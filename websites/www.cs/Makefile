@@ -8,4 +8,4 @@ help:
 	@echo "  deploy - Upload index.html and main.js to www.cs.siue.edu"
 
 deploy:
-	sshpass -f "$(HOME)/.ssh/.passwd.siue" scp index.html main.js override.css wgrim@www.cs.siue.edu:.
+	sshpass -f "$(HOME)/.ssh/.passwd.siue" scp *.html *.js *.css wgrim@www.cs.siue.edu:.

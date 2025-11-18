@@ -9,12 +9,12 @@
 }
 
 .cylon-gradient {
-  background: linear-gradient(90deg, black 0%, black 45%, #ff0000 49%, #ff4444 50%, #ff0000 51%, black 55%, black 100%);
+  background: linear-gradient(90deg, black 0%, black 48%, #ff0000 49.25%, #ff4444 50%, #ff0000 50.75%, black 52%, black 100%);
   background-size: 200% 100%;
-  animation: gradientLoop 2.5s linear infinite alternate;
+  animation: gradientLoop 2s linear infinite alternate;
 }
 
 @keyframes gradientLoop {
-  0%   { background-position: 0% 50%; }
-  100% { background-position: 100% 50%; }
+  0%   { background-position: 25% 50%; }
+  100% { background-position: 75% 50%; }
 }

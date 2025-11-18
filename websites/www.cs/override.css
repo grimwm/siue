@@ -1,0 +1,12 @@
+.bg-primary    { background-color: #158a1c !important; }
+
+.cylon-gradient {
+  background: linear-gradient(90deg, black 0%, black 45%, #ff0000 49%, #ff4444 50%, #ff0000 51%, black 55%, black 100%);
+  background-size: 200% 100%;
+  animation: gradientLoop 2.5s linear infinite alternate;
+}
+
+@keyframes gradientLoop {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}

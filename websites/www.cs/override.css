@@ -1,5 +1,13 @@
 .bg-primary    { background-color: #158a1c !important; }
 
+.navbar .nav-link {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.navbar .nav-link:hover {
+  color: rgba(255, 255, 255, 1) !important;
+}
+
 .cylon-gradient {
   background: linear-gradient(90deg, black 0%, black 45%, #ff0000 49%, #ff4444 50%, #ff0000 51%, black 55%, black 100%);
   background-size: 200% 100%;

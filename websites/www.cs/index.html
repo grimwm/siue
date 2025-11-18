@@ -7,6 +7,7 @@
 
 <!-- Bootstrap -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
 <link href="override.css" rel="stylesheet">
 </head>
@@ -18,6 +19,11 @@
 <ul class="navbar-nav flex-row">
 <li class="nav-item px-3"><a class="nav-link" href="#" onclick="showNavDiv('main')">Home</a></li>
 <li class="nav-item px-3"><a class="nav-link" href="#" onclick="showNavDiv('contact')">Contact</a></li>
+<li class="nav-item px-3">
+  <a class="nav-link" href="#" onclick="toggleTheme(); return false;" id="theme-toggle" title="Toggle dark/light mode">
+    <i id="theme-icon" class="bi bi-sun"></i>
+  </a>
+</li>
 </ul>
 </div>
 </nav>
@@ -64,6 +70,10 @@ Email: <a href="mailto:wgrim@siue.edu">wgrim@siue.edu</a>
 
 <!-- main.js -->
 <script src="main.js"></script>
-<script>showNavDiv("main");</script>
+<script>
+  // Initialize theme on page load
+  initializeTheme();
+  showNavDiv("main");
+</script>
 </body>
 </html>

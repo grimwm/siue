@@ -1,11 +1,14 @@
 /**
- * Shows a div matching the "nav-" id. All other divs with a "nav-" id prefix
- * will be hidden.
+ * Shows a panel matching the "nav-" id. All other panels with a "nav-" id prefix
+ * are hidden.
  */
-function showNavDiv(divId, display = "block") {
-    const divs = document.querySelectorAll("div[id^='nav-']");
-    divs.forEach(div => { div.style.display = "none"; });
-    document.getElementById(`nav-${divId}`).style.display = display;
+function showNavDiv(divId) {
+    const divs = document.querySelectorAll("[id^='nav-']");
+    divs.forEach(div => { div.classList.remove("is-active"); });
+    const target = document.getElementById(`nav-${divId}`);
+    if (target) {
+        target.classList.add("is-active");
+    }
 }
 
 /**

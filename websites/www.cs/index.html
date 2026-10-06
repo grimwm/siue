@@ -1,93 +1,99 @@
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
 <head>
-<title>William Grim's Page</title>
-<metadata name="author" content="William Grim">
-<metadata name="description" content="William Grim is an instructor of computer science at SIUE.">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>William Grim — Computer Science, SIUE</title>
+<meta name="author" content="William Grim">
+<meta name="description" content="William Grim is an instructor of computer science at Southern Illinois University Edwardsville.">
 
-<!-- Bootstrap -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-
 <link href="custom.css" rel="stylesheet">
 </head>
 
 <body>
-<nav class="navbar navbar-dark bg-dark cylon-gradient">
-<div class="container">
-<a class="navbar-brand" href="#" onclick="showNavDiv('main')">William Grim</a>
-<ul class="navbar-nav flex-row">
-<li class="nav-item px-3"><a class="nav-link" href="#" onclick="showNavDiv('main')">Home</a></li>
-<li class="nav-item px-3"><a class="nav-link" href="#" onclick="showNavDiv('contact')">Contact</a></li>
-<li class="nav-item px-3">
-  <a class="nav-link" href="#" onclick="toggleTheme(); return false;" id="theme-toggle" title="Toggle dark/light mode">
-    <i id="theme-icon" class="bi bi-sun"></i>
-  </a>
-</li>
-</ul>
-</div>
-</nav>
-
-<div class="container" id="nav-main">
-<h1>Mr. William Grim</h1>
-<p>William Grim is an Instructor of Computer Science for Southern Illinois University at Edwardsville as of Fall 2025.</p>
-
-<h2>Areas of Interest</h2>
-<ul>
-<li>Finance</li>
-<li>Applications of Modern AI</li>
-<li>Quantum Computing</li>
-</ul>
-
-<h2>Courses Taught</h2>
-<ul>
-<li>CS 234: Database and Web System Development</li>
-<li>CS 425: Senior Project: Design</li>
-<li>CS 499: Senior Project: Software Implementation</li>
-</ul>
-
-<h2>External Projects</h2>
-<ul>
-  <li>
-    <a href="https://github.com/grimwm/siue">This Website in Code</a>
-    <p>
-      This website is built with Bootstrap and jQuery. It is hosted on GitHub Pages.
-    </p>
-  </li>
-  <li>
-    <a href="https://github.com/grimwm/stencil">Stencil</a>
-    <p>
-      Compose packages of documents and tools from reusable capabilities, driven by Jinja2 templates and YAML config. Each package only gets the pieces that match it: docs, services, build files, and other tooling.
-    </p>
-  </li>
-</ul>
+<div class="cylon-scanner" aria-hidden="true">
+  <div class="cylon-eye"></div>
 </div>
 
-<div class="container" id="nav-contact">
-<h1>Contact Information</h1>
+<header class="site-nav">
+  <div class="site-nav-inner">
+    <a class="site-brand" href="#" onclick="showNavDiv('main'); return false;">William Grim</a>
+    <nav class="site-nav-links" aria-label="Primary">
+      <a class="site-link" href="#" onclick="showNavDiv('main'); return false;">Home</a>
+      <a class="site-link" href="#" onclick="showNavDiv('contact'); return false;">Contact</a>
+      <button type="button" class="site-link theme-toggle" id="theme-toggle" title="Toggle dark/light mode" onclick="toggleTheme()">
+        <i id="theme-icon" class="bi bi-sun" aria-hidden="true"></i>
+        <span class="visually-hidden">Toggle theme</span>
+      </button>
+    </nav>
+  </div>
+</header>
 
-<h2>Mailing Address</h2>
-<p>
-Southern Illinois University Edwardsville<br>
-Department of Computer Science<br>
-Edwardsville, IL 62026-1656
-</p>
+<main>
+  <div class="container page-panel is-active" id="nav-main">
+    <h1>Mr. William Grim</h1>
+    <p class="page-lead">Instructor of Computer Science at Southern Illinois University Edwardsville, as of Fall 2025.</p>
 
-<h2>Office</h2>
-<p>
-Engineering Building (EB) 3040<br>
-Phone: 618-650-2386<br>
-Email: <a href="mailto:wgrim@siue.edu">wgrim@siue.edu</a>
-</p>
-</div>
+    <h2>Areas of Interest</h2>
+    <ul class="interest-list">
+      <li>Finance</li>
+      <li>Applications of Modern AI</li>
+      <li>Quantum Computing</li>
+    </ul>
 
-<!-- Bootstrap -->
+    <h2>Courses Taught</h2>
+    <ul class="course-list">
+      <li>CS 234: Database and Web System Development</li>
+      <li>CS 425: Senior Project: Design</li>
+      <li>CS 499: Senior Project: Software Implementation</li>
+    </ul>
+
+    <h2>External Projects</h2>
+    <ul class="project-list">
+      <li>
+        <a href="https://github.com/grimwm/siue">This Website in Code</a>
+        <p>Built with Bootstrap and hosted on GitHub Pages.</p>
+      </li>
+      <li>
+        <a href="https://github.com/grimwm/stencil">Stencil</a>
+        <p>Compose packages of documents and tools from reusable capabilities, driven by Jinja2 templates and YAML config. Each package only gets the pieces that match it: docs, services, build files, and other tooling.</p>
+      </li>
+    </ul>
+  </div>
+
+  <div class="container page-panel" id="nav-contact">
+    <h1>Contact</h1>
+    <p class="page-lead">Reach me through the department mailing address or campus office.</p>
+
+    <h2>Mailing Address</h2>
+    <div class="contact-block">
+      <p>
+        Southern Illinois University Edwardsville<br>
+        Department of Computer Science<br>
+        Edwardsville, IL 62026-1656
+      </p>
+    </div>
+
+    <h2>Office</h2>
+    <div class="contact-block">
+      <p>
+        Engineering Building (EB) 3040<br>
+        Phone: <a href="tel:+16186502386">618-650-2386</a><br>
+        Email: <a href="mailto:wgrim@siue.edu">wgrim@siue.edu</a>
+      </p>
+    </div>
+  </div>
+</main>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-
-<!-- main.js -->
 <script src="main.js"></script>
 <script>
-  // Initialize theme on page load
   initializeTheme();
   showNavDiv("main");
 </script>

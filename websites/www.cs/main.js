@@ -957,6 +957,62 @@ function initializeCylonEffects() {
         });
     }
 
+    /** Top-of-viewport launch X, biased away from other live missiles. */
+    function pickMissileLaunchOrigin() {
+        const vw = window.innerWidth || 800;
+        const margin = Math.max(24, Math.min(56, vw * 0.04));
+        const usable = Math.max(80, vw - margin * 2);
+        const topY = 8 + Math.random() * 22;
+        const alive = activeMissiles.filter((m) => m.alive);
+        const avoidXs = alive.map((m) => {
+            const live = parseFloat(m.el.style.left);
+            return Number.isFinite(live) ? live : (m.originX || vw / 2);
+        });
+
+        // Lane samples across the top + a couple of random probes
+        const lanes = 8;
+        const candidates = [];
+        for (let i = 0; i < lanes; i++) {
+            candidates.push(margin + ((i + 0.5) / lanes) * usable);
+        }
+        candidates.push(margin + Math.random() * usable);
+        candidates.push(margin + Math.random() * usable);
+
+        // Solo launches: sometimes still drop near the eye for flavor
+        if (!avoidXs.length && Math.random() < 0.28) {
+            const eye = eyeClientCenter();
+            return {
+                x: Math.min(vw - margin, Math.max(margin, eye.x + (Math.random() - 0.5) * 64)),
+                y: Math.min(topY + 18, Math.max(6, eye.y - 36))
+            };
+        }
+
+        let bestX = candidates[0];
+        let bestScore = -Infinity;
+        for (const cx of candidates) {
+            let score;
+            if (!avoidXs.length) {
+                // Prefer edges a bit so the first shot isn't always center
+                const edgeBias = Math.abs(cx - vw / 2) / (vw / 2);
+                score = edgeBias * 40 + Math.random() * 80;
+            } else {
+                // Maximize clearance from every live missile (origins + current X)
+                let minDist = Infinity;
+                for (const ox of avoidXs) {
+                    minDist = Math.min(minDist, Math.abs(cx - ox));
+                }
+                // Extra weight when several are already up — force spread
+                score = minDist * (1 + avoidXs.length * 0.35) + Math.random() * 36;
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                bestX = cx;
+            }
+        }
+
+        return { x: bestX, y: topY };
+    }
+
     function detonateSmallMissileAt(missile, clientX, clientY) {
         if (missile) {
             missile.alive = false;
@@ -999,12 +1055,12 @@ function initializeCylonEffects() {
         el.setAttribute('aria-hidden', 'true');
         document.body.appendChild(el);
 
-        const missile = { el, tracker, alive: true };
+        const origin = pickMissileLaunchOrigin();
+        let x = origin.x;
+        let y = origin.y;
+        const missile = { el, tracker, alive: true, originX: x };
         activeMissiles.push(missile);
 
-        const origin = eyeClientCenter();
-        let x = origin.x + (fromPair ? (Math.random() - 0.5) * 36 : 0);
-        let y = origin.y - 40;
         let started = performance.now();
         let last = started;
 

@@ -1289,9 +1289,10 @@ body.cylon-grenade-armed .cylon-bot {
 }
 
 .cylon-high-scores li {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
+  display: grid;
+  grid-template-columns: 2.75ch 3.4ch minmax(6.5rem, 1fr) auto;
+  align-items: baseline;
+  column-gap: 0.55rem;
   padding: 0.2rem 0;
   border-bottom: 1px solid var(--rail-edge);
   font-variant-numeric: tabular-nums;
@@ -1301,13 +1302,34 @@ body.cylon-grenade-armed .cylon-bot {
   border-bottom: none;
 }
 
+.cylon-high-scores .cylon-hs-rank {
+  color: var(--steel);
+  font-variant-numeric: tabular-nums;
+}
+
+.cylon-high-scores .cylon-hs-initials {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.cylon-high-scores .cylon-hs-date {
+  text-align: left;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
 .cylon-high-scores .cylon-hs-score {
   color: var(--crimson-hot);
   font-family: var(--font-display);
   font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .cylon-high-scores .cylon-hs-empty {
+  display: block;
   color: var(--steel);
   font-style: italic;
 }

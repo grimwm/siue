@@ -272,7 +272,10 @@ function initializeCylonEffects() {
                 ? when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
                 : '';
             const initials = (entry.initials || 'AAA').toString().slice(0, 3).toUpperCase();
-            return `<li><span>#${i + 1} <strong>${initials}</strong> ${date}</span><span class="cylon-hs-score">${entry.score} KOs</span></li>`;
+            const dateHtml = date
+                ? `<span class="cylon-hs-date">${date}</span>`
+                : '<span class="cylon-hs-date"></span>';
+            return `<li><span class="cylon-hs-rank">#${i + 1}</span><strong class="cylon-hs-initials">${initials}</strong>${dateHtml}<span class="cylon-hs-score">${entry.score} KOs</span></li>`;
         }).join('');
     }
 

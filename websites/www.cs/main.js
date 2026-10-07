@@ -13,8 +13,11 @@ function showNavDiv(divId) {
 
 /**
  * Toggles between dark and light theme, persisting the choice in localStorage.
+ * Disabled while the game is live (combat forces dark).
  */
 function toggleTheme() {
+    if (document.body.classList.contains('cylon-game-live')) return;
+
     const html = document.documentElement;
     const currentTheme = html.getAttribute('data-bs-theme');
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
@@ -27,10 +30,24 @@ function toggleTheme() {
 
 /**
  * Initializes the theme from localStorage or defaults to dark.
+ * Game mode always starts off on load, so the saved preference is restored.
  */
 function initializeTheme() {
     const savedTheme = localStorage.getItem('theme') || 'dark';
     const html = document.documentElement;
+    html.setAttribute('data-bs-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+}
+
+/** Force dark during combat without overwriting the user's saved preference. */
+function applyCombatTheme(on) {
+    const html = document.documentElement;
+    if (on) {
+        html.setAttribute('data-bs-theme', 'dark');
+        updateThemeIcon('dark');
+        return;
+    }
+    const savedTheme = localStorage.getItem('theme') || 'dark';
     html.setAttribute('data-bs-theme', savedTheme);
     updateThemeIcon(savedTheme);
 }
@@ -923,6 +940,7 @@ function initializeCylonEffects() {
     function syncWorldEndedLook() {
         const on = settings.gameEnabled;
         document.body.classList.toggle('cylon-game-live', on);
+        applyCombatTheme(on);
         syncNavChrome();
         if (on) {
             // Wrap glyphs first at rest, then blow them outward next frame so CSS transitions fire

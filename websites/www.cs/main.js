@@ -1386,6 +1386,7 @@ function initializeCylonEffects() {
             impact.style.top = `${toY}px`;
             impact.setAttribute('aria-hidden', 'true');
             field.appendChild(impact);
+            punchHole(toX, toY, HOLE_PRESETS.small);
             setTimeout(() => impact.remove(), 300);
 
             syncMousePageFromClient();
@@ -1419,6 +1420,9 @@ function initializeCylonEffects() {
         bot.classList.add('is-ko');
         clearBotTimers(bot);
         playKoSound();
+        const kx = (parseFloat(bot.style.left) || 0) + BOT_SIZE.w / 2;
+        const ky = (parseFloat(bot.style.top) || 0) + BOT_SIZE.h / 2;
+        punchHole(kx, ky, HOLE_PRESETS.small);
         bumpScore();
         activeBots = Math.max(0, activeBots - 1);
         setTimeout(() => bot.remove(), 560);
@@ -1608,6 +1612,7 @@ function initializeCylonEffects() {
         blast.style.top = `${y}px`;
         blast.setAttribute('aria-hidden', 'true');
         field.appendChild(blast);
+        punchHole(x, y, HOLE_PRESETS.medium);
         setTimeout(() => blast.remove(), 480);
 
         field.querySelectorAll('.cylon-bot').forEach((bot) => {
@@ -1629,9 +1634,14 @@ function initializeCylonEffects() {
             setTimeout(() => {
                 const hit = document.createElement('span');
                 hit.className = 'cylon-raptor-impact';
-                hit.style.left = `${12 + Math.random() * 76}%`;
-                hit.style.top = `${40 + Math.random() * 50}%`;
+                const leftPct = 12 + Math.random() * 76;
+                const topPct = 40 + Math.random() * 50;
+                hit.style.left = `${leftPct}%`;
+                hit.style.top = `${topPct}%`;
                 raptorImpactsEl.appendChild(hit);
+                const pageX = window.scrollX + (leftPct / 100) * window.innerWidth;
+                const pageY = window.scrollY + (topPct / 100) * window.innerHeight;
+                punchHole(pageX, pageY, HOLE_PRESETS.medium);
                 setTimeout(() => hit.remove(), 560);
             }, i * 55);
         }
@@ -1841,6 +1851,13 @@ function initializeCylonEffects() {
         nukeEl.style.setProperty('--nuke-y', `${(clientY / vh) * 100}%`);
         nukeEl.classList.add('is-detonating');
         document.body.classList.add('is-nuke-shake');
+        const pageX = clientX + window.scrollX;
+        const pageY = clientY + window.scrollY;
+        punchHole(pageX, pageY, {
+            radius: largeHoleRadius(),
+            holdMs: HOLE_PRESETS.large.holdMs,
+            fadeMs: HOLE_PRESETS.large.fadeMs
+        });
 
         // Direct hit ends the run
         const dist = Math.hypot(mouse.clientX - clientX, mouse.clientY - clientY);

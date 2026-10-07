@@ -403,13 +403,12 @@ button:focus-visible,
   vertical-align: middle;
 }
 
-/* Fade chrome, brand, theme ↔ settings — game toggle stays put */
+/* Fade chrome, brand, and theme — game toggle stays put */
 .site-brand,
 .site-nav-menu,
 .site-nav-game,
 .site-nav-burger,
-.theme-toggle,
-.site-nav-tools .cylon-settings {
+.theme-toggle {
   transition: opacity calc(var(--cylon-desolate-fade, 1.6s) * 0.45) ease;
   opacity: 1;
 }
@@ -418,19 +417,16 @@ button:focus-visible,
 .site-nav-inner.is-nav-fading .site-nav-menu,
 .site-nav-inner.is-nav-fading .site-nav-game,
 .site-nav-inner.is-nav-fading .site-nav-burger,
-.site-nav-inner.is-nav-fading .theme-toggle,
-.site-nav-inner.is-nav-fading .site-nav-tools .cylon-settings {
+.site-nav-inner.is-nav-fading .theme-toggle {
   opacity: 0;
   pointer-events: none;
 }
 
-/* Combat: settings gear takes the theme button's slot */
+/* Keep the theme control's box so the Game toggle doesn't slide over */
 body.cylon-nav-combat .theme-toggle {
-  display: none;
-}
-
-body:not(.cylon-nav-combat) .site-nav-tools .cylon-settings {
-  display: none;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -438,8 +434,7 @@ body:not(.cylon-nav-combat) .site-nav-tools .cylon-settings {
   .site-nav-menu,
   .site-nav-game,
   .site-nav-burger,
-  .theme-toggle,
-  .site-nav-tools .cylon-settings {
+  .theme-toggle {
     transition: none;
   }
 
@@ -447,8 +442,7 @@ body:not(.cylon-nav-combat) .site-nav-tools .cylon-settings {
   .site-nav-inner.is-nav-fading .site-nav-menu,
   .site-nav-inner.is-nav-fading .site-nav-game,
   .site-nav-inner.is-nav-fading .site-nav-burger,
-  .site-nav-inner.is-nav-fading .theme-toggle,
-  .site-nav-inner.is-nav-fading .site-nav-tools .cylon-settings {
+  .site-nav-inner.is-nav-fading .theme-toggle {
     opacity: 1;
     pointer-events: auto;
   }
@@ -472,9 +466,7 @@ body.cylon-nav-combat .site-nav-inner {
   flex: 0 0 auto;
   white-space: nowrap;
   border: 1px solid transparent;
-  padding: 0 0.05em 0;
-  /* Orbitron caps sit optically high in the em-box — nudge to the shared midline */
-  transform: translateY(0.06em);
+  padding: 0;
 }
 
 .site-brand:hover {

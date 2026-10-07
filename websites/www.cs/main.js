@@ -297,9 +297,6 @@ function initializeCylonEffects() {
         if (navGame) {
             navGame.hidden = !on;
         }
-        if (settingsRoot) {
-            settingsRoot.hidden = !on;
-        }
         // Game toggle stays in #site-nav-power — never reparented (avoids fade/size jumps)
         if (on && navMenu && navBurger) {
             navMenu.classList.remove('is-open');

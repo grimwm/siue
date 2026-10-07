@@ -2418,13 +2418,18 @@ body.cylon-world-ended {
   --cylon-desolate-fade: 1.1s;
 }
 
-body.cylon-world-ended main,
-body.cylon-world-ended #nav-main,
-body.cylon-world-ended #nav-contact,
-body.cylon-world-ended .page-panel {
+#nav-main,
+#nav-contact,
+.page-panel,
+main {
   transition:
-    filter var(--cylon-desolate-fade) ease,
-    color var(--cylon-desolate-fade) ease;
+    filter var(--cylon-desolate-fade, 1.1s) ease,
+    color var(--cylon-desolate-fade, 1.1s) ease;
+  filter: none;
+}
+
+body.cylon-world-ended #nav-main,
+body.cylon-world-ended #nav-contact {
   filter: grayscale(0.55) contrast(0.92) brightness(0.88);
 }
 
@@ -2435,6 +2440,7 @@ body.cylon-world-ended #nav-main h1,
 body.cylon-world-ended #nav-main h2,
 body.cylon-world-ended #nav-main p,
 body.cylon-world-ended #nav-main li,
+body.cylon-world-ended #nav-contact h1,
 body.cylon-world-ended #nav-contact p {
   text-shadow:
     0.6px 0 0 rgba(40, 40, 40, 0.55),
@@ -2444,7 +2450,8 @@ body.cylon-world-ended #nav-contact p {
 }
 
 body.cylon-world-ended main h1,
-body.cylon-world-ended #nav-main h1 {
+body.cylon-world-ended #nav-main h1,
+body.cylon-world-ended #nav-contact h1 {
   background-image: repeating-linear-gradient(
     105deg,
     transparent 0 11px,
@@ -2457,12 +2464,32 @@ body.cylon-world-ended #nav-main h1 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body.cylon-world-ended main,
   body.cylon-world-ended #nav-main,
-  body.cylon-world-ended #nav-contact,
-  body.cylon-world-ended .page-panel {
+  body.cylon-world-ended #nav-contact {
     transition: filter 0.4s ease;
     filter: grayscale(0.5) brightness(0.9);
+  }
+
+  body.cylon-world-ended main h1,
+  body.cylon-world-ended main h2,
+  body.cylon-world-ended main h3,
+  body.cylon-world-ended #nav-main h1,
+  body.cylon-world-ended #nav-main h2,
+  body.cylon-world-ended #nav-main p,
+  body.cylon-world-ended #nav-main li,
+  body.cylon-world-ended #nav-contact h1,
+  body.cylon-world-ended #nav-contact p {
+    text-shadow: none;
+    color: inherit;
+  }
+
+  body.cylon-world-ended main h1,
+  body.cylon-world-ended #nav-main h1,
+  body.cylon-world-ended #nav-contact h1 {
+    background-image: none;
+    background-blend-mode: normal;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
   }
 }
 

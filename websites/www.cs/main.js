@@ -2093,7 +2093,13 @@ function initializeCylonEffects() {
     }
 
     function updateHitsUi() {
-        if (hitsEl) hitsEl.textContent = String(currentHp());
+        if (!hitsEl) return;
+        const hp = currentHp();
+        hitsEl.textContent = String(hp);
+        hitsEl.classList.remove('is-hp-good', 'is-hp-mid', 'is-hp-low');
+        if (hp > MAX_HITS * 0.5) hitsEl.classList.add('is-hp-good');
+        else if (hp > MAX_HITS * 0.25) hitsEl.classList.add('is-hp-mid');
+        else hitsEl.classList.add('is-hp-low');
     }
 
     function registerHit(count = 1, { fromNuke = false } = {}) {

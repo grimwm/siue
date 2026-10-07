@@ -950,7 +950,7 @@ body.cylon-touch-play .cylon-bot {
   font-size: 0.95rem;
   min-width: 1.25ch;
   text-shadow: 0 0 8px rgba(255, 40, 40, 0.45);
-  transition: transform 0.15s ease, color 0.15s ease;
+  transition: transform 0.15s ease, color 0.2s ease, text-shadow 0.2s ease;
 }
 
 .cylon-score-value.is-bump {
@@ -958,9 +958,26 @@ body.cylon-touch-play .cylon-bot {
   color: #fff;
 }
 
-.cylon-score-value.is-heal {
-  transform: scale(1.2);
+/* HP: green → yellow → red as hull drops */
+#cylon-hits-value.is-hp-good {
   color: #7dff9a;
+  text-shadow: 0 0 8px rgba(80, 255, 140, 0.55);
+}
+
+#cylon-hits-value.is-hp-mid {
+  color: #ffd24a;
+  text-shadow: 0 0 8px rgba(255, 200, 60, 0.5);
+}
+
+#cylon-hits-value.is-hp-low {
+  color: var(--crimson-hot);
+  text-shadow: 0 0 8px rgba(255, 40, 40, 0.45);
+}
+
+.cylon-score-value.is-heal,
+#cylon-hits-value.is-heal {
+  transform: scale(1.2);
+  color: #b8ffc8;
   text-shadow: 0 0 10px rgba(80, 255, 140, 0.65);
 }
 

@@ -198,7 +198,9 @@ function initializeCylonEffects() {
     const MISSILE_MAX_FLIGHT_MS = 2200;
     const MISSILE_BLAST_RADIUS = 72;
     const MISSILE_TRACKER_CHANCE = 0.22;
+    const MISSILE_TRACKER_CAP = 2;
     const MISSILE_GROUND_CAP_MAX = 4;
+    let trackerPairTimer = null;
     const RAPTOR_COOLDOWN_MS = 60000;
     const RAPTOR_STRIKE_AT_MS = 700;
     const EYE_DISORIENT_MS = 30000;
@@ -898,11 +900,13 @@ function initializeCylonEffects() {
     }
 
     function canLaunchMissile(asTracker) {
-        if (asTracker) return countActiveMissiles(true) === 0;
+        if (asTracker) return countActiveMissiles(true) < MISSILE_TRACKER_CAP;
         return countActiveMissiles(false) < groundMissileCap();
     }
 
     function clearActiveMissiles() {
+        clearTimeout(trackerPairTimer);
+        trackerPairTimer = null;
         activeMissiles.forEach((m) => {
             m.alive = false;
             m.el.remove();
@@ -914,8 +918,10 @@ function initializeCylonEffects() {
     function clearInboundSchedulers() {
         clearTimeout(missileTimer);
         clearTimeout(nukeTimer);
+        clearTimeout(trackerPairTimer);
         missileTimer = null;
         nukeTimer = null;
+        trackerPairTimer = null;
         missileDueAt = 0;
         nukeDueAt = 0;
         clearActiveMissiles();
@@ -961,12 +967,14 @@ function initializeCylonEffects() {
         }
     }
 
-    function launchSmallMissile() {
-        if (!isGameLive() || isEyeDisoriented()) return;
+    function launchSmallMissile({ forceTracker = false, fromPair = false } = {}) {
+        if (!isGameLive() || isEyeDisoriented()) return false;
 
-        // Prefer tracker roll only if none is already seeking; else ground (multi-cap)
-        let tracker = Math.random() < MISSILE_TRACKER_CHANCE && canLaunchMissile(true);
-        if (!tracker && !canLaunchMissile(false)) return;
+        // Trackers may fly alongside ground missiles; up to MISSILE_TRACKER_CAP seekers
+        let tracker = forceTracker
+            ? canLaunchMissile(true)
+            : (Math.random() < MISSILE_TRACKER_CHANCE && canLaunchMissile(true));
+        if (!tracker && !canLaunchMissile(false)) return false;
 
         const aimFresh = performance.now() - lastAim.t < 4000;
         let lockX = aimFresh ? lastAim.clientX : mouse.clientX;
@@ -981,7 +989,7 @@ function initializeCylonEffects() {
         activeMissiles.push(missile);
 
         const origin = eyeClientCenter();
-        let x = origin.x;
+        let x = origin.x + (fromPair ? (Math.random() - 0.5) * 36 : 0);
         let y = origin.y - 40;
         let started = performance.now();
         let last = started;
@@ -1019,6 +1027,17 @@ function initializeCylonEffects() {
             requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
+
+        // Often fire a second tracker on a short stagger when one launches
+        if (tracker && !fromPair && canLaunchMissile(true) && Math.random() < 0.55) {
+            clearTimeout(trackerPairTimer);
+            trackerPairTimer = setTimeout(() => {
+                trackerPairTimer = null;
+                if (!isGameLive() || paused || isEyeDisoriented()) return;
+                launchSmallMissile({ forceTracker: true, fromPair: true });
+            }, 280 + Math.random() * 320);
+        }
+        return true;
     }
 
     function scheduleMissiles(first = false) {

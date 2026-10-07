@@ -650,15 +650,28 @@ body:not(.cylon-nav-combat) .site-nav-power {
     font-size: 0.72rem;
   }
 
-  /* One combat row: brand · game bar (? + …) · Game On · gear */
+  /*
+   * Combat row: [game bar… ?] · power · gear
+   * Brand fades away so controls shift left; power sits between help and settings.
+   */
   body.cylon-nav-combat .site-nav-inner {
     flex-wrap: nowrap;
     gap: 0.35rem 0.4rem;
   }
 
   body.cylon-nav-combat .site-brand {
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
+    flex: 0 0 0;
+    width: 0;
+    min-width: 0;
+    max-width: 0;
+    margin: 0;
+    padding: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    border: none;
+    transform: none;
+    transition: opacity calc(var(--cylon-desolate-fade, 1.6s) * 0.45) ease;
   }
 
   body.cylon-nav-combat .site-nav-game {
@@ -672,6 +685,15 @@ body:not(.cylon-nav-combat) .site-nav-power {
     border-top: none;
     height: var(--nav-control-h);
     min-height: var(--nav-control-h);
+  }
+
+  body.cylon-nav-combat .site-nav-power {
+    order: 3;
+    margin-left: 0;
+  }
+
+  body.cylon-nav-combat .site-nav-tools {
+    order: 4;
   }
 
   body.cylon-nav-combat .cylon-score {

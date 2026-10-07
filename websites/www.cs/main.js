@@ -97,6 +97,9 @@ function initializeCylonEffects() {
 
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+    const BOT_CAP_START = 4;
+    const BOT_CAP_PER_KOS = 5;
+    const BOT_HARD_CAP = coarsePointer ? 10 : 30;
     if (reduceMotion) return;
 
     let draggingReticle = false;
@@ -150,6 +153,13 @@ function initializeCylonEffects() {
     let grenadeReadyAt = 0;
     let grenadeArmed = false;
     let nukeInFlight = false;
+    let runStartedAt = 0;
+    let lastAim = { clientX: 0, clientY: 0, t: 0 };
+    let missileTimer = null;
+    let nukeTimer = null;
+    let missileInFlight = false;
+    let missileDueAt = 0;
+    let nukeDueAt = 0;
     let herdTimer = null;
     let cachedHighScores = [];
 
@@ -734,11 +744,107 @@ function initializeCylonEffects() {
         }
     }
 
+    function lerp(a, b, t) {
+        return a + (b - a) * Math.min(1, Math.max(0, t));
+    }
+
+    function difficultyFactor() {
+        if (!runStartedAt) return 0;
+        const elapsedMin = (Date.now() - runStartedAt) / 60000;
+        const timePart = Math.min(1, elapsedMin / 3.5);
+        const koPart = Math.min(1, koScore / 40);
+        return Math.min(1, timePart * 0.55 + koPart * 0.45);
+    }
+
+    function nextMissileDelayMs() {
+        const d = difficultyFactor();
+        const lo = lerp(11000, 7000, d);
+        const span = lerp(3000, 2500, d);
+        return lo - span / 2 + Math.random() * span;
+    }
+
+    function nextNukeDelayMs() {
+        const d = difficultyFactor();
+        const lo = lerp(32500, 24000, d);
+        const span = lerp(15000, 12000, d);
+        return lo - span / 2 + Math.random() * span;
+    }
+
+    function clearInboundSchedulers() {
+        clearTimeout(missileTimer);
+        clearTimeout(nukeTimer);
+        missileTimer = null;
+        nukeTimer = null;
+        missileDueAt = 0;
+        nukeDueAt = 0;
+    }
+
+    function launchSmallMissile() {
+        // Implemented in Task 3
+    }
+
+    function scheduleMissiles(first = false) {
+        clearTimeout(missileTimer);
+        if (!isGameLive()) return;
+        const wait = first ? 4000 + Math.random() * 3000 : nextMissileDelayMs();
+        missileDueAt = Date.now() + wait;
+        missileTimer = setTimeout(() => {
+            missileTimer = null;
+            if (!isGameLive() || paused) return;
+            if (!isEyeDisoriented() && !missileInFlight) {
+                launchSmallMissile();
+            }
+            scheduleMissiles(false);
+        }, wait);
+    }
+
+    function scheduleNukes(first = false) {
+        clearTimeout(nukeTimer);
+        if (!isGameLive()) return;
+        const wait = first ? 12000 + Math.random() * 8000 : nextNukeDelayMs();
+        nukeDueAt = Date.now() + wait;
+        nukeTimer = setTimeout(() => {
+            nukeTimer = null;
+            if (!isGameLive() || paused) return;
+            if (!isEyeDisoriented() && !nukeInFlight) {
+                launchNuke();
+            }
+            scheduleNukes(false);
+        }, wait);
+    }
+
+    function startInboundSchedulers() {
+        clearInboundSchedulers();
+        scheduleMissiles(true);
+        scheduleNukes(true);
+    }
+
     function applyPauseTimeSkew(elapsed) {
         if (elapsed <= 0) return;
         if (grenadeReadyAt > pauseStartedAt) grenadeReadyAt += elapsed;
         if (raptorReadyAt > pauseStartedAt) raptorReadyAt += elapsed;
         if (eyeDisorientedUntil > pauseStartedAt) eyeDisorientedUntil += elapsed;
+
+        if (missileDueAt > pauseStartedAt) {
+            clearTimeout(missileTimer);
+            missileDueAt += elapsed;
+            missileTimer = setTimeout(() => {
+                missileTimer = null;
+                if (!isGameLive() || paused) return;
+                if (!isEyeDisoriented() && !missileInFlight) launchSmallMissile();
+                scheduleMissiles(false);
+            }, Math.max(0, missileDueAt - Date.now()));
+        }
+        if (nukeDueAt > pauseStartedAt) {
+            clearTimeout(nukeTimer);
+            nukeDueAt += elapsed;
+            nukeTimer = setTimeout(() => {
+                nukeTimer = null;
+                if (!isGameLive() || paused) return;
+                if (!isEyeDisoriented() && !nukeInFlight) launchNuke();
+                scheduleNukes(false);
+            }, Math.max(0, nukeDueAt - Date.now()));
+        }
 
         activeHoles.forEach((h) => {
             if (h.phase === 'hold' && h.holdDue > pauseStartedAt) {
@@ -1081,6 +1187,9 @@ function initializeCylonEffects() {
         syncMousePageFromClient();
         mouse.t = performance.now();
         paintReticle();
+        lastAim.clientX = mouse.clientX;
+        lastAim.clientY = mouse.clientY;
+        lastAim.t = performance.now();
         if (isGameLive() && settings.eyeEnabled && !isEyeDisoriented()) {
             setEyeTracking(true);
             clearTimeout(idleTimer);
@@ -1196,6 +1305,10 @@ function initializeCylonEffects() {
                 h.holdTimer = null;
                 h.fadeTimer = null;
             });
+            clearTimeout(missileTimer);
+            clearTimeout(nukeTimer);
+            missileTimer = null;
+            nukeTimer = null;
             setEyeTracking(false);
             syncMusic();
             updateAbilityButtons();
@@ -2046,6 +2159,9 @@ function initializeCylonEffects() {
         settings.gameEnabled = false;
         saveSettings();
         clearAllBots();
+        clearInboundSchedulers();
+        missileInFlight = false;
+        runStartedAt = 0;
         clearTimeout(idleTimer);
         setEyeTracking(false);
         cancelGrenadeArm();
@@ -2089,6 +2205,9 @@ function initializeCylonEffects() {
         saveSettings();
         if (!on) {
             clearAllBots();
+            clearInboundSchedulers();
+            missileInFlight = false;
+            runStartedAt = 0;
             clearTimeout(idleTimer);
             setEyeTracking(false);
             cancelGrenadeArm();
@@ -2104,6 +2223,8 @@ function initializeCylonEffects() {
         } else {
             hideGameOver();
             resetRunStats();
+            runStartedAt = Date.now();
+            startInboundSchedulers();
             if (coarsePointer) {
                 resetReticleToCenter();
                 document.body.classList.add('cylon-touch-play');

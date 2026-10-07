@@ -177,7 +177,8 @@ function initializeCylonEffects() {
     let lastAim = { clientX: 0, clientY: 0, t: 0 };
     let missileTimer = null;
     let nukeTimer = null;
-    let missileInFlight = false;
+    /** @type {{ el: HTMLElement, tracker: boolean, alive: boolean }[]} */
+    let activeMissiles = [];
     let missileDueAt = 0;
     let nukeDueAt = 0;
     let herdTimer = null;
@@ -197,6 +198,7 @@ function initializeCylonEffects() {
     const MISSILE_MAX_FLIGHT_MS = 2200;
     const MISSILE_BLAST_RADIUS = 72;
     const MISSILE_TRACKER_CHANCE = 0.22;
+    const MISSILE_GROUND_CAP_MAX = 4;
     const RAPTOR_COOLDOWN_MS = 60000;
     const RAPTOR_STRIKE_AT_MS = 700;
     const EYE_DISORIENT_MS = 30000;
@@ -882,6 +884,33 @@ function initializeCylonEffects() {
         return lo - span / 2 + Math.random() * span;
     }
 
+    function groundMissileCap() {
+        // 1 at easy → up to 4 as difficulty rises
+        return Math.min(MISSILE_GROUND_CAP_MAX, 1 + Math.floor(difficultyFactor() * MISSILE_GROUND_CAP_MAX));
+    }
+
+    function countActiveMissiles(trackerOnly = null) {
+        return activeMissiles.filter((m) => {
+            if (!m.alive) return false;
+            if (trackerOnly == null) return true;
+            return m.tracker === trackerOnly;
+        }).length;
+    }
+
+    function canLaunchMissile(asTracker) {
+        if (asTracker) return countActiveMissiles(true) === 0;
+        return countActiveMissiles(false) < groundMissileCap();
+    }
+
+    function clearActiveMissiles() {
+        activeMissiles.forEach((m) => {
+            m.alive = false;
+            m.el.remove();
+        });
+        activeMissiles = [];
+        if (missileEl) missileEl.classList.remove('is-flying', 'is-tracker');
+    }
+
     function clearInboundSchedulers() {
         clearTimeout(missileTimer);
         clearTimeout(nukeTimer);
@@ -889,8 +918,7 @@ function initializeCylonEffects() {
         nukeTimer = null;
         missileDueAt = 0;
         nukeDueAt = 0;
-        if (missileEl) missileEl.classList.remove('is-flying', 'is-tracker');
-        missileInFlight = false;
+        clearActiveMissiles();
     }
 
     function playSmallMissileSound(tracker) {
@@ -909,10 +937,11 @@ function initializeCylonEffects() {
         });
     }
 
-    function detonateSmallMissileAt(clientX, clientY) {
-        missileInFlight = false;
-        if (missileEl) {
-            missileEl.classList.remove('is-flying', 'is-tracker');
+    function detonateSmallMissileAt(missile, clientX, clientY) {
+        if (missile) {
+            missile.alive = false;
+            missile.el.remove();
+            activeMissiles = activeMissiles.filter((m) => m !== missile && m.alive);
         }
         const pageX = clientX + window.scrollX;
         const pageY = clientY + window.scrollY;
@@ -933,12 +962,23 @@ function initializeCylonEffects() {
     }
 
     function launchSmallMissile() {
-        if (!isGameLive() || isEyeDisoriented() || missileInFlight || !missileEl) return;
-        missileInFlight = true;
-        const tracker = Math.random() < MISSILE_TRACKER_CHANCE;
+        if (!isGameLive() || isEyeDisoriented()) return;
+
+        // Prefer tracker roll only if none is already seeking; else ground (multi-cap)
+        let tracker = Math.random() < MISSILE_TRACKER_CHANCE && canLaunchMissile(true);
+        if (!tracker && !canLaunchMissile(false)) return;
+
         const aimFresh = performance.now() - lastAim.t < 4000;
         let lockX = aimFresh ? lastAim.clientX : mouse.clientX;
         let lockY = aimFresh ? lastAim.clientY : mouse.clientY;
+
+        const el = document.createElement('div');
+        el.className = 'cylon-small-missile is-flying' + (tracker ? ' is-tracker' : '');
+        el.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(el);
+
+        const missile = { el, tracker, alive: true };
+        activeMissiles.push(missile);
 
         const origin = eyeClientCenter();
         let x = origin.x;
@@ -946,18 +986,16 @@ function initializeCylonEffects() {
         let started = performance.now();
         let last = started;
 
-        missileEl.classList.toggle('is-tracker', tracker);
-        missileEl.classList.add('is-flying');
-        missileEl.style.left = `${x}px`;
-        missileEl.style.top = `${y}px`;
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
         if (settings.soundEnabled) ensureAudio();
         playSmallMissileSound(tracker);
 
         const tick = (now) => {
+            if (!missile.alive) return;
             if (paused || !settings.gameEnabled || gameOver) {
                 started += now - last;
                 last = now;
-                if (!missileInFlight) return;
                 requestAnimationFrame(tick);
                 return;
             }
@@ -971,12 +1009,11 @@ function initializeCylonEffects() {
             const step = MISSILE_SPEED * dt;
             x += (dx / dist) * Math.min(step, dist);
             y += (dy / dist) * Math.min(step, dist);
-            missileEl.style.left = `${x}px`;
-            missileEl.style.top = `${y}px`;
-            missileEl.style.setProperty('--missile-heading', `${Math.atan2(dy, dx) * (180 / Math.PI)}deg`);
-            missileEl.style.transform = `rotate(${Math.atan2(dy, dx) * (180 / Math.PI)}deg)`;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            el.style.transform = `rotate(${Math.atan2(dy, dx) * (180 / Math.PI)}deg)`;
             if (dist <= MISSILE_ARRIVE || now - started >= MISSILE_MAX_FLIGHT_MS) {
-                detonateSmallMissileAt(x, y);
+                detonateSmallMissileAt(missile, x, y);
                 return;
             }
             requestAnimationFrame(tick);
@@ -992,7 +1029,7 @@ function initializeCylonEffects() {
         missileTimer = setTimeout(() => {
             missileTimer = null;
             if (!isGameLive() || paused) return;
-            if (!isEyeDisoriented() && !missileInFlight) {
+            if (!isEyeDisoriented() && (canLaunchMissile(false) || canLaunchMissile(true))) {
                 launchSmallMissile();
             }
             scheduleMissiles(false);
@@ -1032,7 +1069,9 @@ function initializeCylonEffects() {
             missileTimer = setTimeout(() => {
                 missileTimer = null;
                 if (!isGameLive() || paused) return;
-                if (!isEyeDisoriented() && !missileInFlight) launchSmallMissile();
+                if (!isEyeDisoriented() && (canLaunchMissile(false) || canLaunchMissile(true))) {
+                    launchSmallMissile();
+                }
                 scheduleMissiles(false);
             }, Math.max(0, missileDueAt - Date.now()));
         }
@@ -2429,14 +2468,12 @@ function initializeCylonEffects() {
         saveSettings();
         clearAllBots();
         clearInboundSchedulers();
-        missileInFlight = false;
         runStartedAt = 0;
         clearTimeout(idleTimer);
         setEyeTracking(false);
         cancelGrenadeArm();
         nukeInFlight = false;
         if (nukeMissileEl) nukeMissileEl.classList.remove('is-flying');
-        if (missileEl) missileEl.classList.remove('is-flying', 'is-tracker');
         draggingReticle = false;
         reticlePointerId = null;
         document.body.classList.remove('cylon-touch-play');
@@ -2477,7 +2514,6 @@ function initializeCylonEffects() {
         if (!on) {
             clearAllBots();
             clearInboundSchedulers();
-            missileInFlight = false;
             runStartedAt = 0;
             clearTimeout(idleTimer);
             setEyeTracking(false);

@@ -365,8 +365,8 @@ function initializeCylonEffects() {
     function volumeToGain(pct, bus = 'sfx') {
         const t = Math.max(0, Math.min(100, Number(pct) || 0)) / 100;
         if (bus === 'music') {
-            // UI 50% = former music-at-100% loudness (gain 1); 100% can go hotter
-            return Math.min(2, t / 0.5);
+            // UI 50% ≈ former max * 1.25; slider stays at 50 by default
+            return Math.min(2.5, (t / 0.5) * 1.25);
         }
         // SFX: UI 50 ≈ former default at 85 (0.85²); 100 still reaches full gain
         const internalPct = t <= 0.5

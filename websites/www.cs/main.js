@@ -113,7 +113,8 @@ function initializeCylonEffects() {
         gameEnabled: false,
         soundEnabled: true,
         musicEnabled: true,
-        soundVolume: 85,
+        // UI midpoint; gain curve maps 50 → former default loudness
+        soundVolume: 50,
         musicVolume: 40,
         eyeEnabled: true
     };
@@ -122,6 +123,15 @@ function initializeCylonEffects() {
     settings.gameEnabled = false;
     settings.soundVolume = Math.max(0, Math.min(100, Number(settings.soundVolume) || defaults.soundVolume));
     settings.musicVolume = Math.max(0, Math.min(100, Number(settings.musicVolume) || defaults.musicVolume));
+    // Migrate old SFX default (85) to the new midpoint UI value (same loudness)
+    if (settings.soundVolume === 85) {
+        settings.soundVolume = 50;
+        try {
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+        } catch {
+            /* ignore quota / private mode */
+        }
+    }
 
     const mouse = {
         clientX: window.innerWidth / 2,
@@ -344,10 +354,18 @@ function initializeCylonEffects() {
         field.style.height = '';
     }
 
-    function volumeToGain(pct) {
+    function volumeToGain(pct, bus = 'sfx') {
         const t = Math.max(0, Math.min(100, Number(pct) || 0)) / 100;
-        // Gentle curve so mid slider values aren't too loud
-        return t * t;
+        if (bus === 'music') {
+            // Keep slider default at 40; boost so the bed reads clearly at that setting
+            return Math.min(1, t * t * 2.4);
+        }
+        // SFX: UI 50 ≈ former default at 85 (0.85²); 100 still reaches full gain
+        const internalPct = t <= 0.5
+            ? (t / 0.5) * 85
+            : 85 + ((t - 0.5) / 0.5) * 15;
+        const u = internalPct / 100;
+        return u * u;
     }
 
     function ensureAudioContext() {
@@ -373,11 +391,11 @@ function initializeCylonEffects() {
 
     function applyBusVolumes() {
         if (sfxBus) {
-            sfxBus.gain.value = settings.soundEnabled ? volumeToGain(settings.soundVolume) : 0;
+            sfxBus.gain.value = settings.soundEnabled ? volumeToGain(settings.soundVolume, 'sfx') : 0;
         }
         if (musicBus) {
             const on = settings.musicEnabled && isGameLive() && musicPlaying;
-            const target = on ? volumeToGain(settings.musicVolume) : 0;
+            const target = on ? volumeToGain(settings.musicVolume, 'music') : 0;
             if (audioCtx) {
                 const now = audioCtx.currentTime;
                 // Hard set — avoid delayed automation that can mute a just-started bed
@@ -749,10 +767,59 @@ function initializeCylonEffects() {
         }
     }
 
+    function scatterPageGlyphs() {
+        if (document.body.dataset.cylonScattered === '1') return;
+        if (reduceMotion) return;
+        const roots = document.querySelectorAll('#nav-main, #nav-contact');
+        roots.forEach((root) => {
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                acceptNode(node) {
+                    if (!node.nodeValue || !/\S/.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
+                    if (node.parentElement?.closest('.cylon-scatter-char')) return NodeFilter.FILTER_REJECT;
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            });
+            const texts = [];
+            while (walker.nextNode()) texts.push(walker.currentNode);
+            texts.forEach((textNode) => {
+                const frag = document.createDocumentFragment();
+                for (const ch of textNode.nodeValue) {
+                    if (ch === ' ' || ch === '\n' || ch === '\t') {
+                        frag.appendChild(document.createTextNode(ch));
+                        continue;
+                    }
+                    const span = document.createElement('span');
+                    span.className = 'cylon-scatter-char';
+                    span.textContent = ch;
+                    // Blast outward from a rough page center — nuke shockwave
+                    const dx = (Math.random() - 0.5) * 42;
+                    const dy = (Math.random() - 0.35) * 52;
+                    const rot = (Math.random() - 0.5) * 72;
+                    span.style.setProperty('--sx', `${dx.toFixed(1)}px`);
+                    span.style.setProperty('--sy', `${dy.toFixed(1)}px`);
+                    span.style.setProperty('--sr', `${rot.toFixed(1)}deg`);
+                    frag.appendChild(span);
+                }
+                textNode.parentNode.replaceChild(frag, textNode);
+            });
+        });
+        document.body.dataset.cylonScattered = '1';
+    }
+
+    function restorePageGlyphs() {
+        if (document.body.dataset.cylonScattered !== '1') return;
+        document.querySelectorAll('.cylon-scatter-char').forEach((span) => {
+            span.replaceWith(document.createTextNode(span.textContent || ''));
+        });
+        document.body.dataset.cylonScattered = '0';
+    }
+
     function syncWorldEndedLook() {
         const on = settings.gameEnabled;
         document.body.classList.toggle('cylon-world-ended', on);
         document.body.classList.toggle('cylon-game-live', on);
+        if (on) scatterPageGlyphs();
+        else restorePageGlyphs();
     }
 
     function allBots() {

@@ -12,6 +12,25 @@ header('Cache-Control: no-store');
 
 const MAX_SCORES = 10;
 const MAX_SCORE_VALUE = 100000;
+/**
+ * Uppercase 3-letter blocks rejected on write and omitted on read.
+ * Keep in sync with BLOCKED_INITIALS in games/cylon/cylon.js.
+ */
+const BLOCKED_INITIALS = [
+    'ASS',
+    'FUK', 'FUC', 'FCK', 'FUX', 'FUQ',
+    'SHT', 'SHI',
+    'DIK', 'DIC', 'DCK',
+    'COK', 'COC', 'COQ',
+    'CUM', 'JIZ',
+    'CNT', 'PUS', 'VAG', 'CLT',
+    'SEX', 'XXX', 'TIT',
+    'FAG', 'FGT',
+    'NIG', 'NGR',
+    'WTF', 'FFS',
+    'POO', 'PEE',
+    'KKK',
+];
 
 function respond(array $payload, int $status = 200): void {
     http_response_code($status);
@@ -53,6 +72,9 @@ function normalizeScores($data): array {
         $initials = isset($row['initials']) ? strtoupper((string) $row['initials']) : 'AAA';
         $initials = preg_replace('/[^A-Z]/', '', $initials) ?: 'AAA';
         $initials = substr(str_pad($initials, 3, 'A'), 0, 3);
+        if (isBlockedInitials($initials)) {
+            continue;
+        }
         $out[] = [
             'score' => (int) $row['score'],
             'hits' => isset($row['hits']) ? (int) $row['hits'] : 0,
@@ -67,6 +89,10 @@ function sanitizeInitials($value): string {
     $initials = strtoupper((string) $value);
     $initials = preg_replace('/[^A-Z]/', '', $initials) ?: 'AAA';
     return substr(str_pad($initials, 3, 'A'), 0, 3);
+}
+
+function isBlockedInitials(string $initials): bool {
+    return in_array($initials, BLOCKED_INITIALS, true);
 }
 
 function sortScores(array $scores): array {
@@ -197,6 +223,9 @@ try {
         $initials = sanitizeInitials($data['initials'] ?? 'AAA');
         if ($score < 1 || $score > MAX_SCORE_VALUE) {
             respond(['error' => 'invalid score', 'scores' => []], 400);
+        }
+        if (isBlockedInitials($initials)) {
+            respond(['error' => 'invalid initials', 'scores' => readScoresLocked()], 400);
         }
         $hits = max(0, min(MAX_SCORE_VALUE, $hits));
 

@@ -927,6 +927,19 @@ body.cylon-touch-play .cylon-bot {
   color: var(--muted);
 }
 
+.cylon-gameover-entry-error {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffb4b4;
+}
+
+.cylon-gameover-entry-error[hidden] {
+  display: none;
+}
+
 
 .cylon-gameover-actions {
   display: flex;

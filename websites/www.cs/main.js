@@ -495,7 +495,8 @@ function initializeCylonEffects() {
             sfxBus.gain.value = settings.soundEnabled ? volumeToGain(settings.soundVolume, 'sfx') : 0;
         }
         if (musicBus) {
-            const on = settings.musicEnabled && isGameLive() && musicPlaying;
+            // Keep the bed going through game-over overlays (session still On)
+            const on = settings.musicEnabled && sessionActive() && musicPlaying;
             const target = on ? volumeToGain(settings.musicVolume, 'music') : 0;
             if (audioCtx) {
                 const now = audioCtx.currentTime;
@@ -685,17 +686,23 @@ function initializeCylonEffects() {
         osc2.stop(when + dur + 0.05);
     }
 
+    /** Combat session chrome / music — stays true through game-over until Game Off. */
+    function sessionActive() {
+        return settings.gameEnabled && !paused;
+    }
+
+    /** Actively fighting — false during game-over overlays. */
     function isGameLive() {
-        return settings.gameEnabled && !gameOver && !paused;
+        return sessionActive() && !gameOver;
     }
 
     function startMusic() {
-        if (musicPlaying || !settings.musicEnabled || settings.musicVolume <= 0 || !isGameLive()) return;
+        if (musicPlaying || !settings.musicEnabled || settings.musicVolume <= 0 || !sessionActive()) return;
         const ctx = ensureAudioContext();
         if (!ctx || !musicBus) return;
 
         const begin = () => {
-            if (musicPlaying || !settings.musicEnabled || !isGameLive()) return;
+            if (musicPlaying || !settings.musicEnabled || !sessionActive()) return;
 
             if (musicTimer) {
                 clearInterval(musicTimer);
@@ -859,7 +866,7 @@ function initializeCylonEffects() {
     }
 
     function syncMusic() {
-        const want = isGameLive() && settings.musicEnabled && settings.musicVolume > 0;
+        const want = sessionActive() && settings.musicEnabled && settings.musicVolume > 0;
         if (want) {
             if (!musicPlaying) startMusic();
             else applyBusVolumes();
@@ -1782,10 +1789,22 @@ function initializeCylonEffects() {
         window.addEventListener('pointerup', endReticleDrag, true);
         window.addEventListener('pointercancel', endReticleDrag, true);
 
-        // iOS still pans the document on touchmove unless it's non-passive + prevented.
-        // Exempt nav / modals so settings, help, and game-over can scroll.
+    }
+
+    /** Page scroll is pointless once glyphs are scattered — lock it for the whole session. */
+    function bindPlayScrollLock() {
+        const scrollExempt = (target) => !!(target && target.closest
+            && target.closest('.cylon-help-panel, .cylon-gameover, .cylon-settings-panel'));
+
+        document.addEventListener('wheel', (e) => {
+            if (!document.body.classList.contains('cylon-game-live')) return;
+            if (scrollExempt(e.target)) return;
+            e.preventDefault();
+        }, { passive: false });
+
+        // iOS pans on touchmove unless non-passive + prevented.
         document.addEventListener('touchmove', (e) => {
-            if (!document.body.classList.contains('cylon-touch-play')) return;
+            if (!document.body.classList.contains('cylon-game-live')) return;
             const t = e.target;
             if (t && t.closest && t.closest('.site-nav, .cylon-help, .cylon-gameover, .cylon-settings-panel')) {
                 return;
@@ -2534,8 +2553,9 @@ function initializeCylonEffects() {
             knockOutBot(bot);
         });
 
-        // Buttons swallow wheel events — forward scrolls so the page stays usable
+        // Outside a run, bots (if any) shouldn't trap the wheel
         bot.addEventListener('wheel', (e) => {
+            if (document.body.classList.contains('cylon-game-live')) return;
             window.scrollBy({ top: e.deltaY, left: e.deltaX, behavior: 'auto' });
         }, { passive: true });
     }
@@ -2781,8 +2801,8 @@ function initializeCylonEffects() {
         if (gameOver) return;
         gameOver = true;
         pendingScore = { score: koScore, hits: hitsTaken, reason };
-        settings.gameEnabled = false;
-        saveSettings();
+        // Losses keep the session On (music, combat chrome, scatter). Quit turns it off.
+        const keepSession = reason === 'hits' || reason === 'nuke';
         clearAllBots();
         clearInboundSchedulers();
         clearHealTimer();
@@ -2794,12 +2814,18 @@ function initializeCylonEffects() {
         if (nukeMissileEl) nukeMissileEl.classList.remove('is-flying');
         draggingReticle = false;
         reticlePointerId = null;
-        document.body.classList.remove('cylon-touch-play');
+        if (!keepSession) {
+            settings.gameEnabled = false;
+            saveSettings();
+            document.body.classList.remove('cylon-touch-play');
+        }
         updateAbilityButtons();
         syncGameToggleUi();
         syncReticleVisibility();
         syncMusic();
-        syncWorldEndedLook();
+        if (!keepSession) {
+            syncWorldEndedLook();
+        }
         showGameOver(reason);
     }
 
@@ -2844,7 +2870,9 @@ function initializeCylonEffects() {
             paused = false;
             pauseStartedAt = 0;
             document.body.classList.remove('cylon-touch-play');
-            if (!gameOver) hideGameOver();
+            hideGameOver();
+            gameOver = false;
+            pendingScore = null;
             if (helpEl && !helpEl.hidden) {
                 helpEl.hidden = true;
             }
@@ -3092,6 +3120,7 @@ function initializeCylonEffects() {
     bindAbilityControls();
     bindGameOverUi();
     bindReticle();
+    bindPlayScrollLock();
     bindNavMenu();
     bindHelp();
     resizeBattlefield();

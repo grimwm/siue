@@ -1735,6 +1735,11 @@ body.cylon-game-live * {
   -webkit-touch-callout: none;
 }
 
+/* Scattered page — no point scrolling (wheel/touch blocked in JS too) */
+body.cylon-game-live {
+  overscroll-behavior: none;
+}
+
 body.cylon-game-live ::selection {
   background: transparent;
   color: inherit;

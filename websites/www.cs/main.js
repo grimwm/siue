@@ -770,6 +770,8 @@ function initializeCylonEffects() {
     function scatterPageGlyphs() {
         if (document.body.dataset.cylonScattered === '1') return;
         if (reduceMotion) return;
+        const vw = window.innerWidth || 800;
+        const vh = window.innerHeight || 600;
         const roots = document.querySelectorAll('#nav-main, #nav-contact');
         roots.forEach((root) => {
             const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
@@ -791,10 +793,10 @@ function initializeCylonEffects() {
                     const span = document.createElement('span');
                     span.className = 'cylon-scatter-char';
                     span.textContent = ch;
-                    // Blast outward from a rough page center — nuke shockwave
-                    const dx = (Math.random() - 0.5) * 42;
-                    const dy = (Math.random() - 0.35) * 52;
-                    const rot = (Math.random() - 0.5) * 72;
+                    // Spread across the full viewport — planetary nuke debris field
+                    const dx = (Math.random() - 0.5) * vw * 1.15;
+                    const dy = (Math.random() - 0.5) * vh * 1.2;
+                    const rot = (Math.random() - 0.5) * 180;
                     span.style.setProperty('--sx', `${dx.toFixed(1)}px`);
                     span.style.setProperty('--sy', `${dy.toFixed(1)}px`);
                     span.style.setProperty('--sr', `${rot.toFixed(1)}deg`);
@@ -816,10 +818,27 @@ function initializeCylonEffects() {
 
     function syncWorldEndedLook() {
         const on = settings.gameEnabled;
-        document.body.classList.toggle('cylon-world-ended', on);
         document.body.classList.toggle('cylon-game-live', on);
-        if (on) scatterPageGlyphs();
-        else restorePageGlyphs();
+        if (on) {
+            // Wrap glyphs first at rest, then blow them outward next frame so CSS transitions fire
+            scatterPageGlyphs();
+            document.body.classList.add('cylon-world-ended');
+            document.body.classList.remove('cylon-glyphs-blown');
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    if (settings.gameEnabled) {
+                        document.body.classList.add('cylon-glyphs-blown');
+                    }
+                });
+            });
+        } else {
+            document.body.classList.remove('cylon-glyphs-blown');
+            document.body.classList.remove('cylon-world-ended');
+            // Let letters ease home, then unwrap
+            setTimeout(() => {
+                if (!settings.gameEnabled) restorePageGlyphs();
+            }, 1300);
+        }
     }
 
     function allBots() {

@@ -816,6 +816,15 @@ function initializeCylonEffects() {
                 }
                 textNode.parentNode.replaceChild(frag, textNode);
             });
+            // Give list markers their own blast vectors (CSS reads --mx/--my/--mr)
+            root.querySelectorAll('.interest-list li, .course-list li').forEach((li) => {
+                const dx = (Math.random() - 0.5) * vw * 0.35;
+                const dy = (Math.random() - 0.5) * vh * 0.4;
+                const rot = (Math.random() - 0.5) * 120;
+                li.style.setProperty('--mx', `${dx.toFixed(1)}px`);
+                li.style.setProperty('--my', `${dy.toFixed(1)}px`);
+                li.style.setProperty('--mr', `${rot.toFixed(1)}deg`);
+            });
         });
         document.body.dataset.cylonScattered = '1';
     }
@@ -824,6 +833,11 @@ function initializeCylonEffects() {
         if (document.body.dataset.cylonScattered !== '1') return;
         document.querySelectorAll('.cylon-scatter-char').forEach((span) => {
             span.replaceWith(document.createTextNode(span.textContent || ''));
+        });
+        document.querySelectorAll('.interest-list li, .course-list li').forEach((li) => {
+            li.style.removeProperty('--mx');
+            li.style.removeProperty('--my');
+            li.style.removeProperty('--mr');
         });
         document.body.dataset.cylonScattered = '0';
     }

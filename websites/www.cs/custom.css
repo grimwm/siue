@@ -2595,6 +2595,37 @@ body.cylon-glyphs-blown .cylon-scatter-char {
     0 1.5px 0 rgba(0, 0, 0, 0.4);
 }
 
+/* List chrome (bullets, rules) otherwise stays planted after glyphs fly */
+.interest-list li::before,
+.course-list li::before {
+  transition:
+    opacity calc(var(--cylon-desolate-fade, 1.6s) * 0.7) ease,
+    transform var(--cylon-desolate-fade, 1.6s) cubic-bezier(0.15, 0.85, 0.25, 1),
+    box-shadow calc(var(--cylon-desolate-fade, 1.6s) * 0.7) ease;
+}
+
+body.cylon-glyphs-blown .interest-list li::before,
+body.cylon-glyphs-blown .course-list li::before {
+  opacity: 0;
+  transform: translate(var(--mx, 12px), var(--my, -28px)) rotate(var(--mr, -25deg));
+  box-shadow: none;
+}
+
+.project-list > li,
+.page-panel h2 {
+  transition:
+    border-color var(--cylon-desolate-fade, 1.6s) ease,
+    opacity var(--cylon-desolate-fade, 1.6s) ease;
+}
+
+body.cylon-glyphs-blown .project-list > li {
+  border-bottom-color: transparent;
+}
+
+body.cylon-glyphs-blown .page-panel h2 {
+  border-bottom-color: transparent;
+}
+
 /* Chromatic fracture on block type when glyphs aren't wrapped yet */
 body.cylon-world-ended #nav-main h1,
 body.cylon-world-ended #nav-main h2,

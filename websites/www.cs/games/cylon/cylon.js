@@ -5,7 +5,7 @@
  */
 
 // Host blocks .html under games/ — serve mount from home-dir root (see cylon-mount.html symlink)
-const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006cn';
+const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261007a';
 
 async function mountCylonDom() {
     const root = document.getElementById('game-root');
@@ -55,6 +55,7 @@ async function initializeCylonEffects() {
     const gameOverBoardEl = document.getElementById('cylon-gameover-board');
     const gameOverScoresEl = document.getElementById('cylon-gameover-scores');
     const scoreSubmitBtn = document.getElementById('cylon-score-submit');
+    const initialsErrorEl = document.getElementById('cylon-initials-error');
     const playAgainBtn = document.getElementById('cylon-play-again');
     const reticleEl = document.getElementById('cylon-reticle');
     const navBurger = document.getElementById('site-nav-burger');
@@ -90,6 +91,22 @@ async function initializeCylonEffects() {
     const SETTINGS_KEY = 'cylon-settings';
     const SCORES_API = 'scores.php';
     const HIGH_SCORE_LIMIT = 10; // keep in sync with scores.php MAX_SCORES
+    // Keep in sync with BLOCKED_INITIALS in scores.php
+    const BLOCKED_INITIALS = new Set([
+        'ASS',
+        'FUK', 'FUC', 'FCK', 'FUX', 'FUQ',
+        'SHT', 'SHI',
+        'DIK', 'DIC', 'DCK',
+        'COK', 'COC', 'COQ',
+        'CUM', 'JIZ',
+        'CNT', 'PUS', 'VAG', 'CLT',
+        'SEX', 'XXX', 'TIT',
+        'FAG', 'FGT',
+        'NIG', 'NGR',
+        'WTF', 'FFS',
+        'POO', 'PEE',
+        'KKK',
+    ]);
     const defaults = {
         gameEnabled: false,
         soundEnabled: true,
@@ -376,6 +393,21 @@ async function initializeCylonEffects() {
         return initialLetters.map(readInitialLetter).join('').slice(0, 3).padEnd(3, 'A');
     }
 
+    function isBlockedInitials(initials) {
+        return BLOCKED_INITIALS.has((initials || '').toUpperCase());
+    }
+
+    function setInitialsError(message) {
+        if (!initialsErrorEl) return;
+        if (message) {
+            initialsErrorEl.textContent = message;
+            initialsErrorEl.hidden = false;
+        } else {
+            initialsErrorEl.textContent = '';
+            initialsErrorEl.hidden = true;
+        }
+    }
+
     function setActiveInitial(idx) {
         activeInitialIdx = Math.max(0, Math.min(2, idx));
         initialLetters.forEach((el, i) => {
@@ -391,6 +423,7 @@ async function initializeCylonEffects() {
         const code = readInitialLetter(el).charCodeAt(0) - 65;
         const next = ((code + dir) % 26 + 26) % 26;
         el.textContent = String.fromCharCode(65 + next);
+        setInitialsError('');
         setActiveInitial(idx);
     }
 
@@ -398,11 +431,17 @@ async function initializeCylonEffects() {
         initialLetters.forEach((el) => {
             if (el) el.textContent = 'A';
         });
+        setInitialsError('');
         setActiveInitial(0);
     }
 
     async function submitHighScore(score, initials) {
-        if (!score || score < 1) return;
+        if (!score || score < 1) return false;
+        const clean = (initials || 'AAA').toUpperCase().slice(0, 3).padEnd(3, 'A');
+        if (isBlockedInitials(clean)) {
+            setInitialsError("Those initials aren't valid — choose another.");
+            return false;
+        }
         try {
             const res = await fetch(SCORES_API, {
                 method: 'POST',
@@ -410,16 +449,32 @@ async function initializeCylonEffects() {
                 body: JSON.stringify({
                     score,
                     hits: pendingScore ? pendingScore.hits : hitsTaken,
-                    initials: initials || 'AAA'
+                    initials: clean
                 }),
                 cache: 'no-store'
             });
+            let data = null;
+            try {
+                data = await res.json();
+            } catch {
+                data = null;
+            }
+            if (res.status === 400 && data && data.error === 'invalid initials') {
+                setInitialsError("Those initials aren't valid — choose another.");
+                if (Array.isArray(data.scores)) {
+                    cachedHighScores = data.scores;
+                    renderHighScores();
+                }
+                return false;
+            }
             if (!res.ok) throw new Error('bad status');
-            const data = await res.json();
-            cachedHighScores = Array.isArray(data.scores) ? data.scores : cachedHighScores;
+            setInitialsError('');
+            cachedHighScores = Array.isArray(data && data.scores) ? data.scores : cachedHighScores;
             renderHighScores();
+            return true;
         } catch {
             renderHighScores(cachedHighScores);
+            return false;
         }
     }
 
@@ -3605,9 +3660,10 @@ async function initializeCylonEffects() {
                 const initials = readInitials();
                 const score = pendingScore ? pendingScore.score : koScore;
                 scoreSubmitBtn.disabled = true;
-                await submitHighScore(score, initials);
-                pendingScore = null;
+                const ok = await submitHighScore(score, initials);
                 scoreSubmitBtn.disabled = false;
+                if (!ok) return;
+                pendingScore = null;
                 revealHighScoreBoard();
             });
         }

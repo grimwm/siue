@@ -748,11 +748,23 @@ function initializeCylonEffects() {
             if (h.phase === 'hold' && h.holdDue > pauseStartedAt) {
                 clearTimeout(h.holdTimer);
                 h.holdDue += elapsed;
-                h.holdTimer = setTimeout(() => beginHoleFade(h), Math.max(0, h.holdDue - Date.now()));
+                h.holdTimer = setTimeout(() => {
+                    if (paused) {
+                        h.holdTimer = null;
+                        return;
+                    }
+                    beginHoleFade(h);
+                }, Math.max(0, h.holdDue - Date.now()));
             } else if (h.phase === 'fade' && h.fadeDue > pauseStartedAt) {
                 clearTimeout(h.fadeTimer);
                 h.fadeDue += elapsed;
-                h.fadeTimer = setTimeout(() => removeHoleEntry(h), Math.max(0, h.fadeDue - Date.now()));
+                h.fadeTimer = setTimeout(() => {
+                    if (paused) {
+                        h.fadeTimer = null;
+                        return;
+                    }
+                    removeHoleEntry(h);
+                }, Math.max(0, h.fadeDue - Date.now()));
             }
         });
     }
@@ -1086,6 +1098,12 @@ function initializeCylonEffects() {
             paused = true;
             pauseStartedAt = Date.now();
             clearTimeout(idleTimer);
+            activeHoles.forEach((h) => {
+                clearTimeout(h.holdTimer);
+                clearTimeout(h.fadeTimer);
+                h.holdTimer = null;
+                h.fadeTimer = null;
+            });
             setEyeTracking(false);
             syncMusic();
             updateAbilityButtons();
@@ -1427,7 +1445,13 @@ function initializeCylonEffects() {
         entry.el.style.setProperty('--hole-fade-ms', `${entry.fadeMs}ms`);
         entry.el.classList.add('is-fading');
         entry.fadeDue = Date.now() + entry.fadeMs;
-        entry.fadeTimer = setTimeout(() => removeHoleEntry(entry), entry.fadeMs);
+        entry.fadeTimer = setTimeout(() => {
+            if (paused) {
+                entry.fadeTimer = null;
+                return;
+            }
+            removeHoleEntry(entry);
+        }, entry.fadeMs);
     }
 
     function forceFadeOldestHole() {
@@ -1473,7 +1497,13 @@ function initializeCylonEffects() {
             fadeMs: fade,
             phase: 'hold'
         };
-        entry.holdTimer = setTimeout(() => beginHoleFade(entry), hold);
+        entry.holdTimer = setTimeout(() => {
+            if (paused) {
+                entry.holdTimer = null;
+                return;
+            }
+            beginHoleFade(entry);
+        }, hold);
         activeHoles.push(entry);
     }
 

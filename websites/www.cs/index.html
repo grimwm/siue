@@ -43,7 +43,7 @@
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-<link href="custom.css?v=20261006aq" rel="stylesheet">
+<link href="custom.css?v=20261006as" rel="stylesheet">
 </head>
 
 <body>
@@ -126,7 +126,7 @@
           </label>
           <p class="cylon-settings-title cylon-settings-scores-title">High scores</p>
           <ol class="cylon-high-scores" id="cylon-high-scores"></ol>
-          <p class="cylon-settings-hint">Survive until 30 hits — occasional nukes and small missiles (2 hits each). Cyan/pink missiles chase you; orange locks where you just aimed. More drones as KOs rise; the page looks ruined while Game On. Drag the pip to dodge · tap drones · Grenade / Raptor in the bar.</p>
+          <p class="cylon-settings-hint">Survive until 30 hits — occasional nukes and small missiles (2 hits each). Last 10s without a hit to heal 1. Cyan/pink missiles chase you; orange locks where you just aimed. More drones as KOs rise; the page looks ruined while Game On. Drag the pip to dodge · tap drones · Grenade / Raptor in the bar.</p>
         </div>
       </div>
       <button type="button" class="site-nav-burger" id="site-nav-burger" aria-expanded="false" aria-controls="site-nav-menu" title="Menu">
@@ -151,7 +151,7 @@
         <span class="cylon-score-label">KOs</span>
         <span class="cylon-score-value" id="cylon-score-value">0</span>
       </span>
-      <span class="cylon-score" id="cylon-hits" title="Hits taken — game over at 30, or if a nuke lands on you" aria-live="polite">
+      <span class="cylon-score" id="cylon-hits" title="Hits taken — game over at 30, or if a nuke lands on you. Heal 1 after 10s without a hit." aria-live="polite">
         <span class="cylon-score-label">Hits</span>
         <span class="cylon-score-value" id="cylon-hits-value">0</span>
         <span class="cylon-score-cap">/30</span>
@@ -192,6 +192,7 @@
         <li><strong>Raptor</strong> (<kbd>R</kbd>): orbital strike that clears the field and dazes the eye.</li>
         <li>Over time, expect occasional <strong>nukes</strong> and smaller <strong>missiles</strong> (each missile costs <strong>2 hits</strong>).</li>
         <li><strong>Cyan/pink</strong> missiles chase you; <strong>orange</strong> ones aim where you just were.</li>
+        <li>Go <strong>10 seconds</strong> without taking a hit to <strong>heal 1</strong>.</li>
         <li>More <strong>drones</strong> appear as your KO count rises.</li>
         <li>With <strong>Game On</strong>, the page gradually looks ruined — flip Game Off to restore it.</li>
         <li>Survive until <strong>30 hits</strong> — or a nuke lands on you — then enter 3 initials for the board.</li>
@@ -206,6 +207,7 @@
         <li><strong>Raptor</strong>: tap for a strike that clears drones and dazes the eye.</li>
         <li>Over time, expect occasional <strong>nukes</strong> and smaller <strong>missiles</strong> (each missile costs <strong>2 hits</strong>).</li>
         <li><strong>Cyan/pink</strong> missiles chase you; <strong>orange</strong> ones aim where you just were.</li>
+        <li>Go <strong>10 seconds</strong> without taking a hit to <strong>heal 1</strong>.</li>
         <li>More <strong>drones</strong> appear as your KO count rises.</li>
         <li>With <strong>Game On</strong>, the page gradually looks ruined — flip Game Off to restore it.</li>
         <li>Survive until <strong>30 hits</strong> — or a nuke lands on you — then scroll initials ▲▼ for the high-score board.</li>
@@ -314,7 +316,7 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-<script src="main.js?v=20261006ar"></script>
+<script src="main.js?v=20261006as"></script>
 <script>
   initializeTheme();
   showNavDiv("main");

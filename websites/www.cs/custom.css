@@ -811,6 +811,12 @@ body.cylon-touch-play .cylon-bot {
   color: #fff;
 }
 
+.cylon-score-value.is-heal {
+  transform: scale(1.2);
+  color: #7dff9a;
+  text-shadow: 0 0 10px rgba(80, 255, 140, 0.65);
+}
+
 .cylon-score-cap {
   color: var(--steel);
   font-size: 0.68rem;

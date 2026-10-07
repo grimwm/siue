@@ -154,6 +154,8 @@ function initializeCylonEffects() {
     let activeBots = 0;
     let koScore = 0;
     let hitCount = 0;
+    let healTimer = null;
+    let healDueAt = 0;
     let gameOver = false;
     let paused = false;
     let pauseStartedAt = 0;
@@ -189,6 +191,7 @@ function initializeCylonEffects() {
     const LINK_PAD = 28;
     const HIT_RADIUS = 52;
     const MAX_HITS = 30;
+    const HEAL_IDLE_MS = 10000;
     const NUKE_DIRECT_HIT_RADIUS = 120;
     const NUKE_SPEED = 520; // px/sec toward cursor
     const NUKE_ARRIVE_RADIUS = 28;
@@ -1213,6 +1216,14 @@ function initializeCylonEffects() {
                 scheduleNukes(false);
             }, Math.max(0, nukeDueAt - Date.now()));
         }
+        if (healDueAt > pauseStartedAt) {
+            clearTimeout(healTimer);
+            healDueAt += elapsed;
+            healTimer = setTimeout(() => {
+                healTimer = null;
+                tryHeal();
+            }, Math.max(0, healDueAt - Date.now()));
+        }
 
         activeHoles.forEach((h) => {
             if (h.phase === 'hold' && h.holdDue > pauseStartedAt) {
@@ -1408,6 +1419,42 @@ function initializeCylonEffects() {
     function playHitSound() {
         playTone({ freq: 160, freqEnd: 70, type: 'sawtooth', duration: 0.1, gain: 0.05 });
         playNoiseBurst({ duration: 0.08, gain: 0.04 });
+    }
+
+    function playHealSound() {
+        playTone({ freq: 280, freqEnd: 540, type: 'sine', duration: 0.18, gain: 0.05 });
+        playTone({ freq: 420, freqEnd: 660, type: 'triangle', duration: 0.14, gain: 0.03, delay: 0.04 });
+    }
+
+    function clearHealTimer() {
+        clearTimeout(healTimer);
+        healTimer = null;
+        healDueAt = 0;
+    }
+
+    function tryHeal() {
+        healTimer = null;
+        healDueAt = 0;
+        if (!isGameLive() || hitCount <= 0) return;
+        hitCount -= 1;
+        updateHitsUi();
+        if (settings.soundEnabled) ensureAudio();
+        playHealSound();
+        if (hitsEl) {
+            hitsEl.classList.add('is-heal');
+            setTimeout(() => hitsEl.classList.remove('is-heal'), 320);
+        }
+        scheduleHeal();
+    }
+
+    function scheduleHeal() {
+        clearHealTimer();
+        if (!settings.gameEnabled || gameOver || paused || hitCount <= 0) return;
+        healDueAt = Date.now() + HEAL_IDLE_MS;
+        healTimer = setTimeout(() => {
+            healTimer = null;
+            tryHeal();
+        }, HEAL_IDLE_MS);
     }
 
     function playRaptorSound() {
@@ -1675,8 +1722,10 @@ function initializeCylonEffects() {
             });
             clearTimeout(missileTimer);
             clearTimeout(nukeTimer);
+            clearTimeout(healTimer);
             missileTimer = null;
             nukeTimer = null;
+            healTimer = null;
             setEyeTracking(false);
             syncMusic();
             updateAbilityButtons();
@@ -1905,13 +1954,16 @@ function initializeCylonEffects() {
         hitCount += count;
         updateHitsUi();
         playHitSound();
+        scheduleHeal();
 
         if (fromNuke) {
+            clearHealTimer();
             endGame('nuke');
             return;
         }
 
         if (hitCount >= MAX_HITS) {
+            clearHealTimer();
             endGame('hits');
         }
     }
@@ -2596,6 +2648,7 @@ function initializeCylonEffects() {
         saveSettings();
         clearAllBots();
         clearInboundSchedulers();
+        clearHealTimer();
         runStartedAt = 0;
         clearTimeout(idleTimer);
         setEyeTracking(false);
@@ -2618,6 +2671,7 @@ function initializeCylonEffects() {
         hitCount = 0;
         gameOver = false;
         pendingScore = null;
+        clearHealTimer();
         if (scoreEl) scoreEl.textContent = '0';
         updateHitsUi();
     }
@@ -2642,6 +2696,7 @@ function initializeCylonEffects() {
         if (!on) {
             clearAllBots();
             clearInboundSchedulers();
+            clearHealTimer();
             runStartedAt = 0;
             clearTimeout(idleTimer);
             setEyeTracking(false);

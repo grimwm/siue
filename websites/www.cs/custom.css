@@ -721,18 +721,27 @@ body:not(.cylon-nav-combat) .site-nav-power {
   margin-top: 0.25rem;
 }
 
-/* While touch play is live: allow multi-finger taps without browser gesture hijacks */
+/* Touch play: lock page scroll; nav / bots still accept taps */
+html:has(body.cylon-touch-play),
 body.cylon-touch-play {
-  touch-action: manipulation;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+body.cylon-touch-play main {
+  /* Let the dodge pip receive hits above the page surface */
+  pointer-events: none !important;
 }
 
 body.cylon-touch-play .site-nav,
 body.cylon-touch-play .site-nav-game,
 body.cylon-touch-play .cylon-bot {
   touch-action: manipulation;
+  pointer-events: auto;
 }
 
-/* Dodge pip — below nav so a second finger can hit the bar (touch) */
+/* Dodge pip — above page content, below sticky nav (second finger hits bar / bots) */
 .cylon-reticle {
   position: fixed;
   left: 0;
@@ -740,7 +749,7 @@ body.cylon-touch-play .cylon-bot {
   width: 56px;
   height: 56px;
   margin: -28px 0 0 -28px;
-  z-index: 1025;
+  z-index: 2100;
   pointer-events: auto;
   touch-action: none;
   cursor: grab;
@@ -1697,7 +1706,7 @@ body.cylon-game-live main [role="button"] {
   pointer-events: auto;
   cursor: crosshair;
   /* Above the dodge pip so a second finger can tap hostiles while dragging */
-  z-index: 1061;
+  z-index: 2150;
   touch-action: manipulation;
   transform-origin: 50% 80%;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.55));

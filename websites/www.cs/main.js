@@ -88,6 +88,9 @@ function initializeCylonEffects() {
     const navMenu = document.getElementById('site-nav-menu');
     const navPower = document.getElementById('site-nav-power');
     const navGame = document.getElementById('site-nav-game');
+    const siteBrand = document.getElementById('site-brand');
+    const BRAND_CIVIL = 'William Grim';
+    const BRAND_COMBAT = 'The CIC';
     const helpBtn = document.getElementById('cylon-help-btn');
     const helpEl = document.getElementById('cylon-help');
     const helpPlatformEl = document.getElementById('cylon-help-platform');
@@ -271,6 +274,9 @@ function initializeCylonEffects() {
     /** Apply civil vs combat nav structure (no animation). */
     function applyNavChrome(on) {
         document.body.classList.toggle('cylon-nav-combat', on);
+        if (siteBrand) {
+            siteBrand.textContent = on ? BRAND_COMBAT : BRAND_CIVIL;
+        }
         if (navGame) {
             navGame.hidden = !on;
         }

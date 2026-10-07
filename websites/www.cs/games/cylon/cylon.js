@@ -5,7 +5,7 @@
  */
 
 // Host blocks .html under games/ — serve mount from home-dir root (see cylon-mount.html symlink)
-const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006ci';
+const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006cj';
 
 async function mountCylonDom() {
     const root = document.getElementById('game-root');
@@ -155,6 +155,8 @@ async function initializeCylonEffects() {
     let ambushTimer = null;
     let raptorReadyAt = 0;
     let raptorInbound = false;
+    /** @type {ReturnType<typeof setTimeout>[]} */
+    let raptorStrikeTimers = [];
     let abilityCdTimer = null;
     let eyeDisorientedUntil = 0;
     let grenadeReadyAt = 0;
@@ -2449,6 +2451,34 @@ async function initializeCylonEffects() {
         updateGrenadeButton();
     }
 
+    function clearRaptorStrike() {
+        raptorStrikeTimers.forEach((t) => clearTimeout(t));
+        raptorStrikeTimers = [];
+        raptorInbound = false;
+        if (raptorEl) raptorEl.classList.remove('is-inbound');
+        if (raptorImpactsEl) raptorImpactsEl.innerHTML = '';
+    }
+
+    function clearEyeDisorient() {
+        eyeDisorientedUntil = 0;
+        if (eye) eye.classList.remove('is-disoriented');
+        if (glare) {
+            glare.classList.remove('is-disoriented');
+            if (!tracking) glare.classList.remove('is-active');
+        }
+    }
+
+    /** Cooldowns / armed state do not carry across runs. */
+    function resetAbilityCooldowns() {
+        grenadeReadyAt = 0;
+        raptorReadyAt = 0;
+        grenadeArmed = false;
+        document.body.classList.remove('cylon-grenade-armed');
+        clearRaptorStrike();
+        clearEyeDisorient();
+        updateAbilityButtons();
+    }
+
     function cancelGrenadeArm() {
         if (!grenadeArmed) return;
         grenadeArmed = false;
@@ -2553,6 +2583,7 @@ async function initializeCylonEffects() {
         if (Date.now() < raptorReadyAt) return false;
         if (!raptorEl) return false;
 
+        clearRaptorStrike();
         raptorInbound = true;
         raptorReadyAt = Date.now() + RAPTOR_COOLDOWN_MS;
         updateAbilityButtons();
@@ -2561,18 +2592,20 @@ async function initializeCylonEffects() {
         disorientEye(EYE_DISORIENT_MS);
 
         raptorEl.classList.add('is-inbound');
-        setTimeout(() => {
+        raptorStrikeTimers.push(setTimeout(() => {
+            if (!raptorInbound || !isGameLive()) return;
             rearrangeLandscape(window.innerWidth * 0.5, window.innerHeight * 0.62, 0.58);
             spawnRaptorImpacts();
             wipeAllBotsWithScore();
-        }, RAPTOR_STRIKE_AT_MS);
+        }, RAPTOR_STRIKE_AT_MS));
 
-        setTimeout(() => {
+        raptorStrikeTimers.push(setTimeout(() => {
             raptorEl.classList.remove('is-inbound');
             if (raptorImpactsEl) raptorImpactsEl.innerHTML = '';
             raptorInbound = false;
+            raptorStrikeTimers = [];
             updateAbilityButtons();
-        }, 1900);
+        }, 1900));
 
         return true;
     }
@@ -3336,16 +3369,15 @@ async function initializeCylonEffects() {
         runStartedAt = 0;
         clearTimeout(idleTimer);
         setEyeTracking(false);
-        cancelGrenadeArm();
         cancelIntroNuke();
         draggingReticle = false;
         reticlePointerId = null;
+        resetAbilityCooldowns();
         if (!keepSession) {
             settings.gameEnabled = false;
             saveSettings();
             document.body.classList.remove('cylon-touch-play');
         }
-        updateAbilityButtons();
         syncGameToggleUi();
         syncReticleVisibility();
         syncMusic();
@@ -3392,7 +3424,6 @@ async function initializeCylonEffects() {
             runStartedAt = 0;
             clearTimeout(idleTimer);
             setEyeTracking(false);
-            cancelGrenadeArm();
             draggingReticle = false;
             reticlePointerId = null;
             paused = false;
@@ -3404,7 +3435,7 @@ async function initializeCylonEffects() {
             if (helpEl && !helpEl.hidden) {
                 helpEl.hidden = true;
             }
-            updateAbilityButtons();
+            resetAbilityCooldowns();
             syncGameToggleUi();
             syncReticleVisibility();
             syncMusic();
@@ -3415,7 +3446,7 @@ async function initializeCylonEffects() {
             clearInboundSchedulers();
             hideGameOver();
             resetRunStats();
-            updateAbilityButtons();
+            resetAbilityCooldowns();
             syncGameToggleUi();
             syncReticleVisibility();
             syncMusic();

@@ -113,9 +113,9 @@ function initializeCylonEffects() {
         gameEnabled: false,
         soundEnabled: true,
         musicEnabled: true,
-        // UI midpoint; gain curve maps 50 → former default loudness
+        // UI midpoints; gain curves map 50% to the intended default loudness
         soundVolume: 50,
-        musicVolume: 40,
+        musicVolume: 50,
         eyeEnabled: true
     };
     let settings = loadSettings();
@@ -123,9 +123,17 @@ function initializeCylonEffects() {
     settings.gameEnabled = false;
     settings.soundVolume = Math.max(0, Math.min(100, Number(settings.soundVolume) || defaults.soundVolume));
     settings.musicVolume = Math.max(0, Math.min(100, Number(settings.musicVolume) || defaults.musicVolume));
-    // Migrate old SFX default (85) to the new midpoint UI value (same loudness)
+    // Migrate old defaults to the new midpoint UI values
+    let migrated = false;
     if (settings.soundVolume === 85) {
         settings.soundVolume = 50;
+        migrated = true;
+    }
+    if (settings.musicVolume === 40) {
+        settings.musicVolume = 50;
+        migrated = true;
+    }
+    if (migrated) {
         try {
             localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
         } catch {
@@ -357,8 +365,8 @@ function initializeCylonEffects() {
     function volumeToGain(pct, bus = 'sfx') {
         const t = Math.max(0, Math.min(100, Number(pct) || 0)) / 100;
         if (bus === 'music') {
-            // Keep slider default at 40; boost so the bed reads clearly at that setting
-            return Math.min(1, t * t * 2.4);
+            // UI 50% = former music-at-100% loudness (gain 1); 100% can go hotter
+            return Math.min(2, t / 0.5);
         }
         // SFX: UI 50 ≈ former default at 85 (0.85²); 100 still reaches full gain
         const internalPct = t <= 0.5

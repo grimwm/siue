@@ -5,7 +5,7 @@
  */
 
 // Host blocks .html under games/ — serve mount from home-dir root (see cylon-mount.html symlink)
-const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006cl';
+const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006cm';
 
 async function mountCylonDom() {
     const root = document.getElementById('game-root');
@@ -193,6 +193,9 @@ async function initializeCylonEffects() {
     /** Local letter/terrain chew for player shots, robot bolts, and inbound missiles. */
     const SMALL_WEAPON_SCALE = 0.22;
     const MISSILE_WEAPON_SCALE = 0.32;
+    const GRENADE_WEAPON_SCALE = 0.62;
+    const RAPTOR_IMPACT_SCALE = 0.5;
+    const RAPTOR_STRIKE_SCALE = 0.72;
     const MISSILE_TRACKER_CHANCE_BASE = 0.14;
     const MISSILE_TRACKER_CAP_MAX = 3;
     const MISSILE_GROUND_CAP_MAX = 5;
@@ -2539,7 +2542,10 @@ async function initializeCylonEffects() {
                 fadeMs: HOLE_PRESETS.small.fadeMs
             });
         }
-        rearrangeLandscapePage(x, y, 0.48);
+        // Letter AoE sized to the grenade blast (not the weak shot-scale radius)
+        rearrangeLandscapePage(x, y, GRENADE_WEAPON_SCALE, {
+            radius: GRENADE_RADIUS * 1.2
+        });
         setTimeout(() => blast.remove(), 480);
 
         allBots().forEach((bot) => {
@@ -2557,8 +2563,10 @@ async function initializeCylonEffects() {
         if (!raptorImpactsEl) return;
         raptorImpactsEl.innerHTML = '';
         const count = 10;
+        const impactRadius = 110;
         for (let i = 0; i < count; i++) {
             setTimeout(() => {
+                if (!isGameLive()) return;
                 const hit = document.createElement('span');
                 hit.className = 'cylon-raptor-impact';
                 const leftPct = 12 + Math.random() * 76;
@@ -2569,7 +2577,9 @@ async function initializeCylonEffects() {
                 const pageX = window.scrollX + (leftPct / 100) * window.innerWidth;
                 const pageY = window.scrollY + (topPct / 100) * window.innerHeight;
                 punchHole(pageX, pageY, HOLE_PRESETS.medium);
-                rearrangeLandscapePage(pageX, pageY, 0.22);
+                rearrangeLandscapePage(pageX, pageY, RAPTOR_IMPACT_SCALE, {
+                    radius: impactRadius
+                });
                 setTimeout(() => hit.remove(), 560);
             }, i * 55);
         }
@@ -2601,7 +2611,15 @@ async function initializeCylonEffects() {
         raptorEl.classList.add('is-inbound');
         raptorStrikeTimers.push(setTimeout(() => {
             if (!raptorInbound || !isGameLive()) return;
-            rearrangeLandscape(window.innerWidth * 0.5, window.innerHeight * 0.62, 0.58);
+            // Local sweep across the strike band — not a single global landscape rewrite
+            const vw = window.innerWidth || 1;
+            const vh = window.innerHeight || 1;
+            const bandY = vh * 0.62;
+            const strikeRadius = Math.min(220, vw * 0.28);
+            for (let i = 0; i < 5; i++) {
+                const cx = vw * (0.18 + i * 0.16);
+                rearrangeLandscape(cx, bandY, RAPTOR_STRIKE_SCALE, { radius: strikeRadius });
+            }
             spawnRaptorImpacts();
             wipeAllBotsWithScore();
         }, RAPTOR_STRIKE_AT_MS));
@@ -2879,21 +2897,23 @@ async function initializeCylonEffects() {
 
     /**
      * Reshuffle fracture / ash overlays and nudge nearby debris.
-     * Global crack/ash rewrite only for large weapons (Raptor pulse / nuke).
-     * Everything else is a local AoE on individual letters + blast hotspot.
+     * Global crack/ash rewrite only for full nukes (scale ≈ 1).
+     * Grenade / Raptor / shots stay local letter AoE + blast hotspot.
+     * @param {{ radius?: number }} [opts] optional on-screen letter kick radius override
      */
-    function rearrangeLandscape(clientX, clientY, scale = 1) {
+    function rearrangeLandscape(clientX, clientY, scale = 1, opts = {}) {
         if (!document.body.classList.contains('cylon-world-ended') && scale < 0.9) {
             if (scale < 0.99) return;
         }
         const s = Math.max(0.05, Math.min(1, scale));
         const pageX = clientX + scrollX();
         const pageY = clientY + scrollY();
+        const radiusOpt = Number.isFinite(opts.radius) ? opts.radius : null;
 
-        // Smaller weapons: local letter AoE + hotspot — never rewrite the whole backdrop
-        if (s < 0.55) {
+        // Non-nuke weapons: local letter AoE + hotspot — never rewrite the whole backdrop
+        if (s < 0.9) {
             aimBlastHotspot(clientX, clientY, s);
-            disruptGlyphs(pageX, pageY, s);
+            disruptGlyphs(pageX, pageY, s, radiusOpt);
             return;
         }
 
@@ -2935,17 +2955,20 @@ async function initializeCylonEffects() {
         body.style.setProperty('--ash-scale', `${(1 + (landScale - 1) * 0.4).toFixed(3)}`);
         body.style.setProperty('--land-morph-ms', `${Math.round(420 + s * 930)}ms`);
 
-        disruptGlyphs(pageX, pageY, s);
+        disruptGlyphs(pageX, pageY, s, radiusOpt);
     }
 
     /**
-     * Kick debris that is visually next to the blast (getBoundingClientRect), not layout-home.
-     * Smaller weapons only touch individual letters — never parent blocks (those yank whole sections).
+     * Kick debris that is visually next to the blast (getBoundingClientRect).
+     * Non-nuke weapons only touch individual letters — never parent blocks.
+     * @param {number|null} radiusOverride explicit on-screen px radius (grenade/raptor blasts)
      */
-    function disruptGlyphs(pageX, pageY, scale = 1) {
+    function disruptGlyphs(pageX, pageY, scale = 1, radiusOverride = null) {
         if (document.body.dataset.cylonScattered !== '1' || reduceMotion) return;
         const s = Math.max(0.05, Math.min(1.6, scale));
-        const radius = disruptRadiusForScale(s);
+        const radius = Number.isFinite(radiusOverride) && radiusOverride > 0
+            ? radiusOverride
+            : disruptRadiusForScale(s);
         // Only full nuke-scale blasts may nudge blocks/panels
         const localOnly = s < 0.95;
         const selector = localOnly
@@ -2977,8 +3000,8 @@ async function initializeCylonEffects() {
         });
     }
 
-    function rearrangeLandscapePage(pageX, pageY, scale = 1) {
-        rearrangeLandscape(pageX - scrollX(), pageY - scrollY(), scale);
+    function rearrangeLandscapePage(pageX, pageY, scale = 1, opts = {}) {
+        rearrangeLandscape(pageX - scrollX(), pageY - scrollY(), scale, opts);
     }
 
     function clearLandscapeVars() {

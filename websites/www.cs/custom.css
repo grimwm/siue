@@ -1548,6 +1548,37 @@ body.cylon-grenade-armed .cylon-bot {
   background: var(--rail);
 }
 
+/* Behind page text while Game On — bots spawn here, then rise to the battlefield */
+.cylon-ambush-under {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  max-width: 100%;
+  z-index: 1055;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Page sits above ambush-under so bots can hide behind letters */
+body.cylon-game-live main {
+  position: relative;
+  z-index: 1058;
+}
+
+/* Block accidental link/UI clicks in page content; scroll still works */
+body.cylon-game-live main a,
+body.cylon-game-live main button,
+body.cylon-game-live main input,
+body.cylon-game-live main select,
+body.cylon-game-live main textarea,
+body.cylon-game-live main label,
+body.cylon-game-live main summary,
+body.cylon-game-live main [role="link"],
+body.cylon-game-live main [role="button"] {
+  pointer-events: none !important;
+  cursor: default;
+}
+
 /* —— Ambush battlefield (document-grounded; scrolls with the page) —— */
 .cylon-battlefield {
   position: absolute;
@@ -1575,6 +1606,29 @@ body.cylon-grenade-armed .cylon-bot {
   transform-origin: 50% 80%;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.55));
   transition: left 0.9s linear, top 0.9s linear;
+}
+
+.cylon-bot.is-hiding {
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35)) brightness(0.75);
+  opacity: 0.92;
+}
+
+.cylon-bot.is-emerging {
+  animation: botEmerge 0.55s ease-out forwards;
+}
+
+@keyframes botEmerge {
+  from {
+    opacity: 0.55;
+    transform: scale(0.82) translateY(10px);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35)) brightness(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.55));
+  }
 }
 
 .cylon-bot.is-marching .cylon-bot-legs span:first-child {

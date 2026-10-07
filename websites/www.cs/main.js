@@ -58,6 +58,7 @@ function initializeCylonEffects() {
     const eye = document.getElementById('cylon-eye');
     const glare = document.getElementById('cylon-glare');
     const field = document.getElementById('cylon-battlefield');
+    const ambushUnder = document.getElementById('cylon-ambush-under');
     const nukeEl = document.getElementById('cylon-nuke');
     const nukeMissileEl = document.getElementById('cylon-nuke-missile');
     const missileEl = document.getElementById('cylon-small-missile');
@@ -751,6 +752,13 @@ function initializeCylonEffects() {
     function syncWorldEndedLook() {
         const on = settings.gameEnabled;
         document.body.classList.toggle('cylon-world-ended', on);
+        document.body.classList.toggle('cylon-game-live', on);
+    }
+
+    function allBots() {
+        const under = ambushUnder ? [...ambushUnder.querySelectorAll('.cylon-bot')] : [];
+        const top = field ? [...field.querySelectorAll('.cylon-bot')] : [];
+        return under.concat(top);
     }
 
     function lerp(a, b, t) {
@@ -767,9 +775,10 @@ function initializeCylonEffects() {
 
     function nextMissileDelayMs() {
         const d = difficultyFactor();
-        const lo = lerp(11000, 7000, d);
+        // Early ~8–14s → late ~3.5–6s, never faster than 3.5s floor
+        const lo = lerp(11000, 4750, d);
         const span = lerp(3000, 2500, d);
-        return lo - span / 2 + Math.random() * span;
+        return Math.max(3500, lo - span / 2 + Math.random() * span);
     }
 
     function nextNukeDelayMs() {
@@ -1809,7 +1818,7 @@ function initializeCylonEffects() {
     }
 
     function clearAllBots() {
-        field.querySelectorAll('.cylon-bot').forEach((bot) => {
+        allBots().forEach((bot) => {
             clearBotTimers(bot);
             bot.remove();
         });
@@ -1906,7 +1915,7 @@ function initializeCylonEffects() {
         punchHole(x, y, HOLE_PRESETS.medium);
         setTimeout(() => blast.remove(), 480);
 
-        field.querySelectorAll('.cylon-bot').forEach((bot) => {
+        allBots().forEach((bot) => {
             if (bot.dataset.ko === '1') return;
             const bx = (parseFloat(bot.style.left) || 0) + BOT_SIZE.w / 2;
             const by = (parseFloat(bot.style.top) || 0) + BOT_SIZE.h / 2;
@@ -1939,7 +1948,7 @@ function initializeCylonEffects() {
     }
 
     function wipeAllBotsWithScore() {
-        const bots = [...field.querySelectorAll('.cylon-bot')];
+        const bots = allBots();
         bots.forEach((bot, i) => {
             setTimeout(() => {
                 if (bot.isConnected && bot.dataset.ko !== '1') knockOutBot(bot);
@@ -2015,12 +2024,41 @@ function initializeCylonEffects() {
 
     function herdBotsIntoView() {
         if (!isGameLive()) return;
-        field.querySelectorAll('.cylon-bot').forEach((bot) => {
+        allBots().forEach((bot) => {
             if (bot.dataset.ko === '1' || !bot.isConnected) return;
+            if (bot.classList.contains('is-hiding')) return;
             const x = parseFloat(bot.style.left) || 0;
             const y = parseFloat(bot.style.top) || 0;
             if (!isInVisiblePlayfield(x, y)) moveBot(bot);
         });
+    }
+
+    function findTextAmbushSpot() {
+        const panel = document.querySelector('#nav-main.is-active, #nav-contact.is-active')
+            || document.getElementById('nav-main');
+        if (!panel) return null;
+        const nodes = [...panel.querySelectorAll('h1, h2, h3, p, li')];
+        if (!nodes.length) return null;
+        // Prefer nodes currently in the viewport
+        const visible = nodes.filter((n) => {
+            const r = n.getBoundingClientRect();
+            return r.width > 8 && r.height > 8
+                && r.bottom > 60 && r.top < (window.innerHeight || 1) - 20
+                && r.right > 0 && r.left < (window.innerWidth || 1);
+        });
+        const pool = visible.length ? visible : nodes;
+        for (let attempt = 0; attempt < 12; attempt++) {
+            const node = pool[Math.floor(Math.random() * pool.length)];
+            const r = node.getBoundingClientRect();
+            if (r.width < 8 || r.height < 8) continue;
+            const page = toPageRect(r);
+            // Tuck under the glyph box (slightly inset so it reads as “behind” letters)
+            let x = page.left + Math.random() * Math.max(8, page.right - page.left - BOT_SIZE.w);
+            let y = page.top + Math.random() * Math.max(4, Math.min(page.bottom - page.top, BOT_SIZE.h) * 0.65);
+            ({ x, y } = clampToVisiblePlayfield(x, y));
+            return { x, y, edge: 'ambush' };
+        }
+        return null;
     }
 
     function startCombat(bot) {
@@ -2048,25 +2086,11 @@ function initializeCylonEffects() {
         return Math.min(BOT_HARD_CAP, BOT_CAP_START + Math.floor(koScore / BOT_CAP_PER_KOS));
     }
 
-    function spawnBot() {
-        if (!isGameLive() || activeBots >= botCap()) return false;
-        resizeBattlefield();
-        const spot = findSafeSpot();
-        if (!spot) return false;
-
-        const from = marchOrigin(spot);
-        const bot = document.createElement('button');
-        bot.type = 'button';
-        bot.className = 'cylon-bot is-marching';
-        bot.title = 'Attack drone';
-        bot.setAttribute('aria-label', 'Attack hostile drone');
-        bot.style.left = `${from.x}px`;
-        bot.style.top = `${from.y}px`;
-        bot.innerHTML = '<span class="cylon-bot-body"></span><span class="cylon-bot-legs" aria-hidden="true"><span></span><span></span></span>';
-
+    function attachBotControls(bot) {
         // pointerdown so a second finger can KO while the first drags the pip
         bot.addEventListener('pointerdown', (e) => {
             if (!isGameLive()) return;
+            if (bot.classList.contains('is-hiding')) return;
             if (reticlePointerId != null && e.pointerId === reticlePointerId) return;
             if (e.pointerType === 'mouse' && e.button != null && e.button !== 0) return;
             e.preventDefault();
@@ -2079,7 +2103,66 @@ function initializeCylonEffects() {
         bot.addEventListener('wheel', (e) => {
             window.scrollBy({ top: e.deltaY, left: e.deltaX, behavior: 'auto' });
         }, { passive: true });
+    }
 
+    function finishBotArrival(bot) {
+        if (bot.dataset.ko === '1' || !bot.isConnected) return;
+        bot.classList.remove('is-marching', 'is-hiding', 'is-emerging');
+        if (!ensureClearOfLinks(bot)) {
+            clearBotTimers(bot);
+            bot.remove();
+            activeBots = Math.max(0, activeBots - 1);
+            return;
+        }
+        startCombat(bot);
+    }
+
+    function spawnBot() {
+        if (!isGameLive() || activeBots >= botCap()) return false;
+        resizeBattlefield();
+
+        const ambush = Math.random() < 0.4 && ambushUnder;
+        const ambushSpot = ambush ? findTextAmbushSpot() : null;
+
+        const bot = document.createElement('button');
+        bot.type = 'button';
+        bot.title = 'Attack drone';
+        bot.setAttribute('aria-label', 'Attack hostile drone');
+        bot.innerHTML = '<span class="cylon-bot-body"></span><span class="cylon-bot-legs" aria-hidden="true"><span></span><span></span></span>';
+        attachBotControls(bot);
+
+        if (ambushSpot) {
+            bot.className = 'cylon-bot is-hiding';
+            bot.style.left = `${ambushSpot.x}px`;
+            bot.style.top = `${ambushSpot.y}px`;
+            ambushUnder.appendChild(bot);
+            activeBots += 1;
+
+            // Linger behind the letters, then rise onto the battlefield
+            setTimeout(() => {
+                if (bot.dataset.ko === '1' || !bot.isConnected || !isGameLive()) {
+                    if (bot.isConnected) {
+                        clearBotTimers(bot);
+                        bot.remove();
+                        activeBots = Math.max(0, activeBots - 1);
+                    }
+                    return;
+                }
+                field.appendChild(bot);
+                bot.classList.remove('is-hiding');
+                bot.classList.add('is-emerging');
+                setTimeout(() => finishBotArrival(bot), 560);
+            }, 700 + Math.random() * 900);
+            return true;
+        }
+
+        const spot = findSafeSpot();
+        if (!spot) return false;
+
+        const from = marchOrigin(spot);
+        bot.className = 'cylon-bot is-marching';
+        bot.style.left = `${from.x}px`;
+        bot.style.top = `${from.y}px`;
         field.appendChild(bot);
         activeBots += 1;
 
@@ -2088,18 +2171,7 @@ function initializeCylonEffects() {
             bot.style.top = `${spot.y}px`;
         });
 
-        setTimeout(() => {
-            if (bot.dataset.ko === '1' || !bot.isConnected) return;
-            bot.classList.remove('is-marching');
-            if (!ensureClearOfLinks(bot)) {
-                clearBotTimers(bot);
-                bot.remove();
-                activeBots = Math.max(0, activeBots - 1);
-                return;
-            }
-            startCombat(bot);
-        }, 950);
-
+        setTimeout(() => finishBotArrival(bot), 950);
         return true;
     }
 

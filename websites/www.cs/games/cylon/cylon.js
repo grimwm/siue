@@ -5,7 +5,7 @@
  */
 
 // Host blocks .html under games/ — serve mount from home-dir root (see cylon-mount.html symlink)
-const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006cg';
+const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006ch';
 
 async function mountCylonDom() {
     const root = document.getElementById('game-root');
@@ -2813,27 +2813,28 @@ async function initializeCylonEffects() {
         return current + (target - current) * scale;
     }
 
-    /** Blast radius (page px) for local letter kicks — shots/missiles stay nearby. */
+    /** Blast radius (page px) — AoE only, scaled by weapon power. */
     function disruptRadiusForScale(scale) {
-        return 100 + Math.max(0.05, Math.min(1.6, scale)) * 480;
+        const s = Math.max(0.05, Math.min(1.6, scale));
+        // shot≈0.14 → ~100px · missile≈0.34 → ~145px · grenade≈0.48 → ~175px · nuke≈1.4 → ~380px
+        return 70 + s * 220;
     }
 
     /**
      * Reshuffle fracture / ash overlays and nudge nearby debris.
-     * @param {number} scale 0–1 weapon power (nuke=1, grenade≈0.48, missile≈0.32, shot≈0.14)
-     * Shots/missiles (scale &lt; 0.4) only kick local glyphs — no global landscape rewrite.
+     * Global crack/ash rewrite only for large weapons (Raptor pulse / nuke).
+     * Everything else is a local AoE on individual letters.
      */
     function rearrangeLandscape(clientX, clientY, scale = 1) {
         if (!document.body.classList.contains('cylon-world-ended') && scale < 0.9) {
-            // Terrain chrome isn't up yet (pre-scatter intro) — only full nukes seed vars
             if (scale < 0.99) return;
         }
         const s = Math.max(0.05, Math.min(1, scale));
         const pageX = clientX + scrollX();
         const pageY = clientY + scrollY();
 
-        // Local weapons: scorched letters near impact only
-        if (s < 0.4) {
+        // Smaller weapons: local letter AoE only — never rewrite the whole backdrop
+        if (s < 0.55) {
             disruptGlyphs(pageX, pageY, s);
             return;
         }
@@ -2880,20 +2881,24 @@ async function initializeCylonEffects() {
     }
 
     /**
-     * Kick scattered letters / blocks near the blast only.
-     * @param {number} scale weapon power; nukes pass ~1.4
+     * Kick debris inside the weapon AoE only (individual letters for smaller blasts).
+     * Moving parent blocks would drag every child letter across the screen — never do that
+     * unless this is a large weapon.
      */
     function disruptGlyphs(pageX, pageY, scale = 1) {
         if (document.body.dataset.cylonScattered !== '1' || reduceMotion) return;
         const s = Math.max(0.05, Math.min(1.6, scale));
         const radius = disruptRadiusForScale(s);
-        const nodes = [...document.querySelectorAll('.cylon-scatter-char, .cylon-scatter-block, .cylon-scatter-panel')];
-        const chance = Math.min(1, 0.35 + s * 0.7);
-        const jitter = 55 * s;
-        const pushMax = 36 + 190 * s;
+        const localOnly = s < 0.7;
+        const selector = localOnly
+            ? '.cylon-scatter-char'
+            : '.cylon-scatter-char, .cylon-scatter-block, .cylon-scatter-panel';
+        const nodes = [...document.querySelectorAll(selector)];
+        const chance = Math.min(1, 0.45 + s * 0.55);
+        const jitter = 48 * s;
+        const pushMax = 28 + 160 * s;
         nodes.forEach((el) => {
-            // Whole page panels only move for big weapons
-            if (el.classList.contains('cylon-scatter-panel') && s < 0.55) return;
+            if (el.classList.contains('cylon-scatter-panel') && s < 0.9) return;
             const rect = el.getBoundingClientRect();
             const cx = rect.left + rect.width / 2 + scrollX();
             const cy = rect.top + rect.height / 2 + scrollY();
@@ -2905,11 +2910,11 @@ async function initializeCylonEffects() {
             const sx = parseFloat(el.style.getPropertyValue('--sx')) || 0;
             const sy = parseFloat(el.style.getPropertyValue('--sy')) || 0;
             const sr = parseFloat(el.style.getPropertyValue('--sr')) || 0;
-            const falloff = 1 - awayDist / radius;
-            const push = randRange(pushMax * 0.35, pushMax) * falloff;
+            const falloff = Math.max(0, 1 - awayDist / radius);
+            const push = randRange(pushMax * 0.4, pushMax) * falloff * falloff;
             el.style.setProperty('--sx', `${(sx + (awayX / awayDist) * push + randRange(-jitter, jitter) * falloff).toFixed(1)}px`);
             el.style.setProperty('--sy', `${(sy + (awayY / awayDist) * push + randRange(-jitter, jitter) * falloff).toFixed(1)}px`);
-            el.style.setProperty('--sr', `${(sr + randRange(-36, 36) * s * falloff).toFixed(1)}deg`);
+            el.style.setProperty('--sr', `${(sr + randRange(-28, 28) * s * falloff).toFixed(1)}deg`);
         });
     }
 

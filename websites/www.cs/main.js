@@ -258,7 +258,7 @@ function initializeCylonEffects() {
         return list.map((entry, i) => {
             const when = entry.at ? new Date(entry.at) : null;
             const date = when && !Number.isNaN(when.getTime())
-                ? when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+                ? when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
                 : '';
             const initials = (entry.initials || 'AAA').toString().slice(0, 3).toUpperCase();
             return `<li><span>#${i + 1} <strong>${initials}</strong> ${date}</span><span class="cylon-hs-score">${entry.score} KOs</span></li>`;

@@ -297,12 +297,7 @@ function initializeCylonEffects() {
         if (navGame) {
             navGame.hidden = !on;
         }
-        if (gameToggleBtn) {
-            const home = on ? navGame : navPower;
-            if (home && gameToggleBtn.parentElement !== home) {
-                home.appendChild(gameToggleBtn);
-            }
-        }
+        // Game toggle stays in #site-nav-power — never reparented (avoids fade/size jumps)
         if (on && navMenu && navBurger) {
             navMenu.classList.remove('is-open');
             navBurger.setAttribute('aria-expanded', 'false');

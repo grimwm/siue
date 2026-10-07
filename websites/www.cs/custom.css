@@ -378,10 +378,9 @@ button:focus-visible,
   box-sizing: border-box;
 }
 
-/* Fade chrome, brand, and theme toggle together */
+/* Fade chrome, brand, and theme — game toggle stays put */
 .site-brand,
 .site-nav-menu,
-.site-nav-power,
 .site-nav-game,
 .site-nav-burger,
 .theme-toggle {
@@ -391,7 +390,6 @@ button:focus-visible,
 
 .site-nav-inner.is-nav-fading .site-brand,
 .site-nav-inner.is-nav-fading .site-nav-menu,
-.site-nav-inner.is-nav-fading .site-nav-power,
 .site-nav-inner.is-nav-fading .site-nav-game,
 .site-nav-inner.is-nav-fading .site-nav-burger,
 .site-nav-inner.is-nav-fading .theme-toggle {
@@ -406,7 +404,6 @@ body.cylon-nav-combat .theme-toggle {
 @media (prefers-reduced-motion: reduce) {
   .site-brand,
   .site-nav-menu,
-  .site-nav-power,
   .site-nav-game,
   .site-nav-burger,
   .theme-toggle {
@@ -415,7 +412,6 @@ body.cylon-nav-combat .theme-toggle {
 
   .site-nav-inner.is-nav-fading .site-brand,
   .site-nav-inner.is-nav-fading .site-nav-menu,
-  .site-nav-inner.is-nav-fading .site-nav-power,
   .site-nav-inner.is-nav-fading .site-nav-game,
   .site-nav-inner.is-nav-fading .site-nav-burger,
   .site-nav-inner.is-nav-fading .theme-toggle {
@@ -426,7 +422,7 @@ body.cylon-nav-combat .theme-toggle {
 
 body.cylon-nav-combat .site-nav-inner {
   grid-template-areas:
-    "brand game tools"
+    "brand power tools"
     "game game game";
 }
 
@@ -458,10 +454,7 @@ body.cylon-nav-combat .site-nav-inner {
   align-items: center;
   justify-content: flex-end;
   gap: 0.3rem;
-}
-
-body.cylon-nav-combat .site-nav-power {
-  display: none;
+  flex: 0 0 auto;
 }
 
 .site-nav-tools {
@@ -548,7 +541,7 @@ body.cylon-nav-combat .site-nav-menu.is-open {
 }
 
 /* Desktop civil: Brand · Home/Contact · Game toggle · theme
-   Desktop live: Brand · game bar (incl. toggle) · theme */
+   Desktop live: Brand · game bar · Game toggle · (theme hidden) */
 @media (min-width: 820px) {
   .site-nav-inner {
     display: flex;
@@ -599,12 +592,6 @@ body.cylon-nav-combat .site-nav-menu.is-open {
     display: none !important;
   }
 
-  .site-nav-power {
-    flex: 0 0 auto;
-    order: 2;
-    margin-left: auto;
-  }
-
   .site-nav-game {
     flex: 1 1 auto;
     flex-wrap: wrap;
@@ -621,20 +608,22 @@ body.cylon-nav-combat .site-nav-menu.is-open {
     display: flex;
   }
 
-  .site-nav-tools {
+  .site-nav-power {
     flex: 0 0 auto;
     order: 3;
+    margin-left: 0;
+  }
+
+  body:not(.cylon-nav-combat) .site-nav-power {
+    margin-left: auto;
+  }
+
+  .site-nav-tools {
+    flex: 0 0 auto;
+    order: 4;
     gap: 0.65rem;
     margin-left: 0;
   }
-
-  body:not(.cylon-nav-combat) .site-nav-tools {
-    margin-left: 0;
-  }
-}
-
-.site-nav-game .cylon-game-toggle {
-  flex: 0 0 auto;
 }
 
 .site-nav-game .cylon-help-btn {
@@ -1232,7 +1221,11 @@ body.cylon-touch-play .cylon-bot {
 .cylon-game-toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.4rem;
+  width: 7.75rem;
+  min-width: 7.75rem;
+  max-width: 7.75rem;
   min-height: var(--nav-control-h, 2.25rem);
   font-family: var(--font-display);
   font-size: 0.72rem;
@@ -1247,26 +1240,25 @@ body.cylon-touch-play .cylon-bot {
   line-height: 1;
   touch-action: manipulation;
   box-sizing: border-box;
+  flex: 0 0 7.75rem;
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cylon-game-toggle-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 819px) {
   .site-nav-power {
-    max-width: 7.5rem;
     justify-self: end;
   }
 
-  .site-nav-power .cylon-game-toggle-label,
-  .site-nav-game .cylon-game-toggle-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   body.cylon-nav-combat .site-nav-inner {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto auto auto;
     grid-template-areas:
-      "brand tools tools"
+      "brand power tools"
       "game game game";
   }
 }

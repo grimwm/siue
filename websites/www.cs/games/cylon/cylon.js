@@ -5,7 +5,7 @@
  */
 
 // Host blocks .html under games/ — serve mount from home-dir root (see cylon-mount.html symlink)
-const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006ch';
+const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006ci';
 
 async function mountCylonDom() {
     const root = document.getElementById('game-root');
@@ -188,6 +188,8 @@ async function initializeCylonEffects() {
     const MISSILE_ARRIVE = 22;
     const MISSILE_MAX_FLIGHT_MS = 2200;
     const MISSILE_BLAST_RADIUS = 72;
+    /** Local letter/terrain chew for player shots, robot bolts, and inbound missiles. */
+    const SMALL_WEAPON_SCALE = 0.14;
     const MISSILE_TRACKER_CHANCE_BASE = 0.14;
     const MISSILE_TRACKER_CAP_MAX = 3;
     const MISSILE_GROUND_CAP_MAX = 5;
@@ -1164,7 +1166,8 @@ async function initializeCylonEffects() {
         field.appendChild(blast);
         setTimeout(() => blast.remove(), 420);
         punchHole(pageX, pageY, HOLE_PRESETS.small);
-        rearrangeLandscape(clientX, clientY, 0.34);
+        // Same local letter AoE as player small shots / robot bolts — not a global rearrange
+        rearrangeLandscapePage(pageX, pageY, SMALL_WEAPON_SCALE);
         syncMousePageFromClient();
         const miss = Math.hypot(mouse.clientX - clientX, mouse.clientY - clientY);
         if (miss <= MISSILE_BLAST_RADIUS) {
@@ -2244,7 +2247,7 @@ async function initializeCylonEffects() {
         impact.setAttribute('aria-hidden', 'true');
         field.appendChild(impact);
         punchHole(pageX, pageY, HOLE_PRESETS.small);
-        rearrangeLandscapePage(pageX, pageY, 0.14);
+        rearrangeLandscapePage(pageX, pageY, SMALL_WEAPON_SCALE);
         setTimeout(() => impact.remove(), 300);
     }
 

@@ -5,7 +5,7 @@
  */
 
 // Host blocks .html under games/ — serve mount from home-dir root (see cylon-mount.html symlink)
-const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006cm';
+const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006cn';
 
 async function mountCylonDom() {
     const root = document.getElementById('game-root');
@@ -173,6 +173,7 @@ async function initializeCylonEffects() {
     let missileDueAt = 0;
     let nukeDueAt = 0;
     let herdTimer = null;
+    let reshuffleSettleTimer = null;
     let cachedHighScores = [];
 
     const IDLE_MS = 2000;
@@ -875,6 +876,39 @@ async function initializeCylonEffects() {
         el.style.setProperty('--sr', `${rot.toFixed(1)}deg`);
     }
 
+    /**
+     * Nuke special case: full random re-scatter of existing debris so the backdrop
+     * stays interesting after smaller weapons have chewed the same letters.
+     */
+    function reshuffleScatteredGlyphs() {
+        if (document.body.dataset.cylonScattered !== '1' || reduceMotion) return;
+        const vw = window.innerWidth || 800;
+        const vh = window.innerHeight || 600;
+        document.body.classList.add('cylon-glyphs-blowing');
+        document.querySelectorAll('.cylon-scatter-panel').forEach((el) => {
+            assignBlastVector(el, vw, vh, { xSpread: 0.55, ySpread: 0.7, rotMax: 28 });
+        });
+        document.querySelectorAll('.cylon-scatter-block').forEach((el) => {
+            assignBlastVector(el, vw, vh, { xSpread: 1.15, ySpread: 1.25, rotMax: 150 });
+        });
+        document.querySelectorAll('.cylon-scatter-char').forEach((el) => {
+            assignBlastVector(el, vw, vh, { xSpread: 1.35, ySpread: 1.4, rotMax: 220 });
+        });
+        document.querySelectorAll('.interest-list li, .course-list li').forEach((li) => {
+            const dx = (Math.random() - 0.5) * vw * 0.35;
+            const dy = (Math.random() - 0.5) * vh * 0.4;
+            const rot = (Math.random() - 0.5) * 120;
+            li.style.setProperty('--mx', `${dx.toFixed(1)}px`);
+            li.style.setProperty('--my', `${dy.toFixed(1)}px`);
+            li.style.setProperty('--mr', `${rot.toFixed(1)}deg`);
+        });
+        clearTimeout(reshuffleSettleTimer);
+        reshuffleSettleTimer = setTimeout(() => {
+            document.body.classList.remove('cylon-glyphs-blowing');
+            reshuffleSettleTimer = null;
+        }, 3000);
+    }
+
     function scatterPageGlyphs() {
         if (document.body.dataset.cylonScattered === '1') return;
         if (reduceMotion) return;
@@ -981,6 +1015,8 @@ async function initializeCylonEffects() {
             document.body.classList.remove('cylon-glyphs-blown');
             document.body.classList.remove('cylon-glyphs-blowing');
             document.body.classList.remove('cylon-world-ended');
+            clearTimeout(reshuffleSettleTimer);
+            reshuffleSettleTimer = null;
             clearLandscapeVars();
             // Let letters ease home, then unwrap (match --cylon-desolate-fade)
             setTimeout(() => {
@@ -3052,11 +3088,14 @@ async function initializeCylonEffects() {
         }
 
         rearrangeLandscape(clientX, clientY, 1);
-        // Extra letter shockwave — stronger than the landscape nudge alone
-        disruptGlyphs(pageX, pageY, 1.45);
-        // Catch glyphs that finish wrapping a beat after the intro scatter
-        setTimeout(() => disruptGlyphs(pageX, pageY, 1.2), 220);
-        setTimeout(() => disruptGlyphs(pageX, pageY, 0.85), 520);
+        // Mid-run nukes fully reshuffle debris; intro scatter happens a beat later
+        if (document.body.dataset.cylonScattered === '1') {
+            reshuffleScatteredGlyphs();
+        } else {
+            disruptGlyphs(pageX, pageY, 1.45);
+            setTimeout(() => disruptGlyphs(pageX, pageY, 1.2), 220);
+            setTimeout(() => disruptGlyphs(pageX, pageY, 0.85), 520);
+        }
 
         if (dealDamage) {
             // Direct hit ends the run — count the nuke as 1 hit of real damage (no pad-to-30)

@@ -1609,6 +1609,19 @@ body.cylon-game-live main {
   z-index: 1058;
 }
 
+/* No text highlight / long-press select while fighting */
+body.cylon-game-live,
+body.cylon-game-live * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none;
+}
+
+body.cylon-game-live ::selection {
+  background: transparent;
+  color: inherit;
+}
+
 /* Block accidental link/UI clicks in page content; scroll still works */
 body.cylon-game-live main a,
 body.cylon-game-live main button,

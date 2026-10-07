@@ -2977,6 +2977,13 @@ function initializeCylonEffects() {
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('pointerdown', unlockAudioFromGesture, { passive: true });
     window.addEventListener('keydown', unlockAudioFromGesture, { passive: true });
+    // Kill double-click / drag text selection over page content during a run
+    document.addEventListener('selectstart', (e) => {
+        if (document.body.classList.contains('cylon-game-live')) e.preventDefault();
+    });
+    document.addEventListener('dragstart', (e) => {
+        if (document.body.classList.contains('cylon-game-live')) e.preventDefault();
+    });
     requestAnimationFrame(updateEye);
     scheduleAmbush(true);
 }

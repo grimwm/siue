@@ -43,7 +43,7 @@
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-<link href="custom.css?v=20261006br" rel="stylesheet">
+<link href="custom.css?v=20261006bs" rel="stylesheet">
 </head>
 
 <body>
@@ -104,10 +104,9 @@
         <span class="cylon-score-label">KOs</span>
         <span class="cylon-score-value" id="cylon-score-value">0</span>
       </span>
-      <span class="cylon-score" id="cylon-hits" title="Hits taken — game over at 30, or if a nuke lands on you. Heal 1 after 10s without a hit." aria-live="polite">
-        <span class="cylon-score-label">Hits</span>
-        <span class="cylon-score-value" id="cylon-hits-value">0</span>
-        <span class="cylon-score-cap">/30</span>
+      <span class="cylon-score" id="cylon-hits" title="Hull points — game over at 0, or if a nuke lands on you. Heal 1 after 10s without a hit." aria-live="polite">
+        <span class="cylon-score-label">HP</span>
+        <span class="cylon-score-value" id="cylon-hits-value">30</span>
       </span>
       <button type="button" class="cylon-raptor-btn" id="cylon-grenade-btn" title="Ready grenade, then tap/click to throw (G)" aria-label="Ready grenade">
         <svg class="cylon-ability-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -166,7 +165,7 @@
           </label>
           <p class="cylon-settings-title cylon-settings-scores-title">High scores</p>
           <ol class="cylon-high-scores" id="cylon-high-scores"></ol>
-          <p class="cylon-settings-hint">Survive until 30 hits — occasional nukes and small missiles (2 hits each). Last 10s without a hit to heal 1. Cyan/pink missiles chase you; orange locks where you just aimed. More drones as KOs rise. Drag the reticle to dodge · tap drones · Grenade / Raptor in the bar.</p>
+          <p class="cylon-settings-hint">Start with 30 HP — occasional nukes and small missiles (2 HP each). Last 10s without a hit to heal 1. Cyan/pink missiles chase you; orange locks where you just aimed. More drones as KOs rise. Drag the reticle to dodge · tap drones · Grenade / Raptor in the bar.</p>
         </div>
       </div>
     </div>
@@ -185,11 +184,11 @@
         <li><strong>Click drones</strong> to KO them and score.</li>
         <li><strong>Grenade</strong> (<kbd>G</kbd>): arm, then click where you want the blast.</li>
         <li><strong>Raptor</strong> (<kbd>R</kbd>): orbital strike that clears the field and dazes the eye.</li>
-        <li>Over time, expect occasional <strong>nukes</strong> and smaller <strong>missiles</strong> (each missile costs <strong>2 hits</strong>).</li>
+        <li>Over time, expect occasional <strong>nukes</strong> and smaller <strong>missiles</strong> (each missile costs <strong>2 HP</strong>).</li>
         <li><strong>Cyan/pink</strong> missiles chase you; <strong>orange</strong> ones aim where you just were.</li>
-        <li>Go <strong>10 seconds</strong> without taking a hit to <strong>heal 1</strong>.</li>
+        <li>Go <strong>10 seconds</strong> without taking a hit to <strong>heal 1 HP</strong>.</li>
         <li>More <strong>drones</strong> appear as your KO count rises.</li>
-        <li>Survive until <strong>30 hits</strong> — or a nuke lands on you — then enter 3 initials for the board.</li>
+        <li>You start with <strong>30 HP</strong> — hit 0, or take a nuke, then enter 3 initials for the board.</li>
       </ol>
     </div>
     <div class="cylon-help-body" id="cylon-help-mobile" hidden>
@@ -199,11 +198,11 @@
         <li>With your <strong>other finger</strong>, tap drones to KO them, or tap Grenade / Raptor / menu controls.</li>
         <li><strong>Grenade</strong>: tap the button to arm, then tap the page to throw.</li>
         <li><strong>Raptor</strong>: tap for a strike that clears drones and dazes the eye.</li>
-        <li>Over time, expect occasional <strong>nukes</strong> and smaller <strong>missiles</strong> (each missile costs <strong>2 hits</strong>).</li>
+        <li>Over time, expect occasional <strong>nukes</strong> and smaller <strong>missiles</strong> (each missile costs <strong>2 HP</strong>).</li>
         <li><strong>Cyan/pink</strong> missiles chase you; <strong>orange</strong> ones aim where you just were.</li>
-        <li>Go <strong>10 seconds</strong> without taking a hit to <strong>heal 1</strong>.</li>
+        <li>Go <strong>10 seconds</strong> without taking a hit to <strong>heal 1 HP</strong>.</li>
         <li>More <strong>drones</strong> appear as your KO count rises.</li>
-        <li>Survive until <strong>30 hits</strong> — or a nuke lands on you — then scroll initials ▲▼ for the high-score board.</li>
+        <li>You start with <strong>30 HP</strong> — hit 0, or take a nuke, then scroll initials ▲▼ for the high-score board.</li>
       </ol>
     </div>
     <button type="button" class="cylon-gameover-btn" id="cylon-help-close">Got it</button>
@@ -217,7 +216,7 @@
     <p class="cylon-gameover-reason" id="cylon-gameover-reason"></p>
     <p class="cylon-gameover-stats">
       <span><em id="cylon-gameover-kos">0</em> KOs</span>
-      <span><em id="cylon-gameover-hits">0</em> Hits</span>
+      <span><em id="cylon-gameover-hits">0</em> HP</span>
     </p>
     <div class="cylon-gameover-entry" id="cylon-gameover-entry">
       <p class="cylon-gameover-entry-label">Enter your initials</p>
@@ -309,7 +308,7 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-<script src="main.js?v=20261006bj"></script>
+<script src="main.js?v=20261006bk"></script>
 <script>
   initializeTheme();
   showNavDiv("main");

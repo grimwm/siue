@@ -2084,8 +2084,12 @@ function initializeCylonEffects() {
         return randomVisibleSpot(forbidden);
     }
 
+    function currentHp() {
+        return Math.max(0, MAX_HITS - hitCount);
+    }
+
     function updateHitsUi() {
-        if (hitsEl) hitsEl.textContent = String(hitCount);
+        if (hitsEl) hitsEl.textContent = String(currentHp());
     }
 
     function registerHit(count = 1, { fromNuke = false } = {}) {
@@ -2785,7 +2789,7 @@ function initializeCylonEffects() {
             gameOverReasonEl.textContent = reasons[reason] || 'Run complete.';
         }
         if (gameOverKosEl) gameOverKosEl.textContent = String(koScore);
-        if (gameOverHitsEl) gameOverHitsEl.textContent = String(hitsTaken);
+        if (gameOverHitsEl) gameOverHitsEl.textContent = String(currentHp());
         if (gameOverEntryEl) gameOverEntryEl.hidden = koScore < 1;
         if (gameOverBoardEl) {
             gameOverBoardEl.hidden = koScore >= 1;

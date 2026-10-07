@@ -224,9 +224,9 @@ function initializeCylonEffects() {
     const MISSILE_ARRIVE = 22;
     const MISSILE_MAX_FLIGHT_MS = 2200;
     const MISSILE_BLAST_RADIUS = 72;
-    const MISSILE_TRACKER_CHANCE = 0.22;
-    const MISSILE_TRACKER_CAP = 2;
-    const MISSILE_GROUND_CAP_MAX = 6;
+    const MISSILE_TRACKER_CHANCE_BASE = 0.14;
+    const MISSILE_TRACKER_CAP_MAX = 3;
+    const MISSILE_GROUND_CAP_MAX = 5;
     let trackerPairTimer = null;
     /** @type {ReturnType<typeof setTimeout>[]} */
     let groundVolleyTimers = [];
@@ -969,20 +969,26 @@ function initializeCylonEffects() {
         return a + (b - a) * Math.min(1, Math.max(0, t));
     }
 
+    /** Same rung as bot capacity: every BOT_CAP_PER_KOS kills is a new level. */
+    function killLevel() {
+        return Math.floor(koScore / BOT_CAP_PER_KOS);
+    }
+
     function difficultyFactor() {
         if (!runStartedAt) return 0;
         const elapsedMin = (Date.now() - runStartedAt) / 60000;
         const timePart = Math.min(1, elapsedMin / 3.5);
-        const koPart = Math.min(1, koScore / 40);
-        return Math.min(1, timePart * 0.55 + koPart * 0.45);
+        // Prefer the 5-KO ladder; time is a light backstop if KOs stall
+        const levelPart = Math.min(1, killLevel() / 10);
+        return Math.min(1, levelPart * 0.75 + timePart * 0.25);
     }
 
     function nextMissileDelayMs() {
-        const d = difficultyFactor();
-        // Early ~5.5–9s → late ~2–3.5s; floor 2s so static volleys can overlap
-        const lo = lerp(7500, 2800, d);
-        const span = lerp(2800, 1600, d);
-        return Math.max(2000, lo - span / 2 + Math.random() * span);
+        // Gentle cadence climb with kill level — not a spike every rung
+        const t = Math.min(1, killLevel() / 10);
+        const lo = lerp(8500, 3400, t);
+        const span = lerp(2800, 1600, t);
+        return Math.max(2400, lo - span / 2 + Math.random() * span);
     }
 
     function nextNukeDelayMs() {
@@ -993,12 +999,20 @@ function initializeCylonEffects() {
     }
 
     function groundMissileCap() {
-        // Steeper than linear: 2 mid-early, 4 mid-run, up to 6 late
-        const t = Math.pow(difficultyFactor(), 0.55);
-        return Math.min(
-            MISSILE_GROUND_CAP_MAX,
-            1 + Math.floor(t * (MISSILE_GROUND_CAP_MAX - 1))
-        );
+        // L0–1: 1 · L2–3: 2 · L4–5: 3 · L6–7: 4 · L8+: 5
+        return Math.min(MISSILE_GROUND_CAP_MAX, 1 + Math.floor(killLevel() / 2));
+    }
+
+    function trackerMissileCap() {
+        // Start at 1 (not 2). L0–2: 1 · L3–6: 2 · L7+: 3
+        const lvl = killLevel();
+        if (lvl < 3) return 1;
+        if (lvl < 7) return 2;
+        return Math.min(MISSILE_TRACKER_CAP_MAX, 3);
+    }
+
+    function trackerMissileChance() {
+        return Math.min(0.34, MISSILE_TRACKER_CHANCE_BASE + killLevel() * 0.02);
     }
 
     function countActiveMissiles(trackerOnly = null) {
@@ -1010,7 +1024,7 @@ function initializeCylonEffects() {
     }
 
     function canLaunchMissile(asTracker) {
-        if (asTracker) return countActiveMissiles(true) < MISSILE_TRACKER_CAP;
+        if (asTracker) return countActiveMissiles(true) < trackerMissileCap();
         return countActiveMissiles(false) < groundMissileCap();
     }
 
@@ -1144,7 +1158,7 @@ function initializeCylonEffects() {
     function launchSmallMissile({ forceTracker = false, forceGround = false, fromPair = false } = {}) {
         if (!isGameLive() || isEyeDisoriented()) return false;
 
-        // Trackers may fly alongside ground missiles; up to MISSILE_TRACKER_CAP seekers
+        // Trackers may fly alongside ground missiles; cap rises on the 5-KO ladder
         let tracker = false;
         if (forceGround) {
             if (!canLaunchMissile(false)) return false;
@@ -1152,7 +1166,7 @@ function initializeCylonEffects() {
             tracker = canLaunchMissile(true);
             if (!tracker) return false;
         } else {
-            tracker = Math.random() < MISSILE_TRACKER_CHANCE && canLaunchMissile(true);
+            tracker = Math.random() < trackerMissileChance() && canLaunchMissile(true);
             if (!tracker && !canLaunchMissile(false)) return false;
         }
 
@@ -1208,8 +1222,8 @@ function initializeCylonEffects() {
         };
         requestAnimationFrame(tick);
 
-        // Often fire a second tracker on a short stagger when one launches
-        if (tracker && !fromPair && canLaunchMissile(true) && Math.random() < 0.55) {
+        // Pair a second tracker only once the 5-KO ladder allows 2+ seekers
+        if (tracker && !fromPair && trackerMissileCap() >= 2 && canLaunchMissile(true) && Math.random() < 0.45) {
             clearTimeout(trackerPairTimer);
             trackerPairTimer = setTimeout(() => {
                 trackerPairTimer = null;
@@ -1218,13 +1232,13 @@ function initializeCylonEffects() {
             }, 280 + Math.random() * 320);
         }
 
-        // Static (lock-on) volleys from other top lanes as difficulty rises
+        // Static volleys from other top lanes — extras unlock every couple of kill levels
         if (!tracker && !fromPair && !forceGround) {
-            const d = difficultyFactor();
+            const lvl = killLevel();
             const room = groundMissileCap() - countActiveMissiles(false);
-            const maxExtra = Math.min(room, d < 0.18 ? 0 : d < 0.4 ? 1 : 2);
-            if (maxExtra > 0 && Math.random() < 0.4 + d * 0.45) {
-                const extras = 1 + (maxExtra > 1 && Math.random() < 0.35 + d * 0.4 ? 1 : 0);
+            const maxExtra = Math.min(room, lvl < 2 ? 0 : lvl < 5 ? 1 : 2);
+            if (maxExtra > 0 && Math.random() < 0.35 + Math.min(0.4, lvl * 0.04)) {
+                const extras = 1 + (maxExtra > 1 && Math.random() < 0.3 + Math.min(0.35, lvl * 0.03) ? 1 : 0);
                 for (let i = 0; i < Math.min(extras, maxExtra); i++) {
                     const delay = 90 + i * (140 + Math.random() * 160);
                     const id = setTimeout(() => {

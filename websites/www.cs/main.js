@@ -348,7 +348,11 @@ function initializeCylonEffects() {
         return list.map((entry, i) => {
             const when = entry.at ? new Date(entry.at) : null;
             const date = when && !Number.isNaN(when.getTime())
-                ? when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                ? when.toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                })
                 : '';
             const initials = (entry.initials || 'AAA').toString().slice(0, 3).toUpperCase();
             const dateHtml = date

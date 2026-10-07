@@ -1619,9 +1619,11 @@ function initializeCylonEffects() {
 
     function syncReticleVisibility() {
         if (!reticleEl) return;
-        const show = isGameLive() && coarsePointer;
+        const show = isGameLive();
         reticleEl.hidden = !show;
         reticleEl.setAttribute('aria-hidden', show ? 'false' : 'true');
+        // Desktop: follow the mouse without stealing clicks; mobile keeps drag
+        reticleEl.classList.toggle('is-mouse-follow', show && !coarsePointer);
         if (show) paintReticle();
     }
 
@@ -2726,6 +2728,8 @@ function initializeCylonEffects() {
             if (coarsePointer) {
                 resetReticleToCenter();
                 document.body.classList.add('cylon-touch-play');
+            } else {
+                paintReticle();
             }
         }
         updateAbilityButtons();

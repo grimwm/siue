@@ -709,7 +709,7 @@ body.cylon-touch-play .cylon-bot {
   touch-action: manipulation;
 }
 
-/* Touch dodge pip — below nav so a second finger can hit the bar */
+/* Dodge pip — below nav so a second finger can hit the bar (touch) */
 .cylon-reticle {
   position: fixed;
   left: 0;
@@ -726,6 +726,12 @@ body.cylon-touch-play .cylon-bot {
 
 .cylon-reticle[hidden] {
   display: none !important;
+}
+
+/* Desktop: sit on the mouse; let clicks pass through to bots / UI */
+.cylon-reticle.is-mouse-follow {
+  pointer-events: none;
+  cursor: none;
 }
 
 .cylon-reticle.is-dragging {

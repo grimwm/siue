@@ -8,6 +8,8 @@ help:
 	@echo "  deploy - Upload site + games assets to www.cs.siue.edu"
 
 deploy:
+	@test -f cylon.js || ln -sf games/cylon/cylon.js cylon.js
+	@test -f cylon-mount.html || ln -sf games/cylon/mount.html cylon-mount.html
 	sshpass -f "$(HOME)/.ssh/.passwd.siue" scp *.html *.js *.css *.php *.png *.ico *.webmanifest wgrim@www.cs.siue.edu:.
 	# Game modules (creates games/ on the host if needed)
 	sshpass -f "$(HOME)/.ssh/.passwd.siue" scp -r games wgrim@www.cs.siue.edu:.

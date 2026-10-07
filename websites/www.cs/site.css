@@ -482,3 +482,128 @@ button:focus-visible,
 #nav-contact {
   position: relative;
 }
+
+/* Games — opens games hub (left of Game Off) */
+.site-nav-power {
+  gap: 0.45rem;
+}
+
+.cic-enter-btn {
+  height: var(--nav-control-h);
+  min-height: var(--nav-control-h);
+  max-height: var(--nav-control-h);
+  margin: 0;
+  padding: 0 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid rgba(255, 55, 55, 0.38);
+  border-radius: 0.25rem;
+  background:
+    linear-gradient(180deg, rgba(255, 45, 45, 0.14) 0%, rgba(90, 8, 8, 0.28) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    color 0.15s ease;
+}
+
+@media (min-width: 480px) {
+  .cic-enter-btn {
+    font-size: 0.78rem;
+    padding: 0 0.85rem;
+    letter-spacing: 0.12em;
+  }
+}
+
+.cic-enter-btn:hover {
+  color: #fff;
+  border-color: var(--crimson-hot);
+  box-shadow:
+    0 0 16px rgba(255, 40, 40, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+body.cylon-nav-combat .cic-enter-btn,
+body.cylon-game-live .cic-enter-btn {
+  display: none;
+}
+
+/* —— Games hub —— */
+.games-hub-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.games-hub-card {
+  padding: 1.35rem 1.25rem 1.45rem;
+  border: 1px solid var(--rail-edge);
+  border-radius: 0.35rem;
+  background: var(--bg-elevated);
+}
+
+.games-hub-card-kicker {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--crimson-hot);
+  margin: 0 0 0.35rem;
+}
+
+.games-hub-card-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.35rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0 0 0.75rem;
+  color: var(--text);
+}
+
+.games-hub-card-copy {
+  margin: 0 0 1.15rem;
+  color: var(--text-muted);
+  max-width: 38rem;
+}
+
+.games-hub-card-copy strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.games-enter-btn {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text);
+  background: linear-gradient(180deg, rgba(255, 40, 40, 0.22) 0%, rgba(120, 10, 10, 0.35) 100%);
+  border: 1px solid rgba(255, 60, 60, 0.45);
+  border-radius: 0.25rem;
+  padding: 0.55rem 1.05rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+
+.games-enter-btn:hover {
+  color: #fff;
+  border-color: var(--crimson-hot);
+  box-shadow: 0 0 18px rgba(255, 40, 40, 0.25);
+}

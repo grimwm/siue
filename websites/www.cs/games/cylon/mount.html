@@ -1,0 +1,118 @@
+<!-- Cylon Defense — FX / overlays injected into #game-root -->
+<div class="cylon-scanner" aria-hidden="true">
+  <div class="cylon-eye" id="cylon-eye"></div>
+</div>
+<div class="cylon-glare" id="cylon-glare" aria-hidden="true"></div>
+
+<div class="cylon-ambush-under" id="cylon-ambush-under" aria-hidden="true"></div>
+<div class="cylon-battlefield" id="cylon-battlefield" aria-hidden="true"></div>
+<div class="cylon-nuke-missile" id="cylon-nuke-missile" aria-hidden="true"></div>
+<div class="cylon-small-missile" id="cylon-small-missile" aria-hidden="true"></div>
+<div class="cylon-nuke" id="cylon-nuke" aria-hidden="true">
+  <div class="cylon-nuke-flash"></div>
+  <div class="cylon-nuke-ball"></div>
+  <div class="cylon-nuke-ring"></div>
+</div>
+<div class="cylon-raptor" id="cylon-raptor" aria-hidden="true">
+  <div class="cylon-raptor-skyflash"></div>
+  <div class="cylon-raptor-ground"></div>
+  <div class="cylon-raptor-ship">
+    <span class="cylon-raptor-wing cylon-raptor-wing-l"></span>
+    <span class="cylon-raptor-fuselage"></span>
+    <span class="cylon-raptor-wing cylon-raptor-wing-r"></span>
+    <span class="cylon-raptor-engine"></span>
+    <span class="cylon-raptor-cannon cylon-raptor-cannon-l"></span>
+    <span class="cylon-raptor-cannon cylon-raptor-cannon-r"></span>
+    <span class="cylon-raptor-beam cylon-raptor-beam-l"></span>
+    <span class="cylon-raptor-beam cylon-raptor-beam-r"></span>
+    <span class="cylon-raptor-beam-core"></span>
+  </div>
+  <div class="cylon-raptor-strafe"></div>
+  <div class="cylon-raptor-impacts" id="cylon-raptor-impacts"></div>
+</div>
+
+<div class="cylon-reticle" id="cylon-reticle" hidden aria-hidden="true">
+  <span class="cylon-reticle-ring"></span>
+  <span class="cylon-reticle-core"></span>
+</div>
+
+<div class="cylon-intro-title" id="cylon-intro-title" hidden aria-hidden="true">The CIC</div>
+
+<div class="cylon-help" id="cylon-help" hidden>
+  <div class="cylon-help-panel" role="dialog" aria-modal="true" aria-labelledby="cylon-help-title">
+    <p class="cylon-help-kicker">Cylon defense</p>
+    <h2 class="cylon-help-title" id="cylon-help-title">How to Play</h2>
+    <p class="cylon-help-platform" id="cylon-help-platform"></p>
+    <div class="cylon-help-body" id="cylon-help-desktop" hidden>
+      <ol>
+        <li>Flip <strong>Game On</strong> in the top bar.</li>
+        <li><strong>Move the mouse</strong> to dodge bolts and nukes — the eye and drones track your cursor.</li>
+        <li><strong>Click drones</strong> to KO them and score.</li>
+        <li><strong>Grenade</strong> (<kbd>G</kbd>): arm, then click where you want the blast.</li>
+        <li><strong>Raptor</strong> (<kbd>R</kbd>): orbital strike that clears the field and dazes the eye.</li>
+        <li>Over time, expect occasional <strong>nukes</strong> and smaller <strong>missiles</strong> (each missile costs <strong>2 HP</strong>).</li>
+        <li><strong>Cyan/pink</strong> missiles chase you; <strong>orange</strong> ones aim where you just were.</li>
+        <li>Go <strong>10 seconds</strong> without taking a hit to <strong>heal 1 HP</strong>.</li>
+        <li>More <strong>drones</strong> appear as your KO count rises.</li>
+        <li>You start with <strong>30 HP</strong> — hit 0, or take a nuke, then enter 3 initials for the board.</li>
+      </ol>
+    </div>
+    <div class="cylon-help-body" id="cylon-help-mobile" hidden>
+      <ol>
+        <li>Flip <strong>Game On</strong> in the top bar.</li>
+        <li><strong>Drag the green reticle</strong> with one finger to dodge. Drones and nukes aim at that reticle.</li>
+        <li>With your <strong>other finger</strong>, tap drones to KO them, or tap Grenade / Raptor / menu controls.</li>
+        <li><strong>Grenade</strong>: tap the button to arm, then tap the page to throw.</li>
+        <li><strong>Raptor</strong>: tap for a strike that clears drones and dazes the eye.</li>
+        <li>Over time, expect occasional <strong>nukes</strong> and smaller <strong>missiles</strong> (each missile costs <strong>2 HP</strong>).</li>
+        <li><strong>Cyan/pink</strong> missiles chase you; <strong>orange</strong> ones aim where you just were.</li>
+        <li>Go <strong>10 seconds</strong> without taking a hit to <strong>heal 1 HP</strong>.</li>
+        <li>More <strong>drones</strong> appear as your KO count rises.</li>
+        <li>You start with <strong>30 HP</strong> — hit 0, or take a nuke, then scroll initials ▲▼ for the high-score board.</li>
+      </ol>
+    </div>
+    <button type="button" class="cylon-gameover-btn" id="cylon-help-close">Got it</button>
+  </div>
+</div>
+
+<div class="cylon-gameover" id="cylon-gameover" hidden>
+  <div class="cylon-gameover-panel" role="dialog" aria-modal="true" aria-labelledby="cylon-gameover-title">
+    <p class="cylon-gameover-kicker">Cylon defense</p>
+    <h2 class="cylon-gameover-title" id="cylon-gameover-title">Game Over</h2>
+    <p class="cylon-gameover-reason" id="cylon-gameover-reason"></p>
+    <p class="cylon-gameover-stats">
+      <span><em id="cylon-gameover-kos">0</em> KOs</span>
+      <span><em id="cylon-gameover-hits">0</em> HP</span>
+    </p>
+    <div class="cylon-gameover-entry" id="cylon-gameover-entry">
+      <p class="cylon-gameover-entry-label">Enter your initials</p>
+      <div class="cylon-initials" id="cylon-initials" role="group" aria-label="Arcade initials">
+        <div class="cylon-initial-slot">
+          <button type="button" class="cylon-initial-spin" data-initial="0" data-dir="1" aria-label="Scroll initial 1 up">▲</button>
+          <button type="button" class="cylon-initial" id="cylon-initial-0" data-initial="0" aria-label="Initial 1, use up and down to change">A</button>
+          <button type="button" class="cylon-initial-spin" data-initial="0" data-dir="-1" aria-label="Scroll initial 1 down">▼</button>
+        </div>
+        <div class="cylon-initial-slot">
+          <button type="button" class="cylon-initial-spin" data-initial="1" data-dir="1" aria-label="Scroll initial 2 up">▲</button>
+          <button type="button" class="cylon-initial" id="cylon-initial-1" data-initial="1" aria-label="Initial 2, use up and down to change">A</button>
+          <button type="button" class="cylon-initial-spin" data-initial="1" data-dir="-1" aria-label="Scroll initial 2 down">▼</button>
+        </div>
+        <div class="cylon-initial-slot">
+          <button type="button" class="cylon-initial-spin" data-initial="2" data-dir="1" aria-label="Scroll initial 3 up">▲</button>
+          <button type="button" class="cylon-initial" id="cylon-initial-2" data-initial="2" aria-label="Initial 3, use up and down to change">A</button>
+          <button type="button" class="cylon-initial-spin" data-initial="2" data-dir="-1" aria-label="Scroll initial 3 down">▼</button>
+        </div>
+      </div>
+      <p class="cylon-gameover-entry-hint">↑↓ change letter · ←→ next · Enter submit</p>
+      <div class="cylon-gameover-actions">
+        <button type="button" class="cylon-gameover-btn" id="cylon-score-submit">Submit Score</button>
+        <button type="button" class="cylon-gameover-btn is-ghost" id="cylon-score-skip">Skip</button>
+      </div>
+    </div>
+    <div class="cylon-gameover-board" id="cylon-gameover-board" hidden>
+      <p class="cylon-gameover-entry-label">High scores</p>
+      <ol class="cylon-high-scores" id="cylon-gameover-scores"></ol>
+      <button type="button" class="cylon-gameover-btn" id="cylon-play-again">Play Again</button>
+    </div>
+  </div>
+</div>

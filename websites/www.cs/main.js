@@ -110,8 +110,7 @@ function initializeCylonEffects() {
         musicEnabled: true,
         soundVolume: 85,
         musicVolume: 40,
-        eyeEnabled: true,
-        nukesEnabled: true
+        eyeEnabled: true
     };
     let settings = loadSettings();
     // Game stays off until the player explicitly enables it
@@ -160,7 +159,6 @@ function initializeCylonEffects() {
     const MAX_BOTS = 4;
     const MAX_WAVE = 3;
     const HIT_RADIUS = 52;
-    const HITS_PER_NUKE = 10;
     const MAX_HITS = 30;
     const NUKE_DIRECT_HIT_RADIUS = 120;
     const NUKE_SPEED = 520; // px/sec toward cursor
@@ -203,13 +201,11 @@ function initializeCylonEffects() {
         const soundVol = settingsRoot.querySelector('[data-setting="soundVolume"]');
         const musicVol = settingsRoot.querySelector('[data-setting="musicVolume"]');
         const eyeToggle = settingsRoot.querySelector('[data-setting="eyeEnabled"]');
-        const nukes = settingsRoot.querySelector('[data-setting="nukesEnabled"]');
         if (sound) sound.checked = settings.soundEnabled;
         if (music) music.checked = settings.musicEnabled;
         if (soundVol) soundVol.value = String(settings.soundVolume);
         if (musicVol) musicVol.value = String(settings.musicVolume);
         if (eyeToggle) eyeToggle.checked = settings.eyeEnabled;
-        if (nukes) nukes.checked = settings.nukesEnabled;
         renderHighScores();
     }
 
@@ -1434,18 +1430,6 @@ function initializeCylonEffects() {
             return;
         }
 
-        // Nukes are triggered by projectile hits only — avoid nuke→hit→nuke loops.
-        // Disoriented eye (post-Raptor) cannot launch.
-        if (
-            !isEyeDisoriented()
-            && settings.nukesEnabled
-            && hitCount > 0
-            && hitCount % HITS_PER_NUKE === 0
-            && hitCount < MAX_HITS
-        ) {
-            launchNuke();
-        }
-
         if (hitCount >= MAX_HITS) {
             endGame('hits');
         }
@@ -1966,7 +1950,7 @@ function initializeCylonEffects() {
     }
 
     function launchNuke() {
-        if (!isGameLive() || !settings.nukesEnabled || isEyeDisoriented() || nukeInFlight) return;
+        if (!isGameLive() || isEyeDisoriented() || nukeInFlight) return;
         if (!nukeMissileEl) {
             detonateNukeAt(mouse.clientX, mouse.clientY);
             return;

@@ -5,7 +5,7 @@ Site: `websites/www.cs` (Cylon defense mini-game)
 
 ## Goal
 
-Make inbound threats feel like Missile Command: nukes appear occasionally (not every 10 hits), smaller missiles appear more often (2× damage), most missiles aim at recent pointer/finger ground, occasional trackers chase the reticle and look different, and bot count rises with KO score so grenades matter more mid-run.
+Make inbound threats feel like Missile Command: nukes appear occasionally (not every 10 hits), smaller missiles appear more often (2× damage), most missiles aim at recent pointer/finger ground, occasional trackers chase the reticle and look different, and bot count rises with KO score so grenades matter more mid-run. When Game On starts, the page content shifts into a desolate “world ended” look (ashy + cracked text) that fades in.
 
 ## Decisions (locked)
 
@@ -15,6 +15,7 @@ Make inbound threats feel like Missile Command: nukes appear occasionally (not e
 - Bot hard cap: **30 desktop / 10 mobile**; start at 4; **+1 every 5 KOs**.
 - Tracker missiles must be **visually distinct** from ground missiles.
 - Remove hit-triggered nukes (`HITS_PER_NUKE` / `registerHit` → `launchNuke`).
+- Game On applies a **desolate world** treatment to main page content: **ashy palette + crack distortion**, with a **fade-in**; Game Off restores normal look.
 
 ## Behavior
 
@@ -71,9 +72,20 @@ Make inbound threats feel like Missile Command: nukes appear occasionally (not e
 
 No new audio sample files — procedural Web Audio on `sfxBus`.
 
+## Desolate Game On look
+
+When Game On starts, add a class on `body` (e.g. `cylon-world-ended`):
+
+- **Ashy palette:** main content text/links desaturate toward grey-ash; page backgrounds mute slightly via CSS variables or a content-scoped filter (not a full-page wash that kills the battlefield FX).
+- **Crack distortion:** headings and body text get a light cracked/offset treatment (pseudo-elements, layered `text-shadow`, and/or mask) so type reads fractured but stays legible.
+- **Fade-in:** the desolate treatment transitions in over ~0.8–1.5s when the class is applied (opacity/filter/color transitions), not a hard cut.
+- **Restore:** Game Off and quitting the run remove the class; reverse transition (fade out) back to the normal site look when practical.
+- **Scope:** main page content only. Navbar game controls, reticle, score HUD, help/options overlays stay readable and uncracked.
+- **`prefers-reduced-motion`:** ashy palette only (no crack jitter); still allow a short color fade if inexpensive.
+
 ## UI / help
 
-- Update How to Play: occasional nukes; smaller missiles deal 2 hits; trackers look different and chase; bot numbers rise with KOs.
+- Update How to Play: occasional nukes; smaller missiles deal 2 hits; trackers look different and chase; bot numbers rise with KOs; the page looks ruined while the game runs.
 - Hits HUD unchanged (numeric). No required new counters.
 
 ## Lifecycle / edges
@@ -99,10 +111,11 @@ No new audio sample files — procedural Web Audio on `sfxBus`.
 - Desktop: bot cap can climb toward 30 with KOs; mobile hard-stops at 10.
 - Nukes toggle off: missiles continue, nukes stop.
 - Pause freezes inbound; Game Off clears in-flight FX and timers.
+- Game On: page content fades into ashy + cracked look; HUD/nav stay clear; Game Off fades back to normal.
 - Hard-refresh after deploy with cache-bust.
 
 ## Files
 
-- `websites/www.cs/main.js` — schedulers, missile entity, botCap, remove hit-nuke trigger
-- `websites/www.cs/custom.css` — `.cylon-missile`, `.cylon-missile.is-tracker`
+- `websites/www.cs/main.js` — schedulers, missile entity, botCap, remove hit-nuke trigger, toggle `cylon-world-ended`
+- `websites/www.cs/custom.css` — `.cylon-missile`, `.cylon-missile.is-tracker`, `.cylon-world-ended` desolate styles + fade
 - `websites/www.cs/index.html` — How to Play copy + cache-bust

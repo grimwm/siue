@@ -2092,14 +2092,40 @@ function initializeCylonEffects() {
         return Math.max(0, MAX_HITS - hitCount);
     }
 
+    /**
+     * Smooth HP tint: green at full → yellow at half → red at empty.
+     * t = hp / MAX ∈ [0,1]. Piecewise RGB lerp on either side of 0.5:
+     *   t ≥ 0.5: mix(yellow, green, (t-0.5)/0.5)
+     *   t <  0.5: mix(red,    yellow, t/0.5)
+     */
+    function hpTint(hp) {
+        const mix = (a, b, u) => Math.round(a + (b - a) * u);
+        const mixRgb = (c0, c1, u) => ({
+            r: mix(c0.r, c1.r, u),
+            g: mix(c0.g, c1.g, u),
+            b: mix(c0.b, c1.b, u),
+        });
+        const green = { r: 125, g: 255, b: 154 };
+        const yellow = { r: 255, g: 210, b: 74 };
+        const red = { r: 255, g: 72, b: 72 };
+        const t = Math.max(0, Math.min(1, hp / MAX_HITS));
+        const c = t >= 0.5
+            ? mixRgb(yellow, green, (t - 0.5) / 0.5)
+            : mixRgb(red, yellow, t / 0.5);
+        return {
+            color: `rgb(${c.r}, ${c.g}, ${c.b})`,
+            glow: `rgba(${c.r}, ${c.g}, ${c.b}, 0.55)`,
+        };
+    }
+
     function updateHitsUi() {
         if (!hitsEl) return;
         const hp = currentHp();
         hitsEl.textContent = String(hp);
         hitsEl.classList.remove('is-hp-good', 'is-hp-mid', 'is-hp-low');
-        if (hp > MAX_HITS * 0.5) hitsEl.classList.add('is-hp-good');
-        else if (hp > MAX_HITS * 0.25) hitsEl.classList.add('is-hp-mid');
-        else hitsEl.classList.add('is-hp-low');
+        const tint = hpTint(hp);
+        hitsEl.style.color = tint.color;
+        hitsEl.style.textShadow = `0 0 8px ${tint.glow}`;
     }
 
     function registerHit(count = 1, { fromNuke = false } = {}) {

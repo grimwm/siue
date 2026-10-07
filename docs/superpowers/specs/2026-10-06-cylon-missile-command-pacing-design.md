@@ -15,6 +15,7 @@ Make inbound threats feel like Missile Command: nukes appear occasionally (not e
 - Bot hard cap: **30 desktop / 10 mobile**; start at 4; **+1 every 5 KOs**.
 - Tracker missiles must be **visually distinct** from ground missiles.
 - Remove hit-triggered nukes (`HITS_PER_NUKE` / `registerHit` → `launchNuke`).
+- **Nukes are always enabled** — remove the Options `nukesEnabled` setting/checkbox; nuke timer always runs while Game On (still blocked by eye disorient / single-flight).
 - Game On applies a **desolate world** treatment to main page content: **ashy palette + crack distortion**, with a **fade-in**; Game Off restores normal look.
 
 ## Behavior
@@ -42,13 +43,14 @@ Make inbound threats feel like Missile Command: nukes appear occasionally (not e
 
 ### Nukes
 
-- Separate rarer timer while Game On and `settings.nukesEnabled`.
+- Separate rarer timer while Game On (always; no toggle).
 - Interval lerps with `d`:
   - Early: ~25–40s
   - Late: ~18–30s
 - Flight/detonation behavior stays as today (chase aim, large FX, direct hit ends run).
 - At most **one** nuke in flight; eye disorient (post-Raptor) blocks nuke launch (unchanged intent).
 - Small missiles also blocked while eye disoriented (fairness).
+- Remove `nukesEnabled` from settings defaults, Options UI, and `launchNuke` / scheduler guards.
 
 ### Difficulty factor
 
@@ -92,7 +94,6 @@ When Game On starts, add a class on `body` (e.g. `cylon-world-ended`):
 
 - Timers start when Game On; clear on Game Off / game over.
 - Pause (How to Play): freeze inbound schedules (same pause skew / clear-and-reschedule pattern as hole timers / cooldowns).
-- `nukesEnabled` off: no nuke timer launches; **small missiles still run**.
 - Prefer single-flight for each class (missile / nuke) to avoid spam.
 
 ## Non-goals
@@ -109,7 +110,7 @@ When Game On starts, add a class on `body` (e.g. `cylon-world-ended`):
 - Ground missile targets recent pointer/finger spot; moving away before impact avoids the +2.
 - Tracker looks distinct and follows reticle; dodge still works.
 - Desktop: bot cap can climb toward 30 with KOs; mobile hard-stops at 10.
-- Nukes toggle off: missiles continue, nukes stop.
+- Options UI has no nukes checkbox; nukes still spawn on their timer.
 - Pause freezes inbound; Game Off clears in-flight FX and timers.
 - Game On: page content fades into ashy + cracked look; HUD/nav stay clear; Game Off fades back to normal.
 - Hard-refresh after deploy with cache-bust.

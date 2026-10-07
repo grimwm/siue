@@ -1781,6 +1781,17 @@ function initializeCylonEffects() {
         window.addEventListener('pointermove', onReticleMove, { passive: false });
         window.addEventListener('pointerup', endReticleDrag, true);
         window.addEventListener('pointercancel', endReticleDrag, true);
+
+        // iOS still pans the document on touchmove unless it's non-passive + prevented.
+        // Exempt nav / modals so settings, help, and game-over can scroll.
+        document.addEventListener('touchmove', (e) => {
+            if (!document.body.classList.contains('cylon-touch-play')) return;
+            const t = e.target;
+            if (t && t.closest && t.closest('.site-nav, .cylon-help, .cylon-gameover, .cylon-settings-panel')) {
+                return;
+            }
+            e.preventDefault();
+        }, { passive: false });
     }
 
     function bindNavMenu() {

@@ -721,27 +721,37 @@ body:not(.cylon-nav-combat) .site-nav-power {
   margin-top: 0.25rem;
 }
 
-/* Touch play: lock page scroll; nav / bots still accept taps */
-html:has(body.cylon-touch-play),
+/*
+ * Touch play: don't pan the document; keep nav / bots tappable.
+ * Avoid overflow:hidden here — it jumps scroll and fights sticky nav.
+ */
 body.cylon-touch-play {
-  overflow: hidden;
   overscroll-behavior: none;
   touch-action: none;
 }
 
 body.cylon-touch-play main {
-  /* Let the dodge pip receive hits above the page surface */
+  /* Page surface was above the pip (z 1058 > 1025) and ate drags as scrolls */
   pointer-events: none !important;
 }
 
 body.cylon-touch-play .site-nav,
-body.cylon-touch-play .site-nav-game,
+body.cylon-touch-play .site-nav * {
+  touch-action: manipulation;
+  pointer-events: auto;
+}
+
 body.cylon-touch-play .cylon-bot {
   touch-action: manipulation;
   pointer-events: auto;
 }
 
-/* Dodge pip — above page content, below sticky nav (second finger hits bar / bots) */
+/*
+ * Dodge pip — above main (1058) so it can be grabbed; below nav (2200),
+ * help/gameover (2100), and nuke/raptor FX (~1950–2000). Bots stay at 1061
+ * so battlefield layering is unchanged; a second finger still hits a bot
+ * wherever the pip isn't.
+ */
 .cylon-reticle {
   position: fixed;
   left: 0;
@@ -749,7 +759,7 @@ body.cylon-touch-play .cylon-bot {
   width: 56px;
   height: 56px;
   margin: -28px 0 0 -28px;
-  z-index: 2100;
+  z-index: 1080;
   pointer-events: auto;
   touch-action: none;
   cursor: grab;
@@ -1705,8 +1715,8 @@ body.cylon-game-live main [role="button"] {
   background: transparent;
   pointer-events: auto;
   cursor: crosshair;
-  /* Above the dodge pip so a second finger can tap hostiles while dragging */
-  z-index: 2150;
+  /* Above the dodge pip’s former layer; second finger taps hostiles while dragging */
+  z-index: 1061;
   touch-action: manipulation;
   transform-origin: 50% 80%;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.55));

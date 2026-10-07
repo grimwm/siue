@@ -167,8 +167,6 @@ function initializeCylonEffects() {
     const IDLE_MS = 2000;
     const BOT_SIZE = { w: 44, h: 56 };
     const LINK_PAD = 28;
-    const MAX_BOTS = 4;
-    const MAX_WAVE = 3;
     const HIT_RADIUS = 52;
     const MAX_HITS = 30;
     const NUKE_DIRECT_HIT_RADIUS = 120;
@@ -2041,8 +2039,12 @@ function initializeCylonEffects() {
         bot._patrolInterval = setInterval(() => moveBot(bot), 2200 + Math.random() * 1800);
     }
 
+    function botCap() {
+        return Math.min(BOT_HARD_CAP, BOT_CAP_START + Math.floor(koScore / BOT_CAP_PER_KOS));
+    }
+
     function spawnBot() {
-        if (!isGameLive() || activeBots >= MAX_BOTS) return false;
+        if (!isGameLive() || activeBots >= botCap()) return false;
         resizeBattlefield();
         const spot = findSafeSpot();
         if (!spot) return false;
@@ -2098,11 +2100,12 @@ function initializeCylonEffects() {
 
     function launchWave() {
         if (!isGameLive()) return;
-        const room = MAX_BOTS - activeBots;
+        const room = botCap() - activeBots;
         if (room <= 0) return;
         const isWave = Math.random() < 0.55;
+        const maxBatch = Math.min(room, Math.max(2, Math.min(4, Math.floor(botCap() / 3))));
         const count = isWave
-            ? Math.min(MAX_WAVE, room, 2 + Math.floor(Math.random() * 2))
+            ? Math.min(room, 2 + Math.floor(Math.random() * Math.max(1, maxBatch - 1)))
             : 1;
         for (let i = 0; i < count; i++) {
             setTimeout(() => spawnBot(), i * (isWave ? 380 : 0));

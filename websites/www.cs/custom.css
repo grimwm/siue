@@ -403,12 +403,13 @@ button:focus-visible,
   vertical-align: middle;
 }
 
-/* Fade chrome, brand, and theme — game toggle stays put */
+/* Fade chrome, brand, theme ↔ settings — game toggle stays put */
 .site-brand,
 .site-nav-menu,
 .site-nav-game,
 .site-nav-burger,
-.theme-toggle {
+.theme-toggle,
+.site-nav-tools .cylon-settings {
   transition: opacity calc(var(--cylon-desolate-fade, 1.6s) * 0.45) ease;
   opacity: 1;
 }
@@ -417,16 +418,19 @@ button:focus-visible,
 .site-nav-inner.is-nav-fading .site-nav-menu,
 .site-nav-inner.is-nav-fading .site-nav-game,
 .site-nav-inner.is-nav-fading .site-nav-burger,
-.site-nav-inner.is-nav-fading .theme-toggle {
+.site-nav-inner.is-nav-fading .theme-toggle,
+.site-nav-inner.is-nav-fading .site-nav-tools .cylon-settings {
   opacity: 0;
   pointer-events: none;
 }
 
-/* Keep the theme control's box so the Game toggle doesn't slide over */
+/* Combat: settings gear takes the theme button's slot */
 body.cylon-nav-combat .theme-toggle {
-  visibility: hidden;
-  pointer-events: none;
-  opacity: 0;
+  display: none;
+}
+
+body:not(.cylon-nav-combat) .site-nav-tools .cylon-settings {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -434,7 +438,8 @@ body.cylon-nav-combat .theme-toggle {
   .site-nav-menu,
   .site-nav-game,
   .site-nav-burger,
-  .theme-toggle {
+  .theme-toggle,
+  .site-nav-tools .cylon-settings {
     transition: none;
   }
 
@@ -442,7 +447,8 @@ body.cylon-nav-combat .theme-toggle {
   .site-nav-inner.is-nav-fading .site-nav-menu,
   .site-nav-inner.is-nav-fading .site-nav-game,
   .site-nav-inner.is-nav-fading .site-nav-burger,
-  .site-nav-inner.is-nav-fading .theme-toggle {
+  .site-nav-inner.is-nav-fading .theme-toggle,
+  .site-nav-inner.is-nav-fading .site-nav-tools .cylon-settings {
     opacity: 1;
     pointer-events: auto;
   }

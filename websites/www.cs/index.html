@@ -43,7 +43,7 @@
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-<link href="custom.css?v=20261006bf" rel="stylesheet">
+<link href="custom.css?v=20261006bg" rel="stylesheet">
 </head>
 
 <body>
@@ -130,7 +130,13 @@
       <button type="button" class="cylon-raptor-btn cylon-help-btn" id="cylon-help-btn" title="How to play" aria-haspopup="dialog" aria-controls="cylon-help">
         <span class="cylon-raptor-btn-label">How to Play</span>
       </button>
-      <div class="cylon-settings" id="cylon-settings">
+    </div>
+    <div class="site-nav-tools" id="site-nav-tools">
+      <button type="button" class="site-link theme-toggle" id="theme-toggle" title="Toggle dark/light mode" onclick="toggleTheme()">
+        <i id="theme-icon" class="bi bi-sun" aria-hidden="true"></i>
+        <span class="visually-hidden">Toggle theme</span>
+      </button>
+      <div class="cylon-settings" id="cylon-settings" hidden>
         <button type="button" class="cylon-settings-toggle" id="cylon-settings-toggle" aria-expanded="false" aria-controls="cylon-settings-panel" title="Game settings">
           <i class="bi bi-gear" aria-hidden="true"></i>
           <span class="visually-hidden">Game settings</span>
@@ -162,12 +168,6 @@
           <p class="cylon-settings-hint">Survive until 30 hits — occasional nukes and small missiles (2 hits each). Last 10s without a hit to heal 1. Cyan/pink missiles chase you; orange locks where you just aimed. More drones as KOs rise; the page looks ruined while Game On. Drag the pip to dodge · tap drones · Grenade / Raptor in the bar.</p>
         </div>
       </div>
-    </div>
-    <div class="site-nav-tools" id="site-nav-tools">
-      <button type="button" class="site-link theme-toggle" id="theme-toggle" title="Toggle dark/light mode" onclick="toggleTheme()">
-        <i id="theme-icon" class="bi bi-sun" aria-hidden="true"></i>
-        <span class="visually-hidden">Toggle theme</span>
-      </button>
       <button type="button" class="site-nav-burger" id="site-nav-burger" aria-expanded="false" aria-controls="site-nav-menu" title="Menu">
         <i class="bi bi-list" aria-hidden="true"></i>
         <span class="visually-hidden">Menu</span>
@@ -314,7 +314,7 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-<script src="main.js?v=20261006be"></script>
+<script src="main.js?v=20261006bf"></script>
 <script>
   initializeTheme();
   showNavDiv("main");

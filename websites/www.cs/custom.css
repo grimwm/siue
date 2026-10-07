@@ -467,6 +467,8 @@ body.cylon-nav-combat .site-nav-inner {
   white-space: nowrap;
   border: 1px solid transparent;
   padding: 0;
+  /* Orbitron’s visual weight sits a hair low vs Source Sans — lift to the midline */
+  transform: translateY(-0.05em);
 }
 
 .site-brand:hover {

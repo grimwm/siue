@@ -60,6 +60,7 @@ function initializeCylonEffects() {
     const field = document.getElementById('cylon-battlefield');
     const nukeEl = document.getElementById('cylon-nuke');
     const nukeMissileEl = document.getElementById('cylon-nuke-missile');
+    const missileEl = document.getElementById('cylon-small-missile');
     const scoreEl = document.getElementById('cylon-score-value');
     const hitsEl = document.getElementById('cylon-hits-value');
     const settingsRoot = document.getElementById('cylon-settings');
@@ -174,6 +175,11 @@ function initializeCylonEffects() {
     const NUKE_SPEED = 520; // px/sec toward cursor
     const NUKE_ARRIVE_RADIUS = 28;
     const NUKE_MAX_FLIGHT_MS = 2800;
+    const MISSILE_SPEED = 640;
+    const MISSILE_ARRIVE = 22;
+    const MISSILE_MAX_FLIGHT_MS = 2200;
+    const MISSILE_BLAST_RADIUS = 72;
+    const MISSILE_TRACKER_CHANCE = 0.22;
     const RAPTOR_COOLDOWN_MS = 60000;
     const RAPTOR_STRIKE_AT_MS = 700;
     const EYE_DISORIENT_MS = 30000;
@@ -777,10 +783,99 @@ function initializeCylonEffects() {
         nukeTimer = null;
         missileDueAt = 0;
         nukeDueAt = 0;
+        if (missileEl) missileEl.classList.remove('is-flying', 'is-tracker');
+        missileInFlight = false;
+    }
+
+    function playSmallMissileSound(tracker) {
+        playTone({
+            freq: tracker ? 520 : 380,
+            freqEnd: tracker ? 160 : 110,
+            type: 'sawtooth',
+            duration: 0.22,
+            gain: tracker ? 0.07 : 0.055
+        });
+        playNoiseBurst({
+            duration: 0.14,
+            gain: 0.04,
+            filterFreq: tracker ? 2200 : 1400,
+            filterType: 'highpass'
+        });
+    }
+
+    function detonateSmallMissileAt(clientX, clientY) {
+        missileInFlight = false;
+        if (missileEl) {
+            missileEl.classList.remove('is-flying', 'is-tracker');
+        }
+        const pageX = clientX + window.scrollX;
+        const pageY = clientY + window.scrollY;
+        playExplosion({ size: 'small', delay: 0 });
+        const blast = document.createElement('div');
+        blast.className = 'cylon-missile-blast';
+        blast.style.left = `${pageX}px`;
+        blast.style.top = `${pageY}px`;
+        blast.setAttribute('aria-hidden', 'true');
+        field.appendChild(blast);
+        setTimeout(() => blast.remove(), 420);
+        punchHole(pageX, pageY, HOLE_PRESETS.small);
+        syncMousePageFromClient();
+        const miss = Math.hypot(mouse.clientX - clientX, mouse.clientY - clientY);
+        if (miss <= MISSILE_BLAST_RADIUS) {
+            registerHit(2);
+        }
     }
 
     function launchSmallMissile() {
-        // Implemented in Task 3
+        if (!isGameLive() || isEyeDisoriented() || missileInFlight || !missileEl) return;
+        missileInFlight = true;
+        const tracker = Math.random() < MISSILE_TRACKER_CHANCE;
+        const aimFresh = performance.now() - lastAim.t < 4000;
+        let lockX = aimFresh ? lastAim.clientX : mouse.clientX;
+        let lockY = aimFresh ? lastAim.clientY : mouse.clientY;
+
+        const origin = eyeClientCenter();
+        let x = origin.x;
+        let y = origin.y - 40;
+        let started = performance.now();
+        let last = started;
+
+        missileEl.classList.toggle('is-tracker', tracker);
+        missileEl.classList.add('is-flying');
+        missileEl.style.left = `${x}px`;
+        missileEl.style.top = `${y}px`;
+        if (settings.soundEnabled) ensureAudio();
+        playSmallMissileSound(tracker);
+
+        const tick = (now) => {
+            if (paused || !settings.gameEnabled || gameOver) {
+                started += now - last;
+                last = now;
+                if (!missileInFlight) return;
+                requestAnimationFrame(tick);
+                return;
+            }
+            const dt = Math.min(0.05, (now - last) / 1000);
+            last = now;
+            const tx = tracker ? mouse.clientX : lockX;
+            const ty = tracker ? mouse.clientY : lockY;
+            const dx = tx - x;
+            const dy = ty - y;
+            const dist = Math.hypot(dx, dy) || 1;
+            const step = MISSILE_SPEED * dt;
+            x += (dx / dist) * Math.min(step, dist);
+            y += (dy / dist) * Math.min(step, dist);
+            missileEl.style.left = `${x}px`;
+            missileEl.style.top = `${y}px`;
+            missileEl.style.setProperty('--missile-heading', `${Math.atan2(dy, dx) * (180 / Math.PI)}deg`);
+            missileEl.style.transform = `rotate(${Math.atan2(dy, dx) * (180 / Math.PI)}deg)`;
+            if (dist <= MISSILE_ARRIVE || now - started >= MISSILE_MAX_FLIGHT_MS) {
+                detonateSmallMissileAt(x, y);
+                return;
+            }
+            requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
     }
 
     function scheduleMissiles(first = false) {
@@ -2167,6 +2262,7 @@ function initializeCylonEffects() {
         cancelGrenadeArm();
         nukeInFlight = false;
         if (nukeMissileEl) nukeMissileEl.classList.remove('is-flying');
+        if (missileEl) missileEl.classList.remove('is-flying', 'is-tracker');
         draggingReticle = false;
         reticlePointerId = null;
         document.body.classList.remove('cylon-touch-play');

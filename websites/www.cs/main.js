@@ -264,9 +264,13 @@ function initializeCylonEffects() {
         }
     }
 
-    /** Civil nav vs combat bar: reparent Game On/Off and show the right chrome. */
-    function syncNavChrome() {
-        const on = !!settings.gameEnabled;
+    let navChromeFadeGen = 0;
+    let navChromeFadeTimer = null;
+    const NAV_FADE_MS = Math.round(1600 * 0.45); // match --cylon-desolate-fade * 0.45
+
+    /** Apply civil vs combat nav structure (no animation). */
+    function applyNavChrome(on) {
+        document.body.classList.toggle('cylon-nav-combat', on);
         if (navGame) {
             navGame.hidden = !on;
         }
@@ -276,13 +280,10 @@ function initializeCylonEffects() {
                 home.appendChild(gameToggleBtn);
             }
         }
-        if (!on && navMenu) {
-            // leave menu as-is when civil
-        } else if (on && navMenu && navBurger) {
+        if (on && navMenu && navBurger) {
             navMenu.classList.remove('is-open');
             navBurger.setAttribute('aria-expanded', 'false');
         }
-        // Close settings when leaving the fight
         if (!on) {
             const panel = document.getElementById('cylon-settings-panel');
             const toggleBtn = document.getElementById('cylon-settings-toggle');
@@ -291,6 +292,36 @@ function initializeCylonEffects() {
                 if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
             }
         }
+    }
+
+    /** Fade out → swap chrome → fade in (same family as page scatter fade). */
+    function syncNavChrome() {
+        const on = !!settings.gameEnabled;
+        const navInner = document.querySelector('.site-nav-inner');
+        const already = document.body.classList.contains('cylon-nav-combat');
+
+        if (reduceMotion || !navInner || already === on) {
+            clearTimeout(navChromeFadeTimer);
+            navChromeFadeTimer = null;
+            navInner?.classList.remove('is-nav-fading');
+            applyNavChrome(on);
+            return;
+        }
+
+        const gen = ++navChromeFadeGen;
+        clearTimeout(navChromeFadeTimer);
+        navInner.classList.add('is-nav-fading');
+        navChromeFadeTimer = setTimeout(() => {
+            if (gen !== navChromeFadeGen) return;
+            applyNavChrome(on);
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    if (gen !== navChromeFadeGen) return;
+                    navInner.classList.remove('is-nav-fading');
+                    navChromeFadeTimer = null;
+                });
+            });
+        }, NAV_FADE_MS);
     }
 
     function formatHighScoreRows(list) {

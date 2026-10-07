@@ -3,7 +3,8 @@
  * High-score API for the Cylon defense mini-game.
  * GET  -> { "scores": [ { "score", "hits", "at" }, ... ] }
  * POST -> JSON body { "score": int, "hits": int, "initials": "ABC" }
- * Storage: JSON file with flock()-based exclusive/shared locks.
+ * Storage: prefer data/scores.json (SFTP-reachable); fall back to
+ * /var/tmp/<user>-cylon-scores.json when data/ is not web-writable.
  */
 
 header('Content-Type: application/json; charset=utf-8');
@@ -18,25 +19,26 @@ function respond(array $payload, int $status = 200): void {
     exit;
 }
 
-function scorePaths(): array {
-    return [
-        __DIR__ . '/.cylon-scores.json',
-        __DIR__ . '/data/scores.json',
-        rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . '/wgrim-cylon-scores.json',
-    ];
+function accountName(): string {
+    $base = basename(__DIR__);
+    return preg_match('/^[A-Za-z0-9._-]+$/', $base) ? $base : 'cylon';
 }
 
-function resolveScorePath(): string {
-    foreach (scorePaths() as $path) {
-        $dir = dirname($path);
-        if (is_file($path) && is_writable($path)) {
-            return $path;
-        }
-        if (is_dir($dir) && is_writable($dir)) {
-            return $path;
-        }
+function scorePathUsable(string $path): bool {
+    if (is_file($path)) {
+        return is_readable($path) && is_writable($path);
     }
-    return scorePaths()[0];
+    $dir = dirname($path);
+    return is_dir($dir) && is_writable($dir);
+}
+
+/** Prefer data/scores.json; fall back to durable world-writable /var/tmp. */
+function resolveScorePath(): string {
+    $preferred = __DIR__ . '/data/scores.json';
+    if (scorePathUsable($preferred)) {
+        return $preferred;
+    }
+    return '/var/tmp/' . accountName() . '-cylon-scores.json';
 }
 
 function normalizeScores($data): array {
@@ -83,8 +85,15 @@ function sortScores(array $scores): array {
  */
 function openScoresFile(string $path, string $mode) {
     $dir = dirname($path);
-    if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
+    // 0777 only for our data/ dir — shared-host PHP is not the SFTP user.
+    $relax = strpos($dir, __DIR__ . DIRECTORY_SEPARATOR) === 0
+        || $dir === __DIR__ . '/data'
+        || $dir === __DIR__ . DIRECTORY_SEPARATOR . 'data';
+    if (!is_dir($dir) && !@mkdir($dir, $relax ? 0777 : 0755, true) && !is_dir($dir)) {
         throw new RuntimeException('scores directory missing: ' . $dir);
+    }
+    if ($relax) {
+        @chmod($dir, 0777);
     }
     if (!is_file($path)) {
         $bootstrap = @fopen($path, 'c+');

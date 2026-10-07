@@ -43,7 +43,7 @@
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-<link href="custom.css?v=20261006aw" rel="stylesheet">
+<link href="custom.css?v=20261006ax" rel="stylesheet">
 </head>
 
 <body>
@@ -87,16 +87,49 @@
 <header class="site-nav">
   <div class="site-nav-inner">
     <a class="site-brand" href="#" onclick="showNavDiv('main'); return false;">William Grim</a>
+    <nav class="site-nav-menu" id="site-nav-menu" aria-label="Primary">
+      <div class="site-nav-menu-primary">
+        <a class="site-link" href="#" onclick="showNavDiv('main'); return false;">Home</a>
+        <a class="site-link" href="#" onclick="showNavDiv('contact'); return false;">Contact</a>
+      </div>
+    </nav>
     <div class="site-nav-power" id="site-nav-power">
-      <button type="button" class="cylon-raptor-btn cylon-help-btn" id="cylon-help-btn" title="How to play" aria-haspopup="dialog" aria-controls="cylon-help">
-        <span class="cylon-raptor-btn-label">How to Play</span>
-      </button>
       <button type="button" class="cylon-game-toggle" id="cylon-game-toggle" aria-pressed="false" title="Toggle Cylon defense game">
         <span class="cylon-game-toggle-dot" aria-hidden="true"></span>
         <span class="cylon-game-toggle-label" id="cylon-game-toggle-label">Game Off</span>
       </button>
     </div>
-    <div class="site-nav-tools" id="site-nav-tools">
+    <div class="site-nav-game" id="site-nav-game" hidden>
+      <span class="cylon-score" id="cylon-score" title="Hostile drones neutralized" aria-live="polite">
+        <span class="cylon-score-label">KOs</span>
+        <span class="cylon-score-value" id="cylon-score-value">0</span>
+      </span>
+      <span class="cylon-score" id="cylon-hits" title="Hits taken — game over at 30, or if a nuke lands on you. Heal 1 after 10s without a hit." aria-live="polite">
+        <span class="cylon-score-label">Hits</span>
+        <span class="cylon-score-value" id="cylon-hits-value">0</span>
+        <span class="cylon-score-cap">/30</span>
+      </span>
+      <button type="button" class="cylon-raptor-btn" id="cylon-grenade-btn" title="Ready grenade, then tap/click to throw (G)" aria-label="Ready grenade">
+        <svg class="cylon-ability-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path fill="currentColor" d="M11 2h2v2h2.2c.4 0 .8.3.8.8V7l1.4.9c.3.2.4.6.2 1l-.7 1.2A6.5 6.5 0 0 1 18.5 15 6.5 6.5 0 1 1 5.5 15c0-2.1 1-3.9 2.6-5l-.7-1.2c-.2-.4-.1-.8.2-1L9 7V4.8c0-.5.4-.8.8-.8H12V2zm1 8.2A4.3 4.3 0 0 0 7.7 15 4.3 4.3 0 0 0 12 19.3 4.3 4.3 0 0 0 16.3 15 4.3 4.3 0 0 0 12 10.2z"/>
+          <path fill="currentColor" d="M10.2 4.8h3.6v1.3l1.1.7-.4.7-1.3-.4H10.8l-1.3.4-.4-.7 1.1-.7V4.8z"/>
+          <circle cx="12" cy="15" r="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+        </svg>
+        <span class="cylon-raptor-btn-label">Grenade</span>
+        <span class="cylon-raptor-btn-cd" id="cylon-grenade-cd" hidden></span>
+      </button>
+      <button type="button" class="cylon-raptor-btn" id="cylon-raptor-btn" title="Call Raptor strike (R)" aria-label="Call Raptor reinforcements">
+        <svg class="cylon-ability-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path fill="currentColor" d="M2.5 13.1 8.8 10.8l1-2.6c.15-.4.55-.55.9-.35l1.1.6L13 6.7c.25-.4.85-.4 1.1 0l1.2 1.75 1.05-.55c.35-.2.75 0 .9.35l1.05 2.55 5.2 1.7c.45.15.65.65.4 1.05l-1.35 1.9c-.2.3-.55.4-.9.3l-2.85-.75-1.45 2.55c-.15.3-.5.5-.85.5H9.85c-.35 0-.7-.2-.85-.5L7.55 15.4l-3.2.7c-.35.1-.75-.15-.85-.5l-1.35-2.05c-.2-.4.1-.9.55-.75z"/>
+          <path fill="currentColor" d="M18.6 11.35h2.35l.75.85-1 .35-2.1-.35z"/>
+          <path fill="currentColor" opacity=".9" d="M11.1 8.35h1.8l.35.95h-2.5l.35-.95z"/>
+        </svg>
+        <span class="cylon-raptor-btn-label">Raptor</span>
+        <span class="cylon-raptor-btn-cd" id="cylon-raptor-cd" hidden></span>
+      </button>
+      <button type="button" class="cylon-raptor-btn cylon-help-btn" id="cylon-help-btn" title="How to play" aria-haspopup="dialog" aria-controls="cylon-help">
+        <span class="cylon-raptor-btn-label">How to Play</span>
+      </button>
       <div class="cylon-settings" id="cylon-settings">
         <button type="button" class="cylon-settings-toggle" id="cylon-settings-toggle" aria-expanded="false" aria-controls="cylon-settings-panel" title="Game settings">
           <i class="bi bi-gear" aria-hidden="true"></i>
@@ -129,50 +162,15 @@
           <p class="cylon-settings-hint">Survive until 30 hits — occasional nukes and small missiles (2 hits each). Last 10s without a hit to heal 1. Cyan/pink missiles chase you; orange locks where you just aimed. More drones as KOs rise; the page looks ruined while Game On. Drag the pip to dodge · tap drones · Grenade / Raptor in the bar.</p>
         </div>
       </div>
+    </div>
+    <div class="site-nav-tools" id="site-nav-tools">
+      <button type="button" class="site-link theme-toggle" id="theme-toggle" title="Toggle dark/light mode" onclick="toggleTheme()">
+        <i id="theme-icon" class="bi bi-sun" aria-hidden="true"></i>
+        <span class="visually-hidden">Toggle theme</span>
+      </button>
       <button type="button" class="site-nav-burger" id="site-nav-burger" aria-expanded="false" aria-controls="site-nav-menu" title="Menu">
         <i class="bi bi-list" aria-hidden="true"></i>
         <span class="visually-hidden">Menu</span>
-      </button>
-    </div>
-    <nav class="site-nav-menu" id="site-nav-menu" aria-label="Primary">
-      <div class="site-nav-menu-primary">
-        <a class="site-link" href="#" onclick="showNavDiv('main'); return false;">Home</a>
-        <a class="site-link" href="#" onclick="showNavDiv('contact'); return false;">Contact</a>
-      </div>
-      <div class="site-nav-menu-utils">
-        <button type="button" class="site-link theme-toggle" id="theme-toggle" title="Toggle dark/light mode" onclick="toggleTheme()">
-          <i id="theme-icon" class="bi bi-sun" aria-hidden="true"></i>
-          <span class="visually-hidden">Toggle theme</span>
-        </button>
-      </div>
-    </nav>
-    <div class="site-nav-game" id="site-nav-game">
-      <span class="cylon-score" id="cylon-score" title="Hostile drones neutralized" aria-live="polite">
-        <span class="cylon-score-label">KOs</span>
-        <span class="cylon-score-value" id="cylon-score-value">0</span>
-      </span>
-      <span class="cylon-score" id="cylon-hits" title="Hits taken — game over at 30, or if a nuke lands on you. Heal 1 after 10s without a hit." aria-live="polite">
-        <span class="cylon-score-label">Hits</span>
-        <span class="cylon-score-value" id="cylon-hits-value">0</span>
-        <span class="cylon-score-cap">/30</span>
-      </span>
-      <button type="button" class="cylon-raptor-btn" id="cylon-grenade-btn" title="Ready grenade, then tap/click to throw (G)" aria-label="Ready grenade">
-        <svg class="cylon-ability-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path fill="currentColor" d="M11 2h2v2h2.2c.4 0 .8.3.8.8V7l1.4.9c.3.2.4.6.2 1l-.7 1.2A6.5 6.5 0 0 1 18.5 15 6.5 6.5 0 1 1 5.5 15c0-2.1 1-3.9 2.6-5l-.7-1.2c-.2-.4-.1-.8.2-1L9 7V4.8c0-.5.4-.8.8-.8H12V2zm1 8.2A4.3 4.3 0 0 0 7.7 15 4.3 4.3 0 0 0 12 19.3 4.3 4.3 0 0 0 16.3 15 4.3 4.3 0 0 0 12 10.2z"/>
-          <path fill="currentColor" d="M10.2 4.8h3.6v1.3l1.1.7-.4.7-1.3-.4H10.8l-1.3.4-.4-.7 1.1-.7V4.8z"/>
-          <circle cx="12" cy="15" r="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
-        </svg>
-        <span class="cylon-raptor-btn-label">Grenade</span>
-        <span class="cylon-raptor-btn-cd" id="cylon-grenade-cd" hidden></span>
-      </button>
-      <button type="button" class="cylon-raptor-btn" id="cylon-raptor-btn" title="Call Raptor strike (R)" aria-label="Call Raptor reinforcements">
-        <svg class="cylon-ability-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path fill="currentColor" d="M2.5 13.1 8.8 10.8l1-2.6c.15-.4.55-.55.9-.35l1.1.6L13 6.7c.25-.4.85-.4 1.1 0l1.2 1.75 1.05-.55c.35-.2.75 0 .9.35l1.05 2.55 5.2 1.7c.45.15.65.65.4 1.05l-1.35 1.9c-.2.3-.55.4-.9.3l-2.85-.75-1.45 2.55c-.15.3-.5.5-.85.5H9.85c-.35 0-.7-.2-.85-.5L7.55 15.4l-3.2.7c-.35.1-.75-.15-.85-.5l-1.35-2.05c-.2-.4.1-.9.55-.75z"/>
-          <path fill="currentColor" d="M18.6 11.35h2.35l.75.85-1 .35-2.1-.35z"/>
-          <path fill="currentColor" opacity=".9" d="M11.1 8.35h1.8l.35.95h-2.5l.35-.95z"/>
-        </svg>
-        <span class="cylon-raptor-btn-label">Raptor</span>
-        <span class="cylon-raptor-btn-cd" id="cylon-raptor-cd" hidden></span>
       </button>
     </div>
   </div>
@@ -316,7 +314,7 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-<script src="main.js?v=20261006aw"></script>
+<script src="main.js?v=20261006ax"></script>
 <script>
   initializeTheme();
   showNavDiv("main");

@@ -86,6 +86,8 @@ function initializeCylonEffects() {
     const reticleEl = document.getElementById('cylon-reticle');
     const navBurger = document.getElementById('site-nav-burger');
     const navMenu = document.getElementById('site-nav-menu');
+    const navPower = document.getElementById('site-nav-power');
+    const navGame = document.getElementById('site-nav-game');
     const helpBtn = document.getElementById('cylon-help-btn');
     const helpEl = document.getElementById('cylon-help');
     const helpPlatformEl = document.getElementById('cylon-help-platform');
@@ -259,6 +261,35 @@ function initializeCylonEffects() {
         gameToggleBtn.setAttribute('aria-pressed', settings.gameEnabled ? 'true' : 'false');
         if (gameToggleLabel) {
             gameToggleLabel.textContent = settings.gameEnabled ? 'Game On' : 'Game Off';
+        }
+    }
+
+    /** Civil nav vs combat bar: reparent Game On/Off and show the right chrome. */
+    function syncNavChrome() {
+        const on = !!settings.gameEnabled;
+        if (navGame) {
+            navGame.hidden = !on;
+        }
+        if (gameToggleBtn) {
+            const home = on ? navGame : navPower;
+            if (home && gameToggleBtn.parentElement !== home) {
+                home.appendChild(gameToggleBtn);
+            }
+        }
+        if (!on && navMenu) {
+            // leave menu as-is when civil
+        } else if (on && navMenu && navBurger) {
+            navMenu.classList.remove('is-open');
+            navBurger.setAttribute('aria-expanded', 'false');
+        }
+        // Close settings when leaving the fight
+        if (!on) {
+            const panel = document.getElementById('cylon-settings-panel');
+            const toggleBtn = document.getElementById('cylon-settings-toggle');
+            if (panel && !panel.hidden) {
+                panel.hidden = true;
+                if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+            }
         }
     }
 
@@ -855,6 +886,7 @@ function initializeCylonEffects() {
     function syncWorldEndedLook() {
         const on = settings.gameEnabled;
         document.body.classList.toggle('cylon-game-live', on);
+        syncNavChrome();
         if (on) {
             // Wrap glyphs first at rest, then blow them outward next frame so CSS transitions fire
             scatterPageGlyphs();
@@ -2968,6 +3000,7 @@ function initializeCylonEffects() {
     bindHelp();
     resizeBattlefield();
     updateHitsUi();
+    syncNavChrome();
     syncReticleVisibility();
     renderHighScores();
     fetchHighScores();

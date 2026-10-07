@@ -199,8 +199,10 @@ function initializeCylonEffects() {
     const MISSILE_BLAST_RADIUS = 72;
     const MISSILE_TRACKER_CHANCE = 0.22;
     const MISSILE_TRACKER_CAP = 2;
-    const MISSILE_GROUND_CAP_MAX = 4;
+    const MISSILE_GROUND_CAP_MAX = 6;
     let trackerPairTimer = null;
+    /** @type {ReturnType<typeof setTimeout>[]} */
+    let groundVolleyTimers = [];
     const RAPTOR_COOLDOWN_MS = 60000;
     const RAPTOR_STRIKE_AT_MS = 700;
     const EYE_DISORIENT_MS = 30000;
@@ -887,10 +889,10 @@ function initializeCylonEffects() {
 
     function nextMissileDelayMs() {
         const d = difficultyFactor();
-        // Early ~8–14s → late ~3.5–6s, never faster than 3.5s floor
-        const lo = lerp(11000, 4750, d);
-        const span = lerp(3000, 2500, d);
-        return Math.max(3500, lo - span / 2 + Math.random() * span);
+        // Early ~5.5–9s → late ~2–3.5s; floor 2s so static volleys can overlap
+        const lo = lerp(7500, 2800, d);
+        const span = lerp(2800, 1600, d);
+        return Math.max(2000, lo - span / 2 + Math.random() * span);
     }
 
     function nextNukeDelayMs() {
@@ -901,8 +903,12 @@ function initializeCylonEffects() {
     }
 
     function groundMissileCap() {
-        // 1 at easy → up to 4 as difficulty rises
-        return Math.min(MISSILE_GROUND_CAP_MAX, 1 + Math.floor(difficultyFactor() * MISSILE_GROUND_CAP_MAX));
+        // Steeper than linear: 2 mid-early, 4 mid-run, up to 6 late
+        const t = Math.pow(difficultyFactor(), 0.55);
+        return Math.min(
+            MISSILE_GROUND_CAP_MAX,
+            1 + Math.floor(t * (MISSILE_GROUND_CAP_MAX - 1))
+        );
     }
 
     function countActiveMissiles(trackerOnly = null) {
@@ -918,9 +924,15 @@ function initializeCylonEffects() {
         return countActiveMissiles(false) < groundMissileCap();
     }
 
+    function clearGroundVolleyTimers() {
+        groundVolleyTimers.forEach((id) => clearTimeout(id));
+        groundVolleyTimers = [];
+    }
+
     function clearActiveMissiles() {
         clearTimeout(trackerPairTimer);
         trackerPairTimer = null;
+        clearGroundVolleyTimers();
         activeMissiles.forEach((m) => {
             m.alive = false;
             m.el.remove();
@@ -933,6 +945,7 @@ function initializeCylonEffects() {
         clearTimeout(missileTimer);
         clearTimeout(nukeTimer);
         clearTimeout(trackerPairTimer);
+        clearGroundVolleyTimers();
         missileTimer = null;
         nukeTimer = null;
         trackerPairTimer = null;
@@ -969,12 +982,13 @@ function initializeCylonEffects() {
             return Number.isFinite(live) ? live : (m.originX || vw / 2);
         });
 
-        // Lane samples across the top + a couple of random probes
-        const lanes = 8;
+        // Dense lane samples across the top so volleys can fan out
+        const lanes = 12;
         const candidates = [];
         for (let i = 0; i < lanes; i++) {
             candidates.push(margin + ((i + 0.5) / lanes) * usable);
         }
+        candidates.push(margin + Math.random() * usable);
         candidates.push(margin + Math.random() * usable);
         candidates.push(margin + Math.random() * usable);
 
@@ -1037,14 +1051,20 @@ function initializeCylonEffects() {
         }
     }
 
-    function launchSmallMissile({ forceTracker = false, fromPair = false } = {}) {
+    function launchSmallMissile({ forceTracker = false, forceGround = false, fromPair = false } = {}) {
         if (!isGameLive() || isEyeDisoriented()) return false;
 
         // Trackers may fly alongside ground missiles; up to MISSILE_TRACKER_CAP seekers
-        let tracker = forceTracker
-            ? canLaunchMissile(true)
-            : (Math.random() < MISSILE_TRACKER_CHANCE && canLaunchMissile(true));
-        if (!tracker && !canLaunchMissile(false)) return false;
+        let tracker = false;
+        if (forceGround) {
+            if (!canLaunchMissile(false)) return false;
+        } else if (forceTracker) {
+            tracker = canLaunchMissile(true);
+            if (!tracker) return false;
+        } else {
+            tracker = Math.random() < MISSILE_TRACKER_CHANCE && canLaunchMissile(true);
+            if (!tracker && !canLaunchMissile(false)) return false;
+        }
 
         const aimFresh = performance.now() - lastAim.t < 4000;
         let lockX = aimFresh ? lastAim.clientX : mouse.clientX;
@@ -1106,6 +1126,25 @@ function initializeCylonEffects() {
                 if (!isGameLive() || paused || isEyeDisoriented()) return;
                 launchSmallMissile({ forceTracker: true, fromPair: true });
             }, 280 + Math.random() * 320);
+        }
+
+        // Static (lock-on) volleys from other top lanes as difficulty rises
+        if (!tracker && !fromPair && !forceGround) {
+            const d = difficultyFactor();
+            const room = groundMissileCap() - countActiveMissiles(false);
+            const maxExtra = Math.min(room, d < 0.18 ? 0 : d < 0.4 ? 1 : 2);
+            if (maxExtra > 0 && Math.random() < 0.4 + d * 0.45) {
+                const extras = 1 + (maxExtra > 1 && Math.random() < 0.35 + d * 0.4 ? 1 : 0);
+                for (let i = 0; i < Math.min(extras, maxExtra); i++) {
+                    const delay = 90 + i * (140 + Math.random() * 160);
+                    const id = setTimeout(() => {
+                        groundVolleyTimers = groundVolleyTimers.filter((t) => t !== id);
+                        if (!isGameLive() || paused || isEyeDisoriented()) return;
+                        launchSmallMissile({ forceGround: true, fromPair: true });
+                    }, delay);
+                    groundVolleyTimers.push(id);
+                }
+            }
         }
         return true;
     }

@@ -297,11 +297,10 @@ function initializeCylonEffects() {
         if (navGame) {
             navGame.hidden = !on;
         }
-        // Game toggle stays in #site-nav-power — never reparented (avoids fade/size jumps)
-        if (on && navMenu && navBurger) {
-            navMenu.classList.remove('is-open');
-            navBurger.setAttribute('aria-expanded', 'false');
+        if (settingsRoot) {
+            settingsRoot.hidden = !on;
         }
+        // Game toggle stays in #site-nav-power — never reparented (avoids fade/size jumps)
         if (!on) {
             const panel = document.getElementById('cylon-settings-panel');
             const toggleBtn = document.getElementById('cylon-settings-toggle');

@@ -5,7 +5,7 @@
  */
 
 // Host blocks .html under games/ — serve mount from home-dir root (see cylon-mount.html symlink)
-const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006cj';
+const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006ck';
 
 async function mountCylonDom() {
     const root = document.getElementById('game-root');
@@ -191,7 +191,8 @@ async function initializeCylonEffects() {
     const MISSILE_MAX_FLIGHT_MS = 2200;
     const MISSILE_BLAST_RADIUS = 72;
     /** Local letter/terrain chew for player shots, robot bolts, and inbound missiles. */
-    const SMALL_WEAPON_SCALE = 0.14;
+    const SMALL_WEAPON_SCALE = 0.22;
+    const MISSILE_WEAPON_SCALE = 0.32;
     const MISSILE_TRACKER_CHANCE_BASE = 0.14;
     const MISSILE_TRACKER_CAP_MAX = 3;
     const MISSILE_GROUND_CAP_MAX = 5;
@@ -871,6 +872,21 @@ async function initializeCylonEffects() {
         el.style.setProperty('--sr', `${rot.toFixed(1)}deg`);
     }
 
+    /** Record layout home while glyphs-blown is off (must be in-DOM). */
+    function stampGlyphOrigins(root) {
+        root.querySelectorAll('.cylon-scatter-char, .cylon-scatter-block, .cylon-scatter-panel').forEach((el) => {
+            const r = el.getBoundingClientRect();
+            el.dataset.ox = String(r.left + r.width / 2 + scrollX());
+            el.dataset.oy = String(r.top + r.height / 2 + scrollY());
+        });
+        // Panel root itself may be the scatter-panel
+        if (root.classList.contains('cylon-scatter-panel')) {
+            const r = root.getBoundingClientRect();
+            root.dataset.ox = String(r.left + r.width / 2 + scrollX());
+            root.dataset.oy = String(r.top + r.height / 2 + scrollY());
+        }
+    }
+
     function scatterPageGlyphs() {
         if (document.body.dataset.cylonScattered === '1') return;
         if (reduceMotion) return;
@@ -923,6 +939,8 @@ async function initializeCylonEffects() {
                 li.style.setProperty('--my', `${dy.toFixed(1)}px`);
                 li.style.setProperty('--mr', `${rot.toFixed(1)}deg`);
             });
+            // After chars are in the tree, stamp page-home for weapon AoE tests
+            stampGlyphOrigins(root);
         });
         document.body.dataset.cylonScattered = '1';
     }
@@ -951,11 +969,16 @@ async function initializeCylonEffects() {
         scatterPageGlyphs();
         document.body.classList.add('cylon-world-ended');
         document.body.classList.remove('cylon-glyphs-blown');
+        // Long transition only for the opening scatter; combat kicks use a snappy curve
+        document.body.classList.add('cylon-glyphs-blowing');
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 if (settings.gameEnabled) {
                     document.body.classList.add('cylon-glyphs-blown');
                 }
+                setTimeout(() => {
+                    document.body.classList.remove('cylon-glyphs-blowing');
+                }, 3000);
             });
         });
     }
@@ -970,6 +993,7 @@ async function initializeCylonEffects() {
             if (!deferScatter) blowWorldEnded();
         } else {
             document.body.classList.remove('cylon-glyphs-blown');
+            document.body.classList.remove('cylon-glyphs-blowing');
             document.body.classList.remove('cylon-world-ended');
             clearLandscapeVars();
             // Let letters ease home, then unwrap (match --cylon-desolate-fade)
@@ -1168,8 +1192,8 @@ async function initializeCylonEffects() {
         field.appendChild(blast);
         setTimeout(() => blast.remove(), 420);
         punchHole(pageX, pageY, HOLE_PRESETS.small);
-        // Same local letter AoE as player small shots / robot bolts — not a global rearrange
-        rearrangeLandscapePage(pageX, pageY, SMALL_WEAPON_SCALE);
+        // Local letter AoE sized to the missile blast — not a global rearrange
+        rearrangeLandscapePage(pageX, pageY, MISSILE_WEAPON_SCALE);
         syncMousePageFromClient();
         const miss = Math.hypot(mouse.clientX - clientX, mouse.clientY - clientY);
         if (miss <= MISSILE_BLAST_RADIUS) {
@@ -2852,14 +2876,28 @@ async function initializeCylonEffects() {
     /** Blast radius (page px) — AoE only, scaled by weapon power. */
     function disruptRadiusForScale(scale) {
         const s = Math.max(0.05, Math.min(1.6, scale));
-        // shot≈0.14 → ~100px · missile≈0.34 → ~145px · grenade≈0.48 → ~175px · nuke≈1.4 → ~380px
-        return 70 + s * 220;
+        // shot≈0.22 → ~210px · missile≈0.32 → ~240px · grenade≈0.48 → ~290px · nuke≈1.4 → ~580px
+        return 140 + s * 320;
+    }
+
+    /** Aim the crack/ash hotspot at the impact without rewriting the whole scar field. */
+    function aimBlastHotspot(clientX, clientY, scale) {
+        const body = document.body;
+        const vw = window.innerWidth || 1;
+        const vh = window.innerHeight || 1;
+        const s = Math.max(0.05, Math.min(1, scale));
+        const blastX = Math.max(8, Math.min(92, (clientX / vw) * 100));
+        const blastY = Math.max(10, Math.min(90, (clientY / vh) * 100));
+        const blend = Math.min(1, 0.55 + s * 0.6);
+        body.style.setProperty('--blast-x', `${blendToward(readBodyNum('--blast-x', 50), blastX, blend).toFixed(1)}%`);
+        body.style.setProperty('--blast-y', `${blendToward(readBodyNum('--blast-y', 48), blastY, blend).toFixed(1)}%`);
+        body.style.setProperty('--land-morph-ms', `${Math.round(280 + s * 420)}ms`);
     }
 
     /**
      * Reshuffle fracture / ash overlays and nudge nearby debris.
      * Global crack/ash rewrite only for large weapons (Raptor pulse / nuke).
-     * Everything else is a local AoE on individual letters.
+     * Everything else is a local AoE on individual letters + blast hotspot.
      */
     function rearrangeLandscape(clientX, clientY, scale = 1) {
         if (!document.body.classList.contains('cylon-world-ended') && scale < 0.9) {
@@ -2869,8 +2907,9 @@ async function initializeCylonEffects() {
         const pageX = clientX + scrollX();
         const pageY = clientY + scrollY();
 
-        // Smaller weapons: local letter AoE only — never rewrite the whole backdrop
+        // Smaller weapons: local letter AoE + hotspot — never rewrite the whole backdrop
         if (s < 0.55) {
+            aimBlastHotspot(clientX, clientY, s);
             disruptGlyphs(pageX, pageY, s);
             return;
         }
@@ -2917,9 +2956,8 @@ async function initializeCylonEffects() {
     }
 
     /**
-     * Kick debris inside the weapon AoE only (individual letters for smaller blasts).
-     * Moving parent blocks would drag every child letter across the screen — never do that
-     * unless this is a large weapon.
+     * Kick letters whose page-home (pre-scatter layout) sits inside the weapon AoE.
+     * Individual chars only for smaller blasts — never parent blocks (those drag the whole section).
      */
     function disruptGlyphs(pageX, pageY, scale = 1) {
         if (document.body.dataset.cylonScattered !== '1' || reduceMotion) return;
@@ -2930,14 +2968,23 @@ async function initializeCylonEffects() {
             ? '.cylon-scatter-char'
             : '.cylon-scatter-char, .cylon-scatter-block, .cylon-scatter-panel';
         const nodes = [...document.querySelectorAll(selector)];
-        const chance = Math.min(1, 0.45 + s * 0.55);
-        const jitter = 48 * s;
-        const pushMax = 28 + 160 * s;
+        const chance = Math.min(1, 0.75 + s * 0.25);
+        const jitter = 70 * s;
+        const pushMax = 55 + 240 * s;
         nodes.forEach((el) => {
             if (el.classList.contains('cylon-scatter-panel') && s < 0.9) return;
-            const rect = el.getBoundingClientRect();
-            const cx = rect.left + rect.width / 2 + scrollX();
-            const cy = rect.top + rect.height / 2 + scrollY();
+            const ox = parseFloat(el.dataset.ox);
+            const oy = parseFloat(el.dataset.oy);
+            let cx;
+            let cy;
+            if (Number.isFinite(ox) && Number.isFinite(oy)) {
+                cx = ox;
+                cy = oy;
+            } else {
+                const rect = el.getBoundingClientRect();
+                cx = rect.left + rect.width / 2 + scrollX();
+                cy = rect.top + rect.height / 2 + scrollY();
+            }
             const awayX = cx - pageX;
             const awayY = cy - pageY;
             const awayDist = Math.hypot(awayX, awayY) || 1;
@@ -2947,10 +2994,10 @@ async function initializeCylonEffects() {
             const sy = parseFloat(el.style.getPropertyValue('--sy')) || 0;
             const sr = parseFloat(el.style.getPropertyValue('--sr')) || 0;
             const falloff = Math.max(0, 1 - awayDist / radius);
-            const push = randRange(pushMax * 0.4, pushMax) * falloff * falloff;
+            const push = randRange(pushMax * 0.55, pushMax) * falloff;
             el.style.setProperty('--sx', `${(sx + (awayX / awayDist) * push + randRange(-jitter, jitter) * falloff).toFixed(1)}px`);
             el.style.setProperty('--sy', `${(sy + (awayY / awayDist) * push + randRange(-jitter, jitter) * falloff).toFixed(1)}px`);
-            el.style.setProperty('--sr', `${(sr + randRange(-28, 28) * s * falloff).toFixed(1)}deg`);
+            el.style.setProperty('--sr', `${(sr + randRange(-40, 40) * s * falloff).toFixed(1)}deg`);
         });
     }
 
@@ -3130,6 +3177,15 @@ async function initializeCylonEffects() {
         if (!settings.gameEnabled || gameOver) return;
         introPlaying = false;
         blowWorldEnded();
+        // Intro detonate runs before glyphs exist — pulse letters once scatter is stamped
+        const cx = (window.innerWidth || 1) / 2;
+        const cy = (window.innerHeight || 1) * 0.48;
+        const pageX = cx + scrollX();
+        const pageY = cy + scrollY();
+        requestAnimationFrame(() => {
+            disruptGlyphs(pageX, pageY, 1.35);
+            setTimeout(() => disruptGlyphs(pageX, pageY, 1.1), 280);
+        });
         runStartedAt = Date.now();
         startInboundSchedulers();
         if (coarsePointer) {

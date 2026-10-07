@@ -815,6 +815,7 @@ body.cylon-touch-play .cylon-bot {
  * help/gameover (2100), and nuke/raptor FX (~1950–2000). Bots stay at 1061
  * so battlefield layering is unchanged; a second finger still hits a bot
  * wherever the pip isn't.
+ * Mobile (drag to dodge): green. Desktop (.is-mouse-follow attack cursor): red.
  */
 .cylon-reticle {
   position: fixed;
@@ -827,7 +828,7 @@ body.cylon-touch-play .cylon-bot {
   pointer-events: auto;
   touch-action: none;
   cursor: grab;
-  filter: drop-shadow(0 0 8px rgba(255, 60, 60, 0.55));
+  filter: drop-shadow(0 0 8px rgba(60, 220, 100, 0.55));
 }
 
 .cylon-reticle[hidden] {
@@ -838,6 +839,7 @@ body.cylon-touch-play .cylon-bot {
 .cylon-reticle.is-mouse-follow {
   pointer-events: none;
   cursor: none;
+  filter: drop-shadow(0 0 8px rgba(255, 60, 60, 0.55));
 }
 
 .cylon-reticle.is-dragging {
@@ -847,8 +849,13 @@ body.cylon-touch-play .cylon-bot {
 .cylon-reticle-ring {
   position: absolute;
   inset: 4px;
-  border: 2px solid rgba(255, 90, 90, 0.95);
+  border: 2px solid rgba(70, 230, 120, 0.95);
   border-radius: 50%;
+  box-shadow: inset 0 0 10px rgba(40, 200, 90, 0.35);
+}
+
+.cylon-reticle.is-mouse-follow .cylon-reticle-ring {
+  border-color: rgba(255, 90, 90, 0.95);
   box-shadow: inset 0 0 10px rgba(255, 40, 40, 0.35);
 }
 
@@ -861,6 +868,10 @@ body.cylon-touch-play .cylon-bot {
   margin: -5px 0 0 -5px;
   border-radius: 50%;
   background: #fff;
+  box-shadow: 0 0 10px 3px rgba(60, 230, 110, 0.9);
+}
+
+.cylon-reticle.is-mouse-follow .cylon-reticle-core {
   box-shadow: 0 0 10px 3px rgba(255, 80, 60, 0.9);
 }
 

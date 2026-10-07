@@ -748,6 +748,11 @@ function initializeCylonEffects() {
         }
     }
 
+    function syncWorldEndedLook() {
+        const on = settings.gameEnabled;
+        document.body.classList.toggle('cylon-world-ended', on);
+    }
+
     function lerp(a, b, t) {
         return a + (b - a) * Math.min(1, Math.max(0, t));
     }
@@ -2273,6 +2278,7 @@ function initializeCylonEffects() {
         syncGameToggleUi();
         syncReticleVisibility();
         syncMusic();
+        syncWorldEndedLook();
         showGameOver(reason);
     }
 
@@ -2333,6 +2339,7 @@ function initializeCylonEffects() {
         syncGameToggleUi();
         syncReticleVisibility();
         syncMusic();
+        syncWorldEndedLook();
     }
 
     function bindGameOverUi() {

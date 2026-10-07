@@ -5,7 +5,7 @@
  */
 
 // Host blocks .html under games/ — serve mount from home-dir root (see cylon-mount.html symlink)
-const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006ck';
+const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261006cl';
 
 async function mountCylonDom() {
     const root = document.getElementById('game-root');
@@ -872,21 +872,6 @@ async function initializeCylonEffects() {
         el.style.setProperty('--sr', `${rot.toFixed(1)}deg`);
     }
 
-    /** Record layout home while glyphs-blown is off (must be in-DOM). */
-    function stampGlyphOrigins(root) {
-        root.querySelectorAll('.cylon-scatter-char, .cylon-scatter-block, .cylon-scatter-panel').forEach((el) => {
-            const r = el.getBoundingClientRect();
-            el.dataset.ox = String(r.left + r.width / 2 + scrollX());
-            el.dataset.oy = String(r.top + r.height / 2 + scrollY());
-        });
-        // Panel root itself may be the scatter-panel
-        if (root.classList.contains('cylon-scatter-panel')) {
-            const r = root.getBoundingClientRect();
-            root.dataset.ox = String(r.left + r.width / 2 + scrollX());
-            root.dataset.oy = String(r.top + r.height / 2 + scrollY());
-        }
-    }
-
     function scatterPageGlyphs() {
         if (document.body.dataset.cylonScattered === '1') return;
         if (reduceMotion) return;
@@ -939,8 +924,6 @@ async function initializeCylonEffects() {
                 li.style.setProperty('--my', `${dy.toFixed(1)}px`);
                 li.style.setProperty('--mr', `${rot.toFixed(1)}deg`);
             });
-            // After chars are in the tree, stamp page-home for weapon AoE tests
-            stampGlyphOrigins(root);
         });
         document.body.dataset.cylonScattered = '1';
     }
@@ -2873,11 +2856,11 @@ async function initializeCylonEffects() {
         return current + (target - current) * scale;
     }
 
-    /** Blast radius (page px) — AoE only, scaled by weapon power. */
+    /** Blast radius (page px) around the visible impact — scaled by weapon power. */
     function disruptRadiusForScale(scale) {
         const s = Math.max(0.05, Math.min(1.6, scale));
-        // shot≈0.22 → ~210px · missile≈0.32 → ~240px · grenade≈0.48 → ~290px · nuke≈1.4 → ~580px
-        return 140 + s * 320;
+        // shot≈0.22 → ~130px · missile≈0.32 → ~150px · grenade≈0.48 → ~180px · nuke≈1.4 → ~350px
+        return 90 + s * 180;
     }
 
     /** Aim the crack/ash hotspot at the impact without rewriting the whole scar field. */
@@ -2956,35 +2939,28 @@ async function initializeCylonEffects() {
     }
 
     /**
-     * Kick letters whose page-home (pre-scatter layout) sits inside the weapon AoE.
-     * Individual chars only for smaller blasts — never parent blocks (those drag the whole section).
+     * Kick debris that is visually next to the blast (getBoundingClientRect), not layout-home.
+     * Smaller weapons only touch individual letters — never parent blocks (those yank whole sections).
      */
     function disruptGlyphs(pageX, pageY, scale = 1) {
         if (document.body.dataset.cylonScattered !== '1' || reduceMotion) return;
         const s = Math.max(0.05, Math.min(1.6, scale));
         const radius = disruptRadiusForScale(s);
-        const localOnly = s < 0.7;
+        // Only full nuke-scale blasts may nudge blocks/panels
+        const localOnly = s < 0.95;
         const selector = localOnly
             ? '.cylon-scatter-char'
             : '.cylon-scatter-char, .cylon-scatter-block, .cylon-scatter-panel';
         const nodes = [...document.querySelectorAll(selector)];
-        const chance = Math.min(1, 0.75 + s * 0.25);
-        const jitter = 70 * s;
-        const pushMax = 55 + 240 * s;
+        const chance = Math.min(1, 0.7 + s * 0.3);
+        const jitter = 55 * s;
+        const pushMax = 48 + 200 * s;
         nodes.forEach((el) => {
-            if (el.classList.contains('cylon-scatter-panel') && s < 0.9) return;
-            const ox = parseFloat(el.dataset.ox);
-            const oy = parseFloat(el.dataset.oy);
-            let cx;
-            let cy;
-            if (Number.isFinite(ox) && Number.isFinite(oy)) {
-                cx = ox;
-                cy = oy;
-            } else {
-                const rect = el.getBoundingClientRect();
-                cx = rect.left + rect.width / 2 + scrollX();
-                cy = rect.top + rect.height / 2 + scrollY();
-            }
+            if (el.classList.contains('cylon-scatter-panel') && s < 1.1) return;
+            const rect = el.getBoundingClientRect();
+            // On-screen position after scatter transforms — “physically next to the blast”
+            const cx = rect.left + rect.width / 2 + scrollX();
+            const cy = rect.top + rect.height / 2 + scrollY();
             const awayX = cx - pageX;
             const awayY = cy - pageY;
             const awayDist = Math.hypot(awayX, awayY) || 1;
@@ -2994,10 +2970,10 @@ async function initializeCylonEffects() {
             const sy = parseFloat(el.style.getPropertyValue('--sy')) || 0;
             const sr = parseFloat(el.style.getPropertyValue('--sr')) || 0;
             const falloff = Math.max(0, 1 - awayDist / radius);
-            const push = randRange(pushMax * 0.55, pushMax) * falloff;
+            const push = randRange(pushMax * 0.5, pushMax) * falloff;
             el.style.setProperty('--sx', `${(sx + (awayX / awayDist) * push + randRange(-jitter, jitter) * falloff).toFixed(1)}px`);
             el.style.setProperty('--sy', `${(sy + (awayY / awayDist) * push + randRange(-jitter, jitter) * falloff).toFixed(1)}px`);
-            el.style.setProperty('--sr', `${(sr + randRange(-40, 40) * s * falloff).toFixed(1)}deg`);
+            el.style.setProperty('--sr', `${(sr + randRange(-32, 32) * s * falloff).toFixed(1)}deg`);
         });
     }
 

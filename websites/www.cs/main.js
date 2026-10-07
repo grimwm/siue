@@ -216,7 +216,7 @@ function initializeCylonEffects() {
     const HIT_RADIUS = 52;
     const MAX_HITS = 30;
     const HEAL_IDLE_MS = 10000;
-    const NUKE_DIRECT_HIT_RADIUS = 120;
+    const NUKE_DIRECT_HIT_RADIUS = 64;
     const NUKE_SPEED = 520; // px/sec toward cursor
     const NUKE_ARRIVE_RADIUS = 28;
     const NUKE_MAX_FLIGHT_MS = 2800;
@@ -1713,12 +1713,19 @@ function initializeCylonEffects() {
         setAim(window.innerWidth / 2, window.innerHeight * 0.42);
     }
 
+    function isUiAimBlocker(el) {
+        if (!el || !el.closest) return false;
+        return !!el.closest('.site-nav, .cylon-help, .cylon-gameover, .cylon-settings-panel');
+    }
+
     function onPointerMove(e) {
         if (settings.soundEnabled) ensureAudio();
         // Reticle finger is handled in bindReticle (per pointerId)
         if (reticlePointerId != null && e.pointerId === reticlePointerId) return;
         // Other touch fingers must not move aim (so a tap/attack finger is free)
         if (coarsePointer && e.pointerType === 'touch') return;
+        // Don't drag aim (and seeking nukes) up into the nav when clicking Raptor / gear
+        if (isUiAimBlocker(e.target)) return;
         setAim(e.clientX, e.clientY);
     }
 
@@ -2652,6 +2659,10 @@ function initializeCylonEffects() {
         const origin = eyeClientCenter();
         let x = origin.x;
         let y = origin.y;
+        // Seek the cursor until the eye is blinded (Raptor); then fly to the last lock
+        let lockX = mouse.clientX;
+        let lockY = mouse.clientY;
+        let seeking = !isEyeDisoriented();
         const started = performance.now();
         let last = started;
 
@@ -2674,8 +2685,19 @@ function initializeCylonEffects() {
             const dt = Math.min(0.05, (now - last) / 1000);
             last = now;
 
-            const tx = mouse.clientX;
-            const ty = mouse.clientY;
+            if (isEyeDisoriented()) {
+                if (seeking) {
+                    // Guidance cut — keep the aim point from the moment the eye lost you
+                    seeking = false;
+                }
+            } else {
+                seeking = true;
+                lockX = mouse.clientX;
+                lockY = mouse.clientY;
+            }
+
+            const tx = lockX;
+            const ty = lockY;
             const dx = tx - x;
             const dy = ty - y;
             const dist = Math.hypot(dx, dy) || 1;

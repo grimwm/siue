@@ -43,7 +43,7 @@
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-<link href="custom.css?v=20261006ao" rel="stylesheet">
+<link href="custom.css?v=20261006aq" rel="stylesheet">
 </head>
 
 <body>
@@ -88,6 +88,9 @@
   <div class="site-nav-inner">
     <a class="site-brand" href="#" onclick="showNavDiv('main'); return false;">William Grim</a>
     <div class="site-nav-power" id="site-nav-power">
+      <button type="button" class="cylon-raptor-btn cylon-help-btn" id="cylon-help-btn" title="How to play" aria-haspopup="dialog" aria-controls="cylon-help">
+        <span class="cylon-raptor-btn-label">How to Play</span>
+      </button>
       <button type="button" class="cylon-game-toggle" id="cylon-game-toggle" aria-pressed="false" title="Toggle Cylon defense game">
         <span class="cylon-game-toggle-dot" aria-hidden="true"></span>
         <span class="cylon-game-toggle-label" id="cylon-game-toggle-label">Game Off</span>
@@ -170,9 +173,6 @@
         </svg>
         <span class="cylon-raptor-btn-label">Raptor</span>
         <span class="cylon-raptor-btn-cd" id="cylon-raptor-cd" hidden></span>
-      </button>
-      <button type="button" class="cylon-raptor-btn cylon-help-btn" id="cylon-help-btn" title="How to play" aria-haspopup="dialog" aria-controls="cylon-help">
-        <span class="cylon-raptor-btn-label">How to Play</span>
       </button>
     </div>
   </div>

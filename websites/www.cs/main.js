@@ -154,6 +154,8 @@ function initializeCylonEffects() {
     let activeBots = 0;
     let koScore = 0;
     let hitCount = 0;
+    /** Lifetime damage this run (heals do not undo it). */
+    let hitsTaken = 0;
     let healTimer = null;
     let healDueAt = 0;
     let gameOver = false;
@@ -333,7 +335,7 @@ function initializeCylonEffects() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     score,
-                    hits: pendingScore ? pendingScore.hits : hitCount,
+                    hits: pendingScore ? pendingScore.hits : hitsTaken,
                     initials: initials || 'AAA'
                 }),
                 cache: 'no-store'
@@ -1951,7 +1953,9 @@ function initializeCylonEffects() {
 
     function registerHit(count = 1, { fromNuke = false } = {}) {
         if (gameOver || !isGameLive()) return;
-        hitCount += count;
+        const n = Math.max(0, Number(count) || 0);
+        hitCount += n;
+        hitsTaken += n;
         updateHitsUi();
         playHitSound();
         scheduleHeal();
@@ -2540,10 +2544,10 @@ function initializeCylonEffects() {
             fadeMs: HOLE_PRESETS.large.fadeMs
         });
 
-        // Direct hit ends the run
+        // Direct hit ends the run — count the nuke as 1 hit of real damage (no pad-to-30)
         const dist = Math.hypot(mouse.clientX - clientX, mouse.clientY - clientY);
         if (dist <= NUKE_DIRECT_HIT_RADIUS) {
-            registerHit(Math.max(1, MAX_HITS - hitCount), { fromNuke: true });
+            registerHit(1, { fromNuke: true });
         }
 
         setTimeout(() => document.body.classList.remove('is-nuke-shake'), 600);
@@ -2628,7 +2632,7 @@ function initializeCylonEffects() {
             gameOverReasonEl.textContent = reasons[reason] || 'Run complete.';
         }
         if (gameOverKosEl) gameOverKosEl.textContent = String(koScore);
-        if (gameOverHitsEl) gameOverHitsEl.textContent = String(hitCount);
+        if (gameOverHitsEl) gameOverHitsEl.textContent = String(hitsTaken);
         if (gameOverEntryEl) gameOverEntryEl.hidden = koScore < 1;
         if (gameOverBoardEl) {
             gameOverBoardEl.hidden = koScore >= 1;
@@ -2643,7 +2647,7 @@ function initializeCylonEffects() {
     function endGame(reason) {
         if (gameOver) return;
         gameOver = true;
-        pendingScore = { score: koScore, hits: hitCount, reason };
+        pendingScore = { score: koScore, hits: hitsTaken, reason };
         settings.gameEnabled = false;
         saveSettings();
         clearAllBots();
@@ -2669,6 +2673,7 @@ function initializeCylonEffects() {
     function resetRunStats() {
         koScore = 0;
         hitCount = 0;
+        hitsTaken = 0;
         gameOver = false;
         pendingScore = null;
         clearHealTimer();

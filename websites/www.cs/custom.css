@@ -1183,18 +1183,13 @@ body.cylon-touch-play .cylon-bot {
 }
 
 @media (max-width: 819px) {
-  .site-nav-power {
-    justify-self: end;
-  }
-
   body.cylon-nav-combat .site-nav-inner {
-    grid-template-columns: auto auto auto;
-    grid-template-areas:
-      "brand power tools"
-      "game game game";
+    flex-wrap: wrap;
   }
 
   body.cylon-nav-combat .site-nav-game {
+    flex: 1 1 100%;
+    order: 5;
     margin-top: 0.15rem;
     padding-top: 0.35rem;
     border-top: 1px solid var(--rail-edge);

@@ -814,22 +814,125 @@ function initializeCylonEffects() {
         src.stop(t0 + duration + 0.02);
     }
 
+    function playExplosion({ size = 'medium', delay = 0 } = {}) {
+        const ctx = ensureAudio();
+        if (!ctx) return;
+        const profiles = {
+            small: {
+                thumpGain: 0.11,
+                thumpDur: 0.28,
+                crackGain: 0.08,
+                crackDur: 0.12,
+                debrisGain: 0.06,
+                debrisDur: 0.22,
+                rumbleGain: 0.05,
+                rumbleDur: 0.35,
+                thumpFreq: 70,
+                crackFreq: 420
+            },
+            medium: {
+                thumpGain: 0.16,
+                thumpDur: 0.45,
+                crackGain: 0.12,
+                crackDur: 0.16,
+                debrisGain: 0.1,
+                debrisDur: 0.4,
+                rumbleGain: 0.09,
+                rumbleDur: 0.65,
+                thumpFreq: 55,
+                crackFreq: 380
+            },
+            large: {
+                thumpGain: 0.2,
+                thumpDur: 0.85,
+                crackGain: 0.14,
+                crackDur: 0.28,
+                debrisGain: 0.12,
+                debrisDur: 0.7,
+                rumbleGain: 0.14,
+                rumbleDur: 1.4,
+                thumpFreq: 42,
+                crackFreq: 300
+            }
+        };
+        const p = profiles[size] || profiles.medium;
+        // 1) Sub thump
+        playTone({
+            freq: p.thumpFreq,
+            freqEnd: Math.max(18, p.thumpFreq * 0.35),
+            type: 'sine',
+            duration: p.thumpDur,
+            gain: p.thumpGain,
+            delay
+        });
+        playTone({
+            freq: p.thumpFreq * 1.4,
+            freqEnd: 24,
+            type: 'triangle',
+            duration: p.thumpDur * 0.85,
+            gain: p.thumpGain * 0.55,
+            delay: delay + 0.02
+        });
+        // 2) Sharp crack
+        playNoiseBurst({
+            duration: p.crackDur,
+            gain: p.crackGain,
+            delay: delay + 0.03,
+            filterFreq: p.crackFreq,
+            filterType: 'bandpass'
+        });
+        playTone({
+            freq: 900,
+            freqEnd: 120,
+            type: 'square',
+            duration: p.crackDur * 0.7,
+            gain: p.crackGain * 0.45,
+            delay: delay + 0.03
+        });
+        // 3) Debris / hiss
+        playNoiseBurst({
+            duration: p.debrisDur,
+            gain: p.debrisGain,
+            delay: delay + 0.06,
+            filterFreq: 1800,
+            filterType: 'highpass'
+        });
+        playNoiseBurst({
+            duration: p.debrisDur * 0.8,
+            gain: p.debrisGain * 0.7,
+            delay: delay + 0.08,
+            filterFreq: 700,
+            filterType: 'bandpass'
+        });
+        // 4) Rumble tail
+        playTone({
+            freq: 48,
+            freqEnd: 20,
+            type: 'sine',
+            duration: p.rumbleDur,
+            gain: p.rumbleGain,
+            delay: delay + 0.1
+        });
+        playNoiseBurst({
+            duration: p.rumbleDur * 0.9,
+            gain: p.rumbleGain * 0.65,
+            delay: delay + 0.12,
+            filterFreq: 180,
+            filterType: 'lowpass'
+        });
+    }
+
     function playProjectileSound() {
         playTone({ freq: 980, freqEnd: 240, type: 'sawtooth', duration: 0.14, gain: 0.07 });
         playTone({ freq: 1400, freqEnd: 400, type: 'square', duration: 0.08, gain: 0.035, delay: 0.01 });
     }
 
     function playKoSound() {
-        playTone({ freq: 180, freqEnd: 55, type: 'triangle', duration: 0.22, gain: 0.09 });
-        playNoiseBurst({ duration: 0.2, gain: 0.07 });
-        playTone({ freq: 720, freqEnd: 120, type: 'square', duration: 0.1, gain: 0.04, delay: 0.02 });
+        playExplosion({ size: 'small' });
     }
 
     function playNukeSound() {
-        playNoiseBurst({ duration: 0.9, gain: 0.14 });
-        playTone({ freq: 90, freqEnd: 28, type: 'sawtooth', duration: 1.1, gain: 0.12 });
-        playTone({ freq: 220, freqEnd: 40, type: 'triangle', duration: 0.7, gain: 0.06, delay: 0.05 });
-        playTone({ freq: 60, freqEnd: 20, type: 'sine', duration: 1.6, gain: 0.1, delay: 0.08 });
+        playExplosion({ size: 'large' });
     }
 
     function playHitSound() {
@@ -855,11 +958,9 @@ function initializeCylonEffects() {
             });
             playNoiseBurst({ duration: 0.08, gain: 0.045, delay: d, filterFreq: 1600 });
         });
-        // Ground impacts
-        playTone({ freq: 90, freqEnd: 35, type: 'sine', duration: 0.35, gain: 0.1, delay: 0.7 });
-        playTone({ freq: 70, freqEnd: 28, type: 'triangle', duration: 0.4, gain: 0.08, delay: 0.95 });
-        playNoiseBurst({ duration: 0.45, gain: 0.1, delay: 0.72, filterFreq: 400, filterType: 'lowpass' });
-        playNoiseBurst({ duration: 0.5, gain: 0.09, delay: 1.0, filterFreq: 350, filterType: 'lowpass' });
+        // Ground impacts — layered explosions
+        playExplosion({ size: 'medium', delay: 0.72 });
+        playExplosion({ size: 'medium', delay: 1.0 });
     }
 
     function playGrenadeArmSound() {
@@ -869,16 +970,11 @@ function initializeCylonEffects() {
     }
 
     function playGrenadeSound() {
-        // Throw whoosh
+        // Throw whoosh (keep)
         playTone({ freq: 420, freqEnd: 140, type: 'sawtooth', duration: 0.14, gain: 0.05 });
         playNoiseBurst({ duration: 0.12, gain: 0.05, filterFreq: 1800, filterType: 'highpass' });
         // Detonation
-        playTone({ freq: 95, freqEnd: 32, type: 'sine', duration: 0.45, gain: 0.14, delay: 0.08 });
-        playTone({ freq: 160, freqEnd: 45, type: 'sawtooth', duration: 0.35, gain: 0.1, delay: 0.09 });
-        playTone({ freq: 60, freqEnd: 22, type: 'triangle', duration: 0.55, gain: 0.09, delay: 0.1 });
-        playNoiseBurst({ duration: 0.4, gain: 0.16, delay: 0.08, filterFreq: 500, filterType: 'lowpass' });
-        playNoiseBurst({ duration: 0.28, gain: 0.1, delay: 0.1, filterFreq: 1400 });
-        playNoiseBurst({ duration: 0.5, gain: 0.07, delay: 0.18, filterFreq: 220, filterType: 'lowpass' });
+        playExplosion({ size: 'medium', delay: 0.08 });
     }
 
     function readEyePercent() {

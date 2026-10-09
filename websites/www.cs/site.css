@@ -602,6 +602,15 @@ body.cylon-game-live .cic-enter-btn {
   transition: border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
 }
 
+a.games-enter-btn {
+  display: inline-block;
+  text-decoration: none;
+}
+
+.games-hub-status {
+  color: var(--text-muted);
+}
+
 .games-enter-btn:hover {
   color: #fff;
   border-color: var(--crimson-hot);

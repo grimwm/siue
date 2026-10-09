@@ -43,7 +43,7 @@
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-<link href="site.css?v=20261006cn" rel="stylesheet">
+<link href="site.css?v=20261009a" rel="stylesheet">
 <link href="games/cylon/cylon.css?v=20261007a" rel="stylesheet">
 </head>
 
@@ -178,15 +178,9 @@
     <h1>Games</h1>
     <p class="page-lead">Small experiments hosted on this site. More may show up here over time.</p>
 
-    <ul class="games-hub-list">
-      <li class="games-hub-card">
-        <div class="games-hub-card-head">
-          <p class="games-hub-card-kicker">Cylon defense</p>
-          <h2 class="games-hub-card-title">The CIC</h2>
-        </div>
-        <p class="games-hub-card-copy">Defend this page from Cylon drones — missiles, Raptors, and one opening nuke. Play often: weekly high scores reset every Monday at midnight Central. You can also start from the nav <strong>Game Off</strong> toggle.</p>
-        <button type="button" class="games-enter-btn" onclick="enterTheCic(); return false;">Enter The CIC</button>
-      </li>
+    <!-- Cards come from games/*/metadata.yaml via games.php (main.js loadGamesHub). -->
+    <ul class="games-hub-list" id="games-hub-list" aria-live="polite">
+      <li class="games-hub-status">Loading games…</li>
     </ul>
   </div>
 
@@ -215,12 +209,13 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-<script src="main.js?v=20261006cn"></script>
+<script src="main.js?v=20261009a"></script>
 <script src="cylon.js?v=20261009d" data-cylon-base="games/cylon/"></script>
 <script>
   initializeTheme();
   showNavDiv("main");
   initializeCylonEffects();
+  loadGamesHub();
 </script>
 </body>
 </html>

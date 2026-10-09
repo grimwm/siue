@@ -11,16 +11,75 @@ function showNavDiv(divId) {
     }
 }
 
-/** Open the games hub (The CIC lives there; Game Off/On also starts a run). */
+/** Open the games hub (cards come from loadGamesHub; Game Off/On also starts The CIC). */
 function showGamesHub() {
     showNavDiv('games');
 }
 
-/** Start The CIC from the hub (same as flipping Game On). */
-function enterTheCic() {
-    if (typeof window.cylonStartGame === 'function') {
-        window.cylonStartGame();
+/**
+ * Fills the games hub with one card per games/<id>/metadata.yaml, as listed
+ * by games.php. A card either links to the game's page (`href`) or calls a
+ * page function that mounts the game in place (`start`).
+ */
+async function loadGamesHub() {
+    const list = document.getElementById('games-hub-list');
+    if (!list) return;
+    const status = (text) => {
+        const li = document.createElement('li');
+        li.className = 'games-hub-status';
+        li.textContent = text;
+        list.replaceChildren(li);
+    };
+
+    let hub;
+    try {
+        const res = await fetch('games.php', { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error(`games.php answered ${res.status}`);
+        hub = await res.json();
+    } catch (err) {
+        console.warn('Games hub:', err);
+        status('The games list could not load right now. Try again in a moment.');
+        return;
     }
+    (hub.errors || []).forEach(e => console.warn(`Games hub: games/${e.id}: ${e.error}`));
+
+    const games = hub.games || [];
+    if (games.length === 0) {
+        status('No games are installed yet.');
+        return;
+    }
+    list.replaceChildren(...games.map(gamesHubCard));
+}
+
+function gamesHubCard(game) {
+    const el = (tag, className, text) => {
+        const node = document.createElement(tag);
+        node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    };
+
+    const card = el('li', 'games-hub-card');
+    card.dataset.game = game.id;
+    const head = el('div', 'games-hub-card-head');
+    if (game.kicker) head.append(el('p', 'games-hub-card-kicker', game.kicker));
+    head.append(el('h2', 'games-hub-card-title', game.title));
+    card.append(head, el('p', 'games-hub-card-copy', game.description));
+
+    let launch;
+    if (game.href) {
+        launch = el('a', 'games-enter-btn', game.button);
+        launch.href = game.href;
+    } else {
+        launch = el('button', 'games-enter-btn', game.button);
+        launch.type = 'button';
+        launch.addEventListener('click', () => {
+            const start = window[game.start];
+            if (typeof start === 'function') start();
+        });
+    }
+    card.append(launch);
+    return card;
 }
 
 /**

@@ -939,16 +939,30 @@ function nextTurn() {
   render();
   renderHUD();
 }
-function settle() {
-  // Tanks ride the terrain down after craters.
+/* Tanks left hanging over a crater fall under gravity every frame until they
+   land; ground that rose (a new round, fresh hills) takes them straight up. */
+const FALL_GRAVITY = 700;
+function fallTanks(dt) {
   for (const t of G.tanks) {
     if (t.hp <= 0) continue;
     const gy = surfY(t.x);
-    if (t.y < gy) {
-      t.y = Math.min(gy, t.y + 260 * (1 / 60));
-      if (t.y >= gy && t.isPlayer) SFX.thud();
-    } else t.y = gy;
+    if (t.y < gy - 0.5) {
+      t.vy = (t.vy || 0) + FALL_GRAVITY * dt;
+      t.y = Math.min(gy, t.y + t.vy * dt);
+      if (t.y >= gy) {
+        t.vy = 0;
+        if (t.isPlayer) SFX.thud();
+      }
+    } else {
+      t.y = gy;
+      t.vy = 0;
+    }
   }
+}
+function anyTankFalling() {
+  return G.tanks.some(t => t.hp > 0 && t.y < surfY(t.x) - 0.5);
+}
+function settle() {
   if (me().hp <= 0) {
     if (G.demo) {
       say('Demo tank wrecked. Rolling a fresh one.', 'info');
@@ -2137,6 +2151,7 @@ function frame(ts) {
   if (G.paused || G.over) { pumpDialogue(dt); render(); renderHUD(); return; }
   G.time += dt;
   decayFx(dt);
+  fallTanks(dt);
   tickTutorial();
   for (const cl of G.clouds) {
     cl.x += cl.v * dt;
@@ -2200,7 +2215,8 @@ function frame(ts) {
       G.phase = 'settle';
     } else if (G.phase === 'settle' && !G.shells.length) {
       G.settleT -= dt;
-      if (G.settleT <= 0) settle();
+      // The turn waits for every tank to finish falling into its crater.
+      if (G.settleT <= 0 && !anyTankFalling()) settle();
     }
   }
   updateCamera(dt);
@@ -2684,7 +2700,10 @@ function netApply(room) {
     return {
       id, seat: t.seat, isPlayer: mine,
       color: mine ? '#ffff00' : (ai ? (FOE_PAINT[id] || '#c9c9c9') : SEAT_PAINT[t.seat % SEAT_PAINT.length]),
-      x: t.x, y: t.y, angle: t.angle, power: t.power,
+      // The server drops tanks straight onto the ground; keep the drawn
+      // height from the last poll so fallTanks() shows the fall.
+      x: t.x, y: was && Math.abs(was.x - t.x) < 1 ? Math.min(was.y, t.y) : t.y, vy: was ? was.vy || 0 : 0,
+      angle: t.angle, power: t.power,
       hp: t.hp, maxHp: t.maxHp || 100, fuel: 0, dirS: t.dirS || 1,
       name: t.name,
       // Keep the drawn aim where it was so the new one glides in.
@@ -2862,6 +2881,7 @@ function netFrame(dt) {
   netEaseAim(dt);
   updateCamera(dt);
   decayFx(dt);
+  fallTanks(dt);
   for (const cl of G.clouds) {
     cl.x += cl.v * dt;
     if (cl.x - 40 > W) cl.x = -40;

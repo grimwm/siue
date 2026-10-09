@@ -8,8 +8,8 @@ games/
   README.md
   cylon/           # The CIC — Cylon defense
     cylon.css
-    cylon.js       # source; also ~/cylon.js (root copy kept from when the host blocked .js under games/; it no longer does, checked 2026-10-09)
-    mount.html     # FX / overlays; also ~/cylon-mount.html (same history)
+    cylon.js       # source; symlinked at ~/cylon.js
+    mount.html     # FX / overlays; symlinked at ~/cylon-mount.html
     scores.php     # high-score API
     data/config.json
     LICENSE        # GPL-3.0

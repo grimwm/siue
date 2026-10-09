@@ -15,7 +15,7 @@
 //     range-checked against authoritative state; turn order is enforced.
 //   - AI backfills empty seats and runs the same sim inline, so no cron is needed.
 //
-// Storage: rooms live in SysV shared memory, never on disk. A server restart
+// Storage: rooms live in SysV shared memory, never on disk. A host restart
 // wipes the shelf, which is the point: rooms are play sessions, not records.
 // (Score files stay on disk next to where rooms used to be.) One semaphore
 // guards the whole registry, so concurrent shots cannot corrupt each other.
@@ -512,7 +512,9 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
                 $room['laststand'][$t['seat']] = false;
                 $events[] = ['t' => 'laststand', 'seat' => $t['seat']];
                 $gone = $t;
-                room_explode($room, $events, $gone, 'shell', (float) $t['x'], (float) $t['y'] - 12.0, null, ['dmg' => 50, 'radius' => 44]);
+                $ls = room_gear('laststand') ?? [];
+                $blast = ['dmg' => (int) ($ls['dmg'] ?? 50), 'radius' => (float) ($ls['radius'] ?? 44)];
+                room_explode($room, $events, $gone, 'shell', (float) $t['x'], (float) $t['y'] - 12.0, null, $blast);
             }
         }
     }
@@ -527,7 +529,7 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
     $width = count($room['terrain']);
     $dt = 1 / 60;
     $grav = !empty($w['flat']) ? 90.0 : (float) ROOM_GRAV;
-    $pierced = false;
+    $pierced = null; // the tank a lance went through, never hit twice
     for ($step = 0; $step < 720; $step++) {
         if (($w['effect'] ?? 'shot') === 'seeker') {
             $best = null;
@@ -561,7 +563,7 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
         }
         $direct = null;
         foreach ($room['tanks'] as $idx => $t) {
-            if ($t['hp'] <= 0) {
+            if ($t['hp'] <= 0 || $idx === $pierced) {
                 continue;
             }
             if (hypot($sx - $t['x'], $sy - ($t['y'] - 12)) < 13) {
@@ -583,8 +585,8 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
             }
         }
         if ($direct !== null) {
-            if (($w['effect'] ?? 'shot') === 'pierce' && !$pierced) {
-                $pierced = true;
+            if (($w['effect'] ?? 'shot') === 'pierce' && $pierced === null) {
+                $pierced = $direct;
                 room_explode($room, $events, $tank, $wkey, $sx, $sy, $direct, $ov);
                 continue;
             }
@@ -1166,7 +1168,27 @@ function room_find_seat(array $room, string $token): ?int
     return null;
 }
 
+/* Banked shop repair and fuel go onto the freshly mustered human tanks.
+   Tanks muster at full armor, so repair rides on top for this round, the
+   same as solo play. */
+function room_apply_banked(array &$room): void
+{
+    foreach ($room['tanks'] as &$t) {
+        if ($t['kind'] !== 'human') {
+            continue;
+        }
+        $t['hp'] += ($room['repairApplied'][$t['seat']] ?? 0);
+        $t['maxHp'] = $t['hp'];
+        $t['fuel'] += ($room['fuelApplied'][$t['seat']] ?? 0);
+    }
+    unset($t);
+}
+
 /* ---------- router ---------- */
+// rooms-sim-test.php includes this file for its functions only.
+if (defined('TANKITY_ROOMS_LIB')) {
+    return;
+}
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = $_GET['action'] ?? ($_POST['action'] ?? '');
 $body = [];
@@ -1646,16 +1668,7 @@ if ($action === 'next' && $method === 'POST') {
         $room['fuelBonus'][$idx] = 0;
     }
     room_start_round($room);
-    foreach ($room['tanks'] as &$t) {
-        if ($t['kind'] !== 'human') {
-            continue;
-        }
-        $maxHp = 100 + 25 * ($room['plate'][$t['seat']] ?? 0);
-        $t['hp'] = min($maxHp, $t['hp'] + ($room['repairApplied'][$t['seat']] ?? 0));
-        $t['maxHp'] = $maxHp;
-        $t['fuel'] += ($room['fuelApplied'][$t['seat']] ?? 0);
-    }
-    unset($t);
+    room_apply_banked($room);
     $events = [];
     $events[] = ['t' => 'round', 'round' => $room['round'], 'wind' => $room['wind']];
     room_advance($room, $events);

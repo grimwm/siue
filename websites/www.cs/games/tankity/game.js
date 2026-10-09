@@ -795,9 +795,10 @@ function stepShells(dt) {
       continue;
     }
     // Direct hit on a living tank?
+    // A lance that already went through a tank cannot hit that tank again.
     let direct = null;
     for (const t of G.tanks) {
-      if (t.hp <= 0) continue;
+      if (t.hp <= 0 || t === s.pierced) continue;
       if (Math.hypot(s.x - t.x, s.y - (t.y - 12)) < 13) { direct = t; break; }
     }
     // Flak bursts next to anything it passes, but never its own gunner: the
@@ -813,7 +814,7 @@ function stepShells(dt) {
     if (direct) {
       // A lance punches through its first victim and keeps flying.
       if (w.effect === 'pierce' && !s.pierced) {
-        s.pierced = true;
+        s.pierced = direct;
         explode(s.x, s.y, s.wkey, s.owner, direct, s.dw ? { dmg: s.dw, radius: s.dr } : null);
         continue;
       }
@@ -899,7 +900,8 @@ function killTank(t, owner) {
   if (t.isPlayer && G.laststand) {
     G.laststand = false;
     say('Last stand! The wreck detonates!', 'good');
-    explode(t.x, t.y - 12, 'shell', t, null, { dmg: 50, radius: 44 });
+    const ls = GEAR.laststand || {};
+    explode(t.x, t.y - 12, 'shell', t, null, { dmg: ls.dmg || 50, radius: ls.radius || 44 });
     renderHUD();
   }
   if (t.isPlayer) {
@@ -1457,7 +1459,7 @@ function stepPreview(dt) {
         s.dead = true;
         continue;
       }
-      const touch = Math.hypot(s.x - pv.tx, s.y - fy) < 10;
+      const touch = !s.pierced && Math.hypot(s.x - pv.tx, s.y - fy) < 10;
       const near = w.effect === 'proximity' && Math.hypot(s.x - pv.tx, s.y - fy) < (w.prox || 34);
       if (touch || near) {
         if (w.effect === 'pierce' && !s.pierced && touch) {

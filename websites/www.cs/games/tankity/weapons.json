@@ -1,5 +1,5 @@
 {
-  "_note": "Operation Tankity arsenal. Edit freely: the game (game.js) and the room server (rooms.php) read this file and never hard-code these numbers. Ammo 'effect' must be one of: shot, pellets, cluster, proximity, seeker, pierce, emp. 'painter' must be one of: disc, beam, spark. Gear 'effect' must be one of: repair, fuel, plate, shield, extralife, jammer, bunker, laststand.",
+  "_note": "Operation Tankity arsenal. Edit freely: the game (game.js) and the room server (rooms.php) read this file and never hard-code these numbers. Ammo 'effect' must be one of: shot, pellets, cluster, proximity, seeker, pierce, emp. 'painter' must be one of: disc, beam, spark. Gear 'effect' must be one of: repair, fuel, plate, shield, extralife, jammer, bunker, laststand. Last stand's wreck blast uses its 'dmg' and 'radius'.",
   "ammo": [
     {"key": "shell", "name": "Shell", "cat": "Shells", "dmg": 34, "radius": 26, "price": 0, "pack": 0, "minRound": 1, "ai": true, "aiRound": 1, "effect": "shot", "speed": 1.0, "note": "Free, straight, honest.",
      "gfx": {"shell": "#ffe27a", "trail": "#ffd75e", "blast": ["#ffb13c", "#fff3c4"], "painter": "disc", "shake": 0.3}},
@@ -15,7 +15,7 @@
      "gfx": {"shell": "#ff5964", "trail": "#ff5964", "blast": ["#ff5964", "#ffe27a"], "painter": "spark", "shake": 0.4}},
     {"key": "seeker", "name": "Seeker", "cat": "Shells", "dmg": 40, "radius": 24, "price": 260, "pack": 2, "minRound": 4, "ai": true, "aiRound": 6, "effect": "seeker", "steer": 70, "speed": 1.0, "note": "Bends toward the nearest tank.",
      "gfx": {"shell": "#80ffdb", "trail": "#80ffdb", "blast": ["#80ffdb", "#ffffff"], "painter": "disc", "shake": 0.3}},
-    {"key": "lance", "name": "Lance", "cat": "Shells", "dmg": 36, "radius": 14, "price": 250, "pack": 2, "minRound": 4, "ai": true, "aiRound": 5, "effect": "pierce", "flat": true, "speed": 1.0, "note": "Flat bolt that punches through one tank.",
+    {"key": "lance", "name": "Lance", "cat": "Shells", "dmg": 52, "radius": 14, "price": 250, "pack": 2, "minRound": 4, "ai": true, "aiRound": 5, "effect": "pierce", "flat": true, "speed": 1.0, "note": "Flat bolt that punches through one tank.",
      "gfx": {"shell": "#f9f871", "trail": "#f9f871", "blast": ["#f9f871", "#ffffff"], "painter": "beam", "shake": 0.3}},
     {"key": "heavy", "name": "Heavy", "cat": "Shells", "dmg": 85, "radius": 52, "price": 350, "pack": 2, "minRound": 4, "ai": true, "aiRound": 6, "effect": "shot", "speed": 0.55, "note": "Slow, huge, deletes hillsides.",
      "gfx": {"shell": "#ff8c42", "trail": "#e8483f", "blast": ["#e8483f", "#ffd75e"], "painter": "disc", "shake": 0.7}},
@@ -34,6 +34,6 @@
     {"key": "extralife", "name": "Extra life", "cat": "Tricks", "price": 1000, "n": 1, "effect": "extralife", "note": "One more life, up to 5."},
     {"key": "jammer", "name": "Jammer (2 rounds)", "cat": "Tricks", "price": 325, "n": 2, "effect": "jammer", "note": "Drones aim twice as shaky at you."},
     {"key": "bunker", "name": "Bunker (2 rounds)", "cat": "Tricks", "price": 450, "n": 2, "effect": "bunker", "note": "Halves every hit you take."},
-    {"key": "laststand", "name": "Last stand", "cat": "Tricks", "price": 125, "n": 1, "effect": "laststand", "note": "Your wreck detonates when you go down."}
+    {"key": "laststand", "name": "Last stand", "cat": "Tricks", "price": 125, "n": 1, "effect": "laststand", "dmg": 50, "radius": 44, "note": "Your wreck detonates when you go down."}
   ]
 }

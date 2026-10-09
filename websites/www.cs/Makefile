@@ -1,4 +1,4 @@
-.PHONY: help deploy
+.PHONY: help deploy up down url parity
 
 .DEFAULT_TARGET := help
 
@@ -9,6 +9,10 @@ help:
 	@echo "Available targets:"
 	@echo "  help   - Show this help message"
 	@echo "  deploy - Upload site + games assets to www.cs.siue.edu"
+	@echo "  up     - Run the site locally in docker (PHP matches the server)"
+	@echo "  down   - Stop the local site"
+	@echo "  url    - Print the local site's URL (its port is ephemeral)"
+	@echo "  parity - Check the docker PHP against www.cs.siue.edu's modules/ini"
 
 deploy:
 	@test -f cylon.js || ln -sf games/cylon/cylon.js cylon.js
@@ -38,3 +42,16 @@ deploy:
 	$(SSHPASS) scp -p games/cylon/scores.php $(HOST):games/cylon/scores.php
 	$(SSHPASS) scp -p games/cylon/data/config.json $(HOST):games/cylon/data/config.json
 	$(SSHPASS) scp -p games/cylon/data/.htaccess $(HOST):games/cylon/data/.htaccess
+
+up:
+	docker compose up -d --build
+	@$(MAKE) --no-print-directory url
+
+down:
+	docker compose down
+
+url:
+	@echo "http://$$(docker compose port nginx 80)/"
+
+parity:
+	./docker/check-parity.sh

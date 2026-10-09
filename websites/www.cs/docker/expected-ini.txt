@@ -1,0 +1,28 @@
+# php.ini values on www.cs.siue.edu (phpinfo, 2026-10-09).
+# docker/check-parity.sh compares each against ini_get() in the image.
+date.timezone=America/Chicago
+default_charset=UTF-8
+memory_limit=512M
+upload_max_filesize=512M
+post_max_size=512M
+max_execution_time=30
+max_input_time=60
+max_input_vars=1000
+display_errors=Off
+log_errors=On
+error_reporting=22527
+short_open_tag=Off
+output_buffering=4096
+expose_php=On
+allow_url_fopen=On
+file_uploads=On
+zend.assertions=-1
+session.save_handler=files
+session.save_path=/var/lib/php/session
+session.cookie_httponly=Off
+session.cookie_secure=Off
+session.use_strict_mode=Off
+opcache.enable=On
+opcache.memory_consumption=128
+opcache.validate_timestamps=On
+opcache.revalidate_freq=2

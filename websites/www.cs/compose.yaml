@@ -1,0 +1,22 @@
+# Local copy of www.cs.siue.edu/~wgrim: nginx in front of PHP-FPM built to
+# match the server's PHP (docker/expected-modules.txt). The host port is
+# ephemeral so this never takes a port someone is using; `make url` prints it.
+name: www-cs
+
+services:
+  php:
+    build: docker/php
+    volumes:
+      - ./:/var/www/html
+      # Outside the docroot: the probe and lists docker/check-parity.sh uses.
+      - ./docker:/opt/www-cs-docker:ro
+
+  nginx:
+    image: nginx:1.29-alpine
+    depends_on:
+      - php
+    ports:
+      - "127.0.0.1::80"
+    volumes:
+      - ./:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Operation Tankity: Scorched-Earth Artillery</title>
-<link rel="stylesheet" href="game.css?v=20261009k">
+<link rel="stylesheet" href="game.css?v=20261009m">
 </head>
 <body>
 <header class="topbar">
@@ -21,7 +21,7 @@
         aria-label="Hillside artillery battlefield. Your tank, the drone battery, wind and turn order are announced in the log and HUD."></canvas>
       <div class="hudbar" aria-label="Battle status">
         <dl class="hud">
-          <div><dt>Turn</dt><dd id="hud-turn">-</dd></div>
+          <div class="sr-only"><dt>Turn</dt><dd id="hud-turn" aria-live="polite">-</dd></div>
           <div><dt>Angle</dt><dd id="hud-angle">-</dd></div>
           <div><dt>Power</dt><dd id="hud-power">-</dd></div>
           <div><dt>Wind</dt><dd id="hud-wind">-</dd></div>
@@ -245,6 +245,6 @@
   </section>
 </main>
 
-<script src="game.js?v=20261009k" defer></script>
+<script src="game.js?v=20261009m" defer></script>
 </body>
 </html>

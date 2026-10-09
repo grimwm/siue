@@ -22,6 +22,16 @@
 
 * { box-sizing: border-box; }
 
+/* Present for screen readers, not drawn (the battlefield shows whose turn). */
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -288,7 +298,10 @@ battle buttons on the right, sky behind both. */
 }
 .seed-row button { width: auto; flex: none; }
 .unit-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem; flex: 1; }
-.unit-picker button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.unit-picker .unit-choice { display: grid; justify-items: center; gap: 0.1rem; padding: 0.25rem 0.2rem; }
+.unit-choice canvas { width: 48px; height: 34px; }
+.unit-choice span { font-size: 0.7rem; }
+.unit-picker button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
 .canvas-holder .dialogue {
   position: absolute;
   left: 50%;

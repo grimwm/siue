@@ -420,7 +420,7 @@ async function loadArsenal() {
 
 /* ---------- state ---------- */
 const G = {
-  seed: '', rng: null,
+  seed: '', rng: null, body: 'tank',
   terrain: null, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // aim | think | fly | settle | shop | over
   thinkT: 0, settleT: 0,
@@ -584,7 +584,7 @@ function newRound(bannerText) {
   G.repairBank = 0;
   G.fuelBank = 0;
   G.tanks = [{
-    id: 'tank', isPlayer: true, color: '#ffff00',
+    id: 'tank', isPlayer: true, color: '#ffff00', body: G.body,
     x: order[0], y: 0, angle: 62, power: 55,
     hp: musterHp, maxHp: musterHp, fuel: musterFuel,
   }];
@@ -1662,14 +1662,102 @@ function burst(x, y, color, n, spd) {
     G.parts.push({ x, y, vx: Math.cos(a) * s * 10, vy: Math.sin(a) * s * 10 - 30, life: 0.5 + Math.random() * 0.5, color: color || '#ffd75e' });
   }
 }
-function drawTankSide(c, t, time) {
-  c.save();
-  c.translate(t.x, t.y);
-  c.fillStyle = 'rgba(0,0,0,0.3)';
-  c.beginPath();
-  c.ellipse(0, 3, 20, 5, 0, 0, Math.PI * 2);
-  c.fill();
-  // Treads with road wheels, flat black.
+/* Ground units: every human (you, and the people in a room) picks a body.
+   Bodies are looks only; all share the turret pivot at (0, -12), so aim,
+   muzzle and shots are identical whichever one you drive. */
+const UNIT_BODIES = [
+  { key: 'tank', name: 'Tank' },
+  { key: 'hover', name: 'Hover' },
+  { key: 'walker', name: 'Walker' },
+  { key: 'buggy', name: 'Buggy' },
+];
+function isGroundUnit(t) {
+  return t.isPlayer || !!t.human;
+}
+function shade(hex, k) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = v => Math.max(0, Math.min(255, Math.round(v * k)));
+  return `rgb(${ch(n >> 16)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
+}
+function drawChassis(c, body, hull, time, moving) {
+  c.strokeStyle = '#000000';
+  c.lineWidth = 1.5;
+  if (body === 'hover') {
+    // Air skirt with a flickering cushion under a low wedge hull.
+    c.fillStyle = Math.floor(time * 12) % 2 ? 'rgba(111,195,255,0.55)' : 'rgba(111,195,255,0.3)';
+    c.beginPath();
+    c.ellipse(0, 1, 19, 3.5, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = '#1b1d26';
+    c.beginPath();
+    c.roundRect(-18, -4, 36, 5, 2.5);
+    c.fill();
+    c.fillStyle = hull;
+    c.beginPath();
+    c.moveTo(-16, -4);
+    c.lineTo(16, -4);
+    c.lineTo(11, -14);
+    c.lineTo(-11, -14);
+    c.closePath();
+    c.fill();
+    c.stroke();
+    return;
+  }
+  if (body === 'walker') {
+    // Two jointed legs that shuffle while the walker drives.
+    const step = moving ? Math.sin(time * 14) * 3 : 0;
+    c.strokeStyle = '#101208';
+    c.lineWidth = 3;
+    for (const [hx, ph] of [[-7, 1], [7, -1]]) {
+      c.beginPath();
+      c.moveTo(hx, -8);
+      c.lineTo(hx + 4 + step * ph, -3);
+      c.lineTo(hx + step * ph, 2);
+      c.stroke();
+      c.fillStyle = '#101208';
+      c.fillRect(hx - 3 + step * ph, 1, 7, 2.5);
+    }
+    c.strokeStyle = '#000000';
+    c.lineWidth = 1.5;
+    c.fillStyle = hull;
+    c.beginPath();
+    c.roundRect(-12, -17, 24, 11, 4);
+    c.fill();
+    c.stroke();
+    return;
+  }
+  if (body === 'buggy') {
+    // Two big spoked wheels under an open frame.
+    const spin = moving ? time * 10 : 0;
+    for (const wx of [-11, 11]) {
+      c.fillStyle = '#101208';
+      c.beginPath();
+      c.arc(wx, -1, 6, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = '#5a5f48';
+      c.lineWidth = 1.2;
+      for (let k = 0; k < 3; k++) {
+        const a = spin + k * Math.PI / 3;
+        c.beginPath();
+        c.moveTo(wx - Math.cos(a) * 5, -1 - Math.sin(a) * 5);
+        c.lineTo(wx + Math.cos(a) * 5, -1 + Math.sin(a) * 5);
+        c.stroke();
+      }
+    }
+    c.strokeStyle = '#000000';
+    c.lineWidth = 1.5;
+    c.fillStyle = hull;
+    c.beginPath();
+    c.moveTo(-17, -6);
+    c.lineTo(17, -6);
+    c.lineTo(13, -13);
+    c.lineTo(-9, -13);
+    c.closePath();
+    c.fill();
+    c.stroke();
+    return;
+  }
+  // Tank: treads with road wheels, flat black, under a rounded hull.
   c.fillStyle = '#101208';
   c.beginPath();
   c.roundRect(-18, -3, 36, 7, 3.5);
@@ -1684,19 +1772,28 @@ function drawTankSide(c, t, time) {
     c.arc(i, 0.5, 1.2, 0, Math.PI * 2);
     c.fill();
   }
-  // Hull, flat EGA yellow with a darker shade blob and black outline.
-  c.fillStyle = '#d7a800';
+  c.fillStyle = hull;
   c.beginPath();
   c.roundRect(-15, -15, 30, 13, 5);
   c.fill();
-  c.strokeStyle = '#000000';
-  c.lineWidth = 1.5;
   c.stroke();
-  c.fillStyle = '#8a6d00';
+  c.fillStyle = shade(hull.startsWith('#') ? hull : '#d7a800', 0.64);
   c.beginPath();
   c.ellipse(-6, -9, 6, 3, 0.4, 0, Math.PI * 2);
   c.fill();
-  // Turret rotated to the barrel angle (mirrored for drones is handled by caller).
+}
+function drawGroundUnit(c, t, time) {
+  const hull = t.isPlayer ? '#d7a800' : shade(t.color || '#c9c9c9', 0.85);
+  const moving = Math.abs((t.x - (t.lastX ?? t.x))) > 0.01;
+  t.lastX = t.x;
+  c.save();
+  c.translate(t.x, t.y);
+  c.fillStyle = 'rgba(0,0,0,0.3)';
+  c.beginPath();
+  c.ellipse(0, 3, 20, 5, 0, 0, Math.PI * 2);
+  c.fill();
+  drawChassis(c, t.body || 'tank', hull, time, moving);
+  // Turret on the shared pivot, barrel to the shown angle on the facing side.
   const rad = shownAngle(t) * Math.PI / 180;
   const s = facing(t);
   const bx = Math.cos(rad) * 26 * s, by = -Math.sin(rad) * 26;
@@ -1706,24 +1803,106 @@ function drawTankSide(c, t, time) {
   c.moveTo(0, -12);
   c.lineTo(bx, -12 + by);
   c.stroke();
-  c.fillStyle = '#d7a800';
+  c.fillStyle = hull;
   c.beginPath();
   c.arc(0, -12, 8, 0, Math.PI * 2);
   c.fill();
   c.strokeStyle = '#000000';
   c.lineWidth = 1.5;
   c.stroke();
-  // Antenna with blinking tip.
-  c.strokeStyle = '#000000';
-  c.lineWidth = 1.5;
+  // Antenna with blinking tip, on the side away from the barrel.
   c.beginPath();
-  c.moveTo(-8, -16);
-  c.lineTo(-12, -26);
+  c.moveTo(-8 * s, -16);
+  c.lineTo(-12 * s, -26);
   c.stroke();
   c.fillStyle = Math.floor(time * 3) % 2 === 0 ? '#ff5a5a' : '#7a2020';
   c.beginPath();
-  c.arc(-12, -26, 1.8, 0, Math.PI * 2);
+  c.arc(-12 * s, -26, 1.8, 0, Math.PI * 2);
   c.fill();
+  c.restore();
+}
+/* The unit picker in the Game menu: one button per body, each with a small
+   drawing of it. The choice is remembered and, in a room, shared. */
+function loadBody() {
+  try {
+    const b = window.localStorage.getItem('tankity-body');
+    if (UNIT_BODIES.some(u => u.key === b)) return b;
+  } catch (_) { /* storage off: default body */ }
+  return 'tank';
+}
+function chooseBody(key) {
+  if (!UNIT_BODIES.some(u => u.key === key)) return;
+  G.body = key;
+  try { window.localStorage.setItem('tankity-body', key); } catch (_) { /* fine */ }
+  const mine = NET.on ? myTank() : (G.tanks || []).find(t => t.isPlayer);
+  if (mine) mine.body = key;
+  if (NET.code) roomPost('body', { body: key }).then(d => { if (NET.on) netApply(d.room); }).catch(() => {});
+  renderUnitPicker();
+}
+function renderUnitPicker() {
+  const box = $('unit-picker');
+  if (!box || !box.replaceChildren) return;
+  const buttons = UNIT_BODIES.map(u => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'unit-choice';
+    b.setAttribute('aria-pressed', String(G.body === u.key));
+    b.title = u.name;
+    const cv = document.createElement('canvas');
+    cv.width = 48;
+    cv.height = 34;
+    const c = cv.getContext && cv.getContext('2d');
+    if (c && c.translate) {
+      c.translate(24, 28);
+      drawChassis(c, u.key, '#d7a800', 0, false);
+      c.fillStyle = '#d7a800';
+      c.beginPath();
+      c.arc(0, -12, 7, 0, Math.PI * 2);
+      c.fill();
+    }
+    const label = document.createElement('span');
+    label.textContent = u.name;
+    b.append(cv, label);
+    b.addEventListener('click', ev => { ev.currentTarget.blur(); chooseBody(u.key); });
+    return b;
+  });
+  box.replaceChildren(...buttons);
+}
+/* Whose turn the battlefield shows: the shooter of a replaying volley, else
+   the tank whose turn it is. Nobody between rounds or after the match. */
+function turnTank() {
+  if (G.over || G.phase === 'shop' || G.phase === 'banner') return null;
+  if (NET.on && NET.volley && NET.volley.shooter) return NET.volley.shooter;
+  const t = G.tanks[G.turn];
+  return t && t.hp > 0 ? t : null;
+}
+/* A pulsing glow under the unit and a bobbing chevron over its name. */
+function drawTurnMarker(c, t, time, ground) {
+  const color = t.isPlayer ? '#ffff55' : (t.color || '#ffffff');
+  const pulse = 0.5 + 0.5 * Math.sin(time * 5);
+  const cy = ground ? t.y + 2 : t.y - 30 + droneHover(t, time) + 6;
+  c.save();
+  c.globalAlpha = 0.25 + 0.35 * pulse;
+  c.fillStyle = color;
+  c.beginPath();
+  c.ellipse(t.x, cy, 24 + 4 * pulse, 6 + pulse, 0, 0, Math.PI * 2);
+  c.fill();
+  c.globalAlpha = 0.9;
+  c.strokeStyle = color;
+  c.lineWidth = 1.5;
+  c.stroke();
+  const top = t.y - (ground ? 34 : 52) - 16 - 3 * Math.abs(Math.sin(time * 4));
+  c.globalAlpha = 1;
+  c.fillStyle = color;
+  c.beginPath();
+  c.moveTo(t.x - 6, top - 6);
+  c.lineTo(t.x + 6, top - 6);
+  c.lineTo(t.x, top);
+  c.closePath();
+  c.fill();
+  c.strokeStyle = '#000000';
+  c.lineWidth = 1;
+  c.stroke();
   c.restore();
 }
 function droneHover(t, time) {
@@ -1734,6 +1913,29 @@ function droneBarrelTip(t, x, y) {
   const rad = shownAngle(t) * Math.PI / 180;
   const s = facing(t);
   return { x: x + Math.cos(rad) * 22 * s, y: y + 4 - Math.sin(rad) * 22, rad, s };
+}
+/* Wraith: a domed disc with chasing rim lights. Drawn about the drone's
+   body centre, which the caller has translated to. */
+function drawSaucer(c, t, time) {
+  c.fillStyle = '#2b2e36';
+  c.beginPath();
+  c.ellipse(0, 1, 15, 4.5, 0, 0, Math.PI * 2);
+  c.fill();
+  c.strokeStyle = t.color;
+  c.lineWidth = 1.5;
+  c.stroke();
+  c.fillStyle = 'rgba(160,240,255,0.55)';
+  c.beginPath();
+  c.ellipse(0, -2, 7, 5, 0, Math.PI, 0);
+  c.fill();
+  for (let k = 0; k < 6; k++) {
+    const a = time * 3 + k * Math.PI / 3;
+    if (Math.sin(a) < 0) continue; // only the near side of the rim shows
+    c.fillStyle = k % 2 ? t.color : '#ffffff';
+    c.beginPath();
+    c.arc(Math.cos(a) * 13, 1 + Math.sin(a) * 2.5, 1.2, 0, Math.PI * 2);
+    c.fill();
+  }
 }
 function drawGunDrone(c, t, time) {
   const hover = droneHover(t, time);
@@ -1752,9 +1954,16 @@ function drawGunDrone(c, t, time) {
   c.moveTo(0, 4);
   c.lineTo(tip.x, tip.y);
   c.stroke();
-  // Rotor arms + spinning discs.
+  // Each battery drone has its own frame: Wraith a saucer, Spotter a
+  // tri-rotor with a big eye, everyone else the classic quad.
+  if (t.id === 'wraith') {
+    drawSaucer(c, t, time);
+    c.restore();
+    return;
+  }
+  const arms = t.id === 'spotter' ? [[0, -1.25], [-1.1, 0.8], [1.1, 0.8]] : [[-1, -1], [1, -1], [-1, 1], [1, 1]];
   let i = 0;
-  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+  for (const [sx, sy] of arms) {
     c.strokeStyle = '#2b2e36';
     c.lineWidth = 3;
     c.beginPath();
@@ -1783,8 +1992,14 @@ function drawGunDrone(c, t, time) {
   c.stroke();
   c.fillStyle = '#ffffff';
   c.beginPath();
-  c.arc(0, 0, 2.6, 0, Math.PI * 2);
+  c.arc(0, 0, t.id === 'spotter' ? 4 : 2.6, 0, Math.PI * 2);
   c.fill();
+  if (t.id === 'spotter') {
+    c.fillStyle = t.color;
+    c.beginPath();
+    c.arc(Math.cos(time * 1.3) * 1.5, 0, 1.8, 0, Math.PI * 2);
+    c.fill();
+  }
   // Blinking strobe.
   if (Math.floor(time * 2 + t.x) % 2 === 0) {
     c.fillStyle = '#ffffff';
@@ -1876,18 +2091,21 @@ function render() {
       c.fillRect(t.x - 3, surfY(t.x) - 26, 6, 18);
       continue;
     }
-    if (t.isPlayer) drawTankSide(c, t, time);
+    const ground = isGroundUnit(t);
+    if (t === turnTank()) drawTurnMarker(c, t, time, ground);
+    if (ground) drawGroundUnit(c, t, time);
     else drawGunDrone(c, t, time);
     // Health bar + name.
     const w = 40;
+    const barY = t.y - (ground ? 34 : 52);
     c.fillStyle = 'rgba(0,0,0,0.55)';
-    c.fillRect(t.x - w / 2, t.y - (t.isPlayer ? 34 : 52), w, 6);
+    c.fillRect(t.x - w / 2, barY, w, 6);
     c.fillStyle = t.isPlayer ? '#00ff00' : t.color;
-    c.fillRect(t.x - w / 2 + 1, t.y - (t.isPlayer ? 34 : 52) + 1, (w - 2) * (t.hp / t.maxHp), 4);
+    c.fillRect(t.x - w / 2 + 1, barY + 1, (w - 2) * Math.min(1, t.hp / t.maxHp), 4);
     c.fillStyle = '#fff';
     c.font = 'bold 9px sans-serif';
     c.textAlign = 'center';
-    c.fillText(t.isPlayer ? 'TANK' : t.id.toUpperCase(), t.x, t.y - (t.isPlayer ? 38 : 56));
+    c.fillText(t.isPlayer ? 'TANK' : (ground ? String(t.name || t.id).toUpperCase() : t.id.toUpperCase()), t.x, barY - 4);
     c.textAlign = 'left';
   }
   // Aim arm: a stub out of the shooter's barrel showing launch direction,
@@ -1898,7 +2116,7 @@ function render() {
     const t = cur();
     const len = aimArmLength(shownPower(t));
     let x0, y0, rad, ds;
-    if (t.isPlayer) {
+    if (isGroundUnit(t)) {
       const m = muzzle(t);
       x0 = m.x; y0 = m.y;
       rad = shownAngle(t) * Math.PI / 180;
@@ -2442,7 +2660,7 @@ async function hostRoom(initials, mapId) {
   NET.map = null;
   NET.mapName = 'Random hills';
   try {
-    const data = await roomPost('create', { initials, map: mapId || '' });
+    const data = await roomPost('create', { initials, map: mapId || '', body: G.body });
     NET.code = data.code; NET.seat = data.seat; NET.token = data.token; NET.csrf = data.csrf;
     say(`Room ${NET.code} hosted. Read the code to your friends.`, 'info');
     await netRefreshRoster();
@@ -2457,7 +2675,7 @@ async function joinRoom(code, initials) {
   NET.seats = [];
   NET.initials = initials;
   try {
-    const data = await roomPost('join', { code: NET.code, initials });
+    const data = await roomPost('join', { code: NET.code, initials, body: G.body });
     NET.code = data.code; NET.seat = data.seat; NET.token = data.token; NET.csrf = data.csrf;
     say(`Joined room ${NET.code} as ${initials}.`, 'info');
     await netRefreshRoster();
@@ -2772,6 +2990,8 @@ function netAdopt(room) {
       angle: t.angle, power: t.power,
       hp: t.hp, maxHp: t.maxHp || 100, fuel: 0, dirS: t.dirS || 1,
       name: t.name,
+      human: !ai,
+      body: t.body || 'tank',
       // Keep the drawn aim where it was so the new one glides in.
       showA: was && !mine ? shownAngle(was) : undefined,
       showP: was && !mine ? shownPower(was) : undefined,
@@ -3515,6 +3735,8 @@ function init() {
   bindKeys();
   loadArsenal();
   loadKeys();
+  G.body = loadBody();
+  renderUnitPicker();
   renderKeyHints();
   startDemo();
   loadScores();

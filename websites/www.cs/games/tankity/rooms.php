@@ -804,6 +804,13 @@ function room_new(string $code, string $initials): array
    overlap; fresh rounds spread them ROOM_SPAWN_GAP apart. */
 const ROOM_UNIT_GAP = 44.0;
 const ROOM_SPAWN_GAP = 110;
+/* Ground-unit bodies a human may drive; looks only, no stats. */
+const ROOM_BODIES = ['tank', 'hover', 'walker', 'buggy'];
+function room_body(array $body): string
+{
+    $b = (string) ($body['body'] ?? 'tank');
+    return in_array($b, ROOM_BODIES, true) ? $b : 'tank';
+}
 function room_spot_taken(array $room, int $self, float $x): bool
 {
     foreach ($room['tanks'] as $idx => $t) {
@@ -1201,6 +1208,7 @@ function room_snapshot(array $room, ?int $seat, int $since): array
             'angle' => $t['angle'], 'power' => $t['power'],
             'hp' => $t['hp'], 'maxHp' => $t['maxHp'],
             'dirS' => $t['dirS'] ?? 1,
+            'body' => $t['kind'] === 'human' ? ($room['seats'][$t['seat']]['body'] ?? 'tank') : null,
         ];
     }
     $seats = [];
@@ -1339,6 +1347,20 @@ if ($action === 'map' && $method === 'POST') {
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
+// A seat changes its unit's look any time: lobby, shop, mid-match.
+if ($action === 'body' && $method === 'POST') {
+    [$room, $fh, $path, $seat] = room_gate($body, true);
+    $room['seats'][$seat]['body'] = room_body($body);
+    if (!room_save($fh, $path, $room)) {
+        room_unlock($fh);
+        room_json_out(500, ['error' => 'store write failed']);
+    }
+    $since = (int) ($body['since'] ?? 0);
+    $out = room_snapshot($room, $seat, $since);
+    room_unlock($fh);
+    room_json_out(200, ['ok' => true, 'room' => $out]);
+}
+
 if ($action === 'create' && $method === 'POST') {
     if (!room_origin_ok()) {
         room_json_out(403, ['error' => 'bad origin']);
@@ -1367,7 +1389,7 @@ if ($action === 'create' && $method === 'POST') {
     $token = room_rand_token();
     // A fresh seat is present, not idle: the 90-second auto-fire rule must
     // not mistake a guest who just sat down for one who walked away.
-    $room['seats'][] = ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true)];
+    $room['seats'][] = ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];
     $room['scores'][] = 0;
     $room['cash'][] = 600;
     $room['ammo'][] = ['shell' => -1, 'buck' => 1, 'mortar' => 0, 'rail' => 0, 'nuke' => 0];
@@ -1417,7 +1439,7 @@ if ($action === 'join' && $method === 'POST') {
     }
     $token = room_rand_token();
     // Same as create: joining means present, so the seat starts clocked in.
-    $room['seats'][] = ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true)];
+    $room['seats'][] = ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];
     $seat = count($room['seats']) - 1;
     $room['scores'][] = 0;
     $room['cash'][] = 600;

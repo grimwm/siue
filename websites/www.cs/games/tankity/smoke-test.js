@@ -496,7 +496,7 @@ function change(el) {
   TAP('global', 'menu');
   TAP('shop', 'close'); frames(3);
   check('shop-esc-closes-menu', els['menu-overlay'].hidden === true && els['shop-veil'].hidden === false);
-  // Stock up: Buckshot ($100), Mortar ($150), Rail ($200) of the $600 stake.
+  // Stock up: Buckshot ($80), Mortar ($200), Rail ($140) of the $600 stake.
   // (Each render appends, so read the last eight list items: two category
   // headers plus six rows. Each row holds an info div then an acts span.)
   const shopLis = () => els['shop-list'].children.slice(-8);
@@ -557,10 +557,11 @@ function change(el) {
   TAP('shop', 'qtyUp'); frames(3);
   check('shop-qty-2', /×2 packs = \$120/.test(rowName(fuelRow())), rowName(fuelRow()));
   TAP('shop', 'qtyUp'); frames(3);
-  check('shop-qty-cap', /×2 packs = \$120/.test(rowName(fuelRow())), rowName(fuelRow()));
+  TAP('shop', 'qtyUp'); frames(3); // $180 left after the three guns: three packs is all the chest covers
+  check('shop-qty-cap', /×3 packs = \$180/.test(rowName(fuelRow())), rowName(fuelRow()));
   TAP('shop', 'buy'); frames(3);
-  check('shop-bulk', /\$30/.test(els['shop-cash'].textContent), els['shop-cash'].textContent);
-  check('shop-bulk-said', /Bought 2 × Fuel/.test(logTail()), logTail());
+  check('shop-bulk', /\$0\b/.test(els['shop-cash'].textContent), els['shop-cash'].textContent);
+  check('shop-bulk-said', /Bought 3 × Fuel/.test(logTail()), logTail());
   check('shop-bulk-reset', !/×[2-9] packs/.test(rowName(fuelRow())), rowName(fuelRow()));
   const buckRow = () => shopRows().find(li => rowName(li).includes('Buckshot'));
   check('shop-bulk-disabled', buyBtn(fuelRow()).disabled === true && buyBtn(buckRow()).disabled === true,
@@ -582,7 +583,7 @@ function change(el) {
   const angle0 = els['hud-angle'].textContent;
   const wind0 = els['hud-wind'].textContent;
   const armor0 = els['hud-armor'].textContent;
-  check('shop-bulk-banked', els['hud-fuel'].textContent === '200', els['hud-fuel'].textContent);
+  check('shop-bulk-banked', els['hud-fuel'].textContent === '260', els['hud-fuel'].textContent);
 
   // Every demo lands its verdict with damage, never a clean miss.
   await ensureAim();
@@ -743,7 +744,7 @@ function change(el) {
   const dlg = els['dlg-line'].textContent;
 
   check('preshop', shopOpen && /\$600/.test(shopCash0), shopCash0);
-  check('shop-buy', /\$150/.test(shopCash1), shopCash1);
+  check('shop-buy', /\$180/.test(shopCash1), shopCash1);
   check('boot-turn', /YOU/.test(turn0), turn0);
   check('boot-hud', /62°/.test(angle0) && wind0.length > 0 && /you 100/.test(armor0),
     `${angle0} | ${wind0} | ${armor0}`);

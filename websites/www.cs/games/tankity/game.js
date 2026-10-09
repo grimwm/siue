@@ -1009,6 +1009,7 @@ function endMatch(won, text) {
     $('end-text').textContent = text;
     $('end-score').textContent = `Score ${G.score} · ${G.roundsWon} rounds won · ${G.round} rounds played · seed ${G.seed}`;
     veil.hidden = false;
+    refreshNavHints();
   }
   renderHUD();
 }
@@ -1045,6 +1046,7 @@ function openShop() {
   renderShop();
   const veil = $('shop-veil');
   if (veil) veil.hidden = false;
+  refreshNavHints(); // only a shown list has a height to measure
   render();
   renderHUD();
 }
@@ -2741,6 +2743,7 @@ function netApply(room) {
     renderShop();
     const veil = $('shop-veil');
     if (veil) veil.hidden = false;
+    refreshNavHints();
     if (NET.lastPhase === 'play') talk('tank', 'Shopping! Then back to bam bam.', true);
   } else if (room.phase === 'over') {
     G.over = true;
@@ -2975,6 +2978,7 @@ function netShowStandings(room) {
   }
   const veil = $('end-veil');
   if (veil) veil.hidden = false;
+  refreshNavHints();
 }
 
 /* ---------- scores: file-backed API with localStorage fallback ---------- */
@@ -3532,7 +3536,8 @@ function scrollOverlay(lines, pages) {
 /* Every scrollable panel carries a visible key footer. It reads disabled
 while everything fits, and lights up the moment content overflows. */
 const NAV_HINTS = [
-  ['shop-veil', 'nav-shop'], ['lobby-veil', 'nav-lobby'],
+  // The shop scrolls its list, not its veil.
+  ['shop-list', 'nav-shop'], ['lobby-veil', 'nav-lobby'],
   ['preview-veil', 'nav-preview'], ['end-veil', 'nav-end'],
   ['help-overlay', 'nav-help'], ['report-overlay', 'nav-report'],
   ['menu-overlay', 'nav-menu'], ['log-overlay', 'nav-log'],

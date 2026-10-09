@@ -37,9 +37,9 @@ stage=$work/stage
 mkdir "$stage"
 
 # '-mkdir' on a directory that exists reports a Failure it then ignores;
-# drop that line so real errors stand out.
+# drop that line so real errors stand out. sftp ends its messages with CRLF.
 sftp_batch() {
-  "${sshpass[@]}" sftp -q -oBatchMode=no -b "$1" "${HOST#*@}" 2> >(grep -v '^remote mkdir .*: Failure$' >&2) >/dev/null
+  "${sshpass[@]}" sftp -q -oBatchMode=no -b "$1" "${HOST#*@}" 2> >(tr -d '\r' | grep -v '^remote mkdir .*: Failure$' >&2) >/dev/null
 }
 
 # 1. Stage.

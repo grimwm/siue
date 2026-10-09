@@ -1928,23 +1928,32 @@ function render() {
     c.arc(s.x, s.y, 1.5, 0, Math.PI * 2);
     c.fill();
   }
-  // Room-match tracers: the server already settled these shots, so this line
-  // is pure theater showing where the shell went.
-  for (const tr of NET.tracers) {
-    const k = Math.min(1, tr.t);
-    const hx = tr.x0 + (tr.x1 - tr.x0) * k;
-    const hy = tr.y0 + (tr.y1 - tr.y0) * k;
-    c.strokeStyle = (((WEAPONS[tr.wkey] || {}).gfx || {}).shell) || '#ffe27a';
-    c.globalAlpha = 0.9;
-    c.lineWidth = tr.wkey === 'nuke' ? 4 : 2;
-    c.beginPath();
-    c.moveTo(tr.x0, tr.y0);
-    c.lineTo(hx, hy);
-    c.stroke();
-    c.fillStyle = '#fff';
-    c.beginPath();
-    c.arc(hx, hy, 3, 0, Math.PI * 2);
-    c.fill();
+  // Room replay: shells fly the paths the server simulated, trail and all.
+  if (NET.volley && NET.volley.ft >= 0) {
+    const ft = NET.volley.ft;
+    for (const sh of NET.volley.shots) {
+      if (sh.landed) continue;
+      const [hx, hy, idx] = netShellAt(sh, ft);
+      const gfx = ((WEAPONS[sh.e.w] || {}).gfx) || {};
+      c.strokeStyle = gfx.trail || '#ffd75e';
+      c.globalAlpha = 0.5;
+      c.lineWidth = 1.5;
+      c.beginPath();
+      const from = Math.max(0, idx - 8);
+      c.moveTo(sh.pts[from] ? sh.pts[from][0] : hx, sh.pts[from] ? sh.pts[from][1] : hy);
+      for (let i = from + 1; i <= idx; i++) c.lineTo(sh.pts[i][0], sh.pts[i][1]);
+      c.lineTo(hx, hy);
+      c.stroke();
+      c.globalAlpha = 1;
+      c.fillStyle = gfx.shell || '#ffe27a';
+      c.beginPath();
+      c.arc(hx, hy, sh.e.w === 'nuke' ? 7 : sh.e.w === 'mortar' ? 4.5 : 3.5, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = '#fff';
+      c.beginPath();
+      c.arc(hx, hy, 1.5, 0, Math.PI * 2);
+      c.fill();
+    }
   }
   c.globalAlpha = 1;
   // Blast discs: each explosion draws exactly the circle its weapon destroys.
@@ -2279,7 +2288,7 @@ const BLOCKED_INITIALS = [
 const NET = {
   on: false, code: '', seat: -1, token: '', csrf: '', since: 0,
   seats: [], myTurn: false, aimDirty: false, driveAcc: 0, driveT: 0,
-  tracers: [], busy: false, lastPhase: '', pollId: 0,
+  queue: [], volley: null, pendingRoom: null, synced: false, busy: false, lastPhase: '', pollId: 0,
   initials: '', maps: [], map: null, mapName: 'Random hills', lastRound: -1,
 };
 const KNOWN_FOES = ['reaper', 'wraith', 'spotter'];
@@ -2573,7 +2582,7 @@ function startNetMatch(room) {
   NET.since = 0;
   NET.lastPhase = '';
   NET.lastRound = -1;
-  NET.tracers = [];
+  NET.queue = []; NET.volley = null; NET.pendingRoom = null; NET.synced = false;
   NET.aimDirty = false;
   G.over = false;
   const sf = $('score-form');
@@ -2593,7 +2602,7 @@ function netLeave(quiet) {
   const rematch = $('rematch');
   if (rematch) rematch.hidden = true;
   NET.on = false; NET.code = ''; NET.seat = -1; NET.token = ''; NET.csrf = ''; NET.since = 0;
-  NET.seats = []; NET.tracers = []; NET.myTurn = false; NET.lastPhase = ''; NET.lastTurn = -1; NET.lastRound = -1;
+  NET.seats = []; NET.queue = []; NET.volley = null; NET.pendingRoom = null; NET.synced = false; NET.myTurn = false; NET.lastPhase = ''; NET.lastTurn = -1; NET.lastRound = -1;
   const againBtn = $('again');
   if (againBtn) againBtn.textContent = 'Play again (N)';
   const sf = $('score-form');
@@ -2706,8 +2715,30 @@ function netNext() {
     .then(d => netApply(d.room))
     .catch(err => { say(prettyRoomError(err), 'bad'); });
 }
+/* A room update either lands now or waits behind the replay: the server
+   settles a whole turn at once, and clients play it back (aim, flight,
+   blasts, damage) before the new state takes over. */
 function netApply(room) {
   if (!room || !NET.code) return;
+  const fresh = (room.events || []).filter(e => (e.seq || 0) > NET.since);
+  for (const e of fresh) NET.since = Math.max(NET.since, e.seq || 0);
+  if (!NET.synced) {
+    // First sync: earlier events are history. Log them, replay nothing.
+    NET.synced = true;
+    netAdopt(room);
+    for (const e of fresh) if (e.t !== 'shot' && e.t !== 'burst') netEvent(e);
+    return;
+  }
+  NET.queue.push(...fresh);
+  if (NET.queue.length || NET.volley) {
+    NET.pendingRoom = room;
+    NET.myTurn = false;
+    G.phase = 'think';
+    return;
+  }
+  netAdopt(room);
+}
+function netAdopt(room) {
   NET.seats = room.seats || [];
   if (room.map !== undefined) {
     NET.map = room.map;
@@ -2767,10 +2798,6 @@ function netApply(room) {
     G.nextOneUp = room.you.nextUp || 3000;
     if (mine) mine.fuel = room.you.fuel || 0;
   }
-  for (const e of room.events || []) {
-    if ((e.seq || 0) > NET.since) NET.since = e.seq;
-    netEvent(e);
-  }
   const rs = $('run-stats');
   if (rs) rs.textContent = `Room ${NET.code} · you are ${seatName(NET.seat)} · round ${G.round}`;
   if (room.phase === 'play') {
@@ -2812,11 +2839,7 @@ function netApply(room) {
 }
 function netEvent(e) {
   if (!e || !e.t) return;
-  if (e.t === 'shot') {
-    NET.tracers.push({ x0: e.x0, y0: e.y0, x1: e.x1, y1: e.y1, wkey: e.w || 'shell', t: 0 });
-    SFX.launch();
-    return;
-  }
+  if (e.t === 'shot' || e.t === 'burst') return; // flown by the replay
   if (e.t === 'fizzle') { say(`${seatName(e.by)} sends one into the sunset.`, 'info'); return; }
   if (e.t === 'fire') {
     if (e.seat === NET.seat) say(`You fire ${WEAPONS[G.selected] ? WEAPONS[G.selected].name : 'a shell'}.`, 'info');
@@ -2901,6 +2924,114 @@ function netEvent(e) {
   }
   if (e.t === 'auto') { say(`${seatName(e.seat)} sat quiet, so the crew fired for them.`, 'info'); return; }
 }
+/* ---------- room replay ---------- */
+const VOLLEY_OPENERS = new Set(['fire', 'aifire', 'auto']);
+const PATH_HZ = 12; // rooms.php records a path point every 5 sim steps at 60/s
+function netParsePath(str) {
+  return String(str || '').split(' ').filter(Boolean).map(p => p.split(',').map(Number));
+}
+function netStartVolley() {
+  const opener = NET.queue.shift();
+  const events = [];
+  while (NET.queue.length && !VOLLEY_OPENERS.has(NET.queue[0].t)) events.push(NET.queue.shift());
+  const shooter = G.tanks.find(t => t.seat === opener.seat);
+  const a1 = opener.a ?? (shooter ? shooter.angle : 62);
+  const p1 = opener.pw ?? (shooter ? shooter.power : 55);
+  const x1 = opener.x ?? (shooter ? shooter.x : 0);
+  const swing = shooter ? Math.max(Math.abs(a1 - shooter.angle), Math.abs(p1 - shooter.power), Math.abs(x1 - shooter.x)) : 0;
+  NET.volley = {
+    opener, events, shooter, tau: 0,
+    a0: shooter ? shooter.angle : a1, p0: shooter ? shooter.power : p1, x0: shooter ? shooter.x : x1, a1, p1, x1,
+    aimDur: swing < 1 ? 0.15 : clamp(0.45 + swing / 110, 0.5, 1.4),
+    shots: [], end: Math.max(0, ...events.map(e => e.t1 ?? e.at ?? 0)) + 0.6,
+  };
+  netEvent(opener);
+}
+function netCarve(x, y, r) {
+  const x0 = Math.max(0, Math.floor(x - r)), x1 = Math.min(W - 1, Math.ceil(x + r));
+  for (let ix = x0; ix <= x1; ix++) {
+    const dx = ix - x;
+    const cut = Math.sqrt(Math.max(0, r * r - dx * dx)) * 0.75;
+    G.terrain[ix] = Math.min(H - 4, Math.max(G.terrain[ix], y + cut));
+  }
+}
+function netBlast(x, y, r, wkey) {
+  SFX.boom();
+  G.shake = Math.min(1, G.shake + (wkey === 'nuke' ? 0.9 : r > 40 ? 0.5 : 0.3));
+  burst(x, y, wkey === 'nuke' ? '#ff6b6b' : '#ffd75e');
+  G.booms.push({ x, y, r, t: 0, life: wkey === 'nuke' ? 0.8 : 0.5 });
+  netCarve(x, y, r);
+}
+function netStepVolley(dt) {
+  const v = NET.volley;
+  v.tau += dt;
+  const sh = v.shooter;
+  if (sh) {
+    const u = Math.min(1, v.tau / v.aimDur);
+    const e = u * u * (3 - 2 * u);
+    sh.angle = v.a0 + (v.a1 - v.a0) * e;
+    sh.power = v.p0 + (v.p1 - v.p0) * e;
+    sh.x = v.x0 + (v.x1 - v.x0) * e;
+    sh.showA = sh.angle;
+    sh.showP = sh.power;
+  }
+  const ft = v.tau - v.aimDur;
+  v.ft = ft;
+  if (ft < 0) return;
+  for (const e of v.events) {
+    if (e.done || e.at === undefined || ft < e.at) continue;
+    e.done = true;
+    if (e.t === 'shot') {
+      v.shots.push({ e, pts: netParsePath(e.p), landed: false });
+      SFX.launch();
+    } else if (e.t === 'burst') {
+      netBlast(e.x, e.y, e.r, e.w);
+    } else {
+      if (e.t === 'hit') {
+        const t = G.tanks.find(x => x.seat === e.seat);
+        if (t) t.hp = Math.max(0, t.hp - e.dmg);
+      } else if (e.t === 'kill') {
+        const t = G.tanks.find(x => x.seat === e.seat);
+        if (t) t.hp = 0;
+      }
+      netEvent(e);
+    }
+  }
+  for (const s of v.shots) {
+    if (!s.landed && ft >= s.e.t1) {
+      s.landed = true;
+      if (s.e.r > 0) netBlast(s.e.x1, s.e.y1, s.e.r, s.e.w);
+    }
+  }
+  if (ft >= v.end && v.events.every(e => e.done || e.at === undefined) && v.shots.every(s => s.landed)) {
+    for (const e of v.events) if (!e.done) netEvent(e);
+    NET.volley = null;
+  }
+}
+/* Drive the replay; once nothing is left to play, the waiting room state
+   takes over. */
+function netReplay(dt) {
+  if (NET.volley) netStepVolley(dt);
+  while (!NET.volley && NET.queue.length) {
+    if (VOLLEY_OPENERS.has(NET.queue[0].t)) netStartVolley();
+    else netEvent(NET.queue.shift());
+  }
+  if (!NET.volley && !NET.queue.length && NET.pendingRoom) {
+    const room = NET.pendingRoom;
+    NET.pendingRoom = null;
+    netAdopt(room);
+  }
+}
+/* Where a replayed shell is at flight time ft: path points are 1/12 s apart. */
+function netShellAt(s, ft) {
+  const k = (ft - s.e.t0) * PATH_HZ;
+  const pts = s.pts;
+  if (!pts.length) return [s.e.x1, s.e.y1, 0];
+  const i = Math.max(0, Math.min(pts.length - 1, Math.floor(k)));
+  const j = Math.min(pts.length - 1, i + 1);
+  const f = Math.max(0, Math.min(1, k - i));
+  return [pts[i][0] + (pts[j][0] - pts[i][0]) * f, pts[i][1] + (pts[j][1] - pts[i][1]) * f, i];
+}
 function netEaseAim(dt) {
   const k = 1 - Math.exp(-dt * 5);
   for (const t of G.tanks) {
@@ -2919,16 +3050,7 @@ function netFrame(dt) {
     cl.x += cl.v * dt;
     if (cl.x - 40 > W) cl.x = -40;
   }
-  for (const tr of NET.tracers) tr.t += dt / 0.45;
-  const done = NET.tracers.filter(tr => tr.t >= 1);
-  NET.tracers = NET.tracers.filter(tr => tr.t < 1);
-  for (const tr of done) {
-    SFX.boom();
-    G.shake = Math.min(1, G.shake + (tr.wkey === 'nuke' ? 0.9 : tr.wkey === 'mortar' ? 0.5 : 0.3));
-    burst(tr.x1, tr.y1, tr.wkey === 'nuke' ? '#ff6b6b' : '#ffd75e');
-    const wr = WEAPONS[tr.wkey] ? WEAPONS[tr.wkey].radius : 26;
-    G.booms.push({ x: tr.x1, y: tr.y1, r: wr, t: 0, life: tr.wkey === 'nuke' ? 0.8 : 0.5 });
-  }
+  netReplay(dt);
   pumpDialogue(dt);
   G.banterT -= dt;
   if (G.banterT <= 0) {

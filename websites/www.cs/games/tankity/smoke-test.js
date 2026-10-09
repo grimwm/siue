@@ -888,6 +888,7 @@ function change(el) {
   sawFire = false;
   TAP('global', 'fire'); await tick(10);
   check('net-fire', sawFire, 'intent sent');
+  frames(180); // the turn passes once the replay of the shot has played out
   check('net-turn-passes', /REAPER aiming/.test(els['hud-turn'].textContent), els['hud-turn'].textContent);
   // typing in a box is typing, not playing
   const logLen = els['log'].children.length;

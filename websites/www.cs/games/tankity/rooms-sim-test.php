@@ -92,5 +92,44 @@ $check('spot-free-far', !room_spot_taken($room, 0, 200.0));
 $check('spot-ignores-self', !room_spot_taken($room, 1, 160.0)); // 20 from itself, 60 from tank 0
 $check('spot-ignores-wrecks', !room_spot_taken($room, 0, 290.0));
 
+// Replay stamping: a shot event carries its path and flight times, and the
+// blast it causes lands at the moment the shell does.
+$room = $flatRoom([$tank(0, 'human', 100.0, 100), $tank(1, 'ai', 300.0, 500)]);
+$room['tanks'][0]['angle'] = 45.0;
+$room['tanks'][0]['power'] = 60.0;
+$events = [['t' => 'fire', 'seat' => 0, 'w' => 'shell']];
+room_fire_shot($room, $events, 0, 'shell');
+$shot = null;
+foreach ($events as $e) {
+    if ($e['t'] === 'shot') {
+        $shot = $e;
+    }
+}
+$pts = $shot ? explode(' ', $shot['p']) : [];
+$check('replay-fire-at-zero', ($events[0]['at'] ?? null) === 0.0);
+$check('replay-shot-path', $shot !== null && count($pts) >= 3, 'points=' . count($pts));
+$check('replay-shot-times', $shot !== null && $shot['t0'] === 0.0 && $shot['t1'] > 0.2, 't1=' . ($shot['t1'] ?? '?'));
+// Same shot again with a tank parked where it landed: its hit must carry the
+// landing time.
+$landX = $shot['x1'] ?? 300.0;
+$room = $flatRoom([$tank(0, 'human', 100.0, 100), $tank(1, 'ai', $landX, 500)]);
+$room['tanks'][0]['angle'] = 45.0;
+$room['tanks'][0]['power'] = 60.0;
+$events = [['t' => 'fire', 'seat' => 0, 'w' => 'shell']];
+room_fire_shot($room, $events, 0, 'shell');
+$shot2 = array_values(array_filter($events, fn($e) => $e['t'] === 'shot'))[0] ?? null;
+$hits = array_values(array_filter($events, fn($e) => $e['t'] === 'hit'));
+$check('replay-blast-at-landing', $shot2 !== null && count($hits) >= 1 && abs($hits[0]['at'] - $shot2['t1']) < 0.001,
+    json_encode(['t1' => $shot2['t1'] ?? null, 'hits' => array_map(fn($e) => $e['at'], $hits)]));
+
+// A drone on the left fires to the right, the way it faces.
+$room = $flatRoom([$tank(0, 'human', 600.0, 100), $tank(1, 'ai', 100.0, 500)]);
+$room['tanks'][1]['dirS'] = 1;
+$room['tanks'][1]['angle'] = 45.0;
+$events = [['t' => 'aifire', 'seat' => 1, 'w' => 'shell']];
+room_fire_shot($room, $events, 1, 'shell');
+$shot = array_values(array_filter($events, fn($e) => $e['t'] === 'shot'))[0] ?? null;
+$check('drone-fires-its-facing', $shot !== null && $shot['x1'] > $shot['x0'], json_encode([$shot['x0'] ?? null, $shot['x1'] ?? null]));
+
 echo $fail === 0 ? "SIM-OK\n" : "SIM-FAIL $fail\n";
 exit($fail === 0 ? 0 : 1);

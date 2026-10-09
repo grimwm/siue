@@ -54,17 +54,24 @@ input[type="text"] {
   max-width: 11rem;
 }
 
+/* Secondary buttons (the default) wear the navbar style; .btn-primary and the
+   aim pad wear gold, one primary per panel. */
 button {
-  background: var(--accent);
-  color: #1a1a1a;
-  border: none;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 0.45rem 0.8rem;
   font-weight: 700;
   cursor: pointer;
 }
-
-button:hover { filter: brightness(1.08); }
+button:hover { border-color: var(--accent); }
+button.btn-primary, .pad-grid button {
+  background: var(--accent);
+  color: #1a1a1a;
+  border-color: var(--accent);
+}
+button.btn-primary:hover, .pad-grid button:hover { filter: brightness(1.08); }
 /* Key hints ride visibly inside their buttons. */
 button .key {
   background: rgba(0, 0, 0, 0.28);
@@ -252,22 +259,36 @@ battle buttons on the right, sky behind both. */
   gap: 0.25rem;
 }
 .guide-actions button { padding: 0.3rem 0.35rem; white-space: nowrap; }
-/* Every battle button wears the menubar style, in every dialog too. */
 #frame button { font-size: 0.75rem; padding: 0.3rem 0.35rem; white-space: nowrap; }
-/* The Game menu dialog pairs its buttons in two equal columns under a
-full-width seed row, so both columns land the same size. */
-.menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 0.6rem; align-items: center; }
-/* Every dialog button mimics the navbar pills (Fire, Weapon, ...): dark
-panel with a hairline border, never the gold base button. Menu pairs sit as
-centered pills instead of stretching into full-column bars. */
-.frame-overlay button, .veil button {
-  background: var(--panel);
+/* Game menu: a compact centred card. Seed and New Game share a row, the
+   unit picker sits under them, and the rest fill equal three-across rows. */
+.menu-card {
+  inset: 0;
+  margin: auto;
+  width: min(25rem, 92%);
+  height: fit-content;
+  max-height: 88%;
+  padding: 0.8rem 0.9rem;
+}
+.menu-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.6rem; }
+.menu-head h2 { margin: 0; }
+.card-overlay .menu-head button { margin-top: 0; }
+.menu-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
+.menu-grid button { width: 100%; }
+.seed-row, .unit-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.4rem; }
+.seed-row label, .unit-label { font-size: 0.8rem; color: var(--wash-ink); flex: none; }
+.seed-row input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
   color: var(--ink);
   border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.3rem 0.45rem;
 }
-.menu-grid button { justify-self: center; }
-.menu-grid .span-both { grid-column: 1 / -1; }
-.menu-grid label, .menu-grid input { grid-column: 1 / -1; }
+.seed-row button { width: auto; flex: none; }
+.unit-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem; flex: 1; }
+.unit-picker button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .canvas-holder .dialogue {
   position: absolute;
   left: 50%;
@@ -459,8 +480,6 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 .log li.info { border-color: var(--safe); }
 
 .guide { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
-.guide button { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
-.guide button:hover { border-color: var(--accent); }
 
 @media (max-width: 1520px) {
   .layout { grid-template-columns: 1fr; }

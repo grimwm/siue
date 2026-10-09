@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Operation Tankity: Scorched-Earth Artillery</title>
-<link rel="stylesheet" href="game.css?v=20261009i">
+<link rel="stylesheet" href="game.css?v=20261009k">
 </head>
 <body>
 <header class="topbar">
@@ -52,7 +52,7 @@
         <p class="pad-note"><span data-keyhint="aim:barrelLeft">◀</span><span data-keyhint="aim:barrelRight">▶</span> barrel · <span data-keyhint="aim:powerUp">▲</span><span data-keyhint="aim:powerDown">▼</span> power</p>
       </div>
       <div class="guide guide-actions" aria-label="Action controls">
-        <button type="button" id="btn-menu" aria-expanded="false">Menu <span class="key" data-keyhint="global:menu">(C)</span></button>
+        <button type="button" id="btn-menu" class="btn-primary" aria-expanded="false">Menu <span class="key" data-keyhint="global:menu">(C)</span></button>
         <button type="button" id="btn-cannon">Fire <span class="key" data-keyhint="global:fire">(Ctrl)</span></button>
         <button type="button" id="btn-weapon">Weapon <span class="key" data-keyhint="global:cycle">(Q)</span></button>
         <button type="button" id="btn-drive-l">Drive ◀ <span class="key" data-keyhint="aim:driveLeft">(A)</span></button>
@@ -82,8 +82,7 @@
             steadier aim, and deeper magazines. How many hills can you hold?</li>
           <li><strong><span data-keyhint="global:fullscreen">F</span></strong> toggles fullscreen for the full hillside view; <strong><span data-keyhint="global:fullscreen">F</span></strong> again leaves it.</li>
           <li><strong><span data-keyhint="global:sound">E</span></strong> toggles sound effects, <strong><span data-keyhint="global:music">M</span></strong> toggles the music.
-            Each has its own button in the menu (<strong><span data-keyhint="global:menu">C</span></strong> opens it, <strong><span data-keyhint="global:escape">ESC</span></strong>
-            closes menus), so one can stay on while the other rests. New Game, seed, fullscreen,
+            Each has its own button in the menu (<strong><span data-keyhint="global:menu">C</span></strong> opens it), so one can stay on while the other rests. New Game, seed, fullscreen,
             rooms (<strong><span data-keyhint="global:rooms">O</span></strong>), and random hills (<strong><span data-keyhint="global:random">T</span></strong>) live there too.</li>
           <li><strong><span data-keyhint="global:fav">1</span></strong> through <strong><span data-keyhint="global:fav:3">4</span></strong> load a favorite shell (hold
             <strong>Shift</strong> with a number to pin the loaded shell to that slot). In the shop,
@@ -108,7 +107,7 @@
             menu. Overlays never pause the battle.</li>
         </ul>
         <button type="button" id="help-close">Close <span class="key" data-keyhint="global:help">(H)</span></button>
-        <p class="nav-hint" id="nav-help"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page · <span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page · </span><span data-keyhint="global:help">H</span> closes</p>
+        <p class="nav-hint" data-scroll-only id="nav-help"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page · <span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></p>
       </section>
       <section id="report-overlay" class="frame-overlay card-overlay" aria-labelledby="score-h" hidden>
         <h2 id="score-h">After-action report</h2>
@@ -121,31 +120,39 @@
         <ol id="scores" class="scores"></ol>
         <p id="scores-note" class="hint"></p>
         <button type="button" id="report-close">Close <span class="key" data-keyhint="global:report">(R)</span></button>
-        <p class="nav-hint" id="nav-report"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page · <span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page · </span><span data-keyhint="global:report">R</span> closes</p>
+        <p class="nav-hint" data-scroll-only id="nav-report"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page · <span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></p>
       </section>
-      <section id="menu-overlay" class="frame-overlay card-overlay" aria-labelledby="menu-h" hidden>
-        <h2 id="menu-h">Game menu</h2>
+      <section id="menu-overlay" class="frame-overlay card-overlay menu-card" aria-labelledby="menu-h" hidden>
+        <header class="menu-head">
+          <h2 id="menu-h">Game menu</h2>
+          <button type="button" id="menu-close">Close <span class="key" data-keyhint="global:escape">(ESC)</span></button>
+        </header>
         <form id="seed-form" class="menu-grid" action="#">
-          <label for="seed-input">Seed</label>
-          <input id="seed-input" name="seed" type="text" inputmode="text"
-                 autocomplete="off" spellcheck="false" placeholder="e.g. bam-bam-01">
-          <button type="button" id="new-game">New Game <span class="key" data-keyhint="global:new">(N)</span></button>
+          <div class="seed-row">
+            <label for="seed-input">Seed</label>
+            <input id="seed-input" name="seed" type="text" inputmode="text"
+                   autocomplete="off" spellcheck="false" placeholder="e.g. bam-bam-01">
+            <button type="button" id="new-game" class="btn-primary">New Game <span class="key" data-keyhint="global:new">(N)</span></button>
+          </div>
+          <div class="unit-row" id="unit-row" role="group" aria-labelledby="unit-label">
+            <span class="unit-label" id="unit-label">Unit</span>
+            <div class="unit-picker" id="unit-picker"></div>
+          </div>
           <button type="button" id="random-run" title="Ignore the seed box and start on a fresh random seed">Random seed <span class="key" data-keyhint="global:random">(T)</span></button>
+          <button type="button" id="rooms-open" title="Host or join a multiplayer game room">Rooms <span class="key" data-keyhint="global:rooms">(O)</span></button>
+          <button type="button" id="tutorial-open" title="Replay the opening-moves tutorial">Tutorial <span class="key" data-keyhint="global:tutorial">(U)</span></button>
           <button type="button" id="btn-sound" title="Toggle sound effects">Sound: on <span class="key" data-keyhint="global:sound">(E)</span></button>
           <button type="button" id="btn-music" title="Toggle music">Music: on <span class="key" data-keyhint="global:music">(M)</span></button>
           <button type="button" id="fullscreen" title="Toggle fullscreen">Fullscreen <span class="key" data-keyhint="global:fullscreen">(F)</span></button>
-          <button type="button" id="rooms-open" title="Host or join a multiplayer game room">Rooms <span class="key" data-keyhint="global:rooms">(O)</span></button>
-          <button type="button" id="tutorial-open" class="span-both" title="Replay the opening-moves tutorial">Tutorial <span class="key" data-keyhint="global:tutorial">(U)</span></button>
         </form>
-        <button type="button" id="menu-close">Close <span class="key" data-keyhint="global:escape">(ESC)</span></button>
-        <p class="nav-hint" id="nav-menu"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page · <span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page · </span><span data-keyhint="global:escape">ESC</span> closes</p>
+        <p class="nav-hint" data-scroll-only id="nav-menu"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page · <span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></p>
       </section>
       <section id="tutorial-overlay" class="frame-overlay card-overlay" aria-labelledby="tutorial-h" hidden>
         <h2 id="tutorial-h">Tutorial</h2>
         <p id="tutorial-text"></p>
         <p class="hint" id="tutorial-progress"></p>
         <button type="button" id="tutorial-skip">Skip tutorial <span class="key">(ESC)</span></button>
-        <p class="nav-hint" id="nav-tutorial"><span data-keyhint="global:tutorial">U</span> replays anytime · <span data-keyhint="global:escape">ESC</span> skips · skipping once skips it for good</p>
+        <p class="nav-hint" id="nav-tutorial"><span data-keyhint="global:tutorial">U</span> replays anytime; skipping once skips it for good</p>
       </section>
     </div>
     <div id="end-veil" class="veil" hidden>
@@ -155,8 +162,8 @@
         <p id="end-text"></p>
         <p id="end-score" class="runstats"></p>
         <button type="button" id="rematch" hidden>Rematch on these hills</button>
-        <button type="button" id="again">Play again <span class="key" data-keyhint="global:new">(N)</span></button>
-        <p class="nav-hint" id="nav-end"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page · </span><span data-keyhint="global:new">N</span> plays again</p>
+        <button type="button" id="again" class="btn-primary">Play again <span class="key" data-keyhint="global:new">(N)</span></button>
+        <p class="nav-hint" data-scroll-only id="nav-end"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span></p>
       </div>
     </div>
     <div id="shop-veil" class="veil" hidden>
@@ -165,8 +172,8 @@
         <h2 id="shop-title">Field shop</h2>
         <p id="shop-cash" class="runstats"></p>
         <ul id="shop-list" class="scores"></ul>
-        <button type="button" id="shop-next">Next round <span class="key">(N)</span></button>
-        <p class="nav-hint" id="nav-shop"><span data-keyhint="shop:selUp">▲</span><span data-keyhint="shop:selDown">▼</span> move · <span data-keyhint="shop:buy">B</span> buys · <span data-keyhint="shop:preview">V</span> previews · <span data-keyhint="shop:qtyDown">◀</span><span data-keyhint="shop:qtyUp">▶</span> packs · <span data-keyhint="shop:next">N</span> rolls out<span class="scroll-keys"> · <span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span></p>
+        <button type="button" id="shop-next" class="btn-primary">Next round <span class="key">(N)</span></button>
+        <p class="nav-hint" id="nav-shop"><span data-keyhint="shop:selUp">▲</span><span data-keyhint="shop:selDown">▼</span> move · <span data-keyhint="shop:buy">B</span> buys · <span data-keyhint="shop:preview">V</span> previews · <span data-keyhint="shop:qtyDown">◀</span><span data-keyhint="shop:qtyUp">▶</span> packs<span class="scroll-keys"> · <span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span></p>
       </div>
     </div>
     <div id="lobby-veil" class="veil" hidden>
@@ -188,7 +195,7 @@
             <select id="lobby-map" name="map">
               <option value="">Random hills</option>
             </select>
-            <button type="submit" id="host-go">Host a room</button>
+            <button type="submit" id="host-go" class="btn-primary">Host a room</button>
           </form>
           <form id="join-form" class="lobby-form" action="#">
             <label for="join-code">Room code</label>
@@ -197,7 +204,7 @@
             <label for="join-initials">Your initials</label>
             <input id="join-initials" name="initials" type="text" autocomplete="off"
                    spellcheck="false" maxlength="3" minlength="3" placeholder="ZED">
-            <button type="submit" id="join-go">Join room</button>
+            <button type="submit" id="join-go" class="btn-primary">Join room</button>
           </form>
         </div>
         <p id="lobby-status" class="hint" aria-live="polite"></p>
@@ -214,7 +221,7 @@
           <p class="hint" id="lobby-hills">Hills: Random hills</p>
           <ol id="lobby-seats" class="roster"></ol>
           <div class="acts">
-            <button type="button" id="lobby-start">Start match</button>
+            <button type="button" id="lobby-start" class="btn-primary">Start match</button>
             <button type="button" id="lobby-leave">Leave room</button>
           </div>
         </div>
@@ -230,14 +237,14 @@
         <h2 id="preview-title">Preview</h2>
         <canvas id="preview-stage" width="360" height="200"></canvas>
         <p id="preview-result" class="hint" aria-live="polite"></p>
-        <p class="hint">Live demo on a small hill. Same shells, same wind math, same damage numbers. Close it with ESC or the button.</p>
+        <p class="hint">Live demo on a small hill. Same shells, same wind math, same damage numbers.</p>
         <button type="button" id="preview-close">Close <span class="key" data-keyhint="global:escape">(ESC)</span></button>
-        <p class="nav-hint" id="nav-preview"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page · </span><span data-keyhint="global:escape">ESC</span> closes</p>
+        <p class="nav-hint" data-scroll-only id="nav-preview"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span></p>
       </div>
     </div>
   </section>
 </main>
 
-<script src="game.js?v=20261009i" defer></script>
+<script src="game.js?v=20261009k" defer></script>
 </body>
 </html>

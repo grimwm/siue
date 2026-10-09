@@ -249,9 +249,12 @@ for (const id of ['menu-overlay', 'btn-menu', 'menu-close', 'seed-form', 'new-ga
 check('menu-in-frame', html.indexOf('id="seed-form"') > html.indexOf('id="frame"'));
 check('menu-grid', html.includes('menu-grid'));
 check('menu-buttons', /#frame button\s*\{[^}]*font-size:\s*0\.75rem/.test(css));
-check('menu-grid-cols', /\.menu-grid\s*\{[^}]*1fr 1fr/.test(css));
-check('dialog-buttons', /\.frame-overlay button,\s*\.veil button\s*\{[^}]*background:\s*var\(--panel\)/.test(css) && /\.frame-overlay button,\s*\.veil button\s*\{[^}]*border:\s*1px solid var\(--line\)/.test(css));
-check('menu-pills', /\.menu-grid button\s*\{[^}]*justify-self:\s*center/.test(css));
+check('menu-grid-cols', /\.menu-grid\s*\{[^}]*repeat\(3, 1fr\)/.test(css));
+// Secondary is the default (navbar style); gold is opt-in via .btn-primary.
+check('buttons-secondary-default', /\nbutton\s*\{[^}]*background:\s*var\(--panel\)/.test(css) && /\nbutton\s*\{[^}]*border:\s*1px solid var\(--line\)/.test(css));
+check('buttons-primary-gold', /button\.btn-primary[^{]*\{[^}]*background:\s*var\(--accent\)/.test(css));
+const menubarHtml = html.slice(html.indexOf('id="menubar"'), html.indexOf('id="log-overlay"'));
+check('menubar-one-primary', (menubarHtml.match(/btn-primary/g) || []).length === 1 && /id="btn-menu" class="btn-primary"/.test(menubarHtml));
 TAP('global', 'menu');
 check('menu-toggle', els['menu-overlay'].hidden === false && els['btn-menu'].getAttribute('aria-expanded') === 'true');
 click(els['menu-close']);

@@ -133,7 +133,8 @@ function games_hub_card(string $id, array $meta, string $dir): array
         if (!is_file("$dir/$play")) {
             return [null, "`play` names $play, which is not in the game folder"];
         }
-        $card['href'] = "games/$id/$play";
+        // A folder's index page gets the folder URL, the shorter link to share.
+        $card['href'] = $play === 'index.html' ? "games/$id/" : "games/$id/$play";
     } else {
         if (!preg_match('/^[A-Za-z_$][A-Za-z0-9_$]*$/', $start)) {
             return [null, '`start` must be a JavaScript function name, like cylonStartGame'];

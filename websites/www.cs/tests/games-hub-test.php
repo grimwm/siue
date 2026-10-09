@@ -58,7 +58,7 @@ $game('tankity', null, ['index.html']);
 [$card, $err] = games_hub_card('tankity', [
     'title' => 'Operation Tankity', 'description' => 'Artillery.', 'play' => 'index.html',
 ], "$tmp/tankity");
-$check('card-play-ok', $err === null && $card['href'] === 'games/tankity/index.html');
+$check('card-play-ok', $err === null && $card['href'] === 'games/tankity/');
 $check('card-default-button', ($card['button'] ?? null) === 'Play Operation Tankity');
 $check('card-default-order', ($card['order'] ?? null) === 100);
 $check('card-no-start-key', !array_key_exists('start', $card));

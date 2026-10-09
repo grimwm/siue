@@ -42,6 +42,9 @@ hidden: false                     # optional; true keeps the card off the page
 - A broken file keeps only that game off the page; `games.php` lists why under
   `errors`, and the browser console repeats it.
 - Check every game with `php tests/games-hub-test.php`.
+- Every card has **Copy link**: a `play` game links to its folder
+  (`games/<id>/`); a `start` game links to the site with `?game=<id>`, which
+  launches it on load.
 
 ## Site contract
 - `index.html` owns brand, Home / Contact / Games hub panels, and combat nav chrome slots.

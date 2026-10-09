@@ -49,6 +49,45 @@ async function loadGamesHub() {
         return;
     }
     list.replaceChildren(...games.map(gamesHubCard));
+    openLinkedGame(games);
+}
+
+/** The link to share for a game: its own page, or ?game=<id> for games that
+ * run inside this page. */
+function gameShareUrl(game) {
+    if (game.href) return new URL(game.href, location.href).href;
+    const url = new URL(location.href);
+    url.search = `?game=${encodeURIComponent(game.id)}`;
+    url.hash = '';
+    return url.href;
+}
+
+/** ?game=<id> opens that game straight away. */
+function openLinkedGame(games) {
+    const id = new URLSearchParams(location.search).get('game');
+    const game = id && games.find(g => g.id === id);
+    if (!game) return;
+    if (game.href) {
+        location.replace(game.href);
+        return;
+    }
+    showGamesHub();
+    const start = window[game.start];
+    if (typeof start === 'function') start();
+}
+
+async function copyGameLink(button, game) {
+    const url = gameShareUrl(game);
+    const label = button.textContent;
+    try {
+        await navigator.clipboard.writeText(url);
+        button.textContent = 'Link copied';
+    } catch (err) {
+        // No clipboard access (an http page or a denied permission): show
+        // the link so it can be copied by hand.
+        window.prompt('Copy this link:', url);
+    }
+    setTimeout(() => { button.textContent = label; }, 1600);
 }
 
 function gamesHubCard(game) {
@@ -78,7 +117,13 @@ function gamesHubCard(game) {
             if (typeof start === 'function') start();
         });
     }
-    card.append(launch);
+    const share = el('button', 'games-share-btn', 'Copy link');
+    share.type = 'button';
+    share.title = gameShareUrl(game);
+    share.addEventListener('click', () => copyGameLink(share, game));
+    const actions = el('div', 'games-hub-card-actions');
+    actions.append(launch, share);
+    card.append(actions);
     return card;
 }
 

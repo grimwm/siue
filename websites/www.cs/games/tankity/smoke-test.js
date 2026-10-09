@@ -587,6 +587,13 @@ function change(el) {
 
   // Every demo lands its verdict with damage, never a clean miss.
   await ensureAim();
+  // The keyboard drives: holding the drive key burns fuel (it used to set an
+  // action name the drive code never read).
+  const fuelBeforeDrive = Number(els['hud-fuel'].textContent);
+  KD('aim', 'driveRight'); frames(30); KU('aim', 'driveRight'); frames(2);
+  KD('aim', 'driveLeft'); frames(30); KU('aim', 'driveLeft'); frames(2);
+  const fuelAfterDrive = Number(els['hud-fuel'].textContent);
+  check('keyboard-drives', fuelAfterDrive < fuelBeforeDrive, `fuel ${fuelBeforeDrive} -> ${fuelAfterDrive}`);
   // Digits load favorite shells; Shift plus a digit pins the loaded one.
   TAPD('global', 'fav', 3); frames(3);
   check('fav-hotkey', /Mortar [^·]*◀/.test(els['hud-weapon'].textContent), els['hud-weapon'].textContent);

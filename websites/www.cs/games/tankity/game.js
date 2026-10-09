@@ -2220,8 +2220,8 @@ function frame(ts) {
     if (swing) t.angle = clamp(t.angle + swing * facing(t) * 42 * dt, 10, 170);
     if (keysDown.powerUp) t.power = clamp(t.power + 45 * dt, 10, 100);
     if (keysDown.powerDown) t.power = clamp(t.power - 45 * dt, 10, 100);
-    if ((keysDown.driveL || keysDown.driveR) && t.fuel > 0) {
-      const dx = (keysDown.driveR ? 1 : 0) - (keysDown.driveL ? 1 : 0);
+    if ((keysDown.driveLeft || keysDown.driveRight) && t.fuel > 0) {
+      const dx = (keysDown.driveRight ? 1 : 0) - (keysDown.driveLeft ? 1 : 0);
       const step = dx * TUNE.driveSpeed * dt;
       if (Math.abs(step) > 0 && Math.abs(t.fuel) >= Math.abs(step)) {
         const nx = clamp(t.x + step, 12, W - 12);
@@ -2951,8 +2951,8 @@ function netFrame(dt) {
     if (keysDown.powerUp) { t.power = clamp(t.power + 45 * dt, 10, 100); NET.aimDirty = true; }
     if (keysDown.powerDown) { t.power = clamp(t.power - 45 * dt, 10, 100); NET.aimDirty = true; }
     if (!keysDown.barrelLeft && !keysDown.barrelRight && !keysDown.powerUp && !keysDown.powerDown && NET.aimDirty) netSendAim();
-    if ((keysDown.driveL || keysDown.driveR) && t.fuel > 0) {
-      const dir = (keysDown.driveR ? 1 : 0) - (keysDown.driveL ? 1 : 0);
+    if ((keysDown.driveLeft || keysDown.driveRight) && t.fuel > 0) {
+      const dir = (keysDown.driveRight ? 1 : 0) - (keysDown.driveLeft ? 1 : 0);
       NET.driveAcc += dir * TUNE.driveSpeed * dt;
       NET.driveT += dt;
       if (NET.driveT >= 0.22 && Math.abs(NET.driveAcc) >= 4) {
@@ -3415,8 +3415,8 @@ function init() {
   if (cannon) cannon.addEventListener('click', ev => { ev.currentTarget.blur(); ctx(); startMusic(); playerFire(); });
   const weapon = $('btn-weapon');
   if (weapon) weapon.addEventListener('click', ev => { ev.currentTarget.blur(); cycleWeapon(); });
-  holdButton('btn-drive-l', 'driveL');
-  holdButton('btn-drive-r', 'driveR');
+  holdButton('btn-drive-l', 'driveLeft');
+  holdButton('btn-drive-r', 'driveRight');
   const pause = $('btn-pause');
   if (pause) pause.addEventListener('click', ev => {
     ev.currentTarget.blur();

@@ -16,17 +16,25 @@ deploy:
 	$(SSHPASS) scp *.html *.js *.css *.php *.png *.ico *.webmanifest $(HOST):.
 	# Game modules (creates games/ on the host if needed)
 	$(SSHPASS) scp -r games $(HOST):.
-	# Host allows SFTP/SCP only (no shell). Scores live in data/scores.json.
+	# Host allows SFTP/SCP only (no shell). Scores live in games/cylon/data/scores.json.
 	# Server umask turns plain uploads into 640 (PHP can't open). Use scp -p
 	# with mode 666; re-push existing content so perms stay fixed without a wipe.
-	$(SSHPASS) scp data/.htaccess $(HOST):data/.htaccess
+	$(SSHPASS) scp games/cylon/data/.htaccess $(HOST):games/cylon/data/.htaccess
 	@tmp=/tmp/cylon-scores-deploy-$$$$.json; \
-	if $(SSHPASS) scp $(HOST):data/scores.json "$$tmp" >/dev/null 2>&1; then \
-		echo "data/scores.json present — refreshing mode 666 via scp -p"; \
+	scores=games/cylon/data/scores.json; \
+	if $(SSHPASS) scp $(HOST):$$scores "$$tmp" >/dev/null 2>&1; then \
+		echo "$$scores present — refreshing mode 666 via scp -p"; \
 	else \
 		echo "[]" > "$$tmp"; \
-		echo "bootstrapping empty data/scores.json"; \
+		echo "bootstrapping empty $$scores"; \
 	fi; \
 	chmod 666 "$$tmp"; \
-	$(SSHPASS) scp -p "$$tmp" $(HOST):data/scores.json; \
+	$(SSHPASS) scp -p "$$tmp" $(HOST):$$scores; \
 	rm -f "$$tmp"
+	# Umask turns new uploads into 640, which PHP cannot read. Re-push the
+	# adapter, API, and config with their local 644 mode preserved.
+	chmod 644 scores.php games/cylon/scores.php games/cylon/data/config.json games/cylon/data/.htaccess
+	$(SSHPASS) scp -p scores.php $(HOST):scores.php
+	$(SSHPASS) scp -p games/cylon/scores.php $(HOST):games/cylon/scores.php
+	$(SSHPASS) scp -p games/cylon/data/config.json $(HOST):games/cylon/data/config.json
+	$(SSHPASS) scp -p games/cylon/data/.htaccess $(HOST):games/cylon/data/.htaccess

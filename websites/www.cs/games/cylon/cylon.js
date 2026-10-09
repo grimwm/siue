@@ -1,11 +1,27 @@
 /**
  * Cylon Defense — game logic.
+ * Copyright (C) 2026 William Grim
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
  * Loaded after main.js (site shell: nav, theme, applyCombatTheme).
  * Phase 3: overlays live in games/cylon/mount.html → #game-root.
  */
 
 // Host blocks .html under games/ — serve mount from home-dir root (see cylon-mount.html symlink)
-const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261007a';
+const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261009d';
+
+function cylonAsset(path) {
+    const el = document.querySelector('script[data-cylon-base]');
+    let base = el ? (el.getAttribute('data-cylon-base') || '') : '';
+    if (base && !base.endsWith('/')) base += '/';
+    return base + path.replace(/^\//, '');
+}
+
+function cylonApi() {
+    const el = document.querySelector('script[data-cylon-api]');
+    const api = el ? (el.getAttribute('data-cylon-api') || '') : '';
+    return api || cylonAsset('scores.php');
+}
 
 async function mountCylonDom() {
     const root = document.getElementById('game-root');
@@ -89,24 +105,13 @@ async function initializeCylonEffects() {
     let reticlePointerId = null;
 
     const SETTINGS_KEY = 'cylon-settings';
-    const SCORES_API = 'scores.php';
-    const HIGH_SCORE_LIMIT = 10; // keep in sync with scores.php MAX_SCORES
-    // Keep in sync with BLOCKED_INITIALS in scores.php
-    const BLOCKED_INITIALS = new Set([
-        'ASS',
-        'FUK', 'FUC', 'FCK', 'FUX', 'FUQ',
-        'SHT', 'SHI',
-        'DIK', 'DIC', 'DCK',
-        'COK', 'COC', 'COQ',
-        'CUM', 'JIZ',
-        'CNT', 'PUS', 'VAG', 'CLT',
-        'SEX', 'XXX', 'TIT',
-        'FAG', 'FGT',
-        'NIG', 'NGR',
-        'WTF', 'FFS',
-        'POO', 'PEE',
-        'KKK',
-    ]);
+    const SCORES_API = cylonApi();
+    let csrfToken = '';
+    let runToken = '';
+    let runIssueGen = 0;
+    let runIssue = null;
+    let HIGH_SCORE_LIMIT = 10;
+    const BLOCKED_INITIALS = new Set();
     const defaults = {
         gameEnabled: false,
         soundEnabled: true,
@@ -360,16 +365,75 @@ async function initializeCylonEffects() {
         if (gameOverScoresEl) gameOverScoresEl.innerHTML = formatHighScoreRows(list);
     }
 
+    function applyScoreConfig(config) {
+        if (!config || typeof config !== 'object') return;
+        const maxScores = Number(config.maxScores);
+        if (maxScores >= 1) HIGH_SCORE_LIMIT = maxScores;
+        if (Array.isArray(config.blockedInitials)) {
+            BLOCKED_INITIALS.clear();
+            config.blockedInitials.forEach((item) => {
+                const initials = String(item || '').toUpperCase();
+                if (/^[A-Z]{3}$/.test(initials)) BLOCKED_INITIALS.add(initials);
+            });
+        }
+        const day = config.weekStartsOn === 'sunday' ? 'Sunday' : 'Monday';
+        const zone = config.timezone === 'America/Chicago' ? 'Central' : (config.timezone || '');
+        const blurb = `Play often — scores reset every ${day} at midnight ${zone}.`;
+        ['cylon-weekly-reset', 'cylon-gameover-reset'].forEach((id) => {
+            const node = document.getElementById(id);
+            if (node) node.textContent = blurb;
+        });
+    }
+
+    function scoreRequestHeaders(extra) {
+        const headers = { 'X-Cylon-CSRF': csrfToken };
+        if (extra) {
+            Object.keys(extra).forEach((key) => {
+                headers[key] = extra[key];
+            });
+        }
+        return headers;
+    }
+
     async function fetchHighScores() {
         try {
-            const res = await fetch(SCORES_API, { cache: 'no-store' });
+            const res = await fetch(SCORES_API, {
+                cache: 'no-store',
+                credentials: 'same-origin',
+                headers: scoreRequestHeaders()
+            });
             if (!res.ok) throw new Error('bad status');
             const data = await res.json();
+            if (typeof data.csrf === 'string' && data.csrf) csrfToken = data.csrf;
+            applyScoreConfig(data.config);
             cachedHighScores = Array.isArray(data.scores) ? data.scores : [];
             renderHighScores();
         } catch {
             renderHighScores(cachedHighScores);
         }
+    }
+
+    function issueRunToken() {
+        const gen = ++runIssueGen;
+        runToken = '';
+        runIssue = (async () => {
+            try {
+                if (!csrfToken) await fetchHighScores();
+                const res = await fetch(SCORES_API, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: scoreRequestHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ op: 'start' }),
+                    cache: 'no-store'
+                });
+                const data = await res.json().catch(() => null);
+                if (gen !== runIssueGen) return;
+                if (res.ok && data && typeof data.run === 'string') runToken = data.run;
+            } catch (err) {
+                console.error('Cylon run token failed', err);
+            }
+        })();
+        return runIssue;
     }
 
     /** True when score earns a board slot: open seats, or strictly above the lowest shown. */
@@ -443,13 +507,21 @@ async function initializeCylonEffects() {
             return false;
         }
         try {
+            if (runIssue) await runIssue;
+            if (!runToken) {
+                setInitialsError('Could not save that score. Refresh and play again.');
+                return false;
+            }
             const res = await fetch(SCORES_API, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                headers: scoreRequestHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
+                    op: 'score',
                     score,
                     hits: pendingScore ? pendingScore.hits : hitsTaken,
-                    initials: clean
+                    initials: clean,
+                    run: runToken
                 }),
                 cache: 'no-store'
             });
@@ -467,8 +539,17 @@ async function initializeCylonEffects() {
                 }
                 return false;
             }
+            if (!res.ok) {
+                setInitialsError('Could not save that score. Refresh and play again.');
+                if (data && Array.isArray(data.scores)) {
+                    cachedHighScores = data.scores;
+                    renderHighScores();
+                }
+                return false;
+            }
             if (!res.ok) throw new Error('bad status');
             setInitialsError('');
+            runToken = '';
             cachedHighScores = Array.isArray(data && data.scores) ? data.scores : cachedHighScores;
             renderHighScores();
             return true;
@@ -3295,6 +3376,7 @@ async function initializeCylonEffects() {
     function playIntroNuke() {
         const gen = ++introGen;
         introPlaying = true;
+        issueRunToken();
         nukeInFlight = false;
         resetIntroTitle();
 

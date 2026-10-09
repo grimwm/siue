@@ -10,6 +10,9 @@ games/
     cylon.css
     cylon.js       # source; also ~/cylon.js (host blocks .js under games/)
     mount.html     # FX / overlays; also ~/cylon-mount.html (host blocks .html under games/)
+    scores.php     # high-score API
+    data/config.json
+    LICENSE        # GPL-3.0
     README.md
 ```
 

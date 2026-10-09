@@ -1,0 +1,31 @@
+{
+  "timezone": "America/Chicago",
+  "weekStartsOn": "monday",
+  "maxScores": 10,
+  "maxScoreValue": 100000,
+  "maxHitsStored": 500,
+  "runTtlSec": 2700,
+  "minRunSec": 3,
+  "maxKosPerSec": 2,
+  "koBurst": 8,
+  "startsPerHour": 60,
+  "scoresPerHour": 30,
+  "csrfCookie": "cylon_csrf",
+  "storageKey": "cylon",
+  "blockedInitials": [
+    "ASS",
+    "FUK", "FUC", "FCK", "FUX", "FUQ",
+    "SHT", "SHI",
+    "DIK", "DIC", "DCK",
+    "COK", "COC", "COQ",
+    "CUM", "JIZ",
+    "CNT", "PUS", "VAG", "CLT",
+    "SEX", "XXX", "TIT",
+    "FAG", "FGT",
+    "NIG", "NGR",
+    "WTF", "FFS",
+    "POO", "PEE",
+    "KKK"
+  ],
+  "allowedHosts": ["www.cs.siue.edu", "cs.siue.edu"]
+}

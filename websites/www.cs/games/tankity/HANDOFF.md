@@ -45,9 +45,10 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | `php rooms-sim-test.php` | Server sim units: pierce, repair, spawns, spacing, replay stamping |
 | `php rooms-test.php` | The room shelf over its own `php -S` (needs SysV; run inside the PHP container) |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed) |
-| `npm test` in `../../tests/e2e` | Real-browser checks, solo and two-player, local or live |
+| `make e2e` (site root) | Real-browser checks, solo and two-player; `E2E_BASE_URL` points it at the live site |
 
-Deploys skip `*-test.*` and this file.
+`make test` from the site root runs every suite above except e2e. Deploys
+skip `*-test.*` and this file.
 
 ## Keys (defaults; `keys.json` rules)
 

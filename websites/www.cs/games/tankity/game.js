@@ -2811,7 +2811,22 @@ function startNetMatch(room) {
   if (NET.pollId) clearInterval(NET.pollId);
   NET.pollId = setInterval(netRefresh, 1600);
 }
+/* Tell the server this seat is gone, so an emptied room frees its slot at
+   once instead of after the idle window. Best effort; sendBeacon survives a
+   closing tab. */
+function netSendLeave() {
+  if (!NET.code || !NET.token) return;
+  const body = JSON.stringify({ code: NET.code, token: NET.token, csrf: NET.csrf });
+  const url = 'rooms.php?action=leave';
+  try {
+    if (navigator.sendBeacon && navigator.sendBeacon(url, body)) return;
+  } catch (_) { /* fall through to fetch */ }
+  try {
+    fetch(url, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body });
+  } catch (_) { /* the idle sweep closes it anyway */ }
+}
 function netLeave(quiet) {
+  netSendLeave();
   if (NET.pollId) { clearInterval(NET.pollId); NET.pollId = 0; }
   if (lobbyTimer) { clearInterval(lobbyTimer); lobbyTimer = 0; }
   const wasOn = NET.on;
@@ -2827,7 +2842,7 @@ function netLeave(quiet) {
   if ($('end-veil')) $('end-veil').hidden = true;
   if ($('lobby-veil')) $('lobby-veil').hidden = true;
   if (wasOn && !quiet) {
-    say('Back to the solo hills. Your room tank holds still until the room closes.', 'info');
+    say('Back to the solo hills. The battery takes your seat in the room.', 'info');
     freshMatchFromSeedBox();
   }
 }
@@ -3139,6 +3154,7 @@ function netEvent(e) {
     return;
   }
   if (e.t === 'join') { say(`${seatName(e.seat)} rolled into the room.`, 'info'); return; }
+  if (e.t === 'left') { say(`${seatName(e.seat)} left; the battery takes that seat.`, 'info'); return; }
   if (e.t === 'round') {
     say(`Round ${e.round}. Fresh barrels, same battery. Wind ${windText()}.`, 'info');
     talk('tank', 'Back in! These hills are mine!', true);
@@ -3876,6 +3892,7 @@ function init() {
   const kickAudio = () => { ctx(); if (!musicMuted && !musicOn) startMusic(); };
   window.addEventListener('pointerdown', kickAudio, true);
   window.addEventListener('keydown', kickAudio, true);
+  window.addEventListener('pagehide', netSendLeave);
   window.addEventListener('resize', refreshNavHints);
   window.addEventListener('resize', placeLogBelowMenu);
   placeLogBelowMenu();

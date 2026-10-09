@@ -37,7 +37,7 @@ function share_tags_block(array $card, string $site, string $pad): string
         '<meta name="description" content="' . $desc . '">',
         '<link rel="canonical" href="' . share_tags_esc($url) . '">',
         '<meta property="og:type" content="website">',
-        '<meta property="og:site_name" content="William Grim — SIUE Computer Science">',
+        '<meta property="og:site_name" content="William Grim · SIUE Computer Science">',
         '<meta property="og:title" content="' . $title . '">',
         '<meta property="og:description" content="' . $desc . '">',
         '<meta property="og:url" content="' . share_tags_esc($url) . '">',

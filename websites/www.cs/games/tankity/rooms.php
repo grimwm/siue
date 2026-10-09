@@ -1347,6 +1347,46 @@ if ($action === 'map' && $method === 'POST') {
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
+/* A human walks away. The last human out closes the room, freeing its slot
+   at once; otherwise the battery takes over the seat (in the lobby a host
+   leaving closes the room, since nobody else can start it). */
+function room_leave(array &$room, int $seat): bool
+{
+    $humans = 0;
+    foreach ($room['seats'] as $idx => $s) {
+        if ($idx !== $seat && ($s['human'] ?? false)) {
+            $humans++;
+        }
+    }
+    if ($humans === 0 || ($room['phase'] === 'lobby' && $seat === 0)) {
+        return false; // close the room
+    }
+    $name = strtoupper((string) ($room['seats'][$seat]['initials'] ?? 'AI'));
+    $room['seats'][$seat] = ['human' => false, 'name' => $name, 'lives' => $room['seats'][$seat]['lives'] ?? 0];
+    foreach ($room['tanks'] as &$t) {
+        if ($t['seat'] === $seat) {
+            $t['kind'] = 'ai';
+            $t['ammo'] = room_ai_rack((int) $room['round']);
+        }
+    }
+    unset($t);
+    return true;
+}
+if ($action === 'leave' && $method === 'POST') {
+    [$room, $fh, $path, $seat] = room_gate($body, true);
+    $code = $room['code'];
+    if (room_leave($room, $seat)) {
+        room_emit($room, ['t' => 'left', 'seat' => $seat]);
+        $ok = room_save($fh, $path, $room);
+    } else {
+        $reg = room_registry_get();
+        unset($reg[$code]);
+        $ok = room_registry_put($reg);
+    }
+    room_unlock($fh);
+    room_json_out($ok ? 200 : 500, $ok ? ['ok' => true] : ['error' => 'store write failed']);
+}
+
 // A seat changes its unit's look any time: lobby, shop, mid-match.
 if ($action === 'body' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true);

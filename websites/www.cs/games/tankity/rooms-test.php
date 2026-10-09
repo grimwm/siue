@@ -194,6 +194,23 @@ foreach (($calm['room']['events'] ?? []) as $e) {
 }
 $check('polls-hold-turn', ($calm['ok'] ?? false) === true && ($calm['room']['turn'] ?? -1) === 0 && $aiC === $aiG,
     'turn=' . ($calm['room']['turn'] ?? '?') . ' ai=' . $aiC);
+// Leaving: a guest's seat goes to the battery and the room stays; the last
+// human out closes the room at once, freeing its slot.
+usleep(300000);
+$gLeft = $post('leave', ['code' => $mcode, 'token' => $gtoken, 'csrf' => $gcsrf]);
+$after = $get($base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
+$gSeat = $after['room']['seats'][1] ?? [];
+$check('leave-guest-to-battery', ($gLeft['ok'] ?? false) === true && ($gSeat['human'] ?? true) === false,
+    json_encode($gSeat));
+usleep(300000);
+$usedBefore = ($get($base . '/rooms.php?action=ping')['rooms']['used'] ?? -1);
+$hLeft = $post('leave', ['code' => $mcode, 'token' => $mtoken, 'csrf' => $mcsrf]);
+$usedAfter = ($get($base . '/rooms.php?action=ping')['rooms']['used'] ?? -1);
+$check('leave-last-closes-room', ($hLeft['ok'] ?? false) === true && $usedAfter === $usedBefore - 1,
+    "used $usedBefore -> $usedAfter");
+$gone = $get($base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
+$check('leave-room-gone', ($gone['error'] ?? '') === 'no such room', $gone['error'] ?? '');
+
 // Leave the shelf as found.
 $id = shm_attach($shmKey, 2097152);
 $reg = shm_get_var($id, 1);

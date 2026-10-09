@@ -1,0 +1,11 @@
+{
+  "name": "www-cs-e2e",
+  "private": true,
+  "description": "Real-browser checks for the www.cs games, against local docker or the live site.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  }
+}

@@ -3403,6 +3403,7 @@ function init() {
   const fsBtn = $('fullscreen');
   if (fsBtn) fsBtn.addEventListener('click', ev => { ev.currentTarget.blur(); toggleFullscreen(); });
   if (document.addEventListener) document.addEventListener('fullscreenchange', syncFullscreenLabel);
+  if (document.addEventListener) document.addEventListener('fullscreenchange', lockEscapeInFullscreen);
   const again = $('again');
   if (again) again.addEventListener('click', ev => {
     ev.currentTarget.blur();
@@ -3680,6 +3681,15 @@ function toggleFullscreen() {
   } catch (_) {
     say('Fullscreen is not available right now.', 'info');
   }
+}
+/* In fullscreen the browser takes ESC to leave fullscreen, so the game never
+   sees it. Where Keyboard Lock exists (Chromium), claim ESC for the game:
+   a tap closes menus as usual and holding ESC still leaves fullscreen. */
+function lockEscapeInFullscreen() {
+  const kb = navigator.keyboard;
+  if (!kb || !kb.lock) return;
+  if (document.fullscreenElement) kb.lock(['Escape']).catch(() => {});
+  else kb.unlock();
 }
 function syncFullscreenLabel() {
   const btn = $('fullscreen');

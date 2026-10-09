@@ -13,6 +13,8 @@
 #
 #   FORCE=1   upload everything even when the hash matches
 #   DRY_RUN=1 show what would change, upload nothing
+#   PRUNE=1   also delete stale files: ones the last deploy sent (they are
+#             in the host's .deploy-hash manifest) that this one does not
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -45,6 +47,8 @@ while IFS= read -r -d '' f; do
   [ -e "$f" ] || continue # deleted but still in the index
   case "$f" in
     "$SCORES") continue ;;
+    # Development files that ride along with games: tests and handoff notes.
+    games/*-test.* | games/*/HANDOFF.md) continue ;;
     games/*) ;;
     */*) continue ;;
     *.html | *.js | *.css | *.php | *.png | *.ico | *.webmanifest) ;;
@@ -84,15 +88,20 @@ fi
 # The recipe rides in the manifest as an "extra" line; it is never uploaded.
 grep -v '^deploy.sh$' "$work/send" >"$work/files" || true
 
-# Files the last deploy sent that this one does not have. scp/sftp cannot
-# tell ours from the server's own, so report them rather than delete.
+# Files the last deploy sent that this one does not have. Only paths in the
+# host's manifest qualify, so the server's own files (scores, runs) never
+# do. They are reported, and deleted only with PRUNE=1.
 comm -23 <(cut -d' ' -f3- "$work/remote-manifest" | grep -v '^extra ' | sort) \
          <(cut -d' ' -f3- "$work/manifest" | sort) >"$work/gone" || true
 
 prev=${remote_hash:0:12}
 echo "www.cs: deploying ${hash:0:12} to $HOST (was ${prev:-nothing})"
 sed 's/^/  send  /' "$work/files"
-sed 's/^/  stale (left on server)  /' "$work/gone"
+if [ "${PRUNE:-0}" = 1 ]; then
+  sed 's/^/  delete  /' "$work/gone"
+else
+  sed 's/^/  stale (left on server; PRUNE=1 deletes)  /' "$work/gone"
+fi
 if [ "${DRY_RUN:-0}" = 1 ]; then
   echo "DRY_RUN: nothing uploaded"
   exit 0
@@ -114,6 +123,11 @@ fi
 } >"$work/batch"
 if [ -s "$work/batch" ]; then
   sftp_batch "$work/batch"
+fi
+if [ "${PRUNE:-0}" = 1 ] && [ -s "$work/gone" ]; then
+  # '-rm' so a file someone already removed by hand does not stop the batch.
+  sed -e 's/^/-rm "/' -e 's/$/"/' "$work/gone" >"$work/prune"
+  sftp_batch "$work/prune"
 fi
 
 # The scores file is the server's: create it if missing, and keep it 666 so

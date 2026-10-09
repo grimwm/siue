@@ -2,7 +2,7 @@
  * Turn-based artillery across destructible hills. You and the drone battery
  * trade shells: angle, power, wind, craters. Last one rolling wins the round.
  * Controls: hold Left/Right = angle · hold Up/Down = power · A/D = drive ·
- * Ctrl/Space = fire · Q = weapon · N = next round / new match · P/M = pause/mute.
+ * Ctrl/Space = fire · Q = weapon · N = next round / new match · M = music.
  */
 (() => {
 'use strict';
@@ -434,7 +434,7 @@ const G = {
   time: 0, shake: 0,
   dlgQ: [], dlgT: 0, lastTalk: -99, banterT: 30, bannerT: 0, bannerDone: null,
   cam: { z: 1, cx: 360, cy: 230 },
-  over: false, won: false, paused: false,
+  over: false, won: false,
 };
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 /* Tables start from the baked fallback (G exists from here on); the file
@@ -526,7 +526,6 @@ function resetMatch(seedStr) {
   G.laststand = false;
   G.over = false;
   G.won = false;
-  G.paused = false;
   G.demo = false;
   G.demoHint = false;
   G.time = 0;
@@ -729,7 +728,7 @@ function demoBlock() {
 function playerFire() {
   if (NET.on) { netFire(); return; }
   if (demoBlock()) return;
-  if (G.phase !== 'aim' || !cur().isPlayer || G.over || G.paused) return;
+  if (G.phase !== 'aim' || !cur().isPlayer || G.over) return;
   closePreview();
   if (fireWeapon(me(), G.selected)) {
     if (TUT) TUT.fired = true;
@@ -1242,7 +1241,7 @@ function shopSub2(it, locked) {
 }
 /* One direct loader for digits and favorites; Q keeps cycling through it. */
 function selectWeapon(w) {
-  if (G.over || G.paused || G.phase === 'shop' || demoBlock()) return false;
+  if (G.over || G.phase === 'shop' || demoBlock()) return false;
   if (NET.on) return netPick(w);
   if (!(w === 'shell' || (G.ammo[w] || 0) > 0)) {
     say(`No ${WEAPONS[w].name} left in the rack.`, 'info');
@@ -2162,14 +2161,13 @@ function frame(ts) {
   const dt = Math.min(0.05, (ts - lastT) / 1000 || 0.016);
   lastT = ts;
   // The firing range runs on its own, even over the pre-match shop.
-  if (G.preview && !G.paused) stepPreview(dt);
+  if (G.preview) stepPreview(dt);
   // Name cards tick on sim time so a throttled background tab can never
   // strand the game between rounds; on return the card simply finishes.
-  if (!G.paused) tickBanner(dt);
+  tickBanner(dt);
   // Room matches render the server snapshot; the server runs the war.
   if (NET.on) {
-    if (!G.paused) netFrame(dt);
-    else pumpDialogue(dt);
+    netFrame(dt);
     if (G.terrain) { render(); renderHUD(); }
     return;
   }
@@ -2187,7 +2185,7 @@ function frame(ts) {
     return;
   }
   if (!G.tanks.length) { render(); renderHUD(); return; }
-  if (G.paused || G.over) { pumpDialogue(dt); render(); renderHUD(); return; }
+  if (G.over) { pumpDialogue(dt); render(); renderHUD(); return; }
   G.time += dt;
   decayFx(dt);
   fallTanks(dt);
@@ -2713,7 +2711,11 @@ function netBuy(it, qty) {
 function netNext() {
   roomPost('next', {})
     .then(d => netApply(d.room))
-    .catch(err => { say(prettyRoomError(err), 'bad'); });
+    .catch(err => {
+      // Anyone may roll out; if someone else already did, just catch up.
+      if (/not at the shop/.test(String(err && err.message))) { netRefresh(); return; }
+      say(prettyRoomError(err), 'bad');
+    });
 }
 /* A room update either lands now or waits behind the replay: the server
    settles a whole turn at once, and clients play it back (aim, flight,
@@ -3243,7 +3245,7 @@ const FALLBACK_KEYS = Object.freeze({
     next: ['n'],
   }),
   global: Object.freeze({
-    pause: ['p'], music: ['m'], sound: ['e'], log: ['l'], help: ['h'],
+    music: ['m'], sound: ['e'], log: ['l'], help: ['h'],
     report: ['r'], menu: ['c'], random: ['t'], rooms: ['o'], new: ['n'],
     cycle: ['q'], tutorial: ['u'], fav: ['1', '2', '3', '4'],
     battlePreview: ['v'], fullscreen: ['f'],
@@ -3436,10 +3438,6 @@ function bindKeys() {
     const k = e.key || '';
     const ga = lookupKey('global', e);
     switch (ga) {
-    case 'pause':
-      G.paused = !G.paused;
-      say(G.paused ? `Paused. Press ${keyHint('global', 'pause')} to roll again.` : 'Rolling!', 'info');
-      return;
     case 'music': toggleMusic(); return;
     case 'sound': toggleSound(); return;
     case 'log': toggleOverlay('log-overlay', 'btn-log'); return;
@@ -3488,7 +3486,7 @@ function bindKeys() {
   });
 }
 function cycleWeapon() {
-  if (G.over || G.paused || G.phase === 'shop') return;
+  if (G.over || G.phase === 'shop') return;
   if (NET.on) { netCycle(); return; }
   if (demoBlock()) return;
   const i = WORDER.indexOf(G.selected);
@@ -3539,12 +3537,6 @@ function init() {
   if (weapon) weapon.addEventListener('click', ev => { ev.currentTarget.blur(); cycleWeapon(); });
   holdButton('btn-drive-l', 'driveLeft');
   holdButton('btn-drive-r', 'driveRight');
-  const pause = $('btn-pause');
-  if (pause) pause.addEventListener('click', ev => {
-    ev.currentTarget.blur();
-    G.paused = !G.paused;
-    say(G.paused ? 'Paused.' : 'Rolling!', 'info');
-  });
   const form = $('seed-form');
   if (form) form.addEventListener('submit', e => {
     e.preventDefault();

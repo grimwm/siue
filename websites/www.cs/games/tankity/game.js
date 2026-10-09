@@ -639,6 +639,19 @@ function newRound(bannerText) {
 function cur() {
   return G.tanks[G.turn];
 }
+/* Aim as drawn. Solo drones animate their real angle and power; in rooms the
+   server only reports where a rival ended up, so the drawing glides there
+   (showA/showP, eased in netEaseAim) instead of jumping. */
+function shownAngle(t) {
+  return t.showA === undefined ? t.angle : t.showA;
+}
+function shownPower(t) {
+  return t.showP === undefined ? t.power : t.showP;
+}
+/* Aim-arm length in world units: 14 at power 10 up to 50 at power 100. */
+function aimArmLength(power) {
+  return 10 + clamp(power, 10, 100) * 0.4;
+}
 function muzzle(t) {
   const rad = t.angle * Math.PI / 180;
   const s = t.dirS || (t.isPlayer ? 1 : -1);
@@ -1529,18 +1542,44 @@ function aiChoose(t) {
   const skill = Math.min(1, 0.35 + G.round * 0.12);
   let wob = Math.max(0.25, 1.2 - skill);
   if (target.isPlayer && (G.jammer || 0) > 0) wob *= 2;
-  t.angle = clamp(Math.round(best.a + gauss(G.rng) * 9 * wob), 10, 170);
-  t.power = clamp(Math.round(best.p + gauss(G.rng) * 12 * wob), 10, 100);
+  const angle = clamp(Math.round(best.a + gauss(G.rng) * 9 * wob), 10, 170);
+  const power = clamp(Math.round(best.p + gauss(G.rng) * 12 * wob), 10, 100);
   // Drones shuffle for a better firing spot instead of camping one rut.
   if (G.rng() < 0.35) {
     const dx = (G.rng() < 0.5 ? -1 : 1) * (8 + G.rng() * 27);
     t.x = clamp(t.x + dx, 12, W - 12);
     t.y = surfY(t.x);
   }
-  return best.wkey;
+  return { wkey: best.wkey, angle, power };
+}
+/* The shooter swings its barrel and power to the plan in plain sight before
+   firing, so everyone can watch the shot line up. Longer swings take a bit
+   longer, eased at both ends. */
+function aiPlanAim(t) {
+  const plan = aiChoose(t);
+  const swing = Math.max(Math.abs(plan.angle - t.angle), Math.abs(plan.power - t.power));
+  t.aim = {
+    plan, a0: t.angle, p0: t.power, k: 0,
+    dur: clamp(0.45 + swing / 110, 0.5, 1.4),
+  };
+}
+/* Advance a planned swing; true once the barrel has sat on the plan for a
+   beat, so the final aim reads before the shot leaves. */
+function aiStepAim(t, dt) {
+  const aim = t.aim;
+  const hold = 0.2;
+  aim.k = Math.min(aim.dur + hold, aim.k + dt);
+  const u = Math.min(1, aim.k / aim.dur);
+  const e = u * u * (3 - 2 * u);
+  t.angle = aim.a0 + (aim.plan.angle - aim.a0) * e;
+  t.power = aim.p0 + (aim.plan.power - aim.p0) * e;
+  return aim.k >= aim.dur + hold;
 }
 function aiFire(t) {
-  const wkey = aiChoose(t);
+  const { wkey, angle, power } = t.aim.plan;
+  t.aim = null;
+  t.angle = angle;
+  t.power = power;
   talk(t.id, pick(FOE_FIRE[t.id] || FOE_MISS));
   say(`${t.id} fires ${WEAPONS[wkey].name}.`, 'info');
   fireWeapon(t, wkey);
@@ -1611,7 +1650,7 @@ function drawTankSide(c, t, time) {
   c.ellipse(-6, -9, 6, 3, 0.4, 0, Math.PI * 2);
   c.fill();
   // Turret rotated to the barrel angle (mirrored for drones is handled by caller).
-  const rad = t.angle * Math.PI / 180;
+  const rad = shownAngle(t) * Math.PI / 180;
   const s = t.isPlayer ? 1 : -1;
   const bx = Math.cos(rad) * 26 * s, by = -Math.sin(rad) * 26;
   c.strokeStyle = '#1a1a00';
@@ -1640,8 +1679,17 @@ function drawTankSide(c, t, time) {
   c.fill();
   c.restore();
 }
+function droneHover(t, time) {
+  return Math.sin(time * 2.2 + t.x) * 3;
+}
+/* Tip of a drone's slung barrel, from a body centre at (x, y). */
+function droneBarrelTip(t, x, y) {
+  const rad = shownAngle(t) * Math.PI / 180;
+  const s = t.dirS || -1;
+  return { x: x + Math.cos(rad) * 22 * s, y: y + 4 - Math.sin(rad) * 22, rad, s };
+}
 function drawGunDrone(c, t, time) {
-  const hover = Math.sin(time * 2.2 + t.x) * 3;
+  const hover = droneHover(t, time);
   const y = t.y - 30 + hover;
   c.save();
   c.translate(t.x, y);
@@ -1650,12 +1698,12 @@ function drawGunDrone(c, t, time) {
   c.ellipse(0, 34 - hover, 14, 4, 0, 0, Math.PI * 2);
   c.fill();
   // Aiming barrel slung below, tracking its own angle.
-  const rad = t.angle * Math.PI / 180;
+  const tip = droneBarrelTip(t, 0, 0);
   c.strokeStyle = '#0a0a0c';
   c.lineWidth = 4;
   c.beginPath();
   c.moveTo(0, 4);
-  c.lineTo(Math.cos(rad) * -22, 4 - Math.sin(rad) * 22);
+  c.lineTo(tip.x, tip.y);
   c.stroke();
   // Rotor arms + spinning discs.
   let i = 0;
@@ -1795,22 +1843,31 @@ function render() {
     c.fillText(t.isPlayer ? 'TANK' : t.id.toUpperCase(), t.x, t.y - (t.isPlayer ? 38 : 56));
     c.textAlign = 'left';
   }
-  // Muzzle line: a short stub out of the cannon showing the launch
-  // direction only. No dots, no landing marker: reading the hills, the
+  // Aim arm: a stub out of the shooter's barrel showing launch direction,
+  // longer with more power. Drones show theirs too, so everyone can watch
+  // a shot line up. No dots, no landing marker: reading the hills, the
   // wind, and the shell's legs is the game.
-  if (G.phase === 'aim' && cur() && cur().isPlayer && !G.over) {
+  if ((G.phase === 'aim' || G.phase === 'think') && cur() && cur().hp > 0 && !G.over) {
     const t = cur();
-    const m = muzzle(t);
-    const ds = t.dirS || 1;
-    const rad = t.angle * Math.PI / 180;
-    const ex = m.x + Math.cos(rad) * 34 * ds;
-    const ey = m.y - Math.sin(rad) * 34;
-    c.strokeStyle = 'rgba(255,255,255,0.7)';
-    c.lineWidth = 3;
+    const len = aimArmLength(shownPower(t));
+    let x0, y0, rad, ds;
+    if (t.isPlayer) {
+      const m = muzzle(t);
+      x0 = m.x; y0 = m.y;
+      rad = shownAngle(t) * Math.PI / 180;
+      ds = t.dirS || (t.isPlayer ? 1 : -1);
+    } else {
+      const tip = droneBarrelTip(t, t.x, t.y - 30 + droneHover(t, time));
+      x0 = tip.x; y0 = tip.y; rad = tip.rad; ds = tip.s;
+    }
+    c.strokeStyle = t.isPlayer ? 'rgba(255,255,255,0.7)' : t.color;
+    c.globalAlpha = t.isPlayer ? 1 : 0.75;
+    c.lineWidth = t.isPlayer ? 3 : 2;
     c.beginPath();
-    c.moveTo(m.x, m.y);
-    c.lineTo(ex, ey);
+    c.moveTo(x0, y0);
+    c.lineTo(x0 + Math.cos(rad) * len * ds, y0 - Math.sin(rad) * len);
     c.stroke();
+    c.globalAlpha = 1;
   }
   // Shells in flight.
   for (const s of G.shells) {
@@ -2121,8 +2178,10 @@ function frame(ts) {
       }
     }
   } else if (G.phase === 'think') {
+    const t = cur();
+    if (!t.aim) aiPlanAim(t);
     G.thinkT -= dt;
-    if (G.thinkT <= 0) aiFire(cur());
+    if (aiStepAim(t, dt) && G.thinkT <= 0) aiFire(t);
   } else if (G.phase === 'fly' || G.phase === 'settle') {
     // A volley resolves pellet by pellet: explosions flip us to settle, but
     // stepping continues until every shell has landed or fizzled.
@@ -2608,8 +2667,10 @@ function netApply(room) {
   }
   G.wind = room.wind || 0;
   G.round = room.round || 1;
+  const before = new Map(G.tanks.map(t => [t.seat, t]));
   G.tanks = (room.tanks || []).map(t => {
     const mine = t.seat === NET.seat;
+    const was = before.get(t.seat);
     const seat = NET.seats[t.seat];
     const ai = !seat || !seat.human;
     const id = mine ? 'tank' : String(t.name || '?').toLowerCase();
@@ -2619,6 +2680,9 @@ function netApply(room) {
       x: t.x, y: t.y, angle: t.angle, power: t.power,
       hp: t.hp, maxHp: t.maxHp || 100, fuel: 0, dirS: t.dirS || 1,
       name: t.name,
+      // Keep the drawn aim where it was so the new one glides in.
+      showA: was && !mine ? shownAngle(was) : undefined,
+      showP: was && !mine ? shownPower(was) : undefined,
     };
   });
   G.turn = Math.max(0, G.tanks.findIndex(t => t.seat === room.turn));
@@ -2776,8 +2840,17 @@ function netEvent(e) {
   }
   if (e.t === 'auto') { say(`${seatName(e.seat)} sat quiet, so the crew fired for them.`, 'info'); return; }
 }
+function netEaseAim(dt) {
+  const k = 1 - Math.exp(-dt * 5);
+  for (const t of G.tanks) {
+    if (t.isPlayer) continue;
+    t.showA = t.showA === undefined ? t.angle : t.showA + (t.angle - t.showA) * k;
+    t.showP = t.showP === undefined ? t.power : t.showP + (t.power - t.showP) * k;
+  }
+}
 function netFrame(dt) {
   G.time += dt;
+  netEaseAim(dt);
   updateCamera(dt);
   decayFx(dt);
   for (const cl of G.clouds) {

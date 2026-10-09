@@ -646,16 +646,29 @@ function change(el) {
   const boomR = [];
   const zoomZ = [];
   let lastFill = '';
+  // Drone aim arms: the only strokes drawn at alpha 0.75, width 2.
+  const arms = [];
+  let armAlpha = 1, armWidth = 1, armFrom = null;
   {
     const rec = new Proxy(function () {}, {
       get(t, p) {
+        if (p === 'moveTo') return (x, y) => { armFrom = [x, y]; return rec; };
+        if (p === 'lineTo') return (x, y) => {
+          if (armAlpha === 0.75 && armWidth === 2 && armFrom) arms.push({ x0: armFrom[0], y0: armFrom[1], x1: x, y1: y });
+          return rec;
+        };
         if (p === 'arc') return (x, y, r) => { if (lastFill === '#ffb13c') boomR.push(r); };
         if (p === 'scale') return (x, y) => { zoomZ.push(x); };
         if (p === 'fillStyle') return lastFill;
         if (p === 'createLinearGradient') return () => ({ addColorStop() {} });
         return (...a) => rec;
       },
-      set(t, p, v) { if (p === 'fillStyle') lastFill = v; return true; },
+      set(t, p, v) {
+        if (p === 'fillStyle') lastFill = v;
+        if (p === 'globalAlpha') armAlpha = v;
+        if (p === 'lineWidth') armWidth = v;
+        return true;
+      },
       apply() { return rec; },
     });
     els['stage'].getContext = () => rec;
@@ -694,6 +707,28 @@ function change(el) {
   guard = 0;
   mark = els['log'].children.length;
   while (guard++ < 4000 && !/(is aiming…|Your turn)/.test(freshFrom(mark))) frames(10);
+  // A drone's turn: its aim arm must show, swing in small steps rather than
+  // snapping, and stay within the power-scaled length (14..50). Step single
+  // frames and keep the first unbroken run of arm frames. Fire first so the
+  // battery gets its turn.
+  {
+    TAP('global', 'fire');
+    const seen = [];
+    for (let i = 0; i < 3000; i++) {
+      arms.length = 0;
+      frames(1);
+      if (arms.length) seen.push(arms[arms.length - 1]);
+      else if (seen.length) break;
+    }
+    const ang = seen.map(a => Math.atan2(a.y0 - a.y1, Math.abs(a.x1 - a.x0)) * 180 / Math.PI);
+    const len = seen.map(a => Math.hypot(a.x1 - a.x0, a.y1 - a.y0));
+    let maxStep = 0;
+    for (let i = 1; i < ang.length; i++) maxStep = Math.max(maxStep, Math.abs(ang[i] - ang[i - 1]));
+    check('drone-aim-arm-shows', seen.length >= 20, `frames=${seen.length}`);
+    check('drone-aim-arm-glides', seen.length >= 20 && maxStep < 6, `max step=${maxStep.toFixed(2)}°`);
+    check('drone-aim-arm-power-length', seen.length > 0 && len.every(l => l >= 13.9 && l <= 50.1),
+      len.length ? `len ${Math.min(...len).toFixed(1)}..${Math.max(...len).toFixed(1)}` : 'none');
+  }
   // Fresh match, then a single Shell for the battery-exchange checks.
   TAP('global', 'new'); frames(120);
   TAP('global', 'fire');

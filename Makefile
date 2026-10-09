@@ -1,4 +1,4 @@
-.PHONY: help up down ps urls parity
+.PHONY: help up down ps urls parity deploy
 
 .DEFAULT_GOAL := help
 
@@ -12,6 +12,9 @@ help:
 	@echo "  ps     - Show running containers"
 	@echo "  urls   - Print each site's local URL (ports are ephemeral)"
 	@echo "  parity - Run every site's parity check against its server"
+	@echo "  deploy - Deploy every site to its own server; SITE=www.cs for one."
+	@echo "           Each skips when its server's .deploy-hash already matches."
+	@echo "           FORCE=1 / DRY_RUN=1 pass through."
 	@echo ""
 	@echo "One site, including its deploy: make -C websites/<site> help"
 	@echo "Sites: $(notdir $(SITES))"
@@ -33,6 +36,12 @@ urls:
 		else \
 			printf '%-12s %s\n' "$$(basename $$s)" "not running"; \
 		fi; \
+	done
+
+deploy:
+	@for s in $(if $(SITE),websites/$(SITE),$(SITES)); do \
+		test -f $$s/Makefile || { echo "no site $$s" >&2; exit 1; }; \
+		$(MAKE) --no-print-directory -C $$s deploy || exit 1; \
 	done
 
 parity:

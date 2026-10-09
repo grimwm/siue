@@ -1939,6 +1939,9 @@ function say(text, tone) {
   log.appendChild(li);
   while (log.children.length > 80) log.removeChild(log.firstChild);
   log.scrollTop = log.scrollHeight;
+  // The overlay is what scrolls in the frame; keep the newest line in view.
+  const overlay = $('log-overlay');
+  if (overlay) overlay.scrollTop = overlay.scrollHeight;
   refreshNavHints();
 }
 /* Fitted tricks ride the HUD beside the shells. In room matches netApply
@@ -3477,7 +3480,17 @@ function init() {
   window.addEventListener('pointerdown', kickAudio, true);
   window.addEventListener('keydown', kickAudio, true);
   window.addEventListener('resize', refreshNavHints);
+  window.addEventListener('resize', placeLogBelowMenu);
+  placeLogBelowMenu();
   requestAnimationFrame(frame);
+}
+/* The log hangs just under the menu strip, whose height changes with the
+   frame width, so it never covers the battle buttons. */
+function placeLogBelowMenu() {
+  const bar = $('menubar');
+  const log = $('log-overlay');
+  if (!bar || !log || !bar.offsetHeight) return;
+  log.style.top = `${bar.offsetTop + bar.offsetHeight + 6}px`;
 }
 function toggleSound() {
   soundMuted = !soundMuted;

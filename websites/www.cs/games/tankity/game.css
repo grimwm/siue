@@ -308,13 +308,20 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 .frame-overlay[hidden] { display: none; }
 .log-overlay {
   position: absolute;
-  top: 3.6rem;
+  top: 6.4rem; /* placeLogBelowMenu() sets the measured value */
   right: 0.5rem;
   width: min(20rem, 42%);
   max-height: 55%;
   overflow-y: auto;
   z-index: 6;
   pointer-events: none;
+  /* One panel behind every line, so the battlefield does not show through
+     between rows. */
+  background: var(--wash-card);
+  border: 1px solid var(--wash-edge);
+  border-radius: 10px;
+  padding: 0.4rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
 }
 .log-overlay h2 {
   position: absolute;
@@ -330,9 +337,9 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 }
 .log-transparent li {
   list-style: none;
-  background: var(--wash-solid);
-  border: 1px solid var(--wash-edge);
-  border-left-width: 3px;
+  background: rgba(85, 85, 255, 0.08);
+  border: none;
+  border-left: 3px solid var(--wash-edge);
   border-radius: 6px;
   padding: 0.1rem 0.45rem 0.1rem 0.35rem;
   font-size: 0.82rem;
@@ -354,17 +361,16 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 }
 .card-overlay h2 { margin: 0 0 0.5rem; font-size: 1.05rem; }
 .card-overlay button { margin-top: 0.6rem; }
-/* Navigation footers: always visible, dimmed while everything fits. */
+/* Navigation footers: always visible; the scroll keys only show while there
+   is something to scroll (aria-disabled="true" means everything fits). */
 .nav-hint { color: #ffffff; font-size: 0.8rem; margin: 0.6rem 0 0; text-shadow: 0 1px 2px #000; }
 .nav-hint [data-keyhint] { color: var(--wash-key); font-weight: 700; }
-/* Nothing to scroll: quieter, but still readable (EGA light grey, 8:1). */
-.nav-hint[aria-disabled="true"] { color: var(--wash-ink); }
-.nav-hint[aria-disabled="true"] [data-keyhint] { color: #d8d870; }
+.nav-hint[aria-disabled="true"] .scroll-keys { display: none; }
+.nav-hint[data-scroll-only][aria-disabled="true"] { visibility: hidden; }
 .log-overlay .nav-hint {
-  background: var(--wash-solid);
-  border: 1px solid var(--wash-edge);
-  border-radius: 6px;
-  padding: 0.1rem 0.45rem;
+  margin-top: 0.4rem;
+  padding: 0.2rem 0.35rem 0;
+  border-top: 1px solid var(--wash-edge);
 }
 .panel {
   background: var(--panel);

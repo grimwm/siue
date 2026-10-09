@@ -31,6 +31,12 @@ STAMP=.deploy-hash
 # Runtime data the server writes; never upload over it.
 SCORES=games/cylon/data/scores.json
 
+# Shared game links must preview the game: refuse to ship stale share tags.
+if ! php tools/game-share-tags.php --check; then
+  echo "deploy: run php tools/game-share-tags.php and commit the result" >&2
+  exit 1
+fi
+
 work=$(mktemp -d "${TMPDIR:-/tmp}/www-cs-deploy.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 stage=$work/stage

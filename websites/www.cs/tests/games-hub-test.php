@@ -93,6 +93,22 @@ foreach ($bad as $name => $meta) {
 ], "$tmp/tankity");
 $check('card-hidden-skipped', $card === null && $err === null);
 
+// Share image and share link.
+$game('tankity', null, ['index.html', 'og.png', 'notes.txt']);
+[$card, $err] = games_hub_card('tankity', ['title' => 't', 'description' => 'd', 'play' => 'index.html', 'image' => 'og.png'], "$tmp/tankity");
+$check('card-image-ok', $err === null && $card['image'] === 'games/tankity/og.png' && $card['share'] === 'games/tankity/');
+foreach (['missing' => 'nope.png', 'not-an-image' => 'notes.txt', 'traversal' => '../cylon/og.png'] as $name => $img) {
+    [$card, $err] = games_hub_card('tankity', ['title' => 't', 'description' => 'd', 'play' => 'index.html', 'image' => $img], "$tmp/tankity");
+    $check("card-image-reject-$name", $card === null && is_string($err));
+}
+$game('mounted', null);
+[$card, $err] = games_hub_card('mounted', ['title' => 't', 'description' => 'd', 'start' => 'go'], "$tmp/mounted");
+$check('card-start-no-share-without-page', $err === null && !array_key_exists('share', $card));
+$game('mounted', null, ['index.html']);
+[$card, $err] = games_hub_card('mounted', ['title' => 't', 'description' => 'd', 'start' => 'go'], "$tmp/mounted");
+$check('card-start-share-page', $err === null && ($card['share'] ?? null) === 'games/mounted/');
+exec('rm -rf ' . escapeshellarg("$tmp/mounted"));
+
 // --- Discovery --------------------------------------------------------------
 
 $game('cylon', "title: The CIC\ndescription: Defend.\nstart: cylonStartGame\norder: 10\n");

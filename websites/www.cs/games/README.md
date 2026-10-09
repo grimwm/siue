@@ -32,6 +32,7 @@ play: index.html                  # a page in this folder, opened full-page
 # start: cylonStartGame           # OR a site-page function (mounted games)
 order: 20                         # optional whole number, low first; default 100
 hidden: false                     # optional; true keeps the card off the page
+image: og.png                     # optional 1200x630 picture for link previews
 ```
 
 - Set exactly one of `play` or `start`. `play` must be a file inside the game
@@ -42,9 +43,13 @@ hidden: false                     # optional; true keeps the card off the page
 - A broken file keeps only that game off the page; `games.php` lists why under
   `errors`, and the browser console repeats it.
 - Check every game with `php tests/games-hub-test.php`.
-- Every card has **Copy link**: a `play` game links to its folder
-  (`games/<id>/`); a `start` game links to the site with `?game=<id>`, which
-  launches it on load.
+- Link previews: `php tools/game-share-tags.php` writes each game's share tags
+  (title, description, `image`) into its page, or for a `start` game into
+  `games/<id>/index.html`, a page that forwards to `?game=<id>`. Run it after
+  editing a `metadata.yaml`; `make deploy` refuses stale tags.
+- Every card has **Copy link**: its game folder (`games/<id>/`). For a
+  `start` game that folder holds the generated share page, which forwards to
+  the site with `?game=<id>`; the site launches it on load.
 
 ## Site contract
 - `index.html` owns brand, Home / Contact / Games hub panels, and combat nav chrome slots.

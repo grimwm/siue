@@ -55,6 +55,7 @@ async function loadGamesHub() {
 /** The link to share for a game: its own page, or ?game=<id> for games that
  * run inside this page. */
 function gameShareUrl(game) {
+    if (game.share) return new URL(game.share, location.href).href;
     if (game.href) return new URL(game.href, location.href).href;
     const url = new URL(location.href);
     url.search = `?game=${encodeURIComponent(game.id)}`;

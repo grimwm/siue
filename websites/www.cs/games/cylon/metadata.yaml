@@ -10,3 +10,4 @@ description: >
 button: Enter The CIC
 start: cylonStartGame
 order: 10
+image: og.png

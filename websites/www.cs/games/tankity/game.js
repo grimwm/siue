@@ -2763,6 +2763,7 @@ function netEvent(e) {
   if (e.t === 'fizzle') { say(`${seatName(e.by)} sends one into the sunset.`, 'info'); return; }
   if (e.t === 'fire') {
     if (e.seat === NET.seat) say(`You fire ${WEAPONS[G.selected] ? WEAPONS[G.selected].name : 'a shell'}.`, 'info');
+    else say(`${seatName(e.seat)} fires ${WEAPONS[e.w] ? WEAPONS[e.w].name : 'a shell'}.`, 'info');
     return;
   }
   if (e.t === 'aifire') {

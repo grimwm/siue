@@ -574,14 +574,9 @@ function startSolo(seedStr) {
 function newRound(bannerText) {
   genTerrain();
   G.wind = Math.round((G.rng() * 2 - 1) * 8);
-  // Spread four combatants across the hills; the tank takes the west side.
-  const slots = [0.08, 0.38, 0.62, 0.86].map(f => Math.round(f * W));
-  const order = [slots[0], slots[1], slots[2], slots[3]];
-  // Shuffle the drone slots so every round sits differently.
-  for (let i = order.length - 1; i > 1; i--) {
-    const j = 1 + Math.floor(G.rng() * i);
-    [order[i], order[j]] = [order[j], order[i]];
-  }
+  // Spread four combatants across the hills; every round, anyone may land
+  // anywhere, never on top of each other.
+  const order = spawnSpots(1 + FOE_DEFS.length, G.rng);
   // Shop fuel and repairs ride in banks: the round rebuilds every tank from
   // scratch, so anything bought spends only if it waits here for muster.
   const musterMax = TUNE.playerArmor + 25 * (G.plate || 0);
@@ -604,7 +599,10 @@ function newRound(bannerText) {
       ammo: droneRack(),
     });
   });
-  for (const t of G.tanks) t.y = surfY(t.x);
+  for (const t of G.tanks) {
+    t.y = surfY(t.x);
+    t.dirS = t.x < W / 2 ? 1 : -1; // face the middle of the field
+  }
   G.turn = G.firstTurn % G.tanks.length;
   G.firstTurn++;
   G.shells = [];
@@ -652,9 +650,38 @@ function shownPower(t) {
 function aimArmLength(power) {
   return 10 + clamp(power, 10, 100) * 0.4;
 }
+/* Which way a tank faces: +1 right, -1 left. Angles count from that side. */
+function facing(t) {
+  return t.dirS || (t.isPlayer ? 1 : -1);
+}
+/* Units keep at least this far apart, centre to centre, so hulls and rotors
+   never overlap; fresh rounds spread them wider still. */
+const UNIT_GAP = 44;
+const SPAWN_GAP = 110;
+function spotTaken(t, x) {
+  return G.tanks.some(o => o !== t && o.hp > 0 && Math.abs(o.x - x) < UNIT_GAP);
+}
+/* n spawn points across the hills, at least SPAWN_GAP apart, in random
+   order: nobody owns a side. Falls back to even spacing if sampling fails. */
+function spawnSpots(n, rng) {
+  const lo = 30, hi = W - 30;
+  for (let tries = 0; tries < 200; tries++) {
+    const xs = [];
+    for (let i = 0; i < n; i++) xs.push(Math.round(lo + rng() * (hi - lo)));
+    xs.sort((a, b) => a - b);
+    if (xs.every((x, i) => i === 0 || x - xs[i - 1] >= SPAWN_GAP)) {
+      for (let i = xs.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [xs[i], xs[j]] = [xs[j], xs[i]];
+      }
+      return xs;
+    }
+  }
+  return Array.from({ length: n }, (_, i) => Math.round(lo + (i + 0.5) * (hi - lo) / n));
+}
 function muzzle(t) {
   const rad = t.angle * Math.PI / 180;
-  const s = t.dirS || (t.isPlayer ? 1 : -1);
+  const s = facing(t);
   return { x: t.x + Math.cos(rad) * 20 * s, y: t.y - 14 - Math.sin(rad) * 20 };
 }
 function shotSpeed(power, flat, mult) {
@@ -671,7 +698,7 @@ function fireWeapon(t, wkey) {
   if (wkey !== 'shell') store[wkey] -= 1;
   const m = muzzle(t);
   const rad = t.angle * Math.PI / 180;
-  const s = t.isPlayer ? 1 : -1;
+  const s = facing(t);
   const shots = w.pellets || 1;
   for (let i = 0; i < shots; i++) {
     const off = shots === 1 ? 0 : (i - (shots - 1) / 2) * (w.spread || 0);
@@ -1537,7 +1564,7 @@ function aiChoose(t) {
   if (rivals.length > 1 && G.rng() >= 0.6) {
     target = rivals[1 + Math.floor(G.rng() * (rivals.length - 1))];
   }
-  const dirS = t.dirS || (t.isPlayer ? 1 : -1);
+  const dirS = facing(t);
   const m = muzzle(t);
   let best = null;
   const keys = ['shell'];
@@ -1565,8 +1592,11 @@ function aiChoose(t) {
   // Drones shuffle for a better firing spot instead of camping one rut.
   if (G.rng() < 0.35) {
     const dx = (G.rng() < 0.5 ? -1 : 1) * (8 + G.rng() * 27);
-    t.x = clamp(t.x + dx, 12, W - 12);
-    t.y = surfY(t.x);
+    const nx = clamp(t.x + dx, 12, W - 12);
+    if (!spotTaken(t, nx)) {
+      t.x = nx;
+      t.y = surfY(t.x);
+    }
   }
   return { wkey: best.wkey, angle, power };
 }
@@ -1669,7 +1699,7 @@ function drawTankSide(c, t, time) {
   c.fill();
   // Turret rotated to the barrel angle (mirrored for drones is handled by caller).
   const rad = shownAngle(t) * Math.PI / 180;
-  const s = t.isPlayer ? 1 : -1;
+  const s = facing(t);
   const bx = Math.cos(rad) * 26 * s, by = -Math.sin(rad) * 26;
   c.strokeStyle = '#1a1a00';
   c.lineWidth = 5;
@@ -1703,7 +1733,7 @@ function droneHover(t, time) {
 /* Tip of a drone's slung barrel, from a body centre at (x, y). */
 function droneBarrelTip(t, x, y) {
   const rad = shownAngle(t) * Math.PI / 180;
-  const s = t.dirS || -1;
+  const s = facing(t);
   return { x: x + Math.cos(rad) * 22 * s, y: y + 4 - Math.sin(rad) * 22, rad, s };
 }
 function drawGunDrone(c, t, time) {
@@ -1873,7 +1903,7 @@ function render() {
       const m = muzzle(t);
       x0 = m.x; y0 = m.y;
       rad = shownAngle(t) * Math.PI / 180;
-      ds = t.dirS || (t.isPlayer ? 1 : -1);
+      ds = facing(t);
     } else {
       const tip = droneBarrelTip(t, t.x, t.y - 30 + droneHover(t, time));
       x0 = tip.x; y0 = tip.y; rad = tip.rad; ds = tip.s;
@@ -2186,17 +2216,20 @@ function frame(ts) {
   }
   if (G.phase === 'aim' && cur().isPlayer && !G.demo) {
     const t = me();
-    if (keysDown.barrelLeft) t.angle = clamp(t.angle + 42 * dt, 10, 170);
-    if (keysDown.barrelRight) t.angle = clamp(t.angle - 42 * dt, 10, 170);
+    const swing = (keysDown.barrelLeft ? 1 : 0) - (keysDown.barrelRight ? 1 : 0);
+    if (swing) t.angle = clamp(t.angle + swing * facing(t) * 42 * dt, 10, 170);
     if (keysDown.powerUp) t.power = clamp(t.power + 45 * dt, 10, 100);
     if (keysDown.powerDown) t.power = clamp(t.power - 45 * dt, 10, 100);
     if ((keysDown.driveL || keysDown.driveR) && t.fuel > 0) {
       const dx = (keysDown.driveR ? 1 : 0) - (keysDown.driveL ? 1 : 0);
       const step = dx * TUNE.driveSpeed * dt;
       if (Math.abs(step) > 0 && Math.abs(t.fuel) >= Math.abs(step)) {
-        t.fuel -= Math.abs(step);
-        t.x = clamp(t.x + step, 12, W - 12);
-        t.y = surfY(t.x);
+        const nx = clamp(t.x + step, 12, W - 12);
+        if (!spotTaken(t, nx)) {
+          t.fuel -= Math.abs(step);
+          t.x = nx;
+          t.y = surfY(t.x);
+        }
       }
     }
   } else if (G.phase === 'think') {
@@ -2913,8 +2946,8 @@ function netFrame(dt) {
   }
   const t = myTank();
   if (t && t.hp > 0 && NET.myTurn) {
-    if (keysDown.barrelLeft) { t.angle = clamp(t.angle + 42 * dt, 10, 170); NET.aimDirty = true; }
-    if (keysDown.barrelRight) { t.angle = clamp(t.angle - 42 * dt, 10, 170); NET.aimDirty = true; }
+    const swing = (keysDown.barrelLeft ? 1 : 0) - (keysDown.barrelRight ? 1 : 0);
+    if (swing) { t.angle = clamp(t.angle + swing * facing(t) * 42 * dt, 10, 170); NET.aimDirty = true; }
     if (keysDown.powerUp) { t.power = clamp(t.power + 45 * dt, 10, 100); NET.aimDirty = true; }
     if (keysDown.powerDown) { t.power = clamp(t.power - 45 * dt, 10, 100); NET.aimDirty = true; }
     if (!keysDown.barrelLeft && !keysDown.barrelRight && !keysDown.powerUp && !keysDown.powerDown && NET.aimDirty) netSendAim();

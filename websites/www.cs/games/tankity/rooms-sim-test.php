@@ -63,5 +63,34 @@ $ls = room_gear('laststand');
 $check('laststand-blast-from-data', isset($ls['dmg'], $ls['radius']) && (int) $ls['dmg'] > 0 && (float) $ls['radius'] > 0,
     'dmg=' . ($ls['dmg'] ?? '?') . ' radius=' . ($ls['radius'] ?? '?'));
 
+// Spawns: never closer than ROOM_SPAWN_GAP, always on the field, and seat 0
+// (the host) does not always land on the left.
+$minGap = INF;
+$inside = true;
+$hostLeftmost = 0;
+for ($seed = 1; $seed <= 200; $seed++) {
+    $rng = $seed * 7919;
+    $xs = room_spawn_spots($rng, 4, 720);
+    $sorted = $xs;
+    sort($sorted);
+    for ($i = 1; $i < 4; $i++) {
+        $minGap = min($minGap, $sorted[$i] - $sorted[$i - 1]);
+    }
+    $inside = $inside && $sorted[0] >= 12 && $sorted[3] <= 708;
+    if ($xs[0] === $sorted[0]) {
+        $hostLeftmost++;
+    }
+}
+$check('spawn-gap', $minGap >= ROOM_SPAWN_GAP, 'min gap=' . $minGap);
+$check('spawn-on-field', $inside);
+$check('spawn-host-varies', $hostLeftmost > 20 && $hostLeftmost < 120, "host leftmost in $hostLeftmost/200");
+
+// Moves never end on top of another unit.
+$room = $flatRoom([$tank(0, 'human', 100.0, 100), $tank(1, 'ai', 140.0, 60), $tank(2, 'ai', 300.0, 0)]);
+$check('spot-taken-near', room_spot_taken($room, 0, 120.0));
+$check('spot-free-far', !room_spot_taken($room, 0, 200.0));
+$check('spot-ignores-self', !room_spot_taken($room, 1, 160.0)); // 20 from itself, 60 from tank 0
+$check('spot-ignores-wrecks', !room_spot_taken($room, 0, 290.0));
+
 echo $fail === 0 ? "SIM-OK\n" : "SIM-FAIL $fail\n";
 exit($fail === 0 ? 0 : 1);

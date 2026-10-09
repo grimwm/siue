@@ -752,6 +752,52 @@ function room_new(string $code, string $initials): array
         'winners' => [],
     ];
 }
+/* Units keep at least ROOM_UNIT_GAP apart, centre to centre, so hulls never
+   overlap; fresh rounds spread them ROOM_SPAWN_GAP apart. */
+const ROOM_UNIT_GAP = 44.0;
+const ROOM_SPAWN_GAP = 110;
+function room_spot_taken(array $room, int $self, float $x): bool
+{
+    foreach ($room['tanks'] as $idx => $t) {
+        if ($idx !== $self && $t['hp'] > 0 && abs($t['x'] - $x) < ROOM_UNIT_GAP) {
+            return true;
+        }
+    }
+    return false;
+}
+/* n spawn points, at least ROOM_SPAWN_GAP apart, in random order: no seat
+   owns a side. Even spacing if sampling fails. */
+function room_spawn_spots(int &$rng, int $n, int $width): array
+{
+    $lo = 30;
+    $hi = $width - 30;
+    for ($tries = 0; $tries < 200; $tries++) {
+        $xs = [];
+        for ($i = 0; $i < $n; $i++) {
+            $xs[] = (int) round($lo + room_rng_next($rng) * ($hi - $lo));
+        }
+        sort($xs);
+        $ok = true;
+        for ($i = 1; $i < $n; $i++) {
+            if ($xs[$i] - $xs[$i - 1] < ROOM_SPAWN_GAP) {
+                $ok = false;
+                break;
+            }
+        }
+        if ($ok) {
+            for ($i = $n - 1; $i > 0; $i--) {
+                $j = (int) floor(room_rng_next($rng) * ($i + 1));
+                [$xs[$i], $xs[$j]] = [$xs[$j], $xs[$i]];
+            }
+            return $xs;
+        }
+    }
+    $xs = [];
+    for ($i = 0; $i < $n; $i++) {
+        $xs[] = (int) round($lo + ($i + 0.5) * ($hi - $lo) / $n);
+    }
+    return $xs;
+}
 function room_start_round(array &$room): void
 {
     $room['round'] += 1;
@@ -765,11 +811,7 @@ function room_start_round(array &$room): void
         $room['terrain'] = room_gen_terrain($room['rng'], $w);
     }
     $room['wind'] = (int) round(room_rng_range($room['rng'], -8, 8));
-    $slots = [58, 274, 446, 619];
-    for ($i = count($slots) - 1; $i > 1; $i--) {
-        $j = 1 + (int) floor(room_rng_next($room['rng']) * $i);
-        [$slots[$i], $slots[$j]] = [$slots[$j], $slots[$i]];
-    }
+    $slots = room_spawn_spots($room['rng'], count($room['seats']), $w);
     $room['tanks'] = [];
     $seat = 0;
     foreach ($room['seats'] as $idx => $s) {
@@ -781,14 +823,14 @@ function room_start_round(array &$room): void
             'seat' => $idx,
             'kind' => $s['human'] ? 'human' : 'ai',
             'name' => $s['human'] ? $s['initials'] : $s['initials'],
-            'x' => $slots[$seat % 4],
+            'x' => $slots[$seat % count($slots)],
             'y' => 0,
             'angle' => 62.0,
             'power' => 55.0,
             'hp' => $armor,
             'maxHp' => $armor,
             'fuel' => $s['human'] ? 80 : 0,
-            'dirS' => $seat === 0 ? 1 : -1,
+            'dirS' => $slots[$seat % count($slots)] < $w / 2 ? 1 : -1, // face the middle
             'ammo' => $s['human']
                 ? ($room['ammo'][$idx] ?? ['shell' => -1, 'buck' => 1])
                 : room_ai_rack($room['round']),
@@ -860,9 +902,10 @@ function room_advance(array &$room, array &$events): void
         $choice = room_ai_choose($room, $t);
         $room['tanks'][$cur]['angle'] = $choice['angle'];
         $room['tanks'][$cur]['power'] = $choice['power'];
-        if (abs($choice['dx'] ?? 0) > 0.5) {
-            $width = count($room['terrain']);
-            $room['tanks'][$cur]['x'] = max(12.0, min($width - 12.0, $room['tanks'][$cur]['x'] + $choice['dx']));
+        $width = count($room['terrain']);
+        $nx = max(12.0, min($width - 12.0, $room['tanks'][$cur]['x'] + ($choice['dx'] ?? 0)));
+        if (abs($choice['dx'] ?? 0) > 0.5 && !room_spot_taken($room, $cur, $nx)) {
+            $room['tanks'][$cur]['x'] = $nx;
             $xi = max(0, min($width - 1, (int) round($room['tanks'][$cur]['x'])));
             $room['tanks'][$cur]['y'] = $room['terrain'][$xi];
         }
@@ -1482,8 +1525,19 @@ if ($action === 'act' && $method === 'POST') {
             room_json_out(422, ['error' => 'not enough fuel']);
         }
         $w = count($room['terrain']);
-        $tank['fuel'] = max(0.0, $tank['fuel'] - abs($dx));
-        $tank['x'] = max(12.0, min($w - 12.0, $tank['x'] + $dx));
+        // Roll toward the target a pixel at a time and stop short of any
+        // other unit; fuel pays only for the ground actually covered.
+        $goal = max(12.0, min($w - 12.0, $tank['x'] + $dx));
+        $step = $goal > $tank['x'] ? 1.0 : -1.0;
+        $nx = $tank['x'];
+        while (abs($goal - $nx) >= 1.0 && !room_spot_taken($room, $myIdx, $nx + $step)) {
+            $nx += $step;
+        }
+        if (abs($goal - $nx) < 1.0) {
+            $nx = $goal;
+        }
+        $tank['fuel'] = max(0.0, $tank['fuel'] - abs($nx - $tank['x']));
+        $tank['x'] = $nx;
         $xi = max(0, min($w - 1, (int) round($tank['x'])));
         $tank['y'] = $room['terrain'][$xi];
     } elseif ($kind === 'weapon') {

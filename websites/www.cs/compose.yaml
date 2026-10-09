@@ -1,22 +1,35 @@
 # Local copy of www.cs.siue.edu/~wgrim: nginx in front of PHP-FPM built to
-# match the server's PHP (docker/expected-modules.txt). The host port is
-# ephemeral so this never takes a port someone is using; `make url` prints it.
-name: www-cs
+# match the server's PHP (docker/expected-modules.txt). The repo-root
+# compose.yaml includes this file; run it from there or via this Makefile.
+#
+# Every site's services share one project, so names carry the site prefix.
+# Inside the site's own network the short names still resolve, so nginx's
+# fastcgi_pass php:9000 and the tankity suite's http://nginx keep working.
 
 services:
-  php:
+  www-cs-php:
     build: docker/php
     volumes:
       - ./:/var/www/html
       # Outside the docroot: the probe and lists docker/check-parity.sh uses.
       - ./docker:/opt/www-cs-docker:ro
+    networks:
+      www-cs:
+        aliases: [php]
 
-  nginx:
+  www-cs-nginx:
     image: nginx:1.29-alpine
     depends_on:
-      - php
+      - www-cs-php
+    # Ephemeral host port, so this never takes one someone is using.
     ports:
       - "127.0.0.1::80"
     volumes:
       - ./:/var/www/html:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      www-cs:
+        aliases: [nginx]
+
+networks:
+  www-cs:

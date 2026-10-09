@@ -1,0 +1,11 @@
+# Local docker for every site in websites/. Each site owns its compose file,
+# images and Makefile (including how it deploys); this file only gathers
+# them into one project. Service and network names start with the site's
+# slug (www-cs-*) so sites never collide.
+#
+#   make up | down | ps | urls      all sites
+#   make -C websites/<site> help    one site, including its deploy
+name: siue
+
+include:
+  - websites/www.cs/compose.yaml

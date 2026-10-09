@@ -5,6 +5,12 @@
 SSHPASS ?= sshpass -f "$(HOME)/.ssh/.passwd.siue"
 HOST ?= wgrim@www.cs.siue.edu
 
+# Local docker runs through the repo-root project, which includes this
+# site's compose.yaml; these targets touch only this site's services.
+COMPOSE ?= docker compose -f ../../compose.yaml
+SERVICES := www-cs-php www-cs-nginx
+export COMPOSE
+
 help:
 	@echo "Available targets:"
 	@echo "  help   - Show this help message"
@@ -44,14 +50,14 @@ deploy:
 	$(SSHPASS) scp -p games/cylon/data/.htaccess $(HOST):games/cylon/data/.htaccess
 
 up:
-	docker compose up -d --build
+	$(COMPOSE) up -d --build $(SERVICES)
 	@$(MAKE) --no-print-directory url
 
 down:
-	docker compose down
+	$(COMPOSE) rm --stop --force $(SERVICES)
 
 url:
-	@echo "http://$$(docker compose port nginx 80)/"
+	@echo "http://$$($(COMPOSE) port www-cs-nginx 80)/"
 
 parity:
 	./docker/check-parity.sh

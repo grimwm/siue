@@ -7,18 +7,22 @@
 # from the image: see docker/parity/probe.php.
 set -euo pipefail
 
+# The repo-root project includes this site; COMPOSE (set by the site
+# Makefile) may point elsewhere.
 cd "$(dirname "$0")/.."
+read -r -a compose <<<"${COMPOSE:-docker compose -f ../../compose.yaml}"
+svc=www-cs-php
 
 started=0
-if [ -z "$(docker compose ps --status running -q php)" ]; then
-  docker compose up -d --build php >/dev/null
+if [ -z "$("${compose[@]}" ps --status running -q "$svc")" ]; then
+  "${compose[@]}" up -d --build "$svc" >/dev/null
   started=1
 fi
-cleanup() { if [ "$started" -eq 1 ]; then docker compose stop php >/dev/null; fi; }
+cleanup() { if [ "$started" -eq 1 ]; then "${compose[@]}" rm --stop --force "$svc" >/dev/null 2>&1; fi; }
 trap cleanup EXIT
 
 probe() {
-  docker compose exec -T php env \
+  "${compose[@]}" exec -T "$svc" env \
     SCRIPT_FILENAME=/opt/www-cs-docker/parity/probe.php \
     REQUEST_METHOD=GET \
     cgi-fcgi -bind -connect 127.0.0.1:9000
@@ -41,4 +45,4 @@ done
 # Drop the FastCGI response headers (everything up to the first blank line).
 body=$(awk 'seen { print; next } /^\r?$/ { seen = 1 }' <<<"$out")
 
-docker compose exec -T php php /opt/www-cs-docker/parity/compare.php /opt/www-cs-docker <<<"$body"
+"${compose[@]}" exec -T "$svc" php /opt/www-cs-docker/parity/compare.php /opt/www-cs-docker <<<"$body"

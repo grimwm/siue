@@ -28,11 +28,8 @@ ps:
 
 urls:
 	@for s in $(SITES); do \
-		if u=$$($(MAKE) -s --no-print-directory -C $$s url 2>/dev/null); then \
-			printf '%-12s %s\n' "$$(basename $$s)" "$$u"; \
-		else \
-			printf '%-12s %s\n' "$$(basename $$s)" "not running"; \
-		fi; \
+		basename $$s; \
+		$(MAKE) -s --no-print-directory -C $$s url 2>/dev/null || echo "not running"; \
 	done
 
 parity:

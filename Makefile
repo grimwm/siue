@@ -27,7 +27,13 @@ ps:
 	docker compose ps
 
 urls:
-	@for s in $(SITES); do printf '%-12s ' "$$(basename $$s)"; $(MAKE) -s --no-print-directory -C $$s url; done
+	@for s in $(SITES); do \
+		if u=$$($(MAKE) -s --no-print-directory -C $$s url 2>/dev/null); then \
+			printf '%-12s %s\n' "$$(basename $$s)" "$$u"; \
+		else \
+			printf '%-12s %s\n' "$$(basename $$s)" "not running"; \
+		fi; \
+	done
 
 parity:
 	@for s in $(SITES); do $(MAKE) --no-print-directory -C $$s parity || exit 1; done

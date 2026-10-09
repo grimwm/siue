@@ -57,7 +57,11 @@ down:
 	$(COMPOSE) rm --stop --force $(SERVICES)
 
 url:
-	@echo "http://$$($(COMPOSE) port www-cs-nginx 80)/"
+	@if port=$$($(COMPOSE) port www-cs-nginx 80 2>/dev/null) && [ -n "$$port" ]; then \
+		echo "http://$$port/"; \
+	else \
+		echo "www.cs is not running (make up)" >&2; exit 1; \
+	fi
 
 parity:
 	./docker/check-parity.sh

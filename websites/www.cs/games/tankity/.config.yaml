@@ -1,0 +1,16 @@
+# Operation Tankity server settings.
+# The game reads this file once at startup and NEVER writes to it.
+# Rooms live in SysV shared memory only; there is no disk fallback and no
+# room setting points at the disk. Score files still use the disk (scores
+# are files); they default to /var/tmp unless TANKITY_SCORES_DIR is set.
+# For each setting, the matching environment variable wins when set and non-empty:
+#   max_rooms    <- TANKITY_MAX_ROOMS (how many rooms can exist at once)
+#   room_max_age <- TANKITY_ROOM_MAX_AGE (seconds a room record is kept)
+#   shm_key      <- TANKITY_SHM_KEY (shared memory key; only set this to
+#                  isolate a test run, otherwise leave it out)
+# Point CONFIG_FILE at another file to load settings from elsewhere.
+#   room_live_secs <- TANKITY_ROOM_LIVE_SECS (seconds since the last touch
+#                    before a room stops counting as occupied)
+max_rooms: 10
+room_max_age: 86400
+room_live_secs: 600

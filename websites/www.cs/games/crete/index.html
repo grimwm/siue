@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Island of Crete</title>
+    <link rel="stylesheet" href="game.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>The Island of Crete</h1>
+        <p class="tagline">
+          A text-based chase. Theseus (you) moves once. The Minotaur moves
+          twice.
+        </p>
+      </div>
+      <form id="seed-form" class="seedbox" action="#">
+        <label for="seed-input">Seed</label>
+        <input
+          id="seed-input"
+          name="seed"
+          type="text"
+          inputmode="text"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="e.g. stefan-1984"
+        />
+        <button type="submit" id="new-run">New run (N)</button>
+        <button
+          type="button"
+          id="random-run"
+          title="Ignore the seed box and start on a fresh random seed"
+        >
+          🎲 Random seed
+        </button>
+        <button type="button" id="mute">🔊 Sound (M)</button>
+      </form>
+    </header>
+
+    <main class="layout">
+      <section class="stage-wrap" aria-label="Maze">
+        <div
+          id="stage"
+          class="stage"
+          role="img"
+          aria-label="Maze grid. Your position, the Minotaur, the exit, safe zones, barriers and items are announced in the log and HUD."
+        ></div>
+        <div class="pad" aria-label="Movement controls">
+          <span class="pad-label">Move</span>
+          <div class="pad-grid">
+            <span></span>
+            <button type="button" data-move="up" aria-label="Move up">▲</button>
+            <span></span>
+            <button type="button" data-move="left" aria-label="Move left">
+              ◀
+            </button>
+            <button type="button" data-move="down" aria-label="Move down">
+              ▼
+            </button>
+            <button type="button" data-move="right" aria-label="Move right">
+              ▶
+            </button>
+          </div>
+          <p class="hint">Keys: arrows / WASD. Bumping a wall costs no turn.</p>
+          <div class="guide" aria-label="Guide controls">
+            <button type="button" id="btn-hint">Hint (H)</button>
+            <button type="button" id="btn-answer">Answer path (V)</button>
+            <button type="button" id="btn-auto">Play-through (T)</button>
+            <button type="button" id="btn-bash">Bash (Space)</button>
+          </div>
+          <p class="hint">
+            Hint flashes your next step. Answer path shows the whole route.
+            Play-through plays for you.
+          </p>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="panel" aria-labelledby="hud-h">
+          <h2 id="hud-h">Status</h2>
+          <dl class="hud">
+            <div>
+              <dt>Health</dt>
+              <dd id="hud-hp">–</dd>
+            </div>
+            <div>
+              <dt>Turns</dt>
+              <dd id="hud-turns">–</dd>
+            </div>
+            <div>
+              <dt>Script pages</dt>
+              <dd id="hud-pages">–</dd>
+            </div>
+            <div>
+              <dt>Score</dt>
+              <dd id="hud-score">–</dd>
+            </div>
+            <div>
+              <dt>Fuses</dt>
+              <dd id="hud-fuses">–</dd>
+            </div>
+            <div>
+              <dt>Bash</dt>
+              <dd id="hud-bash">–</dd>
+            </div>
+            <div>
+              <dt>Minotaur</dt>
+              <dd id="hud-dist">–</dd>
+            </div>
+          </dl>
+          <p id="run-stats" class="runstats"></p>
+        </section>
+
+        <section class="panel" aria-labelledby="inv-h">
+          <h2 id="inv-h">Inventory — use with Z / X / C</h2>
+          <ul id="inventory" class="inv"></ul>
+          <p class="hint">
+            Using an item costs your turn: the Minotaur still moves twice,
+            unless a Mirror Shard freezes it.
+          </p>
+        </section>
+
+        <section class="panel" aria-labelledby="help-h">
+          <h2 id="help-h">How to play</h2>
+          <ul class="help">
+            <li>
+              Reach the <strong>exit 🚪</strong> alive. The Minotaur 👹 moves
+              <strong>twice</strong> per move you make.
+            </li>
+            <li>
+              <strong>Safe zones 🛡️</strong> block the Minotaur. Catch your
+              breath there — but lingering beside it still burns 2 HP a turn.
+            </li>
+            <li>
+              <strong>Barriers 🚧</strong> block corridors. Grab a
+              <strong>🔌 fuse</strong> and walk into one to blow it open (+40).
+              Nothing ever pauses.
+            </li>
+            <li>
+              <strong>Bash (Space)</strong> shoves the adjacent Minotaur
+              backwards. It costs your turn and needs 3 turns to recharge.
+            </li>
+            <li>
+              Grab <strong>tools 🔮🥣📻</strong> and
+              <strong>script pages 📄</strong>. Three pages earn the True
+              Ending.
+            </li>
+            <li>
+              Stuck? <strong>Hint (H)</strong> flashes one step.
+              <strong>Answer path (V)</strong> reveals the whole route.
+              <strong>Play-through (T)</strong> plays for you.
+              <strong>M</strong> toggles sound.
+            </li>
+          </ul>
+        </section>
+
+        <section class="panel" aria-labelledby="log-h">
+          <h2 id="log-h">Story log</h2>
+          <ol id="log" class="log" aria-live="polite"></ol>
+        </section>
+      </aside>
+    </main>
+
+    <div id="end-veil" class="veil" hidden>
+      <div
+        class="card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="end-title"
+      >
+        <p class="kicker" id="end-kicker">Run over</p>
+        <h2 id="end-title">Ending</h2>
+        <p id="end-text"></p>
+        <p id="end-score" class="runstats"></p>
+        <button type="button" id="again">Play again (N)</button>
+      </div>
+    </div>
+
+    <script src="game.js" defer></script>
+  </body>
+</html>

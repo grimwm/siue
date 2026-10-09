@@ -1,0 +1,461 @@
+:root {
+  --bg: #101308;
+  --panel: #1a1e10;
+  --ink: #eef3d8;
+  --dim: #a8b08a;
+  --line: #3a4226;
+  --accent: #ffc93c;
+  --good: #7ddf64;
+  --bad: #ff5a5a;
+  --safe: #6fc3ff;
+  --player: #ffd75e;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: end;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+h1 { margin: 0; font-size: 1.5rem; letter-spacing: 0.02em; }
+.tagline { margin: 0.15rem 0 0; color: var(--dim); }
+
+.seedbox { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.seedbox label { color: var(--dim); }
+
+input[type="text"] {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  max-width: 11rem;
+}
+
+button {
+  background: var(--accent);
+  color: #1a1a1a;
+  border: none;
+  border-radius: 6px;
+  padding: 0.45rem 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover { filter: brightness(1.08); }
+/* Key hints ride visibly inside their buttons. */
+button .key {
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 4px;
+  padding: 0 0.3rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+button:focus-visible, input:focus-visible { outline: 3px solid var(--safe); outline-offset: 2px; }
+button:disabled { opacity: 0.45; cursor: default; }
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1120px);
+  gap: 1rem;
+  padding: 1rem 1.25rem 2rem;
+  justify-content: center;
+}
+/* Fullscreen shows the whole battle with no scrolling: the holder answers to
+both screen axes, so the canvas plus its in-frame HUD always fit the viewport. */
+#frame:fullscreen {
+  background: var(--bg);
+  padding: 1rem;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  align-content: center;
+}
+#frame:fullscreen .canvas-holder {
+  width: min(1600px, 100%, calc((100vh - 8rem) * 1080 / 690));
+  max-width: none;
+  margin: 0;
+}
+
+.canvas-holder {
+  position: relative;
+  background: #05060a;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.6rem;
+  user-select: none;
+  /* Windowed mode keeps the whole viewport on screen: the holder answers to
+  both browser axes, shrinking with short windows instead of scrolling away. */
+  width: 100%;
+  max-width: min(1120px, 100%, max(320px, calc((100vh - 17rem) * 1080 / 690)));
+  margin: 0 auto;
+}
+
+#stage {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  order: 1;
+}
+.canvas-holder {
+  display: flex;
+  flex-direction: column;
+}
+.menubar { order: 2; }
+.hudbar { order: 3; }
+
+.dialogue {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.6rem;
+  min-height: 56px;
+  background: rgba(8, 10, 6, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.4rem 0.6rem;
+  pointer-events: none;
+}
+.dialogue[hidden] { visibility: hidden; }
+#portrait {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #141810;
+}
+.dlg-text { display: grid; gap: 0.1rem; min-width: 0; }
+#dlg-name { font-weight: 800; font-size: 0.78rem; letter-spacing: 0.04em; }
+#dlg-line { font-size: 0.92rem; color: var(--ink); }
+.bark[hidden] { display: none; }
+
+.veil {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 4, 0.8);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 10;
+  overflow: auto;
+}
+.veil[hidden] { display: none; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  max-width: 34rem;
+  width: 100%;
+  padding: 1.25rem 1.4rem;
+}
+.kicker { color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem; margin: 0; }
+.card h2 { margin: 0.2rem 0 0.5rem; }
+
+.pad { margin-top: 0.75rem; }
+.pad-label { font-weight: 700; }
+/* In-frame overlays: the battle status rides the top, aim bottom-left,
+// actions bottom-right, dialogue bottom-center, all above the canvas. */
+.hudbar {
+  position: static;
+  margin-top: 0.5rem;
+  z-index: 4;
+}
+/* One menu strip floating over the top of the game: aim pad on the left,
+battle buttons on the right, sky behind both. */
+.menubar {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  background: rgba(8, 10, 6, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.3rem 0.5rem;
+}
+.menubar .pad-aim,
+.menubar .guide-actions {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+.hudbar .hud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.9rem;
+  margin: 0;
+  padding: 0.35rem 0.7rem;
+  background: rgba(8, 10, 6, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+.hudbar .hud > div { display: flex; gap: 0.35rem; align-items: baseline; }
+.hudbar dt { color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.hudbar dd { margin: 0; font-weight: 700; }
+.hudbar .runstats { display: none; }
+.pad-aim {
+  position: static;
+  margin: 0;
+  padding: 0.3rem;
+  background: rgba(8, 10, 6, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  z-index: 4;
+}
+.pad-aim .pad-grid { display: grid; grid-template-columns: repeat(3, 1.9rem); gap: 0.15rem; }
+.pad-note { margin: 0.25rem 0 0; font-size: 0.75rem; color: var(--ink); white-space: nowrap; text-align: center; }
+.guide-actions {
+  position: static;
+  margin: 0;
+  padding: 0.3rem;
+  background: rgba(8, 10, 6, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  z-index: 4;
+  font-size: 0.75rem;
+  /* A compact button grid, not a tall stack: three short rows hug the corner
+  instead of walling off the terrain above. */
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 0.25rem;
+}
+.guide-actions button { padding: 0.3rem 0.35rem; white-space: nowrap; }
+/* Every battle button wears the menubar style, in every dialog too. */
+#frame button { font-size: 0.75rem; padding: 0.3rem 0.35rem; white-space: nowrap; }
+/* The Game menu dialog pairs its buttons in two equal columns under a
+full-width seed row, so both columns land the same size. */
+.menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 0.6rem; align-items: center; }
+/* Every dialog button mimics the navbar pills (Fire, Weapon, ...): dark
+panel with a hairline border, never the gold base button. Menu pairs sit as
+centered pills instead of stretching into full-column bars. */
+.frame-overlay button, .veil button {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.menu-grid button { justify-self: center; }
+.menu-grid .span-both { grid-column: 1 / -1; }
+.menu-grid label, .menu-grid input { grid-column: 1 / -1; }
+.canvas-holder .dialogue {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0.5rem;
+  margin: 0;
+  max-width: min(30rem, 60%);
+  z-index: 3;
+}
+.pad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 3rem);
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+.pad-grid button { padding: 0.5rem 0; }
+
+.hint { color: var(--dim); font-size: 0.9rem; }
+/* Room-server connection dot: red until a ping answers, green while live. */
+.dot { display: inline-block; width: 0.7em; height: 0.7em; border-radius: 50%; background: #e5484d; vertical-align: baseline; }
+.dot.on { background: #46c26a; }
+.invite-row { display: flex; gap: 0.4rem; align-items: center; }
+.invite-row input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+}
+.invite-row button { display: inline-flex; gap: 0.35rem; align-items: center; }
+.invite-row button svg { width: 1em; height: 1em; }
+
+/* In-frame panels: help, report, and the radio log ride over the battle and
+never pause it. The log is a transparent whisper, emoji plus text only. */
+.frame-overlay[hidden] { display: none; }
+.log-overlay {
+  position: absolute;
+  top: 3.6rem;
+  right: 0.5rem;
+  width: min(20rem, 42%);
+  max-height: 55%;
+  overflow-y: auto;
+  z-index: 6;
+  pointer-events: none;
+}
+.log-overlay h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.log-transparent {
+  max-height: none;
+  overflow: visible;
+  gap: 0.15rem;
+}
+.log-transparent li {
+  list-style: none;
+  background: rgba(8, 10, 6, 0.55);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 0.1rem 0.45rem 0.1rem 0.35rem;
+  font-size: 0.82rem;
+  color: var(--ink);
+  text-shadow: 0 1px 2px #000;
+}
+.log-transparent li.good::before { content: '\2705  '; }
+.log-transparent li.bad::before { content: '\1F4A5  '; }
+.log-transparent li.info::before { content: '\1F4FB  '; }
+.card-overlay {
+  position: absolute;
+  inset: 8% 6%;
+  z-index: 6;
+  overflow-y: auto;
+  background: rgba(26, 30, 16, 0.95);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 1rem 1.2rem;
+}
+.card-overlay h2 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+.card-overlay button { margin-top: 0.6rem; }
+/* Navigation footers: always visible, dimmed while everything fits. */
+.nav-hint { color: var(--dim); font-size: 0.8rem; margin: 0.6rem 0 0; }
+.nav-hint[aria-disabled="true"] { opacity: 0.45; }
+.log-overlay .nav-hint {
+  background: rgba(8, 10, 6, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.1rem 0.45rem;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+}
+.panel h2 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+
+.hud { display: grid; gap: 0.25rem; margin: 0; }
+.hud div { display: flex; justify-content: space-between; gap: 1rem; }
+.hud dt { color: var(--dim); }
+.hud dd { margin: 0; font-weight: 700; }
+
+.runstats { color: var(--dim); font-size: 0.9rem; }
+
+.help { margin: 0; padding-left: 1.1rem; }
+.help li { margin-bottom: 0.35rem; }
+
+.scores { margin: 0.5rem 0 0; padding-left: 1.4rem; display: grid; gap: 0.2rem; }
+.scores li { font-variant-numeric: tabular-nums; }
+#shop-veil .card { max-width: 44rem; }
+#shop-list { max-height: 52vh; overflow-y: auto; }
+#shop-list li { display: flex; align-items: center; gap: 0.75rem; padding: 0.35rem 0.4rem; }
+.shop-item { flex: 1; min-width: 0; display: grid; gap: 0.1rem; }
+.shop-name { font-weight: 700; }
+.shop-sub { color: var(--dim); font-size: 0.85rem; }
+.shop-cat { font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem; color: var(--dim); margin-top: 0.4rem; }
+#shop-list li.sel { background: rgba(255, 255, 255, 0.07); border-radius: 0.4rem; }
+#shop-list li .acts { flex: none; display: flex; gap: 0.4rem; margin-left: auto; align-self: center; }
+#shop-list li .acts button { min-width: 4.5rem; }
+#preview-stage { width: 100%; height: auto; border-radius: 6px; background: #10131c; }
+
+.canvas-holder { position: relative; }
+.banner { position: absolute; top: 50%; left: 0; right: 0; text-align: center;
+  transform: translateY(-50%);
+  pointer-events: none; z-index: 5; }
+.banner[hidden] { display: none; }
+.banner span { display: inline-block; font-size: 1.6rem; font-weight: 800; color: #fff;
+  background: rgba(8, 10, 6, 0.88); border: 1px solid var(--accent); border-radius: 10px;
+  padding: 0.5rem 1.2rem; animation: bannerpop 1.5s ease-out; }
+@keyframes bannerpop {
+  0% { transform: scale(0.7); opacity: 0; }
+  15% { transform: scale(1.05); opacity: 1; }
+  30% { transform: scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.lobby-rows { display: grid; gap: 0.8rem; margin: 0.6rem 0; }
+.lobby-form { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+  border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.7rem; }
+.lobby-form label { color: var(--dim); font-size: 0.9rem; }
+.lobby-form input { max-width: 6rem; text-transform: none; }
+.lobby-form select {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  max-width: 10rem;
+}
+#join-code { max-width: 5rem; text-transform: uppercase; }
+.room-code { font-size: 2rem; font-weight: 800; letter-spacing: 0.4em; margin: 0.4rem 0 0;
+  color: var(--accent); }
+.roster { margin: 0.5rem 0; padding-left: 1.4rem; display: grid; gap: 0.2rem; }
+.roster li { font-variant-numeric: tabular-nums; }
+.roster .host-tag { color: var(--accent); font-size: 0.8rem; margin-left: 0.4rem; }
+.card .acts { display: flex; gap: 0.4rem; margin-left: auto; justify-content: flex-end; margin-top: 0.6rem; }
+
+.log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 16rem;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.35rem;
+}
+.log li {
+  border-left: 3px solid var(--line);
+  padding-left: 0.55rem;
+}
+.log li.good { border-color: var(--good); }
+.log li.bad { border-color: var(--bad); }
+.log li.info { border-color: var(--safe); }
+
+.guide { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
+.guide button { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+.guide button:hover { border-color: var(--accent); }
+
+@media (max-width: 1520px) {
+  .layout { grid-template-columns: 1fr; }
+}
+/* Narrow screens: overlays drop below the canvas instead of covering it. */
+@media (max-width: 700px) {
+  .menubar { position: static; margin-top: 0.5rem; flex-wrap: wrap; }
+  .pad-aim, .guide-actions, .canvas-holder .dialogue { position: static; transform: none; }
+  .pad-aim, .guide-actions { margin-top: 0.5rem; }
+  .guide-actions { max-width: none; }
+  .canvas-holder .dialogue { margin-top: 0.5rem; max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

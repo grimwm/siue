@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""Print one SHA-256 that identifies exactly what a deploy would upload.
+
+    deploy-hash TREE [--extra FILE ...] [--manifest]
+
+TREE is the staged copy of what the server receives. Every regular file
+counts by relative path, permission bits and content; mtimes do not, so
+re-staging unchanged files gives the same hash. --extra adds files that
+shape the deploy without being uploaded (the deploy recipe itself), by
+name and content only, so where they live does not matter. --manifest
+prints the per-file lines instead of the digest.
+
+Symlinks are refused: the stage must hold what the server holds, and scp
+follows links, so stage with cp -L.
+"""
+import argparse
+import hashlib
+import os
+import stat
+import sys
+
+
+def file_sha(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def manifest(tree, extras):
+    lines = []
+    for dirpath, dirnames, filenames in os.walk(tree):
+        for name in dirnames + filenames:
+            path = os.path.join(dirpath, name)
+            if os.path.islink(path):
+                raise SystemExit(f"deploy-hash: refusing symlink in stage: {path}")
+        for name in filenames:
+            path = os.path.join(dirpath, name)
+            rel = os.path.relpath(path, tree).replace(os.sep, "/")
+            mode = stat.S_IMODE(os.stat(path).st_mode)
+            lines.append(f"{mode:04o} {file_sha(path)} {rel}")
+    lines.sort(key=lambda l: l.split(" ", 2)[2].encode())
+    for path in extras:
+        lines.append(f"extra {file_sha(path)} {os.path.basename(path)}")
+    return lines
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p.add_argument("tree")
+    p.add_argument("--extra", action="append", default=[])
+    p.add_argument("--manifest", action="store_true")
+    a = p.parse_args()
+    if not os.path.isdir(a.tree):
+        raise SystemExit(f"deploy-hash: not a directory: {a.tree}")
+    lines = manifest(a.tree, a.extra)
+    if a.manifest:
+        print("\n".join(lines))
+    else:
+        print(hashlib.sha256(("\n".join(lines) + "\n").encode()).hexdigest())
+
+
+if __name__ == "__main__":
+    sys.exit(main())

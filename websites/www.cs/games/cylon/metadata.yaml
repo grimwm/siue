@@ -1,0 +1,13 @@
+# Games page card. games.php reads every games/*/metadata.yaml; the format
+# is in games/README.md. The CIC mounts into the site page, so it launches
+# with `start` (a page function) instead of a `play` link.
+title: The CIC
+kicker: Cylon defense
+description: >
+  Defend this page from Cylon drones: missiles, Raptors, and one opening
+  nuke. Play often: weekly high scores reset every Monday at midnight
+  Central. You can also start from the nav Game Off toggle.
+button: Enter The CIC
+start: cylonStartGame
+order: 10
+image: og.png

@@ -13,6 +13,8 @@
 #
 #   FORCE=1   upload everything even when the hash matches
 #   DRY_RUN=1 show what would change, upload nothing
+#   PRUNE=1   also delete stale files: ones the last deploy sent (they are
+#             in the host's .deploy-hash manifest) that this one does not
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -29,15 +31,21 @@ STAMP=.deploy-hash
 # Runtime data the server writes; never upload over it.
 SCORES=games/cylon/data/scores.json
 
+# Shared game links must preview the game: refuse to ship stale share tags.
+if ! php tools/game-share-tags.php --check; then
+  echo "deploy: run php tools/game-share-tags.php and commit the result" >&2
+  exit 1
+fi
+
 work=$(mktemp -d "${TMPDIR:-/tmp}/www-cs-deploy.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 stage=$work/stage
 mkdir "$stage"
 
 # '-mkdir' on a directory that exists reports a Failure it then ignores;
-# drop that line so real errors stand out.
+# drop that line so real errors stand out. sftp ends its messages with CRLF.
 sftp_batch() {
-  "${sshpass[@]}" sftp -q -oBatchMode=no -b "$1" "${HOST#*@}" 2> >(grep -v '^remote mkdir .*: Failure$' >&2) >/dev/null
+  "${sshpass[@]}" sftp -q -oBatchMode=no -b "$1" "${HOST#*@}" 2> >(tr -d '\r' | grep -v '^remote mkdir .*: Failure$' >&2) >/dev/null
 }
 
 # 1. Stage.
@@ -45,6 +53,8 @@ while IFS= read -r -d '' f; do
   [ -e "$f" ] || continue # deleted but still in the index
   case "$f" in
     "$SCORES") continue ;;
+    # Development files that ride along with games: tests and handoff notes.
+    games/*-test.* | games/*/HANDOFF.md) continue ;;
     games/*) ;;
     */*) continue ;;
     *.html | *.js | *.css | *.php | *.png | *.ico | *.webmanifest) ;;
@@ -84,15 +94,20 @@ fi
 # The recipe rides in the manifest as an "extra" line; it is never uploaded.
 grep -v '^deploy.sh$' "$work/send" >"$work/files" || true
 
-# Files the last deploy sent that this one does not have. scp/sftp cannot
-# tell ours from the server's own, so report them rather than delete.
+# Files the last deploy sent that this one does not have. Only paths in the
+# host's manifest qualify, so the server's own files (scores, runs) never
+# do. They are reported, and deleted only with PRUNE=1.
 comm -23 <(cut -d' ' -f3- "$work/remote-manifest" | grep -v '^extra ' | sort) \
          <(cut -d' ' -f3- "$work/manifest" | sort) >"$work/gone" || true
 
 prev=${remote_hash:0:12}
 echo "www.cs: deploying ${hash:0:12} to $HOST (was ${prev:-nothing})"
 sed 's/^/  send  /' "$work/files"
-sed 's/^/  stale (left on server)  /' "$work/gone"
+if [ "${PRUNE:-0}" = 1 ]; then
+  sed 's/^/  delete  /' "$work/gone"
+else
+  sed 's/^/  stale (left on server; PRUNE=1 deletes)  /' "$work/gone"
+fi
 if [ "${DRY_RUN:-0}" = 1 ]; then
   echo "DRY_RUN: nothing uploaded"
   exit 0
@@ -114,6 +129,11 @@ fi
 } >"$work/batch"
 if [ -s "$work/batch" ]; then
   sftp_batch "$work/batch"
+fi
+if [ "${PRUNE:-0}" = 1 ] && [ -s "$work/gone" ]; then
+  # '-rm' so a file someone already removed by hand does not stop the batch.
+  sed -e 's/^/-rm "/' -e 's/$/"/' "$work/gone" >"$work/prune"
+  sftp_batch "$work/prune"
 fi
 
 # The scores file is the server's: create it if missing, and keep it 666 so

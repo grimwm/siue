@@ -1,0 +1,5 @@
+# Dotfiles in game folders are server-side settings (games/tankity/.config.yaml);
+# PHP reads them, browsers may not. Apache only hides .ht* on its own.
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>

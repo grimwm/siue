@@ -9,9 +9,28 @@
   --bad: #ff5a5a;
   --safe: #6fc3ff;
   --player: #ffd75e;
+  /* In-frame overlays sit on the battlefield, so they take its colours: the
+     night sky (#00000b) nudged toward EGA blue, edged in EGA blue, with EGA
+     light grey text and EGA yellow key caps. */
+  --wash: rgba(0, 0, 24, 0.72);
+  --wash-solid: rgba(0, 0, 24, 0.88);
+  --wash-card: rgba(4, 4, 32, 0.95);
+  --wash-edge: rgba(85, 85, 255, 0.55);
+  --wash-ink: #aaaaaa;
+  --wash-key: #ffff55;
 }
 
 * { box-sizing: border-box; }
+
+/* Present for screen readers, not drawn (the battlefield shows whose turn). */
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 
 body {
   margin: 0;
@@ -45,17 +64,24 @@ input[type="text"] {
   max-width: 11rem;
 }
 
+/* Secondary buttons (the default) wear the navbar style; .btn-primary and the
+   aim pad wear gold, one primary per panel. */
 button {
-  background: var(--accent);
-  color: #1a1a1a;
-  border: none;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 0.45rem 0.8rem;
   font-weight: 700;
   cursor: pointer;
 }
-
-button:hover { filter: brightness(1.08); }
+button:hover { border-color: var(--accent); }
+button.btn-primary, .pad-grid button {
+  background: var(--accent);
+  color: #1a1a1a;
+  border-color: var(--accent);
+}
+button.btn-primary:hover, .pad-grid button:hover { filter: brightness(1.08); }
 /* Key hints ride visibly inside their buttons. */
 button .key {
   background: rgba(0, 0, 0, 0.28);
@@ -126,8 +152,8 @@ both screen axes, so the canvas plus its in-frame HUD always fit the viewport. *
   align-items: center;
   margin-top: 0.6rem;
   min-height: 56px;
-  background: rgba(8, 10, 6, 0.92);
-  border: 1px solid var(--line);
+  background: var(--wash-solid);
+  border: 1px solid var(--wash-edge);
   border-radius: 10px;
   padding: 0.4rem 0.6rem;
   pointer-events: none;
@@ -148,7 +174,7 @@ both screen axes, so the canvas plus its in-frame HUD always fit the viewport. *
 .veil {
   position: fixed;
   inset: 0;
-  background: rgba(5, 6, 4, 0.8);
+  background: rgba(0, 0, 11, 0.82);
   display: grid;
   place-items: center;
   padding: 1rem;
@@ -190,8 +216,8 @@ battle buttons on the right, sky behind both. */
   align-items: center;
   justify-content: center;
   z-index: 4;
-  background: rgba(8, 10, 6, 0.6);
-  border: 1px solid var(--line);
+  background: var(--wash);
+  border: 1px solid var(--wash-edge);
   border-radius: 10px;
   padding: 0.3rem 0.5rem;
 }
@@ -207,21 +233,21 @@ battle buttons on the right, sky behind both. */
   gap: 0.2rem 0.9rem;
   margin: 0;
   padding: 0.35rem 0.7rem;
-  background: rgba(8, 10, 6, 0.78);
-  border: 1px solid var(--line);
+  background: var(--wash-solid);
+  border: 1px solid var(--wash-edge);
   border-radius: 8px;
   font-size: 0.85rem;
 }
 .hudbar .hud > div { display: flex; gap: 0.35rem; align-items: baseline; }
-.hudbar dt { color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.hudbar dt { color: var(--wash-ink); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
 .hudbar dd { margin: 0; font-weight: 700; }
 .hudbar .runstats { display: none; }
 .pad-aim {
   position: static;
   margin: 0;
   padding: 0.3rem;
-  background: rgba(8, 10, 6, 0.6);
-  border: 1px solid var(--line);
+  background: var(--wash);
+  border: 1px solid var(--wash-edge);
   border-radius: 10px;
   z-index: 4;
 }
@@ -231,8 +257,8 @@ battle buttons on the right, sky behind both. */
   position: static;
   margin: 0;
   padding: 0.3rem;
-  background: rgba(8, 10, 6, 0.6);
-  border: 1px solid var(--line);
+  background: var(--wash);
+  border: 1px solid var(--wash-edge);
   border-radius: 10px;
   z-index: 4;
   font-size: 0.75rem;
@@ -243,22 +269,39 @@ battle buttons on the right, sky behind both. */
   gap: 0.25rem;
 }
 .guide-actions button { padding: 0.3rem 0.35rem; white-space: nowrap; }
-/* Every battle button wears the menubar style, in every dialog too. */
 #frame button { font-size: 0.75rem; padding: 0.3rem 0.35rem; white-space: nowrap; }
-/* The Game menu dialog pairs its buttons in two equal columns under a
-full-width seed row, so both columns land the same size. */
-.menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 0.6rem; align-items: center; }
-/* Every dialog button mimics the navbar pills (Fire, Weapon, ...): dark
-panel with a hairline border, never the gold base button. Menu pairs sit as
-centered pills instead of stretching into full-column bars. */
-.frame-overlay button, .veil button {
-  background: var(--panel);
+/* Game menu: a compact centred card. Seed and New Game share a row, the
+   unit picker sits under them, and the rest fill equal three-across rows. */
+.menu-card {
+  inset: 0;
+  margin: auto;
+  width: min(25rem, 92%);
+  height: fit-content;
+  max-height: 88%;
+  padding: 0.8rem 0.9rem;
+}
+.menu-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.6rem; }
+.menu-head h2 { margin: 0; }
+.card-overlay .menu-head button { margin-top: 0; }
+.menu-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
+.menu-grid button { width: 100%; }
+.seed-row, .unit-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.4rem; }
+.seed-row label, .unit-label { font-size: 0.8rem; color: var(--wash-ink); flex: none; }
+.seed-row input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
   color: var(--ink);
   border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.3rem 0.45rem;
 }
-.menu-grid button { justify-self: center; }
-.menu-grid .span-both { grid-column: 1 / -1; }
-.menu-grid label, .menu-grid input { grid-column: 1 / -1; }
+.seed-row button { width: auto; flex: none; }
+.unit-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem; flex: 1; }
+.unit-picker .unit-choice { display: grid; justify-items: center; gap: 0.1rem; padding: 0.25rem 0.2rem; }
+.unit-choice canvas { width: 48px; height: 34px; }
+.unit-choice span { font-size: 0.7rem; }
+.unit-picker button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
 .canvas-holder .dialogue {
   position: absolute;
   left: 50%;
@@ -299,13 +342,20 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 .frame-overlay[hidden] { display: none; }
 .log-overlay {
   position: absolute;
-  top: 3.6rem;
+  top: 6.4rem; /* placeLogBelowMenu() sets the measured value */
   right: 0.5rem;
   width: min(20rem, 42%);
   max-height: 55%;
   overflow-y: auto;
   z-index: 6;
   pointer-events: none;
+  /* One panel behind every line, so the battlefield does not show through
+     between rows. */
+  background: var(--wash-card);
+  border: 1px solid var(--wash-edge);
+  border-radius: 10px;
+  padding: 0.4rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
 }
 .log-overlay h2 {
   position: absolute;
@@ -321,9 +371,9 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 }
 .log-transparent li {
   list-style: none;
-  background: rgba(8, 10, 6, 0.55);
-  border: 1px solid var(--line);
-  border-left-width: 3px;
+  background: rgba(85, 85, 255, 0.08);
+  border: none;
+  border-left: 3px solid var(--wash-edge);
   border-radius: 6px;
   padding: 0.1rem 0.45rem 0.1rem 0.35rem;
   font-size: 0.82rem;
@@ -338,21 +388,23 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
   inset: 8% 6%;
   z-index: 6;
   overflow-y: auto;
-  background: rgba(26, 30, 16, 0.95);
+  background: var(--wash-card);
   border: 1px solid var(--accent);
   border-radius: 12px;
   padding: 1rem 1.2rem;
 }
 .card-overlay h2 { margin: 0 0 0.5rem; font-size: 1.05rem; }
 .card-overlay button { margin-top: 0.6rem; }
-/* Navigation footers: always visible, dimmed while everything fits. */
-.nav-hint { color: var(--dim); font-size: 0.8rem; margin: 0.6rem 0 0; }
-.nav-hint[aria-disabled="true"] { opacity: 0.45; }
+/* Navigation footers: always visible; the scroll keys only show while there
+   is something to scroll (aria-disabled="true" means everything fits). */
+.nav-hint { color: #ffffff; font-size: 0.8rem; margin: 0.6rem 0 0; text-shadow: 0 1px 2px #000; }
+.nav-hint [data-keyhint] { color: var(--wash-key); font-weight: 700; }
+.nav-hint[aria-disabled="true"] .scroll-keys { display: none; }
+.nav-hint[data-scroll-only][aria-disabled="true"] { visibility: hidden; }
 .log-overlay .nav-hint {
-  background: rgba(8, 10, 6, 0.55);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 0.1rem 0.45rem;
+  margin-top: 0.4rem;
+  padding: 0.2rem 0.35rem 0;
+  border-top: 1px solid var(--wash-edge);
 }
 .panel {
   background: var(--panel);
@@ -392,7 +444,7 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
   pointer-events: none; z-index: 5; }
 .banner[hidden] { display: none; }
 .banner span { display: inline-block; font-size: 1.6rem; font-weight: 800; color: #fff;
-  background: rgba(8, 10, 6, 0.88); border: 1px solid var(--accent); border-radius: 10px;
+  background: var(--wash-solid); border: 1px solid var(--accent); border-radius: 10px;
   padding: 0.5rem 1.2rem; animation: bannerpop 1.5s ease-out; }
 @keyframes bannerpop {
   0% { transform: scale(0.7); opacity: 0; }
@@ -441,8 +493,6 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 .log li.info { border-color: var(--safe); }
 
 .guide { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
-.guide button { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
-.guide button:hover { border-color: var(--accent); }
 
 @media (max-width: 1520px) {
   .layout { grid-template-columns: 1fr; }

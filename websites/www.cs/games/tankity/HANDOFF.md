@@ -1,86 +1,59 @@
-# HANDOFF: Operation Tankity -> siue repo
+# Operation Tankity: maintainer notes
 
-## Status: ready to move. Nothing blocks the copy.
+Scorched-Earth artillery against a drone battery. Endless escalating rounds
+from a $600 stake, solo or in network rooms (max 10 live). No chat; names are
+3-letter initials with a blocked list (`room_valid_initials` in rooms.php).
+Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
-All suites green at handoff (2026-10-09, local docker, port 8000):
-`node smoke-test.js` -> SMOKE-OK, 198 PASS, every press driven from
-`keys.json`. `php config-test.php` -> 9 PASS.
-`curl .../rooms-web-test.php` -> WEB-OK 21/21 (host->guest->AI turns,
-10-room ceiling, stale sweep, 5s crash-lock recovery; the suite is
-config-driven now: ceiling and SHM key come from `.config.yaml`, counts
-are relative to a baseline, it only ages out its own rooms).
-`php /tmp/e2e/turn-cycle.php` -> CYCLE-OK. Two-browser host/guest/AI OK.
-Headless Chrome probes in `/tmp/e2e/` (not part of the move):
-`arrow-verify.mjs` ARROWS-OK, `keys-verify.mjs` KEYS-OK, `net-turns.mjs`
-host->guest->AI cycle OK.
+## Files
 
-## What this game is
+| File | What it is |
+|---|---|
+| `index.html`, `game.css`, `game.js` | The page and the whole client (solo sim, rendering, room client and replay) |
+| `rooms.php` | Room server: authoritative sim, AI turns, shop, events |
+| `scores.php`, `config.php` | Score API; `.config.yaml` reader |
+| `weapons.json` | The 20-item arsenal (data). `game.js` and `rooms.php` carry a frozen fallback copy of a few rows; edit both together |
+| `keys.json` | Every key binding (contexts: aim, shop, global, scroll). `game.js` carries a frozen fallback copy |
+| `metadata.yaml`, `og.png` | Games-page card and link preview (see `../README.md`) |
+| `.config.yaml` | Server settings, read-only; env vars win (`TANKITY_MAX_ROOMS`, `TANKITY_ROOM_MAX_AGE`, `TANKITY_ROOM_LIVE_SECS`, `TANKITY_SHM_KEY`; `CONFIG_FILE` points elsewhere) |
 
-Scorched-Earth artillery vs AI battery. Endless, no victory, escalating
-rounds, $600 stake. Solo hills or network rooms (max 10, live count only).
-No chat anywhere. Names are 3-letter initials, lowercase allowed,
-cylon-style blocked list (`room_valid_initials` in rooms.php).
-Kid-friendly, human error strings, never status codes. GPLv3 (LICENSE).
-1991 EGA palette on canvas. 20-item arsenal lives in `weapons.json`
-(data, not code; JS + PHP both read it). Music: 4 songs, one per round.
-Tutorial remembers skip in localStorage, `U` replays, `ESC` closes menus.
-All keyboard bindings live in `keys.json` (contexts: aim, shop, global,
-scroll; first token per action shows on labels). `game.js` carries an
-identical frozen fallback so the game works if the file cannot load; edit
-both together. Buttons, nav hints, help, and tutorial render their caps
-from it via `data-keyhint` spans, so labels cannot drift from behavior.
+## Architecture rules
 
-## Architecture the next agent must preserve
+- Rooms live in SysV shared memory only: no disk, no fallback. A host restart
+  wipes them; a web-server restart does not. Key: `shm_key` from
+  `.config.yaml`, else `ftok(rooms.php,'R')`, else `0x54414E4B`. The PHP image
+  needs `sysvsem` and `sysvshm` (Fedora's `php-process`).
+- The server is authoritative. Clients send intents (aim, drive, weapon, fire,
+  buy, body), never hits. CSRF and Origin gated; every act is range-checked.
+- The server settles a whole turn per request. Every event it emits carries
+  `at` (seconds into the volley); shot events carry their flight path, launch
+  and landing times, and blast radius. Clients replay each volley at real
+  speed and adopt the new room state only after the replay drains.
+- Locks are bounded (~5 s): a crashed holder must never brick the shelf.
+- Live occupancy only: rooms idle longer than `room_live_secs` stop counting;
+  the sweep (on ping) drops them.
+- Spawns are random, at least 110 px apart, and units never end a move within
+  44 px of another. Each tank faces the middle; barrel keys swing toward the
+  side pressed.
 
-- Rooms live in SysV shared memory ONLY. No disk, no fallback, no persist
-  across restarts. Key = numeric `shm_key` from `.config.yaml`, else
-  `ftok(rooms.php,'R')`, else `0x54414E4B`. Registry at var 1.
-- `.config.yaml` (game root, `CONFIG_FILE` env may override) is READ ONLY.
-  Never written. Env vars win over file. `max_rooms: 10`.
-- Server is authoritative. Clients never report hits. CSRF + Origin gated.
-- Locks are bounded (~5s): a crashed holder must never brick the shelf.
-  `rooms-web-test.php` proves this; keep that check passing.
-- Live occupancy only: rooms idle > `room_live_secs` (600) stop counting;
-  the sweep (runs on ping) drops them. `used` in ping is the live count.
+## Tests
 
-## Docker requirement (do this when setting up siue docker)
+| Command | Covers |
+|---|---|
+| `node smoke-test.js` | The shipped client in a stub DOM, driven by `keys.json` presses |
+| `php config-test.php` | `.config.yaml` precedence |
+| `php rooms-sim-test.php` | Server sim units: pierce, repair, spawns, spacing, replay stamping |
+| `php rooms-test.php` | The room shelf over its own `php -S` (needs SysV; run inside the PHP container) |
+| `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed) |
+| `make e2e` (site root) | Real-browser checks, solo and two-player; `E2E_BASE_URL` points it at the live site |
 
-The PHP web image MUST install `sysvsem` and `sysvshm` (bundled exts,
-no apt deps). Without them every rooms endpoint fails and the game
-silently falls back to solo. Locally this bit us when a container
-recreate wiped a hand install. Reference patch (adapt path as needed):
+`make test` from the site root runs every suite above except e2e. Deploys
+skip `*-test.*` and this file.
 
-```
- RUN docker-php-ext-install \
-     pdo \
-     pdo_mysql \
-     pdo_pgsql \
-     pdo_sqlite \
-     pgsql \
-     mysqli \
--    zip
-+    zip \
-+    sysvsem \
-+    sysvshm
-```
+## Keys (defaults; `keys.json` rules)
 
-## The move
-
-Plain copy of this directory to `siue/websites/www.cs/games/` (folder name TBD).
-Full page, NOT embedded. Hookup patch + staged compose not yet written;
-deployment stays on hold until after the move. After moving, re-run every
-suite above against the new docker and eyeball fullscreen fit (it was not
-re-checked after the palette change) plus a ~20-item balance pass.
-
-## Test quirks worth knowing
-
-- `rooms-test.php` (CLI) needs SysV in the *executing* PHP or it SKIPs;
-  `rooms-web-test.php` (over HTTP) is the real room coverage.
-- `rooms-web-test.php` reaches itself via public host, or the `nginx`
-  sibling when the host is localhost; it only ages out rooms it created.
-- Room create/start/act are throttled; the suites already sleep correctly.
-- Game keys (defaults; reconfigure in `keys.json`): Left/Right swing the
-  barrel, Up/Down work power, A/D drive, Ctrl fire, Q cycle, digits buy
-  rows in the shop, 1-4 favorites in battle, B buy, V/P preview, N
-  new/next, C menu, O rooms, U tutorial, T random seed, F fullscreen,
-  M music, E sound, J/K and PgUp/PgDn scroll overlays, ESC closes.
+Left/Right swing the barrel, Up/Down set power, A/D drive, Ctrl fires, Q
+cycles weapons, 1-4 load favorites, B buys, V/P preview, N new/next, C menu,
+O rooms, U tutorial, T random seed, F fullscreen, M music, E sound, J/K and
+PgUp/PgDn scroll panels, ESC closes. In fullscreen, Chromium lets a tap of
+ESC reach the game; holding it leaves fullscreen.

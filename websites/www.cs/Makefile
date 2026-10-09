@@ -1,4 +1,4 @@
-.PHONY: help deploy up down url parity
+.PHONY: help deploy up down url parity test e2e
 
 .DEFAULT_TARGET := help
 
@@ -15,11 +15,14 @@ help:
 	@echo "Available targets:"
 	@echo "  help   - Show this help message"
 	@echo "  deploy - Upload what changed to www.cs.siue.edu (skips when its"
-	@echo "           .deploy-hash matches; FORCE=1 sends all, DRY_RUN=1 sends none)"
+	@echo "           .deploy-hash matches; FORCE=1 sends all, DRY_RUN=1 sends none,"
+	@echo "           PRUNE=1 deletes files the last deploy sent that are now gone)"
 	@echo "  up     - Run the site locally in docker (PHP matches the server)"
 	@echo "  down   - Stop the local site"
 	@echo "  url    - Print the local site's URL (its port is ephemeral)"
 	@echo "  parity - Check the docker PHP against www.cs.siue.edu's modules/ini"
+	@echo "  test   - Unit suites: games hub, share tags, Tankity (needs make up)"
+	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL"
 
 deploy:
 	@HOST="$(HOST)" SSHPASS_FILE="$(SSHPASS_FILE)" ./deploy.sh
@@ -40,3 +43,15 @@ url:
 
 parity:
 	./docker/check-parity.sh
+
+test:
+	php tests/games-hub-test.php
+	php tests/game-share-tags-test.php
+	php tools/game-share-tags.php --check
+	cd games/tankity && node smoke-test.js && php config-test.php && php rooms-sim-test.php
+	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php rooms-test.php'
+	@url=$$($(MAKE) --no-print-directory -s url) && curl -sf --max-time 300 "$${url}games/tankity/rooms-web-test.php" | tail -1
+
+e2e:
+	@url=$${E2E_BASE_URL:-$$($(MAKE) --no-print-directory -s url)} && \
+	cd tests/e2e && npm ci --silent && E2E_BASE_URL=$$url npx playwright test

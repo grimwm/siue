@@ -249,9 +249,12 @@ for (const id of ['menu-overlay', 'btn-menu', 'menu-close', 'seed-form', 'new-ga
 check('menu-in-frame', html.indexOf('id="seed-form"') > html.indexOf('id="frame"'));
 check('menu-grid', html.includes('menu-grid'));
 check('menu-buttons', /#frame button\s*\{[^}]*font-size:\s*0\.75rem/.test(css));
-check('menu-grid-cols', /\.menu-grid\s*\{[^}]*1fr 1fr/.test(css));
-check('dialog-buttons', /\.frame-overlay button,\s*\.veil button\s*\{[^}]*background:\s*var\(--panel\)/.test(css) && /\.frame-overlay button,\s*\.veil button\s*\{[^}]*border:\s*1px solid var\(--line\)/.test(css));
-check('menu-pills', /\.menu-grid button\s*\{[^}]*justify-self:\s*center/.test(css));
+check('menu-grid-cols', /\.menu-grid\s*\{[^}]*repeat\(3, 1fr\)/.test(css));
+// Secondary is the default (navbar style); gold is opt-in via .btn-primary.
+check('buttons-secondary-default', /\nbutton\s*\{[^}]*background:\s*var\(--panel\)/.test(css) && /\nbutton\s*\{[^}]*border:\s*1px solid var\(--line\)/.test(css));
+check('buttons-primary-gold', /button\.btn-primary[^{]*\{[^}]*background:\s*var\(--accent\)/.test(css));
+const menubarHtml = html.slice(html.indexOf('id="menubar"'), html.indexOf('id="log-overlay"'));
+check('menubar-one-primary', (menubarHtml.match(/btn-primary/g) || []).length === 1 && /id="btn-menu" class="btn-primary"/.test(menubarHtml));
 TAP('global', 'menu');
 check('menu-toggle', els['menu-overlay'].hidden === false && els['btn-menu'].getAttribute('aria-expanded') === 'true');
 click(els['menu-close']);
@@ -496,7 +499,7 @@ function change(el) {
   TAP('global', 'menu');
   TAP('shop', 'close'); frames(3);
   check('shop-esc-closes-menu', els['menu-overlay'].hidden === true && els['shop-veil'].hidden === false);
-  // Stock up: Buckshot ($100), Mortar ($150), Rail ($200) of the $600 stake.
+  // Stock up: Buckshot ($80), Mortar ($200), Rail ($140) of the $600 stake.
   // (Each render appends, so read the last eight list items: two category
   // headers plus six rows. Each row holds an info div then an acts span.)
   const shopLis = () => els['shop-list'].children.slice(-8);
@@ -557,10 +560,11 @@ function change(el) {
   TAP('shop', 'qtyUp'); frames(3);
   check('shop-qty-2', /×2 packs = \$120/.test(rowName(fuelRow())), rowName(fuelRow()));
   TAP('shop', 'qtyUp'); frames(3);
-  check('shop-qty-cap', /×2 packs = \$120/.test(rowName(fuelRow())), rowName(fuelRow()));
+  TAP('shop', 'qtyUp'); frames(3); // $180 left after the three guns: three packs is all the chest covers
+  check('shop-qty-cap', /×3 packs = \$180/.test(rowName(fuelRow())), rowName(fuelRow()));
   TAP('shop', 'buy'); frames(3);
-  check('shop-bulk', /\$30/.test(els['shop-cash'].textContent), els['shop-cash'].textContent);
-  check('shop-bulk-said', /Bought 2 × Fuel/.test(logTail()), logTail());
+  check('shop-bulk', /\$0\b/.test(els['shop-cash'].textContent), els['shop-cash'].textContent);
+  check('shop-bulk-said', /Bought 3 × Fuel/.test(logTail()), logTail());
   check('shop-bulk-reset', !/×[2-9] packs/.test(rowName(fuelRow())), rowName(fuelRow()));
   const buckRow = () => shopRows().find(li => rowName(li).includes('Buckshot'));
   check('shop-bulk-disabled', buyBtn(fuelRow()).disabled === true && buyBtn(buckRow()).disabled === true,
@@ -582,10 +586,17 @@ function change(el) {
   const angle0 = els['hud-angle'].textContent;
   const wind0 = els['hud-wind'].textContent;
   const armor0 = els['hud-armor'].textContent;
-  check('shop-bulk-banked', els['hud-fuel'].textContent === '200', els['hud-fuel'].textContent);
+  check('shop-bulk-banked', els['hud-fuel'].textContent === '260', els['hud-fuel'].textContent);
 
   // Every demo lands its verdict with damage, never a clean miss.
   await ensureAim();
+  // The keyboard drives: holding the drive key burns fuel (it used to set an
+  // action name the drive code never read).
+  const fuelBeforeDrive = Number(els['hud-fuel'].textContent);
+  KD('aim', 'driveRight'); frames(30); KU('aim', 'driveRight'); frames(2);
+  KD('aim', 'driveLeft'); frames(30); KU('aim', 'driveLeft'); frames(2);
+  const fuelAfterDrive = Number(els['hud-fuel'].textContent);
+  check('keyboard-drives', fuelAfterDrive < fuelBeforeDrive, `fuel ${fuelBeforeDrive} -> ${fuelAfterDrive}`);
   // Digits load favorite shells; Shift plus a digit pins the loaded one.
   TAPD('global', 'fav', 3); frames(3);
   check('fav-hotkey', /Mortar [^·]*◀/.test(els['hud-weapon'].textContent), els['hud-weapon'].textContent);
@@ -646,16 +657,29 @@ function change(el) {
   const boomR = [];
   const zoomZ = [];
   let lastFill = '';
+  // Drone aim arms: the only strokes drawn at alpha 0.75, width 2.
+  const arms = [];
+  let armAlpha = 1, armWidth = 1, armFrom = null;
   {
     const rec = new Proxy(function () {}, {
       get(t, p) {
+        if (p === 'moveTo') return (x, y) => { armFrom = [x, y]; return rec; };
+        if (p === 'lineTo') return (x, y) => {
+          if (armAlpha === 0.75 && armWidth === 2 && armFrom) arms.push({ x0: armFrom[0], y0: armFrom[1], x1: x, y1: y });
+          return rec;
+        };
         if (p === 'arc') return (x, y, r) => { if (lastFill === '#ffb13c') boomR.push(r); };
         if (p === 'scale') return (x, y) => { zoomZ.push(x); };
         if (p === 'fillStyle') return lastFill;
         if (p === 'createLinearGradient') return () => ({ addColorStop() {} });
         return (...a) => rec;
       },
-      set(t, p, v) { if (p === 'fillStyle') lastFill = v; return true; },
+      set(t, p, v) {
+        if (p === 'fillStyle') lastFill = v;
+        if (p === 'globalAlpha') armAlpha = v;
+        if (p === 'lineWidth') armWidth = v;
+        return true;
+      },
       apply() { return rec; },
     });
     els['stage'].getContext = () => rec;
@@ -694,6 +718,28 @@ function change(el) {
   guard = 0;
   mark = els['log'].children.length;
   while (guard++ < 4000 && !/(is aiming…|Your turn)/.test(freshFrom(mark))) frames(10);
+  // A drone's turn: its aim arm must show, swing in small steps rather than
+  // snapping, and stay within the power-scaled length (14..50). Step single
+  // frames and keep the first unbroken run of arm frames. Fire first so the
+  // battery gets its turn.
+  {
+    TAP('global', 'fire');
+    const seen = [];
+    for (let i = 0; i < 3000; i++) {
+      arms.length = 0;
+      frames(1);
+      if (arms.length) seen.push(arms[arms.length - 1]);
+      else if (seen.length) break;
+    }
+    const ang = seen.map(a => Math.atan2(a.y0 - a.y1, Math.abs(a.x1 - a.x0)) * 180 / Math.PI);
+    const len = seen.map(a => Math.hypot(a.x1 - a.x0, a.y1 - a.y0));
+    let maxStep = 0;
+    for (let i = 1; i < ang.length; i++) maxStep = Math.max(maxStep, Math.abs(ang[i] - ang[i - 1]));
+    check('drone-aim-arm-shows', seen.length >= 20, `frames=${seen.length}`);
+    check('drone-aim-arm-glides', seen.length >= 20 && maxStep < 6, `max step=${maxStep.toFixed(2)}°`);
+    check('drone-aim-arm-power-length', seen.length > 0 && len.every(l => l >= 13.9 && l <= 50.1),
+      len.length ? `len ${Math.min(...len).toFixed(1)}..${Math.max(...len).toFixed(1)}` : 'none');
+  }
   // Fresh match, then a single Shell for the battery-exchange checks.
   TAP('global', 'new'); frames(120);
   TAP('global', 'fire');
@@ -708,7 +754,7 @@ function change(el) {
   const dlg = els['dlg-line'].textContent;
 
   check('preshop', shopOpen && /\$600/.test(shopCash0), shopCash0);
-  check('shop-buy', /\$150/.test(shopCash1), shopCash1);
+  check('shop-buy', /\$180/.test(shopCash1), shopCash1);
   check('boot-turn', /YOU/.test(turn0), turn0);
   check('boot-hud', /62°/.test(angle0) && wind0.length > 0 && /you 100/.test(armor0),
     `${angle0} | ${wind0} | ${armor0}`);
@@ -845,6 +891,7 @@ function change(el) {
   sawFire = false;
   TAP('global', 'fire'); await tick(10);
   check('net-fire', sawFire, 'intent sent');
+  frames(180); // the turn passes once the replay of the shot has played out
   check('net-turn-passes', /REAPER aiming/.test(els['hud-turn'].textContent), els['hud-turn'].textContent);
   // typing in a box is typing, not playing
   const logLen = els['log'].children.length;

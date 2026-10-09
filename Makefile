@@ -14,7 +14,7 @@ help:
 	@echo "  parity - Run every site's parity check against its server"
 	@echo "  deploy - Deploy every site to its own server; SITE=www.cs for one."
 	@echo "           Each skips when its server's .deploy-hash already matches."
-	@echo "           FORCE=1 / DRY_RUN=1 pass through."
+	@echo "           FORCE=1 / DRY_RUN=1 / PRUNE=1 pass through."
 	@echo ""
 	@echo "One site, including its deploy: make -C websites/<site> help"
 	@echo "Sites: $(notdir $(SITES))"

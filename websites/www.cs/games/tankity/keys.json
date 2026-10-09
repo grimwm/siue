@@ -20,7 +20,6 @@
     "next": ["n"]
   },
   "global": {
-    "pause": ["p"],
     "music": ["m"],
     "sound": ["e"],
     "log": ["l"],

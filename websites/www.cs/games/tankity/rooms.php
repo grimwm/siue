@@ -15,7 +15,7 @@
 //     range-checked against authoritative state; turn order is enforced.
 //   - AI backfills empty seats and runs the same sim inline, so no cron is needed.
 //
-// Storage: rooms live in SysV shared memory, never on disk. A server restart
+// Storage: rooms live in SysV shared memory, never on disk. A host restart
 // wipes the shelf, which is the point: rooms are play sessions, not records.
 // (Score files stay on disk next to where rooms used to be.) One semaphore
 // guards the whole registry, so concurrent shots cannot corrupt each other.
@@ -366,9 +366,9 @@ function room_arsenal(): array
     if ($a === false) {
         $a = ['ammo' => [
             ['key' => 'shell', 'name' => 'Shell', 'dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'minRound' => 1, 'ai' => true, 'aiRound' => 1, 'effect' => 'shot', 'speed' => 1.0],
-            ['key' => 'buck', 'name' => 'Buckshot', 'dmg' => 14, 'radius' => 17, 'price' => 100, 'pack' => 2, 'minRound' => 1, 'ai' => true, 'aiRound' => 2, 'effect' => 'pellets', 'pellets' => 3, 'spread' => 0.10, 'speed' => 1.0],
-            ['key' => 'mortar', 'name' => 'Mortar', 'dmg' => 62, 'radius' => 44, 'price' => 150, 'pack' => 2, 'minRound' => 1, 'ai' => true, 'aiRound' => 3, 'effect' => 'shot', 'speed' => 1.0],
-            ['key' => 'rail', 'name' => 'Rail', 'dmg' => 46, 'radius' => 15, 'price' => 200, 'pack' => 2, 'minRound' => 1, 'ai' => true, 'aiRound' => 5, 'effect' => 'shot', 'flat' => true, 'speed' => 1.0],
+            ['key' => 'buck', 'name' => 'Buckshot', 'dmg' => 17, 'radius' => 20, 'price' => 80, 'pack' => 2, 'minRound' => 1, 'ai' => true, 'aiRound' => 2, 'effect' => 'pellets', 'pellets' => 3, 'spread' => 0.10, 'speed' => 1.0],
+            ['key' => 'mortar', 'name' => 'Mortar', 'dmg' => 56, 'radius' => 42, 'price' => 200, 'pack' => 2, 'minRound' => 1, 'ai' => true, 'aiRound' => 3, 'effect' => 'shot', 'speed' => 1.0],
+            ['key' => 'rail', 'name' => 'Rail', 'dmg' => 56, 'radius' => 15, 'price' => 140, 'pack' => 2, 'minRound' => 1, 'ai' => true, 'aiRound' => 5, 'effect' => 'shot', 'flat' => true, 'speed' => 1.0],
             ['key' => 'nuke', 'name' => 'NUKE', 'dmg' => 95, 'radius' => 70, 'price' => 500, 'pack' => 1, 'minRound' => 4, 'ai' => false, 'aiRound' => 99, 'effect' => 'shot', 'speed' => 1.0],
         ], 'gear' => [
             ['key' => 'repair', 'name' => 'Repair +40 armor', 'price' => 120, 'n' => 40, 'effect' => 'repair'],
@@ -512,7 +512,9 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
                 $room['laststand'][$t['seat']] = false;
                 $events[] = ['t' => 'laststand', 'seat' => $t['seat']];
                 $gone = $t;
-                room_explode($room, $events, $gone, 'shell', (float) $t['x'], (float) $t['y'] - 12.0, null, ['dmg' => 50, 'radius' => 44]);
+                $ls = room_gear('laststand') ?? [];
+                $blast = ['dmg' => (int) ($ls['dmg'] ?? 50), 'radius' => (float) ($ls['radius'] ?? 44)];
+                room_explode($room, $events, $gone, 'shell', (float) $t['x'], (float) $t['y'] - 12.0, null, $blast);
             }
         }
     }
@@ -522,12 +524,34 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
 // proximity burst. Returns [status, x, y, vx, vy, directIdx]; cluster
 // parents return 'split' with the bloom point instead of exploding.
 // Mirrors the stepShells effect hooks in game.js. */
-function room_fly_arc(array &$room, array &$events, array $tank, array $w, string $wkey, int $ownerIdx, float $sx, float $sy, float $vx, float $vy, float $age, $fuse, $ov): array
+/* Replay timing: every event a volley makes carries 'at', seconds after the
+   volley fires, so clients play the turn back at the speed it happened. */
+const ROOM_PATH_EVERY = 5; // record one path point per 5 sim steps (12 per second)
+function room_stamp(array &$events, int $from, float $at): void
+{
+    for ($i = $from, $n = count($events); $i < $n; $i++) {
+        if (!isset($events[$i]['at'])) {
+            $events[$i]['at'] = round($at, 3);
+        }
+    }
+}
+/* The shot event clients replay: launch time, landing time, blast radius,
+   and the flight path as "x,y x,y ..." (compact in shared memory). */
+function room_shot_event(array $tank, string $wkey, float $t0, array $res, float $radius): array
+{
+    return ['t' => 'shot', 'by' => $tank['seat'], 'w' => $wkey,
+        'x0' => round($res[6][0][0] ?? $res[1], 1), 'y0' => round($res[6][0][1] ?? $res[2], 1),
+        'x1' => round($res[1], 1), 'y1' => round($res[2], 1),
+        't0' => round($t0, 3), 't1' => round($t0 + $res[7], 3), 'r' => $radius,
+        'p' => implode(' ', array_map(fn($pt) => round($pt[0]) . ',' . round($pt[1]), $res[6]))];
+}
+function room_fly_arc(array &$room, array &$events, array $tank, array $w, string $wkey, int $ownerIdx, float $sx, float $sy, float $vx, float $vy, float $age, $fuse, $ov, float $t0 = 0.0): array
 {
     $width = count($room['terrain']);
     $dt = 1 / 60;
+    $path = [[$sx, $sy]];
     $grav = !empty($w['flat']) ? 90.0 : (float) ROOM_GRAV;
-    $pierced = false;
+    $pierced = null; // the tank a lance went through, never hit twice
     for ($step = 0; $step < 720; $step++) {
         if (($w['effect'] ?? 'shot') === 'seeker') {
             $best = null;
@@ -553,15 +577,21 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
         $sx += $vx * $dt;
         $sy += $vy * $dt;
         $age += $dt;
+        if (($step + 1) % ROOM_PATH_EVERY === 0) {
+            $path[] = [$sx, $sy];
+        }
+        $flown = ($step + 1) * $dt;
         if ($sx < -20 || $sx > $width + 20 || $sy > 500) {
-            return ['oob', $sx, $sy, $vx, $vy, null];
+            $path[] = [$sx, $sy];
+            return ['oob', $sx, $sy, $vx, $vy, null, $path, $flown];
         }
         if ($fuse !== false && ($w['effect'] ?? 'shot') === 'cluster' && $age >= $fuse) {
-            return ['split', $sx, $sy, $vx, $vy, null];
+            $path[] = [$sx, $sy];
+            return ['split', $sx, $sy, $vx, $vy, null, $path, $flown];
         }
         $direct = null;
         foreach ($room['tanks'] as $idx => $t) {
-            if ($t['hp'] <= 0) {
+            if ($t['hp'] <= 0 || $idx === $pierced) {
                 continue;
             }
             if (hypot($sx - $t['x'], $sy - ($t['y'] - 12)) < 13) {
@@ -583,22 +613,28 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
             }
         }
         if ($direct !== null) {
-            if (($w['effect'] ?? 'shot') === 'pierce' && !$pierced) {
-                $pierced = true;
+            if (($w['effect'] ?? 'shot') === 'pierce' && $pierced === null) {
+                $pierced = $direct;
+                $mark = count($events);
                 room_explode($room, $events, $tank, $wkey, $sx, $sy, $direct, $ov);
+                $events[] = ['t' => 'burst', 'x' => round($sx, 1), 'y' => round($sy, 1), 'r' => (float) (($ov['radius'] ?? null) ?? $w['radius']), 'w' => $wkey];
+                room_stamp($events, $mark, $t0 + $flown);
                 continue;
             }
-            return ['hit', $sx, $sy, $vx, $vy, $direct];
+            $path[] = [$sx, $sy];
+            return ['hit', $sx, $sy, $vx, $vy, $direct, $path, $flown];
         }
         $xi = max(0, min($width - 1, (int) round($sx)));
         if ($age >= 0.1 && $sy >= $room['terrain'][$xi]) {
-            return ['hit', $sx, $sy, $vx, $vy, null];
+            $path[] = [$sx, $sy];
+            return ['hit', $sx, $sy, $vx, $vy, null, $path, $flown];
         }
     }
-    return ['oob', $sx, $sy, $vx, $vy, null];
+    return ['oob', $sx, $sy, $vx, $vy, null, $path, 720 * $dt];
 }
 /* One fully simulated shot (all pellets, all bomblets), server side. No
- * client can fake this. */
+ * client can fake this. Every event is stamped with its moment in the volley
+ * ('at'), and shot events carry their flight path, so clients replay it. */
 function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey): void
 {
     $tank = &$room['tanks'][$seatIdx];
@@ -606,7 +642,9 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
     $w = $weapons[$wkey] ?? $weapons['shell'];
     $shots = ($w['pellets'] ?? 0) > 0 ? $w['pellets'] : 1;
     $rad = deg2rad($tank['angle']);
-    $dirS = $tank['kind'] === 'human' ? $tank['dirS'] : -1;
+    $dirS = $tank['dirS'] ?? -1;
+    $radius = (float) $w['radius'];
+    $events[count($events) - 1]['at'] = 0.0; // the fire/aifire that opened this volley
     for ($i = 0; $i < $shots; $i++) {
         $off = $shots === 1 ? 0 : ($i - ($shots - 1) / 2) * ($w['spread'] ?? 0.0);
         $a = $rad + $off;
@@ -615,11 +653,15 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
         $my = $tank['y'] - 14 - sin($rad) * 20;
         $vx = cos($a) * $spd * $dirS;
         $vy = -sin($a) * $spd;
-        $res = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $mx, $my, $vx, $vy, 0.0, (float) ($w['fuse'] ?? 0.9), null);
+        $res = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $mx, $my, $vx, $vy, 0.0, (float) ($w['fuse'] ?? 0.9), null, 0.0);
         if ($res[0] === 'split') {
             // The bloom reads as a burst on every screen; the bomblets do
             // the real damage from here.
-            $events[] = ['t' => 'shot', 'by' => $tank['seat'], 'w' => $wkey, 'x0' => $mx, 'y0' => $my, 'x1' => $res[1], 'y1' => $res[2]];
+            $split = room_shot_event($tank, $wkey, 0.0, $res, 0.0);
+            $split['split'] = true;
+            $split['at'] = 0.0;
+            $events[] = $split;
+            $tSplit = $res[7];
             $n = max(2, (int) ($w['split'] ?? 4));
             $fan = (float) ($w['fan'] ?? 0.22);
             $sp = hypot($res[3], $res[4]) * 0.85;
@@ -627,22 +669,30 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
             $sub = ['dmg' => (int) ($w['subDmg'] ?? $w['dmg']), 'radius' => (int) ($w['subRadius'] ?? $w['radius'])];
             for ($k = 0; $k < $n; $k++) {
                 $ca = $base + ($k - ($n - 1) / 2) * $fan;
-                $cr = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $res[1], $res[2], cos($ca) * $sp, sin($ca) * $sp, 99.0, false, $sub);
+                $cr = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $res[1], $res[2], cos($ca) * $sp, sin($ca) * $sp, 99.0, false, $sub, $tSplit);
+                $ev = room_shot_event($tank, $wkey, $tSplit, $cr, $cr[0] === 'hit' ? (float) $sub['radius'] : 0.0);
+                $ev['at'] = round($tSplit, 3);
+                $events[] = $ev;
+                $mark = count($events);
                 if ($cr[0] === 'hit') {
-                    $events[] = ['t' => 'shot', 'by' => $tank['seat'], 'w' => $wkey, 'x0' => $res[1], 'y0' => $res[2], 'x1' => $cr[1], 'y1' => $cr[2]];
                     room_explode($room, $events, $tank, $wkey, $cr[1], $cr[2], $cr[5], $sub);
                 } else {
                     $events[] = ['t' => 'fizzle', 'by' => $tank['seat'], 'w' => $wkey];
                 }
+                room_stamp($events, $mark, $tSplit + $cr[7]);
             }
             continue;
         }
+        $ev = room_shot_event($tank, $wkey, 0.0, $res, $res[0] === 'hit' ? $radius : 0.0);
+        $ev['at'] = 0.0;
+        $events[] = $ev;
+        $mark = count($events);
         if ($res[0] === 'hit') {
-            $events[] = ['t' => 'shot', 'by' => $tank['seat'], 'w' => $wkey, 'x0' => $mx, 'y0' => $my, 'x1' => $res[1], 'y1' => $res[2]];
             room_explode($room, $events, $tank, $wkey, $res[1], $res[2], $res[5], null);
         } else {
             $events[] = ['t' => 'fizzle', 'by' => $tank['seat'], 'w' => $wkey];
         }
+        room_stamp($events, $mark, $res[7]);
     }
     unset($tank);
 }
@@ -750,6 +800,59 @@ function room_new(string $code, string $initials): array
         'winners' => [],
     ];
 }
+/* Units keep at least ROOM_UNIT_GAP apart, centre to centre, so hulls never
+   overlap; fresh rounds spread them ROOM_SPAWN_GAP apart. */
+const ROOM_UNIT_GAP = 44.0;
+const ROOM_SPAWN_GAP = 110;
+/* Ground-unit bodies a human may drive; looks only, no stats. */
+const ROOM_BODIES = ['tank', 'hover', 'walker', 'buggy'];
+function room_body(array $body): string
+{
+    $b = (string) ($body['body'] ?? 'tank');
+    return in_array($b, ROOM_BODIES, true) ? $b : 'tank';
+}
+function room_spot_taken(array $room, int $self, float $x): bool
+{
+    foreach ($room['tanks'] as $idx => $t) {
+        if ($idx !== $self && $t['hp'] > 0 && abs($t['x'] - $x) < ROOM_UNIT_GAP) {
+            return true;
+        }
+    }
+    return false;
+}
+/* n spawn points, at least ROOM_SPAWN_GAP apart, in random order: no seat
+   owns a side. Even spacing if sampling fails. */
+function room_spawn_spots(int &$rng, int $n, int $width): array
+{
+    $lo = 30;
+    $hi = $width - 30;
+    for ($tries = 0; $tries < 200; $tries++) {
+        $xs = [];
+        for ($i = 0; $i < $n; $i++) {
+            $xs[] = (int) round($lo + room_rng_next($rng) * ($hi - $lo));
+        }
+        sort($xs);
+        $ok = true;
+        for ($i = 1; $i < $n; $i++) {
+            if ($xs[$i] - $xs[$i - 1] < ROOM_SPAWN_GAP) {
+                $ok = false;
+                break;
+            }
+        }
+        if ($ok) {
+            for ($i = $n - 1; $i > 0; $i--) {
+                $j = (int) floor(room_rng_next($rng) * ($i + 1));
+                [$xs[$i], $xs[$j]] = [$xs[$j], $xs[$i]];
+            }
+            return $xs;
+        }
+    }
+    $xs = [];
+    for ($i = 0; $i < $n; $i++) {
+        $xs[] = (int) round($lo + ($i + 0.5) * ($hi - $lo) / $n);
+    }
+    return $xs;
+}
 function room_start_round(array &$room): void
 {
     $room['round'] += 1;
@@ -763,11 +866,7 @@ function room_start_round(array &$room): void
         $room['terrain'] = room_gen_terrain($room['rng'], $w);
     }
     $room['wind'] = (int) round(room_rng_range($room['rng'], -8, 8));
-    $slots = [58, 274, 446, 619];
-    for ($i = count($slots) - 1; $i > 1; $i--) {
-        $j = 1 + (int) floor(room_rng_next($room['rng']) * $i);
-        [$slots[$i], $slots[$j]] = [$slots[$j], $slots[$i]];
-    }
+    $slots = room_spawn_spots($room['rng'], count($room['seats']), $w);
     $room['tanks'] = [];
     $seat = 0;
     foreach ($room['seats'] as $idx => $s) {
@@ -779,14 +878,14 @@ function room_start_round(array &$room): void
             'seat' => $idx,
             'kind' => $s['human'] ? 'human' : 'ai',
             'name' => $s['human'] ? $s['initials'] : $s['initials'],
-            'x' => $slots[$seat % 4],
+            'x' => $slots[$seat % count($slots)],
             'y' => 0,
             'angle' => 62.0,
             'power' => 55.0,
             'hp' => $armor,
             'maxHp' => $armor,
             'fuel' => $s['human'] ? 80 : 0,
-            'dirS' => $seat === 0 ? 1 : -1,
+            'dirS' => $slots[$seat % count($slots)] < $w / 2 ? 1 : -1, // face the middle
             'ammo' => $s['human']
                 ? ($room['ammo'][$idx] ?? ['shell' => -1, 'buck' => 1])
                 : room_ai_rack($room['round']),
@@ -840,7 +939,8 @@ function room_advance(array &$room, array &$events): void
             if ($wkey !== 'shell' && $have <= 0) {
                 $wkey = 'shell';
             }
-            $events[] = ['t' => 'auto', 'seat' => $t['seat'], 'w' => $wkey];
+            $events[] = ['t' => 'auto', 'seat' => $t['seat'], 'w' => $wkey,
+                'x' => round($t['x'], 1), 'a' => round($t['angle'], 1), 'pw' => round($t['power'], 1)];
             if ($wkey !== 'shell') {
                 $room['ammo'][$t['seat']][$wkey] = max(0, $have - 1);
                 $room['tanks'][$cur]['ammo'][$wkey] = $room['ammo'][$t['seat']][$wkey];
@@ -858,16 +958,19 @@ function room_advance(array &$room, array &$events): void
         $choice = room_ai_choose($room, $t);
         $room['tanks'][$cur]['angle'] = $choice['angle'];
         $room['tanks'][$cur]['power'] = $choice['power'];
-        if (abs($choice['dx'] ?? 0) > 0.5) {
-            $width = count($room['terrain']);
-            $room['tanks'][$cur]['x'] = max(12.0, min($width - 12.0, $room['tanks'][$cur]['x'] + $choice['dx']));
+        $width = count($room['terrain']);
+        $nx = max(12.0, min($width - 12.0, $room['tanks'][$cur]['x'] + ($choice['dx'] ?? 0)));
+        if (abs($choice['dx'] ?? 0) > 0.5 && !room_spot_taken($room, $cur, $nx)) {
+            $room['tanks'][$cur]['x'] = $nx;
             $xi = max(0, min($width - 1, (int) round($room['tanks'][$cur]['x'])));
             $room['tanks'][$cur]['y'] = $room['terrain'][$xi];
         }
         if ($choice['wkey'] !== 'shell') {
             $room['tanks'][$cur]['ammo'][$choice['wkey']] = max(0, ($room['tanks'][$cur]['ammo'][$choice['wkey']] ?? 0) - 1);
         }
-        $events[] = ['t' => 'aifire', 'seat' => $t['seat'], 'w' => $choice['wkey']];
+        $me = $room['tanks'][$cur];
+        $events[] = ['t' => 'aifire', 'seat' => $t['seat'], 'w' => $choice['wkey'],
+            'x' => round($me['x'], 1), 'a' => round($me['angle'], 1), 'pw' => round($me['power'], 1)];
         room_fire_shot($room, $events, $cur, $choice['wkey']);
         if (room_round_settled($room)) {
             room_end_round($room, $events);
@@ -1105,6 +1208,7 @@ function room_snapshot(array $room, ?int $seat, int $since): array
             'angle' => $t['angle'], 'power' => $t['power'],
             'hp' => $t['hp'], 'maxHp' => $t['maxHp'],
             'dirS' => $t['dirS'] ?? 1,
+            'body' => $t['kind'] === 'human' ? ($room['seats'][$t['seat']]['body'] ?? 'tank') : null,
         ];
     }
     $seats = [];
@@ -1166,7 +1270,27 @@ function room_find_seat(array $room, string $token): ?int
     return null;
 }
 
+/* Banked shop repair and fuel go onto the freshly mustered human tanks.
+   Tanks muster at full armor, so repair rides on top for this round, the
+   same as solo play. */
+function room_apply_banked(array &$room): void
+{
+    foreach ($room['tanks'] as &$t) {
+        if ($t['kind'] !== 'human') {
+            continue;
+        }
+        $t['hp'] += ($room['repairApplied'][$t['seat']] ?? 0);
+        $t['maxHp'] = $t['hp'];
+        $t['fuel'] += ($room['fuelApplied'][$t['seat']] ?? 0);
+    }
+    unset($t);
+}
+
 /* ---------- router ---------- */
+// rooms-sim-test.php includes this file for its functions only.
+if (defined('TANKITY_ROOMS_LIB')) {
+    return;
+}
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = $_GET['action'] ?? ($_POST['action'] ?? '');
 $body = [];
@@ -1223,6 +1347,60 @@ if ($action === 'map' && $method === 'POST') {
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
+/* A human walks away. The last human out closes the room, freeing its slot
+   at once; otherwise the battery takes over the seat (in the lobby a host
+   leaving closes the room, since nobody else can start it). */
+function room_leave(array &$room, int $seat): bool
+{
+    $humans = 0;
+    foreach ($room['seats'] as $idx => $s) {
+        if ($idx !== $seat && ($s['human'] ?? false)) {
+            $humans++;
+        }
+    }
+    if ($humans === 0 || ($room['phase'] === 'lobby' && $seat === 0)) {
+        return false; // close the room
+    }
+    $name = strtoupper((string) ($room['seats'][$seat]['initials'] ?? 'AI'));
+    $room['seats'][$seat] = ['human' => false, 'name' => $name, 'lives' => $room['seats'][$seat]['lives'] ?? 0];
+    foreach ($room['tanks'] as &$t) {
+        if ($t['seat'] === $seat) {
+            $t['kind'] = 'ai';
+            $t['ammo'] = room_ai_rack((int) $room['round']);
+        }
+    }
+    unset($t);
+    return true;
+}
+if ($action === 'leave' && $method === 'POST') {
+    [$room, $fh, $path, $seat] = room_gate($body, true);
+    $code = $room['code'];
+    if (room_leave($room, $seat)) {
+        room_emit($room, ['t' => 'left', 'seat' => $seat]);
+        $ok = room_save($fh, $path, $room);
+    } else {
+        $reg = room_registry_get();
+        unset($reg[$code]);
+        $ok = room_registry_put($reg);
+    }
+    room_unlock($fh);
+    room_json_out($ok ? 200 : 500, $ok ? ['ok' => true] : ['error' => 'store write failed']);
+}
+
+// A seat changes its unit's look any time: lobby, shop, mid-match.
+if ($action === 'body' && $method === 'POST') {
+    [$room, $fh, $path, $seat] = room_gate($body, true);
+    $room['seats'][$seat]['body'] = room_body($body);
+    if (!room_save($fh, $path, $room)) {
+        room_unlock($fh);
+        room_json_out(500, ['error' => 'store write failed']);
+    }
+    $since = (int) ($body['since'] ?? 0);
+    $out = room_snapshot($room, $seat, $since);
+    room_unlock($fh);
+    room_json_out(200, ['ok' => true, 'room' => $out]);
+}
+
 if ($action === 'create' && $method === 'POST') {
     if (!room_origin_ok()) {
         room_json_out(403, ['error' => 'bad origin']);
@@ -1251,7 +1429,7 @@ if ($action === 'create' && $method === 'POST') {
     $token = room_rand_token();
     // A fresh seat is present, not idle: the 90-second auto-fire rule must
     // not mistake a guest who just sat down for one who walked away.
-    $room['seats'][] = ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true)];
+    $room['seats'][] = ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];
     $room['scores'][] = 0;
     $room['cash'][] = 600;
     $room['ammo'][] = ['shell' => -1, 'buck' => 1, 'mortar' => 0, 'rail' => 0, 'nuke' => 0];
@@ -1301,7 +1479,7 @@ if ($action === 'join' && $method === 'POST') {
     }
     $token = room_rand_token();
     // Same as create: joining means present, so the seat starts clocked in.
-    $room['seats'][] = ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true)];
+    $room['seats'][] = ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];
     $seat = count($room['seats']) - 1;
     $room['scores'][] = 0;
     $room['cash'][] = 600;
@@ -1460,8 +1638,19 @@ if ($action === 'act' && $method === 'POST') {
             room_json_out(422, ['error' => 'not enough fuel']);
         }
         $w = count($room['terrain']);
-        $tank['fuel'] = max(0.0, $tank['fuel'] - abs($dx));
-        $tank['x'] = max(12.0, min($w - 12.0, $tank['x'] + $dx));
+        // Roll toward the target a pixel at a time and stop short of any
+        // other unit; fuel pays only for the ground actually covered.
+        $goal = max(12.0, min($w - 12.0, $tank['x'] + $dx));
+        $step = $goal > $tank['x'] ? 1.0 : -1.0;
+        $nx = $tank['x'];
+        while (abs($goal - $nx) >= 1.0 && !room_spot_taken($room, $myIdx, $nx + $step)) {
+            $nx += $step;
+        }
+        if (abs($goal - $nx) < 1.0) {
+            $nx = $goal;
+        }
+        $tank['fuel'] = max(0.0, $tank['fuel'] - abs($nx - $tank['x']));
+        $tank['x'] = $nx;
         $xi = max(0, min($w - 1, (int) round($tank['x'])));
         $tank['y'] = $room['terrain'][$xi];
     } elseif ($kind === 'weapon') {
@@ -1511,7 +1700,9 @@ if ($action === 'act' && $method === 'POST') {
             $room['ammo'][$seat][$wkey] = $have - 1;
             $room['tanks'][$myIdx]['ammo'][$wkey] = $room['ammo'][$seat][$wkey];
         }
-        $events[] = ['t' => 'fire', 'seat' => $seat, 'w' => $wkey];
+        $me = $room['tanks'][$myIdx];
+        $events[] = ['t' => 'fire', 'seat' => $seat, 'w' => $wkey,
+            'x' => round($me['x'], 1), 'a' => round($me['angle'], 1), 'pw' => round($me['power'], 1)];
         room_fire_shot($room, $events, $myIdx, $wkey);
         room_settle_tanks($room);
         $rng = $room['rng'];
@@ -1646,16 +1837,7 @@ if ($action === 'next' && $method === 'POST') {
         $room['fuelBonus'][$idx] = 0;
     }
     room_start_round($room);
-    foreach ($room['tanks'] as &$t) {
-        if ($t['kind'] !== 'human') {
-            continue;
-        }
-        $maxHp = 100 + 25 * ($room['plate'][$t['seat']] ?? 0);
-        $t['hp'] = min($maxHp, $t['hp'] + ($room['repairApplied'][$t['seat']] ?? 0));
-        $t['maxHp'] = $maxHp;
-        $t['fuel'] += ($room['fuelApplied'][$t['seat']] ?? 0);
-    }
-    unset($t);
+    room_apply_banked($room);
     $events = [];
     $events[] = ['t' => 'round', 'round' => $room['round'], 'wind' => $room['wind']];
     room_advance($room, $events);

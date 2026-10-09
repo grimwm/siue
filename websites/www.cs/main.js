@@ -11,16 +11,121 @@ function showNavDiv(divId) {
     }
 }
 
-/** Open the games hub (The CIC lives there; Game Off/On also starts a run). */
+/** Open the games hub (cards come from loadGamesHub; Game Off/On also starts The CIC). */
 function showGamesHub() {
     showNavDiv('games');
 }
 
-/** Start The CIC from the hub (same as flipping Game On). */
-function enterTheCic() {
-    if (typeof window.cylonStartGame === 'function') {
-        window.cylonStartGame();
+/**
+ * Fills the games hub with one card per games/<id>/metadata.yaml, as listed
+ * by games.php. A card either links to the game's page (`href`) or calls a
+ * page function that mounts the game in place (`start`).
+ */
+async function loadGamesHub() {
+    const list = document.getElementById('games-hub-list');
+    if (!list) return;
+    const status = (text) => {
+        const li = document.createElement('li');
+        li.className = 'games-hub-status';
+        li.textContent = text;
+        list.replaceChildren(li);
+    };
+
+    let hub;
+    try {
+        const res = await fetch('games.php', { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error(`games.php answered ${res.status}`);
+        hub = await res.json();
+    } catch (err) {
+        console.warn('Games hub:', err);
+        status('The games list could not load right now. Try again in a moment.');
+        return;
     }
+    (hub.errors || []).forEach(e => console.warn(`Games hub: games/${e.id}: ${e.error}`));
+
+    const games = hub.games || [];
+    if (games.length === 0) {
+        status('No games are installed yet.');
+        return;
+    }
+    list.replaceChildren(...games.map(gamesHubCard));
+    openLinkedGame(games);
+}
+
+/** The link to share for a game: its own page, or ?game=<id> for games that
+ * run inside this page. */
+function gameShareUrl(game) {
+    if (game.share) return new URL(game.share, location.href).href;
+    if (game.href) return new URL(game.href, location.href).href;
+    const url = new URL(location.href);
+    url.search = `?game=${encodeURIComponent(game.id)}`;
+    url.hash = '';
+    return url.href;
+}
+
+/** ?game=<id> opens that game straight away. */
+function openLinkedGame(games) {
+    const id = new URLSearchParams(location.search).get('game');
+    const game = id && games.find(g => g.id === id);
+    if (!game) return;
+    if (game.href) {
+        location.replace(game.href);
+        return;
+    }
+    showGamesHub();
+    const start = window[game.start];
+    if (typeof start === 'function') start();
+}
+
+async function copyGameLink(button, game) {
+    const url = gameShareUrl(game);
+    const label = button.textContent;
+    try {
+        await navigator.clipboard.writeText(url);
+        button.textContent = 'Link copied';
+    } catch (err) {
+        // No clipboard access (an http page or a denied permission): show
+        // the link so it can be copied by hand.
+        window.prompt('Copy this link:', url);
+    }
+    setTimeout(() => { button.textContent = label; }, 1600);
+}
+
+function gamesHubCard(game) {
+    const el = (tag, className, text) => {
+        const node = document.createElement(tag);
+        node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    };
+
+    const card = el('li', 'games-hub-card');
+    card.dataset.game = game.id;
+    const head = el('div', 'games-hub-card-head');
+    if (game.kicker) head.append(el('p', 'games-hub-card-kicker', game.kicker));
+    head.append(el('h2', 'games-hub-card-title', game.title));
+    card.append(head, el('p', 'games-hub-card-copy', game.description));
+
+    let launch;
+    if (game.href) {
+        launch = el('a', 'games-enter-btn', game.button);
+        launch.href = game.href;
+    } else {
+        launch = el('button', 'games-enter-btn', game.button);
+        launch.type = 'button';
+        launch.addEventListener('click', () => {
+            const start = window[game.start];
+            if (typeof start === 'function') start();
+        });
+    }
+    const share = el('button', 'games-share-btn', 'Copy link');
+    share.type = 'button';
+    share.title = gameShareUrl(game);
+    share.addEventListener('click', () => copyGameLink(share, game));
+    const actions = el('div', 'games-hub-card-actions');
+    actions.append(launch, share);
+    card.append(actions);
+    return card;
 }
 
 /**

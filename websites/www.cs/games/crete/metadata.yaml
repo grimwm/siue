@@ -1,0 +1,11 @@
+# Games page card. games.php reads every games/*/metadata.yaml; the format
+# is in games/README.md.
+title: The Island of Crete
+kicker: Minotaur chase
+description: >
+  A text-based chase through the labyrinth. Theseus (you) moves once. The
+  Minotaur moves twice. Reach the exit alive.
+button: Enter the labyrinth
+play: index.html
+order: 30
+image: og.png

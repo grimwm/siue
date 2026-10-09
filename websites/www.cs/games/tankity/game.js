@@ -2,7 +2,7 @@
  * Turn-based artillery across destructible hills. You and the drone battery
  * trade shells: angle, power, wind, craters. Last one rolling wins the round.
  * Controls: hold Left/Right = angle · hold Up/Down = power · A/D = drive ·
- * Ctrl/Space = fire · Q = weapon · N = next round / new match · P/M = pause/mute.
+ * Ctrl/Space = fire · Q = weapon · N = next round / new match · M = music.
  */
 (() => {
 'use strict';
@@ -353,9 +353,9 @@ function pumpDialogue(dt) {
 const FALLBACK_ARSENAL = {
   ammo: [
     { key: 'shell', name: 'Shell', cat: 'Shells', dmg: 34, radius: 26, price: 0, pack: 0, minRound: 1, ai: true, aiRound: 1, effect: 'shot', speed: 1.0, note: 'Free, straight, honest.', gfx: { shell: '#ffe27a', trail: '#ffd75e', blast: ['#ffb13c', '#fff3c4'], painter: 'disc', shake: 0.3 } },
-    { key: 'buck', name: 'Buckshot', cat: 'Shells', dmg: 14, radius: 17, price: 100, pack: 2, minRound: 1, ai: true, aiRound: 2, effect: 'pellets', pellets: 3, spread: 0.10, speed: 1.0, note: 'Three pellets, forgiving aim.', gfx: { shell: '#ffd166', trail: '#ffb13c', blast: ['#ffb13c', '#fff3c4'], painter: 'disc', shake: 0.3 } },
-    { key: 'mortar', name: 'Mortar', cat: 'Shells', dmg: 62, radius: 44, price: 150, pack: 2, minRound: 1, ai: true, aiRound: 3, effect: 'shot', speed: 1.0, note: 'Big crater, slow shell.', gfx: { shell: '#ff9f43', trail: '#ff7b39', blast: ['#ff7b39', '#ffe27a'], painter: 'disc', shake: 0.5 } },
-    { key: 'rail', name: 'Rail', cat: 'Shells', dmg: 46, radius: 15, price: 200, pack: 2, minRound: 1, ai: true, aiRound: 5, effect: 'shot', flat: true, speed: 1.0, note: 'Flies fast and nearly flat.', gfx: { shell: '#9fd8ff', trail: '#9fd8ff', blast: ['#9fd8ff', '#ffffff'], painter: 'beam', shake: 0.3 } },
+    { key: 'buck', name: 'Buckshot', cat: 'Shells', dmg: 17, radius: 20, price: 80, pack: 2, minRound: 1, ai: true, aiRound: 2, effect: 'pellets', pellets: 3, spread: 0.10, speed: 1.0, note: 'Three pellets, forgiving aim.', gfx: { shell: '#ffd166', trail: '#ffb13c', blast: ['#ffb13c', '#fff3c4'], painter: 'disc', shake: 0.3 } },
+    { key: 'mortar', name: 'Mortar', cat: 'Shells', dmg: 56, radius: 42, price: 200, pack: 2, minRound: 1, ai: true, aiRound: 3, effect: 'shot', speed: 1.0, note: 'Big crater, slow shell.', gfx: { shell: '#ff9f43', trail: '#ff7b39', blast: ['#ff7b39', '#ffe27a'], painter: 'disc', shake: 0.5 } },
+    { key: 'rail', name: 'Rail', cat: 'Shells', dmg: 56, radius: 15, price: 140, pack: 2, minRound: 1, ai: true, aiRound: 5, effect: 'shot', flat: true, speed: 1.0, note: 'Flies fast and nearly flat.', gfx: { shell: '#9fd8ff', trail: '#9fd8ff', blast: ['#9fd8ff', '#ffffff'], painter: 'beam', shake: 0.3 } },
     { key: 'nuke', name: 'NUKE', cat: 'Shells', dmg: 95, radius: 70, price: 500, pack: 1, minRound: 4, ai: false, aiRound: 99, effect: 'shot', speed: 1.0, note: 'Levels whole hillsides.', gfx: { shell: '#ff6b6b', trail: '#ff6b6b', blast: ['#ff6b6b', '#fff3c4'], painter: 'disc', shake: 0.9 } },
   ],
   gear: [
@@ -420,7 +420,7 @@ async function loadArsenal() {
 
 /* ---------- state ---------- */
 const G = {
-  seed: '', rng: null,
+  seed: '', rng: null, body: 'tank',
   terrain: null, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // aim | think | fly | settle | shop | over
   thinkT: 0, settleT: 0,
@@ -434,7 +434,7 @@ const G = {
   time: 0, shake: 0,
   dlgQ: [], dlgT: 0, lastTalk: -99, banterT: 30, bannerT: 0, bannerDone: null,
   cam: { z: 1, cx: 360, cy: 230 },
-  over: false, won: false, paused: false,
+  over: false, won: false,
 };
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 /* Tables start from the baked fallback (G exists from here on); the file
@@ -526,7 +526,6 @@ function resetMatch(seedStr) {
   G.laststand = false;
   G.over = false;
   G.won = false;
-  G.paused = false;
   G.demo = false;
   G.demoHint = false;
   G.time = 0;
@@ -574,14 +573,9 @@ function startSolo(seedStr) {
 function newRound(bannerText) {
   genTerrain();
   G.wind = Math.round((G.rng() * 2 - 1) * 8);
-  // Spread four combatants across the hills; the tank takes the west side.
-  const slots = [0.08, 0.38, 0.62, 0.86].map(f => Math.round(f * W));
-  const order = [slots[0], slots[1], slots[2], slots[3]];
-  // Shuffle the drone slots so every round sits differently.
-  for (let i = order.length - 1; i > 1; i--) {
-    const j = 1 + Math.floor(G.rng() * i);
-    [order[i], order[j]] = [order[j], order[i]];
-  }
+  // Spread four combatants across the hills; every round, anyone may land
+  // anywhere, never on top of each other.
+  const order = spawnSpots(1 + FOE_DEFS.length, G.rng);
   // Shop fuel and repairs ride in banks: the round rebuilds every tank from
   // scratch, so anything bought spends only if it waits here for muster.
   const musterMax = TUNE.playerArmor + 25 * (G.plate || 0);
@@ -590,7 +584,7 @@ function newRound(bannerText) {
   G.repairBank = 0;
   G.fuelBank = 0;
   G.tanks = [{
-    id: 'tank', isPlayer: true, color: '#ffff00',
+    id: 'tank', isPlayer: true, color: '#ffff00', body: G.body,
     x: order[0], y: 0, angle: 62, power: 55,
     hp: musterHp, maxHp: musterHp, fuel: musterFuel,
   }];
@@ -604,7 +598,10 @@ function newRound(bannerText) {
       ammo: droneRack(),
     });
   });
-  for (const t of G.tanks) t.y = surfY(t.x);
+  for (const t of G.tanks) {
+    t.y = surfY(t.x);
+    t.dirS = t.x < W / 2 ? 1 : -1; // face the middle of the field
+  }
   G.turn = G.firstTurn % G.tanks.length;
   G.firstTurn++;
   G.shells = [];
@@ -639,9 +636,51 @@ function newRound(bannerText) {
 function cur() {
   return G.tanks[G.turn];
 }
+/* Aim as drawn. Solo drones animate their real angle and power; in rooms the
+   server only reports where a rival ended up, so the drawing glides there
+   (showA/showP, eased in netEaseAim) instead of jumping. */
+function shownAngle(t) {
+  return t.showA === undefined ? t.angle : t.showA;
+}
+function shownPower(t) {
+  return t.showP === undefined ? t.power : t.showP;
+}
+/* Aim-arm length in world units: 14 at power 10 up to 50 at power 100. */
+function aimArmLength(power) {
+  return 10 + clamp(power, 10, 100) * 0.4;
+}
+/* Which way a tank faces: +1 right, -1 left. Angles count from that side. */
+function facing(t) {
+  return t.dirS || (t.isPlayer ? 1 : -1);
+}
+/* Units keep at least this far apart, centre to centre, so hulls and rotors
+   never overlap; fresh rounds spread them wider still. */
+const UNIT_GAP = 44;
+const SPAWN_GAP = 110;
+function spotTaken(t, x) {
+  return G.tanks.some(o => o !== t && o.hp > 0 && Math.abs(o.x - x) < UNIT_GAP);
+}
+/* n spawn points across the hills, at least SPAWN_GAP apart, in random
+   order: nobody owns a side. Falls back to even spacing if sampling fails. */
+function spawnSpots(n, rng) {
+  const lo = 30, hi = W - 30;
+  for (let tries = 0; tries < 200; tries++) {
+    const xs = [];
+    for (let i = 0; i < n; i++) xs.push(Math.round(lo + rng() * (hi - lo)));
+    xs.sort((a, b) => a - b);
+    if (xs.every((x, i) => i === 0 || x - xs[i - 1] >= SPAWN_GAP)) {
+      for (let i = xs.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [xs[i], xs[j]] = [xs[j], xs[i]];
+      }
+      return xs;
+    }
+  }
+  return Array.from({ length: n }, (_, i) => Math.round(lo + (i + 0.5) * (hi - lo) / n));
+}
 function muzzle(t) {
   const rad = t.angle * Math.PI / 180;
-  const s = t.dirS || (t.isPlayer ? 1 : -1);
+  const s = facing(t);
   return { x: t.x + Math.cos(rad) * 20 * s, y: t.y - 14 - Math.sin(rad) * 20 };
 }
 function shotSpeed(power, flat, mult) {
@@ -658,7 +697,7 @@ function fireWeapon(t, wkey) {
   if (wkey !== 'shell') store[wkey] -= 1;
   const m = muzzle(t);
   const rad = t.angle * Math.PI / 180;
-  const s = t.isPlayer ? 1 : -1;
+  const s = facing(t);
   const shots = w.pellets || 1;
   for (let i = 0; i < shots; i++) {
     const off = shots === 1 ? 0 : (i - (shots - 1) / 2) * (w.spread || 0);
@@ -689,7 +728,7 @@ function demoBlock() {
 function playerFire() {
   if (NET.on) { netFire(); return; }
   if (demoBlock()) return;
-  if (G.phase !== 'aim' || !cur().isPlayer || G.over || G.paused) return;
+  if (G.phase !== 'aim' || !cur().isPlayer || G.over) return;
   closePreview();
   if (fireWeapon(me(), G.selected)) {
     if (TUT) TUT.fired = true;
@@ -782,9 +821,10 @@ function stepShells(dt) {
       continue;
     }
     // Direct hit on a living tank?
+    // A lance that already went through a tank cannot hit that tank again.
     let direct = null;
     for (const t of G.tanks) {
-      if (t.hp <= 0) continue;
+      if (t.hp <= 0 || t === s.pierced) continue;
       if (Math.hypot(s.x - t.x, s.y - (t.y - 12)) < 13) { direct = t; break; }
     }
     // Flak bursts next to anything it passes, but never its own gunner: the
@@ -800,7 +840,7 @@ function stepShells(dt) {
     if (direct) {
       // A lance punches through its first victim and keeps flying.
       if (w.effect === 'pierce' && !s.pierced) {
-        s.pierced = true;
+        s.pierced = direct;
         explode(s.x, s.y, s.wkey, s.owner, direct, s.dw ? { dmg: s.dw, radius: s.dr } : null);
         continue;
       }
@@ -886,7 +926,8 @@ function killTank(t, owner) {
   if (t.isPlayer && G.laststand) {
     G.laststand = false;
     say('Last stand! The wreck detonates!', 'good');
-    explode(t.x, t.y - 12, 'shell', t, null, { dmg: 50, radius: 44 });
+    const ls = GEAR.laststand || {};
+    explode(t.x, t.y - 12, 'shell', t, null, { dmg: ls.dmg || 50, radius: ls.radius || 44 });
     renderHUD();
   }
   if (t.isPlayer) {
@@ -924,16 +965,30 @@ function nextTurn() {
   render();
   renderHUD();
 }
-function settle() {
-  // Tanks ride the terrain down after craters.
+/* Tanks left hanging over a crater fall under gravity every frame until they
+   land; ground that rose (a new round, fresh hills) takes them straight up. */
+const FALL_GRAVITY = 700;
+function fallTanks(dt) {
   for (const t of G.tanks) {
     if (t.hp <= 0) continue;
     const gy = surfY(t.x);
-    if (t.y < gy) {
-      t.y = Math.min(gy, t.y + 260 * (1 / 60));
-      if (t.y >= gy && t.isPlayer) SFX.thud();
-    } else t.y = gy;
+    if (t.y < gy - 0.5) {
+      t.vy = (t.vy || 0) + FALL_GRAVITY * dt;
+      t.y = Math.min(gy, t.y + t.vy * dt);
+      if (t.y >= gy) {
+        t.vy = 0;
+        if (t.isPlayer) SFX.thud();
+      }
+    } else {
+      t.y = gy;
+      t.vy = 0;
+    }
   }
+}
+function anyTankFalling() {
+  return G.tanks.some(t => t.hp > 0 && t.y < surfY(t.x) - 0.5);
+}
+function settle() {
   if (me().hp <= 0) {
     if (G.demo) {
       say('Demo tank wrecked. Rolling a fresh one.', 'info');
@@ -996,6 +1051,7 @@ function endMatch(won, text) {
     $('end-text').textContent = text;
     $('end-score').textContent = `Score ${G.score} · ${G.roundsWon} rounds won · ${G.round} rounds played · seed ${G.seed}`;
     veil.hidden = false;
+    refreshNavHints();
   }
   renderHUD();
 }
@@ -1032,6 +1088,7 @@ function openShop() {
   renderShop();
   const veil = $('shop-veil');
   if (veil) veil.hidden = false;
+  refreshNavHints(); // only a shown list has a height to measure
   render();
   renderHUD();
 }
@@ -1184,7 +1241,7 @@ function shopSub2(it, locked) {
 }
 /* One direct loader for digits and favorites; Q keeps cycling through it. */
 function selectWeapon(w) {
-  if (G.over || G.paused || G.phase === 'shop' || demoBlock()) return false;
+  if (G.over || G.phase === 'shop' || demoBlock()) return false;
   if (NET.on) return netPick(w);
   if (!(w === 'shell' || (G.ammo[w] || 0) > 0)) {
     say(`No ${WEAPONS[w].name} left in the rack.`, 'info');
@@ -1442,7 +1499,7 @@ function stepPreview(dt) {
         s.dead = true;
         continue;
       }
-      const touch = Math.hypot(s.x - pv.tx, s.y - fy) < 10;
+      const touch = !s.pierced && Math.hypot(s.x - pv.tx, s.y - fy) < 10;
       const near = w.effect === 'proximity' && Math.hypot(s.x - pv.tx, s.y - fy) < (w.prox || 34);
       if (touch || near) {
         if (w.effect === 'pierce' && !s.pierced && touch) {
@@ -1506,7 +1563,7 @@ function aiChoose(t) {
   if (rivals.length > 1 && G.rng() >= 0.6) {
     target = rivals[1 + Math.floor(G.rng() * (rivals.length - 1))];
   }
-  const dirS = t.dirS || (t.isPlayer ? 1 : -1);
+  const dirS = facing(t);
   const m = muzzle(t);
   let best = null;
   const keys = ['shell'];
@@ -1529,18 +1586,47 @@ function aiChoose(t) {
   const skill = Math.min(1, 0.35 + G.round * 0.12);
   let wob = Math.max(0.25, 1.2 - skill);
   if (target.isPlayer && (G.jammer || 0) > 0) wob *= 2;
-  t.angle = clamp(Math.round(best.a + gauss(G.rng) * 9 * wob), 10, 170);
-  t.power = clamp(Math.round(best.p + gauss(G.rng) * 12 * wob), 10, 100);
+  const angle = clamp(Math.round(best.a + gauss(G.rng) * 9 * wob), 10, 170);
+  const power = clamp(Math.round(best.p + gauss(G.rng) * 12 * wob), 10, 100);
   // Drones shuffle for a better firing spot instead of camping one rut.
   if (G.rng() < 0.35) {
     const dx = (G.rng() < 0.5 ? -1 : 1) * (8 + G.rng() * 27);
-    t.x = clamp(t.x + dx, 12, W - 12);
-    t.y = surfY(t.x);
+    const nx = clamp(t.x + dx, 12, W - 12);
+    if (!spotTaken(t, nx)) {
+      t.x = nx;
+      t.y = surfY(t.x);
+    }
   }
-  return best.wkey;
+  return { wkey: best.wkey, angle, power };
+}
+/* The shooter swings its barrel and power to the plan in plain sight before
+   firing, so everyone can watch the shot line up. Longer swings take a bit
+   longer, eased at both ends. */
+function aiPlanAim(t) {
+  const plan = aiChoose(t);
+  const swing = Math.max(Math.abs(plan.angle - t.angle), Math.abs(plan.power - t.power));
+  t.aim = {
+    plan, a0: t.angle, p0: t.power, k: 0,
+    dur: clamp(0.45 + swing / 110, 0.5, 1.4),
+  };
+}
+/* Advance a planned swing; true once the barrel has sat on the plan for a
+   beat, so the final aim reads before the shot leaves. */
+function aiStepAim(t, dt) {
+  const aim = t.aim;
+  const hold = 0.2;
+  aim.k = Math.min(aim.dur + hold, aim.k + dt);
+  const u = Math.min(1, aim.k / aim.dur);
+  const e = u * u * (3 - 2 * u);
+  t.angle = aim.a0 + (aim.plan.angle - aim.a0) * e;
+  t.power = aim.p0 + (aim.plan.power - aim.p0) * e;
+  return aim.k >= aim.dur + hold;
 }
 function aiFire(t) {
-  const wkey = aiChoose(t);
+  const { wkey, angle, power } = t.aim.plan;
+  t.aim = null;
+  t.angle = angle;
+  t.power = power;
   talk(t.id, pick(FOE_FIRE[t.id] || FOE_MISS));
   say(`${t.id} fires ${WEAPONS[wkey].name}.`, 'info');
   fireWeapon(t, wkey);
@@ -1576,14 +1662,102 @@ function burst(x, y, color, n, spd) {
     G.parts.push({ x, y, vx: Math.cos(a) * s * 10, vy: Math.sin(a) * s * 10 - 30, life: 0.5 + Math.random() * 0.5, color: color || '#ffd75e' });
   }
 }
-function drawTankSide(c, t, time) {
-  c.save();
-  c.translate(t.x, t.y);
-  c.fillStyle = 'rgba(0,0,0,0.3)';
-  c.beginPath();
-  c.ellipse(0, 3, 20, 5, 0, 0, Math.PI * 2);
-  c.fill();
-  // Treads with road wheels, flat black.
+/* Ground units: every human (you, and the people in a room) picks a body.
+   Bodies are looks only; all share the turret pivot at (0, -12), so aim,
+   muzzle and shots are identical whichever one you drive. */
+const UNIT_BODIES = [
+  { key: 'tank', name: 'Tank' },
+  { key: 'hover', name: 'Hover' },
+  { key: 'walker', name: 'Walker' },
+  { key: 'buggy', name: 'Buggy' },
+];
+function isGroundUnit(t) {
+  return t.isPlayer || !!t.human;
+}
+function shade(hex, k) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = v => Math.max(0, Math.min(255, Math.round(v * k)));
+  return `rgb(${ch(n >> 16)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
+}
+function drawChassis(c, body, hull, time, moving) {
+  c.strokeStyle = '#000000';
+  c.lineWidth = 1.5;
+  if (body === 'hover') {
+    // Air skirt with a flickering cushion under a low wedge hull.
+    c.fillStyle = Math.floor(time * 12) % 2 ? 'rgba(111,195,255,0.55)' : 'rgba(111,195,255,0.3)';
+    c.beginPath();
+    c.ellipse(0, 1, 19, 3.5, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = '#1b1d26';
+    c.beginPath();
+    c.roundRect(-18, -4, 36, 5, 2.5);
+    c.fill();
+    c.fillStyle = hull;
+    c.beginPath();
+    c.moveTo(-16, -4);
+    c.lineTo(16, -4);
+    c.lineTo(11, -14);
+    c.lineTo(-11, -14);
+    c.closePath();
+    c.fill();
+    c.stroke();
+    return;
+  }
+  if (body === 'walker') {
+    // Two jointed legs that shuffle while the walker drives.
+    const step = moving ? Math.sin(time * 14) * 3 : 0;
+    c.strokeStyle = '#101208';
+    c.lineWidth = 3;
+    for (const [hx, ph] of [[-7, 1], [7, -1]]) {
+      c.beginPath();
+      c.moveTo(hx, -8);
+      c.lineTo(hx + 4 + step * ph, -3);
+      c.lineTo(hx + step * ph, 2);
+      c.stroke();
+      c.fillStyle = '#101208';
+      c.fillRect(hx - 3 + step * ph, 1, 7, 2.5);
+    }
+    c.strokeStyle = '#000000';
+    c.lineWidth = 1.5;
+    c.fillStyle = hull;
+    c.beginPath();
+    c.roundRect(-12, -17, 24, 11, 4);
+    c.fill();
+    c.stroke();
+    return;
+  }
+  if (body === 'buggy') {
+    // Two big spoked wheels under an open frame.
+    const spin = moving ? time * 10 : 0;
+    for (const wx of [-11, 11]) {
+      c.fillStyle = '#101208';
+      c.beginPath();
+      c.arc(wx, -1, 6, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = '#5a5f48';
+      c.lineWidth = 1.2;
+      for (let k = 0; k < 3; k++) {
+        const a = spin + k * Math.PI / 3;
+        c.beginPath();
+        c.moveTo(wx - Math.cos(a) * 5, -1 - Math.sin(a) * 5);
+        c.lineTo(wx + Math.cos(a) * 5, -1 + Math.sin(a) * 5);
+        c.stroke();
+      }
+    }
+    c.strokeStyle = '#000000';
+    c.lineWidth = 1.5;
+    c.fillStyle = hull;
+    c.beginPath();
+    c.moveTo(-17, -6);
+    c.lineTo(17, -6);
+    c.lineTo(13, -13);
+    c.lineTo(-9, -13);
+    c.closePath();
+    c.fill();
+    c.stroke();
+    return;
+  }
+  // Tank: treads with road wheels, flat black, under a rounded hull.
   c.fillStyle = '#101208';
   c.beginPath();
   c.roundRect(-18, -3, 36, 7, 3.5);
@@ -1598,21 +1772,30 @@ function drawTankSide(c, t, time) {
     c.arc(i, 0.5, 1.2, 0, Math.PI * 2);
     c.fill();
   }
-  // Hull, flat EGA yellow with a darker shade blob and black outline.
-  c.fillStyle = '#d7a800';
+  c.fillStyle = hull;
   c.beginPath();
   c.roundRect(-15, -15, 30, 13, 5);
   c.fill();
-  c.strokeStyle = '#000000';
-  c.lineWidth = 1.5;
   c.stroke();
-  c.fillStyle = '#8a6d00';
+  c.fillStyle = shade(hull.startsWith('#') ? hull : '#d7a800', 0.64);
   c.beginPath();
   c.ellipse(-6, -9, 6, 3, 0.4, 0, Math.PI * 2);
   c.fill();
-  // Turret rotated to the barrel angle (mirrored for drones is handled by caller).
-  const rad = t.angle * Math.PI / 180;
-  const s = t.isPlayer ? 1 : -1;
+}
+function drawGroundUnit(c, t, time) {
+  const hull = t.isPlayer ? '#d7a800' : shade(t.color || '#c9c9c9', 0.85);
+  const moving = Math.abs((t.x - (t.lastX ?? t.x))) > 0.01;
+  t.lastX = t.x;
+  c.save();
+  c.translate(t.x, t.y);
+  c.fillStyle = 'rgba(0,0,0,0.3)';
+  c.beginPath();
+  c.ellipse(0, 3, 20, 5, 0, 0, Math.PI * 2);
+  c.fill();
+  drawChassis(c, t.body || 'tank', hull, time, moving);
+  // Turret on the shared pivot, barrel to the shown angle on the facing side.
+  const rad = shownAngle(t) * Math.PI / 180;
+  const s = facing(t);
   const bx = Math.cos(rad) * 26 * s, by = -Math.sin(rad) * 26;
   c.strokeStyle = '#1a1a00';
   c.lineWidth = 5;
@@ -1620,28 +1803,142 @@ function drawTankSide(c, t, time) {
   c.moveTo(0, -12);
   c.lineTo(bx, -12 + by);
   c.stroke();
-  c.fillStyle = '#d7a800';
+  c.fillStyle = hull;
   c.beginPath();
   c.arc(0, -12, 8, 0, Math.PI * 2);
   c.fill();
   c.strokeStyle = '#000000';
   c.lineWidth = 1.5;
   c.stroke();
-  // Antenna with blinking tip.
-  c.strokeStyle = '#000000';
-  c.lineWidth = 1.5;
+  // Antenna with blinking tip, on the side away from the barrel.
   c.beginPath();
-  c.moveTo(-8, -16);
-  c.lineTo(-12, -26);
+  c.moveTo(-8 * s, -16);
+  c.lineTo(-12 * s, -26);
   c.stroke();
   c.fillStyle = Math.floor(time * 3) % 2 === 0 ? '#ff5a5a' : '#7a2020';
   c.beginPath();
-  c.arc(-12, -26, 1.8, 0, Math.PI * 2);
+  c.arc(-12 * s, -26, 1.8, 0, Math.PI * 2);
   c.fill();
   c.restore();
 }
+/* The unit picker in the Game menu: one button per body, each with a small
+   drawing of it. The choice is remembered and, in a room, shared. */
+function loadBody() {
+  try {
+    const b = window.localStorage.getItem('tankity-body');
+    if (UNIT_BODIES.some(u => u.key === b)) return b;
+  } catch (_) { /* storage off: default body */ }
+  return 'tank';
+}
+function chooseBody(key) {
+  if (!UNIT_BODIES.some(u => u.key === key)) return;
+  G.body = key;
+  try { window.localStorage.setItem('tankity-body', key); } catch (_) { /* fine */ }
+  const mine = NET.on ? myTank() : (G.tanks || []).find(t => t.isPlayer);
+  if (mine) mine.body = key;
+  if (NET.code) roomPost('body', { body: key }).then(d => { if (NET.on) netApply(d.room); }).catch(() => {});
+  renderUnitPicker();
+}
+function renderUnitPicker() {
+  const box = $('unit-picker');
+  if (!box || !box.replaceChildren) return;
+  const buttons = UNIT_BODIES.map(u => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'unit-choice';
+    b.setAttribute('aria-pressed', String(G.body === u.key));
+    b.title = u.name;
+    const cv = document.createElement('canvas');
+    cv.width = 48;
+    cv.height = 34;
+    const c = cv.getContext && cv.getContext('2d');
+    if (c && c.translate) {
+      c.translate(24, 28);
+      drawChassis(c, u.key, '#d7a800', 0, false);
+      c.fillStyle = '#d7a800';
+      c.beginPath();
+      c.arc(0, -12, 7, 0, Math.PI * 2);
+      c.fill();
+    }
+    const label = document.createElement('span');
+    label.textContent = u.name;
+    b.append(cv, label);
+    b.addEventListener('click', ev => { ev.currentTarget.blur(); chooseBody(u.key); });
+    return b;
+  });
+  box.replaceChildren(...buttons);
+}
+/* Whose turn the battlefield shows: the shooter of a replaying volley, else
+   the tank whose turn it is. Nobody between rounds or after the match. */
+function turnTank() {
+  if (G.over || G.phase === 'shop' || G.phase === 'banner') return null;
+  if (NET.on && NET.volley && NET.volley.shooter) return NET.volley.shooter;
+  const t = G.tanks[G.turn];
+  return t && t.hp > 0 ? t : null;
+}
+/* A pulsing glow under the unit and a bobbing chevron over its name. */
+function drawTurnMarker(c, t, time, ground) {
+  const color = t.isPlayer ? '#ffff55' : (t.color || '#ffffff');
+  const pulse = 0.5 + 0.5 * Math.sin(time * 5);
+  const cy = ground ? t.y + 2 : t.y - 30 + droneHover(t, time) + 6;
+  c.save();
+  c.globalAlpha = 0.25 + 0.35 * pulse;
+  c.fillStyle = color;
+  c.beginPath();
+  c.ellipse(t.x, cy, 24 + 4 * pulse, 6 + pulse, 0, 0, Math.PI * 2);
+  c.fill();
+  c.globalAlpha = 0.9;
+  c.strokeStyle = color;
+  c.lineWidth = 1.5;
+  c.stroke();
+  const top = t.y - (ground ? 34 : 52) - 16 - 3 * Math.abs(Math.sin(time * 4));
+  c.globalAlpha = 1;
+  c.fillStyle = color;
+  c.beginPath();
+  c.moveTo(t.x - 6, top - 6);
+  c.lineTo(t.x + 6, top - 6);
+  c.lineTo(t.x, top);
+  c.closePath();
+  c.fill();
+  c.strokeStyle = '#000000';
+  c.lineWidth = 1;
+  c.stroke();
+  c.restore();
+}
+function droneHover(t, time) {
+  return Math.sin(time * 2.2 + t.x) * 3;
+}
+/* Tip of a drone's slung barrel, from a body centre at (x, y). */
+function droneBarrelTip(t, x, y) {
+  const rad = shownAngle(t) * Math.PI / 180;
+  const s = facing(t);
+  return { x: x + Math.cos(rad) * 22 * s, y: y + 4 - Math.sin(rad) * 22, rad, s };
+}
+/* Wraith: a domed disc with chasing rim lights. Drawn about the drone's
+   body centre, which the caller has translated to. */
+function drawSaucer(c, t, time) {
+  c.fillStyle = '#2b2e36';
+  c.beginPath();
+  c.ellipse(0, 1, 15, 4.5, 0, 0, Math.PI * 2);
+  c.fill();
+  c.strokeStyle = t.color;
+  c.lineWidth = 1.5;
+  c.stroke();
+  c.fillStyle = 'rgba(160,240,255,0.55)';
+  c.beginPath();
+  c.ellipse(0, -2, 7, 5, 0, Math.PI, 0);
+  c.fill();
+  for (let k = 0; k < 6; k++) {
+    const a = time * 3 + k * Math.PI / 3;
+    if (Math.sin(a) < 0) continue; // only the near side of the rim shows
+    c.fillStyle = k % 2 ? t.color : '#ffffff';
+    c.beginPath();
+    c.arc(Math.cos(a) * 13, 1 + Math.sin(a) * 2.5, 1.2, 0, Math.PI * 2);
+    c.fill();
+  }
+}
 function drawGunDrone(c, t, time) {
-  const hover = Math.sin(time * 2.2 + t.x) * 3;
+  const hover = droneHover(t, time);
   const y = t.y - 30 + hover;
   c.save();
   c.translate(t.x, y);
@@ -1650,16 +1947,23 @@ function drawGunDrone(c, t, time) {
   c.ellipse(0, 34 - hover, 14, 4, 0, 0, Math.PI * 2);
   c.fill();
   // Aiming barrel slung below, tracking its own angle.
-  const rad = t.angle * Math.PI / 180;
+  const tip = droneBarrelTip(t, 0, 0);
   c.strokeStyle = '#0a0a0c';
   c.lineWidth = 4;
   c.beginPath();
   c.moveTo(0, 4);
-  c.lineTo(Math.cos(rad) * -22, 4 - Math.sin(rad) * 22);
+  c.lineTo(tip.x, tip.y);
   c.stroke();
-  // Rotor arms + spinning discs.
+  // Each battery drone has its own frame: Wraith a saucer, Spotter a
+  // tri-rotor with a big eye, everyone else the classic quad.
+  if (t.id === 'wraith') {
+    drawSaucer(c, t, time);
+    c.restore();
+    return;
+  }
+  const arms = t.id === 'spotter' ? [[0, -1.25], [-1.1, 0.8], [1.1, 0.8]] : [[-1, -1], [1, -1], [-1, 1], [1, 1]];
   let i = 0;
-  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+  for (const [sx, sy] of arms) {
     c.strokeStyle = '#2b2e36';
     c.lineWidth = 3;
     c.beginPath();
@@ -1688,8 +1992,14 @@ function drawGunDrone(c, t, time) {
   c.stroke();
   c.fillStyle = '#ffffff';
   c.beginPath();
-  c.arc(0, 0, 2.6, 0, Math.PI * 2);
+  c.arc(0, 0, t.id === 'spotter' ? 4 : 2.6, 0, Math.PI * 2);
   c.fill();
+  if (t.id === 'spotter') {
+    c.fillStyle = t.color;
+    c.beginPath();
+    c.arc(Math.cos(time * 1.3) * 1.5, 0, 1.8, 0, Math.PI * 2);
+    c.fill();
+  }
   // Blinking strobe.
   if (Math.floor(time * 2 + t.x) % 2 === 0) {
     c.fillStyle = '#ffffff';
@@ -1781,36 +2091,48 @@ function render() {
       c.fillRect(t.x - 3, surfY(t.x) - 26, 6, 18);
       continue;
     }
-    if (t.isPlayer) drawTankSide(c, t, time);
+    const ground = isGroundUnit(t);
+    if (t === turnTank()) drawTurnMarker(c, t, time, ground);
+    if (ground) drawGroundUnit(c, t, time);
     else drawGunDrone(c, t, time);
     // Health bar + name.
     const w = 40;
+    const barY = t.y - (ground ? 34 : 52);
     c.fillStyle = 'rgba(0,0,0,0.55)';
-    c.fillRect(t.x - w / 2, t.y - (t.isPlayer ? 34 : 52), w, 6);
+    c.fillRect(t.x - w / 2, barY, w, 6);
     c.fillStyle = t.isPlayer ? '#00ff00' : t.color;
-    c.fillRect(t.x - w / 2 + 1, t.y - (t.isPlayer ? 34 : 52) + 1, (w - 2) * (t.hp / t.maxHp), 4);
+    c.fillRect(t.x - w / 2 + 1, barY + 1, (w - 2) * Math.min(1, t.hp / t.maxHp), 4);
     c.fillStyle = '#fff';
     c.font = 'bold 9px sans-serif';
     c.textAlign = 'center';
-    c.fillText(t.isPlayer ? 'TANK' : t.id.toUpperCase(), t.x, t.y - (t.isPlayer ? 38 : 56));
+    c.fillText(t.isPlayer ? 'TANK' : (ground ? String(t.name || t.id).toUpperCase() : t.id.toUpperCase()), t.x, barY - 4);
     c.textAlign = 'left';
   }
-  // Muzzle line: a short stub out of the cannon showing the launch
-  // direction only. No dots, no landing marker: reading the hills, the
+  // Aim arm: a stub out of the shooter's barrel showing launch direction,
+  // longer with more power. Drones show theirs too, so everyone can watch
+  // a shot line up. No dots, no landing marker: reading the hills, the
   // wind, and the shell's legs is the game.
-  if (G.phase === 'aim' && cur() && cur().isPlayer && !G.over) {
+  if ((G.phase === 'aim' || G.phase === 'think') && cur() && cur().hp > 0 && !G.over) {
     const t = cur();
-    const m = muzzle(t);
-    const ds = t.dirS || 1;
-    const rad = t.angle * Math.PI / 180;
-    const ex = m.x + Math.cos(rad) * 34 * ds;
-    const ey = m.y - Math.sin(rad) * 34;
-    c.strokeStyle = 'rgba(255,255,255,0.7)';
-    c.lineWidth = 3;
+    const len = aimArmLength(shownPower(t));
+    let x0, y0, rad, ds;
+    if (isGroundUnit(t)) {
+      const m = muzzle(t);
+      x0 = m.x; y0 = m.y;
+      rad = shownAngle(t) * Math.PI / 180;
+      ds = facing(t);
+    } else {
+      const tip = droneBarrelTip(t, t.x, t.y - 30 + droneHover(t, time));
+      x0 = tip.x; y0 = tip.y; rad = tip.rad; ds = tip.s;
+    }
+    c.strokeStyle = t.isPlayer ? 'rgba(255,255,255,0.7)' : t.color;
+    c.globalAlpha = t.isPlayer ? 1 : 0.75;
+    c.lineWidth = t.isPlayer ? 3 : 2;
     c.beginPath();
-    c.moveTo(m.x, m.y);
-    c.lineTo(ex, ey);
+    c.moveTo(x0, y0);
+    c.lineTo(x0 + Math.cos(rad) * len * ds, y0 - Math.sin(rad) * len);
     c.stroke();
+    c.globalAlpha = 1;
   }
   // Shells in flight.
   for (const s of G.shells) {
@@ -1823,23 +2145,32 @@ function render() {
     c.arc(s.x, s.y, 1.5, 0, Math.PI * 2);
     c.fill();
   }
-  // Room-match tracers: the server already settled these shots, so this line
-  // is pure theater showing where the shell went.
-  for (const tr of NET.tracers) {
-    const k = Math.min(1, tr.t);
-    const hx = tr.x0 + (tr.x1 - tr.x0) * k;
-    const hy = tr.y0 + (tr.y1 - tr.y0) * k;
-    c.strokeStyle = (((WEAPONS[tr.wkey] || {}).gfx || {}).shell) || '#ffe27a';
-    c.globalAlpha = 0.9;
-    c.lineWidth = tr.wkey === 'nuke' ? 4 : 2;
-    c.beginPath();
-    c.moveTo(tr.x0, tr.y0);
-    c.lineTo(hx, hy);
-    c.stroke();
-    c.fillStyle = '#fff';
-    c.beginPath();
-    c.arc(hx, hy, 3, 0, Math.PI * 2);
-    c.fill();
+  // Room replay: shells fly the paths the server simulated, trail and all.
+  if (NET.volley && NET.volley.ft >= 0) {
+    const ft = NET.volley.ft;
+    for (const sh of NET.volley.shots) {
+      if (sh.landed) continue;
+      const [hx, hy, idx] = netShellAt(sh, ft);
+      const gfx = ((WEAPONS[sh.e.w] || {}).gfx) || {};
+      c.strokeStyle = gfx.trail || '#ffd75e';
+      c.globalAlpha = 0.5;
+      c.lineWidth = 1.5;
+      c.beginPath();
+      const from = Math.max(0, idx - 8);
+      c.moveTo(sh.pts[from] ? sh.pts[from][0] : hx, sh.pts[from] ? sh.pts[from][1] : hy);
+      for (let i = from + 1; i <= idx; i++) c.lineTo(sh.pts[i][0], sh.pts[i][1]);
+      c.lineTo(hx, hy);
+      c.stroke();
+      c.globalAlpha = 1;
+      c.fillStyle = gfx.shell || '#ffe27a';
+      c.beginPath();
+      c.arc(hx, hy, sh.e.w === 'nuke' ? 7 : sh.e.w === 'mortar' ? 4.5 : 3.5, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = '#fff';
+      c.beginPath();
+      c.arc(hx, hy, 1.5, 0, Math.PI * 2);
+      c.fill();
+    }
   }
   c.globalAlpha = 1;
   // Blast discs: each explosion draws exactly the circle its weapon destroys.
@@ -1882,6 +2213,9 @@ function say(text, tone) {
   log.appendChild(li);
   while (log.children.length > 80) log.removeChild(log.firstChild);
   log.scrollTop = log.scrollHeight;
+  // The overlay is what scrolls in the frame; keep the newest line in view.
+  const overlay = $('log-overlay');
+  if (overlay) overlay.scrollTop = overlay.scrollHeight;
   refreshNavHints();
 }
 /* Fitted tricks ride the HUD beside the shells. In room matches netApply
@@ -2045,14 +2379,13 @@ function frame(ts) {
   const dt = Math.min(0.05, (ts - lastT) / 1000 || 0.016);
   lastT = ts;
   // The firing range runs on its own, even over the pre-match shop.
-  if (G.preview && !G.paused) stepPreview(dt);
+  if (G.preview) stepPreview(dt);
   // Name cards tick on sim time so a throttled background tab can never
   // strand the game between rounds; on return the card simply finishes.
-  if (!G.paused) tickBanner(dt);
+  tickBanner(dt);
   // Room matches render the server snapshot; the server runs the war.
   if (NET.on) {
-    if (!G.paused) netFrame(dt);
-    else pumpDialogue(dt);
+    netFrame(dt);
     if (G.terrain) { render(); renderHUD(); }
     return;
   }
@@ -2070,9 +2403,10 @@ function frame(ts) {
     return;
   }
   if (!G.tanks.length) { render(); renderHUD(); return; }
-  if (G.paused || G.over) { pumpDialogue(dt); render(); renderHUD(); return; }
+  if (G.over) { pumpDialogue(dt); render(); renderHUD(); return; }
   G.time += dt;
   decayFx(dt);
+  fallTanks(dt);
   tickTutorial();
   for (const cl of G.clouds) {
     cl.x += cl.v * dt;
@@ -2107,22 +2441,27 @@ function frame(ts) {
   }
   if (G.phase === 'aim' && cur().isPlayer && !G.demo) {
     const t = me();
-    if (keysDown.barrelLeft) t.angle = clamp(t.angle + 42 * dt, 10, 170);
-    if (keysDown.barrelRight) t.angle = clamp(t.angle - 42 * dt, 10, 170);
+    const swing = (keysDown.barrelLeft ? 1 : 0) - (keysDown.barrelRight ? 1 : 0);
+    if (swing) t.angle = clamp(t.angle + swing * facing(t) * 42 * dt, 10, 170);
     if (keysDown.powerUp) t.power = clamp(t.power + 45 * dt, 10, 100);
     if (keysDown.powerDown) t.power = clamp(t.power - 45 * dt, 10, 100);
-    if ((keysDown.driveL || keysDown.driveR) && t.fuel > 0) {
-      const dx = (keysDown.driveR ? 1 : 0) - (keysDown.driveL ? 1 : 0);
+    if ((keysDown.driveLeft || keysDown.driveRight) && t.fuel > 0) {
+      const dx = (keysDown.driveRight ? 1 : 0) - (keysDown.driveLeft ? 1 : 0);
       const step = dx * TUNE.driveSpeed * dt;
       if (Math.abs(step) > 0 && Math.abs(t.fuel) >= Math.abs(step)) {
-        t.fuel -= Math.abs(step);
-        t.x = clamp(t.x + step, 12, W - 12);
-        t.y = surfY(t.x);
+        const nx = clamp(t.x + step, 12, W - 12);
+        if (!spotTaken(t, nx)) {
+          t.fuel -= Math.abs(step);
+          t.x = nx;
+          t.y = surfY(t.x);
+        }
       }
     }
   } else if (G.phase === 'think') {
+    const t = cur();
+    if (!t.aim) aiPlanAim(t);
     G.thinkT -= dt;
-    if (G.thinkT <= 0) aiFire(cur());
+    if (aiStepAim(t, dt) && G.thinkT <= 0) aiFire(t);
   } else if (G.phase === 'fly' || G.phase === 'settle') {
     // A volley resolves pellet by pellet: explosions flip us to settle, but
     // stepping continues until every shell has landed or fizzled.
@@ -2134,7 +2473,8 @@ function frame(ts) {
       G.phase = 'settle';
     } else if (G.phase === 'settle' && !G.shells.length) {
       G.settleT -= dt;
-      if (G.settleT <= 0) settle();
+      // The turn waits for every tank to finish falling into its crater.
+      if (G.settleT <= 0 && !anyTankFalling()) settle();
     }
   }
   updateCamera(dt);
@@ -2164,7 +2504,7 @@ const BLOCKED_INITIALS = [
 const NET = {
   on: false, code: '', seat: -1, token: '', csrf: '', since: 0,
   seats: [], myTurn: false, aimDirty: false, driveAcc: 0, driveT: 0,
-  tracers: [], busy: false, lastPhase: '', pollId: 0,
+  queue: [], volley: null, pendingRoom: null, synced: false, busy: false, lastPhase: '', pollId: 0,
   initials: '', maps: [], map: null, mapName: 'Random hills', lastRound: -1,
 };
 const KNOWN_FOES = ['reaper', 'wraith', 'spotter'];
@@ -2320,7 +2660,7 @@ async function hostRoom(initials, mapId) {
   NET.map = null;
   NET.mapName = 'Random hills';
   try {
-    const data = await roomPost('create', { initials, map: mapId || '' });
+    const data = await roomPost('create', { initials, map: mapId || '', body: G.body });
     NET.code = data.code; NET.seat = data.seat; NET.token = data.token; NET.csrf = data.csrf;
     say(`Room ${NET.code} hosted. Read the code to your friends.`, 'info');
     await netRefreshRoster();
@@ -2335,7 +2675,7 @@ async function joinRoom(code, initials) {
   NET.seats = [];
   NET.initials = initials;
   try {
-    const data = await roomPost('join', { code: NET.code, initials });
+    const data = await roomPost('join', { code: NET.code, initials, body: G.body });
     NET.code = data.code; NET.seat = data.seat; NET.token = data.token; NET.csrf = data.csrf;
     say(`Joined room ${NET.code} as ${initials}.`, 'info');
     await netRefreshRoster();
@@ -2458,7 +2798,7 @@ function startNetMatch(room) {
   NET.since = 0;
   NET.lastPhase = '';
   NET.lastRound = -1;
-  NET.tracers = [];
+  NET.queue = []; NET.volley = null; NET.pendingRoom = null; NET.synced = false;
   NET.aimDirty = false;
   G.over = false;
   const sf = $('score-form');
@@ -2471,14 +2811,29 @@ function startNetMatch(room) {
   if (NET.pollId) clearInterval(NET.pollId);
   NET.pollId = setInterval(netRefresh, 1600);
 }
+/* Tell the server this seat is gone, so an emptied room frees its slot at
+   once instead of after the idle window. Best effort; sendBeacon survives a
+   closing tab. */
+function netSendLeave() {
+  if (!NET.code || !NET.token) return;
+  const body = JSON.stringify({ code: NET.code, token: NET.token, csrf: NET.csrf });
+  const url = 'rooms.php?action=leave';
+  try {
+    if (navigator.sendBeacon && navigator.sendBeacon(url, body)) return;
+  } catch (_) { /* fall through to fetch */ }
+  try {
+    fetch(url, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body });
+  } catch (_) { /* the idle sweep closes it anyway */ }
+}
 function netLeave(quiet) {
+  netSendLeave();
   if (NET.pollId) { clearInterval(NET.pollId); NET.pollId = 0; }
   if (lobbyTimer) { clearInterval(lobbyTimer); lobbyTimer = 0; }
   const wasOn = NET.on;
   const rematch = $('rematch');
   if (rematch) rematch.hidden = true;
   NET.on = false; NET.code = ''; NET.seat = -1; NET.token = ''; NET.csrf = ''; NET.since = 0;
-  NET.seats = []; NET.tracers = []; NET.myTurn = false; NET.lastPhase = ''; NET.lastTurn = -1; NET.lastRound = -1;
+  NET.seats = []; NET.queue = []; NET.volley = null; NET.pendingRoom = null; NET.synced = false; NET.myTurn = false; NET.lastPhase = ''; NET.lastTurn = -1; NET.lastRound = -1;
   const againBtn = $('again');
   if (againBtn) againBtn.textContent = 'Play again (N)';
   const sf = $('score-form');
@@ -2487,7 +2842,7 @@ function netLeave(quiet) {
   if ($('end-veil')) $('end-veil').hidden = true;
   if ($('lobby-veil')) $('lobby-veil').hidden = true;
   if (wasOn && !quiet) {
-    say('Back to the solo hills. Your room tank holds still until the room closes.', 'info');
+    say('Back to the solo hills. The battery takes your seat in the room.', 'info');
     freshMatchFromSeedBox();
   }
 }
@@ -2589,10 +2944,36 @@ function netBuy(it, qty) {
 function netNext() {
   roomPost('next', {})
     .then(d => netApply(d.room))
-    .catch(err => { say(prettyRoomError(err), 'bad'); });
+    .catch(err => {
+      // Anyone may roll out; if someone else already did, just catch up.
+      if (/not at the shop/.test(String(err && err.message))) { netRefresh(); return; }
+      say(prettyRoomError(err), 'bad');
+    });
 }
+/* A room update either lands now or waits behind the replay: the server
+   settles a whole turn at once, and clients play it back (aim, flight,
+   blasts, damage) before the new state takes over. */
 function netApply(room) {
   if (!room || !NET.code) return;
+  const fresh = (room.events || []).filter(e => (e.seq || 0) > NET.since);
+  for (const e of fresh) NET.since = Math.max(NET.since, e.seq || 0);
+  if (!NET.synced) {
+    // First sync: earlier events are history. Log them, replay nothing.
+    NET.synced = true;
+    netAdopt(room);
+    for (const e of fresh) if (e.t !== 'shot' && e.t !== 'burst') netEvent(e);
+    return;
+  }
+  NET.queue.push(...fresh);
+  if (NET.queue.length || NET.volley) {
+    NET.pendingRoom = room;
+    NET.myTurn = false;
+    G.phase = 'think';
+    return;
+  }
+  netAdopt(room);
+}
+function netAdopt(room) {
   NET.seats = room.seats || [];
   if (room.map !== undefined) {
     NET.map = room.map;
@@ -2608,17 +2989,27 @@ function netApply(room) {
   }
   G.wind = room.wind || 0;
   G.round = room.round || 1;
+  const before = new Map(G.tanks.map(t => [t.seat, t]));
   G.tanks = (room.tanks || []).map(t => {
     const mine = t.seat === NET.seat;
+    const was = before.get(t.seat);
     const seat = NET.seats[t.seat];
     const ai = !seat || !seat.human;
     const id = mine ? 'tank' : String(t.name || '?').toLowerCase();
     return {
       id, seat: t.seat, isPlayer: mine,
       color: mine ? '#ffff00' : (ai ? (FOE_PAINT[id] || '#c9c9c9') : SEAT_PAINT[t.seat % SEAT_PAINT.length]),
-      x: t.x, y: t.y, angle: t.angle, power: t.power,
+      // The server drops tanks straight onto the ground; keep the drawn
+      // height from the last poll so fallTanks() shows the fall.
+      x: t.x, y: was && Math.abs(was.x - t.x) < 1 ? Math.min(was.y, t.y) : t.y, vy: was ? was.vy || 0 : 0,
+      angle: t.angle, power: t.power,
       hp: t.hp, maxHp: t.maxHp || 100, fuel: 0, dirS: t.dirS || 1,
       name: t.name,
+      human: !ai,
+      body: t.body || 'tank',
+      // Keep the drawn aim where it was so the new one glides in.
+      showA: was && !mine ? shownAngle(was) : undefined,
+      showP: was && !mine ? shownPower(was) : undefined,
     };
   });
   G.turn = Math.max(0, G.tanks.findIndex(t => t.seat === room.turn));
@@ -2643,10 +3034,6 @@ function netApply(room) {
     G.plate = room.you.plate || 0;
     G.nextOneUp = room.you.nextUp || 3000;
     if (mine) mine.fuel = room.you.fuel || 0;
-  }
-  for (const e of room.events || []) {
-    if ((e.seq || 0) > NET.since) NET.since = e.seq;
-    netEvent(e);
   }
   const rs = $('run-stats');
   if (rs) rs.textContent = `Room ${NET.code} · you are ${seatName(NET.seat)} · round ${G.round}`;
@@ -2674,6 +3061,7 @@ function netApply(room) {
     renderShop();
     const veil = $('shop-veil');
     if (veil) veil.hidden = false;
+    refreshNavHints();
     if (NET.lastPhase === 'play') talk('tank', 'Shopping! Then back to bam bam.', true);
   } else if (room.phase === 'over') {
     G.over = true;
@@ -2688,14 +3076,11 @@ function netApply(room) {
 }
 function netEvent(e) {
   if (!e || !e.t) return;
-  if (e.t === 'shot') {
-    NET.tracers.push({ x0: e.x0, y0: e.y0, x1: e.x1, y1: e.y1, wkey: e.w || 'shell', t: 0 });
-    SFX.launch();
-    return;
-  }
+  if (e.t === 'shot' || e.t === 'burst') return; // flown by the replay
   if (e.t === 'fizzle') { say(`${seatName(e.by)} sends one into the sunset.`, 'info'); return; }
   if (e.t === 'fire') {
     if (e.seat === NET.seat) say(`You fire ${WEAPONS[G.selected] ? WEAPONS[G.selected].name : 'a shell'}.`, 'info');
+    else say(`${seatName(e.seat)} fires ${WEAPONS[e.w] ? WEAPONS[e.w].name : 'a shell'}.`, 'info');
     return;
   }
   if (e.t === 'aifire') {
@@ -2769,6 +3154,7 @@ function netEvent(e) {
     return;
   }
   if (e.t === 'join') { say(`${seatName(e.seat)} rolled into the room.`, 'info'); return; }
+  if (e.t === 'left') { say(`${seatName(e.seat)} left; the battery takes that seat.`, 'info'); return; }
   if (e.t === 'round') {
     say(`Round ${e.round}. Fresh barrels, same battery. Wind ${windText()}.`, 'info');
     talk('tank', 'Back in! These hills are mine!', true);
@@ -2776,24 +3162,133 @@ function netEvent(e) {
   }
   if (e.t === 'auto') { say(`${seatName(e.seat)} sat quiet, so the crew fired for them.`, 'info'); return; }
 }
+/* ---------- room replay ---------- */
+const VOLLEY_OPENERS = new Set(['fire', 'aifire', 'auto']);
+const PATH_HZ = 12; // rooms.php records a path point every 5 sim steps at 60/s
+function netParsePath(str) {
+  return String(str || '').split(' ').filter(Boolean).map(p => p.split(',').map(Number));
+}
+function netStartVolley() {
+  const opener = NET.queue.shift();
+  const events = [];
+  while (NET.queue.length && !VOLLEY_OPENERS.has(NET.queue[0].t)) events.push(NET.queue.shift());
+  const shooter = G.tanks.find(t => t.seat === opener.seat);
+  const a1 = opener.a ?? (shooter ? shooter.angle : 62);
+  const p1 = opener.pw ?? (shooter ? shooter.power : 55);
+  const x1 = opener.x ?? (shooter ? shooter.x : 0);
+  const swing = shooter ? Math.max(Math.abs(a1 - shooter.angle), Math.abs(p1 - shooter.power), Math.abs(x1 - shooter.x)) : 0;
+  NET.volley = {
+    opener, events, shooter, tau: 0,
+    a0: shooter ? shooter.angle : a1, p0: shooter ? shooter.power : p1, x0: shooter ? shooter.x : x1, a1, p1, x1,
+    aimDur: swing < 1 ? 0.15 : clamp(0.45 + swing / 110, 0.5, 1.4),
+    shots: [], end: Math.max(0, ...events.map(e => e.t1 ?? e.at ?? 0)) + 0.6,
+  };
+  netEvent(opener);
+}
+function netCarve(x, y, r) {
+  const x0 = Math.max(0, Math.floor(x - r)), x1 = Math.min(W - 1, Math.ceil(x + r));
+  for (let ix = x0; ix <= x1; ix++) {
+    const dx = ix - x;
+    const cut = Math.sqrt(Math.max(0, r * r - dx * dx)) * 0.75;
+    G.terrain[ix] = Math.min(H - 4, Math.max(G.terrain[ix], y + cut));
+  }
+}
+function netBlast(x, y, r, wkey) {
+  SFX.boom();
+  G.shake = Math.min(1, G.shake + (wkey === 'nuke' ? 0.9 : r > 40 ? 0.5 : 0.3));
+  burst(x, y, wkey === 'nuke' ? '#ff6b6b' : '#ffd75e');
+  G.booms.push({ x, y, r, t: 0, life: wkey === 'nuke' ? 0.8 : 0.5 });
+  netCarve(x, y, r);
+}
+function netStepVolley(dt) {
+  const v = NET.volley;
+  v.tau += dt;
+  const sh = v.shooter;
+  if (sh) {
+    const u = Math.min(1, v.tau / v.aimDur);
+    const e = u * u * (3 - 2 * u);
+    sh.angle = v.a0 + (v.a1 - v.a0) * e;
+    sh.power = v.p0 + (v.p1 - v.p0) * e;
+    sh.x = v.x0 + (v.x1 - v.x0) * e;
+    sh.showA = sh.angle;
+    sh.showP = sh.power;
+  }
+  const ft = v.tau - v.aimDur;
+  v.ft = ft;
+  if (ft < 0) return;
+  for (const e of v.events) {
+    if (e.done || e.at === undefined || ft < e.at) continue;
+    e.done = true;
+    if (e.t === 'shot') {
+      v.shots.push({ e, pts: netParsePath(e.p), landed: false });
+      SFX.launch();
+    } else if (e.t === 'burst') {
+      netBlast(e.x, e.y, e.r, e.w);
+    } else {
+      if (e.t === 'hit') {
+        const t = G.tanks.find(x => x.seat === e.seat);
+        if (t) t.hp = Math.max(0, t.hp - e.dmg);
+      } else if (e.t === 'kill') {
+        const t = G.tanks.find(x => x.seat === e.seat);
+        if (t) t.hp = 0;
+      }
+      netEvent(e);
+    }
+  }
+  for (const s of v.shots) {
+    if (!s.landed && ft >= s.e.t1) {
+      s.landed = true;
+      if (s.e.r > 0) netBlast(s.e.x1, s.e.y1, s.e.r, s.e.w);
+    }
+  }
+  if (ft >= v.end && v.events.every(e => e.done || e.at === undefined) && v.shots.every(s => s.landed)) {
+    for (const e of v.events) if (!e.done) netEvent(e);
+    NET.volley = null;
+  }
+}
+/* Drive the replay; once nothing is left to play, the waiting room state
+   takes over. */
+function netReplay(dt) {
+  if (NET.volley) netStepVolley(dt);
+  while (!NET.volley && NET.queue.length) {
+    if (VOLLEY_OPENERS.has(NET.queue[0].t)) netStartVolley();
+    else netEvent(NET.queue.shift());
+  }
+  if (!NET.volley && !NET.queue.length && NET.pendingRoom) {
+    const room = NET.pendingRoom;
+    NET.pendingRoom = null;
+    netAdopt(room);
+  }
+}
+/* Where a replayed shell is at flight time ft: path points are 1/12 s apart. */
+function netShellAt(s, ft) {
+  const k = (ft - s.e.t0) * PATH_HZ;
+  const pts = s.pts;
+  if (!pts.length) return [s.e.x1, s.e.y1, 0];
+  const i = Math.max(0, Math.min(pts.length - 1, Math.floor(k)));
+  const j = Math.min(pts.length - 1, i + 1);
+  const f = Math.max(0, Math.min(1, k - i));
+  return [pts[i][0] + (pts[j][0] - pts[i][0]) * f, pts[i][1] + (pts[j][1] - pts[i][1]) * f, i];
+}
+function netEaseAim(dt) {
+  const k = 1 - Math.exp(-dt * 5);
+  for (const t of G.tanks) {
+    if (t.isPlayer) continue;
+    t.showA = t.showA === undefined ? t.angle : t.showA + (t.angle - t.showA) * k;
+    t.showP = t.showP === undefined ? t.power : t.showP + (t.power - t.showP) * k;
+  }
+}
 function netFrame(dt) {
   G.time += dt;
+  netEaseAim(dt);
   updateCamera(dt);
   decayFx(dt);
+  fallTanks(dt);
   for (const cl of G.clouds) {
     cl.x += cl.v * dt;
     if (cl.x - 40 > W) cl.x = -40;
   }
-  for (const tr of NET.tracers) tr.t += dt / 0.45;
-  const done = NET.tracers.filter(tr => tr.t >= 1);
-  NET.tracers = NET.tracers.filter(tr => tr.t < 1);
-  for (const tr of done) {
-    SFX.boom();
-    G.shake = Math.min(1, G.shake + (tr.wkey === 'nuke' ? 0.9 : tr.wkey === 'mortar' ? 0.5 : 0.3));
-    burst(tr.x1, tr.y1, tr.wkey === 'nuke' ? '#ff6b6b' : '#ffd75e');
-    const wr = WEAPONS[tr.wkey] ? WEAPONS[tr.wkey].radius : 26;
-    G.booms.push({ x: tr.x1, y: tr.y1, r: wr, t: 0, life: tr.wkey === 'nuke' ? 0.8 : 0.5 });
-  }
+  netReplay(dt);
   pumpDialogue(dt);
   G.banterT -= dt;
   if (G.banterT <= 0) {
@@ -2811,13 +3306,13 @@ function netFrame(dt) {
   }
   const t = myTank();
   if (t && t.hp > 0 && NET.myTurn) {
-    if (keysDown.barrelLeft) { t.angle = clamp(t.angle + 42 * dt, 10, 170); NET.aimDirty = true; }
-    if (keysDown.barrelRight) { t.angle = clamp(t.angle - 42 * dt, 10, 170); NET.aimDirty = true; }
+    const swing = (keysDown.barrelLeft ? 1 : 0) - (keysDown.barrelRight ? 1 : 0);
+    if (swing) { t.angle = clamp(t.angle + swing * facing(t) * 42 * dt, 10, 170); NET.aimDirty = true; }
     if (keysDown.powerUp) { t.power = clamp(t.power + 45 * dt, 10, 100); NET.aimDirty = true; }
     if (keysDown.powerDown) { t.power = clamp(t.power - 45 * dt, 10, 100); NET.aimDirty = true; }
     if (!keysDown.barrelLeft && !keysDown.barrelRight && !keysDown.powerUp && !keysDown.powerDown && NET.aimDirty) netSendAim();
-    if ((keysDown.driveL || keysDown.driveR) && t.fuel > 0) {
-      const dir = (keysDown.driveR ? 1 : 0) - (keysDown.driveL ? 1 : 0);
+    if ((keysDown.driveLeft || keysDown.driveRight) && t.fuel > 0) {
+      const dir = (keysDown.driveRight ? 1 : 0) - (keysDown.driveLeft ? 1 : 0);
       NET.driveAcc += dir * TUNE.driveSpeed * dt;
       NET.driveT += dt;
       if (NET.driveT >= 0.22 && Math.abs(NET.driveAcc) >= 4) {
@@ -2898,6 +3393,7 @@ function netShowStandings(room) {
   }
   const veil = $('end-veil');
   if (veil) veil.hidden = false;
+  refreshNavHints();
 }
 
 /* ---------- scores: file-backed API with localStorage fallback ---------- */
@@ -2985,7 +3481,7 @@ const FALLBACK_KEYS = Object.freeze({
     next: ['n'],
   }),
   global: Object.freeze({
-    pause: ['p'], music: ['m'], sound: ['e'], log: ['l'], help: ['h'],
+    music: ['m'], sound: ['e'], log: ['l'], help: ['h'],
     report: ['r'], menu: ['c'], random: ['t'], rooms: ['o'], new: ['n'],
     cycle: ['q'], tutorial: ['u'], fav: ['1', '2', '3', '4'],
     battlePreview: ['v'], fullscreen: ['f'],
@@ -3178,10 +3674,6 @@ function bindKeys() {
     const k = e.key || '';
     const ga = lookupKey('global', e);
     switch (ga) {
-    case 'pause':
-      G.paused = !G.paused;
-      say(G.paused ? `Paused. Press ${keyHint('global', 'pause')} to roll again.` : 'Rolling!', 'info');
-      return;
     case 'music': toggleMusic(); return;
     case 'sound': toggleSound(); return;
     case 'log': toggleOverlay('log-overlay', 'btn-log'); return;
@@ -3230,7 +3722,7 @@ function bindKeys() {
   });
 }
 function cycleWeapon() {
-  if (G.over || G.paused || G.phase === 'shop') return;
+  if (G.over || G.phase === 'shop') return;
   if (NET.on) { netCycle(); return; }
   if (demoBlock()) return;
   const i = WORDER.indexOf(G.selected);
@@ -3259,6 +3751,8 @@ function init() {
   bindKeys();
   loadArsenal();
   loadKeys();
+  G.body = loadBody();
+  renderUnitPicker();
   renderKeyHints();
   startDemo();
   loadScores();
@@ -3279,14 +3773,8 @@ function init() {
   if (cannon) cannon.addEventListener('click', ev => { ev.currentTarget.blur(); ctx(); startMusic(); playerFire(); });
   const weapon = $('btn-weapon');
   if (weapon) weapon.addEventListener('click', ev => { ev.currentTarget.blur(); cycleWeapon(); });
-  holdButton('btn-drive-l', 'driveL');
-  holdButton('btn-drive-r', 'driveR');
-  const pause = $('btn-pause');
-  if (pause) pause.addEventListener('click', ev => {
-    ev.currentTarget.blur();
-    G.paused = !G.paused;
-    say(G.paused ? 'Paused.' : 'Rolling!', 'info');
-  });
+  holdButton('btn-drive-l', 'driveLeft');
+  holdButton('btn-drive-r', 'driveRight');
   const form = $('seed-form');
   if (form) form.addEventListener('submit', e => {
     e.preventDefault();
@@ -3322,6 +3810,7 @@ function init() {
   const fsBtn = $('fullscreen');
   if (fsBtn) fsBtn.addEventListener('click', ev => { ev.currentTarget.blur(); toggleFullscreen(); });
   if (document.addEventListener) document.addEventListener('fullscreenchange', syncFullscreenLabel);
+  if (document.addEventListener) document.addEventListener('fullscreenchange', lockEscapeInFullscreen);
   const again = $('again');
   if (again) again.addEventListener('click', ev => {
     ev.currentTarget.blur();
@@ -3403,8 +3892,19 @@ function init() {
   const kickAudio = () => { ctx(); if (!musicMuted && !musicOn) startMusic(); };
   window.addEventListener('pointerdown', kickAudio, true);
   window.addEventListener('keydown', kickAudio, true);
+  window.addEventListener('pagehide', netSendLeave);
   window.addEventListener('resize', refreshNavHints);
+  window.addEventListener('resize', placeLogBelowMenu);
+  placeLogBelowMenu();
   requestAnimationFrame(frame);
+}
+/* The log hangs just under the menu strip, whose height changes with the
+   frame width, so it never covers the battle buttons. */
+function placeLogBelowMenu() {
+  const bar = $('menubar');
+  const log = $('log-overlay');
+  if (!bar || !log || !bar.offsetHeight) return;
+  log.style.top = `${bar.offsetTop + bar.offsetHeight + 6}px`;
 }
 function toggleSound() {
   soundMuted = !soundMuted;
@@ -3445,7 +3945,8 @@ function scrollOverlay(lines, pages) {
 /* Every scrollable panel carries a visible key footer. It reads disabled
 while everything fits, and lights up the moment content overflows. */
 const NAV_HINTS = [
-  ['shop-veil', 'nav-shop'], ['lobby-veil', 'nav-lobby'],
+  // The shop scrolls its list, not its veil.
+  ['shop-list', 'nav-shop'], ['lobby-veil', 'nav-lobby'],
   ['preview-veil', 'nav-preview'], ['end-veil', 'nav-end'],
   ['help-overlay', 'nav-help'], ['report-overlay', 'nav-report'],
   ['menu-overlay', 'nav-menu'], ['log-overlay', 'nav-log'],
@@ -3588,6 +4089,15 @@ function toggleFullscreen() {
   } catch (_) {
     say('Fullscreen is not available right now.', 'info');
   }
+}
+/* In fullscreen the browser takes ESC to leave fullscreen, so the game never
+   sees it. Where Keyboard Lock exists (Chromium), claim ESC for the game:
+   a tap closes menus as usual and holding ESC still leaves fullscreen. */
+function lockEscapeInFullscreen() {
+  const kb = navigator.keyboard;
+  if (!kb || !kb.lock) return;
+  if (document.fullscreenElement) kb.lock(['Escape']).catch(() => {});
+  else kb.unlock();
 }
 function syncFullscreenLabel() {
   const btn = $('fullscreen');

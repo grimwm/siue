@@ -1,0 +1,12 @@
+# Games page card. games.php reads every games/*/metadata.yaml; the format
+# is in games/README.md.
+title: Operation Tankity
+kicker: Scorched-earth artillery
+description: >
+  Mind the wind and out-shoot a drone battery across endless hills. Spend
+  your $600 stake on a 20-item arsenal, or open a room and take turns with
+  a friend.
+button: Play Operation Tankity
+play: index.html
+order: 20
+image: og.png

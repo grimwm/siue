@@ -602,6 +602,41 @@ body.cylon-game-live .cic-enter-btn {
   transition: border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
 }
 
+a.games-enter-btn {
+  display: inline-block;
+  text-decoration: none;
+}
+
+.games-hub-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.games-share-btn {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--rail-edge);
+  border-radius: 0.25rem;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+}
+
+.games-share-btn:hover {
+  color: var(--text);
+  border-color: var(--crimson-hot);
+}
+
+.games-hub-status {
+  color: var(--text-muted);
+}
+
 .games-enter-btn:hover {
   color: #fff;
   border-color: var(--crimson-hot);

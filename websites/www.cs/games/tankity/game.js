@@ -7,7 +7,7 @@
 /* The pure game math (RNG, terrain, flight, hits, blasts, drone aim) lives in
  * src/sim.ts, the sound in src/audio.ts, the room client in src/net.ts and the
  * canvas drawing in src/render.ts, the keys and touch pads in src/input.ts, the room volley replay in
- * src/replay.ts and the firing-range simulation in src/preview.ts, each compiled to js/ and imported here.
+ * src/replay.ts, the firing-range simulation in src/preview.ts and the solo phase moves in src/flow.ts, each compiled to js/ and imported here.
  * The overlays that are mostly markup are Preact components in src/ui/ (the help and the shop so far):
  * they take state and callbacks as props and keep none of their own. Each
  * import's ?v= is the module's content hash, written by tools/install-files.php,
@@ -28,6 +28,7 @@ import {
 import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, CLOCK_SHOW_S,
 } from './js/net.js?v=6259020b84';
+import { transition } from './js/flow.js?v=782899f37b';
 import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=b278b20677';
 import { createReplay } from './js/replay.js?v=967c6939ce';
 import { createRenderer, drawChassis } from './js/render.js?v=1e211c92ed';
@@ -316,7 +317,7 @@ function fxTrail(sys, s, dt, x, y, vx, vy, wkey) {
 const G = {
   seed: '', rng: null, body: 'tank',
   terrain: null, clouds: [],
-  tanks: [], turn: 0, phase: 'aim', // aim | think | fly | settle | shop | over
+  tanks: [], turn: 0, phase: 'aim', // banner | shop | aim | think | fly | settle | over (src/flow.ts)
   thinkT: 0, settleT: 0,
   shells: [], parts: [], booms: [], fx: null,
   wind: 0, round: 1, firstTurn: 0,
@@ -426,11 +427,19 @@ function resetMatch(seedStr) {
   closePreview();
   hideShop();
 }
+/* The solo phase moves live in src/flow.ts: ask it for the next phase. A move
+   its table rejects leaves the phase where it was and says so on the console. */
+function advance(event) {
+  const next = transition(G.phase, event);
+  if (next === null) console.warn(`tankity flow: ${event} is not legal in ${G.phase}`);
+  else G.phase = next;
+}
 // Attract mode: the crew drives every tank until a human takes over.
 function startDemo() {
   resetMatch('scorched-demo');
   G.demo = true;
   G.round = 1;
+  advance('demo');
   newRound(`Demo mode. Press New Game${TOUCH ? '' : ` (or ${keyHint('global', 'new')})`} to play.`);
   render();
   renderHUD();
@@ -438,7 +447,7 @@ function startDemo() {
 function newMatch(seedStr) {
   resetMatch(seedStr);
   // No round yet: spend the starting stake in the shop first.
-  G.phase = 'banner';
+  advance('matchStart');
   music.leaveTheme(); // a new match leaves the demo's theme at once
   startBanner('Round 1. The battery holds these hills.', openShop);
   say(`Match ${G.seed}: $600 stake in your pocket. Buy guns first. The battery holds these hills.`, 'info');
@@ -451,7 +460,7 @@ function startSolo(seedStr) {
   music.start();
   newMatch(seedStr);
 }
-function newRound(bannerText) {
+function newRound(bannerText, event) {
   genTerrain();
   G.wind = Math.round((G.rng() * 2 - 1) * 8);
   // Spread four combatants across the hills; every round, anyone may land
@@ -492,7 +501,7 @@ function newRound(bannerText) {
   // The soundtrack turns over with the rounds: song follows the round, and
   // the demo always plays the theme.
   if (G.demo) music.playTheme(); else music.forRound(G.round);
-  G.phase = 'banner';
+  if (event) advance(event);
   closePreview();
   hideShop();
   if ($('end-veil')) $('end-veil').hidden = true;
@@ -503,11 +512,11 @@ function newRound(bannerText) {
   startBanner(card, () => {
     // Open on the scheduled tank: advancing here would skip seat 0 every round.
     if (opener.isPlayer && !G.demo) {
-      G.phase = 'aim';
+      advance('playerUp');
       say(`Round ${G.round}. Wind ${windText()}. Your move. Aim!`, 'info');
       maybeStartTutorial();
     } else {
-      G.phase = 'think';
+      advance('foeUp');
       G.thinkT = TUNE.thinkTime;
       const who = opener.isPlayer ? 'Tankity tank' : opener.id;
       say(`Round ${G.round}. Wind ${windText()}. ${who} moves first.`, 'info');
@@ -545,7 +554,7 @@ function fireWeapon(t, wkey) {
   // Muzzle effects (the rail's beam among them) fire once per volley, along the barrel.
   fxMuzzle(G.fx, wkey, launch.x, launch.y, launch.ang);
   sfx.play('launch');
-  G.phase = 'fly';
+  advance('fire');
   return true;
 }
 function demoBlock() {
@@ -579,7 +588,7 @@ function stepShells(dt) {
     else {
       showBlast(e.blast);
       G.settleT = TUNE.settleTime;
-      G.phase = 'settle';
+      advance('shellsLanded');
     }
   }
 }
@@ -641,10 +650,10 @@ function nextTurn() {
   }
   const t = cur();
   if (t.isPlayer && !G.demo) {
-    G.phase = 'aim';
+    advance('playerUp');
     say('Your turn. Aim!', 'info');
   } else {
-    G.phase = 'think';
+    advance('foeUp');
     G.thinkT = TUNE.thinkTime;
     say(`${t.isPlayer ? 'Tankity tank' : t.id} is aiming…`, 'info');
     if (Math.random() < 0.4) talk(t.id, pick(FOE_FIRE[t.id] || FOE_MISS));
@@ -664,7 +673,7 @@ function settle() {
   if (me().hp <= 0) {
     if (G.demo) {
       say('Demo tank wrecked. Rolling a fresh one.', 'info');
-      newRound('Back in! Same hills, fresh tank.');
+      newRound('Back in! Same hills, fresh tank.', 'tankLost');
       return;
     }
     G.lives -= 1;
@@ -674,14 +683,14 @@ function settle() {
     } else {
       say(`Tank wrecked! ${G.lives} ${G.lives === 1 ? 'life' : 'lives'} left. Same round, fresh hills.`, 'bad');
       talk('tank', 'I will be back... right now!', true);
-      newRound('Back in! Same hills, fresh tank.');
+      newRound('Back in! Same hills, fresh tank.', 'tankLost');
     }
     return;
   }
   if (!foesAlive().length) {
     if (G.demo) {
       G.round += 1;
-      newRound();
+      newRound(undefined, 'roundWon');
       return;
     }
     G.roundsWon += 1;
@@ -696,7 +705,7 @@ function settle() {
     // Trick timers tick down on claimed rounds, not on wrecked restarts.
     if (G.jammer > 0) G.jammer--;
     if (G.bunker > 0) G.bunker--;
-    G.phase = 'banner';
+    advance('roundWon');
     startBanner(`Round ${G.round} claimed! Spend the winnings.`, openShop);
     return;
   }
@@ -738,7 +747,7 @@ function endMatch(won, text) {
   endTutorial(true);
   G.over = true;
   G.won = won;
-  G.phase = 'over';
+  advance(won ? 'matchWon' : 'matchLost');
   music.stop();
   hideShop();
   refreshNavHints();
@@ -787,7 +796,7 @@ function tickBanner(dt) {
   if (done) done();
 }
 function openShop() {
-  G.phase = 'shop';
+  advance('shopOpen');
   G.shopQty = 1;
   renderShop();
   const veil = $('shop-veil');
@@ -1055,7 +1064,7 @@ function nextRound() {
   if (net.on) { netNext(); return; }
   if (G.phase !== 'shop') return;
   G.round += 1;
-  newRound();
+  newRound(undefined, 'shopDone');
 }
 
 /* ---------- firing range: a live mini demo sharing the real ballistics ---------- */
@@ -1745,7 +1754,7 @@ function frame(ts) {
       say('Shot fizzles out over the hills.', 'info');
       talk('tank', pick(TANK_MISS));
       G.settleT = 0.6;
-      G.phase = 'settle';
+      advance('shellsLanded');
     } else if (G.phase === 'settle' && !G.shells.length) {
       G.settleT -= dt;
       // The turn waits for every tank to finish falling into its crater.

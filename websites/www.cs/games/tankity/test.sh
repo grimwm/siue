@@ -20,6 +20,7 @@ node net-test.js
 node input-test.js
 node replay-test.js
 node preview-test.js
+node flow-test.js
 node protocol-test.js
 php config-test.php
 php rooms-sim-test.php

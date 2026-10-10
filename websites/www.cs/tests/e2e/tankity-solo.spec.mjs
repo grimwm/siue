@@ -213,3 +213,13 @@ test('the log hint offers scroll keys only when the log scrolls', async ({ brows
   });
   expect(state.shown).toBe(state.scrolls);
 });
+
+test('asking for the tutorial deals a match with the coach on, even after it was seen', async ({ browser }) => {
+  const { page, errors } = await newPlayer(browser); // this player has seen the tutorial before
+  await page.keyboard.press('u'); // from the demo: a fresh match, coach armed
+  await page.waitForSelector('#shop-veil:not([hidden])');
+  await page.click('#shop-next'); // the coach starts with the first round
+  await expect(page.locator('#tutorial-overlay')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('#tutorial-overlay')).toContainText('Move 1 of');
+  expect(errors).toEqual([]);
+});

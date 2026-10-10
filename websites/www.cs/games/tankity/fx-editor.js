@@ -1,4 +1,4 @@
-/* Effects editor (dev only): edits effects.json live. The preview runs the
+/* Effects editor (dev only): edits game.yaml's effects section live. The preview runs the
    game's own engine and playback helpers (fx.js: createSystem, play, drawBody),
    so what you see is what ships; only the toy ballistics around the shell are
    this page's own. */
@@ -9,7 +9,7 @@
   const W = 720, H = 300, DRAFT = 'tankity-fx-draft';
 
   /* ---------- state ---------- */
-  let defs = null;                 // effects.json, emitters dressed with DEFAULTS
+  let defs = null;                 // game.json's effects, emitters dressed with DEFAULTS
   let arsenal = {};                // the arsenal's ammo by key (game.json)
   const cur = { weapon: 'shell', slot: 'impact', em: 0 };
   const muted = new WeakSet();     // emitters silenced in the preview only
@@ -44,7 +44,7 @@
 
   /* ---------- data ---------- */
   function weaponKeys() { return Object.keys(defs).filter(k => k[0] !== '_'); }
-  function entry() { return defs[cur.weapon]; }
+  function entry() { return defs ? defs[cur.weapon] : undefined; }
   /* The effect being edited: a slot, or one of the weapon's specials. */
   function effect() {
     const w = entry();
@@ -69,7 +69,7 @@
   }
   function touch() {
     dirty = true;
-    store.set(FX.stringify(defs));
+    store.set(JSON.stringify(defs));
     restartAt = performance.now() + 160;
   }
 
@@ -491,6 +491,8 @@
   }
 
   /* ---------- export ---------- */
+  const PASTE = 'Replace the effects: block at the end of games/tankity/game.yaml with it, then run php tools/game-json.php.';
+  const COPIED = 'Copied the effects: block. ' + PASTE;
   function problems() {
     const bad = FX.validate(defs, weaponKeys());
     if (bad.length) say(bad.length + ' problem' + (bad.length > 1 ? 's' : '') + ': ' + bad[0], 'bad');
@@ -498,11 +500,11 @@
   }
   async function copy() {
     if (problems().length) return;
-    const text = FX.stringify(defs);
+    const text = FX.toYaml(defs);
     try {
       await navigator.clipboard.writeText(text);
       dirty = false;
-      say('Copied effects.json (' + text.length + ' bytes).', 'good');
+      say(COPIED + ' (' + text.length + ' bytes).', 'good');
     } catch (_) {
       const ta = h('textarea', { style: 'position:fixed;opacity:0' }, text);
       document.body.append(ta);
@@ -511,32 +513,31 @@
       try { ok = document.execCommand('copy'); } catch (_e) { ok = false; }
       ta.remove();
       if (ok) dirty = false;
-      say(ok ? 'Copied effects.json (' + text.length + ' bytes).' : 'Copy was blocked; use Download.', ok ? 'good' : 'bad');
+      say(ok ? COPIED + ' (' + text.length + ' bytes).' : 'Copy was blocked; use Download.', ok ? 'good' : 'bad');
     }
   }
   function download() {
     if (problems().length) return;
-    const url = URL.createObjectURL(new Blob([FX.stringify(defs)], { type: 'application/json' }));
-    const a = h('a', { href: url, download: 'effects.json' });
+    const url = URL.createObjectURL(new Blob([FX.toYaml(defs)], { type: 'text/yaml' }));
+    const a = h('a', { href: url, download: 'effects.yaml' });
     document.body.append(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     dirty = false;
-    say('Downloaded effects.json. Replace games/tankity/effects.json with it.', 'good');
+    say('Downloaded effects.yaml. ' + PASTE, 'good');
   }
   async function reloadFile(useDraft) {
-    const [eff, arm] = await Promise.all([
-      fetch('effects.json', { cache: 'no-store' }).then(r => r.json()),
-      fetch('game.json', { cache: 'no-store' }).then(r => r.json()),
-    ]);
+    const arm = await fetch('game.json', { cache: 'no-store' }).then(r => r.json());
+    const eff = arm.effects;
+    if (!eff) throw new Error('game.json has no effects section');
     arsenal = {};
     for (const a of (arm.arsenal && arm.arsenal.ammo) || []) arsenal[a.key] = a;
     let data = eff, fromDraft = false;
     const draft = useDraft ? store.get() : null;
     if (draft) { try { data = JSON.parse(draft); fromDraft = true; } catch (_) { data = eff; } } else store.del();
     load(data, fromDraft);
-    say(fromDraft ? 'Restored your unsaved edits. "Reload file" drops them.' : 'Loaded effects.json.', fromDraft ? '' : 'good');
+    say(fromDraft ? 'Restored your unsaved edits. "Reload file" drops them.' : 'Loaded the effects from game.json.', fromDraft ? '' : 'good');
   }
 
   /* ---------- wire up ---------- */
@@ -573,5 +574,5 @@
 
   makeTerrain();
   FX.loadSprites('fx/sprites/', () => { buildParams(); });
-  reloadFile(true).then(() => requestAnimationFrame(frame)).catch(err => say('Could not load effects.json: ' + err.message, 'bad'));
+  reloadFile(true).then(() => requestAnimationFrame(frame)).catch(err => say('Could not load the effects from game.json: ' + err.message, 'bad'));
 }());

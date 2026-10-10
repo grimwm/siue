@@ -10,13 +10,12 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | File                                                            | What it is                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `index.html`, `game.css`, `game.js`                             | The page and the whole client (solo sim, rendering, room client and replay)                                                                                                                 |
-| `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (20 shells and tricks), `keys` (every binding), `audio` (optional sound files). Commented field by field                                         |
-| `game.json`                                                     | Generated from `game.yaml`; the only data file `game.js` and `rooms.php` load. Never edit by hand                                                                                           |
+| `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (20 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
+| `game.json`                                                     | Generated from `game.yaml`; the only data file `game.js`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml`, and where each came from                                                                                                                     |
 | `rooms.php`                                                     | Room server: authoritative sim, AI turns, shop, events                                                                                                                                      |
 | `scores.php`, `config.php`                                      | Score API; `.config.yaml` reader                                                                                                                                                            |
 | `fx.js` | The effects engine (particle pool, emitters, screen flash, shell glow), shared by `game.js` and the editor; exposes `window.TankityFX` |
-| `effects.json` | Every weapon's muzzle, trail, impact and special effects (data; schema in its `_schema`, summary below). `game.js` carries a baked Shell fallback and derives a plain effect from `gfx` for any weapon the file does not describe |
 | `fx/sprites/` | Sprite sheets (`fireball`, `smoke`, `shock`, `energy`, `mushroom`, `moon`) and `sprites.json`, rendered by `fx/blender/render_fx.py` |
 | `fx/blender/render_fx.py` | Headless Blender script that builds and renders the sprite sheets; its header documents the command and every option. Dev only |
 | `fx-editor.html`, `fx-editor.js`, `fx-editor.css` | Dev-only live effects editor (see Weapon effects). Never deployed |
@@ -114,13 +113,13 @@ php tools/install-files.php      # after the last edit to any served file
 
 | Command                                        | Covers                                                                                     |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `node smoke-test.js`                           | The shipped client in a stub DOM (loads `fx.js` first), driven by the `game.json` key table and the `protocol/` fixtures; also checks every weapon has muzzle, trail and impact effects and that the particle pool caps |
+| `node smoke-test.js`                           | The shipped client in a stub DOM (loads `fx.js` first), driven by the `game.json` key table and the `protocol/` fixtures; also checks every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps |
 | `php config-test.php`                          | `.config.yaml` precedence                                                                  |
 | `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; `room_snapshot` shapes against `protocol/` |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (needs SysV; run inside the PHP container)                 |
 | `php rooms-test.php`                           | The room shelf over its own `php -S` (needs SysV; run inside the PHP container)            |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
-| `php game-json-test.php`                       | The YAML parser, the `game.yaml` schema, `--check` staleness                               |
+| `php game-json-test.php`                       | The YAML parser, the `game.yaml` schema (effects included), `--check` staleness            |
 | `php install-files-test.php`                   | The manifest, install block and `sw.js` precache, `--check` staleness                      |
 | `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx.spec.mjs`; its editor checks run on a local site only); `E2E_BASE_URL` points it at the live site |
 | `make e2e-changed` (site root) | Only the browser specs your changes need (`tests/e2e/select.mjs` maps touched files to specs; CI uses the same map) |
@@ -157,27 +156,35 @@ is `{about, status, body}`.
 ## Weapon effects
 
 Looks are data and the blast radius stays the sim's. The arsenal in `game.yaml` owns
-`radius` (crater and damage); `effects.json` only decorates it: its emitters
-size themselves from the radius `explode` hands them (`unit: "r"`), the blast
-disc `drawBoom` paints is exactly that radius (drawn under the effects), and
-`gfx.shake` is still the screen shake unless an effect sets its own
-`screen.shake`.
+`radius` (crater and damage); the `effects` section only decorates it: its
+emitters size themselves from the radius `explode` hands them (`unit: "r"`),
+the blast disc `drawBoom` paints is exactly that radius (drawn under the
+effects), and `gfx.shake` is still the screen shake unless an effect sets its
+own `screen.shake`.
 
-`effects.json` is keyed by weapon key (plus `laststand`, the wreck blast).
-Each entry has `body` (shell glow: `halo`, `alpha`, `pulse`, `stretch`) and
-three effects: `muzzle` (once, at the barrel), `trail` (every frame in flight,
-emitters need a `rate`), `impact` (on detonation). `special` holds named
-extras: `split` (cluster bloom), `steer` (seeker pulse), `pierce` (lance
-through a tank), `arc` (EMP, over each tank it fries). An effect is
-`{ emitters: [...], screen: { shake, flash: { color, alpha, dur } } }`. An
-emitter's fields and defaults are `DEFAULTS` in `fx.js` (shape `dot | streak |
-ring | spark | smoke | sprite | bolt | beam`, count or rate, delay, duration,
-life, speed, aim/angle/spread, offset/edge, gravity, drag, wind, size over life,
-alpha keyframes, colour ramp, `glow` = additive, sprite sheet/fps/scale/anchor/
-tint); only non-default fields are written. The file's `_schema` documents each
-one, so the whole table can move verbatim into a `game.yaml` `effects:` section.
-`unit: "r"` multiplies size, speed, offset and length by the blast radius, so
-keep sizes in r small (a `dot` of size 1 is a disc of radius r).
+`effects` is the last section of `game.yaml`, keyed by weapon key (every ammo
+key, plus `laststand`, the wreck blast); the generator rejects a missing
+weapon. Each entry has `body` (shell glow: `halo`, `alpha`, `pulse`,
+`stretch`) and three effects: `muzzle` (once, at the barrel), `trail` (every
+frame in flight, emitters need a `rate`), `impact` (on detonation). `special`
+holds named extras: `split` (cluster bloom), `steer` (seeker pulse), `pierce`
+(lance through a tank), `arc` (EMP, over each tank it fries). An effect is
+`emitters` (one `- { ... }` line each) and an optional `screen: { shake,
+flash: { color, alpha, dur } }`. An emitter's fields and defaults are
+`DEFAULTS` in `fx.js` (shape `dot | streak | ring | spark | smoke | sprite |
+bolt | beam`, count or rate, delay, duration, life, speed, aim/angle/spread,
+offset/edge, gravity, drag, wind, size over life, alpha keyframes, colour
+ramp, `glow` = additive, sprite sheet/fps/scale/anchor/tint); only non-default
+fields are written. `game.yaml` documents each field with its range, and
+`tools/game-json.php` checks them: unknown names, a trail emitter with no
+`rate`, an emitter that emits nothing, a sprite with no sheet or a sheet
+that does not exist, and out-of-range numbers (checked against the unit they
+are written in). The generated `game.json` carries the section as plain JSON.
+`game.js` reads it from `game.json`, carries a baked Shell fallback for when
+that does not arrive, and derives a plain effect from `gfx` for any weapon
+the data does not describe. `unit: "r"` multiplies size, speed, offset and
+length by the blast radius, so keep sizes in r small (a `dot` of size 1 is a
+disc of radius r).
 
 Engine (`fx.js`): one preallocated pool per canvas (battlefield 700 particles,
 firing range 260, hard caps; a full pool recycles slots, and trails stop
@@ -196,11 +203,14 @@ Regenerate the sheets (Blender 4.2+, `brew install --cask blender`), from
     /Applications/Blender.app/Contents/MacOS/Blender -b -P render_fx.py -- --out ../sprites
 
 The editor, `fx-editor.html` (open it from the local site: `make url`, then
-`games/tankity/fx-editor.html`), edits `effects.json` live: pick a weapon and
+`games/tankity/fx-editor.html`), edits the effects live: pick a weapon and
 slot, edit every emitter field, add, duplicate, reorder, mute and remove
 emitters, watch a looping shot (slow motion, reduced motion and a blast-radius
-ring are toggles), then Copy JSON or Download effects.json and replace the
-file. Unsaved edits are kept in `localStorage` until Reload file. `deploy.sh`
+ring are toggles). It starts from the `effects` in `game.json`. Copy YAML (or
+Download effects.yaml) exports the whole `effects:` block, which runs to the
+end of `game.yaml`: paste it over the old block, then run
+`php tools/game-json.php` and `php tools/install-files.php`. Unsaved edits are
+kept in `localStorage` until Reload file re-reads `game.json`. `deploy.sh`
 skips `games/*/fx-editor.*` and `games/*/fx/blender/*`, the service worker
 precache leaves the editor out and includes `fx/sprites/`, and nginx denies the
 Blender folder. The Blender scenes (`fx/blender/*.blend`) are the sources of the sheets and live in Git LFS.

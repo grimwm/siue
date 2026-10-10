@@ -611,7 +611,7 @@ function applyArsenal(data) {
     renderHUD();
   }
 }
-/* One file feeds the client: arsenal, keys and audio all come from
+/* One file feeds the client: arsenal, keys, audio and effects all come from
    game.json (written from game.yaml). Any part that is missing or fails
    leaves that part's baked fallback in charge. */
 async function loadGameConfig() {
@@ -620,6 +620,7 @@ async function loadGameConfig() {
     if (!res.ok) return;
     const data = await res.json();
     if (!data) return;
+    installEffects(data.effects);
     applyArsenal(data.arsenal);
     applyKeys(data.keys);
     applyAudio(data.audio);
@@ -628,13 +629,13 @@ async function loadGameConfig() {
 
 /* ---------- effects ---------- */
 /* Every weapon's looks (muzzle flash, flight trail, blast, specials) live in
-// effects.json, keyed by weapon key, and run on the particle engine in fx.js
-// (shared with the dev-only fx-editor.html). The file's own `_schema` and
-// README.md describe the fields. Blast radii stay in the arsenal (game.yaml): effects
-// scale to the radius the sim hands them and never decide it. Until the file
-// arrives (or when it cannot, e.g. file:// play) this baked Shell keeps the
-// war lit, and any weapon the file does not describe gets a plain effect
-// derived from its paint job (gfx). */
+// game.yaml's effects section (served as game.json), keyed by weapon key, and
+// run on the particle engine in fx.js (shared with the dev-only
+// fx-editor.html). game.yaml and README.md describe the fields. Blast radii
+// stay in the arsenal: effects scale to the radius the sim hands them and
+// never decide it. Until game.json arrives (or when it cannot, e.g. file://
+// play) this baked Shell keeps the war lit, and any weapon it does not
+// describe gets a plain effect derived from its paint job (gfx). */
 const FX = window.TankityFX || null;
 const FX_BUDGET = 700; // live particles on the battlefield, hard cap
 const FALLBACK_FX = {
@@ -663,7 +664,7 @@ function fxSet(key) {
   if (d) return d;
   return FX_DERIVED[key] || (FX_DERIVED[key] = FX.derive(((WEAPONS[key] || {}).gfx)));
 }
-/* Install a parsed effects.json: each entry that passes validation wins; a
+/* Install game.json's effects section: each entry that passes validation wins; a
    bad one is reported and left to the derived effect. */
 function installEffects(data) {
   if (!FX || !data || typeof data !== 'object') return 0;
@@ -672,20 +673,12 @@ function installEffects(data) {
     if (key[0] === '_') continue;
     FX.dress({ [key]: data[key] });
     const bad = FX.validate({ [key]: data[key] }, [key]);
-    if (bad.length) { if (window.console) console.warn('effects.json: ' + bad[0]); continue; }
+    if (bad.length) { if (window.console) console.warn('game.json effects: ' + bad[0]); continue; }
     next[key] = data[key];
   }
   if (!next.shell) return 0;
   FX_DEFS = next;
   return Object.keys(next).length;
-}
-function loadEffects() {
-  if (!FX || typeof fetch !== 'function') return;
-  fetch('effects.json', { headers: { Accept: 'application/json' } })
-    .then(r => r.json())
-    .then(installEffects)
-    .catch(() => { /* the baked Shell effect above keeps the war lit */ });
-  FX.loadSprites('fx/sprites/');
 }
 if (FX) {
   // Reduced motion: fewer, shorter particles and no screen flash (shake is
@@ -695,7 +688,7 @@ if (FX) {
     FX.reduced = !!mq.matches;
     if (mq.addEventListener) mq.addEventListener('change', e => { FX.reduced = e.matches; });
   }
-  loadEffects();
+  FX.loadSprites('fx/sprites/');
 }
 function fxMuzzle(sys, wkey, x, y, ang) {
   if (!sys) return;

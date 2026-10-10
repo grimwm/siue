@@ -19,8 +19,8 @@ exec('cd ' . escapeshellarg($site) . ' && LIST=1 ./deploy.sh 2>&1', $out, $code)
 $check('list-runs', $code === 0, implode(' | ', array_slice($out, -3)));
 $set = array_flip($out);
 
-// Served: the effects engine, its data and the rendered sprite sheets.
-foreach (['games/tankity/fx.js', 'games/tankity/effects.json', 'games/tankity/fx/sprites/sprites.json', 'games/tankity/game.js', 'games/tankity/game.json', 'games/tankity/sw.js'] as $f) {
+// Served: the effects engine and the rendered sprite sheets (the effects data rides game.json).
+foreach (['games/tankity/fx.js', 'games/tankity/fx/sprites/sprites.json', 'games/tankity/game.js', 'games/tankity/game.json', 'games/tankity/sw.js'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
 $sheets = glob("$site/games/tankity/fx/sprites/*.png") ?: [];

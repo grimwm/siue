@@ -5,14 +5,14 @@
  * Loaded before game.js; exposes window.TankityFX (also module.exports).
  *
  * An EFFECT is { emitters: [...], screen: { shake, flash: { color, alpha, dur } } }.
- * A weapon's entry in effects.json holds three effects plus optional extras:
+ * A weapon's entry in game.yaml's `effects:` section (served as game.json) holds three effects plus optional extras:
  *   muzzle   once, as the shell leaves the barrel
  *   trail    every frame while the shell flies (emitters use `rate`)
  *   impact   once, on detonation; `unit: "r"` sizes it by the blast radius
  *   special  named extras: split (cluster), steer (seeker), pierce (lance),
  *            arc (EMP, over each tank it fries)
  *   body     the shell itself: halo radius/alpha/pulse, stretch (streak behind)
- * Every emitter field and its default lives in DEFAULTS below; effects.json
+ * Every emitter field and its default lives in DEFAULTS below; game.yaml
  * carries only what differs. The particle pool is preallocated and capped, so
  * a frame never allocates and a runaway effect cannot run the frame rate down.
  */
@@ -167,7 +167,8 @@
 
   /* ---------- effect data helpers ---------- */
   /* Emitters inherit DEFAULTS through their prototype, so JSON.stringify
-     (the editor's export) writes only what an author changed. */
+     (the editor's draft) and toYaml (its export) write only what an author
+     changed. */
   function adopt(em) { return Object.setPrototypeOf(em, DEFAULTS); }
   function dressEffect(ef) {
     if (!ef) return ef;
@@ -555,7 +556,7 @@
     c.globalAlpha = oa;
   }
   /* The shell's own glow: a halo, a stretch of light behind it, and an
-     optional pulse. body = { halo, alpha, pulse, stretch } from effects.json. */
+     optional pulse. body = { halo, alpha, pulse, stretch } from game.yaml. */
   /* A shell body's settings when its weapon leaves them out. */
   const BODY_DEFAULTS = Object.freeze({ halo: 9, alpha: 0.5, pulse: 0, stretch: 0 });
   function drawBody(c, x, y, vx, vy, body, color, time) {
@@ -582,7 +583,7 @@
     if (halo > 0 && a > 0) glow(c, x, y, halo, color, a);
   }
 
-  /* How a weapon's effect set (one entry of effects.json) is played. The game
+  /* How a weapon's effect set (one weapon's entry in `effects`) is played. The game
      and the editor both go through these, so they cannot drift apart. Each
      returns what the engine returns: emit() gives the effect's own screen shake. */
   const play = {
@@ -606,36 +607,44 @@
     },
   };
 
-  /* effects.json text: the _schema block pretty-printed, each weapon's slots
-     in a fixed order, one emitter per line. Only an emitter's own fields are
-     written (the defaults ride its prototype), so an export diffs cleanly. */
-  function val(v) {
-    if (Array.isArray(v)) return '[' + v.map(val).join(', ') + ']';
+  /* The `effects:` block of game.yaml, as the editor exports it: weapons in
+     the order given, each one's slots in a fixed order, one emitter per line
+     as a flow map. Only an emitter's own fields are written (the defaults ride
+     its prototype), so an export diffs cleanly. */
+  const yKey = (k) => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(k) ? k : JSON.stringify(k));
+  function yVal(v) {
+    if (Array.isArray(v)) return '[' + v.map(yVal).join(', ') + ']';
     if (v && typeof v === 'object') {
       const ks = Object.keys(v);
-      return ks.length ? '{ ' + ks.map(k => JSON.stringify(k) + ': ' + val(v[k])).join(', ') + ' }' : '{}';
+      return ks.length ? '{ ' + ks.map(k => yKey(k) + ': ' + yVal(v[k])).join(', ') + ' }' : '{}';
     }
+    // Plain words stay bare; anything else (colours, '', true-ish text) is quoted.
+    if (typeof v === 'string' && /^[A-Za-z][A-Za-z0-9]*$/.test(v) && !/^(true|false|null)$/.test(v)) return v;
     return JSON.stringify(v);
   }
-  function stringify(defs) {
+  function toYaml(defs) {
     const effect = (ef, ind) => {
-      const parts = [];
-      if (ef.screen) parts.push(ind + '  "screen": ' + val(ef.screen));
-      parts.push(ind + '  "emitters": [' + (ef.emitters.length
-        ? '\n' + ef.emitters.map(em => ind + '    ' + val(em)).join(',\n') + '\n' + ind + '  ' : '') + ']');
-      return '{\n' + parts.join(',\n') + '\n' + ind + '}';
+      const out = [];
+      if (ef.screen) out.push(ind + 'screen: ' + yVal(ef.screen));
+      if (ef.emitters.length) {
+        out.push(ind + 'emitters:');
+        for (const em of ef.emitters) out.push(ind + '  - ' + yVal(em));
+      } else out.push(ind + 'emitters: []');
+      return out;
     };
-    const blocks = Object.keys(defs).map(k => {
-      if (k[0] === '_') return '  ' + JSON.stringify(k) + ': ' + JSON.stringify(defs[k], null, 2).replace(/\n/g, '\n  ');
-      const w = defs[k], lines = [];
-      if (w.body) lines.push('    "body": ' + val(w.body));
-      for (const slot of SLOTS) if (w[slot]) lines.push('    "' + slot + '": ' + effect(w[slot], '    '));
+    const out = ['effects:'];
+    for (const k of Object.keys(defs)) {
+      if (k[0] === '_') continue;
+      const w = defs[k];
+      out.push('  ' + yKey(k) + ':');
+      if (w.body) out.push('    body: ' + yVal(w.body));
+      for (const slot of SLOTS) if (w[slot]) out.push('    ' + slot + ':', ...effect(w[slot], '      '));
       if (w.special && Object.keys(w.special).length) {
-        lines.push('    "special": {\n' + Object.keys(w.special).map(n => '      "' + n + '": ' + effect(w.special[n], '      ')).join(',\n') + '\n    }');
+        out.push('    special:');
+        for (const n of Object.keys(w.special)) out.push('      ' + yKey(n) + ':', ...effect(w.special[n], '        '));
       }
-      return '  ' + JSON.stringify(k) + ': {\n' + lines.join(',\n') + '\n  }';
-    });
-    return '{\n' + blocks.join(',\n') + '\n}\n';
+    }
+    return out.join('\n') + '\n';
   }
 
   const api = {
@@ -644,7 +653,7 @@
     reduced: false,
     sheets,
     createSystem, loadSprites, glow, drawBody, BODY_DEFAULTS,
-    adopt, dress, dressEffect, newEmitter, cloneEmitter, validate, derive, stringify, play,
+    adopt, dress, dressEffect, newEmitter, cloneEmitter, validate, derive, toYaml, play,
     parseColor, lutFor,
   };
   root.TankityFX = api;

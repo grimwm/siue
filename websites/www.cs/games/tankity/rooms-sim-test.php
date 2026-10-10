@@ -131,5 +131,17 @@ room_fire_shot($room, $events, 1, 'shell');
 $shot = array_values(array_filter($events, fn($e) => $e['t'] === 'shot'))[0] ?? null;
 $check('drone-fires-its-facing', $shot !== null && $shot['x1'] > $shot['x0'], json_encode([$shot['x0'] ?? null, $shot['x1'] ?? null]));
 
+// The lobby's silhouettes come from the terrain a room on that map plays.
+foreach (ROOM_MAPS as $id => $m) {
+    $prof = room_map_profile($id);
+    $rng = room_hash_seed($m['seed'] . '|round1');
+    $terrain = room_gen_terrain($rng, 720);
+    $ok = count($prof) === ROOM_PROFILE_N && min($prof) >= 0.0 && max($prof) <= 1.0
+        && abs($prof[0] - (415.0 - $terrain[0]) / 225.0) < 0.001
+        && abs($prof[ROOM_PROFILE_N - 1] - (415.0 - $terrain[719]) / 225.0) < 0.001;
+    $check("map-profile-$id", $ok, json_encode([count($prof), min($prof), max($prof)]));
+}
+$check('map-profiles-differ', count(array_unique(array_map(fn($id) => json_encode(room_map_profile($id)), array_keys(ROOM_MAPS)))) === count(ROOM_MAPS));
+
 echo $fail === 0 ? "SIM-OK\n" : "SIM-FAIL $fail\n";
 exit($fail === 0 ? 0 : 1);

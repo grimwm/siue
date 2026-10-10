@@ -28,7 +28,7 @@
 <meta name="twitter:title" content="Operation Tankity">
 <meta name="twitter:description" content="Mind the wind and out-shoot a drone battery across endless hills. Spend your $600 stake on a 20-item arsenal, or open a room and take turns with a friend.">
 <!-- share-tags:end -->
-<link rel="stylesheet" href="game.css?v=20261010b">
+<link rel="stylesheet" href="game.css?v=20261010c">
 </head>
 <body>
 <header class="topbar">
@@ -178,12 +178,17 @@
             <span class="unit-label" id="text-label">Text</span>
             <div class="unit-picker" id="text-picker"></div>
           </div>
+          <div class="unit-row" role="group" aria-labelledby="options-label">
+            <span class="unit-label" id="options-label">Options</span>
+            <div class="unit-picker" id="toggle-picker">
+              <button type="button" id="btn-sound" class="unit-choice tile-toggle" aria-pressed="true" title="Toggle sound effects"><svg class="tile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" stroke="none"/><path class="on-only" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/><path class="off-only" d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></svg><span>Sound <span class="key" data-keyhint="global:sound">(E)</span></span></button>
+              <button type="button" id="btn-music" class="unit-choice tile-toggle" aria-pressed="true" title="Toggle music"><svg class="tile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5" fill="currentColor"/><circle cx="16.5" cy="16" r="2.5" fill="currentColor"/><path class="off-only" d="M4 3l16 18"/></svg><span>Music <span class="key" data-keyhint="global:music">(M)</span></span></button>
+              <button type="button" id="fullscreen" class="unit-choice tile-toggle" aria-pressed="false" title="Toggle fullscreen"><svg class="tile-icon" viewBox="0 0 24 24" aria-hidden="true"><path class="off-only" d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path class="on-only" d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg><span>Fullscreen <span class="key" data-keyhint="global:fullscreen">(F)</span></span></button>
+            </div>
+          </div>
           <button type="button" id="random-run" title="Ignore the seed box and start on a fresh random seed">Random seed <span class="key" data-keyhint="global:random">(T)</span></button>
           <button type="button" id="rooms-open" title="Host or join a multiplayer game room">Rooms <span class="key" data-keyhint="global:rooms">(O)</span></button>
           <button type="button" id="tutorial-open" title="Replay the opening-moves tutorial">Tutorial <span class="key" data-keyhint="global:tutorial">(U)</span></button>
-          <button type="button" id="btn-sound" title="Toggle sound effects">Sound: on <span class="key" data-keyhint="global:sound">(E)</span></button>
-          <button type="button" id="btn-music" title="Toggle music">Music: on <span class="key" data-keyhint="global:music">(M)</span></button>
-          <button type="button" id="fullscreen" title="Toggle fullscreen">Fullscreen <span class="key" data-keyhint="global:fullscreen">(F)</span></button>
         </form>
       </section>
       <section id="tutorial-overlay" class="frame-overlay card-overlay" aria-labelledby="tutorial-h" hidden>
@@ -235,10 +240,9 @@
             <label for="host-initials">Your initials</label>
             <input id="host-initials" name="initials" type="text" autocomplete="off"
                    spellcheck="false" maxlength="3" minlength="3" placeholder="ABC">
-            <label for="lobby-map">Hills</label>
-            <select id="lobby-map" name="map">
-              <option value="">Random hills</option>
-            </select>
+            <span class="map-label" id="lobby-map-label">Hills</span>
+            <input type="hidden" id="lobby-map" name="map" value="">
+            <div class="unit-picker map-picker" id="lobby-map-picker" role="group" aria-labelledby="lobby-map-label"></div>
             <button type="submit" id="host-go" class="btn-primary">Host a room</button>
           </form>
           <form id="join-form" class="lobby-form" action="#">
@@ -287,6 +291,6 @@
   </section>
 </main>
 
-<script src="game.js?v=20261010b" defer></script>
+<script src="game.js?v=20261010c" defer></script>
 </body>
 </html>

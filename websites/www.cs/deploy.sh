@@ -64,6 +64,8 @@ while IFS= read -r -d '' f; do
     # (README.md), and games/tankity/game.yaml, whose runtime form is the
     # generated game.json (nothing fetches the YAML).
     games/*-test.* | games/README.md | games/*/README.md | games/tankity/game.yaml) continue ;;
+    # Authoring sources kept in Git LFS (see .gitattributes): never served.
+    *.blend | *.blend1 | *.wav | *.flac | *.aif | *.aiff | games/*/src/*) continue ;;
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).
     play/*) ;;

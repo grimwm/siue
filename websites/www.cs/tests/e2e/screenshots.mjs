@@ -67,7 +67,7 @@ const SHOTS = {
       await page.waitForTimeout(260);
       if (!(await page.locator('#cylon-gameover').isVisible())) return null;
     }
-    return null;
+    throw new Error('cylon: every run ended in game over; no screenshot taken');
   },
 };
 

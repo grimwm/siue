@@ -624,6 +624,86 @@ function room_turn_left(array &$room): ?float
     }
     return max(0.0, ROOM_TURN_SECS - (microtime(true) - (float) $room['clock']['at']));
 }
+/* Seconds the between-rounds shop stays open before the next round starts for
+// everyone, ready or not. */
+const ROOM_SHOP_SECS = 90;
+/* Seconds left on the shop clock (null outside the shop). It starts when the
+// round is won (room_end_round stamps shop.at). */
+function room_shop_left(array $room): ?float
+{
+    if (($room['phase'] ?? '') !== 'shop') {
+        return null;
+    }
+    $at = (float) ($room['shop']['at'] ?? microtime(true));
+    return max(0.0, ROOM_SHOP_SECS - (microtime(true) - $at));
+}
+/* The seats the shop waits on: humans still in the match. Drones, open chairs,
+// leavers (their seat turns into a drone) and eliminated humans never block. */
+function room_shop_voters(array $room): array
+{
+    $out = [];
+    foreach ($room['seats'] as $idx => $s) {
+        if (($s['human'] ?? false) && ($s['lives'] ?? 0) > 0) {
+            $out[] = $idx;
+        }
+    }
+    return $out;
+}
+function room_shop_ready(array $room, int $seat): bool
+{
+    return !empty($room['shop']['ready'][$seat]) && in_array($seat, room_shop_voters($room), true);
+}
+/* Record one seat's wanted ready state. The caller sends the state it wants,
+// never a flip, so a retried or duplicated request lands the same way twice;
+// outside the shop it is ignored (false), so a late "unready" cannot reopen a
+// shop whose round has begun. Callers hold the room lock and call
+// room_shop_settle right after, in the same read-modify-write. */
+function room_shop_set_ready(array &$room, int $seat, bool $want): bool
+{
+    if ($room['phase'] !== 'shop') {
+        return false;
+    }
+    $room['shop']['ready'][$seat] = $want;
+    return true;
+}
+/* Start the next round when the shop clock has run out or every voter is
+// ready. Runs inside the locked read-modify-write that recorded the change,
+// so "last player readies" and "round starts" are one step no other request
+// can slip between. Returns whether the round started. */
+function room_shop_settle(array &$room): bool
+{
+    if ($room['phase'] !== 'shop') {
+        return false;
+    }
+    $voters = room_shop_voters($room);
+    $all = count($voters) > 0;
+    foreach ($voters as $v) {
+        $all = $all && room_shop_ready($room, $v);
+    }
+    if (!$all && room_shop_left($room) > 0) {
+        return false;
+    }
+    // Apply stockpiled repairs and fuel before fresh hills.
+    foreach ($room['seats'] as $idx => $s) {
+        if (!($s['human'] ?? false)) {
+            continue;
+        }
+        $room['repairApplied'][$idx] = $room['repair'][$idx] ?? 0;
+        $room['fuelApplied'][$idx] = $room['fuelBonus'][$idx] ?? 0;
+        $room['repair'][$idx] = 0;
+        $room['fuelBonus'][$idx] = 0;
+    }
+    unset($room['shop']);
+    room_start_round($room);
+    room_apply_banked($room);
+    $events = [['t' => 'round', 'round' => $room['round'], 'wind' => $room['wind']]];
+    room_advance($room, $events);
+    foreach ($events as $e) {
+        room_emit($room, $e);
+    }
+    room_settle_tanks($room);
+    return true;
+}
 /* A random gun from a seat's rack: any shell it still has, the Shell always,
 // skipping anything its round has not unlocked. */
 function room_random_gun(array $room, int $seat): string
@@ -1150,6 +1230,7 @@ function room_end_round(array &$room, array &$events): void
             $room['cash'][$t['seat']] = ($room['cash'][$t['seat']] ?? 0) + $prize;
         }
         $room['phase'] = 'shop';
+        $room['shop'] = ['at' => microtime(true), 'ready' => []];
         $events[] = ['t' => 'roundwin', 'round' => $room['round']];
         return;
     }
@@ -1350,6 +1431,8 @@ function room_snapshot(array $room, ?int $seat, int $since): array
             'mode' => $s['human'] ? 'human' : ($s['mode'] ?? 'ai'),
             'lives' => $s['lives'] ?? 0,
             'score' => $room['scores'][$idx] ?? 0,
+            // Pressed Ready at the shop (always false elsewhere).
+            'ready' => $room['phase'] === 'shop' && room_shop_ready($room, $idx),
         ];
     }
     $out = [
@@ -1363,6 +1446,11 @@ function room_snapshot(array $room, ?int $seat, int $since): array
         // Seconds left before the crew fires for the human whose turn it is.
         'turnLeft' => (function () use ($room) {
             $left = room_turn_left($room);
+            return $left === null ? null : round($left, 1);
+        })(),
+        // Seconds left before the shop closes and the next round starts.
+        'shopLeft' => (function () use ($room) {
+            $left = room_shop_left($room);
             return $left === null ? null : round($left, 1);
         })(),
         'terrain' => array_map(fn($v) => round($v, 1), $room['terrain']),
@@ -1522,6 +1610,8 @@ if ($action === 'leave' && $method === 'POST') {
     $code = $room['code'];
     if (room_leave($room, $seat)) {
         room_emit($room, ['t' => 'left', 'seat' => $seat]);
+        // The leaver may have been the one the shop was waiting on.
+        room_shop_settle($room);
         $ok = room_save($fh, $path, $room);
     } else {
         $reg = room_registry_get();
@@ -1787,6 +1877,10 @@ if ($action === 'state') {
         }
         room_settle_tanks($room);
         room_save($fh, $path, $room);
+    } elseif ($room['phase'] === 'shop') {
+        // The shop clock runs out on whoever polls first.
+        room_shop_settle($room);
+        room_save($fh, $path, $room);
     } elseif ($seat !== null) {
         // Heartbeat: a seated browser polls state every couple of seconds, so
         // saving (mtime only, hands off lastAct) keeps a waiting lobby live
@@ -1944,6 +2038,9 @@ if ($action === 'act' && $method === 'POST') {
 
 if ($action === 'buy' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true);
+    if (room_shop_settle($room)) {
+        room_save($fh, $path, $room); // the clock ran out before this purchase
+    }
     if ($room['phase'] !== 'shop') {
         room_unlock($fh);
         room_json_out(409, ['error' => 'shop is closed']);
@@ -2027,34 +2124,23 @@ if ($action === 'buy' && $method === 'POST') {
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
-if ($action === 'next' && $method === 'POST') {
-    [$room, $fh, $path, $seat] = room_gate($body, true);
-    if ($room['phase'] !== 'shop') {
+/* Ready is a toggle on the wire as a wanted state: {"ready": true|false}.
+   Not throttled: it follows the player's own click, like the menu flag, and
+   a swallowed click would leave the button disagreeing with the room. */
+if ($action === 'ready' && $method === 'POST') {
+    [$room, $fh, $path, $seat] = room_gate($body, true, false);
+    if (!is_bool($body['ready'] ?? null)) {
         room_unlock($fh);
-        room_json_out(409, ['error' => 'not at the shop']);
+        room_json_out(422, ['error' => 'say whether you are ready']);
     }
-    // Apply stockpiled repairs and fuel before fresh hills.
-    foreach ($room['seats'] as $idx => $s) {
-        if (!($s['human'] ?? false)) {
-            continue;
+    // Out of the shop this changes nothing and answers with the room as it
+    // is, so a late "unready" just shows the client the round already began.
+    if (room_shop_set_ready($room, $seat, $body['ready'])) {
+        room_shop_settle($room);
+        if (!room_save($fh, $path, $room)) {
+            room_unlock($fh);
+            room_json_out(500, ['error' => 'store write failed']);
         }
-        $room['repairApplied'][$idx] = $room['repair'][$idx] ?? 0;
-        $room['fuelApplied'][$idx] = $room['fuelBonus'][$idx] ?? 0;
-        $room['repair'][$idx] = 0;
-        $room['fuelBonus'][$idx] = 0;
-    }
-    room_start_round($room);
-    room_apply_banked($room);
-    $events = [];
-    $events[] = ['t' => 'round', 'round' => $room['round'], 'wind' => $room['wind']];
-    room_advance($room, $events);
-    foreach ($events as $e) {
-        room_emit($room, $e);
-    }
-    room_settle_tanks($room);
-    if (!room_save($fh, $path, $room)) {
-        room_unlock($fh);
-        room_json_out(500, ['error' => 'store write failed']);
     }
     $since = (int) ($body['since'] ?? 0);
     $out = room_snapshot($room, $seat, $since);

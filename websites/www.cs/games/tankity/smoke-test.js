@@ -46,6 +46,7 @@ function makeEl(id) {
     addEventListener(t, f) { (this._l = this._l || {})[t] = ((this._l)[t] || []).concat(f); },
     setAttribute(k, v) { (this._attrs = this._attrs || {})[k] = String(v); },
     getAttribute(k) { return (this._attrs || {})[k]; },
+    removeAttribute(k) { delete (this._attrs || {})[k]; },
     getBoundingClientRect: () => ({ width: 720, height: 460 }),
     getContext: () => makeCallable(),
     blur: () => {},
@@ -406,8 +407,8 @@ function scriptTank(seat, x, name, kind) {
 function scriptSeats() {
   // Server shape: humans arrive as name=initials, drones as name=AI name.
   return [
-    { seat: 0, human: true, name: 'abc', mode: 'human', lives: 3, score: 0 },
-    { seat: 1, human: false, name: 'REAPER', mode: 'ai', lives: 0, score: 0 },
+    { seat: 0, human: true, name: 'abc', mode: 'human', lives: 3, score: 0, ready: NET_SHOP && mockReady },
+    { seat: 1, human: false, name: 'REAPER', mode: 'ai', lives: 0, score: 0, ready: false },
   ];
 }
 function scriptYou() {
@@ -419,7 +420,7 @@ function scriptYou() {
 }
 function playRoom(turn, events) {
   return fxConform(Object.assign({
-    code: 'TST1', phase: NET_SHOP ? 'shop' : 'play', round: 1, wind: 2, turn, turnLeft: NET_SHOP ? null : 120,
+    code: 'TST1', phase: NET_SHOP ? 'shop' : 'play', round: 1, wind: 2, turn, turnLeft: NET_SHOP ? null : 120, shopLeft: NET_SHOP ? 90 : null,
     terrain: terr720(),
     tanks: [scriptTank(0, 100, 'abc', 'human'), scriptTank(1, 600, 'REAPER', 'ai')],
     seats: scriptSeats(), events: events || [], you: scriptYou(), csrf: 'cs0',
@@ -494,7 +495,12 @@ global.fetch = async (url, opts) => {
     }
     return okJson({ ok: true, room: playRoom(curTurn, []) });
   }
-  if (u.includes('action=buy') || u.includes('action=next')) {
+  if (u.includes('action=ready')) {
+    readySent.push(body.ready);
+    mockReady = body.ready;
+    return okJson({ ok: true, room: playRoom(curTurn, []) });
+  }
+  if (u.includes('action=buy')) {
     return okJson({ ok: true, room: playRoom(curTurn, []) });
   }
   if (u.includes('action=join')) {
@@ -504,6 +510,8 @@ global.fetch = async (url, opts) => {
 };
 let NET_LOBBY = true;
 let NET_SHOP = false;
+let mockReady = false;
+const readySent = [];
 let extraGuest = false;
 // Lobby seats as the server sends them: all four from the start, each human,
 // AI or open; the host's seatmode requests flip the stored mode.
@@ -514,12 +522,12 @@ let stateCalls = 0;
 function lobbyRoom() {
   const aiNames = { 1: 'REAPER', 2: 'WRAITH', 3: 'SPOTTER' };
   const seats = [0, 1, 2, 3].map(i => {
-    if (i === 0) return { seat: 0, human: true, name: 'abc', mode: 'human', lives: 3, score: 0 };
-    if (i === 1 && extraGuest) return { seat: 1, human: true, name: 'def', mode: 'human', lives: 3, score: 0 };
-    return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], lives: 0, score: 0 };
+    if (i === 0) return { seat: 0, human: true, name: 'abc', mode: 'human', lives: 3, score: 0, ready: false };
+    if (i === 1 && extraGuest) return { seat: 1, human: true, name: 'def', mode: 'human', lives: 3, score: 0, ready: false };
+    return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], lives: 0, score: 0, ready: false };
   });
   return fxConform(Object.assign(
-    { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], round: 0, wind: 0, turn: null, turnLeft: null, you: scriptYou(), csrf: 'cs0' },
+    { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], round: 0, wind: 0, turn: null, turnLeft: null, shopLeft: null, you: scriptYou(), csrf: 'cs0' },
     mapFields(),
   ));
 }
@@ -1036,6 +1044,21 @@ function change(el) {
   NET_SHOP = true;
   await sleep(1800); await tick(10);
   check('net-shop', els['shop-veil'].hidden === false, `shop hidden=${els['shop-veil'].hidden}`);
+  // The shop button is the Ready toggle: it shows who is ready and the clock,
+  // sends the wanted state in click order, and a fast double click ends unready.
+  check('net-ready-idle', /^Ready/.test(els['shop-next'].textContent) && !/✓/.test(els['shop-next'].textContent)
+    && els['shop-next'].getAttribute('aria-pressed') === 'false'
+    && /^0\/1 ready · shop closes in 1:\d\d/.test(els['shop-ready'].textContent), els['shop-next'].textContent + ' | ' + els['shop-ready'].textContent);
+  click(els['shop-next']); await tick(10);
+  check('net-ready-on', readySent.join() === 'true' && /^Ready ✓/.test(els['shop-next'].textContent)
+    && els['shop-next'].getAttribute('aria-pressed') === 'true' && /^1\/1 ready/.test(els['shop-ready'].textContent),
+    readySent.join() + ' | ' + els['shop-next'].textContent + ' | ' + els['shop-ready'].textContent);
+  click(els['shop-next']); click(els['shop-next']); await tick(10);
+  check('net-ready-double-click-ordered', readySent.join() === 'true,false,true' && mockReady === true,
+    readySent.join());
+  click(els['shop-next']); await tick(10);
+  check('net-ready-off', readySent.join() === 'true,false,true,false' && !/✓/.test(els['shop-next'].textContent)
+    && els['shop-next'].getAttribute('aria-pressed') === 'false', readySent.join() + ' | ' + els['shop-next'].textContent);
   TAP('shop', 'preview'); await tick(5);
   const pvOpened = els['preview-veil'].hidden === false;
   await sleep(3400); await tick(10);
@@ -1152,6 +1175,11 @@ function change(el) {
   await sleep(2200); await tick(10);
   check('fx-shop-opens', els['shop-veil'].hidden === false, `shop hidden=${els['shop-veil'].hidden}`);
   check('fx-shop-cash', els['shop-cash'].textContent.includes(String(fxRoomOf('shop-after-win').you.cash)), els['shop-cash'].textContent);
+  // The server's own shop with the host readied and a second human waiting.
+  PFX.room = 'shop-ready';
+  await sleep(2200); await tick(10);
+  check('fx-shop-ready', /^Ready ✓/.test(els['shop-next'].textContent) && /^1\/2 ready · shop closes in 1:/.test(els['shop-ready'].textContent),
+    els['shop-next'].textContent + ' | ' + els['shop-ready'].textContent);
   PFX.on = false;
   check('fx-hand-snapshots-match', FX_DRIFT.size === 0, [...FX_DRIFT].slice(0, 6).join('; '));
   click(els['shop-leave']); frames(2);

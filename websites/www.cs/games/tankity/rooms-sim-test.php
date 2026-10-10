@@ -261,6 +261,117 @@ foreach ($room['tanks'] as $t) {
 $check('host-leave-mid-match-continues', $left === true && ($room['seats'][0]['human'] ?? true) === false
     && $hostTank !== null && $hostTank['kind'] === 'ai' && $room['seats'][1]['human'] === true);
 
+// The shop between multiplayer rounds: ready is a wanted state, the last
+// ready starts the round inside the same step, and the clock starts it too.
+// $shopRoom: humans HOS (seat 0) and GST (seat 1) plus a drone, round won.
+$shopRoom = function (int $humans = 2) {
+    $room = room_new('SHOP', 'hos');
+    $room['seats'][0] = ['human' => true, 'initials' => 'HOS', 'token' => 't0', 'lives' => 3, 'lastAct' => microtime(true)];
+    $room['seats'][1] = $humans > 1
+        ? ['human' => true, 'initials' => 'GST', 'token' => 't1', 'lives' => 3, 'lastAct' => microtime(true)]
+        : room_idle_seat(1, 'open');
+    $room['seats'][2] = room_idle_seat(2, 'ai');
+    $room['seats'][3] = room_idle_seat(3, 'open');
+    room_seat_economy($room, 0);
+    if ($humans > 1) {
+        room_seat_economy($room, 1);
+    }
+    room_start_round($room);
+    foreach ($room['tanks'] as &$t) {
+        if ($t['kind'] === 'ai') {
+            $t['hp'] = 0;
+        }
+    }
+    unset($t);
+    $events = [];
+    room_end_round($room, $events);
+    return $room;
+};
+$room = $shopRoom();
+$check('shop-opens-with-clock', $room['phase'] === 'shop' && room_shop_left($room) > ROOM_SHOP_SECS - 2 && room_shop_left($room) <= ROOM_SHOP_SECS,
+    $room['phase'] . ' ' . (string) room_shop_left($room));
+$snap = room_snapshot($room, 0, 0);
+$check('shop-snapshot-carries-clock-and-ready', $snap['shopLeft'] > 85 && $snap['seats'][0]['ready'] === false && $snap['seats'][2]['ready'] === false);
+$check('shop-clock-null-in-play', room_shop_left(['phase' => 'play']) === null);
+
+// All ready starts the round; one of two ready does not.
+$room = $shopRoom();
+room_shop_set_ready($room, 0, true);
+$check('shop-one-ready-waits', room_shop_settle($room) === false && $room['phase'] === 'shop'
+    && room_snapshot($room, 0, 0)['seats'][0]['ready'] === true);
+room_shop_set_ready($room, 1, true);
+$round0 = $room['round'];
+$check('shop-all-ready-starts', room_shop_settle($room) === true && $room['phase'] === 'play' && $room['round'] === $round0 + 1);
+$check('shop-start-clears-state', !isset($room['shop']) && room_snapshot($room, 0, 0)['shopLeft'] === null
+    && room_snapshot($room, 0, 0)['seats'][0]['ready'] === false);
+
+// Unready while the other has not readied: the shop stays and the flag clears.
+$room = $shopRoom();
+room_shop_set_ready($room, 0, true);
+room_shop_settle($room);
+room_shop_set_ready($room, 0, false);
+$check('shop-unready-before-all', room_shop_settle($room) === false && $room['phase'] === 'shop' && !room_shop_ready($room, 0));
+room_shop_set_ready($room, 1, true);
+$check('shop-unready-blocks-start', room_shop_settle($room) === false && $room['phase'] === 'shop');
+
+// The race: the last ready starts the round, and an unready that arrives
+// afterwards neither reopens the shop nor un-starts the round.
+$room = $shopRoom();
+room_shop_set_ready($room, 0, true);
+room_shop_set_ready($room, 1, true);
+room_shop_settle($room);
+$tanksBefore = json_encode($room['tanks']);
+$roundBefore = $room['round'];
+$applied = room_shop_set_ready($room, 0, false);
+$check('shop-late-unready-ignored', $applied === false && room_shop_settle($room) === false
+    && $room['phase'] === 'play' && $room['round'] === $roundBefore && json_encode($room['tanks']) === $tanksBefore
+    && !isset($room['shop']));
+
+// Duplicate ready is idempotent: a retried request cannot flip the state.
+$room = $shopRoom();
+room_shop_set_ready($room, 0, true);
+room_shop_set_ready($room, 0, true);
+$check('shop-duplicate-ready-idempotent', room_shop_ready($room, 0) === true && room_shop_settle($room) === false);
+room_shop_set_ready($room, 0, false);
+room_shop_set_ready($room, 0, false);
+$check('shop-duplicate-unready-idempotent', room_shop_ready($room, 0) === false);
+
+// The clock: an expired shop starts the round whatever the ready flags say.
+$room = $shopRoom();
+$room['shop']['at'] = microtime(true) - ROOM_SHOP_SECS - 1;
+$check('shop-clock-expiry-starts', room_shop_left($room) === 0.0 && room_shop_settle($room) === true && $room['phase'] === 'play');
+$room = $shopRoom();
+$room['shop']['at'] = microtime(true) - ROOM_SHOP_SECS + 5;
+$check('shop-clock-running-waits', room_shop_settle($room) === false && $room['phase'] === 'shop');
+
+// A leaver does not block: the seat becomes a drone, so the remaining human's
+// ready is enough.
+$room = $shopRoom();
+room_shop_set_ready($room, 0, true);
+room_shop_settle($room);
+room_leave($room, 1);
+$check('shop-leaver-does-not-block', room_shop_settle($room) === true && $room['phase'] === 'play');
+// A leaver who had readied does not count towards anything either.
+$room = $shopRoom();
+room_shop_set_ready($room, 1, true);
+room_leave($room, 1);
+$check('shop-leaver-ready-is-not-a-vote', room_shop_ready($room, 1) === false && room_shop_settle($room) === false);
+
+// AI and open seats never block: a lone human readying starts the round.
+$room = $shopRoom(1);
+$check('shop-ai-never-blocks-waits-for-human', room_shop_settle($room) === false);
+room_shop_set_ready($room, 0, true);
+$check('shop-ai-never-blocks', room_shop_settle($room) === true && $room['phase'] === 'play');
+// An eliminated human (no lives) never blocks either.
+$room = $shopRoom();
+$room['seats'][1]['lives'] = 0;
+room_shop_set_ready($room, 0, true);
+$check('shop-eliminated-never-blocks', room_shop_settle($room) === true);
+// Ready changes outside the shop are refused, and settle is inert there.
+$room = $seatRoom(['ai', 'open', 'open']);
+room_start_round($room);
+$check('shop-ready-outside-shop', room_shop_set_ready($room, 0, true) === false && room_shop_settle($room) === false && !isset($room['shop']));
+
 // Protocol fixtures (protocol/*.json): what room_snapshot builds today must
 // have the keys and types the fixtures record, which the client's smoke test
 // is run against. The values are not compared (generate.php --check does that

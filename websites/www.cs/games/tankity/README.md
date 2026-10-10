@@ -84,14 +84,26 @@ php tools/install-files.php      # after the last edit to any served file
   it lands right behind an aim tap). In the lobby the chair resets to a drone
   seat (a host leaving the lobby closes the room, since nobody else can start
   it). Once the match has begun the seat, host included, becomes a drone and the
-  match carries on; nothing after the lobby is host-only (shop and next round
-  are open to every human). The last human out removes the room.
+  match carries on; nothing after the lobby is host-only. The last human out
+  removes the room.
 - Turn clock: a human's turn runs for 120 s (`ROOM_TURN_SECS`), started when
   the turn begins; aiming and driving do not reset it. When it runs out the
   crew loads a random gun from that player's rack (the Shell, or anything
   with ammo the round has unlocked) and fires it with the current aim.
   Snapshots carry `turnLeft`; the client alerts its player at 30 s and shows
   everyone a countdown for the last 10. Solo play has no clock.
+- Shop clock: between rounds the shop is open for at most 90 s
+  (`ROOM_SHOP_SECS`), or until every human still in the match is ready. The
+  shop button is the Ready toggle (`action=ready` with `{"ready": true|false}`,
+  the wanted state rather than a flip, not throttled). Each ready change and
+  the "all ready, start" check run in one locked read-modify-write, so the last
+  Ready starts the round at once and a later "unready" (or a duplicate) finds
+  the shop closed and changes nothing; it answers with the current snapshot.
+  A clock that runs out starts the round for everyone, settled by whichever
+  request (poll, buy, ready) reaches the room first. Drones, open seats,
+  leavers and eliminated players never block. Snapshots carry `shopLeft` and
+  `seats[].ready`; the client shows the countdown and how many are ready.
+  Solo play has no shop clock.
 - Spawns are random, at least 110 px apart, and units never end a move within
   44 px of another. Each tank faces the middle; barrel keys swing toward the
   side pressed.
@@ -121,8 +133,8 @@ skip `*-test.*`, `README.md` files, `protocol/`, the effects editor and the Blen
 
 `protocol/*.json` are real room-server replies, one file per moment:
 `lobby-host`, `lobby-public`, `play-my-turn`, `play-after-fire` (fire, shot and
-hit events, then the drone's answer), `shop-after-win`, `create-reply`,
-`join-reply`, `error-too-fast` (429) and `error-not-your-turn` (409). Each file
+hit events, then the drone's answer), `shop-after-win`, `shop-ready` (the shop
+with one of two humans readied), `create-reply`, `join-reply`, `error-too-fast` (429) and `error-not-your-turn` (409). Each file
 is `{about, status, body}`.
 
 - `protocol/generate.php` writes them. Snapshots are built in process with

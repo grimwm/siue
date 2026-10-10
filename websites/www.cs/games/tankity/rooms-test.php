@@ -194,6 +194,14 @@ foreach (($calm['room']['events'] ?? []) as $e) {
 }
 $check('polls-hold-turn', ($calm['ok'] ?? false) === true && ($calm['room']['turn'] ?? -1) === 0 && $aiC === $aiG,
     'turn=' . ($calm['room']['turn'] ?? '?') . ' ai=' . $aiC);
+// Ready outside the shop changes nothing and answers quietly with the room
+// as it is; a ready that does not say true or false is refused.
+usleep(300000);
+$idle = $post('ready', ['code' => $mcode, 'token' => $mtoken, 'csrf' => $mcsrf, 'ready' => false]);
+$check('ready-outside-shop-ignored', ($idle['ok'] ?? false) === true && ($idle['room']['phase'] ?? '') === 'play'
+    && array_key_exists('shopLeft', $idle['room']) && $idle['room']['shopLeft'] === null, json_encode($idle['room']['phase'] ?? $idle));
+$vague = $post('ready', ['code' => $mcode, 'token' => $mtoken, 'csrf' => $mcsrf]);
+$check('ready-needs-a-state', !isset($vague['ok']) && isset($vague['error']), json_encode($vague));
 // Leaving: a guest's seat goes to the battery and the room stays; the last
 // human out closes the room at once, freeing its slot.
 usleep(300000);

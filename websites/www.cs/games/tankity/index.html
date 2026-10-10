@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Tankity">
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
-<link rel="stylesheet" href="game.css?v=20261010u">
+<link rel="stylesheet" href="game.css?v=20261010w">
 </head>
 <body>
 <header class="topbar">
@@ -219,6 +219,7 @@
         </header>
         <p id="shop-cash" class="runstats"></p>
         <ul id="shop-list" class="scores"></ul>
+        <p id="shop-ready" class="runstats" hidden></p>
         <button type="button" id="shop-next" class="btn-primary">Next round <span class="key">(N)</span></button>
         <button type="button" id="shop-leave" class="btn-leave" title="Leave this game room and go back to the solo hills" hidden>Leave room</button>
       </div>
@@ -309,6 +310,6 @@
 </main>
 
 <script src="fx.js?v=20261010u" defer></script>
-<script src="game.js?v=20261010v" defer></script>
+<script src="game.js?v=20261010w" defer></script>
 </body>
 </html>

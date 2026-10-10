@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Tankity">
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
-<link rel="stylesheet" href="game.css?v=20261010i">
+<link rel="stylesheet" href="game.css?v=20261010l">
 </head>
 <body>
 <header class="topbar">
@@ -61,16 +61,17 @@
         <p class="pad-note"><span data-keyhint="aim:barrelLeft">◀</span><span data-keyhint="aim:barrelRight">▶</span> barrel · <span data-keyhint="aim:powerUp">▲</span><span data-keyhint="aim:powerDown">▼</span> power</p>
       </div>
       <div class="guide guide-actions" aria-label="Action controls">
-        <button type="button" id="btn-menu" class="btn-primary" aria-expanded="false">Menu <span class="key" data-keyhint="global:menu">(C)</span></button>
-        <button type="button" id="btn-cannon">Fire <span class="key" data-keyhint="global:fire">(Ctrl)</span></button>
-        <button type="button" id="btn-weapon" aria-expanded="false" title="Pick a weapon (Q loads the next one)">Weapons <span class="key" data-keyhint="global:guns">(G)</span></button>
-        <button type="button" id="btn-drive-l">Drive ◀ <span class="key" data-keyhint="aim:driveLeft">(A)</span></button>
-        <button type="button" id="btn-drive-r">Drive ▶ <span class="key" data-keyhint="aim:driveRight">(D)</span></button>
-        <button type="button" id="btn-log" aria-expanded="false">Log <span class="key" data-keyhint="global:log">(L)</span></button>
-        <button type="button" id="btn-help" aria-expanded="false">Help <span class="key" data-keyhint="global:help">(H)</span></button>
-        <button type="button" id="btn-report" aria-expanded="false">Report <span class="key" data-keyhint="global:report">(R)</span></button>
+        <button type="button" id="btn-menu" class="tool btn-primary" style="--tool: #ffc93c" aria-label="Menu" data-tip="Menu" data-tip-desc="New game, rooms, unit, text size, sound and more" aria-expanded="false"><svg class="tool-icon" viewBox="0 0 26 26" aria-hidden="true"><path d="M4 7h18M4 13h18M4 19h18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg><span class="key" data-keyhint="global:menu">(C)</span></button>
+        <button type="button" id="btn-cannon" class="tool" style="--tool: #ff5a3c" aria-label="Fire" data-tip="Fire" data-tip-desc="Fire the loaded shell and end your turn"><svg class="tool-icon" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="8" stroke="#ff5a3c" stroke-width="2" fill="none"/><circle cx="13" cy="13" r="3" fill="#ffd23c"/><path d="M13 1v4M13 21v4M1 13h4M21 13h4" stroke="#ffd23c" stroke-width="2" stroke-linecap="round"/></svg><span class="key" data-keyhint="global:fire">(Ctrl)</span></button>
+        <button type="button" id="btn-weapon" class="tool" style="--tool: #ffb13c" aria-label="Weapons" data-tip="Weapons" data-tip-desc="Pick any gun on your rack (Q loads the next)" aria-expanded="false"><svg class="tool-icon" viewBox="0 0 26 26" aria-hidden="true"><path d="M2.5 7.5h17.5l1.5-1.5h2v5.5h-5.5l-1 1v1.5" stroke="#ffb13c" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/><path d="M8 11.5l-1.5 9h4.5l1.5-6" stroke="#9fd8ff" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/><path d="M12.5 13.5c0 2.5 2 3.5 4 3" stroke="#ffe27a" stroke-width="1.8" fill="none" stroke-linecap="round"/><path d="M5 9.5h3" stroke="#ffe27a" stroke-width="1.6" stroke-linecap="round"/></svg><span class="key" data-keyhint="global:guns">(G)</span></button>
+        <button type="button" id="btn-drive-l" class="tool" style="--tool: #7ddf64" aria-label="Drive left" data-tip="Drive left" data-tip-desc="Hold to drive left while you have fuel"><svg class="tool-icon" viewBox="0 0 26 26" aria-hidden="true"><rect x="7" y="13" width="16" height="7" rx="3.5" stroke="#7ddf64" stroke-width="2" fill="none"/><path d="M9 8H3m0 0 3-3M3 8l3 3" stroke="#a8e06a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span class="key" data-keyhint="aim:driveLeft">(A)</span></button>
+        <button type="button" id="btn-drive-r" class="tool" style="--tool: #7ddf64" aria-label="Drive right" data-tip="Drive right" data-tip-desc="Hold to drive right while you have fuel"><svg class="tool-icon" viewBox="0 0 26 26" aria-hidden="true"><rect x="3" y="13" width="16" height="7" rx="3.5" stroke="#7ddf64" stroke-width="2" fill="none"/><path d="M17 8h6m0 0-3-3m3 3-3 3" stroke="#a8e06a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span class="key" data-keyhint="aim:driveRight">(D)</span></button>
+        <button type="button" id="btn-log" class="tool" style="--tool: #6fe4ff" aria-label="Radio log" data-tip="Radio log" data-tip-desc="Show or hide the battle radio" aria-expanded="false"><svg class="tool-icon" viewBox="0 0 26 26" aria-hidden="true"><rect x="3" y="10" width="20" height="13" rx="2.5" stroke="#6fe4ff" stroke-width="2" fill="none"/><path d="M7 15h12M7 19h8" stroke="#bff3ff" stroke-width="2" stroke-linecap="round"/><path d="M17 10l4-7" stroke="#6fe4ff" stroke-width="2" stroke-linecap="round"/></svg><span class="key" data-keyhint="global:log">(L)</span></button>
+        <button type="button" id="btn-track" class="tool" style="--tool: #ff7ad9" aria-label="Next track" data-tip="Next track" data-tip-desc="Change the music to the next song"><svg class="tool-icon" viewBox="0 0 26 26" aria-hidden="true"><path d="M10 18V6l9-2v12" stroke="#ff7ad9" stroke-width="2" fill="none" stroke-linejoin="round"/><circle cx="7.5" cy="18.5" r="2.8" stroke="#ffc2ee" stroke-width="2" fill="none"/><circle cx="16.5" cy="16.5" r="2.8" stroke="#ffc2ee" stroke-width="2" fill="none"/><path d="M20 21l3-2.5-3-2.5" stroke="#ff7ad9" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="key" data-keyhint="global:nextTrack">(])</span></button>
+        <button type="button" id="btn-help" class="tool" style="--tool: #8f8fff" aria-label="How to play" data-tip="How to play" data-tip-desc="Controls, weapons and tips" aria-expanded="false"><svg class="tool-icon" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="10" stroke="#8f8fff" stroke-width="2" fill="none"/><path d="M9.5 10.5a3.5 3.5 0 1 1 5 3c-1 .5-1.5 1.1-1.5 2.4" stroke="#e0e0ff" stroke-width="2.2" stroke-linecap="round" fill="none"/><circle cx="13" cy="19" r="1.4" fill="#e0e0ff"/></svg><span class="key" data-keyhint="global:help">(H)</span></button>
       </div>
       </div>
+      <div id="tool-tip" class="tool-tip" role="tooltip" hidden><p class="tool-tip-name"></p><p class="tool-tip-desc"></p></div>
       <section id="log-overlay" class="frame-overlay log-overlay" aria-label="Radio log" hidden>
         <header class="ov-head">
           <div class="ov-title"><h2 id="log-h">Radio log</h2></div>
@@ -128,7 +129,7 @@
       </section>
       <section id="report-overlay" class="frame-overlay card-overlay" aria-labelledby="score-h" hidden>
         <header class="ov-head">
-          <div class="ov-title"><h2 id="score-h">After-action report</h2></div>
+          <div class="ov-title"><h2 id="score-h">Scores</h2></div>
           <button type="button" class="ov-x" id="report-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
           <div class="nav-hint ov-keys" id="nav-report" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
         </header>
@@ -173,6 +174,7 @@
           <button type="button" id="random-run" title="Ignore the seed box and start on a fresh random seed">Random seed <span class="key" data-keyhint="global:random">(T)</span></button>
           <button type="button" id="rooms-open" title="Host or join a multiplayer game room">Rooms <span class="key" data-keyhint="global:rooms">(O)</span></button>
           <button type="button" id="tutorial-open" title="Replay the opening-moves tutorial">Tutorial <span class="key" data-keyhint="global:tutorial">(U)</span></button>
+          <button type="button" id="scores-open" title="High scores, and file your run">Scores <span class="key" data-keyhint="global:report">(R)</span></button>
           <button type="button" id="menu-leave" class="btn-leave" title="Leave this game room and go back to the solo hills" hidden>Leave room</button>
         </form>
       </section>
@@ -201,6 +203,11 @@
         <p id="end-text"></p>
         <p id="end-score" class="runstats"></p>
         <button type="button" id="rematch" hidden>Rematch on these hills</button>
+        <form id="end-score-form" class="seedbox" action="#">
+          <label for="end-name">Callsign</label>
+          <input id="end-name" name="name" type="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="e.g. tankity">
+          <button type="submit">File score</button>
+        </form>
         <button type="button" id="again" class="btn-primary">Play again <span class="key" data-keyhint="global:new">(N)</span></button>
       </div>
     </div>
@@ -301,6 +308,6 @@
   </section>
 </main>
 
-<script src="game.js?v=20261010i" defer></script>
+<script src="game.js?v=20261010l" defer></script>
 </body>
 </html>

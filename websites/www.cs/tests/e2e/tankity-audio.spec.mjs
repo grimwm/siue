@@ -70,7 +70,8 @@ test('no sound file is requested before a gesture; the first key press starts mu
   await page.waitForSelector('#shop-veil:not([hidden])');
   await expect.poll(() => files.filter(f => f.startsWith('audio/sfx/')).length, { timeout: 15_000 }).toBe(sfxFiles(config).length);
   expect(new Set(files.filter(f => f.startsWith('audio/sfx/')))).toEqual(new Set(sfxFiles(config)));
-  await expect.poll(() => files.includes(musicFiles(config)[0])).toBe(true);
+  // Round 1 plays the second track (the first is the demo's theme).
+  await expect.poll(() => files.includes(musicFiles(config)[1])).toBe(true);
   // Once decoded, effects play from the files, not the synth.
   await page.click('#shop-next');
   await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU|Aim/);
@@ -91,7 +92,7 @@ test('with sound and music muted by the first tap, no sound file is requested; u
   await page.waitForTimeout(2500);
   expect(files).toEqual([]);
   await page.keyboard.press('m');
-  await expect.poll(() => files.includes(musicFiles(config)[0])).toBe(true);
+  await expect.poll(() => files.includes(musicFiles(config)[1])).toBe(true);
   expect(files.some(f => f.startsWith('audio/sfx/'))).toBe(false);
   await page.keyboard.press('e');
   await page.keyboard.press('c');
@@ -120,42 +121,96 @@ test('a missing sound file falls back to the built-in sounds without errors', as
   expect(errors).toEqual([]);
 });
 
-test('the playlist advances to the next track when one ends and loops at the end', async ({ browser }) => {
-  const { page, errors, config } = await open(browser);
+/* A short stand-in for a music file: 0.5 s of silence, a 3 s tone at
+   `freq` Hz, 0.5 s of silence, so loops come round in seconds and the
+   trimming of silence at both ends is visible. */
+function toneWav(freq) {
+  const rate = 22050, pad = rate / 2, tone = rate * 3, n = pad * 2 + tone;
+  const buf = Buffer.alloc(44 + n * 2);
+  buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 2, 4); buf.write('WAVE', 8);
+  buf.write('fmt ', 12); buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(rate, 24); buf.writeUInt32LE(rate * 2, 28); buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34);
+  buf.write('data', 36); buf.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < tone; i++) buf.writeInt16LE(Math.round(Math.sin(2 * Math.PI * freq * i / rate) * 12000), 44 + (pad + i) * 2);
+  return buf;
+}
+
+/* Records every music pass: which file's buffer (by its tone length), and
+   the start(when, offset, duration) it was given. */
+function passProbe() {
+  window.__passes = [];
+  const start = AudioBufferSourceNode.prototype.start;
+  AudioBufferSourceNode.prototype.start = function (when, offset, dur) {
+    if (this.buffer && this.buffer.duration > 3.5) {
+      window.__passes.push({ len: this.buffer.duration, ch: this.buffer.getChannelData(0)[Math.floor(this.buffer.sampleRate * 0.5) + 10], when, offset, dur, at: this.context.currentTime });
+    }
+    return start.apply(this, arguments);
+  };
+}
+
+async function openWithTones(browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, serviceWorkers: 'block' });
+  await ctx.addInitScript(recorderScript);
+  await ctx.addInitScript(passProbe);
+  const page = await ctx.newPage();
+  const errors = [];
+  const music = [];
+  page.on('pageerror', e => errors.push(e.message));
+  const config = await (await page.request.get('games/tankity/game.json')).json();
   const tracks = musicFiles(config);
-  expect(tracks.length).toBeGreaterThan(1);
-  await page.keyboard.press('n');
-  await page.waitForSelector('#shop-veil:not([hidden])');
-  const state = () => page.evaluate(() => {
-    const el = window.__audios[0];
-    return el ? { src: new URL(el.src).pathname, paused: el.paused, t: el.currentTime, d: el.duration, vol: el.volume } : null;
+  await page.route(/\/audio\/music\//, route => {
+    const file = new URL(route.request().url()).pathname.replace(/^.*\/audio\//, 'audio/');
+    music.push(file);
+    route.fulfill({ status: 200, contentType: 'audio/wav', body: toneWav(220 + 110 * tracks.indexOf(file)) });
   });
-  await expect.poll(async () => (await state())?.paused === false && (await state()).t > 0, { timeout: 20_000 }).toBe(true);
-  const first = await state();
-  expect(first.src.endsWith(tracks[0])).toBe(true);
-  expect(first.vol).toBeCloseTo(config.audio.music[0].volume, 2);
-  for (let i = 1; i <= tracks.length; i++) {
-    // Seek close to the end; the element fires `ended` and the next track starts.
-    await page.evaluate(() => { const el = window.__audios[0]; el.currentTime = Math.max(0, el.duration - 0.6); });
-    const want = tracks[i % tracks.length];
-    await expect.poll(async () => (await state()).src.endsWith(want), { timeout: 20_000 }).toBe(true);
-    await expect.poll(async () => { const s = await state(); return !s.paused && s.t > 0; }, { timeout: 20_000 }).toBe(true);
-  }
-  // The log names what is playing.
+  await page.goto('games/tankity/');
+  await page.waitForTimeout(700);
+  return { ctx, page, errors, music, config, tracks };
+}
+const logText = page => page.locator('#log').textContent();
+
+test('the demo plays the theme, loops it without a seam, and a round picks the next track', async ({ browser }) => {
+  const { page, errors, music, config, tracks } = await openWithTones(browser);
+  // Any key in the demo starts the music: always the first track, the theme.
   await page.keyboard.press('l');
-  expect(await page.locator('#log-overlay').textContent()).toContain(`Now playing: ${config.audio.music[0].title}`);
+  await expect.poll(() => music[0], { timeout: 15_000 }).toBe(tracks[0]);
+  await expect.poll(() => logText(page), { timeout: 15_000 }).toContain(`Now playing: ${config.audio.music[0].title}`);
+  // Two passes of the same track overlap: the second starts before the first
+  // ends, and both skip the silent lead-in and tail.
+  await expect.poll(() => page.evaluate(() => window.__passes.length), { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
+  const [a, b] = await page.evaluate(() => window.__passes.slice(0, 2));
+  expect(b.len).toBe(a.len);
+  expect(a.offset).toBeGreaterThan(0.45);
+  expect(a.dur).toBeLessThan(3.2);
+  expect(b.when).toBeLessThan(a.when + a.dur);
+  expect(b.when).toBeGreaterThan(a.when + a.dur - 2.1);
+  // A new match's round 1 switches to the next track.
+  await page.keyboard.press('n');
+  await expect.poll(() => music.includes(tracks[1]), { timeout: 15_000 }).toBe(true);
+  await expect.poll(() => logText(page), { timeout: 15_000 }).toContain(`Now playing: ${config.audio.music[1].title}`);
   expect(errors).toEqual([]);
 });
 
-test('the Music toggle pauses and resumes the playlist', async ({ browser }) => {
-  const { page, errors } = await open(browser);
-  await page.keyboard.press('n');
-  await page.waitForSelector('#shop-veil:not([hidden])');
-  const paused = () => page.evaluate(() => !window.__audios[0] || window.__audios[0].paused);
-  await expect.poll(async () => !(await paused()), { timeout: 20_000 }).toBe(true);
+test('Next track steps through the soundtrack from the toolbar or the ] key', async ({ browser }) => {
+  const { page, errors, music, config, tracks } = await openWithTones(browser);
+  await page.keyboard.press('l');
+  await expect.poll(() => music[0], { timeout: 15_000 }).toBe(tracks[0]);
+  await page.click('#btn-track');
+  await expect.poll(() => logText(page), { timeout: 15_000 }).toContain(`Now playing: ${config.audio.music[1].title}`);
+  await page.keyboard.press(']');
+  await expect.poll(() => logText(page), { timeout: 15_000 }).toContain(`Now playing: ${config.audio.music[2].title}`);
+  expect(errors).toEqual([]);
+});
+
+test('the Music toggle stops the soundtrack and brings it back', async ({ browser }) => {
+  const { page, errors } = await openWithTones(browser);
+  await page.keyboard.press('l');
+  await expect.poll(() => page.evaluate(() => window.__passes.length), { timeout: 15_000 }).toBeGreaterThanOrEqual(1);
   await page.keyboard.press('m');
-  await expect.poll(paused).toBe(true);
+  const muted = await page.evaluate(() => window.__passes.length);
+  await page.waitForTimeout(4000); // longer than a pass: no new passes start
+  expect(await page.evaluate(() => window.__passes.length)).toBe(muted);
   await page.keyboard.press('m');
-  await expect.poll(async () => !(await paused()), { timeout: 20_000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__passes.length), { timeout: 15_000 }).toBeGreaterThan(muted);
   expect(errors).toEqual([]);
 });

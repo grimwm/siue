@@ -140,7 +140,6 @@ let gestured = false;
 const SFX_FILES = {}; // event -> { file, volume, state: idle | loading | ready | failed, buf }
 let MUSIC_LIST = []; // [{ file, title, volume, credit }]
 let trackIdx = 0;
-let trackEl = null;
 let trackFails = 0;
 const FALLBACK_AUDIO = { sfx: {}, music: [] };
 function applyAudio(a) {
@@ -165,7 +164,8 @@ function loadSfx() {
   for (const s of Object.values(SFX_FILES)) {
     if (s.state !== 'idle') continue;
     s.state = 'loading';
-    fetch(s.file)
+    // Revalidate: a rebuilt effect keeps its name, so never trust a stale copy.
+    fetch(s.file, { cache: 'no-cache' })
       .then(r => { if (!r.ok) throw new Error('missing'); return r.arrayBuffer(); })
       .then(b => new Promise((res, rej) => { const p = ac.decodeAudioData(b, res, rej); if (p && p.then) p.then(res, rej); }))
       .then(buf => { s.buf = buf; s.state = 'ready'; })
@@ -274,49 +274,124 @@ function musicStep() {
     }
   } catch (_) { /* silent */ }
 }
-/* A playlist plays when game.json lists tracks, an <audio> element exists
-   and the list has not failed end to end; otherwise the synth songs play. */
+/* Tracks play through WebAudio so a track loops without a seam: each one is
+   decoded once, its leading and trailing silence trimmed, and every pass
+   cross-fades into the next over XFADE_S. A track change fades the old one
+   out under the new one. The files themselves are untouched, so a single
+   pass sounds exactly as recorded. The demo always plays the first track
+   (the theme); each round picks the next of the others; the Next track
+   button steps through them all. */
+const XFADE_S = 2;
+const SWITCH_S = 1.2;
+const TRACK_CACHE = {}; // file -> Promise<{ buf, start, end } | null>
+let musicBus = null; // gain node every track runs through
+let trackPlay = null; // { idx, voices: [{ src, gain }], timer }
 function trackMode() {
-  return MUSIC_LIST.length > 0 && trackFails < MUSIC_LIST.length && typeof Audio === 'function';
+  return MUSIC_LIST.length > 0 && trackFails < MUSIC_LIST.length && typeof fetch === 'function';
+}
+/* Where sound starts and stops, so silence at either end never gaps a loop. */
+function trimSilence(buf) {
+  const ch = buf.getChannelData(0);
+  const floor = 0.004;
+  let a = 0, b = ch.length - 1;
+  while (a < b && Math.abs(ch[a]) < floor) a++;
+  while (b > a && Math.abs(ch[b]) < floor) b--;
+  return { start: a / buf.sampleRate, end: (b + 1) / buf.sampleRate };
+}
+function loadTrack(t) {
+  const ac = audioCtx();
+  if (!ac) return Promise.resolve(null);
+  if (!TRACK_CACHE[t.file]) {
+    TRACK_CACHE[t.file] = fetch(t.file, { cache: 'no-cache' })
+      .then(r => { if (!r.ok) throw new Error('missing'); return r.arrayBuffer(); })
+      .then(b => new Promise((res, rej) => { const p = ac.decodeAudioData(b, res, rej); if (p && p.then) p.then(res, rej); }))
+      .then(buf => Object.assign({ buf }, trimSilence(buf)))
+      .catch(() => null);
+  }
+  return TRACK_CACHE[t.file];
+}
+function bus() {
+  const ac = audioCtx();
+  if (!ac) return null;
+  if (!musicBus) { musicBus = ac.createGain(); musicBus.connect(ac.destination); }
+  return musicBus;
+}
+/* One pass of a track from `when`, fading in over `fadeIn` seconds, with the
+   next pass scheduled to overlap its last XFADE_S. */
+function playPass(play, entry, vol, when, fadeIn) {
+  const ac = audioCtx();
+  const out = bus();
+  if (!ac || !out || trackPlay !== play) return;
+  const len = entry.end - entry.start;
+  const xf = Math.min(XFADE_S, len / 4);
+  const src = ac.createBufferSource();
+  src.buffer = entry.buf;
+  const gain = ac.createGain();
+  gain.gain.setValueAtTime(fadeIn > 0 ? 0.0001 : vol, when);
+  if (fadeIn > 0) gain.gain.linearRampToValueAtTime(vol, when + fadeIn);
+  // Fade out under the next pass; equal-time linear ramps keep the sum even.
+  gain.gain.setValueAtTime(vol, when + len - xf);
+  gain.gain.linearRampToValueAtTime(0.0001, when + len);
+  src.connect(gain);
+  gain.connect(out);
+  src.start(when, entry.start, len);
+  play.voices.push({ src, gain });
+  src.onended = () => { play.voices = play.voices.filter(v => v.src !== src); };
+  const next = when + len - xf;
+  clearTimeout(play.timer);
+  play.timer = setTimeout(() => playPass(play, entry, vol, next, xf), Math.max(0, (next - ac.currentTime - 1) * 1000));
+}
+function fadeOutPlay(play, secs) {
+  const ac = audioCtx();
+  if (!play || !ac) return;
+  clearTimeout(play.timer);
+  const t = ac.currentTime;
+  for (const v of play.voices) {
+    try {
+      v.gain.gain.cancelScheduledValues(t);
+      v.gain.gain.setValueAtTime(v.gain.gain.value, t);
+      v.gain.gain.linearRampToValueAtTime(0.0001, t + secs);
+      v.src.stop(t + secs + 0.05);
+    } catch (_) { /* already stopped */ }
+  }
 }
 function playTrack() {
   if (!musicOn || musicMuted || !gestured || !trackMode()) return;
-  const t = MUSIC_LIST[trackIdx % MUSIC_LIST.length];
-  try {
-    if (!trackEl) {
-      trackEl = new Audio();
-      trackEl.preload = 'none';
-      trackEl.addEventListener('ended', nextTrack);
-      trackEl.addEventListener('error', trackFailed);
-      trackEl.addEventListener('playing', () => {
-        trackFails = 0;
-        if (trackEl._announce) {
-          trackEl._announce = false;
-          const cur = MUSIC_LIST[trackIdx % MUSIC_LIST.length];
-          if (cur) say(`Now playing: ${cur.title || cur.file}${cur.credit ? ` (${cur.credit})` : ''}.`, 'info');
-        }
-      });
-    }
-    if (trackEl._file !== t.file) {
-      trackEl._file = t.file;
-      trackEl._announce = true;
-      trackEl.src = t.file;
-    }
-    trackEl.volume = typeof t.volume === 'number' ? t.volume : 1;
-    const p = trackEl.play();
-    // A refused play (no gesture yet) is retried by the next tap or key.
-    if (p && p.catch) p.catch(() => {});
-  } catch (_) { trackFailed(); }
+  const idx = trackIdx % MUSIC_LIST.length;
+  if (trackPlay && trackPlay.idx === idx) return;
+  const old = trackPlay;
+  const play = { idx, voices: [], timer: 0 };
+  trackPlay = play;
+  const t = MUSIC_LIST[idx];
+  loadTrack(t).then(entry => {
+    if (trackPlay !== play) return;
+    if (!entry) { trackFailed(); return; }
+    trackFails = 0;
+    const ac = audioCtx();
+    fadeOutPlay(old, old ? SWITCH_S : 0);
+    playPass(play, entry, typeof t.volume === 'number' ? t.volume : 1, ac.currentTime + 0.05, old ? SWITCH_S : 0.4);
+    say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info');
+  });
+}
+/* The song for a level: 0 is the demo (always the theme, the first track);
+   rounds walk through the rest in order. */
+function musicForLevel(level) {
+  const n = MUSIC_LIST.length;
+  if (!n) return;
+  trackIdx = level <= 0 || n === 1 ? 0 : 1 + ((level - 1) % (n - 1));
+  if (musicOn && trackMode()) playTrack();
 }
 function nextTrack() {
-  trackIdx = (trackIdx + 1) % Math.max(1, MUSIC_LIST.length);
-  playTrack();
+  if (!MUSIC_LIST.length) { songIdx = (songIdx + 1) % SONGS.length; return; }
+  trackIdx = ((trackPlay ? trackPlay.idx : trackIdx) + 1) % MUSIC_LIST.length;
+  if (!musicOn && !musicMuted) startMusic();
+  else playTrack();
 }
 function trackFailed() {
   trackFails++;
-  if (trackMode()) { nextTrack(); return; }
+  if (trackMode()) { trackIdx = (trackIdx + 1) % MUSIC_LIST.length; trackPlay = null; playTrack(); return; }
   // Every track failed: the built-in songs take over.
-  if (trackEl) { trackEl.pause(); trackEl = null; }
+  trackPlay = null;
   if (musicOn && !musicMuted) startSynth();
 }
 function startSynth() {
@@ -340,7 +415,8 @@ function startMusic() {
 function stopMusic() {
   musicOn = false;
   stopSynth();
-  if (trackEl) trackEl.pause();
+  fadeOutPlay(trackPlay, 0.3);
+  trackPlay = null;
 }
 
 /* ---------- dialogue: subtitled trash-talk, kid-friendly ---------- */
@@ -689,6 +765,7 @@ function newMatch(seedStr) {
   resetMatch(seedStr);
   // No round yet: spend the starting stake in the shop first.
   G.phase = 'banner';
+  musicForLevel(1); // a new match leaves the demo's theme at once
   startBanner('Round 1. The battery holds these hills.', openShop);
   say(`Match ${G.seed}: $600 stake in your pocket. Buy guns first. The battery holds these hills.`, 'info');
   talk('tank', 'tankity tank! Shopping, then shooting!', true);
@@ -738,8 +815,10 @@ function newRound(bannerText) {
   G.parts = [];
   G.beams = [];
   G.booms = [];
-  // The soundtrack turns over with the rounds: song follows the round.
-  songIdx = (G.round - 1) % SONGS.length;
+  // The soundtrack turns over with the rounds: song follows the round, and
+  // the demo always plays the theme.
+  songIdx = G.demo ? 0 : (G.round - 1) % SONGS.length;
+  musicForLevel(G.demo ? 0 : G.round);
   G.phase = 'banner';
   closePreview();
   hideShop();
@@ -1181,6 +1260,13 @@ function endMatch(won, text) {
     $('end-title').textContent = won ? 'Hills claimed!' : 'Tank down';
     $('end-text').textContent = text;
     $('end-score').textContent = `Score ${G.score} · ${G.roundsWon} rounds won · ${G.round} rounds played · seed ${G.seed}`;
+    // File the run right here, with the last callsign ready.
+    const ef = $('end-score-form');
+    if (ef) ef.hidden = false;
+    const en = $('end-name');
+    if (en && !en.value) en.value = savedCallsign();
+    const eb = ef && ef.querySelector && ef.querySelector('button');
+    if (eb) { eb.disabled = false; eb.textContent = 'File score'; }
     veil.hidden = false;
     refreshNavHints();
   }
@@ -3812,6 +3898,7 @@ function netAdopt(room) {
       // the host came through so nobody has to ESC it away mid-battle.
       if (NET.lastPhase !== 'play') closeOverlays();
       songIdx = (room.round - 1) % SONGS.length;
+      musicForLevel(room.round);
       startBanner(`Round ${room.round}. ${room.mapName || 'Random hills'}.`);
       say(`Round ${G.round}. Wind ${windText()}. ${NET.myTurn ? 'Your move. Aim!' : seatName(room.turn) + ' moves first.'}`, 'info');
       if (NET.myTurn) talk('tank', 'tankity tank! My hill now!', true);
@@ -4131,6 +4218,8 @@ function netShowStandings(room) {
   }
   const again = $('again');
   if (again) again.textContent = 'Back to rooms';
+  const ef = $('end-score-form'); // room standings are not high-score runs
+  if (ef) ef.hidden = true;
   const rematch = $('rematch');
   if (rematch) {
     rematch.hidden = false;
@@ -4186,7 +4275,12 @@ async function loadScores() {
   }
   if (note) note.textContent = `Showing reports from ${src}.`;
 }
+/* The last callsign filed, so the next report is one tap. */
+function savedCallsign() {
+  try { return window.localStorage.getItem('tankity-callsign') || ''; } catch (_) { return ''; }
+}
 async function fileReport(name) {
+  try { window.localStorage.setItem('tankity-callsign', name); } catch (_) { /* fine */ }
   const entry = { name, score: G.score, banked: G.roundsWon, won: G.won, seed: G.seed };
   try {
     const res = await fetch('scores.php', {
@@ -4231,7 +4325,7 @@ const FALLBACK_KEYS = Object.freeze({
   global: Object.freeze({
     music: ['m'], sound: ['e'], log: ['l'], help: ['h'],
     report: ['r'], menu: ['c'], random: ['t'], rooms: ['o'], new: ['n'],
-    cycle: ['q'], guns: ['g'], tutorial: ['u'],
+    cycle: ['q'], guns: ['g'], nextTrack: ['BracketRight', ']'], tutorial: ['u'],
     battlePreview: ['v'], fullscreen: ['f'],
     fire: ['ControlLeft', 'ControlRight', 'Control', 'Space', ' '],
     escape: ['Escape'],
@@ -4274,6 +4368,8 @@ function keycap(token) {
   if (token === 'PageUp') return 'PgUp';
   if (token === 'PageDown') return 'PgDn';
   if (token === 'Shift') return 'Shift';
+  if (token === 'BracketRight') return ']';
+  if (token === 'BracketLeft') return '[';
   const code = /^(Key|Digit)(.+)$/.exec(token);
   if (code) return code[2].toUpperCase();
   return String(token).toUpperCase();
@@ -4339,6 +4435,37 @@ function openRooms() {
   ctx();
   SFX.click();
   openLobby();
+}
+/* Toolbar tips: resting the pointer (or keyboard focus) on an icon button
+   for a moment shows its name, what it does and its key in a styled card.
+   Touch screens have no hover, and their buttons keep spoken names. */
+const TIP_DELAY_MS = 700;
+function bindToolTips() {
+  const tip = $('tool-tip');
+  if (!tip || !document.querySelectorAll) return;
+  let timer = 0;
+  const hide = () => { clearTimeout(timer); timer = 0; tip.hidden = true; };
+  const show = btn => {
+    const name = tip.querySelector('.tool-tip-name');
+    const desc = tip.querySelector('.tool-tip-desc');
+    const key = btn.querySelector('.key');
+    if (name) name.textContent = btn.getAttribute('data-tip') || '';
+    if (desc) desc.textContent = (btn.getAttribute('data-tip-desc') || '') + (key && !TOUCH ? ` ${key.textContent}` : '');
+    tip.style.setProperty('--tool', btn.style.getPropertyValue('--tool') || '#ffc93c');
+    tip.hidden = false;
+    const r = btn.getBoundingClientRect(), t = tip.getBoundingClientRect();
+    const left = Math.max(6, Math.min(window.innerWidth - t.width - 6, r.left + r.width / 2 - t.width / 2));
+    tip.style.left = `${left}px`;
+    tip.style.top = `${r.bottom + 8}px`;
+  };
+  document.querySelectorAll('.guide-actions .tool').forEach(btn => {
+    const arm = () => { clearTimeout(timer); timer = setTimeout(() => show(btn), TIP_DELAY_MS); };
+    btn.addEventListener('mouseenter', arm);
+    btn.addEventListener('mouseleave', hide);
+    btn.addEventListener('focus', () => { if (!btn.matches || btn.matches(':focus-visible')) arm(); });
+    btn.addEventListener('blur', hide);
+    btn.addEventListener('pointerdown', hide);
+  });
 }
 /* Another panel (menu, help, report, log) open above the shop takes the keys. */
 function shopCovered() {
@@ -4461,10 +4588,11 @@ function bindKeys() {
     const ga = lookupKey('global', e);
     switch (ga) {
     case 'music': toggleMusic(); return;
+    case 'nextTrack': ctx(); nextTrack(); return;
     case 'sound': toggleSound(); return;
     case 'log': toggleOverlay('log-overlay', 'btn-log'); return;
     case 'help': toggleOverlay('help-overlay', 'btn-help'); return;
-    case 'report': toggleOverlay('report-overlay', 'btn-report'); return;
+    case 'report': toggleOverlay('report-overlay', 'scores-open'); return;
     case 'menu': {
       // C opens the menu; ESC does the closing.
       const mv = $('menu-overlay');
@@ -4588,6 +4716,7 @@ function holdButton(id, act) {
 function init() {
   if (TOUCH) document.documentElement.classList.add('touch');
   bindKeys();
+  bindToolTips();
   loadGameConfig();
   G.body = loadBody();
   renderUnitPicker();
@@ -4610,6 +4739,8 @@ function init() {
   });
   const cannon = $('btn-cannon');
   if (cannon) cannon.addEventListener('click', ev => { ev.currentTarget.blur(); ctx(); startMusic(); playerFire(); });
+  const track = $('btn-track');
+  if (track) track.addEventListener('click', ev => { ev.currentTarget.blur(); ctx(); nextTrack(); });
   const weapon = $('btn-weapon');
   if (weapon) weapon.addEventListener('click', ev => { ev.currentTarget.blur(); if (gunsOpen()) closeGuns(); else openGuns(); });
   const gunClose = $('gun-close');
@@ -4643,13 +4774,13 @@ function init() {
   if (soundBtn) soundBtn.addEventListener('click', ev => { ev.currentTarget.blur(); toggleSound(); });
   const musicBtn = $('btn-music');
   if (musicBtn) musicBtn.addEventListener('click', ev => { ev.currentTarget.blur(); toggleMusic(); });
-  for (const [btnId, ovId] of [['btn-log', 'log-overlay'], ['btn-help', 'help-overlay'], ['btn-report', 'report-overlay']]) {
+  for (const [btnId, ovId] of [['btn-log', 'log-overlay'], ['btn-help', 'help-overlay'], ['scores-open', 'report-overlay']]) {
     const b = $(btnId);
     if (b) b.addEventListener('click', ev => { ev.currentTarget.blur(); toggleOverlay(ovId, btnId); });
   }
   const menuBtn = $('btn-menu');
   if (menuBtn) menuBtn.addEventListener('click', ev => { ev.currentTarget.blur(); toggleOverlay('menu-overlay', 'btn-menu'); });
-  for (const [closeId, ovId, btnId] of [['log-close', 'log-overlay', 'btn-log'], ['help-close', 'help-overlay', 'btn-help'], ['report-close', 'report-overlay', 'btn-report'], ['menu-close', 'menu-overlay', 'btn-menu']]) {
+  for (const [closeId, ovId, btnId] of [['log-close', 'log-overlay', 'btn-log'], ['help-close', 'help-overlay', 'btn-help'], ['report-close', 'report-overlay', 'scores-open'], ['menu-close', 'menu-overlay', 'btn-menu']]) {
     const c = $(closeId);
     if (c) c.addEventListener('click', ev => { ev.currentTarget.blur(); toggleOverlay(ovId, btnId); });
   }
@@ -4718,6 +4849,16 @@ function init() {
   if (shopNext) shopNext.addEventListener('click', ev => { ev.currentTarget.blur(); nextRound(); });
   const pvClose = $('preview-close');
   if (pvClose) pvClose.addEventListener('click', ev => { ev.currentTarget.blur(); closePreview(); });
+  const eform = $('end-score-form');
+  if (eform) eform.addEventListener('submit', e => {
+    e.preventDefault();
+    const nm = $('end-name');
+    const name = nm && nm.value ? nm.value.trim() : '';
+    if (!name) { say('Give your callsign first, hero.', 'info'); return; }
+    fileReport(name);
+    const btn = eform.querySelector && eform.querySelector('button');
+    if (btn) { btn.disabled = true; btn.textContent = 'Filed'; }
+  });
   const sform = $('score-form');
   if (sform) sform.addEventListener('submit', e => {
     e.preventDefault();
@@ -4827,7 +4968,7 @@ function closeLobbyVeil() {
 function closeOverlays() {
   let shut = closeGuns();
   for (const [ovId, btnId] of [['log-overlay', 'btn-log'], ['help-overlay', 'btn-help'],
-      ['report-overlay', 'btn-report'], ['menu-overlay', 'btn-menu']]) {
+      ['report-overlay', 'scores-open'], ['menu-overlay', 'btn-menu']]) {
     const ov = $(ovId);
     if (ov && !ov.hidden) { toggleOverlay(ovId, btnId); shut = true; }
   }

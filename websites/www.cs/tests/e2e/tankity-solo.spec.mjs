@@ -91,7 +91,10 @@ test('a tank falls smoothly into the crater under it', async ({ browser }) => {
   let best = { drop: 0, moving: 0, maxStep: 0 };
   for (let attempt = 0; attempt < 5 && best.drop <= 1; attempt++) {
     await expect.poll(() => hud(page, 'hud-turn'), { timeout: 60_000 }).toMatch(/YOU|Aim/);
-    await page.keyboard.press('3');
+    // Load the Mortar from the weapon picker.
+    await page.keyboard.press('g');
+    await page.locator('#gun-grid .gun-choice', { hasText: 'Mortar' }).click();
+    await expect.poll(() => hud(page, 'hud-weapon')).toMatch(/^Mortar /);
     await aimTo(page, 90);
     await setPower(page, 15);
     await resetRec(page);

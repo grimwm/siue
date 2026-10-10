@@ -239,7 +239,7 @@ check('key-hints', html.includes('data-keyhint="global:menu">(C)<') && html.incl
 check('key-style', /button \.key\s*\{[^}]*background/.test(css));
 // Panels live over the battle, never beside it; L/H/R flip them without pausing.
 check('no-side-panels', !/<aside/.test(html));
-for (const id of ['log-overlay', 'help-overlay', 'report-overlay', 'btn-log', 'btn-help', 'btn-report']) {
+for (const id of ['log-overlay', 'help-overlay', 'report-overlay', 'btn-log', 'btn-help', 'scores-open']) {
   check('overlay-markup-' + id, html.includes('id="' + id + '"'));
 }
 check('overlays-in-frame', ['log-overlay', 'help-overlay', 'report-overlay']
@@ -272,7 +272,7 @@ check('menu-grid-cols', /\.menu-grid\s*\{[^}]*repeat\(3, 1fr\)/.test(css));
 check('buttons-secondary-default', /\nbutton\s*\{[^}]*background:\s*var\(--panel\)/.test(css) && /\nbutton\s*\{[^}]*border:\s*1px solid var\(--line\)/.test(css));
 check('buttons-primary-gold', /button\.btn-primary[^{]*\{[^}]*background:\s*var\(--accent\)/.test(css));
 const menubarHtml = html.slice(html.indexOf('id="menubar"'), html.indexOf('id="log-overlay"'));
-check('menubar-one-primary', (menubarHtml.match(/btn-primary/g) || []).length === 1 && /id="btn-menu" class="btn-primary"/.test(menubarHtml));
+check('menubar-one-primary', (menubarHtml.match(/btn-primary/g) || []).length === 1 && /id="btn-menu" class="tool btn-primary"/.test(menubarHtml));
 TAP('global', 'menu');
 check('menu-toggle', els['menu-overlay'].hidden === false && els['btn-menu'].getAttribute('aria-expanded') === 'true');
 click(els['menu-close']);
@@ -288,7 +288,7 @@ check('menu-esc', els['menu-overlay'].hidden === true);
   check('menu-tutorial', !!els['tutorial-open'] && !!els['tutorial-overlay'] && !!els['tutorial-skip']);
   // Four 32-step songs; the round picks the song.
   const songNames = (src.match(/name: '[^']+'/g) || []).filter(n => /Rollout|High Ground|Crater Blues|Last Tank/.test(n));
-  check('songs', songNames.length === 4 && /songIdx = \(G\.round - 1\) % SONGS\.length/.test(src), songNames.join(','));
+  check('songs', songNames.length === 4 && /songIdx = G\.demo \? 0 : \(G\.round - 1\) % SONGS\.length/.test(src), songNames.join(','));
 // Every scrollable panel shows its keys, dimmed while everything fits.
 const navCount = (html.match(/class="nav-hint[" ]/g) || []).length;
 check('nav-hints', navCount === 10, `hints=${navCount}`);

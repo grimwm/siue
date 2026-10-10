@@ -294,7 +294,7 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
   check('lobby-map-hidden-value', attr(byId(card, 'lobby-map'), 'type') === 'hidden' && byId(card, 'lobby-map').value === '');
   check('lobby-map-icons-drawn-once', calls.icons.length === 3 && calls.icons[0] === null && calls.icons[1].join() === '0.1,0.5,0.9', String(calls.icons.length));
   renderLobby(veil, { ...props, mapId: 'canyon' });
-  check('lobby-map-pick-redraws-pressed', picker.children === tiles || picker.children.map(t => attr(t, 'aria-pressed')).join() === 'false,true,false');
+  check('lobby-map-pick-redraws-pressed', picker.children.map(t => attr(t, 'aria-pressed')).join() === 'false,true,false', picker.children.map(t => attr(t, 'aria-pressed')).join());
   check('lobby-map-redraw-does-not-repaint', calls.icons.length === 3);
   renderLobby(veil, { ...props, mapId: 'canyon', mapsRev: 2 });
   check('lobby-map-new-maps-repaint', calls.icons.length === 6, String(calls.icons.length));

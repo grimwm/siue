@@ -3612,10 +3612,19 @@ function tickTutorial() {
   }
 }
 /* In-frame panels overlay the battle and never pause it. */
+/* The panels a component draws: redrawn on open and close, so each knows it
+   was closed and forgets its scroll (the browser reopens it at the top). */
+const OVERLAY_PAINT = {
+  'menu-overlay': () => renderMenu(),
+  'log-overlay': () => renderLogOverlay(),
+  'report-overlay': () => renderScoresOverlay(),
+  'help-overlay': () => renderHelpOverlay(),
+};
 function toggleOverlay(id, btnId) {
   const ov = $(id);
   if (!ov) return;
   ov.hidden = !ov.hidden;
+  if (OVERLAY_PAINT[id]) OVERLAY_PAINT[id]();
   const btn = btnId && $(btnId);
   if (btn) btn.setAttribute('aria-expanded', String(!ov.hidden));
   refreshNavHints();

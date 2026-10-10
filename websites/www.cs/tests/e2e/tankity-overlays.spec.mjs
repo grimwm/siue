@@ -126,6 +126,13 @@ test('scrolled panels stay where the player left them when they redraw', async (
   expect(await top('#menu-overlay')).toBe(menuAt);
   await page.click('#btn-sound');
   await page.keyboard.press('Escape');
+  // Closed and reopened it starts at the top, and a redraw keeps it there.
+  await page.keyboard.press('c');
+  await expect(page.locator('#menu-overlay')).toBeVisible();
+  await page.click('#btn-sound');
+  expect(await top('#menu-overlay')).toBe(0);
+  await page.click('#btn-sound');
+  await page.keyboard.press('Escape');
   // The lobby: the veil scrolls; the status line changing redraws it.
   await page.setViewportSize({ width: 420, height: 700 });
   await page.keyboard.press('o');

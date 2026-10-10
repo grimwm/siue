@@ -80,3 +80,27 @@ test('a room invite made on the site page points back to the site page', async (
   await expect(guest.locator('.play-nav')).toBeVisible();
   await expect(guest.frameLocator('#play-frame').locator('#join-code')).toHaveValue(new URL(link).searchParams.get('code'));
 });
+
+test('a turn that arrives in a hidden tab changes its title and sends a notification', async ({ browser }) => {
+  const { host, guest } = await roomPair(browser);
+  await guest.ctx.grantPermissions(['notifications']);
+  await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);
+  // Hide the guest's tab and record notifications instead of showing them.
+  await guest.page.evaluate(() => {
+    window.__notes = [];
+    window.Notification = class { constructor(title, opts) { window.__notes.push({ title, body: opts && opts.body }); } close() {} static get permission() { return 'granted'; } };
+    window.__hide = true;
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => window.__hide });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const title = await guest.page.title();
+  await host.page.keyboard.press('Control');
+  await expect.poll(() => guest.page.title(), { timeout: 60_000 }).toBe(`● Your turn · ${title}`);
+  const notes = await guest.page.evaluate(() => window.__notes);
+  expect(notes.length).toBe(1);
+  expect(notes[0].title).toBe('Your turn in Operation Tankity');
+  // Seen again: the title goes back.
+  await guest.page.evaluate(() => { window.__hide = false; document.dispatchEvent(new Event('visibilitychange')); });
+  await expect.poll(() => guest.page.title()).toBe(title);
+  await host.ctx.close(); await guest.ctx.close();
+});

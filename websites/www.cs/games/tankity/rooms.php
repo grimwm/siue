@@ -574,21 +574,31 @@ function room_unit_box(array $t): array
         ? [(float) $t['x'], (float) $t['y'] - 10.0, 20.0, 13.0]
         : [(float) $t['x'], (float) $t['y'] - 30.0, 18.0, 14.0];
 }
+function room_in_box(array $t, float $x, float $y): bool
+{
+    [$cx, $cy, $rx, $ry] = room_unit_box($t);
+    return (($x - $cx) / $rx) ** 2 + (($y - $cy) / $ry) ** 2 <= 1;
+}
 /* The first unit a shell touches anywhere along its step from (x0, y0) to
 // (x1, y1), sampled every 3 px so a fast shell cannot skip through one, with
-// the point it touched. */
-function room_sweep_hit(array $room, float $x0, float $y0, float $x1, float $y1, ?int $skip): ?array
+// the point it touched. The muzzle sits inside its gunner's box, so a shell
+// ignores its owner until it has flown clear of that box ($clear turns true
+// there); one that comes back hits it like anyone else. game.js sweepHit()
+// is the same. */
+function room_sweep_hit(array $room, float $x0, float $y0, float $x1, float $y1, ?int $skip, int $ownerIdx, bool &$clear): ?array
 {
     $n = max(1, (int) ceil(hypot($x1 - $x0, $y1 - $y0) / 3));
     for ($i = 1; $i <= $n; $i++) {
         $px = $x0 + ($x1 - $x0) * $i / $n;
         $py = $y0 + ($y1 - $y0) * $i / $n;
+        if (!$clear && !room_in_box($room['tanks'][$ownerIdx], $px, $py)) {
+            $clear = true;
+        }
         foreach ($room['tanks'] as $idx => $t) {
-            if ($t['hp'] <= 0 || $idx === $skip) {
+            if ($t['hp'] <= 0 || $idx === $skip || ($idx === $ownerIdx && !$clear)) {
                 continue;
             }
-            [$cx, $cy, $rx, $ry] = room_unit_box($t);
-            if ((($px - $cx) / $rx) ** 2 + (($py - $cy) / $ry) ** 2 <= 1) {
+            if (room_in_box($t, $px, $py)) {
                 return [$idx, $px, $py];
             }
         }
@@ -635,6 +645,7 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
     $path = [[$sx, $sy]];
     $grav = !empty($w['flat']) ? 90.0 : (float) ROOM_GRAV;
     $pierced = null; // the tank a lance went through, never hit twice
+    $clear = false; // out of its gunner's box yet
     for ($step = 0; $step < 720; $step++) {
         if (($w['effect'] ?? 'shot') === 'seeker') {
             $best = null;
@@ -675,7 +686,7 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
             return ['split', $sx, $sy, $vx, $vy, null, $path, $flown];
         }
         $direct = null;
-        $hit = room_sweep_hit($room, $px, $py, $sx, $sy, $pierced);
+        $hit = room_sweep_hit($room, $px, $py, $sx, $sy, $pierced, $ownerIdx, $clear);
         if ($hit !== null) {
             // Burst where the shell touched the unit, not past it.
             [$direct, $sx, $sy] = $hit;

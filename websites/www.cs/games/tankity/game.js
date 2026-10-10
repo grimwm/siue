@@ -1117,16 +1117,23 @@ function unitHitBox(t) {
     ? { cx: t.x, cy: t.y - 10, rx: 20, ry: 13 }
     : { cx: t.x, cy: t.y - 30, rx: 18, ry: 14 };
 }
-/* The first unit a shell touches anywhere along its step, sampled every
-   3 px so a fast shell (or a slow frame) cannot skip through one. */
-function sweepHit(x0, y0, x1, y1, skip) {
+function inHitBox(t, x, y) {
+  const b = unitHitBox(t);
+  return ((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2 <= 1;
+}
+/* The first unit shell s touches anywhere along its step, sampled every
+   3 px so a fast shell (or a slow frame) cannot skip through one. The
+   muzzle sits inside its gunner's box, so a shell ignores its owner until
+   it has flown clear of that box; one that comes back (wind, a lob
+   straight up) hits it like anyone else. */
+function sweepHit(s, x0, y0, x1, y1) {
   const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 3));
   for (let i = 1; i <= n; i++) {
     const px = x0 + (x1 - x0) * i / n, py = y0 + (y1 - y0) * i / n;
+    if (!s.clear && !inHitBox(s.owner, px, py)) s.clear = true;
     for (const t of G.tanks) {
-      if (t.hp <= 0 || t === skip) continue;
-      const b = unitHitBox(t);
-      if (((px - b.cx) / b.rx) ** 2 + ((py - b.cy) / b.ry) ** 2 <= 1) return { t, x: px, y: py };
+      if (t.hp <= 0 || t === s.pierced || (t === s.owner && !s.clear)) continue;
+      if (inHitBox(t, px, py)) return { t, x: px, y: py };
     }
   }
   return null;
@@ -1155,7 +1162,7 @@ function stepShells(dt) {
     // Direct hit on a living tank?
     // A lance that already went through a tank cannot hit that tank again.
     let direct = null;
-    const hit = sweepHit(x0, y0, s.x, s.y, s.pierced);
+    const hit = sweepHit(s, x0, y0, s.x, s.y);
     if (hit) {
       // Burst where the shell touched the unit, not past it.
       direct = hit.t;

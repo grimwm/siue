@@ -1135,12 +1135,15 @@ function change(el) {
   TAP('global', 'fire'); await tick(10);
   check('fx-409-said', logText().includes(fx('error-not-your-turn').body.error), logText().split('\n').slice(-1)[0]);
   PFX.actError = '';
-  // A real turn: shot and hits replay, then the drone's answer lands and the
-  // turn is ours again with the armor the server settled.
+  // A real turn: shot and hits replay, then the drone's answer flies (and
+  // hits us if the server says it did) and the turn is ours again with the
+  // armor the server settled.
   TAP('global', 'fire'); await tick(10);
   frames(600);
   const after = fxRoomOf('play-after-fire');
-  check('fx-fire-replayed', /ABC hits REAPER for \d+/.test(logText()) && /REAPER hits YOU for \d+/.test(logText()),
+  const hitMe = after.events.some(e => e.t === 'hit' && e.seat === 0 && e.by === 1);
+  check('fx-fire-replayed', /ABC hits REAPER for \d+/.test(logText()) && /REAPER fires/.test(logText()) &&
+    /REAPER hits YOU for \d+/.test(logText()) === hitMe,
     logText().split('\n').slice(-3).join(' | '));
   check('fx-fire-turn-back', /YOU/.test(els['hud-turn'].textContent) && els['hud-armor'].textContent.startsWith(after.tanks[0].hp + ' '),
     els['hud-turn'].textContent + ' | armor ' + els['hud-armor'].textContent);
@@ -1216,6 +1219,22 @@ function change(el) {
     FX.play.trail(sys2, defs.shell, shellFx, 0.016, 0, 0, 100, 0);
     FX.play.trail(sys2, defs.shell, shellFx, 0.016, 90, 0, 100, 0);
     check('fx-trail-follows-path', sys2.live >= 1, 'live=' + sys2.live);
+  }
+  {
+    // A shell leaves the muzzle inside its gunner's box: it ignores its
+    // gunner until it is clear of that box, then hits it if it comes back.
+    const fnSrc = name => {
+      const at = src.indexOf('function ' + name + '(');
+      return src.slice(at, src.indexOf('\n}\n', at) + 2);
+    };
+    const sweep = new Function('G', fnSrc('isGroundUnit') + fnSrc('unitHitBox') + fnSrc('inHitBox') +
+      fnSrc('sweepHit') + 'return sweepHit;');
+    const drone = { x: 300, y: 400, hp: 50 }, foe = { x: 600, y: 400, hp: 50, isPlayer: true };
+    const hits = sweep({ tanks: [drone, foe] });
+    const a = 62 * Math.PI / 180, mx = 300 + Math.cos(a) * 20, my = 386 - Math.sin(a) * 20;
+    const s = { owner: drone, pierced: false };
+    check('own-shell-passes-out-of-gunner', hits(s, mx, my, 330, 360) === null && s.clear === true);
+    check('own-shell-hits-gunner-coming-back', (hits(s, 330, 360, 300, 370) || {}).t === drone);
   }
   if (errors.length) { console.error('SMOKE-FAILED: ' + errors.join(',')); process.exit(1); }
   console.log('SMOKE-OK turn=' + els['hud-turn'].textContent + ' score=' + els['hud-score'].textContent);

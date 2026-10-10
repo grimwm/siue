@@ -276,7 +276,7 @@ battle buttons on the right, sky behind both. */
 .menu-card {
   inset: 0;
   margin: auto;
-  width: min(25rem, 92%);
+  width: min(27rem, 92%);
   height: fit-content;
   max-height: 88%;
   padding: 0.8rem 0.9rem;
@@ -285,6 +285,8 @@ battle buttons on the right, sky behind both. */
 .menu-grid button { width: 100%; }
 .seed-row, .unit-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.4rem; }
 .seed-row label, .unit-label { font-size: 0.8rem; color: var(--wash-ink); flex: none; }
+/* The picker rows share one label column, so their tiles line up. */
+.unit-row .unit-label { width: 3.6rem; }
 .seed-row input {
   flex: 1;
   min-width: 0;
@@ -295,11 +297,19 @@ battle buttons on the right, sky behind both. */
   padding: 0.3rem 0.45rem;
 }
 .seed-row button { width: auto; flex: none; }
-.unit-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem; flex: 1; }
+.unit-picker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.3rem; flex: 1; }
 .unit-picker .unit-choice { display: grid; justify-items: center; gap: 0.1rem; padding: 0.25rem 0.2rem; }
 .unit-picker .text-choice { display: grid; justify-items: center; align-content: end; gap: 0.1rem; padding: 0.25rem 0.2rem; min-height: 3.2rem; }
 .text-glyph { font-weight: 800; line-height: 1; }
-.unit-choice canvas { width: 48px; height: 34px; }
+.unit-choice canvas, .tile-icon { width: 48px; height: 34px; }
+.tile-icon { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tile-toggle[aria-pressed="true"] .off-only, .tile-toggle[aria-pressed="false"] .on-only { display: none; }
+#btn-sound[aria-pressed="false"], #btn-music[aria-pressed="false"] { color: var(--dim); }
+.tile-toggle .key { margin-left: 0.1rem; }
+.map-label { flex-basis: 100%; color: var(--dim); font-size: 0.9rem; }
+.map-picker { flex: 1 1 100%; grid-template-columns: repeat(auto-fill, minmax(5.4rem, 1fr)); }
+.map-choice canvas { width: 80px; height: 52px; }
+.map-choice { cursor: pointer; }
 .unit-choice span { font-size: 0.7rem; }
 .unit-picker button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
 .canvas-holder .dialogue {
@@ -424,6 +434,7 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 .shop-sub { color: var(--dim); font-size: 0.85rem; }
 .shop-cat { font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem; color: var(--dim); margin-top: 0.4rem; }
 #shop-list li.sel { background: rgba(255, 255, 255, 0.07); border-radius: 0.4rem; }
+#shop-list li .shop-icon { flex: none; width: 72px; height: 47px; }
 #shop-list li .acts { flex: none; display: flex; gap: 0.4rem; margin-left: auto; align-self: center; }
 #shop-list li .acts button { min-width: 4.5rem; }
 /* One line, always: the hit text never resizes the firing range. */
@@ -556,3 +567,7 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 .log-overlay .ov-head h2 { font-size: 0.85rem; }
 .log-overlay .ov-keys { font-size: 0.68rem; }
 .log-overlay .ov-x { font-size: 1rem; padding: 0.1rem 0.4rem; }
+/* HUD loadout chips: a shell icon beside each name. */
+.hudbar .chip { display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
+.hudbar #hud-weapon, .hudbar #hud-favs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.3rem; }
+.chip-icon { width: 36px; height: 23px; }

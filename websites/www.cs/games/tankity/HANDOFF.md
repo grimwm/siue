@@ -64,6 +64,14 @@ an ESC cap on desktop), and the panel's keys in a three-column grid that
 shows only while the panel scrolls. Text size (menu) scales every panel and
 the unit name tags; the choice is kept in `localStorage` as `tankity-text`.
 
+Picture buttons: every shell and trick has a canvas icon (`drawShellIcon`,
+`drawGearIcon` in `game.js`, drawn from each weapon's `gfx`) shown in the shop
+rows and beside the HUD's loaded weapon and favorites; the text stays in each
+chip. The lobby's hills are tiles (a hidden `#lobby-map` holds the value) whose
+silhouettes come from the `profile` (48 heights, 0..1) that `rooms.php?action=maps`
+computes from round one of each map's terrain. Sound, Music and Fullscreen are
+icon tiles whose `aria-pressed` carries on/off.
+
 Touch-only screens (coarse pointer, no mouse or trackpad) get no key
 bindings and no key labels: `.key`, `.nav-hint`, `.pad-note` and
 `.keys-only` hide under `html.touch`, and `.touch-only` help shows instead.

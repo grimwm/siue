@@ -106,6 +106,14 @@ global.window.AudioContext = class {
 };
 
 // ---- boot the exact shipped script ----
+// Tile pickers build their buttons with replaceChildren, which this stub only
+// grants to the elements the checks inspect (the HUD stays on its text path).
+const withChildren = id => {
+  els[id] = makeEl(id);
+  els[id].replaceChildren = function (...nodes) { this.children = nodes; };
+  return els[id];
+};
+withChildren('lobby-map-picker');
 els['seed-input'] = makeEl('seed-input');
 els['seed-input'].value = 'scorch-01';
 eval(src);
@@ -173,18 +181,19 @@ check('keys-no-scroll', pd === 2, `prevented=${pd}/2`);
 TAP('global', 'fullscreen'); frames(2);
 check('fullscreen-fallback', /Fullscreen is not supported/.test(logText()));
 // Sound and music mute separately, by button or by key, without touching each other.
+const pressed = id => els[id].getAttribute('aria-pressed');
 click(els['btn-sound']);
-check('sound-off', els['btn-sound'].textContent === 'Sound: off (E)', els['btn-sound'].textContent);
-check('sound-spares-music', els['btn-music'].textContent === '', JSON.stringify(els['btn-music'].textContent));
+check('sound-off', pressed('btn-sound') === 'false', pressed('btn-sound'));
+check('sound-spares-music', pressed('btn-music') === undefined, String(pressed('btn-music')));
 TAP('global', 'music');
-check('music-off', els['btn-music'].textContent === 'Music: off (M)', els['btn-music'].textContent);
-check('music-spares-sound', els['btn-sound'].textContent === 'Sound: off (E)', els['btn-sound'].textContent);
+check('music-off', pressed('btn-music') === 'false', pressed('btn-music'));
+check('music-spares-sound', pressed('btn-sound') === 'false', pressed('btn-sound'));
 click(els['btn-sound']);
-check('sound-on', els['btn-sound'].textContent === 'Sound: on (E)', els['btn-sound'].textContent);
+check('sound-on', pressed('btn-sound') === 'true', pressed('btn-sound'));
 TAP('global', 'sound');
-check('sound-key-off', els['btn-sound'].textContent === 'Sound: off (E)', els['btn-sound'].textContent);
+check('sound-key-off', pressed('btn-sound') === 'false', pressed('btn-sound'));
 TAP('global', 'music');
-check('music-on', els['btn-music'].textContent === 'Music: on (M)', els['btn-music'].textContent);
+check('music-on', pressed('btn-music') === 'true', pressed('btn-music'));
 TAP('global', 'sound');
 click(els['btn-music']); click(els['btn-music']); // end unmuted with a fresh scheduler
 // ---- game rooms: lobby + net play against a scripted server ----
@@ -362,7 +371,10 @@ global.fetch = async (url, opts) => {
   if (u.includes('action=maps')) {
     return okJson({
       ok: true,
-      maps: [{ id: 'canyon 3', name: 'Canyon 3' }, { id: 'twin hills', name: 'Twin Hills' }],
+      maps: [
+        { id: 'canyon 3', name: 'Canyon 3', profile: Array.from({ length: 48 }, (_, i) => 0.3 + 0.2 * Math.sin(i / 5)) },
+        { id: 'twin hills', name: 'Twin Hills', profile: Array.from({ length: 48 }, (_, i) => 0.4 + 0.2 * Math.cos(i / 7)) },
+      ],
     });
   }
   if (u.includes('action=ping')) {
@@ -502,21 +514,23 @@ function change(el) {
   check('shop-esc-closes-menu', els['menu-overlay'].hidden === true && els['shop-veil'].hidden === false);
   // Stock up: Buckshot ($80), Mortar ($200), Rail ($140) of the $600 stake.
   // (Each render appends, so read the last eight list items: two category
-  // headers plus six rows. Each row holds an info div then an acts span.)
+  // headers plus six rows. Each row holds an icon canvas, an info div, then an acts span.)
   const shopLis = () => els['shop-list'].children.slice(-8);
-  const shopRows = () => shopLis().filter(li => li.children.length === 2);
-  const rowName = li => li.children[0].children[0].textContent;
+  const shopRows = () => shopLis().filter(li => li.children.length === 3);
+  const rowName = li => li.children[1].children[0].textContent;
   const buyRow = label => {
     const row = shopRows().find(li => rowName(li).includes(label));
-    const acts = row.children[1];
+    const acts = row.children[2];
     click(acts.children[acts.children.length - 1]);
   };
   buyRow('Buckshot');
   // Categories group the shelf, and even the locked NUKE shows its damage.
   const catNames = shopLis().filter(li => li.className === 'shop-cat').map(li => li.textContent);
   const nukeRow = shopRows().find(li => rowName(li).includes('NUKE'));
-  const nukeStats = nukeRow.children[0].children[1].textContent + ' ' + nukeRow.children[0].children[2].textContent;
+  const nukeStats = nukeRow.children[1].children[1].textContent + ' ' + nukeRow.children[1].children[2].textContent;
   check('shop-cats', catNames.join('|') === 'Shells|Hull and fuel', catNames.join('|'));
+  check('shop-icons', shopRows().length >= 6 && shopRows().every(li => li.children[0].className === 'shop-icon' && li.children[0].getAttribute('aria-hidden') === 'true'),
+    shopRows().map(li => li.children[0].className).join());
   check('nuke-stats', /95 damage/.test(nukeStats) && /round 4/.test(nukeStats), nukeStats);
   // The arsenal file is a second source the game reads at boot: it must
   // parse, hold 20 items, and speak only effects and painters the code has.
@@ -546,7 +560,7 @@ function change(el) {
   check('keys-file-drives', KEYS.shop.buy[0] === 'b' && KEYS.global.fire[0] === 'ControlLeft' && KEYS.aim.barrelLeft[0] === 'ArrowLeft' && KB('shop', 'buy')[0] === 'b',
     `${KEYS.shop.buy[0]}|${KEYS.global.fire[0]}|${KEYS.aim.barrelLeft[0]}`);
   {
-    const ammoActs = shopRows().find(li => rowName(li).includes('Buckshot')).children[1].children;
+    const ammoActs = shopRows().find(li => rowName(li).includes('Buckshot')).children[2].children;
     check('shop-btn-hints', ammoActs[0].children[1].textContent === '(V)' && ammoActs[1].children[1].textContent === '(B)',
       `${ammoActs[0].children[1].textContent}|${ammoActs[1].children[1].textContent}`);
   }
@@ -555,7 +569,7 @@ function change(el) {
   const shopCash1 = els['shop-cash'].textContent;
   // Bulk packs: Right raises the count, capped by the chest; B buys them all
   // and the count falls back to what is still affordable on every row.
-  const buyBtn = li => { const acts = li.children[1]; return acts.children[acts.children.length - 1]; };
+  const buyBtn = li => { const acts = li.children[2]; return acts.children[acts.children.length - 1]; };
   for (let i = 0; i < 4; i++) { TAP('shop', 'selDown'); frames(3); }
   const fuelRow = () => shopRows().find(li => rowName(li).includes('Fuel'));
   TAP('shop', 'qtyUp'); frames(3);
@@ -810,8 +824,13 @@ function change(el) {
     void document.getElementById(id);
   }
   click(els['rooms-open']); await tick(10);
-  check('maps-catalog', els['lobby-map'].children.length === 3,
-    `options=${els['lobby-map'].children.length}`);
+  const tiles = () => els['lobby-map-picker'].children;
+  const tileOn = () => tiles().filter(t => t.getAttribute('aria-pressed') === 'true').map(t => t.getAttribute('data-map'));
+  check('maps-catalog', tiles().length === 3 && tiles().map(t => t.title).join('|') === 'Random hills|Canyon 3|Twin Hills',
+    tiles().map(t => t.title).join('|'));
+  check('maps-tiles-are-buttons', tiles().every(t => t.type === 'button' && t.children.length === 2
+    && t.children[0].getAttribute('aria-hidden') === 'true' && t.children[1].textContent === t.title));
+  check('maps-random-selected', tileOn().join() === '', tileOn().join());
   check('room-occupancy', els['lobby-count'].textContent === '3 / 10 rooms occupied',
     els['lobby-count'].textContent);
   check('room-dot-green', els['net-dot'].className.includes('on') && els['hud-server'].textContent === 'online',
@@ -846,7 +865,7 @@ function change(el) {
     `${badShort} | ${badBlocked}`);
   // host a room on picked hills: code shows, roster opens, hills named
   els['host-initials'].value = 'abc';
-  els['lobby-map'].value = 'canyon 3';
+  click(tiles()[1]); // before hosting, a tile only sets the value
   submit(els['host-form']); await tick(10);
   check('room-hosted', els['lobby-code'].textContent === 'TST1' && els['lobby-room'].hidden === false,
     els['lobby-code'].textContent);
@@ -854,11 +873,20 @@ function change(el) {
     `rows=${els['lobby-seats'].children.length}`);
   check('room-hills', els['lobby-hills'].textContent === 'Hills: Canyon 3',
     els['lobby-hills'].textContent);
+  check('map-tile-pressed', tileOn().join() === 'canyon 3', tileOn().join());
   // the host can swap back to a random draw before starting
   els['lobby-map'].value = '';
   change(els['lobby-map']); await tick(10);
   check('map-change', els['lobby-hills'].textContent === 'Hills: Random hills',
     els['lobby-hills'].textContent);
+  // tapping a tile picks that map through the same request
+  click(tiles()[2]); await tick(10);
+  check('map-tile-pick', els['lobby-map'].value === 'twin hills' && tileOn().join() === 'twin hills',
+    `${els['lobby-map'].value} | ${tileOn().join()}`);
+  check('map-tile-sent', createdMap === 'twin hills', createdMap);
+  click(tiles()[0]); await tick(10);
+  check('map-tile-random', els['lobby-map'].value === '' && createdMap === '' && els['lobby-hills'].textContent === 'Hills: Random hills',
+    `${els['lobby-map'].value} | ${els['lobby-hills'].textContent}`);
   // a guest joining shows both initials on the roster, never undefined
   extraGuest = true;
   void document.getElementById('join-code');

@@ -107,6 +107,22 @@ function room_map_name(?string $id): string
     }
     return 'Random hills';
 }
+/* A picked map's silhouette for the lobby tiles: round one's terrain, from
+// the same hidden seed room_start_round() uses, sampled to ROOM_PROFILE_N
+// heights. 0 is the lowest ground the generator allows, 1 the highest. */
+const ROOM_PROFILE_N = 48;
+function room_map_profile(string $id): array
+{
+    $w = 720;
+    $mrng = room_hash_seed(ROOM_MAPS[$id]['seed'] . '|round1');
+    $t = room_gen_terrain($mrng, $w);
+    $out = [];
+    for ($i = 0; $i < ROOM_PROFILE_N; $i++) {
+        $x = (int) round($i * ($w - 1) / (ROOM_PROFILE_N - 1));
+        $out[] = round((415.0 - $t[$x]) / (415.0 - 190.0), 3);
+    }
+    return $out;
+}
 const ROOM_AI_IDS = ['reaper', 'wraith', 'spotter'];
 const ROOM_TURN_WIND = 2.2;
 const ROOM_GRAV = 95;
@@ -1308,10 +1324,11 @@ if ($action === 'ping') {
 }
 
 if ($action === 'maps') {
-    // Public catalog: ids and names only. Seeds never leave this file.
+    // Public catalog: ids, names, and a silhouette of round one's hills.
+    // Seeds never leave this file.
     $list = [];
     foreach (ROOM_MAPS as $id => $m) {
-        $list[] = ['id' => $id, 'name' => $m['name']];
+        $list[] = ['id' => $id, 'name' => $m['name'], 'profile' => room_map_profile($id)];
     }
     room_json_out(200, ['ok' => true, 'maps' => $list]);
 }

@@ -170,9 +170,24 @@
 }
 
 
+/* While it watches you the glare is a soft cone of light from the eye that
+   fades with distance (the script sets its length and --glare-reach, how
+   far toward the cursor it carries before it is gone), never a solid beam
+   touching the cursor. */
 .cylon-glare.is-active:not(.is-disoriented) {
   transition: opacity 0.15s ease;
-  background: linear-gradient(180deg, rgba(255, 90, 90, 0.95) 0%, rgba(255, 30, 30, 0.55) 55%, rgba(255, 0, 0, 0.3) 100%);
+  width: 26px;
+  border-radius: 50% 50% 0 0 / 12% 12% 0 0;
+  background: radial-gradient(
+    ellipse 50% 100% at 50% 0%,
+    rgba(255, 110, 110, 0.55) 0%,
+    rgba(255, 40, 40, 0.28) calc(var(--glare-reach, 60%) * 0.45),
+    rgba(255, 0, 0, 0.08) calc(var(--glare-reach, 60%) * 0.8),
+    transparent var(--glare-reach, 60%)
+  );
+  box-shadow: none;
+  filter: blur(1.5px);
+  mix-blend-mode: screen;
 }
 
 
@@ -244,6 +259,46 @@
 }
 
 
+/* Home page (game off): the eye sweeps the bar end to end twice, and on its
+   third pass stops in the middle and opens into a band of red filling the
+   strip. Starting the game shrinks it back and the hunt sweeps on from the
+   middle (half a cycle in, so it never jumps). */
+@keyframes cylonIntro {
+  0% { left: 5%; animation-timing-function: ease-in-out; }
+  22.2% { left: 95%; animation-timing-function: ease-in-out; }
+  44.4% { left: 5%; animation-timing-function: ease-in-out; }
+  66.7% { left: 95%; animation-timing-function: ease-in-out; }
+  88.9% { left: 5%; animation-timing-function: ease-in; }
+  100% { left: 50%; }
+}
+@keyframes cylonFill {
+  to {
+    left: 50%;
+    width: 100%;
+    max-width: 100%;
+    border-radius: 0;
+    background: linear-gradient(180deg, #ff4a4a 0%, #ff0000 45%, #b00000 100%);
+    box-shadow: 0 0 18px 4px rgba(255, 0, 0, 0.55);
+  }
+}
+@keyframes cylonShrink {
+  from { width: 100%; max-width: 100%; }
+}
+body:not(.cylon-game-live) .cylon-eye {
+  animation: cylonIntro 11.7s linear forwards, cylonFill 0.9s ease-out 11.7s forwards;
+}
+body:not(.cylon-game-live) .cylon-eye::before,
+body:not(.cylon-game-live) .cylon-eye::after {
+  animation: cylonTrail 2.6s ease-in-out infinite alternate, cylonFade 0.6s ease-out 11.7s forwards;
+}
+@keyframes cylonFade {
+  to { opacity: 0; }
+}
+body.cylon-game-live .cylon-eye {
+  animation: cylonShrink 0.7s ease-out, cylonSweep 2.6s ease-in-out -1.3s infinite alternate;
+}
+
+
 @media (prefers-reduced-motion: reduce) {
   .cylon-eye,
   .cylon-eye::after {
@@ -252,6 +307,10 @@
 
   .cylon-eye {
     left: 50%;
+  }
+
+  body:not(.cylon-game-live) .cylon-eye {
+    animation: cylonFill 0s forwards;
   }
 
   .cylon-eye::after {

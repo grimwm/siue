@@ -1900,7 +1900,14 @@ async function initializeCylonEffects() {
                 glare.style.opacity = '';
                 glare.style.left = `${from.x}px`;
                 glare.style.top = `${top}px`;
-                glare.style.height = `${Math.hypot(dx, dy)}px`;
+                // A glare, not a laser: it points at the cursor but fades out
+                // short of it. It carries at most 85% of the way (140 px plus a
+                // quarter of the distance), and dims overall as you get farther.
+                const dist = Math.hypot(dx, dy);
+                const reach = Math.min(dist * 0.85, 140 + dist * 0.25);
+                glare.style.height = `${dist}px`;
+                glare.style.setProperty('--glare-reach', `${(reach / Math.max(1, dist)) * 100}%`);
+                glare.style.opacity = String(Math.max(0.3, Math.min(1, 1 - dist / (Math.hypot(window.innerWidth, window.innerHeight) * 1.2))));
                 glare.style.transform = `translateX(-50%) rotate(${-Math.atan2(dx, dy)}rad)`;
             }
         }

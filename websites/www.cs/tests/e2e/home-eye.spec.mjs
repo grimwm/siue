@@ -15,6 +15,26 @@ test('the home page eye sweeps the bar', async ({ page }) => {
   expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(60);
 });
 
+test('after two full sweeps the home eye stops in the middle and fills its strip with red', async ({ page }) => {
+  test.setTimeout(40_000);
+  await page.goto('./');
+  await page.waitForSelector('#cylon-eye');
+  await page.waitForTimeout(13_500); // two round trips, half a third, then the fill
+  const box = await page.evaluate(() => {
+    const e = document.getElementById('cylon-eye').getBoundingClientRect();
+    const bar = document.getElementById('cylon-eye').parentElement.getBoundingClientRect();
+    return { center: (e.left + e.width / 2 - bar.left) / bar.width, width: e.width / bar.width, bg: getComputedStyle(document.getElementById('cylon-eye')).backgroundImage };
+  });
+  expect(Math.abs(box.center - 0.5)).toBeLessThan(0.02);
+  expect(box.width).toBeGreaterThan(0.97);
+  expect(box.bg).toContain('rgb(255, 0, 0)');
+  // And it stays put.
+  const x0 = await page.evaluate(() => document.getElementById('cylon-eye').getBoundingClientRect().left);
+  await page.waitForTimeout(800);
+  expect(await page.evaluate(() => document.getElementById('cylon-eye').getBoundingClientRect().left)).toBeCloseTo(x0, 0);
+  await page.screenshot({ path: 'test-results/home-eye-filled.png', clip: { x: 0, y: 0, width: 1280, height: 80 } });
+});
+
 test('in the game the eye keeps sweeping while its glare points at the cursor', async ({ page }) => {
   await page.goto('./?game=cylon');
   await expect.poll(() => page.evaluate(() => document.body.classList.contains('cylon-game-live'))).toBe(true);
@@ -52,5 +72,9 @@ test('in the game the eye keeps sweeping while its glare points at the cursor', 
     expect(Math.abs(s.farY - target.y)).toBeLessThan(12);
     expect(Math.abs(s.farX - target.x)).toBeLessThan(20);
   }
+  // A glare, not a laser: it fades out before it reaches the cursor.
+  const reach = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('cylon-glare')).getPropertyValue('--glare-reach')));
+  expect(reach).toBeGreaterThan(10);
+  expect(reach).toBeLessThan(86);
   await page.screenshot({ path: 'test-results/cylon-glare.png' });
 });

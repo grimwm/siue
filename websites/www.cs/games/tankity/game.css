@@ -434,6 +434,7 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 #shop-list li { display: flex; align-items: center; gap: 0.75rem; padding: 0.35rem 0.4rem; }
 .shop-item { flex: 1; min-width: 0; display: grid; gap: 0.1rem; }
 .shop-name { font-weight: 700; }
+.shop-vals { color: var(--wash-key); font-weight: 600; }
 .shop-sub { color: var(--dim); font-size: 0.85rem; }
 .shop-cat { font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem; color: var(--dim); margin-top: 0.4rem; }
 #shop-list li.sel { background: rgba(255, 255, 255, 0.07); border-radius: 0.4rem; }

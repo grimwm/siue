@@ -44,11 +44,27 @@ test('the shop list keeps its scroll when it redraws', async ({ browser }) => {
   expect(errors).toEqual([]);
 });
 
+test('the shop shows the whole 20-item arsenal, numbers in their own colour', async ({ browser }) => {
+  const { page } = await newPlayer(browser);
+  await page.keyboard.press('n');
+  await page.waitForSelector('#shop-veil:not([hidden])');
+  const rows = page.locator('#shop-list li:not(.shop-cat)');
+  await expect(rows).toHaveCount(20);
+  await expect(page.locator('#shop-list li.shop-free .shop-name')).toHaveText(/^Shell ∞ \(free\)$/);
+  await page.keyboard.press('ArrowRight'); // two of each
+  const name = page.locator('#shop-list li.sel .shop-name');
+  await expect(name).toHaveText(/^1\. Buckshot ×2 \(\$80\).* ×2 = \$160$/);
+  await expect(name).not.toContainText('packs');
+  const colours = await name.evaluate(el => [getComputedStyle(el).color, getComputedStyle(el.querySelector('.shop-vals')).color]);
+  expect(colours[0]).not.toBe(colours[1]);
+  await page.locator('#shop-veil .card').screenshot({ path: 'test-results/tankity-shop-rows.png' });
+});
+
 test('J and K walk the shop rows like the arrows', async ({ browser }) => {
   const { page } = await newPlayer(browser);
   await page.keyboard.press('n');
   await page.waitForSelector('#shop-veil:not([hidden])');
-  const sel = () => page.locator('#shop-list li:not(.shop-cat)').evaluateAll(els => els.findIndex(e => e.classList.contains('sel')));
+  const sel = () => page.locator('#shop-list li:not(.shop-cat):not(.shop-free)').evaluateAll(els => els.findIndex(e => e.classList.contains('sel')));
   expect(await sel()).toBe(0);
   for (let i = 0; i < 6; i++) await page.keyboard.press('j');
   expect(await sel()).toBe(6);

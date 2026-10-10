@@ -530,10 +530,11 @@ function change(el) {
   TAP('shop', 'close'); frames(3);
   check('shop-esc-closes-menu', els['menu-overlay'].hidden === true && els['shop-veil'].hidden === false);
   // Stock up: Buckshot ($80), Mortar ($200), Rail ($140) of the $600 stake.
-  // (Each render appends, so read the last eight list items: two category
-  // headers plus six rows. Each row holds an icon canvas, an info div, then an acts span.)
-  const shopLis = () => els['shop-list'].children.slice(-8);
-  const shopRows = () => shopLis().filter(li => li.children.length === 3);
+  // (Each render appends, so read the last nine list items: two category
+  // headers, the free Shell row, and six rows to buy. Each row holds an icon
+  // canvas, an info div, then an acts span.)
+  const shopLis = () => els['shop-list'].children.slice(-9);
+  const shopRows = () => shopLis().filter(li => li.children.length === 3 && li.className !== 'shop-free');
   const rowName = li => li.children[1].children[0].textContent;
   const buyRow = label => {
     const row = shopRows().find(li => rowName(li).includes(label));
@@ -546,6 +547,8 @@ function change(el) {
   const nukeRow = shopRows().find(li => rowName(li).includes('NUKE'));
   const nukeStats = nukeRow.children[1].children[1].textContent + ' ' + nukeRow.children[1].children[2].textContent;
   check('shop-cats', catNames.join('|') === 'Shells|Hull and fuel', catNames.join('|'));
+  const freeRow = shopLis().find(li => li.className === 'shop-free');
+  check('shop-shell-row', !!freeRow && /^Shell ∞/.test(rowName(freeRow)), freeRow ? rowName(freeRow) : 'missing');
   check('shop-icons', shopRows().length >= 6 && shopRows().every(li => li.children[0].className === 'shop-icon' && li.children[0].getAttribute('aria-hidden') === 'true'),
     shopRows().map(li => li.children[0].className).join());
   check('nuke-stats', /95 damage/.test(nukeStats) && /round 4/.test(nukeStats), nukeStats);
@@ -590,10 +593,10 @@ function change(el) {
   for (let i = 0; i < 4; i++) { TAP('shop', 'selDown'); frames(3); }
   const fuelRow = () => shopRows().find(li => rowName(li).includes('Fuel'));
   TAP('shop', 'qtyUp'); frames(3);
-  check('shop-qty-2', /×2 packs = \$120/.test(rowName(fuelRow())), rowName(fuelRow()));
+  check('shop-qty-2', /×2 = \$120/.test(rowName(fuelRow())), rowName(fuelRow()));
   TAP('shop', 'qtyUp'); frames(3);
   TAP('shop', 'qtyUp'); frames(3); // $180 left after the three guns: three packs is all the chest covers
-  check('shop-qty-cap', /×3 packs = \$180/.test(rowName(fuelRow())), rowName(fuelRow()));
+  check('shop-qty-cap', /×3 = \$180/.test(rowName(fuelRow())), rowName(fuelRow()));
   TAP('shop', 'buy'); frames(3);
   check('shop-bulk', /\$0\b/.test(els['shop-cash'].textContent), els['shop-cash'].textContent);
   check('shop-bulk-said', /Bought 3 × Fuel/.test(logTail()), logTail());

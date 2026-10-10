@@ -1118,6 +1118,7 @@ function renderShop() {
   G.shopSel = clamp(G.shopSel || 0, 0, SHOP.length - 1);
   G.shopQty = clamp(G.shopQty || 1, 1, 9);
   let lastCat = '';
+  let shellRowShown = false;
   SHOP.forEach((it, idx) => {
     if (it.cat !== lastCat) {
       lastCat = it.cat;
@@ -1125,6 +1126,12 @@ function renderShop() {
       h.className = 'shop-cat';
       h.textContent = it.cat;
       list.appendChild(h);
+      // The Shell never needs buying, but it is part of the arsenal: it
+      // heads the shells with no number and no Buy button.
+      if (it.kind === 'ammo' && !shellRowShown) {
+        shellRowShown = true;
+        list.appendChild(shellShopRow());
+      }
     }
     const locked = (it.minRound || 0) > G.round;
     const unit = packPrice(it);
@@ -1136,7 +1143,8 @@ function renderShop() {
     item.className = 'shop-item';
     const name = document.createElement('div');
     name.className = 'shop-name';
-    name.textContent = `${idx + 1}. ${shopName(it, unit)}${qty > 1 ? ` ×${qty} packs = $${total}` : ''}`;
+    const parts = shopName(it, unit);
+    setShopName(name, `${idx + 1}. ${parts.name}`, `${parts.vals}${qty > 1 ? ` ×${qty} = $${total}` : ''}`);
     const sub = document.createElement('div');
     sub.className = 'shop-sub';
     sub.textContent = shopSub(it);
@@ -1201,12 +1209,50 @@ function packPrice(it) {
 function maxPacks(it) {
   return Math.max(0, Math.min(9, Math.floor(G.cash / packPrice(it))));
 }
+/* A row's name, then its numbers (pack size, price, what you own, the bulk
+   total) in their own colour. */
 function shopName(it, price) {
   if (it.kind === 'ammo') {
     const own = (G.ammo[it.w] || 0) > 0 ? ` (you own ${G.ammo[it.w]})` : '';
-    return `${it.label} ($${price})${own}`;
+    return { name: WEAPONS[it.w].name, vals: `×${it.n} ($${price})${own}` };
   }
-  return `${it.label} ($${price})`;
+  return { name: it.label, vals: `($${price})` };
+}
+function setShopName(el, name, vals) {
+  if (!el.replaceChildren) { el.textContent = `${name} ${vals}`; return; }
+  const v = document.createElement('span');
+  v.className = 'shop-vals';
+  v.textContent = vals;
+  el.replaceChildren(document.createTextNode(`${name} `), v);
+}
+function shellShopRow() {
+  const li = document.createElement('li');
+  li.className = 'shop-free';
+  const icon = document.createElement('canvas');
+  icon.className = 'shop-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  drawShellIcon(icon, 'shell');
+  const item = document.createElement('div');
+  item.className = 'shop-item';
+  const name = document.createElement('div');
+  name.className = 'shop-name';
+  setShopName(name, WEAPONS.shell.name, '∞ (free)');
+  const sub = document.createElement('div');
+  sub.className = 'shop-sub';
+  sub.textContent = shopSub({ kind: 'ammo', w: 'shell' });
+  const sub2 = document.createElement('div');
+  sub2.className = 'shop-sub';
+  sub2.textContent = 'Always loaded, never runs out.';
+  item.append(name, sub, sub2);
+  const acts = document.createElement('span');
+  acts.className = 'acts';
+  const pv = document.createElement('button');
+  pv.type = 'button';
+  pv.textContent = 'Preview';
+  pv.addEventListener('click', ev => { ev.currentTarget.blur(); openPreview('shell'); });
+  acts.appendChild(pv);
+  li.append(icon, item, acts);
+  return li;
 }
 /* First stat line: what it does. Second stat line: the deal. Locked rows
 // keep their numbers so the NUKE shows its damage before round 4. */

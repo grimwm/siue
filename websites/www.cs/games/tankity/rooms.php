@@ -127,6 +127,7 @@ function room_map_profile(string $id): array
 const ROOM_AI_IDS = ['reaper', 'wraith', 'spotter'];
 const ROOM_TURN_WIND = 2.2;
 const ROOM_GRAV = 95;
+const ROOM_FLAT_GRAV = 90; // flat bolts arc a little (game.js FLAT_GRAV)
 
 // Mirrors cylon: exact-3 uppercase initials, blocked set enforced both sides.
 // (Keep in sync with BLOCKED_INITIALS in game.js.)
@@ -448,6 +449,51 @@ function room_shot_speed(float $power, bool $flat, float $mult = 1.0): float
 {
     return ($flat ? 140.0 + $power * 3.2 : 40.0 + $power * 2.4) * $mult;
 }
+/* Where a shell leaves the barrel: 20 px along it, 14 px above the hull.
+// game.js muzzle() is the same. [x, y]. */
+function room_muzzle(array $tank): array
+{
+    $rad = deg2rad($tank['angle']);
+    $dirS = $tank['dirS'] ?? -1;
+    return [$tank['x'] + cos($rad) * 20 * $dirS, $tank['y'] - 14 - sin($rad) * 20];
+}
+/* The velocity a seeker gains this step toward the nearest live rival (a
+// point 12 px above its hull), or null when there is none to steer at.
+// game.js steerShell() is the same. [dvx, dvy]. */
+function room_seek_push(array $tanks, int $ownerIdx, float $sx, float $sy, float $steer, float $dt): ?array
+{
+    $best = null;
+    $bd = INF;
+    foreach ($tanks as $idx => $t) {
+        if ($t['hp'] <= 0 || $idx === $ownerIdx) {
+            continue;
+        }
+        $d = hypot($t['x'] - $sx, ($t['y'] - 12) - $sy);
+        if ($d < $bd) {
+            $bd = $d;
+            $best = $t;
+        }
+    }
+    if ($best === null || $bd <= 1) {
+        return null;
+    }
+    $push = $steer * $dt;
+    return [(($best['x'] - $sx) / $bd) * $push, ((($best['y'] - 12) - $sy) / $bd) * $push];
+}
+/* The bomblets a cluster blooms into: $n velocities fanned $fan radians
+// apart around the parent's heading, at 85% of its speed. game.js
+// splitShell() is the same. [[vx, vy], ...]. */
+function room_split_vel(float $vx, float $vy, int $n, float $fan): array
+{
+    $sp = hypot($vx, $vy) * 0.85;
+    $base = atan2($vy, $vx);
+    $out = [];
+    for ($k = 0; $k < $n; $k++) {
+        $ca = $base + ($k - ($n - 1) / 2) * $fan;
+        $out[] = [cos($ca) * $sp, sin($ca) * $sp];
+    }
+    return $out;
+}
 /* Full trajectory; returns landing info. Mirrors game.js simShot. */
 function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $angle, float $power, string $wkey, int $dirS, int $w): array
 {
@@ -456,7 +502,7 @@ function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $a
     $rad = deg2rad($angle);
     $vx = cos($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0)) * $dirS;
     $vy = -sin($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0));
-    $grav = $flat ? 90.0 : (float) ROOM_GRAV;
+    $grav = $flat ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
     $dt = 1 / 60;
     for ($i = 0; $i < 720; $i++) {
         $vx += $wind * ROOM_TURN_WIND * $dt;
@@ -467,7 +513,7 @@ function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $a
             return ['x' => $x, 'y' => $y, 'oob' => true];
         }
         $xi = max(0, min($w - 1, (int) round($x)));
-        if ($y >= $terrain[$xi]) {
+        if ($i >= 6 && $y >= $terrain[$xi]) { // the real flight ignores ground for its first 0.1 s
             return ['x' => $x, 'y' => $y, 'oob' => false];
         }
     }
@@ -723,27 +769,15 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
     $width = count($room['terrain']);
     $dt = 1 / 60;
     $path = [[$sx, $sy]];
-    $grav = !empty($w['flat']) ? 90.0 : (float) ROOM_GRAV;
+    $grav = !empty($w['flat']) ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
     $pierced = null; // the tank a lance went through, never hit twice
     $clear = false; // out of its gunner's box yet
     for ($step = 0; $step < 720; $step++) {
         if (($w['effect'] ?? 'shot') === 'seeker') {
-            $best = null;
-            $bd = INF;
-            foreach ($room['tanks'] as $idx => $t) {
-                if ($t['hp'] <= 0 || $idx === $ownerIdx) {
-                    continue;
-                }
-                $d = hypot($t['x'] - $sx, ($t['y'] - 12) - $sy);
-                if ($d < $bd) {
-                    $bd = $d;
-                    $best = $t;
-                }
-            }
-            if ($best !== null && $bd > 1) {
-                $push = (float) ($w['steer'] ?? 70.0) * $dt;
-                $vx += (($best['x'] - $sx) / $bd) * $push;
-                $vy += ((($best['y'] - 12) - $sy) / $bd) * $push;
+            $dv = room_seek_push($room['tanks'], $ownerIdx, $sx, $sy, (float) ($w['steer'] ?? 70.0), $dt);
+            if ($dv !== null) {
+                $vx += $dv[0];
+                $vy += $dv[1];
             }
         }
         $vx += $room['wind'] * ROOM_TURN_WIND * $dt;
@@ -822,8 +856,7 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
         $off = $shots === 1 ? 0 : ($i - ($shots - 1) / 2) * ($w['spread'] ?? 0.0);
         $a = $rad + $off;
         $spd = room_shot_speed($tank['power'], !empty($w['flat']), (float) ($w['speed'] ?? 1.0));
-        $mx = $tank['x'] + cos($rad) * 20 * $dirS;
-        $my = $tank['y'] - 14 - sin($rad) * 20;
+        [$mx, $my] = room_muzzle($tank);
         $vx = cos($a) * $spd * $dirS;
         $vy = -sin($a) * $spd;
         $res = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $mx, $my, $vx, $vy, 0.0, (float) ($w['fuse'] ?? 0.9), null, 0.0);
@@ -837,12 +870,10 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
             $tSplit = $res[7];
             $n = max(2, (int) ($w['split'] ?? 4));
             $fan = (float) ($w['fan'] ?? 0.22);
-            $sp = hypot($res[3], $res[4]) * 0.85;
-            $base = atan2($res[4], $res[3]);
+            $fanned = room_split_vel($res[3], $res[4], $n, $fan);
             $sub = ['dmg' => (int) ($w['subDmg'] ?? $w['dmg']), 'radius' => (int) ($w['subRadius'] ?? $w['radius'])];
             for ($k = 0; $k < $n; $k++) {
-                $ca = $base + ($k - ($n - 1) / 2) * $fan;
-                $cr = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $res[1], $res[2], cos($ca) * $sp, sin($ca) * $sp, 99.0, false, $sub, $tSplit);
+                $cr = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $res[1], $res[2], $fanned[$k][0], $fanned[$k][1], 99.0, false, $sub, $tSplit);
                 $ev = room_shot_event($tank, $wkey, $tSplit, $cr, $cr[0] === 'hit' ? (float) $sub['radius'] : 0.0);
                 $ev['at'] = round($tSplit, 3);
                 $events[] = $ev;
@@ -875,9 +906,7 @@ function room_ai_choose(array &$room, array $tank): array
 {
     $rng = $room['rng'];
     $dirS = $tank['dirS'] ?? -1;
-    $rad = deg2rad($tank['angle']);
-    $mx = $tank['x'] + cos($rad) * 20 * $dirS;
-    $my = $tank['y'] - 14 - sin($rad) * 20;
+    [$mx, $my] = room_muzzle($tank);
     // Drones feud with each other too: usually the nearest rival, sometimes
     // whoever else is still rolling. Nobody is safe, nobody is perfect.
     $rivals = [];

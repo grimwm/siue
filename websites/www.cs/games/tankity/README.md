@@ -118,6 +118,8 @@ php tools/install-files.php      # after the last edit to any served file
 | `php config-test.php`                          | `.config.yaml` precedence                                                                  |
 | `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; `room_snapshot` shapes against `protocol/` |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (needs SysV; run inside the PHP container)                 |
+| `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (plain php)                                          |
+| `node sim-vectors-test.js`                     | `game.js` agrees with `rooms.php` on every shared sim vector (see Sim vectors)              |
 | `php rooms-test.php`                           | The room shelf over its own `php -S` (needs SysV; run inside the PHP container)            |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
 | `php game-json-test.php`                       | The YAML parser, the `game.yaml` schema, `--check` staleness                               |
@@ -136,6 +138,7 @@ skip `*-test.*`, `README.md` files, `protocol/`, the effects editor and the Blen
 hit events, then the drone's answer), `shop-after-win`, `shop-ready` (the shop
 with one of two humans readied), `create-reply`, `join-reply`, `error-too-fast` (429) and `error-not-your-turn` (409). Each file
 is `{about, status, body}`.
+`sim-vectors.json` in the same folder is not one of them (see Sim vectors).
 
 - `protocol/generate.php` writes them. Snapshots are built in process with
   `rooms.php`'s own functions on a fixed room code and seeds
@@ -153,6 +156,36 @@ is `{about, status, body}`.
   409. A server change the client does not handle fails there.
 - The fixtures are not precached by the service worker (only top-level
   static files are) and are not deployed.
+
+## Sim vectors
+
+The game's math runs twice: in `game.js` (solo, demo and the client's own shell
+flight) and in `rooms.php` (the authoritative room server). `protocol/sim-vectors.json`
+keeps the two honest: `protocol/sim-vectors.php` calls `rooms.php`'s real
+functions over a spread of cases and writes each case's inputs and expected
+outputs; `sim-vectors-test.js` replays every case through `game.js`'s own
+functions, lifted from the shipped source, and compares within 1e-4.
+
+- Covered: the RNG and terrain generator, spawn spots, shot speed, muzzle,
+  gravity and wind, hit boxes, the swept hit test (owner-clear rule, lance
+  skip), seeker steering, the cluster fan, blast damage and craters (shield,
+  bunker, EMP, last stand, kill bonus), landing prediction, whole volleys for
+  every weapon in `game.json`, the drone's aim, and tank settling.
+- Not covered: pacing. The server steps a whole turn in fixed 1/60 s steps; the
+  browser steps per frame. The cases use 1/60 s for both.
+- Regenerate from the site folder with `make sim-vectors` (plain php, no
+  docker) after any change to `rooms.php`'s sim or to `game.yaml`'s arsenal,
+  and commit the result. `make test` runs the generator's `--check` and the
+  replay.
+- A failing case prints its name, inputs, expected and actual values. Expected
+  comes from the server, so the browser disagrees with it: fix whichever side
+  is wrong, then regenerate. A stale `--check` only means the file was not
+  regenerated.
+- A case with a `known` reason is a difference the two sides have on purpose;
+  the replay lists it and does not fail. The replay does fail when a known
+  case starts to agree, so the reason is removed with the difference.
+- The replay finds `game.js`'s functions in one place, `loadSim()`; when the
+  sim moves into a module, that is the only code that changes.
 
 ## Weapon effects
 

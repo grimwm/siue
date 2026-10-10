@@ -1637,8 +1637,10 @@ function room_leave(array &$room, int $seat): bool
 if ($action === 'leave' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true, false);
     $code = $room['code'];
+    // The leaver's name rides on the event: by the next poll the seat is a drone's.
+    $who = (string) ($room['seats'][$seat]['initials'] ?? '');
     if (room_leave($room, $seat)) {
-        room_emit($room, ['t' => 'left', 'seat' => $seat]);
+        room_emit($room, ['t' => 'left', 'seat' => $seat, 'name' => $who]);
         // The leaver may have been the one the shop was waiting on.
         room_shop_settle($room);
         $ok = room_save($fh, $path, $room);
@@ -1752,7 +1754,7 @@ if ($action === 'join' && $method === 'POST') {
     // Same as create: joining means present, so the seat starts clocked in.
     $room['seats'][$seat] = room_seat_human($initials, $token, $body);
     room_seat_economy($room, $seat);
-    room_emit($room, ['t' => 'join', 'seat' => $seat]);
+    room_emit($room, ['t' => 'join', 'seat' => $seat, 'name' => $initials]);
     if (!room_save($fh, $path, $room)) {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);

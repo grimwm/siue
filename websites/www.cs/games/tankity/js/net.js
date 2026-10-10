@@ -237,9 +237,9 @@ export class RoomClient {
     /* ---- polling ---- */
     /** A match begins: the cursor and the sync start over, and the match poll
      * runs until stopPolling. */
-    beginMatch() {
+    beginMatch(since = 0) {
         this.on = true;
-        this.since = 0;
+        this.since = since;
         this.synced = false;
         this.stopLobbyWatch();
         this.stopPolling();

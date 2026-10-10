@@ -119,8 +119,10 @@ export interface MatchOverEvent extends EventBase { t: 'matchover' }
 export interface EliminatedEvent extends EventBase { t: 'eliminated'; seat: number }
 export interface OneUpEvent extends EventBase { t: 'oneup'; seat: number; lives: number }
 /** Someone took a seat in the lobby. */
-export interface JoinEvent extends EventBase { t: 'join'; seat: number }
-export interface LeftEvent extends EventBase { t: 'left'; seat: number }
+/** Arrivals and departures carry the player's name: by the next poll a
+ * departed seat already shows the drone that took it over. */
+export interface JoinEvent extends EventBase { t: 'join'; seat: number; name: string }
+export interface LeftEvent extends EventBase { t: 'left'; seat: number; name: string }
 
 /** What opens a volley: a human fires, the drone fires, or the crew fires for
  * a human who ran the turn clock out. `x`, `a` and `pw` are where the barrel

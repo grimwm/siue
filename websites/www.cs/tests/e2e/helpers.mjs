@@ -200,6 +200,8 @@ export async function roomPair(browser, { beforeStart } = {}) {
   // from before a client's first sync are history and never replay.
   await expect.poll(() => hud(host.page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU\. Aim!/);
   await expect.poll(() => hud(guest.page, 'hud-turn'), { timeout: 30_000 }).toMatch(/abc aiming/);
+  // Told once in the lobby, never again when the match starts.
+  expect(((await hud(host.page, 'log')) || '').match(/zed rolled into the room/gi) || []).toHaveLength(1);
   return { host, guest, roomState, code };
 }
 

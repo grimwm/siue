@@ -11,6 +11,7 @@
             "round": 1,
             "wind": -5,
             "turn": null,
+            "turnLeft": null,
             "terrain": [
                 325.1,
                 325.1,

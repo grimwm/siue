@@ -414,7 +414,7 @@ function scriptYou() {
 }
 function playRoom(turn, events) {
   return fxConform(Object.assign({
-    code: 'TST1', phase: NET_SHOP ? 'shop' : 'play', round: 1, wind: 2, turn,
+    code: 'TST1', phase: NET_SHOP ? 'shop' : 'play', round: 1, wind: 2, turn, turnLeft: NET_SHOP ? null : 120,
     terrain: terr720(),
     tanks: [scriptTank(0, 100, 'abc', 'human'), scriptTank(1, 600, 'REAPER', 'ai')],
     seats: scriptSeats(), events: events || [], you: scriptYou(), csrf: 'cs0',
@@ -514,7 +514,7 @@ function lobbyRoom() {
     return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], lives: 0, score: 0 };
   });
   return fxConform(Object.assign(
-    { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], round: 0, wind: 0, turn: null, you: scriptYou(), csrf: 'cs0' },
+    { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], round: 0, wind: 0, turn: null, turnLeft: null, you: scriptYou(), csrf: 'cs0' },
     mapFields(),
   ));
 }

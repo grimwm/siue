@@ -11,6 +11,7 @@
             "round": 0,
             "wind": 0,
             "turn": null,
+            "turnLeft": null,
             "terrain": [],
             "tanks": [],
             "seats": [

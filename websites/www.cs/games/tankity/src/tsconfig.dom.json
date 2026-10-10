@@ -12,5 +12,8 @@
     "jsx": "react-jsx",
     "jsxImportSource": "preact"
   },
-  "files": ["audio.ts", "render.ts", "ui/help.tsx", "ui/shop.tsx"]
+  "files": [
+    "audio.ts", "render.ts",
+    "ui/help.tsx", "ui/shop.tsx", "ui/lobby.tsx", "ui/menu.tsx", "ui/guns.tsx", "ui/scores.tsx", "ui/log.tsx", "ui/tutorial.tsx", "ui/hud.tsx"
+  ]
 }

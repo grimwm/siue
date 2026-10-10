@@ -29,8 +29,15 @@ import {
 } from './js/net.js?v=6259020b84';
 import { createRenderer, drawChassis } from './js/render.js?v=1e211c92ed';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
-import { renderHelp } from './js/ui/help.js?v=590e2a36cd';
-import { renderShop as drawShop } from './js/ui/shop.js?v=eff4669cf5';
+import { renderHelp } from './js/ui/help.js?v=41fef34a62';
+import { renderShop as drawShop } from './js/ui/shop.js?v=bab62d3d4e';
+import { renderLobby as drawLobby } from './js/ui/lobby.js?v=455b9bb4db';
+import { renderMenu as drawMenu } from './js/ui/menu.js?v=136446ee4b';
+import { renderGuns as drawGuns } from './js/ui/guns.js?v=0651c4fdac';
+import { renderScores as drawScores } from './js/ui/scores.js?v=9b4bcfa524';
+import { renderLog as drawLog } from './js/ui/log.js?v=870a9a2b49';
+import { renderTutorial as drawTutorial } from './js/ui/tutorial.js?v=7c12f75485';
+import { renderHud as drawHud } from './js/ui/hud.js?v=a5deccd438';
 
 /* ---------- audio: lives in src/audio.ts ---------- */
 music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));
@@ -1302,7 +1309,7 @@ function chooseBody(key) {
   const mine = net.on ? myTank() : (G.tanks || []).find(t => t.isPlayer);
   if (mine) mine.body = key;
   net.sendBody(key);
-  renderUnitPicker();
+  renderMenu();
 }
 /* Text size: a menu setting kept in this browser. It scales every panel
    (they size in rem) and the name tags over the units. */
@@ -1326,7 +1333,7 @@ function applyTextSize(key) {
   if (document.documentElement && document.documentElement.style) {
     document.documentElement.style.fontSize = `${textScale() * 100}%`;
   }
-  renderTextPicker();
+  renderMenu();
   placeLogBelowMenu();
 }
 function chooseTextSize(key) {
@@ -1335,54 +1342,52 @@ function chooseTextSize(key) {
   applyTextSize(key);
   sfx.play('click');
 }
-function renderTextPicker() {
-  const box = $('text-picker');
-  if (!box || !box.replaceChildren) return;
-  box.replaceChildren(...TEXT_SIZES.map(t => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'text-choice';
-    b.setAttribute('aria-pressed', String(TEXT_SIZE === t.key));
-    b.title = `${t.name} text`;
-    const glyph = document.createElement('span');
-    glyph.className = 'text-glyph';
-    glyph.style.fontSize = `${0.75 + (t.scale - 0.9) * 2.5}rem`;
-    glyph.textContent = 'Aa';
-    const label = document.createElement('span');
-    label.textContent = t.name;
-    b.append(glyph, label);
-    b.addEventListener('click', ev => { ev.currentTarget.blur(); chooseTextSize(t.key); });
-    return b;
-  }));
+/* The unit thumbnail: the chassis with a turret dome on top. */
+function drawUnitIcon(cv, key) {
+  const c = cv.getContext && cv.getContext('2d');
+  if (!c || !c.translate) return;
+  c.translate(24, 28);
+  drawChassis(c, key, '#d7a800', 0, false);
+  c.fillStyle = '#d7a800';
+  c.beginPath();
+  c.arc(0, -12, 7, 0, Math.PI * 2);
+  c.fill();
 }
-function renderUnitPicker() {
-  const box = $('unit-picker');
-  if (!box || !box.replaceChildren) return;
-  const buttons = UNIT_BODIES.map(u => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'unit-choice';
-    b.setAttribute('aria-pressed', String(G.body === u.key));
-    b.title = u.name;
-    const cv = document.createElement('canvas');
-    cv.width = 48;
-    cv.height = 34;
-    const c = cv.getContext && cv.getContext('2d');
-    if (c && c.translate) {
-      c.translate(24, 28);
-      drawChassis(c, u.key, '#d7a800', 0, false);
-      c.fillStyle = '#d7a800';
-      c.beginPath();
-      c.arc(0, -12, 7, 0, Math.PI * 2);
-      c.fill();
-    }
-    const label = document.createElement('span');
-    label.textContent = u.name;
-    b.append(cv, label);
-    b.addEventListener('click', ev => { ev.currentTarget.blur(); chooseBody(u.key); });
-    return b;
+/* The game menu is a Preact component (src/ui/menu.tsx): it gets what it shows
+   (the unit, the text size, what is muted, whether a room runs) and reports
+   clicks. The seed box stays the page's own. */
+function renderMenu() {
+  const section = $('menu-overlay');
+  if (!section) return;
+  drawMenu(section, {
+    keyHint,
+    onClose: () => toggleOverlay('menu-overlay', 'btn-menu'),
+    onNewGame: () => { unlock(); sfx.play('click'); freshMatchFromSeedBox(); },
+    onSubmit: () => {
+      if (net.on) { netLeave(); return; }
+      sfx.play('click');
+      freshMatchFromSeedBox();
+    },
+    units: UNIT_BODIES,
+    unit: G.body,
+    drawUnit: drawUnitIcon,
+    onPickUnit: chooseBody,
+    sizes: TEXT_SIZES,
+    size: TEXT_SIZE,
+    onPickSize: chooseTextSize,
+    sound: !isSoundMuted(),
+    music: !isMusicMuted(),
+    fullscreen: !!document.fullscreenElement,
+    onSound: toggleSound,
+    onMusic: toggleMusic,
+    onFullscreen: toggleFullscreen,
+    onRandom: randomRun,
+    onRooms: openRooms,
+    onTutorial: () => { sfx.play('click'); tutorialOpen(); },
+    onScores: () => toggleOverlay('report-overlay', 'scores-open'),
+    inRoom: net.on,
+    onLeave: openLeaveVeil,
   });
-  box.replaceChildren(...buttons);
 }
 
 /* Picture buttons: every shell and trick has a small canvas icon, shared by
@@ -1600,54 +1605,18 @@ function drawGearIcon(cv, gkey) {
       c.fillRect(cx - 8, cy - 8, 16, 16);
   }
 }
-/* The loaded weapon: the shell beside its name. Text
-   stays in every chip (screen readers, and the stub DOM which has no
-   replaceChildren), icons are decoration. Redraws only when the text moves. */
-function setChips(el, chips) {
-  const sig = chips.map(ch => ch.text + (ch.sr || '')).join(' · ');
-  if (el._chipSig === sig) return;
-  el._chipSig = sig;
-  if (!el.replaceChildren) { el.textContent = sig; return; }
-  const nodes = [];
-  chips.forEach((ch, i) => {
-    if (i) nodes.push(document.createTextNode(' · '));
-    const span = document.createElement('span');
-    span.className = 'chip';
-    if (ch.w) {
-      const cv = document.createElement('canvas');
-      cv.className = 'chip-icon';
-      cv.setAttribute('aria-hidden', 'true');
-      drawShellIcon(cv, ch.w);
-      span.appendChild(cv);
-    }
-    span.appendChild(document.createTextNode(ch.text));
-    if (ch.sr) {
-      const sr = document.createElement('span');
-      sr.className = 'sr-only';
-      sr.textContent = ch.sr;
-      span.appendChild(sr);
-    }
-    if (ch.title) span.title = ch.title;
-    nodes.push(span);
-  });
-  el.replaceChildren(...nodes);
-}
+/* The loaded weapon: the shell beside its name. A dozen shells no longer fit on
+   one line, so only the loaded gun shows; the rest of the rack is read out for
+   screen readers and lives in the weapon picker. */
 function renderLoadout() {
-  const weapon = $('hud-weapon');
-  if (weapon) {
-    // A dozen shells no longer fit on one line: show what is loaded plus
-    // anything stocked, then the fitted tricks.
-    // Only the loaded gun shows; the rest of the rack is read out for
-    // screen readers and lives in the weapon picker.
-    const count = w => (w === 'shell' ? '∞' : '×' + (G.ammo[w] || 0));
-    const rack = WORDER.filter(w => w !== G.selected && ((G.ammo[w] || 0) > 0 || w === 'shell'))
-      .map(w => `${WEAPONS[w].name} ${count(w)}`).concat(trickChips());
-    setChips(weapon, [{
-      w: G.selected,
-      text: `${WEAPONS[G.selected].name} ${count(G.selected)}`,
-      sr: rack.length ? ` · also ${rack.join(' · ')}` : '',
-    }]);
-  }
+  const count = w => (w === 'shell' ? '∞' : '×' + (G.ammo[w] || 0));
+  const rack = WORDER.filter(w => w !== G.selected && ((G.ammo[w] || 0) > 0 || w === 'shell'))
+    .map(w => `${WEAPONS[w].name} ${count(w)}`).concat(trickChips());
+  HUD.weapon = {
+    key: G.selected,
+    text: `${WEAPONS[G.selected].name} ${count(G.selected)}`,
+    sr: rack.length ? ` · also ${rack.join(' · ')}` : '',
+  };
 }
 /* Whose turn the battlefield shows: the shooter of a replaying volley, else
    the tank whose turn it is. Nobody between rounds or after the match. */
@@ -1731,19 +1700,20 @@ function windGaugeTop() {
 }
 /* ---------- DOM: log, HUD ---------- */
 const $ = id => document.getElementById(id);
+/* The radio log is a Preact component (src/ui/log.tsx); the game keeps the
+   lines, trims them at the cap and redraws. */
+const LOG_CAP = 80;
+let logLines = [];
+let logSeq = 0;
 function say(text, tone) {
-  const log = $('log');
-  if (!log) return;
-  const li = document.createElement('li');
-  if (tone) li.className = tone;
-  li.textContent = text;
-  log.appendChild(li);
-  while (log.children.length > 80) log.removeChild(log.firstChild);
-  log.scrollTop = log.scrollHeight;
-  // The overlay is what scrolls in the frame; keep the newest line in view.
-  const overlay = $('log-overlay');
-  if (overlay) overlay.scrollTop = overlay.scrollHeight;
+  if (!$('log-overlay')) return;
+  logLines = [...logLines, { id: ++logSeq, text, tone }].slice(-LOG_CAP);
+  renderLogOverlay();
   refreshNavHints();
+}
+function renderLogOverlay() {
+  const section = $('log-overlay');
+  if (section) drawLog(section, { keyHint, onClose: () => toggleOverlay('log-overlay', 'btn-log'), lines: logLines });
 }
 /* Fitted tricks ride the HUD beside the shells. In room matches netOnSnapshot
 // keeps these G fields mirrored from the server snapshot. */
@@ -1756,37 +1726,31 @@ function trickChips() {
   if ((G.plate || 0) > 0) chips.push(`plate(+${25 * G.plate})`);
   return chips;
 }
-/* What the bar shows, plus what it leaves to the battlefield (rivals'
+/* The status bar is a Preact component (src/ui/hud.tsx). The game keeps the
+   text it shows in HUD, and redraws only when that changed: the loop asks every
+   frame. Armor carries what the bar leaves to the battlefield (the rivals'
    armor rides over their units) as screen-reader text. */
-function setStat(el, shown, sr) {
-  if (!el) return;
-  if (!el.replaceChildren) { el.textContent = sr ? `${shown} ${sr}` : shown; return; }
-  const sig = shown + '|' + (sr || '');
-  if (el._statSig === sig) return;
-  el._statSig = sig;
-  const nodes = [document.createTextNode(shown)];
-  if (sr) {
-    const s = document.createElement('span');
-    s.className = 'sr-only';
-    s.textContent = ` ${sr}`;
-    nodes.push(s);
-  }
-  el.replaceChildren(...nodes);
+const HUD = {
+  turn: '-', angle: '-', power: '-', fuel: '-', wind: '-', weapon: null,
+  armor: { shown: '-', sr: '' }, lives: { text: '-', title: '' }, score: { text: '-', title: '' },
+  online: false, runStats: '',
+};
+let hudShown = '';
+function paintHud() {
+  const bar = $('hud-bar');
+  if (!bar) return;
+  const sig = JSON.stringify(HUD) + '|' + ARSENAL_REV;
+  if (sig === hudShown) return;
+  hudShown = sig;
+  drawHud(bar, { ...HUD, drawIcon: drawShellIcon, arsenalRev: ARSENAL_REV, onWeapon: openGuns });
 }
 function renderStanding(mine, others) {
-  setStat($('hud-armor'), mine ? `${Math.max(0, Math.round(mine.hp))}` : '-',
-    `${mine ? `you ${Math.max(0, Math.round(mine.hp))} · ` : ''}${others}`);
-  const lives = $('hud-lives');
-  if (lives) {
-    lives.textContent = '♥'.repeat(Math.max(0, G.lives));
-    lives.title = `${G.lives} lives`;
-    lives.setAttribute('aria-label', `${G.lives} lives`);
-  }
-  const score = $('hud-score');
-  if (score) {
-    score.textContent = `$${G.cash} · round ${G.round} · ${G.score} pts`;
-    score.title = `Next 1-up at ${G.nextOneUp} points`;
-  }
+  HUD.armor = {
+    shown: mine ? `${Math.max(0, Math.round(mine.hp))}` : '-',
+    sr: `${mine ? `you ${Math.max(0, Math.round(mine.hp))} · ` : ''}${others}`,
+  };
+  HUD.lives = { text: '♥'.repeat(Math.max(0, G.lives)), title: `${G.lives} lives` };
+  HUD.score = { text: `$${G.cash} · round ${G.round} · ${G.score} pts`, title: `Next 1-up at ${G.nextOneUp} points` };
 }
 function windText() {
   if (G.wind === 0) return '· 0';
@@ -1796,19 +1760,18 @@ function renderHUD() {
   if (net.on) { renderNetHUD(); return; }
   if (!G.tanks.length) return;
   const t = cur() || me();
-  if ($('hud-turn')) {
-    $('hud-turn').textContent =
-      G.phase === 'shop' ? 'shop. Spend it!' :
-      G.over ? 'match over' :
-      G.phase === 'banner' ? 'get ready...' :
-      t.isPlayer ? (G.phase === 'aim' ? 'YOU. Aim!' : 'you fired…') : `${t.id} aiming…`;
-  }
-  if ($('hud-angle')) $('hud-angle').textContent = `${Math.round(me().angle)}°`;
-  if ($('hud-power')) $('hud-power').textContent = `${Math.round(me().power)}`;
-  if ($('hud-wind')) $('hud-wind').textContent = windText();
+  HUD.turn =
+    G.phase === 'shop' ? 'shop. Spend it!' :
+    G.over ? 'match over' :
+    G.phase === 'banner' ? 'get ready...' :
+    t.isPlayer ? (G.phase === 'aim' ? 'YOU. Aim!' : 'you fired…') : `${t.id} aiming…`;
+  HUD.angle = `${Math.round(me().angle)}°`;
+  HUD.power = `${Math.round(me().power)}`;
+  HUD.wind = windText();
   renderLoadout();
   renderStanding(me(), G.tanks.filter(x => !x.isPlayer).map(x => `${x.id}:${Math.max(0, x.hp)}`).join(' '));
-  if ($('hud-fuel')) $('hud-fuel').textContent = `${Math.round(me().fuel)}`;
+  HUD.fuel = `${Math.round(me().fuel)}`;
+  paintHud();
 }
 
 /* ---------- main loop ---------- */
@@ -1994,20 +1957,68 @@ function netValidInitials(raw) {
   if (BLOCKED_INITIALS.indexOf(s.toUpperCase()) >= 0) return null;
   return s;
 }
+/* The lobby is a Preact component (src/ui/lobby.tsx). This is everything it
+   shows that the game decides: the status line, the occupancy count, the
+   server dot, the picked hills, an invite's code, and the room as last drawn
+   (code, link, hills, seats). The initials and code boxes stay the page's own. */
+const LOBBY = {
+  status: '', count: '', online: false, inRoom: false, mapId: '', mapsRev: 0, prefill: '',
+  code: '', link: '', hills: 'Hills: Random hills', seats: [], mySeat: 0, isHost: false, seatsHint: '',
+};
 function lobbySay(text) {
-  const el = $('lobby-status');
-  if (el) el.textContent = text;
+  LOBBY.status = text;
+  renderLobby();
+}
+function renderLobby() {
+  const veil = $('lobby-veil');
+  if (!veil) return;
+  drawLobby(veil, {
+    keyHint,
+    onClose: () => { closeLobbyVeil(); },
+    online: LOBBY.online,
+    count: LOBBY.count,
+    status: LOBBY.status,
+    inRoom: LOBBY.inRoom,
+    maps: [{ id: '', name: 'Random hills' }, ...net.maps],
+    mapId: LOBBY.mapId,
+    drawMapIcon,
+    mapsRev: LOBBY.mapsRev,
+    prefillCode: LOBBY.prefill,
+    onPickMap: id => { LOBBY.mapId = id; mapChosen(); },
+    onHost: raw => {
+      const v = netValidInitials(raw);
+      if (!v) { lobbySay('Initials need exactly 3 letters, and keep them clean.'); return; }
+      unlock(); sfx.play('click');
+      hostRoom(v, LOBBY.mapId);
+    },
+    onJoin: (rawCode, raw) => {
+      const code = rawCode.trim().toUpperCase();
+      const v = netValidInitials(raw);
+      if (!/^[A-Z0-9]{4}$/.test(code)) { lobbySay('Room codes are 4 letters or digits. Read it back and retry.'); return; }
+      if (!v) { lobbySay('Initials need exactly 3 letters, and keep them clean.'); return; }
+      unlock(); sfx.play('click');
+      joinRoom(code, v);
+    },
+    code: LOBBY.code,
+    link: LOBBY.link,
+    hills: LOBBY.hills,
+    seats: LOBBY.seats,
+    mySeat: LOBBY.mySeat,
+    isHost: LOBBY.isHost,
+    seatsHint: LOBBY.seatsHint,
+    onSeatMode: netSeatMode,
+    onCopy: copyInvite,
+    onStart: () => { sfx.play('click'); startRoom(); },
+    onLeave: () => { netLeave(); openLobby(); },
+  });
+  refreshNavHints();
 }
 /* The dot in the lobby and the HUD mirrors the last known reachability. */
 function setNetDot(on) {
-  for (const id of ['net-dot', 'hud-dot']) {
-    const el = $(id);
-    if (!el) continue;
-    el.className = 'dot ' + (on ? 'on' : 'off');
-    el.title = on ? 'room server: connected' : 'room server: not connected';
-  }
-  const word = $('hud-server');
-  if (word) word.textContent = on ? 'online' : 'offline';
+  LOBBY.online = on;
+  renderLobby();
+  HUD.online = on;
+  paintHud();
 }
 function myTank() {
   for (const t of G.tanks) if (t.isPlayer) return t;
@@ -2026,12 +2037,10 @@ function foeTalkId(t) {
 }
 async function loadMaps() {
   await net.loadMaps(); // an unreachable server leaves the picker on random hills
-  const sel = $('lobby-map');
-  if (!sel) return;
-  const cur = sel.value;
-  if (cur === '' || net.maps.some(m => m.id === cur)) sel.value = cur;
-  else sel.value = net.map || '';
-  renderMapPicker();
+  const cur = LOBBY.mapId;
+  if (cur !== '' && !net.maps.some(m => m.id === cur)) LOBBY.mapId = net.map || '';
+  LOBBY.mapsRev++;
+  renderLobby();
 }
 /* The host's hills: a Random tile plus one per named map, each a silhouette
    of that map's terrain from the server. #lobby-map is the hidden value. */
@@ -2072,48 +2081,19 @@ function drawMapIcon(cv, profile) {
     c.fillText('?', ICON_W / 2, 12);
   }
 }
-function renderMapPicker() {
-  const box = $('lobby-map-picker');
-  const sel = $('lobby-map');
-  if (!box || !sel || !box.replaceChildren) return;
-  const tiles = [{ id: '', name: 'Random hills' }, ...net.maps].map(m => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'unit-choice map-choice';
-    b.setAttribute('aria-pressed', String((sel.value || '') === m.id));
-    b.setAttribute('data-map', m.id);
-    b.title = m.name;
-    const cv = document.createElement('canvas');
-    cv.className = 'map-icon';
-    cv.setAttribute('aria-hidden', 'true');
-    drawMapIcon(cv, m.id ? m.profile : null);
-    const label = document.createElement('span');
-    label.textContent = m.name;
-    b.append(cv, label);
-    b.addEventListener('click', ev => {
-      ev.currentTarget.blur();
-      sel.value = m.id;
-      mapChosen();
-    });
-    return b;
-  });
-  box.replaceChildren(...tiles);
-}
 /* A pick (tile or value change): redraw the pressed tile, and a hosting
    seat in an unstarted room tells the server. The server spaces a seat's
    acts 150 ms apart, so a quick second tap waits and tries again; only the
    latest pick is ever applied. */
 let mapPickSeq = 0;
 async function mapChosen() {
-  const mapSel = $('lobby-map');
-  if (!mapSel) return;
-  renderMapPicker();
+  renderLobby();
   if (!net.code || net.seat !== 0 || net.on) return;
   const seq = ++mapPickSeq;
   try {
     for (let tries = 0; ; tries++) {
       try {
-        const d = await net.post('map', { map: mapSel.value || '' });
+        const d = await net.post('map', { map: LOBBY.mapId || '' });
         if (seq !== mapPickSeq) return;
         net.map = d.room.map;
         net.mapName = d.room.mapName || 'Random hills';
@@ -2129,15 +2109,14 @@ async function mapChosen() {
   }
 }
 async function loadOccupancy() {
-  const el = $('lobby-count');
   const data = await net.ping();
   if (!data) {
-    if (el) el.textContent = '';
+    LOBBY.count = '';
+    renderLobby();
     return false;
   }
-  if (data.ok && data.rooms && el) {
-    el.textContent = `${data.rooms.used} / ${data.rooms.max} rooms occupied`;
-  }
+  if (data.ok && data.rooms) LOBBY.count = `${data.rooms.used} / ${data.rooms.max} rooms occupied`;
+  renderLobby();
   return !!(data.ok && data.rooms);
 }
 async function openLobby() {
@@ -2159,13 +2138,8 @@ async function openLobby() {
 /* In a room the lobby shows only the room (code, seats, start); the intro
    and the host and join forms come back once you are out of it. */
 function showLobbyRoom(inRoom) {
-  const box = $('lobby-room');
-  if (box) box.hidden = !inRoom;
-  for (const id of ['lobby-rows', 'lobby-intro']) {
-    const el = $(id);
-    if (el) el.hidden = inRoom;
-  }
-  refreshNavHints();
+  LOBBY.inRoom = inRoom;
+  renderLobby();
 }
 async function hostRoom(initials, mapId) {
   askNotifications(); // for the turn alert while this tab is hidden
@@ -2257,68 +2231,26 @@ function maybeApplyInviteCode() {
   if (typeof location === 'undefined' || !location.search) return;
   const m = /[?&]code=([A-Za-z0-9]{4})/.exec(location.search);
   if (!m) return;
-  const box = $('join-code');
-  if (box) box.value = m[1].toUpperCase();
+  LOBBY.prefill = m[1].toUpperCase();
+  renderLobby();
   openLobby();
 }
 function netRenderRoster(room) {
-  showLobbyRoom(true);
-  if ($('lobby-code')) $('lobby-code').textContent = net.code || '····';
-  const link = $('join-link');
-  if (link) link.value = joinLink();
-  const hills = $('lobby-hills');
-  if (hills) {
-    if (room && room.map !== undefined) {
-      net.map = room.map;
-      net.mapName = room.mapName || 'Random hills';
-    }
-    hills.textContent = 'Hills: ' + (net.mapName || 'Random hills');
+  LOBBY.inRoom = true;
+  LOBBY.code = net.code || '';
+  LOBBY.link = joinLink();
+  if (room && room.map !== undefined) {
+    net.map = room.map;
+    net.mapName = room.mapName || 'Random hills';
   }
-  const grid = $('lobby-seats');
-  if (grid && grid.replaceChildren) {
-    const seats = (room && room.seats) || net.seats || [];
-    const host = net.seat === 0;
-    const tiles = seats.map((s, i) => {
-      const human = !!s.human;
-      const open = !human && s.mode === 'open';
-      // The host flips a drone or open seat; every other tile is for looking.
-      const flips = host && !human;
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'unit-choice seat-tile' + (open ? ' seat-open' : '') + (flips ? '' : ' seat-fixed');
-      b.setAttribute('data-seat', String(i));
-      b.setAttribute('data-mode', human ? 'human' : (open ? 'open' : 'ai'));
-      if (!flips) b.setAttribute('aria-disabled', 'true');
-      const big = document.createElement('span');
-      big.className = 'seat-name';
-      big.textContent = human ? String(s.name || '').toUpperCase() : (open ? 'Open' : 'AI');
-      const cap = document.createElement('span');
-      cap.className = 'seat-cap';
-      if (human) cap.textContent = (i === net.seat ? 'You' : 'Player') + (i === 0 ? ' · host' : '');
-      else if (flips) cap.textContent = open ? 'Tap for AI' : 'Tap for Open';
-      else cap.textContent = open ? 'Nobody' : 'Drone';
-      b.append(big, cap);
-      b.title = human ? 'Seat ' + (i + 1) : (open ? 'Open seat: no tank' : 'Drone battery seat');
-      if (flips) {
-        b.addEventListener('click', ev => {
-          ev.currentTarget.blur();
-          netSeatMode(i, open ? 'ai' : 'open');
-        });
-      }
-      return b;
-    });
-    grid.replaceChildren(...tiles);
-  }
-  const seatsHint = $('seats-hint');
-  if (seatsHint) {
-    seatsHint.textContent = net.seat === 0
-      ? 'Tap a seat nobody holds to switch it between AI and Open. Open seats field no tank.'
-      : 'The host decides which empty seats are AI and which stay open.';
-  }
-  const start = $('lobby-start');
-  if (start) start.style.display = net.seat === 0 ? '' : 'none';
+  LOBBY.hills = 'Hills: ' + (net.mapName || 'Random hills');
+  LOBBY.seats = ((room && room.seats) || net.seats || []).map(s => ({ human: !!s.human, name: String(s.name || ''), mode: s.mode }));
+  LOBBY.mySeat = net.seat;
+  LOBBY.isHost = net.seat === 0;
+  LOBBY.seatsHint = net.seat === 0
+    ? 'Tap a seat nobody holds to switch it between AI and Open. Open seats field no tank.'
+    : 'The host decides which empty seats are AI and which stay open.';
   lobbySay(net.seat === 0 ? 'You host. Start when your crew is in.' : 'Hang tight. The host starts the match.');
-  refreshNavHints();
 }
 /* The host flips a seat nobody holds between the drone battery and open. */
 async function netSeatMode(seat, mode) {
@@ -2347,8 +2279,8 @@ function startNetMatch(room) {
   MATCH.queue = []; MATCH.volley = null; MATCH.pendingRoom = null;
   MATCH.aimDirty = false;
   G.over = false;
-  const sf = $('score-form');
-  if (sf) sf.style.display = 'none';
+  SCORES.formHidden = true;
+  renderScoresOverlay();
   const veil = $('lobby-veil');
   if (veil) veil.hidden = true;
   net.apply(room);
@@ -2358,8 +2290,7 @@ function startNetMatch(room) {
 /* Leaving a running match: Leave room buttons (menu, shop) only show inside a
    room, and ask first in the page, never with a browser dialog. */
 function syncLeaveButtons() {
-  const b = $('menu-leave');
-  if (b) b.hidden = !net.on;
+  renderMenu();
   renderShop();
 }
 function openLeaveVeil() {
@@ -2388,8 +2319,8 @@ function netLeave(quiet) {
   MATCH.queue = []; MATCH.volley = null; MATCH.pendingRoom = null; MATCH.myTurn = false; MATCH.lastPhase = ''; MATCH.lastTurn = -1; MATCH.lastRound = -1;
   const againBtn = $('again');
   if (againBtn) againBtn.textContent = 'Play again (N)';
-  const sf = $('score-form');
-  if (sf) sf.style.display = '';
+  SCORES.formHidden = false;
+  renderScoresOverlay();
   hideShop();
   if ($('end-veil')) $('end-veil').hidden = true;
   if ($('lobby-veil')) $('lobby-veil').hidden = true;
@@ -2414,8 +2345,7 @@ async function netRematch() {
   netLeave(true);
   openLobby();
   await hostRoom(initials, map || '');
-  const sel = $('lobby-map');
-  if (sel && map) { sel.value = map; renderMapPicker(); }
+  if (map) { LOBBY.mapId = map; renderLobby(); }
 }
 function netFire() {
   if (!MATCH.myTurn) { say('Hold on, not your turn yet.', 'info'); return; }
@@ -2581,8 +2511,7 @@ function netAdopt(room) {
     G.nextOneUp = room.you.nextUp || 3000;
     if (mine) mine.fuel = room.you.fuel || 0;
   }
-  const rs = $('run-stats');
-  if (rs) rs.textContent = `Room ${net.code} · you are ${seatName(net.seat)} · round ${G.round}`;
+  HUD.runStats = `Room ${net.code} · you are ${seatName(net.seat)} · round ${G.round}`;
   if (room.phase !== 'shop') net.dropReadyWish();
   if (room.phase === 'play') {
     G.over = false;
@@ -2980,19 +2909,18 @@ function renderNetHUD() {
   if (!G.tanks.length) return;
   const mine = myTank();
   const turnTank = G.tanks[G.turn] || G.tanks[0];
-  if ($('hud-turn')) {
-    $('hud-turn').textContent =
-      G.phase === 'shop' ? 'shop. Spend it!' :
-      G.over ? 'match over' :
-      !mine || mine.hp <= 0 ? 'wrecked. Watching ' + seatName(turnTank.seat) + '...' :
-      MATCH.myTurn ? 'YOU. Aim!' : `${seatName(turnTank.seat)} aiming...`;
-  }
-  if ($('hud-angle')) $('hud-angle').textContent = mine ? `${Math.round(mine.angle)}°` : '-';
-  if ($('hud-power')) $('hud-power').textContent = mine ? `${Math.round(mine.power)}` : '-';
-  if ($('hud-wind')) $('hud-wind').textContent = windText();
+  HUD.turn =
+    G.phase === 'shop' ? 'shop. Spend it!' :
+    G.over ? 'match over' :
+    !mine || mine.hp <= 0 ? 'wrecked. Watching ' + seatName(turnTank.seat) + '...' :
+    MATCH.myTurn ? 'YOU. Aim!' : `${seatName(turnTank.seat)} aiming...`;
+  HUD.angle = mine ? `${Math.round(mine.angle)}°` : '-';
+  HUD.power = mine ? `${Math.round(mine.power)}` : '-';
+  HUD.wind = windText();
   renderLoadout();
   renderStanding(mine, G.tanks.filter(x => !x.isPlayer).map(x => `${seatName(x.seat)}:${Math.max(0, Math.round(x.hp))}`).join(' '));
-  if ($('hud-fuel')) $('hud-fuel').textContent = mine ? `${Math.round(mine.fuel)}` : '-';
+  HUD.fuel = mine ? `${Math.round(mine.fuel)}` : '-';
+  paintHud();
 }
 function netShowStandings(room) {
   net.stopPolling();
@@ -3044,9 +2972,26 @@ function saveLocal(entry) {
     window.localStorage.setItem('tankity-local', JSON.stringify(arr.slice(0, 10)));
   } catch (_) { /* private mode etc. */ }
 }
+/* The scores overlay is a Preact component (src/ui/scores.tsx); the game loads
+   the list and hands in finished lines. */
+const SCORES = { rows: null, note: '', formHidden: false };
+function renderScoresOverlay() {
+  const section = $('report-overlay');
+  if (!section) return;
+  drawScores(section, {
+    keyHint,
+    onClose: () => toggleOverlay('report-overlay', 'scores-open'),
+    rows: SCORES.rows,
+    note: SCORES.note,
+    formHidden: SCORES.formHidden,
+    onFile: raw => {
+      const name = raw.trim();
+      if (!name) { say('Give your callsign first, hero.', 'info'); return; }
+      fileReport(name);
+    },
+  });
+}
 async function loadScores() {
-  const list = $('scores');
-  const note = $('scores-note');
   let rows = [];
   let src = 'file store';
   try {
@@ -3058,20 +3003,9 @@ async function loadScores() {
     rows = localScores().map(s => ({ name: s.name, best: s.score, banked: s.banked, won: s.won }));
     src = 'this browser only (server store unreachable)';
   }
-  if (list) {
-    list.innerHTML = '';
-    if (!rows.length) {
-      const li = document.createElement('li');
-      li.textContent = 'No after-action reports filed yet. Be the first legend.';
-      list.appendChild(li);
-    }
-    for (const r of rows.slice(0, 10)) {
-      const li = document.createElement('li');
-      li.textContent = `${r.name}: ${r.best} pts (${r.banked} rounds won${r.won ? ', champion' : ''})`;
-      list.appendChild(li);
-    }
-  }
-  if (note) note.textContent = `Showing reports from ${src}.`;
+  SCORES.rows = rows.slice(0, 10).map(r => `${r.name}: ${r.best} pts (${r.banked} rounds won${r.won ? ', champion' : ''})`);
+  SCORES.note = `Showing reports from ${src}.`;
+  renderScoresOverlay();
 }
 /* The last callsign filed, so the next report is one tap. */
 function savedCallsign() {
@@ -3110,7 +3044,12 @@ function applyKeys(def) {
   renderKeyHints();
   renderHelpOverlay();
   renderShop();
-  renderTutorialText();
+  renderMenu();
+  renderLobby();
+  renderGuns();
+  renderScoresOverlay();
+  renderLogOverlay();
+  renderTutorial();
 }
 /* What a touch player taps instead, for prose that names a key. */
 const TOUCH_NAMES = {
@@ -3360,31 +3299,28 @@ function closeGuns() {
   if (btn) btn.setAttribute('aria-expanded', 'false');
   return true;
 }
+/* The weapon picker is a Preact component (src/ui/guns.tsx): the rack as tiles,
+   with the cursor the keys move. */
 function renderGuns() {
-  const grid = $('gun-grid');
-  if (!grid || !grid.replaceChildren) return;
+  const section = $('gun-overlay');
+  if (!section || !G.ammo) return;
   const guns = rackGuns();
   gunCursor = clamp(gunCursor, 0, guns.length - 1);
-  grid.replaceChildren(...guns.map((w, i) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'unit-choice gun-choice' + (i === gunCursor ? ' cursor' : '');
-    b.setAttribute('aria-pressed', String(w === G.selected));
-    b.title = WEAPONS[w].note || WEAPONS[w].name;
-    const cv = document.createElement('canvas');
-    cv.setAttribute('aria-hidden', 'true');
-    drawShellIcon(cv, w);
-    const name = document.createElement('span');
-    name.textContent = `${i < 9 ? `${i + 1}. ` : ''}${WEAPONS[w].name}`;
-    const count = document.createElement('span');
-    count.className = 'gun-count';
-    count.textContent = w === 'shell' ? '∞' : `×${G.ammo[w] || 0}`;
-    b.append(cv, name, count);
-    b.addEventListener('click', ev => { ev.currentTarget.blur(); pickGun(w); });
-    return b;
-  }));
-  const cur = grid.querySelector('.cursor');
-  if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
+  drawGuns(section, {
+    keyHint,
+    onClose: () => { closeGuns(); },
+    tiles: guns.map(w => ({
+      key: w,
+      name: WEAPONS[w].name,
+      title: WEAPONS[w].note || WEAPONS[w].name,
+      count: w === 'shell' ? '∞' : `×${G.ammo[w] || 0}`,
+      loaded: w === G.selected,
+    })),
+    cursor: gunCursor,
+    drawIcon: drawShellIcon,
+    arsenalRev: ARSENAL_REV,
+    onPick: pickGun,
+  });
 }
 function pickGun(w) {
   if (selectWeapon(w) !== false) closeGuns();
@@ -3417,8 +3353,12 @@ function init() {
   bindToolTips();
   loadGameConfig();
   G.body = loadBody();
-  renderUnitPicker();
-  loadTextSize();
+  paintHud();
+  renderLogOverlay();
+  renderScoresOverlay();
+  renderTutorial();
+  renderLobby();
+  loadTextSize(); // draws the menu
   renderKeyHints();
   startDemo();
   renderShop();
@@ -3437,51 +3377,16 @@ function init() {
   if (track) track.addEventListener('click', ev => { ev.currentTarget.blur(); unlock(); music.next(); });
   const weapon = $('btn-weapon');
   if (weapon) weapon.addEventListener('click', ev => { ev.currentTarget.blur(); if (gunsOpen()) closeGuns(); else openGuns(); });
-  const gunClose = $('gun-close');
-  if (gunClose) gunClose.addEventListener('click', ev => { ev.currentTarget.blur(); closeGuns(); });
-  const hudGun = $('hud-weapon');
-  if (hudGun) {
-    hudGun.addEventListener('click', () => openGuns());
-    hudGun.title = 'Pick a weapon';
-  }
   for (const [id, act] of [['btn-drive-l', 'driveLeft'], ['btn-drive-r', 'driveRight']]) {
     const btn = $(id);
     if (btn) input.bindHold(btn, act);
   }
-  const form = $('seed-form');
-  if (form) form.addEventListener('submit', e => {
-    e.preventDefault();
-    if (net.on) { netLeave(); return; }
-    sfx.play('click');
-    freshMatchFromSeedBox();
-  });
-  const rnd = $('random-run');
-  if (rnd) rnd.addEventListener('click', ev => {
-    ev.currentTarget.blur();
-    randomRun();
-  });
-  const newGame = $('new-game');
-  if (newGame) newGame.addEventListener('click', ev => {
-    ev.currentTarget.blur();
-    unlock(); sfx.play('click');
-    freshMatchFromSeedBox();
-  });
-  const soundBtn = $('btn-sound');
-  if (soundBtn) soundBtn.addEventListener('click', ev => { ev.currentTarget.blur(); toggleSound(); });
-  const musicBtn = $('btn-music');
-  if (musicBtn) musicBtn.addEventListener('click', ev => { ev.currentTarget.blur(); toggleMusic(); });
-  for (const [btnId, ovId] of [['btn-log', 'log-overlay'], ['btn-help', 'help-overlay'], ['scores-open', 'report-overlay']]) {
+  for (const [btnId, ovId] of [['btn-log', 'log-overlay'], ['btn-help', 'help-overlay']]) {
     const b = $(btnId);
     if (b) b.addEventListener('click', ev => { ev.currentTarget.blur(); toggleOverlay(ovId, btnId); });
   }
   const menuBtn = $('btn-menu');
   if (menuBtn) menuBtn.addEventListener('click', ev => { ev.currentTarget.blur(); toggleOverlay('menu-overlay', 'btn-menu'); });
-  for (const [closeId, ovId, btnId] of [['log-close', 'log-overlay', 'btn-log'], ['report-close', 'report-overlay', 'scores-open'], ['menu-close', 'menu-overlay', 'btn-menu']]) {
-    const c = $(closeId);
-    if (c) c.addEventListener('click', ev => { ev.currentTarget.blur(); toggleOverlay(ovId, btnId); });
-  }
-  const fsBtn = $('fullscreen');
-  if (fsBtn) fsBtn.addEventListener('click', ev => { ev.currentTarget.blur(); toggleFullscreen(); });
   if (document.addEventListener) document.addEventListener('fullscreenchange', syncFullscreenLabel);
   if (document.addEventListener) document.addEventListener('fullscreenchange', lockEscapeInFullscreen);
   const again = $('again');
@@ -3489,50 +3394,10 @@ function init() {
     ev.currentTarget.blur();
     if (net.on) { netLeave(); openLobby(); } else freshMatchFromSeedBox();
   });
-  const menuLeave = $('menu-leave');
-  if (menuLeave) menuLeave.addEventListener('click', ev => { ev.currentTarget.blur(); openLeaveVeil(); });
   const leaveGo = $('leave-go');
   if (leaveGo) leaveGo.addEventListener('click', ev => { ev.currentTarget.blur(); confirmLeave(); });
   const leaveStay = $('leave-stay');
   if (leaveStay) leaveStay.addEventListener('click', ev => { ev.currentTarget.blur(); closeLeaveVeil(); });
-  const roomsOpen = $('rooms-open');
-  if (roomsOpen) roomsOpen.addEventListener('click', ev => { ev.currentTarget.blur(); openRooms(); });
-  const tutOpen = $('tutorial-open');
-  if (tutOpen) tutOpen.addEventListener('click', ev => { ev.currentTarget.blur(); sfx.play('click'); tutorialOpen(); });
-  const tutSkip = $('tutorial-skip');
-  if (tutSkip) tutSkip.addEventListener('click', ev => { ev.currentTarget.blur(); skipTutorial(); });
-  const hostForm = $('host-form');
-  if (hostForm) hostForm.addEventListener('submit', e => {
-    e.preventDefault();
-    const v = netValidInitials($('host-initials') ? $('host-initials').value : '');
-    if (!v) { lobbySay('Initials need exactly 3 letters, and keep them clean.'); return; }
-    const mapSel = $('lobby-map');
-    unlock(); sfx.play('click');
-    hostRoom(v, mapSel ? mapSel.value : '');
-  });
-  const mapSel = $('lobby-map');
-  if (mapSel) mapSel.addEventListener('change', mapChosen);
-  const joinForm = $('join-form');
-  if (joinForm) joinForm.addEventListener('submit', e => {
-    e.preventDefault();
-    const code = $('join-code') ? $('join-code').value.trim().toUpperCase() : '';
-    const v = netValidInitials($('join-initials') ? $('join-initials').value : '');
-    if (!/^[A-Z0-9]{4}$/.test(code)) { lobbySay('Room codes are 4 letters or digits. Read it back and retry.'); return; }
-    if (!v) { lobbySay('Initials need exactly 3 letters, and keep them clean.'); return; }
-    unlock(); sfx.play('click');
-    joinRoom(code, v);
-  });
-  const lobbyStart = $('lobby-start');
-  if (lobbyStart) lobbyStart.addEventListener('click', ev => { ev.currentTarget.blur(); sfx.play('click'); startRoom(); });
-  const lobbyLeave = $('lobby-leave');
-  if (lobbyLeave) lobbyLeave.addEventListener('click', ev => { ev.currentTarget.blur(); netLeave(); openLobby(); });
-  const lobbyClose = $('lobby-close');
-  if (lobbyClose) lobbyClose.addEventListener('click', ev => {
-    ev.currentTarget.blur();
-    if ($('lobby-veil')) $('lobby-veil').hidden = true;
-  });
-  const copyBtn = $('copy-link');
-  if (copyBtn) copyBtn.addEventListener('click', ev => { ev.currentTarget.blur(); copyInvite(); });
   const rematchBtn = $('rematch');
   if (rematchBtn) rematchBtn.addEventListener('click', ev => {
     ev.currentTarget.blur();
@@ -3550,14 +3415,6 @@ function init() {
     fileReport(name);
     const btn = eform.querySelector && eform.querySelector('button');
     if (btn) { btn.disabled = true; btn.textContent = 'Filed'; }
-  });
-  const sform = $('score-form');
-  if (sform) sform.addEventListener('submit', e => {
-    e.preventDefault();
-    const nm = $('name-input');
-    const name = nm && nm.value ? nm.value.trim() : '';
-    if (!name) { say('Give your callsign first, hero.', 'info'); return; }
-    fileReport(name);
   });
   // Any touch or keypress unlocks the speakers and (re)starts a non-muted
   // song, so music never sits claiming to play while silent after a refresh.
@@ -3594,13 +3451,11 @@ function placeLogBelowMenu() {
 }
 function toggleSound() {
   setSoundMuted(!isSoundMuted());
-  const btn = $('btn-sound');
-  if (btn) btn.setAttribute('aria-pressed', String(!isSoundMuted()));
+  renderMenu();
 }
 function toggleMusic() {
   setMusicMuted(!isMusicMuted());
-  const btn = $('btn-music');
-  if (btn) btn.setAttribute('aria-pressed', String(!isMusicMuted()));
+  renderMenu();
 }
 /* Keyboard scrolling for panels: the topmost open veil or overlay takes
 line, page, and half-page keys. Mouse wheels and touch keep working as
@@ -3623,6 +3478,10 @@ function scrollOverlay(lines, pages) {
   refreshNavHints();
   const page = el.clientHeight ? el.clientHeight * 0.85 : 200;
   el.scrollTop += lines * SCROLL_LINE + pages * page;
+  // A script's scrollTop change fires its scroll event only on the next frame.
+  // The panels that keep their scroll across redraws listen for that event, so
+  // tell them now, or a redraw right after the key would put the old place back.
+  if (el.dispatchEvent) el.dispatchEvent(new Event('scroll'));
   return true;
 }
 /* Every scrollable panel carries a visible key footer. It reads disabled
@@ -3679,9 +3538,6 @@ const TUT_STEPS = [
 function fmtKeys(text) {
   return String(text).replace(/\{([a-z]+):([a-zA-Z]+)\}/g, (_, ctx, a) => (TOUCH && TOUCH_NAMES[ctx + ':' + a]) || keyHint(ctx, a));
 }
-function renderTutorialText() {
-  if (TUT) renderTutorial();
-}
 function tutorialSeen() {
   try {
     return window.localStorage.getItem('tankity-tutorial') === 'done';
@@ -3694,12 +3550,18 @@ function markTutorialSeen() {
     window.localStorage.setItem('tankity-tutorial', 'done');
   } catch (_) { /* private mode etc. */ }
 }
+/* The coach is a Preact component (src/ui/tutorial.tsx); the game says which
+   move the player is on and what to call the keys. */
 function renderTutorial() {
-  const tx = $('tutorial-text'), pr = $('tutorial-progress'), sk = $('tutorial-skip');
-  if (!TUT) return;
-  if (tx) tx.textContent = `Move ${TUT.step + 1} of ${TUT_STEPS.length}: ${fmtKeys(TUT_STEPS[TUT.step].text)}`;
-  if (pr) pr.textContent = 'Follow along in the hills behind this card.';
-  if (sk) sk.textContent = `Skip tutorial${keyCap('global', 'escape')}`;
+  const section = $('tutorial-overlay');
+  if (!section) return;
+  drawTutorial(section, {
+    keyHint,
+    text: TUT ? `Move ${TUT.step + 1} of ${TUT_STEPS.length}: ${fmtKeys(TUT_STEPS[TUT.step].text)}` : '',
+    progress: TUT ? 'Follow along in the hills behind this card.' : '',
+    skip: `Skip tutorial${keyCap('global', 'escape')}`,
+    onSkip: skipTutorial,
+  });
   refreshNavHints();
 }
 function startTutorial() {
@@ -3750,10 +3612,19 @@ function tickTutorial() {
   }
 }
 /* In-frame panels overlay the battle and never pause it. */
+/* The panels a component draws: redrawn on open and close, so each knows it
+   was closed and forgets its scroll (the browser reopens it at the top). */
+const OVERLAY_PAINT = {
+  'menu-overlay': () => renderMenu(),
+  'log-overlay': () => renderLogOverlay(),
+  'report-overlay': () => renderScoresOverlay(),
+  'help-overlay': () => renderHelpOverlay(),
+};
 function toggleOverlay(id, btnId) {
   const ov = $(id);
   if (!ov) return;
   ov.hidden = !ov.hidden;
+  if (OVERLAY_PAINT[id]) OVERLAY_PAINT[id]();
   const btn = btnId && $(btnId);
   if (btn) btn.setAttribute('aria-expanded', String(!ov.hidden));
   refreshNavHints();
@@ -3783,8 +3654,7 @@ function lockEscapeInFullscreen() {
   else kb.unlock();
 }
 function syncFullscreenLabel() {
-  const btn = $('fullscreen');
-  if (btn) btn.setAttribute('aria-pressed', String(!!document.fullscreenElement));
+  renderMenu();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

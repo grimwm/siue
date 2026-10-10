@@ -9,7 +9,7 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
 | File                                                            | What it is                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: the game loop, HUD, the shop's state, lobby UI and the room replay); it imports the sim, the audio, the room client, the renderer, the input and the Preact overlays from `js/`                                                                                                               |
+| `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: the game loop, the state behind the HUD, shop, lobby and menu, and the room replay); it imports the sim, the audio, the room client, the renderer, the input and the Preact overlays from `js/`                                                                                                               |
 | `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (20 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `game.js`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml`, and where each came from                                                                                                                     |
@@ -19,7 +19,7 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | `src/render.ts` | The battlefield on the canvas: sky and moon, clouds, hills, the units and their bodies, aim arm, blasts, shells, sparks, the wind gauge, the on-canvas turn clock and the firing-range preview. Reads a `BattleView` that `game.js` builds each frame and paints it; it never changes game state |
 | `src/protocol.ts` | The room wire protocol as types: replies, the room snapshot, the discriminated union of events, and each action's request body. Types only, so it has no `js/` file |
 | `src/protocol-fixtures.check.ts`, `src/tsconfig.check.json` | Type-check only, never emitted: assigns every `protocol/*.json` to its type (see Protocol fixtures) |
-| `src/ui/*.tsx` | The Preact overlays (the help and the shop so far; see Preact overlays): `chrome.tsx` holds the shared key labels and title bar, `help.tsx` and `shop.tsx` one overlay each |
+| `src/ui/*.tsx` | The Preact overlays and panels (see Preact overlays): `chrome.tsx` holds the shared key labels, title bar and scroll keeper; `help.tsx`, `shop.tsx`, `lobby.tsx`, `menu.tsx`, `guns.tsx`, `scores.tsx`, `log.tsx`, `tutorial.tsx` and `hud.tsx` one each |
 | `js/*.js`, `js/ui/*.js` | `src/*.ts` and `src/ui/*.tsx` compiled by `tools/ts-build.mjs`; checked in and deployed (the host has no Node). Never edit by hand |
 | `vendor/preact/` | Preact's ES module builds and licence, copied from `node_modules` by `tools/vendor.mjs`; checked in and deployed. Never edit by hand |
 | `package.json`, `package-lock.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json` | The build setup (TypeScript and Preact pinned exactly). Never deployed, like `src/`, `tools/` and `node_modules/` |
@@ -195,7 +195,7 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
   `php tools/install-files.php`. The rules for a component: props in, DOM and
   callbacks out. `game.js` builds a finished view of its state (the shop's
   rows, the cash line, the start button's label) and hands it in with the
-  callbacks (`onBuy`, `onPreview`, `onNext`, `onLeave`, `onClose`); the
+  callbacks (`onBuy`, `onPreview`, `onNext`, `onLeave`, `onClose`, and so on); the
   component never reaches into game state or the page, and keeps local state
   only for the UI itself. Components keep the ids and classes `game.css` and
   the browser specs use. Key labels come from the `keyHint` prop through
@@ -204,9 +204,25 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
   `[data-ui]`. Touch screens hide `.key` caps and `.keys-only` text centrally in
   `game.css`, so components still emit them. Each overlay module exports a
   `render*(container, props)` that `game.js` calls on every change: Preact diffs,
-  so the DOM (scroll position, focus) persists between renders. Still plain
-  markup in `index.html` and `game.js`: the rooms lobby, settings, menu, gun
-  picker, scores, tutorial, HUD and radio log.
+  so the DOM (scroll position, focus) persists between renders. Every panel
+  and overlay is a component now: the help, the shop, the rooms lobby (`#lobby-veil`),
+  the menu with its settings (`#menu-overlay`), the weapon picker, the scores,
+  the tutorial coach, the radio log (each in its own `<section>`) and the status
+  bar (`#hud-bar`). `game.js` keeps the state of each (`LOBBY`, `SCORES`, `HUD`,
+  the log's lines, the gun cursor) and redraws; the text boxes whose content the
+  player types (seed, initials, room code, callsign) stay uncontrolled inputs the
+  component reads when its form is sent. The HUD is asked every frame, so
+  `paintHud` redraws only when its text changed.
+  A scrolled panel stays put: Preact updates rows in place, and where a row can
+  change height the browser's scroll anchoring can nudge the list on Linux
+  fonts even though it does not on macOS. `useScrollKeep` (`chrome.tsx`)
+  remembers the player's scroll and restores it after any redraw that does not
+  itself move a cursor (the weapon picker scrolls its cursor into view and the
+  radio log follows its newest line; those take the new place). A closed panel
+  forgets its scroll, since the browser reopens it at the top. The shop does the
+  same with its selection. A key that scrolls a panel (`scrollOverlay`) sends
+  the scroll event itself, because a script's `scrollTop` change is reported
+  only on the next frame.
 - The sim takes its state as arguments (`World`, `Arsenal`) and reports what
   happened as data: `explode` returns the blast (each unit's shield, wound or
   wreck, a last stand's nested blast), `stepShells` returns the frame's trails,
@@ -287,7 +303,7 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `node tools/ts-build.mjs --check`              | `js/` is exactly what `src/` compiles to, `src/` type-checks, and every `protocol/*.json` fits its type in `protocol.ts` (run `npm ci` first) |
 | `node tools/vendor.mjs --check`, `node vendor-test.js` | `vendor/preact/` is byte-for-byte what the pinned Preact in `node_modules` ships (pin, lockfile and install agree); the check's own failure cases |
-| `node ui-test.js`                              | The Preact overlays (`js/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the key labels, and that clicks reach the callbacks |
+| `node ui-test.js`                              | The Preact overlays (`js/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the scores, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
 | `node smoke-test.js`                           | The shipped client (`game.js` imported as a module) in a stub DOM (loads `fx.js` first), driven by the `game.json` key table and the `protocol/` fixtures; also checks every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps |
 | `php config-test.php`                          | `.config.yaml` precedence                                                                  |
 | `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; `room_snapshot` shapes against `protocol/` |

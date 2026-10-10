@@ -1,7 +1,7 @@
 // A small DOM for the Node tests (smoke-test.js, ui-test.js): a real tree, with
 // parents, siblings, insert and remove, because the Preact overlays render into
 // it, plus the handful of properties game.js reads. Not a browser: no layout, no
-// events beyond click(), no selectors beyond .class and #id. It lives in tools/
+// events beyond the click(), submit() and fire() helpers below, no selectors beyond .class and #id. It lives in tools/
 // so it never ships (it is test support, not part of the game).
 // Copyright (C) 2026 William Grim
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -44,6 +44,7 @@ export function makeEl(id) {
     get textContent() { return this.children.length ? this.children.map(c => c.textContent).join('') : this._text; },
     set textContent(v) { for (const c of this.children) c.parentNode = null; this.children = []; this._text = String(v); },
     get childNodes() { return this.children; },
+    get parentElement() { return this.parentNode; },
     get nextSibling() { return siblingOf(this, 1); },
     remove() { detach(this); },
     scrollIntoView() { globalThis.__scrolledTo = this; },
@@ -73,6 +74,7 @@ export function makeEl(id) {
     },
     removeChild(c) { this.children.splice(this.children.indexOf(c), 1); c.parentNode = null; return c; },
     addEventListener(t, f) { (this._l = this._l || {})[t] = ((this._l)[t] || []).concat(f); },
+    dispatchEvent(ev) { for (const f of ((this._l || {})[ev.type] || [])) f.call(this, ev); return true; },
     removeEventListener(t, f) { (this._l = this._l || {})[t] = ((this._l)[t] || []).filter(g => g !== f); },
     setAttribute(k, v) { if (k === 'class') this.className = String(v); else this._attrs[k] = String(v); },
     getAttribute(k) { return k === 'class' ? this.className : this._attrs[k]; },
@@ -99,6 +101,14 @@ function makeRenderedEl(tag) {
 /** Fires an element's click listeners, as a browser would (`this` is the element). */
 export function click(el) {
   for (const f of ((el._l || {}).click || [])) f.call(el, { currentTarget: el, preventDefault: () => {} });
+}
+/** Fires an element's listeners for any event type (scroll, change, ...). */
+export function fire(el, type, extra = {}) {
+  for (const f of ((el._l || {})[type] || [])) f.call(el, { currentTarget: el, target: el, preventDefault: () => {}, ...extra });
+}
+/** Sends a form's submit listeners, as a browser would. */
+export function submit(el) {
+  for (const f of ((el._l || {}).submit || [])) f.call(el, { currentTarget: el, preventDefault: () => {} });
 }
 export const document = {
   readyState: 'complete',

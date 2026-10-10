@@ -40,21 +40,7 @@
     <div class="canvas-holder">
       <canvas id="stage" width="1080" height="690" role="img"
         aria-label="Hillside artillery battlefield. Your tank, the drone battery, wind and turn order are announced in the log and HUD."></canvas>
-      <div class="hudbar" aria-label="Battle status">
-        <dl class="hud">
-          <div class="sr-only"><dt>Turn</dt><dd id="hud-turn" aria-live="polite">-</dd></div>
-          <div><dt>Angle</dt><dd id="hud-angle">-</dd></div>
-          <div><dt>Power</dt><dd id="hud-power">-</dd></div>
-          <div><dt>Fuel</dt><dd id="hud-fuel">-</dd></div>
-          <div class="hud-gun"><dt class="sr-only">Weapon</dt><dd id="hud-weapon">-</dd></div>
-          <div><dt>Armor</dt><dd id="hud-armor">-</dd></div>
-          <div class="hud-lives"><dt class="sr-only">Lives</dt><dd id="hud-lives">-</dd></div>
-          <div class="hud-score"><dt class="sr-only">Score</dt><dd id="hud-score">-</dd></div>
-          <div class="sr-only"><dt>Wind</dt><dd id="hud-wind">-</dd></div>
-          <div class="hud-net"><dt class="sr-only">Server</dt><dd><span id="hud-dot" class="dot off" title="room server: not connected"></span><span id="hud-server" class="sr-only">offline</span></dd></div>
-        </dl>
-        <p id="run-stats" class="runstats"></p>
-      </div>
+      <div class="hudbar" id="hud-bar" aria-label="Battle status" data-ui></div>
       <div id="round-banner" class="banner" hidden><span id="round-banner-text"></span></div>
       <div id="dialogue" class="dialogue" hidden>
         <canvas id="portrait" width="36" height="36" aria-hidden="true"></canvas>
@@ -84,81 +70,12 @@
       </div>
       </div>
       <div id="tool-tip" class="tool-tip" role="tooltip" hidden><p class="tool-tip-name"></p><p class="tool-tip-desc"></p></div>
-      <section id="log-overlay" class="frame-overlay log-overlay" aria-label="Radio log" hidden>
-        <header class="ov-head">
-          <div class="ov-title"><h2 id="log-h">Radio log</h2></div>
-          <button type="button" class="ov-x" id="log-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
-          <div class="nav-hint ov-keys" id="nav-log" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
-        </header>
-        <ol id="log" class="log log-transparent" aria-live="polite"></ol>
-      </section>
+      <section id="log-overlay" class="frame-overlay log-overlay" aria-label="Radio log" data-ui hidden></section>
       <section id="help-overlay" class="frame-overlay card-overlay" aria-labelledby="help-h" data-ui hidden></section>
-      <section id="report-overlay" class="frame-overlay card-overlay" aria-labelledby="score-h" hidden>
-        <header class="ov-head">
-          <div class="ov-title"><h2 id="score-h">Scores</h2></div>
-          <button type="button" class="ov-x" id="report-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
-          <div class="nav-hint ov-keys" id="nav-report" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
-        </header>
-        <form id="score-form" class="seedbox" action="#">
-          <label for="name-input">Callsign</label>
-          <input id="name-input" name="name" type="text" autocomplete="off"
-                 spellcheck="false" maxlength="24" placeholder="e.g. tankity">
-          <button type="submit" id="save-score">File report</button>
-        </form>
-        <ol id="scores" class="scores"></ol>
-        <p id="scores-note" class="hint"></p>
-      </section>
-      <section id="menu-overlay" class="frame-overlay card-overlay menu-card" aria-labelledby="menu-h" hidden>
-        <header class="ov-head">
-          <div class="ov-title"><h2 id="menu-h">Game menu</h2></div>
-          <button type="button" class="ov-x" id="menu-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
-          <div class="nav-hint ov-keys" id="nav-menu" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
-        </header>
-        <form id="seed-form" class="menu-grid" action="#">
-          <div class="seed-row">
-            <label for="seed-input">Seed</label>
-            <input id="seed-input" name="seed" type="text" inputmode="text"
-                   autocomplete="off" spellcheck="false" placeholder="e.g. bam-bam-01">
-            <button type="button" id="new-game" class="btn-primary">New Game <span class="key" data-keyhint="global:new">(N)</span></button>
-          </div>
-          <div class="unit-row" id="unit-row" role="group" aria-labelledby="unit-label">
-            <span class="unit-label" id="unit-label">Unit</span>
-            <div class="unit-picker" id="unit-picker"></div>
-          </div>
-          <div class="unit-row" role="group" aria-labelledby="text-label">
-            <span class="unit-label" id="text-label">Text</span>
-            <div class="unit-picker" id="text-picker"></div>
-          </div>
-          <div class="unit-row" role="group" aria-labelledby="options-label">
-            <span class="unit-label" id="options-label">Options</span>
-            <div class="unit-picker" id="toggle-picker">
-              <button type="button" id="btn-sound" class="unit-choice tile-toggle" aria-pressed="true" title="Toggle sound effects"><svg class="tile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" stroke="none"/><path class="on-only" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/><path class="off-only" d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></svg><span>Sound <span class="key" data-keyhint="global:sound">(E)</span></span></button>
-              <button type="button" id="btn-music" class="unit-choice tile-toggle" aria-pressed="true" title="Toggle music"><svg class="tile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5" fill="currentColor"/><circle cx="16.5" cy="16" r="2.5" fill="currentColor"/><path class="off-only" d="M4 3l16 18"/></svg><span>Music <span class="key" data-keyhint="global:music">(M)</span></span></button>
-              <button type="button" id="fullscreen" class="unit-choice tile-toggle" aria-pressed="false" title="Toggle fullscreen"><svg class="tile-icon" viewBox="0 0 24 24" aria-hidden="true"><path class="off-only" d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path class="on-only" d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg><span>Fullscreen <span class="key" data-keyhint="global:fullscreen">(F)</span></span></button>
-            </div>
-          </div>
-          <button type="button" id="random-run" title="Ignore the seed box and start on a fresh random seed">Random seed <span class="key" data-keyhint="global:random">(T)</span></button>
-          <button type="button" id="rooms-open" title="Host or join a multiplayer game room">Rooms <span class="key" data-keyhint="global:rooms">(O)</span></button>
-          <button type="button" id="tutorial-open" title="Replay the opening-moves tutorial">Tutorial <span class="key" data-keyhint="global:tutorial">(U)</span></button>
-          <button type="button" id="scores-open" title="High scores, and file your run">Scores <span class="key" data-keyhint="global:report">(R)</span></button>
-          <button type="button" id="menu-leave" class="btn-leave" title="Leave this game room and go back to the solo hills" hidden>Leave room</button>
-        </form>
-      </section>
-      <section id="gun-overlay" class="frame-overlay card-overlay gun-card" aria-labelledby="gun-h" hidden>
-        <header class="ov-head">
-          <div class="ov-title"><h2 id="gun-h">Weapons</h2></div>
-          <button type="button" class="ov-x" id="gun-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
-          <div class="nav-hint ov-keys" id="nav-gun"><span><span data-keyhint="aim:barrelLeft">◀</span><span data-keyhint="aim:barrelRight">▶</span><span data-keyhint="shop:selUp">▲</span><span data-keyhint="shop:selDown">▼</span> or <span data-keyhint="scroll:lineDown">J</span><span data-keyhint="scroll:lineUp">K</span> move</span><span><span data-keyhint="shop:buy:1">Enter</span> loads</span><span>1-9 load that tile</span></div>
-        </header>
-        <div id="gun-grid" class="gun-grid" role="group" aria-label="Weapons you own"></div>
-      </section>
-      <section id="tutorial-overlay" class="frame-overlay card-overlay" aria-labelledby="tutorial-h" hidden>
-        <h2 id="tutorial-h">Tutorial</h2>
-        <p id="tutorial-text"></p>
-        <p class="hint" id="tutorial-progress"></p>
-        <button type="button" id="tutorial-skip">Skip tutorial <span class="key">(ESC)</span></button>
-        <p class="nav-hint" id="nav-tutorial"><span data-keyhint="global:tutorial">U</span> replays anytime; skipping once skips it for good</p>
-      </section>
+      <section id="report-overlay" class="frame-overlay card-overlay" aria-labelledby="score-h" data-ui hidden></section>
+      <section id="menu-overlay" class="frame-overlay card-overlay menu-card" aria-labelledby="menu-h" data-ui hidden></section>
+      <section id="gun-overlay" class="frame-overlay card-overlay gun-card" aria-labelledby="gun-h" data-ui hidden></section>
+      <section id="tutorial-overlay" class="frame-overlay card-overlay" aria-labelledby="tutorial-h" data-ui hidden></section>
     </div>
     <div id="end-veil" class="veil" hidden>
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="end-title">
@@ -178,63 +95,7 @@
       </div>
     </div>
     <div id="shop-veil" class="veil" data-ui hidden></div>
-    <div id="lobby-veil" class="veil" hidden>
-      <div class="card" role="dialog" aria-modal="true" aria-labelledby="lobby-title">
-        <header class="ov-head">
-          <div class="ov-title"><p class="kicker">Squad up, no chatter</p><h2 id="lobby-title">Game rooms</h2></div>
-          <button type="button" class="ov-x" id="lobby-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
-          <div class="nav-hint ov-keys" id="nav-lobby" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
-        </header>
-        <p class="hint" id="lobby-intro">Host a room and read the 4-letter code to your friends, or join theirs.
-          Everyone picks 3-letter initials (kept clean, lowercase is fine). There is no chat,
-          only artillery. Empty seats go to the drone battery, and a quiet crew fires
-          on its own after a while so no room ever stalls. The host may also pick named
-          hills, like Canyon 3, so the crew can replay a favorite without ever seeing its seed.</p>
-        <p class="hint"><span id="net-dot" class="dot off" title="room server: not connected"></span> <span id="lobby-count" aria-live="polite"></span></p>
-        <div class="lobby-rows" id="lobby-rows">
-          <form id="host-form" class="lobby-form" action="#">
-            <span class="map-label" id="lobby-map-label">Hills</span>
-            <input type="hidden" id="lobby-map" name="map" value="">
-            <div class="unit-picker map-picker" id="lobby-map-picker" role="group" aria-labelledby="lobby-map-label"></div>
-            <label for="host-initials">Your initials</label>
-            <input id="host-initials" name="initials" type="text" autocomplete="off"
-                   spellcheck="false" maxlength="3" minlength="3" placeholder="ABC">
-            <button type="submit" id="host-go" class="btn-primary">Host a room</button>
-          </form>
-          <form id="join-form" class="lobby-form" action="#">
-            <label for="join-code">Room code</label>
-            <input id="join-code" name="code" type="text" autocomplete="off"
-                   spellcheck="false" maxlength="4" minlength="4" placeholder="7K2Q">
-            <label for="join-initials">Your initials</label>
-            <input id="join-initials" name="initials" type="text" autocomplete="off"
-                   spellcheck="false" maxlength="3" minlength="3" placeholder="ZED">
-            <button type="submit" id="join-go" class="btn-primary">Join room</button>
-          </form>
-        </div>
-        <p id="lobby-status" class="hint" aria-live="polite"></p>
-        <div id="lobby-room" hidden>
-          <p class="room-code" id="lobby-code">····</p>
-          <p class="hint">Read this code to your friends, or send them the invite link. First seat hosts and starts the match.</p>
-          <p class="invite-row">
-            <input id="join-link" type="text" readonly aria-label="Invite link">
-            <button type="button" id="copy-link" title="Copy invite link">
-              <svg class="lucide lucide-copy" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
-              <span>Copy invite</span>
-            </button>
-          </p>
-          <p class="hint" id="lobby-hills">Hills: Random hills</p>
-          <div class="unit-row" role="group" aria-labelledby="seats-label">
-            <span class="unit-label" id="seats-label">Seats</span>
-            <div class="unit-picker seat-grid" id="lobby-seats"></div>
-          </div>
-          <p class="hint" id="seats-hint"></p>
-          <div class="acts">
-            <button type="button" id="lobby-start" class="btn-primary">Start match</button>
-            <button type="button" id="lobby-leave">Leave room</button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <div id="lobby-veil" class="veil" data-ui hidden></div>
     <div id="leave-veil" class="veil" hidden>
       <div class="card" role="alertdialog" aria-modal="true" aria-labelledby="leave-title" aria-describedby="leave-text">
         <header class="ov-head">
@@ -264,6 +125,6 @@
 </main>
 
 <script src="fx.js?v=a68a63de24" defer></script>
-<script type="module" src="game.js?v=29b672b3b3"></script>
+<script type="module" src="game.js?v=02a33843b4"></script>
 </body>
 </html>

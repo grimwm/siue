@@ -61,11 +61,12 @@ while IFS= read -r -d '' f; do
   case "$f" in
     "$SCORES") continue ;;
     # Development files that ride along with games: tests, maintainer notes
-    # (README.md), games/tankity/game.yaml, whose runtime form is the
+    # (README.md), the room protocol fixtures (games/*/protocol/, only the
+    # tests read them), games/tankity/game.yaml, whose runtime form is the
     # generated game.json (nothing fetches the YAML), and the sound-effect
     # build script (the .mp3 files it builds do ship; its sources are in
     # games/*/src/ below).
-    games/*-test.* | games/README.md | games/*/README.md | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh) continue ;;
+    games/*-test.* | games/README.md | games/*/README.md | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh) continue ;;
     # Authoring sources kept in Git LFS (see .gitattributes): never served.
     *.blend | *.blend1 | *.wav | *.flac | *.aif | *.aiff | games/*/src/*) continue ;;
     games/*) ;;

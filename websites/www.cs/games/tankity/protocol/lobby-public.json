@@ -1,0 +1,53 @@
+{
+    "about": "The same lobby to a watcher with no seat: no you block, no csrf.",
+    "status": 200,
+    "body": {
+        "ok": true,
+        "room": {
+            "code": "FXT1",
+            "phase": "lobby",
+            "map": null,
+            "mapName": "Random hills",
+            "round": 0,
+            "wind": 0,
+            "turn": null,
+            "terrain": [],
+            "tanks": [],
+            "seats": [
+                {
+                    "seat": 0,
+                    "human": true,
+                    "name": "ABC",
+                    "mode": "human",
+                    "lives": 3,
+                    "score": 0
+                },
+                {
+                    "seat": 1,
+                    "human": true,
+                    "name": "DEF",
+                    "mode": "human",
+                    "lives": 3,
+                    "score": 0
+                },
+                {
+                    "seat": 2,
+                    "human": false,
+                    "name": "WRAITH",
+                    "mode": "ai",
+                    "lives": 0,
+                    "score": 0
+                },
+                {
+                    "seat": 3,
+                    "human": false,
+                    "name": "SPOTTER",
+                    "mode": "open",
+                    "lives": 0,
+                    "score": 0
+                }
+            ],
+            "events": []
+        }
+    }
+}

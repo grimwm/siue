@@ -1,11 +1,13 @@
 name: ci
 
-# Unit suites (`make test`) on pull requests and on main, whenever a change
-# touches something they cover. The browser suite (`make e2e`) is not run
-# here. A green run on main is what starts deploy.yml.
+# Unit suites (`make test`) and the browser suite (`make e2e`) on pull
+# requests; the unit suites also on main, whenever a change touches something
+# they cover. A green run on main is what starts deploy.yml, so the browser
+# suite (about ten minutes) runs on the pull request only, before the merge.
 #
-# `units` is a required check on main, so every pull request runs it; one
-# that touches none of COVERED passes without starting the sites.
+# `units` and `e2e` are meant to be required checks on main, so every pull
+# request runs both; one that touches none of what they cover passes without
+# starting the sites.
 
 on:
   pull_request:
@@ -76,6 +78,93 @@ jobs:
       - name: Unit suites
         if: steps.scope.outputs.run == '1'
         run: make test
+
+      - name: Container logs
+        if: failure() && steps.scope.outputs.run == '1'
+        run: docker compose logs --no-color --tail 200
+
+      - name: Stop the local sites
+        if: always() && steps.scope.outputs.run == '1'
+        run: make down
+
+  # Real Chrome, the two-player room specs included: the room client and server
+  # broke twice in ways only these catch. Runs the whole Playwright suite
+  # against the docker site (ephemeral host port) on the runner's own Chrome.
+  e2e:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check what changed
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          COVERED: "websites/www.cs/ compose.yaml Makefile .github/workflows/ci.yml"
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086
+          changed=$(git diff --name-only "$BASE"...HEAD -- $COVERED)
+          if [ -n "$changed" ]; then
+            echo "run=1" >>"$GITHUB_OUTPUT"
+            printf '%s\n' "$changed"
+          else
+            echo "nothing the browser suite covers changed"
+          fi
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        if: steps.scope.outputs.run == '1'
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: websites/www.cs/tests/e2e/package-lock.json
+
+      - name: Start the local sites
+        if: steps.scope.outputs.run == '1'
+        run: make up
+
+      # ubuntu-latest ships Google Chrome, which the Playwright config asks
+      # for (channel: chrome); install it only if an image ever drops it.
+      - name: Chrome
+        if: steps.scope.outputs.run == '1'
+        run: |
+          set -euo pipefail
+          if command -v google-chrome >/dev/null; then
+            google-chrome --version
+          else
+            cd websites/www.cs/tests/e2e
+            npm ci --silent
+            npx playwright install --with-deps chrome
+          fi
+
+      - name: Wait for the site
+        id: site
+        if: steps.scope.outputs.run == '1'
+        run: |
+          set -euo pipefail
+          url=$(make --no-print-directory -s -C websites/www.cs url)
+          curl -sf --retry 30 --retry-delay 2 --retry-connrefused --retry-all-errors -o /dev/null "${url}games/tankity/"
+          echo "url=$url" >>"$GITHUB_OUTPUT"
+
+      - name: Browser suite
+        if: steps.scope.outputs.run == '1'
+        env:
+          E2E_BASE_URL: ${{ steps.site.outputs.url }}
+          CI: "true"
+        run: make -C websites/www.cs e2e
+
+      - name: Test results
+        if: failure() && steps.scope.outputs.run == '1'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-test-results
+          path: websites/www.cs/tests/e2e/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Container logs
         if: failure() && steps.scope.outputs.run == '1'

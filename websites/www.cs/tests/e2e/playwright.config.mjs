@@ -9,6 +9,10 @@ export default defineConfig({
   testDir: '.',
   timeout: 120_000,
   workers: 1, // room tests share one server's room cap and throttles
+  // A shared CI runner stalls frames now and then; a spec that fails once
+  // and passes on retry shows up as flaky in the report, not as a red build.
+  retries: process.env.CI ? 2 : 0,
+  forbidOnly: !!process.env.CI,
   reporter: [['list']],
   use: {
     baseURL: base.endsWith('/') ? base : base + '/',

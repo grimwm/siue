@@ -1,0 +1,7 @@
+{
+    "about": "An act inside the 150 ms spacing: HTTP 429 with a short error string.",
+    "status": 429,
+    "body": {
+        "error": "too fast"
+    }
+}

@@ -52,12 +52,27 @@ $check('lance-pierces-to-next-tank', $end[0] === 'hit' && $end[5] === 2, json_en
 // step: a fast shell crossing a drone's body in one step still hits it, and
 // one passing under a drone (where the old ground-level circle sat) does not.
 $room = $flatRoom([$tank(0, 'human', 100.0, 100), $tank(1, 'ai', 300.0, 500)]);
-$hit = room_sweep_hit($room, 270.0, 370.0, 330.0, 370.0, null);
+$clear = true;
+$hit = room_sweep_hit($room, 270.0, 370.0, 330.0, 370.0, null, 0, $clear);
 $check('sweep-hits-drone-body', $hit !== null && $hit[0] === 1, json_encode($hit));
-$check('sweep-misses-under-drone', room_sweep_hit($room, 270.0, 392.0, 330.0, 392.0, null) === null);
+$check('sweep-misses-under-drone', room_sweep_hit($room, 270.0, 392.0, 330.0, 392.0, null, 0, $clear) === null);
 $room = $flatRoom([$tank(0, 'human', 100.0, 100), $tank(1, 'human', 300.0, 100)]);
-$check('sweep-hits-tank-hull', (room_sweep_hit($room, 270.0, 392.0, 330.0, 392.0, null)[0] ?? null) === 1);
-$check('sweep-skips-own-gunner', room_sweep_hit($room, 270.0, 392.0, 330.0, 392.0, 1) === null);
+$check('sweep-hits-tank-hull', (room_sweep_hit($room, 270.0, 392.0, 330.0, 392.0, null, 0, $clear)[0] ?? null) === 1);
+$check('sweep-skips-pierced', room_sweep_hit($room, 270.0, 392.0, 330.0, 392.0, 1, 0, $clear) === null);
+
+// A shell leaves the muzzle inside its own gunner's box (a drone's body sits
+// 30 px up, the muzzle 14 px up and 20 px out): it ignores its gunner until it
+// is clear of that box, then hits it like anyone else if it comes back.
+$room = $flatRoom([$tank(0, 'ai', 300.0, 100), $tank(1, 'human', 600.0, 100)]);
+$clear = false;
+$check('own-shell-passes-out-of-gunner', room_sweep_hit($room, 309.0, 368.0, 330.0, 360.0, null, 0, $clear) === null && $clear);
+$check('own-shell-hits-gunner-coming-back', (room_sweep_hit($room, 330.0, 360.0, 300.0, 370.0, null, 0, $clear)[0] ?? null) === 0);
+$room = $flatRoom([$tank(0, 'ai', 300.0, 100), $tank(1, 'human', 600.0, 100)]);
+$events = [];
+$a = deg2rad(62.0);
+$end = room_fly_arc($room, $events, $room['tanks'][0], $weapons['shell'], 'shell', 0,
+    300.0 + cos($a) * 20, 386.0 - sin($a) * 20, cos($a) * 120, -sin($a) * 120, 0.0, false, null);
+$check('drone-shot-does-not-hit-itself', $end[5] !== 0 && $hitsOn($events, 0) === [], json_encode([$end[0], $end[5]]));
 
 // Banked repair rides above full armor for the round, as in solo play;
 // banked fuel adds on. Drones are untouched.

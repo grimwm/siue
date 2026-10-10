@@ -305,7 +305,8 @@ battle buttons on the right, sky behind both. */
 .tile-icon { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .tile-toggle[aria-pressed="true"] .off-only, .tile-toggle[aria-pressed="false"] .on-only { display: none; }
 #btn-sound[aria-pressed="false"], #btn-music[aria-pressed="false"] { color: var(--dim); }
-.tile-toggle .key { margin-left: 0.1rem; }
+.tile-toggle > span { display: grid; justify-items: center; line-height: 1.15; text-align: center; }
+.tile-toggle .key { margin: 0.1rem 0 0; font-size: 0.7rem; }
 .map-label { flex-basis: 100%; color: var(--dim); font-size: 0.9rem; }
 .map-picker { flex: 1 1 100%; grid-template-columns: repeat(auto-fill, minmax(5.4rem, 1fr)); }
 .map-choice canvas { width: 80px; height: 52px; }
@@ -570,4 +571,6 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 /* HUD loadout chips: a shell icon beside each name. */
 .hudbar .chip { display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
 .hudbar #hud-weapon, .hudbar #hud-favs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.3rem; }
-.chip-icon { width: 36px; height: 23px; }
+.chip-icon { height: 1.15em; width: auto; aspect-ratio: 40 / 26; }
+/* Icons have no text baseline: centre those two rows instead. */
+.hudbar .hud > div:has(#hud-weapon), .hudbar .hud > div:has(#hud-favs) { align-items: center; }

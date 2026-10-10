@@ -17,7 +17,7 @@ export const WEIGHTS = {
   'tankity-solo.spec.mjs': 61,
   'tankity-end.spec.mjs': 60,
   'tankity-rooms.spec.mjs': 53,
-  'tankity-rooms-play.spec.mjs': 47,
+  'tankity-rooms-play.spec.mjs': 95,
   'tankity-audio.spec.mjs': 39,
   'tankity-rooms-seats.spec.mjs': 38,
   'tankity-rooms-shop.spec.mjs': 33,

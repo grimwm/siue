@@ -27,10 +27,10 @@ import {
 } from './js/audio.js?v=ce8cdf6a6e';
 import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, CLOCK_SHOW_S,
-} from './js/net.js?v=6259020b84';
+} from './js/net.js?v=c2776f37fa';
 import { transition } from './js/flow.js?v=782899f37b';
 import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=b278b20677';
-import { createReplay } from './js/replay.js?v=967c6939ce';
+import { createReplay } from './js/replay.js?v=841f8c8eed';
 import { createRenderer, drawChassis } from './js/render.js?v=1e211c92ed';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 import { renderHelp } from './js/ui/help.js?v=7366b18437';
@@ -2320,7 +2320,7 @@ function netOnSnapshot(room, fresh, first) {
     return;
   }
   replay.push(fresh);
-  if (shouldCatchUp(document.hidden, replay.queue)) netCatchUp();
+  if (shouldCatchUp(document.hidden)) netCatchUp();
   if (!replay.idle()) {
     MATCH.pendingRoom = room;
     MATCH.myTurn = false;

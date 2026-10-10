@@ -98,9 +98,12 @@ export function isVolleyOpener(e: { t: string }): e is VolleyOpenerEvent {
 }
 
 /** A hidden tab plays nothing (browsers stop its frames), so its replay queue
- * piles up. Catch up when the tab is hidden or more than one volley waits. */
-export function shouldCatchUp(hidden: boolean, queue: readonly { t: string }[]): boolean {
-  return hidden || queue.filter(isVolleyOpener).length > 1;
+ * piles up: catch up while it is hidden (and when it comes back, from the
+ * visibility handler). A visible tab plays every volley in order: one reply
+ * routinely carries several (a human's shot and every drone's answer), and
+ * each is a move someone made that the players must see. */
+export function shouldCatchUp(hidden: boolean): boolean {
+  return hidden;
 }
 
 /** What a catch-up does to the queue: log and drop the first `cut` events,

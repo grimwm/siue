@@ -547,51 +547,51 @@
         "sfx": {
             "move": {
                 "file": "audio/sfx/move.mp3",
-                "volume": 0.3
+                "volume": 0.25
             },
             "click": {
                 "file": "audio/sfx/click.mp3",
-                "volume": 0.6
+                "volume": 0.4
             },
             "launch": {
                 "file": "audio/sfx/launch.mp3",
-                "volume": 0.7
+                "volume": 0.6
             },
             "boom": {
                 "file": "audio/sfx/boom.mp3",
-                "volume": 0.9
+                "volume": 0.75
             },
             "clank": {
                 "file": "audio/sfx/clank.mp3",
-                "volume": 0.8
+                "volume": 0.6
             },
             "thud": {
                 "file": "audio/sfx/thud.mp3",
-                "volume": 0.8
+                "volume": 0.6
             },
             "warn": {
                 "file": "audio/sfx/warn.mp3",
-                "volume": 0.7
+                "volume": 0.45
             },
             "cash": {
                 "file": "audio/sfx/cash.mp3",
-                "volume": 0.7
+                "volume": 0.5
             },
             "bark": {
                 "file": "audio/sfx/bark.mp3",
-                "volume": 0.6
+                "volume": 0.4
             },
             "win": {
                 "file": "audio/sfx/win.mp3",
-                "volume": 0.7
+                "volume": 0.55
             },
             "lose": {
                 "file": "audio/sfx/lose.mp3",
-                "volume": 0.7
+                "volume": 0.55
             },
             "fanfare": {
                 "file": "audio/sfx/fanfare.mp3",
-                "volume": 0.7
+                "volume": 0.6
             }
         },
         "music": [

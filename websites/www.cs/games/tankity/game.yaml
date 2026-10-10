@@ -470,15 +470,17 @@ keys:
 #
 # sfx: one entry per event. An event with no file (or left out) keeps its
 # synthesized sound. Events and when they play:
-#   move     a tiny tick while driving         click    menu and shop taps
+#   move     tank tread clatter while driving  click    menu and shop taps
 #   launch   a shell leaves the barrel         boom     any explosion
-#   clank    a tank takes a hit                thud     a blocked or empty action
+#   clank    a shell hits a tank's armour      thud     a tank lands; a refused tap
 #   warn     an error or refused action        cash     a purchase
-#   bark     a drone speaks                    win      a round is won
+#   bark     a drone's radio chirp             win      a round is won
 #   lose     a life is lost                    fanfare  the match ends in glory
 #   file     path to the sound.
 #   volume   0 (silent) to 1 (full), default 1.
-# Effects are always played through the Sound toggle (E).
+# Effects are always played through the Sound toggle (E). The effect files
+# are built by audio/sfx/build_sfx.sh (one shared "gritty 16-bit artillery"
+# chain over CC0 sources); every file peaks at -2 dBFS, so `volume` is the mix.
 #
 # music: an ordered playlist. The next track starts when one ends and the
 # list loops. Each track:
@@ -490,18 +492,18 @@ keys:
 # follow the round as before. The Music toggle (M) pauses and resumes it.
 audio:
   sfx:
-    move: {file: audio/sfx/move.mp3, volume: 0.3}
-    click: {file: audio/sfx/click.mp3, volume: 0.6}
-    launch: {file: audio/sfx/launch.mp3, volume: 0.7}
-    boom: {file: audio/sfx/boom.mp3, volume: 0.9}
-    clank: {file: audio/sfx/clank.mp3, volume: 0.8}
-    thud: {file: audio/sfx/thud.mp3, volume: 0.8}
-    warn: {file: audio/sfx/warn.mp3, volume: 0.7}
-    cash: {file: audio/sfx/cash.mp3, volume: 0.7}
-    bark: {file: audio/sfx/bark.mp3, volume: 0.6}
-    win: {file: audio/sfx/win.mp3, volume: 0.7}
-    lose: {file: audio/sfx/lose.mp3, volume: 0.7}
-    fanfare: {file: audio/sfx/fanfare.mp3, volume: 0.7}
+    move: {file: audio/sfx/move.mp3, volume: 0.25}
+    click: {file: audio/sfx/click.mp3, volume: 0.4}
+    launch: {file: audio/sfx/launch.mp3, volume: 0.6}
+    boom: {file: audio/sfx/boom.mp3, volume: 0.75}
+    clank: {file: audio/sfx/clank.mp3, volume: 0.6}
+    thud: {file: audio/sfx/thud.mp3, volume: 0.6}
+    warn: {file: audio/sfx/warn.mp3, volume: 0.45}
+    cash: {file: audio/sfx/cash.mp3, volume: 0.5}
+    bark: {file: audio/sfx/bark.mp3, volume: 0.4}
+    win: {file: audio/sfx/win.mp3, volume: 0.55}
+    lose: {file: audio/sfx/lose.mp3, volume: 0.55}
+    fanfare: {file: audio/sfx/fanfare.mp3, volume: 0.6}
   music:
     - file: audio/music/battle-theme-a.mp3
       title: Battle Theme A

@@ -126,3 +126,41 @@ test('navbar panels keep the page but put themselves in the address', async ({ p
   await fresh.goto('./#contact');
   await expect.poll(() => fresh.evaluate(() => document.querySelector('[id^="nav-"].is-active')?.id)).toBe('nav-contact');
 });
+
+// The GitHub mark links the repository, left of Games, on the home navbar and
+// on each game's wrapper navbar.
+test('the home navbar links the repository just left of Games', async ({ page }) => {
+  await page.goto('./');
+  const gh = page.locator('.site-nav a.site-github');
+  await expect(gh).toBeVisible();
+  await expect(gh).toHaveAttribute('href', 'https://github.com/grimwm/siue');
+  await expect(gh).toHaveAttribute('target', '_blank');
+  await expect(gh).toHaveAttribute('rel', /noopener/);
+  await expect(gh).toHaveAttribute('aria-label', 'Source on GitHub');
+  await expect(gh).toHaveAttribute('title', 'Source on GitHub');
+  await expect(gh.locator('svg')).toBeVisible();
+  const [g, games] = await Promise.all([gh.boundingBox(), page.locator('#cic-enter-btn').boundingBox()]);
+  expect(g.x + g.width).toBeLessThanOrEqual(games.x);
+  expect(Math.abs((g.y + g.height / 2) - (games.y + games.height / 2))).toBeLessThan(2);
+  expect(Math.round(g.height)).toBe(Math.round(games.height));
+  // Coloured like the nav buttons in both themes.
+  for (const theme of ['dark', 'light']) {
+    await page.evaluate(t => document.documentElement.setAttribute('data-bs-theme', t), theme);
+    const [ghColor, btnColor] = await Promise.all([
+      gh.evaluate(el => getComputedStyle(el).color),
+      page.locator('#cic-enter-btn').evaluate(el => getComputedStyle(el).color),
+    ]);
+    expect(ghColor).toBe(btnColor);
+  }
+});
+
+test('the wrapper navbar links the repository just left of Games', async ({ page }) => {
+  await page.goto('play/crete/');
+  const gh = page.locator('.play-nav a.play-github');
+  await expect(gh).toBeVisible();
+  await expect(gh).toHaveAttribute('href', 'https://github.com/grimwm/siue');
+  await expect(gh).toHaveAttribute('rel', /noopener/);
+  await expect(gh).toHaveAttribute('aria-label', 'Source on GitHub');
+  const [g, games] = await Promise.all([gh.boundingBox(), page.locator('.play-nav .play-games').boundingBox()]);
+  expect(g.x + g.width).toBeLessThanOrEqual(games.x);
+});

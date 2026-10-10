@@ -57,7 +57,7 @@ jobs:
             echo "nothing the unit suites cover changed"
           fi
 
-      # The host-side suites (games hub, share tags, Tankity sim) run on the
+      # The host-side suites (games hub, site game pages, each game's tools, Tankity sim) run on the
       # runner's PHP; the room suites run in the docker PHP that matches
       # www.cs.siue.edu.
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2

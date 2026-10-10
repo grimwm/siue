@@ -1,5 +1,5 @@
 {
-    "_note": "Generated from game.yaml by tools/tankity-config.php. Edit game.yaml, not this file.",
+    "_note": "Generated from game.yaml by tools/game-json.php. Edit game.yaml, not this file.",
     "arsenal": {
         "ammo": [
             {

@@ -363,7 +363,7 @@ function room_gen_terrain(int &$rng, int $w): array
     }
     return $t;
 }
-/* The arsenal lives in game.yaml, served as game.json (tools/tankity-config.php
+/* The arsenal lives in game.yaml, served as game.json (tools/game-json.php
 // writes it): the browser reads the same file, so prices, packs, ballistics,
 // and effects can never disagree. When the file is missing the baked fallback
 // below keeps rooms rolling. */

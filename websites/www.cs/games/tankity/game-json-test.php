@@ -1,9 +1,9 @@
 <?php
-// Tests for tools/tankity-config.php: the YAML-subset parser, the game.yaml
-// schema checks, and the --check workflow. Run: php tests/tankity-config-test.php
+// Tests for tools/game-json.php: the YAML-subset parser, the game.yaml
+// schema checks, and the --check workflow. Run: php game-json-test.php
 // Exit 0 when every check passes, 1 otherwise.
 declare(strict_types=1);
-require_once __DIR__ . '/../tools/tankity-config.php';
+require_once __DIR__ . '/tools/game-json.php';
 
 $fail = 0;
 $check = function (string $name, bool $cond, string $extra = '') use (&$fail): void {
@@ -80,7 +80,7 @@ foreach ($bad as $name => [$yaml, $want]) {
 }
 
 // ---- schema ----
-$tmp = sys_get_temp_dir() . '/tankity-config-test-' . getmypid();
+$tmp = sys_get_temp_dir() . '/game-json-test-' . getmypid();
 @mkdir("$tmp/audio/sfx", 0777, true);
 @mkdir("$tmp/audio/music", 0777, true);
 file_put_contents("$tmp/audio/sfx/boom.mp3", 'x');
@@ -250,51 +250,49 @@ $e = (string) $errOf(fn() => $render($mut('audio/sfx/boom.mp3', 'audio/sfx/link.
 $check('schema-symlink-escape', str_contains($e, 'must stay inside the game folder'), $e);
 
 // ---- the shipped game.yaml ----
-$repoDir = __DIR__ . '/../games/tankity';
+$repoDir = __DIR__;
 $e = $errOf(function () use ($repoDir, &$shipped) {
     $shipped = tankity_config_render((string) file_get_contents("$repoDir/game.yaml"), $repoDir);
 });
 $check('shipped-yaml-valid', $e === null, (string) $e);
 $check('shipped-json-in-sync', $shipped !== null && $shipped === (string) @file_get_contents("$repoDir/game.json"),
-    'run: php tools/tankity-config.php');
+    'run: php tools/game-json.php (in games/tankity)');
 $sd = json_decode((string) $shipped, true);
 $check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 12 && count($sd['arsenal']['gear'] ?? []) === 8
     && count($sd['audio']['sfx'] ?? []) >= 1 && count($sd['audio']['music'] ?? []) >= 1);
 
 // ---- --check workflow on a scratch copy of the tool and the game folder ----
 $work = "$tmp/work";
-@mkdir("$work/tools", 0777, true);
-@mkdir("$work/games", 0777, true);
-copy(__DIR__ . '/../tools/tankity-config.php', "$work/tools/tankity-config.php");
-exec('cp -R ' . escapeshellarg($repoDir) . ' ' . escapeshellarg("$work/games/tankity"));
+@mkdir($work, 0777, true);
+exec('cp -R ' . escapeshellarg($repoDir) . ' ' . escapeshellarg("$work/tankity"));
 $run = function (string ...$args) use ($work): array {
-    $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg("$work/tools/tankity-config.php") . ' ' . implode(' ', array_map('escapeshellarg', $args)) . ' 2>&1';
+    $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg("$work/tankity/tools/game-json.php") . ' ' . implode(' ', array_map('escapeshellarg', $args)) . ' 2>&1';
     exec($cmd, $lines, $rc);
     return [$rc, implode("\n", $lines)];
 };
 [$rc] = $run('--check');
 $check('cli-check-passes-when-in-sync', $rc === 0);
-file_put_contents("$work/games/tankity/game.json", "{}\n");
+file_put_contents("$work/tankity/game.json", "{}\n");
 [$rc, $msg] = $run('--check');
 $check('cli-check-detects-stale-json', $rc === 1 && str_contains($msg, 'stale'), $msg);
 [$rc] = $run();
 [$rc2] = $run('--check');
-$check('cli-write-fixes-stale', $rc === 0 && $rc2 === 0 && file_get_contents("$work/games/tankity/game.json") === $shipped);
-unlink("$work/games/tankity/game.json");
+$check('cli-write-fixes-stale', $rc === 0 && $rc2 === 0 && file_get_contents("$work/tankity/game.json") === $shipped);
+unlink("$work/tankity/game.json");
 [$rc, $msg] = $run('--check');
 $check('cli-check-detects-missing-json', $rc === 1 && str_contains($msg, 'stale'), $msg);
-$y = (string) file_get_contents("$work/games/tankity/game.yaml");
-file_put_contents("$work/games/tankity/game.yaml", preg_replace('/dmg: 34\b/', 'dmg: 99999', $y, 1));
+$y = (string) file_get_contents("$work/tankity/game.yaml");
+file_put_contents("$work/tankity/game.yaml", preg_replace('/dmg: 34\b/', 'dmg: 99999', $y, 1));
 [$rc, $msg] = $run('--check');
 $check('cli-check-fails-on-invalid-yaml', $rc === 1 && preg_match('/game\.yaml line \d+: arsenal\.ammo\[0\]\.dmg/', $msg) === 1, $msg);
-file_put_contents("$work/games/tankity/game.yaml", "arsenal:\n\tbad: 1\n");
+file_put_contents("$work/tankity/game.yaml", "arsenal:\n\tbad: 1\n");
 [$rc, $msg] = $run('--check');
 $check('cli-check-fails-on-parse-error', $rc === 1 && str_contains($msg, 'line 2: tabs'), $msg);
-file_put_contents("$work/games/tankity/game.yaml", $y);
-@unlink("$work/games/tankity/audio/music/" . basename($sd['audio']['music'][0]['file']));
+file_put_contents("$work/tankity/game.yaml", $y);
+@unlink("$work/tankity/audio/music/" . basename($sd['audio']['music'][0]['file']));
 [$rc, $msg] = $run('--check');
 $check('cli-check-fails-on-missing-audio-file', $rc === 1 && str_contains($msg, 'file not found'), $msg);
 
 exec('rm -rf ' . escapeshellarg($tmp) . ' ' . escapeshellarg(dirname($tmp) . '/tankity-outside-' . getmypid()));
-echo $fail === 0 ? "TANKITY-CONFIG-OK\n" : "TANKITY-CONFIG-FAIL $fail\n";
+echo $fail === 0 ? "GAME-JSON-OK\n" : "TANKITY-CONFIG-FAIL $fail\n";
 exit($fail === 0 ? 0 : 1);

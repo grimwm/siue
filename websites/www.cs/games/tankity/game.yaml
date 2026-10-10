@@ -9,18 +9,19 @@
 # host has no YAML extension, so a generator checks it and writes game.json,
 # which game.js (the client) and rooms.php (the room server) both load:
 #
-#   php tools/tankity-config.php          check this file, rewrite game.json
-#   php tools/tankity-config.php --check  fail if this file is invalid or
-#                                         game.json is stale
+#   php tools/game-json.php          check this file, rewrite game.json
+#   php tools/game-json.php --check  fail if this file is invalid or
+#                                    game.json is stale
 #
-# Run those from the site folder (websites/www.cs). `make test` and
-# `make deploy` run --check, so a stale game.json cannot ship. Commit this
-# file and game.json together. Errors name the line, for example
+# Run those from this game's folder (from the site folder, www.cs, the path
+# is games/tankity/tools/game-json.php). `make test` and `make deploy` run
+# --check, so a stale game.json cannot ship. Commit this file and game.json
+# together. Errors name the line, for example
 #   game.yaml line 41: arsenal.ammo[1].dmg: must be a whole number from 1 to 500
 # Unknown keys are errors too, so a typo cannot silently do nothing.
 #
 # After the last edit to anything the game serves, also run
-#   php tools/game-share-tags.php
+#   php tools/install-files.php
 # which refreshes the offline cache list in sw.js.
 #
 # YAML subset the generator understands (it is a small parser, not full YAML):

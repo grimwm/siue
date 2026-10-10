@@ -1,19 +1,22 @@
 <?php
 /**
- * Builds Operation Tankity's one runtime data file, games/tankity/game.json,
- * from the one file a maintainer edits, games/tankity/game.yaml (arsenal,
+ * Builds Operation Tankity's one runtime data file, game.json,
+ * from the one file a maintainer edits, game.yaml (arsenal,
  * keys, audio). Browsers cannot read YAML and the server has no YAML
  * extension, so the YAML is checked here and written out as JSON; the client
  * (game.js) and the room server (rooms.php) read only the JSON.
  *
- *   php tools/tankity-config.php          validate game.yaml, rewrite game.json
- *   php tools/tankity-config.php --check  exit 1 if game.yaml is invalid or
- *                                         game.json is stale (make test and
- *                                         make deploy run this)
+ *   php tools/game-json.php          validate game.yaml, rewrite game.json
+ *   php tools/game-json.php --check  exit 1 if game.yaml is invalid or
+ *                                  game.json is stale (make test and
+ *                                  make deploy run this)
+ *
+ * Run from this game's folder; from the site root the path is
+ * php games/tankity/tools/game-json.php. It needs only PHP and this folder.
  *
  * The YAML subset is documented at the top of game.yaml's parser below
  * (tankity_yaml_parse); the schema is documented field by field in game.yaml.
- * server settings stay out of this: games/tankity/.config.yaml is read by
+ * server settings stay out of this: ./.config.yaml is read by
  * config.php at request time and never reaches the browser.
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -599,7 +602,7 @@ function tankity_config_build(mixed $doc, array $lines, string $gameDir): array
         }
     }
     $out = [
-        '_note' => 'Generated from game.yaml by tools/tankity-config.php. Edit game.yaml, not this file.',
+        '_note' => 'Generated from game.yaml by tools/game-json.php. Edit game.yaml, not this file.',
         'arsenal' => tankity_build_arsenal($c, $root['arsenal'] ?? null),
         'keys' => tankity_build_keys($c, $root['keys'] ?? null),
         'audio' => tankity_build_audio($c, $root['audio'] ?? null),
@@ -864,13 +867,13 @@ function tankity_config_render(string $yaml, string $gameDir): string
 }
 
 if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
-    $dir = __DIR__ . '/../games/tankity';
+    $dir = dirname(__DIR__);
     $check = in_array('--check', $argv, true);
     try {
         $want = tankity_config_render((string) file_get_contents("$dir/game.yaml"), $dir);
     } catch (TankityConfigError $e) {
         foreach (explode("\n", $e->getMessage()) as $l) {
-            fwrite(STDERR, "tankity-config: game.yaml $l\n");
+            fwrite(STDERR, "game-json: game.yaml $l\n");
         }
         exit(1);
     }
@@ -879,9 +882,9 @@ if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
         exit(0);
     }
     if ($check) {
-        fwrite(STDERR, "tankity-config: games/tankity/game.json is stale; run php tools/tankity-config.php\n");
+        fwrite(STDERR, "game-json: game.json is stale; run php tools/game-json.php in the game folder\n");
         exit(1);
     }
     file_put_contents("$dir/game.json", $want);
-    echo "tankity-config: wrote games/tankity/game.json\n";
+    echo "game-json: wrote game.json\n";
 }

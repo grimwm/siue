@@ -26,6 +26,7 @@ has('site-shell-runs-the-shell', select([`${S}main.js`]), ['games-hub.spec.mjs',
 check('site-shell-skips-tankity', select([`${S}site.css`]).some(s => s.startsWith('tankity-')), false);
 has('union-of-files', select([`${S}games/crete/game.js`, `${S}tests/e2e/tankity-audio.spec.mjs`]), ['games-hub.spec.mjs', 'tankity-audio.spec.mjs']);
 check('generated-sources-run-nothing', select([`${S}games/tankity/game.yaml`, `${S}games/tankity/fx/blender/moon.blend`]), 'NONE');
+check('effects-editor-runs-the-effects-spec', select([`${S}games/tankity/fx-editor.js`]), ['tankity-fx.spec.mjs']);
 check('a-removed-spec-is-dropped', select([`${S}tests/e2e/gone-away.spec.mjs`]), 'NONE');
 
 console.log(fail ? `E2E-SELECT-TEST-FAIL ${fail}` : 'E2E-SELECT-TEST-OK');

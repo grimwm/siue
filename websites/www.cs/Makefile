@@ -21,7 +21,7 @@ help:
 	@echo "  down   - Stop the local site"
 	@echo "  url    - Print the local site's URL (its port is ephemeral)"
 	@echo "  parity - Check the docker PHP against www.cs.siue.edu's modules/ini"
-	@echo "  test   - Unit suites: games hub, site game pages, each game's tools, Tankity (incl. game.yaml) (needs make up)"
+	@echo "  test   - Unit suites: games hub, site game pages, deploy set, each game's tools, Tankity (incl. game.yaml) (needs make up)"
 	@echo "  protocol - Rewrite the Tankity room protocol fixtures (needs make up)"
 	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL;"
 	@echo "           one run per machine at a time (E2E_ARGS passes to playwright)"
@@ -54,6 +54,7 @@ test:
 	php tests/games-hub-test.php
 	php tests/site-game-pages-test.php
 	php tools/site-game-pages.php --check
+	php tests/deploy-set-test.php
 	cd games/tankity && php game-json-test.php && php install-files-test.php && php tools/game-json.php --check && php tools/install-files.php --check
 	cd games/crete && php install-files-test.php && php tools/install-files.php --check
 	cd games/cylon && php install-files-test.php && php tools/install-files.php --check

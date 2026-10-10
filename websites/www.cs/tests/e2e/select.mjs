@@ -35,7 +35,9 @@ const RULES = [
   [new RegExp(`^${SITE}tests/[^/]+\\.php$`), 'NONE'], // unit tests
   [new RegExp(`^${SITE}games/[^/]+/[^/]*-test\\.(php|js)$`), 'NONE'], // unit and smoke tests
   [new RegExp(`^${SITE}games/[^/]+/(tools|protocol|fx/blender|audio/sfx/src)/`), 'NONE'], // generators, fixtures, sources
-  [new RegExp(`^${SITE}games/[^/]+/(audio/sfx/build_sfx\\.sh|game\\.yaml|fx-editor\\.(html|js|css))$`), 'NONE'],
+  [new RegExp(`^${SITE}games/[^/]+/(audio/sfx/build_sfx\\.sh|game\\.yaml)$`), 'NONE'],
+  // The dev-only effects editor: only the effects spec opens it.
+  [new RegExp(`^${SITE}games/tankity/fx-editor\\.(html|js|css)$`), ['tankity-fx.spec.mjs']],
   // The test harness, the stack and CI: everything.
   [new RegExp(`^${SITE}tests/e2e/(helpers\\.mjs|playwright\\.config\\.mjs|package(-lock)?\\.json|run\\.sh|select\\.mjs)$`), 'ALL'],
   [new RegExp(`^${SITE}tests/e2e/(.+\\.spec\\.mjs)$`), m => [m[1]]],

@@ -143,16 +143,19 @@ test('drones show an aim arm that swings smoothly before firing', async ({ brows
   await expect.poll(async () => (await rec(page)).arms.length, { timeout: 30_000 }).toBeGreaterThan(20);
   await page.waitForTimeout(1500);
   const { arms, times } = await rec(page);
-  const byFrame = new Map(arms.map(a => [a[0], a]));
-  const frames = [...byFrame.keys()];
-  const angles = [...byFrame.values()].map(([, x0, y0, x1, y1]) => Math.atan2(y0 - y1, Math.abs(x1 - x0)) * 180 / Math.PI);
-  const lengths = [...byFrame.values()].map(([, x0, y0, x1, y1]) => Math.hypot(x1 - x0, y1 - y0));
+  const byFrame = [...new Map(arms.map(a => [a[0], a])).values()];
+  const angle = ([, x0, y0, x1, y1]) => Math.atan2(y0 - y1, Math.abs(x1 - x0)) * 180 / Math.PI;
+  const lengths = byFrame.map(([, x0, y0, x1, y1]) => Math.hypot(x1 - x0, y1 - y0));
   // Judge the swing by speed, not per frame: a slow machine draws fewer
-  // frames, so each one moves further, but nothing may snap.
+  // frames, so each one moves further, but nothing may snap. Each drone's arm
+  // swings on its own; the next drone to aim starts afresh from another spot,
+  // so speed is measured within one drone's run only.
   let maxRate = 0;
-  for (let i = 1; i < angles.length; i++) {
-    const dt = Math.max(1 / 60, ((times[frames[i]] || 0) - (times[frames[i - 1]] || 0)) / 1000);
-    maxRate = Math.max(maxRate, Math.abs(angles[i] - angles[i - 1]) / dt);
+  for (let i = 1; i < byFrame.length; i++) {
+    const [fa, ax, ay] = byFrame[i - 1], [fb, bx, by] = byFrame[i];
+    if (Math.hypot(bx - ax, by - ay) > 4) continue;
+    const dt = Math.max(1 / 60, ((times[fb] || 0) - (times[fa] || 0)) / 1000);
+    maxRate = Math.max(maxRate, Math.abs(angle(byFrame[i]) - angle(byFrame[i - 1])) / dt);
   }
   expect(maxRate, 'no snapping (degrees per second)').toBeLessThan(360);
   for (const l of lengths) expect(l).toBeGreaterThan(13.9), expect(l).toBeLessThan(50.1);

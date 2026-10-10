@@ -626,13 +626,110 @@ async function loadGameConfig() {
   } catch (_) { /* the baked fallbacks keep the war rolling */ }
 }
 
+/* ---------- effects ---------- */
+/* Every weapon's looks (muzzle flash, flight trail, blast, specials) live in
+// effects.json, keyed by weapon key, and run on the particle engine in fx.js
+// (shared with the dev-only fx-editor.html). The file's own `_schema` and
+// README.md describe the fields. Blast radii stay in the arsenal (game.yaml): effects
+// scale to the radius the sim hands them and never decide it. Until the file
+// arrives (or when it cannot, e.g. file:// play) this baked Shell keeps the
+// war lit, and any weapon the file does not describe gets a plain effect
+// derived from its paint job (gfx). */
+const FX = window.TankityFX || null;
+const FX_BUDGET = 700; // live particles on the battlefield, hard cap
+const FALLBACK_FX = {
+  shell: {
+    body: { halo: 9, alpha: 0.45 },
+    muzzle: { emitters: [
+      { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.09, 0.09], alpha: [1, 0.6, 0], colors: ['#ffffff', '#ffe27a'], glow: true },
+      { shape: 'streak', count: 7, aim: 'forward', spread: 35, speed: [90, 200], length: 7, life: [0.1, 0.22], gravity: 200, drag: 1.2, colors: ['#fff3c4', '#ffb13c'], glow: true },
+    ] },
+    trail: { emitters: [
+      { rate: 46, life: [0.22, 0.4], speed: [0, 14], size: [1.4, 2.2], sizeEnd: 0.3, colors: ['#fff3c4', '#ffd75e', '#ff9f43'], glow: true },
+    ] },
+    impact: { emitters: [
+      { count: 1, unit: 'r', size: [0.9, 0.9], sizeEnd: 0.5, life: [0.25, 0.25], alpha: [1, 0.7, 0], colors: ['#ffffff', '#ffb13c'], glow: true },
+      { shape: 'ring', count: 1, unit: 'r', size: [0.25, 0.25], sizeEnd: 4, ease: 'out', life: [0.4, 0.4], width: 3, alpha: [0.8, 0.4, 0], colors: ['#e8d4a0', '#a0703a'] },
+      { count: 16, speed: [70, 190], angle: 90, spread: 150, gravity: 340, drag: 0.4, size: [1.3, 2.6], life: [0.5, 1], round: false, alpha: [1, 1, 0], colors: ['#b8854a', '#7a4a1e', '#3a2610'] },
+      { shape: 'streak', count: 10, speed: [120, 260], length: 9, life: [0.2, 0.5], gravity: 200, drag: 1.2, colors: ['#fff3c4', '#ffb13c'], glow: true },
+    ] },
+  },
+};
+let FX_DEFS = FX ? FX.dress(FALLBACK_FX) : {};
+const FX_DERIVED = {};
+/* A weapon's effect set: its entry, else one derived from its paint job. */
+function fxSet(key) {
+  const d = FX_DEFS[key];
+  if (d) return d;
+  return FX_DERIVED[key] || (FX_DERIVED[key] = FX.derive(((WEAPONS[key] || {}).gfx)));
+}
+/* Install a parsed effects.json: each entry that passes validation wins; a
+   bad one is reported and left to the derived effect. */
+function installEffects(data) {
+  if (!FX || !data || typeof data !== 'object') return 0;
+  const next = {};
+  for (const key of Object.keys(data)) {
+    if (key[0] === '_') continue;
+    FX.dress({ [key]: data[key] });
+    const bad = FX.validate({ [key]: data[key] }, [key]);
+    if (bad.length) { if (window.console) console.warn('effects.json: ' + bad[0]); continue; }
+    next[key] = data[key];
+  }
+  if (!next.shell) return 0;
+  FX_DEFS = next;
+  return Object.keys(next).length;
+}
+function loadEffects() {
+  if (!FX || typeof fetch !== 'function') return;
+  fetch('effects.json', { headers: { Accept: 'application/json' } })
+    .then(r => r.json())
+    .then(installEffects)
+    .catch(() => { /* the baked Shell effect above keeps the war lit */ });
+  FX.loadSprites('fx/sprites/');
+}
+if (FX) {
+  // Reduced motion: fewer, shorter particles and no screen flash (shake is
+  // already off in render()).
+  const mq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  if (mq) {
+    FX.reduced = !!mq.matches;
+    if (mq.addEventListener) mq.addEventListener('change', e => { FX.reduced = e.matches; });
+  }
+  loadEffects();
+}
+function fxMuzzle(sys, wkey, x, y, ang) {
+  if (!sys) return;
+  const kick = FX.play.muzzle(sys, fxSet(wkey), x, y, ang);
+  if (kick !== undefined && sys === G.fx) G.shake = Math.max(G.shake || 0, kick);
+}
+/* Returns the effect's own screen shake, if it sets one. */
+function fxImpact(sys, key, x, y, r) {
+  return sys ? FX.play.impact(sys, fxSet(key), x, y, r) : undefined;
+}
+function fxSpecial(sys, key, name, x, y, ang) {
+  if (sys) FX.play.special(sys, fxSet(key), name, x, y, ang);
+}
+/* A shell in flight (any object with x, y, vx, vy, wkey, or pass them
+   explicitly for a replayed one): drip its trail along the path it flew. */
+function fxTrail(sys, s, dt, x, y, vx, vy, wkey) {
+  if (!sys) return;
+  if (x === undefined) { x = s.x; y = s.y; vx = s.vx; vy = s.vy; wkey = s.wkey; }
+  FX.play.trail(sys, fxSet(wkey), s, dt, x, y, vx, vy);
+}
+function drawShellBody(c, wkey, x, y, vx, vy, time) {
+  if (!FX) return;
+  const g = (WEAPONS[wkey] || {}).gfx || {};
+  FX.drawBody(c, x, y, vx, vy, fxSet(wkey).body, g.shell || '#ffe27a', time);
+}
+
+
 /* ---------- state ---------- */
 const G = {
   seed: '', rng: null, body: 'tank',
   terrain: null, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // aim | think | fly | settle | shop | over
   thinkT: 0, settleT: 0,
-  shells: [], parts: [], beams: [], booms: [],
+  shells: [], parts: [], booms: [], fx: null,
   wind: 0, round: 1, firstTurn: 0,
   lives: TUNE.lives, score: 0, cash: 0, nextOneUp: TUNE.oneUpEvery,
   roundsWon: 0, ammo: null, selected: 'shell',
@@ -648,6 +745,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 /* Tables start from the baked fallback (G exists from here on); the file
 // arsenal replaces them the moment it arrives. */
 buildArsenal(FALLBACK_ARSENAL);
+G.fx = FX ? FX.createSystem({ max: FX_BUDGET }) : null;
 const me = () => G.tanks[0];
 const alive = () => G.tanks.filter(t => t.hp > 0);
 const foesAlive = () => G.tanks.filter(t => !t.isPlayer && t.hp > 0);
@@ -748,8 +846,8 @@ function resetMatch(seedStr) {
   G.tanks = [];
   G.shells = [];
   G.parts = [];
-  G.beams = [];
   G.booms = [];
+  if (G.fx) G.fx.clear();
   closePreview();
   hideShop();
 }
@@ -814,8 +912,8 @@ function newRound(bannerText) {
   G.firstTurn++;
   G.shells = [];
   G.parts = [];
-  G.beams = [];
   G.booms = [];
+  if (G.fx) G.fx.clear();
   // The soundtrack turns over with the rounds: song follows the round, and
   // the demo always plays the theme.
   songIdx = G.demo ? 0 : (G.round - 1) % SONGS.length;
@@ -922,12 +1020,11 @@ function fireWeapon(t, wkey) {
       x: m.x, y: m.y,
       vx: Math.cos(a) * spd * s, vy: -Math.sin(a) * spd,
       wkey, owner: t, life: 12,
-      trail: 0, age: 0, pierced: false, split: false,
+      age: 0, pierced: false, split: false,
     });
   }
-  if (wkey === 'rail') {
-    G.beams.push({ x1: m.x, y1: m.y, x2: m.x + Math.cos(rad) * 300 * s, y2: m.y - Math.sin(rad) * 300, life: 0.3 });
-  }
+  // Muzzle effects (the rail's beam among them) fire once per volley, along the barrel.
+  fxMuzzle(G.fx, wkey, m.x, m.y, Math.atan2(-Math.sin(rad), Math.cos(rad) * s));
   SFX.launch();
   G.phase = 'fly';
   return true;
@@ -1008,7 +1105,7 @@ function splitShell(s, w) {
       x: s.x, y: s.y,
       vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
       wkey: s.wkey, owner: s.owner, life: 12,
-      trail: 0, age: 0, pierced: false, split: true,
+      age: 0, pierced: false, split: true,
       dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius,
     });
   }
@@ -1042,11 +1139,7 @@ function stepShells(dt) {
     const x0 = s.x, y0 = s.y;
     stepBallistic(s, dt, G.wind, w.flat ? FLAT_GRAV : GRAV);
     s.life -= dt;
-    s.trail -= dt;
-    if (s.trail <= 0) {
-      s.trail = 0.03;
-      G.parts.push({ x: s.x, y: s.y, vx: 0, vy: 0, life: 0.25, color: (w.gfx && w.gfx.trail) || '#ffd75e', dot: true });
-    }
+    fxTrail(G.fx, s, dt);
     if (s.life <= 0 || s.x < -20 || s.x > W + 20 || s.y > H + 40) {
       s.dead = true;
       continue;
@@ -1054,6 +1147,7 @@ function stepShells(dt) {
     // Cluster blooms on fuse, wherever it happens to be.
     if (w.effect === 'cluster' && !s.split && s.age >= (w.fuse || 0.9)) {
       s.split = true;
+      fxSpecial(G.fx, s.wkey, 'split', s.x, s.y, Math.atan2(s.vy, s.vx));
       splitShell(s, w);
       s.dead = true;
       continue;
@@ -1082,6 +1176,7 @@ function stepShells(dt) {
       // A lance punches through its first victim and keeps flying.
       if (w.effect === 'pierce' && !s.pierced) {
         s.pierced = direct;
+        fxSpecial(G.fx, s.wkey, 'pierce', s.x, s.y, Math.atan2(s.vy, s.vx));
         explode(s.x, s.y, s.wkey, s.owner, direct, s.dw ? { dmg: s.dw, radius: s.dr } : null);
         continue;
       }
@@ -1114,14 +1209,9 @@ function explode(x, y, wkey, owner, direct, ov) {
     G.terrain[ix] = Math.min(H - 4, Math.max(G.terrain[ix], y + cut));
   }
   SFX.boom();
-  G.shake = Math.max(G.shake || 0, gfx.shake || 0.5);
+  const kick = fxImpact(G.fx, (ov && ov.fx) || wkey, x, y, r);
+  G.shake = Math.max(G.shake || 0, kick !== undefined ? kick : (gfx.shake || 0.5));
   G.booms.push({ x, y, r, wkey, t: 0, life: wkey === 'nuke' ? 0.8 : 0.5 });
-  burst(x, y, (gfx.blast && gfx.blast[0]) || '#ffb13c', 24, 7);
-  burst(x, y, '#5a4630', 14, 4);
-  if (wkey === 'nuke') {
-    burst(x, y, '#ff6b6b', 30, 9);
-    G.shake = 0.9;
-  }
   // Damage by distance; direct hits pay double.
   for (const t of G.tanks) {
     if (t.hp <= 0) continue;
@@ -1143,7 +1233,10 @@ function explode(x, y, wkey, owner, direct, ov) {
     if (t.isPlayer && (G.bunker || 0) > 0) dmg = Math.max(1, Math.round(dmg / 2));
     t.hp = Math.max(0, t.hp - dmg);
     // EMP fries fuel as well as armor.
-    if (w.effect === 'emp') t.fuel = Math.max(0, (t.fuel || 0) - (w.drain || 0));
+    if (w.effect === 'emp') {
+      t.fuel = Math.max(0, (t.fuel || 0) - (w.drain || 0));
+      fxSpecial(G.fx, wkey, 'arc', t.x, t.y - 12, 0);
+    }
     if (owner.isPlayer && !t.isPlayer) {
       G.score += dmg * 2;
       G.cash += dmg * 2;
@@ -1170,7 +1263,7 @@ function killTank(t, owner) {
     G.laststand = false;
     say('Last stand! The wreck detonates!', 'good');
     const ls = GEAR.laststand || {};
-    explode(t.x, t.y - 12, 'shell', t, null, { dmg: ls.dmg || 50, radius: ls.radius || 44 });
+    explode(t.x, t.y - 12, 'shell', t, null, { dmg: ls.dmg || 50, radius: ls.radius || 44, fx: 'laststand' });
     renderHUD();
   }
   if (t.isPlayer) {
@@ -1656,7 +1749,8 @@ function openPreview(wkey) {
     wkey, terr: makePreviewTerrain(),
     sx: 44, tx: 296, wind: PV_WIND,
     angle: 60, power: 50, phase: 'aim', t: 0.6,
-    shells: [], parts: [], booms: [], volleys: 0, foeHp: PV_FOE_HP,
+    shells: [], booms: [], volleys: 0, foeHp: PV_FOE_HP,
+    fx: FX ? FX.createSystem({ max: 260 }) : null,
     result: '', resultT: 0, volleyDmg: 0, volleyHits: 0,
     cv: document.getElementById('preview-stage'),
   };
@@ -1673,6 +1767,7 @@ function openPreview(wkey) {
   SFX.click();
 }
 function closePreview() {
+  if (G.preview && G.preview.fx) G.preview.fx.clear();
   G.preview = null;
   const veil = $('preview-veil');
   if (veil) veil.hidden = true;
@@ -1737,21 +1832,19 @@ function previewFire(pv) {
   }
   pv.volleyDmg = 0;
   pv.volleyHits = 0;
+  fxMuzzle(pv.fx, pv.wkey, pv.sx, pv.terr[pv.sx] - 12, Math.atan2(-Math.sin(rad), Math.cos(rad)));
 }
 function previewBoom(pv, x, y, ov) {
   const w = WEAPONS[pv.wkey];
   const dmg0 = (ov && ov.dmg) || w.dmg;
   const r = (ov && ov.radius) || w.radius;
-  pv.booms.push({ x, y, r, t: 0, life: 0.5 });
+  pv.booms.push({ x, y, r, wkey: pv.wkey, t: 0, life: 0.5 });
   const x0 = Math.max(0, Math.floor(x - r)), x1 = Math.min(PV_W - 1, Math.ceil(x + r));
   for (let ix = x0; ix <= x1; ix++) {
     const dx = ix - x;
     pv.terr[ix] = Math.min(PV_H - 4, Math.max(pv.terr[ix], y + Math.sqrt(Math.max(0, r * r - dx * dx)) * 0.75));
   }
-  for (let i = 0; i < 14; i++) {
-    const a = Math.random() * Math.PI * 2, s = 30 + Math.random() * 60;
-    pv.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 20, life: 0.5 });
-  }
+  fxImpact(pv.fx, pv.wkey, x, y, r);
   // Same falloff the war uses, scored against the demo target.
   const fy = pv.terr[pv.tx] - 12;
   const d = Math.hypot(pv.tx - x, fy - y);
@@ -1767,12 +1860,7 @@ function previewBoom(pv, x, y, ov) {
 function stepPreview(dt) {
   const pv = G.preview;
   if (!pv) return;
-  for (const q of pv.parts) {
-    q.life -= dt;
-    q.x += q.vx * dt;
-    q.y += q.vy * dt;
-  }
-  pv.parts = pv.parts.filter(q => q.life > 0);
+  if (pv.fx) { pv.fx.wind = pv.wind; pv.fx.step(dt); }
   for (const bm of pv.booms) bm.t += dt;
   pv.booms = pv.booms.filter(bm => bm.t < bm.life);
   if (pv.resultT > 0) pv.resultT -= dt;
@@ -1798,8 +1886,10 @@ function stepPreview(dt) {
       }
       stepBallistic(s, dt, pv.wind, grav);
       if (s.dead) continue;
+      fxTrail(pv.fx, s, dt);
       if (w.effect === 'cluster' && !s.split && s.age >= (w.fuse || 0.9)) {
         s.split = true;
+        fxSpecial(pv.fx, pv.wkey, 'split', s.x, s.y, Math.atan2(s.vy, s.vx));
         const n = Math.max(2, w.split || 4), fan = w.fan || 0.22;
         const sp = Math.hypot(s.vx, s.vy) * 0.85, base = Math.atan2(s.vy, s.vx);
         for (let i = 0; i < n; i++) {
@@ -1814,6 +1904,7 @@ function stepPreview(dt) {
       if (touch || near) {
         if (w.effect === 'pierce' && !s.pierced && touch) {
           s.pierced = true;
+          fxSpecial(pv.fx, pv.wkey, 'pierce', s.x, s.y, Math.atan2(s.vy, s.vx));
           previewBoom(pv, s.x, s.y, s.dw ? { dmg: s.dw, radius: s.dr } : null);
           continue;
         }
@@ -1947,13 +2038,14 @@ function aiFire(t) {
 function drawBoom(c, bm) {
   const p = Math.min(1, bm.t / bm.life);
   const rr = Math.max(0.1, bm.r * (1 - Math.pow(1 - p, 3)));
-  c.globalAlpha = 0.55 * (1 - p);
-  c.fillStyle = '#ffb13c';
+  const blast = ((WEAPONS[bm.wkey] || {}).gfx || {}).blast || [];
+  c.globalAlpha = 0.4 * (1 - p);
+  c.fillStyle = blast[0] || '#ffb13c';
   c.beginPath();
   c.arc(bm.x, bm.y, rr, 0, Math.PI * 2);
   c.fill();
   c.globalAlpha = 0.9 * (1 - p);
-  c.strokeStyle = '#fff3c4';
+  c.strokeStyle = blast[1] || '#fff3c4';
   c.lineWidth = 2;
   c.beginPath();
   c.arc(bm.x, bm.y, rr, 0, Math.PI * 2);
@@ -2670,24 +2762,15 @@ function render() {
   }
   // Night sky, painted well past the world edge so a pulled-back camera never
   // reveals unpainted void at the sides or in the extra headroom above.
-  // Blocky stars ride along, fixed by index so they never twinkle or crawl.
   c.fillStyle = '#00000b';
   c.fillRect(-W - 10, -2 * H - 10, 3 * W + 20, 3 * H + 20);
-  c.fillStyle = '#ffffff';
-  for (let si = 0; si < 70; si++) {
-    const sx = ((si * 173 + 41) % (3 * W + 20)) - W - 10;
-    const sy = ((si * 311 + 17) % (2 * H)) - 2 * H - 10 + H;
-    if ((si % 3) !== 0) c.fillRect(sx, sy, 2, 2);
-  }
+  drawSky(c, time);
   // Dirt base under the extended sky, so the ground reads as one continuous
   // hillside even past the world edge.
   c.fillStyle = '#2e1a08';
   c.fillRect(-W - 10, H - 2, 3 * W + 20, 2 * H + 12);
-  // Pale moon + dark drifting clouds.
-  c.fillStyle = '#e8e8e8';
-  c.beginPath();
-  c.arc(600, 90, 26, 0, Math.PI * 2);
-  c.fill();
+  // Moon (a rendered sphere, phase chosen per match) + dark drifting clouds.
+  drawMoon(c);
   // Slow camera: everything below rides the zoom so every tank stays seen.
   c.translate(W / 2, H / 2);
   c.scale(G.cam.z, G.cam.z);
@@ -2781,8 +2864,13 @@ function render() {
     c.stroke();
     c.globalAlpha = 1;
   }
+  // Blast discs: each explosion draws exactly the circle its weapon destroys,
+  // under the effects (trails, muzzle and blast particles), shells on top.
+  for (const bm of G.booms) drawBoom(c, bm);
+  if (G.fx) G.fx.draw(c);
   // Shells in flight.
   for (const s of G.shells) {
+    drawShellBody(c, s.wkey, s.x, s.y, s.vx, s.vy, time);
     c.fillStyle = ((WEAPONS[s.wkey] || {}).gfx || {}).shell || '#ffe27a';
     c.beginPath();
     c.arc(s.x, s.y, s.wkey === 'nuke' ? 7 : s.wkey === 'mortar' ? 4.5 : 3.5, 0, Math.PI * 2);
@@ -2799,16 +2887,8 @@ function render() {
       if (sh.landed) continue;
       const [hx, hy, idx] = netShellAt(sh, ft);
       const gfx = ((WEAPONS[sh.e.w] || {}).gfx) || {};
-      c.strokeStyle = gfx.trail || '#ffd75e';
-      c.globalAlpha = 0.5;
-      c.lineWidth = 1.5;
-      c.beginPath();
-      const from = Math.max(0, idx - 8);
-      c.moveTo(sh.pts[from] ? sh.pts[from][0] : hx, sh.pts[from] ? sh.pts[from][1] : hy);
-      for (let i = from + 1; i <= idx; i++) c.lineTo(sh.pts[i][0], sh.pts[i][1]);
-      c.lineTo(hx, hy);
-      c.stroke();
-      c.globalAlpha = 1;
+      const hv = netShellVel(sh, idx);
+      drawShellBody(c, sh.e.w, hx, hy, hv[0], hv[1], time);
       c.fillStyle = gfx.shell || '#ffe27a';
       c.beginPath();
       c.arc(hx, hy, sh.e.w === 'nuke' ? 7 : sh.e.w === 'mortar' ? 4.5 : 3.5, 0, Math.PI * 2);
@@ -2821,36 +2901,91 @@ function render() {
   }
   c.globalAlpha = 1;
   drawWindStreaks(c, time);
-  // Blast discs: each explosion draws exactly the circle its weapon destroys.
-  for (const bm of G.booms) drawBoom(c, bm);
   if (G.preview) drawPreview();
-  // Rail muzzle streaks.
-  for (const b of G.beams) {
-    c.globalAlpha = Math.max(0, b.life * 3);
-    c.strokeStyle = '#9fd8ff';
-    c.lineWidth = 4;
-    c.beginPath();
-    c.moveTo(b.x1, b.y1);
-    c.lineTo(b.x2, b.y2);
-    c.stroke();
-    c.globalAlpha = 1;
-  }
   // Particles.
   for (const q of G.parts) {
     c.globalAlpha = Math.max(0, Math.min(1, q.life * 1.8));
     c.fillStyle = q.color;
-    if (q.dot) {
-      c.beginPath();
-      c.arc(q.x, q.y, 1.6, 0, Math.PI * 2);
-      c.fill();
-    } else {
-      c.fillRect(q.x - 2, q.y - 2, 4, 4);
-    }
+    c.fillRect(q.x - 2, q.y - 2, 4, 4);
   }
   c.globalAlpha = 1;
   c.restore();
+  if (G.fx) G.fx.drawFlash(c, cv.width || W, cv.height || H);
   drawWindGauge(c, cv, time);
   drawTurnClock(c, cv);
+}
+/* ---------- the night sky ---------- */
+/* Every match has its own sky, drawn from the match key (the solo seed, or
+   the room code) through a generator of its own, so it never touches the
+   sim's random numbers and every client of a room sees the same stars. Square
+   pixel stars in sizes, brightnesses and a few tints; a faint milky band and
+   a few clusters; a quiet twinkle on some (none under reduced motion); and a
+   moon phase from the rendered sheet (fx/sprites/moon.png). */
+const SKY_X0 = -20, SKY_W = W + 40, SKY_Y0 = -20, SKY_H = 420; // the sky rides the screen, not the camera
+const SKY_TINTS = ['#ffe2b0', '#b8d0ff'];
+const SKY_PHASES = [0, 0, 1, 6, 2, 5, 3, 4]; // frames of moon.png, full and gibbous favoured
+let SKY = null;
+function buildSky(key) {
+  const r = mulberry32(hashSeed('sky:' + key));
+  const stars = [];
+  const add = (x, y, bright) => {
+    const pick = r();
+    const size = pick < 0.72 ? 1.2 : pick < 0.93 ? 2 : 3;
+    const tint = r() < 0.22 ? SKY_TINTS[Math.floor(r() * 2)] : '#ffffff';
+    stars.push({ x: Math.round(x), y: Math.round(y), s: size, a: Math.min(1, bright * (size > 2 ? 1.2 : 1)), c: tint, tw: r() < 0.3 ? 0.6 + r() * 2.2 : 0, ph: r() * 6.28 });
+  };
+  for (let i = 0; i < 130; i++) add(SKY_X0 + r() * SKY_W, SKY_Y0 + r() * SKY_H, 0.3 + r() * 0.7);
+  // The milky band: a slanted strip of faint dust, with its glow drawn behind it.
+  const ang = -0.5 + r() * 1.0, cx = SKY_X0 + SKY_W * (0.3 + r() * 0.4), cy = SKY_Y0 + SKY_H * (0.25 + r() * 0.35);
+  for (let i = 0; i < 130; i++) {
+    const along = (r() - 0.5) * 1.3 * W, across = gauss(r) * 30;
+    add(cx + Math.cos(ang) * along - Math.sin(ang) * across, cy + Math.sin(ang) * along + Math.cos(ang) * across, 0.18 + r() * 0.4);
+  }
+  for (let k = 0; k < 3; k++) {
+    const kx = SKY_X0 + r() * SKY_W, ky = SKY_Y0 + r() * SKY_H;
+    for (let i = 0; i < 9; i++) add(kx + gauss(r) * 16, ky + gauss(r) * 12, 0.35 + r() * 0.6);
+  }
+  return { key, stars, band: { x: cx, y: cy, ang }, phase: SKY_PHASES[Math.floor(r() * SKY_PHASES.length)] };
+}
+function skyKey() { return NET.on ? 'room:' + NET.code : String(G.seed || ''); }
+function drawSky(c, time) {
+  const key = skyKey();
+  if (!SKY || SKY.key !== key) SKY = buildSky(key);
+  const calm = FX && FX.reduced;
+  // The band's glow: three broad, faint ellipses along its slant.
+  c.fillStyle = '#7f86d8';
+  for (let i = 0; i < 3; i++) {
+    c.globalAlpha = 0.03;
+    c.beginPath();
+    c.ellipse(SKY.band.x, SKY.band.y, 520 - i * 120, 52 - i * 12, SKY.band.ang, 0, Math.PI * 2);
+    c.fill();
+  }
+  for (const st of SKY.stars) {
+    let a = st.a;
+    if (st.tw && !calm) a *= 0.72 + 0.28 * Math.sin(time * st.tw + st.ph);
+    c.globalAlpha = a;
+    c.fillStyle = st.c;
+    c.fillRect(st.x, st.y, st.s, st.s);
+    if (st.s > 2.5) { // the brightest ones get a cross glint
+      c.fillRect(st.x - 2, st.y + 1, st.s + 4, 1);
+      c.fillRect(st.x + 1, st.y - 2, 1, st.s + 4);
+    }
+  }
+  c.globalAlpha = 1;
+}
+function drawMoon(c) {
+  const mx = 600, my = 90, mr = 32;
+  const sh = FX && FX.sheets.moon;
+  if (!sh || !sh.ready || !SKY) {
+    c.fillStyle = '#e8e8e8';
+    c.beginPath();
+    c.arc(mx, my, 26, 0, Math.PI * 2);
+    c.fill();
+    return;
+  }
+  FX.glow(c, mx, my, mr * 3.2, '#a8b8ff', 0.26);
+  const f = SKY.phase % sh.frames;
+  c.drawImage(sh.img, (f % sh.cols) * sh.fw, ((f / sh.cols) | 0) * sh.fh, sh.fw, sh.fh, mx - mr, my - mr, mr * 2, mr * 2);
 }
 /* Wind lives on the battlefield, not in the status bar: faint streaks
    drift across the sky at the wind's speed, and a gauge just under the menu
@@ -3064,15 +3199,16 @@ function drawPreview() {
   c.fillStyle = '#00aa00';
   c.fillRect(pv.tx - 14, ty - 27, 28 * (pv.foeHp / PV_FOE_HP), 2);
   // Shells + debris.
+  for (const bm of pv.booms) drawBoom(c, bm);
+  if (pv.fx) pv.fx.draw(c);
   for (const s of pv.shells) {
+    drawShellBody(c, pv.wkey, s.x, s.y, s.vx, s.vy, G.time);
     c.fillStyle = ((WEAPONS[pv.wkey] || {}).gfx || {}).shell || '#ffe27a';
     c.beginPath();
     c.arc(s.x, s.y, 3, 0, Math.PI * 2);
     c.fill();
   }
-  c.fillStyle = '#ffb13c';
-  for (const q of pv.parts) c.fillRect(q.x - 1.5, q.y - 1.5, 3, 3);
-  for (const bm of pv.booms) drawBoom(c, bm);
+  if (pv.fx) pv.fx.drawFlash(c, PV_W, PV_H);
   // Wind readout + last-shot verdict.
   c.fillStyle = '#fff';
   c.font = 'bold 10px sans-serif';
@@ -3107,18 +3243,17 @@ function renderHUD() {
 /* ---------- main loop ---------- */
 const keysDown = {};
 let lastT = 0;
-/* Battlefield cosmetics decay on wall-clock frames, never on volleys: beams,
+/* Battlefield cosmetics decay on wall-clock frames, never on volleys: effects,
  * blast discs, shake, and sparks all finish even after the last shell lands,
 // so nothing freezes over the next turn. */
 function decayFx(dt) {
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt);
-  for (const b of G.beams) b.life -= dt;
-  G.beams = G.beams.filter(b => b.life > 0);
+  if (G.fx) { G.fx.wind = G.wind; G.fx.step(dt); }
   for (const bm of G.booms) bm.t += dt;
   G.booms = G.booms.filter(bm => bm.t < bm.life);
   for (const q of G.parts) {
     q.life -= dt;
-    if (!q.dot) { q.x += q.vx * dt; q.y += q.vy * dt; q.vy += GRAV * 0.6 * dt; }
+    q.x += q.vx * dt; q.y += q.vy * dt; q.vy += GRAV * 0.6 * dt;
   }
   G.parts = G.parts.filter(q => q.life > 0);
 }
@@ -4138,10 +4273,16 @@ function netCarve(x, y, r) {
 }
 function netBlast(x, y, r, wkey) {
   SFX.boom();
-  G.shake = Math.min(1, G.shake + (wkey === 'nuke' ? 0.9 : r > 40 ? 0.5 : 0.3));
-  burst(x, y, wkey === 'nuke' ? '#ff6b6b' : '#ffd75e');
-  G.booms.push({ x, y, r, t: 0, life: wkey === 'nuke' ? 0.8 : 0.5 });
+  const kick = fxImpact(G.fx, wkey, x, y, r);
+  G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : wkey === 'nuke' ? 0.9 : r > 40 ? 0.5 : 0.3));
+  G.booms.push({ x, y, r, wkey, t: 0, life: wkey === 'nuke' ? 0.8 : 0.5 });
   netCarve(x, y, r);
+}
+/* A replayed shell's velocity at path index i (points are 1/PATH_HZ s apart). */
+function netShellVel(s, i) {
+  const pts = s.pts, a = pts[Math.min(i, pts.length - 1)], b = pts[Math.min(i + 1, pts.length - 1)];
+  if (!a || !b) return [0, 0];
+  return [(b[0] - a[0]) * PATH_HZ, (b[1] - a[1]) * PATH_HZ];
 }
 function netStepVolley(dt) {
   const v = NET.volley;
@@ -4164,14 +4305,29 @@ function netStepVolley(dt) {
     if (e.done || e.at === undefined || ft < e.at) continue;
     e.done = true;
     if (e.t === 'shot') {
-      v.shots.push({ e, pts: netParsePath(e.p), landed: false });
+      const sh = { e, pts: netParsePath(e.p), landed: false, fx: null };
+      v.shots.push(sh);
       SFX.launch();
+      // Bomblets leave the bloom point; every other shot leaves the barrel.
+      if (e.t0 < 0.01 && sh.pts.length > 1) {
+        const hv = netShellVel(sh, 0);
+        fxMuzzle(G.fx, e.w, sh.pts[0][0], sh.pts[0][1], Math.atan2(hv[1], hv[0]));
+      }
     } else if (e.t === 'burst') {
       netBlast(e.x, e.y, e.r, e.w);
+      // A burst from a lance is the bolt passing through a tank.
+      const pass = (WEAPONS[e.w] || {}).effect === 'pierce' && v.shots.find(sh => sh.e.w === e.w);
+      if (pass) {
+        const hv = netShellVel(pass, netShellAt(pass, ft)[2]);
+        fxSpecial(G.fx, e.w, 'pierce', e.x, e.y, Math.atan2(hv[1], hv[0]));
+      }
     } else {
       if (e.t === 'hit') {
         const t = G.tanks.find(x => x.seat === e.seat);
         if (t) t.hp = Math.max(0, t.hp - e.dmg);
+        // Over a fried tank, the EMP's arcs.
+        const emp = t && v.shots.find(sh => (WEAPONS[sh.e.w] || {}).effect === 'emp');
+        if (emp) fxSpecial(G.fx, emp.e.w, 'arc', t.x, t.y - 12, 0);
       } else if (e.t === 'kill') {
         const t = G.tanks.find(x => x.seat === e.seat);
         if (t) t.hp = 0;
@@ -4180,9 +4336,18 @@ function netStepVolley(dt) {
     }
   }
   for (const s of v.shots) {
-    if (!s.landed && ft >= s.e.t1) {
-      s.landed = true;
-      if (s.e.r > 0) netBlast(s.e.x1, s.e.y1, s.e.r, s.e.w);
+    if (s.landed) continue;
+    if (ft < s.e.t1) {
+      // In flight: the trail drips along the path the server flew.
+      const at = netShellAt(s, ft), hv = netShellVel(s, at[2]);
+      fxTrail(G.fx, s, dt, at[0], at[1], hv[0], hv[1], s.e.w);
+      continue;
+    }
+    s.landed = true;
+    if (s.e.r > 0) netBlast(s.e.x1, s.e.y1, s.e.r, s.e.w);
+    else if (s.e.split) {
+      const hv = netShellVel(s, s.pts.length - 2);
+      fxSpecial(G.fx, s.e.w, 'split', s.e.x1, s.e.y1, Math.atan2(hv[1], hv[0]));
     }
   }
   if (ft >= v.end && v.events.every(e => e.done || e.at === undefined) && v.shots.every(s => s.landed)) {

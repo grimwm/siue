@@ -1,0 +1,89 @@
+/* Effects editor (dev only). Same night-battlefield palette as game.css. */
+:root {
+  --bg: #101308;
+  --panel: #1a1e10;
+  --ink: #eef3d8;
+  --dim: #a8b08a;
+  --line: #3a4226;
+  --accent: #ffc93c;
+  --good: #7ddf64;
+  --bad: #ff5a5a;
+  --sky: #00000b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+code { color: var(--accent); }
+.bar {
+  display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
+  padding: 0.6rem 1rem; border-bottom: 1px solid var(--line);
+}
+.bar h1 { margin: 0; font-size: 1.15rem; }
+.note { color: var(--dim); font-size: 0.85rem; }
+.grow { flex: 1; }
+.layout {
+  display: grid; gap: 0.75rem; padding: 0.75rem;
+  grid-template-columns: minmax(250px, 300px) minmax(360px, 1fr) minmax(300px, 380px);
+  align-items: start;
+}
+@media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 0.6rem;
+  max-height: calc(100vh - 5rem); overflow: auto;
+}
+@media (max-width: 1100px) { .panel { max-height: none; } }
+h2 { margin: 0.8rem 0 0.4rem; font-size: 0.9rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
+.panel > h2:first-child { margin-top: 0; }
+button, select, input[type="number"], input[type="text"] {
+  background: #23291a; color: var(--ink); border: 1px solid var(--line); border-radius: 4px;
+  padding: 0.25rem 0.5rem; font: inherit;
+}
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input[type="number"] { width: 5.2rem; }
+input[type="color"] { width: 2rem; height: 1.6rem; padding: 0; border: 1px solid var(--line); background: none; }
+input[type="range"] { flex: 1; min-width: 80px; accent-color: var(--accent); }
+.row { display: flex; gap: 0.5rem; align-items: center; margin: 0.35rem 0; }
+.row > span { color: var(--dim); min-width: 5.5rem; }
+.row select { flex: 1; }
+.tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.5rem 0; }
+.tabs button { padding: 0.2rem 0.55rem; }
+.tabs button[aria-pressed="true"] { background: var(--accent); color: #1a1400; border-color: var(--accent); font-weight: 600; }
+.emitters { list-style: none; margin: 0; padding: 0; }
+.emitters li {
+  display: flex; gap: 0.25rem; align-items: center; padding: 0.2rem 0.3rem; border: 1px solid transparent;
+  border-radius: 4px; cursor: pointer;
+}
+.emitters li[aria-current="true"] { border-color: var(--accent); background: #23291a; }
+.emitters li.muted .label { opacity: 0.4; text-decoration: line-through; }
+.emitters .label { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.emitters button { padding: 0 0.35rem; font-size: 0.8rem; }
+.swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 2px; border: 1px solid var(--line); vertical-align: -1px; margin-right: 0.3rem; }
+#stage {
+  width: 100%; max-width: 960px; height: auto; display: block; background: var(--sky);
+  border: 1px solid var(--line); border-radius: 6px; image-rendering: auto;
+}
+.controls { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; margin-top: 0.5rem; }
+.controls label { color: var(--dim); }
+.stats { color: var(--dim); font-variant-numeric: tabular-nums; margin-left: auto; }
+.status { min-height: 1.3em; color: var(--dim); }
+.status.bad { color: var(--bad); }
+.status.good { color: var(--good); }
+.group { border-top: 1px solid var(--line); margin-top: 0.6rem; padding-top: 0.2rem; }
+.group > h3 { margin: 0.3rem 0; font-size: 0.8rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
+.field { display: flex; gap: 0.4rem; align-items: center; margin: 0.28rem 0; }
+.field > label { min-width: 5.2rem; color: var(--ink); }
+.field.is-set > label { color: var(--accent); }
+.field .hint { color: var(--dim); font-size: 0.75rem; }
+.field .reset { padding: 0 0.3rem; font-size: 0.75rem; visibility: hidden; }
+.field.is-set .reset { visibility: visible; }
+.chips { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
+.chips .chip { display: inline-flex; align-items: center; gap: 0.1rem; }
+.chips .chip button { padding: 0 0.3rem; }
+.chips input[type="number"] { width: 4rem; }
+.help { color: var(--dim); font-size: 0.8rem; margin: 0.2rem 0 0.5rem; }

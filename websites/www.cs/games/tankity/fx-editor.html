@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Tankity effects editor</title>
+<link rel="stylesheet" href="fx-editor.css">
+</head>
+<body>
+<!-- Dev tool: never deployed (deploy.sh skips games/*/fx-editor.*). It edits
+     effects.json with the game's own engine (fx.js); see README.md. -->
+<header class="bar">
+  <h1>Tankity effects editor</h1>
+  <span class="note">Dev only. Edits <code>effects.json</code> with the game's engine; export, then replace the file.</span>
+  <span class="grow"></span>
+  <button id="copy" type="button" title="Copy effects.json to the clipboard">Copy JSON</button>
+  <button id="download" type="button" title="Save effects.json">Download effects.json</button>
+  <button id="reload" type="button" title="Drop unsaved edits and read effects.json again">Reload file</button>
+</header>
+<main class="layout">
+  <section class="panel" id="left" aria-label="Weapon and emitters">
+    <label class="row"><span>Weapon</span><select id="weapon"></select></label>
+    <div class="tabs" id="slots" role="group" aria-label="Effect slot"></div>
+    <div class="row addspecial"><select id="special-name" aria-label="Special to add"></select><button id="special-add" type="button">Add special</button></div>
+    <div id="slot-extra"></div>
+    <h2>Emitters</h2>
+    <ol id="emitters" class="emitters"></ol>
+    <div class="row">
+      <select id="new-shape" aria-label="Shape of the new emitter"></select>
+      <button id="em-add" type="button">Add emitter</button>
+    </div>
+  </section>
+  <section id="center" aria-label="Preview">
+    <canvas id="stage" width="720" height="300" aria-label="Effect preview"></canvas>
+    <div class="controls">
+      <button id="fire" type="button">Fire (Space)</button>
+      <label><input type="checkbox" id="loop" checked> Loop</label>
+      <label><input type="checkbox" id="slow"> Slow motion</label>
+      <label><input type="checkbox" id="reduced"> Reduced motion</label>
+      <label><input type="checkbox" id="showr" checked> Blast radius</label>
+      <span id="stats" class="stats" aria-live="off"></span>
+    </div>
+    <p id="status" class="status" role="status"></p>
+  </section>
+  <section class="panel" id="right" aria-label="Emitter parameters">
+    <h2 id="param-title">Parameters</h2>
+    <div id="params"></div>
+  </section>
+</main>
+<script src="fx.js"></script>
+<script src="fx-editor.js"></script>
+</body>
+</html>

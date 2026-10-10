@@ -6,25 +6,74 @@ import { expect } from '@playwright/test';
    the game. Markers:
    - shells: the 1.5 px white core every shell in flight has;
    - arms:   drone aim arms (stroked at alpha 0.75, width 2);
-   - tankY:  the player label's height (the unit's height on the hills). */
+   Neither counts what the effects engine draws (a particle can match either
+   look), so the recorder wraps each TankityFX system's draw to know when
+   it is inside one.
+   - tankY:  the player label's height (the unit's height on the hills).
+   Effects (see tankity-fx.spec.mjs), counted on the battlefield ('stage') and
+   the firing range ('preview-stage') separately:
+   - lighter: times the canvas switched to additive compositing;
+   - sheets:  effect sprite-sheet frames drawn (nine-argument drawImage; the
+              moon's 192 px frames are the sky and not counted);
+   - blobs:   soft glow sprites drawn (five-argument drawImage);
+   - rings:   stroked 2 px arcs in a hex colour (the blast disc), kept only
+              while rec.watchRings is set: [frame, radius, strokeStyle];
+   - skyRects: small (3 px or less) rects painted above y 420 on the battlefield,
+              kept while rec.watchSky is set: [x, y, w]; the stars. */
 export function recorderScript() {
   try { localStorage.setItem('tankity-tutorial', 'done'); } catch (_) { /* fine */ }
-  const rec = { frame: 0, shells: [], arms: [], tankY: [] };
+  const rec = {
+    frame: 0, shells: [], arms: [], tankY: [],
+    lighter: 0, sheets: 0, blobs: 0, pv: { lighter: 0, sheets: 0, blobs: 0 }, rings: [], watchRings: false,
+    skyRects: [], watchSky: false,
+  };
   window.__rec = rec;
   const raf = window.requestAnimationFrame.bind(window);
   rec.times = {}; // frame number -> its timestamp, so motion can be judged per second
   window.requestAnimationFrame = cb => raf(ts => { rec.frame++; rec.times[rec.frame] = ts; cb(ts); });
   const P = CanvasRenderingContext2D.prototype;
   const onStage = c => c.canvas && c.canvas.id === 'stage';
-  const arc = P.arc, moveTo = P.moveTo, lineTo = P.lineTo, fillText = P.fillText;
+  const where = c => (c.canvas && c.canvas.id === 'stage' ? rec : c.canvas && c.canvas.id === 'preview-stage' ? rec.pv : null);
+  // Effects-engine draws, told apart by wrapping each system's draw.
+  let inFx = 0, fxApi;
+  Object.defineProperty(window, 'TankityFX', {
+    configurable: true,
+    get() { return fxApi; },
+    set(api) {
+      const create = api.createSystem;
+      api.createSystem = function (...a) {
+        const sys = create.apply(this, a), draw = sys.draw;
+        sys.draw = function (...b) { inFx++; try { return draw.apply(this, b); } finally { inFx--; } };
+        return sys;
+      };
+      fxApi = api;
+    },
+  });
+  const arc = P.arc, moveTo = P.moveTo, lineTo = P.lineTo, fillText = P.fillText, drawImage = P.drawImage, fillRect = P.fillRect;
+  P.fillRect = function (x, y, w, h) {
+    if (rec.watchSky && onStage(this) && w <= 3 && h <= 3 && y < 420 && rec.skyRects.length < 4000) rec.skyRects.push([x, y, w]);
+    return fillRect.call(this, x, y, w, h);
+  };
+  const gco = Object.getOwnPropertyDescriptor(P, 'globalCompositeOperation');
+  Object.defineProperty(P, 'globalCompositeOperation', {
+    configurable: true,
+    get() { return gco.get.call(this); },
+    set(v) { const w = where(this); if (w && v === 'lighter') w.lighter++; gco.set.call(this, v); },
+  });
+  P.drawImage = function (img, ...a) {
+    const w = where(this);
+    if (w) { if (a.length === 8) { if (a[2] !== 192) w.sheets++; } else if (a.length === 4) w.blobs++; } // 192 px frames are the moon, not an effect
+    return drawImage.call(this, img, ...a);
+  };
   let from = null;
   P.arc = function (x, y, r, ...rest) {
-    if (onStage(this) && r === 1.5 && this.fillStyle === '#ffffff') rec.shells.push([rec.frame, x, y]);
+    if (!inFx && onStage(this) && r === 1.5 && this.fillStyle === '#ffffff') rec.shells.push([rec.frame, x, y]);
+    if (rec.watchRings && onStage(this) && this.lineWidth === 2 && /^#/.test(this.strokeStyle)) rec.rings.push([rec.frame, r, this.strokeStyle]);
     return arc.call(this, x, y, r, ...rest);
   };
   P.moveTo = function (x, y) { from = [x, y]; return moveTo.call(this, x, y); };
   P.lineTo = function (x, y) {
-    if (onStage(this) && this.globalAlpha === 0.75 && this.lineWidth === 2 && from) rec.arms.push([rec.frame, from[0], from[1], x, y]);
+    if (!inFx && onStage(this) && this.globalAlpha === 0.75 && this.lineWidth === 2 && from) rec.arms.push([rec.frame, from[0], from[1], x, y]);
     return lineTo.call(this, x, y);
   };
   P.fillText = function (t, x, y, ...rest) {
@@ -88,7 +137,12 @@ export async function setPower(page, power) {
 }
 
 export const rec = page => page.evaluate(() => window.__rec);
-export const resetRec = page => page.evaluate(() => { const r = window.__rec; r.shells = []; r.arms = []; r.tankY = []; });
+export const resetRec = page => page.evaluate(() => {
+  const r = window.__rec;
+  r.shells = []; r.arms = []; r.tankY = []; r.rings = []; r.skyRects = [];
+  r.lighter = r.sheets = r.blobs = 0;
+  r.pv.lighter = r.pv.sheets = r.pv.blobs = 0;
+});
 
 /* Per-frame positions of the first moving shell core. Small white dots that
    sit still across frames (stars) are not shells and drop out. */

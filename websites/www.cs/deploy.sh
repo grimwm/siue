@@ -15,18 +15,14 @@
 #   DRY_RUN=1 show what would change, upload nothing
 #   PRUNE=1   also delete stale files: ones the last deploy sent (they are
 #             in the host's .deploy-hash manifest) that this one does not
+#   LIST=1    print the deploy set, one path per line, and stop (no host,
+#             no password needed)
 set -euo pipefail
 
 cd "$(dirname "$0")"
 repo=$(git rev-parse --show-toplevel)
 HOST=${HOST:-wgrim@www.cs.siue.edu}
 PASSFILE=${SSHPASS_FILE:-$HOME/.ssh/.passwd.siue}
-# Without a readable password file ssh would sit at a prompt forever.
-if [ ! -r "$PASSFILE" ]; then
-  echo "deploy: cannot read password file $PASSFILE (set SSHPASS_FILE)" >&2
-  exit 1
-fi
-sshpass=(sshpass -f "$PASSFILE")
 STAMP=.deploy-hash
 # Runtime data the server writes; never upload over it.
 SCORES=games/cylon/data/scores.json
@@ -74,9 +70,10 @@ while IFS= read -r -d '' f; do
     # ship; nothing at runtime runs them), the room protocol fixtures
     # (games/*/protocol/, only the tests read them), games/tankity/game.yaml,
     # whose runtime form is the generated game.json (nothing fetches the
-    # YAML), and the sound-effect build script (the .mp3 files it builds do
-    # ship; its sources are in games/*/src/ below).
-    games/*-test.* | games/README.md | games/*/README.md | games/*/tools/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh) continue ;;
+    # YAML), the sound-effect build script (the .mp3 files it builds do ship;
+    # its sources are in games/*/src/ below), the effects editor and the
+    # Blender script behind the effect sprites (the rendered sheets do ship).
+    games/*-test.* | games/README.md | games/*/README.md | games/*/tools/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/*/fx-editor.* | games/*/fx/blender/*) continue ;;
     # Authoring sources kept in Git LFS (see .gitattributes): never served.
     *.blend | *.blend1 | *.wav | *.flac | *.aif | *.aiff | games/*/src/*) continue ;;
     games/*) ;;
@@ -91,6 +88,18 @@ while IFS= read -r -d '' f; do
 done < <(git ls-files -z --cached --others --exclude-standard --deduplicate -- .)
 find "$stage" -type d -exec chmod 755 {} +
 find "$stage" -type f -exec chmod 644 {} +
+
+if [ "${LIST:-0}" = 1 ]; then
+  (cd "$stage" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
+  exit 0
+fi
+
+# Without a readable password file ssh would sit at a prompt forever.
+if [ ! -r "$PASSFILE" ]; then
+  echo "deploy: cannot read password file $PASSFILE (set SSHPASS_FILE)" >&2
+  exit 1
+fi
+sshpass=(sshpass -f "$PASSFILE")
 
 hash=$(python3 -I "$repo/scripts/deploy-hash" "$stage" --extra "$PWD/deploy.sh")
 python3 -I "$repo/scripts/deploy-hash" "$stage" --manifest >"$work/manifest"

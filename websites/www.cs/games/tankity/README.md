@@ -9,13 +9,14 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
 | File                                                            | What it is                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: rendering, sound, HUD, shop, room client and replay); it imports the sim from `js/sim.js`                                                                                                                 |
+| `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: rendering, HUD, shop, room client and replay); it imports the sim and the audio from `js/`                                                                                                               |
 | `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (20 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `game.js`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml`, and where each came from                                                                                                                     |
 | `src/sim.ts` | The game math in TypeScript: RNG, terrain, flight, hit tests, blasts, the drone's aim. Pure: state in, what happened out; no page, sound or particles |
-| `js/sim.js` | `src/sim.ts` compiled by `tools/ts-build.mjs`; checked in and deployed (the host has no Node). Never edit by hand |
-| `package.json`, `package-lock.json`, `tsconfig.json` | The build setup (TypeScript pinned exactly). Never deployed, like `src/`, `tools/` and `node_modules/` |
+| `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes. It never touches the page |
+| `js/*.js` | `src/*.ts` compiled by `tools/ts-build.mjs`; checked in and deployed (the host has no Node). Never edit by hand |
+| `package.json`, `package-lock.json`, `tsconfig.json`, `src/tsconfig.dom.json` | The build setup (TypeScript pinned exactly). Never deployed, like `src/`, `tools/` and `node_modules/` |
 | `rooms.php`                                                     | Room server: authoritative sim, AI turns, shop, events                                                                                                                                      |
 | `scores.php`, `config.php`                                      | Score API; `.config.yaml` reader                                                                                                                                                            |
 | `fx.js` | The effects engine (particle pool, emitters, screen flash, shell glow), shared by `game.js` and the editor; exposes `window.TankityFX` |
@@ -131,17 +132,29 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
   their content.
 - `tsconfig.json`: strict, `noUncheckedIndexedAccess`, ES2022 modules, imports
   written with their `.js` extension (the file the browser fetches), comments
-  kept, no source maps. The sim compiles without DOM types, so it cannot reach
-  for the page.
-- `game.js` imports the sim with the same `?v=` as its own tag in `index.html`
-  (`./js/sim.js?v=...`): bump both together whenever either changes, or a
-  cached module could pair with a newer `game.js`. `smoke-test.js` checks they
-  match. The service worker serves network first, revalidating, so it never
+  kept, no source maps. It lists the DOM-free modules (the sim), which compile
+  without DOM types, so they cannot reach for the page. `src/tsconfig.dom.json`
+  extends it with the DOM lib for the modules that need WebAudio, `fetch` and
+  timers (`audio.ts`); `ts-build.mjs` compiles each config as its own program,
+  so adding the DOM lib for the audio never lets the sim see `document`.
+- `game.js` imports each module with the same `?v=` as its own tag in
+  `index.html` (`./js/sim.js?v=...`, `./js/audio.js?v=...`): bump them all
+  together whenever any changes, or a cached module could pair with a newer
+  `game.js`. `smoke-test.js` checks they match and that every `js/` file is
+  imported. The service worker serves network first, revalidating, so it never
   holds a stale module for an online player.
 - The sim takes its state as arguments (`World`, `Arsenal`) and reports what
   happened as data: `explode` returns the blast (each unit's shield, wound or
   wreck, a last stand's nested blast), `stepShells` returns the frame's trails,
   splits, pierces and blasts. `game.js` plays them as sound, particles and chat.
+- `audio.ts` is a handful of exports and keeps its state to itself: `initAudio`
+  installs game.json's audio section, `sfx.play(name)` (plus `sfx.turnPing()` and
+  `sfx.clockWarn()`) voices an event, `music.start/stop/next/playTheme/forRound/
+  leaveTheme` drive the soundtrack, `music.watchdog()` runs every frame,
+  `music.onTrackStart(cb)` reports the track that begins (`game.js` shows it as
+  a log line), `noteGesture` and `unlock` wake the speakers, and
+  `setSoundMuted`/`setMusicMuted` (with `isSoundMuted`/`isMusicMuted`) are the
+  toggles.
 
 ## Tests
 
@@ -153,6 +166,7 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
 | `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; `room_snapshot` shapes against `protocol/` |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (needs SysV; run inside the PHP container)                 |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
+| `node audio-test.js`                            | `js/audio.js` imports without a browser; the loop-point trim and the round-to-track mapping are right |
 | `node sim-vectors-test.js`                     | `js/sim.js` agrees with `rooms.php` on every shared sim vector (see Sim vectors)              |
 | `php rooms-test.php`                           | The room shelf over its own `php -S` (needs SysV; run inside the PHP container)            |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |

@@ -394,7 +394,7 @@ const TANKITY_AUDIO_EXT = ['mp3', 'ogg', 'm4a', 'wav'];
 const TANKITY_KEY_ACTIONS = [
     'aim' => ['barrelLeft', 'barrelRight', 'powerUp', 'powerDown', 'driveLeft', 'driveRight'],
     'shop' => ['selUp', 'selDown', 'qtyUp', 'qtyDown', 'buyRow', 'buy', 'preview', 'close', 'next'],
-    'global' => ['music', 'sound', 'log', 'help', 'report', 'menu', 'random', 'rooms', 'new', 'cycle', 'guns',
+    'global' => ['music', 'nextTrack', 'sound', 'log', 'help', 'report', 'menu', 'random', 'rooms', 'new', 'cycle', 'guns',
         'tutorial', 'battlePreview', 'fullscreen', 'fire', 'escape'],
     'scroll' => ['lineDown', 'lineUp', 'pageDown', 'pageUp', 'halfDown', 'halfUp'],
 ];

@@ -427,6 +427,7 @@ keys:
     next: [n]
   global:
     music: [m]
+    nextTrack: [BracketRight, "]"]
     sound: [e]
     log: [l]
     help: [h]
@@ -480,8 +481,12 @@ keys:
 #   volume   0 (silent) to 1 (full), default 1.
 # Effects are always played through the Sound toggle (E).
 #
-# music: an ordered playlist. The next track starts when one ends and the
-# list loops. Each track:
+# music: the soundtrack. The FIRST track is the theme: the demo and intro
+# always play it. Each round then picks the next of the other tracks, and a
+# track loops for as long as its round lasts: leading and trailing silence
+# is trimmed and every pass cross-fades into the next, so any track loops
+# without a seam (the files are played as they are). Next track (]) steps
+# through the whole list. Each track:
 #   file     path to the track (required).
 #   title    shown in the log when the track starts (required, max 60).
 #   volume   0 to 1, default 1.

@@ -164,7 +164,8 @@ function loadSfx() {
   for (const s of Object.values(SFX_FILES)) {
     if (s.state !== 'idle') continue;
     s.state = 'loading';
-    fetch(s.file)
+    // Revalidate: a rebuilt effect keeps its name, so never trust a stale copy.
+    fetch(s.file, { cache: 'no-cache' })
       .then(r => { if (!r.ok) throw new Error('missing'); return r.arrayBuffer(); })
       .then(b => new Promise((res, rej) => { const p = ac.decodeAudioData(b, res, rej); if (p && p.then) p.then(res, rej); }))
       .then(buf => { s.buf = buf; s.state = 'ready'; })
@@ -301,7 +302,7 @@ function loadTrack(t) {
   const ac = audioCtx();
   if (!ac) return Promise.resolve(null);
   if (!TRACK_CACHE[t.file]) {
-    TRACK_CACHE[t.file] = fetch(t.file)
+    TRACK_CACHE[t.file] = fetch(t.file, { cache: 'no-cache' })
       .then(r => { if (!r.ok) throw new Error('missing'); return r.arrayBuffer(); })
       .then(b => new Promise((res, rej) => { const p = ac.decodeAudioData(b, res, rej); if (p && p.then) p.then(res, rej); }))
       .then(buf => Object.assign({ buf }, trimSilence(buf)))

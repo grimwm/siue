@@ -1,10 +1,14 @@
 // Headless smoke for the Scorched Earth rewrite. Run here: `node smoke-test.js`.
-// Exercises the exact shipped script with a dependency-free DOM + canvas stub,
-// driving only public inputs (keydown/keyup). Fails loudly on any exception,
-// a stuck turn loop, an unscrolled Space, or a silent battlefield.
-'use strict';
-const fs = require('fs');
-const path = require('path');
+// Exercises the exact shipped module (game.js and the js/ it imports) with a
+// dependency-free DOM + canvas stub, driving only public inputs (keydown/keyup).
+// Fails loudly on any exception, a stuck turn loop, an unscrolled Space, or a
+// silent battlefield.
+import fs from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { sweepHit } from './js/sim.js';
+
+const __dirname = import.meta.dirname;
 const src = fs.readFileSync(path.join(__dirname, 'game.js'), 'utf8');
 const fxSrc = fs.readFileSync(path.join(__dirname, 'fx.js'), 'utf8');
 
@@ -70,7 +74,13 @@ global.window = {
   matchMedia: () => ({ matches: false }),
   localStorage: { _m: {}, getItem(k) { return this._m[k] || null; }, setItem(k, v) { this._m[k] = String(v); } },
 };
+// Importing a module takes a turn of the event loop, so the boot's own requests
+// would answer before the checks below start. They wait here until the async
+// block opens the gate, as they did when the script was evaluated in place.
+let openBootGate;
+const bootGate = new Promise(r => { openBootGate = r; });
 global.fetch = async (url) => {
+  await bootGate;
   if (/game\.json$/.test(String(url))) {
     // Real keys, audio and effects; the arsenal section is withheld so the shop checks
     // below keep exercising the baked fallback arsenal (the file's own arsenal
@@ -114,7 +124,7 @@ global.window.AudioContext = class {
   createBiquadFilter() { return new FakeNode(); }
 };
 
-// ---- boot the exact shipped script ----
+// ---- boot the exact shipped module ----
 // Tile pickers build their buttons with replaceChildren, which this stub only
 // grants to the elements the checks inspect (the HUD stays on its text path).
 const withChildren = id => {
@@ -127,7 +137,7 @@ withChildren('lobby-seats');
 els['seed-input'] = makeEl('seed-input');
 els['seed-input'].value = 'scorch-01';
 eval(fxSrc);
-eval(src);
+await import(pathToFileURL(path.join(__dirname, 'game.js')).href);
 
 // ---- driver: every press below comes from game.json's keys, so the suite proves the
 // file and the shipped bindings agree instead of hardcoding keys twice ----
@@ -178,9 +188,6 @@ frames(30);
 check('demo-plays', els['shop-veil'].hidden === true && /you 100/.test(els['hud-armor'].textContent),
   els['hud-armor'].textContent);
 check('no-ambush-shop', els['shop-veil'].hidden === true);
-function change(el) {
-  for (const f of ((el._l || {}).change || [])) f({ preventDefault: () => {} });
-}
 
 // Space must always preventDefault (no page scroll), both binding paths
 let pd = 0;
@@ -220,6 +227,13 @@ for (const id of ['rooms-open', 'lobby-veil', 'host-form', 'host-initials', 'joi
   check('lobby-markup-' + id, html.includes('id="' + id + '"'));
 }
 check('no-status-codes', !/server said no/.test(src));
+// The page and the module it imports are cache-busted together: game.js's
+// import of each js/ file carries the same ?v= as the page's tag for game.js.
+const gameTag = /<script type="module" src="game\.js\?v=([^"]+)"/.exec(html);
+const imported = [...src.matchAll(/from '\.\/js\/([\w-]+)\.js\?v=([^']+)'/g)];
+check('modules-versioned-with-the-page', !!gameTag && imported.length > 0 && imported.every(m => m[2] === gameTag[1]),
+  gameTag ? gameTag[1] + ' vs ' + imported.map(m => m[2]).join(',') : 'no module tag for game.js');
+check('every-js-module-imported', fs.readdirSync(path.join(__dirname, 'js')).every(f => imported.some(m => m[1] + '.js' === f)));
 check('room-cap', /ROOM_MAX_ROOMS/.test(php) && /room_max_rooms/.test(php) && /every room is taken/.test(php));
 check('no-seed-leak', (() => {
   const start = php.indexOf('function room_snapshot');
@@ -536,6 +550,7 @@ function change(el) {
 (async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // ?code=zz99 was set before boot: the lobby opens with the code filled in
+  openBootGate();
   await tick(10);
   check('invite-prefill', els['join-code'].value === 'ZZ99' && els['lobby-veil'].hidden === false,
     `${els['join-code'].value} | hidden=${els['lobby-veil'] && els['lobby-veil'].hidden}`);
@@ -1251,14 +1266,8 @@ function change(el) {
   {
     // A shell leaves the muzzle inside its gunner's box: it ignores its
     // gunner until it is clear of that box, then hits it if it comes back.
-    const fnSrc = name => {
-      const at = src.indexOf('function ' + name + '(');
-      return src.slice(at, src.indexOf('\n}\n', at) + 2);
-    };
-    const sweep = new Function('G', fnSrc('isGroundUnit') + fnSrc('unitHitBox') + fnSrc('inHitBox') +
-      fnSrc('sweepHit') + 'return sweepHit;');
     const drone = { x: 300, y: 400, hp: 50 }, foe = { x: 600, y: 400, hp: 50, isPlayer: true };
-    const hits = sweep({ tanks: [drone, foe] });
+    const hits = (shell, ...seg) => sweepHit([drone, foe], shell, ...seg);
     const a = 62 * Math.PI / 180, mx = 300 + Math.cos(a) * 20, my = 386 - Math.sin(a) * 20;
     const s = { owner: drone, pierced: false };
     check('own-shell-passes-out-of-gunner', hits(s, mx, my, 330, 360) === null && s.clear === true);

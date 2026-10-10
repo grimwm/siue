@@ -71,12 +71,18 @@ jobs:
             echo "deploying $tip"
           fi
 
-      # deploy.sh checks generated pages with PHP and hashes with python3.
+      # deploy.sh checks generated pages with PHP, Tankity's compiled modules
+      # with Node, and hashes with python3.
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         if: steps.tip.outputs.skip != '1'
         with:
           php-version: "8.4"
           coverage: none
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        if: steps.tip.outputs.skip != '1'
+        with:
+          node-version: "22"
 
       - name: Install sshpass and the host keys
         if: steps.tip.outputs.skip != '1'

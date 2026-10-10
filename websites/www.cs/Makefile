@@ -25,6 +25,7 @@ help:
 	@echo "  protocol - Rewrite the Tankity room protocol fixtures (needs make up)"
 	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL;"
 	@echo "           one run per machine at a time (E2E_ARGS passes to playwright)"
+	@echo "  e2e-changed - Only the browser specs your changes against origin/main need"
 	@echo "  screenshots - Recapture each game's Games-page picture (macOS sips)"
 
 deploy:
@@ -48,6 +49,8 @@ parity:
 	./docker/check-parity.sh
 
 test:
+	node tests/e2e/select-test.mjs
+	node tests/e2e/select.mjs --check
 	php tests/games-hub-test.php
 	php tests/site-game-pages-test.php
 	php tools/site-game-pages.php --check
@@ -69,3 +72,10 @@ e2e:
 screenshots:
 	@url=$${E2E_BASE_URL:-$$($(MAKE) --no-print-directory -s url)} && \
 	cd tests/e2e && npm ci --silent && E2E_BASE_URL=$$url node screenshots.mjs
+
+# The specs this branch's changes need (committed, uncommitted and new files
+# against origin/main), picked by tests/e2e/select.mjs; nothing when none.
+e2e-changed:
+	@specs=$$( { git diff --name-only origin/main...HEAD; git diff --name-only HEAD; git ls-files --others --exclude-standard | sed 's|^|websites/www.cs/|'; } | sort -u | node tests/e2e/select.mjs ) && \
+	echo "e2e: $$specs" && \
+	case "$$specs" in NONE) ;; ALL) $(MAKE) --no-print-directory e2e ;; *) $(MAKE) --no-print-directory e2e E2E_ARGS="$$specs" ;; esac

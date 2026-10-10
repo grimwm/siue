@@ -106,6 +106,7 @@ php tools/install-files.php      # after the last edit to any served file
 | `php game-json-test.php`                       | The YAML parser, the `game.yaml` schema, `--check` staleness                               |
 | `php install-files-test.php`                   | The manifest, install block and `sw.js` precache, `--check` staleness                      |
 | `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio; `E2E_BASE_URL` points it at the live site |
+| `make e2e-changed` (site root) | Only the browser specs your changes need (`tests/e2e/select.mjs` maps touched files to specs; CI uses the same map) |
 
 `make test` from the site root runs every suite above except e2e. CI runs
 `make test` as `units` and `make e2e` as `e2e` on every pull request. Deploys

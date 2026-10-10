@@ -100,21 +100,24 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Check what changed
+      # Only the specs this change can affect: websites/www.cs/tests/e2e/
+      # select.mjs maps touched files to specs (NONE, ALL, or a list) and
+      # runs everything for any site file it does not know.
+      - name: Pick the specs
         id: scope
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-          COVERED: "websites/www.cs/ compose.yaml Makefile .github/workflows/ci.yml"
         run: |
           set -euo pipefail
-          # shellcheck disable=SC2086
-          changed=$(git diff --name-only "$BASE"...HEAD -- $COVERED)
-          if [ -n "$changed" ]; then
-            echo "run=1" >>"$GITHUB_OUTPUT"
-            printf '%s\n' "$changed"
-          else
-            echo "nothing the browser suite covers changed"
-          fi
+          changed=$(git diff --name-only "$BASE"...HEAD)
+          printf '%s\n' "$changed"
+          specs=$(printf '%s\n' "$changed" | node websites/www.cs/tests/e2e/select.mjs)
+          echo "selected: $specs"
+          case "$specs" in
+            NONE) ;;
+            ALL) echo "run=1" >>"$GITHUB_OUTPUT" ;;
+            *) echo "run=1" >>"$GITHUB_OUTPUT"; echo "specs=$specs" >>"$GITHUB_OUTPUT" ;;
+          esac
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         if: steps.scope.outputs.run == '1'
@@ -154,8 +157,9 @@ jobs:
         if: steps.scope.outputs.run == '1'
         env:
           E2E_BASE_URL: ${{ steps.site.outputs.url }}
+          SPECS: ${{ steps.scope.outputs.specs }}
           CI: "true"
-        run: make -C websites/www.cs e2e
+        run: make -C websites/www.cs e2e E2E_ARGS="$SPECS"
 
       - name: Test results
         if: failure() && steps.scope.outputs.run == '1'

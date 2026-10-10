@@ -49,7 +49,7 @@ php tools/install-files.php      # after the last edit to any served file
 - `game.js` and `rooms.php` hold a frozen fallback copy of a few arsenal rows
   and of the key table (shaped like `game.json`'s sections); keep them in step
   with `game.yaml` defaults.
-- `install-files.php` rewrites `manifest.webmanifest` and `sw.js`, and keeps the
+- `install-files.php` rewrites `manifest.webmanifest`, `sw.js` and the `?v=` hashes (see Source layout and build), and keeps the
   install block in `index.html` (cache
   version = hash of the served static files, so any edit makes it stale).
   Music and sound files are never precached; sound effects are cached by the
@@ -145,17 +145,24 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
   `ts-build.mjs` compiles each config as its own program, so adding the DOM lib
   for the audio never lets the sim see `document`. A module that holds only
   types (`protocol.ts`) compiles to nothing and has no `js/` file.
-- `game.js` imports each module with the same `?v=` as its own tag in
-  `index.html` (`./js/sim.js?v=...`, `./js/audio.js?v=...`, `./js/net.js?v=...`,
-  `./js/render.js?v=...`):
-  bump them all together whenever any changes, or a cached module could pair
-  with a newer `game.js`. `smoke-test.js` checks they match, that every `js/`
-  file is imported, and that no `js/` module imports another (the version lives
-  only on `game.js`'s imports, so a module-to-module import would load a second
-  copy). There is no import map: the Node tests import `game.js` and `js/*.js`
-  directly, and bare specifiers would need a loader in every one of them for
-  no fewer places to bump. The service worker serves network first,
-  revalidating, so it never holds a stale module for an online player.
+- Cache-busting versions are content hashes, written by
+  `tools/install-files.php`, never by hand. Each `js/` import in `game.js`
+  (`./js/sim.js?v=...`, `./js/audio.js?v=...`, `./js/net.js?v=...`,
+  `./js/render.js?v=...`) carries the first 10 hex characters of the SHA-256 of
+  that module; then `index.html`'s `game.js?v=`, `game.css?v=` and `fx.js?v=`
+  carry the hash of their file (so a changed module re-versions `game.js` too).
+  After editing any client file, run `php tools/install-files.php` (it also
+  rewrites `sw.js`, which hashes the same files); `make test` fails with
+  "is stale" when you forget. The tool rewrites only the value after `?v=` and
+  fails, writing nothing, if a `js/` module is not imported exactly once or a
+  page tag is missing. Because versions are functions of content, two branches
+  that touch different files do not conflict over them. `smoke-test.js` checks
+  that every `js/` file is imported with a version and that no `js/` module
+  imports another (the version lives only on `game.js`'s imports, so a
+  module-to-module import would load a second copy). There is no import map:
+  the Node tests import `game.js` and `js/*.js` directly, and bare specifiers
+  would need a loader in every one of them. The service worker serves network
+  first, revalidating, so it never holds a stale module for an online player.
 - The sim takes its state as arguments (`World`, `Arsenal`) and reports what
   happened as data: `explode` returns the blast (each unit's shield, wound or
   wreck, a last stand's nested blast), `stepShells` returns the frame's trails,
@@ -214,7 +221,7 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
 | `php rooms-test.php`                           | The room shelf over its own `php -S` (needs SysV; run inside the PHP container)            |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
 | `php game-json-test.php`                       | The YAML parser, the `game.yaml` schema (effects included), `--check` staleness            |
-| `php install-files-test.php`                   | The manifest, install block and `sw.js` precache, `--check` staleness                      |
+| `php install-files-test.php`                   | The manifest, install block, `?v=` content hashes and `sw.js` precache, `--check` staleness                   |
 | `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx.spec.mjs`; its editor checks run on a local site only); `E2E_BASE_URL` points it at the live site |
 | `make e2e-changed` (site root) | Only the browser specs your changes need (`tests/e2e/select.mjs` maps touched files to specs; CI uses the same map) |
 

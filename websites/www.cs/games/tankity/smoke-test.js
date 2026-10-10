@@ -230,12 +230,16 @@ for (const id of ['rooms-open', 'lobby-veil', 'host-form', 'host-initials', 'joi
   check('lobby-markup-' + id, html.includes('id="' + id + '"'));
 }
 check('no-status-codes', !/server said no/.test(src));
-// The page and the module it imports are cache-busted together: game.js's
-// import of each js/ file carries the same ?v= as the page's tag for game.js.
-const gameTag = /<script type="module" src="game\.js\?v=([^"]+)"/.exec(html);
-const imported = [...src.matchAll(/from '\.\/js\/([\w-]+)\.js\?v=([^']+)'/g)];
-check('modules-versioned-with-the-page', !!gameTag && imported.length > 0 && imported.every(m => m[2] === gameTag[1]),
-  gameTag ? gameTag[1] + ' vs ' + imported.map(m => m[2]).join(',') : 'no module tag for game.js');
+// Every import of a js/ module carries a ?v=, and so does the page's tag for
+// each of its own files. The values are content hashes written by
+// tools/install-files.php; `php tools/install-files.php --check` (make test)
+// is what fails when one is stale.
+const imported = [...src.matchAll(/from '\.\/js\/([\w-]+)\.js\?v=([0-9a-f]+)'/g)];
+check('modules-imported-with-a-version', imported.length > 0
+  && (src.match(/from '\.\/js\/[^']*'/g) || []).length === imported.length);
+for (const f of ['game.js', 'game.css', 'fx.js']) {
+  check('page-versions-' + f, new RegExp('(?:src|href)="' + f.replace('.', '\\.') + '\\?v=[0-9a-f]+"').test(html));
+}
 check('every-js-module-imported', fs.readdirSync(path.join(__dirname, 'js')).every(f => imported.some(m => m[1] + '.js' === f)));
 // The one version lives on game.js's imports. A js/ module that imported another
 // would name it without that ?v=, and the browser would load a second copy.

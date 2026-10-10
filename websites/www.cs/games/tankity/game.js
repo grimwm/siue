@@ -6,9 +6,10 @@
  */
 /* The pure game math (RNG, terrain, flight, hits, blasts, drone aim) lives in
  * src/sim.ts, the sound in src/audio.ts, the room client in src/net.ts and the
- * canvas drawing in src/render.ts, each compiled to js/ and imported here; the
- * ?v= matches this script's in index.html so a browser never pairs them from
- * different releases. Everything below is the rest: the game loop, particles,
+ * canvas drawing in src/render.ts, each compiled to js/ and imported here. Each
+ * import's ?v= is the module's content hash, written by tools/install-files.php,
+ * so a browser never pairs a cached module with a newer game.js. Everything
+ * below is the rest: the game loop, particles,
  * the HUD, rooms and the shop. */
 import {
   hashSeed, mulberry32, gauss, W, H, GRAV, FLAT_GRAV, TUNE, clamp,
@@ -17,14 +18,14 @@ import {
   muzzle, shotSpeed, stepBallistic, blastDamage,
   fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling, aiChoose as simAiChoose,
-} from './js/sim.js?v=20261010zf';
+} from './js/sim.js?v=33d9295722';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
-} from './js/audio.js?v=20261010zf';
+} from './js/audio.js?v=ce8cdf6a6e';
 import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, planCatchUp, VOLLEY_OPENERS, CLOCK_SHOW_S,
-} from './js/net.js?v=20261010zf';
-import { createRenderer, drawChassis } from './js/render.js?v=20261010zf';
+} from './js/net.js?v=6259020b84';
+import { createRenderer, drawChassis } from './js/render.js?v=1e211c92ed';
 
 /* ---------- audio: lives in src/audio.ts ---------- */
 music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));

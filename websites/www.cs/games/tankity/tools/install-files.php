@@ -15,7 +15,10 @@
  *   - sw.js, registered from the page: it precaches the game's static files
  *     so it opens offline, and otherwise goes to the network first. Its cache
  *     name carries a hash of those files, so any change to them makes sw.js
- *     stale until rewritten (rerun this after the last edit).
+ *     stale until rewritten (rerun this after the last edit);
+ *   - the `?v=` cache-busters: each js/ module's import in game.js, then the
+ *     page's game.js, game.css and fx.js tags, each set to a short hash of the
+ *     file's content (see install_versions).
  * Test files, .php files, the share-only picture (`image:`) and the build
  * tooling (package.json, package-lock.json, tsconfig.json) are not cached; the
  * compiled modules in js/ are.
@@ -120,6 +123,74 @@ function install_card(string $dir): array
         $card[$key] = strtolower($color);
     }
     return [$card, null];
+}
+
+/** The cache-buster for a file: a short hash of its content. */
+function install_version(string $content): string
+{
+    return substr(hash('sha256', $content), 0, 10);
+}
+
+/** The files the page loads with a `?v=` of their own, besides game.js's modules. */
+const INSTALL_PAGE_VERSIONED = ['game.js', 'game.css', 'fx.js'];
+
+/**
+ * Sets every `?v=` to the content hash of the file it names. Modules first:
+ * each ./js/<name>.js import in game.js gets that module's hash; then the
+ * page's tags for game.js (which now carries those hashes, so a changed module
+ * re-versions game.js too), game.css and fx.js. Only the version value inside
+ * a recognised reference is rewritten. Every js/ module must be imported
+ * exactly once and every page tag found exactly once, or the problems are
+ * reported and the caller writes nothing.
+ *
+ * @return array{0: string, 1: string, 2: list<string>} [game.js, page, problems]
+ */
+function install_versions(string $dir, string $gameJs, string $page, string $pageName): array
+{
+    $problems = [];
+    $modules = [];
+    foreach (is_dir("$dir/js") ? (scandir("$dir/js") ?: []) : [] as $f) {
+        if (preg_match('/^[\w-]+\.js$/', $f)) {
+            $modules[$f] = install_version((string) file_get_contents("$dir/js/$f"));
+        }
+    }
+    $seen = [];
+    $gameJs = (string) preg_replace_callback(
+        '#(from \'\./js/)([\w-]+\.js)(\?v=)([^\'"?\s]*)(\')#',
+        function (array $m) use ($modules, &$seen, &$problems): string {
+            $seen[$m[2]] = ($seen[$m[2]] ?? 0) + 1;
+            if (!isset($modules[$m[2]])) {
+                $problems[] = "game.js imports js/{$m[2]}, which does not exist";
+                return $m[0];
+            }
+            return $m[1] . $m[2] . $m[3] . $modules[$m[2]] . $m[5];
+        },
+        $gameJs
+    );
+    foreach (array_keys($modules) as $f) {
+        if (($seen[$f] ?? 0) !== 1) {
+            $problems[] = "game.js must import ./js/$f?v=... exactly once (found " . ($seen[$f] ?? 0) . ')';
+        }
+    }
+    foreach (INSTALL_PAGE_VERSIONED as $f) {
+        $content = $f === 'game.js' ? $gameJs : @file_get_contents("$dir/$f");
+        if (!is_string($content)) {
+            $problems[] = "$f is not readable, but $pageName references it";
+            continue;
+        }
+        $count = 0;
+        $page = (string) preg_replace_callback(
+            '#((?:src|href)=")' . preg_quote($f, '#') . '(\?v=)([^"?\s]*)(")#',
+            fn(array $m): string => $m[1] . $f . $m[2] . install_version($content) . $m[4],
+            $page,
+            -1,
+            $count
+        );
+        if ($count !== 1) {
+            $problems[] = "$pageName must reference $f?v=... exactly once (found $count)";
+        }
+    }
+    return [$gameJs, $page, $problems];
 }
 
 /** The marked block in the game's page: install tags and the service worker. */
@@ -300,16 +371,21 @@ function install_sync(string $dir, bool $write): array
     $notes = install_icon_problems($dir);
     $pageName = $card['play'];
     $html = (string) @file_get_contents("$dir/$pageName");
+    // Versions first: the page and sw.js hash the content written here.
+    [$gameJs, $html, $problems] = install_versions($dir, (string) @file_get_contents("$dir/game.js"), $html, $pageName);
+    if ($problems) {
+        return [[], array_merge($notes, $problems)];
+    }
     $pad = preg_match('#^([ \t]*)<title>#mi', $html, $m) ? $m[1] : '';
     $page = install_apply($html, install_block($card, $pad));
     if ($page === null) {
         return [[], array_merge($notes, ["no <title> in $pageName to put install tags after"])];
     }
-    $outputs = [$pageName => $page];
+    $outputs = [$pageName => $page, 'game.js' => $gameJs];
     if (!$notes) {
         $manifest = install_manifest($card);
         $outputs['manifest.webmanifest'] = $manifest;
-        [$names, $hash] = install_precache($dir, [$pageName => $page, 'manifest.webmanifest' => $manifest], basename($card['image']));
+        [$names, $hash] = install_precache($dir, [$pageName => $page, 'game.js' => $gameJs, 'manifest.webmanifest' => $manifest], basename($card['image']));
         $outputs['sw.js'] = install_sw($card, basename($dir), $names, $hash);
     }
     $stale = [];

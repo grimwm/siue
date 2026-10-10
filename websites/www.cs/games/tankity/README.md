@@ -118,7 +118,7 @@ php tools/install-files.php      # after the last edit to any served file
 | `php config-test.php`                          | `.config.yaml` precedence                                                                  |
 | `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; `room_snapshot` shapes against `protocol/` |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (needs SysV; run inside the PHP container)                 |
-| `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (plain php)                                          |
+| `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `node sim-vectors-test.js`                     | `game.js` agrees with `rooms.php` on every shared sim vector (see Sim vectors)              |
 | `php rooms-test.php`                           | The room shelf over its own `php -S` (needs SysV; run inside the PHP container)            |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
@@ -173,8 +173,8 @@ functions, lifted from the shipped source, and compares within 1e-4.
   every weapon in `game.json`, the drone's aim, and tank settling.
 - Not covered: pacing. The server steps a whole turn in fixed 1/60 s steps; the
   browser steps per frame. The cases use 1/60 s for both.
-- Regenerate from the site folder with `make sim-vectors` (plain php, no
-  docker) after any change to `rooms.php`'s sim or to `game.yaml`'s arsenal,
+- Regenerate from the site folder with `make sim-vectors` (in the docker
+  PHP, the same build as the server, so float output never varies by host) after any change to `rooms.php`'s sim or to `game.yaml`'s arsenal,
   and commit the result. `make test` runs the generator's `--check` and the
   replay.
 - A failing case prints its name, inputs, expected and actual values. Expected

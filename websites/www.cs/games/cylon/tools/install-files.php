@@ -7,8 +7,14 @@
  *   php tools/install-files.php --check  list stale files, exit 1 if any
  *
  * (Run from the game folder; from the site root it is
- * php games/<id>/tools/install-files.php.) It writes manifest.webmanifest,
- * which needs icon-192.png and icon-512.png, square PNGs.
+ * php games/<id>/tools/install-files.php.) It writes:
+ *   - manifest.webmanifest, which needs icon-192.png and icon-512.png, square
+ *     PNGs;
+ *   - the `?v=` cache-busters inside cylon.js: each ./js/<name>.js import, and
+ *     the mount.html fetch, set to a short hash of that file's content (see
+ *     install_versions). The `?v=` of cylon.js itself, and of cylon.css, are the
+ *     site page's: the page that loads the game versions the game's entry
+ *     points, so this tool never reads or writes it.
  *
  * This game is mounted in the site's page (`start:` in metadata.yaml), so it
  * has no page of its own to run in and no service worker: its manifest starts
@@ -118,6 +124,70 @@ function install_icon_problems(string $dir): array
     return $problems;
 }
 
+/** The cache-buster for a file: a short hash of its content. */
+function install_version(string $content): string
+{
+    return substr(hash('sha256', $content), 0, 10);
+}
+
+/** The game's entry module, which imports js/ and fetches mount.html. */
+const INSTALL_ENTRY = 'cylon.js';
+
+/**
+ * Sets every `?v=` inside the entry module to the content hash of the file it
+ * names: each ./js/<name>.js import, and the mount.html fetch. Only the value
+ * after `?v=` in a recognised reference is rewritten. Every js/ module must be
+ * imported exactly once and mount.html referenced exactly once, or the problems
+ * are reported and the caller writes nothing.
+ *
+ * @return array{0: string, 1: list<string>} [entry module, problems]
+ */
+function install_versions(string $dir, string $entry): array
+{
+    $problems = [];
+    $modules = [];
+    foreach (is_dir("$dir/js") ? (scandir("$dir/js") ?: []) : [] as $f) {
+        if (preg_match('/^[\w-]+\.js$/', $f)) {
+            $modules[$f] = install_version((string) file_get_contents("$dir/js/$f"));
+        }
+    }
+    $seen = [];
+    $entry = (string) preg_replace_callback(
+        '#(from \'\./js/)([\w-]+\.js)(\?v=)([^\'"?\s]*)(\')#',
+        function (array $m) use ($modules, &$seen, &$problems): string {
+            $seen[$m[2]] = ($seen[$m[2]] ?? 0) + 1;
+            if (!isset($modules[$m[2]])) {
+                $problems[] = INSTALL_ENTRY . " imports js/{$m[2]}, which does not exist";
+                return $m[0];
+            }
+            return $m[1] . $m[2] . $m[3] . $modules[$m[2]] . $m[5];
+        },
+        $entry
+    );
+    foreach (array_keys($modules) as $f) {
+        if (($seen[$f] ?? 0) !== 1) {
+            $problems[] = INSTALL_ENTRY . " must import ./js/$f?v=... exactly once (found " . ($seen[$f] ?? 0) . ')';
+        }
+    }
+    $mount = @file_get_contents("$dir/mount.html");
+    if (!is_string($mount)) {
+        $problems[] = 'mount.html is not readable, but ' . INSTALL_ENTRY . ' fetches it';
+        return [$entry, $problems];
+    }
+    $count = 0;
+    $entry = (string) preg_replace_callback(
+        '#(\'mount\.html)(\?v=)([^\'"?\s]*)(\')#',
+        fn(array $m): string => $m[1] . $m[2] . install_version($mount) . $m[4],
+        $entry,
+        -1,
+        $count
+    );
+    if ($count !== 1) {
+        $problems[] = INSTALL_ENTRY . " must reference 'mount.html?v=...' exactly once (found $count)";
+    }
+    return [$entry, $problems];
+}
+
 /** The manifest JSON. Every URL is relative, so the game runs from whatever
  *  path serves it. With no `id`, the app is known by its start_url. */
 function install_manifest(array $card, string $id): string
@@ -155,6 +225,19 @@ function install_sync(string $dir, bool $write): array
     }
     $notes = install_icon_problems($dir);
     $outputs = $notes ? [] : ['manifest.webmanifest' => install_manifest($card, basename($dir))];
+    // A folder with no entry module and no js/ is manifest-only; with either,
+    // the entry module's versions are part of what this tool keeps.
+    if (is_file("$dir/" . INSTALL_ENTRY) || is_dir("$dir/js")) {
+        $entry = @file_get_contents("$dir/" . INSTALL_ENTRY);
+        if (!is_string($entry)) {
+            return [[], array_merge($notes, [INSTALL_ENTRY . ' is not readable, but js/ exists'])];
+        }
+        [$entry, $problems] = install_versions($dir, $entry);
+        if ($problems) {
+            return [[], array_merge($notes, $problems)];
+        }
+        $outputs[INSTALL_ENTRY] = $entry;
+    }
     $stale = [];
     foreach ($outputs as $name => $content) {
         if ((string) @file_get_contents("$dir/$name") !== $content) {

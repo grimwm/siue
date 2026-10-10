@@ -43,8 +43,8 @@
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-<link href="site.css?v=20261010d" rel="stylesheet">
-<link href="games/cylon/cylon.css?v=20261010c" rel="stylesheet">
+<link href="site.css?v=6080beaf2a" rel="stylesheet">
+<link href="games/cylon/cylon.css?v=a736695ea3" rel="stylesheet">
 </head>
 
 <body>
@@ -210,12 +210,23 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-<script src="main.js?v=20261010c"></script>
-<script src="cylon.js?v=20261010c" data-cylon-base="games/cylon/"></script>
+<script src="main.js?v=581e3d81d4"></script>
 <script>
   initializeTheme();
   showNavDiv("main", { url: false });
-  initializeCylonEffects();
+</script>
+<script type="module">
+  // The game reaches the site only through what it is handed here: combat
+  // forces the dark theme (applyCombatTheme is main.js's). The games list
+  // loads once the game has had its chance to define the start function the
+  // list's ?game= link and Play button call; a game that fails to load must
+  // not take the list down with it.
+  try {
+    const { initializeCylonEffects } = await import('./games/cylon/cylon.js?v=3228b07b85');
+    await initializeCylonEffects({ onTheme: applyCombatTheme });
+  } catch (err) {
+    console.error('Cylon failed to start', err);
+  }
   loadGamesHub();
 </script>
 </body>

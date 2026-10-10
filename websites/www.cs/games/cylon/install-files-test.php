@@ -67,6 +67,65 @@ file_put_contents("$dir/metadata.yaml", "title: Mounted\ndescription: x\nplay: i
 [, $notes] = install_sync($dir, false);
 $check('needs-start', $notes === ['metadata.yaml: `start` is required'], json_encode($notes));
 
+// Versions: each ?v= inside cylon.js is the content hash of the file it names.
+file_put_contents("$dir/metadata.yaml", "title: Mounted\ndescription: Runs in the site page.\nstart: goGame\n");
+file_put_contents("$dir/icon-512.png", $png(512));
+@mkdir("$dir/js");
+file_put_contents("$dir/js/rules.js", "export const a = 1;\n");
+file_put_contents("$dir/js/scores.js", "export const b = 2;\n");
+file_put_contents("$dir/mount.html", "<div id=\"cylon-eye\"></div>\n");
+$entryOk = "import * as rules from './js/rules.js?v=old';\nimport { b } from './js/scores.js?v=old';\n"
+    . "const MOUNT = new URL('mount.html?v=old', import.meta.url).href;\n";
+file_put_contents("$dir/cylon.js", $entryOk);
+$read = fn(string $f): string => (string) file_get_contents("$dir/$f");
+$vOf = fn(string $content): string => substr(hash('sha256', $content), 0, 10);
+install_sync($dir, true);
+$check('versions-are-file-hashes',
+    str_contains($read('cylon.js'), "rules.js?v={$vOf($read('js/rules.js'))}'")
+    && str_contains($read('cylon.js'), "scores.js?v={$vOf($read('js/scores.js'))}'")
+    && str_contains($read('cylon.js'), "mount.html?v={$vOf($read('mount.html'))}'"));
+[$stale, $notes] = install_sync($dir, false);
+$check('versions-clean-after-one-run', $stale === [] && $notes === [], json_encode([$stale, $notes]));
+$entryNow = $read('cylon.js');
+$check('rewrite-touches-only-versions', preg_replace('/\?v=[0-9a-f]+/', '?v=X', $entryNow) === preg_replace('/\?v=old/', '?v=X', $entryOk));
+
+// A changed module or mount.html makes the entry stale, and only it.
+file_put_contents("$dir/js/rules.js", "export const a = 3;\n");
+[$stale] = install_sync($dir, false);
+$check('check-sees-changed-module', $stale === ['cylon.js'], json_encode($stale));
+install_sync($dir, true);
+file_put_contents("$dir/mount.html", "<div id=\"cylon-eye\"></div><p>new</p>\n");
+[$stale] = install_sync($dir, false);
+$check('check-sees-changed-mount', $stale === ['cylon.js'], json_encode($stale));
+install_sync($dir, true);
+[$stale] = install_sync($dir, false);
+$check('check-clean-again', $stale === [], json_encode($stale));
+
+// A missing or duplicate reference fails loudly and writes nothing.
+$entryNow = $read('cylon.js');
+$cases = [
+    'a module is not imported' => [str_replace("import { b } from './js/scores.js?v=", "// ", $entryNow), 'cylon.js must import ./js/scores.js?v=... exactly once (found 0)'],
+    'a module is imported twice' => [$entryNow . "import { z } from './js/rules.js?v=x';\n", 'cylon.js must import ./js/rules.js?v=... exactly once (found 2)'],
+    'an import names a missing module' => [$entryNow . "import { z } from './js/gone.js?v=x';\n", 'cylon.js imports js/gone.js, which does not exist'],
+    'the mount fetch has no version' => [str_replace('mount.html?v=', 'mount.html#', $entryNow), "cylon.js must reference 'mount.html?v=...' exactly once (found 0)"],
+    'the mount is fetched twice' => [$entryNow . "const AGAIN = 'mount.html?v=x';\n", "cylon.js must reference 'mount.html?v=...' exactly once (found 2)"],
+];
+foreach ($cases as $name => [$broken, $expect]) {
+    file_put_contents("$dir/cylon.js", $broken);
+    $manifestBefore = $read('manifest.webmanifest');
+    [$stale, $notes] = install_sync($dir, true);
+    $check("missing-reference-fails: $name", $stale === [] && in_array($expect, $notes, true) && $read('cylon.js') === $broken
+        && $read('manifest.webmanifest') === $manifestBefore, json_encode([$stale, $notes]));
+}
+file_put_contents("$dir/cylon.js", $entryNow);
+unlink("$dir/mount.html");
+[, $notes] = install_sync($dir, false);
+$check('a-missing-mount-fails', $notes === ['mount.html is not readable, but cylon.js fetches it'], json_encode($notes));
+file_put_contents("$dir/mount.html", "<div></div>\n");
+unlink("$dir/cylon.js");
+[, $notes] = install_sync($dir, false);
+$check('js-without-an-entry-fails', $notes === ['cylon.js is not readable, but js/ exists'], json_encode($notes));
+
 // This game's own manifest is in sync with its metadata.
 [$stale, $notes] = install_sync(__DIR__, false);
 $check('repo-game-in-sync', $stale === [] && $notes === [], 'run: php tools/install-files.php (stale: ' . implode(', ', $stale) . ')');

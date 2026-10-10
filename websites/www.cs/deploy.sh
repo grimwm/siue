@@ -42,6 +42,14 @@ for tool in games/*/tools/install-files.php; do
   fi
 done
 
+# The home page's own ?v= cache-busters (site.css, main.js, the mounted game's
+# css and entry module): refuse a stale one. It hashes games/cylon/cylon.js, so
+# the loop above has to pass first.
+if ! php tools/site-versions.php --check; then
+  echo "deploy: run php games/cylon/tools/install-files.php, then php tools/site-versions.php, and commit the result" >&2
+  exit 1
+fi
+
 # Tankity's data is edited in game.yaml and served as game.json: refuse a stale
 # or invalid one.
 if ! php games/tankity/tools/game-json.php --check; then
@@ -49,12 +57,15 @@ if ! php games/tankity/tools/game-json.php --check; then
   exit 1
 fi
 
-# Tankity's browser modules are TypeScript (src/) compiled into js/, which is
-# what ships: refuse a stale build.
-if ! (cd games/tankity && npm ci --silent && node tools/ts-build.mjs --check); then
-  echo "deploy: run node games/tankity/tools/ts-build.mjs and commit the result" >&2
-  exit 1
-fi
+# A game's browser modules can be TypeScript (src/) compiled into js/, which is
+# what ships: refuse a stale build. Each game carries its own compiler setup.
+for tool in games/*/tools/ts-build.mjs; do
+  game=$(dirname "$(dirname "$tool")")
+  if ! (cd "$game" && npm ci --silent && node tools/ts-build.mjs --check); then
+    echo "deploy: run node $tool and commit the result" >&2
+    exit 1
+  fi
+done
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/www-cs-deploy.XXXXXX")
 trap 'rm -rf "$work"' EXIT

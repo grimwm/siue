@@ -38,5 +38,6 @@ self.addEventListener('fetch', event => {
       }
       return res;
     }).catch(() => caches.match(req, { ignoreSearch: true })
-      .then(hit => hit || (req.mode === 'navigate' ? caches.match('./') : undefined) || Response.error())));
+      .then(hit => hit || (req.mode === 'navigate' ? caches.match('./') : undefined))
+      .then(res => res || Response.error())));
 });

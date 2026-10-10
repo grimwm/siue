@@ -58,7 +58,8 @@ $game('tankity', null, ['index.html']);
 [$card, $err] = games_hub_card('tankity', [
     'title' => 'Operation Tankity', 'description' => 'Artillery.', 'play' => 'index.html',
 ], "$tmp/tankity");
-$check('card-play-ok', $err === null && $card['href'] === 'games/tankity/');
+// Players go to the site's wrapper page; the game's own page is kept for its frame.
+$check('card-play-ok', $err === null && $card['href'] === 'play/tankity/' && $card['page'] === 'games/tankity/');
 $check('card-default-button', ($card['button'] ?? null) === 'Play Operation Tankity');
 $check('card-default-order', ($card['order'] ?? null) === 100);
 $check('card-no-start-key', !array_key_exists('start', $card));
@@ -96,7 +97,7 @@ $check('card-hidden-skipped', $card === null && $err === null);
 // Share image and share link.
 $game('tankity', null, ['index.html', 'og.png', 'notes.txt']);
 [$card, $err] = games_hub_card('tankity', ['title' => 't', 'description' => 'd', 'play' => 'index.html', 'image' => 'og.png'], "$tmp/tankity");
-$check('card-image-ok', $err === null && $card['image'] === 'games/tankity/og.png' && $card['share'] === 'games/tankity/');
+$check('card-image-ok', $err === null && $card['image'] === 'games/tankity/og.png' && $card['share'] === 'play/tankity/');
 foreach (['missing' => 'nope.png', 'not-an-image' => 'notes.txt', 'traversal' => '../cylon/og.png'] as $name => $img) {
     [$card, $err] = games_hub_card('tankity', ['title' => 't', 'description' => 'd', 'play' => 'index.html', 'image' => $img], "$tmp/tankity");
     $check("card-image-reject-$name", $card === null && is_string($err));
@@ -106,11 +107,12 @@ foreach (['missing' => 'nope.png', 'not-an-image' => 'notes.txt', 'traversal' =>
 $base = ['title' => 'Operation Tankity', 'description' => 'd', 'play' => 'index.html'];
 [$card, $err] = games_hub_card('tankity', $base, "$tmp/tankity");
 $check('card-install-defaults', $err === null && $card['short_name'] === 'Operation Tankity'
-    && $card['theme_color'] === GAMES_HUB_DEFAULT_COLOR && $card['background_color'] === GAMES_HUB_DEFAULT_COLOR);
-[$card, $err] = games_hub_card('tankity', $base + ['short_name' => 'Tankity', 'theme_color' => '#ABC', 'background_color' => '#05060F'], "$tmp/tankity");
+    && $card['theme_color'] === GAMES_HUB_DEFAULT_COLOR && $card['background_color'] === GAMES_HUB_DEFAULT_COLOR
+    && $card['accent_color'] === GAMES_HUB_DEFAULT_ACCENT);
+[$card, $err] = games_hub_card('tankity', $base + ['short_name' => 'Tankity', 'theme_color' => '#ABC', 'background_color' => '#05060F', 'accent_color' => '#FFC93C'], "$tmp/tankity");
 $check('card-install-values', $err === null && $card['short_name'] === 'Tankity'
-    && $card['theme_color'] === '#abc' && $card['background_color'] === '#05060f');
-foreach (['theme_color' => ['red', '#12', '#12345g', '05060f'], 'background_color' => ['rgb(0,0,0)', '#1234567']] as $key => $bad) {
+    && $card['theme_color'] === '#abc' && $card['background_color'] === '#05060f' && $card['accent_color'] === '#ffc93c');
+foreach (['theme_color' => ['red', '#12', '#12345g', '05060f'], 'background_color' => ['rgb(0,0,0)', '#1234567'], 'accent_color' => ['gold', '#ffc93']] as $key => $bad) {
     foreach ($bad as $value) {
         [$card, $err] = games_hub_card('tankity', $base + [$key => $value], "$tmp/tankity");
         $check("card-install-reject-$key-$value", $card === null && is_string($err));
@@ -121,10 +123,7 @@ $check('card-install-reject-long-short-name', $card === null && is_string($err))
 
 $game('mounted', null);
 [$card, $err] = games_hub_card('mounted', ['title' => 't', 'description' => 'd', 'start' => 'go'], "$tmp/mounted");
-$check('card-start-no-share-without-page', $err === null && !array_key_exists('share', $card));
-$game('mounted', null, ['index.html']);
-[$card, $err] = games_hub_card('mounted', ['title' => 't', 'description' => 'd', 'start' => 'go'], "$tmp/mounted");
-$check('card-start-share-page', $err === null && ($card['share'] ?? null) === 'games/mounted/');
+$check('card-start-share-page', $err === null && ($card['share'] ?? null) === 'play/mounted/' && !isset($card['href']));
 $check('card-start-no-manifest-until-written', !array_key_exists('manifest', $card));
 $game('mounted', null, ['manifest.webmanifest']);
 [$card, $err] = games_hub_card('mounted', ['title' => 't', 'description' => 'd', 'start' => 'go'], "$tmp/mounted");

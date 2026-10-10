@@ -1,0 +1,71 @@
+/* The site's wrapper around a game: its navbar over a full-height frame
+   running the game's own page. Each wrapper page sets --game-bg,
+   --game-theme and --game-accent from the game's metadata.yaml, so the bar
+   takes that game's colours. */
+:root {
+  --game-bg: #0c0e12;
+  --game-theme: #0c0e12;
+  --game-accent: #ff4d4d;
+  --play-ink: #eef1f6;
+  --play-dim: rgba(238, 241, 246, 0.72);
+  --play-bar: 3rem;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--game-bg);
+  color: var(--play-ink);
+  font: 600 0.95rem/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.play-nav {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem 1.1rem;
+  min-height: var(--play-bar);
+  padding: 0.35rem 1rem;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--game-theme) 82%, #ffffff 8%), var(--game-theme));
+  border-bottom: 2px solid var(--game-accent);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+.play-nav a { color: var(--play-dim); text-decoration: none; }
+.play-nav a:hover, .play-nav a:focus-visible { color: var(--play-ink); }
+.play-nav a:focus-visible { outline: 2px solid var(--game-accent); outline-offset: 3px; border-radius: 4px; }
+.play-brand {
+  color: var(--play-ink) !important;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.play-games {
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--game-accent);
+  border-radius: 6px;
+  color: var(--game-accent) !important;
+}
+.play-games:hover { background: color-mix(in srgb, var(--game-accent) 16%, transparent); }
+.play-now {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--game-accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.play-now img { border-radius: 4px; flex: none; }
+.play-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  display: block;
+  background: var(--game-bg);
+}
+@media (max-width: 560px) {
+  .play-nav { gap: 0.25rem 0.8rem; padding: 0.35rem 0.75rem; font-size: 0.88rem; }
+  .play-now { display: none; }
+}

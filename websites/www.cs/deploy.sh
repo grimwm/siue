@@ -56,6 +56,8 @@ while IFS= read -r -d '' f; do
     # Development files that ride along with games: tests and handoff notes.
     games/*-test.* | games/*/HANDOFF.md) continue ;;
     games/*) ;;
+    # The site's generated page per game (navbar plus the game in a frame).
+    play/*) ;;
     */*) continue ;;
     *.html | *.js | *.css | *.php | *.png | *.ico | *.webmanifest) ;;
     *) continue ;;

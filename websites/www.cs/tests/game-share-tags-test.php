@@ -43,28 +43,43 @@ file_put_contents("$root/arty/scores.php", "<?php\n");
 [$stale, $notes] = share_tags_sync($root, $site, false);
 sort($stale);
 $check('check-finds-stale', $stale === ['arty', 'mounted'], json_encode($stale));
-$check('check-writes-nothing', file_get_contents("$root/arty/index.html") === $page && !is_file("$root/mounted/index.html"));
+$check('check-writes-nothing', file_get_contents("$root/arty/index.html") === $page && !is_dir("$tmp/play"));
 
-// Write mode fills the play page's head, escaped, with absolute URLs.
+// Write mode gives the game's own page only its install block, nothing
+// about the site.
 share_tags_sync($root, $site, true);
 $html = file_get_contents("$root/arty/index.html");
-$check('play-page-block', substr_count($html, SHARE_TAGS_BEGIN) === 1 && substr_count($html, SHARE_TAGS_END) === 1);
-$check('play-page-title', str_contains($html, '<meta property="og:title" content="Arty &amp; Co">'));
-$check('play-page-escaped', str_contains($html, 'content="Lob &lt;shells&gt; at drones."'));
-$check('play-page-url', str_contains($html, '<meta property="og:url" content="https://example.edu/~me/games/arty/">'));
-$check('play-page-image', str_contains($html, '<meta property="og:image" content="https://example.edu/~me/games/arty/og.png">')
-    && str_contains($html, '<meta name="twitter:card" content="summary_large_image">'));
-$check('play-page-body-kept', str_contains($html, '<body>hi</body>') && str_contains($html, '<title>Arty</title>'));
+$check('game-page-block', substr_count($html, SHARE_TAGS_BEGIN) === 1 && substr_count($html, SHARE_TAGS_END) === 1);
+$check('game-page-knows-no-site', !str_contains($html, 'example.edu') && !str_contains($html, 'og:') && !str_contains($html, '../'));
+$check('game-page-body-kept', str_contains($html, '<body>hi</body>') && str_contains($html, '<title>Arty</title>'));
 
-// A mounted game gets a share page that forwards to the site.
-$fwd = (string) @file_get_contents("$root/mounted/index.html");
+// The site's wrapper page carries the previews (escaped, absolute URLs), the
+// navbar back to the site, and the game in a frame.
+$wrap = (string) @file_get_contents("$tmp/play/arty/index.html");
+$check('wrapper-title', str_contains($wrap, '<meta property="og:title" content="Arty &amp; Co">'));
+$check('wrapper-escaped', str_contains($wrap, 'content="Lob &lt;shells&gt; at drones."'));
+$check('wrapper-url', str_contains($wrap, '<meta property="og:url" content="https://example.edu/~me/play/arty/">'));
+$check('wrapper-image', str_contains($wrap, '<meta property="og:image" content="https://example.edu/~me/games/arty/og.png">')
+    && str_contains($wrap, '<meta name="twitter:card" content="summary_large_image">'));
+$check('wrapper-nav', str_contains($wrap, 'href="../../">William Grim</a>') && str_contains($wrap, 'href="../../#contact"')
+    && str_contains($wrap, 'href="../../#games"'));
+$check('wrapper-frames-game', str_contains($wrap, '<iframe class="play-frame" id="play-frame" src="../../games/arty/"')
+    && str_contains($wrap, 'allow="fullscreen; keyboard-lock'));
+$check('wrapper-colours', str_contains($wrap, '--game-bg: ' . GAMES_HUB_DEFAULT_COLOR . ';')
+    && str_contains($wrap, '--game-accent: ' . GAMES_HUB_DEFAULT_ACCENT . ';'));
+$check('wrapper-installs-game', str_contains($wrap, '<link rel="manifest" href="../../games/arty/manifest.webmanifest">')
+    && !str_contains($wrap, 'serviceWorker'));
+
+// A mounted game gets a site page that forwards to the site.
+$fwd = (string) @file_get_contents("$tmp/play/mounted/index.html");
 $check('start-page-written', str_contains($fwd, '<meta property="og:title" content="Mounted">'));
 $check('start-page-forwards', str_contains($fwd, 'url=../../?game=mounted') && str_contains($fwd, 'http-equiv="refresh"'));
 $check('start-page-no-image-card', str_contains($fwd, '<meta name="twitter:card" content="summary">'));
 
 // Idempotent: a second write changes nothing, and check mode is clean.
 share_tags_sync($root, $site, true);
-$check('write-idempotent', file_get_contents("$root/arty/index.html") === $html);
+$check('write-idempotent', file_get_contents("$root/arty/index.html") === $html
+    && file_get_contents("$tmp/play/arty/index.html") === $wrap);
 [$stale] = share_tags_sync($root, $site, false);
 $check('check-clean-after-write', $stale === [], json_encode($stale));
 
@@ -75,7 +90,7 @@ $check('check-sees-metadata-change', $stale === ['arty'], json_encode($stale));
 
 // --- Install (PWA) files ----------------------------------------------------
 
-file_put_contents("$root/arty/metadata.yaml", "title: Arty & Co\ndescription: Lob shells.\nshort_name: Arty\ntheme_color: \"#112233\"\nbackground_color: \"#445566\"\nplay: index.html\nimage: og.png\n");
+file_put_contents("$root/arty/metadata.yaml", "title: Arty & Co\ndescription: Lob shells.\nshort_name: Arty\ntheme_color: \"#112233\"\nbackground_color: \"#445566\"\naccent_color: \"#aabbcc\"\nplay: index.html\nimage: og.png\n");
 share_tags_sync($root, $site, true);
 [$stale] = share_tags_sync($root, $site, false);
 $check('pwa-clean-after-write', $stale === [], json_encode($stale));
@@ -85,11 +100,14 @@ $check('manifest-names', ($m['name'] ?? null) === 'Arty & Co' && ($m['short_name
 $check('manifest-colors', ($m['theme_color'] ?? null) === '#112233' && ($m['background_color'] ?? null) === '#445566');
 $check('manifest-display', ($m['display'] ?? null) === 'standalone');
 $check('manifest-page-start-in-scope', ($m['start_url'] ?? null) === './' && ($m['scope'] ?? null) === './');
-$check('manifest-id', ($m['id'] ?? null) === '/~me/games/arty/');
+// No id: the app is known by its start_url, the game's own folder.
+$check('manifest-no-id', !array_key_exists('id', $m));
+$check('wrapper-game-colours', str_contains((string) file_get_contents("$tmp/play/arty/index.html"),
+    '--game-bg: #445566; --game-theme: #112233; --game-accent: #aabbcc;'));
 $check('manifest-icons', array_column($m['icons'] ?? [], 'sizes') === ['192x192', '512x512']
     && array_unique(array_column($m['icons'] ?? [], 'type')) === ['image/png']);
-$urls = array_merge([$m['start_url'] ?? '', $m['scope'] ?? ''], array_column($m['icons'] ?? [], 'src'), [$m['id'] ?? '/']);
-$check('manifest-urls-relative', array_filter($urls, fn($u) => preg_match('#^(https?:)?//#', $u) || ($u !== '' && $u[0] === '/' && $u !== $m['id'])) === []);
+$urls = array_merge([$m['start_url'] ?? '', $m['scope'] ?? ''], array_column($m['icons'] ?? [], 'src'));
+$check('manifest-urls-relative', array_filter($urls, fn($u) => preg_match('#^(https?:)?//#', $u) || ($u !== '' && $u[0] === '/')) === []);
 
 $html = file_get_contents("$root/arty/index.html");
 $check('page-links-manifest', str_contains($html, '<link rel="manifest" href="manifest.webmanifest">')
@@ -105,10 +123,12 @@ $m2 = json_decode((string) @file_get_contents("$root/mounted/manifest.webmanifes
 $check('start-manifest-start-url', ($m2['start_url'] ?? null) === '../../?game=mounted');
 $check('start-manifest-scope-contains-start', ($m2['scope'] ?? null) === '../../'
     && str_starts_with($m2['start_url'] ?? '', $m2['scope'] ?? "\0"));
-$check('start-manifest-own-id', ($m2['id'] ?? null) === '/~me/games/mounted/' && ($m2['id'] ?? '') !== ($m['id'] ?? ''));
+$check('start-manifest-no-id', !array_key_exists('id', $m2));
 $check('start-manifest-no-sw', !is_file("$root/mounted/sw.js")
-    && !str_contains((string) file_get_contents("$root/mounted/index.html"), 'serviceWorker'));
-$check('start-page-links-manifest', str_contains((string) file_get_contents("$root/mounted/index.html"), '<link rel="manifest" href="manifest.webmanifest">'));
+    && !str_contains((string) file_get_contents("$tmp/play/mounted/index.html"), 'serviceWorker'));
+$check('start-page-links-manifest', str_contains((string) file_get_contents("$tmp/play/mounted/index.html"),
+    '<link rel="manifest" href="../../games/mounted/manifest.webmanifest">'));
+$check('start-game-folder-untouched', !is_file("$root/mounted/index.html"));
 
 // A stale or missing manifest is caught by check mode, and fixed by write.
 $orig = file_get_contents("$root/arty/manifest.webmanifest");

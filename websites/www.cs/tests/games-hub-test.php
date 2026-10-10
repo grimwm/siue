@@ -101,12 +101,34 @@ foreach (['missing' => 'nope.png', 'not-an-image' => 'notes.txt', 'traversal' =>
     [$card, $err] = games_hub_card('tankity', ['title' => 't', 'description' => 'd', 'play' => 'index.html', 'image' => $img], "$tmp/tankity");
     $check("card-image-reject-$name", $card === null && is_string($err));
 }
+
+// Install look: short name and colors, with defaults.
+$base = ['title' => 'Operation Tankity', 'description' => 'd', 'play' => 'index.html'];
+[$card, $err] = games_hub_card('tankity', $base, "$tmp/tankity");
+$check('card-install-defaults', $err === null && $card['short_name'] === 'Operation Tankity'
+    && $card['theme_color'] === GAMES_HUB_DEFAULT_COLOR && $card['background_color'] === GAMES_HUB_DEFAULT_COLOR);
+[$card, $err] = games_hub_card('tankity', $base + ['short_name' => 'Tankity', 'theme_color' => '#ABC', 'background_color' => '#05060F'], "$tmp/tankity");
+$check('card-install-values', $err === null && $card['short_name'] === 'Tankity'
+    && $card['theme_color'] === '#abc' && $card['background_color'] === '#05060f');
+foreach (['theme_color' => ['red', '#12', '#12345g', '05060f'], 'background_color' => ['rgb(0,0,0)', '#1234567']] as $key => $bad) {
+    foreach ($bad as $value) {
+        [$card, $err] = games_hub_card('tankity', $base + [$key => $value], "$tmp/tankity");
+        $check("card-install-reject-$key-$value", $card === null && is_string($err));
+    }
+}
+[$card, $err] = games_hub_card('tankity', $base + ['short_name' => str_repeat('x', 25)], "$tmp/tankity");
+$check('card-install-reject-long-short-name', $card === null && is_string($err));
+
 $game('mounted', null);
 [$card, $err] = games_hub_card('mounted', ['title' => 't', 'description' => 'd', 'start' => 'go'], "$tmp/mounted");
 $check('card-start-no-share-without-page', $err === null && !array_key_exists('share', $card));
 $game('mounted', null, ['index.html']);
 [$card, $err] = games_hub_card('mounted', ['title' => 't', 'description' => 'd', 'start' => 'go'], "$tmp/mounted");
 $check('card-start-share-page', $err === null && ($card['share'] ?? null) === 'games/mounted/');
+$check('card-start-no-manifest-until-written', !array_key_exists('manifest', $card));
+$game('mounted', null, ['manifest.webmanifest']);
+[$card, $err] = games_hub_card('mounted', ['title' => 't', 'description' => 'd', 'start' => 'go'], "$tmp/mounted");
+$check('card-start-manifest', ($card['manifest'] ?? null) === 'games/mounted/manifest.webmanifest');
 exec('rm -rf ' . escapeshellarg("$tmp/mounted"));
 
 // --- Discovery --------------------------------------------------------------

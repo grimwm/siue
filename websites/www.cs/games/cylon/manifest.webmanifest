@@ -1,0 +1,29 @@
+{
+    "id": "/~wgrim/games/cylon/",
+    "name": "The CIC",
+    "short_name": "The CIC",
+    "description": "Defend this page from Cylon drones: missiles, Raptors, and one opening nuke. Play often: weekly high scores reset every Monday at midnight Central. You can also start from the nav Game Off toggle.",
+    "lang": "en",
+    "start_url": "../../?game=cylon",
+    "scope": "../../",
+    "display": "standalone",
+    "background_color": "#05060d",
+    "theme_color": "#05060d",
+    "categories": [
+        "games"
+    ],
+    "icons": [
+        {
+            "src": "icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        }
+    ]
+}

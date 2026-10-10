@@ -8,8 +8,9 @@
  */
 declare(strict_types=1);
 
-const GAMES_HUB_KEYS = ['title', 'kicker', 'description', 'button', 'play', 'start', 'order', 'hidden', 'image'];
+const GAMES_HUB_KEYS = ['title', 'kicker', 'description', 'button', 'play', 'start', 'order', 'hidden', 'image', 'short_name', 'theme_color', 'background_color'];
 const GAMES_HUB_DEFAULT_ORDER = 100;
+const GAMES_HUB_DEFAULT_COLOR = '#0c0e12';
 
 /**
  * Parses the YAML subset metadata.yaml uses: top-level `key: value` lines,
@@ -133,6 +134,20 @@ function games_hub_card(string $id, array $meta, string $dir): array
         'order' => (int) $order,
     ];
 
+    // Install (PWA) look: the app's short name and its two colors.
+    $short = trim($meta['short_name'] ?? '');
+    if (mb_strlen($short) > 24) {
+        return [null, '`short_name` must be 24 characters or fewer'];
+    }
+    $card['short_name'] = $short !== '' ? $short : $title;
+    foreach (['theme_color', 'background_color'] as $key) {
+        $color = trim($meta[$key] ?? GAMES_HUB_DEFAULT_COLOR);
+        if (!preg_match('/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/', $color)) {
+            return [null, "`$key` must be a #rgb or #rrggbb color"];
+        }
+        $card[$key] = strtolower($color);
+    }
+
     // Share picture for link previews: a 1200x630 image in the game folder.
     $image = trim($meta['image'] ?? '');
     if ($image !== '') {
@@ -165,6 +180,11 @@ function games_hub_card(string $id, array $meta, string $dir): array
         // game's share tags and forwards to the site with ?game=<id>.
         if (is_file("$dir/index.html")) {
             $card['share'] = "games/$id/";
+        }
+        // The site page links this manifest once the game launches, so the
+        // page can be installed as this game.
+        if (is_file("$dir/manifest.webmanifest")) {
+            $card['manifest'] = "games/$id/manifest.webmanifest";
         }
     }
     return [$card, null];

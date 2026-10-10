@@ -15,6 +15,7 @@ export const WEIGHTS = {
   'tankity-fx-battle.spec.mjs': 74,
   'tankity-fx-range.spec.mjs': 73,
   'tankity-solo.spec.mjs': 61,
+  'tankity-end.spec.mjs': 60,
   'tankity-rooms.spec.mjs': 53,
   'tankity-rooms-play.spec.mjs': 47,
   'tankity-audio.spec.mjs': 39,

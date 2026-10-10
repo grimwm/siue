@@ -11,10 +11,12 @@
  *
  * The pure parts are TypeScript in src/, compiled to js/ (see README.md,
  * "Source layout and build"): rules (difficulty, caps, hull tint, volume curve),
- * playfield (where drones may stand), scores (the scores.php client).
+ * playfield (where drones may stand), audio (the buses, effects and music bed),
+ * scores (the scores.php client).
  */
 import * as rules from './js/rules.js?v=7889c1e71d';
 import * as playfield from './js/playfield.js?v=848b755745';
+import { createAudio } from './js/audio.js?v=19ef6956c2';
 import { createScoresClient, formatHighScoreRows, weeklyResetText } from './js/scores.js?v=ce7eccc399';
 
 // Everything the game fetches is found next to this file, wherever it is served from.
@@ -171,13 +173,6 @@ export async function initializeCylonEffects(options = {}) {
     let paused = false;
     let pauseStartedAt = 0;
     let pendingScore = null;
-    let audioCtx = null;
-    let sfxBus = null;
-    let musicBus = null;
-    let musicMaster = null;
-    let musicNodes = [];
-    let musicTimer = null;
-    let musicPlaying = false;
     let ambushTimer = null;
     let raptorReadyAt = 0;
     let raptorInbound = false;
@@ -451,414 +446,20 @@ export async function initializeCylonEffects(options = {}) {
         field.style.height = '';
     }
 
-    function volumeToGain(pct, bus = 'sfx') {
-        return rules.volumeToGain(pct, bus);
-    }
-
-    function ensureAudioContext() {
-        if (!audioCtx) {
-            const Ctx = window.AudioContext || window.webkitAudioContext;
-            if (!Ctx) return null;
-            audioCtx = new Ctx();
-        }
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume().catch(() => {});
-        }
-        if (!sfxBus) {
-            sfxBus = audioCtx.createGain();
-            sfxBus.connect(audioCtx.destination);
-        }
-        if (!musicBus) {
-            musicBus = audioCtx.createGain();
-            musicBus.connect(audioCtx.destination);
-        }
-        applyBusVolumes();
-        return audioCtx;
-    }
-
-    function applyBusVolumes() {
-        if (sfxBus) {
-            sfxBus.gain.value = settings.soundEnabled ? volumeToGain(settings.soundVolume, 'sfx') : 0;
-        }
-        if (musicBus) {
-            // Keep the bed going through game-over overlays (session still On)
-            const on = settings.musicEnabled && sessionActive() && musicPlaying;
-            const target = on ? volumeToGain(settings.musicVolume, 'music') : 0;
-            if (audioCtx) {
-                const now = audioCtx.currentTime;
-                // Hard set — avoid delayed automation that can mute a just-started bed
-                musicBus.gain.cancelScheduledValues(now);
-                musicBus.gain.setValueAtTime(target, now);
-            } else {
-                musicBus.gain.value = target;
-            }
-        }
-    }
-
-    function ensureAudio() {
-        if (!settings.soundEnabled || settings.soundVolume <= 0) return null;
-        return ensureAudioContext();
-    }
-
-    /** Prime/resume audio on the first real user gesture so later SFX/music aren't delayed. */
-    function unlockAudioFromGesture() {
-        if (!settings.soundEnabled && !settings.musicEnabled) return;
-        const ctx = ensureAudioContext();
-        if (!ctx || unlockAudioFromGesture._primed) return;
-
-        const prime = () => {
-            if (unlockAudioFromGesture._primed || ctx.state !== 'running') return;
-            const g = ctx.createGain();
-            g.gain.value = 0.0001;
-            const osc = ctx.createOscillator();
-            osc.connect(g);
-            g.connect(ctx.destination);
-            osc.start();
-            osc.stop(ctx.currentTime + 0.01);
-            unlockAudioFromGesture._primed = true;
-            syncMusic();
-        };
-
-        if (ctx.state === 'running') {
-            prime();
-        } else {
-            ctx.resume().then(prime).catch(() => {});
-        }
-    }
-
-    function stopMusic(fade = true) {
-        if (musicTimer) {
-            clearInterval(musicTimer);
-            musicTimer = null;
-        }
-        const ctx = audioCtx;
-        const master = musicMaster;
-        const nodes = musicNodes;
-        musicPlaying = false;
-        musicMaster = null;
-        musicNodes = [];
-        applyBusVolumes();
-        if (!ctx || !master) return;
-        const now = ctx.currentTime;
-        const teardown = () => {
-            nodes.forEach((node) => {
-                try {
-                    if (typeof node.stop === 'function') node.stop();
-                } catch { /* already stopped */ }
-                try { node.disconnect(); } catch { /* ignore */ }
-            });
-            try { master.disconnect(); } catch { /* ignore */ }
-        };
-        try {
-            if (fade) {
-                master.gain.cancelScheduledValues(now);
-                master.gain.setValueAtTime(Math.max(master.gain.value, 0.0001), now);
-                master.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
-                setTimeout(teardown, 950);
-            } else {
-                master.gain.value = 0;
-                teardown();
-            }
-        } catch {
-            teardown();
-        }
-    }
-
-    function pulseTaiko(ctx, master, when, gain = 0.09) {
-        const osc = ctx.createOscillator();
-        const thump = ctx.createOscillator();
-        const g = ctx.createGain();
-        const tg = ctx.createGain();
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(200, when);
-        filter.frequency.exponentialRampToValueAtTime(55, when + 0.45);
-        osc.type = 'sine';
-        thump.type = 'triangle';
-        osc.frequency.setValueAtTime(85, when);
-        osc.frequency.exponentialRampToValueAtTime(32, when + 0.5);
-        thump.frequency.setValueAtTime(52, when);
-        thump.frequency.exponentialRampToValueAtTime(24, when + 0.4);
-        g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(gain, when + 0.015);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.85);
-        tg.gain.setValueAtTime(0.0001, when);
-        tg.gain.exponentialRampToValueAtTime(gain * 0.75, when + 0.02);
-        tg.gain.exponentialRampToValueAtTime(0.0001, when + 0.55);
-        osc.connect(filter);
-        filter.connect(g);
-        g.connect(master);
-        thump.connect(tg);
-        tg.connect(master);
-        osc.start(when);
-        thump.start(when);
-        osc.stop(when + 0.9);
-        thump.stop(when + 0.6);
-    }
-
-    function pulseRitualHit(ctx, master, when, gain = 0.035) {
-        const len = Math.floor(ctx.sampleRate * 0.18);
-        const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.4);
-        const src = ctx.createBufferSource();
-        const g = ctx.createGain();
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'bandpass';
-        filter.frequency.value = 380;
-        filter.Q.value = 0.7;
-        src.buffer = buffer;
-        g.gain.setValueAtTime(gain, when);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.18);
-        src.connect(filter);
-        filter.connect(g);
-        g.connect(master);
-        src.start(when);
-        src.stop(when + 0.2);
-    }
-
-    function playDarkHorn(ctx, master, when, freq, dur = 3.2, gain = 0.04) {
-        const osc = ctx.createOscillator();
-        const osc2 = ctx.createOscillator();
-        const osc3 = ctx.createOscillator();
-        const g = ctx.createGain();
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(480, when);
-        filter.frequency.linearRampToValueAtTime(280, when + dur);
-        osc.type = 'sawtooth';
-        osc2.type = 'triangle';
-        osc3.type = 'sine';
-        osc.frequency.setValueAtTime(freq, when);
-        osc2.frequency.setValueAtTime(freq * 1.498, when); // fifth
-        osc3.frequency.setValueAtTime(freq * 0.5, when);
-        const attack = Math.min(1.1, dur * 0.35);
-        g.gain.setValueAtTime(0.0001, when);
-        g.gain.linearRampToValueAtTime(gain, when + attack);
-        g.gain.linearRampToValueAtTime(gain * 0.7, when + dur * 0.7);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
-        osc.connect(filter);
-        osc2.connect(filter);
-        osc3.connect(filter);
-        filter.connect(g);
-        g.connect(master);
-        osc.start(when);
-        osc2.start(when);
-        osc3.start(when);
-        osc.stop(when + dur + 0.05);
-        osc2.stop(when + dur + 0.05);
-        osc3.stop(when + dur + 0.05);
-    }
-
-    function playTensionStrand(ctx, master, when, freq, dur = 4, gain = 0.012) {
-        const osc = ctx.createOscillator();
-        const osc2 = ctx.createOscillator();
-        const g = ctx.createGain();
-        osc.type = 'triangle';
-        osc2.type = 'sine';
-        // Slight beating dissonance
-        osc.frequency.setValueAtTime(freq, when);
-        osc2.frequency.setValueAtTime(freq * 1.02, when);
-        g.gain.setValueAtTime(0.0001, when);
-        g.gain.linearRampToValueAtTime(gain, when + 1.5);
-        g.gain.linearRampToValueAtTime(gain * 0.5, when + dur * 0.8);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
-        osc.connect(g);
-        osc2.connect(g);
-        g.connect(master);
-        osc.start(when);
-        osc2.start(when);
-        osc.stop(when + dur + 0.05);
-        osc2.stop(when + dur + 0.05);
-    }
-
     /** Combat session chrome / music — stays true through game-over until Game Off. */
     function sessionActive() {
         return settings.gameEnabled && !paused;
     }
 
+    const audio = createAudio({
+        settings: () => settings,
+        sessionActive,
+        volumeToGain: rules.volumeToGain,
+    });
+
     /** Actively fighting — false during intro cinematic and game-over overlays. */
     function isGameLive() {
         return sessionActive() && !gameOver && !introPlaying;
-    }
-
-    function startMusic() {
-        if (musicPlaying || !settings.musicEnabled || settings.musicVolume <= 0 || !sessionActive()) return;
-        const ctx = ensureAudioContext();
-        if (!ctx || !musicBus) return;
-
-        const begin = () => {
-            if (musicPlaying || !settings.musicEnabled || !sessionActive()) return;
-
-            if (musicTimer) {
-                clearInterval(musicTimer);
-                musicTimer = null;
-            }
-            if (musicMaster) {
-                const oldMaster = musicMaster;
-                const oldNodes = musicNodes;
-                musicMaster = null;
-                musicNodes = [];
-                oldNodes.forEach((node) => {
-                    try {
-                        if (typeof node.stop === 'function') node.stop();
-                    } catch { /* ignore */ }
-                    try { node.disconnect(); } catch { /* ignore */ }
-                });
-                try { oldMaster.disconnect(); } catch { /* ignore */ }
-            }
-
-            const master = ctx.createGain();
-            master.gain.value = 0.0001;
-            master.connect(musicBus);
-
-            // Dark, forboding bed — original synthesis in the spirit of slow McCreary
-            // dread cues (not a recreation of any copyrighted track).
-            const droneA = ctx.createOscillator();
-            const droneB = ctx.createOscillator();
-            const droneC = ctx.createOscillator();
-            const droneGain = ctx.createGain();
-            const droneFilter = ctx.createBiquadFilter();
-            droneA.type = 'sawtooth';
-            droneB.type = 'sine';
-            droneC.type = 'triangle';
-            droneA.frequency.value = 36.71; // D1
-            droneB.frequency.value = 55.0; // A1
-            droneC.frequency.value = 38.89; // Eb1 — grinding against D
-            droneFilter.type = 'lowpass';
-            droneFilter.frequency.value = 160;
-            droneFilter.Q.value = 0.6;
-            droneGain.gain.value = 0.07;
-            droneA.connect(droneFilter);
-            droneB.connect(droneFilter);
-            droneC.connect(droneFilter);
-            droneFilter.connect(droneGain);
-            droneGain.connect(master);
-
-            const pad = ctx.createOscillator();
-            const pad2 = ctx.createOscillator();
-            const padGain = ctx.createGain();
-            const padFilter = ctx.createBiquadFilter();
-            pad.type = 'sawtooth';
-            pad2.type = 'triangle';
-            pad.frequency.value = 73.42; // D2
-            pad2.frequency.value = 87.31; // F2
-            padFilter.type = 'lowpass';
-            padFilter.frequency.value = 320;
-            padGain.gain.value = 0.028;
-            pad.connect(padFilter);
-            pad2.connect(padFilter);
-            padFilter.connect(padGain);
-            padGain.connect(master);
-
-            const lfo = ctx.createOscillator();
-            const lfoGain = ctx.createGain();
-            lfo.type = 'sine';
-            lfo.frequency.value = 0.04;
-            lfoGain.gain.value = 30;
-            lfo.connect(lfoGain);
-            lfoGain.connect(droneFilter.frequency);
-
-            const now = ctx.currentTime;
-            droneA.start(now);
-            droneB.start(now);
-            droneC.start(now);
-            pad.start(now);
-            pad2.start(now);
-            lfo.start(now);
-
-            // Slow chord breath under the bed
-            pad.frequency.setValueAtTime(73.42, now);
-            pad2.frequency.setValueAtTime(87.31, now);
-            pad.frequency.setValueAtTime(73.42, now + 8);
-            pad2.frequency.linearRampToValueAtTime(92.5, now + 16); // F# tension
-            pad.frequency.linearRampToValueAtTime(65.41, now + 24); // C
-            pad2.frequency.linearRampToValueAtTime(98.0, now + 24); // G
-            pad.frequency.linearRampToValueAtTime(73.42, now + 32);
-            pad2.frequency.linearRampToValueAtTime(87.31, now + 32);
-
-            master.gain.setValueAtTime(0.0001, now);
-            master.gain.exponentialRampToValueAtTime(1, now + 1.2);
-
-            musicMaster = master;
-            musicNodes = [
-                droneA, droneB, droneC, pad, pad2, lfo,
-                droneGain, padGain, droneFilter, padFilter, lfoGain
-            ];
-            musicPlaying = true;
-            applyBusVolumes();
-
-            // Slow ritual pulse — doom, not chip-tune
-            const bpm = 50;
-            const beat = 60 / bpm;
-            const hornNotes = [73.42, 69.3, 65.41, 87.31, 73.42, 55.0, 82.41, 73.42];
-            const strands = [293.66, 311.13, 277.18, 349.23];
-            let bar = 0;
-
-            const scheduleWindow = () => {
-                if (!musicPlaying || !audioCtx || !musicMaster) return;
-                const t = audioCtx.currentTime + 0.05;
-                // One 4-beat bar per call — sparse on purpose
-                const when0 = t;
-                const when2 = t + beat * 2;
-
-                pulseTaiko(audioCtx, musicMaster, when0, bar % 2 === 0 ? 0.11 : 0.08);
-                if (bar % 2 === 1) {
-                    pulseTaiko(audioCtx, musicMaster, when2, 0.06);
-                } else {
-                    pulseRitualHit(audioCtx, musicMaster, when2, 0.03);
-                }
-
-                // Long dark horn every bar — changes pitch so it moves
-                playDarkHorn(
-                    audioCtx,
-                    musicMaster,
-                    when0 + beat * 0.15,
-                    hornNotes[bar % hornNotes.length],
-                    beat * 3.4,
-                    0.038
-                );
-
-                // High tension strand every other bar
-                if (bar % 2 === 0) {
-                    playTensionStrand(
-                        audioCtx,
-                        musicMaster,
-                        when0 + beat * 0.5,
-                        strands[(bar / 2) % strands.length],
-                        beat * 3.6,
-                        0.014
-                    );
-                }
-
-                // Heavier double-hit as intensity marker
-                if (bar % 4 === 3) {
-                    pulseTaiko(audioCtx, musicMaster, when0 + beat * 0.75, 0.07);
-                    pulseRitualHit(audioCtx, musicMaster, when0 + beat * 1.1, 0.04);
-                }
-
-                bar += 1;
-            };
-
-            scheduleWindow();
-            musicTimer = setInterval(scheduleWindow, 4 * beat * 1000 - 40);
-        };
-
-        if (ctx.state === 'suspended') {
-            ctx.resume().then(begin).catch(() => {});
-        } else {
-            begin();
-        }
-    }
-
-    function syncMusic() {
-        const want = sessionActive() && settings.musicEnabled && settings.musicVolume > 0;
-        if (want) {
-            if (!musicPlaying) startMusic();
-            else applyBusVolumes();
-        } else {
-            stopMusic(true);
-        }
     }
 
     function assignBlastVector(el, vw, vh, { xSpread = 1.15, ySpread = 1.2, rotMax = 180 } = {}) {
@@ -1100,22 +701,6 @@ export async function initializeCylonEffects(options = {}) {
         clearActiveMissiles();
     }
 
-    function playSmallMissileSound(tracker) {
-        playTone({
-            freq: tracker ? 520 : 380,
-            freqEnd: tracker ? 160 : 110,
-            type: 'sawtooth',
-            duration: 0.22,
-            gain: tracker ? 0.07 : 0.055
-        });
-        playNoiseBurst({
-            duration: 0.14,
-            gain: 0.04,
-            filterFreq: tracker ? 2200 : 1400,
-            filterType: 'highpass'
-        });
-    }
-
     /** Top-of-viewport launch X, biased away from other live missiles. */
     function pickMissileLaunchOrigin() {
         const vw = window.innerWidth || 800;
@@ -1181,7 +766,7 @@ export async function initializeCylonEffects(options = {}) {
         }
         const pageX = clientX + window.scrollX;
         const pageY = clientY + window.scrollY;
-        playExplosion({ size: 'small', delay: 0 });
+        audio.sfx('ko');
         const blast = document.createElement('div');
         blast.className = 'cylon-missile-blast';
         blast.style.left = `${pageX}px`;
@@ -1234,8 +819,8 @@ export async function initializeCylonEffects(options = {}) {
 
         el.style.left = `${x}px`;
         el.style.top = `${y}px`;
-        if (settings.soundEnabled) ensureAudio();
-        playSmallMissileSound(tracker);
+        audio.prime();
+        audio.sfx(tracker ? 'trackerMissile' : 'missile');
 
         const tick = (now) => {
             if (!missile.alive) return;
@@ -1395,182 +980,6 @@ export async function initializeCylonEffects(options = {}) {
         });
     }
 
-    function playTone({ freq = 440, freqEnd = null, type = 'square', duration = 0.12, gain = 0.08, delay = 0 }) {
-        const ctx = ensureAudio();
-        if (!ctx) return;
-        const t0 = ctx.currentTime + delay;
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, t0);
-        if (freqEnd != null) {
-            osc.frequency.exponentialRampToValueAtTime(Math.max(freqEnd, 1), t0 + duration);
-        }
-        g.gain.setValueAtTime(0.0001, t0);
-        g.gain.exponentialRampToValueAtTime(gain, t0 + 0.01);
-        g.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
-        osc.connect(g);
-        g.connect(sfxBus || ctx.destination);
-        osc.start(t0);
-        osc.stop(t0 + duration + 0.02);
-    }
-
-    function playNoiseBurst({ duration = 0.18, gain = 0.06, delay = 0, filterFreq = 900, filterType = 'bandpass' } = {}) {
-        const ctx = ensureAudio();
-        if (!ctx) return;
-        const t0 = ctx.currentTime + delay;
-        const len = Math.floor(ctx.sampleRate * duration);
-        const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < len; i++) {
-            data[i] = (Math.random() * 2 - 1) * (1 - i / len);
-        }
-        const src = ctx.createBufferSource();
-        const g = ctx.createGain();
-        const filter = ctx.createBiquadFilter();
-        filter.type = filterType;
-        filter.frequency.value = filterFreq;
-        src.buffer = buffer;
-        g.gain.setValueAtTime(gain, t0);
-        g.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
-        src.connect(filter);
-        filter.connect(g);
-        g.connect(sfxBus || ctx.destination);
-        src.start(t0);
-        src.stop(t0 + duration + 0.02);
-    }
-
-    function playExplosion({ size = 'medium', delay = 0 } = {}) {
-        const ctx = ensureAudio();
-        if (!ctx) return;
-        const profiles = {
-            small: {
-                thumpGain: 0.11,
-                thumpDur: 0.28,
-                crackGain: 0.08,
-                crackDur: 0.12,
-                debrisGain: 0.06,
-                debrisDur: 0.22,
-                rumbleGain: 0.05,
-                rumbleDur: 0.35,
-                thumpFreq: 70,
-                crackFreq: 420
-            },
-            medium: {
-                thumpGain: 0.16,
-                thumpDur: 0.45,
-                crackGain: 0.12,
-                crackDur: 0.16,
-                debrisGain: 0.1,
-                debrisDur: 0.4,
-                rumbleGain: 0.09,
-                rumbleDur: 0.65,
-                thumpFreq: 55,
-                crackFreq: 380
-            },
-            large: {
-                thumpGain: 0.2,
-                thumpDur: 0.85,
-                crackGain: 0.14,
-                crackDur: 0.28,
-                debrisGain: 0.12,
-                debrisDur: 0.7,
-                rumbleGain: 0.14,
-                rumbleDur: 1.4,
-                thumpFreq: 42,
-                crackFreq: 300
-            }
-        };
-        const p = profiles[size] || profiles.medium;
-        // 1) Sub thump
-        playTone({
-            freq: p.thumpFreq,
-            freqEnd: Math.max(18, p.thumpFreq * 0.35),
-            type: 'sine',
-            duration: p.thumpDur,
-            gain: p.thumpGain,
-            delay
-        });
-        playTone({
-            freq: p.thumpFreq * 1.4,
-            freqEnd: 24,
-            type: 'triangle',
-            duration: p.thumpDur * 0.85,
-            gain: p.thumpGain * 0.55,
-            delay: delay + 0.02
-        });
-        // 2) Sharp crack
-        playNoiseBurst({
-            duration: p.crackDur,
-            gain: p.crackGain,
-            delay: delay + 0.03,
-            filterFreq: p.crackFreq,
-            filterType: 'bandpass'
-        });
-        playTone({
-            freq: 900,
-            freqEnd: 120,
-            type: 'square',
-            duration: p.crackDur * 0.7,
-            gain: p.crackGain * 0.45,
-            delay: delay + 0.03
-        });
-        // 3) Debris / hiss
-        playNoiseBurst({
-            duration: p.debrisDur,
-            gain: p.debrisGain,
-            delay: delay + 0.06,
-            filterFreq: 1800,
-            filterType: 'highpass'
-        });
-        playNoiseBurst({
-            duration: p.debrisDur * 0.8,
-            gain: p.debrisGain * 0.7,
-            delay: delay + 0.08,
-            filterFreq: 700,
-            filterType: 'bandpass'
-        });
-        // 4) Rumble tail
-        playTone({
-            freq: 48,
-            freqEnd: 20,
-            type: 'sine',
-            duration: p.rumbleDur,
-            gain: p.rumbleGain,
-            delay: delay + 0.1
-        });
-        playNoiseBurst({
-            duration: p.rumbleDur * 0.9,
-            gain: p.rumbleGain * 0.65,
-            delay: delay + 0.12,
-            filterFreq: 180,
-            filterType: 'lowpass'
-        });
-    }
-
-    function playProjectileSound() {
-        playTone({ freq: 980, freqEnd: 240, type: 'sawtooth', duration: 0.14, gain: 0.07 });
-        playTone({ freq: 1400, freqEnd: 400, type: 'square', duration: 0.08, gain: 0.035, delay: 0.01 });
-    }
-
-    function playKoSound() {
-        playExplosion({ size: 'small' });
-    }
-
-    function playNukeSound() {
-        playExplosion({ size: 'large' });
-    }
-
-    function playHitSound() {
-        playTone({ freq: 160, freqEnd: 70, type: 'sawtooth', duration: 0.1, gain: 0.05 });
-        playNoiseBurst({ duration: 0.08, gain: 0.04 });
-    }
-
-    function playHealSound() {
-        playTone({ freq: 280, freqEnd: 540, type: 'sine', duration: 0.18, gain: 0.05 });
-        playTone({ freq: 420, freqEnd: 660, type: 'triangle', duration: 0.14, gain: 0.03, delay: 0.04 });
-    }
-
     function clearHealTimer() {
         clearTimeout(healTimer);
         healTimer = null;
@@ -1583,8 +992,8 @@ export async function initializeCylonEffects(options = {}) {
         if (!isGameLive() || hitCount <= 0) return;
         hitCount -= 1;
         updateHitsUi();
-        if (settings.soundEnabled) ensureAudio();
-        playHealSound();
+        audio.prime();
+        audio.sfx('heal');
         if (hitsEl) {
             hitsEl.classList.add('is-heal');
             setTimeout(() => hitsEl.classList.remove('is-heal'), 320);
@@ -1600,43 +1009,6 @@ export async function initializeCylonEffects(options = {}) {
             healTimer = null;
             tryHeal();
         }, HEAL_IDLE_MS);
-    }
-
-    function playRaptorSound() {
-        // Incoming flyby
-        playTone({ freq: 220, freqEnd: 70, type: 'sawtooth', duration: 0.7, gain: 0.09 });
-        playTone({ freq: 140, freqEnd: 55, type: 'triangle', duration: 0.85, gain: 0.07, delay: 0.04 });
-        playNoiseBurst({ duration: 0.55, gain: 0.08, filterFreq: 700, filterType: 'lowpass' });
-        playNoiseBurst({ duration: 0.4, gain: 0.05, delay: 0.15, filterFreq: 2400, filterType: 'highpass' });
-        // Cannon strafe
-        [0.45, 0.58, 0.7, 0.82, 0.94, 1.06].forEach((d, i) => {
-            playTone({
-                freq: 980 - i * 40,
-                freqEnd: 180,
-                type: 'square',
-                duration: 0.07,
-                gain: 0.055,
-                delay: d
-            });
-            playNoiseBurst({ duration: 0.08, gain: 0.045, delay: d, filterFreq: 1600 });
-        });
-        // Ground impacts — layered explosions
-        playExplosion({ size: 'medium', delay: 0.72 });
-        playExplosion({ size: 'medium', delay: 1.0 });
-    }
-
-    function playGrenadeArmSound() {
-        playTone({ freq: 640, freqEnd: 420, type: 'square', duration: 0.09, gain: 0.05 });
-        playTone({ freq: 880, freqEnd: 660, type: 'triangle', duration: 0.07, gain: 0.035, delay: 0.04 });
-        playNoiseBurst({ duration: 0.06, gain: 0.03, filterFreq: 2200 });
-    }
-
-    function playGrenadeSound() {
-        // Throw whoosh (keep)
-        playTone({ freq: 420, freqEnd: 140, type: 'sawtooth', duration: 0.14, gain: 0.05 });
-        playNoiseBurst({ duration: 0.12, gain: 0.05, filterFreq: 1800, filterType: 'highpass' });
-        // Detonation
-        playExplosion({ size: 'medium', delay: 0.08 });
     }
 
     function readEyePercent() {
@@ -1803,7 +1175,7 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function onPointerMove(e) {
-        if (settings.soundEnabled) ensureAudio();
+        audio.prime();
         // Reticle finger is handled in bindReticle (per pointerId)
         if (reticlePointerId != null && e.pointerId === reticlePointerId) return;
         // Other touch fingers must not move aim (so a tap/attack finger is free)
@@ -1930,7 +1302,7 @@ export async function initializeCylonEffects(options = {}) {
             nukeTimer = null;
             healTimer = null;
             setEyeTracking(false);
-            syncMusic();
+            audio.syncMusic();
             updateAbilityButtons();
         }
         syncHelpContent();
@@ -1946,7 +1318,7 @@ export async function initializeCylonEffects(options = {}) {
             applyPauseTimeSkew(elapsed);
             paused = false;
             pauseStartedAt = 0;
-            syncMusic();
+            audio.syncMusic();
             updateAbilityButtons();
             syncReticleVisibility();
         }
@@ -2071,7 +1443,7 @@ export async function initializeCylonEffects(options = {}) {
         hitCount += n;
         hitsTaken += n;
         updateHitsUi();
-        playHitSound();
+        audio.sfx('hit');
         scheduleHeal();
 
         if (fromNuke) {
@@ -2087,7 +1459,7 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function fireBolt(fromX, fromY, toX, toY) {
-        playProjectileSound();
+        audio.sfx('projectile');
         const bolt = document.createElement('div');
         bolt.className = 'cylon-bolt';
         bolt.setAttribute('aria-hidden', 'true');
@@ -2164,8 +1536,8 @@ export async function initializeCylonEffects(options = {}) {
     function spawnShotImpact(pageX, pageY, { sound = true } = {}) {
         if (!field) return;
         if (sound && settings.soundEnabled) {
-            ensureAudio();
-            playProjectileSound();
+            audio.prime();
+            audio.sfx('projectile');
         }
         const impact = document.createElement('div');
         impact.className = 'cylon-impact';
@@ -2225,7 +1597,7 @@ export async function initializeCylonEffects(options = {}) {
         bot.dataset.ko = '1';
         bot.classList.add('is-ko');
         clearBotTimers(bot);
-        playKoSound();
+        audio.sfx('ko');
         const kx = (parseFloat(bot.style.left) || 0) + BOT_SIZE.w / 2;
         const ky = (parseFloat(bot.style.top) || 0) + BOT_SIZE.h / 2;
         spawnShotImpact(kx, ky, { sound: false });
@@ -2418,8 +1790,8 @@ export async function initializeCylonEffects(options = {}) {
             return false;
         }
         grenadeArmed = true;
-        if (settings.soundEnabled) ensureAudio();
-        playGrenadeArmSound();
+        audio.prime();
+        audio.sfx('grenadeArm');
         updateGrenadeButton();
         return true;
     }
@@ -2435,8 +1807,8 @@ export async function initializeCylonEffects(options = {}) {
         grenadeArmed = false;
         grenadeReadyAt = Date.now() + GRENADE_COOLDOWN_MS;
         updateGrenadeButton();
-        if (settings.soundEnabled) ensureAudio();
-        playGrenadeSound();
+        audio.prime();
+        audio.sfx('grenade');
 
         const x = pageX;
         const y = pageY;
@@ -2519,8 +1891,8 @@ export async function initializeCylonEffects(options = {}) {
         raptorInbound = true;
         raptorReadyAt = Date.now() + RAPTOR_COOLDOWN_MS;
         updateAbilityButtons();
-        if (settings.soundEnabled) ensureAudio();
-        playRaptorSound();
+        audio.prime();
+        audio.sfx('raptor');
         disorientEye(EYE_DISORIENT_MS);
 
         raptorEl.classList.add('is-inbound');
@@ -2657,7 +2029,7 @@ export async function initializeCylonEffects(options = {}) {
             if (e.pointerType === 'mouse' && e.button != null && e.button !== 0) return;
             e.preventDefault();
             e.stopPropagation();
-            if (settings.soundEnabled) ensureAudio();
+            audio.prime();
             knockOutBot(bot);
         });
 
@@ -2924,8 +2296,8 @@ export async function initializeCylonEffects(options = {}) {
 
     function detonateNukeAt(clientX, clientY, { dealDamage = true, shake = true } = {}) {
         if (!nukeEl) return;
-        if (settings.soundEnabled) ensureAudio();
-        playNukeSound();
+        audio.prime();
+        audio.sfx('nuke');
 
         const vw = window.innerWidth || 1;
         const vh = window.innerHeight || 1;
@@ -3161,8 +2533,8 @@ export async function initializeCylonEffects(options = {}) {
         nukeMissileEl.style.left = `${x}px`;
         nukeMissileEl.style.top = `${y}px`;
         nukeMissileEl.classList.add('is-flying');
-        if (settings.soundEnabled) ensureAudio();
-        playTone({ freq: 160, freqEnd: 70, type: 'sawtooth', duration: 0.28, gain: 0.06 });
+        audio.prime();
+        audio.sfx('introLaunch');
 
         const tick = (now) => {
             if (gen !== introGen) return;
@@ -3220,8 +2592,8 @@ export async function initializeCylonEffects(options = {}) {
         nukeMissileEl.style.left = `${x}px`;
         nukeMissileEl.style.top = `${y}px`;
         nukeMissileEl.classList.add('is-flying');
-        if (settings.soundEnabled) ensureAudio();
-        playTone({ freq: 180, freqEnd: 90, type: 'sawtooth', duration: 0.2, gain: 0.05 });
+        audio.prime();
+        audio.sfx('nukeLaunch');
 
         const tick = (now) => {
             if (paused || !settings.gameEnabled || gameOver) {
@@ -3351,7 +2723,7 @@ export async function initializeCylonEffects(options = {}) {
         }
         syncGameToggleUi();
         syncReticleVisibility();
-        syncMusic();
+        audio.syncMusic();
         if (!keepSession) {
             syncWorldEndedLook();
         }
@@ -3409,7 +2781,7 @@ export async function initializeCylonEffects(options = {}) {
             resetAbilityCooldowns();
             syncGameToggleUi();
             syncReticleVisibility();
-            syncMusic();
+            audio.syncMusic();
             syncWorldEndedLook();
         } else {
             cancelIntroNuke();
@@ -3420,7 +2792,7 @@ export async function initializeCylonEffects(options = {}) {
             resetAbilityCooldowns();
             syncGameToggleUi();
             syncReticleVisibility();
-            syncMusic();
+            audio.syncMusic();
             // Combat chrome on; page stays intact until the intro nuke hits
             syncWorldEndedLook({ deferScatter: true });
             playIntroNuke();
@@ -3625,19 +2997,7 @@ export async function initializeCylonEffects(options = {}) {
             if (key === 'eyeEnabled' && !settings.eyeEnabled) {
                 setEyeTracking(false);
             }
-            if (key === 'musicEnabled' || key === 'musicVolume') {
-                syncMusic();
-            }
-            if (key === 'soundEnabled' || key === 'soundVolume') {
-                ensureAudioContext();
-                applyBusVolumes();
-            }
-            if (key === 'soundEnabled' && !settings.soundEnabled && !settings.musicEnabled && audioCtx) {
-                audioCtx.suspend().catch(() => {});
-            }
-            if ((key === 'soundEnabled' || key === 'musicEnabled') && (settings.soundEnabled || settings.musicEnabled)) {
-                ensureAudioContext();
-            }
+            audio.settingChanged(key);
         };
 
         settingsRoot.querySelectorAll('[data-setting]').forEach((input) => {
@@ -3673,8 +3033,8 @@ export async function initializeCylonEffects(options = {}) {
 
     window.addEventListener('pointermove', onPointerMove, { passive: true });
     window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('pointerdown', unlockAudioFromGesture, { passive: true });
-    window.addEventListener('keydown', unlockAudioFromGesture, { passive: true });
+    window.addEventListener('pointerdown', audio.unlock, { passive: true });
+    window.addEventListener('keydown', audio.unlock, { passive: true });
     // Kill double-click / drag text selection over page content during a run
     document.addEventListener('selectstart', (e) => {
         if (document.body.classList.contains('cylon-game-live')) e.preventDefault();

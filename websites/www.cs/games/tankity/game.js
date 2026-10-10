@@ -4,45 +4,19 @@
  * Controls: hold Left/Right = angle · hold Up/Down = power · A/D = drive ·
  * Ctrl/Space = fire · Q = weapon · N = next round / new match · M = music.
  */
-(() => {
-'use strict';
-
-/* ---------- seeded RNG (mulberry32 + string hash) ---------- */
-function hashSeed(str) {
-  let h = 1779033703 ^ str.length;
-  for (let i = 0; i < str.length; i++) {
-    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  return h >>> 0;
-}
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function gauss(rng) {
-  return (rng() + rng() + rng() - 1.5) * 2;
-}
-
-/* ---------- board + physics tuning ---------- */
-const W = 720, H = 460;
-const GRAV = 95;
-const FLAT_GRAV = 90; // flat bolts arc a little, so short shots and demos still land
-const TUNE = {
-  lives: 3, maxLives: 5, oneUpEvery: 3000,
-  playerArmor: 100, droneArmor: 60,
-  fuel: 80, driveSpeed: 42,
-  thinkTime: 0.9, settleTime: 1.1,
-  roundWinScore: 750, roundWinCash: 500, killBonus: 300,
-};
-/* Tuning is read-only: one frozen table means a balance number cannot drift
-// halfway through a match. PHP arrays already copy on write, so the server
-// side gets the same guarantee for free. */
-Object.freeze(TUNE);
+/* The pure game math (RNG, terrain, flight, hits, blasts, drone aim) lives in
+ * src/sim.ts, compiled to js/sim.js and imported here; the ?v= matches this
+ * script's in index.html so a browser never pairs the two from different
+ * releases. Everything below is the part that shows it: sound, particles, the
+ * HUD, rooms and the shop. */
+import {
+  hashSeed, mulberry32, gauss, W, H, GRAV, FLAT_GRAV, TUNE, clamp,
+  buildArsenal as simBuildArsenal, droneRack as simDroneRack, genTerrain as simGenTerrain,
+  surfY as simSurfY, carveCrater, facing, isGroundUnit, spawnSpots, spotTaken as simSpotTaken,
+  muzzle, shotSpeed, stepBallistic, blastDamage,
+  fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
+  anyTankFalling as simAnyTankFalling, aiChoose as simAiChoose,
+} from './js/sim.js?v=20261010y';
 
 /* ---------- audio: synthesized voices and songs, optionally replaced by files ---------- */
 let AC = null;
@@ -563,44 +537,15 @@ const FALLBACK_ARSENAL = {
     { key: 'fuel', name: 'Fuel +60', cat: 'Hull and fuel', price: 60, n: 60, effect: 'fuel', note: 'Adds 60 driving fuel.' },
   ],
 };
+let ARSENAL = null; // the same tables, as the sim takes them
 let WEAPONS = {};
 let WORDER = [];
 let SHOP = [];
 let GEAR = {};
 function buildArsenal(data) {
-  const w = {}, order = [], shop = [], gear = {};
-  for (const a of (data && data.ammo) || []) {
-    if (!a || !a.key || !a.name) continue;
-    w[a.key] = Object.assign({ effect: 'shot', speed: 1.0, pack: 0, price: 0, minRound: 1 }, a);
-    order.push(a.key);
-    if ((a.pack || 0) > 0) {
-      // Round-1 goods sell everywhere including the pre-match shelf
-      // (G.round is 0 there); later unlocks need the round to arrive.
-      const openFrom = (a.minRound || 1) <= 1 ? 0 : a.minRound;
-      shop.push({ kind: 'ammo', w: a.key, n: a.pack, label: `${a.name} ×${a.pack}`, cat: a.cat || 'Shells', minRound: openFrom, price: a.price || 0 });
-    }
-  }
-  for (const g of (data && data.gear) || []) {
-    if (!g || !g.key || !g.name) continue;
-    gear[g.key] = g;
-    const openFrom = (g.minRound || 1) <= 1 ? 0 : g.minRound;
-    shop.push({ kind: 'gear', g: g.key, n: g.n || 0, label: g.name, cat: g.cat || 'Tricks', minRound: openFrom, price: g.price || 0, effect: g.effect });
-  }
-  if (!order.length) return false;
-  // The arsenal is read-only after the build: every shell, row, and paint
-  // job freezes, so a stray write fails loudly instead of bending ballistics
-  // mid-match. Hot per-frame state (shells, particles, tanks) stays mutable
-  // where freezing would cost real time.
-  for (const k of Object.keys(w)) {
-    if (w[k].gfx) Object.freeze(w[k].gfx);
-    if (w[k].gfx && w[k].gfx.blast) Object.freeze(w[k].gfx.blast);
-    Object.freeze(w[k]);
-  }
-  for (const row of shop) Object.freeze(row);
-  for (const k of Object.keys(gear)) Object.freeze(gear[k]);
-  Object.freeze(order);
-  Object.freeze(shop);
-  WEAPONS = w; WORDER = order; SHOP = shop; GEAR = gear;
+  const a = simBuildArsenal(data);
+  if (!a) return false;
+  ARSENAL = a; WEAPONS = a.weapons; WORDER = a.order; SHOP = a.shop; GEAR = a.gear;
   G.shopSel = clamp(G.shopSel || 0, 0, SHOP.length - 1);
   return true;
 }
@@ -734,7 +679,6 @@ const G = {
   cam: { z: 1, cx: 360, cy: 230 },
   over: false, won: false,
 };
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 /* Tables start from the baked fallback (G exists from here on); the file
 // arsenal replaces them the moment it arrives. */
 buildArsenal(FALLBACK_ARSENAL);
@@ -744,8 +688,7 @@ const alive = () => G.tanks.filter(t => t.hp > 0);
 const foesAlive = () => G.tanks.filter(t => !t.isPlayer && t.hp > 0);
 
 function surfY(x) {
-  const xi = clamp(Math.round(x), 0, W - 1);
-  return G.terrain[xi];
+  return simSurfY(G.terrain, x);
 }
 /* The camera only ever pulls back, slowly, to keep every live tank framed. */
 function updateCamera(dt) {
@@ -775,23 +718,11 @@ function updateCamera(dt) {
   G.cam.cy = Math.min(G.cam.cy, H + 8 - halfView);
 }
 
-/* Rolling hills from seeded sines. */
+/* Rolling hills from seeded sines, and the clouds over them. */
 function genTerrain() {
-  G.terrain = new Array(W);
-  const a = [20 + G.rng() * 30, 10 + G.rng() * 22, 5 + G.rng() * 12];
-  const p = [G.rng() * 6.28, G.rng() * 6.28, G.rng() * 6.28];
-  const f = [1 / 260 + G.rng() / 500, 1 / 120 + G.rng() / 260, 1 / 47 + G.rng() / 120];
-  for (let x = 0; x < W; x++) {
-    const y = 330
-      + a[0] * Math.sin(x * f[0] + p[0])
-      + a[1] * Math.sin(x * f[1] + p[1])
-      + a[2] * Math.sin(x * f[2] + p[2]);
-    G.terrain[x] = clamp(y, 190, 415);
-  }
-  G.clouds = [];
-  for (let i = 0; i < 5; i++) {
-    G.clouds.push({ x: G.rng() * W, y: 30 + G.rng() * 90, s: 0.6 + G.rng() * 0.9, v: 3 + G.rng() * 5 });
-  }
+  const g = simGenTerrain(G.rng);
+  G.terrain = g.terrain;
+  G.clouds = g.clouds;
 }
 
 const FOE_DEFS = [
@@ -950,74 +881,19 @@ function shownPower(t) {
 function aimArmLength(power) {
   return 10 + clamp(power, 10, 100) * 0.4;
 }
-/* Which way a tank faces: +1 right, -1 left. Angles count from that side. */
-function facing(t) {
-  return t.dirS || (t.isPlayer ? 1 : -1);
-}
-/* Units keep at least this far apart, centre to centre, so hulls and rotors
-   never overlap; fresh rounds spread them wider still. */
-const UNIT_GAP = 44;
-const SPAWN_GAP = 110;
 function spotTaken(t, x) {
-  return G.tanks.some(o => o !== t && o.hp > 0 && Math.abs(o.x - x) < UNIT_GAP);
-}
-/* n spawn points across the hills, at least SPAWN_GAP apart, in random
-   order: nobody owns a side. Falls back to even spacing if sampling fails. */
-function spawnSpots(n, rng) {
-  const lo = 30, hi = W - 30;
-  for (let tries = 0; tries < 200; tries++) {
-    const xs = [];
-    for (let i = 0; i < n; i++) xs.push(Math.round(lo + rng() * (hi - lo)));
-    xs.sort((a, b) => a - b);
-    if (xs.every((x, i) => i === 0 || x - xs[i - 1] >= SPAWN_GAP)) {
-      for (let i = xs.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [xs[i], xs[j]] = [xs[j], xs[i]];
-      }
-      return xs;
-    }
-  }
-  return Array.from({ length: n }, (_, i) => Math.round(lo + (i + 0.5) * (hi - lo) / n));
-}
-function muzzle(t) {
-  const rad = t.angle * Math.PI / 180;
-  const s = facing(t);
-  return { x: t.x + Math.cos(rad) * 20 * s, y: t.y - 14 - Math.sin(rad) * 20 };
-}
-function shotSpeed(power, flat, mult) {
-  const m = mult || 1;
-  return (flat ? 140 + power * 3.2 : 40 + power * 2.4) * m;
+  return simSpotTaken(G.tanks, t, x);
 }
 function fireWeapon(t, wkey) {
   const w = WEAPONS[wkey];
-  const store = t.isPlayer ? G.ammo : t.ammo;
-  if ((store[wkey] || 0) <= 0) {
+  const launch = simFireWeapon(G, ARSENAL, t, wkey);
+  if (!launch) {
     if (t.isPlayer) { say(`No ${w.name} left! ${TOUCH ? 'Tap Weapons' : keyHint('global', 'cycle')} to swap guns.`, 'info'); SFX.click(); }
     return false;
   }
-  if (wkey !== 'shell') store[wkey] -= 1;
-  // The last one fired: the player's gun falls back to the endless Shell.
-  if (t.isPlayer && wkey !== 'shell' && store[wkey] <= 0 && G.selected === wkey) {
-    G.selected = 'shell';
-    say(`Out of ${w.name}. Back to the Shell.`, 'info');
-  }
-  const m = muzzle(t);
-  const rad = t.angle * Math.PI / 180;
-  const s = facing(t);
-  const shots = w.pellets || 1;
-  for (let i = 0; i < shots; i++) {
-    const off = shots === 1 ? 0 : (i - (shots - 1) / 2) * (w.spread || 0);
-    const a = rad + off;
-    const spd = shotSpeed(t.power, w.flat, w.speed);
-    G.shells.push({
-      x: m.x, y: m.y,
-      vx: Math.cos(a) * spd * s, vy: -Math.sin(a) * spd,
-      wkey, owner: t, life: 12,
-      age: 0, pierced: false, split: false,
-    });
-  }
+  if (launch.spent) say(`Out of ${w.name}. Back to the Shell.`, 'info');
   // Muzzle effects (the rail's beam among them) fire once per volley, along the barrel.
-  fxMuzzle(G.fx, wkey, m.x, m.y, Math.atan2(-Math.sin(rad), Math.cos(rad) * s));
+  fxMuzzle(G.fx, wkey, launch.x, launch.y, launch.ang);
   SFX.launch();
   G.phase = 'fly';
   return true;
@@ -1043,238 +919,63 @@ function playerFire() {
   }
   render();
 }
-/* One ballistic step. Shared by the real shells, the AI predictor, the aim
- * guide, and the firing-range preview, so the demo flies exactly like war. */
-function stepBallistic(st, dt, wind, grav) {
-  st.vx += wind * 2.2 * dt;
-  st.vy += grav * dt;
-  st.x += st.vx * dt;
-  st.y += st.vy * dt;
-}
-/* Predict where a shot lands (used by the AI and the aim guide). */
-function simShot(x, y, angle, power, wkey, dirS) {
-  const w = WEAPONS[wkey];
-  const rad = angle * Math.PI / 180;
-  const st = {
-    x, y,
-    vx: Math.cos(rad) * shotSpeed(power, w.flat, w.speed) * dirS,
-    vy: -Math.sin(rad) * shotSpeed(power, w.flat, w.speed),
-  };
-  const dt = 1 / 60;
-  const grav = w.flat ? FLAT_GRAV : GRAV;
-  for (let i = 0; i < 720; i++) {
-    stepBallistic(st, dt, G.wind, grav);
-    if (st.x < 0 || st.x >= W) return { x: st.x, y: st.y, oob: true };
-    if (st.y >= H + 40) return { x: st.x, y: st.y, oob: true };
-    if (i >= 6 && st.y >= G.terrain[clamp(Math.round(st.x), 0, W - 1)]) return { x: st.x, y: st.y, oob: false };
-  }
-  return { x: st.x, y: st.y, oob: true };
-}
-/* Seekers bend toward the nearest live rival before the ballistic step. */
-function steerShell(s, w, dt) {
-  let best = null, bd = Infinity;
-  for (const t of G.tanks) {
-    if (t.hp <= 0 || t === s.owner) continue;
-    const d = Math.hypot(t.x - s.x, (t.y - 12) - s.y);
-    if (d < bd) { bd = d; best = t; }
-  }
-  if (!best) return;
-  const dx = best.x - s.x, dy = (best.y - 12) - s.y;
-  const d = Math.max(1, Math.hypot(dx, dy));
-  const push = (w.steer || 70) * dt;
-  s.vx += (dx / d) * push;
-  s.vy += (dy / d) * push;
-}
-/* Cluster shells split on fuse into a deterministic fan: fixed offsets, no
-// random numbers, so the room server replays the exact same bloom. */
-function splitShell(s, w) {
-  const n = Math.max(2, w.split || 4);
-  const fan = w.fan || 0.22;
-  const sp = Math.hypot(s.vx, s.vy) * 0.85;
-  const base = Math.atan2(s.vy, s.vx);
-  for (let i = 0; i < n; i++) {
-    const a = base + (i - (n - 1) / 2) * fan;
-    G.shells.push({
-      x: s.x, y: s.y,
-      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-      wkey: s.wkey, owner: s.owner, life: 12,
-      age: 0, pierced: false, split: true,
-      dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius,
-    });
-  }
-}
-/* Hit boxes match the drawn units: a ground unit's hull and turret, or a
-   drone's body up in the air (rooms.php room_unit_box() is the same). */
-function unitHitBox(t) {
-  return isGroundUnit(t)
-    ? { cx: t.x, cy: t.y - 10, rx: 20, ry: 13 }
-    : { cx: t.x, cy: t.y - 30, rx: 18, ry: 14 };
-}
-function inHitBox(t, x, y) {
-  const b = unitHitBox(t);
-  return ((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2 <= 1;
-}
-/* The first unit shell s touches anywhere along its step, sampled every
-   3 px so a fast shell (or a slow frame) cannot skip through one. The
-   muzzle sits inside its gunner's box, so a shell ignores its owner until
-   it has flown clear of that box; one that comes back (wind, a lob
-   straight up) hits it like anyone else. */
-function sweepHit(s, x0, y0, x1, y1) {
-  const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 3));
-  for (let i = 1; i <= n; i++) {
-    const px = x0 + (x1 - x0) * i / n, py = y0 + (y1 - y0) * i / n;
-    if (!s.clear && !inHitBox(s.owner, px, py)) s.clear = true;
-    for (const t of G.tanks) {
-      if (t.hp <= 0 || t === s.pierced || (t === s.owner && !s.clear)) continue;
-      if (inHitBox(t, px, py)) return { t, x: px, y: py };
-    }
-  }
-  return null;
-}
+/* One frame of flight: the sim moves the shells and says what happened, and
+   this plays it. */
 function stepShells(dt) {
-  for (const s of G.shells) {
-    const w = WEAPONS[s.wkey];
-    s.age = (s.age || 0) + dt;
-    if (w.effect === 'seeker') steerShell(s, w, dt);
-    const x0 = s.x, y0 = s.y;
-    stepBallistic(s, dt, G.wind, w.flat ? FLAT_GRAV : GRAV);
-    s.life -= dt;
-    fxTrail(G.fx, s, dt);
-    if (s.life <= 0 || s.x < -20 || s.x > W + 20 || s.y > H + 40) {
-      s.dead = true;
-      continue;
-    }
-    // Cluster blooms on fuse, wherever it happens to be.
-    if (w.effect === 'cluster' && !s.split && s.age >= (w.fuse || 0.9)) {
-      s.split = true;
-      fxSpecial(G.fx, s.wkey, 'split', s.x, s.y, Math.atan2(s.vy, s.vx));
-      splitShell(s, w);
-      s.dead = true;
-      continue;
-    }
-    // Direct hit on a living tank?
-    // A lance that already went through a tank cannot hit that tank again.
-    let direct = null;
-    const hit = sweepHit(s, x0, y0, s.x, s.y);
-    if (hit) {
-      // Burst where the shell touched the unit, not past it.
-      direct = hit.t;
-      s.x = hit.x;
-      s.y = hit.y;
-    }
-    // Flak bursts next to anything it passes, but never its own gunner: the
-    // muzzle starts inside the burst radius.
-    if (!direct && w.effect === 'proximity') {
-      let bd = w.prox || 34;
-      for (const t of G.tanks) {
-        if (t.hp <= 0 || t === s.owner) continue;
-        const d = Math.hypot(s.x - t.x, s.y - (t.y - 12));
-        if (d < bd) { bd = d; direct = t; }
-      }
-    }
-    if (direct) {
-      // A lance punches through its first victim and keeps flying.
-      if (w.effect === 'pierce' && !s.pierced) {
-        s.pierced = direct;
-        fxSpecial(G.fx, s.wkey, 'pierce', s.x, s.y, Math.atan2(s.vy, s.vx));
-        explode(s.x, s.y, s.wkey, s.owner, direct, s.dw ? { dmg: s.dw, radius: s.dr } : null);
-        continue;
-      }
-      explode(s.x, s.y, s.wkey, s.owner, direct, s.dw ? { dmg: s.dw, radius: s.dr } : null);
-      s.dead = true;
-      continue;
-    }
-    if (s.age >= 0.1 && s.y >= surfY(s.x)) {
-      explode(s.x, s.y, s.wkey, s.owner, null, s.dw ? { dmg: s.dw, radius: s.dr } : null);
-      s.dead = true;
+  for (const e of simStepShells(G, ARSENAL, dt)) {
+    if (e.kind === 'trail') fxTrail(G.fx, e.shell, dt, e.x, e.y, e.vx, e.vy, e.shell.wkey);
+    else if (e.kind === 'split') fxSpecial(G.fx, e.wkey, 'split', e.x, e.y, e.ang);
+    else if (e.kind === 'pierce') fxSpecial(G.fx, e.wkey, 'pierce', e.x, e.y, e.ang);
+    else {
+      showBlast(e.blast);
+      G.settleT = TUNE.settleTime;
+      G.phase = 'settle';
     }
   }
-  G.shells = G.shells.filter(s => !s.dead);
-  // No clearing here: every pellet of a volley resolves on its own, so a
-  // buckshot spread scores up to three independent hits. The turn advances
-  // once the last pellet lands (or fizzles).
-  // (Sparks decay in decayFx, which runs every frame: leaving them here
-  // froze the last volley's leftovers over the next turn.)
 }
-function explode(x, y, wkey, owner, direct, ov) {
-  const w = WEAPONS[wkey];
-  const dmg0 = (ov && ov.dmg) || w.dmg;
-  const r = (ov && ov.radius) || w.radius;
-  const gfx = (ov && ov.gfx) || w.gfx || {};
-  // Carve the crater.
-  const x0 = Math.max(0, Math.floor(x - r)), x1 = Math.min(W - 1, Math.ceil(x + r));
-  for (let ix = x0; ix <= x1; ix++) {
-    const dx = ix - x;
-    const cut = Math.sqrt(Math.max(0, r * r - dx * dx)) * 0.75;
-    G.terrain[ix] = Math.min(H - 4, Math.max(G.terrain[ix], y + cut));
-  }
+/* A blast as the sim reports it: the boom, then what it did to each unit in
+   the order it happened. */
+function showBlast(b) {
+  const owner = b.owner;
   SFX.boom();
-  const kick = fxImpact(G.fx, (ov && ov.fx) || wkey, x, y, r);
-  G.shake = Math.max(G.shake || 0, kick !== undefined ? kick : (gfx.shake || 0.5));
-  G.booms.push({ x, y, r, wkey, t: 0, life: wkey === 'nuke' ? 0.8 : 0.5 });
-  // Damage by distance; direct hits pay double.
-  for (const t of G.tanks) {
-    if (t.hp <= 0) continue;
-    // Distance from the unit's body (its hit box centre), drone or tank.
-    const b = unitHitBox(t);
-    const d = Math.hypot(b.cx - x, b.cy - y);
-    if (d > r + 14) continue;
-    // A shield absorbs one hit whole, then it is gone.
-    if (t.isPlayer && G.shield) {
-      G.shield = false;
+  const kick = fxImpact(G.fx, b.fx, b.x, b.y, b.r);
+  G.shake = Math.max(G.shake || 0, kick !== undefined ? kick : b.shake);
+  G.booms.push({ x: b.x, y: b.y, r: b.r, wkey: b.wkey, t: 0, life: b.wkey === 'nuke' ? 0.8 : 0.5 });
+  for (const e of b.events) {
+    const t = e.tank;
+    if (e.kind === 'shield') {
       burst(t.x, t.y - 12, '#ffffff', 16, 5);
       say('Shield absorbs the hit!', 'good');
       renderHUD();
-      continue;
+    } else if (e.kind === 'arc') {
+      fxSpecial(G.fx, b.wkey, 'arc', t.x, t.y - 12, 0);
+    } else if (e.kind === 'wound') {
+      if (t.isPlayer) {
+        say(`Direct hit on YOU for ${e.dmg}! (${e.hp} armor left)`, 'bad');
+        exchange('tank', pick(TANK_OWS), owner.id, pick(FOE_HIT[owner.id] || FOE_MISS));
+      } else if (owner.isPlayer) {
+        say(`Direct hit on ${t.id} for ${e.dmg}! (${e.hp} armor left)`, 'good');
+        talk('tank', pick(TANK_HIT), true);
+      } else if (e.direct) {
+        say(`${owner.id} hits ${t.id} for ${e.dmg}.`, 'info');
+      }
+    } else {
+      SFX.boom();
+      burst(t.x, t.y - 12, '#ff5a5a', 26, 7);
+      if (e.lastStand) {
+        say('Last stand! The wreck detonates!', 'good');
+        showBlast(e.lastStand);
+        renderHUD();
+      }
+      if (t.isPlayer) {
+        say('Your tank is scrap metal!', 'bad');
+        talk('tank', 'I will be back... after repairs.', true);
+      } else {
+        const by = owner.isPlayer ? 'You' : owner.id;
+        say(`${by} wreck${owner.isPlayer ? '' : 's'} ${t.id}! (+${TUNE.killBonus})`, 'good');
+        exchange(t.id, FOE_DYING[t.id] || '...', 'tank', pick(TANK_HIT));
+      }
     }
-    let dmg = Math.round(dmg0 * Math.max(0.3, 1 - d / (r + 14)));
-    if (direct === t) dmg *= 2;
-    // A bunker halves everything that gets through.
-    if (t.isPlayer && (G.bunker || 0) > 0) dmg = Math.max(1, Math.round(dmg / 2));
-    t.hp = Math.max(0, t.hp - dmg);
-    // EMP fries fuel as well as armor.
-    if (w.effect === 'emp') {
-      t.fuel = Math.max(0, (t.fuel || 0) - (w.drain || 0));
-      fxSpecial(G.fx, wkey, 'arc', t.x, t.y - 12, 0);
-    }
-    if (owner.isPlayer && !t.isPlayer) {
-      G.score += dmg * 2;
-      G.cash += dmg * 2;
-    }
-    if (t.hp <= 0) killTank(t, owner);
-    else if (t.isPlayer) {
-      say(`Direct hit on YOU for ${dmg}! (${t.hp} armor left)`, 'bad');
-      exchange('tank', pick(TANK_OWS), owner.id, pick(FOE_HIT[owner.id] || FOE_MISS));
-    } else if (owner.isPlayer) {
-      say(`Direct hit on ${t.id} for ${dmg}! (${t.hp} armor left)`, 'good');
-      talk('tank', pick(TANK_HIT), true);
-    } else if (direct) {
-      say(`${owner.id} hits ${t.id} for ${dmg}.`, 'info');
-    }
-  }
-  G.settleT = TUNE.settleTime;
-  G.phase = 'settle';
-}
-function killTank(t, owner) {
-  SFX.boom();
-  burst(t.x, t.y - 12, '#ff5a5a', 26, 7);
-  // Last stand: the wreck itself detonates, once, then the trick is spent.
-  if (t.isPlayer && G.laststand) {
-    G.laststand = false;
-    say('Last stand! The wreck detonates!', 'good');
-    const ls = GEAR.laststand || {};
-    explode(t.x, t.y - 12, 'shell', t, null, { dmg: ls.dmg || 50, radius: ls.radius || 44, fx: 'laststand' });
-    renderHUD();
-  }
-  if (t.isPlayer) {
-    say('Your tank is scrap metal!', 'bad');
-    talk('tank', 'I will be back... after repairs.', true);
-  } else {
-    G.score += TUNE.killBonus;
-    G.cash += TUNE.killBonus;
-    const by = owner.isPlayer ? 'You' : owner.id;
-    say(`${by} wreck${owner.isPlayer ? '' : 's'} ${t.id}! (+${TUNE.killBonus})`, 'good');
-    exchange(t.id, FOE_DYING[t.id] || '...', 'tank', pick(TANK_HIT));
   }
 }
 /* ---------- turn advance, rounds, shop ---------- */
@@ -1303,26 +1004,11 @@ function nextTurn() {
 }
 /* Tanks left hanging over a crater fall under gravity every frame until they
    land; ground that rose (a new round, fresh hills) takes them straight up. */
-const FALL_GRAVITY = 700;
 function fallTanks(dt) {
-  for (const t of G.tanks) {
-    if (t.hp <= 0) continue;
-    const gy = surfY(t.x);
-    if (t.y < gy - 0.5) {
-      t.vy = (t.vy || 0) + FALL_GRAVITY * dt;
-      t.y = Math.min(gy, t.y + t.vy * dt);
-      if (t.y >= gy) {
-        t.vy = 0;
-        if (t.isPlayer) SFX.thud();
-      }
-    } else {
-      t.y = gy;
-      t.vy = 0;
-    }
-  }
+  if (simFallTanks(G, dt).some(t => t.isPlayer)) SFX.thud();
 }
 function anyTankFalling() {
-  return G.tanks.some(t => t.hp > 0 && t.y < surfY(t.x) - 0.5);
+  return simAnyTankFalling(G);
 }
 function settle() {
   if (me().hp <= 0) {
@@ -1874,17 +1560,13 @@ function previewBoom(pv, x, y, ov) {
   const dmg0 = (ov && ov.dmg) || w.dmg;
   const r = (ov && ov.radius) || w.radius;
   pv.booms.push({ x, y, r, wkey: pv.wkey, t: 0, life: 0.5 });
-  const x0 = Math.max(0, Math.floor(x - r)), x1 = Math.min(PV_W - 1, Math.ceil(x + r));
-  for (let ix = x0; ix <= x1; ix++) {
-    const dx = ix - x;
-    pv.terr[ix] = Math.min(PV_H - 4, Math.max(pv.terr[ix], y + Math.sqrt(Math.max(0, r * r - dx * dx)) * 0.75));
-  }
+  carveCrater(pv.terr, x, y, r, PV_H - 4);
   fxImpact(pv.fx, pv.wkey, x, y, r);
   // Same falloff the war uses, scored against the demo target.
   const fy = pv.terr[pv.tx] - 12;
   const d = Math.hypot(pv.tx - x, fy - y);
   if (d <= r + 14) {
-    let dmg = Math.round(dmg0 * Math.max(0.3, 1 - d / (r + 14)));
+    let dmg = blastDamage(dmg0, d, r);
     const direct = d < 14;
     if (direct) dmg *= 2;
     pv.foeHp = Math.max(0, pv.foeHp - dmg);
@@ -1981,59 +1663,10 @@ function stepPreview(dt) {
 /* ---------- drone AI: real ballistic solutions, plus round-scaled error ---------- */
 /* Drone magazine from the data file: shells the battery may load by round. */
 function droneRack() {
-  const rack = { shell: Infinity };
-  for (const k of WORDER) {
-    if (k === 'shell') continue;
-    const a = WEAPONS[k];
-    rack[k] = (a && a.ai && G.round >= (a.aiRound || 99)) ? 2 : 0;
-  }
-  return rack;
+  return simDroneRack(ARSENAL, G.round);
 }
 function aiChoose(t) {
-  // Drones feud with each other too: usually the nearest rival, sometimes
-  // whoever else is still rolling. Nobody is safe, nobody is perfect.
-  const rivals = G.tanks
-    .filter(c => c !== t && c.hp > 0)
-    .sort((a, b) => Math.abs(a.x - t.x) - Math.abs(b.x - t.x));
-  let target = rivals[0] || t;
-  if (rivals.length > 1 && G.rng() >= 0.6) {
-    target = rivals[1 + Math.floor(G.rng() * (rivals.length - 1))];
-  }
-  const dirS = facing(t);
-  const m = muzzle(t);
-  let best = null;
-  const keys = ['shell'];
-  const rack = t.ammo || {};
-  for (const k of WORDER) {
-    if (k === 'shell' || keys.includes(k)) continue;
-    if ((rack[k] || 0) > 0) keys.push(k);
-  }
-  for (const wkey of keys) {
-    for (let a = 25; a <= 155; a += 6) {
-      for (let p = 20; p <= 100; p += 6) {
-        const land = simShot(m.x, m.y, a, p, wkey, dirS);
-        const err = land.oob ? 400 + Math.abs(land.x - target.x) * 0.2 : Math.abs(land.x - target.x);
-        if (!best || err < best.err) best = { err, a, p, wkey };
-      }
-    }
-  }
-  // Deliberately shaky hands: dangerous up close, forgiving at range.
-  // A jammer doubles the wobble of anything aimed at our tank.
-  const skill = Math.min(1, 0.35 + G.round * 0.12);
-  let wob = Math.max(0.25, 1.2 - skill);
-  if (target.isPlayer && (G.jammer || 0) > 0) wob *= 2;
-  const angle = clamp(Math.round(best.a + gauss(G.rng) * 9 * wob), 10, 170);
-  const power = clamp(Math.round(best.p + gauss(G.rng) * 12 * wob), 10, 100);
-  // Drones shuffle for a better firing spot instead of camping one rut.
-  if (G.rng() < 0.35) {
-    const dx = (G.rng() < 0.5 ? -1 : 1) * (8 + G.rng() * 27);
-    const nx = clamp(t.x + dx, 12, W - 12);
-    if (!spotTaken(t, nx)) {
-      t.x = nx;
-      t.y = surfY(t.x);
-    }
-  }
-  return { wkey: best.wkey, angle, power };
+  return simAiChoose(G, ARSENAL, t);
 }
 /* The shooter swings its barrel and power to the plan in plain sight before
    firing, so everyone can watch the shot line up. Longer swings take a bit
@@ -2108,9 +1741,6 @@ const UNIT_BODIES = [
   { key: 'walker', name: 'Walker' },
   { key: 'buggy', name: 'Buggy' },
 ];
-function isGroundUnit(t) {
-  return t.isPlayer || !!t.human;
-}
 function shade(hex, k) {
   const n = parseInt(hex.slice(1), 16);
   const ch = v => Math.max(0, Math.min(255, Math.round(v * k)));
@@ -4329,20 +3959,12 @@ function netStartVolley() {
   };
   netEvent(opener);
 }
-function netCarve(x, y, r) {
-  const x0 = Math.max(0, Math.floor(x - r)), x1 = Math.min(W - 1, Math.ceil(x + r));
-  for (let ix = x0; ix <= x1; ix++) {
-    const dx = ix - x;
-    const cut = Math.sqrt(Math.max(0, r * r - dx * dx)) * 0.75;
-    G.terrain[ix] = Math.min(H - 4, Math.max(G.terrain[ix], y + cut));
-  }
-}
 function netBlast(x, y, r, wkey) {
   SFX.boom();
   const kick = fxImpact(G.fx, wkey, x, y, r);
   G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : wkey === 'nuke' ? 0.9 : r > 40 ? 0.5 : 0.3));
   G.booms.push({ x, y, r, wkey, t: 0, life: wkey === 'nuke' ? 0.8 : 0.5 });
-  netCarve(x, y, r);
+  carveCrater(G.terrain, x, y, r, H - 4);
 }
 /* A replayed shell's velocity at path index i (points are 1/PATH_HZ s apart). */
 function netShellVel(s, i) {
@@ -5556,9 +5178,3 @@ function syncFullscreenLabel() {
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
 else init();
-})();
-
-
-
-
-

@@ -9,10 +9,13 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
 | File                                                            | What it is                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html`, `game.css`, `game.js`                             | The page and the whole client (solo sim, rendering, room client and replay)                                                                                                                 |
+| `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: rendering, sound, HUD, shop, room client and replay); it imports the sim from `js/sim.js`                                                                                                                 |
 | `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (20 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `game.js`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml`, and where each came from                                                                                                                     |
+| `src/sim.ts` | The game math in TypeScript: RNG, terrain, flight, hit tests, blasts, the drone's aim. Pure: state in, what happened out; no page, sound or particles |
+| `js/sim.js` | `src/sim.ts` compiled by `tools/ts-build.mjs`; checked in and deployed (the host has no Node). Never edit by hand |
+| `package.json`, `package-lock.json`, `tsconfig.json` | The build setup (TypeScript pinned exactly). Never deployed, like `src/`, `tools/` and `node_modules/` |
 | `rooms.php`                                                     | Room server: authoritative sim, AI turns, shop, events                                                                                                                                      |
 | `scores.php`, `config.php`                                      | Score API; `.config.yaml` reader                                                                                                                                                            |
 | `fx.js` | The effects engine (particle pool, emitters, screen flash, shell glow), shared by `game.js` and the editor; exposes `window.TankityFX` |
@@ -26,7 +29,7 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 ## Editing game data
 
 The game is self-contained: its generators live in `tools/` here and need
-only PHP and this folder. Run from this folder (from the site folder,
+only PHP (and Node for the TypeScript, see Source layout) and this folder. Run from this folder (from the site folder,
 `websites/www.cs`, prefix the paths with `games/tankity/`):
 
 ```
@@ -109,16 +112,48 @@ php tools/install-files.php      # after the last edit to any served file
 - The lobby's hill tiles draw `profile` (48 heights, 0..1) that
   `rooms.php?action=maps` computes from round one of each map's terrain.
 
+## Source layout and build
+
+The client is native ES modules with no bundler: `game.js` is loaded by
+`index.html` with `<script type="module">`, and `src/*.ts` compiles one file to
+one file into `js/`. Both `js/` and `fx.js` (a classic script exposing
+`window.TankityFX`, loaded first) are served as they are.
+
+```
+npm ci && node tools/ts-build.mjs          # compile src/ to js/ (type errors fail it)
+node tools/ts-build.mjs --check            # fail if js/ is missing, stale or has extra files
+```
+
+- `js/` is generated and committed, like `game.json` and `sw.js`: edit `src/`,
+  rebuild, commit both. `make test` runs `npm ci` and `--check`, and
+  `deploy.sh` refuses a stale `js/`. Rerun `php tools/install-files.php` after
+  a rebuild: the service worker precaches `js/*.js` and versions its cache by
+  their content.
+- `tsconfig.json`: strict, `noUncheckedIndexedAccess`, ES2022 modules, imports
+  written with their `.js` extension (the file the browser fetches), comments
+  kept, no source maps. The sim compiles without DOM types, so it cannot reach
+  for the page.
+- `game.js` imports the sim with the same `?v=` as its own tag in `index.html`
+  (`./js/sim.js?v=...`): bump both together whenever either changes, or a
+  cached module could pair with a newer `game.js`. `smoke-test.js` checks they
+  match. The service worker serves network first, revalidating, so it never
+  holds a stale module for an online player.
+- The sim takes its state as arguments (`World`, `Arsenal`) and reports what
+  happened as data: `explode` returns the blast (each unit's shield, wound or
+  wreck, a last stand's nested blast), `stepShells` returns the frame's trails,
+  splits, pierces and blasts. `game.js` plays them as sound, particles and chat.
+
 ## Tests
 
 | Command                                        | Covers                                                                                     |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `node smoke-test.js`                           | The shipped client in a stub DOM (loads `fx.js` first), driven by the `game.json` key table and the `protocol/` fixtures; also checks every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps |
+| `node tools/ts-build.mjs --check`              | `js/` is exactly what `src/` compiles to, and `src/` type-checks (run `npm ci` first)      |
+| `node smoke-test.js`                           | The shipped client (`game.js` imported as a module) in a stub DOM (loads `fx.js` first), driven by the `game.json` key table and the `protocol/` fixtures; also checks every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps |
 | `php config-test.php`                          | `.config.yaml` precedence                                                                  |
 | `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; `room_snapshot` shapes against `protocol/` |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (needs SysV; run inside the PHP container)                 |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
-| `node sim-vectors-test.js`                     | `game.js` agrees with `rooms.php` on every shared sim vector (see Sim vectors)              |
+| `node sim-vectors-test.js`                     | `js/sim.js` agrees with `rooms.php` on every shared sim vector (see Sim vectors)              |
 | `php rooms-test.php`                           | The room shelf over its own `php -S` (needs SysV; run inside the PHP container)            |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
 | `php game-json-test.php`                       | The YAML parser, the `game.yaml` schema (effects included), `--check` staleness            |
@@ -154,16 +189,16 @@ is `{about, status, body}`.
   to the client: lobby, start, a fired turn replayed, the shop, a 429 and a
   409. A server change the client does not handle fails there.
 - The fixtures are not precached by the service worker (only top-level
-  static files are) and are not deployed.
+  static files, `fx/sprites/` and `js/` are) and are not deployed.
 
 ## Sim vectors
 
-The game's math runs twice: in `game.js` (solo, demo and the client's own shell
-flight) and in `rooms.php` (the authoritative room server). `protocol/sim-vectors.json`
+The game's math runs twice: in `src/sim.ts` (solo, demo and the client's own
+shell flight) and in `rooms.php` (the authoritative room server). `protocol/sim-vectors.json`
 keeps the two honest: `protocol/sim-vectors.php` calls `rooms.php`'s real
 functions over a spread of cases and writes each case's inputs and expected
-outputs; `sim-vectors-test.js` replays every case through `game.js`'s own
-functions, lifted from the shipped source, and compares within 1e-4.
+outputs; `sim-vectors-test.js` replays every case through the compiled sim,
+`js/sim.js`, and compares within 1e-4.
 
 - Covered: the RNG and terrain generator, spawn spots, shot speed, muzzle,
   gravity and wind, hit boxes, the swept hit test (owner-clear rule, lance
@@ -183,8 +218,8 @@ functions, lifted from the shipped source, and compares within 1e-4.
 - A case with a `known` reason is a difference the two sides have on purpose;
   the replay lists it and does not fail. The replay does fail when a known
   case starts to agree, so the reason is removed with the difference.
-- The replay finds `game.js`'s functions in one place, `loadSim()`; when the
-  sim moves into a module, that is the only code that changes.
+- The replay imports `js/sim.js` and passes each case its own plain state
+  object; nothing is stubbed, because the sim has no side effects to stub.
 
 ## Weapon effects
 

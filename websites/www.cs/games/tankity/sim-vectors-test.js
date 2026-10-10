@@ -1,60 +1,26 @@
-// Replays the shared sim vectors (protocol/sim-vectors.json) through game.js's
-// own functions. Run here: `node sim-vectors-test.js`.
+// Replays the shared sim vectors (protocol/sim-vectors.json) through the
+// browser sim, js/sim.js (compiled from src/sim.ts). Run here: `node sim-vectors-test.js`.
 // The vectors are written by `php protocol/sim-vectors.php` from rooms.php, so
 // a change to the browser sim or the room server's that the other side does
 // not follow fails here (or in the generator's --check) until they agree.
 // Exit 0 when every case matches or is a marked known difference.
-'use strict';
-const fs = require('fs');
-const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, 'game.js'), 'utf8');
-const VECTORS = JSON.parse(fs.readFileSync(path.join(__dirname, 'protocol', 'sim-vectors.json'), 'utf8'));
-const GAME = JSON.parse(fs.readFileSync(path.join(__dirname, 'game.json'), 'utf8'));
+import fs from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const dir = import.meta.dirname;
+const VECTORS = JSON.parse(fs.readFileSync(path.join(dir, 'protocol', 'sim-vectors.json'), 'utf8'));
+const GAME = JSON.parse(fs.readFileSync(path.join(dir, 'game.json'), 'utf8'));
 const TOL = VECTORS.tolerance;
 
 /* ---- where the sim comes from ----
-   The only place that reaches into game.js: it lifts the shipped source text
-   of each named function (and constant) and runs it over a plain state
-   object G, with every side effect (sound, particles, chatter) stubbed out.
-   When the sim moves into a module this becomes
-   `import * as sim from './sim.js'` and nothing below changes. */
-const SIM_CONSTS = ['W', 'GRAV', 'FLAT_GRAV', 'TUNE', 'UNIT_GAP', 'SPAWN_GAP', 'FALL_GRAVITY', 'clamp'];
-const SIM_FUNCS = ['hashSeed', 'mulberry32', 'gauss', 'isGroundUnit', 'surfY', 'facing', 'spotTaken', 'spawnSpots', 'muzzle',
-  'shotSpeed', 'fireWeapon', 'stepBallistic', 'simShot', 'steerShell', 'splitShell', 'unitHitBox', 'inHitBox', 'sweepHit',
-  'stepShells', 'explode', 'killTank', 'fallTanks', 'anyTankFalling', 'aiChoose', 'genTerrain', 'buildArsenal'];
-function constSrc(name) {
-  const m = new RegExp('^const ' + name + '\\b[\\s\\S]*?;( *//.*)?$', 'm').exec(src);
-  if (!m) throw new Error('game.js has no const ' + name);
-  return m[0];
-}
-function fnSrc(name) {
-  const at = src.indexOf('\nfunction ' + name + '(');
-  if (at < 0) throw new Error('game.js has no function ' + name);
-  return src.slice(at + 1, src.indexOf('\n}\n', at) + 2);
-}
-function loadSim(G) {
-  // Anything the sim calls for show: sound, particles, the log, the HUD.
-  const stub = new Proxy(function () {}, {
-    get: (t, k) => (k === Symbol.toPrimitive ? () => '' : stub),
-    apply: () => stub,
-  });
-  const names = ['SFX', 'burst', 'say', 'talk', 'exchange', 'pick', 'fxSpecial', 'fxMuzzle', 'fxTrail', 'renderHUD', 'renderShop',
-    'keyHint', 'FOE_DYING', 'FOE_HIT', 'FOE_MISS', 'TANK_HIT', 'TANK_OWS'];
-  const body = `const { ${names.join(', ')} } = stub;
-    const fxImpact = () => 0, TOUCH = false;
-    let WEAPONS = {}, WORDER = [], SHOP = [], GEAR = {};
-    ${SIM_CONSTS.map(constSrc).join('\n')}
-    ${SIM_FUNCS.map(fnSrc).join('\n')}
-    return { ${[...SIM_FUNCS, 'W', 'GRAV', 'FLAT_GRAV', 'UNIT_GAP', 'SPAWN_GAP', 'TUNE'].join(', ')},
-      get WORDER() { return WORDER; } };`;
-  const sim = new Function('G', 'stub', body)(G, stub);
-  sim.buildArsenal(GAME.arsenal);
-  return sim;
-}
+   The only place that reaches for it: the compiled module, which takes its
+   state as arguments, so the cases below pass a plain state object G. */
+const sim = await import(pathToFileURL(path.join(dir, 'js', 'sim.js')).href);
+const arsenal = sim.buildArsenal(GAME.arsenal);
 
 /* ---- state the cases run over ---- */
 const G = {};
-const sim = loadSim(G);
 function buildTerrain(spec) {
   const t = [];
   for (let ix = 0; ix < sim.W; ix++) {
@@ -95,7 +61,7 @@ function outcome(before) {
   };
 }
 
-/* ---- one runner per group: the case's inputs in, what game.js says out ---- */
+/* ---- one runner per group: the case's inputs in, what the sim says out ---- */
 const RUN = {
   constants() {
     const st = { x: 0, y: 0, vx: 0, vy: 0 };
@@ -107,12 +73,10 @@ const RUN = {
     return { hash, stream: [0, 1, 2, 3, 4, 5].map(() => r()) };
   },
   'terrain-gen'(c) {
-    world({});
-    G.rng = sim.mulberry32(sim.hashSeed(c.seed));
-    sim.genTerrain();
+    const { terrain } = sim.genTerrain(sim.mulberry32(sim.hashSeed(c.seed)));
     const samples = [];
-    for (let x = 0; x < sim.W; x += 60) samples.push(G.terrain[x]);
-    return { samples, min: Math.min(...G.terrain), max: Math.max(...G.terrain) };
+    for (let x = 0; x < sim.W; x += 60) samples.push(terrain[x]);
+    return { samples, min: Math.min(...terrain), max: Math.max(...terrain) };
   },
   'spawn-spots'(c) {
     const r = sim.mulberry32(c.seed);
@@ -131,30 +95,29 @@ const RUN = {
   'sweep-hit'(c) {
     world(c);
     const s = { owner: G.tanks[c.owner], pierced: c.skip === null ? false : G.tanks[c.skip], clear: c.clear };
-    const hit = sim.sweepHit(s, ...c.seg);
+    const hit = sim.sweepHit(G.tanks, s, ...c.seg);
     return { hit: hit ? [G.tanks.indexOf(hit.t), hit.x, hit.y] : null, clear: s.clear };
   },
   'seek-push'(c) {
     world(c);
     const s = { x: c.sx, y: c.sy, vx: 0, vy: 0, owner: G.tanks[c.owner] };
-    sim.steerShell(s, { steer: c.steer }, c.dt);
+    sim.steerShell(G.tanks, s, { steer: c.steer }, c.dt);
     return s.vx === 0 && s.vy === 0 ? null : [s.vx, s.vy];
   },
   'split-fan'(c) {
-    world({});
-    sim.splitShell({ x: 0, y: 0, vx: c.vx, vy: c.vy, wkey: 'shell', owner: null }, { split: c.n, fan: c.fan });
-    return G.shells.map(s => [s.vx, s.vy]);
+    return sim.splitShell({ x: 0, y: 0, vx: c.vx, vy: c.vy, wkey: 'shell', owner: null }, { split: c.n, fan: c.fan })
+      .map(s => [s.vx, s.vy]);
   },
   blast(c) {
     world(c);
     const before = G.terrain.slice();
     const direct = c.direct === undefined || c.direct === null ? null : G.tanks[c.direct];
-    sim.explode(c.x, c.y, c.wkey, G.tanks[c.owner], direct, c.ov || null);
+    sim.explode(G, arsenal, c.x, c.y, c.wkey, G.tanks[c.owner], direct, c.ov || null);
     return outcome(before);
   },
   'sim-shot'(c) {
     world(c);
-    return sim.simShot(c.x, c.y, c.angle, c.power, c.wkey, c.dirS);
+    return sim.simShot(G, arsenal, c.x, c.y, c.angle, c.power, c.wkey, c.dirS);
   },
   volley(c) {
     world(c);
@@ -162,22 +125,22 @@ const RUN = {
     shooter.angle = c.angle;
     shooter.power = c.power;
     (shooter.isPlayer ? G.ammo : shooter.ammo)[c.wkey] = 99;
-    sim.fireWeapon(shooter, c.wkey);
+    sim.fireWeapon(G, arsenal, shooter, c.wkey);
     // 1/60 s frames, as the room server steps; a volley ends when its last shell has burst.
-    for (let frame = 0; G.shells.length && frame < 5000; frame++) sim.stepShells(1 / 60);
+    for (let frame = 0; G.shells.length && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
     return outcome(before);
   },
   'ai-aim'(c) {
     world(c);
     G.rng = sim.mulberry32(c.seed);
     const t = G.tanks[c.shooter], x0 = t.x;
-    const choice = sim.aiChoose(t);
+    const choice = sim.aiChoose(G, arsenal, t);
     return { wkey: choice.wkey, angle: choice.angle, power: choice.power, moved: t.x - x0 };
   },
   settle(c) {
     world({ terrain: c.terrain, tanks: [{ kind: 'ai', x: c.x, y: c.y, hp: c.hp }] });
-    for (let i = 0; i < 5000 && sim.anyTankFalling(); i++) sim.fallTanks(1 / 60);
-    sim.fallTanks(1 / 60);
+    for (let i = 0; i < 5000 && sim.anyTankFalling(G); i++) sim.fallTanks(G, 1 / 60);
+    sim.fallTanks(G, 1 / 60);
     return G.tanks[0].y;
   },
 };
@@ -207,9 +170,9 @@ const clip = (v, n) => { const s = JSON.stringify(v); return s.length > n ? s.sl
 
 let failed = 0, known = 0, total = 0;
 const failures = [];
-const wl = JSON.stringify(VECTORS.weapons), arsenal = JSON.stringify(sim.WORDER);
-if (wl !== arsenal) {
-  failures.push(`weapons: the vectors cover ${wl} but game.js loads ${arsenal} from game.json; run make sim-vectors`);
+const wl = JSON.stringify(VECTORS.weapons), loaded = JSON.stringify(arsenal.order);
+if (wl !== loaded) {
+  failures.push(`weapons: the vectors cover ${wl} but the sim loads ${loaded} from game.json; run make sim-vectors`);
 }
 for (const [group, cases] of Object.entries(VECTORS.groups)) {
   if (!RUN[group]) { failures.push(`${group}: no runner for this group in sim-vectors-test.js`); continue; }
@@ -239,7 +202,7 @@ for (const [group, cases] of Object.entries(VECTORS.groups)) {
 failed = failures.length;
 for (const f of failures) console.log('FAIL ' + f);
 if (failed) {
-  console.error(`SIM-VECTORS-FAILED ${failed} of ${total}: client (game.js) and server (rooms.php) disagree; fix the side that is wrong, then run make sim-vectors`);
+  console.error(`SIM-VECTORS-FAILED ${failed} of ${total}: client (js/sim.js) and server (rooms.php) disagree; fix the side that is wrong, then run make sim-vectors`);
   process.exit(1);
 }
 console.log(`SIM-VECTORS-OK ${total} cases (${known} known differences)`);

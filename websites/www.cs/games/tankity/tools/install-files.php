@@ -16,7 +16,9 @@
  *     so it opens offline, and otherwise goes to the network first. Its cache
  *     name carries a hash of those files, so any change to them makes sw.js
  *     stale until rewritten (rerun this after the last edit).
- * Test files, .php files and the share-only picture (`image:`) are not cached.
+ * Test files, .php files, the share-only picture (`image:`) and the build
+ * tooling (package.json, package-lock.json, tsconfig.json) are not cached; the
+ * compiled modules in js/ are.
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -194,8 +196,10 @@ function install_manifest(array $card): string
 /**
  * The static files the service worker precaches, and a hash of them.
  * $override maps a file name to the content this run is about to write.
- * Test files, the dev-only effects editor (fx-editor.*) and the share-only
- * picture are left out; the rendered effect sprites (fx/sprites) are in.
+ * Test files, the dev-only effects editor (fx-editor.*), the share-only
+ * picture and the build tooling (package.json, package-lock.json,
+ * tsconfig.json) are left out; the rendered effect sprites (fx/sprites) and
+ * the compiled ES modules (js/, built from src/ by tools/ts-build.mjs) are in.
  *
  * @param array<string, string> $override
  * @return array{0: list<string>, 1: string} [file names, hash]
@@ -205,14 +209,17 @@ function install_precache(string $dir, array $override, string $image): array
     $names = [];
     // A file about to be written counts even if it is not on disk yet.
     $found = array_merge(scandir($dir) ?: [], array_keys($override));
-    foreach (is_dir("$dir/fx/sprites") ? (scandir("$dir/fx/sprites") ?: []) : [] as $f) {
-        $found[] = "fx/sprites/$f";
+    foreach (['fx/sprites', 'js'] as $sub) {
+        foreach (is_dir("$dir/$sub") ? (scandir("$dir/$sub") ?: []) : [] as $f) {
+            $found[] = "$sub/$f";
+        }
     }
     foreach ($found as $f) {
         if ((is_file("$dir/$f") || isset($override[$f])) && !in_array($f, $names, true)
             && preg_match('/\.(html|js|css|json|png|webmanifest)$/', $f)
             && $f !== 'sw.js' && $f !== $image && !str_contains($f, '-test.')
-            && !str_starts_with($f, 'fx-editor.')) {
+            && !str_starts_with($f, 'fx-editor.')
+            && !in_array($f, ['package.json', 'package-lock.json', 'tsconfig.json'], true)) {
             $names[] = $f;
         }
     }

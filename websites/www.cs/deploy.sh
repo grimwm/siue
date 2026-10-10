@@ -49,6 +49,13 @@ if ! php games/tankity/tools/game-json.php --check; then
   exit 1
 fi
 
+# Tankity's browser modules are TypeScript (src/) compiled into js/, which is
+# what ships: refuse a stale build.
+if ! (cd games/tankity && npm ci --silent && node tools/ts-build.mjs --check); then
+  echo "deploy: run node games/tankity/tools/ts-build.mjs and commit the result" >&2
+  exit 1
+fi
+
 work=$(mktemp -d "${TMPDIR:-/tmp}/www-cs-deploy.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 stage=$work/stage
@@ -72,9 +79,13 @@ while IFS= read -r -d '' f; do
     # whose runtime form is the generated game.json (nothing fetches the
     # YAML), the sound-effect build script (the .mp3 files it builds do ship;
     # its sources are in games/*/src/ below), the effects editor and the
-    # Blender script behind the effect sprites (the rendered sheets do ship).
+    # Blender script behind the effect sprites (the rendered sheets do ship),
+    # and the TypeScript build setup (package*.json, tsconfig.json,
+    # node_modules; the compiled js/ ships, its sources in src/ do not).
     games/*-test.* | games/README.md | games/*/README.md | games/*/tools/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/*/fx-editor.* | games/*/fx/blender/*) continue ;;
-    # Authoring sources kept in Git LFS (see .gitattributes): never served.
+    games/*/package.json | games/*/package-lock.json | games/*/tsconfig.json | games/*/node_modules/* | games/*/.gitignore) continue ;;
+    # Authoring sources (Git LFS audio and Blender scenes, see .gitattributes;
+    # TypeScript in games/*/src/): never served.
     *.blend | *.blend1 | *.wav | *.flac | *.aif | *.aiff | games/*/src/*) continue ;;
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).

@@ -127,7 +127,7 @@ function room_map_profile(string $id): array
 const ROOM_AI_IDS = ['reaper', 'wraith', 'spotter'];
 const ROOM_TURN_WIND = 2.2;
 const ROOM_GRAV = 95;
-const ROOM_FLAT_GRAV = 90; // flat bolts arc a little (game.js FLAT_GRAV)
+const ROOM_FLAT_GRAV = 90; // flat bolts arc a little (src/sim.ts FLAT_GRAV)
 
 // Mirrors cylon: exact-3 uppercase initials, blocked set enforced both sides.
 // (Keep in sync with BLOCKED_INITIALS in game.js.)
@@ -307,7 +307,7 @@ function room_origin_ok(): bool
     return is_string($o) && $o !== '' && strcasecmp($o, $host) === 0;
 }
 
-/* ---------- deterministic sim: bit-identical integer core to game.js ---------- */
+/* ---------- deterministic sim: bit-identical integer core to src/sim.ts ---------- */
 function u32(int $v): int
 {
     return $v & 0xFFFFFFFF;
@@ -450,7 +450,7 @@ function room_shot_speed(float $power, bool $flat, float $mult = 1.0): float
     return ($flat ? 140.0 + $power * 3.2 : 40.0 + $power * 2.4) * $mult;
 }
 /* Where a shell leaves the barrel: 20 px along it, 14 px above the hull.
-// game.js muzzle() is the same. [x, y]. */
+// src/sim.ts muzzle() is the same. [x, y]. */
 function room_muzzle(array $tank): array
 {
     $rad = deg2rad($tank['angle']);
@@ -459,7 +459,7 @@ function room_muzzle(array $tank): array
 }
 /* The velocity a seeker gains this step toward the nearest live rival (a
 // point 12 px above its hull), or null when there is none to steer at.
-// game.js steerShell() is the same. [dvx, dvy]. */
+// src/sim.ts steerShell() is the same. [dvx, dvy]. */
 function room_seek_push(array $tanks, int $ownerIdx, float $sx, float $sy, float $steer, float $dt): ?array
 {
     $best = null;
@@ -481,7 +481,7 @@ function room_seek_push(array $tanks, int $ownerIdx, float $sx, float $sy, float
     return [(($best['x'] - $sx) / $bd) * $push, ((($best['y'] - 12) - $sy) / $bd) * $push];
 }
 /* The bomblets a cluster blooms into: $n velocities fanned $fan radians
-// apart around the parent's heading, at 85% of its speed. game.js
+// apart around the parent's heading, at 85% of its speed. src/sim.ts
 // splitShell() is the same. [[vx, vy], ...]. */
 function room_split_vel(float $vx, float $vy, int $n, float $fan): array
 {
@@ -494,7 +494,7 @@ function room_split_vel(float $vx, float $vy, int $n, float $fan): array
     }
     return $out;
 }
-/* Full trajectory; returns landing info. Mirrors game.js simShot. */
+/* Full trajectory; returns landing info. Mirrors src/sim.ts simShot. */
 function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $angle, float $power, string $wkey, int $dirS, int $w): array
 {
     $weapons = room_weapons();
@@ -589,7 +589,7 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
 /* One ballistic arc: integrate until impact, fizzle, fuse-split, or a
 // proximity burst. Returns [status, x, y, vx, vy, directIdx]; cluster
 // parents return 'split' with the bloom point instead of exploding.
-// Mirrors the stepShells effect hooks in game.js. */
+// Mirrors the stepShells effect hooks in src/sim.ts. */
 /* Replay timing: every event a volley makes carries 'at', seconds after the
    volley fires, so clients play the turn back at the speed it happened. */
 const ROOM_PATH_EVERY = 5; // record one path point per 5 sim steps (12 per second)
@@ -612,7 +612,7 @@ function room_shot_event(array $tank, string $wkey, float $t0, array $res, float
         'p' => implode(' ', array_map(fn($pt) => round($pt[0]) . ',' . round($pt[1]), $res[6]))];
 }
 /* Hit boxes match what clients draw: a ground unit's hull and turret, or a
-// drone's body up in the air (game.js unitHitBox() is the same). An ellipse
+// drone's body up in the air (src/sim.ts unitHitBox() is the same). An ellipse
 // [cx, cy, rx, ry]. */
 function room_unit_box(array $t): array
 {
@@ -629,7 +629,7 @@ function room_in_box(array $t, float $x, float $y): bool
 // (x1, y1), sampled every 3 px so a fast shell cannot skip through one, with
 // the point it touched. The muzzle sits inside its gunner's box, so a shell
 // ignores its owner until it has flown clear of that box ($clear turns true
-// there); one that comes back hits it like anyone else. game.js sweepHit()
+// there); one that comes back hits it like anyone else. src/sim.ts sweepHit()
 // is the same. */
 function room_sweep_hit(array $room, float $x0, float $y0, float $x1, float $y1, ?int $skip, int $ownerIdx, bool &$clear): ?array
 {

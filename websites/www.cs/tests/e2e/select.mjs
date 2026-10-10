@@ -35,7 +35,10 @@ const RULES = [
   [new RegExp(`^${SITE}tests/[^/]+\\.php$`), 'NONE'], // unit tests
   [new RegExp(`^${SITE}games/[^/]+/[^/]*-test\\.(php|js)$`), 'NONE'], // unit and smoke tests
   [new RegExp(`^${SITE}games/[^/]+/(tools|protocol|fx/blender|audio/sfx/src)/`), 'NONE'], // generators, fixtures, sources
-  [new RegExp(`^${SITE}games/[^/]+/(audio/sfx/build_sfx\\.sh|game\\.yaml)$`), 'NONE'],
+  [new RegExp(`^${SITE}games/[^/]+/(audio/sfx/build_sfx\\.sh|game\\.yaml|\\.gitignore)$`), 'NONE'],
+  // Tankity's lockfile only pins the compiler; what the browser runs is js/,
+  // which has its own rule below. The unit suites still check the build.
+  [new RegExp(`^${SITE}games/tankity/package-lock\\.json$`), 'NONE'],
   // The dev-only effects editor: only the effects spec opens it.
   [new RegExp(`^${SITE}games/tankity/fx-editor\\.(html|js|css)$`), ['tankity-fx.spec.mjs']],
   // The test harness, the stack and CI: everything.
@@ -44,6 +47,9 @@ const RULES = [
   [/^(compose\.yaml|Makefile|\.github\/workflows\/ci\.yml)$/, 'ALL'],
   [new RegExp(`^${SITE}(Makefile|compose\\.yaml|docker/)`), 'ALL'],
   [new RegExp(`^${SITE}games/\\.htaccess$`), 'ALL'],
+  // Tankity's TypeScript: the sources, the compiled modules the browser loads,
+  // and the settings that decide how one becomes the other.
+  [new RegExp(`^${SITE}games/tankity/(src/|js/|tsconfig\\.json$|package\\.json$)`), [...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs']],
   // A game's own folder.
   [new RegExp(`^${SITE}games/tankity/`), [...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs']],
   [new RegExp(`^${SITE}games/cylon/`), shell],

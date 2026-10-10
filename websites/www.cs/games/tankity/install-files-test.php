@@ -44,6 +44,16 @@ file_put_contents("$dir/fx-editor.js", "// dev only\n");
 @mkdir("$dir/fx/blender", 0777, true);
 file_put_contents("$dir/fx/sprites/boom.png", $png(192));
 file_put_contents("$dir/fx/blender/render_fx.py", "# dev only\n");
+// Compiled modules ship; their TypeScript sources and the build tooling never do.
+@mkdir("$dir/js", 0777, true);
+@mkdir("$dir/src", 0777, true);
+@mkdir("$dir/node_modules/ts", 0777, true);
+file_put_contents("$dir/js/sim.js", "export const a = 1;\n");
+file_put_contents("$dir/src/sim.ts", "export const a: number = 1;\n");
+file_put_contents("$dir/node_modules/ts/index.js", "// not shipped\n");
+file_put_contents("$dir/package.json", "{}\n");
+file_put_contents("$dir/package-lock.json", "{}\n");
+file_put_contents("$dir/tsconfig.json", "{}\n");
 
 // Check mode on a fresh folder lists what is missing and writes nothing.
 [$stale] = install_sync($dir, false);
@@ -100,7 +110,9 @@ $sw = (string) @file_get_contents("$dir/sw.js");
 preg_match('/const CACHE = PREFIX \+ \'([0-9a-f]{12})\'/', $sw, $hm);
 preg_match('/const PRECACHE = (\[.*\]);/', $sw, $pm);
 $list = json_decode($pm[1] ?? 'null', true);
-$check('sw-precache-list', $list === ['./', 'fx/sprites/boom.png', 'game.js', 'icon-192.png', 'icon-512.png', 'index.html', 'manifest.webmanifest'], json_encode($list));
+$check('sw-precache-list', $list === ['./', 'fx/sprites/boom.png', 'game.js', 'icon-192.png', 'icon-512.png', 'index.html', 'js/sim.js', 'manifest.webmanifest'], json_encode($list));
+$check('sw-skips-ts-sources-and-tooling', !str_contains($pm[1] ?? '', 'src/') && !str_contains($pm[1] ?? '', '.ts')
+    && !str_contains($pm[1] ?? '', 'node_modules') && !str_contains($pm[1] ?? '', 'package') && !str_contains($pm[1] ?? '', 'tsconfig'));
 $check('sw-skips-dev-tools', !str_contains($pm[1] ?? '', 'fx-editor') && !str_contains($pm[1] ?? '', 'blender'));
 $check('sw-skips-tests-php-and-share-image', !str_contains($pm[1] ?? '', 'smoke-test') && !str_contains($pm[1] ?? '', '.php') && !str_contains($pm[1] ?? '', 'og.png'));
 $check('sw-skips-yaml-notes-and-audio', !str_contains($pm[1] ?? '', 'game.yaml') && !str_contains($pm[1] ?? '', 'README') && !str_contains($pm[1] ?? '', '.mp3'));
@@ -118,9 +130,16 @@ $check('check-sees-changed-asset', $stale === ['sw.js'], json_encode($stale));
 install_sync($dir, true);
 preg_match('/const CACHE = PREFIX \+ \'([0-9a-f]{12})\'/', (string) file_get_contents("$dir/sw.js"), $hm2);
 $check('sw-cache-name-changes-with-assets', ($hm2[1] ?? '') !== '' && ($hm2[1] ?? '') !== ($hm[1] ?? ''));
+// A compiled module re-versions the cache too, so a new sim never pairs with an old one offline.
+file_put_contents("$dir/js/sim.js", "export const a = 2;\n");
+[$stale] = install_sync($dir, false);
+$check('check-sees-changed-module', $stale === ['sw.js'], json_encode($stale));
+install_sync($dir, true);
 // Unshipped files do not version the cache.
 file_put_contents("$dir/smoke-test.js", "// edited\n");
 file_put_contents("$dir/scores.php", "<?php // edited\n");
+file_put_contents("$dir/src/sim.ts", "export const a: number = 3;\n");
+file_put_contents("$dir/package.json", "{\"edited\": true}\n");
 [$stale] = install_sync($dir, false);
 $check('check-ignores-unshipped-files', $stale === [], json_encode($stale));
 // A hand-edited sw.js is stale.

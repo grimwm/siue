@@ -28,6 +28,13 @@ check('site-shell-skips-tankity', select([`${S}site.css`]).some(s => s.startsWit
 has('union-of-files', select([`${S}games/crete/game.js`, `${S}tests/e2e/tankity-audio.spec.mjs`]), ['games-hub.spec.mjs', 'tankity-audio.spec.mjs']);
 check('generated-sources-run-nothing', select([`${S}games/tankity/game.yaml`, `${S}games/tankity/fx/blender/moon.blend`]), 'NONE');
 check('effects-editor-runs-the-effects-spec', select([`${S}games/tankity/fx-editor.js`]), ['tankity-fx.spec.mjs']);
+has('tankity-sources-run-its-specs', select([`${S}games/tankity/src/sim.ts`]), ['tankity-solo.spec.mjs', 'tankity-rooms.spec.mjs', 'games-pwa.spec.mjs']);
+has('tankity-compiled-modules-run-its-specs', select([`${S}games/tankity/js/sim.js`]), ['tankity-solo.spec.mjs', 'tankity-rooms.spec.mjs', 'games-pwa.spec.mjs']);
+has('tankity-tsconfig-runs-its-specs', select([`${S}games/tankity/tsconfig.json`]), ['tankity-solo.spec.mjs', 'games-pwa.spec.mjs']);
+has('tankity-package-json-runs-its-specs', select([`${S}games/tankity/package.json`]), ['tankity-solo.spec.mjs', 'games-pwa.spec.mjs']);
+check('tankity-lockfile-alone-runs-no-browser', select([`${S}games/tankity/package-lock.json`]), 'NONE');
+check('tankity-lockfile-with-a-module-still-runs-its-specs', select([`${S}games/tankity/package-lock.json`, `${S}games/tankity/js/sim.js`]).includes('tankity-solo.spec.mjs'), true);
+check('tankity-build-tool-runs-nothing', select([`${S}games/tankity/tools/ts-build.mjs`, `${S}games/tankity/.gitignore`]), 'NONE');
 check('a-removed-spec-is-dropped', select([`${S}tests/e2e/gone-away.spec.mjs`]), 'NONE');
 
 console.log(fail ? `E2E-SELECT-TEST-FAIL ${fail}` : 'E2E-SELECT-TEST-OK');

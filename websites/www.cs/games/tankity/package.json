@@ -1,0 +1,13 @@
+{
+  "name": "tankity",
+  "private": true,
+  "type": "module",
+  "description": "Build tooling for Operation Tankity: TypeScript in src/ compiles to the checked-in js/.",
+  "scripts": {
+    "build": "node tools/ts-build.mjs",
+    "check": "node tools/ts-build.mjs --check"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}

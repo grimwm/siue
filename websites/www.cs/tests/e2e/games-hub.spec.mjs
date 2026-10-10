@@ -98,3 +98,31 @@ test('a room invite on the wrapper reaches the game', async ({ page }) => {
   await page.goto('play/tankity/?code=ZZ99');
   await expect.poll(() => page.locator('#play-frame').evaluate(f => new URL(f.src).search)).toBe('?code=ZZ99');
 });
+
+test('navbar panels keep the page but put themselves in the address', async ({ page, context }) => {
+  await page.goto('./');
+  const active = () => page.evaluate(() => document.querySelector('[id^="nav-"].is-active')?.id);
+  await page.click('#cic-enter-btn');
+  await expect(page).toHaveURL(/#games$/);
+  expect(await active()).toBe('nav-games');
+  await page.click('.site-link >> text=Contact');
+  await expect(page).toHaveURL(/#contact$/);
+  expect(await active()).toBe('nav-contact');
+  // Back and Forward step between panels without reloading.
+  const marker = await page.evaluate(() => (window.__same = Math.random()));
+  await page.goBack();
+  await expect.poll(active).toBe('nav-games');
+  await page.goForward();
+  await expect.poll(active).toBe('nav-contact');
+  expect(await page.evaluate(() => window.__same)).toBe(marker);
+  // Home is the bare address.
+  await page.click('.site-link >> text=Home');
+  await expect.poll(() => page.url()).toMatch(/\/$/);
+  expect(await active()).toBe('nav-main');
+  // A pasted address opens its panel.
+  const fresh = await context.newPage();
+  await fresh.goto('./#games');
+  await expect.poll(() => fresh.evaluate(() => document.querySelector('[id^="nav-"].is-active')?.id)).toBe('nav-games');
+  await fresh.goto('./#contact');
+  await expect.poll(() => fresh.evaluate(() => document.querySelector('[id^="nav-"].is-active')?.id)).toBe('nav-contact');
+});

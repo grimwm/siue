@@ -11,3 +11,6 @@ button: Enter The CIC
 start: cylonStartGame
 order: 10
 image: og.png
+short_name: The CIC
+theme_color: "#05060d"
+background_color: "#05060d"

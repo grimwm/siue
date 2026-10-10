@@ -33,6 +33,9 @@ play: index.html                  # a page in this folder, opened full-page
 order: 20                         # optional whole number, low first; default 100
 hidden: false                     # optional; true keeps the card off the page
 image: og.png                     # optional 1200x630 picture for link previews
+short_name: Tankity               # optional home-screen name; default the title
+theme_color: "#05060f"            # optional #rgb/#rrggbb browser bar color
+background_color: "#05060f"       # optional #rgb/#rrggbb splash color
 ```
 
 - Set exactly one of `play` or `start`. `play` must be a file inside the game
@@ -47,6 +50,26 @@ image: og.png                     # optional 1200x630 picture for link previews
   (title, description, `image`) into its page, or for a `start` game into
   `games/<id>/index.html`, a page that forwards to `?game=<id>`. Run it after
   editing a `metadata.yaml`; `make deploy` refuses stale tags.
+- Install and offline: every game is an installable app (PWA). The same tool
+  writes `games/<id>/manifest.webmanifest` from `title`, `short_name`,
+  `description` and the two colors, and links it (plus `theme-color` and the
+  iOS home-screen tags) from the game's page. Each game folder needs two
+  square PNG icons, `icon-192.png` and `icon-512.png`; the tool reports a game
+  without them as stale. Every URL in a manifest is relative, because the site
+  is served from a `~user` path.
+  - A `play` game also gets `games/<id>/sw.js`, registered from its page with
+    the game folder as scope. It precaches the folder's `.html .js .css .json
+    .png` files (not tests, `og.png`, or `sw.js`) so the game opens offline,
+    and otherwise asks the network first, so online players always get the
+    current files. `.php` requests and non-GET requests never touch the cache,
+    so rooms and high scores stay online-only. The cache name carries a hash
+    of the precached files; rerun the tool after editing any of them, or
+    `--check` (run by `make test` and `make deploy`) reports the game stale.
+    Registration does nothing where service workers are unavailable.
+  - A `start` game has no page of its own, so its manifest starts the site
+    page at `?game=<id>` with the site root as scope. `main.js` links that
+    manifest when the game launches, so installing from there installs the
+    game, not the whole site.
 - Every card has **Copy link**: its game folder (`games/<id>/`). For a
   `start` game that folder holds the generated share page, which forwards to
   the site with `?game=<id>`; the site launches it on load.

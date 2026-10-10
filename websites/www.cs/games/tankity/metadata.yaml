@@ -10,3 +10,6 @@ button: Play Operation Tankity
 play: index.html
 order: 20
 image: og.png
+short_name: Tankity
+theme_color: "#05060f"
+background_color: "#05060f"

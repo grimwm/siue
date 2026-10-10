@@ -73,6 +73,9 @@ function openLinkedGame(games) {
         return;
     }
     showGamesHub();
+    // Installing from here installs this game, not the whole site.
+    const link = document.querySelector('link[rel="manifest"]');
+    if (link && game.manifest) link.href = game.manifest;
     const start = window[game.start];
     if (typeof start === 'function') start();
 }

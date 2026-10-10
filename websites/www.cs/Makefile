@@ -1,4 +1,4 @@
-.PHONY: help deploy up down url parity test e2e screenshots
+.PHONY: help deploy up down url parity test protocol e2e screenshots
 
 .DEFAULT_TARGET := help
 
@@ -22,6 +22,7 @@ help:
 	@echo "  url    - Print the local site's URL (its port is ephemeral)"
 	@echo "  parity - Check the docker PHP against www.cs.siue.edu's modules/ini"
 	@echo "  test   - Unit suites: games hub, share tags, Tankity (incl. game.yaml) (needs make up)"
+	@echo "  protocol - Rewrite the Tankity room protocol fixtures (needs make up)"
 	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL"
 	@echo "  screenshots - Recapture each game's Games-page picture (macOS sips)"
 
@@ -53,7 +54,11 @@ test:
 	php tools/game-share-tags.php --check
 	cd games/tankity && node smoke-test.js && php config-test.php && php rooms-sim-test.php
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php rooms-test.php'
+	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php protocol/generate.php --check'
 	@url=$$($(MAKE) --no-print-directory -s url) && curl -sf --max-time 300 "$${url}games/tankity/rooms-web-test.php" | tail -1
+
+protocol:
+	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php protocol/generate.php'
 
 e2e:
 	@url=$${E2E_BASE_URL:-$$($(MAKE) --no-print-directory -s url)} && \

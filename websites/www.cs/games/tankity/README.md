@@ -94,13 +94,40 @@ php tools/game-share-tags.php         # after the last edit to any served file
 
 | Command                                        | Covers                                                                                     |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `node smoke-test.js`                           | The shipped client in a stub DOM, driven by the `game.json` key table                      |
+| `node smoke-test.js`                           | The shipped client in a stub DOM, driven by the `game.json` key table and the `protocol/` fixtures |
 | `php config-test.php`                          | `.config.yaml` precedence                                                                  |
-| `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping                         |
+| `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; `room_snapshot` shapes against `protocol/` |
+| `php protocol/generate.php --check`            | `protocol/` fixtures are current (needs SysV; run inside the PHP container)                 |
 | `php rooms-test.php`                           | The room shelf over its own `php -S` (needs SysV; run inside the PHP container)            |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
 | `php ../../tests/tankity-config-test.php`      | The YAML parser, the `game.yaml` schema, `--check` staleness                               |
 | `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio; `E2E_BASE_URL` points it at the live site |
 
-`make test` from the site root runs every suite above except e2e. Deploys
-skip `*-test.*` and `README.md` files.
+`make test` from the site root runs every suite above except e2e. CI runs
+`make test` as `units` and `make e2e` as `e2e` on every pull request. Deploys
+skip `*-test.*`, `README.md` files and `protocol/`.
+
+## Protocol fixtures
+
+`protocol/*.json` are real room-server replies, one file per moment:
+`lobby-host`, `lobby-public`, `play-my-turn`, `play-after-fire` (fire, shot and
+hit events, then the drone's answer), `shop-after-win`, `create-reply`,
+`join-reply`, `error-too-fast` (429) and `error-not-your-turn` (409). Each file
+is `{about, status, body}`.
+
+- `protocol/generate.php` writes them. Snapshots are built in process with
+  `rooms.php`'s own functions on a fixed room code and seeds
+  (`protocol/scenarios.php`); the create and join replies and the two errors
+  come from `rooms.php` served by a throwaway `php -S` with a private
+  shared-memory key, with codes and tokens replaced by fixed placeholders.
+- Regenerate from the site folder (`websites/www.cs`) with the site running:
+  `make protocol`. Commit the result. `make test` runs
+  `php protocol/generate.php --check`, which fails when any fixture differs.
+- `rooms-sim-test.php` compares the keys and types of today's `room_snapshot`
+  output with each fixture, on any PHP.
+- `smoke-test.js` checks that every hand-written snapshot its fake server
+  sends has the fixtures' keys and types, then serves the fixtures themselves
+  to the client: lobby, start, a fired turn replayed, the shop, a 429 and a
+  409. A server change the client does not handle fails there.
+- The fixtures are not precached by the service worker (only top-level
+  static files are) and are not deployed.

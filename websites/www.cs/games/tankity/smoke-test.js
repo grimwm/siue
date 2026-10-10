@@ -337,33 +337,88 @@ let SEQ = 10;
 const nx = () => ++SEQ;
 let curTurn = 0;
 const terr720 = () => new Array(720).fill(300);
+// ---- protocol fixtures: real server replies (protocol/*.json) ----
+// The hand-written snapshots below must keep the shape the server really
+// sends, and a later phase feeds the client the fixtures themselves.
+const FX_DIR = path.join(__dirname, 'protocol');
+const fx = name => JSON.parse(fs.readFileSync(path.join(FX_DIR, name + '.json'), 'utf8'));
+const fxReply = f => ({ ok: f.status < 400, status: f.status, json: async () => f.body });
+const PFX = { on: false, room: 'lobby-host', actError: '' };
+function fxServe(u, body) {
+  if (u.includes('action=create')) return fxReply(fx('create-reply'));
+  if (u.includes('action=state')) return fxReply(fx(PFX.room));
+  if (u.includes('action=start')) { PFX.room = 'play-my-turn'; return fxReply(fx('play-my-turn')); }
+  if (u.includes('action=act')) {
+    if (body.kind !== 'fire') return fxReply(fx(PFX.room));
+    if (PFX.actError) return fxReply(fx(PFX.actError));
+    PFX.room = 'play-after-fire';
+    return fxReply(fx('play-after-fire'));
+  }
+  return null;
+}
+// Keys and types of a hand-written value against the server's: same keys,
+// same types; null on either side is open (the server sends null for a
+// drone's body or the turn at the shop). Events may omit keys but never
+// invent them.
+function driftOf(actual, want, p, out, loose) {
+  if (want === null || actual === null) return;
+  const ta = Array.isArray(actual) ? 'array' : typeof actual;
+  const tw = Array.isArray(want) ? 'array' : typeof want;
+  if (ta !== tw) { out.add(`${p}: is ${ta}, the server sends ${tw}`); return; }
+  if (ta === 'array') {
+    const evs = /events$/.test(p);
+    for (const item of actual) {
+      const ref = evs ? want.find(w => w.t === item.t) : want[0];
+      if (!ref) { if (evs) out.add(`${p}: event ${item.t} is not one the server sends`); continue; }
+      driftOf(item, ref, p + '[]', out, evs);
+    }
+  } else if (ta === 'object') {
+    for (const k of Object.keys(want)) if (!(k in actual) && !loose) out.add(`${p}.${k}: missing, the server sends it`);
+    for (const k of Object.keys(actual)) {
+      if (!(k in want)) out.add(`${p}.${k}: the server does not send it`);
+      else driftOf(actual[k], want[k], p + '.' + k, out, loose);
+    }
+  }
+}
+const FX_DRIFT = new Set();
+function fxConform(room) {
+  const name = room.phase === 'lobby' ? 'lobby-host' : room.phase === 'shop' ? 'shop-after-win' : 'play-after-fire';
+  const want = JSON.parse(JSON.stringify(fx(name).body.room));
+  if (room.phase !== 'lobby') {
+    want.events = fx('play-after-fire').body.room.events.concat(fx('shop-after-win').body.room.events);
+  }
+  driftOf(room, want, name, FX_DRIFT, false);
+  return room;
+}
 function scriptTank(seat, x, name, kind) {
   return {
     seat, kind, name, x, y: 300, angle: 60, power: 55,
     hp: kind === 'human' ? 100 : 60, maxHp: kind === 'human' ? 100 : 60,
     dirS: seat === 0 ? 1 : -1,
+    body: kind === 'human' ? 'tank' : null, menu: false,
   };
 }
 function scriptSeats() {
   // Server shape: humans arrive as name=initials, drones as name=AI name.
   return [
-    { seat: 0, human: true, name: 'abc', lives: 3, score: 0 },
-    { seat: 1, human: false, name: 'REAPER', lives: 0, score: 0 },
+    { seat: 0, human: true, name: 'abc', mode: 'human', lives: 3, score: 0 },
+    { seat: 1, human: false, name: 'REAPER', mode: 'ai', lives: 0, score: 0 },
   ];
 }
 function scriptYou() {
   return {
     ammo: { shell: -1, buck: 1, mortar: 0, rail: 0, nuke: 0 },
     cash: 600, score: 0, lives: 3, fuel: 80, weapon: 'shell', nextUp: 3000,
+    seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, plate: 0,
   };
 }
 function playRoom(turn, events) {
-  return Object.assign({
-    code: 'TST1', phase: NET_SHOP ? 'shop' : 'play', round: 1, wind: 2, turn,
+  return fxConform(Object.assign({
+    code: 'TST1', phase: NET_SHOP ? 'shop' : 'play', round: 1, wind: 2, turn, turnLeft: NET_SHOP ? null : 120,
     terrain: terr720(),
     tanks: [scriptTank(0, 100, 'abc', 'human'), scriptTank(1, 600, 'REAPER', 'ai')],
     seats: scriptSeats(), events: events || [], you: scriptYou(), csrf: 'cs0',
-  }, mapFields());
+  }, mapFields()));
 }
 const okJson = d => ({ ok: true, json: async () => d });
 let createdMap = '';
@@ -377,6 +432,10 @@ const mapFields = () => ({
 global.fetch = async (url, opts) => {
   const u = String(url);
   const body = opts && opts.body ? JSON.parse(opts.body) : {};
+  if (PFX.on) {
+    const served = fxServe(u, body);
+    if (served) return served;
+  }
   if (u.includes('action=maps')) {
     return okJson({
       ok: true,
@@ -454,10 +513,10 @@ function lobbyRoom() {
     if (i === 1 && extraGuest) return { seat: 1, human: true, name: 'def', mode: 'human', lives: 3, score: 0 };
     return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], lives: 0, score: 0 };
   });
-  return Object.assign(
-    { code: 'TST1', phase: 'lobby', seats, events: [] },
+  return fxConform(Object.assign(
+    { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], round: 0, wind: 0, turn: null, turnLeft: null, you: scriptYou(), csrf: 'cs0' },
     mapFields(),
-  );
+  ));
 }
 // Freeze regression: ten minutes in a background tab must not backlog the
 // music scheduler into scheduling thousands of catch-up notes at once.
@@ -1047,6 +1106,48 @@ function change(el) {
   const polls0 = stateCalls;
   await sleep(3600); frames(5); // a stopped poll never drags the old room back
   check('leave-polling-stopped', stateCalls === polls0, `extra polls=${stateCalls - polls0}`);
+  // The client against the server's real replies (protocol/*.json): a room
+  // from create to the shop, and the two errors a player can hit mid-match.
+  PFX.on = true; PFX.room = 'lobby-host';
+  const fxRoomOf = name => fx(name).body.room;
+  TAP('global', 'rooms'); await tick(10);
+  els['host-initials'].value = 'abc';
+  submit(els['host-form']); await tick(10);
+  check('fx-lobby-code', els['lobby-code'].textContent === fx('create-reply').body.code && els['lobby-room'].hidden === false,
+    els['lobby-code'].textContent);
+  check('fx-lobby-seats', els['lobby-seats'].children.map(t => t.children[0].textContent).join('|') === 'ABC|DEF|AI|Open',
+    els['lobby-seats'].children.map(t => t.children[0].textContent).join('|'));
+  click(els['lobby-start']); await tick(10);
+  check('fx-play-turn', /YOU/.test(els['hud-turn'].textContent) && els['lobby-veil'].hidden === true && els['shop-veil'].hidden === true,
+    els['hud-turn'].textContent);
+  check('fx-play-hud', els['hud-armor'].textContent.startsWith(fxRoomOf('play-my-turn').tanks[0].hp + ' ') && /\$600/.test(els['hud-score'].textContent),
+    els['hud-armor'].textContent + ' | ' + els['hud-score'].textContent);
+  // 429 (retried, then said kindly) and 409 (the server's own words).
+  PFX.actError = 'error-too-fast';
+  TAP('global', 'fire'); await sleep(900); await tick(5);
+  check('fx-429-kind', /Easy on the trigger/.test(logText()), logText().split('\n').slice(-1)[0]);
+  PFX.actError = 'error-not-your-turn';
+  TAP('global', 'fire'); await tick(10);
+  check('fx-409-said', logText().includes(fx('error-not-your-turn').body.error), logText().split('\n').slice(-1)[0]);
+  PFX.actError = '';
+  // A real turn: shot and hits replay, then the drone's answer lands and the
+  // turn is ours again with the armor the server settled.
+  TAP('global', 'fire'); await tick(10);
+  frames(600);
+  const after = fxRoomOf('play-after-fire');
+  check('fx-fire-replayed', /ABC hits REAPER for \d+/.test(logText()) && /REAPER hits YOU for \d+/.test(logText()),
+    logText().split('\n').slice(-3).join(' | '));
+  check('fx-fire-turn-back', /YOU/.test(els['hud-turn'].textContent) && els['hud-armor'].textContent.startsWith(after.tanks[0].hp + ' '),
+    els['hud-turn'].textContent + ' | armor ' + els['hud-armor'].textContent);
+  // The round is won: the room moves to the shop with the prize paid.
+  PFX.room = 'shop-after-win';
+  await sleep(2200); await tick(10);
+  check('fx-shop-opens', els['shop-veil'].hidden === false, `shop hidden=${els['shop-veil'].hidden}`);
+  check('fx-shop-cash', els['shop-cash'].textContent.includes(String(fxRoomOf('shop-after-win').you.cash)), els['shop-cash'].textContent);
+  PFX.on = false;
+  check('fx-hand-snapshots-match', FX_DRIFT.size === 0, [...FX_DRIFT].slice(0, 6).join('; '));
+  click(els['shop-leave']); frames(2);
+  click(els['leave-go']); await tick(10); frames(5);
   TAP('global', 'escape'); frames(5);
   TAP('global', 'new'); frames(150);
   for (let i = 0; i < 6 && (els['shop-veil'].hidden === false || els['round-banner'].hidden === false); i++) {

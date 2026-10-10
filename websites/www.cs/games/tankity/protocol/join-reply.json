@@ -1,0 +1,11 @@
+{
+    "about": "A guest joins: same keys as create, their own seat.",
+    "status": 200,
+    "body": {
+        "ok": true,
+        "code": "FXT1",
+        "seat": 1,
+        "token": "fixture-token-1",
+        "csrf": "fixture-csrf"
+    }
+}

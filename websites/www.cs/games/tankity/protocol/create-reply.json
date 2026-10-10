@@ -1,0 +1,11 @@
+{
+    "about": "Host creates a room: its code, seat 0, a seat token and the csrf token (values here are placeholders).",
+    "status": 200,
+    "body": {
+        "ok": true,
+        "code": "FXT1",
+        "seat": 0,
+        "token": "fixture-token-0",
+        "csrf": "fixture-csrf"
+    }
+}

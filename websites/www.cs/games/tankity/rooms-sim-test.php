@@ -246,5 +246,28 @@ foreach ($room['tanks'] as $t) {
 $check('host-leave-mid-match-continues', $left === true && ($room['seats'][0]['human'] ?? true) === false
     && $hostTank !== null && $hostTank['kind'] === 'ai' && $room['seats'][1]['human'] === true);
 
+// Protocol fixtures (protocol/*.json): what room_snapshot builds today must
+// have the keys and types the fixtures record, which the client's smoke test
+// is run against. The values are not compared (generate.php --check does that
+// in the room container); a changed shape fails here, on any PHP.
+require_once __DIR__ . '/protocol/scenarios.php';
+foreach (protocol_snapshots() as $name => [$about, $status, $body]) {
+    $file = __DIR__ . "/protocol/$name.json";
+    $fixture = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
+    $check("protocol-$name-present", is_array($fixture) && ($fixture['status'] ?? null) === $status);
+    $want = json_encode(protocol_shape($fixture['body'] ?? null));
+    $have = json_encode(protocol_shape(protocol_wire($body)));
+    $check("protocol-$name-shape", $want === $have, $want === $have ? '' : 'run make protocol and read the diff; then teach the client the new shape');
+}
+foreach (['error-too-fast' => 429, 'error-not-your-turn' => 409, 'create-reply' => 200, 'join-reply' => 200] as $name => $status) {
+    $fixture = json_decode((string) @file_get_contents(__DIR__ . "/protocol/$name.json"), true);
+    $check("protocol-$name", is_array($fixture) && ($fixture['status'] ?? null) === $status
+        && (isset($fixture['body']['error']) || isset($fixture['body']['token'])));
+}
+$fire = json_decode((string) @file_get_contents(__DIR__ . '/protocol/play-after-fire.json'), true);
+$types = array_column($fire['body']['room']['events'] ?? [], 't');
+$check('protocol-fire-has-shot-and-hit', in_array('fire', $types, true) && in_array('shot', $types, true) && in_array('hit', $types, true),
+    implode(',', $types));
+
 echo $fail === 0 ? "SIM-OK\n" : "SIM-FAIL $fail\n";
 exit($fail === 0 ? 0 : 1);

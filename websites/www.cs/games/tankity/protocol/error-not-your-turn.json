@@ -1,0 +1,7 @@
+{
+    "about": "An act on someone else's turn: HTTP 409.",
+    "status": 409,
+    "body": {
+        "error": "not your turn"
+    }
+}

@@ -11,12 +11,12 @@ name: deploy
 # runs from main and holds the one GitHub secret:
 #   OP_SERVICE_ACCOUNT_TOKEN - a 1Password service account, read-only on the
 #     vault below.
-# The login itself lives in 1Password:
-#   vault: siue
-#   item:  www-cs-deploy (a Login item)
-#     username - the www.cs.siue.edu account
+# The login itself is the SIUE item in the SIUE 1Password vault, referenced
+# by id so renaming either never breaks the deploy:
+#   vault khvwk3iogv3mhhjui4se7xqyni, item ioa6izbxvctbalcb65y5fr3esu
+#     username - the SIUE address (wgrim@siue.edu); the host account is the
+#                part before the @
 #     password - its password, fed to sftp/scp through sshpass
-# To rename the vault, item or fields, change the op:// refs below.
 # ssh only accepts the host keys in .github/ssh_known_hosts.
 
 on:
@@ -96,8 +96,8 @@ jobs:
           export-env: true
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          SIUE_USER: op://siue/www-cs-deploy/username
-          SIUE_PASSWORD: op://siue/www-cs-deploy/password
+          SIUE_USER: op://khvwk3iogv3mhhjui4se7xqyni/ioa6izbxvctbalcb65y5fr3esu/username
+          SIUE_PASSWORD: op://khvwk3iogv3mhhjui4se7xqyni/ioa6izbxvctbalcb65y5fr3esu/password
 
       - name: Deploy
         if: steps.tip.outputs.skip != '1'
@@ -106,12 +106,13 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          host="${SIUE_USER%@*}@www.cs.siue.edu"
           passfile="$RUNNER_TEMP/siue.pass"
           printf '%s\n' "$SIUE_PASSWORD" >"$passfile"
           trap 'rm -f "$passfile"' EXIT
-          make -C websites/www.cs deploy HOST="$SIUE_USER@www.cs.siue.edu" SSHPASS_FILE="$passfile" PRUNE=1 FORCE="$FORCE"
+          make -C websites/www.cs deploy HOST="$host" SSHPASS_FILE="$passfile" PRUNE=1 FORCE="$FORCE"
           # The host's stamp must now match this commit's content.
-          out=$(make -C websites/www.cs deploy HOST="$SIUE_USER@www.cs.siue.edu" SSHPASS_FILE="$passfile" DRY_RUN=1)
+          out=$(make -C websites/www.cs deploy HOST="$host" SSHPASS_FILE="$passfile" DRY_RUN=1)
           echo "$out"
           grep -q 'up to date' <<<"$out"
 

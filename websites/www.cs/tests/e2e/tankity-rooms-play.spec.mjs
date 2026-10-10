@@ -104,3 +104,39 @@ test('a turn that arrives in a hidden tab changes its title and sends a notifica
   await expect.poll(() => guest.page.title()).toBe(title);
   await host.ctx.close(); await guest.ctx.close();
 });
+
+test('the turn clock warns its player at 30 seconds and counts the last 10 down for everyone', async ({ browser }) => {
+  const { host, guest } = await roomPair(browser);
+  await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);
+  // The real clock is two minutes: rewrite the server's "seconds left" so the
+  // test sees the alert and the countdown now.
+  let left = 31;
+  for (const p of [host.page, guest.page]) {
+    await p.route(/rooms\.php/, async route => {
+      const res = await route.fetch();
+      let body = await res.text();
+      try {
+        const j = JSON.parse(body);
+        if (j.room && typeof j.room.turnLeft === 'number') { j.room.turnLeft = left; body = JSON.stringify(j); }
+      } catch (_) { /* not JSON */ }
+      await route.fulfill({ response: res, body });
+    });
+  }
+  await expect.poll(() => host.page.locator('#log').textContent(), { timeout: 15_000 }).toMatch(/seconds left\. Fire, or the crew picks a gun/);
+  expect(await guest.page.locator('#log').textContent()).not.toMatch(/seconds left\. Fire/);
+  left = 9;
+  // Both screens paint the countdown: a big digit over the battlefield.
+  for (const p of [host.page, guest.page]) {
+    await p.evaluate(() => {
+      window.__digits = [];
+      const P = CanvasRenderingContext2D.prototype, f = P.fillText;
+      P.fillText = function (t, ...a) { if (/^\d{1,2}$/.test(String(t)) && /bold (7\d|[89]\d)px/.test(this.font)) window.__digits.push(+t); return f.call(this, t, ...a); };
+    });
+  }
+  await expect.poll(() => host.page.evaluate(() => window.__digits.length), { timeout: 15_000 }).toBeGreaterThan(5);
+  await expect.poll(() => guest.page.evaluate(() => window.__digits.length), { timeout: 15_000 }).toBeGreaterThan(5);
+  const shown = await host.page.evaluate(() => Math.max(...window.__digits));
+  expect(shown).toBeLessThanOrEqual(10);
+  await host.page.locator('#stage').screenshot({ path: 'test-results/tankity-turn-clock.png' });
+  await host.ctx.close(); await guest.ctx.close();
+});

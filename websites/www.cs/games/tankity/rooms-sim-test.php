@@ -192,11 +192,35 @@ $events = [];
 room_advance($room, $events);
 $check('ai-turns-with-two-tanks', $room['phase'] === 'play' && $room['tanks'][$room['turn']]['kind'] === 'human',
     'turn=' . $room['turn']);
-$room['seats'][0]['lastAct'] = 0; // the idle human fires, then the lone drone answers
+// The human's turn clock started on the advance above; while it runs, aiming
+// (a fresh lastAct) never resets it and the room waits.
+$left = room_turn_left($room);
+$check('turn-clock-runs', $left !== null && $left > ROOM_TURN_SECS - 5 && $left <= ROOM_TURN_SECS, 'left=' . $left);
+$room['seats'][0]['lastAct'] = microtime(true);
+$room['clock']['at'] -= 30;
+$check('turn-clock-ignores-aim', room_turn_left($room) < ROOM_TURN_SECS - 29);
+$events = [];
+room_advance($room, $events);
+$check('turn-clock-waits', count($events) === 0, json_encode($events));
+$room['clock']['at'] = 0; // out of time: the crew fires for the human, then the lone drone answers
 $events = [];
 room_advance($room, $events);
 $aiShots = count(array_filter($events, fn($e) => $e['t'] === 'aifire'));
 $check('lone-drone-fires', $aiShots >= 1 && $aiShots <= 2, 'aifire=' . $aiShots);
+$check('turn-clock-auto-fires', count(array_filter($events, fn($e) => $e['t'] === 'auto')) === 1);
+// The next time it is the human's turn, the clock starts afresh.
+$check('turn-clock-fresh-next-turn', ($room['tanks'][$room['turn']]['kind'] ?? '') !== 'human' || room_turn_left($room) > ROOM_TURN_SECS - 5);
+
+// The crew's random gun comes from the rack: the Shell always, anything with
+// ammo, never something the round has not unlocked.
+$room['round'] = 1;
+$room['ammo'][0] = ['shell' => -1, 'buck' => 2, 'mortar' => 0, 'nuke' => 3];
+$picked = [];
+for ($i = 0; $i < 200; $i++) {
+    $picked[room_random_gun($room, 0)] = true;
+}
+ksort($picked);
+$check('random-gun-from-rack', array_keys($picked) === ['buck', 'shell'], json_encode(array_keys($picked)));
 
 // A guest leaving the lobby frees the chair back to a drone seat; a host
 // leaving a begun match hands the tank to the battery and the room lives on.

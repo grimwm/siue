@@ -46,8 +46,8 @@ php tools/install-files.php      # after the last edit to any served file
 - The generator carries its own small YAML-subset parser (the host has no YAML
   extension); the subset is listed at the top of `game.yaml`. It rejects
   unknown keys, bad enums, colours, ranges and audio paths, naming the line.
-- `game.js` and `rooms.php` hold a frozen fallback copy of a few arsenal rows
-  and of the key table (shaped like `game.json`'s sections); keep them in step
+- `game.js` and `rooms.php` hold a frozen fallback copy of a few arsenal rows,
+  and `src/input.ts` one of the key table (shaped like `game.json`'s sections); keep them in step
   with `game.yaml` defaults.
 - `install-files.php` rewrites `manifest.webmanifest`, `sw.js` and the `?v=` hashes (see Source layout and build), and keeps the
   install block in `index.html` (cache
@@ -136,8 +136,8 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
   their content.
 - `tsconfig.json`: strict, `noUncheckedIndexedAccess`, ES2022 modules, imports
   written with their `.js` extension (the file the browser fetches), comments
-  kept, no source maps. It lists the DOM-free modules (the sim and the room
-  client), which compile without DOM types, so they cannot reach for the page.
+  kept, no source maps. It lists the DOM-free modules (the sim, the room
+  client and the input), which compile without DOM types, so they cannot reach for the page.
   `src/tsconfig.dom.json` extends it with the DOM lib for the modules that need
   WebAudio, `fetch`, timers and canvas types (`audio.ts`, `render.ts`);
   `src/tsconfig.check.json` is a
@@ -148,7 +148,7 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
 - Cache-busting versions are content hashes, written by
   `tools/install-files.php`, never by hand. Each `js/` import in `game.js`
   (`./js/sim.js?v=...`, `./js/audio.js?v=...`, `./js/net.js?v=...`,
-  `./js/render.js?v=...`) carries the first 10 hex characters of the SHA-256 of
+  `./js/render.js?v=...`, `./js/input.js?v=...`) carries the first 10 hex characters of the SHA-256 of
   that module; then `index.html`'s `game.js?v=`, `game.css?v=` and `fx.js?v=`
   carry the hash of their file (so a changed module re-versions `game.js` too).
   After editing any client file, run `php tools/install-files.php` (it also
@@ -203,6 +203,40 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
   from the match key and cached inside the renderer. `render-test.js` paints a
   deep-frozen view, so a frame that wrote to the game state would throw.
 
+- `input.ts` maps physical keys and touches to named commands, and `game.js`
+  says what each command does. The commands are the action names of
+  `game.json`'s `keys` section (`barrelLeft`, `fire`, `guns`, `lineDown`, ...),
+  so rebinding a key in `game.yaml` changes nothing in either file. `createInput({ touch })`
+  returns the input: `register(commands, context)` takes a `CommandTable` (a
+  handler per command) and an `InputContext` (`shopLive`, `modalOpen`/`modalEscape`,
+  `onHold`); `bind(window)` listens (no key listeners on a touch-only screen, but
+  blur still drops the held keys); `bindHold(button, command)` makes an
+  on-screen pad button hold a command while the pointer is down; `held` is the
+  set of held aim and drive commands; `lookup`, `hint` and `setKeys` serve the
+  key table (Shift+ and Ctrl+ tokens win while that modifier is held, then
+  `event.code`, then `event.key`). A handler returns `true` when it used the key
+  (input then calls `preventDefault`), `'quiet'` when it used the key and the
+  browser's default should stand, and nothing when the command does not apply
+  here, so the key falls through. One keydown is offered in this order: the
+  scroll commands (`lineDown/Up`, `pageDown/Up`, `halfDown/Up`), the gun
+  grid's fixed keys (`gridLeft/Right/Up/Down`, `confirm`, `digit`: arrows,
+  Enter or Space, 1-9, never rebound), the shop commands (only while
+  `shopLive`), the global `escape`, the held aim keys (always suppressed, so
+  the arrows never scroll the page), `fire` (suppressed, once per press), then
+  the other global commands (once per press). A question that holds the keys
+  (`modalOpen`) lets only ESC through. `stepArm(held, dt, arm, facing)` is one
+  frame of held-key arm movement at 42 degrees per second for the barrel and 45
+  power per second, clamped to 10-170 and 10-100, reporting whether a key is
+  adjusting and whether none is down (the room client sends the aim when the
+  keys are released). Driving stays in `game.js` because it depends on terrain
+  and fuel. `touchOnly(matchMedia)` is the one test for a touch-only screen;
+  `game.js` keeps its result as `TOUCH`, which hides key hints (`.touch .key`)
+  and rewrites prose, so there is one source of truth. What stays in
+  `game.js`: what each command does (shop rows, overlays, the gun picker's
+  cursor, scrolling a panel), the key hint text, and the capture-phase
+  keydown that wakes audio. The module touches no page API, so `input-test.js`
+  drives it with plain event objects.
+
 ## Tests
 
 | Command                                        | Covers                                                                                     |
@@ -215,6 +249,7 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `node audio-test.js`                            | `js/audio.js` imports without a browser; the loop-point trim and the round-to-track mapping are right |
 | `node render-test.js`                           | `js/render.js` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, and rebuilds the sky only when the match key changes |
+| `node input-test.js`                            | `js/input.js` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, ESC, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
 | `node net-test.js`                              | `js/net.js` against a fake server and timers: the 429 retry, Ready's ordering under rapid toggles, polling, the leave beacon, the clocks, the hidden-tab catch-up plan |
 | `node protocol-test.js`                         | `src/protocol.ts` against the server: the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events `game.js` handles |
 | `node sim-vectors-test.js`                     | `js/sim.js` agrees with `rooms.php` on every shared sim vector (see Sim vectors)              |

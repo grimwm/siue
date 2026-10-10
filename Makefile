@@ -1,4 +1,4 @@
-.PHONY: help up down ps urls parity deploy
+.PHONY: help up down ps urls parity test deploy
 
 .DEFAULT_GOAL := help
 
@@ -12,6 +12,7 @@ help:
 	@echo "  ps     - Show running containers"
 	@echo "  urls   - Print each site's local URL (ports are ephemeral)"
 	@echo "  parity - Run every site's parity check against its server"
+	@echo "  test   - Unit suites: the deploy hasher, then every site's (needs make up)"
 	@echo "  deploy - Deploy every site to its own server; SITE=www.cs for one."
 	@echo "           Each skips when its server's .deploy-hash already matches."
 	@echo "           FORCE=1 / DRY_RUN=1 / PRUNE=1 pass through."
@@ -43,6 +44,10 @@ deploy:
 		test -f $$s/Makefile || { echo "no site $$s" >&2; exit 1; }; \
 		$(MAKE) --no-print-directory -C $$s deploy || exit 1; \
 	done
+
+test:
+	python3 -I scripts/test_deploy_hash.py
+	@for s in $(SITES); do $(MAKE) --no-print-directory -C $$s test || exit 1; done
 
 parity:
 	@for s in $(SITES); do $(MAKE) --no-print-directory -C $$s parity || exit 1; done

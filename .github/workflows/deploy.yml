@@ -1,0 +1,127 @@
+name: deploy
+
+# Deploys www.cs to www.cs.siue.edu once ci.yml passes on a push to main,
+# with the same `make deploy` a person runs. deploy.sh hashes what the site
+# serves and compares it with the host's .deploy-hash stamp: nothing to do
+# when they match, otherwise it uploads only the files that changed and
+# deletes the ones the last deploy sent that are now gone (PRUNE=1). Run it
+# by hand from the Actions tab to redeploy main; "force" sends every file.
+#
+# The deploy job runs in the `production` environment, which only admits
+# runs from main. The one GitHub secret is the repository's
+#   OP_SERVICE_ACCOUNT_TOKEN - a 1Password service account, read-only on the
+#     vault below.
+# The login itself is the SIUE item in the SIUE 1Password vault, referenced
+# by id so renaming either never breaks the deploy:
+#   vault khvwk3iogv3mhhjui4se7xqyni, item ioa6izbxvctbalcb65y5fr3esu
+#     username - the SIUE address (wgrim@siue.edu); the host account is the
+#                part before the @
+#     password - its password, fed to sftp/scp through sshpass
+# ssh only accepts the host keys in .github/ssh_known_hosts.
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Send every file, even when the host is up to date"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    # Only a green ci run from a push to this repository's main; a fork's
+    # pull request from a branch named main must never get here.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    concurrency:
+      group: deploy-www-cs
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      # Runs finish out of order; deploying an older commit after a newer one
+      # would roll the site back. Only main's current tip ships.
+      - name: Check this is main's tip
+        id: tip
+        env:
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          tip=$(git rev-parse HEAD)
+          if [ -n "$RUN_SHA" ] && [ "$RUN_SHA" != "$tip" ]; then
+            echo "ci passed for $RUN_SHA, but main is now $tip; its own run deploys it"
+            echo "skip=1" >>"$GITHUB_OUTPUT"
+          else
+            echo "deploying $tip"
+          fi
+
+      # deploy.sh checks share tags with PHP and hashes with python3.
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        if: steps.tip.outputs.skip != '1'
+        with:
+          php-version: "8.4"
+          coverage: none
+
+      - name: Install sshpass and the host keys
+        if: steps.tip.outputs.skip != '1'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
+          install -d -m 700 ~/.ssh
+          grep -v '^#' .github/ssh_known_hosts >~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          printf 'Host www.cs.siue.edu\n  StrictHostKeyChecking yes\n' >~/.ssh/config
+
+      - name: Load the deploy login
+        if: steps.tip.outputs.skip != '1'
+        uses: 1password/load-secrets-action@581a835fb51b8e7ec56b71cf2ffddd7e68bb25e0 # v2
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          SIUE_USER: op://khvwk3iogv3mhhjui4se7xqyni/ioa6izbxvctbalcb65y5fr3esu/username
+          SIUE_PASSWORD: op://khvwk3iogv3mhhjui4se7xqyni/ioa6izbxvctbalcb65y5fr3esu/password
+
+      - name: Deploy
+        if: steps.tip.outputs.skip != '1'
+        env:
+          FORCE: ${{ inputs.force && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          host="${SIUE_USER%@*}@www.cs.siue.edu"
+          passfile="$RUNNER_TEMP/siue.pass"
+          printf '%s\n' "$SIUE_PASSWORD" >"$passfile"
+          trap 'rm -f "$passfile"' EXIT
+          make -C websites/www.cs deploy HOST="$host" SSHPASS_FILE="$passfile" PRUNE=1 FORCE="$FORCE"
+          # The host's stamp must now match this commit's content.
+          out=$(make -C websites/www.cs deploy HOST="$host" SSHPASS_FILE="$passfile" DRY_RUN=1)
+          echo "$out"
+          grep -q 'up to date' <<<"$out"
+
+      - name: Check the live site
+        if: steps.tip.outputs.skip != '1'
+        run: |
+          set -euo pipefail
+          for path in "" games/tankity/ games/tankity/rooms.php?action=ping; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://www.cs.siue.edu/~wgrim/$path")
+            echo "$code /~wgrim/$path"
+            [ "$code" = 200 ]
+          done

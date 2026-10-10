@@ -62,10 +62,8 @@ check('fixtures-exercise-the-core-events', ['round', 'fire', 'shot', 'hit', 'kil
 
 // ---- what rooms.php spells out ----
 const set = re => new Set([...php.matchAll(re)].map(m => m[1]));
-// A seq-less `join` is stored but never sent in a snapshot (see protocol.ts).
-const unsent = new Set(['join']);
 const phpEvents = set(/'t' => '(\w+)'/g);
-const missing = [...phpEvents].filter(t => !EVENT_TYPES.includes(t) && !unsent.has(t));
+const missing = [...phpEvents].filter(t => !EVENT_TYPES.includes(t));
 const unused = EVENT_TYPES.filter(t => !phpEvents.has(t));
 check('events-in-rooms-php-are-typed', missing.length === 0, missing.join());
 check('typed-events-exist-in-rooms-php', unused.length === 0, unused.join());
@@ -84,7 +82,7 @@ check('seat-modes-in-rooms-php', [...phpSeatModes].every(m => SEAT_MODES.include
 
 // ---- what the client handles ----
 const handled = new Set([...game.matchAll(/\be\.t === '(\w+)'/g)].map(m => m[1]));
-const typos = [...handled].filter(t => !EVENT_TYPES.includes(t) && !unsent.has(t));
+const typos = [...handled].filter(t => !EVENT_TYPES.includes(t));
 check('client-handles-only-real-events', typos.length === 0, typos.join());
 
 if (failed) { console.log(`\n${failed} check(s) failed`); process.exit(1); }

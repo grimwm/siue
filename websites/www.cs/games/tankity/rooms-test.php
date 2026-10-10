@@ -160,6 +160,11 @@ $gtoken = (string) ($guest['token'] ?? '');
 $gcsrf = (string) ($guest['csrf'] ?? '');
 $check('match-seats', ($match['ok'] ?? false) === true && ($guest['ok'] ?? false) === true && $gseat === 1,
     'code=' . $mcode . ' gseat=' . $gseat);
+// The host's next poll carries the guest's arrival, so the lobby can say so.
+$lobby = $get($base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
+$joins = array_values(array_filter($lobby['room']['events'] ?? [], fn($e) => ($e['t'] ?? '') === 'join'));
+$check('join-event-reaches-the-host', count($joins) === 1 && ($joins[0]['seat'] ?? -1) === $gseat && ($joins[0]['seq'] ?? 0) > 0,
+    json_encode($joins));
 usleep(300000); // seats clock in on create/join; starting is throttled like any other act
 $started = $post('start', ['code' => $mcode, 'token' => $mtoken, 'csrf' => $mcsrf]);
 $check('match-starts', ($started['ok'] ?? false) === true && ($started['room']['turn'] ?? -1) === 0,

@@ -1752,7 +1752,7 @@ if ($action === 'join' && $method === 'POST') {
     // Same as create: joining means present, so the seat starts clocked in.
     $room['seats'][$seat] = room_seat_human($initials, $token, $body);
     room_seat_economy($room, $seat);
-    $room['events'][] = ['t' => 'join', 'seat' => $seat];
+    room_emit($room, ['t' => 'join', 'seat' => $seat]);
     if (!room_save($fh, $path, $room)) {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);

@@ -192,7 +192,8 @@ export async function roomPair(browser, { beforeStart } = {}) {
   await guest.page.fill('#join-initials', 'zed');
   await guest.page.click('#join-go');
   await guest.page.waitForSelector('#lobby-room:not([hidden])');
-  await host.page.waitForTimeout(2000);
+  // The host hears about the guest on its next poll.
+  await expect.poll(() => hud(host.page, 'log'), { timeout: 10_000 }).toMatch(/zed rolled into the room/i);
   if (beforeStart) await beforeStart({ host, guest, roomState, code });
   await host.page.click('#lobby-start');
   // Both clients are in the match once each shows the host's turn; events

@@ -16,13 +16,13 @@ import {
   muzzle, shotSpeed, stepBallistic, blastDamage,
   fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling, aiChoose as simAiChoose,
-} from './js/sim.js?v=20261010zb';
+} from './js/sim.js?v=20261010zd';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
-} from './js/audio.js?v=20261010zb';
+} from './js/audio.js?v=20261010zd';
 import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, planCatchUp, VOLLEY_OPENERS, CLOCK_SHOW_S,
-} from './js/net.js?v=20261010zb';
+} from './js/net.js?v=20261010zd';
 
 /* ---------- audio: lives in src/audio.ts ---------- */
 music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));
@@ -2932,6 +2932,13 @@ function netLobbyWatch() {
     () => { const veil = $('lobby-veil'); return !!veil && !veil.hidden; },
     room => {
       net.seats = room.seats || [];
+      // Arrivals (not our own) and departures, past the cursor so the match
+      // never replays them.
+      const fresh = (room.events || []).filter(e => (e.seq || 0) > net.since);
+      for (const e of fresh) net.since = Math.max(net.since, e.seq || 0);
+      for (const e of fresh) {
+        if ((e.t === 'join' && e.seat !== net.seat) || e.t === 'left') netEvent(e);
+      }
       netRenderRoster(room);
       if (room.phase && room.phase !== 'lobby') startNetMatch(room);
     },

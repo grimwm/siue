@@ -595,6 +595,39 @@ function room_sweep_hit(array $room, float $x0, float $y0, float $x1, float $y1,
     }
     return null;
 }
+/* Seconds a human gets for a turn before the crew fires for them. */
+const ROOM_TURN_SECS = 120;
+/* Seconds left on the turn clock of whoever's turn it is (null when it is
+// not a human's turn). The clock starts when a turn begins: aiming and
+// driving do not reset it. A turn is identified by round, turn slot and the
+// count of shots fired so far, so the same player coming round again starts
+// a fresh clock. */
+function room_turn_left(array &$room): ?float
+{
+    $t = $room['tanks'][$room['turn']] ?? null;
+    if (($room['phase'] ?? '') !== 'play' || !$t || $t['kind'] !== 'human' || $t['hp'] <= 0) {
+        return null;
+    }
+    $key = ($room['round'] ?? 1) . ':' . $room['turn'] . ':' . ($room['shots'] ?? 0);
+    if (($room['clock']['key'] ?? '') !== $key) {
+        $room['clock'] = ['key' => $key, 'at' => microtime(true)];
+    }
+    return max(0.0, ROOM_TURN_SECS - (microtime(true) - (float) $room['clock']['at']));
+}
+/* A random gun from a seat's rack: any shell it still has, the Shell always,
+// skipping anything its round has not unlocked. */
+function room_random_gun(array $room, int $seat): string
+{
+    $weapons = room_weapons();
+    $rack = ['shell'];
+    foreach ($room['ammo'][$seat] ?? [] as $wkey => $have) {
+        if ($wkey !== 'shell' && $have > 0 && isset($weapons[$wkey])
+            && ($weapons[$wkey]['minRound'] ?? 1) <= ($room['round'] ?? 1)) {
+            $rack[] = $wkey;
+        }
+    }
+    return $rack[random_int(0, count($rack) - 1)];
+}
 function room_fly_arc(array &$room, array &$events, array $tank, array $w, string $wkey, int $ownerIdx, float $sx, float $sy, float $vx, float $vy, float $age, $fuse, $ov, float $t0 = 0.0): array
 {
     $width = count($room['terrain']);
@@ -685,6 +718,7 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
  * ('at'), and shot events carry their flight path, so clients replay it. */
 function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey): void
 {
+    $room['shots'] = ($room['shots'] ?? 0) + 1; // a fresh turn clock follows each shot
     $tank = &$room['tanks'][$seatIdx];
     $weapons = room_weapons();
     $w = $weapons[$wkey] ?? $weapons['shell'];
@@ -1012,17 +1046,14 @@ function room_advance(array &$room, array &$events): void
         $room['turn'] = $cur;
         $t = $room['tanks'][$cur];
         if ($t['kind'] === 'human') {
-            // An idle human holds up everyone, so after 90 quiet seconds the
-            // crew fires the loaded gun as-is and play moves on.
-            $last = (float) ($room['seats'][$t['seat']]['lastAct'] ?? microtime(true));
-            if (microtime(true) - $last < 90) {
-                return; // waiting on this human's intent
+            // A human's turn runs on a clock (room_turn_left): when it runs
+            // out, the crew loads a random gun from the rack and fires it with
+            // the current aim, so one absent player never holds up the room.
+            if (room_turn_left($room) > 0) {
+                return; // waiting on this human's move
             }
-            $wkey = (string) ($room['weapon'][$t['seat']] ?? 'shell');
+            $wkey = room_random_gun($room, $t['seat']);
             $have = $room['ammo'][$t['seat']][$wkey] ?? 0;
-            if ($wkey !== 'shell' && $have <= 0) {
-                $wkey = 'shell';
-            }
             $events[] = ['t' => 'auto', 'seat' => $t['seat'], 'w' => $wkey,
                 'x' => round($t['x'], 1), 'a' => round($t['angle'], 1), 'pw' => round($t['power'], 1)];
             if ($wkey !== 'shell') {
@@ -1318,6 +1349,11 @@ function room_snapshot(array $room, ?int $seat, int $since): array
         'round' => $room['round'],
         'wind' => $room['wind'],
         'turn' => $room['phase'] === 'play' && count($room['tanks']) ? $room['tanks'][$room['turn']]['seat'] ?? null : null,
+        // Seconds left before the crew fires for the human whose turn it is.
+        'turnLeft' => (function () use ($room) {
+            $left = room_turn_left($room);
+            return $left === null ? null : round($left, 1);
+        })(),
         'terrain' => array_map(fn($v) => round($v, 1), $room['terrain']),
         'tanks' => $tanks,
         'seats' => $seats,
@@ -1634,9 +1670,8 @@ function room_gate(array $body, bool $needCsrf, bool $throttle = true): array
             room_unlock($fh);
             room_json_out(429, ['error' => 'too fast']);
         }
-        // Unthrottled requests (leave, the menu flag) neither spend the
-        // spacing nor count as play: the idle crew still fires for a player
-        // who sits in a menu for 90 seconds.
+        // Unthrottled requests (leave, the menu flag) do not spend the
+        // spacing.
         if ($throttle) {
             $room['seats'][$seat]['lastAct'] = $now;
         }

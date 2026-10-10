@@ -78,6 +78,12 @@ php tools/game-share-tags.php         # after the last edit to any served file
   it). Once the match has begun the seat, host included, becomes a drone and the
   match carries on; nothing after the lobby is host-only (shop and next round
   are open to every human). The last human out removes the room.
+- Turn clock: a human's turn runs for 120 s (`ROOM_TURN_SECS`), started when
+  the turn begins; aiming and driving do not reset it. When it runs out the
+  crew loads a random gun from that player's rack (the Shell, or anything
+  with ammo the round has unlocked) and fires it with the current aim.
+  Snapshots carry `turnLeft`; the client alerts its player at 30 s and shows
+  everyone a countdown for the last 10. Solo play has no clock.
 - Spawns are random, at least 110 px apart, and units never end a move within
   44 px of another. Each tank faces the middle; barrel keys swing toward the
   side pressed.

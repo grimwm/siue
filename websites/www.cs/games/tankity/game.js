@@ -2850,6 +2850,7 @@ function render() {
   c.globalAlpha = 1;
   c.restore();
   drawWindGauge(c, cv, time);
+  drawTurnClock(c, cv);
 }
 /* Wind lives on the battlefield, not in the status bar: faint streaks
    drift across the sky at the wind's speed, and a gauge just under the menu
@@ -3944,6 +3945,12 @@ function netAdopt(room) {
   });
   G.turn = Math.max(0, G.tanks.findIndex(t => t.seat === room.turn));
   const mine = myTank();
+  // The turn clock: seconds left as of this snapshot, counted down locally.
+  // A clock that jumps up is a new turn, which re-arms the 30-second alert.
+  const prevLeft = turnClockLeft();
+  NET.turnLeft = typeof room.turnLeft === 'number' ? room.turnLeft : null;
+  NET.turnLeftAt = performance.now();
+  if (NET.turnLeft === null || prevLeft === null || NET.turnLeft > prevLeft + 5) NET.clockWarned = false;
   const wasMyTurn = NET.myTurn;
   NET.myTurn = room.phase === 'play' && !!mine && mine.hp > 0 && room.turn === NET.seat;
   if (NET.myTurn && !wasMyTurn) turnAlert();
@@ -4221,6 +4228,44 @@ function clearTurnAlert() {
   for (const [d, t] of alertTitles) d.title = t;
   alertTitles = null;
 }
+/* The room's turn clock (rooms.php ROOM_TURN_SECS): when a human's turn runs
+   out the crew fires a random gun from their rack. Its owner hears an alert
+   with 30 seconds left; everyone sees the last 10 counted down. */
+const CLOCK_WARN_S = 30;
+const CLOCK_SHOW_S = 10;
+function turnClockLeft() {
+  if (!NET.on || typeof NET.turnLeft !== 'number') return null;
+  return Math.max(0, NET.turnLeft - (performance.now() - NET.turnLeftAt) / 1000);
+}
+function tickTurnClock() {
+  const left = turnClockLeft();
+  if (left === null || NET.clockWarned || left > CLOCK_WARN_S || left <= 0) return;
+  NET.clockWarned = true;
+  if (!NET.myTurn) return;
+  say(`${Math.ceil(left)} seconds left. Fire, or the crew picks a gun and fires for you.`, 'bad');
+  if (!soundMuted && audioCtx()) {
+    for (let i = 0; i < 3; i++) blip(988, 0.09, 'square', 0.07, null, i * 0.16);
+  }
+}
+function drawTurnClock(c, cv) {
+  const left = turnClockLeft();
+  if (left === null || left > CLOCK_SHOW_S || left <= 0) return;
+  const n = Math.ceil(left);
+  const frac = left - Math.floor(left); // pulses once a second
+  c.save();
+  c.scale((cv.width || W) / W || 1, (cv.height || H) / H || 1);
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.globalAlpha = 0.25 + 0.6 * frac;
+  c.fillStyle = n <= 3 ? '#ff5a5a' : '#ffff55';
+  c.font = `bold ${Math.round(72 * textScale())}px sans-serif`;
+  c.fillText(String(n), W / 2, H * 0.42);
+  c.globalAlpha = 0.9;
+  c.font = `bold ${Math.round(12 * textScale())}px sans-serif`;
+  c.fillStyle = '#ffffff';
+  c.fillText(NET.myTurn ? 'Fire now, or the crew fires for you' : 'The crew fires if the clock runs out', W / 2, H * 0.42 + 46 * textScale());
+  c.restore();
+}
 /* Tell the room when this player is in a menu (game menu, help, scores, the
    weapon picker), so the others see why the battle waits on them. The radio
    log is a glance, not a menu. */
@@ -4293,6 +4338,7 @@ function netEaseAim(dt) {
 }
 function netFrame(dt) {
   netSyncMenu();
+  tickTurnClock();
   G.time += dt;
   netEaseAim(dt);
   updateCamera(dt);

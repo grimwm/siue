@@ -3,25 +3,23 @@
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Loaded after main.js (site shell: nav, theme, applyCombatTheme).
- * Phase 3: overlays live in games/cylon/mount.html → #game-root.
+ * A native ES module: the page imports initializeCylonEffects and calls it
+ * once. The game knows nothing of the page's own scripts; what it has to say
+ * to the page goes through the options it is given (see initializeCylonEffects)
+ * and what it needs from the page's markup is listed in README.md ("Host
+ * contract"). Its overlays live in mount.html and are injected into #game-root.
+ *
+ * The pure parts are TypeScript in src/, compiled to js/ (see README.md,
+ * "Source layout and build"): rules (difficulty, caps, hull tint, volume curve),
+ * playfield (where drones may stand), scores (the scores.php client).
  */
+import * as rules from './js/rules.js?v=7889c1e71d';
+import * as playfield from './js/playfield.js?v=848b755745';
+import { createScoresClient, formatHighScoreRows, weeklyResetText } from './js/scores.js?v=ce7eccc399';
 
-// Host blocks .html under games/ — serve mount from home-dir root (see cylon-mount.html symlink)
-const CYLON_MOUNT_URL = 'cylon-mount.html?v=20261009d';
-
-function cylonAsset(path) {
-    const el = document.querySelector('script[data-cylon-base]');
-    let base = el ? (el.getAttribute('data-cylon-base') || '') : '';
-    if (base && !base.endsWith('/')) base += '/';
-    return base + path.replace(/^\//, '');
-}
-
-function cylonApi() {
-    const el = document.querySelector('script[data-cylon-api]');
-    const api = el ? (el.getAttribute('data-cylon-api') || '') : '';
-    return api || cylonAsset('scores.php');
-}
+// Everything the game fetches is found next to this file, wherever it is served from.
+const CYLON_MOUNT_URL = new URL('mount.html?v=0f24d0d722', import.meta.url).href;
+const CYLON_SCORES_URL = new URL('scores.php', import.meta.url).href;
 
 async function mountCylonDom() {
     const root = document.getElementById('game-root');
@@ -40,7 +38,19 @@ async function mountCylonDom() {
     }
 }
 
-async function initializeCylonEffects() {
+/**
+ * Mounts the game into #game-root and starts the home-page eye.
+ *
+ * @param {object} [options]
+ * @param {(combat: boolean) => void} [options.onTheme] Called whenever combat
+ *   starts (true) or ends (false), so the page can force its dark theme while
+ *   the game is live and restore the visitor's choice after. The game changes
+ *   no theme itself.
+ * @param {string} [options.scoresApi] The score server's URL, when it is not
+ *   scores.php next to this file.
+ */
+export async function initializeCylonEffects(options = {}) {
+    const onTheme = typeof options.onTheme === 'function' ? options.onTheme : () => {};
     await mountCylonDom();
 
     const eye = document.getElementById('cylon-eye');
@@ -96,8 +106,6 @@ async function initializeCylonEffects() {
 
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
-    const BOT_CAP_START = 4;
-    const BOT_CAP_PER_KOS = 5;
     const BOT_HARD_CAP = coarsePointer ? 10 : 30;
     if (reduceMotion) return;
 
@@ -105,13 +113,9 @@ async function initializeCylonEffects() {
     let reticlePointerId = null;
 
     const SETTINGS_KEY = 'cylon-settings';
-    const SCORES_API = cylonApi();
-    let csrfToken = '';
-    let runToken = '';
-    let runIssueGen = 0;
-    let runIssue = null;
-    let HIGH_SCORE_LIMIT = 10;
-    const BLOCKED_INITIALS = new Set();
+    const scores = createScoresClient(options.scoresApi || CYLON_SCORES_URL, {
+        fetch: (url, init) => fetch(url, init),
+    });
     const defaults = {
         gameEnabled: false,
         soundEnabled: true,
@@ -196,14 +200,13 @@ async function initializeCylonEffects() {
     let nukeDueAt = 0;
     let herdTimer = null;
     let reshuffleSettleTimer = null;
-    let cachedHighScores = [];
 
     const IDLE_MS = 2000;
     const BOT_SIZE = { w: 44, h: 56 };
     const LINK_PAD = 28;
     const HIT_RADIUS = 52;
     const BOLT_HIT_RADIUS = 44;
-    const MAX_HITS = 30;
+    const { MAX_HITS } = rules;
     const HEAL_IDLE_MS = 10000;
     const NUKE_DIRECT_HIT_RADIUS = 64;
     const NUKE_SPEED = 520; // px/sec toward cursor
@@ -219,9 +222,6 @@ async function initializeCylonEffects() {
     const GRENADE_WEAPON_SCALE = 0.62;
     const RAPTOR_IMPACT_SCALE = 0.5;
     const RAPTOR_STRIKE_SCALE = 0.72;
-    const MISSILE_TRACKER_CHANCE_BASE = 0.14;
-    const MISSILE_TRACKER_CAP_MAX = 3;
-    const MISSILE_GROUND_CAP_MAX = 5;
     let trackerPairTimer = null;
     /** @type {ReturnType<typeof setTimeout>[]} */
     let groundVolleyTimers = [];
@@ -339,113 +339,28 @@ async function initializeCylonEffects() {
         }, NAV_FADE_MS);
     }
 
-    function formatHighScoreRows(list) {
-        if (!list.length) {
-            return '<li class="cylon-hs-empty">No scores yet</li>';
-        }
-        return list.map((entry, i) => {
-            const when = entry.at ? new Date(entry.at) : null;
-            const date = when && !Number.isNaN(when.getTime())
-                ? when.toLocaleDateString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                })
-                : '';
-            const initials = (entry.initials || 'AAA').toString().slice(0, 3).toUpperCase();
-            const dateHtml = date
-                ? `<span class="cylon-hs-date">${date}</span>`
-                : '<span class="cylon-hs-date"></span>';
-            return `<li><span class="cylon-hs-rank">#${i + 1}</span><strong class="cylon-hs-initials">${initials}</strong>${dateHtml}<span class="cylon-hs-score">${entry.score} KOs</span></li>`;
-        }).join('');
-    }
-
-    function renderHighScores(list = cachedHighScores) {
+    function renderHighScores(list = scores.board()) {
         if (highScoresEl) highScoresEl.innerHTML = formatHighScoreRows(list);
         if (gameOverScoresEl) gameOverScoresEl.innerHTML = formatHighScoreRows(list);
     }
 
-    function applyScoreConfig(config) {
-        if (!config || typeof config !== 'object') return;
-        const maxScores = Number(config.maxScores);
-        if (maxScores >= 1) HIGH_SCORE_LIMIT = maxScores;
-        if (Array.isArray(config.blockedInitials)) {
-            BLOCKED_INITIALS.clear();
-            config.blockedInitials.forEach((item) => {
-                const initials = String(item || '').toUpperCase();
-                if (/^[A-Z]{3}$/.test(initials)) BLOCKED_INITIALS.add(initials);
-            });
-        }
-        const day = config.weekStartsOn === 'sunday' ? 'Sunday' : 'Monday';
-        const zone = config.timezone === 'America/Chicago' ? 'Central' : (config.timezone || '');
-        const blurb = `Play often — scores reset every ${day} at midnight ${zone}.`;
+    function showScoreConfig(config) {
+        const blurb = weeklyResetText(config);
         ['cylon-weekly-reset', 'cylon-gameover-reset'].forEach((id) => {
             const node = document.getElementById(id);
             if (node) node.textContent = blurb;
         });
     }
 
-    function scoreRequestHeaders(extra) {
-        const headers = { 'X-Cylon-CSRF': csrfToken };
-        if (extra) {
-            Object.keys(extra).forEach((key) => {
-                headers[key] = extra[key];
-            });
-        }
-        return headers;
-    }
-
     async function fetchHighScores() {
-        try {
-            const res = await fetch(SCORES_API, {
-                cache: 'no-store',
-                credentials: 'same-origin',
-                headers: scoreRequestHeaders()
-            });
-            if (!res.ok) throw new Error('bad status');
-            const data = await res.json();
-            if (typeof data.csrf === 'string' && data.csrf) csrfToken = data.csrf;
-            applyScoreConfig(data.config);
-            cachedHighScores = Array.isArray(data.scores) ? data.scores : [];
-            renderHighScores();
-        } catch {
-            renderHighScores(cachedHighScores);
-        }
-    }
-
-    function issueRunToken() {
-        const gen = ++runIssueGen;
-        runToken = '';
-        runIssue = (async () => {
-            try {
-                if (!csrfToken) await fetchHighScores();
-                const res = await fetch(SCORES_API, {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: scoreRequestHeaders({ 'Content-Type': 'application/json' }),
-                    body: JSON.stringify({ op: 'start' }),
-                    cache: 'no-store'
-                });
-                const data = await res.json().catch(() => null);
-                if (gen !== runIssueGen) return;
-                if (res.ok && data && typeof data.run === 'string') runToken = data.run;
-            } catch (err) {
-                console.error('Cylon run token failed', err);
-            }
-        })();
-        return runIssue;
+        const config = await scores.load();
+        if (config) showScoreConfig(config);
+        renderHighScores();
     }
 
     /** True when score earns a board slot: open seats, or strictly above the lowest shown. */
-    function scoreQualifiesForBoard(score, list = cachedHighScores) {
-        if (score < 1) return false;
-        if (!list || list.length < HIGH_SCORE_LIMIT) return true;
-        let lowest = Infinity;
-        for (const entry of list) {
-            const s = Number(entry.score) || 0;
-            if (s < lowest) lowest = s;
-        }
-        return score > lowest;
+    function scoreQualifiesForBoard(score) {
+        return scores.qualifies(score);
     }
 
     function readInitialLetter(el) {
@@ -458,7 +373,7 @@ async function initializeCylonEffects() {
     }
 
     function isBlockedInitials(initials) {
-        return BLOCKED_INITIALS.has((initials || '').toUpperCase());
+        return scores.isBlocked(initials);
     }
 
     function setInitialsError(message) {
@@ -500,63 +415,16 @@ async function initializeCylonEffects() {
     }
 
     async function submitHighScore(score, initials) {
-        if (!score || score < 1) return false;
-        const clean = (initials || 'AAA').toUpperCase().slice(0, 3).padEnd(3, 'A');
-        if (isBlockedInitials(clean)) {
-            setInitialsError("Those initials aren't valid — choose another.");
-            return false;
-        }
-        try {
-            if (runIssue) await runIssue;
-            if (!runToken) {
-                setInitialsError('Could not save that score. Refresh and play again.');
-                return false;
-            }
-            const res = await fetch(SCORES_API, {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: scoreRequestHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({
-                    op: 'score',
-                    score,
-                    hits: pendingScore ? pendingScore.hits : hitsTaken,
-                    initials: clean,
-                    run: runToken
-                }),
-                cache: 'no-store'
-            });
-            let data = null;
-            try {
-                data = await res.json();
-            } catch {
-                data = null;
-            }
-            if (res.status === 400 && data && data.error === 'invalid initials') {
-                setInitialsError("Those initials aren't valid — choose another.");
-                if (Array.isArray(data.scores)) {
-                    cachedHighScores = data.scores;
-                    renderHighScores();
-                }
-                return false;
-            }
-            if (!res.ok) {
-                setInitialsError('Could not save that score. Refresh and play again.');
-                if (data && Array.isArray(data.scores)) {
-                    cachedHighScores = data.scores;
-                    renderHighScores();
-                }
-                return false;
-            }
-            if (!res.ok) throw new Error('bad status');
+        const result = await scores.submit(score, initials, pendingScore ? pendingScore.hits : hitsTaken);
+        if (result.saved) {
             setInitialsError('');
-            runToken = '';
-            cachedHighScores = Array.isArray(data && data.scores) ? data.scores : cachedHighScores;
-            renderHighScores();
-            return true;
-        } catch {
-            renderHighScores(cachedHighScores);
-            return false;
+        } else if (result.problem === 'invalid-initials') {
+            setInitialsError("Those initials aren't valid — choose another.");
+        } else if (result.problem === 'save-failed') {
+            setInitialsError('Could not save that score. Refresh and play again.');
         }
+        renderHighScores();
+        return result.saved;
     }
 
     function scrollX() {
@@ -584,17 +452,7 @@ async function initializeCylonEffects() {
     }
 
     function volumeToGain(pct, bus = 'sfx') {
-        const t = Math.max(0, Math.min(100, Number(pct) || 0)) / 100;
-        if (bus === 'music') {
-            // UI 50% ≈ former max * 1.25; slider stays at 50 by default
-            return Math.min(2.5, (t / 0.5) * 1.25);
-        }
-        // SFX: UI 50 ≈ former default at 85 (0.85²); 100 still reaches full gain
-        const internalPct = t <= 0.5
-            ? (t / 0.5) * 85
-            : 85 + ((t - 0.5) / 0.5) * 15;
-        const u = internalPct / 100;
-        return u * u;
+        return rules.volumeToGain(pct, bus);
     }
 
     function ensureAudioContext() {
@@ -1143,7 +1001,7 @@ async function initializeCylonEffects() {
         const on = settings.gameEnabled;
         const deferScatter = !!opts.deferScatter;
         document.body.classList.toggle('cylon-game-live', on);
-        applyCombatTheme(on);
+        onTheme(on);
         syncNavChrome();
         if (on) {
             if (!deferScatter) blowWorldEnded();
@@ -1168,53 +1026,35 @@ async function initializeCylonEffects() {
     }
 
     function lerp(a, b, t) {
-        return a + (b - a) * Math.min(1, Math.max(0, t));
+        return rules.lerp(a, b, t);
     }
 
-    /** Same rung as bot capacity: every BOT_CAP_PER_KOS kills is a new level. */
     function killLevel() {
-        return Math.floor(koScore / BOT_CAP_PER_KOS);
+        return rules.killLevel(koScore);
     }
 
     function difficultyFactor() {
-        if (!runStartedAt) return 0;
-        const elapsedMin = (Date.now() - runStartedAt) / 60000;
-        const timePart = Math.min(1, elapsedMin / 3.5);
-        // Prefer the 5-KO ladder; time is a light backstop if KOs stall
-        const levelPart = Math.min(1, killLevel() / 10);
-        return Math.min(1, levelPart * 0.75 + timePart * 0.25);
+        return rules.difficultyFactor(koScore, runStartedAt, Date.now());
     }
 
     function nextMissileDelayMs() {
-        // Gentle cadence climb with kill level — not a spike every rung
-        const t = Math.min(1, killLevel() / 10);
-        const lo = lerp(8500, 3400, t);
-        const span = lerp(2800, 1600, t);
-        return Math.max(2400, lo - span / 2 + Math.random() * span);
+        return rules.nextMissileDelayMs(koScore, Math.random);
     }
 
     function nextNukeDelayMs() {
-        const d = difficultyFactor();
-        const lo = lerp(32500, 24000, d);
-        const span = lerp(15000, 12000, d);
-        return lo - span / 2 + Math.random() * span;
+        return rules.nextNukeDelayMs(difficultyFactor(), Math.random);
     }
 
     function groundMissileCap() {
-        // L0–1: 1 · L2–3: 2 · L4–5: 3 · L6–7: 4 · L8+: 5
-        return Math.min(MISSILE_GROUND_CAP_MAX, 1 + Math.floor(killLevel() / 2));
+        return rules.groundMissileCap(koScore);
     }
 
     function trackerMissileCap() {
-        // Start at 1 (not 2). L0–2: 1 · L3–6: 2 · L7+: 3
-        const lvl = killLevel();
-        if (lvl < 3) return 1;
-        if (lvl < 7) return 2;
-        return Math.min(MISSILE_TRACKER_CAP_MAX, 3);
+        return rules.trackerMissileCap(koScore);
     }
 
     function trackerMissileChance() {
-        return Math.min(0.34, MISSILE_TRACKER_CHANCE_BASE + killLevel() * 0.02);
+        return rules.trackerMissileChance(koScore);
     }
 
     function countActiveMissiles(trackerOnly = null) {
@@ -2140,17 +1980,8 @@ async function initializeCylonEffects() {
         });
     }
 
-    function rectsOverlap(a, b) {
-        return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
-    }
-
     function inflate(rect, pad) {
-        return {
-            left: rect.left - pad,
-            top: rect.top - pad,
-            right: rect.right + pad,
-            bottom: rect.bottom + pad
-        };
+        return playfield.inflate(rect, pad);
     }
 
     function toPageRect(domRect) {
@@ -2179,163 +2010,49 @@ async function initializeCylonEffects() {
         return rects;
     }
 
-    function botPageRect(x, y) {
-        return {
-            left: x,
-            top: y,
-            right: x + BOT_SIZE.w,
-            bottom: y + BOT_SIZE.h
-        };
-    }
-
     /** Page-coord box bots should live in so they stay tappable on screen. */
     function visiblePlayfieldBounds() {
-        const sx = scrollX();
-        const sy = scrollY();
-        const vw = document.documentElement.clientWidth || window.innerWidth || 1;
-        const vh = window.innerHeight || 1;
         const nav = document.querySelector('.site-nav');
-        const navBottom = nav ? nav.getBoundingClientRect().bottom : 70;
-        const topPad = Math.max(72, navBottom + 10);
-        const margin = 10;
-        const left = sx + margin;
-        const top = sy + topPad;
-        const right = sx + vw - BOT_SIZE.w - margin;
-        const bottom = sy + vh - BOT_SIZE.h - margin - 6;
-        return {
-            left,
-            top,
-            right: Math.max(left, right),
-            bottom: Math.max(top, bottom)
-        };
+        return playfield.visibleBounds({
+            scrollX: scrollX(),
+            scrollY: scrollY(),
+            width: document.documentElement.clientWidth || window.innerWidth || 1,
+            height: window.innerHeight || 1,
+            navBottom: nav ? nav.getBoundingClientRect().bottom : 70,
+        }, BOT_SIZE);
     }
 
     function clampToVisiblePlayfield(x, y) {
-        const b = visiblePlayfieldBounds();
-        return {
-            x: Math.min(Math.max(b.left, x), b.right),
-            y: Math.min(Math.max(b.top, y), b.bottom)
-        };
+        return playfield.clampToBounds(visiblePlayfieldBounds(), x, y);
     }
 
     function isInVisiblePlayfield(x, y) {
-        const b = visiblePlayfieldBounds();
-        return x >= b.left - 2 && x <= b.right + 2 && y >= b.top - 2 && y <= b.bottom + 2;
+        return playfield.isInBounds(visiblePlayfieldBounds(), x, y);
     }
 
     function isSafePageSpot(x, y, forbidden) {
-        const rect = botPageRect(x, y);
-        const { w, h } = docSize();
-        if (x < 4 || y < 70 || x + BOT_SIZE.w > w - 4 || y + BOT_SIZE.h > h - 4) return false;
-        return !forbidden.some((r) => rectsOverlap(rect, r));
+        return playfield.isSafeSpot(x, y, forbidden, docSize(), BOT_SIZE);
     }
 
-    function randomVisibleSpot(forbidden) {
-        const b = visiblePlayfieldBounds();
-        const spanX = Math.max(1, b.right - b.left);
-        const spanY = Math.max(1, b.bottom - b.top);
-        for (let i = 0; i < 36; i++) {
-            const x = b.left + Math.random() * spanX;
-            const y = b.top + Math.random() * spanY;
-            if (isSafePageSpot(x, y, forbidden)) return { x, y, edge: 'return' };
-        }
-        // Last resort: clamped center of the playfield
-        const fallback = clampToVisiblePlayfield((b.left + b.right) / 2, (b.top + b.bottom) / 2);
-        if (isSafePageSpot(fallback.x, fallback.y, forbidden)) {
-            return { ...fallback, edge: 'return' };
-        }
-        return null;
-    }
-
-    function candidateSpots() {
-        const b = visiblePlayfieldBounds();
-        const margin = 12;
-        const spots = [];
-        const edges = ['left', 'right', 'bottom'];
-        const spanY = Math.max(40, b.bottom - b.top);
-        const spanX = Math.max(40, b.right - b.left);
-
-        // Stay inside the visible playfield (tappable), not past the screen edge
-        edges.forEach((edge) => {
-            for (let i = 0; i < 10; i++) {
-                let x;
-                let y;
-                if (edge === 'left') {
-                    x = b.left;
-                    y = b.top + Math.random() * spanY;
-                } else if (edge === 'right') {
-                    x = b.right;
-                    y = b.top + Math.random() * spanY;
-                } else {
-                    x = b.left + Math.random() * spanX;
-                    y = b.bottom - Math.random() * Math.min(36, spanY * 0.25);
-                }
-                const clamped = clampToVisiblePlayfield(x, y);
-                spots.push({ ...clamped, edge });
-            }
-        });
-
-        for (let i = spots.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [spots[i], spots[j]] = [spots[j], spots[i]];
-        }
-        return spots;
-    }
 
     function findSafeSpot(nearBot) {
-        const forbidden = getForbiddenRects();
-        if (nearBot) {
-            const cx = parseFloat(nearBot.style.left) || 0;
-            const cy = parseFloat(nearBot.style.top) || 0;
-            // Off-screen after a scroll (or bad patrol): march back into view
-            if (!isInVisiblePlayfield(cx, cy)) {
-                const back = randomVisibleSpot(forbidden);
-                if (back) return back;
-            } else {
-                for (let i = 0; i < 28; i++) {
-                    let x = cx + (Math.random() - 0.5) * 200;
-                    let y = cy + (Math.random() - 0.5) * 140;
-                    ({ x, y } = clampToVisiblePlayfield(x, y));
-                    if (isSafePageSpot(x, y, forbidden)) {
-                        return { x, y, edge: 'patrol' };
-                    }
-                }
-            }
-        }
-        for (const spot of candidateSpots()) {
-            if (isSafePageSpot(spot.x, spot.y, forbidden)) return spot;
-        }
-        return randomVisibleSpot(forbidden);
+        const near = nearBot
+            ? { x: parseFloat(nearBot.style.left) || 0, y: parseFloat(nearBot.style.top) || 0 }
+            : null;
+        return playfield.findSafeSpot({
+            bounds: visiblePlayfieldBounds(),
+            forbidden: getForbiddenRects(),
+            doc: docSize(),
+            bot: BOT_SIZE,
+        }, near, Math.random);
     }
 
     function currentHp() {
-        return Math.max(0, MAX_HITS - hitCount);
+        return rules.currentHp(hitCount);
     }
 
-    /**
-     * Smooth HP tint: green at full → yellow at half → red at empty.
-     * t = hp / MAX ∈ [0,1]. Piecewise RGB lerp on either side of 0.5:
-     *   t ≥ 0.5: mix(yellow, green, (t-0.5)/0.5)
-     *   t <  0.5: mix(red,    yellow, t/0.5)
-     */
     function hpTint(hp) {
-        const mix = (a, b, u) => Math.round(a + (b - a) * u);
-        const mixRgb = (c0, c1, u) => ({
-            r: mix(c0.r, c1.r, u),
-            g: mix(c0.g, c1.g, u),
-            b: mix(c0.b, c1.b, u),
-        });
-        const green = { r: 125, g: 255, b: 154 };
-        const yellow = { r: 255, g: 210, b: 74 };
-        const red = { r: 255, g: 72, b: 72 };
-        const t = Math.max(0, Math.min(1, hp / MAX_HITS));
-        const c = t >= 0.5
-            ? mixRgb(yellow, green, (t - 0.5) / 0.5)
-            : mixRgb(red, yellow, t / 0.5);
-        return {
-            color: `rgb(${c.r}, ${c.g}, ${c.b})`,
-            glow: `rgba(${c.r}, ${c.g}, ${c.b}, 0.55)`,
-        };
+        return rules.hpTint(hp);
     }
 
     function updateHitsUi() {
@@ -2834,11 +2551,8 @@ async function initializeCylonEffects() {
     }
 
     function marchOrigin(spot) {
-        const b = visiblePlayfieldBounds();
         // Enter from just outside the visible playfield, then march onto it
-        if (spot.edge === 'left') return { x: b.left - BOT_SIZE.w + 6, y: spot.y };
-        if (spot.edge === 'right') return { x: b.right + BOT_SIZE.w - 6, y: spot.y };
-        return { x: spot.x, y: b.bottom + BOT_SIZE.h - 6 };
+        return playfield.marchOrigin(visiblePlayfieldBounds(), spot, BOT_SIZE);
     }
 
     function ensureClearOfLinks(bot) {
@@ -2931,7 +2645,7 @@ async function initializeCylonEffects() {
     }
 
     function botCap() {
-        return Math.min(BOT_HARD_CAP, BOT_CAP_START + Math.floor(koScore / BOT_CAP_PER_KOS));
+        return rules.botCap(koScore, BOT_HARD_CAP);
     }
 
     function attachBotControls(bot) {
@@ -3028,11 +2742,7 @@ async function initializeCylonEffects() {
         if (!isGameLive()) return;
         const room = botCap() - activeBots;
         if (room <= 0) return;
-        const isWave = Math.random() < 0.55;
-        const maxBatch = Math.min(room, Math.max(2, Math.min(4, Math.floor(botCap() / 3))));
-        const count = isWave
-            ? Math.min(room, 2 + Math.floor(Math.random() * Math.max(1, maxBatch - 1)))
-            : 1;
+        const { isWave, count } = rules.planWave(room, botCap(), Math.random);
         for (let i = 0; i < count; i++) {
             setTimeout(() => spawnBot(), i * (isWave ? 380 : 0));
         }
@@ -3402,7 +3112,7 @@ async function initializeCylonEffects() {
     function playIntroNuke() {
         const gen = ++introGen;
         introPlaying = true;
-        issueRunToken();
+        scores.startRun();
         nukeInFlight = false;
         resetIntroTitle();
 

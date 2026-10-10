@@ -35,6 +35,13 @@ has('tankity-package-json-runs-its-specs', select([`${S}games/tankity/package.js
 check('tankity-lockfile-alone-runs-no-browser', select([`${S}games/tankity/package-lock.json`]), 'NONE');
 check('tankity-lockfile-with-a-module-still-runs-its-specs', select([`${S}games/tankity/package-lock.json`, `${S}games/tankity/js/sim.js`]).includes('tankity-solo.spec.mjs'), true);
 check('tankity-build-tool-runs-nothing', select([`${S}games/tankity/tools/ts-build.mjs`, `${S}games/tankity/.gitignore`]), 'NONE');
+check('cylon-lockfile-alone-runs-no-browser', select([`${S}games/cylon/package-lock.json`]), 'NONE');
+check('cylon-build-tool-runs-nothing', select([`${S}games/cylon/tools/ts-build.mjs`, `${S}games/cylon/.gitignore`, `${S}games/cylon/rules-test.js`]), 'NONE');
+has('cylon-sources-run-the-shell-specs', select([`${S}games/cylon/src/rules.ts`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs', 'games-hub.spec.mjs']);
+has('cylon-compiled-modules-run-the-shell-specs', select([`${S}games/cylon/js/scores.js`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs']);
+has('cylon-tsconfig-runs-the-shell-specs', select([`${S}games/cylon/tsconfig.json`, `${S}games/cylon/package.json`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs']);
+check('cylon-skips-tankity', select([`${S}games/cylon/src/rules.ts`]).some(s => s.startsWith('tankity-')), false);
+has('home-page-tool-runs-the-shell', select([`${S}tools/site-versions.php`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs']);
 check('a-removed-spec-is-dropped', select([`${S}tests/e2e/gone-away.spec.mjs`]), 'NONE');
 
 console.log(fail ? `E2E-SELECT-TEST-FAIL ${fail}` : 'E2E-SELECT-TEST-OK');

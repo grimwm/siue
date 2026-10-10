@@ -36,9 +36,9 @@ const RULES = [
   [new RegExp(`^${SITE}games/[^/]+/[^/]*-test\\.(php|js)$`), 'NONE'], // unit and smoke tests
   [new RegExp(`^${SITE}games/[^/]+/(tools|protocol|fx/blender|audio/sfx/src)/`), 'NONE'], // generators, fixtures, sources
   [new RegExp(`^${SITE}games/[^/]+/(audio/sfx/build_sfx\\.sh|game\\.yaml|\\.gitignore)$`), 'NONE'],
-  // Tankity's lockfile only pins the compiler; what the browser runs is js/,
+  // A game's lockfile only pins the compiler; what the browser runs is js/,
   // which has its own rule below. The unit suites still check the build.
-  [new RegExp(`^${SITE}games/tankity/package-lock\\.json$`), 'NONE'],
+  [new RegExp(`^${SITE}games/[^/]+/package-lock\\.json$`), 'NONE'],
   // The dev-only effects editor: only the effects spec opens it.
   [new RegExp(`^${SITE}games/tankity/fx-editor\\.(html|js|css)$`), ['tankity-fx.spec.mjs']],
   // The test harness, the stack and CI: everything.
@@ -52,10 +52,12 @@ const RULES = [
   [new RegExp(`^${SITE}games/tankity/(src/|js/|tsconfig\\.json$|package\\.json$)`), [...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs']],
   // A game's own folder.
   [new RegExp(`^${SITE}games/tankity/`), [...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs']],
+  // Cylon's TypeScript (src/, the compiled js/, tsconfig.json, package.json) and
+  // the rest of its folder: the home page and the games hub load it.
   [new RegExp(`^${SITE}games/cylon/`), shell],
   [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.mjs', 'games-pwa.spec.mjs']],
   // The site shell around the games.
-  [new RegExp(`^${SITE}(index\\.html|main\\.js|site\\.css|cylon\\.js|games\\.php|games/hub\\.php|games/README|site\\.webmanifest|[^/]+\\.(png|ico)|play/|tools/)`), shell],
+  [new RegExp(`^${SITE}(index\\.html|main\\.js|site\\.css|games\\.php|games/hub\\.php|games/README|site\\.webmanifest|[^/]+\\.(png|ico)|play/|tools/)`), shell],
   // Elsewhere in the site: unknown, so everything.
   [new RegExp(`^${SITE}`), 'ALL'],
   // Outside the site nothing is served.

@@ -1,0 +1,86 @@
+name: ci
+
+# Unit suites (`make test`) on pull requests and on main, whenever a change
+# touches something they cover. The browser suite (`make e2e`) is not run
+# here. A green run on main is what starts deploy.yml.
+#
+# `units` is a required check on main, so every pull request runs it; one
+# that touches none of COVERED passes without starting the sites.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - "websites/**"
+      - "scripts/**"
+      - "compose.yaml"
+      - "Makefile"
+      - ".github/workflows/ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  units:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check what changed
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          COVERED: "websites/ scripts/ compose.yaml Makefile .github/workflows/ci.yml"
+        run: |
+          set -euo pipefail
+          if [ -z "$BASE" ]; then
+            echo "run=1" >>"$GITHUB_OUTPUT" # push to main: its path filter already chose
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          changed=$(git diff --name-only "$BASE"...HEAD -- $COVERED)
+          if [ -n "$changed" ]; then
+            echo "run=1" >>"$GITHUB_OUTPUT"
+            printf '%s\n' "$changed"
+          else
+            echo "nothing the unit suites cover changed"
+          fi
+
+      # The host-side suites (games hub, share tags, Tankity sim) run on the
+      # runner's PHP; the room suites run in the docker PHP that matches
+      # www.cs.siue.edu.
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        if: steps.scope.outputs.run == '1'
+        with:
+          php-version: "8.4"
+          coverage: none
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        if: steps.scope.outputs.run == '1'
+        with:
+          node-version: "22"
+
+      - name: Start the local sites
+        if: steps.scope.outputs.run == '1'
+        run: make up
+
+      - name: Unit suites
+        if: steps.scope.outputs.run == '1'
+        run: make test
+
+      - name: Container logs
+        if: failure() && steps.scope.outputs.run == '1'
+        run: docker compose logs --no-color --tail 200
+
+      - name: Stop the local sites
+        if: always() && steps.scope.outputs.run == '1'
+        run: make down

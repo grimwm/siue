@@ -27,6 +27,10 @@ foreach (['games/tankity/fx.js', 'games/tankity/js/sim.js', 'games/tankity/js/ne
 foreach (['games/cylon/cylon.js', 'games/cylon/js/rules.js', 'games/cylon/js/playfield.js', 'games/cylon/js/scores.js', 'games/cylon/cylon.css', 'games/cylon/mount.html', 'games/cylon/scores.php', 'games/cylon/manifest.webmanifest'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
+// The site's own scripts: compiled from src/, served from the root and play/.
+foreach (['main.js', 'play/play.js', 'play/play.css', 'index.html'] as $f) {
+    $check("ships $f", isset($set[$f]));
+}
 // Crete: the entry module, the compiled modules it imports, its page and PWA files.
 foreach (['games/crete/index.html', 'games/crete/game.js', 'games/crete/game.css', 'games/crete/js/engine.js', 'games/crete/js/audio.js', 'games/crete/js/ui.js', 'games/crete/sw.js', 'games/crete/manifest.webmanifest'] as $f) {
     $check("ships $f", isset($set[$f]));
@@ -51,10 +55,11 @@ foreach (['games/tankity/fx-editor.html', 'games/tankity/fx-editor.js', 'games/t
     'games/cylon/src/rules.ts', 'games/cylon/src/playfield.ts', 'games/cylon/src/scores.ts', 'games/cylon/src/tsconfig.dom.json', 'games/cylon/tsconfig.json', 'games/cylon/package.json', 'games/cylon/package-lock.json',
     'games/cylon/tools/ts-build.mjs', 'games/cylon/tools/install-files.php', 'games/cylon/.gitignore', 'games/cylon/README.md', 'games/cylon/install-files-test.php', 'games/cylon/rules-test.js', 'games/cylon/playfield-test.js', 'games/cylon/scores-test.js', 'games/cylon/smoke-test.js',
     'games/crete/src/engine.ts', 'games/crete/src/audio.ts', 'games/crete/src/ui.ts', 'games/crete/src/tsconfig.dom.json', 'games/crete/tsconfig.json', 'games/crete/package.json', 'games/crete/package-lock.json',
+    'src/main.ts', 'src/play/play.ts', 'tsconfig.json', 'package.json', 'package-lock.json', 'tools/ts-build.mjs',
     'games/crete/tools/ts-build.mjs', 'games/crete/tools/install-files.php', 'games/crete/.gitignore', 'games/crete/README.md', 'games/crete/install-files-test.php', 'games/crete/engine-test.js', 'games/crete/smoke-test.js'] as $f) {
     $check("keeps back $f", file_exists("$site/$f") && !isset($set[$f]));
 }
-$leaks = array_values(array_filter($out, fn(string $f): bool => (bool) preg_match('~(\.blend1?|\.wav|\.flac|\.aiff?)$|/fx/blender/|/fx-editor\.|/protocol/|-test\.|^tests/|/src/|/node_modules/|/tsconfig\.json$|/package(-lock)?\.json$~', $f)));
+$leaks = array_values(array_filter($out, fn(string $f): bool => (bool) preg_match('~(\.blend1?|\.wav|\.flac|\.aiff?)$|/fx/blender/|/fx-editor\.|/protocol/|-test\.|^tests/|(^|/)src/|/node_modules/|(^|/)tsconfig\.json$|(^|/)package(-lock)?\.json$~', $f)));
 $check('no authoring or test files', $leaks === [], implode(', ', $leaks));
 
 $check('node_modules never ships', array_filter($out, fn(string $f): bool => str_contains($f, 'node_modules')) === []);

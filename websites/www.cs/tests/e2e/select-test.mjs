@@ -47,6 +47,10 @@ has('crete-compiled-modules-run-its-specs', select([`${S}games/crete/js/ui.js`, 
 check('crete-lockfile-alone-runs-no-browser', select([`${S}games/crete/package-lock.json`]), 'NONE');
 check('crete-build-tool-and-tests-run-nothing', select([`${S}games/crete/tools/ts-build.mjs`, `${S}games/crete/.gitignore`, `${S}games/crete/engine-test.js`, `${S}games/crete/smoke-test.js`]), 'NONE');
 check('crete-skips-tankity', select([`${S}games/crete/src/ui.ts`]).some(s => s.startsWith('tankity-')), false);
+has('site-sources-run-the-shell', select([`${S}src/main.ts`, `${S}src/play/play.ts`]), ['games-hub.spec.mjs', 'home-eye.spec.mjs']);
+has('site-tsconfig-runs-the-shell', select([`${S}tsconfig.json`, `${S}package.json`]), ['games-hub.spec.mjs', 'home-eye.spec.mjs']);
+check('site-lockfile-alone-runs-no-browser', select([`${S}package-lock.json`]), 'NONE');
+has('play-script-runs-the-shell', select([`${S}play/play.js`]), ['games-hub.spec.mjs']);
 check('a-removed-spec-is-dropped', select([`${S}tests/e2e/gone-away.spec.mjs`]), 'NONE');
 
 console.log(fail ? `E2E-SELECT-TEST-FAIL ${fail}` : 'E2E-SELECT-TEST-OK');

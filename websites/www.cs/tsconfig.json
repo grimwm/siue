@@ -1,0 +1,29 @@
+{
+  // The site's own scripts. Each src/**/*.ts compiles one file to one file at
+  // the same path under the site root (src/main.ts -> main.js,
+  // src/play/play.ts -> play/play.js), and the compiled files are checked in:
+  // the host serves static files and has no Node. Build: node tools/ts-build.mjs;
+  // verify: node tools/ts-build.mjs --check.
+  // These are classic scripts, not modules: the pages load them with a plain
+  // <script>, and index.html's inline handlers call main.js's functions as page
+  // globals, so neither file has an import or an export. The games' own
+  // programs live in games/<id>/ and never see this one.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": [],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "rootDir": "src",
+    "outDir": ".",
+    // Readable output: the comments stay, and there are no source maps.
+    "removeComments": false,
+    "sourceMap": false,
+    "newLine": "lf",
+    "noEmitOnError": true
+  },
+  "files": ["src/main.ts", "src/play/play.ts"]
+}

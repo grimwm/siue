@@ -1,3 +1,4 @@
 .cylon-scores.json
 data/scores.json
 games/cylon/data/scores.json
+node_modules/

@@ -56,6 +56,10 @@ const RULES = [
   // the rest of its folder: the home page and the games hub load it.
   [new RegExp(`^${SITE}games/cylon/`), shell],
   [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.mjs', 'games-pwa.spec.mjs']],
+  // The site's own TypeScript (src/ compiles to main.js and play/play.js) and the
+  // settings that decide how: the lockfile only pins the compiler.
+  [new RegExp(`^${SITE}package-lock\\.json$`), 'NONE'],
+  [new RegExp(`^${SITE}(src/|package\\.json$|tsconfig\\.json$)`), shell],
   // The site shell around the games.
   [new RegExp(`^${SITE}(index\\.html|main\\.js|site\\.css|games\\.php|games/hub\\.php|games/README|site\\.webmanifest|[^/]+\\.(png|ico)|play/|tools/)`), shell],
   // Elsewhere in the site: unknown, so everything.

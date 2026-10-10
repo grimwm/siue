@@ -1,0 +1,13 @@
+{
+  "name": "www-cs",
+  "private": true,
+  "type": "module",
+  "description": "Build tooling for the site's own scripts: TypeScript in src/ compiles to main.js and play/play.js.",
+  "scripts": {
+    "build": "node tools/ts-build.mjs",
+    "check": "node tools/ts-build.mjs --check"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}

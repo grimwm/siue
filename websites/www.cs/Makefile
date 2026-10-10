@@ -21,7 +21,7 @@ help:
 	@echo "  down   - Stop the local site"
 	@echo "  url    - Print the local site's URL (its port is ephemeral)"
 	@echo "  parity - Check the docker PHP against www.cs.siue.edu's modules/ini"
-	@echo "  test   - Unit suites: games hub, site game pages, home-page versions, deploy set, each game's tools, Tankity (incl. game.yaml, the TypeScript build), Cylon (the TypeScript build, its pure modules) (needs make up)"
+	@echo "  test   - Unit suites: the site's TypeScript build, games hub, site game pages, home-page versions, deploy set, each game's tools, Tankity (incl. game.yaml, the TypeScript build), Cylon (the TypeScript build, its pure modules), Crete (the TypeScript build, its engine) (needs make up)"
 	@echo "  protocol - Rewrite the Tankity room protocol fixtures (needs make up)"
 	@echo "  sim-vectors - Rewrite the Tankity shared sim test vectors (needs make up)"
 	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL;"
@@ -52,6 +52,7 @@ parity:
 test:
 	node tests/e2e/select-test.mjs
 	node tests/e2e/select.mjs --check
+	npm ci --silent && node tools/ts-build.mjs --check
 	php tests/games-hub-test.php
 	php tests/site-game-pages-test.php
 	php tools/site-game-pages.php --check
@@ -60,7 +61,9 @@ test:
 	php tests/deploy-set-test.php
 	cd games/tankity && npm ci --silent && node tools/ts-build.mjs --check
 	cd games/tankity && php game-json-test.php && php install-files-test.php && php tools/game-json.php --check && php tools/install-files.php --check
+	cd games/crete && npm ci --silent && node tools/ts-build.mjs --check
 	cd games/crete && php install-files-test.php && php tools/install-files.php --check
+	cd games/crete && node engine-test.js && node smoke-test.js
 	cd games/cylon && npm ci --silent && node tools/ts-build.mjs --check
 	cd games/cylon && php install-files-test.php && php tools/install-files.php --check
 	cd games/cylon && node rules-test.js && node playfield-test.js && node scores-test.js && node audio-test.js && node smoke-test.js

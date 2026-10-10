@@ -17,6 +17,10 @@ $tmp = sys_get_temp_dir() . '/site-game-pages-test-' . getmypid();
 $root = "$tmp/games";
 @mkdir("$root/arty", 0777, true);
 @mkdir("$root/mounted", 0777, true);
+// The shared files every wrapper page loads, with a version of their own.
+@mkdir("$tmp/play", 0777, true);
+file_put_contents("$tmp/play/play.css", ".play-nav{}\n");
+file_put_contents("$tmp/play/play.js", "(function () {})();\n");
 file_put_contents("$root/arty/metadata.yaml", "title: Arty & Co\ndescription: \"Lob <shells> at drones.\"\nplay: index.html\nimage: og.png\n");
 file_put_contents("$root/arty/og.png", 'png');
 $page = "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>Arty</title>\n</head>\n<body>hi</body>\n</html>\n";
@@ -27,7 +31,7 @@ file_put_contents("$root/mounted/metadata.yaml", "title: Mounted\ndescription: R
 [$stale, $notes] = site_pages_sync($root, $site, false);
 sort($stale);
 $check('check-finds-stale', $stale === ['arty', 'mounted'], json_encode($stale));
-$check('check-writes-nothing', file_get_contents("$root/arty/index.html") === $page && !is_dir("$tmp/play"));
+$check('check-writes-nothing', file_get_contents("$root/arty/index.html") === $page && !is_dir("$tmp/play/arty") && !is_dir("$tmp/play/mounted"));
 
 // Write mode writes the site's pages and leaves the game's own page alone.
 site_pages_sync($root, $site, true);
@@ -52,6 +56,12 @@ $check('wrapper-colours', str_contains($wrap, '--game-bg: ' . GAMES_HUB_DEFAULT_
 $check('wrapper-installs-game', str_contains($wrap, '<link rel="manifest" href="../../games/arty/manifest.webmanifest">')
     && !str_contains($wrap, 'serviceWorker'));
 
+// The shared stylesheet and script carry a content-hash version, so a changed
+// file is fetched afresh.
+$vOf = fn(string $f): string => substr(hash('sha256', (string) file_get_contents("$tmp/play/$f")), 0, 10);
+$check('wrapper-versions-shared-files', str_contains($wrap, '<link rel="stylesheet" href="../play.css?v=' . $vOf('play.css') . '">')
+    && str_contains($wrap, '<script src="../play.js?v=' . $vOf('play.js') . '" defer></script>'));
+
 // A mounted game gets a site page that forwards to the site.
 $fwd = (string) @file_get_contents("$tmp/play/mounted/index.html");
 $check('start-page-written', str_contains($fwd, '<meta property="og:title" content="Mounted">'));
@@ -63,6 +73,32 @@ site_pages_sync($root, $site, true);
 $check('write-idempotent', file_get_contents("$tmp/play/arty/index.html") === $wrap);
 [$stale] = site_pages_sync($root, $site, false);
 $check('check-clean-after-write', $stale === [], json_encode($stale));
+
+// Changing play.js re-versions its tag on every wrapper page, and only that.
+$jsBefore = $vOf('play.js');
+file_put_contents("$tmp/play/play.js", "(function () { /* edited */ })();\n");
+[$stale] = site_pages_sync($root, $site, false);
+$check('check-sees-changed-shared-script', $stale === ['arty'], json_encode($stale));
+site_pages_sync($root, $site, true);
+$after = (string) file_get_contents("$tmp/play/arty/index.html");
+$check('rewrite-moves-only-the-script-version', $vOf('play.js') !== $jsBefore
+    && str_contains($after, 'play.js?v=' . $vOf('play.js')) && str_contains($after, 'play.css?v=' . $vOf('play.css'))
+    && str_replace('play.js?v=' . $vOf('play.js'), 'play.js?v=' . $jsBefore, $after) === $wrap);
+file_put_contents("$tmp/play/play.css", ".play-nav{color:red}\n");
+[$stale] = site_pages_sync($root, $site, false);
+$check('check-sees-changed-shared-stylesheet', $stale === ['arty'], json_encode($stale));
+site_pages_sync($root, $site, true);
+[$stale] = site_pages_sync($root, $site, false);
+$check('clean-after-shared-rewrite', $stale === [], json_encode($stale));
+
+// A shared file that cannot be read stops the run: a note, a failure flag, nothing written.
+$keep = (string) file_get_contents("$tmp/play/play.js");
+$wrapNow = (string) file_get_contents("$tmp/play/arty/index.html");
+unlink("$tmp/play/play.js");
+[$stale, $notes, $broken] = site_pages_sync($root, $site, true);
+$check('unreadable-shared-file-fails', $stale === [] && $broken === true && in_array('play/play.js is not readable, but the wrapper pages load it', $notes, true)
+    && file_get_contents("$tmp/play/arty/index.html") === $wrapNow, json_encode([$stale, $notes, $broken]));
+file_put_contents("$tmp/play/play.js", $keep);
 
 // Editing metadata makes the page stale again.
 file_put_contents("$root/arty/metadata.yaml", "title: Arty 2\ndescription: New.\nplay: index.html\n");
@@ -86,7 +122,7 @@ $check('game-folders-untouched', !is_file("$root/arty/manifest.webmanifest") && 
     && !is_file("$root/mounted/manifest.webmanifest") && !is_file("$root/mounted/index.html"));
 
 // The site's own games are in sync with their metadata.
-[$stale, $notes] = site_pages_sync(__DIR__ . '/../games', SITE_PAGES_SITE, false);
+[$stale, $notes, $broken] = site_pages_sync(__DIR__ . '/../games', SITE_PAGES_SITE, false);
 $check('repo-games-in-sync', $stale === [], 'run: php tools/site-game-pages.php  (stale: ' . implode(', ', $stale) . ')');
 
 exec('rm -rf ' . escapeshellarg($tmp));

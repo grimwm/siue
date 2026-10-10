@@ -67,6 +67,13 @@ for tool in games/*/tools/ts-build.mjs; do
   fi
 done
 
+# The site's own scripts (main.js, play/play.js) are TypeScript in src/ too, with
+# their compiler setup at the site root: refuse a stale build.
+if ! (npm ci --silent && node tools/ts-build.mjs --check); then
+  echo "deploy: run node tools/ts-build.mjs and commit the result" >&2
+  exit 1
+fi
+
 work=$(mktemp -d "${TMPDIR:-/tmp}/www-cs-deploy.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 stage=$work/stage

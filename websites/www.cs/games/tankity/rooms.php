@@ -363,9 +363,10 @@ function room_gen_terrain(int &$rng, int $w): array
     }
     return $t;
 }
-/* The arsenal lives in weapons.json, not here: the browser reads the same
-// file, so prices, packs, ballistics, and effects can never disagree. When
-// the file is missing the baked fallback below keeps rooms rolling. */
+/* The arsenal lives in game.yaml, served as game.json (tools/tankity-config.php
+// writes it): the browser reads the same file, so prices, packs, ballistics,
+// and effects can never disagree. When the file is missing the baked fallback
+// below keeps rooms rolling. */
 function room_arsenal(): array
 {
     static $a = null;
@@ -373,11 +374,11 @@ function room_arsenal(): array
         return $a;
     }
     $a = false;
-    $raw = @file_get_contents(__DIR__ . '/weapons.json');
+    $raw = @file_get_contents(__DIR__ . '/game.json');
     if ($raw !== false) {
         $d = json_decode($raw, true);
-        if (is_array($d) && isset($d['ammo']) && is_array($d['ammo'])) {
-            $a = $d;
+        if (is_array($d) && isset($d['arsenal']['ammo']) && is_array($d['arsenal']['ammo'])) {
+            $a = $d['arsenal'];
         }
     }
     if ($a === false) {

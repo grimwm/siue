@@ -1,0 +1,521 @@
+# Operation Tankity: the one file a maintainer edits.
+#
+# It holds the three kinds of game data that used to live in separate files:
+#   arsenal  every shell and every shop trick (prices, ballistics, paint)
+#   keys     every keyboard binding
+#   audio    optional sound-effect and music files
+#
+# Nothing reads this file at runtime. Browsers cannot read YAML and the web
+# host has no YAML extension, so a generator checks it and writes game.json,
+# which game.js (the client) and rooms.php (the room server) both load:
+#
+#   php tools/tankity-config.php          check this file, rewrite game.json
+#   php tools/tankity-config.php --check  fail if this file is invalid or
+#                                         game.json is stale
+#
+# Run those from the site folder (websites/www.cs). `make test` and
+# `make deploy` run --check, so a stale game.json cannot ship. Commit this
+# file and game.json together. Errors name the line, for example
+#   game.yaml line 41: arsenal.ammo[1].dmg: must be a whole number from 1 to 500
+# Unknown keys are errors too, so a typo cannot silently do nothing.
+#
+# After the last edit to anything the game serves, also run
+#   php tools/game-share-tags.php
+# which refreshes the offline cache list in sw.js.
+#
+# YAML subset the generator understands (it is a small parser, not full YAML):
+#   - "key: value" mappings and "- item" lists, indented with spaces only
+#     (tabs are rejected); a list of mappings starts each item with "- key:"
+#   - one-line [a, b] lists and {a: 1, b: 2} maps
+#   - plain, 'single' and "double" quoted text; whole numbers, decimals,
+#     true, false, null (or ~ or nothing after the colon)
+#   - # comments, on their own line or after a value (preceded by a space)
+#   - NOT supported: anchors (&), aliases (*), tags (!), block text (| >),
+#     lists or maps that wrap over several lines, several documents (---)
+# Quote any text that could be mistaken for something else: colours
+# ("#ffe27a", since # starts a comment), key tokens such as "1", "a" or " ".
+
+# --------------------------------------------------------------------------
+# arsenal
+# --------------------------------------------------------------------------
+# Every shell (ammo) and every trick or supply (gear) in the shop. The order
+# of the rows is the order players see in the shop, the weapon picker and the
+# lobby, and rooms.php builds its authoritative sim from the same rows, so
+# prices, damage and unlock rounds can never disagree between solo and rooms.
+# Ids (key) are shared by ammo and gear and must be unique.
+#
+# ammo row fields
+#   key       id, lowercase letters and digits. `shell` must exist and be free
+#             (price 0): every player starts with it and never runs out.
+#   name      what the shop, HUD and picker call it (max 40 characters).
+#   cat       shop section heading; rows sharing a cat sit under one heading.
+#   dmg       damage dealt at the centre of the blast, in armor points. It
+#             falls off with distance (never below 30%); a direct hit doubles
+#             it. Whole number, 1 to 500.
+#   radius    blast radius in pixels: the crater size, and damage reaches
+#             radius + 14 px. Whole number, 1 to 200.
+#   price     dollars for one pack. 0 to 100000.
+#   pack      shells per purchase; 0 means the shop does not sell it (only
+#             the free `shell` uses 0). 0 to 99.
+#   minRound  first round the shop sells it. 1 means from the pre-match shop;
+#             a later round locks the row ("Unlocks in round N") until then.
+#   ai        true lets the drone battery carry it. false keeps it player only.
+#   aiRound   first round drones carry it (they get a rack of 2 from then on).
+#             minRound is when the PLAYER can buy it; aiRound is when DRONES
+#             start firing it, so a shell can reach players before drones, or
+#             the other way round. 99 means never (use with ai: false).
+#   effect    what the shell does in flight:
+#               shot       a plain shell, bursts where it lands
+#               pellets    fires `pellets` shells at once, fanned by `spread`
+#               cluster    flies `fuse` seconds, then splits into `split`
+#                          bomblets fanned by `fan`; each deals subDmg with
+#                          blast subRadius
+#               proximity  bursts when within `prox` px of any tank
+#               seeker     bends toward the nearest tank, `steer` pixels per
+#                          second of sideways push
+#               pierce     passes through the first tank it hits
+#               emp        also drains `drain` fuel from every tank it touches
+#   speed     launch speed multiplier (1.0 is normal; 0.55 slow, 1.3 fast).
+#   flat      true flies on low gravity, so the arc is nearly a straight line.
+#             Optional; leave it out for normal arcs.
+#   note      one sentence for the shop and picker (max 120 characters; no
+#             en or em dashes).
+#   gfx       paint job, see below.
+#   Extra fields by effect (required for that effect; other effects ignore
+#   them):
+#     pellets: pellets (1 to 12), spread (radians between pellets, 0 to 1)
+#     cluster: fuse (seconds, 0.1 to 10), split (2 to 12), fan (radians,
+#              0 to 1), subDmg, subRadius
+#     proximity: prox (pixels)   seeker: steer   emp: drain (fuel)
+#
+# gfx fields (all colours are quoted "#rgb" or "#rrggbb")
+#   shell     the shell's body colour in flight, in the replayed volleys and
+#             in the picture icon beside its name.
+#   trail     the colour of the line it leaves behind, in flight and in the
+#             picture icon.
+#   blast     two colours, [outer, inner]. blast[0] is the colour of the spark
+#             burst thrown when the shell explodes in a solo game, and the
+#             edge of the glowing halo behind the shell in its picture icon;
+#             blast[1] is the centre of that icon halo only. The expanding
+#             disc drawn over the battlefield is a fixed orange and white for
+#             every shell, so neither colour recolours it.
+#   painter   how the picture icon draws the shell (battlefield shells are
+#             always a dot with a trail):
+#               disc   a round dot
+#               beam   a flat glowing streak, for flat or piercing shots
+#               spark  a dot ringed by six short spokes
+#             (pellets and cluster shells draw their own multi-dot icons.)
+#   shake     screen shake on an explosion in solo play and the range
+#             demos, 0 (none) to 1 (violent). Rooms shake by blast size.
+#
+# gear row fields
+#   key, name, cat, price, note   as for ammo (gear is always sold: no pack)
+#   n         the amount, read by the effect:
+#               repair     armor restored (banked for next round)
+#               fuel       driving fuel added
+#               plate      max armor added, ready next round
+#               shield     hits absorbed
+#               extralife  lives added (capped at 5 in play)
+#               jammer     rounds drones aim worse at you
+#               bunker     rounds every hit on you is halved
+#               laststand  1
+#   effect    repair, fuel, plate, shield, extralife, jammer, bunker, laststand
+#   minRound  optional, as for ammo
+#   dmg, radius  laststand only: the blast of the wreck when you go down
+arsenal:
+  ammo:
+    - key: shell
+      name: Shell
+      cat: Shells
+      dmg: 34
+      radius: 26
+      price: 0
+      pack: 0
+      minRound: 1
+      ai: true
+      aiRound: 1
+      effect: shot
+      speed: 1.0
+      note: Free, straight, honest.
+      gfx: {shell: "#ffe27a", trail: "#ffd75e", blast: ["#ffb13c", "#fff3c4"], painter: disc, shake: 0.3}
+
+    - key: buck
+      name: Buckshot
+      cat: Shells
+      dmg: 17
+      radius: 20
+      price: 80
+      pack: 2
+      minRound: 1
+      ai: true
+      aiRound: 2
+      effect: pellets
+      pellets: 3
+      spread: 0.1
+      speed: 1.0
+      note: Three pellets, forgiving aim.
+      gfx: {shell: "#ffd166", trail: "#ffb13c", blast: ["#ffb13c", "#fff3c4"], painter: disc, shake: 0.3}
+
+    - key: mortar
+      name: Mortar
+      cat: Shells
+      dmg: 56
+      radius: 42
+      price: 200
+      pack: 2
+      minRound: 1
+      ai: true
+      aiRound: 3
+      effect: shot
+      speed: 1.0
+      note: Big crater, slow shell.
+      gfx: {shell: "#ff9f43", trail: "#ff7b39", blast: ["#ff7b39", "#ffe27a"], painter: disc, shake: 0.5}
+
+    - key: rail
+      name: Rail
+      cat: Shells
+      dmg: 56
+      radius: 15
+      price: 140
+      pack: 2
+      minRound: 1
+      ai: true
+      aiRound: 5
+      effect: shot
+      flat: true
+      speed: 1.0
+      note: Flies fast and nearly flat.
+      gfx: {shell: "#9fd8ff", trail: "#9fd8ff", blast: ["#9fd8ff", "#ffffff"], painter: beam, shake: 0.3}
+
+    - key: cluster
+      name: Cluster
+      cat: Shells
+      dmg: 20
+      radius: 18
+      price: 220
+      pack: 2
+      minRound: 2
+      ai: true
+      aiRound: 4
+      effect: cluster
+      fuse: 0.9
+      split: 4
+      fan: 0.22
+      subDmg: 28
+      subRadius: 22
+      speed: 1.0
+      note: Splits into 4 bomblets mid-flight.
+      gfx: {shell: "#e0aaff", trail: "#c77dff", blast: ["#c77dff", "#fff3c4"], painter: spark, shake: 0.4}
+
+    - key: flak
+      name: Flak
+      cat: Shells
+      dmg: 44
+      radius: 30
+      price: 180
+      pack: 2
+      minRound: 3
+      ai: true
+      aiRound: 4
+      effect: proximity
+      prox: 34
+      speed: 1.0
+      note: Bursts next to anything it passes.
+      gfx: {shell: "#ff5964", trail: "#ff5964", blast: ["#ff5964", "#ffe27a"], painter: spark, shake: 0.4}
+
+    - key: seeker
+      name: Seeker
+      cat: Shells
+      dmg: 40
+      radius: 24
+      price: 260
+      pack: 2
+      minRound: 4
+      ai: true
+      aiRound: 6
+      effect: seeker
+      steer: 70
+      speed: 1.0
+      note: Bends toward the nearest tank.
+      gfx: {shell: "#80ffdb", trail: "#80ffdb", blast: ["#80ffdb", "#ffffff"], painter: disc, shake: 0.3}
+
+    - key: lance
+      name: Lance
+      cat: Shells
+      dmg: 52
+      radius: 14
+      price: 250
+      pack: 2
+      minRound: 4
+      ai: true
+      aiRound: 5
+      effect: pierce
+      flat: true
+      speed: 1.0
+      note: Flat bolt that punches through one tank.
+      gfx: {shell: "#f9f871", trail: "#f9f871", blast: ["#f9f871", "#ffffff"], painter: beam, shake: 0.3}
+
+    - key: heavy
+      name: Heavy
+      cat: Shells
+      dmg: 85
+      radius: 52
+      price: 350
+      pack: 2
+      minRound: 4
+      ai: true
+      aiRound: 6
+      effect: shot
+      speed: 0.55
+      note: Slow, huge, deletes hillsides.
+      gfx: {shell: "#ff8c42", trail: "#e8483f", blast: ["#e8483f", "#ffd75e"], painter: disc, shake: 0.7}
+
+    - key: needle
+      name: Needle
+      cat: Shells
+      dmg: 85
+      radius: 8
+      price: 120
+      pack: 1
+      minRound: 5
+      ai: true
+      aiRound: 6
+      effect: shot
+      speed: 1.3
+      note: Tiny blast, brutal direct hit.
+      gfx: {shell: "#ffffff", trail: "#caf0f8", blast: ["#ffffff", "#9fd8ff"], painter: beam, shake: 0.3}
+
+    - key: emp
+      name: EMP
+      cat: Shells
+      dmg: 30
+      radius: 30
+      price: 120
+      pack: 2
+      minRound: 3
+      ai: true
+      aiRound: 5
+      effect: emp
+      drain: 60
+      speed: 1.0
+      note: Fries 60 fuel on everything it touches.
+      gfx: {shell: "#72efdd", trail: "#72efdd", blast: ["#72efdd", "#ffffff"], painter: spark, shake: 0.3}
+
+    - key: nuke
+      name: NUKE
+      cat: Shells
+      dmg: 95
+      radius: 70
+      price: 500
+      pack: 1
+      minRound: 4
+      ai: false
+      aiRound: 99
+      effect: shot
+      speed: 1.0
+      note: Levels whole hillsides.
+      gfx: {shell: "#ff6b6b", trail: "#ff6b6b", blast: ["#ff6b6b", "#fff3c4"], painter: disc, shake: 0.9}
+  gear:
+    - key: repair
+      name: Repair +40 armor
+      cat: Hull and fuel
+      price: 120
+      n: 40
+      effect: repair
+      note: Restores 40 armor, banked for next round.
+
+    - key: fuel
+      name: Fuel +60
+      cat: Hull and fuel
+      price: 60
+      n: 60
+      effect: fuel
+      note: Adds 60 driving fuel.
+
+    - key: plate
+      name: Hull plate +25 max
+      cat: Hull and fuel
+      price: 300
+      n: 25
+      effect: plate
+      note: Raises max armor by 25, ready next round.
+
+    - key: shield
+      name: Shield (1 hit)
+      cat: Hull and fuel
+      price: 250
+      n: 1
+      effect: shield
+      note: Absorbs the next hit completely.
+
+    - key: extralife
+      name: Extra life
+      cat: Tricks
+      price: 1000
+      n: 1
+      effect: extralife
+      note: One more life, up to 5.
+
+    - key: jammer
+      name: Jammer (2 rounds)
+      cat: Tricks
+      price: 325
+      n: 2
+      effect: jammer
+      note: Drones aim twice as shaky at you.
+
+    - key: bunker
+      name: Bunker (2 rounds)
+      cat: Tricks
+      price: 450
+      n: 2
+      effect: bunker
+      note: Halves every hit you take.
+
+    - key: laststand
+      name: Last stand
+      cat: Tricks
+      price: 125
+      n: 1
+      effect: laststand
+      dmg: 50
+      radius: 44
+      note: Your wreck detonates when you go down.
+
+# --------------------------------------------------------------------------
+# keys
+# --------------------------------------------------------------------------
+# Every keyboard binding. Each action lists the key tokens that trigger it.
+# Contexts are checked in this order: scroll, then shop (only while buying),
+# then the held aim keys, fire, and last the global taps. A token may be
+# bound to one action per context; the same key can do different things in
+# different contexts (ArrowUp is power in aim and moves the row in the shop).
+#
+# Token syntax
+#   - A token is matched against the browser's event.code first (ArrowLeft,
+#     KeyA, Digit1, ControlLeft, Escape, Space, PageDown), then against
+#     event.key (a, A, 1, Enter, Escape, " "). A single letter matches either
+#     case, so "a" works with Shift or Caps Lock.
+#   - "Ctrl+F" needs the Control key held; the part after the plus is matched
+#     against event.code, then event.key, like any other token. While Control
+#     is held, Ctrl+ tokens are tried first; "Ctrl+F" never matches without
+#     Control.
+#   - The FIRST token of an action names the key on buttons, hints and help
+#     text (it is printed as a keycap: arrows show as triangles, KeyW as W,
+#     Escape as ESC, ControlLeft as Ctrl). Put the one you want shown first;
+#     later tokens are silent alternatives.
+#   - Quote digits ("1") and a lone space (" "), or YAML reads a number.
+#   - Touch-only screens ignore this whole section.
+# Only the actions below exist; each must have at least one token.
+keys:
+  aim:
+    barrelLeft: [ArrowLeft, Left]
+    barrelRight: [ArrowRight, Right]
+    powerUp: [ArrowUp, KeyW, Up, w]
+    powerDown: [ArrowDown, KeyS, Down, s]
+    driveLeft: [KeyA, a]
+    driveRight: [KeyD, d]
+  shop:
+    selUp: [ArrowUp, Up]
+    selDown: [ArrowDown, Down]
+    qtyUp: [ArrowRight, Right]
+    qtyDown: [ArrowLeft, Left]
+    buyRow: ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
+    buy: [b, Enter]
+    preview: [v, p]
+    close: [Escape]
+    next: [n]
+  global:
+    music: [m]
+    sound: [e]
+    log: [l]
+    help: [h]
+    report: [r]
+    menu: [c]
+    random: [t]
+    rooms: [o]
+    new: [n]
+    cycle: [q]
+    guns: [g]
+    tutorial: [u]
+    battlePreview: [v]
+    fullscreen: [f]
+    fire: [ControlLeft, ControlRight, Control, Space, " "]
+    escape: [Escape]
+  scroll:
+    lineDown: [j]
+    lineUp: [k]
+    pageDown: [PageDown, Ctrl+F]
+    pageUp: [PageUp, Ctrl+B]
+    halfDown: [Ctrl+D]
+    halfUp: [Ctrl+U]
+
+# --------------------------------------------------------------------------
+# audio
+# --------------------------------------------------------------------------
+# Optional sound files. The game works with none of them: every sound effect
+# has a built-in synthesized voice, and the music has built-in synthesized
+# songs. A file that is listed but missing, blocked or undecodable is simply
+# skipped and the built-in sound plays. Nothing is downloaded until the
+# player's first tap or key press, and sound effects are not fetched while
+# the Sound toggle is off, nor music while the Music toggle is off.
+#
+# Paths are relative to this folder (games/tankity/), must stay inside it
+# and end in .mp3, .ogg, .m4a or .wav. Use mp3 for the widest browser
+# support. Keep sound effects tiny (a few KB; they are decoded in memory) and
+# stream-sized music at about 80 kbps. The generator checks that each file
+# exists. Where each file came from, its author and its licence are recorded
+# in audio/CREDITS.md; add a line there for every file you add, and only add
+# files that are CC0 or otherwise free to redistribute.
+#
+# sfx: one entry per event. An event with no file (or left out) keeps its
+# synthesized sound. Events and when they play:
+#   move     a tiny tick while driving         click    menu and shop taps
+#   launch   a shell leaves the barrel         boom     any explosion
+#   clank    a tank takes a hit                thud     a blocked or empty action
+#   warn     an error or refused action        cash     a purchase
+#   bark     a drone speaks                    win      a round is won
+#   lose     a life is lost                    fanfare  the match ends in glory
+#   file     path to the sound.
+#   volume   0 (silent) to 1 (full), default 1.
+# Effects are always played through the Sound toggle (E).
+#
+# music: an ordered playlist. The next track starts when one ends and the
+# list loops. Each track:
+#   file     path to the track (required).
+#   title    shown in the log when the track starts (required, max 60).
+#   volume   0 to 1, default 1.
+#   credit   optional author line shown beside the title (max 120).
+# With an empty list, or when no track can play, the built-in songs play and
+# follow the round as before. The Music toggle (M) pauses and resumes it.
+audio:
+  sfx:
+    move: {file: audio/sfx/move.mp3, volume: 0.3}
+    click: {file: audio/sfx/click.mp3, volume: 0.6}
+    launch: {file: audio/sfx/launch.mp3, volume: 0.7}
+    boom: {file: audio/sfx/boom.mp3, volume: 0.9}
+    clank: {file: audio/sfx/clank.mp3, volume: 0.8}
+    thud: {file: audio/sfx/thud.mp3, volume: 0.8}
+    warn: {file: audio/sfx/warn.mp3, volume: 0.7}
+    cash: {file: audio/sfx/cash.mp3, volume: 0.7}
+    bark: {file: audio/sfx/bark.mp3, volume: 0.6}
+    win: {file: audio/sfx/win.mp3, volume: 0.7}
+    lose: {file: audio/sfx/lose.mp3, volume: 0.7}
+    fanfare: {file: audio/sfx/fanfare.mp3, volume: 0.7}
+  music:
+    - file: audio/music/battle-theme-a.mp3
+      title: Battle Theme A
+      volume: 0.6
+      credit: cynicmusic, CC0
+    - file: audio/music/chiptune-level-1.mp3
+      title: Action Chiptune 1
+      volume: 0.6
+      credit: Juhani Junkala, CC0
+    - file: audio/music/awake-megawall-10.mp3
+      title: "Awake! (Megawall-10)"
+      volume: 0.6
+      credit: cynicmusic, CC0
+    - file: audio/music/chiptune-level-3.mp3
+      title: Action Chiptune 3
+      volume: 0.6
+      credit: Juhani Junkala, CC0

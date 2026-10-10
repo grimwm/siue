@@ -72,8 +72,10 @@ accent_color: "#ffc93c"           # optional #rgb/#rrggbb navbar accent on the s
     the game folder as scope. It precaches the folder's `.html .js .css .json
     .png` files (not tests, `og.png`, or `sw.js`) so the game opens offline,
     and otherwise asks the network first, so online players always get the
-    current files. `.php` requests and non-GET requests never touch the cache,
-    so rooms and high scores stay online-only. The cache name carries a hash
+    current files. `.php` requests, non-GET requests and Range requests
+    (streamed music) never touch the cache, so rooms and high scores stay
+    online-only; other files a game fetches whole (small sound effects) are
+    cached the first time they load. The cache name carries a hash
     of the precached files; rerun the tool after editing any of them, or
     `--check` (run by `make test` and `make deploy`) reports the game stale.
     Registration does nothing where service workers are unavailable.
@@ -81,6 +83,12 @@ accent_color: "#ffc93c"           # optional #rgb/#rrggbb navbar accent on the s
     page at `?game=<id>` with the site root as scope. `main.js` links that
     manifest when the game launches, so installing from there installs the
     game, not the whole site.
+- Per-game data: Operation Tankity keeps its arsenal, key bindings and audio
+  in `games/tankity/game.yaml` and serves `game.json`, written by
+  `php tools/tankity-config.php` (`--check` runs in `make test` and
+  `make deploy`). See `games/tankity/README.md`.
+- Deploys skip `README.md` files and `games/tankity/game.yaml`; nothing at
+  runtime reads them.
 - Every card opens, and **Copy link** copies, the game's site page
   (`play/<id>/`). The game's own page (`games/<id>/`) still runs on its own,
   without the navbar.

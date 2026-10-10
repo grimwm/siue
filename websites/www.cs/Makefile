@@ -21,7 +21,7 @@ help:
 	@echo "  down   - Stop the local site"
 	@echo "  url    - Print the local site's URL (its port is ephemeral)"
 	@echo "  parity - Check the docker PHP against www.cs.siue.edu's modules/ini"
-	@echo "  test   - Unit suites: games hub, share tags, Tankity (needs make up)"
+	@echo "  test   - Unit suites: games hub, share tags, Tankity (incl. game.yaml) (needs make up)"
 	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL"
 
 deploy:
@@ -47,6 +47,8 @@ parity:
 test:
 	php tests/games-hub-test.php
 	php tests/game-share-tags-test.php
+	php tests/tankity-config-test.php
+	php tools/tankity-config.php --check
 	php tools/game-share-tags.php --check
 	cd games/tankity && node smoke-test.js && php config-test.php && php rooms-sim-test.php
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php rooms-test.php'

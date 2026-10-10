@@ -49,10 +49,9 @@ test('every shop row carries a painted icon, and the HUD shows the loaded shell'
   const after = await loaded();
   expect(after.sig).not.toBe(before.sig);
   expect(after.n).toBeGreaterThan(80);
-  // The words stay in the HUD for readers and tests, favorites carry icons too.
+  // The words stay in the HUD for readers and tests; the status bar has no favorites row.
   expect(await hud(page, 'hud-weapon')).toMatch(/^Buckshot ×\d+ · also Shell ∞/);
-  expect(await page.locator('#hud-favs .chip canvas').count()).toBe(4);
-  expect(await hud(page, 'hud-favs')).toMatch(/^1 /);
+  expect(await page.locator('#hud-favs').count()).toBe(0);
   await page.locator('.hudbar').first().screenshot({ path: 'test-results/tankity-hud-icons.png' });
   expect(errors).toEqual([]);
 });

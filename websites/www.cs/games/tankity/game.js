@@ -44,7 +44,7 @@ const TUNE = {
 // side gets the same guarantee for free. */
 Object.freeze(TUNE);
 
-/* ---------- cheap-but-awesome audio: all synthesized, zero assets ---------- */
+/* ---------- audio: synthesized voices and songs, optionally replaced by files ---------- */
 let AC = null;
 let soundMuted = false;
 let musicMuted = false;
@@ -110,8 +110,9 @@ function noise(dur, vol, filterFreq, slideTo, when, cx) {
     src.stop(t + dur + 0.02);
   } catch (_) { /* silent */ }
 }
-/* SFX bank: every battlefield event gets a voice. */
-const SFX = {
+/* Synthesized SFX bank: every battlefield event gets a voice. A sound file
+   from game.json's audio.sfx replaces a voice (see SFX below). */
+const SYNTH = {
   move() { blip(190, 0.03, 'square', 0.012); },
   click() { blip(700, 0.04, 'square', 0.03); },
   launch() { noise(0.3, 0.1, 900, 4200); blip(120, 0.28, 'sine', 0.09, 320); },
@@ -130,10 +131,76 @@ const SFX = {
   },
 };
 
+/* ---------- audio files: game.json's audio section (optional) ---------- */
+/* Nothing here is requested before the player's first tap or key press. Sound
+   files load when the first effect plays with the Sound toggle on; music
+   loads when it starts with the Music toggle on. Anything that fails to load
+   leaves the synthesized sound in place. */
+let gestured = false;
+const SFX_FILES = {}; // event -> { file, volume, state: idle | loading | ready | failed, buf }
+let MUSIC_LIST = []; // [{ file, title, volume, credit }]
+let trackIdx = 0;
+let trackEl = null;
+let trackFails = 0;
+const FALLBACK_AUDIO = { sfx: {}, music: [] };
+function applyAudio(a) {
+  a = a || FALLBACK_AUDIO;
+  for (const name of Object.keys(SFX_FILES)) delete SFX_FILES[name];
+  for (const name of Object.keys(SYNTH)) {
+    const e = a.sfx && a.sfx[name];
+    if (e && typeof e.file === 'string') {
+      SFX_FILES[name] = { file: e.file, volume: typeof e.volume === 'number' ? e.volume : 1, state: 'idle', buf: null };
+    }
+  }
+  MUSIC_LIST = (Array.isArray(a.music) ? a.music : []).filter(t => t && typeof t.file === 'string');
+  trackIdx = 0;
+  trackFails = 0;
+  // The list can arrive after the synth began: hand the music over.
+  if (musicOn && trackMode()) { stopSynth(); playTrack(); }
+}
+function loadSfx() {
+  if (!gestured || soundMuted) return;
+  const ac = audioCtx();
+  if (!ac || typeof fetch !== 'function') return;
+  for (const s of Object.values(SFX_FILES)) {
+    if (s.state !== 'idle') continue;
+    s.state = 'loading';
+    fetch(s.file)
+      .then(r => { if (!r.ok) throw new Error('missing'); return r.arrayBuffer(); })
+      .then(b => new Promise((res, rej) => { const p = ac.decodeAudioData(b, res, rej); if (p && p.then) p.then(res, rej); }))
+      .then(buf => { s.buf = buf; s.state = 'ready'; })
+      .catch(() => { s.state = 'failed'; });
+  }
+}
+/* True when a file voiced the event; false hands it to the synthesizer. */
+function playSample(name) {
+  const s = SFX_FILES[name];
+  if (!s || soundMuted) return false;
+  if (s.state === 'idle') loadSfx(); // this one plays synthesized; the rest wait for the files
+  if (s.state !== 'ready') return false;
+  const ac = audioCtx();
+  if (!ac) return false;
+  try {
+    const src = ac.createBufferSource();
+    src.buffer = s.buf;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(s.volume, ac.currentTime);
+    src.connect(g);
+    g.connect(ac.destination);
+    src.start();
+    return true;
+  } catch (_) { return false; }
+}
+const SFX = {};
+for (const name of Object.keys(SYNTH)) {
+  SFX[name] = () => { if (!playSample(name)) SYNTH[name](); };
+}
+
 /* Punchy procedural war-grooves: four songs of 32 steps (two bars each),
  * four-on-the-floor kick with click, layered snare, driving saw bass, crash
- * every two bars. 142 BPM, zero assets. The round picks the song, so the
- * soundtrack turns over instead of looping one riff all match. */
+ * every two bars. 142 BPM. The built-in music: it plays when game.json lists
+ * no tracks or none can play, and the round picks the song so the soundtrack
+ * turns over instead of looping one riff all match. */
 const SONGS = [
   { name: 'Rollout',
     bass: [55, 0, 55, 55, 0, 65.41, 0, 55, 0, 49, 0, 49, 0, 58.27, 0, 73.42,
@@ -207,18 +274,73 @@ function musicStep() {
     }
   } catch (_) { /* silent */ }
 }
+/* A playlist plays when game.json lists tracks, an <audio> element exists
+   and the list has not failed end to end; otherwise the synth songs play. */
+function trackMode() {
+  return MUSIC_LIST.length > 0 && trackFails < MUSIC_LIST.length && typeof Audio === 'function';
+}
+function playTrack() {
+  if (!musicOn || musicMuted || !gestured || !trackMode()) return;
+  const t = MUSIC_LIST[trackIdx % MUSIC_LIST.length];
+  try {
+    if (!trackEl) {
+      trackEl = new Audio();
+      trackEl.preload = 'none';
+      trackEl.addEventListener('ended', nextTrack);
+      trackEl.addEventListener('error', trackFailed);
+      trackEl.addEventListener('playing', () => {
+        trackFails = 0;
+        if (trackEl._announce) {
+          trackEl._announce = false;
+          const cur = MUSIC_LIST[trackIdx % MUSIC_LIST.length];
+          if (cur) say(`Now playing: ${cur.title || cur.file}${cur.credit ? ` (${cur.credit})` : ''}.`, 'info');
+        }
+      });
+    }
+    if (trackEl._file !== t.file) {
+      trackEl._file = t.file;
+      trackEl._announce = true;
+      trackEl.src = t.file;
+    }
+    trackEl.volume = typeof t.volume === 'number' ? t.volume : 1;
+    const p = trackEl.play();
+    // A refused play (no gesture yet) is retried by the next tap or key.
+    if (p && p.catch) p.catch(() => {});
+  } catch (_) { trackFailed(); }
+}
+function nextTrack() {
+  trackIdx = (trackIdx + 1) % Math.max(1, MUSIC_LIST.length);
+  playTrack();
+}
+function trackFailed() {
+  trackFails++;
+  if (trackMode()) { nextTrack(); return; }
+  // Every track failed: the built-in songs take over.
+  if (trackEl) { trackEl.pause(); trackEl = null; }
+  if (musicOn && !musicMuted) startSynth();
+}
+function startSynth() {
+  const ac = audioCtx();
+  if (!ac) return;
+  stepIdx = 0;
+  nextNoteT = ac.currentTime + 0.06;
+  if (!musicTimer) musicTimer = setInterval(musicStep, 60);
+}
+function stopSynth() {
+  if (musicTimer) { clearInterval(musicTimer); musicTimer = 0; }
+}
 function startMusic() {
   if (musicMuted) return;
   const ac = audioCtx();
   if (!ac || musicOn) return;
   musicOn = true;
-  stepIdx = 0;
-  nextNoteT = ac.currentTime + 0.06;
-  if (!musicTimer) musicTimer = setInterval(musicStep, 60);
+  if (trackMode()) playTrack();
+  else startSynth();
 }
 function stopMusic() {
   musicOn = false;
-  if (musicTimer) { clearInterval(musicTimer); musicTimer = 0; }
+  stopSynth();
+  if (trackEl) trackEl.pause();
 }
 
 /* ---------- dialogue: subtitled trash-talk, kid-friendly ---------- */
@@ -346,10 +468,11 @@ function pumpDialogue(dt) {
   }
 }
 /* ---------- weapons ---------- */
-/* The arsenal lives in weapons.json, not here: ballistics, prices, packs,
-// unlock rounds, AI access, blurbs, and paint jobs all come from that file
-// so adding a shell never touches this code. Until it arrives (or when it
-// cannot, e.g. file:// play), this baked fallback keeps the war rolling. */
+/* The arsenal lives in game.yaml (served as game.json), not here: ballistics,
+// prices, packs, unlock rounds, AI access, blurbs, and paint jobs all come
+// from that file so adding a shell never touches this code. Until it arrives
+// (or when it cannot, e.g. file:// play), this baked fallback, shaped like
+// game.json's arsenal section, keeps the war rolling. */
 const FALLBACK_ARSENAL = {
   ammo: [
     { key: 'shell', name: 'Shell', cat: 'Shells', dmg: 34, radius: 26, price: 0, pack: 0, minRound: 1, ai: true, aiRound: 1, effect: 'shot', speed: 1.0, note: 'Free, straight, honest.', gfx: { shell: '#ffe27a', trail: '#ffd75e', blast: ['#ffb13c', '#fff3c4'], painter: 'disc', shake: 0.3 } },
@@ -404,18 +527,26 @@ function buildArsenal(data) {
   G.shopSel = clamp(G.shopSel || 0, 0, SHOP.length - 1);
   return true;
 }
-async function loadArsenal() {
+function applyArsenal(data) {
+  if (data && Array.isArray(data.ammo) && data.ammo.length && buildArsenal(data)) {
+    say(`Arsenal loaded: ${WORDER.length} shells, ${Object.keys(GEAR).length} tricks.`, 'info');
+    if (G.phase === 'shop') renderShop();
+    renderHUD();
+  }
+}
+/* One file feeds the client: arsenal, keys and audio all come from
+   game.json (written from game.yaml). Any part that is missing or fails
+   leaves that part's baked fallback in charge. */
+async function loadGameConfig() {
   try {
-    const res = await fetch('weapons.json', { headers: { Accept: 'application/json' } });
+    const res = await fetch('game.json', { headers: { Accept: 'application/json' } });
+    if (!res.ok) return;
     const data = await res.json();
-    if (data && Array.isArray(data.ammo) && data.ammo.length) {
-      if (buildArsenal(data)) {
-        say(`Arsenal loaded: ${WORDER.length} shells, ${Object.keys(GEAR).length} tricks.`, 'info');
-        if (G.phase === 'shop') renderShop();
-        renderHUD();
-      }
-    }
-  } catch (_) { /* the fallback arsenal above keeps the war rolling */ }
+    if (!data) return;
+    applyArsenal(data.arsenal);
+    applyKeys(data.keys);
+    applyAudio(data.audio);
+  } catch (_) { /* the baked fallbacks keep the war rolling */ }
 }
 
 /* ---------- state ---------- */
@@ -428,7 +559,7 @@ const G = {
   wind: 0, round: 1, firstTurn: 0,
   lives: TUNE.lives, score: 0, cash: 0, nextOneUp: TUNE.oneUpEvery,
   roundsWon: 0, ammo: null, selected: 'shell',
-  favs: ['shell', 'buck', 'mortar', 'rail'], shopSel: 0, shopQty: 1,
+  shopSel: 0, shopQty: 1,
   fuelBank: 0, repairBank: 0,
   plate: 0, shield: false, jammer: 0, bunker: 0, laststand: false,
   time: 0, shake: 0,
@@ -514,7 +645,6 @@ function resetMatch(seedStr) {
   G.ammo = { shell: Infinity, buck: 1 };
   for (const k of WORDER) if (!(k in G.ammo)) G.ammo[k] = 0;
   G.selected = 'shell';
-  G.favs = ['shell', 'buck', 'mortar', 'rail'].filter(k => k in WEAPONS);
   G.shopSel = 0;
   G.shopQty = 1;
   G.fuelBank = 0;
@@ -1298,7 +1428,7 @@ function shopSub2(it, locked) {
       return it.label;
   }
 }
-/* One direct loader for digits and favorites; Q keeps cycling through it. */
+/* One direct loader for the weapon picker; Q keeps cycling through it. */
 function selectWeapon(w) {
   if (G.over || G.phase === 'shop' || demoBlock()) return false;
   if (NET.on) return netPick(w);
@@ -2196,7 +2326,7 @@ function drawGearIcon(cv, gkey) {
       c.fillRect(cx - 8, cy - 8, 16, 16);
   }
 }
-/* The loaded weapon and the favorites: each shell beside its name. Text
+/* The loaded weapon: the shell beside its name. Text
    stays in every chip (screen readers, and the stub DOM which has no
    replaceChildren), icons are decoration. Redraws only when the text moves. */
 function setChips(el, chips) {
@@ -2244,8 +2374,6 @@ function renderLoadout() {
       sr: rack.length ? ` · also ${rack.join(' · ')}` : '',
     }]);
   }
-  const favs = $('hud-favs');
-  if (favs) setChips(favs, G.favs.map((w, i) => ({ w, text: `${i + 1}`, sr: ` ${WEAPONS[w].name}`, title: `${i + 1}: ${WEAPONS[w].name}` })));
 }
 /* Whose turn the battlefield shows: the shooter of a replaying volley, else
    the tank whose turn it is. Nobody between rounds or after the match. */
@@ -4076,7 +4204,8 @@ async function fileReport(name) {
 }
 
 /* ---------- input + init ---------- */
-/* Every binding lives in keys.json; this frozen copy keeps the exact same
+/* Every binding lives in game.yaml's keys section (served as game.json);
+// this frozen copy, shaped like game.json's keys section, keeps the exact same
 // defaults working when the file cannot load. Actions are named by effect,
 // and each lists its accepted tokens in label order (first one shows). */
 const FALLBACK_KEYS = Object.freeze({
@@ -4102,7 +4231,7 @@ const FALLBACK_KEYS = Object.freeze({
   global: Object.freeze({
     music: ['m'], sound: ['e'], log: ['l'], help: ['h'],
     report: ['r'], menu: ['c'], random: ['t'], rooms: ['o'], new: ['n'],
-    cycle: ['q'], guns: ['g'], tutorial: ['u'], fav: ['1', '2', '3', '4'],
+    cycle: ['q'], guns: ['g'], tutorial: ['u'],
     battlePreview: ['v'], fullscreen: ['f'],
     fire: ['ControlLeft', 'ControlRight', 'Control', 'Space', ' '],
     escape: ['Escape'],
@@ -4125,17 +4254,12 @@ function buildKeymap(def) {
   }
   return rev;
 }
-async function loadKeys() {
-  try {
-    const r = await fetch('keys.json');
-    if (!r.ok) return;
-    const def = await r.json();
-    if (!def || !def.aim || !def.shop || !def.global || !def.scroll) return;
-    KEYS = def;
-    KEYMAP = buildKeymap(def);
-    renderKeyHints();
-    renderTutorialText();
-  } catch (err) { /* the frozen fallback above stays in charge */ }
+function applyKeys(def) {
+  if (!def || !def.aim || !def.shop || !def.global || !def.scroll) return;
+  KEYS = def;
+  KEYMAP = buildKeymap(def);
+  renderKeyHints();
+  renderTutorialText();
 }
 /* One token in, one printable cap out: arrows show as glyphs, codes shed
 // their Key/Digit prefix, lone letters go uppercase, chords join with +. */
@@ -4175,7 +4299,7 @@ function keyHint(ctx, action, idx) {
   const t = tokens[idx || 0];
   return t === undefined ? '' : keycap(t);
 }
-/* Fill every [data-keyhint] span at boot and again if keys.json loads late,
+/* Fill every [data-keyhint] span at boot and again if game.json loads late,
 // so labels can never drift from behavior. */
 function renderKeyHints() {
   document.querySelectorAll('[data-keyhint]').forEach(el => {
@@ -4257,7 +4381,7 @@ function bindKeys() {
       const args = { lineDown: [1, 0], lineUp: [-1, 0], pageDown: [0, 1], pageUp: [0, -1], halfDown: [0, 0.5], halfUp: [0, -0.5] }[sc];
       if (args && scrollOverlay(args[0], args[1])) { e.preventDefault(); return; }
     }
-    // The shop answers to its own keys from keys.json; everything else falls
+    // The shop answers to its own keys from game.json; everything else falls
     // through to the usual keys below. Qty keys pick how many packs ride on
     // every buy, capped at what the chest can cover for that row.
     if (G.phase === 'shop' && !G.over && !e.repeat) {
@@ -4358,20 +4482,6 @@ function bindKeys() {
     case 'cycle': cycleWeapon(); if (gunsOpen()) renderGuns(); return;
     case 'guns': if (gunsOpen()) closeGuns(); else openGuns(); return;
     case 'tutorial': tutorialOpen(); return;
-    // Digits pick a favorite shell; hold Shift to pin the loaded one there.
-    case 'fav':
-      if (G.phase === 'aim') {
-        const i = +k - 1;
-        if (e.shiftKey) {
-          G.favs[i] = G.selected;
-          SFX.click();
-          say(`Slot ${k} now holds ${WEAPONS[G.selected].name}.`, 'info');
-          renderHUD();
-        } else {
-          selectWeapon(G.favs[i]);
-        }
-      }
-      return;
     case 'battlePreview': togglePreview(); return;
     case 'fullscreen': toggleFullscreen(); return;
     default: return;
@@ -4478,8 +4588,7 @@ function holdButton(id, act) {
 function init() {
   if (TOUCH) document.documentElement.classList.add('touch');
   bindKeys();
-  loadArsenal();
-  loadKeys();
+  loadGameConfig();
   G.body = loadBody();
   renderUnitPicker();
   loadTextSize();
@@ -4625,7 +4734,16 @@ function init() {
   // Any touch or keypress unlocks the speakers and (re)starts a non-muted
   // song, so music never sits claiming to play while silent after a refresh.
   // This fires before the game keys, and starting twice is a harmless no-op.
-  const kickAudio = () => { ctx(); if (!musicMuted && !musicOn) startMusic(); };
+  const kickAudio = ev => {
+    gestured = true;
+    ctx();
+    // A first tap that turns the music off must not fetch a track.
+    const hit = ev.type === 'keydown' ? lookupKey('global', ev)
+      : (ev.target && ev.target.closest && ev.target.closest('#btn-music') ? 'music' : '');
+    if (musicMuted || hit === 'music') return;
+    if (!musicOn) startMusic();
+    else if (trackMode()) playTrack(); // a play refused before the first gesture
+  };
   window.addEventListener('pointerdown', kickAudio, true);
   window.addEventListener('keydown', kickAudio, true);
   window.addEventListener('pagehide', netSendLeave);

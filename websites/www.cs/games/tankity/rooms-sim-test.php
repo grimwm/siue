@@ -58,7 +58,7 @@ $check('repair-above-max', $me['hp'] === 165 && $me['maxHp'] === 165, "hp={$me['
 $check('fuel-banked', $me['fuel'] === 140.0, 'fuel=' . $me['fuel']);
 $check('drone-untouched', $room['tanks'][1]['hp'] === 60);
 
-// Last stand's wreck blast reads its numbers from weapons.json.
+// Last stand's wreck blast reads its numbers from game.json.
 $ls = room_gear('laststand');
 $check('laststand-blast-from-data', isset($ls['dmg'], $ls['radius']) && (int) $ls['dmg'] > 0 && (float) $ls['radius'] > 0,
     'dmg=' . ($ls['dmg'] ?? '?') . ' radius=' . ($ls['radius'] ?? '?'));

@@ -37,6 +37,13 @@ if ! php tools/game-share-tags.php --check; then
   exit 1
 fi
 
+# Tankity's data is edited in game.yaml and served as game.json: refuse a stale
+# or invalid one.
+if ! php tools/tankity-config.php --check; then
+  echo "deploy: run php tools/tankity-config.php and commit the result" >&2
+  exit 1
+fi
+
 work=$(mktemp -d "${TMPDIR:-/tmp}/www-cs-deploy.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 stage=$work/stage
@@ -53,8 +60,10 @@ while IFS= read -r -d '' f; do
   [ -e "$f" ] || continue # deleted but still in the index
   case "$f" in
     "$SCORES") continue ;;
-    # Development files that ride along with games: tests and handoff notes.
-    games/*-test.* | games/*/HANDOFF.md) continue ;;
+    # Development files that ride along with games: tests, maintainer notes
+    # (README.md), and games/tankity/game.yaml, whose runtime form is the
+    # generated game.json (nothing fetches the YAML).
+    games/*-test.* | games/README.md | games/*/README.md | games/tankity/game.yaml) continue ;;
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).
     play/*) ;;

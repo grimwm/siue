@@ -377,9 +377,10 @@ const bodyOf = entry => JSON.parse(entry.init.body);
   const ev = t => ({ t });
   check('opener-kinds', ['fire', 'aifire', 'auto'].every(t => isVolleyOpener({ t })) && !isVolleyOpener({ t: 'hit' }) && !isVolleyOpener({ t: 'shot' }));
 
-  check('catch-up-wanted-when-hidden', shouldCatchUp(true, []) === true);
-  check('catch-up-wanted-with-two-volleys-waiting', shouldCatchUp(false, [op('fire'), ev('shot'), op('aifire'), ev('shot')]) === true);
-  check('catch-up-not-wanted-for-one-volley', shouldCatchUp(false, [op('fire'), ev('shot'), ev('hit')]) === false);
+  check('catch-up-wanted-when-hidden', shouldCatchUp(true) === true);
+  // A visible tab plays everything: a human's shot and the drones' answers
+  // arrive in one reply, and none of them may be skipped.
+  check('visible-tab-never-catches-up', shouldCatchUp(false) === false);
 
   const play = (turn) => ({ phase: 'play', turn });
   const queue = [op('fire', 0), ev('shot'), ev('hit'), op('aifire'), ev('shot'), op('aifire'), ev('shot'), ev('kill')];

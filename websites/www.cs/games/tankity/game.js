@@ -3984,6 +3984,10 @@ function openRooms() {
   SFX.click();
   openLobby();
 }
+/* Another panel (menu, help, report, log) open above the shop takes the keys. */
+function shopCovered() {
+  return ['menu-overlay', 'help-overlay', 'report-overlay', 'log-overlay'].some(id => { const el = $(id); return el && !el.hidden; });
+}
 function bindKeys() {
   if (TOUCH) return;
   window.addEventListener('keydown', e => {
@@ -3995,6 +3999,15 @@ function bindKeys() {
     // panel open the keys fall through untouched. Arrows are never scroll keys:
     // they keep their aim and shop jobs.
     const sc = lookupKey('scroll', e);
+    // In the shop the line keys walk the rows, like the arrows; paging
+    // still scrolls.
+    if ((sc === 'lineDown' || sc === 'lineUp') && G.phase === 'shop' && !G.over && !G.preview && !shopCovered()) {
+      e.preventDefault();
+      G.shopSel = clamp(G.shopSel + (sc === 'lineUp' ? -1 : 1), 0, SHOP.length - 1);
+      SFX.click();
+      renderShop();
+      return;
+    }
     if (sc) {
       const args = { lineDown: [1, 0], lineUp: [-1, 0], pageDown: [0, 1], pageUp: [0, -1], halfDown: [0, 0.5], halfUp: [0, -0.5] }[sc];
       if (args && scrollOverlay(args[0], args[1])) { e.preventDefault(); return; }

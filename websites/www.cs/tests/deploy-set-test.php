@@ -24,7 +24,7 @@ foreach (['games/tankity/fx.js', 'games/tankity/js/sim.js', 'games/tankity/js/ne
     $check("ships $f", isset($set[$f]));
 }
 // Cylon: the entry module, the compiled modules it imports, its page pieces and server.
-foreach (['games/cylon/cylon.js', 'games/cylon/js/rules.js', 'games/cylon/js/playfield.js', 'games/cylon/js/scores.js', 'games/cylon/cylon.css', 'games/cylon/mount.html', 'games/cylon/scores.php', 'games/cylon/manifest.webmanifest'] as $f) {
+foreach (['games/cylon/cylon.js', 'games/cylon/js/rules.js', 'games/cylon/js/playfield.js', 'games/cylon/js/scores.js', 'games/cylon/js/state.js', 'games/cylon/js/intro.js', 'games/cylon/cylon.css', 'games/cylon/mount.html', 'games/cylon/scores.php', 'games/cylon/manifest.webmanifest'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
 // The site's own scripts: compiled from src/, served from the root and play/.
@@ -52,8 +52,8 @@ foreach ($sheets as $abs) {
 foreach (['games/tankity/fx-editor.html', 'games/tankity/fx-editor.js', 'games/tankity/fx-editor.css', 'games/tankity/fx/blender/render_fx.py', 'games/tankity/game.yaml', 'games/tankity/README.md', 'games/tankity/smoke-test.js', 'games/tankity/protocol/generate.php', 'games/tankity/protocol/play-my-turn.json', 'games/tankity/protocol/sim-vectors.php', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/sim-vectors-test.js', 'games/tankity/audio-test.js', 'games/tankity/render-test.js', 'games/tankity/net-test.js', 'games/tankity/input-test.js', 'games/tankity/protocol-test.js', 'games/tankity/ui-test.js', 'games/tankity/vendor-test.js',
     'games/tankity/src/sim.ts', 'games/tankity/src/audio.ts', 'games/tankity/src/render.ts', 'games/tankity/src/net.ts', 'games/tankity/src/input.ts', 'games/tankity/src/ui/shop.tsx', 'games/tankity/src/ui/help.tsx', 'games/tankity/src/ui/chrome.tsx', 'games/tankity/src/protocol.ts', 'games/tankity/src/protocol-fixtures.check.ts', 'games/tankity/src/tsconfig.dom.json', 'games/tankity/src/tsconfig.check.json', 'games/tankity/tsconfig.json', 'games/tankity/package.json', 'games/tankity/package-lock.json',
     'games/tankity/tools/ts-build.mjs', 'games/tankity/tools/vendor.mjs', 'games/tankity/tools/dom-stub.mjs', 'games/tankity/.gitignore',
-    'games/cylon/src/rules.ts', 'games/cylon/src/playfield.ts', 'games/cylon/src/scores.ts', 'games/cylon/src/tsconfig.dom.json', 'games/cylon/tsconfig.json', 'games/cylon/package.json', 'games/cylon/package-lock.json',
-    'games/cylon/tools/ts-build.mjs', 'games/cylon/tools/install-files.php', 'games/cylon/.gitignore', 'games/cylon/README.md', 'games/cylon/install-files-test.php', 'games/cylon/rules-test.js', 'games/cylon/playfield-test.js', 'games/cylon/scores-test.js', 'games/cylon/smoke-test.js',
+    'games/cylon/src/rules.ts', 'games/cylon/src/playfield.ts', 'games/cylon/src/scores.ts', 'games/cylon/src/state.ts', 'games/cylon/src/intro.ts', 'games/cylon/src/tsconfig.dom.json', 'games/cylon/tsconfig.json', 'games/cylon/package.json', 'games/cylon/package-lock.json',
+    'games/cylon/tools/ts-build.mjs', 'games/cylon/tools/install-files.php', 'games/cylon/.gitignore', 'games/cylon/README.md', 'games/cylon/install-files-test.php', 'games/cylon/rules-test.js', 'games/cylon/playfield-test.js', 'games/cylon/scores-test.js', 'games/cylon/state-test.js', 'games/cylon/smoke-test.js',
     'games/crete/src/engine.ts', 'games/crete/src/audio.ts', 'games/crete/src/ui.ts', 'games/crete/src/tsconfig.dom.json', 'games/crete/tsconfig.json', 'games/crete/package.json', 'games/crete/package-lock.json',
     'src/main.ts', 'src/play/play.ts', 'tsconfig.json', 'package.json', 'package-lock.json', 'tools/ts-build.mjs',
     'games/crete/tools/ts-build.mjs', 'games/crete/tools/install-files.php', 'games/crete/.gitignore', 'games/crete/README.md', 'games/crete/install-files-test.php', 'games/crete/engine-test.js', 'games/crete/smoke-test.js'] as $f) {

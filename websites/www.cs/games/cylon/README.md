@@ -58,14 +58,20 @@ php tools/install-files.php                # then rewrite the ?v= versions insid
 | --- | --- | --- |
 | `rules` | kill level, difficulty factor, drone cap, missile caps and delays, nuke delay, wave plan, hull points and tint, volume curve | DOM-free |
 | `playfield` | the playable box, clear spots, entry edges, where a march begins | DOM-free |
+| `state` | the `Schedule` of due-at moments (missile, nuke, heal, grenade and raptor cooldowns, the eye's disorientation) and the `RunState` (kills, hull hits, run clock, game over, pending score), with the pure transitions on each | DOM-free |
 | `audio` | the WebAudio buses, the sound effects by name, the music bed, volumes and mute (`createAudio`) | DOM (WebAudio types) |
 | `scores` | the `scores.php` client (tokens, board, qualifying rule, submission) and the board's markup | DOM (`fetch`) |
+| `intro` | the opening strike: the nuke's flight to screen center, the timed steps, the "The CIC" title and its glide into the nav brand (`createIntro`) | DOM (window, the elements handed in) |
 
-`cylon.js` keeps the state (score, timers, drones) and measures the page; the modules take what they need as arguments, including the random source, so `rules-test.js` and `playfield-test.js` pin them with fixed and seeded draws, and `scores-test.js` runs the client against a fake server.
+`cylon.js` measures the page and owns the timer handles and the drone and missile elements; the modules take what they need as arguments, including the random source, so `rules-test.js` and `playfield-test.js` pin them with fixed and seeded draws, and `scores-test.js` runs the client against a fake server.
+
+`state` holds two plain records. `cylon.js` keeps one of each and replaces it with what a transition returns: `schedule = state.skewForPause(schedule, pausedAt, pausedMs)` moves every moment still ahead of the pause out by the pause (`applyPauseTimeSkew` then re-arms the `setTimeout` for each moment that moved, with `state.msUntil`), and `run = state.takeHits(run, n, MAX_HITS, fromNuke).run`, `recordKill`, `healOne`, `beginRun`, `endRun`, `resetScore` and the rest carry the score and hull. A `0` moment is unarmed. The timer handles and the holes' own hold and fade moments stay in `cylon.js`, since they belong to elements. `state-test.js` drives the transitions with a fake clock, including that pausing for N ms shifts every armed due-at by N.
+
+`intro` hands `cylon.js` `createIntro(deps)` and gets `play()`, `cancel()` and `playing()`. The flight, the timed steps that wait out a pause, the title's states and the token that cancels them are inside it; the elements, the settings and pause predicates, the sound, the detonation and the start of combat come in as `deps`, so it reaches none of `cylon.js`'s state. It has no Node test: the `home-eye` and `cylon-help` browser specs and a play-through cover it.
 
 `audio` hands `cylon.js` one object, `createAudio({ settings, sessionActive, volumeToGain, createContext? })`: `sfx(name)` plays an effect, `prime()` opens the context ahead of one, `unlock()` is the first-gesture handler, `syncMusic()` starts or stops the bed to match the settings and the session, and `settingChanged(key)` follows the settings panel. The context, the buses and the bed's timer stay inside it, and it exports no state. The settings, the session predicate and the volume curve (`rules.volumeToGain`) come in as arguments, so the module imports nothing; without an `AudioContext` it is silent. `audio-test.js` runs it against a fake context.
 
-Still in `cylon.js`: the drone and missile elements and their timers, the nuke and the intro sequence, glyph scattering, the reticle and eye, settings and the nav chrome, the game-over panel.
+Still in `cylon.js`: the drone, missile and mid-run nuke elements and their timers (they call back into the hull, the kill count, the holes and glyph scattering), glyph scattering, terrain holes, the reticle and eye, the abilities, settings and the nav chrome, the game-over panel.
 
 ## Tests
-From this folder: `node rules-test.js && node playfield-test.js && node scores-test.js && node audio-test.js && node smoke-test.js && php install-files-test.php`. Browser specs for the home page and the game are in `../../tests/e2e` (`home-eye`, `cylon-help`).
+From this folder: `node rules-test.js && node playfield-test.js && node scores-test.js && node audio-test.js && node state-test.js && node smoke-test.js && php install-files-test.php`. Browser specs for the home page and the game are in `../../tests/e2e` (`home-eye`, `cylon-help`).

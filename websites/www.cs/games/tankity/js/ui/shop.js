@@ -27,17 +27,27 @@ function Body({ row, draw, rev }) {
 export function Shop(p) {
     const list = useRef(null);
     const shownSel = useRef(-1);
+    const scrolled = useRef(0); // where the player left the list
     const sel = p.entries.find((e) => e.kind === 'item' && e.selected)?.index ?? -1;
     // Riding the selection with the keys keeps the highlighted row in view.
-    // Redraws that leave it alone (buys, pack counts, room polls) keep the scroll.
+    // Redraws that leave it alone (buys, pack counts, room polls) keep the
+    // scroll exactly: a row that rewraps would otherwise let the browser's
+    // scroll anchoring nudge the list.
     useLayoutEffect(() => {
-        if (shownSel.current === sel)
+        const el = list.current;
+        if (!el)
             return;
+        if (shownSel.current === sel) {
+            if (el.scrollTop !== scrolled.current)
+                el.scrollTop = scrolled.current;
+            return;
+        }
         shownSel.current = sel;
-        list.current?.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+        el.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+        scrolled.current = el.scrollTop;
     });
     const blurThen = (fn) => (ev) => { ev.currentTarget.blur(); fn(); };
-    return (_jsx(KeyHints.Provider, { value: p.keyHint, children: _jsxs("div", { class: "card", role: "dialog", "aria-modal": "true", "aria-labelledby": "shop-title", children: [_jsx(OverlayHead, { kicker: "Between rounds", titleId: "shop-title", title: p.title, navId: "nav-shop", nav: _jsxs(_Fragment, { children: [_jsxs("span", { children: [_jsx(Key, { at: "shop:selUp" }), _jsx(Key, { at: "shop:selDown" }), " or ", _jsx(Key, { at: "scroll:lineDown" }), _jsx(Key, { at: "scroll:lineUp" }), " move"] }), _jsxs("span", { children: [_jsx(Key, { at: "shop:qtyDown" }), _jsx(Key, { at: "shop:qtyUp" }), " packs"] }), _jsxs("span", { children: [_jsx(Key, { at: "shop:buy" }), " buy \u00B7 ", _jsx(Key, { at: "shop:preview" }), " preview"] }), _jsx(ScrollKeys, {})] }) }), _jsx("p", { id: "shop-cash", class: "runstats", children: p.cash }), _jsx("ul", { id: "shop-list", class: "scores", ref: list, children: p.entries.map(e => {
+    return (_jsx(KeyHints.Provider, { value: p.keyHint, children: _jsxs("div", { class: "card", role: "dialog", "aria-modal": "true", "aria-labelledby": "shop-title", children: [_jsx(OverlayHead, { kicker: "Between rounds", titleId: "shop-title", title: p.title, navId: "nav-shop", nav: _jsxs(_Fragment, { children: [_jsxs("span", { children: [_jsx(Key, { at: "shop:selUp" }), _jsx(Key, { at: "shop:selDown" }), " or ", _jsx(Key, { at: "scroll:lineDown" }), _jsx(Key, { at: "scroll:lineUp" }), " move"] }), _jsxs("span", { children: [_jsx(Key, { at: "shop:qtyDown" }), _jsx(Key, { at: "shop:qtyUp" }), " packs"] }), _jsxs("span", { children: [_jsx(Key, { at: "shop:buy" }), " buy \u00B7 ", _jsx(Key, { at: "shop:preview" }), " preview"] }), _jsx(ScrollKeys, {})] }) }), _jsx("p", { id: "shop-cash", class: "runstats", children: p.cash }), _jsx("ul", { id: "shop-list", class: "scores", ref: list, onScroll: (ev) => { scrolled.current = ev.currentTarget.scrollTop; }, children: p.entries.map(e => {
                         if (e.kind === 'cat')
                             return _jsx("li", { class: "shop-cat", children: e.name }, `cat:${e.name}`);
                         if (e.kind === 'free') {

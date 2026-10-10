@@ -99,13 +99,22 @@ function Body({ row, draw, rev }: { row: ShopRowText; draw: ShopProps['drawIcon'
 export function Shop(p: ShopProps) {
   const list = useRef<HTMLUListElement>(null);
   const shownSel = useRef(-1);
+  const scrolled = useRef(0); // where the player left the list
   const sel = p.entries.find((e): e is ShopItemRow => e.kind === 'item' && e.selected)?.index ?? -1;
   // Riding the selection with the keys keeps the highlighted row in view.
-  // Redraws that leave it alone (buys, pack counts, room polls) keep the scroll.
+  // Redraws that leave it alone (buys, pack counts, room polls) keep the
+  // scroll exactly: a row that rewraps would otherwise let the browser's
+  // scroll anchoring nudge the list.
   useLayoutEffect(() => {
-    if (shownSel.current === sel) return;
+    const el = list.current;
+    if (!el) return;
+    if (shownSel.current === sel) {
+      if (el.scrollTop !== scrolled.current) el.scrollTop = scrolled.current;
+      return;
+    }
     shownSel.current = sel;
-    list.current?.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+    el.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+    scrolled.current = el.scrollTop;
   });
   const blurThen = (fn: () => void) => (ev: Event) => { (ev.currentTarget as HTMLElement).blur(); fn(); };
   return (
@@ -118,7 +127,7 @@ export function Shop(p: ShopProps) {
           <ScrollKeys />
         </>} />
         <p id="shop-cash" class="runstats">{p.cash}</p>
-        <ul id="shop-list" class="scores" ref={list}>
+        <ul id="shop-list" class="scores" ref={list} onScroll={(ev: Event) => { scrolled.current = (ev.currentTarget as HTMLElement).scrollTop; }}>
           {p.entries.map(e => {
             if (e.kind === 'cat') return <li class="shop-cat" key={`cat:${e.name}`}>{e.name}</li>;
             if (e.kind === 'free') {

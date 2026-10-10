@@ -30,7 +30,7 @@ import {
 import { createRenderer, drawChassis } from './js/render.js?v=1e211c92ed';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 import { renderHelp } from './js/ui/help.js?v=590e2a36cd';
-import { renderShop as drawShop } from './js/ui/shop.js?v=d896dfdd2b';
+import { renderShop as drawShop } from './js/ui/shop.js?v=eff4669cf5';
 
 /* ---------- audio: lives in src/audio.ts ---------- */
 music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));

@@ -319,7 +319,7 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
 | `php game-json-test.php`                       | The YAML parser, the `game.yaml` schema (effects included), `--check` staleness            |
 | `php install-files-test.php`                   | The manifest, install block, `?v=` content hashes and `sw.js` precache, `--check` staleness                   |
-| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx.spec.mjs`; its editor checks run on a local site only); `E2E_BASE_URL` points it at the live site |
+| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only); `E2E_BASE_URL` points it at the live site |
 | `make e2e-changed` (site root) | Only the browser specs your changes need (`tests/e2e/select.mjs` maps touched files to specs; CI uses the same map) |
 
 `make test` from the site root runs every suite above except e2e. CI runs

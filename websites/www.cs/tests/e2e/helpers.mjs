@@ -10,7 +10,7 @@ import { expect } from '@playwright/test';
    look), so the recorder wraps each TankityFX system's draw to know when
    it is inside one.
    - tankY:  the player label's height (the unit's height on the hills).
-   Effects (see tankity-fx.spec.mjs), counted on the battlefield ('stage') and
+   Effects (see tankity-fx-battle.spec.mjs), counted on the battlefield ('stage') and
    the firing range ('preview-stage') separately:
    - lighter: times the canvas switched to additive compositing;
    - sheets:  effect sprite-sheet frames drawn (nine-argument drawImage; the

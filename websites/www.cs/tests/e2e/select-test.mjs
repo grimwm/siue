@@ -11,6 +11,7 @@ const check = (name, got, want) => {
 const has = (name, got, specs) => check(name, Array.isArray(got) && specs.every(s => got.includes(s)), true);
 
 check('docs-only-runs-nothing', select(['README.md', `${S}games/tankity/README.md`, 'docs/plan.md']), 'NONE');
+check('game-test-runner-runs-nothing', select([`${S}games/tankity/test.sh`, `${S}games/cylon/test.sh`]), 'NONE');
 check('unit-tests-run-nothing', select([`${S}games/tankity/rooms-sim-test.php`, `${S}games/tankity/smoke-test.js`, `${S}tests/games-hub-test.php`]), 'NONE');
 check('sim-vectors-run-nothing', select([`${S}games/tankity/sim-vectors-test.js`, `${S}games/tankity/protocol/sim-vectors.php`, `${S}games/tankity/protocol/sim-vectors.json`]), 'NONE');
 check('deploy-only-runs-nothing', select([`${S}deploy.sh`, '.github/workflows/deploy.yml']), 'NONE');
@@ -27,7 +28,7 @@ has('site-shell-runs-the-shell', select([`${S}main.js`]), ['games-hub.spec.mjs',
 check('site-shell-skips-tankity', select([`${S}site.css`]).some(s => s.startsWith('tankity-')), false);
 has('union-of-files', select([`${S}games/crete/game.js`, `${S}tests/e2e/tankity-audio.spec.mjs`]), ['games-hub.spec.mjs', 'tankity-audio.spec.mjs']);
 check('generated-sources-run-nothing', select([`${S}games/tankity/game.yaml`, `${S}games/tankity/fx/blender/moon.blend`]), 'NONE');
-check('effects-editor-runs-the-effects-spec', select([`${S}games/tankity/fx-editor.js`]), ['tankity-fx.spec.mjs']);
+check('effects-editor-runs-the-effects-spec', select([`${S}games/tankity/fx-editor.js`]), ['tankity-fx-editor.spec.mjs']);
 has('tankity-sources-run-its-specs', select([`${S}games/tankity/src/sim.ts`]), ['tankity-solo.spec.mjs', 'tankity-rooms.spec.mjs', 'games-pwa.spec.mjs']);
 has('tankity-compiled-modules-run-its-specs', select([`${S}games/tankity/js/sim.js`]), ['tankity-solo.spec.mjs', 'tankity-rooms.spec.mjs', 'games-pwa.spec.mjs']);
 has('tankity-tsconfig-runs-its-specs', select([`${S}games/tankity/tsconfig.json`]), ['tankity-solo.spec.mjs', 'games-pwa.spec.mjs']);

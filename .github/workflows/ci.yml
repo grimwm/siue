@@ -100,8 +100,8 @@ jobs:
   # broke twice in ways only these catch. Runs the whole Playwright suite
   # against the docker site (ephemeral host port) on the runner's own Chrome.
   # Four runners, each with its own local sites, split the selected specs
-  # between them (Playwright --shard): a full suite takes about a quarter of
-  # the time. Within a runner the specs stay serial (one room server).
+  # between them by how long each takes (tests/e2e/shard.mjs), so they finish
+  # together. Within a runner the specs stay serial (one room server).
   e2e:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -177,8 +177,12 @@ jobs:
           SPECS: ${{ steps.scope.outputs.specs }}
           SHARD: ${{ matrix.shard }}
           CI: "true"
-        # A short selection can leave a shard with no spec at all.
-        run: make -C websites/www.cs e2e E2E_ARGS="$SPECS --shard=$SHARD/4 --pass-with-no-tests"
+        # A short selection can leave a runner with no spec at all.
+        run: |
+          set -euo pipefail
+          mine=$(node websites/www.cs/tests/e2e/shard.mjs "$SHARD" 4 $SPECS)
+          echo "this runner: ${mine:-nothing}"
+          if [ -n "$mine" ]; then make -C websites/www.cs e2e E2E_ARGS="$mine"; fi
 
       - name: Test results
         if: failure() && steps.scope.outputs.run == '1'

@@ -89,14 +89,19 @@ test('a tank falls smoothly into the crater under it', async ({ browser }) => {
   await page.click('#shop-next');
   await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU|Aim/);
   let best = { drop: 0, moving: 0, maxStep: 0 };
-  for (let attempt = 0; attempt < 3 && best.drop <= 1; attempt++) {
+  for (let attempt = 0; attempt < 5 && best.drop <= 1; attempt++) {
     await expect.poll(() => hud(page, 'hud-turn'), { timeout: 60_000 }).toMatch(/YOU|Aim/);
     await page.keyboard.press('3');
     await aimTo(page, 90);
     await setPower(page, 15);
     await resetRec(page);
+    const logBefore = await page.locator('#log li').count();
     await page.keyboard.press('Control');
     await page.waitForTimeout(5000);
+    // A Mortar on our own hull can wreck the tank, and a fresh tank spawns
+    // elsewhere: that jump is a respawn, not a fall, so try again.
+    const said = await page.locator('#log li').evaluateAll((lis, n) => lis.slice(n).map(li => li.textContent).join(' '), logBefore);
+    if (/wreck|life|lives|Back in/i.test(said)) continue;
     const ys = (await rec(page)).tankY.map(p => p[1]);
     let moving = 0, maxStep = 0;
     for (let i = 1; i < ys.length; i++) {

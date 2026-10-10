@@ -8,5 +8,5 @@
   "compilerOptions": {
     "lib": ["ES2022", "DOM"]
   },
-  "files": ["scores.ts"]
+  "files": ["audio.ts", "scores.ts"]
 }

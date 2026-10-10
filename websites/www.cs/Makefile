@@ -63,7 +63,7 @@ test:
 	cd games/crete && php install-files-test.php && php tools/install-files.php --check
 	cd games/cylon && npm ci --silent && node tools/ts-build.mjs --check
 	cd games/cylon && php install-files-test.php && php tools/install-files.php --check
-	cd games/cylon && node rules-test.js && node playfield-test.js && node scores-test.js && node smoke-test.js
+	cd games/cylon && node rules-test.js && node playfield-test.js && node scores-test.js && node audio-test.js && node smoke-test.js
 	cd games/tankity && node smoke-test.js && node audio-test.js && node render-test.js && node net-test.js && node input-test.js && node protocol-test.js && php config-test.php && php rooms-sim-test.php && node sim-vectors-test.js
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php rooms-test.php'
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php protocol/generate.php --check'

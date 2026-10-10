@@ -58,11 +58,14 @@ php tools/install-files.php                # then rewrite the ?v= versions insid
 | --- | --- | --- |
 | `rules` | kill level, difficulty factor, drone cap, missile caps and delays, nuke delay, wave plan, hull points and tint, volume curve | DOM-free |
 | `playfield` | the playable box, clear spots, entry edges, where a march begins | DOM-free |
+| `audio` | the WebAudio buses, the sound effects by name, the music bed, volumes and mute (`createAudio`) | DOM (WebAudio types) |
 | `scores` | the `scores.php` client (tokens, board, qualifying rule, submission) and the board's markup | DOM (`fetch`) |
 
 `cylon.js` keeps the state (score, timers, drones) and measures the page; the modules take what they need as arguments, including the random source, so `rules-test.js` and `playfield-test.js` pin them with fixed and seeded draws, and `scores-test.js` runs the client against a fake server.
 
-Still in `cylon.js`: the audio (buses, SFX, the music bed), the drone and missile elements and their timers, the nuke and the intro sequence, glyph scattering, the reticle and eye, settings and the nav chrome, the game-over panel.
+`audio` hands `cylon.js` one object, `createAudio({ settings, sessionActive, volumeToGain, createContext? })`: `sfx(name)` plays an effect, `prime()` opens the context ahead of one, `unlock()` is the first-gesture handler, `syncMusic()` starts or stops the bed to match the settings and the session, and `settingChanged(key)` follows the settings panel. The context, the buses and the bed's timer stay inside it, and it exports no state. The settings, the session predicate and the volume curve (`rules.volumeToGain`) come in as arguments, so the module imports nothing; without an `AudioContext` it is silent. `audio-test.js` runs it against a fake context.
+
+Still in `cylon.js`: the drone and missile elements and their timers, the nuke and the intro sequence, glyph scattering, the reticle and eye, settings and the nav chrome, the game-over panel.
 
 ## Tests
-From this folder: `node rules-test.js && node playfield-test.js && node scores-test.js && node smoke-test.js && php install-files-test.php`. Browser specs for the home page and the game are in `../../tests/e2e` (`home-eye`, `cylon-help`).
+From this folder: `node rules-test.js && node playfield-test.js && node scores-test.js && node audio-test.js && node smoke-test.js && php install-files-test.php`. Browser specs for the home page and the game are in `../../tests/e2e` (`home-eye`, `cylon-help`).

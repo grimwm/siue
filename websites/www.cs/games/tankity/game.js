@@ -691,7 +691,7 @@ function fireWeapon(t, wkey) {
   const w = WEAPONS[wkey];
   const store = t.isPlayer ? G.ammo : t.ammo;
   if ((store[wkey] || 0) <= 0) {
-    if (t.isPlayer) { say(`No ${w.name} left! ${TOUCH ? 'Tap Weapon' : keyHint('global', 'cycle')} to swap guns.`, 'info'); SFX.click(); }
+    if (t.isPlayer) { say(`No ${w.name} left! ${TOUCH ? 'Tap Weapons' : keyHint('global', 'cycle')} to swap guns.`, 'info'); SFX.click(); }
     return false;
   }
   if (wkey !== 'shell') store[wkey] -= 1;
@@ -726,6 +726,7 @@ function demoBlock() {
   return true;
 }
 function playerFire() {
+  closeGuns();
   if (NET.on) { netFire(); return; }
   if (demoBlock()) return;
   if (G.phase !== 'aim' || !cur().isPlayer || G.over) return;
@@ -2153,7 +2154,7 @@ function drawGearIcon(cv, gkey) {
    stays in every chip (screen readers, and the stub DOM which has no
    replaceChildren), icons are decoration. Redraws only when the text moves. */
 function setChips(el, chips) {
-  const sig = chips.map(ch => ch.text).join(' · ');
+  const sig = chips.map(ch => ch.text + (ch.sr || '')).join(' · ');
   if (el._chipSig === sig) return;
   el._chipSig = sig;
   if (!el.replaceChildren) { el.textContent = sig; return; }
@@ -2170,6 +2171,13 @@ function setChips(el, chips) {
       span.appendChild(cv);
     }
     span.appendChild(document.createTextNode(ch.text));
+    if (ch.sr) {
+      const sr = document.createElement('span');
+      sr.className = 'sr-only';
+      sr.textContent = ch.sr;
+      span.appendChild(sr);
+    }
+    if (ch.title) span.title = ch.title;
     nodes.push(span);
   });
   el.replaceChildren(...nodes);
@@ -2179,14 +2187,19 @@ function renderLoadout() {
   if (weapon) {
     // A dozen shells no longer fit on one line: show what is loaded plus
     // anything stocked, then the fitted tricks.
-    const chips = WORDER
-      .filter(w => w === G.selected || (G.ammo[w] || 0) > 0 || w === 'shell')
-      .map(w => ({ w, text: `${WEAPONS[w].name} ${w === 'shell' ? '∞' : '×' + (G.ammo[w] || 0)}${w === G.selected ? ' ◀' : ''}` }));
-    for (const text of trickChips()) chips.push({ text });
-    setChips(weapon, chips);
+    // Only the loaded gun shows; the rest of the rack is read out for
+    // screen readers and lives in the weapon picker.
+    const count = w => (w === 'shell' ? '∞' : '×' + (G.ammo[w] || 0));
+    const rack = WORDER.filter(w => w !== G.selected && ((G.ammo[w] || 0) > 0 || w === 'shell'))
+      .map(w => `${WEAPONS[w].name} ${count(w)}`).concat(trickChips());
+    setChips(weapon, [{
+      w: G.selected,
+      text: `${WEAPONS[G.selected].name} ${count(G.selected)}`,
+      sr: rack.length ? ` · also ${rack.join(' · ')}` : '',
+    }]);
   }
   const favs = $('hud-favs');
-  if (favs) setChips(favs, G.favs.map((w, i) => ({ w, text: `${i + 1} ${WEAPONS[w].name}` })));
+  if (favs) setChips(favs, G.favs.map((w, i) => ({ w, text: `${i + 1}`, sr: ` ${WEAPONS[w].name}`, title: `${i + 1}: ${WEAPONS[w].name}` })));
 }
 /* Whose turn the battlefield shows: the shooter of a replaying volley, else
    the tank whose turn it is. Nobody between rounds or after the match. */
@@ -2493,6 +2506,7 @@ function render() {
     }
   }
   c.globalAlpha = 1;
+  drawWindStreaks(c, time);
   // Blast discs: each explosion draws exactly the circle its weapon destroys.
   for (const bm of G.booms) drawBoom(c, bm);
   if (G.preview) drawPreview();
@@ -2521,6 +2535,99 @@ function render() {
   }
   c.globalAlpha = 1;
   c.restore();
+  drawWindGauge(c, cv, time);
+}
+/* Wind lives on the battlefield, not in the status bar: faint streaks
+   drift across the sky at the wind's speed, and a gauge just under the menu
+   strip points the way it blows, longer the stronger it is. */
+const WIND_MAX = 12;
+function drawWindStreaks(c, time) {
+  if (!G.wind) return;
+  const speed = G.wind * 9;
+  c.save();
+  c.strokeStyle = '#cfe3ff';
+  c.lineWidth = 1;
+  for (let i = 0; i < 16; i++) {
+    const span = W + 160;
+    const x = ((((i * 97) + time * speed) % span) + span) % span - 80;
+    const y = 40 + ((i * 53) % 190);
+    const len = 10 + Math.abs(G.wind) * 2.2;
+    c.globalAlpha = 0.06 + 0.05 * ((i % 3) / 2);
+    c.beginPath();
+    c.moveTo(x, y);
+    c.lineTo(x - Math.sign(G.wind) * len, y);
+    c.stroke();
+  }
+  c.restore();
+}
+function windGaugeTop() {
+  const bar = $('menubar'), stage = $('stage');
+  if (!bar || !stage || !stage.clientHeight || !bar.getBoundingClientRect) return 10;
+  const below = bar.getBoundingClientRect().bottom - stage.getBoundingClientRect().top;
+  return Math.max(6, below / stage.clientHeight * H + 6);
+}
+function drawWindGauge(c, cv, time) {
+  if (!G.tanks.length || G.phase === 'shop') return;
+  c.save();
+  c.scale((cv.width || W) / W || 1, (cv.height || H) / H || 1);
+  const s = textScale();
+  const w = 128 * s, h = 22 * s, x = W / 2 - w / 2, y = G.windTop || 10;
+  c.globalAlpha = 0.85;
+  c.fillStyle = 'rgba(4, 4, 32, 0.8)';
+  c.strokeStyle = 'rgba(85, 85, 255, 0.55)';
+  c.lineWidth = 1;
+  c.beginPath();
+  if (c.roundRect) c.roundRect(x, y, w, h, h / 2); else c.rect(x, y, w, h);
+  c.fill();
+  c.stroke();
+  c.globalAlpha = 1;
+  c.font = `bold ${Math.round(9 * s)}px sans-serif`;
+  c.textBaseline = 'middle';
+  c.fillStyle = '#aaaaaa';
+  c.fillText('WIND', x + 9 * s, y + h / 2);
+  const mid = x + w / 2 + 6 * s, cy = y + h / 2;
+  const dir = Math.sign(G.wind);
+  if (!dir) {
+    c.fillStyle = '#ffffff';
+    c.textAlign = 'center';
+    c.fillText('calm', mid + 8 * s, cy);
+  } else {
+    // Arrow length tracks strength; chevrons crawl along it with the wind.
+    const len = (14 + 34 * Math.min(1, Math.abs(G.wind) / WIND_MAX)) * s;
+    const x0 = mid - dir * len / 2, x1 = mid + dir * len / 2;
+    c.strokeStyle = '#ffff55';
+    c.fillStyle = '#ffff55';
+    c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(x0, cy);
+    c.lineTo(x1, cy);
+    c.stroke();
+    c.beginPath();
+    c.moveTo(x1 + dir * 5 * s, cy);
+    c.lineTo(x1 - dir * 2 * s, cy - 5 * s);
+    c.lineTo(x1 - dir * 2 * s, cy + 5 * s);
+    c.closePath();
+    c.fill();
+    const step = 9 * s;
+    const phase = ((time * Math.abs(G.wind) * 3) % step) * dir;
+    c.globalAlpha = 0.55;
+    for (let k = -1; k * step < len; k++) {
+      const px = x0 + dir * k * step + phase;
+      if ((px - x0) * dir < 0 || (x1 - px) * dir < 3 * s) continue;
+      c.beginPath();
+      c.moveTo(px - dir * 2.5 * s, cy - 3 * s);
+      c.lineTo(px + dir * 0.5 * s, cy);
+      c.lineTo(px - dir * 2.5 * s, cy + 3 * s);
+      c.stroke();
+    }
+    c.globalAlpha = 1;
+    c.fillStyle = '#ffffff';
+    c.textAlign = 'right';
+    c.fillText(String(Math.abs(G.wind)), x + w - 9 * s, cy);
+  }
+  c.textAlign = 'left';
+  c.textBaseline = 'alphabetic';
+  c.restore();
 }
 /* ---------- DOM: log, HUD ---------- */
 const $ = id => document.getElementById(id);
@@ -2548,6 +2655,38 @@ function trickChips() {
   if (G.laststand) chips.push('last stand');
   if ((G.plate || 0) > 0) chips.push(`plate(+${25 * G.plate})`);
   return chips;
+}
+/* What the bar shows, plus what it leaves to the battlefield (rivals'
+   armor rides over their units) as screen-reader text. */
+function setStat(el, shown, sr) {
+  if (!el) return;
+  if (!el.replaceChildren) { el.textContent = sr ? `${shown} ${sr}` : shown; return; }
+  const sig = shown + '|' + (sr || '');
+  if (el._statSig === sig) return;
+  el._statSig = sig;
+  const nodes = [document.createTextNode(shown)];
+  if (sr) {
+    const s = document.createElement('span');
+    s.className = 'sr-only';
+    s.textContent = ` ${sr}`;
+    nodes.push(s);
+  }
+  el.replaceChildren(...nodes);
+}
+function renderStanding(mine, others) {
+  setStat($('hud-armor'), mine ? `${Math.max(0, Math.round(mine.hp))}` : '-',
+    `${mine ? `you ${Math.max(0, Math.round(mine.hp))} · ` : ''}${others}`);
+  const lives = $('hud-lives');
+  if (lives) {
+    lives.textContent = '♥'.repeat(Math.max(0, G.lives));
+    lives.title = `${G.lives} lives`;
+    lives.setAttribute('aria-label', `${G.lives} lives`);
+  }
+  const score = $('hud-score');
+  if (score) {
+    score.textContent = `$${G.cash} · round ${G.round} · ${G.score} pts`;
+    score.title = `Next 1-up at ${G.nextOneUp} points`;
+  }
 }
 function windText() {
   if (G.wind === 0) return '· 0';
@@ -2646,12 +2785,8 @@ function renderHUD() {
   if ($('hud-power')) $('hud-power').textContent = `${Math.round(me().power)}`;
   if ($('hud-wind')) $('hud-wind').textContent = windText();
   renderLoadout();
-  if ($('hud-armor')) {
-    const foes = G.tanks.filter(x => !x.isPlayer).map(x => `${x.id}:${Math.max(0, x.hp)}`).join(' ');
-    $('hud-armor').textContent = `you ${Math.max(0, me().hp)} · ${foes} · lives ×${G.lives}`;
-  }
+  renderStanding(me(), G.tanks.filter(x => !x.isPlayer).map(x => `${x.id}:${Math.max(0, x.hp)}`).join(' '));
   if ($('hud-fuel')) $('hud-fuel').textContent = `${Math.round(me().fuel)}`;
-  if ($('hud-score')) $('hud-score').textContent = `${G.score} (1-up at ${G.nextOneUp}) · $${G.cash} · round ${G.round}`;
 }
 
 /* ---------- main loop ---------- */
@@ -3740,14 +3875,8 @@ function renderNetHUD() {
   if ($('hud-power')) $('hud-power').textContent = mine ? `${Math.round(mine.power)}` : '-';
   if ($('hud-wind')) $('hud-wind').textContent = windText();
   renderLoadout();
-  if ($('hud-armor')) {
-    const others = G.tanks.filter(x => !x.isPlayer).map(x => `${seatName(x.seat)}:${Math.max(0, Math.round(x.hp))}`).join(' ');
-    $('hud-armor').textContent = mine
-      ? `you ${Math.max(0, Math.round(mine.hp))} · ${others} · lives ×${G.lives}`
-      : `${others} · lives ×${G.lives}`;
-  }
+  renderStanding(mine, G.tanks.filter(x => !x.isPlayer).map(x => `${seatName(x.seat)}:${Math.max(0, Math.round(x.hp))}`).join(' '));
   if ($('hud-fuel')) $('hud-fuel').textContent = mine ? `${Math.round(mine.fuel)}` : '-';
-  if ($('hud-score')) $('hud-score').textContent = `${G.score} (1-up at ${G.nextOneUp}) · $${G.cash} · round ${G.round}`;
 }
 function netShowStandings(room) {
   if (NET.pollId) { clearInterval(NET.pollId); NET.pollId = 0; }
@@ -3870,7 +3999,7 @@ const FALLBACK_KEYS = Object.freeze({
   global: Object.freeze({
     music: ['m'], sound: ['e'], log: ['l'], help: ['h'],
     report: ['r'], menu: ['c'], random: ['t'], rooms: ['o'], new: ['n'],
-    cycle: ['q'], tutorial: ['u'], fav: ['1', '2', '3', '4'],
+    cycle: ['q'], guns: ['g'], tutorial: ['u'], fav: ['1', '2', '3', '4'],
     battlePreview: ['v'], fullscreen: ['f'],
     fire: ['ControlLeft', 'ControlRight', 'Control', 'Space', ' '],
     escape: ['Escape'],
@@ -3930,7 +4059,7 @@ const TOUCH = typeof window.matchMedia === 'function' &&
 const TOUCH_NAMES = {
   'aim:barrelLeft': '◀', 'aim:barrelRight': '▶', 'aim:powerUp': '▲', 'aim:powerDown': '▼',
   'aim:driveLeft': 'Drive ◀', 'aim:driveRight': 'Drive ▶',
-  'global:cycle': 'Weapon', 'global:fire': 'Fire',
+  'global:cycle': 'Weapons', 'global:fire': 'Fire',
 };
 /* " (KEY)" for a button label; nothing on touch screens. */
 function keyCap(ctx, action) {
@@ -3986,7 +4115,7 @@ function openRooms() {
 }
 /* Another panel (menu, help, report, log) open above the shop takes the keys. */
 function shopCovered() {
-  return ['menu-overlay', 'help-overlay', 'report-overlay', 'log-overlay'].some(id => { const el = $(id); return el && !el.hidden; });
+  return ['menu-overlay', 'help-overlay', 'report-overlay', 'log-overlay', 'gun-overlay'].some(id => { const el = $(id); return el && !el.hidden; });
 }
 function bindKeys() {
   if (TOUCH) return;
@@ -4007,6 +4136,13 @@ function bindKeys() {
       SFX.click();
       renderShop();
       return;
+    }
+    if (gunsOpen()) {
+      const move = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -GUN_COLS, ArrowDown: GUN_COLS }[e.key] ||
+        (sc === 'lineDown' ? 1 : sc === 'lineUp' ? -1 : 0);
+      if (move) { e.preventDefault(); moveGunCursor(move); return; }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!e.repeat) pickGun(rackGuns()[gunCursor]); return; }
+      if (/^[1-9]$/.test(e.key)) { e.preventDefault(); const w = rackGuns()[+e.key - 1]; if (w) pickGun(w); return; }
     }
     if (sc) {
       const args = { lineDown: [1, 0], lineUp: [-1, 0], pageDown: [0, 1], pageUp: [0, -1], halfDown: [0, 0.5], halfUp: [0, -0.5] }[sc];
@@ -4108,7 +4244,8 @@ function bindKeys() {
       if (G.phase === 'shop') nextRound();
       else freshMatchFromSeedBox();
       return;
-    case 'cycle': cycleWeapon(); return;
+    case 'cycle': cycleWeapon(); if (gunsOpen()) renderGuns(); return;
+    case 'guns': if (gunsOpen()) closeGuns(); else openGuns(); return;
     case 'tutorial': tutorialOpen(); return;
     // Digits pick a favorite shell; hold Shift to pin the loaded one there.
     case 'fav':
@@ -4135,6 +4272,71 @@ function bindKeys() {
     const act = lookupKey('aim', e);
     if (act) delete keysDown[act];
   });
+}
+/* The weapon picker: every gun on the rack as a tile, for when Q would take
+   a dozen presses. Arrows or J/K move the cursor, Enter or a digit loads. */
+const GUN_COLS = 4;
+let gunCursor = 0;
+function rackGuns() {
+  return WORDER.filter(w => w === 'shell' || (G.ammo[w] || 0) > 0);
+}
+function gunsOpen() {
+  const ov = $('gun-overlay');
+  return !!ov && !ov.hidden;
+}
+function openGuns() {
+  if (G.over || G.phase === 'shop' || demoBlock()) return;
+  const ov = $('gun-overlay');
+  if (!ov) return;
+  gunCursor = Math.max(0, rackGuns().indexOf(G.selected));
+  renderGuns();
+  ov.hidden = false;
+  const btn = $('btn-weapon');
+  if (btn) btn.setAttribute('aria-expanded', 'true');
+  refreshNavHints();
+  SFX.click();
+}
+function closeGuns() {
+  const ov = $('gun-overlay');
+  if (!ov || ov.hidden) return false;
+  ov.hidden = true;
+  const btn = $('btn-weapon');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+  return true;
+}
+function renderGuns() {
+  const grid = $('gun-grid');
+  if (!grid || !grid.replaceChildren) return;
+  const guns = rackGuns();
+  gunCursor = clamp(gunCursor, 0, guns.length - 1);
+  grid.replaceChildren(...guns.map((w, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'unit-choice gun-choice' + (i === gunCursor ? ' cursor' : '');
+    b.setAttribute('aria-pressed', String(w === G.selected));
+    b.title = WEAPONS[w].note || WEAPONS[w].name;
+    const cv = document.createElement('canvas');
+    cv.setAttribute('aria-hidden', 'true');
+    drawShellIcon(cv, w);
+    const name = document.createElement('span');
+    name.textContent = `${i < 9 ? `${i + 1}. ` : ''}${WEAPONS[w].name}`;
+    const count = document.createElement('span');
+    count.className = 'gun-count';
+    count.textContent = w === 'shell' ? '∞' : `×${G.ammo[w] || 0}`;
+    b.append(cv, name, count);
+    b.addEventListener('click', ev => { ev.currentTarget.blur(); pickGun(w); });
+    return b;
+  }));
+  const cur = grid.querySelector('.cursor');
+  if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
+}
+function pickGun(w) {
+  if (selectWeapon(w) !== false) closeGuns();
+}
+function moveGunCursor(d) {
+  gunCursor = clamp(gunCursor + d, 0, rackGuns().length - 1);
+  SFX.click();
+  renderGuns();
 }
 function cycleWeapon() {
   if (G.over || G.phase === 'shop') return;
@@ -4189,7 +4391,14 @@ function init() {
   const cannon = $('btn-cannon');
   if (cannon) cannon.addEventListener('click', ev => { ev.currentTarget.blur(); ctx(); startMusic(); playerFire(); });
   const weapon = $('btn-weapon');
-  if (weapon) weapon.addEventListener('click', ev => { ev.currentTarget.blur(); cycleWeapon(); });
+  if (weapon) weapon.addEventListener('click', ev => { ev.currentTarget.blur(); if (gunsOpen()) closeGuns(); else openGuns(); });
+  const gunClose = $('gun-close');
+  if (gunClose) gunClose.addEventListener('click', ev => { ev.currentTarget.blur(); closeGuns(); });
+  const hudGun = $('hud-weapon');
+  if (hudGun) {
+    hudGun.addEventListener('click', () => openGuns());
+    hudGun.title = 'Pick a weapon';
+  }
   holdButton('btn-drive-l', 'driveLeft');
   holdButton('btn-drive-r', 'driveRight');
   const form = $('seed-form');
@@ -4309,6 +4518,7 @@ function init() {
 /* The log hangs just under the menu strip, whose height changes with the
    frame width, so it never covers the battle buttons. */
 function placeLogBelowMenu() {
+  G.windTop = windGaugeTop();
   const bar = $('menubar');
   const log = $('log-overlay');
   if (!bar || !log || !bar.offsetHeight) return;
@@ -4336,7 +4546,7 @@ function overlayScrollTarget() {
   const shopVeil = $('shop-veil');
   if (shopVeil && !shopVeil.hidden) return $('shop-list');
   for (const id of ['lobby-veil', 'preview-veil', 'end-veil',
-      'help-overlay', 'report-overlay', 'menu-overlay', 'log-overlay']) {
+      'gun-overlay', 'help-overlay', 'report-overlay', 'menu-overlay', 'log-overlay']) {
     const el = $(id);
     if (el && !el.hidden) return el;
   }
@@ -4358,7 +4568,7 @@ const NAV_HINTS = [
   ['preview-veil', 'nav-preview'], ['end-veil', 'nav-end'],
   ['help-overlay', 'nav-help'], ['report-overlay', 'nav-report'],
   ['menu-overlay', 'nav-menu'], ['log-overlay', 'nav-log'],
-  ['tutorial-overlay', 'nav-tutorial'],
+  ['tutorial-overlay', 'nav-tutorial'], ['gun-overlay', 'nav-gun'],
 ];
 function refreshNavHints() {
   for (const [panelId, hintId] of NAV_HINTS) {
@@ -4378,7 +4588,7 @@ function closeLobbyVeil() {
   return true;
 }
 function closeOverlays() {
-  let shut = false;
+  let shut = closeGuns();
   for (const [ovId, btnId] of [['log-overlay', 'btn-log'], ['help-overlay', 'btn-help'],
       ['report-overlay', 'btn-report'], ['menu-overlay', 'btn-menu']]) {
     const ov = $(ovId);

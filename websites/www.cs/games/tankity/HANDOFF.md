@@ -54,10 +54,14 @@ skip `*-test.*` and this file.
 ## Keys (defaults; `keys.json` rules)
 
 Left/Right swing the barrel, Up/Down set power, A/D drive, Ctrl fires, Q
-cycles weapons, 1-4 load favorites, B buys, V/P preview, N new/next, C menu,
+loads the next weapon, G opens the weapon picker, 1-4 load favorites, B buys, V/P preview, N new/next, C menu,
 O rooms, U tutorial, T random seed, F fullscreen, M music, E sound, J/K and
 PgUp/PgDn scroll panels, ESC closes. In fullscreen, Chromium lets a tap of
 ESC reach the game; holding it leaves fullscreen.
+
+The status bar keeps one row (angle, power, fuel, loaded gun, favorites,
+armor, lives, cash and round); rivals' armor rides over their units and the
+wind is a gauge on the battlefield, both also in screen-reader text.
 
 Every panel opens with a pinned title bar: title, a × that closes it (with
 an ESC cap on desktop), and the panel's keys in a three-column grid that

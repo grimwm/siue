@@ -282,7 +282,7 @@ check('menu-esc', els['menu-overlay'].hidden === true);
   check('songs', songNames.length === 4 && /songIdx = \(G\.round - 1\) % SONGS\.length/.test(src), songNames.join(','));
 // Every scrollable panel shows its keys, dimmed while everything fits.
 const navCount = (html.match(/class="nav-hint[" ]/g) || []).length;
-check('nav-hints', navCount === 9, `hints=${navCount}`);
+check('nav-hints', navCount === 10, `hints=${navCount}`);
 TAP('global', 'help');
 check('nav-disabled', els['nav-help'].getAttribute('aria-disabled') === 'true');
 els['help-overlay'].scrollHeight = 500;
@@ -452,7 +452,7 @@ function change(el) {
   // Match the rack marker, never the log: interleaved battle lines and the
   // trim cap make absolute log positions lie about what is loaded now. The
   // marker must sit in the same rack segment, so a later gun cannot fake it.
-  const selIs = name => new RegExp(name + ' [^·]*◀').test(els['hud-weapon'].textContent);
+  const selIs = name => new RegExp('^' + name + ' ').test(els['hud-weapon'].textContent);
   const loadGun = name => {
     for (let i = 0; i < 6 && !selIs(name); i++) {
       TAP('global', 'cycle'); frames(3);
@@ -614,20 +614,20 @@ function change(el) {
   check('keyboard-drives', fuelAfterDrive < fuelBeforeDrive, `fuel ${fuelBeforeDrive} -> ${fuelAfterDrive}`);
   // Digits load favorite shells; Shift plus a digit pins the loaded one.
   TAPD('global', 'fav', 3); frames(3);
-  check('fav-hotkey', /Mortar [^·]*◀/.test(els['hud-weapon'].textContent), els['hud-weapon'].textContent);
+  check('fav-hotkey', /^Mortar /.test(els['hud-weapon'].textContent), els['hud-weapon'].textContent);
   TAPD('global', 'fav', 4); frames(3);
   KD('global', 'fav', 0, { shiftKey: true }); KU('global', 'fav', 0); frames(3);
   check('fav-assign', els['hud-favs'].textContent.startsWith('1 Rail'), els['hud-favs'].textContent);
   TAPD('global', 'fav', 2); frames(3);
   TAPD('global', 'fav', 1); frames(3);
-  check('fav-recall', /Rail [^·]*◀/.test(els['hud-weapon'].textContent), els['hud-weapon'].textContent);
+  check('fav-recall', /^Rail /.test(els['hud-weapon'].textContent), els['hud-weapon'].textContent);
   loadGun('Rail');
   TAP('global', 'battlePreview'); frames(5);
   frames(300);
   TAP('global', 'battlePreview'); frames(5);
   const railVerdict = els['preview-result'].textContent;
   const railSel = els['hud-weapon'].textContent;
-  check('rail-selected', /Rail [^·]*◀/.test(railSel), railSel);
+  check('rail-selected', /^Rail /.test(railSel), railSel);
   await ensureAim();
   loadGun('Mortar');
   TAP('global', 'battlePreview'); frames(5);
@@ -637,7 +637,7 @@ function change(el) {
   const mortarSel = els['hud-weapon'].textContent;
   loadGun('Buckshot');
   check('rail-hits', /damage|hits/.test(railVerdict) && !/Clean miss/.test(railVerdict), railVerdict + ' | ' + railSel);
-  check('mortar-selected', /Mortar [^·]*◀/.test(mortarSel), mortarSel);
+  check('mortar-selected', /^Mortar /.test(mortarSel), mortarSel);
   check('mortar-hits', /damage|hits/.test(mortarVerdict) && !/Clean miss/.test(mortarVerdict), mortarVerdict + ' | ' + mortarSel);
 
   // aim: Left/Right swing the barrel, Up/Down work power; hold then release

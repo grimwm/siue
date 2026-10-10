@@ -28,7 +28,7 @@
 <meta name="twitter:title" content="Operation Tankity">
 <meta name="twitter:description" content="Mind the wind and out-shoot a drone battery across endless hills. Spend your $600 stake on a 20-item arsenal, or open a room and take turns with a friend.">
 <!-- share-tags:end -->
-<link rel="stylesheet" href="game.css?v=20261010e">
+<link rel="stylesheet" href="game.css?v=20261010f">
 </head>
 <body>
 <header class="topbar">
@@ -48,13 +48,14 @@
           <div class="sr-only"><dt>Turn</dt><dd id="hud-turn" aria-live="polite">-</dd></div>
           <div><dt>Angle</dt><dd id="hud-angle">-</dd></div>
           <div><dt>Power</dt><dd id="hud-power">-</dd></div>
-          <div><dt>Wind</dt><dd id="hud-wind">-</dd></div>
-          <div><dt>Weapon</dt><dd id="hud-weapon">-</dd></div>
-          <div><dt>Faves</dt><dd id="hud-favs">-</dd></div>
-          <div><dt>Armor</dt><dd id="hud-armor">-</dd></div>
           <div><dt>Fuel</dt><dd id="hud-fuel">-</dd></div>
-          <div><dt>Score</dt><dd id="hud-score">-</dd></div>
-          <div><dt>Server</dt><dd><span id="hud-dot" class="dot off" title="room server: not connected"></span> <span id="hud-server">offline</span></dd></div>
+          <div class="hud-gun"><dt class="sr-only">Weapon</dt><dd id="hud-weapon">-</dd></div>
+          <div class="hud-favs"><dt class="sr-only">Favorites</dt><dd id="hud-favs">-</dd></div>
+          <div><dt>Armor</dt><dd id="hud-armor">-</dd></div>
+          <div class="hud-lives"><dt class="sr-only">Lives</dt><dd id="hud-lives">-</dd></div>
+          <div class="hud-score"><dt class="sr-only">Score</dt><dd id="hud-score">-</dd></div>
+          <div class="sr-only"><dt>Wind</dt><dd id="hud-wind">-</dd></div>
+          <div class="hud-net"><dt class="sr-only">Server</dt><dd><span id="hud-dot" class="dot off" title="room server: not connected"></span><span id="hud-server" class="sr-only">offline</span></dd></div>
         </dl>
         <p id="run-stats" class="runstats"></p>
       </div>
@@ -78,7 +79,7 @@
       <div class="guide guide-actions" aria-label="Action controls">
         <button type="button" id="btn-menu" class="btn-primary" aria-expanded="false">Menu <span class="key" data-keyhint="global:menu">(C)</span></button>
         <button type="button" id="btn-cannon">Fire <span class="key" data-keyhint="global:fire">(Ctrl)</span></button>
-        <button type="button" id="btn-weapon">Weapon <span class="key" data-keyhint="global:cycle">(Q)</span></button>
+        <button type="button" id="btn-weapon" aria-expanded="false" title="Pick a weapon (Q loads the next one)">Weapons <span class="key" data-keyhint="global:guns">(G)</span></button>
         <button type="button" id="btn-drive-l">Drive ◀ <span class="key" data-keyhint="aim:driveLeft">(A)</span></button>
         <button type="button" id="btn-drive-r">Drive ▶ <span class="key" data-keyhint="aim:driveRight">(D)</span></button>
         <button type="button" id="btn-log" aria-expanded="false">Log <span class="key" data-keyhint="global:log">(L)</span></button>
@@ -110,7 +111,7 @@
             In the shop, tap a row's <strong>Buy</strong> or <strong>Preview</strong>. <strong>Menu</strong> holds New Game,
             rooms, sound, music, fullscreen and the tutorial.</li>
           <li><strong>Wind</strong> pushes every shell, so check the meter before you fire.
-            <span class="keys-only"><strong><span data-keyhint="global:cycle">Q</span></strong> cycles</span><span class="touch-only"><strong>Weapon</strong> cycles</span> Shell, Buckshot, Mortar, Rail, and the round-4 <strong>NUKE</strong>.
+            <span class="keys-only"><strong><span data-keyhint="global:guns">G</span></strong> (or <strong>Weapons</strong>) opens every gun on your rack as tiles, and <strong><span data-keyhint="global:cycle">Q</span></strong> loads the next one:</span><span class="touch-only"><strong>Weapons</strong> opens every gun on your rack as tiles:</span> Shell, Buckshot, Mortar, Rail, the round-4 <strong>NUKE</strong>, and more from the shop.
             Shells are free; the good stuff is bought with winnings, starting with
             a $600 stake you spend in the shop before round 1.</li>
           <li>There is no final victory. Every round the battery rebuilds with thicker armor,
@@ -190,6 +191,14 @@
           <button type="button" id="rooms-open" title="Host or join a multiplayer game room">Rooms <span class="key" data-keyhint="global:rooms">(O)</span></button>
           <button type="button" id="tutorial-open" title="Replay the opening-moves tutorial">Tutorial <span class="key" data-keyhint="global:tutorial">(U)</span></button>
         </form>
+      </section>
+      <section id="gun-overlay" class="frame-overlay card-overlay gun-card" aria-labelledby="gun-h" hidden>
+        <header class="ov-head">
+          <div class="ov-title"><h2 id="gun-h">Weapons</h2></div>
+          <button type="button" class="ov-x" id="gun-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
+          <div class="nav-hint ov-keys" id="nav-gun"><span><span data-keyhint="aim:barrelLeft">◀</span><span data-keyhint="aim:barrelRight">▶</span><span data-keyhint="shop:selUp">▲</span><span data-keyhint="shop:selDown">▼</span> or <span data-keyhint="scroll:lineDown">J</span><span data-keyhint="scroll:lineUp">K</span> move</span><span><span data-keyhint="shop:buy:1">Enter</span> loads</span><span>1-9 load that tile</span></div>
+        </header>
+        <div id="gun-grid" class="gun-grid" role="group" aria-label="Weapons you own"></div>
       </section>
       <section id="tutorial-overlay" class="frame-overlay card-overlay" aria-labelledby="tutorial-h" hidden>
         <h2 id="tutorial-h">Tutorial</h2>
@@ -291,6 +300,6 @@
   </section>
 </main>
 
-<script src="game.js?v=20261010e" defer></script>
+<script src="game.js?v=20261010f" defer></script>
 </body>
 </html>

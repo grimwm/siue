@@ -527,6 +527,7 @@ function showDialogue(line) {
   }
   const tx = document.getElementById('dlg-line');
   if (tx) tx.textContent = line.text;
+  placeLogBelowMenu(); // the status bar may have grown
   box.hidden = false;
 }
 function pumpDialogue(dt) {
@@ -4897,6 +4898,13 @@ function init() {
    frame width, so it never covers the battle buttons. */
 function placeLogBelowMenu() {
   G.windTop = windGaugeTop();
+  // The speech bubble rides just above the status bar, never over it.
+  const hud = document.querySelector && document.querySelector('.hudbar');
+  const dlg = $('dialogue');
+  const holder = dlg && dlg.parentElement;
+  if (hud && dlg && holder && holder.offsetHeight && hud.offsetHeight) {
+    dlg.style.bottom = `${holder.offsetHeight - hud.offsetTop + 6}px`;
+  }
   const bar = $('menubar');
   const log = $('log-overlay');
   if (!bar || !log || !bar.offsetHeight) return;

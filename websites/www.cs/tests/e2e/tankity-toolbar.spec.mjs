@@ -38,3 +38,26 @@ test('icon buttons show a styled tip after a moment, and Scores lives in the men
   await expect(page.locator('#report-overlay')).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('outside fullscreen the toolbar keeps one row, key caps under the icons', async ({ browser }) => {
+  const { page } = await newPlayer(browser);
+  await page.setViewportSize({ width: 1180, height: 820 });
+  await page.waitForTimeout(300);
+  const boxes = await page.locator('.guide-actions .tool').evaluateAll(bs => bs.map(b => {
+    const r = b.getBoundingClientRect(), i = b.querySelector('svg').getBoundingClientRect(), k = b.querySelector('.key').getBoundingClientRect();
+    return { top: Math.round(r.top), capBelow: k.top >= i.bottom - 1 };
+  }));
+  expect(new Set(boxes.map(b => b.top)).size).toBe(1);
+  expect(boxes.every(b => b.capBelow)).toBe(true);
+});
+
+test('the speech bubble never covers the status bar', async ({ browser }) => {
+  const { page } = await newPlayer(browser);
+  await page.keyboard.press('n');
+  await page.waitForSelector('#shop-veil:not([hidden])');
+  await page.click('#shop-next');
+  await expect(page.locator('#dialogue')).toBeVisible({ timeout: 30_000 });
+  const [d, h] = [await page.locator('#dialogue').boundingBox(), await page.locator('.hudbar').boundingBox()];
+  expect(d.y + d.height).toBeLessThanOrEqual(h.y + 1);
+  await page.locator('#frame').screenshot({ path: 'test-results/tankity-bubble.png' });
+});

@@ -650,3 +650,9 @@ button.btn-leave[hidden] { display: none; }
 .tool-tip-desc { color: var(--ink); font-size: 0.78rem; margin-top: 0.15rem !important; }
 @keyframes tip-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .tool-tip { animation: none; } }
+
+/* Toolbar key caps sit under their icons, so the row stays narrow enough to
+   fit on one line outside fullscreen. */
+.guide-actions .tool { flex-direction: column; gap: 0.15rem; padding: 0.3rem 0.45rem 0.25rem; min-width: 2.6rem; }
+.guide-actions .tool .key { font-size: 0.62rem; padding: 0 0.25rem; line-height: 1.3; }
+.touch .guide-actions .tool { padding: 0.4rem 0.5rem; }

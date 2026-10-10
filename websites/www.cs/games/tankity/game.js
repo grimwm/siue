@@ -16,13 +16,13 @@ import {
   muzzle, shotSpeed, stepBallistic, blastDamage,
   fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling, aiChoose as simAiChoose,
-} from './js/sim.js?v=20261010zb';
+} from './js/sim.js?v=20261010ze';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
-} from './js/audio.js?v=20261010zb';
+} from './js/audio.js?v=20261010ze';
 import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, planCatchUp, VOLLEY_OPENERS, CLOCK_SHOW_S,
-} from './js/net.js?v=20261010zb';
+} from './js/net.js?v=20261010ze';
 
 /* ---------- audio: lives in src/audio.ts ---------- */
 music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));
@@ -2927,11 +2927,21 @@ async function netRefreshRoster() {
   } catch (err) { /* roster fills in on the next tick */ }
   netRenderRoster(room);
 }
+/* The newest lobby event already told, per room: the match starts its event
+   cursor there, so its first sync never repeats who rolled in or left. */
+const lobbyTold = { code: '', seq: 0 };
 function netLobbyWatch() {
+  if (lobbyTold.code !== net.code) { lobbyTold.code = net.code; lobbyTold.seq = 0; }
   net.watchLobby(
     () => { const veil = $('lobby-veil'); return !!veil && !veil.hidden; },
     room => {
       net.seats = room.seats || [];
+      // Arrivals (not our own) and departures, each told once.
+      for (const e of room.events || []) {
+        if ((e.seq || 0) <= lobbyTold.seq || (e.t !== 'join' && e.t !== 'left')) continue;
+        lobbyTold.seq = e.seq || 0;
+        if (e.t === 'left' || e.seat !== net.seat) netEvent(e);
+      }
       netRenderRoster(room);
       if (room.phase && room.phase !== 'lobby') startNetMatch(room);
     },
@@ -3059,7 +3069,8 @@ async function startRoom() {
 function startNetMatch(room) {
   endTutorial(false);
   G.demo = false;
-  net.beginMatch(); // on, a fresh event cursor, the lobby poll off and the match poll on
+  // On, the event cursor past what the lobby already told, the lobby poll off and the match poll on.
+  net.beginMatch(lobbyTold.code === net.code ? lobbyTold.seq : 0);
   MATCH.lastPhase = '';
   MATCH.lastRound = -1;
   MATCH.queue = []; MATCH.volley = null; MATCH.pendingRoom = null;
@@ -3419,8 +3430,8 @@ function netEvent(e) {
     } else say(`${seatName(e.seat)} is out of lives.`, 'info');
     return;
   }
-  if (e.t === 'join') { say(`${seatName(e.seat)} rolled into the room.`, 'info'); return; }
-  if (e.t === 'left') { say(`${seatName(e.seat)} left; the battery takes that seat.`, 'info'); return; }
+  if (e.t === 'join') { say(`${e.name || seatName(e.seat)} rolled into the room.`, 'info'); return; }
+  if (e.t === 'left') { say(`${e.name || seatName(e.seat)} left; the battery takes that seat.`, 'info'); return; }
   if (e.t === 'round') {
     say(`Round ${e.round}. Fresh barrels, same battery. Wind ${windText()}.`, 'info');
     talk('tank', 'Back in! These hills are mine!', true);

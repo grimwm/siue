@@ -192,13 +192,16 @@ export async function roomPair(browser, { beforeStart } = {}) {
   await guest.page.fill('#join-initials', 'zed');
   await guest.page.click('#join-go');
   await guest.page.waitForSelector('#lobby-room:not([hidden])');
-  await host.page.waitForTimeout(2000);
+  // The host hears about the guest on its next poll.
+  await expect.poll(() => hud(host.page, 'log'), { timeout: 10_000 }).toMatch(/zed rolled into the room/i);
   if (beforeStart) await beforeStart({ host, guest, roomState, code });
   await host.page.click('#lobby-start');
   // Both clients are in the match once each shows the host's turn; events
   // from before a client's first sync are history and never replay.
   await expect.poll(() => hud(host.page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU\. Aim!/);
   await expect.poll(() => hud(guest.page, 'hud-turn'), { timeout: 30_000 }).toMatch(/abc aiming/);
+  // Told once in the lobby, never again when the match starts.
+  expect(((await hud(host.page, 'log')) || '').match(/zed rolled into the room/gi) || []).toHaveLength(1);
   return { host, guest, roomState, code };
 }
 

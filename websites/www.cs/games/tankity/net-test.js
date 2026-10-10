@@ -284,6 +284,17 @@ const bodyOf = entry => JSON.parse(entry.init.body);
   net.stopPolling();
   check('match-poll-stops', host.intervals.size === 0);
 
+  // A match can start its cursor past events the lobby already told.
+  const told = makeClient(() => roomReply({ phase: 'play', events: [
+    { t: 'join', seat: 1, name: 'ZED', seq: 1 }, { t: 'round', round: 1, wind: 0, seq: 2 }] }));
+  told.net.beginMatch(1);
+  check('match-begins-past-the-lobby', told.net.since === 1 && told.net.synced === false);
+  [...told.host.intervals.values()][0].fn();
+  await flush();
+  const fresh = told.seen.snapshots[0] ? told.seen.snapshots[0].fresh.map(e => e.t) : [];
+  check('match-skips-what-the-lobby-told', fresh.join() === 'round', fresh.join());
+  told.net.stopPolling();
+
   // A failing poll waits for the next one.
   const flaky = makeClient(() => new Error('offline'));
   flaky.net.beginMatch();

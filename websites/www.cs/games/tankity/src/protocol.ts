@@ -118,7 +118,11 @@ export interface RoundWinEvent extends EventBase { t: 'roundwin'; round: number 
 export interface MatchOverEvent extends EventBase { t: 'matchover' }
 export interface EliminatedEvent extends EventBase { t: 'eliminated'; seat: number }
 export interface OneUpEvent extends EventBase { t: 'oneup'; seat: number; lives: number }
-export interface LeftEvent extends EventBase { t: 'left'; seat: number }
+/** Someone took a seat in the lobby. */
+/** Arrivals and departures carry the player's name: by the next poll a
+ * departed seat already shows the drone that took it over. */
+export interface JoinEvent extends EventBase { t: 'join'; seat: number; name: string }
+export interface LeftEvent extends EventBase { t: 'left'; seat: number; name: string }
 
 /** What opens a volley: a human fires, the drone fires, or the crew fires for
  * a human who ran the turn clock out. `x`, `a` and `pw` are where the barrel
@@ -146,12 +150,9 @@ export interface ShieldEvent extends EventBase { t: 'shield'; seat: number; by: 
 export interface LastStandEvent extends EventBase { t: 'laststand'; seat: number }
 export interface FizzleEvent extends EventBase { t: 'fizzle'; by: number; w: string }
 
-/** The events a snapshot carries, discriminated by `t`. rooms.php also stores
- * a `join` event (`{t, seat}`) without a `seq`; a snapshot only carries events
- * newer than `since`, so a seq-less one is never sent and it has no member
- * here. */
+/** The events a snapshot carries, discriminated by `t`. */
 export type RoomEvent =
-  | RoundEvent | RoundWinEvent | MatchOverEvent | EliminatedEvent | OneUpEvent | LeftEvent
+  | RoundEvent | RoundWinEvent | MatchOverEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent
   | FireEvent | AiFireEvent | AutoEvent
   | ShotEvent | BurstEvent | HitEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent;
 

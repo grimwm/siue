@@ -32,9 +32,10 @@ has('tankity-sources-run-its-specs', select([`${S}games/tankity/src/sim.ts`]), [
 has('tankity-compiled-modules-run-its-specs', select([`${S}games/tankity/js/sim.js`]), ['tankity-solo.spec.mjs', 'tankity-rooms.spec.mjs', 'games-pwa.spec.mjs']);
 has('tankity-tsconfig-runs-its-specs', select([`${S}games/tankity/tsconfig.json`]), ['tankity-solo.spec.mjs', 'games-pwa.spec.mjs']);
 has('tankity-package-json-runs-its-specs', select([`${S}games/tankity/package.json`]), ['tankity-solo.spec.mjs', 'games-pwa.spec.mjs']);
+has('tankity-vendored-preact-runs-its-specs', select([`${S}games/tankity/vendor/preact/preact.module.js`]), ['tankity-solo.spec.mjs', 'tankity-overlays.spec.mjs', 'games-pwa.spec.mjs']);
 check('tankity-lockfile-alone-runs-no-browser', select([`${S}games/tankity/package-lock.json`]), 'NONE');
 check('tankity-lockfile-with-a-module-still-runs-its-specs', select([`${S}games/tankity/package-lock.json`, `${S}games/tankity/js/sim.js`]).includes('tankity-solo.spec.mjs'), true);
-check('tankity-build-tool-runs-nothing', select([`${S}games/tankity/tools/ts-build.mjs`, `${S}games/tankity/.gitignore`]), 'NONE');
+check('tankity-build-tool-runs-nothing', select([`${S}games/tankity/tools/ts-build.mjs`, `${S}games/tankity/tools/vendor.mjs`, `${S}games/tankity/tools/dom-stub.mjs`, `${S}games/tankity/ui-test.js`, `${S}games/tankity/.gitignore`]), 'NONE');
 check('cylon-lockfile-alone-runs-no-browser', select([`${S}games/cylon/package-lock.json`]), 'NONE');
 check('cylon-build-tool-runs-nothing', select([`${S}games/cylon/tools/ts-build.mjs`, `${S}games/cylon/.gitignore`, `${S}games/cylon/rules-test.js`]), 'NONE');
 has('cylon-sources-run-the-shell-specs', select([`${S}games/cylon/src/rules.ts`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs', 'games-hub.spec.mjs']);

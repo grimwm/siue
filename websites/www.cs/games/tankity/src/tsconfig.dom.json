@@ -1,12 +1,16 @@
 {
-  // The modules that touch browser APIs (WebAudio, fetch, timers, canvas) but never
-  // the document: the same options as ../tsconfig.json plus the DOM lib. Each
-  // config is its own program in tools/ts-build.mjs, so the sim, which lists
-  // itself only in ../tsconfig.json, still fails to compile if it uses
-  // `document`. Every module here also imports with its .js extension.
+  // The modules that touch browser APIs: WebAudio, fetch, timers and canvas
+  // (audio.ts, render.ts) and the Preact overlays in ui/, which build DOM. The
+  // same options as ../tsconfig.json plus the DOM lib, and JSX compiled for
+  // Preact (its `jsx-runtime` is imported bare, resolved by the import map in
+  // index.html). Each config is its own program in tools/ts-build.mjs, so the
+  // sim, which lists itself only in ../tsconfig.json, still fails to compile if
+  // it uses `document`. Every module here also imports with its .js extension.
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "lib": ["ES2022", "DOM"]
+    "lib": ["ES2022", "DOM"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
   },
-  "files": ["audio.ts", "render.ts"]
+  "files": ["audio.ts", "render.ts", "ui/help.tsx", "ui/shop.tsx"]
 }

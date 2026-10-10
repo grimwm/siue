@@ -90,6 +90,10 @@ for (const id of PAGE_GAMES) {
     expect(cached.name).toMatch(new RegExp(`^game-${id}-[0-9a-f]{12}$`));
     expect(cached.urls).toEqual(expect.arrayContaining(['game.js', 'game.css', 'index.html', 'icon-512.png']));
     expect(cached.urls.some(u => u.endsWith('.php'))).toBe(false);
+    if (id === 'tankity') {
+      // The vendored Preact and the overlay modules that import it are precached too.
+      expect(cached.urls).toEqual(expect.arrayContaining(['preact.module.js', 'hooks.module.js', 'jsx-runtime.module.js', 'chrome.js', 'help.js', 'shop.js']));
+    }
 
     // Offline: the page still loads and renders.
     await context.setOffline(true);
@@ -98,6 +102,11 @@ for (const id of PAGE_GAMES) {
     await expect(page.locator('script[src^="game.js"]')).toHaveCount(1);
     expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
     expect(errors).toEqual([]);
+    if (id === 'tankity') {
+      // Offline, the import map and the vendored Preact answer from the cache and draw the overlays.
+      await expect(page.locator('#help-overlay ul.help li').first()).toBeAttached();
+      await expect(page.locator('#help-overlay #help-close')).toBeAttached();
+    }
     // Proof the browser is really offline for the worker too: a file it never
     // cached has no answer.
     expect(await page.evaluate(() => fetch('not-cached.txt').then(() => 'answered', () => 'failed'))).toBe('failed');

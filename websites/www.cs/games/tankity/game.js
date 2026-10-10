@@ -6,11 +6,13 @@
  */
 /* The pure game math (RNG, terrain, flight, hits, blasts, drone aim) lives in
  * src/sim.ts, the sound in src/audio.ts, the room client in src/net.ts and the
- * canvas drawing in src/render.ts, the keys and touch pads in src/input.ts, each compiled to js/ and imported here. Each
+ * canvas drawing in src/render.ts, the keys and touch pads in src/input.ts, each compiled to js/ and imported here.
+ * The overlays that are mostly markup are Preact components in src/ui/ (the help and the shop so far):
+ * they take state and callbacks as props and keep none of their own. Each
  * import's ?v= is the module's content hash, written by tools/install-files.php,
  * so a browser never pairs a cached module with a newer game.js. Everything
  * below is the rest: the game loop, particles,
- * the HUD, rooms and the shop. */
+ * the HUD, rooms and the shop's state. */
 import {
   hashSeed, mulberry32, gauss, W, H, GRAV, FLAT_GRAV, TUNE, clamp,
   buildArsenal as simBuildArsenal, droneRack as simDroneRack, genTerrain as simGenTerrain,
@@ -27,6 +29,8 @@ import {
 } from './js/net.js?v=6259020b84';
 import { createRenderer, drawChassis } from './js/render.js?v=1e211c92ed';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
+import { renderHelp } from './js/ui/help.js?v=590e2a36cd';
+import { renderShop as drawShop } from './js/ui/shop.js?v=eff4669cf5';
 
 /* ---------- audio: lives in src/audio.ts ---------- */
 music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));
@@ -180,9 +184,11 @@ let WEAPONS = {};
 let WORDER = [];
 let SHOP = [];
 let GEAR = {};
+let ARSENAL_REV = 0; // counts arsenal rebuilds; the shop repaints its icons when it changes
 function buildArsenal(data) {
   const a = simBuildArsenal(data);
   if (!a) return false;
+  ARSENAL_REV++;
   ARSENAL = a; WEAPONS = a.weapons; WORDER = a.order; SHOP = a.shop; GEAR = a.gear;
   G.shopSel = clamp(G.shopSel || 0, 0, SHOP.length - 1);
   return true;
@@ -757,143 +763,97 @@ function hideShop() {
   const veil = $('shop-veil');
   if (veil) veil.hidden = true;
 }
-/* The shop's start button. In a room it is the Ready toggle: pressed reads
-   "Ready ✓", and a line under it counts who is ready and the time left before
-   the shop closes on its own (rooms.php ROOM_SHOP_SECS). */
-let shopReadyShown = '';
-function renderShopReady() {
-  const next = $('shop-next');
-  const line = $('shop-ready');
+/* The shop is a Preact component (src/ui/shop.tsx) drawn into #shop-veil. This
+   builds what it shows from the game's state and wires its clicks back; the
+   component keeps no state of its own. In a room the start button is the Ready
+   toggle: pressed reads "Ready ✓", and a line under it counts who is ready and
+   the time left before the shop closes on its own (rooms.php ROOM_SHOP_SECS). */
+function shopReadyView() {
   if (!net.on) {
-    if (next) {
-      next.textContent = `Start round ${G.round + 1}${keyCap('shop', 'next')}`;
-      next.removeAttribute('aria-pressed');
-    }
-    if (line) line.hidden = true;
-    shopReadyShown = '';
-    return;
+    const label = `Start round ${G.round + 1}${keyCap('shop', 'next')}`;
+    return { next: { label }, readyLine: null, sig: label };
   }
   const mine = net.readyNow();
   const voters = net.seats.filter(s => s.human && s.lives > 0);
   const ready = voters.filter(s => s.ready).length;
   const left = net.shopClockLeft();
   const clock = left === null ? '' : ` · shop closes in ${Math.floor(Math.ceil(left) / 60)}:${String(Math.ceil(left) % 60).padStart(2, '0')}`;
-  const text = `${mine ? 'Ready ✓' : 'Ready'}${keyCap('shop', 'next')}`;
+  const label = `${mine ? 'Ready ✓' : 'Ready'}${keyCap('shop', 'next')}`;
   const status = `${ready}/${voters.length} ready${clock}`;
   const marks = voters.map(s => `${String(s.name).toUpperCase()}${s.ready ? ' ✓' : ''}`).join('  ');
-  const shown = text + '|' + status + '|' + marks;
-  if (shown === shopReadyShown) return;
-  shopReadyShown = shown;
-  if (next) {
-    next.textContent = text;
-    next.setAttribute('aria-pressed', mine ? 'true' : 'false');
-  }
-  if (line) {
-    line.hidden = false;
-    line.textContent = `${status} · ${marks}`;
-  }
+  return { next: { label, pressed: mine }, readyLine: `${status} · ${marks}`, sig: label + '|' + status + '|' + marks };
 }
-let shopSelShown = -1; // the row renderShop last brought into view
+/* The start button and ready line as last drawn. The clocks call this every
+   frame, so the shop redraws only when what it would show has changed. */
+let shopReadyShown = '';
+function renderShopReady() {
+  if (G.phase === 'shop' && shopReadyView().sig !== shopReadyShown) renderShop();
+}
 function renderShop() {
-  const title = $('shop-title');
-  if (title) title.textContent = G.round === 0 ? 'Pre-match shop' : 'Field shop';
-  renderShopReady();
-  const cash = $('shop-cash');
-  if (cash) {
-    cash.textContent = G.round === 0
-      ? `War chest: $${G.cash} · spend your stake before the first hill`
-      : `War chest: $${G.cash} · armor ${me().hp}/${TUNE.playerArmor} · round ${G.round} cleared`;
-  }
-  const list = $('shop-list');
-  if (!list) return;
-  // Redraws (buys, pack counts, room polls) keep the list where it was.
-  const keepTop = list.scrollTop;
-  const selMoved = shopSelShown !== G.shopSel;
-  list.innerHTML = '';
+  const veil = $('shop-veil');
+  if (!veil || !G.ammo) return; // no match has dealt a hand yet
   G.shopSel = clamp(G.shopSel || 0, 0, SHOP.length - 1);
   G.shopQty = clamp(G.shopQty || 1, 1, 9);
+  const ready = shopReadyView();
+  shopReadyShown = ready.sig;
+  const qty = G.shopQty;
+  const entries = [];
   let lastCat = '';
   let shellRowShown = false;
   SHOP.forEach((it, idx) => {
     if (it.cat !== lastCat) {
       lastCat = it.cat;
-      const h = document.createElement('li');
-      h.className = 'shop-cat';
-      h.textContent = it.cat;
-      list.appendChild(h);
+      entries.push({ kind: 'cat', name: it.cat });
       // The Shell never needs buying, but it is part of the arsenal: it
       // heads the shells with no number and no Buy button.
       if (it.kind === 'ammo' && !shellRowShown) {
         shellRowShown = true;
-        list.appendChild(shellShopRow());
+        entries.push(shellShopRow());
       }
     }
     const locked = (it.minRound || 0) > G.round;
     const unit = packPrice(it);
-    const qty = G.shopQty;
     const total = unit * qty;
-    const li = document.createElement('li');
-    if (idx === G.shopSel) li.className = 'sel';
-    const item = document.createElement('div');
-    item.className = 'shop-item';
-    const name = document.createElement('div');
-    name.className = 'shop-name';
     const parts = shopName(it, unit);
-    setShopName(name, `${idx + 1}. ${parts.name}`, `${parts.vals}${qty > 1 ? ` ×${qty} = $${total}` : ''}`);
-    const sub = document.createElement('div');
-    sub.className = 'shop-sub';
-    sub.textContent = shopSub(it);
-    const sub2 = document.createElement('div');
-    sub2.className = 'shop-sub';
-    sub2.textContent = shopSub2(it, locked);
-    item.appendChild(name);
-    item.appendChild(sub);
-    item.appendChild(sub2);
-    const acts = document.createElement('span');
-    acts.className = 'acts';
-    if (it.kind === 'ammo') {
-      const pv = document.createElement('button');
-      pv.type = 'button';
-      pv.append(document.createTextNode('Preview '), keySpan('shop', 'preview'));
-      pv.addEventListener('click', ev => { ev.currentTarget.blur(); openPreview(it.w); });
-      acts.appendChild(pv);
-    }
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    if (locked) {
-      btn.textContent = 'Locked';
-    } else {
-      btn.append(document.createTextNode(qty > 1 ? `Buy ×${qty} ` : 'Buy '), keySpan('shop', 'buy'));
-    }
-    btn.disabled = locked || G.cash < total;
-    btn.addEventListener('click', () => buyItem(it, G.shopQty));
-    acts.appendChild(btn);
-    const icon = document.createElement('canvas');
-    icon.className = 'shop-icon';
-    icon.setAttribute('aria-hidden', 'true');
-    if (it.kind === 'ammo') drawShellIcon(icon, it.w);
-    else drawGearIcon(icon, it.g);
-    li.appendChild(icon);
-    li.appendChild(item);
-    li.appendChild(acts);
-    list.appendChild(li);
+    entries.push({
+      kind: 'item',
+      index: idx,
+      name: parts.name,
+      vals: `${parts.vals}${qty > 1 ? ` ×${qty} = $${total}` : ''}`,
+      sub: shopSub(it),
+      sub2: shopSub2(it, locked),
+      icon: it.kind === 'ammo' ? { kind: 'ammo', w: it.w } : { kind: 'gear', g: it.g },
+      selected: idx === G.shopSel,
+      locked,
+      disabled: locked || G.cash < total,
+      qty,
+      weapon: it.kind === 'ammo' ? it.w : undefined,
+    });
   });
-  list.scrollTop = keepTop;
-  // Riding the selection with the keys keeps the highlighted row in view.
-  shopSelShown = G.shopSel;
-  const sel = selMoved && list.querySelector('.sel');
-  if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
-  renderKeyHints();
+  drawShop(veil, {
+    keyHint,
+    title: G.round === 0 ? 'Pre-match shop' : 'Field shop',
+    cash: G.round === 0
+      ? `War chest: $${G.cash} · spend your stake before the first hill`
+      : `War chest: $${G.cash} · armor ${me().hp}/${TUNE.playerArmor} · round ${G.round} cleared`,
+    entries,
+    next: ready.next,
+    readyLine: ready.readyLine,
+    inRoom: net.on,
+    drawIcon: (canvas, icon) => (icon.kind === 'ammo' ? drawShellIcon(canvas, icon.w) : drawGearIcon(canvas, icon.g)),
+    arsenalRev: ARSENAL_REV,
+    onBuy: idx => buyItem(SHOP[idx], G.shopQty),
+    onPreview: openPreview,
+    onNext: nextRound,
+    onLeave: openLeaveVeil,
+  });
   refreshNavHints();
 }
-/* A live (KEY) cap for buttons built in script, matching the boot pass over
-// [data-keyhint] spans for buttons written in markup. */
-function keySpan(ctx, action) {
-  const s = document.createElement('span');
-  s.className = 'key';
-  s.setAttribute('data-keyhint', ctx + ':' + action);
-  s.textContent = `(${keyHint(ctx, action)})`;
-  return s;
+/* The help is a Preact component too (src/ui/help.tsx), drawn into the section
+   in the page; it redraws when the key table changes. */
+function renderHelpOverlay() {
+  const section = $('help-overlay');
+  if (section) renderHelp(section, { keyHint, onClose: () => toggleOverlay('help-overlay', 'btn-help') });
 }
 /* Every row names the goods on one line and the numbers below it. */
 /* One pack price shared by the menu, the till, and the affordable count. */
@@ -913,41 +873,16 @@ function shopName(it, price) {
   }
   return { name: it.label, vals: `($${price})` };
 }
-function setShopName(el, name, vals) {
-  if (!el.replaceChildren) { el.textContent = `${name} ${vals}`; return; }
-  const v = document.createElement('span');
-  v.className = 'shop-vals';
-  v.textContent = vals;
-  el.replaceChildren(document.createTextNode(`${name} `), v);
-}
 function shellShopRow() {
-  const li = document.createElement('li');
-  li.className = 'shop-free';
-  const icon = document.createElement('canvas');
-  icon.className = 'shop-icon';
-  icon.setAttribute('aria-hidden', 'true');
-  drawShellIcon(icon, 'shell');
-  const item = document.createElement('div');
-  item.className = 'shop-item';
-  const name = document.createElement('div');
-  name.className = 'shop-name';
-  setShopName(name, WEAPONS.shell.name, '∞ (free)');
-  const sub = document.createElement('div');
-  sub.className = 'shop-sub';
-  sub.textContent = shopSub({ kind: 'ammo', w: 'shell' });
-  const sub2 = document.createElement('div');
-  sub2.className = 'shop-sub';
-  sub2.textContent = 'Always loaded, never runs out.';
-  item.append(name, sub, sub2);
-  const acts = document.createElement('span');
-  acts.className = 'acts';
-  const pv = document.createElement('button');
-  pv.type = 'button';
-  pv.textContent = 'Preview';
-  pv.addEventListener('click', ev => { ev.currentTarget.blur(); openPreview('shell'); });
-  acts.appendChild(pv);
-  li.append(icon, item, acts);
-  return li;
+  return {
+    kind: 'free',
+    weapon: 'shell',
+    name: WEAPONS.shell.name,
+    vals: '∞ (free)',
+    sub: shopSub({ kind: 'ammo', w: 'shell' }),
+    sub2: 'Always loaded, never runs out.',
+    icon: { kind: 'ammo', w: 'shell' },
+  };
 }
 /* First stat line: what it does. Second stat line: the deal. Locked rows
 // keep their numbers so the NUKE shows its damage before round 4. */
@@ -2423,10 +2358,9 @@ function startNetMatch(room) {
 /* Leaving a running match: Leave room buttons (menu, shop) only show inside a
    room, and ask first in the page, never with a browser dialog. */
 function syncLeaveButtons() {
-  for (const id of ['menu-leave', 'shop-leave']) {
-    const b = $(id);
-    if (b) b.hidden = !net.on;
-  }
+  const b = $('menu-leave');
+  if (b) b.hidden = !net.on;
+  renderShop();
 }
 function openLeaveVeil() {
   if (!net.on) return;
@@ -3174,6 +3108,8 @@ const input = createInput({ touch: TOUCH });
 function applyKeys(def) {
   if (!input.setKeys(def)) return;
   renderKeyHints();
+  renderHelpOverlay();
+  renderShop();
   renderTutorialText();
 }
 /* What a touch player taps instead, for prose that names a key. */
@@ -3191,10 +3127,12 @@ function keyCap(ctx, action) {
 function keyHint(ctx, action, idx) {
   return input.hint(ctx, action, idx);
 }
-/* Fill every [data-keyhint] span at boot and again if game.json loads late,
-// so labels can never drift from behavior. */
+/* Fill every [data-keyhint] span in the page at boot and again if game.json
+// loads late, so labels can never drift from behavior. The Preact overlays
+// (marked data-ui) fill their own from the same keyHint. */
 function renderKeyHints() {
   document.querySelectorAll('[data-keyhint]').forEach(el => {
+    if (el.closest && el.closest('[data-ui]')) return;
     const parts = (el.getAttribute('data-keyhint') || '').split(':');
     const cap = parts.length >= 2 ? keyHint(parts[0], parts[1], +(parts[2] || 0)) : '';
     const bare = el.className === 'key';
@@ -3474,6 +3412,7 @@ function cycleWeapon() {
 }
 function init() {
   if (TOUCH) document.documentElement.classList.add('touch');
+  renderHelpOverlay();
   bindKeys();
   bindToolTips();
   loadGameConfig();
@@ -3482,6 +3421,7 @@ function init() {
   loadTextSize();
   renderKeyHints();
   startDemo();
+  renderShop();
   loadScores();
   // Light the connection dot from the start, not only when the lobby opens.
   loadOccupancy();
@@ -3536,7 +3476,7 @@ function init() {
   }
   const menuBtn = $('btn-menu');
   if (menuBtn) menuBtn.addEventListener('click', ev => { ev.currentTarget.blur(); toggleOverlay('menu-overlay', 'btn-menu'); });
-  for (const [closeId, ovId, btnId] of [['log-close', 'log-overlay', 'btn-log'], ['help-close', 'help-overlay', 'btn-help'], ['report-close', 'report-overlay', 'scores-open'], ['menu-close', 'menu-overlay', 'btn-menu']]) {
+  for (const [closeId, ovId, btnId] of [['log-close', 'log-overlay', 'btn-log'], ['report-close', 'report-overlay', 'scores-open'], ['menu-close', 'menu-overlay', 'btn-menu']]) {
     const c = $(closeId);
     if (c) c.addEventListener('click', ev => { ev.currentTarget.blur(); toggleOverlay(ovId, btnId); });
   }
@@ -3549,10 +3489,8 @@ function init() {
     ev.currentTarget.blur();
     if (net.on) { netLeave(); openLobby(); } else freshMatchFromSeedBox();
   });
-  for (const id of ['menu-leave', 'shop-leave']) {
-    const b = $(id);
-    if (b) b.addEventListener('click', ev => { ev.currentTarget.blur(); openLeaveVeil(); });
-  }
+  const menuLeave = $('menu-leave');
+  if (menuLeave) menuLeave.addEventListener('click', ev => { ev.currentTarget.blur(); openLeaveVeil(); });
   const leaveGo = $('leave-go');
   if (leaveGo) leaveGo.addEventListener('click', ev => { ev.currentTarget.blur(); confirmLeave(); });
   const leaveStay = $('leave-stay');
@@ -3601,8 +3539,6 @@ function init() {
     sfx.play('click');
     netRematch();
   });
-  const shopNext = $('shop-next');
-  if (shopNext) shopNext.addEventListener('click', ev => { ev.currentTarget.blur(); nextRound(); });
   const pvClose = $('preview-close');
   if (pvClose) pvClose.addEventListener('click', ev => { ev.currentTarget.blur(); closePreview(); });
   const eform = $('end-score-form');

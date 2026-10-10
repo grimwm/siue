@@ -5,10 +5,18 @@
  * options in tsconfig.json (the DOM-free modules) and src/tsconfig.dom.json
  * (the modules that need browser types). src/tsconfig.check.json is a third
  * program that only type-checks (it holds the guard that keeps the client's
- * protocol types in step with the server's fixtures) and emits nothing. A module
- * that holds only types (src/protocol.ts) compiles to nothing, so it gets no
+ * protocol types in step with the server's fixtures) and emits nothing. The
+ * DOM program also compiles the Preact overlays (src/ui/*.tsx, JSX through
+ * "preact/jsx-runtime") to js/ui/. A module that holds only types (src/protocol.ts) compiles to nothing, so it gets no
  * js/ file. js/ is checked in: the host serves static files and has no Node,
  * so what ships is what is committed.
+ *
+ * A compiled module imports its siblings and Preact without a version
+ * (`from "./chrome.js"`); tools/install-files.php adds the `?v=<hash>` the
+ * browser needs, in place. So that rewrite never makes the build stale, both
+ * modes compare a file with its relative imports' `?v=...` removed: --check
+ * accepts any version, and a file is rewritten (losing its versions, until
+ * install-files runs again) only when its code changed.
  *
  *   node tools/ts-build.mjs          write every stale file, drop extra ones
  *   node tools/ts-build.mjs --check  list missing, stale and extra files in
@@ -74,6 +82,9 @@ function pruneEmpty(dir) {
 
 const outDir = resolve(GAME, 'js');
 
+/** A module's text with the `?v=` install-files.php put on its relative imports removed. */
+const unversioned = text => text.replace(/(\bfrom\s*(['"])\.{1,2}\/[^'"?\n]*)\?v=[^'"\n]*\2/g, '$1$2');
+
 // Compile in memory: path -> text. A module two programs both reach (audio
 // importing the sim, say) is emitted by each; the text is the same.
 const outputs = new Map();
@@ -93,7 +104,7 @@ for (const file of CONFIGS) {
 const stale = [];
 for (const [file, text] of outputs) {
   const have = existsSync(file) ? readFileSync(file, 'utf8') : null;
-  if (have !== text) stale.push({ file, text, why: have === null ? 'is missing' : 'is stale' });
+  if (have === null || unversioned(have) !== text) stale.push({ file, text, why: have === null ? 'is missing' : 'is stale' });
 }
 const extra = filesUnder(outDir).filter(f => !outputs.has(f));
 

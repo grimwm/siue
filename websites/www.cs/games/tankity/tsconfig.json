@@ -27,7 +27,6 @@
     "sourceMap": false,
     "newLine": "lf",
     "noEmitOnError": true
-    // Preact overlays (later): "jsx": "react-jsx", "jsxImportSource": "preact"
   },
   "files": ["src/sim.ts", "src/net.ts", "src/input.ts"]
 }

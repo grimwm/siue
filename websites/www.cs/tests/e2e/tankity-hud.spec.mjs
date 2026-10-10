@@ -66,3 +66,13 @@ test('the weapon picker shows the whole rack and loads with keys or clicks', asy
   await expect(page.locator('#gun-overlay')).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test('the arrow pad sits centred over its label', async ({ browser }) => {
+  const { page } = await newPlayer(browser);
+  const centre = sel => page.locator(sel).evaluate(el => { const r = el.getBoundingClientRect(); return r.left + r.width / 2; });
+  const pad = await centre('.pad-aim .pad-grid');
+  const note = await centre('.pad-aim .pad-note');
+  const box = await centre('.pad-aim');
+  expect(Math.abs(pad - note)).toBeLessThan(1.5);
+  expect(Math.abs(pad - box)).toBeLessThan(1.5);
+});

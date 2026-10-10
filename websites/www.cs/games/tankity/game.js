@@ -16,10 +16,13 @@ import {
   muzzle, shotSpeed, stepBallistic, blastDamage,
   fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling, aiChoose as simAiChoose,
-} from './js/sim.js?v=20261010za';
+} from './js/sim.js?v=20261010zb';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
-} from './js/audio.js?v=20261010za';
+} from './js/audio.js?v=20261010zb';
+import {
+  RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, planCatchUp, VOLLEY_OPENERS, CLOCK_SHOW_S,
+} from './js/net.js?v=20261010zb';
 
 /* ---------- audio: lives in src/audio.ts ---------- */
 music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));
@@ -538,7 +541,7 @@ function demoBlock() {
 }
 function playerFire() {
   closeGuns();
-  if (NET.on) { netFire(); return; }
+  if (net.on) { netFire(); return; }
   if (demoBlock()) return;
   if (G.phase !== 'aim' || !cur().isPlayer || G.over) return;
   closePreview();
@@ -762,7 +765,7 @@ let shopReadyShown = '';
 function renderShopReady() {
   const next = $('shop-next');
   const line = $('shop-ready');
-  if (!NET.on) {
+  if (!net.on) {
     if (next) {
       next.textContent = `Start round ${G.round + 1}${keyCap('shop', 'next')}`;
       next.removeAttribute('aria-pressed');
@@ -771,10 +774,10 @@ function renderShopReady() {
     shopReadyShown = '';
     return;
   }
-  const mine = netReadyNow();
-  const voters = NET.seats.filter(s => s.human && s.lives > 0);
+  const mine = net.readyNow();
+  const voters = net.seats.filter(s => s.human && s.lives > 0);
   const ready = voters.filter(s => s.ready).length;
-  const left = shopClockLeft();
+  const left = net.shopClockLeft();
   const clock = left === null ? '' : ` · shop closes in ${Math.floor(Math.ceil(left) / 60)}:${String(Math.ceil(left) % 60).padStart(2, '0')}`;
   const text = `${mine ? 'Ready ✓' : 'Ready'}${keyCap('shop', 'next')}`;
   const status = `${ready}/${voters.length} ready${clock}`;
@@ -994,7 +997,7 @@ function shopSub2(it, locked) {
 /* One direct loader for the weapon picker; Q keeps cycling through it. */
 function selectWeapon(w) {
   if (G.over || G.phase === 'shop' || demoBlock()) return false;
-  if (NET.on) return netPick(w);
+  if (net.on) return netPick(w);
   if (!(w === 'shell' || (G.ammo[w] || 0) > 0)) {
     say(`No ${WEAPONS[w].name} left in the rack.`, 'info');
     return false;
@@ -1007,7 +1010,7 @@ function selectWeapon(w) {
 }
 function buyItem(it, qty) {
   qty = clamp(Math.floor(qty || 1), 1, 9);
-  if (NET.on) { netBuy(it, qty); return; }
+  if (net.on) { netBuy(it, qty); return; }
   const total = packPrice(it) * qty;
   if ((it.minRound || 0) > G.round) {
     say(`That unlocks in round ${it.minRound}.`, 'info');
@@ -1078,7 +1081,7 @@ function applyGear(it, qty, lots) {
   }
 }
 function nextRound() {
-  if (NET.on) { netNext(); return; }
+  if (net.on) { netNext(); return; }
   if (G.phase !== 'shop') return;
   G.round += 1;
   newRound();
@@ -1531,9 +1534,9 @@ function chooseBody(key) {
   if (!UNIT_BODIES.some(u => u.key === key)) return;
   G.body = key;
   try { window.localStorage.setItem('tankity-body', key); } catch (_) { /* fine */ }
-  const mine = NET.on ? myTank() : (G.tanks || []).find(t => t.isPlayer);
+  const mine = net.on ? myTank() : (G.tanks || []).find(t => t.isPlayer);
   if (mine) mine.body = key;
-  if (NET.code) roomPost('body', { body: key }).then(d => { if (NET.on) netApply(d.room); }).catch(() => {});
+  net.sendBody(key);
   renderUnitPicker();
 }
 /* Text size: a menu setting kept in this browser. It scales every panel
@@ -1885,7 +1888,7 @@ function renderLoadout() {
    the tank whose turn it is. Nobody between rounds or after the match. */
 function turnTank() {
   if (G.over || G.phase === 'shop' || G.phase === 'banner') return null;
-  if (NET.on && NET.volley && NET.volley.shooter) return NET.volley.shooter;
+  if (net.on && MATCH.volley && MATCH.volley.shooter) return MATCH.volley.shooter;
   const t = G.tanks[G.turn];
   return t && t.hp > 0 ? t : null;
 }
@@ -2117,7 +2120,7 @@ function render() {
     }
     const ground = isGroundUnit(t);
     if (t === turnTank()) drawTurnMarker(c, t, time, ground);
-    if (NET.on && t.menu && !t.isPlayer && t === turnTank()) drawMenuBadge(c, t, time, ground);
+    if (net.on && t.menu && !t.isPlayer && t === turnTank()) drawMenuBadge(c, t, time, ground);
     if (ground) drawGroundUnit(c, t, time);
     else drawGunDrone(c, t, time);
     // Health bar + name.
@@ -2176,9 +2179,9 @@ function render() {
     c.fill();
   }
   // Room replay: shells fly the paths the server simulated, trail and all.
-  if (NET.volley && NET.volley.ft >= 0) {
-    const ft = NET.volley.ft;
-    for (const sh of NET.volley.shots) {
+  if (MATCH.volley && MATCH.volley.ft >= 0) {
+    const ft = MATCH.volley.ft;
+    for (const sh of MATCH.volley.shots) {
       if (sh.landed) continue;
       const [hx, hy, idx] = netShellAt(sh, ft);
       const gfx = ((WEAPONS[sh.e.w] || {}).gfx) || {};
@@ -2242,7 +2245,7 @@ function buildSky(key) {
   }
   return { key, stars, band: { x: cx, y: cy, ang }, phase: SKY_PHASES[Math.floor(r() * SKY_PHASES.length)] };
 }
-function skyKey() { return NET.on ? 'room:' + NET.code : String(G.seed || ''); }
+function skyKey() { return net.on ? 'room:' + net.code : String(G.seed || ''); }
 function drawSky(c, time) {
   const key = skyKey();
   if (!SKY || SKY.key !== key) SKY = buildSky(key);
@@ -2390,7 +2393,7 @@ function say(text, tone) {
   if (overlay) overlay.scrollTop = overlay.scrollHeight;
   refreshNavHints();
 }
-/* Fitted tricks ride the HUD beside the shells. In room matches netApply
+/* Fitted tricks ride the HUD beside the shells. In room matches netOnSnapshot
 // keeps these G fields mirrored from the server snapshot. */
 function trickChips() {
   const chips = [];
@@ -2517,7 +2520,7 @@ function drawPreview() {
   }
 }
 function renderHUD() {
-  if (NET.on) { renderNetHUD(); return; }
+  if (net.on) { renderNetHUD(); return; }
   if (!G.tanks.length) return;
   const t = cur() || me();
   if ($('hud-turn')) {
@@ -2565,7 +2568,7 @@ function frame(ts) {
   // strand the game between rounds; on return the card simply finishes.
   tickBanner(dt);
   // Room matches render the server snapshot; the server runs the war.
-  if (NET.on) {
+  if (net.on) {
     netFrame(dt);
     if (G.terrain) { render(); renderHUD(); }
     return;
@@ -2608,7 +2611,7 @@ function frame(ts) {
       }
     }
   }
-  while (!NET.on && G.score >= G.nextOneUp) {
+  while (!net.on && G.score >= G.nextOneUp) {
     G.nextOneUp += TUNE.oneUpEvery;
     if (G.lives < TUNE.maxLives) {
       G.lives += 1;
@@ -2682,17 +2685,38 @@ const BLOCKED_INITIALS = [
   'POO', 'PEE',
   'KKK',
 ];
-const NET = {
-  on: false, code: '', seat: -1, token: '', csrf: '', since: 0,
-  seats: [], myTurn: false, aimDirty: false, driveAcc: 0, driveT: 0,
-  queue: [], volley: null, pendingRoom: null, synced: false, busy: false, lastPhase: '', pollId: 0,
-  initials: '', maps: [], map: null, mapName: 'Random hills', lastRound: -1,
-  shopLeft: null, shopLeftAt: 0, readyWant: null, readySending: false,
+/* The room client (js/net.js, from src/net.ts) owns the session, the
+   transport, polling, the senders and the clocks, and reaches this page only
+   through the handlers below: it reports the snapshot and the events it has
+   not seen (netOnSnapshot), whether the server answers (the dots), and a
+   Ready change or a failed send. fetch, timers and the clock are handed in. */
+function browserRoomEnv() {
+  return {
+    fetch: (url, init) => fetch(url, init),
+    setTimeout: (fn, ms) => setTimeout(fn, ms),
+    setInterval: (fn, ms) => setInterval(fn, ms),
+    clearInterval: id => clearInterval(id),
+    now: () => performance.now(),
+    beacon: (url, body) => typeof navigator !== 'undefined' && !!navigator.sendBeacon && navigator.sendBeacon(url, body),
+  };
+}
+const net = new RoomClient(browserRoomEnv(), {
+  onReachable: setNetDot,
+  onSnapshot: netOnSnapshot,
+  onReadyChange: renderShopReady,
+  onError: err => say(prettyRoomError(err), 'bad'),
+});
+/* What the page keeps of a room match: whose turn it reads as, the aim and
+   drive it has not sent, the replay queue (events waiting to be played back)
+   and the volley on screen, and the last snapshot it drew. */
+const MATCH = {
+  myTurn: false, aimDirty: false, driveAcc: 0, driveT: 0,
+  queue: [], volley: null, pendingRoom: null, fastNext: false,
+  lastPhase: '', lastTurn: -1, lastRound: -1, initials: '',
 };
 const KNOWN_FOES = ['reaper', 'wraith', 'spotter'];
 const FOE_PAINT = { reaper: '#ff0000', wraith: '#00ffff', spotter: '#ff00ff' };
 const SEAT_PAINT = ['#ffff00', '#00ff00', '#00ffff', '#ff00ff'];
-let lobbyTimer = 0;
 function netValidInitials(raw) {
   const s = String(raw || '').trim();
   if (!/^[A-Za-z]{3}$/.test(s)) return null;
@@ -2703,17 +2727,6 @@ function lobbySay(text) {
   const el = $('lobby-status');
   if (el) el.textContent = text;
 }
-// Server lines are already human; these few technical ones get translated so
-// a game never quotes transport at the player.
-function prettyRoomError(err) {
-  const m = String((err && err.message) || err || '');
-  if (/too fast/.test(m)) return 'Easy on the trigger. Give it a beat and try again.';
-  if (/bad seat token|bad csrf token|bad origin/.test(m)) return 'Room session went stale. Leave the room and come back in.';
-  return m || 'The room server did not answer properly. Solo hills still work.';
-}
-/* One fetcher for every room call, so transport trouble always arrives in
-// human words: unreachable, a page where game data should be (PHP not
-// running), or a stumble. Server JSON errors pass through untouched. */
 /* The dot in the lobby and the HUD mirrors the last known reachability. */
 function setNetDot(on) {
   for (const id of ['net-dot', 'hud-dot']) {
@@ -2725,58 +2738,12 @@ function setNetDot(on) {
   const word = $('hud-server');
   if (word) word.textContent = on ? 'online' : 'offline';
 }
-function roomDown(err) {
-  const e = new Error(err);
-  e.roomDown = true;
-  setNetDot(false);
-  return e;
-}
-async function roomFetchJson(url, opts) {
-  let res;
-  try {
-    res = await fetch(url, opts);
-  } catch (err) {
-    throw roomDown('Could not reach the room server. Solo hills still work.');
-  }
-  const data = await res.json().catch(() => null);
-  if (!data) {
-    throw roomDown(res.ok
-      ? 'The room server answered with a page instead of game data, so the PHP service is probably not running there. Solo hills still work.'
-      : 'The room server stumbled. Solo hills still work.');
-  }
-  return { res, data };
-}
-async function roomPost(action, payload) {
-  const send = () => roomFetchJson('rooms.php?action=' + encodeURIComponent(action), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': NET.csrf || '' },
-    body: JSON.stringify(Object.assign({ code: NET.code, token: NET.token, csrf: NET.csrf }, payload || {})),
-  });
-  let { res, data } = await send();
-  // The server spaces one player's acts 150 ms apart: a quick second click
-  // (a weapon picked right after firing) waits a beat and goes again.
-  for (let tries = 0; res.status === 429 && tries < 3; tries++) {
-    await new Promise(r => setTimeout(r, 180));
-    ({ res, data } = await send());
-  }
-  if (!res.ok || !data.ok) throw new Error(data.error || 'The room server stumbled. Solo hills still work.');
-  setNetDot(true);
-  return data;
-}
-async function roomGetState() {
-  const q = 'action=state&code=' + encodeURIComponent(NET.code) +
-    '&token=' + encodeURIComponent(NET.token) + '&since=' + NET.since;
-  const { res, data } = await roomFetchJson('rooms.php?' + q, { headers: { Accept: 'application/json' } });
-  if (!res.ok || !data.ok) throw new Error(data.error || 'The room server stumbled. Solo hills still work.');
-  setNetDot(true);
-  return data.room;
-}
 function myTank() {
   for (const t of G.tanks) if (t.isPlayer) return t;
   return null;
 }
 function seatName(seat) {
-  const s = NET.seats[seat];
+  const s = net.seats[seat];
   if (!s || !s.name) return 'seat ' + (seat + 1);
   return s.name;
 }
@@ -2787,16 +2754,12 @@ function foeTalkId(t) {
   return KNOWN_FOES.indexOf(t.id) >= 0 ? t.id : null;
 }
 async function loadMaps() {
-  try {
-    const { data } = await roomFetchJson('rooms.php?action=maps', { headers: { Accept: 'application/json' } });
-    if (data.ok && Array.isArray(data.maps)) NET.maps = data.maps;
-    if (data.ok) setNetDot(true);
-  } catch (err) { /* hills picker stays on random */ }
+  await net.loadMaps(); // an unreachable server leaves the picker on random hills
   const sel = $('lobby-map');
   if (!sel) return;
   const cur = sel.value;
-  if (cur === '' || NET.maps.some(m => m.id === cur)) sel.value = cur;
-  else sel.value = NET.map || '';
+  if (cur === '' || net.maps.some(m => m.id === cur)) sel.value = cur;
+  else sel.value = net.map || '';
   renderMapPicker();
 }
 /* The host's hills: a Random tile plus one per named map, each a silhouette
@@ -2842,7 +2805,7 @@ function renderMapPicker() {
   const box = $('lobby-map-picker');
   const sel = $('lobby-map');
   if (!box || !sel || !box.replaceChildren) return;
-  const tiles = [{ id: '', name: 'Random hills' }, ...NET.maps].map(m => {
+  const tiles = [{ id: '', name: 'Random hills' }, ...net.maps].map(m => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'unit-choice map-choice';
@@ -2874,15 +2837,15 @@ async function mapChosen() {
   const mapSel = $('lobby-map');
   if (!mapSel) return;
   renderMapPicker();
-  if (!NET.code || NET.seat !== 0 || NET.on) return;
+  if (!net.code || net.seat !== 0 || net.on) return;
   const seq = ++mapPickSeq;
   try {
     for (let tries = 0; ; tries++) {
       try {
-        const d = await roomPost('map', { map: mapSel.value || '' });
+        const d = await net.post('map', { map: mapSel.value || '' });
         if (seq !== mapPickSeq) return;
-        NET.map = d.room.map;
-        NET.mapName = d.room.mapName || 'Random hills';
+        net.map = d.room.map;
+        net.mapName = d.room.mapName || 'Random hills';
         netRenderRoster(d.room);
         return;
       } catch (err) {
@@ -2896,17 +2859,15 @@ async function mapChosen() {
 }
 async function loadOccupancy() {
   const el = $('lobby-count');
-  try {
-    const { data } = await roomFetchJson('rooms.php?action=ping', { headers: { Accept: 'application/json' } });
-    setNetDot(true);
-    if (data.ok && data.rooms && el) {
-      el.textContent = `${data.rooms.used} / ${data.rooms.max} rooms occupied`;
-    }
-    return !!(data.ok && data.rooms);
-  } catch (err) {
+  const data = await net.ping();
+  if (!data) {
     if (el) el.textContent = '';
     return false;
   }
+  if (data.ok && data.rooms && el) {
+    el.textContent = `${data.rooms.used} / ${data.rooms.max} rooms occupied`;
+  }
+  return !!(data.ok && data.rooms);
 }
 async function openLobby() {
   closePreview();
@@ -2917,10 +2878,10 @@ async function openLobby() {
   const veil = $('lobby-veil');
   if (veil) veil.hidden = false;
   refreshNavHints();
-  if (NET.code && !NET.on) {
+  if (net.code && !net.on) {
     netRenderRoster(null);
     netLobbyWatch();
-  } else if (!NET.code) {
+  } else if (!net.code) {
     showLobbyRoom(false);
   }
 }
@@ -2938,15 +2899,10 @@ function showLobbyRoom(inRoom) {
 async function hostRoom(initials, mapId) {
   askNotifications(); // for the turn alert while this tab is hidden
   lobbySay('Raising the flag…');
-  NET.code = ''; NET.token = ''; NET.csrf = ''; NET.seat = -1; NET.since = 0;
-  NET.seats = [];
-  NET.initials = initials;
-  NET.map = null;
-  NET.mapName = 'Random hills';
+  MATCH.initials = initials;
   try {
-    const data = await roomPost('create', { initials, map: mapId || '', body: G.body });
-    NET.code = data.code; NET.seat = data.seat; NET.token = data.token; NET.csrf = data.csrf;
-    say(`Room ${NET.code} hosted. Read the code to your friends.`, 'info');
+    await net.host(initials, mapId || '', G.body);
+    say(`Room ${net.code} hosted. Read the code to your friends.`, 'info');
     await netRefreshRoster();
     loadOccupancy();
     netLobbyWatch();
@@ -2955,14 +2911,10 @@ async function hostRoom(initials, mapId) {
 async function joinRoom(code, initials) {
   askNotifications(); // for the turn alert while this tab is hidden
   lobbySay('Knocking…');
-  NET.code = String(code || '').trim().toUpperCase();
-  NET.token = ''; NET.csrf = ''; NET.seat = -1; NET.since = 0;
-  NET.seats = [];
-  NET.initials = initials;
+  MATCH.initials = initials;
   try {
-    const data = await roomPost('join', { code: NET.code, initials, body: G.body });
-    NET.code = data.code; NET.seat = data.seat; NET.token = data.token; NET.csrf = data.csrf;
-    say(`Joined room ${NET.code} as ${initials}.`, 'info');
+    await net.join(code, initials, G.body);
+    say(`Joined room ${net.code} as ${initials}.`, 'info');
     await netRefreshRoster();
     netLobbyWatch();
   } catch (err) { lobbySay(prettyRoomError(err)); }
@@ -2970,24 +2922,20 @@ async function joinRoom(code, initials) {
 async function netRefreshRoster() {
   let room = null;
   try {
-    room = await roomGetState();
-    NET.seats = room.seats || [];
+    room = await net.getState();
+    net.seats = room.seats || [];
   } catch (err) { /* roster fills in on the next tick */ }
   netRenderRoster(room);
 }
 function netLobbyWatch() {
-  if (lobbyTimer) clearInterval(lobbyTimer);
-  lobbyTimer = setInterval(async () => {
-    if (!NET.code || NET.on) { clearInterval(lobbyTimer); lobbyTimer = 0; return; }
-    const veil = $('lobby-veil');
-    if (!veil || veil.hidden) { clearInterval(lobbyTimer); lobbyTimer = 0; return; }
-    try {
-      const room = await roomGetState();
-      NET.seats = room.seats || [];
+  net.watchLobby(
+    () => { const veil = $('lobby-veil'); return !!veil && !veil.hidden; },
+    room => {
+      net.seats = room.seats || [];
       netRenderRoster(room);
       if (room.phase && room.phase !== 'lobby') startNetMatch(room);
-    } catch (err) { /* the host may have wandered off; keep listening */ }
-  }, 2000);
+    },
+  );
 }
 /* The invite link carries the room code so a friend lands in the lobby with
 // the code already filled in. */
@@ -2995,13 +2943,12 @@ function netLobbyWatch() {
    host frames the game (a site's own page around it), that page, so a
    friend arrives with its navigation too; otherwise the game page itself. */
 function joinLink() {
-  if (typeof location === 'undefined' || !NET.code) return '';
+  if (typeof location === 'undefined' || !net.code) return '';
   let here = location;
   try {
     if (window.top && window.top !== window && window.top.location.origin === location.origin) here = window.top.location;
   } catch (_) { /* a frame on another host: keep our own address */ }
-  const base = (here.origin || '') + (here.pathname || '');
-  return base + '?code=' + encodeURIComponent(NET.code);
+  return inviteUrl(net.code, here);
 }
 async function copyInvite() {
   const url = joinLink();
@@ -3035,21 +2982,21 @@ function maybeApplyInviteCode() {
 }
 function netRenderRoster(room) {
   showLobbyRoom(true);
-  if ($('lobby-code')) $('lobby-code').textContent = NET.code || '····';
+  if ($('lobby-code')) $('lobby-code').textContent = net.code || '····';
   const link = $('join-link');
   if (link) link.value = joinLink();
   const hills = $('lobby-hills');
   if (hills) {
     if (room && room.map !== undefined) {
-      NET.map = room.map;
-      NET.mapName = room.mapName || 'Random hills';
+      net.map = room.map;
+      net.mapName = room.mapName || 'Random hills';
     }
-    hills.textContent = 'Hills: ' + (NET.mapName || 'Random hills');
+    hills.textContent = 'Hills: ' + (net.mapName || 'Random hills');
   }
   const grid = $('lobby-seats');
   if (grid && grid.replaceChildren) {
-    const seats = (room && room.seats) || NET.seats || [];
-    const host = NET.seat === 0;
+    const seats = (room && room.seats) || net.seats || [];
+    const host = net.seat === 0;
     const tiles = seats.map((s, i) => {
       const human = !!s.human;
       const open = !human && s.mode === 'open';
@@ -3066,7 +3013,7 @@ function netRenderRoster(room) {
       big.textContent = human ? String(s.name || '').toUpperCase() : (open ? 'Open' : 'AI');
       const cap = document.createElement('span');
       cap.className = 'seat-cap';
-      if (human) cap.textContent = (i === NET.seat ? 'You' : 'Player') + (i === 0 ? ' · host' : '');
+      if (human) cap.textContent = (i === net.seat ? 'You' : 'Player') + (i === 0 ? ' · host' : '');
       else if (flips) cap.textContent = open ? 'Tap for AI' : 'Tap for Open';
       else cap.textContent = open ? 'Nobody' : 'Drone';
       b.append(big, cap);
@@ -3083,51 +3030,47 @@ function netRenderRoster(room) {
   }
   const seatsHint = $('seats-hint');
   if (seatsHint) {
-    seatsHint.textContent = NET.seat === 0
+    seatsHint.textContent = net.seat === 0
       ? 'Tap a seat nobody holds to switch it between AI and Open. Open seats field no tank.'
       : 'The host decides which empty seats are AI and which stay open.';
   }
   const start = $('lobby-start');
-  if (start) start.style.display = NET.seat === 0 ? '' : 'none';
-  lobbySay(NET.seat === 0 ? 'You host. Start when your crew is in.' : 'Hang tight. The host starts the match.');
+  if (start) start.style.display = net.seat === 0 ? '' : 'none';
+  lobbySay(net.seat === 0 ? 'You host. Start when your crew is in.' : 'Hang tight. The host starts the match.');
   refreshNavHints();
 }
 /* The host flips a seat nobody holds between the drone battery and open. */
 async function netSeatMode(seat, mode) {
-  if (NET.seat !== 0 || NET.on) return;
+  if (net.seat !== 0 || net.on) return;
   try {
-    const d = await roomPost('seatmode', { seat, mode, since: NET.since });
-    NET.seats = d.room.seats || [];
+    const d = await net.post('seatmode', { seat, mode, since: net.since });
+    net.seats = d.room.seats || [];
     netRenderRoster(d.room);
   } catch (err) { lobbySay(prettyRoomError(err)); }
 }
 async function startRoom() {
-  if (NET.seat !== 0) return;
+  if (net.seat !== 0) return;
   lobbySay('Rolling out…');
   try {
-    const data = await roomPost('start', {});
+    const data = await net.post('start', {});
     startNetMatch(data.room);
   } catch (err) { lobbySay(prettyRoomError(err)); }
 }
 function startNetMatch(room) {
   endTutorial(false);
   G.demo = false;
-  NET.on = true;
-  NET.since = 0;
-  NET.lastPhase = '';
-  NET.lastRound = -1;
-  NET.queue = []; NET.volley = null; NET.pendingRoom = null; NET.synced = false;
-  NET.aimDirty = false;
+  net.beginMatch(); // on, a fresh event cursor, the lobby poll off and the match poll on
+  MATCH.lastPhase = '';
+  MATCH.lastRound = -1;
+  MATCH.queue = []; MATCH.volley = null; MATCH.pendingRoom = null;
+  MATCH.aimDirty = false;
   G.over = false;
   const sf = $('score-form');
   if (sf) sf.style.display = 'none';
-  if (lobbyTimer) { clearInterval(lobbyTimer); lobbyTimer = 0; }
   const veil = $('lobby-veil');
   if (veil) veil.hidden = true;
-  netApply(room);
-  say(`Room ${NET.code}: you are ${seatName(NET.seat)}. The battery flies the AI seats.`, 'info');
-  if (NET.pollId) clearInterval(NET.pollId);
-  NET.pollId = setInterval(netRefresh, 1600);
+  net.apply(room);
+  say(`Room ${net.code}: you are ${seatName(net.seat)}. The battery flies the AI seats.`, 'info');
   syncLeaveButtons();
 }
 /* Leaving a running match: Leave room buttons (menu, shop) only show inside a
@@ -3135,11 +3078,11 @@ function startNetMatch(room) {
 function syncLeaveButtons() {
   for (const id of ['menu-leave', 'shop-leave']) {
     const b = $(id);
-    if (b) b.hidden = !NET.on;
+    if (b) b.hidden = !net.on;
   }
 }
 function openLeaveVeil() {
-  if (!NET.on) return;
+  if (!net.on) return;
   const veil = $('leave-veil');
   if (!veil) return;
   veil.hidden = false;
@@ -3154,31 +3097,14 @@ function closeLeaveVeil() {
 }
 function confirmLeave() {
   closeLeaveVeil();
-  if (NET.on) netLeave();
-}
-/* Tell the server this seat is gone, so an emptied room frees its slot at
-   once instead of after the idle window. Best effort; sendBeacon survives a
-   closing tab. */
-function netSendLeave() {
-  if (!NET.code || !NET.token) return;
-  const body = JSON.stringify({ code: NET.code, token: NET.token, csrf: NET.csrf });
-  const url = 'rooms.php?action=leave';
-  try {
-    if (navigator.sendBeacon && navigator.sendBeacon(url, body)) return;
-  } catch (_) { /* fall through to fetch */ }
-  try {
-    fetch(url, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body });
-  } catch (_) { /* the idle sweep closes it anyway */ }
+  if (net.on) netLeave();
 }
 function netLeave(quiet) {
-  netSendLeave();
-  if (NET.pollId) { clearInterval(NET.pollId); NET.pollId = 0; }
-  if (lobbyTimer) { clearInterval(lobbyTimer); lobbyTimer = 0; }
-  const wasOn = NET.on;
+  const wasOn = net.on;
+  net.leave(); // tells the server, stops both polls, clears the session
   const rematch = $('rematch');
   if (rematch) rematch.hidden = true;
-  NET.on = false; NET.code = ''; NET.seat = -1; NET.token = ''; NET.csrf = ''; NET.since = 0;
-  NET.seats = []; NET.queue = []; NET.volley = null; NET.pendingRoom = null; NET.synced = false; NET.myTurn = false; NET.lastPhase = ''; NET.lastTurn = -1; NET.lastRound = -1;
+  MATCH.queue = []; MATCH.volley = null; MATCH.pendingRoom = null; MATCH.myTurn = false; MATCH.lastPhase = ''; MATCH.lastTurn = -1; MATCH.lastRound = -1;
   const againBtn = $('again');
   if (againBtn) againBtn.textContent = 'Play again (N)';
   const sf = $('score-form');
@@ -3197,8 +3123,8 @@ function netLeave(quiet) {
 async function netRematch() {
   // Same hills again, decided entirely server side: the map id reselects the
   // hidden seed, and no seed string ever crosses the wire.
-  const initials = NET.initials;
-  const map = NET.map;
+  const initials = MATCH.initials;
+  const map = net.map;
   if (!netValidInitials(initials)) {
     say('No callsign kept for the rematch. Rejoin from the lobby.', 'bad');
     openLobby();
@@ -3210,45 +3136,30 @@ async function netRematch() {
   const sel = $('lobby-map');
   if (sel && map) { sel.value = map; renderMapPicker(); }
 }
-async function netRefresh() {
-  if (!NET.on) return;
-  try {
-    netApply(await roomGetState());
-  } catch (err) { /* the next poll retries; the hills wait */ }
-}
-async function netAct(kind, extra) {
-  if (NET.busy) return;
-  NET.busy = true;
-  try {
-    netApply((await roomPost('act', Object.assign({ kind }, extra || {}))).room);
-  } catch (err) {
-    say(prettyRoomError(err), 'bad');
-    sfx.play('warn');
-  }
-  NET.busy = false;
-}
 function netFire() {
-  if (!NET.myTurn) { say('Hold on, not your turn yet.', 'info'); return; }
+  if (!MATCH.myTurn) { say('Hold on, not your turn yet.', 'info'); return; }
   closePreview();
   const t = myTank();
   const ang = t ? Math.round(t.angle * 10) / 10 : 60;
   const pow = t ? Math.round(t.power * 10) / 10 : 55;
   talk('tank', pick(TANK_FIRE));
-  netAct('fire', { angle: ang, power: pow });
+  net.act({ kind: 'fire', angle: ang, power: pow }).catch(err => {
+    say(prettyRoomError(err), 'bad');
+    sfx.play('warn');
+  });
 }
 function netSendAim() {
-  NET.aimDirty = false;
+  MATCH.aimDirty = false;
   const t = myTank();
   if (!t || t.hp <= 0) return;
-  roomPost('act', {
+  net.sendQuiet({
     kind: 'aim',
     angle: Math.round(t.angle * 10) / 10,
     power: Math.round(t.power * 10) / 10,
-  }).then(d => netApply(d.room)).catch(() => {});
+  });
 }
 function netSendDrive(dx) {
-  roomPost('act', { kind: 'drive', dx: Math.round(dx * 10) / 10 })
-    .then(d => netApply(d.room)).catch(() => {});
+  net.sendQuiet({ kind: 'drive', dx: Math.round(dx * 10) / 10 });
 }
 /* Loading a gun is fine on anyone's turn: it only sets what fires next. */
 function netPick(w) {
@@ -3265,7 +3176,7 @@ function netPick(w) {
   sfx.play('click');
   say(`Loaded: ${WEAPONS[w].name}.`, 'info');
   renderHUD();
-  roomPost('act', { kind: 'weapon', weapon: w }).then(d => netApply(d.room)).catch(() => {});
+  net.sendQuiet({ kind: 'weapon', weapon: w });
   return true;
 }
 function netCycle() {
@@ -3279,80 +3190,47 @@ function netBuy(it, qty) {
   const key = it.kind === 'ammo' ? it.w : (it.g || it.kind);
   qty = clamp(Math.floor(qty || 1), 1, 9);
   sfx.play('click');
-  roomPost('buy', { item: key, qty })
+  net.buy(key, qty)
     .then(d => {
       sfx.play('cash');
       say(`Bought ${qty > 1 ? qty + ' × ' : ''}${it.label}.`, 'good');
       G.shopQty = 1;
-      netApply(d.room);
+      net.apply(d.room);
     })
     .catch(err => { say(prettyRoomError(err), 'bad'); sfx.play('warn'); });
 }
-/* Whether this seat counts as ready: what the player last asked for while a
-   request is out, otherwise what the room says. */
-function netReadyNow() {
-  if (NET.readyWant !== null) return NET.readyWant;
-  const me = NET.seats[NET.seat];
-  return !!(me && me.ready);
-}
-/* The shop button toggles Ready. The wire carries the wanted state, not a
-   flip, and requests go one at a time in the order of the clicks, so a
-   duplicate or a slow reply can never invert it. If the last player has
-   readied by the time an unready lands, the server has already started the
-   round and answers with that, quietly. */
+/* The shop button toggles Ready (net.setReady: the wire carries the wanted
+   state and the requests go one at a time). */
 function netNext(want) {
-  NET.readyWant = typeof want === 'boolean' ? want : !netReadyNow();
   sfx.play('click');
-  renderShopReady();
-  netSendReady();
-}
-async function netSendReady() {
-  if (NET.readySending) return;
-  NET.readySending = true;
-  try {
-    while (NET.readyWant !== null) {
-      const want = NET.readyWant;
-      const d = await roomPost('ready', { ready: want });
-      if (NET.readyWant === want) NET.readyWant = null;
-      netApply(d.room);
-    }
-  } catch (err) {
-    NET.readyWant = null;
-    say(prettyRoomError(err), 'bad');
-    netRefresh();
-  }
-  NET.readySending = false;
-  renderShopReady();
+  net.setReady(want);
 }
 /* A room update either lands now or waits behind the replay: the server
    settles a whole turn at once, and clients play it back (aim, flight,
-   blasts, damage) before the new state takes over. */
-function netApply(room) {
-  if (!room || !NET.code) return;
-  const fresh = (room.events || []).filter(e => (e.seq || 0) > NET.since);
-  for (const e of fresh) NET.since = Math.max(NET.since, e.seq || 0);
-  if (!NET.synced) {
+   blasts, damage) before the new state takes over. The client has already
+   counted `fresh` (the events past its cursor) as seen. */
+function netOnSnapshot(room, fresh, first) {
+  if (first) {
     // First sync: earlier events are history. Log them, replay nothing.
-    NET.synced = true;
     netAdopt(room);
     for (const e of fresh) if (e.t !== 'shot' && e.t !== 'burst') netEvent(e);
     return;
   }
-  NET.queue.push(...fresh);
-  if (document.hidden || NET.queue.filter(e => VOLLEY_OPENERS.has(e.t)).length > 1) netCatchUp();
-  if (NET.queue.length || NET.volley) {
-    NET.pendingRoom = room;
-    NET.myTurn = false;
+  MATCH.queue.push(...fresh);
+  if (shouldCatchUp(document.hidden, MATCH.queue)) netCatchUp();
+  if (MATCH.queue.length || MATCH.volley) {
+    MATCH.pendingRoom = room;
+    MATCH.myTurn = false;
     G.phase = 'think';
     return;
   }
   netAdopt(room);
 }
 function netAdopt(room) {
-  NET.seats = room.seats || [];
+  net.seats = room.seats || [];
   if (room.map !== undefined) {
-    NET.map = room.map;
-    NET.mapName = room.mapName || 'Random hills';
+    net.map = room.map;
+    net.mapName = room.mapName || 'Random hills';
   }
   if (Array.isArray(room.terrain) && room.terrain.length === W) {
     G.terrain = room.terrain.map(Number);
@@ -3368,11 +3246,11 @@ function netAdopt(room) {
   const before = new Map(G.tanks.map(t => [t.seat, t]));
   // While we aim, the server only learns our angle and power when a key is
   // let go: keep the local aim through polls so the barrel never snaps back.
-  const aiming = sameRound && room.phase === 'play' && room.turn === NET.seat;
+  const aiming = sameRound && room.phase === 'play' && room.turn === net.seat;
   G.tanks = (room.tanks || []).map(t => {
-    const mine = t.seat === NET.seat;
+    const mine = t.seat === net.seat;
     const was = before.get(t.seat);
-    const seat = NET.seats[t.seat];
+    const seat = net.seats[t.seat];
     const ai = !seat || !seat.human;
     const id = mine ? 'tank' : String(t.name || '?').toLowerCase();
     return {
@@ -3395,17 +3273,13 @@ function netAdopt(room) {
   });
   G.turn = Math.max(0, G.tanks.findIndex(t => t.seat === room.turn));
   const mine = myTank();
-  // The turn clock: seconds left as of this snapshot, counted down locally.
-  // A clock that jumps up is a new turn, which re-arms the 30-second alert.
-  const prevLeft = turnClockLeft();
-  NET.turnLeft = typeof room.turnLeft === 'number' ? room.turnLeft : null;
-  NET.turnLeftAt = performance.now();
-  if (NET.turnLeft === null || prevLeft === null || NET.turnLeft > prevLeft + 5) NET.clockWarned = false;
-  NET.shopLeft = typeof room.shopLeft === 'number' ? room.shopLeft : null;
-  NET.shopLeftAt = performance.now();
-  const wasMyTurn = NET.myTurn;
-  NET.myTurn = room.phase === 'play' && !!mine && mine.hp > 0 && room.turn === NET.seat;
-  if (NET.myTurn && !wasMyTurn) turnAlert();
+  // The turn and shop clocks: seconds left as of this snapshot, counted down
+  // locally by the client; a turn clock that jumps up is a new turn, which
+  // re-arms the 30-second alert.
+  net.armClocks(room);
+  const wasMyTurn = MATCH.myTurn;
+  MATCH.myTurn = room.phase === 'play' && !!mine && mine.hp > 0 && room.turn === net.seat;
+  if (MATCH.myTurn && !wasMyTurn) turnAlert();
   if (!G.ammo) G.ammo = { shell: Infinity, buck: 0, mortar: 0, rail: 0, nuke: 0 };
   if (room.you) {
     const a = {};
@@ -3427,42 +3301,42 @@ function netAdopt(room) {
     if (mine) mine.fuel = room.you.fuel || 0;
   }
   const rs = $('run-stats');
-  if (rs) rs.textContent = `Room ${NET.code} · you are ${seatName(NET.seat)} · round ${G.round}`;
-  if (room.phase !== 'shop') NET.readyWant = null;
+  if (rs) rs.textContent = `Room ${net.code} · you are ${seatName(net.seat)} · round ${G.round}`;
+  if (room.phase !== 'shop') net.dropReadyWish();
   if (room.phase === 'play') {
     G.over = false;
-    G.phase = NET.myTurn ? 'aim' : 'think';
+    G.phase = MATCH.myTurn ? 'aim' : 'think';
     hideShop();
     if ($('end-veil')) $('end-veil').hidden = true;
     if ($('lobby-veil')) $('lobby-veil').hidden = true;
-    if (NET.lastPhase !== 'play' || room.round !== NET.lastRound) {
+    if (MATCH.lastPhase !== 'play' || room.round !== MATCH.lastRound) {
       // A started match takes the whole frame, same as solo: shut the menu
       // the host came through so nobody has to ESC it away mid-battle.
-      if (NET.lastPhase !== 'play') closeOverlays();
+      if (MATCH.lastPhase !== 'play') closeOverlays();
       music.forRound(room.round);
       startBanner(`Round ${room.round}. ${room.mapName || 'Random hills'}.`);
-      say(`Round ${G.round}. Wind ${windText()}. ${NET.myTurn ? 'Your move. Aim!' : seatName(room.turn) + ' moves first.'}`, 'info');
-      if (NET.myTurn) talk('tank', 'tankity tank! My hill now!', true);
-    } else if (NET.myTurn && NET.lastTurn !== NET.seat) {
+      say(`Round ${G.round}. Wind ${windText()}. ${MATCH.myTurn ? 'Your move. Aim!' : seatName(room.turn) + ' moves first.'}`, 'info');
+      if (MATCH.myTurn) talk('tank', 'tankity tank! My hill now!', true);
+    } else if (MATCH.myTurn && MATCH.lastTurn !== net.seat) {
       say('Your move. Aim!', 'info');
     }
   } else if (room.phase === 'shop') {
     G.phase = 'shop';
     // Polls repeat the shop phase; only arriving in it shuts open panels.
-    if (NET.lastPhase !== 'shop') { closePreview(); closeOverlays(); }
+    if (MATCH.lastPhase !== 'shop') { closePreview(); closeOverlays(); }
     renderShop();
     const veil = $('shop-veil');
     if (veil) veil.hidden = false;
     refreshNavHints();
-    if (NET.lastPhase === 'play') talk('tank', 'Shopping! Then back to bam bam.', true);
+    if (MATCH.lastPhase === 'play') talk('tank', 'Shopping! Then back to bam bam.', true);
   } else if (room.phase === 'over') {
     G.over = true;
     hideShop();
     netShowStandings(room);
   }
-  NET.lastPhase = room.phase;
-  NET.lastTurn = room.turn;
-  NET.lastRound = room.round;
+  MATCH.lastPhase = room.phase;
+  MATCH.lastTurn = room.turn;
+  MATCH.lastRound = room.round;
   render();
   renderHUD();
 }
@@ -3471,7 +3345,7 @@ function netEvent(e) {
   if (e.t === 'shot' || e.t === 'burst') return; // flown by the replay
   if (e.t === 'fizzle') { say(`${seatName(e.by)} sends one into the sunset.`, 'info'); return; }
   if (e.t === 'fire') {
-    if (e.seat === NET.seat) say(`You fire ${WEAPONS[G.selected] ? WEAPONS[G.selected].name : 'a shell'}.`, 'info');
+    if (e.seat === net.seat) say(`You fire ${WEAPONS[G.selected] ? WEAPONS[G.selected].name : 'a shell'}.`, 'info');
     else say(`${seatName(e.seat)} fires ${WEAPONS[e.w] ? WEAPONS[e.w].name : 'a shell'}.`, 'info');
     return;
   }
@@ -3483,8 +3357,8 @@ function netEvent(e) {
     return;
   }
   if (e.t === 'hit') {
-    const victim = e.seat === NET.seat;
-    const killer = e.by === NET.seat;
+    const victim = e.seat === net.seat;
+    const killer = e.by === net.seat;
     if (e.direct || victim || killer) {
       say(victim
         ? `${seatName(e.by)} hits YOU for ${e.dmg}.`
@@ -3504,29 +3378,29 @@ function netEvent(e) {
     return;
   }
   if (e.t === 'kill') {
-    const victim = e.seat === NET.seat;
+    const victim = e.seat === net.seat;
     sfx.play('boom');
     say(victim
-      ? (e.by === NET.seat ? 'You got yourself?! The hills are cruel.' : `${seatName(e.by)} wrecks YOU.`)
+      ? (e.by === net.seat ? 'You got yourself?! The hills are cruel.' : `${seatName(e.by)} wrecks YOU.`)
       : `${seatName(e.by)} wrecks ${seatName(e.seat)}.`,
       victim ? 'bad' : 'info');
     const vt = G.tanks.find(x => x.seat === e.seat);
     const vid = foeTalkId(vt);
     if (vid && FOE_DYING[vid]) talk(vid, FOE_DYING[vid], true);
-    if (!victim && e.by === NET.seat) talk('tank', pick(TANK_HIT));
+    if (!victim && e.by === net.seat) talk('tank', pick(TANK_HIT));
     return;
   }
   if (e.t === 'shield') {
-    say(e.seat === NET.seat ? 'Your shield absorbs the hit!' : `${seatName(e.seat)}'s shield absorbs the hit!`, 'good');
+    say(e.seat === net.seat ? 'Your shield absorbs the hit!' : `${seatName(e.seat)}'s shield absorbs the hit!`, 'good');
     return;
   }
   if (e.t === 'laststand') {
     sfx.play('boom');
-    say(e.seat === NET.seat ? 'Your wreck goes down glowing!' : `${seatName(e.seat)} goes down glowing!`, 'info');
+    say(e.seat === net.seat ? 'Your wreck goes down glowing!' : `${seatName(e.seat)} goes down glowing!`, 'info');
     return;
   }
   if (e.t === 'oneup') {
-    if (e.seat === NET.seat) {
+    if (e.seat === net.seat) {
       sfx.play('win');
       say(`1-UP! Extra life! (${e.lives} lives)`, 'good');
       talk('tank', 'Another life! I am basically immortal!', true);
@@ -3539,7 +3413,7 @@ function netEvent(e) {
     return;
   }
   if (e.t === 'eliminated') {
-    if (e.seat === NET.seat) {
+    if (e.seat === net.seat) {
       sfx.play('lose');
       say('The battery got you for good this time. Filing your report.', 'bad');
     } else say(`${seatName(e.seat)} is out of lives.`, 'info');
@@ -3555,23 +3429,22 @@ function netEvent(e) {
   if (e.t === 'auto') { say(`${seatName(e.seat)} sat quiet, so the crew fired for them.`, 'info'); return; }
 }
 /* ---------- room replay ---------- */
-const VOLLEY_OPENERS = new Set(['fire', 'aifire', 'auto']);
 const PATH_HZ = 12; // rooms.php records a path point every 5 sim steps at 60/s
 function netParsePath(str) {
   return String(str || '').split(' ').filter(Boolean).map(p => p.split(',').map(Number));
 }
 function netStartVolley() {
-  const fast = !!NET.fastNext;
-  NET.fastNext = false;
-  const opener = NET.queue.shift();
+  const fast = !!MATCH.fastNext;
+  MATCH.fastNext = false;
+  const opener = MATCH.queue.shift();
   const events = [];
-  while (NET.queue.length && !VOLLEY_OPENERS.has(NET.queue[0].t)) events.push(NET.queue.shift());
+  while (MATCH.queue.length && !VOLLEY_OPENERS.has(MATCH.queue[0].t)) events.push(MATCH.queue.shift());
   const shooter = G.tanks.find(t => t.seat === opener.seat);
   const a1 = opener.a ?? (shooter ? shooter.angle : 62);
   const p1 = opener.pw ?? (shooter ? shooter.power : 55);
   const x1 = opener.x ?? (shooter ? shooter.x : 0);
   const swing = shooter ? Math.max(Math.abs(a1 - shooter.angle), Math.abs(p1 - shooter.power), Math.abs(x1 - shooter.x)) : 0;
-  NET.volley = {
+  MATCH.volley = {
     fast,
     opener, events, shooter, tau: 0,
     a0: shooter ? shooter.angle : a1, p0: shooter ? shooter.power : p1, x0: shooter ? shooter.x : x1, a1, p1, x1,
@@ -3594,7 +3467,7 @@ function netShellVel(s, i) {
   return [(b[0] - a[0]) * PATH_HZ, (b[1] - a[1]) * PATH_HZ];
 }
 function netStepVolley(dt) {
-  const v = NET.volley;
+  const v = MATCH.volley;
   // A volley kept back from a catch-up plays at triple speed.
   v.tau += dt * (v.fast ? 3 : 1);
   const sh = v.shooter;
@@ -3661,7 +3534,7 @@ function netStepVolley(dt) {
   }
   if (ft >= v.end && v.events.every(e => e.done || e.at === undefined) && v.shots.every(s => s.landed)) {
     for (const e of v.events) if (!e.done) netEvent(e);
-    NET.volley = null;
+    MATCH.volley = null;
   }
 }
 /* Your turn while the tab is out of sight: the tab title says so, a soft
@@ -3689,7 +3562,7 @@ function turnAlert() {
   sfx.turnPing();
   try {
     if (typeof Notification === 'function' && Notification.permission === 'granted') {
-      const n = new Notification('Your turn in Operation Tankity', { body: `Room ${NET.code}: the hills are waiting.`, tag: 'tankity-turn' });
+      const n = new Notification('Your turn in Operation Tankity', { body: `Room ${net.code}: the hills are waiting.`, tag: 'tankity-turn' });
       n.onclick = () => { try { window.top.focus(); } catch (_) { window.focus(); } n.close(); };
     }
   } catch (_) { /* notifications unavailable */ }
@@ -3702,27 +3575,15 @@ function clearTurnAlert() {
 /* The room's turn clock (rooms.php ROOM_TURN_SECS): when a human's turn runs
    out the crew fires a random gun from their rack. Its owner hears an alert
    with 30 seconds left; everyone sees the last 10 counted down. */
-const CLOCK_WARN_S = 30;
-const CLOCK_SHOW_S = 10;
-function turnClockLeft() {
-  if (!NET.on || typeof NET.turnLeft !== 'number') return null;
-  return Math.max(0, NET.turnLeft - (performance.now() - NET.turnLeftAt) / 1000);
-}
-function shopClockLeft() {
-  if (!NET.on || typeof NET.shopLeft !== 'number') return null;
-  return Math.max(0, NET.shopLeft - (performance.now() - NET.shopLeftAt) / 1000);
-}
 function tickTurnClock() {
   if (G.phase === 'shop') renderShopReady();
-  const left = turnClockLeft();
-  if (left === null || NET.clockWarned || left > CLOCK_WARN_S || left <= 0) return;
-  NET.clockWarned = true;
-  if (!NET.myTurn) return;
-  say(`${Math.ceil(left)} seconds left. Fire, or the crew picks a gun and fires for you.`, 'bad');
+  if (!net.clockWarnDue()) return;
+  if (!MATCH.myTurn) return;
+  say(`${Math.ceil(net.turnClockLeft())} seconds left. Fire, or the crew picks a gun and fires for you.`, 'bad');
   sfx.clockWarn();
 }
 function drawTurnClock(c, cv) {
-  const left = turnClockLeft();
+  const left = net.turnClockLeft();
   if (left === null || left > CLOCK_SHOW_S || left <= 0) return;
   const n = Math.ceil(left);
   const frac = left - Math.floor(left); // pulses once a second
@@ -3737,7 +3598,7 @@ function drawTurnClock(c, cv) {
   c.globalAlpha = 0.9;
   c.font = `bold ${Math.round(12 * textScale())}px sans-serif`;
   c.fillStyle = '#ffffff';
-  c.fillText(NET.myTurn ? 'Fire now, or the crew fires for you' : 'The crew fires if the clock runs out', W / 2, H * 0.42 + 46 * textScale());
+  c.fillText(MATCH.myTurn ? 'Fire now, or the crew fires for you' : 'The crew fires if the clock runs out', W / 2, H * 0.42 + 46 * textScale());
   c.restore();
 }
 /* Tell the room when this player is in a menu (game menu, help, scores, the
@@ -3747,10 +3608,7 @@ function menuOpen() {
   return ['menu-overlay', 'help-overlay', 'report-overlay', 'gun-overlay', 'leave-veil'].some(id => { const el = $(id); return el && !el.hidden; });
 }
 function netSyncMenu() {
-  const open = menuOpen();
-  if (open === NET.menuSent || !NET.code) return;
-  NET.menuSent = open;
-  roomPost('act', { kind: 'menu', open }).then(d => netApply(d.room)).catch(() => { NET.menuSent = !open; });
+  net.setMenu(menuOpen());
 }
 /* A hidden tab plays nothing (browsers stop its frames), so its replay queue
    piles up. Coming back, or whenever more than one volley is waiting, skip
@@ -3758,37 +3616,32 @@ function netSyncMenu() {
    that follows carries the craters and armor. If it is already our turn,
    skip them all and hand over the controls at once. */
 function netCatchUp() {
-  const openers = [];
-  NET.queue.forEach((e, i) => { if (VOLLEY_OPENERS.has(e.t)) openers.push(i); });
-  const room = NET.pendingRoom;
-  const myTurnNext = !!(room && room.phase === 'play' && room.turn === NET.seat);
-  const keep = myTurnNext ? 0 : 1;
-  if (openers.length + (NET.volley ? 1 : 0) <= keep) return;
-  NET.volley = null;
+  const plan = planCatchUp(MATCH.queue, !!MATCH.volley, MATCH.pendingRoom, net.seat);
+  if (!plan) return;
+  MATCH.volley = null;
   G.shells = [];
-  const cut = keep && openers.length ? openers[openers.length - 1] : NET.queue.length;
-  for (const e of NET.queue.slice(0, cut)) netEvent(e);
-  NET.queue = NET.queue.slice(cut);
-  NET.fastNext = keep > 0 && NET.queue.length > 0;
+  for (const e of MATCH.queue.slice(0, plan.cut)) netEvent(e);
+  MATCH.queue = MATCH.queue.slice(plan.cut);
+  MATCH.fastNext = plan.fastNext;
 }
 if (typeof document.addEventListener === 'function') {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     clearTurnAlert();
-    if (NET.on) netCatchUp();
+    if (net.on) netCatchUp();
   });
 }
 /* Drive the replay; once nothing is left to play, the waiting room state
    takes over. */
 function netReplay(dt) {
-  if (NET.volley) netStepVolley(dt);
-  while (!NET.volley && NET.queue.length) {
-    if (VOLLEY_OPENERS.has(NET.queue[0].t)) netStartVolley();
-    else netEvent(NET.queue.shift());
+  if (MATCH.volley) netStepVolley(dt);
+  while (!MATCH.volley && MATCH.queue.length) {
+    if (VOLLEY_OPENERS.has(MATCH.queue[0].t)) netStartVolley();
+    else netEvent(MATCH.queue.shift());
   }
-  if (!NET.volley && !NET.queue.length && NET.pendingRoom) {
-    const room = NET.pendingRoom;
-    NET.pendingRoom = null;
+  if (!MATCH.volley && !MATCH.queue.length && MATCH.pendingRoom) {
+    const room = MATCH.pendingRoom;
+    MATCH.pendingRoom = null;
     netAdopt(room);
   }
 }
@@ -3827,7 +3680,7 @@ function netFrame(dt) {
   G.banterT -= dt;
   if (G.banterT <= 0) {
     G.banterT = 30 + Math.random() * 14;
-    if (!G.dlgQ.length && G.dlgT <= 0 && NET.myTurn) {
+    if (!G.dlgQ.length && G.dlgT <= 0 && MATCH.myTurn) {
       if (Math.random() < 0.5) talk('tank', pick(TANK_IDLE));
       else {
         const live = G.tanks.filter(t => !t.isPlayer && t.hp > 0 && foeTalkId(t));
@@ -3839,25 +3692,25 @@ function netFrame(dt) {
     }
   }
   const t = myTank();
-  if (t && t.hp > 0 && NET.myTurn) {
+  if (t && t.hp > 0 && MATCH.myTurn) {
     const swing = (keysDown.barrelLeft ? 1 : 0) - (keysDown.barrelRight ? 1 : 0);
-    if (swing) { t.angle = clamp(t.angle + swing * facing(t) * 42 * dt, 10, 170); NET.aimDirty = true; }
-    if (keysDown.powerUp) { t.power = clamp(t.power + 45 * dt, 10, 100); NET.aimDirty = true; }
-    if (keysDown.powerDown) { t.power = clamp(t.power - 45 * dt, 10, 100); NET.aimDirty = true; }
-    if (!keysDown.barrelLeft && !keysDown.barrelRight && !keysDown.powerUp && !keysDown.powerDown && NET.aimDirty) netSendAim();
+    if (swing) { t.angle = clamp(t.angle + swing * facing(t) * 42 * dt, 10, 170); MATCH.aimDirty = true; }
+    if (keysDown.powerUp) { t.power = clamp(t.power + 45 * dt, 10, 100); MATCH.aimDirty = true; }
+    if (keysDown.powerDown) { t.power = clamp(t.power - 45 * dt, 10, 100); MATCH.aimDirty = true; }
+    if (!keysDown.barrelLeft && !keysDown.barrelRight && !keysDown.powerUp && !keysDown.powerDown && MATCH.aimDirty) netSendAim();
     if ((keysDown.driveLeft || keysDown.driveRight) && t.fuel > 0) {
       const dir = (keysDown.driveRight ? 1 : 0) - (keysDown.driveLeft ? 1 : 0);
-      NET.driveAcc += dir * TUNE.driveSpeed * dt;
-      NET.driveT += dt;
-      if (NET.driveT >= 0.22 && Math.abs(NET.driveAcc) >= 4) {
-        const dx = clamp(NET.driveAcc, -80, 80);
-        NET.driveAcc = 0;
-        NET.driveT = 0;
+      MATCH.driveAcc += dir * TUNE.driveSpeed * dt;
+      MATCH.driveT += dt;
+      if (MATCH.driveT >= 0.22 && Math.abs(MATCH.driveAcc) >= 4) {
+        const dx = clamp(MATCH.driveAcc, -80, 80);
+        MATCH.driveAcc = 0;
+        MATCH.driveT = 0;
         netSendDrive(dx);
       }
     } else {
-      NET.driveAcc = 0;
-      NET.driveT = 0;
+      MATCH.driveAcc = 0;
+      MATCH.driveT = 0;
     }
   }
 }
@@ -3870,7 +3723,7 @@ function renderNetHUD() {
       G.phase === 'shop' ? 'shop. Spend it!' :
       G.over ? 'match over' :
       !mine || mine.hp <= 0 ? 'wrecked. Watching ' + seatName(turnTank.seat) + '...' :
-      NET.myTurn ? 'YOU. Aim!' : `${seatName(turnTank.seat)} aiming...`;
+      MATCH.myTurn ? 'YOU. Aim!' : `${seatName(turnTank.seat)} aiming...`;
   }
   if ($('hud-angle')) $('hud-angle').textContent = mine ? `${Math.round(mine.angle)}°` : '-';
   if ($('hud-power')) $('hud-power').textContent = mine ? `${Math.round(mine.power)}` : '-';
@@ -3880,20 +3733,20 @@ function renderNetHUD() {
   if ($('hud-fuel')) $('hud-fuel').textContent = mine ? `${Math.round(mine.fuel)}` : '-';
 }
 function netShowStandings(room) {
-  if (NET.pollId) { clearInterval(NET.pollId); NET.pollId = 0; }
+  net.stopPolling();
   const rows = ((room && room.seats) || []).map((s, i) => ({
     name: s.human ? s.initials : (s.name + ' (AI)'),
     score: s.score || 0,
-    mine: i === NET.seat,
+    mine: i === net.seat,
   }));
   rows.sort((a, b) => b.score - a.score);
   const champ = rows[0];
   const kicker = $('end-kicker');
-  if (kicker) kicker.textContent = `Room ${NET.code} · final standings`;
+  if (kicker) kicker.textContent = `Room ${net.code} · final standings`;
   const title = $('end-title');
   if (title) title.textContent = champ && champ.mine ? 'Top gun! The hills are yours.' : (champ ? `${champ.name} holds the hills.` : 'Match over.');
   const text = $('end-text');
-  if (text) text.textContent = `The battery never quits, and neither do you. Room ${NET.code} ended on round ${room.round || '?'}.`;
+  if (text) text.textContent = `The battery never quits, and neither do you. Room ${net.code} ended on round ${room.round || '?'}.`;
   const score = $('end-score');
   if (score) {
     score.textContent = rows.map(r => `${r.name} ${r.score}${r.mine ? ' (you)' : ''}`).join(' · ') +
@@ -3906,8 +3759,8 @@ function netShowStandings(room) {
   const rematch = $('rematch');
   if (rematch) {
     rematch.hidden = false;
-    rematch.textContent = NET.map
-      ? `Rematch on ${NET.mapName || 'these hills'}`
+    rematch.textContent = net.map
+      ? `Rematch on ${net.mapName || 'these hills'}`
       : 'Rematch on random hills';
   }
   const veil = $('end-veil');
@@ -4241,7 +4094,7 @@ function bindKeys() {
         e.preventDefault();
         if (G.preview) closePreview();
         else if (closeLeaveVeil()) { /* the question closed */ }
-        else if (!closeOverlays()) { if (NET.on) netNext(true); else nextRound(); } // ESC readies, never unreadies
+        else if (!closeOverlays()) { if (net.on) netNext(true); else nextRound(); } // ESC readies, never unreadies
         return;
       }
     }
@@ -4374,7 +4227,7 @@ function moveGunCursor(d) {
 }
 function cycleWeapon() {
   if (G.over || G.phase === 'shop') return;
-  if (NET.on) { netCycle(); return; }
+  if (net.on) { netCycle(); return; }
   if (demoBlock()) return;
   const i = WORDER.indexOf(G.selected);
   for (let k = 1; k <= WORDER.length; k++) {
@@ -4440,7 +4293,7 @@ function init() {
   const form = $('seed-form');
   if (form) form.addEventListener('submit', e => {
     e.preventDefault();
-    if (NET.on) { netLeave(); return; }
+    if (net.on) { netLeave(); return; }
     sfx.play('click');
     freshMatchFromSeedBox();
   });
@@ -4476,7 +4329,7 @@ function init() {
   const again = $('again');
   if (again) again.addEventListener('click', ev => {
     ev.currentTarget.blur();
-    if (NET.on) { netLeave(); openLobby(); } else freshMatchFromSeedBox();
+    if (net.on) { netLeave(); openLobby(); } else freshMatchFromSeedBox();
   });
   for (const id of ['menu-leave', 'shop-leave']) {
     const b = $(id);
@@ -4568,7 +4421,7 @@ function init() {
   };
   window.addEventListener('pointerdown', kickAudio, true);
   window.addEventListener('keydown', kickAudio, true);
-  window.addEventListener('pagehide', netSendLeave);
+  window.addEventListener('pagehide', () => net.sendLeave());
   window.addEventListener('resize', refreshNavHints);
   window.addEventListener('resize', placeLogBelowMenu);
   placeLogBelowMenu();
@@ -4714,7 +4567,7 @@ function maybeStartTutorial() {
 /* U or the menu button: coach the live battle, or deal a fresh match with
 // the coach armed for its first battle. Never interrupts a room match. */
 function tutorialOpen() {
-  if (TUT || NET.on) return;
+  if (TUT || net.on) return;
   closeOverlays();
   if (!G.demo && G.tanks.length && (G.phase === 'aim' || G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle')) {
     startTutorial();

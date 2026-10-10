@@ -9,14 +9,17 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
 | File                                                            | What it is                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: rendering, HUD, shop, room client and replay); it imports the sim and the audio from `js/`                                                                                                               |
+| `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: rendering, HUD, shop, lobby UI and the room replay); it imports the sim, the audio and the room client from `js/`                                                                                                               |
 | `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (20 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `game.js`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml`, and where each came from                                                                                                                     |
 | `src/sim.ts` | The game math in TypeScript: RNG, terrain, flight, hit tests, blasts, the drone's aim. Pure: state in, what happened out; no page, sound or particles |
 | `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes. It never touches the page |
+| `src/net.ts` | The room client: transport (one fetcher, the 429 retry), the session, polling, the act/buy/ready/leave senders, the turn and shop clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers and the clock are passed in |
+| `src/protocol.ts` | The room wire protocol as types: replies, the room snapshot, the discriminated union of events, and each action's request body. Types only, so it has no `js/` file |
+| `src/protocol-fixtures.check.ts`, `src/tsconfig.check.json` | Type-check only, never emitted: assigns every `protocol/*.json` to its type (see Protocol fixtures) |
 | `js/*.js` | `src/*.ts` compiled by `tools/ts-build.mjs`; checked in and deployed (the host has no Node). Never edit by hand |
-| `package.json`, `package-lock.json`, `tsconfig.json`, `src/tsconfig.dom.json` | The build setup (TypeScript pinned exactly). Never deployed, like `src/`, `tools/` and `node_modules/` |
+| `package.json`, `package-lock.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json` | The build setup (TypeScript pinned exactly). Never deployed, like `src/`, `tools/` and `node_modules/` |
 | `rooms.php`                                                     | Room server: authoritative sim, AI turns, shop, events                                                                                                                                      |
 | `scores.php`, `config.php`                                      | Score API; `.config.yaml` reader                                                                                                                                                            |
 | `fx.js` | The effects engine (particle pool, emitters, screen flash, shell glow), shared by `game.js` and the editor; exposes `window.TankityFX` |
@@ -132,17 +135,24 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
   their content.
 - `tsconfig.json`: strict, `noUncheckedIndexedAccess`, ES2022 modules, imports
   written with their `.js` extension (the file the browser fetches), comments
-  kept, no source maps. It lists the DOM-free modules (the sim), which compile
-  without DOM types, so they cannot reach for the page. `src/tsconfig.dom.json`
-  extends it with the DOM lib for the modules that need WebAudio, `fetch` and
-  timers (`audio.ts`); `ts-build.mjs` compiles each config as its own program,
-  so adding the DOM lib for the audio never lets the sim see `document`.
+  kept, no source maps. It lists the DOM-free modules (the sim and the room
+  client), which compile without DOM types, so they cannot reach for the page.
+  `src/tsconfig.dom.json` extends it with the DOM lib for the modules that need
+  WebAudio, `fetch` and timers (`audio.ts`); `src/tsconfig.check.json` is a
+  third program that type-checks the protocol fixtures and emits nothing.
+  `ts-build.mjs` compiles each config as its own program, so adding the DOM lib
+  for the audio never lets the sim see `document`. A module that holds only
+  types (`protocol.ts`) compiles to nothing and has no `js/` file.
 - `game.js` imports each module with the same `?v=` as its own tag in
-  `index.html` (`./js/sim.js?v=...`, `./js/audio.js?v=...`): bump them all
-  together whenever any changes, or a cached module could pair with a newer
-  `game.js`. `smoke-test.js` checks they match and that every `js/` file is
-  imported. The service worker serves network first, revalidating, so it never
-  holds a stale module for an online player.
+  `index.html` (`./js/sim.js?v=...`, `./js/audio.js?v=...`, `./js/net.js?v=...`):
+  bump them all together whenever any changes, or a cached module could pair
+  with a newer `game.js`. `smoke-test.js` checks they match, that every `js/`
+  file is imported, and that no `js/` module imports another (the version lives
+  only on `game.js`'s imports, so a module-to-module import would load a second
+  copy). There is no import map: the Node tests import `game.js` and `js/*.js`
+  directly, and bare specifiers would need a loader in every one of them for
+  no fewer places to bump. The service worker serves network first,
+  revalidating, so it never holds a stale module for an online player.
 - The sim takes its state as arguments (`World`, `Arsenal`) and reports what
   happened as data: `explode` returns the blast (each unit's shield, wound or
   wreck, a last stand's nested blast), `stepShells` returns the frame's trails,
@@ -155,18 +165,32 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
   a log line), `noteGesture` and `unlock` wake the speakers, and
   `setSoundMuted`/`setMusicMuted` (with `isSoundMuted`/`isMusicMuted`) are the
   toggles.
+- `net.ts` exports `RoomClient`, built with a `RoomEnv` (fetch, timers, a
+  clock, the leave beacon: `game.js` passes the page's) and `RoomHandlers`
+  (`onSnapshot(room, fresh, first)`, `onReachable`, `onReadyChange`,
+  `onError`). The client owns the session (`code`, `seat`, `token`, `csrf`,
+  the event cursor `since`), `post(action, body)` typed by `protocol.ts`, the
+  match and lobby polls, `act`/`sendQuiet`/`setMenu`/`buy`/`setReady`/`leave`,
+  and the clocks (`armClocks`, `turnClockLeft`, `clockWarnDue`). It counts the
+  events past its cursor as seen and hands them over; `game.js` keeps what
+  draws or animates (the replay queue and volley, `netStepVolley`, the HUD,
+  the lobby and shop) and calls `planCatchUp`/`shouldCatchUp` to decide what a
+  hidden tab skips. Because every environmental call is injected, `net.ts` is
+  in the DOM-free program and `net-test.js` runs it against a fake server.
 
 ## Tests
 
 | Command                                        | Covers                                                                                     |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `node tools/ts-build.mjs --check`              | `js/` is exactly what `src/` compiles to, and `src/` type-checks (run `npm ci` first)      |
+| `node tools/ts-build.mjs --check`              | `js/` is exactly what `src/` compiles to, `src/` type-checks, and every `protocol/*.json` fits its type in `protocol.ts` (run `npm ci` first) |
 | `node smoke-test.js`                           | The shipped client (`game.js` imported as a module) in a stub DOM (loads `fx.js` first), driven by the `game.json` key table and the `protocol/` fixtures; also checks every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps |
 | `php config-test.php`                          | `.config.yaml` precedence                                                                  |
 | `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; `room_snapshot` shapes against `protocol/` |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (needs SysV; run inside the PHP container)                 |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `node audio-test.js`                            | `js/audio.js` imports without a browser; the loop-point trim and the round-to-track mapping are right |
+| `node net-test.js`                              | `js/net.js` against a fake server and timers: the 429 retry, Ready's ordering under rapid toggles, polling, the leave beacon, the clocks, the hidden-tab catch-up plan |
+| `node protocol-test.js`                         | `src/protocol.ts` against the server: the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events `game.js` handles |
 | `node sim-vectors-test.js`                     | `js/sim.js` agrees with `rooms.php` on every shared sim vector (see Sim vectors)              |
 | `php rooms-test.php`                           | The room shelf over its own `php -S` (needs SysV; run inside the PHP container)            |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
@@ -196,6 +220,19 @@ is `{about, status, body}`.
 - Regenerate from the site folder (`websites/www.cs`) with the site running:
   `make protocol`. Commit the result. `make test` runs
   `php protocol/generate.php --check`, which fails when any fixture differs.
+- `src/protocol.ts` types the wire: `RoomSnapshot` (phase, seats with `ready`,
+  tanks, terrain, `turnLeft`, `shopLeft`, `events`, the private `you` and
+  `csrf`), `RoomEvent` (a union discriminated by `t`, written from every event
+  `rooms.php` emits), the replies (`SeatReply`, `RoomReply`, `ErrorReply`, ...)
+  and `PostBodies`/`PostReplies`, which type `RoomClient.post`.
+  `src/protocol-fixtures.check.ts` imports every fixture and assigns it to its
+  type; `node tools/ts-build.mjs --check` (so `make test`) fails with the
+  offending fixture and key when a fixture holds a field the types lack, lacks
+  one they need, or changes a type. A JSON import types strings as `string`,
+  so `protocol-test.js` checks the literal values (phase, seat mode, event
+  `t`). Add a fixture to the `fixturesFit` list when `generate.php` gains one.
+  `rooms.php` stores a `join` event without a `seq`, which no snapshot ever
+  carries; it has no member in the union.
 - `rooms-sim-test.php` compares the keys and types of today's `room_snapshot`
   output with each fixture, on any PHP.
 - `smoke-test.js` checks that every hand-written snapshot its fake server

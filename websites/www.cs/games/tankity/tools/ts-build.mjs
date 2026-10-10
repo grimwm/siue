@@ -3,8 +3,12 @@
  * Compiles this game's TypeScript (src/) to the JavaScript the browser loads
  * (js/), one file to one file, with the TypeScript compiler API and the
  * options in tsconfig.json (the DOM-free modules) and src/tsconfig.dom.json
- * (the modules that need browser types). js/ is checked in: the host serves static files
- * and has no Node, so what ships is what is committed.
+ * (the modules that need browser types). src/tsconfig.check.json is a third
+ * program that only type-checks (it holds the guard that keeps the client's
+ * protocol types in step with the server's fixtures) and emits nothing. A module
+ * that holds only types (src/protocol.ts) compiles to nothing, so it gets no
+ * js/ file. js/ is checked in: the host serves static files and has no Node,
+ * so what ships is what is committed.
  *
  *   node tools/ts-build.mjs          write every stale file, drop extra ones
  *   node tools/ts-build.mjs --check  list missing, stale and extra files in
@@ -24,8 +28,16 @@ const GAME = resolve(import.meta.dirname, '..');
 const check = process.argv.includes('--check');
 const rel = file => relative(GAME, file).split('\\').join('/');
 
+/** A module whose every statement is a type: it has no run-time code to ship. */
+function typesOnly(sf) {
+  return sf.statements.every(st =>
+    ts.isInterfaceDeclaration(st) || ts.isTypeAliasDeclaration(st)
+    || (ts.isImportDeclaration(st) && st.importClause?.isTypeOnly)
+    || (ts.isExportDeclaration(st) && st.isTypeOnly));
+}
+
 /** Each config is its own program, so the lib a module sees is its config's. */
-const CONFIGS = ['tsconfig.json', 'src/tsconfig.dom.json'];
+const CONFIGS = ['tsconfig.json', 'src/tsconfig.dom.json', 'src/tsconfig.check.json'];
 
 /** Reads a config file; fails the run on a config problem. */
 function loadConfig(file) {
@@ -70,8 +82,12 @@ for (const file of CONFIGS) {
   const program = ts.createProgram({ rootNames: config.fileNames, options: config.options });
   const problems = ts.getPreEmitDiagnostics(program);
   if (problems.length) fail(problems);
-  const emitted = program.emit(undefined, (out, text) => outputs.set(resolve(out), text));
-  if (emitted.emitSkipped) fail(emitted.diagnostics);
+  if (config.options.noEmit) continue;
+  for (const sf of program.getSourceFiles()) {
+    if (sf.isDeclarationFile || program.isSourceFileFromExternalLibrary(sf) || typesOnly(sf)) continue;
+    const emitted = program.emit(sf, (out, text) => outputs.set(resolve(out), text));
+    if (emitted.emitSkipped) fail(emitted.diagnostics);
+  }
 }
 
 const stale = [];

@@ -20,7 +20,7 @@ $check('list-runs', $code === 0, implode(' | ', array_slice($out, -3)));
 $set = array_flip($out);
 
 // Served: the effects engine, the compiled ES modules and the rendered sprite sheets (the effects data rides game.json).
-foreach (['games/tankity/fx.js', 'games/tankity/js/sim.js', 'games/tankity/fx/sprites/sprites.json', 'games/tankity/game.js', 'games/tankity/game.json', 'games/tankity/sw.js'] as $f) {
+foreach (['games/tankity/fx.js', 'games/tankity/js/sim.js', 'games/tankity/js/net.js', 'games/tankity/fx/sprites/sprites.json', 'games/tankity/game.js', 'games/tankity/game.json', 'games/tankity/sw.js'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
 $sheets = glob("$site/games/tankity/fx/sprites/*.png") ?: [];
@@ -33,8 +33,8 @@ foreach ($sheets as $abs) {
 // Never served: the effects editor, the Blender scenes and script, authoring
 // sources, the TypeScript sources and their build setup, the room protocol
 // fixtures, maintainer notes and tests.
-foreach (['games/tankity/fx-editor.html', 'games/tankity/fx-editor.js', 'games/tankity/fx-editor.css', 'games/tankity/fx/blender/render_fx.py', 'games/tankity/game.yaml', 'games/tankity/README.md', 'games/tankity/smoke-test.js', 'games/tankity/protocol/generate.php', 'games/tankity/protocol/play-my-turn.json', 'games/tankity/protocol/sim-vectors.php', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/sim-vectors-test.js', 'games/tankity/audio-test.js',
-    'games/tankity/src/sim.ts', 'games/tankity/src/audio.ts', 'games/tankity/src/tsconfig.dom.json', 'games/tankity/tsconfig.json', 'games/tankity/package.json', 'games/tankity/package-lock.json',
+foreach (['games/tankity/fx-editor.html', 'games/tankity/fx-editor.js', 'games/tankity/fx-editor.css', 'games/tankity/fx/blender/render_fx.py', 'games/tankity/game.yaml', 'games/tankity/README.md', 'games/tankity/smoke-test.js', 'games/tankity/protocol/generate.php', 'games/tankity/protocol/play-my-turn.json', 'games/tankity/protocol/sim-vectors.php', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/sim-vectors-test.js', 'games/tankity/audio-test.js', 'games/tankity/net-test.js', 'games/tankity/protocol-test.js',
+    'games/tankity/src/sim.ts', 'games/tankity/src/audio.ts', 'games/tankity/src/net.ts', 'games/tankity/src/protocol.ts', 'games/tankity/src/protocol-fixtures.check.ts', 'games/tankity/src/tsconfig.dom.json', 'games/tankity/src/tsconfig.check.json', 'games/tankity/tsconfig.json', 'games/tankity/package.json', 'games/tankity/package-lock.json',
     'games/tankity/tools/ts-build.mjs', 'games/tankity/.gitignore'] as $f) {
     $check("keeps back $f", file_exists("$site/$f") && !isset($set[$f]));
 }

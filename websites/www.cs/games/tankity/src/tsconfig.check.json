@@ -1,0 +1,14 @@
+{
+  // Type-check only, never emitted and never shipped: protocol-fixtures.check.ts
+  // assigns the server's real replies (protocol/*.json) to the client's
+  // protocol types. It reads JSON from outside src/, so rootDir widens to the
+  // game folder, and tools/ts-build.mjs runs this program for its errors alone.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "ESNext",
+    "rootDir": "..",
+    "resolveJsonModule": true
+  },
+  "files": ["protocol-fixtures.check.ts"]
+}

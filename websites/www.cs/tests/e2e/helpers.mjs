@@ -110,8 +110,9 @@ export function bowFromChord(track) {
   return Math.max(...track.map(([x, y]) => Math.abs((x1 - x0) * (y0 - y) - (x0 - x) * (y1 - y0)) / len));
 }
 
-/* Two players in one room, host first; returns both pages started. */
-export async function roomPair(browser) {
+/* Two players in one room, host first; returns both pages started.
+   beforeStart({host, guest, roomState, code}) runs in the lobby, before the host starts. */
+export async function roomPair(browser, { beforeStart } = {}) {
   const host = await newPlayer(browser);
   const guest = await newPlayer(browser);
   const roomState = { host: [], guest: [] };
@@ -133,6 +134,7 @@ export async function roomPair(browser) {
   await guest.page.click('#join-go');
   await guest.page.waitForSelector('#lobby-room:not([hidden])');
   await host.page.waitForTimeout(2000);
+  if (beforeStart) await beforeStart({ host, guest, roomState, code });
   await host.page.click('#lobby-start');
   // Both clients are in the match once each shows the host's turn; events
   // from before a client's first sync are history and never replay.

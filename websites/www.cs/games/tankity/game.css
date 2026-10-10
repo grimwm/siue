@@ -252,7 +252,9 @@ battle buttons on the right, sky behind both. */
   border-radius: 10px;
   z-index: 4;
 }
-.pad-aim .pad-grid { display: grid; grid-template-columns: repeat(3, 1.9rem); gap: 0.15rem; }
+/* The arrow cluster sits centred over its label. */
+.pad-aim { display: flex; flex-direction: column; align-items: center; }
+.pad-aim .pad-grid { display: grid; grid-template-columns: repeat(3, 1.9rem); gap: 0.15rem; justify-content: center; margin-top: 0; }
 .pad-note { margin: 0.25rem 0 0; font-size: 0.75rem; color: var(--ink); white-space: nowrap; text-align: center; }
 .guide-actions {
   position: static;
@@ -474,9 +476,20 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 #join-code { max-width: 5rem; text-transform: uppercase; }
 .room-code { font-size: 2rem; font-weight: 800; letter-spacing: 0.4em; margin: 0.4rem 0 0;
   color: var(--accent); }
-.roster { margin: 0.5rem 0; padding-left: 1.4rem; display: grid; gap: 0.2rem; }
-.roster li { font-variant-numeric: tabular-nums; }
-.roster .host-tag { color: var(--accent); font-size: 0.8rem; margin-left: 0.4rem; }
+/* Lobby seats: the unit-picker tile look, initials large, one line under. */
+.seat-grid { margin: 0.5rem 0; }
+.seat-tile { display: grid; justify-items: center; align-content: center; gap: 0.15rem; min-height: 3.6rem; }
+.seat-tile .seat-name { font-size: 1.15rem; font-weight: 800; letter-spacing: 0.08em; line-height: 1.1; }
+.seat-tile .seat-cap { font-size: 0.68rem; color: var(--dim); }
+.seat-tile[data-mode="human"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
+.seat-tile.seat-open { color: var(--dim); border-style: dashed; }
+.seat-tile.seat-fixed { cursor: default; }
+.seat-tile.seat-fixed:hover { border-color: var(--line); }
+.seat-tile[data-mode="human"].seat-fixed:hover { border-color: var(--accent); }
+/* Leaving is the one red way out: never gold, so it is never the easy tap. */
+button.btn-leave { border-color: var(--bad); color: var(--bad); }
+button.btn-leave:hover { background: rgba(255, 80, 80, 0.12); border-color: var(--bad); }
+button.btn-leave[hidden] { display: none; }
 .card .acts { display: flex; gap: 0.4rem; margin-left: auto; justify-content: flex-end; margin-top: 0.6rem; }
 
 .log {
@@ -574,3 +587,25 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 .chip-icon { height: 1.15em; width: auto; aspect-ratio: 40 / 26; }
 /* Icons have no text baseline: centre those two rows instead. */
 .hudbar .hud > div:has(#hud-weapon), .hudbar .hud > div:has(#hud-favs) { align-items: center; }
+
+/* Status bar: one calm row. Rivals' armor rides over their units, wind on
+   the battlefield; both stay in screen-reader text. */
+.hudbar .hud-gun dd, .hudbar .hud-favs dd { font-weight: 700; }
+.hudbar .hud-favs .chip { gap: 0.1rem; color: var(--wash-ink); font-size: 0.8rem; }
+.hudbar .hud-favs .chip-icon { height: 0.95em; }
+.hudbar #hud-favs { gap: 0.1rem 0.35rem; }
+.hudbar #hud-lives { color: #ff5c7a; letter-spacing: 0.08em; }
+.hudbar .hud-score dd { color: var(--wash-ink); font-weight: 600; }
+.hudbar .hud-net { margin-left: auto; }
+
+/* Weapon picker: the rack as tiles, four across. */
+.gun-card { inset: 0; margin: auto; width: min(34rem, 92%); height: fit-content; max-height: 84%; padding-bottom: 0.9rem; }
+.gun-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.4rem; }
+.gun-choice { display: grid; justify-items: center; gap: 0.1rem; padding: 0.35rem 0.25rem; margin: 0; }
+.card-overlay .gun-choice { margin-top: 0; }
+.gun-choice canvas { width: 48px; height: 31px; }
+.gun-choice .gun-count { color: var(--wash-ink); font-size: 0.75rem; }
+.gun-choice[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
+.gun-choice.cursor { outline: 2px solid var(--wash-key); outline-offset: 1px; }
+.hudbar #hud-weapon { cursor: pointer; }
+.touch .gun-choice.cursor { outline: none; }

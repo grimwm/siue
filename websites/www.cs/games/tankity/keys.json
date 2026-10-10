@@ -30,6 +30,7 @@
     "rooms": ["o"],
     "new": ["n"],
     "cycle": ["q"],
+    "guns": ["g"],
     "tutorial": ["u"],
     "fav": ["1", "2", "3", "4"],
     "battlePreview": ["v"],

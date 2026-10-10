@@ -33,6 +33,21 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 - Locks are bounded (~5 s): a crashed holder must never brick the shelf.
 - Live occupancy only: rooms idle longer than `room_live_secs` stop counting;
   the sweep (on ping) drops them.
+- Seats: a room always has four (`ROOM_SEATS`), seat 0 the host. Each seat is
+  a human or a non-human with `mode` `ai` (the drone battery, the default) or
+  `open` (no unit). The lobby shows them as a tile grid (initials, `AI`,
+  `Open`); only the host flips a non-human tile (`action=seatmode`, lobby only,
+  CSRF and the 150 ms act throttle apply). A joiner takes the first seat no
+  human holds, open or drone. Start refuses unless at least one seat is on AI
+  (host plus a drone is the two-tank minimum). Spawn slots count fielded seats
+  only, so spacing and AI turns work with two or three tanks.
+- Leaving: any human may leave at any time (`action=leave`, never throttled so
+  it lands right behind an aim tap). In the lobby the chair resets to a drone
+  seat (a host leaving the lobby closes the room, since nobody else can start
+  it). Once the match has begun the seat, host included, becomes a drone and the
+  match carries on; nothing after the lobby is host-only (shop and next round
+  are open to every human). The last human out removes the room. The client
+  offers it in the game menu and the shop, behind an in-page question.
 - Spawns are random, at least 110 px apart, and units never end a move within
   44 px of another. Each tank faces the middle; barrel keys swing toward the
   side pressed.
@@ -54,10 +69,14 @@ skip `*-test.*` and this file.
 ## Keys (defaults; `keys.json` rules)
 
 Left/Right swing the barrel, Up/Down set power, A/D drive, Ctrl fires, Q
-cycles weapons, 1-4 load favorites, B buys, V/P preview, N new/next, C menu,
+loads the next weapon, G opens the weapon picker, 1-4 load favorites, B buys, V/P preview, N new/next, C menu,
 O rooms, U tutorial, T random seed, F fullscreen, M music, E sound, J/K and
 PgUp/PgDn scroll panels, ESC closes. In fullscreen, Chromium lets a tap of
 ESC reach the game; holding it leaves fullscreen.
+
+The status bar keeps one row (angle, power, fuel, loaded gun, favorites,
+armor, lives, cash and round); rivals' armor rides over their units and the
+wind is a gauge on the battlefield, both also in screen-reader text.
 
 Every panel opens with a pinned title bar: title, a × that closes it (with
 an ESC cap on desktop), and the panel's keys in a three-column grid that

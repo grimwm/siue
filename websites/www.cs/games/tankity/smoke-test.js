@@ -114,6 +114,7 @@ const withChildren = id => {
   return els[id];
 };
 withChildren('lobby-map-picker');
+withChildren('lobby-seats');
 els['seed-input'] = makeEl('seed-input');
 els['seed-input'].value = 'scorch-01';
 eval(src);
@@ -282,7 +283,7 @@ check('menu-esc', els['menu-overlay'].hidden === true);
   check('songs', songNames.length === 4 && /songIdx = \(G\.round - 1\) % SONGS\.length/.test(src), songNames.join(','));
 // Every scrollable panel shows its keys, dimmed while everything fits.
 const navCount = (html.match(/class="nav-hint[" ]/g) || []).length;
-check('nav-hints', navCount === 9, `hints=${navCount}`);
+check('nav-hints', navCount === 10, `hints=${navCount}`);
 TAP('global', 'help');
 check('nav-disabled', els['nav-help'].getAttribute('aria-disabled') === 'true');
 els['help-overlay'].scrollHeight = 500;
@@ -392,6 +393,13 @@ global.fetch = async (url, opts) => {
     createdMap = body.map || '';
     return okJson({ ok: true, room: lobbyRoom() });
   }
+  if (u.includes('action=seatmode')) {
+    seatModeSent = body;
+    seatModes[body.seat] = body.mode;
+    return okJson({ ok: true, room: lobbyRoom() });
+  }
+  if (u.includes('action=state')) stateCalls++;
+  if (u.includes('action=leave')) { leaveSent++; return okJson({ ok: true }); }
   if (u.includes('action=start')) { curTurn = 0; return okJson({ ok: true, room: playRoom(0, []) }); }
   if (u.includes('action=state')) {
     if (!body.token && u.includes('token=')) {
@@ -425,10 +433,19 @@ global.fetch = async (url, opts) => {
 let NET_LOBBY = true;
 let NET_SHOP = false;
 let extraGuest = false;
+// Lobby seats as the server sends them: all four from the start, each human,
+// AI or open; the host's seatmode requests flip the stored mode.
+const seatModes = { 1: 'ai', 2: 'ai', 3: 'ai' };
+let seatModeSent = null;
+let leaveSent = 0;
+let stateCalls = 0;
 function lobbyRoom() {
-  const seats = extraGuest
-    ? [scriptSeats()[0], { seat: 1, human: true, name: 'def', lives: 3, score: 0 }]
-    : [scriptSeats()[0]];
+  const aiNames = { 1: 'REAPER', 2: 'WRAITH', 3: 'SPOTTER' };
+  const seats = [0, 1, 2, 3].map(i => {
+    if (i === 0) return { seat: 0, human: true, name: 'abc', mode: 'human', lives: 3, score: 0 };
+    if (i === 1 && extraGuest) return { seat: 1, human: true, name: 'def', mode: 'human', lives: 3, score: 0 };
+    return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], lives: 0, score: 0 };
+  });
   return Object.assign(
     { code: 'TST1', phase: 'lobby', seats, events: [] },
     mapFields(),
@@ -452,7 +469,7 @@ function change(el) {
   // Match the rack marker, never the log: interleaved battle lines and the
   // trim cap make absolute log positions lie about what is loaded now. The
   // marker must sit in the same rack segment, so a later gun cannot fake it.
-  const selIs = name => new RegExp(name + ' [^·]*◀').test(els['hud-weapon'].textContent);
+  const selIs = name => new RegExp('^' + name + ' ').test(els['hud-weapon'].textContent);
   const loadGun = name => {
     for (let i = 0; i < 6 && !selIs(name); i++) {
       TAP('global', 'cycle'); frames(3);
@@ -614,20 +631,20 @@ function change(el) {
   check('keyboard-drives', fuelAfterDrive < fuelBeforeDrive, `fuel ${fuelBeforeDrive} -> ${fuelAfterDrive}`);
   // Digits load favorite shells; Shift plus a digit pins the loaded one.
   TAPD('global', 'fav', 3); frames(3);
-  check('fav-hotkey', /Mortar [^·]*◀/.test(els['hud-weapon'].textContent), els['hud-weapon'].textContent);
+  check('fav-hotkey', /^Mortar /.test(els['hud-weapon'].textContent), els['hud-weapon'].textContent);
   TAPD('global', 'fav', 4); frames(3);
   KD('global', 'fav', 0, { shiftKey: true }); KU('global', 'fav', 0); frames(3);
   check('fav-assign', els['hud-favs'].textContent.startsWith('1 Rail'), els['hud-favs'].textContent);
   TAPD('global', 'fav', 2); frames(3);
   TAPD('global', 'fav', 1); frames(3);
-  check('fav-recall', /Rail [^·]*◀/.test(els['hud-weapon'].textContent), els['hud-weapon'].textContent);
+  check('fav-recall', /^Rail /.test(els['hud-weapon'].textContent), els['hud-weapon'].textContent);
   loadGun('Rail');
   TAP('global', 'battlePreview'); frames(5);
   frames(300);
   TAP('global', 'battlePreview'); frames(5);
   const railVerdict = els['preview-result'].textContent;
   const railSel = els['hud-weapon'].textContent;
-  check('rail-selected', /Rail [^·]*◀/.test(railSel), railSel);
+  check('rail-selected', /^Rail /.test(railSel), railSel);
   await ensureAim();
   loadGun('Mortar');
   TAP('global', 'battlePreview'); frames(5);
@@ -637,7 +654,7 @@ function change(el) {
   const mortarSel = els['hud-weapon'].textContent;
   loadGun('Buckshot');
   check('rail-hits', /damage|hits/.test(railVerdict) && !/Clean miss/.test(railVerdict), railVerdict + ' | ' + railSel);
-  check('mortar-selected', /Mortar [^·]*◀/.test(mortarSel), mortarSel);
+  check('mortar-selected', /^Mortar /.test(mortarSel), mortarSel);
   check('mortar-hits', /damage|hits/.test(mortarVerdict) && !/Clean miss/.test(mortarVerdict), mortarVerdict + ' | ' + mortarSel);
 
   // aim: Left/Right swing the barrel, Up/Down work power; hold then release
@@ -869,8 +886,26 @@ function change(el) {
   submit(els['host-form']); await tick(10);
   check('room-hosted', els['lobby-code'].textContent === 'TST1' && els['lobby-room'].hidden === false,
     els['lobby-code'].textContent);
-  check('room-roster', els['lobby-seats'].children.length === 4,
-    `rows=${els['lobby-seats'].children.length}`);
+  const seatTiles = () => els['lobby-seats'].children;
+  const tileText = t => t.children.map(c => c.textContent).join(' ');
+  check('room-roster', seatTiles().length === 4 && seatTiles().every(t => t.type === 'button' && t.className.includes('unit-choice')),
+    `tiles=${seatTiles().length}`);
+  // The grid shows initials for people, AI for drones; no lives or points.
+  check('seat-grid-labels', seatTiles().map(t => t.children[0].textContent).join('|') === 'ABC|AI|AI|AI'
+    && !seatTiles().some(t => /lives|pts|x3/.test(tileText(t))),
+    seatTiles().map(tileText).join('|'));
+  check('seat-grid-host-flips', seatTiles()[0].getAttribute('aria-disabled') === 'true'
+    && seatTiles().slice(1).every(t => t.getAttribute('aria-disabled') === undefined && (t._l || {}).click),
+    seatTiles().map(t => t.getAttribute('aria-disabled')).join());
+  // The host flips a drone seat to Open and back; the request carries both.
+  click(seatTiles()[2]); await tick(10);
+  check('seat-open-sent', seatModeSent && seatModeSent.seat === 2 && seatModeSent.mode === 'open', JSON.stringify(seatModeSent));
+  check('seat-open-shown', seatTiles()[2].children[0].textContent === 'Open' && seatTiles()[2].className.includes('seat-open')
+    && seatTiles()[1].children[0].textContent === 'AI', seatTiles().map(t => t.children[0].textContent).join('|'));
+  click(seatTiles()[2]); await tick(10);
+  check('seat-back-to-ai', seatModeSent.mode === 'ai' && seatTiles()[2].children[0].textContent === 'AI');
+  click(seatTiles()[3]); await tick(10); // leave one open for the guest's view below
+  check('seats-hint-host', /Tap a seat/.test(els['seats-hint'].textContent), els['seats-hint'].textContent);
   check('room-hills', els['lobby-hills'].textContent === 'Hills: Canyon 3',
     els['lobby-hills'].textContent);
   check('map-tile-pressed', tileOn().join() === 'canyon 3', tileOn().join());
@@ -894,9 +929,15 @@ function change(el) {
   els['join-code'].value = 'TST1';
   els['join-initials'].value = 'def';
   submit(els['join-form']); await tick(10);
-  const guestNames = els['lobby-seats'].children.map(li => li.textContent).join('|');
-  check('guest-seat', /abc/.test(guestNames) && /def/.test(guestNames) && !/undefined/.test(guestNames),
+  const guestNames = seatTiles().map(tileText).join('|');
+  check('guest-seat', /ABC/.test(guestNames) && /DEF/.test(guestNames) && !/undefined/.test(guestNames),
     guestNames);
+  // A guest sees the host's choices but cannot change them.
+  check('guest-sees-open', seatTiles().map(t => t.getAttribute('data-mode')).join() === 'human,human,ai,open',
+    seatTiles().map(t => t.getAttribute('data-mode')).join());
+  check('guest-cannot-flip', seatTiles().every(t => t.getAttribute('aria-disabled') === 'true' && !(t._l || {}).click)
+    && /host decides/.test(els['seats-hint'].textContent), els['seats-hint'].textContent);
+  seatModes[3] = 'ai';
   // back to hosting so the match can start
   extraGuest = false;
   els['host-initials'].value = 'abc';
@@ -974,7 +1015,34 @@ function change(el) {
   // Tutorial replay from a live battle: leave the room the net tests
   // started, shut the lobby, deal in, walk out of the shop, wait out any
   // banner, then U coaches and Skip hides and remembers.
-  click(els['again']); await tick(10); frames(5);
+  // Leaving a running match: only the menu and shop show the button, it asks
+  // first in the page, ESC and Stay keep the match, Leave room returns to solo.
+  void document.getElementById('menu-leave'); void document.getElementById('shop-leave');
+  void document.getElementById('leave-veil'); void document.getElementById('leave-go');
+  void document.getElementById('leave-stay');
+  check('leave-markup', ['menu-leave', 'shop-leave', 'leave-veil', 'leave-go', 'leave-stay'].every(id => html.includes('id="' + id + '"')));
+  check('leave-buttons-in-room', els['menu-leave'].hidden === false && els['shop-leave'].hidden === false,
+    `${els['menu-leave'].hidden} ${els['shop-leave'].hidden}`);
+  TAP('global', 'menu'); frames(2);
+  click(els['menu-leave']); frames(2);
+  check('leave-asks-first', els['leave-veil'].hidden === false && leaveSent === 0);
+  TAP('global', 'escape'); frames(2);
+  check('leave-esc-stays', els['leave-veil'].hidden === true && leaveSent === 0 && /YOU|aiming/.test(els['hud-turn'].textContent)
+    && els['menu-overlay'].hidden === false, els['hud-turn'].textContent);
+  click(els['menu-leave']); frames(2);
+  click(els['leave-stay']); frames(2);
+  check('leave-stay-stays', els['leave-veil'].hidden === true && leaveSent === 0);
+  click(els['menu-leave']); frames(2);
+  click(els['leave-go']); await tick(10); frames(5);
+  check('leave-sent', leaveSent === 1, 'leaves=' + leaveSent);
+  check('leave-cleaned-up', els['leave-veil'].hidden === true && els['menu-overlay'].hidden === true
+    && els['shop-veil'].hidden === true && els['lobby-veil'].hidden === true
+    && els['menu-leave'].hidden === true && els['shop-leave'].hidden === true,
+    `leave=${els['leave-veil'].hidden} menu=${els['menu-overlay'].hidden} shop=${els['shop-veil'].hidden}`);
+  check('leave-back-to-solo', /Back to the solo hills/.test(logText()), logText().split('\n').slice(-1)[0]);
+  const polls0 = stateCalls;
+  await sleep(3600); frames(5); // a stopped poll never drags the old room back
+  check('leave-polling-stopped', stateCalls === polls0, `extra polls=${stateCalls - polls0}`);
   TAP('global', 'escape'); frames(5);
   TAP('global', 'new'); frames(150);
   for (let i = 0; i < 6 && (els['shop-veil'].hidden === false || els['round-banner'].hidden === false); i++) {

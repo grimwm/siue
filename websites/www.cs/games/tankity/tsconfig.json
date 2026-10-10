@@ -3,7 +3,8 @@
   // loaded by the browser as native ES modules (no bundler). Build:
   // node tools/ts-build.mjs; verify: node tools/ts-build.mjs --check.
   // This config is the DOM-free one: the modules listed in "files" compile
-  // without page types, so they cannot reach for the page. A module that
+  // without page types, so they cannot reach for the page (net.ts takes its
+  // fetch, timers and clock as arguments). A module that
   // needs browser types (WebAudio, fetch, timers) goes in src/tsconfig.dom.json,
   // which extends this one and adds the DOM lib.
   "compilerOptions": {
@@ -28,5 +29,5 @@
     "noEmitOnError": true
     // Preact overlays (later): "jsx": "react-jsx", "jsxImportSource": "preact"
   },
-  "files": ["src/sim.ts"]
+  "files": ["src/sim.ts", "src/net.ts"]
 }

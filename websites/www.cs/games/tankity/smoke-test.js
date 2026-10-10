@@ -236,6 +236,10 @@ const imported = [...src.matchAll(/from '\.\/js\/([\w-]+)\.js\?v=([^']+)'/g)];
 check('modules-versioned-with-the-page', !!gameTag && imported.length > 0 && imported.every(m => m[2] === gameTag[1]),
   gameTag ? gameTag[1] + ' vs ' + imported.map(m => m[2]).join(',') : 'no module tag for game.js');
 check('every-js-module-imported', fs.readdirSync(path.join(__dirname, 'js')).every(f => imported.some(m => m[1] + '.js' === f)));
+// The one version lives on game.js's imports. A js/ module that imported another
+// would name it without that ?v=, and the browser would load a second copy.
+check('js-modules-import-nothing', fs.readdirSync(path.join(__dirname, 'js'))
+  .every(f => !/^\s*(import|export)\b[^;]*\bfrom\s*['"]/m.test(fs.readFileSync(path.join(__dirname, 'js', f), 'utf8'))));
 check('room-cap', /ROOM_MAX_ROOMS/.test(php) && /room_max_rooms/.test(php) && /every room is taken/.test(php));
 check('no-seed-leak', (() => {
   const start = php.indexOf('function room_snapshot');

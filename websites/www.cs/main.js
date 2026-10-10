@@ -2,28 +2,44 @@
  * Shows a panel matching the "nav-" id. All other panels with a "nav-" id prefix
  * are hidden.
  */
-function showNavDiv(divId) {
+function showNavDiv(divId, opts = {}) {
     const divs = document.querySelectorAll("[id^='nav-']");
     divs.forEach(div => { div.classList.remove("is-active"); });
     const target = document.getElementById(`nav-${divId}`);
     if (target) {
         target.classList.add("is-active");
     }
+    if (opts.url !== false) linkPanel(divId);
 }
 
 /** Open the games hub (cards come from loadGamesHub; Game Off/On also starts The CIC). */
-function showGamesHub() {
-    showNavDiv('games');
+function showGamesHub(opts = {}) {
+    showNavDiv('games', opts);
 }
 
-/** #contact and #games open those panels, so other pages (a game's wrapper
- *  navbar) can link straight to them. */
+/**
+ * The page stays one page, but its address follows the panel: Home is the
+ * bare site address, Contact and Games are #contact and #games, so a copied
+ * address opens the same panel and Back/Forward step between panels. A
+ * ?game= launch link is dropped once you navigate away from it.
+ */
+function linkPanel(divId) {
+    const url = new URL(location.href);
+    url.searchParams.delete('game');
+    url.hash = divId === 'main' ? '' : divId;
+    const want = url.href.replace(/#$/, '');
+    if (want !== location.href) history.pushState({ panel: divId }, '', want);
+}
+
+/** #contact and #games open those panels; no hash is Home. */
 function openLinkedPanel() {
     const panel = location.hash.slice(1);
-    if (panel === 'games') showGamesHub();
-    else if (panel === 'contact' || panel === 'main') showNavDiv(panel);
+    if (panel === 'games') showGamesHub({ url: false });
+    else if (panel === 'contact') showNavDiv('contact', { url: false });
+    else if (!new URLSearchParams(location.search).get('game')) showNavDiv('main', { url: false });
 }
 window.addEventListener('hashchange', openLinkedPanel);
+window.addEventListener('popstate', openLinkedPanel);
 document.addEventListener('DOMContentLoaded', openLinkedPanel);
 
 /**
@@ -83,7 +99,7 @@ function openLinkedGame(games) {
         location.replace(game.href);
         return;
     }
-    showGamesHub();
+    showGamesHub({ url: false });
     // Installing from here installs this game, not the whole site.
     const link = document.querySelector('link[rel="manifest"]');
     if (link && game.manifest) link.href = game.manifest;

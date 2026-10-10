@@ -52,11 +52,11 @@
 
 <header class="site-nav">
   <div class="site-nav-inner">
-    <a class="site-brand" id="site-brand" href="#" onclick="showNavDiv('main'); return false;">William Grim</a>
+    <a class="site-brand" id="site-brand" href="./" onclick="showNavDiv('main'); return false;">William Grim</a>
     <nav class="site-nav-menu" id="site-nav-menu" aria-label="Primary">
       <div class="site-nav-menu-primary">
-        <a class="site-link" href="#" onclick="showNavDiv('main'); return false;">Home</a>
-        <a class="site-link" href="#" onclick="showNavDiv('contact'); return false;">Contact</a>
+        <a class="site-link" href="./" onclick="showNavDiv('main'); return false;">Home</a>
+        <a class="site-link" href="#contact" onclick="showNavDiv('contact'); return false;">Contact</a>
       </div>
     </nav>
     <div class="site-nav-power" id="site-nav-power">
@@ -209,11 +209,11 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-<script src="main.js?v=20261010b"></script>
+<script src="main.js?v=20261010c"></script>
 <script src="cylon.js?v=20261010b" data-cylon-base="games/cylon/"></script>
 <script>
   initializeTheme();
-  showNavDiv("main");
+  showNavDiv("main", { url: false });
   initializeCylonEffects();
   loadGamesHub();
 </script>

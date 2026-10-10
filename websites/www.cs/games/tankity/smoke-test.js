@@ -1,12 +1,17 @@
 // Headless smoke for the Scorched Earth rewrite. Run here: `node smoke-test.js`.
 // Exercises the exact shipped module (game.js and the js/ it imports) with a
-// dependency-free DOM + canvas stub, driving only public inputs (keydown/keyup).
+// small DOM + canvas stub (tools/dom-stub.mjs), driving only public inputs
+// (keydown/keyup). The stub is a real tree because the Preact overlays render
+// into it; Preact itself is node_modules/preact, the release tools/vendor.mjs
+// copies into vendor/.
 // Fails loudly on any exception, a stuck turn loop, an unscrolled Space, or a
 // silent battlefield.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { sweepHit } from './js/sim.js';
+import { els, makeEl, click, document } from './tools/dom-stub.mjs';
 
 const __dirname = import.meta.dirname;
 const src = fs.readFileSync(path.join(__dirname, 'game.js'), 'utf8');
@@ -14,63 +19,8 @@ const audioSrc = fs.readFileSync(path.join(__dirname, 'src', 'audio.ts'), 'utf8'
 const renderSrc = fs.readFileSync(path.join(__dirname, 'src', 'render.ts'), 'utf8');
 const fxSrc = fs.readFileSync(path.join(__dirname, 'fx.js'), 'utf8');
 
-function makeCallable() {
-  const fn = function () { return proxy; };
-  const proxy = new Proxy(fn, {
-    get: () => proxy,
-    set: () => true,
-    apply: () => proxy,
-  });
-  return proxy;
-}
-
 const listeners = {}; // type -> [fn] on window
-function makeEl(id) {
-  const el = {
-    id, textContent: '', innerHTML: '', hidden: true, value: '',
-    disabled: false, style: {}, className: '', scrollTop: 0, scrollHeight: 0,
-    children: [],
-    scrollIntoView() { globalThis.__scrolledTo = this; },
-    querySelector(sel) {
-      const want = sel.startsWith('.') ? sel.slice(1) : null;
-      const wid = sel.startsWith('#') ? sel.slice(1) : null;
-      const walk = (node) => {
-        for (const c of node.children || []) {
-          if (!c || typeof c !== 'object') continue;
-          if ((want && String(c.className || '').split(' ').includes(want)) || (wid && c.id === wid)) return c;
-          const d = walk(c);
-          if (d) return d;
-        }
-        return null;
-      };
-      return walk(this);
-    },
-    append(...nodes) { for (const n of nodes) this.children.push(n); return this; },
-    get firstChild() { return this.children[0]; },
-    appendChild(c) { this.children.push(c); return c; },
-    removeChild(c) { this.children.splice(this.children.indexOf(c), 1); return c; },
-    addEventListener(t, f) { (this._l = this._l || {})[t] = ((this._l)[t] || []).concat(f); },
-    setAttribute(k, v) { (this._attrs = this._attrs || {})[k] = String(v); },
-    getAttribute(k) { return (this._attrs || {})[k]; },
-    removeAttribute(k) { delete (this._attrs || {})[k]; },
-    getBoundingClientRect: () => ({ width: 720, height: 460 }),
-    getContext: () => makeCallable(),
-    blur: () => {},
-  };
-  return el;
-}
-function click(el) {
-  for (const f of ((el._l || {}).click || [])) f({ currentTarget: el, preventDefault: () => {} });
-}
-const els = {};
-global.document = {
-  readyState: 'complete',
-  getElementById: id => (els[id] = els[id] || makeEl(id)),
-  createElement: tag => makeEl(tag),
-  createTextNode: t => ({ textContent: String(t), children: [] }),
-  querySelectorAll: () => [],
-  addEventListener: () => {},
-};
+global.document = document;
 global.window = {
   addEventListener: (t, f) => { (listeners[t] = listeners[t] || []).push(f); },
   matchMedia: () => ({ matches: false }),
@@ -230,21 +180,60 @@ for (const id of ['rooms-open', 'lobby-veil', 'host-form', 'host-initials', 'joi
   check('lobby-markup-' + id, html.includes('id="' + id + '"'));
 }
 check('no-status-codes', !/server said no/.test(src));
-// Every import of a js/ module carries a ?v=, and so does the page's tag for
-// each of its own files. The values are content hashes written by
-// tools/install-files.php; `php tools/install-files.php --check` (make test)
-// is what fails when one is stale.
-const imported = [...src.matchAll(/from '\.\/js\/([\w-]+)\.js\?v=([0-9a-f]+)'/g)];
-check('modules-imported-with-a-version', imported.length > 0
-  && (src.match(/from '\.\/js\/[^']*'/g) || []).length === imported.length);
+// The module graph. A browser keys a module by its URL, so two spellings of one
+// file (with and without a ?v=, or with two versions) would load two copies,
+// one of them stale. What keeps that from happening, all checked here:
+//   - every import between our files carries a ?v=, and every importer of a
+//     file spells the same one, the content hash install-files.php writes;
+//   - every bare import (preact) is an entry of index.html's import map, whose
+//     URLs carry content-hash versions too;
+//   - every js/ file is reachable from game.js, so none loads unversioned.
+// `php tools/install-files.php --check` (make test) is what fails when a value
+// is stale; these are the rules it cannot see from the browser's side.
+const hashOf = text => crypto.createHash('sha256').update(text).digest('hex').slice(0, 10);
+const jsFiles = dir => fs.readdirSync(path.join(__dirname, dir), { withFileTypes: true })
+  .flatMap(e => (e.isDirectory() ? jsFiles(dir + '/' + e.name) : /\.js$/.test(e.name) ? [dir + '/' + e.name] : []));
+const IMPORT_RE = /^[ \t]*(?:import|export)\b[^;'"]*?\bfrom\s*(['"])([^'"\n]+)\1|^[ \t]*import\s*(['"])([^'"\n]+)\3/gm;
+const importsOf = text => [...text.matchAll(IMPORT_RE)].map(m => m[2] ?? m[4]);
+const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
+const importMap = mapMatch ? JSON.parse(mapMatch[1]).imports : {};
+const graph = {}; // file -> { text, relative: [{ target, version }], bare: [spec] }
+for (const f of ['game.js', ...jsFiles('js')]) {
+  const text = fs.readFileSync(path.join(__dirname, f), 'utf8');
+  const node = { text, relative: [], bare: [] };
+  for (const spec of importsOf(text)) {
+    if (!spec.startsWith('.')) { node.bare.push(spec); continue; }
+    const [rel, query] = spec.split('?');
+    node.relative.push({ target: path.posix.join(path.posix.dirname(f), rel), version: query });
+  }
+  graph[f] = node;
+}
+const edges = Object.entries(graph).flatMap(([f, n]) => n.relative.map(r => ({ from: f, ...r })));
+check('imports-carry-a-version', edges.length > 0 && edges.every(e => /^v=[0-9a-f]{10}$/.test(e.version ?? '')),
+  edges.filter(e => !/^v=[0-9a-f]{10}$/.test(e.version ?? '')).map(e => `${e.from} -> ${e.target}`).join());
+check('imports-name-real-js-modules', edges.every(e => e.target.startsWith('js/') && graph[e.target]),
+  edges.filter(e => !(e.target.startsWith('js/') && graph[e.target])).map(e => `${e.from} -> ${e.target}`).join());
+const versionsOf = target => new Set(edges.filter(e => e.target === target).map(e => e.version));
+check('one-version-per-module', Object.keys(graph).every(f => versionsOf(f).size <= 1),
+  Object.keys(graph).filter(f => versionsOf(f).size > 1).join());
+check('import-versions-are-content-hashes', edges.every(e => !graph[e.target] || e.version === 'v=' + hashOf(graph[e.target].text)));
+const reached = new Set(['game.js']);
+for (const f of reached) for (const r of graph[f].relative) if (graph[r.target]) reached.add(r.target);
+check('every-js-file-reachable-from-game', Object.keys(graph).every(f => reached.has(f)),
+  Object.keys(graph).filter(f => !reached.has(f)).join());
+const bareSpecs = new Set(Object.values(graph).flatMap(n => n.bare));
+check('bare-imports-are-in-the-import-map', bareSpecs.size > 0 && [...bareSpecs].every(s => s in importMap), [...bareSpecs].join());
+check('import-map-files-are-versioned', Object.keys(importMap).length > 0 && Object.values(importMap).every(url => {
+  const m = /^\.\/(vendor\/[\w./-]+\.js)\?v=([0-9a-f]{10})$/.exec(url);
+  return m && hashOf(fs.readFileSync(path.join(__dirname, m[1]), 'utf8')) === m[2];
+}), JSON.stringify(importMap));
+check('import-map-precedes-the-game-script', mapMatch && html.indexOf('type="importmap"') < html.indexOf('src="game.js?v='));
+// A vendored file may import only what the map names, so it never reaches for a second Preact.
+check('vendored-files-import-only-mapped-names', jsFiles('vendor').every(f =>
+  importsOf(fs.readFileSync(path.join(__dirname, f), 'utf8')).every(s => s in importMap)), jsFiles('vendor').join());
 for (const f of ['game.js', 'game.css', 'fx.js']) {
   check('page-versions-' + f, new RegExp('(?:src|href)="' + f.replace('.', '\\.') + '\\?v=[0-9a-f]+"').test(html));
 }
-check('every-js-module-imported', fs.readdirSync(path.join(__dirname, 'js')).every(f => imported.some(m => m[1] + '.js' === f)));
-// The one version lives on game.js's imports. A js/ module that imported another
-// would name it without that ?v=, and the browser would load a second copy.
-check('js-modules-import-nothing', fs.readdirSync(path.join(__dirname, 'js'))
-  .every(f => !/^\s*(import|export)\b[^;]*\bfrom\s*['"]/m.test(fs.readFileSync(path.join(__dirname, 'js', f), 'utf8'))));
 check('room-cap', /ROOM_MAX_ROOMS/.test(php) && /room_max_rooms/.test(php) && /every room is taken/.test(php));
 check('no-seed-leak', (() => {
   const start = php.indexOf('function room_snapshot');
@@ -319,7 +308,9 @@ check('menu-esc', els['menu-overlay'].hidden === true);
   check('songs', songNames.length === 4 && /songIdx = \(round - 1\) % SONGS\.length/.test(audioSrc)
     && /if \(G\.demo\) music\.playTheme\(\); else music\.forRound\(G\.round\)/.test(src), songNames.join(','));
 // Every scrollable panel shows its keys, dimmed while everything fits.
-const navCount = (html.match(/class="nav-hint[" ]/g) || []).length;
+// (The help and the shop draw theirs from src/ui: one OverlayHead per navId.)
+const uiNavs = ['help', 'shop'].flatMap(f => fs.readFileSync(path.join(__dirname, 'src', 'ui', f + '.tsx'), 'utf8').match(/navId="/g) || []).length;
+const navCount = (html.match(/class="nav-hint[" ]/g) || []).length + uiNavs;
 check('nav-hints', navCount === 10, `hints=${navCount}`);
 TAP('global', 'help');
 check('nav-disabled', els['nav-help'].getAttribute('aria-disabled') === 'true');
@@ -1135,7 +1126,10 @@ function change(el) {
   void document.getElementById('menu-leave'); void document.getElementById('shop-leave');
   void document.getElementById('leave-veil'); void document.getElementById('leave-go');
   void document.getElementById('leave-stay');
-  check('leave-markup', ['menu-leave', 'shop-leave', 'leave-veil', 'leave-go', 'leave-stay'].every(id => html.includes('id="' + id + '"')));
+  // (shop-leave is in the shop component, src/ui/shop.tsx; the rest are in the page.)
+  const shopSrc = fs.readFileSync(path.join(__dirname, 'src', 'ui', 'shop.tsx'), 'utf8');
+  check('leave-markup', ['menu-leave', 'leave-veil', 'leave-go', 'leave-stay'].every(id => html.includes('id="' + id + '"'))
+    && shopSrc.includes('id="shop-leave"'));
   check('leave-buttons-in-room', els['menu-leave'].hidden === false && els['shop-leave'].hidden === false,
     `${els['menu-leave'].hidden} ${els['shop-leave'].hidden}`);
   TAP('global', 'menu'); frames(2);

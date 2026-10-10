@@ -36,8 +36,9 @@ const RULES = [
   [new RegExp(`^${SITE}games/[^/]+/[^/]*-test\\.(php|js)$`), 'NONE'], // unit and smoke tests
   [new RegExp(`^${SITE}games/[^/]+/(tools|protocol|fx/blender|audio/sfx/src)/`), 'NONE'], // generators, fixtures, sources
   [new RegExp(`^${SITE}games/[^/]+/(audio/sfx/build_sfx\\.sh|game\\.yaml|\\.gitignore)$`), 'NONE'],
-  // A game's lockfile only pins the compiler; what the browser runs is js/,
-  // which has its own rule below. The unit suites still check the build.
+  // A game's lockfile only pins the compiler (and Tankity's Preact); what the
+  // browser runs is js/ and vendor/, which have their own rules below. The unit
+  // suites still check the build and that vendor/ matches the pin.
   [new RegExp(`^${SITE}games/[^/]+/package-lock\\.json$`), 'NONE'],
   // The dev-only effects editor: only the effects spec opens it.
   [new RegExp(`^${SITE}games/tankity/fx-editor\\.(html|js|css)$`), ['tankity-fx.spec.mjs']],

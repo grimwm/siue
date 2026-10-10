@@ -16,9 +16,12 @@
  *     so it opens offline, and otherwise goes to the network first. Its cache
  *     name carries a hash of those files, so any change to them makes sw.js
  *     stale until rewritten (rerun this after the last edit);
- *   - the `?v=` cache-busters: each js/ module's import in game.js, then the
- *     page's game.js, game.css and fx.js tags, each set to a short hash of the
- *     file's content (see install_versions).
+ *   - the `?v=` cache-busters, each a short hash of the file's content: the
+ *     import map's entries (vendor/), every relative import between js/
+ *     modules and game.js (dependencies first, so one run converges), then the
+ *     page's game.js, game.css and fx.js tags (see install_versions). It edits
+ *     the compiled js/ files for this, which tools/ts-build.mjs --check
+ *     accepts: it compares them without the versions.
  * Test files, .php files, the share-only picture (`image:`) and the build
  * tooling (package.json, package-lock.json, tsconfig.json) are not cached; the
  * compiled modules in js/ are.
@@ -135,42 +138,212 @@ function install_version(string $content): string
 const INSTALL_PAGE_VERSIONED = ['game.js', 'game.css', 'fx.js'];
 
 /**
- * Sets every `?v=` to the content hash of the file it names. Modules first:
- * each ./js/<name>.js import in game.js gets that module's hash; then the
- * page's tags for game.js (which now carries those hashes, so a changed module
- * re-versions game.js too), game.css and fx.js. Only the version value inside
- * a recognised reference is rewritten. Every js/ module must be imported
- * exactly once and every page tag found exactly once, or the problems are
- * reported and the caller writes nothing.
+ * Every .js file under $dir/$sub, recursively, as paths relative to $dir.
+ * @return list<string>
+ */
+function install_js_tree(string $dir, string $sub): array
+{
+    $found = [];
+    foreach (is_dir("$dir/$sub") ? (scandir("$dir/$sub") ?: []) : [] as $f) {
+        if ($f === '.' || $f === '..') {
+            continue;
+        }
+        if (is_dir("$dir/$sub/$f")) {
+            array_push($found, ...install_js_tree($dir, "$sub/$f"));
+        } elseif (preg_match('/^[\w.-]+\.js$/', $f)) {
+            $found[] = "$sub/$f";
+        }
+    }
+    sort($found);
+    return $found;
+}
+
+/**
+ * A module's import specifiers. Only real statements count (`import ... from
+ * 'x'`, `export ... from 'x'`, `import 'x'`, each starting a line), so a
+ * comment that mentions one is left alone. The pattern captures the text up to
+ * the opening quote, the quote, and the specifier.
+ */
+const INSTALL_IMPORT_RE = '#(^[ \t]*(?:import|export)\b[^;\'"]*?\bfrom\s*|^[ \t]*import\s*)([\'"])([^\'"\n]+)\2#m';
+
+/** `a/b/../c.js` resolved against a base directory; null if it climbs out. */
+function install_resolve(string $baseDir, string $spec): ?string
+{
+    $parts = $baseDir === '' ? [] : explode('/', $baseDir);
+    foreach (explode('/', $spec) as $seg) {
+        if ($seg === '' || $seg === '.') {
+            continue;
+        }
+        if ($seg === '..') {
+            if (!$parts) {
+                return null;
+            }
+            array_pop($parts);
+        } else {
+            $parts[] = $seg;
+        }
+    }
+    return implode('/', $parts);
+}
+
+/**
+ * The page's import map as [spec => url], or null when there is none, plus
+ * problems. Each url is a ./ path to a file in the game folder carrying `?v=`.
  *
- * @return array{0: string, 1: string, 2: list<string>} [game.js, page, problems]
+ * @return array{0: ?array<string, string>, 1: list<string>}
+ */
+function install_import_map(string $dir, string $page, string $pageName): array
+{
+    $n = preg_match_all('#<script type="importmap">(.*?)</script>#s', $page, $found);
+    if ($n === 0) {
+        return [null, []];
+    }
+    if ($n > 1) {
+        return [null, ["$pageName must hold one import map (found $n)"]];
+    }
+    $decoded = json_decode($found[1][0], true);
+    $imports = is_array($decoded) ? ($decoded['imports'] ?? null) : null;
+    if (!is_array($imports) || $imports === []) {
+        return [null, ["$pageName: the import map must be JSON with a non-empty \"imports\" object"]];
+    }
+    $problems = [];
+    foreach ($imports as $spec => $url) {
+        if (!is_string($url) || !preg_match('#^\./([\w./-]+\.js)\?v=[^"?\s]*$#', $url, $m)) {
+            $problems[] = "$pageName: import map entry \"$spec\" must be a ./ path to a .js file ending in ?v=...";
+        } elseif (!is_file("$dir/{$m[1]}")) {
+            $problems[] = "$pageName: import map entry \"$spec\" names {$m[1]}, which does not exist";
+        }
+    }
+    return [$problems ? null : $imports, $problems];
+}
+
+/**
+ * Sets every `?v=` to the content hash of the file it names, so a browser
+ * never pairs a cached file with a newer one it imports.
+ *
+ *   1. Import map: each entry's file (./vendor/...) gets its own hash.
+ *   2. js/ modules and game.js, dependencies first. A relative import of
+ *      another module of ours (written with its .js extension, `?v=` present
+ *      or not) gets that module's hash, then the importer is hashed in turn, so
+ *      one run converges however deep the chain. A bare import must name an
+ *      entry of the import map. Imports go through no other door.
+ *   3. The page's tags for game.js (which now carries those hashes), game.css
+ *      and fx.js.
+ *
+ * Loud failure, writing nothing: an import of a module that does not exist or
+ * lives outside js/, a bare import the map lacks, a cycle, a js/ module that
+ * game.js does not reach, a dynamic import of a literal, a malformed import map
+ * or one placed after the game's script, or a page tag found other than once.
+ * Only the version value inside a recognised reference is rewritten.
+ *
+ * @return array{0: string, 1: string, 2: list<string>, 3: array<string, string>} [game.js, page, problems, js/ modules by path]
  */
 function install_versions(string $dir, string $gameJs, string $page, string $pageName): array
 {
     $problems = [];
-    $modules = [];
-    foreach (is_dir("$dir/js") ? (scandir("$dir/js") ?: []) : [] as $f) {
-        if (preg_match('/^[\w-]+\.js$/', $f)) {
-            $modules[$f] = install_version((string) file_get_contents("$dir/js/$f"));
+    [$map, $mapProblems] = install_import_map($dir, $page, $pageName);
+    $problems = array_merge($problems, $mapProblems);
+    $mapSpecs = $map === null ? [] : array_keys($map);
+
+    // The nodes: game.js and every js/ module, with their text as it is now.
+    $text = ['game.js' => $gameJs];
+    foreach (install_js_tree($dir, 'js') as $f) {
+        $text[$f] = (string) file_get_contents("$dir/$f");
+    }
+    // Each node's relative imports, resolved to node paths.
+    $deps = [];
+    foreach ($text as $path => $body) {
+        $deps[$path] = [];
+        $base = dirname($path) === '.' ? '' : dirname($path);
+        preg_match_all(INSTALL_IMPORT_RE, $body, $imps, PREG_SET_ORDER);
+        foreach ($imps as $imp) {
+            $spec = $imp[3];
+            if ($spec[0] === '.') {
+                $target = install_resolve($base, (string) preg_replace('/\?.*$/', '', $spec));
+                if ($target === null || !str_starts_with($target, 'js/') || !str_ends_with($target, '.js')) {
+                    $problems[] = "$path imports $spec, which is not a .js file under js/";
+                } elseif (!isset($text[$target])) {
+                    $problems[] = "$path imports $target, which does not exist";
+                } else {
+                    $deps[$path][$target] = true;
+                }
+            } elseif (!preg_match('#^[A-Za-z@][^:]*$#', $spec)) {
+                $problems[] = "$path imports $spec, which is neither a relative path nor a name in the import map";
+            } elseif (!in_array($spec, $mapSpecs, true)) {
+                $problems[] = "$path imports $spec, which the import map in $pageName does not list";
+            }
+        }
+        if (preg_match('/\bimport\s*\(\s*[\'"]/', $body)) {
+            $problems[] = "$path uses a dynamic import() of a literal; only static imports are versioned";
         }
     }
-    $seen = [];
-    $gameJs = (string) preg_replace_callback(
-        '#(from \'\./js/)([\w-]+\.js)(\?v=)([^\'"?\s]*)(\')#',
-        function (array $m) use ($modules, &$seen, &$problems): string {
-            $seen[$m[2]] = ($seen[$m[2]] ?? 0) + 1;
-            if (!isset($modules[$m[2]])) {
-                $problems[] = "game.js imports js/{$m[2]}, which does not exist";
-                return $m[0];
-            }
-            return $m[1] . $m[2] . $m[3] . $modules[$m[2]] . $m[5];
-        },
-        $gameJs
-    );
-    foreach (array_keys($modules) as $f) {
-        if (($seen[$f] ?? 0) !== 1) {
-            $problems[] = "game.js must import ./js/$f?v=... exactly once (found " . ($seen[$f] ?? 0) . ')';
+    // The map must come before the module script that needs it.
+    $mapAt = strpos($page, '<script type="importmap">');
+    $gameAt = strpos($page, 'game.js?v=');
+    if ($mapAt !== false && $gameAt !== false && $mapAt > $gameAt) {
+        $problems[] = "$pageName must put the import map before the game.js script";
+    }
+    if ($problems) {
+        return [$gameJs, $page, $problems, []];
+    }
+
+    // Dependencies first (post-order from game.js); a cycle or an unreached module is a problem.
+    $order = [];
+    $state = [];
+    $visit = function (string $node, array $trail) use (&$visit, &$order, &$state, &$problems, $deps): void {
+        if (($state[$node] ?? 0) === 2) {
+            return;
         }
+        if (($state[$node] ?? 0) === 1) {
+            $problems[] = 'import cycle: ' . implode(' -> ', array_merge(array_slice($trail, (int) array_search($node, $trail, true)), [$node]));
+            return;
+        }
+        $state[$node] = 1;
+        foreach (array_keys($deps[$node]) as $d) {
+            $visit($d, array_merge($trail, [$node]));
+        }
+        $state[$node] = 2;
+        $order[] = $node;
+    };
+    $visit('game.js', []);
+    foreach (array_keys($text) as $f) {
+        if (!isset($state[$f])) {
+            $problems[] = "$f is not imported from game.js, directly or through another js/ module";
+        }
+    }
+    if ($problems) {
+        return [$gameJs, $page, $problems, []];
+    }
+
+    $hash = [];
+    foreach ($order as $node) {
+        $base = dirname($node) === '.' ? '' : dirname($node);
+        $text[$node] = (string) preg_replace_callback(
+            INSTALL_IMPORT_RE,
+            function (array $m) use ($base, &$hash): string {
+                if ($m[3][0] !== '.') {
+                    return $m[0];
+                }
+                $bare = (string) preg_replace('/\?.*$/', '', $m[3]);
+                return $m[1] . $m[2] . $bare . '?v=' . $hash[install_resolve($base, $bare)] . $m[2];
+            },
+            $text[$node]
+        );
+        $hash[$node] = install_version($text[$node]);
+    }
+    $gameJs = $text['game.js'];
+    unset($text['game.js']);
+
+    if ($map !== null) {
+        $page = (string) preg_replace_callback(
+            '#(<script type="importmap">)(.*?)(</script>)#s',
+            fn(array $m): string => $m[1] . preg_replace_callback(
+                '#"(\./[\w./-]+\.js)\?v=[^"?\s]*"#',
+                fn(array $e): string => '"' . $e[1] . '?v=' . install_version((string) file_get_contents($dir . '/' . substr($e[1], 2))) . '"',
+                $m[2]
+            ) . $m[3],
+            $page
+        );
     }
     foreach (INSTALL_PAGE_VERSIONED as $f) {
         $content = $f === 'game.js' ? $gameJs : @file_get_contents("$dir/$f");
@@ -190,7 +363,7 @@ function install_versions(string $dir, string $gameJs, string $page, string $pag
             $problems[] = "$pageName must reference $f?v=... exactly once (found $count)";
         }
     }
-    return [$gameJs, $page, $problems];
+    return [$gameJs, $page, $problems, $text];
 }
 
 /** The marked block in the game's page: install tags and the service worker. */
@@ -269,8 +442,9 @@ function install_manifest(array $card): string
  * $override maps a file name to the content this run is about to write.
  * Test files, the dev-only effects editor (fx-editor.*), the share-only
  * picture and the build tooling (package.json, package-lock.json,
- * tsconfig.json) are left out; the rendered effect sprites (fx/sprites) and
- * the compiled ES modules (js/, built from src/ by tools/ts-build.mjs) are in.
+ * tsconfig.json) are left out; the rendered effect sprites (fx/sprites), the
+ * compiled ES modules (js/, built from src/ by tools/ts-build.mjs) and the
+ * vendored libraries (vendor/, copied by tools/vendor.mjs) are in.
  *
  * @param array<string, string> $override
  * @return array{0: list<string>, 1: string} [file names, hash]
@@ -280,11 +454,12 @@ function install_precache(string $dir, array $override, string $image): array
     $names = [];
     // A file about to be written counts even if it is not on disk yet.
     $found = array_merge(scandir($dir) ?: [], array_keys($override));
-    foreach (['fx/sprites', 'js'] as $sub) {
+    foreach (['fx/sprites'] as $sub) {
         foreach (is_dir("$dir/$sub") ? (scandir("$dir/$sub") ?: []) : [] as $f) {
             $found[] = "$sub/$f";
         }
     }
+    array_push($found, ...install_js_tree($dir, 'js'), ...install_js_tree($dir, 'vendor'));
     foreach ($found as $f) {
         if ((is_file("$dir/$f") || isset($override[$f])) && !in_array($f, $names, true)
             && preg_match('/\.(html|js|css|json|png|webmanifest)$/', $f)
@@ -372,7 +547,7 @@ function install_sync(string $dir, bool $write): array
     $pageName = $card['play'];
     $html = (string) @file_get_contents("$dir/$pageName");
     // Versions first: the page and sw.js hash the content written here.
-    [$gameJs, $html, $problems] = install_versions($dir, (string) @file_get_contents("$dir/game.js"), $html, $pageName);
+    [$gameJs, $html, $problems, $modules] = install_versions($dir, (string) @file_get_contents("$dir/game.js"), $html, $pageName);
     if ($problems) {
         return [[], array_merge($notes, $problems)];
     }
@@ -381,11 +556,11 @@ function install_sync(string $dir, bool $write): array
     if ($page === null) {
         return [[], array_merge($notes, ["no <title> in $pageName to put install tags after"])];
     }
-    $outputs = [$pageName => $page, 'game.js' => $gameJs];
+    $outputs = [$pageName => $page, 'game.js' => $gameJs] + $modules;
     if (!$notes) {
         $manifest = install_manifest($card);
         $outputs['manifest.webmanifest'] = $manifest;
-        [$names, $hash] = install_precache($dir, [$pageName => $page, 'game.js' => $gameJs, 'manifest.webmanifest' => $manifest], basename($card['image']));
+        [$names, $hash] = install_precache($dir, $outputs, basename($card['image']));
         $outputs['sw.js'] = install_sw($card, basename($dir), $names, $hash);
     }
     $stale = [];

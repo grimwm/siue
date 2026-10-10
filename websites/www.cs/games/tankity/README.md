@@ -9,7 +9,7 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
 | File                                                            | What it is                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: the game loop, HUD, shop, lobby UI and the room replay); it imports the sim, the audio, the room client and the renderer from `js/`                                                                                                               |
+| `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: the game loop, HUD, the shop's state, lobby UI and the room replay); it imports the sim, the audio, the room client, the renderer, the input and the Preact overlays from `js/`                                                                                                               |
 | `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (20 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `game.js`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml`, and where each came from                                                                                                                     |
@@ -19,8 +19,11 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | `src/render.ts` | The battlefield on the canvas: sky and moon, clouds, hills, the units and their bodies, aim arm, blasts, shells, sparks, the wind gauge, the on-canvas turn clock and the firing-range preview. Reads a `BattleView` that `game.js` builds each frame and paints it; it never changes game state |
 | `src/protocol.ts` | The room wire protocol as types: replies, the room snapshot, the discriminated union of events, and each action's request body. Types only, so it has no `js/` file |
 | `src/protocol-fixtures.check.ts`, `src/tsconfig.check.json` | Type-check only, never emitted: assigns every `protocol/*.json` to its type (see Protocol fixtures) |
-| `js/*.js` | `src/*.ts` compiled by `tools/ts-build.mjs`; checked in and deployed (the host has no Node). Never edit by hand |
-| `package.json`, `package-lock.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json` | The build setup (TypeScript pinned exactly). Never deployed, like `src/`, `tools/` and `node_modules/` |
+| `src/ui/*.tsx` | The Preact overlays (the help and the shop so far; see Preact overlays): `chrome.tsx` holds the shared key labels and title bar, `help.tsx` and `shop.tsx` one overlay each |
+| `js/*.js`, `js/ui/*.js` | `src/*.ts` and `src/ui/*.tsx` compiled by `tools/ts-build.mjs`; checked in and deployed (the host has no Node). Never edit by hand |
+| `vendor/preact/` | Preact's ES module builds and licence, copied from `node_modules` by `tools/vendor.mjs`; checked in and deployed. Never edit by hand |
+| `package.json`, `package-lock.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json` | The build setup (TypeScript and Preact pinned exactly). Never deployed, like `src/`, `tools/` and `node_modules/` |
+| `ui-test.js`, `tools/dom-stub.mjs` | Renders the Preact overlays with sample props and asserts their DOM; the stub is the small Node DOM that it and `smoke-test.js` share. Never deployed |
 | `rooms.php`                                                     | Room server: authoritative sim, AI turns, shop, events                                                                                                                                      |
 | `scores.php`, `config.php`                                      | Score API; `.config.yaml` reader                                                                                                                                                            |
 | `fx.js` | The effects engine (particle pool, emitters, screen flash, shell glow), shared by `game.js` and the editor; exposes `window.TankityFX` |
@@ -54,8 +57,8 @@ php tools/install-files.php      # after the last edit to any served file
   version = hash of the served static files, so any edit makes it stale).
   Music and sound files are never precached; sound effects are cached by the
   worker the first time they play, music streams from the network.
-- `make test` and `make deploy` both run the two `--check`s and the deploy
-  refuses stale output. `game.yaml`, `tools/` and this file are not deployed.
+- `make test` and `make deploy` both run the `--check`s (the generators, the TypeScript build, the vendored
+  Preact) and the deploy refuses stale output. `game.yaml`, `tools/` and this file are not deployed.
 - Audio plays only after the first tap or key press, never while its toggle
   (E sound, M music) is off, and a missing or undecodable file silently leaves
   the synthesized sound or song in place. Add a line to `audio/CREDITS.md` for
@@ -120,49 +123,90 @@ php tools/install-files.php      # after the last edit to any served file
 ## Source layout and build
 
 The client is native ES modules with no bundler: `game.js` is loaded by
-`index.html` with `<script type="module">`, and `src/*.ts` compiles one file to
-one file into `js/`. Both `js/` and `fx.js` (a classic script exposing
-`window.TankityFX`, loaded first) are served as they are.
+`index.html` with `<script type="module">`, and `src/*.ts` and `src/ui/*.tsx`
+compile one file to one file into `js/`. Both `js/` and `fx.js` (a classic
+script exposing `window.TankityFX`, loaded first) are served as they are, and
+so is `vendor/`, the one library.
 
 ```
 npm ci && node tools/ts-build.mjs          # compile src/ to js/ (type errors fail it)
 node tools/ts-build.mjs --check            # fail if js/ is missing, stale or has extra files
+node tools/vendor.mjs                      # copy Preact from node_modules to vendor/preact/
+node tools/vendor.mjs --check              # fail if vendor/ drifted from the pinned version
 ```
 
 - `js/` is generated and committed, like `game.json` and `sw.js`: edit `src/`,
-  rebuild, commit both. `make test` runs `npm ci` and `--check`, and
-  `deploy.sh` refuses a stale `js/`. Rerun `php tools/install-files.php` after
-  a rebuild: the service worker precaches `js/*.js` and versions its cache by
-  their content.
+  rebuild, commit both. `make test` runs `npm ci` and both `--check`s, and
+  `deploy.sh` refuses a stale `js/` or `vendor/`. Rerun
+  `php tools/install-files.php` after a rebuild: the service worker precaches
+  `js/**/*.js` and `vendor/**/*.js` and versions its cache by their content.
 - `tsconfig.json`: strict, `noUncheckedIndexedAccess`, ES2022 modules, imports
   written with their `.js` extension (the file the browser fetches), comments
   kept, no source maps. It lists the DOM-free modules (the sim, the room
   client and the input), which compile without DOM types, so they cannot reach for the page.
   `src/tsconfig.dom.json` extends it with the DOM lib for the modules that need
-  WebAudio, `fetch`, timers and canvas types (`audio.ts`, `render.ts`);
+  WebAudio, `fetch`, timers, canvas and the document (`audio.ts`, `render.ts`
+  and the overlays in `ui/`), and with `"jsx": "react-jsx"` and
+  `"jsxImportSource": "preact"` for the `.tsx` files;
   `src/tsconfig.check.json` is a
   third program that type-checks the protocol fixtures and emits nothing.
   `ts-build.mjs` compiles each config as its own program, so adding the DOM lib
   for the audio never lets the sim see `document`. A module that holds only
   types (`protocol.ts`) compiles to nothing and has no `js/` file.
-- Cache-busting versions are content hashes, written by
-  `tools/install-files.php`, never by hand. Each `js/` import in `game.js`
-  (`./js/sim.js?v=...`, `./js/audio.js?v=...`, `./js/net.js?v=...`,
-  `./js/render.js?v=...`, `./js/input.js?v=...`) carries the first 10 hex characters of the SHA-256 of
-  that module; then `index.html`'s `game.js?v=`, `game.css?v=` and `fx.js?v=`
-  carry the hash of their file (so a changed module re-versions `game.js` too).
-  After editing any client file, run `php tools/install-files.php` (it also
-  rewrites `sw.js`, which hashes the same files); `make test` fails with
-  "is stale" when you forget. The tool rewrites only the value after `?v=` and
-  fails, writing nothing, if a `js/` module is not imported exactly once or a
-  page tag is missing. Because versions are functions of content, two branches
-  that touch different files do not conflict over them. `smoke-test.js` checks
-  that every `js/` file is imported with a version and that no `js/` module
-  imports another (the version lives only on `game.js`'s imports, so a
-  module-to-module import would load a second copy). There is no import map:
-  the Node tests import `game.js` and `js/*.js` directly, and bare specifiers
-  would need a loader in every one of them. The service worker serves network
-  first, revalidating, so it never holds a stale module for an online player.
+- **Imports.** A browser keys a module by its URL, so a file imported under two
+  spellings (with and without a `?v=`, or with two versions) loads twice and
+  one copy is stale. Three rules keep that from happening:
+  1. Every import between our own files carries `?v=<hash>`, the first 10 hex
+     characters of the SHA-256 of the imported file, and every importer spells
+     the same one. `tools/install-files.php` writes them, never by hand: it
+     adds a missing `?v=` and edits the compiled `js/` files in place (tsc
+     emits `from "./chrome.js"`; `ts-build.mjs` ignores the versions when it
+     compares). It works dependencies first, hashing each file after its
+     imports are versioned, so one run converges however deep the chain:
+     change `sim.js` and everything importing it, `game.js`, `index.html` and
+     `sw.js` re-version together.
+  2. A bare import (`preact`, `preact/hooks`, `preact/jsx-runtime`) must be an
+     entry of the import map in `index.html`, whose URLs (`./vendor/preact/...`)
+     carry content hashes too. The map precedes the game's script.
+  3. Every `js/` file is reachable from `game.js` through those imports.
+
+  The tool fails, writing nothing, on an import of a file that is missing or
+  outside `js/`, a bare import the map lacks, a cycle, an unreachable `js/`
+  file, a dynamic `import('...')` of a literal, a malformed map or one placed
+  after the game's script, or a page tag that is missing. Then `index.html`'s
+  `game.js?v=`, `game.css?v=` and `fx.js?v=` carry the hash of their file (so a
+  changed module re-versions `game.js` and the page too). Because versions are
+  functions of content, two branches that touch different files do not
+  conflict over them. `smoke-test.js` re-checks the same rules from the
+  browser's side: versions are present, equal one per module and equal the
+  content hash; bare imports are mapped; everything is reachable. The service
+  worker serves network first, revalidating, so it never holds a stale module
+  for an online player, and its precache lets the import map and the vendored
+  files load offline. The Node tests need no map: `preact` resolves to
+  `node_modules/preact`, the release `vendor/` is copied from.
+- **Preact overlays.** The panels that are mostly markup are Preact components
+  in `src/ui/`, drawn into the elements `index.html` keeps (`#help-overlay`,
+  `#shop-veil`, marked `data-ui`). Preact is a pinned dependency (`package.json`
+  holds an exact version, `package-lock.json` the same) and `tools/vendor.mjs`
+  copies its three ES builds and licence to `vendor/preact/`, so the game stays
+  self-contained and works offline; `--check` fails if the pin, the lockfile,
+  `node_modules` or the copies disagree. To upgrade: change the version, run
+  `npm install`, `node tools/vendor.mjs`, `node tools/ts-build.mjs` and
+  `php tools/install-files.php`. The rules for a component: props in, DOM and
+  callbacks out. `game.js` builds a finished view of its state (the shop's
+  rows, the cash line, the start button's label) and hands it in with the
+  callbacks (`onBuy`, `onPreview`, `onNext`, `onLeave`, `onClose`); the
+  component never reaches into game state or the page, and keeps local state
+  only for the UI itself. Components keep the ids and classes `game.css` and
+  the browser specs use. Key labels come from the `keyHint` prop through
+  `KeyHints` context (`Key` in `chrome.tsx`), so a remapped `game.json` rewrites
+  them; the document-wide `renderKeyHints` pass skips anything under
+  `[data-ui]`. Touch screens hide `.key` caps and `.keys-only` text centrally in
+  `game.css`, so components still emit them. Each overlay module exports a
+  `render*(container, props)` that `game.js` calls on every change: Preact diffs,
+  so the DOM (scroll position, focus) persists between renders. Still plain
+  markup in `index.html` and `game.js`: the rooms lobby, settings, menu, gun
+  picker, scores, tutorial, HUD and radio log.
 - The sim takes its state as arguments (`World`, `Arsenal`) and reports what
   happened as data: `explode` returns the blast (each unit's shield, wound or
   wreck, a last stand's nested blast), `stepShells` returns the frame's trails,
@@ -242,6 +286,8 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
 | Command                                        | Covers                                                                                     |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `node tools/ts-build.mjs --check`              | `js/` is exactly what `src/` compiles to, `src/` type-checks, and every `protocol/*.json` fits its type in `protocol.ts` (run `npm ci` first) |
+| `node tools/vendor.mjs --check`, `node vendor-test.js` | `vendor/preact/` is byte-for-byte what the pinned Preact in `node_modules` ships (pin, lockfile and install agree); the check's own failure cases |
+| `node ui-test.js`                              | The Preact overlays (`js/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the key labels, and that clicks reach the callbacks |
 | `node smoke-test.js`                           | The shipped client (`game.js` imported as a module) in a stub DOM (loads `fx.js` first), driven by the `game.json` key table and the `protocol/` fixtures; also checks every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps |
 | `php config-test.php`                          | `.config.yaml` precedence                                                                  |
 | `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; `room_snapshot` shapes against `protocol/` |

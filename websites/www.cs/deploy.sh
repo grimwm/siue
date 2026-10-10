@@ -74,6 +74,13 @@ if ! (npm ci --silent && node tools/ts-build.mjs --check); then
   exit 1
 fi
 
+# Its one library, Preact, ships as a copy in vendor/ (no node_modules on the
+# host): refuse a copy that has drifted from the pinned version.
+if ! (cd games/tankity && node tools/vendor.mjs --check); then
+  echo "deploy: run node games/tankity/tools/vendor.mjs and commit the result" >&2
+  exit 1
+fi
+
 work=$(mktemp -d "${TMPDIR:-/tmp}/www-cs-deploy.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 stage=$work/stage
@@ -99,7 +106,8 @@ while IFS= read -r -d '' f; do
     # its sources are in games/*/src/ below), the effects editor and the
     # Blender script behind the effect sprites (the rendered sheets do ship),
     # and the TypeScript build setup (package*.json, tsconfig.json,
-    # node_modules; the compiled js/ ships, its sources in src/ do not).
+    # node_modules; the compiled js/ and the vendored vendor/ ship, the
+    # TypeScript sources in src/ do not).
     games/*-test.* | games/README.md | games/*/README.md | games/*/tools/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/*/fx-editor.* | games/*/fx/blender/*) continue ;;
     games/*/package.json | games/*/package-lock.json | games/*/tsconfig.json | games/*/node_modules/* | games/*/.gitignore) continue ;;
     # Authoring sources (Git LFS audio and Blender scenes, see .gitattributes;

@@ -14,6 +14,18 @@
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
 <link rel="stylesheet" href="game.css?v=c22d02e472">
+<!-- Bare imports in the compiled modules (js/ui) resolve here, to the Preact
+     copies in vendor/ (tools/vendor.mjs). The ?v= values are content hashes
+     written by tools/install-files.php. -->
+<script type="importmap">
+{
+  "imports": {
+    "preact": "./vendor/preact/preact.module.js?v=3a3201e9cc",
+    "preact/hooks": "./vendor/preact/hooks.module.js?v=6cb79fe995",
+    "preact/jsx-runtime": "./vendor/preact/jsx-runtime.module.js?v=953455da9b"
+  }
+}
+</script>
 </head>
 <body>
 <header class="topbar">
@@ -80,53 +92,7 @@
         </header>
         <ol id="log" class="log log-transparent" aria-live="polite"></ol>
       </section>
-      <section id="help-overlay" class="frame-overlay card-overlay" aria-labelledby="help-h" hidden>
-        <header class="ov-head">
-          <div class="ov-title"><h2 id="help-h">How to play</h2></div>
-          <button type="button" class="ov-x" id="help-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
-          <div class="nav-hint ov-keys" id="nav-help" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
-        </header>
-        <ul class="help">
-          <li>Scorched-earth artillery: you and the drone battery take turns lobbing shells
-            across destructible hills. Last one rolling wins the round.</li>
-          <li class="keys-only">Hold <strong><span data-keyhint="aim:barrelLeft">◀</span><span data-keyhint="aim:barrelRight">▶</span></strong> for barrel angle, <strong><span data-keyhint="aim:powerUp">▲</span><span data-keyhint="aim:powerDown">▼</span></strong> for power.
-            <strong><span data-keyhint="aim:driveLeft">A</span>/<span data-keyhint="aim:driveRight">D</span></strong> drives while you have fuel. <strong><span data-keyhint="global:fire">Ctrl</span></strong> fires and ends your turn.</li>
-          <li class="touch-only">Hold <strong>◀ ▶</strong> to swing the barrel and <strong>▲ ▼</strong> for power.
-            <strong>Drive ◀ ▶</strong> moves while you have fuel. <strong>Fire</strong> shoots and ends your turn.
-            In the shop, tap a row's <strong>Buy</strong> or <strong>Preview</strong>. <strong>Menu</strong> holds New Game,
-            rooms, sound, music, fullscreen and the tutorial.</li>
-          <li><strong>Wind</strong> pushes every shell, so check the meter before you fire.
-            <span class="keys-only"><strong><span data-keyhint="global:guns">G</span></strong> (or <strong>Weapons</strong>) opens every gun on your rack as tiles, and <strong><span data-keyhint="global:cycle">Q</span></strong> loads the next one:</span><span class="touch-only"><strong>Weapons</strong> opens every gun on your rack as tiles:</span> Shell, Buckshot, Mortar, Rail, the round-4 <strong>NUKE</strong>, and more from the shop.
-            Shells are free; the good stuff is bought with winnings, starting with
-            a $600 stake you spend in the shop before round 1.</li>
-          <li>There is no final victory. Every round the battery rebuilds with thicker armor,
-            steadier aim, and deeper magazines. How many hills can you hold?</li>
-          <li class="keys-only"><strong><span data-keyhint="global:fullscreen">F</span></strong> toggles fullscreen for the full hillside view; <strong><span data-keyhint="global:fullscreen">F</span></strong> again leaves it.</li>
-          <li class="keys-only"><strong><span data-keyhint="global:sound">E</span></strong> toggles sound effects, <strong><span data-keyhint="global:music">M</span></strong> toggles the music.
-            Each has its own button in the menu (<strong><span data-keyhint="global:menu">C</span></strong> opens it), so one can stay on while the other rests. New Game, seed, fullscreen,
-            rooms (<strong><span data-keyhint="global:rooms">O</span></strong>), and random hills (<strong><span data-keyhint="global:random">T</span></strong>) live there too.</li>
-          <li class="keys-only"><strong><span data-keyhint="global:guns">G</span></strong> opens the weapon picker (number keys pick a gun there). In the shop,
-            <strong><span data-keyhint="shop:selUp">▲</span>/<span data-keyhint="shop:selDown">▼</span></strong> move, <strong><span data-keyhint="shop:qtyDown">◀</span>/<span data-keyhint="shop:qtyUp">▶</span></strong> pick how many packs to buy
-            (never more than the chest covers), <strong><span data-keyhint="shop:buy">B</span></strong> or <strong><span data-keyhint="shop:buy:1">Enter</span></strong> buys,
-            number keys buy that row, and <strong><span data-keyhint="shop:preview:1">P</span></strong> or <strong><span data-keyhint="shop:preview">V</span></strong> previews it.</li>
-          <li>Explosions carve craters and damage by distance. Direct hits pay double.
-            You have <strong>3 lives</strong>; every 3000 points earns a <strong>1-up</strong> (max 5).</li>
-          <li>The battery (<strong>Reaper</strong>, <strong>Wraith</strong>, <strong>Spotter</strong>)
-            aims back, and gets steadier every round. Keep moving and mind the wind.</li>
-          <li><strong>Rooms</strong> lets friends share a hillside: host a room, read out the code,
-            and take turns with the battery filling empty seats. Initials only, no chat,
-            and the server settles every shot so nobody can fudge a hit. The host can pick
-            named hills, and a rematch replays them without ever revealing the seed.</li>
-          <li>Opening the page runs a demo battle. Press <strong>New Game</strong><span class="keys-only"> (or
-            <strong><span data-keyhint="global:new">N</span></strong>)</span> to take the controls with a fanfare. Every round gets its own
-            name card before the shop and the shooting.</li>
-          <li>The camera pulls back as the battle spreads so every tank stays in view.
-            The railgun trades its old cross-map glare for a shorter, saner bolt.</li>
-          <li class="keys-only"><strong><span data-keyhint="global:log">L</span></strong> shows or hides the radio log, <strong><span data-keyhint="global:help">H</span></strong> this help,
-            <strong><span data-keyhint="global:report">R</span></strong> the after-action report, and <strong><span data-keyhint="global:escape">ESC</span></strong> closes any open
-            menu. Overlays never pause the battle.</li>
-        </ul>
-      </section>
+      <section id="help-overlay" class="frame-overlay card-overlay" aria-labelledby="help-h" data-ui hidden></section>
       <section id="report-overlay" class="frame-overlay card-overlay" aria-labelledby="score-h" hidden>
         <header class="ov-head">
           <div class="ov-title"><h2 id="score-h">Scores</h2></div>
@@ -211,19 +177,7 @@
         <button type="button" id="again" class="btn-primary">Play again <span class="key" data-keyhint="global:new">(N)</span></button>
       </div>
     </div>
-    <div id="shop-veil" class="veil" hidden>
-      <div class="card" role="dialog" aria-modal="true" aria-labelledby="shop-title">
-        <header class="ov-head">
-          <div class="ov-title"><p class="kicker">Between rounds</p><h2 id="shop-title">Field shop</h2></div>
-          <div class="nav-hint ov-keys" id="nav-shop"><span><span data-keyhint="shop:selUp">▲</span><span data-keyhint="shop:selDown">▼</span> or <span data-keyhint="scroll:lineDown">J</span><span data-keyhint="scroll:lineUp">K</span> move</span><span><span data-keyhint="shop:qtyDown">◀</span><span data-keyhint="shop:qtyUp">▶</span> packs</span><span><span data-keyhint="shop:buy">B</span> buy · <span data-keyhint="shop:preview">V</span> preview</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
-        </header>
-        <p id="shop-cash" class="runstats"></p>
-        <ul id="shop-list" class="scores"></ul>
-        <p id="shop-ready" class="runstats" hidden></p>
-        <button type="button" id="shop-next" class="btn-primary">Next round <span class="key">(N)</span></button>
-        <button type="button" id="shop-leave" class="btn-leave" title="Leave this game room and go back to the solo hills" hidden>Leave room</button>
-      </div>
-    </div>
+    <div id="shop-veil" class="veil" data-ui hidden></div>
     <div id="lobby-veil" class="veil" hidden>
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="lobby-title">
         <header class="ov-head">
@@ -310,6 +264,6 @@
 </main>
 
 <script src="fx.js?v=a68a63de24" defer></script>
-<script type="module" src="game.js?v=9300e322f2"></script>
+<script type="module" src="game.js?v=2b04e71f3a"></script>
 </body>
 </html>

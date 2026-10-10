@@ -36,13 +36,31 @@ test('the shop list keeps its scroll when it redraws', async ({ browser }) => {
   const wheeled = await top();
   await page.keyboard.press('ArrowRight'); // more packs per buy: the rows redraw
   expect(await top()).toBe(wheeled);
-  await page.keyboard.press('j');
-  await page.keyboard.press('j');
+  await page.keyboard.press('PageDown');
   const keyed = await top();
   expect(keyed).toBeGreaterThan(wheeled);
   await page.keyboard.press('ArrowLeft');
   expect(await top()).toBe(keyed);
   expect(errors).toEqual([]);
+});
+
+test('J and K walk the shop rows like the arrows', async ({ browser }) => {
+  const { page } = await newPlayer(browser);
+  await page.keyboard.press('n');
+  await page.waitForSelector('#shop-veil:not([hidden])');
+  const sel = () => page.locator('#shop-list li:not(.shop-cat)').evaluateAll(els => els.findIndex(e => e.classList.contains('sel')));
+  expect(await sel()).toBe(0);
+  for (let i = 0; i < 6; i++) await page.keyboard.press('j');
+  expect(await sel()).toBe(6);
+  // The chosen row stays in view as the list scrolls to follow it.
+  const inView = await page.locator('#shop-list li.sel').evaluate(el => {
+    const r = el.getBoundingClientRect(), l = el.parentElement.getBoundingClientRect();
+    return r.top >= l.top - 1 && r.bottom <= l.bottom + 1;
+  });
+  expect(inView).toBe(true);
+  await page.keyboard.press('k');
+  expect(await sel()).toBe(5);
+  await expect(page.locator('#nav-shop')).toContainText('J');
 });
 
 test('a tank falls smoothly into the crater under it', async ({ browser }) => {

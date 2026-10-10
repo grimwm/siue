@@ -236,6 +236,29 @@
 }
 
 
+/* Until the game starts the eye rests in the middle, opened wide across
+   the bar. Starting the game narrows it back to its hunting size, and the
+   sweep picks up from the middle (half a cycle in) so it never jumps. */
+body:not(.cylon-game-live) .cylon-eye {
+  left: 50%;
+  width: 92%;
+  max-width: 92vw;
+  animation: none;
+}
+body:not(.cylon-game-live) .cylon-eye::after {
+  animation: none;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(ellipse 60% 70% at 50% 50%, rgba(255, 60, 60, 0.45), transparent 72%);
+}
+body.cylon-game-live .cylon-eye,
+body.cylon-game-live .cylon-eye::after {
+  animation-delay: -1.3s;
+}
+.cylon-eye {
+  transition: left 0.08s linear, width 0.7s ease, max-width 0.7s ease, filter 0.2s ease, box-shadow 0.2s ease;
+}
+
+
 @media (prefers-reduced-motion: reduce) {
   .cylon-eye,
   .cylon-eye::after {

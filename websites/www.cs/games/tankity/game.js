@@ -29,15 +29,17 @@ import {
 } from './js/net.js?v=6259020b84';
 import { createRenderer, drawChassis } from './js/render.js?v=1e211c92ed';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
-import { renderHelp } from './js/ui/help.js?v=41fef34a62';
-import { renderShop as drawShop } from './js/ui/shop.js?v=bab62d3d4e';
-import { renderLobby as drawLobby } from './js/ui/lobby.js?v=455b9bb4db';
-import { renderMenu as drawMenu } from './js/ui/menu.js?v=136446ee4b';
-import { renderGuns as drawGuns } from './js/ui/guns.js?v=0651c4fdac';
-import { renderScores as drawScores } from './js/ui/scores.js?v=9b4bcfa524';
-import { renderLog as drawLog } from './js/ui/log.js?v=870a9a2b49';
-import { renderTutorial as drawTutorial } from './js/ui/tutorial.js?v=7c12f75485';
+import { renderHelp } from './js/ui/help.js?v=7366b18437';
+import { renderShop as drawShop } from './js/ui/shop.js?v=650582befc';
+import { renderLobby as drawLobby } from './js/ui/lobby.js?v=162ac098fa';
+import { renderMenu as drawMenu } from './js/ui/menu.js?v=6ebee3dc2d';
+import { renderGuns as drawGuns } from './js/ui/guns.js?v=71c87cf72b';
+import { renderScores as drawScores } from './js/ui/scores.js?v=f0bf536feb';
+import { renderLog as drawLog } from './js/ui/log.js?v=7bec951a92';
+import { renderTutorial as drawTutorial } from './js/ui/tutorial.js?v=d501cd8bcc';
 import { renderHud as drawHud } from './js/ui/hud.js?v=a5deccd438';
+import { renderEndVeil as drawEndVeil } from './js/ui/endveil.js?v=6a7f00fd3c';
+import { renderLeave as drawLeave } from './js/ui/leave.js?v=2c5012f581';
 
 /* ---------- audio: lives in src/audio.ts ---------- */
 music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));
@@ -699,6 +701,34 @@ function settle() {
   G.wind = clamp(Math.round(G.wind + gauss(G.rng) * 2), -12, 12);
   nextTurn();
 }
+/* The end veil is a Preact component (src/ui/endveil.tsx); the game keeps what
+   it says and which buttons it offers. */
+const END = { kicker: '', title: '', text: '', score: '', formHidden: false, filed: false, rematch: null, backToRooms: false };
+function renderEndVeil() {
+  const veil = $('end-veil');
+  if (!veil) return;
+  drawEndVeil(veil, {
+    keyHint,
+    kicker: END.kicker,
+    title: END.title,
+    text: END.text,
+    score: END.score,
+    formHidden: END.formHidden,
+    filed: END.filed,
+    callsign: savedCallsign(),
+    rematch: END.rematch,
+    backToRooms: END.backToRooms,
+    onFile: raw => {
+      const name = raw.trim();
+      if (!name) { say('Give your callsign first, hero.', 'info'); return; }
+      fileReport(name);
+      END.filed = true;
+      renderEndVeil();
+    },
+    onRematch: () => { sfx.play('click'); netRematch(); },
+    onAgain: () => { if (net.on) { netLeave(); openLobby(); } else freshMatchFromSeedBox(); },
+  });
+}
 function endMatch(won, text) {
   if (G.demo) { startDemo(); return; }
   if (G.over) return;
@@ -713,17 +743,14 @@ function endMatch(won, text) {
   say(text, won ? 'good' : 'bad');
   const veil = $('end-veil');
   if (veil) {
-    $('end-kicker').textContent = won ? 'Match over' : 'Match lost';
-    $('end-title').textContent = won ? 'Hills claimed!' : 'Tank down';
-    $('end-text').textContent = text;
-    $('end-score').textContent = `Score ${G.score} · ${G.roundsWon} rounds won · ${G.round} rounds played · seed ${G.seed}`;
+    END.kicker = won ? 'Match over' : 'Match lost';
+    END.title = won ? 'Hills claimed!' : 'Tank down';
+    END.text = text;
+    END.score = `Score ${G.score} · ${G.roundsWon} rounds won · ${G.round} rounds played · seed ${G.seed}`;
     // File the run right here, with the last callsign ready.
-    const ef = $('end-score-form');
-    if (ef) ef.hidden = false;
-    const en = $('end-name');
-    if (en && !en.value) en.value = savedCallsign();
-    const eb = ef && ef.querySelector && ef.querySelector('button');
-    if (eb) { eb.disabled = false; eb.textContent = 'File score'; }
+    END.formHidden = false;
+    END.filed = false;
+    renderEndVeil();
     veil.hidden = false;
     refreshNavHints();
   }
@@ -2293,10 +2320,24 @@ function syncLeaveButtons() {
   renderMenu();
   renderShop();
 }
+/* The question is a Preact component (src/ui/leave.tsx); the game says what it
+   asks and what each answer does. */
+function renderLeaveVeil() {
+  const veil = $('leave-veil');
+  if (!veil) return;
+  drawLeave(veil, {
+    keyHint,
+    title: 'Leave this room?',
+    text: 'The drone battery takes your seat and the match goes on without you. You head back to the solo hills.',
+    onStay: closeLeaveVeil,
+    onLeave: confirmLeave,
+  });
+}
 function openLeaveVeil() {
   if (!net.on) return;
   const veil = $('leave-veil');
   if (!veil) return;
+  renderLeaveVeil();
   veil.hidden = false;
   const stay = $('leave-stay');
   if (stay && stay.focus) stay.focus();
@@ -2314,11 +2355,10 @@ function confirmLeave() {
 function netLeave(quiet) {
   const wasOn = net.on;
   net.leave(); // tells the server, stops both polls, clears the session
-  const rematch = $('rematch');
-  if (rematch) rematch.hidden = true;
+  END.rematch = null;
+  END.backToRooms = false;
+  renderEndVeil();
   MATCH.queue = []; MATCH.volley = null; MATCH.pendingRoom = null; MATCH.myTurn = false; MATCH.lastPhase = ''; MATCH.lastTurn = -1; MATCH.lastRound = -1;
-  const againBtn = $('again');
-  if (againBtn) againBtn.textContent = 'Play again (N)';
   SCORES.formHidden = false;
   renderScoresOverlay();
   hideShop();
@@ -2931,28 +2971,17 @@ function netShowStandings(room) {
   }));
   rows.sort((a, b) => b.score - a.score);
   const champ = rows[0];
-  const kicker = $('end-kicker');
-  if (kicker) kicker.textContent = `Room ${net.code} · final standings`;
-  const title = $('end-title');
-  if (title) title.textContent = champ && champ.mine ? 'Top gun! The hills are yours.' : (champ ? `${champ.name} holds the hills.` : 'Match over.');
-  const text = $('end-text');
-  if (text) text.textContent = `The battery never quits, and neither do you. Room ${net.code} ended on round ${room.round || '?'}.`;
-  const score = $('end-score');
-  if (score) {
-    score.textContent = rows.map(r => `${r.name} ${r.score}${r.mine ? ' (you)' : ''}`).join(' · ') +
-      (room.you ? ` · you banked $${room.you.cash || 0}` : '');
-  }
-  const again = $('again');
-  if (again) again.textContent = 'Back to rooms';
-  const ef = $('end-score-form'); // room standings are not high-score runs
-  if (ef) ef.hidden = true;
-  const rematch = $('rematch');
-  if (rematch) {
-    rematch.hidden = false;
-    rematch.textContent = net.map
-      ? `Rematch on ${net.mapName || 'these hills'}`
-      : 'Rematch on random hills';
-  }
+  END.kicker = `Room ${net.code} · final standings`;
+  END.title = champ && champ.mine ? 'Top gun! The hills are yours.' : (champ ? `${champ.name} holds the hills.` : 'Match over.');
+  END.text = `The battery never quits, and neither do you. Room ${net.code} ended on round ${room.round || '?'}.`;
+  END.score = rows.map(r => `${r.name} ${r.score}${r.mine ? ' (you)' : ''}`).join(' · ') +
+    (room.you ? ` · you banked $${room.you.cash || 0}` : '');
+  END.backToRooms = true;
+  END.formHidden = true; // room standings are not high-score runs
+  END.rematch = net.map
+    ? `Rematch on ${net.mapName || 'these hills'}`
+    : 'Rematch on random hills';
+  renderEndVeil();
   const veil = $('end-veil');
   if (veil) veil.hidden = false;
   refreshNavHints();
@@ -3050,6 +3079,8 @@ function applyKeys(def) {
   renderScoresOverlay();
   renderLogOverlay();
   renderTutorial();
+  renderEndVeil();
+  renderLeaveVeil();
 }
 /* What a touch player taps instead, for prose that names a key. */
 const TOUCH_NAMES = {
@@ -3359,6 +3390,8 @@ function init() {
   renderLogOverlay();
   renderScoresOverlay();
   renderTutorial();
+  renderEndVeil();
+  renderLeaveVeil();
   renderLobby();
   loadTextSize(); // draws the menu
   renderKeyHints();
@@ -3391,33 +3424,8 @@ function init() {
   if (menuBtn) menuBtn.addEventListener('click', ev => { ev.currentTarget.blur(); toggleOverlay('menu-overlay', 'btn-menu'); });
   if (document.addEventListener) document.addEventListener('fullscreenchange', syncFullscreenLabel);
   if (document.addEventListener) document.addEventListener('fullscreenchange', lockEscapeInFullscreen);
-  const again = $('again');
-  if (again) again.addEventListener('click', ev => {
-    ev.currentTarget.blur();
-    if (net.on) { netLeave(); openLobby(); } else freshMatchFromSeedBox();
-  });
-  const leaveGo = $('leave-go');
-  if (leaveGo) leaveGo.addEventListener('click', ev => { ev.currentTarget.blur(); confirmLeave(); });
-  const leaveStay = $('leave-stay');
-  if (leaveStay) leaveStay.addEventListener('click', ev => { ev.currentTarget.blur(); closeLeaveVeil(); });
-  const rematchBtn = $('rematch');
-  if (rematchBtn) rematchBtn.addEventListener('click', ev => {
-    ev.currentTarget.blur();
-    sfx.play('click');
-    netRematch();
-  });
   const pvClose = $('preview-close');
   if (pvClose) pvClose.addEventListener('click', ev => { ev.currentTarget.blur(); closePreview(); });
-  const eform = $('end-score-form');
-  if (eform) eform.addEventListener('submit', e => {
-    e.preventDefault();
-    const nm = $('end-name');
-    const name = nm && nm.value ? nm.value.trim() : '';
-    if (!name) { say('Give your callsign first, hero.', 'info'); return; }
-    fileReport(name);
-    const btn = eform.querySelector && eform.querySelector('button');
-    if (btn) { btn.disabled = true; btn.textContent = 'Filed'; }
-  });
   // Any touch or keypress unlocks the speakers and (re)starts a non-muted
   // song, so music never sits claiming to play while silent after a refresh.
   // This fires before the game keys, and starting twice is a harmless no-op.

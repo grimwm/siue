@@ -19,7 +19,7 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | `src/render.ts` | The battlefield on the canvas: sky and moon, clouds, hills, the units and their bodies, aim arm, blasts, shells, sparks, the wind gauge, the on-canvas turn clock and the firing-range preview. Reads a `BattleView` that `game.js` builds each frame and paints it; it never changes game state |
 | `src/protocol.ts` | The room wire protocol as types: replies, the room snapshot, the discriminated union of events, and each action's request body. Types only, so it has no `js/` file |
 | `src/protocol-fixtures.check.ts`, `src/tsconfig.check.json` | Type-check only, never emitted: assigns every `protocol/*.json` to its type (see Protocol fixtures) |
-| `src/ui/*.tsx` | The Preact overlays and panels (see Preact overlays): `chrome.tsx` holds the shared key labels, title bar and scroll keeper; `help.tsx`, `shop.tsx`, `lobby.tsx`, `menu.tsx`, `guns.tsx`, `scores.tsx`, `log.tsx`, `tutorial.tsx` and `hud.tsx` one each |
+| `src/ui/*.tsx` | The Preact overlays and panels (see Preact overlays): `chrome.tsx` holds the shared key labels, title bar and scroll keeper; `help.tsx`, `shop.tsx`, `lobby.tsx`, `menu.tsx`, `guns.tsx`, `scores.tsx`, `log.tsx`, `tutorial.tsx`, `hud.tsx`, `endveil.tsx` and `leave.tsx` one each |
 | `js/*.js`, `js/ui/*.js` | `src/*.ts` and `src/ui/*.tsx` compiled by `tools/ts-build.mjs`; checked in and deployed (the host has no Node). Never edit by hand |
 | `vendor/preact/` | Preact's ES module builds and licence, copied from `node_modules` by `tools/vendor.mjs`; checked in and deployed. Never edit by hand |
 | `package.json`, `package-lock.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json` | The build setup (TypeScript and Preact pinned exactly). Never deployed, like `src/`, `tools/` and `node_modules/` |
@@ -207,8 +207,9 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
   so the DOM (scroll position, focus) persists between renders. Every panel
   and overlay is a component now: the help, the shop, the rooms lobby (`#lobby-veil`),
   the menu with its settings (`#menu-overlay`), the weapon picker, the scores,
-  the tutorial coach, the radio log (each in its own `<section>`) and the status
-  bar (`#hud-bar`). `game.js` keeps the state of each (`LOBBY`, `SCORES`, `HUD`,
+  the tutorial coach, the radio log (each in its own `<section>`), the end-of-match
+  veil (`#end-veil`), the leave-room question (`#leave-veil`) and the status
+  bar (`#hud-bar`). `game.js` keeps the state of each (`LOBBY`, `SCORES`, `HUD`, `END`,
   the log's lines, the gun cursor) and redraws; the text boxes whose content the
   player types (seed, initials, room code, callsign) stay uncontrolled inputs the
   component reads when its form is sent. The HUD is asked every frame, so

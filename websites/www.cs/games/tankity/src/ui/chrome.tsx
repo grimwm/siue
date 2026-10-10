@@ -31,6 +31,8 @@ export function Key({ at, bare, cls }: { at: string; bare?: boolean; cls?: strin
 export interface OverlayHeadProps {
   /** The small line above the title (the shop's "Between rounds"). */
   kicker?: string;
+  /** The id on the kicker line, where the game reads it. */
+  kickerId?: string;
   titleId: string;
   title: string;
   /** With a close handler the bar has the × button; its id is `closeId`. */
@@ -48,7 +50,7 @@ export function OverlayHead(p: OverlayHeadProps) {
   return (
     <header class="ov-head">
       <div class="ov-title">
-        {p.kicker !== undefined && <p class="kicker">{p.kicker}</p>}
+        {p.kicker !== undefined && <p class="kicker" id={p.kickerId}>{p.kicker}</p>}
         <h2 id={p.titleId}>{p.title}</h2>
       </div>
       {p.onClose && (

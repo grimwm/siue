@@ -108,7 +108,7 @@ while IFS= read -r -d '' f; do
     # and the TypeScript build setup (package*.json, tsconfig.json,
     # node_modules; the compiled js/ and the vendored vendor/ ship, the
     # TypeScript sources in src/ do not).
-    games/*-test.* | games/README.md | games/*/README.md | games/*/tools/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/*/fx-editor.* | games/*/fx/blender/*) continue ;;
+    games/*-test.* | games/*/test.sh | games/README.md | games/*/README.md | games/*/tools/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/*/fx-editor.* | games/*/fx/blender/*) continue ;;
     games/*/package.json | games/*/package-lock.json | games/*/tsconfig.json | games/*/node_modules/* | games/*/.gitignore) continue ;;
     # Authoring sources (Git LFS audio and Blender scenes, see .gitattributes;
     # TypeScript in games/*/src/): never served.

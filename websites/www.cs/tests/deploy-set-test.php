@@ -46,21 +46,31 @@ foreach ($sheets as $abs) {
     $check("ships $f", isset($set[$f]));
 }
 
-// Never served: the effects editor, the Blender scenes and script, authoring
-// sources, the TypeScript sources and their build setup, the room protocol
-// fixtures, maintainer notes and tests.
-foreach (['games/tankity/fx-editor.html', 'games/tankity/fx-editor.js', 'games/tankity/fx-editor.css', 'games/tankity/fx/blender/render_fx.py', 'games/tankity/game.yaml', 'games/tankity/README.md', 'games/tankity/smoke-test.js', 'games/tankity/protocol/generate.php', 'games/tankity/protocol/play-my-turn.json', 'games/tankity/protocol/sim-vectors.php', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/sim-vectors-test.js', 'games/tankity/audio-test.js', 'games/tankity/render-test.js', 'games/tankity/net-test.js', 'games/tankity/input-test.js', 'games/tankity/protocol-test.js', 'games/tankity/ui-test.js', 'games/tankity/vendor-test.js',
-    'games/tankity/src/sim.ts', 'games/tankity/src/audio.ts', 'games/tankity/src/render.ts', 'games/tankity/src/net.ts', 'games/tankity/src/input.ts', 'games/tankity/src/ui/shop.tsx', 'games/tankity/src/ui/help.tsx', 'games/tankity/src/ui/chrome.tsx', 'games/tankity/src/protocol.ts', 'games/tankity/src/protocol-fixtures.check.ts', 'games/tankity/src/tsconfig.dom.json', 'games/tankity/src/tsconfig.check.json', 'games/tankity/tsconfig.json', 'games/tankity/package.json', 'games/tankity/package-lock.json',
-    'games/tankity/tools/ts-build.mjs', 'games/tankity/tools/vendor.mjs', 'games/tankity/tools/dom-stub.mjs', 'games/tankity/.gitignore',
-    'games/cylon/src/rules.ts', 'games/cylon/src/playfield.ts', 'games/cylon/src/scores.ts', 'games/cylon/src/state.ts', 'games/cylon/src/intro.ts', 'games/cylon/src/tsconfig.dom.json', 'games/cylon/tsconfig.json', 'games/cylon/package.json', 'games/cylon/package-lock.json',
-    'games/cylon/tools/ts-build.mjs', 'games/cylon/tools/install-files.php', 'games/cylon/.gitignore', 'games/cylon/README.md', 'games/cylon/install-files-test.php', 'games/cylon/rules-test.js', 'games/cylon/playfield-test.js', 'games/cylon/scores-test.js', 'games/cylon/state-test.js', 'games/cylon/smoke-test.js',
-    'games/crete/src/engine.ts', 'games/crete/src/audio.ts', 'games/crete/src/ui.ts', 'games/crete/src/tsconfig.dom.json', 'games/crete/tsconfig.json', 'games/crete/package.json', 'games/crete/package-lock.json',
-    'src/main.ts', 'src/play/play.ts', 'tsconfig.json', 'package.json', 'package-lock.json', 'tools/ts-build.mjs',
-    'games/crete/tools/ts-build.mjs', 'games/crete/tools/install-files.php', 'games/crete/.gitignore', 'games/crete/README.md', 'games/crete/install-files-test.php', 'games/crete/engine-test.js', 'games/crete/smoke-test.js'] as $f) {
-    $check("keeps back $f", file_exists("$site/$f") && !isset($set[$f]));
+// Never served: authoring sources, build setup, tools, tests and notes. The
+// rule is a pattern over every tracked file, so a new test, source or config
+// needs no entry here: it is kept back by what it is.
+const NEVER_SHIPS = '~'
+    . '(^|/)src/|(^|/)tools/|^tests/|/protocol/|/node_modules/'
+    . '|-test\.[a-z]+$|(^|/)test\.sh$|(^|/)tsconfig[^/]*\.json$|(^|/)package(-lock)?\.json$'
+    . '|(^|/)\.gitignore$|(^|/)README\.md$|/fx-editor\.|/fx/blender/|^games/tankity/game\.yaml$'
+    . '|\.(blend1?|wav|flac|aiff?)$'
+    . '~';
+$tracked = [];
+exec('cd ' . escapeshellarg($site) . ' && git ls-files', $tracked);
+$kept = array_values(array_filter($tracked, fn(string $f): bool => (bool) preg_match(NEVER_SHIPS, $f)));
+$check('the rule matches the authoring files', count($kept) > 80, (string) count($kept));
+foreach (['games/tankity/src/sim.ts', 'games/tankity/smoke-test.js', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/fx-editor.js',
+    'games/cylon/src/state.ts', 'games/crete/src/engine.ts', 'src/main.ts', 'tools/ts-build.mjs', 'tsconfig.json'] as $f) {
+    $check("the rule covers $f", in_array($f, $kept, true));
 }
-$leaks = array_values(array_filter($out, fn(string $f): bool => (bool) preg_match('~(\.blend1?|\.wav|\.flac|\.aiff?)$|/fx/blender/|/fx-editor\.|/protocol/|-test\.|^tests/|(^|/)src/|/node_modules/|(^|/)tsconfig\.json$|(^|/)package(-lock)?\.json$~', $f)));
-$check('no authoring or test files', $leaks === [], implode(', ', $leaks));
+$shipped = array_values(array_filter($kept, fn(string $f): bool => isset($set[$f])));
+$check('keeps back every authoring file', $shipped === [], implode(', ', $shipped));
+$leaks = array_values(array_filter($out, fn(string $f): bool => (bool) preg_match(NEVER_SHIPS, $f)));
+$check('ships no authoring or test files', $leaks === [], implode(', ', $leaks));
+// Every compiled module and vendored file ships.
+$built = array_values(array_filter($tracked, fn(string $f): bool => (bool) preg_match('~^games/[^/]+/(js|vendor)/~', $f)));
+$missing = array_values(array_filter($built, fn(string $f): bool => !isset($set[$f])));
+$check('ships every compiled and vendored file', count($built) > 10 && $missing === [], implode(', ', $missing));
 
 $check('node_modules never ships', array_filter($out, fn(string $f): bool => str_contains($f, 'node_modules')) === []);
 

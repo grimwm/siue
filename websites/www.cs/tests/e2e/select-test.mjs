@@ -12,6 +12,7 @@ const has = (name, got, specs) => check(name, Array.isArray(got) && specs.every(
 
 check('docs-only-runs-nothing', select(['README.md', `${S}games/tankity/README.md`, 'docs/plan.md']), 'NONE');
 check('unit-tests-run-nothing', select([`${S}games/tankity/rooms-sim-test.php`, `${S}games/tankity/smoke-test.js`, `${S}tests/games-hub-test.php`]), 'NONE');
+check('sim-vectors-run-nothing', select([`${S}games/tankity/sim-vectors-test.js`, `${S}games/tankity/protocol/sim-vectors.php`, `${S}games/tankity/protocol/sim-vectors.json`]), 'NONE');
 check('deploy-only-runs-nothing', select([`${S}deploy.sh`, '.github/workflows/deploy.yml']), 'NONE');
 check('outside-the-site-runs-nothing', select(['scripts/deploy-hash']), 'NONE');
 check('harness-runs-everything', select([`${S}tests/e2e/helpers.mjs`]), 'ALL');

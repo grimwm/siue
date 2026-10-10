@@ -32,7 +32,7 @@ foreach ($sheets as $abs) {
 
 // Never served: the effects editor, the Blender scenes and script, authoring
 // sources, the room protocol fixtures, maintainer notes and tests.
-foreach (['games/tankity/fx-editor.html', 'games/tankity/fx-editor.js', 'games/tankity/fx-editor.css', 'games/tankity/fx/blender/render_fx.py', 'games/tankity/game.yaml', 'games/tankity/README.md', 'games/tankity/smoke-test.js', 'games/tankity/protocol/generate.php', 'games/tankity/protocol/play-my-turn.json'] as $f) {
+foreach (['games/tankity/fx-editor.html', 'games/tankity/fx-editor.js', 'games/tankity/fx-editor.css', 'games/tankity/fx/blender/render_fx.py', 'games/tankity/game.yaml', 'games/tankity/README.md', 'games/tankity/smoke-test.js', 'games/tankity/protocol/generate.php', 'games/tankity/protocol/play-my-turn.json', 'games/tankity/protocol/sim-vectors.php', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/sim-vectors-test.js'] as $f) {
     $check("keeps back $f", file_exists("$site/$f") && !isset($set[$f]));
 }
 $leaks = array_values(array_filter($out, fn(string $f): bool => (bool) preg_match('~(\.blend1?|\.wav|\.flac|\.aiff?)$|/fx/blender/|/fx-editor\.|/protocol/|-test\.|^tests/|/src/~', $f)));

@@ -75,13 +75,14 @@ test('a lost match shows the end veil: result, score, callsign form, and a fresh
     await expect(page.locator('#end-name')).toHaveValue('e2e-ace');
   }
 
-  // Play again deals a fresh match: the name card and the shop come back, and
-  // once the first round starts the veil is gone and all three lives are back.
+  // Play again deals a fresh match: the shop comes back with the result gone
+  // at once, and once the first round starts all three lives are back.
   await page.click('#again');
   await expect.poll(async () => {
     await page.clock.runFor(1000);
     return page.locator('#shop-veil').isVisible();
   }, { timeout: 15_000 }).toBe(true);
+  await expect(veil).toBeHidden();
   await page.click('#shop-next');
   await expect.poll(async () => {
     await page.clock.runFor(1000);

@@ -150,16 +150,19 @@ test('every shot in a turn plays, and the turn keeps coming round', async ({ bro
   // Did a shell leave the guest's barrel since the recorder was reset?
   const shotFrom = (page, x, y) => page.evaluate(([x, y]) =>
     window.__rec.shells.some(([, sx, sy]) => Math.abs(sx - x) < 30 && Math.abs(sy - (y - 14)) < 30), [x, y]);
+  const hostAlive = () => { const t = lastRoom(roomState.guest).tanks.find(k => k.seat === 0); return !!t && t.hp > 0; };
   for (let cycle = 0; cycle < 2; cycle++) {
-    await expect.poll(() => myTurn(host.page), { timeout: 60_000 }).toBe(true);
-    await host.page.keyboard.press('Control');
-    await expect.poll(() => myTurn(guest.page), { timeout: 60_000 }).toBe(true);
+    // The host plays its turn while it still has a tank (drones may knock it out).
+    await expect.poll(async () => (await myTurn(guest.page)) || (hostAlive() && await myTurn(host.page)), { timeout: 60_000 }).toBe(true);
+    if (!(await myTurn(guest.page))) {
+      await host.page.keyboard.press('Control');
+      await expect.poll(() => myTurn(guest.page), { timeout: 60_000 }).toBe(true);
+    }
     const { x, y } = guestTank();
     await guest.page.evaluate(() => { window.__rec.shells.length = 0; });
     await guest.page.keyboard.press('Control');
     await expect.poll(() => shotFrom(guest.page, x, y), { timeout: 20_000, message: 'the guest never saw its own shell fly' }).toBe(true);
   }
-  await expect.poll(() => myTurn(host.page), { timeout: 60_000 }).toBe(true);
   expect(host.errors).toEqual([]);
   expect(guest.errors).toEqual([]);
   await host.ctx.close(); await guest.ctx.close();

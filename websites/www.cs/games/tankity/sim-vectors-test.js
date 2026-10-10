@@ -223,7 +223,13 @@ for (const [group, cases] of Object.entries(VECTORS.groups)) {
       bad = [`threw ${e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e}`];
     }
     if (c.known) {
-      if (bad.length) { known++; console.log(`KNOWN ${group}/${c.name} :: ${c.known}`); }
+      // Only the fields the known difference names may disagree.
+      const norm = b => b.split(':')[0].replace(/\[\d+\]/g, '[]');
+      const allowed = b => c.knownPaths.some(p => norm(b) === p || norm(b).startsWith(p + '.') || norm(b).startsWith(p + '['));
+      const other = bad.filter(b => !allowed(b));
+      if (other.length) {
+        failures.push(`${group}/${c.name}: known difference (${c.knownPaths.join(', ')}), but other fields disagree too\n  ${other.slice(0, 6).join('\n  ')}`);
+      } else if (bad.length) { known++; console.log(`KNOWN ${group}/${c.name} :: ${c.known}`); }
       else failures.push(`${group}/${c.name}: marked as a known difference but client and server now agree; drop its reason in protocol/sim-vectors.php`);
     } else if (bad.length) {
       failures.push(`${group}/${c.name}\n  ${bad.slice(0, 6).join('\n  ')}\n  inputs:   ${clip(c.in, 700)}\n  expected: ${clip(c.out, 700)}\n  actual:   ${clip(got, 700)}`);

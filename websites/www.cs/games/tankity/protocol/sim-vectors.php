@@ -123,11 +123,27 @@ function sv_aim_at(array $room, int $seat, string $wkey, float $targetX): array
     return [$best[1], $best[2]];
 }
 
+// The output fields each known difference may disagree on (array indexes
+// written []; a path also covers everything under it). Any other field of a
+// known case must still match.
+const SV_KNOWN_PATHS = [
+    'seek-push/half-a-pixel-away' => ['out'],
+    'seek-push/exactly-one-pixel-away' => ['out'],
+    'blast/drone-kills-drone' => ['out.score', 'out.cash'],
+    'volley/cluster-flat-two-rivals-tailwind' => ['out.tanks[].hp', 'out.crater', 'out.score', 'out.cash'],
+    'ai-aim/no-rivals-left' => ['out.angle', 'out.power'],
+];
 $cases = [];
 $add = function (string $group, string $name, array $in, $out, ?string $known = null) use (&$cases): void {
     $case = ['name' => $name, 'in' => $in, 'out' => sv_round($out)];
     if ($known !== null) {
+        $paths = SV_KNOWN_PATHS["$group/$name"] ?? null;
+        if ($paths === null) {
+            fwrite(STDERR, "sim-vectors: known case $group/$name needs its fields in SV_KNOWN_PATHS\n");
+            exit(1);
+        }
         $case['known'] = $known;
+        $case['knownPaths'] = $paths;
     }
     $cases[$group][] = $case;
 };

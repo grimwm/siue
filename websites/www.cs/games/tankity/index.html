@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Tankity">
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
-<link rel="stylesheet" href="game.css?v=20261010h">
+<link rel="stylesheet" href="game.css?v=20261010i">
 </head>
 <body>
 <header class="topbar">
@@ -35,7 +35,6 @@
           <div><dt>Power</dt><dd id="hud-power">-</dd></div>
           <div><dt>Fuel</dt><dd id="hud-fuel">-</dd></div>
           <div class="hud-gun"><dt class="sr-only">Weapon</dt><dd id="hud-weapon">-</dd></div>
-          <div class="hud-favs"><dt class="sr-only">Favorites</dt><dd id="hud-favs">-</dd></div>
           <div><dt>Armor</dt><dd id="hud-armor">-</dd></div>
           <div class="hud-lives"><dt class="sr-only">Lives</dt><dd id="hud-lives">-</dd></div>
           <div class="hud-score"><dt class="sr-only">Score</dt><dd id="hud-score">-</dd></div>
@@ -105,8 +104,7 @@
           <li class="keys-only"><strong><span data-keyhint="global:sound">E</span></strong> toggles sound effects, <strong><span data-keyhint="global:music">M</span></strong> toggles the music.
             Each has its own button in the menu (<strong><span data-keyhint="global:menu">C</span></strong> opens it), so one can stay on while the other rests. New Game, seed, fullscreen,
             rooms (<strong><span data-keyhint="global:rooms">O</span></strong>), and random hills (<strong><span data-keyhint="global:random">T</span></strong>) live there too.</li>
-          <li class="keys-only"><strong><span data-keyhint="global:fav">1</span></strong> through <strong><span data-keyhint="global:fav:3">4</span></strong> load a favorite shell (hold
-            <strong>Shift</strong> with a number to pin the loaded shell to that slot). In the shop,
+          <li class="keys-only"><strong><span data-keyhint="global:guns">G</span></strong> opens the weapon picker (number keys pick a gun there). In the shop,
             <strong><span data-keyhint="shop:selUp">▲</span>/<span data-keyhint="shop:selDown">▼</span></strong> move, <strong><span data-keyhint="shop:qtyDown">◀</span>/<span data-keyhint="shop:qtyUp">▶</span></strong> pick how many packs to buy
             (never more than the chest covers), <strong><span data-keyhint="shop:buy">B</span></strong> or <strong><span data-keyhint="shop:buy:1">Enter</span></strong> buys,
             number keys buy that row, and <strong><span data-keyhint="shop:preview:1">P</span></strong> or <strong><span data-keyhint="shop:preview">V</span></strong> previews it.</li>
@@ -303,6 +301,6 @@
   </section>
 </main>
 
-<script src="game.js?v=20261010h" defer></script>
+<script src="game.js?v=20261010i" defer></script>
 </body>
 </html>

@@ -271,8 +271,11 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
   // Only this game's own files. Its server APIs (.php) stay online only, and
-  // anything outside the folder is left to the browser.
-  if (req.method !== 'GET' || url.origin !== self.location.origin
+  // anything outside the folder is left to the browser. Range requests
+  // (streamed music) go straight to the network: a partial 206 is not cached,
+  // and the precache holds only small static files. Sound effects, fetched
+  // whole, are cached here the first time they play.
+  if (req.method !== 'GET' || url.origin !== self.location.origin || req.headers.has('range')
       || !url.pathname.startsWith(SCOPE_PATH) || url.pathname.endsWith('.php')) {
     return;
   }

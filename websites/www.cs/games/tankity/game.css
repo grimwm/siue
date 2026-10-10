@@ -584,17 +584,14 @@ button.btn-leave[hidden] { display: none; }
 .log-overlay .ov-x { font-size: 1rem; padding: 0.1rem 0.4rem; }
 /* HUD loadout chips: a shell icon beside each name. */
 .hudbar .chip { display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
-.hudbar #hud-weapon, .hudbar #hud-favs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.3rem; }
+.hudbar #hud-weapon { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.3rem; }
 .chip-icon { height: 1.15em; width: auto; aspect-ratio: 40 / 26; }
 /* Icons have no text baseline: centre those two rows instead. */
-.hudbar .hud > div:has(#hud-weapon), .hudbar .hud > div:has(#hud-favs) { align-items: center; }
+.hudbar .hud > div:has(#hud-weapon) { align-items: center; }
 
 /* Status bar: one calm row. Rivals' armor rides over their units, wind on
    the battlefield; both stay in screen-reader text. */
-.hudbar .hud-gun dd, .hudbar .hud-favs dd { font-weight: 700; }
-.hudbar .hud-favs .chip { gap: 0.1rem; color: var(--wash-ink); font-size: 0.8rem; }
-.hudbar .hud-favs .chip-icon { height: 0.95em; }
-.hudbar #hud-favs { gap: 0.1rem 0.35rem; }
+.hudbar .hud-gun dd { font-weight: 700; }
 .hudbar #hud-lives { color: #ff5c7a; letter-spacing: 0.08em; }
 .hudbar .hud-score dd { color: var(--wash-ink); font-weight: 600; }
 .hudbar .hud-net { margin-left: auto; }

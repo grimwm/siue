@@ -69,8 +69,15 @@ global.window = {
   localStorage: { _m: {}, getItem(k) { return this._m[k] || null; }, setItem(k, v) { this._m[k] = String(v); } },
 };
 global.fetch = async (url) => {
-  if (/keys\.json$/.test(String(url))) {
-    return { ok: true, json: async () => JSON.parse(fs.readFileSync(path.join(__dirname, 'keys.json'), 'utf8')) };
+  if (/game\.json$/.test(String(url))) {
+    // Real keys and audio; the arsenal section is withheld so the shop checks
+    // below keep exercising the baked fallback arsenal (the file's own arsenal
+    // is validated separately from disk).
+    return { ok: true, json: async () => {
+      const g = JSON.parse(fs.readFileSync(path.join(__dirname, 'game.json'), 'utf8'));
+      delete g.arsenal;
+      return g;
+    } };
   }
   return { ok: true, json: async () => ({ scores: [] }) };
 };
@@ -119,11 +126,12 @@ els['seed-input'] = makeEl('seed-input');
 els['seed-input'].value = 'scorch-01';
 eval(src);
 
-// ---- driver: every press below comes from keys.json, so the suite proves the
+// ---- driver: every press below comes from game.json's keys, so the suite proves the
 // file and the shipped bindings agree instead of hardcoding keys twice ----
-const KEYS = JSON.parse(fs.readFileSync(path.join(__dirname, 'keys.json'), 'utf8'));
+const GAME = JSON.parse(fs.readFileSync(path.join(__dirname, 'game.json'), 'utf8'));
+const KEYS = GAME.keys;
 for (const ctx of ['aim', 'shop', 'global', 'scroll']) {
-  if (!KEYS[ctx]) throw new Error('keys.json is missing context ' + ctx);
+  if (!KEYS[ctx]) throw new Error('game.json is missing keys context ' + ctx);
 }
 function pressToken(t) {
   t = String(t).replace(/^Ctrl\+/, '');
@@ -552,9 +560,9 @@ function change(el) {
   check('shop-icons', shopRows().length >= 6 && shopRows().every(li => li.children[0].className === 'shop-icon' && li.children[0].getAttribute('aria-hidden') === 'true'),
     shopRows().map(li => li.children[0].className).join());
   check('nuke-stats', /95 damage/.test(nukeStats) && /round 4/.test(nukeStats), nukeStats);
-  // The arsenal file is a second source the game reads at boot: it must
-  // parse, hold 20 items, and speak only effects and painters the code has.
-  const arsenal = JSON.parse(fs.readFileSync(path.join(__dirname, 'weapons.json'), 'utf8'));
+  // The arsenal section of game.json is a second source the game reads at
+  // boot: it must hold 20 items and speak only effects and painters the code has.
+  const arsenal = GAME.arsenal;
   check('arsenal-count', arsenal.ammo.length === 12 && arsenal.gear.length === 8,
     `ammo=${arsenal.ammo.length} gear=${arsenal.gear.length}`);
   const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp'];
@@ -632,15 +640,6 @@ function change(el) {
   KD('aim', 'driveLeft'); frames(30); KU('aim', 'driveLeft'); frames(2);
   const fuelAfterDrive = Number(els['hud-fuel'].textContent);
   check('keyboard-drives', fuelAfterDrive < fuelBeforeDrive, `fuel ${fuelBeforeDrive} -> ${fuelAfterDrive}`);
-  // Digits load favorite shells; Shift plus a digit pins the loaded one.
-  TAPD('global', 'fav', 3); frames(3);
-  check('fav-hotkey', /^Mortar /.test(els['hud-weapon'].textContent), els['hud-weapon'].textContent);
-  TAPD('global', 'fav', 4); frames(3);
-  KD('global', 'fav', 0, { shiftKey: true }); KU('global', 'fav', 0); frames(3);
-  check('fav-assign', els['hud-favs'].textContent.startsWith('1 Rail'), els['hud-favs'].textContent);
-  TAPD('global', 'fav', 2); frames(3);
-  TAPD('global', 'fav', 1); frames(3);
-  check('fav-recall', /^Rail /.test(els['hud-weapon'].textContent), els['hud-weapon'].textContent);
   loadGun('Rail');
   TAP('global', 'battlePreview'); frames(5);
   frames(300);

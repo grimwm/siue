@@ -38,6 +38,9 @@ foreach (['arty', 'mounted'] as $id) {
 file_put_contents("$root/arty/game.js", "console.log(1);\n");
 file_put_contents("$root/arty/smoke-test.js", "// not shipped\n");
 file_put_contents("$root/arty/scores.php", "<?php\n");
+file_put_contents("$root/arty/game.yaml", "arsenal: {}\n");
+file_put_contents("$root/arty/README.md", "# notes\n");
+file_put_contents("$root/arty/theme.mp3", "audio");
 
 // Check mode on a fresh tree reports both games stale and writes nothing.
 [$stale, $notes] = share_tags_sync($root, $site, false);
@@ -149,6 +152,8 @@ preg_match('/const PRECACHE = (\[.*\]);/', $sw, $pm);
 $list = json_decode($pm[1] ?? 'null', true);
 $check('sw-precache-list', $list === ['./', 'game.js', 'icon-192.png', 'icon-512.png', 'index.html', 'manifest.webmanifest'], json_encode($list));
 $check('sw-skips-tests-php-and-share-image', !str_contains($pm[1] ?? '', 'smoke-test') && !str_contains($pm[1] ?? '', '.php') && !str_contains($pm[1] ?? '', 'og.png'));
+$check('sw-skips-yaml-notes-and-audio', !str_contains($pm[1] ?? '', 'game.yaml') && !str_contains($pm[1] ?? '', 'README') && !str_contains($pm[1] ?? '', '.mp3'));
+$check('sw-range-requests-bypass', str_contains($sw, "req.headers.has('range')"));
 $check('sw-prefix-per-game', str_contains($sw, "const PREFIX = 'game-arty-';"));
 $check('sw-network-first', str_contains($sw, "fetch(req, { cache: 'no-cache' })") && str_contains($sw, 'caches.match(req'));
 $check('sw-never-php-or-non-get', str_contains($sw, "req.method !== 'GET'") && str_contains($sw, ".endsWith('.php')"));

@@ -3,8 +3,8 @@
 // Network first, so an online player always gets the current files; the
 // precached copies answer only when the network does not.
 const PREFIX = 'game-tankity-';
-const CACHE = PREFIX + 'e5b3cff656b3';
-const PRECACHE = ["./","game.css","game.js","icon-192.png","icon-512.png","index.html","keys.json","manifest.webmanifest","weapons.json"];
+const CACHE = PREFIX + '99378523a7db';
+const PRECACHE = ["./","game.css","game.js","game.json","icon-192.png","icon-512.png","index.html","manifest.webmanifest"];
 const SCOPE_PATH = new URL('./', self.location).pathname;
 
 self.addEventListener('install', event => {
@@ -25,8 +25,11 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
   // Only this game's own files. Its server APIs (.php) stay online only, and
-  // anything outside the folder is left to the browser.
-  if (req.method !== 'GET' || url.origin !== self.location.origin
+  // anything outside the folder is left to the browser. Range requests
+  // (streamed music) go straight to the network: a partial 206 is not cached,
+  // and the precache holds only small static files. Sound effects, fetched
+  // whole, are cached here the first time they play.
+  if (req.method !== 'GET' || url.origin !== self.location.origin || req.headers.has('range')
       || !url.pathname.startsWith(SCOPE_PATH) || url.pathname.endsWith('.php')) {
     return;
   }

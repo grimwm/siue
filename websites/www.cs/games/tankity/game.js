@@ -3512,6 +3512,7 @@ function showLobbyRoom(inRoom) {
   refreshNavHints();
 }
 async function hostRoom(initials, mapId) {
+  askNotifications(); // for the turn alert while this tab is hidden
   lobbySay('Raising the flag…');
   NET.code = ''; NET.token = ''; NET.csrf = ''; NET.seat = -1; NET.since = 0;
   NET.seats = [];
@@ -3528,6 +3529,7 @@ async function hostRoom(initials, mapId) {
   } catch (err) { lobbySay(prettyRoomError(err)); }
 }
 async function joinRoom(code, initials) {
+  askNotifications(); // for the turn alert while this tab is hidden
   lobbySay('Knocking…');
   NET.code = String(code || '').trim().toUpperCase();
   NET.token = ''; NET.csrf = ''; NET.seat = -1; NET.since = 0;
@@ -3942,7 +3944,9 @@ function netAdopt(room) {
   });
   G.turn = Math.max(0, G.tanks.findIndex(t => t.seat === room.turn));
   const mine = myTank();
+  const wasMyTurn = NET.myTurn;
   NET.myTurn = room.phase === 'play' && !!mine && mine.hp > 0 && room.turn === NET.seat;
+  if (NET.myTurn && !wasMyTurn) turnAlert();
   if (!G.ammo) G.ammo = { shell: Infinity, buck: 0, mortar: 0, rail: 0, nuke: 0 };
   if (room.you) {
     const a = {};
@@ -4098,6 +4102,8 @@ function netParsePath(str) {
   return String(str || '').split(' ').filter(Boolean).map(p => p.split(',').map(Number));
 }
 function netStartVolley() {
+  const fast = !!NET.fastNext;
+  NET.fastNext = false;
   const opener = NET.queue.shift();
   const events = [];
   while (NET.queue.length && !VOLLEY_OPENERS.has(NET.queue[0].t)) events.push(NET.queue.shift());
@@ -4107,6 +4113,7 @@ function netStartVolley() {
   const x1 = opener.x ?? (shooter ? shooter.x : 0);
   const swing = shooter ? Math.max(Math.abs(a1 - shooter.angle), Math.abs(p1 - shooter.power), Math.abs(x1 - shooter.x)) : 0;
   NET.volley = {
+    fast,
     opener, events, shooter, tau: 0,
     a0: shooter ? shooter.angle : a1, p0: shooter ? shooter.power : p1, x0: shooter ? shooter.x : x1, a1, p1, x1,
     aimDur: swing < 1 ? 0.15 : clamp(0.45 + swing / 110, 0.5, 1.4),
@@ -4131,7 +4138,8 @@ function netBlast(x, y, r, wkey) {
 }
 function netStepVolley(dt) {
   const v = NET.volley;
-  v.tau += dt;
+  // A volley kept back from a catch-up plays at triple speed.
+  v.tau += dt * (v.fast ? 3 : 1);
   const sh = v.shooter;
   if (sh) {
     const u = Math.min(1, v.tau / v.aimDur);
@@ -4175,6 +4183,44 @@ function netStepVolley(dt) {
     NET.volley = null;
   }
 }
+/* Your turn while the tab is out of sight: the tab title says so, a soft
+   ping plays (unless Sound is off), and a notification pops up when the
+   player allowed them. Inside a page on this host that frames the game (a
+   site's page around it), that page's title is the tab's, so it changes too.
+   Everything resets the moment the tab is seen again. */
+let alertTitles = null;
+function titleDocs() {
+  const docs = [document];
+  try { if (window.top !== window && window.top.document) docs.push(window.top.document); } catch (_) { /* another host */ }
+  return docs;
+}
+function askNotifications() {
+  try {
+    if (typeof Notification === 'function' && Notification.permission === 'default') Notification.requestPermission();
+  } catch (_) { /* unsupported */ }
+}
+function turnAlert() {
+  if (!document.hidden) return;
+  if (!alertTitles) {
+    alertTitles = titleDocs().map(d => [d, d.title]);
+    for (const [d, t] of alertTitles) d.title = `\u25cf Your turn \u00b7 ${t}`;
+  }
+  if (!soundMuted) {
+    const ac = audioCtx();
+    if (ac) { blip(880, 0.12, 'sine', 0.08, null, 0); blip(1320, 0.18, 'sine', 0.07, null, 0.13); }
+  }
+  try {
+    if (typeof Notification === 'function' && Notification.permission === 'granted') {
+      const n = new Notification('Your turn in Operation Tankity', { body: `Room ${NET.code}: the hills are waiting.`, tag: 'tankity-turn' });
+      n.onclick = () => { try { window.top.focus(); } catch (_) { window.focus(); } n.close(); };
+    }
+  } catch (_) { /* notifications unavailable */ }
+}
+function clearTurnAlert() {
+  if (!alertTitles) return;
+  for (const [d, t] of alertTitles) d.title = t;
+  alertTitles = null;
+}
 /* Tell the room when this player is in a menu (game menu, help, scores, the
    weapon picker), so the others see why the battle waits on them. The radio
    log is a glance, not a menu. */
@@ -4204,9 +4250,14 @@ function netCatchUp() {
   const cut = keep && openers.length ? openers[openers.length - 1] : NET.queue.length;
   for (const e of NET.queue.slice(0, cut)) netEvent(e);
   NET.queue = NET.queue.slice(cut);
+  NET.fastNext = keep > 0 && NET.queue.length > 0;
 }
 if (typeof document.addEventListener === 'function') {
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && NET.on) netCatchUp(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    clearTurnAlert();
+    if (NET.on) netCatchUp();
+  });
 }
 /* Drive the replay; once nothing is left to play, the waiting room state
    takes over. */

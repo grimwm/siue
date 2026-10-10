@@ -13,4 +13,6 @@ node playfield-test.js
 node scores-test.js
 node audio-test.js
 node state-test.js
+node abilities-test.js
+node field-test.js
 node smoke-test.js

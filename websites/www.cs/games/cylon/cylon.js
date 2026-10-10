@@ -19,6 +19,8 @@
 import * as rules from './js/rules.js?v=7889c1e71d';
 import * as playfield from './js/playfield.js?v=848b755745';
 import { createAudio } from './js/audio.js?v=19ef6956c2';
+import { createAbilities, cooldownSeconds } from './js/abilities.js?v=e1407fd932';
+import { createHoles, createDebris, HOLE_PRESETS } from './js/field.js?v=308463842f';
 import { createIntro } from './js/intro.js?v=59b2ae7b2a';
 import * as state from './js/state.js?v=d0424f3f0e';
 import { createScoresClient, formatHighScoreRows, weeklyResetText } from './js/scores.js?v=ce7eccc399';
@@ -173,11 +175,7 @@ export async function initializeCylonEffects(options = {}) {
     let paused = false;
     let pauseStartedAt = 0;
     let ambushTimer = null;
-    let raptorInbound = false;
-    /** @type {ReturnType<typeof setTimeout>[]} */
-    let raptorStrikeTimers = [];
     let abilityCdTimer = null;
-    let grenadeArmed = false;
     let nukeInFlight = false;
     let lastAim = { clientX: 0, clientY: 0, t: 0 };
     let missileTimer = null;
@@ -185,7 +183,6 @@ export async function initializeCylonEffects(options = {}) {
     /** @type {{ el: HTMLElement, tracker: boolean, alive: boolean }[]} */
     let activeMissiles = [];
     let herdTimer = null;
-    let reshuffleSettleTimer = null;
 
     const IDLE_MS = 2000;
     const BOT_SIZE = { w: 44, h: 56 };
@@ -211,20 +208,8 @@ export async function initializeCylonEffects(options = {}) {
     let trackerPairTimer = null;
     /** @type {ReturnType<typeof setTimeout>[]} */
     let groundVolleyTimers = [];
-    const RAPTOR_COOLDOWN_MS = 60000;
-    const RAPTOR_STRIKE_AT_MS = 700;
     const EYE_DISORIENT_MS = 30000;
-    const GRENADE_COOLDOWN_MS = 10000;
-    const GRENADE_RADIUS = 165; // ~50% larger than prior 110px
-    const MAX_HOLES = 24;
-    const HOLE_PRESETS = {
-        small: { radius: 56, holdMs: 800, fadeMs: 1000 },
-        medium: { radius: GRENADE_RADIUS, holdMs: 2500, fadeMs: 2000 },
-        // radius filled at punch time from viewport
-        large: { radius: 0, holdMs: 4000, fadeMs: 3000 }
-    };
-    let activeHoles = [];
-
+    const GRENADE_RADIUS = HOLE_PRESETS.medium.radius; // ~50% larger than prior 110px
     function loadSettings() {
         try {
             const raw = localStorage.getItem(SETTINGS_KEY);
@@ -479,126 +464,56 @@ export async function initializeCylonEffects(options = {}) {
         return sessionActive() && !run.gameOver && !intro.playing();
     }
 
-    function assignBlastVector(el, vw, vh, { xSpread = 1.15, ySpread = 1.2, rotMax = 180 } = {}) {
-        const dx = (Math.random() - 0.5) * vw * xSpread;
-        const dy = (Math.random() - 0.5) * vh * ySpread;
-        const rot = (Math.random() - 0.5) * rotMax;
-        el.style.setProperty('--sx', `${dx.toFixed(1)}px`);
-        el.style.setProperty('--sy', `${dy.toFixed(1)}px`);
-        el.style.setProperty('--sr', `${rot.toFixed(1)}deg`);
-    }
-
-    /**
-     * Nuke special case: full random re-scatter of existing debris so the backdrop
-     * stays interesting after smaller weapons have chewed the same letters.
-     */
-    function reshuffleScatteredGlyphs() {
-        if (document.body.dataset.cylonScattered !== '1' || reduceMotion) return;
-        const vw = window.innerWidth || 800;
-        const vh = window.innerHeight || 600;
-        document.body.classList.add('cylon-glyphs-blowing');
-        document.querySelectorAll('.cylon-scatter-panel').forEach((el) => {
-            assignBlastVector(el, vw, vh, { xSpread: 0.55, ySpread: 0.7, rotMax: 28 });
-        });
-        document.querySelectorAll('.cylon-scatter-block').forEach((el) => {
-            assignBlastVector(el, vw, vh, { xSpread: 1.15, ySpread: 1.25, rotMax: 150 });
-        });
-        document.querySelectorAll('.cylon-scatter-char').forEach((el) => {
-            assignBlastVector(el, vw, vh, { xSpread: 1.35, ySpread: 1.4, rotMax: 220 });
-        });
-        document.querySelectorAll('.interest-list li, .course-list li').forEach((li) => {
-            const dx = (Math.random() - 0.5) * vw * 0.35;
-            const dy = (Math.random() - 0.5) * vh * 0.4;
-            const rot = (Math.random() - 0.5) * 120;
-            li.style.setProperty('--mx', `${dx.toFixed(1)}px`);
-            li.style.setProperty('--my', `${dy.toFixed(1)}px`);
-            li.style.setProperty('--mr', `${rot.toFixed(1)}deg`);
-        });
-        clearTimeout(reshuffleSettleTimer);
-        reshuffleSettleTimer = setTimeout(() => {
-            document.body.classList.remove('cylon-glyphs-blowing');
-            reshuffleSettleTimer = null;
-        }, 3000);
-    }
-
-    function scatterPageGlyphs() {
-        if (document.body.dataset.cylonScattered === '1') return;
-        if (reduceMotion) return;
-        const vw = window.innerWidth || 800;
-        const vh = window.innerHeight || 600;
-        const roots = document.querySelectorAll('.page-panel');
-        roots.forEach((root) => {
-            // Panel shell itself is debris — not just the letters inside
-            root.classList.add('cylon-scatter-panel');
-            assignBlastVector(root, vw, vh, { xSpread: 0.55, ySpread: 0.7, rotMax: 28 });
-
-            root.querySelectorAll(
-                'h1, h2, h3, .page-lead, .contact-block, .interest-list, .course-list, .project-list, .project-list > li, aside, .games-hub-card, .games-home-callout'
-            ).forEach((block) => {
-                block.classList.add('cylon-scatter-block');
-                assignBlastVector(block, vw, vh, { xSpread: 1.15, ySpread: 1.25, rotMax: 150 });
-            });
-
-            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-                acceptNode(node) {
-                    if (!node.nodeValue || !/\S/.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
-                    if (node.parentElement?.closest('.cylon-scatter-char')) return NodeFilter.FILTER_REJECT;
-                    return NodeFilter.FILTER_ACCEPT;
-                }
-            });
-            const texts = [];
-            while (walker.nextNode()) texts.push(walker.currentNode);
-            texts.forEach((textNode) => {
-                const frag = document.createDocumentFragment();
-                for (const ch of textNode.nodeValue) {
-                    if (ch === ' ' || ch === '\n' || ch === '\t') {
-                        frag.appendChild(document.createTextNode(ch));
-                        continue;
-                    }
-                    const span = document.createElement('span');
-                    span.className = 'cylon-scatter-char';
-                    span.textContent = ch;
-                    // Spread across the full viewport — planetary nuke debris field
-                    assignBlastVector(span, vw, vh, { xSpread: 1.35, ySpread: 1.4, rotMax: 220 });
-                    frag.appendChild(span);
-                }
-                textNode.parentNode.replaceChild(frag, textNode);
-            });
-            // Give list markers their own blast vectors (CSS reads --mx/--my/--mr)
-            root.querySelectorAll('.interest-list li, .course-list li').forEach((li) => {
-                const dx = (Math.random() - 0.5) * vw * 0.35;
-                const dy = (Math.random() - 0.5) * vh * 0.4;
-                const rot = (Math.random() - 0.5) * 120;
-                li.style.setProperty('--mx', `${dx.toFixed(1)}px`);
-                li.style.setProperty('--my', `${dy.toFixed(1)}px`);
-                li.style.setProperty('--mr', `${rot.toFixed(1)}deg`);
-            });
-        });
-        document.body.dataset.cylonScattered = '1';
-    }
-
-    function restorePageGlyphs() {
-        if (document.body.dataset.cylonScattered !== '1') return;
-        document.querySelectorAll('.cylon-scatter-char').forEach((span) => {
-            span.replaceWith(document.createTextNode(span.textContent || ''));
-        });
-        document.querySelectorAll('.interest-list li, .course-list li').forEach((li) => {
-            li.style.removeProperty('--mx');
-            li.style.removeProperty('--my');
-            li.style.removeProperty('--mr');
-        });
-        document.querySelectorAll('.cylon-scatter-panel, .cylon-scatter-block').forEach((el) => {
-            el.classList.remove('cylon-scatter-panel', 'cylon-scatter-block');
-            el.style.removeProperty('--sx');
-            el.style.removeProperty('--sy');
-            el.style.removeProperty('--sr');
-        });
-        document.body.dataset.cylonScattered = '0';
-    }
+    /** The terrain holes (src/field.ts). */
+    const holes = createHoles({
+        field,
+        isLive: isGameLive,
+        paused: () => paused,
+        viewport: () => ({ width: window.innerWidth, height: window.innerHeight }),
+        create: (tag) => document.createElement(tag),
+        now: () => Date.now(),
+        setTimer: (fn, ms) => setTimeout(fn, ms),
+        clearTimer: (h) => clearTimeout(h),
+    });
+    /** The page's glyph debris (src/field.ts). */
+    const debris = createDebris({
+        doc: document,
+        viewport: () => ({ width: window.innerWidth, height: window.innerHeight }),
+        random: Math.random,
+        reduceMotion,
+        setTimer: (fn, ms) => setTimeout(fn, ms),
+        clearTimer: (h) => clearTimeout(h),
+    });
+    const punchHole = holes.punch;
+    /** The grenade and the raptor (src/abilities.ts); the cooldowns live in `schedule`. */
+    const abilities = createAbilities({
+        now: () => Date.now(),
+        setTimer: (fn, ms) => setTimeout(fn, ms),
+        clearTimer: (h) => clearTimeout(h),
+        isLive: isGameLive,
+        readyAt: (which) => (which === 'grenade' ? schedule.grenadeReadyAt : schedule.raptorReadyAt),
+        setReadyAt: (which, at) => {
+            if (which === 'grenade') schedule.grenadeReadyAt = at;
+            else schedule.raptorReadyAt = at;
+        },
+        sfx: (name) => {
+            audio.prime();
+            audio.sfx(name);
+        },
+        changed: updateAbilityButtons,
+        grenadeBlast: detonateGrenadeAt,
+        raptorAvailable: () => !!raptorEl,
+        raptorLaunch: () => {
+            disorientEye(EYE_DISORIENT_MS);
+            raptorEl.classList.add('is-inbound');
+        },
+        raptorStrike: strikeRaptorBand,
+        raptorClear: clearRaptorVisuals,
+    });
 
     /** Scatter + blow glyphs (after intro blast, or immediately when not deferred). */
     function blowWorldEnded() {
-        scatterPageGlyphs();
+        debris.scatter();
         document.body.classList.add('cylon-world-ended');
         document.body.classList.remove('cylon-glyphs-blown');
         // Long transition only for the opening scatter; combat kicks use a snappy curve
@@ -627,12 +542,11 @@ export async function initializeCylonEffects(options = {}) {
             document.body.classList.remove('cylon-glyphs-blown');
             document.body.classList.remove('cylon-glyphs-blowing');
             document.body.classList.remove('cylon-world-ended');
-            clearTimeout(reshuffleSettleTimer);
-            reshuffleSettleTimer = null;
+            debris.cancelReshuffleSettle();
             clearLandscapeVars();
             // Let letters ease home, then unwrap (match --cylon-desolate-fade)
             setTimeout(() => {
-                if (!settings.gameEnabled) restorePageGlyphs();
+                if (!settings.gameEnabled) debris.restore();
             }, 2900);
         }
     }
@@ -968,29 +882,7 @@ export async function initializeCylonEffects(options = {}) {
             }, state.msUntil(schedule.healDueAt, Date.now()));
         }
 
-        activeHoles.forEach((h) => {
-            if (h.phase === 'hold' && h.holdDue > pauseStartedAt) {
-                clearTimeout(h.holdTimer);
-                h.holdDue += elapsed;
-                h.holdTimer = setTimeout(() => {
-                    if (paused) {
-                        h.holdTimer = null;
-                        return;
-                    }
-                    beginHoleFade(h);
-                }, Math.max(0, h.holdDue - Date.now()));
-            } else if (h.phase === 'fade' && h.fadeDue > pauseStartedAt) {
-                clearTimeout(h.fadeTimer);
-                h.fadeDue += elapsed;
-                h.fadeTimer = setTimeout(() => {
-                    if (paused) {
-                        h.fadeTimer = null;
-                        return;
-                    }
-                    removeHoleEntry(h);
-                }, Math.max(0, h.fadeDue - Date.now()));
-            }
-        });
+        holes.resume(pauseStartedAt, elapsed);
     }
 
     function clearHealTimer() {
@@ -1221,7 +1113,7 @@ export async function initializeCylonEffects(options = {}) {
             if (!isGameLive()) return;
             if (e.button != null && e.button !== 0) return;
             if (reticlePointerId != null) return; // already steering with another finger
-            if (grenadeArmed) return; // window capture handler throws instead
+            if (abilities.grenadeArmed()) return; // window capture handler throws instead
             e.preventDefault();
             draggingReticle = true;
             reticlePointerId = e.pointerId;
@@ -1302,12 +1194,7 @@ export async function initializeCylonEffects(options = {}) {
             paused = true;
             pauseStartedAt = Date.now();
             clearTimeout(idleTimer);
-            activeHoles.forEach((h) => {
-                clearTimeout(h.holdTimer);
-                clearTimeout(h.fadeTimer);
-                h.holdTimer = null;
-                h.fadeTimer = null;
-            });
+            holes.pause();
             clearTimeout(missileTimer);
             clearTimeout(nukeTimer);
             clearTimeout(healTimer);
@@ -1571,7 +1458,7 @@ export async function initializeCylonEffects(options = {}) {
     function bindPlayerMissShots() {
         window.addEventListener('pointerdown', (e) => {
             if (!isGameLive()) return;
-            if (grenadeArmed) return;
+            if (abilities.grenadeArmed()) return;
             if (intro.playing()) return;
             if (e.button != null && e.button !== 0) return;
             if (reticlePointerId != null && e.pointerId === reticlePointerId) return;
@@ -1612,116 +1499,26 @@ export async function initializeCylonEffects(options = {}) {
         setTimeout(() => bot.remove(), 560);
     }
 
-    function largeHoleRadius() {
-        return Math.min(window.innerWidth || 400, window.innerHeight || 400) * 0.42;
-    }
-
-    function removeHoleEntry(entry) {
-        if (!entry) return;
-        clearTimeout(entry.holdTimer);
-        clearTimeout(entry.fadeTimer);
-        entry.el.remove();
-        activeHoles = activeHoles.filter((h) => h !== entry);
-    }
-
-    function beginHoleFade(entry) {
-        if (!entry || !entry.el.isConnected) {
-            removeHoleEntry(entry);
-            return;
-        }
-        entry.phase = 'fade';
-        entry.el.style.setProperty('--hole-fade-ms', `${entry.fadeMs}ms`);
-        entry.el.classList.add('is-fading');
-        entry.fadeDue = Date.now() + entry.fadeMs;
-        entry.fadeTimer = setTimeout(() => {
-            if (paused) {
-                entry.fadeTimer = null;
-                return;
-            }
-            removeHoleEntry(entry);
-        }, entry.fadeMs);
-    }
-
-    function forceFadeOldestHole() {
-        const oldest = activeHoles[0];
-        if (!oldest) return;
-        if (oldest.phase === 'hold') {
-            clearTimeout(oldest.holdTimer);
-            beginHoleFade(oldest);
-        } else {
-            removeHoleEntry(oldest);
-        }
-    }
-
-    function punchHole(pageX, pageY, { radius, holdMs, fadeMs } = {}) {
-        if (!field || !isGameLive()) return;
-        const r = radius > 0 ? radius : largeHoleRadius();
-        const hold = holdMs > 0 ? holdMs : HOLE_PRESETS.small.holdMs;
-        const fade = fadeMs > 0 ? fadeMs : HOLE_PRESETS.small.fadeMs;
-
-        while (activeHoles.length >= MAX_HOLES) {
-            forceFadeOldestHole();
-            if (activeHoles.length >= MAX_HOLES) removeHoleEntry(activeHoles[0]);
-        }
-
-        const el = document.createElement('div');
-        el.className = 'cylon-hole';
-        el.setAttribute('aria-hidden', 'true');
-        el.style.left = `${pageX}px`;
-        el.style.top = `${pageY}px`;
-        el.style.width = `${r * 2}px`;
-        el.style.height = `${r * 2}px`;
-        const rim = document.createElement('div');
-        rim.className = 'cylon-hole-glitch';
-        el.appendChild(rim);
-        field.appendChild(el);
-
-        const entry = {
-            el,
-            holdTimer: null,
-            fadeTimer: null,
-            holdDue: Date.now() + hold,
-            fadeDue: 0,
-            fadeMs: fade,
-            phase: 'hold'
-        };
-        entry.holdTimer = setTimeout(() => {
-            if (paused) {
-                entry.holdTimer = null;
-                return;
-            }
-            beginHoleFade(entry);
-        }, hold);
-        activeHoles.push(entry);
-    }
-
-    function clearAllHoles() {
-        [...activeHoles].forEach(removeHoleEntry);
-        activeHoles = [];
-        field?.querySelectorAll('.cylon-hole').forEach((el) => el.remove());
-    }
-
     function clearAllBots() {
         allBots().forEach((bot) => {
             clearBotTimers(bot);
             bot.remove();
         });
         field.querySelectorAll('.cylon-bolt, .cylon-impact').forEach((el) => el.remove());
-        clearAllHoles();
+        holes.clearAll();
         activeBots = 0;
     }
 
     function updateCooldownButton(btn, cdEl, readyAt, extraReady = true) {
         if (!btn) return;
-        const remaining = Math.max(0, readyAt - Date.now());
-        const cooling = remaining > 0;
+        const secs = cooldownSeconds(readyAt, Date.now());
+        const cooling = secs > 0;
         const ready = !cooling && extraReady && isGameLive();
         btn.disabled = !ready;
         btn.classList.toggle('is-cooling', cooling);
         if (cdEl) {
             if (cooling) {
                 // Whole seconds only: 10…1 (grenade) / 60…1 (raptor)
-                const secs = Math.max(1, Math.ceil(remaining / 1000));
                 cdEl.hidden = false;
                 cdEl.textContent = String(secs);
                 cdEl.setAttribute('aria-label', `${secs} seconds remaining`);
@@ -1734,19 +1531,19 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function updateRaptorButton() {
-        updateCooldownButton(raptorBtn, raptorCdEl, schedule.raptorReadyAt, !raptorInbound);
+        updateCooldownButton(raptorBtn, raptorCdEl, schedule.raptorReadyAt, !abilities.raptorInbound());
     }
 
     function updateGrenadeButton() {
         // Stay clickable while armed so a second press cancels
-        updateCooldownButton(grenadeBtn, grenadeCdEl, grenadeArmed ? 0 : schedule.grenadeReadyAt, true);
+        updateCooldownButton(grenadeBtn, grenadeCdEl, abilities.grenadeArmed() ? 0 : schedule.grenadeReadyAt, true);
         if (!grenadeBtn) return;
-        grenadeBtn.classList.toggle('is-armed', grenadeArmed);
+        grenadeBtn.classList.toggle('is-armed', abilities.grenadeArmed());
         const label = grenadeBtn.querySelector('.cylon-raptor-btn-label');
         if (label) {
-            label.textContent = grenadeArmed ? 'Armed' : 'Grenade';
+            label.textContent = abilities.grenadeArmed() ? 'Armed' : 'Grenade';
         }
-        document.body.classList.toggle('cylon-grenade-armed', grenadeArmed);
+        document.body.classList.toggle('cylon-grenade-armed', abilities.grenadeArmed());
     }
 
     function updateAbilityButtons() {
@@ -1754,10 +1551,7 @@ export async function initializeCylonEffects(options = {}) {
         updateGrenadeButton();
     }
 
-    function clearRaptorStrike() {
-        raptorStrikeTimers.forEach((t) => clearTimeout(t));
-        raptorStrikeTimers = [];
-        raptorInbound = false;
+    function clearRaptorVisuals() {
         if (raptorEl) raptorEl.classList.remove('is-inbound');
         if (raptorImpactsEl) raptorImpactsEl.innerHTML = '';
     }
@@ -1773,49 +1567,14 @@ export async function initializeCylonEffects(options = {}) {
 
     /** Cooldowns / armed state do not carry across runs. */
     function resetAbilityCooldowns() {
-        schedule.grenadeReadyAt = 0;
-        schedule.raptorReadyAt = 0;
-        grenadeArmed = false;
+        abilities.reset();
         document.body.classList.remove('cylon-grenade-armed');
-        clearRaptorStrike();
         clearEyeDisorient();
         updateAbilityButtons();
     }
 
-    function cancelGrenadeArm() {
-        if (!grenadeArmed) return;
-        grenadeArmed = false;
-        updateGrenadeButton();
-    }
-
-    function readyGrenade() {
-        if (!isGameLive()) return false;
-        if (Date.now() < schedule.grenadeReadyAt) return false;
-        if (grenadeArmed) {
-            cancelGrenadeArm();
-            return false;
-        }
-        grenadeArmed = true;
-        audio.prime();
-        audio.sfx('grenadeArm');
-        updateGrenadeButton();
-        return true;
-    }
-
-    function throwGrenadeAt(pageX, pageY) {
-        if (!isGameLive()) return false;
-        if (!grenadeArmed) return false;
-        if (Date.now() < schedule.grenadeReadyAt) {
-            cancelGrenadeArm();
-            return false;
-        }
-
-        grenadeArmed = false;
-        schedule.grenadeReadyAt = Date.now() + GRENADE_COOLDOWN_MS;
-        updateGrenadeButton();
-        audio.prime();
-        audio.sfx('grenade');
-
+    /** The grenade lands: blast, scorches, letters and knock-outs (the arming and cooldown are in abilities). */
+    function detonateGrenadeAt(pageX, pageY) {
         const x = pageX;
         const y = pageY;
         const blast = document.createElement('div');
@@ -1849,7 +1608,6 @@ export async function initializeCylonEffects(options = {}) {
                 knockOutBot(bot);
             }
         });
-        return true;
     }
 
     function spawnRaptorImpacts() {
@@ -1888,44 +1646,19 @@ export async function initializeCylonEffects(options = {}) {
         field.querySelectorAll('.cylon-bolt').forEach((el) => el.remove());
     }
 
-    function callRaptor() {
-        if (!isGameLive() || raptorInbound) return false;
-        if (Date.now() < schedule.raptorReadyAt) return false;
-        if (!raptorEl) return false;
-
-        clearRaptorStrike();
-        raptorInbound = true;
-        schedule.raptorReadyAt = Date.now() + RAPTOR_COOLDOWN_MS;
-        updateAbilityButtons();
-        audio.prime();
-        audio.sfx('raptor');
-        disorientEye(EYE_DISORIENT_MS);
-
-        raptorEl.classList.add('is-inbound');
-        raptorStrikeTimers.push(setTimeout(() => {
-            if (!raptorInbound || !isGameLive()) return;
-            // Local sweep across the strike band — not a single global landscape rewrite
-            const vw = window.innerWidth || 1;
-            const vh = window.innerHeight || 1;
-            const bandY = vh * 0.62;
-            const strikeRadius = Math.min(220, vw * 0.28);
-            for (let i = 0; i < 5; i++) {
-                const cx = vw * (0.18 + i * 0.16);
-                rearrangeLandscape(cx, bandY, RAPTOR_STRIKE_SCALE, { radius: strikeRadius });
-            }
-            spawnRaptorImpacts();
-            wipeAllBotsWithScore();
-        }, RAPTOR_STRIKE_AT_MS));
-
-        raptorStrikeTimers.push(setTimeout(() => {
-            raptorEl.classList.remove('is-inbound');
-            if (raptorImpactsEl) raptorImpactsEl.innerHTML = '';
-            raptorInbound = false;
-            raptorStrikeTimers = [];
-            updateAbilityButtons();
-        }, 1900));
-
-        return true;
+    /** The raptor's strike band hits (the call, timing and cooldown are in abilities). */
+    function strikeRaptorBand() {
+        // Local sweep across the strike band — not a single global landscape rewrite
+        const vw = window.innerWidth || 1;
+        const vh = window.innerHeight || 1;
+        const bandY = vh * 0.62;
+        const strikeRadius = Math.min(220, vw * 0.28);
+        for (let i = 0; i < 5; i++) {
+            const cx = vw * (0.18 + i * 0.16);
+            rearrangeLandscape(cx, bandY, RAPTOR_STRIKE_SCALE, { radius: strikeRadius });
+        }
+        spawnRaptorImpacts();
+        wipeAllBotsWithScore();
     }
 
     function marchOrigin(spot) {
@@ -2318,7 +2051,7 @@ export async function initializeCylonEffects(options = {}) {
         const pageX = clientX + window.scrollX;
         const pageY = clientY + window.scrollY;
         punchHole(pageX, pageY, {
-            radius: largeHoleRadius(),
+            radius: holes.largeRadius(),
             holdMs: HOLE_PRESETS.large.holdMs,
             fadeMs: HOLE_PRESETS.large.fadeMs
         });
@@ -2327,7 +2060,7 @@ export async function initializeCylonEffects(options = {}) {
         const scarCount = 3 + Math.floor(Math.random() * 3);
         for (let i = 0; i < scarCount; i++) {
             const ang = Math.random() * Math.PI * 2;
-            const dist = randRange(largeHoleRadius() * 0.35, largeHoleRadius() * 0.85);
+            const dist = randRange(holes.largeRadius() * 0.35, holes.largeRadius() * 0.85);
             const sx = pageX + Math.cos(ang) * dist;
             const sy = pageY + Math.sin(ang) * dist;
             punchHole(sx, sy, {
@@ -2339,8 +2072,8 @@ export async function initializeCylonEffects(options = {}) {
 
         rearrangeLandscape(clientX, clientY, 1);
         // Mid-run nukes fully reshuffle debris; intro scatter happens a beat later
-        if (document.body.dataset.cylonScattered === '1') {
-            reshuffleScatteredGlyphs();
+        if (debris.scattered()) {
+            debris.reshuffle();
         } else {
             disruptGlyphs(pageX, pageY, 1.45);
             setTimeout(() => disruptGlyphs(pageX, pageY, 1.2), 220);
@@ -2706,27 +2439,27 @@ export async function initializeCylonEffects(options = {}) {
                 }
             });
         };
-        bindAbilityTap(raptorBtn, () => { callRaptor(); });
-        bindAbilityTap(grenadeBtn, () => { readyGrenade(); });
+        bindAbilityTap(raptorBtn, () => { abilities.callRaptor(); });
+        bindAbilityTap(grenadeBtn, () => { abilities.readyGrenade(); });
         window.addEventListener('keydown', (e) => {
             if (isTypingTarget(e.target)) return;
             // Don't steal browser shortcuts (Ctrl/Cmd+R refresh, etc.)
             if (e.ctrlKey || e.metaKey || e.altKey) return;
             if (e.key === 'Escape') {
-                cancelGrenadeArm();
+                abilities.cancelGrenadeArm();
                 return;
             }
             if (e.key === 'r' || e.key === 'R') {
                 e.preventDefault();
-                callRaptor();
+                abilities.callRaptor();
             } else if (e.key === 'g' || e.key === 'G') {
                 e.preventDefault();
-                readyGrenade();
+                abilities.readyGrenade();
             }
         });
         // Next click after arming throws at the click point
         window.addEventListener('pointerdown', (e) => {
-            if (!grenadeArmed) return;
+            if (!abilities.grenadeArmed()) return;
             if (e.button != null && e.button !== 0) return;
             const t = e.target;
             if (t && (t.closest('#cylon-grenade-btn')
@@ -2743,7 +2476,7 @@ export async function initializeCylonEffects(options = {}) {
                 return;
             }
             e.preventDefault();
-            throwGrenadeAt(e.pageX, e.pageY);
+            abilities.throwGrenadeAt(e.pageX, e.pageY);
         }, true);
         clearInterval(abilityCdTimer);
         abilityCdTimer = setInterval(updateAbilityButtons, 250);

@@ -18,6 +18,8 @@ node audio-test.js
 node render-test.js
 node net-test.js
 node input-test.js
+node replay-test.js
+node preview-test.js
 node protocol-test.js
 php config-test.php
 php rooms-sim-test.php

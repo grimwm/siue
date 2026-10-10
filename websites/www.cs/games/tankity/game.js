@@ -16,382 +16,13 @@ import {
   muzzle, shotSpeed, stepBallistic, blastDamage,
   fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling, aiChoose as simAiChoose,
-} from './js/sim.js?v=20261010y';
+} from './js/sim.js?v=20261010za';
+import {
+  initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
+} from './js/audio.js?v=20261010za';
 
-/* ---------- audio: synthesized voices and songs, optionally replaced by files ---------- */
-let AC = null;
-let soundMuted = false;
-let musicMuted = false;
-let musicOn = false;
-let lastMusicTick = 0;
-let musicTimer = 0;
-let nextNoteT = 0;
-let stepIdx = 0;
-
-function ctx() {
-  if (soundMuted) return null;
-  return audioCtx();
-}
-function audioCtx() {
-  try {
-    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
-    if (AC.state === 'suspended') void AC.resume();
-    return AC;
-  } catch (_) { return null; }
-}
-function envGain(ac, t, vol, dur) {
-  const g = ac.createGain();
-  g.gain.setValueAtTime(vol, t);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  g.connect(ac.destination);
-  return g;
-}
-function blip(freq, dur, type, vol, slideTo, when, cx) {
-  const ac = cx || ctx();
-  if (!ac) return;
-  try {
-    const t = ac.currentTime + (when || 0);
-    const o = ac.createOscillator();
-    o.type = type || 'square';
-    o.frequency.setValueAtTime(freq, t);
-    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t + dur);
-    o.connect(envGain(ac, t, vol || 0.05, dur));
-    o.start(t);
-    o.stop(t + dur + 0.02);
-  } catch (_) { /* silent */ }
-}
-let noiseBuf = null;
-function noise(dur, vol, filterFreq, slideTo, when, cx) {
-  const ac = cx || ctx();
-  if (!ac) return;
-  try {
-    if (!noiseBuf) {
-      noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
-      const d = noiseBuf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    }
-    const t = ac.currentTime + (when || 0);
-    const src = ac.createBufferSource();
-    src.buffer = noiseBuf;
-    src.loop = true;
-    const f = ac.createBiquadFilter();
-    f.type = 'lowpass';
-    f.frequency.setValueAtTime(filterFreq || 1200, t);
-    if (slideTo) f.frequency.exponentialRampToValueAtTime(Math.max(40, slideTo), t + dur);
-    src.connect(f);
-    f.connect(envGain(ac, t, vol || 0.08, dur));
-    src.start(t);
-    src.stop(t + dur + 0.02);
-  } catch (_) { /* silent */ }
-}
-/* Synthesized SFX bank: every battlefield event gets a voice. A sound file
-   from game.json's audio.sfx replaces a voice (see SFX below). */
-const SYNTH = {
-  move() { blip(190, 0.03, 'square', 0.012); },
-  click() { blip(700, 0.04, 'square', 0.03); },
-  launch() { noise(0.3, 0.1, 900, 4200); blip(120, 0.28, 'sine', 0.09, 320); },
-  boom() { noise(0.6, 0.16, 4000, 60); blip(110, 0.55, 'sine', 0.12, 28); },
-  clank() { blip(880, 0.09, 'sawtooth', 0.04, 220); blip(440, 0.12, 'sawtooth', 0.04, 110, 0.08); },
-  thud() { noise(0.12, 0.08, 900, 200); },
-  warn() { blip(1150, 0.09, 'square', 0.05); blip(1150, 0.09, 'square', 0.05, null, 0.13); },
-  cash() { [880, 1174, 1568].forEach((f, i) => blip(f, 0.08, 'triangle', 0.05, null, i * 0.06)); },
-  bark() { blip(300, 0.06, 'square', 0.03, 420); blip(420, 0.06, 'square', 0.025, null, 0.07); },
-  win() { [523, 659, 784, 1046, 1318].forEach((f, i) => blip(f, 0.14, 'triangle', 0.06, null, i * 0.11)); },
-  lose() { [330, 262, 208, 156].forEach((f, i) => blip(f, 0.22, 'sawtooth', 0.05, null, i * 0.18)); },
-  fanfare() {
-    [262, 330, 392, 523, 659, 784].forEach((f, i) => blip(f, 0.12, 'triangle', 0.06, null, i * 0.09));
-    noise(0.4, 0.08, 600, 3000, 0.5);
-    blip(131, 0.4, 'sine', 0.08, 65, 0.55);
-  },
-};
-
-/* ---------- audio files: game.json's audio section (optional) ---------- */
-/* Nothing here is requested before the player's first tap or key press. Sound
-   files load when the first effect plays with the Sound toggle on; music
-   loads when it starts with the Music toggle on. Anything that fails to load
-   leaves the synthesized sound in place. */
-let gestured = false;
-const SFX_FILES = {}; // event -> { file, volume, state: idle | loading | ready | failed, buf }
-let MUSIC_LIST = []; // [{ file, title, volume, credit }]
-let trackIdx = 0;
-let trackFails = 0;
-const FALLBACK_AUDIO = { sfx: {}, music: [] };
-function applyAudio(a) {
-  a = a || FALLBACK_AUDIO;
-  for (const name of Object.keys(SFX_FILES)) delete SFX_FILES[name];
-  for (const name of Object.keys(SYNTH)) {
-    const e = a.sfx && a.sfx[name];
-    if (e && typeof e.file === 'string') {
-      SFX_FILES[name] = { file: e.file, volume: typeof e.volume === 'number' ? e.volume : 1, state: 'idle', buf: null };
-    }
-  }
-  MUSIC_LIST = (Array.isArray(a.music) ? a.music : []).filter(t => t && typeof t.file === 'string');
-  trackIdx = 0;
-  trackFails = 0;
-  // The list can arrive after the synth began: hand the music over.
-  if (musicOn && trackMode()) { stopSynth(); playTrack(); }
-}
-function loadSfx() {
-  if (!gestured || soundMuted) return;
-  const ac = audioCtx();
-  if (!ac || typeof fetch !== 'function') return;
-  for (const s of Object.values(SFX_FILES)) {
-    if (s.state !== 'idle') continue;
-    s.state = 'loading';
-    // Revalidate: a rebuilt effect keeps its name, so never trust a stale copy.
-    fetch(s.file, { cache: 'no-cache' })
-      .then(r => { if (!r.ok) throw new Error('missing'); return r.arrayBuffer(); })
-      .then(b => new Promise((res, rej) => { const p = ac.decodeAudioData(b, res, rej); if (p && p.then) p.then(res, rej); }))
-      .then(buf => { s.buf = buf; s.state = 'ready'; })
-      .catch(() => { s.state = 'failed'; });
-  }
-}
-/* True when a file voiced the event; false hands it to the synthesizer. */
-function playSample(name) {
-  const s = SFX_FILES[name];
-  if (!s || soundMuted) return false;
-  if (s.state === 'idle') loadSfx(); // this one plays synthesized; the rest wait for the files
-  if (s.state !== 'ready') return false;
-  const ac = audioCtx();
-  if (!ac) return false;
-  try {
-    const src = ac.createBufferSource();
-    src.buffer = s.buf;
-    const g = ac.createGain();
-    g.gain.setValueAtTime(s.volume, ac.currentTime);
-    src.connect(g);
-    g.connect(ac.destination);
-    src.start();
-    return true;
-  } catch (_) { return false; }
-}
-const SFX = {};
-for (const name of Object.keys(SYNTH)) {
-  SFX[name] = () => { if (!playSample(name)) SYNTH[name](); };
-}
-
-/* Punchy procedural war-grooves: four songs of 32 steps (two bars each),
- * four-on-the-floor kick with click, layered snare, driving saw bass, crash
- * every two bars. 142 BPM. The built-in music: it plays when game.json lists
- * no tracks or none can play, and the round picks the song so the soundtrack
- * turns over instead of looping one riff all match. */
-const SONGS = [
-  { name: 'Rollout',
-    bass: [55, 0, 55, 55, 0, 65.41, 0, 55, 0, 49, 0, 49, 0, 58.27, 0, 73.42,
-           43.65, 0, 43.65, 43.65, 0, 52, 0, 43.65, 49, 0, 49, 49, 0, 58.27, 0, 73.42],
-    lead: [440, 0, 0, 523.25, 0, 0, 587.33, 0, 0, 523.25, 0, 440, 0, 392, 587.33, 0,
-           349.23, 0, 0, 392, 0, 0, 440, 0, 0, 523.25, 0, 587.33, 0, 659.25, 587.33, 0] },
-  { name: 'High Ground',
-    bass: [73.42, 0, 73.42, 73.42, 0, 87.31, 0, 73.42, 65.41, 0, 65.41, 65.41, 0, 77.78, 0, 65.41,
-           55, 0, 55, 55, 0, 65.41, 0, 55, 49, 0, 49, 49, 0, 58.27, 49, 55],
-    lead: [587.33, 0, 523.25, 0, 0, 440, 0, 0, 523.25, 0, 0, 440, 0, 392, 0, 0,
-           440, 0, 0, 523.25, 0, 587.33, 0, 0, 659.25, 0, 587.33, 0, 523.25, 0, 440, 0] },
-  { name: 'Crater Blues',
-    bass: [82.41, 0, 0, 82.41, 0, 0, 98, 0, 0, 82.41, 0, 0, 110, 0, 98, 0,
-           82.41, 0, 0, 82.41, 0, 0, 123.47, 0, 0, 110, 0, 98, 0, 82.41, 0, 0],
-    lead: [329.63, 0, 0, 0, 392, 0, 0, 0, 440, 0, 493.88, 0, 0, 0, 440, 0,
-           392, 0, 0, 0, 329.63, 0, 0, 0, 293.66, 0, 329.63, 0, 392, 0, 0, 0] },
-  { name: 'Last Tank',
-    bass: [49, 0, 0, 0, 49, 0, 0, 0, 46.25, 0, 0, 0, 46.25, 0, 0, 0,
-           43.65, 0, 0, 0, 43.65, 0, 0, 0, 55, 0, 55, 0, 65.41, 0, 73.42, 0],
-    lead: [293.66, 0, 0, 0, 0, 0, 349.23, 0, 0, 0, 0, 0, 392, 0, 0, 0,
-           440, 0, 0, 0, 0, 0, 523.25, 0, 0, 0, 587.33, 0, 659.25, 0, 0, 0] },
-];
-let songIdx = 0;
-function musicStep() {
-  const ac = audioCtx();
-  if (!ac || musicMuted || !musicOn) return;
-  // Before any gesture the context is suspended with a frozen clock: idle
-  // here instead of scheduling onto it, or the first real gesture resumes
-  // into silence. The watchdog below restarts a wedged scheduler.
-  if (typeof ac.state === 'string' && ac.state !== 'running') return;
-  lastMusicTick = Date.now();
-  try {
-    const stepDur = 60 / 142 / 2;
-    // A hidden tab throttles timers, so nextNoteT falls far behind the clock.
-    // Without this resync the loop below would schedule minutes of backlog
-    // notes in a single tick and freeze the page on refocus. Clamp the other
-    // way too: a clock ahead of the note cursor plays silence until it
-    // catches up, which reads as music that never starts.
-    if (nextNoteT < ac.currentTime - 0.25 || nextNoteT > ac.currentTime + 0.5) {
-      nextNoteT = ac.currentTime + 0.05;
-    }
-    let guard = 0;
-    while (nextNoteT < ac.currentTime + 0.18 && guard++ < 64) {
-      const song = SONGS[songIdx % SONGS.length];
-      const i = stepIdx % 32;
-      const at = Math.max(0, nextNoteT - ac.currentTime);
-      if (i % 4 === 0) {
-        // Kick: sub drop plus a click transient so it cuts through.
-        const t = ac.currentTime + at;
-        const o = ac.createOscillator();
-        o.type = 'sine';
-        o.frequency.setValueAtTime(160, t);
-        o.frequency.exponentialRampToValueAtTime(38, t + 0.13);
-        o.connect(envGain(ac, t, 0.24, 0.15));
-        o.start(t); o.stop(t + 0.17);
-        blip(1100, 0.02, 'square', 0.05, null, at, ac);
-      }
-      if (i === 0 && (stepIdx >> 4) % 2 === 0) noise(0.5, 0.03, 9000, 4000, at, ac); // crash
-      if (i === 4 || i === 12) {
-        // Snare: noise crack plus a 190 Hz body.
-        noise(0.1, 0.08, 6000, 1800, at, ac);
-        blip(190, 0.09, 'triangle', 0.09, 120, at, ac);
-      } else if (i % 2 === 1) noise(0.04, 0.035, 9000, 7000, at, ac); // hats
-      if (song.bass[i]) blip(song.bass[i], 0.22, 'sawtooth', 0.075, null, at, ac);
-      if (song.lead[i] && (stepIdx >> 4) % 2 === 1) {
-        blip(song.lead[i], 0.16, 'square', 0.022, null, at, ac);
-        blip(song.lead[i], 0.12, 'square', 0.012, null, at + stepDur * 3, ac);
-      }
-      nextNoteT += stepDur;
-      stepIdx++;
-    }
-  } catch (_) { /* silent */ }
-}
-/* Tracks play through WebAudio so a track loops without a seam: each one is
-   decoded once, its leading and trailing silence trimmed, and every pass
-   cross-fades into the next over XFADE_S. A track change fades the old one
-   out under the new one. The files themselves are untouched, so a single
-   pass sounds exactly as recorded. The demo always plays the first track
-   (the theme); each round picks the next of the others; the Next track
-   button steps through them all. */
-const XFADE_S = 2;
-const SWITCH_S = 1.2;
-const TRACK_CACHE = {}; // file -> Promise<{ buf, start, end } | null>
-let musicBus = null; // gain node every track runs through
-let trackPlay = null; // { idx, voices: [{ src, gain }], timer }
-function trackMode() {
-  return MUSIC_LIST.length > 0 && trackFails < MUSIC_LIST.length && typeof fetch === 'function';
-}
-/* Where sound starts and stops, so silence at either end never gaps a loop. */
-function trimSilence(buf) {
-  const ch = buf.getChannelData(0);
-  const floor = 0.004;
-  let a = 0, b = ch.length - 1;
-  while (a < b && Math.abs(ch[a]) < floor) a++;
-  while (b > a && Math.abs(ch[b]) < floor) b--;
-  return { start: a / buf.sampleRate, end: (b + 1) / buf.sampleRate };
-}
-function loadTrack(t) {
-  const ac = audioCtx();
-  if (!ac) return Promise.resolve(null);
-  if (!TRACK_CACHE[t.file]) {
-    TRACK_CACHE[t.file] = fetch(t.file, { cache: 'no-cache' })
-      .then(r => { if (!r.ok) throw new Error('missing'); return r.arrayBuffer(); })
-      .then(b => new Promise((res, rej) => { const p = ac.decodeAudioData(b, res, rej); if (p && p.then) p.then(res, rej); }))
-      .then(buf => Object.assign({ buf }, trimSilence(buf)))
-      .catch(() => null);
-  }
-  return TRACK_CACHE[t.file];
-}
-function bus() {
-  const ac = audioCtx();
-  if (!ac) return null;
-  if (!musicBus) { musicBus = ac.createGain(); musicBus.connect(ac.destination); }
-  return musicBus;
-}
-/* One pass of a track from `when`, fading in over `fadeIn` seconds, with the
-   next pass scheduled to overlap its last XFADE_S. */
-function playPass(play, entry, vol, when, fadeIn) {
-  const ac = audioCtx();
-  const out = bus();
-  if (!ac || !out || trackPlay !== play) return;
-  const len = entry.end - entry.start;
-  const xf = Math.min(XFADE_S, len / 4);
-  const src = ac.createBufferSource();
-  src.buffer = entry.buf;
-  const gain = ac.createGain();
-  gain.gain.setValueAtTime(fadeIn > 0 ? 0.0001 : vol, when);
-  if (fadeIn > 0) gain.gain.linearRampToValueAtTime(vol, when + fadeIn);
-  // Fade out under the next pass; equal-time linear ramps keep the sum even.
-  gain.gain.setValueAtTime(vol, when + len - xf);
-  gain.gain.linearRampToValueAtTime(0.0001, when + len);
-  src.connect(gain);
-  gain.connect(out);
-  src.start(when, entry.start, len);
-  play.voices.push({ src, gain });
-  src.onended = () => { play.voices = play.voices.filter(v => v.src !== src); };
-  const next = when + len - xf;
-  clearTimeout(play.timer);
-  play.timer = setTimeout(() => playPass(play, entry, vol, next, xf), Math.max(0, (next - ac.currentTime - 1) * 1000));
-}
-function fadeOutPlay(play, secs) {
-  const ac = audioCtx();
-  if (!play || !ac) return;
-  clearTimeout(play.timer);
-  const t = ac.currentTime;
-  for (const v of play.voices) {
-    try {
-      v.gain.gain.cancelScheduledValues(t);
-      v.gain.gain.setValueAtTime(v.gain.gain.value, t);
-      v.gain.gain.linearRampToValueAtTime(0.0001, t + secs);
-      v.src.stop(t + secs + 0.05);
-    } catch (_) { /* already stopped */ }
-  }
-}
-function playTrack() {
-  if (!musicOn || musicMuted || !gestured || !trackMode()) return;
-  const idx = trackIdx % MUSIC_LIST.length;
-  if (trackPlay && trackPlay.idx === idx) return;
-  const old = trackPlay;
-  const play = { idx, voices: [], timer: 0 };
-  trackPlay = play;
-  const t = MUSIC_LIST[idx];
-  loadTrack(t).then(entry => {
-    if (trackPlay !== play) return;
-    if (!entry) { trackFailed(); return; }
-    trackFails = 0;
-    const ac = audioCtx();
-    fadeOutPlay(old, old ? SWITCH_S : 0);
-    playPass(play, entry, typeof t.volume === 'number' ? t.volume : 1, ac.currentTime + 0.05, old ? SWITCH_S : 0.4);
-    say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info');
-  });
-}
-/* The song for a level: 0 is the demo (always the theme, the first track);
-   rounds walk through the rest in order. */
-function musicForLevel(level) {
-  const n = MUSIC_LIST.length;
-  if (!n) return;
-  trackIdx = level <= 0 || n === 1 ? 0 : 1 + ((level - 1) % (n - 1));
-  if (musicOn && trackMode()) playTrack();
-}
-function nextTrack() {
-  if (!MUSIC_LIST.length) { songIdx = (songIdx + 1) % SONGS.length; return; }
-  trackIdx = ((trackPlay ? trackPlay.idx : trackIdx) + 1) % MUSIC_LIST.length;
-  if (!musicOn && !musicMuted) startMusic();
-  else playTrack();
-}
-function trackFailed() {
-  trackFails++;
-  if (trackMode()) { trackIdx = (trackIdx + 1) % MUSIC_LIST.length; trackPlay = null; playTrack(); return; }
-  // Every track failed: the built-in songs take over.
-  trackPlay = null;
-  if (musicOn && !musicMuted) startSynth();
-}
-function startSynth() {
-  const ac = audioCtx();
-  if (!ac) return;
-  stepIdx = 0;
-  nextNoteT = ac.currentTime + 0.06;
-  if (!musicTimer) musicTimer = setInterval(musicStep, 60);
-}
-function stopSynth() {
-  if (musicTimer) { clearInterval(musicTimer); musicTimer = 0; }
-}
-function startMusic() {
-  if (musicMuted) return;
-  const ac = audioCtx();
-  if (!ac || musicOn) return;
-  musicOn = true;
-  if (trackMode()) playTrack();
-  else startSynth();
-}
-function stopMusic() {
-  musicOn = false;
-  stopSynth();
-  fadeOutPlay(trackPlay, 0.3);
-  trackPlay = null;
-}
+/* ---------- audio: lives in src/audio.ts ---------- */
+music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));
 
 /* ---------- dialogue: subtitled trash-talk, kid-friendly ---------- */
 const SPEAKERS = {
@@ -568,7 +199,7 @@ async function loadGameConfig() {
     installEffects(data.effects);
     applyArsenal(data.arsenal);
     applyKeys(data.keys);
-    applyAudio(data.audio);
+    initAudio(data.audio);
   } catch (_) { /* the baked fallbacks keep the war rolling */ }
 }
 
@@ -788,7 +419,7 @@ function newMatch(seedStr) {
   resetMatch(seedStr);
   // No round yet: spend the starting stake in the shop first.
   G.phase = 'banner';
-  musicForLevel(1); // a new match leaves the demo's theme at once
+  music.leaveTheme(); // a new match leaves the demo's theme at once
   startBanner('Round 1. The battery holds these hills.', openShop);
   say(`Match ${G.seed}: $600 stake in your pocket. Buy guns first. The battery holds these hills.`, 'info');
   talk('tank', 'tankity tank! Shopping, then shooting!', true);
@@ -796,8 +427,8 @@ function newMatch(seedStr) {
 // A fanfare plus a name card, then the game continues. Nothing starts without you.
 function startSolo(seedStr) {
   closePreview();
-  ctx();
-  startMusic();
+  unlock();
+  music.start();
   newMatch(seedStr);
 }
 function newRound(bannerText) {
@@ -840,8 +471,7 @@ function newRound(bannerText) {
   if (G.fx) G.fx.clear();
   // The soundtrack turns over with the rounds: song follows the round, and
   // the demo always plays the theme.
-  songIdx = G.demo ? 0 : (G.round - 1) % SONGS.length;
-  musicForLevel(G.demo ? 0 : G.round);
+  if (G.demo) music.playTheme(); else music.forRound(G.round);
   G.phase = 'banner';
   closePreview();
   hideShop();
@@ -888,13 +518,13 @@ function fireWeapon(t, wkey) {
   const w = WEAPONS[wkey];
   const launch = simFireWeapon(G, ARSENAL, t, wkey);
   if (!launch) {
-    if (t.isPlayer) { say(`No ${w.name} left! ${TOUCH ? 'Tap Weapons' : keyHint('global', 'cycle')} to swap guns.`, 'info'); SFX.click(); }
+    if (t.isPlayer) { say(`No ${w.name} left! ${TOUCH ? 'Tap Weapons' : keyHint('global', 'cycle')} to swap guns.`, 'info'); sfx.play('click'); }
     return false;
   }
   if (launch.spent) say(`Out of ${w.name}. Back to the Shell.`, 'info');
   // Muzzle effects (the rail's beam among them) fire once per volley, along the barrel.
   fxMuzzle(G.fx, wkey, launch.x, launch.y, launch.ang);
-  SFX.launch();
+  sfx.play('launch');
   G.phase = 'fly';
   return true;
 }
@@ -937,7 +567,7 @@ function stepShells(dt) {
    the order it happened. */
 function showBlast(b) {
   const owner = b.owner;
-  SFX.boom();
+  sfx.play('boom');
   const kick = fxImpact(G.fx, b.fx, b.x, b.y, b.r);
   G.shake = Math.max(G.shake || 0, kick !== undefined ? kick : b.shake);
   G.booms.push({ x: b.x, y: b.y, r: b.r, wkey: b.wkey, t: 0, life: b.wkey === 'nuke' ? 0.8 : 0.5 });
@@ -960,7 +590,7 @@ function showBlast(b) {
         say(`${owner.id} hits ${t.id} for ${e.dmg}.`, 'info');
       }
     } else {
-      SFX.boom();
+      sfx.play('boom');
       burst(t.x, t.y - 12, '#ff5a5a', 26, 7);
       if (e.lastStand) {
         say('Last stand! The wreck detonates!', 'good');
@@ -1005,7 +635,7 @@ function nextTurn() {
 /* Tanks left hanging over a crater fall under gravity every frame until they
    land; ground that rose (a new round, fresh hills) takes them straight up. */
 function fallTanks(dt) {
-  if (simFallTanks(G, dt).some(t => t.isPlayer)) SFX.thud();
+  if (simFallTanks(G, dt).some(t => t.isPlayer)) sfx.play('thud');
 }
 function anyTankFalling() {
   return simAnyTankFalling(G);
@@ -1039,7 +669,7 @@ function settle() {
     const prize = TUNE.roundWinCash + G.round * 100;
     G.score += bonus;
     G.cash += prize;
-    SFX.win();
+    sfx.play('win');
     say(`Round ${G.round} won! +${bonus} pts, +$${prize}. The battery rebuilds meaner, so spend it wisely.`, 'good');
     exchange('tank', 'tankity tank! Hill claimed!', pick(['reaper', 'wraith', 'spotter']),
       pick(['Lucky shot, treads...', 'The hill was... too hilly...', 'Recharge... revenge...']));
@@ -1061,10 +691,10 @@ function endMatch(won, text) {
   G.over = true;
   G.won = won;
   G.phase = 'over';
-  stopMusic();
+  music.stop();
   hideShop();
   refreshNavHints();
-  if (won) SFX.win(); else SFX.lose();
+  if (won) sfx.play('win'); else sfx.play('lose');
   say(text, won ? 'good' : 'bad');
   const veil = $('end-veil');
   if (veil) {
@@ -1096,7 +726,7 @@ function startBanner(text, done) {
     void b.offsetWidth;
     b.hidden = false;
   }
-  SFX.fanfare();
+  sfx.play('fanfare');
   G.bannerT = BANNER_MS / 1000;
   G.bannerDone = done || null;
 }
@@ -1370,7 +1000,7 @@ function selectWeapon(w) {
     return false;
   }
   G.selected = w;
-  SFX.click();
+  sfx.play('click');
   say(`Loaded: ${WEAPONS[w].name}.`, 'info');
   renderHUD();
   return true;
@@ -1388,7 +1018,7 @@ function buyItem(it, qty) {
     return;
   }
   G.cash -= total;
-  SFX.cash();
+  sfx.play('cash');
   const lots = qty > 1 ? `${qty} × ` : '';
   if (it.kind === 'ammo') {
     G.ammo[it.w] = (G.ammo[it.w] || 0) + it.n * qty;
@@ -1485,7 +1115,7 @@ function openPreview(wkey) {
   const veil = $('preview-veil');
   if (veil) veil.hidden = false;
   refreshNavHints();
-  SFX.click();
+  sfx.play('click');
 }
 function closePreview() {
   if (G.preview && G.preview.fx) G.preview.fx.clear();
@@ -1935,7 +1565,7 @@ function chooseTextSize(key) {
   if (!TEXT_SIZES.some(t => t.key === key)) return;
   try { window.localStorage.setItem('tankity-text', key); } catch (_) { /* fine */ }
   applyTextSize(key);
-  SFX.click();
+  sfx.play('click');
 }
 function renderTextPicker() {
   const box = $('text-picker');
@@ -2924,17 +2554,9 @@ function decayFx(dt) {
 }
 function frame(ts) {
   requestAnimationFrame(frame);
-  // Watchdog: if the music claims to play but no note has been laid down for
-  // a while (wedged clock, throttled timer), re-pin the note cursor to the
-  // live clock. This never tears the timer down: clearing and recreating the
-  // interval every frame would starve the scheduler so no step ever fires.
-  if (musicOn && !musicMuted && Date.now() - lastMusicTick > 1500) {
-    const ac = audioCtx();
-    if (ac && ac.state === 'running') {
-      nextNoteT = ac.currentTime + 0.05;
-      lastMusicTick = Date.now();
-    }
-  }
+  // The music watchdog re-pins a wedged scheduler to the live clock; it never
+  // tears the timer down (see audio.ts).
+  music.watchdog();
   const dt = Math.min(0.05, (ts - lastT) / 1000 || 0.016);
   lastT = ts;
   // The firing range runs on its own, even over the pre-match shop.
@@ -2990,7 +2612,7 @@ function frame(ts) {
     G.nextOneUp += TUNE.oneUpEvery;
     if (G.lives < TUNE.maxLives) {
       G.lives += 1;
-      SFX.win();
+      sfx.play('win');
       say(`1-UP! Extra life! (${G.lives}/${TUNE.maxLives} lives)`, 'good');
       talk('tank', 'Another life! I am basically immortal!', true);
     } else {
@@ -3397,7 +3019,7 @@ async function copyInvite() {
       }
     }
     lobbySay('Invite link copied. Send it to your friends.');
-    SFX.click();
+    sfx.play('click');
   } catch (_) {
     lobbySay('Copy is blocked here. The invite link is in the box above; copy it by hand.');
   }
@@ -3601,7 +3223,7 @@ async function netAct(kind, extra) {
     netApply((await roomPost('act', Object.assign({ kind }, extra || {}))).room);
   } catch (err) {
     say(prettyRoomError(err), 'bad');
-    SFX.warn();
+    sfx.play('warn');
   }
   NET.busy = false;
 }
@@ -3640,7 +3262,7 @@ function netPick(w) {
     return false;
   }
   G.selected = w;
-  SFX.click();
+  sfx.play('click');
   say(`Loaded: ${WEAPONS[w].name}.`, 'info');
   renderHUD();
   roomPost('act', { kind: 'weapon', weapon: w }).then(d => netApply(d.room)).catch(() => {});
@@ -3656,15 +3278,15 @@ function netCycle() {
 function netBuy(it, qty) {
   const key = it.kind === 'ammo' ? it.w : (it.g || it.kind);
   qty = clamp(Math.floor(qty || 1), 1, 9);
-  SFX.click();
+  sfx.play('click');
   roomPost('buy', { item: key, qty })
     .then(d => {
-      SFX.cash();
+      sfx.play('cash');
       say(`Bought ${qty > 1 ? qty + ' × ' : ''}${it.label}.`, 'good');
       G.shopQty = 1;
       netApply(d.room);
     })
-    .catch(err => { say(prettyRoomError(err), 'bad'); SFX.warn(); });
+    .catch(err => { say(prettyRoomError(err), 'bad'); sfx.play('warn'); });
 }
 /* Whether this seat counts as ready: what the player last asked for while a
    request is out, otherwise what the room says. */
@@ -3680,7 +3302,7 @@ function netReadyNow() {
    round and answers with that, quietly. */
 function netNext(want) {
   NET.readyWant = typeof want === 'boolean' ? want : !netReadyNow();
-  SFX.click();
+  sfx.play('click');
   renderShopReady();
   netSendReady();
 }
@@ -3817,8 +3439,7 @@ function netAdopt(room) {
       // A started match takes the whole frame, same as solo: shut the menu
       // the host came through so nobody has to ESC it away mid-battle.
       if (NET.lastPhase !== 'play') closeOverlays();
-      songIdx = (room.round - 1) % SONGS.length;
-      musicForLevel(room.round);
+      music.forRound(room.round);
       startBanner(`Round ${room.round}. ${room.mapName || 'Random hills'}.`);
       say(`Round ${G.round}. Wind ${windText()}. ${NET.myTurn ? 'Your move. Aim!' : seatName(room.turn) + ' moves first.'}`, 'info');
       if (NET.myTurn) talk('tank', 'tankity tank! My hill now!', true);
@@ -3871,7 +3492,7 @@ function netEvent(e) {
         victim ? 'bad' : 'info');
     }
     if (victim) {
-      SFX.clank();
+      sfx.play('clank');
       talk('tank', pick(TANK_OWS));
       const kt = G.tanks.find(x => x.seat === e.by);
       const kid = foeTalkId(kt);
@@ -3884,7 +3505,7 @@ function netEvent(e) {
   }
   if (e.t === 'kill') {
     const victim = e.seat === NET.seat;
-    SFX.boom();
+    sfx.play('boom');
     say(victim
       ? (e.by === NET.seat ? 'You got yourself?! The hills are cruel.' : `${seatName(e.by)} wrecks YOU.`)
       : `${seatName(e.by)} wrecks ${seatName(e.seat)}.`,
@@ -3900,26 +3521,26 @@ function netEvent(e) {
     return;
   }
   if (e.t === 'laststand') {
-    SFX.boom();
+    sfx.play('boom');
     say(e.seat === NET.seat ? 'Your wreck goes down glowing!' : `${seatName(e.seat)} goes down glowing!`, 'info');
     return;
   }
   if (e.t === 'oneup') {
     if (e.seat === NET.seat) {
-      SFX.win();
+      sfx.play('win');
       say(`1-UP! Extra life! (${e.lives} lives)`, 'good');
       talk('tank', 'Another life! I am basically immortal!', true);
     } else say(`${seatName(e.seat)} earns a 1-up.`, 'info');
     return;
   }
   if (e.t === 'roundwin') {
-    SFX.win();
+    sfx.play('win');
     say(`Round ${e.round} cleared. Winnings paid. Spend them.`, 'good');
     return;
   }
   if (e.t === 'eliminated') {
     if (e.seat === NET.seat) {
-      SFX.lose();
+      sfx.play('lose');
       say('The battery got you for good this time. Filing your report.', 'bad');
     } else say(`${seatName(e.seat)} is out of lives.`, 'info');
     return;
@@ -3960,7 +3581,7 @@ function netStartVolley() {
   netEvent(opener);
 }
 function netBlast(x, y, r, wkey) {
-  SFX.boom();
+  sfx.play('boom');
   const kick = fxImpact(G.fx, wkey, x, y, r);
   G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : wkey === 'nuke' ? 0.9 : r > 40 ? 0.5 : 0.3));
   G.booms.push({ x, y, r, wkey, t: 0, life: wkey === 'nuke' ? 0.8 : 0.5 });
@@ -3995,7 +3616,7 @@ function netStepVolley(dt) {
     if (e.t === 'shot') {
       const sh = { e, pts: netParsePath(e.p), landed: false, fx: null };
       v.shots.push(sh);
-      SFX.launch();
+      sfx.play('launch');
       // Bomblets leave the bloom point; every other shot leaves the barrel.
       if (e.t0 < 0.01 && sh.pts.length > 1) {
         const hv = netShellVel(sh, 0);
@@ -4065,10 +3686,7 @@ function turnAlert() {
     alertTitles = titleDocs().map(d => [d, d.title]);
     for (const [d, t] of alertTitles) d.title = `\u25cf Your turn \u00b7 ${t}`;
   }
-  if (!soundMuted) {
-    const ac = audioCtx();
-    if (ac) { blip(880, 0.12, 'sine', 0.08, null, 0); blip(1320, 0.18, 'sine', 0.07, null, 0.13); }
-  }
+  sfx.turnPing();
   try {
     if (typeof Notification === 'function' && Notification.permission === 'granted') {
       const n = new Notification('Your turn in Operation Tankity', { body: `Room ${NET.code}: the hills are waiting.`, tag: 'tankity-turn' });
@@ -4101,9 +3719,7 @@ function tickTurnClock() {
   NET.clockWarned = true;
   if (!NET.myTurn) return;
   say(`${Math.ceil(left)} seconds left. Fire, or the crew picks a gun and fires for you.`, 'bad');
-  if (!soundMuted && audioCtx()) {
-    for (let i = 0; i < 3; i++) blip(988, 0.09, 'square', 0.07, null, i * 0.16);
-  }
+  sfx.clockWarn();
 }
 function drawTurnClock(c, cv) {
   const left = turnClockLeft();
@@ -4501,8 +4117,8 @@ function randomRun() {
   freshMatchFromSeedBox();
 }
 function openRooms() {
-  ctx();
-  SFX.click();
+  unlock();
+  sfx.play('click');
   openLobby();
 }
 /* Toolbar tips: resting the pointer (or keyboard focus) on an icon button
@@ -4562,7 +4178,7 @@ function bindKeys() {
     if ((sc === 'lineDown' || sc === 'lineUp') && G.phase === 'shop' && !G.over && !G.preview && !shopCovered()) {
       e.preventDefault();
       G.shopSel = clamp(G.shopSel + (sc === 'lineUp' ? -1 : 1), 0, SHOP.length - 1);
-      SFX.click();
+      sfx.play('click');
       renderShop();
       return;
     }
@@ -4585,7 +4201,7 @@ function bindKeys() {
       if (sa === 'selUp' || sa === 'selDown') {
         e.preventDefault();
         G.shopSel = clamp(G.shopSel + (sa === 'selUp' ? -1 : 1), 0, SHOP.length - 1);
-        SFX.click();
+        sfx.play('click');
         renderShop();
         return;
       }
@@ -4594,11 +4210,11 @@ function bindKeys() {
         const it = SHOP[G.shopSel];
         if (sa === 'qtyUp') {
           const max = Math.max(1, maxPacks(it));
-          if (G.shopQty < max) { G.shopQty++; SFX.click(); }
-          else SFX.thud();
+          if (G.shopQty < max) { G.shopQty++; sfx.play('click'); }
+          else sfx.play('thud');
         } else if (G.shopQty > 1) {
           G.shopQty--;
-          SFX.click();
+          sfx.play('click');
         }
         renderShop();
         return;
@@ -4642,14 +4258,14 @@ function bindKeys() {
     if (act) {
       keysDown[act] = true;
       e.preventDefault();
-      ctx(); startMusic();
+      unlock(); music.start();
       return;
     }
     // Fire stays a special tap with its own repeat guard, but its keys come
     // from the same file as everything else.
     if (lookupKey('global', e) === 'fire') {
       e.preventDefault();
-      if (!e.repeat) { ctx(); startMusic(); playerFire(); }
+      if (!e.repeat) { unlock(); music.start(); playerFire(); }
       return;
     }
     if (e.repeat) return;
@@ -4657,7 +4273,7 @@ function bindKeys() {
     const ga = lookupKey('global', e);
     switch (ga) {
     case 'music': toggleMusic(); return;
-    case 'nextTrack': ctx(); nextTrack(); return;
+    case 'nextTrack': unlock(); music.next(); return;
     case 'sound': toggleSound(); return;
     case 'log': toggleOverlay('log-overlay', 'btn-log'); return;
     case 'help': toggleOverlay('help-overlay', 'btn-help'); return;
@@ -4712,7 +4328,7 @@ function openGuns() {
   const btn = $('btn-weapon');
   if (btn) btn.setAttribute('aria-expanded', 'true');
   refreshNavHints();
-  SFX.click();
+  sfx.play('click');
 }
 function closeGuns() {
   const ov = $('gun-overlay');
@@ -4753,7 +4369,7 @@ function pickGun(w) {
 }
 function moveGunCursor(d) {
   gunCursor = clamp(gunCursor + d, 0, rackGuns().length - 1);
-  SFX.click();
+  sfx.play('click');
   renderGuns();
 }
 function cycleWeapon() {
@@ -4765,7 +4381,7 @@ function cycleWeapon() {
     const w = WORDER[(i + k) % WORDER.length];
     if (w === 'shell' || (G.ammo[w] || 0) > 0) {
       G.selected = w;
-      SFX.click();
+      sfx.play('click');
       say(`Loaded: ${WEAPONS[w].name}.`, 'info');
       renderHUD();
       return;
@@ -4775,7 +4391,7 @@ function cycleWeapon() {
 function holdButton(id, act) {
   const btn = $(id);
   if (!btn) return;
-  const on = ev => { ev.preventDefault(); keysDown[act] = true; ctx(); startMusic(); };
+  const on = ev => { ev.preventDefault(); keysDown[act] = true; unlock(); music.start(); };
   const off = () => { delete keysDown[act]; };
   btn.addEventListener('pointerdown', on);
   btn.addEventListener('pointerup', off);
@@ -4799,7 +4415,7 @@ function init() {
 
   document.querySelectorAll('[data-aim]').forEach(btn => {
     const act = { up: 'powerUp', down: 'powerDown', left: 'barrelLeft', right: 'barrelRight' }[btn.getAttribute('data-aim')];
-    const on = ev => { ev.preventDefault(); keysDown[act] = true; ctx(); startMusic(); };
+    const on = ev => { ev.preventDefault(); keysDown[act] = true; unlock(); music.start(); };
     const off = () => { delete keysDown[act]; };
     btn.addEventListener('pointerdown', on);
     btn.addEventListener('pointerup', off);
@@ -4807,9 +4423,9 @@ function init() {
     btn.addEventListener('click', ev => ev.currentTarget.blur());
   });
   const cannon = $('btn-cannon');
-  if (cannon) cannon.addEventListener('click', ev => { ev.currentTarget.blur(); ctx(); startMusic(); playerFire(); });
+  if (cannon) cannon.addEventListener('click', ev => { ev.currentTarget.blur(); unlock(); music.start(); playerFire(); });
   const track = $('btn-track');
-  if (track) track.addEventListener('click', ev => { ev.currentTarget.blur(); ctx(); nextTrack(); });
+  if (track) track.addEventListener('click', ev => { ev.currentTarget.blur(); unlock(); music.next(); });
   const weapon = $('btn-weapon');
   if (weapon) weapon.addEventListener('click', ev => { ev.currentTarget.blur(); if (gunsOpen()) closeGuns(); else openGuns(); });
   const gunClose = $('gun-close');
@@ -4825,7 +4441,7 @@ function init() {
   if (form) form.addEventListener('submit', e => {
     e.preventDefault();
     if (NET.on) { netLeave(); return; }
-    SFX.click();
+    sfx.play('click');
     freshMatchFromSeedBox();
   });
   const rnd = $('random-run');
@@ -4836,7 +4452,7 @@ function init() {
   const newGame = $('new-game');
   if (newGame) newGame.addEventListener('click', ev => {
     ev.currentTarget.blur();
-    ctx(); SFX.click();
+    unlock(); sfx.play('click');
     freshMatchFromSeedBox();
   });
   const soundBtn = $('btn-sound');
@@ -4873,7 +4489,7 @@ function init() {
   const roomsOpen = $('rooms-open');
   if (roomsOpen) roomsOpen.addEventListener('click', ev => { ev.currentTarget.blur(); openRooms(); });
   const tutOpen = $('tutorial-open');
-  if (tutOpen) tutOpen.addEventListener('click', ev => { ev.currentTarget.blur(); SFX.click(); tutorialOpen(); });
+  if (tutOpen) tutOpen.addEventListener('click', ev => { ev.currentTarget.blur(); sfx.play('click'); tutorialOpen(); });
   const tutSkip = $('tutorial-skip');
   if (tutSkip) tutSkip.addEventListener('click', ev => { ev.currentTarget.blur(); skipTutorial(); });
   const hostForm = $('host-form');
@@ -4882,7 +4498,7 @@ function init() {
     const v = netValidInitials($('host-initials') ? $('host-initials').value : '');
     if (!v) { lobbySay('Initials need exactly 3 letters, and keep them clean.'); return; }
     const mapSel = $('lobby-map');
-    ctx(); SFX.click();
+    unlock(); sfx.play('click');
     hostRoom(v, mapSel ? mapSel.value : '');
   });
   const mapSel = $('lobby-map');
@@ -4894,11 +4510,11 @@ function init() {
     const v = netValidInitials($('join-initials') ? $('join-initials').value : '');
     if (!/^[A-Z0-9]{4}$/.test(code)) { lobbySay('Room codes are 4 letters or digits. Read it back and retry.'); return; }
     if (!v) { lobbySay('Initials need exactly 3 letters, and keep them clean.'); return; }
-    ctx(); SFX.click();
+    unlock(); sfx.play('click');
     joinRoom(code, v);
   });
   const lobbyStart = $('lobby-start');
-  if (lobbyStart) lobbyStart.addEventListener('click', ev => { ev.currentTarget.blur(); SFX.click(); startRoom(); });
+  if (lobbyStart) lobbyStart.addEventListener('click', ev => { ev.currentTarget.blur(); sfx.play('click'); startRoom(); });
   const lobbyLeave = $('lobby-leave');
   if (lobbyLeave) lobbyLeave.addEventListener('click', ev => { ev.currentTarget.blur(); netLeave(); openLobby(); });
   const lobbyClose = $('lobby-close');
@@ -4911,7 +4527,7 @@ function init() {
   const rematchBtn = $('rematch');
   if (rematchBtn) rematchBtn.addEventListener('click', ev => {
     ev.currentTarget.blur();
-    SFX.click();
+    sfx.play('click');
     netRematch();
   });
   const shopNext = $('shop-next');
@@ -4945,14 +4561,10 @@ function init() {
   // song, so music never sits claiming to play while silent after a refresh.
   // This fires before the game keys, and starting twice is a harmless no-op.
   const kickAudio = ev => {
-    gestured = true;
-    ctx();
     // A first tap that turns the music off must not fetch a track.
     const hit = ev.type === 'keydown' ? lookupKey('global', ev)
       : (ev.target && ev.target.closest && ev.target.closest('#btn-music') ? 'music' : '');
-    if (musicMuted || hit === 'music') return;
-    if (!musicOn) startMusic();
-    else if (trackMode()) playTrack(); // a play refused before the first gesture
+    noteGesture(hit === 'music');
   };
   window.addEventListener('pointerdown', kickAudio, true);
   window.addEventListener('keydown', kickAudio, true);
@@ -4979,17 +4591,14 @@ function placeLogBelowMenu() {
   log.style.top = `${bar.offsetTop + bar.offsetHeight + 6}px`;
 }
 function toggleSound() {
-  soundMuted = !soundMuted;
+  setSoundMuted(!isSoundMuted());
   const btn = $('btn-sound');
-  if (btn) btn.setAttribute('aria-pressed', String(!soundMuted));
-  if (!soundMuted) ctx();
+  if (btn) btn.setAttribute('aria-pressed', String(!isSoundMuted()));
 }
 function toggleMusic() {
-  musicMuted = !musicMuted;
+  setMusicMuted(!isMusicMuted());
   const btn = $('btn-music');
-  if (btn) btn.setAttribute('aria-pressed', String(!musicMuted));
-  if (musicMuted) stopMusic();
-  else startMusic();
+  if (btn) btn.setAttribute('aria-pressed', String(!isMusicMuted()));
 }
 /* Keyboard scrolling for panels: the topmost open veil or overlay takes
 line, page, and half-page keys. Mouse wheels and touch keep working as
@@ -5121,7 +4730,7 @@ function endTutorial(seen) {
   if (ov) ov.hidden = true;
 }
 function skipTutorial() {
-  SFX.click();
+  sfx.play('click');
   say(TOUCH ? 'Tutorial skipped. Replay it from the menu any time.' : `Tutorial skipped. Press ${keyHint('global', 'tutorial')} any time to replay it.`, 'info');
   endTutorial(true);
 }
@@ -5129,7 +4738,7 @@ function tickTutorial() {
   if (!TUT || G.demo || G.over || !G.tanks.length) return;
   if (TUT.step < TUT_STEPS.length && TUT_STEPS[TUT.step].done(me())) {
     TUT.step++;
-    SFX.click();
+    sfx.play('click');
     if (TUT.step >= TUT_STEPS.length) {
       say('Tutorial complete. The hills are yours.', 'good');
       endTutorial(true);

@@ -33,8 +33,8 @@ foreach ($sheets as $abs) {
 // Never served: the effects editor, the Blender scenes and script, authoring
 // sources, the TypeScript sources and their build setup, the room protocol
 // fixtures, maintainer notes and tests.
-foreach (['games/tankity/fx-editor.html', 'games/tankity/fx-editor.js', 'games/tankity/fx-editor.css', 'games/tankity/fx/blender/render_fx.py', 'games/tankity/game.yaml', 'games/tankity/README.md', 'games/tankity/smoke-test.js', 'games/tankity/protocol/generate.php', 'games/tankity/protocol/play-my-turn.json', 'games/tankity/protocol/sim-vectors.php', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/sim-vectors-test.js',
-    'games/tankity/src/sim.ts', 'games/tankity/tsconfig.json', 'games/tankity/package.json', 'games/tankity/package-lock.json',
+foreach (['games/tankity/fx-editor.html', 'games/tankity/fx-editor.js', 'games/tankity/fx-editor.css', 'games/tankity/fx/blender/render_fx.py', 'games/tankity/game.yaml', 'games/tankity/README.md', 'games/tankity/smoke-test.js', 'games/tankity/protocol/generate.php', 'games/tankity/protocol/play-my-turn.json', 'games/tankity/protocol/sim-vectors.php', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/sim-vectors-test.js', 'games/tankity/audio-test.js',
+    'games/tankity/src/sim.ts', 'games/tankity/src/audio.ts', 'games/tankity/src/tsconfig.dom.json', 'games/tankity/tsconfig.json', 'games/tankity/package.json', 'games/tankity/package-lock.json',
     'games/tankity/tools/ts-build.mjs', 'games/tankity/.gitignore'] as $f) {
     $check("keeps back $f", file_exists("$site/$f") && !isset($set[$f]));
 }

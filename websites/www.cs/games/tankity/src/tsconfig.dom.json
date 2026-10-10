@@ -1,0 +1,12 @@
+{
+  // The modules that touch browser APIs (WebAudio, fetch, timers) but never
+  // the document: the same options as ../tsconfig.json plus the DOM lib. Each
+  // config is its own program in tools/ts-build.mjs, so the sim, which lists
+  // itself only in ../tsconfig.json, still fails to compile if it uses
+  // `document`. Every module here also imports with its .js extension.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"]
+  },
+  "files": ["audio.ts"]
+}

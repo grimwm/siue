@@ -2,7 +2,8 @@
 /**
  * Compiles this game's TypeScript (src/) to the JavaScript the browser loads
  * (js/), one file to one file, with the TypeScript compiler API and the
- * options in tsconfig.json. js/ is checked in: the host serves static files
+ * options in tsconfig.json (the DOM-free modules) and src/tsconfig.dom.json
+ * (the modules that need browser types). js/ is checked in: the host serves static files
  * and has no Node, so what ships is what is committed.
  *
  *   node tools/ts-build.mjs          write every stale file, drop extra ones
@@ -23,11 +24,14 @@ const GAME = resolve(import.meta.dirname, '..');
 const check = process.argv.includes('--check');
 const rel = file => relative(GAME, file).split('\\').join('/');
 
-/** Reads tsconfig.json; fails the run on a config problem. */
-function loadConfig() {
-  const read = ts.readConfigFile(join(GAME, 'tsconfig.json'), ts.sys.readFile);
+/** Each config is its own program, so the lib a module sees is its config's. */
+const CONFIGS = ['tsconfig.json', 'src/tsconfig.dom.json'];
+
+/** Reads a config file; fails the run on a config problem. */
+function loadConfig(file) {
+  const read = ts.readConfigFile(join(GAME, file), ts.sys.readFile);
   if (read.error) fail([read.error]);
-  const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, GAME);
+  const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, dirname(join(GAME, file)));
   if (parsed.errors.length) fail(parsed.errors);
   return parsed;
 }
@@ -56,16 +60,19 @@ function pruneEmpty(dir) {
   }
 }
 
-const config = loadConfig();
-const outDir = resolve(GAME, config.options.outDir ?? 'js');
-const program = ts.createProgram({ rootNames: config.fileNames, options: config.options });
-const problems = ts.getPreEmitDiagnostics(program);
-if (problems.length) fail(problems);
+const outDir = resolve(GAME, 'js');
 
-// Compile in memory: path -> text.
+// Compile in memory: path -> text. A module two programs both reach (audio
+// importing the sim, say) is emitted by each; the text is the same.
 const outputs = new Map();
-const emitted = program.emit(undefined, (file, text) => outputs.set(resolve(file), text));
-if (emitted.emitSkipped) fail(emitted.diagnostics);
+for (const file of CONFIGS) {
+  const config = loadConfig(file);
+  const program = ts.createProgram({ rootNames: config.fileNames, options: config.options });
+  const problems = ts.getPreEmitDiagnostics(program);
+  if (problems.length) fail(problems);
+  const emitted = program.emit(undefined, (out, text) => outputs.set(resolve(out), text));
+  if (emitted.emitSkipped) fail(emitted.diagnostics);
+}
 
 const stale = [];
 for (const [file, text] of outputs) {

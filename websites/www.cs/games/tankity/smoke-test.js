@@ -10,6 +10,7 @@ import { sweepHit } from './js/sim.js';
 
 const __dirname = import.meta.dirname;
 const src = fs.readFileSync(path.join(__dirname, 'game.js'), 'utf8');
+const audioSrc = fs.readFileSync(path.join(__dirname, 'src', 'audio.ts'), 'utf8');
 const fxSrc = fs.readFileSync(path.join(__dirname, 'fx.js'), 'utf8');
 
 function makeCallable() {
@@ -110,7 +111,8 @@ class FakeNode {
   start() { FAKE_STATS.notes++; }
   stop() {}
 }
-global.window.AudioContext = class {
+// The audio module reaches WebAudio through globalThis, as a browser's window is.
+globalThis.AudioContext = class {
   constructor() { this.sampleRate = 44100; this.destination = {}; }
   get state() { return globalThis.__acState || 'running'; }
   get currentTime() { return AC_TIME.t; }
@@ -304,8 +306,9 @@ check('menu-esc', els['menu-overlay'].hidden === true);
   // Tutorial: the menu carries a replay button (pressed for real at the end).
   check('menu-tutorial', !!els['tutorial-open'] && !!els['tutorial-overlay'] && !!els['tutorial-skip']);
   // Four 32-step songs; the round picks the song.
-  const songNames = (src.match(/name: '[^']+'/g) || []).filter(n => /Rollout|High Ground|Crater Blues|Last Tank/.test(n));
-  check('songs', songNames.length === 4 && /songIdx = G\.demo \? 0 : \(G\.round - 1\) % SONGS\.length/.test(src), songNames.join(','));
+  const songNames = (audioSrc.match(/name: '[^']+'/g) || []).filter(n => /Rollout|High Ground|Crater Blues|Last Tank/.test(n));
+  check('songs', songNames.length === 4 && /songIdx = \(round - 1\) % SONGS\.length/.test(audioSrc)
+    && /if \(G\.demo\) music\.playTheme\(\); else music\.forRound\(G\.round\)/.test(src), songNames.join(','));
 // Every scrollable panel shows its keys, dimmed while everything fits.
 const navCount = (html.match(/class="nav-hint[" ]/g) || []).length;
 check('nav-hints', navCount === 10, `hints=${navCount}`);

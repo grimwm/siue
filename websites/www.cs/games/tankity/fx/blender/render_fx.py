@@ -3,7 +3,7 @@
 Builds six sheets procedurally (no .blend files, no external assets), renders
 every frame with a transparent background, tiles the frames into one PNG sprite
 sheet per effect, and writes sprites.json describing the sheets. The game's
-engine (fx.js) reads them; effects.json picks a sheet per emitter.
+engine (fx.js) reads them; the effects in game.yaml pick a sheet per emitter.
 
 Regenerate (from this folder; Blender 4.2 or newer, tested on 5.2):
 

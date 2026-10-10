@@ -71,11 +71,8 @@ global.window = {
   localStorage: { _m: {}, getItem(k) { return this._m[k] || null; }, setItem(k, v) { this._m[k] = String(v); } },
 };
 global.fetch = async (url) => {
-  if (/effects\.json$/.test(String(url))) {
-    return { ok: true, json: async () => JSON.parse(fs.readFileSync(path.join(__dirname, 'effects.json'), 'utf8')) };
-  }
   if (/game\.json$/.test(String(url))) {
-    // Real keys and audio; the arsenal section is withheld so the shop checks
+    // Real keys, audio and effects; the arsenal section is withheld so the shop checks
     // below keep exercising the baked fallback arsenal (the file's own arsenal
     // is validated separately from disk).
     return { ok: true, json: async () => {
@@ -1200,12 +1197,15 @@ function change(el) {
   {
     const FX = window.TankityFX;
     check('fx-engine-loaded', !!FX && typeof FX.createSystem === 'function');
-    const raw = fs.readFileSync(path.join(__dirname, 'effects.json'), 'utf8');
-    const defs = FX.dress(JSON.parse(raw));
-    const arsenal = JSON.parse(fs.readFileSync(path.join(__dirname, 'game.json'), 'utf8')).arsenal;
+    const built = JSON.parse(fs.readFileSync(path.join(__dirname, 'game.json'), 'utf8'));
+    const defs = FX.dress(built.effects);
+    const arsenal = built.arsenal;
     const keys = arsenal.ammo.map(a => a.key).concat('laststand');
     check('fx-file-valid', FX.validate(defs, keys).length === 0, FX.validate(defs, keys).slice(0, 3).join(' | '));
-    check('fx-file-canonical', FX.stringify(defs) === raw, 'effects.json is not what FX.stringify writes');
+    // game.yaml ends with the effects: block, written exactly as the editor exports it.
+    const yaml = fs.readFileSync(path.join(__dirname, 'game.yaml'), 'utf8');
+    const at = yaml.search(/^effects:$/m);
+    check('fx-yaml-canonical', at >= 0 && yaml.slice(at) === FX.toYaml(defs), 'the effects: block of game.yaml is not what FX.toYaml writes');
     const missing = [];
     for (const k of keys) {
       const w = defs[k];

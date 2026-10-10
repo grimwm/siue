@@ -86,6 +86,9 @@ $tmp = sys_get_temp_dir() . '/game-json-test-' . getmypid();
 file_put_contents("$tmp/audio/sfx/boom.mp3", 'x');
 file_put_contents("$tmp/audio/music/a.mp3", 'x');
 file_put_contents("$tmp/audio/notes.txt", 'x');
+@mkdir("$tmp/fx/sprites", 0777, true);
+file_put_contents("$tmp/fx/sprites/fireball.png", 'x');
+file_put_contents("$tmp/fx/sprites/sprites.json", json_encode(['_note' => 'sheets', 'fireball' => ['file' => 'fireball.png'], 'ghost' => ['file' => 'ghost.png']]));
 @mkdir(dirname($tmp) . '/tankity-outside-' . getmypid());
 file_put_contents(dirname($tmp) . '/tankity-outside-' . getmypid() . '/o.mp3', 'x');
 
@@ -96,6 +99,10 @@ foreach (TANKITY_KEY_ACTIONS as $ctx => $actions) {
         $keysYaml .= "    $a: [Tok$ctx$i]\n";
     }
 }
+// A bare weapon entry (shell's is the rich one below). Several tests change one
+// value in shell's entry, so its numbers appear nowhere else.
+$fxMin = "    muzzle:\n      emitters:\n        - { count: 3 }\n    trail:\n      emitters:\n        - { rate: 20 }\n"
+    . "    impact:\n      emitters:\n        - { count: 5, unit: r, size: [0.5, 0.5] }\n";
 $good = <<<YAML
 arsenal:
   ammo:
@@ -149,6 +156,31 @@ arsenal:
       note: Your wreck detonates.
 keys:
 $keysYaml
+
+effects:
+  shell:
+    body: { halo: 9, alpha: 0.45, pulse: 6 }
+    muzzle:
+      screen: { shake: 0.12, flash: { color: "#FF7B39", alpha: 0.12, dur: 0.2 } }
+      emitters:
+        - { count: 4, life: [0.1, 0.22], speed: [90, 200], aim: forward, spread: 35, colors: ["#FFFFFF", "#ffe27a"], alpha: [1, 0.5, 0], glow: true }
+    trail:
+      emitters:
+        - { shape: streak, rate: 31, life: [0.2, 0.4], length: 7 }
+    impact:
+      emitters:
+        - { shape: sprite, count: 1, sheet: fireball, unit: r, size: [1.1, 1.1], life: [0.5, 0.5], scale: 1.2, tint: "#C77DFF" }
+        - { shape: ring, count: 1, unit: r, size: [0.25, 0.25], sizeEnd: 4, ease: out, width: 3 }
+        - { count: 2, rate: 9, duration: 0.7, delay: 0.1 }
+    special:
+      steer:
+        emitters:
+          - { rate: 12, size: [1, 2] }
+      arc:
+        emitters: []
+  buck:
+$fxMin  laststand:
+$fxMin
 audio:
   sfx:
     boom: {file: audio/sfx/boom.mp3, volume: 0.5}
@@ -184,6 +216,16 @@ $check('volume-defaults-to-1', ($out['audio']['music'][0]['volume'] ?? 0) === 0.
 $check('deterministic', $render($good) === $render($good) && str_ends_with($render($good), "}\n"));
 $check('empty-audio-ok', ($d = json_decode($render(preg_replace('/audio:.*/s', "audio:\n  sfx:\n  music:\n", $good)), true)) !== null
     && $d['audio']['music'] === []);
+$fx = $out['effects'] ?? [];
+$check('effects-kept-as-written', array_keys($fx) === ['shell', 'buck', 'laststand']
+    && $fx['shell']['body'] === ['halo' => 9, 'alpha' => 0.45, 'pulse' => 6]
+    && array_keys($fx['shell']['impact']['emitters'][0]) === ['shape', 'count', 'sheet', 'unit', 'size', 'life', 'scale', 'tint']
+    && $fx['shell']['trail']['emitters'][0] === ['shape' => 'streak', 'rate' => 31, 'life' => [0.2, 0.4], 'length' => 7]
+    && $fx['shell']['impact']['emitters'][1]['sizeEnd'] === 4 && $fx['shell']['special']['arc'] === ['emitters' => []],
+    json_encode($fx['shell'] ?? null));
+$check('effects-colours-lowercased', $fx['shell']['muzzle']['emitters'][0]['colors'] === ['#ffffff', '#ffe27a']
+    && $fx['shell']['muzzle']['screen']['flash']['color'] === '#ff7b39' && $fx['shell']['impact']['emitters'][0]['tint'] === '#c77dff');
+$check('effects-defaults-not-added', !isset($fx['buck']['muzzle']['emitters'][0]['shape'], $fx['buck']['muzzle']['emitters'][0]['life']));
 $check('empty-sfx-is-object', str_contains($render(preg_replace('/audio:.*/s', "audio:\n  sfx:\n  music: []\n", $good)), '"sfx": {}'));
 
 $cases = [
@@ -227,6 +269,44 @@ $cases = [
     'sfx-dotdot' => [$mut('audio/sfx/boom.mp3', '../tankity-outside-' . getmypid() . '/o.mp3'), 'relative path inside the game folder'],
     'sfx-absolute' => [$mut('audio/sfx/boom.mp3', '/etc/boom.mp3'), 'relative path inside the game folder'],
     'sfx-url' => [$mut('audio/sfx/boom.mp3', 'https://x.example/b.mp3'), 'relative path inside the game folder'],
+    'effects-missing-section' => [preg_replace('/\neffects:.*?\naudio:/s', "\naudio:", $good), 'section `effects` is required'],
+    'effects-missing-weapon' => [$mut("  laststand:\n$fxMin", ''), 'effects: needs an entry for `laststand`'],
+    'effects-unknown-weapon' => [$mut("  laststand:\n", "  zap:\n$fxMin  laststand:\n"), 'effects.zap: unknown key'],
+    'effects-missing-slot' => [$mut("    trail:\n      emitters:\n        - { shape: streak, rate: 31, life: [0.2, 0.4], length: 7 }\n", ''), 'effects.shell: needs a `trail` effect'],
+    'effects-unknown-slot' => [$mut("    special:\n", "    flame:\n      emitters: []\n    special:\n"), 'effects.shell.flame: unknown key'],
+    'effects-unknown-special' => [$mut("      arc:\n", "      boom:\n        emitters: []\n      arc:\n"), 'effects.shell.special.boom: unknown special'],
+    'effects-unknown-effect-key' => [$mut("      screen: { shake: 0.12,", "      colour: red\n      screen: { shake: 0.12,"), 'effects.shell.muzzle.colour: unknown key'],
+    'effects-slot-needs-emitter' => [$mut("      emitters:\n        - { count: 4, life: [0.1, 0.22], speed: [90, 200], aim: forward, spread: 35, colors: [\"#FFFFFF\", \"#ffe27a\"], alpha: [1, 0.5, 0], glow: true }\n", "      emitters: []\n"), 'effects.shell.muzzle.emitters: needs at least one emitter'],
+    'effects-emitters-not-list' => [$mut("      emitters:\n        - { count: 4, life: [0.1, 0.22], speed: [90, 200], aim: forward, spread: 35, colors: [\"#FFFFFF\", \"#ffe27a\"], alpha: [1, 0.5, 0], glow: true }\n", "      emitters: 3\n"), 'effects.shell.muzzle.emitters: must be a list'],
+    'effects-unknown-emitter-field' => [$mut('glow: true }', 'glow: true, colour: red }'), 'effects.shell.muzzle.emitters[0].colour: unknown key'],
+    'effects-bad-shape' => [$mut('shape: ring', 'shape: cube'), 'effects.shell.impact.emitters[1].shape: must be one of'],
+    'effects-bad-aim' => [$mut('aim: forward', 'aim: sideways'), 'emitters[0].aim: must be one of'],
+    'effects-count-range' => [$mut('count: 4,', 'count: 4000,'), 'emitters[0].count: must be a whole number from 0 to 200'],
+    'effects-count-float' => [$mut('count: 4,', 'count: 4.5,'), 'emitters[0].count: must be a whole number'],
+    'effects-spread-range' => [$mut('spread: 35', 'spread: 500'), 'emitters[0].spread: must be a number from 0 to 360'],
+    'effects-life-not-pair' => [$mut('life: [0.1, 0.22]', 'life: 0.1'), 'emitters[0].life: must be a [min, max] pair of numbers'],
+    'effects-life-reversed' => [$mut('life: [0.1, 0.22]', 'life: [0.5, 0.2]'), 'emitters[0].life: must be [min, max]'],
+    'effects-life-zero' => [$mut('life: [0.1, 0.22]', 'life: [0, 0.2]'), 'emitters[0].life: must be [min, max] with min above 0'],
+    'effects-size-in-px-with-unit-r' => [$mut('size: [1.1, 1.1]', 'size: [30, 30]'), 'emitters[0].size: must be [min, max]'],
+    'effects-speed-range' => [$mut('speed: [90, 200]', 'speed: [90, 20000]'), 'emitters[0].speed: must be [min, max]'],
+    'effects-length-with-unit-r' => [$mut('{ count: 5, unit: r, size: [0.5, 0.5] }', '{ count: 5, unit: r, size: [0.5, 0.5], length: 80 }'), 'length: must be a number from 0 to 10'],
+    'effects-trail-needs-rate' => [$mut('rate: 31', 'count: 31'), 'effects.shell.trail.emitters[0].rate: is required above 0'],
+    'effects-steer-needs-rate' => [$mut('{ rate: 12, size: [1, 2] }', '{ count: 12, size: [1, 2] }'), 'effects.shell.special.steer.emitters[0].rate: is required above 0'],
+    'effects-emits-nothing' => [$mut('{ count: 2, rate: 9, duration: 0.7, delay: 0.1 }', '{ rate: 9, delay: 0.1 }'), 'effects.shell.impact.emitters[2]: emits nothing'],
+    'effects-sprite-needs-sheet' => [$mut('sheet: fireball, ', ''), 'effects.shell.impact.emitters[0].sheet: is required for a sprite emitter'],
+    'effects-sheet-file-missing' => [$mut('sheet: fireball', 'sheet: ghost'), 'emitters[0].sheet: must be one of: fireball'],
+    'effects-sheet-unknown' => [$mut('sheet: fireball', 'sheet: nope'), 'emitters[0].sheet: must be one of: fireball'],
+    'effects-sprite-field-on-dot' => [$mut('glow: true }', 'glow: true, scale: 2 }'), 'emitters[0].scale: only a sprite emitter'],
+    'effects-bad-colour' => [$mut('"#FFFFFF"', 'white'), 'emitters[0].colors[0]: is not valid'],
+    'effects-no-colours' => [$mut('colors: ["#FFFFFF", "#ffe27a"]', 'colors: []'), 'emitters[0].colors: must list 1 to 10'],
+    'effects-bad-tint' => [$mut('"#C77DFF"', 'purple'), 'emitters[0].tint: must be a quoted'],
+    'effects-alpha-range' => [$mut('alpha: [1, 0.5, 0]', 'alpha: [1, 5, 0]'), 'emitters[0].alpha[1]: is not valid'],
+    'effects-flash-needs-colour' => [$mut('flash: { color: "#FF7B39", alpha', 'flash: { alpha'), 'screen.flash.color: is required'],
+    'effects-flash-alpha-range' => [$mut('alpha: 0.12, dur', 'alpha: 3, dur'), 'screen.flash.alpha: must be a number from 0 to 1'],
+    'effects-shake-range' => [$mut('shake: 0.12', 'shake: 4'), 'screen.shake: must be a number from 0 to 1'],
+    'effects-bad-bool' => [$mut('glow: true }', 'glow: maybe }'), 'emitters[0].glow: must be true or false'],
+    'effects-body-unknown' => [$mut('pulse: 6 }', 'pulse: 6, glowy: 1 }'), 'effects.shell.body.glowy: unknown key'],
+    'effects-body-range' => [$mut('halo: 9', 'halo: 900'), 'effects.shell.body.halo: must be a number from 0 to 100'],
     'music-needs-title' => [$mut("      title: Theme\n", ''), 'audio.music[0].title: is required'],
     'music-needs-file' => [$mut("    - file: audio/music/a.mp3\n      title: Theme\n", "    - title: Theme\n"), 'audio.music[0].file'],
     'music-extra-field' => [$mut("      credit: Someone, CC0\n", "      credit: Someone, CC0\n      loop: true\n"), 'audio.music[0].loop: unknown key'],
@@ -240,6 +320,11 @@ $badDmg = $mut('dmg: 34', 'dmg: 9000');
 $n = array_search('      dmg: 9000', explode("\n", $badDmg), true) + 1;
 $e = (string) $errOf(fn() => $render($badDmg));
 $check('schema-error-has-line', str_starts_with($e, "line $n: arsenal.ammo[0].dmg"), $e);
+// An effects error names the emitter's line and its field.
+$badFx = $mut('count: 4,', 'count: 4000,');
+$n = array_search('        - { count: 4000, life: [0.1, 0.22], speed: [90, 200], aim: forward, spread: 35, colors: ["#FFFFFF", "#ffe27a"], alpha: [1, 0.5, 0], glow: true }', explode("\n", $badFx), true) + 1;
+$e = (string) $errOf(fn() => $render($badFx));
+$check('effects-error-has-line', str_starts_with($e, "line $n: effects.shell.muzzle.emitters[0].count"), $e);
 // Several mistakes are all reported at once.
 $e = (string) $errOf(fn() => $render($mut('effect: shot', 'effect: nope') . "\nextra: 1\n"));
 $check('schema-reports-all', substr_count($e, "\n") >= 1, $e);
@@ -260,6 +345,9 @@ $check('shipped-json-in-sync', $shipped !== null && $shipped === (string) @file_
 $sd = json_decode((string) $shipped, true);
 $check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 12 && count($sd['arsenal']['gear'] ?? []) === 8
     && count($sd['audio']['sfx'] ?? []) >= 1 && count($sd['audio']['music'] ?? []) >= 1);
+$ammoKeys = array_column($sd['arsenal']['ammo'] ?? [], 'key');
+$check('shipped-effects-cover-every-weapon', array_keys($sd['effects'] ?? []) === array_merge($ammoKeys, ['laststand']),
+    implode(',', array_keys($sd['effects'] ?? [])));
 
 // ---- --check workflow on a scratch copy of the tool and the game folder ----
 $work = "$tmp/work";

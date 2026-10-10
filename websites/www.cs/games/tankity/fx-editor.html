@@ -9,14 +9,14 @@
 </head>
 <body>
 <!-- Dev tool: never deployed (deploy.sh skips games/*/fx-editor.*). It edits
-     effects.json with the game's own engine (fx.js); see README.md. -->
+     game.yaml's effects section with the game's own engine (fx.js); see README.md. -->
 <header class="bar">
   <h1>Tankity effects editor</h1>
-  <span class="note">Dev only. Edits <code>effects.json</code> with the game's engine; export, then replace the file.</span>
+  <span class="note">Dev only. Edits the <code>effects:</code> section of <code>game.yaml</code> with the game's engine; export it, paste it over that block, then run <code>php tools/game-json.php</code>.</span>
   <span class="grow"></span>
-  <button id="copy" type="button" title="Copy effects.json to the clipboard">Copy JSON</button>
-  <button id="download" type="button" title="Save effects.json">Download effects.json</button>
-  <button id="reload" type="button" title="Drop unsaved edits and read effects.json again">Reload file</button>
+  <button id="copy" type="button" title="Copy the effects: block of game.yaml to the clipboard">Copy YAML</button>
+  <button id="download" type="button" title="Save the effects: block as effects.yaml">Download effects.yaml</button>
+  <button id="reload" type="button" title="Drop unsaved edits and read the effects from game.json again">Reload file</button>
 </header>
 <main class="layout">
   <section class="panel" id="left" aria-label="Weapon and emitters">

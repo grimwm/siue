@@ -2,8 +2,15 @@
 // firing range, reduced motion, and the dev-only effects editor (local only).
 // Screenshots land in test-results/ (tankity-fx-*.png).
 import { promises as fs } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
 import { newPlayer, hud, rec, resetRec, aimTo, setPower, recorderScript } from './helpers.mjs';
+
+/* The effects: block at the end of game.yaml, as committed. */
+async function committedEffects() {
+  const text = await fs.readFile(fileURLToPath(new URL('../../games/tankity/game.yaml', import.meta.url)), 'utf8');
+  return text.slice(text.search(/^effects:$/m));
+}
 
 const local = base => /^https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(base || '');
 
@@ -192,14 +199,32 @@ test.describe('effects editor', () => {
   };
   const resetStats = page => page.evaluate(() => { const s = window.fxEditor.sys.stats; s.spawned = 0; s.recycled = 0; s.peak = 0; });
 
-  test('the committed effects.json is exactly what the editor exports', async ({ browser }) => {
+  test('the effects: block committed in game.yaml is exactly what the editor exports', async ({ browser }) => {
     const { page, errors } = await openEditor(browser);
-    const same = await page.evaluate(async () => {
-      const text = await fetch('effects.json').then(r => r.text());
+    const exported = await page.evaluate(async () => {
       const FX = window.TankityFX;
-      return FX.stringify(FX.dress(JSON.parse(text))) === text;
+      const data = await fetch('game.json').then(r => r.json());
+      return FX.toYaml(FX.dress(data.effects));
     });
-    expect(same, 'effects.json round-trips through the editor byte for byte').toBe(true);
+    expect(exported, 'game.json round-trips through the editor to the YAML block byte for byte').toBe(await committedEffects());
+    expect(errors).toEqual([]);
+  });
+
+  test('unsaved edits survive a reload until Reload file drops them', async ({ browser }) => {
+    const { page, errors } = await openEditor(browser);
+    await page.selectOption('#weapon', 'mortar');
+    await page.click('#slots button[data-slot="impact"]');
+    await page.click('#emitters li[data-i="4"] .label');
+    await page.locator('[data-field="count"] input[type="number"]').fill('3');
+    await page.reload();
+    await expect(page.locator('#weapon option')).toHaveCount(13);
+    await expect(page.locator('#status')).toContainText('Restored your unsaved edits');
+    expect(await page.evaluate(() => window.fxEditor.defs.mortar.impact.emitters[4].count)).toBe(3);
+    await page.click('#reload');
+    await expect(page.locator('#status')).toContainText('Loaded the effects from game.json');
+    expect(await page.evaluate(() => window.fxEditor.defs.mortar.impact.emitters[4].count)).toBe(26);
+    await page.reload();
+    await expect(page.locator('#status')).toContainText('Loaded the effects from game.json');
     expect(errors).toEqual([]);
   });
 
@@ -226,10 +251,14 @@ test.describe('effects editor', () => {
     // The export carries the edit; untouched weapons are byte for byte as loaded.
     await page.click('#copy');
     await expect(page.locator('#status')).toContainText('Copied');
-    const copied = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
-    expect(copied.mortar.impact.emitters[4].count).toBeUndefined();
-    expect(copied.shell.impact.emitters.length).toBe(6);
-    expect(copied._schema).toBeTruthy();
+    const copied = (await page.evaluate(() => navigator.clipboard.readText())).split('\n');
+    const committed = (await committedEffects()).split('\n');
+    expect(copied[0]).toBe('effects:');
+    expect(copied.length).toBe(committed.length);
+    const changed = committed.map((line, i) => [line, copied[i]]).filter(([a, b]) => a !== b);
+    expect(changed.length, 'only the edited emitter line differs').toBe(1);
+    expect(changed[0][0]).toContain('count: 26');
+    expect(changed[0][1]).not.toContain('count:');
     // Add, duplicate, remove, mute.
     await page.selectOption('#new-shape', 'ring');
     await page.click('#em-add');
@@ -241,9 +270,9 @@ test.describe('effects editor', () => {
     await expect(page.locator('#emitters li')).toHaveCount(8);
     await page.locator('#emitters li[data-i="0"] button[aria-label^="Mute "]').click();
     await expect(page.locator('#emitters li[data-i="0"]')).toHaveClass(/muted/);
-    // Download hands back the same text the clipboard did.
+    // Download saves the same block as a file.
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#download')]);
-    expect(dl.suggestedFilename()).toBe('effects.json');
+    expect(dl.suggestedFilename()).toBe('effects.yaml');
     expect(errors).toEqual([]);
   });
 

@@ -28,7 +28,7 @@
 <meta name="twitter:title" content="Operation Tankity">
 <meta name="twitter:description" content="Mind the wind and out-shoot a drone battery across endless hills. Spend your $600 stake on a 20-item arsenal, or open a room and take turns with a friend.">
 <!-- share-tags:end -->
-<link rel="stylesheet" href="game.css?v=20261010f">
+<link rel="stylesheet" href="game.css?v=20261010g">
 </head>
 <body>
 <header class="topbar">
@@ -190,6 +190,7 @@
           <button type="button" id="random-run" title="Ignore the seed box and start on a fresh random seed">Random seed <span class="key" data-keyhint="global:random">(T)</span></button>
           <button type="button" id="rooms-open" title="Host or join a multiplayer game room">Rooms <span class="key" data-keyhint="global:rooms">(O)</span></button>
           <button type="button" id="tutorial-open" title="Replay the opening-moves tutorial">Tutorial <span class="key" data-keyhint="global:tutorial">(U)</span></button>
+          <button type="button" id="menu-leave" class="btn-leave" title="Leave this game room and go back to the solo hills" hidden>Leave room</button>
         </form>
       </section>
       <section id="gun-overlay" class="frame-overlay card-overlay gun-card" aria-labelledby="gun-h" hidden>
@@ -229,6 +230,7 @@
         <p id="shop-cash" class="runstats"></p>
         <ul id="shop-list" class="scores"></ul>
         <button type="button" id="shop-next" class="btn-primary">Next round <span class="key">(N)</span></button>
+        <button type="button" id="shop-leave" class="btn-leave" title="Leave this game room and go back to the solo hills" hidden>Leave room</button>
       </div>
     </div>
     <div id="lobby-veil" class="veil" hidden>
@@ -276,11 +278,27 @@
             </button>
           </p>
           <p class="hint" id="lobby-hills">Hills: Random hills</p>
-          <ol id="lobby-seats" class="roster"></ol>
+          <div class="unit-row" role="group" aria-labelledby="seats-label">
+            <span class="unit-label" id="seats-label">Seats</span>
+            <div class="unit-picker seat-grid" id="lobby-seats"></div>
+          </div>
+          <p class="hint" id="seats-hint"></p>
           <div class="acts">
             <button type="button" id="lobby-start" class="btn-primary">Start match</button>
             <button type="button" id="lobby-leave">Leave room</button>
           </div>
+        </div>
+      </div>
+    </div>
+    <div id="leave-veil" class="veil" hidden>
+      <div class="card" role="alertdialog" aria-modal="true" aria-labelledby="leave-title" aria-describedby="leave-text">
+        <header class="ov-head">
+          <div class="ov-title"><p class="kicker">Heads up</p><h2 id="leave-title">Leave this room?</h2></div>
+        </header>
+        <p id="leave-text">The drone battery takes your seat and the match goes on without you. You head back to the solo hills.</p>
+        <div class="acts">
+          <button type="button" id="leave-stay" class="btn-primary">Stay in the match <span class="key esc-cap" data-keyhint="global:escape">ESC</span></button>
+          <button type="button" id="leave-go" class="btn-leave">Leave room</button>
         </div>
       </div>
     </div>
@@ -300,6 +318,6 @@
   </section>
 </main>
 
-<script src="game.js?v=20261010f" defer></script>
+<script src="game.js?v=20261010g" defer></script>
 </body>
 </html>

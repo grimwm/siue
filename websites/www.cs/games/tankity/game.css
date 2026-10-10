@@ -476,9 +476,20 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 #join-code { max-width: 5rem; text-transform: uppercase; }
 .room-code { font-size: 2rem; font-weight: 800; letter-spacing: 0.4em; margin: 0.4rem 0 0;
   color: var(--accent); }
-.roster { margin: 0.5rem 0; padding-left: 1.4rem; display: grid; gap: 0.2rem; }
-.roster li { font-variant-numeric: tabular-nums; }
-.roster .host-tag { color: var(--accent); font-size: 0.8rem; margin-left: 0.4rem; }
+/* Lobby seats: the unit-picker tile look, initials large, one line under. */
+.seat-grid { margin: 0.5rem 0; }
+.seat-tile { display: grid; justify-items: center; align-content: center; gap: 0.15rem; min-height: 3.6rem; }
+.seat-tile .seat-name { font-size: 1.15rem; font-weight: 800; letter-spacing: 0.08em; line-height: 1.1; }
+.seat-tile .seat-cap { font-size: 0.68rem; color: var(--dim); }
+.seat-tile[data-mode="human"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
+.seat-tile.seat-open { color: var(--dim); border-style: dashed; }
+.seat-tile.seat-fixed { cursor: default; }
+.seat-tile.seat-fixed:hover { border-color: var(--line); }
+.seat-tile[data-mode="human"].seat-fixed:hover { border-color: var(--accent); }
+/* Leaving is the one red way out: never gold, so it is never the easy tap. */
+button.btn-leave { border-color: var(--bad); color: var(--bad); }
+button.btn-leave:hover { background: rgba(255, 80, 80, 0.12); border-color: var(--bad); }
+button.btn-leave[hidden] { display: none; }
 .card .acts { display: flex; gap: 0.4rem; margin-left: auto; justify-content: flex-end; margin-top: 0.6rem; }
 
 .log {

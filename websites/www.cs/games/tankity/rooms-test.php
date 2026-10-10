@@ -211,6 +211,107 @@ $check('leave-last-closes-room', ($hLeft['ok'] ?? false) === true && $usedAfter 
 $gone = $get($base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
 $check('leave-room-gone', ($gone['error'] ?? '') === 'no such room', $gone['error'] ?? '');
 
+// Seat modes. The host flips seats nobody holds between AI and Open; nobody
+// else may; open seats field no tank; a guest takes the first free chair.
+$seatsOf = fn($r) => $r['room']['seats'] ?? [];
+$modeOf = fn($r, int $i) => $seatsOf($r)[$i]['mode'] ?? '?';
+$m2 = $post('create', ['initials' => 'sma']);
+$c2 = (string) ($m2['code'] ?? '');
+$h2 = ['code' => $c2, 'token' => (string) ($m2['token'] ?? ''), 'csrf' => (string) ($m2['csrf'] ?? '')];
+$snap = $get($base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $h2['token'] . '&since=0');
+$check('lobby-four-seats', count($seatsOf($snap)) === 4 && $modeOf($snap, 0) === 'human' && $modeOf($snap, 1) === 'ai'
+    && $modeOf($snap, 3) === 'ai', json_encode($seatsOf($snap)));
+$g2 = $post('join', ['code' => $c2, 'initials' => 'smb']);
+$g2a = ['code' => $c2, 'token' => (string) ($g2['token'] ?? ''), 'csrf' => (string) ($g2['csrf'] ?? '')];
+$check('join-takes-first-free-seat', ($g2['seat'] ?? -1) === 1);
+usleep(300000);
+$denied = $post('seatmode', $g2a + ['seat' => 2, 'mode' => 'open']);
+$check('seatmode-host-only', isset($denied['error']) && strpos($denied['error'] ?? '', 'host') !== false, $denied['error'] ?? '');
+$noCsrf = $post('seatmode', ['code' => $c2, 'token' => $h2['token'], 'seat' => 2, 'mode' => 'open']);
+$check('seatmode-needs-csrf', isset($noCsrf['error']), $noCsrf['error'] ?? '');
+usleep(300000);
+$fast1 = $post('seatmode', $h2 + ['seat' => 2, 'mode' => 'open']);
+$fast2 = $post('seatmode', $h2 + ['seat' => 3, 'mode' => 'open']);
+$check('seatmode-throttled', ($fast1['ok'] ?? false) === true && isset($fast2['error']) && strpos($fast2['error'] ?? '', 'fast') !== false,
+    $fast2['error'] ?? '');
+usleep(300000);
+$fast2 = $post('seatmode', $h2 + ['seat' => 3, 'mode' => 'open']);
+$check('seatmode-host-opens', ($fast2['ok'] ?? false) === true && $modeOf($fast2, 2) === 'open' && $modeOf($fast2, 3) === 'open',
+    json_encode($seatsOf($fast2)));
+usleep(300000);
+$onHuman = $post('seatmode', $h2 + ['seat' => 1, 'mode' => 'open']);
+$check('seatmode-not-on-humans', isset($onHuman['error']), $onHuman['error'] ?? '');
+usleep(300000);
+$badMode = $post('seatmode', $h2 + ['seat' => 2, 'mode' => 'banana']);
+$check('seatmode-validates', isset($badMode['error']), $badMode['error'] ?? '');
+$seen = $get($base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $g2a['token'] . '&since=0');
+$check('guest-sees-open', $modeOf($seen, 2) === 'open' && $modeOf($seen, 1) === 'human');
+// The guest steps out of the lobby: the chair goes back to a drone seat.
+usleep(300000);
+$post('leave', $g2a);
+$seen = $get($base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $h2['token'] . '&since=0');
+$check('lobby-leave-chair-resets', $modeOf($seen, 1) === 'ai' && ($seatsOf($seen)[1]['name'] ?? '') !== 'SMB', json_encode($seatsOf($seen)[1] ?? null));
+// All three other seats open: one tank is no match.
+usleep(300000);
+$post('seatmode', $h2 + ['seat' => 1, 'mode' => 'open']);
+usleep(300000);
+$lone = $post('start', $h2);
+$check('start-refuses-lone-tank', isset($lone['error']) && strpos($lone['error'] ?? '', 'AI') !== false, $lone['error'] ?? '');
+$still = $get($base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $h2['token'] . '&since=0');
+$check('refused-start-stays-lobby', ($still['room']['phase'] ?? '') === 'lobby');
+// A guest joins the open chair; humans alone have nobody to fight.
+usleep(300000);
+$g3 = $post('join', ['code' => $c2, 'initials' => 'smc']);
+$g3a = ['code' => $c2, 'token' => (string) ($g3['token'] ?? ''), 'csrf' => (string) ($g3['csrf'] ?? '')];
+$check('join-into-open-seat', ($g3['seat'] ?? -1) === 1);
+usleep(300000);
+$noFoe = $post('start', $h2);
+$check('start-refuses-no-drone', isset($noFoe['error']) && strpos($noFoe['error'] ?? '', 'AI') !== false, $noFoe['error'] ?? '');
+// One drone seat back on: host + guest + drone, the fourth seat stays open.
+usleep(300000);
+$post('seatmode', $h2 + ['seat' => 3, 'mode' => 'ai']);
+usleep(300000);
+$go = $post('start', $h2);
+$seatsFielded = array_map(fn($t) => $t['seat'], $go['room']['tanks'] ?? []);
+sort($seatsFielded);
+$check('start-skips-open-seat', ($go['ok'] ?? false) === true && $seatsFielded === [0, 1, 3], json_encode($seatsFielded));
+usleep(300000);
+$late = $post('join', ['code' => $c2, 'initials' => 'smd']);
+$check('no-join-after-start', isset($late['error']));
+usleep(300000);
+$late = $post('seatmode', $h2 + ['seat' => 2, 'mode' => 'ai']);
+$check('no-seatmode-after-start', isset($late['error']));
+
+// The host walks out mid-match: the match goes on for the guest (the host's
+// tank turns drone), the room stays on the shelf, and only the last human
+// out takes it down.
+usleep(300000);
+$used0 = ($get($base . '/rooms.php?action=ping')['rooms']['used'] ?? -1);
+$hostGone = $post('leave', $h2);
+$used1 = ($get($base . '/rooms.php?action=ping')['rooms']['used'] ?? -1);
+$check('host-leave-keeps-room', ($hostGone['ok'] ?? false) === true && $used1 === $used0, "used $used0 -> $used1");
+$after = $get($base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $g3a['token'] . '&since=0');
+$hostTank = null;
+foreach (($after['room']['tanks'] ?? []) as $t) {
+    if (($t['seat'] ?? -1) === 0) $hostTank = $t;
+}
+$check('host-seat-now-drone', ($after['ok'] ?? false) === true && ($after['room']['phase'] ?? '') === 'play'
+    && $modeOf($after, 0) === 'ai' && $hostTank !== null && $hostTank['kind'] === 'ai', json_encode($hostTank));
+$check('guest-turn-after-host-left', ($after['room']['turn'] ?? -1) === 1, 'turn=' . ($after['room']['turn'] ?? '?'));
+$ghost = $post('act', $h2 + ['kind' => 'fire']);
+$check('left-host-token-dead', isset($ghost['error']));
+usleep(300000);
+$play = $post('act', $g3a + ['kind' => 'fire']);
+$check('guest-keeps-playing', ($play['ok'] ?? false) === true && ($play['room']['turn'] ?? -1) === 1,
+    'turn=' . ($play['room']['turn'] ?? '?'));
+usleep(300000);
+// A leave straight behind an aim tap is never throttled away.
+$aimed = $post('act', $g3a + ['kind' => 'aim', 'angle' => 70, 'power' => 50]);
+$last = $post('leave', $g3a);
+$check('leave-not-throttled', (($aimed['ok'] ?? false) === true) && (($last['ok'] ?? false) === true), json_encode([$aimed['error'] ?? 'ok', $last['error'] ?? 'ok']));
+$used2 = ($get($base . '/rooms.php?action=ping')['rooms']['used'] ?? -1);
+$check('last-human-closes-room', ($last['ok'] ?? false) === true && $used2 === $used0 - 1, "used $used0 -> $used2");
+
 // Leave the shelf as found.
 $id = shm_attach($shmKey, 2097152);
 $reg = shm_get_var($id, 1);

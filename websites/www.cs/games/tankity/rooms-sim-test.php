@@ -143,5 +143,72 @@ foreach (ROOM_MAPS as $id => $m) {
 }
 $check('map-profiles-differ', count(array_unique(array_map(fn($id) => json_encode(room_map_profile($id)), array_keys(ROOM_MAPS)))) === count(ROOM_MAPS));
 
+// Seat modes: open seats field no unit, the rest do, and spacing and the
+// drones' turns hold up with fewer tanks.
+$seatRoom = function (array $modes) {
+    $room = room_new('TEST', 'hos');
+    $room['seats'][0] = ['human' => true, 'initials' => 'HOS', 'token' => 't', 'lives' => 3, 'lastAct' => microtime(true)];
+    foreach ($modes as $i => $m) {
+        $room['seats'][$i + 1] = room_idle_seat($i + 1, $m);
+    }
+    room_seat_economy($room, 0);
+    return $room;
+};
+$room = $seatRoom(['ai', 'open', 'open']);
+room_start_round($room);
+$check('open-seats-no-tanks', count($room['tanks']) === 2 && room_fielded($room) === 2
+    && array_column($room['tanks'], 'seat') === [0, 1], json_encode(array_column($room['tanks'], 'seat')));
+$room = $seatRoom(['ai', 'ai', 'ai']);
+room_start_round($room);
+$check('all-seats-four-tanks', count($room['tanks']) === 4);
+$gapOk = true;
+for ($i = 0; $i < 60; $i++) {
+    $room = $seatRoom(['ai', 'open', 'ai']);
+    $room['rng'] = $i * 104729 + 17;
+    room_start_round($room);
+    $xs = array_column($room['tanks'], 'x');
+    sort($xs);
+    for ($j = 1; $j < count($xs); $j++) {
+        $gapOk = $gapOk && $xs[$j] - $xs[$j - 1] >= ROOM_SPAWN_GAP;
+    }
+    $gapOk = $gapOk && count($xs) === 3;
+}
+$check('spawn-gap-fewer-tanks', $gapOk);
+$room = $seatRoom(['ai', 'open', 'open']);
+room_start_round($room);
+$events = [];
+room_advance($room, $events);
+$check('ai-turns-with-two-tanks', $room['phase'] === 'play' && $room['tanks'][$room['turn']]['kind'] === 'human',
+    'turn=' . $room['turn']);
+$room['seats'][0]['lastAct'] = 0; // the idle human fires, then the lone drone answers
+$events = [];
+room_advance($room, $events);
+$aiShots = count(array_filter($events, fn($e) => $e['t'] === 'aifire'));
+$check('lone-drone-fires', $aiShots >= 1 && $aiShots <= 2, 'aifire=' . $aiShots);
+
+// A guest leaving the lobby frees the chair back to a drone seat; a host
+// leaving a begun match hands the tank to the battery and the room lives on.
+$room = $seatRoom(['ai', 'open', 'ai']);
+$room['seats'][1] = ['human' => true, 'initials' => 'GST', 'token' => 'g', 'lives' => 3];
+room_seat_economy($room, 1);
+$check('lobby-leave-keeps-room', room_leave($room, 1) === true && ($room['seats'][1]['human'] ?? true) === false
+    && ($room['seats'][1]['mode'] ?? '') === 'ai');
+$room['seats'][1] = ['human' => true, 'initials' => 'GST', 'token' => 'g', 'lives' => 3];
+$check('lobby-host-leave-closes', room_leave($room, 0) === false);
+$room = $seatRoom(['ai', 'open', 'ai']);
+$room['seats'][1] = ['human' => true, 'initials' => 'GST', 'token' => 'g', 'lives' => 3];
+room_seat_economy($room, 1);
+room_start_round($room);
+$room['phase'] = 'play';
+$left = room_leave($room, 0);
+$hostTank = null;
+foreach ($room['tanks'] as $t) {
+    if ($t['seat'] === 0) {
+        $hostTank = $t;
+    }
+}
+$check('host-leave-mid-match-continues', $left === true && ($room['seats'][0]['human'] ?? true) === false
+    && $hostTank !== null && $hostTank['kind'] === 'ai' && $room['seats'][1]['human'] === true);
+
 echo $fail === 0 ? "SIM-OK\n" : "SIM-FAIL $fail\n";
 exit($fail === 0 ? 0 : 1);

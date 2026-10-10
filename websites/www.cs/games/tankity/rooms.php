@@ -13,7 +13,7 @@
 //   - Every act needs the seat's unguessable token PLUS the room CSRF token,
 //     and Origin is checked when present. Aim/power/drive/fuel/ammo/cash are
 //     range-checked against authoritative state; turn order is enforced.
-//   - AI backfills empty seats and runs the same sim inline, so no cron is needed.
+//   - AI seats (the default for seats nobody holds) run the same sim inline, so no cron is needed.
 //
 // Storage: rooms live in SysV shared memory, never on disk. A host restart
 // wipes the shelf, which is the point: rooms are play sessions, not records.
@@ -31,7 +31,8 @@ require_once __DIR__ . '/config.php';
 const ROOM_GAME = 'operation-tankity';
 const ROOM_CODE_LEN = 4;
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
-const ROOM_SEATS = 4; // seat 0 is always a human; the rest fill with AI
+const ROOM_SEATS = 4; // seat 0 is always the host; every other seat starts as AI
+const ROOM_AI_NAMES = ['REAPER', 'WRAITH', 'SPOTTER'];
 const ROOM_MAX_ROOMS = 10; // built-in default; .config.yaml and env can raise it
 function room_max_rooms(): int
 {
@@ -807,7 +808,10 @@ function room_new(string $code, string $initials): array
         'wind' => 0,
         'terrain' => [],
         'tanks' => [],
-        'seats' => [], // seatIdx => ['initials'=>..|'AI:name', 'token'=>.., 'lives'=>.., 'human'=>bool]
+        // seatIdx => human: ['initials','token','lives','human'=>true]; drone or
+        // open: ['name','lives','human'=>false,'mode'=>'ai'|'open']. All
+        // ROOM_SEATS exist from the start; a joiner takes the first free one.
+        'seats' => [],
         'turn' => 0,
         'scores' => [],
         'cash' => [],
@@ -815,6 +819,36 @@ function room_new(string $code, string $initials): array
         'events' => [],
         'winners' => [],
     ];
+}
+/* A seat nobody sits in: the drone battery by default, or open (no unit). */
+function room_idle_seat(int $slot, string $mode = 'ai'): array
+{
+    $name = ROOM_AI_NAMES[($slot - 1) % count(ROOM_AI_NAMES)];
+    return ['human' => false, 'name' => $name, 'initials' => $name, 'lives' => 0, 'mode' => $mode === 'open' ? 'open' : 'ai'];
+}
+function room_seat_human(string $initials, string $token, array $body): array
+{
+    return ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];
+}
+/* Every economy slot a new human seat needs, keyed by seat. */
+function room_seat_economy(array &$room, int $seat): void
+{
+    $room['scores'][$seat] = 0;
+    $room['cash'][$seat] = 600;
+    $room['ammo'][$seat] = ['shell' => -1, 'buck' => 1, 'mortar' => 0, 'rail' => 0, 'nuke' => 0];
+    $room['weapon'][$seat] = 'shell';
+    $room['nextUp'][$seat] = 3000;
+}
+/* Seats that will field a unit: every human and every drone seat. */
+function room_fielded(array $room): int
+{
+    $n = 0;
+    foreach ($room['seats'] as $s) {
+        if (($s['human'] ?? false) || ($s['mode'] ?? 'ai') !== 'open') {
+            $n++;
+        }
+    }
+    return $n;
 }
 /* Units keep at least ROOM_UNIT_GAP apart, centre to centre, so hulls never
    overlap; fresh rounds spread them ROOM_SPAWN_GAP apart. */
@@ -882,12 +916,15 @@ function room_start_round(array &$room): void
         $room['terrain'] = room_gen_terrain($room['rng'], $w);
     }
     $room['wind'] = (int) round(room_rng_range($room['rng'], -8, 8));
-    $slots = room_spawn_spots($room['rng'], count($room['seats']), $w);
+    $slots = room_spawn_spots($room['rng'], max(1, room_fielded($room)), $w);
     $room['tanks'] = [];
     $seat = 0;
     foreach ($room['seats'] as $idx => $s) {
         if ($s['human'] && ($s['lives'] ?? 0) <= 0) {
             continue; // eliminated humans stay out
+        }
+        if (!$s['human'] && ($s['mode'] ?? 'ai') === 'open') {
+            continue; // nobody plays an open seat
         }
         $armor = $s['human'] ? 100 + 25 * ($room['plate'][$idx] ?? 0) : 60 + 6 * ($room['round'] - 1);
         $room['tanks'][] = [
@@ -1232,6 +1269,7 @@ function room_snapshot(array $room, ?int $seat, int $since): array
         $seats[] = [
             'seat' => $idx, 'human' => $s['human'],
             'name' => $s['human'] ? $s['initials'] : $s['name'],
+            'mode' => $s['human'] ? 'human' : ($s['mode'] ?? 'ai'),
             'lives' => $s['lives'] ?? 0,
             'score' => $room['scores'][$idx] ?? 0,
         ];
@@ -1365,8 +1403,10 @@ if ($action === 'map' && $method === 'POST') {
 }
 
 /* A human walks away. The last human out closes the room, freeing its slot
-   at once; otherwise the battery takes over the seat (in the lobby a host
-   leaving closes the room, since nobody else can start it). */
+   at once; otherwise the battery takes over the seat, host included: a match
+   that has begun carries on for everyone else (nothing after the lobby is
+   host-only). Only in the lobby does the host leaving close the room, since
+   nobody else can start it. */
 function room_leave(array &$room, int $seat): bool
 {
     $humans = 0;
@@ -1378,8 +1418,13 @@ function room_leave(array &$room, int $seat): bool
     if ($humans === 0 || ($room['phase'] === 'lobby' && $seat === 0)) {
         return false; // close the room
     }
+    if ($room['phase'] === 'lobby') {
+        $room['seats'][$seat] = room_idle_seat($seat); // the chair goes back to the battery
+        return true;
+    }
     $name = strtoupper((string) ($room['seats'][$seat]['initials'] ?? 'AI'));
-    $room['seats'][$seat] = ['human' => false, 'name' => $name, 'lives' => $room['seats'][$seat]['lives'] ?? 0];
+    $room['seats'][$seat] = ['human' => false, 'name' => $name, 'initials' => $name, 'mode' => 'ai',
+        'lives' => $room['seats'][$seat]['lives'] ?? 0];
     foreach ($room['tanks'] as &$t) {
         if ($t['seat'] === $seat) {
             $t['kind'] = 'ai';
@@ -1390,7 +1435,7 @@ function room_leave(array &$room, int $seat): bool
     return true;
 }
 if ($action === 'leave' && $method === 'POST') {
-    [$room, $fh, $path, $seat] = room_gate($body, true);
+    [$room, $fh, $path, $seat] = room_gate($body, true, false);
     $code = $room['code'];
     if (room_leave($room, $seat)) {
         room_emit($room, ['t' => 'left', 'seat' => $seat]);
@@ -1446,12 +1491,11 @@ if ($action === 'create' && $method === 'POST') {
     $token = room_rand_token();
     // A fresh seat is present, not idle: the 90-second auto-fire rule must
     // not mistake a guest who just sat down for one who walked away.
-    $room['seats'][] = ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];
-    $room['scores'][] = 0;
-    $room['cash'][] = 600;
-    $room['ammo'][] = ['shell' => -1, 'buck' => 1, 'mortar' => 0, 'rail' => 0, 'nuke' => 0];
-    $room['weapon'][] = 'shell';
-    $room['nextUp'][] = 3000;
+    $room['seats'][0] = room_seat_human($initials, $token, $body);
+    for ($i = 1; $i < ROOM_SEATS; $i++) {
+        $room['seats'][$i] = room_idle_seat($i);
+    }
+    room_seat_economy($room, 0);
     $room['touched'] = time();
     $reg[$code] = $room;
     if (!room_registry_put($reg)) {
@@ -1484,7 +1528,15 @@ if ($action === 'join' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(409, ['error' => 'match already started']);
     }
-    if (count($room['seats']) >= ROOM_SEATS) {
+    // A guest takes the first seat nobody holds, open or drone alike.
+    $seat = null;
+    foreach ($room['seats'] as $idx => $s) {
+        if (!($s['human'] ?? false)) {
+            $seat = $idx;
+            break;
+        }
+    }
+    if ($seat === null) {
         room_unlock($fh);
         room_json_out(409, ['error' => 'room is full']);
     }
@@ -1496,13 +1548,8 @@ if ($action === 'join' && $method === 'POST') {
     }
     $token = room_rand_token();
     // Same as create: joining means present, so the seat starts clocked in.
-    $room['seats'][] = ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];
-    $seat = count($room['seats']) - 1;
-    $room['scores'][] = 0;
-    $room['cash'][] = 600;
-    $room['ammo'][] = ['shell' => -1, 'buck' => 1, 'mortar' => 0, 'rail' => 0, 'nuke' => 0];
-    $room['weapon'][] = 'shell';
-    $room['nextUp'][] = 3000;
+    $room['seats'][$seat] = room_seat_human($initials, $token, $body);
+    room_seat_economy($room, $seat);
     $room['events'][] = ['t' => 'join', 'seat' => $seat];
     if (!room_save($fh, $path, $room)) {
         room_unlock($fh);
@@ -1513,7 +1560,9 @@ if ($action === 'join' && $method === 'POST') {
 }
 
 /* Authenticated room ops share these gates. */
-function room_gate(array $body, bool $needCsrf): array
+/* $throttle spaces a seat's acts 150 ms apart; leaving skips it, since a
+   leave right behind an aim tap must still land. */
+function room_gate(array $body, bool $needCsrf, bool $throttle = true): array
 {
     if (!room_origin_ok()) {
         room_json_out(403, ['error' => 'bad origin']);
@@ -1545,13 +1594,45 @@ function room_gate(array $body, bool $needCsrf): array
         }
         $now = microtime(true);
         $last = (float) ($room['seats'][$seat]['lastAct'] ?? 0);
-        if ($now - $last < 0.15) {
+        if ($throttle && $now - $last < 0.15) {
             room_unlock($fh);
             room_json_out(429, ['error' => 'too fast']);
         }
         $room['seats'][$seat]['lastAct'] = $now;
     }
     return [$room, $fh, $path, $seat];
+}
+
+/* The host decides each non-human seat: drone battery ('ai') or 'open'. */
+if ($action === 'seatmode' && $method === 'POST') {
+    [$room, $fh, $path, $seat] = room_gate($body, true);
+    if ($seat !== 0) {
+        room_unlock($fh);
+        room_json_out(403, ['error' => 'only the host sets the seats']);
+    }
+    if ($room['phase'] !== 'lobby') {
+        room_unlock($fh);
+        room_json_out(409, ['error' => 'match already started']);
+    }
+    $target = $body['seat'] ?? null;
+    $mode = (string) ($body['mode'] ?? '');
+    if (!is_int($target) || !isset($room['seats'][$target]) || !in_array($mode, ['ai', 'open'], true)) {
+        room_unlock($fh);
+        room_json_out(422, ['error' => 'pick a seat and AI or Open']);
+    }
+    if ($room['seats'][$target]['human'] ?? false) {
+        room_unlock($fh);
+        room_json_out(409, ['error' => 'a player is sitting there']);
+    }
+    $room['seats'][$target]['mode'] = $mode;
+    if (!room_save($fh, $path, $room)) {
+        room_unlock($fh);
+        room_json_out(500, ['error' => 'store write failed']);
+    }
+    $since = (int) ($body['since'] ?? 0);
+    $out = room_snapshot($room, $seat, $since);
+    room_unlock($fh);
+    room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
 if ($action === 'start' && $method === 'POST') {
@@ -1564,12 +1645,18 @@ if ($action === 'start' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(409, ['error' => 'already started']);
     }
-    // Backfill empty seats with the drone battery, exactly like local play.
-    $names = ['REAPER', 'WRAITH', 'SPOTTER'];
-    $ai = 0;
-    while (count($room['seats']) < ROOM_SEATS) {
-        $room['seats'][] = ['human' => false, 'name' => $names[$ai % 3], 'initials' => $names[$ai % 3], 'lives' => 0];
-        $ai++;
+    // Humans and drone seats field units; open seats stay empty. The host
+    // is always seated, so a single drone seat makes at least two tanks;
+    // humans alone would have no one to fight.
+    $drones = 0;
+    foreach ($room['seats'] as $s) {
+        if (!($s['human'] ?? false) && ($s['mode'] ?? 'ai') !== 'open') {
+            $drones++;
+        }
+    }
+    if ($drones === 0) {
+        room_unlock($fh);
+        room_json_out(409, ['error' => 'A match needs at least two tanks. Switch a seat to AI so there is someone to battle.']);
     }
     room_start_round($room);
     $events = [];

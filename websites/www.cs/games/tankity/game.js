@@ -3283,33 +3283,60 @@ function netRenderRoster(room) {
     }
     hills.textContent = 'Hills: ' + (NET.mapName || 'Random hills');
   }
-  const list = $('lobby-seats');
-  if (list) {
-    list.innerHTML = '';
+  const grid = $('lobby-seats');
+  if (grid && grid.replaceChildren) {
     const seats = (room && room.seats) || NET.seats || [];
-    seats.forEach((s, i) => {
-      const li = document.createElement('li');
-      const who = (s.name || 'seat ' + (i + 1)) + (s.human ? '' : ' (AI)');
-      const extra = s.human ? ` · lives x${s.lives || 0} · ${s.score || 0} pts` : '';
-      li.textContent = who + extra;
-      if (i === 0 && s.human) {
-        const tag = document.createElement('span');
-        tag.className = 'host-tag';
-        tag.textContent = 'hosts';
-        li.appendChild(tag);
+    const host = NET.seat === 0;
+    const tiles = seats.map((s, i) => {
+      const human = !!s.human;
+      const open = !human && s.mode === 'open';
+      // The host flips a drone or open seat; every other tile is for looking.
+      const flips = host && !human;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'unit-choice seat-tile' + (open ? ' seat-open' : '') + (flips ? '' : ' seat-fixed');
+      b.setAttribute('data-seat', String(i));
+      b.setAttribute('data-mode', human ? 'human' : (open ? 'open' : 'ai'));
+      if (!flips) b.setAttribute('aria-disabled', 'true');
+      const big = document.createElement('span');
+      big.className = 'seat-name';
+      big.textContent = human ? String(s.name || '').toUpperCase() : (open ? 'Open' : 'AI');
+      const cap = document.createElement('span');
+      cap.className = 'seat-cap';
+      if (human) cap.textContent = (i === NET.seat ? 'You' : 'Player') + (i === 0 ? ' · host' : '');
+      else if (flips) cap.textContent = open ? 'Tap for AI' : 'Tap for Open';
+      else cap.textContent = open ? 'Nobody' : 'Drone';
+      b.append(big, cap);
+      b.title = human ? 'Seat ' + (i + 1) : (open ? 'Open seat: no tank' : 'Drone battery seat');
+      if (flips) {
+        b.addEventListener('click', ev => {
+          ev.currentTarget.blur();
+          netSeatMode(i, open ? 'ai' : 'open');
+        });
       }
-      list.appendChild(li);
+      return b;
     });
-    for (let i = seats.length; i < 4; i++) {
-      const li = document.createElement('li');
-      li.textContent = 'open seat (battery fills in)';
-      list.appendChild(li);
-    }
+    grid.replaceChildren(...tiles);
+  }
+  const seatsHint = $('seats-hint');
+  if (seatsHint) {
+    seatsHint.textContent = NET.seat === 0
+      ? 'Tap a seat nobody holds to switch it between AI and Open. Open seats field no tank.'
+      : 'The host decides which empty seats are AI and which stay open.';
   }
   const start = $('lobby-start');
   if (start) start.style.display = NET.seat === 0 ? '' : 'none';
   lobbySay(NET.seat === 0 ? 'You host. Start when your crew is in.' : 'Hang tight. The host starts the match.');
   refreshNavHints();
+}
+/* The host flips a seat nobody holds between the drone battery and open. */
+async function netSeatMode(seat, mode) {
+  if (NET.seat !== 0 || NET.on) return;
+  try {
+    const d = await roomPost('seatmode', { seat, mode, since: NET.since });
+    NET.seats = d.room.seats || [];
+    netRenderRoster(d.room);
+  } catch (err) { lobbySay(prettyRoomError(err)); }
 }
 async function startRoom() {
   if (NET.seat !== 0) return;
@@ -3335,9 +3362,36 @@ function startNetMatch(room) {
   const veil = $('lobby-veil');
   if (veil) veil.hidden = true;
   netApply(room);
-  say(`Room ${NET.code}: you are ${seatName(NET.seat)}. The battery backfills empty seats.`, 'info');
+  say(`Room ${NET.code}: you are ${seatName(NET.seat)}. The battery flies the AI seats.`, 'info');
   if (NET.pollId) clearInterval(NET.pollId);
   NET.pollId = setInterval(netRefresh, 1600);
+  syncLeaveButtons();
+}
+/* Leaving a running match: Leave room buttons (menu, shop) only show inside a
+   room, and ask first in the page, never with a browser dialog. */
+function syncLeaveButtons() {
+  for (const id of ['menu-leave', 'shop-leave']) {
+    const b = $(id);
+    if (b) b.hidden = !NET.on;
+  }
+}
+function openLeaveVeil() {
+  if (!NET.on) return;
+  const veil = $('leave-veil');
+  if (!veil) return;
+  veil.hidden = false;
+  const stay = $('leave-stay');
+  if (stay && stay.focus) stay.focus();
+}
+function closeLeaveVeil() {
+  const veil = $('leave-veil');
+  if (!veil || veil.hidden) return false;
+  veil.hidden = true;
+  return true;
+}
+function confirmLeave() {
+  closeLeaveVeil();
+  if (NET.on) netLeave();
 }
 /* Tell the server this seat is gone, so an emptied room frees its slot at
    once instead of after the idle window. Best effort; sendBeacon survives a
@@ -3369,6 +3423,9 @@ function netLeave(quiet) {
   hideShop();
   if ($('end-veil')) $('end-veil').hidden = true;
   if ($('lobby-veil')) $('lobby-veil').hidden = true;
+  closeLeaveVeil();
+  closeOverlays();
+  syncLeaveButtons();
   if (wasOn && !quiet) {
     say('Back to the solo hills. The battery takes your seat in the room.', 'info');
     freshMatchFromSeedBox();
@@ -4123,6 +4180,12 @@ function bindKeys() {
     // Typing in a box is typing, not playing: initials and seeds keep every key.
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    // The leave question holds every key but ESC (which answers "stay").
+    const leaveAsk = $('leave-veil');
+    if (leaveAsk && !leaveAsk.hidden) {
+      if (lookupKey('global', e) === 'escape') { e.preventDefault(); closeLeaveVeil(); }
+      return;
+    }
     // Overlay scrolling runs before every other binding so an open panel keeps
     // its keys even where letters already work (shop buys, driving). With no
     // panel open the keys fall through untouched. Arrows are never scroll keys:
@@ -4195,6 +4258,7 @@ function bindKeys() {
       if (sa === 'close') {
         e.preventDefault();
         if (G.preview) closePreview();
+        else if (closeLeaveVeil()) { /* the question closed */ }
         else if (!closeOverlays()) nextRound();
         return;
       }
@@ -4202,6 +4266,7 @@ function bindKeys() {
     if (lookupKey('global', e) === 'escape') {
       e.preventDefault();
       if (G.preview) { closePreview(); return; }
+      if (closeLeaveVeil()) return;
       if (TUT) { skipTutorial(); return; }
       if (closeLobbyVeil()) return;
       closeOverlays();
@@ -4442,6 +4507,14 @@ function init() {
     ev.currentTarget.blur();
     if (NET.on) { netLeave(); openLobby(); } else freshMatchFromSeedBox();
   });
+  for (const id of ['menu-leave', 'shop-leave']) {
+    const b = $(id);
+    if (b) b.addEventListener('click', ev => { ev.currentTarget.blur(); openLeaveVeil(); });
+  }
+  const leaveGo = $('leave-go');
+  if (leaveGo) leaveGo.addEventListener('click', ev => { ev.currentTarget.blur(); confirmLeave(); });
+  const leaveStay = $('leave-stay');
+  if (leaveStay) leaveStay.addEventListener('click', ev => { ev.currentTarget.blur(); closeLeaveVeil(); });
   const roomsOpen = $('rooms-open');
   if (roomsOpen) roomsOpen.addEventListener('click', ev => { ev.currentTarget.blur(); openRooms(); });
   const tutOpen = $('tutorial-open');

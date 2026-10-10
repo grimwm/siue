@@ -6,7 +6,7 @@
  */
 /* The pure game math (RNG, terrain, flight, hits, blasts, drone aim) lives in
  * src/sim.ts, the sound in src/audio.ts, the room client in src/net.ts and the
- * canvas drawing in src/render.ts, each compiled to js/ and imported here. Each
+ * canvas drawing in src/render.ts, the keys and touch pads in src/input.ts, each compiled to js/ and imported here. Each
  * import's ?v= is the module's content hash, written by tools/install-files.php,
  * so a browser never pairs a cached module with a newer game.js. Everything
  * below is the rest: the game loop, particles,
@@ -26,6 +26,7 @@ import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, planCatchUp, VOLLEY_OPENERS, CLOCK_SHOW_S,
 } from './js/net.js?v=6259020b84';
 import { createRenderer, drawChassis } from './js/render.js?v=1e211c92ed';
+import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 
 /* ---------- audio: lives in src/audio.ts ---------- */
 music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));
@@ -1876,7 +1877,6 @@ function renderHUD() {
 }
 
 /* ---------- main loop ---------- */
-const keysDown = {};
 let lastT = 0;
 /* Battlefield cosmetics decay on wall-clock frames, never on volleys: effects,
  * blast discs, shake, and sparks all finish even after the last shell lands,
@@ -1962,12 +1962,11 @@ function frame(ts) {
   }
   if (G.phase === 'aim' && cur().isPlayer && !G.demo) {
     const t = me();
-    const swing = (keysDown.barrelLeft ? 1 : 0) - (keysDown.barrelRight ? 1 : 0);
-    if (swing) t.angle = clamp(t.angle + swing * facing(t) * 42 * dt, 10, 170);
-    if (keysDown.powerUp) t.power = clamp(t.power + 45 * dt, 10, 100);
-    if (keysDown.powerDown) t.power = clamp(t.power - 45 * dt, 10, 100);
-    if ((keysDown.driveLeft || keysDown.driveRight) && t.fuel > 0) {
-      const dx = (keysDown.driveRight ? 1 : 0) - (keysDown.driveLeft ? 1 : 0);
+    const arm = stepArm(input.held, dt, t, facing(t));
+    t.angle = arm.angle;
+    t.power = arm.power;
+    if ((input.held.has('driveLeft') || input.held.has('driveRight')) && t.fuel > 0) {
+      const dx = input.held.axis('driveLeft', 'driveRight');
       const step = dx * TUNE.driveSpeed * dt;
       if (Math.abs(step) > 0 && Math.abs(t.fuel) >= Math.abs(step)) {
         const nx = clamp(t.x + step, 12, W - 12);
@@ -3022,13 +3021,13 @@ function netFrame(dt) {
   }
   const t = myTank();
   if (t && t.hp > 0 && MATCH.myTurn) {
-    const swing = (keysDown.barrelLeft ? 1 : 0) - (keysDown.barrelRight ? 1 : 0);
-    if (swing) { t.angle = clamp(t.angle + swing * facing(t) * 42 * dt, 10, 170); MATCH.aimDirty = true; }
-    if (keysDown.powerUp) { t.power = clamp(t.power + 45 * dt, 10, 100); MATCH.aimDirty = true; }
-    if (keysDown.powerDown) { t.power = clamp(t.power - 45 * dt, 10, 100); MATCH.aimDirty = true; }
-    if (!keysDown.barrelLeft && !keysDown.barrelRight && !keysDown.powerUp && !keysDown.powerDown && MATCH.aimDirty) netSendAim();
-    if ((keysDown.driveLeft || keysDown.driveRight) && t.fuel > 0) {
-      const dir = (keysDown.driveRight ? 1 : 0) - (keysDown.driveLeft ? 1 : 0);
+    const arm = stepArm(input.held, dt, t, facing(t));
+    t.angle = arm.angle;
+    t.power = arm.power;
+    if (arm.adjusting) MATCH.aimDirty = true;
+    if (arm.idle && MATCH.aimDirty) netSendAim();
+    if ((input.held.has('driveLeft') || input.held.has('driveRight')) && t.fuel > 0) {
+      const dir = input.held.axis('driveLeft', 'driveRight');
       MATCH.driveAcc += dir * TUNE.driveSpeed * dt;
       MATCH.driveT += dt;
       if (MATCH.driveT >= 0.22 && Math.abs(MATCH.driveAcc) >= 4) {
@@ -3163,86 +3162,20 @@ async function fileReport(name) {
 }
 
 /* ---------- input + init ---------- */
-/* Every binding lives in game.yaml's keys section (served as game.json);
-// this frozen copy, shaped like game.json's keys section, keeps the exact same
-// defaults working when the file cannot load. Actions are named by effect,
-// and each lists its accepted tokens in label order (first one shows). */
-const FALLBACK_KEYS = Object.freeze({
-  aim: Object.freeze({
-    barrelLeft: ['ArrowLeft', 'Left'],
-    barrelRight: ['ArrowRight', 'Right'],
-    powerUp: ['ArrowUp', 'KeyW', 'Up', 'w'],
-    powerDown: ['ArrowDown', 'KeyS', 'Down', 's'],
-    driveLeft: ['KeyA', 'a'],
-    driveRight: ['KeyD', 'd'],
-  }),
-  shop: Object.freeze({
-    selUp: ['ArrowUp', 'Up'],
-    selDown: ['ArrowDown', 'Down'],
-    qtyUp: ['ArrowRight', 'Right'],
-    qtyDown: ['ArrowLeft', 'Left'],
-    buyRow: ['1', '2', '3', '4', '5', '6', '7', '8', '9'],
-    buy: ['b', 'Enter'],
-    preview: ['v', 'p'],
-    close: ['Escape'],
-    next: ['n'],
-  }),
-  global: Object.freeze({
-    music: ['m'], sound: ['e'], log: ['l'], help: ['h'],
-    report: ['r'], menu: ['c'], random: ['t'], rooms: ['o'], new: ['n'],
-    cycle: ['q'], guns: ['g'], nextTrack: ['BracketRight', ']'], tutorial: ['u'],
-    battlePreview: ['v'], fullscreen: ['f'],
-    fire: ['ControlLeft', 'ControlRight', 'Control', 'Space', ' '],
-    escape: ['Escape'],
-  }),
-  scroll: Object.freeze({
-    lineDown: ['j'], lineUp: ['k'],
-    pageDown: ['PageDown'], pageUp: ['PageUp'], halfDown: ['Shift+KeyJ'], halfUp: ['Shift+KeyK'],
-  }),
-});
-let KEYS = FALLBACK_KEYS;
-let KEYMAP = buildKeymap(FALLBACK_KEYS);
-function buildKeymap(def) {
-  const rev = {};
-  for (const ctx of Object.keys(def)) {
-    rev[ctx] = {};
-    for (const [action, tokens] of Object.entries(def[ctx])) {
-      for (const t of tokens) rev[ctx][t] = action;
-    }
-  }
-  return rev;
-}
+/* Keys and touch live in src/input.ts: it holds the key table (game.yaml's keys
+// section, served as game.json, with a frozen fallback), turns a key press or a
+// held pad button into a named command, and runs the held-key arm movement.
+// This file says what each command does (bindKeys below). */
+
+/* Phones and tablets: a touch screen with no mouse or trackpad. They get no
+// keyboard at all, so key bindings stay off and no label names a key. */
+const TOUCH = touchOnly(typeof window.matchMedia === 'function' ? q => window.matchMedia(q) : undefined);
+const input = createInput({ touch: TOUCH });
 function applyKeys(def) {
-  if (!def || !def.aim || !def.shop || !def.global || !def.scroll) return;
-  KEYS = def;
-  KEYMAP = buildKeymap(def);
+  if (!input.setKeys(def)) return;
   renderKeyHints();
   renderTutorialText();
 }
-/* One token in, one printable cap out: arrows show as glyphs, codes shed
-// their Key/Digit prefix, lone letters go uppercase, chords join with +. */
-function keycap(token) {
-  const glyph = { ArrowUp: '▲', ArrowDown: '▼', ArrowLeft: '◀', ArrowRight: '▶', Up: '▲', Down: '▼', Left: '◀', Right: '▶' };
-  if (glyph[token]) return glyph[token];
-  if (token === ' ') return 'Space';
-  if (/^Ctrl\+/.test(token)) return 'Ctrl+' + keycap(token.slice(5));
-  if (/^Shift\+/.test(token)) return 'Shift+' + keycap(token.slice(6));
-  if (/^(ControlLeft|ControlRight|Control)$/.test(token)) return 'Ctrl';
-  if (token === 'Escape') return 'ESC';
-  if (token === 'Enter') return 'Enter';
-  if (token === 'PageUp') return 'PgUp';
-  if (token === 'PageDown') return 'PgDn';
-  if (token === 'Shift') return 'Shift';
-  if (token === 'BracketRight') return ']';
-  if (token === 'BracketLeft') return '[';
-  const code = /^(Key|Digit)(.+)$/.exec(token);
-  if (code) return code[2].toUpperCase();
-  return String(token).toUpperCase();
-}
-/* Phones and tablets: a touch screen with no mouse or trackpad. They get no
-// keyboard at all, so key bindings stay off and no label names a key. */
-const TOUCH = typeof window.matchMedia === 'function' &&
-  window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(any-pointer: fine)').matches;
 /* What a touch player taps instead, for prose that names a key. */
 const TOUCH_NAMES = {
   'aim:barrelLeft': '◀', 'aim:barrelRight': '▶', 'aim:powerUp': '▲', 'aim:powerDown': '▼',
@@ -3256,9 +3189,7 @@ function keyCap(ctx, action) {
 /* The shown key for an action: the first token its context lists, or the
 // nth with data-keyhint="context:action:n" where prose names two keys. */
 function keyHint(ctx, action, idx) {
-  const tokens = (KEYS[ctx] && KEYS[ctx][action]) || [];
-  const t = tokens[idx || 0];
-  return t === undefined ? '' : keycap(t);
+  return input.hint(ctx, action, idx);
 }
 /* Fill every [data-keyhint] span at boot and again if game.json loads late,
 // so labels can never drift from behavior. */
@@ -3269,19 +3200,6 @@ function renderKeyHints() {
     const bare = el.className === 'key';
     el.textContent = cap ? (bare ? `(${cap})` : cap) : '';
   });
-}
-function lookupKey(ctx, e) {
-  const m = KEYMAP[ctx];
-  if (!m) return null;
-  // Modifier tokens (Ctrl+X, Shift+X) win while that modifier is held.
-  for (const [held, mod] of [[e.ctrlKey, 'Ctrl+'], [e.shiftKey, 'Shift+']]) {
-    if (!held) continue;
-    const c = (e.code && m[mod + e.code]) || (e.key && (m[mod + e.key] || m[mod + e.key.toLowerCase()]));
-    if (c) return c;
-  }
-  if (e.code && m[e.code]) return m[e.code];
-  if (e.key && (m[e.key] || m[e.key.toLowerCase()])) return m[e.key] || m[e.key.toLowerCase()];
-  return null;
 }
 function freshMatchFromSeedBox(opts) {
   // A new match takes the whole frame: shut any panels so the menu never
@@ -3338,156 +3256,140 @@ function bindToolTips() {
 function shopCovered() {
   return ['menu-overlay', 'help-overlay', 'report-overlay', 'log-overlay', 'gun-overlay'].some(id => { const el = $(id); return el && !el.hidden; });
 }
+/* A line key (j/k): in the shop it walks the rows, like the arrows; in the gun
+// picker it moves the cursor; with any other panel open it scrolls that panel.
+// Paging keys only ever scroll. */
+function lineKey(dir) {
+  if (G.phase === 'shop' && !G.over && !G.preview && !shopCovered()) return shopSelect(dir);
+  if (gunsOpen()) { moveGunCursor(dir); return true; }
+  return scrollOverlay(dir, 0);
+}
+function shopSelect(dir) {
+  G.shopSel = clamp(G.shopSel + dir, 0, SHOP.length - 1);
+  sfx.play('click');
+  renderShop();
+  return true;
+}
+/* Qty keys pick how many packs ride on every buy, capped at what the chest
+// can cover for that row. */
+function shopQtyUp() {
+  const max = Math.max(1, maxPacks(SHOP[G.shopSel]));
+  if (G.shopQty < max) { G.shopQty++; sfx.play('click'); }
+  else sfx.play('thud');
+  renderShop();
+  return true;
+}
+function shopQtyDown() {
+  if (G.shopQty > 1) {
+    G.shopQty--;
+    sfx.play('click');
+  }
+  renderShop();
+  return true;
+}
+/* The gun picker's fixed keys (arrows, Enter or Space, digits) only mean
+// something while it is open; otherwise the key falls through. */
+function gunGrid(dir) {
+  if (!gunsOpen()) return undefined;
+  moveGunCursor(dir);
+  return true;
+}
+/* Input maps keys and touches to named commands (the action names of
+// game.json's keys section); this says what each does in the current context.
+// A handler that returns true used the key; one that returns nothing declines,
+// and the key falls through to the next candidate. The order they are offered
+// in (panel scrolling, the gun grid, the shop, ESC, the held aim keys, fire,
+// then the plain global keys) is src/input.ts's. */
 function bindKeys() {
-  if (TOUCH) return;
-  window.addEventListener('keydown', e => {
-    // Typing in a box is typing, not playing: initials and seeds keep every key.
-    const tag = (e.target && e.target.tagName) || '';
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    // The leave question holds every key but ESC (which answers "stay").
-    const leaveAsk = $('leave-veil');
-    if (leaveAsk && !leaveAsk.hidden) {
-      if (lookupKey('global', e) === 'escape') { e.preventDefault(); closeLeaveVeil(); }
-      return;
-    }
-    // Overlay scrolling runs before every other binding so an open panel keeps
-    // its keys even where letters already work (shop buys, driving). With no
-    // panel open the keys fall through untouched. Arrows are never scroll keys:
-    // they keep their aim and shop jobs.
-    const sc = lookupKey('scroll', e);
-    // In the shop the line keys walk the rows, like the arrows; paging
-    // still scrolls.
-    if ((sc === 'lineDown' || sc === 'lineUp') && G.phase === 'shop' && !G.over && !G.preview && !shopCovered()) {
-      e.preventDefault();
-      G.shopSel = clamp(G.shopSel + (sc === 'lineUp' ? -1 : 1), 0, SHOP.length - 1);
-      sfx.play('click');
-      renderShop();
-      return;
-    }
-    if (gunsOpen()) {
-      const move = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -GUN_COLS, ArrowDown: GUN_COLS }[e.key] ||
-        (sc === 'lineDown' ? 1 : sc === 'lineUp' ? -1 : 0);
-      if (move) { e.preventDefault(); moveGunCursor(move); return; }
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!e.repeat) pickGun(rackGuns()[gunCursor]); return; }
-      if (/^[1-9]$/.test(e.key)) { e.preventDefault(); const w = rackGuns()[+e.key - 1]; if (w) pickGun(w); return; }
-    }
-    if (sc) {
-      const args = { lineDown: [1, 0], lineUp: [-1, 0], pageDown: [0, 1], pageUp: [0, -1], halfDown: [0, 0.5], halfUp: [0, -0.5] }[sc];
-      if (args && scrollOverlay(args[0], args[1])) { e.preventDefault(); return; }
-    }
-    // The shop answers to its own keys from game.json; everything else falls
-    // through to the usual keys below. Qty keys pick how many packs ride on
-    // every buy, capped at what the chest can cover for that row.
-    if (G.phase === 'shop' && !G.over && !e.repeat) {
-      const sa = lookupKey('shop', e);
-      if (sa === 'selUp' || sa === 'selDown') {
-        e.preventDefault();
-        G.shopSel = clamp(G.shopSel + (sa === 'selUp' ? -1 : 1), 0, SHOP.length - 1);
-        sfx.play('click');
-        renderShop();
-        return;
-      }
-      if (sa === 'qtyUp' || sa === 'qtyDown') {
-        e.preventDefault();
-        const it = SHOP[G.shopSel];
-        if (sa === 'qtyUp') {
-          const max = Math.max(1, maxPacks(it));
-          if (G.shopQty < max) { G.shopQty++; sfx.play('click'); }
-          else sfx.play('thud');
-        } else if (G.shopQty > 1) {
-          G.shopQty--;
-          sfx.play('click');
-        }
-        renderShop();
-        return;
-      }
-      // Digits buy rows 1-9 outright; longer shelves still answer to arrows.
-      if (sa === 'buyRow') {
-        const row = e.key >= '1' && e.key <= '9' && +e.key <= SHOP.length ? SHOP[+e.key - 1] : null;
-        if (row) { e.preventDefault(); buyItem(row, G.shopQty); return; }
-      }
-      if (sa === 'buy') {
-        e.preventDefault();
-        buyItem(SHOP[G.shopSel], G.shopQty);
-        return;
-      }
-      if (sa === 'preview') {
-        const it = SHOP[G.shopSel];
-        if (it && it.kind === 'ammo') { e.preventDefault(); openPreview(it.w); }
-        return;
-      }
-      // ESC in the shop shuts the firing range first, then any open panel
-      // (the menu can sit above the shop), and only rolls out to the round
-      // when nothing is left to shut. N is the plain way out.
-      if (sa === 'close') {
-        e.preventDefault();
-        if (G.preview) closePreview();
-        else if (closeLeaveVeil()) { /* the question closed */ }
-        else if (!closeOverlays()) { if (net.on) netNext(true); else nextRound(); } // ESC readies, never unreadies
-        return;
-      }
-    }
-    if (lookupKey('global', e) === 'escape') {
-      e.preventDefault();
+  input.register({
+    lineDown: () => lineKey(1),
+    lineUp: () => lineKey(-1),
+    pageDown: () => scrollOverlay(0, 1),
+    pageUp: () => scrollOverlay(0, -1),
+    halfDown: () => scrollOverlay(0, 0.5),
+    halfUp: () => scrollOverlay(0, -0.5),
+    gridLeft: () => gunGrid(-1),
+    gridRight: () => gunGrid(1),
+    gridUp: () => gunGrid(-GUN_COLS),
+    gridDown: () => gunGrid(GUN_COLS),
+    confirm: p => {
+      if (!gunsOpen()) return undefined;
+      if (!p.repeat) pickGun(rackGuns()[gunCursor]);
+      return true;
+    },
+    digit: p => {
+      if (!gunsOpen()) return undefined;
+      const w = rackGuns()[+p.key - 1];
+      if (w) pickGun(w);
+      return true;
+    },
+    // The shop's own keys (live only in the shop, see shopLive below).
+    selUp: () => shopSelect(-1),
+    selDown: () => shopSelect(1),
+    qtyUp: shopQtyUp,
+    qtyDown: shopQtyDown,
+    // Digits buy rows 1-9 outright; longer shelves still answer to arrows.
+    buyRow: p => {
+      const row = p.key >= '1' && p.key <= '9' && +p.key <= SHOP.length ? SHOP[+p.key - 1] : null;
+      if (!row) return undefined;
+      buyItem(row, G.shopQty);
+      return true;
+    },
+    buy: () => { buyItem(SHOP[G.shopSel], G.shopQty); return true; },
+    preview: () => {
+      const it = SHOP[G.shopSel];
+      if (it && it.kind === 'ammo') { openPreview(it.w); return true; }
+      return 'quiet'; // V does nothing else in the shop
+    },
+    // ESC in the shop shuts the firing range first, then any open panel
+    // (the menu can sit above the shop), and only rolls out to the round
+    // when nothing is left to shut. N is the plain way out.
+    close: () => {
+      if (G.preview) closePreview();
+      else if (closeLeaveVeil()) { /* the question closed */ }
+      else if (!closeOverlays()) { if (net.on) netNext(true); else nextRound(); } // ESC readies, never unreadies
+      return true;
+    },
+    escape: () => {
       if (G.preview) { closePreview(); return; }
       if (closeLeaveVeil()) return;
       if (TUT) { skipTutorial(); return; }
       if (closeLobbyVeil()) return;
       closeOverlays();
-      return;
-    }
-    const act = lookupKey('aim', e);
-    if (act) {
-      keysDown[act] = true;
-      e.preventDefault();
-      unlock(); music.start();
-      return;
-    }
-    // Fire stays a special tap with its own repeat guard, but its keys come
-    // from the same file as everything else.
-    if (lookupKey('global', e) === 'fire') {
-      e.preventDefault();
-      if (!e.repeat) { unlock(); music.start(); playerFire(); }
-      return;
-    }
-    if (e.repeat) return;
-    const k = e.key || '';
-    const ga = lookupKey('global', e);
-    switch (ga) {
-    case 'music': toggleMusic(); return;
-    case 'nextTrack': unlock(); music.next(); return;
-    case 'sound': toggleSound(); return;
-    case 'log': toggleOverlay('log-overlay', 'btn-log'); return;
-    case 'help': toggleOverlay('help-overlay', 'btn-help'); return;
-    case 'report': toggleOverlay('report-overlay', 'scores-open'); return;
-    case 'menu': {
-      // C opens the menu; ESC does the closing.
+    },
+    fire: () => { unlock(); music.start(); playerFire(); },
+    music: () => { toggleMusic(); },
+    nextTrack: () => { unlock(); music.next(); },
+    sound: () => { toggleSound(); },
+    log: () => { toggleOverlay('log-overlay', 'btn-log'); },
+    help: () => { toggleOverlay('help-overlay', 'btn-help'); },
+    report: () => { toggleOverlay('report-overlay', 'scores-open'); },
+    // C opens the menu; ESC does the closing.
+    menu: () => {
       const mv = $('menu-overlay');
       if (mv && mv.hidden) toggleOverlay('menu-overlay', 'btn-menu');
-      return;
-    }
+    },
     // Random hills and the rooms lobby stay out of the shop so a buying
     // spree never misfires into a new match.
-    case 'random': if (G.phase !== 'shop') randomRun(); return;
-    case 'rooms': if (G.phase !== 'shop') openRooms(); return;
-    case 'new':
+    random: () => { if (G.phase !== 'shop') randomRun(); },
+    rooms: () => { if (G.phase !== 'shop') openRooms(); },
+    new: () => {
       if (G.phase === 'shop') nextRound();
       else freshMatchFromSeedBox();
-      return;
-    case 'cycle': cycleWeapon(); if (gunsOpen()) renderGuns(); return;
-    case 'guns': if (gunsOpen()) closeGuns(); else openGuns(); return;
-    case 'tutorial': tutorialOpen(); return;
-    case 'battlePreview': togglePreview(); return;
-    case 'fullscreen': toggleFullscreen(); return;
-    default: return;
-    }
+    },
+    cycle: () => { cycleWeapon(); if (gunsOpen()) renderGuns(); },
+    guns: () => { if (gunsOpen()) closeGuns(); else openGuns(); },
+    tutorial: () => { tutorialOpen(); },
+    battlePreview: () => { togglePreview(); },
+    fullscreen: () => { toggleFullscreen(); },
+  }, {
+    shopLive: p => G.phase === 'shop' && !G.over && !p.repeat,
+    // The leave question holds every key but ESC (which answers "stay").
+    modalOpen: () => { const ask = $('leave-veil'); return !!ask && !ask.hidden; },
+    modalEscape: () => { closeLeaveVeil(); },
+    onHold: () => { unlock(); music.start(); },
   });
-  window.addEventListener('keyup', e => {
-    const tag = (e.target && e.target.tagName) || '';
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    const act = lookupKey('aim', e);
-    if (act) delete keysDown[act];
-  });
+  input.bind(window);
 }
 /* The weapon picker: every gun on the rack as a tile, for when Q would take
    a dozen presses. Arrows or J/K move the cursor, Enter or a digit loads. */
@@ -3570,16 +3472,6 @@ function cycleWeapon() {
     }
   }
 }
-function holdButton(id, act) {
-  const btn = $(id);
-  if (!btn) return;
-  const on = ev => { ev.preventDefault(); keysDown[act] = true; unlock(); music.start(); };
-  const off = () => { delete keysDown[act]; };
-  btn.addEventListener('pointerdown', on);
-  btn.addEventListener('pointerup', off);
-  btn.addEventListener('pointerleave', off);
-  btn.addEventListener('click', ev => ev.currentTarget.blur());
-}
 function init() {
   if (TOUCH) document.documentElement.classList.add('touch');
   bindKeys();
@@ -3597,12 +3489,7 @@ function init() {
 
   document.querySelectorAll('[data-aim]').forEach(btn => {
     const act = { up: 'powerUp', down: 'powerDown', left: 'barrelLeft', right: 'barrelRight' }[btn.getAttribute('data-aim')];
-    const on = ev => { ev.preventDefault(); keysDown[act] = true; unlock(); music.start(); };
-    const off = () => { delete keysDown[act]; };
-    btn.addEventListener('pointerdown', on);
-    btn.addEventListener('pointerup', off);
-    btn.addEventListener('pointerleave', off);
-    btn.addEventListener('click', ev => ev.currentTarget.blur());
+    input.bindHold(btn, act);
   });
   const cannon = $('btn-cannon');
   if (cannon) cannon.addEventListener('click', ev => { ev.currentTarget.blur(); unlock(); music.start(); playerFire(); });
@@ -3617,8 +3504,10 @@ function init() {
     hudGun.addEventListener('click', () => openGuns());
     hudGun.title = 'Pick a weapon';
   }
-  holdButton('btn-drive-l', 'driveLeft');
-  holdButton('btn-drive-r', 'driveRight');
+  for (const [id, act] of [['btn-drive-l', 'driveLeft'], ['btn-drive-r', 'driveRight']]) {
+    const btn = $(id);
+    if (btn) input.bindHold(btn, act);
+  }
   const form = $('seed-form');
   if (form) form.addEventListener('submit', e => {
     e.preventDefault();
@@ -3734,17 +3623,12 @@ function init() {
     if (!name) { say('Give your callsign first, hero.', 'info'); return; }
     fileReport(name);
   });
-  window.addEventListener('blur', () => {
-    // Turn-based play never needs a blur pause (that only stranded players on
-    // a seemingly frozen screen). Just drop held keys so the barrel stops.
-    for (const k of Object.keys(keysDown)) delete keysDown[k];
-  });
   // Any touch or keypress unlocks the speakers and (re)starts a non-muted
   // song, so music never sits claiming to play while silent after a refresh.
   // This fires before the game keys, and starting twice is a harmless no-op.
   const kickAudio = ev => {
     // A first tap that turns the music off must not fetch a track.
-    const hit = ev.type === 'keydown' ? lookupKey('global', ev)
+    const hit = ev.type === 'keydown' ? input.lookup('global', ev)
       : (ev.target && ev.target.closest && ev.target.closest('#btn-music') ? 'music' : '');
     noteGesture(hit === 'music');
   };

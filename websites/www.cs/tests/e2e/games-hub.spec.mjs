@@ -9,6 +9,9 @@ test('the Games page builds a card per metadata.yaml, each with a share link', a
   const cards = page.locator('#games-hub-list .games-hub-card');
   await expect(cards).toHaveCount(GAMES.length);
   expect(await cards.evaluateAll(els => els.map(e => e.dataset.game))).toEqual(GAMES);
+  // Every card leads with its game's screenshot, loaded and 16:9.
+  const shots = await page.locator('.games-hub-card-shot').evaluateAll(imgs => Promise.all(imgs.map(i => i.decode().then(() => [i.naturalWidth, i.naturalHeight]))));
+  expect(shots).toEqual(GAMES.map(() => [800, 450]));
   const shares = await page.locator('.games-share-btn').evaluateAll(els => els.map(e => e.title));
   for (const id of GAMES) expect(shares.some(u => u.endsWith(`/play/${id}/`))).toBe(true);
   await page.screenshot({ path: 'test-results/games-hub.png', fullPage: true });

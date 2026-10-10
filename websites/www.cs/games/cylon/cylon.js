@@ -1808,6 +1808,11 @@ async function initializeCylonEffects() {
         return ((er.left + er.width / 2 - pr.left) / pr.width) * 100;
     }
 
+    // One full left-right-left sweep while the eye tracks the cursor.
+    const EYE_SWEEP_S = 5.2;
+    let sweepPhase = 0;
+    let sweepLast = 0;
+
     function isEyeDisoriented() {
         return Date.now() < eyeDisorientedUntil;
     }
@@ -1816,7 +1821,10 @@ async function initializeCylonEffects() {
         // Idle sweep only when the game is off (or eye tracking disabled / disoriented)
         if (!isGameLive() || !settings.eyeEnabled || isEyeDisoriented()) on = false;
         if (on && !tracking) {
+            // Pick the tracking sweep up where the idle sweep left the eye.
             eyeX = readEyePercent();
+            sweepPhase = Math.asin(Math.max(-1, Math.min(1, (eyeX - 50) / 45)));
+            sweepLast = performance.now();
         }
         tracking = on;
         eye.classList.toggle('is-tracking', on && !isEyeDisoriented());
@@ -1826,6 +1834,8 @@ async function initializeCylonEffects() {
             if (glare) {
                 glare.style.opacity = '';
                 glare.style.height = '';
+                glare.style.top = '';
+                glare.style.transform = '';
             }
         }
     }
@@ -1875,14 +1885,23 @@ async function initializeCylonEffects() {
                 glare.style.opacity = String(0.35 + 0.55 * flicker);
             }
         } else if (tracking && settings.eyeEnabled) {
-            const target = Math.min(95, Math.max(5, (mouse.clientX / window.innerWidth) * 100));
-            eyeX += (target - eyeX) * 0.28;
+            // The eye keeps sweeping while it watches you; the glare is a beam
+            // from the eye down to the cursor, re-aimed every frame.
+            const now = performance.now();
+            sweepPhase += Math.min(0.05, (now - sweepLast) / 1000) * (Math.PI * 2 / EYE_SWEEP_S);
+            sweepLast = now;
+            eyeX = 50 + 45 * Math.sin(sweepPhase);
             eye.style.left = `${eyeX}%`;
             if (glare) {
+                const from = eyeClientCenter();
+                const top = from.y + eye.getBoundingClientRect().height * 0.2;
+                const dx = mouse.clientX - from.x;
+                const dy = Math.max(1, mouse.clientY - top);
                 glare.style.opacity = '';
-                glare.style.left = `${(eyeX / 100) * window.innerWidth}px`;
-                const h = Math.min(window.innerHeight * 0.32, 14 * 16, Math.max(48, mouse.clientY * 0.55));
-                glare.style.height = `${h}px`;
+                glare.style.left = `${from.x}px`;
+                glare.style.top = `${top}px`;
+                glare.style.height = `${Math.hypot(dx, dy)}px`;
+                glare.style.transform = `translateX(-50%) rotate(${-Math.atan2(dx, dy)}rad)`;
             }
         }
         requestAnimationFrame(updateEye);

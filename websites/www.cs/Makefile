@@ -1,4 +1,4 @@
-.PHONY: help deploy up down url parity test e2e
+.PHONY: help deploy up down url parity test e2e screenshots
 
 .DEFAULT_TARGET := help
 
@@ -23,6 +23,7 @@ help:
 	@echo "  parity - Check the docker PHP against www.cs.siue.edu's modules/ini"
 	@echo "  test   - Unit suites: games hub, share tags, Tankity (incl. game.yaml) (needs make up)"
 	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL"
+	@echo "  screenshots - Recapture each game's Games-page picture (macOS sips)"
 
 deploy:
 	@HOST="$(HOST)" SSHPASS_FILE="$(SSHPASS_FILE)" ./deploy.sh
@@ -57,3 +58,7 @@ test:
 e2e:
 	@url=$${E2E_BASE_URL:-$$($(MAKE) --no-print-directory -s url)} && \
 	cd tests/e2e && npm ci --silent && E2E_BASE_URL=$$url npx playwright test
+
+screenshots:
+	@url=$${E2E_BASE_URL:-$$($(MAKE) --no-print-directory -s url)} && \
+	cd tests/e2e && npm ci --silent && E2E_BASE_URL=$$url node screenshots.mjs

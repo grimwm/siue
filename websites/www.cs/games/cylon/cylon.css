@@ -158,6 +158,8 @@
     transparent 100%
   );
   box-shadow: 0 0 12px 3px rgba(255, 0, 0, 0.4);
+  /* Swings from its top end, which sits on the eye. */
+  transform-origin: 50% 0;
   transition: height 0.15s ease, opacity 0.15s ease, left 0.08s linear;
 }
 
@@ -165,6 +167,12 @@
 .cylon-glare.is-active {
   opacity: 0.9;
   height: min(32vh, 14rem);
+}
+
+
+.cylon-glare.is-active:not(.is-disoriented) {
+  transition: opacity 0.15s ease;
+  background: linear-gradient(180deg, rgba(255, 90, 90, 0.95) 0%, rgba(255, 30, 30, 0.55) 55%, rgba(255, 0, 0, 0.3) 100%);
 }
 
 
@@ -233,29 +241,6 @@
   pointer-events: none;
   animation: cylonTrail 2.6s ease-in-out infinite alternate;
   opacity: 0.85;
-}
-
-
-/* Until the game starts the eye rests in the middle, opened wide across
-   the bar. Starting the game narrows it back to its hunting size, and the
-   sweep picks up from the middle (half a cycle in) so it never jumps. */
-body:not(.cylon-game-live) .cylon-eye {
-  left: 50%;
-  width: 92%;
-  max-width: 92vw;
-  animation: none;
-}
-body:not(.cylon-game-live) .cylon-eye::after {
-  animation: none;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(ellipse 60% 70% at 50% 50%, rgba(255, 60, 60, 0.45), transparent 72%);
-}
-body.cylon-game-live .cylon-eye,
-body.cylon-game-live .cylon-eye::after {
-  animation-delay: -1.3s;
-}
-.cylon-eye {
-  transition: left 0.08s linear, width 0.7s ease, max-width 0.7s ease, filter 0.2s ease, box-shadow 0.2s ease;
 }
 
 

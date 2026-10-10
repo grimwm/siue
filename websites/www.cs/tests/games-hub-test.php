@@ -103,6 +103,15 @@ foreach (['missing' => 'nope.png', 'not-an-image' => 'notes.txt', 'traversal' =>
     $check("card-image-reject-$name", $card === null && is_string($err));
 }
 
+// Games-page screenshot: a picture file inside the game folder.
+$game('tankity', null, ['index.html', 'shot.jpg', 'notes.txt']);
+[$card, $err] = games_hub_card('tankity', ['title' => 't', 'description' => 'd', 'play' => 'index.html', 'screenshot' => 'shot.jpg'], "$tmp/tankity");
+$check('card-screenshot-ok', $err === null && ($card['screenshot'] ?? null) === 'games/tankity/shot.jpg');
+foreach (['missing' => 'nope.jpg', 'not-an-image' => 'notes.txt', 'traversal' => '../cylon/shot.jpg'] as $name => $shot) {
+    [$card, $err] = games_hub_card('tankity', ['title' => 't', 'description' => 'd', 'play' => 'index.html', 'screenshot' => $shot], "$tmp/tankity");
+    $check("card-screenshot-reject-$name", $card === null && is_string($err));
+}
+
 // Install look: short name and colors, with defaults.
 $base = ['title' => 'Operation Tankity', 'description' => 'd', 'play' => 'index.html'];
 [$card, $err] = games_hub_card('tankity', $base, "$tmp/tankity");

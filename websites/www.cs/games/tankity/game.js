@@ -6,7 +6,8 @@
  */
 /* The pure game math (RNG, terrain, flight, hits, blasts, drone aim) lives in
  * src/sim.ts, the sound in src/audio.ts, the room client in src/net.ts and the
- * canvas drawing in src/render.ts, the keys and touch pads in src/input.ts, each compiled to js/ and imported here.
+ * canvas drawing in src/render.ts, the keys and touch pads in src/input.ts, the room volley replay in
+ * src/replay.ts and the firing-range simulation in src/preview.ts, each compiled to js/ and imported here.
  * The overlays that are mostly markup are Preact components in src/ui/ (the help and the shop so far):
  * they take state and callbacks as props and keep none of their own. Each
  * import's ?v= is the module's content hash, written by tools/install-files.php,
@@ -25,8 +26,10 @@ import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
 } from './js/audio.js?v=ce8cdf6a6e';
 import {
-  RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, planCatchUp, VOLLEY_OPENERS, CLOCK_SHOW_S,
+  RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, CLOCK_SHOW_S,
 } from './js/net.js?v=6259020b84';
+import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=b278b20677';
+import { createReplay } from './js/replay.js?v=967c6939ce';
 import { createRenderer, drawChassis } from './js/render.js?v=1e211c92ed';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 import { renderHelp } from './js/ui/help.js?v=7366b18437';
@@ -1056,26 +1059,24 @@ function nextRound() {
 }
 
 /* ---------- firing range: a live mini demo sharing the real ballistics ---------- */
-const PV_W = 360, PV_H = 200, PV_WIND = 3, PV_FOE_HP = 60;
-function makePreviewTerrain() {
-  const terr = new Array(PV_W);
-  for (let x = 0; x < PV_W; x++) {
-    terr[x] = 150 + 14 * Math.sin(x / 63 + 1) + 7 * Math.sin(x / 29);
-  }
-  return terr;
-}
+/* The demo itself is src/preview.ts; this is its environment, and the opening
+ * and closing of its veil. */
+const previewEnv = {
+  weapon: key => WEAPONS[key],
+  muzzle: (sys, wkey, x, y, ang) => fxMuzzle(sys, wkey, x, y, ang),
+  impact: (sys, wkey, x, y, r) => { fxImpact(sys, wkey, x, y, r); },
+  special: (sys, wkey, name, x, y, ang) => fxSpecial(sys, wkey, name, x, y, ang),
+  trail: (sys, shell, dt) => fxTrail(sys, shell, dt),
+  showResult: text => {
+    const pr = $('preview-result');
+    if (pr) pr.textContent = text;
+  },
+};
 function openPreview(wkey) {
   const w = WEAPONS[wkey];
   if (!w) return;
-  G.preview = {
-    wkey, terr: makePreviewTerrain(),
-    sx: 44, tx: 296, wind: PV_WIND,
-    angle: 60, power: 50, phase: 'aim', t: 0.6,
-    shells: [], booms: [], volleys: 0, foeHp: PV_FOE_HP,
-    fx: FX ? FX.createSystem({ max: 260 }) : null,
-    result: '', resultT: 0, volleyDmg: 0, volleyHits: 0,
-    cv: document.getElementById('preview-stage'),
-  };
+  G.preview = createPreview(wkey, previewEnv, FX ? FX.createSystem({ max: 260 }) : null,
+    document.getElementById('preview-stage'));
   const pr = $('preview-result');
   if (pr) pr.textContent = '';
   const title = $('preview-title');
@@ -1098,169 +1099,6 @@ function togglePreview() {
   if (G.preview) closePreview();
   else openPreview(G.selected);
 }
-/* Aim the demo at the target with the same integrator the war uses. A coarse
- * sweep plus a fine pass lands every demo on the target: demos never miss. */
-function solvePreview(pv) {
-  const w = WEAPONS[pv.wkey];
-  let best = null;
-  const consider = (a, p) => {
-    const ca = clamp(a, 5, 85), cp = clamp(p, 10, 100);
-    const err = Math.abs(previewShot(pv, ca, cp) - pv.tx);
-    if (!best || err < best.err) best = { err, a: ca, p: cp };
-  };
-  if (w.flat) {
-    // Rail speed answers to power, so sweep both: short soft lobs thread
-    // hills that full-power bolts sail over.
-    for (let a = 5; a <= 85; a += 2) {
-      for (const p of [20, 35, 50, 65, 80]) consider(a, p);
-    }
-    for (let a = best.a - 3; a <= best.a + 3; a += 0.5) {
-      for (let p = best.p - 6; p <= best.p + 6; p += 1.5) consider(a, p);
-    }
-  } else {
-    for (let p = 20; p <= 100; p += 2) consider(60, p);
-    for (let a = 50; a <= 70; a += 2) consider(a, best.p);
-    for (let a = best.a - 3; a <= best.a + 3; a += 0.5) consider(a, best.p);
-    for (let p = best.p - 2; p <= best.p + 2; p += 0.25) consider(best.a, p);
-  }
-  pv.angle = best.a;
-  pv.power = best.p;
-}
-function previewShot(pv, angle, power) {
-  const w = WEAPONS[pv.wkey];
-  const rad = angle * Math.PI / 180;
-  const st = {
-    x: pv.sx, y: pv.terr[pv.sx] - 12,
-    vx: Math.cos(rad) * shotSpeed(power, w.flat, w.speed),
-    vy: -Math.sin(rad) * shotSpeed(power, w.flat, w.speed),
-  };
-  const grav = w.flat ? FLAT_GRAV : GRAV;
-  for (let i = 0; i < 720; i++) {
-    stepBallistic(st, 1 / 60, pv.wind, grav);
-    if (st.x < 0 || st.x >= PV_W || st.y >= PV_H) return st.x;
-    if (i >= 6 && st.y >= pv.terr[clamp(Math.round(st.x), 0, PV_W - 1)]) return st.x;
-  }
-  return st.x;
-}
-function previewFire(pv) {
-  const w = WEAPONS[pv.wkey];
-  const rad = pv.angle * Math.PI / 180;
-  const shots = w.pellets || 1;
-  for (let i = 0; i < shots; i++) {
-    const off = shots === 1 ? 0 : (i - (shots - 1) / 2) * (w.spread || 0);
-    const a = rad + off;
-    const spd = shotSpeed(pv.power, w.flat, w.speed);
-    pv.shells.push({ x: pv.sx, y: pv.terr[pv.sx] - 12, vx: Math.cos(a) * spd, vy: -Math.sin(a) * spd, wkey: pv.wkey, age: 0, pierced: false, split: false });
-  }
-  pv.volleyDmg = 0;
-  pv.volleyHits = 0;
-  fxMuzzle(pv.fx, pv.wkey, pv.sx, pv.terr[pv.sx] - 12, Math.atan2(-Math.sin(rad), Math.cos(rad)));
-}
-function previewBoom(pv, x, y, ov) {
-  const w = WEAPONS[pv.wkey];
-  const dmg0 = (ov && ov.dmg) || w.dmg;
-  const r = (ov && ov.radius) || w.radius;
-  pv.booms.push({ x, y, r, wkey: pv.wkey, t: 0, life: 0.5 });
-  carveCrater(pv.terr, x, y, r, PV_H - 4);
-  fxImpact(pv.fx, pv.wkey, x, y, r);
-  // Same falloff the war uses, scored against the demo target.
-  const fy = pv.terr[pv.tx] - 12;
-  const d = Math.hypot(pv.tx - x, fy - y);
-  if (d <= r + 14) {
-    let dmg = blastDamage(dmg0, d, r);
-    const direct = d < 14;
-    if (direct) dmg *= 2;
-    pv.foeHp = Math.max(0, pv.foeHp - dmg);
-    pv.volleyDmg += dmg;
-    pv.volleyHits += 1;
-  }
-}
-function stepPreview(dt) {
-  const pv = G.preview;
-  if (!pv) return;
-  if (pv.fx) { pv.fx.wind = pv.wind; pv.fx.step(dt); }
-  for (const bm of pv.booms) bm.t += dt;
-  pv.booms = pv.booms.filter(bm => bm.t < bm.life);
-  if (pv.resultT > 0) pv.resultT -= dt;
-  if (pv.phase === 'aim') {
-    pv.t -= dt;
-    if (pv.t <= 0) {
-      solvePreview(pv);
-      previewFire(pv);
-      pv.phase = 'fly';
-    }
-  } else if (pv.phase === 'fly') {
-    const w = WEAPONS[pv.wkey];
-    const grav = w.flat ? FLAT_GRAV : GRAV;
-    const fy = pv.terr[pv.tx] - 12;
-    for (const s of pv.shells) {
-      s.age = (s.age || 0) + dt;
-      if (w.effect === 'seeker') {
-        const dx = pv.tx - s.x, dy = fy - s.y;
-        const d = Math.max(1, Math.hypot(dx, dy));
-        const push = (w.steer || 70) * dt;
-        s.vx += (dx / d) * push;
-        s.vy += (dy / d) * push;
-      }
-      stepBallistic(s, dt, pv.wind, grav);
-      if (s.dead) continue;
-      fxTrail(pv.fx, s, dt);
-      if (w.effect === 'cluster' && !s.split && s.age >= (w.fuse || 0.9)) {
-        s.split = true;
-        fxSpecial(pv.fx, pv.wkey, 'split', s.x, s.y, Math.atan2(s.vy, s.vx));
-        const n = Math.max(2, w.split || 4), fan = w.fan || 0.22;
-        const sp = Math.hypot(s.vx, s.vy) * 0.85, base = Math.atan2(s.vy, s.vx);
-        for (let i = 0; i < n; i++) {
-          const a = base + (i - (n - 1) / 2) * fan;
-          pv.shells.push({ x: s.x, y: s.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, wkey: pv.wkey, age: 0, pierced: false, split: true, dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius });
-        }
-        s.dead = true;
-        continue;
-      }
-      const touch = !s.pierced && Math.hypot(s.x - pv.tx, s.y - fy) < 10;
-      const near = w.effect === 'proximity' && Math.hypot(s.x - pv.tx, s.y - fy) < (w.prox || 34);
-      if (touch || near) {
-        if (w.effect === 'pierce' && !s.pierced && touch) {
-          s.pierced = true;
-          fxSpecial(pv.fx, pv.wkey, 'pierce', s.x, s.y, Math.atan2(s.vy, s.vx));
-          previewBoom(pv, s.x, s.y, s.dw ? { dmg: s.dw, radius: s.dr } : null);
-          continue;
-        }
-        s.dead = true;
-        previewBoom(pv, s.x, s.y, s.dw ? { dmg: s.dw, radius: s.dr } : null);
-        continue;
-      }
-      s.dead = s.x < 0 || s.x >= PV_W || s.y >= PV_H ||
-        (s.age >= 0.1 && s.y >= pv.terr[clamp(Math.round(s.x), 0, PV_W - 1)]);
-      if (s.dead) previewBoom(pv, s.x, s.y, s.dw ? { dmg: s.dw, radius: s.dr } : null);
-    }
-    pv.shells = pv.shells.filter(s => !s.dead);
-    if (!pv.shells.length) {
-      pv.phase = 'show';
-      pv.t = 1.6;
-      pv.result = pv.volleyHits > 1
-        ? `${pv.volleyHits} hits · ${pv.volleyDmg} total damage`
-        : pv.volleyHits === 1
-          ? (pv.volleyDmg >= WEAPONS[pv.wkey].dmg ? `Direct hit! ${pv.volleyDmg} damage (×2 bonus)` : `Splash: ${pv.volleyDmg} damage`)
-          : 'Clean miss. Blame the wind.';
-      pv.resultT = 1.6;
-      const pr = $('preview-result');
-      if (pr) pr.textContent = pv.result;
-    }
-  } else if (pv.phase === 'show') {
-    pv.t -= dt;
-    if (pv.t <= 0) {
-      pv.volleys += 1;
-      if (pv.foeHp <= 0 || pv.volleys % 4 === 3) {
-        pv.terr = makePreviewTerrain();
-        pv.foeHp = PV_FOE_HP;
-      }
-      pv.phase = 'aim';
-      pv.t = 0.5;
-    }
-  }
-}
-
 /* ---------- drone AI: real ballistic solutions, plus round-scaled error ---------- */
 /* Drone magazine from the data file: shells the battery may load by round. */
 function droneRack() {
@@ -1649,7 +1487,8 @@ function renderLoadout() {
    the tank whose turn it is. Nobody between rounds or after the match. */
 function turnTank() {
   if (G.over || G.phase === 'shop' || G.phase === 'banner') return null;
-  if (net.on && MATCH.volley && MATCH.volley.shooter) return MATCH.volley.shooter;
+  const shooter = net.on ? replay.shooter() : null;
+  if (shooter) return shooter;
   const t = G.tanks[G.turn];
   return t && t.hp > 0 ? t : null;
 }
@@ -1671,15 +1510,6 @@ function battleView() {
   const t = cur();
   const aiming = (G.phase === 'aim' || G.phase === 'think') && t && t.hp > 0 && !G.over;
   const left = net.turnClockLeft();
-  const replay = [];
-  if (MATCH.volley && MATCH.volley.ft >= 0) {
-    for (const sh of MATCH.volley.shots) {
-      if (sh.landed) continue;
-      const [hx, hy, idx] = netShellAt(sh, MATCH.volley.ft);
-      const hv = netShellVel(sh, idx);
-      replay.push({ x: hx, y: hy, vx: hv[0], vy: hv[1], wkey: sh.e.w });
-    }
-  }
   const pv = G.preview;
   return {
     time: G.time, shake: G.shake, cam: G.cam,
@@ -1687,7 +1517,7 @@ function battleView() {
     terrain: G.terrain, clouds: G.clouds, tanks: G.tanks,
     turnUnit: turnTank(), online: net.on,
     aim: aiming ? { unit: t, length: aimArmLength(shownPower(t)) } : null,
-    booms: G.booms, fx: G.fx, shells: G.shells, replay, sparks: G.parts,
+    booms: G.booms, fx: G.fx, shells: G.shells, replay: replay.flying(), sparks: G.parts,
     wind: G.wind, windGauge: G.tanks.length > 0 && G.phase !== 'shop', windTop: G.windTop,
     textScale: textScale(),
     turnClock: left !== null && left <= CLOCK_SHOW_S && left > 0 ? { left, myTurn: MATCH.myTurn } : null,
@@ -1825,7 +1655,7 @@ function frame(ts) {
   const dt = Math.min(0.05, (ts - lastT) / 1000 || 0.016);
   lastT = ts;
   // The firing range runs on its own, even over the pre-match shop.
-  if (G.preview) stepPreview(dt);
+  if (G.preview) stepPreview(G.preview, dt, previewEnv);
   // Name cards tick on sim time so a throttled background tab can never
   // strand the game between rounds; on return the card simply finishes.
   tickBanner(dt);
@@ -1968,13 +1798,24 @@ const net = new RoomClient(browserRoomEnv(), {
   onError: err => say(prettyRoomError(err), 'bad'),
 });
 /* What the page keeps of a room match: whose turn it reads as, the aim and
-   drive it has not sent, the replay queue (events waiting to be played back)
-   and the volley on screen, and the last snapshot it drew. */
+   drive it has not sent, the room snapshot waiting for the replay to drain,
+   and the last snapshot it drew. The replay queue and the volley on screen
+   live in `replay` (src/replay.ts), declared below. */
 const MATCH = {
   myTurn: false, aimDirty: false, driveAcc: 0, driveT: 0,
-  queue: [], volley: null, pendingRoom: null, fastNext: false,
+  pendingRoom: null,
   lastPhase: '', lastTurn: -1, lastRound: -1, initials: '',
 };
+const replay = createReplay({
+  tank: seat => G.tanks.find(t => t.seat === seat),
+  effect: wkey => (WEAPONS[wkey] || {}).effect,
+  event: e => netEvent(e),
+  launch: () => sfx.play('launch'),
+  blast: (x, y, r, wkey) => netBlast(x, y, r, wkey),
+  muzzle: (wkey, x, y, ang) => fxMuzzle(G.fx, wkey, x, y, ang),
+  special: (wkey, name, x, y, ang) => fxSpecial(G.fx, wkey, name, x, y, ang),
+  trail: (shot, dt, x, y, vx, vy, wkey) => fxTrail(G.fx, shot, dt, x, y, vx, vy, wkey),
+});
 const KNOWN_FOES = ['reaper', 'wraith', 'spotter'];
 const FOE_PAINT = { reaper: '#ff0000', wraith: '#00ffff', spotter: '#ff00ff' };
 const SEAT_PAINT = ['#ffff00', '#00ff00', '#00ffff', '#ff00ff'];
@@ -2303,7 +2144,7 @@ function startNetMatch(room) {
   net.beginMatch(lobbyTold.code === net.code ? lobbyTold.seq : 0);
   MATCH.lastPhase = '';
   MATCH.lastRound = -1;
-  MATCH.queue = []; MATCH.volley = null; MATCH.pendingRoom = null;
+  replay.clear(); MATCH.pendingRoom = null;
   MATCH.aimDirty = false;
   G.over = false;
   SCORES.formHidden = true;
@@ -2358,7 +2199,7 @@ function netLeave(quiet) {
   END.rematch = null;
   END.backToRooms = false;
   renderEndVeil();
-  MATCH.queue = []; MATCH.volley = null; MATCH.pendingRoom = null; MATCH.myTurn = false; MATCH.lastPhase = ''; MATCH.lastTurn = -1; MATCH.lastRound = -1;
+  replay.clear(); MATCH.pendingRoom = null; MATCH.myTurn = false; MATCH.lastPhase = ''; MATCH.lastTurn = -1; MATCH.lastRound = -1;
   SCORES.formHidden = false;
   renderScoresOverlay();
   hideShop();
@@ -2467,9 +2308,9 @@ function netOnSnapshot(room, fresh, first) {
     for (const e of fresh) if (e.t !== 'shot' && e.t !== 'burst') netEvent(e);
     return;
   }
-  MATCH.queue.push(...fresh);
-  if (shouldCatchUp(document.hidden, MATCH.queue)) netCatchUp();
-  if (MATCH.queue.length || MATCH.volley) {
+  replay.push(fresh);
+  if (shouldCatchUp(document.hidden, replay.queue)) netCatchUp();
+  if (!replay.idle()) {
     MATCH.pendingRoom = room;
     MATCH.myTurn = false;
     G.phase = 'think';
@@ -2679,113 +2520,12 @@ function netEvent(e) {
   if (e.t === 'auto') { say(`${seatName(e.seat)} sat quiet, so the crew fired for them.`, 'info'); return; }
 }
 /* ---------- room replay ---------- */
-const PATH_HZ = 12; // rooms.php records a path point every 5 sim steps at 60/s
-function netParsePath(str) {
-  return String(str || '').split(' ').filter(Boolean).map(p => p.split(',').map(Number));
-}
-function netStartVolley() {
-  const fast = !!MATCH.fastNext;
-  MATCH.fastNext = false;
-  const opener = MATCH.queue.shift();
-  const events = [];
-  while (MATCH.queue.length && !VOLLEY_OPENERS.has(MATCH.queue[0].t)) events.push(MATCH.queue.shift());
-  const shooter = G.tanks.find(t => t.seat === opener.seat);
-  const a1 = opener.a ?? (shooter ? shooter.angle : 62);
-  const p1 = opener.pw ?? (shooter ? shooter.power : 55);
-  const x1 = opener.x ?? (shooter ? shooter.x : 0);
-  const swing = shooter ? Math.max(Math.abs(a1 - shooter.angle), Math.abs(p1 - shooter.power), Math.abs(x1 - shooter.x)) : 0;
-  MATCH.volley = {
-    fast,
-    opener, events, shooter, tau: 0,
-    a0: shooter ? shooter.angle : a1, p0: shooter ? shooter.power : p1, x0: shooter ? shooter.x : x1, a1, p1, x1,
-    aimDur: swing < 1 ? 0.15 : clamp(0.45 + swing / 110, 0.5, 1.4),
-    shots: [], end: Math.max(0, ...events.map(e => e.t1 ?? e.at ?? 0)) + 0.6,
-  };
-  netEvent(opener);
-}
 function netBlast(x, y, r, wkey) {
   sfx.play('boom');
   const kick = fxImpact(G.fx, wkey, x, y, r);
   G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : wkey === 'nuke' ? 0.9 : r > 40 ? 0.5 : 0.3));
   G.booms.push({ x, y, r, wkey, t: 0, life: wkey === 'nuke' ? 0.8 : 0.5 });
   carveCrater(G.terrain, x, y, r, H - 4);
-}
-/* A replayed shell's velocity at path index i (points are 1/PATH_HZ s apart). */
-function netShellVel(s, i) {
-  const pts = s.pts, a = pts[Math.min(i, pts.length - 1)], b = pts[Math.min(i + 1, pts.length - 1)];
-  if (!a || !b) return [0, 0];
-  return [(b[0] - a[0]) * PATH_HZ, (b[1] - a[1]) * PATH_HZ];
-}
-function netStepVolley(dt) {
-  const v = MATCH.volley;
-  // A volley kept back from a catch-up plays at triple speed.
-  v.tau += dt * (v.fast ? 3 : 1);
-  const sh = v.shooter;
-  if (sh) {
-    const u = Math.min(1, v.tau / v.aimDur);
-    const e = u * u * (3 - 2 * u);
-    sh.angle = v.a0 + (v.a1 - v.a0) * e;
-    sh.power = v.p0 + (v.p1 - v.p0) * e;
-    sh.x = v.x0 + (v.x1 - v.x0) * e;
-    sh.showA = sh.angle;
-    sh.showP = sh.power;
-  }
-  const ft = v.tau - v.aimDur;
-  v.ft = ft;
-  if (ft < 0) return;
-  for (const e of v.events) {
-    if (e.done || e.at === undefined || ft < e.at) continue;
-    e.done = true;
-    if (e.t === 'shot') {
-      const sh = { e, pts: netParsePath(e.p), landed: false, fx: null };
-      v.shots.push(sh);
-      sfx.play('launch');
-      // Bomblets leave the bloom point; every other shot leaves the barrel.
-      if (e.t0 < 0.01 && sh.pts.length > 1) {
-        const hv = netShellVel(sh, 0);
-        fxMuzzle(G.fx, e.w, sh.pts[0][0], sh.pts[0][1], Math.atan2(hv[1], hv[0]));
-      }
-    } else if (e.t === 'burst') {
-      netBlast(e.x, e.y, e.r, e.w);
-      // A burst from a lance is the bolt passing through a tank.
-      const pass = (WEAPONS[e.w] || {}).effect === 'pierce' && v.shots.find(sh => sh.e.w === e.w);
-      if (pass) {
-        const hv = netShellVel(pass, netShellAt(pass, ft)[2]);
-        fxSpecial(G.fx, e.w, 'pierce', e.x, e.y, Math.atan2(hv[1], hv[0]));
-      }
-    } else {
-      if (e.t === 'hit') {
-        const t = G.tanks.find(x => x.seat === e.seat);
-        if (t) t.hp = Math.max(0, t.hp - e.dmg);
-        // Over a fried tank, the EMP's arcs.
-        const emp = t && v.shots.find(sh => (WEAPONS[sh.e.w] || {}).effect === 'emp');
-        if (emp) fxSpecial(G.fx, emp.e.w, 'arc', t.x, t.y - 12, 0);
-      } else if (e.t === 'kill') {
-        const t = G.tanks.find(x => x.seat === e.seat);
-        if (t) t.hp = 0;
-      }
-      netEvent(e);
-    }
-  }
-  for (const s of v.shots) {
-    if (s.landed) continue;
-    if (ft < s.e.t1) {
-      // In flight: the trail drips along the path the server flew.
-      const at = netShellAt(s, ft), hv = netShellVel(s, at[2]);
-      fxTrail(G.fx, s, dt, at[0], at[1], hv[0], hv[1], s.e.w);
-      continue;
-    }
-    s.landed = true;
-    if (s.e.r > 0) netBlast(s.e.x1, s.e.y1, s.e.r, s.e.w);
-    else if (s.e.split) {
-      const hv = netShellVel(s, s.pts.length - 2);
-      fxSpecial(G.fx, s.e.w, 'split', s.e.x1, s.e.y1, Math.atan2(hv[1], hv[0]));
-    }
-  }
-  if (ft >= v.end && v.events.every(e => e.done || e.at === undefined) && v.shots.every(s => s.landed)) {
-    for (const e of v.events) if (!e.done) netEvent(e);
-    MATCH.volley = null;
-  }
 }
 /* Your turn while the tab is out of sight: the tab title says so, a soft
    ping plays (unless Sound is off), and a notification pops up when the
@@ -2847,13 +2587,10 @@ function netSyncMenu() {
    that follows carries the craters and armor. If it is already our turn,
    skip them all and hand over the controls at once. */
 function netCatchUp() {
-  const plan = planCatchUp(MATCH.queue, !!MATCH.volley, MATCH.pendingRoom, net.seat);
-  if (!plan) return;
-  MATCH.volley = null;
+  const skipped = replay.catchUp(MATCH.pendingRoom, net.seat);
+  if (!skipped) return;
   G.shells = [];
-  for (const e of MATCH.queue.slice(0, plan.cut)) netEvent(e);
-  MATCH.queue = MATCH.queue.slice(plan.cut);
-  MATCH.fastNext = plan.fastNext;
+  for (const e of skipped) netEvent(e);
 }
 if (typeof document.addEventListener === 'function') {
   document.addEventListener('visibilitychange', () => {
@@ -2865,26 +2602,12 @@ if (typeof document.addEventListener === 'function') {
 /* Drive the replay; once nothing is left to play, the waiting room state
    takes over. */
 function netReplay(dt) {
-  if (MATCH.volley) netStepVolley(dt);
-  while (!MATCH.volley && MATCH.queue.length) {
-    if (VOLLEY_OPENERS.has(MATCH.queue[0].t)) netStartVolley();
-    else netEvent(MATCH.queue.shift());
-  }
-  if (!MATCH.volley && !MATCH.queue.length && MATCH.pendingRoom) {
+  replay.step(dt);
+  if (replay.idle() && MATCH.pendingRoom) {
     const room = MATCH.pendingRoom;
     MATCH.pendingRoom = null;
     netAdopt(room);
   }
-}
-/* Where a replayed shell is at flight time ft: path points are 1/12 s apart. */
-function netShellAt(s, ft) {
-  const k = (ft - s.e.t0) * PATH_HZ;
-  const pts = s.pts;
-  if (!pts.length) return [s.e.x1, s.e.y1, 0];
-  const i = Math.max(0, Math.min(pts.length - 1, Math.floor(k)));
-  const j = Math.min(pts.length - 1, i + 1);
-  const f = Math.max(0, Math.min(1, k - i));
-  return [pts[i][0] + (pts[j][0] - pts[i][0]) * f, pts[i][1] + (pts[j][1] - pts[i][1]) * f, i];
 }
 function netEaseAim(dt) {
   const k = 1 - Math.exp(-dt * 5);

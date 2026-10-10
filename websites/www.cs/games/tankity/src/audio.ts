@@ -296,7 +296,10 @@ function musicStep(): void {
 const XFADE_S = 2;
 const SWITCH_S = 1.2;
 interface TrackEntry { buf: AudioBuffer; start: number; end: number }
-interface Play { idx: number; voices: { src: AudioBufferSourceNode; gain: GainNode }[]; timer: number }
+/* One track's playback. While it is still loading it holds `heard`, the play
+   the listener can hear, so switching, failing over or stopping can always
+   fade that one out. */
+interface Play { idx: number; voices: { src: AudioBufferSourceNode; gain: GainNode }[]; timer: number; heard: Play | null }
 const TRACK_CACHE: Record<string, Promise<TrackEntry | null>> = {}; // file -> decoded track
 let musicBus: GainNode | null = null; // gain node every track runs through
 let trackPlay: Play | null = null;
@@ -378,8 +381,7 @@ function playTrack(): void {
   if (!musicOn || musicMuted || !gestured || !trackMode()) return;
   const idx = trackIdx % MUSIC_LIST.length;
   if (trackPlay && trackPlay.idx === idx) return;
-  const old = trackPlay;
-  const play: Play = { idx, voices: [], timer: 0 };
+  const play: Play = { idx, voices: [], timer: 0, heard: heardPlay() };
   trackPlay = play;
   const t = MUSIC_LIST[idx]!;
   loadTrack(t).then(entry => {
@@ -387,10 +389,18 @@ function playTrack(): void {
     if (!entry) { trackFailed(); return; }
     trackFails = 0;
     const ac = audioCtx()!;
+    const old = play.heard;
+    play.heard = null;
     fadeOutPlay(old, old ? SWITCH_S : 0);
     playPass(play, entry, typeof t.volume === 'number' ? t.volume : 1, ac.currentTime + 0.05, old ? SWITCH_S : 0.4);
     if (onTrackStart) onTrackStart(t);
   });
+}
+/* The play the listener hears now: the current one once it has started,
+   else whatever it is still waiting to replace. */
+function heardPlay(): Play | null {
+  if (!trackPlay) return null;
+  return trackPlay.voices.length ? trackPlay : trackPlay.heard;
 }
 function musicForLevel(level: number): void {
   const n = MUSIC_LIST.length;
@@ -406,8 +416,10 @@ function nextTrack(): void {
 }
 function trackFailed(): void {
   trackFails++;
-  if (trackMode()) { trackIdx = (trackIdx + 1) % MUSIC_LIST.length; trackPlay = null; playTrack(); return; }
+  const heard = heardPlay();
+  if (trackMode()) { trackIdx = (trackIdx + 1) % MUSIC_LIST.length; trackPlay = heard; playTrack(); return; }
   // Every track failed: the built-in songs take over.
+  fadeOutPlay(heard, SWITCH_S);
   trackPlay = null;
   if (musicOn && !musicMuted) startSynth();
 }
@@ -432,7 +444,9 @@ function startMusic(): void {
 function stopMusic(): void {
   musicOn = false;
   stopSynth();
-  fadeOutPlay(trackPlay, 0.3);
+  const heard = heardPlay();
+  fadeOutPlay(heard, 0.3);
+  if (trackPlay !== heard) fadeOutPlay(trackPlay, 0.3);
   trackPlay = null;
 }
 

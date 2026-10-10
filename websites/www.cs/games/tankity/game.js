@@ -16,10 +16,10 @@ import {
   muzzle, shotSpeed, stepBallistic, blastDamage,
   fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling, aiChoose as simAiChoose,
-} from './js/sim.js?v=20261010z';
+} from './js/sim.js?v=20261010za';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
-} from './js/audio.js?v=20261010z';
+} from './js/audio.js?v=20261010za';
 
 /* ---------- audio: lives in src/audio.ts ---------- */
 music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));

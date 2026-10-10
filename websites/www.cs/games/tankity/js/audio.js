@@ -393,8 +393,7 @@ function playTrack() {
     const idx = trackIdx % MUSIC_LIST.length;
     if (trackPlay && trackPlay.idx === idx)
         return;
-    const old = trackPlay;
-    const play = { idx, voices: [], timer: 0 };
+    const play = { idx, voices: [], timer: 0, heard: heardPlay() };
     trackPlay = play;
     const t = MUSIC_LIST[idx];
     loadTrack(t).then(entry => {
@@ -406,11 +405,20 @@ function playTrack() {
         }
         trackFails = 0;
         const ac = audioCtx();
+        const old = play.heard;
+        play.heard = null;
         fadeOutPlay(old, old ? SWITCH_S : 0);
         playPass(play, entry, typeof t.volume === 'number' ? t.volume : 1, ac.currentTime + 0.05, old ? SWITCH_S : 0.4);
         if (onTrackStart)
             onTrackStart(t);
     });
+}
+/* The play the listener hears now: the current one once it has started,
+   else whatever it is still waiting to replace. */
+function heardPlay() {
+    if (!trackPlay)
+        return null;
+    return trackPlay.voices.length ? trackPlay : trackPlay.heard;
 }
 function musicForLevel(level) {
     const n = MUSIC_LIST.length;
@@ -433,13 +441,15 @@ function nextTrack() {
 }
 function trackFailed() {
     trackFails++;
+    const heard = heardPlay();
     if (trackMode()) {
         trackIdx = (trackIdx + 1) % MUSIC_LIST.length;
-        trackPlay = null;
+        trackPlay = heard;
         playTrack();
         return;
     }
     // Every track failed: the built-in songs take over.
+    fadeOutPlay(heard, SWITCH_S);
     trackPlay = null;
     if (musicOn && !musicMuted)
         startSynth();
@@ -474,7 +484,10 @@ function startMusic() {
 function stopMusic() {
     musicOn = false;
     stopSynth();
-    fadeOutPlay(trackPlay, 0.3);
+    const heard = heardPlay();
+    fadeOutPlay(heard, 0.3);
+    if (trackPlay !== heard)
+        fadeOutPlay(trackPlay, 0.3);
     trackPlay = null;
 }
 /** Music. */

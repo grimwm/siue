@@ -142,3 +142,28 @@ export async function roomPair(browser) {
 }
 
 export const lastRoom = list => list[list.length - 1];
+
+/* Hold one barrel key for ms, sampling the HUD angle as it swings. */
+export async function holdBarrel(page, key, ms) {
+  const read = async () => parseInt(await hud(page, 'hud-angle'), 10);
+  const seen = [await read()];
+  await page.keyboard.down(key);
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    await page.waitForTimeout(80);
+    seen.push(await read());
+  }
+  await page.keyboard.up(key);
+  seen.push(await read());
+  return seen;
+}
+
+/* A held key swings one way only, all the way to a stop (10 or 170). */
+export function expectFullSwing(seen) {
+  const dir = Math.sign(seen[seen.length - 1] - seen[0]);
+  expect(dir, `the barrel moved: ${seen.join(' ')}`).not.toBe(0);
+  for (let i = 1; i < seen.length; i++) {
+    expect((seen[i] - seen[i - 1]) * dir, `no snap back: ${seen.join(' ')}`).toBeGreaterThanOrEqual(0);
+  }
+  expect([10, 170], `reached a stop: ${seen.join(' ')}`).toContain(seen[seen.length - 1]);
+}

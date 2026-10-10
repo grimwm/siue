@@ -509,3 +509,8 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* Touch screens have no keyboard: no key caps, key footers or key prose. */
+.touch-only { display: none; }
+.touch .touch-only { display: revert; }
+.touch .key, .touch .keys-only, .touch .nav-hint, .touch .pad-note { display: none; }

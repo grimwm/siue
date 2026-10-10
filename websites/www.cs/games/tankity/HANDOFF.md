@@ -57,3 +57,7 @@ cycles weapons, 1-4 load favorites, B buys, V/P preview, N new/next, C menu,
 O rooms, U tutorial, T random seed, F fullscreen, M music, E sound, J/K and
 PgUp/PgDn scroll panels, ESC closes. In fullscreen, Chromium lets a tap of
 ESC reach the game; holding it leaves fullscreen.
+
+Touch-only screens (coarse pointer, no mouse or trackpad) get no key
+bindings and no key labels: `.key`, `.nav-hint`, `.pad-note` and
+`.keys-only` hide under `html.touch`, and `.touch-only` help shows instead.

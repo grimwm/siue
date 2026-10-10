@@ -23,7 +23,8 @@ help:
 	@echo "  parity - Check the docker PHP against www.cs.siue.edu's modules/ini"
 	@echo "  test   - Unit suites: games hub, share tags, Tankity (incl. game.yaml) (needs make up)"
 	@echo "  protocol - Rewrite the Tankity room protocol fixtures (needs make up)"
-	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL"
+	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL;"
+	@echo "           one run per machine at a time (E2E_ARGS passes to playwright)"
 	@echo "  screenshots - Recapture each game's Games-page picture (macOS sips)"
 
 deploy:
@@ -62,7 +63,7 @@ protocol:
 
 e2e:
 	@url=$${E2E_BASE_URL:-$$($(MAKE) --no-print-directory -s url)} && \
-	cd tests/e2e && npm ci --silent && E2E_BASE_URL=$$url npx playwright test
+	E2E_BASE_URL=$$url tests/e2e/run.sh $(E2E_ARGS)
 
 screenshots:
 	@url=$${E2E_BASE_URL:-$$($(MAKE) --no-print-directory -s url)} && \

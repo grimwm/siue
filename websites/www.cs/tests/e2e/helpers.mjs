@@ -12,7 +12,8 @@ export function recorderScript() {
   const rec = { frame: 0, shells: [], arms: [], tankY: [] };
   window.__rec = rec;
   const raf = window.requestAnimationFrame.bind(window);
-  window.requestAnimationFrame = cb => raf(ts => { rec.frame++; cb(ts); });
+  rec.times = {}; // frame number -> its timestamp, so motion can be judged per second
+  window.requestAnimationFrame = cb => raf(ts => { rec.frame++; rec.times[rec.frame] = ts; cb(ts); });
   const P = CanvasRenderingContext2D.prototype;
   const onStage = c => c.canvas && c.canvas.id === 'stage';
   const arc = P.arc, moveTo = P.moveTo, lineTo = P.lineTo, fillText = P.fillText;
@@ -36,6 +37,10 @@ export async function newPlayer(browser, path = 'games/tankity/') {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
   await ctx.addInitScript(recorderScript);
   const page = await ctx.newPage();
+  // E2E_CPU_THROTTLE=4 runs the page at a quarter speed, like a busy CI
+  // runner, to shake out timing assumptions.
+  const slow = Number(process.env.E2E_CPU_THROTTLE || 0);
+  if (slow > 1) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: slow });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(path);
@@ -145,15 +150,19 @@ export async function roomPair(browser, { beforeStart } = {}) {
 
 export const lastRoom = list => list[list.length - 1];
 
-/* Hold one barrel key for ms, sampling the HUD angle as it swings. */
+/* Hold one barrel key for at least ms, then on until the barrel reaches a
+   stop (a slow machine swings it fewer degrees per wall-clock second), up to
+   15 s; samples the HUD angle throughout. */
 export async function holdBarrel(page, key, ms) {
   const read = async () => parseInt(await hud(page, 'hud-angle'), 10);
   const seen = [await read()];
   await page.keyboard.down(key);
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
+  const start = Date.now();
+  while (Date.now() - start < 15_000) {
     await page.waitForTimeout(80);
-    seen.push(await read());
+    const a = await read();
+    seen.push(a);
+    if (Date.now() - start >= ms && (a === 10 || a === 170)) break;
   }
   await page.keyboard.up(key);
   seen.push(await read());

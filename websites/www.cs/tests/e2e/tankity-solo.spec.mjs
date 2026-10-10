@@ -142,13 +142,19 @@ test('drones show an aim arm that swings smoothly before firing', async ({ brows
   await page.keyboard.press('Control');
   await expect.poll(async () => (await rec(page)).arms.length, { timeout: 30_000 }).toBeGreaterThan(20);
   await page.waitForTimeout(1500);
-  const arms = (await rec(page)).arms;
+  const { arms, times } = await rec(page);
   const byFrame = new Map(arms.map(a => [a[0], a]));
+  const frames = [...byFrame.keys()];
   const angles = [...byFrame.values()].map(([, x0, y0, x1, y1]) => Math.atan2(y0 - y1, Math.abs(x1 - x0)) * 180 / Math.PI);
   const lengths = [...byFrame.values()].map(([, x0, y0, x1, y1]) => Math.hypot(x1 - x0, y1 - y0));
-  let maxStep = 0;
-  for (let i = 1; i < angles.length; i++) maxStep = Math.max(maxStep, Math.abs(angles[i] - angles[i - 1]));
-  expect(maxStep, 'no snapping').toBeLessThan(6);
+  // Judge the swing by speed, not per frame: a slow machine draws fewer
+  // frames, so each one moves further, but nothing may snap.
+  let maxRate = 0;
+  for (let i = 1; i < angles.length; i++) {
+    const dt = Math.max(1 / 60, ((times[frames[i]] || 0) - (times[frames[i - 1]] || 0)) / 1000);
+    maxRate = Math.max(maxRate, Math.abs(angles[i] - angles[i - 1]) / dt);
+  }
+  expect(maxRate, 'no snapping (degrees per second)').toBeLessThan(360);
   for (const l of lengths) expect(l).toBeGreaterThan(13.9), expect(l).toBeLessThan(50.1);
 });
 

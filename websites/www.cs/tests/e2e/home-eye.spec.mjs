@@ -11,7 +11,8 @@ test('the home page eye sweeps the bar', async ({ page }) => {
   await page.goto('./');
   await page.waitForSelector('#cylon-eye');
   const xs = [];
-  for (let i = 0; i < 6; i++) { xs.push(await eyeCentre(page)); await page.waitForTimeout(250); }
+  await page.waitForLoadState('load');
+  for (let i = 0; i < 10; i++) { xs.push(await eyeCentre(page)); await page.waitForTimeout(250); }
   expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(60);
 });
 

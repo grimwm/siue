@@ -72,7 +72,7 @@ e2e:
 
 screenshots:
 	@url=$${E2E_BASE_URL:-$$($(MAKE) --no-print-directory -s url)} && \
-	cd tests/e2e && npm ci --silent && E2E_BASE_URL=$$url node screenshots.mjs
+	cd tests/e2e && npm ci --silent && E2E_BASE_URL=$$url node screenshots.mjs $(GAMES)
 
 # The specs this branch's changes need (committed, uncommitted and new files
 # against origin/main), picked by tests/e2e/select.mjs; nothing when none.

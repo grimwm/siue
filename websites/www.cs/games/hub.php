@@ -193,7 +193,7 @@ function games_hub_card(string $id, array $meta, string $dir): array
             return [null, '`start` must be a JavaScript function name, like cylonStartGame'];
         }
         $card['start'] = $start;
-        // tools/game-share-tags.php writes play/<id>/, a page that carries
+        // tools/site-game-pages.php writes play/<id>/, a page that carries
         // the game's share tags and forwards to the site with ?game=<id>.
         $card['share'] = "play/$id/";
         // The site page links this manifest once the game launches, so the

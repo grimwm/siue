@@ -31,16 +31,25 @@ STAMP=.deploy-hash
 # Runtime data the server writes; never upload over it.
 SCORES=games/cylon/data/scores.json
 
-# Shared game links must preview the game: refuse to ship stale share tags.
-if ! php tools/game-share-tags.php --check; then
-  echo "deploy: run php tools/game-share-tags.php and commit the result" >&2
+# Shared game links must preview the game: refuse to ship a stale site page.
+if ! php tools/site-game-pages.php --check; then
+  echo "deploy: run php tools/site-game-pages.php and commit the result" >&2
   exit 1
 fi
 
+# Each game rebuilds its own install files (manifest, service worker) with
+# the tool in its folder: refuse a stale one.
+for tool in games/*/tools/install-files.php; do
+  if ! php "$tool" --check; then
+    echo "deploy: run php $tool and commit the result" >&2
+    exit 1
+  fi
+done
+
 # Tankity's data is edited in game.yaml and served as game.json: refuse a stale
 # or invalid one.
-if ! php tools/tankity-config.php --check; then
-  echo "deploy: run php tools/tankity-config.php and commit the result" >&2
+if ! php games/tankity/tools/game-json.php --check; then
+  echo "deploy: run php games/tankity/tools/game-json.php and commit the result" >&2
   exit 1
 fi
 
@@ -61,12 +70,13 @@ while IFS= read -r -d '' f; do
   case "$f" in
     "$SCORES") continue ;;
     # Development files that ride along with games: tests, maintainer notes
-    # (README.md), the room protocol fixtures (games/*/protocol/, only the
-    # tests read them), games/tankity/game.yaml, whose runtime form is the
-    # generated game.json (nothing fetches the YAML), and the sound-effect
-    # build script (the .mp3 files it builds do ship; its sources are in
-    # games/*/src/ below).
-    games/*-test.* | games/README.md | games/*/README.md | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh) continue ;;
+    # (README.md), each game's tools/ folder (generators for files that do
+    # ship; nothing at runtime runs them), the room protocol fixtures
+    # (games/*/protocol/, only the tests read them), games/tankity/game.yaml,
+    # whose runtime form is the generated game.json (nothing fetches the
+    # YAML), and the sound-effect build script (the .mp3 files it builds do
+    # ship; its sources are in games/*/src/ below).
+    games/*-test.* | games/README.md | games/*/README.md | games/*/tools/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh) continue ;;
     # Authoring sources kept in Git LFS (see .gitattributes): never served.
     *.blend | *.blend1 | *.wav | *.flac | *.aif | *.aiff | games/*/src/*) continue ;;
     games/*) ;;

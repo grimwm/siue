@@ -39,6 +39,17 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+.play-nav .play-github {
+  margin-right: -0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border-radius: 6px;
+  color: var(--play-dim);
+}
 .play-games {
   padding: 0.3rem 0.75rem;
   border: 1px solid var(--game-accent);

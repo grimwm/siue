@@ -534,6 +534,43 @@ button:focus-visible,
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+/* GitHub mark: the repository link, a square control just left of Games. */
+.site-github {
+  height: var(--nav-control-h);
+  width: var(--nav-control-h);
+  flex: 0 0 var(--nav-control-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid rgba(255, 55, 55, 0.38);
+  border-radius: 0.25rem;
+  background:
+    linear-gradient(180deg, rgba(255, 45, 45, 0.14) 0%, rgba(90, 8, 8, 0.28) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    color 0.15s ease;
+}
+
+.site-github:hover,
+.site-github:focus-visible {
+  color: #fff;
+  border-color: var(--crimson-hot);
+  box-shadow:
+    0 0 16px rgba(255, 40, 40, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.site-github-icon {
+  display: block;
+}
+
+body.cylon-nav-combat .site-github,
+body.cylon-game-live .site-github,
 body.cylon-nav-combat .cic-enter-btn,
 body.cylon-game-live .cic-enter-btn {
   display: none;

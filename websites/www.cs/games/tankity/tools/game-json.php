@@ -1136,7 +1136,21 @@ function tankity_config_render(string $yaml, string $gameDir): string
     if ($data === null) {
         throw new TankityConfigError(implode("\n", $errors));
     }
-    return json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION) . "\n";
+    // Pretty, except each effects emitter sits on one line: there are about
+    // two hundred, and fully expanded they would triple the file the browser
+    // downloads (the host serves it uncompressed).
+    $flags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION;
+    $flat = [];
+    foreach ($data['effects'] ?? [] as $wk => $slots) {
+        foreach ($slots as $slot => $def) {
+            foreach ($def['emitters'] ?? [] as $i => $em) {
+                $token = "\u{1}" . count($flat) . "\u{1}";
+                $flat[json_encode($token, $flags)] = json_encode($em, $flags);
+                $data['effects'][$wk][$slot]['emitters'][$i] = $token;
+            }
+        }
+    }
+    return strtr(json_encode($data, JSON_PRETTY_PRINT | $flags), $flat) . "\n";
 }
 
 if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {

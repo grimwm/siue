@@ -82,10 +82,14 @@ export function recorderScript() {
   };
 }
 
-export async function newPlayer(browser, path = 'games/tankity/') {
+/* A fresh player on the game page. { clock: true } installs Playwright's
+   clock before the page loads, as it requires, so a spec can fast-forward
+   the game with page.clock.runFor() (time still flows on its own). */
+export async function newPlayer(browser, path = 'games/tankity/', { clock = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
   await ctx.addInitScript(recorderScript);
   const page = await ctx.newPage();
+  if (clock) await page.clock.install();
   // E2E_CPU_THROTTLE=4 runs the page at a quarter speed, like a busy CI
   // runner, to shake out timing assumptions.
   const slow = Number(process.env.E2E_CPU_THROTTLE || 0);

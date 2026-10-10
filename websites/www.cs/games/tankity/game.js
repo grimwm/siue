@@ -406,6 +406,8 @@ function resetMatch(seedStr) {
   G.bunker = 0;
   G.laststand = false;
   G.over = false;
+  const endVeil = $('end-veil');
+  if (endVeil) endVeil.hidden = true; // a new match never sits on the last one's result
   G.won = false;
   G.demo = false;
   G.demoHint = false;

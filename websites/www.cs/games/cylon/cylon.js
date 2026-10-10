@@ -3383,6 +3383,16 @@ async function initializeCylonEffects() {
         const targetX = (window.innerWidth || 1) / 2;
         const targetY = (window.innerHeight || 1) * 0.48;
 
+        // The intro's timed steps wait out a pause (How to Play) instead of
+        // running underneath it.
+        const afterPause = (fn) => {
+            const step = () => {
+                if (gen !== introGen || !settings.gameEnabled) return;
+                if (paused) { setTimeout(step, 100); return; }
+                fn();
+            };
+            step();
+        };
         const finish = (x, y) => {
             if (gen !== introGen || !settings.gameEnabled) return;
             nukeInFlight = false;
@@ -3391,18 +3401,12 @@ async function initializeCylonEffects() {
             showIntroTitle();
             // Start scatter after the white flash peaks so the drift is visible
             const scatterDelay = reduceMotion ? 0 : 520;
-            setTimeout(() => {
-                if (gen !== introGen || !settings.gameEnabled) return;
-                beginCombatAfterIntro();
-            }, scatterDelay);
+            setTimeout(() => afterPause(beginCombatAfterIntro), scatterDelay);
             // Hold at center through nav chrome fade, then ride into the brand slot
             const settleDelay = reduceMotion
                 ? 0
                 : Math.max(900, scatterDelay + NAV_FADE_MS + 80);
-            setTimeout(() => {
-                if (gen !== introGen || !settings.gameEnabled) return;
-                settleIntroTitle(gen);
-            }, settleDelay);
+            setTimeout(() => afterPause(() => settleIntroTitle(gen)), settleDelay);
         };
 
         if (reduceMotion || !nukeMissileEl) {
@@ -3414,7 +3418,7 @@ async function initializeCylonEffects() {
         // Enter from above the viewport toward center
         let x = targetX + (Math.random() - 0.5) * Math.min(120, (window.innerWidth || 400) * 0.15);
         let y = -72;
-        const started = performance.now();
+        let started = performance.now();
         let last = started;
         const INTRO_SPEED = NUKE_SPEED * 0.85;
 
@@ -3474,7 +3478,7 @@ async function initializeCylonEffects() {
         let lockX = mouse.clientX;
         let lockY = mouse.clientY;
         let seeking = !isEyeDisoriented();
-        const started = performance.now();
+        let started = performance.now();
         let last = started;
 
         nukeMissileEl.style.left = `${x}px`;

@@ -58,6 +58,11 @@ O rooms, U tutorial, T random seed, F fullscreen, M music, E sound, J/K and
 PgUp/PgDn scroll panels, ESC closes. In fullscreen, Chromium lets a tap of
 ESC reach the game; holding it leaves fullscreen.
 
+Every panel opens with a pinned title bar: title, a × that closes it (with
+an ESC cap on desktop), and the panel's keys in a three-column grid that
+shows only while the panel scrolls. Text size (menu) scales every panel and
+the unit name tags; the choice is kept in `localStorage` as `tankity-text`.
+
 Touch-only screens (coarse pointer, no mouse or trackpad) get no key
 bindings and no key labels: `.key`, `.nav-hint`, `.pad-note` and
 `.keys-only` hide under `html.touch`, and `.touch-only` help shows instead.

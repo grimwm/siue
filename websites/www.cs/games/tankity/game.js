@@ -1362,7 +1362,9 @@ function openPreview(wkey) {
   if (pr) pr.textContent = '';
   const title = $('preview-title');
   const dmg = (w.effect === 'pellets' && w.pellets) ? `${w.dmg}×${w.pellets}` : `${w.dmg}`;
-  if (title) title.textContent = `${w.name}: live firing range (${dmg} damage, blast ${w.radius}, direct hits count double)`;
+  if (title) title.textContent = w.name;
+  const stats = $('preview-stats');
+  if (stats) stats.textContent = `${dmg} damage · blast ${w.radius} · direct hits count double`;
   const veil = $('preview-veil');
   if (veil) veil.hidden = false;
   refreshNavHints();
@@ -1845,6 +1847,57 @@ function chooseBody(key) {
   if (NET.code) roomPost('body', { body: key }).then(d => { if (NET.on) netApply(d.room); }).catch(() => {});
   renderUnitPicker();
 }
+/* Text size: a menu setting kept in this browser. It scales every panel
+   (they size in rem) and the name tags over the units. */
+const TEXT_SIZES = [
+  { key: 's', name: 'Small', scale: 0.9 },
+  { key: 'm', name: 'Normal', scale: 1 },
+  { key: 'l', name: 'Large', scale: 1.15 },
+  { key: 'xl', name: 'Huge', scale: 1.3 },
+];
+let TEXT_SIZE = 'm';
+function textScale() {
+  return (TEXT_SIZES.find(t => t.key === TEXT_SIZE) || TEXT_SIZES[1]).scale;
+}
+function loadTextSize() {
+  let key = 'm';
+  try { key = window.localStorage.getItem('tankity-text') || 'm'; } catch (_) { /* no storage: default */ }
+  applyTextSize(TEXT_SIZES.some(t => t.key === key) ? key : 'm');
+}
+function applyTextSize(key) {
+  TEXT_SIZE = key;
+  if (document.documentElement && document.documentElement.style) {
+    document.documentElement.style.fontSize = `${textScale() * 100}%`;
+  }
+  renderTextPicker();
+  placeLogBelowMenu();
+}
+function chooseTextSize(key) {
+  if (!TEXT_SIZES.some(t => t.key === key)) return;
+  try { window.localStorage.setItem('tankity-text', key); } catch (_) { /* fine */ }
+  applyTextSize(key);
+  SFX.click();
+}
+function renderTextPicker() {
+  const box = $('text-picker');
+  if (!box || !box.replaceChildren) return;
+  box.replaceChildren(...TEXT_SIZES.map(t => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'text-choice';
+    b.setAttribute('aria-pressed', String(TEXT_SIZE === t.key));
+    b.title = `${t.name} text`;
+    const glyph = document.createElement('span');
+    glyph.className = 'text-glyph';
+    glyph.style.fontSize = `${0.75 + (t.scale - 0.9) * 2.5}rem`;
+    glyph.textContent = 'Aa';
+    const label = document.createElement('span');
+    label.textContent = t.name;
+    b.append(glyph, label);
+    b.addEventListener('click', ev => { ev.currentTarget.blur(); chooseTextSize(t.key); });
+    return b;
+  }));
+}
 function renderUnitPicker() {
   const box = $('unit-picker');
   if (!box || !box.replaceChildren) return;
@@ -2109,7 +2162,7 @@ function render() {
     c.fillStyle = t.isPlayer ? '#00ff00' : t.color;
     c.fillRect(t.x - w / 2 + 1, barY + 1, (w - 2) * Math.min(1, t.hp / t.maxHp), 4);
     c.fillStyle = '#fff';
-    c.font = 'bold 9px sans-serif';
+    c.font = `bold ${Math.round(9 * textScale())}px sans-serif`;
     c.textAlign = 'center';
     c.fillText(t.isPlayer ? 'TANK' : (ground ? String(t.name || t.id).toUpperCase() : t.id.toUpperCase()), t.x, barY - 4);
     c.textAlign = 'left';
@@ -3780,6 +3833,7 @@ function init() {
   loadKeys();
   G.body = loadBody();
   renderUnitPicker();
+  loadTextSize();
   renderKeyHints();
   startDemo();
   loadScores();
@@ -3830,7 +3884,7 @@ function init() {
   }
   const menuBtn = $('btn-menu');
   if (menuBtn) menuBtn.addEventListener('click', ev => { ev.currentTarget.blur(); toggleOverlay('menu-overlay', 'btn-menu'); });
-  for (const [closeId, ovId, btnId] of [['help-close', 'help-overlay', 'btn-help'], ['report-close', 'report-overlay', 'btn-report'], ['menu-close', 'menu-overlay', 'btn-menu']]) {
+  for (const [closeId, ovId, btnId] of [['log-close', 'log-overlay', 'btn-log'], ['help-close', 'help-overlay', 'btn-help'], ['report-close', 'report-overlay', 'btn-report'], ['menu-close', 'menu-overlay', 'btn-menu']]) {
     const c = $(closeId);
     if (c) c.addEventListener('click', ev => { ev.currentTarget.blur(); toggleOverlay(ovId, btnId); });
   }

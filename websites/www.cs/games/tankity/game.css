@@ -18,6 +18,7 @@
   --wash-edge: rgba(85, 85, 255, 0.55);
   --wash-ink: #aaaaaa;
   --wash-key: #ffff55;
+  --wash-head: #0e0e40;
 }
 
 * { box-sizing: border-box; }
@@ -36,7 +37,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 .topbar {
@@ -280,9 +281,6 @@ battle buttons on the right, sky behind both. */
   max-height: 88%;
   padding: 0.8rem 0.9rem;
 }
-.menu-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.6rem; }
-.menu-head h2 { margin: 0; }
-.card-overlay .menu-head button { margin-top: 0; }
 .menu-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
 .menu-grid button { width: 100%; }
 .seed-row, .unit-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.4rem; }
@@ -299,6 +297,8 @@ battle buttons on the right, sky behind both. */
 .seed-row button { width: auto; flex: none; }
 .unit-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem; flex: 1; }
 .unit-picker .unit-choice { display: grid; justify-items: center; gap: 0.1rem; padding: 0.25rem 0.2rem; }
+.unit-picker .text-choice { display: grid; justify-items: center; align-content: end; gap: 0.1rem; padding: 0.25rem 0.2rem; min-height: 3.2rem; }
+.text-glyph { font-weight: 800; line-height: 1; }
 .unit-choice canvas { width: 48px; height: 34px; }
 .unit-choice span { font-size: 0.7rem; }
 .unit-picker button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
@@ -357,13 +357,6 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
   padding: 0.4rem;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
 }
-.log-overlay h2 {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-}
 .log-transparent {
   max-height: none;
   overflow: visible;
@@ -399,13 +392,10 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
    is something to scroll (aria-disabled="true" means everything fits). */
 .nav-hint { color: #ffffff; font-size: 0.8rem; margin: 0.6rem 0 0; text-shadow: 0 1px 2px #000; }
 .nav-hint [data-keyhint] { color: var(--wash-key); font-weight: 700; }
+/* A panel only scrolls once it has reached its full size, so showing the
+   keys then reflows inside it and never resizes it. */
 .nav-hint[aria-disabled="true"] .scroll-keys { display: none; }
-.nav-hint[data-scroll-only][aria-disabled="true"] { visibility: hidden; }
-.log-overlay .nav-hint {
-  margin-top: 0.4rem;
-  padding: 0.2rem 0.35rem 0;
-  border-top: 1px solid var(--wash-edge);
-}
+.nav-hint[data-scroll-only][aria-disabled="true"] { display: none; }
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -436,6 +426,8 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 #shop-list li.sel { background: rgba(255, 255, 255, 0.07); border-radius: 0.4rem; }
 #shop-list li .acts { flex: none; display: flex; gap: 0.4rem; margin-left: auto; align-self: center; }
 #shop-list li .acts button { min-width: 4.5rem; }
+/* One line, always: the hit text never resizes the firing range. */
+#preview-result { min-height: 1.5em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #preview-stage { width: 100%; height: auto; border-radius: 6px; background: #10131c; }
 
 .canvas-holder { position: relative; }
@@ -514,3 +506,53 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 .touch-only { display: none; }
 .touch .touch-only { display: revert; }
 .touch .key, .touch .keys-only, .touch .nav-hint, .touch .pad-note { display: none; }
+
+/* Overlay title bars: title and close on top, the panel's keys in a grid
+   below. They stay pinned while the panel scrolls. Each container sets its
+   side padding in --px so the bar can run edge to edge. */
+.card { --px: 1.4rem; padding-top: 0; }
+.card-overlay { --px: 1.2rem; padding-top: 0; }
+.log-overlay { --px: 0.4rem; padding-top: 0; }
+.ov-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  margin: 0 calc(-1 * var(--px)) 0.7rem;
+  padding: 0.7rem var(--px) 0.5rem;
+  background: var(--wash-head);
+  border-bottom: 1px solid var(--wash-edge);
+  border-radius: 11px 11px 0 0;
+}
+.ov-title { min-width: 0; }
+.ov-head h2, .card .ov-head h2, .card-overlay .ov-head h2 { margin: 0; }
+.ov-head .kicker { margin-bottom: 0.1rem; }
+.ov-head .ov-x, .card-overlay .ov-head .ov-x {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  pointer-events: auto;
+}
+.ov-x .esc-cap { font-size: 0.7rem; letter-spacing: 0.04em; }
+.ov-x .x-glyph { font-size: 1.35rem; line-height: 0.8; font-weight: 400; }
+.log-overlay .ov-x .x-glyph { font-size: 1.1rem; }
+.ov-keys {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.15rem 0.6rem;
+  margin: 0;
+  font-size: 0.75rem;
+}
+.ov-keys > span { text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.log-overlay .ov-head { margin-bottom: 0.3rem; padding-top: 0.35rem; border-radius: 9px 9px 0 0; }
+.log-overlay .ov-head h2 { font-size: 0.85rem; }
+.log-overlay .ov-keys { font-size: 0.68rem; }
+.log-overlay .ov-x { font-size: 1rem; padding: 0.1rem 0.4rem; }

@@ -272,7 +272,7 @@ check('menu-esc', els['menu-overlay'].hidden === true);
   const songNames = (src.match(/name: '[^']+'/g) || []).filter(n => /Rollout|High Ground|Crater Blues|Last Tank/.test(n));
   check('songs', songNames.length === 4 && /songIdx = \(G\.round - 1\) % SONGS\.length/.test(src), songNames.join(','));
 // Every scrollable panel shows its keys, dimmed while everything fits.
-const navCount = (html.match(/class="nav-hint"/g) || []).length;
+const navCount = (html.match(/class="nav-hint[" ]/g) || []).length;
 check('nav-hints', navCount === 9, `hints=${navCount}`);
 TAP('global', 'help');
 check('nav-disabled', els['nav-help'].getAttribute('aria-disabled') === 'true');
@@ -765,7 +765,7 @@ function change(el) {
   await ensureAim();
   loadGun('Shell');
   TAP('global', 'battlePreview'); frames(5);
-  const pvTitle = els['preview-title'].textContent;
+  const pvTitle = els['preview-title'].textContent + ' | ' + els['preview-stats'].textContent;
   const pvOpen = els['preview-veil'].hidden === false;
   let pvDraws = 0;
   {
@@ -775,7 +775,7 @@ function change(el) {
   }
   frames(240); // ~4s: aim, fly, boom, verdict on the mini hill
   TAP('global', 'battlePreview'); frames(5);
-  check('preview-open', pvOpen && /Shell: live firing range \(34 damage/.test(pvTitle),
+  check('preview-open', pvOpen && /^Shell \| 34 damage · blast 26/.test(pvTitle),
     `${pvTitle} | turn=${els['hud-turn'].textContent} | ${els['hud-weapon'].textContent}`);
   check('preview-runs', pvDraws > 100, `frames=${pvDraws}`);
   check('preview-close', els['preview-veil'].hidden === true);

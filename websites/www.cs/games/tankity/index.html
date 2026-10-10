@@ -21,7 +21,7 @@
 <meta name="twitter:title" content="Operation Tankity">
 <meta name="twitter:description" content="Mind the wind and out-shoot a drone battery across endless hills. Spend your $600 stake on a 20-item arsenal, or open a room and take turns with a friend.">
 <!-- share-tags:end -->
-<link rel="stylesheet" href="game.css?v=20261010a">
+<link rel="stylesheet" href="game.css?v=20261010b">
 </head>
 <body>
 <header class="topbar">
@@ -80,12 +80,19 @@
       </div>
       </div>
       <section id="log-overlay" class="frame-overlay log-overlay" aria-label="Radio log" hidden>
-        <h2 id="log-h">Radio log</h2>
+        <header class="ov-head">
+          <div class="ov-title"><h2 id="log-h">Radio log</h2></div>
+          <button type="button" class="ov-x" id="log-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
+          <div class="nav-hint ov-keys" id="nav-log" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+        </header>
         <ol id="log" class="log log-transparent" aria-live="polite"></ol>
-        <p class="nav-hint" id="nav-log"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page · </span><span data-keyhint="global:log">L</span> hides</p>
       </section>
       <section id="help-overlay" class="frame-overlay card-overlay" aria-labelledby="help-h" hidden>
-        <h2 id="help-h">How to play</h2>
+        <header class="ov-head">
+          <div class="ov-title"><h2 id="help-h">How to play</h2></div>
+          <button type="button" class="ov-x" id="help-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
+          <div class="nav-hint ov-keys" id="nav-help" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+        </header>
         <ul class="help">
           <li>Scorched-earth artillery: you and the drone battery take turns lobbing shells
             across destructible hills. Last one rolling wins the round.</li>
@@ -127,11 +134,13 @@
             <strong><span data-keyhint="global:report">R</span></strong> the after-action report, and <strong><span data-keyhint="global:escape">ESC</span></strong> closes any open
             menu. Overlays never pause the battle.</li>
         </ul>
-        <button type="button" id="help-close">Close <span class="key" data-keyhint="global:help">(H)</span></button>
-        <p class="nav-hint" data-scroll-only id="nav-help"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page · <span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></p>
       </section>
       <section id="report-overlay" class="frame-overlay card-overlay" aria-labelledby="score-h" hidden>
-        <h2 id="score-h">After-action report</h2>
+        <header class="ov-head">
+          <div class="ov-title"><h2 id="score-h">After-action report</h2></div>
+          <button type="button" class="ov-x" id="report-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
+          <div class="nav-hint ov-keys" id="nav-report" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+        </header>
         <form id="score-form" class="seedbox" action="#">
           <label for="name-input">Callsign</label>
           <input id="name-input" name="name" type="text" autocomplete="off"
@@ -140,13 +149,12 @@
         </form>
         <ol id="scores" class="scores"></ol>
         <p id="scores-note" class="hint"></p>
-        <button type="button" id="report-close">Close <span class="key" data-keyhint="global:report">(R)</span></button>
-        <p class="nav-hint" data-scroll-only id="nav-report"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page · <span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></p>
       </section>
       <section id="menu-overlay" class="frame-overlay card-overlay menu-card" aria-labelledby="menu-h" hidden>
-        <header class="menu-head">
-          <h2 id="menu-h">Game menu</h2>
-          <button type="button" id="menu-close">Close <span class="key" data-keyhint="global:escape">(ESC)</span></button>
+        <header class="ov-head">
+          <div class="ov-title"><h2 id="menu-h">Game menu</h2></div>
+          <button type="button" class="ov-x" id="menu-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
+          <div class="nav-hint ov-keys" id="nav-menu" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
         </header>
         <form id="seed-form" class="menu-grid" action="#">
           <div class="seed-row">
@@ -159,6 +167,10 @@
             <span class="unit-label" id="unit-label">Unit</span>
             <div class="unit-picker" id="unit-picker"></div>
           </div>
+          <div class="unit-row" role="group" aria-labelledby="text-label">
+            <span class="unit-label" id="text-label">Text</span>
+            <div class="unit-picker" id="text-picker"></div>
+          </div>
           <button type="button" id="random-run" title="Ignore the seed box and start on a fresh random seed">Random seed <span class="key" data-keyhint="global:random">(T)</span></button>
           <button type="button" id="rooms-open" title="Host or join a multiplayer game room">Rooms <span class="key" data-keyhint="global:rooms">(O)</span></button>
           <button type="button" id="tutorial-open" title="Replay the opening-moves tutorial">Tutorial <span class="key" data-keyhint="global:tutorial">(U)</span></button>
@@ -166,7 +178,6 @@
           <button type="button" id="btn-music" title="Toggle music">Music: on <span class="key" data-keyhint="global:music">(M)</span></button>
           <button type="button" id="fullscreen" title="Toggle fullscreen">Fullscreen <span class="key" data-keyhint="global:fullscreen">(F)</span></button>
         </form>
-        <p class="nav-hint" data-scroll-only id="nav-menu"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page · <span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></p>
       </section>
       <section id="tutorial-overlay" class="frame-overlay card-overlay" aria-labelledby="tutorial-h" hidden>
         <h2 id="tutorial-h">Tutorial</h2>
@@ -178,29 +189,34 @@
     </div>
     <div id="end-veil" class="veil" hidden>
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="end-title">
-        <p class="kicker" id="end-kicker">Run over</p>
-        <h2 id="end-title">Ending</h2>
+        <header class="ov-head">
+          <div class="ov-title"><p class="kicker" id="end-kicker">Run over</p><h2 id="end-title">Ending</h2></div>
+          <div class="nav-hint ov-keys" id="nav-end" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+        </header>
         <p id="end-text"></p>
         <p id="end-score" class="runstats"></p>
         <button type="button" id="rematch" hidden>Rematch on these hills</button>
         <button type="button" id="again" class="btn-primary">Play again <span class="key" data-keyhint="global:new">(N)</span></button>
-        <p class="nav-hint" data-scroll-only id="nav-end"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span></p>
       </div>
     </div>
     <div id="shop-veil" class="veil" hidden>
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="shop-title">
-        <p class="kicker">Between rounds</p>
-        <h2 id="shop-title">Field shop</h2>
+        <header class="ov-head">
+          <div class="ov-title"><p class="kicker">Between rounds</p><h2 id="shop-title">Field shop</h2></div>
+          <div class="nav-hint ov-keys" id="nav-shop"><span><span data-keyhint="shop:selUp">▲</span><span data-keyhint="shop:selDown">▼</span> move</span><span><span data-keyhint="shop:qtyDown">◀</span><span data-keyhint="shop:qtyUp">▶</span> packs</span><span><span data-keyhint="shop:buy">B</span> buy · <span data-keyhint="shop:preview">V</span> preview</span><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+        </header>
         <p id="shop-cash" class="runstats"></p>
         <ul id="shop-list" class="scores"></ul>
         <button type="button" id="shop-next" class="btn-primary">Next round <span class="key">(N)</span></button>
-        <p class="nav-hint" id="nav-shop"><span data-keyhint="shop:selUp">▲</span><span data-keyhint="shop:selDown">▼</span> move · <span data-keyhint="shop:buy">B</span> buys · <span data-keyhint="shop:preview">V</span> previews · <span data-keyhint="shop:qtyDown">◀</span><span data-keyhint="shop:qtyUp">▶</span> packs<span class="scroll-keys"> · <span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span></p>
       </div>
     </div>
     <div id="lobby-veil" class="veil" hidden>
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="lobby-title">
-        <p class="kicker">Squad up, no chatter</p>
-        <h2 id="lobby-title">Game rooms</h2>
+        <header class="ov-head">
+          <div class="ov-title"><p class="kicker">Squad up, no chatter</p><h2 id="lobby-title">Game rooms</h2></div>
+          <button type="button" class="ov-x" id="lobby-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
+          <div class="nav-hint ov-keys" id="nav-lobby" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+        </header>
         <p class="hint">Host a room and read the 4-letter code to your friends, or join theirs.
           Everyone picks 3-letter initials (kept clean, lowercase is fine). There is no chat,
           only artillery. Empty seats go to the drone battery, and a quiet crew fires
@@ -246,26 +262,24 @@
             <button type="button" id="lobby-leave">Leave room</button>
           </div>
         </div>
-        <div class="acts">
-          <button type="button" id="lobby-close">Back to solo hills</button>
-        </div>
-        <p class="nav-hint" data-scroll-only id="nav-lobby"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span></p>
       </div>
     </div>
     <div id="preview-veil" class="veil" hidden>
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="preview-title">
-        <p class="kicker">Firing range</p>
-        <h2 id="preview-title">Preview</h2>
+        <header class="ov-head">
+          <div class="ov-title"><p class="kicker">Firing range</p><h2 id="preview-title">Preview</h2></div>
+          <button type="button" class="ov-x" id="preview-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
+          <div class="nav-hint ov-keys" id="nav-preview" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+        </header>
+        <p id="preview-stats" class="runstats"></p>
         <canvas id="preview-stage" width="360" height="200"></canvas>
         <p id="preview-result" class="hint" aria-live="polite"></p>
         <p class="hint">Live demo on a small hill. Same shells, same wind math, same damage numbers.</p>
-        <button type="button" id="preview-close">Close <span class="key" data-keyhint="global:escape">(ESC)</span></button>
-        <p class="nav-hint" data-scroll-only id="nav-preview"><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> scroll · <span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span></p>
       </div>
     </div>
   </section>
 </main>
 
-<script src="game.js?v=20261010a" defer></script>
+<script src="game.js?v=20261010b" defer></script>
 </body>
 </html>

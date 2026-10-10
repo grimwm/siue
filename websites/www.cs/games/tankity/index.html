@@ -77,37 +77,10 @@
       <section id="gun-overlay" class="frame-overlay card-overlay gun-card" aria-labelledby="gun-h" data-ui hidden></section>
       <section id="tutorial-overlay" class="frame-overlay card-overlay" aria-labelledby="tutorial-h" data-ui hidden></section>
     </div>
-    <div id="end-veil" class="veil" hidden>
-      <div class="card" role="dialog" aria-modal="true" aria-labelledby="end-title">
-        <header class="ov-head">
-          <div class="ov-title"><p class="kicker" id="end-kicker">Run over</p><h2 id="end-title">Ending</h2></div>
-          <div class="nav-hint ov-keys" id="nav-end" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
-        </header>
-        <p id="end-text"></p>
-        <p id="end-score" class="runstats"></p>
-        <button type="button" id="rematch" hidden>Rematch on these hills</button>
-        <form id="end-score-form" class="seedbox" action="#">
-          <label for="end-name">Callsign</label>
-          <input id="end-name" name="name" type="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="e.g. tankity">
-          <button type="submit">File score</button>
-        </form>
-        <button type="button" id="again" class="btn-primary">Play again <span class="key" data-keyhint="global:new">(N)</span></button>
-      </div>
-    </div>
+    <div id="end-veil" class="veil" data-ui hidden></div>
     <div id="shop-veil" class="veil" data-ui hidden></div>
     <div id="lobby-veil" class="veil" data-ui hidden></div>
-    <div id="leave-veil" class="veil" hidden>
-      <div class="card" role="alertdialog" aria-modal="true" aria-labelledby="leave-title" aria-describedby="leave-text">
-        <header class="ov-head">
-          <div class="ov-title"><p class="kicker">Heads up</p><h2 id="leave-title">Leave this room?</h2></div>
-        </header>
-        <p id="leave-text">The drone battery takes your seat and the match goes on without you. You head back to the solo hills.</p>
-        <div class="acts">
-          <button type="button" id="leave-stay" class="btn-primary">Stay in the match <span class="key esc-cap" data-keyhint="global:escape">ESC</span></button>
-          <button type="button" id="leave-go" class="btn-leave">Leave room</button>
-        </div>
-      </div>
-    </div>
+    <div id="leave-veil" class="veil" data-ui hidden></div>
     <div id="preview-veil" class="veil" hidden>
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="preview-title">
         <header class="ov-head">
@@ -125,6 +98,6 @@
 </main>
 
 <script src="fx.js?v=a68a63de24" defer></script>
-<script type="module" src="game.js?v=de9282dca6"></script>
+<script type="module" src="game.js?v=6be2b1de89"></script>
 </body>
 </html>

@@ -10,7 +10,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "preact/jsx-runtime";
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
 import { useRef } from 'preact/hooks';
-import { KeyHints, OverlayHead, ScrollKeys, useScrollKeep } from './chrome.js?v=9889c2cdd5';
+import { KeyHints, OverlayHead, ScrollKeys, useScrollKeep } from './chrome.js?v=ca57235e2d';
 export function Scores(p) {
     const form = useRef(null);
     const name = useRef(null);

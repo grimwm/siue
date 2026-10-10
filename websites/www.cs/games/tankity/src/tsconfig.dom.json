@@ -14,6 +14,6 @@
   },
   "files": [
     "audio.ts", "render.ts",
-    "ui/help.tsx", "ui/shop.tsx", "ui/lobby.tsx", "ui/menu.tsx", "ui/guns.tsx", "ui/scores.tsx", "ui/log.tsx", "ui/tutorial.tsx", "ui/hud.tsx"
+    "ui/help.tsx", "ui/shop.tsx", "ui/lobby.tsx", "ui/menu.tsx", "ui/guns.tsx", "ui/scores.tsx", "ui/log.tsx", "ui/tutorial.tsx", "ui/hud.tsx", "ui/endveil.tsx", "ui/leave.tsx"
   ]
 }

@@ -17,6 +17,8 @@ const { renderScores } = await import('./js/ui/scores.js');
 const { renderLog } = await import('./js/ui/log.js');
 const { renderTutorial } = await import('./js/ui/tutorial.js');
 const { renderHud } = await import('./js/ui/hud.js');
+const { renderEndVeil } = await import('./js/ui/endveil.js');
+const { renderLeave } = await import('./js/ui/leave.js');
 
 const errors = [];
 function check(name, cond, extra) {
@@ -550,6 +552,70 @@ function gunTiles(n = 10, loaded = 0) {
   section.scrollTop = 0;
   renderScores(section, sp({ rows: ['a', 'b'] }));
   check('scores-reload-keeps-scroll', section.scrollTop === 40, String(section.scrollTop));
+}
+
+// ---- end veil ----
+{
+  const veil = makeEl('end-veil');
+  veil.hidden = false;
+  const calls = { filed: [], rematch: 0, again: 0 };
+  const ep = (over = {}) => ({
+    keyHint, kicker: 'Match over', title: 'Hills claimed!', text: 'All rivals down.', score: 'Score 10 · seed 7',
+    formHidden: false, filed: false, callsign: 'ZED', rematch: null, backToRooms: false,
+    onFile: n => calls.filed.push(n), onRematch: () => { calls.rematch++; }, onAgain: () => { calls.again++; }, ...over,
+  });
+  renderEndVeil(veil, ep());
+  const card = veil.children[0];
+  check('end-card', hasClass(card, 'card') && card.getAttribute('role') === 'dialog' && attr(card, 'aria-modal') === 'true'
+    && attr(card, 'aria-labelledby') === 'end-title');
+  const head = card.children[0];
+  check('end-head', hasClass(head, 'ov-head') && text(byId(head, 'end-kicker')) === 'Match over' && hasClass(byId(head, 'end-kicker'), 'kicker')
+    && text(byId(head, 'end-title')) === 'Hills claimed!' && attr(byId(head, 'nav-end'), 'data-scroll-only') === '');
+  check('end-text-and-score', text(byId(card, 'end-text')) === 'All rivals down.' && text(byId(card, 'end-score')) === 'Score 10 · seed 7'
+    && hasClass(byId(card, 'end-score'), 'runstats'));
+  const rematch = byId(card, 'rematch');
+  check('end-rematch-hidden-in-solo', rematch.hidden === true || attr(rematch, 'hidden') !== undefined);
+  const form = byId(card, 'end-score-form');
+  const input = byId(form, 'end-name');
+  check('end-form', hasClass(form, 'seedbox') && !form.hidden && text(form.children[0]) === 'Callsign' && attr(input, 'maxLength') === '24'
+    && attr(input, 'placeholder') === 'e.g. tankity' && text(form.children[2]) === 'File score' && attr(form.children[2], 'type') === 'submit');
+  check('end-callsign-prefilled', input.value === 'ZED', input.value);
+  const again = byId(card, 'again');
+  check('end-again', hasClass(again, 'btn-primary') && text(again) === 'Play again (N)', text(again));
+  input.value = ' zed ';
+  submit(form);
+  check('end-submit-reports-the-box-as-typed', calls.filed.join('|') === ' zed ', JSON.stringify(calls.filed));
+  renderEndVeil(veil, ep({ callsign: 'ABC' }));
+  check('end-redraw-keeps-typed-callsign', input.value === ' zed ' && byId(veil, 'end-name') === input);
+  renderEndVeil(veil, ep({ filed: true }));
+  check('end-filed', text(form.children[2]) === 'Filed' && form.children[2].disabled === true && byId(veil, 'end-score-form') === form);
+  renderEndVeil(veil, ep({ formHidden: true, rematch: 'Rematch on random hills', backToRooms: true, kicker: 'Room ABCD · final standings' }));
+  check('end-room-standings', form.hidden === true && text(byId(veil, 'rematch')) === 'Rematch on random hills' && !byId(veil, 'rematch').hidden
+    && text(byId(veil, 'again')) === 'Back to rooms' && text(byId(veil, 'end-kicker')) === 'Room ABCD · final standings', text(byId(veil, 'again')));
+  click(byId(veil, 'rematch'));
+  click(byId(veil, 'again'));
+  check('end-buttons-report', calls.rematch === 1 && calls.again === 1);
+}
+
+// ---- leave question ----
+{
+  const veil = makeEl('leave-veil');
+  veil.hidden = false;
+  const calls = { stay: 0, leave: 0 };
+  renderLeave(veil, { keyHint, title: 'Leave this room?', text: 'The battery takes your seat.', onStay: () => { calls.stay++; }, onLeave: () => { calls.leave++; } });
+  const card = veil.children[0];
+  check('leave-card', hasClass(card, 'card') && card.getAttribute('role') === 'alertdialog' && attr(card, 'aria-modal') === 'true'
+    && attr(card, 'aria-labelledby') === 'leave-title' && attr(card, 'aria-describedby') === 'leave-text');
+  check('leave-head-and-text', hasClass(card.children[0], 'ov-head') && text(byId(card, 'leave-title')) === 'Leave this room?'
+    && text(byId(card, 'leave-text')) === 'The battery takes your seat.');
+  const stay = byId(card, 'leave-stay');
+  const go = byId(card, 'leave-go');
+  check('leave-buttons', hasClass(stay, 'btn-primary') && hasClass(go, 'btn-leave') && text(go) === 'Leave room'
+    && text(stay) === 'Stay in the match ESC' && hasClass(byClass(stay, 'key')[0], 'esc-cap'), text(stay));
+  click(stay);
+  check('leave-stay-calls-back', calls.stay === 1 && calls.leave === 0);
+  click(go);
+  check('leave-go-calls-back', calls.leave === 1 && calls.stay === 1);
 }
 
 // ---- radio log ----

@@ -10,7 +10,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "preact/jsx-runtime";
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
-import { KeyHints, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.js?v=9889c2cdd5';
+import { KeyHints, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.js?v=ca57235e2d';
 function MapTile({ map, pressed, draw, rev, onPick }) {
     const canvas = useRef(null);
     useLayoutEffect(() => { if (canvas.current)

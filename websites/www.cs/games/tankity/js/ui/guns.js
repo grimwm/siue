@@ -7,7 +7,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "preact/jsx-ru
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
-import { KeyHints, Key, OverlayHead, blurThen, useScrollKeep } from './chrome.js?v=9889c2cdd5';
+import { KeyHints, Key, OverlayHead, blurThen, useScrollKeep } from './chrome.js?v=ca57235e2d';
 function Tile({ tile, index, cursor, draw, rev, onPick }) {
     const canvas = useRef(null);
     useLayoutEffect(() => { if (canvas.current)

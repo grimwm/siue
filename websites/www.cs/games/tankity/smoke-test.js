@@ -164,7 +164,7 @@ const php = fs.readFileSync(path.join(__dirname, 'rooms.php'), 'utf8');
 // The lobby and the menu are Preact components (src/ui): their ids exist once
 // the game has drawn them, not in index.html (ui-test.js checks their shape).
 const rendered = id => !!els[id] && !!els[id].localName;
-for (const id of ['lobby-veil', 'rematch', 'round-banner', 'round-banner-text', 'preview-result']) {
+for (const id of ['lobby-veil', 'round-banner', 'round-banner-text', 'preview-result']) {
   check('lobby-markup-' + id, html.includes('id="' + id + '"'));
 }
 for (const id of ['rooms-open', 'host-form', 'host-initials', 'join-form',
@@ -308,7 +308,7 @@ check('menu-esc', els['menu-overlay'].hidden === true);
 // Every scrollable panel shows its keys, dimmed while everything fits.
 // (The overlays in src/ui draw theirs: one OverlayHead per navId, and the tutorial's own line.)
 const uiFile = f => fs.readFileSync(path.join(__dirname, 'src', 'ui', f + '.tsx'), 'utf8');
-const uiNavs = ['help', 'shop', 'lobby', 'menu', 'guns', 'scores', 'log'].flatMap(f => uiFile(f).match(/navId="/g) || []).length
+const uiNavs = ['help', 'shop', 'lobby', 'menu', 'guns', 'scores', 'log', 'endveil'].flatMap(f => uiFile(f).match(/navId="/g) || []).length
   + (uiFile('tutorial').match(/class="nav-hint"/g) || []).length;
 const navCount = (html.match(/class="nav-hint[" ]/g) || []).length + uiNavs;
 check('nav-hints', navCount === 10, `hints=${navCount}`);
@@ -1121,7 +1121,7 @@ function lobbyRoom() {
   void document.getElementById('leave-stay');
   // (shop-leave is in the shop component, src/ui/shop.tsx; the rest are in the page.)
   const shopSrc = fs.readFileSync(path.join(__dirname, 'src', 'ui', 'shop.tsx'), 'utf8');
-  check('leave-markup', ['leave-veil', 'leave-go', 'leave-stay'].every(id => html.includes('id="' + id + '"')) && rendered('menu-leave')
+  check('leave-markup', html.includes('id="leave-veil"') && ['leave-go', 'leave-stay', 'rematch', 'again', 'end-score-form'].every(rendered) && rendered('menu-leave')
     && shopSrc.includes('id="shop-leave"'));
   check('leave-buttons-in-room', els['menu-leave'].hidden === false && els['shop-leave'].hidden === false,
     `${els['menu-leave'].hidden} ${els['shop-leave'].hidden}`);

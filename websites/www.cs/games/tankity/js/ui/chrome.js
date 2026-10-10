@@ -21,7 +21,7 @@ export function Key({ at, bare, cls }) {
 }
 /** Title bar: title left, key hints centre, × right, on the grid in game.css. */
 export function OverlayHead(p) {
-    return (_jsxs("header", { class: "ov-head", children: [_jsxs("div", { class: "ov-title", children: [p.kicker !== undefined && _jsx("p", { class: "kicker", children: p.kicker }), _jsx("h2", { id: p.titleId, children: p.title })] }), p.onClose && (_jsxs("button", { type: "button", class: "ov-x", id: p.closeId, "aria-label": "Close", title: "Close (ESC)", onClick: ev => { ev.currentTarget.blur(); p.onClose?.(); }, children: [_jsx(Key, { at: "global:escape", cls: "key esc-cap" }), _jsx("span", { class: "x-glyph", "aria-hidden": "true", children: "\u00D7" })] })), _jsx("div", { class: "nav-hint ov-keys", id: p.navId, "data-scroll-only": p.scrollOnly ? '' : undefined, children: p.nav })] }));
+    return (_jsxs("header", { class: "ov-head", children: [_jsxs("div", { class: "ov-title", children: [p.kicker !== undefined && _jsx("p", { class: "kicker", id: p.kickerId, children: p.kicker }), _jsx("h2", { id: p.titleId, children: p.title })] }), p.onClose && (_jsxs("button", { type: "button", class: "ov-x", id: p.closeId, "aria-label": "Close", title: "Close (ESC)", onClick: ev => { ev.currentTarget.blur(); p.onClose?.(); }, children: [_jsx(Key, { at: "global:escape", cls: "key esc-cap" }), _jsx("span", { class: "x-glyph", "aria-hidden": "true", children: "\u00D7" })] })), _jsx("div", { class: "nav-hint ov-keys", id: p.navId, "data-scroll-only": p.scrollOnly ? '' : undefined, children: p.nav })] }));
 }
 /** The scroll keys that end a key footer: page and half page, and with
  *  `line` the line keys too. */

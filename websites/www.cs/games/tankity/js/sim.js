@@ -220,7 +220,7 @@ export function fireWeapon(world, arsenal, t, wkey) {
             x: m.x, y: m.y,
             vx: Math.cos(a) * spd * s, vy: -Math.sin(a) * spd,
             wkey, owner: t, life: 12,
-            age: 0, pierced: false, split: false,
+            age: 0, pierced: false, split: false, order: [i],
         });
     }
     return { x: m.x, y: m.y, ang: Math.atan2(-Math.sin(rad), Math.cos(rad) * s), spent };
@@ -290,7 +290,7 @@ export function splitShell(s, w) {
             x: s.x, y: s.y,
             vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
             wkey: s.wkey, owner: s.owner, life: 12,
-            age: 0, pierced: false, split: true,
+            age: 0, pierced: false, split: true, order: [...(s.order || []), i],
             dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius,
         });
     }
@@ -363,13 +363,15 @@ export function explode(world, arsenal, x, y, wkey, owner, direct, ov) {
             world.cash += dmg * 2;
         }
         if (t.hp <= 0)
-            blast.events.push(wreck(world, arsenal, t));
+            blast.events.push(wreck(world, arsenal, t, owner));
         else
             blast.events.push({ kind: 'wound', tank: t, dmg, hp: t.hp, direct: !!direct });
     }
     return blast;
 }
-function wreck(world, arsenal, t) {
+/* A unit's wreck: only a kill the player's own shot made pays the bonus, never
+   one a rival drone made. */
+function wreck(world, arsenal, t, owner) {
     // Last stand: the wreck itself detonates, once, then the trick is spent.
     let lastStand = null;
     if (t.isPlayer && world.laststand) {
@@ -377,14 +379,31 @@ function wreck(world, arsenal, t) {
         const ls = arsenal.gear['laststand'] || {};
         lastStand = explode(world, arsenal, t.x, t.y - 12, 'shell', t, null, { dmg: ls.dmg || 50, radius: ls.radius || 44, fx: 'laststand' });
     }
-    if (!t.isPlayer) {
+    if (!t.isPlayer && owner.isPlayer) {
         world.score += TUNE.killBonus;
         world.cash += TUNE.killBonus;
     }
     return { kind: 'wreck', tank: t, lastStand };
 }
+/* True when a shell launched earlier in the same volley is still in the air. */
+function waitsOnEarlier(world, s) {
+    const mine = s.order || [];
+    return world.shells.some(o => {
+        if (o === s || o.dead || o.owner !== s.owner)
+            return false;
+        const theirs = o.order || [];
+        for (let i = 0; i < Math.min(mine.length, theirs.length); i++) {
+            if (theirs[i] !== mine[i])
+                return theirs[i] < mine[i];
+        }
+        return theirs.length < mine.length;
+    });
+}
 /* Advances every shell dt seconds: flight, fuses, hits and bursts. Bomblets
-   born this frame fly this frame too. */
+   born this frame fly this frame too. A volley's shells fly together, but they
+   burst in launch order, as the room server resolves them: a shell that
+   reaches something to burst on while an earlier one is still flying holds
+   where it is, and bursts against the ground that one left once it has landed. */
 export function stepShells(world, arsenal, dt) {
     const events = [];
     for (const s of world.shells) {
@@ -393,6 +412,7 @@ export function stepShells(world, arsenal, dt) {
         if (w.effect === 'seeker')
             steerShell(world.tanks, s, w, dt);
         const x0 = s.x, y0 = s.y;
+        const held = { vx: s.vx, vy: s.vy, age: (s.age || 0) - dt, life: s.life, clear: s.clear };
         stepBallistic(s, dt, world.wind, w.flat ? FLAT_GRAV : GRAV);
         s.life -= dt;
         events.push({ kind: 'trail', shell: s, x: s.x, y: s.y, vx: s.vx, vy: s.vy });
@@ -433,6 +453,18 @@ export function stepShells(world, arsenal, dt) {
             }
         }
         const ov = s.dw ? { dmg: s.dw, radius: s.dr } : null;
+        const bursts = !!direct || (s.age >= 0.1 && s.y >= surfY(world.terrain, s.x));
+        if (bursts && waitsOnEarlier(world, s)) {
+            s.x = x0;
+            s.y = y0;
+            s.vx = held.vx;
+            s.vy = held.vy;
+            s.age = held.age;
+            s.life = held.life;
+            s.clear = held.clear;
+            events.pop(); // no trail for a shell standing still
+            continue;
+        }
         if (direct) {
             // A lance punches through its first victim and keeps flying.
             if (w.effect === 'pierce' && !s.pierced) {

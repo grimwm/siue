@@ -406,6 +406,12 @@ outputs; `sim-vectors-test.js` replays every case through the compiled sim,
   skip), seeker steering, the cluster fan, blast damage and craters (shield,
   bunker, EMP, last stand, kill bonus), landing prediction, whole volleys for
   every weapon in `game.json`, the drone's aim, and tank settling.
+- Shared rules the cases pin: only a kill the player's own shot made pays the
+  300 bonus, and a volley's projectiles (buckshot pellets, cluster bomblets)
+  burst in launch order, each against the ground the earlier ones left. The
+  browser still flies a volley's shells together; a shell that reaches the
+  ground or a unit while an earlier one is in the air holds there until that
+  one has burst.
 - Not covered: pacing. The server steps a whole turn in fixed 1/60 s steps; the
   browser steps per frame. The cases use 1/60 s for both.
 - Regenerate from the site folder with `make sim-vectors` (in the docker

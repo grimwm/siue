@@ -129,8 +129,6 @@ function sv_aim_at(array $room, int $seat, string $wkey, float $targetX): array
 const SV_KNOWN_PATHS = [
     'seek-push/half-a-pixel-away' => ['out'],
     'seek-push/exactly-one-pixel-away' => ['out'],
-    'blast/drone-kills-drone' => ['out.score', 'out.cash'],
-    'volley/cluster-flat-two-rivals-tailwind' => ['out.tanks[].hp', 'out.crater', 'out.score', 'out.cash'],
     'ai-aim/no-rivals-left' => ['out.angle', 'out.power'],
 ];
 $cases = [];
@@ -285,8 +283,7 @@ $blast('two-victims-one-blast', array_replace($base, ['tanks' => [$human(100), $
 $blast('dead-tank-takes-nothing', array_replace($base, ['tanks' => [$human(100), $drone(300, 0)], 'x' => 300]));
 $blast('drone-hurts-human', array_replace($base, ['tanks' => [$drone(100), $human(300, 100)], 'x' => 300, 'direct' => 1]));
 $blast('human-kills-drone-pays-bonus', array_replace($base, ['tanks' => [$human(100), $drone(300, 20)], 'x' => 300, 'direct' => 1]));
-$blast('drone-kills-drone', array_replace($base, ['tanks' => [$human(100), $drone(300, 100), $drone(500, 20)], 'x' => 500, 'direct' => 2, 'owner' => 1]),
-    'The browser pays the player the 300 kill bonus for any drone that dies, including one a rival drone shot; the room server pays a seat only for kills its own tank made. Left as is: a gameplay call for the owner.');
+$blast('drone-kills-drone', array_replace($base, ['tanks' => [$human(100), $drone(300, 100), $drone(500, 20)], 'x' => 500, 'direct' => 2, 'owner' => 1]));
 $blast('drone-kills-human', array_replace($base, ['tanks' => [$drone(100), $human(300, 10)], 'x' => 300, 'direct' => 1]));
 $blast('shield-absorbs-one-hit', array_replace($base, ['tanks' => [$drone(100), $human(300, 100) + ['shield' => true]], 'x' => 300, 'direct' => 1]));
 $blast('shield-spares-the-neighbour-not', array_replace($base, ['tanks' => [$drone(100), $human(300, 100) + ['shield' => true], $drone(320, 100)], 'x' => 310]));
@@ -350,13 +347,12 @@ $setups = [
     'flat-two-rivals-tailwind' => ['terrain' => $flat, 'wind' => 6, 'shooter' => 0,
         'tanks' => [$human(80, 100), $drone(300, 100), $drone(350, 100)], 'aim' => [0, 325]],
 ];
-$inOrder = 'The room server resolves a volley\'s projectiles one after another in launch order, each flying over the craters of the ones before; the browser flies them all together, each meeting the ground as it stood when it lands. Only volleys whose projectiles cross each other\'s craters differ. Left as is: a gameplay call for the owner.';
 foreach ($setups as $label => $s) {
     foreach ($weapons as $wkey => $def) {
         $c = ['terrain' => $s['terrain'], 'wind' => $s['wind'], 'shooter' => $s['shooter'], 'tanks' => $s['tanks'], 'wkey' => $wkey];
         $room = sv_room($c);
         [$c['angle'], $c['power']] = sv_aim_at($room, $s['aim'][0], $wkey, (float) $s['aim'][1]);
-        $volley("$wkey-$label", $c, $wkey === 'cluster' && $label === 'flat-two-rivals-tailwind' ? $inOrder : null);
+        $volley("$wkey-$label", $c);
     }
 }
 $shell = ['terrain' => $flat, 'wkey' => 'shell'];

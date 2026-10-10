@@ -12,6 +12,7 @@
             "wind": -5,
             "turn": null,
             "turnLeft": null,
+            "shopLeft": 90,
             "terrain": [
                 325.1,
                 325.1,
@@ -771,7 +772,8 @@
                     "name": "ABC",
                     "mode": "human",
                     "lives": 3,
-                    "score": 1292
+                    "score": 1292,
+                    "ready": false
                 },
                 {
                     "seat": 1,
@@ -779,7 +781,8 @@
                     "name": "REAPER",
                     "mode": "ai",
                     "lives": 0,
-                    "score": 0
+                    "score": 0,
+                    "ready": false
                 },
                 {
                     "seat": 2,
@@ -787,7 +790,8 @@
                     "name": "WRAITH",
                     "mode": "open",
                     "lives": 0,
-                    "score": 0
+                    "score": 0,
+                    "ready": false
                 },
                 {
                     "seat": 3,
@@ -795,7 +799,8 @@
                     "name": "SPOTTER",
                     "mode": "open",
                     "lives": 0,
-                    "score": 0
+                    "score": 0,
+                    "ready": false
                 }
             ],
             "events": [

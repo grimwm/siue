@@ -1446,12 +1446,47 @@ function hideShop() {
   const veil = $('shop-veil');
   if (veil) veil.hidden = true;
 }
+/* The shop's start button. In a room it is the Ready toggle: pressed reads
+   "Ready ✓", and a line under it counts who is ready and the time left before
+   the shop closes on its own (rooms.php ROOM_SHOP_SECS). */
+let shopReadyShown = '';
+function renderShopReady() {
+  const next = $('shop-next');
+  const line = $('shop-ready');
+  if (!NET.on) {
+    if (next) {
+      next.textContent = `Start round ${G.round + 1}${keyCap('shop', 'next')}`;
+      next.removeAttribute('aria-pressed');
+    }
+    if (line) line.hidden = true;
+    shopReadyShown = '';
+    return;
+  }
+  const mine = netReadyNow();
+  const voters = NET.seats.filter(s => s.human && s.lives > 0);
+  const ready = voters.filter(s => s.ready).length;
+  const left = shopClockLeft();
+  const clock = left === null ? '' : ` · shop closes in ${Math.floor(Math.ceil(left) / 60)}:${String(Math.ceil(left) % 60).padStart(2, '0')}`;
+  const text = `${mine ? 'Ready ✓' : 'Ready'}${keyCap('shop', 'next')}`;
+  const status = `${ready}/${voters.length} ready${clock}`;
+  const marks = voters.map(s => `${String(s.name).toUpperCase()}${s.ready ? ' ✓' : ''}`).join('  ');
+  const shown = text + '|' + status + '|' + marks;
+  if (shown === shopReadyShown) return;
+  shopReadyShown = shown;
+  if (next) {
+    next.textContent = text;
+    next.setAttribute('aria-pressed', mine ? 'true' : 'false');
+  }
+  if (line) {
+    line.hidden = false;
+    line.textContent = `${status} · ${marks}`;
+  }
+}
 let shopSelShown = -1; // the row renderShop last brought into view
 function renderShop() {
   const title = $('shop-title');
   if (title) title.textContent = G.round === 0 ? 'Pre-match shop' : 'Field shop';
-  const next = $('shop-next');
-  if (next) next.textContent = `Start round ${G.round + 1}${keyCap('shop', 'next')}`;
+  renderShopReady();
   const cash = $('shop-cash');
   if (cash) {
     cash.textContent = G.round === 0
@@ -3407,6 +3442,7 @@ const NET = {
   seats: [], myTurn: false, aimDirty: false, driveAcc: 0, driveT: 0,
   queue: [], volley: null, pendingRoom: null, synced: false, busy: false, lastPhase: '', pollId: 0,
   initials: '', maps: [], map: null, mapName: 'Random hills', lastRound: -1,
+  shopLeft: null, shopLeftAt: 0, readyWant: null, readySending: false,
 };
 const KNOWN_FOES = ['reaper', 'wraith', 'spotter'];
 const FOE_PAINT = { reaper: '#ff0000', wraith: '#00ffff', spotter: '#ff00ff' };
@@ -4007,14 +4043,41 @@ function netBuy(it, qty) {
     })
     .catch(err => { say(prettyRoomError(err), 'bad'); SFX.warn(); });
 }
-function netNext() {
-  roomPost('next', {})
-    .then(d => netApply(d.room))
-    .catch(err => {
-      // Anyone may roll out; if someone else already did, just catch up.
-      if (/not at the shop/.test(String(err && err.message))) { netRefresh(); return; }
-      say(prettyRoomError(err), 'bad');
-    });
+/* Whether this seat counts as ready: what the player last asked for while a
+   request is out, otherwise what the room says. */
+function netReadyNow() {
+  if (NET.readyWant !== null) return NET.readyWant;
+  const me = NET.seats[NET.seat];
+  return !!(me && me.ready);
+}
+/* The shop button toggles Ready. The wire carries the wanted state, not a
+   flip, and requests go one at a time in the order of the clicks, so a
+   duplicate or a slow reply can never invert it. If the last player has
+   readied by the time an unready lands, the server has already started the
+   round and answers with that, quietly. */
+function netNext(want) {
+  NET.readyWant = typeof want === 'boolean' ? want : !netReadyNow();
+  SFX.click();
+  renderShopReady();
+  netSendReady();
+}
+async function netSendReady() {
+  if (NET.readySending) return;
+  NET.readySending = true;
+  try {
+    while (NET.readyWant !== null) {
+      const want = NET.readyWant;
+      const d = await roomPost('ready', { ready: want });
+      if (NET.readyWant === want) NET.readyWant = null;
+      netApply(d.room);
+    }
+  } catch (err) {
+    NET.readyWant = null;
+    say(prettyRoomError(err), 'bad');
+    netRefresh();
+  }
+  NET.readySending = false;
+  renderShopReady();
 }
 /* A room update either lands now or waits behind the replay: the server
    settles a whole turn at once, and clients play it back (aim, flight,
@@ -4093,6 +4156,8 @@ function netAdopt(room) {
   NET.turnLeft = typeof room.turnLeft === 'number' ? room.turnLeft : null;
   NET.turnLeftAt = performance.now();
   if (NET.turnLeft === null || prevLeft === null || NET.turnLeft > prevLeft + 5) NET.clockWarned = false;
+  NET.shopLeft = typeof room.shopLeft === 'number' ? room.shopLeft : null;
+  NET.shopLeftAt = performance.now();
   const wasMyTurn = NET.myTurn;
   NET.myTurn = room.phase === 'play' && !!mine && mine.hp > 0 && room.turn === NET.seat;
   if (NET.myTurn && !wasMyTurn) turnAlert();
@@ -4118,6 +4183,7 @@ function netAdopt(room) {
   }
   const rs = $('run-stats');
   if (rs) rs.textContent = `Room ${NET.code} · you are ${seatName(NET.seat)} · round ${G.round}`;
+  if (room.phase !== 'shop') NET.readyWant = null;
   if (room.phase === 'play') {
     G.over = false;
     G.phase = NET.myTurn ? 'aim' : 'think';
@@ -4409,7 +4475,12 @@ function turnClockLeft() {
   if (!NET.on || typeof NET.turnLeft !== 'number') return null;
   return Math.max(0, NET.turnLeft - (performance.now() - NET.turnLeftAt) / 1000);
 }
+function shopClockLeft() {
+  if (!NET.on || typeof NET.shopLeft !== 'number') return null;
+  return Math.max(0, NET.shopLeft - (performance.now() - NET.shopLeftAt) / 1000);
+}
 function tickTurnClock() {
+  if (G.phase === 'shop') renderShopReady();
   const left = turnClockLeft();
   if (left === null || NET.clockWarned || left > CLOCK_WARN_S || left <= 0) return;
   NET.clockWarned = true;
@@ -4939,7 +5010,7 @@ function bindKeys() {
         e.preventDefault();
         if (G.preview) closePreview();
         else if (closeLeaveVeil()) { /* the question closed */ }
-        else if (!closeOverlays()) nextRound();
+        else if (!closeOverlays()) { if (NET.on) netNext(true); else nextRound(); } // ESC readies, never unreadies
         return;
       }
     }

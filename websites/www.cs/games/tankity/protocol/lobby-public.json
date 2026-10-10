@@ -12,6 +12,7 @@
             "wind": 0,
             "turn": null,
             "turnLeft": null,
+            "shopLeft": null,
             "terrain": [],
             "tanks": [],
             "seats": [
@@ -21,7 +22,8 @@
                     "name": "ABC",
                     "mode": "human",
                     "lives": 3,
-                    "score": 0
+                    "score": 0,
+                    "ready": false
                 },
                 {
                     "seat": 1,
@@ -29,7 +31,8 @@
                     "name": "DEF",
                     "mode": "human",
                     "lives": 3,
-                    "score": 0
+                    "score": 0,
+                    "ready": false
                 },
                 {
                     "seat": 2,
@@ -37,7 +40,8 @@
                     "name": "WRAITH",
                     "mode": "ai",
                     "lives": 0,
-                    "score": 0
+                    "score": 0,
+                    "ready": false
                 },
                 {
                     "seat": 3,
@@ -45,7 +49,8 @@
                     "name": "SPOTTER",
                     "mode": "open",
                     "lives": 0,
-                    "score": 0
+                    "score": 0,
+                    "ready": false
                 }
             ],
             "events": []

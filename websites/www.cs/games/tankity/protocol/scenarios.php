@@ -120,6 +120,14 @@ function protocol_snapshots(): array
     $won = protocol_fire($kill, $angle, $power);
     $out['shop-after-win'] = ['The drone is down: the round is won, the room is at the shop, cash and score paid out.',
         200, $ok(room_snapshot($won, 0, 0))];
+
+    $shop = $won;
+    $shop['seats'][2] = room_seat_human('DEF', 'fixture-token-2', []);
+    room_seat_economy($shop, 2);
+    room_shop_set_ready($shop, 0, true);
+    $shop['shop']['at'] = microtime(true);
+    $out['shop-ready'] = ['The shop with a second human seated: the host has pressed Ready (seats[].ready), the other has not, and the shop clock reads shopLeft.',
+        200, $ok(room_snapshot($shop, 0, 0))];
     return $out;
 }
 

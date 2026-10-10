@@ -302,9 +302,9 @@ KD('scroll', 'pageDown');
 check('scroll-page', els['help-overlay'].scrollTop === 240, `top=${els['help-overlay'].scrollTop}`);
 KD('scroll', 'lineUp');
 check('scroll-up', els['help-overlay'].scrollTop === 200, `top=${els['help-overlay'].scrollTop}`);
-KD('scroll', 'halfDown', 0, { ctrlKey: true });
+KD('scroll', 'halfDown', 0, { shiftKey: true });
 check('scroll-half-down', els['help-overlay'].scrollTop === 300, `top=${els['help-overlay'].scrollTop}`);
-KD('scroll', 'halfUp', 0, { ctrlKey: true });
+KD('scroll', 'halfUp', 0, { shiftKey: true });
 check('scroll-half-up', els['help-overlay'].scrollTop === 200, `top=${els['help-overlay'].scrollTop}`);
 TAP('global', 'help');
 const idleTop = els['help-overlay'].scrollTop;
@@ -888,6 +888,8 @@ function change(el) {
   submit(els['host-form']); await tick(10);
   check('room-hosted', els['lobby-code'].textContent === 'TST1' && els['lobby-room'].hidden === false,
     els['lobby-code'].textContent);
+  check('room-hides-forms', els['lobby-rows'].hidden === true && els['lobby-intro'].hidden === true,
+    `rows=${els['lobby-rows'].hidden} intro=${els['lobby-intro'].hidden}`);
   const seatTiles = () => els['lobby-seats'].children;
   const tileText = t => t.children.map(c => c.textContent).join(' ');
   check('room-roster', seatTiles().length === 4 && seatTiles().every(t => t.type === 'button' && t.className.includes('unit-choice')),

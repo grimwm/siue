@@ -773,8 +773,8 @@ function tankity_build_keys(TankityCheck $c, mixed $k): array
             $tokens = [];
             foreach ($list as $i => $t) {
                 $tp = "$p.$a" . "[$i]";
-                if (!is_string($t) || $t === '' || !preg_match('/^( |(Ctrl\+)?[^\s]+)$/', $t)) {
-                    $c->err($tp, 'must be a quoted key token such as ArrowLeft, KeyA, "a", "1", Ctrl+F or " " (a lone space)');
+                if (!is_string($t) || $t === '' || !preg_match('/^( |(Ctrl\+|Shift\+)?[^\s]+)$/', $t)) {
+                    $c->err($tp, 'must be a quoted key token such as ArrowLeft, KeyA, "a", "1", Ctrl+F, Shift+KeyJ or " " (a lone space)');
                     continue;
                 }
                 if (isset($used[$t])) {

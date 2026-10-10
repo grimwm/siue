@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Tankity">
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
-<link rel="stylesheet" href="game.css?v=20261010m">
+<link rel="stylesheet" href="game.css?v=20261010o">
 </head>
 <body>
 <header class="topbar">
@@ -76,7 +76,7 @@
         <header class="ov-head">
           <div class="ov-title"><h2 id="log-h">Radio log</h2></div>
           <button type="button" class="ov-x" id="log-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
-          <div class="nav-hint ov-keys" id="nav-log" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+          <div class="nav-hint ov-keys" id="nav-log" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
         </header>
         <ol id="log" class="log log-transparent" aria-live="polite"></ol>
       </section>
@@ -84,7 +84,7 @@
         <header class="ov-head">
           <div class="ov-title"><h2 id="help-h">How to play</h2></div>
           <button type="button" class="ov-x" id="help-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
-          <div class="nav-hint ov-keys" id="nav-help" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+          <div class="nav-hint ov-keys" id="nav-help" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
         </header>
         <ul class="help">
           <li>Scorched-earth artillery: you and the drone battery take turns lobbing shells
@@ -131,7 +131,7 @@
         <header class="ov-head">
           <div class="ov-title"><h2 id="score-h">Scores</h2></div>
           <button type="button" class="ov-x" id="report-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
-          <div class="nav-hint ov-keys" id="nav-report" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+          <div class="nav-hint ov-keys" id="nav-report" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
         </header>
         <form id="score-form" class="seedbox" action="#">
           <label for="name-input">Callsign</label>
@@ -146,7 +146,7 @@
         <header class="ov-head">
           <div class="ov-title"><h2 id="menu-h">Game menu</h2></div>
           <button type="button" class="ov-x" id="menu-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
-          <div class="nav-hint ov-keys" id="nav-menu" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+          <div class="nav-hint ov-keys" id="nav-menu" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
         </header>
         <form id="seed-form" class="menu-grid" action="#">
           <div class="seed-row">
@@ -198,7 +198,7 @@
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="end-title">
         <header class="ov-head">
           <div class="ov-title"><p class="kicker" id="end-kicker">Run over</p><h2 id="end-title">Ending</h2></div>
-          <div class="nav-hint ov-keys" id="nav-end" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+          <div class="nav-hint ov-keys" id="nav-end" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
         </header>
         <p id="end-text"></p>
         <p id="end-score" class="runstats"></p>
@@ -215,7 +215,7 @@
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="shop-title">
         <header class="ov-head">
           <div class="ov-title"><p class="kicker">Between rounds</p><h2 id="shop-title">Field shop</h2></div>
-          <div class="nav-hint ov-keys" id="nav-shop"><span><span data-keyhint="shop:selUp">▲</span><span data-keyhint="shop:selDown">▼</span> or <span data-keyhint="scroll:lineDown">J</span><span data-keyhint="scroll:lineUp">K</span> move</span><span><span data-keyhint="shop:qtyDown">◀</span><span data-keyhint="shop:qtyUp">▶</span> packs</span><span><span data-keyhint="shop:buy">B</span> buy · <span data-keyhint="shop:preview">V</span> preview</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+          <div class="nav-hint ov-keys" id="nav-shop"><span><span data-keyhint="shop:selUp">▲</span><span data-keyhint="shop:selDown">▼</span> or <span data-keyhint="scroll:lineDown">J</span><span data-keyhint="scroll:lineUp">K</span> move</span><span><span data-keyhint="shop:qtyDown">◀</span><span data-keyhint="shop:qtyUp">▶</span> packs</span><span><span data-keyhint="shop:buy">B</span> buy · <span data-keyhint="shop:preview">V</span> preview</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
         </header>
         <p id="shop-cash" class="runstats"></p>
         <ul id="shop-list" class="scores"></ul>
@@ -228,22 +228,22 @@
         <header class="ov-head">
           <div class="ov-title"><p class="kicker">Squad up, no chatter</p><h2 id="lobby-title">Game rooms</h2></div>
           <button type="button" class="ov-x" id="lobby-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
-          <div class="nav-hint ov-keys" id="nav-lobby" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+          <div class="nav-hint ov-keys" id="nav-lobby" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
         </header>
-        <p class="hint">Host a room and read the 4-letter code to your friends, or join theirs.
+        <p class="hint" id="lobby-intro">Host a room and read the 4-letter code to your friends, or join theirs.
           Everyone picks 3-letter initials (kept clean, lowercase is fine). There is no chat,
           only artillery. Empty seats go to the drone battery, and a quiet crew fires
           on its own after a while so no room ever stalls. The host may also pick named
           hills, like Canyon 3, so the crew can replay a favorite without ever seeing its seed.</p>
         <p class="hint"><span id="net-dot" class="dot off" title="room server: not connected"></span> <span id="lobby-count" aria-live="polite"></span></p>
-        <div class="lobby-rows">
+        <div class="lobby-rows" id="lobby-rows">
           <form id="host-form" class="lobby-form" action="#">
-            <label for="host-initials">Your initials</label>
-            <input id="host-initials" name="initials" type="text" autocomplete="off"
-                   spellcheck="false" maxlength="3" minlength="3" placeholder="ABC">
             <span class="map-label" id="lobby-map-label">Hills</span>
             <input type="hidden" id="lobby-map" name="map" value="">
             <div class="unit-picker map-picker" id="lobby-map-picker" role="group" aria-labelledby="lobby-map-label"></div>
+            <label for="host-initials">Your initials</label>
+            <input id="host-initials" name="initials" type="text" autocomplete="off"
+                   spellcheck="false" maxlength="3" minlength="3" placeholder="ABC">
             <button type="submit" id="host-go" class="btn-primary">Host a room</button>
           </form>
           <form id="join-form" class="lobby-form" action="#">
@@ -297,7 +297,7 @@
         <header class="ov-head">
           <div class="ov-title"><p class="kicker">Firing range</p><h2 id="preview-title">Preview</h2></div>
           <button type="button" class="ov-x" id="preview-close" aria-label="Close" title="Close (ESC)"><span class="key esc-cap" data-keyhint="global:escape">ESC</span><span class="x-glyph" aria-hidden="true">×</span></button>
-          <div class="nav-hint ov-keys" id="nav-preview" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Ctrl+U</span>/<span data-keyhint="scroll:halfDown">Ctrl+D</span> half page</span></div>
+          <div class="nav-hint ov-keys" id="nav-preview" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
         </header>
         <p id="preview-stats" class="runstats"></p>
         <canvas id="preview-stage" width="360" height="200"></canvas>
@@ -308,6 +308,6 @@
   </section>
 </main>
 
-<script src="game.js?v=20261010m" defer></script>
+<script src="game.js?v=20261010o" defer></script>
 </body>
 </html>

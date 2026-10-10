@@ -87,7 +87,7 @@ test('the lobby offers Random plus every server map as a silhouette tile, and pi
   expect(new Set(pics.map(p => p.sig)).size, 'every tile is its own picture').toBe(pics.length);
   await expect(tiles.nth(0)).toHaveAttribute('aria-pressed', 'true');
 
-  // Pick hills, host, then change them: the server's room map follows.
+  // Pick hills, then host: the room plays the picked hills.
   const seen = [];
   page.on('response', async r => {
     if (!r.url().includes('rooms.php')) return;
@@ -100,14 +100,9 @@ test('the lobby offers Random plus every server map as a silhouette tile, and pi
   await page.click('#host-go');
   await page.waitForSelector('#lobby-room:not([hidden])');
   await expect.poll(() => seen.at(-1)?.room.map).toBe(maps.maps[1].id);
-  await tiles.nth(1).click();
-  await expect.poll(() => seen.at(-1)?.room.map).toBe(maps.maps[0].id);
-  await expect.poll(() => hud(page, 'lobby-hills')).toContain(maps.maps[0].name);
-  await tiles.nth(0).click();
-  await expect.poll(() => seen.at(-1)?.room.map).toBeNull();
-  await expect.poll(() => hud(page, 'lobby-hills')).toContain('Random hills');
-  await tiles.nth(3).click();
-  await expect.poll(() => seen.at(-1)?.room.map).toBe(maps.maps[2].id);
+  await expect.poll(() => hud(page, 'lobby-hills')).toContain(maps.maps[1].name);
+  // Once hosted, the lobby shows only the room; the hills are settled.
+  await expect(page.locator('#lobby-map-picker')).toBeHidden();
   await page.locator('#lobby-veil .card').screenshot({ path: 'test-results/tankity-lobby-tiles.png' });
   expect(errors).toEqual([]);
 });

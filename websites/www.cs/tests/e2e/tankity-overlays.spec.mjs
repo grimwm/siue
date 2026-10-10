@@ -78,3 +78,35 @@ test('text size is a menu setting that this browser remembers', async ({ browser
   await page.click('#text-picker button[title="Normal text"]');
   expect(await rootPx(page)).toBe(16);
 });
+
+test('Shift+J and Shift+K scroll half a panel (the browser keeps Ctrl+D and Ctrl+U)', async ({ browser }) => {
+  const { page } = await newPlayer(browser);
+  await page.setViewportSize({ width: 1000, height: 640 });
+  await page.keyboard.press('h');
+  const top = () => page.locator('#help-overlay').evaluate(el => el.scrollTop);
+  await page.keyboard.press('Shift+J');
+  await expect.poll(top).toBeGreaterThan(40);
+  const half = await top();
+  await page.keyboard.press('Shift+K');
+  await expect.poll(top).toBeLessThan(half);
+  await expect(page.locator('#nav-help')).toContainText('Shift+K/Shift+J half page');
+});
+
+test('the lobby shows the hills first, hosts from the initials row, then shows only the room', async ({ browser }) => {
+  const { page } = await newPlayer(browser);
+  await page.keyboard.press('o');
+  await expect(page.locator('#lobby-veil')).toBeVisible();
+  const box = sel => page.locator(sel).boundingBox();
+  const [hills, initials, host] = [await box('#lobby-map-picker'), await box('#host-initials'), await box('#host-go')];
+  expect(hills.y + hills.height).toBeLessThanOrEqual(initials.y);
+  expect(Math.abs((host.y + host.height / 2) - (initials.y + initials.height / 2))).toBeLessThan(4);
+  await page.fill('#host-initials', 'abc');
+  await page.click('#host-go');
+  await expect(page.locator('#lobby-room')).toBeVisible();
+  await expect(page.locator('#lobby-rows')).toBeHidden();
+  await expect(page.locator('#lobby-intro')).toBeHidden();
+  await page.locator('#lobby-veil .card').screenshot({ path: 'test-results/tankity-lobby-hosted.png' });
+  // Leaving brings the forms back.
+  await page.click('#lobby-leave');
+  await expect(page.locator('#lobby-rows')).toBeVisible();
+});

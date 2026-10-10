@@ -905,6 +905,11 @@ function fireWeapon(t, wkey) {
     return false;
   }
   if (wkey !== 'shell') store[wkey] -= 1;
+  // The last one fired: the player's gun falls back to the endless Shell.
+  if (t.isPlayer && wkey !== 'shell' && store[wkey] <= 0 && G.selected === wkey) {
+    G.selected = 'shell';
+    say(`Out of ${w.name}. Back to the Shell.`, 'info');
+  }
   const m = muzzle(t);
   const rad = t.angle * Math.PI / 180;
   const s = facing(t);
@@ -1008,11 +1013,33 @@ function splitShell(s, w) {
     });
   }
 }
+/* Hit boxes match the drawn units: a ground unit's hull and turret, or a
+   drone's body up in the air (rooms.php room_unit_box() is the same). */
+function unitHitBox(t) {
+  return isGroundUnit(t)
+    ? { cx: t.x, cy: t.y - 10, rx: 20, ry: 13 }
+    : { cx: t.x, cy: t.y - 30, rx: 18, ry: 14 };
+}
+/* The first unit a shell touches anywhere along its step, sampled every
+   3 px so a fast shell (or a slow frame) cannot skip through one. */
+function sweepHit(x0, y0, x1, y1, skip) {
+  const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 3));
+  for (let i = 1; i <= n; i++) {
+    const px = x0 + (x1 - x0) * i / n, py = y0 + (y1 - y0) * i / n;
+    for (const t of G.tanks) {
+      if (t.hp <= 0 || t === skip) continue;
+      const b = unitHitBox(t);
+      if (((px - b.cx) / b.rx) ** 2 + ((py - b.cy) / b.ry) ** 2 <= 1) return { t, x: px, y: py };
+    }
+  }
+  return null;
+}
 function stepShells(dt) {
   for (const s of G.shells) {
     const w = WEAPONS[s.wkey];
     s.age = (s.age || 0) + dt;
     if (w.effect === 'seeker') steerShell(s, w, dt);
+    const x0 = s.x, y0 = s.y;
     stepBallistic(s, dt, G.wind, w.flat ? FLAT_GRAV : GRAV);
     s.life -= dt;
     s.trail -= dt;
@@ -1034,9 +1061,12 @@ function stepShells(dt) {
     // Direct hit on a living tank?
     // A lance that already went through a tank cannot hit that tank again.
     let direct = null;
-    for (const t of G.tanks) {
-      if (t.hp <= 0 || t === s.pierced) continue;
-      if (Math.hypot(s.x - t.x, s.y - (t.y - 12)) < 13) { direct = t; break; }
+    const hit = sweepHit(x0, y0, s.x, s.y, s.pierced);
+    if (hit) {
+      // Burst where the shell touched the unit, not past it.
+      direct = hit.t;
+      s.x = hit.x;
+      s.y = hit.y;
     }
     // Flak bursts next to anything it passes, but never its own gunner: the
     // muzzle starts inside the burst radius.
@@ -1095,7 +1125,9 @@ function explode(x, y, wkey, owner, direct, ov) {
   // Damage by distance; direct hits pay double.
   for (const t of G.tanks) {
     if (t.hp <= 0) continue;
-    const d = Math.hypot(t.x - x, (t.y - 12) - y);
+    // Distance from the unit's body (its hit box centre), drone or tank.
+    const b = unitHitBox(t);
+    const d = Math.hypot(b.cx - x, b.cy - y);
     if (d > r + 14) continue;
     // A shield absorbs one hit whole, then it is gone.
     if (t.isPlayer && G.shield) {
@@ -2471,6 +2503,26 @@ function turnTank() {
   return t && t.hp > 0 ? t : null;
 }
 /* A pulsing glow under the unit and a bobbing chevron over its name. */
+/* A small "in a menu" card beside a player whose turn it is, so the others
+   know why the battle is waiting. */
+function drawMenuBadge(c, t, time, ground) {
+  const x = t.x + 24, y = t.y - (ground ? 40 : 58) - 2 * Math.abs(Math.sin(time * 3));
+  c.save();
+  c.globalAlpha = 0.95;
+  c.fillStyle = 'rgba(4, 4, 32, 0.92)';
+  c.strokeStyle = '#ffff55';
+  c.lineWidth = 1.2;
+  c.beginPath();
+  if (c.roundRect) c.roundRect(x, y - 10, 20, 15, 4); else c.rect(x, y - 10, 20, 15);
+  c.fill();
+  c.stroke();
+  c.fillStyle = '#ffff55';
+  for (let i = 0; i < 3; i++) c.fillRect(x + 5, y - 6 + i * 3.5, 10, 1.6);
+  c.beginPath(); // the card's little tail toward the unit
+  c.moveTo(x + 2, y + 5); c.lineTo(x - 3, y + 9); c.lineTo(x + 7, y + 5);
+  c.fill();
+  c.restore();
+}
 function drawTurnMarker(c, t, time, ground) {
   const color = t.isPlayer ? '#ffff55' : (t.color || '#ffffff');
   const pulse = 0.5 + 0.5 * Math.sin(time * 5);
@@ -2687,6 +2739,7 @@ function render() {
     }
     const ground = isGroundUnit(t);
     if (t === turnTank()) drawTurnMarker(c, t, time, ground);
+    if (NET.on && t.menu && !t.isPlayer && t === turnTank()) drawMenuBadge(c, t, time, ground);
     if (ground) drawGroundUnit(c, t, time);
     else drawGunDrone(c, t, time);
     // Health bar + name.
@@ -3270,11 +3323,18 @@ async function roomFetchJson(url, opts) {
   return { res, data };
 }
 async function roomPost(action, payload) {
-  const { res, data } = await roomFetchJson('rooms.php?action=' + encodeURIComponent(action), {
+  const send = () => roomFetchJson('rooms.php?action=' + encodeURIComponent(action), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': NET.csrf || '' },
     body: JSON.stringify(Object.assign({ code: NET.code, token: NET.token, csrf: NET.csrf }, payload || {})),
   });
+  let { res, data } = await send();
+  // The server spaces one player's acts 150 ms apart: a quick second click
+  // (a weapon picked right after firing) waits a beat and goes again.
+  for (let tries = 0; res.status === 429 && tries < 3; tries++) {
+    await new Promise(r => setTimeout(r, 180));
+    ({ res, data } = await send());
+  }
   if (!res.ok || !data.ok) throw new Error(data.error || 'The room server stumbled. Solo hills still work.');
   setNetDot(true);
   return data;
@@ -3437,9 +3497,19 @@ async function openLobby() {
     netRenderRoster(null);
     netLobbyWatch();
   } else if (!NET.code) {
-    const box = $('lobby-room');
-    if (box) box.hidden = true;
+    showLobbyRoom(false);
   }
+}
+/* In a room the lobby shows only the room (code, seats, start); the intro
+   and the host and join forms come back once you are out of it. */
+function showLobbyRoom(inRoom) {
+  const box = $('lobby-room');
+  if (box) box.hidden = !inRoom;
+  for (const id of ['lobby-rows', 'lobby-intro']) {
+    const el = $(id);
+    if (el) el.hidden = inRoom;
+  }
+  refreshNavHints();
 }
 async function hostRoom(initials, mapId) {
   lobbySay('Raising the flag…');
@@ -3495,9 +3565,16 @@ function netLobbyWatch() {
 }
 /* The invite link carries the room code so a friend lands in the lobby with
 // the code already filled in. */
+/* The invite points at the page the player is on: when a page on this same
+   host frames the game (a site's own page around it), that page, so a
+   friend arrives with its navigation too; otherwise the game page itself. */
 function joinLink() {
   if (typeof location === 'undefined' || !NET.code) return '';
-  const base = (location.origin || '') + (location.pathname || '');
+  let here = location;
+  try {
+    if (window.top && window.top !== window && window.top.location.origin === location.origin) here = window.top.location;
+  } catch (_) { /* a frame on another host: keep our own address */ }
+  const base = (here.origin || '') + (here.pathname || '');
   return base + '?code=' + encodeURIComponent(NET.code);
 }
 async function copyInvite() {
@@ -3531,8 +3608,7 @@ function maybeApplyInviteCode() {
   openLobby();
 }
 function netRenderRoster(room) {
-  const box = $('lobby-room');
-  if (box) box.hidden = false;
+  showLobbyRoom(true);
   if ($('lobby-code')) $('lobby-code').textContent = NET.code || '····';
   const link = $('join-link');
   if (link) link.value = joinLink();
@@ -3748,8 +3824,8 @@ function netSendDrive(dx) {
   roomPost('act', { kind: 'drive', dx: Math.round(dx * 10) / 10 })
     .then(d => netApply(d.room)).catch(() => {});
 }
+/* Loading a gun is fine on anyone's turn: it only sets what fires next. */
 function netPick(w) {
-  if (!NET.myTurn) { say('Hold on, not your turn yet.', 'info'); return false; }
   if (w !== 'shell' && (G.ammo[w] || 0) <= 0) {
     say(`No ${WEAPONS[w].name} left in the rack.`, 'info');
     return false;
@@ -3767,7 +3843,6 @@ function netPick(w) {
   return true;
 }
 function netCycle() {
-  if (!NET.myTurn) { say('Hold on, not your turn yet.', 'info'); return; }
   const i = WORDER.indexOf(G.selected);
   for (let k = 1; k <= WORDER.length; k++) {
     const w = WORDER[(i + k) % WORDER.length];
@@ -3811,6 +3886,7 @@ function netApply(room) {
     return;
   }
   NET.queue.push(...fresh);
+  if (document.hidden || NET.queue.filter(e => VOLLEY_OPENERS.has(e.t)).length > 1) netCatchUp();
   if (NET.queue.length || NET.volley) {
     NET.pendingRoom = room;
     NET.myTurn = false;
@@ -3858,6 +3934,7 @@ function netAdopt(room) {
       name: t.name,
       human: !ai,
       body: t.body || 'tank',
+      menu: !!t.menu,
       // Keep the drawn aim where it was so the new one glides in.
       showA: was && !mine ? shownAngle(was) : undefined,
       showP: was && !mine ? shownPower(was) : undefined,
@@ -4098,6 +4175,39 @@ function netStepVolley(dt) {
     NET.volley = null;
   }
 }
+/* Tell the room when this player is in a menu (game menu, help, scores, the
+   weapon picker), so the others see why the battle waits on them. The radio
+   log is a glance, not a menu. */
+function menuOpen() {
+  return ['menu-overlay', 'help-overlay', 'report-overlay', 'gun-overlay', 'leave-veil'].some(id => { const el = $(id); return el && !el.hidden; });
+}
+function netSyncMenu() {
+  const open = menuOpen();
+  if (open === NET.menuSent || !NET.code) return;
+  NET.menuSent = open;
+  roomPost('act', { kind: 'menu', open }).then(d => netApply(d.room)).catch(() => { NET.menuSent = !open; });
+}
+/* A hidden tab plays nothing (browsers stop its frames), so its replay queue
+   piles up. Coming back, or whenever more than one volley is waiting, skip
+   all but the newest volley: their log lines still post, and the room state
+   that follows carries the craters and armor. If it is already our turn,
+   skip them all and hand over the controls at once. */
+function netCatchUp() {
+  const openers = [];
+  NET.queue.forEach((e, i) => { if (VOLLEY_OPENERS.has(e.t)) openers.push(i); });
+  const room = NET.pendingRoom;
+  const myTurnNext = !!(room && room.phase === 'play' && room.turn === NET.seat);
+  const keep = myTurnNext ? 0 : 1;
+  if (openers.length + (NET.volley ? 1 : 0) <= keep) return;
+  NET.volley = null;
+  G.shells = [];
+  const cut = keep && openers.length ? openers[openers.length - 1] : NET.queue.length;
+  for (const e of NET.queue.slice(0, cut)) netEvent(e);
+  NET.queue = NET.queue.slice(cut);
+}
+if (typeof document.addEventListener === 'function') {
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && NET.on) netCatchUp(); });
+}
 /* Drive the replay; once nothing is left to play, the waiting room state
    takes over. */
 function netReplay(dt) {
@@ -4131,6 +4241,7 @@ function netEaseAim(dt) {
   }
 }
 function netFrame(dt) {
+  netSyncMenu();
   G.time += dt;
   netEaseAim(dt);
   updateCamera(dt);
@@ -4333,8 +4444,7 @@ const FALLBACK_KEYS = Object.freeze({
   }),
   scroll: Object.freeze({
     lineDown: ['j'], lineUp: ['k'],
-    pageDown: ['PageDown', 'Ctrl+F'], pageUp: ['PageUp', 'Ctrl+B'],
-    halfDown: ['Ctrl+D'], halfUp: ['Ctrl+U'],
+    pageDown: ['PageDown'], pageUp: ['PageUp'], halfDown: ['Shift+KeyJ'], halfUp: ['Shift+KeyK'],
   }),
 });
 let KEYS = FALLBACK_KEYS;
@@ -4363,6 +4473,7 @@ function keycap(token) {
   if (glyph[token]) return glyph[token];
   if (token === ' ') return 'Space';
   if (/^Ctrl\+/.test(token)) return 'Ctrl+' + keycap(token.slice(5));
+  if (/^Shift\+/.test(token)) return 'Shift+' + keycap(token.slice(6));
   if (/^(ControlLeft|ControlRight|Control)$/.test(token)) return 'Ctrl';
   if (token === 'Escape') return 'ESC';
   if (token === 'Enter') return 'Enter';
@@ -4409,8 +4520,10 @@ function renderKeyHints() {
 function lookupKey(ctx, e) {
   const m = KEYMAP[ctx];
   if (!m) return null;
-  if (e.ctrlKey) {
-    const c = (e.code && m['Ctrl+' + e.code]) || (e.key && (m['Ctrl+' + e.key] || m['Ctrl+' + e.key.toLowerCase()]));
+  // Modifier tokens (Ctrl+X, Shift+X) win while that modifier is held.
+  for (const [held, mod] of [[e.ctrlKey, 'Ctrl+'], [e.shiftKey, 'Shift+']]) {
+    if (!held) continue;
+    const c = (e.code && m[mod + e.code]) || (e.key && (m[mod + e.key] || m[mod + e.key.toLowerCase()]));
     if (c) return c;
   }
   if (e.code && m[e.code]) return m[e.code];

@@ -491,7 +491,9 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
         if ($t['hp'] <= 0) {
             continue;
         }
-        $d = hypot($t['x'] - $x, ($t['y'] - 12) - $y);
+        // Distance from the unit's body (its hit box centre), drone or tank.
+        [$cx, $cy] = room_unit_box($t);
+        $d = hypot($cx - $x, $cy - $y);
         if ($d > $r + 14) {
             continue;
         }
@@ -563,6 +565,36 @@ function room_shot_event(array $tank, string $wkey, float $t0, array $res, float
         't0' => round($t0, 3), 't1' => round($t0 + $res[7], 3), 'r' => $radius,
         'p' => implode(' ', array_map(fn($pt) => round($pt[0]) . ',' . round($pt[1]), $res[6]))];
 }
+/* Hit boxes match what clients draw: a ground unit's hull and turret, or a
+// drone's body up in the air (game.js unitHitBox() is the same). An ellipse
+// [cx, cy, rx, ry]. */
+function room_unit_box(array $t): array
+{
+    return $t['kind'] === 'human'
+        ? [(float) $t['x'], (float) $t['y'] - 10.0, 20.0, 13.0]
+        : [(float) $t['x'], (float) $t['y'] - 30.0, 18.0, 14.0];
+}
+/* The first unit a shell touches anywhere along its step from (x0, y0) to
+// (x1, y1), sampled every 3 px so a fast shell cannot skip through one, with
+// the point it touched. */
+function room_sweep_hit(array $room, float $x0, float $y0, float $x1, float $y1, ?int $skip): ?array
+{
+    $n = max(1, (int) ceil(hypot($x1 - $x0, $y1 - $y0) / 3));
+    for ($i = 1; $i <= $n; $i++) {
+        $px = $x0 + ($x1 - $x0) * $i / $n;
+        $py = $y0 + ($y1 - $y0) * $i / $n;
+        foreach ($room['tanks'] as $idx => $t) {
+            if ($t['hp'] <= 0 || $idx === $skip) {
+                continue;
+            }
+            [$cx, $cy, $rx, $ry] = room_unit_box($t);
+            if ((($px - $cx) / $rx) ** 2 + (($py - $cy) / $ry) ** 2 <= 1) {
+                return [$idx, $px, $py];
+            }
+        }
+    }
+    return null;
+}
 function room_fly_arc(array &$room, array &$events, array $tank, array $w, string $wkey, int $ownerIdx, float $sx, float $sy, float $vx, float $vy, float $age, $fuse, $ov, float $t0 = 0.0): array
 {
     $width = count($room['terrain']);
@@ -592,6 +624,8 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
         }
         $vx += $room['wind'] * ROOM_TURN_WIND * $dt;
         $vy += $grav * $dt;
+        $px = $sx;
+        $py = $sy;
         $sx += $vx * $dt;
         $sy += $vy * $dt;
         $age += $dt;
@@ -608,14 +642,10 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
             return ['split', $sx, $sy, $vx, $vy, null, $path, $flown];
         }
         $direct = null;
-        foreach ($room['tanks'] as $idx => $t) {
-            if ($t['hp'] <= 0 || $idx === $pierced) {
-                continue;
-            }
-            if (hypot($sx - $t['x'], $sy - ($t['y'] - 12)) < 13) {
-                $direct = $idx;
-                break;
-            }
+        $hit = room_sweep_hit($room, $px, $py, $sx, $sy, $pierced);
+        if ($hit !== null) {
+            // Burst where the shell touched the unit, not past it.
+            [$direct, $sx, $sy] = $hit;
         }
         if ($direct === null && ($w['effect'] ?? 'shot') === 'proximity') {
             $bd = (float) ($w['prox'] ?? 34.0);
@@ -998,6 +1028,9 @@ function room_advance(array &$room, array &$events): void
             if ($wkey !== 'shell') {
                 $room['ammo'][$t['seat']][$wkey] = max(0, $have - 1);
                 $room['tanks'][$cur]['ammo'][$wkey] = $room['ammo'][$t['seat']][$wkey];
+                if ($have - 1 <= 0) {
+                    $room['weapon'][$t['seat']] = 'shell';
+                }
             }
             room_fire_shot($room, $events, $cur, $wkey);
             $room['seats'][$t['seat']]['lastAct'] = microtime(true);
@@ -1263,6 +1296,8 @@ function room_snapshot(array $room, ?int $seat, int $since): array
             'hp' => $t['hp'], 'maxHp' => $t['maxHp'],
             'dirS' => $t['dirS'] ?? 1,
             'body' => $t['kind'] === 'human' ? ($room['seats'][$t['seat']]['body'] ?? 'tank') : null,
+            // In a menu right now (shown by their unit on their turn).
+            'menu' => $t['kind'] === 'human' && !empty($room['menu'][$t['seat']]),
         ];
     }
     $seats = [];
@@ -1599,7 +1634,12 @@ function room_gate(array $body, bool $needCsrf, bool $throttle = true): array
             room_unlock($fh);
             room_json_out(429, ['error' => 'too fast']);
         }
-        $room['seats'][$seat]['lastAct'] = $now;
+        // Unthrottled requests (leave, the menu flag) neither spend the
+        // spacing nor count as play: the idle crew still fires for a player
+        // who sits in a menu for 90 seconds.
+        if ($throttle) {
+            $room['seats'][$seat]['lastAct'] = $now;
+        }
     }
     return [$room, $fh, $path, $seat];
 }
@@ -1714,7 +1754,9 @@ if ($action === 'state') {
 }
 
 if ($action === 'act' && $method === 'POST') {
-    [$room, $fh, $path, $seat] = room_gate($body, true);
+    // A menu flag only says "this player is in a menu": it follows the
+    // player's own clicks, so the act throttle does not apply to it.
+    [$room, $fh, $path, $seat] = room_gate($body, true, ($body['kind'] ?? '') !== 'menu');
     $kind = (string) ($body['kind'] ?? '');
     $events = [];
     if ($room['phase'] !== 'play') {
@@ -1728,10 +1770,19 @@ if ($action === 'act' && $method === 'POST') {
             break;
         }
     }
-    if ($myIdx === null || ($room['tanks'][$room['turn']]['seat'] ?? -1) !== $seat) {
+    // Loading a weapon and the menu flag are fine on anyone's turn: neither
+    // moves the match (firing checks the ammo again). Everything else waits
+    // for the player's own turn.
+    $anyTurn = $kind === 'weapon' || $kind === 'menu';
+    if ($kind === 'menu') {
+        $room['menu'][$seat] = !empty($body['open']);
+    } elseif ($myIdx === null || (!$anyTurn && ($room['tanks'][$room['turn']]['seat'] ?? -1) !== $seat)) {
         room_unlock($fh);
         room_json_out(409, ['error' => 'not your turn']);
     }
+    if ($kind === 'menu') {
+        // Recorded above; nothing else to do.
+    } else {
     $tank = &$room['tanks'][$myIdx];
     if ($kind === 'aim') {
         $tank['angle'] = max(10.0, min(170.0, (float) ($body['angle'] ?? $tank['angle'])));
@@ -1804,6 +1855,10 @@ if ($action === 'act' && $method === 'POST') {
         if ($wkey !== 'shell') {
             $room['ammo'][$seat][$wkey] = $have - 1;
             $room['tanks'][$myIdx]['ammo'][$wkey] = $room['ammo'][$seat][$wkey];
+            // The last one fired: the gun falls back to the endless Shell.
+            if ($have - 1 <= 0) {
+                $room['weapon'][$seat] = 'shell';
+            }
         }
         $me = $room['tanks'][$myIdx];
         $events[] = ['t' => 'fire', 'seat' => $seat, 'w' => $wkey,
@@ -1827,6 +1882,7 @@ if ($action === 'act' && $method === 'POST') {
         room_json_out(422, ['error' => 'unknown act']);
     }
     unset($tank);
+    }
     foreach ($events as $e) {
         room_emit($room, $e);
     }

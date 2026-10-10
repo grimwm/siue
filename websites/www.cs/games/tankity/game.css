@@ -462,6 +462,7 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 }
 
 .lobby-rows { display: grid; gap: 0.8rem; margin: 0.6rem 0; }
+.lobby-rows[hidden] { display: none; }
 .lobby-form { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
   border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.7rem; }
 .lobby-form label { color: var(--dim); font-size: 0.9rem; }
@@ -656,3 +657,9 @@ button.btn-leave[hidden] { display: none; }
 .guide-actions .tool { flex-direction: column; gap: 0.15rem; padding: 0.3rem 0.45rem 0.25rem; min-width: 2.6rem; }
 .guide-actions .tool .key { font-size: 0.62rem; padding: 0 0.25rem; line-height: 1.3; }
 .touch .guide-actions .tool { padding: 0.4rem 0.5rem; }
+
+/* Numbers that change while you play keep a fixed width (equal-width digits,
+   room for their widest value), so the bar never rewraps under your keys. */
+.hudbar .hud dd { font-variant-numeric: tabular-nums; }
+.hudbar #hud-angle { min-width: 4ch; }
+.hudbar #hud-power, .hudbar #hud-fuel, .hudbar #hud-armor { min-width: 3ch; }

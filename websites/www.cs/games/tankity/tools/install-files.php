@@ -194,6 +194,8 @@ function install_manifest(array $card): string
 /**
  * The static files the service worker precaches, and a hash of them.
  * $override maps a file name to the content this run is about to write.
+ * Test files, the dev-only effects editor (fx-editor.*) and the share-only
+ * picture are left out; the rendered effect sprites (fx/sprites) are in.
  *
  * @param array<string, string> $override
  * @return array{0: list<string>, 1: string} [file names, hash]
@@ -202,10 +204,15 @@ function install_precache(string $dir, array $override, string $image): array
 {
     $names = [];
     // A file about to be written counts even if it is not on disk yet.
-    foreach (array_merge(scandir($dir) ?: [], array_keys($override)) as $f) {
+    $found = array_merge(scandir($dir) ?: [], array_keys($override));
+    foreach (is_dir("$dir/fx/sprites") ? (scandir("$dir/fx/sprites") ?: []) : [] as $f) {
+        $found[] = "fx/sprites/$f";
+    }
+    foreach ($found as $f) {
         if ((is_file("$dir/$f") || isset($override[$f])) && !in_array($f, $names, true)
             && preg_match('/\.(html|js|css|json|png|webmanifest)$/', $f)
-            && $f !== 'sw.js' && $f !== $image && !str_contains($f, '-test.')) {
+            && $f !== 'sw.js' && $f !== $image && !str_contains($f, '-test.')
+            && !str_starts_with($f, 'fx-editor.')) {
             $names[] = $f;
         }
     }

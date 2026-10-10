@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const src = fs.readFileSync(path.join(__dirname, 'game.js'), 'utf8');
+const fxSrc = fs.readFileSync(path.join(__dirname, 'fx.js'), 'utf8');
 
 function makeCallable() {
   const fn = function () { return proxy; };
@@ -69,6 +70,9 @@ global.window = {
   localStorage: { _m: {}, getItem(k) { return this._m[k] || null; }, setItem(k, v) { this._m[k] = String(v); } },
 };
 global.fetch = async (url) => {
+  if (/effects\.json$/.test(String(url))) {
+    return { ok: true, json: async () => JSON.parse(fs.readFileSync(path.join(__dirname, 'effects.json'), 'utf8')) };
+  }
   if (/game\.json$/.test(String(url))) {
     // Real keys and audio; the arsenal section is withheld so the shop checks
     // below keep exercising the baked fallback arsenal (the file's own arsenal
@@ -124,6 +128,7 @@ withChildren('lobby-map-picker');
 withChildren('lobby-seats');
 els['seed-input'] = makeEl('seed-input');
 els['seed-input'].value = 'scorch-01';
+eval(fxSrc);
 eval(src);
 
 // ---- driver: every press below comes from game.json's keys, so the suite proves the
@@ -1160,6 +1165,58 @@ function change(el) {
   click(els['tutorial-skip']); frames(3);
   check('tutorial-skips', els['tutorial-overlay'].hidden === true);
   check('tutorial-remembered', window.localStorage.getItem('tankity-tutorial') === 'done');
+  // ---- weapon effects: data, engine caps, reduced motion ----
+  {
+    const FX = window.TankityFX;
+    check('fx-engine-loaded', !!FX && typeof FX.createSystem === 'function');
+    const raw = fs.readFileSync(path.join(__dirname, 'effects.json'), 'utf8');
+    const defs = FX.dress(JSON.parse(raw));
+    const arsenal = JSON.parse(fs.readFileSync(path.join(__dirname, 'game.json'), 'utf8')).arsenal;
+    const keys = arsenal.ammo.map(a => a.key).concat('laststand');
+    check('fx-file-valid', FX.validate(defs, keys).length === 0, FX.validate(defs, keys).slice(0, 3).join(' | '));
+    check('fx-file-canonical', FX.stringify(defs) === raw, 'effects.json is not what FX.stringify writes');
+    const missing = [];
+    for (const k of keys) {
+      const w = defs[k];
+      for (const slot of ['muzzle', 'trail', 'impact']) if (!w || !w[slot] || !w[slot].emitters.length) missing.push(k + '.' + slot);
+      if (w && !w.trail.emitters.some(e => e.rate > 0)) missing.push(k + '.trail has no rate emitter');
+      if (w && !w.impact.emitters.some(e => e.unit === 'r')) missing.push(k + '.impact has nothing sized by the blast radius');
+    }
+    check('fx-every-weapon-has-muzzle-trail-impact', missing.length === 0, missing.join(', '));
+    // Blast-sized shapes stay near the damage radius: nothing sized in r runs past 2r.
+    const big = [];
+    for (const k of keys) {
+      for (const e of defs[k].impact.emitters) {
+        if (e.unit !== 'r' || !['ring', 'sprite', 'dot', 'smoke', 'spark'].includes(e.shape)) continue;
+        const reach = e.size[1] * (e.shape === 'sprite' ? e.scale : Math.max(1, e.sizeEnd));
+        if (reach > 2) big.push(k + ' ' + e.shape + ' ' + reach.toFixed(2) + 'r');
+      }
+    }
+    check('fx-blast-sized-effects-stay-near-radius', big.length === 0, big.join(', '));
+    // Specials the mechanics need exist where the weapon has the mechanic.
+    const needs = { cluster: 'split', seeker: 'steer', lance: 'pierce', emp: 'arc' };
+    check('fx-specials', Object.keys(needs).every(k => defs[k].special && defs[k].special[needs[k]]), JSON.stringify(Object.keys(needs).filter(k => !(defs[k].special && defs[k].special[needs[k]]))));
+    // The pool is a hard cap, and a full pool recycles instead of growing.
+    const sys = FX.createSystem({ max: 60 });
+    for (let i = 0; i < 40; i++) sys.emit(defs.nuke.impact, 100, 100, 0, 70);
+    sys.step(0.016);
+    check('fx-budget-caps', sys.live <= 60 && sys.stats.peak <= 60 && sys.stats.recycled > 0, `live=${sys.live} peak=${sys.stats.peak} recycled=${sys.stats.recycled}`);
+    // Reduced motion thins the same blast.
+    const count = reduced => {
+      const s2 = FX.createSystem({ max: 5000 });
+      s2.reduced = reduced;
+      s2.emit(defs.mortar.impact, 100, 100, 0, 42);
+      s2.step(0.2);
+      return s2.stats.spawned;
+    };
+    const full = count(false), calm = count(true);
+    check('fx-reduced-motion-thins', calm < full * 0.6 && calm > 0, `reduced ${calm} vs ${full}`);
+    // A trail drips along the path travelled, not once per frame.
+    const sys2 = FX.createSystem({ max: 400 }), shellFx = { fx: null, fxs: null };
+    FX.play.trail(sys2, defs.shell, shellFx, 0.016, 0, 0, 100, 0);
+    FX.play.trail(sys2, defs.shell, shellFx, 0.016, 90, 0, 100, 0);
+    check('fx-trail-follows-path', sys2.live >= 1, 'live=' + sys2.live);
+  }
   if (errors.length) { console.error('SMOKE-FAILED: ' + errors.join(',')); process.exit(1); }
   console.log('SMOKE-OK turn=' + els['hud-turn'].textContent + ' score=' + els['hud-score'].textContent);
   process.exit(0);

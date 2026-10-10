@@ -27,6 +27,10 @@ foreach (['games/tankity/fx.js', 'games/tankity/js/sim.js', 'games/tankity/js/ne
 foreach (['games/cylon/cylon.js', 'games/cylon/js/rules.js', 'games/cylon/js/playfield.js', 'games/cylon/js/scores.js', 'games/cylon/cylon.css', 'games/cylon/mount.html', 'games/cylon/scores.php', 'games/cylon/manifest.webmanifest'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
+// Crete: the entry module, the compiled modules it imports, its page and PWA files.
+foreach (['games/crete/index.html', 'games/crete/game.js', 'games/crete/game.css', 'games/crete/js/engine.js', 'games/crete/js/audio.js', 'games/crete/js/ui.js', 'games/crete/sw.js', 'games/crete/manifest.webmanifest'] as $f) {
+    $check("ships $f", isset($set[$f]));
+}
 // The game is loaded from its own folder; nothing of it sits at the site root.
 foreach (['cylon.js', 'cylon-mount.html'] as $f) {
     $check("no root copy of $f", !isset($set[$f]) && !file_exists("$site/$f"));
@@ -45,7 +49,9 @@ foreach (['games/tankity/fx-editor.html', 'games/tankity/fx-editor.js', 'games/t
     'games/tankity/src/sim.ts', 'games/tankity/src/audio.ts', 'games/tankity/src/render.ts', 'games/tankity/src/net.ts', 'games/tankity/src/input.ts', 'games/tankity/src/protocol.ts', 'games/tankity/src/protocol-fixtures.check.ts', 'games/tankity/src/tsconfig.dom.json', 'games/tankity/src/tsconfig.check.json', 'games/tankity/tsconfig.json', 'games/tankity/package.json', 'games/tankity/package-lock.json',
     'games/tankity/tools/ts-build.mjs', 'games/tankity/.gitignore',
     'games/cylon/src/rules.ts', 'games/cylon/src/playfield.ts', 'games/cylon/src/scores.ts', 'games/cylon/src/tsconfig.dom.json', 'games/cylon/tsconfig.json', 'games/cylon/package.json', 'games/cylon/package-lock.json',
-    'games/cylon/tools/ts-build.mjs', 'games/cylon/tools/install-files.php', 'games/cylon/.gitignore', 'games/cylon/README.md', 'games/cylon/install-files-test.php', 'games/cylon/rules-test.js', 'games/cylon/playfield-test.js', 'games/cylon/scores-test.js', 'games/cylon/smoke-test.js'] as $f) {
+    'games/cylon/tools/ts-build.mjs', 'games/cylon/tools/install-files.php', 'games/cylon/.gitignore', 'games/cylon/README.md', 'games/cylon/install-files-test.php', 'games/cylon/rules-test.js', 'games/cylon/playfield-test.js', 'games/cylon/scores-test.js', 'games/cylon/smoke-test.js',
+    'games/crete/src/engine.ts', 'games/crete/src/audio.ts', 'games/crete/src/ui.ts', 'games/crete/src/tsconfig.dom.json', 'games/crete/tsconfig.json', 'games/crete/package.json', 'games/crete/package-lock.json',
+    'games/crete/tools/ts-build.mjs', 'games/crete/tools/install-files.php', 'games/crete/.gitignore', 'games/crete/README.md', 'games/crete/install-files-test.php', 'games/crete/engine-test.js', 'games/crete/smoke-test.js'] as $f) {
     $check("keeps back $f", file_exists("$site/$f") && !isset($set[$f]));
 }
 $leaks = array_values(array_filter($out, fn(string $f): bool => (bool) preg_match('~(\.blend1?|\.wav|\.flac|\.aiff?)$|/fx/blender/|/fx-editor\.|/protocol/|-test\.|^tests/|/src/|/node_modules/|/tsconfig\.json$|/package(-lock)?\.json$~', $f)));

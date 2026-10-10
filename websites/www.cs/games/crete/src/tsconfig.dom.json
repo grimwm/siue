@@ -1,0 +1,12 @@
+{
+  // The modules that touch the page (the Web Audio synth, the DOM drawing): the
+  // same options as ../tsconfig.json plus the DOM lib. Each config is its own
+  // program in tools/ts-build.mjs, so the engine, which lists itself only in
+  // ../tsconfig.json, still fails to compile if it uses `document`. Every
+  // module here imports with its .js extension, and only types from the engine.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"]
+  },
+  "files": ["audio.ts", "ui.ts"]
+}

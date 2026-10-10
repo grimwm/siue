@@ -66,7 +66,7 @@ jobs:
           php-version: "8.4"
           coverage: none
 
-      # Node runs the Tankity smoke and sim-vector suites and the Cylon unit
+      # Node runs the Tankity smoke and sim-vector suites and the Cylon and Crete unit
       # suites, and compiles each game's TypeScript (npm ci, then
       # tools/ts-build.mjs --check) inside make test.
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -77,6 +77,7 @@ jobs:
           cache-dependency-path: |
             websites/www.cs/games/tankity/package-lock.json
             websites/www.cs/games/cylon/package-lock.json
+            websites/www.cs/games/crete/package-lock.json
 
       - name: Start the local sites
         if: steps.scope.outputs.run == '1'

@@ -1,0 +1,32 @@
+{
+  // src/*.ts compiles one file to one file into js/, which is checked in and
+  // loaded by the browser as native ES modules (no bundler). Build:
+  // node tools/ts-build.mjs; verify: node tools/ts-build.mjs --check.
+  // This config is the DOM-free one: the engine, listed in "files", compiles
+  // without page types, so it cannot reach for the page (its timers arrive as
+  // an argument). The modules that need browser types (the Web Audio synth,
+  // the DOM drawing) go in src/tsconfig.dom.json, which extends this one and
+  // adds the DOM lib.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    // Imports are written with their .js extension (import ... from './engine.js'),
+    // which is the file the browser fetches. No DOM types here.
+    "lib": ["ES2022"],
+    "types": [],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "rootDir": "src",
+    "outDir": "js",
+    // Readable output: the comments stay, and there are no source maps.
+    "removeComments": false,
+    "sourceMap": false,
+    "newLine": "lf",
+    "noEmitOnError": true
+  },
+  "files": ["src/engine.ts"]
+}

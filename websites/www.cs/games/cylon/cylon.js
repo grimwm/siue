@@ -9,14 +9,18 @@
  * and what it needs from the page's markup is listed in README.md ("Host
  * contract"). Its overlays live in mount.html and are injected into #game-root.
  *
- * The pure parts are TypeScript in src/, compiled to js/ (see README.md,
- * "Source layout and build"): rules (difficulty, caps, hull tint, volume curve),
- * playfield (where drones may stand), audio (the buses, effects and music bed),
- * scores (the scores.php client).
+ * The parts that need no page of their own are TypeScript in src/, compiled to
+ * js/ (see README.md, "Source layout and build"): rules (difficulty, caps, hull
+ * tint, volume curve), playfield (where drones may stand), state (the due-at
+ * moments and the run's score and hull as data with pure transitions), audio
+ * (the buses, effects and music bed), scores (the scores.php client) and intro
+ * (the opening strike, on the elements it is handed).
  */
 import * as rules from './js/rules.js?v=7889c1e71d';
 import * as playfield from './js/playfield.js?v=848b755745';
 import { createAudio } from './js/audio.js?v=19ef6956c2';
+import { createIntro } from './js/intro.js?v=59b2ae7b2a';
+import * as state from './js/state.js?v=d0424f3f0e';
 import { createScoresClient, formatHighScoreRows, weeklyResetText } from './js/scores.js?v=ce7eccc399';
 
 // Everything the game fetches is found next to this file, wherever it is served from.
@@ -161,38 +165,25 @@ export async function initializeCylonEffects(options = {}) {
     let tracking = false;
     let idleTimer = null;
     let activeBots = 0;
-    let koScore = 0;
-    let hitCount = 0;
-    /** Lifetime damage this run (heals do not undo it). */
-    let hitsTaken = 0;
+    /** The run's score and hull (src/state.ts); replaced by each transition. */
+    let run = state.createRun();
+    /** The moments the game is waiting for (src/state.ts); the timer handles stay below. */
+    let schedule = state.createSchedule();
     let healTimer = null;
-    let healDueAt = 0;
-    let gameOver = false;
-    /** Why the overlay is up: hits | nuke | quit */
-    let gameOverEndReason = null;
     let paused = false;
     let pauseStartedAt = 0;
-    let pendingScore = null;
     let ambushTimer = null;
-    let raptorReadyAt = 0;
     let raptorInbound = false;
     /** @type {ReturnType<typeof setTimeout>[]} */
     let raptorStrikeTimers = [];
     let abilityCdTimer = null;
-    let eyeDisorientedUntil = 0;
-    let grenadeReadyAt = 0;
     let grenadeArmed = false;
     let nukeInFlight = false;
-    let introPlaying = false;
-    let introGen = 0;
-    let runStartedAt = 0;
     let lastAim = { clientX: 0, clientY: 0, t: 0 };
     let missileTimer = null;
     let nukeTimer = null;
     /** @type {{ el: HTMLElement, tracker: boolean, alive: boolean }[]} */
     let activeMissiles = [];
-    let missileDueAt = 0;
-    let nukeDueAt = 0;
     let herdTimer = null;
     let reshuffleSettleTimer = null;
 
@@ -410,7 +401,7 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     async function submitHighScore(score, initials) {
-        const result = await scores.submit(score, initials, pendingScore ? pendingScore.hits : hitsTaken);
+        const result = await scores.submit(score, initials, run.pendingScore ? run.pendingScore.hits : run.hitsTaken);
         if (result.saved) {
             setInitialsError('');
         } else if (result.problem === 'invalid-initials') {
@@ -457,9 +448,35 @@ export async function initializeCylonEffects(options = {}) {
         volumeToGain: rules.volumeToGain,
     });
 
+    /** The opening strike (src/intro.ts); the game's part in it comes in as callbacks. */
+    const intro = createIntro({
+        titleEl: introTitleEl,
+        nukeEl: nukeMissileEl,
+        brandEl: siteBrand,
+        body: document.body,
+        title: BRAND_COMBAT,
+        reduceMotion,
+        navFadeMs: NAV_FADE_MS,
+        settleMs: INTRO_TITLE_SETTLE_MS,
+        speed: NUKE_SPEED * 0.85,
+        arriveRadius: NUKE_ARRIVE_RADIUS,
+        maxFlightMs: NUKE_MAX_FLIGHT_MS,
+        random: Math.random,
+        enabled: () => settings.gameEnabled,
+        paused: () => paused,
+        startRun: () => scores.startRun(),
+        launched: () => {
+            audio.prime();
+            audio.sfx('introLaunch');
+        },
+        setNukeInFlight: (inFlight) => { nukeInFlight = inFlight; },
+        detonate: (x, y) => detonateNukeAt(x, y, { dealDamage: false, shake: false }),
+        beginCombat: beginCombatAfterIntro,
+    });
+
     /** Actively fighting — false during intro cinematic and game-over overlays. */
     function isGameLive() {
-        return sessionActive() && !gameOver && !introPlaying;
+        return sessionActive() && !run.gameOver && !intro.playing();
     }
 
     function assignBlastVector(el, vw, vh, { xSpread = 1.15, ySpread = 1.2, rotMax = 180 } = {}) {
@@ -631,15 +648,15 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function killLevel() {
-        return rules.killLevel(koScore);
+        return rules.killLevel(run.koScore);
     }
 
     function difficultyFactor() {
-        return rules.difficultyFactor(koScore, runStartedAt, Date.now());
+        return rules.difficultyFactor(run.koScore, run.runStartedAt, Date.now());
     }
 
     function nextMissileDelayMs() {
-        return rules.nextMissileDelayMs(koScore, Math.random);
+        return rules.nextMissileDelayMs(run.koScore, Math.random);
     }
 
     function nextNukeDelayMs() {
@@ -647,15 +664,15 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function groundMissileCap() {
-        return rules.groundMissileCap(koScore);
+        return rules.groundMissileCap(run.koScore);
     }
 
     function trackerMissileCap() {
-        return rules.trackerMissileCap(koScore);
+        return rules.trackerMissileCap(run.koScore);
     }
 
     function trackerMissileChance() {
-        return rules.trackerMissileChance(koScore);
+        return rules.trackerMissileChance(run.koScore);
     }
 
     function countActiveMissiles(trackerOnly = null) {
@@ -696,8 +713,8 @@ export async function initializeCylonEffects(options = {}) {
         missileTimer = null;
         nukeTimer = null;
         trackerPairTimer = null;
-        missileDueAt = 0;
-        nukeDueAt = 0;
+        schedule.missileDueAt = 0;
+        schedule.nukeDueAt = 0;
         clearActiveMissiles();
     }
 
@@ -824,7 +841,7 @@ export async function initializeCylonEffects(options = {}) {
 
         const tick = (now) => {
             if (!missile.alive) return;
-            if (paused || !settings.gameEnabled || gameOver) {
+            if (paused || !settings.gameEnabled || run.gameOver) {
                 started += now - last;
                 last = now;
                 requestAnimationFrame(tick);
@@ -886,7 +903,7 @@ export async function initializeCylonEffects(options = {}) {
         clearTimeout(missileTimer);
         if (!isGameLive()) return;
         const wait = first ? 4000 + Math.random() * 3000 : nextMissileDelayMs();
-        missileDueAt = Date.now() + wait;
+        schedule.missileDueAt = Date.now() + wait;
         missileTimer = setTimeout(() => {
             missileTimer = null;
             if (!isGameLive() || paused) return;
@@ -901,7 +918,7 @@ export async function initializeCylonEffects(options = {}) {
         clearTimeout(nukeTimer);
         if (!isGameLive()) return;
         const wait = first ? 12000 + Math.random() * 8000 : nextNukeDelayMs();
-        nukeDueAt = Date.now() + wait;
+        schedule.nukeDueAt = Date.now() + wait;
         nukeTimer = setTimeout(() => {
             nukeTimer = null;
             if (!isGameLive() || paused) return;
@@ -920,13 +937,11 @@ export async function initializeCylonEffects(options = {}) {
 
     function applyPauseTimeSkew(elapsed) {
         if (elapsed <= 0) return;
-        if (grenadeReadyAt > pauseStartedAt) grenadeReadyAt += elapsed;
-        if (raptorReadyAt > pauseStartedAt) raptorReadyAt += elapsed;
-        if (eyeDisorientedUntil > pauseStartedAt) eyeDisorientedUntil += elapsed;
+        const before = schedule;
+        schedule = state.skewForPause(before, pauseStartedAt, elapsed);
 
-        if (missileDueAt > pauseStartedAt) {
+        if (schedule.missileDueAt !== before.missileDueAt) {
             clearTimeout(missileTimer);
-            missileDueAt += elapsed;
             missileTimer = setTimeout(() => {
                 missileTimer = null;
                 if (!isGameLive() || paused) return;
@@ -934,25 +949,23 @@ export async function initializeCylonEffects(options = {}) {
                     launchSmallMissile();
                 }
                 scheduleMissiles(false);
-            }, Math.max(0, missileDueAt - Date.now()));
+            }, state.msUntil(schedule.missileDueAt, Date.now()));
         }
-        if (nukeDueAt > pauseStartedAt) {
+        if (schedule.nukeDueAt !== before.nukeDueAt) {
             clearTimeout(nukeTimer);
-            nukeDueAt += elapsed;
             nukeTimer = setTimeout(() => {
                 nukeTimer = null;
                 if (!isGameLive() || paused) return;
                 if (!isEyeDisoriented() && !nukeInFlight) launchNuke();
                 scheduleNukes(false);
-            }, Math.max(0, nukeDueAt - Date.now()));
+            }, state.msUntil(schedule.nukeDueAt, Date.now()));
         }
-        if (healDueAt > pauseStartedAt) {
+        if (schedule.healDueAt !== before.healDueAt) {
             clearTimeout(healTimer);
-            healDueAt += elapsed;
             healTimer = setTimeout(() => {
                 healTimer = null;
                 tryHeal();
-            }, Math.max(0, healDueAt - Date.now()));
+            }, state.msUntil(schedule.healDueAt, Date.now()));
         }
 
         activeHoles.forEach((h) => {
@@ -983,14 +996,14 @@ export async function initializeCylonEffects(options = {}) {
     function clearHealTimer() {
         clearTimeout(healTimer);
         healTimer = null;
-        healDueAt = 0;
+        schedule.healDueAt = 0;
     }
 
     function tryHeal() {
         healTimer = null;
-        healDueAt = 0;
-        if (!isGameLive() || hitCount <= 0) return;
-        hitCount -= 1;
+        schedule.healDueAt = 0;
+        if (!isGameLive() || run.hitCount <= 0) return;
+        run = state.healOne(run);
         updateHitsUi();
         audio.prime();
         audio.sfx('heal');
@@ -1003,8 +1016,8 @@ export async function initializeCylonEffects(options = {}) {
 
     function scheduleHeal() {
         clearHealTimer();
-        if (!settings.gameEnabled || gameOver || paused || hitCount <= 0) return;
-        healDueAt = Date.now() + HEAL_IDLE_MS;
+        if (!settings.gameEnabled || run.gameOver || paused || run.hitCount <= 0) return;
+        schedule.healDueAt = Date.now() + HEAL_IDLE_MS;
         healTimer = setTimeout(() => {
             healTimer = null;
             tryHeal();
@@ -1026,7 +1039,7 @@ export async function initializeCylonEffects(options = {}) {
     let sweepLast = 0;
 
     function isEyeDisoriented() {
-        return Date.now() < eyeDisorientedUntil;
+        return state.pending(schedule.eyeDisorientedUntil, Date.now());
     }
 
     function setEyeTracking(on) {
@@ -1053,7 +1066,7 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function disorientEye(ms = EYE_DISORIENT_MS) {
-        eyeDisorientedUntil = Date.now() + ms;
+        schedule.eyeDisorientedUntil = Date.now() + ms;
         tracking = false;
         eye.classList.remove('is-tracking');
         eye.classList.add('is-disoriented');
@@ -1420,7 +1433,7 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function currentHp() {
-        return rules.currentHp(hitCount);
+        return rules.currentHp(run.hitCount);
     }
 
     function hpTint(hp) {
@@ -1438,23 +1451,16 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function registerHit(count = 1, { fromNuke = false } = {}) {
-        if (gameOver || !isGameLive()) return;
-        const n = Math.max(0, Number(count) || 0);
-        hitCount += n;
-        hitsTaken += n;
+        if (run.gameOver || !isGameLive()) return;
+        const hit = state.takeHits(run, count, MAX_HITS, fromNuke);
+        run = hit.run;
         updateHitsUi();
         audio.sfx('hit');
         scheduleHeal();
 
-        if (fromNuke) {
+        if (hit.ends) {
             clearHealTimer();
-            endGame('nuke');
-            return;
-        }
-
-        if (hitCount >= MAX_HITS) {
-            clearHealTimer();
-            endGame('hits');
+            endGame(hit.ends);
         }
     }
 
@@ -1497,7 +1503,7 @@ export async function initializeCylonEffects(options = {}) {
         // Hit if the player crosses the bolt's path while it flies — not only at impact
         const tick = (now) => {
             if (settled) return;
-            if (!settings.gameEnabled || gameOver) {
+            if (!settings.gameEnabled || run.gameOver) {
                 try { anim.cancel(); } catch (_) { /* ignore */ }
                 finishBolt(toX, toY, { struck: false });
                 return;
@@ -1566,7 +1572,7 @@ export async function initializeCylonEffects(options = {}) {
         window.addEventListener('pointerdown', (e) => {
             if (!isGameLive()) return;
             if (grenadeArmed) return;
-            if (introPlaying) return;
+            if (intro.playing()) return;
             if (e.button != null && e.button !== 0) return;
             if (reticlePointerId != null && e.pointerId === reticlePointerId) return;
             if (isPlayerShotUiTarget(e.target)) return;
@@ -1576,9 +1582,9 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function bumpScore() {
-        koScore += 1;
+        run = state.recordKill(run);
         if (!scoreEl) return;
-        scoreEl.textContent = String(koScore);
+        scoreEl.textContent = String(run.koScore);
         scoreEl.classList.remove('is-bump');
         void scoreEl.offsetWidth;
         scoreEl.classList.add('is-bump');
@@ -1728,12 +1734,12 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function updateRaptorButton() {
-        updateCooldownButton(raptorBtn, raptorCdEl, raptorReadyAt, !raptorInbound);
+        updateCooldownButton(raptorBtn, raptorCdEl, schedule.raptorReadyAt, !raptorInbound);
     }
 
     function updateGrenadeButton() {
         // Stay clickable while armed so a second press cancels
-        updateCooldownButton(grenadeBtn, grenadeCdEl, grenadeArmed ? 0 : grenadeReadyAt, true);
+        updateCooldownButton(grenadeBtn, grenadeCdEl, grenadeArmed ? 0 : schedule.grenadeReadyAt, true);
         if (!grenadeBtn) return;
         grenadeBtn.classList.toggle('is-armed', grenadeArmed);
         const label = grenadeBtn.querySelector('.cylon-raptor-btn-label');
@@ -1757,7 +1763,7 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function clearEyeDisorient() {
-        eyeDisorientedUntil = 0;
+        schedule.eyeDisorientedUntil = 0;
         if (eye) eye.classList.remove('is-disoriented');
         if (glare) {
             glare.classList.remove('is-disoriented');
@@ -1767,8 +1773,8 @@ export async function initializeCylonEffects(options = {}) {
 
     /** Cooldowns / armed state do not carry across runs. */
     function resetAbilityCooldowns() {
-        grenadeReadyAt = 0;
-        raptorReadyAt = 0;
+        schedule.grenadeReadyAt = 0;
+        schedule.raptorReadyAt = 0;
         grenadeArmed = false;
         document.body.classList.remove('cylon-grenade-armed');
         clearRaptorStrike();
@@ -1784,7 +1790,7 @@ export async function initializeCylonEffects(options = {}) {
 
     function readyGrenade() {
         if (!isGameLive()) return false;
-        if (Date.now() < grenadeReadyAt) return false;
+        if (Date.now() < schedule.grenadeReadyAt) return false;
         if (grenadeArmed) {
             cancelGrenadeArm();
             return false;
@@ -1799,13 +1805,13 @@ export async function initializeCylonEffects(options = {}) {
     function throwGrenadeAt(pageX, pageY) {
         if (!isGameLive()) return false;
         if (!grenadeArmed) return false;
-        if (Date.now() < grenadeReadyAt) {
+        if (Date.now() < schedule.grenadeReadyAt) {
             cancelGrenadeArm();
             return false;
         }
 
         grenadeArmed = false;
-        grenadeReadyAt = Date.now() + GRENADE_COOLDOWN_MS;
+        schedule.grenadeReadyAt = Date.now() + GRENADE_COOLDOWN_MS;
         updateGrenadeButton();
         audio.prime();
         audio.sfx('grenade');
@@ -1884,12 +1890,12 @@ export async function initializeCylonEffects(options = {}) {
 
     function callRaptor() {
         if (!isGameLive() || raptorInbound) return false;
-        if (Date.now() < raptorReadyAt) return false;
+        if (Date.now() < schedule.raptorReadyAt) return false;
         if (!raptorEl) return false;
 
         clearRaptorStrike();
         raptorInbound = true;
-        raptorReadyAt = Date.now() + RAPTOR_COOLDOWN_MS;
+        schedule.raptorReadyAt = Date.now() + RAPTOR_COOLDOWN_MS;
         updateAbilityButtons();
         audio.prime();
         audio.sfx('raptor');
@@ -2017,7 +2023,7 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function botCap() {
-        return rules.botCap(koScore, BOT_HARD_CAP);
+        return rules.botCap(run.koScore, BOT_HARD_CAP);
     }
 
     function attachBotControls(bot) {
@@ -2352,112 +2358,8 @@ export async function initializeCylonEffects(options = {}) {
         setTimeout(() => nukeEl.classList.remove('is-detonating'), 2500);
     }
 
-    function resetIntroTitle() {
-        document.body.classList.remove('cylon-intro-hero');
-        if (!introTitleEl) return;
-        introTitleEl.hidden = true;
-        introTitleEl.setAttribute('aria-hidden', 'true');
-        introTitleEl.classList.remove('is-hero', 'is-settling', 'is-exit');
-        introTitleEl.style.cssText = '';
-    }
-
-    function pinIntroTitleCenter() {
-        if (!introTitleEl) return { x: 0, y: 0 };
-        const x = (window.innerWidth || 1) * 0.5;
-        const y = (window.innerHeight || 1) * 0.48;
-        // Pixel pin — % left/top jumps when the scrollbar or nav chrome reflows
-        introTitleEl.style.left = `${x}px`;
-        introTitleEl.style.top = `${y}px`;
-        introTitleEl.style.right = 'auto';
-        introTitleEl.style.bottom = 'auto';
-        introTitleEl.style.transform = 'translate(-50%, -50%)';
-        introTitleEl.style.transformOrigin = 'center center';
-        return { x, y };
-    }
-
-    function showIntroTitle() {
-        if (!introTitleEl) return;
-        introTitleEl.textContent = BRAND_COMBAT;
-        introTitleEl.hidden = false;
-        introTitleEl.setAttribute('aria-hidden', 'false');
-        introTitleEl.classList.remove('is-exit', 'is-settling', 'is-hero');
-        introTitleEl.style.cssText = '';
-        pinIntroTitleCenter();
-        document.body.classList.add('cylon-intro-hero');
-        // Opacity-only fade in; keep transform pinned so nothing pops
-        void introTitleEl.offsetWidth;
-        introTitleEl.classList.add('is-hero');
-    }
-
-    function isIntroMobileChrome() {
-        return window.matchMedia('(max-width: 819px)').matches;
-    }
-
-    /** After the hold: glide from viewport center into the nav brand (desktop) or fade (mobile). */
-    function settleIntroTitle(gen) {
-        if (gen !== introGen || !introTitleEl || introTitleEl.hidden) return;
-
-        if (reduceMotion || isIntroMobileChrome() || !siteBrand) {
-            introTitleEl.classList.add('is-exit');
-            const ms = reduceMotion ? 0 : 450;
-            setTimeout(() => {
-                if (gen !== introGen) return;
-                resetIntroTitle();
-            }, ms);
-            return;
-        }
-
-        // Re-pin after nav chrome / scatter may have shifted layout, then measure once
-        const pinned = pinIntroTitleCenter();
-        void introTitleEl.offsetWidth;
-        const heroRect = introTitleEl.getBoundingClientRect();
-        const brandRect = siteBrand.getBoundingClientRect();
-        const heroCenterX = heroRect.left + heroRect.width / 2;
-        const heroCenterY = heroRect.top + heroRect.height / 2;
-        const targetX = brandRect.left + brandRect.width / 2;
-        const targetY = brandRect.top + brandRect.height / 2;
-        const dx = targetX - heroCenterX;
-        const dy = targetY - heroCenterY;
-        const scale = brandRect.width / Math.max(heroRect.width, 1);
-
-        introTitleEl.classList.remove('is-hero');
-        introTitleEl.classList.add('is-settling');
-        introTitleEl.style.left = `${pinned.x}px`;
-        introTitleEl.style.top = `${pinned.y}px`;
-        introTitleEl.style.transform = 'translate(-50%, -50%) scale(1)';
-
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                if (gen !== introGen) return;
-                introTitleEl.style.transform =
-                    `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(${scale})`;
-                introTitleEl.style.textShadow = 'none';
-            });
-        });
-
-        let settled = false;
-        const finishSettle = (e) => {
-            if (e && e.propertyName && e.propertyName !== 'transform') return;
-            if (settled || gen !== introGen) return;
-            settled = true;
-            introTitleEl.removeEventListener('transitionend', finishSettle);
-            resetIntroTitle();
-        };
-        introTitleEl.addEventListener('transitionend', finishSettle);
-        setTimeout(() => finishSettle(), INTRO_TITLE_SETTLE_MS + 120);
-    }
-
-    function cancelIntroNuke() {
-        introGen += 1;
-        introPlaying = false;
-        nukeInFlight = false;
-        if (nukeMissileEl) nukeMissileEl.classList.remove('is-flying');
-        resetIntroTitle();
-    }
-
     function beginCombatAfterIntro() {
-        if (!settings.gameEnabled || gameOver) return;
-        introPlaying = false;
+        if (!settings.gameEnabled || run.gameOver) return;
         blowWorldEnded();
         // Intro detonate runs before glyphs exist — pulse letters once scatter is stamped
         const cx = (window.innerWidth || 1) / 2;
@@ -2468,7 +2370,7 @@ export async function initializeCylonEffects(options = {}) {
             disruptGlyphs(pageX, pageY, 1.35);
             setTimeout(() => disruptGlyphs(pageX, pageY, 1.1), 280);
         });
-        runStartedAt = Date.now();
+        run = state.beginRun(run, Date.now());
         startInboundSchedulers();
         if (coarsePointer) {
             resetReticleToCenter();
@@ -2478,97 +2380,6 @@ export async function initializeCylonEffects(options = {}) {
         }
         syncReticleVisibility();
         updateAbilityButtons();
-    }
-
-    /** Opening strike: nuke flies to screen center, then the page blows apart and combat starts. */
-    function playIntroNuke() {
-        const gen = ++introGen;
-        introPlaying = true;
-        scores.startRun();
-        nukeInFlight = false;
-        resetIntroTitle();
-
-        const targetX = (window.innerWidth || 1) / 2;
-        const targetY = (window.innerHeight || 1) * 0.48;
-
-        // The intro's timed steps wait out a pause (How to Play) instead of
-        // running underneath it.
-        const afterPause = (fn) => {
-            const step = () => {
-                if (gen !== introGen || !settings.gameEnabled) return;
-                if (paused) { setTimeout(step, 100); return; }
-                fn();
-            };
-            step();
-        };
-        const finish = (x, y) => {
-            if (gen !== introGen || !settings.gameEnabled) return;
-            nukeInFlight = false;
-            if (nukeMissileEl) nukeMissileEl.classList.remove('is-flying');
-            detonateNukeAt(x, y, { dealDamage: false, shake: false });
-            showIntroTitle();
-            // Start scatter after the white flash peaks so the drift is visible
-            const scatterDelay = reduceMotion ? 0 : 520;
-            setTimeout(() => afterPause(beginCombatAfterIntro), scatterDelay);
-            // Hold at center through nav chrome fade, then ride into the brand slot
-            const settleDelay = reduceMotion
-                ? 0
-                : Math.max(900, scatterDelay + NAV_FADE_MS + 80);
-            setTimeout(() => afterPause(() => settleIntroTitle(gen)), settleDelay);
-        };
-
-        if (reduceMotion || !nukeMissileEl) {
-            finish(targetX, targetY);
-            return;
-        }
-
-        nukeInFlight = true;
-        // Enter from above the viewport toward center
-        let x = targetX + (Math.random() - 0.5) * Math.min(120, (window.innerWidth || 400) * 0.15);
-        let y = -72;
-        let started = performance.now();
-        let last = started;
-        const INTRO_SPEED = NUKE_SPEED * 0.85;
-
-        nukeMissileEl.style.left = `${x}px`;
-        nukeMissileEl.style.top = `${y}px`;
-        nukeMissileEl.classList.add('is-flying');
-        audio.prime();
-        audio.sfx('introLaunch');
-
-        const tick = (now) => {
-            if (gen !== introGen) return;
-            if (!settings.gameEnabled) {
-                cancelIntroNuke();
-                return;
-            }
-            if (paused) {
-                started += now - last;
-                last = now;
-                requestAnimationFrame(tick);
-                return;
-            }
-
-            const dt = Math.min(0.05, (now - last) / 1000);
-            last = now;
-            const dx = targetX - x;
-            const dy = targetY - y;
-            const dist = Math.hypot(dx, dy) || 1;
-            const step = INTRO_SPEED * dt;
-            x += (dx / dist) * Math.min(step, dist);
-            y += (dy / dist) * Math.min(step, dist);
-
-            nukeMissileEl.style.left = `${x}px`;
-            nukeMissileEl.style.top = `${y}px`;
-            nukeMissileEl.style.setProperty('--nuke-heading', `${Math.atan2(dy, dx) * (180 / Math.PI)}deg`);
-
-            if (dist <= NUKE_ARRIVE_RADIUS || now - started >= NUKE_MAX_FLIGHT_MS) {
-                finish(x, y);
-                return;
-            }
-            requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
     }
 
     function launchNuke() {
@@ -2596,7 +2407,7 @@ export async function initializeCylonEffects(options = {}) {
         audio.sfx('nukeLaunch');
 
         const tick = (now) => {
-            if (paused || !settings.gameEnabled || gameOver) {
+            if (paused || !settings.gameEnabled || run.gameOver) {
                 // Freeze flight clock while help overlay (or end state) holds the run
                 started += now - last;
                 last = now;
@@ -2648,7 +2459,7 @@ export async function initializeCylonEffects(options = {}) {
 
     function syncGameOverDismissButton() {
         if (!playAgainBtn) return;
-        const quit = gameOverEndReason === 'quit';
+        const quit = run.endReason === 'quit';
         playAgainBtn.textContent = quit ? 'Close' : 'Play Again';
         playAgainBtn.setAttribute(
             'aria-label',
@@ -2657,9 +2468,9 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function dismissGameOverPanel() {
-        if (gameOverEndReason === 'quit') {
+        if (run.endReason === 'quit') {
             hideGameOver();
-            gameOver = false;
+            run = state.clearGameOver(run);
             resetRunStats();
             return;
         }
@@ -2670,16 +2481,15 @@ export async function initializeCylonEffects(options = {}) {
         if (gameOverEl) gameOverEl.hidden = true;
         if (gameOverEntryEl) gameOverEntryEl.hidden = false;
         if (gameOverBoardEl) gameOverBoardEl.hidden = true;
-        pendingScore = null;
-        gameOverEndReason = null;
+        run = state.setEndReason(state.clearPendingScore(run), null);
     }
 
     async function showGameOver(reason) {
         if (!gameOverEl) return;
-        gameOverEndReason = reason;
+        run = state.setEndReason(run, reason);
         await fetchHighScores();
-        const qualifies = scoreQualifiesForBoard(koScore);
-        if (!qualifies) pendingScore = null;
+        const qualifies = scoreQualifiesForBoard(run.koScore);
+        if (!qualifies) run = state.clearPendingScore(run);
 
         const reasons = {
             hits: 'You took too much fire. The eye cooked you.',
@@ -2689,7 +2499,7 @@ export async function initializeCylonEffects(options = {}) {
         if (gameOverReasonEl) {
             gameOverReasonEl.textContent = reasons[reason] || 'Run complete.';
         }
-        if (gameOverKosEl) gameOverKosEl.textContent = String(koScore);
+        if (gameOverKosEl) gameOverKosEl.textContent = String(run.koScore);
         if (gameOverHitsEl) gameOverHitsEl.textContent = String(currentHp());
         if (gameOverEntryEl) gameOverEntryEl.hidden = !qualifies;
         if (gameOverBoardEl) gameOverBoardEl.hidden = qualifies;
@@ -2701,18 +2511,16 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function endGame(reason) {
-        if (gameOver) return;
-        gameOver = true;
-        pendingScore = { score: koScore, hits: hitsTaken, reason };
+        if (run.gameOver) return;
+        run = state.endRun(run, reason);
         // Losses keep the session On (music, combat chrome, scatter). Quit turns it off.
         const keepSession = reason === 'hits' || reason === 'nuke';
         clearAllBots();
         clearInboundSchedulers();
         clearHealTimer();
-        runStartedAt = 0;
         clearTimeout(idleTimer);
         setEyeTracking(false);
-        cancelIntroNuke();
+        intro.cancel();
         draggingReticle = false;
         reticlePointerId = null;
         resetAbilityCooldowns();
@@ -2731,11 +2539,7 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function resetRunStats() {
-        koScore = 0;
-        hitCount = 0;
-        hitsTaken = 0;
-        gameOver = false;
-        pendingScore = null;
+        run = state.resetScore(run);
         clearHealTimer();
         if (scoreEl) scoreEl.textContent = '0';
         updateHitsUi();
@@ -2750,9 +2554,9 @@ export async function initializeCylonEffects(options = {}) {
 
     function setGameEnabled(on) {
         const wasOn = settings.gameEnabled;
-        if (!on && wasOn && !gameOver) {
+        if (!on && wasOn && !run.gameOver) {
             // Voluntary stop — offer initials only if the run can make the board
-            if (koScore > 0) {
+            if (run.koScore > 0) {
                 endGame('quit');
                 return;
             }
@@ -2760,11 +2564,11 @@ export async function initializeCylonEffects(options = {}) {
         settings.gameEnabled = on;
         saveSettings();
         if (!on) {
-            cancelIntroNuke();
+            intro.cancel();
             clearAllBots();
             clearInboundSchedulers();
             clearHealTimer();
-            runStartedAt = 0;
+            run = state.stopClock(run);
             clearTimeout(idleTimer);
             setEyeTracking(false);
             draggingReticle = false;
@@ -2773,8 +2577,7 @@ export async function initializeCylonEffects(options = {}) {
             pauseStartedAt = 0;
             document.body.classList.remove('cylon-touch-play');
             hideGameOver();
-            gameOver = false;
-            pendingScore = null;
+            run = state.clearPendingScore(state.clearGameOver(run));
             if (helpEl && !helpEl.hidden) {
                 helpEl.hidden = true;
             }
@@ -2784,7 +2587,7 @@ export async function initializeCylonEffects(options = {}) {
             audio.syncMusic();
             syncWorldEndedLook();
         } else {
-            cancelIntroNuke();
+            intro.cancel();
             clearAllBots();
             clearInboundSchedulers();
             hideGameOver();
@@ -2795,7 +2598,7 @@ export async function initializeCylonEffects(options = {}) {
             audio.syncMusic();
             // Combat chrome on; page stays intact until the intro nuke hits
             syncWorldEndedLook({ deferScatter: true });
-            playIntroNuke();
+            intro.play();
         }
     }
 
@@ -2852,12 +2655,12 @@ export async function initializeCylonEffects(options = {}) {
         if (scoreSubmitBtn) {
             scoreSubmitBtn.addEventListener('click', async () => {
                 const initials = readInitials();
-                const score = pendingScore ? pendingScore.score : koScore;
+                const score = run.pendingScore ? run.pendingScore.score : run.koScore;
                 scoreSubmitBtn.disabled = true;
                 const ok = await submitHighScore(score, initials);
                 scoreSubmitBtn.disabled = false;
                 if (!ok) return;
-                pendingScore = null;
+                run = state.clearPendingScore(run);
                 revealHighScoreBoard();
             });
         }
@@ -2865,7 +2668,7 @@ export async function initializeCylonEffects(options = {}) {
         const scoreSkipBtn = document.getElementById('cylon-score-skip');
         if (scoreSkipBtn) {
             scoreSkipBtn.addEventListener('click', () => {
-                pendingScore = null;
+                run = state.clearPendingScore(run);
                 revealHighScoreBoard();
             });
         }
@@ -3009,7 +2812,7 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     window.cylonStartGame = () => {
-        if (settings.gameEnabled || gameOver) return;
+        if (settings.gameEnabled || run.gameOver) return;
         setGameEnabled(true);
         window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
     };

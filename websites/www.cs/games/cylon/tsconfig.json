@@ -27,5 +27,5 @@
     "newLine": "lf",
     "noEmitOnError": true
   },
-  "files": ["src/rules.ts", "src/playfield.ts"]
+  "files": ["src/rules.ts", "src/playfield.ts", "src/state.ts"]
 }

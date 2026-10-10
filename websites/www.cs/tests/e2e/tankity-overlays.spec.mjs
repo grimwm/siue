@@ -110,3 +110,33 @@ test('the lobby shows the hills first, hosts from the initials row, then shows o
   await page.click('#lobby-leave');
   await expect(page.locator('#lobby-rows')).toBeVisible();
 });
+
+test('scrolled panels stay where the player left them when they redraw', async ({ browser }) => {
+  const { page, errors } = await newPlayer(browser);
+  await page.setViewportSize({ width: 1000, height: 640 });
+  const top = sel => page.locator(sel).evaluate(el => el.scrollTop);
+  // The menu: scroll it, then flip a toggle and the text size (each redraws it).
+  await page.keyboard.press('c');
+  await page.locator('#menu-overlay').hover();
+  await page.mouse.wheel(0, 300);
+  await expect.poll(() => top('#menu-overlay')).toBeGreaterThan(20);
+  const menuAt = await top('#menu-overlay');
+  await page.click('#btn-sound');
+  await page.click('#text-picker button:nth-child(2)');
+  expect(await top('#menu-overlay')).toBe(menuAt);
+  await page.click('#btn-sound');
+  await page.keyboard.press('Escape');
+  // The lobby: the veil scrolls; the status line changing redraws it.
+  await page.setViewportSize({ width: 420, height: 700 });
+  await page.keyboard.press('o');
+  await expect(page.locator('#lobby-veil')).toBeVisible();
+  await page.locator('#lobby-veil').hover();
+  await page.mouse.wheel(0, 400);
+  await expect.poll(() => top('#lobby-veil')).toBeGreaterThan(20);
+  const lobbyAt = await top('#lobby-veil');
+  await page.fill('#host-initials', 'ass'); // a blocked word
+  await page.keyboard.press('Enter'); // the status line says the initials are wrong: a redraw
+  await expect(page.locator('#lobby-status')).toContainText('3 letters');
+  expect(await top('#lobby-veil')).toBe(lobbyAt);
+  expect(errors).toEqual([]);
+});

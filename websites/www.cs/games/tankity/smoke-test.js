@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { sweepHit } from './js/sim.js';
-import { els, makeEl, click, document } from './tools/dom-stub.mjs';
+import { els, makeEl, click, submit, document } from './tools/dom-stub.mjs';
 
 const __dirname = import.meta.dirname;
 const src = fs.readFileSync(path.join(__dirname, 'game.js'), 'utf8');
@@ -78,17 +78,6 @@ globalThis.AudioContext = class {
 };
 
 // ---- boot the exact shipped module ----
-// Tile pickers build their buttons with replaceChildren, which this stub only
-// grants to the elements the checks inspect (the HUD stays on its text path).
-const withChildren = id => {
-  els[id] = makeEl(id);
-  els[id].replaceChildren = function (...nodes) { this.children = nodes; };
-  return els[id];
-};
-withChildren('lobby-map-picker');
-withChildren('lobby-seats');
-els['seed-input'] = makeEl('seed-input');
-els['seed-input'].value = 'scorch-01';
 eval(fxSrc);
 await import(pathToFileURL(path.join(__dirname, 'game.js')).href);
 
@@ -156,7 +145,7 @@ check('fullscreen-fallback', /Fullscreen is not supported/.test(logText()));
 const pressed = id => els[id].getAttribute('aria-pressed');
 click(els['btn-sound']);
 check('sound-off', pressed('btn-sound') === 'false', pressed('btn-sound'));
-check('sound-spares-music', pressed('btn-music') === undefined, String(pressed('btn-music')));
+check('sound-spares-music', pressed('btn-music') === 'true', String(pressed('btn-music')));
 TAP('global', 'music');
 check('music-off', pressed('btn-music') === 'false', pressed('btn-music'));
 check('music-spares-sound', pressed('btn-sound') === 'false', pressed('btn-sound'));
@@ -172,12 +161,17 @@ click(els['btn-music']); click(els['btn-music']); // end unmuted with a fresh sc
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, 'game.css'), 'utf8');
 const php = fs.readFileSync(path.join(__dirname, 'rooms.php'), 'utf8');
-for (const id of ['rooms-open', 'lobby-veil', 'host-form', 'host-initials', 'join-form',
+// The lobby and the menu are Preact components (src/ui): their ids exist once
+// the game has drawn them, not in index.html (ui-test.js checks their shape).
+const rendered = id => !!els[id] && !!els[id].localName;
+for (const id of ['lobby-veil', 'rematch', 'round-banner', 'round-banner-text', 'preview-result']) {
+  check('lobby-markup-' + id, html.includes('id="' + id + '"'));
+}
+for (const id of ['rooms-open', 'host-form', 'host-initials', 'join-form',
   'join-code', 'join-initials', 'lobby-status', 'lobby-room', 'lobby-code',
   'lobby-seats', 'lobby-start', 'lobby-leave', 'lobby-close',
-  'lobby-map', 'lobby-hills', 'lobby-count', 'rematch',
-  'new-game', 'round-banner', 'round-banner-text', 'preview-result']) {
-  check('lobby-markup-' + id, html.includes('id="' + id + '"'));
+  'lobby-map', 'lobby-hills', 'lobby-count', 'new-game']) {
+  check('lobby-rendered-' + id, rendered(id));
 }
 check('no-status-codes', !/server said no/.test(src));
 // The module graph. A browser keys a module by its URL, so two spellings of one
@@ -242,7 +236,7 @@ check('no-seed-leak', (() => {
   return !/'seed'/.test(body) && !/'rng'/.test(body) && !/'token'/.test(body);
 })());
 check('lobby-css-acts-right', /\.card \.acts\s*\{[^}]*justify-content:\s*flex-end/.test(css));
-for (const id of ['btn-sound', 'btn-music']) check('audio-markup-' + id, html.includes('id="' + id + '"'));
+for (const id of ['btn-sound', 'btn-music']) check('audio-rendered-' + id, rendered(id));
 check('css-fit-windowed', /\.canvas-holder\s*\{[^}]*100vh/.test(css));
 check('css-fit-fullscreen', /#frame:fullscreen\s*\{[^}]*overflow:\s*hidden/.test(css));
 check('css-actions-grid', /\.guide-actions\s*\{[^}]*display:\s*grid/.test(css));
@@ -256,9 +250,10 @@ check('key-hints', html.includes('data-keyhint="global:menu">(C)<') && html.incl
 check('key-style', /button \.key\s*\{[^}]*background/.test(css));
 // Panels live over the battle, never beside it; L/H/R flip them without pausing.
 check('no-side-panels', !/<aside/.test(html));
-for (const id of ['log-overlay', 'help-overlay', 'report-overlay', 'btn-log', 'btn-help', 'scores-open']) {
+for (const id of ['log-overlay', 'help-overlay', 'report-overlay', 'btn-log', 'btn-help']) {
   check('overlay-markup-' + id, html.includes('id="' + id + '"'));
 }
+check('overlay-rendered-scores-open', rendered('scores-open'));
 check('overlays-in-frame', ['log-overlay', 'help-overlay', 'report-overlay']
   .every(id => html.indexOf('id="' + id + '"') > html.indexOf('id="frame"')));
 TAP('global', 'log');
@@ -278,11 +273,14 @@ check('report-toggle', els['report-overlay'].hidden === false);
 click(els['report-close']);
 check('report-close', els['report-overlay'].hidden === true);
 // New Game, seed, sound, music, fullscreen, and rooms live in the in-frame menu.
-for (const id of ['menu-overlay', 'btn-menu', 'menu-close', 'seed-form', 'new-game', 'rooms-open']) {
+for (const id of ['menu-overlay', 'btn-menu']) {
   check('menu-markup-' + id, html.includes('id="' + id + '"'));
 }
-check('menu-in-frame', html.indexOf('id="seed-form"') > html.indexOf('id="frame"'));
-check('menu-grid', html.includes('menu-grid'));
+for (const id of ['menu-close', 'seed-form', 'new-game', 'rooms-open']) {
+  check('menu-rendered-' + id, rendered(id));
+}
+check('menu-in-frame', html.indexOf('id="menu-overlay"') > html.indexOf('id="frame"'));
+check('menu-grid', els['seed-form'].className === 'menu-grid');
 check('menu-buttons', /#frame button\s*\{[^}]*font-size:\s*0\.75rem/.test(css));
 check('menu-grid-cols', /\.menu-grid\s*\{[^}]*repeat\(3, 1fr\)/.test(css));
 // Secondary is the default (navbar style); gold is opt-in via .btn-primary.
@@ -308,8 +306,10 @@ check('menu-esc', els['menu-overlay'].hidden === true);
   check('songs', songNames.length === 4 && /songIdx = \(round - 1\) % SONGS\.length/.test(audioSrc)
     && /if \(G\.demo\) music\.playTheme\(\); else music\.forRound\(G\.round\)/.test(src), songNames.join(','));
 // Every scrollable panel shows its keys, dimmed while everything fits.
-// (The help and the shop draw theirs from src/ui: one OverlayHead per navId.)
-const uiNavs = ['help', 'shop'].flatMap(f => fs.readFileSync(path.join(__dirname, 'src', 'ui', f + '.tsx'), 'utf8').match(/navId="/g) || []).length;
+// (The overlays in src/ui draw theirs: one OverlayHead per navId, and the tutorial's own line.)
+const uiFile = f => fs.readFileSync(path.join(__dirname, 'src', 'ui', f + '.tsx'), 'utf8');
+const uiNavs = ['help', 'shop', 'lobby', 'menu', 'guns', 'scores', 'log'].flatMap(f => uiFile(f).match(/navId="/g) || []).length
+  + (uiFile('tutorial').match(/class="nav-hint"/g) || []).length;
 const navCount = (html.match(/class="nav-hint[" ]/g) || []).length + uiNavs;
 check('nav-hints', navCount === 10, `hints=${navCount}`);
 TAP('global', 'help');
@@ -347,9 +347,6 @@ for (const [f, text] of [['game.js', src], ['index.html', html], ['game.css', cs
   check('no-dashes-' + f, !/[—–]/.test(text));
 }
 check('net-round-event', /e\.t === 'round'/.test(src) && /'t' => 'round'/.test(php));
-function submit(el) {
-  for (const f of ((el._l || {}).submit || [])) f({ preventDefault: () => {} });
-}
 const tick = async (n) => {
   for (let i = 0; i < (n || 6); i++) { await new Promise(r => setImmediate(r)); frames(2); }
 };
@@ -547,9 +544,6 @@ function lobbyRoom() {
 }
 // Freeze regression: ten minutes in a background tab must not backlog the
 // music scheduler into scheduling thousands of catch-up notes at once.
-function change(el) {
-  for (const f of ((el._l || {}).change || [])) f();
-}
 (async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // ?code=zz99 was set before boot: the lobby opens with the code filled in
@@ -932,10 +926,10 @@ function change(el) {
   click(els['rooms-open']); await tick(10);
   const tiles = () => els['lobby-map-picker'].children;
   const tileOn = () => tiles().filter(t => t.getAttribute('aria-pressed') === 'true').map(t => t.getAttribute('data-map'));
-  check('maps-catalog', tiles().length === 3 && tiles().map(t => t.title).join('|') === 'Random hills|Canyon 3|Twin Hills',
-    tiles().map(t => t.title).join('|'));
-  check('maps-tiles-are-buttons', tiles().every(t => t.type === 'button' && t.children.length === 2
-    && t.children[0].getAttribute('aria-hidden') === 'true' && t.children[1].textContent === t.title));
+  check('maps-catalog', tiles().length === 3 && tiles().map(t => t.getAttribute('title')).join('|') === 'Random hills|Canyon 3|Twin Hills',
+    tiles().map(t => t.getAttribute('title')).join('|'));
+  check('maps-tiles-are-buttons', tiles().every(t => t.getAttribute('type') === 'button' && t.children.length === 2
+    && t.children[0].getAttribute('aria-hidden') === 'true' && t.children[1].textContent === t.getAttribute('title')));
   check('maps-random-selected', tileOn().join() === '', tileOn().join());
   check('room-occupancy', els['lobby-count'].textContent === '3 / 10 rooms occupied',
     els['lobby-count'].textContent);
@@ -979,14 +973,14 @@ function change(el) {
     `rows=${els['lobby-rows'].hidden} intro=${els['lobby-intro'].hidden}`);
   const seatTiles = () => els['lobby-seats'].children;
   const tileText = t => t.children.map(c => c.textContent).join(' ');
-  check('room-roster', seatTiles().length === 4 && seatTiles().every(t => t.type === 'button' && t.className.includes('unit-choice')),
+  check('room-roster', seatTiles().length === 4 && seatTiles().every(t => t.getAttribute('type') === 'button' && t.className.includes('unit-choice')),
     `tiles=${seatTiles().length}`);
   // The grid shows initials for people, AI for drones; no lives or points.
   check('seat-grid-labels', seatTiles().map(t => t.children[0].textContent).join('|') === 'ABC|AI|AI|AI'
     && !seatTiles().some(t => /lives|pts|x3/.test(tileText(t))),
     seatTiles().map(tileText).join('|'));
   check('seat-grid-host-flips', seatTiles()[0].getAttribute('aria-disabled') === 'true'
-    && seatTiles().slice(1).every(t => t.getAttribute('aria-disabled') === undefined && (t._l || {}).click),
+    && seatTiles().slice(1).every(t => t.getAttribute('aria-disabled') === undefined && ((t._l || {}).click || []).length > 0),
     seatTiles().map(t => t.getAttribute('aria-disabled')).join());
   // The host flips a drone seat to Open and back; the request carries both.
   click(seatTiles()[2]); await tick(10);
@@ -1001,8 +995,7 @@ function change(el) {
     els['lobby-hills'].textContent);
   check('map-tile-pressed', tileOn().join() === 'canyon 3', tileOn().join());
   // the host can swap back to a random draw before starting
-  els['lobby-map'].value = '';
-  change(els['lobby-map']); await tick(10);
+  click(tiles()[0]); await tick(10);
   check('map-change', els['lobby-hills'].textContent === 'Hills: Random hills',
     els['lobby-hills'].textContent);
   // tapping a tile picks that map through the same request
@@ -1026,7 +1019,7 @@ function change(el) {
   // A guest sees the host's choices but cannot change them.
   check('guest-sees-open', seatTiles().map(t => t.getAttribute('data-mode')).join() === 'human,human,ai,open',
     seatTiles().map(t => t.getAttribute('data-mode')).join());
-  check('guest-cannot-flip', seatTiles().every(t => t.getAttribute('aria-disabled') === 'true' && !(t._l || {}).click)
+  check('guest-cannot-flip', seatTiles().every(t => t.getAttribute('aria-disabled') === 'true' && !((t._l || {}).click || []).length)
     && /host decides/.test(els['seats-hint'].textContent), els['seats-hint'].textContent);
   seatModes[3] = 'ai';
   // back to hosting so the match can start
@@ -1128,7 +1121,7 @@ function change(el) {
   void document.getElementById('leave-stay');
   // (shop-leave is in the shop component, src/ui/shop.tsx; the rest are in the page.)
   const shopSrc = fs.readFileSync(path.join(__dirname, 'src', 'ui', 'shop.tsx'), 'utf8');
-  check('leave-markup', ['menu-leave', 'leave-veil', 'leave-go', 'leave-stay'].every(id => html.includes('id="' + id + '"'))
+  check('leave-markup', ['leave-veil', 'leave-go', 'leave-stay'].every(id => html.includes('id="' + id + '"')) && rendered('menu-leave')
     && shopSrc.includes('id="shop-leave"'));
   check('leave-buttons-in-room', els['menu-leave'].hidden === false && els['shop-leave'].hidden === false,
     `${els['menu-leave'].hidden} ${els['shop-leave'].hidden}`);

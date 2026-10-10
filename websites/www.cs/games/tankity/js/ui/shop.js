@@ -8,7 +8,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "preact/jsx-ru
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
-import { KeyHints, Key, OverlayHead, ScrollKeys } from './chrome.js?v=e4ecb1fc66';
+import { KeyHints, Key, OverlayHead, ScrollKeys } from './chrome.js?v=9889c2cdd5';
 /** A row's icon, painted when it mounts and again when the arsenal changes
  *  (the game's data can load after the first draw). */
 function Icon({ icon, draw, rev }) {

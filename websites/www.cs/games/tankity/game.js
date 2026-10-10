@@ -30,7 +30,7 @@ import {
 import { createRenderer, drawChassis } from './js/render.js?v=1e211c92ed';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 import { renderHelp } from './js/ui/help.js?v=590e2a36cd';
-import { renderShop as drawShop } from './js/ui/shop.js?v=e2833f2563';
+import { renderShop as drawShop } from './js/ui/shop.js?v=d896dfdd2b';
 
 /* ---------- audio: lives in src/audio.ts ---------- */
 music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));
@@ -184,9 +184,11 @@ let WEAPONS = {};
 let WORDER = [];
 let SHOP = [];
 let GEAR = {};
+let ARSENAL_REV = 0; // counts arsenal rebuilds; the shop repaints its icons when it changes
 function buildArsenal(data) {
   const a = simBuildArsenal(data);
   if (!a) return false;
+  ARSENAL_REV++;
   ARSENAL = a; WEAPONS = a.weapons; WORDER = a.order; SHOP = a.shop; GEAR = a.gear;
   G.shopSel = clamp(G.shopSel || 0, 0, SHOP.length - 1);
   return true;
@@ -839,6 +841,7 @@ function renderShop() {
     readyLine: ready.readyLine,
     inRoom: net.on,
     drawIcon: (canvas, icon) => (icon.kind === 'ammo' ? drawShellIcon(canvas, icon.w) : drawGearIcon(canvas, icon.g)),
+    arsenalRev: ARSENAL_REV,
     onBuy: idx => buyItem(SHOP[idx], G.shopQty),
     onPreview: openPreview,
     onNext: nextRound,

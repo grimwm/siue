@@ -9,19 +9,20 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "preact/jsx-ru
 import { render } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import { KeyHints, Key, OverlayHead, ScrollKeys } from './chrome.js?v=e4ecb1fc66';
-/** A row's icon. The painter reads the arsenal, which can change when the
- *  game's data loads, so it repaints on every render. */
-function Icon({ icon, draw }) {
+/** A row's icon, painted when it mounts and again when the arsenal changes
+ *  (the game's data can load after the first draw). */
+function Icon({ icon, draw, rev }) {
     const canvas = useRef(null);
+    const which = icon.kind === 'ammo' ? `ammo:${icon.w}` : `gear:${icon.g}`;
     useLayoutEffect(() => { if (canvas.current)
-        draw(canvas.current, icon); });
+        draw(canvas.current, icon); }, [which, rev]);
     return _jsx("canvas", { class: "shop-icon", "aria-hidden": "true", ref: canvas });
 }
 function Name({ name, vals }) {
     return _jsxs("div", { class: "shop-name", children: [`${name} `, _jsx("span", { class: "shop-vals", children: vals })] });
 }
-function Body({ row, draw }) {
-    return (_jsxs(_Fragment, { children: [_jsx(Icon, { icon: row.icon, draw: draw }), _jsxs("div", { class: "shop-item", children: [_jsx(Name, { name: row.name, vals: row.vals }), _jsx("div", { class: "shop-sub", children: row.sub }), _jsx("div", { class: "shop-sub", children: row.sub2 })] })] }));
+function Body({ row, draw, rev }) {
+    return (_jsxs(_Fragment, { children: [_jsx(Icon, { icon: row.icon, draw: draw, rev: rev }), _jsxs("div", { class: "shop-item", children: [_jsx(Name, { name: row.name, vals: row.vals }), _jsx("div", { class: "shop-sub", children: row.sub }), _jsx("div", { class: "shop-sub", children: row.sub2 })] })] }));
 }
 export function Shop(p) {
     const list = useRef(null);
@@ -40,9 +41,9 @@ export function Shop(p) {
                         if (e.kind === 'cat')
                             return _jsx("li", { class: "shop-cat", children: e.name }, `cat:${e.name}`);
                         if (e.kind === 'free') {
-                            return (_jsxs("li", { class: "shop-free", children: [_jsx(Body, { row: e, draw: p.drawIcon }), _jsx("span", { class: "acts", children: _jsx("button", { type: "button", onClick: blurThen(() => p.onPreview(e.weapon)), children: "Preview" }) })] }, "free"));
+                            return (_jsxs("li", { class: "shop-free", children: [_jsx(Body, { row: e, draw: p.drawIcon, rev: p.arsenalRev }), _jsx("span", { class: "acts", children: _jsx("button", { type: "button", onClick: blurThen(() => p.onPreview(e.weapon)), children: "Preview" }) })] }, "free"));
                         }
-                        return (_jsxs("li", { class: e.selected ? 'sel' : undefined, children: [_jsx(Body, { row: { ...e, name: `${e.index + 1}. ${e.name}` }, draw: p.drawIcon }), _jsxs("span", { class: "acts", children: [e.weapon !== undefined && (_jsxs("button", { type: "button", onClick: blurThen(() => p.onPreview(e.weapon)), children: ["Preview ", _jsx(Key, { at: "shop:preview", bare: true })] })), _jsx("button", { type: "button", disabled: e.disabled, onClick: () => p.onBuy(e.index), children: e.locked ? 'Locked' : _jsxs(_Fragment, { children: [e.qty > 1 ? `Buy ×${e.qty} ` : 'Buy ', _jsx(Key, { at: "shop:buy", bare: true })] }) })] })] }, `item:${e.index}`));
+                        return (_jsxs("li", { class: e.selected ? 'sel' : undefined, children: [_jsx(Body, { row: { ...e, name: `${e.index + 1}. ${e.name}` }, draw: p.drawIcon, rev: p.arsenalRev }), _jsxs("span", { class: "acts", children: [e.weapon !== undefined && (_jsxs("button", { type: "button", onClick: blurThen(() => p.onPreview(e.weapon)), children: ["Preview ", _jsx(Key, { at: "shop:preview", bare: true })] })), _jsx("button", { type: "button", disabled: e.disabled, onClick: () => p.onBuy(e.index), children: e.locked ? 'Locked' : _jsxs(_Fragment, { children: [e.qty > 1 ? `Buy ×${e.qty} ` : 'Buy ', _jsx(Key, { at: "shop:buy", bare: true })] }) })] })] }, `item:${e.index}`));
                     }) }), _jsx("p", { id: "shop-ready", class: "runstats", hidden: p.readyLine === null, children: p.readyLine }), _jsx("button", { type: "button", id: "shop-next", class: "btn-primary", "aria-pressed": p.next.pressed, onClick: blurThen(p.onNext), children: p.next.label }), _jsx("button", { type: "button", id: "shop-leave", class: "btn-leave", title: "Leave this game room and go back to the solo hills", hidden: !p.inRoom, onClick: blurThen(p.onLeave), children: "Leave room" })] }) }));
 }
 /** Draws (or redraws) the shop into its veil. */

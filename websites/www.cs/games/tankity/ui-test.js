@@ -105,6 +105,7 @@ function shopProps(over = {}) {
     keyHint, title: 'Field shop', cash: 'War chest: $600', entries: shelf(),
     next: { label: 'Start round 2 (N)' }, readyLine: null, inRoom: false,
     drawIcon: (canvas, icon) => { calls.icons.push([canvas.className, icon]); },
+    arsenalRev: 1,
     onBuy: i => calls.buy.push(i), onPreview: w => calls.preview.push(w), onNext: () => { calls.next++; }, onLeave: () => { calls.leave++; },
     ...over,
   };
@@ -156,6 +157,13 @@ function shopProps(over = {}) {
     text(lockedBtn));
   check('shop-icons-drawn-once-per-row', calls.icons.length === 20 && calls.icons.every(([cls]) => cls === 'shop-icon')
     && calls.icons.filter(([, i]) => i.kind === 'gear').length === gear.length, String(calls.icons.length));
+  // Icons are painted when a row first appears and when the arsenal changes, not on every redraw.
+  const painted = calls.icons.length;
+  renderShop(veil, { ...props, entries: shelf({ qty: 2 }) });
+  check('shop-redraw-does-not-repaint-icons', calls.icons.length === painted, String(calls.icons.length));
+  renderShop(veil, { ...props, entries: shelf({ qty: 2 }), arsenalRev: 2 });
+  check('shop-new-arsenal-repaints-icons', calls.icons.length === painted + 20, String(calls.icons.length - painted));
+  renderShop(veil, { ...props, entries: shelf() });
   // Buttons report to the game.
   click(acts[1]);
   click(acts[0]);

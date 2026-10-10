@@ -62,17 +62,20 @@ export interface ShopProps {
   inRoom: boolean;
   /** Paints a row's icon into its canvas. */
   drawIcon: (canvas: HTMLCanvasElement, icon: ShopIcon) => void;
+  /** Changes whenever the arsenal the icons are painted from does; icons repaint then, not on every redraw. */
+  arsenalRev: number;
   onBuy: (index: number) => void;
   onPreview: (weapon: string) => void;
   onNext: () => void;
   onLeave: () => void;
 }
 
-/** A row's icon. The painter reads the arsenal, which can change when the
- *  game's data loads, so it repaints on every render. */
-function Icon({ icon, draw }: { icon: ShopIcon; draw: ShopProps['drawIcon'] }) {
+/** A row's icon, painted when it mounts and again when the arsenal changes
+ *  (the game's data can load after the first draw). */
+function Icon({ icon, draw, rev }: { icon: ShopIcon; draw: ShopProps['drawIcon']; rev: number }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  useLayoutEffect(() => { if (canvas.current) draw(canvas.current, icon); });
+  const which = icon.kind === 'ammo' ? `ammo:${icon.w}` : `gear:${icon.g}`;
+  useLayoutEffect(() => { if (canvas.current) draw(canvas.current, icon); }, [which, rev]);
   return <canvas class="shop-icon" aria-hidden="true" ref={canvas} />;
 }
 
@@ -80,10 +83,10 @@ function Name({ name, vals }: { name: string; vals: string }) {
   return <div class="shop-name">{`${name} `}<span class="shop-vals">{vals}</span></div>;
 }
 
-function Body({ row, draw }: { row: ShopRowText; draw: ShopProps['drawIcon'] }) {
+function Body({ row, draw, rev }: { row: ShopRowText; draw: ShopProps['drawIcon']; rev: number }) {
   return (
     <>
-      <Icon icon={row.icon} draw={draw} />
+      <Icon icon={row.icon} draw={draw} rev={rev} />
       <div class="shop-item">
         <Name name={row.name} vals={row.vals} />
         <div class="shop-sub">{row.sub}</div>
@@ -121,7 +124,7 @@ export function Shop(p: ShopProps) {
             if (e.kind === 'free') {
               return (
                 <li class="shop-free" key="free">
-                  <Body row={e} draw={p.drawIcon} />
+                  <Body row={e} draw={p.drawIcon} rev={p.arsenalRev} />
                   <span class="acts">
                     <button type="button" onClick={blurThen(() => p.onPreview(e.weapon))}>Preview</button>
                   </span>
@@ -130,7 +133,7 @@ export function Shop(p: ShopProps) {
             }
             return (
               <li class={e.selected ? 'sel' : undefined} key={`item:${e.index}`}>
-                <Body row={{ ...e, name: `${e.index + 1}. ${e.name}` }} draw={p.drawIcon} />
+                <Body row={{ ...e, name: `${e.index + 1}. ${e.name}` }} draw={p.drawIcon} rev={p.arsenalRev} />
                 <span class="acts">
                   {e.weapon !== undefined && (
                     <button type="button" onClick={blurThen(() => p.onPreview(e.weapon!))}>

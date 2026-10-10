@@ -9,7 +9,7 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
 | File                                                            | What it is                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: the game loop, the state behind the HUD, shop, lobby and menu, and the effects the room replay and the firing range cause); it imports the sim, the audio, the room client, the replay, the firing range, the renderer, the input and the Preact overlays from `js/`                                                                                                               |
+| `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: the game loop, the state behind the HUD, shop, lobby and menu, and the effects the room replay and the firing range cause); it imports the sim, the audio, the room client, the replay, the firing range, the match flow, the renderer, the input and the Preact overlays from `js/`                                                                                                               |
 | `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (20 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `game.js`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml`, and where each came from                                                                                                                     |
@@ -18,6 +18,7 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | `src/net.ts` | The room client: transport (one fetcher, the 429 retry), the session, polling, the act/buy/ready/leave senders, the turn and shop clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers and the clock are passed in |
 | `src/replay.ts` | The room volley replay: the queue of events waiting to play and the volley on screen. Eases the shooter's barrel, flies each shell along the path the server recorded (positions and velocities for the renderer), lands blasts and hits when the events say, and plays a volley kept back by a catch-up at triple speed. Sound, particles, craters, armor and log lines happen through callbacks; it never touches the page |
 | `src/preview.ts` | The firing-range preview simulation: a fixed dummy, the solver that aims at it with the war's own ballistics, the shell loop (seeker, cluster, pierce, proximity), the damage tally and the result timing, on its own small field. Weapons, effects and the result line are passed in; it never touches the page |
+| `src/flow.ts` | The solo match flow: the `Phase` union (`banner`, `shop`, `aim`, `think`, `fly`, `settle`, `over`), the events that move between them and one table, `FLOW`, with `transition(phase, event)` returning the next phase or `null` for an illegal move. `game.js` stores the result in `G.phase`; room matches take their phase from the server and skip it. Pure; it never touches the page |
 | `src/render.ts` | The battlefield on the canvas: sky and moon, clouds, hills, the units and their bodies, aim arm, blasts, shells, sparks, the wind gauge, the on-canvas turn clock and the firing-range preview. Reads a `BattleView` that `game.js` builds each frame and paints it; it never changes game state |
 | `src/protocol.ts` | The room wire protocol as types: replies, the room snapshot, the discriminated union of events, and each action's request body. Types only, so it has no `js/` file |
 | `src/protocol-fixtures.check.ts`, `src/tsconfig.check.json` | Type-check only, never emitted: assigns every `protocol/*.json` to its type (see Protocol fixtures) |
@@ -145,7 +146,7 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
 - `tsconfig.json`: strict, `noUncheckedIndexedAccess`, ES2022 modules, imports
   written with their `.js` extension (the file the browser fetches), comments
   kept, no source maps. It lists the DOM-free modules (the sim, the room
-  client, the input, the firing range and the replay), which compile without DOM types, so they cannot reach for the page.
+  client, the input, the firing range, the replay and the flow), which compile without DOM types, so they cannot reach for the page.
   `src/tsconfig.dom.json` extends it with the DOM lib for the modules that need
   WebAudio, `fetch`, timers, canvas and the document (`audio.ts`, `render.ts`
   and the overlays in `ui/`), and with `"jsx": "react-jsx"` and
@@ -266,6 +267,10 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
   plain `PreviewState` that `game.js` keeps as `G.preview` and the renderer
   draws; `PreviewEnv` supplies the weapon table, the effect hooks and the result
   line. `preview-test.js` steps it on frames the test counts.
+- `flow.ts` exports `transition(phase, event)`, the `FLOW` table behind it and the `Phase` and
+  `FlowEvent` types. `game.js` wraps it in `advance(event)`, which stores the next phase in
+  `G.phase` (the same strings the e2e specs read) or, for a move the table rejects, leaves the
+  phase alone and warns on the console. `flow-test.js` walks the table.
 - `render.ts` exports `createRenderer(canvas, deps)`, which returns
   `{ frame(view) }`, and `drawChassis` (the unit picker draws its small bodies
   with the battlefield's painter). `deps` (`RenderDeps`) is everything it
@@ -334,6 +339,7 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
 | `node net-test.js`                              | `js/net.js` against a fake server and timers: the 429 retry, Ready's ordering under rapid toggles, polling, the leave beacon, the clocks, the hidden-tab catch-up plan |
 | `node replay-test.js`                           | `js/replay.js` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, and the catch-up plan with the kept volley at 3x |
 | `node preview-test.js`                          | `js/preview.js` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |
+| `node flow-test.js`                             | `js/flow.js`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost tank and the match-over phase |
 | `node protocol-test.js`                         | `src/protocol.ts` against the server: the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events `game.js` handles |
 | `node sim-vectors-test.js`                     | `js/sim.js` agrees with `rooms.php` on every shared sim vector (see Sim vectors)              |
 | `php rooms-test.php`                           | The room shelf over its own `php -S` (needs SysV; run inside the PHP container)            |

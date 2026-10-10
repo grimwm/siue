@@ -92,6 +92,8 @@ export async function newPlayer(browser, path = 'games/tankity/') {
   if (slow > 1) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: slow });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
+  // A phase move the turn-flow table rejects is a bug, whatever spec meets it.
+  page.on('console', m => { if (m.text().startsWith('tankity flow:')) errors.push(m.text()); });
   await page.goto(path);
   await page.waitForTimeout(600);
   return { ctx, page, errors };

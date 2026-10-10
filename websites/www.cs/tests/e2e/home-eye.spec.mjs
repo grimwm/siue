@@ -1,32 +1,56 @@
-// The home page's scanner eye: at rest until the game starts, then hunting.
+// The scanner eye: it sweeps the bar on the home page, and in The CIC it keeps
+// sweeping while its glare beam stays on the player's cursor.
 import { test, expect } from '@playwright/test';
 
-const eyeBox = page => page.evaluate(() => {
-  const eye = document.getElementById('cylon-eye').getBoundingClientRect();
-  const bar = document.getElementById('cylon-eye').parentElement.getBoundingClientRect();
-  return { center: (eye.left + eye.width / 2 - bar.left) / bar.width, width: eye.width / bar.width };
+const eyeCentre = page => page.evaluate(() => {
+  const e = document.getElementById('cylon-eye').getBoundingClientRect();
+  return e.left + e.width / 2;
 });
 
-test('the eye rests wide open in the middle, then narrows and sweeps once the game starts', async ({ page }) => {
+test('the home page eye sweeps the bar', async ({ page }) => {
   await page.goto('./');
   await page.waitForSelector('#cylon-eye');
-  const a = await eyeBox(page);
-  await page.waitForTimeout(1200);
-  const b = await eyeBox(page);
-  expect(Math.abs(a.center - 0.5)).toBeLessThan(0.01);
-  expect(Math.abs(b.center - a.center)).toBeLessThan(0.002); // frozen
-  expect(a.width).toBeGreaterThan(0.85);
-  await page.screenshot({ path: 'test-results/home-eye-rest.png', clip: { x: 0, y: 0, width: 1280, height: 120 } });
+  const xs = [];
+  for (let i = 0; i < 6; i++) { xs.push(await eyeCentre(page)); await page.waitForTimeout(250); }
+  expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(60);
+});
 
+test('in the game the eye keeps sweeping while its glare points at the cursor', async ({ page }) => {
   await page.goto('./?game=cylon');
   await expect.poll(() => page.evaluate(() => document.body.classList.contains('cylon-game-live'))).toBe(true);
-  // Narrowing starts from the middle: no jump to an end of the bar.
-  const first = await eyeBox(page);
-  expect(Math.abs(first.center - 0.5)).toBeLessThan(0.2);
-  await page.waitForTimeout(1000);
-  const hunting = await eyeBox(page);
-  expect(hunting.width).toBeLessThan(0.34);
-  const later = [];
-  for (let i = 0; i < 6; i++) { await page.waitForTimeout(250); later.push((await eyeBox(page)).center); }
-  expect(Math.max(...later) - Math.min(...later)).toBeGreaterThan(0.05); // moving
+  // Let the intro finish, then move the mouse so the eye starts tracking.
+  await expect.poll(() => page.evaluate(() => document.body.classList.contains('cylon-intro-hero')), { timeout: 10_000 }).toBe(false);
+  const target = { x: 300, y: 520 };
+  // Combat begins a beat after the blast; keep nudging the mouse until the
+  // eye locks on.
+  let nudge = 0;
+  await expect.poll(async () => {
+    await page.mouse.move(target.x + (nudge++ % 2), target.y);
+    return page.evaluate(() => document.getElementById('cylon-glare').classList.contains('is-active'));
+  }, { timeout: 15_000 }).toBe(true);
+  const ends = [];
+  const eyes = [];
+  for (let i = 0; i < 8; i++) {
+    await page.mouse.move(target.x + i, target.y);
+    await page.waitForTimeout(200);
+    const s = await page.evaluate(() => {
+      const g = document.getElementById('cylon-glare');
+      const e = document.getElementById('cylon-eye').getBoundingClientRect();
+      const r = g.getBoundingClientRect();
+      // The beam's far end: the corner of its box away from the eye.
+      const eyeX = e.left + e.width / 2;
+      const farX = Math.abs(r.left - eyeX) > Math.abs(r.right - eyeX) ? r.left : r.right;
+      return { active: g.classList.contains('is-active'), eyeX, farX, farY: r.bottom, nearY: r.top };
+    });
+    if (s.active) { ends.push(s); eyes.push(s.eyeX); }
+  }
+  expect(ends.length, 'the glare switched on while the cursor moved').toBeGreaterThan(4);
+  // The eye kept moving...
+  expect(Math.max(...eyes) - Math.min(...eyes)).toBeGreaterThan(30);
+  // ...while the far end of the beam stayed on the cursor.
+  for (const s of ends) {
+    expect(Math.abs(s.farY - target.y)).toBeLessThan(12);
+    expect(Math.abs(s.farX - target.x)).toBeLessThan(20);
+  }
+  await page.screenshot({ path: 'test-results/cylon-glare.png' });
 });

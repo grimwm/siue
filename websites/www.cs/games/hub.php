@@ -8,7 +8,7 @@
  */
 declare(strict_types=1);
 
-const GAMES_HUB_KEYS = ['title', 'kicker', 'description', 'button', 'play', 'start', 'order', 'hidden', 'image', 'short_name', 'theme_color', 'background_color', 'accent_color'];
+const GAMES_HUB_KEYS = ['title', 'kicker', 'description', 'button', 'play', 'start', 'order', 'hidden', 'image', 'short_name', 'theme_color', 'background_color', 'accent_color', 'screenshot'];
 const GAMES_HUB_DEFAULT_ORDER = 100;
 const GAMES_HUB_DEFAULT_COLOR = '#0c0e12';
 const GAMES_HUB_DEFAULT_ACCENT = '#ff4d4d';
@@ -160,6 +160,18 @@ function games_hub_card(string $id, array $meta, string $dir): array
             return [null, "`image` names $image, which is not in the game folder"];
         }
         $card['image'] = "games/$id/$image";
+    }
+
+    // Screenshot for the Games page card: a 16:9 picture in the game folder.
+    $shot = trim($meta['screenshot'] ?? '');
+    if ($shot !== '') {
+        if (!games_hub_safe_path($shot) || !preg_match('/\.(png|jpe?g|webp)$/i', $shot)) {
+            return [null, '`screenshot` must be a .png, .jpg or .webp file inside the game folder'];
+        }
+        if (!is_file("$dir/$shot")) {
+            return [null, "`screenshot` names $shot, which is not in the game folder"];
+        }
+        $card['screenshot'] = "games/$id/$shot";
     }
 
     if ($play !== '') {

@@ -37,6 +37,7 @@ short_name: Tankity               # optional home-screen name; default the title
 theme_color: "#05060f"            # optional #rgb/#rrggbb browser bar color
 background_color: "#05060f"       # optional #rgb/#rrggbb splash color
 accent_color: "#ffc93c"           # optional #rgb/#rrggbb navbar accent on the site
+screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
 ```
 
 - Set exactly one of `play` or `start`. `play` must be a file inside the game
@@ -47,6 +48,8 @@ accent_color: "#ffc93c"           # optional #rgb/#rrggbb navbar accent on the s
 - A broken file keeps only that game off the page; `games.php` lists why under
   `errors`, and the browser console repeats it.
 - Check every game with `php tests/games-hub-test.php`.
+- `make screenshots` plays each game briefly in a real browser and rewrites
+  its `screenshot.jpg` (800x450). Rerun it when a game's look changes.
 - Games know nothing about the site. `php tools/game-share-tags.php` writes
   the site's page for each game, `play/<id>/index.html` at the site root:
   - a `play` game: the site navbar (William Grim, Home, Contact, Games, and

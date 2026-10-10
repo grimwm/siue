@@ -13,3 +13,4 @@ short_name: Crete
 theme_color: "#0e1320"
 background_color: "#0e1320"
 accent_color: "#f0b429"
+screenshot: screenshot.jpg            # Games-page card picture (make screenshots)

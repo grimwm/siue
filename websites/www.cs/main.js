@@ -115,6 +115,15 @@ function gamesHubCard(game) {
 
     const card = el('li', 'games-hub-card');
     card.dataset.game = game.id;
+    if (game.screenshot) {
+        const shot = el('img', 'games-hub-card-shot');
+        shot.src = game.screenshot;
+        shot.alt = `${game.title} in play`;
+        shot.loading = 'lazy';
+        shot.width = 800;
+        shot.height = 450;
+        card.append(shot);
+    }
     const head = el('div', 'games-hub-card-head');
     if (game.kicker) head.append(el('p', 'games-hub-card-kicker', game.kicker));
     head.append(el('h2', 'games-hub-card-title', game.title));

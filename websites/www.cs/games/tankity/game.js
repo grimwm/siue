@@ -551,7 +551,7 @@ function startDemo() {
   resetMatch('scorched-demo');
   G.demo = true;
   G.round = 1;
-  newRound('Demo mode. Press New Game (or N) to play.');
+  newRound(`Demo mode. Press New Game${TOUCH ? '' : ` (or ${keyHint('global', 'new')})`} to play.`);
   render();
   renderHUD();
 }
@@ -691,7 +691,7 @@ function fireWeapon(t, wkey) {
   const w = WEAPONS[wkey];
   const store = t.isPlayer ? G.ammo : t.ammo;
   if ((store[wkey] || 0) <= 0) {
-    if (t.isPlayer) { say(`No ${w.name} left! Q to swap guns.`, 'info'); SFX.click(); }
+    if (t.isPlayer) { say(`No ${w.name} left! ${TOUCH ? 'Tap Weapon' : keyHint('global', 'cycle')} to swap guns.`, 'info'); SFX.click(); }
     return false;
   }
   if (wkey !== 'shell') store[wkey] -= 1;
@@ -721,7 +721,7 @@ function demoBlock() {
   if (!G.demo) return false;
   if (!G.demoHint) {
     G.demoHint = true;
-    say('Demo mode. Press New Game (or N) to take the controls.', 'info');
+    say(`Demo mode. Press New Game${TOUCH ? '' : ` (or ${keyHint('global', 'new')})`} to take the controls.`, 'info');
   }
   return true;
 }
@@ -1096,11 +1096,12 @@ function hideShop() {
   const veil = $('shop-veil');
   if (veil) veil.hidden = true;
 }
+let shopSelShown = -1; // the row renderShop last brought into view
 function renderShop() {
   const title = $('shop-title');
   if (title) title.textContent = G.round === 0 ? 'Pre-match shop' : 'Field shop';
   const next = $('shop-next');
-  if (next) next.textContent = G.round === 0 ? `Start round 1 (${keyHint('shop', 'next')})` : `Start round ${G.round + 1} (${keyHint('shop', 'next')})`;
+  if (next) next.textContent = `Start round ${G.round + 1}${keyCap('shop', 'next')}`;
   const cash = $('shop-cash');
   if (cash) {
     cash.textContent = G.round === 0
@@ -1109,6 +1110,9 @@ function renderShop() {
   }
   const list = $('shop-list');
   if (!list) return;
+  // Redraws (buys, pack counts, room polls) keep the list where it was.
+  const keepTop = list.scrollTop;
+  const selMoved = shopSelShown !== G.shopSel;
   list.innerHTML = '';
   G.shopSel = clamp(G.shopSel || 0, 0, SHOP.length - 1);
   G.shopQty = clamp(G.shopQty || 1, 1, 9);
@@ -1164,8 +1168,10 @@ function renderShop() {
     li.appendChild(acts);
     list.appendChild(li);
   });
+  list.scrollTop = keepTop;
   // Riding the selection with the keys keeps the highlighted row in view.
-  const sel = list.querySelector('.sel');
+  shopSelShown = G.shopSel;
+  const sel = selMoved && list.querySelector('.sel');
   if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
   renderKeyHints();
   refreshNavHints();
@@ -2988,8 +2994,12 @@ function netAdopt(room) {
     }
   }
   G.wind = room.wind || 0;
+  const sameRound = G.round === (room.round || 1);
   G.round = room.round || 1;
   const before = new Map(G.tanks.map(t => [t.seat, t]));
+  // While we aim, the server only learns our angle and power when a key is
+  // let go: keep the local aim through polls so the barrel never snaps back.
+  const aiming = sameRound && room.phase === 'play' && room.turn === NET.seat;
   G.tanks = (room.tanks || []).map(t => {
     const mine = t.seat === NET.seat;
     const was = before.get(t.seat);
@@ -3002,7 +3012,8 @@ function netAdopt(room) {
       // The server drops tanks straight onto the ground; keep the drawn
       // height from the last poll so fallTanks() shows the fall.
       x: t.x, y: was && Math.abs(was.x - t.x) < 1 ? Math.min(was.y, t.y) : t.y, vy: was ? was.vy || 0 : 0,
-      angle: t.angle, power: t.power,
+      angle: mine && was && aiming ? was.angle : t.angle,
+      power: mine && was && aiming ? was.power : t.power,
       hp: t.hp, maxHp: t.maxHp || 100, fuel: 0, dirS: t.dirS || 1,
       name: t.name,
       human: !ai,
@@ -3056,8 +3067,8 @@ function netAdopt(room) {
     }
   } else if (room.phase === 'shop') {
     G.phase = 'shop';
-    closePreview();
-    if (NET.lastPhase !== 'shop') closeOverlays();
+    // Polls repeat the shop phase; only arriving in it shuts open panels.
+    if (NET.lastPhase !== 'shop') { closePreview(); closeOverlays(); }
     renderShop();
     const veil = $('shop-veil');
     if (veil) veil.hidden = false;
@@ -3535,6 +3546,20 @@ function keycap(token) {
   if (code) return code[2].toUpperCase();
   return String(token).toUpperCase();
 }
+/* Phones and tablets: a touch screen with no mouse or trackpad. They get no
+// keyboard at all, so key bindings stay off and no label names a key. */
+const TOUCH = typeof window.matchMedia === 'function' &&
+  window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(any-pointer: fine)').matches;
+/* What a touch player taps instead, for prose that names a key. */
+const TOUCH_NAMES = {
+  'aim:barrelLeft': '◀', 'aim:barrelRight': '▶', 'aim:powerUp': '▲', 'aim:powerDown': '▼',
+  'aim:driveLeft': 'Drive ◀', 'aim:driveRight': 'Drive ▶',
+  'global:cycle': 'Weapon', 'global:fire': 'Fire',
+};
+/* " (KEY)" for a button label; nothing on touch screens. */
+function keyCap(ctx, action) {
+  return TOUCH ? '' : ` (${keyHint(ctx, action)})`;
+}
 /* The shown key for an action: the first token its context lists, or the
 // nth with data-keyhint="context:action:n" where prose names two keys. */
 function keyHint(ctx, action, idx) {
@@ -3584,6 +3609,7 @@ function openRooms() {
   openLobby();
 }
 function bindKeys() {
+  if (TOUCH) return;
   window.addEventListener('keydown', e => {
     // Typing in a box is typing, not playing: initials and seeds keep every key.
     const tag = (e.target && e.target.tagName) || '';
@@ -3748,6 +3774,7 @@ function holdButton(id, act) {
   btn.addEventListener('click', ev => ev.currentTarget.blur());
 }
 function init() {
+  if (TOUCH) document.documentElement.classList.add('touch');
   bindKeys();
   loadArsenal();
   loadKeys();
@@ -3909,13 +3936,13 @@ function placeLogBelowMenu() {
 function toggleSound() {
   soundMuted = !soundMuted;
   const btn = $('btn-sound');
-  if (btn) btn.textContent = soundMuted ? `Sound: off (${keyHint('global', 'sound')})` : `Sound: on (${keyHint('global', 'sound')})`;
+  if (btn) btn.textContent = `Sound: ${soundMuted ? 'off' : 'on'}${keyCap('global', 'sound')}`;
   if (!soundMuted) ctx();
 }
 function toggleMusic() {
   musicMuted = !musicMuted;
   const btn = $('btn-music');
-  if (btn) btn.textContent = musicMuted ? `Music: off (${keyHint('global', 'music')})` : `Music: on (${keyHint('global', 'music')})`;
+  if (btn) btn.textContent = `Music: ${musicMuted ? 'off' : 'on'}${keyCap('global', 'music')}`;
   if (musicMuted) stopMusic();
   else startMusic();
 }
@@ -3994,7 +4021,7 @@ const TUT_STEPS = [
   { text: 'Press {global:fire} to fire. Then read the wind and adjust.', done: () => TUT && TUT.fired },
 ];
 function fmtKeys(text) {
-  return String(text).replace(/\{([a-z]+):([a-zA-Z]+)\}/g, (_, ctx, a) => keyHint(ctx, a));
+  return String(text).replace(/\{([a-z]+):([a-zA-Z]+)\}/g, (_, ctx, a) => (TOUCH && TOUCH_NAMES[ctx + ':' + a]) || keyHint(ctx, a));
 }
 function renderTutorialText() {
   if (TUT) renderTutorial();
@@ -4016,7 +4043,7 @@ function renderTutorial() {
   if (!TUT) return;
   if (tx) tx.textContent = `Move ${TUT.step + 1} of ${TUT_STEPS.length}: ${fmtKeys(TUT_STEPS[TUT.step].text)}`;
   if (pr) pr.textContent = 'Follow along in the hills behind this card.';
-  if (sk) sk.textContent = `Skip tutorial (${keyHint('global', 'escape')})`;
+  if (sk) sk.textContent = `Skip tutorial${keyCap('global', 'escape')}`;
   refreshNavHints();
 }
 function startTutorial() {
@@ -4050,7 +4077,7 @@ function endTutorial(seen) {
 }
 function skipTutorial() {
   SFX.click();
-  say('Tutorial skipped. Press U any time to replay it.', 'info');
+  say(TOUCH ? 'Tutorial skipped. Replay it from the menu any time.' : `Tutorial skipped. Press ${keyHint('global', 'tutorial')} any time to replay it.`, 'info');
   endTutorial(true);
 }
 function tickTutorial() {
@@ -4101,7 +4128,7 @@ function lockEscapeInFullscreen() {
 }
 function syncFullscreenLabel() {
   const btn = $('fullscreen');
-  if (btn) btn.textContent = document.fullscreenElement ? `⛶ Exit fullscreen (${keyHint('global', 'fullscreen')})` : `⛶ Fullscreen (${keyHint('global', 'fullscreen')})`;
+  if (btn) btn.textContent = `⛶ ${document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen'}${keyCap('global', 'fullscreen')}`;
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

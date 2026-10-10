@@ -1,6 +1,6 @@
 // Operation Tankity rooms: two real browsers in one room.
 import { test, expect } from '@playwright/test';
-import { roomPair, hud, rec, resetRec, shellTrack, bowFromChord, lastRoom } from './helpers.mjs';
+import { roomPair, hud, rec, resetRec, shellTrack, bowFromChord, lastRoom, holdBarrel, expectFullSwing } from './helpers.mjs';
 
 const myTurn = page => hud(page, 'hud-turn').then(t => /YOU\. Aim!/.test(t));
 
@@ -44,6 +44,22 @@ test('two players: drive, real shell flights on both screens, turns after the re
   await guest.page.screenshot({ path: 'test-results/tankity-room-guest.png' });
   expect(host.errors).toEqual([]);
   expect(guest.errors).toEqual([]);
+  await host.ctx.close();
+  await guest.ctx.close();
+});
+
+test('in a room the barrel swings through the whole arc without snapping back, and the server keeps it', async ({ browser }) => {
+  const { host, guest, roomState } = await roomPair(browser);
+  await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);
+  // Long holds span several polls; none may pull the barrel back.
+  for (const key of ['ArrowRight', 'ArrowLeft']) {
+    expectFullSwing(await holdBarrel(host.page, key, 4500));
+    const shown = parseInt(await hud(host.page, 'hud-angle'), 10);
+    await expect.poll(() => Math.round(lastRoom(roomState.host).tanks.find(t => t.seat === 0).angle), { timeout: 10_000 }).toBe(shown);
+    await host.page.waitForTimeout(2500); // more polls after release
+    expect(parseInt(await hud(host.page, 'hud-angle'), 10)).toBe(shown);
+  }
+  expect(host.errors).toEqual([]);
   await host.ctx.close();
   await guest.ctx.close();
 });

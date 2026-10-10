@@ -21,7 +21,7 @@
 <meta name="twitter:title" content="Operation Tankity">
 <meta name="twitter:description" content="Mind the wind and out-shoot a drone battery across endless hills. Spend your $600 stake on a 20-item arsenal, or open a room and take turns with a friend.">
 <!-- share-tags:end -->
-<link rel="stylesheet" href="game.css?v=20261009n">
+<link rel="stylesheet" href="game.css?v=20261010a">
 </head>
 <body>
 <header class="topbar">
@@ -89,19 +89,23 @@
         <ul class="help">
           <li>Scorched-earth artillery: you and the drone battery take turns lobbing shells
             across destructible hills. Last one rolling wins the round.</li>
-          <li>Hold <strong><span data-keyhint="aim:barrelLeft">◀</span><span data-keyhint="aim:barrelRight">▶</span></strong> for barrel angle, <strong><span data-keyhint="aim:powerUp">▲</span><span data-keyhint="aim:powerDown">▼</span></strong> for power.
+          <li class="keys-only">Hold <strong><span data-keyhint="aim:barrelLeft">◀</span><span data-keyhint="aim:barrelRight">▶</span></strong> for barrel angle, <strong><span data-keyhint="aim:powerUp">▲</span><span data-keyhint="aim:powerDown">▼</span></strong> for power.
             <strong><span data-keyhint="aim:driveLeft">A</span>/<span data-keyhint="aim:driveRight">D</span></strong> drives while you have fuel. <strong><span data-keyhint="global:fire">Ctrl</span></strong> fires and ends your turn.</li>
+          <li class="touch-only">Hold <strong>◀ ▶</strong> to swing the barrel and <strong>▲ ▼</strong> for power.
+            <strong>Drive ◀ ▶</strong> moves while you have fuel. <strong>Fire</strong> shoots and ends your turn.
+            In the shop, tap a row's <strong>Buy</strong> or <strong>Preview</strong>. <strong>Menu</strong> holds New Game,
+            rooms, sound, music, fullscreen and the tutorial.</li>
           <li><strong>Wind</strong> pushes every shell, so check the meter before you fire.
-            <strong><span data-keyhint="global:cycle">Q</span></strong> cycles Shell, Buckshot, Mortar, Rail, and the round-4 <strong>NUKE</strong>.
+            <span class="keys-only"><strong><span data-keyhint="global:cycle">Q</span></strong> cycles</span><span class="touch-only"><strong>Weapon</strong> cycles</span> Shell, Buckshot, Mortar, Rail, and the round-4 <strong>NUKE</strong>.
             Shells are free; the good stuff is bought with winnings, starting with
             a $600 stake you spend in the shop before round 1.</li>
           <li>There is no final victory. Every round the battery rebuilds with thicker armor,
             steadier aim, and deeper magazines. How many hills can you hold?</li>
-          <li><strong><span data-keyhint="global:fullscreen">F</span></strong> toggles fullscreen for the full hillside view; <strong><span data-keyhint="global:fullscreen">F</span></strong> again leaves it.</li>
-          <li><strong><span data-keyhint="global:sound">E</span></strong> toggles sound effects, <strong><span data-keyhint="global:music">M</span></strong> toggles the music.
+          <li class="keys-only"><strong><span data-keyhint="global:fullscreen">F</span></strong> toggles fullscreen for the full hillside view; <strong><span data-keyhint="global:fullscreen">F</span></strong> again leaves it.</li>
+          <li class="keys-only"><strong><span data-keyhint="global:sound">E</span></strong> toggles sound effects, <strong><span data-keyhint="global:music">M</span></strong> toggles the music.
             Each has its own button in the menu (<strong><span data-keyhint="global:menu">C</span></strong> opens it), so one can stay on while the other rests. New Game, seed, fullscreen,
             rooms (<strong><span data-keyhint="global:rooms">O</span></strong>), and random hills (<strong><span data-keyhint="global:random">T</span></strong>) live there too.</li>
-          <li><strong><span data-keyhint="global:fav">1</span></strong> through <strong><span data-keyhint="global:fav:3">4</span></strong> load a favorite shell (hold
+          <li class="keys-only"><strong><span data-keyhint="global:fav">1</span></strong> through <strong><span data-keyhint="global:fav:3">4</span></strong> load a favorite shell (hold
             <strong>Shift</strong> with a number to pin the loaded shell to that slot). In the shop,
             <strong><span data-keyhint="shop:selUp">▲</span>/<span data-keyhint="shop:selDown">▼</span></strong> move, <strong><span data-keyhint="shop:qtyDown">◀</span>/<span data-keyhint="shop:qtyUp">▶</span></strong> pick how many packs to buy
             (never more than the chest covers), <strong><span data-keyhint="shop:buy">B</span></strong> or <strong><span data-keyhint="shop:buy:1">Enter</span></strong> buys,
@@ -114,12 +118,12 @@
             and take turns with the battery filling empty seats. Initials only, no chat,
             and the server settles every shot so nobody can fudge a hit. The host can pick
             named hills, and a rematch replays them without ever revealing the seed.</li>
-          <li>Opening the page runs a demo battle. Press <strong>New Game</strong> (or
-            <strong><span data-keyhint="global:new">N</span></strong>) to take the controls with a fanfare. Every round gets its own
+          <li>Opening the page runs a demo battle. Press <strong>New Game</strong><span class="keys-only"> (or
+            <strong><span data-keyhint="global:new">N</span></strong>)</span> to take the controls with a fanfare. Every round gets its own
             name card before the shop and the shooting.</li>
           <li>The camera pulls back as the battle spreads so every tank stays in view.
             The railgun trades its old cross-map glare for a shorter, saner bolt.</li>
-          <li><strong><span data-keyhint="global:log">L</span></strong> shows or hides the radio log, <strong><span data-keyhint="global:help">H</span></strong> this help,
+          <li class="keys-only"><strong><span data-keyhint="global:log">L</span></strong> shows or hides the radio log, <strong><span data-keyhint="global:help">H</span></strong> this help,
             <strong><span data-keyhint="global:report">R</span></strong> the after-action report, and <strong><span data-keyhint="global:escape">ESC</span></strong> closes any open
             menu. Overlays never pause the battle.</li>
         </ul>
@@ -262,6 +266,6 @@
   </section>
 </main>
 
-<script src="game.js?v=20261009n" defer></script>
+<script src="game.js?v=20261010a" defer></script>
 </body>
 </html>

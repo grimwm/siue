@@ -341,7 +341,7 @@ function scriptYou() {
 }
 function playRoom(turn, events) {
   return Object.assign({
-    code: 'TST1', phase: 'play', round: 1, wind: 2, turn,
+    code: 'TST1', phase: NET_SHOP ? 'shop' : 'play', round: 1, wind: 2, turn,
     terrain: terr720(),
     tanks: [scriptTank(0, 100, 'abc', 'human'), scriptTank(1, 600, 'REAPER', 'ai')],
     seats: scriptSeats(), events: events || [], you: scriptYou(), csrf: 'cs0',
@@ -411,6 +411,7 @@ global.fetch = async (url, opts) => {
   return okJson({ ok: true, scores: [] });
 };
 let NET_LOBBY = true;
+let NET_SHOP = false;
 let extraGuest = false;
 function lobbyRoom() {
   const seats = extraGuest
@@ -893,6 +894,19 @@ function change(el) {
   check('net-fire', sawFire, 'intent sent');
   frames(180); // the turn passes once the replay of the shot has played out
   check('net-turn-passes', /REAPER aiming/.test(els['hud-turn'].textContent), els['hud-turn'].textContent);
+  // Between rounds the room shops; V opens the firing range, and it stays
+  // open through the polls that keep the shop fresh.
+  NET_SHOP = true;
+  await sleep(1800); await tick(10);
+  check('net-shop', els['shop-veil'].hidden === false, `shop hidden=${els['shop-veil'].hidden}`);
+  TAP('shop', 'preview'); await tick(5);
+  const pvOpened = els['preview-veil'].hidden === false;
+  await sleep(3400); await tick(10);
+  check('net-preview-stays', pvOpened && els['preview-veil'].hidden === false,
+    `opened=${pvOpened} open-after-polls=${els['preview-veil'].hidden === false}`);
+  TAP('global', 'escape'); await tick(5);
+  NET_SHOP = false;
+  await sleep(1800); await tick(10);
   // typing in a box is typing, not playing
   const logLen = els['log'].children.length;
   for (const f of listeners['keydown'] || []) {
@@ -925,9 +939,10 @@ function change(el) {
   const recT = Date.now();
   while (Date.now() - recT < 600) { frames(5); AC_TIME.t += 0.08; await new Promise(r => setTimeout(r, 25)); }
   check('music-after-watchdog', FAKE_STATS.notes > rec0, `scheduled=${FAKE_STATS.notes - rec0}`);
+  const preJump = FAKE_STATS.notes;
   AC_TIME.t += 600;
   await new Promise(r => setTimeout(r, 400));
-  check('no-audio-backlog', FAKE_STATS.notes < 300, `scheduled=${FAKE_STATS.notes}`);
+  check('no-audio-backlog', FAKE_STATS.notes - preJump < 300, `scheduled=${FAKE_STATS.notes - preJump}`);
   // Tutorial replay from a live battle: leave the room the net tests
   // started, shut the lobby, deal in, walk out of the shop, wait out any
   // banner, then U coaches and Skip hides and remembers.

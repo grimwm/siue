@@ -1,6 +1,6 @@
 // Operation Tankity, solo, in a real browser.
 import { test, expect } from '@playwright/test';
-import { newPlayer, startSolo, hud, aimTo, setPower, rec, resetRec } from './helpers.mjs';
+import { newPlayer, startSolo, hud, aimTo, setPower, rec, resetRec, holdBarrel, expectFullSwing } from './helpers.mjs';
 
 test('the keyboard drives the tank and burns fuel', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
@@ -13,6 +13,35 @@ test('the keyboard drives the tank and burns fuel', async ({ browser }) => {
   await page.waitForTimeout(700);
   await page.keyboard.up('a');
   expect(Number(await hud(page, 'hud-fuel'))).toBeLessThan(fuel0);
+  expect(errors).toEqual([]);
+});
+
+test('the barrel swings smoothly through the whole arc both ways', async ({ browser }) => {
+  const { page, errors } = await newPlayer(browser);
+  await startSolo(page);
+  expectFullSwing(await holdBarrel(page, 'ArrowRight', 4500));
+  expectFullSwing(await holdBarrel(page, 'ArrowLeft', 4500));
+  expect(errors).toEqual([]);
+});
+
+test('the shop list keeps its scroll when it redraws', async ({ browser }) => {
+  const { page, errors } = await newPlayer(browser);
+  await page.keyboard.press('n');
+  await page.waitForSelector('#shop-veil:not([hidden])');
+  const list = page.locator('#shop-list');
+  const top = () => list.evaluate(el => el.scrollTop);
+  await list.hover();
+  await page.mouse.wheel(0, 400);
+  await expect.poll(top).toBeGreaterThan(50);
+  const wheeled = await top();
+  await page.keyboard.press('ArrowRight'); // more packs per buy: the rows redraw
+  expect(await top()).toBe(wheeled);
+  await page.keyboard.press('j');
+  await page.keyboard.press('j');
+  const keyed = await top();
+  expect(keyed).toBeGreaterThan(wheeled);
+  await page.keyboard.press('ArrowLeft');
+  expect(await top()).toBe(keyed);
   expect(errors).toEqual([]);
 });
 

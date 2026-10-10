@@ -5,7 +5,7 @@
   // This config is the DOM-free one: the modules listed in "files" compile
   // without page types, so they cannot reach for the page (net.ts takes its
   // fetch, timers and clock as arguments). A module that
-  // needs browser types (WebAudio, fetch, timers) goes in src/tsconfig.dom.json,
+  // needs browser types (WebAudio, fetch, timers, canvas) goes in src/tsconfig.dom.json,
   // which extends this one and adds the DOM lib.
   "compilerOptions": {
     "target": "ES2022",

@@ -1,5 +1,5 @@
 {
-  // The modules that touch browser APIs (WebAudio, fetch, timers) but never
+  // The modules that touch browser APIs (WebAudio, fetch, timers, canvas) but never
   // the document: the same options as ../tsconfig.json plus the DOM lib. Each
   // config is its own program in tools/ts-build.mjs, so the sim, which lists
   // itself only in ../tsconfig.json, still fails to compile if it uses
@@ -8,5 +8,5 @@
   "compilerOptions": {
     "lib": ["ES2022", "DOM"]
   },
-  "files": ["audio.ts"]
+  "files": ["audio.ts", "render.ts"]
 }

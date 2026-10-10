@@ -9,13 +9,14 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
 | File                                                            | What it is                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: rendering, HUD, shop, lobby UI and the room replay); it imports the sim, the audio and the room client from `js/`                                                                                                               |
+| `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: the game loop, HUD, shop, lobby UI and the room replay); it imports the sim, the audio, the room client and the renderer from `js/`                                                                                                               |
 | `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (20 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `game.js`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml`, and where each came from                                                                                                                     |
 | `src/sim.ts` | The game math in TypeScript: RNG, terrain, flight, hit tests, blasts, the drone's aim. Pure: state in, what happened out; no page, sound or particles |
 | `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes. It never touches the page |
 | `src/net.ts` | The room client: transport (one fetcher, the 429 retry), the session, polling, the act/buy/ready/leave senders, the turn and shop clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers and the clock are passed in |
+| `src/render.ts` | The battlefield on the canvas: sky and moon, clouds, hills, the units and their bodies, aim arm, blasts, shells, sparks, the wind gauge, the on-canvas turn clock and the firing-range preview. Reads a `BattleView` that `game.js` builds each frame and paints it; it never changes game state |
 | `src/protocol.ts` | The room wire protocol as types: replies, the room snapshot, the discriminated union of events, and each action's request body. Types only, so it has no `js/` file |
 | `src/protocol-fixtures.check.ts`, `src/tsconfig.check.json` | Type-check only, never emitted: assigns every `protocol/*.json` to its type (see Protocol fixtures) |
 | `js/*.js` | `src/*.ts` compiled by `tools/ts-build.mjs`; checked in and deployed (the host has no Node). Never edit by hand |
@@ -138,13 +139,15 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
   kept, no source maps. It lists the DOM-free modules (the sim and the room
   client), which compile without DOM types, so they cannot reach for the page.
   `src/tsconfig.dom.json` extends it with the DOM lib for the modules that need
-  WebAudio, `fetch` and timers (`audio.ts`); `src/tsconfig.check.json` is a
+  WebAudio, `fetch`, timers and canvas types (`audio.ts`, `render.ts`);
+  `src/tsconfig.check.json` is a
   third program that type-checks the protocol fixtures and emits nothing.
   `ts-build.mjs` compiles each config as its own program, so adding the DOM lib
   for the audio never lets the sim see `document`. A module that holds only
   types (`protocol.ts`) compiles to nothing and has no `js/` file.
 - `game.js` imports each module with the same `?v=` as its own tag in
-  `index.html` (`./js/sim.js?v=...`, `./js/audio.js?v=...`, `./js/net.js?v=...`):
+  `index.html` (`./js/sim.js?v=...`, `./js/audio.js?v=...`, `./js/net.js?v=...`,
+  `./js/render.js?v=...`):
   bump them all together whenever any changes, or a cached module could pair
   with a newer `game.js`. `smoke-test.js` checks they match, that every `js/`
   file is imported, and that no `js/` module imports another (the version lives
@@ -177,6 +180,21 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
   the lobby and shop) and calls `planCatchUp`/`shouldCatchUp` to decide what a
   hidden tab skips. Because every environmental call is injected, `net.ts` is
   in the DOM-free program and `net-test.js` runs it against a fake server.
+- `render.ts` exports `createRenderer(canvas, deps)`, which returns
+  `{ frame(view) }`, and `drawChassis` (the unit picker draws its small bodies
+  with the battlefield's painter). `deps` (`RenderDeps`) is everything it
+  borrows: the effects engine as a typed slice of `window.TankityFX` (`FxApi`),
+  the sim helpers it shares with `game.js` (it imports nothing at run time, so
+  they arrive as arguments), a weapon's paint job, the reduced-motion setting
+  and the random source for screen shake. `view` (`BattleView`) is a read-only
+  snapshot: the camera, terrain, tanks, shells, blast discs, sparks, wind, text
+  scale, and the decisions made elsewhere (whose turn marker shows, the aim arm
+  and its length, the clock count-down, the replay's shells, the firing range).
+  Rendering reads and draws; whatever advances lives in `game.js`'s update step
+  (`decayFx` ages the blast discs and shake, `trackMotion` notes which ground
+  units moved), and `battleView()` just assembles the snapshot. The sky is built
+  from the match key and cached inside the renderer. `render-test.js` paints a
+  deep-frozen view, so a frame that wrote to the game state would throw.
 
 ## Tests
 
@@ -189,6 +207,7 @@ node tools/ts-build.mjs --check            # fail if js/ is missing, stale or ha
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (needs SysV; run inside the PHP container)                 |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `node audio-test.js`                            | `js/audio.js` imports without a browser; the loop-point trim and the round-to-track mapping are right |
+| `node render-test.js`                           | `js/render.js` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, and rebuilds the sky only when the match key changes |
 | `node net-test.js`                              | `js/net.js` against a fake server and timers: the 429 retry, Ready's ordering under rapid toggles, polling, the leave beacon, the clocks, the hidden-tab catch-up plan |
 | `node protocol-test.js`                         | `src/protocol.ts` against the server: the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events `game.js` handles |
 | `node sim-vectors-test.js`                     | `js/sim.js` agrees with `rooms.php` on every shared sim vector (see Sim vectors)              |

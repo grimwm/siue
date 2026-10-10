@@ -9,5 +9,5 @@
   "compilerOptions": {
     "lib": ["ES2022", "DOM"]
   },
-  "files": ["audio.ts", "intro.ts", "scores.ts"]
+  "files": ["audio.ts", "field.ts", "intro.ts", "scores.ts"]
 }

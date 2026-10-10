@@ -28,7 +28,7 @@ kicker: Scorched-earth artillery  # optional small line above the title
 description: >                    # required; plain text, `>` folds lines
   Mind the wind and out-shoot a drone battery across endless hills.
 button: Play Operation Tankity    # optional; default "Play <title>"
-play: index.html                  # a page in this folder, opened full-page
+play: index.html                  # a page in this folder (the game's own page)
 # start: cylonStartGame           # OR a site-page function (mounted games)
 order: 20                         # optional whole number, low first; default 100
 hidden: false                     # optional; true keeps the card off the page
@@ -36,6 +36,7 @@ image: og.png                     # optional 1200x630 picture for link previews
 short_name: Tankity               # optional home-screen name; default the title
 theme_color: "#05060f"            # optional #rgb/#rrggbb browser bar color
 background_color: "#05060f"       # optional #rgb/#rrggbb splash color
+accent_color: "#ffc93c"           # optional #rgb/#rrggbb navbar accent on the site
 ```
 
 - Set exactly one of `play` or `start`. `play` must be a file inside the game
@@ -46,14 +47,24 @@ background_color: "#05060f"       # optional #rgb/#rrggbb splash color
 - A broken file keeps only that game off the page; `games.php` lists why under
   `errors`, and the browser console repeats it.
 - Check every game with `php tests/games-hub-test.php`.
-- Link previews: `php tools/game-share-tags.php` writes each game's share tags
-  (title, description, `image`) into its page, or for a `start` game into
-  `games/<id>/index.html`, a page that forwards to `?game=<id>`. Run it after
-  editing a `metadata.yaml`; `make deploy` refuses stale tags.
+- Games know nothing about the site. `php tools/game-share-tags.php` writes
+  the site's page for each game, `play/<id>/index.html` at the site root:
+  - a `play` game: the site navbar (William Grim, Home, Contact, Games, and
+    the game's name), painted from `theme_color`, `background_color` and
+    `accent_color`, over a full-height frame running the game's own page.
+    `play/play.js` hands the frame the address's query and hash (room
+    invites ride on `?code=`) and gives it the keyboard;
+  - a `start` game: a page that forwards to the site with `?game=<id>`.
+  Both carry the game's link previews (title, description, `image`): the
+  tags chat apps and social sites read when a link is shared. Run the tool
+  after editing a `metadata.yaml`; `make test` and `make deploy` refuse stale
+  pages. The home page opens its Contact and Games panels for `#contact` and
+  `#games`, which the navbar links to.
 - Install and offline: every game is an installable app (PWA). The same tool
   writes `games/<id>/manifest.webmanifest` from `title`, `short_name`,
   `description` and the two colors, and links it (plus `theme-color` and the
-  iOS home-screen tags) from the game's page. Each game folder needs two
+  iOS home-screen tags) from the game's page, inside a marked block that
+  holds nothing about the site. Each game folder needs two
   square PNG icons, `icon-192.png` and `icon-512.png`; the tool reports a game
   without them as stale. Every URL in a manifest is relative, because the site
   is served from a `~user` path.
@@ -70,9 +81,9 @@ background_color: "#05060f"       # optional #rgb/#rrggbb splash color
     page at `?game=<id>` with the site root as scope. `main.js` links that
     manifest when the game launches, so installing from there installs the
     game, not the whole site.
-- Every card has **Copy link**: its game folder (`games/<id>/`). For a
-  `start` game that folder holds the generated share page, which forwards to
-  the site with `?game=<id>`; the site launches it on load.
+- Every card opens, and **Copy link** copies, the game's site page
+  (`play/<id>/`). The game's own page (`games/<id>/`) still runs on its own,
+  without the navbar.
 
 ## Site contract
 - `index.html` owns brand, Home / Contact / Games hub panels, and combat nav chrome slots.
@@ -81,6 +92,7 @@ background_color: "#05060f"       # optional #rgb/#rrggbb splash color
 
 ## Adding another game later
 1. Add `games/<id>/{…}`.
-2. Add `games/<id>/metadata.yaml` (above); the Games page picks it up.
+2. Add `games/<id>/metadata.yaml` (above); the Games page picks it up. Run
+   `php tools/game-share-tags.php` to write its `play/<id>/` page.
 3. A game mounted into the site page (like The CIC) exposes a global `start`
    function; only one runs at a time.

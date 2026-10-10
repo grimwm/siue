@@ -16,9 +16,20 @@ function showGamesHub() {
     showNavDiv('games');
 }
 
+/** #contact and #games open those panels, so other pages (a game's wrapper
+ *  navbar) can link straight to them. */
+function openLinkedPanel() {
+    const panel = location.hash.slice(1);
+    if (panel === 'games') showGamesHub();
+    else if (panel === 'contact' || panel === 'main') showNavDiv(panel);
+}
+window.addEventListener('hashchange', openLinkedPanel);
+document.addEventListener('DOMContentLoaded', openLinkedPanel);
+
 /**
  * Fills the games hub with one card per games/<id>/metadata.yaml, as listed
- * by games.php. A card either links to the game's page (`href`) or calls a
+ * by games.php. A card either links to the game's wrapper page (`href`, the
+ * site navbar over the game) or calls a
  * page function that mounts the game in place (`start`).
  */
 async function loadGamesHub() {

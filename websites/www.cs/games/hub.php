@@ -8,9 +8,10 @@
  */
 declare(strict_types=1);
 
-const GAMES_HUB_KEYS = ['title', 'kicker', 'description', 'button', 'play', 'start', 'order', 'hidden', 'image', 'short_name', 'theme_color', 'background_color'];
+const GAMES_HUB_KEYS = ['title', 'kicker', 'description', 'button', 'play', 'start', 'order', 'hidden', 'image', 'short_name', 'theme_color', 'background_color', 'accent_color'];
 const GAMES_HUB_DEFAULT_ORDER = 100;
 const GAMES_HUB_DEFAULT_COLOR = '#0c0e12';
+const GAMES_HUB_DEFAULT_ACCENT = '#ff4d4d';
 
 /**
  * Parses the YAML subset metadata.yaml uses: top-level `key: value` lines,
@@ -134,14 +135,15 @@ function games_hub_card(string $id, array $meta, string $dir): array
         'order' => (int) $order,
     ];
 
-    // Install (PWA) look: the app's short name and its two colors.
+    // Install (PWA) look: the app's short name and its two colors; the site's
+    // wrapper page paints its navbar from these and the accent.
     $short = trim($meta['short_name'] ?? '');
     if (mb_strlen($short) > 24) {
         return [null, '`short_name` must be 24 characters or fewer'];
     }
     $card['short_name'] = $short !== '' ? $short : $title;
-    foreach (['theme_color', 'background_color'] as $key) {
-        $color = trim($meta[$key] ?? GAMES_HUB_DEFAULT_COLOR);
+    foreach (['theme_color', 'background_color', 'accent_color'] as $key) {
+        $color = trim($meta[$key] ?? ($key === 'accent_color' ? GAMES_HUB_DEFAULT_ACCENT : GAMES_HUB_DEFAULT_COLOR));
         if (!preg_match('/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/', $color)) {
             return [null, "`$key` must be a #rgb or #rrggbb color"];
         }
@@ -168,19 +170,20 @@ function games_hub_card(string $id, array $meta, string $dir): array
         if (!is_file("$dir/$play")) {
             return [null, "`play` names $play, which is not in the game folder"];
         }
-        // A folder's index page gets the folder URL, the shorter link to share.
-        $card['href'] = $play === 'index.html' ? "games/$id/" : "games/$id/$play";
+        // The game's own page (a folder's index page gets the folder URL).
+        // Players and shared links go to the site's wrapper page, which shows
+        // the site navbar over that page; the game knows nothing about it.
+        $card['page'] = $play === 'index.html' ? "games/$id/" : "games/$id/$play";
+        $card['href'] = "play/$id/";
         $card['share'] = $card['href'];
     } else {
         if (!preg_match('/^[A-Za-z_$][A-Za-z0-9_$]*$/', $start)) {
             return [null, '`start` must be a JavaScript function name, like cylonStartGame'];
         }
         $card['start'] = $start;
-        // tools/game-share-tags.php writes a page here that carries the
-        // game's share tags and forwards to the site with ?game=<id>.
-        if (is_file("$dir/index.html")) {
-            $card['share'] = "games/$id/";
-        }
+        // tools/game-share-tags.php writes play/<id>/, a page that carries
+        // the game's share tags and forwards to the site with ?game=<id>.
+        $card['share'] = "play/$id/";
         // The site page links this manifest once the game launches, so the
         // page can be installed as this game.
         if (is_file("$dir/manifest.webmanifest")) {

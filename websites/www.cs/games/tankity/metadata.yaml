@@ -13,3 +13,4 @@ image: og.png
 short_name: Tankity
 theme_color: "#05060f"
 background_color: "#05060f"
+accent_color: "#ffc93c"

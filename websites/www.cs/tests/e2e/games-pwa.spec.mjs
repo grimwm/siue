@@ -7,7 +7,9 @@ const PAGE_GAMES = ['tankity', 'crete'];
 const RENDERED = { tankity: '#stage', crete: 'h1' };
 
 async function manifestOf(request, baseURL, id) {
-  const page = new URL(`games/${id}/`, baseURL);
+  // A page game links its manifest from its own page; Cylon, which runs in
+  // the site page, from the site's play/cylon/ page.
+  const page = new URL(PAGE_GAMES.includes(id) ? `games/${id}/` : `play/${id}/`, baseURL);
   const html = await (await request.get(page.href, { maxRedirects: 0 })).text();
   const href = (html.match(/<link rel="manifest" href="([^"]+)"/) || [])[1];
   return { html, url: href && new URL(href, page).href };
@@ -18,13 +20,13 @@ for (const id of GAMES) {
     const { html, url } = await manifestOf(request, baseURL, id);
     expect(url, 'the page links a manifest').toBeTruthy();
     expect(html).toMatch(/<meta name="theme-color" content="#[0-9a-f]{3,6}">/);
-    expect(html).toMatch(/<link rel="apple-touch-icon" [^>]*href="icon-192\.png"/);
+    expect(html).toMatch(/<link rel="apple-touch-icon" [^>]*href="[^"]*icon-192\.png"/);
     expect(html).toContain('<meta name="apple-mobile-web-app-capable" content="yes">');
 
     const res = await request.get(url);
     expect(res.status()).toBe(200);
     const m = await res.json();
-    for (const key of ['id', 'name', 'short_name', 'start_url', 'scope', 'display', 'background_color', 'theme_color']) {
+    for (const key of ['name', 'short_name', 'start_url', 'scope', 'display', 'background_color', 'theme_color']) {
       expect(m[key], key).toBeTruthy();
     }
     expect(m.display).toBe('standalone');

@@ -3082,8 +3082,10 @@ function freshMatchFromSeedBox(opts) {
   // A new match takes the whole frame: shut any panels so the menu never
   // sits over the briefing and the shop never opens underneath it.
   closeOverlays();
-  endTutorial(true);
-  if (opts && opts.tut && !tutorialSeen()) TUT_ARMED = true;
+  // Leaving a coached battle counts as having seen it; asking for the
+  // tutorial (U or the menu) always deals this match with the coach on.
+  endTutorial(!!TUT);
+  if (opts && opts.tut) TUT_ARMED = true;
   const seedInput = $('seed-input');
   startSolo(seedInput ? seedInput.value : '');
   render(); renderHUD();

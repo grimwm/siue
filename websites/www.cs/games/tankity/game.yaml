@@ -396,10 +396,11 @@ arsenal:
 #     KeyA, Digit1, ControlLeft, Escape, Space, PageDown), then against
 #     event.key (a, A, 1, Enter, Escape, " "). A single letter matches either
 #     case, so "a" works with Shift or Caps Lock.
-#   - "Ctrl+F" needs the Control key held; the part after the plus is matched
-#     against event.code, then event.key, like any other token. While Control
-#     is held, Ctrl+ tokens are tried first; "Ctrl+F" never matches without
-#     Control.
+#   - "Ctrl+F" needs the Control key held and "Shift+KeyJ" the Shift key; the
+#     part after the plus is matched against event.code, then event.key, like
+#     any other token. While a modifier is held its tokens are tried first, and
+#     they never match without it. Browsers keep many Ctrl+ keys for
+#     themselves (Ctrl+D bookmarks, Ctrl+U view source), so prefer Shift+.
 #   - The FIRST token of an action names the key on buttons, hints and help
 #     text (it is printed as a keycap: arrows show as triangles, KeyW as W,
 #     Escape as ESC, ControlLeft as Ctrl). Put the one you want shown first;
@@ -446,10 +447,11 @@ keys:
   scroll:
     lineDown: [j]
     lineUp: [k]
-    pageDown: [PageDown, Ctrl+F]
-    pageUp: [PageUp, Ctrl+B]
-    halfDown: [Ctrl+D]
-    halfUp: [Ctrl+U]
+    pageDown: [PageDown]
+    pageUp: [PageUp]
+    # Shift, not Ctrl: browsers keep Ctrl+D, Ctrl+U, Ctrl+F and Ctrl+B.
+    halfDown: [Shift+KeyJ]
+    halfUp: [Shift+KeyK]
 
 # --------------------------------------------------------------------------
 # audio

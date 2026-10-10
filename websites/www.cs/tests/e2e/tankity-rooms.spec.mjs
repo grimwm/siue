@@ -64,6 +64,19 @@ test('in a room the barrel swings through the whole arc without snapping back, a
   await guest.ctx.close();
 });
 
+test('in a room, firing the last round of a weapon loads the Shell again', async ({ browser }) => {
+  const { host, guest } = await roomPair(browser);
+  await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);
+  await host.page.keyboard.press('g');
+  await host.page.locator('#gun-grid .gun-choice', { hasText: 'Buckshot' }).click();
+  await expect.poll(() => hud(host.page, 'hud-weapon'), { timeout: 10_000 }).toMatch(/^Buckshot ×1/);
+  await host.page.waitForTimeout(500); // the server spaces one seat's acts 150 ms apart
+  await host.page.keyboard.press('Control');
+  await expect.poll(() => hud(host.page, 'hud-weapon'), { timeout: 30_000 }).toMatch(/^Shell ∞/);
+  await host.ctx.close();
+  await guest.ctx.close();
+});
+
 test('a unit body picked in a room reaches everyone', async ({ browser }) => {
   const { host, guest, roomState } = await roomPair(browser);
   await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);

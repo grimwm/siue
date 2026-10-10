@@ -532,18 +532,16 @@
                 "k"
             ],
             "pageDown": [
-                "PageDown",
-                "Ctrl+F"
+                "PageDown"
             ],
             "pageUp": [
-                "PageUp",
-                "Ctrl+B"
+                "PageUp"
             ],
             "halfDown": [
-                "Ctrl+D"
+                "Shift+KeyJ"
             ],
             "halfUp": [
-                "Ctrl+U"
+                "Shift+KeyK"
             ]
         }
     },

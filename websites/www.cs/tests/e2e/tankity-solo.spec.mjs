@@ -79,6 +79,19 @@ test('J and K walk the shop rows like the arrows', async ({ browser }) => {
   await expect(page.locator('#nav-shop')).toContainText('J');
 });
 
+test('firing the last round of a weapon loads the Shell again', async ({ browser }) => {
+  const { page, errors } = await newPlayer(browser);
+  await startSolo(page);
+  // Every run starts with a single Buckshot.
+  await page.keyboard.press('g');
+  await page.locator('#gun-grid .gun-choice', { hasText: 'Buckshot' }).click();
+  await expect.poll(() => hud(page, 'hud-weapon')).toMatch(/^Buckshot ×1/);
+  await page.keyboard.press('Control');
+  await expect.poll(() => hud(page, 'hud-weapon'), { timeout: 10_000 }).toMatch(/^Shell ∞/);
+  expect(await page.locator('#log').textContent()).toContain('Out of Buckshot. Back to the Shell.');
+  expect(errors).toEqual([]);
+});
+
 test('a tank falls smoothly into the crater under it', async ({ browser }) => {
   const { page } = await newPlayer(browser);
   // A Mortar's wide blast digs under our own hull even when the wind drifts

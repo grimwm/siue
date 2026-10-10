@@ -76,3 +76,23 @@ test('the arrow pad sits centred over its label', async ({ browser }) => {
   expect(Math.abs(pad - note)).toBeLessThan(1.5);
   expect(Math.abs(pad - box)).toBeLessThan(1.5);
 });
+
+test('holding the aim keys never changes the status bar or the canvas size', async ({ browser }) => {
+  const { page } = await newPlayer(browser);
+  await page.setViewportSize({ width: 1180, height: 720 });
+  await startSolo(page);
+  await page.evaluate(() => {
+    window.__sizes = new Set();
+    const tick = () => {
+      const s = document.getElementById('stage').getBoundingClientRect();
+      const h = document.querySelector('.hudbar').getBoundingClientRect();
+      window.__sizes.add(`${Math.round(s.bottom)}|${Math.round(h.height)}|${Math.round(h.top)}`);
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+  for (const k of ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight']) {
+    await page.keyboard.down(k); await page.waitForTimeout(2200); await page.keyboard.up(k);
+  }
+  expect(await page.evaluate(() => [...window.__sizes])).toHaveLength(1);
+});

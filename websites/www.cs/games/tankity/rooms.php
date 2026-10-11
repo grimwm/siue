@@ -210,14 +210,34 @@ function room_registry_read(): array
     @shm_detach($id);
     return $reg;
 }
+/* Takes a semaphore, waiting at most $max seconds (never forever): a holder
+// that hangs must not pile every later request for its room into PHP workers
+// until the pool runs dry and the whole site stalls. Short backoff, never a
+// sem_remove; false when the wait ran out (or the semaphore was removed). */
+const ROOM_LOCK_WAIT = 2.0;
+function room_sem_take($sem, float $max = ROOM_LOCK_WAIT): bool
+{
+    $deadline = microtime(true) + $max;
+    $nap = 2000;
+    while (true) {
+        if (@sem_acquire($sem, true)) {
+            return true;
+        }
+        if (microtime(true) >= $deadline) {
+            return false;
+        }
+        usleep($nap);
+        $nap = min(50000, $nap * 2);
+    }
+}
 /* Read-modify-write under the registry's own brief lock. The callback gets
 // the registry and returns the new one, or null to leave it as it is; the
 // result of this call is the callback's second return value, if any. */
 function room_registry_update(callable $fn)
 {
     $sem = @sem_get(room_registry_key(), 1);
-    if ($sem === false || !@sem_acquire($sem)) {
-        return null;
+    if ($sem === false || !room_sem_take($sem)) {
+        room_json_out(503, ['error' => 'the room server is busy; try again']);
     }
     $id = @shm_attach(room_registry_key(), ROOM_REGISTRY_BYTES);
     $out = null;
@@ -235,8 +255,8 @@ function room_registry_update(callable $fn)
 
 /* ---- one room's segment ---- */
 /* Crash safety. A room is held through its own semaphore, taken with a
-// blocking sem_acquire (the kernel queues waiters; there is no sleep loop and
-// a waiter never removes a semaphore on a timeout). PHP's sem_get defaults to
+// bounded wait (room_sem_take: at most ROOM_LOCK_WAIT seconds, then "busy",
+// and a waiter never removes a semaphore). PHP's sem_get defaults to
 // auto_release, which also puts the acquire on the kernel's undo list, so a
 // request that ends, fatals or is killed lets go of what it held; the
 // shutdown handler below releases explicitly as well. */
@@ -275,7 +295,11 @@ function room_lock(string $code, bool $wait): ?array
         room_json_out(500, ['error' => 'room memory is unavailable on this server']);
     }
     // A semaphore removed under a waiter makes this fail: the room was closed.
-    if (!@sem_acquire($sem, !$wait)) {
+    // A wait that runs out on a room that still exists is "busy", not gone.
+    if (!($wait ? room_sem_take($sem) : @sem_acquire($sem, true))) {
+        if ($wait && @shmop_open($key, 'w', 0, 0) !== false) {
+            room_json_out(503, ['error' => 'this room is busy; try again']);
+        }
         return null;
     }
     return room_hold(['sem' => $sem, 'shm' => $shm, 'key' => $key, 'code' => $code, 'open' => true]);
@@ -357,7 +381,7 @@ function room_alloc(?callable $nextCode = null): ?array
             continue;
         }
         $sem = @sem_get($key, 1);
-        if ($sem === false || !@sem_acquire($sem)) {
+        if ($sem === false || !room_sem_take($sem)) {
             @shmop_delete($shm);
             room_json_out(500, ['error' => 'room memory is unavailable on this server']);
         }

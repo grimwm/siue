@@ -316,6 +316,21 @@ $dtHttpA = microtime(true) - $t;
 $check('http-same-room-waits', ($stateA['ok'] ?? false) === true && $dtHttpA > 0.5, sprintf('%.3fs', $dtHttpA));
 $reap($p, $pipes);
 
+// Round 3: a holder that hangs past the lock wait. Later requests for its
+// room answer "busy" after about ROOM_LOCK_WAIT instead of piling up in PHP
+// workers; other rooms stay instant.
+[$p, $pipes, $ok] = $hold($A['code'], '3.5', 'plain');
+$check('holder-hangs-on-A', $ok);
+$t = microtime(true);
+$busy = $stateOf($A);
+$dtBusy = microtime(true) - $t;
+$check('hung-room-answers-busy', str_contains((string) ($busy['error'] ?? ''), 'busy') && $dtBusy >= ROOM_LOCK_WAIT - 0.2 && $dtBusy < ROOM_LOCK_WAIT + 1.0,
+    sprintf('%.2fs %s', $dtBusy, json_encode($busy)));
+$t = microtime(true);
+$okB = $stateOf($B);
+$check('other-rooms-unaffected-by-a-hung-one', ($okB['ok'] ?? false) === true && microtime(true) - $t < 0.5);
+$reap($p, $pipes);
+
 // Crashes: a holder that dies hard, or hits a PHP fatal, must not leave the
 // room locked. Poll without blocking so a stuck lock fails instead of hanging.
 $lockable = function (string $code): bool {

@@ -1,4 +1,7 @@
 // Operation Tankity audio files and game.json, in a real browser.
+import { readFileSync } from 'node:fs';
+// The committed arsenal: counts follow it, so a new weapon needs no edit here.
+const GAME = JSON.parse(readFileSync(new URL('../../games/tankity/game.json', import.meta.url), 'utf8'));
 import { test, expect } from '@playwright/test';
 import { recorderScript, hud } from './helpers.mjs';
 
@@ -52,7 +55,7 @@ test('the page loads game.json for arsenal, keys and audio, and nothing else', a
   expect(data).toContain('game.json');
   expect(data.filter(d => d !== 'game.json')).toEqual([]);
   expect(Object.keys(config)).toEqual(expect.arrayContaining(['arsenal', 'keys', 'audio']));
-  expect(config.arsenal.ammo.length).toBe(12);
+  expect(config.arsenal.ammo.length).toBe(GAME.arsenal.ammo.length);
   // The arsenal in the shop and the key labels in the help both came from it.
   await page.keyboard.press('n');
   await page.waitForSelector('#shop-veil:not([hidden])');

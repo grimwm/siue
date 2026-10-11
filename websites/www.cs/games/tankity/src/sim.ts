@@ -49,9 +49,13 @@ Object.freeze(TUNE);
 export const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
 /* ---------- types ---------- */
-/* What a weapon's paint job holds that the sim reads. */
+/* A weapon's paint job: the sim reads the shake; the icons and effects read the colors. */
 export interface Gfx {
   shake?: number;
+  shell?: string;
+  trail?: string;
+  blast?: readonly [string, string];
+  painter?: string;
   [key: string]: unknown;
 }
 /* One ammo row of the arsenal (game.yaml, served as game.json). */

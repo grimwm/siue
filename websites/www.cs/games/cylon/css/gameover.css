@@ -1,0 +1,233 @@
+/* Cylon Defense: The game-over panel: the initials entry, the buttons and the board.
+ * One of the stylesheets index.html links in order; the order is the cascade (README.md, "Stylesheets"). */
+.cylon-gameover {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(4, 6, 10, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+
+.cylon-gameover[hidden] {
+  display: none !important;
+}
+
+
+.cylon-gameover-panel {
+  width: min(100%, 22rem);
+  padding: 1.35rem 1.25rem 1.25rem;
+  background: linear-gradient(180deg, #1a2030 0%, #10151f 100%);
+  border: 1px solid var(--rail-edge);
+  box-shadow:
+    0 0 0 1px rgba(255, 60, 60, 0.15),
+    0 20px 50px rgba(0, 0, 0, 0.55);
+  text-align: center;
+}
+
+
+.cylon-gameover-kicker {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--steel);
+}
+
+
+.cylon-gameover-title {
+  margin: 0.35rem 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--crimson-hot);
+  text-shadow: 0 0 16px rgba(255, 40, 40, 0.45);
+}
+
+
+.cylon-gameover-reason {
+  margin: 0 0 0.85rem;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+
+.cylon-gameover-stats {
+  display: flex;
+  justify-content: center;
+  gap: 1.25rem;
+  margin: 0 0 1.1rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--steel-bright);
+}
+
+
+.cylon-gameover-stats em {
+  font-style: normal;
+  color: var(--crimson-hot);
+  font-size: 1.15rem;
+  margin-right: 0.2rem;
+}
+
+
+.cylon-gameover-entry-label {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--steel);
+}
+
+
+.cylon-initials {
+  display: flex;
+  justify-content: center;
+  gap: 0.7rem;
+  margin-bottom: 0.45rem;
+}
+
+
+.cylon-initial-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+
+.cylon-initial-spin {
+  width: 2.4rem;
+  height: 1.15rem;
+  padding: 0;
+  line-height: 1;
+  font-size: 0.65rem;
+  color: var(--crimson-hot);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+
+.cylon-initial-spin:hover,
+.cylon-initial-spin:focus-visible {
+  opacity: 1;
+  color: #fff;
+  border-color: var(--rail-edge);
+  outline: none;
+}
+
+
+.cylon-initial {
+  width: 2.4rem;
+  height: 2.7rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: #fff;
+  background: #0a0d14;
+  border: 1px solid var(--rail-edge);
+  border-bottom-color: var(--crimson);
+  cursor: pointer;
+  user-select: none;
+}
+
+
+.cylon-initial:focus,
+.cylon-initial.is-active {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 12px rgba(255, 60, 60, 0.35);
+}
+
+
+.cylon-gameover-entry-hint {
+  margin: 0 0 0.7rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cylon-gameover-entry-error {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffb4b4;
+}
+
+.cylon-gameover-entry-error[hidden] {
+  display: none;
+}
+
+
+.cylon-gameover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: center;
+  margin-top: 0.85rem;
+}
+
+
+.cylon-gameover-btn {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(180deg, #8a1515 0%, #5a0c0c 100%);
+  border: 1px solid #c03030;
+  padding: 0.55rem 1rem;
+  cursor: pointer;
+}
+
+
+.cylon-gameover-actions .cylon-gameover-btn {
+  margin-top: 0;
+}
+
+
+.cylon-gameover-btn.is-ghost {
+  background: transparent;
+  border-color: var(--rail-edge);
+  color: var(--muted);
+}
+
+
+.cylon-gameover-btn:hover {
+  filter: brightness(1.12);
+}
+
+
+.cylon-gameover-btn.is-ghost:hover {
+  filter: none;
+  color: var(--text);
+  border-color: var(--crimson);
+}
+
+
+.cylon-gameover-board .cylon-high-scores {
+  text-align: left;
+  margin-bottom: 0.9rem;
+  max-height: 12rem;
+}
+
+

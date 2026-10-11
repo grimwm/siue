@@ -1,0 +1,232 @@
+/* Cylon Defense: The combat nav: control box, the fade between civil and combat chrome, the mobile layout.
+ * One of the stylesheets index.html links in order; the order is the cascade (README.md, "Stylesheets"). */
+/*
+ * Combat nav control box — brand/link/theme heights live in site.css;
+ * game widgets share the same midline here.
+ */
+.site-nav-inner .cylon-game-toggle,
+.site-nav-inner .cylon-raptor-btn,
+.site-nav-inner .cylon-settings-toggle,
+.site-nav-inner .cylon-score {
+  height: var(--nav-control-h);
+  min-height: var(--nav-control-h);
+  max-height: var(--nav-control-h);
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+
+/* Fade chrome, brand, theme ↔ settings — game toggle stays put */
+.site-brand,
+.site-nav-menu,
+.site-nav-game,
+.theme-toggle,
+.site-nav-tools .cylon-settings {
+  transition: opacity calc(var(--cylon-desolate-fade, 1.6s) * 0.45) ease;
+  opacity: 1;
+}
+
+
+.site-nav-inner.is-nav-fading .site-brand,
+.site-nav-inner.is-nav-fading .site-nav-menu,
+.site-nav-inner.is-nav-fading .site-nav-game,
+.site-nav-inner.is-nav-fading .theme-toggle,
+.site-nav-inner.is-nav-fading .site-nav-tools .cylon-settings {
+  opacity: 0;
+  pointer-events: none;
+}
+
+
+/* Combat: settings gear takes the theme button's slot */
+body.cylon-nav-combat .theme-toggle {
+  display: none;
+}
+
+
+body:not(.cylon-nav-combat) .site-nav-tools .cylon-settings {
+  display: none;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .site-brand,
+  .site-nav-menu,
+  .site-nav-game,
+  .theme-toggle,
+  .site-nav-tools .cylon-settings {
+    transition: none;
+  }
+
+  .site-nav-inner.is-nav-fading .site-brand,
+  .site-nav-inner.is-nav-fading .site-nav-menu,
+  .site-nav-inner.is-nav-fading .site-nav-game,
+  .site-nav-inner.is-nav-fading .theme-toggle,
+  .site-nav-inner.is-nav-fading .site-nav-tools .cylon-settings {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+
+body.cylon-nav-combat .site-nav-menu-primary {
+  display: none !important;
+}
+
+
+.site-nav-game:not([hidden]),
+body.cylon-nav-combat .site-nav-game {
+  display: flex;
+}
+
+
+body:not(.cylon-nav-combat) .site-nav-power {
+  margin-left: auto;
+}
+
+
+.site-nav-game .cylon-help-btn {
+  flex: 0 0 auto;
+}
+
+
+.cylon-help-btn .cylon-raptor-btn-label {
+  letter-spacing: 0.06em;
+}
+
+
+.cylon-help-label-short {
+  display: none;
+}
+
+
+@media (max-width: 819px) {
+  /* Compact help control — sits with gear on the game row */
+  .cylon-help-label-full {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .cylon-help-label-short {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1;
+  }
+
+  .cylon-help-btn {
+    width: var(--nav-control-h);
+    min-width: var(--nav-control-h);
+    max-width: var(--nav-control-h);
+    padding: 0;
+    justify-content: center;
+  }
+
+  /* Icon-only ability buttons on narrow screens */
+  #cylon-grenade-btn,
+  #cylon-raptor-btn {
+    padding: 0.35rem 0.45rem;
+    min-width: 2.4rem;
+    justify-content: center;
+  }
+
+  #cylon-grenade-btn .cylon-ability-icon,
+  #cylon-raptor-btn .cylon-ability-icon {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+
+  #cylon-grenade-btn .cylon-raptor-btn-label,
+  #cylon-raptor-btn .cylon-raptor-btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  #cylon-grenade-btn .cylon-raptor-btn-cd,
+  #cylon-raptor-btn .cylon-raptor-btn-cd {
+    position: absolute;
+    right: -0.15rem;
+    top: -0.35rem;
+    min-width: 1.25rem;
+    padding: 0.08rem 0.22rem;
+    font-size: 0.72rem;
+  }
+
+  /*
+   * Combat row: [game bar… ?] · power · gear
+   * Brand fades away so controls shift left; power sits between help and settings.
+   */
+  body.cylon-nav-combat .site-nav-inner {
+    flex-wrap: nowrap;
+    gap: 0.35rem 0.4rem;
+  }
+
+  body.cylon-nav-combat .site-brand {
+    flex: 0 0 0;
+    width: 0;
+    min-width: 0;
+    max-width: 0;
+    margin: 0;
+    padding: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    border: none;
+    transform: none;
+    transition: opacity calc(var(--cylon-desolate-fade, 1.6s) * 0.45) ease;
+  }
+
+  body.cylon-nav-combat .site-nav-game {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 0.3rem 0.35rem;
+    min-width: 0;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    height: var(--nav-control-h);
+    min-height: var(--nav-control-h);
+  }
+
+  body.cylon-nav-combat .site-nav-power {
+    order: 3;
+    margin-left: 0;
+  }
+
+  body.cylon-nav-combat .site-nav-tools {
+    order: 4;
+  }
+
+  body.cylon-nav-combat .cylon-score {
+    gap: 0.2rem;
+  }
+
+  body.cylon-nav-combat .cylon-score-label {
+    font-size: 0.58rem;
+  }
+}
+
+

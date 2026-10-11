@@ -1,0 +1,266 @@
+/* Cylon Defense: The Game On toggle, the grenade and raptor buttons, and the high-score list.
+ * One of the stylesheets index.html links in order; the order is the cascade (README.md, "Stylesheets"). */
+.cylon-game-toggle {
+  position: relative;
+  gap: 0.4rem;
+  width: 7.75rem;
+  min-width: 7.75rem;
+  max-width: 7.75rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0 0.55rem;
+  border: 1px solid var(--rail-edge);
+  background: var(--surface);
+  color: var(--steel-bright);
+  cursor: pointer;
+  touch-action: manipulation;
+  flex: 0 0 7.75rem;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease,
+    width 0.2s ease, min-width 0.2s ease, max-width 0.2s ease, padding 0.2s ease;
+}
+
+
+.cylon-game-toggle-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.cylon-game-toggle-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--steel);
+  box-shadow: none;
+  flex: 0 0 auto;
+}
+
+
+.cylon-game-toggle.is-on {
+  color: #e8ffe8;
+  border-color: #2f8f3a;
+  background: linear-gradient(180deg, #1a3d22 0%, #102416 100%);
+  box-shadow: 0 0 12px rgba(40, 160, 60, 0.35);
+}
+
+
+.cylon-game-toggle.is-on .cylon-game-toggle-dot {
+  background: #3dff6a;
+  box-shadow: 0 0 8px 2px rgba(60, 255, 100, 0.75);
+}
+
+
+/* Mobile: Game On collapses to the green power pip; Game Off keeps full label */
+@media (max-width: 819px) {
+  .cylon-game-toggle.is-on {
+    width: var(--nav-control-h);
+    min-width: var(--nav-control-h);
+    max-width: var(--nav-control-h);
+    flex: 0 0 var(--nav-control-h);
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+  }
+
+  .cylon-game-toggle.is-on .cylon-game-toggle-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .cylon-game-toggle.is-on .cylon-game-toggle-dot {
+    width: 0.72rem;
+    height: 0.72rem;
+  }
+}
+
+
+.cylon-game-toggle:not(.is-on) {
+  color: var(--text-muted);
+  border-color: var(--rail-edge);
+  opacity: 0.9;
+}
+
+
+.cylon-game-toggle:hover {
+  border-color: var(--crimson-dim);
+}
+
+
+.cylon-raptor-btn {
+  gap: 0.35rem;
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--steel-bright);
+  background: transparent;
+  border: 1px solid var(--rail-edge);
+  padding: 0 0.45rem;
+  cursor: pointer;
+  touch-action: manipulation;
+  position: relative;
+  z-index: 1;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+
+.cylon-ability-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: 0 0 auto;
+  display: block;
+}
+
+
+.cylon-raptor-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--crimson-dim);
+}
+
+
+.cylon-raptor-btn:disabled {
+  cursor: not-allowed;
+}
+
+
+.cylon-raptor-btn:disabled:not(.is-cooling):not(.is-armed) {
+  opacity: 0.45;
+}
+
+
+.cylon-raptor-btn.is-cooling {
+  opacity: 1;
+  color: rgba(255, 255, 255, 0.55);
+  border-color: rgba(255, 80, 80, 0.55);
+  background: rgba(40, 8, 8, 0.55);
+}
+
+
+.cylon-raptor-btn.is-cooling .cylon-raptor-btn-label {
+  opacity: 0.55;
+}
+
+
+.cylon-raptor-btn.is-armed {
+  color: #fff4e0;
+  border-color: #e0a020;
+  box-shadow: 0 0 10px rgba(255, 160, 40, 0.45);
+}
+
+
+.cylon-raptor-btn-cd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.65rem;
+  padding: 0.12rem 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: linear-gradient(180deg, #c62828 0%, #7a1010 100%);
+  border: 1px solid #ff6b6b;
+  box-shadow: 0 0 8px rgba(255, 60, 40, 0.45);
+}
+
+
+.cylon-raptor-btn-cd[hidden] {
+  display: none;
+}
+
+
+body.cylon-grenade-armed {
+  cursor: crosshair;
+}
+
+
+body.cylon-grenade-armed .cylon-bot {
+  cursor: crosshair;
+}
+
+
+.cylon-settings-scores-title {
+  margin-top: 0.85rem;
+}
+
+
+.cylon-high-scores {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  max-height: 9rem;
+  overflow: auto;
+}
+
+
+.cylon-high-scores li {
+  display: grid;
+  /* rank · initials · date (with year) · score — leave room so Orbitron initials don't collide */
+  grid-template-columns: 2.75ch 4.5ch minmax(7.5rem, 1fr) auto;
+  align-items: baseline;
+  column-gap: 0.75rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid var(--rail-edge);
+  font-variant-numeric: tabular-nums;
+}
+
+
+.cylon-high-scores li:last-child {
+  border-bottom: none;
+}
+
+
+.cylon-high-scores .cylon-hs-rank {
+  color: var(--steel);
+  font-variant-numeric: tabular-nums;
+}
+
+
+.cylon-high-scores .cylon-hs-initials {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  min-width: 0;
+  padding-right: 0.15rem;
+}
+
+
+.cylon-high-scores .cylon-hs-date {
+  text-align: left;
+  white-space: nowrap;
+  color: var(--text-muted);
+  padding-left: 0.15rem;
+}
+
+
+.cylon-high-scores .cylon-hs-score {
+  color: var(--crimson-hot);
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+
+.cylon-high-scores .cylon-hs-empty {
+  display: block;
+  color: var(--steel);
+  font-style: italic;
+}
+
+

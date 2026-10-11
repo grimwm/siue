@@ -1,0 +1,329 @@
+/* Cylon Defense: The scanner bar, the eye and its glare cone, and the home page eye (two sweeps, then the red fill).
+ * One of the stylesheets index.html links in order; the order is the cascade (README.md, "Stylesheets"). */
+/* Cylon Defense — game styles (extracted from site shell) */
+
+@keyframes cylonSweep {
+  0% { left: 5%; }
+  100% { left: 95%; }
+}
+
+@keyframes cylonTrail {
+  0% {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 0, 0, 0.0) 30%,
+      rgba(255, 0, 0, 0.28) 55%,
+      rgba(255, 90, 90, 0.5) 72%,
+      transparent 100%
+    );
+    transform: translate(-35%, -50%) scaleX(1.15);
+  }
+  100% {
+    background: linear-gradient(
+      270deg,
+      transparent 0%,
+      rgba(255, 0, 0, 0.0) 30%,
+      rgba(255, 0, 0, 0.28) 55%,
+      rgba(255, 90, 90, 0.5) 72%,
+      transparent 100%
+    );
+    transform: translate(-65%, -50%) scaleX(1.15);
+  }
+}
+
+/* —— Cylon scanner —— */
+.cylon-scanner {
+  position: sticky;
+  top: 0;
+  z-index: 1040;
+  height: var(--scanner-height);
+  background:
+    linear-gradient(
+      180deg,
+      #050608 0%,
+      #151a24 35%,
+      #0a0d12 55%,
+      #050608 100%
+    );
+  border-bottom: 1px solid var(--rail-edge);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.65),
+    0 0 24px rgba(180, 0, 0, 0.15),
+    0 4px 18px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+
+.cylon-scanner::before {
+  /* recessed track groove */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 28%;
+  bottom: 28%;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.65), rgba(20, 24, 32, 0.35), rgba(0, 0, 0, 0.7)),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 5px,
+      rgba(0, 0, 0, 0.4) 5px,
+      rgba(0, 0, 0, 0.4) 6px
+    );
+  border-radius: 999px;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.85),
+    0 1px 0 rgba(255, 255, 255, 0.04);
+  pointer-events: none;
+}
+
+
+.cylon-eye {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 32%;
+  max-width: 16rem;
+  min-width: 8rem;
+  height: 160%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  /* core + elongated horizontal bloom (reads as a scanner slit) */
+  background:
+    radial-gradient(
+      ellipse 14% 48% at 50% 50%,
+      #ffffff 0%,
+      #ffe0e0 28%,
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse 62% 78% at 50% 50%,
+      #ff3a3a 0%,
+      #ff0000 34%,
+      #b00000 58%,
+      transparent 74%
+    );
+  box-shadow:
+    0 0 3px 1px rgba(255, 230, 230, 1),
+    0 0 10px 3px rgba(255, 60, 60, 1),
+    0 0 22px 8px rgba(255, 0, 0, 0.85),
+    0 0 48px 18px rgba(180, 0, 0, 0.55),
+    0 0 80px 32px rgba(100, 0, 0, 0.3);
+  animation: cylonSweep 2.6s ease-in-out infinite alternate;
+  will-change: left;
+  transition: left 0.08s linear, filter 0.2s ease, box-shadow 0.2s ease;
+}
+
+
+.cylon-eye.is-tracking {
+  animation: none;
+  filter: saturate(1.25) brightness(1.15);
+  box-shadow:
+    0 0 4px 1px rgba(255, 240, 240, 1),
+    0 0 14px 5px rgba(255, 40, 40, 1),
+    0 0 32px 12px rgba(255, 0, 0, 0.9),
+    0 0 60px 24px rgba(180, 0, 0, 0.55),
+    0 12px 40px 10px rgba(255, 0, 0, 0.25);
+}
+
+
+.cylon-eye.is-tracking::after {
+  animation: none;
+  opacity: 0.55;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(
+    ellipse 70% 60% at 50% 50%,
+    rgba(255, 60, 60, 0.55),
+    transparent 72%
+  );
+}
+
+
+/* downward glare when watching the cursor (outside clipped scanner) */
+.cylon-glare {
+  position: fixed;
+  top: var(--scanner-height);
+  left: 50%;
+  width: 3px;
+  height: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 1035;
+  opacity: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 80, 80, 0.9) 0%,
+    rgba(255, 0, 0, 0.28) 40%,
+    transparent 100%
+  );
+  box-shadow: 0 0 12px 3px rgba(255, 0, 0, 0.4);
+  /* Swings from its top end, which sits on the eye. */
+  transform-origin: 50% 0;
+  transition: height 0.15s ease, opacity 0.15s ease, left 0.08s linear;
+}
+
+
+.cylon-glare.is-active {
+  opacity: 0.9;
+  height: min(32vh, 14rem);
+}
+
+
+/* While it watches you the glare is a soft cone of light from the eye that
+   fades with distance (the script sets its length and --glare-reach, how
+   far toward the cursor it carries before it is gone), never a solid beam
+   touching the cursor. */
+.cylon-glare.is-active:not(.is-disoriented) {
+  transition: opacity 0.15s ease;
+  width: 26px;
+  border-radius: 50% 50% 0 0 / 12% 12% 0 0;
+  background: radial-gradient(
+    ellipse 50% 100% at 50% 0%,
+    rgba(255, 110, 110, 0.55) 0%,
+    rgba(255, 40, 40, 0.28) calc(var(--glare-reach, 60%) * 0.45),
+    rgba(255, 0, 0, 0.08) calc(var(--glare-reach, 60%) * 0.8),
+    transparent var(--glare-reach, 60%)
+  );
+  box-shadow: none;
+  filter: blur(1.5px);
+  mix-blend-mode: screen;
+}
+
+
+.cylon-eye.is-disoriented {
+  animation: none;
+  filter: hue-rotate(-10deg) saturate(1.4) brightness(1.25);
+  box-shadow:
+    0 0 4px 1px rgba(255, 240, 240, 1),
+    0 0 18px 6px rgba(255, 60, 60, 1),
+    0 0 36px 14px rgba(255, 0, 0, 0.75),
+    0 0 8px 2px rgba(120, 180, 255, 0.45);
+}
+
+
+.cylon-eye.is-disoriented::after {
+  animation: none;
+  opacity: 0.7;
+}
+
+
+.cylon-glare.is-disoriented {
+  filter: hue-rotate(40deg);
+}
+
+
+.cylon-eye::before {
+  /* bright horizontal iris line */
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 42%;
+  height: 16%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 80, 80, 0.35) 22%,
+    rgba(255, 255, 255, 0.95) 50%,
+    rgba(255, 80, 80, 0.35) 78%,
+    transparent 100%
+  );
+  box-shadow: 0 0 8px 2px rgba(255, 60, 60, 0.7);
+}
+
+
+.cylon-eye::after {
+  /* motion trail: stretches opposite the travel direction */
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 160%;
+  height: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 0, 0, 0.0) 30%,
+    rgba(255, 0, 0, 0.25) 55%,
+    rgba(255, 80, 80, 0.45) 72%,
+    transparent 100%
+  );
+  filter: blur(4px);
+  pointer-events: none;
+  animation: cylonTrail 2.6s ease-in-out infinite alternate;
+  opacity: 0.85;
+}
+
+
+/* Home page (game off): the eye sweeps the bar end to end twice, and on its
+   third pass stops in the middle and opens into a band of red filling the
+   strip. Starting the game shrinks it back and the hunt sweeps on from the
+   middle (half a cycle in, so it never jumps). */
+@keyframes cylonIntro {
+  0% { left: 5%; animation-timing-function: ease-in-out; }
+  22.2% { left: 95%; animation-timing-function: ease-in-out; }
+  44.4% { left: 5%; animation-timing-function: ease-in-out; }
+  66.7% { left: 95%; animation-timing-function: ease-in-out; }
+  88.9% { left: 5%; animation-timing-function: ease-in; }
+  100% { left: 50%; }
+}
+@keyframes cylonFill {
+  to {
+    left: 50%;
+    width: 100%;
+    max-width: 100%;
+    border-radius: 0;
+    background: linear-gradient(180deg, #ff4a4a 0%, #ff0000 45%, #b00000 100%);
+    box-shadow: 0 0 18px 4px rgba(255, 0, 0, 0.55);
+  }
+}
+@keyframes cylonShrink {
+  from { width: 100%; max-width: 100%; }
+}
+body:not(.cylon-game-live) .cylon-eye {
+  animation: cylonIntro 11.7s linear forwards, cylonFill 0.9s ease-out 11.7s forwards;
+}
+body:not(.cylon-game-live) .cylon-eye::before,
+body:not(.cylon-game-live) .cylon-eye::after {
+  animation: cylonTrail 2.6s ease-in-out infinite alternate, cylonFade 0.6s ease-out 11.7s forwards;
+}
+@keyframes cylonFade {
+  to { opacity: 0; }
+}
+body.cylon-game-live .cylon-eye {
+  animation: cylonShrink 0.7s ease-out, cylonSweep 2.6s ease-in-out -1.3s infinite alternate;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .cylon-eye,
+  .cylon-eye::after {
+    animation: none;
+  }
+
+  .cylon-eye {
+    left: 50%;
+  }
+
+  body:not(.cylon-game-live) .cylon-eye {
+    animation: cylonFill 0s forwards;
+  }
+
+  .cylon-eye::after {
+    opacity: 0.4;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(
+      ellipse 70% 60% at 50% 50%,
+      rgba(255, 40, 40, 0.4),
+      transparent 70%
+    );
+  }
+}
+
+

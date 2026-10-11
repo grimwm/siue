@@ -7,11 +7,15 @@
  * ignorant of it. It rewrites only the version value inside a recognised
  * reference:
  *   - site.css and main.js, the site shell;
- *   - games/cylon/cylon.css, the mounted game's stylesheet;
+ *   - games/cylon/css/*.css, the mounted game's stylesheets, one <link> each.
+ *     The order of those <link> tags is the cascade, so the page must list
+ *     them in the order below, and every file in the folder must be linked;
  *   - games/cylon/cylon.js, the mounted game's entry module, loaded by an
  *     import() in the page's module script.
  * Each reference must appear exactly once, or nothing is written and the
- * problem is reported.
+ * problem is reported. The game's stylesheets are linked rather than
+ * @imported from one file: an @import is fetched only after its parent
+ * downloads, one more round trip before the home page paints.
  *
  *   php tools/site-versions.php          write index.html if it is stale
  *   php tools/site-versions.php --check  report it stale, exit 1 if so
@@ -38,9 +42,22 @@ const SITE_VERSIONS_PAGE = 'index.html';
 const SITE_VERSIONS_REFS = [
     ['attr', 'site.css'],
     ['attr', 'main.js'],
-    ['attr', 'games/cylon/cylon.css'],
+    ['attr', 'games/cylon/css/eye.css'],
+    ['attr', 'games/cylon/css/nav.css'],
+    ['attr', 'games/cylon/css/help.css'],
+    ['attr', 'games/cylon/css/hud.css'],
+    ['attr', 'games/cylon/css/gameover.css'],
+    ['attr', 'games/cylon/css/settings.css'],
+    ['attr', 'games/cylon/css/controls.css'],
+    ['attr', 'games/cylon/css/fx.css'],
+    ['attr', 'games/cylon/css/units.css'],
+    ['attr', 'games/cylon/css/world.css'],
+    ['attr', 'games/cylon/css/intro.css'],
     ['import', 'games/cylon/cylon.js'],
 ];
+
+/** The folder of the game's stylesheets, relative to the site root. */
+const SITE_VERSIONS_CSS_DIR = 'games/cylon/css';
 
 /** The cache-buster for a file: a short hash of its content. */
 function site_versions_hash(string $content): string
@@ -78,6 +95,30 @@ function site_versions_apply(string $html, string $siteDir): array
         if ($count !== 1) {
             $problems[] = SITE_VERSIONS_PAGE . " must reference $path?v=... exactly once (found $count)";
         }
+    }
+    // The stylesheets are one cascade: each file in the folder is linked, and
+    // the links keep the order of SITE_VERSIONS_REFS.
+    $linked = array_values(array_filter(
+        array_column(SITE_VERSIONS_REFS, 1),
+        fn(string $path): bool => str_starts_with($path, SITE_VERSIONS_CSS_DIR . '/')
+    ));
+    foreach (glob("$siteDir/" . SITE_VERSIONS_CSS_DIR . '/*.css') ?: [] as $file) {
+        $path = SITE_VERSIONS_CSS_DIR . '/' . basename($file);
+        if (!in_array($path, $linked, true)) {
+            $problems[] = "$path is not in SITE_VERSIONS_REFS, so " . SITE_VERSIONS_PAGE . ' would not link it';
+        }
+    }
+    $at = [];
+    foreach ($linked as $path) {
+        $pos = strpos($out, 'href="' . $path . '?v=');
+        if ($pos !== false) {
+            $at[] = $pos;
+        }
+    }
+    $sorted = $at;
+    sort($sorted);
+    if ($at !== $sorted) {
+        $problems[] = SITE_VERSIONS_PAGE . ' must link games/cylon/css/*.css in the order of SITE_VERSIONS_REFS';
     }
     return $problems ? [$html, $problems] : [$out, []];
 }

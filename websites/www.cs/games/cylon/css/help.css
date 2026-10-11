@@ -1,0 +1,117 @@
+/* Cylon Defense: The How to Play overlay.
+ * One of the stylesheets index.html links in order; the order is the cascade (README.md, "Stylesheets"). */
+.cylon-help {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(4, 6, 10, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+
+.cylon-help[hidden] {
+  display: none !important;
+}
+
+
+.cylon-help-panel {
+  width: min(100%, 24rem);
+  max-height: min(88vh, 36rem);
+  overflow: auto;
+  padding: 1.35rem 1.25rem 1.25rem;
+  background: linear-gradient(180deg, #1a2030 0%, #10151f 100%);
+  border: 1px solid var(--rail-edge);
+  box-shadow:
+    0 0 0 1px rgba(255, 60, 60, 0.15),
+    0 20px 50px rgba(0, 0, 0, 0.55);
+  text-align: left;
+}
+
+
+.cylon-help-kicker {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--steel);
+  text-align: center;
+}
+
+
+.cylon-help-title {
+  margin: 0.35rem 0 0.35rem;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--crimson-hot);
+  text-shadow: 0 0 16px rgba(255, 40, 40, 0.45);
+  text-align: center;
+}
+
+
+.cylon-help-platform {
+  margin: 0 0 0.9rem;
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--steel-bright);
+  text-align: center;
+}
+
+
+.cylon-help-body {
+  margin: 0 0 1rem;
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+
+.cylon-help-body[hidden] {
+  display: none !important;
+}
+
+
+.cylon-help-body ol {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+
+.cylon-help-body li {
+  margin: 0 0 0.55rem;
+}
+
+
+.cylon-help-body li:last-child {
+  margin-bottom: 0;
+}
+
+
+.cylon-help-body kbd {
+  display: inline-block;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--rail-edge);
+  border-bottom-width: 2px;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--crimson-hot);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+
+.cylon-help-panel .cylon-gameover-btn {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+

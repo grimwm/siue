@@ -1,0 +1,191 @@
+/* Cylon Defense: The grenade blast, the scorched holes, and the page rules that hold while a run is live.
+ * One of the stylesheets index.html links in order; the order is the cascade (README.md, "Stylesheets"). */
+.cylon-grenade-blast {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  margin: -150px 0 0 -150px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1063;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 220, 0.95) 0%,
+    rgba(255, 140, 40, 0.75) 28%,
+    rgba(255, 40, 20, 0.45) 52%,
+    transparent 70%
+  );
+  box-shadow: 0 0 28px 10px rgba(255, 100, 40, 0.55);
+  animation: grenadeBlast 0.45s ease-out forwards;
+}
+
+
+@keyframes grenadeBlast {
+  0% {
+    transform: scale(0.25);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+
+
+/* Destruction holes — scorched void + rim glitch over page content */
+.cylon-hole {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1059;
+  margin: 0;
+  transform: translate(-50%, -50%);
+  background:
+    radial-gradient(
+      circle,
+      rgba(8, 4, 2, 0.92) 0%,
+      rgba(20, 10, 6, 0.78) 38%,
+      rgba(40, 18, 10, 0.45) 58%,
+      transparent 72%
+    );
+  mix-blend-mode: multiply;
+  box-shadow:
+    0 0 0 1px rgba(255, 80, 40, 0.25) inset,
+    0 0 18px 4px rgba(0, 0, 0, 0.35);
+  opacity: 1;
+  will-change: opacity, transform;
+}
+
+
+.cylon-hole-glitch {
+  position: absolute;
+  inset: -6%;
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle,
+      transparent 52%,
+      rgba(255, 60, 40, 0.35) 62%,
+      rgba(80, 200, 255, 0.2) 68%,
+      transparent 78%
+    );
+  mix-blend-mode: screen;
+  animation: holeGlitch 0.12s steps(2, end) infinite;
+  opacity: 0.85;
+}
+
+
+.cylon-hole.is-fading {
+  transition: opacity var(--hole-fade-ms, 1000ms) ease-out;
+  opacity: 0;
+}
+
+
+.cylon-hole.is-fading .cylon-hole-glitch {
+  animation: none;
+  opacity: 0;
+  transition: opacity 0.35s ease-out;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .cylon-hole-glitch {
+    animation: none;
+    opacity: 0.4;
+    filter: none;
+  }
+}
+
+
+.interest-list,
+.course-list,
+.project-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+
+.interest-list li,
+.course-list li {
+  position: relative;
+  padding: 0.35rem 0 0.35rem 1.1rem;
+  color: var(--text);
+}
+
+
+.interest-list li::before,
+.course-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.85em;
+  width: 0.45rem;
+  height: 2px;
+  background: var(--crimson);
+  box-shadow: 0 0 6px rgba(255, 40, 40, 0.55);
+}
+
+
+.cylon-gradient {
+  /* superseded by .cylon-scanner; keep harmless fallback */
+  background: var(--rail);
+}
+
+
+/* Behind page text while Game On — bots spawn here, then rise to the battlefield */
+.cylon-ambush-under {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  max-width: 100%;
+  z-index: 1055;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+
+/* Page sits above ambush-under so bots can hide behind letters */
+body.cylon-game-live main {
+  position: relative;
+  z-index: 1058;
+}
+
+
+/* No text highlight / long-press select while fighting */
+body.cylon-game-live,
+body.cylon-game-live * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none;
+}
+
+
+/* Scattered page — no point scrolling (wheel/touch blocked in JS too) */
+body.cylon-game-live {
+  overscroll-behavior: none;
+}
+
+
+body.cylon-game-live ::selection {
+  background: transparent;
+  color: inherit;
+}
+
+
+/* Block accidental link/UI clicks in page content; scroll still works */
+body.cylon-game-live main a,
+body.cylon-game-live main button,
+body.cylon-game-live main input,
+body.cylon-game-live main select,
+body.cylon-game-live main textarea,
+body.cylon-game-live main label,
+body.cylon-game-live main summary,
+body.cylon-game-live main [role="link"],
+body.cylon-game-live main [role="button"] {
+  pointer-events: none !important;
+  cursor: default;
+}
+
+

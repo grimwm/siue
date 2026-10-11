@@ -44,7 +44,17 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <link href="site.css?v=6080beaf2a" rel="stylesheet">
-<link href="games/cylon/cylon.css?v=a736695ea3" rel="stylesheet">
+<link href="games/cylon/css/eye.css?v=b1b8b1e855" rel="stylesheet">
+<link href="games/cylon/css/nav.css?v=0801887fbb" rel="stylesheet">
+<link href="games/cylon/css/help.css?v=1a91ca8063" rel="stylesheet">
+<link href="games/cylon/css/hud.css?v=00884fe12d" rel="stylesheet">
+<link href="games/cylon/css/gameover.css?v=02983236b5" rel="stylesheet">
+<link href="games/cylon/css/settings.css?v=b117352054" rel="stylesheet">
+<link href="games/cylon/css/controls.css?v=885650b81f" rel="stylesheet">
+<link href="games/cylon/css/fx.css?v=495c940bea" rel="stylesheet">
+<link href="games/cylon/css/units.css?v=eda612a040" rel="stylesheet">
+<link href="games/cylon/css/world.css?v=b860bc34a0" rel="stylesheet">
+<link href="games/cylon/css/intro.css?v=b6955ef83f" rel="stylesheet">
 </head>
 
 <body>
@@ -222,7 +232,7 @@
   // list's ?game= link and Play button call; a game that fails to load must
   // not take the list down with it.
   try {
-    const { initializeCylonEffects } = await import('./games/cylon/cylon.js?v=577443a2e5');
+    const { initializeCylonEffects } = await import('./games/cylon/cylon.js?v=9e6ac8e99b');
     await initializeCylonEffects({ onTheme: applyCombatTheme });
   } catch (err) {
     console.error('Cylon failed to start', err);

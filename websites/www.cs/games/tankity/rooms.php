@@ -17,8 +17,11 @@
 //
 // Storage: rooms live in SysV shared memory, never on disk. A host restart
 // wipes the shelf, which is the point: rooms are play sessions, not records.
-// (Score files stay on disk next to where rooms used to be.) One semaphore
-// guards the whole registry, so concurrent shots cannot corrupt each other.
+// (Score files stay on disk next to where rooms used to be.) Each room is its
+// own shared-memory segment with its own semaphore, both keyed by the room's
+// code and allocated when the room is created, so a request only ever waits
+// for the one room it touches. A small registry lists the live codes; it is
+// written only when a room is created or closed.
 declare(strict_types=1);
 
 // A JSON API must never leak diagnostics into its output: one stray warning
@@ -63,21 +66,11 @@ function room_live_secs(): int
 // longer holds one of the scarce slots. */
 function room_count(): int
 {
-    return room_shm_count();
-}
-function room_shm_count(): int
-{
-    $lock = room_shm_lock();
-    $reg = room_registry_get();
-    room_unlock($lock);
     $live = 0;
     $cutoff = time() - room_live_secs();
-    foreach ($reg as $room) {
-        if (!is_array($room)) {
-            continue;
-        }
-        $t = $room['touched'] ?? $room['created'] ?? 0;
-        if ($t >= $cutoff) {
+    foreach (array_keys(room_registry_read()) as $code) {
+        $head = room_peek((string) $code);
+        if ($head !== null && $head['touched'] >= $cutoff) {
             $live++;
         }
     }
@@ -166,95 +159,266 @@ function room_shm_key(): int
     $k = @ftok(__FILE__, 'R');
     return $k === -1 ? 0x54414e4b : $k;
 }
-const ROOM_SHM_SIZE = 2097152;
-const ROOM_SHM_VAR = 1;
+/* Room segments are sized with headroom: a room serializes to about 30-45 KB,
+// and Linux backs only the pages actually written. */
+const ROOM_SEG_BYTES = 131072;
+// A segment starts with three big-endian uint32s: the length of the
+// serialized room that follows, then touched and created (unix seconds), so
+// the idle rules can read a room's age without taking its lock. Length 0
+// means a segment that has not been written yet.
+const ROOM_SEG_HEAD = 12;
+const ROOM_REGISTRY_BYTES = 262144;
+const ROOM_REGISTRY_VAR = 1;
 /* Rooms live in SysV shared memory, full stop: no disk fallback. Without
-// the semaphore functions every room endpoint honestly reports the store
-// as unavailable instead of serving a second, divergent shelf. */
+// the extensions every room endpoint honestly reports the store as
+// unavailable instead of serving a second, divergent shelf. */
 function room_use_shm(): bool
 {
     static $v = null;
     if ($v === null) {
-        $v = function_exists('sem_get') && function_exists('shm_attach');
+        $v = function_exists('sem_get') && function_exists('shm_attach') && function_exists('shmop_open');
     }
     return $v;
 }
-/* Crash-proof shelf lock. A PHP fatal (timeout, memory limit) between
-// acquire and release would otherwise wedge the semaphore at zero and brick
-// every room: shutdown always lets go, acquisition never blocks forever,
-// and a lock held far past any millisecond critical section belongs to a
-// holder that died hard (kill -9), so it is reset instead of obeyed. */
-$ROOM_SHM_DEPTH = 0;
-$ROOM_SHM_HELD = false;
-function room_shm_lock()
+/* A room's key comes from its code; nothing is reserved in advance. */
+function room_key(string $code, ?int $base = null): int
 {
-    global $ROOM_SHM_DEPTH, $ROOM_SHM_HELD;
-    static $guard = false;
-    if (!$guard) {
-        $guard = true;
-        register_shutdown_function('room_shm_release_all');
-    }
-    if ($ROOM_SHM_DEPTH > 0) {
-        $ROOM_SHM_DEPTH++;
-        return @sem_get(room_shm_key(), 1);
-    }
-    $deadline = microtime(true) + 5.0;
-    while (true) {
-        $sem = @sem_get(room_shm_key(), 1);
-        if ($sem !== false && @sem_acquire($sem, true)) {
-            $ROOM_SHM_DEPTH = 1;
-            $ROOM_SHM_HELD = true;
-            return $sem;
-        }
-        if (microtime(true) >= $deadline) {
-            break;
-        }
-        usleep(50000);
-    }
-    $sem = @sem_get(room_shm_key(), 1);
-    if ($sem !== false) {
-        @sem_remove($sem);
-    }
-    $sem = @sem_get(room_shm_key(), 1);
-    if ($sem !== false && @sem_acquire($sem, true)) {
-        $ROOM_SHM_DEPTH = 1;
-        $ROOM_SHM_HELD = true;
-        return $sem;
-    }
-    room_json_out(500, ['error' => 'room memory is unavailable on this server']);
+    return (($base ?? room_shm_key()) ^ crc32('room:' . $code)) & 0x7fffffff;
 }
-function room_shm_release_all(): void
+function room_registry_key(?int $base = null): int
 {
-    global $ROOM_SHM_DEPTH, $ROOM_SHM_HELD;
-    if (!$ROOM_SHM_HELD) {
-        return;
-    }
-    $ROOM_SHM_HELD = false;
-    $ROOM_SHM_DEPTH = 0;
-    $sem = @sem_get(room_shm_key(), 1);
-    if ($sem !== false) {
-        @sem_release($sem);
-    }
+    return (($base ?? room_shm_key()) ^ crc32('registry')) & 0x7fffffff;
 }
-function room_registry_get(): array
+
+/* ---- the registry: live codes, for the cap, occupancy and the sweep ---- */
+/* Read with no lock: it is a display, a moment of staleness is fine. A read
+// that races a writer can come back torn, so it is retried. */
+function room_registry_read(): array
 {
-    $id = @shm_attach(room_shm_key(), ROOM_SHM_SIZE);
+    $id = @shm_attach(room_registry_key(), ROOM_REGISTRY_BYTES);
     if ($id === false) {
         return [];
     }
-    $v = @shm_get_var($id, ROOM_SHM_VAR);
+    $reg = [];
+    for ($i = 0; $i < 3; $i++) {
+        $v = @shm_get_var($id, ROOM_REGISTRY_VAR);
+        if (is_array($v)) {
+            $reg = $v;
+            break;
+        }
+    }
     @shm_detach($id);
-    return is_array($v) ? $v : [];
+    return $reg;
 }
-function room_registry_put(array $reg): bool
+/* Read-modify-write under the registry's own brief lock. The callback gets
+// the registry and returns the new one, or null to leave it as it is; the
+// result of this call is the callback's second return value, if any. */
+function room_registry_update(callable $fn)
 {
-    $id = @shm_attach(room_shm_key(), ROOM_SHM_SIZE);
-    if ($id === false) {
+    $sem = @sem_get(room_registry_key(), 1);
+    if ($sem === false || !@sem_acquire($sem)) {
+        return null;
+    }
+    $id = @shm_attach(room_registry_key(), ROOM_REGISTRY_BYTES);
+    $out = null;
+    if ($id !== false) {
+        $v = @shm_get_var($id, ROOM_REGISTRY_VAR);
+        [$new, $out] = $fn(is_array($v) ? $v : []);
+        if ($new !== null) {
+            @shm_put_var($id, ROOM_REGISTRY_VAR, $new);
+        }
+        @shm_detach($id);
+    }
+    @sem_release($sem);
+    return $out;
+}
+
+/* ---- one room's segment ---- */
+/* Crash safety. A room is held through its own semaphore, taken with a
+// blocking sem_acquire (the kernel queues waiters; there is no sleep loop and
+// a waiter never removes a semaphore on a timeout). PHP's sem_get defaults to
+// auto_release, which also puts the acquire on the kernel's undo list, so a
+// request that ends, fatals or is killed lets go of what it held; the
+// shutdown handler below releases explicitly as well. */
+$ROOM_HELD = [];
+function room_release_all(): void
+{
+    global $ROOM_HELD;
+    foreach ($ROOM_HELD as $lock) {
+        room_unlock($lock);
+    }
+}
+function room_hold(array $lock): array
+{
+    global $ROOM_HELD;
+    static $guard = false;
+    if (!$guard) {
+        $guard = true;
+        register_shutdown_function('room_release_all');
+    }
+    $ROOM_HELD[$lock['key']] = $lock;
+    return $lock;
+}
+/* Opens an existing room's segment and locks the room: blocking, or with
+// $wait false a held room answers null at once. Null also means the room does
+// not exist (or vanished while this waited). The handle carries the segment
+// and the semaphore for the caller's critical section. */
+function room_lock(string $code, bool $wait): ?array
+{
+    $key = room_key($code);
+    $shm = @shmop_open($key, 'w', 0, 0);
+    if ($shm === false) {
+        return null;
+    }
+    $sem = @sem_get($key, 1);
+    if ($sem === false) {
+        room_json_out(500, ['error' => 'room memory is unavailable on this server']);
+    }
+    // A semaphore removed under a waiter makes this fail: the room was closed.
+    if (!@sem_acquire($sem, !$wait)) {
+        return null;
+    }
+    return room_hold(['sem' => $sem, 'shm' => $shm, 'key' => $key, 'code' => $code, 'open' => true]);
+}
+function room_unlock($lock): void
+{
+    global $ROOM_HELD;
+    if (!is_array($lock) || !($lock['open'] ?? false)) {
+        return;
+    }
+    unset($ROOM_HELD[$lock['key']]);
+    @sem_release($lock['sem']);
+}
+/* The room in a locked segment, or null when nothing readable is there. */
+function room_seg_read($shm): ?array
+{
+    $h = room_seg_head($shm);
+    if ($h === null || $h['len'] === 0 || $h['len'] > ROOM_SEG_BYTES - ROOM_SEG_HEAD) {
+        return null;
+    }
+    $raw = @shmop_read($shm, ROOM_SEG_HEAD, $h['len']);
+    $v = is_string($raw) ? @unserialize($raw, ['allowed_classes' => false]) : false;
+    return is_array($v) ? $v : null;
+}
+function room_seg_head($shm): ?array
+{
+    $raw = @shmop_read($shm, 0, ROOM_SEG_HEAD);
+    if (!is_string($raw) || strlen($raw) !== ROOM_SEG_HEAD) {
+        return null;
+    }
+    $h = unpack('Nlen/Ntouched/Ncreated', $raw);
+    return $h === false ? null : $h;
+}
+/* Header and room in one write, so a reader sees either the old room or the
+// new one. False when the room has outgrown its segment. */
+function room_seg_write($shm, array $room): bool
+{
+    $raw = serialize($room);
+    if (strlen($raw) > ROOM_SEG_BYTES - ROOM_SEG_HEAD) {
         return false;
     }
-    $ok = @shm_put_var($id, ROOM_SHM_VAR, $reg);
-    @shm_detach($id);
-    return (bool) $ok;
+    $t = (int) ($room['touched'] ?? 0);
+    $c = (int) ($room['created'] ?? $t);
+    return @shmop_write($shm, pack('NNN', strlen($raw), $t, $c) . $raw, 0) > 0;
+}
+/* A room's header with no lock, or null when it does not exist (yet). For
+// displays and the idle test only. */
+function room_peek(string $code): ?array
+{
+    $shm = @shmop_open(room_key($code), 'a', 0, 0);
+    if ($shm === false) {
+        return null;
+    }
+    $h = room_seg_head($shm);
+    return $h === null || $h['len'] === 0 ? null : $h;
+}
+/* The idle rules: nobody has touched it inside the live window, or it is
+// older than the day limit. Takes a room or a header. */
+function room_idle(array $r, ?int $now = null): bool
+{
+    $now = $now ?? time();
+    $t = $r['touched'] ?? $r['created'] ?? 0;
+    return $now - $t > room_live_secs() || $now - ($r['created'] ?? $t) > room_max_age();
+}
+/* Creates a room's segment and locks it, nothing written yet. Mode 'n' makes
+// the kernel create it only if no segment has the key, atomically, so a
+// collision or a race with another create just draws another code. */
+function room_alloc(?callable $nextCode = null): ?array
+{
+    $nextCode = $nextCode ?? fn() => room_new_code(fn($c) => false);
+    for ($try = 0; $try < 50; $try++) {
+        $code = $nextCode();
+        $key = room_key($code);
+        if ($key === room_registry_key()) {
+            continue;
+        }
+        $shm = @shmop_open($key, 'n', 0600, ROOM_SEG_BYTES);
+        if ($shm === false) {
+            continue;
+        }
+        $sem = @sem_get($key, 1);
+        if ($sem === false || !@sem_acquire($sem)) {
+            @shmop_delete($shm);
+            room_json_out(500, ['error' => 'room memory is unavailable on this server']);
+        }
+        return room_hold(['sem' => $sem, 'shm' => $shm, 'key' => $key, 'code' => $code, 'open' => true]);
+    }
+    room_json_out(500, ['error' => 'room memory is unavailable on this server']);
+}
+/* Registers a freshly written room, unless that would pass the cap: the
+// check and the add happen under the registry lock, so the cap is exact.
+// Entries whose segment is gone are dropped on the way. */
+function room_register(string $code, int $max): bool
+{
+    $cutoff = time() - room_live_secs();
+    $ok = room_registry_update(function (array $reg) use ($code, $max, $cutoff): array {
+        $live = 0;
+        foreach (array_keys($reg) as $c) {
+            $c = (string) $c;
+            $head = room_peek($c);
+            if ($head === null) {
+                unset($reg[$c]);
+            } elseif ($c !== $code && $head['touched'] >= $cutoff) {
+                $live++;
+            }
+        }
+        if ($live >= $max) {
+            return [$reg, false];
+        }
+        $reg[$code] = ['created' => time()];
+        return [$reg, true];
+    });
+    return $ok === true;
+}
+/* Closes a room the caller holds: mark it closed and save, drop it from the
+// registry, then delete the segment and remove the semaphore. A request that
+// got the room before this (still attached) reads "closed"; one that comes
+// after finds no segment. Either way it is the 404. */
+function room_close($lock): void
+{
+    if (!is_array($lock)) {
+        return;
+    }
+    $raw = serialize(['code' => $lock['code'], 'closed' => true]);
+    @shmop_write($lock['shm'], pack('NNN', strlen($raw), 0, 0) . $raw, 0);
+    $code = $lock['code'];
+    room_registry_update(function (array $reg) use ($code): array {
+        unset($reg[$code]);
+        return [$reg, null];
+    });
+    @shmop_delete($lock['shm']);
+    room_unlock($lock);
+    @sem_remove($lock['sem']);
+}
+/* Drops a room whose creation failed after allocation. */
+function room_discard($lock): void
+{
+    if (!is_array($lock)) {
+        return;
+    }
+    @shmop_delete($lock['shm']);
+    room_unlock($lock);
+    @sem_remove($lock['sem']);
 }
 function room_json_out(int $code, array $payload): void
 {
@@ -1403,66 +1567,79 @@ function room_load(string $code, bool $create = false): ?array
     if (!room_use_shm()) {
         return null;
     }
-    $lock = room_shm_lock();
-    $reg = room_registry_get();
-    return [$reg[$code] ?? null, $lock, $code];
+    $lock = room_lock($code, true);
+    if ($lock === null) {
+        return [null, null, $code];
+    }
+    $room = room_seg_read($lock['shm']);
+    if ($room !== null && ($room['code'] ?? null) === $code && !($room['closed'] ?? false)) {
+        // Whoever locks a room clears it out when it is idle.
+        if (room_idle($room)) {
+            room_close($lock);
+            return [null, null, $code];
+        }
+        return [$room, $lock, $code];
+    }
+    // Closed (or never written): the closer is about to delete it. If the
+    // segment is already gone this lock sat on a semaphore made after the
+    // close, which nothing else will ever remove.
+    $gone = @shmop_open($lock['key'], 'a', 0, 0) === false;
+    room_unlock($lock);
+    if ($gone) {
+        @sem_remove($lock['sem']);
+    }
+    return [null, null, $code];
 }
 function room_save($lock, string $code, array $room): bool
 {
-    if (!room_use_shm()) {
+    if (!room_use_shm() || !is_array($lock)) {
         return false;
     }
     $room['touched'] = time();
-    $reg = room_registry_get();
-    $reg[$code] = $room;
-    return room_registry_put($reg);
-}
-function room_unlock($lock): void
-{
-    global $ROOM_SHM_DEPTH, $ROOM_SHM_HELD;
-    if ($lock === null) {
-        return;
-    }
-    if ($ROOM_SHM_DEPTH > 1) {
-        $ROOM_SHM_DEPTH--;
-        return;
-    }
-    $ROOM_SHM_DEPTH = 0;
-    $ROOM_SHM_HELD = false;
-    @sem_release($lock);
+    return room_seg_write($lock['shm'], $room);
 }
 // The shelf never holds more rooms than matter: anything nobody has touched
 // inside the live window is dropped, and day-old records go whatever happens.
 // Anything with a browser still open heartbeats on every state poll, so only
-// truly gone rooms vanish.
+// truly gone rooms vanish. The walk reads each room's header without a lock
+// and only touches, without waiting, a room that looks idle; a busy room is
+// skipped. Registry entries whose segment is gone are dropped.
 function room_sweep(): void
 {
-    room_shm_sweep();
-}
-function room_shm_sweep(): void
-{
-    $lock = room_shm_lock();
-    $reg = room_registry_get();
     $now = time();
-    $maxAge = room_max_age();
-    $live = room_live_secs();
-    $changed = false;
-    foreach ($reg as $code => $room) {
-        if (!is_array($room)) {
-            unset($reg[$code]);
-            $changed = true;
+    $dead = [];
+    foreach (array_keys(room_registry_read()) as $code) {
+        $code = (string) $code;
+        $shm = @shmop_open(room_key($code), 'a', 0, 0);
+        if ($shm === false) {
+            $dead[] = $code;
             continue;
         }
-        $t = $room['touched'] ?? $room['created'] ?? 0;
-        if ($now - $t > $live || $now - ($room['created'] ?? $t) > $maxAge) {
-            unset($reg[$code]);
-            $changed = true;
+        $head = room_seg_head($shm);
+        if ($head === null || $head['len'] === 0 || !room_idle($head, $now)) {
+            continue;
+        }
+        $lock = room_lock($code, false);
+        if ($lock === null) {
+            continue;
+        }
+        $room = room_seg_read($lock['shm']);
+        if ($room === null || ($room['closed'] ?? false) || room_idle($room, $now)) {
+            room_close($lock);
+        } else {
+            room_unlock($lock);
         }
     }
-    if ($changed) {
-        room_registry_put($reg);
+    if ($dead) {
+        room_registry_update(function (array $reg) use ($dead): array {
+            foreach ($dead as $c) {
+                if (room_peek($c) === null) {
+                    unset($reg[$c]);
+                }
+            }
+            return [$reg, null];
+        });
     }
-    room_unlock($lock);
 }
 /* Tanks ride the terrain down after craters (server side, snapped). */
 function room_settle_tanks(array &$room): void
@@ -1720,9 +1897,8 @@ if ($action === 'leave' && $method === 'POST') {
         room_shop_settle($room);
         $ok = room_save($fh, $path, $room);
     } else {
-        $reg = room_registry_get();
-        unset($reg[$code]);
-        $ok = room_registry_put($reg);
+        room_close($fh);
+        $ok = true;
     }
     room_unlock($fh);
     room_json_out($ok ? 200 : 500, $ok ? ['ok' => true] : ['error' => 'store write failed']);
@@ -1762,9 +1938,8 @@ if ($action === 'create' && $method === 'POST') {
             room_json_out(422, ['error' => 'no such hills']);
         }
     }
-    $lock = room_shm_lock();
-    $reg = room_registry_get();
-    $code = room_new_code(fn($c) => isset($reg[$c]));
+    $lock = room_alloc();
+    $code = $lock['code'];
     $room = room_new($code, $initials);
     $room['map'] = $map;
     $token = room_rand_token();
@@ -1775,11 +1950,14 @@ if ($action === 'create' && $method === 'POST') {
         $room['seats'][$i] = room_idle_seat($i);
     }
     room_seat_economy($room, 0);
-    $room['touched'] = time();
-    $reg[$code] = $room;
-    if (!room_registry_put($reg)) {
-        room_unlock($lock);
+    if (!room_save($lock, $code, $room)) {
+        room_discard($lock);
         room_json_out(500, ['error' => 'store write failed']);
+    }
+    // The exact cap check: two creates racing for the last place cannot both win.
+    if (!room_register($code, $max)) {
+        room_discard($lock);
+        room_json_out(409, ['error' => "every room is taken ($max / $max). Try again later."]);
     }
     room_unlock($lock);
     room_json_out(200, ['ok' => true, 'code' => $code, 'seat' => 0, 'token' => $token, 'csrf' => $room['csrf']]);

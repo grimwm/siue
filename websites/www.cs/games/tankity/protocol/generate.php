@@ -29,18 +29,35 @@ $proc = proc_open(
     null,
     array_merge(getenv(), ['TANKITY_SHM_KEY' => (string) $shmKey, 'TANKITY_MAX_ROOMS' => '2'])
 );
+/* Removes every segment and semaphore the private shelf made. */
+function room_test_wipe(int $base): void
+{
+    $id = @shm_attach(room_registry_key($base), ROOM_REGISTRY_BYTES);
+    $reg = $id === false ? [] : @shm_get_var($id, ROOM_REGISTRY_VAR);
+    foreach (array_keys(is_array($reg) ? $reg : []) as $c) {
+        $k = room_key((string) $c, $base);
+        $seg = @shmop_open($k, 'w', 0, 0);
+        if ($seg !== false) {
+            @shmop_delete($seg);
+        }
+        $sem = @sem_get($k, 1);
+        if ($sem !== false) {
+            @sem_remove($sem);
+        }
+    }
+    if ($id !== false) {
+        @shm_remove($id);
+    }
+    $sem = @sem_get(room_registry_key($base), 1);
+    if ($sem !== false) {
+        @sem_remove($sem);
+    }
+}
 $cleanup = function () use ($proc, $shmKey): void {
     if (is_resource($proc)) {
         proc_terminate($proc);
     }
-    $id = @shm_attach($shmKey, ROOM_SHM_SIZE);
-    if ($id !== false) {
-        @shm_remove($id);
-    }
-    $sem = @sem_get($shmKey, 1);
-    if ($sem !== false) {
-        @sem_remove($sem);
-    }
+    room_test_wipe($shmKey);
 };
 register_shutdown_function($cleanup);
 

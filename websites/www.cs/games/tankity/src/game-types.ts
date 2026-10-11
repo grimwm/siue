@@ -8,6 +8,7 @@ import type { DialogueLine } from './chatter.js';
 import type { FxSys } from './effects.js';
 import type { Phase } from './flow.js';
 import type { PreviewState } from './preview.js';
+import type { RoomSnapshot } from './protocol.js';
 import type { Boom, DrawTank, Spark } from './render.js';
 import type { AimChoice } from './ai.js';
 import type { Arsenal, Cloud, World } from './sim.js';
@@ -87,4 +88,19 @@ export interface GameState extends World {
   watchTurns: number; // drone-only turns since the player fell
   preview: PreviewState<HTMLElement | null> | null;
   windTop: number | undefined; // the wind gauge's top in world units, under the menu strip
+}
+
+/** What the page keeps of a room match: whose turn it reads as, the aim and
+ * drive it has not sent, the room snapshot waiting for the replay to drain,
+ * and the last snapshot it drew. */
+export interface MatchState {
+  myTurn: boolean;
+  aimDirty: boolean;
+  driveAcc: number;
+  driveT: number;
+  pendingRoom: RoomSnapshot | null;
+  lastPhase: string;
+  lastTurn: number;
+  lastRound: number;
+  initials: string;
 }

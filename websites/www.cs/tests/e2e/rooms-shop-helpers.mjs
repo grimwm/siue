@@ -21,10 +21,12 @@ export function landing(room, tank, angle, power) {
   return null;
 }
 
-/* The aim whose shell lands closest to the first living drone. */
+/* The aim whose shell lands closest to the first living drone, or, with every
+   drone down, to the other human (a round ends on one unit left standing). */
 export function bestAim(room, seat) {
   const me = room.tanks.find(t => t.seat === seat);
-  const foe = room.tanks.find(t => t.kind === 'ai' && t.hp > 0);
+  const foe = room.tanks.find(t => t.kind === 'ai' && t.hp > 0)
+    || room.tanks.find(t => t.seat !== seat && t.hp > 0);
   let best = null;
   for (let a = 10; a <= 170; a++) {
     for (let p = 10; p <= 100; p++) {
@@ -61,10 +63,12 @@ export async function reachShop(host, guest, code, roomState) {
 
 /* Both players lob shells straight up onto their own tanks (angle 90, power
    12, straight to the room server as the keyboard would) until the battery
-   takes the round and each sees the shop. */
+   takes the round and each sees the shop. Once both are wrecked the drones
+   fight on, one paced turn per poll, until one is left, so this waits longer
+   than a round the battery wins at once. */
 export async function loseRound(host, guest, code, roomState) {
   const seats = [[host, 'host', 0], [guest, 'guest', 1]];
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 160; i++) {
     if (await shopOpen(host.page) && await shopOpen(guest.page)) return;
     for (const [pl, name, seat] of seats) {
       const room = lastRoom(roomState[name]);

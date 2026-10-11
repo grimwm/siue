@@ -50,9 +50,11 @@ export function createReplay(env) {
     let volley = null;
     let fastNext = false;
     function startVolley() {
-        const fast = fastNext;
-        fastNext = false;
         const opener = queue.shift();
+        // A catch-up keeps a volley back at triple speed; so does a drone's
+        // volley fired with no human left standing.
+        const fast = fastNext || !!opener.watch;
+        fastNext = false;
         const events = [];
         while (queue.length && !isVolleyOpener(queue[0]))
             events.push(queue.shift());

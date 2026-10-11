@@ -2,7 +2,7 @@
 // js/flow.js (compiled from src/flow.ts) is a table of which event is legal in
 // which phase; this checks every legal move, that every other pair is
 // rejected, and walks a whole match from the demo to the match-over veil.
-import { PHASES, EVENTS, FLOW, transition } from './js/flow.js';
+import { PHASES, EVENTS, FLOW, transition, WATCH_SPEED, warSpeed, runWar } from './js/flow.js';
 
 let failed = 0;
 const check = (name, ok, detail = '') => {
@@ -77,12 +77,35 @@ go('playerUp'); go('fire'); go('shellsLanded'); expect('the player fires again',
 go('roundWon'); expect('round 1 is won', 'banner');
 go('shopOpen'); expect('the winnings are spent', 'shop');
 go('shopDone'); go('foeUp'); go('fire'); go('shellsLanded'); expect('round 2: a drone wrecks the tank', 'settle');
-go('tankLost'); expect('the round restarts on a fresh name card', 'banner');
-go('playerUp'); go('fire'); go('shellsLanded'); go('roundWon'); go('shopOpen'); expect('round 2 is won, shop again', 'shop');
+go('foeUp'); go('fire'); go('shellsLanded'); expect('the drones fight on while the player watches', 'settle');
+go('tankLost'); expect('the last drone standing ends the round on a name card', 'banner');
+go('shopOpen'); expect('a lost round goes through the shop too', 'shop');
+go('shopDone'); go('playerUp'); go('fire'); go('shellsLanded'); go('roundWon'); go('shopOpen'); expect('round 3 is won, shop again', 'shop');
 go('shopDone'); go('foeUp'); go('fire'); go('shellsLanded'); go('matchLost'); expect('the last tank is lost: match over', 'over');
 go('matchStart'); expect('a rematch starts over', 'banner');
 
 check('the script visited every phase', PHASES.every(p => trail.includes(p)), trail.join(' '));
+
+// The war speeds up once the player's tank is wrecked: three sub-steps a
+// frame, each the normal step, until the phase leaves think/fly/settle.
+check('watch speed is triple', WATCH_SPEED === 3);
+check('normal speed while the player stands', warSpeed(true, false) === 1);
+check('triple speed once the player is wrecked', warSpeed(false, false) === 3);
+check('the demo never speeds up', warSpeed(false, true) === 1 && warSpeed(true, true) === 1);
+{
+  // A fake clock: 60 frames of 1/60 s. A drone that needs 2 s of think time
+  // fires after 120 frames at normal speed and after 40 when watched.
+  const frames = speed => {
+    let thinkT = 2, f = 0;
+    while (thinkT > 0 && f < 1000) { f++; runWar(1 / 60, speed, d => { thinkT -= d; return thinkT > 0; }); }
+    return f;
+  };
+  check('a think delay takes 120 frames at normal speed', Math.abs(frames(1) - 120) <= 1, String(frames(1)));
+  check('a think delay takes a third of the frames when watched', Math.abs(frames(warSpeed(false, false)) - 40) <= 1, String(frames(3)));
+  let steps = 0;
+  check('runWar runs speed sub-steps of the same dt', runWar(0.05, 3, d => { steps += d; return true; }) === 3 && Math.abs(steps - 0.15) < 1e-9);
+  check('runWar stops when the phase leaves the war', runWar(0.05, 3, () => false) === 1);
+}
 
 console.log(failed ? `${failed} failed` : 'all passed');
 process.exit(failed ? 1 : 0);

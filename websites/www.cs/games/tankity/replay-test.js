@@ -232,5 +232,31 @@ function frames(rp, n) {
   check('clear forgets the queue and the volley', rp.idle() && rp.shooter() === null && rp.flying().length === 0);
 }
 
+/* ---- drones fighting on with no human standing: the volley plays at 3x ---- */
+{
+  const wallFrames = events => {
+    const host = makeHost();
+    const rp = createReplay(host.env);
+    rp.push(events);
+    let n = 0;
+    while (n < 5000) { rp.step(DT); n++; if (rp.idle()) break; }
+    return { n, host };
+  };
+  const volley = EVENTS.filter(e => e.t !== 'round').slice(0, 3); // opener, shot, hit
+  const normal = wallFrames(volley.map(e => ({ ...e })));
+  const watched = wallFrames(volley.map((e, i) => (i === 0 ? { ...e, watch: true } : { ...e })));
+  check('a watch volley still plays every event', watched.host.log.events.length === normal.host.log.events.length
+    && watched.host.log.launches === normal.host.log.launches && watched.host.log.blasts.length === normal.host.log.blasts.length);
+  check('a watch volley plays in a third of the frames', Math.abs(watched.n - normal.n / FAST_SPEED) <= 2,
+    `normal ${normal.n} watched ${watched.n}`);
+  // The next volley is back to normal speed: watch is per volley, not sticky.
+  const host = makeHost();
+  const rp = createReplay(host.env);
+  rp.push([{ ...volley[0], watch: true }, ...volley.slice(1), ...volley.map(e => ({ ...e }))]);
+  let n = 0, firstDone = 0;
+  while (n < 5000) { rp.step(DT); n++; if (!firstDone && host.log.events.filter(e => e.t === 'fire').length === 2) firstDone = n; if (rp.idle()) break; }
+  check('the volley after a watch volley plays at normal speed', Math.abs((n - firstDone) - normal.n) <= 3, `${n - firstDone} vs ${normal.n}`);
+}
+
 if (failed) { console.log(`\n${failed} failed`); process.exit(1); }
 console.log('\nreplay-test: ok');

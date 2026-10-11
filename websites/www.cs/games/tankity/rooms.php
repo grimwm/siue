@@ -841,9 +841,49 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
 /* One fully simulated shot (all pellets, all bomblets), server side. No
  * client can fake this. Every event is stamped with its moment in the volley
  * ('at'), and shot events carry their flight path, so clients replay it. */
+/* Drone-only pacing. While no human tank is standing the battle belongs to the
+// drones and the players only watch, so the server advances ONE drone turn per
+// poll, and only once the previous volley has had time to play on the clients.
+// Running the whole battle inline would blow past room_advance's guard and
+// past the event buffer before a client polled. room_pace_stamp records when a
+// volley fired and how long it plays (the latest shot landing or event offset
+// in it, plus a beat), never less than ROOM_DRONE_PACE_MIN. */
+const ROOM_DRONE_PACE_MIN = 2.0;
+const ROOM_VOLLEY_LINGER = 1.0;
+/* With no human standing the drones play three times as fast: their volleys
+// carry 'watch' => true (clients replay them at src/replay.ts FAST_SPEED, the
+// same 3) and the gap between them is a third as long. */
+const ROOM_DRONE_SPEED = 3.0;
+function room_pace_stamp(array &$room, array $events, int $from): void
+{
+    $span = 0.0;
+    for ($i = max(0, $from), $n = count($events); $i < $n; $i++) {
+        $span = max($span, (float) ($events[$i]['t1'] ?? 0.0), (float) ($events[$i]['at'] ?? 0.0));
+    }
+    $wait = max(ROOM_DRONE_PACE_MIN, $span + ROOM_VOLLEY_LINGER);
+    if (!empty($events[$from]['watch'])) {
+        $wait /= ROOM_DRONE_SPEED;
+    }
+    $room['pace'] = ['at' => microtime(true), 'wait' => $wait];
+}
+function room_pace_ready(array $room): bool
+{
+    $p = $room['pace'] ?? null;
+    return !$p || microtime(true) - (float) $p['at'] >= (float) $p['wait'];
+}
+function room_humans_alive(array $room): bool
+{
+    foreach ($room['tanks'] as $t) {
+        if ($t['kind'] === 'human' && $t['hp'] > 0) {
+            return true;
+        }
+    }
+    return false;
+}
 function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey): void
 {
     $room['shots'] = ($room['shots'] ?? 0) + 1; // a fresh turn clock follows each shot
+    $firstEvent = count($events) - 1; // the opener of this volley
     $tank = &$room['tanks'][$seatIdx];
     $weapons = room_weapons();
     $w = $weapons[$wkey] ?? $weapons['shell'];
@@ -899,6 +939,7 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
         room_stamp($events, $mark, $res[7]);
     }
     unset($tank);
+    room_pace_stamp($room, $events, $firstEvent);
 }
 /* Server-side drone AI: same ballistic search as the browser, with the same
  * round-scaled error, driven by the room rng stream. */
@@ -1192,7 +1233,12 @@ function room_advance(array &$room, array &$events): void
             $room['turn'] = $cur + 1;
             continue;
         }
-        // AI takes its turn right now, server side.
+        // AI takes its turn right now, server side. With no human standing the
+        // drones fight on one turn per poll, paced to the last volley.
+        $watching = !room_humans_alive($room);
+        if ($watching && !room_pace_ready($room)) {
+            return;
+        }
         $choice = room_ai_choose($room, $t);
         $room['tanks'][$cur]['angle'] = $choice['angle'];
         $room['tanks'][$cur]['power'] = $choice['power'];
@@ -1209,6 +1255,9 @@ function room_advance(array &$room, array &$events): void
         $me = $room['tanks'][$cur];
         $events[] = ['t' => 'aifire', 'seat' => $t['seat'], 'w' => $choice['wkey'],
             'x' => round($me['x'], 1), 'a' => round($me['angle'], 1), 'pw' => round($me['power'], 1)];
+        if ($watching) {
+            $events[count($events) - 1]['watch'] = true; // nobody left to play: clients speed it up
+        }
         room_fire_shot($room, $events, $cur, $choice['wkey']);
         if (room_round_settled($room)) {
             room_end_round($room, $events);
@@ -1217,24 +1266,28 @@ function room_advance(array &$room, array &$events): void
         // Pass the turn on like every other shot: without this the same
         // drone fires up to a dozen times per call and humans never move.
         $room['turn'] = $cur + 1;
+        if ($watching || !room_humans_alive($room)) {
+            return; // the last human just fell: the next drone waits for its poll
+        }
     }
 }
+/* A round ends when one unit is left standing, human or drone, or none (the
+// last two fell together). */
 function room_round_settled(array $room): bool
 {
-    $humans = false;
-    $ais = false;
+    $alive = 0;
     foreach ($room['tanks'] as $t) {
-        if ($t['hp'] <= 0) {
-            continue;
-        }
-        if ($t['kind'] === 'human') {
-            $humans = true;
-        } else {
-            $ais = true;
+        if ($t['hp'] > 0) {
+            $alive++;
         }
     }
-    return !$humans || !$ais;
+    return $alive <= 1;
 }
+/* Settle a round: only a human who is the last unit standing is paid (the
+// round bonus and prize, 'roundwin' with the winner's seat); a drone survivor
+// or nobody left is 'roundlost'. Every human whose tank was wrecked loses a
+// life, and at 0 is eliminated. No human with a life left ends the match;
+// otherwise the shop opens, won or lost. */
 function room_end_round(array &$room, array &$events): void
 {
     // Trick timers tick down on settled rounds.
@@ -1249,48 +1302,49 @@ function room_end_round(array &$room, array &$events): void
             $room['bunker'][$idx]--;
         }
     }
-    $humans = array_filter($room['tanks'], fn($t) => $t['kind'] === 'human' && $t['hp'] > 0);
-    $ais = array_filter($room['tanks'], fn($t) => $t['kind'] === 'ai' && $t['hp'] > 0);
-    if (count($ais) === 0 && count($humans) > 0) {
-        foreach ($humans as $t) {
-            $bonus = 750 + $room['round'] * 150;
-            $prize = 500 + $room['round'] * 100;
-            $room['scores'][$t['seat']] = ($room['scores'][$t['seat']] ?? 0) + $bonus;
-            $room['cash'][$t['seat']] = ($room['cash'][$t['seat']] ?? 0) + $prize;
+    $alive = array_values(array_filter($room['tanks'], fn($t) => $t['hp'] > 0));
+    $winner = count($alive) === 1 && $alive[0]['kind'] === 'human' ? $alive[0] : null;
+    $wrecked = [];
+    foreach ($room['tanks'] as $t) {
+        if ($t['hp'] <= 0) {
+            $wrecked[$t['seat']] = true;
         }
-        $room['phase'] = 'shop';
-        $room['shop'] = ['at' => microtime(true), 'ready' => []];
-        $events[] = ['t' => 'roundwin', 'round' => $room['round']];
-        return;
     }
-    if (count($humans) === 0) {
-        // Every human wrecked: lose a life room-wide, survivors return.
-        $anyLeft = false;
-        foreach ($room['seats'] as $idx => &$s) {
-            if (!$s['human']) {
-                continue;
-            }
+    $anyLeft = false;
+    foreach ($room['seats'] as $idx => &$s) {
+        if (!($s['human'] ?? false)) {
+            continue;
+        }
+        if (isset($wrecked[$idx])) {
             $s['lives'] = max(0, ($s['lives'] ?? 3) - 1);
-            if ($s['lives'] > 0) {
-                $anyLeft = true;
-            } else {
+            if ($s['lives'] <= 0) {
                 room_save_score($s['initials'], $room['scores'][$idx] ?? 0, $room);
                 $events[] = ['t' => 'eliminated', 'seat' => $idx];
             }
         }
-        unset($s);
-        if (!$anyLeft) {
-            $room['phase'] = 'over';
-            $events[] = ['t' => 'matchover'];
-            return;
+        if (($s['lives'] ?? 0) > 0) {
+            $anyLeft = true;
         }
-        // A lost round still goes through the shop (no winnings): every
-        // round starts from the shop, won or lost.
-        $room['phase'] = 'shop';
-        $room['shop'] = ['at' => microtime(true), 'ready' => []];
+    }
+    unset($s);
+    if ($winner !== null) {
+        $bonus = 750 + $room['round'] * 150;
+        $prize = 500 + $room['round'] * 100;
+        $room['scores'][$winner['seat']] = ($room['scores'][$winner['seat']] ?? 0) + $bonus;
+        $room['cash'][$winner['seat']] = ($room['cash'][$winner['seat']] ?? 0) + $prize;
+        $events[] = ['t' => 'roundwin', 'round' => $room['round'], 'seat' => $winner['seat']];
+    } else {
         $events[] = ['t' => 'roundlost', 'round' => $room['round']];
+    }
+    unset($room['pace']);
+    if (!$anyLeft) {
+        $room['phase'] = 'over';
+        $events[] = ['t' => 'matchover'];
         return;
     }
+    // Every round starts from the shop, won or lost.
+    $room['phase'] = 'shop';
+    $room['shop'] = ['at' => microtime(true), 'ready' => []];
 }
 /* File a room score into the same per-initials store as local play. */
 function room_save_score(string $initials, int $score, array $room): void
@@ -1415,12 +1469,16 @@ function room_settle_tanks(array &$room): void
     }
     unset($t);
 }
+/* Events a room keeps for late pollers. A drone-only battle makes one volley
+// per ROOM_DRONE_PACE_MIN seconds at most, a volley is a few dozen events, and
+// the busiest client polls every 1.6 s, so this holds many volleys' worth. */
+const ROOM_EVENT_KEEP = 240;
 function room_emit(array &$room, array $ev): void
 {
     $room['seq'] = ($room['seq'] ?? 0) + 1;
     $ev['seq'] = $room['seq'];
     $room['events'][] = $ev;
-    $room['events'] = array_slice($room['events'], -60);
+    $room['events'] = array_slice($room['events'], -ROOM_EVENT_KEEP);
 }
 /* 1-ups, same economy as local play. */
 function room_check_oneups(array &$room, array &$events, int $seat): void

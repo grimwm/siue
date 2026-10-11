@@ -125,9 +125,11 @@ export function createReplay(env: ReplayEnv): Replay {
   let fastNext = false;
 
   function startVolley(): void {
-    const fast = fastNext;
-    fastNext = false;
     const opener = queue.shift() as VolleyOpenerEvent;
+    // A catch-up keeps a volley back at triple speed; so does a drone's
+    // volley fired with no human left standing.
+    const fast = fastNext || !!opener.watch;
+    fastNext = false;
     const events: RoomEvent[] = [];
     while (queue.length && !isVolleyOpener(queue[0] as RoomEvent)) events.push(queue.shift() as RoomEvent);
     const shooter = env.tank(opener.seat);

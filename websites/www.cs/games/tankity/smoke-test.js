@@ -14,7 +14,12 @@ import { sweepHit } from './js/sim.js';
 import { els, makeEl, click, submit, document } from './tools/dom-stub.mjs';
 
 const __dirname = import.meta.dirname;
-const src = fs.readFileSync(path.join(__dirname, 'game.js'), 'utf8');
+const gameJs = fs.readFileSync(path.join(__dirname, 'game.js'), 'utf8');
+// The page's code is game.js and the typed modules it wires (src/*.ts); the checks that read
+// the source for a rule look at all of it, so they hold wherever a function lives.
+const moduleFiles = fs.readdirSync(path.join(__dirname, 'src')).filter(f => f.endsWith('.ts') && !f.endsWith('.check.ts')).sort();
+const moduleSrc = Object.fromEntries(moduleFiles.map(f => [f, fs.readFileSync(path.join(__dirname, 'src', f), 'utf8')]));
+const src = [gameJs, ...Object.values(moduleSrc)].join('\n');
 const audioSrc = fs.readFileSync(path.join(__dirname, 'src', 'audio.ts'), 'utf8');
 const renderSrc = fs.readFileSync(path.join(__dirname, 'src', 'render.ts'), 'utf8');
 const fxSrc = fs.readFileSync(path.join(__dirname, 'fx.js'), 'utf8');
@@ -345,7 +350,7 @@ function blockedOf(src) {
 check('blocked-parity',
   blockedOf(php) === blockedOf(src),
   blockedOf(src).split(',').length + ' entries');
-for (const [f, text] of [['game.js', src], ['index.html', html], ['game.css', css], ...phpFiles.map(f => [f, phpText[f]])]) {
+for (const [f, text] of [['game.js', gameJs], ...moduleFiles.map(m => ['src/' + m, moduleSrc[m]]), ['index.html', html], ['game.css', css], ...phpFiles.map(f => [f, phpText[f]])]) {
   check('no-dashes-' + f, !/[—–]/.test(text));
 }
 check('net-round-event', /e\.t === 'round'/.test(src) && /'t' => 'round'/.test(php));

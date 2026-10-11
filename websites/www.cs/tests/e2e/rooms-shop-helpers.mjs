@@ -6,6 +6,15 @@ export const shopOpen = page => page.evaluate(() => !document.getElementById('sh
 
 /* Where a shell lands: rooms.php's room_sim_shot, ported (gravity 95, wind
    push 2.2, speed 40 + 2.4 * power, fired from 20 px out along the barrel). */
+/* The newest room a page saw, with the hills from the newest snapshot that
+   carried them: polls leave the hills out while they have not changed. */
+export function withHills(list) {
+  const room = lastRoom(list);
+  if (!room || room.terrain) return room;
+  const held = [...list].reverse().find(r => Array.isArray(r.terrain));
+  return held ? { ...room, terrain: held.terrain } : null;
+}
+
 export function landing(room, tank, angle, power) {
   const rad = angle * Math.PI / 180;
   const speed = 40 + power * 2.4;
@@ -45,7 +54,7 @@ export async function reachShop(host, guest, code, roomState) {
   for (let i = 0; i < 80; i++) {
     if (await shopOpen(host.page) && await shopOpen(guest.page)) return;
     for (const [pl, name, seat] of seats) {
-      const room = lastRoom(roomState[name]);
+      const room = withHills(roomState[name]);
       if (!room || room.phase !== 'play' || room.turn !== seat || !room.csrf) continue;
       const aim = bestAim(room, seat);
       await pl.page.evaluate(async ({ code, token, csrf, angle, power }) => {

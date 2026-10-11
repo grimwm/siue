@@ -158,12 +158,14 @@ export interface KillEvent extends EventBase { t: 'kill'; seat: number; by: numb
 export interface ShieldEvent extends EventBase { t: 'shield'; seat: number; by: number }
 export interface LastStandEvent extends EventBase { t: 'laststand'; seat: number }
 export interface FizzleEvent extends EventBase { t: 'fizzle'; by: number; w: string }
+/** A drone that could not hurt anyone for a while switched strategy (hunter, bully, sniper, avenger, glory or lobber). */
+export interface TacticEvent extends EventBase { t: 'tactic'; seat: number; s: string }
 
 /** The events a snapshot carries, discriminated by `t`. */
 export type RoomEvent =
   | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent
   | FireEvent | AiFireEvent | AutoEvent
-  | ShotEvent | BurstEvent | HitEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent;
+  | ShotEvent | BurstEvent | HitEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
 
 export type RoomEventType = RoomEvent['t'];
 /** The events that open a volley. */

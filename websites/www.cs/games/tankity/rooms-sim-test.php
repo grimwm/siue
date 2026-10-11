@@ -634,6 +634,245 @@ room_end_round($room, $events);
 $check('another-human-with-lives-keeps-the-match', $room['phase'] === 'shop' && $room['seats'][0]['lives'] === 0
     && $room['seats'][1]['lives'] === 2 && in_array('eliminated', $types($events), true) && $types($events)[count($events) - 1] === 'roundwin');
 
+// Drone bracketing: a drone that keeps shooting at a target standing still
+// walks its shots in. The target is a tough human (nobody dies mid-test), the
+// ground is flat, and each turn is what the room's caller does for a drone:
+// choose, move if it wants to, fire the volley, which records the burst.
+$bracketRoom = function (int $seed, int $round, array $extra = []) use ($flatRoom) {
+    $mk = fn(int $seat, string $kind, float $x, int $dir) => ['seat' => $seat, 'kind' => $kind, 'name' => 'T' . $seat, 'x' => $x, 'y' => 400.0,
+        'angle' => 62.0, 'power' => 55.0, 'hp' => 100000, 'maxHp' => 100000, 'fuel' => 0.0, 'dirS' => $dir, 'ammo' => []];
+    $room = $flatRoom(array_merge([$mk(0, 'human', 200.0, 1), $mk(1, 'ai', 500.0, -1)], $extra));
+    $room['wind'] = 2.0;
+    $room['round'] = $round;
+    $room['rng'] = $seed;
+    $room['jammer'] = [];
+    return $room;
+};
+$droneTurn = function (array &$room, int $idx): float {
+    $choice = room_ai_choose($room, $room['tanks'][$idx]);
+    $room['tanks'][$idx]['angle'] = $choice['angle'];
+    $room['tanks'][$idx]['power'] = $choice['power'];
+    if (abs($choice['dx']) > 0.5) {
+        $room['tanks'][$idx]['x'] = max(12.0, min(708.0, $room['tanks'][$idx]['x'] + $choice['dx']));
+    }
+    $room['tanks'][$idx]['brk']['ox'] = $room['tanks'][$idx]['x'];
+    $events = [['t' => 'aifire', 'seat' => $idx]];
+    room_fire_shot($room, $events, $idx, 'shell');
+    $land = $room['tanks'][$idx]['brk']['land'];
+    return $land === null ? 400.0 : abs($land - $room['tanks'][$room['tanks'][$idx]['brk']['t']]['x']);
+};
+$median = function (array $v): float {
+    sort($v);
+    return (float) $v[intdiv(count($v), 2)];
+};
+$seeds = 60;
+$misses = [[], [], [], []];
+$hitWithin4 = 0;
+foreach ([1, 3] as $round) {
+    for ($seed = 1; $seed <= $seeds; $seed++) {
+        $room = $bracketRoom($seed * 7919, $round);
+        $hit = false;
+        for ($k = 0; $k < 4; $k++) {
+            $hp = $room['tanks'][0]['hp'];
+            $misses[$k][$round][] = $droneTurn($room, 1);
+            $hit = $hit || $room['tanks'][0]['hp'] < $hp;
+        }
+        $hitWithin4 += $hit ? 1 : 0;
+    }
+}
+foreach ([1, 3] as $round) {
+    $med = array_map(fn($k) => $median($misses[$k][$round]), [0, 1, 2, 3]);
+    $check("bracket-misses-shrink-round$round", $med[1] < $med[0] && $med[2] < $med[1] && $med[3] <= $med[2] + 3, // the last shots sit on the hull-edge floor
+        'median |miss| by shot ' . implode(', ', array_map('round', $med)));
+}
+$check('bracket-hits-within-4-shots-in-most-seeds', $hitWithin4 >= 0.75 * 2 * $seeds, "$hitWithin4 of " . (2 * $seeds));
+
+// The ranging shot starts at zero corrections and every shot at the same
+// standing target adds one, up to the cap; then it starts over.
+$room = $bracketRoom(77, 2);
+$ns = [];
+for ($k = 0; $k < ROOM_BRK_MAX + 2; $k++) {
+    $droneTurn($room, 1);
+    $ns[] = $room['tanks'][1]['brk']['n'];
+}
+$check('bracket-corrections-count-up-to-the-cap-then-restart', $ns === [0, 1, 2, 3, 4, 5, 0], implode(',', $ns));
+
+// A target that drives off, or a gunner that moves, goes back to a fresh solution.
+$room = $bracketRoom(5, 2);
+$droneTurn($room, 1);
+$droneTurn($room, 1);
+$before = $room['tanks'][1]['brk']['n'];
+$room['tanks'][0]['x'] += 40.0;
+$droneTurn($room, 1);
+$check('bracket-target-moved-resets-corrections', $before === 1 && $room['tanks'][1]['brk']['n'] === 0, "before=$before after=" . $room['tanks'][1]['brk']['n']);
+$droneTurn($room, 1);
+$droneTurn($room, 1);
+$before = $room['tanks'][1]['brk']['n'];
+$room['tanks'][1]['x'] -= 25.0;
+$droneTurn($room, 1);
+$check('bracket-gunner-moved-resets-corrections', $before >= 1 && $room['tanks'][1]['brk']['n'] === 0, "before=$before after=" . $room['tanks'][1]['brk']['n']);
+$room = $bracketRoom(5, 2);
+$droneTurn($room, 1);
+$room['tanks'][0]['x'] += ROOM_BRK_DRIFT - 1.0; // a nudge inside the tolerance still counts as standing still
+$droneTurn($room, 1);
+$check('bracket-a-small-nudge-keeps-the-bracket', $room['tanks'][1]['brk']['n'] === 1);
+
+// With several rivals a drone keeps the target it is bracketing instead of the
+// 40% random switch, and picks another once that target is wrecked.
+$mk = fn(int $seat, string $kind, float $x, int $dir) => ['seat' => $seat, 'kind' => $kind, 'name' => 'T' . $seat, 'x' => $x, 'y' => 400.0,
+    'angle' => 62.0, 'power' => 55.0, 'hp' => 100000, 'maxHp' => 100000, 'fuel' => 0.0, 'dirS' => $dir, 'ammo' => []];
+$stuck = 0;
+for ($seed = 1; $seed <= 20; $seed++) {
+    $room = $bracketRoom($seed * 31, 3, [$mk(2, 'ai', 330.0, 1), $mk(3, 'ai', 640.0, -1)]);
+    $droneTurn($room, 1);
+    $first = $room['tanks'][1]['brk']['t'];
+    $same = true;
+    for ($k = 0; $k < 3; $k++) {
+        $droneTurn($room, 1);
+        $same = $same && $room['tanks'][1]['brk']['t'] === $first;
+    }
+    $stuck += $same ? 1 : 0;
+}
+$check('bracket-keeps-its-target', $stuck === 20, "$stuck of 20 seeds");
+$room = $bracketRoom(9, 3, [$mk(2, 'ai', 330.0, 1)]);
+$droneTurn($room, 1);
+$first = $room['tanks'][1]['brk']['t'];
+$room['tanks'][$first]['hp'] = 0;
+$droneTurn($room, 1);
+$check('bracket-switches-when-the-target-dies', $room['tanks'][1]['brk']['t'] !== $first && $room['tanks'][1]['brk']['n'] === 0);
+
+// The memory is a handful of numbers per drone.
+$check('bracket-memory-is-small', strlen(json_encode($room['tanks'][1]['brk'])) < 160, (string) strlen(json_encode($room['tanks'][1]['brk'])));
+
+// Drone strategies. A scene: a human leading on score at x=100, a drone
+// shooter (seat 1) at 520, a weak drone at 300 and a strong, nearest drone at 450
+// with kills; each strategy must pick its own target.
+$scene = function (string $strategy, array $shooter = [], array $far = [], array $near = []) use ($mk) {
+    $human = ['hp' => 80] + $mk(0, 'human', 100.0, 1);
+    $weak = ['hp' => 30] + $mk(2, 'ai', 300.0, 1);
+    $near = $near + ['hp' => 70, 'kills' => 4] + $mk(3, 'ai', 450.0, -1);
+    $gunner = $shooter + ['s' => $strategy] + $mk(1, 'ai', 520.0, -1);
+    $room = ['terrain' => array_fill(0, 720, 400.0), 'wind' => 0.0, 'round' => 3, 'rng' => 12, 'jammer' => [],
+        'scores' => [0 => 900], 'tanks' => [$far + $human, $gunner, $weak, $near]];
+    return $room;
+};
+$picks = function (string $strategy, array $shooter = [], array $far = [], array $near = []) use ($scene): int {
+    $room = $scene($strategy, $shooter, $far, $near);
+    room_ai_choose($room, $room['tanks'][1]);
+    return $room['tanks'][1]['brk']['t'];
+};
+$check('tactic-hunter-and-bully-take-the-nearest', $picks('hunter') === 3 && $picks('bully') === 3);
+$check('tactic-sniper-takes-the-weakest', $picks('sniper') === 2);
+$check('tactic-avenger-takes-its-attacker-else-the-nearest', $picks('avenger', ['lastHitBy' => 0]) === 0 && $picks('avenger') === 3
+    && $picks('avenger', ['lastHitBy' => 0], ['hp' => 0]) === 3);
+$check('tactic-glory-takes-the-leader', $picks('glory') === 3 && $picks('glory', [], [], ['kills' => 1]) === 0);
+$tiePick = function () use ($mk) {
+    $room = ['terrain' => array_fill(0, 720, 400.0), 'wind' => 0.0, 'round' => 2, 'rng' => 5, 'jammer' => [], 'scores' => [],
+        'tanks' => [$mk(0, 'human', 100.0, 1), ['s' => 'sniper'] + $mk(1, 'ai', 520.0, -1), $mk(2, 'ai', 330.0, 1), $mk(3, 'ai', 260.0, 1)]];
+    room_ai_choose($room, $room['tanks'][1]);
+    return $room['tanks'][1]['brk']['t'];
+};
+$check('tactic-sniper-ties-go-to-the-nearest', $tiePick() === 2);
+// A hunter holds the target it picked even when a weaker or nearer one turns up.
+$room = $scene('hunter');
+room_ai_choose($room, $room['tanks'][1]);
+$room['tanks'][2]['hp'] = 1;
+$room['tanks'][3]['x'] = 380.0;
+room_ai_choose($room, $room['tanks'][1]);
+$check('tactic-hunter-keeps-its-target', $room['tanks'][1]['brk']['t'] === 3);
+$room['tanks'][3]['hp'] = 0;
+room_ai_choose($room, $room['tanks'][1]);
+$check('tactic-hunter-moves-on-when-its-target-dies', $room['tanks'][1]['brk']['t'] === 2);
+// A lobber lobs: high arcs and area guns; a glory-hunter takes its strongest gun.
+$lobAngles = [];
+for ($seed = 1; $seed <= 12; $seed++) {
+    $room = $scene('lobber');
+    $room['rng'] = $seed;
+    $c = room_ai_choose($room, $room['tanks'][1]);
+    $lobAngles[] = $c['angle'];
+}
+$check('tactic-lobber-lobs', $median($lobAngles) >= 60, implode(',', $lobAngles));
+$room = $scene('lobber', ['ammo' => ['rail' => 2, 'buck' => 2]]);
+$check('tactic-lobber-prefers-area-guns', room_ai_choose($room, $room['tanks'][1])['wkey'] === 'buck');
+$room = $scene('glory', ['ammo' => ['mortar' => 2, 'heavy' => 2, 'buck' => 2]]);
+$check('tactic-glory-takes-its-strongest-gun', room_ai_choose($room, $room['tanks'][1])['wkey'] === 'heavy');
+// A sniper's hands are steadier: a smaller spread of aims than a bully's.
+$spread = function (string $strategy) use ($scene): float {
+    $v = [];
+    for ($seed = 1; $seed <= 60; $seed++) {
+        $room = $scene($strategy, [], [], ['kills' => 0]);
+        $room['tanks'][2]['hp'] = 70; // same target for both: the nearest, tied on hp
+        $room['rng'] = $seed;
+        $v[] = room_ai_choose($room, $room['tanks'][1])['angle'];
+    }
+    $m = array_sum($v) / count($v);
+    return sqrt(array_sum(array_map(fn($x) => ($x - $m) ** 2, $v)) / count($v));
+};
+$check('tactic-sniper-aims-steadier', $spread('sniper') < $spread('bully'), round($spread('sniper'), 2) . ' vs ' . round($spread('bully'), 2));
+
+// A dry spell flips the strategy, never before three dry turns, and resets dry.
+$firstFlip = [];
+$flipOk = true;
+for ($seed = 1; $seed <= 80; $seed++) {
+    $room = $scene('bully');
+    $room['rng'] = $seed * 17;
+    $flippedAt = null;
+    for ($k = 0; $k < 12 && $flippedAt === null; $k++) {
+        $c = room_ai_choose($room, $room['tanks'][1]);
+        if (isset($c['tactic'])) {
+            $flippedAt = $k;
+            $t = $room['tanks'][1];
+            $flipOk = $flipOk && $t['dry'] === 0 && $t['s'] === $c['tactic'] && $c['tactic'] !== 'bully' && in_array($c['tactic'], ROOM_TACTICS, true)
+                && ($room['tactic'][1] ?? null) === $c['tactic'];
+        }
+    }
+    $firstFlip[] = $flippedAt;
+}
+$flips = array_filter($firstFlip, fn($k) => $k !== null);
+$check('tactic-no-flip-before-three-dry-turns', count($flips) > 0 && min($flips) >= ROOM_DRY_FLIP, 'earliest=' . (count($flips) ? min($flips) : 'none'));
+$check('tactic-flip-resets-dry-and-switches', $flipOk);
+$check('tactic-flips-happen-in-a-dry-spell', count($flips) >= 60, count($flips) . ' of 80 seeds within 12 turns');
+// A drone that keeps hurting someone never flips.
+$flipped = 0;
+for ($seed = 1; $seed <= 30; $seed++) {
+    $room = $scene('bully');
+    $room['rng'] = $seed * 13;
+    for ($k = 0; $k < 12; $k++) {
+        $room['tanks'][1]['dealt'] = true;
+        $flipped += isset(room_ai_choose($room, $room['tanks'][1])['tactic']) ? 1 : 0;
+    }
+}
+$check('tactic-no-flip-while-hurting-someone', $flipped === 0, (string) $flipped);
+
+// Assignment: random per seed, the same every time for a seed, all six dealt.
+$deal = function (int $seed): string {
+    return room_pick_tactic($seed);
+};
+$seen = [];
+for ($seed = 1; $seed <= 200; $seed++) {
+    $seen[$deal($seed)] = true;
+}
+$check('tactic-assignment-covers-all-six', count($seen) === 6 && array_diff(ROOM_TACTICS, array_keys($seen)) === [], implode(',', array_keys($seen)));
+$check('tactic-assignment-is-deterministic', $deal(41) === $deal(41) && $deal(7) === $deal(7));
+// Dealt at round start and kept; a seat taken over by a bot gets one too.
+$seats = [['human' => true, 'name' => 'AAA', 'initials' => 'AAA', 'lives' => 3, 'mode' => 'human'],
+    ['human' => false, 'name' => 'B', 'initials' => 'B', 'mode' => 'ai'], ['human' => false, 'name' => 'C', 'initials' => 'C', 'mode' => 'ai']];
+$room = ['seats' => $seats, 'round' => 0, 'map' => null, 'rng' => 99, 'plate' => [], 'ammo' => [], 'scores' => [], 'cash' => []];
+room_start_round($room);
+$first = array_map(fn($t) => $t['s'] ?? null, $room['tanks']);
+room_start_round($room);
+$again = array_map(fn($t) => $t['s'] ?? null, $room['tanks']);
+$check('tactic-dealt-to-each-drone-at-round-start', $first[0] === null && in_array($first[1], ROOM_TACTICS, true) && in_array($first[2], ROOM_TACTICS, true), json_encode($first));
+$check('tactic-kept-from-round-to-round', $first === $again, json_encode([$first, $again]));
+
+// Damage bookkeeping: whoever last hurt a unit, whether the shooter dealt damage, kills.
+$room = $flatRoom([$tank(0, 'ai', 300.0, 100), $tank(1, 'ai', 340.0, 20), $tank(2, 'ai', 600.0, 100)]);
+$events = [];
+room_explode($room, $events, $room['tanks'][0], 'mortar', 340.0, 370.0, 1, null);
+$check('tactic-hit-records-attacker-and-damage', ($room['tanks'][1]['lastHitBy'] ?? null) === 0 && !empty($room['tanks'][0]['dealt'])
+    && empty($room['tanks'][2]['dealt']) && $room['tanks'][1]['hp'] === 0 && ($room['tanks'][0]['kills'] ?? 0) === 1 && !isset($room['tanks'][0]['lastHitBy']),
+    json_encode([$room['tanks'][0], $room['tanks'][1]['lastHitBy'] ?? null]));
+
 // Protocol fixtures (protocol/*.json): what room_snapshot builds today must
 // have the keys and types the fixtures record, which the client's smoke test
 // is run against. The values are not compared (generate.php --check does that

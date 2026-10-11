@@ -580,7 +580,6 @@ export function createRoom(deps) {
         refreshNavHints();
     }
     return {
-        netFire, netSendAim, netPick, netCycle, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications,
-        turnAlert, clearTurnAlert, netCatchUp, netFrame, netShowStandings,
+        netFire, netPick, netCycle, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
     };
 }

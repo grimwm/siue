@@ -139,6 +139,6 @@ export function createGuns(deps: GunsDeps) {
   const cursorAt = (): number => gunCursor;
 
   return {
-    GUN_COLS, selectWeapon, rackGuns, gunsOpen, openGuns, closeGuns, renderGuns, pickGun, moveGunCursor, cycleWeapon, gunGrid, cursorAt,
+    GUN_COLS, rackGuns, gunsOpen, openGuns, closeGuns, renderGuns, pickGun, moveGunCursor, cycleWeapon, gunGrid, cursorAt,
   };
 }

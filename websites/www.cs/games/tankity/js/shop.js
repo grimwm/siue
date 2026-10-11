@@ -284,8 +284,5 @@ export function createShop(deps) {
         renderShop();
         return true;
     }
-    return {
-        openShop, hideShop, renderShop, renderShopReady, buyItem, packPrice, maxPacks,
-        shopSelect, shopQtyUp, shopQtyDown,
-    };
+    return { openShop, hideShop, renderShop, renderShopReady, buyItem, shopSelect, shopQtyUp, shopQtyDown };
 }

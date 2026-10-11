@@ -456,7 +456,7 @@ export function createLobby(deps: LobbyDeps) {
   }
 
   return {
-    LOBBY, renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
+    renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
     netLeave, netRematch,
   };
 }

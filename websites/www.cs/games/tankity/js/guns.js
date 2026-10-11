@@ -119,6 +119,6 @@ export function createGuns(deps) {
     /* The cursor, for the keys that act on the tile it is on. */
     const cursorAt = () => gunCursor;
     return {
-        GUN_COLS, selectWeapon, rackGuns, gunsOpen, openGuns, closeGuns, renderGuns, pickGun, moveGunCursor, cycleWeapon, gunGrid, cursorAt,
+        GUN_COLS, rackGuns, gunsOpen, openGuns, closeGuns, renderGuns, pickGun, moveGunCursor, cycleWeapon, gunGrid, cursorAt,
     };
 }

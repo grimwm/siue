@@ -4,52 +4,61 @@
  * Controls: hold Left/Right = angle · hold Up/Down = power · A/D = drive ·
  * Ctrl/Space = fire · Q = weapon · N = next round / new match · M = music.
  */
-/* The pure game math (RNG, terrain, flight, hits, blasts, drone aim) lives in
- * src/sim.ts, the sound in src/audio.ts, the room client in src/net.ts and the
- * canvas drawing in src/render.ts, the keys and touch pads in src/input.ts, the room volley replay in
- * src/replay.ts, the firing-range simulation in src/preview.ts and the solo phase moves in src/flow.ts, each compiled to js/ and imported here.
- * The overlays that are mostly markup are Preact components in src/ui/ (the help and the shop so far):
- * they take state and callbacks as props and keep none of their own. Each
- * import's ?v= is the module's content hash, written by tools/install-files.php,
- * so a browser never pairs a cached module with a newer game.js. Everything
- * below is the rest: the game loop, particles,
- * the HUD, rooms and the shop's state. */
-import {
-  hashSeed, mulberry32, gauss, W, H, GRAV, FLAT_GRAV, TUNE, clamp,
-  buildArsenal as simBuildArsenal, droneRack as simDroneRack, genTerrain as simGenTerrain,
-  surfY as simSurfY, carveCrater, facing, isGroundUnit, spawnSpots, spotTaken as simSpotTaken,
-  muzzle, shotSpeed, stepBallistic, blastDamage,
-  fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
-  anyTankFalling as simAnyTankFalling,
-} from './js/sim.js?v=b64eb535e1';
-import { aiChoose as simAiChoose, pickTactic } from './js/ai.js?v=b9925728d7';
+/* The page's entry module: it builds the game's state, wires the typed modules
+ * together and runs the main loop. Everything else is in a module, compiled
+ * from src/ to js/ and imported here:
+ *   sim.ts       the game math (RNG, terrain, flight, hits, blasts)
+ *   ai.ts        the drone AI
+ *   flow.ts      the solo phase moves
+ *   net.ts       the room client
+ *   replay.ts    the room volley replay
+ *   preview.ts   the firing-range simulation
+ *   input.ts     the keys and touch pads
+ *   audio.ts     the sound
+ *   render.ts    the canvas drawing
+ *   effects.ts   weapon looks on the particle engine
+ *   chatter.ts   the crew's talk and the radio log
+ *   match.ts     the solo match: rounds, turns, blasts, the drone's shot
+ *   room.ts      a running room match on this client
+ *   lobby.ts     getting into and out of a room
+ *   shop.ts      the field shop
+ *   guns.ts      the weapon picker
+ *   hud.ts       the status bar's values
+ *   view.ts      the camera and the frame the canvas paints
+ *   tutorial.ts  the coach
+ *   scores.ts    the high scores
+ *   menu.ts      the game menu's settings
+ * The overlays are Preact components in src/ui/: they take state and callbacks
+ * as props and keep none of their own. Each typed module is a factory
+ * (createShop, createMatch, ...) that takes the pieces of the game it needs as
+ * a deps object, so none of them reaches for a global; the wiring is below.
+ * Each import's ?v= is the module's content hash, written by
+ * tools/install-files.php, so a browser never pairs a cached module with a
+ * newer game.js. What stays here is the state, the main loop, the keys and the
+ * page's own plumbing (overlays, the firing range, the arsenal's loading). */
+import { W, TUNE, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './js/sim.js?v=b64eb535e1';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
 } from './js/audio.js?v=ce8cdf6a6e';
-import {
-  RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, CLOCK_SHOW_S,
-} from './js/net.js?v=35baab622b';
-import { transition, runWar, warSpeed, WATCH_TURNS } from './js/flow.js?v=fb268dfd34';
-import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=8e81275ae7';
+import { RoomClient, prettyRoomError } from './js/net.js?v=35baab622b';
+import { runWar, warSpeed } from './js/flow.js?v=fb268dfd34';
+import { createPreview, stepPreview } from './js/preview.js?v=8e81275ae7';
 import { createReplay } from './js/replay.js?v=3f9ccfd889';
-import { createRenderer, drawChassis } from './js/render.js?v=5cf54c957b';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 import { renderHelp } from './js/ui/help.js?v=7366b18437';
-import {
-  createChatter, pick, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, FOE_FIRE, FOE_HIT, FOE_MISS, FOE_DYING, TANK_IDLE, FOE_IDLE,
-} from './js/chatter.js?v=48b9223047';
+import { drawShellIcon as paintShellIcon, drawGearIcon as paintGearIcon } from './js/ui/icons.js?v=b8eec86a1f';
+import { createChatter, pick, TANK_IDLE, FOE_IDLE } from './js/chatter.js?v=48b9223047';
 import { createEffects, FX, FX_BUDGET } from './js/effects.js?v=1be294b3bc';
-import { createShop } from './js/shop.js?v=da716ab023';
+import { createShop } from './js/shop.js?v=6612e3149e';
 import { createHud } from './js/hud.js?v=a4c4a2d226';
 import { createView } from './js/view.js?v=b74c254da9';
 import { createTutorial } from './js/tutorial.js?v=aa28ddad64';
-import { createGuns } from './js/guns.js?v=a709bb7875';
+import { createGuns } from './js/guns.js?v=114898edec';
 import { createScores } from './js/scores.js?v=8402272957';
-import { createMatch } from './js/match.js?v=57b9189a68';
-import { createRoom } from './js/room.js?v=a3374f3b19';
-import { createLobby } from './js/lobby.js?v=5aaa83b235';
+import { createMatch } from './js/match.js?v=7cd295b516';
+import { createRoom } from './js/room.js?v=574003a372';
+import { createLobby } from './js/lobby.js?v=29370ce462';
 import { createMenu } from './js/menu.js?v=01ee148e37';
-import { drawShellIcon as paintShellIcon, drawGearIcon as paintGearIcon } from './js/ui/icons.js?v=b8eec86a1f';
 
 const $ = id => document.getElementById(id);
 
@@ -125,9 +134,6 @@ async function loadGameConfig() {
   } catch (_) { /* the baked fallbacks keep the war rolling */ }
 }
 
- // live particles on the battlefield, hard cap
-
-
 /* ---------- state ---------- */
 const G = {
   seed: '', rng: null, body: 'tank',
@@ -174,8 +180,7 @@ function surfY(x) {
   return simSurfY(G.terrain, x);
 }
 
-
-/* ---------- turns, firing, ballistics ---------- */
+/* ---------- reading the state ---------- */
 function cur() {
   return G.tanks[G.turn];
 }
@@ -372,6 +377,7 @@ const replay = createReplay({
   special: (wkey, name, x, y, ang) => fxSpecial(G.fx, wkey, name, x, y, ang),
   trail: (shot, dt, x, y, vx, vy, wkey) => fxTrail(G.fx, shot, dt, x, y, vx, vy, wkey),
 });
+/* ---------- the typed modules, wired in dependency order ---------- */
 /* The status bar's values (src/hud.ts). */
 const { HUD, paintHud, windText, renderHUD } = createHud({
   G, $, tables, net, MATCH, me, cur, myTank, seatName, drawShellIcon, openGuns: () => openGuns(),
@@ -394,8 +400,8 @@ const {
 /* The solo match (src/match.ts): dealing, turns, blasts, the drone's shot, the end veil. A dependency
    on a module wired further down is passed as an arrow, so it resolves when it is called. */
 const {
-  advance, startDemo, startSolo, newRound, demoBlock, playerFire, nextTurn, fallTanks, anyTankFalling, settle, END,
-  renderEndVeil, endMatch, startBanner, tickBanner, nextRound, stepWar, decayFx,
+  advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
+  stepWar, decayFx,
 } = createMatch({
   G, $, TOUCH, tables, net, sfx, music, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
@@ -406,14 +412,14 @@ const {
 });
 /* The field shop (src/shop.ts): prices, rows, buying, the Ready line. */
 const {
-  openShop, hideShop, renderShop, renderShopReady, buyItem, maxPacks, shopSelect, shopQtyUp, shopQtyDown,
+  openShop, hideShop, renderShop, renderShopReady, buyItem, shopSelect, shopQtyUp, shopQtyDown,
 } = createShop({
   G, $, tables, net, sfx, me, keyCap, keyHint, say, advance, render, renderHUD, refreshNavHints,
   drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil: () => openLeaveVeil(), netBuy: (it, qty) => netBuy(it, qty),
 });
 /* The weapon picker (src/guns.ts). */
 const {
-  GUN_COLS, selectWeapon, rackGuns, gunsOpen, openGuns, closeGuns, renderGuns, pickGun, moveGunCursor, cycleWeapon, gunGrid,
+  GUN_COLS, rackGuns, gunsOpen, openGuns, closeGuns, renderGuns, pickGun, moveGunCursor, cycleWeapon, gunGrid,
   cursorAt: gunCursorAt,
 } = createGuns({
   G, $, tables, net, sfx, keyHint, say, refreshNavHints, renderHUD, drawShellIcon, demoBlock,
@@ -421,8 +427,7 @@ const {
 });
 /* A running room match on this client (src/room.ts): moves sent, snapshots adopted, events told, the turn alert. */
 const {
-  netFire, netSendAim, netPick, netCycle, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications,
-  turnAlert, clearTurnAlert, netCatchUp, netFrame, netShowStandings,
+  netFire, netPick, netCycle, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
 } = createRoom({
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
   decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
@@ -430,7 +435,7 @@ const {
 });
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving, the rematch. */
 const {
-  LOBBY, renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
+  renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
   netLeave, netRematch,
 } = createLobby({
   G, $, net, MATCH, HUD, END, SCORES, replay, sfx, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,

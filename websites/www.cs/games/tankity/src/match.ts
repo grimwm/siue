@@ -605,7 +605,7 @@ export function createMatch(deps: MatchDeps) {
   }
 
   return {
-    advance, startDemo, startSolo, newRound, demoBlock, playerFire, nextTurn, fallTanks, anyTankFalling, settle, END,
-    renderEndVeil, endMatch, startBanner, tickBanner, nextRound, stepWar, decayFx, resetMatch, newMatch,
+    advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
+    stepWar, decayFx,
   };
 }

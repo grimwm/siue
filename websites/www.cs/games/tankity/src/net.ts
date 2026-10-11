@@ -210,7 +210,8 @@ export class RoomClient {
       body: JSON.stringify(Object.assign({ code: this.code, token: this.token, csrf: this.csrf }, payload || {})),
     });
     let { res, data } = await send();
-    for (let tries = 0; res.status === 429 && tries < RETRY_429_TRIES; tries++) {
+    // 503 is a room busy past the server's lock wait: worth the same retry.
+    for (let tries = 0; (res.status === 429 || res.status === 503) && tries < RETRY_429_TRIES; tries++) {
       await new Promise<void>(r => this.env.setTimeout(r, RETRY_429_MS));
       ({ res, data } = await send());
     }

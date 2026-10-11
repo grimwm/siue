@@ -28,6 +28,43 @@ if (!function_exists('shm_attach') || !function_exists('sem_get')) {
     @rmdir($tmp);
     exit(0);
 }
+// The room functions, in this process, for aging records and cleaning up.
+putenv('CONFIG_FILE=' . $tmp . '/test.yaml');
+putenv('TANKITY_SHM_KEY=' . $shmKey);
+define('TANKITY_ROOMS_LIB', true);
+require __DIR__ . '/rooms.php';
+/* Removes every segment and semaphore a private shelf made. */
+function room_test_wipe(int $base): void
+{
+    $id = @shm_attach(room_registry_key($base), ROOM_REGISTRY_BYTES);
+    $reg = $id === false ? [] : @shm_get_var($id, ROOM_REGISTRY_VAR);
+    foreach (array_keys(is_array($reg) ? $reg : []) as $c) {
+        $k = room_key((string) $c, $base);
+        $seg = @shmop_open($k, 'w', 0, 0);
+        if ($seg !== false) {
+            @shmop_delete($seg);
+        }
+        $sem = @sem_get($k, 1);
+        if ($sem !== false) {
+            @sem_remove($sem);
+        }
+    }
+    if ($id !== false) {
+        @shm_remove($id);
+    }
+    $sem = @sem_get(room_registry_key($base), 1);
+    if ($sem !== false) {
+        @sem_remove($sem);
+    }
+}
+$ageRoom = function (string $c): void {
+    [$room, $lock] = room_load($c);
+    if (is_array($room)) {
+        $room['touched'] = time() - 3600;
+        room_seg_write($lock['shm'], $room);
+    }
+    room_unlock($lock);
+};
 // Ask the kernel for a free port, then hand it to php -S.
 $probe = stream_socket_server('tcp://127.0.0.1:0');
 $port = (int) substr(strrchr(stream_socket_get_name($probe, false), ':'), 1);
@@ -86,11 +123,7 @@ $ping = $get($base . '/rooms.php?action=ping');
 $check('counts-live', ($ping['rooms']['used'] ?? -1) === 1);
 
 // Age a record the way an abandoned room ages.
-$id = shm_attach($shmKey, 2097152);
-$reg = shm_get_var($id, 1);
-$reg[$code]['touched'] = time() - 3600;
-shm_put_var($id, 1, $reg);
-shm_detach($id);
+$ageRoom($code);
 // An untouched record is truly gone: the sweep drops it, freeing the slot.
 $ping = $get($base . '/rooms.php?action=ping');
 $check('stale-not-counted', ($ping['rooms']['used'] ?? -1) === 0);
@@ -106,18 +139,19 @@ $check('heartbeat-ok', ($state['ok'] ?? false) === true);
 $ping = $get($base . '/rooms.php?action=ping');
 $check('heartbeat-counts', ($ping['rooms']['used'] ?? -1) === 1);
 
-// A holder that died hard must not brick the shelf: hold the semaphore in
-// this process and prove a ping still gets through after the bounded wait.
-$held = sem_get($shmKey, 1);
+// A request holding one room's lock never stalls the shelf: ping reads
+// the registry, and another room answers at once (rooms-store-test.php
+// covers the full lock behaviour).
+$held = sem_get(room_key($code, $shmKey), 1);
 $check('lock-held', $held !== false && @sem_acquire($held));
 $lockT = microtime(true);
-$pingHeld = $get($base . '/rooms.php?action=ping', 20); // the server waits out the ~5s lock
+$pingHeld = $get($base . '/rooms.php?action=ping', 20);
 $lockDt = microtime(true) - $lockT;
 if (isset($held) && $held !== false) {
     @sem_release($held);
 }
-$check('lock-reset', $pingHeld !== null && ($pingHeld['rooms']['used'] ?? -1) >= 1
-    && $lockDt >= 4.0 && $lockDt < 20.0, sprintf('wait=%.1fs', $lockDt));
+$check('ping-ignores-room-lock', $pingHeld !== null && ($pingHeld['rooms']['used'] ?? -1) >= 1
+    && $lockDt < 2.0, sprintf('wait=%.2fs', $lockDt));
 
 // The ceiling uses the live count, and refusals stay human.
 $second = $post('create', ['initials' => 'abc']);
@@ -135,13 +169,9 @@ proc_close($proc);
 $proc = $spawn();
 $ping = $waitUp();
 $check('restart-keeps-shelf', ($ping['rooms']['used'] ?? -1) === 2, 'used=' . ($ping['rooms']['used'] ?? '?'));
-$id = shm_attach($shmKey, 2097152);
-$reg = shm_get_var($id, 1);
-foreach (array_keys($reg) as $c) {
-    $reg[$c]['touched'] = time() - 3600;
+foreach ([$code, (string) ($second['code'] ?? '')] as $c) {
+    $ageRoom($c);
 }
-shm_put_var($id, 1, $reg);
-shm_detach($id);
 $ping = $get($base . '/rooms.php?action=ping');
 $check('sweep-frees-cap', ($ping['rooms']['used'] ?? -1) === 0, 'used=' . ($ping['rooms']['used'] ?? '?'));
 $gone = $get($base . '/rooms.php?action=state&code=' . $code . '&token=' . $token . '&since=0');
@@ -326,25 +356,14 @@ $used2 = ($get($base . '/rooms.php?action=ping')['rooms']['used'] ?? -1);
 $check('last-human-closes-room', ($last['ok'] ?? false) === true && $used2 === $used0 - 1, "used $used0 -> $used2");
 
 // Leave the shelf as found.
-$id = shm_attach($shmKey, 2097152);
-$reg = shm_get_var($id, 1);
-$reg[$mcode]['touched'] = time() - 3600;
-shm_put_var($id, 1, $reg);
-shm_detach($id);
+$ageRoom($mcode);
 $ping = $get($base . '/rooms.php?action=ping');
 $check('match-cleaned', ($ping['rooms']['used'] ?? -1) === 0);
 
 proc_terminate($proc);
 proc_close($proc);
 // Remove the private shelf so test runs never pile up segments.
-$id = @shm_attach($shmKey, 2097152);
-if ($id !== false) {
-    @shm_remove($id);
-}
-$sem = @sem_get($shmKey, 1);
-if ($sem !== false) {
-    @sem_remove($sem);
-}
+room_test_wipe($shmKey);
 @unlink($tmp . '/test.yaml');
 @rmdir($tmp);
 exit($fail ? 1 : 0);

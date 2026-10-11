@@ -27,10 +27,8 @@ $origin = $scheme . '://' . $host;
 // Read-only peek at the same .config.yaml the server reads, so expectations
 // follow the config instead of hardcoding a ceiling or a memory key.
 $cfgMax = 10;
-$cfgShm = '';
 foreach (file(__DIR__ . '/.config.yaml') ?: [] as $line) {
     if (preg_match('/^\s*max_rooms\s*:\s*(\d+)/', $line, $m)) $cfgMax = (int) $m[1];
-    if (preg_match('/^\s*shm_key\s*:\s*(\S+)/', $line, $m)) $cfgShm = trim($m[1], "'\"");
 }
 
 $probeGet = function (string $url) {
@@ -73,15 +71,19 @@ $post = function (string $action, array $body) use ($base, $origin) {
     return $raw === false ? null : json_decode($raw, true);
 };
 
-// Same derivation as room_shm_key(): an explicit numeric key wins, otherwise
-// the ftok of the rooms file the server runs, otherwise the fixed fallback.
-$shmKey = 0x54414E4B;
-if (preg_match('/^\d+$/', $cfgShm)) {
-    $shmKey = (int) $cfgShm;
-} else {
-    $k = @ftok(__DIR__ . '/rooms.php', 'R');
-    if ($k !== false && $k !== -1) $shmKey = $k;
-}
+// The room functions, in this process: it runs on the same box with the same
+// settings as the server, so slot keys and the cap come out identical. Used
+// to age records and to hold one room's lock.
+define('TANKITY_ROOMS_LIB', true);
+require __DIR__ . '/rooms.php';
+$ageRoom = function (string $c): void {
+    [$room, $lock] = room_load($c);
+    if (is_array($room)) {
+        $room['touched'] = time() - 3600;
+        room_seg_write($lock['shm'], $room);
+    }
+    room_unlock($lock);
+};
 
 $ping = $get($base . '/rooms.php?action=ping');
 $check('server-up', $ping !== null);
@@ -103,11 +105,7 @@ $ping = $get($base . '/rooms.php?action=ping');
 $check('counts-live', ($ping['rooms']['used'] ?? -1) === $baseUsed + 1, 'used=' . ($ping['rooms']['used'] ?? '?'));
 
 // Age a record the way an abandoned room ages.
-$id = shm_attach($shmKey, 2097152);
-$reg = shm_get_var($id, 1);
-$reg[$code]['touched'] = time() - 3600;
-shm_put_var($id, 1, $reg);
-shm_detach($id);
+$ageRoom($code);
 // An untouched record is truly gone: the sweep drops it, freeing the slot.
 $ping = $get($base . '/rooms.php?action=ping');
 $check('stale-not-counted', ($ping['rooms']['used'] ?? -1) === $baseUsed, 'used=' . ($ping['rooms']['used'] ?? '?'));
@@ -124,9 +122,9 @@ $check('heartbeat-ok', ($state['ok'] ?? false) === true);
 $ping = $get($base . '/rooms.php?action=ping');
 $check('heartbeat-counts', ($ping['rooms']['used'] ?? -1) === $baseUsed + 1, 'used=' . ($ping['rooms']['used'] ?? '?'));
 
-// A holder that died hard must not brick the shelf: hold the semaphore here
-// and prove a ping still gets through after the bounded wait.
-$held = sem_get($shmKey, 1);
+// A request holding one room's lock never stalls the shelf: ping reads
+// the registry without a lock.
+$held = sem_get(room_key($code), 1);
 $check('lock-held', $held !== false && @sem_acquire($held));
 $lockT = microtime(true);
 $pingHeld = $get($base . '/rooms.php?action=ping');
@@ -134,8 +132,8 @@ $lockDt = microtime(true) - $lockT;
 if (isset($held) && $held !== false) {
     @sem_release($held);
 }
-$check('lock-reset', $pingHeld !== null && ($pingHeld['rooms']['used'] ?? -1) >= 1
-    && $lockDt >= 4.0 && $lockDt < 20.0, sprintf('wait=%.1fs', $lockDt));
+$check('ping-ignores-room-lock', $pingHeld !== null && ($pingHeld['rooms']['used'] ?? -1) >= 1
+    && $lockDt < 2.0, sprintf('wait=%.2fs', $lockDt));
 
 // The ceiling uses the live count, and refusals stay human: fill the shelf
 // to the configured max, then prove one more guest is refused kindly.
@@ -157,13 +155,9 @@ $check('cap-live', $fillsOk && ($refused['ok'] ?? false) === false,
 $check('cap-human', isset($refused['error']) && strpos($refused['error'], 'taken') !== false, $refused['error'] ?? '');
 
 // Empty the shelf back down for the match below, then prove the sweep took.
-$id = shm_attach($shmKey, 2097152);
-$reg = shm_get_var($id, 1);
 foreach (array_merge($fillCodes, [$code]) as $old) {
-    if (isset($reg[$old])) $reg[$old]['touched'] = time() - 3600;
+    $ageRoom($old);
 }
-shm_put_var($id, 1, $reg);
-shm_detach($id);
 $ping = $get($base . '/rooms.php?action=ping');
 $check('shelf-emptied', ($ping['rooms']['used'] ?? -1) === $baseUsed, 'used=' . ($ping['rooms']['used'] ?? '?'));
 
@@ -215,11 +209,7 @@ foreach (($calm['room']['events'] ?? []) as $e) {
 $check('polls-hold-turn', ($calm['ok'] ?? false) === true && ($calm['room']['turn'] ?? -1) === 0 && $aiC === $aiG,
     'turn=' . ($calm['room']['turn'] ?? '?') . ' ai=' . $aiC);
 // Leave the shared shelf as found: only this match is swept.
-$id = shm_attach($shmKey, 2097152);
-$reg = shm_get_var($id, 1);
-$reg[$mcode]['touched'] = time() - 3600;
-shm_put_var($id, 1, $reg);
-shm_detach($id);
+$ageRoom($mcode);
 $get($base . '/rooms.php?action=ping'); // the sweep runs on ping, not on state
 $gone = $get($base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
 $check('match-cleaned', ($gone['error'] ?? '') === 'no such room', $gone['error'] ?? '');

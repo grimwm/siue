@@ -27,10 +27,10 @@ import {
 } from './js/audio.js?v=ce8cdf6a6e';
 import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, CLOCK_SHOW_S,
-} from './js/net.js?v=c2776f37fa';
+} from './js/net.js?v=a63c4607fa';
 import { transition, runWar, warSpeed, WATCH_TURNS } from './js/flow.js?v=fb268dfd34';
 import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=6bacfc394f';
-import { createReplay } from './js/replay.js?v=2b454d2662';
+import { createReplay } from './js/replay.js?v=9e2d32f609';
 import { createRenderer, drawChassis } from './js/render.js?v=a2add098ba';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 import { renderHelp } from './js/ui/help.js?v=7366b18437';

@@ -73,18 +73,45 @@ php tools/install-files.php      # after the last edit to any served file
 ## Architecture rules
 
 - Rooms live in SysV shared memory only: no disk, no fallback. A host restart
-  wipes them; a web-server restart does not. Key: `shm_key` from
-  `.config.yaml`, else `ftok(rooms.php,'R')`, else `0x54414E4B`. The PHP image
-  needs `sysvsem` and `sysvshm` (Fedora's `php-process`).
+  wipes them; a web-server restart does not. The PHP image needs `shmop`,
+  `sysvsem` and `sysvshm` (Fedora's `php-process`). Each room is its own
+  128 KB segment (Linux backs only the pages written) with its own semaphore,
+  both keyed `base ^ crc32('room:' . code)` masked to 31 bits, where `base` is
+  `shm_key` from `.config.yaml`, else `ftok(rooms.php,'R')`, else
+  `0x54414E4B`. Nothing is reserved in advance. Create draws a random code and
+  opens the segment with `shmop_open(..., 'n')`, which the kernel grants only
+  if no segment has that key, so a collision or race just draws another code.
+  Join, state and every act open the code's segment (`'w'`; failing means "no
+  such room"), then take only that room's semaphore with a blocking
+  `sem_acquire`, read the room and check its stored code. A segment holds a
+  12-byte header (length, touched, created) and the serialized room; the
+  header can be read without the lock, which is how the idle rules and the
+  occupancy count see a room.
+- The registry is a small shm variable (`base ^ crc32('registry')`) listing
+  the live codes. It is written, under its own brief lock, only when a room is
+  created or closed, and the cap is checked there, so it is exact. Joins,
+  polls and acts never touch it, and heartbeats only update the room itself.
+  Reads take no lock; a stale read is fine for a display.
+- Closing a room (the last human leaves, or it goes idle): under the room's
+  lock mark it closed and save, drop it from the registry, `shmop_delete` the
+  segment, `sem_remove` the semaphore. A request that gets the room afterwards
+  reads "closed" or finds no segment, or loses its blocked `sem_acquire` to the
+  removed semaphore: all three are the 404. The sweep (on create and ping)
+  walks the registry without locks and closes idle rooms with a non-blocking
+  try-lock, skipping busy ones; entries whose segment is gone are dropped. A
+  room that is idle is also closed by whoever next locks it.
+- Crash safety: `sem_get` auto-releases, with the kernel's undo, so a request
+  that ends, fatals or is killed (even `kill -9`) frees its room; a shutdown
+  handler also releases explicitly. A waiter blocks without a timeout and
+  never removes a semaphore it does not own.
 - The server is authoritative. Clients send intents (aim, drive, weapon, fire,
   buy, body), never hits. CSRF and Origin gated; every act is range-checked.
 - The server settles a whole turn per request. Every event it emits carries
   `at` (seconds into the volley); shot events carry their flight path, launch
   and landing times, and blast radius. Clients replay each volley at real
   speed and adopt the new room state only after the replay drains.
-- Locks are bounded (~5 s): a crashed holder must never brick the shelf.
 - Live occupancy only: rooms idle longer than `room_live_secs` stop counting;
-  the sweep (on ping) drops them.
+  the sweep (on create and ping) drops them.
 - Seats: a room always has four (`ROOM_SEATS`), seat 0 the host. Each seat is
   a human or a non-human with `mode` `ai` (the drone battery, the default) or
   `open` (no unit). The lobby shows them as a tile grid (initials, `AI`,
@@ -369,6 +396,7 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
 | `node protocol-test.js`                         | `src/protocol.ts` against the server: the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events `game.js` handles |
 | `node sim-vectors-test.js`                     | `js/sim.js` agrees with `rooms.php` on every shared sim vector (see Sim vectors)              |
 | `php rooms-test.php`                           | The room shelf over its own `php -S` (needs SysV; run inside the PHP container)            |
+| `php rooms-store-test.php`                     | Per-room storage: exclusive create, cap, close, sweep, per-room locks and crashes (SysV; PHP container) |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
 | `php game-json-test.php`                       | The YAML parser, the `game.yaml` schema (effects included), `--check` staleness            |
 | `php install-files-test.php`                   | The manifest, install block, `?v=` content hashes and `sw.js` precache, `--check` staleness                   |

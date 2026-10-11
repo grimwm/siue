@@ -16,7 +16,7 @@
  * after step(). Nothing here touches the page, so it compiles in the DOM-free
  * program and replay-test.js steps recorded volleys on a clock the test moves
  * by hand. */
-import { planCatchUp, isVolleyOpener } from './net.js?v=c2776f37fa';
+import { planCatchUp, isVolleyOpener } from './net.js?v=a63c4607fa';
 /** rooms.php records a path point every 5 sim steps at 60/s. */
 export const PATH_HZ = 12;
 /** A volley kept back by a catch-up plays this much faster. */

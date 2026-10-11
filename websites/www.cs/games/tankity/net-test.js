@@ -87,6 +87,13 @@ const bodyOf = entry => JSON.parse(entry.init.body);
   const { net, host } = makeClient(() => (++n <= 2 ? fixture('error-too-fast') && { status: 429, body: fixture('error-too-fast') } : roomReply()));
   const reply = await net.post('act', { kind: 'weapon', weapon: 'buck' });
   check('retry-429-then-success', !!reply.ok && host.log.length === 3, `requests ${host.log.length}`);
+  // A room busy past the server's lock wait answers 503: retried the same way.
+  {
+    let m = 0;
+    const busy = makeClient(() => (++m <= 1 ? { status: 503, body: { ok: false, error: 'this room is busy; try again' } } : roomReply()));
+    const r2 = await busy.net.post('act', { kind: 'aim', angle: 40, power: 50 });
+    check('retry-503-then-success', !!r2.ok && busy.host.log.length === 2, `requests ${busy.host.log.length}`);
+  }
   check('retry-429-waits-180ms', j(host.delays) === j([RETRY_429_MS, RETRY_429_MS]) && RETRY_429_MS === 180, j(host.delays));
 
   const stuck = makeClient(() => ({ status: 429, body: fixture('error-too-fast') }));

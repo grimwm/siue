@@ -141,6 +141,23 @@ const RUN = {
     const choice = sim.aiChoose(G, arsenal, t);
     return { wkey: choice.wkey, angle: choice.angle, power: choice.power, moved: t.x - x0 };
   },
+  'ai-bracket'(c) {
+    world(c);
+    G.rng = sim.mulberry32(c.seed);
+    const t = G.tanks[c.shooter], steps = [];
+    for (let k = 0; k < c.shots; k++) {
+      if (c.driveAt === k) G.tanks[c.target].x += c.driveBy;
+      const choice = sim.aiChoose(G, arsenal, t);
+      t.angle = choice.angle;
+      t.power = choice.power;
+      t.ammo.shell = 99;
+      sim.fireWeapon(G, arsenal, t, choice.wkey);
+      for (let frame = 0; G.shells.length && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
+      const b = t.brk;
+      steps.push({ wkey: choice.wkey, angle: choice.angle, power: choice.power, x: t.x, n: b.n, target: b.t, land: b.land });
+    }
+    return steps;
+  },
   settle(c) {
     world({ terrain: c.terrain, tanks: [{ kind: 'ai', x: c.x, y: c.y, hp: c.hp }] });
     for (let i = 0; i < 5000 && sim.anyTankFalling(G); i++) sim.fallTanks(G, 1 / 60);

@@ -634,6 +634,116 @@ room_end_round($room, $events);
 $check('another-human-with-lives-keeps-the-match', $room['phase'] === 'shop' && $room['seats'][0]['lives'] === 0
     && $room['seats'][1]['lives'] === 2 && in_array('eliminated', $types($events), true) && $types($events)[count($events) - 1] === 'roundwin');
 
+// Drone bracketing: a drone that keeps shooting at a target standing still
+// walks its shots in. The target is a tough human (nobody dies mid-test), the
+// ground is flat, and each turn is what the room's caller does for a drone:
+// choose, move if it wants to, fire the volley, which records the burst.
+$bracketRoom = function (int $seed, int $round, array $extra = []) use ($flatRoom) {
+    $mk = fn(int $seat, string $kind, float $x, int $dir) => ['seat' => $seat, 'kind' => $kind, 'name' => 'T' . $seat, 'x' => $x, 'y' => 400.0,
+        'angle' => 62.0, 'power' => 55.0, 'hp' => 100000, 'maxHp' => 100000, 'fuel' => 0.0, 'dirS' => $dir, 'ammo' => []];
+    $room = $flatRoom(array_merge([$mk(0, 'human', 200.0, 1), $mk(1, 'ai', 500.0, -1)], $extra));
+    $room['wind'] = 2.0;
+    $room['round'] = $round;
+    $room['rng'] = $seed;
+    $room['jammer'] = [];
+    return $room;
+};
+$droneTurn = function (array &$room, int $idx): float {
+    $choice = room_ai_choose($room, $room['tanks'][$idx]);
+    $room['tanks'][$idx]['angle'] = $choice['angle'];
+    $room['tanks'][$idx]['power'] = $choice['power'];
+    if (abs($choice['dx']) > 0.5) {
+        $room['tanks'][$idx]['x'] = max(12.0, min(708.0, $room['tanks'][$idx]['x'] + $choice['dx']));
+    }
+    $room['tanks'][$idx]['brk']['ox'] = $room['tanks'][$idx]['x'];
+    $events = [['t' => 'aifire', 'seat' => $idx]];
+    room_fire_shot($room, $events, $idx, 'shell');
+    $land = $room['tanks'][$idx]['brk']['land'];
+    return $land === null ? 400.0 : abs($land - $room['tanks'][$room['tanks'][$idx]['brk']['t']]['x']);
+};
+$median = function (array $v): float {
+    sort($v);
+    return (float) $v[intdiv(count($v), 2)];
+};
+$seeds = 60;
+$misses = [[], [], [], []];
+$hitWithin4 = 0;
+foreach ([1, 3] as $round) {
+    for ($seed = 1; $seed <= $seeds; $seed++) {
+        $room = $bracketRoom($seed * 7919, $round);
+        $hit = false;
+        for ($k = 0; $k < 4; $k++) {
+            $hp = $room['tanks'][0]['hp'];
+            $misses[$k][$round][] = $droneTurn($room, 1);
+            $hit = $hit || $room['tanks'][0]['hp'] < $hp;
+        }
+        $hitWithin4 += $hit ? 1 : 0;
+    }
+}
+foreach ([1, 3] as $round) {
+    $med = array_map(fn($k) => $median($misses[$k][$round]), [0, 1, 2, 3]);
+    $check("bracket-misses-shrink-round$round", $med[1] < $med[0] && $med[2] < $med[1] && $med[3] <= $med[2] + 3, // the last shots sit on the hull-edge floor
+        'median |miss| by shot ' . implode(', ', array_map('round', $med)));
+}
+$check('bracket-hits-within-4-shots-in-most-seeds', $hitWithin4 >= 0.75 * 2 * $seeds, "$hitWithin4 of " . (2 * $seeds));
+
+// The ranging shot starts at zero corrections and every shot at the same
+// standing target adds one, up to the cap; then it starts over.
+$room = $bracketRoom(77, 2);
+$ns = [];
+for ($k = 0; $k < ROOM_BRK_MAX + 2; $k++) {
+    $droneTurn($room, 1);
+    $ns[] = $room['tanks'][1]['brk']['n'];
+}
+$check('bracket-corrections-count-up-to-the-cap-then-restart', $ns === [0, 1, 2, 3, 4, 5, 0], implode(',', $ns));
+
+// A target that drives off, or a gunner that moves, goes back to a fresh solution.
+$room = $bracketRoom(5, 2);
+$droneTurn($room, 1);
+$droneTurn($room, 1);
+$before = $room['tanks'][1]['brk']['n'];
+$room['tanks'][0]['x'] += 40.0;
+$droneTurn($room, 1);
+$check('bracket-target-moved-resets-corrections', $before === 1 && $room['tanks'][1]['brk']['n'] === 0, "before=$before after=" . $room['tanks'][1]['brk']['n']);
+$droneTurn($room, 1);
+$droneTurn($room, 1);
+$before = $room['tanks'][1]['brk']['n'];
+$room['tanks'][1]['x'] -= 25.0;
+$droneTurn($room, 1);
+$check('bracket-gunner-moved-resets-corrections', $before >= 1 && $room['tanks'][1]['brk']['n'] === 0, "before=$before after=" . $room['tanks'][1]['brk']['n']);
+$room = $bracketRoom(5, 2);
+$droneTurn($room, 1);
+$room['tanks'][0]['x'] += ROOM_BRK_DRIFT - 1.0; // a nudge inside the tolerance still counts as standing still
+$droneTurn($room, 1);
+$check('bracket-a-small-nudge-keeps-the-bracket', $room['tanks'][1]['brk']['n'] === 1);
+
+// With several rivals a drone keeps the target it is bracketing instead of the
+// 40% random switch, and picks another once that target is wrecked.
+$mk = fn(int $seat, string $kind, float $x, int $dir) => ['seat' => $seat, 'kind' => $kind, 'name' => 'T' . $seat, 'x' => $x, 'y' => 400.0,
+    'angle' => 62.0, 'power' => 55.0, 'hp' => 100000, 'maxHp' => 100000, 'fuel' => 0.0, 'dirS' => $dir, 'ammo' => []];
+$stuck = 0;
+for ($seed = 1; $seed <= 20; $seed++) {
+    $room = $bracketRoom($seed * 31, 3, [$mk(2, 'ai', 330.0, 1), $mk(3, 'ai', 640.0, -1)]);
+    $droneTurn($room, 1);
+    $first = $room['tanks'][1]['brk']['t'];
+    $same = true;
+    for ($k = 0; $k < 3; $k++) {
+        $droneTurn($room, 1);
+        $same = $same && $room['tanks'][1]['brk']['t'] === $first;
+    }
+    $stuck += $same ? 1 : 0;
+}
+$check('bracket-keeps-its-target', $stuck === 20, "$stuck of 20 seeds");
+$room = $bracketRoom(9, 3, [$mk(2, 'ai', 330.0, 1)]);
+$droneTurn($room, 1);
+$first = $room['tanks'][1]['brk']['t'];
+$room['tanks'][$first]['hp'] = 0;
+$droneTurn($room, 1);
+$check('bracket-switches-when-the-target-dies', $room['tanks'][1]['brk']['t'] !== $first && $room['tanks'][1]['brk']['n'] === 0);
+
+// The memory is a handful of numbers per drone.
+$check('bracket-memory-is-small', strlen(json_encode($room['tanks'][1]['brk'])) < 160, (string) strlen(json_encode($room['tanks'][1]['brk'])));
+
 // Protocol fixtures (protocol/*.json): what room_snapshot builds today must
 // have the keys and types the fixtures record, which the client's smoke test
 // is run against. The values are not compared (generate.php --check does that

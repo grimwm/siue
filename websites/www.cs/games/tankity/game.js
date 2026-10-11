@@ -21,7 +21,7 @@ import {
   muzzle, shotSpeed, stepBallistic, blastDamage,
   fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling, aiChoose as simAiChoose,
-} from './js/sim.js?v=68e3ccd8ae';
+} from './js/sim.js?v=c526c0398a';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
 } from './js/audio.js?v=ce8cdf6a6e';
@@ -29,7 +29,7 @@ import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, CLOCK_SHOW_S,
 } from './js/net.js?v=a63c4607fa';
 import { transition, runWar, warSpeed, WATCH_TURNS } from './js/flow.js?v=fb268dfd34';
-import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=6f8d25b072';
+import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=597e6f55c1';
 import { createReplay } from './js/replay.js?v=9e2d32f609';
 import { createRenderer, drawChassis } from './js/render.js?v=5cf54c957b';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';

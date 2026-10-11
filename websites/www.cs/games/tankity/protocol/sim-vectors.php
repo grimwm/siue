@@ -438,6 +438,57 @@ $aim('no-rivals-left', ['terrain' => $flat, 'wind' => 0, 'round' => 1, 'seed' =>
     'tanks' => [$drone(300, 60) + ['dirS' => -1], $drone(500, 0)]],
     'With nobody left to shoot at the server falls back to a fixed 62/55 Shell and the browser aims at itself. Unreachable: a round with no rival has already ended on both sides.');
 
+/* ---- bracketing: a drone's shots at one target, one after another ----
+ * Each step is what the caller does for a drone turn: choose, move if it
+ * wants to, fire the volley (which records where it burst). The target may be
+ * driven off at a step; 'hp' is large so nobody dies mid-sequence. */
+$bracket = function (string $name, array $c) use ($add): void {
+    $room = sv_room($c);
+    $seat = $c['shooter'];
+    $steps = [];
+    for ($k = 0; $k < $c['shots']; $k++) {
+        if (($c['driveAt'] ?? -1) === $k) {
+            $room['tanks'][$c['target']]['x'] += $c['driveBy'];
+        }
+        $choice = room_ai_choose($room, $room['tanks'][$seat]);
+        $room['tanks'][$seat]['angle'] = $choice['angle'];
+        $room['tanks'][$seat]['power'] = $choice['power'];
+        $nx = max(12.0, min(SV_WIDTH - 12.0, $room['tanks'][$seat]['x'] + $choice['dx']));
+        if (abs($choice['dx']) > 0.5) {
+            $room['tanks'][$seat]['x'] = $nx;
+            $room['tanks'][$seat]['y'] = $room['terrain'][max(0, min(SV_WIDTH - 1, (int) round($nx)))];
+        }
+        $room['tanks'][$seat]['brk']['ox'] = $room['tanks'][$seat]['x'];
+        if ($choice['wkey'] !== 'shell') {
+            $room['tanks'][$seat]['ammo'][$choice['wkey']] = max(0, ($room['tanks'][$seat]['ammo'][$choice['wkey']] ?? 0) - 1);
+        }
+        $events = [['t' => 'aifire', 'seat' => $seat]];
+        room_fire_shot($room, $events, $seat, $choice['wkey']);
+        $b = $room['tanks'][$seat]['brk'];
+        $steps[] = ['wkey' => $choice['wkey'], 'angle' => $choice['angle'], 'power' => $choice['power'], 'x' => $room['tanks'][$seat]['x'],
+            'n' => $b['n'], 'target' => $b['t'], 'land' => $b['land']];
+    }
+    $add('ai-bracket', $name, $c, $steps);
+};
+foreach ([1, 7, 42, 2026] as $seed) {
+    $bracket("stationary-target-seed$seed", ['terrain' => $flat, 'wind' => 3, 'round' => 1, 'seed' => $seed, 'shooter' => 1, 'target' => 0, 'shots' => 6,
+        'tanks' => [$human(210, 9999), $drone(510, 9999) + ['dirS' => -1, 'angle' => 60]]]);
+}
+foreach ([3, 19] as $seed) {
+    $bracket("steady-hands-seed$seed", ['terrain' => $flat, 'wind' => -2, 'round' => 9, 'seed' => $seed, 'shooter' => 1, 'target' => 0, 'shots' => 5,
+        'tanks' => [$human(210, 9999), $drone(510, 9999) + ['dirS' => -1]]]);
+}
+foreach ([5, 64] as $seed) {
+    $bracket("target-drives-off-seed$seed", ['terrain' => $flat, 'wind' => 1, 'round' => 2, 'seed' => $seed, 'shooter' => 1, 'target' => 0, 'shots' => 6,
+        'driveAt' => 3, 'driveBy' => 45.0, 'tanks' => [$human(200, 9999), $drone(500, 9999) + ['dirS' => -1]]]);
+}
+$bracket('three-rivals-keeps-its-target', ['terrain' => $flat, 'wind' => -4, 'round' => 3, 'seed' => 301, 'shooter' => 2, 'target' => 0, 'shots' => 5,
+    'tanks' => [$human(100, 9999), $drone(300, 9999), $drone(560, 9999) + ['dirS' => -1], $drone(660, 9999)]]);
+$bracket('jammed-target-wobbles-double', ['terrain' => $flat, 'wind' => 0, 'round' => 2, 'seed' => 8, 'shooter' => 1, 'target' => 0, 'shots' => 5,
+    'tanks' => [$human(200, 9999) + ['jammer' => 2], $drone(500, 9999) + ['dirS' => -1]]]);
+$bracket('drone-with-a-rack', ['terrain' => $flat, 'wind' => 2, 'round' => 4, 'seed' => 11, 'shooter' => 1, 'target' => 0, 'shots' => 6,
+    'tanks' => [$human(210, 9999), $drone(510, 9999) + ['dirS' => -1, 'ammo' => ['mortar' => 2]]]]);
+
 /* ---- settling after a crater ---- */
 foreach ([['over-a-pit', 300, 300], ['already-down', 300, 400], ['ground-rose-above', 300, 450], ['off-the-left-edge', -3, 380],
     ['off-the-right-edge', 730, 380], ['half-pixel-rounds-up', 10.5, 380], ['hill-slope', 200.4, 300]] as [$label, $x, $y]) {

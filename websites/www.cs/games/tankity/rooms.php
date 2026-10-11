@@ -1225,6 +1225,13 @@ function room_humans_alive(array $room): bool
     }
     return false;
 }
+/* A drone's bracket learns where its volley first burst. */
+function room_brk_land(array &$tank, float $x): void
+{
+    if (isset($tank['brk']) && $tank['brk']['land'] === null) {
+        $tank['brk']['land'] = $x;
+    }
+}
 function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey): void
 {
     $room['shots'] = ($room['shots'] ?? 0) + 1; // a fresh turn clock follows each shot
@@ -1264,6 +1271,7 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
                 $events[] = $ev;
                 $mark = count($events);
                 if ($cr[0] === 'hit') {
+                    room_brk_land($tank, $cr[1]);
                     room_explode($room, $events, $tank, $wkey, $cr[1], $cr[2], $cr[5], $sub);
                 } else {
                     $events[] = ['t' => 'fizzle', 'by' => $tank['seat'], 'w' => $wkey];
@@ -1277,6 +1285,7 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
         $events[] = $ev;
         $mark = count($events);
         if ($res[0] === 'hit') {
+            room_brk_land($tank, $res[1]);
             room_explode($room, $events, $tank, $wkey, $res[1], $res[2], $res[5], null);
         } else {
             $events[] = ['t' => 'fizzle', 'by' => $tank['seat'], 'w' => $wkey];
@@ -1286,19 +1295,75 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
     unset($tank);
     room_pace_stamp($room, $events, $firstEvent);
 }
+/* Drone bracketing, like real artillery. The first shot at a target is the
+ * ballistic solution plus the round's wobble (the ranging shot). While the
+ * target and the gunner both stay put, each next shot starts from the last aim
+ * and corrects by the measured miss, with the wobble shrinking by
+ * ROOM_BRK_SHRINK per correction down to ROOM_BRK_FLOOR (never zero, so a
+ * drone cannot lock into a bad aim). A target that moved more than
+ * ROOM_BRK_DRIFT px, a gunner that moved, a dead target, or ROOM_BRK_MAX
+ * corrections without a kill all send it back to a fresh solution.
+ * src/sim.ts aiChoose is the same algorithm; protocol/sim-vectors.php keeps
+ * them identical. Memory per drone: $tank['brk'] = [t target index, a, p
+ * angle and power fired, w weapon, n corrections so far, tx target x then,
+ * ox own x then, land first burst x of the volley (null until it bursts)]. */
+const ROOM_BRK_SHRINK = 0.65;
+const ROOM_BRK_FLOOR = 0.2;
+const ROOM_BRK_MAX = 5;
+const ROOM_BRK_DRIFT = 3.0;
+const ROOM_BRK_ON = 22.0;
+
+/* The best (angle, power) near a last aim for a shot to burst on goalX: a
+ * coarse sweep, then a fine one around its best. Nearer the last aim wins ties. */
+function room_ai_correct(array $room, float $mx, float $my, string $wkey, int $dirS, float $a0, float $p0, float $goalX): array
+{
+    $width = count($room['terrain']);
+    $best = null;
+    $try = function (int $a, int $p) use (&$best, $room, $mx, $my, $wkey, $dirS, $a0, $p0, $goalX, $width): void {
+        if ($a < 10 || $a > 170 || $p < 10 || $p > 100) {
+            return;
+        }
+        $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $a, (float) $p, $wkey, $dirS, $width);
+        $err = ($land['oob'] ? 400 + abs($land['x'] - $goalX) * 0.2 : abs($land['x'] - $goalX)) + 0.02 * (abs($a - $a0) + abs($p - $p0));
+        if ($best === null || $err < $best['err']) {
+            $best = ['err' => $err, 'a' => $a, 'p' => $p];
+        }
+    };
+    for ($da = -15; $da <= 15; $da += 3) {
+        for ($dp = -18; $dp <= 18; $dp += 3) {
+            $try((int) $a0 + $da, (int) $p0 + $dp);
+        }
+    }
+    $ca = $best['a'];
+    $cp = $best['p'];
+    for ($da = -2; $da <= 2; $da++) {
+        for ($dp = -2; $dp <= 2; $dp++) {
+            $try($ca + $da, $cp + $dp);
+        }
+    }
+    return [$best['a'], $best['p']];
+}
+
 /* Server-side drone AI: same ballistic search as the browser, with the same
- * round-scaled error, driven by the room rng stream. */
+ * round-scaled error, driven by the room rng stream. Remembers the shot in
+ * the drone's 'brk' (the caller fixes 'ox' once the drone has moved). */
 function room_ai_choose(array &$room, array $tank): array
 {
     $rng = $room['rng'];
     $dirS = $tank['dirS'] ?? -1;
     [$mx, $my] = room_muzzle($tank);
+    $selfIdx = null;
+    foreach ($room['tanks'] as $i => $t) {
+        if ($t['seat'] === $tank['seat']) {
+            $selfIdx = $i;
+        }
+    }
     // Drones feud with each other too: usually the nearest rival, sometimes
     // whoever else is still rolling. Nobody is safe, nobody is perfect.
     $rivals = [];
-    foreach ($room['tanks'] as $t) {
+    foreach ($room['tanks'] as $i => $t) {
         if ($t['hp'] > 0 && $t['seat'] !== $tank['seat']) {
-            $rivals[] = $t;
+            $rivals[] = $t + ['idx' => $i];
         }
     }
     if (!count($rivals)) {
@@ -1306,10 +1371,6 @@ function room_ai_choose(array &$room, array $tank): array
         return ['wkey' => 'shell', 'angle' => 62.0, 'power' => 55.0, 'dx' => 0.0];
     }
     usort($rivals, fn($a, $b) => abs($a['x'] - $tank['x']) <=> abs($b['x'] - $tank['x']));
-    $me = $rivals[0];
-    if (count($rivals) > 1 && room_rng_next($rng) >= 0.6) {
-        $me = $rivals[1 + (int) floor(room_rng_next($rng) * (count($rivals) - 1))];
-    }
     $keys = ['shell'];
     foreach (room_weapons() as $k => $def) {
         if ($k === 'shell') {
@@ -1319,35 +1380,69 @@ function room_ai_choose(array &$room, array $tank): array
             $keys[] = $k;
         }
     }
-    $best = null;
-    $width = count($room['terrain']);
-    foreach ($keys as $wkey) {
-        for ($a = 25; $a <= 155; $a += 6) {
-            for ($p = 20; $p <= 100; $p += 6) {
-                $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $a, (float) $p, $wkey, $dirS, $width);
-                $err = $land['oob'] ? 400 + abs($land['x'] - $me['x']) * 0.2 : abs($land['x'] - $me['x']);
-                if ($best === null || $err < $best['err']) {
-                    $best = ['err' => $err, 'a' => $a, 'p' => $p, 'wkey' => $wkey];
-                }
+    // A bracket in progress: same target standing where it stood, same gunner
+    // on the same spot, the same gun still loaded, under the correction cap.
+    $mem = $tank['brk'] ?? null;
+    $cont = null;
+    if ($mem !== null && $mem['n'] < ROOM_BRK_MAX && abs($tank['x'] - $mem['ox']) <= 1.0 && in_array($mem['w'], $keys, true)) {
+        foreach ($rivals as $r) {
+            if ($r['idx'] === $mem['t'] && abs($r['x'] - $mem['tx']) <= ROOM_BRK_DRIFT) {
+                $cont = $r;
             }
         }
     }
+    $me = $cont ?? $rivals[0];
+    if ($cont === null && count($rivals) > 1 && room_rng_next($rng) >= 0.6) {
+        $me = $rivals[1 + (int) floor(room_rng_next($rng) * (count($rivals) - 1))];
+    }
+    $width = count($room['terrain']);
     // Deliberately shaky hands: dangerous up close, forgiving at range.
     // A jammer doubles the wobble of anything aimed at its owner.
     $skill = min(1.0, 0.35 + $room['round'] * 0.12);
     $wob = max(0.25, 1.2 - $skill);
+    if ($cont !== null) {
+        $w = $mem['w'];
+        $n = $mem['n'] + 1;
+        $sim = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $mem['a'], (float) $mem['p'], $w, $dirS, $width);
+        $landed = $mem['land'] ?? $sim['x'];
+        // Where the sim must put a shot so that, shifted by the measured miss
+        // of the last one, it bursts on the target.
+        $miss = $me['x'] - $landed;
+        if (abs($miss) <= ROOM_BRK_ON) {
+            $miss = 0.0; // a burst on the hull is on target: hold the aim
+        }
+        [$ba, $bp] = room_ai_correct($room, $mx, $my, $w, $dirS, (float) $mem['a'], (float) $mem['p'], $sim['x'] + $miss);
+        $wob = max(ROOM_BRK_FLOOR, $wob * ROOM_BRK_SHRINK ** $n);
+    } else {
+        $best = null;
+        foreach ($keys as $wkey) {
+            for ($a = 25; $a <= 155; $a += 6) {
+                for ($p = 20; $p <= 100; $p += 6) {
+                    $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $a, (float) $p, $wkey, $dirS, $width);
+                    $err = $land['oob'] ? 400 + abs($land['x'] - $me['x']) * 0.2 : abs($land['x'] - $me['x']);
+                    if ($best === null || $err < $best['err']) {
+                        $best = ['err' => $err, 'a' => $a, 'p' => $p, 'wkey' => $wkey];
+                    }
+                }
+            }
+        }
+        [$ba, $bp, $w, $n] = [$best['a'], $best['p'], $best['wkey'], 0];
+    }
     if ($me['kind'] === 'human' && ($room['jammer'][$me['seat']] ?? 0) > 0) {
         $wob *= 2;
     }
-    $angle = max(10.0, min(170.0, round($best['a'] + room_gauss($rng) * 9 * $wob)));
-    $power = max(10.0, min(100.0, round($best['p'] + room_gauss($rng) * 12 * $wob)));
-    // Drones shuffle for a better firing spot instead of camping one rut.
+    $angle = max(10.0, min(170.0, round($ba + room_gauss($rng) * 9 * $wob)));
+    $power = max(10.0, min(100.0, round($bp + room_gauss($rng) * 12 * $wob)));
+    // Drones shuffle for a better firing spot instead of camping one rut,
+    // unless they are walking a bracket in.
     $dx = 0.0;
-    if (room_rng_next($rng) < 0.35) {
+    if ($cont === null && room_rng_next($rng) < 0.35) {
         $dx = (room_rng_next($rng) < 0.5 ? -1.0 : 1.0) * (8 + room_rng_next($rng) * 27);
     }
     $room['rng'] = $rng;
-    return ['wkey' => $best['wkey'], 'angle' => $angle, 'power' => $power, 'dx' => $dx];
+    $room['tanks'][$selfIdx]['brk'] = ['t' => $me['idx'], 'a' => $angle, 'p' => $power, 'w' => $w, 'n' => $n,
+        'tx' => $me['x'], 'ox' => $tank['x'], 'land' => null];
+    return ['wkey' => $w, 'angle' => $angle, 'power' => $power, 'dx' => $dx];
 }
 
 /* Drone magazine from the data file: shells the battery may load by round. */
@@ -1594,6 +1689,9 @@ function room_advance(array &$room, array &$events): void
             $room['tanks'][$cur]['x'] = $nx;
             $xi = max(0, min($width - 1, (int) round($room['tanks'][$cur]['x'])));
             $room['tanks'][$cur]['y'] = $room['terrain'][$xi];
+        }
+        if (isset($room['tanks'][$cur]['brk'])) {
+            $room['tanks'][$cur]['brk']['ox'] = $room['tanks'][$cur]['x']; // the bracket remembers where it fired from
         }
         if ($choice['wkey'] !== 'shell') {
             $room['tanks'][$cur]['ammo'][$choice['wkey']] = max(0, ($room['tanks'][$cur]['ammo'][$choice['wkey']] ?? 0) - 1);

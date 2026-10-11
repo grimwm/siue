@@ -419,6 +419,7 @@ export function explode(world, arsenal, x, y, wkey, owner, direct, ov) {
     const dmg0 = (ov && ov.dmg) || w.dmg;
     const r = (ov && ov.radius) || w.radius;
     const gfx = (ov && ov.gfx) || w.gfx || {};
+    brkLand(owner, x);
     carveCrater(world.terrain, x, y, r, H - 4);
     const blast = { x, y, r, wkey, fx: (ov && ov.fx) || wkey, shake: gfx.shake || 0.5, owner, events: [] };
     for (const t of world.tanks) {
@@ -654,19 +655,56 @@ export function fallTanks(world, dt) {
 export function anyTankFalling(world) {
     return world.tanks.some(t => t.hp > 0 && t.y < surfY(world.terrain, t.x) - 0.5);
 }
+/* Drone bracketing, like real artillery. The first shot at a target is the
+   ballistic solution plus the round's wobble (the ranging shot). While the
+   target and the gunner both stay put, each next shot starts from the last aim
+   and corrects by the measured miss, with the wobble shrinking by BRK_SHRINK
+   per correction down to BRK_FLOOR (never zero, so a drone cannot lock into a
+   bad aim). A target that moved more than BRK_DRIFT px, a gunner that moved, a
+   dead target, or BRK_MAX corrections without a kill all send it back to a
+   fresh solution. rooms.php room_ai_choose is the same algorithm. */
+export const BRK_SHRINK = 0.65;
+export const BRK_FLOOR = 0.2;
+export const BRK_MAX = 5;
+export const BRK_DRIFT = 3;
+export const BRK_ON = 22;
+/* The best (angle, power) near a last aim for a shot to burst on goalX: a
+   coarse sweep, then a fine one around its best. Nearer the last aim wins ties. */
+function aiCorrect(world, arsenal, mx, my, wkey, dirS, a0, p0, goalX) {
+    let best = null;
+    const tryAim = (a, p) => {
+        if (a < 10 || a > 170 || p < 10 || p > 100)
+            return;
+        const land = simShot(world, arsenal, mx, my, a, p, wkey, dirS);
+        const err = (land.oob ? 400 + Math.abs(land.x - goalX) * 0.2 : Math.abs(land.x - goalX)) + 0.02 * (Math.abs(a - a0) + Math.abs(p - p0));
+        if (!best || err < best.err)
+            best = { err, a, p };
+    };
+    for (let da = -15; da <= 15; da += 3) {
+        for (let dp = -18; dp <= 18; dp += 3)
+            tryAim(a0 + da, p0 + dp);
+    }
+    const { a: ca, p: cp } = best;
+    for (let da = -2; da <= 2; da++) {
+        for (let dp = -2; dp <= 2; dp++)
+            tryAim(ca + da, cp + dp);
+    }
+    const b = best;
+    return [b.a, b.p];
+}
+/* A drone's bracket learns where its volley first burst. */
+export function brkLand(owner, x) {
+    if (owner.brk && owner.brk.land === null)
+        owner.brk.land = x;
+}
 export function aiChoose(world, arsenal, t) {
     // Drones feud with each other too: usually the nearest rival, sometimes
     // whoever else is still rolling. Nobody is safe, nobody is perfect.
     const rivals = world.tanks
         .filter(c => c !== t && c.hp > 0)
         .sort((a, b) => Math.abs(a.x - t.x) - Math.abs(b.x - t.x));
-    let target = rivals[0] || t;
-    if (rivals.length > 1 && world.rng() >= 0.6) {
-        target = rivals[1 + Math.floor(world.rng() * (rivals.length - 1))];
-    }
     const dirS = facing(t);
     const m = muzzle(t);
-    let best = null;
     const keys = ['shell'];
     const rack = t.ammo || {};
     for (const k of arsenal.order) {
@@ -675,27 +713,59 @@ export function aiChoose(world, arsenal, t) {
         if ((rack[k] || 0) > 0)
             keys.push(k);
     }
-    for (const wkey of keys) {
-        for (let a = 25; a <= 155; a += 6) {
-            for (let p = 20; p <= 100; p += 6) {
-                const land = simShot(world, arsenal, m.x, m.y, a, p, wkey, dirS);
-                const err = land.oob ? 400 + Math.abs(land.x - target.x) * 0.2 : Math.abs(land.x - target.x);
-                if (!best || err < best.err)
-                    best = { err, a, p, wkey };
-            }
-        }
+    // A bracket in progress: same target standing where it stood, same gunner
+    // on the same spot, the same gun still loaded, under the correction cap.
+    const mem = t.brk;
+    let cont = null;
+    if (mem && mem.n < BRK_MAX && Math.abs(t.x - mem.ox) <= 1 && keys.includes(mem.w)) {
+        const c = world.tanks[mem.t];
+        if (c && c !== t && c.hp > 0 && Math.abs(c.x - mem.tx) <= BRK_DRIFT)
+            cont = c;
     }
-    const pick = best;
+    let target = cont || rivals[0] || t;
+    if (!cont && rivals.length > 1 && world.rng() >= 0.6) {
+        target = rivals[1 + Math.floor(world.rng() * (rivals.length - 1))];
+    }
     // Deliberately shaky hands: dangerous up close, forgiving at range.
     // A jammer doubles the wobble of anything aimed at our tank.
     const skill = Math.min(1, 0.35 + world.round * 0.12);
     let wob = Math.max(0.25, 1.2 - skill);
+    let ba, bp, w, n;
+    if (cont) {
+        w = mem.w;
+        n = mem.n + 1;
+        const sim = simShot(world, arsenal, m.x, m.y, mem.a, mem.p, w, dirS);
+        const landed = mem.land === null ? sim.x : mem.land;
+        // Where the sim must put a shot so that, shifted by the measured miss of
+        // the last one, it bursts on the target.
+        let miss = target.x - landed;
+        if (Math.abs(miss) <= BRK_ON)
+            miss = 0; // a burst on the hull is on target: hold the aim
+        [ba, bp] = aiCorrect(world, arsenal, m.x, m.y, w, dirS, mem.a, mem.p, sim.x + miss);
+        wob = Math.max(BRK_FLOOR, wob * BRK_SHRINK ** n);
+    }
+    else {
+        let best = null;
+        for (const wkey of keys) {
+            for (let a = 25; a <= 155; a += 6) {
+                for (let p = 20; p <= 100; p += 6) {
+                    const land = simShot(world, arsenal, m.x, m.y, a, p, wkey, dirS);
+                    const err = land.oob ? 400 + Math.abs(land.x - target.x) * 0.2 : Math.abs(land.x - target.x);
+                    if (!best || err < best.err)
+                        best = { err, a, p, wkey };
+                }
+            }
+        }
+        const pick = best;
+        [ba, bp, w, n] = [pick.a, pick.p, pick.wkey, 0];
+    }
     if (target.isPlayer && (world.jammer || 0) > 0)
         wob *= 2;
-    const angle = clamp(Math.round(pick.a + gauss(world.rng) * 9 * wob), 10, 170);
-    const power = clamp(Math.round(pick.p + gauss(world.rng) * 12 * wob), 10, 100);
-    // Drones shuffle for a better firing spot instead of camping one rut.
-    if (world.rng() < 0.35) {
+    const angle = clamp(Math.round(ba + gauss(world.rng) * 9 * wob), 10, 170);
+    const power = clamp(Math.round(bp + gauss(world.rng) * 12 * wob), 10, 100);
+    // Drones shuffle for a better firing spot instead of camping one rut,
+    // unless they are walking a bracket in.
+    if (!cont && world.rng() < 0.35) {
         const dx = (world.rng() < 0.5 ? -1 : 1) * (8 + world.rng() * 27);
         const nx = clamp(t.x + dx, 12, W - 12);
         if (!spotTaken(world.tanks, t, nx)) {
@@ -703,5 +773,6 @@ export function aiChoose(world, arsenal, t) {
             t.y = surfY(world.terrain, t.x);
         }
     }
-    return { wkey: pick.wkey, angle, power };
+    t.brk = { t: world.tanks.indexOf(target), a: angle, p: power, w, n, tx: target.x, ox: t.x, land: null };
+    return { wkey: w, angle, power };
 }

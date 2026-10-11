@@ -176,6 +176,44 @@ php tools/install-files.php      # after the last edit to any served file
 - The lobby's hill tiles draw `profile` (48 heights, 0..1) that
   `rooms.php?action=maps` computes from round one of each map's terrain.
 
+## Drone aim
+
+Two copies of one algorithm, `room_ai_choose` in rooms.php and `aiChoose` in
+`src/sim.ts`, pinned together by the sim vectors.
+
+- Target: the nearest rival, or (40% of the time) another live one, except
+  while a bracket is running on a target (below), which it keeps until it dies
+  or drives off.
+- Ranging shot: a brute-force search (angle 25-155 in steps of 6, power 20-100
+  in steps of 6, over the shell and any loaded gun) for the landing nearest the
+  target, plus Gaussian wobble: skill = min(1, 0.35 + round x 0.12), wob =
+  max(0.25, 1.2 - skill), angle +-9 x wob, power +-12 x wob, doubled against a
+  jammer's owner. Then a 35% chance to shuffle 8-35 px.
+- Bracketing: each drone remembers its last shot (`brk` on the tank in a room,
+  on the drone object solo: target index, angle, power, weapon, corrections so
+  far `n`, target x and own x then, and `land`, the x where the volley first
+  burst, filled in when it does). While the same target stands within
+  `BRK_DRIFT` = 3 px of where it stood, the drone is within 1 px of where it
+  fired from, and its gun is still loaded, the next shot is a correction: the
+  sim's landing for the last aim is shifted by the measured miss (`land` against
+  the target's x; a burst within `BRK_ON` = 22 px, the hull, counts as on target
+  and holds the aim), a coarse then fine search near the last aim finds the
+  angle and power for that landing, and the wobble shrinks to wob x
+  `BRK_SHRINK`^n (0.65 per correction), never below `BRK_FLOOR` = 0.2 (so a
+  drone never locks into a bad aim). A bracketing drone does not shuffle.
+- Restart: the target moved or died, the drone moved or its gun ran dry, or
+  `BRK_MAX` = 5 corrections went by, and the next shot is a fresh ranging shot
+  with full wobble.
+- Measured (flat and rolling ground, a target that stays put, 120 seeds per
+  row, a hit is any damage): in round 1 at 250-350 px the median miss is
+  50-110 px on the ranging shot, 24-60 on the second, 17-40 on the third and
+  14-18 (the hull's edge) on the fourth; the hit chance is 22-37% on the first
+  shot, 28-61% on the second, 48-83% on the third and 66-85% on the fourth.
+  Round 6 starts at an 18 px median and 86-88% hits. A target that drives off
+  sends the drone back to the first row.
+- The memory is a few numbers per drone and rides in the room's JSON; the
+  snapshot a client sees leaves it out.
+
 ## Source layout and build
 
 The client is native ES modules with no bundler: `game.js` is loaded by
@@ -404,7 +442,7 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
 | `node ui-test.js`                              | The Preact overlays (`js/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the scores, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
 | `node smoke-test.js`                           | The shipped client (`game.js` imported as a module) in a stub DOM (loads `fx.js` first), driven by the `game.json` key table and the `protocol/` fixtures; also checks every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps; a solo player who wrecks their own tank sees the drones fight on to one and the lost round open the shop |
 | `php config-test.php`                          | `.config.yaml` precedence                                                                  |
-| `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; one unit left standing ends a round (free-for-all, drones fighting on, lives, winnings, `roundwin` seat), the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller: it rolls down a slope and damages a unit at the bottom, settles and craters in a valley, bursts at the board's edge, hits a drone overhead, and its recorded path follows the ground |
+| `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; drone bracketing (misses shrink over shots at a standing target, hits within four, a moved target or gunner resets the corrections, the target is kept until it dies); one unit left standing ends a round (free-for-all, drones fighting on, lives, winnings, `roundwin` seat), the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller: it rolls down a slope and damages a unit at the bottom, settles and craters in a valley, bursts at the board's edge, hits a drone overhead, and its recorded path follows the ground |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (needs SysV; run inside the PHP container)                 |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `node audio-test.js`                            | `js/audio.js` imports without a browser; the loop-point trim and the round-to-track mapping are right |
@@ -482,7 +520,8 @@ outputs; `sim-vectors-test.js` replays every case through the compiled sim,
   bunker, EMP, last stand, kill bonus), landing prediction, where a roller's
   roll ends, whole volleys for every weapon in `game.json` (and a roller down
   into a valley, into a unit, back onto its gunner, off either edge and
-  stopping on a rise), the drone's aim, and tank settling.
+  stopping on a rise), the drone's aim, sequences of drone shots that bracket a
+  target in (and re-range when it drives off), and tank settling.
 - Shared rules the cases pin: only a kill the player's own shot made pays the
   300 bonus, and a volley's projectiles (buckshot pellets, cluster bomblets)
   burst in launch order, each against the ground the earlier ones left. The

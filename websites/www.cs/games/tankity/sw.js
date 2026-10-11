@@ -3,8 +3,8 @@
 // Network first, so an online player always gets the current files; the
 // precached copies answer only when the network does not.
 const PREFIX = 'game-tankity-';
-const CACHE = PREFIX + 'ffb32474d979';
-const PRECACHE = ["./","fx.js","fx/sprites/energy.png","fx/sprites/fireball.png","fx/sprites/moon.png","fx/sprites/mushroom.png","fx/sprites/shock.png","fx/sprites/smoke.png","fx/sprites/sprites.json","game.css","game.js","game.json","icon-192.png","icon-512.png","index.html","js/ai.js","js/audio.js","js/chatter.js","js/effects.js","js/flow.js","js/guns.js","js/hud.js","js/input.js","js/match.js","js/net.js","js/preview.js","js/render.js","js/replay.js","js/scores.js","js/shop.js","js/sim.js","js/tutorial.js","js/ui/chrome.js","js/ui/endveil.js","js/ui/guns.js","js/ui/help.js","js/ui/hud.js","js/ui/icons.js","js/ui/leave.js","js/ui/lobby.js","js/ui/log.js","js/ui/menu.js","js/ui/scores.js","js/ui/shop.js","js/ui/tutorial.js","js/view.js","manifest.webmanifest","vendor/preact/hooks.module.js","vendor/preact/jsx-runtime.module.js","vendor/preact/preact.module.js"];
+const CACHE = PREFIX + 'ee5eb1f57b0d';
+const PRECACHE = ["./","fx.js","fx/sprites/energy.png","fx/sprites/fireball.png","fx/sprites/moon.png","fx/sprites/mushroom.png","fx/sprites/shock.png","fx/sprites/smoke.png","fx/sprites/sprites.json","game.css","game.js","game.json","icon-192.png","icon-512.png","index.html","js/ai.js","js/audio.js","js/chatter.js","js/effects.js","js/flow.js","js/guns.js","js/hud.js","js/input.js","js/match.js","js/net.js","js/preview.js","js/render.js","js/replay.js","js/room.js","js/scores.js","js/shop.js","js/sim.js","js/tutorial.js","js/ui/chrome.js","js/ui/endveil.js","js/ui/guns.js","js/ui/help.js","js/ui/hud.js","js/ui/icons.js","js/ui/leave.js","js/ui/lobby.js","js/ui/log.js","js/ui/menu.js","js/ui/scores.js","js/ui/shop.js","js/ui/tutorial.js","js/view.js","manifest.webmanifest","vendor/preact/hooks.module.js","vendor/preact/jsx-runtime.module.js","vendor/preact/preact.module.js"];
 const SCOPE_PATH = new URL('./', self.location).pathname;
 
 self.addEventListener('install', event => {

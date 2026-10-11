@@ -100,7 +100,7 @@ export interface MatchState {
   driveT: number;
   pendingRoom: RoomSnapshot | null;
   lastPhase: string;
-  lastTurn: number;
+  lastTurn: number | null;
   lastRound: number;
   initials: string;
 }

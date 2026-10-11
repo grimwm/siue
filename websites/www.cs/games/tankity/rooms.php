@@ -850,6 +850,10 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
 // in it, plus a beat), never less than ROOM_DRONE_PACE_MIN. */
 const ROOM_DRONE_PACE_MIN = 2.0;
 const ROOM_VOLLEY_LINGER = 1.0;
+/* The longest barrel swing a client plays before a volley flies (src/replay.ts
+// aimDur, at most 1.4 s); the wait covers it so the next volley never lands on
+// a client still playing the last one. */
+const ROOM_AIM_MAX = 1.4;
 /* With no human standing the drones play three times as fast: their volleys
 // carry 'watch' => true (clients replay them at src/replay.ts FAST_SPEED, the
 // same 3) and the gap between them is a third as long. */
@@ -863,7 +867,7 @@ function room_pace_stamp(array &$room, array $events, int $from): void
     for ($i = max(0, $from), $n = count($events); $i < $n; $i++) {
         $span = max($span, (float) ($events[$i]['t1'] ?? 0.0), (float) ($events[$i]['at'] ?? 0.0));
     }
-    $wait = max(ROOM_DRONE_PACE_MIN, $span + ROOM_VOLLEY_LINGER);
+    $wait = max(ROOM_DRONE_PACE_MIN, ROOM_AIM_MAX + $span + ROOM_VOLLEY_LINGER);
     if (!empty($events[$from]['watch'])) {
         $wait /= ROOM_DRONE_SPEED;
     }

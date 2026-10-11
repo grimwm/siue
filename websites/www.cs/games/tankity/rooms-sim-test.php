@@ -596,10 +596,12 @@ $check('pace-then-one-more-turn', count(array_filter($poll($room), fn($e) => $e[
 $room = $battle(1, 2, 3, 5);
 $events = [['t' => 'aifire', 'seat' => 1, 'w' => 'shell', 'watch' => true], ['t' => 'shot', 't1' => 9.0, 'at' => 0.0]];
 room_pace_stamp($room, $events, 0);
-$check('pace-follows-the-flight-time', abs($room['pace']['wait'] - (9.0 + ROOM_VOLLEY_LINGER) / ROOM_DRONE_SPEED) < 0.001, (string) $room['pace']['wait']);
+$check('pace-follows-the-flight-time', abs($room['pace']['wait'] - (ROOM_AIM_MAX + 9.0 + ROOM_VOLLEY_LINGER) / ROOM_DRONE_SPEED) < 0.001, (string) $room['pace']['wait']);
 $events = [['t' => 'aifire', 'seat' => 1, 'w' => 'shell'], ['t' => 'shot', 't1' => 0.2, 'at' => 0.0]];
 room_pace_stamp($room, $events, 0);
-$check('pace-never-below-the-minimum', $room['pace']['wait'] === ROOM_DRONE_PACE_MIN);
+// A short volley still waits out the client's longest aim swing and the tail.
+$check('pace-covers-aim-swing-and-tail', abs($room['pace']['wait'] - max(ROOM_DRONE_PACE_MIN, ROOM_AIM_MAX + 0.2 + ROOM_VOLLEY_LINGER)) < 0.001 && $room['pace']['wait'] >= ROOM_DRONE_PACE_MIN,
+    (string) $room['pace']['wait']);
 
 // With a human standing the drones still answer inline, unpaced.
 $room = $battle(1, 3, 3, 4242);

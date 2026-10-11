@@ -4,7 +4,8 @@
 // shapes to src/protocol.ts, but a JSON import types every string as `string`,
 // so the literal unions are checked here: the compiler reads them out of
 // protocol.ts, and they are compared with the fixtures, with the action, phase
-// and event names rooms.php spells out, and with the events game.js handles.
+// and event names rooms.php spells out, and with the events the client handles
+// (game.js and the typed modules it wires, src/*.ts).
 import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
@@ -13,7 +14,7 @@ const __dirname = import.meta.dirname;
 const read = file => fs.readFileSync(path.join(__dirname, file), 'utf8');
 // The room server is rooms.php plus the files it requires from server/.
 const php = ['rooms.php', ...['settings', 'store', 'sim', 'ai', 'rules', 'protocol'].map(f => `server/${f}.php`)].map(read).join('\n');
-const game = read('game.js');
+const game = [read('game.js'), ...fs.readdirSync(path.join(__dirname, 'src')).filter(f => f.endsWith('.ts')).map(f => read('src/' + f))].join('\n');
 
 let failed = 0;
 const check = (name, ok, detail = '') => {
@@ -84,6 +85,7 @@ check('seat-modes-in-rooms-php', [...phpSeatModes].every(m => SEAT_MODES.include
 // ---- what the client handles ----
 const handled = new Set([...game.matchAll(/\be\.t === '(\w+)'/g)].map(m => m[1]));
 const typos = [...handled].filter(t => !EVENT_TYPES.includes(t));
+check('client-handles-events', handled.size > 0, 'no \'e.t === ...\' branches found in the client source');
 check('client-handles-only-real-events', typos.length === 0, typos.join());
 
 if (failed) { console.log(`\n${failed} check(s) failed`); process.exit(1); }

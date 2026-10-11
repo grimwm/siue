@@ -14,9 +14,13 @@ const GAME = JSON.parse(fs.readFileSync(path.join(dir, 'game.json'), 'utf8'));
 const TOL = VECTORS.tolerance;
 
 /* ---- where the sim comes from ----
-   The only place that reaches for it: the compiled module, which takes its
-   state as arguments, so the cases below pass a plain state object G. */
-const sim = await import(pathToFileURL(path.join(dir, 'js', 'sim.js')).href);
+   The only place that reaches for it: the compiled modules, which take their
+   state as arguments, so the cases below pass a plain state object G. The
+   physics is js/sim.js and the drone AI js/ai.js; `sim` holds both. */
+const sim = {
+  ...await import(pathToFileURL(path.join(dir, 'js', 'sim.js')).href),
+  ...await import(pathToFileURL(path.join(dir, 'js', 'ai.js')).href),
+};
 const arsenal = sim.buildArsenal(GAME.arsenal);
 
 /* ---- state the cases run over ---- */

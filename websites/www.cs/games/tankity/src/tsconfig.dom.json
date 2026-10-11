@@ -13,7 +13,7 @@
     "jsxImportSource": "preact"
   },
   "files": [
-    "audio.ts", "render.ts", "chatter.ts", "effects.ts", "shop.ts", "hud.ts", "view.ts", "tutorial.ts", "guns.ts", "scores.ts", "match.ts", "room.ts",
+    "audio.ts", "render.ts", "chatter.ts", "effects.ts", "shop.ts", "hud.ts", "view.ts", "tutorial.ts", "guns.ts", "scores.ts", "match.ts", "room.ts", "lobby.ts",
     "ui/help.tsx", "ui/shop.tsx", "ui/lobby.tsx", "ui/menu.tsx", "ui/guns.tsx", "ui/scores.tsx", "ui/log.tsx", "ui/tutorial.tsx", "ui/hud.tsx", "ui/endveil.tsx", "ui/leave.tsx", "ui/icons.ts"
   ]
 }

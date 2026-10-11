@@ -256,7 +256,7 @@ export function drawGearIcon(cv: HTMLCanvasElement, g: Gear | undefined): void {
 }
 /* The host's hills: a Random tile plus one per named map, each a silhouette
    of that map's terrain from the server. #lobby-map is the hidden value. */
-export function drawMapIcon(cv: HTMLCanvasElement, profile: readonly number[] | undefined): void {
+export function drawMapIcon(cv: HTMLCanvasElement, profile: readonly number[] | null | undefined): void {
   const c = iconCtx(cv);
   if (!c) return;
   c.fillStyle = '#00000b';

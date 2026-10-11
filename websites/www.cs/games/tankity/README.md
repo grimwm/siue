@@ -10,14 +10,14 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | File                                                            | What it is                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `index.html`, `game.css`, `game.js`                             | The page and the client (an ES module: the game loop, the state behind the HUD, shop, lobby and menu, and the effects the room replay and the firing range cause); it imports the sim, the audio, the room client, the replay, the firing range, the match flow, the renderer, the input and the Preact overlays from `js/`                                                                                                               |
-| `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (20 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
+| `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (21 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `game.js`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml`, and where each came from                                                                                                                     |
 | `src/sim.ts` | The game math in TypeScript: RNG, terrain, flight, hit tests, blasts, the drone's aim. Pure: state in, what happened out; no page, sound or particles |
 | `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes. It never touches the page |
 | `src/net.ts` | The room client: transport (one fetcher, the 429 retry), the session, polling, the act/buy/ready/leave senders, the turn and shop clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers and the clock are passed in |
 | `src/replay.ts` | The room volley replay: the queue of events waiting to play and the volley on screen. Eases the shooter's barrel, flies each shell along the path the server recorded (positions and velocities for the renderer), lands blasts and hits when the events say, and plays a volley kept back by a catch-up, or fired by a drone with no human standing (`watch`), at triple speed (`FAST_SPEED`). Sound, particles, craters, armor and log lines happen through callbacks; it never touches the page |
-| `src/preview.ts` | The firing-range preview simulation: a fixed dummy, the solver that aims at it with the war's own ballistics, the shell loop (seeker, cluster, pierce, proximity), the damage tally and the result timing, on its own small field. Weapons, effects and the result line are passed in; it never touches the page |
+| `src/preview.ts` | The firing-range preview simulation: a fixed dummy, the solver that aims at it with the war's own ballistics, the shell loop (seeker, cluster, pierce, proximity, roller), the damage tally and the result timing, on its own small field. Weapons, effects and the result line are passed in; it never touches the page |
 | `src/flow.ts` | The solo match flow: the `Phase` union (`banner`, `shop`, `aim`, `think`, `fly`, `settle`, `over`), the events that move between them and one table, `FLOW`, with `transition(phase, event)` returning the next phase or `null` for an illegal move. `game.js` stores the result in `G.phase`; room matches take their phase from the server and skip it. It also holds the solo watch speed (`WATCH_SPEED`, `warSpeed`, `runWar`). Pure; it never touches the page |
 | `src/render.ts` | The battlefield on the canvas: sky and moon, clouds, hills, the units and their bodies, aim arm, blasts, shells, sparks, the wind gauge, the on-canvas turn clock and the firing-range preview. Reads a `BattleView` that `game.js` builds each frame and paints it; it never changes game state |
 | `src/protocol.ts` | The room wire protocol as types: replies, the room snapshot, the discriminated union of events, and each action's request body. Types only, so it has no `js/` file |
@@ -280,6 +280,27 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
   same with its selection. A key that scrolls a panel (`scrollOverlay`) sends
   the scroll event itself, because a script's `scrollTop` change is reported
   only on the next frame.
+- The Roller (`effect: roller`) is a shell that does not burst where it lands:
+  it flies like a Shell, and touching down it rolls the ground (wind no longer
+  touches it) and bursts when it reaches a unit, comes to rest in a dip, runs
+  off the board, or has rolled `rollTime` seconds. A roller that meets a unit
+  while still airborne bursts as a direct hit, as a shell does. Rolling is 1D
+  along the terrain: it starts at 70 % of its speed along the ground, downhill
+  pulls it on (`GRAV` along the slope), `friction` (a share of its speed per
+  second, a game.yaml field) and a constant 10 px/s^2 drag slow it, and it
+  stops once it is slower than 12 px/s on ground that pulls it by less than
+  20 px/s^2. The ball rides 3 px above the ground (a linear blend between
+  columns) and a unit counts as touched when the ball is within the width of
+  its hit box at any height, so it also reaches a drone hovering above it (the
+  owner-clear rule is the shell's). Its burst is a normal blast at the ground
+  under the ball, direct on the unit it touched. `groundAt`, `groundSlope`,
+  `rollStart`, `rollStep`, `rollHit` and `rollOut` in `sim.ts` and their
+  `room_*` twins in `rooms.php` are the rolling; the room replay needs
+  nothing extra, because the rolling is just more points on the shot's path
+  (a point every `PATH_HZ`, and the shot's `t1` is the flight plus the roll).
+  The drones' aim predicts a roller's landing with `rollOut`: where it comes to
+  rest (ignoring units, which the predictor never sees). The renderer draws a
+  `painter: ball` shell as a ball with a stripe that turns as the ball travels.
 - The sim takes its state as arguments (`World`, `Arsenal`) and reports what
   happened as data: `explode` returns the blast (each unit's shield, wound or
   wreck, a last stand's nested blast), `stepShells` returns the frame's trails,
@@ -383,7 +404,7 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
 | `node ui-test.js`                              | The Preact overlays (`js/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the scores, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
 | `node smoke-test.js`                           | The shipped client (`game.js` imported as a module) in a stub DOM (loads `fx.js` first), driven by the `game.json` key table and the `protocol/` fixtures; also checks every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps; a solo player who wrecks their own tank sees the drones fight on to one and the lost round open the shop |
 | `php config-test.php`                          | `.config.yaml` precedence                                                                  |
-| `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; one unit left standing ends a round (free-for-all, drones fighting on, lives, winnings, `roundwin` seat), the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/` |
+| `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; one unit left standing ends a round (free-for-all, drones fighting on, lives, winnings, `roundwin` seat), the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller: it rolls down a slope and damages a unit at the bottom, settles and craters in a valley, bursts at the board's edge, hits a drone overhead, and its recorded path follows the ground |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (needs SysV; run inside the PHP container)                 |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `node audio-test.js`                            | `js/audio.js` imports without a browser; the loop-point trim and the round-to-track mapping are right |
@@ -458,8 +479,10 @@ outputs; `sim-vectors-test.js` replays every case through the compiled sim,
 - Covered: the RNG and terrain generator, spawn spots, shot speed, muzzle,
   gravity and wind, hit boxes, the swept hit test (owner-clear rule, lance
   skip), seeker steering, the cluster fan, blast damage and craters (shield,
-  bunker, EMP, last stand, kill bonus), landing prediction, whole volleys for
-  every weapon in `game.json`, the drone's aim, and tank settling.
+  bunker, EMP, last stand, kill bonus), landing prediction, where a roller's
+  roll ends, whole volleys for every weapon in `game.json` (and a roller down
+  into a valley, into a unit, back onto its gunner, off either edge and
+  stopping on a rise), the drone's aim, and tank settling.
 - Shared rules the cases pin: only a kill the player's own shot made pays the
   300 bonus, and a volley's projectiles (buckshot pellets, cluster bomblets)
   burst in launch order, each against the ground the earlier ones left. The

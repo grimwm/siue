@@ -389,9 +389,9 @@ function tankity_yaml_scalar(string $t): mixed
 
 /* ---------------------------------------------------------------- schema */
 
-const TANKITY_AMMO_EFFECTS = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp'];
+const TANKITY_AMMO_EFFECTS = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller'];
 const TANKITY_GEAR_EFFECTS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand'];
-const TANKITY_PAINTERS = ['disc', 'beam', 'spark'];
+const TANKITY_PAINTERS = ['disc', 'beam', 'spark', 'ball'];
 const TANKITY_SFX_EVENTS = ['move', 'click', 'launch', 'boom', 'clank', 'thud', 'warn', 'cash', 'bark', 'win', 'lose', 'fanfare'];
 const TANKITY_AUDIO_EXT = ['mp3', 'ogg', 'm4a', 'wav'];
 const TANKITY_FX_SLOTS = ['muzzle', 'trail', 'impact'];
@@ -665,7 +665,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         }
         $c->allow($row, ['key', 'name', 'cat', 'dmg', 'radius', 'price', 'pack', 'minRound', 'ai', 'aiRound', 'effect',
             'speed', 'flat', 'pellets', 'spread', 'fuse', 'split', 'fan', 'subDmg', 'subRadius', 'prox', 'steer',
-            'drain', 'note', 'gfx'], $p);
+            'drain', 'friction', 'rollTime', 'note', 'gfx'], $p);
         $o = [];
         $o['key'] = $c->str($row, 'key', $p, 24, true, '/^[a-z][a-z0-9]*$/');
         if ($o['key'] !== null) {
@@ -692,7 +692,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
             'pellets' => ['int', 1, 12], 'spread' => ['num', 0.0, 1.0], 'fuse' => ['num', 0.1, 10.0],
             'split' => ['int', 2, 12], 'fan' => ['num', 0.0, 1.0], 'subDmg' => ['int', 1, 500],
             'subRadius' => ['int', 1, 200], 'prox' => ['num', 1.0, 200.0], 'steer' => ['num', 0.0, 500.0],
-            'drain' => ['int', 0, 1000],
+            'drain' => ['int', 0, 1000], 'friction' => ['num', 0.01, 5.0], 'rollTime' => ['num', 0.5, 10.0],
         ];
         foreach ($extra as $k => [$type, $lo, $hi]) {
             if (array_key_exists($k, $row) && $row[$k] !== null) {
@@ -700,7 +700,8 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
             }
         }
         $needs = ['pellets' => ['pellets', 'spread'], 'cluster' => ['fuse', 'split', 'fan', 'subDmg', 'subRadius'],
-            'proximity' => ['prox'], 'seeker' => ['steer'], 'emp' => ['drain']];
+            'proximity' => ['prox'], 'seeker' => ['steer'], 'emp' => ['drain'],
+            'roller' => ['friction', 'rollTime']];
         foreach ($needs[$o['effect'] ?? ''] ?? [] as $k) {
             if (!array_key_exists($k, $row) || $row[$k] === null) {
                 $c->err("$p.$k", "is required when effect is {$o['effect']}");
@@ -709,7 +710,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         $o['note'] = $c->str($row, 'note', $p, 120);
         $o['gfx'] = tankity_build_gfx($c, $row['gfx'] ?? null, "$p.gfx");
         $res['ammo'][] = tankity_ordered($o, ['key', 'name', 'cat', 'dmg', 'radius', 'price', 'pack', 'minRound', 'ai', 'aiRound',
-            'effect', 'pellets', 'spread', 'fuse', 'split', 'fan', 'subDmg', 'subRadius', 'prox', 'steer', 'drain', 'flat', 'speed', 'note', 'gfx']);
+            'effect', 'pellets', 'spread', 'fuse', 'split', 'fan', 'subDmg', 'subRadius', 'prox', 'steer', 'drain', 'friction', 'rollTime', 'flat', 'speed', 'note', 'gfx']);
     }
     if (!in_array('shell', array_column($res['ammo'], 'key'), true)) {
         $c->err('arsenal.ammo', 'needs a free `shell` (price 0): the game starts every player with it');

@@ -211,6 +211,12 @@ $check('good-shape', isset($out['arsenal']['ammo'][1]['pellets'], $out['keys']['
     && !isset($out['audio']['sfx']['click']));
 $check('colours-lowercased', ($out['arsenal']['ammo'][1]['gfx']['shell'] ?? '') === '#ffd166');
 $check('optional-flat-kept', ($out['arsenal']['ammo'][1]['flat'] ?? null) === true && !isset($out['arsenal']['ammo'][0]['flat']));
+$roller = json_decode($render($mut("      effect: pellets\n      pellets: 3\n      spread: 0.1\n", "      effect: roller\n      friction: 0.5\n      rollTime: 6\n")
+    . ''), true);
+$check('roller-effect-validates', ($roller['arsenal']['ammo'][1]['effect'] ?? '') === 'roller'
+    && ($roller['arsenal']['ammo'][1]['friction'] ?? null) === 0.5 && ($roller['arsenal']['ammo'][1]['rollTime'] ?? null) === 6
+    && !isset($roller['arsenal']['ammo'][1]['pellets']), json_encode($roller['arsenal']['ammo'][1] ?? null));
+$check('ball-painter-validates', (json_decode($render($mut('painter: spark', 'painter: ball')), true)['arsenal']['ammo'][1]['gfx']['painter'] ?? '') === 'ball');
 $check('volume-defaults-to-1', ($out['audio']['music'][0]['volume'] ?? 0) === 0.7
     && (json_decode($render($mut("      volume: 0.7\n", '')), true)['audio']['music'][0]['volume'] ?? 0) === 1.0);
 $check('deterministic', $render($good) === $render($good) && str_ends_with($render($good), "}\n"));
@@ -250,6 +256,10 @@ $cases = [
     'gear-ammo-key-clash' => [$mut('key: repair', 'key: buck'), 'arsenal.gear[0].key: duplicate key'],
     'no-shell' => [$mut('key: shell', 'key: pea'), 'needs a free `shell`'],
     'paid-shell' => [$mut("      price: 0\n", "      price: 5\n"), 'arsenal.ammo[0].price: the `shell` must be free'],
+    'roller-needs-friction' => [$mut("      effect: pellets\n      pellets: 3\n      spread: 0.1\n", "      effect: roller\n      rollTime: 6\n"), 'arsenal.ammo[1].friction: is required when effect is roller'],
+    'roller-needs-rolltime' => [$mut("      effect: pellets\n      pellets: 3\n      spread: 0.1\n", "      effect: roller\n      friction: 0.5\n"), 'arsenal.ammo[1].rollTime: is required when effect is roller'],
+    'roller-friction-range' => [$mut("      effect: pellets\n      pellets: 3\n      spread: 0.1\n", "      effect: roller\n      friction: 9\n      rollTime: 6\n"), 'arsenal.ammo[1].friction: must be a number from 0.01 to 5'],
+    'roller-rolltime-range' => [$mut("      effect: pellets\n      pellets: 3\n      spread: 0.1\n", "      effect: roller\n      friction: 0.5\n      rollTime: 60\n"), 'arsenal.ammo[1].rollTime: must be a number from 0.5 to 10'],
     'pellets-need-fields' => [$mut("      pellets: 3\n", ''), 'arsenal.ammo[1].pellets: is required when effect is pellets'],
     'dmg-on-wrong-gear' => [$mut("      n: 40\n", "      n: 40\n      dmg: 5\n"), 'arsenal.gear[0].dmg: only the laststand'],
     'laststand-needs-dmg' => [$mut("      dmg: 50\n", ''), 'arsenal.gear[1].dmg: is required'],
@@ -343,9 +353,12 @@ $check('shipped-yaml-valid', $e === null, (string) $e);
 $check('shipped-json-in-sync', $shipped !== null && $shipped === (string) @file_get_contents("$repoDir/game.json"),
     'run: php tools/game-json.php (in games/tankity)');
 $sd = json_decode((string) $shipped, true);
-$check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 12 && count($sd['arsenal']['gear'] ?? []) === 8
+$check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 13 && count($sd['arsenal']['gear'] ?? []) === 8
     && count($sd['audio']['sfx'] ?? []) >= 1 && count($sd['audio']['music'] ?? []) >= 1);
 $ammoKeys = array_column($sd['arsenal']['ammo'] ?? [], 'key');
+$rollerRow = $sd['arsenal']['ammo'][array_search('roller', $ammoKeys, true)] ?? [];
+$check('shipped-roller-row', ($rollerRow['effect'] ?? '') === 'roller' && ($rollerRow['friction'] ?? 0) > 0 && ($rollerRow['rollTime'] ?? 0) > 0
+    && ($rollerRow['gfx']['painter'] ?? '') === 'ball' && isset($sd['effects']['roller']['trail']['emitters'][0]['rate']), json_encode($rollerRow));
 $check('shipped-effects-cover-every-weapon', array_keys($sd['effects'] ?? []) === array_merge($ammoKeys, ['laststand']),
     implode(',', array_keys($sd['effects'] ?? [])));
 

@@ -642,12 +642,12 @@ function lobbyRoom() {
     shopRows().map(li => li.children[0].className).join());
   check('nuke-stats', /95 damage/.test(nukeStats) && /round 4/.test(nukeStats), nukeStats);
   // The arsenal section of game.json is a second source the game reads at
-  // boot: it must hold 20 items and speak only effects and painters the code has.
+  // boot: it must hold 21 items and speak only effects and painters the code has.
   const arsenal = GAME.arsenal;
-  check('arsenal-count', arsenal.ammo.length === 12 && arsenal.gear.length === 8,
+  check('arsenal-count', arsenal.ammo.length === 13 && arsenal.gear.length === 8,
     `ammo=${arsenal.ammo.length} gear=${arsenal.gear.length}`);
-  const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp'];
-  const PAINT = ['disc', 'beam', 'spark'];
+  const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller'];
+  const PAINT = ['disc', 'beam', 'spark', 'ball'];
   const TRICKS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand'];
   check('arsenal-fx', arsenal.ammo.every(a => FX.includes(a.effect) && a.gfx && PAINT.includes(a.gfx.painter)
     && typeof a.dmg === 'number' && typeof a.radius === 'number' && typeof a.price === 'number'

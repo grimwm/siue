@@ -417,9 +417,35 @@ export function createRenderer(cv, deps) {
             return;
         FX.drawBody(c, x, y, vx, vy, deps.fxBody(wkey), deps.look(wkey).shell || '#ffe27a', time);
     }
+    /** A ball-painted shell (the roller): a coloured ball with a stripe across it that turns as the ball travels, a full turn per 2 pi radii of ground. */
+    function drawBall(c, x, y, color) {
+        const r = 4.5;
+        c.save();
+        c.translate(x, y);
+        c.rotate(x / r);
+        c.fillStyle = color;
+        c.beginPath();
+        c.arc(0, 0, r, 0, Math.PI * 2);
+        c.fill();
+        c.strokeStyle = 'rgba(40, 24, 8, 0.75)';
+        c.lineWidth = 1.6;
+        c.beginPath();
+        c.moveTo(-r, 0);
+        c.lineTo(r, 0);
+        c.stroke();
+        c.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        c.beginPath();
+        c.arc(0, -r * 0.5, 1, 0, Math.PI * 2);
+        c.fill();
+        c.restore();
+    }
     /** A shell in flight: its glow body, a coloured ball (bigger for the big ones) and a white core. */
     function drawShell(c, s, time) {
         drawShellBody(c, s.wkey, s.x, s.y, s.vx, s.vy, time);
+        if (deps.look(s.wkey).painter === 'ball') {
+            drawBall(c, s.x, s.y, deps.look(s.wkey).shell || '#c9a66b');
+            return;
+        }
         c.fillStyle = deps.look(s.wkey).shell || '#ffe27a';
         c.beginPath();
         c.arc(s.x, s.y, s.wkey === 'nuke' ? 7 : s.wkey === 'mortar' ? 4.5 : 3.5, 0, Math.PI * 2);
@@ -614,6 +640,10 @@ export function createRenderer(cv, deps) {
             pv.fx.draw(c);
         for (const s of pv.shells) {
             drawShellBody(c, pv.wkey, s.x, s.y, s.vx, s.vy, time);
+            if (deps.look(pv.wkey).painter === 'ball') {
+                drawBall(c, s.x, s.y, deps.look(pv.wkey).shell || '#c9a66b');
+                continue;
+            }
             c.fillStyle = deps.look(pv.wkey).shell || '#ffe27a';
             c.beginPath();
             c.arc(s.x, s.y, 3, 0, Math.PI * 2);

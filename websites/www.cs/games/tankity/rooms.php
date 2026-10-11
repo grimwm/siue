@@ -621,12 +621,14 @@ function room_weapons(): array
             'prox' => (float) ($am['prox'] ?? 34.0),
             'steer' => (float) ($am['steer'] ?? 70.0),
             'drain' => (int) ($am['drain'] ?? 0),
+            'friction' => (float) ($am['friction'] ?? 0.3),
+            'rollTime' => (float) ($am['rollTime'] ?? 5.0),
             'ai' => !empty($am['ai']),
             'aiRound' => (int) ($am['aiRound'] ?? 99),
         ];
     }
     if (!isset($w['shell'])) {
-        $w['shell'] = ['dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'minRound' => 1, 'effect' => 'shot', 'speed' => 1.0, 'flat' => false, 'pellets' => 0, 'spread' => 0.0, 'fuse' => 0.9, 'split' => 4, 'fan' => 0.22, 'subDmg' => 34, 'subRadius' => 26, 'prox' => 34.0, 'steer' => 70.0, 'drain' => 0, 'ai' => true, 'aiRound' => 1];
+        $w['shell'] = ['dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'minRound' => 1, 'effect' => 'shot', 'speed' => 1.0, 'flat' => false, 'pellets' => 0, 'spread' => 0.0, 'fuse' => 0.9, 'split' => 4, 'fan' => 0.22, 'subDmg' => 34, 'subRadius' => 26, 'prox' => 34.0, 'steer' => 70.0, 'drain' => 0, 'friction' => 0.3, 'rollTime' => 5.0, 'ai' => true, 'aiRound' => 1];
     }
     return $w;
 }
@@ -688,7 +690,76 @@ function room_split_vel(float $vx, float $vy, int $n, float $fan): array
     }
     return $out;
 }
-/* Full trajectory; returns landing info. Mirrors src/sim.ts simShot. */
+/* Rollers. A roller that touches down does not burst: it rolls along the
+// ground, a ball ROOM_ROLL_LIFT px above the surface, until it reaches a unit,
+// runs off the board, comes to rest, or has rolled the weapon's rollTime. Wind
+// does not touch it. src/sim.ts groundAt() .. rollOut() are the same. */
+const ROOM_ROLL_LIFT = 3.0; // px the ball's centre rides above the ground
+const ROOM_ROLL_KEEP = 0.7; // share of its speed along the ground that survives touching down
+const ROOM_ROLL_DRAG = 10.0; // px/s^2: the ground's constant drag on a rolling ball, besides the weapon's friction
+const ROOM_ROLL_STOP = 12.0; // px/s: slower than this, and ...
+const ROOM_ROLL_STATIC = 20.0; // px/s^2: ... pulled by less than this, it stays put
+/* The ground's height at a (fractional) column: linear between the columns. */
+function room_ground_at(array $terrain, float $x): float
+{
+    $n = count($terrain);
+    $xc = max(0.0, min((float) ($n - 1), $x));
+    $i = (int) floor($xc);
+    $j = min($i + 1, $n - 1);
+    return $terrain[$i] + ($terrain[$j] - $terrain[$i]) * ($xc - $i);
+}
+/* The ground's slope dy/dx at x (positive: it falls away toward the right), over +-3 px. */
+function room_ground_slope(array $terrain, float $x): float
+{
+    return (room_ground_at($terrain, $x + 3) - room_ground_at($terrain, $x - 3)) / 6;
+}
+/* A touching-down shell's speed along the ground at x, from its velocity. */
+function room_roll_start(array $terrain, float $x, float $vx, float $vy): float
+{
+    $m = room_ground_slope($terrain, $x);
+    return (($vx + $vy * $m) / sqrt(1 + $m * $m)) * ROOM_ROLL_KEEP;
+}
+/* One rolling step: downhill pulls it on (gravity along the slope), friction
+// (and the ground's constant drag) slow it. $x moves; $u is its speed along the ground. False once it has
+// come to rest. */
+function room_roll_step(array $terrain, float &$x, float &$u, float $friction, float $dt): bool
+{
+    $m = room_ground_slope($terrain, $x);
+    $n = sqrt(1 + $m * $m);
+    $a = ROOM_GRAV * $m / $n;
+    $u += $a * $dt;
+    $u -= $u * $friction * $dt;
+    $drag = ROOM_ROLL_DRAG * $dt;
+    $u = abs($u) <= $drag ? 0.0 : $u - ($u > 0 ? 1.0 : -1.0) * $drag;
+    if (abs($u) < ROOM_ROLL_STOP && abs($a) <= ROOM_ROLL_STATIC) {
+        $u = 0.0;
+        return false;
+    }
+    $x += $u / $n * $dt;
+    return true;
+}
+/* Where a shell touching down at $x with velocity ($vx, $vy) ends its roll
+// with no unit in the way: [x, y] at rest, off the board edge, or when its
+// time is up. */
+function room_roll_out(array $terrain, float $x, float $vx, float $vy, array $w): array
+{
+    $n = count($terrain);
+    $x = max(0.0, min((float) ($n - 1), $x));
+    $u = room_roll_start($terrain, $x, $vx, $vy);
+    $steps = (int) round(($w['rollTime'] ?: 5.0) * 60);
+    for ($i = 0; $i < $steps; $i++) {
+        if ($x <= 0 || $x >= $n - 1) {
+            break;
+        }
+        if (!room_roll_step($terrain, $x, $u, (float) ($w['friction'] ?: 0.3), 1 / 60)) {
+            break;
+        }
+    }
+    $x = max(0.0, min((float) ($n - 1), $x));
+    return [$x, room_ground_at($terrain, $x)];
+}
+/* Full trajectory; returns landing info. Mirrors src/sim.ts simShot. A
+// roller's landing is where its roll ends. */
 function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $angle, float $power, string $wkey, int $dirS, int $w): array
 {
     $weapons = room_weapons();
@@ -708,6 +779,10 @@ function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $a
         }
         $xi = max(0, min($w - 1, (int) round($x)));
         if ($i >= 6 && $y >= $terrain[$xi]) { // the real flight ignores ground for its first 0.1 s
+            if (($weapons[$wkey]['effect'] ?? 'shot') === 'roller') {
+                [$rx, $ry] = room_roll_out($terrain, $x, $vx, $vy, $weapons[$wkey]);
+                return ['x' => $rx, 'y' => $ry, 'oob' => false];
+            }
             return ['x' => $x, 'y' => $y, 'oob' => false];
         }
     }
@@ -839,6 +914,31 @@ function room_sweep_hit(array $room, float $x0, float $y0, float $x1, float $y1,
                 continue;
             }
             if (room_in_box($t, $px, $py)) {
+                return [$idx, $px, $py];
+            }
+        }
+    }
+    return null;
+}
+/* The first unit a rolling shell touches along its step, with the point it
+// touched. A ball on the ground cannot reach a drone hovering overhead, so a
+// unit counts as touched when the ball is within the width of its hit box, at
+// any height. The owner-clear rule is room_sweep_hit()'s.
+// src/sim.ts rollHit() is the same. */
+function room_roll_hit(array $room, float $x0, float $y0, float $x1, float $y1, int $ownerIdx, bool &$clear): ?array
+{
+    $n = max(1, (int) ceil(hypot($x1 - $x0, $y1 - $y0) / 3));
+    for ($i = 1; $i <= $n; $i++) {
+        $px = $x0 + ($x1 - $x0) * $i / $n;
+        $py = $y0 + ($y1 - $y0) * $i / $n;
+        if (!$clear && !room_in_box($room['tanks'][$ownerIdx], $px, $py)) {
+            $clear = true;
+        }
+        foreach ($room['tanks'] as $idx => $t) {
+            if ($t['hp'] <= 0 || ($idx === $ownerIdx && !$clear)) {
+                continue;
+            }
+            if (room_in_box($t, $px, room_unit_box($t)[1])) {
                 return [$idx, $px, $py];
             }
         }
@@ -1026,11 +1126,55 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
         }
         $xi = max(0, min($width - 1, (int) round($sx)));
         if ($age >= 0.1 && $sy >= $room['terrain'][$xi]) {
+            if (($w['effect'] ?? 'shot') === 'roller') {
+                return room_roll_arc($room, $w, $ownerIdx, $sx, $vx, $vy, $clear, $path, $step + 1);
+            }
             $path[] = [$sx, $sy];
             return ['hit', $sx, $sy, $vx, $vy, null, $path, $flown];
         }
     }
     return ['oob', $sx, $sy, $vx, $vy, null, $path, 720 * $dt];
+}
+/* A roller touched down at column $sx with velocity ($vx, $vy), $steps sim
+// steps into its flight: roll it to its burst. Returns room_fly_arc's tuple
+// ('hit' at the burst, the unit it touched or null, the path so far plus the
+// rolling points, seconds flown). */
+function room_roll_arc(array $room, array $w, int $ownerIdx, float $sx, float $vx, float $vy, bool $clear, array $path, int $steps): array
+{
+    $terrain = $room['terrain'];
+    $width = count($terrain);
+    $dt = 1 / 60;
+    $sx = max(0.0, min((float) ($width - 1), $sx));
+    $u = room_roll_start($terrain, $sx, $vx, $vy);
+    $sy = room_ground_at($terrain, $sx) - ROOM_ROLL_LIFT;
+    $path[] = [$sx, $sy];
+    $limit = (int) round(($w['rollTime'] ?: 5.0) * 60);
+    $friction = (float) ($w['friction'] ?: 0.3);
+    $direct = null;
+    for ($rt = 0; $rt < $limit && $sx > 0 && $sx < $width - 1; $rt++) {
+        $px = $sx;
+        $py = $sy;
+        $moving = room_roll_step($terrain, $sx, $u, $friction, $dt);
+        $steps++;
+        $sy = room_ground_at($terrain, $sx) - ROOM_ROLL_LIFT;
+        $m = room_ground_slope($terrain, $sx);
+        $vx = $u / sqrt(1 + $m * $m);
+        $vy = $vx * $m;
+        $hit = room_roll_hit($room, $px, $py, $sx, $sy, $ownerIdx, $clear);
+        if ($hit !== null) {
+            [$direct, $sx, ] = $hit;
+        }
+        if ($hit !== null || !$moving) {
+            break;
+        }
+        if ($steps % ROOM_PATH_EVERY === 0) {
+            $path[] = [$sx, $sy];
+        }
+    }
+    $bx = max(0.0, min((float) ($width - 1), $sx));
+    $by = room_ground_at($terrain, $bx);
+    $path[] = [$bx, $by];
+    return ['hit', $bx, $by, $vx, $vy, $direct, $path, $steps * $dt];
 }
 /* One fully simulated shot (all pellets, all bomblets), server side. No
  * client can fake this. Every event is stamped with its moment in the volley

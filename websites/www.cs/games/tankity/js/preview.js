@@ -10,7 +10,7 @@
  * the page: weapons, particle effects and the result text come in as a
  * PreviewEnv, so it compiles in the DOM-free program and preview-test.js
  * drives it on a clock the test moves by hand. */
-import { GRAV, FLAT_GRAV, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage, } from './sim.js?v=249042b42a';
+import { GRAV, FLAT_GRAV, ROLL_LIFT, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage, groundAt, groundSlope, rollStart, rollStep, rollOut, } from './sim.js?v=68e3ccd8ae';
 export const PV_W = 360, PV_H = 200, PV_WIND = 3, PV_FOE_HP = 60;
 export function makePreviewTerrain() {
     const terr = new Array(PV_W);
@@ -53,8 +53,10 @@ export function previewShot(pv, env, angle, power) {
         stepBallistic(st, 1 / 60, pv.wind, grav);
         if (st.x < 0 || st.x >= PV_W || st.y >= PV_H)
             return st.x;
-        if (i >= 6 && st.y >= (pv.terr[clamp(Math.round(st.x), 0, PV_W - 1)] ?? 0))
-            return st.x;
+        if (i >= 6 && st.y >= (pv.terr[clamp(Math.round(st.x), 0, PV_W - 1)] ?? 0)) {
+            // A roller rolls on, and stops at the dummy.
+            return w.effect === 'roller' ? rollOut(pv.terr, st.x, st.vx, st.vy, w, x => Math.abs(x - pv.tx) < 10).x : st.x;
+        }
     }
     return st.x;
 }
@@ -136,6 +138,29 @@ function previewBoom(pv, env, x, y, ov) {
     }
 }
 const shellBoom = (s) => s.dw ? { dmg: s.dw, radius: s.dr } : null;
+/* A roller on the demo's ground: it rolls on until it reaches the dummy, the
+ * field's edge, rest, or its roll time, and bursts there. */
+function stepPreviewRoller(pv, env, s, w, dt) {
+    const r = { x: s.x, u: s.ru || 0 };
+    const spent = (s.rt || 0) >= Math.round((w.rollTime || 5) * 60) || r.x <= 0 || r.x >= PV_W - 1;
+    const moving = !spent && rollStep(pv.terr, r, w.friction || 0.3, dt);
+    if (moving) {
+        s.rt = (s.rt || 0) + 1;
+        s.x = r.x;
+        s.ru = r.u;
+        s.y = groundAt(pv.terr, r.x) - ROLL_LIFT;
+        const m = groundSlope(pv.terr, r.x);
+        s.vx = r.u / Math.sqrt(1 + m * m);
+        s.vy = s.vx * m;
+        if (Math.abs(s.x - pv.tx) >= 10) {
+            env.trail(pv.fx, s, dt);
+            return;
+        }
+    }
+    s.dead = true;
+    const bx = clamp(s.x, 0, PV_W - 1);
+    previewBoom(pv, env, bx, groundAt(pv.terr, bx), shellBoom(s));
+}
 /** Advance the demo by `dt` seconds. */
 export function stepPreview(pv, dt, env) {
     if (pv.fx) {
@@ -161,6 +186,10 @@ export function stepPreview(pv, dt, env) {
         const fy = (pv.terr[pv.tx] ?? 0) - 12;
         // Bomblets join pv.shells mid-loop and get their first step this frame.
         for (const s of pv.shells) {
+            if (s.rolling) {
+                stepPreviewRoller(pv, env, s, w, dt);
+                continue;
+            }
             s.age = (s.age || 0) + dt;
             if (w.effect === 'seeker') {
                 const dx = pv.tx - s.x, dy = fy - s.y;
@@ -198,8 +227,15 @@ export function stepPreview(pv, dt, env) {
                 previewBoom(pv, env, s.x, s.y, shellBoom(s));
                 continue;
             }
-            s.dead = s.x < 0 || s.x >= PV_W || s.y >= PV_H ||
-                (s.age >= 0.1 && s.y >= (pv.terr[clamp(Math.round(s.x), 0, PV_W - 1)] ?? 0));
+            const landed = s.age >= 0.1 && s.y >= (pv.terr[clamp(Math.round(s.x), 0, PV_W - 1)] ?? 0);
+            if (landed && w.effect === 'roller' && s.x >= 0 && s.x < PV_W) {
+                s.rolling = true;
+                s.rt = 0;
+                s.ru = rollStart(pv.terr, s.x, s.vx, s.vy);
+                s.y = groundAt(pv.terr, s.x) - ROLL_LIFT;
+                continue;
+            }
+            s.dead = s.x < 0 || s.x >= PV_W || s.y >= PV_H || landed;
             if (s.dead)
                 previewBoom(pv, env, s.x, s.y, shellBoom(s));
         }

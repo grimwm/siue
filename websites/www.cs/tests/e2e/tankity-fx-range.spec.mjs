@@ -11,7 +11,7 @@ test('every weapon has its own look on the firing range', async ({ browser }) =>
   await page.keyboard.press('n');
   await page.waitForSelector('#shop-veil:not([hidden])');
   const names = await page.locator('#shop-list li:not(.shop-cat):not(.shop-free) .shop-name').allTextContents();
-  const ammo = 11; // buck .. nuke; the gear rows follow
+  const ammo = 12; // buck .. nuke; the gear rows follow
   expect(names.length).toBeGreaterThanOrEqual(ammo);
   const shots = new Set();
   for (let i = 0; i < ammo; i++) {

@@ -1,0 +1,2 @@
+# Libraries for rooms.php, never endpoints (each file also 404s on its own).
+Require all denied

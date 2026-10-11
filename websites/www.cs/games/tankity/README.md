@@ -27,7 +27,14 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | `vendor/preact/` | Preact's ES module builds and licence, copied from `node_modules` by `tools/vendor.mjs`; checked in and deployed. Never edit by hand |
 | `package.json`, `package-lock.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json` | The build setup (TypeScript and Preact pinned exactly). Never deployed, like `src/`, `tools/` and `node_modules/` |
 | `ui-test.js`, `tools/dom-stub.mjs` | Renders the Preact overlays with sample props and asserts their DOM; the stub is the small Node DOM that it and `smoke-test.js` share. Never deployed |
-| `rooms.php`                                                     | Room server: authoritative sim, AI turns, shop, events                                                                                                                                      |
+| `rooms.php` | Room server entry point: request parsing, the `$action` handlers, `room_json_out` (gzip), `room_gate`. It requires the files below, and keeps the two helpers that resolve against its own location (`room_shm_key` takes `ftok(rooms.php)`, `room_arsenal` reads `game.json`) |
+| `server/settings.php` | What a room is (`ROOM_*` shape constants) and the host's knobs (`room_max_rooms`, `room_max_age`, `room_live_secs`, `room_scores_dir`) |
+| `server/store.php` | Shared-memory segments, the registry of live codes, semaphores and locks (`room_sem_take`, `room_lock`, `room_hold`), create/close/discard, `room_load`/`room_save`, the sweep, room codes |
+| `server/sim.php` | The deterministic sim that `src/sim.ts` mirrors: RNG, terrain, the curated hills, weapons, ballistics, the Roller (`room_roll_*`), hit boxes and sweeps, explosions, settling |
+| `server/ai.php` | Drone aim, bracketing, the strategies and their flips, `room_ai_rack` |
+| `server/rules.php` | Seats and economy, rounds (`room_start_round`, `room_advance`, `room_end_round`), the turn clock, drone pacing and watch turns, the shop, firing a volley, lives and winnings, scores |
+| `server/protocol.php` | The event log, `room_want`, snapshots and deltas (`terrainRev`, resync) |
+| `server/.htaccess` | `Require all denied`: the files in `server/` are libraries, never endpoints. Each also answers 404 if asked for directly (`TANKITY_ROOMS_INCLUDED` is defined only by `rooms.php`) |
 | `scores.php`, `config.php`                                      | Score API; `.config.yaml` reader                                                                                                                                                            |
 | `fx.js` | The effects engine (particle pool, emitters, screen flash, shell glow), shared by `game.js` and the editor; exposes `window.TankityFX` |
 | `fx/sprites/` | Sprite sheets (`fireball`, `smoke`, `shock`, `energy`, `mushroom`, `moon`) and `sprites.json`, rendered by `fx/blender/render_fx.py` |

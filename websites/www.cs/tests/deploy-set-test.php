@@ -20,7 +20,7 @@ $check('list-runs', $code === 0, implode(' | ', array_slice($out, -3)));
 $set = array_flip($out);
 
 // Served: the effects engine, the compiled ES modules, the vendored Preact and the rendered sprite sheets (the effects data rides game.json).
-foreach (['games/tankity/fx.js', 'games/tankity/js/sim.js', 'games/tankity/js/net.js', 'games/tankity/js/ui/shop.js', 'games/tankity/js/ui/help.js', 'games/tankity/vendor/preact/preact.module.js', 'games/tankity/vendor/preact/hooks.module.js', 'games/tankity/vendor/preact/jsx-runtime.module.js', 'games/tankity/vendor/preact/LICENSE', 'games/tankity/fx/sprites/sprites.json', 'games/tankity/game.js', 'games/tankity/game.json', 'games/tankity/sw.js'] as $f) {
+foreach (['games/tankity/fx.js', 'games/tankity/js/sim.js', 'games/tankity/js/net.js', 'games/tankity/js/ui/shop.js', 'games/tankity/js/ui/help.js', 'games/tankity/vendor/preact/preact.module.js', 'games/tankity/vendor/preact/hooks.module.js', 'games/tankity/vendor/preact/jsx-runtime.module.js', 'games/tankity/vendor/preact/LICENSE', 'games/tankity/fx/sprites/sprites.json', 'games/tankity/game.js', 'games/tankity/game.json', 'games/tankity/sw.js', 'games/tankity/rooms.php', 'games/tankity/server/settings.php', 'games/tankity/server/store.php', 'games/tankity/server/sim.php', 'games/tankity/server/ai.php', 'games/tankity/server/rules.php', 'games/tankity/server/protocol.php', 'games/tankity/server/.htaccess'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
 // Cylon: the entry module, the compiled modules it imports, its page pieces and server.

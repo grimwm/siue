@@ -2,7 +2,7 @@
  *
  * Who a drone shoots at and how it aims: ballistic solutions from the sim,
  * round-scaled error, bracketing and the six strategies. Pure, like the sim it
- * reads (state in, a choice out). rooms.php room_ai_choose is the same
+ * reads (state in, a choice out). server/ai.php room_ai_choose is the same
  * algorithm, kept in step by the shared vectors in protocol/sim-vectors.json.
  * brkLand stays in sim.ts: explode calls it, and sim.ts must not import this
  * file. */
@@ -14,7 +14,7 @@ import { W, clamp, facing, gauss, muzzle, simShot, spotTaken, surfY } from './si
    per correction down to BRK_FLOOR (never zero, so a drone cannot lock into a
    bad aim). A target that moved more than BRK_DRIFT px, a gunner that moved, a
    dead target, or BRK_MAX corrections without a kill all send it back to a
-   fresh solution. rooms.php room_ai_choose is the same algorithm. */
+   fresh solution. server/ai.php room_ai_choose is the same algorithm. */
 export const BRK_SHRINK = 0.65;
 export const BRK_FLOOR = 0.2;
 export const BRK_MAX = 5;
@@ -54,7 +54,7 @@ function aiCorrect(world, arsenal, mx, my, wkey, dirS, a0, p0, goalX) {
      avenger  whoever last damaged it; the nearest while nobody has
      glory    the rival with the most score (a drone: 300 per kill); its strongest gun
      lobber   any rival; high arcs (above LOB_ANGLE degrees first) and area guns
-   rooms.php has the same table. */
+   server/ai.php has the same table. */
 export const TACTICS = ['hunter', 'bully', 'sniper', 'avenger', 'glory', 'lobber'];
 export const DRY_FLIP = 3;
 export const FLIP_CHANCE = 0.35;

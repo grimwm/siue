@@ -8,7 +8,7 @@
  * says it. A room match is run by the server, so nothing here runs in one
  * except the pieces a room shares (the banner, the cosmetics, the end veil).
  * The game's state, the page and the rest of the game arrive as deps. */
-import { aiChoose as simAiChoose, pickTactic } from './ai.js?v=b9925728d7';
+import { aiChoose as simAiChoose, pickTactic } from './ai.js?v=b40963e36a';
 import { FOE_DYING, FOE_FIRE, FOE_HIT, FOE_MISS, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, pick } from './chatter.js?v=48b9223047';
 import { transition, WATCH_TURNS } from './flow.js?v=fb268dfd34';
 import { hashSeed, mulberry32, gauss, W, H, GRAV, TUNE, clamp, droneRack as simDroneRack, genTerrain as simGenTerrain, spawnSpots, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks, anyTankFalling as simAnyTankFalling, } from './sim.js?v=b64eb535e1';

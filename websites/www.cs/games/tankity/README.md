@@ -239,7 +239,7 @@ php tools/install-files.php      # after the last edit to any served file
 
 ## Drone aim
 
-Two copies of one algorithm, `room_ai_choose` in rooms.php and `aiChoose` in
+Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` in
 `src/ai.ts`, pinned together by the sim vectors.
 
 - Target: whoever the drone's strategy picks (next section), except that a
@@ -303,7 +303,7 @@ how it aims; all of them bracket a standing target the same way.
   `lastHitBy` (index in the tanks array) and `kills`. It stays on the server
   (and on the solo drone objects); the snapshot carries only the `tactic`
   event. `dry`, `lastHitBy` and `kills` start over each round; `s` does not.
-- The rules sit in `src/ai.ts` (`aiChoose`, `TACTICS`) and `rooms.php`
+- The rules sit in `src/ai.ts` (`aiChoose`, `TACTICS`) and `server/ai.php`
   (`room_ai_choose`, `ROOM_TACTICS`) and are held together by the `ai-tactic`
   vectors.
 

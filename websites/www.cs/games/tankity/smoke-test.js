@@ -360,16 +360,35 @@ const terr720 = () => new Array(720).fill(300);
 const FX_DIR = path.join(__dirname, 'protocol');
 const fx = name => JSON.parse(fs.readFileSync(path.join(FX_DIR, name + '.json'), 'utf8'));
 const fxReply = f => ({ ok: f.status < 400, status: f.status, json: async () => f.body });
-const PFX = { on: false, room: 'lobby-host', actError: '' };
+const PFX = { on: false, room: 'lobby-host', actError: '', delta: 0, full: 0 };
+// The server's delta rule on a fixture: a request that names the hills
+// revision the room is at (`have`, in the query or the body) gets the room
+// without its hills, as rooms.php answers it; `full` or any other revision
+// gets the hills.
+function fxDelta(f, u, body) {
+  const room = f.body && f.body.room;
+  if (!room || !Array.isArray(room.terrain) || !room.terrain.length) return fxReply(f);
+  const q = new URLSearchParams(u.split('?')[1] || '');
+  const have = q.has('have') ? Number(q.get('have')) : body.have;
+  const full = q.get('full') === '1' || body.full === true;
+  if (!full && have === room.terrainRev) {
+    PFX.delta++;
+    const lean = JSON.parse(JSON.stringify(f));
+    delete lean.body.room.terrain;
+    return fxReply(lean);
+  }
+  PFX.full++;
+  return fxReply(f);
+}
 function fxServe(u, body) {
   if (u.includes('action=create')) return fxReply(fx('create-reply'));
-  if (u.includes('action=state')) return fxReply(fx(PFX.room));
+  if (u.includes('action=state')) return fxDelta(fx(PFX.room), u, body);
   if (u.includes('action=start')) { PFX.room = 'play-my-turn'; return fxReply(fx('play-my-turn')); }
   if (u.includes('action=act')) {
-    if (body.kind !== 'fire') return fxReply(fx(PFX.room));
+    if (body.kind !== 'fire') return fxDelta(fx(PFX.room), u, body);
     if (PFX.actError) return fxReply(fx(PFX.actError));
     PFX.room = 'play-after-fire';
-    return fxReply(fx('play-after-fire'));
+    return fxDelta(fx('play-after-fire'), u, body);
   }
   return null;
 }
@@ -432,7 +451,7 @@ function scriptYou() {
 function playRoom(turn, events) {
   return fxConform(Object.assign({
     code: 'TST1', phase: NET_SHOP ? 'shop' : 'play', round: 1, wind: 2, turn, turnLeft: NET_SHOP ? null : 120, shopLeft: NET_SHOP ? 90 : null,
-    terrain: terr720(),
+    terrain: terr720(), terrainRev: 1,
     tanks: [scriptTank(0, 100, 'abc', 'human'), scriptTank(1, 600, 'REAPER', 'ai')],
     seats: scriptSeats(), events: events || [], you: scriptYou(), csrf: 'cs0',
   }, mapFields()));
@@ -538,7 +557,7 @@ function lobbyRoom() {
     return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], bot: false, lives: 0, score: 0, ready: false };
   });
   return fxConform(Object.assign(
-    { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], round: 0, wind: 0, turn: null, turnLeft: null, shopLeft: null, you: scriptYou(), csrf: 'cs0' },
+    { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], terrainRev: 1, round: 0, wind: 0, turn: null, turnLeft: null, shopLeft: null, you: scriptYou(), csrf: 'cs0' },
     mapFields(),
   ));
 }
@@ -1252,6 +1271,9 @@ function lobbyRoom() {
   check('fx-shop-ready', /^Ready ✓/.test(els['shop-next'].textContent) && /^1\/2 ready · shop closes in 1:/.test(els['shop-ready'].textContent),
     els['shop-next'].textContent + ' | ' + els['shop-ready'].textContent);
   PFX.on = false;
+  // The server's delta replies reached the client as complete rooms: polls
+  // that held the current hills got them left out, and everything above held.
+  check('fx-delta-polls-omit-the-hills', PFX.delta > 0 && PFX.full > 0, `delta ${PFX.delta}, full ${PFX.full}`);
   check('fx-hand-snapshots-match', FX_DRIFT.size === 0, [...FX_DRIFT].slice(0, 6).join('; '));
   click(els['shop-leave']); frames(2);
   click(els['leave-go']); await tick(10); frames(5);

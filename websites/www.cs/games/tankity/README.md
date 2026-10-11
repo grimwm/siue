@@ -173,6 +173,45 @@ php tools/install-files.php      # after the last edit to any served file
 - Spawns are random, at least 110 px apart, and units never end a move within
   44 px of another. Each tank faces the middle; barrel keys swing toward the
   side pressed.
+- Wire cost. Every human polls `action=state` every 1.6 s, and a snapshot is
+  mostly hills (720 heights, about 4 KB of its 5.6 KB). So a client says what it
+  already holds and the server sends only the rest:
+  - `rooms.php` keeps `terrainRev` in the room, raised by
+    `room_terrain_changed` whenever the hills change (a crater that really
+    carved, a new round). Every snapshot names the current `terrainRev`.
+  - Polls (query) and room-answering POSTs (`start`, `act`, `buy`, `ready`,
+    `body`, `map`, `seatmode`; body) carry `since` (the newest event seen),
+    `have` (the `terrainRev` held; absent while holding no hills) and `full=1`.
+    `room_want` reads them, `room_reply_snapshot` answers.
+  - The snapshot omits `terrain` when `have` equals the room's `terrainRev`.
+    It is full (carries `terrain`) when `have` is missing or another revision,
+    when `full=1`, and when the room has no hills yet.
+  - `resync: true` marks a snapshot whose `since` is older than the oldest of
+    the `ROOM_EVENT_KEEP` events still kept, or newer than the room's own
+    count: events were lost, so it is full too. `RoomClient` takes it as a first
+    sync: the log catches up, nothing is replayed, `game.js` drops what was
+    queued.
+  - `RoomClient` keeps the hills last received (`terrain`, `terrainRev`) and
+    puts them back into a snapshot that omits them, so `onSnapshot` always gets
+    a complete room; `game.js` still copies `room.terrain` into `G.terrain`, so
+    craters the replay carved locally are replaced by the server's ground on
+    every adopt. A reply older than the revision held never rolls the
+    hills back. A new match, and leaving, forget the hills (the first sync is
+    always full).
+  - The client asks for `full=1` on its next request after the server could not
+    be reached, after a hidden tab comes back (`resync()`), and when a snapshot
+    omits hills for a revision it does not hold (it fetches again instead of
+    using that snapshot; once, so a server that never sends the hills is not
+    looped on).
+  - JSON replies are gzipped when the request accepts it (`room_json_out`,
+    `ob_gzhandler`, so errors too). Static text (`json`, `js`, `mjs`, `css`,
+    `html`, `svg`, `webmanifest`) is gzipped by `mod_deflate` in
+    `games/.htaccess` (`<IfModule mod_deflate.c>`); images and audio are not.
+    The local nginx has the same in `docker/nginx/default.conf`.
+  - Typical bytes of one poll (compact JSON, scripted match with a human
+    thinking about 13 s between shots): 5.6 KB raw, 1.9 KB gzipped, 1.4 KB as a
+    delta, 0.55 KB delta and gzipped. An act reply is dominated by the volley's
+    shot paths (about 7.4 KB raw, 2.8 KB gzipped).
 - The lobby's hill tiles draw `profile` (48 heights, 0..1) that
   `rooms.php?action=maps` computes from round one of each map's terrain.
 
@@ -387,7 +426,8 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
   clock, the leave beacon: `game.js` passes the page's) and `RoomHandlers`
   (`onSnapshot(room, fresh, first)`, `onReachable`, `onReadyChange`,
   `onError`). The client owns the session (`code`, `seat`, `token`, `csrf`,
-  the event cursor `since`), `post(action, body)` typed by `protocol.ts`, the
+  the event cursor `since`, the hills held and their `terrainRev`),
+  `post(action, body)` typed by `protocol.ts`, the
   match and lobby polls, `act`/`sendQuiet`/`setMenu`/`buy`/`setReady`/`leave`,
   and the clocks (`armClocks`, `turnClockLeft`, `clockWarnDue`). It counts the
   events past its cursor as seen and hands them over; `game.js` keeps what
@@ -480,7 +520,7 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
 | `node audio-test.js`                            | `js/audio.js` imports without a browser; the loop-point trim and the round-to-track mapping are right |
 | `node render-test.js`                           | `js/render.js` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, and rebuilds the sky only when the match key changes |
 | `node input-test.js`                            | `js/input.js` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, ESC, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
-| `node net-test.js`                              | `js/net.js` against a fake server and timers: the 429 retry, Ready's ordering under rapid toggles, polling, the leave beacon, the clocks, the hidden-tab catch-up plan |
+| `node net-test.js`                              | `js/net.js` against a fake server and timers: the 429 retry, Ready's ordering under rapid toggles, polling, the leave beacon, the clocks, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect) |
 | `node replay-test.js`                           | `js/replay.js` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, and a `watch` volley at 3x for that volley only |
 | `node preview-test.js`                          | `js/preview.js` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |
 | `node flow-test.js`                             | `js/flow.js`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
@@ -502,7 +542,9 @@ skip `*-test.*`, `README.md` files, `protocol/`, the effects editor and the Blen
 
 `protocol/*.json` are real room-server replies, one file per moment:
 `lobby-host`, `lobby-public`, `play-my-turn`, `play-after-fire` (fire, shot and
-hit events, then the drone's answer), `shop-after-win`, `shop-ready` (the shop
+hit events, then the drone's answer), `play-after-fire-delta` (the same moment
+for a poll that holds the current hills: no `terrain`), `play-resync` (a stale
+`since`: full, `resync: true`), `shop-after-win`, `shop-ready` (the shop
 with one of two humans readied), `create-reply`, `join-reply`, `error-too-fast` (429) and `error-not-your-turn` (409). Each file
 is `{about, status, body}`.
 `sim-vectors.json` in the same folder is not one of them (see Sim vectors).
@@ -516,7 +558,7 @@ is `{about, status, body}`.
   `make protocol`. Commit the result. `make test` runs
   `php protocol/generate.php --check`, which fails when any fixture differs.
 - `src/protocol.ts` types the wire: `RoomSnapshot` (phase, seats with `ready`,
-  tanks, terrain, `turnLeft`, `shopLeft`, `events`, the private `you` and
+  tanks, optional `terrain` with `terrainRev`, `resync`, `turnLeft`, `shopLeft`, `events`, the private `you` and
   `csrf`), `RoomEvent` (a union discriminated by `t`, written from every event
   `rooms.php` emits), the replies (`SeatReply`, `RoomReply`, `ErrorReply`, ...)
   and `PostBodies`/`PostReplies`, which type `RoomClient.post`.

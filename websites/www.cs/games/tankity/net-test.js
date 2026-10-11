@@ -72,7 +72,7 @@ const bodyOf = entry => JSON.parse(entry.init.body);
   const req = host.log[0];
   check('wire-url-and-method', req.url === 'rooms.php?action=buy' && req.init.method === 'POST', req.url);
   check('wire-csrf-header', req.init.headers['X-CSRF-Token'] === 'csrf' && req.init.headers['Content-Type'] === 'application/json');
-  check('wire-body-carries-the-seat', j(bodyOf(req)) === j({ code: 'FXT1', token: 'tok', csrf: 'csrf', item: 'buck', qty: 2 }), req.init.body);
+  check('wire-body-carries-the-seat', j(bodyOf(req)) === j({ code: 'FXT1', token: 'tok', csrf: 'csrf', since: 0, item: 'buck', qty: 2 }), req.init.body);
   check('wire-reachable-on-success', j(seen.reachable) === '[true]', j(seen.reachable));
 
   const q = makeClient(() => roomReply());
@@ -338,6 +338,160 @@ const bodyOf = entry => JSON.parse(entry.init.body);
   [...t.host.intervals.values()][0].fn();
   await flush();
   check('lobby-poll-survives-a-bad-tick', t.host.intervals.size === 1);
+}
+
+// ---- delta snapshots: the hills ride only when the client lacks them ----
+{
+  const delta = fixture('play-after-fire-delta').room;
+  const full = Object.assign(fixture('play-my-turn').room, { terrainRev: delta.terrainRev }); // the hills the delta is relative to
+  const fullRev = full.terrainRev;
+  const urlQuery = entry => new URLSearchParams(entry.url.split('?')[1]);
+  let step = 0;
+  const { net, host, seen } = makeClient(() => {
+    step++;
+    return ok({ ok: true, room: structuredClone(step === 1 ? full : delta) });
+  });
+  net.on = true;
+
+  // The first sync holds nothing: no `have`, so the server sends the hills.
+  await net.refresh();
+  let q1 = urlQuery(host.log[0]);
+  check('delta-first-poll-names-no-rev', !q1.has('have') && !q1.has('full') && q1.get('since') === '0', host.log[0].url);
+  check('delta-first-snapshot-keeps-the-hills', net.terrain === seen.snapshots[0].room.terrain && net.terrainRev === fullRev && net.terrain.length === 720);
+
+  // The next poll says what it holds; the reply omits the hills and the
+  // client hands the page a complete room anyway.
+  await net.refresh();
+  const q2 = urlQuery(host.log[1]);
+  check('delta-poll-sends-its-rev', q2.get('have') === String(fullRev) && !q2.has('full'), host.log[1].url);
+  const second = seen.snapshots[1].room;
+  check('delta-reply-omitted-the-hills', delta.terrain === undefined);
+  check('delta-page-sees-held-hills', second.terrain === net.terrain && second.terrain.length === 720 && second.terrainRev === delta.terrainRev);
+
+  // act, buy and ready replies carry the same fields: the cursor and the rev.
+  step = 1;
+  await net.post('act', { kind: 'aim', angle: 40, power: 50 });
+  const act = bodyOf(host.log[2]);
+  check('delta-act-sends-since-and-have', act.since === net.since && act.have === fullRev && act.full === undefined, host.log[2].init.body);
+  await net.post('buy', { item: 'buck', qty: 1 });
+  check('delta-buy-sends-have', bodyOf(host.log[3]).have === fullRev, host.log[3].init.body);
+  await net.post('ready', { ready: true });
+  check('delta-ready-sends-have', bodyOf(host.log[4]).have === fullRev, host.log[4].init.body);
+  await net.post('create', { initials: 'ABC', map: '', body: 'tank' }).catch(() => {});
+  check('delta-create-sends-no-holdings', bodyOf(host.log[5]).have === undefined && bodyOf(host.log[5]).since === undefined, host.log[5].init.body);
+}
+{
+  // A new revision arrives with its hills and replaces the held ones.
+  const full = fixture('play-my-turn').room;
+  const next = structuredClone(full);
+  next.terrainRev = full.terrainRev + 1;
+  next.terrain = full.terrain.map(v => v + 1);
+  const replies = [full, next];
+  const { net, host, seen } = makeClient(() => ok({ ok: true, room: structuredClone(replies.shift()) }));
+  net.on = true;
+  await net.refresh();
+  await net.refresh();
+  check('delta-new-rev-replaces-the-hills', net.terrainRev === next.terrainRev && net.terrain[0] === full.terrain[0] + 1 && seen.snapshots[1].room.terrain === net.terrain);
+
+  // A reply that lost a race (an older rev, hills omitted or sent) never rolls the hills back.
+  const stale = structuredClone(full);
+  const { net: n2, seen: s2 } = makeClient(() => ok({ ok: true, room: structuredClone(full) }));
+  n2.on = true; n2.synced = true;
+  n2.terrain = next.terrain; n2.terrainRev = next.terrainRev;
+  n2.apply(stale);
+  check('delta-older-rev-never-rolls-back', n2.terrain === next.terrain && s2.snapshots[0].room.terrain === next.terrain);
+  const omitted = structuredClone(full);
+  delete omitted.terrain;
+  n2.apply(omitted);
+  check('delta-older-rev-omitted-keeps-the-hills', s2.snapshots[1].room.terrain === next.terrain);
+}
+{
+  // A snapshot that omits hills the client does not hold at that rev is not
+  // used: the whole world is fetched (full=1) and that answer is.
+  const full = fixture('play-my-turn').room;
+  const ahead = structuredClone(fixture('play-after-fire-delta').room);
+  ahead.terrainRev = full.terrainRev + 5;
+  let n = 0;
+  const { net, host, seen } = makeClient(() => {
+    n++;
+    return ok({ ok: true, room: structuredClone(n === 1 ? full : n === 2 ? ahead : Object.assign(structuredClone(full), { terrainRev: ahead.terrainRev })) });
+  });
+  net.on = true;
+  await net.refresh();
+  await net.refresh(); // `ahead` omits hills for a rev the client lacks
+  await flush();
+  check('delta-unknown-rev-asks-for-everything', host.log.length === 3 && /[?&]full=1/.test(host.log[2].url) && !/[?&]have=/.test(host.log[2].url), host.log.map(r => r.url).join('\n'));
+  check('delta-unknown-rev-snapshot-not-applied', seen.snapshots.length === 2 && net.terrainRev === ahead.terrainRev && seen.snapshots[1].room.terrain.length === 720, `${seen.snapshots.length} ${net.terrainRev}`);
+  // The request after that is a delta again.
+  await net.refresh();
+  check('delta-full-is-asked-once', !/[?&]full=1/.test(host.log[3].url) && /[?&]have=/.test(host.log[3].url), host.log[3].url);
+}
+{
+  // A server that keeps omitting the hills when asked for everything is not looped on.
+  const full = fixture('play-my-turn').room;
+  const bare = structuredClone(fixture('play-after-fire-delta').room);
+  bare.terrainRev = full.terrainRev + 1;
+  let n = 0;
+  const { net, host, seen } = makeClient(() => { n++; return ok({ ok: true, room: structuredClone(n === 1 ? full : bare) }); });
+  net.on = true;
+  await net.refresh();
+  await net.refresh();
+  await flush();
+  check('delta-no-refetch-loop', host.log.length === 3 && seen.snapshots.length === 2, `${host.log.length} requests, ${seen.snapshots.length} snapshots`);
+}
+{
+  // resync: events were lost, so the snapshot is a first sync (no replay) and carries the hills.
+  const full = fixture('play-my-turn').room;
+  const lost = fixture('play-resync').room;
+  check('delta-resync-fixture-is-full', lost.resync === true && Array.isArray(lost.terrain) && lost.terrain.length === 720);
+  const replies = [full, lost];
+  const { net, seen } = makeClient(() => ok({ ok: true, room: structuredClone(replies.shift()) }));
+  net.on = true;
+  await net.refresh();
+  net.since = 999;
+  await net.refresh();
+  check('delta-resync-is-a-first-sync', seen.snapshots[0].first === true && seen.snapshots[1].first === true && seen.snapshots[1].room.resync === true);
+}
+{
+  // Hidden tab returns, or the server was unreachable: the next request is full=1.
+  const full = fixture('play-my-turn').room;
+  let down = false;
+  const { net, host } = makeClient(() => (down ? new Error('offline') : ok({ ok: true, room: structuredClone(full) })));
+  net.on = true;
+  await net.refresh();
+  await net.refresh();
+  check('delta-steady-poll-is-a-delta', /[?&]have=/.test(host.log[1].url) && !/full=1/.test(host.log[1].url), host.log[1].url);
+  net.resync(); // the tab came back
+  await flush();
+  check('delta-hidden-return-asks-for-everything', /[?&]full=1/.test(host.log[2].url) && !/[?&]have=/.test(host.log[2].url), host.log[2].url);
+  await net.refresh();
+  check('delta-hidden-return-asks-once', !/full=1/.test(host.log[3].url) && /[?&]have=/.test(host.log[3].url), host.log[3].url);
+  down = true;
+  await net.refresh();
+  down = false;
+  await net.refresh();
+  check('delta-reconnect-asks-for-everything', /[?&]full=1/.test(host.log[5].url), host.log[5].url);
+  // A failed full request stays wanted: the flag clears only when an answer gets through.
+  down = true;
+  net.resync();
+  await flush();
+  down = false;
+  await net.refresh();
+  check('delta-full-stays-wanted-until-answered', /[?&]full=1/.test(host.log[host.log.length - 1].url), host.log.map(r => r.url).join('\n'));
+}
+{
+  // A new match starts empty: the first sync is always full.
+  const full = fixture('play-my-turn').room;
+  const { net, host } = makeClient(() => ok({ ok: true, room: structuredClone(full) }));
+  net.beginMatch();
+  await net.refresh();
+  net.stopPolling();
+  net.beginMatch();
+  await net.refresh();
+  net.stopPolling();
+  check('delta-match-start-forgets-the-hills', net.terrain !== null && !/[?&]have=/.test(host.log[1].url), host.log[1].url);
+  net.leave();
+  check('delta-leave-forgets-the-hills', net.terrain === null && net.terrainRev === 0);
 }
 
 // ---- leave beacon ----

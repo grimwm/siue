@@ -450,10 +450,27 @@ function room_discard($lock): void
     room_unlock($lock);
     @sem_remove($lock['sem']);
 }
+/* A client that sends Accept-Encoding: gzip gets the JSON compressed (the
+   host's Apache has no compression of its own for PHP output; a room snapshot
+   shrinks about eight-fold). ob_gzhandler negotiates the encoding, sets
+   Content-Encoding and Vary, and passes the body through untouched for a
+   client that does not accept it. Started here, not at the top of the file,
+   so only a reply that is really sent is wrapped: the test suites include
+   this file for its functions and must not have their output captured. It
+   stacks on any buffer php.ini's output_buffering already opened (that one
+   level is flushed by the exit below). */
+function room_gzip_begin(): void
+{
+    if (!function_exists('ob_gzhandler') || ini_get('zlib.output_compression')) {
+        return;
+    }
+    ob_start('ob_gzhandler');
+}
 function room_json_out(int $code, array $payload): void
 {
     http_response_code($code);
     header('Content-Type: application/json');
+    room_gzip_begin();
     echo json_encode($payload, JSON_UNESCAPED_SLASHES);
     exit;
 }
@@ -788,6 +805,13 @@ function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $a
     }
     return ['x' => $x, 'y' => $y, 'oob' => true];
 }
+/* The ground changed (a crater, a new round): clients holding an older
+   terrainRev must be sent the hills again. Rooms stored before the counter
+   existed read as revision 1. */
+function room_terrain_changed(array &$room): void
+{
+    $room['terrainRev'] = ($room['terrainRev'] ?? 1) + 1;
+}
 function room_explode(array &$room, array &$events, array $tank, string $wkey, float $x, float $y, ?int $directIdx, $ov = null): void
 {
     $weapons = room_weapons();
@@ -797,10 +821,18 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
     $width = count($room['terrain']);
     $x0 = max(0, (int) floor($x - $r));
     $x1 = min($width - 1, (int) ceil($x + $r));
+    $carved = false;
     for ($ix = $x0; $ix <= $x1; $ix++) {
         $dx = $ix - $x;
         $cut = sqrt(max(0.0, $r * $r - $dx * $dx)) * 0.75;
-        $room['terrain'][$ix] = min(456.0, max($room['terrain'][$ix], $y + $cut));
+        $was = $room['terrain'][$ix];
+        $room['terrain'][$ix] = min(456.0, max($was, $y + $cut));
+        if ($room['terrain'][$ix] !== $was) {
+            $carved = true;
+        }
+    }
+    if ($carved) {
+        room_terrain_changed($room);
     }
     $ownerIdx = null;
     foreach ($room['tanks'] as $i => $o) {
@@ -1621,6 +1653,7 @@ function room_new(string $code, string $initials): array
         'round' => 0,
         'wind' => 0,
         'terrain' => [],
+        'terrainRev' => 1, // bumped whenever the hills change (room_terrain_changed)
         'tanks' => [],
         // seatIdx => human: ['initials','token','lives','human'=>true]; drone or
         // open: ['name','lives','human'=>false,'mode'=>'ai'|'open']. All
@@ -1730,6 +1763,7 @@ function room_start_round(array &$room): void
     } else {
         $room['terrain'] = room_gen_terrain($room['rng'], $w);
     }
+    room_terrain_changed($room);
     $room['wind'] = (int) round(room_rng_range($room['rng'], -8, 8));
     $slots = room_spawn_spots($room['rng'], max(1, room_fielded($room)), $w);
     $room['tanks'] = [];
@@ -2114,8 +2148,39 @@ function room_check_oneups(array &$room, array &$events, int $seat): void
 }
 
 /* ---------- snapshots (public + private per seat) ---------- */
-function room_snapshot(array $room, ?int $seat, int $since): array
+/* What a client says it already holds, read from a POST body or the query
+   string: `since` (the newest event seq seen), `have` (the terrainRev of the
+   hills it holds; absent when it holds none) and `full` (send everything). */
+function room_want(array $body): array
 {
+    $get = fn(string $k) => $body[$k] ?? $_GET[$k] ?? null;
+    $have = $get('have');
+    return [
+        'since' => (int) ($get('since') ?? 0),
+        'have' => is_numeric($have) ? (int) $have : null,
+        'full' => !empty($get('full')) && $get('full') !== '0',
+    ];
+}
+/* The reply every room-answering handler ends with. */
+function room_reply_snapshot(array $room, ?int $seat, array $body): array
+{
+    $w = room_want($body);
+    return room_snapshot($room, $seat, $w['since'], $w['have'], $w['full']);
+}
+/* A delta snapshot leaves the hills out (720 numbers, most of the bytes)
+   when `$have` is the revision the room is at, and always names the current
+   revision. It is a full snapshot when the client asks (`$full`), holds
+   nothing, holds another revision, or has fallen so far behind that events
+   it never saw are gone (`resync`: its `since` is older than the oldest event
+   kept, or newer than the room's own count). */
+function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, bool $full = false): array
+{
+    $events = $room['events'] ?? [];
+    $seq = (int) ($room['seq'] ?? 0);
+    $oldest = $events ? (int) ($events[0]['seq'] ?? 1) : $seq + 1;
+    $resync = $since > $seq || ($since > 0 && $oldest > $since + 1);
+    $rev = (int) ($room['terrainRev'] ?? 1);
+    $sendTerrain = $full || $resync || $have !== $rev || !$room['terrain'];
     $tanks = [];
     foreach ($room['tanks'] as $t) {
         $tanks[] = [
@@ -2161,11 +2226,17 @@ function room_snapshot(array $room, ?int $seat, int $since): array
             $left = room_shop_left($room);
             return $left === null ? null : round($left, 1);
         })(),
-        'terrain' => array_map(fn($v) => round($v, 1), $room['terrain']),
+        'terrainRev' => $rev,
         'tanks' => $tanks,
         'seats' => $seats,
-        'events' => array_values(array_filter($room['events'] ?? [], fn($e) => ($e['seq'] ?? 0) > $since)),
+        'events' => array_values(array_filter($events, fn($e) => ($e['seq'] ?? 0) > $since)),
     ];
+    if ($sendTerrain) {
+        $out['terrain'] = array_map(fn($v) => round($v, 1), $room['terrain']);
+    }
+    if ($resync) {
+        $out['resync'] = true;
+    }
     if ($seat !== null && isset($room['seats'][$seat]) && ($room['seats'][$seat]['human'] ?? false)) {
         $tank = null;
         foreach ($room['tanks'] as $t) {
@@ -2275,8 +2346,7 @@ if ($action === 'map' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
     }
-    $since = (int) ($body['since'] ?? 0);
-    $out = room_snapshot($room, $seat, $since);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
@@ -2342,8 +2412,7 @@ if ($action === 'body' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
     }
-    $since = (int) ($body['since'] ?? 0);
-    $out = room_snapshot($room, $seat, $since);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
@@ -2525,8 +2594,7 @@ if ($action === 'seatmode' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
     }
-    $since = (int) ($body['since'] ?? 0);
-    $out = room_snapshot($room, $seat, $since);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
@@ -2566,8 +2634,7 @@ if ($action === 'start' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
     }
-    $since = (int) ($body['since'] ?? 0);
-    $out = room_snapshot($room, $seat, $since);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
@@ -2606,8 +2673,7 @@ if ($action === 'state') {
         // without holding its slot forever after everyone leaves.
         room_save($fh, $path, $room);
     }
-    $since = (int) (($body['since'] ?? $_GET['since'] ?? 0));
-    $out = room_snapshot($room, $seat, $since);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
@@ -2749,8 +2815,7 @@ if ($action === 'act' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
     }
-    $since = (int) ($body['since'] ?? 0);
-    $out = room_snapshot($room, $seat, $since);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
@@ -2837,8 +2902,7 @@ if ($action === 'buy' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
     }
-    $since = (int) ($body['since'] ?? 0);
-    $out = room_snapshot($room, $seat, $since);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
@@ -2861,8 +2925,7 @@ if ($action === 'ready' && $method === 'POST') {
             room_json_out(500, ['error' => 'store write failed']);
         }
     }
-    $since = (int) ($body['since'] ?? 0);
-    $out = room_snapshot($room, $seat, $since);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }

@@ -115,6 +115,14 @@ function protocol_snapshots(): array
     $out['play-after-fire'] = ['After the host fires: fire, shot and hit events, then the drone answers (aifire, shot).',
         200, $ok(room_snapshot($fired, 0, 0))];
 
+    // A delta: the asker names the hills revision it holds (`have`) and the
+    // newest event it has seen (`since`), so the snapshot leaves the hills out
+    // and carries only the events after the opening round event.
+    $out['play-after-fire-delta'] = ['The same moment as a poll that holds the current hills (have = terrainRev) and has seen the round event (since = 1): terrain is left out, terrainRev names the revision, and only the later events ride along.',
+        200, $ok(room_snapshot($fired, 0, 1, $fired['terrainRev']))];
+    $out['play-resync'] = ['A poll whose since is newer than anything the room has recorded (the room was lost or restarted): the snapshot is full again and carries resync: true.',
+        200, $ok(room_snapshot($fired, 0, 999, $fired['terrainRev']))];
+
     $kill = $play;
     $kill['tanks'][1]['hp'] = 1;
     $won = protocol_fire($kill, $angle, $power);

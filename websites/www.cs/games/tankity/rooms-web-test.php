@@ -208,6 +208,74 @@ foreach (($calm['room']['events'] ?? []) as $e) {
 }
 $check('polls-hold-turn', ($calm['ok'] ?? false) === true && ($calm['room']['turn'] ?? -1) === 0 && $aiC === $aiG,
     'turn=' . ($calm['room']['turn'] ?? '?') . ' ai=' . $aiC);
+// Delta snapshots: the hills ride only when the asker lacks them. A poll
+// names the terrainRev it holds (have); the reply leaves terrain out when that
+// is the room's revision, and always names the revision. full=1, another
+// revision, or a missing have gets everything.
+$dUrl = $base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken;
+$dFull = $get($dUrl . '&since=0');
+$dRev = $dFull['room']['terrainRev'] ?? null;
+$check('delta-first-poll-is-full', is_int($dRev) && is_array($dFull['room']['terrain'] ?? null) && count($dFull['room']['terrain']) === 720
+    && !isset($dFull['room']['resync']), json_encode([$dRev, count($dFull['room']['terrain'] ?? [])]));
+$dLean = $get($dUrl . '&since=0&have=' . $dRev);
+$check('delta-omits-terrain-when-rev-matches', ($dLean['ok'] ?? false) === true && !array_key_exists('terrain', $dLean['room'] ?? [])
+    && ($dLean['room']['terrainRev'] ?? null) === $dRev && count($dLean['room']['tanks'] ?? []) >= 2, json_encode(array_keys($dLean['room'] ?? [])));
+$dOther = $get($dUrl . '&since=0&have=' . ($dRev + 1));
+$check('delta-other-rev-gets-terrain', count($dOther['room']['terrain'] ?? []) === 720 && ($dOther['room']['terrainRev'] ?? null) === $dRev);
+$dForce = $get($dUrl . '&since=0&full=1&have=' . $dRev);
+$check('delta-full-1-returns-terrain', count($dForce['room']['terrain'] ?? []) === 720 && ($dForce['room']['terrain'] ?? []) === ($dFull['room']['terrain'] ?? null));
+$dZero = $get($dUrl . '&since=0&full=0&have=' . $dRev);
+$check('delta-full-0-is-not-full', !array_key_exists('terrain', $dZero['room'] ?? []));
+// since cannot be ahead of the room: events were lost (a restarted room), so
+// the answer is a full resync.
+$dLost = $get($dUrl . '&since=99999&have=' . $dRev);
+$check('delta-stale-since-resyncs-with-terrain', ($dLost['room']['resync'] ?? false) === true && count($dLost['room']['terrain'] ?? []) === 720, json_encode(array_keys($dLost['room'] ?? [])));
+// The same fields ride on the POST actions (act, ready, buy).
+usleep(300000);
+$dAct = $post('act', ['code' => $mcode, 'token' => $mtoken, 'csrf' => $mcsrf, 'kind' => 'aim', 'angle' => 60, 'power' => 50, 'since' => 999999, 'have' => $dRev]);
+$check('delta-act-reply-resyncs-too', ($dAct['room']['resync'] ?? false) === true && count($dAct['room']['terrain'] ?? []) === 720, json_encode(array_keys($dAct['room'] ?? [])));
+usleep(300000);
+$dAct = $post('act', ['code' => $mcode, 'token' => $mtoken, 'csrf' => $mcsrf, 'kind' => 'aim', 'angle' => 61, 'power' => 50, 'since' => 0, 'have' => $dRev]);
+$check('delta-act-reply-omits-terrain', ($dAct['ok'] ?? false) === true && !array_key_exists('terrain', $dAct['room'] ?? []) && !isset($dAct['room']['resync']), json_encode(array_keys($dAct['room'] ?? ['error' => $dAct['error'] ?? '?'])));
+usleep(300000);
+$dReady = $post('ready', ['code' => $mcode, 'token' => $mtoken, 'csrf' => $mcsrf, 'ready' => false, 'have' => $dRev]);
+$check('delta-ready-reply-omits-terrain', ($dReady['ok'] ?? false) === true && !array_key_exists('terrain', $dReady['room'] ?? []));
+// A client that sends nothing extra still gets the old, complete reply.
+usleep(300000);
+$dPlain = $post('act', ['code' => $mcode, 'token' => $mtoken, 'csrf' => $mcsrf, 'kind' => 'aim', 'angle' => 62, 'power' => 50]);
+$check('delta-plain-client-gets-terrain', count($dPlain['room']['terrain'] ?? []) === 720);
+// Compression: Accept-Encoding: gzip returns Content-Encoding: gzip that
+// decodes to the same JSON; without it the body is plain.
+$rawGet = function (string $url, string $accept) {
+    $ctx = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true, 'header' => $accept === '' ? '' : "Accept-Encoding: $accept\r\n"]]);
+    $body = @file_get_contents($url, false, $ctx);
+    return [$http_response_header ?? [], $body === false ? '' : $body];
+};
+$headerOf = function (array $headers, string $name): string {
+    foreach ($headers as $h) {
+        if (stripos($h, $name . ':') === 0) {
+            return trim(substr($h, strlen($name) + 1));
+        }
+    }
+    return '';
+};
+$volatile = function (array $r): array {
+    unset($r['room']['turnLeft'], $r['room']['shopLeft']);
+    return $r;
+};
+[$hPlain, $bPlain] = $rawGet($dUrl . '&since=0', '');
+[$hGz, $bGz] = $rawGet($dUrl . '&since=0', 'gzip');
+$unz = $bGz === '' ? false : @gzdecode($bGz);
+$check('gzip-plain-without-accept-encoding', $headerOf($hPlain, 'Content-Encoding') === '' && is_array(json_decode($bPlain, true)));
+$check('gzip-content-encoding', strtolower($headerOf($hGz, 'Content-Encoding')) === 'gzip' && stripos($headerOf($hGz, 'Vary'), 'Accept-Encoding') !== false,
+    json_encode($hGz));
+$check('gzip-decodes-to-the-same-json', $unz !== false && $volatile(json_decode($unz, true)) == $volatile(json_decode($bPlain, true)),
+    $unz === false ? 'gzdecode failed' : '');
+$check('gzip-shrinks-the-reply', $bGz !== '' && strlen($bGz) * 2 < strlen($bPlain), strlen($bGz) . ' vs ' . strlen($bPlain));
+[$hErr, $bErr] = $rawGet($base . '/rooms.php?action=state&code=ZZZZ&token=x', 'gzip');
+$errJson = $bErr === '' ? null : json_decode((string) @gzdecode($bErr), true);
+$check('gzip-errors-compress-too', is_array($errJson) && ($errJson['error'] ?? '') === 'no such room' && strtolower($headerOf($hErr, 'Content-Encoding')) === 'gzip');
+$check('gzip-error-status-kept', strpos($hErr[0] ?? '', '404') !== false, $hErr[0] ?? '');
 // Leave the shared shelf as found: only this match is swept.
 $ageRoom($mcode);
 $get($base . '/rooms.php?action=ping'); // the sweep runs on ping, not on state

@@ -1,4 +1,4 @@
-import { CLOCK_SHOW_S } from './net.js?v=35baab622b';
+import { CLOCK_SHOW_S } from './net.js?v=38d45fb1ea';
 import { PV_W, PV_H, PV_FOE_HP } from './preview.js?v=8e81275ae7';
 import { createRenderer } from './render.js?v=5cf54c957b';
 import { hashSeed, mulberry32, gauss, W, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle, } from './sim.js?v=b64eb535e1';

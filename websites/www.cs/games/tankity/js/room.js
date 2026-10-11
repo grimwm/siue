@@ -1,6 +1,6 @@
 import { FOE_DYING, FOE_FIRE, FOE_HIT, FOE_IDLE, TANK_FIRE, TANK_HIT, TANK_IDLE, TANK_OWS, pick, } from './chatter.js?v=48b9223047';
 import { stepArm } from './input.js?v=9287dbfb97';
-import { prettyRoomError, shouldCatchUp } from './net.js?v=35baab622b';
+import { prettyRoomError, shouldCatchUp, standingsRows } from './net.js?v=38d45fb1ea';
 import { H, TUNE, W, carveCrater, clamp, facing } from './sim.js?v=b64eb535e1';
 export function createRoom(deps) {
     const { G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview, decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop, renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText, } = deps;
@@ -556,12 +556,7 @@ export function createRoom(deps) {
     }
     function netShowStandings(room) {
         net.stopPolling();
-        const rows = ((room && room.seats) || []).map((s, i) => ({
-            name: s.human ? s.initials : (s.name + ' (AI)'),
-            score: s.score || 0,
-            mine: i === net.seat,
-        }));
-        rows.sort((a, b) => b.score - a.score);
+        const rows = standingsRows((room && room.seats) || [], net.seat);
         const champ = rows[0];
         END.kicker = `Room ${net.code} · final standings`;
         END.title = champ && champ.mine ? 'Top gun! The hills are yours.' : (champ ? `${champ.name} holds the hills.` : 'Match over.');

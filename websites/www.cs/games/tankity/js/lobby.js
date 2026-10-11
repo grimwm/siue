@@ -1,4 +1,4 @@
-import { inviteUrl, prettyRoomError } from './net.js?v=35baab622b';
+import { inviteUrl, prettyRoomError } from './net.js?v=38d45fb1ea';
 import { drawMapIcon } from './ui/icons.js?v=b8eec86a1f';
 import { renderLeave as drawLeave } from './ui/leave.js?v=2c5012f581';
 import { renderLobby as drawLobby } from './ui/lobby.js?v=162ac098fa';

@@ -17,9 +17,9 @@ import type { GameState, GameTank, MatchState, Tables } from './game-types.js';
 import type { HudValues } from './hud.js';
 import { stepArm } from './input.js';
 import type { Input } from './input.js';
-import { prettyRoomError, shouldCatchUp } from './net.js';
+import { prettyRoomError, shouldCatchUp, standingsRows } from './net.js';
 import type { RoomClient } from './net.js';
-import type { RoomEvent, RoomSeat, RoomSnapshot } from './protocol.js';
+import type { RoomEvent, RoomSnapshot } from './protocol.js';
 import type { Replay } from './replay.js';
 import { H, TUNE, W, carveCrater, clamp, facing } from './sim.js';
 import type { ShopRow } from './sim.js';
@@ -531,12 +531,7 @@ export function createRoom(deps: RoomDeps) {
   }
   function netShowStandings(room: RoomSnapshot): void {
     net.stopPolling();
-    const rows = ((room && room.seats) || []).map((s, i) => ({
-      name: s.human ? (s as RoomSeat & { initials?: string }).initials : (s.name + ' (AI)'),
-      score: s.score || 0,
-      mine: i === net.seat,
-    }));
-    rows.sort((a, b) => b.score - a.score);
+    const rows = standingsRows((room && room.seats) || [], net.seat);
     const champ = rows[0];
     END.kicker = `Room ${net.code} · final standings`;
     END.title = champ && champ.mine ? 'Top gun! The hills are yours.' : (champ ? `${champ.name} holds the hills.` : 'Match over.');

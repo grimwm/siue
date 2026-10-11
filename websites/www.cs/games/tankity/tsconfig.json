@@ -28,5 +28,5 @@
     "newLine": "lf",
     "noEmitOnError": true
   },
-  "files": ["src/sim.ts", "src/net.ts", "src/input.ts", "src/preview.ts", "src/replay.ts", "src/flow.ts"]
+  "files": ["src/sim.ts", "src/ai.ts", "src/net.ts", "src/input.ts", "src/preview.ts", "src/replay.ts", "src/flow.ts"]
 }

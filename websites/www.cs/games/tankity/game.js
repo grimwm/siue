@@ -20,8 +20,9 @@ import {
   surfY as simSurfY, carveCrater, facing, isGroundUnit, spawnSpots, spotTaken as simSpotTaken,
   muzzle, shotSpeed, stepBallistic, blastDamage,
   fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
-  anyTankFalling as simAnyTankFalling, aiChoose as simAiChoose, pickTactic,
-} from './js/sim.js?v=737a66c416';
+  anyTankFalling as simAnyTankFalling,
+} from './js/sim.js?v=b64eb535e1';
+import { aiChoose as simAiChoose, pickTactic } from './js/ai.js?v=b9925728d7';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
 } from './js/audio.js?v=ce8cdf6a6e';
@@ -29,7 +30,7 @@ import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, CLOCK_SHOW_S,
 } from './js/net.js?v=35baab622b';
 import { transition, runWar, warSpeed, WATCH_TURNS } from './js/flow.js?v=fb268dfd34';
-import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=9e4c05a2f0';
+import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=8e81275ae7';
 import { createReplay } from './js/replay.js?v=3f9ccfd889';
 import { createRenderer, drawChassis } from './js/render.js?v=5cf54c957b';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';

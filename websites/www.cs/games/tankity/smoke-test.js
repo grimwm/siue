@@ -160,7 +160,10 @@ click(els['btn-music']); click(els['btn-music']); // end unmuted with a fresh sc
 // ---- game rooms: lobby + net play against a scripted server ----
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, 'game.css'), 'utf8');
-const php = fs.readFileSync(path.join(__dirname, 'rooms.php'), 'utf8');
+// The room server is rooms.php plus the files it requires from server/.
+const phpFiles = ['rooms.php', ...['settings', 'store', 'sim', 'ai', 'rules', 'protocol'].map(f => `server/${f}.php`)];
+const phpText = Object.fromEntries(phpFiles.map(f => [f, fs.readFileSync(path.join(__dirname, f), 'utf8')]));
+const php = Object.values(phpText).join('\n');
 // The lobby and the menu are Preact components (src/ui): their ids exist once
 // the game has drawn them, not in index.html (ui-test.js checks their shape).
 const rendered = id => !!els[id] && !!els[id].localName;
@@ -230,9 +233,8 @@ for (const f of ['game.js', 'game.css', 'fx.js']) {
 }
 check('room-cap', /ROOM_MAX_ROOMS/.test(php) && /room_max_rooms/.test(php) && /every room is taken/.test(php));
 check('no-seed-leak', (() => {
-  const start = php.indexOf('function room_snapshot');
-  const end = php.indexOf('function room_find_seat', start);
-  const body = php.slice(start, end);
+  const proto = phpText['server/protocol.php'];
+  const body = proto.slice(proto.indexOf('function room_snapshot'));
   return !/'seed'/.test(body) && !/'rng'/.test(body) && !/'token'/.test(body);
 })());
 check('lobby-css-acts-right', /\.card \.acts\s*\{[^}]*justify-content:\s*flex-end/.test(css));
@@ -343,7 +345,7 @@ function blockedOf(src) {
 check('blocked-parity',
   blockedOf(php) === blockedOf(src),
   blockedOf(src).split(',').length + ' entries');
-for (const [f, text] of [['game.js', src], ['index.html', html], ['game.css', css], ['rooms.php', php]]) {
+for (const [f, text] of [['game.js', src], ['index.html', html], ['game.css', css], ...phpFiles.map(f => [f, phpText[f]])]) {
   check('no-dashes-' + f, !/[—–]/.test(text));
 }
 check('net-round-event', /e\.t === 'round'/.test(src) && /'t' => 'round'/.test(php));

@@ -282,4 +282,13 @@ $get($base . '/rooms.php?action=ping'); // the sweep runs on ping, not on state
 $gone = $get($base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
 $check('match-cleaned', ($gone['error'] ?? '') === 'no such room', $gone['error'] ?? '');
 
+// server/*.php are libraries for rooms.php, never endpoints: asked for directly
+// they answer 403 (.htaccess, nginx) or 404 (their own guard) and send no code.
+foreach (['settings', 'store', 'sim', 'ai', 'rules', 'protocol'] as $lib) {
+    [$hLib, $bLib] = $rawGet($base . '/server/' . $lib . '.php', '');
+    $statusLib = (int) substr($hLib[0] ?? '', 9, 3);
+    $check("server-$lib-not-served", in_array($statusLib, [403, 404], true) && stripos($bLib, '<?php') === false && stripos($bLib, 'function ') === false,
+        ($hLib[0] ?? 'no reply') . ' ' . strlen($bLib) . ' bytes');
+}
+
 echo $fail ? "WEB-FAILED\n" : "WEB-OK\n";

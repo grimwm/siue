@@ -11,7 +11,8 @@ import ts from 'typescript';
 
 const __dirname = import.meta.dirname;
 const read = file => fs.readFileSync(path.join(__dirname, file), 'utf8');
-const php = read('rooms.php');
+// The room server is rooms.php plus the files it requires from server/.
+const php = ['rooms.php', ...['settings', 'store', 'sim', 'ai', 'rules', 'protocol'].map(f => `server/${f}.php`)].map(read).join('\n');
 const game = read('game.js');
 
 let failed = 0;

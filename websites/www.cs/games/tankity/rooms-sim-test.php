@@ -1051,5 +1051,15 @@ $_GET = ['full' => '0'];
 $check('want-full-zero-is-no', room_want([])['full'] === false);
 $_GET = [];
 
+// server/*.php are libraries for rooms.php. Required without it they stop at
+// their guard (over HTTP that is a 404) before anything after it runs.
+foreach (['settings', 'store', 'sim', 'ai', 'rules', 'protocol'] as $lib) {
+    $outLib = [];
+    $codeLib = 0;
+    exec(escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg('require $argv[1]; echo "RAN";') . ' '
+        . escapeshellarg(__DIR__ . '/server/' . $lib . '.php') . ' 2>&1', $outLib, $codeLib);
+    $check("server-$lib-guarded", $codeLib === 0 && $outLib === [], $codeLib . ' ' . implode('|', array_slice($outLib, 0, 2)));
+}
+
 echo $fail === 0 ? "SIM-OK\n" : "SIM-FAIL $fail\n";
 exit($fail === 0 ? 0 : 1);

@@ -37,6 +37,7 @@ const tankOf = (spec, i) => ({
   id: 'T' + i, isPlayer: spec.kind === 'human', x: spec.x, y: spec.y, hp: spec.hp === undefined ? 100 : spec.hp,
   angle: spec.angle === undefined ? 45 : spec.angle, power: spec.power === undefined ? 50 : spec.power,
   dirS: spec.dirS === undefined ? 1 : spec.dirS, fuel: spec.fuel === undefined ? 80 : spec.fuel, ammo: Object.assign({}, spec.ammo), vy: 0,
+  s: spec.s, dry: spec.dry, dealt: spec.dealt, lastHitBy: spec.lastHitBy, kills: spec.kills,
 });
 /* A fresh world for a case: the tanks, the ground, the wind, and the human's tricks (G.shield and friends are the player's). */
 function world(c) {
@@ -44,7 +45,7 @@ function world(c) {
   const human = (c.tanks || []).find(t => t.kind === 'human') || {};
   Object.assign(G, {
     tanks: (c.tanks || []).map(tankOf), terrain: buildTerrain(c.terrain || { flat: 400 }), wind: c.wind || 0, round: c.round || 1,
-    shells: [], booms: [], clouds: [], fx: {}, ammo: {}, selected: 'shell', score: 0, cash: 0, shake: 0, shopSel: 0,
+    shells: [], booms: [], clouds: [], fx: {}, ammo: {}, selected: 'shell', score: human.score || 0, cash: 0, shake: 0, shopSel: 0,
     shield: !!human.shield, bunker: human.bunker || 0, laststand: !!human.laststand, jammer: human.jammer || 0,
   });
   return G;
@@ -155,6 +156,19 @@ const RUN = {
       for (let frame = 0; G.shells.length && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
       const b = t.brk;
       steps.push({ wkey: choice.wkey, angle: choice.angle, power: choice.power, x: t.x, n: b.n, target: b.t, land: b.land });
+    }
+    return steps;
+  },
+  'ai-tactic'(c) {
+    world(c);
+    G.rng = sim.mulberry32(c.seed);
+    const t = G.tanks[c.shooter], steps = [];
+    for (let k = 0; k < c.turns; k++) {
+      const choice = sim.aiChoose(G, arsenal, t);
+      t.angle = choice.angle;
+      t.power = choice.power;
+      steps.push({ target: t.brk.t, s: t.s, dry: t.dry, tactic: choice.tactic === undefined ? null : choice.tactic,
+        wkey: choice.wkey, angle: choice.angle, power: choice.power, x: t.x, n: t.brk.n });
     }
     return steps;
   },

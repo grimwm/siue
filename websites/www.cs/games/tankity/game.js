@@ -20,8 +20,8 @@ import {
   surfY as simSurfY, carveCrater, facing, isGroundUnit, spawnSpots, spotTaken as simSpotTaken,
   muzzle, shotSpeed, stepBallistic, blastDamage,
   fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
-  anyTankFalling as simAnyTankFalling, aiChoose as simAiChoose,
-} from './js/sim.js?v=c526c0398a';
+  anyTankFalling as simAnyTankFalling, aiChoose as simAiChoose, pickTactic,
+} from './js/sim.js?v=737a66c416';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
 } from './js/audio.js?v=ce8cdf6a6e';
@@ -29,7 +29,7 @@ import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, CLOCK_SHOW_S,
 } from './js/net.js?v=a63c4607fa';
 import { transition, runWar, warSpeed, WATCH_TURNS } from './js/flow.js?v=fb268dfd34';
-import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=597e6f55c1';
+import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=9e4c05a2f0';
 import { createReplay } from './js/replay.js?v=9e2d32f609';
 import { createRenderer, drawChassis } from './js/render.js?v=5cf54c957b';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
@@ -392,6 +392,7 @@ function resetMatch(seedStr) {
   G.nextOneUp = TUNE.oneUpEvery;
   G.roundsWon = 0;
   G.round = 0;
+  G.tactics = {}; // each drone's strategy, kept from round to round
   G.firstTurn = 0;
   G.ammo = { shell: Infinity, buck: 1 };
   for (const k of WORDER) if (!(k in G.ammo)) G.ammo[k] = 0;
@@ -489,6 +490,7 @@ function newRound(bannerText, event) {
       x: order[i + 1], y: 0, angle: 62, power: 55,
       hp: armor, maxHp: armor, fuel: 0,
       ammo: droneRack(),
+      s: (G.tactics = G.tactics || {})[f.id] || (G.tactics[f.id] = pickTactic(G.rng)),
     });
   });
   for (const t of G.tanks) {
@@ -1131,6 +1133,10 @@ function aiChoose(t) {
    longer, eased at both ends. */
 function aiPlanAim(t) {
   const plan = aiChoose(t);
+  if (plan.tactic) {
+    G.tactics[t.id] = plan.tactic;
+    say(`${t.id.toUpperCase()} switches to ${plan.tactic} tactics.`, 'info');
+  }
   const swing = Math.max(Math.abs(plan.angle - t.angle), Math.abs(plan.power - t.power));
   t.aim = {
     plan, a0: t.angle, p0: t.power, k: 0,
@@ -2575,6 +2581,7 @@ function netEvent(e) {
     talk('tank', 'Back in! These hills are mine!', true);
     return;
   }
+  if (e.t === 'tactic') { say(`${seatName(e.seat).toUpperCase()} switches to ${e.s} tactics.`, 'info'); return; }
   if (e.t === 'auto') { say(`${seatName(e.seat)} sat quiet, so the crew fired for them.`, 'info'); return; }
 }
 /* ---------- room replay ---------- */

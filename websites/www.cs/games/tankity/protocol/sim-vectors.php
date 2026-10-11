@@ -68,6 +68,12 @@ function sv_room(array $c): array
             'x' => (float) $t['x'], 'y' => (float) $t['y'], 'angle' => (float) ($t['angle'] ?? 45), 'power' => (float) ($t['power'] ?? 50),
             'hp' => (int) ($t['hp'] ?? 100), 'maxHp' => 100, 'fuel' => (float) ($t['fuel'] ?? 80), 'dirS' => $t['dirS'] ?? 1,
             'ammo' => $t['ammo'] ?? []];
+        foreach (['s', 'dry', 'dealt', 'lastHitBy', 'kills'] as $k) {
+            if (isset($t[$k])) {
+                $room['tanks'][$i][$k] = $t[$k];
+            }
+        }
+        $room['scores'][$i] = (int) ($t['score'] ?? 0);
         $room['shield'][$i] = !empty($t['shield']);
         $room['bunker'][$i] = (int) ($t['bunker'] ?? 0);
         $room['laststand'][$i] = !empty($t['laststand']);
@@ -488,6 +494,57 @@ $bracket('jammed-target-wobbles-double', ['terrain' => $flat, 'wind' => 0, 'roun
     'tanks' => [$human(200, 9999) + ['jammer' => 2], $drone(500, 9999) + ['dirS' => -1]]]);
 $bracket('drone-with-a-rack', ['terrain' => $flat, 'wind' => 2, 'round' => 4, 'seed' => 11, 'shooter' => 1, 'target' => 0, 'shots' => 6,
     'tanks' => [$human(210, 9999), $drone(510, 9999) + ['dirS' => -1, 'ammo' => ['mortar' => 2]]]]);
+
+/* ---- strategies: who a drone picks and how it aims ----
+ * A few turns of choosing with no volley fired in between, so nothing is
+ * damaged and the dry spell grows; a turn is choose plus the caller's move. */
+$tactic = function (string $name, array $c) use ($add): void {
+    $room = sv_room($c);
+    $seat = $c['shooter'];
+    $steps = [];
+    for ($k = 0; $k < $c['turns']; $k++) {
+        $choice = room_ai_choose($room, $room['tanks'][$seat]);
+        $room['tanks'][$seat]['angle'] = $choice['angle'];
+        $room['tanks'][$seat]['power'] = $choice['power'];
+        if (abs($choice['dx']) > 0.5) {
+            $nx = max(12.0, min(SV_WIDTH - 12.0, $room['tanks'][$seat]['x'] + $choice['dx']));
+            $room['tanks'][$seat]['x'] = $nx;
+            $room['tanks'][$seat]['y'] = $room['terrain'][max(0, min(SV_WIDTH - 1, (int) round($nx)))];
+        }
+        $room['tanks'][$seat]['brk']['ox'] = $room['tanks'][$seat]['x'];
+        $b = $room['tanks'][$seat];
+        $steps[] = ['target' => $b['brk']['t'], 's' => $b['s'], 'dry' => $b['dry'], 'tactic' => $choice['tactic'] ?? null,
+            'wkey' => $choice['wkey'], 'angle' => $choice['angle'], 'power' => $choice['power'], 'x' => $b['x'], 'n' => $b['brk']['n']];
+    }
+    $add('ai-tactic', $name, $c, $steps);
+};
+$scene = function (string $s, array $shooter = [], array $rival3 = [], array $rival0 = []) use ($human, $drone, $flat): array {
+    return ['terrain' => $flat, 'wind' => 1, 'round' => 3, 'seed' => 12, 'shooter' => 1, 'turns' => 3,
+        'tanks' => [
+            $rival0 + $human(100, 80) + ['score' => 900],
+            $drone(520, 100) + $shooter + ['dirS' => -1, 's' => $s],
+            $drone(300, 30),
+            $drone(450, 70) + $rival3 + ['kills' => 4],
+        ]];
+};
+foreach (['hunter', 'bully', 'sniper', 'avenger', 'glory', 'lobber'] as $s) {
+    $tactic("$s-scene", $scene($s));
+}
+$tactic('avenger-remembers-its-attacker', $scene('avenger', ['lastHitBy' => 0]));
+$tactic('avenger-attacker-wrecked-falls-back-to-nearest', $scene('avenger', ['lastHitBy' => 0], [], ['hp' => 0]));
+$tactic('glory-human-leads', $scene('glory', [], ['kills' => 1]));
+$tactic('glory-takes-its-strongest-gun', $scene('glory', ['ammo' => ['mortar' => 2, 'heavy' => 2, 'buck' => 2]]));
+$tactic('sniper-ties-go-to-the-nearest', ['terrain' => $flat, 'wind' => 0, 'round' => 2, 'seed' => 5, 'shooter' => 1, 'turns' => 2,
+    'tanks' => [$human(100, 50), $drone(520, 100) + ['dirS' => -1, 's' => 'sniper'], $drone(330, 50), $drone(260, 50)]]);
+$tactic('lobber-with-area-guns', array_replace($scene('lobber', ['ammo' => ['rail' => 2, 'buck' => 2, 'mortar' => 2]]), ['turns' => 2]));
+foreach ([2, 9, 31] as $seed) {
+    $tactic("lobber-plain-shells-seed$seed", array_replace($scene('lobber'), ['seed' => $seed, 'turns' => 2]));
+}
+foreach ([1, 4, 8, 16] as $seed) {
+    $tactic("dry-spell-flips-seed$seed", array_replace($scene('bully'), ['seed' => $seed, 'turns' => 9, 'round' => 6]));
+}
+$tactic('flip-waits-for-three-dry-turns', array_replace($scene('bully', ['dry' => 2]), ['seed' => 3, 'turns' => 1]));
+$tactic('flip-when-the-spell-is-long', array_replace($scene('bully', ['dry' => 3]), ['seed' => 3, 'turns' => 1]));
 
 /* ---- settling after a crater ---- */
 foreach ([['over-a-pit', 300, 300], ['already-down', 300, 400], ['ground-rose-above', 300, 450], ['off-the-left-edge', -3, 380],

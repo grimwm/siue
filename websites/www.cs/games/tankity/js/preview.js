@@ -10,7 +10,7 @@
  * the page: weapons, particle effects and the result text come in as a
  * PreviewEnv, so it compiles in the DOM-free program and preview-test.js
  * drives it on a clock the test moves by hand. */
-import { GRAV, FLAT_GRAV, ROLL_LIFT, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage, groundAt, groundSlope, rollStart, rollStep, rollOut, } from './sim.js?v=c526c0398a';
+import { GRAV, FLAT_GRAV, ROLL_LIFT, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage, groundAt, groundSlope, rollStart, rollStep, rollOut, } from './sim.js?v=737a66c416';
 export const PV_W = 360, PV_H = 200, PV_WIND = 3, PV_FOE_HP = 60;
 export function makePreviewTerrain() {
     const terr = new Array(PV_W);

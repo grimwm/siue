@@ -131,6 +131,11 @@ export interface Tank {
   dirS?: number; // +1 faces right, -1 left
   ammo?: Ammo; // a drone's magazine
   brk?: Bracket; // a drone's memory of its last shot
+  s?: string; // a drone's strategy (TACTICS)
+  dry?: number; // its own turns in a row that hurt nobody
+  dealt?: boolean; // it hurt someone since its last turn
+  lastHitBy?: number; // index in world.tanks of whoever last damaged this unit
+  kills?: number; // units this drone has wrecked this round
 }
 /* A drone's memory of its last shot, for bracketing a target in. */
 export interface Bracket {
@@ -621,6 +626,11 @@ export function explode(world: World, arsenal: Arsenal, x: number, y: number, wk
       world.score += dmg * 2;
       world.cash += dmg * 2;
     }
+    if (t !== owner) {
+      t.lastHitBy = world.tanks.indexOf(owner); // an avenger and the shooter's dry spell read these
+      owner.dealt = true;
+      if (t.hp <= 0) owner.kills = (owner.kills || 0) + 1;
+    }
     if (t.hp <= 0) blast.events.push(wreck(world, arsenal, t, owner));
     else blast.events.push({ kind: 'wound', tank: t, dmg, hp: t.hp, direct: !!direct });
   }
@@ -825,6 +835,7 @@ export interface AimChoice {
   wkey: string;
   angle: number;
   power: number;
+  tactic?: string; // set when the drone just switched strategy
 }
 /* Drone bracketing, like real artillery. The first shot at a target is the
    ballistic solution plus the round's wobble (the ranging shot). While the
@@ -865,9 +876,56 @@ function aiCorrect(world: World, arsenal: Arsenal, mx: number, my: number, wkey:
 export function brkLand(owner: Tank, x: number): void {
   if (owner.brk && owner.brk.land === null) owner.brk.land = x;
 }
+/* Drone strategies: who a drone shoots at and how it aims. Every drone is
+   dealt one at random when it spawns, and a drone that goes DRY_FLIP turns
+   without hurting anyone may switch (FLIP_CHANCE per further dry turn). Every
+   strategy brackets a standing target the same way.
+     hunter   keeps its target until it is wrecked (nearest when it picks)
+     bully    always the nearest rival
+     sniper   the weakest rival (lowest hp, nearest on a tie); wobble x0.8
+     avenger  whoever last damaged it; the nearest while nobody has
+     glory    the rival with the most score (a drone: 300 per kill); its strongest gun
+     lobber   any rival; high arcs (above LOB_ANGLE degrees first) and area guns
+   rooms.php has the same table. */
+export const TACTICS = ['hunter', 'bully', 'sniper', 'avenger', 'glory', 'lobber'] as const;
+export const DRY_FLIP = 3;
+export const FLIP_CHANCE = 0.35;
+export const SNIPER_WOB = 0.8;
+export const LOB_ANGLE = 60;
+export const LOB_OK = 40; // a high arc this close is good enough; otherwise flat shots may compete
+export const KILL_GLORY = 300;
+export function pickTactic(rng: Rng): string {
+  return TACTICS[Math.floor(rng() * TACTICS.length)]!;
+}
+/* A different strategy from the one it has. */
+export function flipTactic(rng: Rng, now: string): string {
+  const others = TACTICS.filter(k => k !== now);
+  return others[Math.floor(rng() * others.length)]!;
+}
+/* Guns that hurt an area: pellets, cluster bomblets, a big blast. */
+function areaGun(w: Weapon): boolean {
+  return w.effect === 'pellets' || w.effect === 'cluster' || w.radius >= 40;
+}
+/* The rival a strategy would pick, ignoring any bracket in progress. Null for
+   a lobber, whose pick is random. rivals are sorted nearest first. */
+function tacticTarget(world: World, t: Tank, rivals: readonly Tank[], s: string): Tank | null {
+  if (s === 'lobber') return null;
+  let pick = rivals[0]!;
+  if (s === 'hunter') {
+    const mem = t.brk;
+    for (const r of rivals) if (mem && world.tanks.indexOf(r) === mem.t) pick = r;
+  } else if (s === 'sniper') {
+    for (const r of rivals) if (r.hp < pick.hp) pick = r;
+  } else if (s === 'avenger') {
+    for (const r of rivals) if (world.tanks.indexOf(r) === (t.lastHitBy === undefined ? -1 : t.lastHitBy)) pick = r;
+  } else if (s === 'glory') {
+    const glory = (r: Tank): number => r.isPlayer ? world.score : (r.kills || 0) * KILL_GLORY;
+    for (const r of rivals) if (glory(r) > glory(pick)) pick = r;
+  }
+  return pick;
+}
 export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
-  // Drones feud with each other too: usually the nearest rival, sometimes
-  // whoever else is still rolling. Nobody is safe, nobody is perfect.
+  // Drones feud with each other too. Nobody is safe, nobody is perfect.
   const rivals = world.tanks
     .filter(c => c !== t && c.hp > 0)
     .sort((a, b) => Math.abs(a.x - t.x) - Math.abs(b.x - t.x));
@@ -879,43 +937,76 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
     if (k === 'shell' || keys.includes(k)) continue;
     if ((rack[k] || 0) > 0) keys.push(k);
   }
-  // A bracket in progress: same target standing where it stood, same gunner
-  // on the same spot, the same gun still loaded, under the correction cap.
+  // A drone that cannot hurt anyone for a while tries something else.
+  let s = t.s || 'hunter';
   const mem = t.brk;
+  let dry = t.dry || 0;
+  let tactic: string | undefined;
+  if (rivals.length) {
+    if (mem) dry = t.dealt ? 0 : dry + 1;
+    if (dry >= DRY_FLIP && world.rng() < FLIP_CHANCE) {
+      s = flipTactic(world.rng, s);
+      tactic = s;
+      dry = 0;
+    }
+  }
+  const want = rivals.length ? tacticTarget(world, t, rivals, s) : null;
+  // A bracket in progress: same target standing where it stood, same gunner
+  // on the same spot, the same gun still loaded, under the correction cap, and
+  // a strategy that still wants that target.
   let cont: Tank | null = null;
   if (mem && mem.n < BRK_MAX && Math.abs(t.x - mem.ox) <= 1 && keys.includes(mem.w)) {
     const c = world.tanks[mem.t];
-    if (c && c !== t && c.hp > 0 && Math.abs(c.x - mem.tx) <= BRK_DRIFT) cont = c;
+    if (c && c !== t && c.hp > 0 && Math.abs(c.x - mem.tx) <= BRK_DRIFT && (want === null || want === c)) cont = c;
   }
-  let target = cont || rivals[0] || t;
-  if (!cont && rivals.length > 1 && world.rng() >= 0.6) {
-    target = rivals[1 + Math.floor(world.rng() * (rivals.length - 1))]!;
-  }
+  let target: Tank;
+  if (cont) target = cont;
+  else if (want) target = want;
+  else if (rivals.length > 1) target = rivals[Math.floor(world.rng() * rivals.length)]!;
+  else target = rivals[0] || t;
   // Deliberately shaky hands: dangerous up close, forgiving at range.
   // A jammer doubles the wobble of anything aimed at our tank.
   const skill = Math.min(1, 0.35 + world.round * 0.12);
-  let wob = Math.max(0.25, 1.2 - skill);
+  let wob = Math.max(0.25, 1.2 - skill) * (s === 'sniper' ? SNIPER_WOB : 1);
   let ba: number, bp: number, w: string, n: number;
   if (cont) {
     w = mem!.w;
     n = mem!.n + 1;
     const sim = simShot(world, arsenal, m.x, m.y, mem!.a, mem!.p, w, dirS);
     const landed = mem!.land === null ? sim.x : mem!.land;
-    // Where the sim must put a shot so that, shifted by the measured miss of
-    // the last one, it bursts on the target.
     let miss = target.x - landed;
     if (Math.abs(miss) <= BRK_ON) miss = 0; // a burst on the hull is on target: hold the aim
+    // Where the sim must put a shot so that, shifted by the measured miss of
+    // the last one, it bursts on the target.
     [ba, bp] = aiCorrect(world, arsenal, m.x, m.y, w, dirS, mem!.a, mem!.p, sim.x + miss);
     wob = Math.max(BRK_FLOOR, wob * BRK_SHRINK ** n);
   } else {
+    let guns = keys;
+    if (s === 'glory') {
+      let top = keys[0]!;
+      for (const k of keys) if (arsenal.weapons[k]!.dmg > arsenal.weapons[top]!.dmg) top = k;
+      guns = [top];
+    } else if (s === 'lobber') {
+      const area = keys.filter(k => areaGun(arsenal.weapons[k]!));
+      if (area.length) guns = area;
+    }
     let best: { err: number; a: number; p: number; wkey: string } | null = null;
-    for (const wkey of keys) {
-      for (let a = 25; a <= 155; a += 6) {
-        for (let p = 20; p <= 100; p += 6) {
-          const land = simShot(world, arsenal, m.x, m.y, a, p, wkey, dirS);
-          const err = land.oob ? 400 + Math.abs(land.x - target.x) * 0.2 : Math.abs(land.x - target.x);
-          if (!best || err < best.err) best = { err, a, p, wkey };
-        }
+    const consider = (wkey: string, a: number): void => {
+      for (let p = 20; p <= 100; p += 6) {
+        const land = simShot(world, arsenal, m.x, m.y, a, p, wkey, dirS);
+        const err = land.oob ? 400 + Math.abs(land.x - target.x) * 0.2 : Math.abs(land.x - target.x);
+        if (!best || err < best.err) best = { err, a, p, wkey };
+      }
+    };
+    // The first angle on the grid (25, 31, ...) above LOB_ANGLE.
+    const highFrom = 25 + 6 * Math.ceil((LOB_ANGLE + 1 - 25) / 6);
+    for (const wkey of guns) {
+      for (let a = s === 'lobber' ? highFrom : 25; a <= 155; a += 6) consider(wkey, a);
+    }
+    // A lobber falls back to flat shots only when no high arc lands near.
+    if (s === 'lobber' && best!.err > LOB_OK) {
+      for (const wkey of guns) {
+        for (let a = 25; a < highFrom; a += 6) consider(wkey, a);
       }
     }
     const pick = best!;
@@ -934,6 +1025,11 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
       t.y = surfY(world.terrain, t.x);
     }
   }
+  t.s = s;
+  t.dry = dry;
+  t.dealt = false;
   t.brk = { t: world.tanks.indexOf(target), a: angle, p: power, w, n, tx: target.x, ox: t.x, land: null };
-  return { wkey: w, angle, power };
+  const out: AimChoice = { wkey: w, angle, power };
+  if (tactic) out.tactic = tactic;
+  return out;
 }

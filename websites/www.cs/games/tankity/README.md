@@ -181,10 +181,9 @@ php tools/install-files.php      # after the last edit to any served file
 Two copies of one algorithm, `room_ai_choose` in rooms.php and `aiChoose` in
 `src/sim.ts`, pinned together by the sim vectors.
 
-- Target: the nearest rival, or (40% of the time) another live one, except
-  while a bracket is running on a target (below), which it keeps until it dies
-  or drives off.
-- Ranging shot: a brute-force search (angle 25-155 in steps of 6, power 20-100
+- Target: whoever the drone's strategy picks (next section), except that a
+  bracket in progress on a target the strategy still wants is kept.
+- Ranging shot: a brute-force search (which a strategy can narrow) (angle 25-155 in steps of 6, power 20-100
   in steps of 6, over the shell and any loaded gun) for the landing nearest the
   target, plus Gaussian wobble: skill = min(1, 0.35 + round x 0.12), wob =
   max(0.25, 1.2 - skill), angle +-9 x wob, power +-12 x wob, doubled against a
@@ -213,6 +212,39 @@ Two copies of one algorithm, `room_ai_choose` in rooms.php and `aiChoose` in
   sends the drone back to the first row.
 - The memory is a few numbers per drone and rides in the room's JSON; the
   snapshot a client sees leaves it out.
+
+## Drone strategies
+
+Every drone is dealt one strategy at random when it spawns (round start for a
+seat's first round, and when a bot takes over a departed player's seat), with
+a stream seeded from the room's RNG and the seat in a room (so dealing never
+shifts its shots) and the match RNG solo, so the same seed deals the same hands. A strategy keeps for the whole match (`room['tactic']` per seat
+in a room, `G.tactics` per drone solo) and decides whom the drone targets and
+how it aims; all of them bracket a standing target the same way.
+
+| Strategy | Target | Aim |
+|---|---|---|
+| `hunter` | The target it picked (the nearest, at the time) until that one is wrecked; no random switching | As usual |
+| `bully` | Always the nearest rival | As usual |
+| `sniper` | The weakest rival (lowest hp, nearest on a tie) | Base wobble x`SNIPER_WOB` = 0.8 |
+| `avenger` | Whoever last damaged it (`lastHitBy`); the nearest while nobody has, or when that unit is wrecked | As usual |
+| `glory` | The leader: a human by match score, a drone by kills this round x`KILL_GLORY` = 300 | Only its strongest loaded gun (highest damage) |
+| `lobber` | A random rival | Angles above `LOB_ANGLE` = 60 degrees first (flat ones only when no high arc lands within `LOB_OK` = 40 px), and area guns (buckshot, cluster, anything with blast radius 40 or more) when it has them |
+
+- Flipping: each drone counts `dry`, its consecutive own turns that dealt no
+  damage (to anyone but itself). From `DRY_FLIP` = 3 dry turns on, every
+  further dry turn has a `FLIP_CHANCE` = 35% chance to switch to a different
+  random strategy and reset `dry`. A turn that deals damage resets `dry`.
+- The switch is announced: a room sends `{t:'tactic', seat, s}` ahead of the
+  drone's `aifire`, solo logs the same line, and the radio log reads "WRAITH
+  switches to sniper tactics."
+- State per tank: `s`, `dry`, `dealt` (damage since its last turn),
+  `lastHitBy` (index in the tanks array) and `kills`. It stays on the server
+  (and on the solo drone objects); the snapshot carries only the `tactic`
+  event. `dry`, `lastHitBy` and `kills` start over each round; `s` does not.
+- The rules sit in `src/sim.ts` (`aiChoose`, `TACTICS`) and `rooms.php`
+  (`room_ai_choose`, `ROOM_TACTICS`) and are held together by the `ai-tactic`
+  vectors.
 
 ## Source layout and build
 
@@ -442,7 +474,7 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
 | `node ui-test.js`                              | The Preact overlays (`js/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the scores, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
 | `node smoke-test.js`                           | The shipped client (`game.js` imported as a module) in a stub DOM (loads `fx.js` first), driven by the `game.json` key table and the `protocol/` fixtures; also checks every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps; a solo player who wrecks their own tank sees the drones fight on to one and the lost round open the shop |
 | `php config-test.php`                          | `.config.yaml` precedence                                                                  |
-| `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; drone bracketing (misses shrink over shots at a standing target, hits within four, a moved target or gunner resets the corrections, the target is kept until it dies); one unit left standing ends a round (free-for-all, drones fighting on, lives, winnings, `roundwin` seat), the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller: it rolls down a slope and damages a unit at the bottom, settles and craters in a valley, bursts at the board's edge, hits a drone overhead, and its recorded path follows the ground |
+| `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; drone bracketing (misses shrink over shots at a standing target, hits within four, a moved target or gunner resets the corrections, the target is kept until it dies); drone strategies (each picks its target in a constructed scene, the lobber's arcs and area guns, the sniper's steadier hands, flips only after three dry turns, dealing, damage bookkeeping); one unit left standing ends a round (free-for-all, drones fighting on, lives, winnings, `roundwin` seat), the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller: it rolls down a slope and damages a unit at the bottom, settles and craters in a valley, bursts at the board's edge, hits a drone overhead, and its recorded path follows the ground |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (needs SysV; run inside the PHP container)                 |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `node audio-test.js`                            | `js/audio.js` imports without a browser; the loop-point trim and the round-to-track mapping are right |
@@ -521,7 +553,8 @@ outputs; `sim-vectors-test.js` replays every case through the compiled sim,
   roll ends, whole volleys for every weapon in `game.json` (and a roller down
   into a valley, into a unit, back onto its gunner, off either edge and
   stopping on a rise), the drone's aim, sequences of drone shots that bracket a
-  target in (and re-range when it drives off), and tank settling.
+  target in (and re-range when it drives off), each drone strategy's choice of
+  target, gun and arc and a flip after a dry spell, and tank settling.
 - Shared rules the cases pin: only a kill the player's own shot made pays the
   300 bonus, and a volley's projectiles (buckshot pellets, cluster bomblets)
   burst in launch order, each against the ground the earlier ones left. The

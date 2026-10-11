@@ -287,6 +287,36 @@ $shopRoom = function (int $humans = 2) {
     room_end_round($room, $events);
     return $room;
 };
+// A lost round (every human wrecked) also goes through the shop: a life
+// gone, no winnings, the same clock; the last life still ends the match.
+$lostRoom = function (int $lives) {
+    $room = room_new('LOST', 'hst');
+    $room['seats'][0] = ['human' => true, 'initials' => 'HST', 'token' => 't0', 'lives' => $lives, 'lastAct' => microtime(true)];
+    $room['seats'][1] = room_idle_seat(1, 'ai');
+    $room['seats'][2] = room_idle_seat(2, 'open');
+    $room['seats'][3] = room_idle_seat(3, 'open');
+    room_seat_economy($room, 0);
+    room_start_round($room);
+    foreach ($room['tanks'] as &$t) {
+        if ($t['kind'] === 'human') {
+            $t['hp'] = 0;
+        }
+    }
+    unset($t);
+    $cash = $room['cash'][0] ?? 0;
+    $events = [];
+    room_end_round($room, $events);
+    return [$room, $events, $cash];
+};
+[$room, $events, $cash] = $lostRoom(3);
+$check('lost-round-opens-the-shop', $room['phase'] === 'shop' && room_shop_left($room) > ROOM_SHOP_SECS - 2, $room['phase']);
+$check('lost-round-costs-a-life-pays-nothing', $room['seats'][0]['lives'] === 2 && ($room['cash'][0] ?? 0) === $cash);
+$check('lost-round-says-so', array_column($events, 't') === ['roundlost'], json_encode(array_column($events, 't')));
+room_shop_set_ready($room, 0, true);
+$check('lost-round-shop-starts-the-next-round', room_shop_settle($room) === true && $room['phase'] === 'play');
+[$room, $events] = $lostRoom(1);
+$check('last-life-lost-ends-the-match', $room['phase'] === 'over' && in_array('matchover', array_column($events, 't'), true));
+
 $room = $shopRoom();
 $check('shop-opens-with-clock', $room['phase'] === 'shop' && room_shop_left($room) > ROOM_SHOP_SECS - 2 && room_shop_left($room) <= ROOM_SHOP_SECS,
     $room['phase'] . ' ' . (string) room_shop_left($room));

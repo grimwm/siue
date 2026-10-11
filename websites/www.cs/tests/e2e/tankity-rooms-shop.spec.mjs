@@ -2,7 +2,7 @@
 // ready (or after 90 s), and Ready is a toggle until the last player presses it.
 import { test, expect } from '@playwright/test';
 import { roomPair, lastRoom } from './helpers.mjs';
-import { shopOpen, reachShop } from './rooms-shop-helpers.mjs';
+import { shopOpen, reachShop, loseRound } from './rooms-shop-helpers.mjs';
 
 test('the shop starts the next round when everyone is ready, and Ready can be taken back until then', async ({ browser }) => {
   test.setTimeout(300_000);
@@ -75,3 +75,25 @@ test('the shop starts the next round when everyone is ready, and Ready can be ta
   await host.ctx.close(); await guest.ctx.close();
 });
 
+
+test('a lost round goes through the shop too: a life gone, then everyone ready starts the next', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const { host, guest, roomState, code } = await roomPair(browser, {
+    beforeStart: async ({ host }) => { await host.page.locator('#lobby-seats .seat-tile').nth(3).click(); },
+  });
+  for (const pl of [host, guest]) {
+    pl.page.on('request', r => { const m = r.url().match(/action=state.*[?&]token=([0-9a-f]+)/); if (m) pl.token = m[1]; });
+  }
+  await expect.poll(() => host.token && guest.token, { timeout: 15_000 }).toBeTruthy();
+  const round = lastRoom(roomState.host).round;
+  await loseRound(host, guest, code, roomState);
+  for (const p of [host.page, guest.page]) await expect(p.locator('#shop-veil')).toBeVisible();
+  expect(lastRoom(roomState.host).you.lives).toBe(2);
+  await expect(host.page.locator('#log')).toContainText('goes to the battery');
+  for (const p of [host.page, guest.page]) await p.locator('#shop-next').click();
+  await expect.poll(() => lastRoom(roomState.host).phase, { timeout: 15_000 }).toBe('play');
+  expect(lastRoom(roomState.host).round).toBe(round + 1);
+  expect(host.errors).toEqual([]);
+  expect(guest.errors).toEqual([]);
+  await host.ctx.close(); await guest.ctx.close();
+});

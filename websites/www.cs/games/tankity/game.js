@@ -2515,6 +2515,11 @@ function netEvent(e) {
     say(`Round ${e.round} cleared. Winnings paid. Spend them.`, 'good');
     return;
   }
+  if (e.t === 'roundlost') {
+    sfx.play('lose');
+    say(`Round ${e.round} goes to the battery. A life gone; restock and roll again.`, 'bad');
+    return;
+  }
   if (e.t === 'eliminated') {
     if (e.seat === net.seat) {
       sfx.play('lose');

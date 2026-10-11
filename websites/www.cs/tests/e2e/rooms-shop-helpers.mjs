@@ -58,3 +58,26 @@ export async function reachShop(host, guest, code, roomState) {
   }
   throw new Error('nobody won the round');
 }
+
+/* Both players lob shells straight up onto their own tanks (angle 90, power
+   12, straight to the room server as the keyboard would) until the battery
+   takes the round and each sees the shop. */
+export async function loseRound(host, guest, code, roomState) {
+  const seats = [[host, 'host', 0], [guest, 'guest', 1]];
+  for (let i = 0; i < 80; i++) {
+    if (await shopOpen(host.page) && await shopOpen(guest.page)) return;
+    for (const [pl, name, seat] of seats) {
+      const room = lastRoom(roomState[name]);
+      if (!room || room.phase !== 'play' || room.turn !== seat || !room.csrf) continue;
+      await pl.page.evaluate(async ({ code, token, csrf }) => {
+        await fetch('rooms.php?action=act', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+          body: JSON.stringify({ code, token, csrf, kind: 'fire', angle: 90, power: 12 }),
+        });
+      }, { code, token: pl.token, csrf: room.csrf });
+    }
+    await host.page.waitForTimeout(1500);
+  }
+  throw new Error('the round was never lost');
+}

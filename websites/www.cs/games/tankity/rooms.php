@@ -1284,8 +1284,11 @@ function room_end_round(array &$room, array &$events): void
             $events[] = ['t' => 'matchover'];
             return;
         }
-        room_start_round($room);
-        $events[] = ['t' => 'round', 'round' => $room['round'], 'wind' => $room['wind']];
+        // A lost round still goes through the shop (no winnings): every
+        // round starts from the shop, won or lost.
+        $room['phase'] = 'shop';
+        $room['shop'] = ['at' => microtime(true), 'ready' => []];
+        $events[] = ['t' => 'roundlost', 'round' => $room['round']];
         return;
     }
 }

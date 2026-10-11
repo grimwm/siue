@@ -117,6 +117,8 @@ interface EventBase { seq: number; at?: number }
 
 export interface RoundEvent extends EventBase { t: 'round'; round: number; wind: number }
 export interface RoundWinEvent extends EventBase { t: 'roundwin'; round: number }
+/** Every human was wrecked: a life gone each, and the shop before the next round. */
+export interface RoundLostEvent extends EventBase { t: 'roundlost'; round: number }
 export interface MatchOverEvent extends EventBase { t: 'matchover' }
 export interface EliminatedEvent extends EventBase { t: 'eliminated'; seat: number }
 export interface OneUpEvent extends EventBase { t: 'oneup'; seat: number; lives: number }
@@ -154,7 +156,7 @@ export interface FizzleEvent extends EventBase { t: 'fizzle'; by: number; w: str
 
 /** The events a snapshot carries, discriminated by `t`. */
 export type RoomEvent =
-  | RoundEvent | RoundWinEvent | MatchOverEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent
+  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent
   | FireEvent | AiFireEvent | AutoEvent
   | ShotEvent | BurstEvent | HitEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent;
 

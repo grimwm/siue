@@ -39,7 +39,6 @@ import { renderLobby as drawLobby } from './js/ui/lobby.js?v=162ac098fa';
 import { renderMenu as drawMenu } from './js/ui/menu.js?v=6ebee3dc2d';
 import { renderGuns as drawGuns } from './js/ui/guns.js?v=71c87cf72b';
 import { renderScores as drawScores } from './js/ui/scores.js?v=f0bf536feb';
-import { renderTutorial as drawTutorial } from './js/ui/tutorial.js?v=d501cd8bcc';
 import { renderEndVeil as drawEndVeil } from './js/ui/endveil.js?v=6a7f00fd3c';
 import { renderLeave as drawLeave } from './js/ui/leave.js?v=2c5012f581';
 import {
@@ -49,9 +48,20 @@ import { createEffects, FX, FX_BUDGET } from './js/effects.js?v=1be294b3bc';
 import { createShop } from './js/shop.js?v=da716ab023';
 import { createHud } from './js/hud.js?v=a4c4a2d226';
 import { createView } from './js/view.js?v=b74c254da9';
+import { createTutorial } from './js/tutorial.js?v=aa28ddad64';
 import { drawShellIcon as paintShellIcon, drawGearIcon as paintGearIcon, drawMapIcon, drawUnitIcon } from './js/ui/icons.js?v=b8eec86a1f';
 
 const $ = id => document.getElementById(id);
+
+/* Keys and touch live in src/input.ts: it holds the key table (game.yaml's keys
+// section, served as game.json, with a frozen fallback), turns a key press or a
+// held pad button into a named command, and runs the held-key arm movement.
+// This file says what each command does (bindKeys below). */
+
+/* Phones and tablets: a touch screen with no mouse or trackpad. They get no
+// keyboard at all, so key bindings stay off and no label names a key. */
+const TOUCH = touchOnly(typeof window.matchMedia === 'function' ? q => window.matchMedia(q) : undefined);
+const input = createInput({ touch: TOUCH });
 
 /* ---------- audio: lives in src/audio.ts ---------- */
 music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));
@@ -358,7 +368,7 @@ function playerFire() {
   if (G.phase !== 'aim' || !cur().isPlayer || G.over) return;
   closePreview();
   if (fireWeapon(me(), G.selected)) {
-    if (TUT) TUT.fired = true;
+    tutorialFired();
     talk('tank', pick(TANK_FIRE));
     say(`You fire ${WEAPONS[G.selected].name}.`, 'info');
   }
@@ -1002,6 +1012,13 @@ const replay = createReplay({
   muzzle: (wkey, x, y, ang) => fxMuzzle(G.fx, wkey, x, y, ang),
   special: (wkey, name, x, y, ang) => fxSpecial(G.fx, wkey, name, x, y, ang),
   trail: (shot, dt, x, y, vx, vy, wkey) => fxTrail(G.fx, shot, dt, x, y, vx, vy, wkey),
+});
+/* The coach (src/tutorial.ts). */
+const {
+  renderTutorial, maybeStartTutorial, tutorialOpen, endTutorial, skipTutorial, tickTutorial,
+  isActive: tutorialActive, arm: armTutorial, noteFired: tutorialFired,
+} = createTutorial({
+  G, $, TOUCH, net, sfx, me, keyHint, keyCap, say, refreshNavHints, closeOverlays, freshMatchFromSeedBox,
 });
 /* The camera and the frame the canvas paints (src/view.ts). */
 const { updateCamera, shownAngle, shownPower, render, windGaugeTop } = createView({
@@ -1939,15 +1956,6 @@ async function fileReport(name) {
 }
 
 /* ---------- input + init ---------- */
-/* Keys and touch live in src/input.ts: it holds the key table (game.yaml's keys
-// section, served as game.json, with a frozen fallback), turns a key press or a
-// held pad button into a named command, and runs the held-key arm movement.
-// This file says what each command does (bindKeys below). */
-
-/* Phones and tablets: a touch screen with no mouse or trackpad. They get no
-// keyboard at all, so key bindings stay off and no label names a key. */
-const TOUCH = touchOnly(typeof window.matchMedia === 'function' ? q => window.matchMedia(q) : undefined);
-const input = createInput({ touch: TOUCH });
 function applyKeys(def) {
   if (!input.setKeys(def)) return;
   renderKeyHints();
@@ -1962,12 +1970,6 @@ function applyKeys(def) {
   renderEndVeil();
   renderLeaveVeil();
 }
-/* What a touch player taps instead, for prose that names a key. */
-const TOUCH_NAMES = {
-  'aim:barrelLeft': '◀', 'aim:barrelRight': '▶', 'aim:powerUp': '▲', 'aim:powerDown': '▼',
-  'aim:driveLeft': 'Drive ◀', 'aim:driveRight': 'Drive ▶',
-  'global:cycle': 'Weapons', 'global:fire': 'Fire',
-};
 /* " (KEY)" for a button label; nothing on touch screens. */
 function keyCap(ctx, action) {
   return TOUCH ? '' : ` (${keyHint(ctx, action)})`;
@@ -1995,8 +1997,8 @@ function freshMatchFromSeedBox(opts) {
   closeOverlays();
   // Leaving a coached battle counts as having seen it; asking for the
   // tutorial (U or the menu) always deals this match with the coach on.
-  endTutorial(!!TUT);
-  if (opts && opts.tut) TUT_ARMED = true;
+  endTutorial(tutorialActive());
+  if (opts && opts.tut) armTutorial();
   const seedInput = $('seed-input');
   startSolo(seedInput ? seedInput.value : '');
   render(); renderHUD();
@@ -2120,7 +2122,7 @@ function bindKeys() {
     escape: () => {
       if (G.preview) { closePreview(); return; }
       if (closeLeaveVeil()) return;
-      if (TUT) { skipTutorial(); return; }
+      if (tutorialActive()) { skipTutorial(); return; }
       if (closeLobbyVeil()) return;
       closeOverlays();
     },
@@ -2386,97 +2388,6 @@ function closeOverlays() {
     if (ov && !ov.hidden) { toggleOverlay(ovId, btnId); shut = true; }
   }
   return shut;
-}
-/* ---------- tutorial: coached opening moves, skippable forever ---------- */
-// The tutorial arms on a fresh New Game and starts at the first live
-// battle (after the pre-match shop). Skipping or finishing remembers the
-// choice in localStorage; the menu replays it any time.
-let TUT = null;
-let TUT_ARMED = false;
-/* Step texts name keys as {context:action} tokens so a reconfigured layout
-// rewrites the lesson by itself. */
-const TUT_STEPS = [
-  { text: 'Hold {aim:barrelLeft} or {aim:barrelRight} to swing the barrel. Watch the muzzle stub move.', done: t => t.angle !== 62 },
-  { text: 'Hold {aim:powerUp} or {aim:powerDown} to change power. More power means longer legs.', done: t => t.power !== 55 },
-  { text: 'Tap {aim:driveLeft} or {aim:driveRight} to drive while fuel lasts. Hills are cover.', done: t => TUT && Math.abs(t.x - TUT.x0) > 2 },
-  { text: 'Press {global:cycle} to cycle shells. The HUD shows what is loaded.', done: () => TUT && G.selected !== TUT.sel0 },
-  { text: 'Press {global:fire} to fire. Then read the wind and adjust.', done: () => TUT && TUT.fired },
-];
-function fmtKeys(text) {
-  return String(text).replace(/\{([a-z]+):([a-zA-Z]+)\}/g, (_, ctx, a) => (TOUCH && TOUCH_NAMES[ctx + ':' + a]) || keyHint(ctx, a));
-}
-function tutorialSeen() {
-  try {
-    return window.localStorage.getItem('tankity-tutorial') === 'done';
-  } catch (_) {
-    return true; // without storage there is nowhere to remember, so never nag
-  }
-}
-function markTutorialSeen() {
-  try {
-    window.localStorage.setItem('tankity-tutorial', 'done');
-  } catch (_) { /* private mode etc. */ }
-}
-/* The coach is a Preact component (src/ui/tutorial.tsx); the game says which
-   move the player is on and what to call the keys. */
-function renderTutorial() {
-  const section = $('tutorial-overlay');
-  if (!section) return;
-  drawTutorial(section, {
-    keyHint,
-    text: TUT ? `Move ${TUT.step + 1} of ${TUT_STEPS.length}: ${fmtKeys(TUT_STEPS[TUT.step].text)}` : '',
-    progress: TUT ? 'Follow along in the hills behind this card.' : '',
-    skip: `Skip tutorial${keyCap('global', 'escape')}`,
-    onSkip: skipTutorial,
-  });
-  refreshNavHints();
-}
-function startTutorial() {
-  if (G.demo || !G.tanks.length) return;
-  TUT_ARMED = false;
-  TUT = { step: 0, x0: me().x, sel0: G.selected, fired: false };
-  const ov = $('tutorial-overlay');
-  if (ov) ov.hidden = false;
-  renderTutorial();
-}
-function maybeStartTutorial() {
-  if (TUT_ARMED && !TUT && !G.demo && G.tanks.length) startTutorial();
-}
-/* U or the menu button: coach the live battle, or deal a fresh match with
-// the coach armed for its first battle. Never interrupts a room match. */
-function tutorialOpen() {
-  if (TUT || net.on) return;
-  closeOverlays();
-  if (!G.demo && G.tanks.length && (G.phase === 'aim' || G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle')) {
-    startTutorial();
-  } else {
-    freshMatchFromSeedBox({ tut: true });
-  }
-}
-function endTutorial(seen) {
-  if (seen) markTutorialSeen();
-  TUT = null;
-  TUT_ARMED = false;
-  const ov = $('tutorial-overlay');
-  if (ov) ov.hidden = true;
-}
-function skipTutorial() {
-  sfx.play('click');
-  say(TOUCH ? 'Tutorial skipped. Replay it from the menu any time.' : `Tutorial skipped. Press ${keyHint('global', 'tutorial')} any time to replay it.`, 'info');
-  endTutorial(true);
-}
-function tickTutorial() {
-  if (!TUT || G.demo || G.over || !G.tanks.length) return;
-  if (TUT.step < TUT_STEPS.length && TUT_STEPS[TUT.step].done(me())) {
-    TUT.step++;
-    sfx.play('click');
-    if (TUT.step >= TUT_STEPS.length) {
-      say('Tutorial complete. The hills are yours.', 'good');
-      endTutorial(true);
-      return;
-    }
-    renderTutorial();
-  }
 }
 /* In-frame panels overlay the battle and never pause it. */
 /* The panels a component draws: redrawn on open and close, so each knows it

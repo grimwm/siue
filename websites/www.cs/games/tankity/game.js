@@ -21,7 +21,7 @@ import {
   muzzle, shotSpeed, stepBallistic, blastDamage,
   fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling, aiChoose as simAiChoose,
-} from './js/sim.js?v=249042b42a';
+} from './js/sim.js?v=68e3ccd8ae';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
 } from './js/audio.js?v=ce8cdf6a6e';
@@ -29,9 +29,9 @@ import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, CLOCK_SHOW_S,
 } from './js/net.js?v=a63c4607fa';
 import { transition, runWar, warSpeed, WATCH_TURNS } from './js/flow.js?v=fb268dfd34';
-import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=6bacfc394f';
+import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=6f8d25b072';
 import { createReplay } from './js/replay.js?v=9e2d32f609';
-import { createRenderer, drawChassis } from './js/render.js?v=a2add098ba';
+import { createRenderer, drawChassis } from './js/render.js?v=5cf54c957b';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 import { renderHelp } from './js/ui/help.js?v=7366b18437';
 import { renderShop as drawShop } from './js/ui/shop.js?v=650582befc';
@@ -1346,6 +1346,25 @@ function drawShellIcon(cv, wkey) {
       c.arc(cx + dx, cy + dy, 2, 0, Math.PI * 2);
       c.fill();
     }
+  } else if (g.painter === 'ball') {
+    // A ball with a stripe across it, tipped as if rolling.
+    c.save();
+    c.translate(cx, cy);
+    c.rotate(-0.5);
+    c.beginPath();
+    c.arc(0, 0, 4.4, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = 'rgba(40,24,8,0.75)';
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(-4.4, 0);
+    c.lineTo(4.4, 0);
+    c.stroke();
+    c.fillStyle = 'rgba(255,255,255,0.8)';
+    c.beginPath();
+    c.arc(0, -2.2, 1, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
   } else if (w.effect === 'cluster') {
     c.beginPath();
     c.arc(cx, cy, 2.8, 0, Math.PI * 2);

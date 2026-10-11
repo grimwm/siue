@@ -639,6 +639,103 @@ $check('another-human-with-lives-keeps-the-match', $room['phase'] === 'shop' && 
 // is run against. The values are not compared (generate.php --check does that
 // in the room container); a changed shape fails here, on any PHP.
 require_once __DIR__ . '/protocol/scenarios.php';
+// Roller: touching down it does not burst but rolls the ground, downhill
+// gaining speed, and bursts on a unit, at rest in a dip, or off the board.
+$roller = $weapons['roller'];
+$check('roller-is-a-roller', ($roller['effect'] ?? '') === 'roller' && $roller['friction'] > 0 && $roller['rollTime'] > 0);
+$hills = [];
+for ($ix = 0; $ix < 720; $ix++) {
+    $hills[] = round(330 + 40 * sin($ix * 2 * M_PI / 240), 3); // valleys at x=60, 300, 540
+}
+$onHills = function (array $tanks) use ($hills) {
+    foreach ($tanks as &$t) {
+        $t['y'] = $hills[(int) $t['x']];
+    }
+    unset($t);
+    return ['terrain' => $hills, 'tanks' => $tanks, 'wind' => 0.0, 'round' => 1, 'scores' => [], 'cash' => [], 'shield' => [], 'bunker' => [], 'laststand' => []];
+};
+$fireRoller = function (array $room, float $angle, float $power) {
+    $room['tanks'][0]['angle'] = $angle;
+    $room['tanks'][0]['power'] = $power;
+    $events = [['t' => 'fire', 'seat' => 0]];
+    room_fire_shot($room, $events, 0, 'roller');
+    return [$room, $events];
+};
+$shotOf = fn(array $events) => array_values(array_filter($events, fn($e) => $e['t'] === 'shot'))[0];
+$pathOf = fn(array $shot) => array_map(fn($p) => array_map('floatval', explode(',', $p)), explode(' ', $shot['p']));
+
+// Fired down a slope, it rolls down and damages a unit at the bottom.
+$gun = $tank(0, 'human', 60.0, 100);
+$target = $tank(1, 'human', 300.0, 100);
+$target['dirS'] = -1;
+$room = $onHills([$gun, $target]);
+[$after, $events] = $fireRoller($room, 45.0, 40.0);
+$shot = $shotOf($events);
+$hits = $hitsOn($events, 1);
+$check('roller-rolls-down-and-hits', count($hits) === 1 && $hits[0]['direct'] && $hits[0]['dmg'] > (int) $roller['dmg'], json_encode($hits));
+$path = $pathOf($shot);
+$landed = null;
+foreach ($path as $i => [$px, $py]) {
+    if ($i > 0 && $py >= $hills[(int) round($px)] - 3.5 && $landed === null) {
+        $landed = $i;
+    }
+}
+$check('roller-path-rolls-after-landing', $landed !== null && count($path) - $landed > 8, 'landed point ' . json_encode($landed) . ' of ' . count($path));
+$check('roller-path-follows-the-ground', array_reduce(array_slice($path, (int) $landed + 1, -1), fn($ok, $p) => $ok && abs($p[1] - (room_ground_at($hills, $p[0]) - ROOM_ROLL_LIFT)) < 2.0, true));
+$check('roller-bursts-where-the-shot-ends', abs($shot['x1'] - $path[count($path) - 1][0]) < 1.0 && $shot['r'] === (float) $roller['radius']);
+$check('roller-burst-craters-the-ground', $after['terrain'][(int) round($shot['x1'])] > $hills[(int) round($shot['x1'])]);
+$check('roller-burst-after-landing', $shot['t1'] > 1.0 && $shot['x1'] > 200.0 && $shot['x1'] < 300.0, json_encode([$shot['t1'], $shot['x1']]));
+
+// With nobody to touch it settles in the valley and craters there.
+$room = $onHills([$gun, $tank(1, 'ai', 640.0, 100)]);
+[$after, $events] = $fireRoller($room, 45.0, 40.0);
+$shot = $shotOf($events);
+$check('roller-rests-in-the-valley', abs($shot['x1'] - 300.0) < 12.0 && abs($shot['y1'] - $hills[300]) < 4.0, json_encode([$shot['x1'], $shot['y1']]));
+$check('roller-valley-crater', $after['terrain'][300] > $hills[300] + 20.0 && count($hitsOn($events, 1)) === 0);
+$check('roller-valley-rest-before-time-up', $shot['t1'] < 0.9 + (float) $roller['rollTime'] - 0.2, (string) $shot['t1']);
+
+// Wind does not push a rolling ball: the same shot, windy, rolls the same
+// way once down (the landing differs, the roll from a spot does not).
+$flatTerrain = array_fill(0, 720, 400.0);
+[$rx1, $ry1] = room_roll_out($flatTerrain, 100.0, 120.0, 30.0, $roller);
+$check('roller-flat-roll-coasts-then-stops', $rx1 > 150.0 && $rx1 < 260.0 && $ry1 === 400.0, json_encode([$rx1, $ry1]));
+$slow = room_roll_out($flatTerrain, 100.0, 10.0, 5.0, $roller);
+$check('roller-barely-moving-stays-put', abs($slow[0] - 100.0) < 0.001);
+
+// It bursts at the board's edge, where it runs off it.
+$down = [];
+for ($ix = 0; $ix < 720; $ix++) {
+    $down[] = round(300 + 120 * $ix / 719, 3);
+}
+$room = ['terrain' => $down, 'tanks' => [$tank(0, 'human', 560.0, 100), $tank(1, 'ai', 100.0, 100)], 'wind' => 0.0, 'round' => 1,
+    'scores' => [], 'cash' => [], 'shield' => [], 'bunker' => [], 'laststand' => []];
+$room['tanks'][0]['y'] = $down[560];
+$room['tanks'][1]['y'] = $down[100];
+[$after, $events] = $fireRoller($room, 35.0, 20.0);
+$shot = $shotOf($events);
+$check('roller-bursts-at-the-edge', $shot['x1'] >= 718.0 && $shot['r'] > 0 && !in_array('fizzle', array_column($events, 't'), true), json_encode([$shot['x1'], $shot['r']]));
+
+// A roller that is still airborne when it meets a unit bursts as a direct hit, like a shell.
+$room = $flatRoom([$tank(0, 'human', 100.0, 100), $tank(1, 'human', 300.0, 100)]);
+$events = [];
+$end = room_fly_arc($room, $events, $room['tanks'][0], $roller, 'roller', 0, 285.0, 392.0, 300.0, 0.0, 0.5, false, null);
+$check('roller-airborne-hit-is-direct', $end[0] === 'hit' && $end[5] === 1 && $end[2] < 395.0, json_encode([$end[0], $end[5], $end[2]]));
+
+// The gunner is safe from its own roller until it has left the gunner's box,
+// and it passes under a drone's body and hits the column.
+$room = $flatRoom([$tank(0, 'human', 300.0, 100), $tank(1, 'ai', 500.0, 100)]);
+$clear = false;
+$check('roll-hit-ignores-owner-before-clear', room_roll_hit($room, 299.0, 397.0, 301.0, 397.0, 0, $clear) === null && $clear === false);
+$clear = true;
+$check('roll-hit-owner-after-clear', (room_roll_hit($room, 290.0, 397.0, 295.0, 397.0, 0, $clear)[0] ?? null) === 0);
+$clear = true;
+$check('roll-hit-drone-overhead', (room_roll_hit($room, 470.0, 397.0, 485.0, 397.0, 0, $clear)[0] ?? null) === 1);
+$check('roll-hit-misses-beyond-its-width', room_roll_hit($room, 470.0, 397.0, 481.0, 397.0, 0, $clear) === null);
+
+// Drones count a roller's landing where it comes to rest.
+$land = room_sim_shot($hills, 0.0, 74.0, 342.0, 45.0, 40.0, 'roller', 1, 720);
+$check('roller-aim-predicts-the-rest', !$land['oob'] && abs($land['x'] - 300.0) < 12.0, json_encode($land));
+
 foreach (protocol_snapshots() as $name => [$about, $status, $body]) {
     $file = __DIR__ . "/protocol/$name.json";
     $fixture = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;

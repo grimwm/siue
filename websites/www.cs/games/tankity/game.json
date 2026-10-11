@@ -290,6 +290,33 @@
                 }
             },
             {
+                "key": "roller",
+                "name": "Roller",
+                "cat": "Shells",
+                "dmg": 44,
+                "radius": 34,
+                "price": 160,
+                "pack": 2,
+                "minRound": 2,
+                "ai": true,
+                "aiRound": 5,
+                "effect": "roller",
+                "friction": 0.6,
+                "rollTime": 8,
+                "speed": 1.0,
+                "note": "Rolls downhill after landing; bursts on a tank or in a dip.",
+                "gfx": {
+                    "shell": "#c9a66b",
+                    "trail": "#b08850",
+                    "blast": [
+                        "#d9a441",
+                        "#fff3c4"
+                    ],
+                    "painter": "ball",
+                    "shake": 0.5
+                }
+            },
+            {
                 "key": "nuke",
                 "name": "NUKE",
                 "cat": "Shells",
@@ -1388,6 +1415,42 @@
                         }
                     ]
                 }
+            }
+        },
+        "roller": {
+            "body": {
+                "halo": 6,
+                "alpha": 0.25
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[8,8],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.8,0.45,0],"colors":["#ffffff","#ffe27a","#d9a441"],"glow":true},
+                    {"shape":"smoke","count":5,"life":[0.5,0.75],"speed":[15,55],"angle":90,"spread":80,"gravity":-20,"drag":1.2,"size":[5,9],"sizeEnd":1.8,"alpha":[0,0.5,0.3,0],"colors":["#b9a27a","#7a6a50","#3a3228"],"wind":1,"aim":"forward"},
+                    {"shape":"streak","count":8,"life":[0.15,0.35],"speed":[60,150],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":7,"alpha":[1,0.9,0],"colors":["#fff3c4","#d9a441"],"glow":true,"aim":"forward","spread":60}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"shape":"smoke","count":0,"life":[0.5,0.9],"speed":[0,18],"angle":90,"spread":140,"gravity":-14,"drag":1.4,"size":[2.5,4.5],"sizeEnd":2.4,"alpha":[0,0.45,0.25,0],"colors":["#c9b48a","#8a7656","#4a3f30"],"wind":1,"rate":34,"offset":2},
+                    {"rate":26,"life":[0.3,0.6],"speed":[10,50],"angle":90,"spread":120,"gravity":260,"drag":0.6,"size":[0.9,1.6],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]}
+                ]
+            },
+            "impact": {
+                "screen": {
+                    "flash": {
+                        "color": "#d9a441",
+                        "alpha": 0.1,
+                        "dur": 0.2
+                    }
+                },
+                "emitters": [
+                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[1.1,1.1],"life":[0.55,0.55],"alpha":[1,1,0],"rotJitter":14,"scale":1.2},
+                    {"count":1,"unit":"r","size":[0.68,0.68],"sizeEnd":0.6,"life":[0.24,0.24],"alpha":[0.6,0.35,0],"colors":["#ffffff","#ffe27a","#d9a441"],"glow":true},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":4.6,"ease":"out","life":[0.42,0.42],"width":3,"alpha":[1,0.6,0],"colors":["#ffe27a","#d9a441"],"glow":true},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":4.2,"ease":"out","life":[0.55,0.55],"width":3,"alpha":[0.7,0.35,0],"colors":["#d8c090","#8a6a3a"],"glow":false},
+                    {"count":22,"life":[0.5,1],"speed":[80,220],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.3,2.6],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
+                    {"shape":"smoke","count":6,"life":[0.9,1.3],"speed":[10,40],"angle":90,"spread":120,"gravity":-40,"drag":1.2,"size":[10,17],"sizeEnd":1.8,"alpha":[0,0.5,0.3,0],"colors":["#8a7656","#4a3f30","#1a1a1a"],"wind":1}
+                ]
             }
         },
         "nuke": {

@@ -119,6 +119,10 @@ const RUN = {
     world(c);
     return sim.simShot(G, arsenal, c.x, c.y, c.angle, c.power, c.wkey, c.dirS);
   },
+  'roll-out'(c) {
+    const r = sim.rollOut(buildTerrain(c.terrain), c.x, c.vx, c.vy, arsenal.weapons[c.wkey]);
+    return { x: r.x, y: r.y };
+  },
   volley(c) {
     world(c);
     const before = G.terrain.slice(), shooter = G.tanks[c.shooter];

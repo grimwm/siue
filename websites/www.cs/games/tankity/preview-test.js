@@ -132,6 +132,24 @@ function run(pv, env, seconds, done = () => false) {
   run(l, lance.env, 10, p => p.phase === 'show');
   check('a lance pierces the dummy and keeps flying', lance.log.special.some(s => s.name === 'pierce') && l.volleyHits >= 1);
   check('trails drip while shells fly', buck.phase === 'fly' && lance.log.trail > 0);
+
+  // A roller touches down, rolls on along the hills, and bursts at the dummy.
+  const rl = makeEnv();
+  const roller = createPreview('roller', rl.env, rl.fx, null);
+  run(roller, rl.env, 0.7);
+  run(roller, rl.env, 15, p => p.phase === 'show');
+  check('a roller demo lands a hit on the dummy', rl.log.impact.length === 1 && roller.volleyHits === 1, JSON.stringify(rl.log.impact));
+  // A roller dropped short of the dummy rolls toward it and bursts there.
+  const rr = makeEnv();
+  const short = createPreview('roller', rr.env, rr.fx, null);
+  short.phase = 'fly';
+  short.tx = 55;
+  short.shells.push({ x: 100, y: short.terr[100] - 2, vx: 40, vy: 30, wkey: 'roller', age: 0.5, pierced: false, split: false });
+  let rolled = 0;
+  run(short, rr.env, 15, p => { if (p.shells.some(s => s.rolling)) rolled++; return p.phase === 'show'; });
+  check('a roller rolls after it lands', rolled > 10, `${rolled} frames rolling`);
+  check('a roller bursts once, on the dummy', rr.log.impact.length === 1 && Math.abs(rr.log.impact[0].x - 55) < 12 && short.volleyHits === 1,
+    JSON.stringify(rr.log.impact));
 }
 
 /* ---- the dummy and the hills reset ---- */

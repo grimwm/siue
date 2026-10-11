@@ -140,7 +140,7 @@ function shopProps(over = {}) {
   const list = byId(card, 'shop-list');
   check('shop-list', list.localName === 'ul' && hasClass(list, 'scores'));
   const rows = list.children.filter(li => !hasClass(li, 'shop-cat'));
-  check('shop-all-20-items', rows.length === 20, String(rows.length));
+  check('shop-all-21-items', rows.length === 21, String(rows.length));
   check('shop-categories', list.children.filter(li => hasClass(li, 'shop-cat')).map(text).join('|') === 'Shells|Hull and fuel|Tricks',
     list.children.filter(li => hasClass(li, 'shop-cat')).map(text).join('|'));
   const free = list.children.find(li => hasClass(li, 'shop-free'));
@@ -167,21 +167,21 @@ function shopProps(over = {}) {
   const lockedBtn = locked.children[2].children[1];
   check('shop-locked-row', text(lockedBtn) === 'Locked' && lockedBtn.disabled === true && /Unlocks in round 4/.test(text(locked.children[1].children[2])),
     text(lockedBtn));
-  check('shop-icons-drawn-once-per-row', calls.icons.length === 20 && calls.icons.every(([cls]) => cls === 'shop-icon')
+  check('shop-icons-drawn-once-per-row', calls.icons.length === 21 && calls.icons.every(([cls]) => cls === 'shop-icon')
     && calls.icons.filter(([, i]) => i.kind === 'gear').length === gear.length, String(calls.icons.length));
   // Icons are painted when a row first appears and when the arsenal changes, not on every redraw.
   const painted = calls.icons.length;
   renderShop(veil, { ...props, entries: shelf({ qty: 2 }) });
   check('shop-redraw-does-not-repaint-icons', calls.icons.length === painted, String(calls.icons.length));
   renderShop(veil, { ...props, entries: shelf({ qty: 2 }), arsenalRev: 2 });
-  check('shop-new-arsenal-repaints-icons', calls.icons.length === painted + 20, String(calls.icons.length - painted));
+  check('shop-new-arsenal-repaints-icons', calls.icons.length === painted + 21, String(calls.icons.length - painted));
   renderShop(veil, { ...props, entries: shelf() });
   // Buttons report to the game.
   click(acts[1]);
   click(acts[0]);
   click(free.children[2].children[0]);
   click(gearRow.children[2].children[0]);
-  check('shop-clicks-reach-the-game', calls.buy.join() === '0,18' && calls.preview.join() === `${ammo[0].key},shell`, `${calls.buy}|${calls.preview}`);
+  check('shop-clicks-reach-the-game', calls.buy.join() === '0,19' && calls.preview.join() === `${ammo[0].key},shell`, `${calls.buy}|${calls.preview}`);
   // Start button: a plain label outside a room, and no ready line or Leave button.
   const next = byId(card, 'shop-next');
   const readyLine = byId(card, 'shop-ready');
@@ -200,7 +200,7 @@ function shopProps(over = {}) {
   renderShop(veil, shopProps({ next: { label: 'Ready ✓ (N)', pressed: true }, readyLine: '1/2 ready · ABC ✓  DEF', inRoom: true }).props);
   check('shop-ready-toggle-pressed', text(next) === 'Ready ✓ (N)' && next.getAttribute('aria-pressed') === 'true' && text(readyLine) === '1/2 ready · ABC ✓  DEF');
   check('shop-redraw-keeps-nodes', veil.children[0] === card && byId(card, 'shop-next') === next && byId(card, 'shop-list') === list
-    && list.children.filter(li => !hasClass(li, 'shop-cat')).length === 20 && list.children.filter(li => !hasClass(li, 'shop-cat'))[2] === rows[2]);
+    && list.children.filter(li => !hasClass(li, 'shop-cat')).length === 21 && list.children.filter(li => !hasClass(li, 'shop-cat'))[2] === rows[2]);
   // Back to solo: the toggle's aria-pressed goes away with it.
   renderShop(veil, shopProps().props);
   check('shop-solo-again-drops-aria-pressed', next.getAttribute('aria-pressed') === undefined && readyLine.hidden === true && leave.hidden === true);

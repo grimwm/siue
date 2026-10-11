@@ -77,6 +77,15 @@
 #                          second of sideways push
 #               pierce     passes through the first tank it hits
 #               emp        also drains `drain` fuel from every tank it touches
+#               roller     flies like a shell, but touching down it does not
+#                          burst: it rolls along the ground (downhill gains
+#                          speed, uphill loses it, `friction` slows it, wind
+#                          does not touch it) and bursts on the first unit it
+#                          reaches, at the board's edge, once it comes to rest
+#                          in a dip, or after `rollTime` seconds. Hit while
+#                          still airborne, it bursts as a direct hit, as a
+#                          shell does. A drone hovers above the ground, so a
+#                          rolling ball touches it when it passes under it.
 #   speed     launch speed multiplier (1.0 is normal; 0.55 slow, 1.3 fast).
 #   flat      true flies on low gravity, so the arc is nearly a straight line.
 #             Optional; leave it out for normal arcs.
@@ -89,6 +98,9 @@
 #     cluster: fuse (seconds, 0.1 to 10), split (2 to 12), fan (radians,
 #              0 to 1), subDmg, subRadius
 #     proximity: prox (pixels)   seeker: steer   emp: drain (fuel)
+#     roller: friction (the share of its speed it loses per second, 0.01 to
+#             5; 0.6 rolls a fair way), rollTime (most seconds it rolls, 0.5
+#             to 10)
 #
 # gfx fields (all colours are quoted "#rgb" or "#rrggbb")
 #   shell     the shell's body colour in flight, in the replayed volleys and
@@ -106,6 +118,8 @@
 #               disc   a round dot
 #               beam   a flat glowing streak, for flat or piercing shots
 #               spark  a dot ringed by six short spokes
+#               ball   a ball with a stripe across it (the battlefield ball
+#                      spins as it travels)
 #             (pellets and cluster shells draw their own multi-dot icons.)
 #   shake     screen shake on an explosion in solo play and the range
 #             demos, 0 (none) to 1 (violent). Rooms shake by blast size.
@@ -302,6 +316,23 @@ arsenal:
       speed: 1.0
       note: Fries 60 fuel on everything it touches.
       gfx: {shell: "#72efdd", trail: "#72efdd", blast: ["#72efdd", "#ffffff"], painter: spark, shake: 0.3}
+
+    - key: roller
+      name: Roller
+      cat: Shells
+      dmg: 44
+      radius: 34
+      price: 160
+      pack: 2
+      minRound: 2
+      ai: true
+      aiRound: 5
+      effect: roller
+      friction: 0.6
+      rollTime: 8
+      speed: 1.0
+      note: Rolls downhill after landing; bursts on a tank or in a dip.
+      gfx: {shell: "#c9a66b", trail: "#b08850", blast: ["#d9a441", "#fff3c4"], painter: ball, shake: 0.5}
 
     - key: nuke
       name: NUKE
@@ -904,6 +935,26 @@ effects:
           - { shape: spark, count: 4, life: [0.2, 0.4], speed: [20, 70], size: [3, 5], sizeEnd: 0.3, colors: ["#ffffff", "#72efdd"], glow: true, rotJitter: 90, spin: [-300, 300] }
           - { shape: ring, count: 1, size: [6, 6], sizeEnd: 2.8, ease: out, life: [0.3, 0.3], width: 2, alpha: [1, 0.6, 0], colors: ["#ffffff", "#72efdd"], glow: true }
           - { count: 8, life: [0.5, 0.9], speed: [10, 50], gravity: -30, drag: 1, size: [1, 1.8], colors: ["#ffffff", "#72efdd", "#1f9a8a"], glow: true }
+  roller:
+    body: { halo: 6, alpha: 0.25 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [8, 8], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.8, 0.45, 0], colors: ["#ffffff", "#ffe27a", "#d9a441"], glow: true }
+        - { shape: smoke, count: 5, life: [0.5, 0.75], speed: [15, 55], angle: 90, spread: 80, gravity: -20, drag: 1.2, size: [5, 9], sizeEnd: 1.8, alpha: [0, 0.5, 0.3, 0], colors: ["#b9a27a", "#7a6a50", "#3a3228"], wind: 1, aim: forward }
+        - { shape: streak, count: 8, life: [0.15, 0.35], speed: [60, 150], gravity: 200, drag: 1.2, size: [1.2, 1.8], length: 7, alpha: [1, 0.9, 0], colors: ["#fff3c4", "#d9a441"], glow: true, aim: forward, spread: 60 }
+    trail:
+      emitters:
+        - { shape: smoke, count: 0, life: [0.5, 0.9], speed: [0, 18], angle: 90, spread: 140, gravity: -14, drag: 1.4, size: [2.5, 4.5], sizeEnd: 2.4, alpha: [0, 0.45, 0.25, 0], colors: ["#c9b48a", "#8a7656", "#4a3f30"], wind: 1, rate: 34, offset: 2 }
+        - { rate: 26, life: [0.3, 0.6], speed: [10, 50], angle: 90, spread: 120, gravity: 260, drag: 0.6, size: [0.9, 1.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+    impact:
+      screen: { flash: { color: "#d9a441", alpha: 0.1, dur: 0.2 } }
+      emitters:
+        - { shape: sprite, count: 1, sheet: fireball, unit: r, size: [1.1, 1.1], life: [0.55, 0.55], alpha: [1, 1, 0], rotJitter: 14, scale: 1.2 }
+        - { count: 1, unit: r, size: [0.68, 0.68], sizeEnd: 0.6, life: [0.24, 0.24], alpha: [0.6, 0.35, 0], colors: ["#ffffff", "#ffe27a", "#d9a441"], glow: true }
+        - { shape: ring, count: 1, unit: r, size: [0.2, 0.2], sizeEnd: 4.6, ease: out, life: [0.42, 0.42], width: 3, alpha: [1, 0.6, 0], colors: ["#ffe27a", "#d9a441"], glow: true }
+        - { shape: ring, count: 1, unit: r, size: [0.2, 0.2], sizeEnd: 4.2, ease: out, life: [0.55, 0.55], width: 3, alpha: [0.7, 0.35, 0], colors: ["#d8c090", "#8a6a3a"], glow: false }
+        - { count: 22, life: [0.5, 1], speed: [80, 220], angle: 90, spread: 150, gravity: 340, drag: 0.4, size: [1.3, 2.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: smoke, count: 6, life: [0.9, 1.3], speed: [10, 40], angle: 90, spread: 120, gravity: -40, drag: 1.2, size: [10, 17], sizeEnd: 1.8, alpha: [0, 0.5, 0.3, 0], colors: ["#8a7656", "#4a3f30", "#1a1a1a"], wind: 1 }
   nuke:
     body: { halo: 22, alpha: 0.6, pulse: 3 }
     muzzle:

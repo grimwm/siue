@@ -79,6 +79,8 @@ export interface Weapon {
   drain?: number;
   subDmg?: number;
   subRadius?: number;
+  friction?: number;
+  rollTime?: number;
   note?: string;
   gfx?: Gfx;
 }
@@ -149,6 +151,10 @@ export interface Shell extends Motion {
   clear?: boolean; // flown clear of its own gunner's hit box
   dw?: number; // a cluster bomblet's own damage and radius
   dr?: number;
+  /** A roller on the ground: its speed along the surface (px/s, + is toward the right edge) and the 1/60 s steps it has rolled. */
+  rolling?: boolean;
+  ru?: number;
+  rt?: number;
 }
 export interface Cloud {
   x: number;
@@ -372,7 +378,70 @@ export function stepBallistic(st: Motion, dt: number, wind: number, grav: number
   st.x += st.vx * dt;
   st.y += st.vy * dt;
 }
-/* Predict where a shot lands (used by the AI and the aim guide). */
+/* ---------- rollers ---------- */
+/* A roller that touches down does not burst: it rolls along the ground, a
+   ball resting ROLL_LIFT px above the surface, until it reaches a unit, runs
+   off the board, comes to rest, or has rolled the weapon's rollTime. Wind
+   does not touch it. rooms.php room_ground_at() .. room_roll_out() are the
+   same. */
+export const ROLL_LIFT = 3; // px the ball's centre rides above the ground
+export const ROLL_KEEP = 0.7; // share of its speed along the ground that survives touching down
+export const ROLL_DRAG = 10; // px/s^2: the ground's constant drag on a rolling ball, besides the weapon's friction
+export const ROLL_STOP = 12; // px/s: slower than this, and ...
+export const ROLL_STATIC = 20; // px/s^2: ... pulled by less than this, it stays put
+/* The ground's height at a (fractional) column: linear between the columns. */
+export function groundAt(terrain: readonly number[], x: number): number {
+  const n = terrain.length;
+  const xc = clamp(x, 0, n - 1);
+  const i = Math.floor(xc);
+  const j = Math.min(i + 1, n - 1);
+  return terrain[i]! + (terrain[j]! - terrain[i]!) * (xc - i);
+}
+/* The ground's slope dy/dx at x (positive: it falls away toward the right), over +-3 px. */
+export function groundSlope(terrain: readonly number[], x: number): number {
+  return (groundAt(terrain, x + 3) - groundAt(terrain, x - 3)) / 6;
+}
+/* A touching-down shell's speed along the ground at x, from its velocity. */
+export function rollStart(terrain: readonly number[], x: number, vx: number, vy: number): number {
+  const m = groundSlope(terrain, x);
+  return ((vx + vy * m) / Math.sqrt(1 + m * m)) * ROLL_KEEP;
+}
+/* One rolling step: downhill pulls it on (GRAV along the slope), friction
+   (and the ground's constant drag) slow it. r.x moves; r.u is its speed along the ground. False once it has
+   come to rest. */
+export function rollStep(terrain: readonly number[], r: { x: number; u: number }, friction: number, dt: number): boolean {
+  const m = groundSlope(terrain, r.x);
+  const n = Math.sqrt(1 + m * m);
+  const a = GRAV * m / n;
+  r.u += a * dt;
+  r.u -= r.u * friction * dt;
+  const drag = ROLL_DRAG * dt;
+  r.u = Math.abs(r.u) <= drag ? 0 : r.u - Math.sign(r.u) * drag;
+  if (Math.abs(r.u) < ROLL_STOP && Math.abs(a) <= ROLL_STATIC) {
+    r.u = 0;
+    return false;
+  }
+  r.x += r.u / n * dt;
+  return true;
+}
+/* Where a shell touching down at x with velocity (vx, vy) ends its roll with
+   no unit in the way: at rest, off the board edge, or when its time is up.
+   `touch` stops it early at the first column it returns true for. */
+export function rollOut(terrain: readonly number[], x: number, vx: number, vy: number, w: Pick<Weapon, 'friction' | 'rollTime'>,
+  touch?: (x: number) => boolean): { x: number; y: number } {
+  const r = { x: clamp(x, 0, terrain.length - 1), u: 0 };
+  r.u = rollStart(terrain, r.x, vx, vy);
+  const steps = Math.round((w.rollTime || 5) * 60);
+  for (let i = 0; i < steps; i++) {
+    if (touch && touch(r.x)) break;
+    if (r.x <= 0 || r.x >= terrain.length - 1) break;
+    if (!rollStep(terrain, r, w.friction || 0.3, 1 / 60)) break;
+  }
+  r.x = clamp(r.x, 0, terrain.length - 1);
+  return { x: r.x, y: groundAt(terrain, r.x) };
+}
+/* Predict where a shot lands (used by the AI and the aim guide); a roller's
+   landing is where its roll ends. */
 export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal, x: number, y: number, angle: number,
   power: number, wkey: string, dirS: number): { x: number; y: number; oob: boolean } {
   const w = arsenal.weapons[wkey]!;
@@ -388,7 +457,10 @@ export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal
     stepBallistic(st, dt, world.wind, grav);
     if (st.x < 0 || st.x >= W) return { x: st.x, y: st.y, oob: true };
     if (st.y >= H + 40) return { x: st.x, y: st.y, oob: true };
-    if (i >= 6 && st.y >= world.terrain[clamp(Math.round(st.x), 0, W - 1)]!) return { x: st.x, y: st.y, oob: false };
+    if (i >= 6 && st.y >= world.terrain[clamp(Math.round(st.x), 0, W - 1)]!) {
+      if (w.effect === 'roller') return { ...rollOut(world.terrain, st.x, st.vx, st.vy, w), oob: false };
+      return { x: st.x, y: st.y, oob: false };
+    }
   }
   return { x: st.x, y: st.y, oob: true };
 }
@@ -442,6 +514,26 @@ export function sweepHit(tanks: readonly Tank[], s: Pick<Shell, 'owner' | 'pierc
     for (const t of tanks) {
       if (t.hp <= 0 || t === s.pierced || (t === s.owner && !s.clear)) continue;
       if (inHitBox(t, px, py)) return { t, x: px, y: py };
+    }
+  }
+  return null;
+}
+
+/* The first unit a rolling shell touches along its step. A ball on the ground
+   cannot reach a drone hovering overhead, so a unit counts as touched when the
+   ball is within the width of its hit box, at any height. The
+   owner-clear rule is sweepHit's: the shell ignores its gunner until it has
+   been outside the gunner's real box. rooms.php room_roll_hit() is the same. */
+export function rollHit(tanks: readonly Tank[], s: Pick<Shell, 'owner' | 'clear'>,
+  x0: number, y0: number, x1: number, y1: number): { t: Tank; x: number; y: number } | null {
+  const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 3));
+  for (let i = 1; i <= n; i++) {
+    const px = x0 + (x1 - x0) * i / n, py = y0 + (y1 - y0) * i / n;
+    if (!s.clear && !inHitBox(s.owner, px, py)) s.clear = true;
+    for (const t of tanks) {
+      if (t.hp <= 0 || (t === s.owner && !s.clear)) continue;
+      const b = unitHitBox(t);
+      if (inHitBox(t, px, b.cy)) return { t, x: px, y: py };
     }
   }
   return null;
@@ -560,6 +652,38 @@ function waitsOnEarlier(world: World, s: Shell): boolean {
     return theirs.length < mine.length;
   });
 }
+/* One step of a roller on the ground: it rolls, then bursts on a unit it
+   touches, at rest, at the board's edge, or when its roll time is up. Pushes
+   the trail, and the blast when it bursts. */
+function stepRoller(world: World, arsenal: Arsenal, s: Shell, w: Weapon, dt: number, events: StepEvent[]): void {
+  const t = world.terrain;
+  const x0 = s.x, y0 = s.y;
+  const r = { x: s.x, u: s.ru || 0 };
+  let done = (s.rt || 0) >= Math.round((w.rollTime || 5) * 60) || r.x <= 0 || r.x >= t.length - 1;
+  let direct: Tank | null = null;
+  if (!done) {
+    const moving = rollStep(t, r, w.friction || 0.3, dt);
+    s.rt = (s.rt || 0) + 1;
+    s.x = r.x;
+    s.ru = r.u;
+    s.y = groundAt(t, r.x) - ROLL_LIFT;
+    const m = groundSlope(t, r.x);
+    s.vx = r.u / Math.sqrt(1 + m * m);
+    s.vy = s.vx * m;
+    done = !moving;
+    const hit = rollHit(world.tanks, s, x0, y0, s.x, s.y);
+    if (hit) {
+      direct = hit.t;
+      s.x = hit.x;
+      done = true;
+    }
+    if (!done) events.push({ kind: 'trail', shell: s, x: s.x, y: s.y, vx: s.vx, vy: s.vy });
+  }
+  if (!done) return;
+  const bx = clamp(s.x, 0, t.length - 1);
+  events.push({ kind: 'blast', blast: explode(world, arsenal, bx, groundAt(t, bx), s.wkey, s.owner, direct, null) });
+  s.dead = true;
+}
 /* Advances every shell dt seconds: flight, fuses, hits and bursts. Bomblets
    born this frame fly this frame too. A volley's shells fly together, but they
    burst in launch order, as the room server resolves them: a shell that
@@ -569,6 +693,10 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
   const events: StepEvent[] = [];
   for (const s of world.shells) {
     const w = arsenal.weapons[s.wkey]!;
+    if (s.rolling) {
+      stepRoller(world, arsenal, s, w, dt, events);
+      continue;
+    }
     s.age = (s.age || 0) + dt;
     if (w.effect === 'seeker') steerShell(world.tanks, s, w, dt);
     const x0 = s.x, y0 = s.y;
@@ -609,7 +737,8 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
       }
     }
     const ov = s.dw ? { dmg: s.dw, radius: s.dr } : null;
-    const bursts = !!direct || (s.age >= 0.1 && s.y >= surfY(world.terrain, s.x));
+    const grounded = s.age >= 0.1 && s.y >= surfY(world.terrain, s.x);
+    const bursts = !!direct || (grounded && w.effect !== 'roller');
     if (bursts && waitsOnEarlier(world, s)) {
       s.x = x0; s.y = y0;
       s.vx = held.vx; s.vy = held.vy;
@@ -629,7 +758,16 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
       s.dead = true;
       continue;
     }
-    if (s.age >= 0.1 && s.y >= surfY(world.terrain, s.x)) {
+    if (grounded && w.effect === 'roller') {
+      // Touching down, a roller starts to roll instead of bursting.
+      s.rolling = true;
+      s.rt = 0;
+      s.x = clamp(s.x, 0, world.terrain.length - 1);
+      s.ru = rollStart(world.terrain, s.x, s.vx, s.vy);
+      s.y = groundAt(world.terrain, s.x) - ROLL_LIFT;
+      continue;
+    }
+    if (grounded) {
       events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, null, ov) });
       s.dead = true;
     }

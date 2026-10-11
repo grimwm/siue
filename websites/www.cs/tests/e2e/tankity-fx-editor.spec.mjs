@@ -1,6 +1,9 @@
 // The dev-only Tankity effects editor (local sites only: it is never deployed).
 // Screenshots land in test-results/ (tankity-fx-*.png).
 import { promises as fs } from 'node:fs';
+import { readFileSync } from 'node:fs';
+// The committed arsenal: counts follow it, so a new weapon needs no edit here.
+const GAME = JSON.parse(readFileSync(new URL('../../games/tankity/game.json', import.meta.url), 'utf8'));
 import { test, expect } from '@playwright/test';
 import { newPlayer, hud, rec, resetRec, aimTo, setPower, recorderScript } from './helpers.mjs';
 import { committedEffects, local, arsenal, grab, fireAndWatch } from './fx-helpers.mjs';
@@ -15,7 +18,7 @@ test.describe('effects editor', () => {
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.goto('games/tankity/fx-editor.html');
-    await expect(page.locator('#weapon option')).toHaveCount(13);
+    await expect(page.locator('#weapon option')).toHaveCount(Object.keys(GAME.effects).length);
     await page.evaluate(() => { document.getElementById('loop').checked = false; });
     return { ctx, page, errors };
   }
@@ -45,7 +48,7 @@ test.describe('effects editor', () => {
     await page.click('#emitters li[data-i="4"] .label');
     await page.locator('[data-field="count"] input[type="number"]').fill('3');
     await page.reload();
-    await expect(page.locator('#weapon option')).toHaveCount(13);
+    await expect(page.locator('#weapon option')).toHaveCount(Object.keys(GAME.effects).length);
     await expect(page.locator('#status')).toContainText('Restored your unsaved edits');
     expect(await page.evaluate(() => window.fxEditor.defs.mortar.impact.emitters[4].count)).toBe(3);
     await page.click('#reload');

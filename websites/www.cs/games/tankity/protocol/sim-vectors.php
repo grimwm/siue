@@ -313,7 +313,7 @@ $sim = function (string $name, array $c) use ($add): void {
         $c['wkey'], $c['dirS'], SV_WIDTH);
     $add('sim-shot', $name, $c, $land);
 };
-foreach (['shell', 'mortar', 'rail', 'buck'] as $wkey) {
+foreach (['shell', 'mortar', 'rail', 'buck', 'roller'] as $wkey) {
     if (!isset($weapons[$wkey])) {
         continue;
     }
@@ -327,6 +327,26 @@ foreach (['shell', 'mortar', 'rail', 'buck'] as $wkey) {
     $sim("$wkey-straight-up", ['terrain' => $flat, 'x' => 300, 'y' => 386, 'angle' => 90, 'power' => 40, 'wkey' => $wkey, 'dirS' => 1]);
     $sim("$wkey-hugs-the-ground", ['terrain' => $flat, 'x' => 100, 'y' => 399.5, 'angle' => 0, 'power' => 20, 'wkey' => $wkey, 'dirS' => 1]);
     $sim("$wkey-into-the-hillside", ['terrain' => ['slope' => [420, 260]], 'x' => 100, 'y' => 390, 'angle' => 5, 'power' => 50, 'wkey' => $wkey, 'dirS' => 1]);
+}
+
+/* ---- a roller's roll: where it ends, from the moment it touches down ---- */
+if (isset($weapons['roller'])) {
+    $roll = function (string $name, array $c) use ($add, $weapons): void {
+        [$x, $y] = room_roll_out(sv_terrain($c['terrain']), (float) $c['x'], (float) $c['vx'], (float) $c['vy'], $weapons['roller']);
+        $add('roll-out', $name, $c + ['wkey' => 'roller'], ['x' => $x, 'y' => $y]);
+    };
+    $valley = ['hills' => [330, 40, 240]];
+    $roll('down-into-the-valley', ['terrain' => $valley, 'x' => 200, 'vx' => 60, 'vy' => 20]);
+    $roll('down-into-the-valley-from-the-right', ['terrain' => $valley, 'x' => 400, 'vx' => -60, 'vy' => 20]);
+    $roll('coasts-on-the-flat-then-stops', ['terrain' => $flat, 'x' => 100, 'vx' => 120, 'vy' => 30]);
+    $roll('barely-touching-stays-put', ['terrain' => $flat, 'x' => 100, 'vx' => 10, 'vy' => 5]);
+    $roll('up-a-gentle-rise-loses-it', ['terrain' => ['slope' => [430, 380]], 'x' => 100, 'vx' => 110, 'vy' => 40]);
+    $roll('up-a-steep-rise-turns-back', ['terrain' => ['slope' => [460, 240]], 'x' => 300, 'vx' => 120, 'vy' => 30]);
+    $roll('off-the-right-edge', ['terrain' => ['slope' => [300, 420]], 'x' => 560, 'vx' => 80, 'vy' => 30]);
+    $roll('off-the-left-edge', ['terrain' => ['slope' => [420, 300]], 'x' => 160, 'vx' => -80, 'vy' => 30]);
+    $roll('lands-on-the-edge', ['terrain' => $flat, 'x' => 730, 'vx' => 80, 'vy' => 30]);
+    $roll('rolls-out-its-time', ['terrain' => ['slope' => [200, 460]], 'x' => 20, 'vx' => 30, 'vy' => 0]);
+    $roll('over-a-pit', ['terrain' => ['flat' => 400, 'set' => [[300, 340, 440]]], 'x' => 250, 'vx' => 110, 'vy' => 30]);
 }
 
 /* ---- whole volleys: fire, fly, burst, split, damage ---- */
@@ -365,6 +385,31 @@ $volley('shielded-human-eats-a-drone-shell', array_replace($shell, ['shooter' =>
     'angle' => sv_aim_at(sv_room(array_replace($shell, ['tanks' => [$human(380, 100), $drone(100, 100) + ['dirS' => 1]]])), 1, 'shell', 380.0)[0],
     'power' => sv_aim_at(sv_room(array_replace($shell, ['tanks' => [$human(380, 100), $drone(100, 100) + ['dirS' => 1]]])), 1, 'shell', 380.0)[1]]));
 
+/* A roller: rolls down into a valley, into a unit, off the edge, stops on a rise. */
+if (isset($weapons['roller'])) {
+    $tankAt = function (array $terrain, string $kind, int $x, int $dirS, int $hp = 100) {
+        $t = sv_terrain($terrain);
+        return ['kind' => $kind, 'x' => (float) $x, 'y' => $t[$x], 'hp' => $hp, 'dirS' => $dirS];
+    };
+    $rollerVolley = function (string $name, array $terrain, array $tanks, int $angle, int $power) use ($volley): void {
+        $volley($name, ['terrain' => $terrain, 'wkey' => 'roller', 'shooter' => 0, 'tanks' => $tanks, 'angle' => $angle, 'power' => $power]);
+    };
+    $valley = ['hills' => [330, 40, 240]];
+    $rollerVolley('roller-rolls-down-into-the-valley', $valley, [$tankAt($valley, 'human', 60, 1), $tankAt($valley, 'ai', 640, -1)], 45, 40);
+    $rollerVolley('roller-rolls-into-a-drone', $valley, [$tankAt($valley, 'human', 60, 1), $tankAt($valley, 'ai', 300, -1)], 45, 40);
+    $rollerVolley('roller-rolls-into-a-human', $valley, [$tankAt($valley, 'ai', 60, 1), $tankAt($valley, 'human', 300, -1)], 45, 40);
+    $rollerVolley('roller-rolls-back-onto-its-gunner', $valley, [$tankAt($valley, 'human', 60, 1), $tankAt($valley, 'ai', 640, -1)], 50, 30);
+    $down = ['slope' => [300, 420]];
+    $rollerVolley('roller-rolls-off-the-right-edge', $down, [$tankAt($down, 'human', 560, 1), $tankAt($down, 'ai', 100, -1)], 35, 20);
+    $rollerVolley('roller-lobbed-off-the-board', $down, [$tankAt($down, 'human', 560, 1), $tankAt($down, 'ai', 100, -1)], 30, 30);
+    $up = ['slope' => [420, 300]];
+    $rollerVolley('roller-rolls-off-the-left-edge', $up, [$tankAt($up, 'human', 160, -1), $tankAt($up, 'ai', 600, 1)], 35, 20);
+    $rise = ['slope' => [430, 380]];
+    $rollerVolley('roller-stops-on-a-gentle-rise', $rise, [$tankAt($rise, 'human', 100, 1), $tankAt($rise, 'ai', 640, -1)], 40, 40);
+    $rollerVolley('roller-rolls-past-two-rivals-hits-the-first', $valley, [$tankAt($valley, 'human', 60, 1), $tankAt($valley, 'ai', 290, -1), $tankAt($valley, 'ai', 310, -1)], 45, 40);
+    $rollerVolley('roller-into-the-hillside', ['slope' => [420, 260]], [$tankAt(['slope' => [420, 260]], 'human', 100, 1), $tankAt(['slope' => [420, 260]], 'ai', 500, -1)], 5, 50);
+}
+
 /* ---- the drone's aim ---- */
 $aim = function (string $name, array $c, ?string $known = null) use ($add): void {
     $room = sv_room($c);
@@ -385,6 +430,10 @@ $aim('jammed-human-target', ['terrain' => $flat, 'wind' => 0, 'round' => 2, 'see
     'tanks' => [$human(150, 100) + ['jammer' => 2], $drone(550, 60) + ['dirS' => -1]]]);
 $aim('late-round-steady-hands', ['terrain' => $flat, 'wind' => 1, 'round' => 12, 'seed' => 64, 'shooter' => 1,
     'tanks' => [$human(150, 100), $drone(550, 60) + ['dirS' => -1, 'ammo' => $rack]]]);
+foreach ([4, 9, 21] as $seed) {
+    $aim("roller-in-the-rack-seed$seed", ['terrain' => ['hills' => [330, 40, 240]], 'wind' => 0, 'round' => 5, 'seed' => $seed, 'shooter' => 1,
+        'tanks' => [$human(300, 100), $drone(60, 60) + ['dirS' => 1, 'ammo' => ['roller' => 2]]]]);
+}
 $aim('no-rivals-left', ['terrain' => $flat, 'wind' => 0, 'round' => 1, 'seed' => 3, 'shooter' => 0,
     'tanks' => [$drone(300, 60) + ['dirS' => -1], $drone(500, 0)]],
     'With nobody left to shoot at the server falls back to a fixed 62/55 Shell and the browser aims at itself. Unreachable: a round with no rival has already ended on both sides.');

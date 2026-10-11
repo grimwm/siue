@@ -44,12 +44,12 @@ test('the shop list keeps its scroll when it redraws', async ({ browser }) => {
   expect(errors).toEqual([]);
 });
 
-test('the shop shows the whole 20-item arsenal, numbers in their own colour', async ({ browser }) => {
+test('the shop shows the whole 21-item arsenal, numbers in their own colour', async ({ browser }) => {
   const { page } = await newPlayer(browser);
   await page.keyboard.press('n');
   await page.waitForSelector('#shop-veil:not([hidden])');
   const rows = page.locator('#shop-list li:not(.shop-cat)');
-  await expect(rows).toHaveCount(20);
+  await expect(rows).toHaveCount(21);
   await expect(page.locator('#shop-list li.shop-free .shop-name')).toHaveText(/^Shell ∞ \(free\)$/);
   await page.keyboard.press('ArrowRight'); // two of each
   const name = page.locator('#shop-list li.sel .shop-name');

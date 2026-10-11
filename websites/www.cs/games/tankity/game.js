@@ -37,8 +37,6 @@ import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 import { renderHelp } from './js/ui/help.js?v=7366b18437';
 import { renderLobby as drawLobby } from './js/ui/lobby.js?v=162ac098fa';
 import { renderMenu as drawMenu } from './js/ui/menu.js?v=6ebee3dc2d';
-import { renderGuns as drawGuns } from './js/ui/guns.js?v=71c87cf72b';
-import { renderScores as drawScores } from './js/ui/scores.js?v=f0bf536feb';
 import { renderEndVeil as drawEndVeil } from './js/ui/endveil.js?v=6a7f00fd3c';
 import { renderLeave as drawLeave } from './js/ui/leave.js?v=2c5012f581';
 import {
@@ -49,6 +47,8 @@ import { createShop } from './js/shop.js?v=da716ab023';
 import { createHud } from './js/hud.js?v=a4c4a2d226';
 import { createView } from './js/view.js?v=b74c254da9';
 import { createTutorial } from './js/tutorial.js?v=aa28ddad64';
+import { createGuns } from './js/guns.js?v=a709bb7875';
+import { createScores } from './js/scores.js?v=8402272957';
 import { drawShellIcon as paintShellIcon, drawGearIcon as paintGearIcon, drawMapIcon, drawUnitIcon } from './js/ui/icons.js?v=b8eec86a1f';
 
 const $ = id => document.getElementById(id);
@@ -604,20 +604,6 @@ function renderHelpOverlay() {
   const section = $('help-overlay');
   if (section) renderHelp(section, { keyHint, onClose: () => toggleOverlay('help-overlay', 'btn-help') });
 }
-/* One direct loader for the weapon picker; Q keeps cycling through it. */
-function selectWeapon(w) {
-  if (G.over || G.phase === 'shop' || demoBlock()) return false;
-  if (net.on) return netPick(w);
-  if (!(w === 'shell' || (G.ammo[w] || 0) > 0)) {
-    say(`No ${WEAPONS[w].name} left in the rack.`, 'info');
-    return false;
-  }
-  G.selected = w;
-  sfx.play('click');
-  say(`Loaded: ${WEAPONS[w].name}.`, 'info');
-  renderHUD();
-  return true;
-}
 function nextRound() {
   if (net.on) { netNext(); return; }
   if (G.phase !== 'shop') return;
@@ -1013,20 +999,20 @@ const replay = createReplay({
   special: (wkey, name, x, y, ang) => fxSpecial(G.fx, wkey, name, x, y, ang),
   trail: (shot, dt, x, y, vx, vy, wkey) => fxTrail(G.fx, shot, dt, x, y, vx, vy, wkey),
 });
-/* The coach (src/tutorial.ts). */
-const {
-  renderTutorial, maybeStartTutorial, tutorialOpen, endTutorial, skipTutorial, tickTutorial,
-  isActive: tutorialActive, arm: armTutorial, noteFired: tutorialFired,
-} = createTutorial({
-  G, $, TOUCH, net, sfx, me, keyHint, keyCap, say, refreshNavHints, closeOverlays, freshMatchFromSeedBox,
+/* The status bar's values (src/hud.ts). */
+const { HUD, paintHud, windText, renderHUD } = createHud({
+  G, $, tables, net, MATCH, me, cur, myTank, seatName, drawShellIcon, openGuns: () => openGuns(),
 });
 /* The camera and the frame the canvas paints (src/view.ts). */
 const { updateCamera, shownAngle, shownPower, render, windGaugeTop } = createView({
   G, $, tables, net, MATCH, replay, FX, fxSet, cur, textScale,
 });
-/* The status bar's values (src/hud.ts). */
-const { HUD, paintHud, windText, renderHUD } = createHud({
-  G, $, tables, net, MATCH, me, cur, myTank, seatName, drawShellIcon, openGuns,
+/* The weapon picker (src/guns.ts). */
+const {
+  GUN_COLS, selectWeapon, rackGuns, gunsOpen, openGuns, closeGuns, renderGuns, pickGun, moveGunCursor, cycleWeapon, gunGrid,
+  cursorAt: gunCursorAt,
+} = createGuns({
+  G, $, tables, net, sfx, keyHint, say, refreshNavHints, renderHUD, drawShellIcon, demoBlock, netPick, netCycle,
 });
 /* The field shop (src/shop.ts): prices, rows, buying, the Ready line. */
 const {
@@ -1034,6 +1020,17 @@ const {
 } = createShop({
   G, $, tables, net, sfx, me, keyCap, keyHint, say, advance, render, renderHUD, refreshNavHints,
   drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil, netBuy,
+});
+/* The high scores (src/scores.ts). */
+const { SCORES, renderScoresOverlay, loadScores, savedCallsign, fileReport } = createScores({
+  G, $, keyHint, say, toggleOverlay,
+});
+/* The coach (src/tutorial.ts). */
+const {
+  renderTutorial, maybeStartTutorial, tutorialOpen, endTutorial, skipTutorial, tickTutorial,
+  isActive: tutorialActive, arm: armTutorial, noteFired: tutorialFired,
+} = createTutorial({
+  G, $, TOUCH, net, sfx, me, keyHint, keyCap, say, refreshNavHints, closeOverlays, freshMatchFromSeedBox,
 });
 const KNOWN_FOES = ['reaper', 'wraith', 'spotter'];
 const FOE_PAINT = { reaper: '#ff0000', wraith: '#00ffff', spotter: '#ff00ff' };
@@ -1884,76 +1881,6 @@ function netShowStandings(room) {
   refreshNavHints();
 }
 
-/* ---------- scores: file-backed API with localStorage fallback ---------- */
-function localScores() {
-  try {
-    return JSON.parse(window.localStorage.getItem('tankity-local') || '[]');
-  } catch (_) { return []; }
-}
-function saveLocal(entry) {
-  try {
-    const arr = localScores();
-    arr.push(entry);
-    arr.sort((a, b) => b.score - a.score);
-    window.localStorage.setItem('tankity-local', JSON.stringify(arr.slice(0, 10)));
-  } catch (_) { /* private mode etc. */ }
-}
-/* The scores overlay is a Preact component (src/ui/scores.tsx); the game loads
-   the list and hands in finished lines. */
-const SCORES = { rows: null, note: '', formHidden: false };
-function renderScoresOverlay() {
-  const section = $('report-overlay');
-  if (!section) return;
-  drawScores(section, {
-    keyHint,
-    onClose: () => toggleOverlay('report-overlay', 'scores-open'),
-    rows: SCORES.rows,
-    note: SCORES.note,
-    formHidden: SCORES.formHidden,
-    onFile: raw => {
-      const name = raw.trim();
-      if (!name) { say('Give your callsign first, hero.', 'info'); return; }
-      fileReport(name);
-    },
-  });
-}
-async function loadScores() {
-  let rows = [];
-  let src = 'file store';
-  try {
-    const res = await fetch('scores.php', { headers: { Accept: 'application/json' } });
-    if (!res.ok) throw new Error('http ' + res.status);
-    const data = await res.json();
-    rows = data.scores || [];
-  } catch (_) {
-    rows = localScores().map(s => ({ name: s.name, best: s.score, banked: s.banked, won: s.won }));
-    src = 'this browser only (server store unreachable)';
-  }
-  SCORES.rows = rows.slice(0, 10).map(r => `${r.name}: ${r.best} pts (${r.banked} rounds won${r.won ? ', champion' : ''})`);
-  SCORES.note = `Showing reports from ${src}.`;
-  renderScoresOverlay();
-}
-/* The last callsign filed, so the next report is one tap. */
-function savedCallsign() {
-  try { return window.localStorage.getItem('tankity-callsign') || ''; } catch (_) { return ''; }
-}
-async function fileReport(name) {
-  try { window.localStorage.setItem('tankity-callsign', name); } catch (_) { /* fine */ }
-  const entry = { name, score: G.score, banked: G.roundsWon, won: G.won, seed: G.seed };
-  try {
-    const res = await fetch('scores.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(entry),
-    });
-    if (!res.ok) throw new Error('http ' + res.status);
-    say(`Report filed for ${name}. The base salutes you.`, 'good');
-  } catch (_) {
-    saveLocal(entry);
-    say(`Server store unreachable, so the report stays in ${name}'s browser instead.`, 'info');
-  }
-  loadScores();
-}
 
 /* ---------- input + init ---------- */
 function applyKeys(def) {
@@ -2056,13 +1983,6 @@ function lineKey(dir) {
   if (gunsOpen()) { moveGunCursor(dir); return true; }
   return scrollOverlay(dir, 0);
 }
-/* The gun picker's fixed keys (arrows, Enter or Space, digits) only mean
-// something while it is open; otherwise the key falls through. */
-function gunGrid(dir) {
-  if (!gunsOpen()) return undefined;
-  moveGunCursor(dir);
-  return true;
-}
 /* Input maps keys and touches to named commands (the action names of
 // game.json's keys section); this says what each does in the current context.
 // A handler that returns true used the key; one that returns nothing declines,
@@ -2083,7 +2003,7 @@ function bindKeys() {
     gridDown: () => gunGrid(GUN_COLS),
     confirm: p => {
       if (!gunsOpen()) return undefined;
-      if (!p.repeat) pickGun(rackGuns()[gunCursor]);
+      if (!p.repeat) pickGun(rackGuns()[gunCursorAt()]);
       return true;
     },
     digit: p => {
@@ -2159,84 +2079,6 @@ function bindKeys() {
     onHold: () => { unlock(); music.start(); },
   });
   input.bind(window);
-}
-/* The weapon picker: every gun on the rack as a tile, for when Q would take
-   a dozen presses. Arrows or J/K move the cursor, Enter or a digit loads. */
-const GUN_COLS = 4;
-let gunCursor = 0;
-function rackGuns() {
-  return WORDER.filter(w => w === 'shell' || (G.ammo[w] || 0) > 0);
-}
-function gunsOpen() {
-  const ov = $('gun-overlay');
-  return !!ov && !ov.hidden;
-}
-function openGuns() {
-  if (G.over || G.phase === 'shop' || demoBlock()) return;
-  const ov = $('gun-overlay');
-  if (!ov) return;
-  gunCursor = Math.max(0, rackGuns().indexOf(G.selected));
-  renderGuns();
-  ov.hidden = false;
-  const btn = $('btn-weapon');
-  if (btn) btn.setAttribute('aria-expanded', 'true');
-  refreshNavHints();
-  sfx.play('click');
-}
-function closeGuns() {
-  const ov = $('gun-overlay');
-  if (!ov || ov.hidden) return false;
-  ov.hidden = true;
-  const btn = $('btn-weapon');
-  if (btn) btn.setAttribute('aria-expanded', 'false');
-  return true;
-}
-/* The weapon picker is a Preact component (src/ui/guns.tsx): the rack as tiles,
-   with the cursor the keys move. */
-function renderGuns() {
-  const section = $('gun-overlay');
-  if (!section || !G.ammo) return;
-  const guns = rackGuns();
-  gunCursor = clamp(gunCursor, 0, guns.length - 1);
-  drawGuns(section, {
-    keyHint,
-    onClose: () => { closeGuns(); },
-    tiles: guns.map(w => ({
-      key: w,
-      name: WEAPONS[w].name,
-      title: WEAPONS[w].note || WEAPONS[w].name,
-      count: w === 'shell' ? '∞' : `×${G.ammo[w] || 0}`,
-      loaded: w === G.selected,
-    })),
-    cursor: gunCursor,
-    drawIcon: drawShellIcon,
-    arsenalRev: ARSENAL_REV,
-    onPick: pickGun,
-  });
-}
-function pickGun(w) {
-  if (selectWeapon(w) !== false) closeGuns();
-}
-function moveGunCursor(d) {
-  gunCursor = clamp(gunCursor + d, 0, rackGuns().length - 1);
-  sfx.play('click');
-  renderGuns();
-}
-function cycleWeapon() {
-  if (G.over || G.phase === 'shop') return;
-  if (net.on) { netCycle(); return; }
-  if (demoBlock()) return;
-  const i = WORDER.indexOf(G.selected);
-  for (let k = 1; k <= WORDER.length; k++) {
-    const w = WORDER[(i + k) % WORDER.length];
-    if (w === 'shell' || (G.ammo[w] || 0) > 0) {
-      G.selected = w;
-      sfx.play('click');
-      say(`Loaded: ${WEAPONS[w].name}.`, 'info');
-      renderHUD();
-      return;
-    }
-  }
 }
 function init() {
   if (TOUCH) document.documentElement.classList.add('touch');

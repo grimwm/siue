@@ -67,6 +67,9 @@ export function transition(phase: Phase, event: FlowEvent): Phase | null {
  * watches, at this multiple of normal speed (rooms.php ROOM_DRONE_SPEED and
  * src/replay.ts FAST_SPEED play the same 3 in a room). */
 export const WATCH_SPEED = 3;
+/** Drones left alone can miss each other forever: after this many drone-only
+ * turns the round ends anyway, as the battery's (rooms.php ROOM_WATCH_TURNS). */
+export const WATCH_TURNS = 40;
 
 /** How many sim steps one frame runs: normal while the player's tank stands
  * (and in the demo, which has no player to wait for), WATCH_SPEED once it has

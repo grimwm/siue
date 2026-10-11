@@ -319,6 +319,32 @@ $check('lost-round-shop-starts-the-next-round', room_shop_settle($room) === true
 [$room, $events] = $lostRoom(1);
 $check('last-life-lost-ends-the-match', $room['phase'] === 'over' && in_array('matchover', array_column($events, 't'), true));
 
+// Drones left alone cannot stall a round forever: after ROOM_WATCH_TURNS
+// drone-only turns it ends as the battery's, and solo uses the same number.
+$stall = room_new('STAL', 'stl');
+$stall['seats'][0] = ['human' => true, 'initials' => 'STL', 'token' => 't0', 'lives' => 3, 'lastAct' => microtime(true)];
+for ($i = 1; $i < ROOM_SEATS; $i++) {
+    $stall['seats'][$i] = room_idle_seat($i, 'ai');
+}
+room_seat_economy($stall, 0);
+room_start_round($stall);
+foreach ($stall['tanks'] as &$t) {
+    if ($t['kind'] === 'human') {
+        $t['hp'] = 0;
+    } else {
+        $t['hp'] = 100000; // nobody can die: a guaranteed stalemate
+    }
+}
+unset($t);
+$stall['watchTurns'] = ROOM_WATCH_TURNS - 1;
+unset($stall['pace']);
+$events = [];
+room_advance($stall, $events);
+$check('drone-stalemate-ends-the-round', $stall['phase'] === 'shop' && in_array('roundlost', array_column($events, 't'), true),
+    $stall['phase'] . ' ' . json_encode(array_column($events, 't')));
+$flowSrc = (string) file_get_contents(__DIR__ . '/src/flow.ts');
+$check('solo-and-rooms-share-the-stalemate-cap', (bool) preg_match('/WATCH_TURNS = ' . ROOM_WATCH_TURNS . ';/', $flowSrc));
+
 $room = $shopRoom();
 $check('shop-opens-with-clock', $room['phase'] === 'shop' && room_shop_left($room) > ROOM_SHOP_SECS - 2 && room_shop_left($room) <= ROOM_SHOP_SECS,
     $room['phase'] . ' ' . (string) room_shop_left($room));

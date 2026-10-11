@@ -28,7 +28,7 @@ import {
 import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, CLOCK_SHOW_S,
 } from './js/net.js?v=c2776f37fa';
-import { transition, runWar, warSpeed } from './js/flow.js?v=2deece36a6';
+import { transition, runWar, warSpeed, WATCH_TURNS } from './js/flow.js?v=fb268dfd34';
 import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=6bacfc394f';
 import { createReplay } from './js/replay.js?v=2b454d2662';
 import { createRenderer, drawChassis } from './js/render.js?v=a2add098ba';
@@ -464,6 +464,7 @@ function startSolo(seedStr) {
 }
 function newRound(bannerText, event) {
   genTerrain();
+  G.watchTurns = 0; // drone-only turns since the player fell (see WATCH_TURNS)
   G.wind = Math.round((G.rng() * 2 - 1) * 8);
   // Spread four combatants across the hills; every round, anyone may land
   // anywhere, never on top of each other.
@@ -683,9 +684,10 @@ function settle() {
       newRound(undefined, 'roundWon');
       return;
     }
-  } else if (alive().length > 1) {
+  } else if (alive().length > 1 && !(me().hp <= 0 && ++G.watchTurns >= WATCH_TURNS)) {
     // A round ends only with one unit left standing: with the player's tank
-    // wrecked, the drones fight on while the player watches.
+    // wrecked, the drones fight on while the player watches (for at most
+    // WATCH_TURNS turns, so a stalemate cannot run forever).
   } else if (me().hp <= 0) {
     // The last unit is a drone (or the last two fell together): the round
     // goes to the battery, the player loses a life, and the shop opens.

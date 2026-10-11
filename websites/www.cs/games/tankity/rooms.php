@@ -854,6 +854,9 @@ const ROOM_VOLLEY_LINGER = 1.0;
 // carry 'watch' => true (clients replay them at src/replay.ts FAST_SPEED, the
 // same 3) and the gap between them is a third as long. */
 const ROOM_DRONE_SPEED = 3.0;
+/* Drones left alone can miss each other forever: after this many drone-only
+// turns the round ends anyway, as the battery's (src/flow.ts WATCH_TURNS is the same). */
+const ROOM_WATCH_TURNS = 40;
 function room_pace_stamp(array &$room, array $events, int $from): void
 {
     $span = 0.0;
@@ -1131,6 +1134,7 @@ function room_spawn_spots(int &$rng, int $n, int $width): array
 }
 function room_start_round(array &$room): void
 {
+    $room['watchTurns'] = 0;
     $room['round'] += 1;
     $w = 720;
     if ($room['map'] !== null && isset(ROOM_MAPS[$room['map']])) {
@@ -1259,7 +1263,10 @@ function room_advance(array &$room, array &$events): void
             $events[count($events) - 1]['watch'] = true; // nobody left to play: clients speed it up
         }
         room_fire_shot($room, $events, $cur, $choice['wkey']);
-        if (room_round_settled($room)) {
+        if ($watching) {
+            $room['watchTurns'] = ($room['watchTurns'] ?? 0) + 1;
+        }
+        if (room_round_settled($room) || ($room['watchTurns'] ?? 0) >= ROOM_WATCH_TURNS) {
             room_end_round($room, $events);
             return;
         }

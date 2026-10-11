@@ -13,6 +13,13 @@ const STUMBLED = 'The room server stumbled. Solo hills still work.';
 /* ---------- words and links ---------- */
 /** Server lines are already human; these few technical ones get translated so
  * a game never quotes transport at the player. */
+/** A room's final standings, best score first. A seat's `name` is a human's
+    initials or the drone's name; drones are tagged (AI). */
+export function standingsRows(seats, mySeat) {
+    return seats
+        .map(s => ({ name: s.human ? s.name : s.name + ' (AI)', score: s.score || 0, mine: s.seat === mySeat }))
+        .sort((a, b) => b.score - a.score);
+}
 export function prettyRoomError(err) {
     const m = String((err && err.message) || err || '');
     if (/too fast/.test(m))

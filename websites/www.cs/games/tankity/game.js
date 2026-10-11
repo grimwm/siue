@@ -40,10 +40,10 @@ import { W, TUNE, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, fac
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
 } from './js/audio.js?v=ce8cdf6a6e';
-import { RoomClient, prettyRoomError } from './js/net.js?v=35baab622b';
+import { RoomClient, prettyRoomError } from './js/net.js?v=38d45fb1ea';
 import { runWar, warSpeed } from './js/flow.js?v=fb268dfd34';
 import { createPreview, stepPreview } from './js/preview.js?v=8e81275ae7';
-import { createReplay } from './js/replay.js?v=3f9ccfd889';
+import { createReplay } from './js/replay.js?v=7cc0680c3b';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 import { renderHelp } from './js/ui/help.js?v=7366b18437';
 import { drawShellIcon as paintShellIcon, drawGearIcon as paintGearIcon } from './js/ui/icons.js?v=b8eec86a1f';
@@ -51,13 +51,13 @@ import { createChatter, pick, TANK_IDLE, FOE_IDLE } from './js/chatter.js?v=48b9
 import { createEffects, FX, FX_BUDGET } from './js/effects.js?v=1be294b3bc';
 import { createShop } from './js/shop.js?v=6612e3149e';
 import { createHud } from './js/hud.js?v=a4c4a2d226';
-import { createView } from './js/view.js?v=b74c254da9';
+import { createView } from './js/view.js?v=fce3ec2057';
 import { createTutorial } from './js/tutorial.js?v=aa28ddad64';
 import { createGuns } from './js/guns.js?v=114898edec';
 import { createScores } from './js/scores.js?v=8402272957';
 import { createMatch } from './js/match.js?v=5da6150168';
-import { createRoom } from './js/room.js?v=574003a372';
-import { createLobby } from './js/lobby.js?v=29370ce462';
+import { createRoom } from './js/room.js?v=5b52f793c0';
+import { createLobby } from './js/lobby.js?v=7937aa554a';
 import { createMenu } from './js/menu.js?v=01ee148e37';
 
 const $ = id => document.getElementById(id);

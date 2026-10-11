@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, planCatchUp, isVolleyOpener,
+  RoomClient, prettyRoomError, inviteUrl, standingsRows, shouldCatchUp, planCatchUp, isVolleyOpener,
   MATCH_POLL_MS, LOBBY_POLL_MS, RETRY_429_MS, RETRY_429_TRIES,
 } from './js/net.js';
 
@@ -566,6 +566,16 @@ const bodyOf = entry => JSON.parse(entry.init.body);
 check('invite-url', inviteUrl('AB3D', { origin: 'https://host', pathname: '/games/tankity/' }) === 'https://host/games/tankity/?code=AB3D');
 check('invite-url-needs-a-code', inviteUrl('', { origin: 'https://host', pathname: '/x' }) === '');
 check('invite-url-escapes-the-code', inviteUrl('A&B', {}) === '?code=A%26B');
+
+// Final standings name a human by the initials the server sends as `name`.
+{
+  const seats = fixture('play-after-fire').room.seats;
+  const rows = standingsRows(seats, 0);
+  check('standings-name-the-human-by-initials', rows[0].name === 'ABC' && rows[0].mine && rows[0].score === 92, JSON.stringify(rows[0]));
+  check('standings-tag-drones-ai', rows.some(r => r.name === 'REAPER (AI)' && !r.mine), JSON.stringify(rows));
+  const flipped = standingsRows([...seats].reverse(), 0);
+  check('standings-best-first', flipped[0].name === 'ABC' && flipped[0].mine, JSON.stringify(flipped[0]));
+}
 
 if (failed) { console.log(`\n${failed} check(s) failed`); process.exit(1); }
 console.log('\nNET-OK');

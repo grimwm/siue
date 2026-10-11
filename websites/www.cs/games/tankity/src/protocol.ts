@@ -43,6 +43,8 @@ export interface RoomSeat {
   /** Initials for a human, the drone's name otherwise. */
   name: string;
   mode: SeatMode;
+  /** A player left mid-match and a bot drives their unit now. */
+  bot: boolean;
   lives: number;
   score: number;
   ready: boolean;

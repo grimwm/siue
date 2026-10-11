@@ -771,6 +771,7 @@
                     "human": true,
                     "name": "ABC",
                     "mode": "human",
+                    "bot": false,
                     "lives": 3,
                     "score": 1292,
                     "ready": false
@@ -780,6 +781,7 @@
                     "human": false,
                     "name": "REAPER",
                     "mode": "ai",
+                    "bot": false,
                     "lives": 0,
                     "score": 0,
                     "ready": false
@@ -789,6 +791,7 @@
                     "human": false,
                     "name": "WRAITH",
                     "mode": "open",
+                    "bot": false,
                     "lives": 0,
                     "score": 0,
                     "ready": false
@@ -798,6 +801,7 @@
                     "human": false,
                     "name": "SPOTTER",
                     "mode": "open",
+                    "bot": false,
                     "lives": 0,
                     "score": 0,
                     "ready": false

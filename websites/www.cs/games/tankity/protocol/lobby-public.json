@@ -21,6 +21,7 @@
                     "human": true,
                     "name": "ABC",
                     "mode": "human",
+                    "bot": false,
                     "lives": 3,
                     "score": 0,
                     "ready": false
@@ -30,6 +31,7 @@
                     "human": true,
                     "name": "DEF",
                     "mode": "human",
+                    "bot": false,
                     "lives": 3,
                     "score": 0,
                     "ready": false
@@ -39,6 +41,7 @@
                     "human": false,
                     "name": "WRAITH",
                     "mode": "ai",
+                    "bot": false,
                     "lives": 0,
                     "score": 0,
                     "ready": false
@@ -48,6 +51,7 @@
                     "human": false,
                     "name": "SPOTTER",
                     "mode": "open",
+                    "bot": false,
                     "lives": 0,
                     "score": 0,
                     "ready": false

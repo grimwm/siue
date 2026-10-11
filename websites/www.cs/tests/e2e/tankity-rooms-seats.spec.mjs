@@ -88,6 +88,7 @@ test('the host leaves mid-match: the guest keeps playing, the room goes with the
   await expect.poll(() => myTurn(guest.page), { timeout: 60_000 }).toBe(true);
   const room = lastRoom(roomState.guest);
   expect(room.seats[0].mode).toBe('ai');
+  expect(room.seats[0].bot, 'the departed host\'s unit is marked as bot-driven').toBe(true);
   expect(room.tanks.find(t => t.seat === 0).kind).toBe('ai');
   await guest.page.keyboard.press('Control');
   await expect.poll(() => roomState.guest.flatMap(r => r.events || []).some(e => e.t === 'aifire' && e.seat === 0), { timeout: 30_000 }).toBe(true);

@@ -14,17 +14,22 @@ $check = function (string $name, bool $cond, string $extra = '') use (&$fail): v
 };
 
 $tmp = sys_get_temp_dir() . '/site-versions-test-' . getmypid();
-@mkdir("$tmp/games/cylon", 0777, true);
+@mkdir("$tmp/games/cylon/css", 0777, true);
+// The game's stylesheets, in the order the page links them: that order is the cascade.
+$sheets = ['eye', 'nav', 'help', 'hud', 'gameover', 'settings', 'controls', 'fx', 'units', 'world', 'intro'];
 $files = [
     'site.css' => "body{}\n",
     'main.js' => "function f(){}\n",
-    'games/cylon/cylon.css' => ".a{}\n",
     'games/cylon/cylon.js' => "export const x = 1;\n",
 ];
+foreach ($sheets as $n) {
+    $files["games/cylon/css/$n.css"] = ".$n{}\n";
+}
 foreach ($files as $f => $content) {
     file_put_contents("$tmp/$f", $content);
 }
-$page = "<link href=\"site.css?v=old\" rel=\"stylesheet\">\n<link href=\"games/cylon/cylon.css?v=old\" rel=\"stylesheet\">\n"
+$links = implode('', array_map(fn(string $n): string => "<link href=\"games/cylon/css/$n.css?v=old\" rel=\"stylesheet\">\n", $sheets));
+$page = "<link href=\"site.css?v=old\" rel=\"stylesheet\">\n$links"
     . "<script src=\"main.js?v=old\"></script>\n"
     . "<script type=\"module\">\nconst m = await import('./games/cylon/cylon.js?v=old');\n</script>\n";
 file_put_contents("$tmp/index.html", $page);
@@ -42,7 +47,9 @@ $html = $read('index.html');
 $check('write-reports-stale', $stale === true);
 $check('site-css-version', str_contains($html, "href=\"site.css?v={$v('site.css')}\""));
 $check('main-js-version', str_contains($html, "src=\"main.js?v={$v('main.js')}\""));
-$check('cylon-css-version', str_contains($html, "href=\"games/cylon/cylon.css?v={$v('games/cylon/cylon.css')}\""));
+foreach ($sheets as $n) {
+    $check("cylon-$n-css-version", str_contains($html, "href=\"games/cylon/css/$n.css?v={$v("games/cylon/css/$n.css")}\""));
+}
 $check('cylon-js-version', str_contains($html, "import('./games/cylon/cylon.js?v={$v('games/cylon/cylon.js')}')"));
 [$stale, $problems] = site_versions_sync($tmp, false);
 $check('converges-in-one-run', $stale === false && $problems === [], json_encode([$stale, $problems]));
@@ -64,7 +71,9 @@ $now = $read('index.html');
 $cases = [
     'site.css has no version' => [str_replace('site.css?v=', 'site.css#', $now), 'index.html must reference site.css?v=... exactly once (found 0)'],
     'main.js is listed twice' => [$now . "<script src=\"main.js?v=x\"></script>\n", 'index.html must reference main.js?v=... exactly once (found 2)'],
-    'cylon.css is gone' => [str_replace('games/cylon/cylon.css?v=', 'games/cylon/other.css?v=', $now), 'index.html must reference games/cylon/cylon.css?v=... exactly once (found 0)'],
+    'a cylon stylesheet is gone' => [str_replace('games/cylon/css/hud.css?v=', 'games/cylon/css/other.css?v=', $now), 'index.html must reference games/cylon/css/hud.css?v=... exactly once (found 0)'],
+    'a cylon stylesheet is linked twice' => [$now . "<link href=\"games/cylon/css/eye.css?v=x\" rel=\"stylesheet\">\n", 'index.html must reference games/cylon/css/eye.css?v=... exactly once (found 2)'],
+    'cylon stylesheets are out of order' => [str_replace(['css/nav.css?v=', 'css/help.css?v=', 'css/tmp.css?v='], ['css/tmp.css?v=', 'css/nav.css?v=', 'css/help.css?v='], $now), 'index.html must link games/cylon/css/*.css in the order of SITE_VERSIONS_REFS'],
     'the cylon import has no version' => [str_replace("cylon.js?v=", 'cylon.js#', $now), 'index.html must reference games/cylon/cylon.js?v=... exactly once (found 0)'],
     'cylon.js is imported twice' => [$now . "import('./games/cylon/cylon.js?v=y');\n", 'index.html must reference games/cylon/cylon.js?v=... exactly once (found 2)'],
 ];
@@ -73,7 +82,12 @@ foreach ($cases as $name => [$broken, $expect]) {
     [$stale, $problems] = site_versions_sync($tmp, true);
     $check("bad-reference-fails: $name", $stale === false && in_array($expect, $problems, true) && $read('index.html') === $broken, json_encode($problems));
 }
+// A stylesheet in the folder that the page does not link would never load.
 file_put_contents("$tmp/index.html", $now);
+file_put_contents("$tmp/games/cylon/css/extra.css", ".x{}\n");
+[$stale, $problems] = site_versions_sync($tmp, true);
+$check('an-unlinked-stylesheet-fails', $stale === false && in_array('games/cylon/css/extra.css is not in SITE_VERSIONS_REFS, so index.html would not link it', $problems, true) && $read('index.html') === $now, json_encode($problems));
+unlink("$tmp/games/cylon/css/extra.css");
 unlink("$tmp/main.js");
 [, $problems] = site_versions_sync($tmp, false);
 $check('unreadable-file-fails', $problems === ['index.html references main.js, which is not readable'], json_encode($problems));

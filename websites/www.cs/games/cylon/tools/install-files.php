@@ -12,7 +12,7 @@
  *     PNGs;
  *   - the `?v=` cache-busters inside cylon.js: each ./js/<name>.js import, and
  *     the mount.html fetch, set to a short hash of that file's content (see
- *     install_versions). The `?v=` of cylon.js itself, and of cylon.css, are the
+ *     install_versions). The `?v=` of cylon.js itself, and of the stylesheets in css/, are the
  *     site page's: the page that loads the game versions the game's entry
  *     points, so this tool never reads or writes it.
  *

@@ -23,7 +23,7 @@ check('unknown-site-file-runs-everything', select([`${S}something-new.txt`]), 'A
 check('a-spec-runs-itself', select([`${S}tests/e2e/home-eye.spec.mjs`]), ['home-eye.spec.mjs']);
 has('tankity-runs-its-specs', select([`${S}games/tankity/game.js`]), ['tankity-solo.spec.mjs', 'tankity-rooms.spec.mjs', 'games-pwa.spec.mjs']);
 check('tankity-skips-the-home-page', (select([`${S}games/tankity/rooms.php`])).includes('home-eye.spec.mjs'), false);
-has('cylon-runs-home-and-cylon', select([`${S}games/cylon/cylon.css`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs']);
+has('cylon-runs-home-and-cylon', select([`${S}games/cylon/css/units.css`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs']);
 has('site-shell-runs-the-shell', select([`${S}main.js`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'home-eye.spec.mjs']);
 check('site-shell-skips-tankity', select([`${S}site.css`]).some(s => s.startsWith('tankity-')), false);
 has('union-of-files', select([`${S}games/crete/game.js`, `${S}tests/e2e/tankity-audio.spec.mjs`]), ['games-hub.spec.mjs', 'tankity-audio.spec.mjs']);

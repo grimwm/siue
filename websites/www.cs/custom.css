@@ -1,6 +1,17 @@
 /*
  * Compatibility shim — site shell + Cylon Defense.
- * Prefer linking site.css and games/cylon/cylon.css directly.
+ * Prefer linking site.css and the games/cylon/css/*.css files directly, as
+ * index.html does; the order here is the cascade.
  */
 @import url("site.css");
-@import url("games/cylon/cylon.css");
+@import url("games/cylon/css/eye.css");
+@import url("games/cylon/css/nav.css");
+@import url("games/cylon/css/help.css");
+@import url("games/cylon/css/hud.css");
+@import url("games/cylon/css/gameover.css");
+@import url("games/cylon/css/settings.css");
+@import url("games/cylon/css/controls.css");
+@import url("games/cylon/css/fx.css");
+@import url("games/cylon/css/units.css");
+@import url("games/cylon/css/world.css");
+@import url("games/cylon/css/intro.css");

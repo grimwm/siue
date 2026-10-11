@@ -1,0 +1,94 @@
+/* Cylon Defense: The intro title card: "The CIC" and its glide into the brand.
+ * One of the stylesheets index.html links in order; the order is the cascade (README.md, "Stylesheets"). */
+/* —— Intro title card: giant “The CIC” → brand slot (desktop) or fade (mobile) —— */
+.cylon-intro-title {
+  position: fixed;
+  left: 50%;
+  top: 48%;
+  z-index: 2010;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(2.75rem, 14vw, 7.5rem);
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  opacity: 0;
+  text-shadow:
+    0 0 28px rgba(255, 40, 40, 0.45),
+    0 0 80px rgba(255, 20, 20, 0.25),
+    0 2px 0 rgba(0, 0, 0, 0.55);
+  /* opacity only while anchored; transform reserved for the settle glide */
+  transition: none;
+  will-change: opacity;
+}
+
+.cylon-intro-title.is-hero {
+  opacity: 1;
+  transition: opacity 0.5s ease-out;
+}
+
+.cylon-intro-title.is-settling {
+  /* Keep visible — removing .is-hero would otherwise snap opacity back to 0 */
+  opacity: 1;
+  will-change: transform, opacity;
+  transition:
+    transform 0.88s cubic-bezier(0.22, 0.84, 0.18, 1),
+    text-shadow 0.55s ease;
+}
+
+.cylon-intro-title.is-exit {
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+
+/* Hide the real brand while the hero card owns the wordmark */
+body.cylon-intro-hero .site-brand {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cylon-bot,
+  .cylon-bot-body::after,
+  .cylon-impact,
+  .cylon-hole,
+  .cylon-nuke.is-detonating,
+  .cylon-nuke.is-detonating .cylon-nuke-flash,
+  .cylon-nuke.is-detonating .cylon-nuke-ball,
+  .cylon-nuke.is-detonating .cylon-nuke-ring,
+  .cylon-raptor.is-inbound .cylon-raptor-ship,
+  .cylon-raptor.is-inbound .cylon-raptor-strafe,
+  .cylon-raptor.is-inbound .cylon-raptor-beam,
+  .cylon-raptor.is-inbound .cylon-raptor-beam-core,
+  .cylon-raptor.is-inbound .cylon-raptor-cannon,
+  .cylon-raptor.is-inbound .cylon-raptor-skyflash,
+  .cylon-raptor.is-inbound .cylon-raptor-ground,
+  .cylon-raptor-impact,
+  .cylon-grenade-blast,
+  body.is-nuke-shake,
+  .cylon-intro-title.is-hero,
+  .cylon-intro-title.is-settling,
+  .cylon-intro-title.is-exit {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .cylon-battlefield,
+  .cylon-nuke,
+  .cylon-nuke-missile,
+  .cylon-raptor {
+    display: none !important;
+  }
+}
+

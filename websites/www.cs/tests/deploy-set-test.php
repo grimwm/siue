@@ -24,7 +24,7 @@ foreach (['games/tankity/fx.js', 'games/tankity/js/sim.js', 'games/tankity/js/ne
     $check("ships $f", isset($set[$f]));
 }
 // Cylon: the entry module, the compiled modules it imports, its page pieces and server.
-foreach (['games/cylon/cylon.js', 'games/cylon/js/rules.js', 'games/cylon/js/playfield.js', 'games/cylon/js/scores.js', 'games/cylon/js/state.js', 'games/cylon/js/intro.js', 'games/cylon/cylon.css', 'games/cylon/mount.html', 'games/cylon/scores.php', 'games/cylon/manifest.webmanifest'] as $f) {
+foreach (['games/cylon/cylon.js', 'games/cylon/js/rules.js', 'games/cylon/js/playfield.js', 'games/cylon/js/scores.js', 'games/cylon/js/state.js', 'games/cylon/js/intro.js', 'games/cylon/js/units.js', 'games/cylon/js/chrome.js', 'games/cylon/css/eye.css', 'games/cylon/css/units.css', 'games/cylon/css/intro.css', 'games/cylon/mount.html', 'games/cylon/scores.php', 'games/cylon/manifest.webmanifest'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
 // The site's own scripts: compiled from src/, served from the root and play/.

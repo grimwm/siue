@@ -7,7 +7,7 @@ Pluggable mini-games for the SIUE personal site.
 games/
   README.md
   cylon/           # The CIC — Cylon defense
-    cylon.css
+    css/           # the stylesheets, linked by the home page in order
     cylon.js       # the game, an ES module the home page imports
     src/, js/      # TypeScript modules and the JavaScript compiled from them
     mount.html     # FX / overlays, fetched into the home page
@@ -98,7 +98,8 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
       fetch carry a hash of that file.
   - Home page: `php tools/site-versions.php` (site root) writes the `?v=`
     cache-busters in `index.html`, the one page the site shares with a mounted
-    game: `site.css`, `main.js`, `games/cylon/cylon.css` and the entry module
+    game: `site.css`, `main.js`, the game's stylesheets `games/cylon/css/*.css`
+    (one `<link>` each, in cascade order) and the entry module
     `games/cylon/cylon.js`, each a hash of its file's content. Each file has
     one writer: this tool owns `index.html`, the game's own tool owns
     `cylon.js`. The page hashes `cylon.js` as it stands, so run the game's

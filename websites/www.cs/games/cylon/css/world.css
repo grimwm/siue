@@ -1,0 +1,349 @@
+/* Cylon Defense: The world-ended look: fracture and ash, the scattered glyphs and panels.
+ * One of the stylesheets index.html links in order; the order is the cascade (README.md, "Stylesheets"). */
+/* —— Desolate world-ended look (Game On) —— */
+/* Slower than the nuke flash so glyph scatter reads after the whiteout */
+body.cylon-world-ended {
+  --cylon-desolate-fade: 2.85s;
+}
+
+
+/* Let blasted glyphs fly past panel edges */
+body.cylon-world-ended main,
+body.cylon-world-ended #nav-main,
+body.cylon-world-ended #nav-contact,
+body.cylon-world-ended .page-panel {
+  overflow: visible;
+}
+
+
+#nav-main,
+#nav-contact,
+.page-panel,
+main {
+  transition:
+    filter var(--cylon-desolate-fade, 1.1s) ease,
+    color var(--cylon-desolate-fade, 1.1s) ease,
+    opacity var(--cylon-desolate-fade, 1.1s) ease;
+  filter: none;
+}
+
+
+/* Ashy content panels */
+body.cylon-world-ended #nav-main,
+body.cylon-world-ended #nav-contact {
+  filter: grayscale(0.72) contrast(1.08) brightness(0.78) sepia(0.18);
+}
+
+
+/* Full-viewport fracture / ash — CSS vars reshuffle on each nuke */
+body.cylon-world-ended {
+  --crack-a: 118deg;
+  --crack-b: 28deg;
+  --crack-c: 155deg;
+  --crack-grain: -18deg;
+  --scar-1: 42%;
+  --scar-2: 61%;
+  --scar-3: 33%;
+  --scar-4: 72%;
+  --scar-5: 18%;
+  --scar-6: 78%;
+  --ash-1-x: 18%;
+  --ash-1-y: 22%;
+  --ash-2-x: 82%;
+  --ash-2-y: 70%;
+  --ash-3-x: 50%;
+  --ash-3-y: 100%;
+  --land-shift-x: 0px;
+  --land-shift-y: 0px;
+  --ash-drift-x: 0px;
+  --ash-drift-y: 0px;
+  --land-rot: 0deg;
+  --land-scale: 1;
+  --ash-scale: 1;
+  --blast-x: 50%;
+  --blast-y: 48%;
+  --land-morph-ms: 1.1s;
+}
+
+
+body.cylon-world-ended::before {
+  content: "";
+  position: fixed;
+  inset: -8%;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(var(--land-shift-x), var(--land-shift-y)) rotate(var(--land-rot)) scale(var(--land-scale));
+  transition:
+    opacity var(--cylon-desolate-fade, 1.1s) ease,
+    transform var(--land-morph-ms, 1.1s) cubic-bezier(0.22, 0.7, 0.2, 1),
+    background var(--land-morph-ms, 1.1s) ease;
+  background:
+    radial-gradient(
+      ellipse 48% 42% at var(--blast-x) var(--blast-y),
+      rgba(40, 12, 8, 0.45) 0%,
+      transparent 62%
+    ),
+    linear-gradient(
+      var(--crack-a),
+      transparent 0%,
+      transparent calc(var(--scar-1) - 0.4%),
+      rgba(20, 16, 12, 0.55) var(--scar-1),
+      transparent calc(var(--scar-1) + 0.5%),
+      transparent calc(var(--scar-2) - 0.4%),
+      rgba(12, 12, 12, 0.4) var(--scar-2),
+      transparent calc(var(--scar-2) + 0.55%)
+    ),
+    linear-gradient(
+      var(--crack-b),
+      transparent 0%,
+      transparent calc(var(--scar-3) - 0.35%),
+      rgba(0, 0, 0, 0.35) var(--scar-3),
+      transparent calc(var(--scar-3) + 0.45%),
+      transparent calc(var(--scar-4) - 0.35%),
+      rgba(40, 28, 20, 0.3) var(--scar-4),
+      transparent calc(var(--scar-4) + 0.5%)
+    ),
+    linear-gradient(
+      var(--crack-c),
+      transparent 0%,
+      transparent calc(var(--scar-5) - 0.3%),
+      rgba(0, 0, 0, 0.32) var(--scar-5),
+      transparent calc(var(--scar-5) + 0.4%),
+      transparent calc(var(--scar-6) - 0.3%),
+      rgba(25, 18, 12, 0.28) var(--scar-6),
+      transparent calc(var(--scar-6) + 0.45%)
+    ),
+    repeating-linear-gradient(
+      var(--crack-grain),
+      transparent 0 38px,
+      rgba(0, 0, 0, 0.14) 38px 39px,
+      transparent 39px 71px
+    );
+  mix-blend-mode: multiply;
+}
+
+
+body.cylon-world-ended::before {
+  opacity: 0.9;
+}
+
+
+body.cylon-world-ended::after {
+  content: "";
+  position: fixed;
+  inset: -6%;
+  z-index: 41;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(var(--ash-drift-x), var(--ash-drift-y)) scale(var(--ash-scale));
+  transition:
+    opacity var(--cylon-desolate-fade, 1.1s) ease,
+    transform var(--land-morph-ms, 1.1s) cubic-bezier(0.22, 0.7, 0.2, 1),
+    background var(--land-morph-ms, 1.1s) ease;
+  background:
+    radial-gradient(ellipse 55% 40% at var(--ash-1-x) var(--ash-1-y), rgba(0, 0, 0, 0.28), transparent 70%),
+    radial-gradient(ellipse 40% 50% at var(--ash-2-x) var(--ash-2-y), rgba(30, 20, 10, 0.22), transparent 65%),
+    radial-gradient(ellipse 50% 35% at var(--ash-3-x) var(--ash-3-y), rgba(0, 0, 0, 0.2), transparent 70%),
+    radial-gradient(ellipse 35% 30% at var(--blast-x) var(--blast-y), rgba(60, 20, 10, 0.22), transparent 68%);
+}
+
+
+body.cylon-world-ended::after {
+  opacity: 1;
+}
+
+
+/* Per-glyph / panel / block nuke scatter — rest pose, then fade/blow when .cylon-glyphs-blown */
+.cylon-scatter-char {
+  display: inline-block;
+  position: relative;
+  z-index: 1;
+  white-space: pre;
+  transform: translate(0, 0) rotate(0deg);
+  opacity: 1;
+  /* Combat weapon kicks: snappy. Opening scatter overrides via .cylon-glyphs-blowing */
+  transition:
+    transform 0.32s cubic-bezier(0.22, 0.7, 0.2, 1),
+    color 0.45s ease,
+    text-shadow 0.45s ease,
+    opacity 0.45s ease;
+}
+
+
+body.cylon-glyphs-blown .cylon-scatter-char {
+  transform: translate(var(--sx, 0), var(--sy, 0)) rotate(var(--sr, 0deg));
+  color: color-mix(in srgb, currentColor 38%, #5a5854 62%);
+  text-shadow:
+    1.8px 0 0 rgba(160, 35, 35, 0.5),
+    -1.8px 0.4px 0 rgba(40, 90, 160, 0.45),
+    0 1.5px 0 rgba(0, 0, 0, 0.4);
+}
+
+
+body.cylon-glyphs-blowing .cylon-scatter-char {
+  transition:
+    transform var(--cylon-desolate-fade, 1.6s) cubic-bezier(0.15, 0.85, 0.25, 1),
+    color var(--cylon-desolate-fade, 1.6s) ease,
+    text-shadow var(--cylon-desolate-fade, 1.6s) ease,
+    opacity calc(var(--cylon-desolate-fade, 1.6s) * 0.85) ease;
+}
+
+
+/* Whole page panels + section chrome fly with the glyphs */
+.page-panel.cylon-scatter-panel,
+.cylon-scatter-block {
+  transform: translate(0, 0) rotate(0deg);
+  opacity: 1;
+  transition:
+    transform 0.32s cubic-bezier(0.22, 0.7, 0.2, 1),
+    opacity 0.45s ease,
+    filter 0.45s ease,
+    border-color 0.45s ease,
+    box-shadow 0.45s ease;
+  will-change: transform, opacity;
+}
+
+
+body.cylon-glyphs-blowing .page-panel.cylon-scatter-panel,
+body.cylon-glyphs-blowing .cylon-scatter-block {
+  transition:
+    transform var(--cylon-desolate-fade, 1.6s) cubic-bezier(0.15, 0.85, 0.25, 1),
+    opacity calc(var(--cylon-desolate-fade, 1.6s) * 0.9) ease,
+    filter var(--cylon-desolate-fade, 1.6s) ease,
+    border-color var(--cylon-desolate-fade, 1.6s) ease,
+    box-shadow var(--cylon-desolate-fade, 1.6s) ease;
+}
+
+
+/* Keep panel opacity up so letter debris stays readable; shell still drifts */
+body.cylon-glyphs-blown .page-panel.cylon-scatter-panel {
+  transform: translate(var(--sx, 0), var(--sy, 0)) rotate(var(--sr, 0deg)) scale(0.96);
+  filter: grayscale(0.8) brightness(0.7) sepia(0.15);
+  pointer-events: none;
+}
+
+
+body.cylon-glyphs-blown .cylon-scatter-block {
+  transform: translate(var(--sx, 0), var(--sy, 0)) rotate(var(--sr, 0deg));
+  opacity: 0.55;
+  pointer-events: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+
+/* List chrome (bullets, rules) otherwise stays planted after glyphs fly */
+.interest-list li::before,
+.course-list li::before {
+  transition:
+    opacity calc(var(--cylon-desolate-fade, 1.6s) * 0.7) ease,
+    transform var(--cylon-desolate-fade, 1.6s) cubic-bezier(0.15, 0.85, 0.25, 1),
+    box-shadow calc(var(--cylon-desolate-fade, 1.6s) * 0.7) ease;
+}
+
+
+body.cylon-glyphs-blown .interest-list li::before,
+body.cylon-glyphs-blown .course-list li::before {
+  opacity: 0;
+  transform: translate(var(--mx, 12px), var(--my, -28px)) rotate(var(--mr, -25deg));
+  box-shadow: none;
+}
+
+
+.project-list > li,
+.page-panel h2 {
+  transition:
+    border-color var(--cylon-desolate-fade, 1.6s) ease,
+    opacity var(--cylon-desolate-fade, 1.6s) ease;
+}
+
+
+body.cylon-glyphs-blown .project-list > li {
+  border-bottom-color: transparent;
+}
+
+
+body.cylon-glyphs-blown .page-panel h2 {
+  border-bottom-color: transparent;
+}
+
+
+/* Chromatic fracture on block type when glyphs aren't wrapped yet */
+body.cylon-world-ended #nav-main h1,
+body.cylon-world-ended #nav-main h2,
+body.cylon-world-ended #nav-main h3,
+body.cylon-world-ended #nav-contact h1,
+body.cylon-world-ended #nav-contact h2,
+body.cylon-world-ended #nav-contact h3 {
+  position: relative;
+  color: color-mix(in srgb, currentColor 35%, #5a5854 65%);
+  letter-spacing: 0.04em;
+  text-shadow:
+    2.5px 0 0 rgba(160, 35, 35, 0.55),
+    -2.5px 0.5px 0 rgba(40, 90, 160, 0.5),
+    0 2px 0 rgba(0, 0, 0, 0.45),
+    1px 1px 0 rgba(20, 20, 20, 0.35);
+  transition:
+    color var(--cylon-desolate-fade, 1.1s) ease,
+    text-shadow var(--cylon-desolate-fade, 1.1s) ease;
+}
+
+
+body.cylon-world-ended #nav-main p,
+body.cylon-world-ended #nav-main li,
+body.cylon-world-ended #nav-contact p,
+body.cylon-world-ended #nav-contact li {
+  color: color-mix(in srgb, currentColor 40%, #6e6a64 60%);
+  text-shadow:
+    1.4px 0 0 rgba(130, 40, 40, 0.4),
+    -1.4px 0 0 rgba(35, 70, 130, 0.35),
+    0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+
+body.cylon-world-ended #nav-main a,
+body.cylon-world-ended #nav-contact a {
+  color: color-mix(in srgb, currentColor 45%, #7a6a5a 55%);
+  text-shadow:
+    1.2px 0 0 rgba(140, 50, 40, 0.45),
+    -1.2px 0 0 rgba(40, 80, 140, 0.4);
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: rgba(80, 70, 60, 0.55);
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  body.cylon-world-ended #nav-main,
+  body.cylon-world-ended #nav-contact {
+    transition: filter 0.4s ease;
+    filter: grayscale(0.65) brightness(0.85);
+  }
+
+  body.cylon-world-ended::before,
+  body.cylon-world-ended::after {
+    opacity: 0.35;
+    transition: opacity 0.4s ease;
+  }
+
+  body.cylon-world-ended #nav-main h1,
+  body.cylon-world-ended #nav-main h2,
+  body.cylon-world-ended #nav-main h3,
+  body.cylon-world-ended #nav-contact h1,
+  body.cylon-world-ended #nav-contact h2,
+  body.cylon-world-ended #nav-contact h3,
+  body.cylon-world-ended #nav-main p,
+  body.cylon-world-ended #nav-main li,
+  body.cylon-world-ended #nav-contact p,
+  body.cylon-world-ended #nav-contact li,
+  body.cylon-world-ended #nav-main a,
+  body.cylon-world-ended #nav-contact a,
+  body.cylon-world-ended .cylon-scatter-char {
+    animation: none;
+    transform: none;
+    text-shadow: none;
+    color: color-mix(in srgb, currentColor 50%, #707070 50%);
+  }
+}
+
+

@@ -13,7 +13,7 @@
             "turn": null,
             "turnLeft": null,
             "shopLeft": null,
-            "terrain": [],
+            "terrainRev": 1,
             "tanks": [],
             "seats": [
                 {
@@ -58,6 +58,7 @@
                 }
             ],
             "events": [],
+            "terrain": [],
             "you": {
                 "seat": 0,
                 "ammo": {

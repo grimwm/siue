@@ -13,6 +13,87 @@
             "turn": 0,
             "turnLeft": 120,
             "shopLeft": null,
+            "terrainRev": 2,
+            "tanks": [
+                {
+                    "seat": 0,
+                    "kind": "human",
+                    "name": "ABC",
+                    "x": 251,
+                    "y": 344.5,
+                    "angle": 62,
+                    "power": 55,
+                    "hp": 100,
+                    "maxHp": 100,
+                    "dirS": 1,
+                    "body": "tank",
+                    "menu": false
+                },
+                {
+                    "seat": 1,
+                    "kind": "ai",
+                    "name": "REAPER",
+                    "x": 426,
+                    "y": 372.2,
+                    "angle": 62,
+                    "power": 55,
+                    "hp": 60,
+                    "maxHp": 60,
+                    "dirS": -1,
+                    "body": null,
+                    "menu": false
+                }
+            ],
+            "seats": [
+                {
+                    "seat": 0,
+                    "human": true,
+                    "name": "ABC",
+                    "mode": "human",
+                    "bot": false,
+                    "lives": 3,
+                    "score": 0,
+                    "ready": false
+                },
+                {
+                    "seat": 1,
+                    "human": false,
+                    "name": "REAPER",
+                    "mode": "ai",
+                    "bot": false,
+                    "lives": 0,
+                    "score": 0,
+                    "ready": false
+                },
+                {
+                    "seat": 2,
+                    "human": false,
+                    "name": "WRAITH",
+                    "mode": "open",
+                    "bot": false,
+                    "lives": 0,
+                    "score": 0,
+                    "ready": false
+                },
+                {
+                    "seat": 3,
+                    "human": false,
+                    "name": "SPOTTER",
+                    "mode": "open",
+                    "bot": false,
+                    "lives": 0,
+                    "score": 0,
+                    "ready": false
+                }
+            ],
+            "events": [
+                {
+                    "t": "round",
+                    "round": 1,
+                    "wind": -5,
+                    "seq": 1
+                }
+            ],
             "terrain": [
                 325.1,
                 325.1,
@@ -734,86 +815,6 @@
                 309.3,
                 309.3,
                 309.2
-            ],
-            "tanks": [
-                {
-                    "seat": 0,
-                    "kind": "human",
-                    "name": "ABC",
-                    "x": 251,
-                    "y": 344.5,
-                    "angle": 62,
-                    "power": 55,
-                    "hp": 100,
-                    "maxHp": 100,
-                    "dirS": 1,
-                    "body": "tank",
-                    "menu": false
-                },
-                {
-                    "seat": 1,
-                    "kind": "ai",
-                    "name": "REAPER",
-                    "x": 426,
-                    "y": 372.2,
-                    "angle": 62,
-                    "power": 55,
-                    "hp": 60,
-                    "maxHp": 60,
-                    "dirS": -1,
-                    "body": null,
-                    "menu": false
-                }
-            ],
-            "seats": [
-                {
-                    "seat": 0,
-                    "human": true,
-                    "name": "ABC",
-                    "mode": "human",
-                    "bot": false,
-                    "lives": 3,
-                    "score": 0,
-                    "ready": false
-                },
-                {
-                    "seat": 1,
-                    "human": false,
-                    "name": "REAPER",
-                    "mode": "ai",
-                    "bot": false,
-                    "lives": 0,
-                    "score": 0,
-                    "ready": false
-                },
-                {
-                    "seat": 2,
-                    "human": false,
-                    "name": "WRAITH",
-                    "mode": "open",
-                    "bot": false,
-                    "lives": 0,
-                    "score": 0,
-                    "ready": false
-                },
-                {
-                    "seat": 3,
-                    "human": false,
-                    "name": "SPOTTER",
-                    "mode": "open",
-                    "bot": false,
-                    "lives": 0,
-                    "score": 0,
-                    "ready": false
-                }
-            ],
-            "events": [
-                {
-                    "t": "round",
-                    "round": 1,
-                    "wind": -5,
-                    "seq": 1
-                }
             ],
             "you": {
                 "seat": 0,

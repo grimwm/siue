@@ -100,7 +100,18 @@ export interface RoomSnapshot {
   turnLeft: number | null;
   /** Seconds before the shop closes; null outside the shop. */
   shopLeft: number | null;
-  terrain: number[];
+  /** The hills as heights, or absent in a delta snapshot: the asker sent
+   * `have=<terrainRev>` and holds the current revision already. Sent whenever
+   * the asker holds nothing, another revision, or asked for `full`. */
+  terrain?: number[];
+  /** The hills' revision; it rises whenever the ground changes (a crater, a
+   * new round). Always present, so a client can tell whether what it holds is
+   * current. */
+  terrainRev: number;
+  /** Present (true) when the asker's `since` is older than the oldest event
+   * the room still keeps, or newer than the room's own count: events were
+   * lost, so a replay cannot be built. The snapshot is then full. */
+  resync?: true;
   tanks: RoomTank[];
   seats: RoomSeat[];
   /** Events newer than the `since` the asker sent, oldest first. */
@@ -186,8 +197,11 @@ export type ActBody =
 export type BodyKind = 'tank' | 'hover' | 'walker' | 'buggy';
 
 /** The JSON body each POST action takes, beyond the `code`, `token` and
- * `csrf` that the client adds to every one. `since` (optional on every
- * action that answers with a room) trims the reply's events. */
+ * `csrf` that the client adds to every one. On every action that answers with
+ * a room the client also adds `since` (trims the reply's events), `have` (the
+ * terrainRev it holds, which lets the reply leave the hills out) and, to ask
+ * for the whole world, `full: true`; action=state takes the same three as
+ * query parameters. */
 export interface PostBodies {
   create: { initials: string; map: string; body: string };
   join: { code: string; initials: string; body: string };

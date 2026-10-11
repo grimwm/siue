@@ -27,10 +27,10 @@ import {
 } from './js/audio.js?v=ce8cdf6a6e';
 import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, CLOCK_SHOW_S,
-} from './js/net.js?v=a63c4607fa';
+} from './js/net.js?v=35baab622b';
 import { transition, runWar, warSpeed, WATCH_TURNS } from './js/flow.js?v=fb268dfd34';
 import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=9e4c05a2f0';
-import { createReplay } from './js/replay.js?v=9e2d32f609';
+import { createReplay } from './js/replay.js?v=3f9ccfd889';
 import { createRenderer, drawChassis } from './js/render.js?v=5cf54c957b';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 import { renderHelp } from './js/ui/help.js?v=7366b18437';
@@ -2360,6 +2360,8 @@ function netNext(want) {
 function netOnSnapshot(room, fresh, first) {
   if (first) {
     // First sync: earlier events are history. Log them, replay nothing.
+    // (A resync lands here too: events were lost, so nothing waiting is real.)
+    replay.clear(); MATCH.pendingRoom = null;
     netAdopt(room);
     for (const e of fresh) if (e.t !== 'shot' && e.t !== 'burst') netEvent(e);
     return;
@@ -2661,7 +2663,7 @@ if (typeof document.addEventListener === 'function') {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     clearTurnAlert();
-    if (net.on) netCatchUp();
+    if (net.on) { netCatchUp(); net.resync(); }
   });
 }
 /* Drive the replay; once nothing is left to play, the waiting room state

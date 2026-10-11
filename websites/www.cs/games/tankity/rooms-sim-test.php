@@ -993,5 +993,63 @@ $types = array_column($fire['body']['room']['events'] ?? [], 't');
 $check('protocol-fire-has-shot-and-hit', in_array('fire', $types, true) && in_array('shot', $types, true) && in_array('hit', $types, true),
     implode(',', $types));
 
+// Terrain revisions: the counter rises exactly when the hills change.
+$revRoom = $flatRoom([$tank(0, 'human', 100.0, 100), $tank(1, 'ai', 300.0, 500)]);
+$revRoom['terrainRev'] = 7;
+$revEvents = [];
+room_explode($revRoom, $revEvents, $revRoom['tanks'][0], 'shell', 200.0, 10.0, null); // bursts in the sky
+$check('rev-steady-when-nothing-is-carved', $revRoom['terrainRev'] === 7, 'rev=' . $revRoom['terrainRev']);
+room_explode($revRoom, $revEvents, $revRoom['tanks'][0], 'shell', 200.0, 400.0, null); // bursts on the ground
+$check('rev-bumps-on-a-crater', $revRoom['terrainRev'] === 8 && max($revRoom['terrain']) > 400.0, 'rev=' . $revRoom['terrainRev']);
+$legacy = $flatRoom([$tank(0, 'human', 100.0, 100)]);
+room_explode($legacy, $revEvents, $legacy['tanks'][0], 'shell', 200.0, 400.0, null);
+$check('rev-legacy-room-reads-as-1', $legacy['terrainRev'] === 2);
+$round = room_new('REV1', 'ABC');
+$round['seats'][0] = room_seat_human('ABC', 'tok', []);
+$round['seats'][1] = room_idle_seat(1, 'ai');
+$round['seats'][2] = room_idle_seat(2, 'open');
+$round['seats'][3] = room_idle_seat(3, 'open');
+room_seat_economy($round, 0);
+$before = $round['terrainRev'];
+room_start_round($round);
+$check('rev-bumps-on-a-new-round', $round['terrainRev'] === $before + 1);
+
+// Delta rules in the snapshot itself.
+$snapFull = room_snapshot($round, 0, 0);
+$snapHave = room_snapshot($round, 0, 0, $round['terrainRev']);
+$check('delta-snapshot-full-without-have', count($snapFull['terrain'] ?? []) === 720 && $snapFull['terrainRev'] === $round['terrainRev']);
+$check('delta-snapshot-omits-when-current', !array_key_exists('terrain', $snapHave) && $snapHave['terrainRev'] === $round['terrainRev']);
+$check('delta-snapshot-full-when-asked', count(room_snapshot($round, 0, 0, $round['terrainRev'], true)['terrain'] ?? []) === 720);
+$check('delta-snapshot-full-when-behind', count(room_snapshot($round, 0, 0, $round['terrainRev'] - 1)['terrain'] ?? []) === 720);
+$lobbyRoom = room_new('REV2', 'ABC');
+$check('delta-snapshot-lobby-has-no-hills-to-omit', room_snapshot($lobbyRoom, 0, 0, 1)['terrain'] === []);
+
+// Resync: events the room dropped are lost for good.
+$gap = $round;
+$gap['events'] = [];
+$gap['seq'] = 0;
+for ($i = 0; $i < ROOM_EVENT_KEEP + 30; $i++) {
+    room_emit($gap, ['t' => 'hit', 'seat' => 1, 'dmg' => 1, 'by' => 0, 'direct' => false]);
+}
+$oldest = $gap['events'][0]['seq'];
+$check('resync-fixture-dropped-events', $oldest === 31 && $gap['seq'] === ROOM_EVENT_KEEP + 30, "oldest=$oldest");
+$lost = room_snapshot($gap, 0, 5, $gap['terrainRev']);
+$check('resync-since-before-the-oldest-event', ($lost['resync'] ?? false) === true && count($lost['terrain'] ?? []) === 720 && count($lost['events']) === ROOM_EVENT_KEEP);
+$edge = room_snapshot($gap, 0, $oldest - 1, $gap['terrainRev']);
+$check('resync-not-when-nothing-was-missed', !isset($edge['resync']) && !array_key_exists('terrain', $edge) && count($edge['events']) === ROOM_EVENT_KEEP);
+$fresh = room_snapshot($gap, 0, $gap['seq'], $gap['terrainRev']);
+$check('resync-not-when-caught-up', !isset($fresh['resync']) && $fresh['events'] === []);
+$check('resync-since-ahead-of-the-room', (room_snapshot($gap, 0, $gap['seq'] + 1, $gap['terrainRev'])['resync'] ?? false) === true);
+$check('resync-not-on-the-first-sync', !isset(room_snapshot($gap, 0, 0, null)['resync']));
+
+// What a request says it holds, from a body or the query string.
+$check('want-from-body', room_want(['since' => '4', 'have' => 3, 'full' => true]) === ['since' => 4, 'have' => 3, 'full' => true]);
+$check('want-defaults', room_want([]) === ['since' => 0, 'have' => null, 'full' => false]);
+$_GET = ['since' => '9', 'have' => '12', 'full' => '1'];
+$check('want-from-query', room_want([]) === ['since' => 9, 'have' => 12, 'full' => true]);
+$_GET = ['full' => '0'];
+$check('want-full-zero-is-no', room_want([])['full'] === false);
+$_GET = [];
+
 echo $fail === 0 ? "SIM-OK\n" : "SIM-FAIL $fail\n";
 exit($fail === 0 ? 0 : 1);

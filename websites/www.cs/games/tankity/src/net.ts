@@ -128,6 +128,10 @@ export function planCatchUp(
   return { cut, fastNext: keep > 0 && queue.length - cut > 0 };
 }
 
+/** The POST actions whose reply is a room, which therefore take the delta
+ * fields (since, have, full). */
+const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready', 'body', 'map', 'seatmode']);
+
 /* ---------- the client ---------- */
 
 type Reply = { ok?: unknown; error?: unknown } & Record<string, unknown>;
@@ -140,6 +144,12 @@ export class RoomClient {
   csrf = '';
   /** The seq of the newest event seen. */
   since = 0;
+  /** The hills last received and their revision. Snapshots arrive without the
+   * hills when this is current (the delta protocol: the client sends
+   * `have=<terrainRev>`), and `apply` hands the page the complete room either
+   * way. Null while it holds none (the first sync of a match is always full). */
+  terrain: number[] | null = null;
+  terrainRev = 0;
   /** In a running match (polling, acting) rather than the lobby. */
   on = false;
   /** The first snapshot of the match has been taken. */
@@ -154,6 +164,12 @@ export class RoomClient {
   private readyWant: boolean | null = null;
   private readySending = false;
   private busy = false;
+  /** The next request asks for the whole world (`full=1`): set after trouble
+   * reaching the server and when a hidden tab comes back, cleared by the
+   * first answer that gets through. */
+  private needFull = false;
+  /** A full refetch ordered by an unusable delta is in flight. */
+  private refetching = false;
   private menuSent = false;
   private pollId: unknown = 0;
   private lobbyId: unknown = 0;
@@ -195,6 +211,7 @@ export class RoomClient {
   private down(message: string): Error {
     const e: Error & { roomDown?: boolean } = new Error(message);
     e.roomDown = true;
+    this.needFull = true;
     this.handlers.onReachable(false);
     return e;
   }
@@ -204,10 +221,13 @@ export class RoomClient {
    * 429 waits a beat and goes again, up to three times. Throws the server's
    * line on an error reply. */
   async post<A extends PostAction>(action: A, payload: PostBodies[A]): Promise<PostReplies[A]> {
+    const asksRoom = ROOM_ANSWERS.has(action);
     const send = () => this.fetchJson('rooms.php?action=' + encodeURIComponent(action), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': this.csrf || '' },
-      body: JSON.stringify(Object.assign({ code: this.code, token: this.token, csrf: this.csrf }, payload || {})),
+      body: JSON.stringify(Object.assign(
+        { code: this.code, token: this.token, csrf: this.csrf }, asksRoom ? this.holdings() : {}, payload || {},
+      )),
     });
     let { res, data } = await send();
     // 503 is a room busy past the server's lock wait: worth the same retry.
@@ -217,16 +237,38 @@ export class RoomClient {
     }
     if (!res.ok || !data.ok) throw new Error(String(data.error || STUMBLED));
     this.handlers.onReachable(true);
+    if (asksRoom) this.needFull = false;
     return data as unknown as PostReplies[A];
+  }
+
+  /** What this client tells the server it already holds, so the reply can be
+   * a delta: the event cursor, the hills' revision (only while it holds
+   * hills), and `full` when it wants the whole world. */
+  private holdings(): { since: number; have?: number; full?: true } {
+    const h: { since: number; have?: number; full?: true } = { since: this.since };
+    if (this.terrain && !this.needFull) h.have = this.terrainRev;
+    if (this.needFull) h.full = true;
+    return h;
+  }
+
+  /** The next request fetches everything and the room is fetched now (a
+   * hidden tab that came back: whatever it missed is not worth trusting a
+   * delta for). */
+  resync(): void {
+    this.needFull = true;
+    void this.refresh();
   }
 
   /** The room as this seat sees it (events newer than the cursor). */
   async getState(): Promise<RoomSnapshot> {
+    const h = this.holdings();
     const q = 'action=state&code=' + encodeURIComponent(this.code) +
-      '&token=' + encodeURIComponent(this.token) + '&since=' + this.since;
+      '&token=' + encodeURIComponent(this.token) + '&since=' + h.since +
+      (h.have !== undefined ? '&have=' + h.have : '') + (h.full ? '&full=1' : '');
     const { res, data } = await this.fetchJson('rooms.php?' + q, { headers: { Accept: 'application/json' } });
     if (!res.ok || !data.ok) throw new Error(String(data.error || STUMBLED));
     this.handlers.onReachable(true);
+    this.needFull = false;
     return (data as unknown as RoomReply).room;
   }
 
@@ -271,6 +313,11 @@ export class RoomClient {
   private forget(): void {
     this.code = ''; this.token = ''; this.csrf = ''; this.seat = -1; this.since = 0;
     this.seats = [];
+    this.dropTerrain();
+  }
+
+  private dropTerrain(): void {
+    this.terrain = null; this.terrainRev = 0; this.needFull = false;
   }
 
   /** Tells the server this seat is gone, so an emptied room frees its slot at
@@ -297,6 +344,7 @@ export class RoomClient {
     this.stopLobbyWatch();
     this.on = false; this.code = ''; this.seat = -1; this.token = ''; this.csrf = ''; this.since = 0;
     this.seats = []; this.synced = false;
+    this.dropTerrain();
   }
 
   /* ---- polling ---- */
@@ -307,6 +355,7 @@ export class RoomClient {
     this.on = true;
     this.since = since;
     this.synced = false;
+    this.dropTerrain();
     this.stopLobbyWatch();
     this.stopPolling();
     this.pollId = this.env.setInterval(() => { void this.refresh(); }, MATCH_POLL_MS);
@@ -344,13 +393,49 @@ export class RoomClient {
     if (this.lobbyId) { this.env.clearInterval(this.lobbyId); this.lobbyId = 0; }
   }
 
+  /** Settles the hills of a snapshot: a snapshot that carries them replaces
+   * what is held (unless it is an older revision than the one held, a reply
+   * that lost a race); one that omits them gets the held hills put back, so
+   * the page always sees a complete room. False when the snapshot omits hills
+   * this client does not hold at that revision: it cannot be used, and the
+   * whole world is fetched instead (once: a server that still omits the hills
+   * when asked for `full` is not looped on). */
+  private settleTerrain(room: RoomSnapshot): boolean {
+    const rev = typeof room.terrainRev === 'number' ? room.terrainRev : null;
+    if (Array.isArray(room.terrain)) {
+      if (!room.terrain.length) { this.dropTerrain(); return true; }
+      if (this.terrain && rev !== null && rev < this.terrainRev) {
+        room.terrain = this.terrain;
+      } else {
+        this.terrain = room.terrain;
+        this.terrainRev = rev === null ? 0 : rev;
+      }
+      return true;
+    }
+    if (rev === null) return true; // a server with no delta protocol: nothing to settle
+    if (this.terrain && rev <= this.terrainRev) {
+      room.terrain = this.terrain;
+      return true;
+    }
+    if (this.refetching) return true; // already asked for the whole world; take what came
+    this.needFull = true;
+    return false;
+  }
+
   /** Counts a snapshot's events past the cursor and hands both to the page.
-   * Ignored with no session. */
+   * Ignored with no session. A snapshot flagged `resync` lost events the
+   * client never saw: it is taken as a first sync (the log catches up, no
+   * replay is built). */
   apply(room: RoomSnapshot | null | undefined): void {
     if (!room || !this.code) return;
+    if (!this.settleTerrain(room)) {
+      this.refetching = true;
+      void this.refresh().finally(() => { this.refetching = false; });
+      return;
+    }
     const fresh = (room.events || []).filter(e => (e.seq || 0) > this.since);
     for (const e of fresh) this.since = Math.max(this.since, e.seq || 0);
-    const first = !this.synced;
+    const first = !this.synced || room.resync === true;
     this.synced = true;
     this.handlers.onSnapshot(room, fresh, first);
   }

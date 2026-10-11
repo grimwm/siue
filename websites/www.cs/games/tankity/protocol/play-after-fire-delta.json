@@ -1,0 +1,174 @@
+{
+    "about": "The same moment as a poll that holds the current hills (have = terrainRev) and has seen the round event (since = 1): terrain is left out, terrainRev names the revision, and only the later events ride along.",
+    "status": 200,
+    "body": {
+        "ok": true,
+        "room": {
+            "code": "FXT1",
+            "phase": "play",
+            "map": null,
+            "mapName": "Random hills",
+            "round": 1,
+            "wind": -5,
+            "turn": 0,
+            "turnLeft": 120,
+            "shopLeft": null,
+            "terrainRev": 3,
+            "tanks": [
+                {
+                    "seat": 0,
+                    "kind": "human",
+                    "name": "ABC",
+                    "x": 251,
+                    "y": 344.5,
+                    "angle": 20,
+                    "power": 45,
+                    "hp": 100,
+                    "maxHp": 100,
+                    "dirS": 1,
+                    "body": "tank",
+                    "menu": false
+                },
+                {
+                    "seat": 1,
+                    "kind": "ai",
+                    "name": "REAPER",
+                    "x": 415.1,
+                    "y": 369.9,
+                    "angle": 45,
+                    "power": 39,
+                    "hp": 14,
+                    "maxHp": 60,
+                    "dirS": -1,
+                    "body": null,
+                    "menu": false
+                }
+            ],
+            "seats": [
+                {
+                    "seat": 0,
+                    "human": true,
+                    "name": "ABC",
+                    "mode": "human",
+                    "bot": false,
+                    "lives": 3,
+                    "score": 92,
+                    "ready": false
+                },
+                {
+                    "seat": 1,
+                    "human": false,
+                    "name": "REAPER",
+                    "mode": "ai",
+                    "bot": false,
+                    "lives": 0,
+                    "score": 0,
+                    "ready": false
+                },
+                {
+                    "seat": 2,
+                    "human": false,
+                    "name": "WRAITH",
+                    "mode": "open",
+                    "bot": false,
+                    "lives": 0,
+                    "score": 0,
+                    "ready": false
+                },
+                {
+                    "seat": 3,
+                    "human": false,
+                    "name": "SPOTTER",
+                    "mode": "open",
+                    "bot": false,
+                    "lives": 0,
+                    "score": 0,
+                    "ready": false
+                }
+            ],
+            "events": [
+                {
+                    "t": "fire",
+                    "seat": 0,
+                    "w": "shell",
+                    "x": 251,
+                    "a": 20,
+                    "pw": 45,
+                    "at": 0,
+                    "seq": 2
+                },
+                {
+                    "t": "shot",
+                    "by": 0,
+                    "w": "shell",
+                    "x0": 269.8,
+                    "y0": 323.7,
+                    "x1": 422.4,
+                    "y1": 329.2,
+                    "t0": 0,
+                    "t1": 1.15,
+                    "r": 26,
+                    "p": "270,324 281,320 293,317 304,314 316,312 327,311 338,311 349,311 360,312 371,313 382,315 393,318 403,321 414,325 422,329",
+                    "at": 0,
+                    "seq": 3
+                },
+                {
+                    "t": "hit",
+                    "seat": 1,
+                    "dmg": 46,
+                    "by": 0,
+                    "direct": true,
+                    "at": 1.15,
+                    "seq": 4
+                },
+                {
+                    "t": "aifire",
+                    "seat": 1,
+                    "w": "shell",
+                    "x": 415.1,
+                    "a": 45,
+                    "pw": 39,
+                    "at": 0,
+                    "seq": 5
+                },
+                {
+                    "t": "shot",
+                    "by": 1,
+                    "w": "shell",
+                    "x0": 400.9,
+                    "y0": 341.8,
+                    "x1": 191.8,
+                    "y1": 342.8,
+                    "t0": 0,
+                    "t1": 1.983,
+                    "r": 26,
+                    "p": "401,342 393,334 385,327 377,321 369,316 361,311 352,307 344,303 335,300 327,298 318,297 310,296 301,296 292,296 283,297 274,299 265,301 256,304 247,308 237,313 228,318 219,323 209,330 199,337 192,343",
+                    "at": 0,
+                    "seq": 6
+                }
+            ],
+            "you": {
+                "seat": 0,
+                "ammo": {
+                    "shell": -1,
+                    "buck": 1,
+                    "mortar": 0,
+                    "rail": 0,
+                    "nuke": 0
+                },
+                "cash": 692,
+                "score": 92,
+                "lives": 3,
+                "fuel": 80,
+                "weapon": "shell",
+                "nextUp": 3000,
+                "shield": false,
+                "jammer": 0,
+                "bunker": 0,
+                "laststand": false,
+                "plate": 0
+            },
+            "csrf": "fixture-csrf"
+        }
+    }
+}

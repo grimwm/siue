@@ -3,3 +3,15 @@
 <FilesMatch "^\.">
     Require all denied
 </FilesMatch>
+
+# The host sends nothing compressed by default. Text assets (game.json alone
+# is 70 KB) go out gzipped to browsers that accept it. Images and audio are
+# compressed already and left alone, which is why this lists extensions
+# instead of compressing everything. A host without mod_deflate skips the
+# block. rooms.php compresses its own JSON replies; mod_deflate leaves a
+# response that already carries a Content-Encoding alone.
+<IfModule mod_deflate.c>
+    <FilesMatch "\.(json|js|mjs|css|html|svg|webmanifest)$">
+        SetOutputFilter DEFLATE
+    </FilesMatch>
+</IfModule>

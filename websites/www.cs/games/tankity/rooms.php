@@ -215,6 +215,8 @@ function room_registry_read(): array
 // until the pool runs dry and the whole site stalls. Short backoff, never a
 // sem_remove; false when the wait ran out (or the semaphore was removed). */
 const ROOM_LOCK_WAIT = 2.0;
+/* What room_registry_update answers when its lock wait ran out. */
+const ROOM_REGISTRY_BUSY = '__registry_busy__';
 function room_sem_take($sem, float $max = ROOM_LOCK_WAIT): bool
 {
     $deadline = microtime(true) + $max;
@@ -237,7 +239,9 @@ function room_registry_update(callable $fn)
 {
     $sem = @sem_get(room_registry_key(), 1);
     if ($sem === false || !room_sem_take($sem)) {
-        room_json_out(503, ['error' => 'the room server is busy; try again']);
+        // Busy: never exit from here. The caller decides, so a create that
+        // already allocated its segment can free it (no leak, no cap bypass).
+        return ROOM_REGISTRY_BUSY;
     }
     $id = @shm_attach(room_registry_key(), ROOM_REGISTRY_BYTES);
     $out = null;
@@ -392,7 +396,9 @@ function room_alloc(?callable $nextCode = null): ?array
 /* Registers a freshly written room, unless that would pass the cap: the
 // check and the add happen under the registry lock, so the cap is exact.
 // Entries whose segment is gone are dropped on the way. */
-function room_register(string $code, int $max): bool
+/* True when registered, false when the cap is reached, null when the registry
+// stayed busy past the lock wait. */
+function room_register(string $code, int $max): ?bool
 {
     $cutoff = time() - room_live_secs();
     $ok = room_registry_update(function (array $reg) use ($code, $max, $cutoff): array {
@@ -412,7 +418,7 @@ function room_register(string $code, int $max): bool
         $reg[$code] = ['created' => time()];
         return [$reg, true];
     });
-    return $ok === true;
+    return $ok === ROOM_REGISTRY_BUSY ? null : $ok === true;
 }
 /* Closes a room the caller holds: mark it closed and save, drop it from the
 // registry, then delete the segment and remove the semaphore. A request that
@@ -1979,8 +1985,13 @@ if ($action === 'create' && $method === 'POST') {
         room_json_out(500, ['error' => 'store write failed']);
     }
     // The exact cap check: two creates racing for the last place cannot both win.
-    if (!room_register($code, $max)) {
+    // Every failure frees the segment just allocated before answering.
+    $registered = room_register($code, $max);
+    if ($registered !== true) {
         room_discard($lock);
+        if ($registered === null) {
+            room_json_out(503, ['error' => 'the room server is busy; try again']);
+        }
         room_json_out(409, ['error' => "every room is taken ($max / $max). Try again later."]);
     }
     room_unlock($lock);

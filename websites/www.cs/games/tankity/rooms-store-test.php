@@ -177,6 +177,32 @@ $check('closed-room-gone', ($stateOf($gone)['error'] ?? '') === 'no such room');
 $check('closed-segment-removed', !$segExists($gone['code']));
 $check('closed-registry-entry-removed', !isset(room_registry_read()[$gone['code']]));
 $check('closed-semaphore-removed', $freeSem($gone['code']));
+// A create that finds the registry busy past the lock wait answers 503 and
+// frees the segment it already allocated: nothing leaks, no hidden room
+// slips past the cap.
+$roomSegs = function (): int {
+    $n = 0;
+    foreach (explode("\n", (string) shell_exec('ipcs -m 2>/dev/null')) as $line) {
+        $f = preg_split('/\s+/', trim($line));
+        if (count($f) >= 5 && (int) $f[4] === ROOM_SEG_BYTES) {
+            $n++;
+        }
+    }
+    return $n;
+};
+$regHold = proc_open(
+    [PHP_BINARY, '-r', 'define("TANKITY_ROOMS_LIB", true); require $argv[1] . "/rooms.php"; $s = sem_get(room_registry_key(), 1); sem_acquire($s); echo "LOCKED\n"; fflush(STDOUT); usleep(3500000); sem_release($s);', __DIR__],
+    [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']],
+    $regPipes, null, $env
+);
+$check('registry-held', trim((string) fgets($regPipes[1])) === 'LOCKED');
+$segsBefore = $roomSegs();
+$busyCreate = $post('create', ['initials' => 'bsy']);
+$check('busy-registry-create-answers-busy', str_contains((string) ($busyCreate['error'] ?? ''), 'busy'), json_encode($busyCreate));
+$check('busy-registry-create-leaks-nothing', $roomSegs() === $segsBefore, $segsBefore . ' -> ' . $roomSegs());
+fclose($regPipes[1]);
+proc_close($regHold);
+
 $again = $post('create', ['initials' => 'fff']);
 $check('closed-room-place-reusable', ($again['ok'] ?? false) === true && $segExists($again['code']));
 $rooms[1] = $again;

@@ -729,7 +729,21 @@ export function createRenderer(cv, deps) {
             c.fillStyle = '#fff';
             c.font = `bold ${Math.round(9 * view.textScale)}px sans-serif`;
             c.textAlign = 'center';
-            c.fillText(t.isPlayer ? 'TANK' : (ground ? String(t.name || t.id).toUpperCase() : t.id.toUpperCase()), t.x, barY - 4);
+            const label = t.isPlayer ? 'TANK' : (ground ? String(t.name || t.id).toUpperCase() : t.id.toUpperCase());
+            c.fillText(label, t.x, barY - 4);
+            // A player who left: a bot drives the unit now, and a tag says so.
+            if (t.bot) {
+                const lw = c.measureText(label).width;
+                const s = view.textScale;
+                c.font = `bold ${Math.round(7 * s)}px sans-serif`;
+                const tw = c.measureText('BOT').width + 6 * s;
+                const tx = t.x + lw / 2 + 4 * s, ty = barY - 4 - 9 * s;
+                c.fillStyle = '#7fdbff';
+                c.fillRect(tx, ty, tw, 10 * s);
+                c.fillStyle = '#04121c';
+                c.textAlign = 'left';
+                c.fillText('BOT', tx + 3 * s, ty + 8 * s);
+            }
             c.textAlign = 'left';
         }
         // Aim arm: a stub out of the shooter's barrel showing launch direction,

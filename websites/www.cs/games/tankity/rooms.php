@@ -1458,6 +1458,8 @@ function room_snapshot(array $room, ?int $seat, int $since): array
             'seat' => $idx, 'human' => $s['human'],
             'name' => $s['human'] ? $s['initials'] : $s['name'],
             'mode' => $s['human'] ? 'human' : ($s['mode'] ?? 'ai'),
+            // A player who left mid-match: a bot drives their unit now.
+            'bot' => !$s['human'] && !empty($s['bot']),
             'lives' => $s['lives'] ?? 0,
             'score' => $room['scores'][$idx] ?? 0,
             // Pressed Ready at the shop (always false elsewhere).
@@ -1623,7 +1625,8 @@ function room_leave(array &$room, int $seat): bool
         return true;
     }
     $name = strtoupper((string) ($room['seats'][$seat]['initials'] ?? 'AI'));
-    $room['seats'][$seat] = ['human' => false, 'name' => $name, 'initials' => $name, 'mode' => 'ai',
+    // A bot drives the seat from here; 'bot' marks the unit for everyone.
+    $room['seats'][$seat] = ['human' => false, 'name' => $name, 'initials' => $name, 'mode' => 'ai', 'bot' => true,
         'lives' => $room['seats'][$seat]['lives'] ?? 0];
     foreach ($room['tanks'] as &$t) {
         if ($t['seat'] === $seat) {

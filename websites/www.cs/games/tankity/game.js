@@ -31,7 +31,7 @@ import {
 import { transition } from './js/flow.js?v=782899f37b';
 import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=6bacfc394f';
 import { createReplay } from './js/replay.js?v=841f8c8eed';
-import { createRenderer, drawChassis } from './js/render.js?v=1e211c92ed';
+import { createRenderer, drawChassis } from './js/render.js?v=a2add098ba';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 import { renderHelp } from './js/ui/help.js?v=7366b18437';
 import { renderShop as drawShop } from './js/ui/shop.js?v=650582befc';
@@ -2369,6 +2369,7 @@ function netAdopt(room) {
       human: !ai,
       body: t.body || 'tank',
       menu: !!t.menu,
+      bot: !!(seat && seat.bot),
       // Keep the drawn aim where it was so the new one glides in.
       showA: was && !mine ? shownAngle(was) : undefined,
       showP: was && !mine ? shownPower(was) : undefined,

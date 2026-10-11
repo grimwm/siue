@@ -22,11 +22,12 @@ function deepFreeze(o) {
 
 /* A canvas context that accepts every call and every property, and counts the calls. */
 function stubContext() {
-  const calls = { n: 0, fills: 0 };
+  const calls = { n: 0, fills: 0, texts: [] };
   const ctx = new Proxy({}, {
     get(t, p) {
       if (p in t) return t[p];
-      return (...a) => { calls.n++; if (p === 'fill' || p === 'fillRect') calls.fills++; return ctx; };
+      if (p === 'measureText') return s => ({ width: String(s).length * 6 });
+      return (...a) => { calls.n++; if (p === 'fill' || p === 'fillRect') calls.fills++; if (p === 'fillText') calls.texts.push(a[0]); return ctx; };
     },
     set(t, p, v) { t[p] = v; return true; },
   });
@@ -61,6 +62,7 @@ const view = deepFreeze({
     tank('guest', 250, { human: true, body: 'buggy', menu: true, showA: 61.5 }),
     tank('wraith', 400, {}),
     tank('spotter', 500, {}),
+    tank('abc', 650, { name: 'abc', bot: true }),
     tank('reaper', 600, { hp: 0 }),
   ],
   turnUnit: null, online: true, aim: null,
@@ -85,6 +87,8 @@ const live = deepFreeze({ ...view, turnUnit: view.tanks[1], aim: { unit: view.ta
     r.frame(live);
   } catch (e) { threw = String(e); }
   check('frame-paints-a-frozen-view', !threw && calls.n > 200 && calls.fills > 20, threw || `calls=${calls.n}`);
+  // A player who left: the bot driving the unit is tagged, and only that unit.
+  check('bot-unit-is-tagged', calls.texts.includes('BOT') && calls.texts.filter(t => t === 'BOT').length === 2, calls.texts.join(','));
 }
 
 {

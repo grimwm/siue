@@ -35,7 +35,6 @@ import { createReplay } from './js/replay.js?v=3f9ccfd889';
 import { createRenderer, drawChassis } from './js/render.js?v=5cf54c957b';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 import { renderHelp } from './js/ui/help.js?v=7366b18437';
-import { renderMenu as drawMenu } from './js/ui/menu.js?v=6ebee3dc2d';
 import {
   createChatter, pick, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, FOE_FIRE, FOE_HIT, FOE_MISS, FOE_DYING, TANK_IDLE, FOE_IDLE,
 } from './js/chatter.js?v=48b9223047';
@@ -49,7 +48,8 @@ import { createScores } from './js/scores.js?v=8402272957';
 import { createMatch } from './js/match.js?v=57b9189a68';
 import { createRoom } from './js/room.js?v=a3374f3b19';
 import { createLobby } from './js/lobby.js?v=5aaa83b235';
-import { drawShellIcon as paintShellIcon, drawGearIcon as paintGearIcon, drawUnitIcon } from './js/ui/icons.js?v=b8eec86a1f';
+import { createMenu } from './js/menu.js?v=01ee148e37';
+import { drawShellIcon as paintShellIcon, drawGearIcon as paintGearIcon } from './js/ui/icons.js?v=b8eec86a1f';
 
 const $ = id => document.getElementById(id);
 
@@ -230,100 +230,6 @@ function togglePreview() {
   if (G.preview) closePreview();
   else openPreview(G.selected);
 }
-/* Ground units: every human (you, and the people in a room) picks a body.
-   Bodies are looks only; all share the turret pivot at (0, -12), so aim,
-   muzzle and shots are identical whichever one you drive. */
-const UNIT_BODIES = [
-  { key: 'tank', name: 'Tank' },
-  { key: 'hover', name: 'Hover' },
-  { key: 'walker', name: 'Walker' },
-  { key: 'buggy', name: 'Buggy' },
-];
-/* The unit picker in the Game menu: one button per body, each with a small
-   drawing of it. The choice is remembered and, in a room, shared. */
-function loadBody() {
-  try {
-    const b = window.localStorage.getItem('tankity-body');
-    if (UNIT_BODIES.some(u => u.key === b)) return b;
-  } catch (_) { /* storage off: default body */ }
-  return 'tank';
-}
-function chooseBody(key) {
-  if (!UNIT_BODIES.some(u => u.key === key)) return;
-  G.body = key;
-  try { window.localStorage.setItem('tankity-body', key); } catch (_) { /* fine */ }
-  const mine = net.on ? myTank() : (G.tanks || []).find(t => t.isPlayer);
-  if (mine) mine.body = key;
-  net.sendBody(key);
-  renderMenu();
-}
-/* Text size: a menu setting kept in this browser. It scales every panel
-   (they size in rem) and the name tags over the units. */
-const TEXT_SIZES = [
-  { key: 's', name: 'Small', scale: 0.9 },
-  { key: 'm', name: 'Normal', scale: 1 },
-  { key: 'l', name: 'Large', scale: 1.15 },
-  { key: 'xl', name: 'Huge', scale: 1.3 },
-];
-let TEXT_SIZE = 'm';
-function textScale() {
-  return (TEXT_SIZES.find(t => t.key === TEXT_SIZE) || TEXT_SIZES[1]).scale;
-}
-function loadTextSize() {
-  let key = 'm';
-  try { key = window.localStorage.getItem('tankity-text') || 'm'; } catch (_) { /* no storage: default */ }
-  applyTextSize(TEXT_SIZES.some(t => t.key === key) ? key : 'm');
-}
-function applyTextSize(key) {
-  TEXT_SIZE = key;
-  if (document.documentElement && document.documentElement.style) {
-    document.documentElement.style.fontSize = `${textScale() * 100}%`;
-  }
-  renderMenu();
-  placeLogBelowMenu();
-}
-function chooseTextSize(key) {
-  if (!TEXT_SIZES.some(t => t.key === key)) return;
-  try { window.localStorage.setItem('tankity-text', key); } catch (_) { /* fine */ }
-  applyTextSize(key);
-  sfx.play('click');
-}
-/* The game menu is a Preact component (src/ui/menu.tsx): it gets what it shows
-   (the unit, the text size, what is muted, whether a room runs) and reports
-   clicks. The seed box stays the page's own. */
-function renderMenu() {
-  const section = $('menu-overlay');
-  if (!section) return;
-  drawMenu(section, {
-    keyHint,
-    onClose: () => toggleOverlay('menu-overlay', 'btn-menu'),
-    onNewGame: () => { unlock(); sfx.play('click'); freshMatchFromSeedBox(); },
-    onSubmit: () => {
-      if (net.on) { netLeave(); return; }
-      sfx.play('click');
-      freshMatchFromSeedBox();
-    },
-    units: UNIT_BODIES,
-    unit: G.body,
-    drawUnit: drawUnitIcon,
-    onPickUnit: chooseBody,
-    sizes: TEXT_SIZES,
-    size: TEXT_SIZE,
-    onPickSize: chooseTextSize,
-    sound: !isSoundMuted(),
-    music: !isMusicMuted(),
-    fullscreen: !!document.fullscreenElement,
-    onSound: toggleSound,
-    onMusic: toggleMusic,
-    onFullscreen: toggleFullscreen,
-    onRandom: randomRun,
-    onRooms: openRooms,
-    onTutorial: () => { sfx.play('click'); tutorialOpen(); },
-    onScores: () => toggleOverlay('report-overlay', 'scores-open'),
-    inRoom: net.on,
-    onLeave: openLeaveVeil,
-  });
-}
 
 
 /* ---------- main loop ---------- */
@@ -472,7 +378,7 @@ const { HUD, paintHud, windText, renderHUD } = createHud({
 });
 /* The camera and the frame the canvas paints (src/view.ts). */
 const { updateCamera, shownAngle, shownPower, render, windGaugeTop } = createView({
-  G, $, tables, net, MATCH, replay, FX, fxSet, cur, textScale,
+  G, $, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
 /* The high scores (src/scores.ts). */
 const { SCORES, renderScoresOverlay, loadScores, savedCallsign, fileReport } = createScores({
@@ -528,8 +434,14 @@ const {
   netLeave, netRematch,
 } = createLobby({
   G, $, net, MATCH, HUD, END, SCORES, replay, sfx, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
-  closeOverlays, closePreview, endTutorial, freshMatchFromSeedBox, hideShop, paintHud, refreshNavHints, renderEndVeil, renderMenu,
+  closeOverlays, closePreview, endTutorial, freshMatchFromSeedBox, hideShop, paintHud, refreshNavHints, renderEndVeil,
+  renderMenu: () => renderMenu(),
   renderScoresOverlay, renderShop,
+});
+/* The game menu's settings (src/menu.ts). */
+const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
+  G, $, net, sfx, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, openRooms, placeLogBelowMenu,
+  randomRun, freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound, tutorialOpen,
 });
 function myTank() {
   for (const t of G.tanks) if (t.isPlayer) return t;

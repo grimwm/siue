@@ -28,9 +28,9 @@ import {
 import {
   RoomClient, prettyRoomError, inviteUrl, shouldCatchUp, CLOCK_SHOW_S,
 } from './js/net.js?v=c2776f37fa';
-import { transition } from './js/flow.js?v=782899f37b';
+import { transition, runWar, warSpeed, WATCH_TURNS } from './js/flow.js?v=fb268dfd34';
 import { PV_W, PV_H, PV_FOE_HP, createPreview, stepPreview } from './js/preview.js?v=6bacfc394f';
-import { createReplay } from './js/replay.js?v=841f8c8eed';
+import { createReplay } from './js/replay.js?v=2b454d2662';
 import { createRenderer, drawChassis } from './js/render.js?v=a2add098ba';
 import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
 import { renderHelp } from './js/ui/help.js?v=7366b18437';
@@ -464,6 +464,7 @@ function startSolo(seedStr) {
 }
 function newRound(bannerText, event) {
   genTerrain();
+  G.watchTurns = 0; // drone-only turns since the player fell (see WATCH_TURNS)
   G.wind = Math.round((G.rng() * 2 - 1) * 8);
   // Spread four combatants across the hills; every round, anyone may land
   // anywhere, never on top of each other.
@@ -672,29 +673,36 @@ function anyTankFalling() {
   return simAnyTankFalling(G);
 }
 function settle() {
-  if (me().hp <= 0) {
-    if (G.demo) {
+  if (G.demo) {
+    if (me().hp <= 0) {
       say('Demo tank wrecked. Rolling a fresh one.', 'info');
       newRound('Back in! Same hills, fresh tank.', 'tankLost');
       return;
     }
+    if (!foesAlive().length) {
+      G.round += 1;
+      newRound(undefined, 'roundWon');
+      return;
+    }
+  } else if (alive().length > 1 && !(me().hp <= 0 && ++G.watchTurns >= WATCH_TURNS)) {
+    // A round ends only with one unit left standing: with the player's tank
+    // wrecked, the drones fight on while the player watches (for at most
+    // WATCH_TURNS turns, so a stalemate cannot run forever).
+  } else if (me().hp <= 0) {
+    // The last unit is a drone (or the last two fell together): the round
+    // goes to the battery, the player loses a life, and the shop opens.
     G.lives -= 1;
     if (G.lives <= 0) {
       G.lives = 0;
       endMatch(false, 'The tank is scrap across these hills. The battery keeps the high ground.');
     } else {
-      say(`Tank wrecked! ${G.lives} ${G.lives === 1 ? 'life' : 'lives'} left. Same round, fresh hills.`, 'bad');
-      talk('tank', 'I will be back... right now!', true);
-      newRound('Back in! Same hills, fresh tank.', 'tankLost');
+      say(`Round ${G.round} goes to the battery. ${G.lives} ${G.lives === 1 ? 'life' : 'lives'} left. Restock and roll again.`, 'bad');
+      talk('tank', 'I will be back... after shopping!', true);
+      advance('tankLost');
+      startBanner(`Round ${G.round} lost. Restock and roll again.`, openShop);
     }
     return;
-  }
-  if (!foesAlive().length) {
-    if (G.demo) {
-      G.round += 1;
-      newRound(undefined, 'roundWon');
-      return;
-    }
+  } else {
     G.roundsWon += 1;
     const bonus = TUNE.roundWinScore + G.round * 150;
     const prize = TUNE.roundWinCash + G.round * 100;
@@ -1658,6 +1666,30 @@ function decayFx(dt) {
   }
   G.parts = G.parts.filter(q => q.life > 0);
 }
+/* One step of the war between turns: a drone aims and fires, shells fly, the
+   dust settles. */
+function stepWar(dt) {
+  if (G.phase === 'think') {
+    const t = cur();
+    if (!t.aim) aiPlanAim(t);
+    G.thinkT -= dt;
+    if (aiStepAim(t, dt) && G.thinkT <= 0) aiFire(t);
+  } else if (G.phase === 'fly' || G.phase === 'settle') {
+    // A volley resolves pellet by pellet: explosions flip us to settle, but
+    // stepping continues until every shell has landed or fizzled.
+    if (G.shells.length) stepShells(dt);
+    if (G.phase === 'fly' && !G.shells.length) {
+      say('Shot fizzles out over the hills.', 'info');
+      talk('tank', pick(TANK_MISS));
+      G.settleT = 0.6;
+      advance('shellsLanded');
+    } else if (G.phase === 'settle' && !G.shells.length) {
+      G.settleT -= dt;
+      // The turn waits for every tank to finish falling into its crater.
+      if (G.settleT <= 0 && !anyTankFalling()) settle();
+    }
+  }
+}
 function frame(ts) {
   requestAnimationFrame(frame);
   // The music watchdog re-pins a wedged scheduler to the live clock; it never
@@ -1743,25 +1775,13 @@ function frame(ts) {
         }
       }
     }
-  } else if (G.phase === 'think') {
-    const t = cur();
-    if (!t.aim) aiPlanAim(t);
-    G.thinkT -= dt;
-    if (aiStepAim(t, dt) && G.thinkT <= 0) aiFire(t);
-  } else if (G.phase === 'fly' || G.phase === 'settle') {
-    // A volley resolves pellet by pellet: explosions flip us to settle, but
-    // stepping continues until every shell has landed or fizzled.
-    if (G.shells.length) stepShells(dt);
-    if (G.phase === 'fly' && !G.shells.length) {
-      say('Shot fizzles out over the hills.', 'info');
-      talk('tank', pick(TANK_MISS));
-      G.settleT = 0.6;
-      advance('shellsLanded');
-    } else if (G.phase === 'settle' && !G.shells.length) {
-      G.settleT -= dt;
-      // The turn waits for every tank to finish falling into its crater.
-      if (G.settleT <= 0 && !anyTankFalling()) settle();
-    }
+  } else if (G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle') {
+    // With the player's tank wrecked the drones play on at triple speed.
+    runWar(dt, warSpeed(me().hp > 0, G.demo), (d, i) => {
+      if (i > 0) fallTanks(d);
+      stepWar(d);
+      return !G.over && (G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle');
+    });
   }
   updateCamera(dt);
   render();
@@ -2511,13 +2531,15 @@ function netEvent(e) {
     return;
   }
   if (e.t === 'roundwin') {
-    sfx.play('win');
-    say(`Round ${e.round} cleared. Winnings paid. Spend them.`, 'good');
+    if (e.seat === net.seat) {
+      sfx.play('win');
+      say(`You take round ${e.round}. Winnings paid. Spend them.`, 'good');
+    } else say(`${seatName(e.seat)} takes round ${e.round}.`, 'info');
     return;
   }
   if (e.t === 'roundlost') {
     sfx.play('lose');
-    say(`Round ${e.round} goes to the battery. A life gone; restock and roll again.`, 'bad');
+    say(`Round ${e.round} goes to the battery. Every wrecked player loses a life; restock and roll again.`, 'bad');
     return;
   }
   if (e.t === 'eliminated') {

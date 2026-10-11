@@ -8,11 +8,15 @@ import { local } from './fx-helpers.mjs';
    tank, until the veil opens. Six mortars rarely suffice (a lob can miss), so
    the loop goes on with the free shell. Each lob waits on the HUD for our next turn, never
    on a timer; the page clock is driven by hand (page.clock.runFor) so the
-   drones' turns play out in a blink instead of seconds. */
+   drones' turns play out in a blink instead of seconds. When our tank falls
+   the drones fight on (at triple speed) until one is left; the lost round then
+   opens the shop, and the loop starts the next round from it. */
 async function loseMatch(page) {
   const veil = page.locator('#end-veil');
   const aiming = async () => {
     await page.clock.runFor(4000);
+    // A lost round goes through the shop, after the drones have fought it out.
+    if (await page.locator('#shop-veil').isVisible()) await page.click('#shop-next');
     return (await veil.isVisible()) || /Aim/.test(await hud(page, 'hud-turn'));
   };
   for (let shot = 0; shot < 30 && await veil.isHidden(); shot++) {

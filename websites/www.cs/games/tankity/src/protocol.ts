@@ -116,8 +116,10 @@ export interface RoomSnapshot {
 interface EventBase { seq: number; at?: number }
 
 export interface RoundEvent extends EventBase { t: 'round'; round: number; wind: number }
-export interface RoundWinEvent extends EventBase { t: 'roundwin'; round: number }
-/** Every human was wrecked: a life gone each, and the shop before the next round. */
+/** A human is the last unit standing: `seat` is theirs, and only they are paid. */
+export interface RoundWinEvent extends EventBase { t: 'roundwin'; round: number; seat: number }
+/** The last unit standing is a drone, or nobody is: no winnings. Either way every
+ * wrecked human lost a life, and the shop opens before the next round. */
 export interface RoundLostEvent extends EventBase { t: 'roundlost'; round: number }
 export interface MatchOverEvent extends EventBase { t: 'matchover' }
 export interface EliminatedEvent extends EventBase { t: 'eliminated'; seat: number }
@@ -133,6 +135,9 @@ export interface LeftEvent extends EventBase { t: 'left'; seat: number; name: st
  * stood at the shot, for the replay to ease to. */
 interface VolleyOpener<T extends string> extends EventBase {
   t: T; seat: number; w: string; x: number; a: number; pw: number;
+  /** Fired with no human left standing: the drones fight on while the players
+   * watch, and the replay plays the volley at triple speed. */
+  watch?: boolean;
 }
 export type FireEvent = VolleyOpener<'fire'>;
 export type AiFireEvent = VolleyOpener<'aifire'>;

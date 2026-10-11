@@ -916,6 +916,66 @@ function lobbyRoom() {
   check('battery-answers', /(is aiming…|fires )/.test(midLog));
   check('dialogue-shown', dlg.length > 0, dlg);
   check('log-alive', els['log'].children.length > 5, `lines=${els['log'].children.length}`);
+  // Solo: the player lobs shells straight up onto their own tank. A round ends
+  // only with one unit standing, so after the wreck the drones fight on (the
+  // log keeps showing their shots) until one is left, the round goes to the
+  // battery, a life is gone, and the shop opens before the next round. A match
+  // is replayed until the tank falls with at least two drones still standing.
+  {
+    let verdict = null;
+    const droneKills = ls => ls.filter(l => /wrecks? \w+! \(\+/.test(l)).length;
+    for (let attempt = 0; attempt < 12 && !verdict; attempt++) {
+      els['seed-input'].value = 'lob-' + attempt; // each attempt deals different hills
+      TAP('global', 'new'); frames(120);
+      if (els['shop-veil'].hidden === false) { click(els['shop-next']); frames(120); }
+      // The log keeps only its newest lines, so collect them as they arrive.
+      const all = [];
+      let tail = els['log'].children.map(li => li.textContent);
+      const lines = () => {
+        const now = els['log'].children.map(li => li.textContent);
+        let at = 0;
+        for (let n = Math.min(tail.length, now.length); n > 0; n--) {
+          if (tail.slice(-n).join('\n') === now.slice(0, n).join('\n')) { at = n; break; }
+        }
+        all.push(...now.slice(at));
+        tail = now;
+        return all;
+      };
+      const angleNow = () => parseInt(els['hud-angle'].textContent, 10);
+      let lobs = 0;
+      for (let g = 0; g < 4000 && !lines().some(l => /goes to the battery/.test(l)); g++) {
+        if (/YOU\. Aim!/.test(els['hud-turn'].textContent) && lobs < 60) {
+          for (let k = 0; k < 200 && Math.abs(angleNow() - 90) > 2; k++) {
+            const key = angleNow() < 90 ? 'barrelLeft' : 'barrelRight';
+            const before = angleNow();
+            KD('aim', key); frames(2); KU('aim', key);
+            if (k === 5 && Math.abs(angleNow() - 90) > Math.abs(before - 90)) {
+              const other = key === 'barrelLeft' ? 'barrelRight' : 'barrelLeft';
+              KD('aim', other); frames(20); KU('aim', other);
+            }
+          }
+          KD('aim', 'powerDown'); frames(120); KU('aim', 'powerDown');
+          TAP('global', 'fire'); lobs++;
+        }
+        frames(30);
+      }
+      const log = lines();
+      const scrap = log.findIndex(l => /Your tank is scrap metal/.test(l));
+      const left = scrap < 0 ? 0 : 3 - droneKills(log.slice(0, scrap));
+      if (scrap >= 0 && left >= 2) verdict = { log, scrap, left, lobs };
+    }
+    check('solo-self-lob-wrecks-the-tank-with-drones-standing', verdict !== null);
+    if (verdict) {
+      const { log, scrap, left } = verdict;
+      const after = log.slice(scrap + 1);
+      check('solo-drones-fight-on', after.some(l => / fires /.test(l)), after.join(' | '));
+      check('solo-drones-fight-to-one', droneKills(after) === left - 1, `left=${left} kills=${droneKills(after)}`);
+      check('solo-round-ends-after-the-last-wreck', /goes to the battery.*2 lives left/.test(after[after.length - 1] || ''), after.slice(-2).join(' | '));
+      frames(600); // the name card runs on sim time, then the shop opens
+      check('solo-lost-round-opens-the-shop', els['shop-veil'].hidden === false);
+      check('solo-lost-round-costs-a-life', /^♥♥$/.test(els['hud-lives'].textContent), els['hud-lives'].textContent);
+    }
+  }
   // The stub only knows elements the game asked for; ask for the lobby ones.
   for (const id of ['host-initials', 'host-form', 'lobby-status', 'lobby-code',
     'lobby-room', 'lobby-seats', 'lobby-start']) void document.getElementById(id);

@@ -41,3 +41,29 @@ export const FLOW = {
 export function transition(phase, event) {
     return FLOW[event]?.[phase] ?? null;
 }
+/** Once the player's tank is wrecked the drones fight on while the player
+ * watches, at this multiple of normal speed (rooms.php ROOM_DRONE_SPEED and
+ * src/replay.ts FAST_SPEED play the same 3 in a room). */
+export const WATCH_SPEED = 3;
+/** Drones left alone can miss each other forever: after this many drone-only
+ * turns the round ends anyway, as the battery's (rooms.php ROOM_WATCH_TURNS). */
+export const WATCH_TURNS = 40;
+/** How many sim steps one frame runs: normal while the player's tank stands
+ * (and in the demo, which has no player to wait for), WATCH_SPEED once it has
+ * fallen. */
+export function warSpeed(playerAlive, demo) {
+    return demo || playerAlive ? 1 : WATCH_SPEED;
+}
+/** Run one frame's war: `speed` sub-steps of `dt` each (so shells and aim
+ * moves keep their step size rather than tunnelling), stopping early when a
+ * step answers false because the phase left think/fly/settle. Returns the
+ * steps run. `step` gets the sub-step's dt and its index. */
+export function runWar(dt, speed, step) {
+    let n = 0;
+    for (let i = 0; i < speed; i++) {
+        n++;
+        if (!step(dt, i))
+            break;
+    }
+    return n;
+}

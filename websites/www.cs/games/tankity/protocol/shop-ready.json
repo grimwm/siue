@@ -858,6 +858,7 @@
                 {
                     "t": "roundwin",
                     "round": 1,
+                    "seat": 0,
                     "seq": 6
                 }
             ],

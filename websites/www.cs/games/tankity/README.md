@@ -16,9 +16,9 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | `src/sim.ts` | The game math in TypeScript: RNG, terrain, flight, hit tests, blasts, the drone's aim. Pure: state in, what happened out; no page, sound or particles |
 | `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes. It never touches the page |
 | `src/net.ts` | The room client: transport (one fetcher, the 429 retry), the session, polling, the act/buy/ready/leave senders, the turn and shop clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers and the clock are passed in |
-| `src/replay.ts` | The room volley replay: the queue of events waiting to play and the volley on screen. Eases the shooter's barrel, flies each shell along the path the server recorded (positions and velocities for the renderer), lands blasts and hits when the events say, and plays a volley kept back by a catch-up at triple speed. Sound, particles, craters, armor and log lines happen through callbacks; it never touches the page |
+| `src/replay.ts` | The room volley replay: the queue of events waiting to play and the volley on screen. Eases the shooter's barrel, flies each shell along the path the server recorded (positions and velocities for the renderer), lands blasts and hits when the events say, and plays a volley kept back by a catch-up, or fired by a drone with no human standing (`watch`), at triple speed (`FAST_SPEED`). Sound, particles, craters, armor and log lines happen through callbacks; it never touches the page |
 | `src/preview.ts` | The firing-range preview simulation: a fixed dummy, the solver that aims at it with the war's own ballistics, the shell loop (seeker, cluster, pierce, proximity), the damage tally and the result timing, on its own small field. Weapons, effects and the result line are passed in; it never touches the page |
-| `src/flow.ts` | The solo match flow: the `Phase` union (`banner`, `shop`, `aim`, `think`, `fly`, `settle`, `over`), the events that move between them and one table, `FLOW`, with `transition(phase, event)` returning the next phase or `null` for an illegal move. `game.js` stores the result in `G.phase`; room matches take their phase from the server and skip it. Pure; it never touches the page |
+| `src/flow.ts` | The solo match flow: the `Phase` union (`banner`, `shop`, `aim`, `think`, `fly`, `settle`, `over`), the events that move between them and one table, `FLOW`, with `transition(phase, event)` returning the next phase or `null` for an illegal move. `game.js` stores the result in `G.phase`; room matches take their phase from the server and skip it. It also holds the solo watch speed (`WATCH_SPEED`, `warSpeed`, `runWar`). Pure; it never touches the page |
 | `src/render.ts` | The battlefield on the canvas: sky and moon, clouds, hills, the units and their bodies, aim arm, blasts, shells, sparks, the wind gauge, the on-canvas turn clock and the firing-range preview. Reads a `BattleView` that `game.js` builds each frame and paints it; it never changes game state |
 | `src/protocol.ts` | The room wire protocol as types: replies, the room snapshot, the discriminated union of events, and each action's request body. Types only, so it has no `js/` file |
 | `src/protocol-fixtures.check.ts`, `src/tsconfig.check.json` | Type-check only, never emitted: assigns every `protocol/*.json` to its type (see Protocol fixtures) |
@@ -117,6 +117,32 @@ php tools/install-files.php      # after the last edit to any served file
   leavers and eliminated players never block. Snapshots carry `shopLeft` and
   `seats[].ready`; the client shows the countdown and how many are ready.
   Solo play has no shop clock.
+- How a round ends (rooms and solo alike): only when one unit is left
+  standing, humans and drones counted together (or none, when the last two fall
+  together). Two or more humans fight on after the last drone is wrecked; every
+  human wrecked, the drones fight on while the players watch. Every human whose
+  tank was wrecked loses a life when the round ends; a human who survives to be
+  the last unit loses none. At 0 lives a human is eliminated (`eliminated`);
+  with no human left on a life the match is over (`matchover`). Only a human
+  who is the last unit standing is paid (the round bonus and prize), reported
+  as `roundwin` with that player's `seat`; a drone survivor, or nobody, is
+  `roundlost`. Every round starts from the shop, won or lost, and a room closes
+  only when every human has left it. Solo follows the same rules for the one
+  player: the round ends when one tank remains, a lost round costs a life and
+  opens the shop (the next round has the next number), and the last life ends
+  the match.
+- Speed when nobody is playing: once no human is standing, the drones play at
+  3x. In a room the server advances ONE drone turn per poll, and only after the
+  previous volley has had time to play (its flight time plus a beat, at least
+  `ROOM_DRONE_PACE_MIN` seconds, all divided by `ROOM_DRONE_SPEED` = 3), so a
+  drone-only battle is never run inline in one request and the event buffer
+  (`ROOM_EVENT_KEEP`) cannot overflow between polls. Those volleys' opening
+  events carry `watch: true`, and the replay plays them at `FAST_SPEED` (3, the
+  same speed a hidden tab's catch-up uses; catch-up itself is unchanged). The
+  volley that fells the last human plays at normal speed. Solo does the same
+  client-side: with the player's tank wrecked, `warSpeed`/`runWar` in
+  `src/flow.ts` (`WATCH_SPEED` = 3) run three sub-steps per frame (aim, think
+  delay, shell flight, settle) until one tank remains; the demo never speeds up.
 - Spawns are random, at least 110 px apart, and units never end a move within
   44 px of another. Each tank faces the middle; barrel keys swing toward the
   side pressed.
@@ -328,18 +354,18 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
 | `node tools/ts-build.mjs --check`              | `js/` is exactly what `src/` compiles to, `src/` type-checks, and every `protocol/*.json` fits its type in `protocol.ts` (run `npm ci` first) |
 | `node tools/vendor.mjs --check`, `node vendor-test.js` | `vendor/preact/` is byte-for-byte what the pinned Preact in `node_modules` ships (pin, lockfile and install agree); the check's own failure cases |
 | `node ui-test.js`                              | The Preact overlays (`js/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the scores, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
-| `node smoke-test.js`                           | The shipped client (`game.js` imported as a module) in a stub DOM (loads `fx.js` first), driven by the `game.json` key table and the `protocol/` fixtures; also checks every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps |
+| `node smoke-test.js`                           | The shipped client (`game.js` imported as a module) in a stub DOM (loads `fx.js` first), driven by the `game.json` key table and the `protocol/` fixtures; also checks every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps; a solo player who wrecks their own tank sees the drones fight on to one and the lost round open the shop |
 | `php config-test.php`                          | `.config.yaml` precedence                                                                  |
-| `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; `room_snapshot` shapes against `protocol/` |
+| `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; one unit left standing ends a round (free-for-all, drones fighting on, lives, winnings, `roundwin` seat), the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/` |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (needs SysV; run inside the PHP container)                 |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `node audio-test.js`                            | `js/audio.js` imports without a browser; the loop-point trim and the round-to-track mapping are right |
 | `node render-test.js`                           | `js/render.js` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, and rebuilds the sky only when the match key changes |
 | `node input-test.js`                            | `js/input.js` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, ESC, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
 | `node net-test.js`                              | `js/net.js` against a fake server and timers: the 429 retry, Ready's ordering under rapid toggles, polling, the leave beacon, the clocks, the hidden-tab catch-up plan |
-| `node replay-test.js`                           | `js/replay.js` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, and the catch-up plan with the kept volley at 3x |
+| `node replay-test.js`                           | `js/replay.js` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, and a `watch` volley at 3x for that volley only |
 | `node preview-test.js`                          | `js/preview.js` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |
-| `node flow-test.js`                             | `js/flow.js`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost tank and the match-over phase |
+| `node flow-test.js`                             | `js/flow.js`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
 | `node protocol-test.js`                         | `src/protocol.ts` against the server: the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events `game.js` handles |
 | `node sim-vectors-test.js`                     | `js/sim.js` agrees with `rooms.php` on every shared sim vector (see Sim vectors)              |
 | `php rooms-test.php`                           | The room shelf over its own `php -S` (needs SysV; run inside the PHP container)            |

@@ -135,6 +135,17 @@ Install opens the game's own page with `?install`, where the steps open. Share
 uses Web Share, then the clipboard ("Link copied"), then a selectable field; a
 cancelled share sheet is no error.
 
+`ui/install-bar.tsx` draws it: `#install-btn` (`kit-install-asked` when
+highlighted), `#share-btn`, `#share-status` ("Link copied"), `#share-url` (the
+address to copy by hand) and the steps dialog `#install-steps` on the kit's
+`Dialog` (focus moves in and back; Escape closes it). `mountInstallBar(root,
+setup, env)` wires it to the browser and adds its stylesheet once, first in
+`<head>`; a page restyles it through `--kit-install-accent` or its own rules.
+Each page game builds `install-page.ts` as `dist/install.js` (an entry in its
+`build.json`): the site's `/play/<id>/` page loads it to fill `#play-install`,
+and the game's own page loads it to show a corner bar when the address has
+`?install`.
+
 ## Tests (`test/`)
 
 Unit tests are `*.test.mjs` files run with `node --test`. They import

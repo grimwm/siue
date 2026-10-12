@@ -1,4 +1,7 @@
 {
   "programs": ["tsconfig.json", "src/tsconfig.dom.json"],
-  "entries": [{ "in": "src/main.ts", "out": "main", "format": "esm" }]
+  "entries": [
+    { "in": "src/main.ts", "out": "main", "format": "esm" },
+    { "in": "../_kit/install-page.ts", "out": "install", "format": "iife" }
+  ]
 }

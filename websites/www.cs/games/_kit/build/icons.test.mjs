@@ -62,3 +62,9 @@ test('writeIcons renders a game folder\'s six icons from tools/icon.svg', () => 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('install-core.php checks exactly the icons this renders', () => {
+  const php = readFileSync(join(import.meta.dirname, '..', 'php', 'install-core.php'), 'utf8');
+  const listed = [...php.matchAll(/\['file' => '([^']+)', 'size' => (\d+)/g)].map(m => [m[1], Number(m[2])]);
+  assert.deepEqual(listed, ICONS.map(i => [i.file, i.size]));
+});

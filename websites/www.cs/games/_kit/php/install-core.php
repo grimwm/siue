@@ -11,6 +11,18 @@ const INSTALL_DEFAULT_COLOR = '#0c0e12';
 
 /* Registers the page's service worker; harmless where service workers do
    not exist (plain http, file://, a test's stub DOM). */
+/** Every install icon (rendered by games/_kit/build/icons.mjs): file, size and
+ *  purpose. `apple` is the home-screen icon iOS reads from the page; the rest
+ *  go in the manifest. */
+const INSTALL_ICONS = [
+    ['file' => 'icon-192.png', 'size' => 192, 'purpose' => 'any'],
+    ['file' => 'icon-512.png', 'size' => 512, 'purpose' => 'any'],
+    ['file' => 'icon-maskable-192.png', 'size' => 192, 'purpose' => 'maskable'],
+    ['file' => 'icon-maskable-512.png', 'size' => 512, 'purpose' => 'maskable'],
+    ['file' => 'icon-monochrome-512.png', 'size' => 512, 'purpose' => 'monochrome'],
+    ['file' => 'icon-apple-180.png', 'size' => 180, 'purpose' => 'apple'],
+];
+
 const INSTALL_SW_REGISTER = "<script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>";
 
 function install_esc(string $s): string
@@ -146,7 +158,7 @@ function install_block(array $card, string $pad): string
         INSTALL_BEGIN,
         '<meta name="theme-color" content="' . install_esc($card['theme_color']) . '">',
         '<link rel="manifest" href="manifest.webmanifest">',
-        '<link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">',
+        '<link rel="apple-touch-icon" sizes="180x180" href="icon-apple-180.png">',
         '<meta name="mobile-web-app-capable" content="yes">',
         '<meta name="apple-mobile-web-app-capable" content="yes">',
         '<meta name="apple-mobile-web-app-title" content="' . install_esc($card['short_name']) . '">',
@@ -178,17 +190,18 @@ function install_apply(string $html, string $block): ?string
 function install_icon_problems(string $dir): array
 {
     $problems = [];
-    foreach ([192, 512] as $n) {
-        $info = @getimagesize("$dir/icon-$n.png");
+    foreach (INSTALL_ICONS as $icon) {
+        $n = $icon['size'];
+        $info = @getimagesize("$dir/{$icon['file']}");
         if ($info === false || $info[2] !== IMAGETYPE_PNG || $info[0] !== $n || $info[1] !== $n) {
-            $problems[] = "icon-$n.png must be a {$n}x$n PNG";
+            $problems[] = "{$icon['file']} must be a {$n}x$n PNG";
         }
     }
     return $problems;
 }
 
 /** The manifest JSON. Every URL is relative, so the game runs from whatever
- *  path serves it. A `start` game lives on the site page, so it starts there. */
+ *  path serves it. A `start` game runs on the site page, so it starts there, with its scope narrowed to that page: an installed app stays in the game. */
 function install_manifest(array $card, string $id): string
 {
     $start = isset($card['start']);
@@ -197,16 +210,17 @@ function install_manifest(array $card, string $id): string
         'short_name' => $card['short_name'],
         'description' => $card['description'],
         'lang' => 'en',
-        'start_url' => $start ? '../../?game=' . rawurlencode($id) : ($card['play'] === 'index.html' ? './' : $card['play']),
-        'scope' => $start ? '../../' : './',
+        'start_url' => $start ? '../../index.html?game=' . rawurlencode($id) . '&app=1' : ($card['play'] === 'index.html' ? './' : $card['play']),
+        'scope' => $start ? '../../index.html' : './',
+        'display_override' => ['fullscreen', 'standalone'],
         'display' => 'standalone',
         'background_color' => $card['background_color'],
         'theme_color' => $card['theme_color'],
         'categories' => ['games'],
-        'icons' => [
-            ['src' => 'icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
-            ['src' => 'icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'],
-        ],
+        'icons' => array_values(array_map(
+            fn(array $i): array => ['src' => $i['file'], 'sizes' => "{$i['size']}x{$i['size']}", 'type' => 'image/png', 'purpose' => $i['purpose']],
+            array_filter(INSTALL_ICONS, fn(array $i): bool => $i['purpose'] !== 'apple')
+        )),
     ];
     return json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
 }

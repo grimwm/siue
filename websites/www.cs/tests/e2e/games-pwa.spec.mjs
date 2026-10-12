@@ -22,7 +22,7 @@ for (const id of GAMES) {
     const { html, url } = await manifestOf(request, baseURL, id);
     expect(url, 'the page links a manifest').toBeTruthy();
     expect(html).toMatch(/<meta name="theme-color" content="#[0-9a-f]{3,6}">/);
-    expect(html).toMatch(/<link rel="apple-touch-icon" [^>]*href="[^"]*icon-192\.png"/);
+    expect(html).toMatch(/<link rel="apple-touch-icon" sizes="180x180" href="[^"]*icon-apple-180\.png"/);
     expect(html).toContain('<meta name="apple-mobile-web-app-capable" content="yes">');
 
     const res = await request.get(url);
@@ -32,6 +32,7 @@ for (const id of GAMES) {
       expect(m[key], key).toBeTruthy();
     }
     expect(m.display).toBe('standalone');
+    expect(m.display_override).toEqual(['fullscreen', 'standalone']);
 
     // start_url must lie within scope, on this origin.
     const start = new URL(m.start_url, url);
@@ -40,12 +41,16 @@ for (const id of GAMES) {
     expect(start.pathname.startsWith(scope.pathname)).toBe(true);
     // A page game starts at its own folder; The CIC at the site page that hosts it.
     expect(start.pathname).toBe(scope.pathname);
-    if (id === 'cylon') expect(start.search).toBe('?game=cylon');
-    else expect(scope.pathname).toMatch(new RegExp(`/games/${id}/$`));
+    if (id === 'cylon') {
+      expect(start.search).toBe('?game=cylon&app=1');
+      expect(scope.pathname).toMatch(/\/index\.html$/);
+    } else {
+      expect(scope.pathname).toMatch(new RegExp(`/games/${id}/$`));
+    }
 
-    // Icons: 192 and 512 exist and are PNGs of the stated size.
-    const sizes = m.icons.map(i => i.sizes);
-    expect(sizes).toEqual(expect.arrayContaining(['192x192', '512x512']));
+    // Icons: any, maskable and monochrome, each a PNG of its stated size.
+    expect(m.icons.map(i => `${i.purpose} ${i.sizes}`)).toEqual(
+      ['any 192x192', 'any 512x512', 'maskable 192x192', 'maskable 512x512', 'monochrome 512x512']);
     for (const icon of m.icons) {
       const r = await request.get(new URL(icon.src, url).href);
       expect(r.status(), icon.src).toBe(200);
@@ -53,6 +58,11 @@ for (const id of GAMES) {
       const body = await r.body();
       expect(body.readUInt32BE(16) + 'x' + body.readUInt32BE(20)).toBe(icon.sizes);
     }
+    const apple = html.match(/<link rel="apple-touch-icon" sizes="180x180" href="([^"]+)"/)[1];
+    const appleRes = await request.get(new URL(apple, new URL(PAGE_GAMES.includes(id) ? `games/${id}/` : `play/${id}/`, baseURL)).href);
+    expect(appleRes.status()).toBe(200);
+    const appleBody = await appleRes.body();
+    expect(appleBody.readUInt32BE(16) + 'x' + appleBody.readUInt32BE(20)).toBe('180x180');
   });
 }
 

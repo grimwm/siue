@@ -80,7 +80,7 @@ function site_pages_install(array $card, string $base): array
     return [
         '<meta name="theme-color" content="' . site_pages_esc($card['theme_color']) . '">',
         '<link rel="manifest" href="' . site_pages_esc($base) . 'manifest.webmanifest">',
-        '<link rel="apple-touch-icon" sizes="192x192" href="' . site_pages_esc($base) . 'icon-192.png">',
+        '<link rel="apple-touch-icon" sizes="180x180" href="' . site_pages_esc($base) . 'icon-apple-180.png">',
         '<meta name="mobile-web-app-capable" content="yes">',
         '<meta name="apple-mobile-web-app-capable" content="yes">',
         '<meta name="apple-mobile-web-app-title" content="' . site_pages_esc($card['short_name']) . '">',

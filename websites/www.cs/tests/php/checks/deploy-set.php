@@ -51,6 +51,7 @@ $check('ships games/crete/dist/THIRD_PARTY_LICENSES.txt', isset($set['games/cret
 foreach (['games/cylon/dist/main.js', 'games/cylon/css/eye.css', 'games/cylon/css/units.css', 'games/cylon/css/intro.css', 'games/cylon/mount.html', 'games/cylon/scores.php', 'games/cylon/manifest.webmanifest'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
+$check('ships games/cylon/dist/THIRD_PARTY_LICENSES.txt', isset($set['games/cylon/dist/THIRD_PARTY_LICENSES.txt']));
 // The site's own scripts: compiled from src/, served from the root and play/.
 foreach (['main.js', 'play/play.js', 'play/play.css', 'index.html'] as $f) {
     $check("ships $f", isset($set[$f]));

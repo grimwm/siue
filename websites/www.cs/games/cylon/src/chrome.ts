@@ -1,8 +1,8 @@
 /* Cylon Defense: the settings and the nav chrome.
  *
  * The player's settings (sound, music, their volumes, the eye) persist in
- * localStorage (one kit pref) and show in the gear's panel; the Game On toggle sits beside
- * it. The nav has two looks, civil and combat, and the chrome fades between
+ * localStorage (one kit pref) and are drawn by ui/settings.tsx in the gear's panel; the
+ * Game On toggle sits beside it. The nav has two looks, civil and combat, and the chrome fades between
  * them when the game is switched. The mobile menu's burger is bound here too.
  *
  * It touches only the nav elements it is handed and `document`; what the
@@ -12,6 +12,9 @@ import { pref, json } from '../../_kit/prefs.ts';
 import { browserStorage } from '../../_kit/ports.browser.ts';
 import { DEFAULT_SETTINGS, SETTINGS_KEY, isSettings } from './types.ts';
 import type { Settings, Timer } from './types.ts';
+import { renderSettings as drawSettings } from './ui/settings.tsx';
+import type { SettingKey } from './ui/settings.tsx';
+import type { HsRow } from './scores.ts';
 
 export interface ChromeDeps {
   settingsRoot: HTMLElement | null;
@@ -28,8 +31,11 @@ export interface ChromeDeps {
   /** How long the nav chrome fades, matching --cylon-desolate-fade * 0.45. */
   NAV_FADE_MS: number;
   reduceMotion: boolean;
-  /** The game-over module's board drawing and fetching. */
-  renderHighScores: () => void;
+  /** The gear's panel, which the settings are drawn into. */
+  settingsPanel: HTMLElement | null;
+  /** The weekly board and its reset sentence (the game-over module keeps them). */
+  boardRows: () => readonly HsRow[];
+  resetText: () => string;
   fetchHighScores: () => Promise<void>;
   /** The Game On toggle was pressed. */
   setGameEnabled: (on: boolean) => void;
@@ -46,6 +52,7 @@ export interface Chrome {
   syncGameToggleUi(): void;
   /** Fades to the nav look the settings call for (civil when the game is off). */
   syncNavChrome(): void;
+  renderSettings(): void;
   bindSettings(): void;
   bindGameToggle(): void;
   bindNavMenu(): void;
@@ -53,7 +60,7 @@ export interface Chrome {
 
 export function createChrome(d: ChromeDeps): Chrome {
   const { settingsRoot, gameToggleBtn, gameToggleLabel, cicEnterBtn, navBurger, navMenu, navGame, siteBrand,
-    BRAND_CIVIL, BRAND_COMBAT, NAV_FADE_MS, reduceMotion, renderHighScores, fetchHighScores, setGameEnabled,
+    BRAND_CIVIL, BRAND_COMBAT, NAV_FADE_MS, reduceMotion, settingsPanel, fetchHighScores, setGameEnabled,
     setEyeTracking } = d;
   // The settings panel reaches the sound through one callback; the name is the
   // one the panel's handler has always called.
@@ -85,23 +92,34 @@ export function createChrome(d: ChromeDeps): Chrome {
 
   function saveSettings() {
     saved.set(settings);
-    syncSettingsUi();
+    renderSettings();
     syncGameToggleUi();
   }
 
-  function syncSettingsUi() {
-    if (!settingsRoot) return;
-    const sound = settingsRoot.querySelector<HTMLInputElement>('[data-setting="soundEnabled"]');
-    const music = settingsRoot.querySelector<HTMLInputElement>('[data-setting="musicEnabled"]');
-    const soundVol = settingsRoot.querySelector<HTMLInputElement>('[data-setting="soundVolume"]');
-    const musicVol = settingsRoot.querySelector<HTMLInputElement>('[data-setting="musicVolume"]');
-    const eyeToggle = settingsRoot.querySelector<HTMLInputElement>('[data-setting="eyeEnabled"]');
-    if (sound) sound.checked = settings.soundEnabled;
-    if (music) music.checked = settings.musicEnabled;
-    if (soundVol) soundVol.value = String(settings.soundVolume);
-    if (musicVol) musicVol.value = String(settings.musicVolume);
-    if (eyeToggle) eyeToggle.checked = settings.eyeEnabled;
-    renderHighScores();
+  function renderSettings(): void {
+    if (!settingsPanel) return;
+    drawSettings(settingsPanel, {
+      soundEnabled: settings.soundEnabled,
+      soundVolume: settings.soundVolume,
+      musicEnabled: settings.musicEnabled,
+      musicVolume: settings.musicVolume,
+      eyeEnabled: settings.eyeEnabled,
+      rows: d.boardRows(),
+      resetText: d.resetText(),
+      onSetting: applySetting,
+    });
+  }
+
+  function applySetting(key: SettingKey, value: boolean | number): void {
+    // Volumes take numbers and switches take booleans; a value of the wrong type is ignored.
+    if (key === 'soundVolume' || key === 'musicVolume') {
+      if (typeof value === 'number') settings[key] = Math.max(0, Math.min(100, value || 0));
+    } else if (typeof value === 'boolean') {
+      settings[key] = value;
+    }
+    saveSettings();
+    if (key === 'eyeEnabled' && !settings.eyeEnabled) setEyeTracking(false);
+    audio.settingChanged(key);
   }
 
   function syncGameToggleUi() {
@@ -206,54 +224,28 @@ export function createChrome(d: ChromeDeps): Chrome {
 
   function bindSettings() {
     if (!settingsRoot) return;
-    syncSettingsUi();
-
+    renderSettings();
     const toggleBtn = document.getElementById('cylon-settings-toggle');
-    const panel = document.getElementById('cylon-settings-panel');
-    if (toggleBtn && panel) {
-      toggleBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const open = panel.hasAttribute('hidden');
-        if (open) {
-          fetchHighScores();
-          panel.removeAttribute('hidden');
-        } else {
-          panel.setAttribute('hidden', '');
-        }
-        toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-      });
-      document.addEventListener('click', (e) => {
-        if (!settingsRoot.contains(e.target as Node | null)) {
-          panel.setAttribute('hidden', '');
-          toggleBtn.setAttribute('aria-expanded', 'false');
-        }
-      });
-    }
-
-    const applySettingInput = (input: HTMLInputElement): void => {
-      const key = input.getAttribute('data-setting');
-      if (!key) return;
-      if (input.type === 'checkbox') {
-        settings[key] = input.checked;
-      } else if (input.type === 'range') {
-        settings[key] = Math.max(0, Math.min(100, Number(input.value) || 0));
+    const panel = settingsPanel;
+    if (!toggleBtn || !panel) return;
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = panel.hasAttribute('hidden');
+      if (open) {
+        fetchHighScores();
+        panel.removeAttribute('hidden');
       } else {
-        settings[key] = Boolean(input.value);
+        panel.setAttribute('hidden', '');
       }
-      saveSettings();
-      if (key === 'eyeEnabled' && !settings.eyeEnabled) {
-        setEyeTracking(false);
-      }
-      audio.settingChanged(key);
-    };
-
-    settingsRoot.querySelectorAll<HTMLInputElement>('[data-setting]').forEach((input) => {
-      input.addEventListener('change', () => applySettingInput(input));
-      if (input.type === 'range') {
-        input.addEventListener('input', () => applySettingInput(input));
+      toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', (e) => {
+      if (!settingsRoot.contains(e.target as Node | null)) {
+        panel.setAttribute('hidden', '');
+        toggleBtn.setAttribute('aria-expanded', 'false');
       }
     });
   }
 
-  return { settings, saveSettings, syncGameToggleUi, syncNavChrome, bindSettings, bindGameToggle, bindNavMenu };
+  return { settings, saveSettings, syncGameToggleUi, syncNavChrome, renderSettings, bindSettings, bindGameToggle, bindNavMenu };
 }

@@ -20,6 +20,7 @@ require_once __DIR__ . '/../rooms.php';
 const SV_WIDTH = 720;
 const SV_DECIMALS = 5; // numbers are written to this many places; the runner's tolerance is 1e-4
 const SV_TOLERANCE = 0.0001;
+ini_set('serialize_precision', '-1'); // exact cases are written as the shortest string that reads back to the same double
 
 /** Rounds every float in a value, so the file is stable across platforms. */
 function sv_round($v)
@@ -35,14 +36,14 @@ function sv_round($v)
 }
 
 /** A terrain from its recipe, to the nearest 0.001 so both languages build the same ground. */
-function sv_terrain(array $spec): array
+function sv_terrain(array $spec, int $w = SV_WIDTH): array
 {
     $t = [];
-    for ($ix = 0; $ix < SV_WIDTH; $ix++) {
+    for ($ix = 0; $ix < $w; $ix++) {
         if (isset($spec['flat'])) {
             $y = (float) $spec['flat'];
         } elseif (isset($spec['slope'])) {
-            $y = $spec['slope'][0] + ($spec['slope'][1] - $spec['slope'][0]) * $ix / (SV_WIDTH - 1);
+            $y = $spec['slope'][0] + ($spec['slope'][1] - $spec['slope'][0]) * $ix / ($w - 1);
         } else {
             [$base, $amp, $period] = $spec['hills'];
             $y = $base + $amp * sin($ix * 2 * M_PI / $period);
@@ -58,9 +59,9 @@ function sv_terrain(array $spec): array
 }
 
 /** A room around a case: seat i is tank i; flags on a tank become the room's per-seat state. */
-function sv_room(array $c): array
+function sv_room(array $c, int $w = SV_WIDTH): array
 {
-    $room = ['terrain' => sv_terrain($c['terrain']), 'tanks' => [], 'wind' => (float) ($c['wind'] ?? 0),
+    $room = ['terrain' => sv_terrain($c['terrain'], $w), 'tanks' => [], 'wind' => (float) ($c['wind'] ?? 0),
         'round' => (int) ($c['round'] ?? 1), 'rng' => (int) ($c['seed'] ?? 1),
         'scores' => [], 'cash' => [], 'shield' => [], 'bunker' => [], 'laststand' => [], 'jammer' => []];
     if (array_key_exists('difficulty', $c)) {
@@ -154,6 +155,10 @@ $add = function (string $group, string $name, array $in, $out, ?string $known = 
     }
     $cases[$group][] = $case;
 };
+/* An exact case: written unrounded and compared with Object.is by the runner (terrain heights at 1e-9 until Plan D's deterministic math). */
+$exact = function (string $group, string $name, array $in, $out) use (&$cases): void {
+    $cases[$group][] = ['name' => $name, 'in' => $in, 'out' => $out, 'exact' => true];
+};
 $weapons = room_weapons();
 
 /* ---- constants and the integer core ---- */
@@ -182,6 +187,40 @@ foreach ([[1, 3], [2, 1234], [3, 99], [4, 7], [5, 2026]] as [$n, $seed]) {
     $rng = $seed;
     $spots = room_spawn_spots($rng, $n, SV_WIDTH);
     $add('spawn-spots', "n$n-seed$seed", ['n' => $n, 'seed' => $seed], ['spots' => $spots, 'next' => room_rng_next($rng)]);
+}
+
+/* ---- the field at any width, exact except terrain heights (spec 7.4) ---- */
+foreach ([720, 1080, 1440] as $w) {
+    foreach (['tankity-twin-hills', 'scorch-01'] as $seed) {
+        $rng = room_hash_seed($seed);
+        $h = room_gen_hills($rng);
+        $exact('field', "terrain-$w-$seed", ['kind' => 'terrain', 'w' => $w, 'seed' => $seed],
+            ['hills' => room_hills_wire($h), 'terrain' => room_hills_terrain($h, $w), 'next' => room_rng_next($rng)]);
+    }
+    foreach ([3, 1234, 2026] as $seed) {
+        $rng = $seed;
+        $xs = room_spawn_spots($rng, 4, $w);
+        $exact('field', "placement-$w-seed$seed", ['kind' => 'placement', 'w' => $w, 'seed' => $seed],
+            ['xs' => $xs, 'next' => room_rng_next($rng)]);
+    }
+    $reach = room_field_reach($w);
+    $speeds = [];
+    foreach ([0.0, 37.0, 100.0] as $p) {
+        array_push($speeds, room_shot_speed($p, false, 1.0, $reach), room_shot_speed($p, true, 1.0, $reach), room_shot_speed($p, false, 0.55, $reach));
+    }
+    $exact('field', "speed-$w", ['kind' => 'speed', 'w' => $w], ['reach' => $reach, 'speeds' => $speeds]);
+    $shot = ['kind' => 'sim-shot', 'w' => $w, 'x' => $w - 100.0, 'y' => 386.0, 'angle' => 40.0, 'power' => 100.0, 'wkey' => 'shell', 'dirS' => 1];
+    $exact('field', "off-the-right-$w", $shot, room_sim_shot(array_fill(0, $w, 400.0), 0.0, $shot['x'], $shot['y'], $shot['angle'], $shot['power'], 'shell', 1, $w));
+    // A drone aiming across the width: the faster shell, the search and the tightened wobble together.
+    $c = ['kind' => 'aim', 'w' => $w, 'seed' => 7, 'difficulty' => 'normal', 'terrain' => ['flat' => 400], 'tanks' => [
+        ['kind' => 'ai', 'x' => 100, 'y' => 400.0, 'hp' => 100, 's' => 'hunter', 'ammo' => ['shell' => 99], 'dirS' => 1],
+        ['kind' => 'human', 'x' => $w - 120, 'y' => 400.0, 'hp' => 100, 'dirS' => -1],
+    ]];
+    $room = sv_room($c, $w);
+    $choice = room_ai_choose($room, $room['tanks'][0]);
+    $fa = room_field_aim($w);
+    $exact('field', "aim-$w", $c, ['fa' => [$fa['aim'], $fa['floor']], 'target' => $room['tanks'][0]['brk']['t'], 'wkey' => $choice['wkey'],
+        'angle' => $choice['angle'], 'power' => $choice['power']]);
 }
 
 /* ---- shot speed and muzzle ---- */

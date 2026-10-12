@@ -14,7 +14,7 @@
 <script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__installPrompt = e; });</script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
-<link rel="stylesheet" href="game.css?v=fc8b86acfb">
+<link rel="stylesheet" href="game.css?v=be816f1e38">
 </head>
 <body>
 <header class="topbar">
@@ -32,6 +32,7 @@
         <canvas id="stage" width="1080" height="690" role="img"
           aria-label="Hillside artillery battlefield. Your tank, the drone battery, wind and turn order are announced in the log and the status bar."></canvas>
         <div id="title-root" data-ui></div>
+        <div id="rotate-hint-root" data-ui></div>
         <div id="round-banner" class="banner" hidden><span id="round-banner-text"></span></div>
         <div id="dialogue" class="dialogue" hidden>
           <canvas id="portrait" width="36" height="36" aria-hidden="true"></canvas>
@@ -102,7 +103,7 @@
 </main>
 
 <script src="dist/fx.js?v=7e1e68411c" defer></script>
-<script type="module" src="dist/main.js?v=776eddea05"></script>
+<script type="module" src="dist/main.js?v=bfa51ede74"></script>
 <script src="dist/install.js?v=fcce8eeb4c" defer></script>
 </body>
 </html>

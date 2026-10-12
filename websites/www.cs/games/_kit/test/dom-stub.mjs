@@ -40,7 +40,7 @@ export function makeEl(id) {
   const el = {
     id, nodeType: 1, parentNode: null, hidden: true, value: '', innerHTML: '',
     disabled: false, checked: false, style: {}, className: '', scrollTop: 0, scrollHeight: 0,
-    children: [], _text: '', _attrs: {},
+    children: [], _text: '', _attrs: {}, dataset: {},
     get textContent() { return this.children.length ? this.children.map(c => c.textContent).join('') : this._text; },
     set textContent(v) { for (const c of this.children) c.parentNode = null; this.children = []; this._text = String(v); },
     get childNodes() { return this.children; },

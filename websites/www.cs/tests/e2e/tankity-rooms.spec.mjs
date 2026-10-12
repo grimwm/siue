@@ -1,6 +1,6 @@
 // Operation Tankity rooms: two real browsers in one room.
 import { test, expect } from '@playwright/test';
-import { roomPair, hud, rec, resetRec, shellTrack, bowFromChord, lastRoom, holdBarrel, expectFullSwing } from './helpers.mjs';
+import { roomPair, hud, rec, resetRec, shellTrack, bowFromChord, lastRoom, holdBarrel, expectFullSwing, aimTo, setPower, groundProbe } from './helpers.mjs';
 
 const myTurn = page => hud(page, 'hud-turn').then(t => /YOU\. Aim!/.test(t));
 
@@ -104,4 +104,27 @@ test('closing every player tab frees the room slot at once', async ({ browser, r
   await expect.poll(used, { timeout: 10_000 }).toBe(withRoom - 1);
   const gone = await (await request.get(`games/tankity/rooms.php?action=state&code=${code}&token=x&since=0`)).json();
   expect(gone.error).toMatch(/no such room|bad seat token/);
+});
+
+/* A room's field is 720 wide, so a wide box shows scenery either side: the drawn ground reaches both
+   screen edges and continues across both seams, and a shell the sim retires past the edge is still
+   drawn flying on over the scenery (the sim and the server keep their out of bounds). */
+test('a room shows its ground across the scenery and a shell flies on over it', async ({ browser }) => {
+  const { host, guest } = await roomPair(browser);
+  await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);
+  for (const [w, h] of [[852, 393], [1280, 720]]) {
+    await host.page.setViewportSize({ width: w, height: h });
+    await host.page.waitForTimeout(700);
+    expect(Number(await host.page.locator('#stage').getAttribute('data-w')), `${w}×${h}: a room is 720 wide`).toBe(720);
+    const gp = await host.page.evaluate(groundProbe);
+    expect(gp.seams, `${w}×${h}: scenery shows either side of the 720 field`).toBe(2);
+    expect(gp.probs, `${w}×${h}`).toEqual([]);
+  }
+  // At full power the shell leaves the 720 field whichever way the tank faces.
+  await aimTo(host.page, 40);
+  await setPower(host.page, 100);
+  await resetRec(host.page);
+  await host.page.keyboard.press('Control');
+  await expect.poll(async () => shellTrack((await rec(host.page)).shells).some(([x]) => x > 760 || x < -40), { timeout: 15_000 }).toBe(true);
+  await host.ctx.close(); await guest.ctx.close();
 });

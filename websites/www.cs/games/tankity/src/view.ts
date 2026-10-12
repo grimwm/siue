@@ -10,17 +10,20 @@ import type { FxEngine } from './fx/types.ts';
 import { CLOCK_SHOW_S } from './net.ts';
 import type { RoomClient } from './net.ts';
 import { PV_W, PV_H, PV_FOE_HP } from './preview.ts';
+import { fitField, visibleWorld } from './field.ts';
+import { createGhosts } from './ghosts.ts';
 import { createRenderer } from './render.ts';
 import type { BattleView, DrawTank, Renderer } from './render.ts';
 import type { Replay } from './replay.ts';
+import { sceneryY } from './scenery.ts';
 import {
-  hashSeed, mulberry32, gauss, W, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
+  hashSeed, mulberry32, gauss, GRAV, FLAT_GRAV, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
 } from './sim.ts';
 import type { Weapon } from './sim.ts';
 
 /** The slice of the game's state the view reads and steps (main.ts's G). */
 export type ViewState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'cam' | 'terrain' | 'clouds' | 'time' | 'shake'
-  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'preview'>;
+  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'preview' | 'w' | 'hills'>;
 
 /** What the view needs from the page and the rest of the game. */
 export interface ViewDeps {
@@ -40,19 +43,20 @@ export function createView(deps: ViewDeps) {
 
   /* The camera only ever pulls back, slowly, to keep every live tank framed. */
   function updateCamera(dt: number): void {
-    let tz = 1, tx = W / 2, ty = H / 2;
+    // Always centred: the view is never narrower than the field (fitField), so panning would only
+    // cut one edge of the field off and show scenery at the other.
+    let tz = 1;
+    const tx = G.w / 2;
+    let ty = H / 2;
     const live = G.tanks.filter(t => t.hp > 0);
     if (live.length) {
-      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      let y0 = Infinity, y1 = -Infinity;
       for (const t of live) {
-        x0 = Math.min(x0, t.x); x1 = Math.max(x1, t.x);
         y0 = Math.min(y0, t.y - 56); y1 = Math.max(y1, t.y);
       }
       const pad = 70;
-      const spanX = Math.max(1, (x1 - x0) + pad * 2);
       const spanY = Math.max(1, (y1 - y0) + pad * 2);
-      tz = clamp(Math.min(W / spanX, H / spanY, 1), 0.45, 1);
-      tx = (x0 + x1) / 2;
+      tz = clamp(Math.min(H / spanY, 1), 0.45, 1); // the field is always in view across, so only height pulls back
       ty = (y0 + y1) / 2;
     }
     const k = Math.min(1, dt * 1.5);
@@ -101,18 +105,26 @@ export function createView(deps: ViewDeps) {
   /* The snapshot of everything the canvas shows this frame. render.ts reads it
      and paints; it never writes back. The rules live here: whose turn marker
      shows, whether the aim arm is up, when the clock counts down on the canvas. */
+  const ghosts = createGhosts();
+  let ghostTime = 0;
   function battleView(): BattleView {
     const t = cur();
     const aiming = (G.phase === 'aim' || G.phase === 'think') && t && t.hp > 0 && !G.over;
     const left = net.turnClockLeft();
     const pv = G.preview;
+    // Shells the sim retires past the field's edge fly on, drawn only, over the scenery.
+    const flying = replay.flying();
+    if (G.time < ghostTime) ghosts.clear(); // a new match restarted the clock
+    const flyOn = ghosts.frame([...G.shells, ...flying], G.w, Math.min(0.1, Math.max(0, G.time - ghostTime)), G.wind,
+      wkey => (tables.weapons[wkey]?.flat ? FLAT_GRAV : GRAV));
+    ghostTime = G.time;
     return {
       time: G.time, shake: G.shake, cam: G.cam,
       skyKey: net.on ? 'room:' + net.code : String(G.seed || ''),
-      terrain: G.terrain, clouds: G.clouds, tanks: G.tanks,
+      terrain: G.terrain, field: { w: G.w, h: H }, hills: G.hills, clouds: G.clouds, tanks: G.tanks,
       turnUnit: turnTank(), online: net.on,
       aim: aiming ? { unit: t, length: aimArmLength(shownPower(t)) } : null,
-      booms: G.booms, fx: G.fx, shells: G.shells, replay: replay.flying(), sparks: G.parts,
+      booms: G.booms, fx: G.fx, shells: G.shells, replay: flying, ghosts: flyOn, sparks: G.parts,
       wind: G.wind,
       textScale: textScale(),
       turnClock: left !== null && left <= CLOCK_SHOW_S && left > 0 ? { left, myTurn: MATCH.myTurn } : null,
@@ -123,15 +135,34 @@ export function createView(deps: ViewDeps) {
       } : null,
     };
   }
+  /* The backing store follows the battlefield box (at most two device pixels
+     per CSS pixel), so the field is drawn in the box's own shape and never
+     stretched; #stage tells the layout spec the width and where the field sits. */
+  let published = '';
+  function fitCanvas(cv: HTMLCanvasElement): void {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const bw = Math.round(cv.clientWidth * dpr), bh = Math.round(cv.clientHeight * dpr);
+    if (bw > 0 && bh > 0 && (cv.width !== bw || cv.height !== bh)) {
+      cv.width = bw;
+      cv.height = bh;
+    }
+    const fit = fitField({ w: cv.clientWidth || 1, h: cv.clientHeight || 1 }, { w: G.w, h: H });
+    const field = [fit.ox, fit.oy, G.w * fit.s, H * fit.s].map(v => Math.round(v)).join(',');
+    if (published !== `${G.w}|${field}`) {
+      published = `${G.w}|${field}`;
+      cv.dataset.w = String(G.w);
+      cv.dataset.field = field;
+    }
+  }
   let renderer: Renderer | null = null;
   function render(): void {
     const cv = document.getElementById('stage') as HTMLCanvasElement | null;
     if (!cv || !G.terrain) return;
+    fitCanvas(cv);
     if (!renderer) {
       renderer = createRenderer(cv, {
         fx: FX,
-        size: { w: W, h: H },
-        sim: { facing, isGroundUnit, muzzle, surfY: simSurfY, hashSeed, mulberry32, gauss },
+        sim: { facing, isGroundUnit, muzzle, surfY: simSurfY, hashSeed, mulberry32, gauss, fitField, visibleWorld, sceneryY },
         shownAngle,
         look: wkey => (tables.weapons[wkey] || {}).gfx || {},
         fxBody: wkey => fxSet(wkey).body,

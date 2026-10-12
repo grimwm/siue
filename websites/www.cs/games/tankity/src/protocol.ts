@@ -112,6 +112,8 @@ export interface RoomSnapshot {
    * new round). Always present, so a client can tell whether what it holds is
    * current. */
   terrainRev: number;
+  /** The round's nine hill numbers (sim.ts hillsWire), for the scenery past the field. */
+  hills?: number[] | null;
   /** Present (true) when the asker's `since` is older than the oldest event
    * the room still keeps, or newer than the room's own count: events were
    * lost, so a replay cannot be built. The snapshot is then full. */

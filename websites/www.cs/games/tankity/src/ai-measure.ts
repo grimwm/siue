@@ -6,19 +6,19 @@
  * here. Pure: no page, and the same seeds give the same numbers. */
 import { aiChoose } from './ai.ts';
 import type { Difficulty } from './ai.ts';
-import { W, anyTankFalling, fallTanks, fireWeapon, genTerrain, hashSeed, mulberry32, spawnSpots, stepShells, surfY } from './sim.ts';
+import { ROOM_W, anyTankFalling, fallTanks, fireWeapon, genTerrain, hashSeed, mulberry32, spawnSpots, stepShells, surfY } from './sim.ts';
 import type { Arsenal, Tank, World } from './sim.ts';
 
 /** P(hit) per shot in a bracket: [0] the ranging shot, [1] after one correction, and so on. */
 export type HitRates = number[];
 
-/** The hills, wind and the two units' spots of case `i`, the same for every round and difficulty. */
-function dealCase(i: number): { terrain: number[]; wind: number; px: number; dx: number } {
+/** The hills, wind and the two units' spots of case `i` on a field w wide, the same for every round and difficulty. */
+function dealCase(i: number, w: number): { terrain: number[]; wind: number; px: number; dx: number; w: number } {
   const rng = mulberry32(hashSeed('hitrate-case-' + i));
-  const { terrain } = genTerrain(rng);
+  const { terrain } = genTerrain(rng, w);
   const wind = Math.round((rng() * 2 - 1) * 8);
-  const [px, dx] = spawnSpots(4, rng);
-  return { terrain, wind, px: px!, dx: dx! };
+  const [px, dx] = spawnSpots(4, rng, w);
+  return { terrain, wind, px: px!, dx: dx!, w };
 }
 
 /* A world holding just the two units: the player cannot die, has no tricks,
@@ -27,7 +27,7 @@ function caseWorld(c: ReturnType<typeof dealCase>, round: number, difficulty: Di
   const terrain = c.terrain.slice();
   const unit = (id: string, isPlayer: boolean, x: number): Tank => ({
     id, isPlayer, x, y: surfY(terrain, x), angle: 62, power: 55, hp: 1e9, fuel: 0,
-    dirS: x < W / 2 ? 1 : -1, ammo: isPlayer ? undefined : { shell: Infinity }, s: isPlayer ? undefined : 'hunter',
+    dirS: x < c.w / 2 ? 1 : -1, ammo: isPlayer ? undefined : { shell: Infinity }, s: isPlayer ? undefined : 'hunter',
   });
   return {
     tanks: [unit('tank', true, c.px), unit('drone', false, c.dx)], terrain, wind: c.wind, round,
@@ -37,10 +37,10 @@ function caseWorld(c: ReturnType<typeof dealCase>, round: number, difficulty: Di
 }
 
 /** The drone's hit rate per shot index over `cases` seeded cases at one round and difficulty. */
-export function measureHitRates(arsenal: Arsenal, round: number, difficulty: Difficulty, cases: number, shots = 3): HitRates {
+export function measureHitRates(arsenal: Arsenal, round: number, difficulty: Difficulty, cases: number, shots = 3, w = ROOM_W): HitRates {
   const hits = new Array<number>(shots).fill(0);
   for (let i = 0; i < cases; i++) {
-    const world = caseWorld(dealCase(i), round, difficulty, `hitrate-aim-${i}-${round}`);
+    const world = caseWorld(dealCase(i, w), round, difficulty, `hitrate-aim-${i}-${round}`);
     const [player, drone] = world.tanks as [Tank, Tank];
     for (let k = 0; k < shots; k++) {
       const choice = aiChoose(world, arsenal, drone);

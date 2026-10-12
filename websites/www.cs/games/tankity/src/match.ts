@@ -16,9 +16,10 @@ import type { FxSys } from './fx/types.ts';
 import { transition, WATCH_TURNS } from './flow.ts';
 import type { FlowEvent } from './flow.ts';
 import type { GameState, GameTank, Tables } from './game-types.ts';
+import type { FieldWidth } from './field.ts';
 import type { RoomClient } from './net.ts';
 import {
-  hashSeed, mulberry32, gauss, W, H, GRAV, TUNE, clamp, droneRack as simDroneRack, genTerrain as simGenTerrain,
+  hashSeed, mulberry32, gauss, H, GRAV, TUNE, clamp, droneRack as simDroneRack, genTerrain as simGenTerrain,
   spawnSpots, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling,
 } from './sim.ts';
@@ -40,6 +41,8 @@ export interface EndState {
 
 /** What the solo match needs from the page and the rest of the game. */
 export interface MatchDeps {
+  /** Where a solo match's field width is dealt; only a deal reads the viewport. */
+  field: Pick<FieldWidth, 'deal'>;
   G: GameState;
   $(id: string): HTMLElement | null;
   TOUCH: boolean;
@@ -87,7 +90,7 @@ export interface MatchDeps {
 
 export function createMatch(deps: MatchDeps) {
   const {
-    G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
+    field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
     render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closeGuns, closePreview, hideShop, openShop,
     endTutorial, maybeStartTutorial, tutorialFired, fileReport, savedCallsign, backToTitle, netFire, netLeave,
     netNext, netRematch, openLobby,
@@ -95,9 +98,10 @@ export function createMatch(deps: MatchDeps) {
 
   /* Rolling hills from seeded sines, and the clouds over them. */
   function genTerrain(): void {
-    const g = simGenTerrain(G.rng);
+    const g = simGenTerrain(G.rng, G.w);
     G.terrain = g.terrain;
     G.clouds = g.clouds;
+    G.hills = g.hills;
   }
   const FOE_DEFS = [
     { id: 'reaper', color: '#ff0000' },
@@ -108,6 +112,7 @@ export function createMatch(deps: MatchDeps) {
     const seed = (seedStr || '').trim() || ('scorched-' + Math.floor(Math.random() * 9000 + 1000));
     G.seed = seed;
     G.rng = mulberry32(hashSeed(seed));
+    G.w = field.deal(); // fixed until the next deal
     G.difficulty = difficulty.get(); // a change in the Menu waits for the next match
     G.lives = TUNE.lives;
     G.score = 0;
@@ -142,7 +147,7 @@ export function createMatch(deps: MatchDeps) {
     G.banterT = 24;
     G.bannerT = 0;
     G.bannerDone = null;
-    G.cam = { z: 1, cx: W / 2, cy: H / 2 };
+    G.cam = { z: 1, cx: G.w / 2, cy: H / 2 };
     if ($('round-banner')) $('round-banner')!.hidden = true;
     genTerrain();
     G.tanks = [];
@@ -174,6 +179,7 @@ export function createMatch(deps: MatchDeps) {
     resetMatch(seedStr);
     // No round yet: spend the starting stake in the shop first.
     advance('matchStart');
+    refreshNavHints(); // the rotate hint shows from the first name card
     music.leaveTheme(); // a new match leaves the demo's theme at once
     startBanner('Round 1. The battery holds these hills.', openShop);
     say(`Match ${G.seed}: $600 stake in your pocket. Buy guns first. The battery holds these hills.`, 'info');
@@ -192,7 +198,7 @@ export function createMatch(deps: MatchDeps) {
     G.wind = Math.round((G.rng() * 2 - 1) * 8);
     // Spread four combatants across the hills; every round, anyone may land
     // anywhere, never on top of each other.
-    const order = spawnSpots(1 + FOE_DEFS.length, G.rng);
+    const order = spawnSpots(1 + FOE_DEFS.length, G.rng, G.w); // spread over the whole field
     // Shop fuel and repairs ride in banks: the round rebuilds every tank from
     // scratch, so anything bought spends only if it waits here for muster.
     const musterMax = TUNE.playerArmor + 25 * (G.plate || 0);
@@ -218,7 +224,7 @@ export function createMatch(deps: MatchDeps) {
     });
     for (const t of G.tanks) {
       t.y = surfY(t.x);
-      t.dirS = t.x < W / 2 ? 1 : -1; // face the middle of the field
+      t.dirS = t.x < G.w / 2 ? 1 : -1; // face the middle of the field
     }
     G.turn = G.firstTurn % G.tanks.length;
     G.firstTurn++;

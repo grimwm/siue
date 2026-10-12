@@ -31,7 +31,18 @@ export function gauss(rng: Rng): number {
 }
 
 /* ---------- board + physics tuning ---------- */
-export const W = 720, H = 460;
+/** The field is always H tall. A room's is ROOM_W wide; a solo match's is
+ *  dealt from the screen (field.ts), a whole number of FIELD_COL columns. */
+export const H = 460;
+export const ROOM_W = 720;
+export const FIELD_W_MIN = 720, FIELD_W_MAX = 1440, FIELD_COL = 24;
+/** A shell's longest flight on a room's field, in 1/60 s steps (12 s); a wider field's shells fly
+ *  fieldReach(w) times longer. Not a width. */
+export const FLIGHT_STEPS = 720;
+/** A width a match may be played at: a whole number of columns, in range. */
+export function fieldWidthOk(w: unknown): w is number {
+  return typeof w === 'number' && Number.isInteger(w) && w >= FIELD_W_MIN && w <= FIELD_W_MAX && w % FIELD_COL === 0;
+}
 export const GRAV = 95;
 export const FLAT_GRAV = 90; // flat bolts arc a little, so short shots and demos still land
 export const TUNE = {
@@ -265,27 +276,49 @@ export function droneRack(arsenal: Arsenal, round: number): Ammo {
 }
 
 /* ---------- terrain ---------- */
-/* Rolling hills from seeded sines, and the clouds that drift over them. */
-export function genTerrain(rng: Rng): { terrain: number[]; clouds: Cloud[] } {
-  const terrain = new Array<number>(W);
+/** A round's hills: three sines' amplitudes, phases and frequencies. */
+export interface Hills {
+  a: readonly [number, number, number];
+  p: readonly [number, number, number];
+  f: readonly [number, number, number];
+}
+/** The nine draws a round's hills are made of, in the order the server draws them. */
+export function drawHills(rng: Rng): Hills {
   const a = [20 + rng() * 30, 10 + rng() * 22, 5 + rng() * 12] as const;
   const p = [rng() * 6.28, rng() * 6.28, rng() * 6.28] as const;
   const f = [1 / 260 + rng() / 500, 1 / 120 + rng() / 260, 1 / 47 + rng() / 120] as const;
-  for (let x = 0; x < W; x++) {
-    const y = 330
-      + a[0] * Math.sin(x * f[0] + p[0])
-      + a[1] * Math.sin(x * f[1] + p[1])
-      + a[2] * Math.sin(x * f[2] + p[2]);
-    terrain[x] = clamp(y, 190, 415);
-  }
+  return { a, p, f };
+}
+/** The hills' height at column x, on or past the field (the scenery draws the same hills). */
+export function hillY(h: Hills, x: number): number {
+  const y = 330
+    + h.a[0] * Math.sin(x * h.f[0] + h.p[0])
+    + h.a[1] * Math.sin(x * h.f[1] + h.p[1])
+    + h.a[2] * Math.sin(x * h.f[2] + h.p[2]);
+  return clamp(y, 190, 415);
+}
+/** The nine numbers as a room snapshot carries them. */
+export function hillsWire(h: Hills): number[] {
+  return [...h.a, ...h.p, ...h.f];
+}
+export function hillsFrom(n: unknown): Hills | null {
+  if (!Array.isArray(n) || n.length !== 9 || !n.every(v => typeof v === 'number' && Number.isFinite(v))) return null;
+  const v = n as number[];
+  return { a: [v[0]!, v[1]!, v[2]!], p: [v[3]!, v[4]!, v[5]!], f: [v[6]!, v[7]!, v[8]!] };
+}
+/* Rolling hills over w columns, and the clouds that drift over them. */
+export function genTerrain(rng: Rng, w: number): { terrain: number[]; clouds: Cloud[]; hills: Hills } {
+  const hills = drawHills(rng);
+  const terrain = new Array<number>(w);
+  for (let x = 0; x < w; x++) terrain[x] = hillY(hills, x);
   const clouds: Cloud[] = [];
   for (let i = 0; i < 5; i++) {
-    clouds.push({ x: rng() * W, y: 30 + rng() * 90, s: 0.6 + rng() * 0.9, v: 3 + rng() * 5 });
+    clouds.push({ x: rng() * w, y: 30 + rng() * 90, s: 0.6 + rng() * 0.9, v: 3 + rng() * 5 });
   }
-  return { terrain, clouds };
+  return { terrain, clouds, hills };
 }
 export function surfY(terrain: readonly number[], x: number): number {
-  const xi = clamp(Math.round(x), 0, W - 1);
+  const xi = clamp(Math.round(x), 0, terrain.length - 1);
   return terrain[xi]!;
 }
 /* Cuts a crater: the ground under the blast drops to a 3:4 ellipse around
@@ -316,9 +349,11 @@ export function spotTaken(tanks: readonly Tank[], t: Tank, x: number): boolean {
   return tanks.some(o => o !== t && o.hp > 0 && Math.abs(o.x - x) < UNIT_GAP);
 }
 /* n spawn points across the hills, at least SPAWN_GAP apart, in random
-   order: nobody owns a side. Falls back to even spacing if sampling fails. */
-export function spawnSpots(n: number, rng: Rng): number[] {
-  const lo = 30, hi = W - 30;
+   order: nobody owns a side. Falls back to even spacing if sampling fails.
+   SPAWN_GAP is more than the largest blast radius plus a hull, so nobody
+   starts inside another's blast. */
+export function spawnSpots(n: number, rng: Rng, w: number): number[] {
+  const lo = 30, hi = w - 30; // over the whole field: the extra hills are part of the fight
   for (let tries = 0; tries < 200; tries++) {
     const xs: number[] = [];
     for (let i = 0; i < n; i++) xs.push(Math.round(lo + rng() * (hi - lo)));
@@ -351,9 +386,15 @@ export function muzzle(t: Pick<Tank, 'angle' | 'dirS' | 'isPlayer' | 'x' | 'y'>)
   const s = facing(t);
   return { x: t.x + Math.cos(rad) * 20 * s, y: t.y - 14 - Math.sin(rad) * 20 };
 }
-export function shotSpeed(power: number, flat: boolean | undefined, mult: number | undefined): number {
+/** How much faster shells fly on a field w wide: range and height grow by
+ *  w / ROOM_W, so full power still crosses the field and the wind bends a shot
+ *  by the same share of its length. Exactly 1 on a room's field. */
+export function fieldReach(w: number): number {
+  return Math.sqrt(w / ROOM_W);
+}
+export function shotSpeed(power: number, flat: boolean | undefined, mult: number | undefined, reach = 1): number {
   const m = mult || 1;
-  return (flat ? 140 + power * 3.2 : 40 + power * 2.4) * m;
+  return (flat ? 140 + power * 3.2 : 40 + power * 2.4) * m * reach;
 }
 /* What a successful shot leaves for the caller to show: where the barrel
    pointed (for the muzzle effect) and whether it spent the player's last
@@ -384,11 +425,11 @@ export function fireWeapon(world: World, arsenal: Arsenal, t: Tank, wkey: string
   for (let i = 0; i < shots; i++) {
     const off = shots === 1 ? 0 : (i - (shots - 1) / 2) * (w.spread || 0);
     const a = rad + off;
-    const spd = shotSpeed(t.power, w.flat, w.speed);
+    const spd = shotSpeed(t.power, w.flat, w.speed, fieldReach(world.terrain.length));
     world.shells.push({
       x: m.x, y: m.y,
       vx: Math.cos(a) * spd * s, vy: -Math.sin(a) * spd,
-      wkey, owner: t, life: 12,
+      wkey, owner: t, life: 12 * fieldReach(world.terrain.length), // flights last as long as the field is wide
       age: 0, pierced: false, split: false, order: [i],
     });
   }
@@ -469,19 +510,20 @@ export function rollOut(terrain: readonly number[], x: number, vx: number, vy: n
 export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal, x: number, y: number, angle: number,
   power: number, wkey: string, dirS: number): { x: number; y: number; oob: boolean } {
   const w = arsenal.weapons[wkey]!;
+  const fw = world.terrain.length, reach = fieldReach(fw);
   const rad = angle * Math.PI / 180;
   const st: Motion = {
     x, y,
-    vx: Math.cos(rad) * shotSpeed(power, w.flat, w.speed) * dirS,
-    vy: -Math.sin(rad) * shotSpeed(power, w.flat, w.speed),
+    vx: Math.cos(rad) * shotSpeed(power, w.flat, w.speed, reach) * dirS,
+    vy: -Math.sin(rad) * shotSpeed(power, w.flat, w.speed, reach),
   };
   const dt = 1 / 60;
   const grav = w.flat ? FLAT_GRAV : GRAV;
-  for (let i = 0; i < 720; i++) {
+  for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * reach); i < steps; i++) {
     stepBallistic(st, dt, world.wind, grav);
-    if (st.x < 0 || st.x >= W) return { x: st.x, y: st.y, oob: true };
+    if (st.x < 0 || st.x >= fw) return { x: st.x, y: st.y, oob: true };
     if (st.y >= H + 40) return { x: st.x, y: st.y, oob: true };
-    if (i >= 6 && st.y >= world.terrain[clamp(Math.round(st.x), 0, W - 1)]!) {
+    if (i >= 6 && st.y >= world.terrain[clamp(Math.round(st.x), 0, fw - 1)]!) {
       if (w.effect === 'roller') return { ...rollOut(world.terrain, st.x, st.vx, st.vy, w), oob: false };
       return { x: st.x, y: st.y, oob: false };
     }
@@ -506,7 +548,7 @@ export function steerShell(tanks: readonly Tank[], s: Shell, w: Weapon, dt: numb
 /* Cluster shells split on fuse into a deterministic fan: fixed offsets, no
 // random numbers, so the room server replays the exact same bloom. Returns
 // the bomblets. */
-export function splitShell(s: Shell, w: Weapon): Shell[] {
+export function splitShell(s: Shell, w: Weapon, reach = 1): Shell[] {
   const n = Math.max(2, w.split || 4);
   const fan = w.fan || 0.22;
   const sp = Math.hypot(s.vx, s.vy) * 0.85;
@@ -517,7 +559,7 @@ export function splitShell(s: Shell, w: Weapon): Shell[] {
     bomblets.push({
       x: s.x, y: s.y,
       vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-      wkey: s.wkey, owner: s.owner, life: 12,
+      wkey: s.wkey, owner: s.owner, life: 12 * reach,
       age: 0, pierced: false, split: true, order: [...(s.order || []), i],
       dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius,
     });
@@ -734,7 +776,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
     stepBallistic(s, dt, world.wind, w.flat ? FLAT_GRAV : GRAV);
     s.life -= dt;
     events.push({ kind: 'trail', shell: s, x: s.x, y: s.y, vx: s.vx, vy: s.vy });
-    if (s.life <= 0 || s.x < -20 || s.x > W + 20 || s.y > H + 40) {
+    if (s.life <= 0 || s.x < -20 || s.x > world.terrain.length + 20 || s.y > H + 40) {
       s.dead = true;
       continue;
     }
@@ -742,7 +784,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
     if (w.effect === 'cluster' && !s.split && s.age >= (w.fuse || 0.9)) {
       s.split = true;
       events.push({ kind: 'split', wkey: s.wkey, x: s.x, y: s.y, ang: Math.atan2(s.vy, s.vx) });
-      world.shells.push(...splitShell(s, w));
+      world.shells.push(...splitShell(s, w, fieldReach(world.terrain.length)));
       s.dead = true;
       continue;
     }

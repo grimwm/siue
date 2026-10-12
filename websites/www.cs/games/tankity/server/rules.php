@@ -219,7 +219,7 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
     for ($i = 0; $i < $shots; $i++) {
         $off = $shots === 1 ? 0 : ($i - ($shots - 1) / 2) * ($w['spread'] ?? 0.0);
         $a = $rad + $off;
-        $spd = room_shot_speed($tank['power'], !empty($w['flat']), (float) ($w['speed'] ?? 1.0));
+        $spd = room_shot_speed($tank['power'], !empty($w['flat']), (float) ($w['speed'] ?? 1.0), room_field_reach(count($room['terrain'])));
         [$mx, $my] = room_muzzle($tank);
         $vx = cos($a) * $spd * $dirS;
         $vy = -sin($a) * $spd;
@@ -385,15 +385,16 @@ function room_start_round(array &$room): void
 {
     $room['watchTurns'] = 0;
     $room['round'] += 1;
-    $w = 720;
+    $w = ROOM_W;
     if ($room['map'] !== null && isset(ROOM_MAPS[$room['map']])) {
         // A picked map replays its own hills every time: terrain comes from
         // the hidden seed plus the round, never from the live stream.
         $mrng = room_hash_seed(ROOM_MAPS[$room['map']]['seed'] . '|round' . $room['round']);
-        $room['terrain'] = room_gen_terrain($mrng, $w);
+        $room['hills'] = room_gen_hills($mrng);
     } else {
-        $room['terrain'] = room_gen_terrain($room['rng'], $w);
+        $room['hills'] = room_gen_hills($room['rng']);
     }
+    $room['terrain'] = room_hills_terrain($room['hills'], $w);
     room_terrain_changed($room);
     $room['wind'] = (int) round(room_rng_range($room['rng'], -8, 8));
     $slots = room_spawn_spots($room['rng'], max(1, room_fielded($room)), $w);

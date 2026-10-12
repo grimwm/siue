@@ -15,6 +15,7 @@
             "turnLeft": null,
             "shopLeft": null,
             "terrainRev": 1,
+            "hills": null,
             "tanks": [],
             "seats": [
                 {

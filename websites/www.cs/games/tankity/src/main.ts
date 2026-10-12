@@ -34,7 +34,7 @@
  * a deps object, so none of them reaches for a global; the wiring is below.
  * What stays here is the state, the main loop, the keys and the page's own
  * plumbing (overlays, the firing range, the arsenal's loading). */
-import { W, TUNE, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './sim.ts';
+import { ROOM_W, TUNE, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './sim.ts';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
 } from './audio.ts';
@@ -44,6 +44,7 @@ import { runWar, warSpeed } from './flow.ts';
 import type { HoldCommand } from './input.ts';
 import { createPreview, stepPreview } from './preview.ts';
 import { createReplay } from './replay.ts';
+import { createFieldWidth } from './field.ts';
 import { createInput, touchOnly, stepArm } from './input.ts';
 import { renderHelp } from './ui/help.tsx';
 import { drawShellIcon as paintShellIcon, drawGearIcon as paintGearIcon } from './ui/icons.ts';
@@ -64,6 +65,9 @@ import { difficultySetting } from './difficulty.ts';
 import { initialsPref } from './initials.ts';
 import { browserStorage } from '../../_kit/ports.browser.ts';
 import { exitApp, enterFullscreen, browserAppEnv, EXIT_HINT } from '../../_kit/app.ts';
+import { pref, text } from '../../_kit/prefs.ts';
+import { ROTATE_HINT_KEY, rotateHintShows } from './rotate-hint.ts';
+import { renderRotateHint } from './ui/rotate-hint.tsx';
 import type { Arsenal, Weapon, Gear } from './sim.ts';
 import type { GameState, GameTank, MatchState } from './game-types.ts';
 import type { PreviewEnv } from './preview.ts';
@@ -169,7 +173,7 @@ const G: GameState = {
   plate: 0, shield: false, jammer: 0, bunker: 0, laststand: false,
   time: 0, shake: 0,
   dlgQ: [], dlgT: 0, lastTalk: -99, banterT: 30, bannerT: 0, bannerDone: null,
-  cam: { z: 1, cx: 360, cy: 230 },
+  w: ROOM_W, hills: null, cam: { z: 1, cx: ROOM_W / 2, cy: 230 },
   over: false, won: false,
   tactics: {}, demo: false, demoHint: false, watchTurns: 0, preview: null,
 };
@@ -283,7 +287,7 @@ function frame(ts: number): void {
     G.time += dt;
     for (const cl of G.clouds) {
       cl.x += cl.v * dt;
-      if (cl.x - 40 > W) cl.x = -40;
+      if (cl.x - 40 > G.w) cl.x = -40;
     }
     pumpDialogue(dt);
     updateCamera(dt);
@@ -299,7 +303,7 @@ function frame(ts: number): void {
   tickTutorial();
   for (const cl of G.clouds) {
     cl.x += cl.v * dt;
-    if (cl.x - 40 > W) cl.x = -40;
+    if (cl.x - 40 > G.w) cl.x = -40;
   }
   pumpDialogue(dt);
   G.banterT -= dt;
@@ -330,14 +334,14 @@ function frame(ts: number): void {
   }
   if (G.phase === 'aim' && cur().isPlayer && !G.demo) {
     const t = me();
-    const arm = stepArm(input.held, dt, t, facing(t));
+    const arm = stepArm(input.held, dt, t, facing(t), G.w);
     t.angle = arm.angle;
     t.power = arm.power;
     if ((input.held.has('driveLeft') || input.held.has('driveRight')) && t.fuel > 0) {
       const dx = input.held.axis('driveLeft', 'driveRight');
       const step = dx * TUNE.driveSpeed * dt;
       if (Math.abs(step) > 0 && Math.abs(t.fuel) >= Math.abs(step)) {
-        const nx = clamp(t.x + step, 12, W - 12);
+        const nx = clamp(t.x + step, 12, G.w - 12);
         if (!spotTaken(t, nx)) {
           t.fuel -= Math.abs(step);
           t.x = nx;
@@ -428,11 +432,13 @@ const savedInitials = initialsPref(browserStorage(), Math.random);
 const getInitials = (): string => savedInitials.get();
 /* The solo match (src/match.ts): dealing, turns, blasts, the drone's shot, the end veil. A dependency
    on a module wired further down is passed as an arrow, so it resolves when it is called. */
+/* Matches are dealt at the width the landscape box gives (spec 6.6). */
+const field = createFieldWidth(() => ({ w: window.innerWidth, h: window.innerHeight }));
 const {
   advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
   stepWar, decayFx,
 } = createMatch({
-  G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
+  field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
   tutorialFired, fileReport, savedCallsign, backToTitle: () => backToTitle(),
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
@@ -791,6 +797,16 @@ const NAV_HINTS: [string, string][] = [
   ['menu-overlay', 'nav-menu'], ['log-overlay', 'nav-log'],
   ['tutorial-overlay', 'nav-tutorial'], ['gun-overlay', 'nav-gun'],
 ];
+/* The rotate hint: portrait, a real match, until the player closes it once. */
+const rotateHint = pref(ROTATE_HINT_KEY, '', text, browserStorage());
+const portraitQuery = window.matchMedia('(orientation: portrait)');
+function refreshRotateHint(): void {
+  const root = document.getElementById('rotate-hint-root');
+  if (!root) return;
+  const show = rotateHintShows({ portrait: portraitQuery.matches, dismissed: rotateHint.get() === 'dismissed', playing: !G.demo && !G.over && (G.tanks.length > 0 || G.phase === 'banner' || G.phase === 'shop') });
+  renderRotateHint(root, show, () => { rotateHint.set('dismissed'); refreshRotateHint(); });
+}
+portraitQuery.addEventListener?.('change', refreshRotateHint);
 function refreshNavHints(): void {
   for (const [panelId, hintId] of NAV_HINTS) {
     const panel = $(panelId), hint = $(hintId);
@@ -798,6 +814,7 @@ function refreshNavHints(): void {
     const fits = (panel.scrollHeight || 0) <= (panel.clientHeight || 0) + 1;
     hint.setAttribute('aria-disabled', String(fits));
   }
+  refreshRotateHint();
 }
 /* ESC shuts whatever is overlaid: the firing range first, then the lobby,
 then every open panel. */

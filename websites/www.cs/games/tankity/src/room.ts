@@ -21,7 +21,7 @@ import { prettyRoomError, shouldCatchUp, standingsRows } from './net.ts';
 import type { RoomClient } from './net.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
-import { H, TUNE, W, carveCrater, clamp, facing } from './sim.ts';
+import { H, ROOM_W, TUNE, carveCrater, clamp, facing, genTerrain, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
 import type { ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
 
@@ -169,12 +169,21 @@ export function createRoom(deps: RoomDeps) {
       net.map = room.map;
       net.mapName = room.mapName || 'Random hills';
     }
-    if (Array.isArray(room.terrain) && room.terrain.length === W) {
+    G.w = ROOM_W; // every room plays a 720 field
+    if (Array.isArray(room.terrain) && room.terrain.length === ROOM_W) {
       G.terrain = room.terrain.map(Number);
+    } else if (G.terrain.length !== ROOM_W) {
+      // The lobby has no ground yet and the demo's was dealt at its own width: a stand-in at the
+      // room's width keeps the canvas, the camera and the scenery from drawing a field of the wrong size.
+      const stand = genTerrain(mulberry32(hashSeed('room:' + room.code)), ROOM_W);
+      G.terrain = stand.terrain;
+      G.hills = stand.hills;
     }
+    const hills = hillsFrom(room.hills);
+    if (hills) G.hills = hills;
     if (!G.clouds.length) {
       for (let i = 0; i < 5; i++) {
-        G.clouds.push({ x: Math.random() * W, y: 30 + Math.random() * 90, s: 0.6 + Math.random() * 0.9, v: 3 + Math.random() * 5 });
+        G.clouds.push({ x: Math.random() * ROOM_W, y: 30 + Math.random() * 90, s: 0.6 + Math.random() * 0.9, v: 3 + Math.random() * 5 });
       }
     }
     G.wind = room.wind || 0;
@@ -481,7 +490,7 @@ export function createRoom(deps: RoomDeps) {
     fallTanks(dt);
     for (const cl of G.clouds) {
       cl.x += cl.v * dt;
-      if (cl.x - 40 > W) cl.x = -40;
+      if (cl.x - 40 > G.w) cl.x = -40;
     }
     netReplay(dt);
     pumpDialogue(dt);
@@ -501,7 +510,7 @@ export function createRoom(deps: RoomDeps) {
     }
     const t = myTank();
     if (t && t.hp > 0 && MATCH.myTurn) {
-      const arm = stepArm(input.held, dt, t, facing(t));
+      const arm = stepArm(input.held, dt, t, facing(t), G.w);
       t.angle = arm.angle;
       t.power = arm.power;
       if (arm.adjusting) MATCH.aimDirty = true;

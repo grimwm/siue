@@ -186,6 +186,10 @@ for (const id of ['rooms-open', 'host-form', 'lobby-initials', 'join-form',
   'lobby-map', 'lobby-hills', 'lobby-count', 'new-game']) {
   check('lobby-rendered-' + id, rendered(id));
 }
+// The field's width is set where a match is dealt and nowhere else (spec 6.6).
+const widthWrites = [...src.matchAll(/\bG\.w\s*=(?!=)/g)].length;
+check('field-width-written-only-at-the-deal', widthWrites === 2 && /G\.w = field\.deal\(\)/.test(moduleSrc['match.ts']) && /G\.w = ROOM_W/.test(moduleSrc['room.ts']), `writes=${widthWrites}`);
+check('no-module-imports-a-fixed-width', !/import\s*\{[^}]*\bW\b[^}]*\}\s*from\s*'\.\/sim\.ts'/.test(src), 'a module still imports W from sim.ts');
 check('no-status-codes', !/server said no/.test(src));
 // The page loads the effects bundle, then the game bundle, and nothing else:
 // no import map, and the game bundle carries Preact so it has no bare imports.
@@ -292,7 +296,7 @@ KD('scroll', 'lineDown');
 check('scroll-idle', els['help-overlay'].scrollTop === idleTop, `top=${els['help-overlay'].scrollTop}`);
 // The camera pins the ground to the viewport floor: no void below the world.
 check('cam-pins-ground', /H \+ 8 - halfView/.test(src));
-check('cam-wide-sky', /fillRect\(-W - 10, -2 \* H - 10, 3 \* W/.test(renderSrc));
+check('cam-wide-sky', /fillRect\(rect\.x0 - 20, rect\.y0 - 20, rect\.x1 - rect\.x0 \+ 40/.test(renderSrc)); // the sky covers everything the canvas shows
 // (invite-prefill runs inside the async block below: openLobby unhides late)
 // The clean-initials list must match the server copy exactly (cylon rule).
 function blockedOf(src) {
@@ -411,7 +415,7 @@ function scriptYou() {
 function playRoom(turn, events) {
   return fxConform(Object.assign({
     code: 'TST1', phase: NET_SHOP ? 'shop' : 'play', round: 1, wind: 2, turn, turnLeft: NET_SHOP ? null : 120, shopLeft: NET_SHOP ? 90 : null,
-    terrain: terr720(), terrainRev: 1,
+    terrain: terr720(), terrainRev: 1, hills: [40, 20, 10, 1, 2, 3, 0.004, 0.008, 0.02],
     tanks: [scriptTank(0, 100, 'abc', 'human'), scriptTank(1, 600, 'REAPER', 'ai')],
     seats: scriptSeats(), events: events || [], you: scriptYou(), csrf: 'cs0',
   }, mapFields()));
@@ -522,7 +526,7 @@ function lobbyRoom() {
     return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], bot: false, lives: 0, score: 0, ready: false };
   });
   return fxConform(Object.assign(
-    { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], terrainRev: 1, round: 0, wind: 0, turn: null, turnLeft: null, shopLeft: null, you: scriptYou(), csrf: 'cs0' },
+    { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], terrainRev: 1, hills: null, round: 0, wind: 0, turn: null, turnLeft: null, shopLeft: null, you: scriptYou(), csrf: 'cs0' },
     mapFields(),
   ));
 }

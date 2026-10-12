@@ -3,7 +3,7 @@
 // the status bar wraps or clips, the deck fits, the page fits the screen,
 // chips in a row line up, and phone targets are thumb-sized.
 import { test, expect } from '@playwright/test';
-import { recorderScript, newPlayer } from './helpers.mjs';
+import { recorderScript, newPlayer, groundProbe } from './helpers.mjs';
 
 const DEVICES = [
   ['Desktop', 1280, 720, false], ['Laptop, small window', 1024, 640, false],
@@ -13,6 +13,44 @@ const DEVICES = [
 ];
 const phone = ([, w, h]) => Math.min(w, h) < 600;
 const landscapePhone = ([, w, h]) => phone([0, w, h]) && w > h;
+
+/* The width each screen deals (spec 6.6): a device's portrait and landscape give the same. */
+const DEALT = { '1280x720': 1200, '1024x640': 1344, '1180x820': 984, '820x1180': 984, '393x852': 1224, '852x393': 1224, '360x740': 1176, '740x360': 1176 };
+/* The landscape box src/field.ts computes for a viewport, which the measured box must match. */
+function landscapeBox(vw, vh) {
+  const long = Math.max(vw, vh), short = Math.min(vw, vh);
+  return short <= 500 ? { w: long - 10, h: short - 75 } : { w: Math.min(long - 18, 1118), h: short - 294 };
+}
+
+/* The battlefield as drawn: no band of page between the bars, and where the field sits. */
+function battlefield() {
+  const cv = document.getElementById('stage');
+  const box = document.getElementById('field').getBoundingClientRect();
+  const r = cv.getBoundingClientRect();
+  const bar = document.getElementById('hud-bar').getBoundingClientRect();
+  const deck = document.getElementById('deck');
+  const floating = getComputedStyle(deck).position === 'absolute';
+  const probs = [];
+  if (Math.abs(r.left - box.left) > 0.5 || Math.abs(r.right - box.right) > 0.5 || Math.abs(r.top - box.top) > 0.5 || Math.abs(r.bottom - box.bottom) > 0.5) {
+    probs.push('the canvas does not fill the battlefield');
+  }
+  if (Math.abs(box.top - bar.bottom) > 0.5) probs.push(`${Math.round(box.top - bar.bottom)}px between the status bar and the battlefield`);
+  if (!floating && Math.abs(deck.getBoundingClientRect().top - box.bottom) > 0.5) probs.push(`${Math.round(deck.getBoundingClientRect().top - box.bottom)}px between the battlefield and the deck`);
+  const holder = getComputedStyle(document.querySelector('.canvas-holder')).backgroundColor.match(/\d+/g).map(Number);
+  const c = cv.getContext('2d'), W = cv.width, H = cv.height;
+  const px = c.getImageData(0, 0, W, H).data;
+  const at = (x, y) => { const i = (y * W + x) * 4; return [px[i], px[i + 1], px[i + 2], px[i + 3]]; };
+  for (let y = 0; y < H; y += 2) {
+    let band = true;
+    for (let x = 0; x < W && band; x += 7) {
+      const [r0, g0, b0, a0] = at(x, y);
+      band = a0 < 255 || (r0 === holder[0] && g0 === holder[1] && b0 === holder[2]);
+    }
+    if (band) { probs.push(`a band of background at canvas row ${y}`); break; }
+  }
+  const [fx, fy, fw, fh] = cv.dataset.field.split(',').map(Number);
+  return { probs, w: Number(cv.dataset.w), field: { x: fx, y: fy, w: fw, h: fh }, canvas: { w: r.width, h: r.height }, box: { w: box.width, h: box.height } };
+}
 
 async function open(browser, [, width, height, touch], { text } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
@@ -100,7 +138,7 @@ function chipSpreads() {
 }
 
 function smallTargets() {
-  return [...document.querySelectorAll('#hud-bar button, #deck button')]
+  return [...document.querySelectorAll('#hud-bar button, #deck button, #field .rotate-x')]
     .filter(el => el.getClientRects().length)
     .map(el => [el.id || el.dataset.aim, el.getBoundingClientRect()])
     .filter(([, r]) => r.width < 43.5 || r.height < 43.5)
@@ -114,6 +152,31 @@ for (const dev of DEVICES) {
       await page.evaluate(setWorst, room);
       expect(await page.evaluate(measure), room ? 'room' : 'solo').toEqual([]);
       await page.screenshot({ path: `test-results/tankity-layout-${dev[1]}x${dev[2]}-${room ? 'room' : 'solo'}.png` });
+    }
+    // The battlefield fills the screen between the bars, the ground meets both
+    // edges, and the field's width is the one this device deals either way up.
+    const bf = await page.evaluate(battlefield);
+    expect(bf.probs).toEqual([]);
+    const gp = await page.evaluate(groundProbe);
+    expect(gp.probs, 'the drawn ground at the edges and the seams').toEqual([]);
+    expect(bf.w).toBe(DEALT[`${dev[1]}x${dev[2]}`]);
+    if (dev[1] > dev[2]) {
+      const want = landscapeBox(dev[1], dev[2]);
+      expect(Math.abs(bf.box.w - want.w), 'box width vs src/field.ts').toBeLessThanOrEqual(2);
+      expect(Math.abs(bf.box.h - want.h), 'box height vs src/field.ts').toBeLessThanOrEqual(2);
+    } else {
+      // Portrait: the field spans the full width, with sky above and dirt below.
+      expect(Math.abs(bf.field.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(bf.field.w - bf.canvas.w)).toBeLessThanOrEqual(1);
+      expect(bf.field.y).toBeGreaterThan(0);
+      expect(bf.field.y + bf.field.h).toBeLessThan(bf.canvas.h);
+      // And the pixels agree: the field's own ground (#7a4a1e, not scenery's dimmed fill) meets both screen edges.
+      expect(gp.seams, 'no scenery in portrait').toBe(0);
+      for (const e of gp.edge) {
+        expect(e.body[0], `ground fill at column ${e.x}`).toBeGreaterThanOrEqual(105);
+        expect(e.y, 'inside the drawn field').toBeGreaterThan(bf.field.y);
+        expect(e.y).toBeLessThan(bf.field.y + bf.field.h);
+      }
     }
     const chips = await page.evaluate(chipSpreads);
     if (!dev[3]) {
@@ -288,6 +351,74 @@ for (const [name, width, height, touch, narrow] of SHOP_SCREENS) {
     expect(foot.covered.filter(Boolean)).toEqual([]);
     // Rows with a Preview and a Buy are the ones the halves rule is about.
     expect(m.rows.some(r => r.buttons.length === 2)).toBe(true);
+    await ctx.close();
+  });
+}
+
+test('the width holds through a resize and the next match takes the new one', async ({ browser }) => {
+  const { ctx, page } = await open(browser, DEVICES[0]);
+  await page.locator('.title-play').click();
+  await page.clock.runFor(200);
+  expect(Number(await page.locator('#stage').getAttribute('data-w'))).toBe(1200);
+  await page.setViewportSize({ width: 1024, height: 640 });
+  await page.clock.runFor(200);
+  expect(Number(await page.locator('#stage').getAttribute('data-w')), 'mid-match: rescaled, not re-dealt').toBe(1200);
+  expect((await page.evaluate(battlefield)).probs).toEqual([]);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /Play this seed/ }).click(); // a new deal (Menu, Task 14)
+  await page.clock.runFor(200);
+  expect(Number(await page.locator('#stage').getAttribute('data-w'))).toBe(1344);
+  await ctx.close();
+});
+
+test('the rotate hint: portrait only, in a match, gone once dismissed', async ({ browser }) => {
+  const { ctx, page } = await open(browser, DEVICES[4]);
+  expect(await page.locator('.rotate-hint').count(), 'not over the demo').toBe(0);
+  await page.locator('.title-play').click();
+  await page.clock.runFor(200);
+  await expect(page.locator('.rotate-hint')).toContainText('Turn sideways for the full battlefield');
+  await page.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(page.locator('.rotate-hint')).toHaveCount(0);
+  await page.reload();
+  await page.waitForSelector('#hud-score > span');
+  await page.locator('.title-play').click();
+  await page.clock.runFor(200);
+  expect(await page.locator('.rotate-hint').count(), 'remembered').toBe(0);
+  await ctx.close();
+});
+
+/* In portrait the field's ground melts into the dirt: down the foot of the field, the
+   median luminance of a row (so a stray spark or crater cannot hide or fake an edge)
+   differs from the next row's by no more than SEAM_STEP levels of 255. The old hard line was 50. */
+const SEAM_STEP = 8;
+function seamSteps() {
+  const cv = document.getElementById('stage');
+  const c = cv.getContext('2d'), W = cv.width, H = cv.height;
+  const dpr = W / cv.getBoundingClientRect().width;
+  const [, fy, , fh] = cv.dataset.field.split(',').map(Number);
+  const floor = Math.round((fy + fh) * dpr); // the field's bottom edge in canvas pixels
+  const unit = (fh / 460) * dpr; // a world unit in canvas pixels; the lowest hills sit 45 units above the floor
+  const y0 = Math.max(0, floor - Math.round(30 * unit)), y1 = Math.min(H - 1, floor + Math.round(70 * unit));
+  const px = c.getImageData(0, y0, W, y1 - y0 + 1).data;
+  const median = y => {
+    const v = [];
+    for (let x = 0; x < W; x += 3) { const i = ((y - y0) * W + x) * 4; v.push(0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]); }
+    return v.sort((a, b) => a - b)[v.length >> 1];
+  };
+  let worst = 0, at = 0, prev = median(y0);
+  for (let y = y0 + 1; y <= y1; y++) {
+    const m = median(y);
+    if (Math.abs(m - prev) > worst) { worst = Math.abs(m - prev); at = y - floor; }
+    prev = m;
+  }
+  return { worst, at };
+}
+
+for (const dev of DEVICES.filter(d => d[2] > d[1])) {
+  test(`portrait ${dev[1]}×${dev[2]}: the ground melts into the dirt with no straight edge across the width`, async ({ browser }) => {
+    const { ctx, page } = await open(browser, dev);
+    const { worst, at } = await page.evaluate(seamSteps);
+    expect(worst, `largest luminance step ${worst.toFixed(1)} at ${at}px from the field's floor`).toBeLessThanOrEqual(SEAM_STEP);
     await ctx.close();
   });
 }

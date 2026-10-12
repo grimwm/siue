@@ -43,7 +43,7 @@ function room_map_name(?string $id): string
 const ROOM_PROFILE_N = 48;
 function room_map_profile(string $id): array
 {
-    $w = 720;
+    $w = ROOM_W;
     $mrng = room_hash_seed(ROOM_MAPS[$id]['seed'] . '|round1');
     $t = room_gen_terrain($mrng, $w);
     $out = [];
@@ -56,6 +56,21 @@ function room_map_profile(string $id): array
 const ROOM_TURN_WIND = 2.2;
 const ROOM_GRAV = 95;
 const ROOM_FLAT_GRAV = 90; // flat bolts arc a little (src/sim.ts FLAT_GRAV)
+const ROOM_W = 720; // a room's field; a solo run's is dealt (src/field.ts) and checked here
+const FIELD_W_MIN = 720;
+const FIELD_W_MAX = 1440;
+const FIELD_COL = 24;
+const ROOM_FLIGHT_STEPS = 720; // a shell's longest flight on a room's field in 1/60 s steps (12 s), times room_field_reach() on a wider one; not a width
+
+/* src/sim.ts fieldWidthOk(): an int in range on a whole column, else null.
+   Nothing calls it yet: the solo-run checks (Plan D) validate a reported width with it. */
+function room_field_width(mixed $w): ?int
+{
+    if (!is_int($w) || $w < FIELD_W_MIN || $w > FIELD_W_MAX || $w % FIELD_COL !== 0) {
+        return null;
+    }
+    return $w;
+}
 
 /* ---------- deterministic sim: bit-identical integer core to src/sim.ts ---------- */
 function u32(int $v): int
@@ -99,11 +114,18 @@ function room_gauss(int &$a): float
 {
     return (room_rng_next($a) + room_rng_next($a) + room_rng_next($a) - 1.5) * 2.0;
 }
-function room_gen_terrain(int &$rng, int $w): array
+/* src/sim.ts drawHills(): the nine draws, in this order. */
+function room_gen_hills(int &$rng): array
 {
     $a = [20 + room_rng_next($rng) * 30, 10 + room_rng_next($rng) * 22, 5 + room_rng_next($rng) * 12];
     $p = [room_rng_next($rng) * 6.28, room_rng_next($rng) * 6.28, room_rng_next($rng) * 6.28];
     $f = [1 / 260 + room_rng_next($rng) / 500, 1 / 120 + room_rng_next($rng) / 260, 1 / 47 + room_rng_next($rng) / 120];
+    return ['a' => $a, 'p' => $p, 'f' => $f];
+}
+/* src/sim.ts hillY() over columns 0..w-1. */
+function room_hills_terrain(array $h, int $w): array
+{
+    [$a, $p, $f] = [$h['a'], $h['p'], $h['f']];
     $t = [];
     for ($x = 0; $x < $w; $x++) {
         $y = 330
@@ -113,6 +135,14 @@ function room_gen_terrain(int &$rng, int $w): array
         $t[$x] = max(190.0, min(415.0, $y));
     }
     return $t;
+}
+function room_hills_wire(array $h): array
+{
+    return array_merge($h['a'], $h['p'], $h['f']);
+}
+function room_gen_terrain(int &$rng, int $w): array
+{
+    return room_hills_terrain(room_gen_hills($rng), $w);
 }
 function room_weapons(): array
 {
@@ -165,9 +195,15 @@ function room_gear(string $key): ?array
     }
     return null;
 }
-function room_shot_speed(float $power, bool $flat, float $mult = 1.0): float
+/* src/sim.ts shotSpeed(): $reach is room_field_reach() of the field, exactly 1.0 on a room's. */
+function room_shot_speed(float $power, bool $flat, float $mult = 1.0, float $reach = 1.0): float
 {
-    return ($flat ? 140.0 + $power * 3.2 : 40.0 + $power * 2.4) * $mult;
+    return ($flat ? 140.0 + $power * 3.2 : 40.0 + $power * 2.4) * $mult * $reach;
+}
+/* src/sim.ts fieldReach(): range and height grow by w / ROOM_W. */
+function room_field_reach(int $w): float
+{
+    return sqrt($w / ROOM_W);
 }
 /* Where a shell leaves the barrel: 20 px along it, 14 px above the hull.
 // src/sim.ts muzzle() is the same. [x, y]. */
@@ -289,11 +325,11 @@ function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $a
     $weapons = room_weapons();
     $flat = !empty($weapons[$wkey]['flat']);
     $rad = deg2rad($angle);
-    $vx = cos($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0)) * $dirS;
-    $vy = -sin($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0));
+    $vx = cos($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0), room_field_reach($w)) * $dirS;
+    $vy = -sin($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0), room_field_reach($w));
     $grav = $flat ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
     $dt = 1 / 60;
-    for ($i = 0; $i < 720; $i++) {
+    for ($i = 0, $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($w)); $i < $steps; $i++) {
         $vx += $wind * ROOM_TURN_WIND * $dt;
         $vy += $grav * $dt;
         $x += $vx * $dt;
@@ -505,7 +541,8 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
     $grav = !empty($w['flat']) ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
     $pierced = null; // the tank a lance went through, never hit twice
     $clear = false; // out of its gunner's box yet
-    for ($step = 0; $step < 720; $step++) {
+    $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($width));
+    for ($step = 0; $step < $steps; $step++) {
         if (($w['effect'] ?? 'shot') === 'seeker') {
             $dv = room_seek_push($room['tanks'], $ownerIdx, $sx, $sy, (float) ($w['steer'] ?? 70.0), $dt);
             if ($dv !== null) {
@@ -572,7 +609,7 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
             return ['hit', $sx, $sy, $vx, $vy, null, $path, $flown];
         }
     }
-    return ['oob', $sx, $sy, $vx, $vy, null, $path, 720 * $dt];
+    return ['oob', $sx, $sy, $vx, $vy, null, $path, $steps * $dt];
 }
 /* A roller touched down at column $sx with velocity ($vx, $vy), $steps sim
 // steps into its flight: roll it to its burst. Returns room_fly_arc's tuple

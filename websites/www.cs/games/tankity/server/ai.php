@@ -104,6 +104,28 @@ const ROOM_TACTICS = ['hunter', 'bully', 'sniper', 'avenger', 'glory', 'lobber']
 const ROOM_DRY_FLIP = 3;
 const ROOM_FLIP_CHANCE = 0.35;
 const ROOM_SNIPER_WOB = 0.8;
+/* src/ai.ts FIELD_AIM: [width, aim, floor]. A wider field's faster shells
+   need a steadier hand to keep each difficulty's hit rates. */
+const ROOM_FIELD_AIM = [[720, 1.0, 1.0], [1080, 0.7, 0.5], [1440, 0.55, 0.4]];
+function room_field_aim(int $w): array
+{
+    $pts = ROOM_FIELD_AIM;
+    $n = count($pts);
+    if ($w <= $pts[0][0]) {
+        return ['aim' => $pts[0][1], 'floor' => $pts[0][2]];
+    }
+    if ($w >= $pts[$n - 1][0]) {
+        return ['aim' => $pts[$n - 1][1], 'floor' => $pts[$n - 1][2]];
+    }
+    $i = 0;
+    while ($pts[$i + 1][0] < $w) {
+        $i++;
+    }
+    [$aw, $aa, $af] = $pts[$i];
+    [$bw, $ba, $bf] = $pts[$i + 1];
+    $t = ($w - $aw) / ($bw - $aw);
+    return ['aim' => $aa + ($ba - $aa) * $t, 'floor' => $af + ($bf - $af) * $t];
+}
 const ROOM_LOB_ANGLE = 60;
 const ROOM_LOB_OK = 40.0; // a high arc this close is good enough; otherwise flat shots may compete
 const ROOM_KILL_GLORY = 300;
@@ -238,9 +260,10 @@ function room_ai_choose(array &$room, array $tank): array
         $me = count($rivals) > 1 ? $rivals[(int) floor(room_rng_next($rng) * count($rivals))] : $rivals[0];
     }
     $width = count($room['terrain']);
+    $fa = room_field_aim($width);
     // Deliberately shaky hands: dangerous up close, forgiving at range.
     // A jammer doubles the wobble of anything aimed at its owner.
-    $wob = max($skill['wobFloor'], $skill['wobStart'] - $skill['wobStep'] * $room['round']) * ($s === 'sniper' ? ROOM_SNIPER_WOB : 1.0);
+    $wob = max($skill['wobFloor'], $skill['wobStart'] - $skill['wobStep'] * $room['round']) * ($s === 'sniper' ? ROOM_SNIPER_WOB : 1.0) * $fa['aim'];
     if ($cont !== null) {
         $w = $mem['w'];
         $n = $mem['n'] + 1;
@@ -254,7 +277,7 @@ function room_ai_choose(array &$room, array $tank): array
         // of the last one, it bursts on the target (or, taking out only part
         // of the miss, nearer it).
         [$ba, $bp] = room_ai_correct($room, $mx, $my, $w, $dirS, (float) $mem['a'], (float) $mem['p'], $sim['x'] + $miss * $skill['correct']);
-        $wob = max($skill['brkFloor'], $wob * $skill['brkShrink'] ** $n);
+        $wob = max($skill['brkFloor'] * $fa['floor'], $wob * $skill['brkShrink'] ** $n);
     } else {
         $guns = $keys;
         if ($s === 'glory') {

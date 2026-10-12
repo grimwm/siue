@@ -4,7 +4,7 @@
 // tried to advance or change game state fails here without a browser.
 import { check } from '../../_kit/test/check.ts';
 import { createRenderer, drawChassis } from '../src/render.ts';
-import { W, H, facing, isGroundUnit, muzzle, surfY, hashSeed, mulberry32, gauss } from '../src/sim.ts';
+import { ROOM_W as W, H, facing, isGroundUnit, muzzle, surfY, hashSeed, mulberry32, gauss } from '../src/sim.ts';
 
 
 function deepFreeze(o) {

@@ -6,7 +6,7 @@
  * algorithm, kept in step by the shared vectors in protocol/sim-vectors.json.
  * brkLand stays in sim.ts: explode calls it, and sim.ts must not import this
  * file. */
-import { W, clamp, facing, gauss, muzzle, simShot, spotTaken, surfY } from './sim.ts';
+import { clamp, facing, gauss, muzzle, simShot, spotTaken, surfY } from './sim.ts';
 import type { Arsenal, Difficulty, Rng, Tank, Weapon, World } from './sim.ts';
 export type { Difficulty } from './sim.ts';
 
@@ -51,6 +51,27 @@ export const DIFFICULTY: Readonly<Record<Difficulty, Readonly<AimSkill>>> = {
   normal: { wobStart: 3.7, wobStep: 0.33, wobFloor: 1.15, correct: 0.6, brkShrink: 0.5, brkFloor: 0.4, brkMax: 5 },
   hard: { wobStart: 0.85, wobStep: 0.12, wobFloor: 0.25, correct: 1, brkShrink: 0.65, brkFloor: 0.2, brkMax: 5 },
 };
+/* Wider fields fly faster shells (sim.ts fieldReach), so a degree or a power
+   point moves the burst further: the drones' wobble tightens with the width so
+   each difficulty keeps its hit rates (test/ai-hitrate.test.mjs, every width).
+   `aim` scales the ranging wobble, `floor` the bracket's floor. Measured with
+   src/ai-measure.ts; between points the knobs are interpolated straight.
+   Rooms are always ROOM_W wide, where both are exactly 1. */
+export const FIELD_AIM: readonly { w: number; aim: number; floor: number }[] = [
+  { w: 720, aim: 1, floor: 1 },
+  { w: 1080, aim: 0.7, floor: 0.5 },
+  { w: 1440, aim: 0.55, floor: 0.4 },
+];
+export function fieldAim(w: number): { aim: number; floor: number } {
+  const last = FIELD_AIM[FIELD_AIM.length - 1]!;
+  if (w <= FIELD_AIM[0]!.w) return { aim: FIELD_AIM[0]!.aim, floor: FIELD_AIM[0]!.floor };
+  if (w >= last.w) return { aim: last.aim, floor: last.floor };
+  let i = 0;
+  while (FIELD_AIM[i + 1]!.w < w) i++;
+  const a = FIELD_AIM[i]!, b = FIELD_AIM[i + 1]!;
+  const t = (w - a.w) / (b.w - a.w);
+  return { aim: a.aim + (b.aim - a.aim) * t, floor: a.floor + (b.floor - a.floor) * t };
+}
 /* The table row for a stored difficulty; anything else (an older save, a
    room from before the setting) aims at normal. */
 export function aimSkill(d: string | undefined): Readonly<AimSkill> {
@@ -158,6 +179,7 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
   // a strategy that still wants that target.
   let cont: Tank | null = null;
   const skill = aimSkill(world.difficulty);
+  const fa = fieldAim(world.terrain.length);
   if (mem && mem.n < skill.brkMax && Math.abs(t.x - mem.ox) <= 1 && keys.includes(mem.w)) {
     const c = world.tanks[mem.t];
     if (c && c !== t && c.hp > 0 && Math.abs(c.x - mem.tx) <= BRK_DRIFT && (want === null || want === c)) cont = c;
@@ -169,7 +191,7 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
   else target = rivals[0] || t;
   // Deliberately shaky hands: dangerous up close, forgiving at range.
   // A jammer doubles the wobble of anything aimed at our tank.
-  let wob = Math.max(skill.wobFloor, skill.wobStart - skill.wobStep * world.round) * (s === 'sniper' ? SNIPER_WOB : 1);
+  let wob = Math.max(skill.wobFloor, skill.wobStart - skill.wobStep * world.round) * (s === 'sniper' ? SNIPER_WOB : 1) * fa.aim;
   let ba: number, bp: number, w: string, n: number;
   if (cont) {
     w = mem!.w;
@@ -182,7 +204,7 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
     // the last one, it bursts on the target (or, taking out only part of the
     // miss, nearer it).
     [ba, bp] = aiCorrect(world, arsenal, m.x, m.y, w, dirS, mem!.a, mem!.p, sim.x + miss * skill.correct);
-    wob = Math.max(skill.brkFloor, wob * skill.brkShrink ** n);
+    wob = Math.max(skill.brkFloor * fa.floor, wob * skill.brkShrink ** n);
   } else {
     let guns = keys;
     if (s === 'glory') {
@@ -222,7 +244,7 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
   // unless they are walking a bracket in.
   if (!cont && world.rng() < 0.35) {
     const dx = (world.rng() < 0.5 ? -1 : 1) * (8 + world.rng() * 27);
-    const nx = clamp(t.x + dx, 12, W - 12);
+    const nx = clamp(t.x + dx, 12, world.terrain.length - 12);
     if (!spotTaken(world.tanks, t, nx)) {
       t.x = nx;
       t.y = surfY(world.terrain, t.x);

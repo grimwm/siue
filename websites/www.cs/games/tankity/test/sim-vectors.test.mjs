@@ -26,12 +26,12 @@ const arsenal = sim.buildArsenal(GAME.arsenal);
 
 /* ---- state the cases run over ---- */
 const G = {};
-function buildTerrain(spec) {
+function buildTerrain(spec, w = 720) {
   const t = [];
-  for (let ix = 0; ix < sim.W; ix++) {
+  for (let ix = 0; ix < w; ix++) {
     let y;
     if (spec.flat !== undefined) y = spec.flat;
-    else if (spec.slope) y = spec.slope[0] + (spec.slope[1] - spec.slope[0]) * ix / (sim.W - 1);
+    else if (spec.slope) y = spec.slope[0] + (spec.slope[1] - spec.slope[0]) * ix / (w - 1);
     else y = spec.hills[0] + spec.hills[1] * Math.sin(ix * 2 * Math.PI / spec.hills[2]);
     for (const [x0, x1, sy] of spec.set || []) if (ix >= x0 && ix <= x1) y = sy;
     t.push(Math.round(y * 1000) / 1000);
@@ -45,11 +45,11 @@ const tankOf = (spec, i) => ({
   s: spec.s, dry: spec.dry, dealt: spec.dealt, lastHitBy: spec.lastHitBy, kills: spec.kills,
 });
 /* A fresh world for a case: the tanks, the ground, the wind, and the human's tricks (G.shield and friends are the player's). */
-function world(c) {
+function world(c, w = 720) {
   for (const k of Object.keys(G)) delete G[k];
   const human = (c.tanks || []).find(t => t.kind === 'human') || {};
   Object.assign(G, {
-    tanks: (c.tanks || []).map(tankOf), terrain: buildTerrain(c.terrain || { flat: 400 }), wind: c.wind || 0, round: c.round || 1,
+    tanks: (c.tanks || []).map(tankOf), terrain: buildTerrain(c.terrain || { flat: 400 }, w), wind: c.wind || 0, round: c.round || 1,
     shells: [], booms: [], clouds: [], fx: {}, ammo: {}, selected: 'shell', score: human.score || 0, cash: 0, shake: 0, shopSel: 0,
     shield: !!human.shield, bunker: human.bunker || 0, laststand: !!human.laststand, jammer: human.jammer || 0,
     difficulty: c.difficulty,
@@ -80,14 +80,14 @@ const RUN = {
     return { hash, stream: [0, 1, 2, 3, 4, 5].map(() => r()) };
   },
   'terrain-gen'(c) {
-    const { terrain } = sim.genTerrain(sim.mulberry32(sim.hashSeed(c.seed)));
+    const { terrain } = sim.genTerrain(sim.mulberry32(sim.hashSeed(c.seed)), 720);
     const samples = [];
-    for (let x = 0; x < sim.W; x += 60) samples.push(terrain[x]);
+    for (let x = 0; x < 720; x += 60) samples.push(terrain[x]);
     return { samples, min: Math.min(...terrain), max: Math.max(...terrain) };
   },
   'spawn-spots'(c) {
     const r = sim.mulberry32(c.seed);
-    return { spots: sim.spawnSpots(c.n, r), next: r() };
+    return { spots: sim.spawnSpots(c.n, r, 720), next: r() };
   },
   'shot-speed': c => sim.shotSpeed(c.power, c.flat, c.mult),
   muzzle(c) {
@@ -189,7 +189,7 @@ const RUN = {
 function expectedFor(group, c, out) {
   if (group !== 'ai-aim') return out;
   const x0 = c.tanks[c.shooter].x;
-  const moved = out.dx === 0 ? 0 : Math.max(12, Math.min(sim.W - 12, x0 + out.dx)) - x0;
+  const moved = out.dx === 0 ? 0 : Math.max(12, Math.min(720 - 12, x0 + out.dx)) - x0;
   return { wkey: out.wkey, angle: out.angle, power: out.power, moved };
 }
 

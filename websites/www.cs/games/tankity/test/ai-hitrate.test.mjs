@@ -24,12 +24,17 @@ const ROUNDS = [1, 5, 10];
 const NORMAL = { ranging: { 1: 10, 5: 15, 10: 25 }, twice: { 1: 25, 5: 40, 10: 55 } };
 const BAND = 5;
 
+const WIDTHS = (process.env.TANKITY_HITRATE_WIDTHS || '720,1080,1440').split(',').map(Number);
 const rates = {};
-for (const d of DIFFICULTIES) {
-  rates[d] = {};
-  for (const r of ROUNDS) rates[d][r] = measureHitRates(arsenal, r, d, CASES, 3).map(p => p * 100);
+for (const w of WIDTHS) {
+  rates[w] = {};
+  for (const d of DIFFICULTIES) {
+    rates[w][d] = {};
+    for (const r of ROUNDS) rates[w][d][r] = measureHitRates(arsenal, r, d, CASES, 3, w).map(p => p * 100);
+  }
 }
-const cell = (d, r, shot) => rates[d][r][shot];
+const cell = (d, r, shot, w = 720) => rates[w][d][r][shot];
+
 
 test('the table has the three levels, each with every knob', () => {
   assert.deepEqual([...DIFFICULTIES], ['easy', 'normal', 'hard']);
@@ -53,29 +58,31 @@ test('an unknown or missing level aims at normal', () => {
   assert.equal(aimSkill('easy'), DIFFICULTY.easy);
 });
 
-test('normal hits within 5 points of its targets', () => {
-  for (const r of ROUNDS) {
-    assert.ok(Math.abs(cell('normal', r, 0) - NORMAL.ranging[r]) <= BAND, `round ${r} ranging shot: ${cell('normal', r, 0).toFixed(1)}%`);
-    assert.ok(Math.abs(cell('normal', r, 2) - NORMAL.twice[r]) <= BAND, `round ${r} after two corrections: ${cell('normal', r, 2).toFixed(1)}%`);
-  }
-});
-
-test('easy hits about half as often as normal', () => {
-  for (const r of ROUNDS) {
-    for (const shot of [0, 2]) {
-      const half = cell('normal', r, shot) / 2;
-      assert.ok(Math.abs(cell('easy', r, shot) - half) <= BAND, `round ${r} shot ${shot}: easy ${cell('easy', r, shot).toFixed(1)}%, half of normal ${half.toFixed(1)}%`);
+for (const w of WIDTHS) {
+  test(`normal hits within 5 points of its targets, ${w} wide`, () => {
+    for (const r of ROUNDS) {
+      assert.ok(Math.abs(cell('normal', r, 0, w) - NORMAL.ranging[r]) <= BAND, `round ${r} ranging shot: ${cell('normal', r, 0, w).toFixed(1)}%`);
+      assert.ok(Math.abs(cell('normal', r, 2, w) - NORMAL.twice[r]) <= BAND, `round ${r} after two corrections: ${cell('normal', r, 2, w).toFixed(1)}%`);
     }
-  }
-});
+  });
 
-test('hard hits at least as often as normal', () => {
-  for (const r of ROUNDS) {
-    for (const shot of [0, 1, 2]) {
-      assert.ok(cell('hard', r, shot) >= cell('normal', r, shot), `round ${r} shot ${shot}: hard ${cell('hard', r, shot)}%, normal ${cell('normal', r, shot)}%`);
+  test(`easy hits about half as often as normal, ${w} wide`, () => {
+    for (const r of ROUNDS) {
+      for (const shot of [0, 2]) {
+        const half = cell('normal', r, shot, w) / 2;
+        assert.ok(Math.abs(cell('easy', r, shot, w) - half) <= BAND, `round ${r} shot ${shot}: easy ${cell('easy', r, shot, w).toFixed(1)}%, half of normal ${half.toFixed(1)}%`);
+      }
     }
-  }
-});
+  });
+
+  test(`hard hits at least as often as normal, ${w} wide`, () => {
+    for (const r of ROUNDS) {
+      for (const shot of [0, 1, 2]) {
+        assert.ok(cell('hard', r, shot, w) >= cell('normal', r, shot, w), `round ${r} shot ${shot}: hard ${cell('hard', r, shot, w)}%, normal ${cell('normal', r, shot, w)}%`);
+      }
+    }
+  });
+}
 
 test('the setting defaults to normal and keeps a saved word', () => {
   assert.equal(difficultySetting(memoryStorage()).get(), 'normal');

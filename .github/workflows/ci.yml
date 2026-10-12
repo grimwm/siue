@@ -93,6 +93,9 @@ jobs:
 
       - name: Unit suites
         if: steps.scope.outputs.run == '1'
+        env:
+          # The nightly run adds the two widths PRs skip (Tankity's hit rates per field width).
+          TANKITY_HITRATE_WIDTHS: ${{ github.event_name == 'schedule' && '720,912,1080,1200,1440' || '720,1080,1440' }}
         run: make test
 
       - name: Container logs

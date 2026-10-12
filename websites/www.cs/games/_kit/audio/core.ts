@@ -89,6 +89,15 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     }
   }
 
+  // Some contexts return nothing or throw from resume(); a promise either way keeps sound calls safe.
+  function resume(c: AudioContext): Promise<void> {
+    try {
+      return Promise.resolve(c.resume());
+    } catch (err) {
+      return Promise.reject(err);
+    }
+  }
+
   function context(): AudioContext | null {
     if (!ctx) {
       // Asked again on every call: a page can gain Web Audio later (a test, a polyfill).
@@ -110,7 +119,7 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
         return null;
       }
     }
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    if (ctx.state === 'suspended') resume(ctx).catch(() => {});
     return ctx;
   }
 
@@ -213,7 +222,7 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
       for (const cb of ready) cb();
     };
     if (c.state === 'running') prime();
-    else c.resume().then(prime, () => {});
+    else resume(c).then(prime, () => {});
   }
 
   return {

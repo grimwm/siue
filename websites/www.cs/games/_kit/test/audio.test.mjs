@@ -198,3 +198,16 @@ test('unlock primes and reports ready only once resume resolves, for every calle
   assert.deepEqual(ready, ['first', 'second']);
   assert.equal(ctx.nodes.filter(n => n.kind === 'osc').length, 1);
 });
+
+test('a context whose resume() returns nothing or throws still plays and throws nothing', () => {
+  for (const resume of [() => undefined, () => { throw new Error('no resume'); }]) {
+    const ctx = fakeAudioContext('suspended');
+    ctx.resume = resume;
+    const core = createAudioCore({ createContext: () => ctx });
+    assert.doesNotThrow(() => {
+      core.tone({ freq: 440, dur: 0.1 });
+      core.unlock(() => {});
+    });
+    assert.equal(core.peek(), ctx);
+  }
+});

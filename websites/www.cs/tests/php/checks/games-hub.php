@@ -152,10 +152,7 @@ $check('list-missing-dir-empty', games_hub_list("$tmp/nope") === ['games' => [],
 
 // The games shipped with the site must all be valid.
 $real = games_hub_list(__DIR__ . '/../../../games');
-$check('repo-games-no-errors', $real['errors'] === []);
-foreach ($real['errors'] as $e) {
-    echo "  {$e['id']}: {$e['error']}\n";
-}
+$check('repo-games-no-errors', $real['errors'] === [], json_encode($real['errors']));
 $realIds = array_column($real['games'], 'id');
 sort($realIds);
 $check('repo-games-all-listed', $realIds === ['crete', 'cylon', 'tankity']);

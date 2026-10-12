@@ -113,6 +113,7 @@ while IFS= read -r -d '' f; do
     # Authoring sources (Git LFS audio and Blender scenes, see .gitattributes;
     # TypeScript in games/*/src/): never served.
     *.blend | *.blend1 | *.wav | *.flac | *.aif | *.aiff | games/*/src/*) continue ;;
+    games/_kit/*) continue ;;
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).
     play/*) ;;

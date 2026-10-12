@@ -66,3 +66,4 @@ $check('ships every compiled and vendored file', count($built) > 10 && $missing 
 $check('node_modules never ships', array_filter($out, fn(string $f): bool => str_contains($f, 'node_modules')) === []);
 $check('composer-files-stay-home', !array_intersect(['composer.json', 'composer.lock', 'phpunit.xml'], $out), '');
 $check('vendor-stays-home', !array_filter($out, fn($f) => str_starts_with($f, 'vendor/')), '');
+$check('kit-php-stays-home', !array_filter($out, fn($f) => str_starts_with($f, 'games/_kit/')), '');

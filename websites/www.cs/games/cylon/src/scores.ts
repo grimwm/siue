@@ -28,12 +28,22 @@ export interface ScoreConfig {
 
 /** Why a submission did not save; null in the cases that stay silent. */
 export type SubmitProblem = 'invalid-initials' | 'save-failed';
-export interface SubmitResult { saved: boolean; problem: SubmitProblem | null }
+export interface SubmitResult {
+  saved: boolean;
+  problem: SubmitProblem | null;
+  /** The run's 1-based place on the all-time board as scores.php ranked it, or null when it did not make it. */
+  allTimeRank: number | null;
+}
 
 export interface ScoresClient {
-  /** The board as last heard from the server. */
+  /** The weekly board as last heard from the server. */
   board(): readonly ScoreEntry[];
-  /** True when `score` earns a board slot: open seats, or strictly above the lowest shown. */
+  /** The all-time board as last heard from the server. */
+  alltime(): readonly ScoreEntry[];
+  /**
+   * True when `score` earns a weekly board slot: open seats, or strictly above the lowest shown.
+   * Any score that makes the all-time board also makes the weekly one, so this one rule serves both.
+   */
   qualifies(score: number, list?: readonly ScoreEntry[]): boolean;
   isBlocked(initials: string): boolean;
   /** Fetches the board and the config; returns the config, or null when the call failed. */
@@ -92,6 +102,7 @@ export function createScoresClient(api: string, env: ScoresEnv): ScoresClient {
   let limit = 10;
   const blocked = new Set<string>();
   let cached: ScoreEntry[] = [];
+  let cachedAllTime: ScoreEntry[] = [];
 
   function headers(extra?: Record<string, string>): Record<string, string> {
     return { 'X-Cylon-CSRF': csrfToken, ...extra };
@@ -111,7 +122,9 @@ export function createScoresClient(api: string, env: ScoresEnv): ScoresClient {
   }
 
   function takeBoard(data: unknown): void {
-    if (isRecord(data) && Array.isArray(data.scores)) cached = data.scores as ScoreEntry[];
+    if (!isRecord(data)) return;
+    if (Array.isArray(data.scores)) cached = data.scores as ScoreEntry[];
+    if (Array.isArray(data.alltime)) cachedAllTime = data.alltime as ScoreEntry[];
   }
 
   async function load(): Promise<ScoreConfig | null> {
@@ -127,6 +140,7 @@ export function createScoresClient(api: string, env: ScoresEnv): ScoresClient {
       if (typeof data.csrf === 'string' && data.csrf) csrfToken = data.csrf;
       applyConfig(data.config);
       cached = Array.isArray(data.scores) ? data.scores as ScoreEntry[] : [];
+      cachedAllTime = Array.isArray(data.alltime) ? data.alltime as ScoreEntry[] : [];
       return isRecord(data.config) ? data.config : null;
     } catch {
       return null;
@@ -167,17 +181,23 @@ export function createScoresClient(api: string, env: ScoresEnv): ScoresClient {
     return score > lowest;
   }
 
+  /** The place scores.php computed for the run under its lock; null when it did not place. */
+  function serverRank(data: unknown): number | null {
+    const rank = isRecord(data) ? data.alltimeRank : null;
+    return typeof rank === 'number' && Number.isInteger(rank) && rank >= 1 ? rank : null;
+  }
+
   function isBlocked(initials: string): boolean {
     return blocked.has((initials || '').toUpperCase());
   }
 
   async function submit(score: number, initials: string, hits: number): Promise<SubmitResult> {
-    if (!score || score < 1) return { saved: false, problem: null };
+    if (!score || score < 1) return { saved: false, problem: null, allTimeRank: null };
     const clean = (initials || 'AAA').toUpperCase().slice(0, 3).padEnd(3, 'A');
-    if (isBlocked(clean)) return { saved: false, problem: 'invalid-initials' };
+    if (isBlocked(clean)) return { saved: false, problem: 'invalid-initials', allTimeRank: null };
     try {
       if (runIssue) await runIssue;
-      if (!runToken) return { saved: false, problem: 'save-failed' };
+      if (!runToken) return { saved: false, problem: 'save-failed', allTimeRank: null };
       const res = await env.fetch(api, {
         method: 'POST',
         credentials: 'same-origin',
@@ -193,22 +213,23 @@ export function createScoresClient(api: string, env: ScoresEnv): ScoresClient {
       }
       if (res.status === 400 && isRecord(data) && data.error === 'invalid initials') {
         takeBoard(data);
-        return { saved: false, problem: 'invalid-initials' };
+        return { saved: false, problem: 'invalid-initials', allTimeRank: null };
       }
       if (!res.ok) {
         takeBoard(data);
-        return { saved: false, problem: 'save-failed' };
+        return { saved: false, problem: 'save-failed', allTimeRank: null };
       }
       runToken = '';
-      cached = isRecord(data) && Array.isArray(data.scores) ? data.scores as ScoreEntry[] : cached;
-      return { saved: true, problem: null };
+      takeBoard(data);
+      return { saved: true, problem: null, allTimeRank: serverRank(data) };
     } catch {
-      return { saved: false, problem: null };
+      return { saved: false, problem: null, allTimeRank: null };
     }
   }
 
   return {
     board: () => cached,
+    alltime: () => cachedAllTime,
     qualifies,
     isBlocked,
     load,

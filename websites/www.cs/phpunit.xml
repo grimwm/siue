@@ -5,6 +5,7 @@
          failOnRisky="true" executionOrder="defects">
   <testsuites>
     <testsuite name="site"><directory>tests/php</directory></testsuite>
+    <testsuite name="cylon"><directory>games/cylon/test/php</directory></testsuite>
     <testsuite name="kit"><directory>games/_kit/php/tests</directory></testsuite>
   </testsuites>
 </phpunit>

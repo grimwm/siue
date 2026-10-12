@@ -1,9 +1,9 @@
 name: ci
 
-# Unit suites (`make test`) and the browser suite (`make e2e`) on pull
-# requests; the unit suites also on main, whenever a change touches something
-# they cover. A green run on main is what starts deploy.yml, so the browser
-# suite (about ten minutes) runs on the pull request only, before the merge.
+# Unit suites and the selected browser specs on pull requests; the unit suites
+# on main when a covered path changes; and every suite, every browser spec,
+# once a day on main (schedule) or on demand (workflow_dispatch). Only a green
+# run from a push starts deploy.yml.
 #
 # `units` and `e2e` are meant to be required checks on main, so every pull
 # request runs both; one that touches none of what they cover passes without
@@ -11,6 +11,9 @@ name: ci
 
 on:
   pull_request:
+  schedule:
+    - cron: "17 8 * * *" # daily, about 3 a.m. Central; the full suite on main
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -45,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$BASE" ]; then
-            echo "run=1" >>"$GITHUB_OUTPUT" # push to main: its path filter already chose
+            echo "run=1" >>"$GITHUB_OUTPUT" # push, schedule, dispatch: no PR base; run everything
             exit 0
           fi
           # shellcheck disable=SC2086
@@ -109,7 +112,7 @@ jobs:
   # between them by how long each takes (tests/e2e/shard.mjs), so they finish
   # together. Within a runner the specs stay serial (one room server).
   e2e:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -132,6 +135,10 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            echo "run=1" >>"$GITHUB_OUTPUT" # nightly: every spec
+            exit 0
+          fi
           changed=$(git diff --name-only "$BASE"...HEAD)
           printf '%s\n' "$changed"
           specs=$(printf '%s\n' "$changed" | node websites/www.cs/tests/e2e/select.mjs)

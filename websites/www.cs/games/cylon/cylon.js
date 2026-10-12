@@ -32,13 +32,13 @@ import { createLandscape } from './js/landscape.js?v=9747fb9a2b';
 import { createEye } from './js/eye.js?v=156f60570d';
 import { createReticle } from './js/reticle.js?v=3896896eb0';
 import { createUnits } from './js/units.js?v=a4b4545e56';
-import { createGameOver } from './js/gameover.js?v=c6461fd842';
+import { createGameOver } from './js/gameover.js?v=3525afbc7b';
 import { createChrome } from './js/chrome.js?v=9114f7a639';
 import * as state from './js/state.js?v=d0424f3f0e';
-import { createScoresClient, formatHighScoreRows, weeklyResetText } from './js/scores.js?v=ce7eccc399';
+import { createScoresClient, formatHighScoreRows, weeklyResetText } from './js/scores.js?v=0917bafe89';
 
 // Everything the game fetches is found next to this file, wherever it is served from.
-const CYLON_MOUNT_URL = new URL('mount.html?v=0f24d0d722', import.meta.url).href;
+const CYLON_MOUNT_URL = new URL('mount.html?v=7185c23324', import.meta.url).href;
 const CYLON_SCORES_URL = new URL('scores.php', import.meta.url).href;
 
 async function mountCylonDom() {

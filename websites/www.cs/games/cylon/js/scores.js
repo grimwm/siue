@@ -49,6 +49,7 @@ export function createScoresClient(api, env) {
     let limit = 10;
     const blocked = new Set();
     let cached = [];
+    let cachedAllTime = [];
     function headers(extra) {
         return { 'X-Cylon-CSRF': csrfToken, ...extra };
     }
@@ -68,8 +69,12 @@ export function createScoresClient(api, env) {
         }
     }
     function takeBoard(data) {
-        if (isRecord(data) && Array.isArray(data.scores))
+        if (!isRecord(data))
+            return;
+        if (Array.isArray(data.scores))
             cached = data.scores;
+        if (Array.isArray(data.alltime))
+            cachedAllTime = data.alltime;
     }
     async function load() {
         try {
@@ -87,6 +92,7 @@ export function createScoresClient(api, env) {
                 csrfToken = data.csrf;
             applyConfig(data.config);
             cached = Array.isArray(data.scores) ? data.scores : [];
+            cachedAllTime = Array.isArray(data.alltime) ? data.alltime : [];
             return isRecord(data.config) ? data.config : null;
         }
         catch {
@@ -132,20 +138,25 @@ export function createScoresClient(api, env) {
         }
         return score > lowest;
     }
+    /** The place scores.php computed for the run under its lock; null when it did not place. */
+    function serverRank(data) {
+        const rank = isRecord(data) ? data.alltimeRank : null;
+        return typeof rank === 'number' && Number.isInteger(rank) && rank >= 1 ? rank : null;
+    }
     function isBlocked(initials) {
         return blocked.has((initials || '').toUpperCase());
     }
     async function submit(score, initials, hits) {
         if (!score || score < 1)
-            return { saved: false, problem: null };
+            return { saved: false, problem: null, allTimeRank: null };
         const clean = (initials || 'AAA').toUpperCase().slice(0, 3).padEnd(3, 'A');
         if (isBlocked(clean))
-            return { saved: false, problem: 'invalid-initials' };
+            return { saved: false, problem: 'invalid-initials', allTimeRank: null };
         try {
             if (runIssue)
                 await runIssue;
             if (!runToken)
-                return { saved: false, problem: 'save-failed' };
+                return { saved: false, problem: 'save-failed', allTimeRank: null };
             const res = await env.fetch(api, {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -162,22 +173,23 @@ export function createScoresClient(api, env) {
             }
             if (res.status === 400 && isRecord(data) && data.error === 'invalid initials') {
                 takeBoard(data);
-                return { saved: false, problem: 'invalid-initials' };
+                return { saved: false, problem: 'invalid-initials', allTimeRank: null };
             }
             if (!res.ok) {
                 takeBoard(data);
-                return { saved: false, problem: 'save-failed' };
+                return { saved: false, problem: 'save-failed', allTimeRank: null };
             }
             runToken = '';
-            cached = isRecord(data) && Array.isArray(data.scores) ? data.scores : cached;
-            return { saved: true, problem: null };
+            takeBoard(data);
+            return { saved: true, problem: null, allTimeRank: serverRank(data) };
         }
         catch {
-            return { saved: false, problem: null };
+            return { saved: false, problem: null, allTimeRank: null };
         }
     }
     return {
         board: () => cached,
+        alltime: () => cachedAllTime,
         qualifies,
         isBlocked,
         load,

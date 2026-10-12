@@ -47,5 +47,33 @@ if (fs.existsSync(siteMain)) {
   check('reaches-no-site-variable', reachedConst.length === 0, reachedConst.join(', '));
 }
 
+// The board resets on Sunday; no page, manifest or description may still say Monday.
+{
+  const text = (...p) => fs.readFileSync(path.join(__dirname, ...p), 'utf8');
+  const home = text('..', '..', 'index.html');
+  // The whole Cylon settings block: from the container holding the reset line to its closing tag.
+  const at = home.indexOf('id="cylon-weekly-reset"');
+  const start = home.indexOf('<div class="cylon-settings" id="cylon-settings"');
+  const tag = /<div|<\/div>/g;
+  tag.lastIndex = start;
+  let depth = 0;
+  let end = -1;
+  for (let m = tag.exec(home); m; m = tag.exec(home)) {
+    depth += m[0] === '<div' ? 1 : -1;
+    if (depth === 0) { end = m.index; break; }
+  }
+  const homeCylon = end > start ? home.slice(start, end) : '';
+  check('home-page-cylon-block-found', at > start && start >= 0 && homeCylon.includes('cylon-weekly-reset'), `${start}..${end}`);
+  const files = {
+    'metadata.yaml': text('metadata.yaml'),
+    'manifest.webmanifest': text('manifest.webmanifest'),
+    'mount.html': text('mount.html'),
+    'index.html (cylon block)': homeCylon,
+    'play/cylon/index.html': text('..', '..', 'play', 'cylon', 'index.html'),
+  };
+  const stale = Object.entries(files).filter(([, body]) => /\bMonday\b/.test(body)).map(([name]) => name);
+  check('no-cylon-file-says-monday', stale.length === 0, stale.join(', '));
+}
+
 console.log(failed ? `SMOKE-FAIL ${failed}` : 'SMOKE-OK');
 process.exit(failed ? 1 : 0);

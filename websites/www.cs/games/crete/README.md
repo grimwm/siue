@@ -59,8 +59,9 @@ starts it fewer than 8 steps from the player (barriers open). The route the bots
 walk, and the Hint, is the fewest-step trip to the exit, fetching a spare fuse on
 the way when that is shorter. The play-through
 (T) is the strategist, so it wins any run it starts from the beginning.
-`test/maze-sweep.test.mjs` holds the budgets (fallback on at most 1% of seeds,
-p95 at most 20 ms) over 300 seeds, and 10,000 nightly.
+`test/maze-sweep.test.mjs` holds the budgets over 300 seeds, and 10,000 nightly:
+the fallback on at most 1% of seeds, and at most 6 candidates per seed on average
+(20 at p95), which keeps generation to a few milliseconds.
 
 ## Tests
 

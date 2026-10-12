@@ -25,7 +25,6 @@ export type ViewState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'c
 /** What the view needs from the page and the rest of the game. */
 export interface ViewDeps {
   G: ViewState;
-  $(id: string): HTMLElement | null;
   tables: Pick<Tables, 'weapons'>;
   net: Pick<RoomClient, 'on' | 'code' | 'turnClockLeft'>;
   MATCH: Pick<MatchState, 'myTurn'>;
@@ -37,7 +36,7 @@ export interface ViewDeps {
 }
 
 export function createView(deps: ViewDeps) {
-  const { G, $, tables, net, MATCH, replay, FX, fxSet, cur, textScale } = deps;
+  const { G, tables, net, MATCH, replay, FX, fxSet, cur, textScale } = deps;
 
   /* The camera only ever pulls back, slowly, to keep every live tank framed. */
   function updateCamera(dt: number): void {

@@ -14,6 +14,8 @@ export interface GunLabelProps {
   sr: string;
   /** "34 dmg · M". */
   line: string;
+  /** The line as readers should hear it: "34 damage, medium blast". */
+  spoken: string;
   drawIcon: (canvas: HTMLCanvasElement, weapon: string) => void;
   /** Changes whenever the arsenal the icon is painted from does. */
   arsenalRev: number;
@@ -28,7 +30,8 @@ export function GunLabel(p: GunLabelProps) {
         <canvas class="gun-icon" aria-hidden="true" ref={canvas} />
         <span id="hud-weapon">{p.name}{p.sr && <span class="sr-only">{p.sr}</span>}</span>
       </span>
-      <span class="gun-line">{p.line}</span>
+      <span class="gun-line" aria-hidden="true">{p.line}</span>
+      <span class="sr-only">{p.spoken}</span>
     </>
   );
 }

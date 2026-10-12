@@ -18,7 +18,7 @@ function props(over = {}) {
     calls,
     p: {
       turn: 'YOU. Aim!', angle: '162°', power: '100', fuel: '100', ammo: '×2',
-      armor: { shown: '100', sr: 'you 100 · REAPER:100' }, lives: 5, wind: '← 12', badge: SOLO,
+      armor: { shown: '100', max: 125, sr: 'REAPER 60 of 60' }, lives: 5, wind: '← 12', badge: SOLO,
       online: false, runStats: '', menuOpen: false, menuKey: 'Esc', onMenu: () => { calls.menu++; }, ...over,
     },
   };
@@ -92,22 +92,39 @@ test('a redraw updates in place', () => {
   const bar = makeEl('hud-bar');
   hud.renderHud(bar, props().p);
   const angle = byId(bar, 'hud-angle');
-  hud.renderHud(bar, props({ angle: '63°', armor: { shown: '90', sr: '' } }).p);
+  hud.renderHud(bar, props({ angle: '63°', armor: { shown: '90', max: 125, sr: '' } }).p);
   assert.equal(byId(bar, 'hud-angle'), angle);
   assert.equal(angle.textContent, '63°');
   assert.equal(byId(bar, 'hud-armor').textContent, '90');
+  const pill = walk(bar).find(n => hasClass(n, 'armor'));
+  assert.equal(pill.getAttribute('aria-label'), 'Armor 90 of 125');
 });
 
 test('the Weapon label: the icon painted once per gun, the name, the line, and the rest for readers', () => {
   const slot = makeEl('deck-gun');
   const painted = [];
-  const gp = over => ({ gun: 'buck', name: 'Buckshot', sr: ' ×2 · also Shell ∞', line: '17 dmg · M', drawIcon: (cv, w) => painted.push(w), arsenalRev: 1, ...over });
+  const gp = over => ({ gun: 'buck', name: 'Buckshot', sr: ' ×2 · also Shell ∞', line: '17 dmg · M', spoken: '17 damage, medium blast', drawIcon: (cv, w) => painted.push(w), arsenalRev: 1, ...over });
   gunLabel.renderGunLabel(slot, gp());
   assert.equal(byId(slot, 'hud-weapon').textContent, 'Buckshot ×2 · also Shell ∞');
   assert.equal(walk(slot).find(n => hasClass(n, 'gun-line')).textContent, '17 dmg · M');
+  const line = walk(slot).find(n => hasClass(n, 'gun-line'));
+  assert.equal(line.getAttribute('aria-hidden'), 'true');
+  assert.ok(walk(slot).some(n => hasClass(n, 'sr-only') && n.textContent === '17 damage, medium blast'));
   assert.equal(walk(slot).find(n => hasClass(n, 'gun-icon')).getAttribute('aria-hidden'), 'true');
   gunLabel.renderGunLabel(slot, gp());
   gunLabel.renderGunLabel(slot, gp({ gun: 'rail', name: 'Rail' }));
   gunLabel.renderGunLabel(slot, gp({ gun: 'rail', name: 'Rail', arsenalRev: 2 }));
   assert.deepEqual(painted, ['buck', 'rail', 'rail']);
+});
+
+test('armor is named with its maximum and the rivals in words; before a match the pill and lives still read', () => {
+  const bar = makeEl('hud-bar');
+  hud.renderHud(bar, props().p);
+  const pill = walk(bar).find(n => hasClass(n, 'armor'));
+  assert.equal(pill.getAttribute('aria-label'), 'Armor 100 of 125, REAPER 60 of 60');
+  assert.equal(pill.getAttribute('role'), 'img');
+  hud.renderHud(bar, props({ armor: { shown: '-', max: null, sr: '' }, lives: null, badge: null }).p);
+  assert.equal(walk(bar).find(n => hasClass(n, 'armor')).getAttribute('aria-label'), 'Armor -');
+  assert.equal(byId(bar, 'hud-lives').textContent, '-');
+  assert.equal(byId(bar, 'hud-score').textContent, '-');
 });

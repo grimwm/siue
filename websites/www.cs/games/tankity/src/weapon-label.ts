@@ -11,7 +11,15 @@ export function blastSize(radius: number): 'S' | 'M' | 'L' {
   return 'M';
 }
 
+/** The same letters, spelled out for screen readers. */
+export const BLAST_WORDS = Object.freeze({ S: 'small', M: 'medium', L: 'large' });
+
 /** "34 dmg · M". */
 export function weaponLine(w: Pick<Weapon, 'dmg' | 'radius'>): string {
   return `${w.dmg} dmg · ${blastSize(w.radius)}`;
+}
+
+/** "34 damage, medium blast": what a screen reader hears for the line. */
+export function weaponLineSpoken(w: Pick<Weapon, 'dmg' | 'radius'>): string {
+  return `${w.dmg} damage, ${BLAST_WORDS[blastSize(w.radius)]} blast`;
 }

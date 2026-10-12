@@ -10,7 +10,8 @@ import { renderHud as drawHud } from './ui/hud.tsx';
 import type { HudProps } from './ui/hud.tsx';
 import { renderGunLabel as drawGun } from './ui/gun-label.tsx';
 import type { GunLabelProps } from './ui/gun-label.tsx';
-import { weaponLine } from './weapon-label.ts';
+import { weaponLine, weaponLineSpoken } from './weapon-label.ts';
+import { TUNE } from './sim.ts';
 import type { KeyHintFn } from './ui/chrome.tsx';
 
 /** The slice of the game's state the status bar reads (main.ts's G). */
@@ -44,10 +45,10 @@ export function createHud(deps: HudDeps) {
   const { G, $, tables, net, MATCH, me, cur, myTank, seatName, drawShellIcon, keyHint, touch, menuOpen, onMenu } = deps;
 
   const HUD: HudValues = {
-    turn: '-', angle: '-', power: '-', fuel: '-', ammo: '-', armor: { shown: '-', sr: '' }, lives: null,
+    turn: '-', angle: '-', power: '-', fuel: '-', ammo: '-', armor: { shown: '-', max: null, sr: '' }, lives: null,
     wind: '-', badge: null, online: false, runStats: '',
   };
-  const GUN: GunValues = { gun: null, name: '-', sr: '', line: '' };
+  const GUN: GunValues = { gun: null, name: '-', sr: '', line: '', spoken: '' };
 
   /* Fitted tricks ride the rack line for readers. In room matches netOnSnapshot
   // keeps these G fields mirrored from the server snapshot. */
@@ -72,6 +73,7 @@ export function createHud(deps: HudDeps) {
     GUN.name = w.name;
     GUN.sr = ` ${count(G.selected)}${rack.length ? ` · also ${rack.join(' · ')}` : ''}`;
     GUN.line = weaponLine(w);
+    GUN.spoken = weaponLineSpoken(w);
   }
   let hudShown = '';
   let gunShown = '';
@@ -91,10 +93,16 @@ export function createHud(deps: HudDeps) {
     hudShown = sig;
     drawHud(bar, { ...HUD, menuOpen: open, menuKey, onMenu });
   }
+  /* A rival's armor in words, the way the player's own reads. */
+  function foe(x: GameTank): string {
+    const name = net.on ? seatName(x.seat!) : x.id;
+    return `${name} ${Math.max(0, Math.round(x.hp))} of ${x.maxHp}`;
+  }
   function renderStanding(mine: GameTank | null, others: string): void {
     HUD.armor = {
       shown: mine ? `${Math.max(0, Math.round(mine.hp))}` : '-',
-      sr: `${mine ? `you ${Math.max(0, Math.round(mine.hp))} · ` : ''}${others}`,
+      max: mine ? TUNE.playerArmor + 25 * (G.plate || 0) : null,
+      sr: others,
     };
     HUD.lives = G.lives;
     HUD.badge = net.on
@@ -118,7 +126,7 @@ export function createHud(deps: HudDeps) {
     HUD.power = `${Math.round(me().power)}`;
     HUD.wind = windText();
     renderLoadout();
-    renderStanding(me(), G.tanks.filter(x => !x.isPlayer).map(x => `${x.id}:${Math.max(0, x.hp)}`).join(' '));
+    renderStanding(me(), G.tanks.filter(x => !x.isPlayer).map(foe).join(', '));
     HUD.fuel = `${Math.round(me().fuel)}`;
     paintHud();
   }
@@ -135,7 +143,7 @@ export function createHud(deps: HudDeps) {
     HUD.power = mine ? `${Math.round(mine.power)}` : '-';
     HUD.wind = windText();
     renderLoadout();
-    renderStanding(mine, G.tanks.filter(x => !x.isPlayer).map(x => `${seatName(x.seat!)}:${Math.max(0, Math.round(x.hp))}`).join(' '));
+    renderStanding(mine, G.tanks.filter(x => !x.isPlayer).map(foe).join(', '));
     HUD.fuel = mine ? `${Math.round(mine.fuel)}` : '-';
     paintHud();
   }

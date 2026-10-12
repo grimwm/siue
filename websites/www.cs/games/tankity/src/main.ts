@@ -406,7 +406,7 @@ const { HUD, paintHud, windText, renderHUD } = createHud({
 });
 /* The camera and the frame the canvas paints (src/view.ts). */
 const { updateCamera, shownAngle, shownPower, render } = createView({
-  G, $, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
+  G, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
 /* The high scores (src/scores.ts). */
 const { SCORES, renderScoresOverlay, loadScores, savedCallsign, fileReport } = createScores({

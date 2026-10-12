@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { blastSize, weaponLine, BLAST_CUTOFFS } from '../src/weapon-label.ts';
+import { blastSize, weaponLine, weaponLineSpoken, BLAST_CUTOFFS } from '../src/weapon-label.ts';
 
 const GAME = JSON.parse(fs.readFileSync(new URL('../game.json', import.meta.url), 'utf8'));
 const gun = key => GAME.arsenal.ammo.find(a => a.key === key);
@@ -18,4 +18,10 @@ test('the shipped guns read the way the deck shows them', () => {
   assert.equal(blastSize(gun('mortar').radius), 'L');
   assert.equal(blastSize(gun('nuke').radius), 'L');
   for (const w of GAME.arsenal.ammo) assert.match(weaponLine(w), /^\d+ dmg · [SML]$/, w.key);
+});
+
+test('readers hear the words, not the letters', () => {
+  assert.equal(weaponLineSpoken(gun('shell')), '34 damage, medium blast');
+  assert.equal(weaponLineSpoken({ dmg: 90, radius: 70 }), '90 damage, large blast');
+  assert.equal(weaponLineSpoken({ dmg: 60, radius: 14 }), '60 damage, small blast');
 });

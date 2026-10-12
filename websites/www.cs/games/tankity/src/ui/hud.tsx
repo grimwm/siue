@@ -20,8 +20,9 @@ export interface HudProps {
   fuel: string;
   /** The loaded gun's count: "∞" or "×2". */
   ammo: string;
-  /** Armor: what shows, and what a screen reader adds (the rivals' armor). */
-  armor: { shown: string; sr: string };
+  /** Armor: what shows, its maximum (base plus 25 per hull plate; null before
+   *  a tank exists), and the rivals' armor in words for screen readers. */
+  armor: { shown: string; max: number | null; sr: string };
   /** Lives left; null before a match is dealt. */
   lives: number | null;
   /** "→ 7", "← 3" or "· 0". */
@@ -91,9 +92,10 @@ export function Hud(p: HudProps) {
         </div>
         <div class="hud-row r2">
           <span class="pill ammo"><span class="k">AMMO</span> <span class="v" id="hud-ammo">{p.ammo}</span></span>
-          <span class="pill armor">
+          <span class="pill armor" role="img"
+            aria-label={`Armor ${p.armor.shown}${p.armor.max === null ? '' : ` of ${p.armor.max}`}${p.armor.sr ? `, ${p.armor.sr}` : ''}`}>
             <Label full="ARMOR" short="ARM" />{' '}
-            <span class="v" id="hud-armor">{p.armor.shown}{p.armor.sr && <span class="sr-only">{` ${p.armor.sr}`}</span>}</span>
+            <span class="v" id="hud-armor">{p.armor.shown}</span>
           </span>
           {p.lives === null
             ? <span class="pill lives" id="hud-lives">-</span>

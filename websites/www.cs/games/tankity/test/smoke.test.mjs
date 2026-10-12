@@ -135,7 +135,7 @@ for (const id of ['new-game', 'round-banner', 'round-banner-text', 'preview-resu
   void document.getElementById(id);
 }
 frames(30);
-check('demo-plays', els['shop-veil'].hidden === true && /you 100/.test(els['hud-armor'].textContent),
+check('demo-plays', els['shop-veil'].hidden === true && els['hud-armor'].textContent === '100',
   els['hud-armor'].textContent);
 const rendered = id => !!els[id] && !!els[id].localName;
 const titleVeil = () => els['title-root'].children[0];
@@ -863,7 +863,7 @@ await (async () => {
   check('preshop', shopOpen && /\$600/.test(shopCash0), shopCash0);
   check('shop-buy', /\$180/.test(shopCash1), shopCash1);
   check('boot-turn', /YOU/.test(turn0), turn0);
-  check('boot-hud', /62°/.test(angle0) && wind0.length > 0 && /you 100/.test(armor0),
+  check('boot-hud', /62°/.test(angle0) && wind0.length > 0 && armor0 === '100',
     `${angle0} | ${wind0} | ${armor0}`);
   // Firing range: V opens the demo with its damage stats, frames render it,
   // V closes it again. Roll into a live aiming phase with a Shell loaded so
@@ -1209,7 +1209,7 @@ await (async () => {
   click(els['lobby-start']); await tick(10);
   check('fx-play-turn', /YOU/.test(els['hud-turn'].textContent) && els['lobby-veil'].hidden === true && els['shop-veil'].hidden === true,
     els['hud-turn'].textContent);
-  check('fx-play-hud', els['hud-armor'].textContent.startsWith(fxRoomOf('play-my-turn').tanks[0].hp + ' ') && /ROOM/.test(els['hud-score'].textContent),
+  check('fx-play-hud', els['hud-armor'].textContent === String(fxRoomOf('play-my-turn').tanks[0].hp) && /ROOM/.test(els['hud-score'].textContent),
     els['hud-armor'].textContent + ' | ' + els['hud-score'].textContent);
   // 429 (retried, then said kindly) and 409 (the server's own words).
   PFX.actError = 'error-too-fast';
@@ -1229,7 +1229,7 @@ await (async () => {
   check('fx-fire-replayed', /ABC hits REAPER for \d+/.test(logText()) && /REAPER fires/.test(logText()) &&
     /REAPER hits YOU for \d+/.test(logText()) === hitMe,
     logText().split('\n').slice(-3).join(' | '));
-  check('fx-fire-turn-back', /YOU/.test(els['hud-turn'].textContent) && els['hud-armor'].textContent.startsWith(after.tanks[0].hp + ' '),
+  check('fx-fire-turn-back', /YOU/.test(els['hud-turn'].textContent) && els['hud-armor'].textContent === String(after.tanks[0].hp),
     els['hud-turn'].textContent + ' | armor ' + els['hud-armor'].textContent);
   // The round is won: the room moves to the shop with the prize paid.
   PFX.room = 'shop-after-win';

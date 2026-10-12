@@ -296,7 +296,7 @@ KD('scroll', 'lineDown');
 check('scroll-idle', els['help-overlay'].scrollTop === idleTop, `top=${els['help-overlay'].scrollTop}`);
 // The camera pins the ground to the viewport floor: no void below the world.
 check('cam-pins-ground', /H \+ 8 - halfView/.test(src));
-check('cam-wide-sky', /fillRect\(-W - 10, -2 \* H - 10, 3 \* W/.test(renderSrc));
+check('cam-wide-sky', /fillRect\(rect\.x0 - 20, rect\.y0 - 20, rect\.x1 - rect\.x0 \+ 40/.test(renderSrc)); // the sky covers everything the canvas shows
 // (invite-prefill runs inside the async block below: openLobby unhides late)
 // The clean-initials list must match the server copy exactly (cylon rule).
 function blockedOf(src) {

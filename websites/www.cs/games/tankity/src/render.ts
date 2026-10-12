@@ -1,7 +1,7 @@
 /* Operation Tankity: the battlefield, drawn.
  *
  * Everything that paints the 2D canvas: the night sky and its moon, clouds,
- * hills, the units (tank bodies, drones, name tags, turn marker, menu badge),
+ * hills, the scenery past the field's edges and the dirt below it, the units (tank bodies, drones, name tags, turn marker, menu badge),
  * the aim arm, blast discs, shells, particles, wind streaks, the
  * turn clock, and the firing-range preview. main.ts builds a BattleView each
  * frame and calls `frame(view)`; this module reads it and paints, and never
@@ -14,7 +14,8 @@
  * random numbers. Like the other modules it imports nothing at run time, so
  * the sim helpers arrive as dependencies. */
 import type { TrailCarrier } from './fx/trail.ts';
-import type { Cloud, Rng, Tank } from './sim.ts';
+import type { Box, Fit, WorldRect } from './field.ts';
+import type { Cloud, Hills, Rng, Tank } from './sim.ts';
 
 /* ---------- what main.ts hands over ---------- */
 
@@ -97,6 +98,8 @@ export interface BattleView {
   cam: { readonly z: number; readonly cx: number; readonly cy: number };
   skyKey: string; // the match key the stars are drawn from
   terrain: readonly number[];
+  field: { w: number; h: number }; // this match's field, in world units
+  hills: Hills | null; // the round's hills, for the scenery
   clouds: readonly Cloud[];
   tanks: readonly DrawTank[];
   turnUnit: DrawTank | null; // whose turn marker shows
@@ -122,12 +125,14 @@ export interface RenderSim {
   hashSeed(str: string): number;
   mulberry32(seed: number): Rng;
   gauss(rng: Rng): number;
+  fitField(box: Box, field: Box): Fit;
+  visibleWorld(fit: Fit, box: Box): WorldRect;
+  sceneryY(h: Hills, terrain: readonly number[], x: number): number;
 }
 
 /** What createRenderer needs from its host. */
 export interface RenderDeps {
   fx: FxApi | null;
-  size: { w: number; h: number }; // the world, in world units
   sim: RenderSim;
   shownAngle(t: DrawTank): number;
   look(wkey: string): Look;
@@ -493,11 +498,12 @@ interface Sky { key: string; stars: Star[]; band: { x: number; y: number; ang: n
 
 export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Renderer {
   const { fx: FX, sim } = deps;
-  const { w: W, h: H } = deps.size;
-  const SKY_X0 = -20, SKY_W = W + 40, SKY_Y0 = -20, SKY_H = 420; // the sky rides the screen, not the camera
-  let sky: Sky | null = null; // drawn from view.skyKey, rebuilt when the key changes
+  const { fitField, visibleWorld, sceneryY } = sim;
+  let W = 0, H = 0; // the field being drawn, from each frame's view
+  let sky: Sky | null = null; // drawn from view.skyKey over the visible sky, rebuilt when either changes
 
-  function buildSky(key: string): Sky {
+  function buildSky(key: string, rect: WorldRect): Sky {
+    const SKY_X0 = rect.x0 - 20, SKY_W = rect.x1 - rect.x0 + 40, SKY_Y0 = rect.y0 - 20, SKY_H = 420 - rect.y0; // a field-sized view gives -20…W+20 by -20…400
     const r = sim.mulberry32(sim.hashSeed('sky:' + key));
     const stars: Star[] = [];
     const add = (x: number, y: number, bright: number): void => {
@@ -506,7 +512,8 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
       const tint = r() < 0.22 ? (SKY_TINTS[Math.floor(r() * 2)] ?? '#ffffff') : '#ffffff';
       stars.push({ x: Math.round(x), y: Math.round(y), s: size, a: Math.min(1, bright * (size > 2 ? 1.2 : 1)), c: tint, tw: r() < 0.3 ? 0.6 + r() * 2.2 : 0, ph: r() * 6.28 });
     };
-    for (let i = 0; i < 130; i++) add(SKY_X0 + r() * SKY_W, SKY_Y0 + r() * SKY_H, 0.3 + r() * 0.7);
+    const n = Math.round(130 * Math.max(1, (SKY_W * SKY_H) / (760 * 440)));
+    for (let i = 0; i < n; i++) add(SKY_X0 + r() * SKY_W, SKY_Y0 + r() * SKY_H, 0.3 + r() * 0.7);
     // The milky band: a slanted strip of faint dust, with its glow drawn behind it.
     const ang = -0.5 + r() * 1.0, cx = SKY_X0 + SKY_W * (0.3 + r() * 0.4), cy = SKY_Y0 + SKY_H * (0.25 + r() * 0.35);
     for (let i = 0; i < 130; i++) {
@@ -520,8 +527,9 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     return { key, stars, band: { x: cx, y: cy, ang }, phase: SKY_PHASES[Math.floor(r() * SKY_PHASES.length)] ?? 0 };
   }
 
-  function drawSky(c: CanvasRenderingContext2D, view: BattleView): void {
-    if (!sky || sky.key !== view.skyKey) sky = buildSky(view.skyKey);
+  function drawSky(c: CanvasRenderingContext2D, view: BattleView, rect: WorldRect): void {
+    const key = `${view.skyKey}|${Math.round(rect.x0)},${Math.round(rect.y0)},${Math.round(rect.x1)}`;
+    if (!sky || sky.key !== key) sky = buildSky(key, rect);
     const calm = FX && FX.reduced;
     // The band's glow: three broad, faint ellipses along its slant.
     c.fillStyle = '#7f86d8';
@@ -545,8 +553,8 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.globalAlpha = 1;
   }
 
-  function drawMoon(c: CanvasRenderingContext2D): void {
-    const mx = 600, my = 90, mr = 32;
+  function drawMoon(c: CanvasRenderingContext2D, rect: WorldRect): void {
+    const mx = W - 120, my = 90 + Math.min(0, rect.y0) * 0.5, mr = 32; // a tall sky lifts the moon into it
     const sh = FX && FX.sheets.moon;
     if (!FX || !sh || !sh.ready || !sky) {
       c.fillStyle = '#e8e8e8';
@@ -638,7 +646,8 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     const frac = clock.left - Math.floor(clock.left); // pulses once a second
     const s = view.textScale;
     c.save();
-    c.scale((cv.width || W) / W || 1, (cv.height || H) / H || 1);
+    const fit = fitField({ w: cv.width || W, h: cv.height || H }, { w: W, h: H });
+    c.setTransform(fit.s, 0, 0, fit.s, fit.ox, fit.oy);
     c.textAlign = 'center';
     c.textBaseline = 'middle';
     c.globalAlpha = 0.25 + 0.6 * frac;
@@ -743,52 +752,83 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     if (!c) return;
     const time = view.time;
     const terrain = (x: number): number => view.terrain[x] ?? 0;
+    W = view.field.w;
+    H = view.field.h;
+    const box = { w: cv.width || W, h: cv.height || H };
+    const fit = fitField(box, view.field);
+    const rect = visibleWorld(fit, box); // world units the whole canvas shows, before the camera
     c.save();
-    // The backing store outgrew the 720x460 world for a bigger, crisper
-    // viewport; every world unit below rides this scale, sim untouched.
-    c.scale((cv.width || W) / W || 1, (cv.height || H) / H || 1);
+    c.setTransform(fit.s, 0, 0, fit.s, fit.ox, fit.oy);
     if (view.shake > 0 && !deps.reducedMotion()) {
       c.translate((deps.random() - 0.5) * 8 * view.shake, (deps.random() - 0.5) * 8 * view.shake);
     }
-    // Night sky, painted well past the world edge so a pulled-back camera never
-    // reveals unpainted void at the sides or in the extra headroom above.
+    // Night sky over everything the canvas shows: no band of page shows anywhere.
     c.fillStyle = '#00000b';
-    c.fillRect(-W - 10, -2 * H - 10, 3 * W + 20, 3 * H + 20);
-    drawSky(c, view);
-    // Dirt base under the extended sky, so the ground reads as one continuous
-    // hillside even past the world edge.
-    c.fillStyle = '#2e1a08';
-    c.fillRect(-W - 10, H - 2, 3 * W + 20, 2 * H + 12);
-    // Moon (a rendered sphere, phase chosen per match) + dark drifting clouds.
-    drawMoon(c);
+    c.fillRect(rect.x0 - 20, rect.y0 - 20, rect.x1 - rect.x0 + 40, rect.y1 - rect.y0 + 40);
+    drawSky(c, view, rect);
+    drawMoon(c, rect);
     // Slow camera: everything below rides the zoom so every tank stays seen.
     c.translate(W / 2, H / 2);
     c.scale(view.cam.z, view.cam.z);
     c.translate(-view.cam.cx, -view.cam.cy);
+    // What the canvas shows through the camera: the scenery and the dirt fill all of it.
+    const z = view.cam.z;
+    const sx0 = Math.floor(view.cam.cx + (rect.x0 - W / 2) / z) - 8, sx1 = Math.ceil(view.cam.cx + (rect.x1 - W / 2) / z) + 8;
+    const sy0 = view.cam.cy + (rect.y0 - H / 2) / z, sy1 = view.cam.cy + (rect.y1 - H / 2) / z + 8;
     c.fillStyle = '#23233f';
     for (const cl of view.clouds) {
-      c.beginPath();
-      c.ellipse(cl.x, cl.y, 30 * cl.s, 10 * cl.s, 0, 0, Math.PI * 2);
-      c.ellipse(cl.x + 22 * cl.s, cl.y + 3, 20 * cl.s, 8 * cl.s, 0, 0, Math.PI * 2);
-      c.fill();
+      for (const lift of sy0 < -120 ? [0, sy0 * 0.45] : [0]) { // a tall sky gets a high layer too
+        c.globalAlpha = lift ? 0.6 : 1;
+        c.beginPath();
+        c.ellipse(cl.x, cl.y + lift, 30 * cl.s, 10 * cl.s, 0, 0, Math.PI * 2);
+        c.ellipse(cl.x + 22 * cl.s, cl.y + 3 + lift, 20 * cl.s, 8 * cl.s, 0, 0, Math.PI * 2);
+        c.fill();
+      }
     }
-    // Far dunes.
+    c.globalAlpha = 1;
+    // Far dunes, across the whole view.
     c.fillStyle = '#3a2408';
     c.beginPath();
-    c.moveTo(-10, H);
-    for (let x = -10; x <= W + 10; x += 24) {
-      c.lineTo(x, 396 - 18 * Math.sin(x / 190 + 2));
-    }
-    c.lineTo(W + 10, H);
+    c.moveTo(sx0, H);
+    for (let x = sx0; x <= sx1 + 24; x += 24) c.lineTo(x, 396 - 18 * Math.sin(x / 190 + 2));
+    c.lineTo(sx1 + 24, H);
     c.fill();
-    // Terrain with a flat green rim.
+    // The dirt and its layers, from the field's floor down to the canvas's.
+    c.fillStyle = '#2e1a08';
+    c.fillRect(sx0, H - 2, sx1 - sx0, Math.max(0, sy1 - H + 2));
+    c.fillStyle = '#26150a';
+    for (let y = H + 18; y < sy1; y += 36) c.fillRect(sx0, y, sx1 - sx0, 6);
+    // Scenery: the round's hills past both edges, dimmed; drawn, never hit.
+    if (view.hills) {
+      const hills = view.hills;
+      for (const [a, b] of [[sx0, 0], [W - 1, sx1]] as const) {
+        if (b <= a) continue;
+        c.fillStyle = '#4a2e14';
+        c.beginPath();
+        c.moveTo(a, H + 10);
+        for (let x = a; x < b; x += 4) c.lineTo(x, sceneryY(hills, view.terrain, x));
+        c.lineTo(b, sceneryY(hills, view.terrain, b));
+        c.lineTo(b, H + 10);
+        c.fill();
+        c.strokeStyle = '#2f6a2f';
+        c.lineWidth = 2;
+        c.beginPath();
+        for (let x = a; x < b; x += 4) {
+          const y = sceneryY(hills, view.terrain, x);
+          if (x === a) c.moveTo(x, y);
+          else c.lineTo(x, y);
+        }
+        c.lineTo(b, sceneryY(hills, view.terrain, b));
+        c.stroke();
+      }
+    }
+    // The field's ground with its flat green rim, edge to edge (no cliff at either edge).
     c.fillStyle = '#7a4a1e';
     c.beginPath();
-    c.moveTo(-10, H + 10);
-    for (let x = -10; x <= W + 10; x += 4) {
-      c.lineTo(x, x < 0 || x >= W ? H : terrain(x));
-    }
-    c.lineTo(W + 10, H + 10);
+    c.moveTo(0, H + 10);
+    for (let x = 0; x < W; x += 4) c.lineTo(x, terrain(x));
+    c.lineTo(W - 1, terrain(W - 1));
+    c.lineTo(W - 1, H + 10);
     c.fill();
     c.strokeStyle = '#00aa00';
     c.lineWidth = 3;
@@ -798,6 +838,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
       if (x === 0) c.moveTo(x, y);
       else c.lineTo(x, y);
     }
+    c.lineTo(W - 1, terrain(W - 1));
     c.stroke();
     // Combatants (dead ones leave a smoking wreck marker).
     for (const t of view.tanks) {

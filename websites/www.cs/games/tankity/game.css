@@ -525,7 +525,8 @@ input.initial { width: 2rem; height: 2rem; max-width: none; padding: 0; text-ali
 
 /* ---------- the frame: status bar, battlefield, control deck ----------
    The page is one screen tall: the header, then the frame's three parts, the
-   battlefield taking what is left. The bars size in px so the text-size
+   battlefield taking what is left, edge to edge and touching both bars, so no
+   band of page shows between them. The bars size in px so the text-size
    setting (which scales the panels) never pushes them over; their
    breakpoints follow the frame's own width. */
 body { height: 100dvh; display: flex; flex-direction: column; }
@@ -533,11 +534,11 @@ body { height: 100dvh; display: flex; flex-direction: column; }
 .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1120px); justify-content: center; padding: 0.5rem; }
 #frame { container-type: inline-size; height: 100%; min-height: 0; }
 .canvas-holder {
-  position: relative; display: flex; flex-direction: column; gap: 6px; height: 100%; width: 100%; margin: 0;
+  position: relative; display: flex; flex-direction: column; gap: 0; height: 100%; width: 100%; margin: 0;
   padding: 6px; background: #05060a; border: 1px solid var(--line); border-radius: 10px; user-select: none;
 }
-.field { position: relative; flex: 1; min-height: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; }
-#stage { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; border-radius: 6px; }
+.field { position: relative; flex: 1; min-height: 0; margin: 0 -6px; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; }
+#stage { display: block; width: 100%; height: 100%; justify-self: stretch; align-self: stretch; }
 #frame:fullscreen { background: var(--bg); padding: 0.5rem; width: 100%; height: 100%; overflow: hidden; }
 #frame:fullscreen .canvas-holder { max-width: 1600px; margin: 0 auto; }
 

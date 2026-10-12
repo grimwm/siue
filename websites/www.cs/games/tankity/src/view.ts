@@ -10,11 +10,13 @@ import type { FxEngine } from './fx/types.ts';
 import { CLOCK_SHOW_S } from './net.ts';
 import type { RoomClient } from './net.ts';
 import { PV_W, PV_H, PV_FOE_HP } from './preview.ts';
+import { fitField, visibleWorld } from './field.ts';
 import { createRenderer } from './render.ts';
 import type { BattleView, DrawTank, Renderer } from './render.ts';
 import type { Replay } from './replay.ts';
+import { sceneryY } from './scenery.ts';
 import {
-  hashSeed, mulberry32, gauss, ROOM_W, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
+  hashSeed, mulberry32, gauss, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
 } from './sim.ts';
 import type { Weapon } from './sim.ts';
 
@@ -109,7 +111,7 @@ export function createView(deps: ViewDeps) {
     return {
       time: G.time, shake: G.shake, cam: G.cam,
       skyKey: net.on ? 'room:' + net.code : String(G.seed || ''),
-      terrain: G.terrain, clouds: G.clouds, tanks: G.tanks,
+      terrain: G.terrain, field: { w: G.w, h: H }, hills: G.hills, clouds: G.clouds, tanks: G.tanks,
       turnUnit: turnTank(), online: net.on,
       aim: aiming ? { unit: t, length: aimArmLength(shownPower(t)) } : null,
       booms: G.booms, fx: G.fx, shells: G.shells, replay: replay.flying(), sparks: G.parts,
@@ -123,15 +125,34 @@ export function createView(deps: ViewDeps) {
       } : null,
     };
   }
+  /* The backing store follows the battlefield box (at most two device pixels
+     per CSS pixel), so the field is drawn in the box's own shape and never
+     stretched; #stage tells the layout spec the width and where the field sits. */
+  let published = '';
+  function fitCanvas(cv: HTMLCanvasElement): void {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const bw = Math.round(cv.clientWidth * dpr), bh = Math.round(cv.clientHeight * dpr);
+    if (bw > 0 && bh > 0 && (cv.width !== bw || cv.height !== bh)) {
+      cv.width = bw;
+      cv.height = bh;
+    }
+    const fit = fitField({ w: cv.clientWidth || 1, h: cv.clientHeight || 1 }, { w: G.w, h: H });
+    const field = [fit.ox, fit.oy, G.w * fit.s, H * fit.s].map(v => Math.round(v)).join(',');
+    if (published !== `${G.w}|${field}`) {
+      published = `${G.w}|${field}`;
+      cv.dataset.w = String(G.w);
+      cv.dataset.field = field;
+    }
+  }
   let renderer: Renderer | null = null;
   function render(): void {
     const cv = document.getElementById('stage') as HTMLCanvasElement | null;
     if (!cv || !G.terrain) return;
+    fitCanvas(cv);
     if (!renderer) {
       renderer = createRenderer(cv, {
         fx: FX,
-        size: { w: ROOM_W, h: H },
-        sim: { facing, isGroundUnit, muzzle, surfY: simSurfY, hashSeed, mulberry32, gauss },
+        sim: { facing, isGroundUnit, muzzle, surfY: simSurfY, hashSeed, mulberry32, gauss, fitField, visibleWorld, sceneryY },
         shownAngle,
         look: wkey => (tables.weapons[wkey] || {}).gfx || {},
         fxBody: wkey => fxSet(wkey).body,

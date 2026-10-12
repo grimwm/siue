@@ -4,6 +4,8 @@
 // tried to advance or change game state fails here without a browser.
 import { check } from '../../_kit/test/check.ts';
 import { createRenderer, drawChassis } from '../src/render.ts';
+import { fitField, visibleWorld } from '../src/field.ts';
+import { sceneryY } from '../src/scenery.ts';
 import { ROOM_W as W, H, facing, isGroundUnit, muzzle, surfY, hashSeed, mulberry32, gauss } from '../src/sim.ts';
 
 
@@ -38,8 +40,7 @@ const fxApi = { reduced: false, sheets: {}, glow() {}, drawBody() {} };
 const shownAngle = t => (t.showA === undefined ? t.angle : t.showA);
 const deps = {
   fx: fxApi,
-  size: { w: W, h: H },
-  sim: { facing, isGroundUnit, muzzle, surfY, hashSeed, mulberry32, gauss },
+  sim: { facing, isGroundUnit, muzzle, surfY, hashSeed, mulberry32, gauss, fitField, visibleWorld, sceneryY },
   shownAngle,
   look: () => ({ shell: '#ffe27a', blast: ['#ffb13c', '#fff3c4'] }),
   fxBody: () => ({}),
@@ -51,7 +52,8 @@ const terrain = Array.from({ length: W }, (_, x) => 300 + 20 * Math.sin(x / 40))
 const tank = (id, x, extra) => ({ id, isPlayer: false, x, y: terrain[x], angle: 50, power: 60, hp: 80, maxHp: 100, fuel: 0, color: '#ff00ff', ...extra });
 const view = deepFreeze({
   time: 3.2, shake: 0.4, cam: { z: 0.8, cx: 360, cy: 230 }, skyKey: 'test-seed',
-  terrain, clouds: [{ x: 100, y: 60, s: 1.2, v: 4 }],
+  terrain, field: { w: W, h: H }, hills: { a: [30, 16, 8], p: [1, 2, 3], f: [0.005, 0.01, 0.025] },
+  clouds: [{ x: 100, y: 60, s: 1.2, v: 4 }],
   tanks: [
     tank('tank', 100, { isPlayer: true, color: undefined, body: 'walker', moving: true }),
     tank('guest', 250, { human: true, body: 'buggy', menu: true, showA: 61.5 }),

@@ -155,12 +155,13 @@ Landscape is the preferred way to play. Portrait is allowed and looks as finishe
   - A taller box (portrait) spans the field across the full width. The night sky, with its stars, clouds and moon, fills the space above, up to the status bar; it takes 60 % of the leftover height. The dirt and its layers fill the rest below, down to the deck. It reads as one picture, not a box.
 - **Scenery.** The hills past the field's edges are drawn from the same terrain generator, continuing the same seed's hills. The generator is a sum of three sines, evaluated past the edges. Next to each edge the scenery eases from the field's current edge height over max(48, |difference|) px, so a crater at the edge leaves no cliff. At the seam the scenery adds no step greater than 1 px beyond the hills' own slope. It is dimmed and desaturated. It is not hittable and not part of the sim: a shell that leaves the field flies on over the scenery and is out of play, as it is today. A room's snapshot carries the round's nine hill numbers, so rooms draw the same scenery.
 - **Rotate hint.** In portrait, a small dismissible chip says "Turn sideways for the full battlefield". It shows at the start of each portrait match until it is dismissed, and dismissing it is remembered as a kit `pref` (`tankity-rotate-hint`). It never shows in landscape.
-- **Fair at any width.** A wider field is more ground, not longer shots:
+- **Fair at any width.** The extra width is part of the fight, and shots get longer.
   - Terrain: the same nine draws make the hills, and W columns are filled. The first 720 columns of a wide field are exactly the 720 field of the same seed.
-  - Placement: the units spawn exactly as on a 720 field (same draws, same gaps). Then, when W > 720, one more draw slides the whole group by a whole number in 0…W − 720, and units face the middle of their group. The distances between units, and so every shot's length, are distributed the same at any width.
-  - Wind: the range is unchanged (±8 at the deal, ±12 at most).
-  - The drone AI searches the same angle and power grid, with out of bounds at W. It prefers rivals within 696 px (the widest gap a 720 field allows, so the rule never changes a room), else the nearest. It drives within the field.
-  - Pinned by the drones' measured hit rates at W = 1440, which stay within 6 points of W = 720.
+  - Placement: the units spawn spread over the whole width (30 to W − 30) and face the middle of the field. Neighbours always start at least 110 apart, which is more than the largest blast radius (70) plus a hull's half-width (20), so no unit starts inside another's blast.
+  - Reach: shots fly √(W ÷ 720) times faster, so a trajectory's range and height grow by W ÷ 720 and full power still crosses the field. The longest flight is under 9 s at 1440, inside the 12 s limit. On a 720 field the factor is exactly 1.
+  - Wind: the range is unchanged (±8 at the deal, ±12 at most). Drift grows with the flight time squared, which grows by W ÷ 720 like the range, so wind bends a shot by the same share of its length at any width (pinned within 2 %).
+  - The drone AI searches the same angle and power grid, with out of bounds at W, and drives within the field. A degree or a power point moves a faster shell further, so the drones' wobble tightens per width. A table (`FIELD_AIM`, measured with `ai-measure`) scales the ranging wobble and the bracket's floor: 1 and 1 at 720, 0.7 and 0.5 at 1080, 0.55 and 0.4 at 1440, straight-line between those points.
+  - Pinned by the measured hit rates. At 720, 1080 and 1440, Normal stays within 5 points of its targets (ranging 10/15/25 %, after two corrections 25/40/55 % at rounds 1/5/10), Easy within 5 points of half of Normal, and Hard at least Normal. The nightly run adds 912 and 1200.
 
 ## 7. Tankity rules
 
@@ -185,9 +186,9 @@ Landscape is the preferred way to play. Portrait is allowed and looks as finishe
 
 ### 7.4 Field width on the server
 
-- The server's simulation takes the field width W as a parameter wherever it assumed 720 (terrain, placement, out of bounds, the drone AI). Rooms pass 720.
+- The server's simulation takes the field width W as a parameter wherever it assumed 720 (terrain, placement, shot speed, out of bounds, the drone AI's wobble). Rooms pass 720, where every factor is exactly 1.
 - A solo run records its W when it starts, with the seed and the difficulty (section 8). The server takes W only as an integer from 720 to 1440 that is a multiple of 24, and refuses anything else (422). It deals and plays every round of that run at that W.
-- Shared sim vectors at W = 720, 1080 and 1440 (terrain, placement, out of bounds, the drone's choice of target) are checked bit for bit in both JavaScript and PHP.
+- Shared sim vectors at W = 720, 1080 and 1440 (terrain, placement, shot speed, out of bounds, a drone's aim with the width's tightened wobble) are checked bit for bit in both JavaScript and PHP.
 
 ### 7.3 Scoreboards (this match only)
 

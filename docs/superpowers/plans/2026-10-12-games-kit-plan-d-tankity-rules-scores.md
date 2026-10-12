@@ -17,7 +17,7 @@
 **Cross-plan dependencies:**
 - The difficulty PR (#77: `src/difficulty.ts`; `DIFFICULTY`, `DIFFICULTIES`, `aimSkill()` and `type Difficulty` in `src/ai.ts`/`src/sim.ts`; `World.difficulty`; `ROOM_DIFFICULTY`, `room_parse_difficulty()` and `room_difficulty()` in `server/ai.php`; `$room['difficulty']`, set by the host at create and sent in every snapshot) is on `main`. Every protocol fixture (`protocol/*.json`) and `protocol/sim-vectors.json` this plan regenerates is written on top of it, by the generators (`make protocol`, `php protocol/sim-vectors.php`), never by hand.
 - PR 20 needs only Plan A (PHPUnit, the kit build) and lands after B19 so it does not rebase under Plan C's Tankity PRs.
-- PR 16 needs Plan C's PR 13b (the field's width): `GameState.w`, `genTerrain(rng, w)`, `drawHills`/`hillY`, `bandOffset`, `ROOM_W`, `fieldWidthOk`, `createFieldWidth` (`MatchDeps.field`), and in PHP `ROOM_W`, `room_field_width`, `room_gen_hills`/`room_hills_terrain`, `room_band_offset`, and the sim-vector `exact` cases (`$exact`, compared with `Object.is`).
+- PR 16 needs Plan C's PR 13b (the field's width): `GameState.w`, `genTerrain(rng, w)`, `drawHills`/`hillY`, `spawnSpots(n, rng, w)`, `fieldReach`, `fieldAim`, `ROOM_W`, `fieldWidthOk`, `createFieldWidth` (`MatchDeps.field`), and in PHP `ROOM_W`, `room_field_width`, `room_gen_hills`/`room_hills_terrain`, `room_field_reach` (with `room_shot_speed`'s `$reach`), `room_field_aim`, and the sim-vector `exact` cases (`$exact`, compared with `Object.is`).
 - PR 14 needs Plan C's PR 13 (the status bar in `src/ui/hud.tsx` and its `test/hud.test.mjs`) and PR 20 (`test/php/rooms-lib.php`).
 - PR 15 needs PR 20 (the database), Plan C's PR 10 (the kit's `Kit\ScoreGuard` and the `kit_php` install key) and PR 12 (`src/initials.ts`, `getInitials`, the title card and `backToTitle()`, and `test/menu.test.mjs`), and Plan B's PR 19 (Menu → Quit, which Task 18's Standings button follows).
 - `menu.tsx`, `menu.ts` and `test/menu.test.mjs` change in this order: the difficulty PR → Plan C Task 14 → Plan C Task 19 → Plan B Task 24 (Quit) → Task 18 here (Standings).
@@ -28,7 +28,7 @@ Plan D runs after Plan C. These are the names this plan uses from Plan C's work.
 
 | What | Name and shape |
 |---|---|
-| The field's width (PR 13b) | `src/sim.ts`: `H`, `ROOM_W = 720`, `FIELD_W_MIN`/`FIELD_W_MAX`/`FIELD_COL`, `fieldWidthOk(w)`, `genTerrain(rng, w)` → `{ terrain, clouds, hills }`, `drawHills`, `hillY`, `bandOffset(rng, w)` (no draw at 720); `src/field.ts` `createFieldWidth(viewport)` → `{ deal(), width }`, passed to the match as `MatchDeps.field`; `GameState.w`, `GameState.hills`; `server/sim.php` `ROOM_W`, `room_field_width(mixed): ?int`, `room_gen_hills`, `room_hills_terrain($h, $w)`, `room_gen_terrain($rng, $w)`; `server/rules.php` `room_band_offset(&$rng, $w)`; `protocol/sim-vectors.php` `$exact` (cases compared bit for bit). The smoke check `field-width-written-only-at-the-deal` names where `G.w` is written. |
+| The field's width (PR 13b) | `src/sim.ts`: `H`, `ROOM_W = 720`, `FIELD_W_MIN`/`FIELD_W_MAX`/`FIELD_COL`, `fieldWidthOk(w)`, `genTerrain(rng, w)` → `{ terrain, clouds, hills }`, `drawHills`, `hillY`, `spawnSpots(n, rng, w)` (over the whole width), `fieldReach(w)` (shot speed × √(w/720), exactly 1 at 720) and `shotSpeed(…, reach)`; `src/ai.ts` `FIELD_AIM`/`fieldAim(w)` (the drones' wobble per width); `src/field.ts` `createFieldWidth(viewport)` → `{ deal(), width }`, passed to the match as `MatchDeps.field`; `GameState.w`, `GameState.hills`; `server/sim.php` `ROOM_W`, `room_field_width(mixed): ?int`, `room_gen_hills`, `room_hills_terrain($h, $w)`, `room_gen_terrain($rng, $w)`; `room_field_reach($w)`, `room_shot_speed($power, $flat, $mult, $reach)`; `server/ai.php` `room_field_aim($w)`; `protocol/sim-vectors.php` `$exact` (cases compared bit for bit). The smoke check `field-width-written-only-at-the-deal` names where `G.w` is written. |
 | Kit score guard | `games/_kit/php/score-guard.php` (Plan C Tasks 2–4), copied into the game as `games/tankity/server/score-guard.php` when Tankity's `tools/install-files.php` config lists it under `'kit_php' => ['score-guard.php']` (generated, checked in, kept current by `php tools/install-files.php --check`). One class, `Kit\ScoreGuard`: `new ScoreGuard(array $config, string $csrfHeader, string $rateSalt, array $server, array $cookies, string $runsPath, ?Closure $clock = null, ?Closure $setCookie = null)`; `ScoreGuard::CONFIG_KEYS` (`runTtlSec`, `startsPerHour`, `scoresPerHour`, `csrfCookie`, `storageKey`, `blockedInitials`, `allowedHosts`); `static validateConfig(array): array` (throws `RuntimeException`; `runTtlSec` 60–86400); `static initials(mixed): ?string` (`[A-Za-z]{3}` in, uppercase out, null otherwise; it does not check the blocklist); `static coerceInitials(mixed $value, string $pad): string`; `isBlocked(string): bool`; `originAllowed(): bool`; `csrfToken(): string` (the cookie's token, or a new one set now); `csrfOk(): bool`; `startRun(): ?string` (null = rate-limited; a 32-hex id); `consumeRun(string $id, ?callable $plausible = null): ?string` (null accepted, else `'rate'`, `'invalid run'` or `'score rejected'`); `rateTake(string $kind, int $perHour): bool` (Task 4's per-client cap for any other endpoint). Tankity's `server/guard.php` (Task 10) is the thin wrapper that builds one from Tankity's settings, with its run store in the storage directory. |
 | Initials | `src/initials.ts` exports `BLOCKED_INITIALS`, `validInitials(raw)`, `randomInitials(rng)` and `initialsPref(storage, rng)` (Plan C Task 11). `main.ts` (Plan C Task 13) holds the one set: `const savedInitials = initialsPref(browserStorage(), Math.random);` and `const getInitials = (): string => savedInitials.get();`. There is no `getInitials` export from `src/initials.ts`. The rooms host and join with `getInitials()` (`LobbyDeps.savedInitials`). |
 | Title card | `main.ts` has `backToTitle(): void` (close panels, restart the demo, open the card; Plan C Task 13). Leave room (`netLeave`) and the solo end card's **Continue** return to it. `MatchDeps.backToTitle` replaced `freshMatchFromSeedBox`. |
@@ -49,7 +49,7 @@ William's answers (2026-10-12); every task below is written to them.
 5. **Storage location: one setting, then a fixed order.** `data_dir` / `TANKITY_DATA_DIR` (read through `tankity_setting()`: the environment, then `.config.yaml`) names the one directory for everything Tankity keeps; when set it is used exactly, created 0700 when missing, and an unwritable one is an error (logged, "store unavailable"), never a silent move elsewhere. It replaces `scores_dir` / `TANKITY_SCORES_DIR`, which is retired: an existing `scores_dir` is read only as the place to import old score files from. `shm_key` / `TANKITY_SHM_KEY` are retired with shared memory. When `data_dir` is unset, in this order: `games/tankity/data/` when PHP can write there (it then also writes `data/.htaccess` denying HTTP), else `/var/tmp/<username>-tankity/`, where `<username>` is `get_current_user()`: the owner of the running script, which is the account the site is deployed as (`wgrim` on the host), the same for every PHP-FPM worker and pool, and needing no extension; `uid<N>` (from `getmyuid()`) when the name cannot be resolved. Modes come from Plan C's `Kit\StoreModes`, the one helper Cylon and Tankity share: a directory PHP creates is 0700 and its files 0600 whichever user PHP runs as (their owner is PHP's user, which is all PHP needs). If PHP runs as the deploying account, only that account can reach them. If it runs as a web user every site on the host shares (Cylon's 0666/0777 suggest so; Task S1 confirms), any other site's PHP runs as that same user and can read and write Tankity's data, the same exposure Cylon's scores have today; no mode prevents it. A `/var/tmp` directory that is a symlink, not PHP's own, or open to group or others is refused. Every Tankity file lives there: `tankity.sqlite` (rooms, the boards, solo runs, and the old per-callsign scores until they are converted) and the guard's run store `guard-runs.json`. The old `/var/tmp/<callsign>-operation-tankity.json` files are imported once, idempotently, without losing a run, and each is deleted only after its import committed and only if it did not change since it was read. The journal mode is WAL on a local filesystem and DELETE otherwise (including when the filesystem cannot be read), chosen at run time.
 6. **Deterministic math.** Every transcendental on the solo simulation path (`sin`, `cos`, `atan2` in the sim, the AI's predictor and the flight) comes from `src/detmath.ts` and its PHP twin `server/detmath.php`: fdlibm's polynomials built only from `+ − × ÷` and `floor`, so the browser and the host compute the same bits; halves round toward +∞ on both sides. Shared `detmath` vectors are checked bit for bit (Task 21a). An honest run is never voided by a libm difference. Rendering keeps `Math.*`.
 7. **The server cleans up after itself**: idle rooms, expired solo runs, converted per-callsign rows, the old files once imported, and leftover temp files. The host has no cron, so housekeeping runs on requests, at most once every five minutes, each job bounded, and every function takes the clock as an argument so tests use a fake one.
-8. **The field's width** (spec 6.6, 7.4; Plan C PR 13b). A solo match is dealt at a width W (720–1440, a multiple of 24) taken from the landscape battlefield box, and keeps it for the match; rooms are 720. The solo referee deals and musters at the match's W (`soloDeal(…, w)`, `G.w`), a run records its W when it starts (`{op:'start', seed, difficulty, w}`), and the server refuses any other width (422), stores W in the run's state and plays every round of it at that W (`solo_deal($seed, $difficulty, $w)`). Recorded runs (`solo-runs.json`) carry their `w`, and one is recorded at 1440.
+8. **The field's width** (spec 6.6, 7.4; Plan C PR 13b). A solo match is dealt at a width W (720–1440, a multiple of 24) taken from the landscape battlefield box, and keeps it for the match; rooms are 720. The solo referee deals and musters at the match's W (`soloDeal(…, w)`, `G.w`): units spread over the whole width, shells fly √(W/720) faster, and the drones aim with that width's `fieldAim`, in the browser and in the server's play alike; a run records its W when it starts (`{op:'start', seed, difficulty, w}`), and the server refuses any other width (422), stores W in the run's state and plays every round of it at that W (`solo_deal($seed, $difficulty, $w)`). Recorded runs (`solo-runs.json`) carry their `w`, and one is recorded at 1440.
 
 ## Global Constraints
 
@@ -6636,7 +6636,7 @@ The audit, done before this task's code (the executor re-verifies each line agai
 | cluster bomblets | TS ignores ground for a bomblet's first 0.1 s; PHP's bomblets start at age 99 | differs when a cluster splits near the ground | TS bomblets may burst on the ground at once (`s.split ||`) |
 | lance bracket | TS `explode()` marks a drone's bracket landing at the first pierce burst; PHP only at the final hit | differs for drones with lances (round 5 on) | PHP marks it at the pierce burst too |
 | `sin`/`cos`/`atan2` (terrain, launch, cluster fan, the AI's predictor) | V8 vs the host's libm | may differ by one ulp, which would void an honest run | both sides use `src/detmath.ts` / `server/detmath.php` (Task 21a): the same bits by construction, pinned by the `detmath` vectors without tolerance |
-| shells flying a full 12 s | TS `life -= dt` (float) vs PHP 720 steps | can differ on the very last step | accepted: no weapon stays airborne 12 s on any field up to 1440×460 (the longest flight, straight up at full power, lasts under 6 s, and units spawn no farther apart than on a 720 field) |
+| shells flying a full 12 s | TS `life -= dt` (float) vs PHP 720 steps | can differ on the very last step | accepted: no weapon stays airborne 12 s on any field up to 1440×460 (the longest flight, straight up at full power, lasts under 6 s at 720 and under 9 s at 1440, where shells fly √2 faster; `fieldReach`'s `sqrt` and `/` are correctly rounded in both languages) |
 | volley order | TS flies all pellets/bomblets together, holding a later burst until earlier ones land; the room server resolves them one by one | same outcome without falls, pinned by every `volley` vector | the solo server flies them together like the browser (`server/flight.php`, Task 29) |
 | tank falls | TS drops tanks over craters between frames, including mid-volley; the room server snaps them after the volley | differs mid-volley | the browser keeps its falls and takes them inside the war's fixed steps (Task 23); the solo server takes the same steps, falls first, then shells (`server/flight.php`, Task 29, pinned by the `volley-fall` vectors); rooms keep snapping (they are refereed on the server and animated on the client) |
 | frame `dt` | TS flies shells and drops tanks by the frame's `dt` | the server cannot know it | fixed 1/60 s steps for the whole war, falls included (Task 23) |
@@ -7287,7 +7287,7 @@ MSG
 - Modify: `games/tankity/tsconfig.json` (`files` + `src/solo.ts`)
 
 **Interfaces:**
-- Consumes: `armor.ts`, `ai.ts` (`aiChoose`, `pickTactic`; `aiChoose` reads `world.difficulty` through `aimSkill()`), `flow.ts` (`WATCH_TURNS`), `sim.ts` (`type Difficulty`; PR 13b's `ROOM_W`, `fieldWidthOk`, `genTerrain(rng, w)`, `bandOffset`, `type Hills`), `field.ts` (`MatchDeps.field`); the difficulty PR's `MatchDeps.difficulty` and its `G.difficulty = difficulty.get()` in `resetMatch()`.
+- Consumes: `armor.ts`, `ai.ts` (`aiChoose`, `pickTactic`; `aiChoose` reads `world.difficulty` through `aimSkill()`), `flow.ts` (`WATCH_TURNS`), `sim.ts` (`type Difficulty`; PR 13b's `fieldWidthOk`, `genTerrain(rng, w)`, `spawnSpots(n, rng, w)`, `type Hills`), `field.ts` (`MatchDeps.field`); the difficulty PR's `MatchDeps.difficulty` and its `G.difficulty = difficulty.get()` in `resetMatch()`.
 - Produces: `SOLO_STEP = 1 / 60`; `FOES`; `interface SoloTank extends Tank { maxHp: number; color?: string; body?: string }`; `interface SoloState extends World { seed; difficulty: Difficulty; w: number; hills: Hills | null; body; clouds; tanks: SoloTank[]; turn; firstTurn; lives; nextOneUp; roundsWon; tactics; watchTurns; armor; plate; fuelBank }` (`difficulty` is required here, where `World` has it optional); `soloDeal(G: SoloState, arsenal: Arsenal, seed: string, difficulty: Difficulty, w: number): void` (the match keeps its difficulty and its width from the deal on; a width `fieldWidthOk` refuses throws `RangeError`); `soloMuster(G: SoloState, arsenal: Arsenal): void`; `snapTanks(G: Pick<SoloState, 'tanks' | 'terrain'>): void`; `soloNextTurn(G: SoloState): void`; `type Settled = { kind: 'next' } | { kind: 'roundWon'; bonus: number; prize: number } | { kind: 'tankLost' } | { kind: 'matchLost' }`; `soloSettle(G: SoloState): Settled`; `type OneUp = 'life' | 'points'`; `soloOneUps(G: SoloState): OneUp[]`; `soloAim(G: SoloState, arsenal: Arsenal, t: SoloTank): AimChoice`.
 
 - [ ] **Step 1: Write the failing test**
@@ -7300,7 +7300,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildArsenal, TUNE } from '../src/sim.ts';
+import { buildArsenal, SPAWN_GAP, TUNE } from '../src/sim.ts';
 import { soloAim, soloDeal, soloMuster, soloSettle, soloNextTurn, soloOneUps } from '../src/solo.ts';
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
@@ -7308,13 +7308,14 @@ const arsenal = buildArsenal(GAME.arsenal);
 const fresh = (seed, level = 'normal', w = 720) => { const G = { body: 'tank' }; soloDeal(G, arsenal, seed, level, w); return G; };
 const round1 = (seed, level = 'normal', w = 720) => { const G = fresh(seed, level, w); G.round = 1; soloMuster(G, arsenal); return G; };
 
-test('a deal keeps its width; a wide field is the same hills and the same gaps, slid along', () => {
+test('a deal keeps its width; a wide field is the same hills with the units spread over it', () => {
   const a = round1('alpha'), b = round1('alpha', 'normal', 1440);
   assert.equal(b.w, 1440);
   assert.equal(b.terrain.length, 1440);
   assert.deepEqual(b.terrain.slice(0, 720), a.terrain);
-  const gaps = G => G.tanks.map(t => t.x).sort((x, y) => x - y).map((x, i, xs) => (i ? x - xs[i - 1] : 0));
-  assert.deepEqual(gaps(b), gaps(a));
+  const xs = b.tanks.map(t => t.x).sort((x, y) => x - y);
+  assert.ok(xs[0] >= 30 && xs.at(-1) <= 1410);
+  for (let i = 1; i < xs.length; i++) assert.ok(xs[i] - xs[i - 1] >= SPAWN_GAP, 'nobody starts inside another\'s blast');
   assert.throws(() => soloDeal({ body: 'tank' }, arsenal, 'x', 'normal', 1000), RangeError);
 });
 
@@ -7419,7 +7420,7 @@ import { aiChoose, pickTactic } from './ai.ts';
 import type { AimChoice } from './ai.ts';
 import { carryArmor, maxArmor } from './armor.ts';
 import { WATCH_TURNS } from './flow.ts';
-import { ROOM_W, TUNE, bandOffset, clamp, droneRack, fieldWidthOk, gauss, genTerrain, hashSeed, mulberry32, spawnSpots, surfY } from './sim.ts';
+import { TUNE, clamp, droneRack, fieldWidthOk, gauss, genTerrain, hashSeed, mulberry32, spawnSpots, surfY } from './sim.ts';
 import type { Arsenal, Cloud, Difficulty, Hills, Tank, World } from './sim.ts';
 
 /** Every war step is this long, in the browser and in the server's play. */
@@ -7495,27 +7496,26 @@ export function soloMuster(G: SoloState, arsenal: Arsenal): void {
   G.hills = g.hills;
   G.watchTurns = 0;
   G.wind = Math.round((G.rng() * 2 - 1) * 8);
-  const order = spawnSpots(1 + FOES.length, G.rng);
-  const off = bandOffset(G.rng, G.w); // a wider field slides the group; the gaps stay a 720 field's
+  const order = spawnSpots(1 + FOES.length, G.rng, G.w); // over the whole field: the extra hills are part of the fight
   const fuel = TUNE.fuel + (G.fuelBank || 0);
   G.fuelBank = 0;
   G.tanks = [{
     id: 'tank', isPlayer: true, color: '#ffff00', body: G.body,
-    x: order[0]! + off, y: 0, angle: 62, power: 55, hp: G.armor, maxHp: maxArmor(G.plate), fuel,
+    x: order[0]!, y: 0, angle: 62, power: 55, hp: G.armor, maxHp: maxArmor(G.plate), fuel,
   }];
   FOES.forEach((f, i) => {
     // Endless escalation: thicker armor and a deeper magazine every round.
     const armor = TUNE.droneArmor + 6 * (G.round - 1);
     G.tanks.push({
       id: f.id, isPlayer: false, color: f.color,
-      x: order[i + 1]! + off, y: 0, angle: 62, power: 55, hp: armor, maxHp: armor, fuel: 0,
+      x: order[i + 1]!, y: 0, angle: 62, power: 55, hp: armor, maxHp: armor, fuel: 0,
       ammo: droneRack(arsenal, G.round),
       s: G.tactics[f.id] || (G.tactics[f.id] = pickTactic(G.rng)),
     });
   });
   for (const t of G.tanks) {
     t.y = surfY(G.terrain, t.x);
-    t.dirS = t.x < off + ROOM_W / 2 ? 1 : -1; // face the middle of the group
+    t.dirS = t.x < G.w / 2 ? 1 : -1; // face the middle of the field
   }
   G.turn = G.firstTurn % G.tanks.length;
   G.firstTurn++;
@@ -7600,7 +7600,7 @@ Add `"src/solo.ts"` to `tsconfig.json` `files`.
 
 - [ ] **Step 3: match.ts plays the referee**
 
-In `src/match.ts` import `{ FOES, SOLO_STEP, snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloSettle } from './solo.ts'` and drop now-unused imports (`hashSeed`, `mulberry32`, `simDroneRack`, `simGenTerrain`, `spawnSpots`, `bandOffset`, `ROOM_W`, `pickTactic`, `simAiChoose`). Delete `genTerrain()`, `FOE_DEFS`, `droneRack()` and the `aiChoose(t)` wrapper (`simAiChoose(G, tables.arsenal!, t)`). The difficulty pass-through stays: the `difficulty` dep (`MatchDeps.difficulty: Pick<DifficultySetting, 'get'>` and its `import type { DifficultySetting }`) stays, `resetMatch()` hands `difficulty.get()` to `soloDeal`, which sets `G.difficulty`, and `soloAim` → `aiChoose(G, …)` reads it, as the wrapper did.
+In `src/match.ts` import `{ FOES, SOLO_STEP, snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloSettle } from './solo.ts'` and drop now-unused imports (`hashSeed`, `mulberry32`, `simDroneRack`, `simGenTerrain`, `spawnSpots`, `pickTactic`, `simAiChoose`). Delete `genTerrain()`, `FOE_DEFS`, `droneRack()` and the `aiChoose(t)` wrapper (`simAiChoose(G, tables.arsenal!, t)`). The difficulty pass-through stays: the `difficulty` dep (`MatchDeps.difficulty: Pick<DifficultySetting, 'get'>` and its `import type { DifficultySetting }`) stays, `resetMatch()` hands `difficulty.get()` to `soloDeal`, which sets `G.difficulty`, and `soloAim` → `aiChoose(G, …)` reads it, as the wrapper did.
 
 `test/smoke.test.mjs`: the deal's write of `G.w` moves into `solo.ts`, so Plan C Task 25's check becomes
 
@@ -8734,7 +8734,7 @@ MSG
 - Modify: `games/tankity/protocol/sim-vectors.php` (group `solo-deal`), `games/tankity/test/sim-vectors.test.mjs` (`RUN['solo-deal']`)
 
 **Interfaces:**
-- Consumes: `room_hash_seed`, `room_rng_next`, `room_gen_terrain`, `room_spawn_spots`, PR 13b's `room_field_width`, `room_band_offset`, `ROOM_W`, `room_pick_tactic`, `room_ai_rack`, `room_max_armor`, `room_muster_armor`, `room_weapons`.
+- Consumes: `room_hash_seed`, `room_rng_next`, `room_gen_terrain`, `room_spawn_spots`, PR 13b's `room_field_width`, `room_spawn_spots(&$rng, $n, $w)`, `room_pick_tactic`, `room_ai_rack`, `room_max_armor`, `room_muster_armor`, `room_weapons`.
 - Produces: `SOLO_FOES`; `det_round(float $x): float`; `solo_gen_terrain(int &$rng, int $w): array`; `solo_deal(string $seed, string $difficulty, int $w): array` (throws `InvalidArgumentException` for a width `room_field_width` refuses; a room-shaped state: one human at seat 0, keys `seed, w, difficulty (a ROOM_DIFFICULTY word, read by room_ai_choose through room_difficulty()), rng, phase ('shop'), round, wind, terrain, tanks, shells (the volley in the air, `server/flight.php`'s), turn, firstTurn, watchTurns, seats[0].lives, scores[0], cash[0], ammo[0], nextUp[0], roundsWon, tactics, plate[0], armor[0], fuelBonus[0], shield[0], jammer[0], bunker[0], laststand[0]`); `solo_muster(array &$s): void` (round must already be incremented). Vector group `solo-deal`: input `{ seed, rounds, w }`, output per round `{ samples, wind, xs, ys, tactics, turn, hp, next }`.
 
 - [ ] **Step 1: Generator group (the PHP side does not exist yet, so this fails)**
@@ -8765,7 +8765,7 @@ $soloDeal = function (string $seed, int $rounds, int $w) use ($add): void {
 foreach (['scorched-1000', 'scorched-4242', 'alpha', 'runs-long-70', 'a b c'] as $seed) {
     $soloDeal($seed, 3, 720);
 }
-$soloDeal('alpha', 3, 1440); // a wide field: the same draws, the group slid by one more
+$soloDeal('alpha', 3, 1440); // a wide field: the same draws, spread over 1440
 $soloDeal('scorched-4242', 2, 1080);
 ```
 
@@ -8839,25 +8839,24 @@ function solo_muster(array &$s): void
     $s['terrain'] = solo_gen_terrain($s['rng'], $s['w']);
     $s['watchTurns'] = 0;
     $s['wind'] = (int) det_round((room_rng_next($s['rng']) * 2 - 1) * 8);
-    $xs = room_spawn_spots($s['rng'], 1 + count(SOLO_FOES), ROOM_W);
-    $off = room_band_offset($s['rng'], $s['w']); // src/solo.ts: the group slides, the gaps stay
+    $xs = room_spawn_spots($s['rng'], 1 + count(SOLO_FOES), $s['w']);
     $fuel = 80.0 + (float) ($s['fuelBonus'][0] ?? 0);
     $s['fuelBonus'][0] = 0;
     $s['tanks'] = [[
-        'seat' => 0, 'kind' => 'human', 'name' => 'tank', 'x' => (float) ($xs[0] + $off), 'y' => 0.0, 'angle' => 62.0, 'power' => 55.0,
+        'seat' => 0, 'kind' => 'human', 'name' => 'tank', 'x' => (float) $xs[0], 'y' => 0.0, 'angle' => 62.0, 'power' => 55.0,
         'hp' => room_muster_armor($s, 0), 'maxHp' => room_max_armor($s, 0), 'fuel' => $fuel, 'dirS' => 1, 'ammo' => $s['ammo'][0],
     ]];
     foreach (SOLO_FOES as $i => $id) {
         $armor = 60 + 6 * ($s['round'] - 1);
         $s['tactics'][$id] ??= room_pick_tactic($s['rng']);
         $s['tanks'][] = [
-            'seat' => $i + 1, 'kind' => 'ai', 'name' => $id, 'x' => (float) ($xs[$i + 1] + $off), 'y' => 0.0, 'angle' => 62.0, 'power' => 55.0,
+            'seat' => $i + 1, 'kind' => 'ai', 'name' => $id, 'x' => (float) $xs[$i + 1], 'y' => 0.0, 'angle' => 62.0, 'power' => 55.0,
             'hp' => $armor, 'maxHp' => $armor, 'fuel' => 0.0, 'dirS' => -1, 'ammo' => room_ai_rack((int) $s['round']), 's' => $s['tactics'][$id],
         ];
     }
     foreach ($s['tanks'] as &$t) {
         $t['y'] = $s['terrain'][max(0, min($s['w'] - 1, (int) round($t['x'])))];
-        $t['dirS'] = $t['x'] < $off + ROOM_W / 2 ? 1 : -1;
+        $t['dirS'] = $t['x'] < $s['w'] / 2 ? 1 : -1;
     }
     unset($t);
     $s['turn'] = $s['firstTurn'] % count($s['tanks']);
@@ -9088,7 +9087,7 @@ function flight_launch(array &$s, int $idx, string $wkey): void
     $r0 = deg2rad((float) $t['angle']);
     $dirS = $t['dirS'] ?? -1;
     $shots = (int) (($w['pellets'] ?? 0) ?: 1);
-    $spd = room_shot_speed((float) $t['power'], !empty($w['flat']), (float) (($w['speed'] ?? 0) ?: 1.0));
+    $spd = room_shot_speed((float) $t['power'], !empty($w['flat']), (float) (($w['speed'] ?? 0) ?: 1.0), room_field_reach(count($s['terrain'])));
     for ($i = 0; $i < $shots; $i++) {
         $off = $shots === 1 ? 0.0 : ($i - ($shots - 1) / 2) * (float) ($w['spread'] ?? 0.0);
         $a = $r0 + $off;

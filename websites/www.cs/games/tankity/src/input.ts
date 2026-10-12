@@ -93,7 +93,7 @@ export interface KeyLike {
   ctrlKey?: boolean;
   shiftKey?: boolean;
   repeat?: boolean;
-  target?: { tagName?: string } | null;
+  target?: { tagName?: string; click?(): void } | null;
   preventDefault(): void;
 }
 
@@ -222,6 +222,8 @@ export interface InputContext {
   /** A question holds every key but ESC; modalEscape answers it. */
   modalOpen?(): boolean;
   modalEscape?(): void;
+  /** The title card is up: the aim keys rest, and Space presses the card's focused button. */
+  cardOpen?(): boolean;
   /** Something held or pressed started play (the page unlocks audio). */
   onHold?(cmd: HoldCommand): void;
 }
@@ -302,7 +304,8 @@ export function createInput(opts: { touch: boolean }): Input {
   const aimDown = new Map<string, { key?: string; code?: string; ctrlKey?: boolean }>();
 
   function keydown(e: KeyLike): void {
-    if (isTyping(e.target)) return;
+    // A box keeps every key but Esc, which still closes what is open.
+    if (isTyping(e.target) && lookup('global', e) !== 'escape') return;
     if (e.key === 'Shift') {
       for (const k of aimDown.values()) {
         const act = lookup('aim', { ...k, shiftKey: true }) as HoldCommand | null;
@@ -332,6 +335,7 @@ export function createInput(opts: { touch: boolean }): Input {
       return;
     }
     const act = lookup('aim', e) as HoldCommand | null;
+    if (act && ctx.cardOpen && ctx.cardOpen()) return;
     if (act) {
       // Shift pressed or let go mid-hold turns a barrel key into a drive key
       // (or back): only the action the chord names now stays down.
@@ -347,6 +351,14 @@ export function createInput(opts: { touch: boolean }): Input {
     // from the same table as everything else.
     if (global === 'fire') {
       e.preventDefault();
+      // On the title card Space presses the focused button (its own default,
+      // the page scroll, is suppressed just above). Ctrl does not: it begins
+      // browser shortcuts, so it must never start a match.
+      const target = e.target;
+      if (ctx.cardOpen && ctx.cardOpen() && e.key === ' ' && target && target.tagName === 'BUTTON' && target.click) {
+        if (!press.repeat) target.click();
+        return;
+      }
       const fn = commands.fire;
       if (fn && !press.repeat) fn(press);
       return;

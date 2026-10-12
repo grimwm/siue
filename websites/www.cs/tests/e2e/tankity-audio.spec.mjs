@@ -194,7 +194,7 @@ test('the demo plays the theme, loops it without a seam, and a round picks the n
   expect(errors).toEqual([]);
 });
 
-test('Next track steps through the soundtrack from the toolbar or the ] key', async ({ browser }) => {
+test('Next track steps through the soundtrack from the deck or the ] key', async ({ browser }) => {
   const { page, errors, music, config, tracks } = await openWithTones(browser);
   await page.keyboard.press('l');
   await expect.poll(() => music[0], { timeout: 15_000 }).toBe(tracks[0]);

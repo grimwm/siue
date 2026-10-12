@@ -20,12 +20,11 @@ import type { Weapon } from './sim.ts';
 
 /** The slice of the game's state the view reads and steps (main.ts's G). */
 export type ViewState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'cam' | 'terrain' | 'clouds' | 'time' | 'shake'
-  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'windTop' | 'preview'>;
+  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'preview'>;
 
 /** What the view needs from the page and the rest of the game. */
 export interface ViewDeps {
   G: ViewState;
-  $(id: string): HTMLElement | null;
   tables: Pick<Tables, 'weapons'>;
   net: Pick<RoomClient, 'on' | 'code' | 'turnClockLeft'>;
   MATCH: Pick<MatchState, 'myTurn'>;
@@ -37,7 +36,7 @@ export interface ViewDeps {
 }
 
 export function createView(deps: ViewDeps) {
-  const { G, $, tables, net, MATCH, replay, FX, fxSet, cur, textScale } = deps;
+  const { G, tables, net, MATCH, replay, FX, fxSet, cur, textScale } = deps;
 
   /* The camera only ever pulls back, slowly, to keep every live tank framed. */
   function updateCamera(dt: number): void {
@@ -114,7 +113,7 @@ export function createView(deps: ViewDeps) {
       turnUnit: turnTank(), online: net.on,
       aim: aiming ? { unit: t, length: aimArmLength(shownPower(t)) } : null,
       booms: G.booms, fx: G.fx, shells: G.shells, replay: replay.flying(), sparks: G.parts,
-      wind: G.wind, windGauge: G.tanks.length > 0 && G.phase !== 'shop', windTop: G.windTop,
+      wind: G.wind,
       textScale: textScale(),
       turnClock: left !== null && left <= CLOCK_SHOW_S && left > 0 ? { left, myTurn: MATCH.myTurn } : null,
       preview: pv && pv.cv ? {
@@ -143,14 +142,5 @@ export function createView(deps: ViewDeps) {
     trackMotion();
     renderer.frame(battleView());
   }
-  /* The wind gauge sits just under the menu strip, so its top is measured from
-     the page (placeLogBelowMenu) and handed to the renderer in world units. */
-  function windGaugeTop(): number {
-    const bar = $('menubar'), stage = $('stage');
-    if (!bar || !stage || !stage.clientHeight || !bar.getBoundingClientRect) return 10;
-    const below = bar.getBoundingClientRect().bottom - stage.getBoundingClientRect().top;
-    return Math.max(6, below / stage.clientHeight * H + 6);
-  }
-
-  return { updateCamera, shownAngle, shownPower, render, windGaugeTop };
+  return { updateCamera, shownAngle, shownPower, render };
 }

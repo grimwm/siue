@@ -59,7 +59,9 @@ import { createMatch } from './match.ts';
 import { createRoom } from './room.ts';
 import { createLobby } from './lobby.ts';
 import { createMenu } from './menu.ts';
+import { createTitle } from './title.ts';
 import { difficultySetting } from './difficulty.ts';
+import { initialsPref } from './initials.ts';
 import { browserStorage } from '../../_kit/ports.browser.ts';
 import type { Arsenal, Weapon, Gear } from './sim.ts';
 import type { GameState, GameTank, MatchState } from './game-types.ts';
@@ -168,7 +170,7 @@ const G: GameState = {
   dlgQ: [], dlgT: 0, lastTalk: -99, banterT: 30, bannerT: 0, bannerDone: null,
   cam: { z: 1, cx: 360, cy: 230 },
   over: false, won: false,
-  tactics: {}, demo: false, demoHint: false, watchTurns: 0, preview: null, windTop: undefined,
+  tactics: {}, demo: false, demoHint: false, watchTurns: 0, preview: null,
 };
 /* Tables start from the baked fallback (G exists from here on); the file
 // arsenal replaces them the moment it arrives. */
@@ -188,7 +190,7 @@ const { fxSet, installEffects, fxMuzzle, fxImpact, fxSpecial, fxTrail } = create
 G.fx = FX ? FX.createSystem({ max: FX_BUDGET }) : null;
 /* What the crew says (src/chatter.ts): the trash-talk queue and the radio log. */
 const { talk, exchange, pumpDialogue, say, renderLogOverlay } = createChatter({
-  G, $, keyHint, toggleOverlay, refreshNavHints, placeLogBelowMenu,
+  G, $, keyHint, toggleOverlay, refreshNavHints, placeLogBelowStatus,
 });
 const me = () => G.tanks[0]!;
 const alive = () => G.tanks.filter(t => t.hp > 0);
@@ -398,11 +400,13 @@ const replay = createReplay({
 /* ---------- the typed modules, wired in dependency order ---------- */
 /* The status bar's values (src/hud.ts). */
 const { HUD, paintHud, windText, renderHUD } = createHud({
-  G, $, tables, net, MATCH, me, cur, myTank, seatName, drawShellIcon, openGuns: () => openGuns(),
+  G, $, tables, net, MATCH, me, cur, myTank, seatName, drawShellIcon, keyHint, touch: TOUCH,
+  menuOpen: () => { const mv = $('menu-overlay'); return !!mv && !mv.hidden; },
+  onMenu: () => toggleOverlay('menu-overlay', 'btn-menu'),
 });
 /* The camera and the frame the canvas paints (src/view.ts). */
-const { updateCamera, shownAngle, shownPower, render, windGaugeTop } = createView({
-  G, $, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
+const { updateCamera, shownAngle, shownPower, render } = createView({
+  G, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
 /* The high scores (src/scores.ts). */
 const { SCORES, renderScoresOverlay, loadScores, savedCallsign, fileReport } = createScores({
@@ -417,6 +421,10 @@ const {
 });
 /* The Difficulty setting: the Menu picks it, a new solo match and a hosted room read it. */
 const difficulty = difficultySetting(browserStorage());
+/* The player's initials (src/initials.ts): one set per browser, edited on the
+   title card; the rooms host and join with it, and filed scores carry it. */
+const savedInitials = initialsPref(browserStorage(), Math.random);
+const getInitials = (): string => savedInitials.get();
 /* The solo match (src/match.ts): dealing, turns, blasts, the drone's shot, the end veil. A dependency
    on a module wired further down is passed as an arrow, so it resolves when it is called. */
 const {
@@ -425,7 +433,7 @@ const {
 } = createMatch({
   G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
-  tutorialFired, fileReport, savedCallsign, freshMatchFromSeedBox,
+  tutorialFired, fileReport, savedCallsign, backToTitle: () => backToTitle(),
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
   netFire: () => netFire(), netLeave: quiet => netLeave(quiet), netNext: want => netNext(want),
   netRematch: () => netRematch(), openLobby: () => openLobby(),
@@ -459,15 +467,32 @@ const {
   netLeave, netRematch,
 } = createLobby({
   G, $, net, MATCH, HUD, END, SCORES, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
-  closeOverlays, closePreview, endTutorial, freshMatchFromSeedBox, hideShop, paintHud, refreshNavHints, renderEndVeil,
+  closeOverlays, closePreview, endTutorial, hideShop, savedInitials: getInitials, paintHud, refreshNavHints, renderEndVeil,
   renderMenu: () => renderMenu(),
+  closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
   renderScoresOverlay, renderShop,
 });
 /* The game menu's settings (src/menu.ts). */
 const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
-  G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, openRooms, placeLogBelowMenu,
-  randomRun, freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound, tutorialOpen,
+  G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
+  nextSong: () => { unlock(); music.next(); },
+  freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
 });
+/* The title card over the demo (src/title.ts). */
+const { titleOpen, openTitle, closeTitle, renderTitle } = createTitle({
+  $, keyHint, initials: savedInitials,
+  play: () => { unlock(); sfx.play('click'); randomRun(); },
+  friends: () => openRooms(),
+  tutorial: () => { sfx.play('click'); tutorialOpen(); },
+  settings: () => { const mv = $('menu-overlay'); if (mv && mv.hidden) toggleOverlay('menu-overlay', 'btn-menu'); },
+  settingsOpen: () => { const mv = $('menu-overlay'); return !!mv && !mv.hidden; },
+});
+/* After a match or a room: the demo again, under the card. */
+function backToTitle(): void {
+  closeOverlays();
+  startDemo();
+  openTitle();
+}
 function myTank(): GameTank | null {
   for (const t of G.tanks) if (t.isPlayer) return t;
   return null;
@@ -483,9 +508,11 @@ function seatName(seat: number): string {
 function applyKeys(def: unknown): void {
   if (!input.setKeys(def)) return;
   renderKeyHints();
+  paintHud();
   renderHelpOverlay();
   renderShop();
   renderMenu();
+  renderTitle();
   renderLobby();
   renderGuns();
   renderScoresOverlay();
@@ -513,6 +540,7 @@ function freshMatchFromSeedBox(opts?: { tut?: boolean }): void {
   // A new match takes the whole frame: shut any panels so the menu never
   // sits over the briefing and the shop never opens underneath it.
   closeOverlays();
+  closeTitle();
   // Leaving a coached battle counts as having seen it; asking for the
   // tutorial (U or the menu) always deals this match with the coach on.
   endTutorial(tutorialActive());
@@ -530,37 +558,6 @@ function openRooms(): void {
   unlock();
   sfx.play('click');
   openLobby();
-}
-/* Toolbar tips: resting the pointer (or keyboard focus) on an icon button
-   for a moment shows its name, what it does and its key in a styled card.
-   Touch screens have no hover, and their buttons keep spoken names. */
-const TIP_DELAY_MS = 700;
-function bindToolTips(): void {
-  const tip = $('tool-tip');
-  if (!tip || !document.querySelectorAll) return;
-  let timer = 0;
-  const hide = () => { clearTimeout(timer); timer = 0; tip.hidden = true; };
-  const show = (btn: HTMLElement): void => {
-    const name = tip.querySelector('.tool-tip-name');
-    const desc = tip.querySelector('.tool-tip-desc');
-    const key = btn.querySelector('.key');
-    if (name) name.textContent = btn.getAttribute('data-tip') || '';
-    if (desc) desc.textContent = (btn.getAttribute('data-tip-desc') || '') + (key && key.textContent && !TOUCH ? ` (${key.textContent})` : '');
-    tip.style.setProperty('--tool', btn.style.getPropertyValue('--tool') || '#ffc93c');
-    tip.hidden = false;
-    const r = btn.getBoundingClientRect(), t = tip.getBoundingClientRect();
-    const left = Math.max(6, Math.min(window.innerWidth - t.width - 6, r.left + r.width / 2 - t.width / 2));
-    tip.style.left = `${left}px`;
-    tip.style.top = `${r.bottom + 8}px`;
-  };
-  document.querySelectorAll<HTMLElement>('.guide-actions .tool').forEach(btn => {
-    const arm = () => { clearTimeout(timer); timer = setTimeout(() => show(btn), TIP_DELAY_MS); };
-    btn.addEventListener('mouseenter', arm);
-    btn.addEventListener('mouseleave', hide);
-    btn.addEventListener('focus', () => { if (!btn.matches || btn.matches(':focus-visible')) arm(); });
-    btn.addEventListener('blur', hide);
-    btn.addEventListener('pointerdown', hide);
-  });
 }
 /* Another panel (menu, help, report, log) open above the shop takes the keys. */
 function shopCovered(): boolean {
@@ -666,6 +663,7 @@ function bindKeys(): void {
     // The leave question holds every key but ESC (which answers "stay").
     modalOpen: () => { const ask = $('leave-veil'); return !!ask && !ask.hidden; },
     modalEscape: () => { closeLeaveVeil(); },
+    cardOpen: () => titleOpen(),
     onHold: () => { unlock(); music.start(); },
   });
   input.bind(window);
@@ -679,7 +677,6 @@ function init(): void {
   if (TOUCH) document.documentElement.classList.add('touch');
   renderHelpOverlay();
   bindKeys();
-  bindToolTips();
   loadGameConfig();
   G.body = loadBody();
   paintHud();
@@ -692,6 +689,7 @@ function init(): void {
   loadTextSize(); // draws the menu
   renderKeyHints();
   startDemo();
+  openTitle();
   renderShop();
   loadScores();
   // Light the connection dot from the start, not only when the lobby opens.
@@ -716,8 +714,6 @@ function init(): void {
     const b = $(btnId);
     if (b) b.addEventListener('click', ev => { blurTarget(ev); toggleOverlay(ovId, btnId); });
   }
-  const menuBtn = $('btn-menu');
-  if (menuBtn) menuBtn.addEventListener('click', ev => { blurTarget(ev); toggleOverlay('menu-overlay', 'btn-menu'); });
   if (document.addEventListener) document.addEventListener('fullscreenchange', syncFullscreenLabel);
   if (document.addEventListener) document.addEventListener('fullscreenchange', lockEscapeInFullscreen);
   const pvClose = $('preview-close');
@@ -736,22 +732,14 @@ function init(): void {
   window.addEventListener('keydown', kickAudio, true);
   window.addEventListener('pagehide', () => net.sendLeave());
   window.addEventListener('resize', refreshNavHints);
-  window.addEventListener('resize', placeLogBelowMenu);
-  placeLogBelowMenu();
+  window.addEventListener('resize', placeLogBelowStatus);
+  placeLogBelowStatus();
   requestAnimationFrame(frame);
 }
-/* The log hangs just under the menu strip, whose height changes with the
-   frame width, so it never covers the battle buttons. */
-function placeLogBelowMenu(): void {
-  G.windTop = windGaugeTop();
-  // The speech bubble rides just above the status bar, never over it.
-  const hud = document.querySelector && document.querySelector<HTMLElement>('.hudbar');
-  const dlg = $('dialogue');
-  const holder = dlg && dlg.parentElement;
-  if (hud && dlg && holder && holder.offsetHeight && hud.offsetHeight) {
-    dlg.style.bottom = `${holder.offsetHeight - hud.offsetTop + 6}px`;
-  }
-  const bar = $('menubar');
+/* The radio log hangs just under the status bar, whose height changes with
+   the frame width. */
+function placeLogBelowStatus(): void {
+  const bar = $('hud-bar');
   const log = $('log-overlay');
   if (!bar || !log || !bar.offsetHeight) return;
   log.style.top = `${bar.offsetTop + bar.offsetHeight + 6}px`;
@@ -843,7 +831,16 @@ function toggleOverlay(id: string, btnId?: string): void {
   if (OVERLAY_PAINT[id]) OVERLAY_PAINT[id]();
   const btn = btnId && $(btnId);
   if (btn) btn.setAttribute('aria-expanded', String(!ov.hidden));
+  if (id === 'menu-overlay') menuFocus(!ov.hidden);
+  paintHud();
   refreshNavHints();
+}
+/* Focus goes into the menu when it opens, and back to what opens it when it
+   closes: the card's Settings while the card is up, else the Menu button. */
+function menuFocus(open: boolean): void {
+  renderTitle();
+  const to = open ? $('menu-close') : titleOpen() ? $('title-settings') : $('btn-menu');
+  if (to && to.focus) to.focus();
 }
 function toggleFullscreen(): void {
   try {

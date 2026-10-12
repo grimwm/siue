@@ -118,3 +118,53 @@ test('letting go of Shift with an arrow still down goes back to aiming at once',
   input.keyup(shift({ shiftKey: false }));
   assert.ok(input.held.has('barrelLeft') && !input.held.has('driveLeft'));
 });
+
+test('card: Space presses the focused card button, never fires, never scrolls', () => {
+  const input = rig();
+  const calls = [];
+  input.register({ fire: () => { calls.push('fire'); } }, { cardOpen: () => true });
+  let clicked = 0, prevented = 0;
+  input.keydown({ ...ev({ code: 'Space', key: ' ' }), target: { tagName: 'BUTTON', click: () => { clicked++; } }, preventDefault: () => { prevented++; } });
+  assert.equal(clicked, 1);
+  assert.equal(prevented, 1);
+  assert.deepEqual(calls, []);
+});
+
+test('card: the aim keys hold nothing, and the letter keys still reach their commands', () => {
+  const input = rig();
+  const calls = [];
+  const log = name => () => { calls.push(name); };
+  input.register({ new: log('new'), rooms: log('rooms'), escape: log('escape') }, { cardOpen: () => true });
+  input.keydown(arrowLeft());
+  assert.ok(!input.held.has('barrelLeft'));
+  for (const [code, key] of [['KeyN', 'n'], ['KeyO', 'o'], ['Escape', 'Escape']]) input.keydown(ev({ code, key }));
+  assert.deepEqual(calls, ['new', 'rooms', 'escape']);
+});
+
+test('card: with no button focused, the fire key reaches the game (which explains the demo)', () => {
+  const input = rig();
+  const calls = [];
+  input.register({ fire: () => { calls.push('fire'); } }, { cardOpen: () => true });
+  input.keydown(ev({ code: 'Space', key: ' ' }));
+  assert.deepEqual(calls, ['fire']);
+});
+
+test('card: Ctrl alone never presses the focused card button; it only reaches fire', () => {
+  const input = rig();
+  const calls = [];
+  input.register({ fire: () => { calls.push('fire'); } }, { cardOpen: () => true });
+  let clicked = 0;
+  input.keydown({ ...ev({ code: 'ControlLeft', key: 'Control', ctrlKey: true }), target: { tagName: 'BUTTON', click: () => { clicked++; } } });
+  assert.equal(clicked, 0);
+  assert.deepEqual(calls, ['fire']);
+});
+
+test('Esc still works while a text box has focus; other keys stay the box\'s', () => {
+  const input = rig();
+  const calls = [];
+  input.register({ escape: () => { calls.push('escape'); }, new: () => { calls.push('new'); } });
+  const inBox = o => ({ ...ev(o), target: { tagName: 'INPUT' } });
+  input.keydown(inBox({ code: 'Escape', key: 'Escape' }));
+  input.keydown(inBox({ code: 'KeyN', key: 'n' }));
+  assert.deepEqual(calls, ['escape']);
+});

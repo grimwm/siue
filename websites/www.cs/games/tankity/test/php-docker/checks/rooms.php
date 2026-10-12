@@ -56,6 +56,11 @@ function room_test_wipe(int $base): void
         @sem_remove($sem);
     }
 }
+$storedInitials = function (string $c) {
+    [$room, $lock] = room_load($c);
+    room_unlock($lock);
+    return is_array($room) ? ($room['seats'][0]['initials'] ?? '(missing)') : '(no room)';
+};
 $storedDifficulty = function (string $c) {
     [$room, $lock] = room_load($c);
     room_unlock($lock);
@@ -125,6 +130,7 @@ $code = (string) ($room['code'] ?? '');
 $token = (string) ($room['token'] ?? '');
 $ping = $get($base . '/rooms.php?action=ping');
 $check('counts-live', ($ping['rooms']['used'] ?? -1) === 1);
+$check('lowercase-initials-stored-uppercase', $storedInitials($code) === 'TST', $storedInitials($code));
 $check('create-without-difficulty-stores-normal', $storedDifficulty($code) === 'normal', $storedDifficulty($code));
 
 // Age a record the way an abandoned room ages.

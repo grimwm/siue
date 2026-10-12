@@ -10,16 +10,14 @@ import { click, fire, submit, document, makeEl, els } from '../../_kit/test/dom-
 
 globalThis.document = document;
 
-const UI = ['shop', 'lobby', 'menu', 'guns', 'scores', 'log', 'tutorial', 'hud', 'endveil', 'leave'];
+const UI = ['shop', 'lobby', 'guns', 'scores', 'log', 'tutorial', 'endveil', 'leave'];
 const ui = await importTsx(import.meta.dirname, Object.fromEntries(UI.map(n => [n, `../src/ui/${n}.tsx`])));
 const { renderShop } = ui.shop;
 const { renderLobby } = ui.lobby;
-const { renderMenu } = ui.menu;
 const { renderGuns } = ui.guns;
 const { renderScores } = ui.scores;
 const { renderLog } = ui.log;
 const { renderTutorial } = ui.tutorial;
-const { renderHud } = ui.hud;
 const { renderEndVeil } = ui.endveil;
 const { renderLeave } = ui.leave;
 
@@ -206,7 +204,7 @@ function lobbyProps(over = {}) {
   const props = {
     keyHint, onClose: () => { calls.close++; }, online: true, count: '3 / 10 rooms occupied', status: '', inRoom: false,
     maps: MAPS, mapId: '', drawMapIcon: (cv, profile) => { calls.icons.push(profile); }, mapsRev: 1, prefillCode: '',
-    onPickMap: id => calls.pick.push(id), onHost: i => calls.host.push(i), onJoin: (c, i) => calls.join.push([c, i]),
+    onPickMap: id => calls.pick.push(id), initials: 'ZED', onHost: () => calls.host.push('host'), onJoin: c => calls.join.push(c),
     code: '', link: '', hills: 'Hills: Random hills', seats: [], mySeat: 0, isHost: false, seatsHint: '',
     onSeatMode: (i, m) => calls.seat.push([i, m]), onCopy: () => { calls.copy++; }, onStart: () => { calls.start++; }, onLeave: () => { calls.leave++; },
     ...over,
@@ -261,20 +259,19 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
   check('lobby-map-hidden-value-follows-pick', byId(card, 'lobby-map').value === 'canyon');
   click(picker.children[2]);
   check('lobby-map-click-reports-id', calls.pick.join() === 'twin');
-  // The host form: initials as typed, on submit.
+  // The forms carry no initials: the rooms use the set saved on the title card.
   const hostForm = byId(card, 'host-form');
-  byId(card, 'host-initials').value = 'abc';
   submit(hostForm);
-  check('lobby-host-submit', calls.host.join() === 'abc' && hasClass(byId(card, 'host-go'), 'btn-primary') && text(byId(card, 'host-go')) === 'Host a room');
-  check('lobby-initials-boxes', attr(byId(card, 'host-initials'), 'placeholder') === 'ABC' && attr(byId(card, 'host-initials'), 'maxLength') === '3'
-    && attr(byId(card, 'join-code'), 'maxLength') === '4' && attr(byId(card, 'join-initials'), 'placeholder') === 'ZED');
+  check('lobby-host-submit', calls.host.length === 1 && hasClass(byId(card, 'host-go'), 'btn-primary') && text(byId(card, 'host-go')) === 'Host a room');
+  check('lobby-no-initials-boxes', !byId(card, 'host-initials') && !byId(card, 'join-initials') && attr(byId(card, 'join-code'), 'maxLength') === '4');
+  check('lobby-says-whose-initials', /ZED/.test(text(byId(card, 'lobby-initials'))) && /title card/.test(text(byId(card, 'lobby-initials'))),
+    text(byId(card, 'lobby-initials')));
   byId(card, 'join-code').value = 'tst1';
-  byId(card, 'join-initials').value = 'def';
   submit(byId(card, 'join-form'));
-  check('lobby-join-submit', JSON.stringify(calls.join) === '[["tst1","def"]]', JSON.stringify(calls.join));
-  // The typed boxes survive every redraw; an invite's code fills the code box once.
+  check('lobby-join-submit', JSON.stringify(calls.join) === '["tst1"]', JSON.stringify(calls.join));
+  // The typed code survives every redraw; an invite's code fills the code box once.
   renderLobby(veil, { ...props, status: 'Raising the flag…' });
-  check('lobby-redraw-keeps-typing', byId(card, 'host-initials').value === 'abc' && byId(card, 'join-code').value === 'tst1');
+  check('lobby-redraw-keeps-typing', byId(card, 'join-code').value === 'tst1');
   renderLobby(veil, { ...props, prefillCode: 'ZZ99' });
   check('lobby-invite-code-prefills', byId(card, 'join-code').value === 'ZZ99');
   byId(card, 'join-code').value = 'AAAA';
@@ -333,105 +330,6 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
   renderLobby(veil, props);
   check('lobby-back-out', rows.hidden === false && intro.hidden === false && room.hidden === true);
   check('lobby-redraw-keeps-nodes', veil.children[0] === card && byId(card, 'host-form') === hostForm);
-}
-
-// ---- menu ----
-const UNITS = [{ key: 'tank', name: 'Tank' }, { key: 'hover', name: 'Hover' }, { key: 'walker', name: 'Walker' }, { key: 'buggy', name: 'Buggy' }];
-const SIZES = [{ key: 's', name: 'Small', scale: 0.9 }, { key: 'm', name: 'Normal', scale: 1 }, { key: 'l', name: 'Large', scale: 1.15 }, { key: 'xl', name: 'Huge', scale: 1.3 }];
-function menuProps(over = {}) {
-  const calls = { close: 0, newGame: 0, submit: 0, unit: [], size: [], difficulty: [], sound: 0, music: 0, fs: 0, random: 0, rooms: 0, tutorial: 0, scores: 0, leave: 0, drawn: [] };
-  const props = {
-    keyHint, onClose: () => { calls.close++; }, onNewGame: () => { calls.newGame++; }, onSubmit: () => { calls.submit++; },
-    units: UNITS, unit: 'tank', drawUnit: (cv, key) => { calls.drawn.push(key); }, onPickUnit: k => calls.unit.push(k),
-    sizes: SIZES, size: 'm', onPickSize: k => calls.size.push(k),
-    difficulties: [{ key: 'easy', name: 'Easy' }, { key: 'normal', name: 'Normal' }, { key: 'hard', name: 'Hard' }],
-    difficulty: 'normal', onPickDifficulty: k => calls.difficulty.push(k),
-    sound: true, music: true, fullscreen: false,
-    onSound: () => { calls.sound++; }, onMusic: () => { calls.music++; }, onFullscreen: () => { calls.fs++; },
-    onRandom: () => { calls.random++; }, onRooms: () => { calls.rooms++; }, onTutorial: () => { calls.tutorial++; }, onScores: () => { calls.scores++; },
-    inRoom: false, onLeave: () => { calls.leave++; },
-    ...over,
-  };
-  return { props, calls };
-}
-{
-  const section = makeEl('menu-overlay');
-  section.hidden = false;
-  const { props, calls } = menuProps();
-  renderMenu(section, props);
-  const [head, form] = section.children;
-  check('menu-head-and-form', hasClass(head, 'ov-head') && form.localName === 'form' && form.id === 'seed-form' && hasClass(form, 'menu-grid'));
-  check('menu-title', text(byId(head, 'menu-h')) === 'Game menu' && byId(head, 'menu-close') && attr(byId(head, 'nav-menu'), 'data-scroll-only') === ''
-    && text(byId(head, 'nav-menu')) === 'J/K linePgUp/PgDn pageShift+K/Shift+J half page');
-  click(byId(head, 'menu-close'));
-  check('menu-close-calls-back', calls.close === 1);
-  const seed = byId(form, 'seed-input');
-  check('menu-seed-row', seed.localName === 'input' && attr(seed, 'placeholder') === 'e.g. bam-bam-01' && text(byClass(form, 'seed-row')[0].children[0]) === 'Seed');
-  const ng = byId(form, 'new-game');
-  check('menu-new-game-button', hasClass(ng, 'btn-primary') && text(ng) === 'New Game N' && hasClass(ng.children[ng.children.length - 1], 'key')
-    && attr(ng.children[ng.children.length - 1], 'data-keyhint') === 'global:new', text(ng));
-  click(ng);
-  submit(form);
-  check('menu-new-game-and-enter-report', calls.newGame === 1 && calls.submit === 1);
-  const unitTiles = byId(form, 'unit-picker').children;
-  check('menu-unit-tiles', unitTiles.length === 4 && unitTiles.map(t => text(t.children[1])).join() === 'Tank,Hover,Walker,Buggy'
-    && unitTiles.every(t => hasClass(t, 'unit-choice') && t.children[0].localName === 'canvas') && unitTiles.map(t => attr(t, 'aria-pressed')).join() === 'true,false,false,false');
-  check('menu-unit-thumbnails-drawn-once', calls.drawn.join() === 'tank,hover,walker,buggy');
-  click(unitTiles[2]);
-  check('menu-unit-click-reports-key', calls.unit.join() === 'walker');
-  const sizeTiles = byId(form, 'text-picker').children;
-  check('menu-text-tiles', sizeTiles.length === 4 && sizeTiles.every(t => hasClass(t, 'text-choice'))
-    && sizeTiles.map(t => text(t.children[1])).join() === 'Small,Normal,Large,Huge' && sizeTiles.map(t => text(t.children[0])).join() === 'Aa,Aa,Aa,Aa'
-    && sizeTiles.map(t => attr(t, 'aria-pressed')).join() === 'false,true,false,false' && attr(sizeTiles[0], 'title') === 'Small text');
-  check('menu-text-glyphs-grow', sizeTiles.map(t => t.children[0].style.fontSize).join() === '0.75rem,0.9rem,1.1875rem,1.5rem'
-    || sizeTiles[3].children[0].style.fontSize !== sizeTiles[0].children[0].style.fontSize, sizeTiles.map(t => t.children[0].style.fontSize).join());
-  click(sizeTiles[3]);
-  check('menu-text-click-reports-key', calls.size.join() === 'xl');
-  const levelTiles = byId(form, 'difficulty-picker').children;
-  check('menu-difficulty-tiles', levelTiles.length === 3 && levelTiles.map(t => text(t)).join() === 'Easy,Normal,Hard'
-    && levelTiles.map(t => attr(t, 'aria-pressed')).join() === 'false,true,false' && text(byId(form, 'difficulty-label')) === 'Difficulty',
-    levelTiles.map(t => text(t) + ':' + attr(t, 'aria-pressed')).join());
-  check('menu-difficulty-hint-says-when', /next match/.test(text(byId(form, 'difficulty-hint'))) && /host/.test(text(byId(form, 'difficulty-hint'))));
-  click(levelTiles[2]);
-  check('menu-difficulty-click-reports-key', calls.difficulty.join() === 'hard');
-  const toggles = ['btn-sound', 'btn-music', 'fullscreen'].map(id => byId(form, id));
-  check('menu-toggles', toggles.map(t => hasClass(t, 'tile-toggle') && hasClass(t, 'unit-choice')).every(Boolean)
-    && toggles.map(t => attr(t, 'aria-pressed')).join() === 'true,true,false' && toggles.map(t => text(t)).join('|') === 'Sound E|Music M|Fullscreen F',
-    toggles.map(t => text(t)).join('|'));
-  check('menu-toggle-icons', toggles.every(t => byClass(t, 'tile-icon').length === 1) && byClass(toggles[0], 'on-only').length === 1 && byClass(toggles[0], 'off-only').length === 1);
-  toggles.forEach(click);
-  check('menu-toggle-clicks-report', calls.sound === 1 && calls.music === 1 && calls.fs === 1);
-  renderMenu(section, { ...props, sound: false, fullscreen: true });
-  check('menu-toggle-states-follow', toggles.map(t => attr(t, 'aria-pressed')).join() === 'false,true,true');
-  const buttons = ['random-run', 'rooms-open', 'tutorial-open', 'scores-open'].map(id => byId(form, id));
-  check('menu-action-buttons', buttons.map(b => text(b)).join('|') === 'Random seed T|Rooms O|Tutorial U|Scores R'
-    && buttons.every(b => b.localName === 'button' && attr(b, 'type') === 'button'), buttons.map(b => text(b)).join('|'));
-  buttons.forEach(click);
-  check('menu-action-clicks-report', calls.random === 1 && calls.rooms === 1 && calls.tutorial === 1 && calls.scores === 1);
-  const leave = byId(form, 'menu-leave');
-  check('menu-leave-hidden-outside-a-room', leave.hidden === true && hasClass(leave, 'btn-leave'));
-  renderMenu(section, { ...props, inRoom: true });
-  click(leave);
-  check('menu-leave-in-a-room', leave.hidden === false && calls.leave === 1);
-  // The seed box is the page's: a redraw leaves what was typed.
-  seed.value = 'bam-bam-01';
-  renderMenu(section, props);
-  check('menu-redraw-keeps-nodes-and-seed', section.children[1] === form && byId(form, 'new-game') === ng && seed.value === 'bam-bam-01'
-    && calls.drawn.length === 4);
-  section.scrollTop = 90;
-  fire(section, 'scroll');
-  section.scrollTop = 0;
-  renderMenu(section, { ...props, size: 'l' });
-  check('menu-redraw-keeps-scroll', section.scrollTop === 90 && sizeTiles.map(t => attr(t, 'aria-pressed')).join() === 'false,false,true,false', String(section.scrollTop));
-  check('menu-keys-follow-the-table', (() => {
-    renderMenu(section, { ...props, keyHint: (c, a) => (KEYS[`${c}:${a}`] ?? '').toLowerCase() });
-    return text(ng) === 'New Game n';
-  })());
-  check('menu-no-key-means-no-cap', (() => {
-    const s2 = makeEl('menu-touch');
-    renderMenu(s2, { ...props, keyHint: () => '' });
-    return text(byId(s2, 'new-game')) === 'New Game ' && text(byId(s2, 'rooms-open')) === 'Rooms ';
-  })());
 }
 
 // ---- weapon picker ----
@@ -548,7 +446,7 @@ function gunTiles(n = 10, loaded = 0) {
     && attr(input, 'placeholder') === 'e.g. tankity' && text(form.children[2]) === 'File score' && attr(form.children[2], 'type') === 'submit');
   check('end-callsign-prefilled', input.value === 'ZED', input.value);
   const again = byId(card, 'again');
-  check('end-again', hasClass(again, 'btn-primary') && text(again) === 'Play again N', text(again));
+  check('end-again', hasClass(again, 'btn-primary') && text(again) === 'Continue', text(again));
   input.value = ' zed ';
   submit(form);
   check('end-submit-reports-the-box-as-typed', calls.filed.join('|') === ' zed ', JSON.stringify(calls.filed));
@@ -633,52 +531,4 @@ function gunTiles(n = 10, loaded = 0) {
   check('tutorial-skip-calls-back', skipped === 1);
   check('tutorial-replay-hint-names-the-key', text(nav) === 'U replays anytime; skipping once skips it for good' && byClass(nav, 'key').length === 0
     && attr(walk(nav)[0], 'data-keyhint') === 'global:tutorial', text(nav));
-}
-
-
-// ---- status bar ----
-{
-  const bar = makeEl('hud-bar');
-  const calls = { weapon: 0, icons: [] };
-  const hp = (over = {}) => ({
-    turn: 'YOU. Aim!', angle: '62°', power: '55', fuel: '260', wind: '→ 4',
-    weapon: { key: 'buck', text: 'Buckshot ×2', sr: ' · also Shell ∞' },
-    armor: { shown: '100', sr: 'you 100 · REAPER:100' }, lives: { text: '♥♥♥', title: '3 lives' },
-    score: { text: '$600 · round 1 · 0 pts', title: 'Next 1-up at 3000 points' }, online: false, runStats: '',
-    drawIcon: (cv, w) => { calls.icons.push(w); }, arsenalRev: 1, onWeapon: () => { calls.weapon++; },
-    ...over,
-  });
-  renderHud(bar, hp());
-  const [dl, runStats] = bar.children;
-  check('hud-shape', dl.localName === 'dl' && hasClass(dl, 'hud') && runStats.id === 'run-stats' && hasClass(runStats, 'runstats') && dl.children.length === 10, String(dl.children.length));
-  check('hud-values', ['hud-turn', 'hud-angle', 'hud-power', 'hud-fuel', 'hud-wind'].map(id => text(byId(bar, id))).join('|') === 'YOU. Aim!|62°|55|260|→ 4'
-    && attr(byId(bar, 'hud-turn'), 'aria-live') === 'polite' && byId(bar, 'hud-turn').localName === 'dd');
-  check('hud-labels', dl.children.map(div => text(div.children[0])).join('|') === 'Turn|Angle|Power|Fuel|Weapon|Armor|Lives|Score|Wind|Server');
-  check('hud-screen-reader-only-cells', dl.children.filter(d => hasClass(d, 'sr-only')).length === 2 && hasClass(dl.children[4].children[0], 'sr-only'));
-  const gun = byId(bar, 'hud-weapon');
-  check('hud-weapon-chip', gun.children.length === 1 && hasClass(gun.children[0], 'chip') && hasClass(gun.children[0].children[0], 'chip-icon')
-    && attr(gun.children[0].children[0], 'aria-hidden') === 'true' && text(gun) === 'Buckshot ×2 · also Shell ∞' && hasClass(byClass(gun, 'sr-only')[0], 'sr-only'), text(gun));
-  check('hud-weapon-title', attr(gun, 'title') === 'Pick a weapon');
-  click(gun);
-  check('hud-weapon-tap-reports', calls.weapon === 1);
-  check('hud-icon-drawn', calls.icons.join() === 'buck');
-  check('hud-armor-with-screen-reader-line', text(byId(bar, 'hud-armor')) === '100 you 100 · REAPER:100' && byClass(byId(bar, 'hud-armor'), 'sr-only').length === 1);
-  check('hud-lives-and-score', text(byId(bar, 'hud-lives')) === '♥♥♥' && attr(byId(bar, 'hud-lives'), 'title') === '3 lives' && attr(byId(bar, 'hud-lives'), 'aria-label') === '3 lives'
-    && text(byId(bar, 'hud-score')) === '$600 · round 1 · 0 pts' && attr(byId(bar, 'hud-score'), 'title') === 'Next 1-up at 3000 points');
-  check('hud-server-dot-off', byId(bar, 'hud-dot').className === 'dot off' && attr(byId(bar, 'hud-dot'), 'title') === 'room server: not connected'
-    && text(byId(bar, 'hud-server')) === 'offline' && hasClass(byId(bar, 'hud-server'), 'sr-only'));
-  // A redraw updates in place: the same nodes, no repaint of an unchanged icon, no sr line when there is nothing to add.
-  renderHud(bar, hp({ angle: '63°', online: true, runStats: 'Room TST1 · you are ABC · round 1', armor: { shown: '90', sr: '' }, weapon: { key: 'buck', text: 'Buckshot ×1', sr: '' } }));
-  check('hud-redraw-in-place', bar.children[0] === dl && byId(bar, 'hud-weapon') === gun && text(byId(bar, 'hud-angle')) === '63°' && calls.icons.length === 1);
-  check('hud-redraw-values', text(byId(bar, 'hud-armor')) === '90' && byClass(byId(bar, 'hud-armor'), 'sr-only').length === 0 && text(gun) === 'Buckshot ×1'
-    && byClass(gun, 'sr-only').length === 0 && text(runStats) === 'Room TST1 · you are ABC · round 1');
-  check('hud-server-dot-on', byId(bar, 'hud-dot').className === 'dot on' && text(byId(bar, 'hud-server')) === 'online' && attr(byId(bar, 'hud-dot'), 'title') === 'room server: connected');
-  renderHud(bar, hp({ weapon: { key: 'rail', text: 'Rail ×1', sr: '' } }));
-  check('hud-new-gun-repaints-icon', calls.icons.join() === 'buck,rail');
-  renderHud(bar, hp({ weapon: { key: 'rail', text: 'Rail ×1', sr: '' }, arsenalRev: 2 }));
-  check('hud-new-arsenal-repaints-icon', calls.icons.join() === 'buck,rail,rail');
-  renderHud(bar, hp({ weapon: null }));
-  check('hud-no-gun-yet', text(byId(bar, 'hud-weapon')) === '-' && byClass(gun, 'chip').length === 0);
-  renderHud(bar, hp({ lives: { text: '', title: '' }, score: { text: '-', title: '' } }));
-  check('hud-no-lives-no-label', attr(byId(bar, 'hud-lives'), 'aria-label') === undefined && attr(byId(bar, 'hud-score'), 'title') === undefined);
 }

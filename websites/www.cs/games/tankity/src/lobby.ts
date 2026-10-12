@@ -10,6 +10,7 @@ import type { sfx as SfxApi } from './audio.ts';
 import type { GameState, MatchState } from './game-types.ts';
 import { DIFFICULTY_NAMES } from './difficulty.ts';
 import type { DifficultySetting } from './difficulty.ts';
+import { validInitials } from './initials.ts';
 import type { HudValues } from './hud.ts';
 import type { EndState } from './match.ts';
 import { inviteUrl, prettyRoomError } from './net.ts';
@@ -68,7 +69,12 @@ export interface LobbyDeps {
   closeOverlays(): boolean;
   closePreview(): void;
   endTutorial(seen: boolean): void;
-  freshMatchFromSeedBox(opts?: { tut?: boolean }): void;
+  /** Hide the title card: a room match is starting. */
+  closeTitle(): void;
+  /** Back to the title card over a fresh demo. */
+  backToTitle(): void;
+  /** The player's saved initials (the title card's); rooms host and join with them. */
+  savedInitials(): string;
   hideShop(): void;
   paintHud(): void;
   refreshNavHints(): void;
@@ -81,39 +87,20 @@ export interface LobbyDeps {
 export function createLobby(deps: LobbyDeps) {
   const {
     G, $, net, MATCH, HUD, END, SCORES, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
-    closeOverlays, closePreview, endTutorial, freshMatchFromSeedBox, hideShop, paintHud, refreshNavHints, renderEndVeil, renderMenu,
+    closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, savedInitials, hideShop, paintHud, refreshNavHints, renderEndVeil, renderMenu,
     renderScoresOverlay, renderShop,
   } = deps;
 
   /* ---------- game rooms: server-hosted multiplayer ---------- */
-  // The clean-initials rule mirrors rooms.php (which borrows it from the cylon
-  // game): an exact-3 uppercase block list, compared uppercase, while any letter
-  // case may play.
-  const BLOCKED_INITIALS = [
-    'ASS',
-    'FUK', 'FUC', 'FCK', 'FUX', 'FUQ',
-    'SHT', 'SHI',
-    'DIK', 'DIC', 'DCK',
-    'COK', 'COC', 'COQ',
-    'CUM', 'JIZ',
-    'CNT', 'PUS', 'VAG', 'CLT',
-    'SEX', 'XXX', 'TIT',
-    'FAG', 'FGT',
-    'NIG', 'NGR',
-    'WTF', 'FFS',
-    'POO', 'PEE',
-    'KKK',
-  ];
+  /* Room initials keep the case the player typed (rooms.php compares them
+     uppercase); src/initials.ts holds the rule and the blocked words. */
   function netValidInitials(raw: unknown): string | null {
-    const s = String(raw || '').trim();
-    if (!/^[A-Za-z]{3}$/.test(s)) return null;
-    if (BLOCKED_INITIALS.indexOf(s.toUpperCase()) >= 0) return null;
-    return s;
+    return validInitials(raw) === null ? null : String(raw).trim();
   }
   /* The lobby is a Preact component (src/ui/lobby.tsx). This is everything it
      shows that the game decides: the status line, the occupancy count, the
      server dot, the picked hills, an invite's code, and the room as last drawn
-     (code, link, hills, seats). The initials and code boxes stay the page's own. */
+     (code, link, hills, seats). The code box stays the page's own. */
   const LOBBY: LobbyView = {
     status: '', count: '', online: false, inRoom: false, mapId: '', mapsRev: 0, prefill: '',
     code: '', link: '', hills: 'Hills: Random hills', drones: '', seats: [], mySeat: 0, isHost: false, seatsHint: '',
@@ -138,19 +125,16 @@ export function createLobby(deps: LobbyDeps) {
       mapsRev: LOBBY.mapsRev,
       prefillCode: LOBBY.prefill,
       onPickMap: id => { LOBBY.mapId = id; mapChosen(); },
-      onHost: raw => {
-        const v = netValidInitials(raw);
-        if (!v) { lobbySay('Initials need exactly 3 letters, and keep them clean.'); return; }
+      initials: savedInitials(),
+      onHost: () => {
         unlock(); sfx.play('click');
-        hostRoom(v, LOBBY.mapId);
+        hostRoom(savedInitials(), LOBBY.mapId);
       },
-      onJoin: (rawCode, raw) => {
+      onJoin: rawCode => {
         const code = rawCode.trim().toUpperCase();
-        const v = netValidInitials(raw);
         if (!/^[A-Z0-9]{4}$/.test(code)) { lobbySay('Room codes are 4 letters or digits. Read it back and retry.'); return; }
-        if (!v) { lobbySay('Initials need exactly 3 letters, and keep them clean.'); return; }
         unlock(); sfx.play('click');
-        joinRoom(code, v);
+        joinRoom(code, savedInitials());
       },
       code: LOBBY.code,
       link: LOBBY.link,
@@ -372,6 +356,7 @@ export function createLobby(deps: LobbyDeps) {
   }
   function startNetMatch(room: RoomSnapshot): void {
     endTutorial(false);
+    closeTitle();
     G.demo = false;
     // On, the event cursor past what the lobby already told, the lobby poll off and the match poll on.
     net.beginMatch(lobbyTold.code === net.code ? lobbyTold.seq : 0);
@@ -402,7 +387,7 @@ export function createLobby(deps: LobbyDeps) {
     drawLeave(veil, {
       keyHint,
       title: 'Leave this room?',
-      text: 'The drone battery takes your seat and the match goes on without you. You head back to the solo hills.',
+      text: 'The drone battery takes your seat and the match goes on without you. You head back to the title card.',
       onStay: closeLeaveVeil,
       onLeave: confirmLeave,
     });
@@ -442,8 +427,8 @@ export function createLobby(deps: LobbyDeps) {
     closeOverlays();
     syncLeaveButtons();
     if (wasOn && !quiet) {
-      say('Back to the solo hills. The battery takes your seat in the room.', 'info');
-      freshMatchFromSeedBox();
+      say('Back from the room. The battery takes your seat there.', 'info');
+      backToTitle();
     }
   }
   async function netRematch(): Promise<void> {

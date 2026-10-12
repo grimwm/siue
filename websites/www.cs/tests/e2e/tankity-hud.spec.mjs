@@ -1,40 +1,25 @@
-// Operation Tankity status bar, wind gauge, and weapon picker.
+// Operation Tankity status bar and weapon picker.
 import { test, expect } from '@playwright/test';
 import { newPlayer, startSolo, hud } from './helpers.mjs';
 
-test('the status bar is one calm row; wind rides the battlefield', async ({ browser }) => {
+test('the status bar runs Menu, the aim numbers, AMMO, ARMOR, lives, WIND and the badge, in one row', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
   await startSolo(page);
-  const tops = await page.locator('.hudbar .hud > div:not(.sr-only)').evaluateAll(els =>
-    els.map(e => e.getBoundingClientRect()).filter(r => r.width > 0).map(r => Math.round(r.top + r.height / 2)));
-  expect(new Set(tops).size, `row centres ${tops}`).toBe(1);
-  const shown = await page.locator('.hudbar').evaluate(el => {
-    const out = [];
-    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    while (walk.nextNode()) if (!walk.currentNode.parentElement.closest('.sr-only')) out.push(walk.currentNode.textContent);
-    return out.join(' ');
-  });
-  expect(shown).not.toMatch(/reaper:|wraith:|spotter:|1-up|online|offline|Wind/i);
-  // Screen readers still get rivals' armor and the wind.
-  expect(await hud(page, 'hud-armor')).toMatch(/you \d+ · .*reaper:\d+/);
+  const IDS = ['btn-menu', 'hud-angle', 'hud-power', 'hud-fuel', 'hud-ammo', 'hud-armor', 'hud-lives', 'hud-wind', 'hud-score'];
+  const boxes = await page.evaluate(ids => ids.map(id => { const r = document.getElementById(id).getBoundingClientRect(); return [r.left, r.top + r.height / 2]; }), IDS);
+  const lefts = boxes.map(b => b[0]);
+  expect([...lefts].sort((a, b) => a - b)).toEqual(lefts);
+  const mids = boxes.map(b => b[1]);
+  expect(Math.max(...mids) - Math.min(...mids)).toBeLessThanOrEqual(1);
+  expect(await hud(page, 'hud-lives')).toBe('♥ 3');
+  await expect(page.locator('#hud-lives')).toHaveAttribute('aria-label', '3 lives');
+  expect(await hud(page, 'hud-armor')).toMatch(/^\d+$/);
+  await expect(page.locator('.pill.armor')).toHaveAttribute('aria-label', /^Armor \d+ of \d+, .*REAPER \d+ of \d+/i);
   expect(await hud(page, 'hud-wind')).toMatch(/^(· 0|[←→] \d+)$/);
-  // The gauge paints its yellow arrow (or "calm") just under the menu strip.
-  const painted = await page.evaluate(() => {
-    const cv = document.getElementById('stage');
-    const c = cv.getContext('2d');
-    const bar = document.getElementById('menubar').getBoundingClientRect();
-    const st = cv.getBoundingClientRect();
-    const y0 = Math.round((bar.bottom - st.top) * cv.height / st.height);
-    const d = c.getImageData(Math.round(cv.width * 0.38), y0, Math.round(cv.width * 0.24), 50).data;
-    let bright = 0;
-    for (let i = 0; i < d.length; i += 4) if (d[i] > 200 && d[i + 1] > 200) bright++;
-    return bright;
-  });
-  expect(painted).toBeGreaterThan(20);
+  expect(await page.locator('#hud-score > span').count()).toBe(3);
   await page.locator('#frame').screenshot({ path: 'test-results/tankity-hud.png' });
   expect(errors).toEqual([]);
 });
-
 test('the weapon picker shows the whole rack and loads with keys or clicks', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
   await page.keyboard.press('n');
@@ -67,16 +52,6 @@ test('the weapon picker shows the whole rack and loads with keys or clicks', asy
   expect(errors).toEqual([]);
 });
 
-test('the arrow pad sits centred over its label', async ({ browser }) => {
-  const { page } = await newPlayer(browser);
-  const centre = sel => page.locator(sel).evaluate(el => { const r = el.getBoundingClientRect(); return r.left + r.width / 2; });
-  const pad = await centre('.pad-aim .pad-grid');
-  const note = await centre('.pad-aim .pad-note');
-  const box = await centre('.pad-aim');
-  expect(Math.abs(pad - note)).toBeLessThan(1.5);
-  expect(Math.abs(pad - box)).toBeLessThan(1.5);
-});
-
 test('holding the aim keys never changes the status bar or the canvas size', async ({ browser }) => {
   const { page } = await newPlayer(browser);
   await page.setViewportSize({ width: 1180, height: 720 });
@@ -85,7 +60,7 @@ test('holding the aim keys never changes the status bar or the canvas size', asy
     window.__sizes = new Set();
     const tick = () => {
       const s = document.getElementById('stage').getBoundingClientRect();
-      const h = document.querySelector('.hudbar').getBoundingClientRect();
+      const h = document.getElementById('hud-bar').getBoundingClientRect();
       window.__sizes.add(`${Math.round(s.bottom)}|${Math.round(h.height)}|${Math.round(h.top)}`);
       requestAnimationFrame(tick);
     };

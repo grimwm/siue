@@ -160,7 +160,7 @@ export function Shop(p: ShopProps) {
         <p id="shop-ready" class="runstats" hidden={p.readyLine === null}>{p.readyLine}</p>
         <button type="button" id="shop-next" class="btn-primary" aria-pressed={p.next.pressed}
           onClick={blurThen(p.onNext)}>{p.next.label}{p.next.keyAt && <>{' '}<Key at={p.next.keyAt} bare /></>}</button>
-        <button type="button" id="shop-leave" class="btn-leave" title="Leave this game room and go back to the solo hills"
+        <button type="button" id="shop-leave" class="btn-leave" title="Leave this game room and go back to the title card"
           hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave room</button>
       </div>
     </KeyHints.Provider>

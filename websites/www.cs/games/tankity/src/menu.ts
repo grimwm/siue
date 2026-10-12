@@ -1,10 +1,9 @@
 /* Operation Tankity: the game menu's settings.
  *
- * The unit look, the text size and the Difficulty, all remembered in this browser, and the
+ * The settings menu: the unit look, the text size and the Difficulty (all remembered in this browser), and the
  * props the game menu overlay (src/ui/menu.tsx) is drawn from: what is
  * chosen, what is muted, whether a room runs, and what each button does.
- * The page's other controls (sound, music, fullscreen, a fresh match, the
- * rooms) arrive as deps. */
+ * Sound, music, fullscreen and a match on the seed box's hills arrive as deps. */
 import { browserStorage } from '../../_kit/ports.browser.ts';
 import { pref, text } from '../../_kit/prefs.ts';
 import type { sfx as SfxApi } from './audio.ts';
@@ -34,21 +33,19 @@ export interface MenuDeps {
   myTank(): GameTank | null;
   netLeave(quiet?: boolean): void;
   openLeaveVeil(): void;
-  openRooms(): void;
-  placeLogBelowMenu(): void;
-  randomRun(): void;
+  placeLogBelowStatus(): void;
   freshMatchFromSeedBox(opts?: { tut?: boolean }): void;
   toggleFullscreen(): void;
   toggleMusic(): void;
   toggleOverlay(id: string, btnId?: string): void;
   toggleSound(): void;
-  tutorialOpen(): void;
+  nextSong(): void;
 }
 
 export function createMenu(deps: MenuDeps) {
   const {
-    G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, openRooms, placeLogBelowMenu,
-    randomRun, freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound, tutorialOpen,
+    G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
+    freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound, nextSong,
   } = deps;
 
   /* Ground units: every human (you, and the people in a room) picks a body.
@@ -99,7 +96,7 @@ export function createMenu(deps: MenuDeps) {
       document.documentElement.style.fontSize = `${textScale() * 100}%`;
     }
     renderMenu();
-    placeLogBelowMenu();
+    placeLogBelowStatus();
   }
   function chooseTextSize(key: string): void {
     if (!TEXT_SIZES.some(t => t.key === key)) return;
@@ -125,7 +122,7 @@ export function createMenu(deps: MenuDeps) {
     drawMenu(section, {
       keyHint,
       onClose: () => toggleOverlay('menu-overlay', 'btn-menu'),
-      onNewGame: () => { unlock(); sfx.play('click'); freshMatchFromSeedBox(); },
+      onPlaySeed: () => { unlock(); sfx.play('click'); freshMatchFromSeedBox(); },
       onSubmit: () => {
         if (net.on) { netLeave(); return; }
         sfx.play('click');
@@ -147,12 +144,15 @@ export function createMenu(deps: MenuDeps) {
       onSound: toggleSound,
       onMusic: toggleMusic,
       onFullscreen: toggleFullscreen,
-      onRandom: randomRun,
-      onRooms: openRooms,
-      onTutorial: () => { sfx.play('click'); tutorialOpen(); },
       onScores: () => toggleOverlay('report-overlay', 'scores-open'),
       inRoom: net.on,
       onLeave: openLeaveVeil,
+      onNextSong: nextSong,
+      // Radio and Help close the menu, then open their panel in its place.
+      onRadio: () => { toggleOverlay('menu-overlay', 'btn-menu'); toggleOverlay('log-overlay', 'btn-log'); },
+      onHelp: () => { toggleOverlay('menu-overlay', 'btn-menu'); toggleOverlay('help-overlay', 'btn-help'); },
+      radioOpen: !($('log-overlay')?.hidden ?? true),
+      helpOpen: !($('help-overlay')?.hidden ?? true),
     });
   }
 

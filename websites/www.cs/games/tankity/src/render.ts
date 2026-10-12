@@ -2,7 +2,7 @@
  *
  * Everything that paints the 2D canvas: the night sky and its moon, clouds,
  * hills, the units (tank bodies, drones, name tags, turn marker, menu badge),
- * the aim arm, blast discs, shells, particles, wind streaks and gauge, the
+ * the aim arm, blast discs, shells, particles, wind streaks, the
  * turn clock, and the firing-range preview. main.ts builds a BattleView each
  * frame and calls `frame(view)`; this module reads it and paints, and never
  * changes game state. Anything that advances (a boom's age, the shake decay,
@@ -108,8 +108,6 @@ export interface BattleView {
   replay: readonly Flying[]; // shells of a room replay, at their place now
   sparks: readonly Spark[];
   wind: number;
-  windGauge: boolean; // the gauge shows (a match is on, not the shop)
-  windTop: number | undefined; // the gauge's top in world units, under the menu strip
   textScale: number;
   turnClock: { left: number; myTurn: boolean } | null; // the on-canvas count-down, when it shows
   preview: PreviewView | null;
@@ -491,9 +489,6 @@ const SKY_PHASES = [0, 0, 1, 6, 2, 5, 3, 4]; // frames of moon.png, full and gib
 interface Star { x: number; y: number; s: number; a: number; c: string; tw: number; ph: number }
 interface Sky { key: string; stars: Star[]; band: { x: number; y: number; ang: number }; phase: number }
 
-/** Wind speed at which the gauge's arrow is longest. */
-const WIND_MAX = 12;
-
 /* ---------- the renderer ---------- */
 
 export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Renderer {
@@ -613,8 +608,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
 
   /* ---------- wind ---------- */
   /* Wind lives on the battlefield, not in the status bar: faint streaks
-     drift across the sky at the wind's speed, and a gauge just under the menu
-     strip points the way it blows, longer the stronger it is. */
+     drift across the sky at the wind's speed; the number is the WIND pill's. */
   function drawWindStreaks(c: CanvasRenderingContext2D, view: BattleView): void {
     const wind = view.wind;
     if (!wind) return;
@@ -633,71 +627,6 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
       c.lineTo(x - Math.sign(wind) * len, y);
       c.stroke();
     }
-    c.restore();
-  }
-
-  function drawWindGauge(c: CanvasRenderingContext2D, view: BattleView): void {
-    if (!view.windGauge) return;
-    const wind = view.wind;
-    c.save();
-    c.scale((cv.width || W) / W || 1, (cv.height || H) / H || 1);
-    const s = view.textScale;
-    const w = 128 * s, h = 22 * s, x = W / 2 - w / 2, y = view.windTop || 10;
-    c.globalAlpha = 0.85;
-    c.fillStyle = 'rgba(4, 4, 32, 0.8)';
-    c.strokeStyle = 'rgba(85, 85, 255, 0.55)';
-    c.lineWidth = 1;
-    c.beginPath();
-    if (c.roundRect) c.roundRect(x, y, w, h, h / 2); else c.rect(x, y, w, h);
-    c.fill();
-    c.stroke();
-    c.globalAlpha = 1;
-    c.font = `bold ${Math.round(9 * s)}px sans-serif`;
-    c.textBaseline = 'middle';
-    c.fillStyle = '#aaaaaa';
-    c.fillText('WIND', x + 9 * s, y + h / 2);
-    const mid = x + w / 2 + 6 * s, cy = y + h / 2;
-    const dir = Math.sign(wind);
-    if (!dir) {
-      c.fillStyle = '#ffffff';
-      c.textAlign = 'center';
-      c.fillText('calm', mid + 8 * s, cy);
-    } else {
-      // Arrow length tracks strength; chevrons crawl along it with the wind.
-      const len = (14 + 34 * Math.min(1, Math.abs(wind) / WIND_MAX)) * s;
-      const x0 = mid - dir * len / 2, x1 = mid + dir * len / 2;
-      c.strokeStyle = '#ffff55';
-      c.fillStyle = '#ffff55';
-      c.lineWidth = 2;
-      c.beginPath();
-      c.moveTo(x0, cy);
-      c.lineTo(x1, cy);
-      c.stroke();
-      c.beginPath();
-      c.moveTo(x1 + dir * 5 * s, cy);
-      c.lineTo(x1 - dir * 2 * s, cy - 5 * s);
-      c.lineTo(x1 - dir * 2 * s, cy + 5 * s);
-      c.closePath();
-      c.fill();
-      const step = 9 * s;
-      const phase = ((view.time * Math.abs(wind) * 3) % step) * dir;
-      c.globalAlpha = 0.55;
-      for (let k = -1; k * step < len; k++) {
-        const px = x0 + dir * k * step + phase;
-        if ((px - x0) * dir < 0 || (x1 - px) * dir < 3 * s) continue;
-        c.beginPath();
-        c.moveTo(px - dir * 2.5 * s, cy - 3 * s);
-        c.lineTo(px + dir * 0.5 * s, cy);
-        c.lineTo(px - dir * 2.5 * s, cy + 3 * s);
-        c.stroke();
-      }
-      c.globalAlpha = 1;
-      c.fillStyle = '#ffffff';
-      c.textAlign = 'right';
-      c.fillText(String(Math.abs(wind)), x + w - 9 * s, cy);
-    }
-    c.textAlign = 'left';
-    c.textBaseline = 'alphabetic';
     c.restore();
   }
 
@@ -960,7 +889,6 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.globalAlpha = 1;
     c.restore();
     if (view.fx) view.fx.drawFlash(c, cv.width || W, cv.height || H);
-    drawWindGauge(c, view);
     drawTurnClock(c, view);
   }
 

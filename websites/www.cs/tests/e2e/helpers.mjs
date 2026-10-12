@@ -175,6 +175,13 @@ export function bowFromChord(track) {
   return Math.max(...track.map(([x, y]) => Math.abs((x1 - x0) * (y0 - y) - (x0 - x) * (y1 - y0)) / len));
 }
 
+/** Types a player's initials into the title card's three boxes, as a player would. */
+export async function setInitials(page, word) {
+  await page.click('#title-initial-1');
+  await page.keyboard.type(word);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('tankity-initials'))).toBe(word.toUpperCase());
+}
+
 /* Two players in one room, host first; returns both pages started.
    beforeStart({host, guest, roomState, code}) runs in the lobby, before the host starts. */
 export async function roomPair(browser, { beforeStart } = {}) {
@@ -187,15 +194,15 @@ export async function roomPair(browser, { beforeStart } = {}) {
       try { const b = await r.json(); if (b && b.room) roomState[name].push(b.room); } catch (_) { /* not json */ }
     });
   }
-  await host.page.keyboard.press('o');
-  await host.page.fill('#host-initials', 'abc');
+  await setInitials(host.page, 'abc');
+  await host.page.click('#rooms-open');
   await host.page.click('#host-go');
   await host.page.waitForSelector('#lobby-room:not([hidden])');
   await expect.poll(() => hud(host.page, 'lobby-code')).toMatch(/^[A-Z0-9]{4}$/);
   const code = (await hud(host.page, 'lobby-code')).trim();
-  await guest.page.keyboard.press('o');
+  await setInitials(guest.page, 'zed');
+  await guest.page.click('#rooms-open');
   await guest.page.fill('#join-code', code);
-  await guest.page.fill('#join-initials', 'zed');
   await guest.page.click('#join-go');
   await guest.page.waitForSelector('#lobby-room:not([hidden])');
   // The host hears about the guest on its next poll.
@@ -205,7 +212,7 @@ export async function roomPair(browser, { beforeStart } = {}) {
   // Both clients are in the match once each shows the host's turn; events
   // from before a client's first sync are history and never replay.
   await expect.poll(() => hud(host.page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU\. Aim!/);
-  await expect.poll(() => hud(guest.page, 'hud-turn'), { timeout: 30_000 }).toMatch(/abc aiming/);
+  await expect.poll(() => hud(guest.page, 'hud-turn'), { timeout: 30_000 }).toMatch(/ABC aiming/);
   // Told once in the lobby, never again when the match starts.
   expect(((await hud(host.page, 'log')) || '').match(/zed rolled into the room/gi) || []).toHaveLength(1);
   return { host, guest, roomState, code };

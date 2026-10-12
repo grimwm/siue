@@ -5,6 +5,8 @@ from a $600 stake, solo or in network rooms (max 10 live). No chat; names are
 3-letter initials with a blocked list (`room_valid_initials` in rooms.php).
 Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
+The page opens on a title card over the dimmed demo: Play (solo, random hills), Play with friends (the rooms), Tutorial, Settings, and the player's initials, the one set solo and the rooms both use. The card comes back after a match ends and after leaving a room. Esc toggles the settings menu.
+
 ## Files
 
 | File                                                            | What it is                                                                                                                                                                                  |
@@ -23,23 +25,27 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | `src/replay.ts` | The room volley replay: the queue of events waiting to play and the volley on screen. Eases the shooter's barrel, flies each shell along the path the server recorded (positions and velocities for the renderer), lands blasts and hits when the events say, and plays a volley kept back by a catch-up, or fired by a drone with no human standing (`watch`), at triple speed (`FAST_SPEED`). Sound, particles, craters, armor and log lines happen through callbacks; it never touches the page |
 | `src/preview.ts` | The firing-range preview simulation: a fixed dummy, the solver that aims at it with the war's own ballistics, the shell loop (seeker, cluster, pierce, proximity, roller), the damage tally and the result timing, on its own small field. Weapons, effects and the result line are passed in; it never touches the page |
 | `src/flow.ts` | The solo match flow: the `Phase` union (`banner`, `shop`, `aim`, `think`, `fly`, `settle`, `over`), the events that move between them and one table, `FLOW`, with `transition(phase, event)` returning the next phase or `null` for an illegal move. `match.ts` stores the result in `G.phase`; room matches take their phase from the server and skip it. It also holds the solo watch speed (`WATCH_SPEED`, `warSpeed`, `runWar`). Pure; it never touches the page |
-| `src/render.ts` | The battlefield on the canvas: sky and moon, clouds, hills, the units and their bodies, aim arm, blasts, shells, sparks, the wind gauge, the on-canvas turn clock and the firing-range preview. Reads a `BattleView` that `view.ts` builds each frame and paints it; it never changes game state |
+| `src/render.ts` | The battlefield on the canvas: sky and moon, clouds, hills, the units and their bodies, aim arm, blasts, shells, sparks, the wind streaks, the on-canvas turn clock and the firing-range preview. Reads a `BattleView` that `view.ts` builds each frame and paints it; it never changes game state |
 | `src/game-types.ts` | Types only: the shapes `main.ts` shares with its modules. `GameState` (the sim's `World` plus the page's bookkeeping: the shop, the dialogue queue, the banner, the camera), `GameTank`, `MatchState` (a room match's turn, unsent aim and waiting snapshot) and `Tables` (the arsenal as `main.ts` holds it now). Each module picks the slice it reads and writes |
 | `src/match.ts` | The solo match: dealing a match and its rounds, whose turn it is, firing and what a blast does to each unit, a drone's aim and shot, the end of a round and of the match, the name cards, the end veil's props and the cosmetics decay. `createMatch(deps)` |
 | `src/room.ts` | A running room match on this client: the moves it sends (fire, aim, drive, load a gun, buy, Ready), adopting the room snapshot once the replay before it has played, turning events into log lines, talk and sounds, a room frame, the turn alert for a hidden tab, and the final standings. `createRoom(deps)` |
-| `src/lobby.ts` | Getting into and out of a room: the lobby overlay's props, the initials check, the server dot, the hills picker, hosting and joining, the roster, the invite link, starting the match, the leave question, leaving and the rematch. `createLobby(deps)` |
+| `src/lobby.ts` | Getting into and out of a room: the lobby overlay's props, the server dot, the hills picker, hosting and joining under the saved initials, the roster, the invite link, starting the match, the leave question, leaving and the rematch. `createLobby(deps)` |
 | `src/shop.ts` | The field shop: what a pack costs and how many the chest covers, each row's stat lines, the Ready line in a room, what a purchase does to the stock and the gear, and the shop overlay's props. `createShop(deps)` |
 | `src/guns.ts` | The weapon picker: the rack's tiles, the cursor and its keys, loading a gun and cycling through the rack. `createGuns(deps)` |
 | `src/chatter.ts` | What the crew says: the speakers, the line tables, the portrait, the speech-bubble queue, and the radio log with its overlay props. `createChatter(deps)` |
 | `src/effects.ts` | Weapon looks on the effects engine (`src/fx/engine.ts`): the baked fallback, installing `game.json`'s effects over it, and the muzzle, impact, special and trail plays. `createEffects(deps)` |
-| `src/hud.ts` | The status bar's values, for a solo match and for a room, redrawn only when they change. `createHud(deps)` |
+| `src/hud.ts` | The status bar's values (aim numbers, AMMO, ARMOR, lives and WIND pills, the match badge) and the Weapon button's face, redrawn only when they change. `createHud(deps)` |
+| `src/weapon-label.ts` | The Weapon button's line: damage and an S/M/L blast size from the radius, one tested cut-off (and the same line in words for screen readers) |
+| `src/ui/gun-label.tsx` | The Weapon button's face: shell icon, name, the damage and blast line, and the rest of the rack for readers |
 | `src/view.ts` | The camera, and the `BattleView` snapshot the canvas paints each frame (whose turn marker shows, whether the aim arm is up, when the clock counts down). `createView(deps)` |
 | `src/tutorial.ts` | The coach: the steps, their key-name text, remembering a finished lesson, and the overlay's props. `createTutorial(deps)` |
 | `src/scores.ts` | The high scores: filing a report with `scores.php`, the local fallback, and the overlay's props. `createScores(deps)` |
-| `src/menu.ts` | The game menu's settings (the unit look, the text size and the Difficulty, all remembered in this browser) and the menu overlay's props. `createMenu(deps)` |
+| `src/menu.ts` | The settings menu (the unit look, the text size and the Difficulty, all remembered in this browser) and the menu overlay's props. `createMenu(deps)` |
+| `src/title.ts` | The title card over the demo: whether it shows, the initials it edits, and its props. `createTitle(deps)` |
+| `src/initials.ts` | A player's three-letter initials: the rule, the blocked words, and the one saved set per browser (`tankity-initials`), random until chosen |
 | `src/protocol.ts` | The room wire protocol as types: replies, the room snapshot, the discriminated union of events, and each action's request body. Types only |
 | `src/protocol-fixtures.check.ts`, `src/tsconfig.check.json` | Type-check only, never emitted: assigns every `protocol/*.json` to its type (see Protocol fixtures) |
-| `src/ui/*.tsx` | The Preact overlays and panels (see Preact overlays): `chrome.tsx` holds the shared key labels, title bar and scroll keeper; `help.tsx`, `shop.tsx`, `lobby.tsx`, `menu.tsx`, `guns.tsx`, `scores.tsx`, `log.tsx`, `tutorial.tsx`, `hud.tsx`, `endveil.tsx` and `leave.tsx` one each |
+| `src/ui/*.tsx` | The Preact overlays and panels (see Preact overlays): `chrome.tsx` holds the shared key labels, title bar and scroll keeper; `help.tsx`, `shop.tsx`, `lobby.tsx`, `menu.tsx`, `guns.tsx`, `scores.tsx`, `log.tsx`, `tutorial.tsx`, `hud.tsx`, `endveil.tsx`, `leave.tsx` and `title.tsx` one each |
 | `src/ui/icons.ts` | The small canvas pictures (a shell, a trick, a hills silhouette, a unit thumbnail). Each draws on the canvas and the weapon or trick it is handed and reads nothing else |
 | `dist/main.js`, `dist/fx.js`, `dist/fx-editor.js` (and `.map`s) | The bundles the games kit builds from `src/` (see Source layout and build); checked in and deployed (the host has no Node), except the dev-only `fx-editor.js`. Never edit by hand |
 | `build.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json` | The build setup: the three entries and the three type-check programs. Never deployed, like `src/`, `test/` and `tools/` |
@@ -61,6 +67,10 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | `.config.yaml`                                                  | Server settings, read-only, never sent to browsers; env vars win (`TANKITY_MAX_ROOMS`, `TANKITY_ROOM_MAX_AGE`, `TANKITY_ROOM_LIVE_SECS`, `TANKITY_SHM_KEY`; `CONFIG_FILE` points elsewhere) |
 | `metadata.yaml`, `og.png`                                       | Games-page card and link preview (see `../README.md`)                                                                                                                                       |
 | `manifest.webmanifest`, `sw.js`, `icon-192.png`, `icon-512.png` | Install and offline support; the first two are generated by `tools/install-files.php`                                                                                                     |
+
+## Layout
+
+The frame stacks the status bar (`#hud-bar`, Preact), the battlefield (`#field`: the canvas, the title card, the round banner and the one-line chatter toast) and the control deck (`#deck`, static HTML in `index.html`: Aim, Drive, More, Weapon, FIRE). Breakpoints follow the frame's width (`#frame` is a size container): at 1100 px the labels shorten, at 860 px the bar drops to 11 px, at 760 px the key chips go. A portrait phone stacks the bar in three rows and moves Next song to the Menu; a landscape phone floats the controls over the battlefield's corners and moves Radio, Help and Next song to the Menu. `tankity-layout.spec.mjs` measures all of this on eight screens.
 
 ## Editing game data
 

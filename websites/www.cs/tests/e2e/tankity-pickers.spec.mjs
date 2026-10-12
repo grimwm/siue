@@ -33,13 +33,12 @@ test('every shop row carries a painted icon, and the HUD shows the loaded shell'
   await page.click('#shop-next');
   await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU|Aim/);
   const loaded = () => page.evaluate(() => {
-    const chip = document.querySelector('#hud-weapon .chip'); // only the loaded gun shows
-    const cv = chip && chip.querySelector('canvas');
+    const cv = document.querySelector('#btn-weapon .gun-icon');
     if (!cv) return null;
     const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
     let n = 0;
     for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
-    return { text: chip.textContent, n, sig: cv.toDataURL() };
+    return { text: document.getElementById('hud-weapon').textContent, n, sig: cv.toDataURL() };
   });
   const before = await loaded();
   expect(before.text).toMatch(/^Shell/);
@@ -53,7 +52,7 @@ test('every shop row carries a painted icon, and the HUD shows the loaded shell'
   // The words stay in the HUD for readers and tests; the status bar has no favorites row.
   expect(await hud(page, 'hud-weapon')).toMatch(/^Buckshot ×\d+ · also Shell ∞/);
   expect(await page.locator('#hud-favs').count()).toBe(0);
-  await page.locator('.hudbar').first().screenshot({ path: 'test-results/tankity-hud-icons.png' });
+  await page.locator('#deck').screenshot({ path: 'test-results/tankity-hud-icons.png' });
   expect(errors).toEqual([]);
 });
 
@@ -97,7 +96,6 @@ test('the lobby offers Random plus every server map as a silhouette tile, and pi
   await tiles.nth(2).click();
   await expect(tiles.nth(2)).toHaveAttribute('aria-pressed', 'true');
   await expect(tiles.nth(0)).toHaveAttribute('aria-pressed', 'false');
-  await page.fill('#host-initials', 'abc');
   await page.click('#host-go');
   await page.waitForSelector('#lobby-room:not([hidden])');
   await expect.poll(() => seen.at(-1)?.room.map).toBe(maps.maps[1].id);
@@ -154,7 +152,8 @@ test('on a touch screen the toggle tiles drop their key caps', async ({ browser 
   const page = await ctx.newPage();
   await page.goto('games/tankity/');
   await expect(page.locator('html')).toHaveClass(/touch/);
-  await page.locator('#btn-menu').tap();
+  // On a phone the title card fills the screen; its Settings opens the menu.
+  await page.locator('#title-settings').tap();
   await expect(page.locator('#menu-overlay')).toBeVisible();
   await expect(page.locator('#btn-sound')).toBeVisible();
   await expect(page.locator('#btn-sound .key')).toBeHidden();

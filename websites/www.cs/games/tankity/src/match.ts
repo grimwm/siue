@@ -76,7 +76,8 @@ export interface MatchDeps {
   tutorialFired(): void;
   fileReport(name: string): Promise<void>;
   savedCallsign(): string;
-  freshMatchFromSeedBox(opts?: { tut?: boolean }): void;
+  /** Back to the title card over a fresh demo. */
+  backToTitle(): void;
   netFire(): void;
   netLeave(quiet?: boolean): void;
   netNext(want?: boolean): void;
@@ -88,7 +89,7 @@ export function createMatch(deps: MatchDeps) {
   const {
     G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
     render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closeGuns, closePreview, hideShop, openShop,
-    endTutorial, maybeStartTutorial, tutorialFired, fileReport, savedCallsign, freshMatchFromSeedBox, netFire, netLeave,
+    endTutorial, maybeStartTutorial, tutorialFired, fileReport, savedCallsign, backToTitle, netFire, netLeave,
     netNext, netRematch, openLobby,
   } = deps;
 
@@ -165,7 +166,7 @@ export function createMatch(deps: MatchDeps) {
     G.demo = true;
     G.round = 1;
     advance('demo');
-    newRound(`Demo mode. Press New Game${TOUCH ? '' : ` (or ${keyHint('global', 'new')})`} to play.`);
+    newRound(`Demo mode. Press Play${TOUCH ? '' : ` (or ${keyHint('global', 'new')})`} to start.`);
     render();
     renderHUD();
   }
@@ -268,7 +269,7 @@ export function createMatch(deps: MatchDeps) {
     if (!G.demo) return false;
     if (!G.demoHint) {
       G.demoHint = true;
-      say(`Demo mode. Press New Game${TOUCH ? '' : ` (or ${keyHint('global', 'new')})`} to take the controls.`, 'info');
+      say(`Demo mode. Press Play${TOUCH ? '' : ` (or ${keyHint('global', 'new')})`} to take the controls.`, 'info');
     }
     return true;
   }
@@ -452,7 +453,7 @@ export function createMatch(deps: MatchDeps) {
         renderEndVeil();
       },
       onRematch: () => { sfx.play('click'); netRematch(); },
-      onAgain: () => { if (net.on) { netLeave(); openLobby(); } else freshMatchFromSeedBox(); },
+      onAgain: () => { if (net.on) { netLeave(); openLobby(); } else backToTitle(); },
     });
   }
   function endMatch(won: boolean, text: string): void {

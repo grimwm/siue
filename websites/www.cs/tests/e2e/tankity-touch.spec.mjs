@@ -16,11 +16,12 @@ test('touch screens get no key labels and no key bindings', async ({ page }) => 
   await page.waitForTimeout(300);
   await expect(page.locator('#menu-overlay')).toBeHidden();
 
-  // The buttons still work, and no label anywhere names a key.
-  await page.locator('#btn-menu').tap();
+  // The buttons still work, and no label anywhere names a key. The phone's
+  // title card covers the toolbar, so the menu opens from the card's Settings.
+  await page.locator('#title-settings').tap();
   await expect(page.locator('#menu-overlay')).toBeVisible();
   const noKeys = async () => {
-    const shown = await page.evaluate(() => [...document.querySelectorAll('.key, .nav-hint, .pad-note, .keys-only')]
+    const shown = await page.evaluate(() => [...document.querySelectorAll('.key, .nav-hint, .keys-only')]
       .filter(el => el.getClientRects().length > 0).map(el => el.id || el.className));
     expect(shown).toEqual([]);
     const text = await page.evaluate(() => document.body.innerText);

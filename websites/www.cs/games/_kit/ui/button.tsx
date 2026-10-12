@@ -20,7 +20,7 @@ export interface ButtonProps {
 
 let pressed: Element | null = null;
 
-/** The button last clicked, which has already blurred itself: a Dialog it opens returns focus here. */
+/** The button whose click handler is running, which has already blurred itself: a Dialog that click opens returns focus here. */
 export function lastPressed(): Element | null {
   return pressed;
 }
@@ -28,7 +28,14 @@ export function lastPressed(): Element | null {
 export function Button(p: ButtonProps) {
   return (
     <button type="button" id={p.id} class={p.class} disabled={p.disabled} aria-label={p.label} title={p.title}
-      aria-pressed={p.pressed} onClick={ev => { pressed = ev.currentTarget; ev.currentTarget.blur(); p.onClick(); }}>
+      aria-pressed={p.pressed} onClick={ev => {
+        pressed = ev.currentTarget;
+        ev.currentTarget.blur();
+        p.onClick();
+        // A dialog this click opened has taken it by now (synchronously, or in
+        // Preact's next microtask); a dialog the game opens later must not.
+        setTimeout(() => { pressed = null; }, 0);
+      }}>
       {p.children}
       {p.keyLabel ? <> <KeyChip label={p.keyLabel} decorative /></> : null}
     </button>

@@ -1,6 +1,6 @@
 // The kit's Preact components in the DOM stub: the dialog's structure, focus
 // and dismissal; the button's blur, chip and click; the panel; the key chip.
-import { test, afterEach } from 'node:test';
+import { test, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { h, render } from 'preact';
 import { importTsx } from './tsx.ts';
@@ -82,6 +82,28 @@ test('a dialog opened by a kit Button gives focus back to that Button', () => {
   assert.equal(document.activeElement?.id, 'again');
   open(false);
   assert.equal(globalThis.__focused, opener);
+});
+
+test('a dialog the game opens after a press does not return focus to that Button', () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    const trigger = mount();
+    const host = mount();
+    render(h(Button, { id: 'used', onClick() {} }, 'Use'), trigger);
+    const used = byId(trigger, 'used');
+    used.focus();
+    click(used);
+    mock.timers.tick(0);
+    const content = h(Button, { id: 'again', onClick() {} }, 'Again');
+    render(dialog({ open: false, focusId: 'again' }, content), host);
+    render(dialog({ open: true, focusId: 'again' }, content), host);
+    assert.equal(document.activeElement?.id, 'again');
+    render(dialog({ open: false, focusId: 'again' }, content), host);
+    assert.notEqual(globalThis.__focused, used);
+    assert.notEqual(document.activeElement, used);
+  } finally {
+    mock.timers.reset();
+  }
 });
 
 test('unmounting an open dialog gives focus back too', () => {

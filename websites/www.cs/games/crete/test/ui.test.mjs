@@ -1,6 +1,6 @@
 // Crete's Preact overlays in the DOM stub: the ids the page's CSS and the
 // browser specs use, the text each shows, and that each button calls back.
-import { test, afterEach } from 'node:test';
+import { test, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from 'preact';
 import { importTsx } from '../../_kit/test/tsx.ts';
@@ -66,6 +66,7 @@ test('the inventory is a panel with one row per item: name, count, key and what 
   const section = root.children[0];
   assert.equal(section.localName, 'section');
   assert.equal(section.className, 'panel');
+  assert.equal(section.getAttribute('aria-labelledby'), 'inv-h');
   assert.equal(byId(root, 'inv-h').textContent, 'Inventory — use with Z / X / C');
   const list = byId(root, 'inventory');
   assert.equal(list.className, 'inv');
@@ -85,4 +86,25 @@ test('an empty or unusable item cannot be pressed; a usable one calls back with 
   assert.deepEqual(buttons.map(b => b.disabled), [false, true, false]);
   click(buttons[2]);
   assert.deepEqual(used, ['jammer']);
+});
+
+test('closing the ending card after a Use click leaves focus off the inventory buttons', () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    const inv = mount();
+    const end = mount();
+    renderInventory(inv, { rows: ROWS, onUse() {} });
+    renderEndCard(end, { open: false, ...END, onAgain() {} });
+    const use = walk(byId(inv, 'inventory').children[0]).find(n => n.localName === 'button');
+    use.focus();
+    click(use);
+    mock.timers.tick(0);
+    renderEndCard(end, { open: true, ...END, onAgain() {} });
+    assert.equal(document.activeElement?.id, 'again');
+    renderEndCard(end, { open: false, ...END, onAgain() {} });
+    const buttons = walk(inv).filter(n => n.localName === 'button');
+    assert.ok(!buttons.includes(document.activeElement));
+  } finally {
+    mock.timers.reset();
+  }
 });

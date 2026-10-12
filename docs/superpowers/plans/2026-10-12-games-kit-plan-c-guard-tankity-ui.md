@@ -2,21 +2,22 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Put every score endpoint's integrity rules in one kit file that Cylon uses unchanged, then give Tankity its new keys and key chips, a title card with initials and a settings-only menu, and a status bar plus control deck that fit every screen from a 360 px phone to a desktop.
+**Goal:** Put every score endpoint's integrity rules in one kit file that Cylon uses unchanged, then give Tankity its new keys and key chips, a title card with initials and a settings-only menu, a status bar plus control deck that fit every screen from a 360 px phone to a desktop, and a battlefield that fills the screen between them, with no black bars and a solo field as wide as the landscape screen.
 
-**Architecture:** `games/_kit/php/score-guard.php` is one namespaced class (`Kit\ScoreGuard`) holding Cylon's origin, CSRF, run-token, rate-limit and initials rules, configured by a validated config array, a header name, a salt and a store path; each game's `install-files.php` copies it into the game's `server/` (the kit is never deployed). Tankity's key table (`game.yaml`, mirrored by `input.ts`'s fallback) drops W/A/S/D/Q, C and the `cycle` command; chips are `<kbd class="key">` read from that table. A title card (`src/title.ts` + `src/ui/title.tsx`) sits over the dimmed demo; the menu keeps only settings. The page becomes three stacked parts, a Preact status bar, the battlefield, and a static-HTML control deck, laid out by CSS container and media queries.
+**Architecture:** `games/_kit/php/score-guard.php` is one namespaced class (`Kit\ScoreGuard`) holding Cylon's origin, CSRF, run-token, rate-limit and initials rules, configured by a validated config array, a header name, a salt and a store path; each game's `install-files.php` copies it into the game's `server/` (the kit is never deployed). Tankity's key table (`game.yaml`, mirrored by `input.ts`'s fallback) drops W/A/S/D/Q, C and the `cycle` command; chips are `<kbd class="key">` read from that table. A title card (`src/title.ts` + `src/ui/title.tsx`) sits over the dimmed demo; the menu keeps only settings. The page becomes three stacked parts, a Preact status bar, the battlefield, and a static-HTML control deck, laid out by CSS container and media queries. The battlefield's canvas then fills its box: a solo match is dealt a field width from the box's landscape shape (`src/field.ts`), the sim and the server's sim take that width, and the renderer fits the field in the box and fills the rest with the round's hills continued, sky and dirt (`src/scenery.ts`).
 
 **Tech Stack:** TypeScript 7.0.2, esbuild 0.28.2, Preact 11.0.1, Node 24 (`node --test`), PHP 8.4, PHPUnit ^12, Playwright (+ `@axe-core/playwright` from PR 13).
 
-**Spec:** `docs/superpowers/specs/2026-10-12-games-kit-design.md`, section 10 rows 10–13, and the sections they point to: 6.1, 6.2, 6.3, 6.4 and 8 (the guard paragraph). Visual reference: `docs/superpowers/specs/2026-10-12-games-kit-mockups/` (`title-card.html` option A, `controls-and-key-chips.html`, `layout-all-devices.html`; `layout-measure.mjs` is the overflow check `tankity-layout` reuses).
+**Spec:** `docs/superpowers/specs/2026-10-12-games-kit-design.md`, section 10 rows 10–13 and 13b, and the sections they point to: 6.1, 6.2, 6.3, 6.4, 6.6, 7.4 and 8 (the guard paragraph). Visual reference: `docs/superpowers/specs/2026-10-12-games-kit-mockups/` (`title-card.html` option A, `controls-and-key-chips.html`, `layout-all-devices.html`; `layout-measure.mjs` is the overflow check `tankity-layout` reuses).
 
-**Landing order across plans:** difficulty PR → B6 ∥ C10 → B7 → (B8 ∥ B9) ∥ (C11 → C12 → C13) → B19 → D20 → D14 → D15 → D16 → E17 → row 18. (D20 is Plan D's storage PR, spec row 20.)
+**Landing order across plans:** difficulty PR → B6 ∥ C10 → B7 → (B8 ∥ B9) ∥ (C11 → C12 → C13 → C13b) → B19 → D20 → D14 → D15 → D16 → E17 → row 18. (D20 is Plan D's storage PR, spec row 20.)
 
 **Cross-plan dependencies:**
 - Tankity's Difficulty setting (branch `games/tankity-difficulty`: `src/difficulty.ts`, `DIFFICULTY`/`aimSkill` in `src/ai.ts`, the Menu's Difficulty picker, the `difficulty` dep of `createMenu`/`createMatch`/`createLobby`) lands before PR 11. Every search/replace anchor below that quotes `main.ts`, `menu.ts`, `ui/menu.tsx` or `lobby.ts` is written against that code.
 - PR 11 needs Plan B's PR 7 merged first: the chips render through the kit's `KeyChip` (`games/_kit/ui/key-chip.tsx`), the title card is the kit's `Dialog` (`games/_kit/ui/dialog.tsx`), and the component tests load `.tsx` with the kit's `importTsx` (`games/_kit/test/tsx.ts`) and render into the kit's `games/_kit/test/dom-stub.mjs` (PR 7 moves it there from `tankity/test/`).
 - PR 10 lands before Plan B's PR 19: both edit `install_sync` in `games/_kit/php/install-core.php` and `InstallCoreTest.php`, and B's PR 19 rebases onto this one.
 - Plan B's PR 19 (Tankity's Menu → Quit) lands after PR 12 and calls `backToTitle()` from Task 13.
+- PR 13b lands after PR 13 and before Plan B's PR 19 and all of Plan D. Plan D's solo referee and the server's play of a solo round take the field width it introduces (`GameState.w`, `genTerrain(rng, w)`, `bandOffset`, `fieldWidthOk` / `room_field_width`, `room_gen_hills`, `room_band_offset`; Plan D Tasks 21a, 22, 26, 28 and 30–33 are written against them). Its sim-vector `exact` cases are the mechanism Plan D Task 21a's `detmath` group uses.
 - `menu.tsx`, `menu.ts` and `test/menu.test.mjs` change in this order: the difficulty PR → Task 14 → Task 19 → Plan B Task 24 (Quit) → Plan D Task 18 (Standings). Each later change is written against the one before it.
 
 ## Global Constraints
@@ -33,7 +34,7 @@
 - Existing specs that press `C`, `W`/`S`, `A`/`D` or `Q`, or click `#btn-menu`, change in the PR that changes those keys.
 - After any change to `game.css` or a Tankity bundle: `node ../_kit/build/build.mjs tankity && php tools/install-files.php` in `games/tankity/` (the page's `?v=` hashes and `sw.js` follow the files). After `game.yaml`: `php tools/game-json.php`.
 - Comments say why, never what or history; file headers 1–5 lines; docs describe the current state only.
-- One PR per spec row: **PR 10** (Tasks 1–5), **PR 11** (Tasks 6–10), **PR 12** (Tasks 11–15), **PR 13** (Tasks 16–21). PR 10 is independent; 11 → 12 → 13 are sequential, each branched from `main` after the previous merged. Every PR: worktree branch, CI, the pr-fix loop on review comments, merge on green CI after pr-fix (William authorized merging on green; CodeRabbit rate limits do not block), deploy, light live check, and the report ends with a cache-busted `/play/tankity/?v=<sha>` link.
+- One PR per spec row: **PR 10** (Tasks 1–5), **PR 11** (Tasks 6–10), **PR 12** (Tasks 11–15), **PR 13** (Tasks 16–21), **PR 13b** (Tasks 22–28). PR 10 is independent; 11 → 12 → 13 → 13b are sequential, each branched from `main` after the previous merged. Every PR: worktree branch, CI, the pr-fix loop on review comments, merge on green CI after pr-fix (William authorized merging on green; CodeRabbit rate limits do not block), deploy, light live check, and the report ends with a cache-busted `/play/tankity/?v=<sha>` link.
 - Generated files are never hand-merged. Every Tankity PR rewrites `dist/`, `sw.js`, `index.html`'s `?v=` values and `game.json`; after rebasing onto `main`, take either side of a conflict in them and rebuild: `cd websites/www.cs/games && npm run build && php tankity/tools/game-json.php && php tankity/tools/install-files.php && php cylon/tools/install-files.php && php crete/tools/install-files.php`, then `cd websites/www.cs && php tools/site-versions.php`, and commit what they wrote.
 - Merge gate: `gh pr checks <pr> --required`; when it lists nothing, confirm with `gh api "repos/:owner/:repo/branches/main/protection"` and, on a 404, wait for the CI run's own conclusion (`gh run list --branch <branch> --limit 1`, then `gh run watch <id> --exit-status`, branching on the exit status). CodeRabbit rate-limit notices are not merge gates.
 - Work happens in a worktree per branch; the main checkout stays on `main`.
@@ -50,6 +51,8 @@
 3. **A run token issued by today's Cylon, spent after the deploy that moves Cylon onto the guard.** Expected: the guard reads the same `<storageKey>-runs.json` shape and the same HMAC rate keys, so the token is honoured and the hour's rate stamps still count. Pinned by `ScoreGuardTest::testAStoreWrittenByTheOldCylonCodeIsHonoured` in Task 4.
 4. **Storage that throws or holds junk when the initials are first set** (Safari private mode, a hand-edited value, a blocked word). Expected: three valid random letters for the session, no exception, and a bad stored value replaced. Pinned by `initials.test.mjs` in Task 11.
 5. **The Huge text size on the smallest phone with worst-case numbers.** Expected: the status bar and deck still fit without wrapping or clipping (they size in px, so text size only scales the panels). Pinned by the "Huge text" case in `tankity-layout.spec.mjs`, Task 20.
+6. **A phone turned mid-match, or a desktop window resized, then the next match.** Expected: the match keeps the width it was dealt (the view only rescales, never black bars), the next match takes the new shape, and a phone deals the same width held either way. Pinned by `field.test.mjs` "the dealt width holds until the next deal" and "portrait and landscape on one device deal the same width" (Task 22) and the resize test in `tankity-layout.spec.mjs` (Task 28).
+7. **A 1440 field against a 720 one, and a room after this PR.** Expected: the gaps between units and the drones' hit rates are the 720 field's; every room vector and fixture is unchanged apart from the new `hills` key; the new `field` vectors agree bit for bit in JS and PHP. Pinned by `wide-field.test.mjs` and the 1440 hit-rate test (Task 23), and the `field` group in `sim-vectors.json` (Task 24).
 
 ---
 
@@ -81,6 +84,12 @@ websites/www.cs/
       src/initials.ts                               # PR 12 (create, DOM-free)
       src/title.ts, src/ui/title.tsx                # PR 12 (create)
       src/weapon-label.ts                           # PR 13 (create, DOM-free)
+      src/field.ts, src/scenery.ts, src/rotate-hint.ts  # PR 13b (create, DOM-free)
+      src/ui/rotate-hint.tsx                        # PR 13b (create)
+      src/{sim,ai,ai-measure,protocol}.ts           # PR 13b: the field's width
+      server/{sim,rules,ai,protocol}.php            # PR 13b: the field's width, the hills in the snapshot
+      protocol/sim-vectors.php, protocol/*.json     # PR 13b: the exact `field` group; fixtures carry `hills`
+      test/{field,wide-field,scenery,rotate-hint}.test.mjs, test/php/FieldWidthTest.php  # PR 13b (create)
       src/ui/gun-label.tsx                          # PR 13 (create)
       src/{main,menu,hud,guns,room,lobby,match,shop,tutorial,view,render,game-types}.ts
       src/ui/{chrome,help,menu,shop,tutorial,endveil,hud}.tsx
@@ -4986,12 +4995,1400 @@ BODY
 
 If `main` moved, rebase and rebuild the generated files (Global Constraints: never hand-merge `dist/`, `sw.js`, `?v=` values or `game.json`). Run the pr-fix loop on the review comments, then gate, merge on green, wait for deploy, live-check with `cd websites/www.cs && E2E_BASE_URL=https://www.cs.siue.edu/~wgrim/ tests/e2e/run.sh tankity-layout.spec.mjs`, and report `https://www.cs.siue.edu/~wgrim/play/tankity/?v=<merged sha>`.
 
+# PR 13b: Tankity's battlefield fills the screen
+
+Spec sections 6.6 and 7.4, row 13b. It branches from `main` after PR 13 merged (`games/tankity-battlefield`), and it lands before Plan B's PR 19 and before Plan D: Plan D's solo referee and the server's play of a solo round take the field width this PR introduces.
+
+The measured starting point (PR 13, `game.css` at merge): the canvas keeps its 1080×690 backing store and is letterboxed inside `.field`. On a 1280×720 desktop it shows at 648×414 inside a 1106×414 box, and on a 393×852 phone at 371×237 inside a 371×556 box. After Task 26's CSS, the box is the canvas: 1118×426 on 1280×720, 383×568 on 393×852, 842×317 on 852×393 (measured with Playwright on the PR 13 build with Task 26's four CSS rules applied).
+
+### Task 22: The field's width, from the landscape box
+
+**Files:**
+- Modify: `games/tankity/src/sim.ts` (constants, `fieldWidthOk`)
+- Create: `games/tankity/src/field.ts`, `games/tankity/test/field.test.mjs`
+- Modify: `games/tankity/tsconfig.json` (`files` + `src/field.ts`)
+
+**Interfaces:**
+- Produces, in `src/sim.ts`: `H = 460`; `ROOM_W = 720`; `FIELD_W_MIN = 720`, `FIELD_W_MAX = 1440`, `FIELD_COL = 24`; `FLIGHT_STEPS = 720` (a shell's longest flight in 1/60 s steps, not a width); `fieldWidthOk(w: unknown): w is number`. `W` stays exported until Task 23 removes it.
+- Produces, in `src/field.ts` (DOM-free): `interface Box { w: number; h: number }`; `PHONE_SHORT = 500`; `PHONE_CHROME = { x: 10, y: 75 }`; `WIDE_CHROME = { x: 18, y: 294, maxW: 1118 }`; `landscapeBox(vw: number, vh: number): Box`; `fieldWidth(box: Box): number`; `fieldWidthFor(vw: number, vh: number): number`; `createFieldWidth(viewport: () => Box): FieldWidth` with `interface FieldWidth { deal(): number; readonly width: number }`; `SKY_SHARE = 0.6`; `interface Fit { s: number; ox: number; oy: number }`; `fitField(box: Box, field: Box): Fit`; `interface WorldRect { x0: number; y0: number; x1: number; y1: number }`; `visibleWorld(fit: Fit, box: Box): WorldRect`.
+
+- [ ] **Step 1: Write the failing test**
+
+```js
+// games/tankity/test/field.test.mjs
+// How wide a solo field is dealt, and how the field sits in the battlefield
+// box (src/field.ts). The width comes from the box the device gives in
+// landscape and never from portrait.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { FIELD_COL, FIELD_W_MAX, FIELD_W_MIN, H, ROOM_W, fieldWidthOk } from '../src/sim.ts';
+import { createFieldWidth, fieldWidth, fieldWidthFor, fitField, landscapeBox, visibleWorld } from '../src/field.ts';
+
+test('the width is 460 × the landscape aspect, on a whole column', () => {
+  assert.equal(fieldWidth({ w: 1118, h: 426 }), 1200); // 1207.2 → 50.3 columns → 50
+  assert.equal(fieldWidth({ w: 842, h: 318 }), 1224);
+  assert.equal(fieldWidth({ w: 1118, h: 526 }), 984);
+  for (const w of [1200, 1224, 984]) assert.equal(w % FIELD_COL, 0);
+});
+
+test('the width clamps to 720–1440', () => {
+  assert.equal(fieldWidth({ w: 800, h: 600 }), FIELD_W_MIN);
+  assert.equal(fieldWidth({ w: 3000, h: 400 }), FIELD_W_MAX);
+  assert.equal(fieldWidth({ w: 1000, h: 0 }), FIELD_W_MAX, 'a collapsed box never divides by zero');
+  assert.equal(ROOM_W, FIELD_W_MIN);
+});
+
+test("a portrait box is read in its landscape aspect", () => {
+  assert.equal(fieldWidth({ w: 383, h: 568 }), fieldWidth({ w: 568, h: 383 }));
+});
+
+test('the box is the one the device gives in landscape, whichever way it is held', () => {
+  assert.deepEqual(landscapeBox(1280, 720), { w: 1118, h: 426 });
+  assert.deepEqual(landscapeBox(1024, 640), { w: 1006, h: 346 });
+  assert.deepEqual(landscapeBox(1180, 820), { w: 1118, h: 526 });
+  assert.deepEqual(landscapeBox(852, 393), { w: 842, h: 318 });
+  assert.deepEqual(landscapeBox(740, 360), { w: 730, h: 285 });
+  for (const [w, h] of [[393, 852], [360, 740], [820, 1180]]) assert.deepEqual(landscapeBox(w, h), landscapeBox(h, w));
+});
+
+test('portrait and landscape on one device deal the same width', () => {
+  const pairs = [[[1180, 820], [820, 1180], 984], [[852, 393], [393, 852], 1224], [[740, 360], [360, 740], 1176]];
+  for (const [land, port, want] of pairs) {
+    assert.equal(fieldWidthFor(...land), want, `${land} in landscape`);
+    assert.equal(fieldWidthFor(...port), want, `${port} in portrait`);
+  }
+  assert.equal(fieldWidthFor(1280, 720), 1200);
+  assert.equal(fieldWidthFor(1024, 640), 1344);
+});
+
+test('the dealt width holds until the next deal, whatever the viewport does', () => {
+  let vp = { w: 1280, h: 720 };
+  const fw = createFieldWidth(() => vp);
+  assert.equal(fw.width, ROOM_W, 'nothing dealt yet');
+  assert.equal(fw.deal(), 1200);
+  vp = { w: 1024, h: 640 };
+  assert.equal(fw.width, 1200, 'a resize mid-match rescales only');
+  vp = { w: 640, h: 1024 };
+  assert.equal(fw.width, 1200, 'and so does turning the device');
+  assert.equal(fw.deal(), 1344, 'the next match takes the new shape');
+});
+
+test('fieldWidthOk takes only whole columns in range', () => {
+  for (const w of [720, 744, 1200, 1440]) assert.ok(fieldWidthOk(w), String(w));
+  for (const w of [696, 1464, 1201, 1200.5, '1200', null, NaN]) assert.ok(!fieldWidthOk(w), String(w));
+});
+
+test('a wider box centres the field; a taller one spans it and puts 60 % of the rest above', () => {
+  const wide = fitField({ w: 1118, h: 426 }, { w: ROOM_W, h: H });
+  assert.ok(Math.abs(wide.s - 426 / H) < 1e-12);
+  assert.ok(Math.abs(wide.ox - (1118 - ROOM_W * wide.s) / 2) < 1e-9 && Math.abs(wide.oy) < 1e-9);
+  const tall = fitField({ w: 383, h: 568 }, { w: 1224, h: H });
+  assert.ok(Math.abs(tall.s * 1224 - 383) < 1e-9, 'the field spans the full width');
+  assert.equal(tall.ox, 0);
+  assert.ok(Math.abs(tall.oy - (568 - H * tall.s) * 0.6) < 1e-9);
+  const seen = visibleWorld(tall, { w: 383, h: 568 });
+  assert.ok(seen.x0 === 0 && Math.abs(seen.x1 - 1224) < 1e-9);
+  assert.ok(seen.y0 < 0 && seen.y1 > H, 'sky above the field and dirt below it are in view');
+});
+```
+
+- [ ] **Step 2: Run** — `cd websites/www.cs/games/tankity && node --test test/field.test.mjs` — Expected: FAIL, `Cannot find module '../src/field.ts'`.
+
+- [ ] **Step 3: The constants**
+
+`src/sim.ts`: replace `export const W = 720, H = 460;` with
+
+```ts
+/** The field is always H tall. A room's is ROOM_W wide; a solo match's is
+ *  dealt from the screen (field.ts), a whole number of FIELD_COL columns. */
+export const H = 460;
+export const ROOM_W = 720;
+export const W = ROOM_W; // removed in Task 23, once every reader takes the match's width
+export const FIELD_W_MIN = 720, FIELD_W_MAX = 1440, FIELD_COL = 24;
+/** A shell's longest flight, in 1/60 s steps (12 s). Not a width. */
+export const FLIGHT_STEPS = 720;
+/** A width a match may be played at; server/sim.php room_field_width() is the same rule. */
+export function fieldWidthOk(w: unknown): w is number {
+  return typeof w === 'number' && Number.isInteger(w) && w >= FIELD_W_MIN && w <= FIELD_W_MAX && w % FIELD_COL === 0;
+}
+```
+
+- [ ] **Step 4: `src/field.ts`**
+
+```ts
+/* Operation Tankity: how wide a solo field is dealt, and where the field sits
+ * in the battlefield box. DOM-free: main.ts hands in the viewport and view.ts
+ * the canvas's box. The width comes only from the box the device gives in
+ * landscape (spec 6.6); portrait frames that field and never changes it. */
+import { FIELD_COL, FIELD_W_MAX, FIELD_W_MIN, ROOM_W, clamp } from './sim.ts';
+
+export interface Box { w: number; h: number }
+
+/* What the frame takes around the battlefield in landscape, in CSS px. The
+   landscape-phone layout (game.css, `(orientation: landscape) and
+   (max-height: 500px)`) applies at a short side of PHONE_SHORT or less.
+   tankity-layout checks these against the measured box on every landscape screen. */
+export const PHONE_SHORT = 500;
+export const PHONE_CHROME = { x: 10, y: 75 } as const;
+export const WIDE_CHROME = { x: 18, y: 294, maxW: 1118 } as const;
+
+/** The battlefield box this viewport gives in landscape, held either way. */
+export function landscapeBox(vw: number, vh: number): Box {
+  const long = Math.max(vw, vh), short = Math.min(vw, vh);
+  if (short <= PHONE_SHORT) return { w: long - PHONE_CHROME.x, h: short - PHONE_CHROME.y };
+  return { w: Math.min(long - WIDE_CHROME.x, WIDE_CHROME.maxW), h: short - WIDE_CHROME.y };
+}
+
+/** 460 × the box's long side ÷ its short side, clamped, on a whole column. */
+export function fieldWidth(box: Box): number {
+  const long = Math.max(box.w, box.h), short = Math.max(1, Math.min(box.w, box.h));
+  return Math.round(clamp(460 * long / short, FIELD_W_MIN, FIELD_W_MAX) / FIELD_COL) * FIELD_COL;
+}
+
+export function fieldWidthFor(vw: number, vh: number): number {
+  return fieldWidth(landscapeBox(vw, vh));
+}
+
+export interface FieldWidth { deal(): number; readonly width: number }
+/** The width matches are dealt at. Only deal() reads the viewport, so a
+ *  resize or a turn mid-match rescales the view and never the map. */
+export function createFieldWidth(viewport: () => Box): FieldWidth {
+  let width = ROOM_W;
+  return {
+    deal() {
+      const vp = viewport();
+      width = fieldWidthFor(vp.w, vp.h);
+      return width;
+    },
+    get width() { return width; },
+  };
+}
+
+/** Share of a tall box's leftover height that goes to sky above the field; the rest is dirt below. */
+export const SKY_SHARE = 0.6;
+export interface Fit { s: number; ox: number; oy: number }
+/** Scale and offset that put the field (world units) in the box (any unit):
+ *  whole and as large as fits, centred across, the leftover height split sky above, dirt below. */
+export function fitField(box: Box, field: Box): Fit {
+  const s = Math.min(box.w / field.w, box.h / field.h);
+  return { s, ox: (box.w - field.w * s) / 2, oy: (box.h - field.h * s) * SKY_SHARE };
+}
+export interface WorldRect { x0: number; y0: number; x1: number; y1: number }
+/** The world rectangle the whole box shows at that fit, before the camera. */
+export function visibleWorld(fit: Fit, box: Box): WorldRect {
+  return { x0: -fit.ox / fit.s, y0: -fit.oy / fit.s, x1: (box.w - fit.ox) / fit.s, y1: (box.h - fit.oy) / fit.s };
+}
+```
+
+`tsconfig.json`: add `"src/field.ts"` to `files`, after `"src/sim.ts"`.
+
+- [ ] **Step 5: Run** — `node --test test/field.test.mjs && node ../_kit/build/build.mjs tankity` — Expected: PASS; the build type-checks both programs.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/sim.ts src/field.ts test/field.test.mjs tsconfig.json dist
+git commit -m "Tankity: a solo field's width comes from the landscape battlefield box, held either way"
+```
+
+---
+
+### Task 23: The sim plays at any width, fairly
+
+**Files:**
+- Modify: `games/tankity/src/sim.ts`, `src/ai.ts`, `src/ai-measure.ts`
+- Create: `games/tankity/test/wide-field.test.mjs`
+- Modify: `games/tankity/test/ai-hitrate.test.mjs`, `test/render.test.mjs` (the `W` import), `test/sim-vectors.test.mjs` (`sim.W`)
+
+**Interfaces:**
+- Consumes: Task 22's constants.
+- Produces: `W` is no longer exported. `interface Hills { a: readonly [number, number, number]; p: readonly [number, number, number]; f: readonly [number, number, number] }`; `drawHills(rng: Rng): Hills` (the nine draws, in today's order); `hillY(h: Hills, x: number): number` (today's formula for one column); `hillsWire(h: Hills): number[]` (`[a0, a1, a2, p0, p1, p2, f0, f1, f2]`); `hillsFrom(n: unknown): Hills | null` (nine finite numbers, else null); `genTerrain(rng: Rng, w: number): { terrain: number[]; clouds: Cloud[]; hills: Hills }`; `bandOffset(rng: Rng, w: number): number` (no draw when `w <= ROOM_W`, else one draw, an integer in 0…w − ROOM_W). `surfY`, `simShot`, `stepShells` take the width from `terrain.length`. `spawnSpots(n, rng)` is unchanged: it always deals on a 720 field. In `src/ai.ts`: `REACH_X = ROOM_W - 24`. `measureHitRates(arsenal, round, difficulty, cases, shots = 3, w = ROOM_W)`.
+
+The fairness rule, which the tests pin: a wider field is more ground, not longer shots. The hills are the same nine draws over more columns; the units spawn exactly as on a 720 field and one more draw slides the whole group along the wider field; a drone prefers rivals within `REACH_X` (696 px, the widest a 720 field allows, so the rule never binds at 720 and no room changes); the wind range is untouched.
+
+- [ ] **Step 1: Write the failing test**
+
+```js
+// games/tankity/test/wide-field.test.mjs
+// The sim at any width (spec 6.6): a wide field is the 720 field's hills
+// continued, the units spawn as on a 720 field and slide as a group, a drone
+// prefers rivals within reach, and nothing at 720 draws differently.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import * as sim from '../src/sim.ts';
+import { REACH_X, aiChoose } from '../src/ai.ts';
+
+const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+const arsenal = sim.buildArsenal(GAME.arsenal);
+const WIDTHS = [720, 1080, 1440];
+
+test('a wider field is the same hills, continued', () => {
+  for (const seed of ['scorch-01', 'tankity-riverbed', 'a']) {
+    const narrow = sim.genTerrain(sim.mulberry32(sim.hashSeed(seed)), 720);
+    for (const w of WIDTHS) {
+      const r = sim.mulberry32(sim.hashSeed(seed));
+      const g = sim.genTerrain(r, w);
+      assert.equal(g.terrain.length, w);
+      assert.deepEqual(g.terrain.slice(0, 720), narrow.terrain, `${seed} at ${w}`);
+      assert.deepEqual(sim.hillsWire(g.hills), sim.hillsWire(narrow.hills));
+      for (let x = 0; x < w; x += 37) assert.ok(Object.is(g.terrain[x], sim.hillY(g.hills, x)));
+    }
+  }
+});
+
+test('the deal draws the same numbers at any width; only the group offset is new', () => {
+  for (let seed = 1; seed <= 300; seed++) {
+    const base = sim.mulberry32(seed);
+    const xs = sim.spawnSpots(4, base);
+    const after = base();
+    for (const w of WIDTHS) {
+      const r = sim.mulberry32(seed);
+      assert.deepEqual(sim.spawnSpots(4, r), xs);
+      const off = sim.bandOffset(r, w);
+      if (w === 720) assert.equal(r(), after, 'a 720 field draws nothing more');
+      assert.ok(Number.isInteger(off) && off >= 0 && off <= w - 720, `offset ${off} at ${w}`);
+      for (const x of xs) assert.ok(x + off >= 30 && x + off <= w - 30);
+    }
+  }
+});
+
+test('the gaps between units are the same at any width', () => {
+  const gaps = w => {
+    const out = [];
+    for (let seed = 1; seed <= 500; seed++) {
+      const r = sim.mulberry32(seed);
+      const xs = sim.spawnSpots(4, r);
+      const off = sim.bandOffset(r, w);
+      const placed = xs.map(x => x + off).sort((a, b) => a - b);
+      out.push(...placed.slice(1).map((x, i) => x - placed[i]));
+    }
+    return out;
+  };
+  assert.deepEqual(gaps(1440), gaps(720));
+  assert.ok(Math.max(...gaps(1440)) <= 720 - 60, 'no neighbour is farther than a 720 field allows');
+});
+
+test('a drone passes over a rival beyond reach for a nearer one', () => {
+  for (const w of WIDTHS) {
+    const terrain = Array(w).fill(400);
+    const far = w === 720 ? 690 : w - 40;
+    const tanks = [
+      { id: 'd', isPlayer: false, x: 100, y: 400, angle: 45, power: 50, hp: 100, fuel: 0, dirS: 1, ammo: { shell: Infinity }, s: 'sniper' },
+      { id: 'p', isPlayer: true, x: 600, y: 400, angle: 45, power: 50, hp: 100, fuel: 80, dirS: -1 },
+      { id: 'x', isPlayer: false, x: far, y: 400, angle: 45, power: 50, hp: 10, fuel: 0, dirS: -1, ammo: { shell: Infinity }, s: 'hunter' },
+    ];
+    const world = { tanks, terrain, wind: 0, round: 1, rng: sim.mulberry32(7), shells: [], score: 0, cash: 0, ammo: { shell: Infinity },
+      selected: 'shell', shield: false, bunker: 0, laststand: false, jammer: 0, difficulty: 'normal' };
+    aiChoose(world, arsenal, tanks[0]);
+    const want = Math.abs(far - 100) <= REACH_X ? 2 : 1; // the sniper wants the weakest it can reach
+    assert.equal(tanks[0].brk.t, want, `at ${w}`);
+  }
+  assert.equal(REACH_X, 696);
+});
+
+test('out of bounds is the field edge, wherever it is', () => {
+  for (const w of WIDTHS) {
+    const r = sim.simShot({ terrain: Array(w).fill(400), wind: 0 }, arsenal, w - 100, 386, 40, 100, 'shell', 1);
+    assert.ok(r.oob && r.x >= w, `${w}: ${JSON.stringify(r)}`);
+    assert.equal(sim.surfY(Array.from({ length: w }, (_, i) => i), w + 50), w - 1);
+  }
+});
+
+test('the scenery is not the sim: past the edge a shell is removed without a blast', () => {
+  for (const w of WIDTHS) {
+    const terrain = Array(w).fill(400);
+    const world = { tanks: [], terrain, wind: 0, round: 1, rng: sim.mulberry32(1), shells: [], score: 0, cash: 0, ammo: {},
+      selected: 'shell', shield: false, bunker: 0, laststand: false, jammer: 0 };
+    world.shells.push({ x: w + 25, y: 440, vx: 120, vy: 10, wkey: 'shell', owner: null, life: 5, age: 1 });
+    const events = sim.stepShells(world, arsenal, 1 / 60);
+    assert.equal(world.shells.filter(s => !s.dead).length, 0);
+    assert.ok(!events.some(e => e.kind === 'blast'));
+    assert.deepEqual(terrain, Array(w).fill(400));
+  }
+  const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'sim.ts'), 'utf8');
+  assert.ok(!/world\.hills|G\.hills/.test(src), 'the sim never reads the scenery\'s hills');
+});
+```
+
+The `stepShells` return value and shell fields above are the ones `sim.ts` uses today (`stepShells(world, arsenal, dt)` returns its events; a shell carries `x, y, vx, vy, wkey, owner, life, age`). If its signature differs on `main`, adapt only the call, never the assertions.
+
+In `test/ai-hitrate.test.mjs`, after the existing tests, add:
+
+```js
+test('a 1440 field plays as fair as a 720 one: the drones hit as often', () => {
+  const wide = {};
+  for (const r of ROUNDS) wide[r] = measureHitRates(arsenal, r, 'normal', CASES, 3, 1440).map(p => p * 100);
+  for (const r of ROUNDS) {
+    for (const shot of [0, 2]) {
+      const d = Math.abs(wide[r][shot] - cell('normal', r, shot));
+      assert.ok(d <= 6, `round ${r} shot ${shot + 1}: ${wide[r][shot].toFixed(1)} at 1440 vs ${cell('normal', r, shot).toFixed(1)} at 720`);
+    }
+  }
+});
+```
+
+- [ ] **Step 2: Run** — `node --test test/wide-field.test.mjs` — Expected: FAIL (`sim.hillsWire is not a function`, `sim.bandOffset is not a function`, `REACH_X` undefined).
+
+- [ ] **Step 3: The sim**
+
+In `src/sim.ts`:
+
+1. Delete `export const W = ROOM_W; // removed in Task 23…`.
+2. Replace the terrain block from `/* Rolling hills from seeded sines, and the clouds that drift over them. */` through the end of `surfY` with:
+
+```ts
+/** A round's hills: three sines' amplitudes, phases and frequencies. */
+export interface Hills {
+  a: readonly [number, number, number];
+  p: readonly [number, number, number];
+  f: readonly [number, number, number];
+}
+/** The nine draws a round's hills are made of, in the order the server draws them. */
+export function drawHills(rng: Rng): Hills {
+  const a = [20 + rng() * 30, 10 + rng() * 22, 5 + rng() * 12] as const;
+  const p = [rng() * 6.28, rng() * 6.28, rng() * 6.28] as const;
+  const f = [1 / 260 + rng() / 500, 1 / 120 + rng() / 260, 1 / 47 + rng() / 120] as const;
+  return { a, p, f };
+}
+/** The hills' height at column x, on or past the field (the scenery draws the same hills). */
+export function hillY(h: Hills, x: number): number {
+  const y = 330
+    + h.a[0] * Math.sin(x * h.f[0] + h.p[0])
+    + h.a[1] * Math.sin(x * h.f[1] + h.p[1])
+    + h.a[2] * Math.sin(x * h.f[2] + h.p[2]);
+  return clamp(y, 190, 415);
+}
+/** The nine numbers as a room snapshot carries them. */
+export function hillsWire(h: Hills): number[] {
+  return [...h.a, ...h.p, ...h.f];
+}
+export function hillsFrom(n: unknown): Hills | null {
+  if (!Array.isArray(n) || n.length !== 9 || !n.every(v => typeof v === 'number' && Number.isFinite(v))) return null;
+  const v = n as number[];
+  return { a: [v[0]!, v[1]!, v[2]!], p: [v[3]!, v[4]!, v[5]!], f: [v[6]!, v[7]!, v[8]!] };
+}
+/* Rolling hills over w columns, and the clouds that drift over them. */
+export function genTerrain(rng: Rng, w: number): { terrain: number[]; clouds: Cloud[]; hills: Hills } {
+  const hills = drawHills(rng);
+  const terrain = new Array<number>(w);
+  for (let x = 0; x < w; x++) terrain[x] = hillY(hills, x);
+  const clouds: Cloud[] = [];
+  for (let i = 0; i < 5; i++) {
+    clouds.push({ x: rng() * w, y: 30 + rng() * 90, s: 0.6 + rng() * 0.9, v: 3 + rng() * 5 });
+  }
+  return { terrain, clouds, hills };
+}
+export function surfY(terrain: readonly number[], x: number): number {
+  const xi = clamp(Math.round(x), 0, terrain.length - 1);
+  return terrain[xi]!;
+}
+```
+
+3. In `spawnSpots`, replace `const lo = 30, hi = W - 30;` with `const lo = 30, hi = ROOM_W - 30; // every deal is a 720 field's; bandOffset() places it`. Directly after `spawnSpots`, add:
+
+```ts
+/** Where a wider field puts the group spawnSpots dealt: one more draw, and
+ *  only when the field is wider than a room's, so a 720 deal draws exactly as
+ *  it always has. The gaps between units, and so every shot's length, do not
+ *  change with the width. server/rules.php room_band_offset() is the same. */
+export function bandOffset(rng: Rng, w: number): number {
+  return w > ROOM_W ? Math.floor(rng() * (w - ROOM_W + 1)) : 0;
+}
+```
+
+4. In `simShot`: after `const w = arsenal.weapons[wkey]!;` add `const fw = world.terrain.length;`; replace `for (let i = 0; i < 720; i++) {` with `for (let i = 0; i < FLIGHT_STEPS; i++) {`, `if (st.x < 0 || st.x >= W) return` with `if (st.x < 0 || st.x >= fw) return`, and `clamp(Math.round(st.x), 0, W - 1)` with `clamp(Math.round(st.x), 0, fw - 1)`.
+5. In `stepShells`: replace `s.x > W + 20` with `s.x > world.terrain.length + 20`.
+
+Run `grep -n "\bW\b" src/sim.ts` — Expected: no output.
+
+- [ ] **Step 4: The drone AI**
+
+`src/ai.ts`: the import becomes `import { ROOM_W, clamp, facing, gauss, muzzle, simShot, spotTaken, surfY } from './sim.ts';`. After the `aimSkill` export, add:
+
+```ts
+/** A drone passes over rivals farther than this for nearer ones, so a wide
+ *  field never has it lobbing at what it cannot reach. It is the widest gap a
+ *  ROOM_W field allows (units stay 12 px from each edge), so no room and no
+ *  720 field ever meets it. server/ai.php ROOM_REACH_X is the same. */
+export const REACH_X = ROOM_W - 24;
+```
+
+In `aiChoose`, replace
+
+```ts
+  const rivals = world.tanks
+    .filter(c => c !== t && c.hp > 0)
+    .sort((a, b) => Math.abs(a.x - t.x) - Math.abs(b.x - t.x));
+```
+
+with
+
+```ts
+  const nearest = world.tanks
+    .filter(c => c !== t && c.hp > 0)
+    .sort((a, b) => Math.abs(a.x - t.x) - Math.abs(b.x - t.x));
+  const inReach = nearest.filter(c => Math.abs(c.x - t.x) <= REACH_X);
+  const rivals = inReach.length ? inReach : nearest.slice(0, 1);
+```
+
+and the shuffle's `const nx = clamp(t.x + dx, 12, W - 12);` with `const nx = clamp(t.x + dx, 12, world.terrain.length - 12);`.
+
+`src/ai-measure.ts`: the import drops `W` and adds `ROOM_W, bandOffset`; replace `dealCase` and the `dirS` line:
+
+```ts
+/** The hills, wind and the two units' spots of case `i` on a field w wide, the same for every round and difficulty. */
+function dealCase(i: number, w: number): { terrain: number[]; wind: number; px: number; dx: number; mid: number } {
+  const rng = mulberry32(hashSeed('hitrate-case-' + i));
+  const { terrain } = genTerrain(rng, w);
+  const wind = Math.round((rng() * 2 - 1) * 8);
+  const [px, dx] = spawnSpots(4, rng);
+  const off = bandOffset(rng, w);
+  return { terrain, wind, px: px! + off, dx: dx! + off, mid: off + ROOM_W / 2 };
+}
+```
+
+with `dirS: x < c.mid ? 1 : -1,` in `caseWorld`, and `measureHitRates(arsenal: Arsenal, round: number, difficulty: Difficulty, cases: number, shots = 3, w = ROOM_W)` calling `dealCase(i, w)`.
+
+`test/render.test.mjs`: `import { W, H, …` becomes `import { ROOM_W as W, H, …` (Task 26 changes the renderer's deps).
+
+`test/sim-vectors.test.mjs` stops reading `sim.W`: `function buildTerrain(spec)` becomes `function buildTerrain(spec, w = 720)` with both `sim.W` inside it replaced by `w`; `function world(c)` becomes `function world(c, w = 720)` and builds `terrain: buildTerrain(c.terrain || { flat: 400 }, w)`; in `'terrain-gen'(c)`, `sim.genTerrain(sim.mulberry32(sim.hashSeed(c.seed)))` becomes `sim.genTerrain(sim.mulberry32(sim.hashSeed(c.seed)), 720)` and `x < sim.W` becomes `x < 720`.
+
+- [ ] **Step 5: Run** — `node --test test/wide-field.test.mjs test/ai-hitrate.test.mjs test/sim-vectors.test.mjs` — Expected: all PASS; `sim-vectors` unchanged at 720 (nothing at 720 draws differently). The page modules do not type-check yet (`W` is gone); Task 25 moves them, so do not build `dist/` in this task.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/sim.ts src/ai.ts src/ai-measure.ts test/wide-field.test.mjs test/ai-hitrate.test.mjs test/render.test.mjs
+git commit -m "Tankity sim: any field width; the units spawn as on a 720 field and slide as a group; drones prefer rivals in reach"
+```
+
+---
+
+### Task 24: The server's sim takes the width; vectors at 720, 1080 and 1440
+
+**Files:**
+- Modify: `games/tankity/server/sim.php`, `server/rules.php`, `server/ai.php`, `server/protocol.php`, `src/protocol.ts`
+- Modify: `games/tankity/protocol/sim-vectors.php`, `test/sim-vectors.test.mjs`
+- Create: `games/tankity/test/php/FieldWidthTest.php`
+- Regenerate: `protocol/sim-vectors.json`, `protocol/*.json` (the room fixtures gain `hills`)
+
+**Interfaces:**
+- Consumes: Task 23's TypeScript names.
+- Produces (PHP): `ROOM_W = 720`, `FIELD_W_MIN = 720`, `FIELD_W_MAX = 1440`, `FIELD_COL = 24`, `ROOM_FLIGHT_STEPS = 720`, `ROOM_REACH_X = ROOM_W - 24`; `room_field_width(mixed $w): ?int`; `room_gen_hills(int &$rng): array` (`['a' => [3], 'p' => [3], 'f' => [3]]`, the nine draws in order); `room_hills_terrain(array $h, int $w): array`; `room_hills_wire(array $h): array` (nine floats); `room_gen_terrain(int &$rng, int $w): array` (unchanged result); `room_band_offset(int &$rng, int $w): int`; `$room['hills']`, set at every round start. A snapshot carries `hills` (nine numbers, or null before the first round). `RoomSnapshot.hills?: number[] | null` in `src/protocol.ts`.
+- Vector group `field`, every case marked `exact`: `{ kind: 'terrain', w, seed }` → `{ hills, terrain, next }`; `{ kind: 'placement', w, seed }` → `{ xs, offset, next }`; `{ kind: 'sim-shot', w, x, y, angle, power, wkey, dirS }` → `{ x, y, oob }`; `{ kind: 'target', w, seed, tanks }` → `{ target, wkey, angle, power }`. The runner compares an exact case's numbers with `Object.is`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```php
+<?php
+// games/tankity/test/php/FieldWidthTest.php
+// The server's sim at any field width (spec 7.4): the width rule, the hills
+// and their wire form, the group offset, and a room still dealt at 720.
+declare(strict_types=1);
+
+use PHPUnit\Framework\TestCase;
+
+final class FieldWidthTest extends TestCase
+{
+    public static function setUpBeforeClass(): void
+    {
+        if (!defined('TANKITY_ROOMS_LIB')) {
+            define('TANKITY_ROOMS_LIB', true);
+        }
+        require_once dirname(__DIR__, 2) . '/rooms.php';
+    }
+
+    public function testOnlyWholeColumnsInRangeAreAWidth(): void
+    {
+        foreach ([720, 744, 1200, 1440] as $w) {
+            $this->assertSame($w, room_field_width($w));
+        }
+        foreach ([696, 1464, 1201, 1200.0, '1200', null, true] as $w) {
+            $this->assertNull(room_field_width($w), var_export($w, true));
+        }
+    }
+
+    public function testTheHillsAreTheTerrainsNineDraws(): void
+    {
+        $a = room_hash_seed('scorch-01');
+        $b = $a;
+        $h = room_gen_hills($a);
+        $this->assertSame(room_gen_terrain($b, 1440), room_hills_terrain($h, 1440));
+        $this->assertSame(room_rng_next($a), room_rng_next($b), 'both drew exactly nine');
+        $this->assertCount(9, room_hills_wire($h));
+        $this->assertSame(array_slice(room_hills_terrain($h, 1440), 0, 720), room_hills_terrain($h, 720));
+    }
+
+    public function testTheGroupOffsetDrawsNothingAt720(): void
+    {
+        $a = 99;
+        $b = 99;
+        $this->assertSame(0, room_band_offset($a, ROOM_W));
+        $this->assertSame(room_rng_next($b), room_rng_next($a));
+        for ($seed = 1; $seed <= 200; $seed++) {
+            $r = $seed;
+            $off = room_band_offset($r, 1440);
+            $this->assertGreaterThanOrEqual(0, $off);
+            $this->assertLessThanOrEqual(720, $off);
+        }
+    }
+
+    public function testARoomRoundIsDealtAt720WithItsHills(): void
+    {
+        $room = room_new('ABCD', 'AAA');
+        room_start_round($room);
+        $this->assertCount(ROOM_W, $room['terrain']);
+        $this->assertSame(room_hills_terrain($room['hills'], ROOM_W), $room['terrain']);
+        $snap = room_snapshot($room, 0, 0, null, true);
+        $this->assertSame(room_hills_wire($room['hills']), $snap['hills']);
+    }
+}
+```
+
+`room_new`, `room_start_round` and `room_snapshot($room, $seat, $since, $have, $full)` are today's. If `room_start_round` needs seats seated first on `main`, seat the host the way `test/php/checks/rooms-sim.php` does before calling it.
+
+In `test/sim-vectors.test.mjs` (whose `buildTerrain` and `world` already take a width, Task 23):
+
+- `diff(want, got, at, out)` becomes `diff(want, got, at, out, exact = false)`; its number branch becomes
+
+```js
+  if (typeof want === 'number' && typeof got === 'number') {
+    if (exact ? !Object.is(want, got) : !(Math.abs(want - got) <= TOL)) out.push(`${at}: expected ${want}, got ${got}`);
+```
+
+  each recursive `diff(…)` call passes `exact` on, and the case loop calls `diff(expectedFor(group, c.in, c.out), got, 'out', [], c.exact === true)`.
+- Add the runner:
+
+```js
+  field(c) {
+    if (c.kind === 'terrain') {
+      const r = sim.mulberry32(sim.hashSeed(c.seed));
+      const h = sim.drawHills(r);
+      const next = r();
+      const { terrain } = sim.genTerrain(sim.mulberry32(sim.hashSeed(c.seed)), c.w);
+      return { hills: sim.hillsWire(h), terrain, next };
+    }
+    if (c.kind === 'placement') {
+      const r = sim.mulberry32(c.seed);
+      const xs = sim.spawnSpots(4, r);
+      return { xs, offset: sim.bandOffset(r, c.w), next: r() };
+    }
+    if (c.kind === 'sim-shot') {
+      return sim.simShot({ terrain: Array(c.w).fill(400), wind: 0 }, arsenal, c.x, c.y, c.angle, c.power, c.wkey, c.dirS);
+    }
+    world(c, c.w);
+    G.rng = sim.mulberry32(c.seed);
+    const t = G.tanks[0];
+    const choice = sim.aiChoose(G, arsenal, t);
+    return { target: t.brk.t, wkey: choice.wkey, angle: choice.angle, power: choice.power };
+  },
+```
+
+- [ ] **Step 2: Run** — `cd websites/www.cs && vendor/bin/phpunit games/tankity/test/php/FieldWidthTest.php` — Expected: FAIL, `Call to undefined function room_field_width()`.
+
+- [ ] **Step 3: The server's sim**
+
+`server/sim.php`, after `const ROOM_FLAT_GRAV = 90; …`:
+
+```php
+const ROOM_W = 720; // a room's field; a solo run's is dealt (src/field.ts) and checked here
+const FIELD_W_MIN = 720;
+const FIELD_W_MAX = 1440;
+const FIELD_COL = 24;
+const ROOM_FLIGHT_STEPS = 720; // a shell's longest flight in 1/60 s steps (12 s); not a width
+
+/* src/sim.ts fieldWidthOk(): an int in range on a whole column, else null. */
+function room_field_width(mixed $w): ?int
+{
+    if (!is_int($w) || $w < FIELD_W_MIN || $w > FIELD_W_MAX || $w % FIELD_COL !== 0) {
+        return null;
+    }
+    return $w;
+}
+```
+
+Replace `room_gen_terrain` with:
+
+```php
+/* src/sim.ts drawHills(): the nine draws, in this order. */
+function room_gen_hills(int &$rng): array
+{
+    $a = [20 + room_rng_next($rng) * 30, 10 + room_rng_next($rng) * 22, 5 + room_rng_next($rng) * 12];
+    $p = [room_rng_next($rng) * 6.28, room_rng_next($rng) * 6.28, room_rng_next($rng) * 6.28];
+    $f = [1 / 260 + room_rng_next($rng) / 500, 1 / 120 + room_rng_next($rng) / 260, 1 / 47 + room_rng_next($rng) / 120];
+    return ['a' => $a, 'p' => $p, 'f' => $f];
+}
+/* src/sim.ts hillY() over columns 0..w-1. */
+function room_hills_terrain(array $h, int $w): array
+{
+    [$a, $p, $f] = [$h['a'], $h['p'], $h['f']];
+    $t = [];
+    for ($x = 0; $x < $w; $x++) {
+        $y = 330
+            + $a[0] * sin($x * $f[0] + $p[0])
+            + $a[1] * sin($x * $f[1] + $p[1])
+            + $a[2] * sin($x * $f[2] + $p[2]);
+        $t[$x] = max(190.0, min(415.0, $y));
+    }
+    return $t;
+}
+function room_hills_wire(array $h): array
+{
+    return array_merge($h['a'], $h['p'], $h['f']);
+}
+function room_gen_terrain(int &$rng, int $w): array
+{
+    return room_hills_terrain(room_gen_hills($rng), $w);
+}
+```
+
+In `room_map_profile`, `$w = 720;` becomes `$w = ROOM_W;`. In `room_sim_shot`, `for ($i = 0; $i < 720; $i++) {` becomes `for ($i = 0; $i < ROOM_FLIGHT_STEPS; $i++) {`; in `room_fly_arc`, `for ($step = 0; $step < 720; $step++) {` becomes `for ($step = 0; $step < ROOM_FLIGHT_STEPS; $step++) {` and `720 * $dt` becomes `ROOM_FLIGHT_STEPS * $dt`.
+
+`server/rules.php`: after `room_spawn_spots`, add
+
+```php
+/* src/sim.ts bandOffset(): one more draw, only on a field wider than a room's. */
+function room_band_offset(int &$rng, int $w): int
+{
+    return $w > ROOM_W ? (int) floor(room_rng_next($rng) * ($w - ROOM_W + 1)) : 0;
+}
+```
+
+In `room_start_round`, replace from `$w = 720;` through `room_terrain_changed($room);` with
+
+```php
+    $w = ROOM_W;
+    if ($room['map'] !== null && isset(ROOM_MAPS[$room['map']])) {
+        // A picked map replays its own hills every time: terrain comes from
+        // the hidden seed plus the round, never from the live stream.
+        $mrng = room_hash_seed(ROOM_MAPS[$room['map']]['seed'] . '|round' . $room['round']);
+        $room['hills'] = room_gen_hills($mrng);
+    } else {
+        $room['hills'] = room_gen_hills($room['rng']);
+    }
+    $room['terrain'] = room_hills_terrain($room['hills'], $w);
+    room_terrain_changed($room);
+```
+
+`server/ai.php`: after `const` declarations at the top add `const ROOM_REACH_X = ROOM_W - 24; // src/ai.ts REACH_X`; in `room_ai_choose`, after the `usort($rivals, …);` line add
+
+```php
+    // A wide field: pass over rivals beyond reach for nearer ones (never binds at 720).
+    $inReach = array_values(array_filter($rivals, fn($r) => abs($r['x'] - $tank['x']) <= ROOM_REACH_X));
+    $rivals = count($inReach) ? $inReach : [$rivals[0]];
+```
+
+`server/protocol.php`, in `room_snapshot`'s `$out` after `'terrainRev' => $rev,` add `'hills' => isset($room['hills']) ? room_hills_wire($room['hills']) : null,` (nine numbers every snapshot: small, and a round's hills never change, so the delta protocol leaves them alone). `src/protocol.ts`, in `RoomSnapshot` after `terrainRev: number;`, add `/** The round's nine hill numbers (sim.ts hillsWire), for the scenery past the field. */ hills?: number[] | null;`.
+
+- [ ] **Step 4: The vectors**
+
+`protocol/sim-vectors.php`: after `const SV_TOLERANCE = 0.0001;` add `ini_set('serialize_precision', '-1'); // exact cases are written as the shortest string that reads back to the same double`. `function sv_terrain(array $spec): array` becomes `function sv_terrain(array $spec, int $w = SV_WIDTH): array` with both `SV_WIDTH` inside it replaced by `$w`; `function sv_room(array $c): array` becomes `function sv_room(array $c, int $w = SV_WIDTH): array` with `sv_terrain($c['terrain'])` → `sv_terrain($c['terrain'], $w)`. After the `$add` closure add
+
+```php
+/* An exact case: written unrounded and compared bit for bit by the runner. */
+$exact = function (string $group, string $name, array $in, $out) use (&$cases): void {
+    $cases[$group][] = ['name' => $name, 'in' => $in, 'out' => $out, 'exact' => true];
+};
+```
+
+and after the `spawn-spots` cases:
+
+```php
+/* ---- the field at any width, bit for bit (spec 7.4) ---- */
+foreach ([720, 1080, 1440] as $w) {
+    foreach (['tankity-twin-hills', 'scorch-01'] as $seed) {
+        $rng = room_hash_seed($seed);
+        $h = room_gen_hills($rng);
+        $exact('field', "terrain-$w-$seed", ['kind' => 'terrain', 'w' => $w, 'seed' => $seed],
+            ['hills' => room_hills_wire($h), 'terrain' => room_hills_terrain($h, $w), 'next' => room_rng_next($rng)]);
+    }
+    foreach ([3, 1234, 2026] as $seed) {
+        $rng = $seed;
+        $xs = room_spawn_spots($rng, 4, ROOM_W);
+        $off = room_band_offset($rng, $w);
+        $exact('field', "placement-$w-seed$seed", ['kind' => 'placement', 'w' => $w, 'seed' => $seed],
+            ['xs' => $xs, 'offset' => $off, 'next' => room_rng_next($rng)]);
+    }
+    $shot = ['kind' => 'sim-shot', 'w' => $w, 'x' => $w - 100.0, 'y' => 386.0, 'angle' => 40.0, 'power' => 100.0, 'wkey' => 'shell', 'dirS' => 1];
+    $exact('field', "off-the-right-$w", $shot, room_sim_shot(array_fill(0, $w, 400.0), 0.0, $shot['x'], $shot['y'], $shot['angle'], $shot['power'], 'shell', 1, $w));
+    $far = $w === 720 ? 690 : $w - 40;
+    $c = ['kind' => 'target', 'w' => $w, 'seed' => 7, 'difficulty' => 'normal', 'terrain' => ['flat' => 400], 'tanks' => [
+        ['kind' => 'ai', 'x' => 100, 'y' => 400.0, 'hp' => 100, 's' => 'sniper', 'ammo' => ['shell' => 99], 'dirS' => 1],
+        ['kind' => 'human', 'x' => 600, 'y' => 400.0, 'hp' => 100, 'dirS' => -1],
+        ['kind' => 'ai', 'x' => $far, 'y' => 400.0, 'hp' => 10, 's' => 'hunter', 'ammo' => ['shell' => 99], 'dirS' => -1],
+    ]];
+    $room = sv_room($c, $w);
+    $choice = room_ai_choose($room, $room['tanks'][0]);
+    $exact('field', "target-$w", $c, ['target' => $room['tanks'][0]['brk']['t'], 'wkey' => $choice['wkey'],
+        'angle' => $choice['angle'], 'power' => $choice['power']]);
+}
+```
+
+In the writer, rows are encoded with `JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION` already, so exact floats keep their `.0`.
+
+The `target` runner's `world(c, c.w)` builds the shooter with `ammo: { shell: 99 }` from the case; the drone's `ammo.shell` is finite in both languages, so the two sides load the same rack.
+
+- [ ] **Step 5: Regenerate and run**
+
+Run (in `websites/www.cs`): `make up && make sim-vectors && make protocol`, then `vendor/bin/phpunit --testsuite tankity` and (in `games/tankity`) `node --test test/sim-vectors.test.mjs test/net.test.mjs test/protocol.test.mjs`
+Expected: PASS; the summary line counts the `field` group's 30 cases; every pre-existing case is unchanged (`git diff --stat protocol/sim-vectors.json` shows only additions); the room fixtures differ only by their new `hills` key.
+
+If a `field` terrain or target case differs in the last bit between V8 and the PHP container, that is a libm difference in `sin` or `cos`, not a bug in this task: stop and land Plan D Task 21a (`detmath`) in front of this PR, then rerun. Never loosen an exact case.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add server protocol src/protocol.ts test/sim-vectors.test.mjs test/php/FieldWidthTest.php
+git commit -m "Tankity server: the sim takes the field width, rooms pass 720 and send their hills; vectors at 720, 1080 and 1440, bit for bit"
+```
+
+---
+
+### Task 25: A match is dealt at its width and keeps it
+
+**Files:**
+- Modify: `games/tankity/src/game-types.ts`, `src/main.ts`, `src/match.ts`, `src/room.ts`, `src/view.ts`
+- Modify: `games/tankity/test/smoke.test.mjs` (two static checks)
+
+**Interfaces:**
+- Consumes: Task 22's `createFieldWidth`, Task 23's `genTerrain(rng, w)`, `bandOffset`, `hillsFrom`, Task 24's `RoomSnapshot.hills`.
+- Produces: `GameState.w: number` (this match's field width) and `GameState.hills: Hills | null`. `MatchDeps.field: Pick<FieldWidth, 'deal'>`. Only `resetMatch()` (solo, demo, tutorial) and `netAdopt()` (rooms, `ROOM_W`) write `G.w`.
+
+- [ ] **Step 1: Write the failing checks**
+
+In `test/smoke.test.mjs`, beside the other static checks on `src`, add:
+
+```js
+// The field's width is set where a match is dealt and nowhere else (spec 6.6).
+const widthWrites = [...src.matchAll(/\bG\.w\s*=(?!=)/g)].length;
+check('field-width-written-only-at-the-deal', widthWrites === 2 && /G\.w = field\.deal\(\)/.test(moduleSrc['match.ts']) && /G\.w = ROOM_W/.test(moduleSrc['room.ts']), `writes=${widthWrites}`);
+check('no-module-imports-a-fixed-width', !/import\s*\{[^}]*\bW\b[^}]*\}\s*from\s*'\.\/sim\.ts'/.test(src), 'a module still imports W from sim.ts');
+```
+
+- [ ] **Step 2: Run** — `node ../_kit/build/build.mjs tankity` — Expected: FAIL, type errors in `main.ts`, `match.ts`, `room.ts`, `view.ts` (`W` is not exported by `./sim.ts`).
+
+- [ ] **Step 3: The state and the deal**
+
+`src/game-types.ts`: import `type Hills` from `./sim.ts` and add to `GameState`, after `clouds: Cloud[];`:
+
+```ts
+  /** This match's field width: dealt at the start of a solo match (field.ts), ROOM_W in a room; fixed for the match. */
+  w: number;
+  /** The round's hills, for the scenery past the field's edges; null until a room sends them. */
+  hills: Hills | null;
+```
+
+`src/main.ts`: the sim import replaces `W,` with `ROOM_W,`; add `import { createFieldWidth } from './field.ts';`. In the `G` literal, `cam: { z: 1, cx: 360, cy: 230 },` becomes `w: ROOM_W, hills: null, cam: { z: 1, cx: ROOM_W / 2, cy: 230 },`. Before `createMatch({`, add
+
+```ts
+/* Matches are dealt at the width the landscape box gives (spec 6.6). */
+const field = createFieldWidth(() => ({ w: window.innerWidth, h: window.innerHeight }));
+```
+
+and pass `field,` in the `createMatch({ … })` deps. Both cloud wraps `if (cl.x - 40 > W) cl.x = -40;` become `if (cl.x - 40 > G.w) cl.x = -40;`, and the drive clamp `clamp(t.x + step, 12, W - 12)` becomes `clamp(t.x + step, 12, G.w - 12)`.
+
+`src/match.ts`: the sim import replaces `W,` with `ROOM_W,` and adds `bandOffset,`; add `import type { FieldWidth } from './field.ts';`; `MatchDeps` gains `field: Pick<FieldWidth, 'deal'>;` and the destructuring in `createMatch` gains `field`. Then:
+
+- `genTerrain()` becomes
+
+```ts
+  function genTerrain(): void {
+    const g = simGenTerrain(G.rng, G.w);
+    G.terrain = g.terrain;
+    G.clouds = g.clouds;
+    G.hills = g.hills;
+  }
+```
+
+- in `resetMatch`, after `G.rng = mulberry32(hashSeed(seed));` add `G.w = field.deal(); // fixed until the next deal`;
+- in `newMatch`, `G.cam = { z: 1, cx: W / 2, cy: H / 2 };` becomes `G.cam = { z: 1, cx: G.w / 2, cy: H / 2 };`;
+- in `newRound`, replace `const order = spawnSpots(1 + FOE_DEFS.length, G.rng);` with
+
+```ts
+    const order = spawnSpots(1 + FOE_DEFS.length, G.rng);
+    const off = bandOffset(G.rng, G.w); // a wider field slides the whole group; the gaps stay a 720 field's
+```
+
+  `x: order[0]!,` becomes `x: order[0]! + off,`, `x: order[i + 1]!,` becomes `x: order[i + 1]! + off,`, and `t.dirS = t.x < W / 2 ? 1 : -1; // face the middle of the field` becomes `t.dirS = t.x < off + ROOM_W / 2 ? 1 : -1; // face the middle of the group`.
+
+`src/room.ts`: the sim import replaces `W,` with `ROOM_W, hillsFrom,`. In `netAdopt`, before `if (Array.isArray(room.terrain) && room.terrain.length === W) {` add `G.w = ROOM_W; // every room plays a 720 field`, change that condition to `room.terrain.length === ROOM_W`, add after its block
+
+```ts
+    const hills = hillsFrom(room.hills);
+    if (hills) G.hills = hills;
+```
+
+and change `Math.random() * W` to `Math.random() * ROOM_W` and the cloud wrap `cl.x - 40 > W` to `cl.x - 40 > G.w`.
+
+`src/view.ts`: the sim import drops `W,`; `ViewState` adds `| 'w' | 'hills'`; in `updateCamera`, `let tz = 1, tx = W / 2, ty = H / 2;` becomes `let tz = 1, tx = G.w / 2, ty = H / 2;` and `Math.min(W / spanX, H / spanY, 1)` becomes `Math.min(G.w / spanX, H / spanY, 1)`. (`createRenderer`'s `size` is Task 26's; until then pass `size: { w: ROOM_W, h: H }` with `ROOM_W` imported.)
+
+- [ ] **Step 4: Run** — `node ../_kit/build/build.mjs tankity && php tools/install-files.php && node --test 'test/*.test.mjs'` — Expected: PASS, the two new smoke checks included; a solo match on a 1280×720 screen is dealt at 1200 and still draws stretched into the box (Task 26 fixes the drawing).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src test/smoke.test.mjs dist sw.js index.html
+git commit -m "Tankity: a solo match is dealt at the landscape box's width and keeps it; rooms play 720"
+```
+
+---
+
+### Task 26: The battlefield fills the box: scenery, sky and dirt
+
+**Files:**
+- Create: `games/tankity/src/scenery.ts`, `games/tankity/test/scenery.test.mjs`
+- Modify: `games/tankity/src/render.ts`, `src/view.ts`, `game.css`, `test/render.test.mjs`, `tsconfig.json` (`files` + `src/scenery.ts`)
+
+**Interfaces:**
+- Consumes: Task 22's `fitField`, `visibleWorld`; Task 23's `Hills`, `hillY`.
+- Produces: `SEAM_EASE = 48`; `sceneryY(h: Hills, terrain: readonly number[], x: number): number`. `RenderDeps` loses `size`; `BattleView` gains `field: { w: number; h: number }` and `hills: Hills | null`. `#stage` carries `data-w` (the match's width) and `data-field` (`"x,y,w,h"`, the field's rectangle in CSS px inside the canvas), written only when they change; `tankity-layout` reads both.
+
+- [ ] **Step 1: Write the failing test**
+
+```js
+// games/tankity/test/scenery.test.mjs
+// The hills past the field's edges (src/scenery.ts): the same hills continued,
+// eased from the field's live edge so a crater there leaves no cliff, and
+// never more than 1 px of step at the seam beyond the hills' own slope.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { carveCrater, genTerrain, hashSeed, hillY, mulberry32 } from '../src/sim.ts';
+import { SEAM_EASE, sceneryY } from '../src/scenery.ts';
+
+const SEEDS = Array.from({ length: 60 }, (_, i) => 'seam-' + i);
+const deal = (seed, w) => genTerrain(mulberry32(hashSeed(seed)), w);
+function seamSteps(h, t) {
+  const w = t.length;
+  return [
+    Math.abs(sceneryY(h, t, -1) - t[0]) - Math.abs(hillY(h, -1) - hillY(h, 0)),
+    Math.abs(sceneryY(h, t, w) - t[w - 1]) - Math.abs(hillY(h, w) - hillY(h, w - 1)),
+  ];
+}
+
+test('inside the field the scenery is the field', () => {
+  const { terrain, hills } = deal('in', 1080);
+  for (let x = 0; x < 1080; x += 13) assert.equal(sceneryY(hills, terrain, x), terrain[x]);
+});
+
+test('past the ease the scenery is the same hills, continued', () => {
+  for (const w of [720, 1080, 1440]) {
+    const { terrain, hills } = deal('far', w);
+    for (const x of [-SEAM_EASE - 1, -300, w + SEAM_EASE, w + 500]) assert.equal(sceneryY(hills, terrain, x), hillY(hills, x));
+  }
+});
+
+test('the seam adds no step greater than 1 px, untouched or cratered', () => {
+  for (const w of [720, 1080, 1440]) {
+    for (const seed of SEEDS) {
+      const { terrain, hills } = deal(seed, w);
+      for (const s of seamSteps(hills, terrain)) assert.ok(s <= 1 + 1e-9, `${seed} at ${w}: ${s}`);
+      carveCrater(terrain, 0, terrain[0], 60, 456);
+      carveCrater(terrain, w - 1, terrain[w - 1], 60, 456);
+      for (const s of seamSteps(hills, terrain)) assert.ok(s <= 1 + 1e-9, `${seed} at ${w}, cratered: ${s}`);
+    }
+  }
+});
+
+test('each column of the ease moves at most 1 px off the hills', () => {
+  const { terrain, hills } = deal('ease', 720);
+  carveCrater(terrain, 719, terrain[719], 90, 456);
+  for (let k = 1; k < 200; k++) {
+    const off = sceneryY(hills, terrain, 719 + k) - hillY(hills, 719 + k);
+    const prev = sceneryY(hills, terrain, 718 + k) - hillY(hills, 718 + k);
+    assert.ok(Math.abs(off - prev) <= 1 + 1e-9, `column ${k}`);
+  }
+});
+```
+
+- [ ] **Step 2: Run** — `node --test test/scenery.test.mjs` — Expected: FAIL, `Cannot find module '../src/scenery.ts'`.
+
+- [ ] **Step 3: `src/scenery.ts`**
+
+```ts
+/* Operation Tankity: the hills past the field's edges, for drawing only.
+ * The sim never reads this: past the edge nothing is hittable. Pure. */
+import { hillY } from './sim.ts';
+import type { Hills } from './sim.ts';
+
+/** Columns over which the scenery eases from the field's edge into the hills, at least. */
+export const SEAM_EASE = 48;
+
+/** The ground at column x as drawn: the field inside it; past an edge the
+ *  round's hills continued, eased from the field's live edge height over
+ *  max(SEAM_EASE, |difference|) columns, so the ease adds at most 1 px a column. */
+export function sceneryY(h: Hills, terrain: readonly number[], x: number): number {
+  const w = terrain.length;
+  if (x >= 0 && x <= w - 1) return terrain[Math.round(x)]!;
+  const edge = x < 0 ? 0 : w - 1;
+  const d = terrain[edge]! - hillY(h, edge);
+  const span = Math.max(SEAM_EASE, Math.ceil(Math.abs(d)));
+  return hillY(h, x) + d * Math.max(0, 1 - Math.abs(x - edge) / span);
+}
+```
+
+`tsconfig.json`: add `"src/scenery.ts"` to `files`.
+
+- [ ] **Step 4: The renderer draws the box, not a stretched field**
+
+`src/render.ts`:
+
+1. Imports stay type-only, as the header requires: `import type { Cloud, Hills, Rng, Tank } from './sim.ts';` and `import type { Box, Fit, WorldRect } from './field.ts';`. `RenderSim` gains the three pure helpers the frame needs, which arrive with the other sim helpers:
+
+```ts
+  fitField(box: Box, field: Box): Fit;
+  visibleWorld(fit: Fit, box: Box): WorldRect;
+  sceneryY(h: Hills, terrain: readonly number[], x: number): number;
+```
+
+   Inside `createRenderer`, `fitField`, `visibleWorld` and `sceneryY` below mean `sim.fitField`, `sim.visibleWorld` and `sim.sceneryY` (add `const { fitField, visibleWorld, sceneryY } = sim;` after `const { fx: FX, sim } = deps;`).
+2. `BattleView` gains, after `terrain: readonly number[];`: `field: { w: number; h: number }; // this match's field, in world units` and `hills: Hills | null; // the round's hills, for the scenery`.
+3. `RenderDeps` loses `size`.
+4. In `createRenderer`, replace `const { w: W, h: H } = deps.size;` and the `SKY_…` line with
+
+```ts
+  let W = 0, H = 0; // the field being drawn, from each frame's view
+  let sky: Sky | null = null; // drawn from view.skyKey over the visible sky, rebuilt when either changes
+```
+
+  (delete the old `let sky` line below it).
+5. `buildSky(key: string): Sky` becomes `buildSky(key: string, rect: WorldRect): Sky`; at its top add `const SKY_X0 = rect.x0 - 20, SKY_W = rect.x1 - rect.x0 + 40, SKY_Y0 = rect.y0 - 20, SKY_H = 420 - rect.y0; // a field-sized view gives today's -20…700 by -20…400` and scale the star count with the area: `const n = Math.round(130 * Math.max(1, (SKY_W * SKY_H) / (760 * 440)));` used for the first loop (`for (let i = 0; i < n; i++)`). In `drawSky(c, view)` add a third parameter `rect: WorldRect` and replace `if (!sky || sky.key !== view.skyKey) sky = buildSky(view.skyKey);` with
+
+```ts
+    const key = `${view.skyKey}|${Math.round(rect.x0)},${Math.round(rect.y0)},${Math.round(rect.x1)}`;
+    if (!sky || sky.key !== key) sky = buildSky(key, rect);
+```
+
+6. `drawMoon(c)` becomes `drawMoon(c, rect)`; its first line becomes `const mx = W - 120, my = 90 + Math.min(0, rect.y0) * 0.5, mr = 32; // a tall sky lifts the moon into it`.
+7. In `drawWindStreaks`, `const span = W + 160;` stays (it reads the frame's W).
+8. In `drawTurnClock`, replace `c.scale((cv.width || W) / W || 1, (cv.height || H) / H || 1);` with
+
+```ts
+    const fit = fitField({ w: cv.width || W, h: cv.height || H }, { w: W, h: H });
+    c.setTransform(fit.s, 0, 0, fit.s, fit.ox, fit.oy);
+```
+
+9. In `frame(view)`, replace everything from `c.save();` through the end of the green rim's `c.stroke();` with:
+
+```ts
+    W = view.field.w;
+    H = view.field.h;
+    const box = { w: cv.width || W, h: cv.height || H };
+    const fit = fitField(box, view.field);
+    const rect = visibleWorld(fit, box); // world units the whole canvas shows, before the camera
+    c.save();
+    c.setTransform(fit.s, 0, 0, fit.s, fit.ox, fit.oy);
+    if (view.shake > 0 && !deps.reducedMotion()) {
+      c.translate((deps.random() - 0.5) * 8 * view.shake, (deps.random() - 0.5) * 8 * view.shake);
+    }
+    // Night sky over everything the canvas shows: no band of page shows anywhere.
+    c.fillStyle = '#00000b';
+    c.fillRect(rect.x0 - 20, rect.y0 - 20, rect.x1 - rect.x0 + 40, rect.y1 - rect.y0 + 40);
+    drawSky(c, view, rect);
+    drawMoon(c, rect);
+    // Slow camera: everything below rides the zoom so every tank stays seen.
+    c.translate(W / 2, H / 2);
+    c.scale(view.cam.z, view.cam.z);
+    c.translate(-view.cam.cx, -view.cam.cy);
+    // What the canvas shows through the camera: the scenery and the dirt fill all of it.
+    const z = view.cam.z;
+    const sx0 = Math.floor(view.cam.cx + (rect.x0 - W / 2) / z) - 8, sx1 = Math.ceil(view.cam.cx + (rect.x1 - W / 2) / z) + 8;
+    const sy0 = view.cam.cy + (rect.y0 - H / 2) / z, sy1 = view.cam.cy + (rect.y1 - H / 2) / z + 8;
+    c.fillStyle = '#23233f';
+    for (const cl of view.clouds) {
+      for (const lift of sy0 < -120 ? [0, sy0 * 0.45] : [0]) { // a tall sky gets a high layer too
+        c.globalAlpha = lift ? 0.6 : 1;
+        c.beginPath();
+        c.ellipse(cl.x, cl.y + lift, 30 * cl.s, 10 * cl.s, 0, 0, Math.PI * 2);
+        c.ellipse(cl.x + 22 * cl.s, cl.y + 3 + lift, 20 * cl.s, 8 * cl.s, 0, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+    c.globalAlpha = 1;
+    // Far dunes, across the whole view.
+    c.fillStyle = '#3a2408';
+    c.beginPath();
+    c.moveTo(sx0, H);
+    for (let x = sx0; x <= sx1 + 24; x += 24) c.lineTo(x, 396 - 18 * Math.sin(x / 190 + 2));
+    c.lineTo(sx1 + 24, H);
+    c.fill();
+    // The dirt and its layers, from the field's floor down to the canvas's.
+    c.fillStyle = '#2e1a08';
+    c.fillRect(sx0, H - 2, sx1 - sx0, Math.max(0, sy1 - H + 2));
+    c.fillStyle = '#26150a';
+    for (let y = H + 18; y < sy1; y += 36) c.fillRect(sx0, y, sx1 - sx0, 6);
+    // Scenery: the round's hills past both edges, dimmed; drawn, never hit.
+    if (view.hills) {
+      const hills = view.hills;
+      for (const [a, b] of [[sx0, 0], [W - 1, sx1]] as const) {
+        if (b <= a) continue;
+        c.fillStyle = '#4a2e14';
+        c.beginPath();
+        c.moveTo(a, H + 10);
+        for (let x = a; x < b; x += 4) c.lineTo(x, sceneryY(hills, view.terrain, x));
+        c.lineTo(b, sceneryY(hills, view.terrain, b));
+        c.lineTo(b, H + 10);
+        c.fill();
+        c.strokeStyle = '#2f6a2f';
+        c.lineWidth = 2;
+        c.beginPath();
+        for (let x = a; x < b; x += 4) {
+          const y = sceneryY(hills, view.terrain, x);
+          if (x === a) c.moveTo(x, y);
+          else c.lineTo(x, y);
+        }
+        c.lineTo(b, sceneryY(hills, view.terrain, b));
+        c.stroke();
+      }
+    }
+    // The field's ground with its flat green rim, edge to edge (no cliff at either edge).
+    c.fillStyle = '#7a4a1e';
+    c.beginPath();
+    c.moveTo(0, H + 10);
+    for (let x = 0; x < W; x += 4) c.lineTo(x, terrain(x));
+    c.lineTo(W - 1, terrain(W - 1));
+    c.lineTo(W - 1, H + 10);
+    c.fill();
+    c.strokeStyle = '#00aa00';
+    c.lineWidth = 3;
+    c.beginPath();
+    for (let x = 0; x < W; x += 4) {
+      const y = terrain(x);
+      if (x === 0) c.moveTo(x, y);
+      else c.lineTo(x, y);
+    }
+    c.lineTo(W - 1, terrain(W - 1));
+    c.stroke();
+```
+
+   A room before its first snapshot with hills (or a fixture without them) has `hills: null`: the dunes and the dirt still fill the sides, and nothing is cut off at the edge, because the dirt reaches the canvas floor and the far dunes span the view.
+
+   Drawing cost: the scenery is two polylines of at most (visible width ÷ 4) points each, three `Math.sin` per point, so at most about 600 points and 1,800 sines a frame on the widest screen at the camera's widest pull-back (z = 0.45); the field's own ground already draws 360 points.
+
+10. The header's first paragraph gains "the scenery past the field's edges and the dirt below it," after "hills,".
+
+`src/view.ts`: import `{ fitField, visibleWorld }` from `./field.ts` and `{ sceneryY }` from `./scenery.ts`; `H` stays imported. Delete the renderer's `size: { w: ROOM_W, h: H },` line, add `fitField, visibleWorld, sceneryY` to the `sim: { … }` object passed to `createRenderer`, and in the view object add `field: { w: G.w, h: H }, hills: G.hills,` after `terrain: G.terrain,`. Add, above `render()`:
+
+```ts
+  /* The backing store follows the battlefield box (at most two device pixels
+     per CSS pixel), so the field is drawn in the box's own shape and never
+     stretched; #stage tells the layout spec the width and where the field sits. */
+  let published = '';
+  function fitCanvas(cv: HTMLCanvasElement): void {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const bw = Math.round(cv.clientWidth * dpr), bh = Math.round(cv.clientHeight * dpr);
+    if (bw > 0 && bh > 0 && (cv.width !== bw || cv.height !== bh)) {
+      cv.width = bw;
+      cv.height = bh;
+    }
+    const fit = fitField({ w: cv.clientWidth || 1, h: cv.clientHeight || 1 }, { w: G.w, h: H });
+    const field = [fit.ox, fit.oy, G.w * fit.s, H * fit.s].map(v => Math.round(v)).join(',');
+    if (published !== `${G.w}|${field}`) {
+      published = `${G.w}|${field}`;
+      cv.dataset.w = String(G.w);
+      cv.dataset.field = field;
+    }
+  }
+```
+
+and call `fitCanvas(cv);` in `render()` right after `if (!cv || !G.terrain) return;`.
+
+`game.css`, in the frame block: `.canvas-holder`'s `gap: 6px;` becomes `gap: 0;`; `.field { … }` gains `margin: 0 -6px;`; `#stage { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; border-radius: 6px; }` becomes `#stage { display: block; width: 100%; height: 100%; justify-self: stretch; align-self: stretch; }`. Change the frame comment's "the battlefield taking what is left" to "the battlefield taking what is left, edge to edge and touching both bars, so no band of page shows between them".
+
+`test/render.test.mjs`: import `{ fitField, visibleWorld }` from `../src/field.ts` and `{ sceneryY }` from `../src/scenery.ts`; delete `size: { w: W, h: H },` from `deps` and add `fitField, visibleWorld, sceneryY` to its `sim`; add `field: { w: W, h: H }, hills: { a: [30, 16, 8], p: [1, 2, 3], f: [0.005, 0.01, 0.025] },` after `terrain, clouds: […],` in the frozen `view`, and in the no-context block nothing changes.
+
+- [ ] **Step 5: Run** — `node --test test/scenery.test.mjs test/field.test.mjs test/render.test.mjs && node ../_kit/build/build.mjs tankity && php tools/install-files.php && node --test 'test/*.test.mjs'` — Expected: PASS. Then `cd websites/www.cs && make e2e E2E_ARGS="tankity-layout.spec.mjs"` — Expected: PASS (the existing measurements are unchanged by the canvas filling the box).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src game.css test tsconfig.json dist sw.js index.html
+git commit -m "Tankity: the battlefield fills its box; hills continue as scenery, a tall box adds sky above and dirt below"
+```
+
+---
+
+### Task 27: The rotate hint
+
+**Files:**
+- Create: `games/tankity/src/rotate-hint.ts`, `src/ui/rotate-hint.tsx`, `test/rotate-hint.test.mjs`
+- Modify: `games/tankity/index.html`, `src/main.ts`, `game.css`, `tsconfig.json` (`src/rotate-hint.ts`), `src/tsconfig.dom.json` (`ui/rotate-hint.tsx`)
+
+**Interfaces:**
+- Produces: `ROTATE_HINT_KEY = 'tankity-rotate-hint'`; `rotateHintShows(s: { portrait: boolean; dismissed: boolean; playing: boolean }): boolean`; `RotateHint({ onDismiss })`; `renderRotateHint(root: Element, show: boolean, onDismiss: () => void): void`. The pref holds `'dismissed'` once the chip is closed.
+
+- [ ] **Step 1: Write the failing test**
+
+```js
+// games/tankity/test/rotate-hint.test.mjs
+// "Turn sideways for the full battlefield": in portrait, in a match, until dismissed.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { importTsx } from '../../_kit/test/tsx.ts';
+import { document } from '../../_kit/test/dom-stub.mjs';
+import { ROTATE_HINT_KEY, rotateHintShows } from '../src/rotate-hint.ts';
+
+const { renderRotateHint } = await importTsx(import.meta.dirname, { name: '../src/ui/rotate-hint.tsx' });
+
+test('only in portrait, only in a match, only until dismissed', () => {
+  assert.equal(rotateHintShows({ portrait: true, dismissed: false, playing: true }), true);
+  assert.equal(rotateHintShows({ portrait: false, dismissed: false, playing: true }), false);
+  assert.equal(rotateHintShows({ portrait: true, dismissed: true, playing: true }), false);
+  assert.equal(rotateHintShows({ portrait: true, dismissed: false, playing: false }), false, 'never over the demo');
+  assert.equal(ROTATE_HINT_KEY, 'tankity-rotate-hint');
+});
+
+test('the chip says it and closes', () => {
+  const root = document.createElement('div');
+  let closed = 0;
+  renderRotateHint(root, true, () => { closed++; });
+  assert.match(root.textContent, /Turn sideways for the full battlefield/);
+  const x = root.querySelector('button');
+  assert.equal(x.getAttribute('aria-label'), 'Dismiss');
+  x.click();
+  assert.equal(closed, 1);
+  renderRotateHint(root, false, () => {});
+  assert.equal(root.querySelector('.rotate-hint'), null);
+});
+```
+
+`importTsx`'s return and the stub's `createElement`/`querySelector`/`click` are the ones Plan C Tasks 12 and 17 use for `title.tsx` and `hud.tsx`; follow `test/title.test.mjs` exactly for the import line if its shape differs.
+
+- [ ] **Step 2: Run** — `node --test test/rotate-hint.test.mjs` — Expected: FAIL, module not found.
+
+- [ ] **Step 3: The rule, the chip and the wiring**
+
+```ts
+// games/tankity/src/rotate-hint.ts
+/* Operation Tankity: when the "turn sideways" chip shows (spec 6.6). DOM-free. */
+export const ROTATE_HINT_KEY = 'tankity-rotate-hint';
+export function rotateHintShows(s: { portrait: boolean; dismissed: boolean; playing: boolean }): boolean {
+  return s.portrait && s.playing && !s.dismissed;
+}
+```
+
+```tsx
+// games/tankity/src/ui/rotate-hint.tsx
+/* The "turn sideways" chip over the top of the battlefield. */
+import { render } from 'preact';
+
+export function RotateHint({ onDismiss }: { onDismiss(): void }) {
+  return (
+    <div class="rotate-hint" role="status">
+      <span>Turn sideways for the full battlefield</span>
+      <button type="button" class="rotate-x" aria-label="Dismiss" onClick={onDismiss}>×</button>
+    </div>
+  );
+}
+export function renderRotateHint(root: Element, show: boolean, onDismiss: () => void): void {
+  render(show ? <RotateHint onDismiss={onDismiss} /> : null, root);
+}
+```
+
+`index.html`: inside `#field`, after `<div id="title-root" data-ui></div>`, add `<div id="rotate-hint-root" data-ui></div>`.
+
+`src/main.ts`: import `{ ROTATE_HINT_KEY, rotateHintShows }` from `./rotate-hint.ts` and `{ renderRotateHint }` from `./ui/rotate-hint.tsx` (the kit's `pref`, `text` and `browserStorage` are already imported for the menu's prefs; add whichever is missing from the same modules `menu.ts` uses). Add, near the other prefs:
+
+```ts
+/* The rotate hint: portrait, a real match, until the player closes it once. */
+const rotateHint = pref(ROTATE_HINT_KEY, '', text, browserStorage());
+const portraitQuery = window.matchMedia('(orientation: portrait)');
+function refreshRotateHint(): void {
+  const root = document.getElementById('rotate-hint-root');
+  if (!root) return;
+  const show = rotateHintShows({ portrait: portraitQuery.matches, dismissed: rotateHint.get() === 'dismissed', playing: !G.demo && G.tanks.length > 0 });
+  renderRotateHint(root, show, () => { rotateHint.set('dismissed'); refreshRotateHint(); });
+}
+portraitQuery.addEventListener?.('change', refreshRotateHint);
+```
+
+and call `refreshRotateHint();` at the end of `refreshNavHints()` (the match calls it whenever a match starts, a round opens or the page resizes).
+
+`game.css`, after the chatter toast rules:
+
+```css
+/* "Turn sideways": a small chip at the top of the battlefield, in portrait only. */
+#rotate-hint-root { display: contents; }
+.rotate-hint {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 3;
+  display: flex; align-items: center; gap: 6px; padding: 2px 4px 2px 12px;
+  background: rgba(12, 15, 46, 0.92); border: 1px solid #3a3fb0; border-radius: 999px;
+  color: #eef; font: 600 12px/1.2 system-ui, sans-serif; white-space: nowrap;
+}
+#frame .rotate-x { min-width: 44px; min-height: 44px; padding: 0; background: none; border: 0; color: #9aa3c7; font-size: 18px; }
+@media (orientation: landscape) { .rotate-hint { display: none; } }
+```
+
+`tsconfig.json` gains `"src/rotate-hint.ts"`; `src/tsconfig.dom.json` gains `"ui/rotate-hint.tsx"` (the same lists `title.tsx` joined in Task 12).
+
+- [ ] **Step 4: Run** — `node --test test/rotate-hint.test.mjs && node ../_kit/build/build.mjs tankity && php tools/install-files.php && node --test 'test/*.test.mjs'` — Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src test/rotate-hint.test.mjs index.html game.css tsconfig.json dist sw.js
+git commit -m "Tankity: in portrait, a dismissible chip suggests turning sideways; the choice is remembered"
+```
+
+---
+
+### Task 28: `tankity-layout` checks the battlefield; docs; PR 13b
+
+**Files:**
+- Modify: `websites/www.cs/tests/e2e/tankity-layout.spec.mjs`, `tests/e2e/tankity-a11y.spec.mjs`
+- Modify: `games/tankity/README.md`
+
+**Interfaces:**
+- Consumes: `#stage`'s `data-w` and `data-field` (Task 26), `#rotate-hint-root` (Task 27).
+
+- [ ] **Step 1: Add the three checks, the width and the box to every device**
+
+In `tankity-layout.spec.mjs`, after `const landscapePhone = …;` add:
+
+```js
+/* The width each screen deals (spec 6.6): a device's portrait and landscape give the same. */
+const DEALT = { '1280x720': 1200, '1024x640': 1344, '1180x820': 984, '820x1180': 984, '393x852': 1224, '852x393': 1224, '360x740': 1176, '740x360': 1176 };
+/* The landscape box src/field.ts computes for a viewport, which the measured box must match. */
+function landscapeBox(vw, vh) {
+  const long = Math.max(vw, vh), short = Math.min(vw, vh);
+  return short <= 500 ? { w: long - 10, h: short - 75 } : { w: Math.min(long - 18, 1118), h: short - 294 };
+}
+
+/* The battlefield as drawn: no band of page between the bars, the ground at
+   both screen edges with no cut, and where the field sits. */
+function battlefield() {
+  const cv = document.getElementById('stage');
+  const box = document.getElementById('field').getBoundingClientRect();
+  const r = cv.getBoundingClientRect();
+  const bar = document.getElementById('hud-bar').getBoundingClientRect();
+  const deck = document.getElementById('deck');
+  const floating = getComputedStyle(deck).position === 'absolute';
+  const probs = [];
+  if (Math.abs(r.left - box.left) > 0.5 || Math.abs(r.right - box.right) > 0.5 || Math.abs(r.top - box.top) > 0.5 || Math.abs(r.bottom - box.bottom) > 0.5) {
+    probs.push('the canvas does not fill the battlefield');
+  }
+  if (Math.abs(box.top - bar.bottom) > 0.5) probs.push(`${Math.round(box.top - bar.bottom)}px between the status bar and the battlefield`);
+  if (!floating && Math.abs(deck.getBoundingClientRect().top - box.bottom) > 0.5) probs.push(`${Math.round(deck.getBoundingClientRect().top - box.bottom)}px between the battlefield and the deck`);
+  const holder = getComputedStyle(document.querySelector('.canvas-holder')).backgroundColor.match(/\d+/g).map(Number);
+  const c = cv.getContext('2d'), W = cv.width, H = cv.height;
+  const px = c.getImageData(0, 0, W, H).data;
+  const at = (x, y) => { const i = (y * W + x) * 4; return [px[i], px[i + 1], px[i + 2], px[i + 3]]; };
+  for (let y = 0; y < H; y += 2) {
+    let band = true;
+    for (let x = 0; x < W && band; x += 7) {
+      const [r0, g0, b0, a0] = at(x, y);
+      band = a0 < 255 || (r0 === holder[0] && g0 === holder[1] && b0 === holder[2]);
+    }
+    if (band) { probs.push(`a band of background at canvas row ${y}`); break; }
+  }
+  // Ground: dirt, hills, grass (warm or green), never the night sky (blue at least as strong as red).
+  const ground = ([r0, g0, b0]) => r0 > b0 + 10 || (g0 > b0 + 40 && g0 > r0);
+  const top = x => { let y = H - 1; while (y > 0 && ground(at(x, y))) y--; return y; };
+  const dpr = W / r.width;
+  for (const [edge, inward] of [[0, Math.round(8 * dpr)], [W - 1, W - 1 - Math.round(8 * dpr)]]) {
+    const te = top(edge), ti = top(inward);
+    if (te >= H - 1) probs.push(`no ground at canvas column ${edge}`);
+    if (Math.abs(te - ti) > 6 * dpr) probs.push(`the ground is cut at canvas column ${edge}: ${H - te} vs ${H - ti} px high`);
+  }
+  const [fx, fy, fw, fh] = cv.dataset.field.split(',').map(Number);
+  return { probs, w: Number(cv.dataset.w), field: { x: fx, y: fy, w: fw, h: fh }, canvas: { w: r.width, h: r.height }, box: { w: box.width, h: box.height } };
+}
+```
+
+In the per-device test, after the loop over `[false, true]` (the bars), add:
+
+```js
+    // The battlefield fills the screen between the bars, the ground meets both
+    // edges, and the field's width is the one this device deals either way up.
+    const bf = await page.evaluate(battlefield);
+    expect(bf.probs).toEqual([]);
+    expect(bf.w).toBe(DEALT[`${dev[1]}x${dev[2]}`]);
+    if (dev[1] > dev[2]) {
+      const want = landscapeBox(dev[1], dev[2]);
+      expect(Math.abs(bf.box.w - want.w), 'box width vs src/field.ts').toBeLessThanOrEqual(2);
+      expect(Math.abs(bf.box.h - want.h), 'box height vs src/field.ts').toBeLessThanOrEqual(2);
+    } else {
+      // Portrait: the field spans the full width, with sky above and dirt below.
+      expect(Math.abs(bf.field.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(bf.field.w - bf.canvas.w)).toBeLessThanOrEqual(1);
+      expect(bf.field.y).toBeGreaterThan(0);
+      expect(bf.field.y + bf.field.h).toBeLessThan(bf.canvas.h);
+    }
+```
+
+After the per-device loop, add two tests:
+
+```js
+test('the width holds through a resize and the next match takes the new one', async ({ browser }) => {
+  const { ctx, page } = await open(browser, DEVICES[0]);
+  await page.locator('.title-play').click();
+  await page.clock.runFor(200);
+  expect(Number(await page.locator('#stage').getAttribute('data-w'))).toBe(1200);
+  await page.setViewportSize({ width: 1024, height: 640 });
+  await page.clock.runFor(200);
+  expect(Number(await page.locator('#stage').getAttribute('data-w')), 'mid-match: rescaled, not re-dealt').toBe(1200);
+  expect((await page.evaluate(battlefield)).probs).toEqual([]);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /Play this seed/ }).click(); // a new deal (Menu, Task 14)
+  await page.clock.runFor(200);
+  expect(Number(await page.locator('#stage').getAttribute('data-w'))).toBe(1344);
+  await ctx.close();
+});
+
+test('the rotate hint: portrait only, in a match, gone once dismissed', async ({ browser }) => {
+  const { ctx, page } = await open(browser, DEVICES[4]);
+  expect(await page.locator('.rotate-hint').count(), 'not over the demo').toBe(0);
+  await page.locator('.title-play').click();
+  await page.clock.runFor(200);
+  await expect(page.locator('.rotate-hint')).toContainText('Turn sideways for the full battlefield');
+  await page.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(page.locator('.rotate-hint')).toHaveCount(0);
+  await page.reload();
+  await page.waitForSelector('#hud-score > span');
+  await page.locator('.title-play').click();
+  await page.clock.runFor(200);
+  expect(await page.locator('.rotate-hint').count(), 'remembered').toBe(0);
+  await ctx.close();
+});
+```
+
+`tankity-a11y.spec.mjs`: in the open-menu or deck pass it runs on a portrait phone, add the chip (`await page.locator('.title-play').click();` before axe runs on that page) so axe covers `.rotate-hint`. If that spec runs only at desktop size, leave it: the chip's name and target size are pinned by `rotate-hint.test.mjs` and the 44 px rule in `smallTargets()` does not include it, so add `#field .rotate-x` to `smallTargets()`'s selector list.
+
+- [ ] **Step 2: Run** — `cd websites/www.cs && make e2e E2E_ARGS="tankity-layout.spec.mjs tankity-a11y.spec.mjs"` — Expected: PASS, `tankity-layout` within 15 s (the battlefield check reads one canvas per device; the two new tests open one page each). Screenshots in `test-results/tankity-layout-*.png` show no bars, the scenery on the desktop and the sky and dirt on the phones.
+
+- [ ] **Step 3: Docs**
+
+`games/tankity/README.md`: add rows for `src/field.ts` ("How wide a solo field is dealt (from the landscape battlefield box, whichever way the device is held) and where the field sits in the box. DOM-free.") , `src/scenery.ts` ("The hills past the field's edges, for drawing only: the round's hills continued, eased from the field's edge.") and `src/rotate-hint.ts` / `src/ui/rotate-hint.tsx`. Add a paragraph "The battlefield": "The field is 460 world units tall. A room's is 720 wide; a solo match's is dealt at the start of each match, 460 × the battlefield box's landscape aspect, between 720 and 1440 on a whole number of 24-unit columns, and kept for the match: a resize or a turn only rescales. In portrait the width is the one the same device gives in landscape. The canvas fills the box: a wider box shows the round's hills continuing past both edges as dimmed scenery (`#stage`'s `data-w` and `data-field` give the width and the field's place); a taller box spans the field across and fills the rest with sky above and dirt below. The units spawn as on a 720 field and slide as a group along a wider one, and a drone prefers rivals within 696 px, so a wider field never makes shots longer. The server's sim takes the width; rooms pass 720, and `protocol/sim-vectors.json`'s `field` group pins 720, 1080 and 1440 bit for bit." In the tests table, add `test/field.test.mjs`, `test/wide-field.test.mjs`, `test/scenery.test.mjs`, `test/rotate-hint.test.mjs`, `test/php/FieldWidthTest.php` with one line each.
+
+- [ ] **Step 4: Verify**
+
+Run: `cd websites/www.cs && make test` — Expected: PASS within the budgets (the wide hit-rate comparison adds under 1 s to the unit tier).
+Run: `make e2e E2E_ARGS="tankity-layout.spec.mjs tankity-rooms-play.spec.mjs"` — Expected: PASS (a room still plays its 720 field, now with scenery).
+
+- [ ] **Step 5: Commit and open PR 13b**
+
+```bash
+git add -A websites/www.cs/tests/e2e websites/www.cs/games/tankity/README.md
+git commit -m "Specs: tankity-layout checks the battlefield fills the screen on eight devices; README: the battlefield"
+git push -u origin games/tankity-battlefield
+gh pr create --title "Tankity: the battlefield fills the screen" --body-file - <<'BODY'
+Spec row 13b (sections 6.6, 7.4). A solo match is dealt at a field width from the battlefield box's landscape shape (720–1440, whole 24-unit columns), the same whichever way the device is held, and keeps it for the match; rooms stay 720. The canvas fills the box: the round's hills continue past the edges as dimmed scenery, and a portrait screen spans the field across with sky above and dirt below. A dismissible chip suggests turning sideways in portrait. The units spawn as on a 720 field and slide as a group, and drones prefer rivals in reach, so a wider field never lengthens shots (hit rates at 1440 within 6 points of 720). The server's sim takes the width; sim vectors at 720, 1080 and 1440 are checked bit for bit in JS and PHP. tankity-layout checks no bars, ground at both edges, the portrait span and the dealt width on eight screens.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
+BODY
+```
+
+Run the pr-fix loop on review comments, gate (Global Constraints), merge on green, wait for deploy, live-check with `cd websites/www.cs && E2E_BASE_URL=https://www.cs.siue.edu/~wgrim/ tests/e2e/run.sh tankity-layout.spec.mjs`, and report `https://www.cs.siue.edu/~wgrim/play/tankity/?v=<merged sha>`.
+
 ---
 
 ## Self-review
 
-- **Spec coverage.** Row 10: guard rules (Tasks 2–4), validated config (2), PHPUnit per rule (2–4), Cylon unchanged (5, with `cylon-play` locally), copy-not-deploy (1, 5). Row 11: keys per 6.3 (6), `cycle` gone and Esc toggles (7), chips from the table and only with a fine pointer (8), Help lists every key (9), specs updated (10). Row 12: title card over the dimmed demo with Play / Play with friends / Tutorial / Settings and initials (11–13), one set of initials for solo and rooms (13), card after a match and after a room (13), settings-only menu that keeps Difficulty (14), focus in and back (13), `tankity-start` (15). Row 13: status bar order, pills, lives `♥ N`, segmented badge (17, 19), Weapon "34 dmg · M" at 55 px (16, 17, 20), toast and no sky gauge (18, 20), portrait and landscape layouts with translucent arrows (20), breakpoints (20), eight-device measurement (20), `a11y` (21). Standings in the menu belong to row 15 and are not here.
+- **Spec coverage.** Row 10: guard rules (Tasks 2–4), validated config (2), PHPUnit per rule (2–4), Cylon unchanged (5, with `cylon-play` locally), copy-not-deploy (1, 5). Row 11: keys per 6.3 (6), `cycle` gone and Esc toggles (7), chips from the table and only with a fine pointer (8), Help lists every key (9), specs updated (10). Row 12: title card over the dimmed demo with Play / Play with friends / Tutorial / Settings and initials (11–13), one set of initials for solo and rooms (13), card after a match and after a room (13), settings-only menu that keeps Difficulty (14), focus in and back (13), `tankity-start` (15). Row 13: status bar order, pills, lives `♥ N`, segmented badge (17, 19), Weapon "34 dmg · M" at 55 px (16, 17, 20), toast and no sky gauge (18, 20), portrait and landscape layouts with translucent arrows (20), breakpoints (20), eight-device measurement (20), `a11y` (21). Standings in the menu belong to row 15 and are not here. Row 13b: the solo width from the landscape box, held either way, with its clamps and columns (22); fixed per match (22, 25, 28); terrain, placement, out of bounds, the AI and the hit rates at any width (23); the server's sim taking the width, rooms at 720 with their hills, vectors at 720/1080/1440 bit for bit (24); no bars, scenery that continues the hills with no step over 1 px at the seam and is not hittable, sky above and dirt below in portrait (26); the rotate hint as a kit `pref` (27); the three new `tankity-layout` checks on all eight devices (28).
 - **Placeholders.** None; each edit quotes the current text or gives the whole new file.
-- **Names.** `ScoreGuard` methods (with `rateTake`, which Plan D's rooms use), `initialsPref`, `savedInitials`/`getInitials`, `createTitle`/`openTitle`/`closeTitle`/`titleOpen`/`renderTitle`, `backToTitle`, `weaponLine`, `renderGunLabel`, `placeLogBelowStatus`, `cardOpen` are used with the same signatures in every task, and Plans B (Task 24) and D use them as named here.
+- **Names.** `ScoreGuard` methods (with `rateTake`, which Plan D's rooms use), `initialsPref`, `savedInitials`/`getInitials`, `createTitle`/`openTitle`/`closeTitle`/`titleOpen`/`renderTitle`, `backToTitle`, `weaponLine`, `renderGunLabel`, `placeLogBelowStatus`, `cardOpen`, and from PR 13b `fieldWidthOk`, `createFieldWidth`, `fitField`, `genTerrain(rng, w)`, `hillY`, `bandOffset`, `REACH_X`, `sceneryY`, `room_field_width`, `room_gen_hills`, `room_band_offset`, are used with the same signatures in every task, and Plans B (Task 24) and D use them as named here.
 - **Kit reuse.** Chips are the kit's `KeyChip`, the title card is the kit's `Dialog`, and component tests use the kit's `importTsx` and `dom-stub.mjs`; no Tankity-only copies.
-- **Review Focus.** Each line has its test in the owning task (6, 13, 4, 11, 20).
+- **Review Focus.** Each line has its test in the owning task (6, 13, 4, 11, 20, 22 and 28, 23 and 24).

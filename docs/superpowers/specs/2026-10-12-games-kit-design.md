@@ -108,7 +108,7 @@ Their hand-built overlays (`createElement`/`innerHTML`) become kit `ui/` compone
 Mockups: `controls-and-key-chips.html` (desktop deck and chips), `layout-all-devices.html` (eight devices, solo and room, worst-case values).
 
 - **Status bar on top**, in this order: Menu (with an inline `Esc` chip), angle, power, fuel, **AMMO** pill (orange), **ARMOR** pill (green), **lives** pill (pink, always `♥ N`, `aria-label="N lives"`), **WIND** pill, and the **match badge**, one segmented outline: `$cash | ROUND n | score PTS` in solo, `ROOM code | YOU seat | ROUND n` in a room.
-- **Battlefield** in the middle. Chatter is a one-line toast. The wind badge leaves the sky.
+- **Battlefield** in the middle, touching the status bar and the deck and running to the frame's sides (section 6.6). Chatter is a one-line toast. The wind badge leaves the sky.
 - **Control deck** below, in labelled groups: **Aim** (barrel and power arrows, every arrow says which), **Drive (uses fuel)** (Left, Right), **More** (Radio, Next song, Help), **Weapon** (the gun's name over "34 dmg · M", 55 px tall like its neighbours; G opens the picker), and a large rounded-rectangle **FIRE**. Damage is the gun's `dmg`; blast size S/M/L comes from its `radius`, with the cut-offs in one tested function.
 - **Portrait phone:** the same deck without group headings; Shell sits directly on FIRE, its top level with ▲; Next song moves to the Menu. The status bar has three rows: Menu and aiming numbers; the four pills; the full-width match badge.
 - **Landscape phone:** controls float over the battlefield's lower corners. Arrow keys there are translucent gold (`rgba(255,201,60,.55)`) with white text and a dark halo; other buttons keep their solid style. Shell stacks above FIRE with a clear gap. Radio, Help and Next song move to the Menu.
@@ -138,6 +138,30 @@ Visible labels match each `aria-label` (WCAG 2.5.3); `aria-expanded` on everythi
 - Next song shows a toast "♫ Title · Author".
 - A unit test checks that `game.yaml`, `CREDITS.md` and `audio/music/` agree.
 
+### 6.6 The battlefield fills the screen
+
+Landscape is the preferred way to play. Portrait is allowed and looks as finished. There are no black bars anywhere, and no terrain is cut off sharply where it shows.
+
+- **No bars.** The canvas fills the battlefield box, which touches the status bar and the deck and runs to the frame's sides. Nothing between the status bar and the deck shows the page's background.
+- **The field's width W.** The field is always 460 world units tall. A room's is 720 wide, the same for everyone. A solo match's is set at the deal: W = 460 × long side ÷ short side of the battlefield box in landscape, clamped to 720–1440 and rounded to a whole number of 24-unit terrain columns. Demo, tutorial and Play again deal the same way.
+- **Map sizing never depends on portrait.** On every device (desktop, tablet or phone), W comes only from the battlefield box's landscape shape. On a device held in portrait, that is the box the device would give in landscape, with the viewport's long side as its width. The box is computed from the viewport, never measured, so both orientations give the same W:
+  - when the short side is 500 px or less (the landscape-phone layout), the box is (long − 10) × (short − 75);
+  - otherwise it is min(long − 18, 1118) × (short − 294).
+
+  `tankity-layout` checks that this is within 2 px of the measured box on every landscape device. For example, 1280×720 gives 1200; 1024×640 gives 1344; 1180×820 and 820×1180 give 984; 852×393 and 393×852 give 1224; 740×360 and 360×740 give 1176.
+- **W is fixed for the match.** Resizing, rotating or going full screen mid-match only rescales the view. The next match takes the new W. Portrait only scales and frames the landscape field (sky above, dirt below, the rotate hint) and never changes the map.
+- **Fitting the field.** The field is scaled by s = min(box width ÷ W, box height ÷ 460).
+  - A box wider than the field (a room, a clamped W, or full screen) centres the field. The hills continue past both edges as scenery.
+  - A taller box (portrait) spans the field across the full width. The night sky, with its stars, clouds and moon, fills the space above, up to the status bar; it takes 60 % of the leftover height. The dirt and its layers fill the rest below, down to the deck. It reads as one picture, not a box.
+- **Scenery.** The hills past the field's edges are drawn from the same terrain generator, continuing the same seed's hills. The generator is a sum of three sines, evaluated past the edges. Next to each edge the scenery eases from the field's current edge height over max(48, |difference|) px, so a crater at the edge leaves no cliff. At the seam the scenery adds no step greater than 1 px beyond the hills' own slope. It is dimmed and desaturated. It is not hittable and not part of the sim: a shell that leaves the field flies on over the scenery and is out of play, as it is today. A room's snapshot carries the round's nine hill numbers, so rooms draw the same scenery.
+- **Rotate hint.** In portrait, a small dismissible chip says "Turn sideways for the full battlefield". It shows at the start of each portrait match until it is dismissed, and dismissing it is remembered as a kit `pref` (`tankity-rotate-hint`). It never shows in landscape.
+- **Fair at any width.** A wider field is more ground, not longer shots:
+  - Terrain: the same nine draws make the hills, and W columns are filled. The first 720 columns of a wide field are exactly the 720 field of the same seed.
+  - Placement: the units spawn exactly as on a 720 field (same draws, same gaps). Then, when W > 720, one more draw slides the whole group by a whole number in 0…W − 720, and units face the middle of their group. The distances between units, and so every shot's length, are distributed the same at any width.
+  - Wind: the range is unchanged (±8 at the deal, ±12 at most).
+  - The drone AI searches the same angle and power grid, with out of bounds at W. It prefers rivals within 696 px (the widest gap a 720 field allows, so the rule never changes a room), else the nearest. It drives within the field.
+  - Pinned by the drones' measured hit rates at W = 1440, which stay within 6 points of W = 720.
+
 ## 7. Tankity rules
 
 ### 7.1 Armor
@@ -159,6 +183,12 @@ Visible labels match each `aria-label` (WCAG 2.5.3); `aria-expanded` on everythi
 - The 40-turn watch cap (`WATCH_TURNS`) stays.
 - Sim vectors cover the last-human-standing rule.
 
+### 7.4 Field width on the server
+
+- The server's simulation takes the field width W as a parameter wherever it assumed 720 (terrain, placement, out of bounds, the drone AI). Rooms pass 720.
+- A solo run records its W when it starts, with the seed and the difficulty (section 8). The server takes W only as an integer from 720 to 1440 that is a multiple of 24, and refuses anything else (422). It deals and plays every round of that run at that W.
+- Shared sim vectors at W = 720, 1080 and 1440 (terrain, placement, out of bounds, the drone's choice of target) are checked bit for bit in both JavaScript and PHP.
+
 ### 7.3 Scoreboards (this match only)
 
 Mockup: `scoreboards.html`.
@@ -176,7 +206,7 @@ Mockup: `scoreboards.html`.
 - Existing solo entries (free-text callsigns, 1–24 characters) are converted once onto the Normal board, each callsign's best run: letters uppercased, everything else dropped, cut or padded with X to three.
 - `games/_kit/php/score-guard.php`, generalized from Cylon's `scores.php`: Origin/Referer allow-list; CSRF double-submit (cookie must match header); single-use, expiring run tokens; per-IP rate limits keyed by an HMAC of the IP; initials validation and blocklist; validated config. Cylon moves onto it with no behaviour change; Tankity's score and room endpoints use it.
 - Rooms: the server computes and files every score itself; the client never sends one.
-- **The server keeps a solo run as it is played; nothing is replayed at the end.** A dealt match starts a run (the seed and the difficulty) on a single-use guard run token, and the server deals the same match and stores it. As each round ends the browser sends that round's inputs (each shop purchase before it; each shot's weapon, angle, power and where the tank had driven to) with its claim of how the round ended (the end, score, cash, lives and rounds won). The server plays the round from the run's stored state with the same PHP rules and the same fixed-step flight, stores the new state and the running score in SQLite, and answers its own claim. When the match ends the server already holds the score: filing spends the run token and files that score; any score the client sends is ignored.
+- **The server keeps a solo run as it is played; nothing is replayed at the end.** A dealt match starts a run (the seed, the difficulty and the field width W, section 7.4) on a single-use guard run token, and the server deals the same match and stores it. As each round ends the browser sends that round's inputs (each shop purchase before it; each shot's weapon, angle, power and where the tank had driven to) with its claim of how the round ended (the end, score, cash, lives and rounds won). The server plays the round from the run's stored state with the same PHP rules and the same fixed-step flight, stores the new state and the running score in SQLite, and answers its own claim. When the match ends the server already holds the score: filing spends the run token and files that score; any score the client sends is ignored.
 - The server's play is the authority. A round it cannot play (an illegal shot or purchase, shots after the round ended) or whose outcome differs from the client's claim voids the run: once the two disagree, no later round could match, so nothing from that run files. A round sent twice answers its stored reply; one out of order is refused.
 - Limits are per round, not per run: at most 2 s of CPU and 200 player shots per round, and rounds are rate-limited per IP. A run expires two hours after the last round the server accepted, and a day after it started at the latest; an expired run cannot advance or file. Rounds that could not be sent wait in the browser and go, in order, when it is next online.
 - PHPUnit covers every guard rule (bad origin, missing or mismatched CSRF, reused or expired token, rate limit) and the per-round play (a tampered round, a lying claim, a forged score field, a round sent twice or out of order, an expired run, and an honest run that files at exactly the score the browser showed).
@@ -237,6 +267,7 @@ Each PR tightens the comments in the files it touches:
 | 11 | Tankity keys and key chips | |
 | 12 | Tankity title card (with initials) and settings-only menu | |
 | 13 | Tankity layout, pills, deck, phone layouts; `a11y` and eight-device layout specs | |
+| 13b | Tankity battlefield fills the screen (6.6, 7.4): solo W from the landscape box, the field fitted with scenery, sky and dirt, the rotate hint; the sim and the server's sim take W, rooms stay 720; sim vectors at 720, 1080 and 1440 | after 13, before 19's Tankity work and Plan D |
 | 14 | Tankity armor rules (client, server, sim vectors) | |
 | 15 | Tankity match end, scoreboards, Play again, auto-filed scores, a board per difficulty, board conversion | after 20 |
 | 20 | Tankity storage: one SQLite database (rooms off shared memory, scores), its location and the import of the old score files, cleanup on requests; host probe first | after 13 and 19, before 14 |
@@ -245,9 +276,9 @@ Each PR tightens the comments in the files it touches:
 | 19 | Install and exit: full-screen manifests, per-game icon sets (maskable, Apple, monochrome), kit `app.ts`, Quit in each game, Install and Share buttons (kit `install.ts`) after a real-browser probe of where Chromium prompts | after 5; Tankity's Quit lands with 12 if 12 is in flight |
 | 18 | Typed tests: every remaining `*.test.mjs` becomes `*.test.ts` on `node:test` directly, and every PHP check script a real PHPUnit `TestCase`; each game's `tsconfig.test.json` (with `@types/node`) joins its `build.json` programs; the `check()` and `LegacyCheckCase` bridges are deleted | last; tests in any area a plan B–E PR touches are rewritten in that PR onto `node:test` as `*.test.mjs` (section 3), and this row renames them to `*.test.ts` with the rest |
 
-After 6, the Crete line (7–9) and the Tankity line (11–17, with 20 in front of 14) touch different files and run in parallel worktrees; 14 and 17 are independent of each other, and 15 needs 20's database. Each implementing agent's job stays at about 20 minutes or less.
+After 6, the Crete line (7–9) and the Tankity line (11–17, with 13b after 13 and 20 in front of 14) touch different files and run in parallel worktrees; 14 and 17 are independent of each other, and 15 needs 20's database. Each implementing agent's job stays at about 20 minutes or less.
 
-New specs and their budgets: `tankity-start`, `tankity-layout` (the eight-device measurement, plus chip centres within 1 px of their row), `a11y` (axe-core over the title card, deck and open menu), each ≤ 15 s. Existing specs that use `#btn-menu`, `C`, `W`/`S`, `A`/`D` or `Q` change in the PR that changes those keys.
+New specs and their budgets: `tankity-start`, `tankity-layout` (the eight-device measurement, plus chip centres within 1 px of their row; from 13b also no band of background between the status bar and the deck, the ground meeting each screen edge with no cut, the field filling the width in portrait, and W the same for a device's portrait and landscape boxes), `a11y` (axe-core over the title card, deck and open menu), each ≤ 15 s. Existing specs that use `#btn-menu`, `C`, `W`/`S`, `A`/`D` or `Q` change in the PR that changes those keys.
 
 ## Done when
 

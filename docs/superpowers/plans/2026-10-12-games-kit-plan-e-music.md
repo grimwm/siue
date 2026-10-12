@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-12-games-kit-design.md` (section 6.5 Music; PR row 17 of section 10). The code this plan changes is Plan A's result (the kit exists, Tankity is TypeScript under `src/`, tests are `*.test.mjs` under `test/`) plus the PRs that land before it, below.
 
-**Landing order across plans:** difficulty PR → B6 ∥ C10 → B7 → (B8 ∥ B9) ∥ (C11 → C12 → C13) → B19 → D20 → D14 → D15 → D16 → E17 → row 18. (D20 is Plan D's storage PR, spec row 20.)
+**Landing order across plans:** difficulty PR → B6 ∥ C10 → B7 → (B8 ∥ B9) ∥ (C11 → C12 → C13 → C13b) → B19 → D20 → D14 → D15 → D16 → E17 → row 18. (D20 is Plan D's storage PR, spec row 20.)
 
 **Cross-plan dependencies:**
 - The branch starts from `main` after Plan B's PR 6 and Plan C's PR 13 have merged (and rebases onto anything that lands after it starts). PR 6 rewrote `test/audio.test.mjs` onto `node:test` and the kit's fake audio context, and moved `src/audio.ts`'s context onto the kit's audio core; this plan's `test/audio-announce.test.mjs` uses that same `fakeAudioContext` from `games/_kit/test/audio.ts`.

@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-12-games-kit-design.md`: sections 1 (`audio/core.ts`, `ui/`), 4 (Crete's maze), 5 (overlays), 11 (install and exit), and section 10 rows 6, 7, 8, 9 and 19. Plan A (`docs/superpowers/plans/2026-10-12-games-kit-plan-a-foundation.md`) built the kit this plan extends.
 
-**Landing order across plans:** difficulty PR → B6 ∥ C10 → B7 → (B8 ∥ B9) ∥ (C11 → C12 → C13) → B19 → D20 → D14 → D15 → D16 → E17 → row 18. (D20 is Plan D's storage PR, spec row 20.)
+**Landing order across plans:** difficulty PR → B6 ∥ C10 → B7 → (B8 ∥ B9) ∥ (C11 → C12 → C13 → C13b) → B19 → D20 → D14 → D15 → D16 → E17 → row 18. (D20 is Plan D's storage PR, spec row 20.)
 
 **Cross-plan dependencies:**
 - PR 7 lands before Plan C's PR 11: Plan C renders Tankity's key chips with this plan's `KeyChip` (`at` and `decorative`, Task 6), builds its title card on `Dialog`, and loads its component tests with `importTsx` and the moved `dom-stub.mjs` (Task 5).

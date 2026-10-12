@@ -73,11 +73,15 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
   - Site: `php tools/site-game-pages.php` (site root) writes the site's page
     for each game, `play/<id>/index.html`:
     - a `play` game: the site navbar (William Grim, Home, Contact, a GitHub
-      link, Games, and the game's name), painted from `theme_color`,
+      link, Games, the game's name, and Install and Share), painted from `theme_color`,
       `background_color` and `accent_color`, over a full-height frame running
       the game's own page. `play/play.js` hands the frame the address's query
-      and hash (room invites ride on `?code=`) and gives it the keyboard;
-    - a `start` game: a page that forwards to the site with `?game=<id>`.
+      and hash (room invites ride on `?code=`) and gives it the keyboard.
+      Install and Share sit at the end of the navbar, drawn by the game's own
+      `dist/install.js` (the kit's `install.ts`); `?install` highlights
+      Install, or on iOS opens the Add to Home Screen steps on the game's page;
+    - a `start` game: a page that forwards to the site with `?game=<id>`,
+      keeping the address's query (`?install`).
     Both carry the game's link previews (title, description, `image`): the
     tags chat apps and social sites read when a link is shared. Run the tool
     after editing a `metadata.yaml`; `make test` and `make deploy` refuse
@@ -90,9 +94,19 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
     `short_name`, `description` and the two colors, and, for a `play` game,
     links it (plus `theme-color` and the iOS home-screen tags) from the
     game's page inside a marked block that holds nothing about the site. Each
-    game folder needs two square PNG icons, `icon-192.png` and
-    `icon-512.png`; the tool reports a game without them. Every URL in a
-    manifest is relative, because the site is served from a `~user` path.
+    game installs as its own full-screen app (`display_override:
+    ["fullscreen", "standalone"]`). Its icons are rendered from
+    `tools/icon.svg` by `node _kit/build/icons.mjs <id>` (any 192 and 512,
+    maskable 192 and 512, monochrome 512, Apple 180), and `tools/install-files.php
+    --check` fails on a missing or wrong-sized one; `icons.mjs <id> --check`
+    (in each game's `test.sh`) fails when the drawing changed without a rerun.
+    Every game has a Quit through `_kit/app.ts` (Tankity: Menu, Quit; Cylon:
+    the Game On toggle; Crete: the Quit button or Q): an installed app closes
+    where the platform allows, otherwise the game shows its title card and
+    says to swipe the app away. Every URL in a manifest is relative, because
+    the site is served from a `~user` path.
+    - A page game's page also loads `dist/install.js`, which shows the same
+      Install and Share bar in a corner when the address has `?install`.
     - A `play` game also gets `sw.js`, registered from its page with the game
       folder as scope. It precaches the folder's `.html .js .css .json .png`
       files (not tests, the `image:` picture, or `sw.js`) so the game opens

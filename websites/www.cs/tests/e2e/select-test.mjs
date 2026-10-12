@@ -33,6 +33,8 @@ check('site-shell-skips-tankity', select([`${S}site.css`]).some(s => s.startsWit
 has('union-of-files', select([`${S}games/crete/src/main.ts`, `${S}tests/e2e/tankity-audio.spec.mjs`]), ['games-hub.spec.mjs', 'tankity-audio.spec.mjs']);
 has('play-page-runs-install-spec', select([`${S}play/play.css`, `${S}tools/site-game-pages.php`]), ['games-install.spec.mjs']);
 has('a-page-game-runs-install-spec', select([`${S}games/crete/index.html`, `${S}games/tankity/index.html`]), ['games-install.spec.mjs']);
+check('kit-icon-renderer-runs-no-spec', select([`${S}games/_kit/build/icons.mjs`, `${S}games/_kit/build/icons.test.mjs`]), 'NONE');
+check('a-game-icon-drawing-runs-no-spec', select([`${S}games/crete/tools/icon.svg`]), 'NONE');
 check('generated-sources-run-nothing', select([`${S}games/tankity/game.yaml`, `${S}games/tankity/fx/blender/moon.blend`]), 'NONE');
 check('effects-editor-runs-the-effects-spec', select([`${S}games/tankity/fx-editor.html`]), ['tankity-fx-editor.spec.mjs']);
 check('effects-editor-source-runs-the-effects-spec', select([`${S}games/tankity/src/fx/editor.ts`, `${S}games/tankity/dist/fx-editor.js`]), ['tankity-fx-editor.spec.mjs']);

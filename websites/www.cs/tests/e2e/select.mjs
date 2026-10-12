@@ -42,7 +42,7 @@ const RULES = [
   [new RegExp(`^${SITE}games/[^/]+/(audio/sfx/build_sfx\\.sh|game\\.yaml|\\.gitignore)$`), 'NONE'],
   // The kit's own tests and docs, and a game's unit tests: not what a browser runs.
   [new RegExp(`^${SITE}games/[^/]+/test/`), 'NONE'],
-  [new RegExp(`^${SITE}games/_kit/(README\\.md|test/|php/tests/|build/(build\\.test\\.mjs|fixture/))`), 'NONE'],
+  [new RegExp(`^${SITE}games/_kit/(README\\.md|test/|php/tests/|build/(build\\.test\\.mjs|icons(\\.test)?\\.mjs|fixture/))`), 'NONE'],
   // The score guard reaches a browser only as the copy each game commits in
   // its server/, and that copy selects its own game's specs. The rest of the
   // kit's PHP (install-core.php) writes every game's pages: ALL, below.

@@ -226,9 +226,16 @@ if [ "${PRUNE:-0}" = 1 ] && [ -s "$work/gone" ]; then
   sftp_batch "$work/prune"
 fi
 
-# The scores file is the server's: create it if missing, and keep it 666 so
-# PHP (a different user) can write it in place.
-if ! "${sshpass[@]}" scp -q "$HOST:$SCORES" "$work/scores" 2>/dev/null; then
+# The scores file is the server's: create it only when a listing of its folder
+# succeeds and does not show it, and keep it 666 so PHP (a different user) can
+# write it in place. A failed listing stops here, before the stamp, so a
+# network error can never replace live scores with an empty board.
+scores_dir=$(dirname "$SCORES")
+if ! listing=$(printf 'ls -1 %s\n' "$scores_dir" | "${sshpass[@]}" sftp -q -oBatchMode=no -b - "$HOST" 2>&1); then
+  echo "deploy: cannot list $scores_dir on $HOST; scores left untouched, rerun the deploy" >&2
+  exit 1
+fi
+if ! grep -q "/$(basename "$SCORES")\$" <<<"$listing"; then
   echo '{"week":[],"alltime":[]}' >"$work/scores"
   chmod 666 "$work/scores"
   "${sshpass[@]}" scp -q -p "$work/scores" "$HOST:$SCORES"

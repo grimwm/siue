@@ -22,7 +22,7 @@ test('builds every entry with a linked source map', t => {
   const dir = scratch(t);
   const r = run(dir);
   assert.equal(r.status, 0, r.stderr);
-  assert.deepEqual(readdirSync(join(dir, 'dist')).sort(), ['main.js', 'main.js.map']);
+  assert.deepEqual(readdirSync(join(dir, 'dist')).sort(), ['THIRD_PARTY_LICENSES.txt', 'main.js', 'main.js.map']);
   assert.match(readFileSync(join(dir, 'dist/main.js'), 'utf8'), /\/\/# sourceMappingURL=main\.js\.map\n?$/);
 });
 
@@ -105,4 +105,54 @@ test('a per-game node_modules is refused: everything resolves from games/node_mo
   assert.equal(r.status, 1);
   assert.match(r.stderr, /node_modules.*delete it/);
   assert.ok(!existsSync(join(dir, 'dist')));
+});
+
+const LICENSES = 'dist/THIRD_PARTY_LICENSES.txt';
+const preactVersion = JSON.parse(readFileSync(join(HERE, '..', '..', 'node_modules/preact/package.json'), 'utf8')).version;
+
+test('ships the licenses of bundled npm packages: name, version, license and full text', t => {
+  const dir = scratch(t);
+  run(dir);
+  const text = readFileSync(join(dir, LICENSES), 'utf8');
+  assert.ok(text.includes(`preact ${preactVersion}\nLicense: MIT\n`));
+  assert.match(text, /Permission is hereby granted, free of charge[\s\S]*THE SOFTWARE IS PROVIDED "AS IS"/);
+  assert.ok(text.includes('Jason Miller'));
+});
+
+test('the bundle begins with the third-party licenses banner', t => {
+  const dir = scratch(t);
+  run(dir);
+  assert.ok(readFileSync(join(dir, 'dist/main.js'), 'utf8').startsWith('/*! Third-party licenses: THIRD_PARTY_LICENSES.txt */\n'));
+});
+
+test('the licenses file is deterministic and holds no absolute paths or CRs', t => {
+  const dir = scratch(t);
+  run(dir);
+  const first = readFileSync(join(dir, LICENSES));
+  rmSync(join(dir, 'dist'), { recursive: true });
+  run(dir);
+  assert.ok(first.equals(readFileSync(join(dir, LICENSES))));
+  const text = first.toString('utf8');
+  assert.ok(!text.includes(dir) && !text.includes('\r'));
+  assert.doesNotMatch(text, /\/Users\/|\/home\/|node_modules|[A-Z]:\\\\|file:\/\//);
+});
+
+test('--check fails when the licenses file is edited or deleted', t => {
+  const dir = scratch(t);
+  run(dir);
+  writeFileSync(join(dir, LICENSES), 'edited\n');
+  assert.equal(run(dir, '--check').status, 1);
+  run(dir);
+  rmSync(join(dir, LICENSES));
+  const r = run(dir, '--check');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /THIRD_PARTY_LICENSES\.txt/);
+});
+
+test('a game bundling no npm package gets no licenses file and no banner', t => {
+  const dir = scratch(t);
+  writeFileSync(join(dir, 'src/main.ts'), 'export const x: number = 1;\nconsole.log(x);\n');
+  assert.equal(run(dir).status, 0);
+  assert.ok(!existsSync(join(dir, LICENSES)));
+  assert.doesNotMatch(readFileSync(join(dir, 'dist/main.js'), 'utf8'), /Third-party licenses/);
 });

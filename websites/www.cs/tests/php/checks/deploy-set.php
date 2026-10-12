@@ -44,6 +44,8 @@ $set = array_flip($out);
 foreach (['games/tankity/dist/main.js', 'games/tankity/dist/fx.js', 'games/tankity/fx/sprites/sprites.json', 'games/tankity/game.json', 'games/tankity/sw.js', 'games/tankity/rooms.php', 'games/tankity/server/settings.php', 'games/tankity/server/store.php', 'games/tankity/server/sim.php', 'games/tankity/server/ai.php', 'games/tankity/server/rules.php', 'games/tankity/server/protocol.php', 'games/tankity/server/.htaccess'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
+// The licenses of the npm code inside a game's bundle ship beside it.
+$check('ships games/tankity/dist/THIRD_PARTY_LICENSES.txt', isset($set['games/tankity/dist/THIRD_PARTY_LICENSES.txt']));
 // Cylon: the bundle, its page pieces and server.
 foreach (['games/cylon/dist/main.js', 'games/cylon/css/eye.css', 'games/cylon/css/units.css', 'games/cylon/css/intro.css', 'games/cylon/mount.html', 'games/cylon/scores.php', 'games/cylon/manifest.webmanifest'] as $f) {
     $check("ships $f", isset($set[$f]));

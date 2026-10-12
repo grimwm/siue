@@ -204,14 +204,9 @@ check('no-seed-leak', (() => {
 })());
 check('lobby-css-acts-right', /\.card \.acts\s*\{[^}]*justify-content:\s*flex-end/.test(css));
 for (const id of ['btn-sound', 'btn-music']) check('audio-rendered-' + id, rendered(id));
-check('css-fit-windowed', /\.canvas-holder\s*\{[^}]*100vh/.test(css));
+check('css-fit-windowed', /\nbody\s*\{[^}]*height:\s*100dvh/.test(css) && /\n\.field\s*\{[^}]*flex:\s*1/.test(css));
+check('css-breakpoints', ['@container (max-width: 1100px)', '@container (max-width: 860px)', '@container (max-width: 760px)'].every(q => css.includes(q)));
 check('css-fit-fullscreen', /#frame:fullscreen\s*\{[^}]*overflow:\s*hidden/.test(css));
-check('css-actions-grid', /\.guide-actions\s*\{[^}]*display:\s*grid/.test(css));
-check('css-menu-top', /\.menubar\s*\{[^}]*top:\s*0\.5rem/.test(css));
-check('css-menu-centered', /\.menubar\s*\{[^}]*justify-content:\s*center/.test(css));
-check('css-menu-row', /\.menubar\s*\{[^}]*flex-wrap:\s*nowrap/.test(css));
-check('css-menu-block', /\.menubar\s*\{[^}]*background/.test(css));
-check('css-stats-strip', /\.hudbar\s*\{[^}]*position:\s*static/.test(css));
 check('key-hints', html.includes('data-keyhint="global:fire" aria-hidden="true">Space<') && html.includes('data-keyhint="aim:driveLeft" aria-hidden="true">Shift+←<'));
 check('key-style', /\n\.key\s*\{[^}]*background:\s*#14183a/.test(css) && /@media \(hover: hover\) and \(pointer: fine\)/.test(css));
 // Panels live over the battle, never beside it; L/H/R flip them without pausing.

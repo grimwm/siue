@@ -77,12 +77,12 @@ button {
   cursor: pointer;
 }
 button:hover { border-color: var(--accent); }
-button.btn-primary, .pad-grid button {
+button.btn-primary {
   background: var(--accent);
   color: #1a1a1a;
   border-color: var(--accent);
 }
-button.btn-primary:hover, .pad-grid button:hover { filter: brightness(1.08); }
+button.btn-primary:hover { filter: brightness(1.08); }
 /* Ready, once pressed, reads as held down until it is pressed again. */
 button.btn-primary[aria-pressed="true"] { background: var(--panel); color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
 button:focus-visible, input:focus-visible { outline: 3px solid var(--safe); outline-offset: 2px; }
@@ -114,82 +114,6 @@ button:disabled { opacity: 0.45; cursor: default; }
 }
 .key:empty { display: none; }
 
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1120px);
-  gap: 1rem;
-  padding: 1rem 1.25rem 2rem;
-  justify-content: center;
-}
-/* Fullscreen shows the whole battle with no scrolling: the holder answers to
-both screen axes, so the canvas plus its in-frame HUD always fit the viewport. */
-#frame:fullscreen {
-  background: var(--bg);
-  padding: 1rem;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  align-content: center;
-}
-#frame:fullscreen .canvas-holder {
-  width: min(1600px, 100%, calc((100vh - 8rem) * 1080 / 690));
-  max-width: none;
-  margin: 0;
-}
-
-.canvas-holder {
-  position: relative;
-  background: #05060a;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.6rem;
-  user-select: none;
-  /* Windowed mode keeps the whole viewport on screen: the holder answers to
-  both browser axes, shrinking with short windows instead of scrolling away. */
-  width: 100%;
-  max-width: min(1120px, 100%, max(320px, calc((100vh - 17rem) * 1080 / 690)));
-  margin: 0 auto;
-}
-
-#stage {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 6px;
-  order: 1;
-}
-.canvas-holder {
-  display: flex;
-  flex-direction: column;
-}
-.menubar { order: 2; }
-.hudbar { order: 3; }
-
-.dialogue {
-  display: flex;
-  gap: 0.6rem;
-  align-items: center;
-  margin-top: 0.6rem;
-  min-height: 56px;
-  background: var(--wash-solid);
-  border: 1px solid var(--wash-edge);
-  border-radius: 10px;
-  padding: 0.4rem 0.6rem;
-  pointer-events: none;
-}
-.dialogue[hidden] { visibility: hidden; }
-#portrait {
-  flex: 0 0 36px;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: #141810;
-}
-.dlg-text { display: grid; gap: 0.1rem; min-width: 0; }
-#dlg-name { font-weight: 800; font-size: 0.78rem; letter-spacing: 0.04em; }
-#dlg-line { font-size: 0.92rem; color: var(--ink); }
 .bark[hidden] { display: none; }
 
 .veil {
@@ -215,83 +139,6 @@ both screen axes, so the canvas plus its in-frame HUD always fit the viewport. *
 .kicker { color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem; margin: 0; }
 .card h2 { margin: 0.2rem 0 0.5rem; }
 
-.pad { margin-top: 0.75rem; }
-.pad-label { font-weight: 700; }
-/* In-frame overlays: the battle status rides the top, aim bottom-left,
-// actions bottom-right, dialogue bottom-center, all above the canvas. */
-.hudbar {
-  position: static;
-  margin-top: 0.5rem;
-  z-index: 4;
-}
-/* One menu strip floating over the top of the game: aim pad on the left,
-battle buttons on the right, sky behind both. */
-.menubar {
-  position: absolute;
-  top: 0.5rem;
-  left: 0.5rem;
-  right: 0.5rem;
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 0.5rem 1rem;
-  align-items: center;
-  justify-content: center;
-  z-index: 4;
-  background: var(--wash);
-  border: 1px solid var(--wash-edge);
-  border-radius: 10px;
-  padding: 0.3rem 0.5rem;
-}
-.menubar .pad-aim,
-.menubar .guide-actions {
-  background: transparent;
-  border: none;
-  padding: 0;
-}
-.hudbar .hud {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.9rem;
-  margin: 0;
-  padding: 0.35rem 0.7rem;
-  background: var(--wash-solid);
-  border: 1px solid var(--wash-edge);
-  border-radius: 8px;
-  font-size: 0.85rem;
-}
-.hudbar .hud > div { display: flex; gap: 0.35rem; align-items: baseline; }
-.hudbar dt { color: var(--wash-ink); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
-.hudbar dd { margin: 0; font-weight: 700; }
-.hudbar .runstats { display: none; }
-.pad-aim {
-  position: static;
-  margin: 0;
-  padding: 0.3rem;
-  background: var(--wash);
-  border: 1px solid var(--wash-edge);
-  border-radius: 10px;
-  z-index: 4;
-}
-/* The arrow cluster sits centred over its label. */
-.pad-aim { display: flex; flex-direction: column; align-items: center; }
-.pad-aim .pad-grid { display: grid; grid-template-columns: repeat(3, 1.9rem); gap: 0.15rem; justify-content: center; margin-top: 0; }
-.pad-note { margin: 0.25rem 0 0; font-size: 0.75rem; color: var(--ink); white-space: nowrap; text-align: center; }
-.guide-actions {
-  position: static;
-  margin: 0;
-  padding: 0.3rem;
-  background: var(--wash);
-  border: 1px solid var(--wash-edge);
-  border-radius: 10px;
-  z-index: 4;
-  font-size: 0.75rem;
-  /* A compact button grid, not a tall stack: three short rows hug the corner
-  instead of walling off the terrain above. */
-  display: grid;
-  grid-template-columns: repeat(3, auto);
-  gap: 0.25rem;
-}
-.guide-actions button { padding: 0.3rem 0.35rem; white-space: nowrap; }
 #frame button { font-size: 0.75rem; padding: 0.3rem 0.35rem; white-space: nowrap; }
 /* Game menu: a compact centred card. Seed and New Game share a row, the
    unit picker sits under them, and the rest fill equal three-across rows. */
@@ -335,22 +182,6 @@ battle buttons on the right, sky behind both. */
 .map-choice { cursor: pointer; }
 .unit-choice span { font-size: 0.7rem; }
 .unit-picker button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
-.canvas-holder .dialogue {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 0.5rem;
-  margin: 0;
-  max-width: min(30rem, 60%);
-  z-index: 3;
-}
-.pad-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 3rem);
-  gap: 0.3rem;
-  margin-top: 0.4rem;
-}
-.pad-grid button { padding: 0.5rem 0; }
 
 .hint { color: var(--dim); font-size: 0.9rem; }
 /* Room-server connection dot: red until a ping answers, green while live. */
@@ -437,11 +268,6 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 }
 .panel h2 { margin: 0 0 0.5rem; font-size: 1.05rem; }
 
-.hud { display: grid; gap: 0.25rem; margin: 0; }
-.hud div { display: flex; justify-content: space-between; gap: 1rem; }
-.hud dt { color: var(--dim); }
-.hud dd { margin: 0; font-weight: 700; }
-
 .runstats { color: var(--dim); font-size: 0.9rem; }
 
 .help { margin: 0; padding-left: 1.1rem; }
@@ -465,7 +291,6 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 #preview-result { min-height: 1.5em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #preview-stage { width: 100%; height: auto; border-radius: 6px; background: #10131c; }
 
-.canvas-holder { position: relative; }
 .banner { position: absolute; top: 50%; left: 0; right: 0; text-align: center;
   transform: translateY(-50%);
   pointer-events: none; z-index: 5; }
@@ -531,20 +356,6 @@ button.btn-leave[hidden] { display: none; }
 .log li.bad { border-color: var(--bad); }
 .log li.info { border-color: var(--safe); }
 
-.guide { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
-
-@media (max-width: 1520px) {
-  .layout { grid-template-columns: 1fr; }
-}
-/* Narrow screens: overlays drop below the canvas instead of covering it. */
-@media (max-width: 700px) {
-  .menubar { position: static; margin-top: 0.5rem; flex-wrap: wrap; }
-  .pad-aim, .guide-actions, .canvas-holder .dialogue { position: static; transform: none; }
-  .pad-aim, .guide-actions { margin-top: 0.5rem; }
-  .guide-actions { max-width: none; }
-  .canvas-holder .dialogue { margin-top: 0.5rem; max-width: none; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
@@ -552,7 +363,7 @@ button.btn-leave[hidden] { display: none; }
 /* Touch screens have no keyboard: no key caps, key footers or key prose. */
 .touch-only { display: none; }
 .touch .touch-only { display: revert; }
-.touch .key, .touch .keys-only, .touch .nav-hint, .touch .pad-note { display: none; }
+.touch .key, .touch .keys-only, .touch .nav-hint { display: none; }
 
 /* Overlay title bars: title and close on top, the panel's keys in a grid
    below. They stay pinned while the panel scrolls. Each container sets its
@@ -603,19 +414,6 @@ button.btn-leave[hidden] { display: none; }
 .log-overlay .ov-head h2 { font-size: 0.85rem; }
 .log-overlay .ov-keys { font-size: 0.68rem; }
 .log-overlay .ov-x { font-size: 1rem; padding: 0.1rem 0.4rem; }
-/* HUD loadout chips: a shell icon beside each name. */
-.hudbar .chip { display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
-.hudbar #hud-weapon { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.3rem; }
-.chip-icon { height: 1.15em; width: auto; aspect-ratio: 40 / 26; }
-/* Icons have no text baseline: centre those two rows instead. */
-.hudbar .hud > div:has(#hud-weapon) { align-items: center; }
-
-/* Status bar: one calm row. Rivals' armor rides over their units, wind on
-   the battlefield; both stay in screen-reader text. */
-.hudbar .hud-gun dd { font-weight: 700; }
-.hudbar #hud-lives { color: #ff5c7a; letter-spacing: 0.08em; }
-.hudbar .hud-score dd { color: var(--wash-ink); font-weight: 600; }
-.hudbar .hud-net { margin-left: auto; }
 
 /* Weapon picker: the rack as tiles, four across. */
 .gun-card { inset: 0; margin: auto; width: min(34rem, 92%); height: fit-content; max-height: 84%; padding-bottom: 0.9rem; }
@@ -626,60 +424,8 @@ button.btn-leave[hidden] { display: none; }
 .gun-choice .gun-count { color: var(--wash-ink); font-size: 0.75rem; }
 .gun-choice[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
 .gun-choice.cursor { outline: 2px solid var(--wash-key); outline-offset: 1px; }
-.hudbar #hud-weapon { cursor: pointer; }
+
 .touch .gun-choice.cursor { outline: none; }
-
-/* Battle toolbar: one row of icon buttons, one colour per action (--tool),
-   each with a key cap on desktop and a tip on hover or focus. */
-.menubar .guide-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
-.guide-actions .tool {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--tool);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--tool) 9%, transparent);
-  color: color-mix(in srgb, var(--tool) 30%, #ffffff);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--tool) 30%, transparent);
-}
-.guide-actions .tool:hover, .guide-actions .tool:focus-visible {
-  background: color-mix(in srgb, var(--tool) 18%, transparent);
-  box-shadow: 0 0 16px color-mix(in srgb, var(--tool) 50%, transparent);
-}
-.guide-actions .tool.btn-primary { background: var(--accent); color: #1a1a1a; border-color: var(--accent); }
-.tool-icon { width: 1.6rem; height: 1.6rem; flex: none; }
-.guide-actions .tool[aria-expanded="true"] { outline: 2px solid var(--tool); outline-offset: 2px; }
-.tool-tip {
-  position: fixed;
-  z-index: 30;
-  max-width: 15rem;
-  padding: 0.5rem 0.7rem 0.55rem;
-  border: 1px solid var(--wash-edge);
-  border-top: 3px solid var(--tool, var(--accent));
-  border-radius: 8px;
-  background: var(--wash-card);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 14px color-mix(in srgb, var(--tool, #ffc93c) 25%, transparent);
-  pointer-events: none;
-  animation: tip-in 0.12s ease-out;
-}
-.tool-tip[hidden] { display: none; }
-.tool-tip p { margin: 0; }
-.tool-tip-name { font-weight: 800; color: var(--tool, var(--accent)); font-size: 0.85rem; }
-.tool-tip-desc { color: var(--ink); font-size: 0.78rem; margin-top: 0.15rem !important; }
-@keyframes tip-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .tool-tip { animation: none; } }
-
-/* Toolbar key caps sit under their icons, so the row stays narrow enough to
-   fit on one line outside fullscreen. */
-.guide-actions .tool { flex-direction: column; gap: 0.15rem; padding: 0.3rem 0.45rem 0.25rem; min-width: 2.6rem; }
-.touch .guide-actions .tool { padding: 0.4rem 0.5rem; }
-
-/* Numbers that change while you play keep a fixed width (equal-width digits,
-   room for their widest value), so the bar never rewraps under your keys. */
-.hudbar .hud dd { font-variant-numeric: tabular-nums; }
-.hudbar #hud-angle { min-width: 4ch; }
-.hudbar #hud-power, .hudbar #hud-fuel, .hudbar #hud-armor { min-width: 3ch; }
 
 /* Help's key list: each key as a cap (always shown, unlike the button chips:
    the whole list is keyboard-only), its job beside it. */
@@ -697,13 +443,10 @@ button.btn-leave[hidden] { display: none; }
 /* The title card's mount point adds no box of its own. */
 #title-root { display: contents; }
 /* The title card over the dimmed demo. It covers the battlefield only, so the
-   toolbar stays usable, and sits under the in-frame panels: the menu opens over it. */
+   bars stay usable, and sits under the in-frame panels: the menu opens over it. */
 .title-veil {
   position: absolute;
-  left: 0.6rem;
-  right: 0.6rem;
-  top: 0.6rem;
-  aspect-ratio: 1080 / 690;
+  inset: 0;
   display: grid;
   place-items: center;
   padding: 0.5rem;
@@ -741,9 +484,7 @@ input.initial { width: 2rem; height: 2rem; max-width: none; padding: 0; text-ali
    canvas-shaped box, so every control is in reach without an inner scroll. */
 @media (max-width: 600px), (max-height: 480px) {
   .title-veil {
-    position: fixed;
-    inset: 0;
-    z-index: 5; /* over the toolbar and HUD (4); the panels (6, 10) still open above it */
+    z-index: 5; /* over the deck (4) inside the battlefield; the panels (6, 10) open above it */
     aspect-ratio: auto;
     border-radius: 0;
     padding: 0.4rem;
@@ -764,4 +505,183 @@ input.initial { width: 2rem; height: 2rem; max-width: none; padding: 0; text-ali
 @media (pointer: coarse) {
   #frame .title-play, #frame .title-row button, #frame .title-link { min-height: 44px; }
   input.initial { width: 44px; height: 44px; }
+}
+
+/* ---------- the frame: status bar, battlefield, control deck ----------
+   The page is one screen tall: the header, then the frame's three parts, the
+   battlefield taking what is left. The bars size in px so the text-size
+   setting (which scales the panels) never pushes them over; their
+   breakpoints follow the frame's own width. */
+body { height: 100dvh; display: flex; flex-direction: column; }
+.topbar { flex: none; padding: 0.5rem 1.25rem; }
+.layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1120px); justify-content: center; padding: 0.5rem; }
+#frame { container-type: inline-size; height: 100%; min-height: 0; }
+.canvas-holder {
+  position: relative; display: flex; flex-direction: column; gap: 6px; height: 100%; width: 100%; margin: 0;
+  padding: 6px; background: #05060a; border: 1px solid var(--line); border-radius: 10px; user-select: none;
+}
+.field { position: relative; flex: 1; min-height: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; }
+#stage { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; border-radius: 6px; }
+#frame:fullscreen { background: var(--bg); padding: 0.5rem; width: 100%; height: 100%; overflow: hidden; }
+#frame:fullscreen .canvas-holder { max-width: 1600px; margin: 0 auto; }
+
+/* Status bar: Menu, angle, power, fuel, the AMMO, ARMOR, lives and WIND
+   pills, and the match badge at the far end. */
+#hud-bar { flex: none; }
+#hud-bar .runstats { display: none; }
+.hud {
+  display: flex; align-items: center; gap: 10px; min-width: 0; padding: 5px 8px;
+  background: #0c0f2e; border: 1px solid #3a3fb0; border-radius: 9px; color: #eef;
+  font: 13px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif; white-space: nowrap;
+}
+.hud-row { display: contents; }
+.hud .k { color: #9aa3c7; font-size: 0.78em; letter-spacing: 0.06em; }
+.hud .v { color: #7f7; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hud .stat { flex: none; }
+.hud .short { display: none; }
+#frame .menu-btn {
+  display: inline-flex; align-items: center; gap: 6px; flex: none; height: 26px; padding: 0 9px;
+  font: 800 13px/1 system-ui, sans-serif; color: #111; background: var(--accent); border: 1px solid var(--accent); border-radius: 6px;
+}
+.menu-icon { width: 14px; height: 14px; }
+.pill { display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 2px 9px; background: #11163a; border: 1px solid #5a63e0; border-radius: 999px; }
+.pill.ammo { border-color: #ffb13c; }
+.pill.ammo .v { color: #ffb13c; }
+.pill.armor { border-color: #7ddf64; }
+.pill.lives { border-color: #ff5c8a; }
+.pill.lives .v, .pill.lives .hearts { color: #ff5c8a; }
+.seg { display: inline-flex; align-items: stretch; flex: none; margin-left: auto; border: 1px solid #3a3fb0; border-radius: 8px; overflow: hidden; }
+.seg > span { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; }
+.seg > span + span { border-left: 1px solid #3a3fb0; }
+.seg .cash .v { color: #ffd75e; }
+.seg .dot { margin-left: 4px; }
+
+/* Control deck: Aim, Drive, More, Weapon and a big FIRE, each labelled. Chips
+   sit at the foot of their button, so chips in a row line up. */
+#deck {
+  --chip: 4px;
+  flex: none; display: flex; align-items: flex-end; justify-content: space-between; gap: 10px;
+  padding: 8px; background: #0c0f2e; border: 1px solid #3a3fb0; border-radius: 10px;
+}
+@media (hover: hover) and (pointer: fine) { #deck { --chip: 18px; } }
+.touch #deck { --chip: 4px; }
+.grp { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.gl { font: 9px/1.2 system-ui, sans-serif; letter-spacing: 0.12em; color: #9aa3c7; text-transform: uppercase; }
+#deck .row { display: flex; gap: 5px; }
+.aim-pad { display: grid; grid-template-columns: repeat(3, auto); gap: 4px; }
+#frame #deck .btn {
+  position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-width: 48px; height: 55px; padding: 4px 8px var(--chip); border: 1.5px solid var(--c, #667); border-radius: 9px;
+  background: #0a0d26; color: #eef; font: 700 11px/1.15 system-ui, sans-serif; white-space: nowrap;
+}
+#deck .btn .ic { font-size: 14px; line-height: 1; color: var(--c); }
+#frame #deck .btn.gold { background: var(--accent); border-color: var(--accent); color: #111; }
+#deck .btn.gold .ic { color: #111; }
+#frame .aim-pad .btn { height: 54px; }
+#deck .w-narrow { display: none; }
+#deck .key { position: absolute; left: 50%; bottom: 3px; transform: translateX(-50%); }
+#frame #deck .weap { min-width: 96px; }
+#frame #deck .grp-drive .btn { min-width: 76px; }
+#deck .gun { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+#deck .gun-top { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 800; }
+#deck .gun-icon { width: 28px; height: 18px; }
+#deck .gun-line { font-size: 10px; font-weight: 700; color: #ffb13c; }
+#frame #deck .fire {
+  position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 120px; height: 55px; padding: 0 0 var(--chip); border: 0; border-radius: 12px; background: #e33; color: #fff;
+  font: 900 16px/1 system-ui, sans-serif; box-shadow: 0 0 0 4px rgba(238, 51, 51, 0.3);
+}
+#deck [aria-expanded="true"] { box-shadow: 0 0 0 2px var(--c, var(--accent)); }
+.phone-extras { display: none; }
+/* Touch screens: no chips, thumb-sized targets. */
+.touch #frame #deck .btn { height: 46px; min-width: 46px; font-size: 10px; padding: 2px 5px; }
+.touch #frame .aim-pad .btn { height: 44px; }
+.touch #frame #deck .fire { height: 46px; }
+.touch #frame .menu-btn { height: 44px; min-width: 44px; }
+
+/* Chatter: a one-line toast at the top of the battlefield. */
+#dialogue {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 2;
+  display: flex; align-items: center; max-width: calc(100% - 16px); padding: 3px 9px;
+  background: rgba(12, 15, 46, 0.88); border: 1px solid #3a3fb0; border-radius: 7px;
+  font-size: 0.72rem; line-height: 1.3; white-space: nowrap; pointer-events: none;
+}
+#dialogue[hidden] { display: none; }
+#dialogue > canvas { display: none; }
+#dialogue > div { display: flex; gap: 0.4rem; min-width: 0; }
+#dialogue span + span { overflow: hidden; text-overflow: ellipsis; }
+#dialogue span:first-child { font-weight: 800; letter-spacing: 0.04em; }
+
+/* The frame's own width decides: short labels, then an 11 px bar, then no chips. */
+@container (max-width: 1100px) {
+  .hud { font-size: 12px; gap: 7px; }
+  .hud .full { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .hud .short { display: inline; }
+}
+@container (max-width: 860px) {
+  .hud { font-size: 11px; gap: 6px; padding: 4px 6px; }
+  .pill { padding: 1px 7px; }
+  .seg > span { padding: 1px 6px; }
+}
+@container (max-width: 760px) {
+  .hud { gap: 4px; padding: 3px 4px; }
+  .pill { padding: 1px 5px; gap: 3px; }
+  .seg > span { padding: 1px 4px; gap: 3px; }
+  #frame .menu-btn { height: 24px; padding: 0 7px; }
+  .key { display: none !important; }
+  #deck { --chip: 4px; }
+}
+
+/* Portrait phone: no page header; the status bar in three rows (Menu and the
+   aim numbers, the four pills, the badge across); the deck without headings,
+   Weapon on FIRE beside the arrows (its top level with ▲), Drive, Radio and
+   Help along the foot; Next song moves to the Menu. */
+@media (orientation: portrait) and (max-width: 600px) {
+  .topbar { display: none; }
+  .layout { padding: 4px; }
+  .hud { flex-direction: column; align-items: stretch; gap: 4px; }
+  .hud-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .seg { flex: 1; margin-left: 0; justify-content: space-around; }
+  #deck { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "aim weapon" "aim fire" "drive more"; gap: 6px; align-items: stretch; }
+  .grp-aim { grid-area: aim; }
+  .grp-weapon { grid-area: weapon; align-items: stretch; }
+  .grp-fire { grid-area: fire; align-items: stretch; }
+  .grp-drive { grid-area: drive; align-items: flex-start; }
+  .grp-more { grid-area: more; align-items: flex-end; }
+  .gl { display: none; }
+  .grp { gap: 0; }
+  #frame #deck .weap { width: 100%; height: 44px; }
+  #frame #deck .fire { width: 100%; height: auto; min-height: 44px; }
+  #frame #deck #btn-track { display: none; }
+  #deck .w-wide { display: none; }
+  #deck .w-narrow { display: inline; }
+  .phone-extras { display: flex; }
+  #frame .phone-extras .m-radio, #frame .phone-extras .m-help { display: none; }
+}
+
+/* Landscape phone: no page header; the controls float over the battlefield's
+   lower corners (arrows left, Drive centre, Weapon above FIRE right) and the
+   arrow keys turn translucent so the hills show through; Radio, Help and
+   Next song move to the Menu. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .topbar { display: none; }
+  .layout { padding: 4px; }
+  #deck {
+    position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 4;
+    display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: ". . weapon" "aim drive fire";
+    align-items: end; row-gap: 8px; padding: 0; background: none; border: 0; pointer-events: none;
+  }
+  #deck > * { pointer-events: auto; }
+  .gl, .grp-more { display: none; }
+  .grp-aim { grid-area: aim; }
+  .grp-drive { grid-area: drive; justify-self: center; }
+  .grp-weapon { grid-area: weapon; }
+  .grp-fire { grid-area: fire; }
+  #frame #deck .weap { width: 96px; height: 44px; }
+  #frame #deck .fire { width: 96px; height: 46px; }
+  #frame #deck .btn.gold { background: rgba(255, 201, 60, 0.55); border-color: rgba(255, 201, 60, 0.9); color: #fff; text-shadow: 0 0 2px #000, 0 1px 2px #000; }
+  #deck .btn.gold .ic { color: #fff; }
+  #deck .w-wide { display: none; }
+  #deck .w-narrow { display: inline; }
+  .phone-extras { display: flex; }
 }

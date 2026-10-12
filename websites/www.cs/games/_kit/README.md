@@ -61,6 +61,24 @@ what each setting means stay in the game. Without Web Audio, or when making
 the context throws, every call is silent. Tests use `fakeAudioContext()` from
 `test/audio.ts`, which records every node and parameter call.
 
+## Components (`ui/`)
+
+Preact components every game draws its overlays with. A page keeps an empty
+mount point; the game's module renders a component into it with a finished
+view of its state and callbacks, and redraws when the state changes.
+
+- `Dialog`: a modal panel in its veil. `open` shows it; on opening it focuses
+  `focusId` (or its first button), on closing it gives focus back; Escape and
+  a click on the veil call `onDismiss`. The game passes its own ids and
+  classes, so its CSS and browser specs keep working.
+- `Button`: blurs itself before calling `onClick`, so the key that pressed it
+  cannot press it again; `keyLabel` adds a `KeyChip`.
+- `Panel`: a section named by its `<h2>`.
+- `KeyChip`: one key as a `<kbd class="key-chip">`; the game styles it and
+  reads the label from its key table. `at` records the key-table slot as
+  `data-keyhint`; `decorative` hides a chip that sits beside words already
+  naming the action from screen readers.
+
 ## Tests (`test/`)
 
 Unit tests are `*.test.mjs` files run with `node --test`. They import

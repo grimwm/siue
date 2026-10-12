@@ -1,5 +1,5 @@
 {
   "extends": "./build/tsconfig.base.json",
   "compilerOptions": { "lib": ["ES2022", "DOM"], "types": ["node"] },
-  "include": ["*.ts", "audio/*.ts", "test/*.ts"]
+  "include": ["*.ts", "audio/*.ts", "ui/*.tsx", "test/*.ts"]
 }

@@ -51,7 +51,19 @@ if (fs.existsSync(siteMain)) {
 {
   const text = (...p) => fs.readFileSync(path.join(__dirname, ...p), 'utf8');
   const home = text('..', '..', 'index.html');
-  const homeCylon = home.slice(home.indexOf('cylon-weekly-reset') - 200, home.indexOf('cylon-weekly-reset') + 300);
+  // The whole Cylon settings block: from the container holding the reset line to its closing tag.
+  const at = home.indexOf('id="cylon-weekly-reset"');
+  const start = home.indexOf('<div class="cylon-settings" id="cylon-settings"');
+  const tag = /<div|<\/div>/g;
+  tag.lastIndex = start;
+  let depth = 0;
+  let end = -1;
+  for (let m = tag.exec(home); m; m = tag.exec(home)) {
+    depth += m[0] === '<div' ? 1 : -1;
+    if (depth === 0) { end = m.index; break; }
+  }
+  const homeCylon = end > start ? home.slice(start, end) : '';
+  check('home-page-cylon-block-found', at > start && start >= 0 && homeCylon.includes('cylon-weekly-reset'), `${start}..${end}`);
   const files = {
     'metadata.yaml': text('metadata.yaml'),
     'manifest.webmanifest': text('manifest.webmanifest'),
@@ -59,7 +71,6 @@ if (fs.existsSync(siteMain)) {
     'index.html (cylon block)': homeCylon,
     'play/cylon/index.html': text('..', '..', 'play', 'cylon', 'index.html'),
   };
-  check('home-page-cylon-block-found', home.includes('cylon-weekly-reset'), '');
   const stale = Object.entries(files).filter(([, body]) => /\bMonday\b/.test(body)).map(([name]) => name);
   check('no-cylon-file-says-monday', stale.length === 0, stale.join(', '));
 }

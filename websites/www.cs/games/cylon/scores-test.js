@@ -32,7 +32,8 @@ function fakeServer(opts = {}) {
         if (opts.rejectInitials) return reply(400, { error: 'invalid initials', scores: board });
         board = [...board, { initials: body.initials, score: body.score, at: '2026-10-10T12:00:00Z' }].sort((a, b) => b.score - a.score);
         allTime = [...allTime, { initials: body.initials, score: body.score, at: '2026-10-10T12:00:00Z' }].sort((a, b) => b.score - a.score).slice(0, 10);
-        return reply(200, { scores: board, alltime: allTime });
+        const place = allTime.map((e) => e.initials + e.score).lastIndexOf(body.initials + body.score) + 1;
+        return reply(200, { scores: board, alltime: allTime, alltimeRank: 'alltimeRank' in opts ? opts.alltimeRank : (place || null) });
       }
       return reply(400, { error: 'unknown' });
     },
@@ -63,6 +64,17 @@ function fakeServer(opts = {}) {
   await client.startRun();
   const r = await client.submit(5, 'LOW', 0);
   check('a-run-off-the-all-time-board-has-no-place', r.saved && r.allTimeRank === null, JSON.stringify(r));
+}
+
+// The all-time place is the server's word, not a guess from the list.
+{
+  for (const [sent, want] of [[7, 7], [null, null], [0, null], ['2', null]]) {
+    const client = createScoresClient('scores.php', { fetch: fakeServer({ alltimeRank: sent }).fetch });
+    await client.load();
+    await client.startRun();
+    const r = await client.submit(20, 'abc', 0);
+    check(`all-time-place-follows-the-server-${JSON.stringify(sent)}`, r.saved && r.allTimeRank === want, JSON.stringify(r));
+  }
 }
 
 // The qualifying rule: open seats, else strictly above the lowest shown.

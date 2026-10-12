@@ -31,7 +31,7 @@ export type SubmitProblem = 'invalid-initials' | 'save-failed';
 export interface SubmitResult {
   saved: boolean;
   problem: SubmitProblem | null;
-  /** The run's 1-based place on the all-time board, or null when it did not make it. */
+  /** The run's 1-based place on the all-time board as scores.php ranked it, or null when it did not make it. */
   allTimeRank: number | null;
 }
 
@@ -181,13 +181,10 @@ export function createScoresClient(api: string, env: ScoresEnv): ScoresClient {
     return score > lowest;
   }
 
-  /** The newest matching row: among equal scores the server ranks the earlier ones first. */
-  function rankOnAllTime(initials: string, score: number): number | null {
-    for (let i = cachedAllTime.length - 1; i >= 0; i--) {
-      const entry = cachedAllTime[i];
-      if (entry && entry.score === score && (entry.initials || 'AAA').toUpperCase() === initials) return i + 1;
-    }
-    return null;
+  /** The place scores.php computed for the run under its lock; null when it did not place. */
+  function serverRank(data: unknown): number | null {
+    const rank = isRecord(data) ? data.alltimeRank : null;
+    return typeof rank === 'number' && Number.isInteger(rank) && rank >= 1 ? rank : null;
   }
 
   function isBlocked(initials: string): boolean {
@@ -224,7 +221,7 @@ export function createScoresClient(api: string, env: ScoresEnv): ScoresClient {
       }
       runToken = '';
       takeBoard(data);
-      return { saved: true, problem: null, allTimeRank: rankOnAllTime(clean, score) };
+      return { saved: true, problem: null, allTimeRank: serverRank(data) };
     } catch {
       return { saved: false, problem: null, allTimeRank: null };
     }

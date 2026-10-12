@@ -545,17 +545,32 @@ function openScoresFile(string $path, string $mode) {
  * @return array{week: array, alltime: array, legacy: bool}
  */
 function parseStore($raw): array {
-    $data = json_decode(is_string($raw) && $raw !== '' ? $raw : '{"week":[],"alltime":[]}', true);
-    if (is_array($data) && array_is_list($data)) {
+    if (!is_string($raw) || $raw === '') {
+        return ['week' => [], 'alltime' => [], 'legacy' => false];
+    }
+    // A store that will not parse is left alone for repair: carrying on would
+    // overwrite every board with an empty one.
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        throw new RuntimeException('scores file is not valid JSON');
+    }
+    if (array_is_list($data) && $data !== []) {
         $rows = normalizeScores($data);
         return ['week' => $rows, 'alltime' => sortScores($rows), 'legacy' => true];
     }
-    $data = is_array($data) ? $data : [];
-    return [
-        'week' => normalizeScores($data['week'] ?? []),
-        'alltime' => sortScores(normalizeScores($data['alltime'] ?? [])),
-        'legacy' => false,
-    ];
+    $hasWeek = array_key_exists('week', $data);
+    $hasAllTime = array_key_exists('alltime', $data);
+    if ((!$hasWeek && !$hasAllTime) && $data !== []) {
+        throw new RuntimeException('scores file has neither week nor alltime');
+    }
+    if (($hasWeek && !is_array($data['week'])) || ($hasAllTime && !is_array($data['alltime']))) {
+        throw new RuntimeException('scores file boards must be lists');
+    }
+    $week = normalizeScores($data['week'] ?? []);
+    // A store without an all-time list gets one seeded from the weekly rows, so
+    // nothing already ranked is lost; it is rewritten with both on the next save.
+    $alltime = $hasAllTime ? normalizeScores($data['alltime']) : $week;
+    return ['week' => $week, 'alltime' => sortScores($alltime), 'legacy' => !$hasAllTime];
 }
 
 /** @return array{scores: array, alltime: array} the response fields for both boards */
@@ -572,7 +587,7 @@ function readScoresLocked(): array {
     $path = resolveScorePath();
     $fh = openScoresFile($path, 'c+');
     try {
-        // Exclusive: a read after midnight rewrites the file without yesterday's rows.
+        // Exclusive: a read after the week turns rewrites the file without last week's rows.
         if (!flock($fh, LOCK_EX)) {
             throw new RuntimeException('unable to lock scores file for reading');
         }
@@ -592,7 +607,11 @@ function readScoresLocked(): array {
     }
 }
 
-/** @return array{week: array, alltime: array} */
+/**
+ * Ranks the score onto both boards. `rank` is its 1-based place on the all-time
+ * board, or null when it did not make the cut (a tie at the last place keeps the older row).
+ * @return array{week: array, alltime: array, rank: ?int}
+ */
 function addScoreLocked(int $score, int $hits, string $initials): array {
     $path = resolveScorePath();
     $fh = openScoresFile($path, 'c+');
@@ -615,6 +634,14 @@ function addScoreLocked(int $score, int $hits, string $initials): array {
         $store['week'] = sortScores($week);
         $store['alltime'][] = $row;
         $store['alltime'] = sortScores($store['alltime']);
+        // Equal rows sort in insertion order, so the new one is the last of its twins.
+        $rank = null;
+        foreach ($store['alltime'] as $i => $r) {
+            if ($r === $row) {
+                $rank = $i + 1;
+            }
+        }
+        $store['rank'] = $rank;
         writeScoresHandle($fh, $store, $path);
         flock($fh, LOCK_UN);
         @chmod($path, 0666);
@@ -696,7 +723,8 @@ try {
 
         respond([
             'ok' => true,
-            ...boardPayload(addScoreLocked($score, $hits, $initials)),
+            ...boardPayload($added = addScoreLocked($score, $hits, $initials)),
+            'alltimeRank' => $added['rank'],
             'week' => localWeek(),
             'tz' => cfg('timezone'),
             'config' => publicConfig(),

@@ -138,14 +138,10 @@ export function createScoresClient(api, env) {
         }
         return score > lowest;
     }
-    /** The newest matching row: among equal scores the server ranks the earlier ones first. */
-    function rankOnAllTime(initials, score) {
-        for (let i = cachedAllTime.length - 1; i >= 0; i--) {
-            const entry = cachedAllTime[i];
-            if (entry && entry.score === score && (entry.initials || 'AAA').toUpperCase() === initials)
-                return i + 1;
-        }
-        return null;
+    /** The place scores.php computed for the run under its lock; null when it did not place. */
+    function serverRank(data) {
+        const rank = isRecord(data) ? data.alltimeRank : null;
+        return typeof rank === 'number' && Number.isInteger(rank) && rank >= 1 ? rank : null;
     }
     function isBlocked(initials) {
         return blocked.has((initials || '').toUpperCase());
@@ -185,7 +181,7 @@ export function createScoresClient(api, env) {
             }
             runToken = '';
             takeBoard(data);
-            return { saved: true, problem: null, allTimeRank: rankOnAllTime(clean, score) };
+            return { saved: true, problem: null, allTimeRank: serverRank(data) };
         }
         catch {
             return { saved: false, problem: null, allTimeRank: null };

@@ -35,10 +35,10 @@ import { createUnits } from './js/units.js?v=a4b4545e56';
 import { createGameOver } from './js/gameover.js?v=3525afbc7b';
 import { createChrome } from './js/chrome.js?v=9114f7a639';
 import * as state from './js/state.js?v=d0424f3f0e';
-import { createScoresClient, formatHighScoreRows, weeklyResetText } from './js/scores.js?v=f45ba2dad6';
+import { createScoresClient, formatHighScoreRows, weeklyResetText } from './js/scores.js?v=0917bafe89';
 
 // Everything the game fetches is found next to this file, wherever it is served from.
-const CYLON_MOUNT_URL = new URL('mount.html?v=694277a7f4', import.meta.url).href;
+const CYLON_MOUNT_URL = new URL('mount.html?v=7185c23324', import.meta.url).href;
 const CYLON_SCORES_URL = new URL('scores.php', import.meta.url).href;
 
 async function mountCylonDom() {

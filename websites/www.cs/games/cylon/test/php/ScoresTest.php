@@ -34,6 +34,11 @@ final class ScoresTest extends TestCase
         rmdir($this->dir);
     }
 
+    private function bytes(): string
+    {
+        return (string) file_get_contents($this->store);
+    }
+
     private function row(int $score, string $at, string $initials = 'AAA'): array
     {
         return ['score' => $score, 'hits' => 0, 'initials' => $initials, 'at' => $at];
@@ -77,7 +82,6 @@ final class ScoresTest extends TestCase
         ];
     }
 
-    /** @dataProvider weekBoundaries */
     #[\PHPUnit\Framework\Attributes\DataProvider('weekBoundaries')]
     public function testWeekStartsSundayMidnightCentral(string $iso, string $weekStart): void
     {
@@ -140,6 +144,60 @@ final class ScoresTest extends TestCase
         $board = addScoreLocked(10, 1, 'NEW');
         $this->assertSame(['NEW'], array_column($board['week'], 'initials'));
         $this->assertSame(['OLD', 'NEW'], array_column($board['alltime'], 'initials'));
+    }
+
+    public function testACorruptStoreIsRefusedAndLeftUntouched(): void
+    {
+        foreach (['{not json', '"a string"', '{"other":1}', '{"week":"x","alltime":[]}', '{"week":[],"alltime":5}'] as $bad) {
+            file_put_contents($this->store, $bad);
+            try {
+                addScoreLocked(5, 0, 'AAA');
+                $this->fail("accepted $bad");
+            } catch (RuntimeException) {
+                $this->assertSame($bad, $this->bytes());
+            }
+            try {
+                readScoresLocked();
+                $this->fail("read $bad");
+            } catch (RuntimeException) {
+                $this->assertSame($bad, $this->bytes());
+            }
+        }
+    }
+
+    public function testAnEmptyStoreIsEmptyBoards(): void
+    {
+        file_put_contents($this->store, '');
+        $this->assertSame(['week' => [], 'alltime' => []], readScoresLocked());
+    }
+
+    public function testAStoreMissingAllTimeSeedsItFromTheWeekWithoutLoss(): void
+    {
+        file_put_contents($this->store, json_encode(['week' => [$this->row(3, gmdate('c'), 'ONE'), $this->row(9, gmdate('c'), 'TWO')]]));
+        $board = readScoresLocked();
+        $this->assertSame(['TWO', 'ONE'], array_column($board['alltime'], 'initials'));
+        $this->assertSame(['TWO', 'ONE'], array_column($this->stored()['alltime'], 'initials'));
+    }
+
+    public function testTheRankIsThePlaceOnTheAllTimeBoardOrNull(): void
+    {
+        $this->assertSame(1, addScoreLocked(10, 0, 'AAA')['rank']);
+        $this->assertSame(1, addScoreLocked(20, 0, 'BBB')['rank']);
+        $this->assertSame(2, addScoreLocked(15, 0, 'CCC')['rank']);
+    }
+
+    public function testATieAtTheLastPlaceLeavesTheNewerRowOffTheBoard(): void
+    {
+        $max = cfg('maxScores');
+        $rows = [];
+        for ($i = 0; $i < $max; $i++) {
+            $rows[] = $this->row(50, '2026-01-01T00:00:00+00:00', 'OLD');
+        }
+        file_put_contents($this->store, json_encode(['week' => [], 'alltime' => $rows]));
+        $result = addScoreLocked(50, 0, 'NEW');
+        $this->assertNull($result['rank']);
+        $this->assertSame(['OLD'], array_unique(array_column($result['alltime'], 'initials')));
+        $this->assertSame(1, addScoreLocked(51, 0, 'TOP')['rank']);
     }
 
     public function testALegacyArrayFileSeedsBothBoardsAndIsRewrittenAsAnObject(): void

@@ -35,13 +35,17 @@ test('a scored run reaches the board', async ({ page }) => {
   });
   await expect(page.locator('#cylon-grenade-cd')).not.toHaveText('', { timeout: 3_000 });
 
-  // A full weekly board only takes a score above its lowest row, so play on until this run
-  // beats it. The server caps a run at koBurst + elapsed * maxKosPerSec KOs (8 + 2/s), so a
-  // threshold past REACHABLE cannot be met inside this test's budget.
+  // A full board only takes a score above its lowest row, and the store persists between runs
+  // (and weeks), so a run can qualify weekly yet miss the all-time board. Play on until this run
+  // beats both cutoffs. The server caps a run at koBurst + elapsed * maxKosPerSec KOs (8 + 2/s),
+  // so a threshold past REACHABLE cannot be met inside this test's budget.
   const REACHABLE = 12;
   const board = await (await page.request.get('games/cylon/scores.php')).json();
   const max = Number(board.config.maxScores);
-  const lowest = board.scores.length >= max ? Math.min(...board.scores.map(s => Number(s.score))) : 0;
+  const cutoff = list => (list.length >= max ? Math.min(...list.map(s => Number(s.score))) : 0);
+  const weeklyLowest = cutoff(board.scores);
+  const allTimeLowest = cutoff(board.alltime);
+  const lowest = Math.max(weeklyLowest, allTimeLowest);
   if (lowest + 1 > REACHABLE) {
     test.info().annotations.push({ type: 'board', description: 'full board beyond reach: checked the non-qualifying game over instead' });
     await page.locator('#cylon-game-toggle').click();
@@ -73,7 +77,7 @@ test('a scored run reaches the board', async ({ page }) => {
     .filter({ has: page.locator('.cylon-hs-initials', { hasText: /^AAA$/ }) })
     .filter({ has: page.locator('.cylon-hs-score', { hasText: new RegExp(`^${final} KOs$`) }) });
   await expect(row.first()).toBeVisible({ timeout: 5_000 });
-  // The same run is on the all-time board too (it fits the top rows this test can reach), and says so.
+  // The run beat both cutoffs above, so it is on the all-time board too and says so.
   await page.getByRole('tab', { name: 'All time' }).click();
   await expect(page.getByRole('tab', { name: 'All time' })).toHaveAttribute('aria-selected', 'true');
   await expect(row.first()).toBeVisible({ timeout: 5_000 });

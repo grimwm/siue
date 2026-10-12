@@ -53,7 +53,7 @@ foreach (['main.js', 'play/play.js', 'play/play.css', 'index.html'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
 // Crete: the entry module, the compiled modules it imports, its page and PWA files.
-foreach (['games/crete/index.html', 'games/crete/game.js', 'games/crete/game.css', 'games/crete/js/engine.js', 'games/crete/js/audio.js', 'games/crete/js/ui.js', 'games/crete/sw.js', 'games/crete/manifest.webmanifest'] as $f) {
+foreach (['games/crete/index.html', 'games/crete/dist/main.js', 'games/crete/game.css', 'games/crete/sw.js', 'games/crete/manifest.webmanifest'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
 // The game is loaded from its own folder; nothing of it sits at the site root.

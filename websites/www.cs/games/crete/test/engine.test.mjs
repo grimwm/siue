@@ -1,15 +1,11 @@
 // The Island of Crete's rules, with no page: seeded generation, the chase, items,
-// the hint and play-through timers. Run here: `node engine-test.js`.
-// js/engine.js (compiled from src/engine.ts) takes everything it shows or
-// plays through hooks, so the test hands it recording ones and a fake clock.
-import * as E from './js/engine.js';
+// the hint and play-through timers. Run by `node --test`.
+// src/engine.ts takes everything it shows or plays through hooks, so the test
+// hands it recording ones and a manual clock.
+import * as E from '../src/engine.ts';
 import crypto from 'node:crypto';
-
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
+import { check } from '../../_kit/test/check.ts';
+import { manualClock } from '../../_kit/test/clock.ts';
 
 /** A game wired to recorders and a manual clock. */
 function harness() {
@@ -17,27 +13,7 @@ function harness() {
   const sounds = [];
   const ends = [];
   let renders = 0;
-  let now = 0;
-  let nextId = 1;
-  const pending = new Map(); // id -> { at, every, fn }
-  const timers = {
-    setTimeout: (fn, ms) => { pending.set(nextId, { at: now + ms, every: 0, fn }); return nextId++; },
-    clearTimeout: id => { pending.delete(id); },
-    setInterval: (fn, ms) => { pending.set(nextId, { at: now + ms, every: ms, fn }); return nextId++; },
-    clearInterval: id => { pending.delete(id); },
-  };
-  const advance = ms => {
-    const end = now + ms;
-    for (;;) {
-      const due = [...pending.entries()].filter(([, t]) => t.at <= end).sort((a, b) => a[1].at - b[1].at)[0];
-      if (!due) break;
-      const [id, t] = due;
-      now = t.at;
-      if (t.every) t.at += t.every; else pending.delete(id);
-      t.fn();
-    }
-    now = end;
-  };
+  const { timers, advance, pending } = manualClock();
   const game = E.createGame({
     say: (text, tone) => log.push({ text, tone }),
     sfx: name => sounds.push(name),
@@ -272,16 +248,16 @@ check('distance-is-manhattan-in-the-open', E.bfsDist(room, { r: 1, c: 1 })[13][1
 
   const route0 = h.game.goalPath().length;
   h.game.toggleAuto();
-  check('auto-starts-on-a-timer', h.G.auto && h.pending.size === 1 && h.G.autoTimer > 0, '');
+  check('auto-starts-on-a-timer', h.G.auto && h.pending() === 1 && h.G.autoTimer > 0, '');
   h.game.tryMove(0, 1);
   check('player-input-waits-for-the-take-over', said(h, /Play-through is running/), '');
   h.advance(350 * 5);
   check('auto-walks-the-route', h.G.turns >= 3 || h.G.over, h.G.turns);
   h.game.toggleAuto();
-  check('auto-pauses-on-a-second-press', !h.G.auto && h.pending.size === 0 && said(h, /Play-through paused/), '');
+  check('auto-pauses-on-a-second-press', !h.G.auto && h.pending() === 0 && said(h, /Play-through paused/), '');
   h.game.toggleAuto();
   h.advance(350 * 400);
-  check('auto-plays-the-run-to-an-end', h.G.over && !h.G.auto && h.pending.size === 0 && route0 > 0 && h.ends.length === 1, JSON.stringify([h.G.over, h.G.turns, h.G.deathCause]));
+  check('auto-plays-the-run-to-an-end', h.G.over && !h.G.auto && h.pending() === 0 && route0 > 0 && h.ends.length === 1, JSON.stringify([h.G.over, h.G.turns, h.G.deathCause]));
 }
 
 // The creature steers toward you by search, breaking ties with the rng only.
@@ -292,6 +268,3 @@ check('distance-is-manhattan-in-the-open', E.bfsDist(room, { r: 1, c: 1 })[13][1
   h.game.foeStep();
   check('foe-step-gets-closer', dist(h.G.foe, h.G.player) === 3, JSON.stringify(h.G.foe));
 }
-
-console.log(failed ? `ENGINE-FAIL ${failed}` : 'ENGINE-OK');
-process.exit(failed ? 1 : 0);

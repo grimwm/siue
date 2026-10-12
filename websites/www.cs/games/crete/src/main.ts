@@ -1,19 +1,17 @@
-/* The Island of Crete: a text-based chase.
- * You move once per turn; the creature moves twice. Reach the exit alive.
- * Controls: arrows/WASD = move · Space = bash · Z/X/C = use item · H = hint ·
- * V = show the route · T = play-through · M = sound · N = new run.
- */
-/* The game is three typed modules, compiled from src/ to js/ and imported here:
- * js/engine.js (the maze and the rules, no page in it), js/audio.js (the synth)
- * and js/ui.js (the board, HUD, log and input). Each import's ?v= is the
- * module's content hash, written by tools/install-files.php, so a browser never
- * pairs a cached module with a newer game.js. This file only wires them
- * together, starts a run, and exposes the test hook. */
+/* Entry: wires engine, audio and UI, starts a run, and exposes window.__mazeTest
+ * for the browser specs. */
 import {
   createGame, bfsDist, bfsPath, key, ROWS, COLS, MAX_HP, TOTAL_PAGES, ITEMS,
-} from './js/engine.js?v=7480931246';
-import { createAudio } from './js/audio.js?v=f3f8ff55b1';
-import { createUi } from './js/ui.js?v=9421923c2a';
+} from './engine.ts';
+import { createAudio } from './audio.ts';
+import { createUi } from './ui.ts';
+import { browserTimers } from '../../_kit/ports.browser.ts';
+
+declare global {
+  interface Window {
+    __mazeTest?: Record<string, unknown>;
+  }
+}
 
 const audio = createAudio();
 const ui = createUi({
@@ -25,22 +23,17 @@ const game = createGame({
   sfx: audio.sfx,
   render: () => ui.render(game),
   showEnd: won => ui.showEnd(game, won),
-  timers: {
-    setTimeout: (fn, ms) => window.setTimeout(fn, ms),
-    clearTimeout: id => window.clearTimeout(id),
-    setInterval: (fn, ms) => window.setInterval(fn, ms),
-    clearInterval: id => window.clearInterval(id),
-  },
+  timers: browserTimers,
 });
 const G = game.G;
 
-function toggleMute() {
+function toggleMute(): void {
   const muted = audio.toggleMute();
   ui.setMuteLabel(muted);
   ui.say(muted ? 'Sound off.' : 'Sound on.', 'info');
 }
 
-function restart(seedStr) {
+function restart(seedStr: string): void {
   ui.hideEnd();
   game.stopAuto();
   game.clearHint();
@@ -53,7 +46,7 @@ function restart(seedStr) {
   ui.render(game);
 }
 
-function start() {
+function start(): void {
   ui.bindControls({ game, restart, toggleMute, wake: audio.ensure });
   let seed = '';
   try {

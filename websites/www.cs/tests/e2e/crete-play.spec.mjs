@@ -2,7 +2,7 @@
 // change to Crete must keep this green.
 import { test, expect } from '@playwright/test';
 
-const WIN_SEED = 'play-1'; // the play-through wins this maze
+const WIN_SEED = 'play-1'; // the play-through (the strategist) wins every maze; this one is pinned so a failure replays
 const PAGE = 'games/crete/';
 
 async function open(page, seed) {
@@ -17,7 +17,7 @@ async function open(page, seed) {
 test('the play-through wins a pinned seed and shows the ending', async ({ page }) => {
   const errors = await open(page, WIN_SEED);
   await page.keyboard.press('t');
-  await page.clock.runFor(120_000);
+  await page.clock.runFor(250_000);
   const G = await page.evaluate(() => ({ over: window.__mazeTest.G.over, won: window.__mazeTest.G.won }));
   expect(G).toEqual({ over: true, won: true });
   await expect(page.locator('#end-veil')).toBeVisible();

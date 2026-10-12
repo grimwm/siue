@@ -100,22 +100,24 @@ for (const ctx of ['aim', 'shop', 'global', 'scroll']) {
   if (!KEYS[ctx]) throw new Error('game.json is missing keys context ' + ctx);
 }
 function pressToken(t) {
-  t = String(t).replace(/^Ctrl\+/, '');
+  t = String(t);
+  const mods = /^Shift\+/.test(t) ? { shiftKey: true } : {};
+  t = t.replace(/^(Ctrl|Shift)\+/, '');
   let m = /^Key([A-Z])$/.exec(t);
-  if (m) return [m[1].toLowerCase(), 'Key' + m[1]];
+  if (m) return [m[1].toLowerCase(), 'Key' + m[1], mods];
   m = /^Digit([0-9])$/.exec(t);
-  if (m) return [m[1], 'Digit' + m[1]];
-  if (t === 'Space' || t === ' ') return [' ', 'Space'];
-  if (t === 'ControlLeft' || t === 'ControlRight') return ['Control', t];
-  if (t === 'Control') return ['Control', 'ControlLeft'];
-  return [t, /^[A-Z][A-Za-z]*$/.test(t) ? t : undefined];
+  if (m) return [m[1], 'Digit' + m[1], mods];
+  if (t === 'Space' || t === ' ') return [' ', 'Space', mods];
+  if (t === 'ControlLeft' || t === 'ControlRight') return ['Control', t, mods];
+  if (t === 'Control') return ['Control', 'ControlLeft', mods];
+  return [t, /^[A-Z][A-Za-z]*$/.test(t) ? t : undefined, mods];
 }
 const KB = (ctx, a, i) => pressToken((KEYS[ctx][a] || [])[i || 0]);
 const KBD = (ctx, a, n) => pressToken((KEYS[ctx][a] || [])[n - 1]);
-const KD = (ctx, a, i, extra) => keyDown(...KB(ctx, a, i), extra);
-const KU = (ctx, a, i) => keyUp(...KB(ctx, a, i));
+const KD = (ctx, a, i, extra) => { const [k, c, mods] = KB(ctx, a, i); keyDown(k, c, { ...mods, ...extra }); };
+const KU = (ctx, a, i) => { const [k, c] = KB(ctx, a, i); keyUp(k, c); };
 const TAP = (ctx, a, i, extra) => { KD(ctx, a, i, extra); KU(ctx, a, i); };
-const TAPD = (ctx, a, n, extra) => { const t = KBD(ctx, a, n); keyDown(...t, extra); keyUp(...t); };
+const TAPD = (ctx, a, n, extra) => { const [k, c, mods] = KBD(ctx, a, n); keyDown(k, c, { ...mods, ...extra }); keyUp(k, c); };
 function keyDown(k, code, extra) {
   for (const f of listeners['keydown'] || []) f(Object.assign({ key: k, code, preventDefault: () => {}, repeat: false }, extra));
 }
@@ -209,8 +211,8 @@ check('css-menu-row', /\.menubar\s*\{[^}]*flex-wrap:\s*nowrap/.test(css));
 check('css-menu-block', /\.menubar\s*\{[^}]*background/.test(css));
 check('css-stats-strip', /\.hudbar\s*\{[^}]*position:\s*static/.test(css));
 check('pad-note', html.includes('class="pad-note"') && html.includes('barrel'));
-check('key-hints', html.includes('data-keyhint="global:menu">(C)<') && html.includes('data-keyhint="global:fire">(Ctrl)<'));
-check('key-style', /button \.key\s*\{[^}]*background/.test(css));
+check('key-hints', html.includes('data-keyhint="global:escape" aria-hidden="true">Esc<') && html.includes('data-keyhint="global:fire" aria-hidden="true">Space<'));
+check('key-style', /\n\.key\s*\{[^}]*background:\s*#14183a/.test(css) && /@media \(hover: hover\) and \(pointer: fine\)/.test(css));
 // Panels live over the battle, never beside it; L/H/R flip them without pausing.
 check('no-side-panels', !/<aside/.test(html));
 for (const id of ['log-overlay', 'help-overlay', 'report-overlay', 'btn-log', 'btn-help']) {
@@ -251,15 +253,13 @@ check('buttons-secondary-default', /\nbutton\s*\{[^}]*background:\s*var\(--panel
 check('buttons-primary-gold', /button\.btn-primary[^{]*\{[^}]*background:\s*var\(--accent\)/.test(css));
 const menubarHtml = html.slice(html.indexOf('id="menubar"'), html.indexOf('id="log-overlay"'));
 check('menubar-one-primary', (menubarHtml.match(/btn-primary/g) || []).length === 1 && /id="btn-menu" class="tool btn-primary"/.test(menubarHtml));
-TAP('global', 'menu');
+TAP('global', 'escape');
 check('menu-toggle', els['menu-overlay'].hidden === false && els['btn-menu'].getAttribute('aria-expanded') === 'true');
 click(els['menu-close']);
 check('menu-close', els['menu-overlay'].hidden === true);
-// C opens the menu but never closes it; ESC does the closing.
-TAP('global', 'menu');
+// Esc toggles the menu: once opens it, again closes it.
+TAP('global', 'escape');
 check('menu-reopen', els['menu-overlay'].hidden === false);
-TAP('global', 'menu');
-check('menu-c-stays', els['menu-overlay'].hidden === false);
 TAP('global', 'escape');
 check('menu-esc', els['menu-overlay'].hidden === true);
   // Tutorial: the menu carries a replay button (pressed for real at the end).
@@ -545,8 +545,10 @@ await (async () => {
   // marker must sit in the same rack segment, so a later gun cannot fake it.
   const selIs = name => new RegExp('^' + name + ' ').test(els['hud-weapon'].textContent);
   const loadGun = name => {
-    for (let i = 0; i < 6 && !selIs(name); i++) {
-      TAP('global', 'cycle'); frames(3);
+    // G opens the rack; a digit loads that tile and shuts it. Try each in turn.
+    for (let n = 1; n <= 6 && !selIs(name); n++) {
+      TAP('global', 'guns'); frames(2);
+      keyDown(String(n), 'Digit' + n); keyUp(String(n), 'Digit' + n); frames(3);
     }
   };
   const waitAim = async () => {
@@ -586,7 +588,7 @@ await (async () => {
   // New Game rolls the fanfare and the Round 1 card, then the pre-match shop.
   // It also takes the whole frame: an open menu shuts instead of sitting
   // over the briefing and the shop that follows it.
-  TAP('global', 'menu');
+  TAP('global', 'escape');
   check('menu-open-before-newgame', els['menu-overlay'].hidden === false);
   click(els['new-game']);
   check('new-game-closes-menu', els['menu-overlay'].hidden === true);
@@ -598,9 +600,8 @@ await (async () => {
   check('banner-done', els['round-banner'].hidden === true);
   const shopOpen = els['shop-veil'].hidden === false;
   const shopCash0 = els['shop-cash'].textContent;
-  // ESC in the shop shuts panels before it ever rolls out: with the menu
-  // open above the shop, ESC closes the menu and the shop stays open.
-  TAP('global', 'menu');
+  // Esc in the shop shuts panels first and, with none open, opens the menu: it never starts the round (N does).
+  TAP('global', 'escape');
   TAP('shop', 'close'); frames(3);
   check('shop-esc-closes-menu', els['menu-overlay'].hidden === true && els['shop-veil'].hidden === false);
   // Stock up: Buckshot ($80), Mortar ($200), Rail ($140) of the $600 stake.
@@ -651,11 +652,11 @@ await (async () => {
   check('shop-keys', shopRows()[1].className === 'sel', shopRows().map(li => li.className).join(','));
   check('shop-scroll-follows', globalThis.__scrolledTo && globalThis.__scrolledTo.className === 'sel',
     globalThis.__scrolledTo && globalThis.__scrolledTo.className);
-  check('keys-file-drives', KEYS.shop.buy[0] === 'b' && KEYS.global.fire[0] === 'ControlLeft' && KEYS.aim.barrelLeft[0] === 'ArrowLeft' && KB('shop', 'buy')[0] === 'b',
+  check('keys-file-drives', KEYS.shop.buy[0] === 'b' && KEYS.global.fire[0] === 'Space' && KEYS.aim.barrelLeft[0] === 'ArrowLeft' && KB('shop', 'buy')[0] === 'b',
     `${KEYS.shop.buy[0]}|${KEYS.global.fire[0]}|${KEYS.aim.barrelLeft[0]}`);
   {
     const ammoActs = shopRows().find(li => rowName(li).includes('Buckshot')).children[2].children;
-    check('shop-btn-hints', ammoActs[0].children[1].textContent === '(V)' && ammoActs[1].children[1].textContent === '(B)',
+    check('shop-btn-hints', ammoActs[0].children[1].textContent === 'V' && ammoActs[1].children[1].textContent === 'B',
       `${ammoActs[0].children[1].textContent}|${ammoActs[1].children[1].textContent}`);
   }
   TAP('shop', 'buy'); frames(3);
@@ -746,11 +747,12 @@ await (async () => {
   KU('aim', 'barrelLeft');
   const angleC = els['hud-angle'].textContent;
 
-  // Q -> Buckshot (1 in the rack); cycle right round to prove the NUKE stays
-  // gated on round 1 while every affordable gun comes up.
-  TAP('global', 'cycle'); frames(3);
+  // G then 2 loads the rack's second gun (Buckshot); loading every tile in
+  // turn proves the NUKE stays off the round-1 rack while each bought gun is on it.
+  const pickTile = n => { TAP('global', 'guns'); frames(2); keyDown(String(n), 'Digit' + n); keyUp(String(n), 'Digit' + n); frames(3); };
+  pickTile(2);
   const qLog = logText();
-  for (let i = 0; i < 4; i++) { TAP('global', 'cycle'); frames(3); }
+  for (let n = 1; n <= 4; n++) pickTile(n);
   const cycleNames = [...logText().matchAll(/Loaded: (\w+)\./g)].map(m => m[1]);
   // Watch the canvas: blast discs must match their weapon radii exactly,
   // and the camera zoom must stay inside its sane range.
@@ -885,7 +887,7 @@ await (async () => {
   check('aim-hold', angle1 !== angle0, `${angle0} -> ${angle1}`);
   check('power-hold', power1 !== power0, `${power0} -> ${power1}`);
   check('blur-no-pause', !/Paused\./.test(logText()) && angleB !== angleC, `${angleB} -> ${angleC}`);
-  check('q-cycle', /Loaded: Buckshot/.test(qLog));
+  check('picker-loads-a-tile', /Loaded: Buckshot/.test(qLog));
   check('nuke-gated', !cycleNames.includes('NUKE') && cycleNames.includes('Buckshot') && cycleNames.includes('Shell'),
     cycleNames.join(','));
   check('buckshot-volley', /You fire Buckshot/.test(spreadLog), `${volleyTurn} | ${volleyGun}`);
@@ -1179,7 +1181,7 @@ await (async () => {
     && shopSrc.includes('id="shop-leave"'));
   check('leave-buttons-in-room', els['menu-leave'].hidden === false && els['shop-leave'].hidden === false,
     `${els['menu-leave'].hidden} ${els['shop-leave'].hidden}`);
-  TAP('global', 'menu'); frames(2);
+  TAP('global', 'escape'); frames(2);
   click(els['menu-leave']); frames(2);
   check('leave-asks-first', els['leave-veil'].hidden === false && leaveSent === 0);
   TAP('global', 'escape'); frames(2);
@@ -1252,7 +1254,6 @@ await (async () => {
   check('fx-hand-snapshots-match', FX_DRIFT.size === 0, [...FX_DRIFT].slice(0, 6).join('; '));
   click(els['shop-leave']); frames(2);
   click(els['leave-go']); await tick(10); frames(5);
-  TAP('global', 'escape'); frames(5);
   TAP('global', 'new'); frames(150);
   for (let i = 0; i < 6 && (els['shop-veil'].hidden === false || els['round-banner'].hidden === false); i++) {
     if (els['shop-veil'].hidden === false) click(els['shop-next']);
@@ -1261,6 +1262,17 @@ await (async () => {
   TAP('global', 'tutorial'); frames(5);
   check('tutorial-opens', els['tutorial-overlay'].hidden === false);
   check('tutorial-step', /Move 1 of 5/.test(els['tutorial-text'].textContent), els['tutorial-text'].textContent);
+  // The coach sends the player into the gun picker (move 4): Esc there shuts
+  // the picker and leaves the tutorial running; a second Esc skips it.
+  TAP('global', 'guns'); frames(3);
+  check('esc-picker-open', els['gun-overlay'].hidden === false);
+  TAP('global', 'escape'); frames(3);
+  check('esc-closes-picker-first', els['gun-overlay'].hidden === true && els['tutorial-overlay'].hidden === false
+    && window.localStorage.getItem('tankity-tutorial') !== 'done');
+  TAP('global', 'escape'); frames(3);
+  check('esc-then-skips-tutorial', els['tutorial-overlay'].hidden === true && window.localStorage.getItem('tankity-tutorial') === 'done');
+  TAP('global', 'tutorial'); frames(5);
+  check('tutorial-reopens', els['tutorial-overlay'].hidden === false);
   click(els['tutorial-skip']); frames(3);
   check('tutorial-skips', els['tutorial-overlay'].hidden === true);
   check('tutorial-remembered', window.localStorage.getItem('tankity-tutorial') === 'done');

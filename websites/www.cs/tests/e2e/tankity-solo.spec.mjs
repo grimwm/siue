@@ -6,12 +6,14 @@ test('the keyboard drives the tank and burns fuel', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
   await startSolo(page);
   const fuel0 = Number(await hud(page, 'hud-fuel'));
-  await page.keyboard.down('d');
+  await page.keyboard.down('Shift');
+  await page.keyboard.down('ArrowRight');
   await page.waitForTimeout(700);
-  await page.keyboard.up('d');
-  await page.keyboard.down('a');
+  await page.keyboard.up('ArrowRight');
+  await page.keyboard.down('ArrowLeft');
   await page.waitForTimeout(700);
-  await page.keyboard.up('a');
+  await page.keyboard.up('ArrowLeft');
+  await page.keyboard.up('Shift');
   expect(Number(await hud(page, 'hud-fuel'))).toBeLessThan(fuel0);
   expect(errors).toEqual([]);
 });
@@ -163,7 +165,7 @@ test('drones show an aim arm that swings smoothly before firing', async ({ brows
 
 test('the menu is a compact card and Menu is the only primary on the navbar', async ({ browser }) => {
   const { page } = await newPlayer(browser);
-  await page.keyboard.press('c');
+  await page.keyboard.press('Escape');
   const card = page.locator('#menu-overlay');
   await expect(card).toBeVisible();
   const frame = await page.locator('#frame').boundingBox();
@@ -192,25 +194,25 @@ test('the menu is a compact card and Menu is the only primary on the navbar', as
 
 test('the unit picker changes the body and remembers it', async ({ browser }) => {
   const { page, ctx } = await newPlayer(browser);
-  await page.keyboard.press('c');
+  await page.keyboard.press('Escape');
   await page.click('#unit-picker button[title=Buggy]');
   await expect(page.locator('#unit-picker button[title=Buggy]')).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => localStorage.getItem('tankity-body'))).toBe('buggy');
   const again = await ctx.newPage();
   await again.goto('games/tankity/');
-  await again.keyboard.press('c');
+  await again.keyboard.press('Escape');
   await expect(again.locator('#unit-picker button[title=Buggy]')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('the Difficulty picker starts on Normal and keeps a choice across a reload', async ({ browser }) => {
   const { page } = await newPlayer(browser);
-  await page.keyboard.press('c');
+  await page.keyboard.press('Escape');
   const tile = name => page.locator('#difficulty-picker button', { hasText: name });
   await expect(tile('Normal')).toHaveAttribute('aria-pressed', 'true');
   await tile('Hard').click();
   await expect(tile('Hard')).toHaveAttribute('aria-pressed', 'true');
   await page.reload();
-  await page.keyboard.press('c');
+  await page.keyboard.press('Escape');
   await expect(tile('Hard')).toHaveAttribute('aria-pressed', 'true');
   await expect(tile('Normal')).toHaveAttribute('aria-pressed', 'false');
 });

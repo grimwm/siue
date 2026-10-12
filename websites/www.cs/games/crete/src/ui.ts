@@ -153,7 +153,7 @@ export function createUi(deps: UiDeps): Ui {
             : `${d} steps away — and it moves twice`;
 
     $("run-stats").textContent =
-      `Seed ${G.seed} · optimal route ${G.optimal} moves · mistake budget ${G.budget} ` +
+      `Seed ${G.seed} · optimal route ${G.optimal} moves ` +
       `· Sugar Puffs heal ${G.snackHeal} · creature pace 2/turn, spawned ${G.foeSpawnDist} away`;
 
     renderInventory($("inventory-root"), {

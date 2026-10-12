@@ -29,7 +29,7 @@ test('icon buttons show a styled tip after a moment, and Scores lives in the men
   await expect(tip).toBeHidden();
 
   // Scores: a menu tile, and R still opens it.
-  await page.keyboard.press('c');
+  await page.keyboard.press('Escape');
   await page.click('#scores-open');
   await expect(page.locator('#report-overlay')).toBeVisible();
   await expect(page.locator('#score-h')).toHaveText('Scores');

@@ -431,23 +431,19 @@
             ],
             "powerUp": [
                 "ArrowUp",
-                "KeyW",
-                "Up",
-                "w"
+                "Up"
             ],
             "powerDown": [
                 "ArrowDown",
-                "KeyS",
-                "Down",
-                "s"
+                "Down"
             ],
             "driveLeft": [
-                "KeyA",
-                "a"
+                "Shift+ArrowLeft",
+                "Shift+Left"
             ],
             "driveRight": [
-                "KeyD",
-                "d"
+                "Shift+ArrowRight",
+                "Shift+Right"
             ]
         },
         "shop": {
@@ -513,9 +509,6 @@
             "report": [
                 "r"
             ],
-            "menu": [
-                "c"
-            ],
             "random": [
                 "t"
             ],
@@ -524,9 +517,6 @@
             ],
             "new": [
                 "n"
-            ],
-            "cycle": [
-                "q"
             ],
             "guns": [
                 "g"
@@ -541,11 +531,11 @@
                 "f"
             ],
             "fire": [
+                "Space",
+                " ",
                 "ControlLeft",
                 "ControlRight",
-                "Control",
-                "Space",
-                " "
+                "Control"
             ],
             "escape": [
                 "Escape"

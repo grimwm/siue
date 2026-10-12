@@ -21,8 +21,9 @@ test('shell, mortar and rail light up the battlefield and the blast disc keeps i
     let r, radii = [];
     for (let attempt = 0; attempt < 2 && !radii.length; attempt++) {
       await expect.poll(() => hud(page, 'hud-turn'), { timeout: 90_000 }).toMatch(/YOU|Aim/);
-      // Q loads the next gun; stop on the one the HUD names first.
-      for (let i = 0; i < 8 && !(await hud(page, 'hud-weapon')).trim().startsWith(W[key].name); i++) await page.keyboard.press('q');
+      // G opens the rack; a click on the gun's tile loads it.
+      await page.keyboard.press('g');
+      await page.locator('#gun-grid .gun-choice', { hasText: W[key].name }).first().click();
       await expect(page.locator('#hud-weapon'), `${key} is loaded`).toContainText(W[key].name);
       await aimTo(page, angle);
       await setPower(page, power);

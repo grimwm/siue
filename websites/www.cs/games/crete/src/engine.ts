@@ -9,6 +9,12 @@
  */
 
 import type { Timers } from '../../_kit/ports.ts';
+import { ROWS, COLS, DIRS, key, inBounds, unkey, grid, bfsDist, bfsPath, manhattan } from './grid.ts';
+import type { Cell } from './grid.ts';
+import { dasher, strategist } from './bots.ts';
+import type { Bot, BotAction } from './bots.ts';
+export { ROWS, COLS, key, bfsDist, bfsPath, manhattan };
+export type { Cell };
 export type { Timers };
 
 /* ---------- seeded RNG (mulberry32 + string hash) ---------- */
@@ -34,12 +40,9 @@ export function mulberry32(a: number): Rng {
 }
 
 /* ---------- tuning ---------- */
-export const ROWS = 15;
-export const COLS = 15;
 export const MAX_HP = 20;
 export const TOTAL_PAGES = 3;
 const BARRIER_COUNT = 2;
-const MISTAKE_BUDGET = 6;
 const BASH_RANGE = 1;
 const BASH_PUSH = 3;
 const BASH_COOLDOWN = 3;
@@ -89,10 +92,6 @@ export interface Hooks {
 }
 
 /* ---------- state ---------- */
-export interface Cell {
-  r: number;
-  c: number;
-}
 
 export interface State {
   seed: string;
@@ -113,14 +112,14 @@ export interface State {
   opened: number;
   /** Moves on the shortest route with every barrier open. */
   optimal: number;
-  /** Wrong turns you can afford. */
-  budget: number;
   inv: Record<ItemKind, number>;
   fuses: number;
   snackHeal: number;
   foeSpawnDist: number;
   frozen: number;
   bashCd: number;
+  /** Turns waited in a row; any other turn the player spends resets it. */
+  stillTurns: number;
   dazed: number;
   hint: string | null;
   hintTimer: number;
@@ -132,25 +131,6 @@ export interface State {
   deathCause: string;
 }
 
-export const key = (r: number, c: number): string => r + "," + c;
-const inBounds = (r: number, c: number): boolean => r >= 0 && r < ROWS && c >= 0 && c < COLS;
-const DIRS: ReadonlyArray<readonly [number, number]> = [
-  [-1, 0],
-  [1, 0],
-  [0, -1],
-  [0, 1],
-];
-
-/** A [row, column] pair from a cell key. */
-function unkey(k: string): [number, number] {
-  const [r, c] = k.split(",").map(Number);
-  return [r!, c!];
-}
-
-/** Every cell of a ROWS x COLS grid set to `value`. */
-function grid<T>(value: T): T[][] {
-  return Array.from({ length: ROWS }, () => Array<T>(COLS).fill(value));
-}
 
 /* ---------- maze generation (randomized DFS + loop openings) ---------- */
 export function carveMaze(rng: Rng): boolean[][] {
@@ -188,46 +168,6 @@ export function carveMaze(rng: Rng): boolean[][] {
   return walls;
 }
 
-/** Steps from `t` to every cell (-1 where unreachable, or all -1 if `t` is a wall). */
-export function bfsDist(walls: boolean[][], t: Cell): number[][] {
-  const dist = grid(-1);
-  if (walls[t.r]![t.c]) return dist;
-  const q: Array<[number, number]> = [[t.r, t.c]];
-  dist[t.r]![t.c] = 0;
-  while (q.length) {
-    const [r, c] = q.shift()!;
-    for (const [dr, dc] of DIRS) {
-      const nr = r + dr,
-        nc = c + dc;
-      if (inBounds(nr, nc) && !walls[nr]![nc] && dist[nr]![nc] === -1) {
-        dist[nr]![nc] = dist[r]![c]! + 1;
-        q.push([nr, nc]);
-      }
-    }
-  }
-  return dist;
-}
-
-/** The shortest route from `from` to `to`, both included; empty when there is none. */
-export function bfsPath(walls: boolean[][], from: Cell, to: Cell): Cell[] {
-  const dist = bfsDist(walls, to);
-  if (dist[from.r]![from.c] === -1) return [];
-  const path: Cell[] = [{ ...from }];
-  let cur: Cell = { ...from };
-  while (cur.r !== to.r || cur.c !== to.c) {
-    const here = cur;
-    const next = DIRS.map(([dr, dc]) => ({ r: here.r + dr, c: here.c + dc }))
-      .filter(
-        (p) =>
-          inBounds(p.r, p.c) && !walls[p.r]![p.c] && dist[p.r]![p.c] !== -1,
-      )
-      .sort((a, b) => dist[a.r]![a.c]! - dist[b.r]![b.c]!)[0];
-    if (!next) return [];
-    path.push(next);
-    cur = next;
-  }
-  return path;
-}
 
 /* ---------- run setup: fresh maze, permadeath ---------- */
 export interface Layout {
@@ -238,9 +178,9 @@ export interface Layout {
   foe: Cell;
   foeDist: number;
   optimal: number;
-  /** Spare turns: the creature's distance minus your optimal route. */
-  margin: number;
 }
+
+const LOOT: PickupKind[] = ["shard", "snack", "jammer", "page", "page", "page", "fuse", "fuse"];
 
 function buildMaze(rng: Rng, start: Cell, exit: Cell): Layout {
   const walls = carveMaze(rng);
@@ -311,17 +251,7 @@ function buildMaze(rng: Rng, start: Cell, exit: Cell): Layout {
     }
   }
   const pickups = new Map<string, PickupKind>();
-  const loot: PickupKind[] = [
-    "shard",
-    "snack",
-    "jammer",
-    "page",
-    "page",
-    "page",
-    "fuse",
-    "fuse",
-  ];
-  for (const kind of loot) {
+  for (const kind of LOOT) {
     if (!open.length) break;
     const spot = open.splice(Math.floor(rng() * open.length), 1)[0]!;
     pickups.set(key(spot.r, spot.c), kind);
@@ -329,8 +259,6 @@ function buildMaze(rng: Rng, start: Cell, exit: Cell): Layout {
   }
 
   // The creature starts far: farthest from you, never camping the exit.
-  // margin = spare turns = foe distance minus your optimal route. That is how
-  // many wrong turns you can afford before escape becomes impossible.
   const dist = bfsDist(walls, start);
   const distExit = bfsDist(walls, exit);
   const openWalls = walls.map((row) => row.slice());
@@ -358,8 +286,7 @@ function buildMaze(rng: Rng, start: Cell, exit: Cell): Layout {
   }
   if (!foe) foe = { ...exit };
   if (foeDist < 0) foeDist = 0;
-  const margin = foeDist - optimal;
-  return { walls, safe, barriers, pickups, foe, foeDist, optimal, margin };
+  return { walls, safe, barriers, pickups, foe, foeDist, optimal };
 }
 
 /** The player's start cell. */
@@ -367,25 +294,98 @@ export const START: Readonly<Cell> = { r: 1, c: 1 };
 /** The exit cell. */
 export const EXIT: Readonly<Cell> = { r: ROWS - 2, c: COLS - 2 };
 
-/**
- * A run's maze for a seed: the same seed always gives the same maze. Mazes are
- * generated until the escape math works (the optimal route plus a spare
- * mistake budget fits inside the creature's starting distance); attempts just
- * advance the same rng stream. The rng comes back too, since the run keeps
- * drawing from it.
- */
-export function generateRun(seed: string): { rng: Rng; layout: Layout } {
-  const rng = mulberry32(hashSeed(seed));
-  let best: Layout | null = null;
-  for (let attempt = 0; attempt < 80; attempt++) {
-    const cand = buildMaze(rng, START, EXIT);
-    if (!best || cand.margin > best.margin) best = cand;
-    if (cand.margin >= MISTAKE_BUDGET) {
-      best = cand;
-      break;
-    }
+/** Attempt `attempt`'s layout stream. */
+export function mazeRng(seed: string, attempt: number): Rng {
+  return mulberry32(hashSeed(`${seed}:maze:${attempt}`));
+}
+
+/** Attempt `attempt`'s run stream: the creature's tie-breaks, the jammer, the snack. */
+export function runRng(seed: string, attempt: number): Rng {
+  return mulberry32(hashSeed(`${seed}:run:${attempt}`));
+}
+
+/** Attempt `attempt`'s maze; a fresh copy each call, since a run changes it as it plays. */
+export function layoutFor(seed: string, attempt: number): Layout {
+  return buildMaze(mazeRng(seed, attempt), START, EXIT);
+}
+
+/** Candidates a seed gets before falling back. */
+export const MAX_ATTEMPTS = 80;
+/** Past MAX_ATTEMPTS, draws continue only to find a maze the strategist wins; a safety bound; no swept seed gets near it. */
+const LAST_ATTEMPT = 399;
+
+export interface Trial {
+  won: boolean;
+  /** The creature ended a turn beside the bot, or caught it. */
+  met: boolean;
+  /** The fewest steps (Manhattan) between them at the end of any turn. */
+  closest: number;
+}
+
+export type Judge = (seed: string, attempt: number, bot: Bot) => Trial;
+
+export interface RunPick {
+  attempt: number;
+  /** No candidate passed both checks; this is the best winnable one. */
+  fallback: boolean;
+  layout: Layout;
+  rng: Rng;
+}
+
+/** The creature never starts nearer than this to the player, barriers open. */
+export const MIN_SPAWN = 8;
+
+/** Steps from the start to the creature with every barrier open: what it takes the creature to arrive once the player has opened them. */
+export function spawnDistance(layout: Layout): number {
+  const open = layout.walls.map((row) => row.slice());
+  for (const k of layout.barriers) {
+    const [r, c] = unkey(k);
+    open[r]![c] = false;
   }
-  return { rng, layout: best! };
+  return bfsDist(open, START)[layout.foe.r]![layout.foe.c]!;
+}
+
+/**
+ * Whether a candidate is a board at all. A closed barrier near the start can
+ * seal off a pocket: too small for the loot, or leaving the creature on the
+ * exit or a step or two from the player. Those are not mazes, whatever the
+ * bots make of them.
+ */
+export function layoutOk(layout: Layout): boolean {
+  const { foe } = layout;
+  return (
+    layout.pickups.size === LOOT.length &&
+    !(foe.r === EXIT.r && foe.c === EXIT.c) &&
+    spawnDistance(layout) >= MIN_SPAWN
+  );
+}
+
+function pick(seed: string, attempt: number, fallback: boolean): RunPick {
+  return { attempt, fallback, layout: layoutFor(seed, attempt), rng: runRng(seed, attempt) };
+}
+
+/**
+ * A run's maze for a seed: the same seed always gives the same maze. The first
+ * attempt whose dasher meets the creature and whose strategist escapes is
+ * kept (spec section 4); failing that, the strategist-won attempt whose dasher
+ * came closest. A maze the strategist loses is never returned.
+ */
+export function generateRun(seed: string, judge: Judge = trial): RunPick {
+  let best: { attempt: number; closest: number } | null = null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (!layoutOk(layoutFor(seed, attempt))) continue;
+    const dash = judge(seed, attempt, dasher);
+    // A non-meeting candidate can only matter as a closer fallback.
+    if (!dash.met && best && dash.closest >= best.closest) continue;
+    if (!judge(seed, attempt, strategist).won) continue;
+    if (dash.met) return pick(seed, attempt, false);
+    best = { attempt, closest: dash.closest };
+  }
+  if (best) return pick(seed, best.attempt, true);
+  for (let attempt = MAX_ATTEMPTS; attempt <= LAST_ATTEMPT; attempt++) {
+    if (layoutOk(layoutFor(seed, attempt)) && judge(seed, attempt, strategist).won) return pick(seed, attempt, true);
+  }
+  throw new Error(`Crete: no winnable maze for seed ${seed}`);
 }
 
 /** The seed a run uses: the typed one, or a fresh random one. */
@@ -411,13 +411,13 @@ function blankState(): State {
     score: 0,
     opened: 0,
     optimal: 0,
-    budget: 0,
     inv: { shard: 1, snack: 1, jammer: 1 },
     fuses: 0,
     snackHeal: 5,
     foeSpawnDist: 0,
     frozen: 0,
     bashCd: 0,
+    stillTurns: 0,
     dazed: 0,
     hint: null,
     hintTimer: 0,
@@ -441,9 +441,15 @@ const DIR_WORD: Record<string, string> = {
 export interface Game {
   G: State;
   newRun(seedStr: string): void;
+  /** A run on attempt `attempt`'s layout and run stream. */
+  startRun(seed: string, attempt: number): void;
   tryMove(dr: number, dc: number): void;
   bash(): void;
   useItem(kind: ItemKind): void;
+  /** Spend a turn in place; the creature still moves. */
+  wait(): void;
+  /** Whether the jammer has somewhere far enough to throw the creature. */
+  canJam(): boolean;
   hint(): void;
   clearHint(): void;
   toggleAnswer(): void;
@@ -457,6 +463,8 @@ export interface Game {
   foeDistance(): number;
 }
 
+const popcount = (n: number): number => (n === 0 ? 0 : (n & 1) + popcount(n >> 1));
+
 export function createGame(hooks: Hooks): Game {
   const G = blankState();
   const { say, sfx, timers } = hooks;
@@ -465,7 +473,15 @@ export function createGame(hooks: Hooks): Game {
   function newRun(seedStr: string): void {
     const seed = chooseSeed(seedStr);
     const { rng, layout } = generateRun(seed);
-    const { walls, safe, barriers, pickups, foe, foeDist, optimal, margin } = layout;
+    applyRun(seed, layout, rng);
+  }
+
+  function startRun(seed: string, attempt: number): void {
+    applyRun(seed, layoutFor(seed, attempt), runRng(seed, attempt));
+  }
+
+  function applyRun(seed: string, layout: Layout, rng: Rng): void {
+    const { walls, safe, barriers, pickups, foe, foeDist, optimal } = layout;
     Object.assign(G, {
       seed,
       rng,
@@ -481,13 +497,13 @@ export function createGame(hooks: Hooks): Game {
       score: 0,
       opened: 0,
       optimal,
-      budget: margin,
       inv: { shard: 1, snack: 1, jammer: 1 },
       fuses: 0,
       snackHeal: 4 + Math.floor(rng() * 3),
       foeSpawnDist: foeDist,
       frozen: 0,
       bashCd: 0,
+      stillTurns: 0,
       dazed: 0,
       hint: null,
       hintTimer: 0,
@@ -631,6 +647,7 @@ export function createGame(hooks: Hooks): Game {
     G.player.r = nr;
     G.player.c = nc;
     G.turns += 1;
+    G.stillTurns = 0;
     sfx("move");
     resolveTile();
     if (!G.over) creaturePhase(0);
@@ -674,6 +691,7 @@ export function createGame(hooks: Hooks): Game {
     G.bashCd = BASH_COOLDOWN;
     G.dazed = 1;
     G.turns += 1;
+    G.stillTurns = 0;
     sfx("bash");
     say(
       "You slam the static with a CRT monitor. The 👹 reels backwards, dazed — it moves once, not twice.",
@@ -742,7 +760,7 @@ export function createGame(hooks: Hooks): Game {
       );
       return;
     }
-    if (kind === "jammer" && !farSpot(6)) {
+    if (kind === "jammer" && !canJam()) {
       say(
         "Signal Jammer hisses. Nowhere far is left to throw it — no turn spent.",
         "info",
@@ -761,6 +779,7 @@ export function createGame(hooks: Hooks): Game {
       return;
     }
     G.turns += 1;
+    G.stillTurns = 0;
     if (kind === "snack") {
       const got = heal(G.snackHeal);
       say(`Sugar Puffs (+${got} HP). Theseus types faster.`, "good");
@@ -778,24 +797,115 @@ export function createGame(hooks: Hooks): Game {
     render();
   }
 
-  function farSpot(minDist: number): Cell | null {
+  function farCells(minDist: number): Cell[] {
     const dist = bfsDist(G.walls, G.player);
     const cands: Cell[] = [];
     for (let r = 1; r < ROWS - 1; r++) {
       for (let c = 1; c < COLS - 1; c++) {
-        const k = key(r, c);
-        if (!G.walls[r]![c] && !G.safe.has(k) && dist[r]![c]! >= minDist)
+        if (!G.walls[r]![c] && !G.safe.has(key(r, c)) && dist[r]![c]! >= minDist)
           cands.push({ r, c });
       }
     }
+    return cands;
+  }
+
+  function farSpot(minDist: number): Cell | null {
+    const cands = farCells(minDist);
     if (!cands.length) return null;
     return cands[Math.floor(G.rng() * cands.length)]!;
   }
 
+  function canJam(): boolean {
+    return farCells(6).length > 0;
+  }
+
+  function wait(): void {
+    if (blockedMsg()) return;
+    G.turns += 1;
+    G.stillTurns += 1;
+    say("You hold still behind the blue lines and let it pace.", "info");
+    creaturePhase(0);
+    render();
+  }
+
   /* ---------- hint: one move in advance ---------- */
+  /**
+   * The fewest-step trip to the exit, counting any fuses worth fetching on
+   * the way, and with equal steps the one that spends fewer fuses. The search
+   * runs over (cell, which board fuses are already taken, barriers crossed):
+   * stepping on a fuse takes it, crossing a barrier spends one. Empty when
+   * the exit is out of reach even with every fuse.
+   */
+  function bestTrip(): Cell[] {
+    const fuseCells: number[] = [];
+    for (const [k, v] of G.pickups) {
+      if (v !== "fuse") continue;
+      const [r, c] = unkey(k);
+      fuseCells.push(r * COLS + c);
+    }
+    const masks = 1 << fuseCells.length;
+    const maxSpent = G.fuses + fuseCells.length;
+    const K = maxSpent + 1;
+    const total = ROWS * COLS * masks * K;
+    const idx = (cell: number, mask: number, spent: number): number => (cell * masks + mask) * K + spent;
+    const from = new Int32Array(total).fill(-2);
+    const dist = new Int32Array(total).fill(-1);
+    const startCell = G.player.r * COLS + G.player.c;
+    const start = idx(startCell, 0, 0);
+    from[start] = -1;
+    dist[start] = 0;
+    const queue = [start];
+    let best = -1;
+    for (let head = 0; head < queue.length; head++) {
+      const cur = queue[head]!;
+      if (best !== -1 && dist[cur]! > dist[best]!) break;
+      const spent = cur % K;
+      const rest = (cur - spent) / K;
+      const mask = rest % masks;
+      const cell = (rest - mask) / masks;
+      const r = Math.floor(cell / COLS),
+        c = cell % COLS;
+      if (r === G.exit.r && c === G.exit.c) {
+        if (best === -1 || spent < best % K) best = cur;
+        continue;
+      }
+      const held = G.fuses + popcount(mask) - spent;
+      for (const [dr, dc] of DIRS) {
+        const nr = r + dr,
+          nc = c + dc;
+        if (!inBounds(nr, nc)) continue;
+        let nSpent = spent,
+          nMask = mask;
+        if (G.walls[nr]![nc]) {
+          if (!G.barriers.has(key(nr, nc)) || held < 1) continue;
+          nSpent += 1;
+        } else {
+          const f = fuseCells.indexOf(nr * COLS + nc);
+          if (f !== -1) nMask |= 1 << f;
+        }
+        const next = idx(nr * COLS + nc, nMask, nSpent);
+        if (from[next] !== -2) continue;
+        from[next] = cur;
+        dist[next] = dist[cur]! + 1;
+        queue.push(next);
+      }
+    }
+    if (best === -1) return [];
+    const path: Cell[] = [];
+    for (let at = best; at !== -1; at = from[at]!) {
+      const spent = at % K;
+      const cell = Math.floor(((at - spent) / K) / masks);
+      path.push({ r: Math.floor(cell / COLS), c: cell % COLS });
+    }
+    return path.reverse();
+  }
+
   function goalPath(): Cell[] {
-    const p = bfsPath(G.walls, G.player, G.exit);
-    if (p.length) return p;
+    const open = bfsPath(G.walls, G.player, G.exit);
+    if (open.length) return open;
+    const trip = bestTrip();
+    if (trip.length) return trip;
+    // Out of reach even with every fuse: head for the nearest one.
     const d = bfsDist(G.walls, G.player);
     let target: Cell | null = null,
       bestD = 1e9;
@@ -884,19 +994,12 @@ export function createGame(hooks: Hooks): Game {
     }
     autoPilot = true;
     try {
-      if (
-        Math.abs(G.foe.r - G.player.r) + Math.abs(G.foe.c - G.player.c) === 1 &&
-        G.bashCd === 0
-      ) {
-        bash();
-        return;
-      }
-      const p = goalPath();
-      if (p.length < 2) {
+      const action = strategist(game);
+      if (action.kind === "stuck") {
         stopAuto("Play-through is stuck. Your move.");
         return;
       }
-      tryMove(p[1]!.r - G.player.r, p[1]!.c - G.player.c);
+      perform(game, action);
     } finally {
       autoPilot = false;
     }
@@ -906,8 +1009,44 @@ export function createGame(hooks: Hooks): Game {
     return bfsDist(G.walls, G.player)[G.foe.r]![G.foe.c]!;
   }
 
-  return {
-    G, newRun, tryMove, bash, useItem, hint, clearHint, toggleAnswer, toggleAuto,
+  const game: Game = {
+    G, newRun, startRun, tryMove, bash, useItem, wait, canJam, hint, clearHint, toggleAnswer, toggleAuto,
     stopAuto, autoStep, goalPath, foeStep, creaturePhase, foeDistance,
   };
+  return game;
+}
+
+/** Carries out a bot's choice through the same actions a player has. */
+export function perform(game: Game, action: BotAction): void {
+  switch (action.kind) {
+    case "bash": game.bash(); break;
+    case "item": game.useItem(action.item); break;
+    case "wait": game.wait(); break;
+    case "move": game.tryMove(action.dr, action.dc); break;
+    case "stuck": break;
+  }
+}
+
+const INERT_TIMERS: Timers = {
+  setTimeout: () => 0,
+  clearTimeout: () => {},
+  setInterval: () => 0,
+  clearInterval: () => {},
+};
+/** A bot that has not finished by then has lost. */
+const TRIAL_ACTIONS = 600;
+
+/** Plays attempt `attempt` of `seed` with `bot` under the real rules, from the stream the real run would use. */
+export function trial(seed: string, attempt: number, bot: Bot): Trial {
+  const game = createGame({ say() {}, sfx() {}, render() {}, showEnd() {}, timers: INERT_TIMERS });
+  game.startRun(seed, attempt);
+  const G = game.G;
+  let closest = manhattan(G.player, G.foe);
+  for (let i = 0; i < TRIAL_ACTIONS && !G.over; i++) {
+    const action = bot(game);
+    if (action.kind === "stuck") break;
+    perform(game, action);
+    closest = Math.min(closest, manhattan(G.player, G.foe));
+  }
+  return { won: G.won, met: closest <= 1, closest };
 }

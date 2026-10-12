@@ -10,9 +10,11 @@ test('two players: drive, real shell flights on both screens, turns after the re
 
   // Driving moves the tank on the server and costs fuel.
   const before = lastRoom(roomState.host).tanks.find(t => t.seat === 0);
-  await host.page.keyboard.down('d');
+  await host.page.keyboard.down('Shift');
+  await host.page.keyboard.down('ArrowRight');
   await host.page.waitForTimeout(900);
-  await host.page.keyboard.up('d');
+  await host.page.keyboard.up('ArrowRight');
+  await host.page.keyboard.up('Shift');
   await expect.poll(() => lastRoom(roomState.host).tanks.find(t => t.seat === 0).x, { timeout: 10_000 }).not.toBe(before.x);
   expect(Number(await hud(host.page, 'hud-fuel'))).toBeLessThan(80);
 
@@ -80,7 +82,7 @@ test('in a room, firing the last round of a weapon loads the Shell again', async
 test('a unit body picked in a room reaches everyone', async ({ browser }) => {
   const { host, guest, roomState } = await roomPair(browser);
   await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);
-  await guest.page.keyboard.press('c');
+  await guest.page.keyboard.press('Escape');
   await guest.page.click('#unit-picker button[title=Walker]');
   await guest.page.keyboard.press('Escape');
   await expect.poll(() => {

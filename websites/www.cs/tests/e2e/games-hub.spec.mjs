@@ -91,7 +91,7 @@ test('the wrapper navbar takes the game colours and leads back to the site', asy
   });
   expect(fills).toBe(true);
   await page.waitForTimeout(500);
-  await page.keyboard.press('c');
+  await page.keyboard.press('Escape');
   await expect(frame.locator('#menu-overlay')).toBeVisible();
   await page.screenshot({ path: 'test-results/play-tankity.png' });
   // Contact and Games open those panels on the home page.

@@ -63,6 +63,9 @@ function sv_room(array $c): array
     $room = ['terrain' => sv_terrain($c['terrain']), 'tanks' => [], 'wind' => (float) ($c['wind'] ?? 0),
         'round' => (int) ($c['round'] ?? 1), 'rng' => (int) ($c['seed'] ?? 1),
         'scores' => [], 'cash' => [], 'shield' => [], 'bunker' => [], 'laststand' => [], 'jammer' => []];
+    if (array_key_exists('difficulty', $c)) {
+        $room['difficulty'] = $c['difficulty'];
+    }
     foreach ($c['tanks'] as $i => $t) {
         $room['tanks'][$i] = ['seat' => $i, 'kind' => $t['kind'], 'name' => 'T' . $i,
             'x' => (float) $t['x'], 'y' => (float) $t['y'], 'angle' => (float) ($t['angle'] ?? 45), 'power' => (float) ($t['power'] ?? 50),
@@ -494,6 +497,22 @@ $bracket('jammed-target-wobbles-double', ['terrain' => $flat, 'wind' => 0, 'roun
     'tanks' => [$human(200, 9999) + ['jammer' => 2], $drone(500, 9999) + ['dirS' => -1]]]);
 $bracket('drone-with-a-rack', ['terrain' => $flat, 'wind' => 2, 'round' => 4, 'seed' => 11, 'shooter' => 1, 'target' => 0, 'shots' => 6,
     'tanks' => [$human(210, 9999), $drone(510, 9999) + ['dirS' => -1, 'ammo' => ['mortar' => 2]]]]);
+
+/* ---- difficulty: the same scenes under each level's aim ----
+ * A word neither side knows aims at normal on both. */
+foreach (['easy', 'normal', 'hard', 'brutal'] as $level) {
+    foreach ([[1, 1], [5, 77], [10, 2026]] as [$round, $seed]) {
+        $aim("$level-round$round", ['terrain' => $hills, 'wind' => 3, 'round' => $round, 'seed' => $seed, 'shooter' => 1, 'difficulty' => $level,
+            'tanks' => [$human(140, 100), $drone(520, 60) + ['dirS' => -1, 'angle' => 60]]]);
+    }
+    $aim("$level-sniper-on-a-jammer", ['terrain' => $flat, 'wind' => -2, 'round' => 4, 'seed' => 33, 'shooter' => 1, 'difficulty' => $level,
+        'tanks' => [$human(160, 100) + ['jammer' => 2], $drone(540, 60) + ['dirS' => -1, 's' => 'sniper']]]);
+    foreach ([[1, 7], [6, 42]] as [$round, $seed]) {
+        // Seven shots: the ranging shot, five corrections, then a fresh start.
+        $bracket("$level-stationary-round$round", ['terrain' => $hills, 'wind' => 2, 'round' => $round, 'seed' => $seed, 'shooter' => 1, 'target' => 0,
+            'shots' => 7, 'difficulty' => $level, 'tanks' => [$human(200, 9999), $drone(520, 9999) + ['dirS' => -1, 'angle' => 60]]]);
+    }
+}
 
 /* ---- strategies: who a drone picks and how it aims ----
  * A few turns of choosing with no volley fired in between, so nothing is

@@ -22,20 +22,39 @@ function room_brk_land(array &$tank, float $x): void
 /* Drone bracketing, like real artillery. The first shot at a target is the
  * ballistic solution plus the round's wobble (the ranging shot). While the
  * target and the gunner both stay put, each next shot starts from the last aim
- * and corrects by the measured miss, with the wobble shrinking by
- * ROOM_BRK_SHRINK per correction down to ROOM_BRK_FLOOR (never zero, so a
+ * and corrects by a share ('correct') of the measured miss, with the wobble
+ * shrinking by 'brkShrink' per correction down to 'brkFloor' (never zero, so a
  * drone cannot lock into a bad aim). A target that moved more than
- * ROOM_BRK_DRIFT px, a gunner that moved, a dead target, or ROOM_BRK_MAX
+ * ROOM_BRK_DRIFT px, a gunner that moved, a dead target, or 'brkMax'
  * corrections without a kill all send it back to a fresh solution.
  * src/sim.ts aiChoose is the same algorithm; protocol/sim-vectors.php keeps
  * them identical. Memory per drone: $tank['brk'] = [t target index, a, p
  * angle and power fired, w weapon, n corrections so far, tx target x then,
  * ox own x then, land first burst x of the volley (null until it bursts)]. */
-const ROOM_BRK_SHRINK = 0.65;
-const ROOM_BRK_FLOOR = 0.2;
-const ROOM_BRK_MAX = 5;
 const ROOM_BRK_DRIFT = 3.0;
 const ROOM_BRK_ON = 22.0;
+
+/* How well the drones aim, by difficulty: the host's choice, stored in
+ * $room['difficulty']. The ranging shot's wobble is wobStart - wobStep x round,
+ * never below wobFloor. src/ai.ts DIFFICULTY is the same table (its comment
+ * says how it was tuned). */
+const ROOM_DIFFICULTY = [
+    'easy' => ['wobStart' => 5.0, 'wobStep' => 0.3, 'wobFloor' => 2.0, 'correct' => 0.5, 'brkShrink' => 0.6, 'brkFloor' => 0.8, 'brkMax' => 5],
+    'normal' => ['wobStart' => 3.7, 'wobStep' => 0.33, 'wobFloor' => 1.15, 'correct' => 0.6, 'brkShrink' => 0.5, 'brkFloor' => 0.4, 'brkMax' => 5],
+    'hard' => ['wobStart' => 0.85, 'wobStep' => 0.12, 'wobFloor' => 0.25, 'correct' => 1.0, 'brkShrink' => 0.65, 'brkFloor' => 0.2, 'brkMax' => 5],
+];
+/* The difficulty a create request asks for: exactly one of the three words,
+ * anything else (missing, misspelled, another type) is normal. */
+function room_parse_difficulty(mixed $raw): string
+{
+    return is_string($raw) && isset(ROOM_DIFFICULTY[$raw]) ? $raw : 'normal';
+}
+/* A room's difficulty word; a room from before the setting, or anything
+ * else, is normal. */
+function room_difficulty(array $room): string
+{
+    return room_parse_difficulty($room['difficulty'] ?? null);
+}
 
 /* The best (angle, power) near a last aim for a shot to burst on goalX: a
  * coarse sweep, then a fine one around its best. Nearer the last aim wins ties. */
@@ -203,7 +222,8 @@ function room_ai_choose(array &$room, array $tank): array
     // on the same spot, the same gun still loaded, under the correction cap,
     // and a strategy that still wants that target.
     $cont = null;
-    if ($mem !== null && $mem['n'] < ROOM_BRK_MAX && abs($tank['x'] - $mem['ox']) <= 1.0 && in_array($mem['w'], $keys, true)) {
+    $skill = ROOM_DIFFICULTY[room_difficulty($room)];
+    if ($mem !== null && $mem['n'] < $skill['brkMax'] && abs($tank['x'] - $mem['ox']) <= 1.0 && in_array($mem['w'], $keys, true)) {
         foreach ($rivals as $r) {
             if ($r['idx'] === $mem['t'] && abs($r['x'] - $mem['tx']) <= ROOM_BRK_DRIFT && ($want === null || $want['idx'] === $r['idx'])) {
                 $cont = $r;
@@ -220,8 +240,7 @@ function room_ai_choose(array &$room, array $tank): array
     $width = count($room['terrain']);
     // Deliberately shaky hands: dangerous up close, forgiving at range.
     // A jammer doubles the wobble of anything aimed at its owner.
-    $skill = min(1.0, 0.35 + $room['round'] * 0.12);
-    $wob = max(0.25, 1.2 - $skill) * ($s === 'sniper' ? ROOM_SNIPER_WOB : 1.0);
+    $wob = max($skill['wobFloor'], $skill['wobStart'] - $skill['wobStep'] * $room['round']) * ($s === 'sniper' ? ROOM_SNIPER_WOB : 1.0);
     if ($cont !== null) {
         $w = $mem['w'];
         $n = $mem['n'] + 1;
@@ -232,9 +251,10 @@ function room_ai_choose(array &$room, array $tank): array
             $miss = 0.0; // a burst on the hull is on target: hold the aim
         }
         // Where the sim must put a shot so that, shifted by the measured miss
-        // of the last one, it bursts on the target.
-        [$ba, $bp] = room_ai_correct($room, $mx, $my, $w, $dirS, (float) $mem['a'], (float) $mem['p'], $sim['x'] + $miss);
-        $wob = max(ROOM_BRK_FLOOR, $wob * ROOM_BRK_SHRINK ** $n);
+        // of the last one, it bursts on the target (or, taking out only part
+        // of the miss, nearer it).
+        [$ba, $bp] = room_ai_correct($room, $mx, $my, $w, $dirS, (float) $mem['a'], (float) $mem['p'], $sim['x'] + $miss * $skill['correct']);
+        $wob = max($skill['brkFloor'], $wob * $skill['brkShrink'] ** $n);
     } else {
         $guns = $keys;
         if ($s === 'glory') {

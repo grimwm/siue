@@ -244,6 +244,8 @@ if ($action === 'create' && $method === 'POST') {
     $code = $lock['code'];
     $room = room_new($code, $initials);
     $room['map'] = $map;
+    // The host's setting for the whole room; nobody changes it after this.
+    $room['difficulty'] = room_parse_difficulty($body['difficulty'] ?? null);
     $token = room_rand_token();
     // A fresh seat is present, not idle: the 90-second auto-fire rule must
     // not mistake a guest who just sat down for one who walked away.

@@ -183,6 +183,8 @@ export interface Cloud {
   s: number;
   v: number;
 }
+/* How well the drones aim; the table behind each word is DIFFICULTY in ai.ts. */
+export type Difficulty = 'easy' | 'normal' | 'hard';
 /* The slice of the game's state the sim reads and writes (main.ts's G). */
 export interface World {
   tanks: Tank[];
@@ -199,6 +201,7 @@ export interface World {
   bunker: number;
   laststand: boolean;
   jammer: number;
+  difficulty?: Difficulty; // the drones' aim this match; missing means normal
 }
 export interface HitBox {
   cx: number;

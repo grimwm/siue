@@ -56,6 +56,11 @@ function room_test_wipe(int $base): void
         @sem_remove($sem);
     }
 }
+$storedDifficulty = function (string $c) {
+    [$room, $lock] = room_load($c);
+    room_unlock($lock);
+    return is_array($room) ? ($room['difficulty'] ?? '(missing)') : '(no room)';
+};
 $ageRoom = function (string $c): void {
     [$room, $lock] = room_load($c);
     if (is_array($room)) {
@@ -120,6 +125,7 @@ $code = (string) ($room['code'] ?? '');
 $token = (string) ($room['token'] ?? '');
 $ping = $get($base . '/rooms.php?action=ping');
 $check('counts-live', ($ping['rooms']['used'] ?? -1) === 1);
+$check('create-without-difficulty-stores-normal', $storedDifficulty($code) === 'normal', $storedDifficulty($code));
 
 // Age a record the way an abandoned room ages.
 $ageRoom($code);
@@ -130,11 +136,13 @@ $gone = $get($base . '/rooms.php?action=state&code=' . $code . '&token=' . $toke
 $check('stale-unreachable', ($gone['error'] ?? '') === 'no such room', $gone['error'] ?? '');
 
 // A seated state poll is a heartbeat: a fresh waiting lobby stays counted.
-$room = $post('create', ['initials' => 'qrs']);
+$room = $post('create', ['initials' => 'qrs', 'difficulty' => 'hard']);
 $code = (string) ($room['code'] ?? '');
 $token = (string) ($room['token'] ?? '');
 $state = $get($base . '/rooms.php?action=state&code=' . $code . '&token=' . $token . '&since=0');
 $check('heartbeat-ok', ($state['ok'] ?? false) === true);
+$check('create-stores-the-hosts-difficulty', $storedDifficulty($code) === 'hard', $storedDifficulty($code));
+$check('snapshot-shows-the-difficulty', ($state['room']['difficulty'] ?? null) === 'hard', json_encode($state['room']['difficulty'] ?? null));
 $ping = $get($base . '/rooms.php?action=ping');
 $check('heartbeat-counts', ($ping['rooms']['used'] ?? -1) === 1);
 
@@ -153,7 +161,9 @@ $check('ping-ignores-room-lock', $pingHeld !== null && ($pingHeld['rooms']['used
     && $lockDt < 2.0, sprintf('wait=%.2fs', $lockDt));
 
 // The ceiling uses the live count, and refusals stay human.
-$second = $post('create', ['initials' => 'abc']);
+$second = $post('create', ['initials' => 'abc', 'difficulty' => 'HARD']);
+$check('create-with-an-unknown-difficulty-stores-normal', $storedDifficulty((string) ($second['code'] ?? '')) === 'normal',
+    $storedDifficulty((string) ($second['code'] ?? '')));
 usleep(1100000); // respect the creation throttle before the next attempt
 $third = $post('create', ['initials' => 'def']);
 $check('cap-live', ($second['ok'] ?? false) === true && ($third['ok'] ?? false) === false,
@@ -183,12 +193,13 @@ $match = $post('create', ['initials' => 'hos']);
 $mcode = (string) ($match['code'] ?? '');
 $mtoken = (string) ($match['token'] ?? '');
 $mcsrf = (string) ($match['csrf'] ?? '');
-$guest = $post('join', ['code' => $mcode, 'initials' => 'gst']);
+$guest = $post('join', ['code' => $mcode, 'initials' => 'gst', 'difficulty' => 'easy']);
 $gseat = (int) ($guest['seat'] ?? -1);
 $gtoken = (string) ($guest['token'] ?? '');
 $gcsrf = (string) ($guest['csrf'] ?? '');
 $check('match-seats', ($match['ok'] ?? false) === true && ($guest['ok'] ?? false) === true && $gseat === 1,
     'code=' . $mcode . ' gseat=' . $gseat);
+$check('a-joiner-cannot-change-the-difficulty', $storedDifficulty($mcode) === 'normal', $storedDifficulty($mcode));
 // The host's next poll carries the guest's arrival, so the lobby can say so.
 $lobby = $get($base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
 $joins = array_values(array_filter($lobby['room']['events'] ?? [], fn($e) => ($e['t'] ?? '') === 'join'));

@@ -8,6 +8,7 @@
             "phase": "shop",
             "map": null,
             "mapName": "Random hills",
+            "difficulty": "normal",
             "round": 1,
             "wind": -5,
             "turn": null,

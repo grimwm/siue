@@ -398,11 +398,13 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
 const UNITS = [{ key: 'tank', name: 'Tank' }, { key: 'hover', name: 'Hover' }, { key: 'walker', name: 'Walker' }, { key: 'buggy', name: 'Buggy' }];
 const SIZES = [{ key: 's', name: 'Small', scale: 0.9 }, { key: 'm', name: 'Normal', scale: 1 }, { key: 'l', name: 'Large', scale: 1.15 }, { key: 'xl', name: 'Huge', scale: 1.3 }];
 function menuProps(over = {}) {
-  const calls = { close: 0, newGame: 0, submit: 0, unit: [], size: [], sound: 0, music: 0, fs: 0, random: 0, rooms: 0, tutorial: 0, scores: 0, leave: 0, drawn: [] };
+  const calls = { close: 0, newGame: 0, submit: 0, unit: [], size: [], difficulty: [], sound: 0, music: 0, fs: 0, random: 0, rooms: 0, tutorial: 0, scores: 0, leave: 0, drawn: [] };
   const props = {
     keyHint, onClose: () => { calls.close++; }, onNewGame: () => { calls.newGame++; }, onSubmit: () => { calls.submit++; },
     units: UNITS, unit: 'tank', drawUnit: (cv, key) => { calls.drawn.push(key); }, onPickUnit: k => calls.unit.push(k),
     sizes: SIZES, size: 'm', onPickSize: k => calls.size.push(k),
+    difficulties: [{ key: 'easy', name: 'Easy' }, { key: 'normal', name: 'Normal' }, { key: 'hard', name: 'Hard' }],
+    difficulty: 'normal', onPickDifficulty: k => calls.difficulty.push(k),
     sound: true, music: true, fullscreen: false,
     onSound: () => { calls.sound++; }, onMusic: () => { calls.music++; }, onFullscreen: () => { calls.fs++; },
     onRandom: () => { calls.random++; }, onRooms: () => { calls.rooms++; }, onTutorial: () => { calls.tutorial++; }, onScores: () => { calls.scores++; },
@@ -444,6 +446,13 @@ function menuProps(over = {}) {
     || sizeTiles[3].children[0].style.fontSize !== sizeTiles[0].children[0].style.fontSize, sizeTiles.map(t => t.children[0].style.fontSize).join());
   click(sizeTiles[3]);
   check('menu-text-click-reports-key', calls.size.join() === 'xl');
+  const levelTiles = byId(form, 'difficulty-picker').children;
+  check('menu-difficulty-tiles', levelTiles.length === 3 && levelTiles.map(t => text(t)).join() === 'Easy,Normal,Hard'
+    && levelTiles.map(t => attr(t, 'aria-pressed')).join() === 'false,true,false' && text(byId(form, 'difficulty-label')) === 'Difficulty',
+    levelTiles.map(t => text(t) + ':' + attr(t, 'aria-pressed')).join());
+  check('menu-difficulty-hint-says-when', /next match/.test(text(byId(form, 'difficulty-hint'))) && /host/.test(text(byId(form, 'difficulty-hint'))));
+  click(levelTiles[2]);
+  check('menu-difficulty-click-reports-key', calls.difficulty.join() === 'hard');
   const toggles = ['btn-sound', 'btn-music', 'fullscreen'].map(id => byId(form, id));
   check('menu-toggles', toggles.map(t => hasClass(t, 'tile-toggle') && hasClass(t, 'unit-choice')).every(Boolean)
     && toggles.map(t => attr(t, 'aria-pressed')).join() === 'true,true,false' && toggles.map(t => text(t)).join('|') === 'Sound (E)|Music (M)|Fullscreen (F)',

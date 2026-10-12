@@ -57,6 +57,8 @@ export interface LobbyProps {
   link: string;
   /** "Hills: Canyon 3". */
   hills: string;
+  /** "Drones: Hard (the host's Difficulty)"; empty hides the line. */
+  drones: string;
   seats: LobbySeat[];
   /** This player's seat number. */
   mySeat: number;
@@ -174,6 +176,7 @@ export function Lobby(p: LobbyProps) {
             </button>
           </p>
           <p class="hint" id="lobby-hills">{p.hills}</p>
+          <p class="hint" id="lobby-drones" hidden={!p.drones}>{p.drones}</p>
           <div class="unit-row" role="group" aria-labelledby="seats-label">
             <span class="unit-label" id="seats-label">Seats</span>
             <div class="unit-picker seat-grid" id="lobby-seats">

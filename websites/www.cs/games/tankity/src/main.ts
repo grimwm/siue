@@ -59,6 +59,8 @@ import { createMatch } from './match.ts';
 import { createRoom } from './room.ts';
 import { createLobby } from './lobby.ts';
 import { createMenu } from './menu.ts';
+import { difficultySetting } from './difficulty.ts';
+import { browserStorage } from '../../_kit/ports.browser.ts';
 import type { Arsenal, Weapon, Gear } from './sim.ts';
 import type { GameState, GameTank, MatchState } from './game-types.ts';
 import type { PreviewEnv } from './preview.ts';
@@ -413,13 +415,15 @@ const {
 } = createTutorial({
   G, $, TOUCH, net, sfx, me, keyHint, keyCap, say, refreshNavHints, closeOverlays, freshMatchFromSeedBox,
 });
+/* The Difficulty setting: the Menu picks it, a new solo match and a hosted room read it. */
+const difficulty = difficultySetting(browserStorage());
 /* The solo match (src/match.ts): dealing, turns, blasts, the drone's shot, the end veil. A dependency
    on a module wired further down is passed as an arrow, so it resolves when it is called. */
 const {
   advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
   stepWar, decayFx,
 } = createMatch({
-  G, $, TOUCH, tables, net, sfx, music, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
+  G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
   tutorialFired, fileReport, savedCallsign, freshMatchFromSeedBox,
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
@@ -454,14 +458,14 @@ const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
   netLeave, netRematch,
 } = createLobby({
-  G, $, net, MATCH, HUD, END, SCORES, replay, sfx, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
+  G, $, net, MATCH, HUD, END, SCORES, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
   closeOverlays, closePreview, endTutorial, freshMatchFromSeedBox, hideShop, paintHud, refreshNavHints, renderEndVeil,
   renderMenu: () => renderMenu(),
   renderScoresOverlay, renderShop,
 });
 /* The game menu's settings (src/menu.ts). */
 const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
-  G, $, net, sfx, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, openRooms, placeLogBelowMenu,
+  G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, openRooms, placeLogBelowMenu,
   randomRun, freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound, tutorialOpen,
 });
 function myTank(): GameTank | null {

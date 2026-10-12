@@ -29,7 +29,7 @@ function pathAt(shot, k) {
 function makeHost() {
   const tanks = [
     { seat: 0, x: 251, y: 324, angle: 20, power: 45, hp: 100 },
-    { seat: 1, x: 415.1, y: 342, angle: 45, power: 39, hp: 100 },
+    { seat: 1, x: 415.1, y: 342, angle: byT('aifire')[0].a, power: byT('aifire')[0].pw, hp: 100 },
   ];
   const log = { events: [], launches: 0, blasts: [], muzzles: [], specials: [], trails: [] };
   const env = {

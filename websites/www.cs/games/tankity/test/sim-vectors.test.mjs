@@ -52,6 +52,7 @@ function world(c) {
     tanks: (c.tanks || []).map(tankOf), terrain: buildTerrain(c.terrain || { flat: 400 }), wind: c.wind || 0, round: c.round || 1,
     shells: [], booms: [], clouds: [], fx: {}, ammo: {}, selected: 'shell', score: human.score || 0, cash: 0, shake: 0, shopSel: 0,
     shield: !!human.shield, bunker: human.bunker || 0, laststand: !!human.laststand, jammer: human.jammer || 0,
+    difficulty: c.difficulty,
   });
   return G;
 }

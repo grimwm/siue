@@ -18,6 +18,7 @@ import type {
   ActBody, ErrorReply, MapInfo, MapsReply, PingReply, PostAction, PostBodies, PostReplies,
   RoomEvent, RoomReply, RoomSeat, RoomSnapshot, VolleyOpenerEvent,
 } from './protocol.ts';
+import type { Difficulty } from './sim.ts';
 
 /* ---------- what the client needs from its host ---------- */
 
@@ -304,11 +305,11 @@ export class RoomClient {
   /* ---- joining and leaving ---- */
 
   /** Hosts a room: forgets any earlier session, creates, takes the seat. */
-  async host(initials: string, map: string, body: string): Promise<void> {
+  async host(initials: string, map: string, body: string, difficulty: Difficulty): Promise<void> {
     this.forget();
     this.map = null;
     this.mapName = 'Random hills';
-    const data = await this.post('create', { initials, map, body });
+    const data = await this.post('create', { initials, map, body, difficulty });
     this.code = data.code; this.seat = data.seat; this.token = data.token; this.csrf = data.csrf;
   }
 

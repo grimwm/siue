@@ -25,7 +25,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="The CIC">
-<meta http-equiv="refresh" content="0; url=../../?game=cylon">
+<script>location.replace("../../?game=cylon" + location.search.replace(/^\?/, '&') + location.hash);</script>
+<noscript><meta http-equiv="refresh" content="0; url=../../?game=cylon"></noscript>
 </head>
 <body>
 <p><a href="../../?game=cylon">Play The CIC</a></p>

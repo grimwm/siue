@@ -13,6 +13,11 @@ const INSTALL_DEFAULT_COLOR = '#0c0e12';
    not exist (plain http, file://, a test's stub DOM). */
 const INSTALL_SW_REGISTER = "<script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>";
 
+/* Holds back the browser's install prompt for the page's Install button
+   (games/_kit/install.ts): the event can fire before the deferred
+   dist/install.js runs, and a prompt not held back is lost. */
+const INSTALL_PROMPT_STASH = "<script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__installPrompt = e; });</script>";
+
 /** Every install icon (rendered by games/_kit/build/icons.mjs): file, size and
  *  purpose. `apple` is the home-screen icon iOS reads from the page; the rest
  *  go in the manifest. */
@@ -162,6 +167,7 @@ function install_block(array $card, string $pad): string
         '<meta name="mobile-web-app-capable" content="yes">',
         '<meta name="apple-mobile-web-app-capable" content="yes">',
         '<meta name="apple-mobile-web-app-title" content="' . install_esc($card['short_name']) . '">',
+        INSTALL_PROMPT_STASH,
         INSTALL_SW_REGISTER,
         INSTALL_END,
     ];

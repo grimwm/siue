@@ -11,6 +11,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Tankity">
+<script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__installPrompt = e; });</script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
 <link rel="stylesheet" href="game.css?v=0e23b6ac63">
@@ -102,5 +103,6 @@
 
 <script src="dist/fx.js?v=7e1e68411c" defer></script>
 <script type="module" src="dist/main.js?v=4f6989140f"></script>
+<script src="dist/install.js?v=c9b6fdc8d2" defer></script>
 </body>
 </html>

@@ -4,7 +4,9 @@
 // three ways a link is shared.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createInstall, asksInstall, withInstall, COPIED_MS, IOS_STEPS } from '../install.ts';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { createInstall, asksInstall, withInstall, COPIED_MS, IOS_STEPS, PROMPT_STASH } from '../install.ts';
 import { manualClock } from './clock.ts';
 
 // A site page (/play/crete/) and the game's own page (games/crete/).
@@ -197,4 +199,9 @@ test('?install is read in any form, and added to a page keeping its query and ha
   for (const s of ['', '?installs', '?game=cylon']) assert.equal(asksInstall(s), false, s);
   assert.equal(withInstall('https://site.test/games/crete/'), 'https://site.test/games/crete/?install');
   assert.equal(withInstall('https://site.test/index.html?game=cylon#top'), 'https://site.test/index.html?game=cylon&install#top');
+});
+
+test('the page\'s first script parks an early prompt where the bar looks for it', () => {
+  const php = readFileSync(join(import.meta.dirname, '..', 'php', 'install-core.php'), 'utf8');
+  assert.match(php, new RegExp(`window\\.${PROMPT_STASH} = e;`));
 });

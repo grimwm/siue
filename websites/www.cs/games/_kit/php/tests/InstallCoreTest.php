@@ -73,6 +73,15 @@ final class InstallCoreTest extends TestCase
         $this->assertSame(['index.html must reference dist/main.js?v=... exactly once (found 0)'], $problems);
     }
 
+    public function testBlockHoldsBackTheInstallPromptForTheInstallBar(): void
+    {
+        [$card] = install_card($this->dir, 'play');
+        $block = install_block($card, '');
+        $this->assertStringContainsString(INSTALL_PROMPT_STASH, $block);
+        $this->assertStringContainsString('e.preventDefault(); window.__installPrompt = e;', INSTALL_PROMPT_STASH);
+        $this->assertLessThan(strpos($block, INSTALL_SW_REGISTER), strpos($block, INSTALL_PROMPT_STASH));
+    }
+
     public function testBlockIsInsertedThenReplaced(): void
     {
         [$card] = install_card($this->dir, 'play');

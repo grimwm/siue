@@ -14,6 +14,9 @@ file_put_contents("$tmp/play/play.css", ".play-nav{}\n");
 file_put_contents("$tmp/play/play.js", "(function () {})();\n");
 file_put_contents("$root/arty/metadata.yaml", "title: Arty & Co\ndescription: \"Lob <shells> at drones.\"\nplay: index.html\nimage: og.png\n");
 file_put_contents("$root/arty/og.png", 'png');
+// A page game's built Install and Share bar, which its site page loads.
+@mkdir("$root/arty/dist", 0777, true);
+file_put_contents("$root/arty/dist/install.js", "(()=>{})();\n");
 $page = "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>Arty</title>\n</head>\n<body>hi</body>\n</html>\n";
 file_put_contents("$root/arty/index.html", $page);
 file_put_contents("$root/mounted/metadata.yaml", "title: Mounted\ndescription: Runs in the site page.\nstart: goGame\n");
@@ -46,6 +49,14 @@ $check('wrapper-colours', str_contains($wrap, '--game-bg: ' . GAMES_HUB_DEFAULT_
     && str_contains($wrap, '--game-accent: ' . GAMES_HUB_DEFAULT_ACCENT . ';'));
 $check('wrapper-installs-game', str_contains($wrap, '<link rel="manifest" href="../../games/arty/manifest.webmanifest">')
     && !str_contains($wrap, 'serviceWorker'));
+// Install and Share: the bar's mount after the game's name, the game's
+// dist/install.js with its own version, and the early-prompt stash before it.
+$check('wrapper-install-bar', str_contains($wrap, '<span class="play-install" id="play-install" data-title="Arty &amp; Co" data-game-page="../../games/arty/"></span>')
+    && strpos($wrap, 'class="play-now"') < strpos($wrap, 'id="play-install"'));
+$check('wrapper-loads-install-js', str_contains($wrap, '<script src="../../games/arty/dist/install.js?v='
+    . substr(hash('sha256', (string) file_get_contents("$root/arty/dist/install.js")), 0, 10) . '" defer></script>'));
+$check('wrapper-stashes-the-prompt-first', str_contains($wrap, INSTALL_PROMPT_STASH)
+    && strpos($wrap, INSTALL_PROMPT_STASH) < strpos($wrap, '<script src='));
 
 // The shared stylesheet and script carry a content-hash version, so a changed
 // file is fetched afresh.
@@ -58,6 +69,8 @@ $fwd = (string) @file_get_contents("$tmp/play/mounted/index.html");
 $check('start-page-written', str_contains($fwd, '<meta property="og:title" content="Mounted">'));
 $check('start-page-forwards', str_contains($fwd, 'url=../../?game=mounted') && str_contains($fwd, 'http-equiv="refresh"'));
 $check('start-page-no-image-card', str_contains($fwd, '<meta name="twitter:card" content="summary">'));
+$check('start-page-keeps-the-query', str_contains($fwd, "<script>location.replace(\"../../?game=mounted\" + location.search.replace(/^\\?/, '&') + location.hash);</script>")
+    && str_contains($fwd, '<noscript><meta http-equiv="refresh" content="0; url=../../?game=mounted"></noscript>'));
 
 // Idempotent: a second write changes nothing, and check mode is clean.
 site_pages_sync($root, $site, true);
@@ -90,6 +103,13 @@ unlink("$tmp/play/play.js");
 $check('unreadable-shared-file-fails', $stale === [] && $broken === true && in_array('play/play.js is not readable, but the wrapper pages load it', $notes, true)
     && file_get_contents("$tmp/play/arty/index.html") === $wrapNow, json_encode([$stale, $notes, $broken]));
 file_put_contents("$tmp/play/play.js", $keep);
+
+// A page game that was never built has no bar to load: a note and a failure.
+unlink("$root/arty/dist/install.js");
+[$stale, $notes, $broken] = site_pages_sync($root, $site, false);
+$check('unbuilt-game-fails', $broken === true
+    && in_array('games/arty/dist/install.js is not readable, but play/arty/ loads it; build the game', $notes, true), json_encode([$notes, $broken]));
+file_put_contents("$root/arty/dist/install.js", "(()=>{})();\n");
 
 // Editing metadata makes the page stale again.
 file_put_contents("$root/arty/metadata.yaml", "title: Arty 2\ndescription: New.\nplay: index.html\n");

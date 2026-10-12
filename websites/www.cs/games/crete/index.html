@@ -11,6 +11,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Crete">
+    <script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__installPrompt = e; });</script>
     <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
     <!-- app-tags:end -->
     <link rel="stylesheet" href="game.css?v=f5f8fe983a" />
@@ -169,5 +170,6 @@
     <div id="title-root"></div>
 
     <script type="module" src="dist/main.js?v=a4109f7cfd"></script>
+    <script src="dist/install.js?v=c9b6fdc8d2" defer></script>
   </body>
 </html>

@@ -254,7 +254,7 @@ export function createMatch(deps: MatchDeps) {
     const w = tables.weapons[wkey]!;
     const launch = simFireWeapon(G, tables.arsenal!, t, wkey);
     if (!launch) {
-      if (t.isPlayer) { say(`No ${w.name} left! ${TOUCH ? 'Tap Weapons' : keyHint('global', 'cycle')} to swap guns.`, 'info'); sfx.play('click'); }
+      if (t.isPlayer) { say(`No ${w.name} left! ${TOUCH ? 'Tap Weapon' : `Press ${keyHint('global', 'guns')}`} to swap guns.`, 'info'); sfx.play('click'); }
       return false;
     }
     if (launch.spent) say(`Out of ${w.name}. Back to the Shell.`, 'info');

@@ -1,10 +1,9 @@
 /* Operation Tankity: the weapon picker.
  *
- * Every gun on the rack as a tile, for when Q would take a dozen presses; the
- * keys that move its cursor and load a gun, and the plain cycle through the
- * rack. The picker overlay (src/ui/guns.tsx) draws what this says. In a room
- * a pick goes to the server (the `netPick` and `netCycle` deps). The game's
- * state, the arsenal tables and the page arrive as deps. */
+ * Every gun on the rack as a tile, and the keys that move its cursor and load
+ * a gun. The picker overlay (src/ui/guns.tsx) draws what this says. In a room
+ * a pick goes to the server (the `netPick` dep). The game's state, the
+ * arsenal tables and the page arrive as deps. */
 import type { GameState, Tables } from './game-types.ts';
 import type { RoomClient } from './net.ts';
 import { clamp } from './sim.ts';
@@ -29,13 +28,12 @@ export interface GunsDeps {
   drawShellIcon(cv: HTMLCanvasElement, wkey: string): void;
   demoBlock(): boolean;
   netPick(w: string): boolean;
-  netCycle(): void;
 }
 
 export function createGuns(deps: GunsDeps) {
-  const { G, $, tables, net, sfx, keyHint, say, refreshNavHints, renderHUD, drawShellIcon, demoBlock, netPick, netCycle } = deps;
+  const { G, $, tables, net, sfx, keyHint, say, refreshNavHints, renderHUD, drawShellIcon, demoBlock, netPick } = deps;
 
-  /* One direct loader for the weapon picker; Q keeps cycling through it. */
+  /* The weapon picker's one loader. */
   function selectWeapon(w: string): boolean {
     if (G.over || G.phase === 'shop' || demoBlock()) return false;
     if (net.on) return netPick(w);
@@ -56,8 +54,7 @@ export function createGuns(deps: GunsDeps) {
     moveGunCursor(dir);
     return true;
   }
-  /* The weapon picker: every gun on the rack as a tile, for when Q would take
-     a dozen presses. Arrows or J/K move the cursor, Enter or a digit loads. */
+  /* The weapon picker: every gun on the rack as a tile. Arrows or J/K move the cursor, Enter or a digit loads. */
   const GUN_COLS = 4;
   let gunCursor = 0;
   function rackGuns(): string[] {
@@ -118,27 +115,11 @@ export function createGuns(deps: GunsDeps) {
     sfx.play('click');
     renderGuns();
   }
-  function cycleWeapon(): void {
-    if (G.over || G.phase === 'shop') return;
-    if (net.on) { netCycle(); return; }
-    if (demoBlock()) return;
-    const i = tables.order.indexOf(G.selected);
-    for (let k = 1; k <= tables.order.length; k++) {
-      const w = tables.order[(i + k) % tables.order.length]!;
-      if (w === 'shell' || (G.ammo![w] || 0) > 0) {
-        G.selected = w;
-        sfx.play('click');
-        say(`Loaded: ${tables.weapons[w]!.name}.`, 'info');
-        renderHUD();
-        return;
-      }
-    }
-  }
 
   /* The cursor, for the keys that act on the tile it is on. */
   const cursorAt = (): number => gunCursor;
 
   return {
-    GUN_COLS, rackGuns, gunsOpen, openGuns, closeGuns, renderGuns, pickGun, moveGunCursor, cycleWeapon, gunGrid, cursorAt,
+    GUN_COLS, rackGuns, gunsOpen, openGuns, closeGuns, renderGuns, pickGun, moveGunCursor, gunGrid, cursorAt,
   };
 }

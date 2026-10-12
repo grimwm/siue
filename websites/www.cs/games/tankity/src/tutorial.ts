@@ -46,7 +46,7 @@ export function createTutorial(deps: TutorialDeps) {
   const TOUCH_NAMES: Record<string, string> = {
     'aim:barrelLeft': '◀', 'aim:barrelRight': '▶', 'aim:powerUp': '▲', 'aim:powerDown': '▼',
     'aim:driveLeft': 'Drive ◀', 'aim:driveRight': 'Drive ▶',
-    'global:cycle': 'Weapons', 'global:fire': 'Fire',
+    'global:guns': 'Weapon', 'global:fire': 'FIRE',
   };
   /* ---------- tutorial: coached opening moves, skippable forever ---------- */
   // The tutorial arms on a fresh New Game and starts at the first live
@@ -60,7 +60,7 @@ export function createTutorial(deps: TutorialDeps) {
     { text: 'Hold {aim:barrelLeft} or {aim:barrelRight} to swing the barrel. Watch the muzzle stub move.', done: (t: GameTank) => t.angle !== 62 },
     { text: 'Hold {aim:powerUp} or {aim:powerDown} to change power. More power means longer legs.', done: (t: GameTank) => t.power !== 55 },
     { text: 'Tap {aim:driveLeft} or {aim:driveRight} to drive while fuel lasts. Hills are cover.', done: (t: GameTank) => TUT && Math.abs(t.x - TUT.x0) > 2 },
-    { text: 'Press {global:cycle} to cycle shells. The HUD shows what is loaded.', done: () => TUT && G.selected !== TUT.sel0 },
+    { text: 'Press {global:guns} and pick another shell. The Weapon button shows what is loaded.', done: () => TUT && G.selected !== TUT.sel0 },
     { text: 'Press {global:fire} to fire. Then read the wind and adjust.', done: () => TUT && TUT.fired },
   ];
   function fmtKeys(text: string): string {

@@ -121,13 +121,6 @@ export function createRoom(deps: RoomDeps) {
     net.sendQuiet({ kind: 'weapon', weapon: w });
     return true;
   }
-  function netCycle(): void {
-    const i = tables.order.indexOf(G.selected);
-    for (let k = 1; k <= tables.order.length; k++) {
-      const w = tables.order[(i + k) % tables.order.length]!;
-      if (netPick(w)) return;
-    }
-  }
   function netBuy(it: ShopRow, qty?: number): void {
     const key = it.kind === 'ammo' ? it.w! : (it.g || it.kind);
     qty = clamp(Math.floor(qty || 1), 1, 9);
@@ -550,6 +543,6 @@ export function createRoom(deps: RoomDeps) {
   }
 
   return {
-    netFire, netPick, netCycle, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
+    netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
   };
 }

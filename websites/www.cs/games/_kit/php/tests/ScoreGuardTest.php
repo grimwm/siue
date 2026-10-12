@@ -111,4 +111,64 @@ final class ScoreGuardTest extends TestCase
         $this->assertTrue($g->isBlocked('KKK'));
         $this->assertFalse($g->isBlocked('ABC'));
     }
+
+    /** @return array<string, array{array<string, string>, bool}> */
+    public static function origins(): array
+    {
+        return [
+            'own host' => [['HTTP_ORIGIN' => 'https://game.test'], true],
+            'own host, other port' => [['HTTP_ORIGIN' => 'http://game.test:8080'], true],
+            'own host behind a port' => [['HTTP_HOST' => 'game.test:8443', 'HTTP_ORIGIN' => 'https://game.test'], true],
+            'allowed host' => [['HTTP_ORIGIN' => 'https://www.cs.siue.edu'], true],
+            'foreign origin' => [['HTTP_ORIGIN' => 'https://evil.example'], false],
+            'opaque origin' => [['HTTP_ORIGIN' => 'null'], false],
+            'referer when no origin' => [['HTTP_REFERER' => 'https://game.test/games/cylon/'], true],
+            'foreign referer' => [['HTTP_REFERER' => 'https://evil.example/x'], false],
+            'origin wins over referer' => [['HTTP_ORIGIN' => 'https://evil.example', 'HTTP_REFERER' => 'https://game.test/'], false],
+            'neither, with the header' => [['HTTP_X_TEST_CSRF' => 'x'], true],
+            'neither, no header' => [[], false],
+        ];
+    }
+
+    /** @param array<string, string> $server */
+    #[DataProvider('origins')]
+    public function testOriginAllowList(array $server, bool $allowed): void
+    {
+        $this->assertSame($allowed, $this->guard($server)->originAllowed());
+    }
+
+    public function testCsrfNeedsTheCookieAndAnEqualHeader(): void
+    {
+        $token = str_repeat('ab', 16);
+        $this->assertTrue($this->guard(['HTTP_X_TEST_CSRF' => $token], ['test_csrf' => $token])->csrfOk());
+        $this->assertFalse($this->guard(['HTTP_X_TEST_CSRF' => str_repeat('cd', 16)], ['test_csrf' => $token])->csrfOk());
+        $this->assertFalse($this->guard([], ['test_csrf' => $token])->csrfOk());
+        $this->assertFalse($this->guard(['HTTP_X_TEST_CSRF' => 'abc'], ['test_csrf' => 'abc'])->csrfOk());
+        $this->assertFalse($this->guard(['HTTP_X_TEST_CSRF' => $token])->csrfOk());
+    }
+
+    public function testATokenCookieIsReusedNotReissued(): void
+    {
+        $token = str_repeat('ab', 16);
+        $this->assertSame($token, $this->guard([], ['test_csrf' => $token])->csrfToken());
+        $this->assertSame([], $this->cookiesSet);
+    }
+
+    public function testANewTokenIsAStrictHttpOnlyCookieScopedToTheGame(): void
+    {
+        $g = $this->guard(['SCRIPT_NAME' => '/games/test/scores.php', 'HTTPS' => 'on'], ['test_csrf' => 'not-a-token']);
+        $token = $g->csrfToken();
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{32}$/', $token);
+        $this->assertSame([['test_csrf', $token, [
+            'expires' => $this->now + 7 * 86400, 'path' => '/games/test', 'secure' => true, 'httponly' => true, 'samesite' => 'Strict',
+        ]]], $this->cookiesSet);
+        $this->assertSame($token, $g->csrfToken(), 'the same request keeps the token it set');
+    }
+
+    public function testAPlainHttpRequestGetsANonSecureCookieAtTheRoot(): void
+    {
+        $this->guard(['SCRIPT_NAME' => '/scores.php'])->csrfToken();
+        $this->assertSame('/', $this->cookiesSet[0][2]['path']);
+        $this->assertFalse($this->cookiesSet[0][2]['secure']);
+    }
 }

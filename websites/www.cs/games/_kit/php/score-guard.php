@@ -128,4 +128,78 @@ final class ScoreGuard
     {
         return in_array(strtoupper($initials), $this->config['blockedInitials'], true);
     }
+
+    /**
+     * A browser post from an allowed page: Origin, else Referer, must name the
+     * request's own host or an allowed one. A request with neither passes only
+     * when it carries the CSRF header, which a cross-site form cannot set.
+     */
+    public function originAllowed(): bool
+    {
+        $allowed = array_values(array_filter(array_unique(array_merge($this->config['allowedHosts'], [$this->requestHost()]))));
+        foreach (['HTTP_ORIGIN', 'HTTP_REFERER'] as $field) {
+            $value = (string) ($this->server[$field] ?? '');
+            if ($value !== '') {
+                return in_array(self::urlHost($value), $allowed, true);
+            }
+        }
+        return isset($this->server[$this->headerKey()]);
+    }
+
+    /** This browser's CSRF token: the cookie's, or a new one set now (7 days, Strict, HttpOnly, scoped to the script's folder). */
+    public function csrfToken(): string
+    {
+        $name = $this->config['csrfCookie'];
+        $current = $this->cookies[$name] ?? '';
+        if (preg_match(self::TOKEN, $current)) {
+            return $current;
+        }
+        $token = bin2hex(random_bytes(16));
+        ($this->setCookie)($name, $token, [
+            'expires' => ($this->clock)() + 7 * 86400,
+            'path' => $this->cookiePath(),
+            'secure' => $this->https(),
+            'httponly' => true,
+            'samesite' => 'Strict',
+        ]);
+        $this->cookies[$name] = $token;
+        return $token;
+    }
+
+    /** Double submit: the header must equal the cookie, and the cookie must be a token this guard issues. */
+    public function csrfOk(): bool
+    {
+        $cookie = $this->cookies[$this->config['csrfCookie']] ?? '';
+        $header = (string) ($this->server[$this->headerKey()] ?? '');
+        return preg_match(self::TOKEN, $cookie) === 1 && $header !== '' && hash_equals($cookie, $header);
+    }
+
+    private function requestHost(): string
+    {
+        return (string) preg_replace('/:\d+$/', '', strtolower((string) ($this->server['HTTP_HOST'] ?? '')));
+    }
+
+    private static function urlHost(string $url): string
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+        return is_string($host) ? strtolower($host) : '';
+    }
+
+    private function headerKey(): string
+    {
+        return 'HTTP_' . strtoupper(str_replace('-', '_', $this->csrfHeader));
+    }
+
+    private function cookiePath(): string
+    {
+        $dir = rtrim(str_replace('\\', '/', dirname((string) ($this->server['SCRIPT_NAME'] ?? ''))), '/');
+        return ($dir === '' || $dir === '.') ? '/' : $dir;
+    }
+
+    private function https(): bool
+    {
+        return (!empty($this->server['HTTPS']) && $this->server['HTTPS'] !== 'off')
+            || ($this->server['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'
+            || ($this->server['REQUEST_SCHEME'] ?? '') === 'https';
+    }
 }

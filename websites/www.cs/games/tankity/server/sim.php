@@ -62,7 +62,8 @@ const FIELD_W_MAX = 1440;
 const FIELD_COL = 24;
 const ROOM_FLIGHT_STEPS = 720; // a shell's longest flight on a room's field in 1/60 s steps (12 s), times room_field_reach() on a wider one; not a width
 
-/* src/sim.ts fieldWidthOk(): an int in range on a whole column, else null. */
+/* src/sim.ts fieldWidthOk(): an int in range on a whole column, else null.
+   Nothing calls it yet: the solo-run checks (Plan D) validate a reported width with it. */
 function room_field_width(mixed $w): ?int
 {
     if (!is_int($w) || $w < FIELD_W_MIN || $w > FIELD_W_MAX || $w % FIELD_COL !== 0) {

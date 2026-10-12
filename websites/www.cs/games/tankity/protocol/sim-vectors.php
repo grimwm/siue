@@ -155,7 +155,7 @@ $add = function (string $group, string $name, array $in, $out, ?string $known = 
     }
     $cases[$group][] = $case;
 };
-/* An exact case: written unrounded and compared bit for bit by the runner. */
+/* An exact case: written unrounded and compared with Object.is by the runner (terrain heights at 1e-9 until Plan D's deterministic math). */
 $exact = function (string $group, string $name, array $in, $out) use (&$cases): void {
     $cases[$group][] = ['name' => $name, 'in' => $in, 'out' => $out, 'exact' => true];
 };
@@ -189,7 +189,7 @@ foreach ([[1, 3], [2, 1234], [3, 99], [4, 7], [5, 2026]] as [$n, $seed]) {
     $add('spawn-spots', "n$n-seed$seed", ['n' => $n, 'seed' => $seed], ['spots' => $spots, 'next' => room_rng_next($rng)]);
 }
 
-/* ---- the field at any width, bit for bit (spec 7.4) ---- */
+/* ---- the field at any width, exact except terrain heights (spec 7.4) ---- */
 foreach ([720, 1080, 1440] as $w) {
     foreach (['tankity-twin-hills', 'scorch-01'] as $seed) {
         $rng = room_hash_seed($seed);

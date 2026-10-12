@@ -803,15 +803,23 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
       const hills = view.hills;
       for (const [a, b] of [[sx0, 0], [W - 1, sx1]] as const) {
         if (b <= a) continue;
-        c.fillStyle = '#4a2e14';
+        // The scenery dims away from the field: full colour at the seam, so the edge never reads as a cut.
+        const edge = a < 0 ? 0 : W - 1, away = a < 0 ? edge - 160 : edge + 160;
+        const body = c.createLinearGradient(edge, 0, away, 0);
+        body.addColorStop(0, '#7a4a1e');
+        body.addColorStop(1, '#4a2e14');
+        const rim = c.createLinearGradient(edge, 0, away, 0);
+        rim.addColorStop(0, '#00aa00');
+        rim.addColorStop(1, '#2f6a2f');
+        c.fillStyle = body;
         c.beginPath();
         c.moveTo(a, H + 10);
         for (let x = a; x < b; x += 4) c.lineTo(x, sceneryY(hills, view.terrain, x));
         c.lineTo(b, sceneryY(hills, view.terrain, b));
         c.lineTo(b, H + 10);
         c.fill();
-        c.strokeStyle = '#2f6a2f';
-        c.lineWidth = 2;
+        c.strokeStyle = rim;
+        c.lineWidth = 3;
         c.beginPath();
         for (let x = a; x < b; x += 4) {
           const y = sceneryY(hills, view.terrain, x);

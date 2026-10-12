@@ -43,7 +43,7 @@ function room_reply_snapshot(array $room, ?int $seat, array $body): array
     $w = room_want($body);
     return room_snapshot($room, $seat, $w['since'], $w['have'], $w['full']);
 }
-/* A delta snapshot leaves the hills out (720 numbers, most of the bytes)
+/* A delta snapshot leaves the terrain out (720 heights, most of the bytes)
    when `$have` is the revision the room is at, and always names the current
    revision. It is a full snapshot when the client asks (`$full`), holds
    nothing, holds another revision, or has fallen so far behind that events

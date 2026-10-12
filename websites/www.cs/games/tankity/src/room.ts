@@ -21,7 +21,7 @@ import { prettyRoomError, shouldCatchUp, standingsRows } from './net.ts';
 import type { RoomClient } from './net.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
-import { H, ROOM_W, TUNE, carveCrater, clamp, facing, hillsFrom } from './sim.ts';
+import { H, ROOM_W, TUNE, carveCrater, clamp, facing, genTerrain, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
 import type { ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
 
@@ -172,6 +172,12 @@ export function createRoom(deps: RoomDeps) {
     G.w = ROOM_W; // every room plays a 720 field
     if (Array.isArray(room.terrain) && room.terrain.length === ROOM_W) {
       G.terrain = room.terrain.map(Number);
+    } else if (G.terrain.length !== ROOM_W) {
+      // The lobby has no ground yet and the demo's was dealt at its own width: a stand-in at the
+      // room's width keeps the canvas, the camera and the scenery from drawing a field of the wrong size.
+      const stand = genTerrain(mulberry32(hashSeed('room:' + room.code)), ROOM_W);
+      G.terrain = stand.terrain;
+      G.hills = stand.hills;
     }
     const hills = hillsFrom(room.hills);
     if (hills) G.hills = hills;

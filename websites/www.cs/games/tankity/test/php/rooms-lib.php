@@ -38,3 +38,24 @@ if ((string) getenv('TANKITY_DATA_DIR') === '' && !isset($GLOBALS['TANKITY_TEST_
     putenv('TANKITY_DATA_DIR=' . $GLOBALS['TANKITY_TEST_HOME']);
     register_shutdown_function(static fn() => tankity_test_rm($GLOBALS['TANKITY_TEST_HOME']));
 }
+
+/* Ages a stored room by $seconds, as a room nobody touches ages. */
+function room_test_age(string $code, int $seconds): void
+{
+    tankity_tx(tankity_db(), function (PDO $db) use ($code, $seconds): void {
+        $q = $db->prepare('SELECT data FROM rooms WHERE code = ?');
+        $q->execute([$code]);
+        $room = room_decode($q->fetchColumn());
+        if ($room === null) {
+            return;
+        }
+        $room['touched'] = (int) ($room['touched'] ?? time()) - $seconds;
+        $room['created'] = (int) ($room['created'] ?? time()) - $seconds;
+        $u = $db->prepare('UPDATE rooms SET data = ?, touched = touched - ?, created = created - ? WHERE code = ?');
+        $u->bindValue(1, serialize($room), PDO::PARAM_LOB);
+        $u->bindValue(2, $seconds, PDO::PARAM_INT);
+        $u->bindValue(3, $seconds, PDO::PARAM_INT);
+        $u->bindValue(4, $code);
+        $u->execute();
+    });
+}

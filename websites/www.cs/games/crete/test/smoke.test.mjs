@@ -1,5 +1,5 @@
 // Static checks on what ships: the page loads the bundle as a module with a
-// version, the engine never names the page, and the test hook is exposed.
+// version, the rules never name the page, and the test hook is exposed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -17,8 +17,10 @@ test('the page versions its stylesheet', () => {
   assert.match(read('index.html'), /href="game\.css\?v=[0-9a-f]{10}"/);
 });
 
-test('the engine never names the page', () => {
-  assert.doesNotMatch(strip(read('src/engine.ts')), /\b(document|window|navigator|localStorage|AudioContext)\b/);
+test('the rules never name the page', () => {
+  for (const file of ['engine.ts', 'grid.ts', 'bots.ts']) {
+    assert.doesNotMatch(strip(read('src/' + file)), /\b(document|window|navigator|localStorage|AudioContext)\b/, file);
+  }
 });
 
 test('the entry hands the browser specs their test hook, and the bundle ships it', () => {

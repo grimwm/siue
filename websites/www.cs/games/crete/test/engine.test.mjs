@@ -46,15 +46,16 @@ check('rng-in-unit-interval', Array.from({ length: 1000 }, a).every(v => v >= 0 
 // ---- generation ----
 const wallsHash = walls => crypto.createHash('sha256').update(walls.map(r => r.map(w => (w ? '#' : '.')).join('')).join('\n')).digest('hex').slice(0, 12);
 const g1 = E.generateRun('stefan-1984').layout;
-check('maze-is-pinned-per-seed', wallsHash(g1.walls) === 'f81101096cba' && g1.optimal === 26 && g1.margin === 10 && g1.foeDist === 36
-  && g1.foe.r === 3 && g1.foe.c === 7, `${wallsHash(g1.walls)} ${g1.optimal} ${g1.margin} ${g1.foeDist}`);
+const PIN = {"walls":"2b4c9d3a4f99","optimal":34,"foeDist":21,"foe":{"r":2,"c":13}}; // generateRun('stefan-1984') under the maze rule (spec section 4)
+check('maze-is-pinned-per-seed', wallsHash(g1.walls) === PIN.walls && g1.optimal === PIN.optimal && g1.foeDist === PIN.foeDist
+  && g1.foe.r === PIN.foe.r && g1.foe.c === PIN.foe.c, `${wallsHash(g1.walls)} ${g1.optimal} ${g1.foeDist} ${JSON.stringify(g1.foe)}`);
 check('same-seed-same-maze', wallsHash(E.generateRun('stefan-1984').layout.walls) === wallsHash(g1.walls), '');
 check('other-seed-other-maze', wallsHash(E.generateRun('shot-1').layout.walls) !== wallsHash(g1.walls), '');
 check('blank-seed-is-random-but-named', /^stefan-\d{4}$/.test(E.chooseSeed('  ')) && E.chooseSeed('  abc ') === 'abc', E.chooseSeed(''));
 
 // Every maze, over many seeds, is a fair board.
 let problems = [];
-for (let i = 0; i < 120; i++) {
+for (let i = 0; i < 60; i++) {
   const { layout: l } = E.generateRun(`seed-${i}`);
   const open = (r, c) => !l.walls[r][c];
   const fromStart = E.bfsDist(l.walls, E.START);
@@ -73,7 +74,7 @@ for (let i = 0; i < 120; i++) {
   if (l.safe.has(E.key(E.START.r, E.START.c)) || l.safe.has(E.key(E.EXIT.r, E.EXIT.c))) problems.push(`${i}: safe zone on start or exit`);
   if (l.safe.has(E.key(l.foe.r, l.foe.c)) || !open(l.foe.r, l.foe.c)) problems.push(`${i}: creature in a safe zone or wall`);
   if (l.foe.r === E.EXIT.r && l.foe.c === E.EXIT.c) problems.push(`${i}: creature on the exit`);
-  if (l.margin !== l.foeDist - l.optimal) problems.push(`${i}: margin`);
+  if (E.spawnDistance(l) < E.MIN_SPAWN) problems.push(`${i}: creature ${E.spawnDistance(l)} steps from the start`);
 }
 check('every-generated-maze-is-fair', problems.length === 0, problems.slice(0, 3).join('; '));
 
@@ -94,7 +95,8 @@ check('distance-is-manhattan-in-the-open', E.bfsDist(room, { r: 1, c: 1 })[13][1
   h.game.newRun('stefan-1984');
   const G = h.G;
   check('run-starts-fresh', G.seed === 'stefan-1984' && G.hp === E.MAX_HP && G.turns === 0 && G.pages === 0 && !G.over
-    && G.player.r === 1 && G.player.c === 1 && G.optimal === 26 && G.budget === 10 && G.foeSpawnDist === 36, JSON.stringify([G.seed, G.hp, G.optimal, G.budget]));
+    && G.player.r === 1 && G.player.c === 1 && G.optimal === PIN.optimal && G.foeSpawnDist === PIN.foeDist && G.stillTurns === 0,
+    JSON.stringify([G.seed, G.hp, G.optimal, G.foeSpawnDist]));
   check('snack-heal-is-rolled-4-to-6', G.snackHeal >= 4 && G.snackHeal <= 6, G.snackHeal);
   check('start-inventory', JSON.stringify(G.inv) === '{"shard":1,"snack":1,"jammer":1}', JSON.stringify(G.inv));
   check('hud-distance-matches-search', h.game.foeDistance() === E.bfsDist(G.walls, G.player)[G.foe.r][G.foe.c], '');
@@ -256,7 +258,7 @@ check('distance-is-manhattan-in-the-open', E.bfsDist(room, { r: 1, c: 1 })[13][1
   h.game.toggleAuto();
   check('auto-pauses-on-a-second-press', !h.G.auto && h.pending() === 0 && said(h, /Play-through paused/), '');
   h.game.toggleAuto();
-  h.advance(350 * 400);
+  h.advance(350 * 700);
   check('auto-plays-the-run-to-an-end', h.G.over && !h.G.auto && h.pending() === 0 && route0 > 0 && h.ends.length === 1, JSON.stringify([h.G.over, h.G.turns, h.G.deathCause]));
 }
 

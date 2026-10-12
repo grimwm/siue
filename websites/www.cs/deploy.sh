@@ -111,7 +111,8 @@ while IFS= read -r -d '' f; do
     # TypeScript in games/*/src/): never served.
     *.blend | *.blend1 | *.wav | *.flac | *.aif | *.aiff | games/*/src/*) continue ;;
     # The shared build kit, its tests and the games' build setup (the kit's
-    # package files, each game's build.json and test/); the built dist/ ships.
+    # package files and each game's build.json; test/ is skipped above); the
+    # built dist/ ships.
     games/_kit/* | games/node_modules/* | games/package.json | games/package-lock.json | games/.gitignore | games/*/build.json) continue ;;
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).

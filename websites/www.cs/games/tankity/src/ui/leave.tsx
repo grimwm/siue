@@ -5,8 +5,8 @@
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
-import { Key, KeyHints, blurThen } from './chrome.js';
-import type { KeyHintFn } from './chrome.js';
+import { Key, KeyHints, blurThen } from './chrome.tsx';
+import type { KeyHintFn } from './chrome.tsx';
 
 export interface LeaveProps {
   keyHint: KeyHintFn;

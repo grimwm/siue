@@ -6,14 +6,14 @@
  * the falling tanks settle (settle), and the end of the match (over). One
  * table says which event is legal in which phase and where it leads;
  * transition() reads it and answers the next phase, or null for a move the
- * match has no business making. game.js asks for each next phase here and
+ * match has no business making. main.ts asks for each next phase here and
  * stores it in G.phase; the strings are the ones the e2e specs and the room
  * client read, so they do not change.
  *
  * Room matches are driven by the server's snapshots (net.ts, replay.ts) and
  * set their phase from those; they do not pass through this table.
  * Nothing here touches the page, so it compiles in the DOM-free program and
- * flow-test.js walks a whole match through it. */
+ * test/flow.test.mjs walks a whole match through it. */
 
 /** Where a match is. */
 export type Phase = 'banner' | 'shop' | 'aim' | 'think' | 'fly' | 'settle' | 'over';

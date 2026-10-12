@@ -76,8 +76,8 @@ jobs:
           key: composer-${{ hashFiles('websites/www.cs/composer.lock') }}
 
       # Node runs the Tankity smoke and sim-vector suites, the Cylon and Crete unit
-      # suites and the games kit's tests and type check, and checks the site's and
-      # each not-yet-migrated game's TypeScript build, inside make test.
+      # suites and the games kit's tests and type check, and checks the site's
+      # TypeScript build, inside make test.
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         if: steps.scope.outputs.run == '1'
         with:
@@ -86,7 +86,6 @@ jobs:
           cache-dependency-path: |
             websites/www.cs/package-lock.json
             websites/www.cs/games/package-lock.json
-            websites/www.cs/games/tankity/package-lock.json
 
       - name: Start the local sites
         if: steps.scope.outputs.run == '1'

@@ -13,6 +13,12 @@ games/
     dist/          # the esbuild bundle, checked in
     test/          # node:test suites
     index.html, game.css, sw.js, tools/install-files.php
+  tankity/         # Operation Tankity
+    build.json     # entries and type programs for _kit/build/build.mjs
+    src/           # TypeScript; main.ts is the entry, src/fx/ the effects engine and editor
+    dist/          # three esbuild bundles (main.js, fx.js, fx-editor.js), checked in
+    test/          # node:test suites and PHP checks
+    index.html, game.css, game.json (from game.yaml), rooms.php, scores.php, sw.js
   cylon/           # The CIC — Cylon defense
     css/           # the stylesheets, linked by the home page in order
     build.json     # entries and type programs for _kit/build/build.mjs
@@ -114,17 +120,16 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
     `dist/main.js`. The page hashes the bundle as it stands, so run the build
     first; `--check` (in `make test` and `make deploy`) reports the page
     stale when either was forgotten.
-    Each tool has its own test beside it (`install-files-test.php`).
+    The kit's `InstallCoreTest` covers the shared install logic.
 - Per-game data: Operation Tankity keeps its arsenal, key bindings and audio
   in `games/tankity/game.yaml` and serves `game.json`, written by
   `php tools/game-json.php` in its folder (`--check` runs in `make test` and
   `make deploy`). See `games/tankity/README.md`.
 - Deploys skip `README.md` files, every game's `tools/` folder, tests,
-  `games/tankity/game.yaml`, and the TypeScript setup (`src/`, `package*.json`,
-  `tsconfig.json`, `node_modules/`); nothing at runtime reads them. The
-  compiled `js/` ships. Tankity and Cylon each carry their own copy of
-  `tools/ts-build.mjs`, because a game folder stands alone; `make test` and
-  `make deploy` run each one's `--check`.
+  `games/tankity/game.yaml`, and the TypeScript setup (`src/`, `build.json`,
+  `package*.json`, `tsconfig.json`, `node_modules/`); nothing at runtime reads them. The
+  built `dist/` ships. Every game is built by the shared kit in `_kit/`;
+  `make test` and `make deploy` run each game's `--check`.
 - Every card opens, and **Copy link** copies, the game's site page
   (`play/<id>/`). The game's own page (`games/<id>/`) still runs on its own,
   without the navbar.

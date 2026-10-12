@@ -6,13 +6,15 @@
  * replays it any time. The coach overlay (src/ui/tutorial.tsx) draws what
  * this says; the rest of the game asks it three questions (is it on, arm it,
  * note a shot) through the object createTutorial returns. */
-import type { GameState, GameTank } from './game-types.js';
-import type { RoomClient } from './net.js';
-import type { sfx as SfxApi } from './audio.js';
-import type { KeyHintFn } from './ui/chrome.js';
-import { renderTutorial as drawTutorial } from './ui/tutorial.js';
+import { browserStorage } from '../../_kit/ports.browser.ts';
+import { pref, text } from '../../_kit/prefs.ts';
+import type { GameState, GameTank } from './game-types.ts';
+import type { RoomClient } from './net.ts';
+import type { sfx as SfxApi } from './audio.ts';
+import type { KeyHintFn } from './ui/chrome.tsx';
+import { renderTutorial as drawTutorial } from './ui/tutorial.tsx';
 
-/** The slice of the game's state the coach reads (game.js's G). */
+/** The slice of the game's state the coach reads (main.ts's G). */
 export type TutorialState = Pick<GameState, 'demo' | 'over' | 'tanks' | 'phase' | 'selected'>;
 
 /** Where the player is in the lesson. */
@@ -64,17 +66,10 @@ export function createTutorial(deps: TutorialDeps) {
   function fmtKeys(text: string): string {
     return String(text).replace(/\{([a-z]+):([a-zA-Z]+)\}/g, (_, ctx: string, a: string) => (TOUCH && TOUCH_NAMES[ctx + ':' + a]) || keyHint(ctx, a));
   }
-  function tutorialSeen(): boolean {
-    try {
-      return window.localStorage.getItem('tankity-tutorial') === 'done';
-    } catch (_) {
-      return true; // without storage there is nowhere to remember, so never nag
-    }
-  }
+  const storage = browserStorage();
+  const seen = pref('tankity-tutorial', '', text, storage);
   function markTutorialSeen(): void {
-    try {
-      window.localStorage.setItem('tankity-tutorial', 'done');
-    } catch (_) { /* private mode etc. */ }
+    seen.set('done');
   }
   /* The coach is a Preact component (src/ui/tutorial.tsx); the game says which
      move the player is on and what to call the keys. */

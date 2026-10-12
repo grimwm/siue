@@ -1,6 +1,7 @@
 <?php
 // Runs a PASS/FAIL check script under PHPUnit: every $check(name, cond, extra)
-// the script makes becomes one test case, named after the check.
+// the script makes becomes one test case, named after the check. Scripts run
+// inside a closure, so their top-level assignments are locals, not globals.
 declare(strict_types=1);
 
 use PHPUnit\Framework\Attributes\DataProvider;

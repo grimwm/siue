@@ -14,18 +14,6 @@
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
 <link rel="stylesheet" href="game.css?v=c22d02e472">
-<!-- Bare imports in the compiled modules (js/ui) resolve here, to the Preact
-     copies in vendor/ (tools/vendor.mjs). The ?v= values are content hashes
-     written by tools/install-files.php. -->
-<script type="importmap">
-{
-  "imports": {
-    "preact": "./vendor/preact/preact.module.js?v=3a3201e9cc",
-    "preact/hooks": "./vendor/preact/hooks.module.js?v=6cb79fe995",
-    "preact/jsx-runtime": "./vendor/preact/jsx-runtime.module.js?v=953455da9b"
-  }
-}
-</script>
 </head>
 <body>
 <header class="topbar">
@@ -97,7 +85,7 @@
   </section>
 </main>
 
-<script src="fx.js?v=a68a63de24" defer></script>
-<script type="module" src="game.js?v=b76d72796d"></script>
+<script src="dist/fx.js?v=7e1e68411c" defer></script>
+<script type="module" src="dist/main.js?v=4ea2d58d98"></script>
 </body>
 </html>

@@ -11,13 +11,13 @@
  *
  * It does not reach for the browser either: fetch, timers, the clock and the
  * leave beacon come in as a RoomEnv, so this module compiles in the DOM-free
- * program, and net-test.js drives it with a fake server and fake timers.
- * game.js builds the real RoomEnv from the page's globals. The wire types are
+ * program, and test/net.test.mjs drives it with a fake server and fake timers.
+ * main.ts builds the real RoomEnv from the page's globals. The wire types are
  * in protocol.ts. */
 import type {
   ActBody, ErrorReply, MapInfo, MapsReply, PingReply, PostAction, PostBodies, PostReplies,
   RoomEvent, RoomReply, RoomSeat, RoomSnapshot, VolleyOpenerEvent,
-} from './protocol.js';
+} from './protocol.ts';
 
 /* ---------- what the client needs from its host ---------- */
 

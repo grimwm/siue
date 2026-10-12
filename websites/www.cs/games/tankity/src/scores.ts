@@ -4,15 +4,15 @@
  * store cannot be reached they fall back to this browser's localStorage. The
  * scores overlay (src/ui/scores.tsx) draws the lines kept here. The game's
  * state and the page arrive as deps. */
-import type { GameState } from './game-types.js';
-import type { KeyHintFn } from './ui/chrome.js';
-import { renderScores as drawScores } from './ui/scores.js';
+import { browserStorage } from '../../_kit/ports.browser.ts';
+import { json, pref, text } from '../../_kit/prefs.ts';
+import type { GameState } from './game-types.ts';
+import { isScoreRows, type ScoreEntry } from './score-rows.ts';
+import type { KeyHintFn } from './ui/chrome.tsx';
+import { renderScores as drawScores } from './ui/scores.tsx';
 
-/** The slice of the game's state a filed report is written from (game.js's G). */
+/** The slice of the game's state a filed report is written from (main.ts's G). */
 export type ScoresState = Pick<GameState, 'score' | 'roundsWon' | 'won' | 'seed'>;
-
-/** A finished run as it is filed. */
-interface ScoreEntry { name: string; score: number; banked: number; won: boolean; seed: string }
 
 /** A line of the high-score list as scores.php sends it. */
 interface ScoreRow { name: string; best: number; banked: number; won: boolean }
@@ -28,20 +28,18 @@ export interface ScoresDeps {
 
 export function createScores(deps: ScoresDeps) {
   const { G, $, keyHint, say, toggleOverlay } = deps;
+  const storage = browserStorage();
+  const localRows = pref<ScoreEntry[]>('tankity-local', [], json(isScoreRows), storage);
+  const callsign = pref('tankity-callsign', '', text, storage);
 
   /* ---------- scores: file-backed API with localStorage fallback ---------- */
   function localScores(): ScoreEntry[] {
-    try {
-      return JSON.parse(window.localStorage.getItem('tankity-local') || '[]');
-    } catch (_) { return []; }
+    return localRows.get();
   }
   function saveLocal(entry: ScoreEntry): void {
-    try {
-      const arr = localScores();
-      arr.push(entry);
-      arr.sort((a, b) => b.score - a.score);
-      window.localStorage.setItem('tankity-local', JSON.stringify(arr.slice(0, 10)));
-    } catch (_) { /* private mode etc. */ }
+    const arr = [...localScores(), entry];
+    arr.sort((a, b) => b.score - a.score);
+    localRows.set(arr.slice(0, 10));
   }
   /* The scores overlay is a Preact component (src/ui/scores.tsx); the game loads
      the list and hands in finished lines. */
@@ -80,10 +78,10 @@ export function createScores(deps: ScoresDeps) {
   }
   /* The last callsign filed, so the next report is one tap. */
   function savedCallsign(): string {
-    try { return window.localStorage.getItem('tankity-callsign') || ''; } catch (_) { return ''; }
+    return callsign.get();
   }
   async function fileReport(name: string): Promise<void> {
-    try { window.localStorage.setItem('tankity-callsign', name); } catch (_) { /* fine */ }
+    callsign.set(name);
     const entry = { name, score: G.score, banked: G.roundsWon, won: G.won, seed: G.seed };
     try {
       const res = await fetch('scores.php', {

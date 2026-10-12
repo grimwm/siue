@@ -2,7 +2,7 @@
 // The room protocol's fixture scenarios: deterministic rooms built with
 // rooms.php's own functions, in the same order the act handlers use, and the
 // shape comparison both the PHP test and the generator share.
-// Included by generate.php and ../rooms-sim-test.php; serves nothing.
+// Included by generate.php and ../test/php/checks/rooms-sim.php; serves nothing.
 declare(strict_types=1);
 if (!defined('TANKITY_ROOMS_LIB')) {
     define('TANKITY_ROOMS_LIB', true);

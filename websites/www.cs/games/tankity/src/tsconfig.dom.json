@@ -1,18 +1,10 @@
 {
-  // The modules that touch browser APIs: WebAudio, fetch, timers and canvas
-  // (audio.ts, render.ts) and the Preact overlays in ui/, which build DOM. The
-  // same options as ../tsconfig.json plus the DOM lib, and JSX compiled for
-  // Preact (its `jsx-runtime` is imported bare, resolved by the import map in
-  // index.html). Each config is its own program in tools/ts-build.mjs, so the
-  // sim, which lists itself only in ../tsconfig.json, still fails to compile if
-  // it uses `document`. Every module here also imports with its .js extension.
+  // The modules that touch browser APIs: WebAudio, fetch, timers and canvas,
+  // the Preact overlays in ui/, and the three entry files. See games/_kit/README.md.
   "extends": "../tsconfig.json",
-  "compilerOptions": {
-    "lib": ["ES2022", "DOM"],
-    "jsx": "react-jsx",
-    "jsxImportSource": "preact"
-  },
+  "compilerOptions": { "lib": ["ES2022", "DOM"] },
   "files": [
+    "main.ts", "fx/engine.ts", "fx/editor.ts",
     "audio.ts", "render.ts", "chatter.ts", "effects.ts", "shop.ts", "hud.ts", "view.ts", "tutorial.ts", "guns.ts", "scores.ts", "match.ts", "room.ts", "lobby.ts", "menu.ts",
     "ui/help.tsx", "ui/shop.tsx", "ui/lobby.tsx", "ui/menu.tsx", "ui/guns.tsx", "ui/scores.tsx", "ui/log.tsx", "ui/tutorial.tsx", "ui/hud.tsx", "ui/endveil.tsx", "ui/leave.tsx", "ui/icons.ts"
   ]

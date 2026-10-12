@@ -2,20 +2,21 @@
  *
  * Every weapon's looks (muzzle flash, flight trail, blast, specials) live in
  * game.yaml's effects section (served as game.json), keyed by weapon key, and
- * run on the particle engine in fx.js (a classic script that exposes
- * window.TankityFX, shared with the dev-only fx-editor.html). This module
+ * run on the particle engine in fx/engine.ts (bundled as a classic script
+ * that sets window.TankityFX, shared with the dev-only fx-editor.html). This module
  * holds the baked fallback, installs game.json's effects over it, and plays
  * a weapon's effect set on a particle system. The weapon tables arrive as
  * deps, so it knows a weapon's paint job without owning the arsenal. */
-import type { Flying, FxApi, FxSystem } from './render.js';
-import type { PreviewFx } from './preview.js';
-import type { Weapon } from './sim.js';
-import type { Tables } from './game-types.js';
+import type { FxEngine, FxSet, FxSetData, FxSys } from './fx/types.ts';
+import type { TrailCarrier } from './fx/trail.ts';
+import type { Flying } from './render.ts';
+import type { Weapon } from './sim.ts';
+import type { Tables } from './game-types.ts';
 
 /* ---------- effects ---------- */
 /* Every weapon's looks (muzzle flash, flight trail, blast, specials) live in
 // game.yaml's effects section (served as game.json), keyed by weapon key, and
-// run on the particle engine in fx.js (shared with the dev-only
+// run on the particle engine in fx/engine.ts (shared with the dev-only
 // fx-editor.html). game.yaml and README.md describe the fields. Blast radii
 // stay in the arsenal: effects scale to the radius the sim hands them and
 // never decide it. Until game.json arrives (or when it cannot, e.g. file://
@@ -23,7 +24,7 @@ import type { Tables } from './game-types.js';
 // describe gets a plain effect derived from its paint job (gfx). */
 export const FX = window.TankityFX || null;
 export const FX_BUDGET = 700;
-const FALLBACK_FX = {
+const FALLBACK_FX: Record<string, FxSetData> = {
   shell: {
     body: { halo: 9, alpha: 0.45 },
     muzzle: { emitters: [
@@ -42,41 +43,7 @@ const FALLBACK_FX = {
   },
 };
 
-/** One emitter-set of a weapon (muzzle, trail, impact or a named special). */
-export interface FxEffect { emitters: unknown[]; screen?: number }
-
-/** A weapon's effect set as the engine plays it. */
-export interface FxSet {
-  body?: unknown;
-  muzzle?: FxEffect;
-  trail?: FxEffect;
-  impact?: FxEffect;
-  special?: Record<string, FxEffect>;
-}
-
-/** A live particle system: what the battlefield draws and the loop steps. */
-export interface FxSys extends FxSystem, PreviewFx {}
-
-/** The slice of window.TankityFX the game calls (the draw half is render.ts's FxApi). */
-export interface FxEngine extends FxApi {
-  createSystem(opts: { max: number }): FxSys;
-  loadSprites(base: string): void;
-  dress(defs: Record<string, unknown>): Record<string, FxSet>;
-  derive(gfx: Weapon['gfx']): FxSet;
-  validate(defs: Record<string, unknown>, keys: string[]): string[];
-  play: {
-    muzzle(sys: FxSys, set: FxSet, x: number, y: number, ang: number): number | undefined;
-    impact(sys: FxSys, set: FxSet, x: number, y: number, r: number): number | undefined;
-    special(sys: FxSys, set: FxSet, name: string, x: number, y: number, ang: number): void;
-    trail(sys: FxSys, set: FxSet, s: unknown, dt: number, x: number, y: number, vx: number, vy: number): void;
-  };
-}
-
-declare global {
-  interface Window { TankityFX?: FxEngine }
-}
-
-/** The slice of the game's state the effects read and write (game.js's G). */
+/** The slice of the game's state the effects read and write (main.ts's G). */
 export interface FxState { fx: FxSys | null; shake: number }
 
 /** What the effects need from the game. */
@@ -98,15 +65,15 @@ export function createEffects(deps: FxDeps) {
   }
   /* Install game.json's effects section: each entry that passes validation wins; a
      bad one is reported and left to the derived effect. */
-  function installEffects(data: Record<string, unknown> | null | undefined): number {
+  function installEffects(data: Record<string, FxSetData> | null | undefined): number {
     if (!FX || !data || typeof data !== 'object') return 0;
     const next: Record<string, FxSet> = {};
     for (const key of Object.keys(data)) {
       if (key[0] === '_') continue;
-      FX.dress({ [key]: data[key] });
-      const bad = FX.validate({ [key]: data[key] }, [key]);
+      const dressed = FX.dress({ [key]: data[key]! });
+      const bad = FX.validate(dressed, [key]);
       if (bad.length) { if (window.console) console.warn('game.json effects: ' + bad[0]); continue; }
-      next[key] = data[key] as FxSet;
+      next[key] = dressed[key]!;
     }
     if (!next.shell) return 0;
     FX_DEFS = next;
@@ -136,10 +103,10 @@ export function createEffects(deps: FxDeps) {
   }
   /* A shell in flight (any object with x, y, vx, vy, wkey, or pass them
      explicitly for a replayed one): drip its trail along the path it flew. */
-  function fxTrail(sys: FxSys | null, s: Flying, dt: number, x?: number, y?: number, vx?: number, vy?: number, wkey?: string): void {
+  function fxTrail(sys: FxSys | null, s: TrailCarrier & Partial<Flying>, dt: number, x?: number, y?: number, vx?: number, vy?: number, wkey?: string): void {
     if (!sys) return;
     if (x === undefined) { x = s.x; y = s.y; vx = s.vx; vy = s.vy; wkey = s.wkey; }
-    FX!.play.trail(sys, fxSet(wkey!), s, dt, x, y!, vx!, vy!);
+    FX!.play.trail(sys, fxSet(wkey!), s, dt, x!, y!, vx!, vy!);
   }
 
   return { fxSet, installEffects, fxMuzzle, fxImpact, fxSpecial, fxTrail };

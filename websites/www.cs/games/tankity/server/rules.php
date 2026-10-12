@@ -12,7 +12,7 @@ if (!defined('TANKITY_ROOMS_INCLUDED')) {
 }
 
 // Mirrors cylon: exact-3 uppercase initials, blocked set enforced both sides.
-// (Keep in sync with BLOCKED_INITIALS in game.js.)
+// (Keep in sync with BLOCKED_INITIALS in src/lobby.ts.)
 const BLOCKED_INITIALS = [
     'ASS',
     'FUK', 'FUC', 'FCK', 'FUX', 'FUQ',

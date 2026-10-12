@@ -9,7 +9,7 @@
 </head>
 <body>
 <!-- Dev tool: never deployed (deploy.sh skips games/*/fx-editor.*). It edits
-     game.yaml's effects section with the game's own engine (fx.js); see README.md. -->
+     game.yaml's effects section with the game's own engine (src/fx/engine.ts); see README.md. -->
 <header class="bar">
   <h1>Tankity effects editor</h1>
   <span class="note">Dev only. Edits the <code>effects:</code> section of <code>game.yaml</code> with the game's engine; export it, paste it over that block, then run <code>php tools/game-json.php</code>.</span>
@@ -48,7 +48,7 @@
     <div id="params"></div>
   </section>
 </main>
-<script src="fx.js"></script>
-<script src="fx-editor.js"></script>
+<script src="dist/fx.js"></script>
+<script src="dist/fx-editor.js"></script>
 </body>
 </html>

@@ -131,7 +131,8 @@ function room_registry_update(callable $fn)
 // auto_release, which also puts the acquire on the kernel's undo list, so a
 // request that ends, fatals or is killed lets go of what it held; the
 // shutdown handler below releases explicitly as well. */
-$ROOM_HELD = [];
+// Through $GLOBALS so it is a real global even when a test script loads this in a closure.
+$GLOBALS['ROOM_HELD'] ??= [];
 function room_release_all(): void
 {
     global $ROOM_HELD;

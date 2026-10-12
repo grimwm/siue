@@ -5,12 +5,12 @@
  * score, for a solo match and for a room. The text is kept here, and the bar
  * is redrawn only when it changed, since the loop asks every frame. The
  * game's state, the arsenal tables and the room client arrive as deps. */
-import type { GameState, GameTank, MatchState, Tables } from './game-types.js';
-import type { RoomClient } from './net.js';
-import { renderHud as drawHud } from './ui/hud.js';
-import type { HudProps } from './ui/hud.js';
+import type { GameState, GameTank, MatchState, Tables } from './game-types.ts';
+import type { RoomClient } from './net.ts';
+import { renderHud as drawHud } from './ui/hud.tsx';
+import type { HudProps } from './ui/hud.tsx';
 
-/** The slice of the game's state the status bar reads (game.js's G). */
+/** The slice of the game's state the status bar reads (main.ts's G). */
 export type HudState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'ammo' | 'selected' | 'lives' | 'cash' | 'round'
   | 'score' | 'nextOneUp' | 'wind' | 'shield' | 'bunker' | 'jammer' | 'laststand' | 'plate'>;
 

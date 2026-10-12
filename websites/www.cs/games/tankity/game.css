@@ -680,3 +680,16 @@ button.btn-leave[hidden] { display: none; }
 .hudbar .hud dd { font-variant-numeric: tabular-nums; }
 .hudbar #hud-angle { min-width: 4ch; }
 .hudbar #hud-power, .hudbar #hud-fuel, .hudbar #hud-armor { min-width: 3ch; }
+
+/* Help's key list: each key as a cap (always shown, unlike the button chips:
+   the whole list is keyboard-only), its job beside it. */
+.help-keys h3 { margin: 0.8rem 0 0.3rem; font-size: 0.85rem; color: var(--wash-key); }
+.help-keys dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 0.7rem; margin: 0; }
+.help-keys dl > div { display: contents; }
+.help-keys dt { white-space: nowrap; }
+.help-keys dd { margin: 0; }
+.hk {
+  display: inline-flex; align-items: center; justify-content: center; height: 1.15rem; padding: 0 0.35rem;
+  font: 700 0.72rem/1 system-ui, sans-serif; color: #eef0ff; background: #14183a;
+  border: 1px solid #3a3f78; border-bottom: 2px solid #000; border-radius: 4px;
+}

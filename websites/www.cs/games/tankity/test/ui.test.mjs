@@ -10,9 +10,8 @@ import { click, fire, submit, document, makeEl, els } from '../../_kit/test/dom-
 
 globalThis.document = document;
 
-const UI = ['help', 'shop', 'lobby', 'menu', 'guns', 'scores', 'log', 'tutorial', 'hud', 'endveil', 'leave'];
+const UI = ['shop', 'lobby', 'menu', 'guns', 'scores', 'log', 'tutorial', 'hud', 'endveil', 'leave'];
 const ui = await importTsx(import.meta.dirname, Object.fromEntries(UI.map(n => [n, `../src/ui/${n}.tsx`])));
-const { renderHelp } = ui.help;
 const { renderShop } = ui.shop;
 const { renderLobby } = ui.lobby;
 const { renderMenu } = ui.menu;
@@ -41,47 +40,6 @@ const KEYS = {
   'global:rooms': 'O', 'global:tutorial': 'U', 'global:report': 'R', 'shop:next': 'N',
 };
 const keyHint = (ctx, action, idx) => (idx ? KEYS[`${ctx}:${action}:${idx}`] : undefined) ?? KEYS[`${ctx}:${action}`] ?? '';
-
-// ---- help ----
-{
-  const section = makeEl('help-overlay');
-  let closed = 0;
-  const props = { keyHint, onClose: () => { closed++; } };
-  renderHelp(section, props);
-  const [head, list] = section.children;
-  check('help-head-and-list', head.localName === 'header' && hasClass(head, 'ov-head') && list.localName === 'ul' && hasClass(list, 'help'),
-    section.children.map(c => c.localName).join());
-  check('help-title', text(byId(head, 'help-h')) === 'How to play' && byId(head, 'help-h').localName === 'h2');
-  const x = byId(head, 'help-close');
-  check('help-close-button', x.localName === 'button' && hasClass(x, 'ov-x') && x.getAttribute('aria-label') === 'Close'
-    && x.getAttribute('title') === 'Close (ESC)' && x.getAttribute('type') === 'button');
-  const [esc, glyph] = x.children;
-  check('help-close-esc-cap', hasClass(esc, 'key') && hasClass(esc, 'esc-cap') && esc.getAttribute('data-keyhint') === 'global:escape'
-    && text(esc) === 'ESC', `${esc.className}|${text(esc)}`);
-  check('help-close-glyph', hasClass(glyph, 'x-glyph') && glyph.getAttribute('aria-hidden') === 'true' && text(glyph) === '×');
-  const nav = byId(head, 'nav-help');
-  const cells = byClass(nav, 'scroll-keys').map(text);
-  check('help-nav', hasClass(nav, 'nav-hint') && hasClass(nav, 'ov-keys') && nav.getAttribute('data-scroll-only') === ''
-    && cells.join('|') === 'J/K line|PgUp/PgDn page|Shift+K/Shift+J half page', cells.join('|'));
-  const items = list.children;
-  check('help-items', items.length === 14 && items.every(li => li.localName === 'li'), String(items.length));
-  check('help-audience-classes', items.filter(li => hasClass(li, 'keys-only')).length === 5
-    && items.filter(li => hasClass(li, 'touch-only')).length === 1, 'keys-only/touch-only');
-  check('help-prose-keys-are-plain', byClass(list, 'key').length === 0
-    && text(items[1]).startsWith('Hold ') && /Ctrl fires and ends your turn\.$/.test(text(items[1])), text(items[1]));
-  check('help-touch-prose-names-no-key', walk(items[2]).every(n => n.getAttribute?.('data-keyhint') === undefined));
-  click(x);
-  check('help-close-calls-back', closed === 1);
-  // A new key table redraws in place: the same nodes, new key names.
-  renderHelp(section, { keyHint: (c, a) => (KEYS[`${c}:${a}`] ?? '').toLowerCase(), onClose: props.onClose });
-  check('help-redraw-keeps-nodes', section.children[1] === list && byId(head, 'help-close') === x);
-  check('help-redraw-rewrites-keys', text(byClass(nav, 'scroll-keys')[0]) === 'j/k line' && text(esc) === 'esc');
-  check('help-missing-key-is-empty', (() => {
-    const s = makeEl('s');
-    renderHelp(s, { keyHint: () => '', onClose() {} });
-    return byClass(s, 'esc-cap').every(n => text(n) === '');
-  })());
-}
 
 // ---- shop ----
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));

@@ -211,3 +211,13 @@ test('a context whose resume() returns nothing or throws still plays and throws 
     assert.equal(core.peek(), ctx);
   }
 });
+
+test('suspend() on a context that returns nothing or throws throws nothing', () => {
+  for (const suspend of [() => undefined, () => { throw new Error('no suspend'); }]) {
+    const ctx = fakeAudioContext();
+    ctx.suspend = suspend;
+    const core = createAudioCore({ createContext: () => ctx });
+    core.tone({ freq: 440, dur: 0.1 });
+    assert.doesNotThrow(() => core.suspend());
+  }
+});

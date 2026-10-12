@@ -89,10 +89,10 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     }
   }
 
-  // Some contexts return nothing or throw from resume(); a promise either way keeps sound calls safe.
-  function resume(c: AudioContext): Promise<void> {
+  // Some contexts return nothing or throw from resume() or suspend(); a promise either way keeps calls safe.
+  function settle(call: () => Promise<void>): Promise<void> {
     try {
-      return Promise.resolve(c.resume());
+      return Promise.resolve(call());
     } catch (err) {
       return Promise.reject(err);
     }
@@ -119,8 +119,9 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
         return null;
       }
     }
-    if (ctx.state === 'suspended') resume(ctx).catch(() => {});
-    return ctx;
+    const c = ctx;
+    if (c.state === 'suspended') settle(() => c.resume()).catch(() => {});
+    return c;
   }
 
   function output(to: BusName | AudioNode | undefined): { c: AudioContext; node: AudioNode } | null {
@@ -222,7 +223,7 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
       for (const cb of ready) cb();
     };
     if (c.state === 'running') prime();
-    else resume(c).then(prime, () => {});
+    else settle(() => c.resume()).then(prime, () => {});
   }
 
   return {
@@ -233,7 +234,10 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     setMuted(name, m) { muted[name] = m; applyGain(name); },
     isMuted: name => muted[name],
     unlock,
-    suspend() { ctx?.suspend().catch(() => {}); },
+    suspend() {
+      const c = ctx;
+      if (c) settle(() => c.suspend()).catch(() => {});
+    },
     tone,
     noise,
   };

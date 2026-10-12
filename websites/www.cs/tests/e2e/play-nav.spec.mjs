@@ -109,6 +109,14 @@ for (const id of GAMES) {
     await expect(page.locator('.play-now-name')).toBeVisible();
     const share = await box(page.locator('#share-btn'));
     expect(1280 - (share.x + share.width), 'right edge').toBeLessThanOrEqual(16);
+    // "Link copied" floats under the buttons: Share does not move and the bar does not widen.
+    await page.locator('#share-btn').click();
+    await expect(page.locator('#share-status')).toHaveText('Link copied');
+    const after = await box(page.locator('#share-btn'));
+    expect(Math.abs(after.x - share.x), 'Share stays put').toBeLessThanOrEqual(1);
+    const st = await box(page.locator('#share-status'));
+    expect(st.y, 'under the buttons').toBeGreaterThanOrEqual(share.y + share.height);
+    await oneLine(page);
     await context.close();
   });
 }

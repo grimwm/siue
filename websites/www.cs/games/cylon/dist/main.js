@@ -9,6 +9,8 @@ var Kr=Object.defineProperty;var yn=(e,t)=>{for(var n in t)Kr(e,n,{get:t[n],enum
 @keyframes kit-install-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--kit-install-accent, #f0b429) 40%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .kit-install-asked { animation: none; } }
 .kit-install-status { color: var(--kit-install-accent, #f0b429); white-space: nowrap; }
+/* Shown, it floats under the buttons at every width, so it never widens the bar or pushes it onto a second line. */
+.kit-install-status:not(:empty) { position: absolute; top: calc(100% + 0.4rem); right: 0; z-index: 3000; padding: 0.3rem 0.6rem; border-radius: 6px; background: #11141b; }
 /* Always in the page, so a screen reader announces the text when it arrives; empty, it takes no room. */
 .kit-install-status:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 /* Under the buttons, out of the bar's layout, and never wider than the screen. */
@@ -22,8 +24,6 @@ var Kr=Object.defineProperty;var yn=(e,t)=>{for(var n in t)Kr(e,n,{get:t[n],enum
   .kit-install-btn { position: relative; width: 2.5rem; height: 2.5rem; padding: 0; flex: none; }
   .kit-install-btn::after { content: ''; position: absolute; inset: -2px; }
   .kit-install-txt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  /* Beside the squares it would push the bar onto a second line, so it floats under them. */
-  .kit-install-status:not(:empty) { position: absolute; top: calc(100% + 0.4rem); right: 0; z-index: 3000; padding: 0.3rem 0.6rem; border-radius: 6px; background: #11141b; }
 }
 .kit-install-glyph { vertical-align: -0.3em; margin-right: 0.4rem; }
 .kit-install-corner { position: fixed; top: 0.5rem; right: 0.5rem; z-index: 2900; }

@@ -1,6 +1,6 @@
 /* The end-of-match veil: the result (kicker, title, text, score line), the
  * callsign form that files a solo run, the room rematch button, and the button
- * that starts over. The game owns the match and hands in finished text; this
+ * that leaves it (Continue to the title card, or Back to rooms). The game owns the match and hands in finished text; this
  * draws it and reports the buttons. The veil (#end-veil) stays in index.html
  * and the game shows and hides it. What the player typed in the callsign box
  * lives in the input, which a redraw leaves alone.
@@ -8,7 +8,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
-import { Key, KeyHints, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.tsx';
+import { KeyHints, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.tsx';
 import type { KeyHintFn } from './chrome.tsx';
 
 export interface EndVeilProps {
@@ -26,7 +26,7 @@ export interface EndVeilProps {
   callsign: string;
   /** The rematch button's label; null hides the button (solo matches). */
   rematch: string | null;
-  /** The start-over button reads "Back to rooms" instead of "Play again (N)". */
+  /** The button reads "Back to rooms" (a room's standings) instead of "Continue" (back to the title card). */
   backToRooms: boolean;
   /** The callsign form was sent; `name` is the box as typed. */
   onFile: (name: string) => void;
@@ -59,7 +59,7 @@ export function EndVeil(p: EndVeilProps) {
           <button type="submit" disabled={p.filed}>{p.filed ? 'Filed' : 'File score'}</button>
         </form>
         <button type="button" id="again" class="btn-primary" onClick={blurThen(p.onAgain)}>
-          {p.backToRooms ? 'Back to rooms' : <>Play again <Key at="global:new" bare /></>}
+          {p.backToRooms ? 'Back to rooms' : 'Continue'}
         </button>
       </div>
     </KeyHints.Provider>

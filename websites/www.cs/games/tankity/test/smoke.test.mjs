@@ -137,7 +137,10 @@ for (const id of ['new-game', 'round-banner', 'round-banner-text', 'preview-resu
 frames(30);
 check('demo-plays', els['shop-veil'].hidden === true && /you 100/.test(els['hud-armor'].textContent),
   els['hud-armor'].textContent);
+const rendered = id => !!els[id] && !!els[id].localName;
+const titleVeil = () => els['title-root'].children[0];
 check('no-ambush-shop', els['shop-veil'].hidden === true);
+check('title-card-over-the-demo', titleVeil().id === 'title-card' && titleVeil().hidden === false && rendered('title-play') && rendered('rooms-open') && rendered('tutorial-open'));
 
 // Space must always preventDefault (no page scroll), both binding paths
 let pd = 0;
@@ -174,12 +177,11 @@ const phpText = Object.fromEntries(phpFiles.map(f => [f, fs.readFileSync(path.jo
 const php = Object.values(phpText).join('\n');
 // The lobby and the menu are Preact components (src/ui): their ids exist once
 // the game has drawn them, not in index.html (ui.test.mjs checks their shape).
-const rendered = id => !!els[id] && !!els[id].localName;
 for (const id of ['lobby-veil', 'round-banner', 'round-banner-text', 'preview-result']) {
   check('lobby-markup-' + id, html.includes('id="' + id + '"'));
 }
-for (const id of ['rooms-open', 'host-form', 'host-initials', 'join-form',
-  'join-code', 'join-initials', 'lobby-status', 'lobby-room', 'lobby-code',
+for (const id of ['rooms-open', 'host-form', 'lobby-initials', 'join-form',
+  'join-code', 'lobby-status', 'lobby-room', 'lobby-code',
   'lobby-seats', 'lobby-start', 'lobby-leave', 'lobby-close',
   'lobby-map', 'lobby-hills', 'lobby-count', 'new-game']) {
   check('lobby-rendered-' + id, rendered(id));
@@ -237,11 +239,11 @@ TAP('global', 'report');
 check('report-toggle', els['report-overlay'].hidden === false);
 click(els['report-close']);
 check('report-close', els['report-overlay'].hidden === true);
-// New Game, seed, sound, music, fullscreen, and rooms live in the in-frame menu.
+// Seed, sound, music and fullscreen live in the in-frame settings menu.
 for (const id of ['menu-overlay', 'btn-menu']) {
   check('menu-markup-' + id, html.includes('id="' + id + '"'));
 }
-for (const id of ['menu-close', 'seed-form', 'new-game', 'rooms-open']) {
+for (const id of ['menu-close', 'seed-form', 'new-game']) {
   check('menu-rendered-' + id, rendered(id));
 }
 check('menu-in-frame', html.indexOf('id="menu-overlay"') > html.indexOf('id="frame"'));
@@ -262,8 +264,8 @@ TAP('global', 'escape');
 check('menu-reopen', els['menu-overlay'].hidden === false);
 TAP('global', 'escape');
 check('menu-esc', els['menu-overlay'].hidden === true);
-  // Tutorial: the menu carries a replay button (pressed for real at the end).
-  check('menu-tutorial', !!els['tutorial-open'] && !!els['tutorial-overlay'] && !!els['tutorial-skip']);
+  // Tutorial: the title card carries a replay button (pressed for real at the end).
+  check('title-tutorial', !!els['tutorial-open'] && !!els['tutorial-overlay'] && !!els['tutorial-skip']);
   // Four 32-step songs; the round picks the song.
   const songNames = (audioSrc.match(/name: '[^']+'/g) || []).filter(n => /Rollout|High Ground|Crater Blues|Last Tank/.test(n));
   check('songs', songNames.length === 4 && /songIdx = \(round - 1\) % SONGS\.length/.test(audioSrc)
@@ -299,8 +301,8 @@ check('cam-wide-sky', /fillRect\(-W - 10, -2 \* H - 10, 3 \* W/.test(renderSrc))
 // (invite-prefill runs inside the async block below: openLobby unhides late)
 // The clean-initials list must match the server copy exactly (cylon rule).
 function blockedOf(src) {
-  const start = src.indexOf('BLOCKED_INITIALS = [');
-  const end = src.indexOf('];', start);
+  const start = src.search(/BLOCKED_INITIALS = (Object\.freeze\()?\[/);
+  const end = src.indexOf(']', start);
   return [...src.slice(start, end).matchAll(/'([A-Z]{3})'/g)].map(m => m[1]).sort().join(',');
 }
 check('blocked-parity',
@@ -421,6 +423,7 @@ function playRoom(turn, events) {
 }
 const okJson = d => ({ ok: true, json: async () => d });
 let createdMap = '';
+let createdInitials = '';
 let createdDifficulty;
 let failCreate = '';
 let failMode = '';
@@ -455,6 +458,7 @@ global.fetch = async (url, opts) => {
     if (failMode === 'stumble') return { ok: false, json: async () => { throw new Error('Unexpected token <'); } };
     if (failCreate) return { ok: false, json: async () => ({ error: failCreate }) };
     createdMap = body.map || '';
+    createdInitials = body.initials || '';
     createdDifficulty = body.difficulty;
     return okJson({ ok: true, code: 'TST1', seat: 0, token: 'tok0', csrf: 'cs0' });
   }
@@ -584,6 +588,7 @@ await (async () => {
   check('lobby-esc', els['lobby-veil'].hidden === true);
   TAP('global', 'random'); frames(120);
   check('random-hotkey', els['shop-veil'].hidden === false);
+  check('a-match-closes-the-card', titleVeil().hidden === true);
   els['seed-input'].value = 'scorch-01';
   // New Game rolls the fanfare and the Round 1 card, then the pre-match shop.
   // It also takes the whole frame: an open menu shuts instead of sitting
@@ -964,7 +969,7 @@ await (async () => {
     }
   }
   // The stub only knows elements the game asked for; ask for the lobby ones.
-  for (const id of ['host-initials', 'host-form', 'lobby-status', 'lobby-code',
+  for (const id of ['lobby-initials', 'host-form', 'lobby-status', 'lobby-code',
     'lobby-room', 'lobby-seats', 'lobby-start']) void document.getElementById(id);
   // the hills picker fills from the server catalog, seeds never attached
   for (const id of ['rooms-open', 'lobby-map', 'lobby-hills', 'lobby-drones', 'lobby-count', 'difficulty-picker']) {
@@ -989,7 +994,6 @@ await (async () => {
     `${els['net-dot'].className} | ${els['hud-server'].textContent}`);
   // a full shelf says so in plain words, never a status code
   failCreate = 'every room is taken (10 / 10). Try again later.';
-  els['host-initials'].value = 'abc';
   submit(els['host-form']); await tick(10);
   check('room-full', els['lobby-status'].textContent === failCreate,
     els['lobby-status'].textContent);
@@ -997,7 +1001,6 @@ await (async () => {
   // transport trouble arrives in human words, never a status code
   for (const [mode, want] of [['down', 'Could not reach'], ['page', 'page instead of game data'], ['stumble', 'stumbled']]) {
     failMode = mode;
-    els['host-initials'].value = 'abc';
     submit(els['host-form']); await tick(10);
     check('room-err-' + mode, els['lobby-status'].textContent.includes(want), els['lobby-status'].textContent);
     if (mode === 'down') {
@@ -1006,21 +1009,16 @@ await (async () => {
     }
   }
   failMode = '';
-  // invalid + blocked initials never reach the server
-  els['host-initials'].value = 'AB';
-  submit(els['host-form']); await tick();
-  const badShort = els['lobby-status'].textContent;
-  els['host-initials'].value = 'ass';
-  submit(els['host-form']); await tick();
-  const badBlocked = els['lobby-status'].textContent;
-  check('lobby-initials-gated', /3 letters/.test(badShort) && /3 letters/.test(badBlocked),
-    `${badShort} | ${badBlocked}`);
+  // The rooms use the initials saved on the title card; the lobby only names them.
+  check('lobby-no-initials-boxes', !rendered('host-initials') && !rendered('join-initials'));
+  check('lobby-names-saved-initials', els['lobby-initials'].textContent.includes(window.localStorage.getItem('tankity-initials')),
+    els['lobby-initials'].textContent);
   // host a room on picked hills: code shows, roster opens, hills named
-  els['host-initials'].value = 'abc';
   click(tiles()[1]); // before hosting, a tile only sets the value
   submit(els['host-form']); await tick(10);
   check('room-hosted', els['lobby-code'].textContent === 'TST1' && els['lobby-room'].hidden === false,
     els['lobby-code'].textContent);
+  check('room-hosted-with-saved-initials', createdInitials === window.localStorage.getItem('tankity-initials'), createdInitials);
   check('room-hides-forms', els['lobby-rows'].hidden === true && els['lobby-intro'].hidden === true,
     `rows=${els['lobby-rows'].hidden} intro=${els['lobby-intro'].hidden}`);
   const seatTiles = () => els['lobby-seats'].children;
@@ -1065,9 +1063,7 @@ await (async () => {
   // a guest joining shows both initials on the roster, never undefined
   extraGuest = true;
   void document.getElementById('join-code');
-  void document.getElementById('join-initials');
   els['join-code'].value = 'TST1';
-  els['join-initials'].value = 'def';
   submit(els['join-form']); await tick(10);
   const guestNames = seatTiles().map(tileText).join('|');
   check('guest-seat', /ABC/.test(guestNames) && /DEF/.test(guestNames) && !/undefined/.test(guestNames),
@@ -1080,7 +1076,6 @@ await (async () => {
   seatModes[3] = 'ai';
   // back to hosting so the match can start
   extraGuest = false;
-  els['host-initials'].value = 'abc';
   submit(els['host-form']); await tick(10);
   // the invite link carries the room code, and copy hands it over
   void document.getElementById('join-link');
@@ -1197,7 +1192,7 @@ await (async () => {
     && els['shop-veil'].hidden === true && els['lobby-veil'].hidden === true
     && els['menu-leave'].hidden === true && els['shop-leave'].hidden === true,
     `leave=${els['leave-veil'].hidden} menu=${els['menu-overlay'].hidden} shop=${els['shop-veil'].hidden}`);
-  check('leave-back-to-solo', /Back to the solo hills/.test(logText()), logText().split('\n').slice(-1)[0]);
+  check('leave-back-to-title', /Back from the room/.test(logText()) && titleVeil().hidden === false, logText().split('\n').slice(-1)[0]);
   const polls0 = stateCalls;
   await sleep(3600); frames(5); // a stopped poll never drags the old room back
   check('leave-polling-stopped', stateCalls === polls0, `extra polls=${stateCalls - polls0}`);
@@ -1206,7 +1201,6 @@ await (async () => {
   PFX.on = true; PFX.room = 'lobby-host';
   const fxRoomOf = name => fx(name).body.room;
   TAP('global', 'rooms'); await tick(10);
-  els['host-initials'].value = 'abc';
   submit(els['host-form']); await tick(10);
   check('fx-lobby-code', els['lobby-code'].textContent === fx('create-reply').body.code && els['lobby-room'].hidden === false,
     els['lobby-code'].textContent);

@@ -47,7 +47,7 @@ test('host opens a seat, the guest sees it, and the match fields only the right 
   await guest.ctx.close();
 });
 
-test('a guest leaves mid-match from the menu and lands in solo; the host plays on', async ({ browser, request }) => {
+test('a guest leaves mid-match from the menu and lands on the title card; the host plays on', async ({ browser, request }) => {
   const { host, guest, roomState } = await roomPair(browser);
   const inRooms = await used(request);
   await leaveFromMenu(guest.page, 'test-results/tankity-leave-confirm.png');
@@ -57,7 +57,9 @@ test('a guest leaves mid-match from the menu and lands in solo; the host plays o
   await guest.page.keyboard.press('Escape');
   await expect(guest.page.locator('#menu-leave')).toBeHidden();
   await guest.page.keyboard.press('Escape');
-  // A fresh solo match deals in: banner, then the pre-match shop (no room button there).
+  // Back at the title card over the demo; Play deals a fresh solo match.
+  await expect(guest.page.locator('#title-card')).toBeVisible();
+  await guest.page.click('#title-play');
   await expect(guest.page.locator('#shop-veil')).toBeVisible({ timeout: 15_000 });
   await expect(guest.page.locator('#shop-title')).toHaveText('Pre-match shop');
   await expect(guest.page.locator('#shop-leave')).toBeHidden();

@@ -97,7 +97,6 @@ test('the lobby offers Random plus every server map as a silhouette tile, and pi
   await tiles.nth(2).click();
   await expect(tiles.nth(2)).toHaveAttribute('aria-pressed', 'true');
   await expect(tiles.nth(0)).toHaveAttribute('aria-pressed', 'false');
-  await page.fill('#host-initials', 'abc');
   await page.click('#host-go');
   await page.waitForSelector('#lobby-room:not([hidden])');
   await expect.poll(() => seen.at(-1)?.room.map).toBe(maps.maps[1].id);
@@ -154,7 +153,8 @@ test('on a touch screen the toggle tiles drop their key caps', async ({ browser 
   const page = await ctx.newPage();
   await page.goto('games/tankity/');
   await expect(page.locator('html')).toHaveClass(/touch/);
-  await page.locator('#btn-menu').tap();
+  // On a phone the title card fills the screen; its Settings opens the menu.
+  await page.locator('#title-settings').tap();
   await expect(page.locator('#menu-overlay')).toBeVisible();
   await expect(page.locator('#btn-sound')).toBeVisible();
   await expect(page.locator('#btn-sound .key')).toBeHidden();

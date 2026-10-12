@@ -12,7 +12,7 @@ if (!defined('TANKITY_ROOMS_INCLUDED')) {
 }
 
 // Mirrors cylon: exact-3 uppercase initials, blocked set enforced both sides.
-// (Keep in sync with BLOCKED_INITIALS in src/lobby.ts.)
+// (Keep in sync with BLOCKED_INITIALS in src/initials.ts.)
 const BLOCKED_INITIALS = [
     'ASS',
     'FUK', 'FUC', 'FCK', 'FUX', 'FUQ',
@@ -28,8 +28,8 @@ const BLOCKED_INITIALS = [
     'POO', 'PEE',
     'KKK',
 ];
-/* Cylon-style initials, case kept as typed: exactly 3 letters, and the
- * uppercased form must not be blocked. */
+/* Cylon-style initials: exactly 3 letters, stored uppercase, and not a
+ * blocked word. */
 function room_valid_initials($raw): ?string
 {
     if (!is_string($raw)) {
@@ -39,10 +39,8 @@ function room_valid_initials($raw): ?string
     if (!preg_match('/^[A-Za-z]{3}$/', $s)) {
         return null;
     }
-    if (in_array(strtoupper($s), BLOCKED_INITIALS, true)) {
-        return null;
-    }
-    return $s;
+    $s = strtoupper($s);
+    return in_array($s, BLOCKED_INITIALS, true) ? null : $s;
 }
 /* Seconds a human gets for a turn before the crew fires for them. */
 const ROOM_TURN_SECS = 120;

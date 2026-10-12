@@ -39,9 +39,9 @@ test('two players: drive, real shell flights on both screens, turns after the re
   await guest.page.waitForTimeout(1500);
   const server = lastRoom(roomState.guest).tanks;
   const armorText = await hud(guest.page, 'hud-armor');
-  const mine = server.find(t => t.name === 'zed');
+  const mine = server.find(t => t.name === 'ZED');
   expect(armorText).toContain(`you ${mine.hp}`);
-  for (const t of server.filter(t => t.name !== 'zed')) expect(armorText).toContain(`${t.name}:${t.hp}`);
+  for (const t of server.filter(t => t.name !== 'ZED')) expect(armorText).toContain(`${t.name}:${t.hp}`);
 
   await guest.page.screenshot({ path: 'test-results/tankity-room-guest.png' });
   expect(host.errors).toEqual([]);
@@ -87,7 +87,7 @@ test('a unit body picked in a room reaches everyone', async ({ browser }) => {
   await guest.page.keyboard.press('Escape');
   await expect.poll(() => {
     const room = lastRoom(roomState.host);
-    const t = room && room.tanks.find(x => x.name === 'zed');
+    const t = room && room.tanks.find(x => x.name === 'ZED');
     return t && t.body;
   }, { timeout: 15_000 }).toBe('walker');
   await host.ctx.close();

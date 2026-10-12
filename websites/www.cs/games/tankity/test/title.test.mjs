@@ -1,0 +1,103 @@
+// The title card: the kit dialog with its buttons, the initials boxes that
+// show the saved letters and report a typed set uppercase, and Settings
+// saying whether the menu is open.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { document, makeEl, click, fire } from '../../_kit/test/dom-stub.mjs';
+import { importTsx } from '../../_kit/test/tsx.ts';
+
+globalThis.document = document;
+const { title } = await importTsx(import.meta.dirname, { title: '../src/ui/title.tsx' });
+const walk = (el, out = []) => { for (const c of el.children || []) { out.push(c); walk(c, out); } return out; };
+const byId = (el, id) => walk(el).find(n => n.id === id);
+const KEYS = { 'global:new': 'N', 'global:rooms': 'O', 'global:tutorial': 'U', 'global:escape': 'Esc' };
+
+function draw(over = {}) {
+  const root = makeEl('title-root');
+  const calls = { initials: [], play: 0, friends: 0, tutorial: 0, settings: 0 };
+  const props = {
+    keyHint: (c, a) => KEYS[`${c}:${a}`] ?? '', open: true, initials: 'BDJ', problem: '', settingsOpen: false,
+    onInitials: w => calls.initials.push(w), onPlay: () => { calls.play++; }, onFriends: () => { calls.friends++; },
+    onTutorial: () => { calls.tutorial++; }, onSettings: () => { calls.settings++; }, ...over,
+  };
+  title.renderTitle(root, props);
+  return { root, calls, props };
+}
+const type = (box, value) => { box.value = value; fire(box, 'input'); };
+
+test('the card is the kit dialog: a veil around a panel labelled and described by its own text', () => {
+  const { root } = draw();
+  const veil = byId(root, 'title-card');
+  assert.equal(veil.className, 'title-veil');
+  assert.equal(veil.hidden, false);
+  const card = veil.children[0];
+  assert.equal(card.className, 'title-card');
+  assert.equal(card.getAttribute('role'), 'dialog');
+  assert.equal(card.getAttribute('aria-modal'), 'true');
+  assert.equal(card.getAttribute('aria-labelledby'), 'title-h');
+  assert.equal(card.getAttribute('aria-describedby'), 'title-tag');
+  assert.equal(byId(root, 'title-h').textContent, 'Operation Tankity');
+});
+
+test('Play, Play with friends, Tutorial and Settings, each with its key chip', () => {
+  const { root } = draw();
+  assert.match(byId(root, 'title-play').textContent, /^▶ Play/);
+  assert.match(byId(root, 'rooms-open').textContent, /^Play with friends/);
+  assert.match(byId(root, 'tutorial-open').textContent, /^Tutorial/);
+  assert.match(byId(root, 'title-settings').textContent, /^Settings/);
+  const chip = walk(byId(root, 'title-play')).find(n => n.localName === 'kbd');
+  assert.equal(chip.className, 'key');
+  assert.equal(chip.getAttribute('data-keyhint'), 'global:new');
+  assert.equal(chip.getAttribute('aria-hidden'), 'true');
+  assert.equal(chip.textContent, 'N');
+});
+
+test('a closed card stays in the page, hidden; opening it focuses Play', () => {
+  const { root, props } = draw({ open: false });
+  assert.equal(byId(root, 'title-card').hidden, true);
+  globalThis.__focused = null;
+  title.renderTitle(root, { ...props, open: true });
+  assert.equal(byId(root, 'title-card').hidden, false);
+  assert.equal(globalThis.__focused?.id, 'title-play');
+});
+
+test('every button reports to the game', () => {
+  const { root, calls } = draw();
+  for (const id of ['title-play', 'rooms-open', 'tutorial-open', 'title-settings']) click(byId(root, id));
+  assert.deepEqual([calls.play, calls.friends, calls.tutorial, calls.settings], [1, 1, 1, 1]);
+});
+
+test('the boxes show the saved initials, one letter each', () => {
+  const { root } = draw({ initials: 'ZED' });
+  assert.deepEqual([1, 2, 3].map(n => byId(root, `title-initial-${n}`).value), ['Z', 'E', 'D']);
+  assert.equal(byId(root, 'title-initial-1').getAttribute('aria-label'), 'Initial 1 of 3');
+});
+
+test('typed letters show uppercase and a full set is reported; a non-letter is dropped', () => {
+  const { root, calls } = draw({ initials: '' }); // empty boxes: a lone letter is not yet a set
+  const [a, b, c] = [1, 2, 3].map(n => byId(root, `title-initial-${n}`));
+  type(a, 'z');
+  assert.equal(a.value, 'Z');
+  type(b, '1');
+  assert.equal(b.value, '');
+  assert.deepEqual(calls.initials, []);
+  type(b, 'e');
+  type(c, 'd');
+  assert.deepEqual(calls.initials, ['ZED']);
+});
+
+test('a refused set says why, and Settings follows the menu', () => {
+  const { root } = draw({ problem: 'Those initials are not allowed. Pick others.', settingsOpen: true });
+  assert.equal(byId(root, 'title-initials-note').textContent, 'Those initials are not allowed. Pick others.');
+  assert.equal(byId(root, 'title-initials-note').getAttribute('role'), 'status');
+  assert.equal(byId(root, 'title-settings').getAttribute('aria-expanded'), 'true');
+});
+
+test('retyping the last letter of a saved set reports it at once; retyping the first starts over', () => {
+  const { root, calls } = draw({ initials: 'BDJ' });
+  type(byId(root, 'title-initial-3'), 'x');
+  assert.deepEqual(calls.initials, ['BDX']);
+  type(byId(root, 'title-initial-1'), 'z');
+  assert.equal(byId(root, 'title-initial-2').value, '');
+  assert.deepEqual(calls.initials, ['BDX']);
+});

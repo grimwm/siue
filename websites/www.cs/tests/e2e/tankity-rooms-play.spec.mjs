@@ -70,7 +70,6 @@ test('a room invite made on the site page points back to the site page', async (
   await game.locator('#stage').waitFor();
   await page.waitForTimeout(500);
   await page.keyboard.press('o');
-  await game.locator('#host-initials').fill('abc');
   await game.locator('#host-go').click();
   await expect(game.locator('#join-link')).toHaveValue(/\/play\/tankity\/\?code=[A-Z0-9]{4}$/);
   // Opening it lands in the site page with the code handed to the game.

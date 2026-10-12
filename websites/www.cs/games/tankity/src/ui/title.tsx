@@ -36,6 +36,9 @@ function InitialsPicker({ initials, onInitials }: Pick<TitleProps, 'initials' | 
     const letter = box.value.replace(/[^A-Za-z]/g, '').slice(-1).toUpperCase();
     box.value = letter;
     if (!letter) return;
+    // Retyping from a box starts a new set: the boxes after it empty, so a
+    // half-typed set is never saved as a mix of new and old letters.
+    for (const later of boxes.slice(i + 1)) if (later.current) later.current.value = '';
     const next = boxes[i + 1]?.current;
     if (next) {
       next.focus?.();

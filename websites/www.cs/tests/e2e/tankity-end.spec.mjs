@@ -31,7 +31,7 @@ async function loseMatch(page) {
   }
 }
 
-test('a lost match shows the end veil: result, score, callsign form, and a fresh deal on Play again', async ({ browser, baseURL }) => {
+test('a lost match shows the end veil: result, score, callsign form, and Continue back to the title card', async ({ browser, baseURL }) => {
   test.setTimeout(180_000);
   const { page, errors } = await newPlayer(browser, undefined, { clock: true });
   await page.keyboard.press('n');
@@ -78,9 +78,12 @@ test('a lost match shows the end veil: result, score, callsign form, and a fresh
     await expect(page.locator('#end-name')).toHaveValue('e2e-ace');
   }
 
-  // Play again deals a fresh match: the shop comes back with the result gone
-  // at once, and once the first round starts all three lives are back.
+  // Continue goes back to the title card over the demo; Play deals a fresh
+  // match: the shop comes back with the result gone, and once the first
+  // round starts all three lives are back.
   await page.click('#again');
+  await expect(page.locator('#title-card')).toBeVisible();
+  await page.click('#title-play');
   await expect.poll(async () => {
     await page.clock.runFor(1000);
     return page.locator('#shop-veil').isVisible();

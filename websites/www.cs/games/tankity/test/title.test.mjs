@@ -93,8 +93,11 @@ test('a refused set says why, and Settings follows the menu', () => {
   assert.equal(byId(root, 'title-settings').getAttribute('aria-expanded'), 'true');
 });
 
-test('changing one letter of a saved set reports the new set at once', () => {
+test('retyping the last letter of a saved set reports it at once; retyping the first starts over', () => {
   const { root, calls } = draw({ initials: 'BDJ' });
+  type(byId(root, 'title-initial-3'), 'x');
+  assert.deepEqual(calls.initials, ['BDX']);
   type(byId(root, 'title-initial-1'), 'z');
-  assert.deepEqual(calls.initials, ['ZDJ']);
+  assert.equal(byId(root, 'title-initial-2').value, '');
+  assert.deepEqual(calls.initials, ['BDX']);
 });

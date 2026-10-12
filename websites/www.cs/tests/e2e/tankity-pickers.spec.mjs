@@ -97,7 +97,6 @@ test('the lobby offers Random plus every server map as a silhouette tile, and pi
   await tiles.nth(2).click();
   await expect(tiles.nth(2)).toHaveAttribute('aria-pressed', 'true');
   await expect(tiles.nth(0)).toHaveAttribute('aria-pressed', 'false');
-  await page.fill('#host-initials', 'abc');
   await page.click('#host-go');
   await page.waitForSelector('#lobby-room:not([hidden])');
   await expect.poll(() => seen.at(-1)?.room.map).toBe(maps.maps[1].id);

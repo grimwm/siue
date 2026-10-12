@@ -149,3 +149,19 @@ test('scrolled panels stay where the player left them when they redraw', async (
   expect(await top('#lobby-veil')).toBe(lobbyAt);
   expect(errors).toEqual([]);
 });
+
+test('Menu → Quit ends the match and returns to the title card in a browser tab', async ({ browser }) => {
+  const { page, errors } = await newPlayer(browser);
+  await page.click('#title-play');
+  await page.waitForSelector('#shop-veil:not([hidden])');
+  await expect(page.locator('#title-card')).toBeHidden();
+  await page.evaluate(() => document.getElementById('btn-menu').click());
+  await expect(page.locator('#menu-overlay')).toBeVisible();
+  await page.evaluate(() => document.getElementById('menu-quit').click());
+  await expect(page.locator('#menu-overlay')).toBeHidden();
+  await expect(page.locator('#shop-veil')).toBeHidden();
+  await expect(page.locator('#title-card')).toBeVisible();
+  await expect(page.locator('#log-overlay')).toContainText('You left the match.');
+  await expect(page.locator('#log-overlay')).not.toContainText('Swipe the app away');
+  expect(errors).toEqual([]);
+});

@@ -7,10 +7,11 @@
     <!-- app-tags:begin (tools/install-files.php writes this block) -->
     <meta name="theme-color" content="#0e1320">
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="icon-apple-180.png">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Crete">
+    <script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__installPrompt = e; });</script>
     <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
     <!-- app-tags:end -->
     <link rel="stylesheet" href="game.css?v=f5f8fe983a" />
@@ -44,6 +45,7 @@
           🎲 Random seed
         </button>
         <button type="button" id="mute">🔊 Sound (M)</button>
+        <button type="button" id="quit" title="End this run and leave the game">⏻ Quit (Q)</button>
       </form>
     </header>
 
@@ -152,7 +154,7 @@
               Stuck? <strong>Hint (H)</strong> flashes one step.
               <strong>Answer path (V)</strong> reveals the whole route.
               <strong>Play-through (T)</strong> plays for you.
-              <strong>M</strong> toggles sound.
+              <strong>M</strong> toggles sound. <strong>Q</strong> quits.
             </li>
           </ul>
         </section>
@@ -165,7 +167,9 @@
     </main>
 
     <div id="end-root"></div>
+    <div id="title-root"></div>
 
-    <script type="module" src="dist/main.js?v=b322d244f7"></script>
+    <script type="module" src="dist/main.js?v=a4109f7cfd"></script>
+    <script src="dist/install.js?v=fcce8eeb4c" defer></script>
   </body>
 </html>

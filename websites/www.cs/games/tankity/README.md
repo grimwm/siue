@@ -5,7 +5,7 @@ from a $600 stake, solo or in network rooms (max 10 live). No chat; names are
 3-letter initials with a blocked list (`room_valid_initials` in rooms.php).
 Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
-The page opens on a title card over the dimmed demo: Play (solo, random hills), Play with friends (the rooms), Tutorial, Settings, and the player's initials, the one set solo and the rooms both use. The card comes back after a match ends and after leaving a room. Esc toggles the settings menu.
+The page opens on a title card over the dimmed demo: Play (solo, random hills), Play with friends (the rooms), Tutorial, Settings, and the player's initials, the one set solo and the rooms both use. The card comes back after a match ends and after leaving a room. Esc toggles the settings menu. Quit in the menu ends the match (leaving a room first) and returns to the title card over the demo; an installed app closes, or says how to close it (`games/_kit/app.ts`).
 
 ## Files
 

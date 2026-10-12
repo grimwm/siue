@@ -5,5 +5,6 @@ set -e
 cd "$(dirname "$0")"
 node ../_kit/build/build.mjs cylon --check
 php tools/install-files.php --check
+node ../_kit/build/icons.mjs cylon --check
 node --test 'test/*.test.mjs'
 ../../vendor/bin/phpunit -c ../../phpunit.xml --testsuite cylon

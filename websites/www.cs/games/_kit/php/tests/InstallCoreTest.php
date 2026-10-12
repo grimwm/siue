@@ -23,8 +23,8 @@ final class InstallCoreTest extends TestCase
         file_put_contents("$this->dir/dist/main.js.map", '{}');
         file_put_contents("$this->dir/og.png", 'png');
         file_put_contents("$this->dir/engine-test.js", '');
-        foreach ([192, 512] as $n) {
-            file_put_contents("$this->dir/icon-$n.png", self::png($n));
+        foreach (INSTALL_ICONS as $icon) {
+            file_put_contents("$this->dir/{$icon['file']}", self::png($icon['size']));
         }
     }
 
@@ -73,6 +73,15 @@ final class InstallCoreTest extends TestCase
         $this->assertSame(['index.html must reference dist/main.js?v=... exactly once (found 0)'], $problems);
     }
 
+    public function testBlockHoldsBackTheInstallPromptForTheInstallBar(): void
+    {
+        [$card] = install_card($this->dir, 'play');
+        $block = install_block($card, '');
+        $this->assertStringContainsString(INSTALL_PROMPT_STASH, $block);
+        $this->assertStringContainsString('e.preventDefault(); window.__installPrompt = e;', INSTALL_PROMPT_STASH);
+        $this->assertLessThan(strpos($block, INSTALL_SW_REGISTER), strpos($block, INSTALL_PROMPT_STASH));
+    }
+
     public function testBlockIsInsertedThenReplaced(): void
     {
         [$card] = install_card($this->dir, 'play');
@@ -81,6 +90,7 @@ final class InstallCoreTest extends TestCase
         $this->assertNotNull($once);
         $this->assertSame($once, install_apply($once, install_block($card, '    ')));
         $this->assertStringContainsString('<meta name="apple-mobile-web-app-title" content="Arty">', $once);
+        $this->assertStringContainsString('<link rel="apple-touch-icon" sizes="180x180" href="icon-apple-180.png">', $once);
         $this->assertNull(install_apply('<p>no title</p>', 'x'));
     }
 
@@ -90,7 +100,22 @@ final class InstallCoreTest extends TestCase
         $play = json_decode(install_manifest($card, 'arty'), true);
         $this->assertSame(['./', './'], [$play['start_url'], $play['scope']]);
         $start = json_decode(install_manifest(['start' => 'arty'] + $card, 'arty'), true);
-        $this->assertSame(['../../?game=arty', '../../'], [$start['start_url'], $start['scope']]);
+        // A path, not a query, narrows the scope: browsers ignore a scope's query.
+        $this->assertSame(['../../index.html?game=arty&app=1', '../../index.html'], [$start['start_url'], $start['scope']]);
+    }
+
+    public function testManifestOpensFullScreenAndListsEveryIconByPurpose(): void
+    {
+        [$card] = install_card($this->dir, 'play');
+        $m = json_decode(install_manifest($card, 'arty'), true);
+        $this->assertSame('standalone', $m['display']);
+        $this->assertSame(['fullscreen', 'standalone'], $m['display_override']);
+        $this->assertSame([
+            ['icon-192.png', '192x192', 'any'], ['icon-512.png', '512x512', 'any'],
+            ['icon-maskable-192.png', '192x192', 'maskable'], ['icon-maskable-512.png', '512x512', 'maskable'],
+            ['icon-monochrome-512.png', '512x512', 'monochrome'],
+        ], array_map(fn(array $i): array => [$i['src'], $i['sizes'], $i['purpose']], $m['icons']));
+        $this->assertSame(['image/png'], array_values(array_unique(array_column($m['icons'], 'type'))));
     }
 
     public function testManifestHasNoIdAndTakesItsFieldsFromMetadata(): void
@@ -131,7 +156,8 @@ final class InstallCoreTest extends TestCase
     {
         file_put_contents("$this->dir/fx-editor.js", '');
         [$names] = install_precache($this->dir, [], 'og.png', ['dist'], ['fx-editor.*']);
-        $this->assertSame(['dist/main.js', 'game.css', 'icon-192.png', 'icon-512.png', 'index.html'], $names);
+        $this->assertSame(['dist/main.js', 'game.css', 'icon-192.png', 'icon-512.png', 'icon-apple-180.png',
+            'icon-maskable-192.png', 'icon-maskable-512.png', 'icon-monochrome-512.png', 'index.html'], $names);
     }
 
     public function testPrecacheListsOnlyExistingFiles(): void
@@ -150,11 +176,15 @@ final class InstallCoreTest extends TestCase
         $this->assertNotSame($a, $b);
     }
 
-    public function testIconsMustBeSquarePngsOfTheirSize(): void
+    public function testEveryIconMustBeAPngOfItsSize(): void
     {
         $this->assertSame([], install_icon_problems($this->dir));
         file_put_contents("$this->dir/icon-512.png", self::png(511));
-        $this->assertSame(['icon-512.png must be a 512x512 PNG'], install_icon_problems($this->dir));
+        unlink("$this->dir/icon-maskable-192.png");
+        $this->assertSame([
+            'icon-512.png must be a 512x512 PNG',
+            'icon-maskable-192.png must be a 192x192 PNG',
+        ], install_icon_problems($this->dir));
     }
 
     public function testSyncWritesThenChecksClean(): void

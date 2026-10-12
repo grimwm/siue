@@ -18,6 +18,8 @@ export interface TitleProps {
   initials: string;
   /** Why the last typed set was refused, or empty. */
   problem: string;
+  /** An installed app that could not close itself says how, or empty. */
+  hint: string;
   /** The menu is open (the Settings link's aria-expanded). */
   settingsOpen: boolean;
   /** All three boxes hold a letter: the set, uppercase. The game checks it. */
@@ -76,6 +78,7 @@ export function Title(p: TitleProps) {
         </div>
         <InitialsPicker initials={p.initials} onInitials={p.onInitials} />
         <p class="title-note" id="title-initials-note" role="status">{p.problem}</p>
+        {p.hint && <p class="title-hint" id="title-hint" role="status">{p.hint}</p>}
         <button type="button" id="title-settings" class="title-link" aria-haspopup="dialog" aria-expanded={p.settingsOpen}
           onClick={blurThen(p.onSettings)}>Settings <Key at="global:escape" bare /></button>
       </Dialog>

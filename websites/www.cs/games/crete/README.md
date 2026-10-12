@@ -1,6 +1,6 @@
 # The Island of Crete
 
-A text-based chase on a seeded 15 x 15 maze. You move once per turn, the creature twice; reach the exit alive. Controls are listed on the page (arrows/WASD move, Space bashes, Z/X/C use items, H hints, V shows the route, T plays itself, M mutes, N starts a new run). The seed is in the address (`?seed=`), so a link replays a maze.
+A text-based chase on a seeded 15 x 15 maze. You move once per turn, the creature twice; reach the exit alive. Controls are listed on the page (arrows/WASD move, Space bashes, Z/X/C use items, H hints, V shows the route, T plays itself, M mutes, Q quits, N starts a new run). The seed is in the address (`?seed=`), so a link replays a maze.
 
 It is a `play` game: the folder is a complete page (`index.html`) with its own PWA files, and the site wraps it in `play/crete/` without the game knowing.
 
@@ -33,7 +33,7 @@ php tools/install-files.php                # then rewrite the ?v= versions and s
 | `engine` | seeded RNG and the per-attempt streams, maze generation and the maze rule, the run's state and every rule (moves, items, bash, waiting, the chase, hint, route, play-through) | DOM-free |
 | `audio` | the Web Audio synth and the mute switch | DOM lib |
 | `ui` | drawing the board, HUD and log, choosing what the ending and inventory say; keys and clicks | DOM lib |
-| `ui/end.tsx`, `ui/inventory.tsx` | the ending card and the inventory panel, drawn with the kit's `Dialog`, `Panel`, `Button` and `KeyChip`; `ui.ts` hands them a finished view | DOM lib |
+| `ui/end.tsx`, `ui/inventory.tsx`, `ui/title.tsx` | the ending card, the inventory panel and the title card Quit returns to, drawn with the kit's `Dialog`, `Panel`, `Button` and `KeyChip`; `ui.ts` hands them a finished view | DOM lib |
 
 The split follows one seam: what the game *is* versus what the player *sees*. The engine never names the page. Everything it shows or plays goes out through `Hooks` (`say`, `sfx`, `render`, `showEnd`), and its timers arrive as an argument, so `test/engine.test.mjs` plays whole runs against recording hooks and a manual clock. `ui.ts` and `audio.ts` are the other ends of those hooks. `ui.ts` imports only *types* from the engine and takes what it needs at run time as arguments.
 

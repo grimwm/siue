@@ -36,6 +36,7 @@ export interface MenuDeps {
   placeLogBelowStatus(): void;
   freshMatchFromSeedBox(opts?: { tut?: boolean }): void;
   toggleFullscreen(): void;
+  quit(): void;
   toggleMusic(): void;
   toggleOverlay(id: string, btnId?: string): void;
   toggleSound(): void;
@@ -45,7 +46,7 @@ export interface MenuDeps {
 export function createMenu(deps: MenuDeps) {
   const {
     G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
-    freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound, nextSong,
+    freshMatchFromSeedBox, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong,
   } = deps;
 
   /* Ground units: every human (you, and the people in a room) picks a body.
@@ -147,6 +148,7 @@ export function createMenu(deps: MenuDeps) {
       onScores: () => toggleOverlay('report-overlay', 'scores-open'),
       inRoom: net.on,
       onLeave: openLeaveVeil,
+      onQuit: quit,
       onNextSong: nextSong,
       // Radio and Help close the menu, then open their panel in its place.
       onRadio: () => { toggleOverlay('menu-overlay', 'btn-menu'); toggleOverlay('log-overlay', 'btn-log'); },

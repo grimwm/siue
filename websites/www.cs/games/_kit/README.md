@@ -31,6 +31,21 @@ code starts with `/*! Third-party licenses: THIRD_PARTY_LICENSES.txt */`, and
 `--check` covers the file like any other output. A game with no npm packages
 gets neither.
 
+`node _kit/build/icons.mjs <game>` renders the game's six install icons from
+one drawing, `<game>/tools/icon.svg`: a 512×512 SVG with a full-bleed
+`<g id="bg">` and a `<g id="art">` that stays within 256 px of the centre. Any
+(192, 512) and Apple (180) icons are the drawing; maskable (192, 512) icons
+keep the backdrop and scale the art by 0.8 into the safe zone; the monochrome
+icon (512) is that art as a white silhouette for Android's themed icons. The
+PNGs are checked in; rerun after editing the drawing. The run records the
+drawing's hash in `<game>/tools/icons.json`, and `--check` (part of `npm run
+check`) fails when the drawing changed without a rerun or an icon is missing;
+it compares the hash, not PNG bytes, which differ between platforms. It also
+fails when the icons were rendered by another `@resvg/resvg-js` version than
+the installed one. Each game's `test.sh` runs the check, so `make test` fails
+on a stale icon.
+`install-core.php` checks each icon's size.
+
 ## Ports and adapters (`ports.ts`)
 
 An engine never reaches for the page. It takes `Timers`, a `Clock`, an `Rng`
@@ -90,6 +105,49 @@ view of its state and callbacks, and redraws when the state changes.
   reads the label from its key table. `at` records the key-table slot as
   `data-keyhint`; `decorative` hides a chip that sits beside words already
   naming the action from screen readers.
+
+## Installed apps (`app.ts`)
+
+Each game installs as its own app (its manifest asks for full screen, then
+standalone). `isInstalled(env)` reads the display mode (or iOS's
+`navigator.standalone`); `enterFullscreen(env, el)` asks once and reports
+whether it worked; `exitApp(env)` is every game's Quit: an installed app asks
+to close its window, and where that does nothing within `CLOSE_WAIT_MS`, or in
+a browser tab (never closed), it leaves full screen and answers `'title'` or,
+for an installed app, `'title-with-hint'`: the game then shows its title card
+and, with the hint, `EXIT_HINT`. Pages pass `browserAppEnv()`; tests pass a
+fake environment and a manual clock.
+
+## Install and Share (`install.ts`, `ui/install-bar.tsx`)
+
+`createInstall(env, setup, onChange)` decides what the Install and Share
+buttons show; the browser is a port (`InstallEnv`: the held-back install
+prompt, `appinstalled`, whether the page runs installed, the platform, whether
+it is framed, `navigator.share`, the clipboard, navigation, timers), so tests
+pass a fake and `browserInstallEnv()` is the real one. Chromium gets Install
+only while a held-back `beforeinstallprompt` is in hand, and a click spends it;
+iOS, which has no install API, gets Install always, opening the "Tap Share,
+then Add to Home Screen" steps; other browsers get none; an installed app never
+does. `?install` highlights the button, or on iOS opens the steps, and never
+prompts by itself.
+
+Chromium offers to install from a page outside the manifest's scope
+(`OUT_OF_SCOPE_PROMPTS`, measured in Chrome), so the site's `/play/<id>/`
+pages prompt themselves. iOS saves the page it is on, so on a site page its
+Install opens the game's own page with `?install`, where the steps open. Share
+uses Web Share, then the clipboard ("Link copied"), then a selectable field; a
+cancelled share sheet is no error.
+
+`ui/install-bar.tsx` draws it: `#install-btn` (`kit-install-asked` when
+highlighted), `#share-btn`, `#share-status` ("Link copied"), `#share-url` (the
+address to copy by hand) and the steps dialog `#install-steps` on the kit's
+`Dialog` (focus moves in and back; Escape closes it). `mountInstallBar(root,
+setup, env)` wires it to the browser and adds its stylesheet once, first in
+`<head>`; a page restyles it through `--kit-install-accent` or its own rules.
+Each page game builds `install-page.ts` as `dist/install.js` (an entry in its
+`build.json`): the site's `/play/<id>/` page loads it to fill `#play-install`,
+and the game's own page loads it to show a corner bar when the address has
+`?install`.
 
 ## Tests (`test/`)
 

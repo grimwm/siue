@@ -461,6 +461,8 @@ export interface Game {
   creaturePhase(bonusSteps: number): void;
   /** Steps from the player to the creature, -1 if there is no way. */
   foeDistance(): number;
+  /** Ends the run where it stands, with no ending card: the player is leaving. */
+  quit(): void;
 }
 
 const popcount = (n: number): number => (n === 0 ? 0 : (n & 1) + popcount(n >> 1));
@@ -1009,9 +1011,19 @@ export function createGame(hooks: Hooks): Game {
     return bfsDist(G.walls, G.player)[G.foe.r]![G.foe.c]!;
   }
 
+  function quit(): void {
+    if (G.over) return;
+    stopAuto();
+    clearHint();
+    G.hint = null;
+    G.over = true;
+    G.won = false;
+    render();
+  }
+
   const game: Game = {
     G, newRun, startRun, tryMove, bash, useItem, wait, canJam, hint, clearHint, toggleAnswer, toggleAuto,
-    stopAuto, autoStep, goalPath, foeStep, creaturePhase, foeDistance,
+    stopAuto, autoStep, goalPath, foeStep, creaturePhase, foeDistance, quit,
   };
   return game;
 }

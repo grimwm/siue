@@ -7,5 +7,6 @@ cd "$(dirname "$0")"
 node ../_kit/build/build.mjs tankity --check
 php tools/game-json.php --check
 php tools/install-files.php --check
+node ../_kit/build/icons.mjs tankity --check
 node --test 'test/*.test.mjs'
 ../../vendor/bin/phpunit -c ../../phpunit.xml --testsuite tankity

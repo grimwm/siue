@@ -7,13 +7,14 @@
 <!-- app-tags:begin (tools/install-files.php writes this block) -->
 <meta name="theme-color" content="#05060f">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-apple-180.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Tankity">
+<script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__installPrompt = e; });</script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
-<link rel="stylesheet" href="game.css?v=cff96c5f79">
+<link rel="stylesheet" href="game.css?v=fc8b86acfb">
 </head>
 <body>
 <header class="topbar">
@@ -101,6 +102,7 @@
 </main>
 
 <script src="dist/fx.js?v=7e1e68411c" defer></script>
-<script type="module" src="dist/main.js?v=3dc17f3fa2"></script>
+<script type="module" src="dist/main.js?v=776eddea05"></script>
+<script src="dist/install.js?v=fcce8eeb4c" defer></script>
 </body>
 </html>

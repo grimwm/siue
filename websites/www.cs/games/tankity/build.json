@@ -3,6 +3,7 @@
   "entries": [
     { "in": "src/main.ts", "out": "main", "format": "esm" },
     { "in": "src/fx/engine.ts", "out": "fx", "format": "iife" },
-    { "in": "src/fx/editor.ts", "out": "fx-editor", "format": "iife" }
+    { "in": "src/fx/editor.ts", "out": "fx-editor", "format": "iife" },
+    { "in": "../_kit/install-page.ts", "out": "install", "format": "iife" }
   ]
 }

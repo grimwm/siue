@@ -1,0 +1,19 @@
+<!-- websites/www.cs/games/crete/tools/icon.svg: the maze. Source of every install icon (games/_kit/build/icons.mjs). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="night" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0e1320"/>
+      <stop offset="1" stop-color="#1a2034"/>
+    </linearGradient>
+  </defs>
+  <g id="bg"><rect width="512" height="512" fill="url(#night)"/></g>
+  <g id="art">
+    <g fill="none" stroke="#f0b429" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M196 432 H80 V80 H432 V432 H318"/>
+      <path d="M385 210 V128 H128 V384 H385 V300"/>
+      <path d="M230 176 H176 V336 H336 V176 H285"/>
+    </g>
+    <circle cx="256" cy="256" r="28" fill="#e5484d"/>
+    <circle cx="256" cy="256" r="10" fill="#ffd0d0"/>
+  </g>
+</svg>

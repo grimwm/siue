@@ -413,7 +413,7 @@ const {
   renderTutorial, maybeStartTutorial, tutorialOpen, endTutorial, skipTutorial, tickTutorial,
   isActive: tutorialActive, arm: armTutorial, noteFired: tutorialFired,
 } = createTutorial({
-  G, $, TOUCH, net, sfx, me, keyHint, keyCap, say, refreshNavHints, closeOverlays, freshMatchFromSeedBox,
+  G, $, TOUCH, net, sfx, me, keyHint, say, refreshNavHints, closeOverlays, freshMatchFromSeedBox,
 });
 /* The Difficulty setting: the Menu picks it, a new solo match and a hosted room read it. */
 const difficulty = difficultySetting(browserStorage());
@@ -434,7 +434,7 @@ const {
 const {
   openShop, hideShop, renderShop, renderShopReady, buyItem, shopSelect, shopQtyUp, shopQtyDown,
 } = createShop({
-  G, $, tables, net, sfx, me, keyCap, keyHint, say, advance, render, renderHUD, refreshNavHints,
+  G, $, tables, net, sfx, me, touch: TOUCH, keyHint, say, advance, render, renderHUD, refreshNavHints,
   drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil: () => openLeaveVeil(), netBuy: (it, qty) => netBuy(it, qty),
 });
 /* The weapon picker (src/guns.ts). */
@@ -494,10 +494,6 @@ function applyKeys(def: unknown): void {
   renderEndVeil();
   renderLeaveVeil();
 }
-/* " (KEY)" for a button label; nothing on touch screens. */
-function keyCap(ctx: string, action: string): string {
-  return TOUCH ? '' : ` (${keyHint(ctx, action)})`;
-}
 /* The shown key for an action: the first token its context lists, or the
 // nth with data-keyhint="context:action:n" where prose names two keys. */
 function keyHint(ctx: string, action: string, idx?: number): string {
@@ -510,9 +506,7 @@ function renderKeyHints(): void {
   document.querySelectorAll('[data-keyhint]').forEach(el => {
     if (el.closest && el.closest('[data-ui]')) return;
     const [kctx, kact, kidx] = (el.getAttribute('data-keyhint') || '').split(':');
-    const cap = kctx !== undefined && kact !== undefined ? keyHint(kctx, kact, +(kidx || 0)) : '';
-    const bare = el.className === 'key';
-    el.textContent = cap ? (bare ? `(${cap})` : cap) : '';
+    el.textContent = kctx !== undefined && kact !== undefined ? keyHint(kctx, kact, +(kidx || 0)) : '';
   });
 }
 function freshMatchFromSeedBox(opts?: { tut?: boolean }): void {
@@ -551,7 +545,7 @@ function bindToolTips(): void {
     const desc = tip.querySelector('.tool-tip-desc');
     const key = btn.querySelector('.key');
     if (name) name.textContent = btn.getAttribute('data-tip') || '';
-    if (desc) desc.textContent = (btn.getAttribute('data-tip-desc') || '') + (key && !TOUCH ? ` ${key.textContent}` : '');
+    if (desc) desc.textContent = (btn.getAttribute('data-tip-desc') || '') + (key && key.textContent && !TOUCH ? ` (${key.textContent})` : '');
     tip.style.setProperty('--tool', btn.style.getPropertyValue('--tool') || '#ffc93c');
     tip.hidden = false;
     const r = btn.getBoundingClientRect(), t = tip.getBoundingClientRect();

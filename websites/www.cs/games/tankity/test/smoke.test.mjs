@@ -211,8 +211,8 @@ check('css-menu-row', /\.menubar\s*\{[^}]*flex-wrap:\s*nowrap/.test(css));
 check('css-menu-block', /\.menubar\s*\{[^}]*background/.test(css));
 check('css-stats-strip', /\.hudbar\s*\{[^}]*position:\s*static/.test(css));
 check('pad-note', html.includes('class="pad-note"') && html.includes('barrel'));
-check('key-hints', html.includes('data-keyhint="global:escape">(Esc)<') && html.includes('data-keyhint="global:fire">(Ctrl)<'));
-check('key-style', /button \.key\s*\{[^}]*background/.test(css));
+check('key-hints', html.includes('data-keyhint="global:escape" aria-hidden="true">Esc<') && html.includes('data-keyhint="global:fire" aria-hidden="true">Space<'));
+check('key-style', /\n\.key\s*\{[^}]*background:\s*#14183a/.test(css) && /@media \(hover: hover\) and \(pointer: fine\)/.test(css));
 // Panels live over the battle, never beside it; L/H/R flip them without pausing.
 check('no-side-panels', !/<aside/.test(html));
 for (const id of ['log-overlay', 'help-overlay', 'report-overlay', 'btn-log', 'btn-help']) {
@@ -656,7 +656,7 @@ await (async () => {
     `${KEYS.shop.buy[0]}|${KEYS.global.fire[0]}|${KEYS.aim.barrelLeft[0]}`);
   {
     const ammoActs = shopRows().find(li => rowName(li).includes('Buckshot')).children[2].children;
-    check('shop-btn-hints', ammoActs[0].children[1].textContent === '(V)' && ammoActs[1].children[1].textContent === '(B)',
+    check('shop-btn-hints', ammoActs[0].children[1].textContent === 'V' && ammoActs[1].children[1].textContent === 'B',
       `${ammoActs[0].children[1].textContent}|${ammoActs[1].children[1].textContent}`);
   }
   TAP('shop', 'buy'); frames(3);

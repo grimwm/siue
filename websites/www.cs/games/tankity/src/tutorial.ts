@@ -32,7 +32,6 @@ export interface TutorialDeps {
   sfx: Pick<typeof SfxApi, 'play'>;
   me(): GameTank;
   keyHint: KeyHintFn;
-  keyCap(ctx: string, action: string): string;
   say(text: string, tone?: string): void;
   refreshNavHints(): void;
   closeOverlays(): boolean;
@@ -40,7 +39,7 @@ export interface TutorialDeps {
 }
 
 export function createTutorial(deps: TutorialDeps) {
-  const { G, $, TOUCH, net, sfx, me, keyHint, keyCap, say, refreshNavHints, closeOverlays, freshMatchFromSeedBox } = deps;
+  const { G, $, TOUCH, net, sfx, me, keyHint, say, refreshNavHints, closeOverlays, freshMatchFromSeedBox } = deps;
 
   /* What a touch player taps instead, for prose that names a key. */
   const TOUCH_NAMES: Record<string, string> = {
@@ -80,7 +79,8 @@ export function createTutorial(deps: TutorialDeps) {
       keyHint,
       text: TUT ? `Move ${TUT.step + 1} of ${TUT_STEPS.length}: ${fmtKeys(TUT_STEPS[TUT.step]!.text)}` : '',
       progress: TUT ? 'Follow along in the hills behind this card.' : '',
-      skip: `Skip tutorial${keyCap('global', 'escape')}`,
+      skip: 'Skip tutorial',
+      skipKey: TOUCH ? undefined : 'global:escape',
       onSkip: skipTutorial,
     });
     refreshNavHints();

@@ -14,8 +14,10 @@ export interface TutorialProps {
   /** "Move 2 of 5: ...", or empty while no lesson runs. */
   text: string;
   progress: string;
-  /** The Skip button's whole label, ESC key included ("Skip tutorial (ESC)"; no key on touch). */
+  /** The Skip button's words. */
   skip: string;
+  /** The key its chip names; none on touch screens. */
+  skipKey?: string;
   onSkip: () => void;
 }
 
@@ -25,7 +27,7 @@ export function Tutorial(p: TutorialProps) {
       <h2 id="tutorial-h">Tutorial</h2>
       <p id="tutorial-text">{p.text}</p>
       <p class="hint" id="tutorial-progress">{p.progress}</p>
-      <button type="button" id="tutorial-skip" onClick={blurThen(p.onSkip)}>{p.skip}</button>
+      <button type="button" id="tutorial-skip" onClick={blurThen(p.onSkip)}>{p.skip}{p.skipKey && <>{' '}<Key at={p.skipKey} bare /></>}</button>
       <p class="nav-hint" id="nav-tutorial"><Key at="global:tutorial" /> replays anytime; skipping once skips it for good</p>
     </KeyHints.Provider>
   );

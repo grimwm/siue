@@ -38,7 +38,7 @@ const KEYS = {
   'shop:buy': 'B', 'shop:preview': 'V', 'global:fire': 'Ctrl',
   'shop:buy:1': 'Enter', 'aim:barrelLeft': '◀', 'aim:barrelRight': '▶',
   'global:new': 'N', 'global:sound': 'E', 'global:music': 'M', 'global:fullscreen': 'F', 'global:random': 'T',
-  'global:rooms': 'O', 'global:tutorial': 'U', 'global:report': 'R',
+  'global:rooms': 'O', 'global:tutorial': 'U', 'global:report': 'R', 'shop:next': 'N',
 };
 const keyHint = (ctx, action, idx) => (idx ? KEYS[`${ctx}:${action}:${idx}`] : undefined) ?? KEYS[`${ctx}:${action}`] ?? '';
 
@@ -114,7 +114,7 @@ function shopProps(over = {}) {
   const calls = { buy: [], preview: [], next: 0, leave: 0, icons: [] };
   const props = {
     keyHint, title: 'Field shop', cash: 'War chest: $600', entries: shelf(),
-    next: { label: 'Start round 2 (N)' }, readyLine: null, inRoom: false,
+    next: { label: 'Start round 2', keyAt: 'shop:next' }, readyLine: null, inRoom: false,
     drawIcon: (canvas, icon) => { calls.icons.push([canvas.className, icon]); },
     arsenalRev: 1,
     onBuy: i => calls.buy.push(i), onPreview: w => calls.preview.push(w), onNext: () => { calls.next++; }, onLeave: () => { calls.leave++; },
@@ -157,9 +157,10 @@ function shopProps(over = {}) {
   check('shop-selection', first.className === 'sel' && items.filter(li => hasClass(li, 'sel')).length === 1
     && items.slice(1).every(li => li.className === ''), items.map(li => li.className).join());
   const acts = first.children[2].children;
-  check('shop-buy-and-preview-buttons', acts.length === 2 && text(acts[0]) === 'Preview (V)' && text(acts[1]) === 'Buy (B)'
+  check('shop-buy-and-preview-buttons', acts.length === 2 && text(acts[0]) === 'Preview V' && text(acts[1]) === 'Buy B'
     && acts.every(b => b.localName === 'button' && b.getAttribute('type') === 'button') && hasClass(acts[0].children[1], 'key')
-    && acts[0].children[1].getAttribute('data-keyhint') === 'shop:preview', acts.map(text).join('|'));
+    && acts[0].children[1].getAttribute('data-keyhint') === 'shop:preview'
+    && acts[0].children[1].localName === 'kbd' && acts[0].children[1].getAttribute('aria-hidden') === 'true', acts.map(text).join('|'));
   const gearRow = items[items.length - 1];
   check('shop-gear-row-has-no-preview', gearRow.children[2].children.length === 1 && /^Buy /.test(text(gearRow.children[2].children[0])));
   const locked = items.find(li => /^\d+\. NUKE/.test(text(byClass(li, 'shop-name')[0])));
@@ -185,19 +186,19 @@ function shopProps(over = {}) {
   const next = byId(card, 'shop-next');
   const readyLine = byId(card, 'shop-ready');
   const leave = byId(card, 'shop-leave');
-  check('shop-start-button-solo', text(next) === 'Start round 2 (N)' && hasClass(next, 'btn-primary') && next.getAttribute('aria-pressed') === undefined
+  check('shop-start-button-solo', text(next) === 'Start round 2 N' && hasClass(next, 'btn-primary') && next.getAttribute('aria-pressed') === undefined
     && readyLine.hidden === true && leave.hidden === true && hasClass(leave, 'btn-leave'));
   click(next);
   click(leave);
   check('shop-start-and-leave-reach-the-game', calls.next === 1 && calls.leave === 1);
 
   // A room: the Ready toggle reads Ready / Ready ✓ with aria-pressed, a line counts who is ready.
-  renderShop(veil, shopProps({ next: { label: 'Ready (N)', pressed: false }, readyLine: '0/2 ready · shop closes in 1:30 · ABC  DEF', inRoom: true }).props);
-  check('shop-ready-toggle-idle', text(next) === 'Ready (N)' && next.getAttribute('aria-pressed') === 'false'
+  renderShop(veil, shopProps({ next: { label: 'Ready', keyAt: 'shop:next', pressed: false }, readyLine: '0/2 ready · shop closes in 1:30 · ABC  DEF', inRoom: true }).props);
+  check('shop-ready-toggle-idle', text(next) === 'Ready N' && next.getAttribute('aria-pressed') === 'false'
     && readyLine.hidden === false && text(readyLine) === '0/2 ready · shop closes in 1:30 · ABC  DEF' && leave.hidden === false,
     `${text(next)}|${next.getAttribute('aria-pressed')}|${readyLine.hidden}`);
-  renderShop(veil, shopProps({ next: { label: 'Ready ✓ (N)', pressed: true }, readyLine: '1/2 ready · ABC ✓  DEF', inRoom: true }).props);
-  check('shop-ready-toggle-pressed', text(next) === 'Ready ✓ (N)' && next.getAttribute('aria-pressed') === 'true' && text(readyLine) === '1/2 ready · ABC ✓  DEF');
+  renderShop(veil, shopProps({ next: { label: 'Ready ✓', keyAt: 'shop:next', pressed: true }, readyLine: '1/2 ready · ABC ✓  DEF', inRoom: true }).props);
+  check('shop-ready-toggle-pressed', text(next) === 'Ready ✓ N' && next.getAttribute('aria-pressed') === 'true' && text(readyLine) === '1/2 ready · ABC ✓  DEF');
   check('shop-redraw-keeps-nodes', veil.children[0] === card && byId(card, 'shop-next') === next && byId(card, 'shop-list') === list
     && list.children.filter(li => !hasClass(li, 'shop-cat')).length === 21 && list.children.filter(li => !hasClass(li, 'shop-cat'))[2] === rows[2]);
   // Back to solo: the toggle's aria-pressed goes away with it.
@@ -207,7 +208,7 @@ function shopProps(over = {}) {
   // Pack counts: the bulk total shows after the price in the numbers' colour, and the button names the packs.
   renderShop(veil, shopProps({ entries: shelf({ qty: 3, sel: 2 }) }).props);
   const bulk = list.children.filter(li => !hasClass(li, 'shop-cat') && !hasClass(li, 'shop-free'))[2];
-  check('shop-bulk-row', /×3 = \$/.test(text(byClass(bulk, 'shop-vals')[0])) && /^Buy ×3 \(B\)$/.test(text(bulk.children[2].children[bulk.children[2].children.length - 1])),
+  check('shop-bulk-row', /×3 = \$/.test(text(byClass(bulk, 'shop-vals')[0])) && /^Buy ×3 B$/.test(text(bulk.children[2].children[bulk.children[2].children.length - 1])),
     text(bulk.children[1].children[0]) + '|' + text(bulk.children[2]));
   check('shop-cant-afford-disables-buy', (() => {
     renderShop(veil, shopProps({ entries: shelf({ cash: 50 }) }).props);
@@ -409,7 +410,7 @@ function menuProps(over = {}) {
   const seed = byId(form, 'seed-input');
   check('menu-seed-row', seed.localName === 'input' && attr(seed, 'placeholder') === 'e.g. bam-bam-01' && text(byClass(form, 'seed-row')[0].children[0]) === 'Seed');
   const ng = byId(form, 'new-game');
-  check('menu-new-game-button', hasClass(ng, 'btn-primary') && text(ng) === 'New Game (N)' && hasClass(ng.children[ng.children.length - 1], 'key')
+  check('menu-new-game-button', hasClass(ng, 'btn-primary') && text(ng) === 'New Game N' && hasClass(ng.children[ng.children.length - 1], 'key')
     && attr(ng.children[ng.children.length - 1], 'data-keyhint') === 'global:new', text(ng));
   click(ng);
   submit(form);
@@ -437,7 +438,7 @@ function menuProps(over = {}) {
   check('menu-difficulty-click-reports-key', calls.difficulty.join() === 'hard');
   const toggles = ['btn-sound', 'btn-music', 'fullscreen'].map(id => byId(form, id));
   check('menu-toggles', toggles.map(t => hasClass(t, 'tile-toggle') && hasClass(t, 'unit-choice')).every(Boolean)
-    && toggles.map(t => attr(t, 'aria-pressed')).join() === 'true,true,false' && toggles.map(t => text(t)).join('|') === 'Sound (E)|Music (M)|Fullscreen (F)',
+    && toggles.map(t => attr(t, 'aria-pressed')).join() === 'true,true,false' && toggles.map(t => text(t)).join('|') === 'Sound E|Music M|Fullscreen F',
     toggles.map(t => text(t)).join('|'));
   check('menu-toggle-icons', toggles.every(t => byClass(t, 'tile-icon').length === 1) && byClass(toggles[0], 'on-only').length === 1 && byClass(toggles[0], 'off-only').length === 1);
   toggles.forEach(click);
@@ -445,7 +446,7 @@ function menuProps(over = {}) {
   renderMenu(section, { ...props, sound: false, fullscreen: true });
   check('menu-toggle-states-follow', toggles.map(t => attr(t, 'aria-pressed')).join() === 'false,true,true');
   const buttons = ['random-run', 'rooms-open', 'tutorial-open', 'scores-open'].map(id => byId(form, id));
-  check('menu-action-buttons', buttons.map(b => text(b)).join('|') === 'Random seed (T)|Rooms (O)|Tutorial (U)|Scores (R)'
+  check('menu-action-buttons', buttons.map(b => text(b)).join('|') === 'Random seed T|Rooms O|Tutorial U|Scores R'
     && buttons.every(b => b.localName === 'button' && attr(b, 'type') === 'button'), buttons.map(b => text(b)).join('|'));
   buttons.forEach(click);
   check('menu-action-clicks-report', calls.random === 1 && calls.rooms === 1 && calls.tutorial === 1 && calls.scores === 1);
@@ -466,7 +467,7 @@ function menuProps(over = {}) {
   check('menu-redraw-keeps-scroll', section.scrollTop === 90 && sizeTiles.map(t => attr(t, 'aria-pressed')).join() === 'false,false,true,false', String(section.scrollTop));
   check('menu-keys-follow-the-table', (() => {
     renderMenu(section, { ...props, keyHint: (c, a) => (KEYS[`${c}:${a}`] ?? '').toLowerCase() });
-    return text(ng) === 'New Game (n)';
+    return text(ng) === 'New Game n';
   })());
   check('menu-no-key-means-no-cap', (() => {
     const s2 = makeEl('menu-touch');
@@ -589,7 +590,7 @@ function gunTiles(n = 10, loaded = 0) {
     && attr(input, 'placeholder') === 'e.g. tankity' && text(form.children[2]) === 'File score' && attr(form.children[2], 'type') === 'submit');
   check('end-callsign-prefilled', input.value === 'ZED', input.value);
   const again = byId(card, 'again');
-  check('end-again', hasClass(again, 'btn-primary') && text(again) === 'Play again (N)', text(again));
+  check('end-again', hasClass(again, 'btn-primary') && text(again) === 'Play again N', text(again));
   input.value = ' zed ';
   submit(form);
   check('end-submit-reports-the-box-as-typed', calls.filed.join('|') === ' zed ', JSON.stringify(calls.filed));
@@ -659,7 +660,7 @@ function gunTiles(n = 10, loaded = 0) {
 {
   const section = makeEl('tutorial-overlay');
   let skipped = 0;
-  const tp = (over = {}) => ({ keyHint: (c, a) => (c === 'global' && a === 'tutorial' ? 'U' : ''), text: '', progress: '', skip: 'Skip tutorial (ESC)', onSkip: () => { skipped++; }, ...over });
+  const tp = (over = {}) => ({ keyHint: (c, a) => (c === 'global' && a === 'tutorial' ? 'U' : c === 'global' && a === 'escape' ? 'Esc' : ''), text: '', progress: '', skip: 'Skip tutorial', skipKey: 'global:escape', onSkip: () => { skipped++; }, ...over });
   renderTutorial(section, tp());
   const [h, p1, p2, btn, nav] = section.children;
   check('tutorial-shape', h.localName === 'h2' && h.id === 'tutorial-h' && text(h) === 'Tutorial' && p1.id === 'tutorial-text' && p2.id === 'tutorial-progress' && hasClass(p2, 'hint')
@@ -667,8 +668,8 @@ function gunTiles(n = 10, loaded = 0) {
   check('tutorial-idle-is-blank', text(p1) === '' && text(p2) === '');
   renderTutorial(section, tp({ text: 'Move 2 of 5: Hold ▲ or ▼ to change power.', progress: 'Follow along in the hills behind this card.' }));
   check('tutorial-move', text(p1) === 'Move 2 of 5: Hold ▲ or ▼ to change power.' && text(p2) === 'Follow along in the hills behind this card.' && section.children[1] === p1);
-  check('tutorial-skip-label-is-plain-text', text(btn) === 'Skip tutorial (ESC)' && byClass(btn, 'key').length === 0);
-  renderTutorial(section, tp({ skip: 'Skip tutorial' }));
+  check('tutorial-skip-label-has-the-esc-chip', text(btn) === 'Skip tutorial Esc' && byClass(btn, 'key').length === 1);
+  renderTutorial(section, tp({ skipKey: undefined }));
   check('tutorial-skip-label-without-key-on-touch', text(btn) === 'Skip tutorial');
   click(btn);
   check('tutorial-skip-calls-back', skipped === 1);

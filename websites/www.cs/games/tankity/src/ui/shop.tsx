@@ -52,10 +52,10 @@ export interface ShopProps {
   /** The war-chest line. */
   cash: string;
   entries: ShopEntry[];
-  /** The start button's whole label, key cap included ("Start round 2 (N)",
-   *  or "Ready ✓ (N)" in a room). `pressed` is set only in a room, where the
-   *  button toggles and reads aria-pressed. */
-  next: { label: string; pressed?: boolean };
+  /** The start button: its words ("Start round 2", "Ready ✓" in a room), the
+   *  key its chip names (none on touch screens), and `pressed`, set only in a
+   *  room, where the button toggles and reads aria-pressed. */
+  next: { label: string; keyAt?: string; pressed?: boolean };
   /** The room's "n/m ready" line under the list; null outside a room. */
   readyLine: string | null;
   /** Show the Leave room button (inside a room). */
@@ -159,7 +159,7 @@ export function Shop(p: ShopProps) {
         </ul>
         <p id="shop-ready" class="runstats" hidden={p.readyLine === null}>{p.readyLine}</p>
         <button type="button" id="shop-next" class="btn-primary" aria-pressed={p.next.pressed}
-          onClick={blurThen(p.onNext)}>{p.next.label}</button>
+          onClick={blurThen(p.onNext)}>{p.next.label}{p.next.keyAt && <>{' '}<Key at={p.next.keyAt} bare /></>}</button>
         <button type="button" id="shop-leave" class="btn-leave" title="Leave this game room and go back to the solo hills"
           hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave room</button>
       </div>

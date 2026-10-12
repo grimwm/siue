@@ -1,0 +1,150 @@
+<?php
+// games/tankity/test/php/LegacyImportTest.php
+declare(strict_types=1);
+
+use PHPUnit\Framework\TestCase;
+
+/* The per-callsign runs live in the database; the old files are imported
+   once, losing nothing, and deleted only once their import has committed. */
+final class LegacyImportTest extends TestCase
+{
+    private string $dir;
+    private string $old;
+
+    public static function setUpBeforeClass(): void
+    {
+        require_once __DIR__ . '/rooms-lib.php';
+    }
+
+    protected function setUp(): void
+    {
+        $this->dir = tankity_test_dir();
+        $this->old = $this->dir . '/old';
+        mkdir($this->old, 0700);
+        putenv('TANKITY_SCORES_DIR=' . $this->old);
+    }
+
+    protected function tearDown(): void
+    {
+        putenv('TANKITY_SCORES_DIR');
+        tankity_test_rm($this->dir);
+    }
+
+    private function file(string $slug, array $runs): string
+    {
+        $path = $this->old . "/$slug-operation-tankity.json";
+        file_put_contents($path, json_encode(['name' => $slug, 'runs' => $runs, 'best' => max(array_column($runs, 'score'))]));
+        return $path;
+    }
+
+    private function entry(int $score, string $ts): array
+    {
+        return ['score' => $score, 'banked' => 2, 'won' => false, 'seed' => 's' . $score, 'ts' => $ts];
+    }
+
+    private function runs(string $slug): array
+    {
+        return legacy_read(tankity_db(), $slug)['runs'];
+    }
+
+    public function testEveryRunOfEveryFileArrivesAndTheFilesGo(): void
+    {
+        $runs = [];
+        for ($i = 0; $i < 60; $i++) {
+            $runs[] = $this->entry(10 + $i, sprintf('2026-01-01T00:%02d:00+00:00', $i));
+        }
+        $a = $this->file('wg', $runs);
+        $b = $this->file('r2-d2', [$this->entry(450, '2026-03-01T00:00:00+00:00')]);
+        $this->assertSame([2, 2], legacy_import());
+        $this->assertCount(60, $this->runs('wg'), 'the import keeps every run, past the 50 a new file keeps');
+        $this->assertSame(69, legacy_read(tankity_db(), 'wg')['best']);
+        $this->assertSame([450], array_column($this->runs('r2-d2'), 'score'));
+        $this->assertFileDoesNotExist($a);
+        $this->assertFileDoesNotExist($b);
+        $this->assertSame(['r2-d2', 'wg'], array_column(legacy_top(10), 'name'), 'best first: 450 beats 69');
+    }
+
+    public function testAnInterruptedImportResumesWithoutDuplicates(): void
+    {
+        $path = $this->file('wg', [$this->entry(100, '2026-01-01T00:00:00+00:00'), $this->entry(200, '2026-01-02T00:00:00+00:00')]);
+        $copy = (string) file_get_contents($path);
+        legacy_import();
+        file_put_contents($path, $copy); // as if the request died between the commit and the delete
+        $this->assertSame([1, 1], legacy_import());
+        $this->assertSame([100, 200], array_column($this->runs('wg'), 'score'));
+    }
+
+    public function testRunsAlreadyInTheDatabaseMergeWithTheFile(): void
+    {
+        legacy_add_run('wg', $this->entry(300, '2026-05-01T00:00:00+00:00'));
+        $this->file('wg', [$this->entry(100, '2026-01-01T00:00:00+00:00')]);
+        legacy_import();
+        $this->assertSame([100, 300], array_column($this->runs('wg'), 'score'), 'merged, oldest first');
+    }
+
+    public function testAFileThatChangedIsKeptForTheNextPass(): void
+    {
+        $path = $this->file('wg', [$this->entry(100, '2026-01-01T00:00:00+00:00')]);
+        legacy_import(null, LEGACY_IMPORT_BATCH, null, function () use ($path): void {
+            $this->file('wg', [$this->entry(100, '2026-01-01T00:00:00+00:00'), $this->entry(150, '2026-01-03T00:00:00+00:00')]);
+        });
+        $this->assertFileExists($path);
+        legacy_import();
+        $this->assertFileDoesNotExist($path);
+        $this->assertSame([100, 150], array_column($this->runs('wg'), 'score'));
+    }
+
+    public function testAnUnreadableFileIsLeftAlone(): void
+    {
+        file_put_contents($this->old . '/bad-operation-tankity.json', '{not json');
+        $this->assertSame([0, 0], legacy_import());
+        $this->assertFileExists($this->old . '/bad-operation-tankity.json');
+    }
+
+    public function testALinkOrAnOversizedFileIsNotOursToTake(): void
+    {
+        $real = $this->file('real', [$this->entry(5, '2026-01-01T00:00:00+00:00')]);
+        rename($real, $this->dir . '/elsewhere.json');
+        symlink($this->dir . '/elsewhere.json', $real);
+        file_put_contents($this->old . '/big-operation-tankity.json', json_encode(['runs' => [$this->entry(1, 'x')], 'pad' => str_repeat('x', LEGACY_FILE_MAX)]));
+        $this->assertSame([0, 0], legacy_import());
+        $this->assertFileExists($this->dir . '/elsewhere.json');
+    }
+
+    public function testOldTempFilesGoAndFreshOnesStay(): void
+    {
+        $stale = $this->old . '/wg-operation-tankity.json.tmp.123';
+        $fresh = $this->old . '/wg-operation-tankity.json.tmp.456';
+        file_put_contents($stale, 'x');
+        file_put_contents($fresh, 'x');
+        touch($stale, time() - 7200);
+        legacy_import();
+        $this->assertFileDoesNotExist($stale);
+        $this->assertFileExists($fresh);
+    }
+
+    public function testABatchIsBounded(): void
+    {
+        foreach (['a', 'b', 'c'] as $s) {
+            $this->file($s, [$this->entry(1, '2026-01-01T00:00:00+00:00')]);
+        }
+        $this->assertSame([2, 2], legacy_import(null, 2));
+        $this->assertSame([1, 1], legacy_import(null, 2));
+    }
+
+    public function testANewRunKeepsTheLastFiftyAndAnswersTheBest(): void
+    {
+        for ($i = 1; $i <= 55; $i++) {
+            $best = legacy_add_run('ace', $this->entry($i * 10, sprintf('2026-02-01T00:%02d:00+00:00', $i)));
+        }
+        $this->assertSame(550, $best);
+        $this->assertCount(LEGACY_RUNS_KEPT, $this->runs('ace'));
+    }
+
+    public function testARoomScoreGoesToTheSameCallsign(): void
+    {
+        room_save_score('WGR', 640, ['code' => 'ABCD']);
+        $this->assertSame([['score' => 640, 'banked' => 0, 'won' => false, 'seed' => 'room:ABCD']],
+            array_map(fn(array $r): array => array_diff_key($r, ['ts' => 1]), $this->runs('wgr')));
+    }
+}

@@ -33,6 +33,7 @@ require_once __DIR__ . '/config.php';
 // pipeline: parsing, the JSON reply, the gate, and one handler per action.
 //   server/settings.php  room shape and the host's knobs
 //   server/db.php        the storage directory, the database, transactions
+//   server/legacy.php    the per-callsign score runs and the import of the old score files
 //   server/store.php     rooms as rows: the room lock, room lifecycle, the sweep
 //   server/sim.php       the deterministic sim (mirrors src/sim.ts)
 //   server/ai.php        drone aim, bracketing and strategies
@@ -41,6 +42,7 @@ require_once __DIR__ . '/config.php';
 // Those files do nothing unless this one requires them.
 define('TANKITY_ROOMS_INCLUDED', true);
 require_once __DIR__ . '/server/db.php';
+require_once __DIR__ . '/server/legacy.php';
 require_once __DIR__ . '/server/settings.php';
 require_once __DIR__ . '/server/store.php';
 require_once __DIR__ . '/server/sim.php';

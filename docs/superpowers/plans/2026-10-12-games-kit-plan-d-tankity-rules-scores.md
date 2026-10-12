@@ -43,9 +43,10 @@ William's answers (2026-10-12); every task below is written to them.
 1. **One all-time board per difficulty.** Easy, Normal and Hard each keep their own best 100 runs. A run files on the board of the difficulty it was played at (a room's is its host's). Menu → Scores opens on the player's current difficulty's board, with a switcher to the other two. Rows filed before boards had a difficulty go on the Normal board.
 2. **Tanks fall mid-volley.** The browser keeps today's behaviour: a tank left over a crater falls while shells are still flying, and a later shell of the same volley meets it where it has fallen to. The war (aim, flight and falls) runs in fixed 1/60 s steps, and the server's solo simulation (`server/flight.php`) takes the same steps in the same order, pinned by the `volley-fall` sim vectors.
 3. **The server keeps a solo run as it is played; nothing is replayed at the end.** The run starts with a single-use guard run token. As each round ends the browser sends that round's purchases and shots and how it saw the round end; the server plays the round from the run's stored state, stores the new state and the running score in SQLite, and answers. At game over the server already holds the score, and filing reads it. There is no round limit: CPU is bounded per round (2 s, and at most 200 player shots), not per run. A round whose outcome differs from the client's claim voids the run (the server's simulation is the authority; once the two disagree nothing later could match). A run expires two hours after the last round the server accepted, and 24 hours after it started at the latest; an expired run cannot advance or file and housekeeping deletes it.
-4. **Rooms move into SQLite**, replacing SysV shared memory. One writer at a time, through `BEGIN IMMEDIATE` and a 2 s busy timeout (a request that waits longer answers 503, as a busy room did). The shared-memory code and the ping's `store: "memory"` report are removed.
-5. **Storage location: one setting, then a fixed order.** `data_dir` / `TANKITY_DATA_DIR` (read through `tankity_setting()`: the environment, then `.config.yaml`) names the one directory for everything Tankity keeps; when set it is used exactly, created 0700 when missing, and an unwritable one is an error (logged, "store unavailable"), never a silent move elsewhere. It replaces `scores_dir` / `TANKITY_SCORES_DIR`, which is retired: an existing `scores_dir` is read only as the place to import old score files from. `shm_key` / `TANKITY_SHM_KEY` are retired with shared memory. When `data_dir` is unset, in this order: `games/tankity/data/` when PHP can write there (it then also writes `data/.htaccess` denying HTTP), else `/var/tmp/<username>-tankity/`, where `<username>` is `get_current_user()`: the owner of the running script, which is the account the site is deployed as (`wgrim` on the host), the same for every PHP-FPM worker and pool, and needing no extension; `uid<N>` (from `getmyuid()`) when the name cannot be resolved. A directory PHP creates is mode 0700 and its files 0600; a `/var/tmp` directory that is a symlink, not PHP's own, or open to group or others is refused. Every Tankity file lives there: `tankity.sqlite` (rooms, the boards, solo runs, and the old per-callsign scores until they are converted) and the guard's run store `guard-runs.json`. The old `/var/tmp/<callsign>-operation-tankity.json` files are imported once, idempotently, without losing a run, and each is deleted only after its import committed and only if it did not change since it was read. The journal mode is WAL on a local filesystem and DELETE otherwise (including when the filesystem cannot be read), chosen at run time.
-6. **The server cleans up after itself**: idle rooms, expired solo runs, converted per-callsign rows, the old files once imported, and leftover temp files. The host has no cron, so housekeeping runs on requests, at most once every five minutes, each job bounded, and every function takes the clock as an argument so tests use a fake one.
+4. **Rooms move into SQLite**, replacing SysV shared memory. One writer at a time, through `BEGIN IMMEDIATE` and a 2 s busy timeout. A room's write transaction covers only the step that changes it (read, simulate, write); replies are built after the lock is released, nothing sleeps or long-polls while holding it, and a poll that changes nothing (a lobby or a finished match, the ping) reads without it. A request that waits past the timeout answers 503 and the client retries (`src/net.ts` treats 503 like 429). A load test (8 rooms × 4 players polling at the client's pace) asserts no 503 and a p95 under 300 ms. The shared-memory code and the ping's `store: "memory"` report are removed.
+5. **Storage location: one setting, then a fixed order.** `data_dir` / `TANKITY_DATA_DIR` (read through `tankity_setting()`: the environment, then `.config.yaml`) names the one directory for everything Tankity keeps; when set it is used exactly, created 0700 when missing, and an unwritable one is an error (logged, "store unavailable"), never a silent move elsewhere. It replaces `scores_dir` / `TANKITY_SCORES_DIR`, which is retired: an existing `scores_dir` is read only as the place to import old score files from. `shm_key` / `TANKITY_SHM_KEY` are retired with shared memory. When `data_dir` is unset, in this order: `games/tankity/data/` when PHP can write there (it then also writes `data/.htaccess` denying HTTP), else `/var/tmp/<username>-tankity/`, where `<username>` is `get_current_user()`: the owner of the running script, which is the account the site is deployed as (`wgrim` on the host), the same for every PHP-FPM worker and pool, and needing no extension; `uid<N>` (from `getmyuid()`) when the name cannot be resolved. Modes come from Plan C's `Kit\StoreModes`, the one helper Cylon and Tankity share: a directory PHP creates is 0700 and its files 0600 whichever user PHP runs as (their owner is PHP's user, which is all PHP needs). If PHP runs as the deploying account, only that account can reach them. If it runs as a web user every site on the host shares (Cylon's 0666/0777 suggest so; Task S1 confirms), any other site's PHP runs as that same user and can read and write Tankity's data, the same exposure Cylon's scores have today; no mode prevents it. A `/var/tmp` directory that is a symlink, not PHP's own, or open to group or others is refused. Every Tankity file lives there: `tankity.sqlite` (rooms, the boards, solo runs, and the old per-callsign scores until they are converted) and the guard's run store `guard-runs.json`. The old `/var/tmp/<callsign>-operation-tankity.json` files are imported once, idempotently, without losing a run, and each is deleted only after its import committed and only if it did not change since it was read. The journal mode is WAL on a local filesystem and DELETE otherwise (including when the filesystem cannot be read), chosen at run time.
+6. **Deterministic math.** Every transcendental on the solo simulation path (`sin`, `cos`, `atan2` in the sim, the AI's predictor and the flight) comes from `src/detmath.ts` and its PHP twin `server/detmath.php`: fdlibm's polynomials built only from `+ − × ÷` and `floor`, so the browser and the host compute the same bits; halves round toward +∞ on both sides. Shared `detmath` vectors are checked bit for bit (Task 21a). An honest run is never voided by a libm difference. Rendering keeps `Math.*`.
+7. **The server cleans up after itself**: idle rooms, expired solo runs, converted per-callsign rows, the old files once imported, and leftover temp files. The host has no cron, so housekeeping runs on requests, at most once every five minutes, each job bounded, and every function takes the clock as an argument so tests use a fake one.
 
 ## Global Constraints
 
@@ -73,11 +74,11 @@ William's answers (2026-10-12); every task below is written to them.
 
 ## Review Focus
 
-1. **A solo run on a 30 Hz phone, a 144 Hz monitor, or a tab throttled in the background, with tanks falling into craters mid-volley.** Frame lengths vary wildly; the server's per-round play must still land every shell and drop every tank where the browser did, so the filed score equals the shown one. Pinned by `test/fixed-step.test.mjs` "every step is exactly SOLO_STEP whatever the frame lengths" (Task 23), the jittered-frame test in `test/solo-play.test.mjs` (Task 26), and `FlightTest::testTheVolleyFallVectorsMatch` (Task 29).
+1. **A solo run on a 30 Hz phone, a 144 Hz monitor, or a tab throttled in the background, with tanks falling into craters mid-volley, on a host whose libm rounds `sin` differently from V8.** The server's per-round play must still land every shell and drop every tank where the browser did, to the bit. Pinned by `test/fixed-step.test.mjs` "every step is exactly SOLO_STEP whatever the frame lengths" (Task 23), the `detmath` vectors compared without tolerance (Task 21a), the jittered-frame test in `test/solo-play.test.mjs` (Task 26), and `FlightTest::testTheVolleyFallVectorsReallyFall` with the `volley-fall` vectors (Task 29).
 2. **A client that lies about a round** (a shot it never fired, a claim of a won round the server sees lost, a forged score field, a round sent twice or out of order). Expected: the server's own play decides; a mismatched claim voids the run and nothing files; a repeated round answers the stored reply without playing it again. Pinned by `ScoresApiTest::testALyingClaimVoidsTheRun`, `testAForgedScoreFieldIsIgnored`, `testARoundSentTwiceIsPlayedOnce`, `testARoundOutOfOrderIsRefused` (Task 31).
 3. **The host's storage**: `games/tankity/data/` not writable, `/var/tmp/<username>-tankity` pre-created by another account or as a symlink, `/proc/self/mounts` unreadable, the directory on NFS. Expected: the fallback is taken, a foreign or open directory is refused (503, nothing written), unknown or network filesystems get the DELETE journal. Pinned by `DataDirTest` (Task S2) and confirmed on the real host by Task S1's probe.
 4. **The one-time import of the old score files**, interrupted halfway, run twice, or racing a file that changes while it is read. Expected: every run in every old file ends up in the database exactly once, and a file is deleted only after its import committed and only if it is unchanged. Pinned by `LegacyImportTest::testAnInterruptedImportResumesWithoutDuplicates`, `testAFileThatChangedIsKeptForTheNextPass` (Task S5).
-5. **Two creates racing for the last room, and one room's slow turn.** Expected: the cap is exact (one wins, one gets 409), and a request that waits past the 2 s busy timeout answers 503 rather than hanging a PHP worker. Pinned by `RoomsStoreTest::testTwoCreatesRaceForTheLastPlace` and `testAHeldWriterMakesOthersWaitThenAnswerBusy` (Task S4).
+5. **Every room sharing one writer.** Expected: two creates racing for the last room leave the cap exact (one wins, one gets 409); 8 playing rooms × 4 players polling never see a 503 and stay under 300 ms at p95; a lobby poll never waits for a writer; a request that does wait past the 2 s busy timeout answers 503 (retried by the client) rather than hanging a PHP worker. Pinned by `RoomsStoreTest::testTwoCreatesRaceForTheLastPlace`, `testALobbyPollAnswersWhileARoomIsHeld`, `testAHeldWriterMakesOthersWaitThenAnswerBusy` and `RoomsLoadTest` (Task S4).
 6. **Old free-text callsigns on the Normal board** (`""`, `"123"`, `"r2-d2"`, `"bo"`, `"ass"`, `"tankity ace"`). Expected: three letters, never a blocked set, every old callsign's best run still listed. Pinned by `BoardTest::testOddCallsignsConvert` and `testConvertsCallsignRowsOnceOntoTheNormalBoard` (Task 10).
 7. **Two humans losing their last lives in the same round.** In a 3-human room with one left, that one wins; in a 2-human room nobody is left, so the match ends with no winner and no bonus. Pinned by `RoomMatchEndTest::testTwoOutAtOnceLeaveOneWinner` and `testLastTwoFallTogetherNobodyWins` (Task 8).
 8. **Buying Repair at full armor, or more packs than the hull needs, in a room or solo.** Expected: refused at full, otherwise only the packs that fill the hull are charged. Pinned by `RoomBuyTest::testRepairAtFullArmorIsRefusedAndCostsNothing` / `testRepairBuysOnlyThePacksThatFillTheHull` (Task 3) and `test/armor.test.mjs` "packs wanted" (Task 1).
@@ -215,11 +216,15 @@ echo json_encode([
     'sqlite3' => class_exists('SQLite3') ? SQLite3::version()['versionString'] : null,
     'pdo_sqlite' => $pdo,
     'euid' => function_exists('posix_geteuid') ? [posix_geteuid(), $who(posix_geteuid())] : null,
+    'egid' => function_exists('posix_getegid') ? posix_getegid() : null,
+    'deployed_owner' => [getmyuid(), $who(getmyuid())],
+    'php_is_owner' => function_exists('posix_geteuid') ? posix_geteuid() === getmyuid() : null,
     'get_current_user' => get_current_user(), 'getmyuid' => getmyuid(), 'tankity_user' => $user,
     'open_basedir' => ini_get('open_basedir'), 'disable_functions' => ini_get('disable_functions'),
     'sys_get_temp_dir' => sys_get_temp_dir(), 'umask' => sprintf('%04o', umask()),
     'mounts_readable' => is_string($mounts),
     'dirs' => [$dir(__DIR__), $dir(__DIR__ . '/data'), $dir('/var/tmp'), $dir('/var/tmp/' . $user . '-tankity')],
+    'cylon' => [$dir(dirname(__DIR__) . '/cylon/data'), $dir(dirname(__DIR__) . '/cylon/data/scores.json')],
     'legacy_files' => [
         'count' => count($legacy), 'bytes' => array_sum(array_map(fn(string $f): int => (int) @filesize($f), $legacy)),
         'oldest' => $mtimes ? gmdate('c', min($mtimes)) : null, 'newest' => $mtimes ? gmdate('c', max($mtimes)) : null,
@@ -265,6 +270,8 @@ Read the JSON against this table. Any "stop" row: stop, report the JSON and the 
 | `fs.type` is anything else (`nfs`, `nfs4`, `cifs`, `smb3`, `fuse.*`, `9p`, `ceph`, `glusterfs`, `afs`, …), or `mounts_readable` false | journal mode DELETE (the code chooses it); for an `nfs*`, `cifs` or `smb*` filesystem also **stop**: SQLite's locks are unreliable over a network filesystem even with DELETE, and rooms write constantly, so William decides whether to go on |
 | `fs.type` is `tmpfs` | WAL, but **stop**: tmpfs empties on reboot and the boards would go with it |
 | `open_basedir` is set and leaves out the chosen directory or `/var/tmp` | **stop** (the fallback cannot be opened) |
+| `php_is_owner` true (`euid` is `deployed_owner`) | PHP runs as the site's own account: Tankity's directory 0700 and files 0600 (`Kit\StoreModes`), reachable by this account only |
+| `php_is_owner` false (expected: `euid` is the web user, e.g. `apache`, matching Cylon's 0666 `scores.json` and its `data/` in `cylon[]`) | PHP runs as a user every site shares. Tankity still creates 0700/0600 (owned by that user, which is all PHP needs; `sharedDir`/`sharedFile` 0777/0666 are only for paths the deploy account also writes, and Tankity has none). Go, and say plainly in the PR: any other site's PHP on the host runs as the same user and can read and write Tankity's data (rooms, boards, runs, the guard's tokens), the same exposure Cylon's scores have today; no mode prevents it |
 
 The code makes the same choices at run time (Task S2); this step only confirms that the host lands on a "go" row before any code ships.
 
@@ -276,9 +283,11 @@ The code makes the same choices at run time (Task S2); this step only confirms t
 - Create: `games/tankity/test/php/DataDirTest.php`
 - Create: `games/tankity/test/php/DbTest.php`
 - Modify: `games/tankity/test/php/checks/config.php` (`data_dir` replaces `scores_dir` in the precedence checks)
+- Modify: `games/tankity/tools/install-files.php` (install config: `'kit_php' => ['score-guard.php']`, Plan C Task 1's key)
+- Create: `games/tankity/server/score-guard.php` (generated copy of the kit's guard, which also carries `Kit\StoreModes`; written by `php tools/install-files.php`)
 
 **Interfaces:**
-- Produces (`server/db.php`): `TANKITY_DB_FILE = 'tankity.sqlite'`, `TANKITY_DIR_MODE = 0700`, `TANKITY_FILE_MODE = 0600`, `TANKITY_BUSY_MS = 2000`, `TANKITY_LOCAL_FS`; `tankity_username(): string`; `tankity_euid(): int`; `tankity_claim_dir(string $dir, bool $private): string` (throws `RuntimeException`); `tankity_deny_http(string $dir): bool`; `tankity_pick_dir(string $preferred, string $fallback, ?Closure $writable = null): string`; `tankity_data_dir(): string` (setting `TANKITY_DATA_DIR` / `data_dir` wins); `tankity_fs_type(string $path, ?string $mounts = null): ?string`; `tankity_journal_mode(string $dir, ?string $mounts = null): string` (`'wal' | 'delete'`; setting `TANKITY_JOURNAL` / `journal_mode` wins); `tankity_schema_steps(): array<int, list<string>>` (version 1: tables `meta`, `rooms`, `callsigns`); `tankity_schema(PDO $db): void`; `tankity_db(): PDO`; `tankity_depth(PDO $db, int $delta = 0): int`; `tankity_tx(PDO $db, callable $fn): mixed`; `tankity_busy(Throwable $e): bool`.
+- Produces (`server/db.php`): `TANKITY_DB_FILE = 'tankity.sqlite'`, `tankity_mode(string $kind): int` (`'dir'` or `'file'` from Plan C's `Kit\StoreModes::modes()`: 0700 and 0600 whichever user PHP runs as), `TANKITY_BUSY_MS = 2000`, `TANKITY_LOCAL_FS`; `tankity_username(): string`; `tankity_euid(): int`; `tankity_claim_dir(string $dir, bool $private): string` (throws `RuntimeException`); `tankity_deny_http(string $dir): bool`; `tankity_pick_dir(string $preferred, string $fallback, ?Closure $writable = null): string`; `tankity_data_dir(): string` (setting `TANKITY_DATA_DIR` / `data_dir` wins); `tankity_fs_type(string $path, ?string $mounts = null): ?string`; `tankity_journal_mode(string $dir, ?string $mounts = null): string` (`'wal' | 'delete'`; setting `TANKITY_JOURNAL` / `journal_mode` wins); `tankity_schema_steps(): array<int, list<string>>` (version 1: tables `meta`, `rooms`, `callsigns`); `tankity_schema(PDO $db): void`; `tankity_db(): PDO`; `tankity_depth(PDO $db, int $delta = 0): int`; `tankity_tx(PDO $db, callable $fn): mixed`; `tankity_busy(Throwable $e): bool`.
 - Produces (`test/php/rooms-lib.php`): `tankity_test_dir(): string` (a fresh 0700 directory, and `TANKITY_DATA_DIR` pointed at it); `tankity_test_rm(string $dir): void`; on load, a process-wide default `TANKITY_DATA_DIR` when none is set, so no test ever stores in the game's own directories.
 
 - [ ] **Step 1: The test library, and the failing tests**
@@ -562,6 +571,8 @@ final class DbTest extends TestCase
 }
 ```
 
+The kit's guard copy comes in now, because `server/db.php` takes its modes from `Kit\StoreModes` in it: in `tools/install-files.php` add `'kit_php' => ['score-guard.php'],` to Tankity's install config array (after `'precache_exclude' => ['fx-editor.*'],`), change its header's second line to `// The work is games/_kit/php/install-core.php; this is Tankity's config (it also keeps server/score-guard.php current).`, and run `php tools/install-files.php` (`install-files: wrote server/score-guard.php`). `server/.htaccess` and the nginx rule already deny the folder.
+
 In `test/php/checks/config.php` the precedence checks move from the retired `scores_dir` to `data_dir`: in the `a.yaml` fixture replace `scores_dir: \"/tmp/sco\" # trailing note` with `data_dir: \"/tmp/sco\" # trailing note`, and replace the `file-dir` check with:
 
 ```php
@@ -591,15 +602,22 @@ if (count(get_included_files()) === 1) {
     exit;
 }
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/score-guard.php';
 
 const TANKITY_DB_FILE = 'tankity.sqlite';
-const TANKITY_DIR_MODE = 0700;
-const TANKITY_FILE_MODE = 0600;
 const TANKITY_BUSY_MS = 2000; // a writer that waits longer answers "busy" instead of tying up a PHP worker
 // Filesystems whose locks and shared memory WAL can trust. Anything else,
 // including a mount table PHP cannot read, gets the DELETE journal.
 const TANKITY_LOCAL_FS = ['ext2', 'ext3', 'ext4', 'xfs', 'btrfs', 'zfs', 'f2fs', 'jfs', 'reiserfs', 'bcachefs', 'tmpfs', 'overlay', 'apfs', 'hfs'];
 const TANKITY_DENY = "# Tankity's database: PHP reads it, browsers may not.\nRequire all denied\n";
+
+/* The mode for a directory ('dir') or file ('file') Tankity's PHP creates.
+   Kit\StoreModes decides for every game; README "Storage" says who else can
+   reach them on a host where PHP runs as a shared user. */
+function tankity_mode(string $kind): int
+{
+    return \Kit\StoreModes::modes()[$kind];
+}
 
 /* The account the site belongs to: the owner of the running script, the same
    in every PHP-FPM worker and pool; uid<N> when the name cannot be looked up. */
@@ -621,10 +639,10 @@ function tankity_euid(): int
 function tankity_claim_dir(string $dir, bool $private): string
 {
     if (!is_dir($dir) && !is_link($dir)) {
-        if (!@mkdir($dir, TANKITY_DIR_MODE, true) && !is_dir($dir)) {
+        if (!@mkdir($dir, tankity_mode('dir'), true) && !is_dir($dir)) {
             throw new RuntimeException("cannot create $dir");
         }
-        @chmod($dir, TANKITY_DIR_MODE);
+        @chmod($dir, tankity_mode('dir'));
     }
     clearstatcache(true, $dir);
     if (is_link($dir) || !is_dir($dir) || !is_writable($dir)) {
@@ -647,7 +665,7 @@ function tankity_deny_http(string $dir): bool
     if (@file_put_contents($f, TANKITY_DENY) === false) {
         return false;
     }
-    @chmod($f, TANKITY_FILE_MODE);
+    @chmod($f, tankity_mode('file'));
     return true;
 }
 
@@ -659,9 +677,9 @@ function tankity_pick_dir(string $preferred, string $fallback, ?Closure $writabl
     if (is_dir($preferred) && !is_link($preferred)) {
         $usable = $writable($preferred);
     } else {
-        $usable = !file_exists($preferred) && $writable(dirname($preferred)) && @mkdir($preferred, TANKITY_DIR_MODE);
+        $usable = !file_exists($preferred) && $writable(dirname($preferred)) && @mkdir($preferred, tankity_mode('dir'));
         if ($usable) {
-            @chmod($preferred, TANKITY_DIR_MODE);
+            @chmod($preferred, tankity_mode('dir'));
         }
     }
     if ($usable && tankity_deny_http($preferred)) {
@@ -768,7 +786,7 @@ function tankity_db(): PDO
     $db = new PDO('sqlite:' . $path, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     if ($fresh) {
         // SQLite gives its journal and WAL files the database file's mode.
-        @chmod($path, TANKITY_FILE_MODE);
+        @chmod($path, tankity_mode('file'));
     }
     $db->exec('PRAGMA busy_timeout = ' . TANKITY_BUSY_MS);
     $mode = tankity_journal_mode($dir);
@@ -828,7 +846,7 @@ Expected: PASS, 9 `DataDirTest` and 7 `DbTest` cases (two skipped when run as ro
 - [ ] **Step 4: Commit**
 
 ```bash
-git add games/tankity/server/db.php games/tankity/test/php/rooms-lib.php games/tankity/test/php/DataDirTest.php games/tankity/test/php/DbTest.php games/tankity/test/php/checks/config.php
+git add games/tankity/server/db.php games/tankity/server/score-guard.php games/tankity/tools/install-files.php games/tankity/test/php/rooms-lib.php games/tankity/test/php/DataDirTest.php games/tankity/test/php/DbTest.php games/tankity/test/php/checks/config.php
 git commit -F- <<'MSG'
 Tankity: one private storage directory and its SQLite database
 
@@ -849,7 +867,7 @@ MSG
 
 **Interfaces:**
 - Consumes: Task S2's `tankity_db`, `tankity_tx`, `tankity_depth`, `tankity_busy`; `room_live_secs`, `room_max_age`, `room_new_code`, `room_json_out`.
-- Produces (`server/store.php`): `ROOM_MAX_BYTES = 131072`; `final class RoomLock { PDO $db; string $code; bool $open; bool $saved }`; `room_begin(): PDO` (503 `'this room is busy; try again'` past the busy timeout, 500 `'store unavailable'`); `room_hold(RoomLock $lock): RoomLock`; `room_release_all(): void` (commits a held room that was saved, rolls back one that was not); `room_unlock($lock): void`; `room_decode(mixed $raw): ?array`; `room_count(?int $now = null): int`; `room_idle(array $r, ?int $now = null): bool`; `room_alloc(?callable $nextCode = null): RoomLock`; `room_register(string $code, int $max): ?bool`; `room_load(string $code): array` (`[?array $room, ?RoomLock $lock, string $code]`; with no room nothing stays locked); `room_save($lock, string $code, array $room): bool`; `room_close($lock): void`; `room_discard($lock): void`; `room_sweep(?int $now = null, int $limit = 100): int`; `room_rand_token`, `room_new_code` unchanged. Removed: `ROOM_SEG_*`, `ROOM_REGISTRY_*`, `ROOM_LOCK_WAIT`, `ROOM_REGISTRY_BUSY`, `room_use_shm`, `room_key`, `room_registry_key`, `room_registry_read`, `room_registry_update`, `room_sem_take`, `room_lock`, `room_seg_read`, `room_seg_head`, `room_seg_write`, `room_peek`, `room_shm_key`. Ping replies `{ ok, game, rooms: { used, max } }`.
+- Produces (`server/store.php`): `ROOM_MAX_BYTES = 131072`; `final class RoomLock { PDO $db; string $code; bool $open; bool $saved }`; `room_begin(): PDO` (503 `'this room is busy; try again'` past the busy timeout, 500 `'store unavailable'`); `room_hold(RoomLock $lock): RoomLock`; `room_release_all(): void` (commits a held room that was saved, rolls back one that was not); `room_unlock($lock): void`; `room_decode(mixed $raw): ?array`; `room_count(?int $now = null): int`; `room_idle(array $r, ?int $now = null): bool`; `room_alloc(?callable $nextCode = null): RoomLock`; `room_register(string $code, int $max): ?bool`; `room_load(string $code): array` (`[?array $room, ?RoomLock $lock, string $code]`; with no room nothing stays locked); `ROOM_HEARTBEAT_SECS = 20`, `room_peek(string $code): ?array` (a read without the write lock); `room_save($lock, string $code, array $room): bool`; `room_close($lock): void`; `room_discard($lock): void`; `room_sweep(?int $now = null, int $limit = 100): int`; `room_rand_token`, `room_new_code` unchanged. Removed: `ROOM_SEG_*`, `ROOM_REGISTRY_*`, `ROOM_LOCK_WAIT`, `ROOM_REGISTRY_BUSY`, `room_use_shm`, `room_key`, `room_registry_key`, `room_registry_read`, `room_registry_update`, `room_sem_take`, `room_lock`, `room_seg_read`, `room_seg_head`, `room_seg_write`, `room_peek`, `room_shm_key`. Ping replies `{ ok, game, rooms: { used, max } }`.
 - Produces (`test/php/rooms-lib.php`): `room_test_age(string $code, int $seconds): void`.
 
 - [ ] **Step 1: Write the failing test**
@@ -988,6 +1006,20 @@ final class RoomStoreTest extends TestCase
         $other->exec('ROLLBACK');
     }
 
+    public function testAPeekReadsWithoutTheLock(): void
+    {
+        $code = $this->make();
+        $other = new PDO('sqlite:' . $this->dir . '/' . TANKITY_DB_FILE, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $other->exec('BEGIN IMMEDIATE');
+        try {
+            $this->assertSame($code, room_peek($code)['code']);
+        } finally {
+            $other->exec('ROLLBACK');
+        }
+        room_test_age($code, 120);
+        $this->assertNull(room_peek($code), 'an idle room is not there to read');
+    }
+
     public function testAnIdleRoomIsUncountedAndGoneOnLoad(): void
     {
         $code = $this->make();
@@ -1079,6 +1111,9 @@ if (!defined('TANKITY_ROOMS_INCLUDED')) {
 /* A room serializes to about 30-45 KB; one far past that is a bug, refused
    rather than stored. */
 const ROOM_MAX_BYTES = 131072;
+/* A seated poll of a room that is not playing refreshes its touch this often;
+   in between it is a read that never waits for the writer. */
+const ROOM_HEARTBEAT_SECS = 20;
 
 /* A held room: its write transaction is open until room_unlock (commit),
    room_close (delete, commit) or room_discard (roll back). */
@@ -1214,6 +1249,16 @@ function room_register(string $code, int $max): ?bool
     $q = $lock->db->prepare('SELECT COUNT(*) FROM rooms WHERE code <> ? AND touched >= ? AND created >= ?');
     $q->execute([$code, $now - room_live_secs(), $now - room_max_age()]);
     return (int) $q->fetchColumn() < $max;
+}
+
+/* A room as stored, read without the write lock, for a poll that changes
+   nothing; null when there is none or it is idle. */
+function room_peek(string $code): ?array
+{
+    $q = tankity_db()->prepare('SELECT data FROM rooms WHERE code = ?');
+    $q->execute([$code]);
+    $room = room_decode($q->fetchColumn());
+    return $room !== null && ($room['code'] ?? null) === $code && !room_idle($room) ? $room : null;
 }
 
 /* Holds a room for this request: [room, lock, code]. With no room (never
@@ -1354,12 +1399,34 @@ if ($action === 'ping') {
 
 after each `$loaded = room_load($code);` (three places). The `create` handler is unchanged: `room_alloc`, `room_save`, `room_register`, `room_discard` and `room_unlock` keep its exact-cap flow, and `room_register()` never answers null there.
 
+6. Keep every write transaction to the step that changes the room. Building the reply is not part of it: in every handler that does `$out = room_reply_snapshot($room, $seat, $body);` then `room_unlock($fh);`, swap the two lines, so the lock is released before the snapshot is encoded (the snapshot reads only `$room`). No handler sleeps or long-polls while it holds a room, and none may: `room_begin()`'s comment gains the sentence `Never hold a room across a sleep, a long poll or any wait on the network.`
+
+7. The `state` handler reads first and takes the lock only when the poll changes the room. After its code check, before `$loaded = room_load($code);`, add:
+
+```php
+    // A lobby or a finished match changes only by an act: a poll reads it
+    // without the write lock. A seated poll still refreshes the room's touch
+    // every ROOM_HEARTBEAT_SECS, so a waiting lobby stays live.
+    $peek = room_peek($code);
+    if ($peek === null) {
+        room_json_out(404, ['error' => 'no such room']);
+    }
+    $peekToken = (string) ($body['token'] ?? $_GET['token'] ?? '');
+    $peekSeat = $peekToken !== '' ? room_find_seat($peek, $peekToken) : null;
+    if (in_array($peek['phase'], ['lobby', 'over'], true)
+        && ($peekSeat === null || time() - (int) ($peek['touched'] ?? 0) < ROOM_HEARTBEAT_SECS)) {
+        room_json_out(200, ['ok' => true, 'room' => room_reply_snapshot($peek, $peekSeat, $body)]);
+    }
+```
+
+(A playing room or one in the shop may change on any poll, a drone's turn or the shop clock, so those polls keep the locked path; a 503 there is retried by the client: `src/net.ts` treats 503 like 429, three tries 180 ms apart, and the next poll comes 1.6 s later anyway.)
+
 `src/protocol.ts`: `export interface PingReply { ok: true; game: string; rooms: { used: number; max: number } }`.
 
 - [ ] **Step 4: Run**
 
 Run (in `websites/www.cs`): `vendor/bin/phpunit --testsuite tankity && (cd games/tankity && node ../_kit/build/build.mjs tankity && node --test 'test/*.test.mjs')`
-Expected: PASS, 10 `RoomStoreTest` cases; `RoomsSimTest` unchanged. (The docker suite still talks to shared memory until Task S4; it is not run here.)
+Expected: PASS, 11 `RoomStoreTest` cases; `RoomsSimTest` unchanged. (The docker suite still talks to shared memory until Task S4; it is not run here.)
 
 - [ ] **Step 5: Commit**
 
@@ -1381,9 +1448,11 @@ MSG
 - Modify: `games/tankity/test/php-docker/checks/rooms.php`
 - Modify: `games/tankity/rooms-web-test.php`
 - Modify: `games/tankity/protocol/generate.php`
+- Create: `games/tankity/test/php-docker/RoomsLoadTest.php`
 
 **Interfaces:**
 - Consumes: Task S3's store and `room_test_age`.
+- Produces: `RoomsLoadTest` (tankity-docker suite) against the docker site itself (`http://nginx`, PHP-FPM behind nginx, as players reach it): 8 rooms × 4 players polling at the client's pace for 10 s; no 503 and no other failure, and the 95th-percentile reply under `ROOMS_P95_MS = 300`.
 - Produces: `RoomsStoreTest` (tankity-docker suite) over its own `php -S` on a kernel-chosen 127.0.0.1 port with a private data directory: distinct codes to the cap, an exact cap under a race, close, sweep on create, a held writer making others wait then answer 503, a killed holder releasing the lock, and ping answering while a room is held.
 
 - [ ] **Step 1: The store suite over HTTP**
@@ -1538,6 +1607,7 @@ final class RoomsStoreTest extends TestCase
     public function testAHeldWriterMakesOthersWaitThenAnswerBusy(): void
     {
         [, $r] = self::post('create', ['initials' => 'bsy']);
+        room_test_age($r['code'], 30); // a seated poll past the heartbeat takes the write lock
         [$p, $pipes] = $this->holder(3.0);
         $t = microtime(true);
         $out = self::get('state', '&code=' . $r['code'] . '&token=' . $r['token']);
@@ -1551,6 +1621,7 @@ final class RoomsStoreTest extends TestCase
     public function testAShortHoldOnlyDelays(): void
     {
         [, $r] = self::post('create', ['initials' => 'dly']);
+        room_test_age($r['code'], 30); // a seated poll past the heartbeat takes the write lock
         [$p, $pipes] = $this->holder(0.5);
         $t = microtime(true);
         $out = self::get('state', '&code=' . $r['code'] . '&token=' . $r['token']);
@@ -1563,6 +1634,7 @@ final class RoomsStoreTest extends TestCase
     public function testAKilledHolderReleasesTheLock(): void
     {
         [, $r] = self::post('create', ['initials' => 'kil']);
+        room_test_age($r['code'], 30); // a seated poll past the heartbeat takes the write lock
         [$p, $pipes] = $this->holder(30.0);
         proc_terminate($p, 9);
         proc_close($p);
@@ -1570,6 +1642,18 @@ final class RoomsStoreTest extends TestCase
         $out = self::get('state', '&code=' . $r['code'] . '&token=' . $r['token']);
         $this->assertTrue($out['ok'] ?? false, json_encode($out));
         $this->assertLessThan(1.0, microtime(true) - $t);
+    }
+
+    public function testALobbyPollAnswersWhileARoomIsHeld(): void
+    {
+        [, $r] = self::post('create', ['initials' => 'lob']);
+        [$p, $pipes] = $this->holder(3.0);
+        $t = microtime(true);
+        $out = self::get('state', '&code=' . $r['code'] . '&token=' . $r['token']);
+        $dt = microtime(true) - $t;
+        proc_close($p);
+        $this->assertTrue($out['ok'] ?? false, json_encode($out));
+        $this->assertLessThan(1.0, $dt, 'a fresh lobby poll is a read');
     }
 
     public function testPingAnswersWhileARoomIsHeld(): void
@@ -1588,6 +1672,115 @@ final class RoomsStoreTest extends TestCase
 ```
 
 Delete `test/php-docker/checks/rooms-store.php`.
+
+Create `test/php-docker/RoomsLoadTest.php`:
+
+```php
+<?php
+// games/tankity/test/php-docker/RoomsLoadTest.php
+declare(strict_types=1);
+
+use PHPUnit\Framework\TestCase;
+
+/* One SQLite writer for every room, under the load the lobby allows: 8 rooms
+   playing, each with three humans and a drone, and four players per room
+   polling at the client's pace (src/net.ts MATCH_POLL_MS) for ten seconds,
+   against the docker site (nginx and PHP-FPM), as browsers reach it. */
+final class RoomsLoadTest extends TestCase
+{
+    private const ROOMS = 8;
+    private const POLL_SECS = 1.6;
+    private const RUN_SECS = 10.0;
+    private const ROOMS_P95_MS = 300;
+    private const BASE = 'http://nginx/games/tankity/rooms.php';
+
+    /** @return array{int, ?array} */
+    private function post(string $action, array $body): array
+    {
+        $h = curl_init(self::BASE . '?action=' . $action);
+        curl_setopt_array($h, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($body), CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'], CURLOPT_TIMEOUT => 10]);
+        $raw = curl_exec($h);
+        $code = (int) curl_getinfo($h, CURLINFO_RESPONSE_CODE);
+        return [$code, is_string($raw) ? json_decode($raw, true) : null];
+    }
+
+    public function testEightPlayingRoomsPolledAtTheClientsPaceNeverAnswerBusy(): void
+    {
+        $ping = json_decode((string) @file_get_contents(self::BASE . '?action=ping'), true);
+        $this->assertIsArray($ping, 'the docker site answers (make up)');
+        $this->assertLessThanOrEqual($ping['rooms']['max'], $ping['rooms']['used'] + self::ROOMS, 'room for the test on the shelf');
+        $seats = [];
+        $rooms = [];
+        for ($r = 0; $r < self::ROOMS; $r++) {
+            [$st, $host] = $this->post('create', ['initials' => 'l' . chr(97 + $r) . 'a']);
+            $this->assertSame(200, $st, json_encode($host));
+            $rooms[] = $host;
+            $seats[] = [$host['code'], $host['token'], $host['csrf']];
+            foreach (['b', 'c'] as $g) {
+                [$st, $guest] = $this->post('join', ['code' => $host['code'], 'initials' => 'l' . chr(97 + $r) . $g]);
+                $this->assertSame(200, $st, json_encode($guest));
+                $seats[] = [$host['code'], $guest['token'], $guest['csrf']];
+            }
+            [$st, $out] = $this->post('start', ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']]);
+            $this->assertSame(200, $st, json_encode($out));
+            $seats[] = [$host['code'], '', '']; // a fourth player watching: a poll with no seat
+        }
+        $mh = curl_multi_init();
+        $next = [];
+        foreach ($seats as $k => $_) {
+            $next[$k] = microtime(true) + ($k % 16) * 0.1; // spread the first polls as browsers' clocks are spread
+        }
+        $busy = [];
+        $codes = [];
+        $lat = [];
+        $active = [];
+        $end = microtime(true) + self::RUN_SECS;
+        while (microtime(true) < $end || $active) {
+            $now = microtime(true);
+            foreach ($seats as $k => [$code, $token]) {
+                if ($now < $end && $now >= $next[$k] && !isset($active[$k])) {
+                    $h = curl_init(self::BASE . '?action=state&code=' . $code . ($token !== '' ? '&token=' . $token : ''));
+                    curl_setopt_array($h, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10]);
+                    curl_multi_add_handle($mh, $h);
+                    $active[$k] = [$h, $now];
+                    $next[$k] = $now + self::POLL_SECS;
+                }
+            }
+            curl_multi_exec($mh, $running);
+            while (($info = curl_multi_info_read($mh)) !== false) {
+                foreach ($active as $k => [$h, $t0]) {
+                    if ($h === $info['handle']) {
+                        $status = (int) curl_getinfo($h, CURLINFO_RESPONSE_CODE);
+                        $codes[] = $status;
+                        $lat[] = (microtime(true) - $t0) * 1000;
+                        if ($status === 503) {
+                            $busy[] = $k;
+                        }
+                        curl_multi_remove_handle($mh, $h);
+                        unset($active[$k]);
+                        break;
+                    }
+                }
+            }
+            curl_multi_select($mh, 0.01);
+        }
+        foreach ($seats as [$code, $token, $csrf]) {
+            if ($token !== '') {
+                $this->post('leave', ['code' => $code, 'token' => $token, 'csrf' => $csrf]);
+            }
+        }
+        sort($lat);
+        $p95 = $lat[(int) ceil(0.95 * count($lat)) - 1];
+        $this->assertGreaterThan(self::ROOMS * 4 * 5, count($codes), 'every player polled');
+        $this->assertSame([], $busy, 'no poll answered 503');
+        $this->assertSame([200], array_values(array_unique($codes)));
+        $this->assertLessThan(self::ROOMS_P95_MS, $p95, sprintf('p95 %.0f ms over %d polls', $p95, count($lat)));
+    }
+}
+```
+
+The budget is 300 ms at the 95th percentile on the docker site: a playing room's poll runs its drone turns under the write lock, and 32 players polling every 1.6 s is about 20 such polls a second. If the measured p95 is over budget, shorten what runs under the lock (Task S3 step 6) before raising the number, and say so in the PR.
 
 - [ ] **Step 2: The room shelf suite**
 
@@ -1699,7 +1892,7 @@ $cleanup = function () use ($proc, $data): void {
 - [ ] **Step 4: Run in the container**
 
 Run (in `websites/www.cs`): `make up && docker compose -f ../../compose.yaml exec -T www-cs-php sh -c 'cd /var/www/html && vendor/bin/phpunit --testsuite tankity-docker && cd games/tankity && php protocol/generate.php --check' && curl -sf "$(make -s url)games/tankity/rooms-web-test.php" | tail -1`
-Expected: PASS (8 `RoomsStoreTest` cases and every `RoomsTest` check), `protocol: … current`, and `WEB-OK`.
+Expected: PASS (9 `RoomsStoreTest` cases, every `RoomsTest` check, and `RoomsLoadTest`), `protocol: … current`, and `WEB-OK`.
 
 - [ ] **Step 5: Commit**
 
@@ -2494,9 +2687,15 @@ Everything Tankity keeps is in one directory, picked in this order:
 3. `/var/tmp/<username>-tankity/`, where `<username>` is `get_current_user()`
    (the owner of the running script: the account the site is deployed as),
    or `uid<N>` when the name cannot be resolved. A directory PHP creates is
-   mode 0700 and its files 0600; one that already exists there must be a
-   real directory owned by PHP's own user and closed to group and others, or
-   every request answers "store unavailable".
+   mode 0700 and its files 0600 (`Kit\StoreModes`); one that already exists
+   there must be a real directory owned by PHP's own user and closed to group
+   and others, or every request answers "store unavailable".
+
+Who else can reach the data depends on which user PHP runs as (Task S1's
+probe says). As the deploying account: nobody else. As a web user every site
+on the host shares: any other site's PHP runs as that user and can read and
+write Tankity's database and run store, as it can Cylon's scores; the modes
+cannot prevent that.
 
 `deploy.sh` never stages anything under `games/tankity/data/` (and git
 ignores it), so a deploy never uploads into it, changes its modes or prunes
@@ -4215,8 +4414,6 @@ MSG
 - Modify: `games/tankity/server/housekeep.php` (`tankity_jobs`: the `callsigns` job)
 - Modify: `games/tankity/server/rules.php` (delete `BLOCKED_INITIALS` const, current lines 14–30)
 - Modify: `games/tankity/rooms.php` (require `server/guard.php` and `server/board.php` before `server/rules.php`)
-- Modify: `games/tankity/tools/install-files.php` (install config: `'kit_php' => ['score-guard.php']`, Plan C Task 1's key)
-- Create: `games/tankity/server/score-guard.php` (generated copy, written by `php tools/install-files.php`)
 - Modify: `games/tankity/test/smoke.test.mjs` (`phpFiles` reads `server/guard.php` and `server/board.php`)
 - Create: `games/tankity/test/php/BoardTest.php`
 
@@ -4355,7 +4552,7 @@ Expected: FAIL, `Call to undefined function board_file()`.
 
 - [ ] **Step 2: The guard settings**
 
-In `tools/install-files.php`, add `'kit_php' => ['score-guard.php'],` to Tankity's install config array (after `'precache_exclude' => ['fx-editor.*'],`; Plan C Task 1's key), change its header's second line to `// The work is games/_kit/php/install-core.php; this is Tankity's config (it also keeps server/score-guard.php current).`, then run `php tools/install-files.php` to write the copy (`install-files: wrote server/score-guard.php`). The copy needs no new deny rule: `server/.htaccess` already denies the folder, and `docker/nginx/default.conf` already has `location ^~ /games/tankity/server/ { deny all; }`.
+The guard's copy `server/score-guard.php` is already in place (PR 20, Task S2, `kit_php`).
 
 `server/guard.php` is a thin wrapper: Tankity's settings for the kit's `Kit\ScoreGuard`, nothing else.
 
@@ -4440,7 +4637,7 @@ function tankity_initials(ScoreGuard $guard, mixed $raw): ?string
 }
 ```
 
-(The guard sets its store to mode 0666 after each write, which Cylon's shared folder needs; inside Tankity's 0700 directory no other account can reach it.)
+(The guard sets its store to `Kit\StoreModes`' private file mode, 0600, after each write.)
 
 Delete the `// Mirrors cylon: ...` comment and the `const BLOCKED_INITIALS = [...]` block from `server/rules.php` (current lines 14–30). In `rooms.php`, before `require_once __DIR__ . '/server/settings.php';` add:
 
@@ -4581,7 +4778,7 @@ Expected: PASS, 14 `BoardTest` cases; the smoke test's `blocked-parity` finds th
 - [ ] **Step 5: Commit**
 
 ```bash
-git add games/tankity/server games/tankity/rooms.php games/tankity/tools/install-files.php games/tankity/test/php/BoardTest.php games/tankity/test/smoke.test.mjs
+git add games/tankity/server games/tankity/rooms.php games/tankity/test/php/BoardTest.php games/tankity/test/smoke.test.mjs
 git commit -F- <<'MSG'
 Tankity: a board per difficulty in the database; callsign rows move to Normal
 
@@ -6427,7 +6624,7 @@ The audit, done before this task's code (the executor re-verifies each line agai
 |---|---|---|---|
 | `hashSeed` / `room_hash_seed`, `mulberry32` / `room_rng_next` | integer hashing and the stream | bit-identical (`imul32`), pinned by `rng` vectors | none |
 | `genTerrain` | 9 draws + `sin` ×3 per column, clamp; **plus 20 cloud draws** | PHP `room_gen_terrain` draws 9 | solo PHP draws the 20 (`solo_gen_terrain`, Task 28) |
-| solo wind `Math.round((rng*2-1)*8)`, shift `Math.round(wind + gauss*2)` | half-way values go up in JS, away from zero in PHP | differs on negative halves | solo PHP uses `js_round()` (Task 28) |
+| solo wind `Math.round((rng*2-1)*8)`, shift `Math.round(wind + gauss*2)` | half-way values go up in JS, away from zero in PHP | differs on negative halves | solo PHP uses `det_round()` (Task 21a) |
 | `spawnSpots`, damage `Math.round`, AI angle/power `Math.round` | positive (or clamped) values only | same | none |
 | degrees→radians | `angle * PI / 180` vs `deg2rad` = `(deg / 180) * PI` | may differ in the last bit | TS adopts PHP's order (`rad`) |
 | `Math.hypot` vs `hypot()` | sweep sample counts, blast distances, flak, seek, cluster speed | engines may differ in the last bit | both sides use `sqrt` of the squares |
@@ -6435,7 +6632,7 @@ The audit, done before this task's code (the executor re-verifies each line agai
 | seeker within 1 px | TS clamps the distance to 1 and steers; PHP skips | differs (a known vector case) | TS skips, like PHP |
 | cluster bomblets | TS ignores ground for a bomblet's first 0.1 s; PHP's bomblets start at age 99 | differs when a cluster splits near the ground | TS bomblets may burst on the ground at once (`s.split ||`) |
 | lance bracket | TS `explode()` marks a drone's bracket landing at the first pierce burst; PHP only at the final hit | differs for drones with lances (round 5 on) | PHP marks it at the pierce burst too |
-| `sin`/`cos`/`atan2` (terrain, launch, cluster fan) | V8 fdlibm vs the host's libm | may differ by one ulp | accepted: a one-ulp drift flips a hit or a rounding only at an exact boundary (≈1e-13 per test); measured by the nightly long-run sweep (Task 30), and a run it touches is voided at that round, never filed wrong |
+| `sin`/`cos`/`atan2` (terrain, launch, cluster fan, the AI's predictor) | V8 vs the host's libm | may differ by one ulp, which would void an honest run | both sides use `src/detmath.ts` / `server/detmath.php` (Task 21a): the same bits by construction, pinned by the `detmath` vectors without tolerance |
 | shells flying a full 12 s | TS `life -= dt` (float) vs PHP 720 steps | can differ on the very last step | accepted: no weapon stays airborne 12 s on a 720×460 field |
 | volley order | TS flies all pellets/bomblets together, holding a later burst until earlier ones land; the room server resolves them one by one | same outcome without falls, pinned by every `volley` vector | the solo server flies them together like the browser (`server/flight.php`, Task 29) |
 | tank falls | TS drops tanks over craters between frames, including mid-volley; the room server snaps them after the volley | differs mid-volley | the browser keeps its falls and takes them inside the war's fixed steps (Task 23); the solo server takes the same steps, falls first, then shells (`server/flight.php`, Task 29, pinned by the `volley-fall` vectors); rooms keep snapping (they are refereed on the server and animated on the client) |
@@ -6666,7 +6863,7 @@ the browser and on the server:
   rule modules: distances are `dist()`/`room_dist()`, whole powers are
   `powi()`/`room_powi()`, degrees go through
   `rad()` in PHP `deg2rad`'s order, and JavaScript's `Math.round` is
-  `js_round()` in PHP where a value can be a negative half;
+  `det_round()` in PHP where a value can be a negative half;
 - `sin`, `cos` and `atan2` remain; a last-bit difference there changes an
   outcome only at an exact boundary, and the nightly long-run sweep measures it.
 
@@ -6681,6 +6878,396 @@ agreeing.
 git add games/tankity/src/sim.ts games/tankity/src/ai.ts games/tankity/server/sim.php games/tankity/server/ai.php games/tankity/protocol games/tankity/test/determinism.test.mjs games/tankity/README.md games/tankity/dist
 git commit -F- <<'MSG'
 Tankity: determinism audit; browser and server sims agree to the last bit where they can
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
+MSG
+```
+
+### Task 21a: Deterministic math: one `sin`, `cos` and `atan2` for the browser and the server
+
+An honest run must never be voided because V8's `Math.sin` and the host's libm `sin()` differ in the last bit. Every transcendental the solo simulation path uses (the browser's `src/sim.ts` and the server's `server/sim.php`, `server/rules.php`, and from Task 29 `server/flight.php`) goes through one module per language built only from `+ − × ÷`, `Math.floor`/`floor`, and decimal constants that both languages parse to the same double (both round decimal literals correctly). IEEE 754 makes each of those operations exact-to-the-same-bit on both sides; neither V8 nor PHP's VM fuses a multiply and an add. Rendering-only code (`render.ts`, `preview.ts`, `replay.ts`, particles in `match.ts`, `room.ts`) keeps `Math.*`.
+
+The approximations are fdlibm's (`__kernel_sin`, `__kernel_cos`, `atan`), with a two-constant Cody–Waite reduction by π/2. Accuracy is about 1 ulp on the ranges the game feeds them (`|x| < 1e5`); the point is that both sides compute the same bits.
+
+Rounding rule, stated once: a half rounds toward +∞, which is JavaScript's `Math.round`; PHP's `round()` rounds halves away from zero, so PHP uses `det_round()` (`floor`, then up when the remainder is at least one half). The reduction's quadrant uses `floor(x · 2/π + 0.5)` on both sides.
+
+**Files:**
+- Create: `games/tankity/src/detmath.ts`
+- Create: `games/tankity/server/detmath.php`
+- Modify: `games/tankity/rooms.php` (require `server/detmath.php` before `server/sim.php`; file map)
+- Modify: `games/tankity/src/sim.ts` (`genTerrain`, `muzzle`, `fireWeapon`, `simShot`, `splitShell`, the `split` and `pierce` events' `ang`)
+- Modify: `games/tankity/server/sim.php` (`room_gen_terrain`, `room_muzzle`, `room_split_vel`, `room_sim_shot`)
+- Modify: `games/tankity/server/rules.php` (`room_fire_shot`)
+- Modify: `games/tankity/protocol/sim-vectors.php` (group `detmath`), `games/tankity/test/sim-vectors.test.mjs` (`RUN.detmath`, compared bit for bit)
+- Modify: `games/tankity/test/determinism.test.mjs` (the ban covers the transcendentals)
+- Create: `games/tankity/test/detmath.test.mjs`
+- Create: `games/tankity/test/php/DetMathTest.php`
+- Regenerate: `games/tankity/protocol/*.json`, `games/tankity/protocol/sim-vectors.json` (the hills move by about 1e-13 px; the generators rewrite them)
+
+**Interfaces:**
+- Produces (TS, `src/detmath.ts`): `PI = 3.141592653589793`; `dsin(x: number): number`; `dcos(x: number): number`; `datan(x: number): number`; `datan2(y: number, x: number): number` (`x > 0`: `datan(y/x)`; `x < 0`: `datan(y/x) ± π` by the sign test `y >= 0`; `x == 0`: `±π/2` by the sign of `y`, `0` for `y == 0`).
+- Produces (PHP, `server/detmath.php`): `DET_PI`; `det_sin(float $x): float`, `det_cos(float $x): float`, `det_atan(float $x): float`, `det_atan2(float $y, float $x): float`, `det_round(float $x): float` (JavaScript's `Math.round`). Task 28 and Task 30 round with `det_round`.
+- Vector group `detmath`: input `{ fn: 'sin' | 'cos' | 'atan' | 'atan2' | 'round', x, y? }`, output the number; the TS runner compares with `Object.is` (no tolerance).
+
+- [ ] **Step 1: The failing tests**
+
+```js
+// games/tankity/test/detmath.test.mjs
+// src/detmath.ts: the solo sim's sin, cos and atan2, built only from + - * /
+// and floor so PHP computes the very same bits (the detmath sim vectors pin
+// that). Here: they are accurate, and they keep the identities the sim leans on.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { PI, dsin, dcos, datan, datan2 } from '../src/detmath.ts';
+
+const grid = [];
+for (let x = -40; x <= 40; x += 0.0137) grid.push(x);
+
+test('sin and cos agree with Math to 1e-15 over the range the sim feeds them', () => {
+  for (const x of grid) {
+    assert.ok(Math.abs(dsin(x) - Math.sin(x)) <= 1e-15 * Math.max(1, Math.abs(x)), `sin ${x}`);
+    assert.ok(Math.abs(dcos(x) - Math.cos(x)) <= 1e-15 * Math.max(1, Math.abs(x)), `cos ${x}`);
+  }
+});
+
+test('atan and atan2 agree with Math to 1e-15, in every quadrant', () => {
+  for (const x of grid) assert.ok(Math.abs(datan(x) - Math.atan(x)) <= 1e-15, `atan ${x}`);
+  for (const [y, x] of [[1, 1], [1, -1], [-1, -1], [-1, 1], [0.3, 2e-9], [-5, 0.01], [7, -1e-6], [0, -3], [0, 3]]) {
+    assert.ok(Math.abs(datan2(y, x) - Math.atan2(y, x)) <= 1e-15 * 4, `atan2 ${y} ${x}`);
+  }
+  assert.equal(datan2(1, 0), PI / 2);
+  assert.equal(datan2(-1, 0), -PI / 2);
+  assert.equal(datan2(0, 0), 0);
+});
+
+test('exact at the points the sim relies on', () => {
+  assert.equal(dsin(0), 0);
+  assert.equal(dcos(0), 1);
+  assert.equal(datan(0), 0);
+  assert.equal(datan(1), PI / 4);
+});
+```
+
+```php
+<?php
+// games/tankity/test/php/DetMathTest.php
+declare(strict_types=1);
+
+use PHPUnit\Framework\TestCase;
+
+/* server/detmath.php: accurate, the rounding rule is JavaScript's, and the
+   detmath vectors cover every function (the TS side checks them bit for bit). */
+final class DetMathTest extends TestCase
+{
+    public static function setUpBeforeClass(): void
+    {
+        require_once __DIR__ . '/rooms-lib.php';
+    }
+
+    public function testSinCosAndAtanAgreeWithLibmTo1e15(): void
+    {
+        for ($x = -40.0; $x <= 40.0; $x += 0.0137) {
+            $tol = 1e-15 * max(1.0, abs($x));
+            $this->assertEqualsWithDelta(sin($x), det_sin($x), $tol, "sin $x");
+            $this->assertEqualsWithDelta(cos($x), det_cos($x), $tol, "cos $x");
+            $this->assertEqualsWithDelta(atan($x), det_atan($x), 1e-15, "atan $x");
+        }
+        foreach ([[1, 1], [1, -1], [-1, -1], [-1, 1], [0.3, 2e-9], [-5, 0.01], [7, -1e-6], [0, -3], [0, 3]] as [$y, $x]) {
+            $this->assertEqualsWithDelta(atan2($y, $x), det_atan2((float) $y, (float) $x), 4e-15, "atan2 $y $x");
+        }
+    }
+
+    public function testHalvesRoundTowardPositiveInfinityLikeJavaScript(): void
+    {
+        $this->assertSame([3.0, -2.0, 0.0, -0.0, 0.0, 1.0], [det_round(2.5), det_round(-2.5), det_round(0.49999999999999994), det_round(-0.5), det_round(0.4), det_round(0.5)]);
+    }
+
+    public function testTheVectorsCoverEveryFunction(): void
+    {
+        $cases = json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/protocol/sim-vectors.json'), true)['groups']['detmath'];
+        $fns = array_unique(array_map(fn(array $c): string => $c['in']['fn'], $cases));
+        sort($fns);
+        $this->assertSame(['atan', 'atan2', 'cos', 'round', 'sin'], array_values($fns));
+        $this->assertGreaterThan(200, count($cases));
+    }
+}
+```
+
+(`det_round(-0.5)` is `-0.0`, as `Math.round(-0.5)` is `-0`; PHP's `===` does not tell the two zeros apart, so the sign is pinned by the `detmath` vectors instead.)
+
+In `test/determinism.test.mjs` extend the TS ban list with `/Math\.(sin|cos|tan|atan2?|asin|acos|exp|log|pow|cbrt)\b/` (the comment-stripped source of `src/sim.ts`, `src/ai.ts`, `src/armor.ts`, and from Task 22 `src/solo.ts`) and the PHP list (`server/sim.php`, `server/ai.php`, `server/rules.php`, and from Tasks 22–30 `server/solo.php` and `server/flight.php` when they exist) with `/(?<![\w>$])(sin|cos|tan|atan2?|asin|acos|exp|log|pow)\(/`. Add `server/rules.php` to the PHP files it reads.
+
+Run (in `games/tankity`): `node --test test/detmath.test.mjs test/determinism.test.mjs`
+Expected: FAIL, `src/detmath.ts` not found and `src/sim.ts must not use …Math.sin…`.
+
+- [ ] **Step 2: The modules**
+
+```ts
+// games/tankity/src/detmath.ts
+/* Operation Tankity: sin, cos and atan2 for the simulation, computed the same
+ * to the last bit in the browser and in PHP (server/detmath.php). Only + - * /
+ * and Math.floor on decimal constants both languages parse alike: fdlibm's
+ * kernels after a Cody-Waite reduction by pi/2. Rendering keeps Math.*. */
+
+export const PI = 3.141592653589793;
+const PIO2 = 1.5707963267948966;
+const INV_PIO2 = 6.36619772367581382433e-01;
+const PIO2_1 = 1.57079632673412561417e+00;
+const PIO2_1T = 6.07710050650619224932e-11;
+
+const S1 = -1.66666666666666324348e-01, S2 = 8.33333333332248946124e-03, S3 = -1.98412698298579493134e-04;
+const S4 = 2.75573137070700676789e-06, S5 = -2.50507602534068634195e-08, S6 = 1.58969099521155010221e-10;
+const C1 = 4.16666666666666019037e-02, C2 = -1.38888888888741095749e-03, C3 = 2.48015872894767294178e-05;
+const C4 = -2.75573143513906633035e-07, C5 = 2.08757232129817482790e-09, C6 = -1.13596475577881948265e-11;
+
+function ksin(x: number): number {
+  const z = x * x, v = z * x;
+  const r = S2 + z * (S3 + z * (S4 + z * (S5 + z * S6)));
+  return x + v * (S1 + z * r);
+}
+function kcos(x: number): number {
+  const z = x * x;
+  const r = z * (C1 + z * (C2 + z * (C3 + z * (C4 + z * (C5 + z * C6)))));
+  const hz = 0.5 * z, w = 1 - hz;
+  return w + (((1 - w) - hz) + z * r);
+}
+/** x as k quarter turns plus a remainder in [-pi/4, pi/4]: [quadrant 0-3, remainder]. */
+function reduce(x: number): [number, number] {
+  const k = Math.floor(x * INV_PIO2 + 0.5);
+  return [k & 3, (x - k * PIO2_1) - k * PIO2_1T];
+}
+export function dsin(x: number): number {
+  const [q, r] = reduce(x);
+  return q === 0 ? ksin(r) : q === 1 ? kcos(r) : q === 2 ? -ksin(r) : -kcos(r);
+}
+export function dcos(x: number): number {
+  const [q, r] = reduce(x);
+  return q === 0 ? kcos(r) : q === 1 ? -ksin(r) : q === 2 ? -kcos(r) : ksin(r);
+}
+
+const AT = [
+  3.33333333333329318027e-01, -1.99999999998764832476e-01, 1.42857142725034663711e-01, -1.11111104054623557880e-01,
+  9.09088713343650656196e-02, -7.69187620504482999495e-02, 6.66107313738753120669e-02, -5.83357013379057348645e-02,
+  4.97687799461593236017e-02, -3.65315727442169155270e-02, 1.62858201153657823623e-02,
+] as const;
+const ATAN_HI = [4.63647609000806093515e-01, 7.85398163397448278999e-01, 9.82793723247329054082e-01, 1.57079632679489655800e+00] as const;
+const ATAN_LO = [2.26987774529616870924e-17, 3.06161699786838301793e-17, 1.39033110312309984516e-17, 6.12323399573676603587e-17] as const;
+
+export function datan(x: number): number {
+  let t = x < 0 ? -x : x;
+  let id = -1;
+  if (t >= 0.4375) {
+    if (t < 0.6875) { id = 0; t = (2 * t - 1) / (2 + t); }
+    else if (t < 1.1875) { id = 1; t = (t - 1) / (t + 1); }
+    else if (t < 2.4375) { id = 2; t = (t - 1.5) / (1 + 1.5 * t); }
+    else { id = 3; t = -1 / t; }
+  }
+  const z = t * t, w = z * z;
+  const s1 = z * (AT[0] + w * (AT[2] + w * (AT[4] + w * (AT[6] + w * (AT[8] + w * AT[10])))));
+  const s2 = w * (AT[1] + w * (AT[3] + w * (AT[5] + w * (AT[7] + w * AT[9]))));
+  const r = id < 0 ? t - t * (s1 + s2) : ATAN_HI[id]! - ((t * (s1 + s2) - ATAN_LO[id]!) - t);
+  return x < 0 ? -r : r;
+}
+export function datan2(y: number, x: number): number {
+  if (x > 0) return datan(y / x);
+  if (x < 0) return y >= 0 ? datan(y / x) + PI : datan(y / x) - PI;
+  return y > 0 ? PIO2 : y < 0 ? -PIO2 : 0;
+}
+```
+
+```php
+<?php
+// games/tankity/server/detmath.php
+// sin, cos, atan2 and Math.round for the simulation, the same to the last bit
+// as src/detmath.ts: only + - * / and floor on decimal constants both
+// languages parse alike (fdlibm's kernels after a Cody-Waite reduction by
+// pi/2). Loaded by rooms.php; it runs nothing on its own.
+declare(strict_types=1);
+
+if (!defined('TANKITY_ROOMS_INCLUDED')) {
+    http_response_code(404);
+    exit;
+}
+
+const DET_PI = 3.141592653589793;
+const DET_PIO2 = 1.5707963267948966;
+const DET_INV_PIO2 = 6.36619772367581382433e-01;
+const DET_PIO2_1 = 1.57079632673412561417e+00;
+const DET_PIO2_1T = 6.07710050650619224932e-11;
+const DET_S = [-1.66666666666666324348e-01, 8.33333333332248946124e-03, -1.98412698298579493134e-04,
+    2.75573137070700676789e-06, -2.50507602534068634195e-08, 1.58969099521155010221e-10];
+const DET_C = [4.16666666666666019037e-02, -1.38888888888741095749e-03, 2.48015872894767294178e-05,
+    -2.75573143513906633035e-07, 2.08757232129817482790e-09, -1.13596475577881948265e-11];
+const DET_AT = [3.33333333333329318027e-01, -1.99999999998764832476e-01, 1.42857142725034663711e-01, -1.11111104054623557880e-01,
+    9.09088713343650656196e-02, -7.69187620504482999495e-02, 6.66107313738753120669e-02, -5.83357013379057348645e-02,
+    4.97687799461593236017e-02, -3.65315727442169155270e-02, 1.62858201153657823623e-02];
+const DET_ATAN_HI = [4.63647609000806093515e-01, 7.85398163397448278999e-01, 9.82793723247329054082e-01, 1.57079632679489655800e+00];
+const DET_ATAN_LO = [2.26987774529616870924e-17, 3.06161699786838301793e-17, 1.39033110312309984516e-17, 6.12323399573676603587e-17];
+
+/* JavaScript's Math.round: a half goes toward +infinity (PHP's round() takes it away from zero). */
+function det_round(float $x): float
+{
+    $f = floor($x);
+    return $x - $f >= 0.5 ? $f + 1.0 : $f;
+}
+
+function det_ksin(float $x): float
+{
+    [$s1, $s2, $s3, $s4, $s5, $s6] = DET_S;
+    $z = $x * $x;
+    $v = $z * $x;
+    $r = $s2 + $z * ($s3 + $z * ($s4 + $z * ($s5 + $z * $s6)));
+    return $x + $v * ($s1 + $z * $r);
+}
+
+function det_kcos(float $x): float
+{
+    [$c1, $c2, $c3, $c4, $c5, $c6] = DET_C;
+    $z = $x * $x;
+    $r = $z * ($c1 + $z * ($c2 + $z * ($c3 + $z * ($c4 + $z * ($c5 + $z * $c6)))));
+    $hz = 0.5 * $z;
+    $w = 1.0 - $hz;
+    return $w + (((1.0 - $w) - $hz) + $z * $r);
+}
+
+/* [quadrant 0-3, remainder in [-pi/4, pi/4]] */
+function det_reduce(float $x): array
+{
+    $k = floor($x * DET_INV_PIO2 + 0.5);
+    return [((int) $k) & 3, ($x - $k * DET_PIO2_1) - $k * DET_PIO2_1T];
+}
+
+function det_sin(float $x): float
+{
+    [$q, $r] = det_reduce($x);
+    return match ($q) { 0 => det_ksin($r), 1 => det_kcos($r), 2 => -det_ksin($r), default => -det_kcos($r) };
+}
+
+function det_cos(float $x): float
+{
+    [$q, $r] = det_reduce($x);
+    return match ($q) { 0 => det_kcos($r), 1 => -det_ksin($r), 2 => -det_kcos($r), default => det_ksin($r) };
+}
+
+function det_atan(float $x): float
+{
+    $t = $x < 0 ? -$x : $x;
+    $id = -1;
+    if ($t >= 0.4375) {
+        if ($t < 0.6875) {
+            $id = 0;
+            $t = (2.0 * $t - 1.0) / (2.0 + $t);
+        } elseif ($t < 1.1875) {
+            $id = 1;
+            $t = ($t - 1.0) / ($t + 1.0);
+        } elseif ($t < 2.4375) {
+            $id = 2;
+            $t = ($t - 1.5) / (1.0 + 1.5 * $t);
+        } else {
+            $id = 3;
+            $t = -1.0 / $t;
+        }
+    }
+    $a = DET_AT;
+    $z = $t * $t;
+    $w = $z * $z;
+    $s1 = $z * ($a[0] + $w * ($a[2] + $w * ($a[4] + $w * ($a[6] + $w * ($a[8] + $w * $a[10])))));
+    $s2 = $w * ($a[1] + $w * ($a[3] + $w * ($a[5] + $w * ($a[7] + $w * $a[9]))));
+    $r = $id < 0 ? $t - $t * ($s1 + $s2) : DET_ATAN_HI[$id] - (($t * ($s1 + $s2) - DET_ATAN_LO[$id]) - $t);
+    return $x < 0 ? -$r : $r;
+}
+
+function det_atan2(float $y, float $x): float
+{
+    if ($x > 0) {
+        return det_atan($y / $x);
+    }
+    if ($x < 0) {
+        return $y >= 0 ? det_atan($y / $x) + DET_PI : det_atan($y / $x) - DET_PI;
+    }
+    return $y > 0 ? DET_PIO2 : ($y < 0 ? -DET_PIO2 : 0.0);
+}
+```
+
+`rooms.php`: before `require_once __DIR__ . '/server/sim.php';` add `require_once __DIR__ . '/server/detmath.php';`, and the map line `//   server/detmath.php   sin, cos, atan2 and Math.round, the same bits as src/detmath.ts`. Add `"src/detmath.ts"` to `tsconfig.json` `files` if the program lists files.
+
+- [ ] **Step 3: The sim on it**
+
+`src/sim.ts` (import `{ datan2, dcos, dsin }` from `./detmath.ts`): in `genTerrain` the three `Math.sin(` become `dsin(`; in `muzzle`, `fireWeapon`, `simShot` and `splitShell` every `Math.cos(` becomes `dcos(`, `Math.sin(` becomes `dsin(` and `Math.atan2(` becomes `datan2(`; the `split` and `pierce` events' `ang: Math.atan2(s.vy, s.vx)` become `datan2(s.vy, s.vx)` too (the ban is per file, and the same bits cost nothing).
+
+`server/sim.php`: in `room_gen_terrain` `sin(` → `det_sin(` (three); `room_muzzle` `cos(`/`sin(` → `det_cos(`/`det_sin(`; `room_split_vel` `atan2(` → `det_atan2(`, `cos(`/`sin(` → `det_cos(`/`det_sin(`; `room_sim_shot` `cos(`/`sin(` → `det_cos(`/`det_sin(`. `server/rules.php` `room_fire_shot`: `cos($a)`/`sin($a)` → `det_cos($a)`/`det_sin($a)`. (`deg2rad` stays: it is `(x / 180) * M_PI`, the same two operations as `rad()`.)
+
+- [ ] **Step 4: The vectors, bit for bit**
+
+In `protocol/sim-vectors.php`, before the other groups:
+
+```php
+/* ---- the deterministic math: every function on a grid and its edges ----
+ * Compared without tolerance: the browser must produce these exact doubles. */
+$det = function (string $fn, float $x, ?float $y = null) use ($add): void {
+    $out = match ($fn) {
+        'sin' => det_sin($x), 'cos' => det_cos($x), 'atan' => det_atan($x),
+        'atan2' => det_atan2((float) $y, $x), 'round' => det_round($x),
+    };
+    $add('detmath', "$fn(" . ($y === null ? '' : "$y, ") . "$x)", ['fn' => $fn, 'x' => $x] + ($y === null ? [] : ['y' => $y]), $out);
+};
+for ($i = -60; $i <= 60; $i++) {
+    $x = $i * 0.5236 + 0.00137 * $i;
+    $det('sin', $x);
+    $det('cos', $x);
+    $det('atan', $x / 7);
+}
+foreach ([0.0, M_PI_4, -M_PI_4, M_PI_2, M_PI, 3 * M_PI_2, 2 * M_PI, 30.9, 1e-9, 0.4375, 0.6875, 1.1875, 2.4375, 1e6] as $x) {
+    $det('sin', $x);
+    $det('cos', $x);
+    $det('atan', $x);
+}
+foreach ([[1, 1], [1, -1], [-1, -1], [-1, 1], [0, 1], [0, -1], [1, 0], [-1, 0], [0, 0], [3e-7, -2], [-250.5, 31.25]] as [$y, $x]) {
+    $det('atan2', (float) $x, (float) $y);
+}
+foreach ([2.5, -2.5, 0.49999999999999994, -0.5, 7.5, -7.5, 1e15 + 0.5] as $x) {
+    $det('round', $x);
+}
+```
+
+In `test/sim-vectors.test.mjs` import the module (`const det = await import(pathToFileURL(path.join(dir, 'src', 'detmath.ts')).href);`) and add the runner:
+
+```js
+  detmath(c) {
+    switch (c.fn) {
+      case 'sin': return det.dsin(c.x);
+      case 'cos': return det.dcos(c.x);
+      case 'atan': return det.datan(c.x);
+      case 'atan2': return det.datan2(c.y, c.x);
+      default: return Math.round(c.x);
+    }
+  },
+```
+
+and make the group compare exactly: where the test compares a case's output with the tolerance `TOL`, compare `detmath` cases with `assert.ok(Object.is(got, c.out), …)` (PHP's `json_encode` writes a negative zero as `-0.0`, which `JSON.parse` reads back as `-0`).
+
+- [ ] **Step 5: Regenerate and run everything that pins the sims**
+
+Run (in `websites/www.cs`): `make up && make protocol && make sim-vectors`, then (in `games/tankity`) `node ../_kit/build/build.mjs tankity && node --test test/detmath.test.mjs test/determinism.test.mjs test/sim-vectors.test.mjs test/preview.test.mjs 'test/*.test.mjs'` and (in `websites/www.cs`) `vendor/bin/phpunit --testsuite tankity`
+Expected: PASS; `SIM-VECTORS-OK`, the `detmath` group compared bit for bit; every other group still within its tolerance (the hills moved by ~1e-13 px, the regenerated fixtures carry them).
+
+- [ ] **Step 6: Docs and commit**
+
+In Task 21's README section ("Solo determinism") replace the bullet beginning `- \`sin\`, \`cos\` and \`atan2\` remain;` with:
+
+```markdown
+- `sin`, `cos` and `atan2` come from `src/detmath.ts` / `server/detmath.php`:
+  fdlibm's polynomials built only from `+ − × ÷` and `floor`, so both sides
+  compute the same bits whatever the browser's or the host's libm does; the
+  `detmath` vectors are compared without tolerance. Halves round toward +∞
+  (`Math.round`, `det_round`). Rendering keeps `Math.*`.
+```
+
+```bash
+git add games/tankity/src/detmath.ts games/tankity/server/detmath.php games/tankity/src/sim.ts games/tankity/server/sim.php games/tankity/server/rules.php games/tankity/rooms.php games/tankity/protocol games/tankity/test games/tankity/README.md games/tankity/tsconfig.json games/tankity/dist
+git commit -F- <<'MSG'
+Tankity: one deterministic sin, cos and atan2 for the browser and the server sims
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
@@ -8110,7 +8697,7 @@ MSG
 
 **Interfaces:**
 - Consumes: `room_hash_seed`, `room_rng_next`, `room_gen_terrain`, `room_spawn_spots`, `room_pick_tactic`, `room_ai_rack`, `room_max_armor`, `room_muster_armor`, `room_weapons`.
-- Produces: `SOLO_FOES`, `SOLO_W`; `js_round(float $x): float`; `solo_gen_terrain(int &$rng): array`; `solo_deal(string $seed, string $difficulty): array` (a room-shaped state: one human at seat 0, keys `seed, difficulty (a ROOM_DIFFICULTY word, read by room_ai_choose through room_difficulty()), rng, phase ('shop'), round, wind, terrain, tanks, shells (the volley in the air, `server/flight.php`'s), turn, firstTurn, watchTurns, seats[0].lives, scores[0], cash[0], ammo[0], nextUp[0], roundsWon, tactics, plate[0], armor[0], fuelBonus[0], shield[0], jammer[0], bunker[0], laststand[0]`); `solo_muster(array &$s): void` (round must already be incremented). Vector group `solo-deal`: input `{ seed, rounds }`, output per round `{ samples, wind, xs, ys, tactics, turn, hp, next }`.
+- Produces: `SOLO_FOES`, `SOLO_W`; `det_round(float $x): float`; `solo_gen_terrain(int &$rng): array`; `solo_deal(string $seed, string $difficulty): array` (a room-shaped state: one human at seat 0, keys `seed, difficulty (a ROOM_DIFFICULTY word, read by room_ai_choose through room_difficulty()), rng, phase ('shop'), round, wind, terrain, tanks, shells (the volley in the air, `server/flight.php`'s), turn, firstTurn, watchTurns, seats[0].lives, scores[0], cash[0], ammo[0], nextUp[0], roundsWon, tactics, plate[0], armor[0], fuelBonus[0], shield[0], jammer[0], bunker[0], laststand[0]`); `solo_muster(array &$s): void` (round must already be incremented). Vector group `solo-deal`: input `{ seed, rounds }`, output per round `{ samples, wind, xs, ys, tactics, turn, hp, next }`.
 
 - [ ] **Step 1: Generator group (the PHP side does not exist yet, so this fails)**
 
@@ -8166,14 +8753,6 @@ if (!defined('TANKITY_ROOMS_INCLUDED')) {
 const SOLO_FOES = ['reaper', 'wraith', 'spotter'];
 const SOLO_W = 720;
 
-/* JavaScript's Math.round: halves go up, toward +infinity (PHP's round() takes
-   them away from zero, which differs on negative halves). */
-function js_round(float $x): float
-{
-    $f = floor($x);
-    return $x - $f >= 0.5 ? $f + 1.0 : $f;
-}
-
 /* src/sim.ts genTerrain(): the hills, then five clouds of four numbers each,
    which the server must draw too to stay on the browser's stream. */
 function solo_gen_terrain(int &$rng): array
@@ -8215,7 +8794,7 @@ function solo_muster(array &$s): void
 {
     $s['terrain'] = solo_gen_terrain($s['rng']);
     $s['watchTurns'] = 0;
-    $s['wind'] = (int) js_round((room_rng_next($s['rng']) * 2 - 1) * 8);
+    $s['wind'] = (int) det_round((room_rng_next($s['rng']) * 2 - 1) * 8);
     $xs = room_spawn_spots($s['rng'], 1 + count(SOLO_FOES), SOLO_W);
     $fuel = 80.0 + (float) ($s['fuelBonus'][0] ?? 0);
     $s['fuelBonus'][0] = 0;
@@ -8293,7 +8872,7 @@ The room server resolves a volley shell by shell and settles tanks after it; the
 - Create: `games/tankity/test/php/FlightTest.php`
 
 **Interfaces:**
-- Consumes: Task 21's aligned helpers (`room_dist`, the lance bracket, the seek clamp); `ROOM_GRAV`, `ROOM_FLAT_GRAV`, `ROOM_TURN_WIND`, `ROOM_ROLL_LIFT`; Task 26's `flyVolley`.
+- Consumes: Task 21's aligned helpers (`room_dist`, the lance bracket, the seek clamp) and Task 21a's `det_sin`/`det_cos` (`room_muzzle` and `room_split_vel` already use them); `ROOM_GRAV`, `ROOM_FLAT_GRAV`, `ROOM_TURN_WIND`, `ROOM_ROLL_LIFT`; Task 26's `flyVolley`.
 - Produces: `FLIGHT_STEP = 1 / 60`, `FLIGHT_FALL_GRAVITY = 700.0` (`src/sim.ts FALL_GRAVITY`), `FLIGHT_MAX_STEPS = 20000`; `flight_surf(array $terrain, float $x): float`; `flight_launch(array &$s, int $idx, string $wkey): void` (shells into `$s['shells']`; ammo is the caller's); `flight_fall(array &$s, float $h): void`; `flight_falling(array $s): bool`; `flight_waits(array $s, int $k): bool`; `flight_burst(array &$s, array $shell, float $x, float $y, ?int $direct, ?array $ov): void`; `flight_step_shells(array &$s, float $h): void`; `flight_volley(array &$s, ?Closure $onStep = null): int`. A shell is `['x','y','vx','vy','w','owner','life','age','pierced','split','order','dead','clear','dw','dr','rolling','ru','rt']`. Vector group `volley-fall`: a `volley` case's inputs; output `sv_outcome` plus `ys` (each tank's y), `steps` and `midFall` (a tank moved while a shell was in the air).
 
 - [ ] **Step 1: The generator group and the failing test**
@@ -8468,7 +9047,7 @@ function flight_launch(array &$s, int $idx, string $wkey): void
     for ($i = 0; $i < $shots; $i++) {
         $off = $shots === 1 ? 0.0 : ($i - ($shots - 1) / 2) * (float) ($w['spread'] ?? 0.0);
         $a = $r0 + $off;
-        $s['shells'][] = ['x' => $mx, 'y' => $my, 'vx' => cos($a) * $spd * $dirS, 'vy' => -sin($a) * $spd, 'w' => $wkey, 'owner' => $idx,
+        $s['shells'][] = ['x' => $mx, 'y' => $my, 'vx' => det_cos($a) * $spd * $dirS, 'vy' => -det_sin($a) * $spd, 'w' => $wkey, 'owner' => $idx,
             'life' => 12.0, 'age' => 0.0, 'pierced' => null, 'split' => false, 'order' => [$i], 'dead' => false, 'clear' => false,
             'dw' => null, 'dr' => null, 'rolling' => false, 'ru' => 0.0, 'rt' => 0];
     }
@@ -8975,7 +9554,7 @@ function solo_settle(array &$s): string
         }
     }
     if ($alive > 1 && !($me['hp'] <= 0 && ++$s['watchTurns'] >= ROOM_WATCH_TURNS)) {
-        $s['wind'] = (int) max(-12, min(12, js_round($s['wind'] + room_gauss($s['rng']) * 2)));
+        $s['wind'] = (int) max(-12, min(12, det_round($s['wind'] + room_gauss($s['rng']) * 2)));
         solo_next_turn($s);
         return 'next';
     }
@@ -10485,7 +11064,7 @@ If `main` moved, rebase and rebuild the generated files (Global Constraints). Ru
 
 ## Self-Review
 
-1. **Spec coverage.** 7.1: max armor and plates (T1–3, T5), carry-over (T2, T5), Repair capped/greyed/says what it restores (T1, T3, T5, T7), no banking (T2, T3, T5), re-muster at full max with plates (T2, T5), drones unchanged (T2 test), ARMOR pill "160 of 175" (T6), client and server together with vectors (T4). 7.2: solo endless with no round limit (T22, T27's run past 60 rounds, T30), tanks falling mid-volley on both sides (T23, T29), last human standing with ×2 bonus (T8, T13), one-human room like solo (T8), `WATCH_TURNS` stays (T8 test, T22), vectors (T13, T29). 7.3: top-of-shop board (T14–16), match over with ♛, Play again (same room), Leave room, "Filed · #12 all-time on Normal" (T12, T14, T17–18), you're out with Watch the finish and Menu → Standings (T18), solo rounds table heading the end card (T16–17). 8: auto-filing, no form (T11, T17, T19, T33), a board per difficulty with yours highlighted and a switcher (T10, T19), initials in either case, uppercase stored (T19 and T31 via `tankity_initials`, T34), one-time conversion onto Normal (T10), guard on score and room endpoints (T31, T34), rooms filed server-side (T11), the server playing each round from stored state with the per-round limits and voiding on a mismatch (T29–31), filing what the server holds (T31), expiry (T31), offline queue (T32–33), PHPUnit for every guard rule and round case (T30, T31), determinism audit before the endpoint (T21–23). 12: one SQLite database for rooms, boards and runs (S2–S5, T10, T31), the `data_dir` setting used exactly or the location order with the username source and the private-directory checks (S2), journal mode by filesystem (S2, confirmed by S1), the one-time lossless import of the old files with `scores_dir` read only as their location (S5), `shm_key` and shared memory gone (S3, S4), cleanup on requests with a fake clock (S6, T10, T31), never served or deployed (S7), the host probe before any code (S1).
+1. **Spec coverage.** 7.1: max armor and plates (T1–3, T5), carry-over (T2, T5), Repair capped/greyed/says what it restores (T1, T3, T5, T7), no banking (T2, T3, T5), re-muster at full max with plates (T2, T5), drones unchanged (T2 test), ARMOR pill "160 of 175" (T6), client and server together with vectors (T4). 7.2: solo endless with no round limit (T22, T27's run past 60 rounds, T30), tanks falling mid-volley on both sides (T23, T29), last human standing with ×2 bonus (T8, T13), one-human room like solo (T8), `WATCH_TURNS` stays (T8 test, T22), vectors (T13, T29). 7.3: top-of-shop board (T14–16), match over with ♛, Play again (same room), Leave room, "Filed · #12 all-time on Normal" (T12, T14, T17–18), you're out with Watch the finish and Menu → Standings (T18), solo rounds table heading the end card (T16–17). 8: auto-filing, no form (T11, T17, T19, T33), a board per difficulty with yours highlighted and a switcher (T10, T19), initials in either case, uppercase stored (T19 and T31 via `tankity_initials`, T34), one-time conversion onto Normal (T10), guard on score and room endpoints (T31, T34), rooms filed server-side (T11), the server playing each round from stored state with the per-round limits and voiding on a mismatch (T29–31), filing what the server holds (T31), expiry (T31), offline queue (T32–33), PHPUnit for every guard rule and round case (T30, T31), determinism audit before the endpoint (T21–23). determinism to the bit for sin/cos/atan2 (T21a). 12: one SQLite database for rooms, boards and runs (S2–S5, T10, T31), short room transactions and lock-free polls with a load test (S3, S4), modes from `Kit\StoreModes` with the exposure stated per probe outcome (S1, S2, Plan C Task 4), the `data_dir` setting used exactly or the location order with the username source and the private-directory checks (S2), journal mode by filesystem (S2, confirmed by S1), the one-time lossless import of the old files with `scores_dir` read only as their location (S5), `shm_key` and shared memory gone (S3, S4), cleanup on requests with a fake clock (S6, T10, T31), never served or deployed (S7), the host probe before any code (S1).
 2. **Placeholders.** None remain. The plan has no open questions; the decisions it is written to are in **Decisions** (header). Two gates stop for William on measured facts: Task S1's "stop" rows (the host's storage) and Task 30's per-round CPU.
 3. **Type consistency.** Plan C's names are used as Plan C defines them: `Kit\ScoreGuard` and its methods through `tankity_guard()`/`tankity_initials()` (T10, T19, T31, T34; `rateTake` is Plan C Task 4's and paces rounds in T31), `kit_php` (T10), `initialsPref` and main.ts's `getInitials` (T17, T19), `backToTitle` (T17, T18), `HudProps` in `ui/hud.tsx` with `test/hud.test.mjs` (T6), `test/menu.test.mjs` (T18), and the e2e `dealSolo` is this plan's (T7). PR 20's `tankity_db`/`tankity_tx`/`tankity_depth` are what the store (S3), the callsign rows (S5), housekeeping (S6), the boards (T10) and the runs (T31) use, and a filing inside a held room joins the room's transaction (S2's `tankity_depth`). `tankity_jobs()` grows by `callsigns` (T10) and `solo` (T31). `difficulty` runs from the Menu through `soloDeal` (T22) into the run's start (T33, T31), the board a run files on (T10, T19, T31), `filedLine` (T14, T18, T19, T33), `playSolo`/`replaySolo` (T26), `solo-runs.json` (T27) and `solo_deal` (T28). `SoloRoundLog`/`RoundClaim` (T25) are what `soloRound` (T26), `solo-runs.json` (T27), `solo_claim`/`solo_round` (T30), the `round` op (T31) and the filer (T32) carry; `FLIGHT_STEP`/`SOLO_STEP` and `FLIGHT_MAX_STEPS` match (T23, T26, T29). `SoloState`/`SoloTank` (T22) are what `soloBuy` (T24) and `soloRound` (T26) use; `EndState.buttons` matches `EndVeilProps.buttons` (T17) and `RoomCard` minus `'shop'` (T14, T18); `MatchDeps.fileSolo` (T17, T19) gives way to `soloBegin`/`soloRound`/`soloFinish` once, in T33, with its caller.
-4. **Review Focus.** Each of the eight lines has its test in the owning task (T23/T26/T29, T31, S2/S1, S5, S4, T10, T8, T3/T1).
+4. **Review Focus.** Each of the eight lines has its test in the owning task (T21a/T23/T26/T29, T31, S2/S1, S5, S4, T10, T8, T3/T1).

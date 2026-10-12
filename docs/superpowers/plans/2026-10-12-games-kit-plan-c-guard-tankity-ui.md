@@ -667,7 +667,7 @@ git commit -m "Kit score guard: origin allow-list and CSRF double-submit"
 
 **Interfaces:**
 - Consumes: Tasks 2–3.
-- Produces: `clientKey(): string` (24 hex chars of `hash_hmac('sha256', REMOTE_ADDR, $rateSalt)`), `startRun(): ?string` (null = rate-limited), `consumeRun(string $id, ?callable $plausible = null): ?string` returning `null` (accepted), `'rate'`, `'invalid run'` or `'score rejected'`; `$plausible(int $elapsedSeconds): bool`; `rateTake(string $kind, int $perHour): bool` (takes one of this client's `$perHour` slots for `$kind` this hour; false when they are spent; `$kind` is 1–16 lowercase letters; Tankity's rooms use `'room'`). Store shape (unchanged from Cylon, plus any extra kinds beside `start` and `score`): `{"runs":[{"id","at","exp","used"}],"rates":{"<clientKey>":{"start":[ts…],"score":[ts…]}}}`.
+- Produces: `clientKey(): string` (24 hex chars of `hash_hmac('sha256', REMOTE_ADDR, $rateSalt)`), `startRun(): ?string` (null = rate-limited), `consumeRun(string $id, ?callable $plausible = null): ?string` returning `null` (accepted), `'rate'`, `'invalid run'` or `'score rejected'`; `$plausible(int $elapsedSeconds): bool`; `rateTake(string $kind, int $perHour): bool` (takes one of this client's `$perHour` slots for `$kind` this hour; false when they are spent; `$kind` is 1–16 lowercase letters; Tankity's rooms use `'room'`). Store shape (unchanged from Cylon, plus any extra kinds beside `start` and `score`): `{"runs":[{"id","at","exp","used"}],"rates":{"<clientKey>":{"start":[ts…],"score":[ts…]}}}`. In the same file, `final class StoreModes` with `static phpIsOwner(): bool` and `static modes(?bool $phpIsOwner = null): array{dir: int, file: int, sharedDir: int, sharedFile: int}`: the one place a game's PHP takes file modes from (the guard's store, Cylon's scores file, Tankity's storage). `dir`/`file` (paths only PHP writes) are 0700/0600 whichever user PHP runs as; `sharedDir`/`sharedFile` (paths the deploy account also writes, such as a game's own `data/`) are 0700/0600 when PHP runs as the deploying account and 0777/0666 when it runs as a web user shared by every site on the host.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -971,12 +971,59 @@ Add to the class:
             }
             fflush($fh);
             flock($fh, LOCK_UN);
-            // The web user and the deploy user differ on the shared host.
-            @chmod($this->runsPath, 0666);
+            // Only PHP writes the store: StoreModes decides what that means on this host.
+            @chmod($this->runsPath, StoreModes::modes()['file']);
             return $result;
         } finally {
             fclose($fh);
         }
+    }
+```
+
+Append to `score-guard.php`, after the `ScoreGuard` class (same namespace, so every game's `kit_php` copy carries it):
+
+```php
+/**
+ * The file modes a game's PHP uses, decided in one place. PHP runs either as
+ * the account that deployed the game or as a web user every site on the host
+ * shares (what Cylon's 0666/0777 assumed). A path only PHP writes is 0700/0600
+ * either way: its owner is PHP's user, and that is all PHP needs. A path the
+ * deploy account also writes (a game's own data/ folder) must be open to both
+ * when they are different users. With a shared web user, any other site's PHP
+ * runs as that same user and can read and write what this one stores; no
+ * mode prevents that.
+ */
+final class StoreModes
+{
+    /** PHP's effective user is the owner of the running script: the deploying account. */
+    public static function phpIsOwner(): bool
+    {
+        return !function_exists('posix_geteuid') || posix_geteuid() === getmyuid();
+    }
+
+    /** @return array{dir: int, file: int, sharedDir: int, sharedFile: int} */
+    public static function modes(?bool $phpIsOwner = null): array
+    {
+        $own = $phpIsOwner ?? self::phpIsOwner();
+        return ['dir' => 0700, 'file' => 0600, 'sharedDir' => $own ? 0700 : 0777, 'sharedFile' => $own ? 0600 : 0666];
+    }
+}
+```
+
+Add to `ScoreGuardTest` (with `use Kit\StoreModes;`):
+
+```php
+    public function testModesForEachWayPhpRuns(): void
+    {
+        $this->assertSame(['dir' => 0700, 'file' => 0600, 'sharedDir' => 0700, 'sharedFile' => 0600], StoreModes::modes(true));
+        $this->assertSame(['dir' => 0700, 'file' => 0600, 'sharedDir' => 0777, 'sharedFile' => 0666], StoreModes::modes(false));
+        $this->assertSame(StoreModes::modes(posix_geteuid() === getmyuid()), StoreModes::modes());
+    }
+
+    public function testTheStoreTakesThePrivateFileMode(): void
+    {
+        $this->guard()->startRun();
+        $this->assertSame(0600, fileperms($this->runs) & 0777);
     }
 ```
 
@@ -1007,7 +1054,7 @@ git commit -m "Kit score guard: single-use run tokens and hashed-IP rate limits"
 
 **Interfaces:**
 - Consumes: `Kit\ScoreGuard` (Tasks 2–4); `install_run(..., ['kind' => 'start', 'kit_php' => [...]], ...)` (Task 1).
-- Produces: in `cylon/scores.php`, `guard(): Kit\ScoreGuard` and `scoreFitsTime(int $score): callable`. Response codes, bodies, the cookie name `cylon_csrf`, the header `X-Cylon-CSRF`, the rate salt `cylon-score-rate-v1` and the runs file `sys_get_temp_dir()/cylon-runs.json` are all unchanged.
+- Produces: in `cylon/scores.php`, `guard(): Kit\ScoreGuard` and `scoreFitsTime(int $score): callable`. Response codes, bodies, the cookie name `cylon_csrf`, the header `X-Cylon-CSRF`, the rate salt `cylon-score-rate-v1` and the runs file `sys_get_temp_dir()/cylon-runs.json` are all unchanged. File modes come from `Kit\StoreModes` (Task 4): the runs file is 0600 (it was 0666), and `openScoresFile` uses `sharedDir`/`sharedFile` for Cylon's own `data/` and `dir`/`file` elsewhere, in place of its hard-coded 0777/0755/0666.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1174,7 +1221,7 @@ In `games/cylon/scores.php`:
            }
    ```
    replace `$initials = sanitizeInitials($data['initials'] ?? 'AAA');` with `$initials = ScoreGuard::coerceInitials($data['initials'] ?? 'AAA', 'A');`, `if (isBlockedInitials($initials)) {` with `if (guard()->isBlocked($initials)) {`, and `$problem = consumeRun((string) ($data['run'] ?? ''), $score);` with `$problem = guard()->consumeRun((string) ($data['run'] ?? ''), scoreFitsTime($score));`.
-7. In `openScoresFile`, nothing changes (it now opens only the scores file).
+7. `openScoresFile` (it now opens only the scores file) takes its modes from the kit: after `$dir = dirname($path);` add `$m = StoreModes::modes();`; replace `@mkdir($dir, $relax ? 0777 : 0755, true)` with `@mkdir($dir, $relax ? $m['sharedDir'] : $m['dir'], true)`, `@chmod($dir, 0777);` with `@chmod($dir, $m['sharedDir']);`, and `@chmod($path, 0666);` with `@chmod($path, $relax ? $m['sharedFile'] : $m['file']);`; its comment `// 0777 only for our data/ dir — shared-host PHP is not the SFTP user.` becomes `// Our own data/ is also the deploy account's: Kit\StoreModes opens it to both when PHP runs as another user.` Add `use Kit\StoreModes;` beside `use Kit\ScoreGuard;`.
 
 Run: `grep -nE 'sanitizeInitials|isBlockedInitials|issueCsrfCookie|consumeRun\(|startRun\(|withRunStore' websites/www.cs/games/cylon/scores.php`
 Expected: only the `guard()->consumeRun(` and `guard()->startRun(` calls.
@@ -1206,6 +1253,8 @@ has('a-games-copy-runs-its-specs', select([`${S}games/cylon/server/score-guard.p
 ## Score guard (`php/score-guard.php`)
 
 `Kit\ScoreGuard` is the gate in front of a score endpoint: the Origin (else Referer) allow-list, CSRF double-submit (the header must equal the cookie), single-use run tokens that expire, per-client rate limits keyed by an HMAC of the address (`startRun()` and `consumeRun()` count their own; `rateTake($kind, $perHour)` caps any other endpoint), and three-letter initials (`initials()`: `[A-Za-z]{3}` in, `[A-Z]{3}` out; `coerceInitials()` for rows stored before that rule). It reads only the keys in `ScoreGuard::CONFIG_KEYS`, checked by `ScoreGuard::validateConfig()`; a game's config may hold more. A game lists `score-guard.php` under `kit_php` in its `install-files.php` config, which keeps a copy in the game's `server/` (deny that folder in `.htaccess` and in `docker/nginx/default.conf`).
+
+The same file holds `Kit\StoreModes`, the one place a game's PHP takes file modes from: 0700/0600 for what only PHP writes, and for a path the deploy account also writes (a game's own `data/`) 0700/0600 when PHP runs as the deploying account, 0777/0666 when it runs as a web user every site shares. In that second case any other site's PHP on the host can read and write the game's stored files; no mode prevents it.
 ```
 
 `games/cylon/README.md`: after the `scores.php` bullet in the file list add `- `server/score-guard.php` — the kit's score guard (origin, CSRF, run tokens, rate limits, initials), copied by `tools/install-files.php`; never edit the copy`, and append to the paragraph that starts "`scores.php` keeps two boards" the sentence: "Every POST passes the kit's score guard first (`server/score-guard.php`), configured by the guard keys in `data/config.json`."

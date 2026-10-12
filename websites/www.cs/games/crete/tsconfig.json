@@ -1,5 +1,5 @@
 {
   // DOM-free program: the engine cannot reach the page. See games/_kit/README.md.
   "extends": "../_kit/build/tsconfig.base.json",
-  "files": ["src/engine.ts", "src/grid.ts"]
+  "files": ["src/engine.ts", "src/grid.ts", "src/bots.ts"]
 }

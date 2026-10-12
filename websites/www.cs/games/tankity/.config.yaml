@@ -1,16 +1,21 @@
 # Operation Tankity server settings.
 # The game reads this file once at startup and NEVER writes to it.
-# Rooms live in SysV shared memory only; there is no disk fallback and no
-# room setting points at the disk. Score files still use the disk (scores
-# are files); they default to /var/tmp unless TANKITY_SCORES_DIR is set.
+# Tankity keeps its database (rooms, scores) in games/tankity/data/ when PHP
+# can write there, else in /var/tmp/<username>-tankity/ (README "Storage").
 # For each setting, the matching environment variable wins when set and non-empty:
-#   max_rooms    <- TANKITY_MAX_ROOMS (how many rooms can exist at once)
-#   room_max_age <- TANKITY_ROOM_MAX_AGE (seconds a room record is kept)
-#   shm_key      <- TANKITY_SHM_KEY (shared memory key; only set this to
-#                  isolate a test run, otherwise leave it out)
-# Point CONFIG_FILE at another file to load settings from elsewhere.
+#   max_rooms      <- TANKITY_MAX_ROOMS (how many rooms can exist at once)
+#   room_max_age   <- TANKITY_ROOM_MAX_AGE (seconds a room record is kept)
 #   room_live_secs <- TANKITY_ROOM_LIVE_SECS (seconds since the last touch
-#                    before a room stops counting as occupied)
+#                     before a room stops counting as occupied)
+#   data_dir       <- TANKITY_DATA_DIR (the one directory for everything
+#                     Tankity keeps: used exactly as given, created 0700 when
+#                     missing, an error when not writable, never a fallback.
+#                     Unset: games/tankity/data/, else /var/tmp/<user>-tankity/)
+#   journal_mode   <- TANKITY_JOURNAL (wal or delete; otherwise chosen from
+#                     the storage directory's filesystem)
+#   scores_dir     <- TANKITY_SCORES_DIR (retired: only where score files
+#                     from before the database are imported from; default /var/tmp)
+# Point CONFIG_FILE at another file to load settings from elsewhere.
 max_rooms: 10
 room_max_age: 86400
 room_live_secs: 600

@@ -39,13 +39,13 @@ check('tankity-lockfile-with-a-module-still-runs-its-specs', select([`${S}games/
 check('tankity-build-tool-runs-nothing', select([`${S}games/tankity/tools/ts-build.mjs`, `${S}games/tankity/tools/vendor.mjs`, `${S}games/tankity/tools/dom-stub.mjs`, `${S}games/tankity/ui-test.js`, `${S}games/tankity/.gitignore`]), 'NONE');
 check('cylon-lockfile-alone-runs-no-browser', select([`${S}games/cylon/package-lock.json`]), 'NONE');
 check('cylon-build-tool-runs-nothing', select([`${S}games/cylon/tools/ts-build.mjs`, `${S}games/cylon/.gitignore`, `${S}games/cylon/rules-test.js`]), 'NONE');
-has('cylon-sources-run-the-shell-specs', select([`${S}games/cylon/src/rules.ts`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs', 'games-hub.spec.mjs']);
+has('cylon-sources-run-the-shell-specs', select([`${S}games/cylon/src/rules.ts`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs', 'cylon-play.spec.mjs', 'games-hub.spec.mjs']);
 has('cylon-compiled-modules-run-the-shell-specs', select([`${S}games/cylon/js/scores.js`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs']);
 has('cylon-tsconfig-runs-the-shell-specs', select([`${S}games/cylon/tsconfig.json`, `${S}games/cylon/package.json`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs']);
 check('cylon-skips-tankity', select([`${S}games/cylon/src/rules.ts`]).some(s => s.startsWith('tankity-')), false);
 has('home-page-tool-runs-the-shell', select([`${S}tools/site-versions.php`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs']);
-has('crete-sources-run-its-specs', select([`${S}games/crete/src/engine.ts`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs']);
-has('crete-compiled-modules-run-its-specs', select([`${S}games/crete/js/ui.js`, `${S}games/crete/tsconfig.json`, `${S}games/crete/package.json`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs']);
+has('crete-sources-run-its-specs', select([`${S}games/crete/src/engine.ts`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'crete-play.spec.mjs']);
+has('crete-compiled-modules-run-its-specs', select([`${S}games/crete/js/ui.js`, `${S}games/crete/tsconfig.json`, `${S}games/crete/package.json`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'crete-play.spec.mjs']);
 check('crete-lockfile-alone-runs-no-browser', select([`${S}games/crete/package-lock.json`]), 'NONE');
 check('crete-build-tool-and-tests-run-nothing', select([`${S}games/crete/tools/ts-build.mjs`, `${S}games/crete/.gitignore`, `${S}games/crete/engine-test.js`, `${S}games/crete/smoke-test.js`]), 'NONE');
 check('crete-skips-tankity', select([`${S}games/crete/src/ui.ts`]).some(s => s.startsWith('tankity-')), false);

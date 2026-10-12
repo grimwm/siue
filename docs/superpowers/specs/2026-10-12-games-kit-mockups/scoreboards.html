@@ -1,0 +1,84 @@
+<style>
+  .tk { --bg:#05060f; --panel:#0c0f2e; --line:#3a3fb0; --gold:#ffc93c; --ink:#eef; --dim:#9aa3c7; font-family: system-ui, sans-serif; }
+  .tk .stage { background:var(--bg); color:var(--ink); border-radius:12px; padding:14px; display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+  .tk .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; width:430px; box-sizing:border-box; }
+  .tk .card.win { border-color:var(--gold); box-shadow:0 0 0 3px rgba(255,201,60,.18); }
+  .tk .kick { font-size:10px; letter-spacing:.14em; color:var(--dim); text-transform:uppercase; }
+  .tk h4 { margin:2px 0 8px; font-size:18px; color:var(--gold); }
+  .tk table { width:100%; border-collapse:collapse; font-size:12px; }
+  .tk th { text-align:left; font-size:9.5px; letter-spacing:.1em; color:var(--dim); font-weight:600; padding:3px 4px; border-bottom:1px solid var(--line); }
+  .tk th.n, .tk td.n { text-align:right; }
+  .tk td { padding:5px 4px; border-bottom:1px solid #1b2050; white-space:nowrap; }
+  .tk tr.me td { background:#141a46; }
+  .tk tr.out td { color:#7d84a8; }
+  .tk .pl { font-weight:800; } .tk .you { font-size:9px; color:#111; background:var(--gold); border-radius:4px; padding:1px 4px; margin-left:4px; }
+  .tk .bot { font-size:9px; color:#cfd3ff; border:1px solid #4b52c8; border-radius:4px; padding:0 3px; margin-left:4px; }
+  .tk .delta { color:#7f7; font-size:10px; margin-left:3px; }
+  .tk .hearts { color:#ff5c8a; font-weight:800; }
+  .tk .crown { color:var(--gold); }
+  .tk .btns { display:flex; gap:8px; margin-top:10px; }
+  .tk .bt { flex:1; text-align:center; padding:8px; border-radius:9px; font-weight:800; font-size:13px; border:1.5px solid var(--line); background:#11163a; }
+  .tk .bt.pri { background:var(--gold); color:#111; border-color:var(--gold); }
+  .tk .note { font-size:11px; color:var(--dim); margin-top:8px; }
+  .tk .shopstub { margin-top:8px; border:1px dashed #4b52c8; border-radius:9px; padding:10px; color:var(--dim); font-size:11px; text-align:center; }
+</style>
+
+<h2>This match's scoreboard: after every round, and at the end</h2>
+<p class="subtitle">Only the players in this match; the all-time board stays under Menu → Scores. Columns: score (with what this round added), rounds won, kills, lives. Rows sort by score; eliminated players stay listed, greyed, in the place they finished. Reply in the terminal.</p>
+
+<div class="tk stage">
+
+  <div class="card">
+    <div class="kick">Room ABCD · after round 6</div>
+    <h4>Round 6 to WG</h4>
+    <table>
+      <tr><th>#</th><th>Player</th><th class="n">Score</th><th class="n">Rounds</th><th class="n">Kills</th><th class="n">Lives</th></tr>
+      <tr><td>1</td><td class="pl">WG</td><td class="n">8,420<span class="delta">+1,650</span></td><td class="n">3</td><td class="n">11</td><td class="n hearts">♥ 2</td></tr>
+      <tr class="me"><td>2</td><td class="pl">AK<span class="you">YOU</span></td><td class="n">6,105<span class="delta">+380</span></td><td class="n">2</td><td class="n">8</td><td class="n hearts">♥ 1</td></tr>
+      <tr class="out"><td>3</td><td class="pl">JR</td><td class="n">3,940</td><td class="n">1</td><td class="n">4</td><td class="n">out in round 5</td></tr>
+    </table>
+    <div class="shopstub">the shop opens right under the scoreboard (Ready toggle, 90 s) as today</div>
+    <p class="note">Shown at the top of the shop after every round, won or lost, so nobody has to dismiss anything.</p>
+  </div>
+
+  <div class="card win">
+    <div class="kick">Room ABCD · match over after round 9</div>
+    <h4><span class="crown">♛</span> WG wins: last tank standing</h4>
+    <table>
+      <tr><th>#</th><th>Player</th><th class="n">Score</th><th class="n">Rounds</th><th class="n">Kills</th><th class="n">Out in</th></tr>
+      <tr><td>1</td><td class="pl">WG <span class="crown">♛</span></td><td class="n">14,980<span class="delta">+2,000 win</span></td><td class="n">5</td><td class="n">19</td><td class="n hearts">♥ 1</td></tr>
+      <tr class="me"><td>2</td><td class="pl">AK<span class="you">YOU</span></td><td class="n">9,210</td><td class="n">3</td><td class="n">13</td><td class="n">round 9</td></tr>
+      <tr class="out"><td>3</td><td class="pl">JR</td><td class="n">3,940</td><td class="n">1</td><td class="n">4</td><td class="n">round 5</td></tr>
+    </table>
+    <div class="btns"><span class="bt pri">Play again (same room)</span><span class="bt">Leave room</span></div>
+    <p class="note">Your score is filed on the all-time board as today; a line under the table says “Filed: #12 all-time” when it places.</p>
+  </div>
+
+  <div class="card">
+    <div class="kick">Room ABCD · round 7</div>
+    <h4>You're out</h4>
+    <table>
+      <tr><th>#</th><th>Player</th><th class="n">Score</th><th class="n">Rounds</th><th class="n">Kills</th><th class="n">Lives</th></tr>
+      <tr><td>1</td><td class="pl">WG</td><td class="n">9,980</td><td class="n">4</td><td class="n">14</td><td class="n hearts">♥ 2</td></tr>
+      <tr class="me out"><td>2</td><td class="pl">AK<span class="you">YOU</span></td><td class="n">9,210</td><td class="n">3</td><td class="n">13</td><td class="n">out in round 7</td></tr>
+      <tr class="out"><td>3</td><td class="pl">JR</td><td class="n">3,940</td><td class="n">1</td><td class="n">4</td><td class="n">out in round 5</td></tr>
+    </table>
+    <div class="btns"><span class="bt pri">Watch the finish</span><span class="bt">Leave room</span></div>
+    <p class="note">Appears when you lose your last life while others play on. Watching keeps the scoreboard one tap away (Menu → Standings).</p>
+  </div>
+
+  <div class="card">
+    <div class="kick">Solo · after round 4</div>
+    <h4>Round 4 cleared</h4>
+    <table>
+      <tr><th>Round</th><th class="n">Points</th><th class="n">Kills</th><th class="n">Cash</th><th class="n">Lives</th></tr>
+      <tr><td>1</td><td class="n">1,020</td><td class="n">3</td><td class="n">+$600</td><td class="n hearts">♥ 3</td></tr>
+      <tr><td>2</td><td class="n">1,310</td><td class="n">3</td><td class="n">+$700</td><td class="n hearts">♥ 3</td></tr>
+      <tr><td>3</td><td class="n">240</td><td class="n">1</td><td class="n">+$0</td><td class="n hearts">♥ 2</td></tr>
+      <tr class="me"><td>4</td><td class="n">1,880</td><td class="n">3</td><td class="n">+$900</td><td class="n hearts">♥ 2</td></tr>
+      <tr><td class="pl">Total</td><td class="n pl">4,450</td><td class="n pl">10</td><td class="n"></td><td class="n"></td></tr>
+    </table>
+    <p class="note">Solo has no rivals, so its board is your rounds so far. At game over the same table ends the match card, above the score form.</p>
+  </div>
+
+</div>

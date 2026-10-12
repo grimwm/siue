@@ -34,6 +34,7 @@ import { createReticle } from './reticle.ts';
 import { createUnits } from './units.ts';
 import { createGameOver } from './gameover.ts';
 import { createChrome } from './chrome.ts';
+import { renderHelp } from './ui/help.tsx';
 import * as state from './state.ts';
 import { createScoresClient, formatHighScoreRows, weeklyResetText } from './scores.ts';
 import type { Timer } from './types.ts';
@@ -129,11 +130,8 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const BRAND_COMBAT = 'The CIC';
     const INTRO_TITLE_SETTLE_MS = 880;
     const helpBtn = document.getElementById('cylon-help-btn');
-    const helpEl = document.getElementById('cylon-help');
-    const helpPlatformEl = document.getElementById('cylon-help-platform');
-    const helpDesktopEl = document.getElementById('cylon-help-desktop');
-    const helpMobileEl = document.getElementById('cylon-help-mobile');
-    const helpCloseBtn = document.getElementById('cylon-help-close');
+    const helpRoot = document.getElementById('cylon-help-root');
+    let helpOpen = false;
     const initialLetters = [0, 1, 2].map((i) => document.getElementById(`cylon-initial-${i}`));
     const initialsRoot = document.getElementById('cylon-initials');
     if (!eye || !field) return;
@@ -637,17 +635,12 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         }, { passive: false });
     }
 
-    function syncHelpContent() {
-        const mobile = coarsePointer;
-        if (helpPlatformEl) {
-            helpPlatformEl.textContent = mobile ? 'Touch controls' : 'Desktop controls';
-        }
-        if (helpDesktopEl) helpDesktopEl.hidden = mobile;
-        if (helpMobileEl) helpMobileEl.hidden = !mobile;
+    function drawHelp() {
+        if (helpRoot) renderHelp(helpRoot, { open: helpOpen, touch: coarsePointer, onClose: closeHelp });
     }
 
     function openHelp() {
-        if (!helpEl) return;
+        if (!helpRoot) return;
         if (!game.paused) {
             game.paused = true;
             game.pauseStartedAt = Date.now();
@@ -663,14 +656,14 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
             audio.syncMusic();
             updateAbilityButtons();
         }
-        syncHelpContent();
-        helpEl.hidden = false;
-        helpCloseBtn?.focus();
+        helpOpen = true;
+        drawHelp();
     }
 
     function closeHelp() {
-        if (!helpEl) return;
-        helpEl.hidden = true;
+        if (!helpOpen) return;
+        helpOpen = false;
+        drawHelp();
         if (game.paused) {
             const elapsed = Date.now() - game.pauseStartedAt;
             applyPauseTimeSkew(elapsed);
@@ -680,10 +673,10 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
             updateAbilityButtons();
             syncReticleVisibility();
         }
-        helpBtn?.focus();
     }
 
     function bindHelp() {
+        drawHelp();
         if (helpBtn) {
             helpBtn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -691,25 +684,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
                 openHelp();
             });
         }
-        if (helpCloseBtn) {
-            helpCloseBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                closeHelp();
-            });
-        }
-        if (helpEl) {
-            helpEl.addEventListener('click', (e) => {
-                if (e.target === helpEl) closeHelp();
-            });
-        }
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && helpEl && !helpEl.hidden) {
-                e.preventDefault();
-                closeHelp();
-            }
-        });
     }
-
 
     function currentHp() {
         return rules.currentHp(game.run.hitCount);
@@ -961,8 +936,9 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
             document.body.classList.remove('cylon-touch-play');
             hideGameOver();
             game.run = state.clearPendingScore(state.clearGameOver(game.run));
-            if (helpEl && !helpEl.hidden) {
-                helpEl.hidden = true;
+            if (helpOpen) {
+                helpOpen = false;
+                drawHelp();
             }
             resetAbilityCooldowns();
             syncGameToggleUi();

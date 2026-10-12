@@ -2,5 +2,5 @@
   // The browser-facing modules; the DOM-free ones are in ../tsconfig.json. See games/_kit/README.md.
   "extends": "../tsconfig.json",
   "compilerOptions": { "lib": ["ES2022", "DOM"] },
-  "files": ["audio.ts", "chrome.ts", "eye.ts", "field.ts", "gameover.ts", "intro.ts", "landscape.ts", "main.ts", "reticle.ts", "scores.ts", "types.ts", "ui/board.tsx", "units.ts"]
+  "files": ["audio.ts", "chrome.ts", "eye.ts", "field.ts", "gameover.ts", "intro.ts", "landscape.ts", "main.ts", "reticle.ts", "scores.ts", "types.ts", "ui/board.tsx", "ui/help.tsx", "units.ts"]
 }

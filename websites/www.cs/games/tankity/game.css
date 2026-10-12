@@ -743,6 +743,7 @@ input.initial { width: 2rem; height: 2rem; max-width: none; padding: 0; text-ali
   .title-veil {
     position: fixed;
     inset: 0;
+    z-index: 5; /* over the toolbar and HUD (4); the panels (6, 10) still open above it */
     aspect-ratio: auto;
     border-radius: 0;
     padding: 0.4rem;

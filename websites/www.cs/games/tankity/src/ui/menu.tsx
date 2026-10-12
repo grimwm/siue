@@ -139,7 +139,7 @@ export function Menu(p: MenuProps) {
         <button type="button" id="scores-open" title="High scores, and file your run" onClick={blurThen(p.onScores)}>
           Scores <Key at="global:report" bare />
         </button>
-        <button type="button" id="menu-leave" class="btn-leave" title="Leave this game room and go back to the solo hills"
+        <button type="button" id="menu-leave" class="btn-leave" title="Leave this game room and go back to the title card"
           hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave room</button>
       </form>
     </KeyHints.Provider>

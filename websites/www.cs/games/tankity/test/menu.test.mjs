@@ -86,3 +86,36 @@ test('the seed box keeps what was typed across a redraw, and the scroll stays pu
   assert.equal(seed.value, 'bam-bam-01');
   assert.equal(section.scrollTop, 90);
 });
+
+test('the close button reports, and the toggles and thumbnails follow the props', () => {
+  const drawn = [];
+  const { section, calls, props } = draw({ drawUnit: (cv, key) => drawn.push(key) });
+  click(byId(section, 'menu-close'));
+  assert.equal(calls.close, 1);
+  assert.deepEqual(drawn, ['tank', 'hover', 'walker', 'buggy']);
+  const toggles = ['btn-sound', 'btn-music', 'fullscreen'].map(id => byId(section, id));
+  assert.deepEqual(toggles.map(t => t.getAttribute('aria-pressed')), ['true', 'true', 'false']);
+  assert.deepEqual(toggles.map(t => t.textContent), ['Sound E', 'Music M', 'Fullscreen F']);
+  menu.renderMenu(section, { ...props, sound: false, fullscreen: true });
+  assert.deepEqual(toggles.map(t => t.getAttribute('aria-pressed')), ['false', 'true', 'true']);
+  assert.deepEqual(drawn, ['tank', 'hover', 'walker', 'buggy']); // thumbnails are drawn once
+});
+
+test('the pickers mark the chosen tile; text sizes label and grow', () => {
+  const { section } = draw();
+  const units = byId(section, 'unit-picker').children;
+  assert.deepEqual(units.map(t => t.getAttribute('aria-pressed')), ['true', 'false', 'false', 'false']);
+  const sizes = byId(section, 'text-picker').children;
+  assert.deepEqual(sizes.map(t => t.getAttribute('aria-pressed')), ['false', 'true', 'false', 'false']);
+  assert.equal(sizes[0].getAttribute('title'), 'Small text');
+  assert.notEqual(sizes[3].children[0].style.fontSize, sizes[0].children[0].style.fontSize);
+});
+
+test('key labels follow the table, and no key means no cap', () => {
+  const { section, props } = draw();
+  menu.renderMenu(section, { ...props, keyHint: (c, a) => (KEYS[`${c}:${a}`] ?? '').toLowerCase() });
+  assert.equal(byId(section, 'new-game').textContent, 'Play this seed n');
+  const bare = makeEl('menu-touch');
+  menu.renderMenu(bare, { ...props, keyHint: () => '' });
+  assert.equal(byId(bare, 'new-game').textContent, 'Play this seed ');
+});

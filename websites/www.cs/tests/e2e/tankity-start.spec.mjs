@@ -90,20 +90,30 @@ test('Ctrl alone never starts a match from the card, and Esc works from an initi
   expect(errors).toEqual([]);
 });
 
-test('on a phone, portrait or landscape, every card control is in view without an inner scroll', async ({ browser }) => {
-  const { page, errors } = await newPlayer(browser);
-  for (const [width, height] of [[375, 667], [667, 375]]) {
-    await page.setViewportSize({ width, height });
-    await expect(page.locator('#title-card')).toBeVisible();
-    for (const id of ['#title-play', '#rooms-open', '#tutorial-open', '#title-initial-1', '#title-initial-3', '#title-settings']) {
-      const box = await page.locator(id).boundingBox();
-      expect(box, `${id} at ${width}x${height}`).not.toBeNull();
-      expect(box.y, `${id} top at ${width}x${height}`).toBeGreaterThanOrEqual(0);
-      expect(box.y + box.height, `${id} bottom at ${width}x${height}`).toBeLessThanOrEqual(height);
-      expect(box.x + box.width, `${id} right at ${width}x${height}`).toBeLessThanOrEqual(width);
-    }
-    const scrolls = await page.locator('#title-card').evaluate(el => el.scrollHeight > el.clientHeight + 1);
-    expect(scrolls, `the card scrolls at ${width}x${height}`).toBe(false);
-  }
-  expect(errors).toEqual([]);
+// What a finger touches is whatever is on top at the control's centre, so the
+// test asks the page, not the control's box: a toolbar over the card fails it.
+const topAtCentre = (page, sel) => page.locator(sel).evaluate(el => {
+  const r = el.getBoundingClientRect();
+  const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+  return !!hit && (hit === el || el.contains(hit));
 });
+
+for (const [width, height, touch] of [[375, 667, false], [390, 844, true], [844, 390, true]]) {
+  test(`on a ${width}x${height} phone every card control is on top, and Settings opens over the card`, async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto('games/tankity/');
+    await expect(page.locator('#title-card')).toBeVisible();
+    for (const id of ['#title-play', '#rooms-open', '#tutorial-open', '#title-initial-1', '#title-initial-2', '#title-initial-3', '#title-settings']) {
+      expect(await topAtCentre(page, id), `${id} is covered at ${width}x${height}`).toBe(true);
+    }
+    expect(await page.locator('#title-card').evaluate(el => el.scrollHeight > el.clientHeight + 1), 'the card scrolls').toBe(false);
+    await page.locator('#title-settings').click();
+    await expect(page.locator('#menu-overlay')).toBeVisible();
+    expect(await topAtCentre(page, '#menu-close'), 'the menu opens under the card').toBe(true);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
+}

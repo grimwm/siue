@@ -387,7 +387,7 @@ export function createLobby(deps: LobbyDeps) {
     drawLeave(veil, {
       keyHint,
       title: 'Leave this room?',
-      text: 'The drone battery takes your seat and the match goes on without you. You head back to the solo hills.',
+      text: 'The drone battery takes your seat and the match goes on without you. You head back to the title card.',
       onStay: closeLeaveVeil,
       onLeave: confirmLeave,
     });

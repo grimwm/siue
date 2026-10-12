@@ -4,19 +4,28 @@
 import { test, expect } from '@playwright/test';
 
 test('a scored run reaches the board', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto('./?game=cylon');
+  // The intro hero runs first; the server refuses a score from a run shorter than minRunSec.
+  await expect(page.locator('body')).toHaveClass(/cylon-intro-hero/, { timeout: 30_000 });
   await expect(page.locator('body')).toHaveClass(/cylon-game-live/, { timeout: 30_000 });
   await expect(page.locator('body')).not.toHaveClass(/cylon-intro-hero/, { timeout: 30_000 });
 
   const score = async () => Number((await page.locator('#cylon-score-value').textContent()) || '0');
-  const start = await score();
-  const bot = page.locator('.cylon-bot.is-marching').first();
-  await expect(bot).toBeVisible({ timeout: 20_000 });
-  await bot.dispatchEvent('pointerdown', { pointerType: 'mouse', button: 0, isPrimary: true });
-  await expect.poll(score, { timeout: 5_000 }).toBeGreaterThan(start);
+  // Bots mid-KO keep their class for a moment, so aim at a live one on every try.
+  const ko = async () => {
+    const before = await score();
+    await expect.poll(async () => {
+      await page.locator('.cylon-bot.is-marching:not([data-ko="1"])').first()
+        .dispatchEvent('pointerdown', { pointerType: 'mouse', button: 0, isPrimary: true }, { timeout: 1_000 })
+        .catch(() => {});
+      return score();
+    }, { timeout: 20_000 }).toBeGreaterThan(before);
+  };
+  await expect(page.locator('.cylon-bot.is-marching').first()).toBeVisible({ timeout: 20_000 });
+  await ko();
 
   // The button arms the grenade; the next pointerdown anywhere throws it and starts the cooldown.
   await page.locator('#cylon-grenade-btn').click();
@@ -26,12 +35,29 @@ test('a scored run reaches the board', async ({ page }) => {
   });
   await expect(page.locator('#cylon-grenade-cd')).not.toHaveText('', { timeout: 3_000 });
 
+  // A full weekly board only takes a score above its lowest row, so play on until this run
+  // beats it; whatever the site already holds, the run then qualifies for an entry.
+  const board = await (await page.request.get('games/cylon/scores.php')).json();
+  const max = Number(board.config.maxScores);
+  const lowest = board.scores.length >= max ? Math.min(...board.scores.map(s => Number(s.score))) : 0;
+  while ((await score()) <= lowest) {
+    await expect(page.locator('.cylon-bot.is-marching').first()).toBeVisible({ timeout: 20_000 });
+    await ko();
+  }
+
   const final = await score();
   await page.locator('#cylon-game-toggle').click();
   await expect(page.locator('#cylon-gameover')).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('#cylon-gameover-entry')).toBeVisible();
+  const filed = page.waitForResponse(r => r.url().includes('scores.php') && r.request().method() === 'POST' && (r.request().postData() || '').includes('"op":"score"'));
   await page.locator('#cylon-score-submit').click();
+  const res = await filed;
+  expect(res.status(), `scores.php refused the run: ${await res.text()}`).toBe(200);
   await expect(page.locator('#cylon-gameover-board')).toBeVisible({ timeout: 5_000 });
-  // The default initials are what gets filed; the row reads "<n> KOs".
-  await expect(page.locator('#cylon-gameover-scores li').filter({ hasText: 'AAA' }).filter({ hasText: `${final} KOs` }).first()).toBeVisible({ timeout: 5_000 });
+  // The default initials are what gets filed; the score cell reads "<n> KOs".
+  const row = page.locator('#cylon-gameover-scores li')
+    .filter({ has: page.locator('.cylon-hs-initials', { hasText: /^AAA$/ }) })
+    .filter({ has: page.locator('.cylon-hs-score', { hasText: new RegExp(`^${final} KOs$`) }) });
+  await expect(row.first()).toBeVisible({ timeout: 5_000 });
   expect(errors).toEqual([]);
 });

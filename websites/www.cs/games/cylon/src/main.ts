@@ -36,7 +36,7 @@ import { createGameOver } from './gameover.ts';
 import { createChrome } from './chrome.ts';
 import { renderHelp } from './ui/help.tsx';
 import * as state from './state.ts';
-import { createScoresClient, formatHighScoreRows, weeklyResetText } from './scores.ts';
+import { createScoresClient, weeklyResetText } from './scores.ts';
 import type { Timer } from './types.ts';
 import type { EndReason } from './state.ts';
 
@@ -108,17 +108,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const gameToggleLabel = document.getElementById('cylon-game-toggle-label');
     const cicEnterBtn = document.getElementById('cic-enter-btn');
     const highScoresEl = document.getElementById('cylon-high-scores');
-    const gameOverEl = document.getElementById('cylon-gameover');
-    const gameOverReasonEl = document.getElementById('cylon-gameover-reason');
-    const gameOverKosEl = document.getElementById('cylon-gameover-kos');
-    const gameOverHitsEl = document.getElementById('cylon-gameover-hits');
-    const gameOverEntryEl = document.getElementById('cylon-gameover-entry');
-    const gameOverBoardEl = document.getElementById('cylon-gameover-board');
-    const gameOverScoresEl = document.getElementById('cylon-gameover-scores');
-    const gameOverAllTimeEl = document.getElementById('cylon-gameover-alltime');
-    const scoreSubmitBtn = document.getElementById('cylon-score-submit') as HTMLButtonElement | null;
-    const initialsErrorEl = document.getElementById('cylon-initials-error');
-    const playAgainBtn = document.getElementById('cylon-play-again') as HTMLButtonElement | null;
+    const gameOverRoot = document.getElementById('cylon-gameover-root');
     const reticleEl = document.getElementById('cylon-reticle');
     const navBurger = document.getElementById('site-nav-burger');
     const navMenu = document.getElementById('site-nav-menu');
@@ -132,8 +122,6 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const helpBtn = document.getElementById('cylon-help-btn');
     const helpRoot = document.getElementById('cylon-help-root');
     let helpOpen = false;
-    const initialLetters = [0, 1, 2].map((i) => document.getElementById(`cylon-initial-${i}`));
-    const initialsRoot = document.getElementById('cylon-initials');
     if (!eye || !field) return;
 
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -199,29 +187,16 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const NAV_FADE_MS = Math.round(2850 * 0.45); // match --cylon-desolate-fade * 0.45
 
     /** The game-over panel and the high scores (src/gameover.ts). */
-    const { renderHighScores, fetchHighScores, hideGameOver, showGameOver, bindGameOverUi } = createGameOver({
+    const { renderHighScores, fetchHighScores, hideGameOver, showGameOver } = createGameOver({
         game,
         state,
         scores,
-        formatHighScoreRows,
         weeklyResetText,
         currentHp,
         setGameEnabled,
         resetRunStats,
+        root: gameOverRoot,
         highScoresEl,
-        gameOverEl,
-        gameOverReasonEl,
-        gameOverKosEl,
-        gameOverHitsEl,
-        gameOverEntryEl,
-        gameOverBoardEl,
-        gameOverScoresEl,
-        allTimeNoteEl: gameOverAllTimeEl,
-        scoreSubmitBtn,
-        initialsErrorEl,
-        playAgainBtn,
-        initialLetters,
-        initialsRoot,
     });
     /** The settings and the nav chrome (src/chrome.ts). */
     const { settings, saveSettings, syncGameToggleUi, syncNavChrome, bindSettings, bindGameToggle, bindNavMenu } = createChrome({
@@ -1041,7 +1016,6 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     bindSettings();
     bindGameToggle();
     bindAbilityControls();
-    bindGameOverUi();
     bindPlayerMissShots();
     bindReticle();
     bindPlayScrollLock();

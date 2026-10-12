@@ -204,6 +204,7 @@ Each PR tightens the comments in the files it touches:
 | 15 | Tankity match end, scoreboards, Play again, auto-filed scores | |
 | 16 | Tankity score integrity: guard, solo replay, initials, board conversion | after 10 and 15 |
 | 17 | Tankity music | |
+| 18 | Typed tests: every remaining `*.test.mjs` becomes `*.test.ts` on `node:test` directly, and every PHP check script a real PHPUnit `TestCase`; each game's `tsconfig.test.json` (with `@types/node`) joins its `build.json` programs; the `check()` and `LegacyCheckCase` bridges are deleted | last; tests in any area a plan B–D PR touches are rewritten in that PR |
 
 After 6, the Crete line (7–9) and the Tankity line (11–17) touch different files and run in parallel worktrees; 14, 15 and 17 are independent of each other. Each implementing agent's job stays at about 20 minutes or less.
 
@@ -214,3 +215,4 @@ New specs and their budgets: `tankity-start`, `tankity-layout` (the eight-device
 - Every PR above has landed and deployed, and its live check passed.
 - `make test` stays within its budgets (static ≤ 15 s, unit ≤ 45 s) and the nightly run is green.
 - No hand-written `.js` remains outside `dist/`, and no tool or helper is duplicated across the games.
+- Every test file is TypeScript and type-checked by the build; no test runs through a bridge.

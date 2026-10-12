@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/score-guard.php';
 
 use Kit\ScoreGuard;
+use Kit\StoreModes;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -205,5 +206,135 @@ final class ScoreGuardTest extends TestCase
                 $this->addToAssertionCount(1);
             }
         }
+    }
+
+    public function testARunTokenIsSpentOnce(): void
+    {
+        $g = $this->guard();
+        $run = $g->startRun();
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{32}$/', (string) $run);
+        $this->assertNull($g->consumeRun((string) $run));
+        $this->assertSame('invalid run', $g->consumeRun((string) $run));
+    }
+
+    public function testAnExpiredTokenIsRefused(): void
+    {
+        $run = (string) $this->guard()->startRun();
+        $this->now += 601;
+        $this->assertSame('invalid run', $this->guard()->consumeRun($run));
+    }
+
+    public function testUnknownAndMalformedTokensAreRefused(): void
+    {
+        $this->assertSame('invalid run', $this->guard()->consumeRun(str_repeat('0', 32)));
+        $this->assertSame('invalid run', $this->guard()->consumeRun('not-a-token'));
+        $this->assertSame('invalid run', $this->guard()->consumeRun(''));
+    }
+
+    public function testAnImplausibleScoreKeepsItsTokenUnspent(): void
+    {
+        $run = (string) $this->guard()->startRun();
+        $this->now += 42;
+        $seen = [];
+        $this->assertSame('score rejected', $this->guard()->consumeRun($run, function (int $elapsed) use (&$seen): bool { $seen[] = $elapsed; return false; }));
+        $this->assertSame([42], $seen);
+        $this->assertNull($this->guard()->consumeRun($run, fn(int $elapsed): bool => true));
+    }
+
+    public function testStartsAreLimitedPerHourPerClient(): void
+    {
+        for ($i = 0; $i < 3; $i++) {
+            $this->assertNotNull($this->guard()->startRun());
+        }
+        $this->assertNull($this->guard()->startRun());
+        $this->assertNotNull($this->guard(['REMOTE_ADDR' => '198.51.100.9'])->startRun(), 'another client has its own budget');
+        $this->now += 3601;
+        $this->assertNotNull($this->guard()->startRun(), 'an hour later the budget is back');
+    }
+
+    public function testScoresAreLimitedPerHour(): void
+    {
+        $runs = [];
+        for ($i = 0; $i < 3; $i++) {
+            $runs[] = (string) $this->guard()->startRun();
+        }
+        $this->assertNull($this->guard()->consumeRun($runs[0]));
+        $this->assertNull($this->guard()->consumeRun($runs[1]));
+        $this->assertSame('rate', $this->guard()->consumeRun($runs[2]));
+    }
+
+    public function testTheStoreHoldsTheKeyedHashNeverTheAddress(): void
+    {
+        $g = $this->guard();
+        $g->startRun();
+        $raw = (string) file_get_contents($this->runs);
+        $this->assertStringNotContainsString(self::IP, $raw);
+        $this->assertSame(substr(hash_hmac('sha256', self::IP, 'test-salt'), 0, 24), $g->clientKey());
+        $this->assertArrayHasKey($g->clientKey(), json_decode($raw, true)['rates']);
+    }
+
+    public function testAStoreWrittenByTheOldCylonCodeIsHonoured(): void
+    {
+        $id = str_repeat('e', 32);
+        $key = substr(hash_hmac('sha256', self::IP, 'test-salt'), 0, 24);
+        file_put_contents($this->runs, json_encode([
+            'runs' => [['id' => $id, 'at' => $this->now - 10, 'exp' => $this->now + 100, 'used' => false]],
+            'rates' => [$key => ['start' => [$this->now - 10], 'score' => []]],
+        ]));
+        $this->assertNull($this->guard()->consumeRun($id));
+        $this->assertNotNull($this->guard()->startRun());
+        $this->assertNotNull($this->guard()->startRun());
+        $this->assertNull($this->guard()->startRun(), 'the old start stamp still counts toward the hour');
+    }
+
+    public function testRateTakeCountsItsOwnKindPerClientPerHour(): void
+    {
+        $this->assertTrue($this->guard()->rateTake('room', 2));
+        $this->assertTrue($this->guard()->rateTake('room', 2));
+        $this->assertFalse($this->guard()->rateTake('room', 2));
+        $this->assertTrue($this->guard(['REMOTE_ADDR' => '198.51.100.9'])->rateTake('room', 2), 'another client has its own budget');
+        $this->assertNotNull($this->guard()->startRun(), 'room stamps never spend run starts');
+        $this->now += 3601;
+        $this->assertTrue($this->guard()->rateTake('room', 2), 'an hour later the budget is back');
+    }
+
+    public function testRateTakeKeepsTheStoreShapeOldReadersExpect(): void
+    {
+        $g = $this->guard();
+        $g->rateTake('room', 5);
+        $row = json_decode((string) file_get_contents($this->runs), true)['rates'][$g->clientKey()];
+        $this->assertSame([[], [], [$this->now]], [$row['start'], $row['score'], $row['room']]);
+    }
+
+    public function testRateTakeRefusesAKindThatIsNotAWord(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->guard()->rateTake('Room!', 1);
+    }
+
+    public function testAnUnparsableStoreStartsEmpty(): void
+    {
+        file_put_contents($this->runs, '{not json');
+        $this->assertNotNull($this->guard()->startRun());
+    }
+
+    public function testAnUnopenableStoreIsAnError(): void
+    {
+        $this->runs = sys_get_temp_dir() . '/no-such-dir-' . bin2hex(random_bytes(4)) . '/runs.json';
+        $this->expectException(RuntimeException::class);
+        $this->guard()->startRun();
+    }
+
+    public function testModesForEachWayPhpRuns(): void
+    {
+        $this->assertSame(['dir' => 0700, 'file' => 0600, 'sharedDir' => 0700, 'sharedFile' => 0600], StoreModes::modes(true));
+        $this->assertSame(['dir' => 0700, 'file' => 0600, 'sharedDir' => 0777, 'sharedFile' => 0666], StoreModes::modes(false));
+        $this->assertSame(StoreModes::modes(posix_geteuid() === getmyuid()), StoreModes::modes());
+    }
+
+    public function testTheStoreTakesThePrivateFileMode(): void
+    {
+        $this->guard()->startRun();
+        $this->assertSame(0600, fileperms($this->runs) & 0777);
     }
 }

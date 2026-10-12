@@ -203,4 +203,207 @@ final class ScoreGuard
             || ($this->server['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'
             || ($this->server['REQUEST_SCHEME'] ?? '') === 'https';
     }
+
+    /** This client's rate-limit key: an HMAC of its address, so the store never holds an IP. */
+    public function clientKey(): string
+    {
+        return substr(hash_hmac('sha256', (string) ($this->server['REMOTE_ADDR'] ?? ''), $this->rateSalt), 0, 24);
+    }
+
+    /** A new run token, or null when this client has started too many runs this hour. */
+    public function startRun(): ?string
+    {
+        $now = ($this->clock)();
+        return $this->withStore(function (array &$store) use ($now): ?string {
+            if (!$this->rateAllows($store, 'start', $this->config['startsPerHour'], $now)) {
+                return null;
+            }
+            $id = bin2hex(random_bytes(16));
+            $store['runs'][] = ['id' => $id, 'at' => $now, 'exp' => $now + $this->config['runTtlSec'], 'used' => false];
+            $this->rateMark($store, 'start', $now);
+            return $id;
+        });
+    }
+
+    /**
+     * Spends a run token. $plausible, given the seconds since the token was
+     * issued, may reject the score it came with; a rejected token stays
+     * unspent. Returns null when the run is accepted, else 'rate',
+     * 'invalid run' or 'score rejected'.
+     * @param (callable(int): bool)|null $plausible
+     */
+    public function consumeRun(string $id, ?callable $plausible = null): ?string
+    {
+        if (!preg_match(self::TOKEN, $id)) {
+            return 'invalid run';
+        }
+        $now = ($this->clock)();
+        return $this->withStore(function (array &$store) use ($id, $plausible, $now): ?string {
+            if (!$this->rateAllows($store, 'score', $this->config['scoresPerHour'], $now)) {
+                return 'rate';
+            }
+            foreach ($store['runs'] as $i => $run) {
+                if (!is_array($run) || ($run['id'] ?? '') !== $id) {
+                    continue;
+                }
+                if (!empty($run['used']) || (int) ($run['exp'] ?? 0) < $now) {
+                    return 'invalid run';
+                }
+                if ($plausible !== null && !$plausible($now - (int) ($run['at'] ?? $now))) {
+                    return 'score rejected';
+                }
+                $store['runs'][$i]['used'] = true;
+                $this->rateMark($store, 'score', $now);
+                return null;
+            }
+            return 'invalid run';
+        });
+    }
+
+    /**
+     * Takes one of this client's $perHour slots for $kind (a lowercase word,
+     * such as 'room'); false, and nothing taken, when this hour's are spent.
+     * For endpoints other than run starts and scores that still need a cap.
+     */
+    public function rateTake(string $kind, int $perHour): bool
+    {
+        if (!preg_match('/^[a-z]{1,16}\z/', $kind)) {
+            throw new \InvalidArgumentException('rate kind must be 1 to 16 lowercase letters');
+        }
+        $now = ($this->clock)();
+        return $this->withStore(function (array &$store) use ($kind, $perHour, $now): bool {
+            if (!$this->rateAllows($store, $kind, $perHour, $now)) {
+                return false;
+            }
+            $this->rateMark($store, $kind, $now);
+            return true;
+        });
+    }
+
+    /** @param array{runs: list<mixed>, rates: array<string, mixed>} $store */
+    private function rateAllows(array $store, string $kind, int $limit, int $now): bool
+    {
+        $recent = 0;
+        foreach ($store['rates'][$this->clientKey()][$kind] ?? [] as $ts) {
+            if ((int) $ts >= $now - self::WINDOW_SEC) {
+                $recent++;
+            }
+        }
+        return $recent < $limit;
+    }
+
+    /** @param array{runs: list<mixed>, rates: array<string, mixed>} $store */
+    private function rateMark(array &$store, string $kind, int $now): void
+    {
+        $key = $this->clientKey();
+        if (!isset($store['rates'][$key]) || !is_array($store['rates'][$key])) {
+            $store['rates'][$key] = ['start' => [], 'score' => []];
+        }
+        $store['rates'][$key][$kind][] = $now;
+    }
+
+    /** @return array{runs: list<mixed>, rates: array<string, mixed>} */
+    private static function parseStore(string $raw): array
+    {
+        $data = json_decode($raw !== '' ? $raw : '{}', true);
+        $store = ['runs' => [], 'rates' => []];
+        if (is_array($data)) {
+            if (isset($data['runs']) && is_array($data['runs'])) {
+                $store['runs'] = array_values($data['runs']);
+            }
+            if (isset($data['rates']) && is_array($data['rates'])) {
+                $store['rates'] = $data['rates'];
+            }
+        }
+        return $store;
+    }
+
+    /**
+     * Drops what can no longer matter: tokens an hour past expiry and rate
+     * stamps older than the window. Every client row keeps `start` and
+     * `score` (the shape Cylon's old code wrote), plus any kind rateTake() added.
+     * @param array{runs: list<mixed>, rates: array<string, mixed>} $store
+     * @return array{runs: list<mixed>, rates: array<string, mixed>}
+     */
+    private static function prune(array $store, int $now): array
+    {
+        $cutoff = $now - self::WINDOW_SEC;
+        $store['runs'] = array_values(array_filter($store['runs'], static fn($run): bool => is_array($run) && (int) ($run['exp'] ?? 0) >= $cutoff));
+        $rates = [];
+        foreach ($store['rates'] as $key => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $clean = ['start' => [], 'score' => []];
+            foreach ($row as $kind => $stamps) {
+                if (is_string($kind) && preg_match('/^[a-z]{1,16}\z/', $kind) && is_array($stamps)) {
+                    $clean[$kind] = array_values(array_filter(array_map('intval', $stamps), static fn(int $ts): bool => $ts >= $cutoff));
+                }
+            }
+            if (array_filter($clean)) {
+                $rates[$key] = $clean;
+            }
+        }
+        $store['rates'] = $rates;
+        return $store;
+    }
+
+    /** Runs $fn on the store under one exclusive lock and writes back what it leaves. */
+    private function withStore(callable $fn): mixed
+    {
+        $fh = @fopen($this->runsPath, 'c+');
+        if ($fh === false) {
+            throw new \RuntimeException('unable to open the run store: ' . $this->runsPath);
+        }
+        try {
+            if (!flock($fh, LOCK_EX)) {
+                throw new \RuntimeException('unable to lock the run store');
+            }
+            $raw = stream_get_contents($fh);
+            $store = self::prune(self::parseStore($raw === false ? '' : $raw), ($this->clock)());
+            $result = $fn($store);
+            $encoded = json_encode($store, JSON_UNESCAPED_SLASHES);
+            if ($encoded === false) {
+                throw new \RuntimeException('run store encode failed');
+            }
+            rewind($fh);
+            ftruncate($fh, 0);
+            if (fwrite($fh, $encoded) === false) {
+                throw new \RuntimeException('run store write failed');
+            }
+            fflush($fh);
+            flock($fh, LOCK_UN);
+            // Only PHP writes the store: StoreModes decides what that means on this host.
+            @chmod($this->runsPath, StoreModes::modes()['file']);
+            return $result;
+        } finally {
+            fclose($fh);
+        }
+    }
+}
+
+/**
+ * The file modes a game's PHP uses, decided in one place. PHP runs either as
+ * the account that deployed the game or as a web user every site on the host
+ * shares (what Cylon's 0666/0777 assumed). A path only PHP writes is 0700/0600
+ * either way: its owner is PHP's user, and that is all PHP needs. A path the
+ * deploy account also writes (a game's own data/ folder) must be open to both
+ * when they are different users. With a shared web user, any other site's PHP
+ * runs as that same user and can read and write what this one stores; no
+ * mode prevents that.
+ */
+final class StoreModes
+{
+    /** PHP's effective user is the owner of the running script: the deploying account. */
+    public static function phpIsOwner(): bool
+    {
+        return !function_exists('posix_geteuid') || posix_geteuid() === getmyuid();
+    }
+
+    /** @return array{dir: int, file: int, sharedDir: int, sharedFile: int} */
+    public static function modes(?bool $phpIsOwner = null): array
+    {
+        $own = $phpIsOwner ?? self::phpIsOwner();
+        return ['dir' => 0700, 'file' => 0600, 'sharedDir' => $own ? 0700 : 0777, 'sharedFile' => $own ? 0600 : 0666];
+    }
 }

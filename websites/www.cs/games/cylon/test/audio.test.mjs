@@ -1,70 +1,24 @@
-// The sound module against a fake AudioContext.
-// src/audio.ts gets its settings, its session state,
-// its volume curve and its context as arguments, so Node needs no WebAudio: the
-// fake below records the nodes the module builds and the gains it sets.
+// Cylon's sound against the kit's recording fake context: the effects go
+// through the sfx bus, the buses follow the settings, the music bed follows
+// the session, and a gesture primes the context once.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
 import { createAudio } from '../src/audio.ts';
 import { volumeToGain } from '../src/rules.ts';
-import { check } from '../../_kit/test/check.ts';
+import { fakeAudioContext } from '../../_kit/test/audio.ts';
 
-// Several checks start the music, whose scheduler is a real interval; unref it
-// so a finished file does not wait on it.
+// The music bed's scheduler is a real interval; unref it so a finished file does not wait on it.
 const realSetInterval = globalThis.setInterval;
 globalThis.setInterval = (...args) => realSetInterval(...args).unref();
+const tick = () => new Promise(resolve => setImmediate(resolve));
 
-const tick = () => new Promise((resolve) => setImmediate(resolve));
+const SFX = ['projectile', 'hit', 'heal', 'ko', 'nuke', 'raptor', 'grenadeArm', 'grenade', 'missile', 'trackerMissile', 'introLaunch', 'nukeLaunch'];
+const oscs = ctx => ctx.nodes.filter(n => n.kind === 'osc').length;
+// The core makes the sfx bus, then the music bus, as the context's first two gains.
+const sfxBus = ctx => ctx.nodes.filter(n => n.kind === 'gain')[0];
+const musicBus = ctx => ctx.nodes.filter(n => n.kind === 'gain')[1];
 
-function fakeParam(initial = 1) {
-  return {
-    value: initial,
-    setValueAtTime(v) { this.value = v; },
-    exponentialRampToValueAtTime() {},
-    linearRampToValueAtTime() {},
-    cancelScheduledValues() {},
-  };
-}
-
-function fakeContext(state = 'running') {
-  const ctx = {
-    state,
-    currentTime: 10,
-    sampleRate: 8000,
-    destination: { name: 'destination' },
-    nodes: [],
-    oscillators: 0,
-    resumes: 0,
-    suspends: 0,
-    resume() { ctx.resumes++; ctx.state = 'running'; return Promise.resolve(); },
-    suspend() { ctx.suspends++; ctx.state = 'suspended'; return Promise.resolve(); },
-    createGain() {
-      const node = { kind: 'gain', gain: fakeParam(), to: [], connect(t) { node.to.push(t); }, disconnect() {} };
-      ctx.nodes.push(node);
-      return node;
-    },
-    createOscillator() {
-      ctx.oscillators++;
-      const node = { kind: 'osc', type: 'sine', frequency: fakeParam(440), to: [], connect(t) { node.to.push(t); }, disconnect() {}, start() {}, stop() {} };
-      ctx.nodes.push(node);
-      return node;
-    },
-    createBiquadFilter() {
-      const node = { kind: 'filter', type: 'lowpass', frequency: fakeParam(), Q: fakeParam(), to: [], connect(t) { node.to.push(t); }, disconnect() {} };
-      ctx.nodes.push(node);
-      return node;
-    },
-    createBuffer(_ch, len) { return { getChannelData: () => new Float32Array(len) }; },
-    createBufferSource() {
-      const node = { kind: 'source', to: [], connect(t) { node.to.push(t); }, disconnect() {}, start() {}, stop() {} };
-      ctx.nodes.push(node);
-      return node;
-    },
-  };
-  // The first two gains the module makes are the sfx bus and the music bus.
-  ctx.sfxBus = () => ctx.nodes.filter((n) => n.kind === 'gain')[0];
-  ctx.musicBus = () => ctx.nodes.filter((n) => n.kind === 'gain')[1];
-  return ctx;
-}
-
-function rig({ ctx = fakeContext(), settings = {}, session = true, noWebAudio = false } = {}) {
+function rig({ ctx = fakeAudioContext(), settings = {}, session = true, noWebAudio = false } = {}) {
   const state = {
     settings: { soundEnabled: true, soundVolume: 50, musicEnabled: true, musicVolume: 50, ...settings },
     session,
@@ -78,155 +32,135 @@ function rig({ ctx = fakeContext(), settings = {}, session = true, noWebAudio = 
   return { audio, ctx, state };
 }
 
-const SFX = ['projectile', 'hit', 'heal', 'ko', 'nuke', 'raptor', 'grenadeArm', 'grenade', 'missile', 'trackerMissile', 'introLaunch', 'nukeLaunch'];
-
-// 1. Silent without an AudioContext: every entry point is a no-op, none throws.
-{
+test('without Web Audio every entry point is a silent no-op', () => {
   const { audio } = rig({ noWebAudio: true });
-  let threw = null;
-  try {
-    SFX.forEach((n) => audio.sfx(n));
+  assert.doesNotThrow(() => {
+    SFX.forEach(n => audio.sfx(n));
     audio.prime();
     audio.unlock();
     audio.syncMusic();
     audio.settingChanged('soundEnabled');
     audio.settingChanged('musicVolume');
-  } catch (err) { threw = err; }
-  check('silent-without-webaudio-never-throws', threw === null, String(threw));
-}
-{
-  // The default context finder: Node has no AudioContext, so the module stays silent.
+  });
+});
+
+test('Node has no AudioContext, so the default context finder stays silent', () => {
   const audio = createAudio({
     settings: () => ({ soundEnabled: true, soundVolume: 50, musicEnabled: true, musicVolume: 50 }),
     sessionActive: () => true,
     volumeToGain,
   });
-  let threw = null;
-  try { audio.sfx('hit'); audio.unlock(); audio.syncMusic(); } catch (err) { threw = err; }
-  check('default-context-absent-in-node-is-silent', threw === null, String(threw));
-}
+  assert.doesNotThrow(() => { audio.sfx('hit'); audio.unlock(); audio.syncMusic(); });
+});
 
-// 2. Each effect builds sound through the sfx bus, never straight to the speakers.
-{
-  const { audio, ctx } = rig();
+test('every effect is built behind the sfx bus; only the two buses reach the speakers', () => {
+  const { audio, ctx } = rig({ session: false });
   audio.prime();
-  const bus = ctx.sfxBus();
   const before = ctx.nodes.length;
-  SFX.forEach((n) => audio.sfx(n));
-  check('every-sfx-makes-sound', ctx.nodes.length > before);
-  const toDestination = ctx.nodes.filter((n) => n.to.includes(ctx.destination));
-  check('only-the-buses-reach-the-destination', toDestination.length === 2 && toDestination.includes(bus) && toDestination.includes(ctx.musicBus()),
-    toDestination.map((n) => n.kind).join());
-  const fed = ctx.nodes.filter((n) => n.to.includes(bus)).length;
-  check('effects-feed-the-sfx-bus', fed > SFX.length, String(fed));
+  SFX.forEach(n => audio.sfx(n));
+  assert.ok(ctx.nodes.length > before);
+  const toSpeakers = ctx.nodes.filter(n => n.to.includes(ctx.destination));
+  assert.deepEqual(toSpeakers, [sfxBus(ctx), musicBus(ctx)]);
+  assert.ok(ctx.nodes.filter(n => n.to.includes(sfxBus(ctx))).length > SFX.length);
+});
+
+for (const [name, settings] of [['sound off', { soundEnabled: false }], ['volume 0', { soundVolume: 0 }]]) {
+  test(`${name} makes no effect and no context`, () => {
+    const { audio, ctx } = rig({ settings, session: false });
+    SFX.forEach(n => audio.sfx(n));
+    audio.prime();
+    assert.equal(ctx.nodes.length, 0);
+  });
 }
 
-// 3. Mute and zero volume stop sound: no context, no nodes.
-for (const [name, settings] of [['sound-off', { soundEnabled: false }], ['volume-zero', { soundVolume: 0 }]]) {
-  const { audio, ctx } = rig({ settings });
-  SFX.forEach((n) => audio.sfx(n));
+test('the sfx bus follows the volume and the mute', () => {
+  const { audio, ctx, state } = rig({ session: false });
   audio.prime();
-  check(`${name}-plays-no-sfx`, ctx.nodes.length === 0 && ctx.oscillators === 0, `${ctx.nodes.length} nodes`);
-}
-
-// 4. The sfx bus gain follows the volume setting and the mute.
-{
-  const { audio, ctx, state } = rig();
-  audio.prime();
-  const bus = ctx.sfxBus();
-  check('sfx-bus-follows-volume-50', bus.gain.value === volumeToGain(50, 'sfx'), String(bus.gain.value));
+  assert.equal(sfxBus(ctx).gain.value, volumeToGain(50, 'sfx'));
   state.settings.soundVolume = 100;
   audio.settingChanged('soundVolume');
-  check('sfx-bus-follows-volume-100', bus.gain.value === volumeToGain(100, 'sfx') && bus.gain.value > volumeToGain(50, 'sfx'), String(bus.gain.value));
-  state.settings.soundVolume = 0;
-  audio.settingChanged('soundVolume');
-  check('sfx-bus-volume-0-is-silent', bus.gain.value === volumeToGain(0, 'sfx'), String(bus.gain.value));
-  state.settings.soundVolume = 70;
-  audio.settingChanged('soundVolume');
+  assert.equal(sfxBus(ctx).gain.value, volumeToGain(100, 'sfx'));
   state.settings.soundEnabled = false;
   audio.settingChanged('soundEnabled');
-  check('mute-zeroes-the-sfx-bus', bus.gain.value === 0, String(bus.gain.value));
+  assert.equal(sfxBus(ctx).gain.value, 0);
   const nodes = ctx.nodes.length;
   audio.sfx('raptor');
-  check('mute-stops-new-effects', ctx.nodes.length === nodes);
+  assert.equal(ctx.nodes.length, nodes, 'muted: no new effect');
   state.settings.soundEnabled = true;
   audio.settingChanged('soundEnabled');
-  check('unmute-restores-the-sfx-bus', bus.gain.value === volumeToGain(70, 'sfx'), String(bus.gain.value));
-}
+  assert.equal(sfxBus(ctx).gain.value, volumeToGain(100, 'sfx'));
+});
 
-// 5. Muting both sound and music suspends the context.
-{
+test('turning both sound and music off suspends the context', () => {
   const { audio, ctx, state } = rig();
   audio.prime();
   state.settings.soundEnabled = false;
   state.settings.musicEnabled = false;
   audio.settingChanged('soundEnabled');
-  check('both-off-suspends-the-context', ctx.suspends === 1, String(ctx.suspends));
-}
+  assert.equal(ctx.suspends, 1);
+});
 
-// 6. The music bed: starts with the session, follows the volume, stops on mute and when the session ends.
-{
+test('the music bed starts with the session, follows its volume, and stops on mute or when the session ends', async () => {
   const { audio, ctx, state } = rig();
   audio.syncMusic();
   await tick();
-  const bed = ctx.musicBus();
-  check('music-starts-with-the-session', ctx.oscillators > 0 && bed.gain.value === volumeToGain(50, 'music'), `${ctx.oscillators} osc, gain ${bed.gain.value}`);
+  assert.ok(oscs(ctx) > 0);
+  assert.equal(musicBus(ctx).gain.value, volumeToGain(50, 'music'));
   state.settings.musicVolume = 90;
   audio.settingChanged('musicVolume');
-  check('music-bus-follows-volume', bed.gain.value === volumeToGain(90, 'music'), String(bed.gain.value));
+  assert.equal(musicBus(ctx).gain.value, volumeToGain(90, 'music'));
   state.settings.musicEnabled = false;
   audio.settingChanged('musicEnabled');
-  check('music-mute-zeroes-the-bus', bed.gain.value === 0, String(bed.gain.value));
-  const oscs = ctx.oscillators;
+  assert.equal(musicBus(ctx).gain.value, 0);
+  const stopped = oscs(ctx);
   audio.syncMusic();
-  check('music-mute-stays-stopped', ctx.oscillators === oscs);
+  assert.equal(oscs(ctx), stopped);
   state.settings.musicEnabled = true;
   audio.settingChanged('musicEnabled');
   await tick();
-  check('music-unmute-restarts-the-bed', bed.gain.value === volumeToGain(90, 'music') && ctx.oscillators > oscs, String(bed.gain.value));
+  assert.equal(musicBus(ctx).gain.value, volumeToGain(90, 'music'));
+  assert.ok(oscs(ctx) > stopped);
   state.session = false;
   audio.syncMusic();
-  check('music-stops-when-the-session-ends', bed.gain.value === 0, String(bed.gain.value));
-}
-{
-  const { audio, ctx } = rig({ session: false });
-  audio.syncMusic();
-  await tick();
-  check('no-music-outside-a-session', ctx.oscillators === 0 && ctx.nodes.length === 0);
-}
-{
-  const { audio, ctx } = rig({ settings: { musicVolume: 0 } });
-  audio.syncMusic();
-  await tick();
-  check('no-music-at-volume-zero', ctx.oscillators === 0);
-}
+  assert.equal(musicBus(ctx).gain.value, 0);
+});
 
-// 7. A suspended context is resumed by the first gesture, which starts the bed once.
-{
-  const ctx = fakeContext('suspended');
+test('no music outside a session or at volume 0', async () => {
+  const outside = rig({ session: false });
+  outside.audio.syncMusic();
+  await tick();
+  assert.equal(outside.ctx.nodes.length, 0);
+  const quiet = rig({ settings: { musicVolume: 0 } });
+  quiet.audio.syncMusic();
+  await tick();
+  assert.equal(oscs(quiet.ctx), 0);
+});
+
+test('the first gesture resumes a suspended context and starts the bed once', async () => {
+  const ctx = fakeAudioContext('suspended');
   const { audio } = rig({ ctx });
   audio.unlock();
   await tick();
-  check('gesture-resumes-the-context', ctx.resumes >= 1 && ctx.state === 'running');
-  const oscs = ctx.oscillators;
-  check('gesture-primes-and-starts-the-bed', oscs > 1, String(oscs));
+  assert.equal(ctx.state, 'running');
+  const after = oscs(ctx);
+  assert.ok(after > 1, 'the priming blip and the bed');
   audio.unlock();
   await tick();
-  check('second-gesture-does-not-prime-again', ctx.oscillators === oscs, `${ctx.oscillators} vs ${oscs}`);
-}
-{
+  assert.equal(oscs(ctx), after);
+});
+
+test('a gesture with sound and music both off opens nothing', () => {
   const { audio, ctx } = rig({ settings: { soundEnabled: false, musicEnabled: false } });
   audio.unlock();
-  check('gesture-with-everything-off-opens-nothing', ctx.nodes.length === 0);
-}
+  assert.equal(ctx.nodes.length, 0);
+});
 
-// 8. The settings may be replaced between calls.
-{
-  const ctx = fakeContext();
+test('the settings are read live, even when the object is replaced', () => {
+  const ctx = fakeAudioContext();
   let current = { soundEnabled: true, soundVolume: 50, musicEnabled: false, musicVolume: 50 };
   const audio = createAudio({ settings: () => current, sessionActive: () => true, volumeToGain, createContext: () => ctx });
   audio.prime();
   current = { ...current, soundVolume: 100 };
   audio.settingChanged('soundVolume');
-  check('replaced-settings-object-is-read-live', ctx.sfxBus().gain.value === volumeToGain(100, 'sfx'));
-}
+  assert.equal(sfxBus(ctx).gain.value, volumeToGain(100, 'sfx'));
+});

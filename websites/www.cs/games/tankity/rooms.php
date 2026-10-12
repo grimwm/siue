@@ -34,6 +34,7 @@ require_once __DIR__ . '/config.php';
 //   server/settings.php  room shape and the host's knobs
 //   server/db.php        the storage directory, the database, transactions
 //   server/legacy.php    the per-callsign score runs and the import of the old score files
+//   server/housekeep.php throttled cleanup on requests
 //   server/store.php     rooms as rows: the room lock, room lifecycle, the sweep
 //   server/sim.php       the deterministic sim (mirrors src/sim.ts)
 //   server/ai.php        drone aim, bracketing and strategies
@@ -43,6 +44,7 @@ require_once __DIR__ . '/config.php';
 define('TANKITY_ROOMS_INCLUDED', true);
 require_once __DIR__ . '/server/db.php';
 require_once __DIR__ . '/server/legacy.php';
+require_once __DIR__ . '/server/housekeep.php';
 require_once __DIR__ . '/server/settings.php';
 require_once __DIR__ . '/server/store.php';
 require_once __DIR__ . '/server/sim.php';
@@ -124,6 +126,8 @@ function room_arsenal(): array
 if (defined('TANKITY_ROOMS_LIB')) {
     return;
 }
+// No cron on the host: requests do the cleanup, at most every few minutes.
+tankity_housekeep(time(), tankity_jobs());
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = $_GET['action'] ?? ($_POST['action'] ?? '');
 $body = [];

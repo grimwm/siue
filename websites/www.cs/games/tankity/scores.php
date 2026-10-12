@@ -12,6 +12,7 @@ ini_set('display_errors', '0');
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/server/db.php';
 require_once __DIR__ . '/server/legacy.php';
+require_once __DIR__ . '/server/housekeep.php';
 
 function json_out(int $code, array $payload): void
 {
@@ -23,6 +24,7 @@ function json_out(int $code, array $payload): void
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 try {
+    tankity_housekeep(time(), tankity_jobs());
     if ($method === 'GET') {
         json_out(200, ['scores' => legacy_top(10)]);
     }

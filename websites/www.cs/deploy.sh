@@ -88,6 +88,13 @@ if ! (cd games/tankity && node tools/vendor.mjs --check); then
   exit 1
 fi
 
+# deploy-set.php plants probe files under games/zz-probe while it lists the set;
+# a killed test could leave them behind, so a real deploy refuses to ship them.
+if [ "${LIST:-0}" != 1 ] && [ -e games/zz-probe ]; then
+  echo "deploy: games/zz-probe is a leftover of tests/php/checks/deploy-set.php; delete it" >&2
+  exit 1
+fi
+
 work=$(mktemp -d "${TMPDIR:-/tmp}/www-cs-deploy.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 stage=$work/stage

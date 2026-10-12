@@ -72,9 +72,9 @@ jobs:
           path: websites/www.cs/vendor
           key: composer-${{ hashFiles('websites/www.cs/composer.lock') }}
 
-      # Node runs the Tankity smoke and sim-vector suites and the Cylon and Crete unit
-      # suites, and compiles the site's and each game's TypeScript (npm ci, then
-      # tools/ts-build.mjs --check) inside make test.
+      # Node runs the Tankity smoke and sim-vector suites, the Cylon and Crete unit
+      # suites and the games kit's tests and type check, and checks the site's and
+      # each not-yet-migrated game's TypeScript build, inside make test.
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         if: steps.scope.outputs.run == '1'
         with:

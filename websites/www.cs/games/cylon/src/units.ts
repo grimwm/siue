@@ -13,13 +13,13 @@
  * and the hull (registerHit). When the next missile or nuke launches is the
  * run clock's business (cylon.js); this module launches one when asked.
  * Browser-only: it compiles in the DOM program. */
-import type { AimPoint, Bot, Game, Missile, Mouse, PlayfieldApi, RulesApi, Settings, StateApi, Timer } from './types.js';
-import type { Abilities } from './abilities.js';
-import type { CylonAudio } from './audio.js';
-import type { Debris, Holes, HolePreset } from './field.js';
-import type { Intro } from './intro.js';
-import type { LandscapeOptions } from './landscape.js';
-import type { Rect, Size, Spot } from './playfield.js';
+import type { AimPoint, Bot, Game, Missile, Mouse, PlayfieldApi, RulesApi, Settings, StateApi, Timer } from './types.ts';
+import type { Abilities } from './abilities.ts';
+import type { CylonAudio } from './audio.ts';
+import type { Debris, Holes, HolePreset } from './field.ts';
+import type { Intro } from './intro.ts';
+import type { LandscapeOptions } from './landscape.ts';
+import type { Rect, Size, Spot } from './playfield.ts';
 
 export interface UnitsDeps {
   game: Game;

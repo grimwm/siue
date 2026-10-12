@@ -1,13 +1,9 @@
 // The run's state: the schedule of due-at moments and the run's score and hull.
-// Run here: `node state-test.js`. js/state.js (compiled from src/state.ts) is
+// src/state.ts is
 // pure, so a fake clock (plain numbers) drives every case; no timer is used.
-import * as st from './js/state.js';
+import * as st from '../src/state.ts';
+import { check } from '../../_kit/test/check.ts';
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const KEYS = Object.keys(st.createSchedule());
 
@@ -88,6 +84,3 @@ check('pending-is-strictly-ahead', st.pending(10, 9) && !st.pending(10, 10) && !
   check('clear-pending-and-game-over', st.clearPendingScore(over).pendingScore === null && !st.clearGameOver(over).gameOver, '');
   check('stop-clock', st.stopClock(st.beginRun(r, 9)).runStartedAt === 0, '');
 }
-
-console.log(failed ? `STATE-FAIL ${failed}` : 'STATE-OK');
-process.exit(failed ? 1 : 0);

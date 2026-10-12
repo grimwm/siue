@@ -1,13 +1,9 @@
 // The terrain holes: hold and fade timing, the cap, and pause. Run here:
-// `node field-test.js`. js/field.js (compiled from src/field.ts) is handed fake
+// `node field-test.js`. src/field.ts is handed fake
 // elements, a fake clock and fake timers, so nothing needs a browser.
-import * as f from './js/field.js';
+import * as f from '../src/field.ts';
+import { check } from '../../_kit/test/check.ts';
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
 
 function fakeEl() {
   const el = {
@@ -146,6 +142,3 @@ check('presets-keep-their-timings', f.HOLE_PRESETS.small.holdMs === 800 && f.HOL
   h.advance(800);
   check('a-due-timer-is-ignored-while-paused', h.holes.count() === 1 && !h.field.children[0].classes.has('is-fading'), '');
 }
-
-console.log(failed ? `FIELD-FAIL ${failed}` : 'FIELD-OK');
-process.exit(failed ? 1 : 0);

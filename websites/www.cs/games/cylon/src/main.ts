@@ -22,24 +22,38 @@
  * settings and the nav). This file measures the page, owns the run's state and
  * timers, and wires them together.
  */
-import * as rules from './js/rules.js?v=7889c1e71d';
-import * as playfield from './js/playfield.js?v=848b755745';
-import { createAudio } from './js/audio.js?v=19ef6956c2';
-import { createAbilities, cooldownSeconds } from './js/abilities.js?v=e1407fd932';
-import { createHoles, createDebris, HOLE_PRESETS } from './js/field.js?v=308463842f';
-import { createIntro } from './js/intro.js?v=59b2ae7b2a';
-import { createLandscape } from './js/landscape.js?v=9747fb9a2b';
-import { createEye } from './js/eye.js?v=156f60570d';
-import { createReticle } from './js/reticle.js?v=3896896eb0';
-import { createUnits } from './js/units.js?v=a4b4545e56';
-import { createGameOver } from './js/gameover.js?v=3525afbc7b';
-import { createChrome } from './js/chrome.js?v=9114f7a639';
-import * as state from './js/state.js?v=d0424f3f0e';
-import { createScoresClient, formatHighScoreRows, weeklyResetText } from './js/scores.js?v=0917bafe89';
+import * as rules from './rules.ts';
+import * as playfield from './playfield.ts';
+import { createAudio } from './audio.ts';
+import { createAbilities, cooldownSeconds } from './abilities.ts';
+import { createHoles, createDebris, HOLE_PRESETS } from './field.ts';
+import { createIntro } from './intro.ts';
+import { createLandscape } from './landscape.ts';
+import { createEye } from './eye.ts';
+import { createReticle } from './reticle.ts';
+import { createUnits } from './units.ts';
+import { createGameOver } from './gameover.ts';
+import { createChrome } from './chrome.ts';
+import * as state from './state.ts';
+import { createScoresClient, formatHighScoreRows, weeklyResetText } from './scores.ts';
+import type { Timer } from './types.ts';
+import type { EndReason } from './state.ts';
+
+declare const MOUNT_HTML_V: string; // mount.html's content hash, injected by the build
+
+declare global {
+    interface Window { cylonStartGame?: () => void }
+}
+
+/** What the page hands the game. */
+export interface CylonOptions {
+    onTheme?: (combat: boolean) => void;
+    scoresApi?: string;
+}
 
 // Everything the game fetches is found next to this file, wherever it is served from.
-const CYLON_MOUNT_URL = new URL('mount.html?v=7185c23324', import.meta.url).href;
-const CYLON_SCORES_URL = new URL('scores.php', import.meta.url).href;
+const CYLON_MOUNT_URL = new URL(`../mount.html?v=${MOUNT_HTML_V}`, import.meta.url).href;
+const CYLON_SCORES_URL = new URL('../scores.php', import.meta.url).href;
 
 async function mountCylonDom() {
     const root = document.getElementById('game-root');
@@ -69,7 +83,7 @@ async function mountCylonDom() {
  * @param {string} [options.scoresApi] The score server's URL, when it is not
  *   scores.php next to this file.
  */
-export async function initializeCylonEffects(options = {}) {
+export async function initializeCylonEffects(options: CylonOptions = {}) {
     const onTheme = typeof options.onTheme === 'function' ? options.onTheme : () => {};
     await mountCylonDom();
 
@@ -85,9 +99,9 @@ export async function initializeCylonEffects(options = {}) {
     const settingsRoot = document.getElementById('cylon-settings');
     const raptorEl = document.getElementById('cylon-raptor');
     const raptorImpactsEl = document.getElementById('cylon-raptor-impacts');
-    const raptorBtn = document.getElementById('cylon-raptor-btn');
+    const raptorBtn = document.getElementById('cylon-raptor-btn') as HTMLButtonElement | null;
     const raptorCdEl = document.getElementById('cylon-raptor-cd');
-    const grenadeBtn = document.getElementById('cylon-grenade-btn');
+    const grenadeBtn = document.getElementById('cylon-grenade-btn') as HTMLButtonElement | null;
     const grenadeCdEl = document.getElementById('cylon-grenade-cd');
     const gameToggleBtn = document.getElementById('cylon-game-toggle');
     const gameToggleLabel = document.getElementById('cylon-game-toggle-label');
@@ -100,9 +114,9 @@ export async function initializeCylonEffects(options = {}) {
     const gameOverEntryEl = document.getElementById('cylon-gameover-entry');
     const gameOverBoardEl = document.getElementById('cylon-gameover-board');
     const gameOverScoresEl = document.getElementById('cylon-gameover-scores');
-    const scoreSubmitBtn = document.getElementById('cylon-score-submit');
+    const scoreSubmitBtn = document.getElementById('cylon-score-submit') as HTMLButtonElement | null;
     const initialsErrorEl = document.getElementById('cylon-initials-error');
-    const playAgainBtn = document.getElementById('cylon-play-again');
+    const playAgainBtn = document.getElementById('cylon-play-again') as HTMLButtonElement | null;
     const reticleEl = document.getElementById('cylon-reticle');
     const navBurger = document.getElementById('site-nav-burger');
     const navMenu = document.getElementById('site-nav-menu');
@@ -153,12 +167,12 @@ export async function initializeCylonEffects(options = {}) {
         pageY: window.innerHeight / 3,
         t: 0
     };
-    let healTimer = null;
-    let abilityCdTimer = null;
+    let healTimer: Timer | null = null;
+    let abilityCdTimer: Timer | null = null;
     let lastAim = { clientX: 0, clientY: 0, t: 0 };
-    let missileTimer = null;
-    let nukeTimer = null;
-    let herdTimer = null;
+    let missileTimer: Timer | null = null;
+    let nukeTimer: Timer | null = null;
+    let herdTimer: Timer | null = null;
 
     const IDLE_MS = 2000;
     const BOT_SIZE = { w: 44, h: 56 };
@@ -241,6 +255,7 @@ export async function initializeCylonEffects(options = {}) {
     function resizeBattlefield() {
         // Battlefield uses CSS inset:0 against body — clear any old inline sizing
         // that previously tracked scrollHeight and caused dual/growing scrollbars.
+        if (!field) return;
         field.style.width = '';
         field.style.height = '';
     }
@@ -296,7 +311,7 @@ export async function initializeCylonEffects(options = {}) {
         create: (tag) => document.createElement(tag),
         now: () => Date.now(),
         setTimer: (fn, ms) => setTimeout(fn, ms),
-        clearTimer: (h) => clearTimeout(h),
+        clearTimer: (h) => clearTimeout(h as Timer),
     });
     /** The page's glyph debris (src/field.ts). */
     const debris = createDebris({
@@ -305,14 +320,14 @@ export async function initializeCylonEffects(options = {}) {
         random: Math.random,
         reduceMotion,
         setTimer: (fn, ms) => setTimeout(fn, ms),
-        clearTimer: (h) => clearTimeout(h),
+        clearTimer: (h) => clearTimeout(h as Timer),
     });
     const punchHole = holes.punch;
     /** The grenade and the raptor (src/abilities.ts); the cooldowns live in `schedule`. */
     const abilities = createAbilities({
         now: () => Date.now(),
         setTimer: (fn, ms) => setTimeout(fn, ms),
-        clearTimer: (h) => clearTimeout(h),
+        clearTimer: (h) => clearTimeout(h as Timer),
         isLive: isGameLive,
         readyAt: (which) => (which === 'grenade' ? game.schedule.grenadeReadyAt : game.schedule.raptorReadyAt),
         setReadyAt: (which, at) => {
@@ -328,7 +343,7 @@ export async function initializeCylonEffects(options = {}) {
         raptorAvailable: () => !!raptorEl,
         raptorLaunch: () => {
             disorientEye(EYE_DISORIENT_MS);
-            raptorEl.classList.add('is-inbound');
+            raptorEl?.classList.add('is-inbound');
         },
         raptorStrike: strikeRaptorBand,
         raptorClear: clearRaptorVisuals,
@@ -441,7 +456,7 @@ export async function initializeCylonEffects(options = {}) {
         });
     }
 
-    function syncWorldEndedLook(opts = {}) {
+    function syncWorldEndedLook(opts: { deferScatter?: boolean } = {}) {
         const on = settings.gameEnabled;
         const deferScatter = !!opts.deferScatter;
         document.body.classList.toggle('cylon-game-live', on);
@@ -462,7 +477,7 @@ export async function initializeCylonEffects(options = {}) {
         }
     }
 
-    function lerp(a, b, t) {
+    function lerp(a: number, b: number, t: number) {
         return rules.lerp(a, b, t);
     }
 
@@ -479,8 +494,8 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function clearInboundSchedulers() {
-        clearTimeout(missileTimer);
-        clearTimeout(nukeTimer);
+        clearTimeout(missileTimer ?? undefined);
+        clearTimeout(nukeTimer ?? undefined);
         missileTimer = null;
         nukeTimer = null;
         game.schedule.missileDueAt = 0;
@@ -489,7 +504,7 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function scheduleMissiles(first = false) {
-        clearTimeout(missileTimer);
+        clearTimeout(missileTimer ?? undefined);
         if (!isGameLive()) return;
         const wait = first ? 4000 + Math.random() * 3000 : nextMissileDelayMs();
         game.schedule.missileDueAt = Date.now() + wait;
@@ -504,7 +519,7 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function scheduleNukes(first = false) {
-        clearTimeout(nukeTimer);
+        clearTimeout(nukeTimer ?? undefined);
         if (!isGameLive()) return;
         const wait = first ? 12000 + Math.random() * 8000 : nextNukeDelayMs();
         game.schedule.nukeDueAt = Date.now() + wait;
@@ -524,13 +539,13 @@ export async function initializeCylonEffects(options = {}) {
         scheduleNukes(true);
     }
 
-    function applyPauseTimeSkew(elapsed) {
+    function applyPauseTimeSkew(elapsed: number) {
         if (elapsed <= 0) return;
         const before = game.schedule;
         game.schedule = state.skewForPause(before, game.pauseStartedAt, elapsed);
 
         if (game.schedule.missileDueAt !== before.missileDueAt) {
-            clearTimeout(missileTimer);
+            clearTimeout(missileTimer ?? undefined);
             missileTimer = setTimeout(() => {
                 missileTimer = null;
                 if (!isGameLive() || game.paused) return;
@@ -541,7 +556,7 @@ export async function initializeCylonEffects(options = {}) {
             }, state.msUntil(game.schedule.missileDueAt, Date.now()));
         }
         if (game.schedule.nukeDueAt !== before.nukeDueAt) {
-            clearTimeout(nukeTimer);
+            clearTimeout(nukeTimer ?? undefined);
             nukeTimer = setTimeout(() => {
                 nukeTimer = null;
                 if (!isGameLive() || game.paused) return;
@@ -550,7 +565,7 @@ export async function initializeCylonEffects(options = {}) {
             }, state.msUntil(game.schedule.nukeDueAt, Date.now()));
         }
         if (game.schedule.healDueAt !== before.healDueAt) {
-            clearTimeout(healTimer);
+            clearTimeout(healTimer ?? undefined);
             healTimer = setTimeout(() => {
                 healTimer = null;
                 tryHeal();
@@ -561,7 +576,7 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     function clearHealTimer() {
-        clearTimeout(healTimer);
+        clearTimeout(healTimer ?? undefined);
         healTimer = null;
         game.schedule.healDueAt = 0;
     }
@@ -594,13 +609,13 @@ export async function initializeCylonEffects(options = {}) {
     function onScroll() {
         syncMousePageFromClient();
         // After the user scrolls, pull stragglers back into the visible playfield
-        clearTimeout(herdTimer);
+        clearTimeout(herdTimer ?? undefined);
         herdTimer = setTimeout(herdBotsIntoView, 180);
     }
 
     /** Page scroll is pointless once glyphs are scattered — lock it for the whole session. */
     function bindPlayScrollLock() {
-        const scrollExempt = (target) => !!(target && target.closest
+        const scrollExempt = (target: EventTarget | null) => !!(target instanceof Element
             && target.closest('.cylon-help-panel, .cylon-gameover, .cylon-settings-panel'));
 
         document.addEventListener('wheel', (e) => {
@@ -612,7 +627,7 @@ export async function initializeCylonEffects(options = {}) {
         // iOS pans on touchmove unless non-passive + prevented.
         document.addEventListener('touchmove', (e) => {
             if (!document.body.classList.contains('cylon-game-live')) return;
-            const t = e.target;
+            const t = e.target as Element | null;
             if (t && t.closest && t.closest('.site-nav, .cylon-help, .cylon-gameover, .cylon-settings-panel')) {
                 return;
             }
@@ -634,11 +649,11 @@ export async function initializeCylonEffects(options = {}) {
         if (!game.paused) {
             game.paused = true;
             game.pauseStartedAt = Date.now();
-            clearTimeout(game.idleTimer);
+            clearTimeout(game.idleTimer ?? undefined);
             holes.pause();
-            clearTimeout(missileTimer);
-            clearTimeout(nukeTimer);
-            clearTimeout(healTimer);
+            clearTimeout(missileTimer ?? undefined);
+            clearTimeout(nukeTimer ?? undefined);
+            clearTimeout(healTimer ?? undefined);
             missileTimer = null;
             nukeTimer = null;
             healTimer = null;
@@ -698,7 +713,7 @@ export async function initializeCylonEffects(options = {}) {
         return rules.currentHp(game.run.hitCount);
     }
 
-    function hpTint(hp) {
+    function hpTint(hp: number) {
         return rules.hpTint(hp);
     }
 
@@ -726,7 +741,7 @@ export async function initializeCylonEffects(options = {}) {
         }
     }
 
-    function updateCooldownButton(btn, cdEl, readyAt, extraReady = true) {
+    function updateCooldownButton(btn: HTMLButtonElement | null, cdEl: HTMLElement | null, readyAt: number, extraReady = true) {
         if (!btn) return;
         const secs = cooldownSeconds(readyAt, Date.now());
         const cooling = secs > 0;
@@ -782,7 +797,7 @@ export async function initializeCylonEffects(options = {}) {
     }
 
     /** The grenade lands: blast, scorches, letters and knock-outs (the arming and cooldown are in abilities). */
-    function detonateGrenadeAt(pageX, pageY) {
+    function detonateGrenadeAt(pageX: number, pageY: number) {
         const x = pageX;
         const y = pageY;
         const blast = document.createElement('div');
@@ -790,7 +805,7 @@ export async function initializeCylonEffects(options = {}) {
         blast.style.left = `${x}px`;
         blast.style.top = `${y}px`;
         blast.setAttribute('aria-hidden', 'true');
-        field.appendChild(blast);
+        field?.appendChild(blast);
         punchHole(x, y, HOLE_PRESETS.medium);
         // Light satellite scorches — grenade-scale terrain chew
         for (let i = 0; i < 2; i++) {
@@ -883,7 +898,7 @@ export async function initializeCylonEffects(options = {}) {
         updateAbilityButtons();
     }
 
-    function endGame(reason) {
+    function endGame(reason: EndReason) {
         if (game.run.gameOver) return;
         game.run = state.endRun(game.run, reason);
         // Losses keep the session On (music, combat chrome, scatter). Quit turns it off.
@@ -891,7 +906,7 @@ export async function initializeCylonEffects(options = {}) {
         clearAllBots();
         clearInboundSchedulers();
         clearHealTimer();
-        clearTimeout(game.idleTimer);
+        clearTimeout(game.idleTimer ?? undefined);
         setEyeTracking(false);
         intro.cancel();
         game.draggingReticle = false;
@@ -918,7 +933,7 @@ export async function initializeCylonEffects(options = {}) {
         updateHitsUi();
     }
 
-    function setGameEnabled(on) {
+    function setGameEnabled(on: boolean) {
         const wasOn = settings.gameEnabled;
         if (!on && wasOn && !game.run.gameOver) {
             // Voluntary stop — offer initials only if the run can make the board
@@ -935,7 +950,7 @@ export async function initializeCylonEffects(options = {}) {
             clearInboundSchedulers();
             clearHealTimer();
             game.run = state.stopClock(game.run);
-            clearTimeout(game.idleTimer);
+            clearTimeout(game.idleTimer ?? undefined);
             setEyeTracking(false);
             game.draggingReticle = false;
             game.reticlePointerId = null;
@@ -968,13 +983,14 @@ export async function initializeCylonEffects(options = {}) {
         }
     }
 
-    function isTypingTarget(el) {
+    function isTypingTarget(target: EventTarget | null) {
+        const el = target as HTMLElement | null;
         const tag = (el && el.tagName) || '';
         return tag === 'INPUT' || tag === 'TEXTAREA' || (el && el.isContentEditable);
     }
 
     function bindAbilityControls() {
-        const bindAbilityTap = (btn, action) => {
+        const bindAbilityTap = (btn: HTMLButtonElement | null, action: () => void) => {
             if (!btn) return;
             // pointerup so a second finger can fire abilities while the first drags the pip
             btn.addEventListener('pointerup', (e) => {
@@ -1016,7 +1032,7 @@ export async function initializeCylonEffects(options = {}) {
         window.addEventListener('pointerdown', (e) => {
             if (!abilities.grenadeArmed()) return;
             if (e.button != null && e.button !== 0) return;
-            const t = e.target;
+            const t = e.target as Element | null;
             if (t && (t.closest('#cylon-grenade-btn')
                 || t.closest('#cylon-raptor-btn')
                 || t.closest('#cylon-game-toggle')
@@ -1033,7 +1049,7 @@ export async function initializeCylonEffects(options = {}) {
             e.preventDefault();
             abilities.throwGrenadeAt(e.pageX, e.pageY);
         }, true);
-        clearInterval(abilityCdTimer);
+        clearInterval(abilityCdTimer ?? undefined);
         abilityCdTimer = setInterval(updateAbilityButtons, 250);
         updateAbilityButtons();
     }

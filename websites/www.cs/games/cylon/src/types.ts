@@ -5,10 +5,10 @@
  * a few plain records (the cursor, the settings). They are handed to each
  * module as these types; the modules import nothing at run time, so this file
  * is types only and compiles to nothing. */
-import type * as playfieldModule from './playfield.js';
-import type * as rulesModule from './rules.js';
-import type { RunState, Schedule } from './state.js';
-import type * as stateModule from './state.js';
+import type * as playfieldModule from './playfield.ts';
+import type * as rulesModule from './rules.ts';
+import type { RunState, Schedule } from './state.ts';
+import type * as stateModule from './state.ts';
 
 /** The modules the factories call into, as the objects cylon.js imported them. */
 export type StateApi = typeof stateModule;
@@ -54,6 +54,26 @@ export interface Settings {
   eyeEnabled: boolean;
   /** The settings panel writes by data-setting name. */
   [key: string]: boolean | number;
+}
+
+export const SETTINGS_KEY = 'cylon-settings';
+
+export const DEFAULT_SETTINGS: Settings = {
+  gameEnabled: false,
+  soundEnabled: true,
+  musicEnabled: true,
+  // UI midpoints; gain curves map 50% to the intended default loudness
+  soundVolume: 50,
+  musicVolume: 50,
+  eyeEnabled: true,
+};
+
+/**
+ * Accepts any stored object, so a partial or older one still loads; the caller
+ * spreads it over DEFAULT_SETTINGS and clamps the volumes.
+ */
+export function isSettings(v: unknown): v is Settings {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 /** The cursor, in viewport and in page coordinates. */

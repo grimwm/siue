@@ -1,13 +1,8 @@
 // The grenade and the raptor: arming, cooldowns and effects, on a fake clock.
-// Run here: `node abilities-test.js`. js/abilities.js (compiled from
-// src/abilities.ts) touches no element, so a fake clock and fake timers drive it.
-import * as ab from './js/abilities.js';
+// src/abilities.ts touches no element, so a fake clock and fake timers drive it.
+import * as ab from '../src/abilities.ts';
+import { check } from '../../_kit/test/check.ts';
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
 
 // A harness: a clock, a timer queue that fires on advance(), a Schedule's two fields, and a log.
 function harness({ live = true, raptor = true } = {}) {
@@ -129,6 +124,3 @@ check('cooldown-seconds-zero-when-ready', ab.cooldownSeconds(0, 5) === 0 && ab.c
   h.advance(5_000);
   check('reset-cancels-the-pending-strike', !h.log.includes('strike'), h.log.join());
 }
-
-console.log(failed ? `ABILITIES-FAIL ${failed}` : 'ABILITIES-OK');
-process.exit(failed ? 1 : 0);

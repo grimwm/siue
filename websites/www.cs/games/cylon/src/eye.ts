@@ -9,7 +9,7 @@
  * It touches only the eye and glare elements it is handed; the live game's
  * record, the settings and the cursor come in as arguments. Browser-only: it
  * compiles in the DOM program. */
-import type { Game, Mouse, Settings, StateApi } from './types.js';
+import type { Game, Mouse, Settings, StateApi } from './types.ts';
 
 export interface EyeDeps {
   /** The eye on the scanner bar. */

@@ -87,7 +87,6 @@ jobs:
             websites/www.cs/package-lock.json
             websites/www.cs/games/package-lock.json
             websites/www.cs/games/tankity/package-lock.json
-            websites/www.cs/games/cylon/package-lock.json
 
       - name: Start the local sites
         if: steps.scope.outputs.run == '1'

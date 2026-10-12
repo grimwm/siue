@@ -44,11 +44,12 @@ $set = array_flip($out);
 foreach (['games/tankity/fx.js', 'games/tankity/js/sim.js', 'games/tankity/js/net.js', 'games/tankity/js/ui/shop.js', 'games/tankity/js/ui/help.js', 'games/tankity/vendor/preact/preact.module.js', 'games/tankity/vendor/preact/hooks.module.js', 'games/tankity/vendor/preact/jsx-runtime.module.js', 'games/tankity/vendor/preact/LICENSE', 'games/tankity/fx/sprites/sprites.json', 'games/tankity/game.js', 'games/tankity/game.json', 'games/tankity/sw.js', 'games/tankity/rooms.php', 'games/tankity/server/settings.php', 'games/tankity/server/store.php', 'games/tankity/server/sim.php', 'games/tankity/server/ai.php', 'games/tankity/server/rules.php', 'games/tankity/server/protocol.php', 'games/tankity/server/.htaccess'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
-// Cylon: the entry module, the compiled modules it imports, its page pieces and server.
-foreach (['games/cylon/cylon.js', 'games/cylon/js/rules.js', 'games/cylon/js/playfield.js', 'games/cylon/js/scores.js', 'games/cylon/js/state.js', 'games/cylon/js/intro.js', 'games/cylon/js/units.js', 'games/cylon/js/chrome.js', 'games/cylon/css/eye.css', 'games/cylon/css/units.css', 'games/cylon/css/intro.css', 'games/cylon/mount.html', 'games/cylon/scores.php', 'games/cylon/manifest.webmanifest'] as $f) {
+// Cylon: the bundle, its page pieces and server.
+foreach (['games/cylon/dist/main.js', 'games/cylon/css/eye.css', 'games/cylon/css/units.css', 'games/cylon/css/intro.css', 'games/cylon/mount.html', 'games/cylon/scores.php', 'games/cylon/manifest.webmanifest'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
 // The site's own scripts: compiled from src/, served from the root and play/.
+$check('ships-root-htaccess', in_array('.htaccess', array_keys($set), true), '');
 foreach (['main.js', 'play/play.js', 'play/play.css', 'index.html'] as $f) {
     $check("ships $f", isset($set[$f]));
 }

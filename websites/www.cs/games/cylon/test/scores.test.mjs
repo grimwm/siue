@@ -1,15 +1,11 @@
-// The high-score client against a fake scores.php. Run here: `node scores-test.js`.
-// js/scores.js (compiled from src/scores.ts) gets its fetch as an argument, so
+// The high-score client against a fake scores.php.
+// src/scores.ts gets its fetch as an argument, so
 // the fake server below answers it the way scores.php does: a GET gives the
 // board, the config and a CSRF token; a POST op=start gives a run token; a POST
 // op=score checks the run token and the initials.
-import { createScoresClient, formatHighScoreRows, weeklyResetText } from './js/scores.js';
+import { createScoresClient, formatHighScoreRows, weeklyResetText } from '../src/scores.ts';
+import { check } from '../../_kit/test/check.ts';
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
 
 function fakeServer(opts = {}) {
   const log = [];
@@ -162,6 +158,3 @@ const rows = formatHighScoreRows([{ initials: 'abcdef', score: 9, at: 'not a dat
 check('rows-rank-initials-score', rows.includes('#1</span><strong class="cylon-hs-initials">ABC</strong>') && rows.includes('9 KOs') && rows.includes('#2'), rows);
 check('rows-default-initials-and-empty-date', rows.includes('>AAA</strong>') && !rows.includes('Invalid'), rows);
 check('rows-show-a-date', /cylon-hs-date">\w+ \d+, 2026</.test(formatHighScoreRows([{ initials: 'A', score: 1, at: '2026-10-05T12:00:00Z' }])), formatHighScoreRows([{ initials: 'A', score: 1, at: '2026-10-05T12:00:00Z' }]));
-
-console.log(failed ? `SCORES-FAIL ${failed}` : 'SCORES-OK');
-process.exit(failed ? 1 : 0);

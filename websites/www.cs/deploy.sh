@@ -43,8 +43,8 @@ for tool in games/*/tools/install-files.php; do
 done
 
 # The home page's own ?v= cache-busters (site.css, main.js, the mounted game's
-# css and entry module): refuse a stale one. It hashes games/cylon/cylon.js, so
-# the loop above has to pass first.
+# css and entry module): refuse a stale one. It hashes games/cylon/dist/main.js,
+# which the kit build check below guards.
 if ! php tools/site-versions.php --check; then
   echo "deploy: run php games/cylon/tools/install-files.php, then php tools/site-versions.php, and commit the result" >&2
   exit 1
@@ -133,6 +133,7 @@ while IFS= read -r -d '' f; do
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).
     play/*) ;;
+    .htaccess) ;;
     */*) continue ;;
     *.html | *.js | *.css | *.php | *.png | *.ico | *.webmanifest) ;;
     *) continue ;;

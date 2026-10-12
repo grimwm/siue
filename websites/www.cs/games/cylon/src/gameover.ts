@@ -10,9 +10,9 @@
  *
  * It touches only the elements it is handed. Browser-only: it compiles in the
  * DOM program. */
-import type { EndReason } from './state.js';
-import type { Game, StateApi } from './types.js';
-import type { ScoreConfig, ScoreEntry, ScoresClient } from './scores.js';
+import type { EndReason } from './state.ts';
+import type { Game, StateApi } from './types.ts';
+import type { ScoreConfig, ScoreEntry, ScoresClient } from './scores.ts';
 
 export interface GameOverDeps {
   game: Game;

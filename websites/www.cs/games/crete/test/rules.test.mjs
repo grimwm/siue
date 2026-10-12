@@ -130,3 +130,37 @@ test('starting a run on an attempt plays that maze from that run stream', () => 
   assert.equal(h.G.rng(), stream());
   assert.deepEqual([h.G.turns, h.G.hp, h.G.over], [0, E.MAX_HP, false]);
 });
+
+/** Two walls across the arena, each shut by one barrier on row 7; the exit is behind both. */
+function twoBarriers(h) {
+  arena(h.G, { r: 7, c: 3 }, { r: 1, c: 1 });
+  wallAcross(h.G, 5);
+  wallAcross(h.G, 7);
+  for (const c of [5, 7]) h.G.barriers.add(E.key(7, c));
+  h.G.exit = { r: 7, c: 11 };
+}
+
+test('holding one fuse, a longer way round that crosses one barrier beats going through two', () => {
+  const h = harness();
+  twoBarriers(h);
+  h.G.walls[1][7] = false;
+  h.G.pickups.set(E.key(2, 2), 'fuse');
+  h.G.fuses = 1;
+  const route = h.game.goalPath();
+  assert.deepEqual(route.at(-1), { r: 7, c: 11 }, 'goes for the exit, not for a second fuse');
+  assert.ok(route.some(p => p.r === 7 && p.c === 5), 'through the first barrier');
+  assert.ok(route.some(p => p.r === 1 && p.c === 7), 'round the second by the gap');
+  assert.ok(!route.some(p => p.r === 7 && p.c === 7), 'never through the second barrier');
+});
+
+test('when two barriers really are in the way, one fuse sends it for another and two take it through', () => {
+  const h = harness();
+  twoBarriers(h);
+  h.G.pickups.set(E.key(2, 2), 'fuse');
+  h.G.fuses = 1;
+  assert.deepEqual(h.game.goalPath().at(-1), { r: 2, c: 2 });
+  h.G.fuses = 2;
+  const route = h.game.goalPath();
+  assert.deepEqual(route.at(-1), { r: 7, c: 11 });
+  assert.ok([5, 7].every(c => route.some(p => p.r === 7 && p.c === c)));
+});

@@ -798,19 +798,58 @@ export function createGame(hooks: Hooks): Game {
   }
 
   /* ---------- hint: one move in advance ---------- */
+  /**
+   * The shortest route to the exit that crosses at most `fuses` closed
+   * barriers (each crossing spends a fuse), or [] when none does. Searching
+   * (cell, fuses spent) rather than the shortest route with every barrier
+   * open, since a longer way round can cross fewer barriers.
+   */
+  function routeOpening(fuses: number): Cell[] {
+    if (fuses <= 0) return [];
+    const W = fuses + 1;
+    const idx = (r: number, c: number, used: number): number => (r * COLS + c) * W + used;
+    const from = new Int32Array(ROWS * COLS * W).fill(-2);
+    const start = idx(G.player.r, G.player.c, 0);
+    from[start] = -1;
+    const queue = [start];
+    for (let head = 0; head < queue.length; head++) {
+      const cur = queue[head]!;
+      const used = cur % W;
+      const cell = (cur - used) / W;
+      const r = Math.floor(cell / COLS),
+        c = cell % COLS;
+      if (r === G.exit.r && c === G.exit.c) {
+        const path: Cell[] = [];
+        for (let at = cur; at !== -1; at = from[at]!) {
+          const u = at % W;
+          const cl = (at - u) / W;
+          path.push({ r: Math.floor(cl / COLS), c: cl % COLS });
+        }
+        return path.reverse();
+      }
+      for (const [dr, dc] of DIRS) {
+        const nr = r + dr,
+          nc = c + dc;
+        if (!inBounds(nr, nc)) continue;
+        let nu = used;
+        if (G.walls[nr]![nc]) {
+          if (!G.barriers.has(key(nr, nc)) || used + 1 > fuses) continue;
+          nu = used + 1;
+        }
+        const next = idx(nr, nc, nu);
+        if (from[next] !== -2) continue;
+        from[next] = cur;
+        queue.push(next);
+      }
+    }
+    return [];
+  }
+
   function goalPath(): Cell[] {
     const open = bfsPath(G.walls, G.player, G.exit);
     if (open.length) return open;
-    if (G.fuses > 0) {
-      const unbarred = G.walls.map((row) => row.slice());
-      for (const k of G.barriers) {
-        const [br, bc] = unkey(k);
-        unbarred[br]![bc] = false;
-      }
-      const through = bfsPath(unbarred, G.player, G.exit);
-      const crossed = through.filter((c) => G.barriers.has(key(c.r, c.c))).length;
-      if (through.length && crossed <= G.fuses) return through;
-    }
+    const through = routeOpening(G.fuses);
+    if (through.length) return through;
     const d = bfsDist(G.walls, G.player);
     let target: Cell | null = null,
       bestD = 1e9;

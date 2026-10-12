@@ -23,6 +23,14 @@ in `dist/`. Every tsconfig extends `build/tsconfig.base.json`: strict,
 `noUncheckedIndexedAccess`, `erasableSyntaxOnly` (so Node can run the
 sources directly), imports written with their `.ts` extension.
 
+A game that bundles npm packages (Preact) also gets
+`dist/THIRD_PARTY_LICENSES.txt`: each package's name, version, license field
+and full license text, sorted by name, built from the packages' own files. A
+package without a license file fails the build. Every bundle containing npm
+code starts with `/*! Third-party licenses: THIRD_PARTY_LICENSES.txt */`, and
+`--check` covers the file like any other output. A game with no npm packages
+gets neither.
+
 ## Ports and adapters (`ports.ts`)
 
 An engine never reaches for the page. It takes `Timers`, a `Clock`, an `Rng`

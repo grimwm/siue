@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="Crete">
     <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
     <!-- app-tags:end -->
-    <link rel="stylesheet" href="game.css?v=860aebff5a" />
+    <link rel="stylesheet" href="game.css?v=f5f8fe983a" />
   </head>
   <body>
     <header class="topbar">
@@ -121,14 +121,7 @@
           <p id="run-stats" class="runstats"></p>
         </section>
 
-        <section class="panel" aria-labelledby="inv-h">
-          <h2 id="inv-h">Inventory — use with Z / X / C</h2>
-          <ul id="inventory" class="inv"></ul>
-          <p class="hint">
-            Using an item costs your turn: the Minotaur still moves twice,
-            unless a Mirror Shard freezes it.
-          </p>
-        </section>
+        <div id="inventory-root"></div>
 
         <section class="panel" aria-labelledby="help-h">
           <h2 id="help-h">How to play</h2>
@@ -173,6 +166,6 @@
 
     <div id="end-root"></div>
 
-    <script type="module" src="dist/main.js?v=01e64bae2f"></script>
+    <script type="module" src="dist/main.js?v=d607d60e4d"></script>
   </body>
 </html>

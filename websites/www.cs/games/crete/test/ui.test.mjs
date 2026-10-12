@@ -7,8 +7,9 @@ import { importTsx } from '../../_kit/test/tsx.ts';
 import { document, makeEl, click } from '../../_kit/test/dom-stub.mjs';
 
 globalThis.document = document;
-const ui = await importTsx(import.meta.dirname, { end: '../src/ui/end.tsx' });
+const ui = await importTsx(import.meta.dirname, { end: '../src/ui/end.tsx', inventory: '../src/ui/inventory.tsx' });
 const { renderEndCard } = ui.end;
+const { renderInventory } = ui.inventory;
 
 const walk = (el, out = []) => { for (const c of el.children) if (c.nodeType === 1) { out.push(c); walk(c, out); } return out; };
 const byId = (el, id) => walk(el).find(n => n.id === id);
@@ -51,4 +52,37 @@ test('Play again calls back', () => {
   renderEndCard(root, { open: true, ...END, onAgain: () => { again++; } });
   click(byId(root, 'again'));
   assert.equal(again, 1);
+});
+
+const ROWS = [
+  { kind: 'shard', emoji: '🔮', name: 'Mirror Shard', key: 'Z', count: 1, desc: 'Freeze the creature for one full turn. Move right after.', disabled: false },
+  { kind: 'snack', emoji: '🥣', name: 'Sugar Puffs', key: 'X', count: 0, desc: 'Heal 5 HP. Using it costs your turn.', disabled: true },
+  { kind: 'jammer', emoji: '📻', name: 'Signal Jammer', key: 'C', count: 2, desc: 'Hurl the creature far away. Using it costs your turn.', disabled: false },
+];
+
+test('the inventory is a panel with one row per item: name, count, key and what it does', () => {
+  const root = mount();
+  renderInventory(root, { rows: ROWS, onUse() {} });
+  const section = root.children[0];
+  assert.equal(section.localName, 'section');
+  assert.equal(section.className, 'panel');
+  assert.equal(byId(root, 'inv-h').textContent, 'Inventory — use with Z / X / C');
+  const list = byId(root, 'inventory');
+  assert.equal(list.className, 'inv');
+  const items = list.children;
+  assert.equal(items.length, 3);
+  assert.equal(walk(items[0]).find(n => n.className === 'name').textContent, '🔮 Mirror Shard × 1 Z');
+  assert.equal(walk(items[0]).find(n => n.localName === 'kbd').textContent, 'Z');
+  assert.equal(walk(items[1]).find(n => n.className === 'desc').textContent, 'Heal 5 HP. Using it costs your turn.');
+  assert.deepEqual(items.map(li => walk(li).find(n => n.localName === 'button').textContent), ['Use (Z)', 'Use (X)', 'Use (C)']);
+});
+
+test('an empty or unusable item cannot be pressed; a usable one calls back with its kind', () => {
+  const root = mount();
+  const used = [];
+  renderInventory(root, { rows: ROWS, onUse: kind => used.push(kind) });
+  const buttons = byId(root, 'inventory').children.map(li => walk(li).find(n => n.localName === 'button'));
+  assert.deepEqual(buttons.map(b => b.disabled), [false, true, false]);
+  click(buttons[2]);
+  assert.deepEqual(used, ['jammer']);
 });

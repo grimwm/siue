@@ -37,6 +37,7 @@ The game finds `mount.html` and `scores.php` one folder above the bundle (from `
 Mount into `#game-root`. The game may scatter glyphs in `#nav-main`, `#nav-contact`, `#nav-games` and toggle body classes:
 `cylon-game-live`, `cylon-nav-combat`, `cylon-world-ended`, `cylon-glyphs-blown`, `cylon-touch-play`.
 Combat nav chrome (toggle, scores, abilities, settings) still lives in the site header until Phase 5.
+**Leaving.** Game Off (and Close on a quit run's panel) calls the kit's `exitApp`: the installed app (`start_url` `../../index.html?game=cylon&app=1`, scoped to that page) closes where the platform allows; otherwise the page stays, out of full screen, and an installed app shows `#cylon-exit-hint`.
 
 The game reaches the page only through what it is handed and what it declares:
 

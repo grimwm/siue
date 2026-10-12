@@ -37,6 +37,7 @@ import { createChrome } from './chrome.ts';
 import { renderHelp } from './ui/help.tsx';
 import * as state from './state.ts';
 import { createScoresClient, highScoreRows, weeklyResetText } from './scores.ts';
+import { exitApp, browserAppEnv, EXIT_HINT } from '../../_kit/app.ts';
 import type { Timer } from './types.ts';
 import type { EndReason } from './state.ts';
 
@@ -109,6 +110,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const cicEnterBtn = document.getElementById('cic-enter-btn');
     const settingsPanel = document.getElementById('cylon-settings-panel');
     const gameOverRoot = document.getElementById('cylon-gameover-root');
+    const exitHintEl = document.getElementById('cylon-exit-hint');
     const reticleEl = document.getElementById('cylon-reticle');
     const navBurger = document.getElementById('site-nav-burger');
     const navMenu = document.getElementById('site-nav-menu');
@@ -197,6 +199,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         resetRunStats,
         root: gameOverRoot,
         boardChanged: () => renderSettings(),
+        closed: () => { void leaveApp(); },
     });
     /** The settings and the nav chrome (src/chrome.ts). */
     const { settings, saveSettings, syncGameToggleUi, syncNavChrome, renderSettings, bindSettings, bindGameToggle, bindNavMenu } = createChrome({
@@ -924,6 +927,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
             syncReticleVisibility();
             audio.syncMusic();
             syncWorldEndedLook();
+            void leaveApp();
         } else {
             intro.cancel();
             clearAllBots();
@@ -938,6 +942,17 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
             syncWorldEndedLook({ deferScatter: true });
             intro.play();
         }
+    }
+
+    let exitHintTimer: Timer | null = null;
+    /** The session is off: an installed app closes where it may, or says how to close it. */
+    async function leaveApp() {
+        const outcome = await exitApp(browserAppEnv());
+        if (outcome !== 'title-with-hint' || !exitHintEl) return;
+        exitHintEl.textContent = EXIT_HINT;
+        exitHintEl.hidden = false;
+        clearTimeout(exitHintTimer ?? undefined);
+        exitHintTimer = setTimeout(() => { exitHintEl.hidden = true; }, 6000);
     }
 
     function isTypingTarget(target: EventTarget | null) {

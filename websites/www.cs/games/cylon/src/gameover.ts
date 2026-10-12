@@ -28,6 +28,8 @@ export interface GameOverDeps {
   root: HTMLElement | null;
   /** The board changed: the settings panel redraws its weekly list. */
   boardChanged: () => void;
+  /** A quit run's panel was closed: the game leaves (kit exitApp). */
+  closed: () => void;
 }
 
 export interface GameOver {
@@ -157,6 +159,7 @@ export function createGameOver(d: GameOverDeps): GameOver {
       hideGameOver();
       game.run = state.clearGameOver(game.run);
       d.resetRunStats();
+      d.closed();
       return;
     }
     d.setGameEnabled(true);

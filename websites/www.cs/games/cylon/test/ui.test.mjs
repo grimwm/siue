@@ -6,10 +6,11 @@ import { importTsx } from '../../_kit/test/tsx.ts';
 import { document, makeEl, click, fire } from '../../_kit/test/dom-stub.mjs';
 
 globalThis.document = document;
-const ui = await importTsx(import.meta.dirname, { board: '../src/ui/board.tsx', help: '../src/ui/help.tsx', gameover: '../src/ui/gameover.tsx' });
+const ui = await importTsx(import.meta.dirname, { board: '../src/ui/board.tsx', help: '../src/ui/help.tsx', gameover: '../src/ui/gameover.tsx', settings: '../src/ui/settings.tsx' });
 const { renderHsRows } = ui.board;
 const { renderHelp } = ui.help;
 const { renderGameOver } = ui.gameover;
+const { renderSettings } = ui.settings;
 
 const walk = (el, out = []) => { for (const c of el.children) if (c.nodeType === 1) { out.push(c); walk(c, out); } return out; };
 const byId = (el, id) => walk(el).find(n => n.id === id);
@@ -169,4 +170,34 @@ test('after a quit, the dismiss button closes instead of starting a run', () => 
   const { root } = gameOver({ mode: 'board', quit: true });
   assert.equal(byId(root, 'cylon-play-again').textContent, 'Close');
   assert.equal(byId(root, 'cylon-gameover-alltime').hidden, true);
+});
+
+test('the settings panel shows each setting, the weekly board and its reset note', () => {
+  const panel = makeEl('cylon-settings-panel');
+  renderSettings(panel, {
+    soundEnabled: true, soundVolume: 70, musicEnabled: false, musicVolume: 20, eyeEnabled: true,
+    rows: ROWS, resetText: 'Play often — scores reset every Sunday at midnight Central.', onSetting() {},
+  });
+  const inputs = walk(panel).filter(n => n.localName === 'input');
+  assert.deepEqual(inputs.map(i => i.getAttribute('data-setting')), ['soundEnabled', 'soundVolume', 'musicEnabled', 'musicVolume', 'eyeEnabled']);
+  assert.deepEqual([inputs[0].checked, inputs[2].checked, inputs[4].checked], [true, false, true]);
+  assert.deepEqual([inputs[1].value, inputs[3].value], [70, 20]);
+  assert.equal(inputs[1].getAttribute('aria-label'), 'Sound effects volume');
+  assert.equal(byId(panel, 'cylon-weekly-reset').textContent, 'Play often — scores reset every Sunday at midnight Central.');
+  assert.equal(byId(panel, 'cylon-high-scores').children.length, 2);
+});
+
+test('changing a setting reports its key and new value', () => {
+  const panel = makeEl('cylon-settings-panel');
+  const seen = [];
+  renderSettings(panel, {
+    soundEnabled: true, soundVolume: 50, musicEnabled: true, musicVolume: 50, eyeEnabled: true,
+    rows: [], resetText: '', onSetting: (k, v) => seen.push([k, v]),
+  });
+  const inputs = walk(panel).filter(n => n.localName === 'input');
+  inputs[0].checked = false;
+  fire(inputs[0], 'change');
+  inputs[3].value = '30';
+  fire(inputs[3], 'input');
+  assert.deepEqual(seen, [['soundEnabled', false], ['musicVolume', 30]]);
 });

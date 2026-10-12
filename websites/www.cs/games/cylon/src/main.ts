@@ -36,7 +36,7 @@ import { createGameOver } from './gameover.ts';
 import { createChrome } from './chrome.ts';
 import { renderHelp } from './ui/help.tsx';
 import * as state from './state.ts';
-import { createScoresClient, weeklyResetText } from './scores.ts';
+import { createScoresClient, highScoreRows, weeklyResetText } from './scores.ts';
 import type { Timer } from './types.ts';
 import type { EndReason } from './state.ts';
 
@@ -107,7 +107,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const gameToggleBtn = document.getElementById('cylon-game-toggle');
     const gameToggleLabel = document.getElementById('cylon-game-toggle-label');
     const cicEnterBtn = document.getElementById('cic-enter-btn');
-    const highScoresEl = document.getElementById('cylon-high-scores');
+    const settingsPanel = document.getElementById('cylon-settings-panel');
     const gameOverRoot = document.getElementById('cylon-gameover-root');
     const reticleEl = document.getElementById('cylon-reticle');
     const navBurger = document.getElementById('site-nav-burger');
@@ -187,7 +187,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const NAV_FADE_MS = Math.round(2850 * 0.45); // match --cylon-desolate-fade * 0.45
 
     /** The game-over panel and the high scores (src/gameover.ts). */
-    const { renderHighScores, fetchHighScores, hideGameOver, showGameOver } = createGameOver({
+    const { renderHighScores, fetchHighScores, hideGameOver, showGameOver, resetText } = createGameOver({
         game,
         state,
         scores,
@@ -196,10 +196,10 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         setGameEnabled,
         resetRunStats,
         root: gameOverRoot,
-        highScoresEl,
+        boardChanged: () => renderSettings(),
     });
     /** The settings and the nav chrome (src/chrome.ts). */
-    const { settings, saveSettings, syncGameToggleUi, syncNavChrome, bindSettings, bindGameToggle, bindNavMenu } = createChrome({
+    const { settings, saveSettings, syncGameToggleUi, syncNavChrome, renderSettings, bindSettings, bindGameToggle, bindNavMenu } = createChrome({
         settingsRoot,
         gameToggleBtn,
         gameToggleLabel,
@@ -212,7 +212,9 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         BRAND_COMBAT,
         NAV_FADE_MS,
         reduceMotion,
-        renderHighScores,
+        settingsPanel,
+        boardRows: () => highScoreRows(scores.board()),
+        resetText,
         fetchHighScores,
         setGameEnabled,
         setEyeTracking: (on) => setEyeTracking(on),

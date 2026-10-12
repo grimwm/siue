@@ -12,7 +12,6 @@ import type { ScoreConfig, ScoresClient } from './scores.ts';
 import { highScoreRows } from './scores.ts';
 import { renderGameOver } from './ui/gameover.tsx';
 import type { Board } from './ui/gameover.tsx';
-import { renderHsRows } from './ui/board.tsx';
 
 export interface GameOverDeps {
   game: Game;
@@ -27,8 +26,8 @@ export interface GameOverDeps {
   resetRunStats: () => void;
   /** mount.html's #cylon-gameover-root, where the panel is drawn. */
   root: HTMLElement | null;
-  /** The settings panel's weekly list. */
-  highScoresEl: HTMLElement | null;
+  /** The board changed: the settings panel redraws its weekly list. */
+  boardChanged: () => void;
 }
 
 export interface GameOver {
@@ -78,7 +77,7 @@ export function createGameOver(d: GameOverDeps): GameOver {
   const focus = (id: string): void => { document.getElementById(id)?.focus(); };
 
   function renderHighScores(): void {
-    if (d.highScoresEl) renderHsRows(d.highScoresEl, highScoreRows(scores.board()));
+    d.boardChanged();
     draw();
   }
 
@@ -86,8 +85,6 @@ export function createGameOver(d: GameOverDeps): GameOver {
     const config = await scores.load();
     if (config) {
       resetBlurb = d.weeklyResetText(config);
-      const weekly = document.getElementById('cylon-weekly-reset');
-      if (weekly) weekly.textContent = resetBlurb;
     }
     renderHighScores();
   }

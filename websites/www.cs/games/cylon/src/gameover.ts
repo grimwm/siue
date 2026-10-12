@@ -3,7 +3,8 @@
  * When a run ends the panel opens: why it ended, the run's KOs and hull, and,
  * if the score earns a place on the weekly board, three spinning initials to
  * record it (the score client in scores.ts does the talking to scores.php);
- * otherwise the board itself. The same board is drawn in the settings panel.
+ * otherwise the board itself, with This week and All time tabs. The settings
+ * panel draws the weekly board.
  * This module owns the panel, the initials entry and the board's markup in both
  * places; the run's record, and starting or closing a run, stay the game's.
  *
@@ -59,10 +60,37 @@ export function createGameOver(d: GameOverDeps): GameOver {
     gameOverScoresEl, scoreSubmitBtn, initialsErrorEl, playAgainBtn, initialLetters, initialsRoot } = d;
 
   let activeInitialIdx = 0;
+  type Board = 'week' | 'alltime';
+  let activeBoard: Board = 'week';
+  const tabs = (): HTMLElement[] => Array.from(gameOverBoardEl?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []);
+  const allTimeNoteEl = (): HTMLElement | null => document.getElementById('cylon-gameover-alltime');
 
   function renderHighScores(list: readonly ScoreEntry[] = scores.board()): void {
     if (highScoresEl) highScoresEl.innerHTML = formatHighScoreRows(list);
-    if (gameOverScoresEl) gameOverScoresEl.innerHTML = formatHighScoreRows(list);
+    if (gameOverScoresEl) {
+      gameOverScoresEl.innerHTML = formatHighScoreRows(activeBoard === 'alltime' ? scores.alltime() : list);
+    }
+  }
+
+  function selectBoard(board: Board, focus = false): void {
+    activeBoard = board;
+    tabs().forEach((tab) => {
+      const on = tab.dataset.board === board;
+      tab.setAttribute('aria-selected', String(on));
+      tab.tabIndex = on ? 0 : -1;
+      if (on) {
+        gameOverScoresEl?.parentElement?.setAttribute('aria-labelledby', tab.id);
+        if (focus) tab.focus();
+      }
+    });
+    renderHighScores();
+  }
+
+  function showAllTimeRank(rank: number | null): void {
+    const note = allTimeNoteEl();
+    if (!note) return;
+    note.hidden = rank === null;
+    note.textContent = rank === null ? '' : `New all-time #${rank}!`;
   }
 
   function showScoreConfig(config: ScoreConfig): void {
@@ -136,9 +164,11 @@ export function createGameOver(d: GameOverDeps): GameOver {
   }
 
   async function submitHighScore(score: number, initials: string): Promise<boolean> {
+    showAllTimeRank(null);
     const result = await scores.submit(score, initials, game.run.pendingScore ? game.run.pendingScore.hits : game.run.hitsTaken);
     if (result.saved) {
       setInitialsError('');
+      showAllTimeRank(result.allTimeRank);
     } else if (result.problem === 'invalid-initials') {
       setInitialsError("Those initials aren't valid — choose another.");
     } else if (result.problem === 'save-failed') {
@@ -172,6 +202,8 @@ export function createGameOver(d: GameOverDeps): GameOver {
     if (gameOverEl) gameOverEl.hidden = true;
     if (gameOverEntryEl) gameOverEntryEl.hidden = false;
     if (gameOverBoardEl) gameOverBoardEl.hidden = true;
+    showAllTimeRank(null);
+    selectBoard('week');
     game.run = state.setEndReason(state.clearPendingScore(game.run), null);
   }
 
@@ -255,6 +287,18 @@ export function createGameOver(d: GameOverDeps): GameOver {
           e.preventDefault();
           scoreSubmitBtn?.click();
         }
+      });
+    });
+
+    tabs().forEach((tab, i, all) => {
+      tab.addEventListener('click', () => selectBoard(tab.dataset.board === 'alltime' ? 'alltime' : 'week'));
+      tab.addEventListener('keydown', (e) => {
+        const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        const edge = e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : -1;
+        const to = step ? (i + step + all.length) % all.length : edge;
+        if (to < 0) return;
+        e.preventDefault();
+        selectBoard(all[to]?.dataset.board === 'alltime' ? 'alltime' : 'week', true);
       });
     });
 

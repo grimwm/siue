@@ -43,7 +43,7 @@ foreach ($sheets as $abs) {
 const NEVER_SHIPS = '~'
     . '(^|/)src/|(^|/)tools/|^tests/|/protocol/|/node_modules/'
     . '|-test\.[a-z]+$|(^|/)test\.sh$|(^|/)tsconfig[^/]*\.json$|(^|/)package(-lock)?\.json$'
-    . '|(^|/)\.gitignore$|(^|/)README\.md$|/fx-editor\.|/fx/blender/|^games/tankity/game\.yaml$'
+    . '|(^|/)\.gitignore$|^games/[^/]+/test/|(^|/)README\.md$|/fx-editor\.|/fx/blender/|^games/tankity/game\.yaml$'
     . '|\.(blend1?|wav|flac|aiff?)$'
     . '~';
 $tracked = [];

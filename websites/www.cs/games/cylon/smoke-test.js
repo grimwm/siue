@@ -47,5 +47,22 @@ if (fs.existsSync(siteMain)) {
   check('reaches-no-site-variable', reachedConst.length === 0, reachedConst.join(', '));
 }
 
+// The board resets on Sunday; no page, manifest or description may still say Monday.
+{
+  const text = (...p) => fs.readFileSync(path.join(__dirname, ...p), 'utf8');
+  const home = text('..', '..', 'index.html');
+  const homeCylon = home.slice(home.indexOf('cylon-weekly-reset') - 200, home.indexOf('cylon-weekly-reset') + 300);
+  const files = {
+    'metadata.yaml': text('metadata.yaml'),
+    'manifest.webmanifest': text('manifest.webmanifest'),
+    'mount.html': text('mount.html'),
+    'index.html (cylon block)': homeCylon,
+    'play/cylon/index.html': text('..', '..', 'play', 'cylon', 'index.html'),
+  };
+  check('home-page-cylon-block-found', home.includes('cylon-weekly-reset'), '');
+  const stale = Object.entries(files).filter(([, body]) => /\bMonday\b/.test(body)).map(([name]) => name);
+  check('no-cylon-file-says-monday', stale.length === 0, stale.join(', '));
+}
+
 console.log(failed ? `SMOKE-FAIL ${failed}` : 'SMOKE-OK');
 process.exit(failed ? 1 : 0);

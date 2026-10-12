@@ -9,11 +9,15 @@ Homepage mini-game module. Licensed under the GNU GPL v3 (see `LICENSE`).
 - `mount.html` — scanner, battlefield, FX, help, game-over (injected into `#game-root`)
 - `scores.php` — high-score API
 - `data/config.json` — timezone, week boundary, board size, blocked initials, and request limits
-- `data/scores.json` — live board (created on the server; not part of the source tree)
+- `data/scores.json` — live boards (created on the server; not part of the source tree)
+- `test/php/ScoresTest.php` — PHPUnit cases for `scores.php` (`vendor/bin/phpunit --testsuite cylon` from the site root)
 - `data/.htaccess` — denies HTTP access to `data/`
 - `tools/install-files.php` — writes `manifest.webmanifest` and the `?v=` cache-busters inside `cylon.js`
 - `tools/ts-build.mjs` — the TypeScript build; `package.json`, `package-lock.json`, `tsconfig.json`, `src/tsconfig.dom.json` configure it
 - `*-test.js`, `install-files-test.php` — unit and static checks, run from this folder
+
+## High scores
+`scores.php` keeps two boards of at most `maxScores` rows each (score, hits, initials, time): the weekly board, which resets Sunday 00:00 America/Chicago (DST follows the timezone, not a fixed offset), and an all-time board that no reset touches. Every accepted score is ranked onto both, highest first, an earlier time winning a tie. The store is one JSON object, `{"week": [...], "alltime": [...]}`, read and rewritten under one `flock`; a store that is still a bare array is read as both boards. `GET` and `POST` answer with `scores` (this week) and `alltime`. The game-over panel shows them as This week and All time tabs, and the settings panel lists the weekly board. `CYLON_SCORES_FILE` points the store somewhere else; the PHPUnit suite uses it, and defines `CYLON_SCORES_LIBRARY` so that requiring `scores.php` serves no request.
 
 ## Loading it
 The page loads the entry module and calls it once:
@@ -100,4 +104,4 @@ The page links the stylesheets in `css/`, in this order, and the order is the ca
 They are `<link>` tags in the site's `index.html`, each with a content-hash `?v=` that `php tools/site-versions.php` (site root) writes, not `@import`s from one file: an `@import` is fetched only after its parent arrives, a round trip the home page would wait out before it paints. That tool fails if a file in `css/` is not linked, is linked twice, or is linked out of order. `custom.css` at the site root imports them in the same order for any page that still links it.
 
 ## Tests
-From this folder: `node rules-test.js && node playfield-test.js && node scores-test.js && node audio-test.js && node state-test.js && node abilities-test.js && node field-test.js && node smoke-test.js && php install-files-test.php`. Browser specs for the home page and the game are in `../../tests/e2e` (`home-eye`, `cylon-help`).
+From this folder (`./test.sh` also runs the PHPUnit suite): `node rules-test.js && node playfield-test.js && node scores-test.js && node audio-test.js && node state-test.js && node abilities-test.js && node field-test.js && node smoke-test.js && php install-files-test.php`. Browser specs for the home page and the game are in `../../tests/e2e` (`home-eye`, `cylon-help`).

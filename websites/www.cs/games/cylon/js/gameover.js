@@ -1,11 +1,36 @@
 export function createGameOver(d) {
     const { game, state, scores, formatHighScoreRows, weeklyResetText, currentHp, setGameEnabled, resetRunStats, highScoresEl, gameOverEl, gameOverReasonEl, gameOverKosEl, gameOverHitsEl, gameOverEntryEl, gameOverBoardEl, gameOverScoresEl, scoreSubmitBtn, initialsErrorEl, playAgainBtn, initialLetters, initialsRoot } = d;
     let activeInitialIdx = 0;
+    let activeBoard = 'week';
+    const tabs = () => Array.from(gameOverBoardEl?.querySelectorAll('[role="tab"]') ?? []);
+    const allTimeNoteEl = () => document.getElementById('cylon-gameover-alltime');
     function renderHighScores(list = scores.board()) {
         if (highScoresEl)
             highScoresEl.innerHTML = formatHighScoreRows(list);
-        if (gameOverScoresEl)
-            gameOverScoresEl.innerHTML = formatHighScoreRows(list);
+        if (gameOverScoresEl) {
+            gameOverScoresEl.innerHTML = formatHighScoreRows(activeBoard === 'alltime' ? scores.alltime() : list);
+        }
+    }
+    function selectBoard(board, focus = false) {
+        activeBoard = board;
+        tabs().forEach((tab) => {
+            const on = tab.dataset.board === board;
+            tab.setAttribute('aria-selected', String(on));
+            tab.tabIndex = on ? 0 : -1;
+            if (on) {
+                gameOverScoresEl?.parentElement?.setAttribute('aria-labelledby', tab.id);
+                if (focus)
+                    tab.focus();
+            }
+        });
+        renderHighScores();
+    }
+    function showAllTimeRank(rank) {
+        const note = allTimeNoteEl();
+        if (!note)
+            return;
+        note.hidden = rank === null;
+        note.textContent = rank === null ? '' : `New all-time #${rank}!`;
     }
     function showScoreConfig(config) {
         const blurb = weeklyResetText(config);
@@ -75,9 +100,11 @@ export function createGameOver(d) {
         setActiveInitial(0);
     }
     async function submitHighScore(score, initials) {
+        showAllTimeRank(null);
         const result = await scores.submit(score, initials, game.run.pendingScore ? game.run.pendingScore.hits : game.run.hitsTaken);
         if (result.saved) {
             setInitialsError('');
+            showAllTimeRank(result.allTimeRank);
         }
         else if (result.problem === 'invalid-initials') {
             setInitialsError("Those initials aren't valid — choose another.");
@@ -111,6 +138,8 @@ export function createGameOver(d) {
             gameOverEntryEl.hidden = false;
         if (gameOverBoardEl)
             gameOverBoardEl.hidden = true;
+        showAllTimeRank(null);
+        selectBoard('week');
         game.run = state.setEndReason(state.clearPendingScore(game.run), null);
     }
     async function showGameOver(reason) {
@@ -204,6 +233,18 @@ export function createGameOver(d) {
                     e.preventDefault();
                     scoreSubmitBtn?.click();
                 }
+            });
+        });
+        tabs().forEach((tab, i, all) => {
+            tab.addEventListener('click', () => selectBoard(tab.dataset.board === 'alltime' ? 'alltime' : 'week'));
+            tab.addEventListener('keydown', (e) => {
+                const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+                const edge = e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : -1;
+                const to = step ? (i + step + all.length) % all.length : edge;
+                if (to < 0)
+                    return;
+                e.preventDefault();
+                selectBoard(all[to]?.dataset.board === 'alltime' ? 'alltime' : 'week', true);
             });
         });
         if (scoreSubmitBtn) {

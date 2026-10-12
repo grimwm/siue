@@ -13,6 +13,7 @@ const check = (name, ok, detail = '') => {
 
 function fakeServer(opts = {}) {
   const log = [];
+  let allTime = opts.alltime ?? [{ initials: 'OLD', score: 40, at: '2026-08-01T12:00:00Z' }, { initials: 'AAA', score: 12, at: '2026-10-05T12:00:00Z' }];
   let board = opts.board ?? [{ initials: 'AAA', score: 12, at: '2026-10-05T12:00:00Z' }];
   const server = {
     log,
@@ -23,14 +24,15 @@ function fakeServer(opts = {}) {
       const reply = (status, data) => ({ ok: status >= 200 && status < 300, status, json: async () => { if (data === undefined) throw new Error('no body'); return data; } });
       if (opts.down) throw new TypeError('network down');
       if (!init.method) {
-        return reply(200, { csrf: 'tok-1', config: { maxScores: 3, blockedInitials: ['bad', 'XX', 'nope1'], weekStartsOn: 'monday', timezone: 'America/Chicago' }, scores: board });
+        return reply(200, { csrf: 'tok-1', alltime: allTime, config: { maxScores: 3, blockedInitials: ['bad', 'XX', 'nope1'], weekStartsOn: 'monday', timezone: 'America/Chicago' }, scores: board });
       }
       if (body.op === 'start') return reply(200, { run: 'run-1' });
       if (body.op === 'score') {
         if (body.run !== 'run-1') return reply(403, { error: 'bad run' });
         if (opts.rejectInitials) return reply(400, { error: 'invalid initials', scores: board });
         board = [...board, { initials: body.initials, score: body.score, at: '2026-10-10T12:00:00Z' }].sort((a, b) => b.score - a.score);
-        return reply(200, { scores: board });
+        allTime = [...allTime, { initials: body.initials, score: body.score, at: '2026-10-10T12:00:00Z' }].sort((a, b) => b.score - a.score).slice(0, 10);
+        return reply(200, { scores: board, alltime: allTime });
       }
       return reply(400, { error: 'unknown' });
     },
@@ -45,12 +47,22 @@ function fakeServer(opts = {}) {
   check('empty-before-loading', client.board().length === 0, '');
   const config = await client.load();
   check('load-returns-the-config', config && config.maxScores === 3, JSON.stringify(config));
+  check('load-keeps-the-all-time-board', client.alltime().length === 2 && client.alltime()[0].initials === 'OLD', JSON.stringify(client.alltime()));
   check('load-keeps-the-board', client.board().length === 1 && client.board()[0].score === 12, '');
   check('blocked-initials-come-from-the-config', client.isBlocked('BAD') && client.isBlocked('bad') && client.isBlocked('XX') === false, '');
   check('malformed-blocked-entries-are-ignored', client.isBlocked('NOPE1') === false, '');
   await client.startRun();
   check('the-token-rides-later-calls', server.log[1].csrf === 'tok-1' && server.log[1].body.op === 'start', JSON.stringify(server.log));
   check('first-call-had-no-token', server.log[0].csrf === '', JSON.stringify(server.log[0]));
+}
+
+// A run that misses the all-time board has no all-time place; a server without one leaves the list empty.
+{
+  const client = createScoresClient('scores.php', { fetch: fakeServer({ alltime: Array.from({ length: 10 }, () => ({ initials: 'TOP', score: 99, at: '2026-08-01T12:00:00Z' })) }).fetch });
+  await client.load();
+  await client.startRun();
+  const r = await client.submit(5, 'LOW', 0);
+  check('a-run-off-the-all-time-board-has-no-place', r.saved && r.allTimeRank === null, JSON.stringify(r));
 }
 
 // The qualifying rule: open seats, else strictly above the lowest shown.
@@ -74,6 +86,8 @@ function fakeServer(opts = {}) {
   check('submit-saves', r.saved && r.problem === null, JSON.stringify(r));
   const post = server.log.at(-1).body;
   check('submit-sends-score-hits-initials-run', post.op === 'score' && post.score === 20 && post.hits === 4 && post.initials === 'ABC' && post.run === 'run-1', JSON.stringify(post));
+  check('submit-reports-the-all-time-place', r.allTimeRank === 2, JSON.stringify(r));
+  check('submit-adopts-the-new-all-time-board', client.alltime().map(e => e.score).join() === '40,20,12', JSON.stringify(client.alltime()));
   check('submit-adopts-the-new-board', client.board()[0].score === 20, JSON.stringify(client.board()));
   const again = await client.submit(21, 'abc', 4);
   check('a-run-token-is-single-use', !again.saved && again.problem === 'save-failed', JSON.stringify(again));
@@ -128,6 +142,7 @@ function fakeServer(opts = {}) {
 }
 
 // Text.
+check('reset-text-sunday-central', weeklyResetText({ weekStartsOn: 'sunday', timezone: 'America/Chicago' }) === 'Play often — scores reset every Sunday at midnight Central.', weeklyResetText({ weekStartsOn: 'sunday', timezone: 'America/Chicago' }));
 check('reset-text-monday-central', weeklyResetText({ weekStartsOn: 'monday', timezone: 'America/Chicago' }) === 'Play often — scores reset every Monday at midnight Central.', weeklyResetText({ weekStartsOn: 'monday', timezone: 'America/Chicago' }));
 check('reset-text-sunday-other-zone', weeklyResetText({ weekStartsOn: 'sunday', timezone: 'UTC' }) === 'Play often — scores reset every Sunday at midnight UTC.', '');
 check('empty-board-text', formatHighScoreRows([]) === '<li class="cylon-hs-empty">No scores yet</li>', '');

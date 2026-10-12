@@ -16,3 +16,4 @@ node state-test.js
 node abilities-test.js
 node field-test.js
 node smoke-test.js
+../../vendor/bin/phpunit -c ../../phpunit.xml --testsuite cylon

@@ -19,6 +19,19 @@ const TANKITY_BUSY_MS = 2000; // a writer that waits longer answers "busy" inste
 const TANKITY_LOCAL_FS = ['ext2', 'ext3', 'ext4', 'xfs', 'btrfs', 'zfs', 'f2fs', 'jfs', 'reiserfs', 'bcachefs', 'tmpfs', 'overlay', 'apfs', 'hfs'];
 const TANKITY_DENY = "# Tankity's database: PHP reads it, browsers may not.\nRequire all denied\n";
 
+/* The storage directory cannot be trusted (someone else's, a link, open to
+   others). Callers answer 503; the cause is already in the log. */
+final class TankityStorageRefused extends RuntimeException
+{
+}
+
+/* Logs one line naming the path and the problem, then refuses. */
+function tankity_refuse(string $dir, string $problem): never
+{
+    error_log("tankity storage: $dir $problem; remove it, or set data_dir");
+    throw new TankityStorageRefused("$dir $problem");
+}
+
 /* The mode for a directory ('dir') or file ('file') Tankity's PHP creates.
    Kit\StoreModes decides for every game; README "Storage" says who else can
    reach them on a host where PHP runs as a shared user. */
@@ -46,18 +59,31 @@ function tankity_euid(): int
    enter: /var/tmp is shared, so a directory another account made is refused. */
 function tankity_claim_dir(string $dir, bool $private): string
 {
-    if (!is_dir($dir) && !is_link($dir)) {
-        if (!@mkdir($dir, tankity_mode('dir'), true) && !is_dir($dir)) {
+    // mkdir is the atomic step: if the name is taken, whatever holds it is
+    // verified below, never adopted.
+    if (!file_exists($dir) && !is_link($dir)) {
+        if (!@mkdir($dir, tankity_mode('dir'), true) && !file_exists($dir) && !is_link($dir)) {
             throw new RuntimeException("cannot create $dir");
         }
-        @chmod($dir, tankity_mode('dir'));
     }
     clearstatcache(true, $dir);
-    if (is_link($dir) || !is_dir($dir) || !is_writable($dir)) {
+    $st = @lstat($dir); // lstat: a link is reported as a link, not followed
+    if ($st === false) {
         throw new RuntimeException("$dir is not a writable directory");
     }
-    if ($private && (fileowner($dir) !== tankity_euid() || (fileperms($dir) & 0077) !== 0)) {
-        throw new RuntimeException("$dir is not private to this account");
+    if (($st['mode'] & 0170000) === 0120000) {
+        $private ? tankity_refuse($dir, 'is a symbolic link') : throw new RuntimeException("$dir is not a writable directory");
+    }
+    if (($st['mode'] & 0170000) !== 0040000 || !is_writable($dir)) {
+        throw new RuntimeException("$dir is not a writable directory");
+    }
+    if ($private) {
+        if ($st['uid'] !== tankity_euid()) {
+            tankity_refuse($dir, 'belongs to another account');
+        }
+        if (($st['mode'] & 0777) !== tankity_mode('dir')) {
+            tankity_refuse($dir, sprintf('has mode %04o, not %04o', $st['mode'] & 0777, tankity_mode('dir')));
+        }
     }
     return $dir;
 }
@@ -181,6 +207,16 @@ function tankity_schema(PDO $db): void
     }
 }
 
+/* The database and any journal or WAL files beside it are private. */
+function tankity_private_files(string $path): void
+{
+    foreach (['', '-wal', '-shm', '-journal'] as $suffix) {
+        if (is_file($path . $suffix)) {
+            @chmod($path . $suffix, tankity_mode('file'));
+        }
+    }
+}
+
 /* The database in the storage directory, opened once per request. */
 function tankity_db(): PDO
 {
@@ -190,17 +226,23 @@ function tankity_db(): PDO
         return $open[$dir];
     }
     $path = $dir . '/' . TANKITY_DB_FILE;
-    $fresh = !file_exists($path);
-    $db = new PDO('sqlite:' . $path, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-    if ($fresh) {
-        // SQLite gives its journal and WAL files the database file's mode.
-        @chmod($path, tankity_mode('file'));
+    if (is_link($path)) {
+        tankity_refuse($path, 'is a symbolic link');
     }
-    $db->exec('PRAGMA busy_timeout = ' . TANKITY_BUSY_MS);
-    $mode = tankity_journal_mode($dir);
-    $db->query('PRAGMA journal_mode = ' . $mode)->fetchColumn();
-    $db->exec('PRAGMA synchronous = ' . ($mode === 'wal' ? 'NORMAL' : 'FULL'));
-    tankity_schema($db);
+    // The host's umask (0022) would make the database and its -wal/-shm side
+    // files readable by everyone; create them private instead.
+    $old = umask(0077);
+    try {
+        $db = new PDO('sqlite:' . $path, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $db->exec('PRAGMA busy_timeout = ' . TANKITY_BUSY_MS);
+        $mode = tankity_journal_mode($dir);
+        $db->query('PRAGMA journal_mode = ' . $mode)->fetchColumn();
+        $db->exec('PRAGMA synchronous = ' . ($mode === 'wal' ? 'NORMAL' : 'FULL'));
+        tankity_schema($db);
+        tankity_private_files($path);
+    } finally {
+        umask($old);
+    }
     return $open[$dir] = $db;
 }
 

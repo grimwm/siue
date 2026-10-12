@@ -40,6 +40,35 @@ final class DbTest extends TestCase
         }
     }
 
+    public function testTheDirectoryAndEveryDatabaseFileArePrivateUnderALooseUmask(): void
+    {
+        $old = umask(0022);
+        try {
+            $db = tankity_db();
+            $db->exec("INSERT INTO meta (k, v) VALUES ('w', '1')");
+            $this->assertSame(0022, umask(), 'the umask is back as it was');
+        } finally {
+            umask($old);
+        }
+        $this->assertSame(0700, fileperms($this->dir) & 0777);
+        $files = glob($this->dir . '/' . TANKITY_DB_FILE . '*') ?: [];
+        $this->assertContains($this->dir . '/' . TANKITY_DB_FILE, $files);
+        if (tankity_journal_mode($this->dir) === 'wal') {
+            $this->assertContains($this->dir . '/' . TANKITY_DB_FILE . '-wal', $files);
+            $this->assertContains($this->dir . '/' . TANKITY_DB_FILE . '-shm', $files);
+        }
+        foreach ($files as $f) {
+            $this->assertSame(0600, fileperms($f) & 0777, "$f is private");
+        }
+    }
+
+    public function testASymlinkedDatabaseIsRefused(): void
+    {
+        symlink($this->dir . '/elsewhere.sqlite', $this->dir . '/' . TANKITY_DB_FILE);
+        $this->expectException(TankityStorageRefused::class);
+        tankity_db();
+    }
+
     public function testTheSchemaStepsRunOnce(): void
     {
         $db = tankity_db();

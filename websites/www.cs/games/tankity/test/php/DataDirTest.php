@@ -72,6 +72,53 @@ final class DataDirTest extends TestCase
         tankity_pick_dir($this->root . '/data', $this->root . '/link', fn(string $p): bool => false);
     }
 
+    public function testASquattedFallbackIsRefusedWithAClearLogLine(): void
+    {
+        $log = $this->root . '/php.log';
+        $old = ini_set('error_log', $log);
+        $refusals = [];
+        try {
+            $open = $this->root . '/open';
+            mkdir($open, 0755);
+            chmod($open, 0755);
+            mkdir($this->root . '/elsewhere', 0700);
+            symlink($this->root . '/elsewhere', $this->root . '/link');
+            foreach ([$open, $this->root . '/link'] as $bad) {
+                try {
+                    tankity_pick_dir($this->root . '/data', $bad, fn(string $p): bool => false);
+                    $this->fail("$bad was accepted");
+                } catch (TankityStorageRefused $e) {
+                    $refusals[] = $e->getMessage();
+                }
+            }
+            if (tankity_euid() !== 0 && is_writable('/var/tmp') && fileowner('/var/tmp') !== tankity_euid()) {
+                $this->expectException(TankityStorageRefused::class);
+                try {
+                    tankity_claim_dir('/var/tmp', true);
+                } finally {
+                    $text = (string) file_get_contents($log);
+                    $this->assertStringContainsString('/var/tmp belongs to another account; remove it, or set data_dir', $text);
+                }
+            }
+        } finally {
+            ini_set('error_log', $old === false ? '' : $old);
+            $text = (string) @file_get_contents($log);
+            $this->assertStringContainsString("$open has mode 0755, not 0700; remove it, or set data_dir", $text);
+            $this->assertStringContainsString('/link is a symbolic link; remove it, or set data_dir', $text);
+            $this->assertCount(2, $refusals);
+        }
+    }
+
+    public function testAnExistingDirectoryIsVerifiedNeverJustUsed(): void
+    {
+        $mine = $this->root . '/mine';
+        mkdir($mine, 0700);
+        $this->assertSame($mine, tankity_claim_dir($mine, true));
+        chmod($mine, 0750);
+        $this->expectException(TankityStorageRefused::class);
+        tankity_claim_dir($mine, true);
+    }
+
     public function testTheUsernameIsTheScriptOwnersAndSafeInAPath(): void
     {
         $name = tankity_username();

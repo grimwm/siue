@@ -59,7 +59,7 @@ test:
 	composer install --quiet --no-interaction
 	vendor/bin/phpunit --testsuite site
 	vendor/bin/phpunit --testsuite kit
-	cd games && npm ci --silent && node --test _kit/test/ _kit/build/ && node_modules/.bin/tsc -p _kit/tsconfig.json
+	cd games && npm ci --silent && node --test '_kit/test/*.test.mjs' '_kit/build/*.test.mjs' && node_modules/.bin/tsc -p _kit/tsconfig.json
 	for t in games/*/test.sh; do echo "== $$t"; $$t || exit 1; done
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html && vendor/bin/phpunit --testsuite tankity-docker'
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php protocol/generate.php --check'

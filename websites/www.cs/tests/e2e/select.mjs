@@ -19,7 +19,7 @@ const SITE = 'websites/www.cs/';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SPECS = readdirSync(HERE).filter(f => f.endsWith('.spec.mjs')).sort();
 const tankity = SPECS.filter(f => f.startsWith('tankity-'));
-const shell = ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'home-eye.spec.mjs', 'cylon-help.spec.mjs'];
+const shell = ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'home-eye.spec.mjs', 'cylon-help.spec.mjs', 'cylon-play.spec.mjs'];
 
 /* [pattern, what to run]: 'NONE', 'ALL', a list of specs, or a function of
    the regex match returning a list. */
@@ -35,7 +35,7 @@ const RULES = [
   [new RegExp(`^${SITE}tests/[^/]+\\.php$`), 'NONE'], // unit tests
   [new RegExp(`^${SITE}(composer\\.(json|lock)|phpunit\\.xml)$`), 'NONE'],
   [new RegExp(`^${SITE}tests/php/`), 'NONE'],
-  [new RegExp(`^${SITE}games/_kit/php/testing/`), 'NONE'],
+  [new RegExp(`^${SITE}games/_kit/php/(testing|tests)/`), 'NONE'],
   [new RegExp(`^${SITE}games/[^/]+/[^/]*-test\\.(php|js)$`), 'NONE'], // unit and smoke tests
   [new RegExp(`^${SITE}games/[^/]+/test\\.sh$`), 'NONE'], // a game's unit-suite runner
   [new RegExp(`^${SITE}games/[^/]+/(tools|protocol|fx/blender|audio/sfx/src)/`), 'NONE'], // generators, fixtures, sources
@@ -65,7 +65,7 @@ const RULES = [
   // Cylon's TypeScript (src/, the compiled js/, tsconfig.json, package.json) and
   // the rest of its folder: the home page and the games hub load it.
   [new RegExp(`^${SITE}games/cylon/`), shell],
-  [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.mjs', 'games-pwa.spec.mjs']],
+  [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'crete-play.spec.mjs']],
   // The site's own TypeScript (src/ compiles to main.js and play/play.js) and the
   // settings that decide how: the lockfile only pins the compiler.
   [new RegExp(`^${SITE}package-lock\\.json$`), 'NONE'],

@@ -1,8 +1,7 @@
-// The firing-range preview without a browser.
-// src/preview.ts takes its weapons, effects and
-// result line as an environment, so each case steps the demo on a clock the
-// test moves by hand (fixed 1/60 s frames) and records what the environment
-// was asked to do. The arsenal is the real one, from game.json.
+// The firing-range preview without a browser. src/preview.ts takes its weapons,
+// effects and result line as an environment, so each case steps the demo on a
+// clock the test moves by hand (fixed 1/60 s frames) and records what the
+// environment was asked to do. The arsenal is the real one, from game.json.
 import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';

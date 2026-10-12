@@ -1,8 +1,7 @@
-// Tests for the Preact overlays in src/ui: each is rendered
-// with sample props into the Node DOM stub (test/dom-stub.mjs) and its key DOM
-// asserted: the ids and classes game.css and the browser specs rely on, the
-// title bar's cells, the shop's rows, and that every click reaches the callback
-// the game passed.
+// Tests for the Preact overlays in src/ui: each is rendered with sample props into
+// the Node DOM stub (test/dom-stub.mjs) and its key DOM asserted: the ids and
+// classes game.css and the browser specs rely on, the title bar's cells, the
+// shop's rows, and that every click reaches the callback the game passed.
 import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';

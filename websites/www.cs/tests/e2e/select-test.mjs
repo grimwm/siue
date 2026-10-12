@@ -12,10 +12,10 @@ const has = (name, got, specs) => check(name, Array.isArray(got) && specs.every(
 
 check('docs-only-runs-nothing', select(['README.md', `${S}games/tankity/README.md`, 'docs/plan.md']), 'NONE');
 check('game-test-runner-runs-nothing', select([`${S}games/tankity/test.sh`, `${S}games/cylon/test.sh`]), 'NONE');
-check('unit-tests-run-nothing', select([`${S}games/tankity/rooms-sim-test.php`, `${S}games/tankity/smoke-test.js`, `${S}tests/games-hub-test.php`]), 'NONE');
+check('unit-tests-run-nothing', select([`${S}games/tankity/test/php/checks/rooms-sim.php`, `${S}games/tankity/test/smoke.test.mjs`, `${S}tests/games-hub-test.php`]), 'NONE');
 check('phpunit-config-runs-no-browser-specs', select([`${S}phpunit.xml`]), 'NONE');
 check('site-php-tests-run-no-browser-specs', select([`${S}tests/php/SiteVersionsTest.php`]), 'NONE');
-check('sim-vectors-run-nothing', select([`${S}games/tankity/sim-vectors-test.js`, `${S}games/tankity/protocol/sim-vectors.php`, `${S}games/tankity/protocol/sim-vectors.json`]), 'NONE');
+check('sim-vectors-run-nothing', select([`${S}games/tankity/test/sim-vectors.test.mjs`, `${S}games/tankity/protocol/sim-vectors.php`, `${S}games/tankity/protocol/sim-vectors.json`]), 'NONE');
 check('deploy-only-runs-nothing', select([`${S}deploy.sh`, '.github/workflows/deploy.yml']), 'NONE');
 check('outside-the-site-runs-nothing', select(['scripts/deploy-hash']), 'NONE');
 check('harness-runs-everything', select([`${S}tests/e2e/helpers.mjs`]), 'ALL');
@@ -38,7 +38,7 @@ has('tankity-tsconfig-runs-its-specs', select([`${S}games/tankity/tsconfig.json`
 has('tankity-build-config-runs-its-specs', select([`${S}games/tankity/build.json`]), ['tankity-solo.spec.mjs', 'games-pwa.spec.mjs']);
 check('tankity-lockfile-alone-runs-no-browser', select([`${S}games/tankity/package-lock.json`]), 'NONE');
 check('tankity-lockfile-with-a-module-still-runs-its-specs', select([`${S}games/tankity/package-lock.json`, `${S}games/tankity/dist/main.js`]).includes('tankity-solo.spec.mjs'), true);
-check('tankity-build-tool-runs-nothing', select([`${S}games/tankity/tools/install-files.php`, `${S}games/tankity/tools/dom-stub.mjs`, `${S}games/tankity/ui-test.js`, `${S}games/tankity/.gitignore`]), 'NONE');
+check('tankity-build-tool-runs-nothing', select([`${S}games/tankity/tools/install-files.php`, `${S}games/tankity/test/dom-stub.mjs`, `${S}games/tankity/test/ui.test.mjs`, `${S}games/tankity/.gitignore`]), 'NONE');
 check('cylon-lockfile-alone-runs-no-browser', select([`${S}games/cylon/package-lock.json`]), 'NONE');
 check('cylon-build-tool-runs-nothing', select([`${S}games/cylon/tools/ts-build.mjs`, `${S}games/cylon/.gitignore`, `${S}games/cylon/rules-test.js`]), 'NONE');
 has('cylon-sources-run-the-shell-specs', select([`${S}games/cylon/src/rules.ts`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs', 'cylon-play.spec.mjs', 'games-hub.spec.mjs']);

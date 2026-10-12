@@ -1,10 +1,9 @@
-// The room volley replay without a browser.
-// src/replay.ts plays recorded volleys through an
-// environment of callbacks, so each case steps the replay on a clock the test
-// moves by hand and checks what the room would show: the shell's place at
-// fixed times against the path points the server recorded (protocol/play-after-fire.json),
-// the blasts and hits at the moments the events say, the catch-up for a hidden
-// tab, and the 3x replay of the volley it keeps.
+// The room volley replay without a browser. src/replay.ts plays recorded volleys
+// through an environment of callbacks, so each case steps the replay on a clock
+// the test moves by hand and checks what the room would show: the shell's place at
+// fixed times against the path points the server recorded
+// (protocol/play-after-fire.json), the blasts and hits at the moments the events
+// say, the catch-up for a hidden tab, and the 3x replay of the volley it keeps.
 import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';

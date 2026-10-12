@@ -1,10 +1,9 @@
-// Headless smoke for the Scorched Earth rewrite.
-// Exercises the exact shipped bundle (dist/fx.js, then dist/main.js) with a
-// small DOM + canvas stub (test/dom-stub.mjs), driving only public inputs
-// (keydown/keyup). The stub is a real tree because the Preact overlays render
-// into it. Also holds the static checks on the page, CSS, source and PHP.
-// Fails loudly on any exception, a stuck turn loop, an unscrolled Space, or a
-// silent battlefield.
+// Headless smoke for the Scorched Earth rewrite. Exercises the exact shipped
+// bundle (dist/fx.js, then dist/main.js) with a small DOM + canvas stub
+// (test/dom-stub.mjs), driving only public inputs (keydown/keyup). The stub is a
+// real tree because the Preact overlays render into it. Also holds the static
+// checks on the page, CSS, source and PHP. Fails loudly on any exception, a stuck
+// turn loop, an unscrolled Space, or a silent battlefield.
 import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -1318,6 +1317,5 @@ await (async () => {
     check('own-shell-passes-out-of-gunner', hits(s, mx, my, 330, 360) === null && s.clear === true);
     check('own-shell-hits-gunner-coming-back', (hits(s, 330, 360, 300, 370) || {}).t === drone);
   }
-  console.log('SMOKE-OK turn=' + els['hud-turn'].textContent + ' score=' + els['hud-score'].textContent);
   for (const h of liveTimers) { clearTimeout(h); clearInterval(h); }
 })();

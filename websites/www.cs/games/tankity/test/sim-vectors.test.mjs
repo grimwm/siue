@@ -1,9 +1,8 @@
-// Replays the shared sim vectors (protocol/sim-vectors.json) through the
-// browser sim, src/sim.ts.
-// The vectors are written by `php protocol/sim-vectors.php` from rooms.php, so
-// a change to the browser sim or the room server's that the other side does
-// not follow fails here (or in the generator's --check) until they agree.
-// Passes when every case matches or is a marked known difference.
+// Replays the shared sim vectors (protocol/sim-vectors.json) through the browser
+// sim, src/sim.ts. The vectors are written by `php protocol/sim-vectors.php` from
+// rooms.php, so a change to the browser sim or the room server's that the other
+// side does not follow fails here (or in the generator's --check) until they
+// agree. Passes when every case matches or is a marked known difference.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -211,6 +210,7 @@ const clip = (v, n) => { const s = JSON.stringify(v); return s.length > n ? s.sl
 
 let failed = 0, known = 0, total = 0;
 const failures = [];
+const knownLines = [];
 const wl = JSON.stringify(VECTORS.weapons), loaded = JSON.stringify(arsenal.order);
 if (wl !== loaded) {
   failures.push(`weapons: the vectors cover ${wl} but the sim loads ${loaded} from game.json; run make sim-vectors`);
@@ -233,7 +233,7 @@ for (const [group, cases] of Object.entries(VECTORS.groups)) {
       const other = bad.filter(b => !allowed(b));
       if (other.length) {
         failures.push(`${group}/${c.name}: known difference (${c.knownPaths.join(', ')}), but other fields disagree too\n  ${other.slice(0, 6).join('\n  ')}`);
-      } else if (bad.length) { known++; console.log(`KNOWN ${group}/${c.name} :: ${c.known}`); }
+      } else if (bad.length) { known++; knownLines.push(`KNOWN ${group}/${c.name} :: ${c.known}`); }
       else failures.push(`${group}/${c.name}: marked as a known difference but client and server now agree; drop its reason in protocol/sim-vectors.php`);
     } else if (bad.length) {
       failures.push(`${group}/${c.name}\n  ${bad.slice(0, 6).join('\n  ')}\n  inputs:   ${clip(c.in, 700)}\n  expected: ${clip(c.out, 700)}\n  actual:   ${clip(got, 700)}`);
@@ -241,9 +241,9 @@ for (const [group, cases] of Object.entries(VECTORS.groups)) {
   }
 }
 failed = failures.length;
-for (const f of failures) console.log('FAIL ' + f);
 const summary = `SIM-VECTORS-OK ${total} cases (${known} known differences)`;
-test('client and server sims agree on every shared vector', () => {
-  assert.equal(failed, 0, `SIM-VECTORS-FAILED ${failed} of ${total}: client (src/sim.ts) and server (rooms.php) disagree; fix the side that is wrong, then run make sim-vectors`);
-  console.log(summary);
+test('client and server sims agree on every shared vector', t => {
+  for (const l of knownLines) t.diagnostic(l);
+  t.diagnostic(summary);
+  assert.equal(failed, 0, `SIM-VECTORS-FAILED ${failed} of ${total}: client (src/sim.ts) and server (rooms.php) disagree; fix the side that is wrong, then run make sim-vectors\n` + failures.join('\n'));
 });

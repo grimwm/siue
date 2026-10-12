@@ -1,6 +1,5 @@
-// The input module without a browser.
-// src/input.ts takes plain event objects, so the
-// key table, the command routing, the held keys and the arm movement run here
+// The input module without a browser. src/input.ts takes plain event objects, so
+// the key table, the command routing, the held keys and the arm movement run here
 // against the shipped game.json and a fake clock.
 import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';

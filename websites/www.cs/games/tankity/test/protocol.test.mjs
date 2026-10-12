@@ -1,9 +1,9 @@
 // The client's protocol types against the server and its fixtures.
 // src/protocol-fixtures.check.ts holds the fixtures' shapes to src/protocol.ts
-// (the check program, type-checked below), but a JSON import types every string
-// as `string`, so the literal unions are read out of protocol.ts here and
-// compared with the fixtures, with the action, phase and event names rooms.php
-// spells out, and with the events the client handles (src/*.ts).
+// (the check program, type-checked below), but a JSON import types every string as
+// `string`, so the literal unions are read out of protocol.ts here and compared
+// with the fixtures, with the action, phase and event names rooms.php spells out,
+// and with the events the client handles (src/*.ts).
 import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';

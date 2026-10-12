@@ -1,8 +1,7 @@
-// The renderer reads and paints; it never writes.
-// src/render.ts is driven with a recording canvas
-// stub and a view that is frozen all the way down: any assignment to the view
-// (a tank, a boom, the terrain) throws in module code, so a frame that tried to
-// advance or change game state fails here without a browser.
+// The renderer reads and paints; it never writes. src/render.ts is driven with a
+// recording canvas stub and a view that is frozen all the way down: any assignment
+// to the view (a tank, a boom, the terrain) throws in module code, so a frame that
+// tried to advance or change game state fails here without a browser.
 import { check } from '../../_kit/test/check.ts';
 import { createRenderer, drawChassis } from '../src/render.ts';
 import { W, H, facing, isGroundUnit, muzzle, surfY, hashSeed, mulberry32, gauss } from '../src/sim.ts';

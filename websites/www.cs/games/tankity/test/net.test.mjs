@@ -1,9 +1,9 @@
-// The room client without a browser or a server.
-// src/net.ts takes its fetch, timers and clock as
-// arguments, so every case below drives it with a fake server, fake timers and
-// a clock the test moves by hand: the 429 retry, Ready's one-at-a-time ordering
-// under rapid toggles, polling, the turn clock and the catch-up decision for a
-// hidden tab. Replies come from protocol/*.json where a real shape matters.
+// The room client without a browser or a server. src/net.ts takes its fetch,
+// timers and clock as arguments, so every case below drives it with a fake server,
+// fake timers and a clock the test moves by hand: the 429 retry, Ready's
+// one-at-a-time ordering under rapid toggles, polling, the turn clock and the
+// catch-up decision for a hidden tab. Replies come from protocol/*.json where a
+// real shape matters.
 import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';

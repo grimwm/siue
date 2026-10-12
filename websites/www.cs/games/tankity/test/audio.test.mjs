@@ -1,7 +1,6 @@
-// The audio module's pure parts, without a browser.
-// src/audio.ts must import with no page and no
-// AudioContext; what it computes without one is the loop-point trim that keeps
-// a track's silence out of its seam, and which track a level plays.
+// The audio module's pure parts, without a browser. src/audio.ts must import with
+// no page and no AudioContext; what it computes without one is the loop-point trim
+// that keeps a track's silence out of its seam, and which track a level plays.
 import { check } from '../../_kit/test/check.ts';
 import { trimSilence, trackForLevel, sfx, music, initAudio, noteGesture } from '../src/audio.ts';
 

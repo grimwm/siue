@@ -4,6 +4,7 @@ import { check } from '../../_kit/test/check.ts';
 import { memoryStorage, throwingStorage } from '../../_kit/test/record.ts';
 import { json, pref, text } from '../../_kit/prefs.ts';
 import { isScoreRows } from '../src/score-rows.ts';
+import { tutorialSeen } from '../src/tutorial-seen.ts';
 
 const ROWS = [{ name: 'bam', score: 120, banked: 3, won: true, seed: 'abc123' }];
 const saved = memoryStorage({
@@ -36,3 +37,9 @@ const damaged = memoryStorage({ 'tankity-local': '[{"name":"x"}]' });
 check('malformed-score-rows-fall-back-to-empty', pref('tankity-local', [], json(isScoreRows), damaged).get().length === 0);
 check('unparseable-score-rows-fall-back-to-empty', pref('tankity-local', [], json(isScoreRows), memoryStorage({ 'tankity-local': '{oops' })).get().length === 0);
 check('blocked-storage-gives-the-default', pref('tankity-body', 'tank', text, throwingStorage()).get() === 'tank');
+
+// The coach never nags where it cannot remember: unreadable storage counts as seen.
+check('tutorial-seen-when-done', tutorialSeen(saved) === true);
+check('tutorial-unseen-when-fresh', tutorialSeen(empty) === false);
+check('tutorial-seen-when-storage-is-absent', tutorialSeen(null) === true);
+check('tutorial-seen-when-storage-throws', tutorialSeen(throwingStorage()) === true);

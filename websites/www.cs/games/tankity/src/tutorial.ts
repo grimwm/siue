@@ -8,6 +8,7 @@
  * note a shot) through the object createTutorial returns. */
 import { browserStorage } from '../../_kit/ports.browser.ts';
 import { pref, text } from '../../_kit/prefs.ts';
+import { tutorialSeen } from './tutorial-seen.ts';
 import type { GameState, GameTank } from './game-types.ts';
 import type { RoomClient } from './net.ts';
 import type { sfx as SfxApi } from './audio.ts';
@@ -68,10 +69,7 @@ export function createTutorial(deps: TutorialDeps) {
   }
   const storage = browserStorage();
   const seen = pref('tankity-tutorial', '', text, storage);
-  function tutorialSeen(): boolean {
-    // Without storage there is nowhere to remember, so never nag.
-    return storage === null || seen.get() === 'done';
-  }
+  const isSeen = (): boolean => tutorialSeen(storage);
   function markTutorialSeen(): void {
     seen.set('done');
   }

@@ -1,6 +1,5 @@
-// The solo match flow without a browser.
-// src/flow.ts is a table of which event is legal in
-// which phase; this checks every legal move, that every other pair is
+// The solo match flow without a browser. src/flow.ts is a table of which event is
+// legal in which phase; this checks every legal move, that every other pair is
 // rejected, and walks a whole match from the demo to the match-over veil.
 import { check } from '../../_kit/test/check.ts';
 import { PHASES, EVENTS, FLOW, transition, WATCH_SPEED, warSpeed, runWar } from '../src/flow.ts';

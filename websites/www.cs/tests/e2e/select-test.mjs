@@ -55,6 +55,12 @@ has('site-sources-run-the-shell', select([`${S}src/main.ts`, `${S}src/play/play.
 has('site-tsconfig-runs-the-shell', select([`${S}tsconfig.json`, `${S}package.json`]), ['games-hub.spec.mjs', 'home-eye.spec.mjs']);
 check('site-lockfile-alone-runs-no-browser', select([`${S}package-lock.json`]), 'NONE');
 has('play-script-runs-the-shell', select([`${S}play/play.js`]), ['games-hub.spec.mjs']);
+check('kit-change-runs-everything', select([`${S}games/_kit/prefs.ts`]), 'ALL');
+check('kit-lockfile-runs-everything', select([`${S}games/package-lock.json`]), 'ALL');
+check('kit-tests-run-no-browser-specs', select([`${S}games/_kit/test/prefs.test.mjs`, `${S}games/_kit/README.md`, `${S}games/_kit/php/tests/InstallCoreTest.php`]), 'NONE');
+check('game-unit-tests-run-no-browser-specs', select([`${S}games/crete/test/engine.test.mjs`]), 'NONE');
+has('build-config-runs-the-games-specs', select([`${S}games/crete/build.json`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs']);
+has('built-output-runs-the-games-specs', select([`${S}games/crete/dist/main.js`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs']);
 check('a-removed-spec-is-dropped', select([`${S}tests/e2e/gone-away.spec.mjs`]), 'NONE');
 
 console.log(fail ? `E2E-SELECT-TEST-FAIL ${fail}` : 'E2E-SELECT-TEST-OK');

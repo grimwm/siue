@@ -13,20 +13,20 @@ const GAME = JSON.parse(fs.readFileSync(new URL('../game.json', import.meta.url)
 const map = buildKeymap(GAME.keys);
 
 // ---- tokens: code first, then key (either case), modifiers win while held ----
-check('lookup-by-code', lookupKey(map, 'aim', { code: 'KeyW', key: 'w' }) === 'powerUp');
-check('lookup-by-key-when-code-unmapped', lookupKey(map, 'aim', { code: 'Quote', key: 'a' }) === 'driveLeft');
+check('lookup-by-code', lookupKey(map, 'aim', { code: 'ArrowUp', key: 'Up' }) === 'powerUp');
+check('lookup-by-key-when-code-unmapped', lookupKey(map, 'aim', { code: 'Quote', key: 'Up' }) === 'powerUp');
 check('lookup-key-is-case-folded', lookupKey(map, 'global', { code: '', key: 'M' }) === 'music');
 check('lookup-unknown-is-null', lookupKey(map, 'aim', { code: 'KeyZ', key: 'z' }) === null);
 check('lookup-unknown-context-is-null', lookupKey(map, 'nowhere', { code: 'KeyW', key: 'w' }) === null);
 check('lookup-shift-token', lookupKey(map, 'scroll', { code: 'KeyJ', key: 'J', shiftKey: true }) === 'halfDown');
 check('lookup-plain-j-is-a-line', lookupKey(map, 'scroll', { code: 'KeyJ', key: 'j' }) === 'lineDown');
-check('lookup-shift-falls-back-to-plain', lookupKey(map, 'aim', { code: 'KeyW', key: 'W', shiftKey: true }) === 'powerUp');
+check('lookup-shift-falls-back-to-plain', lookupKey(map, 'aim', { code: 'ArrowUp', key: 'ArrowUp', shiftKey: true }) === 'powerUp');
 // Ctrl+ tokens: a table that binds one wins only while Control is held.
 const chord = buildKeymap({ aim: {}, shop: {}, scroll: {}, global: { page: ['Ctrl+KeyU'], plain: ['u'] } });
 check('lookup-ctrl-token', lookupKey(chord, 'global', { code: 'KeyU', key: 'u', ctrlKey: true }) === 'page');
 check('lookup-ctrl-token-needs-ctrl', lookupKey(chord, 'global', { code: 'KeyU', key: 'u' }) === 'plain');
 check('keycap-chords', keycap('Ctrl+KeyU') === 'Ctrl+U' && keycap('Shift+KeyJ') === 'Shift+J', keycap('Shift+KeyJ'));
-check('keycap-glyphs', keycap('ArrowLeft') === '◀' && keycap('Escape') === 'ESC' && keycap('PageDown') === 'PgDn' && keycap(' ') === 'Space');
+check('keycap-glyphs', keycap('ArrowLeft') === '←' && keycap('Escape') === 'Esc' && keycap('PageDown') === 'PgDn' && keycap(' ') === 'Space');
 
 // Browsers reserve Ctrl+U (view source) and Ctrl+D (bookmark): no shipped binding uses them.
 const tokens = Object.values(GAME.keys).flatMap(c => Object.values(c).flat());
@@ -195,7 +195,7 @@ function rig(extraCtx = {}) {
   r.input.keydown(ev({ key: 'x', code: 'KeyX' }));
   check('rebinding-moves-the-key', r.calls.join() === 'music' && r.input.hint('global', 'music') === 'X', r.calls.join());
   check('set-keys-refuses-a-partial-table', r.input.setKeys({ aim: {} }) === false && r.input.hint('global', 'music') === 'X');
-  check('hint-nth-token', r.input.hint('global', 'fire', 0) === 'Ctrl' && r.input.hint('global', 'fire', 4) === 'Space' && r.input.hint('global', 'nope') === '');
+  check('hint-nth-token', r.input.hint('global', 'fire', 0) === 'Space' && r.input.hint('global', 'fire', 2) === 'Ctrl' && r.input.hint('global', 'nope') === '');
 }
 {
   // Touch screens bind no keys, but still drop held buttons on blur.

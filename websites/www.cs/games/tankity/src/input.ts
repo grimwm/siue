@@ -30,7 +30,7 @@ export type KeyDefs = Readonly<Record<KeyContext, Readonly<Record<string, readon
 export type HoldCommand = 'barrelLeft' | 'barrelRight' | 'powerUp' | 'powerDown' | 'driveLeft' | 'driveRight';
 type ShopCommand = 'selUp' | 'selDown' | 'qtyUp' | 'qtyDown' | 'buyRow' | 'buy' | 'preview' | 'close' | 'next';
 type GlobalCommand =
-  | 'music' | 'sound' | 'log' | 'help' | 'report' | 'menu' | 'random' | 'rooms' | 'new' | 'cycle'
+  | 'music' | 'sound' | 'log' | 'help' | 'report' | 'random' | 'rooms' | 'new'
   | 'guns' | 'nextTrack' | 'tutorial' | 'battlePreview' | 'fullscreen' | 'fire' | 'escape';
 type ScrollCommand = 'lineDown' | 'lineUp' | 'pageDown' | 'pageUp' | 'halfDown' | 'halfUp';
 /** Keys no one rebinds: how a grid (the gun picker) is walked and loaded. */
@@ -42,10 +42,10 @@ export const FALLBACK_KEYS: KeyDefs = Object.freeze({
   aim: Object.freeze({
     barrelLeft: ['ArrowLeft', 'Left'],
     barrelRight: ['ArrowRight', 'Right'],
-    powerUp: ['ArrowUp', 'KeyW', 'Up', 'w'],
-    powerDown: ['ArrowDown', 'KeyS', 'Down', 's'],
-    driveLeft: ['KeyA', 'a'],
-    driveRight: ['KeyD', 'd'],
+    powerUp: ['ArrowUp', 'Up'],
+    powerDown: ['ArrowDown', 'Down'],
+    driveLeft: ['Shift+ArrowLeft', 'Shift+Left'],
+    driveRight: ['Shift+ArrowRight', 'Shift+Right'],
   }),
   shop: Object.freeze({
     selUp: ['ArrowUp', 'Up'],
@@ -59,11 +59,10 @@ export const FALLBACK_KEYS: KeyDefs = Object.freeze({
     next: ['n'],
   }),
   global: Object.freeze({
-    music: ['m'], sound: ['e'], log: ['l'], help: ['h'],
-    report: ['r'], menu: ['c'], random: ['t'], rooms: ['o'], new: ['n'],
-    cycle: ['q'], guns: ['g'], nextTrack: ['BracketRight', ']'], tutorial: ['u'],
+    music: ['m'], nextTrack: ['BracketRight', ']'], sound: ['e'], log: ['l'], help: ['h'],
+    report: ['r'], random: ['t'], rooms: ['o'], new: ['n'], guns: ['g'], tutorial: ['u'],
     battlePreview: ['v'], fullscreen: ['f'],
-    fire: ['ControlLeft', 'ControlRight', 'Control', 'Space', ' '],
+    fire: ['Space', ' ', 'ControlLeft', 'ControlRight', 'Control'],
     escape: ['Escape'],
   }),
   scroll: Object.freeze({
@@ -118,19 +117,18 @@ export function lookupKey(map: Keymap, ctx: string, e: Pick<KeyLike, 'key' | 'co
   return null;
 }
 
-/** One token in, one printable cap out: arrows show as glyphs, codes shed
- * their Key/Digit prefix, lone letters go uppercase, chords join with +. */
+/** One token in, one printable cap out: arrows show as ← ↑ → ↓, codes shed their Key/Digit prefix, lone letters go uppercase, chords join with +. */
 export function keycap(token: string): string {
   const glyph: Record<string, string> = {
-    ArrowUp: '▲', ArrowDown: '▼', ArrowLeft: '◀', ArrowRight: '▶', Up: '▲', Down: '▼', Left: '◀', Right: '▶',
+    ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Up: '↑', Down: '↓', Left: '←', Right: '→',
   };
   const g = glyph[token];
   if (g) return g;
-  if (token === ' ') return 'Space';
+  if (token === ' ' || token === 'Space') return 'Space';
   if (/^Ctrl\+/.test(token)) return 'Ctrl+' + keycap(token.slice(5));
   if (/^Shift\+/.test(token)) return 'Shift+' + keycap(token.slice(6));
   if (/^(ControlLeft|ControlRight|Control)$/.test(token)) return 'Ctrl';
-  if (token === 'Escape') return 'ESC';
+  if (token === 'Escape') return 'Esc';
   if (token === 'Enter') return 'Enter';
   if (token === 'PageUp') return 'PgUp';
   if (token === 'PageDown') return 'PgDn';
@@ -323,6 +321,10 @@ export function createInput(opts: { touch: boolean }): Input {
     }
     const act = lookup('aim', e) as HoldCommand | null;
     if (act) {
+      // Shift pressed or let go mid-hold turns a barrel key into a drive key
+      // (or back): only the action the chord names now stays down.
+      const other = lookup('aim', { key: e.key, code: e.code, ctrlKey: e.ctrlKey, shiftKey: !e.shiftKey }) as HoldCommand | null;
+      if (other && other !== act) held.release(other);
       held.press(act);
       e.preventDefault();
       if (ctx.onHold) ctx.onHold(act);
@@ -343,8 +345,17 @@ export function createInput(opts: { touch: boolean }): Input {
 
   function keyup(e: KeyLike): void {
     if (isTyping(e.target)) return;
-    const act = lookup('aim', e) as HoldCommand | null;
-    if (act) held.release(act);
+    // A chord comes apart in either order: an arrow lets go of whatever it
+    // held with or without Shift, and Shift lets go of every Shift+ hold.
+    for (const shiftKey of [false, true]) {
+      const act = lookup('aim', { key: e.key, code: e.code, ctrlKey: e.ctrlKey, shiftKey }) as HoldCommand | null;
+      if (act) held.release(act);
+    }
+    if (e.key === 'Shift') {
+      for (const [action, tokens] of Object.entries(defs.aim)) {
+        if (tokens.some(t => t.startsWith('Shift+'))) held.release(action as HoldCommand);
+      }
+    }
   }
 
   return {

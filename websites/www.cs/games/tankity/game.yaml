@@ -435,20 +435,23 @@ arsenal:
 #     they never match without it. Browsers keep many Ctrl+ keys for
 #     themselves (Ctrl+D bookmarks, Ctrl+U view source), so prefer Shift+.
 #   - The FIRST token of an action names the key on buttons, hints and help
-#     text (it is printed as a keycap: arrows show as triangles, KeyW as W,
-#     Escape as ESC, ControlLeft as Ctrl). Put the one you want shown first;
+#     text (it is printed as a keycap: arrows show as ← ↑ → ↓, KeyG as G,
+#     Escape as Esc, ControlLeft as Ctrl). Put the one you want shown first;
 #     later tokens are silent alternatives.
 #   - Quote digits ("1") and a lone space (" "), or YAML reads a number.
 #   - Touch-only screens ignore this whole section.
+# Driving is Shift plus an arrow, and W, A, S, D, Q and C are bound nowhere:
+# the arrows do all the aiming, so the other hand only ever needs Shift,
+# Space or Ctrl. Esc opens the menu and closes whatever is open.
 # Only the actions below exist; each must have at least one token.
 keys:
   aim:
     barrelLeft: [ArrowLeft, Left]
     barrelRight: [ArrowRight, Right]
-    powerUp: [ArrowUp, KeyW, Up, w]
-    powerDown: [ArrowDown, KeyS, Down, s]
-    driveLeft: [KeyA, a]
-    driveRight: [KeyD, d]
+    powerUp: [ArrowUp, Up]
+    powerDown: [ArrowDown, Down]
+    driveLeft: [Shift+ArrowLeft, Shift+Left]
+    driveRight: [Shift+ArrowRight, Shift+Right]
   shop:
     selUp: [ArrowUp, Up]
     selDown: [ArrowDown, Down]
@@ -466,16 +469,14 @@ keys:
     log: [l]
     help: [h]
     report: [r]
-    menu: [c]
     random: [t]
     rooms: [o]
     new: [n]
-    cycle: [q]
     guns: [g]
     tutorial: [u]
     battlePreview: [v]
     fullscreen: [f]
-    fire: [ControlLeft, ControlRight, Control, Space, " "]
+    fire: [Space, " ", ControlLeft, ControlRight, Control]
     escape: [Escape]
   scroll:
     lineDown: [j]

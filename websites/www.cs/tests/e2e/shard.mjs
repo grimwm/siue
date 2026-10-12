@@ -11,6 +11,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const WEIGHTS = {
+  'crete-play.spec.mjs': 15,
   'tankity-fx-editor.spec.mjs': 64,
   'tankity-fx-battle.spec.mjs': 74,
   'tankity-fx-range.spec.mjs': 73,

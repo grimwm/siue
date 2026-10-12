@@ -57,7 +57,7 @@ const RULES = [
   // Cylon's TypeScript (src/, the compiled js/, tsconfig.json, package.json) and
   // the rest of its folder: the home page and the games hub load it.
   [new RegExp(`^${SITE}games/cylon/`), shell],
-  [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.mjs', 'games-pwa.spec.mjs']],
+  [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'crete-play.spec.mjs']],
   // The site's own TypeScript (src/ compiles to main.js and play/play.js) and the
   // settings that decide how: the lockfile only pins the compiler.
   [new RegExp(`^${SITE}package-lock\\.json$`), 'NONE'],

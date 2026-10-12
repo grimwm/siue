@@ -1,3 +1,4 @@
 *.swp
 .claude/worktrees/
 .DS_Store
+games/tankity/data/

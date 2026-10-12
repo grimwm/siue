@@ -74,7 +74,11 @@ Left out on purpose: a generic state machine (only Tankity's `flow.ts` needs one
 
 - PHPUnit (^12) via `websites/www.cs/composer.json`, dev only. `phpunit.xml` has one suite per game plus `site` and `kit`; each game's `test.sh` runs its suite. Hand-rolled `*-test.php` scripts become `TestCase` classes one-for-one, each game's in the PR that moves it onto the kit.
 - Characterization specs land first and pass on today's code: `crete-play` (a fixed seed won through `__mazeTest`, a death, mute, `N`) and `cylon-play` (start, destroy a unit, an ability, game over, score submit). They use Playwright's `page.clock` and aim for ≤ 30 s each.
-- `select.mjs` maps `games/_kit/**` to ALL specs.
+- `select.mjs` maps `games/_kit/**` to ALL specs, except files no browser runs, which select nothing on their own:
+  - the kit's own tests, test helpers and docs (`_kit/README.md`, `_kit/test/`, `_kit/php/tests/`, `_kit/php/testing/`, `_kit/build/build.test.mjs`, `_kit/build/fixture/`): unit tests cover them;
+  - the icon renderer, `_kit/build/icons.mjs` and its test: it runs only when an icon drawing changes, and the PNGs it writes fall under each game's own rule;
+  - `_kit/php/score-guard.php`: it reaches a browser only as the copy each game commits in its `server/` (`kit_php`), and that copy selects its own game's specs. The rest of the kit's PHP (`install-core.php`) writes every game's pages and stays ALL.
+- Tests written in Plans B–E are `node:test` files named `*.test.mjs` (TypeScript-friendly: `test()` and `node:assert/strict`, no `check()` bridge; components load through the kit's `importTsx`); row 18 turns them, with the rest, into `*.test.ts`. New UI tests go in new `node:test` files, never into the `check()`-style files such as Tankity's `test/ui.test.mjs`.
 
 ## 4. Crete: the maze must be met, and must be winnable
 
@@ -97,7 +101,7 @@ Their hand-built overlays (`createElement`/`innerHTML`) become kit `ui/` compone
 ### 6.1 Starting a game
 
 - On load the demo plays dimmed behind a title card: **▶ Play** (solo, random seed), **Play with friends** (Rooms), **Tutorial**, a **Settings** link, and the 3-letter initials picker (section 8). The card returns after a match ends and after leaving a room. Mockup: `title-card.html` (option A).
-- The menu becomes settings only: unit, seed (with "Play this seed"), text size, sound, music (with Next song on phones), fullscreen, scores, standings, and Leave room in a room. It opens from a labelled **☰ Menu** button or **Esc**, and Esc closes it again.
+- The menu becomes settings only: unit, seed (with "Play this seed"), text size, Difficulty (how well the drones aim; a change waits for the next match, and a room uses its host's), sound, music (with Next song on phones), fullscreen, scores, **Quit** (section 11), and, in a room, **Standings** and **Leave room**. It opens from a labelled **☰ Menu** button or **Esc**, and Esc closes it again.
 
 ### 6.2 Layout (every screen)
 
@@ -216,7 +220,7 @@ Each PR tightens the comments in the files it touches:
 | 16 | Tankity score integrity: guard, solo replay, initials, board conversion | after 10 and 15 |
 | 17 | Tankity music | |
 | 19 | Install and exit: full-screen manifests, per-game icon sets (maskable, Apple, monochrome), kit `app.ts`, Quit in each game | after 5; Tankity's Quit lands with 12 if 12 is in flight |
-| 18 | Typed tests: every remaining `*.test.mjs` becomes `*.test.ts` on `node:test` directly, and every PHP check script a real PHPUnit `TestCase`; each game's `tsconfig.test.json` (with `@types/node`) joins its `build.json` programs; the `check()` and `LegacyCheckCase` bridges are deleted | last; tests in any area a plan B–D PR touches are rewritten in that PR |
+| 18 | Typed tests: every remaining `*.test.mjs` becomes `*.test.ts` on `node:test` directly, and every PHP check script a real PHPUnit `TestCase`; each game's `tsconfig.test.json` (with `@types/node`) joins its `build.json` programs; the `check()` and `LegacyCheckCase` bridges are deleted | last; tests in any area a plan B–E PR touches are rewritten in that PR onto `node:test` as `*.test.mjs` (section 3), and this row renames them to `*.test.ts` with the rest |
 
 After 6, the Crete line (7–9) and the Tankity line (11–17) touch different files and run in parallel worktrees; 14, 15 and 17 are independent of each other. Each implementing agent's job stays at about 20 minutes or less.
 

@@ -104,6 +104,7 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
             return $left === null ? null : round($left, 1);
         })(),
         'terrainRev' => $rev,
+        'hills' => isset($room['hills']) ? room_hills_wire($room['hills']) : null,
         'tanks' => $tanks,
         'seats' => $seats,
         'events' => array_values(array_filter($events, fn($e) => ($e['seq'] ?? 0) > $since)),

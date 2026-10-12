@@ -141,6 +141,33 @@ const RUN = {
     for (let frame = 0; G.shells.length && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
     return outcome(before);
   },
+  field(c) {
+    if (c.kind === 'terrain') {
+      const r = sim.mulberry32(sim.hashSeed(c.seed));
+      const h = sim.drawHills(r);
+      const next = r();
+      const { terrain } = sim.genTerrain(sim.mulberry32(sim.hashSeed(c.seed)), c.w);
+      return { hills: sim.hillsWire(h), terrain, next };
+    }
+    if (c.kind === 'placement') {
+      const r = sim.mulberry32(c.seed);
+      const xs = sim.spawnSpots(4, r, c.w);
+      return { xs, next: r() };
+    }
+    if (c.kind === 'speed') {
+      const reach = sim.fieldReach(c.w);
+      return { reach, speeds: [0, 37, 100].flatMap(p => [sim.shotSpeed(p, false, 1, reach), sim.shotSpeed(p, true, 1, reach), sim.shotSpeed(p, false, 0.55, reach)]) };
+    }
+    if (c.kind === 'sim-shot') {
+      return sim.simShot({ terrain: Array(c.w).fill(400), wind: 0 }, arsenal, c.x, c.y, c.angle, c.power, c.wkey, c.dirS);
+    }
+    world(c, c.w);
+    G.rng = sim.mulberry32(c.seed);
+    const t = G.tanks[0];
+    const choice = sim.aiChoose(G, arsenal, t);
+    const fa = sim.fieldAim(c.w);
+    return { fa: [fa.aim, fa.floor], target: t.brk.t, wkey: choice.wkey, angle: choice.angle, power: choice.power };
+  },
   'ai-aim'(c) {
     world(c);
     G.rng = sim.mulberry32(c.seed);
@@ -194,14 +221,16 @@ function expectedFor(group, c, out) {
 }
 
 /* ---- compare and report ---- */
-function diff(want, got, at, out) {
+// Terrain heights use the platform's sin until Plan D's deterministic math (Task 21a) replaces it; they must then become exact.
+const TERRAIN_TOL = 1e-9;
+function diff(want, got, at, out, exact = false, tol = TOL) {
   if (typeof want === 'number' && typeof got === 'number') {
-    if (!(Math.abs(want - got) <= TOL)) out.push(`${at}: expected ${want}, got ${got}`);
+    if (exact ? !Object.is(want, got) : !(Math.abs(want - got) <= tol)) out.push(`${at}: expected ${want}, got ${got}`);
   } else if (Array.isArray(want) && Array.isArray(got)) {
     if (want.length !== got.length) out.push(`${at}: expected ${want.length} items, got ${got.length}`);
-    for (let i = 0; i < Math.min(want.length, got.length); i++) diff(want[i], got[i], `${at}[${i}]`, out);
+    for (let i = 0; i < Math.min(want.length, got.length); i++) diff(want[i], got[i], `${at}[${i}]`, out, exact, tol);
   } else if (want && got && typeof want === 'object' && typeof got === 'object' && !Array.isArray(want) && !Array.isArray(got)) {
-    for (const k of new Set([...Object.keys(want), ...Object.keys(got)])) diff(want[k], got[k], `${at}.${k}`, out);
+    for (const k of new Set([...Object.keys(want), ...Object.keys(got)])) (exact && k === 'terrain' ? diff(want[k], got[k], `${at}.${k}`, out, false, TERRAIN_TOL) : diff(want[k], got[k], `${at}.${k}`, out, exact, tol));
   } else if (want !== got) {
     out.push(`${at}: expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
   }
@@ -223,7 +252,7 @@ for (const [group, cases] of Object.entries(VECTORS.groups)) {
     let got, bad;
     try {
       got = RUN[group](c.in);
-      bad = diff(expectedFor(group, c.in, c.out), got, 'out', []);
+      bad = diff(expectedFor(group, c.in, c.out), got, 'out', [], c.exact === true);
     } catch (e) {
       bad = [`threw ${e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e}`];
     }

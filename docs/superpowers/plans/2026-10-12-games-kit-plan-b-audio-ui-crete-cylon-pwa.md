@@ -5693,11 +5693,10 @@ Each game's site page (`/play/<id>/`) links the game's manifest (`../../games/<i
 // websites/www.cs/tests/e2e/install-probe.spec.mjs
 // One-off probe, deleted after it runs: where does Chromium offer to install
 // each game? Prints one PROBE line per page.
-import { test } from '@playwright/test';
-
-// Chrome asks for some engagement before it offers to install; the probe asks
-// whether a page qualifies, not whether a visitor has engaged yet.
-test.use({ launchOptions: { args: ['--bypass-app-banner-engagement-checks'] } });
+import { test, chromium } from '@playwright/test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const PAGES = [
   ['baseline crete', 'games/crete/'],
@@ -5709,7 +5708,13 @@ const PAGES = [
 ];
 
 for (const [name, path] of PAGES) {
-  test(name, async ({ page }) => {
+  test(name, async ({ baseURL }) => {
+    // A persistent profile: Playwright's default context is incognito, and Chrome never offers to install there
+    // (every page reports the error "in-incognito", headless or headed). Chrome also asks for some engagement
+    // before it offers to install; the probe asks whether a page qualifies, not whether a visitor has engaged yet.
+    const ctx = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'probe-')),
+      { args: ['--bypass-app-banner-engagement-checks'], baseURL });
+    const page = await ctx.newPage();
     await page.addInitScript(() => {
       window.__offers = 0;
       window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); window.__offers++; });
@@ -5718,10 +5723,11 @@ for (const [name, path] of PAGES) {
     // The manifest and icons load, the service worker registers, and for The
     // CIC main.js swaps the manifest link once the games list arrives.
     await page.waitForTimeout(5000);
-    const cdp = await page.context().newCDPSession(page);
+    const cdp = await ctx.newCDPSession(page);
     const { url: manifest } = await cdp.send('Page.getAppManifest');
     const { installabilityErrors } = await cdp.send('Page.getInstallabilityErrors');
     const offers = await page.evaluate(() => window.__offers);
+    await ctx.close();
     console.log(`PROBE ${name} | manifest ${manifest} | beforeinstallprompt ${offers} | errors ${JSON.stringify(installabilityErrors.map(e => e.errorId))}`);
   });
 }
@@ -5730,7 +5736,7 @@ for (const [name, path] of PAGES) {
 - [ ] **Step 2: Run it**
 
 Run: `cd websites/www.cs && make up && make e2e E2E_ARGS="install-probe.spec.mjs"`
-Expected: six `PROBE` lines. If both baselines say `beforeinstallprompt 0` with `errors []`, this Chrome does not fire the event headless: rerun headed, `make e2e E2E_ARGS="install-probe.spec.mjs --headed"`, and read that run.
+Expected: six `PROBE` lines. If every line says `beforeinstallprompt 0` with `errors ["in-incognito"]`, the probe is running in an incognito context (Playwright's default, headless or `--headed`), where Chrome never offers to install: it must use a persistent profile, as written above. Measured this way, all six pages fired the event with `errors []`, so `OUT_OF_SCOPE_PROMPTS` and `PROMPTS_IN_SCOPE` are both `true` (branch A).
 
 - [ ] **Step 3: Decide (the decision point)**
 

@@ -480,8 +480,9 @@ input.initial { width: 2rem; height: 2rem; max-width: none; padding: 0; text-ali
 #frame .title-link { background: none; border: 0; color: #9aa3c7; text-decoration: underline; font-weight: 600; padding: 0.25rem 0.5rem; }
 /* The demo's own "press Play" banner would sit over the card. */
 #title-root:has(.title-veil:not([hidden])) ~ .banner { display: none; }
-/* Phones, portrait or landscape: the card fills the screen instead of the
-   canvas-shaped box, so every control is in reach without an inner scroll. */
+/* Phones, portrait or landscape: the card fills the whole battlefield instead
+   of the canvas-shaped box, so every control is in reach without an inner
+   scroll; the bars and Menu stay usable around it. */
 @media (max-width: 600px), (max-height: 480px) {
   .title-veil {
     z-index: 5; /* over the deck (4) inside the battlefield; the panels (6, 10) open above it */
@@ -668,13 +669,14 @@ body { height: 100dvh; display: flex; flex-direction: column; }
   .layout { padding: 4px; }
   #deck {
     position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 4;
-    display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: ". . weapon" "aim drive fire";
-    align-items: end; row-gap: 8px; padding: 0; background: none; border: 0; pointer-events: none;
+    display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "aim drive weapon" "aim drive fire";
+    align-items: end; align-content: end; row-gap: 8px; padding: 0; background: none; border: 0; pointer-events: none;
   }
   #deck > * { pointer-events: auto; }
   .gl, .grp-more { display: none; }
   .grp-aim { grid-area: aim; }
-  .grp-drive { grid-area: drive; justify-self: center; }
+  .grp-drive { grid-area: drive; justify-self: center; align-self: end; }
+  .grp-aim { align-self: end; }
   .grp-weapon { grid-area: weapon; }
   .grp-fire { grid-area: fire; }
   #frame #deck .weap { width: 96px; height: 44px; }

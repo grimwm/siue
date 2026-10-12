@@ -125,6 +125,26 @@ for (const dev of DEVICES) {
     } else {
       expect(chips.rows, 'no chips on a touch screen').toEqual([]);
     }
+    // Weapon sits on FIRE: stacked 4-16px apart on phones, side by side and
+    // bottom-aligned elsewhere; FIRE is a rounded rectangle, never a circle.
+    const pair = await page.evaluate(() => {
+      const w = document.getElementById('btn-weapon').getBoundingClientRect();
+      const fb = document.getElementById('btn-cannon');
+      const f = fb.getBoundingClientRect();
+      return { gapY: f.top - w.bottom, gapX: f.left - w.right, bottomDiff: Math.abs(f.bottom - w.bottom), overlapX: Math.min(w.right, f.right) - Math.max(w.left, f.left),
+        fireW: f.width, fireH: f.height, radius: parseFloat(getComputedStyle(fb).borderTopLeftRadius) };
+    });
+    if (phone(dev)) {
+      expect(pair.gapY, 'Weapon above FIRE').toBeGreaterThanOrEqual(4);
+      expect(pair.gapY, 'Weapon above FIRE').toBeLessThanOrEqual(16);
+      expect(pair.overlapX, 'Weapon is over FIRE').toBeGreaterThan(40);
+    } else {
+      expect(pair.gapX, 'Weapon beside FIRE').toBeGreaterThanOrEqual(4);
+      expect(pair.bottomDiff).toBeLessThanOrEqual(1);
+    }
+    expect(pair.fireW).toBeGreaterThan(pair.fireH);
+    expect(pair.radius).toBeGreaterThanOrEqual(4);
+    expect(pair.radius).toBeLessThan(pair.fireH * 0.4);
     const up = await page.locator('#deck [data-aim="up"]').evaluate(b => [getComputedStyle(b).backgroundColor, getComputedStyle(b).color]);
     if (!landscapePhone(dev)) expect(up).toEqual(['rgb(255, 201, 60)', 'rgb(17, 17, 17)']);
     if (phone(dev)) {
@@ -156,11 +176,14 @@ const over = (fg, alpha, bg) => fg.map((c, i) => c * alpha + bg[i] * (1 - alpha)
 test('the translucent landscape arrow keys keep white words readable; other buttons stay solid', async ({ browser }) => {
   const { ctx, page } = await open(browser, DEVICES[6]);
   const [bg, color, shadow] = await page.locator('#deck [data-aim="up"]').evaluate(b => { const c = getComputedStyle(b); return [c.backgroundColor, c.color, c.textShadow]; });
-  expect(bg).toBe('rgba(255, 201, 60, 0.55)');
-  expect(color).toBe('rgb(255, 255, 255)');
-  expect(shadow).toContain('rgb(0, 0, 0)');
+  const rgba = v => { const m = v.match(/[\d.]+/g).map(Number); return { rgb: m.slice(0, 3), a: m.length > 3 ? m[3] : 1 }; };
+  const fill = rgba(bg), text = rgba(color);
+  expect(fill.a, 'translucent').toBeLessThan(1);
+  expect(fill.a, 'not invisible').toBeGreaterThan(0.3);
+  expect(text.rgb).toEqual([255, 255, 255]);
+  expect(shadow, 'a dark halo').toContain('rgb(0, 0, 0)');
   // Over the night sky the fill alone gives 4.5:1; over the hills the dark halo carries the words.
-  expect(contrast([255, 255, 255], over([255, 201, 60], 0.55, [0, 0, 11]))).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(text.rgb, over(fill.rgb, fill.a, [0, 0, 11]))).toBeGreaterThanOrEqual(4.5);
   expect(await page.locator('#btn-drive-l').evaluate(b => getComputedStyle(b).backgroundColor)).toBe('rgb(10, 13, 38)');
   await ctx.close();
 });

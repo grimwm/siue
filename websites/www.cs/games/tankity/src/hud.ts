@@ -11,7 +11,6 @@ import type { HudProps } from './ui/hud.tsx';
 import { renderGunLabel as drawGun } from './ui/gun-label.tsx';
 import type { GunLabelProps } from './ui/gun-label.tsx';
 import { weaponLine, weaponLineSpoken } from './weapon-label.ts';
-import { TUNE } from './sim.ts';
 import type { KeyHintFn } from './ui/chrome.tsx';
 
 /** The slice of the game's state the status bar reads (main.ts's G). */
@@ -101,7 +100,7 @@ export function createHud(deps: HudDeps) {
   function renderStanding(mine: GameTank | null, others: string): void {
     HUD.armor = {
       shown: mine ? `${Math.max(0, Math.round(mine.hp))}` : '-',
-      max: mine ? TUNE.playerArmor + 25 * (G.plate || 0) : null,
+      max: mine ? mine.maxHp : null,
       sr: others,
     };
     HUD.lives = G.lives;

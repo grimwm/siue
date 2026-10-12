@@ -46,6 +46,21 @@ localStorage key, in the raw form that key already holds (`text` or
 `subscribe` tells the UI when a value changes. Blocked or missing storage
 falls back to a value that lives for the session; nothing throws.
 
+## Sound (`audio/core.ts`)
+
+`createAudioCore()` is a facade over the game's one `AudioContext`. It makes
+the context on the first sound, resumes it when suspended, and gives it two
+buses, `sfx` and `music`, each a gain node to the speakers. `setGain` and
+`setMuted` set a bus at once (a muted bus is 0, and nothing sent to it is even
+made); `unlock(onReady)` is for a gesture: it resumes the context and, the
+first time it runs, primes it with a silent blip and calls `onReady`.
+`tone(spec, bus)` and `noise(spec, bus)` are the two envelopes every voice is
+built from: an oscillator or filtered noise whose gain falls exponentially to
+silence, with an optional attack and pitch or filter slide. Voices, songs and
+what each setting means stay in the game. Without Web Audio, or when making
+the context throws, every call is silent. Tests use `fakeAudioContext()` from
+`test/audio.ts`, which records every node and parameter call.
+
 ## Tests (`test/`)
 
 Unit tests are `*.test.mjs` files run with `node --test`. They import

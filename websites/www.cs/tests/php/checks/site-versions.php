@@ -84,7 +84,7 @@ unlink("$tmp/main.js");
 [, $problems] = site_versions_sync($tmp, false);
 $check('unreadable-file-fails', $problems === ['index.html references main.js, which is not readable'], json_encode($problems));
 
-// The repository's own page is in sync (run php games/cylon/tools/install-files.php, then php tools/site-versions.php).
+// The repository's own page is in sync (build the games, then run php tools/site-versions.php).
 [$stale, $problems] = site_versions_sync(dirname(__DIR__, 3), false);
 $check('repo-page-in-sync', $stale === false && $problems === [], json_encode([$stale, $problems]));
 

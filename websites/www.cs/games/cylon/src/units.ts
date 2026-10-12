@@ -11,7 +11,7 @@
  * What the game's other parts own comes in as arguments: the live record, the
  * settings and the cursor, the sound, the terrain holes, the landscape writers
  * and the hull (registerHit). When the next missile or nuke launches is the
- * run clock's business (cylon.js); this module launches one when asked.
+ * run clock's business (main.ts); this module launches one when asked.
  * Browser-only: it compiles in the DOM program. */
 import type { AimPoint, Bot, Game, Missile, Mouse, PlayfieldApi, RulesApi, Settings, StateApi, Timer } from './types.ts';
 import type { Abilities } from './abilities.ts';

@@ -6,7 +6,7 @@ import { memoryStorage, throwingStorage } from '../../_kit/test/record.ts';
 import { DEFAULT_SETTINGS, SETTINGS_KEY, isSettings } from '../src/types.ts';
 
 // What the chrome wrote before it used the pref: JSON.stringify of the default
-// settings, with the sound volume moved.
+// settings, with the sound volume moved and the music turned off.
 const WRITTEN = '{"gameEnabled":false,"soundEnabled":true,"musicEnabled":false,"soundVolume":70,"musicVolume":50,"eyeEnabled":true}';
 
 const open = storage => pref(SETTINGS_KEY, DEFAULT_SETTINGS, json(isSettings), storage);

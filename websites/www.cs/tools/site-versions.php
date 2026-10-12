@@ -151,7 +151,7 @@ if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
     }
     if ($stale) {
         if ($check) {
-            fwrite(STDERR, 'site-versions: ' . SITE_VERSIONS_PAGE . " is stale; run php tools/site-versions.php (after php games/cylon/tools/install-files.php)\n");
+            fwrite(STDERR, 'site-versions: ' . SITE_VERSIONS_PAGE . " is stale; run php tools/site-versions.php (after cd games && npm run build)\n");
         } else {
             echo 'site-versions: wrote ' . SITE_VERSIONS_PAGE . "\n";
         }

@@ -5,9 +5,9 @@
  * eye's disorientation) as epoch milliseconds, 0 for "not armed". A RunState
  * holds the run itself: kills, hull hits, when it began, whether it is over.
  * Neither holds a timer handle or an element, so both compile in the DOM-free
- * program and state-test.js drives them with a fake clock. cylon.js owns the
+ * program and test/state.test.mjs drives them with a fake clock. main.ts owns the
  * setTimeout handles and the page; it keeps one of each record and replaces it
- * with what a transition here returns. A module in js/ imports nothing, so the
+ * with what a transition here returns. This module imports nothing, so the
  * hull limit comes in as an argument. */
 
 /** Every wait the game is counting down, in epoch ms; 0 when nothing is armed. */

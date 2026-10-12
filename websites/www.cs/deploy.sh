@@ -46,7 +46,7 @@ done
 # css and entry module): refuse a stale one. It hashes games/cylon/dist/main.js,
 # which the kit build check below guards.
 if ! php tools/site-versions.php --check; then
-  echo "deploy: run php games/cylon/tools/install-files.php, then php tools/site-versions.php, and commit the result" >&2
+  echo "deploy: run (cd games && npm run build), then php tools/site-versions.php, and commit the result" >&2
   exit 1
 fi
 

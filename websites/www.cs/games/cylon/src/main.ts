@@ -3,13 +3,13 @@
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * A native ES module: the page imports initializeCylonEffects and calls it
+ * The entry of the bundle: the page imports initializeCylonEffects and calls it
  * once. The game knows nothing of the page's own scripts; what it has to say
  * to the page goes through the options it is given (see initializeCylonEffects)
  * and what it needs from the page's markup is listed in README.md ("Host
  * contract"). Its overlays live in mount.html and are injected into #game-root.
  *
- * The game's parts are TypeScript in src/, compiled to js/ (see README.md,
+ * The game's parts are TypeScript in src/, bundled into dist/main.js (see README.md,
  * "Source layout and build"). The pure ones: rules (difficulty, caps, hull tint,
  * volume curve), playfield (where drones may stand), state (the due-at moments
  * and the run's score and hull as data with pure transitions), abilities (the
@@ -51,7 +51,7 @@ export interface CylonOptions {
     scoresApi?: string;
 }
 
-// Everything the game fetches is found next to this file, wherever it is served from.
+// Everything the game fetches is found relative to this bundle (in dist/), wherever it is served from.
 const CYLON_MOUNT_URL = new URL(`../mount.html?v=${MOUNT_HTML_V}`, import.meta.url).href;
 const CYLON_SCORES_URL = new URL('../scores.php', import.meta.url).href;
 
@@ -81,7 +81,7 @@ async function mountCylonDom() {
  *   the game is live and restore the visitor's choice after. The game changes
  *   no theme itself.
  * @param {string} [options.scoresApi] The score server's URL, when it is not
- *   scores.php next to this file.
+ *   scores.php in the game folder, one level above dist/.
  */
 export async function initializeCylonEffects(options: CylonOptions = {}) {
     const onTheme = typeof options.onTheme === 'function' ? options.onTheme : () => {};

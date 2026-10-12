@@ -1,5 +1,5 @@
-// The terrain holes: hold and fade timing, the cap, and pause. Run here:
-// `node field-test.js`. src/field.ts is handed fake
+// The terrain holes: hold and fade timing, the cap, and pause. Run by
+// `node --test` (games/cylon/test.sh). src/field.ts is handed fake
 // elements, a fake clock and fake timers, so nothing needs a browser.
 import * as f from '../src/field.ts';
 import { check } from '../../_kit/test/check.ts';

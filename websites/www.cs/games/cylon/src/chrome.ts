@@ -60,8 +60,8 @@ export function createChrome(d: ChromeDeps): Chrome {
   const audio = { settingChanged: (key: string): void => d.settingChanged(key) };
 
   const defaults = DEFAULT_SETTINGS;
-  const saved = pref<Settings>(SETTINGS_KEY, DEFAULT_SETTINGS, json(isSettings), browserStorage());
-  let settings: Settings = { ...defaults, ...saved.get() };
+  const saved = pref<Partial<Settings>>(SETTINGS_KEY, DEFAULT_SETTINGS, json(isSettings), browserStorage());
+  let settings: Settings = Object.assign({}, defaults, saved.get());
   // Game stays off until the player explicitly enables it
   settings.gameEnabled = false;
   settings.soundVolume = Math.max(0, Math.min(100, Number(settings.soundVolume) || defaults.soundVolume));

@@ -93,6 +93,40 @@ final class InstallCoreTest extends TestCase
         $this->assertSame(['../../?game=arty', '../../'], [$start['start_url'], $start['scope']]);
     }
 
+    public function testManifestHasNoIdAndTakesItsFieldsFromMetadata(): void
+    {
+        [$card] = install_card($this->dir, 'play');
+        $m = json_decode(install_manifest($card, 'arty'), true);
+        $this->assertArrayNotHasKey('id', $m);
+        $this->assertSame(['Arty & Co', 'Arty', '#112233', '#445566'], [$m['name'], $m['short_name'], $m['theme_color'], $m['background_color']]);
+    }
+
+    public function testCheckDetectsAHandEditedManifestAndAWriteRestoresIt(): void
+    {
+        install_sync($this->dir, self::PLAY, true);
+        $path = "$this->dir/manifest.webmanifest";
+        $good = (string) file_get_contents($path);
+        file_put_contents($path, str_replace('Arty', 'Edited', $good));
+        [$stale] = install_sync($this->dir, self::PLAY, false);
+        $this->assertSame(['manifest.webmanifest'], $stale);
+        install_sync($this->dir, self::PLAY, true);
+        $this->assertSame($good, file_get_contents($path));
+    }
+
+    public function testCheckWritesNothing(): void
+    {
+        $before = [];
+        foreach (scandir($this->dir) as $f) {
+            $before[$f] = is_file("$this->dir/$f") ? md5_file("$this->dir/$f") : null;
+        }
+        install_sync($this->dir, self::PLAY, false);
+        $after = [];
+        foreach (scandir($this->dir) as $f) {
+            $after[$f] = is_file("$this->dir/$f") ? md5_file("$this->dir/$f") : null;
+        }
+        $this->assertSame($before, $after);
+    }
+
     public function testPrecacheListsShippedFilesOnly(): void
     {
         file_put_contents("$this->dir/fx-editor.js", '');

@@ -7,8 +7,8 @@
  * return values (the board to render, the config the server sent, the problem
  * to show next to the initials).
  *
- * `fetch` comes in as an argument, so scores-test.js drives it with a fake
- * server. cylon.js builds the real client from the page's fetch and the
+ * `fetch` comes in as an argument, so test/scores.test.mjs drives it with a fake
+ * server. main.ts builds the real client from the page's fetch and the
  * scores URL. */
 
 export interface ScoreEntry {

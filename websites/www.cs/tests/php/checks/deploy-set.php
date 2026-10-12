@@ -49,10 +49,11 @@ foreach (['games/cylon/dist/main.js', 'games/cylon/css/eye.css', 'games/cylon/cs
     $check("ships $f", isset($set[$f]));
 }
 // The site's own scripts: compiled from src/, served from the root and play/.
-$check('ships-root-htaccess', in_array('.htaccess', array_keys($set), true), '');
 foreach (['main.js', 'play/play.js', 'play/play.css', 'index.html'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
+// The root .htaccess carries the page revalidation header.
+$check('ships-root-htaccess', isset($set['.htaccess']));
 // Crete: the bundle, its page and PWA files.
 foreach (['games/crete/index.html', 'games/crete/dist/main.js', 'games/crete/game.css', 'games/crete/sw.js', 'games/crete/manifest.webmanifest'] as $f) {
     $check("ships $f", isset($set[$f]));

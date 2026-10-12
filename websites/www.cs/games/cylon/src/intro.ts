@@ -8,7 +8,7 @@
  *
  * It touches only the elements it is handed and `window`; what the sequence
  * needs from the game (the settings, the pause, the sound, the detonation, the
- * start of combat) comes in as callbacks, so nothing here reaches cylon.js's
+ * start of combat) comes in as callbacks, so nothing here reaches main.ts's
  * state. Browser-only: it compiles in the DOM program. */
 
 export interface IntroDeps {

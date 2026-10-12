@@ -88,3 +88,17 @@ test('--check passes on fresh icons, names a changed drawing or a missing icon, 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('--check names icons rendered by another renderer version', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'icons-version-'));
+  try {
+    mkdirSync(join(dir, 'tools'));
+    writeFileSync(join(dir, 'tools', 'icon.svg'), SOURCE);
+    writeIcons(dir);
+    const record = JSON.parse(readFileSync(join(dir, 'tools', 'icons.json'), 'utf8'));
+    writeFileSync(join(dir, 'tools', 'icons.json'), JSON.stringify({ ...record, resvg: '0.0.1' }));
+    assert.match(checkIcons(dir).join('\n'), /rendered with @resvg\/resvg-js 0\.0\.1/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

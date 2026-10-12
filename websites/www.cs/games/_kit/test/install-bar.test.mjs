@@ -5,6 +5,8 @@ import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { h, render } from 'preact';
 import { importTsx } from './tsx.ts';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { document, makeEl, click, fire, fireDocument } from './dom-stub.mjs';
 
 globalThis.document = document;
@@ -85,4 +87,14 @@ test('iOS steps: a dialog with the Share glyph; Done is focused; Escape and Done
   fireDocument('keydown', { key: 'Escape' });
   click(byId(root, 'install-steps-done'));
   assert.deepEqual(calls, ['close-steps', 'close-steps']);
+});
+
+test('the "Link copied" status line is always in the page, and its empty state hides it visually, never with display: none', () => {
+  const root = draw({});
+  assert.ok(byId(root, 'share-status'), 'present while idle, so a screen reader hears the text arrive');
+  assert.equal(byId(root, 'share-status').hidden, false);
+  const css = readFileSync(join(import.meta.dirname, '..', 'ui', 'install-bar.tsx'), 'utf8');
+  const empty = css.match(/\.kit-install-status:empty \{([^}]*)\}/)[1];
+  assert.doesNotMatch(empty, /display\s*:\s*none/);
+  assert.match(empty, /clip-path/);
 });

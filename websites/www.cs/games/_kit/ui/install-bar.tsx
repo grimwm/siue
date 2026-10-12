@@ -72,7 +72,8 @@ const CSS = `
 @keyframes kit-install-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--kit-install-accent, #f0b429) 40%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .kit-install-asked { animation: none; } }
 .kit-install-status { color: var(--kit-install-accent, #f0b429); white-space: nowrap; }
-.kit-install-status:empty { display: none; }
+/* Always in the page, so a screen reader announces the text when it arrives; empty, it takes no room. */
+.kit-install-status:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .kit-install-url { width: min(22rem, 55vw); padding: 0.25rem 0.4rem; font: 500 0.85rem/1.2 ui-monospace, monospace; }
 .kit-install-veil { position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center; padding: 1rem; background: rgba(0, 0, 0, 0.6); }
 .kit-install-veil[hidden] { display: none; }

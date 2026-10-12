@@ -5,4 +5,5 @@ set -e
 cd "$(dirname "$0")"
 node ../_kit/build/build.mjs crete --check
 php tools/install-files.php --check
+node ../_kit/build/icons.mjs crete --check
 node --test 'test/*.test.mjs'

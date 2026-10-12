@@ -63,7 +63,7 @@ const CYLON_SCORES_URL = new URL('../scores.php', import.meta.url).href;
 const PROMPTS_IN_SCOPE: boolean = true;
 
 /**
- * Install and Share in the game bar, when the address opens The CIC
+ * Install and Share in a corner pill, when the address opens The CIC
  * (?game=cylon). The page links Cylon's manifest before the bar listens, so a
  * held-back prompt is the game's, not the site's.
  */

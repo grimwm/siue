@@ -207,6 +207,13 @@ export function createInstall(env: InstallEnv, setup: InstallSetup, onChange: (v
 type Parked = { [PROMPT_STASH]?: DeferredPrompt | null };
 type WithBrands = Navigator & { userAgentData?: { brands?: { brand: string }[] } };
 
+/** iOS has no install API; Chromium (Chrome, Edge, Samsung Internet) has; anything else cannot install. */
+export function detectPlatform(userAgent: string, platform: string, touchPoints: number, brands: { brand: string }[] = []): Platform {
+  // iPadOS reports itself as a Mac; its touch points give it away.
+  if (/iPhone|iPad|iPod/.test(userAgent) || (platform === 'MacIntel' && touchPoints > 1)) return 'ios';
+  return brands.some(b => b.brand === 'Chromium') ? 'chromium' : 'other';
+}
+
 export function browserInstallEnv(): InstallEnv {
   const parked = window as unknown as Parked;
   return {
@@ -222,10 +229,7 @@ export function browserInstallEnv(): InstallEnv {
     },
     onInstalled: cb => window.addEventListener('appinstalled', () => cb()),
     installed: () => isInstalled(browserAppEnv()),
-    // iPadOS reports itself as a Mac; its touch points give it away.
-    platform: () => (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-      ? 'ios'
-      : ((navigator as WithBrands).userAgentData?.brands ?? []).some(b => b.brand === 'Chromium') ? 'chromium' : 'other'),
+    platform: () => detectPlatform(navigator.userAgent, navigator.platform, navigator.maxTouchPoints, (navigator as WithBrands).userAgentData?.brands),
     framed: () => window.self !== window.top,
     share: typeof navigator.share === 'function' ? data => navigator.share(data) : null,
     copy: typeof navigator.clipboard?.writeText === 'function' ? text => navigator.clipboard.writeText(text) : null,

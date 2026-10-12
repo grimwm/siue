@@ -38,7 +38,7 @@ Mount into `#game-root`. The game may scatter glyphs in `#nav-main`, `#nav-conta
 `cylon-game-live`, `cylon-nav-combat`, `cylon-world-ended`, `cylon-glyphs-blown`, `cylon-touch-play`.
 Combat nav chrome (toggle, scores, abilities, settings) still lives in the site header until Phase 5.
 **Leaving.** Game Off (and Close on a quit run's panel) calls the kit's `exitApp`: the installed app (`start_url` `../../index.html?game=cylon&app=1`, scoped to that page) closes where the platform allows; otherwise the page stays, out of full screen, and an installed app shows `#cylon-exit-hint`.
-**Install and Share.** With `?game=cylon`, `#cylon-install-root` in the home page's game bar holds the kit's Install and Share bar (`games/_kit/install.ts`): Share hands out `play/cylon/`; Install installs The CIC (the page links its manifest first). `/play/cylon/?install` forwards to `?game=cylon&install`, which highlights Install, or on iOS opens the Add to Home Screen steps.
+**Install and Share.** With `?game=cylon`, `#cylon-install-root`, a pill in the bottom-left corner of the home page (the game bar has no room for it on a phone), holds the kit's Install and Share bar (`games/_kit/install.ts`): Share hands out `play/cylon/`; Install installs The CIC (the page links its manifest first). `/play/cylon/?install` forwards to `?game=cylon&install`, which highlights Install, or on iOS opens the Add to Home Screen steps.
 
 The game reaches the page only through what it is handed and what it declares:
 

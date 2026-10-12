@@ -80,7 +80,7 @@ body {
   background: var(--game-bg);
 }
 @media (max-width: 560px) {
-  .play-nav { gap: 0.25rem 0.8rem; padding: 0.35rem 0.75rem; font-size: 0.88rem; }
+  .play-nav { flex-wrap: wrap; gap: 0.25rem 0.8rem; padding: 0.35rem 0.75rem; font-size: 0.88rem; }
   .play-now { display: none; }
   .play-install { margin-left: auto; }
 }

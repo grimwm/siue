@@ -67,6 +67,9 @@ export function checkIcons(gameDir) {
   if (!existsSync(recordPath)) return ['tools/icons.json is missing: run node _kit/build/icons.mjs <game>'];
   const record = JSON.parse(readFileSync(recordPath, 'utf8'));
   const problems = [];
+  if (record.resvg !== RESVG_VERSION) {
+    problems.push(`the icons were rendered with @resvg/resvg-js ${record.resvg}, this is ${RESVG_VERSION}: run node _kit/build/icons.mjs <game>`);
+  }
   if (record.source !== sha(readFileSync(join(gameDir, 'tools', 'icon.svg'), 'utf8'))) {
     problems.push('tools/icon.svg changed since the icons were rendered: run node _kit/build/icons.mjs <game>');
   }

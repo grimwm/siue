@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createInstall, asksInstall, withInstall, COPIED_MS, IOS_STEPS, PROMPT_STASH } from '../install.ts';
+import { createInstall, asksInstall, withInstall, COPIED_MS, IOS_STEPS, PROMPT_STASH, detectPlatform, browserInstallEnv } from '../install.ts';
+import { runInNewContext } from 'node:vm';
 import { manualClock } from './clock.ts';
 
 // A site page (/play/crete/) and the game's own page (games/crete/).
@@ -204,4 +205,43 @@ test('?install is read in any form, and added to a page keeping its query and ha
 test('the page\'s first script parks an early prompt where the bar looks for it', () => {
   const php = readFileSync(join(import.meta.dirname, '..', 'php', 'install-core.php'), 'utf8');
   assert.match(php, new RegExp(`window\\.${PROMPT_STASH} = e;`));
+});
+
+test('platform: iPhone and iPad (also as a Mac with a touch screen) are iOS; Chromium brands are Chromium; the rest cannot install', () => {
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1';
+  const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15';
+  assert.equal(detectPlatform(IPHONE, 'iPhone', 5), 'ios');
+  assert.equal(detectPlatform(MAC, 'MacIntel', 5), 'ios', 'iPadOS says it is a Mac');
+  assert.equal(detectPlatform(MAC, 'MacIntel', 0), 'other', 'a desktop Safari');
+  assert.equal(detectPlatform(MAC, 'MacIntel', 0, [{ brand: 'Not A Brand' }, { brand: 'Chromium' }, { brand: 'Google Chrome' }]), 'chromium');
+  assert.equal(detectPlatform('Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/130.0', 'Linux x86_64', 0), 'other');
+});
+
+test('a prompt that fires before the bar loads is held back by the page\'s first script, and the bar picks it up', () => {
+  const php = readFileSync(join(import.meta.dirname, '..', 'php', 'install-core.php'), 'utf8');
+  const script = php.match(/const INSTALL_PROMPT_STASH = "<script>(.*?)<\/script>";/)[1];
+  const handlers = [];
+  const fakeWindow = { addEventListener: (type, fn) => handlers.push([type, fn]) };
+  runInNewContext(script, { window: fakeWindow });
+  assert.deepEqual(handlers.map(h => h[0]), ['beforeinstallprompt']);
+  let prevented = 0;
+  const early = { preventDefault: () => { prevented++; }, prompt: async () => {} };
+  handlers[0][1](early);
+  assert.equal(prevented, 1, 'the browser is told to hold the prompt back');
+  assert.equal(fakeWindow[PROMPT_STASH], early);
+
+  // The deferred bar script comes later: it finds the parked event.
+  globalThis.window = fakeWindow;
+  const realNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { value: { userAgent: '', platform: '', maxTouchPoints: 0 }, configurable: true, writable: true });
+  try {
+    const got = [];
+    browserInstallEnv().onPrompt(p => got.push(p));
+    assert.deepEqual(got, [early]);
+    assert.equal(fakeWindow[PROMPT_STASH], null, 'the parked prompt is taken once');
+  } finally {
+    delete globalThis.window;
+    if (realNavigator) Object.defineProperty(globalThis, 'navigator', realNavigator);
+    else delete globalThis.navigator;
+  }
 });

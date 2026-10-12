@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give the games kit a shared Web Audio core and Preact UI components, move Crete's and Cylon's hand-built overlays onto them, make every Crete maze one that the creature reaches and a good player still wins, and make each game an installable full-screen app with its own icons and a way to quit.
+**Goal:** Give the games kit a shared Web Audio core and Preact UI components, move Crete's and Cylon's hand-built overlays onto them, make every Crete maze one that the creature reaches and a good player still wins, and make each game an installable full-screen app with its own icons, a way to quit, and Install and Share buttons on its site page.
 
-**Architecture:** `games/_kit/audio/core.ts` is a facade over one `AudioContext` per game (lazy creation, gesture unlock, an sfx and a music bus, the tone and noise envelopes); each game keeps its own voices and music and calls the core. `games/_kit/ui/` holds four Preact components (`Dialog`, `Button`, `Panel`, `KeyChip`); a game's page keeps an empty mount point and its module renders the component with a finished view of its state. Crete's generator judges each candidate maze by playing it twice with the real `createGame` rules (a "dasher" bot and a "strategist" bot) from per-attempt random streams. `games/_kit/app.ts` owns installed-app detection, full screen and leaving; `games/_kit/build/icons.mjs` renders every icon from one SVG per game; `install-core.php` writes full-screen manifests and checks the icon set.
+**Architecture:** `games/_kit/audio/core.ts` is a facade over one `AudioContext` per game (lazy creation, gesture unlock, an sfx and a music bus, the tone and noise envelopes); each game keeps its own voices and music and calls the core. `games/_kit/ui/` holds four Preact components (`Dialog`, `Button`, `Panel`, `KeyChip`); a game's page keeps an empty mount point and its module renders the component with a finished view of its state. Crete's generator judges each candidate maze by playing it twice with the real `createGame` rules (a "dasher" bot and a "strategist" bot) from per-attempt random streams. `games/_kit/app.ts` owns installed-app detection, full screen and leaving; `games/_kit/build/icons.mjs` renders every icon from one SVG per game; `install-core.php` writes full-screen manifests and checks the icon set. `games/_kit/install.ts` decides when to offer Install (the browser's held-back prompt, iOS's Add to Home Screen steps, or nothing) and how Share falls back, with the browser behind ports; `ui/install-bar.tsx` draws it, and each page game ships it as `dist/install.js` for its site page and its own page.
 
 **Tech Stack:** TypeScript 7.0.2, esbuild 0.28.2, Preact 11.0.1, `@resvg/resvg-js` 2.6.2 (dev only, icon rendering), Node 24 (`node --test`, native type stripping), PHP 8.4, PHPUnit ^12, Playwright.
 
@@ -16,6 +16,7 @@
 - PR 7 lands before Plan C's PR 11: Plan C renders Tankity's key chips with this plan's `KeyChip` (`at` and `decorative`, Task 6), builds its title card on `Dialog`, and loads its component tests with `importTsx` and the moved `dom-stub.mjs` (Task 5).
 - PR 19 lands after Plan C's PR 10 and PR 13. Plan C's PR 10 (Task 1) adds `kit_php` copies to `install_sync` and two `InstallCoreTest` cases; Task 20 here is written to apply on top of that (rebase onto it, keep both). Task 24's Quit calls Plan C's `backToTitle()` and extends Plan C's `test/menu.test.mjs`.
 - Tankity's `menu.tsx`, `menu.ts` and `test/menu.test.mjs` change in this order: the difficulty PR → Plan C Task 14 → Plan C Task 19 → Task 24 here (Quit) → Plan D Task 18 (Standings).
+- Task 29 adds `dist/install.js` to the `versioned` list in `tankity/tools/install-files.php`, and a `dist/install.js` script tag to `tankity/index.html`; Plan D Task S2 later adds `kit_php` to the same config array (another line). Tankity's `src/` is untouched by the Install and Share work: the bar is a separate bundle, so Plan C's and Plan D's `main.ts` and menu edits do not meet it.
 - Plan E (PR 17) rebases onto PR 6: its new audio tests use `fakeAudioContext` from `games/_kit/test/audio.ts` (Task 1).
 
 ## Global Constraints
@@ -47,6 +48,7 @@
 3. **High-score initials that are not plain letters** (a forged or legacy row such as `<b>`). Expected: shown as text; the board used to be built with `innerHTML`. Pinned by `cylon/test/ui.test.mjs` "rows show initials as text" (Task 9).
 4. **An installed app whose `window.close()` is silently ignored** (phones, some desktop installs). Expected: within 150 ms the game falls back to its title card, leaves full screen and shows "Swipe the app away to close it"; never hangs waiting. Pinned by `_kit/test/app.test.mjs` "an installed app that cannot close…" (Task 21).
 5. **No Web Audio, or a context that throws while being made** (old Safari, too many contexts). Expected: every sound call is silent and nothing throws; a muted bus never even creates the context. Pinned by `_kit/test/audio.test.mjs` (Task 1).
+6. **Chrome fires `beforeinstallprompt` before the page's deferred `dist/install.js` has run.** Expected: the page's first script holds the event back (`INSTALL_PROMPT_STASH`) and the Install button appears as soon as the bar mounts; the prompt is never lost and Chrome's own mini-infobar never shows. Pinned by `install.test.mjs` "a prompt held back before the bar mounted shows Install" (Task 27) and `InstallCoreTest` / `site-game-pages` checks for the stash (Task 29).
 
 ---
 
@@ -55,12 +57,15 @@
 ```
 websites/www.cs/
   index.html                                   # PR 8: settings panel becomes an empty mount point
-  tools/site-game-pages.php                    # PR 19: apple-touch-icon is the 180 px icon
-  tests/php/checks/site-game-pages.php         # PR 19: (if it pins the icon line)
+  index.html                                   # PR 19: #cylon-install-root in the game bar
+  tools/site-game-pages.php                    # PR 19: apple-touch-icon is the 180 px icon; the Install/Share mount, dist/install.js, the prompt stash; the forward keeps the query
+  play/play.css                                # PR 19: the bar's place in .play-nav
+  tests/php/checks/site-game-pages.php         # PR 19: the buttons' mount, script and stash
   tests/e2e/crete-play.spec.mjs                # PR 9 re-pin; PR 19 Quit test
   tests/e2e/cylon-help.spec.mjs                # PR 19 Game Off test
   tests/e2e/tankity-overlays.spec.mjs          # PR 19 Menu → Quit test
   tests/e2e/games-pwa.spec.mjs                 # PR 19 manifests, icons, display
+  tests/e2e/games-install.spec.mjs             # PR 19 Install and Share (new; select.mjs, shard.mjs WEIGHTS)
   tests/php/checks/deploy-set.php              # PR 7, PR 8: Crete's and Cylon's THIRD_PARTY_LICENSES.txt ship
   games/
     package.json, package-lock.json            # PR 19: @resvg/resvg-js
@@ -71,14 +76,17 @@ websites/www.cs/
       audio/core.ts                            # PR 6 (Task 1)
       ui/dialog.tsx, button.tsx, panel.tsx, key-chip.tsx   # PR 7 (Task 6)
       app.ts                                   # PR 19 (Task 21)
+      install.ts                               # PR 19 (Task 27)
+      ui/install-bar.tsx, install-page.ts      # PR 19 (Task 28)
       build/icons.mjs, build/icons.test.mjs    # PR 19 (Task 19)
-      php/install-core.php, php/tests/InstallCoreTest.php  # PR 19 (Task 20)
+      php/install-core.php, php/tests/InstallCoreTest.php  # PR 19 (Tasks 20, 29)
       test/audio.ts, audio.test.mjs            # PR 6 (Task 1)
       test/dom-stub.mjs (moved from tankity), tsx.ts, tsx.test.mjs, fixture/hello.tsx  # PR 7 (Task 5)
       test/ui.test.mjs                         # PR 7 (Task 6)
       test/app.test.mjs                        # PR 19 (Task 21)
+      test/install.test.mjs, install-bar.test.mjs  # PR 19 (Tasks 27, 28)
     crete/
-      index.html, game.css                     # PR 7 mount points; PR 19 Quit button
+      index.html, game.css                     # PR 7 mount points; PR 19 Quit button and dist/install.js
       src/audio.ts                             # PR 6
       src/ui.ts                                # PR 7, 9, 19
       src/ui/end.tsx, ui/inventory.tsx         # PR 7
@@ -86,6 +94,7 @@ websites/www.cs/
       src/grid.ts, src/bots.ts                 # PR 9
       src/engine.ts, src/main.ts               # PR 9, 19
       tools/icon.svg                           # PR 19
+      build.json, tools/install-files.php      # PR 19: dist/install.js, built and versioned
       test/audio.test.mjs, ui.test.mjs, bots.test.mjs, maze-rule.test.mjs, maze-sweep.test.mjs
     cylon/
       mount.html                               # PR 8 mount points; PR 19 exit hint
@@ -93,13 +102,14 @@ websites/www.cs/
       src/audio.ts                             # PR 6
       src/scores.ts                            # PR 8: rows as data
       src/ui/board.tsx, help.tsx, gameover.tsx, settings.tsx  # PR 8
-      src/gameover.ts, chrome.ts, main.ts      # PR 8, 19
+      src/gameover.ts, chrome.ts, main.ts      # PR 8, 19 (main.ts: Install and Share in the game bar)
       tools/icon.svg                           # PR 19
       test/audio.test.mjs (rewritten), ui.test.mjs (new), scores.test.mjs, smoke.test.mjs
     tankity/
       src/audio.ts                             # PR 6
       src/menu.ts, src/ui/menu.tsx, src/main.ts  # PR 19 Quit (on Plan C's menu and backToTitle)
       tools/icon.svg                           # PR 19
+      index.html, build.json, tools/install-files.php  # PR 19: dist/install.js, built and versioned
       test/audio.test.mjs (rewritten), ui.test.mjs, smoke.test.mjs (imports); menu.test.mjs (PR 19, Plan C's file)
 ```
 
@@ -4478,9 +4488,9 @@ Push `games/crete-maze-rule`, open the PR ("Crete: every maze is met and winnabl
 
 ---
 
-# PR 19: Install straight into each game, full screen; icons; Quit
+# PR 19: Install straight into each game, full screen; icons; Quit; Install and Share
 
-Branch `games/install-and-exit`. Spec section 11. If PR 12 (Tankity's title card, Plan C) is in flight when this PR starts, Task 24 moves into PR 12 and this PR ships without it; otherwise Task 24 returns Tankity to the demo it opens on, which PR 12 later puts its title card over.
+Branch `games/install-and-exit`. Spec section 11. The tasks run in the order 19–24, 26–31, 25: Task 26's probe needs Task 20's manifests, and Task 25 ships the PR. If PR 12 (Tankity's title card, Plan C) is in flight when this PR starts, Task 24 moves into PR 12 and this PR ships without it; otherwise Task 24 returns Tankity to the demo it opens on, which PR 12 later puts its title card over.
 
 ### Task 19: One drawing per game, every icon rendered from it
 
@@ -5664,6 +5674,1305 @@ git add -A websites/www.cs/games/tankity websites/www.cs/tests/e2e/tankity-overl
 git commit -m "Tankity: Menu → Quit; full screen through the kit"
 ```
 
+### Task 26: Probe where Chromium offers to install (the decision point)
+
+**Files:**
+- Create, run, then delete (never committed): `websites/www.cs/tests/e2e/install-probe.spec.mjs`
+
+Each game's site page (`/play/<id>/`) links the game's manifest (`../../games/<id>/manifest.webmanifest`) but lies outside its scope (`games/<id>/`), and shows the game in a frame. The CIC's manifest is scoped to `index.html`, so the home page at the bare site address (`/~wgrim/?game=cylon`) is outside it too. Whether Chromium fires `beforeinstallprompt` on such a page decides where the Install button can prompt. This task measures it in real Chrome against the docker site, before any button is built; Tasks 27 and 30 take its answers as two constants.
+
+**Interfaces:**
+- Consumes: Task 20's full-screen manifests and icons (the probe needs installable manifests); the site's own manifest swap for `?game=cylon` (`src/main.ts` `openLinkedGame`).
+- Produces: two answers, recorded in the PR description with the six `PROBE` lines:
+  - `OUT_OF_SCOPE_PROMPTS`: whether Chromium prompts on a page outside the linked manifest's scope (the two `play page` lines). Task 27 writes it into `games/_kit/install.ts`.
+  - `PROMPTS_IN_SCOPE`: whether Chromium prompts for The CIC on `index.html?game=cylon`, inside its manifest's scope, once the page has swapped its manifest link to Cylon's. Task 30 writes it into `games/cylon/src/main.ts`.
+
+- [ ] **Step 1: Write the probe**
+
+```js
+// websites/www.cs/tests/e2e/install-probe.spec.mjs
+// One-off probe, deleted after it runs: where does Chromium offer to install
+// each game? Prints one PROBE line per page.
+import { test } from '@playwright/test';
+
+// Chrome asks for some engagement before it offers to install; the probe asks
+// whether a page qualifies, not whether a visitor has engaged yet.
+test.use({ launchOptions: { args: ['--bypass-app-banner-engagement-checks'] } });
+
+const PAGES = [
+  ['baseline crete', 'games/crete/'],
+  ['baseline tankity', 'games/tankity/'],
+  ['play page crete', 'play/crete/'],
+  ['play page tankity', 'play/tankity/'],
+  ['cylon at index.html (in scope)', 'index.html?game=cylon'],
+  ['cylon at the site root (out of scope)', './?game=cylon'],
+];
+
+for (const [name, path] of PAGES) {
+  test(name, async ({ page }) => {
+    await page.addInitScript(() => {
+      window.__offers = 0;
+      window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); window.__offers++; });
+    });
+    await page.goto(path);
+    // The manifest and icons load, the service worker registers, and for The
+    // CIC main.js swaps the manifest link once the games list arrives.
+    await page.waitForTimeout(5000);
+    const cdp = await page.context().newCDPSession(page);
+    const { url: manifest } = await cdp.send('Page.getAppManifest');
+    const { installabilityErrors } = await cdp.send('Page.getInstallabilityErrors');
+    const offers = await page.evaluate(() => window.__offers);
+    console.log(`PROBE ${name} | manifest ${manifest} | beforeinstallprompt ${offers} | errors ${JSON.stringify(installabilityErrors.map(e => e.errorId))}`);
+  });
+}
+```
+
+- [ ] **Step 2: Run it**
+
+Run: `cd websites/www.cs && make up && make e2e E2E_ARGS="install-probe.spec.mjs"`
+Expected: six `PROBE` lines. If both baselines say `beforeinstallprompt 0` with `errors []`, this Chrome does not fire the event headless: rerun headed, `make e2e E2E_ARGS="install-probe.spec.mjs --headed"`, and read that run.
+
+- [ ] **Step 3: Decide (the decision point)**
+
+Read the lines in this order:
+1. **The baselines** (`games/crete/`, `games/tankity/`) must be installable: `beforeinstallprompt 1` (or more) and `errors []`, manifest `…/games/<id>/manifest.webmanifest`. If either reports an error, stop: Task 20's manifest or icons are wrong. Fix that first and rerun; nothing below means anything until both baselines pass.
+2. **`OUT_OF_SCOPE_PROMPTS`** is `true` when both `play page` lines read like the baselines (the event fired, no errors, the game's manifest), and `false` otherwise. If the two disagree, it is `false`.
+   - `true`: the Install button prompts right on `/play/<id>/` (branch A).
+   - `false`: on Chromium, Install on `/play/<id>/` opens `games/<id>/?install`, and the game's page shows the same bar, which prompts there (branch B).
+   - Either way, iOS's Install on a site page opens `games/<id>/?install`: iOS saves the page it is on to the home screen, and that must be the game.
+3. **`PROMPTS_IN_SCOPE`** is `true` when the `cylon at index.html` line shows manifest `…/games/cylon/manifest.webmanifest`, the event fired, and no errors; otherwise `false` (Chromium does not pick up a swapped manifest link, so The CIC cannot prompt from the home page at all, and Task 30 shows Share only on Chromium, with the iOS steps on iOS).
+4. The `cylon at the site root` line should agree with the `play page` lines (it is the same rule: a page outside the manifest's scope). If it does not, set `OUT_OF_SCOPE_PROMPTS` to `false`: the bar then sends Chromium to a page in scope, which works whichever line is right.
+
+Both branches are written out below: Task 27 has one constant to set, and Task 30 one more; Tasks 28, 29 and 31 are the same in both branches.
+
+- [ ] **Step 4: Remove the probe**
+
+Run: `rm websites/www.cs/tests/e2e/install-probe.spec.mjs && git -C websites/www.cs status --short tests/e2e`
+Expected: nothing listed (the probe was never added; `select.mjs --check` would refuse a spec no rule selects). Paste the six `PROBE` lines and the two answers into a scratch note for the PR description (Task 25 Step 4). No commit.
+
+### Task 27: The kit's `install.ts`: when to offer Install, and how Share falls back
+
+**Files:**
+- Create: `websites/www.cs/games/_kit/install.ts`
+- Create: `websites/www.cs/games/_kit/test/install.test.mjs`
+- Modify: `websites/www.cs/games/_kit/README.md`
+
+The logic is the kit's, not the play page's own module: the site's TypeScript (`src/`, compiled one file to one by `tools/ts-build.mjs` with TypeScript 6) is classic scripts with no imports, while branch B, The CIC (Task 30) and iOS's arrival on `games/<id>/?install` all need the same logic on game pages, which only the kit reaches. The kit also brings the ports, the manual clock, Preact and the DOM stub this needs. The site page gets it from the game's own `dist/install.js` (Task 28).
+
+**Interfaces:**
+- Consumes: `Timers` (ports.ts), `browserTimers` (ports.browser.ts), `isInstalled`, `browserAppEnv` (Task 21); `manualClock` (tests).
+- Produces:
+  - `OUT_OF_SCOPE_PROMPTS: boolean` (Task 26), `IOS_STEPS = 'Tap Share, then Add to Home Screen'`, `COPIED_MS = 2500`, `PROMPT_STASH = '__installPrompt'`
+  - `type Platform = 'ios' | 'chromium' | 'other'`; `interface DeferredPrompt { prompt(): Promise<unknown> }`
+  - `interface InstallEnv { onPrompt(cb: (p: DeferredPrompt) => void): void; onInstalled(cb: () => void): void; installed(): boolean; platform(): Platform; framed(): boolean; share: ((data: { title: string; url: string }) => Promise<void>) | null; copy: ((text: string) => Promise<void>) | null; navigate(url: string, replace: boolean): void; timers: Timers }`
+  - `interface InstallSetup { title: string; shareUrl: string; installPage: string | null; promptsHere: boolean; asked: boolean }`
+  - `type ShareState = 'idle' | 'copied' | 'field'`; `interface InstallView { off: boolean; install: boolean; highlight: boolean; steps: boolean; share: ShareState }`
+  - `interface Install { view(): InstallView; pressInstall(): Promise<void>; closeSteps(): void; pressShare(): Promise<void>; closeShare(): void }`
+  - `createInstall(env, setup, onChange: (v: InstallView) => void): Install`, `asksInstall(search: string): boolean`, `withInstall(page: string): string`, `browserInstallEnv(): InstallEnv`
+  - The rules: framed → nothing at all; installed (or after `appinstalled`) → no Install; iOS → Install always, which opens the steps here when `installPage` is null and otherwise goes to `withInstall(installPage)`; Chromium on a page that prompts → Install only while a held-back prompt is in hand, a click spends it; Chromium on a page that does not (`promptsHere: false`) with an `installPage` → Install at once, which goes there; anything else → no Install. `asked` (`?install`) highlights a shown button; on iOS it opens the steps here, or goes to `installPage` with `replace`. Nothing ever prompts without a click. Share: Web Share; on `AbortError` nothing; on another error, or without Web Share, the clipboard and `'copied'` for `COPIED_MS`; if that fails or is missing, `'field'`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```js
+// websites/www.cs/games/_kit/test/install.test.mjs
+// Install and Share on every platform: Chromium's held-back prompt, iOS's
+// steps, a browser that cannot install, an installed app, ?install, and the
+// three ways a link is shared.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createInstall, asksInstall, withInstall, COPIED_MS, IOS_STEPS } from '../install.ts';
+import { manualClock } from './clock.ts';
+
+// A site page (/play/crete/) and the game's own page (games/crete/).
+const PLAY = {
+  title: 'The Island of Crete', shareUrl: 'https://site.test/play/crete/',
+  installPage: 'https://site.test/games/crete/', promptsHere: true, asked: false,
+};
+const GAME = { ...PLAY, installPage: null };
+
+function setup({ platform = 'chromium', installed = false, framed = false, share = null, copy = null, early = null } = {}, how = PLAY) {
+  const clock = manualClock();
+  const went = [];
+  const views = [];
+  let offer = () => {};
+  let installedNow = () => {};
+  const env = {
+    onPrompt: cb => { offer = cb; if (early) cb(early); },
+    onInstalled: cb => { installedNow = cb; },
+    installed: () => installed,
+    platform: () => platform,
+    framed: () => framed,
+    share,
+    copy,
+    navigate: (url, replace) => went.push([url, replace]),
+    timers: clock.timers,
+  };
+  const install = createInstall(env, how, v => views.push(v));
+  return { install, went, views, clock, offer: p => offer(p), installedNow: () => installedNow() };
+}
+const fakePrompt = () => {
+  const p = { shown: 0, prompt: async () => { p.shown++; } };
+  return p;
+};
+
+test('Chromium: Install stays hidden until the browser offers to install, then shows', () => {
+  const t = setup();
+  assert.equal(t.install.view().install, false);
+  t.offer(fakePrompt());
+  assert.equal(t.install.view().install, true);
+  assert.equal(t.views.at(-1).install, true, 'the bar is redrawn');
+});
+
+test('a prompt held back before the bar mounted shows Install', () => {
+  assert.equal(setup({ early: fakePrompt() }).install.view().install, true);
+});
+
+test('a click prompts once; the spent prompt takes the button with it', async () => {
+  const t = setup();
+  const p = fakePrompt();
+  t.offer(p);
+  await t.install.pressInstall();
+  assert.equal(p.shown, 1);
+  assert.equal(t.install.view().install, false);
+  await t.install.pressInstall();
+  assert.equal(p.shown, 1);
+});
+
+test('a prompt that throws leaves no button and no error', async () => {
+  const t = setup();
+  t.offer({ prompt: async () => { throw new Error('already shown'); } });
+  await t.install.pressInstall();
+  assert.equal(t.install.view().install, false);
+});
+
+test('appinstalled hides Install for good', () => {
+  const t = setup();
+  t.offer(fakePrompt());
+  t.installedNow();
+  assert.equal(t.install.view().install, false);
+  t.offer(fakePrompt());
+  assert.equal(t.install.view().install, false);
+});
+
+test('the installed app never shows Install or the steps, on any platform', () => {
+  for (const platform of ['chromium', 'ios', 'other']) {
+    const t = setup({ platform, installed: true }, { ...GAME, asked: true });
+    t.offer(fakePrompt());
+    assert.deepEqual([t.install.view().install, t.install.view().steps, t.went], [false, false, []], platform);
+  }
+});
+
+test('a browser that cannot install shows no Install button', () => {
+  const t = setup({ platform: 'other' });
+  assert.equal(t.install.view().install, false);
+  const away = setup({ platform: 'other' }, { ...PLAY, promptsHere: false, asked: true });
+  assert.equal(away.install.view().install, false);
+  assert.deepEqual(away.went, []);
+});
+
+test('iOS on the game page: Install opens the Add to Home Screen steps, which close', async () => {
+  const t = setup({ platform: 'ios' }, GAME);
+  assert.deepEqual([t.install.view().install, t.install.view().steps], [true, false]);
+  await t.install.pressInstall();
+  assert.equal(t.install.view().steps, true);
+  t.install.closeSteps();
+  assert.equal(t.install.view().steps, false);
+  assert.equal(IOS_STEPS, 'Tap Share, then Add to Home Screen');
+});
+
+test('iOS on a site page: Install opens the game page asking to install, so iOS saves the game', async () => {
+  const t = setup({ platform: 'ios' });
+  await t.install.pressInstall();
+  assert.deepEqual(t.went, [['https://site.test/games/crete/?install', false]]);
+  assert.equal(t.install.view().steps, false);
+});
+
+test('?install highlights Install once it shows, and never prompts by itself', () => {
+  const t = setup({}, { ...PLAY, asked: true });
+  assert.equal(t.install.view().highlight, false, 'nothing to highlight yet');
+  const p = fakePrompt();
+  t.offer(p);
+  assert.deepEqual([t.install.view().install, t.install.view().highlight, p.shown, t.went], [true, true, 0, []]);
+});
+
+test('?install on iOS opens the steps on the game page, and goes to the game page from a site page', () => {
+  assert.equal(setup({ platform: 'ios' }, { ...GAME, asked: true }).install.view().steps, true);
+  const fromSite = setup({ platform: 'ios' }, { ...PLAY, asked: true });
+  assert.deepEqual(fromSite.went, [['https://site.test/games/crete/?install', true]]);
+});
+
+test('Chromium on a page it does not prompt on: Install shows at once and opens the game page', async () => {
+  const t = setup({}, { ...PLAY, promptsHere: false, asked: true });
+  assert.deepEqual([t.install.view().install, t.install.view().highlight], [true, true]);
+  await t.install.pressInstall();
+  assert.deepEqual(t.went, [['https://site.test/games/crete/?install', false]]);
+});
+
+test('inside the site page\'s frame the bar is off: no Install, no steps, no share', async () => {
+  const shared = [];
+  const t = setup({ framed: true, platform: 'ios', share: async d => { shared.push(d); } }, { ...GAME, asked: true });
+  t.offer(fakePrompt());
+  await t.install.pressShare();
+  const v = t.install.view();
+  assert.deepEqual([v.off, v.install, v.steps, shared], [true, false, false, []]);
+});
+
+test('Share hands the title and the site page to the share sheet', async () => {
+  const shared = [];
+  const t = setup({ share: async d => { shared.push(d); }, copy: async () => { throw new Error('unused'); } });
+  await t.install.pressShare();
+  assert.deepEqual(shared, [{ title: 'The Island of Crete', url: 'https://site.test/play/crete/' }]);
+  assert.equal(t.install.view().share, 'idle');
+});
+
+test('a cancelled share sheet is silent: no copy, no message, no redraw', async () => {
+  const copied = [];
+  const t = setup({
+    share: async () => { throw Object.assign(new Error('cancelled'), { name: 'AbortError' }); },
+    copy: async u => { copied.push(u); },
+  });
+  await t.install.pressShare();
+  assert.deepEqual([copied, t.install.view().share, t.views.length], [[], 'idle', 0]);
+});
+
+test('without Web Share the address is copied and "Link copied" shows, then clears', async () => {
+  const copied = [];
+  const t = setup({ copy: async u => { copied.push(u); } });
+  await t.install.pressShare();
+  assert.deepEqual(copied, ['https://site.test/play/crete/']);
+  assert.equal(t.install.view().share, 'copied');
+  t.clock.advance(COPIED_MS - 1);
+  assert.equal(t.install.view().share, 'copied');
+  t.clock.advance(1);
+  assert.equal(t.install.view().share, 'idle');
+});
+
+test('a share sheet that refuses falls back to copying', async () => {
+  const copied = [];
+  const t = setup({
+    share: async () => { throw Object.assign(new Error('no gesture'), { name: 'NotAllowedError' }); },
+    copy: async u => { copied.push(u); },
+  });
+  await t.install.pressShare();
+  assert.deepEqual([copied.length, t.install.view().share], [1, 'copied']);
+});
+
+test('a blocked or missing clipboard shows the address in a field, until it is closed', async () => {
+  const t = setup({ copy: async () => { throw new Error('denied'); } });
+  await t.install.pressShare();
+  assert.equal(t.install.view().share, 'field');
+  t.install.closeShare();
+  assert.equal(t.install.view().share, 'idle');
+  const none = setup();
+  await none.install.pressShare();
+  assert.equal(none.install.view().share, 'field');
+});
+
+test('?install is read in any form, and added to a page keeping its query and hash', () => {
+  for (const s of ['?install', '?install=1', '?game=cylon&install']) assert.equal(asksInstall(s), true, s);
+  for (const s of ['', '?installs', '?game=cylon']) assert.equal(asksInstall(s), false, s);
+  assert.equal(withInstall('https://site.test/games/crete/'), 'https://site.test/games/crete/?install');
+  assert.equal(withInstall('https://site.test/index.html?game=cylon#top'), 'https://site.test/index.html?game=cylon&install#top');
+});
+```
+
+Run: `cd websites/www.cs/games && node --test _kit/test/install.test.mjs`
+Expected: FAIL, `Cannot find module '.../_kit/install.ts'`.
+
+- [ ] **Step 2: Implement**
+
+Set `OUT_OF_SCOPE_PROMPTS` to Task 26's answer: the code below is branch A (`true`); for branch B write `false`. Nothing else in this task differs between the branches.
+
+```ts
+// websites/www.cs/games/_kit/install.ts
+// Install and Share for one game: whether to offer the browser's install
+// prompt, iOS's Add to Home Screen steps, or nothing, and how a link is
+// shared. The browser is a port (InstallEnv), so every platform is
+// unit-tested; browserInstallEnv() is the real one.
+import type { Timers } from './ports.ts';
+import { browserTimers } from './ports.browser.ts';
+import { isInstalled, browserAppEnv } from './app.ts';
+
+/**
+ * Whether Chromium offers to install a game from a page that links its
+ * manifest but lies outside the manifest's scope, as the site's /play/<id>/
+ * pages do (measured in Chrome). Where it does not, Install there opens the
+ * game's own page with ?install.
+ */
+export const OUT_OF_SCOPE_PROMPTS: boolean = true;
+
+export const IOS_STEPS = 'Tap Share, then Add to Home Screen';
+/** How long "Link copied" stays up. */
+export const COPIED_MS = 2500;
+/** Where the page's first script parks a prompt that came before the bar (install-core.php's INSTALL_PROMPT_STASH). */
+export const PROMPT_STASH = '__installPrompt';
+
+export type Platform = 'ios' | 'chromium' | 'other';
+
+/** A held-back BeforeInstallPromptEvent: prompt() shows the browser's install dialog, once. */
+export interface DeferredPrompt {
+  prompt(): Promise<unknown>;
+}
+
+export interface InstallEnv {
+  /** Each install prompt the browser offers, already held back with preventDefault(). */
+  onPrompt(cb: (p: DeferredPrompt) => void): void;
+  /** appinstalled. */
+  onInstalled(cb: () => void): void;
+  /** This page runs as an installed app. */
+  installed(): boolean;
+  platform(): Platform;
+  /** This page is inside another page's frame (the game inside /play/<id>/). */
+  framed(): boolean;
+  /** navigator.share, or null where there is none. */
+  share: ((data: { title: string; url: string }) => Promise<void>) | null;
+  /** navigator.clipboard.writeText, or null where there is none. */
+  copy: ((text: string) => Promise<void>) | null;
+  /** Goes to another page; `replace` leaves this one out of the history. */
+  navigate(url: string, replace: boolean): void;
+  timers: Timers;
+}
+
+export interface InstallSetup {
+  /** The game's name, for the share sheet. */
+  title: string;
+  /** The address Share hands out: the game's /play/<id>/ page. */
+  shareUrl: string;
+  /** The page installing happens on when it cannot happen here (absolute, without ?install), or null when it can. */
+  installPage: string | null;
+  /** Whether Chromium offers its install prompt on this page. */
+  promptsHere: boolean;
+  /** The address asked for installing (?install). */
+  asked: boolean;
+}
+
+/** 'copied': "Link copied" is up; 'field': the address is shown to copy by hand. */
+export type ShareState = 'idle' | 'copied' | 'field';
+
+export interface InstallView {
+  /** Nothing to draw: the page is framed. */
+  off: boolean;
+  install: boolean;
+  /** ?install: the button is drawn to the eye. */
+  highlight: boolean;
+  /** iOS's Add to Home Screen steps are open. */
+  steps: boolean;
+  share: ShareState;
+}
+
+export interface Install {
+  view(): InstallView;
+  pressInstall(): Promise<void>;
+  closeSteps(): void;
+  pressShare(): Promise<void>;
+  closeShare(): void;
+}
+
+export function asksInstall(search: string): boolean {
+  return new URLSearchParams(search).has('install');
+}
+
+/** `page` with ?install added to its query. */
+export function withInstall(page: string): string {
+  const url = new URL(page);
+  url.search = url.search ? `${url.search}&install` : '?install';
+  return url.href;
+}
+
+const cancelled = (e: unknown): boolean => (e as { name?: unknown } | null)?.name === 'AbortError';
+
+export function createInstall(env: InstallEnv, setup: InstallSetup, onChange: (v: InstallView) => void): Install {
+  const off = env.framed();
+  const platform = env.platform();
+  const ios = platform === 'ios';
+  // Chromium on a page it does not prompt on: Install opens the page that does.
+  const sendsAway = platform === 'chromium' && !setup.promptsHere && setup.installPage !== null;
+  let installed = env.installed();
+  let prompt: DeferredPrompt | null = null;
+  let steps = false;
+  let share: ShareState = 'idle';
+  let copiedTimer: number | null = null;
+
+  const offered = (): boolean => !off && !installed && (ios || sendsAway || prompt !== null);
+  const view = (): InstallView => ({ off, install: offered(), highlight: setup.asked && offered(), steps, share });
+  const changed = (): void => onChange(view());
+
+  function setShare(next: ShareState): void {
+    if (copiedTimer !== null) {
+      env.timers.clearTimeout(copiedTimer);
+      copiedTimer = null;
+    }
+    share = next;
+    if (next === 'copied') {
+      copiedTimer = env.timers.setTimeout(() => {
+        copiedTimer = null;
+        share = 'idle';
+        changed();
+      }, COPIED_MS);
+    }
+    changed();
+  }
+
+  if (!off && !installed) {
+    env.onPrompt(p => {
+      prompt = p;
+      changed();
+    });
+    env.onInstalled(() => {
+      installed = true;
+      prompt = null;
+      steps = false;
+      changed();
+    });
+    if (setup.asked && ios) {
+      if (setup.installPage === null) steps = true;
+      else env.navigate(withInstall(setup.installPage), true);
+    }
+  }
+
+  return {
+    view,
+    async pressInstall() {
+      if (!offered()) return;
+      if (ios) {
+        if (setup.installPage === null) {
+          steps = true;
+          changed();
+        } else {
+          env.navigate(withInstall(setup.installPage), false);
+        }
+        return;
+      }
+      if (prompt) {
+        // A prompt shows once; the browser offers a new one if the player declines.
+        const p = prompt;
+        prompt = null;
+        changed();
+        try {
+          await p.prompt();
+        } catch {
+          // Already shown, or refused: the button is gone either way.
+        }
+        return;
+      }
+      if (setup.installPage !== null) env.navigate(withInstall(setup.installPage), false);
+    },
+    closeSteps() {
+      if (!steps) return;
+      steps = false;
+      changed();
+    },
+    async pressShare() {
+      if (off) return;
+      if (env.share) {
+        try {
+          await env.share({ title: setup.title, url: setup.shareUrl });
+          return;
+        } catch (e) {
+          if (cancelled(e)) return;
+          // Refused (no gesture left, a blocked sheet): copy instead.
+        }
+      }
+      if (env.copy) {
+        try {
+          await env.copy(setup.shareUrl);
+          setShare('copied');
+          return;
+        } catch {
+          // A blocked clipboard: show the address to copy by hand.
+        }
+      }
+      setShare('field');
+    },
+    closeShare() {
+      if (share !== 'idle') setShare('idle');
+    },
+  };
+}
+
+type Parked = { [PROMPT_STASH]?: DeferredPrompt | null };
+type WithBrands = Navigator & { userAgentData?: { brands?: { brand: string }[] } };
+
+export function browserInstallEnv(): InstallEnv {
+  const parked = window as unknown as Parked;
+  return {
+    onPrompt: cb => {
+      const early = parked[PROMPT_STASH];
+      parked[PROMPT_STASH] = null;
+      if (early) cb(early);
+      window.addEventListener('beforeinstallprompt', ev => {
+        ev.preventDefault();
+        parked[PROMPT_STASH] = null;
+        cb(ev as unknown as DeferredPrompt);
+      });
+    },
+    onInstalled: cb => window.addEventListener('appinstalled', () => cb()),
+    installed: () => isInstalled(browserAppEnv()),
+    // iPadOS reports itself as a Mac; its touch points give it away.
+    platform: () => (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+      ? 'ios'
+      : ((navigator as WithBrands).userAgentData?.brands ?? []).some(b => b.brand === 'Chromium') ? 'chromium' : 'other'),
+    framed: () => window.self !== window.top,
+    share: typeof navigator.share === 'function' ? data => navigator.share(data) : null,
+    copy: typeof navigator.clipboard?.writeText === 'function' ? text => navigator.clipboard.writeText(text) : null,
+    navigate: (url, replace) => (replace ? location.replace(url) : location.assign(url)),
+    timers: browserTimers,
+  };
+}
+```
+
+- [ ] **Step 3: Run, type-check, document, commit**
+
+Run: `cd websites/www.cs/games && node --test _kit/test/install.test.mjs && node_modules/.bin/tsc -p _kit/tsconfig.json`
+Expected: PASS; tsc silent.
+
+Add to `_kit/README.md`, after "Installed apps (`app.ts`)" (in branch B, replace the second paragraph's first sentence with "Chromium does not offer to install from a page outside the manifest's scope (`OUT_OF_SCOPE_PROMPTS` is false), so on a site page Install opens the game's own page with `?install`, which prompts."):
+
+```markdown
+## Install and Share (`install.ts`, `ui/install-bar.tsx`)
+
+`createInstall(env, setup, onChange)` decides what the Install and Share
+buttons show; the browser is a port (`InstallEnv`: the held-back install
+prompt, `appinstalled`, whether the page runs installed, the platform, whether
+it is framed, `navigator.share`, the clipboard, navigation, timers), so tests
+pass a fake and `browserInstallEnv()` is the real one. Chromium gets Install
+only while a held-back `beforeinstallprompt` is in hand, and a click spends it;
+iOS, which has no install API, gets Install always, opening the "Tap Share,
+then Add to Home Screen" steps; other browsers get none; an installed app never
+does. `?install` highlights the button, or on iOS opens the steps, and never
+prompts by itself.
+
+Chromium offers to install from a page outside the manifest's scope
+(`OUT_OF_SCOPE_PROMPTS`, measured in Chrome), so the site's `/play/<id>/`
+pages prompt themselves. iOS saves the page it is on, so on a site page its
+Install opens the game's own page with `?install`, where the steps open. Share
+uses Web Share, then the clipboard ("Link copied"), then a selectable field; a
+cancelled share sheet is no error.
+```
+
+```bash
+git add websites/www.cs/games/_kit/install.ts websites/www.cs/games/_kit/test/install.test.mjs websites/www.cs/games/_kit/README.md
+git commit -m "Games kit: install.ts decides Install and Share on every platform"
+```
+
+### Task 28: The Install and Share bar, built into each page game as `dist/install.js`
+
+**Files:**
+- Create: `websites/www.cs/games/_kit/ui/install-bar.tsx`, `websites/www.cs/games/_kit/install-page.ts`
+- Create: `websites/www.cs/games/_kit/test/install-bar.test.mjs`
+- Modify: `websites/www.cs/games/crete/build.json`, `websites/www.cs/games/tankity/build.json`, `_kit/README.md`
+- Rebuild: `crete/dist/`, `tankity/dist/` (each gains `install.js` and its map), each `sw.js`
+
+**Interfaces:**
+- Consumes: `createInstall`, `browserInstallEnv`, `asksInstall`, `OUT_OF_SCOPE_PROMPTS`, `IOS_STEPS`, the `Install*` types (Task 27); `Dialog`, `Button` (Task 6); `importTsx`, `dom-stub.mjs` (Task 5).
+- Produces:
+  - `InstallBarProps = { view: InstallView; shareUrl: string; onInstall(): void; onShare(): void; onCloseSteps(): void; onCloseShare(): void }`, `InstallBar(props)`, `mountInstallBar(root: Element, setup: InstallSetup, env: InstallEnv): Install`.
+  - Ids: `#install-btn` (class `kit-install-btn`, plus `kit-install-asked` when highlighted), `#share-btn`, `#share-status` (`role="status"`, "Link copied"), `#share-url` (read-only field), `#install-steps` (the dialog's veil), `#install-steps-title`, `#install-steps-text`, `#install-steps-done`. `mountInstallBar` adds `<style id="kit-install-css">` once, first in `<head>`, so a page's own CSS wins; colours come from `--kit-install-accent`.
+  - `install-page.ts`, each page game's `dist/install.js` (iife): with `#play-install` on the page (a site page) it mounts there with `data-title`, `data-game-page`, `shareUrl` = the page's own folder, `installPage` = `data-game-page`, `promptsHere: OUT_OF_SCOPE_PROMPTS`; otherwise, when the address has `?install` (the game's own page), it mounts in a `div.kit-install-corner` with `installPage: null`, `promptsHere: true` and `shareUrl` `../../play/<id>/`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```js
+// websites/www.cs/games/_kit/test/install-bar.test.mjs
+// The Install and Share bar in the DOM stub: what each view draws, the iOS
+// steps dialog's focus and Escape, and the address field.
+import { test, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { h, render } from 'preact';
+import { importTsx } from './tsx.ts';
+import { document, makeEl, click, fire, fireDocument } from './dom-stub.mjs';
+
+globalThis.document = document;
+const { bar } = await importTsx(import.meta.dirname, { bar: '../ui/install-bar.tsx' });
+const { InstallBar } = bar;
+
+const walk = (el, out = []) => { for (const c of el.children) if (c.nodeType === 1) { out.push(c); walk(c, out); } return out; };
+const byId = (el, id) => walk(el).find(n => n.id === id);
+const VIEW = { off: false, install: false, highlight: false, steps: false, share: 'idle' };
+const calls = [];
+const roots = [];
+afterEach(() => {
+  for (const root of roots.splice(0)) render(null, root);
+  calls.length = 0;
+  document.activeElement = null;
+  globalThis.__focused = null;
+});
+function draw(view, root = makeEl('root')) {
+  if (!roots.includes(root)) roots.push(root);
+  render(h(InstallBar, {
+    view: { ...VIEW, ...view }, shareUrl: 'https://site.test/play/crete/',
+    onInstall: () => calls.push('install'), onShare: () => calls.push('share'),
+    onCloseSteps: () => calls.push('close-steps'), onCloseShare: () => calls.push('close-share'),
+  }), root);
+  return root;
+}
+
+test('Install is drawn only when the view offers it; Share always', () => {
+  const root = draw({});
+  assert.equal(byId(root, 'install-btn'), undefined);
+  assert.equal(byId(root, 'share-btn').textContent, 'Share');
+  draw({ install: true }, root);
+  const install = byId(root, 'install-btn');
+  assert.equal(install.textContent, 'Install');
+  assert.equal(install.className, 'kit-install-btn');
+  click(install);
+  click(byId(root, 'share-btn'));
+  assert.deepEqual(calls, ['install', 'share']);
+});
+
+test('?install draws Install highlighted', () => {
+  assert.equal(byId(draw({ install: true, highlight: true }), 'install-btn').className, 'kit-install-btn kit-install-asked');
+});
+
+test('a framed page draws nothing', () => {
+  assert.equal(draw({ off: true, install: true }).children.length, 0);
+});
+
+test('"Link copied" is said in a status line', () => {
+  const root = draw({});
+  const status = byId(root, 'share-status');
+  assert.equal(status.getAttribute('role'), 'status');
+  assert.equal(status.textContent, '');
+  draw({ share: 'copied' }, root);
+  assert.equal(byId(root, 'share-status').textContent, 'Link copied');
+});
+
+test('a blocked clipboard shows the address in a focused field; Escape closes it', () => {
+  const root = draw({ share: 'field' });
+  const field = byId(root, 'share-url');
+  assert.equal(field.value, 'https://site.test/play/crete/');
+  assert.equal(globalThis.__focused, field);
+  fire(field, 'keydown', { type: 'keydown', key: 'Escape' });
+  assert.deepEqual(calls, ['close-share']);
+});
+
+test('iOS steps: a dialog with the Share glyph; Done is focused; Escape and Done close it', () => {
+  const root = draw({ install: true });
+  assert.equal(byId(root, 'install-steps').hidden, true);
+  draw({ install: true, steps: true }, root);
+  const veil = byId(root, 'install-steps');
+  assert.equal(veil.hidden, false);
+  assert.equal(veil.children[0].getAttribute('role'), 'dialog');
+  assert.equal(byId(root, 'install-steps-title').textContent, 'Add to Home Screen');
+  assert.equal(byId(root, 'install-steps-text').textContent, 'Tap Share, then Add to Home Screen.');
+  assert.equal(walk(byId(root, 'install-steps-text')).some(n => n.localName === 'svg'), true);
+  assert.equal(globalThis.__focused?.id, 'install-steps-done');
+  fireDocument('keydown', { key: 'Escape' });
+  click(byId(root, 'install-steps-done'));
+  assert.deepEqual(calls, ['close-steps', 'close-steps']);
+});
+```
+
+Run: `cd websites/www.cs/games && node --test _kit/test/install-bar.test.mjs`
+Expected: FAIL: `../ui/install-bar.tsx` cannot be resolved.
+
+- [ ] **Step 2: The bar**
+
+```tsx
+// websites/www.cs/games/_kit/ui/install-bar.tsx
+// The Install and Share buttons, iOS's Add to Home Screen steps and the
+// shared address, drawn from an InstallView (install.ts). mountInstallBar()
+// wires one to the browser and brings its own small stylesheet.
+import { render } from 'preact';
+import { useLayoutEffect, useRef } from 'preact/hooks';
+import { Button } from './button.tsx';
+import { Dialog } from './dialog.tsx';
+import { createInstall, IOS_STEPS } from '../install.ts';
+import type { Install, InstallEnv, InstallSetup, InstallView } from '../install.ts';
+
+export interface InstallBarProps {
+  view: InstallView;
+  shareUrl: string;
+  onInstall: () => void;
+  onShare: () => void;
+  onCloseSteps: () => void;
+  onCloseShare: () => void;
+}
+
+/** iOS's Share glyph: a box with an arrow out of its top. */
+function ShareGlyph() {
+  return (
+    <svg class="kit-install-glyph" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+      <path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M8 10H6v11h12V10h-2" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function InstallBar(p: InstallBarProps) {
+  const v = p.view;
+  const field = useRef<HTMLInputElement>(null);
+  useLayoutEffect(() => {
+    if (v.share !== 'field') return;
+    field.current?.focus();
+    field.current?.select?.();
+  }, [v.share]);
+  if (v.off) return null;
+  return (
+    <span class="kit-install">
+      {v.install && (
+        <Button id="install-btn" class={v.highlight ? 'kit-install-btn kit-install-asked' : 'kit-install-btn'}
+          title="Install this game as an app" onClick={p.onInstall}>Install</Button>
+      )}
+      <Button id="share-btn" class="kit-install-btn" title="Share a link to this game" onClick={p.onShare}>Share</Button>
+      <span id="share-status" class="kit-install-status" role="status">{v.share === 'copied' ? 'Link copied' : null}</span>
+      {v.share === 'field' && (
+        <input id="share-url" class="kit-install-url" type="text" readOnly value={p.shareUrl} aria-label="Link to this game"
+          ref={field} onKeyDown={ev => {
+            if (ev.key !== 'Escape') return;
+            ev.preventDefault();
+            p.onCloseShare();
+          }} />
+      )}
+      <Dialog open={v.steps} id="install-steps" veilClass="kit-install-veil" panelClass="kit-install-panel"
+        titleId="install-steps-title" title="Add to Home Screen" focusId="install-steps-done" onDismiss={p.onCloseSteps}>
+        <p id="install-steps-text"><ShareGlyph />{IOS_STEPS}.</p>
+        <Button id="install-steps-done" class="kit-install-btn" onClick={p.onCloseSteps}>Done</Button>
+      </Dialog>
+    </span>
+  );
+}
+
+// The bar's own look, first in <head> so the page's CSS can restyle it.
+const CSS = `
+.kit-install { display: inline-flex; align-items: center; gap: 0.5rem; }
+.kit-install-btn { font: 600 0.9rem/1.1 system-ui, sans-serif; padding: 0.3rem 0.75rem; border: 1px solid var(--kit-install-accent, #f0b429); border-radius: 6px; background: transparent; color: var(--kit-install-accent, #f0b429); cursor: pointer; }
+.kit-install-btn:hover, .kit-install-btn:focus-visible { background: color-mix(in srgb, var(--kit-install-accent, #f0b429) 18%, transparent); }
+.kit-install-btn:focus-visible { outline: 2px solid var(--kit-install-accent, #f0b429); outline-offset: 2px; }
+.kit-install-asked { background: var(--kit-install-accent, #f0b429); color: #000; animation: kit-install-pulse 1.2s ease-in-out 3; }
+@keyframes kit-install-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--kit-install-accent, #f0b429) 40%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .kit-install-asked { animation: none; } }
+.kit-install-status { color: var(--kit-install-accent, #f0b429); white-space: nowrap; }
+.kit-install-status:empty { display: none; }
+.kit-install-url { width: min(22rem, 55vw); padding: 0.25rem 0.4rem; font: 500 0.85rem/1.2 ui-monospace, monospace; }
+.kit-install-veil { position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center; padding: 1rem; background: rgba(0, 0, 0, 0.6); }
+.kit-install-veil[hidden] { display: none; }
+.kit-install-panel { max-width: 22rem; padding: 1.25rem; border-radius: 12px; background: #11141b; color: #eef1f6; font: 500 1rem/1.45 system-ui, sans-serif; }
+.kit-install-panel h2 { margin: 0 0 0.5rem; font-size: 1.15rem; }
+.kit-install-glyph { vertical-align: -0.3em; margin-right: 0.4rem; }
+.kit-install-corner { position: fixed; top: 0.5rem; right: 0.5rem; z-index: 2900; }
+`;
+
+function addStyles(): void {
+  if (document.getElementById('kit-install-css')) return;
+  const style = document.createElement('style');
+  style.id = 'kit-install-css';
+  style.textContent = CSS;
+  document.head.prepend(style);
+}
+
+/** Draws the bar into `root` and keeps it current as the browser offers, installs and shares. */
+export function mountInstallBar(root: Element, setup: InstallSetup, env: InstallEnv): Install {
+  addStyles();
+  // A prompt held back before the bar mounted arrives during createInstall; the first draw below shows it.
+  let draw = (_v: InstallView): void => {};
+  const install = createInstall(env, setup, v => draw(v));
+  draw = v => render(
+    <InstallBar view={v} shareUrl={setup.shareUrl}
+      onInstall={() => { void install.pressInstall(); }} onShare={() => { void install.pressShare(); }}
+      onCloseSteps={install.closeSteps} onCloseShare={install.closeShare} />,
+    root);
+  draw(install.view());
+  return install;
+}
+```
+
+Run: `cd websites/www.cs/games && node --test _kit/test/install-bar.test.mjs`
+Expected: PASS.
+
+- [ ] **Step 3: The entry each page game ships**
+
+```ts
+// websites/www.cs/games/_kit/install-page.ts
+// Built into each page game as dist/install.js. On the site's /play/<id>/
+// page it fills the top bar's #play-install; on the game's own page it shows
+// a corner bar, and only when the address asks (?install).
+import { mountInstallBar } from './ui/install-bar.tsx';
+import { asksInstall, browserInstallEnv, OUT_OF_SCOPE_PROMPTS } from './install.ts';
+
+const asked = asksInstall(location.search);
+const sitePage = document.getElementById('play-install');
+if (sitePage) {
+  mountInstallBar(sitePage, {
+    title: sitePage.dataset.title ?? document.title,
+    shareUrl: new URL('./', location.href).href,
+    installPage: new URL(sitePage.dataset.gamePage ?? './', location.href).href,
+    promptsHere: OUT_OF_SCOPE_PROMPTS,
+    asked,
+  }, browserInstallEnv());
+} else if (asked) {
+  // games/<id>/: its site page is ../../play/<id>/.
+  const folder = new URL('./', location.href);
+  const id = folder.pathname.split('/').filter(Boolean).pop() ?? '';
+  const corner = document.createElement('div');
+  corner.className = 'kit-install-corner';
+  document.body.append(corner);
+  mountInstallBar(corner, {
+    title: document.title,
+    shareUrl: new URL(`../../play/${id}/`, folder).href,
+    installPage: null,
+    promptsHere: true,
+    asked,
+  }, browserInstallEnv());
+}
+```
+
+(The game's page inside a site page's frame also sees `?install`, because `play.js` passes the address's query to the frame; there `framed()` turns the bar off and the corner stays empty.)
+
+In `crete/build.json` and `tankity/build.json`, append to `entries`:
+
+```json
+    { "in": "../_kit/install-page.ts", "out": "install", "format": "iife" }
+```
+
+(Crete's becomes a two-line `entries` list: `src/main.ts` then this. The kit's `tsconfig.json` already type-checks `*.ts` and `ui/*.tsx`.)
+
+- [ ] **Step 4: Build, check, document, commit**
+
+Run:
+
+```bash
+cd websites/www.cs/games
+node --test _kit/test/install.test.mjs _kit/test/install-bar.test.mjs && node_modules/.bin/tsc -p _kit/tsconfig.json
+node _kit/build/build.mjs crete && node _kit/build/build.mjs tankity
+php crete/tools/install-files.php && php tankity/tools/install-files.php
+crete/test.sh && tankity/test.sh
+```
+
+Expected: green; each build writes `dist/install.js` and `dist/install.js.map`; `install-files.php` rewrites each `sw.js` (`dist/install.js` is now precached). Each `THIRD_PARTY_LICENSES.txt` is unchanged: Preact was already bundled.
+
+In `_kit/README.md`'s Install and Share section, add:
+
+```markdown
+`ui/install-bar.tsx` draws it: `#install-btn` (`kit-install-asked` when
+highlighted), `#share-btn`, `#share-status` ("Link copied"), `#share-url` (the
+address to copy by hand) and the steps dialog `#install-steps` on the kit's
+`Dialog` (focus moves in and back; Escape closes it). `mountInstallBar(root,
+setup, env)` wires it to the browser and adds its stylesheet once, first in
+`<head>`; a page restyles it through `--kit-install-accent` or its own rules.
+Each page game builds `install-page.ts` as `dist/install.js` (an entry in its
+`build.json`): the site's `/play/<id>/` page loads it to fill `#play-install`,
+and the game's own page loads it to show a corner bar when the address has
+`?install`.
+```
+
+```bash
+git add websites/www.cs/games/_kit websites/www.cs/games/crete websites/www.cs/games/tankity
+git commit -m "Games kit: the Install and Share bar, built into each page game as dist/install.js"
+```
+
+### Task 29: The pages load the bar: site pages, game pages, and the prompt held back early
+
+**Files:**
+- Modify: `websites/www.cs/games/_kit/php/install-core.php` (`INSTALL_PROMPT_STASH`, `install_block`), `_kit/php/tests/InstallCoreTest.php`, `_kit/test/install.test.mjs`
+- Modify: `websites/www.cs/games/crete/index.html`, `crete/tools/install-files.php`, `tankity/index.html`, `tankity/tools/install-files.php`
+- Modify: `websites/www.cs/tools/site-game-pages.php` (`site_pages_wrapper`, `site_pages_forward_page`, `site_pages_sync`), `tests/php/checks/site-game-pages.php`, `play/play.css`
+- Regenerate: Crete's and Tankity's `index.html` and `sw.js`; `play/*/index.html`
+
+The buttons are drawn by the kit's component into a mount point the generated page carries, not written as static markup: Install and Share need JavaScript (the install prompt, Web Share, the clipboard), so static buttons would be dead without it, and one component keeps one markup for the site pages, the game pages and The CIC. `site-game-pages.php` writes the mount, its script and the stash, and its check covers all three.
+
+**Interfaces:**
+- Consumes: `dist/install.js` (Task 28); `PROMPT_STASH` (Task 27).
+- Produces: `INSTALL_PROMPT_STASH` (PHP constant): `<script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__installPrompt = e; });</script>`, in every page game's install block and in every site page's head, before any other script. A site page's nav ends with `<span class="play-install" id="play-install" data-title="<title>" data-game-page="../../games/<id>/"></span>` after `.play-now`, and its head loads `../../games/<id>/dist/install.js?v=<hash>` (`defer`). `site_pages_sync` reports a page game without `dist/install.js` and fails. The forward page for a `start` game keeps the address's query and hash (`/play/cylon/?install` opens `../../?game=cylon&install`), with the meta refresh as the no-script fallback.
+
+- [ ] **Step 1: Write the failing tests**
+
+In `InstallCoreTest.php`, add:
+
+```php
+    public function testBlockHoldsBackTheInstallPromptForTheInstallBar(): void
+    {
+        [$card] = install_card($this->dir, 'play');
+        $block = install_block($card, '');
+        $this->assertStringContainsString(INSTALL_PROMPT_STASH, $block);
+        $this->assertStringContainsString('e.preventDefault(); window.__installPrompt = e;', INSTALL_PROMPT_STASH);
+        $this->assertLessThan(strpos($block, INSTALL_SW_REGISTER), strpos($block, INSTALL_PROMPT_STASH));
+    }
+```
+
+Append to `games/_kit/test/install.test.mjs` (and add `PROMPT_STASH` to its `../install.ts` import, `readFileSync` from `node:fs` and `join` from `node:path`):
+
+```js
+test('the page\'s first script parks an early prompt where the bar looks for it', () => {
+  const php = readFileSync(join(import.meta.dirname, '..', 'php', 'install-core.php'), 'utf8');
+  assert.match(php, new RegExp(`window\\.${PROMPT_STASH} = e;`));
+});
+```
+
+In `tests/php/checks/site-game-pages.php`:
+- After the line that writes `$root/arty/og.png`, add:
+
+```php
+// A page game's built Install and Share bar, which its site page loads.
+@mkdir("$root/arty/dist", 0777, true);
+file_put_contents("$root/arty/dist/install.js", "(()=>{})();\n");
+```
+
+- After the `wrapper-installs-game` check, add:
+
+```php
+// Install and Share: the bar's mount after the game's name, the game's
+// dist/install.js with its own version, and the early-prompt stash before it.
+$check('wrapper-install-bar', str_contains($wrap, '<span class="play-install" id="play-install" data-title="Arty &amp; Co" data-game-page="../../games/arty/"></span>')
+    && strpos($wrap, 'class="play-now"') < strpos($wrap, 'id="play-install"'));
+$check('wrapper-loads-install-js', str_contains($wrap, '<script src="../../games/arty/dist/install.js?v='
+    . substr(hash('sha256', (string) file_get_contents("$root/arty/dist/install.js")), 0, 10) . '" defer></script>'));
+$check('wrapper-stashes-the-prompt-first', str_contains($wrap, INSTALL_PROMPT_STASH)
+    && strpos($wrap, INSTALL_PROMPT_STASH) < strpos($wrap, '<script src='));
+```
+
+- After the `start-page-no-image-card` check, add:
+
+```php
+$check('start-page-keeps-the-query', str_contains($fwd, "<script>location.replace(\"../../?game=mounted\" + location.search.replace(/^\\?/, '&') + location.hash);</script>")
+    && str_contains($fwd, '<noscript><meta http-equiv="refresh" content="0; url=../../?game=mounted"></noscript>'));
+```
+
+- After the `unreadable-shared-file-fails` block (after `file_put_contents("$tmp/play/play.js", $keep);`), add:
+
+```php
+// A page game that was never built has no bar to load: a note and a failure.
+unlink("$root/arty/dist/install.js");
+[$stale, $notes, $broken] = site_pages_sync($root, $site, false);
+$check('unbuilt-game-fails', $broken === true
+    && in_array('games/arty/dist/install.js is not readable, but play/arty/ loads it; build the game', $notes, true), json_encode([$notes, $broken]));
+file_put_contents("$root/arty/dist/install.js", "(()=>{})();\n");
+```
+
+Run: `cd websites/www.cs && vendor/bin/phpunit --testsuite kit && vendor/bin/phpunit --testsuite site && (cd games && node --test _kit/test/install.test.mjs)`
+Expected: FAIL: `INSTALL_PROMPT_STASH` is undefined; the new `site-game-pages` checks fail; the stash test finds no `window.__installPrompt = e;`.
+
+- [ ] **Step 2: The stash in the kit's install block**
+
+In `install-core.php`, after `INSTALL_SW_REGISTER`, add:
+
+```php
+/* Holds back the browser's install prompt for the page's Install button
+   (games/_kit/install.ts): the event can fire before the deferred
+   dist/install.js runs, and a prompt not held back is lost. */
+const INSTALL_PROMPT_STASH = "<script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__installPrompt = e; });</script>";
+```
+
+In `install_block`, add `INSTALL_PROMPT_STASH,` on the line before `INSTALL_SW_REGISTER,`.
+
+- [ ] **Step 3: The game pages load the bar**
+
+In `crete/index.html`, after `<script type="module" src="dist/main.js?v=…"></script>`, add:
+
+```html
+    <script src="dist/install.js?v=0" defer></script>
+```
+
+In `tankity/index.html`, after `<script type="module" src="dist/main.js?v=…"></script>`, add `<script src="dist/install.js?v=0" defer></script>` at the same indent.
+
+In `crete/tools/install-files.php`, change `'versioned' => ['dist/main.js', 'game.css'],` to `'versioned' => ['dist/main.js', 'dist/install.js', 'game.css'],`; in `tankity/tools/install-files.php`, change `'versioned' => ['dist/main.js', 'dist/fx.js', 'game.css'],` to `'versioned' => ['dist/main.js', 'dist/fx.js', 'dist/install.js', 'game.css'],`.
+
+- [ ] **Step 4: The site pages**
+
+In `tools/site-game-pages.php`:
+- After `require_once __DIR__ . '/../games/hub.php';`, add `require_once __DIR__ . '/../games/_kit/php/install-core.php'; // INSTALL_PROMPT_STASH`.
+- In the file's doc comment, after the paragraph on `?v=`, add: "A play game's page also loads the game's own `dist/install.js` (the kit's Install and Share bar, built with the game) into `#play-install`, versioned the same way, and holds back the install prompt from its first script (`INSTALL_PROMPT_STASH`). A play game that has not been built cannot be written."
+- In `site_pages_wrapper`, change the doc comment's last sentence to "$versions maps play.css, play.js and the game's install.js to their `?v=`." and replace the `$head = array_merge(…);` statement with:
+
+```php
+    $head = array_merge(
+        ['<meta charset="utf-8">', '<meta name="viewport" content="width=device-width, initial-scale=1">',
+         "<title>$title · William Grim</title>"],
+        site_pages_preview($card, $site),
+        site_pages_install($card, "../../games/$id/"),
+        [INSTALL_PROMPT_STASH,
+         '<link rel="icon" href="../../favicon-32.png" sizes="32x32">',
+         '<link rel="stylesheet" href="../play.css?v=' . $versions['play.css'] . '">',
+         '<style>:root { --game-bg: ' . $card['background_color'] . '; --game-theme: ' . $card['theme_color']
+            . '; --game-accent: ' . $card['accent_color'] . '; }</style>',
+         '<script src="../play.js?v=' . $versions['play.js'] . '" defer></script>',
+         '<script src="../../games/' . $id . '/dist/install.js?v=' . $versions['install.js'] . '" defer></script>']);
+```
+
+  and after the `play-now` line of the returned page add:
+
+```php
+        . "  <span class=\"play-install\" id=\"play-install\" data-title=\"$title\" data-game-page=\"$game\"></span>\n"
+```
+
+- In `site_pages_forward_page`, after `$to = …;` add `$js = json_encode('../../?game=' . rawurlencode($card['id']), JSON_UNESCAPED_SLASHES);`, change its doc comment to "The site's page for a game mounted in the site page: its preview tags, then straight on to the site with ?game=<id>, keeping the address's query and hash (?install).", and replace the meta refresh line with:
+
+```php
+        . '<script>location.replace(' . $js . " + location.search.replace(/^\\?/, '&') + location.hash);</script>\n"
+        . '<noscript><meta http-equiv="refresh" content="0; url=' . $to . "\"></noscript>\n"
+```
+
+- In `site_pages_sync`, add `$broken = false;` after `$notes = [];`, and replace the loop's first statement (`$content = isset($card['page']) ? … : …;`) with:
+
+```php
+        if (isset($card['page'])) {
+            $bar = @file_get_contents("$root/{$card['id']}/dist/install.js");
+            if (!is_string($bar)) {
+                $notes[] = "games/{$card['id']}/dist/install.js is not readable, but play/{$card['id']}/ loads it; build the game";
+                $broken = true;
+                continue;
+            }
+            $content = site_pages_wrapper($card, $site, $versions + ['install.js' => site_pages_version($bar)]);
+        } else {
+            $content = site_pages_forward_page($card, $site);
+        }
+```
+
+  and change the final `return [$stale, $notes, false];` to `return [$stale, $notes, $broken];`.
+
+In `play/play.css`, after the `.play-now img` rule, add:
+
+```css
+/* Install and Share (the game's dist/install.js draws them). */
+.play-install { display: inline-flex; --kit-install-accent: var(--game-accent); }
+.play-install:empty { display: none; }
+```
+
+and inside the `@media (max-width: 560px)` block add `.play-install { margin-left: auto; }` (the game's name, which pushes the bar right on wider screens, is hidden there).
+
+- [ ] **Step 5: Regenerate, run, commit**
+
+Run:
+
+```bash
+cd websites/www.cs
+vendor/bin/phpunit --testsuite kit && vendor/bin/phpunit --testsuite site
+(cd games && node --test _kit/test/install.test.mjs)
+for g in crete cylon tankity; do php games/$g/tools/install-files.php; done
+php tools/site-game-pages.php
+make test
+```
+
+Expected: green; `install-files.php` rewrites Crete's and Tankity's `index.html` (the stash in the block, `dist/install.js?v=`) and `sw.js`; `site-game-pages.php` rewrites all three `play/*/index.html`.
+
+```bash
+git add -A websites/www.cs/games/_kit websites/www.cs/games/crete websites/www.cs/games/tankity websites/www.cs/tools/site-game-pages.php websites/www.cs/tests/php websites/www.cs/play
+git commit -m "Install and Share on each game's site page; the game page shows them for ?install; the prompt held back from the first script"
+```
+
+### Task 30: The CIC's Install and Share, in its game bar
+
+**Files:**
+- Modify: `websites/www.cs/index.html` (`#cylon-install-root`), `games/cylon/src/main.ts`, `games/cylon/css/nav.css`, `games/cylon/README.md`
+- Rebuild: `cylon/dist/`; `php tools/site-versions.php`
+
+The CIC's site page forwards to the home page, so its buttons live where it is played: the home page's game bar, when the address opens The CIC (`?game=cylon`). The site's `main.js` links Cylon's manifest for `?game=cylon` once the games list arrives; Cylon links it first, before the bar listens, so a prompt the bar holds back is the game's, never the site's.
+
+**Interfaces:**
+- Consumes: `mountInstallBar` (Task 28); `asksInstall`, `browserInstallEnv`, `OUT_OF_SCOPE_PROMPTS` (Task 27); Task 26's `PROMPTS_IN_SCOPE`.
+- Produces: `#cylon-install-root` (class `cylon-install`) at the end of `#site-nav-game`; with `?game=cylon`, the kit bar there: title "The CIC", share URL `play/cylon/`; at `index.html` (in scope) `installPage: null`; at the bare site address `installPage` `index.html?game=cylon`. `PROMPTS_IN_SCOPE` (in `main.ts`) is Task 26's answer.
+
+| Task 26 | at `index.html?game=cylon` | at `/?game=cylon` |
+|---|---|---|
+| A: `OUT_OF_SCOPE_PROMPTS`, `PROMPTS_IN_SCOPE` both true | prompts here | prompts here; iOS goes to `index.html` |
+| B: only `PROMPTS_IN_SCOPE` true | prompts here | Chromium's and iOS's Install go to `index.html?game=cylon&install` |
+| `PROMPTS_IN_SCOPE` false | Share only on Chromium; iOS's steps here | the same |
+
+- [ ] **Step 1: The mount point and its style**
+
+In `index.html`, inside `#site-nav-game`, after the `#cylon-help-btn` button's closing `</button>`, add:
+
+```html
+      <span class="cylon-install" id="cylon-install-root"></span>
+```
+
+Append to `games/cylon/css/nav.css`:
+
+```css
+/* Install and Share (games/_kit/ui/install-bar.tsx), in the game bar when the address opens The CIC. */
+.cylon-install { display: inline-flex; --kit-install-accent: #ff3b3b; }
+.cylon-install:empty { display: none; }
+@media (max-width: 560px) {
+  .cylon-install .kit-install-btn { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+}
+```
+
+- [ ] **Step 2: Mount the bar**
+
+In `games/cylon/src/main.ts`:
+- Add the imports:
+
+```ts
+import { mountInstallBar } from '../../_kit/ui/install-bar.tsx';
+import { asksInstall, browserInstallEnv, OUT_OF_SCOPE_PROMPTS } from '../../_kit/install.ts';
+```
+
+- After `const CYLON_MOUNT_URL = …;`, add (in the third row of the table above, write `false`):
+
+```ts
+/** Whether Chrome offers The CIC's install prompt on index.html, inside its manifest's scope, once the page links that manifest (measured in Chrome). */
+const PROMPTS_IN_SCOPE: boolean = true;
+
+/**
+ * Install and Share in the game bar, when the address opens The CIC
+ * (?game=cylon). The page links Cylon's manifest before the bar listens, so a
+ * held-back prompt is the game's, not the site's.
+ */
+function mountInstall(): void {
+    const root = document.getElementById('cylon-install-root');
+    if (!root || new URLSearchParams(location.search).get('game') !== 'cylon') return;
+    document.querySelector('link[rel="manifest"]')?.setAttribute('href', 'games/cylon/manifest.webmanifest');
+    const inScope = location.pathname.endsWith('/index.html');
+    mountInstallBar(root, {
+        title: 'The CIC',
+        shareUrl: new URL('play/cylon/', location.href).href,
+        installPage: inScope || !PROMPTS_IN_SCOPE ? null : new URL('index.html?game=cylon', location.href).href,
+        promptsHere: PROMPTS_IN_SCOPE && (inScope || OUT_OF_SCOPE_PROMPTS),
+        asked: asksInstall(location.search),
+    }, browserInstallEnv());
+}
+```
+
+- In `initializeCylonEffects`, after `bindHelp();`, add `mountInstall();`.
+
+In `games/cylon/README.md`'s "Host contract", add: "**Install and Share.** With `?game=cylon`, `#cylon-install-root` in the home page's game bar holds the kit's Install and Share bar (`games/_kit/install.ts`): Share hands out `play/cylon/`; Install installs The CIC (the page links its manifest first). `/play/cylon/?install` forwards to `?game=cylon&install`, which highlights Install, or on iOS opens the Add to Home Screen steps."
+
+- [ ] **Step 3: Build, check, commit**
+
+Run: `cd websites/www.cs/games && node _kit/build/build.mjs cylon && php cylon/tools/install-files.php && cylon/test.sh && cd .. && php tools/site-versions.php && make e2e E2E_ARGS="cylon-help.spec.mjs home-eye.spec.mjs"`
+Expected: green; `site-versions.php` rewrites `index.html`'s `?v=` for `nav.css` and `dist/main.js`.
+
+```bash
+git add -A websites/www.cs/games/cylon websites/www.cs/index.html
+git commit -m "Cylon: Install and Share in the game bar for ?game=cylon"
+```
+
+### Task 31: The browser spec: Install and Share on every game
+
+**Files:**
+- Create: `websites/www.cs/tests/e2e/games-install.spec.mjs`
+- Modify: `websites/www.cs/tests/e2e/select.mjs`, `select-test.mjs`, `shard.mjs` (`WEIGHTS`)
+
+**Interfaces:**
+- Consumes: Tasks 28–30's pages and ids.
+- Produces: `games-install.spec.mjs` (≤ 15 s; weight 10), selected by the site shell, Crete, Tankity and the kit (`_kit/` already selects everything). Its checks hold in both of Task 26's branches: the synthetic event shows Install on a site page in either (branch B shows it at once); the click that must prompt is tested on the game's own page, which prompts in both.
+
+- [ ] **Step 1: Write the spec**
+
+```js
+// websites/www.cs/tests/e2e/games-install.spec.mjs
+// Install and Share on each game: Install appears when the browser offers to
+// install and prompts on a click; on an iPhone it opens the Add to Home Screen
+// steps on the game's own page; Share falls back to copying the link.
+import { test, expect } from '@playwright/test';
+
+const PAGE_GAMES = ['crete', 'tankity'];
+const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+
+/** Chrome's install offer, as a page sees it: a beforeinstallprompt whose prompt() is counted. */
+const offerInstall = page => page.evaluate(() => {
+  const ev = new Event('beforeinstallprompt', { cancelable: true });
+  ev.prompt = () => { window.__prompted = (window.__prompted ?? 0) + 1; return Promise.resolve(); };
+  window.dispatchEvent(ev);
+});
+
+/** Chrome's own install offers are kept from the page, so only the test's offer counts. */
+const onlyTestOffers = target => target.addInitScript(() => {
+  window.addEventListener('beforeinstallprompt', e => {
+    if (!e.isTrusted) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  });
+});
+
+/** No Web Share, and a clipboard that records what it is given. */
+const noShareSheet = context => context.addInitScript(() => {
+  Object.defineProperty(Navigator.prototype, 'share', { value: undefined, configurable: true });
+  Object.defineProperty(navigator, 'clipboard', {
+    value: { writeText: text => { window.__copied = text; return Promise.resolve(); } },
+    configurable: true,
+  });
+});
+
+function watchErrors(page) {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  return errors;
+}
+
+for (const id of PAGE_GAMES) {
+  test(`${id}: the site page shows Install when the browser offers it, and Share copies its address`, async ({ browser, baseURL }) => {
+    const context = await browser.newContext();
+    await onlyTestOffers(context);
+    await noShareSheet(context);
+    const page = await context.newPage();
+    const errors = watchErrors(page);
+    await page.goto(`play/${id}/`);
+    const bar = page.locator('#play-install');
+    await expect(bar.locator('#share-btn')).toBeVisible();
+    await offerInstall(page);
+    await expect(bar.locator('#install-btn')).toBeVisible();
+    await bar.locator('#share-btn').click();
+    await expect(bar.locator('#share-status')).toHaveText('Link copied');
+    expect(await page.evaluate(() => window.__copied)).toBe(new URL(`play/${id}/`, baseURL).href);
+    expect(errors).toEqual([]);
+    await context.close();
+  });
+}
+
+test('the game page asked to install (?install) highlights Install, and a click prompts', async ({ page }) => {
+  await onlyTestOffers(page);
+  const errors = watchErrors(page);
+  await page.goto('games/crete/?install');
+  await expect(page.locator('.kit-install-corner #share-btn')).toBeVisible();
+  await offerInstall(page);
+  const install = page.locator('.kit-install-corner #install-btn');
+  await expect(install).toBeVisible();
+  await expect(install).toHaveClass(/kit-install-asked/);
+  await install.click();
+  expect(await page.evaluate(() => window.__prompted)).toBe(1);
+  await expect(install).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('on an iPhone, Install opens the game page with the Add to Home Screen steps; Escape closes them', async ({ browser }) => {
+  const context = await browser.newContext({ userAgent: IPHONE });
+  const page = await context.newPage();
+  const errors = watchErrors(page);
+  await page.goto('play/crete/');
+  await page.locator('#play-install #install-btn').click();
+  await expect(page).toHaveURL(/\/games\/crete\/\?install$/);
+  await expect(page.locator('#install-steps')).toBeVisible();
+  await expect(page.locator('#install-steps-text')).toHaveText('Tap Share, then Add to Home Screen.');
+  await expect(page.locator('#install-steps-done')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#install-steps')).toBeHidden();
+  expect(errors).toEqual([]);
+  await context.close();
+});
+
+test('The CIC: the game bar has Share, and the page links the game\'s manifest', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('./?game=cylon');
+  await expect(page.locator('#cylon-install-root #share-btn')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', /games\/cylon\/manifest\.webmanifest$/);
+  expect(errors).toEqual([]);
+});
+```
+
+- [ ] **Step 2: Select and weigh it**
+
+In `tests/e2e/select.mjs`, add `'games-install.spec.mjs'` to the `shell` list, to the Crete rule's list (`['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'crete-play.spec.mjs', 'games-install.spec.mjs']`), and to both Tankity rules (`[...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs', 'games-install.spec.mjs']`).
+
+In `select-test.mjs`, next to the other site-shell cases, add:
+
+```js
+has('play-page-runs-install-spec', select([`${S}play/play.css`, `${S}tools/site-game-pages.php`]), ['games-install.spec.mjs']);
+has('a-page-game-runs-install-spec', select([`${S}games/crete/index.html`, `${S}games/tankity/index.html`]), ['games-install.spec.mjs']);
+```
+
+In `shard.mjs`'s `WEIGHTS`, add `'games-install.spec.mjs': 10,` after `'games-pwa.spec.mjs': 3,`.
+
+- [ ] **Step 3: Run and commit**
+
+Run: `cd websites/www.cs && node tests/e2e/select-test.mjs && node tests/e2e/shard-test.mjs && node tests/e2e/select.mjs --check && make e2e E2E_ARGS="games-install.spec.mjs"`
+Expected: green, the spec within 15 s (Playwright prints its time; if it runs longer, set its weight to the measured seconds).
+
+```bash
+git add websites/www.cs/tests/e2e/games-install.spec.mjs websites/www.cs/tests/e2e/select.mjs websites/www.cs/tests/e2e/select-test.mjs websites/www.cs/tests/e2e/shard.mjs
+git commit -m "e2e: games-install checks Install and Share on every game"
+```
+
 ### Task 25: Docs, the whole check, and PR 19 ships
 
 **Files:**
@@ -5696,11 +7005,11 @@ check('a-game-icon-drawing-runs-no-spec', select([`${S}games/crete/tools/icon.sv
 
 - [ ] **Step 2: The games README**
 
-In `websites/www.cs/games/README.md`, in the section on installing, state: each game installs as its own full-screen app (manifest `display_override: ["fullscreen", "standalone"]`); its icons are rendered from `tools/icon.svg` by `node _kit/build/icons.mjs <id>` (any 192 and 512, maskable 192 and 512, monochrome 512, Apple 180), and `tools/install-files.php --check` fails on a missing or wrong-sized one; every game has a Quit (Tankity: Menu → Quit; Cylon: the Game On toggle; Crete: the Quit button or Q) through `_kit/app.ts`.
+In `websites/www.cs/games/README.md`, in the section on installing, state: each game installs as its own full-screen app (manifest `display_override: ["fullscreen", "standalone"]`); its icons are rendered from `tools/icon.svg` by `node _kit/build/icons.mjs <id>` (any 192 and 512, maskable 192 and 512, monochrome 512, Apple 180), and `tools/install-files.php --check` fails on a missing or wrong-sized one; every game has a Quit (Tankity: Menu → Quit; Cylon: the Game On toggle; Crete: the Quit button or Q) through `_kit/app.ts`. In the site-side bullet on `play/<id>/index.html`, add to the `play` game's description: "Install and Share sit at the end of the navbar, drawn by the game's own `dist/install.js` (the kit's `install.ts`); `?install` highlights Install, or on iOS opens the Add to Home Screen steps on the game's page"; to the `start` game's: "keeping the address's query (`?install`)"; and to the Game bullet: "A page game's page also loads `dist/install.js`, which shows the same bar in a corner when the address has `?install`."
 
 - [ ] **Step 3: The whole check**
 
-Run: `cd websites/www.cs && make test && make e2e E2E_ARGS="games-pwa.spec.mjs crete-play.spec.mjs"`
+Run: `cd websites/www.cs && make test && make e2e E2E_ARGS="games-pwa.spec.mjs games-install.spec.mjs"`
 Expected: green.
 
 ```bash
@@ -5710,13 +7019,13 @@ git commit -m "Install and exit: docs; the icon renderer selects no browser spec
 
 - [ ] **Step 4: Ship PR 19**
 
-Push `games/install-and-exit`, open the PR ("Install and exit: full-screen apps, icon sets from one drawing per game, and Quit in each game", spec row 19). CI selects every spec (`_kit/` and `games/package*.json` changed). If `main` moved, rebase and rebuild the generated files (Global Constraints). Run the pr-fix loop on the review comments, then merge on green CI, deploy, live-check with `games-pwa.spec.mjs` and `crete-play.spec.mjs`, and end the report with `/play/tankity/?v=<merge sha>`.
+Push `games/install-and-exit`, open the PR ("Install and exit: full-screen apps, icon sets from one drawing per game, Quit in each game, and Install and Share buttons", spec row 19). Paste Task 26's six `PROBE` lines and its two answers (`OUT_OF_SCOPE_PROMPTS`, `PROMPTS_IN_SCOPE`) into the description, and say which branch the PR built. CI selects every spec (`_kit/` and `games/package*.json` changed). If `main` moved, rebase and rebuild the generated files (Global Constraints). Run the pr-fix loop on the review comments, then merge on green CI, deploy, live-check with `games-pwa.spec.mjs` and `games-install.spec.mjs` (both read-only), and end the report with `/play/tankity/?v=<merge sha>`.
 
 ---
 
 ## Self-review
 
-- **Spec coverage.** Row 6: Tasks 1–4 (`audio/core.ts`; Crete, Cylon, Tankity adopt it). Row 7: Tasks 5–8 (kit `ui/`; Crete's ending and inventory). Row 8: Tasks 9–12 (Cylon's help, game over, settings, board; the intro stays an animated sprite). Row 9: Tasks 13–18 (dasher meets, strategist wins, derived streams, 80 attempts and the fallback, never a losing maze, 1,000-seed sweep with both budgets, 10,000 nightly through `GITHUB_EVENT_NAME=schedule`, HUD drops the budget and keeps the optimal route, `engine.test` and `crete-play` re-pinned, T is the strategist). Row 19: Tasks 19–25 (full-screen manifests; per-game icon sets from one drawing, maskable, Apple and monochrome; `install-core.php` checks every icon; `app.ts` with `isInstalled`, `enterFullscreen`, `exitApp`; Quit in Tankity, Cylon and Crete; close where allowed, else title card, out of full screen, and the phone hint; unit tests for the closable, not-closable and browser-tab cases; each game's spec presses its exit; `games-pwa` checks start URL, scope, display and icons).
+- **Spec coverage.** Row 6: Tasks 1–4 (`audio/core.ts`; Crete, Cylon, Tankity adopt it). Row 7: Tasks 5–8 (kit `ui/`; Crete's ending and inventory). Row 8: Tasks 9–12 (Cylon's help, game over, settings, board; the intro stays an animated sprite). Row 9: Tasks 13–18 (dasher meets, strategist wins, derived streams, 80 attempts and the fallback, never a losing maze, 1,000-seed sweep with both budgets, 10,000 nightly through `GITHUB_EVENT_NAME=schedule`, HUD drops the budget and keeps the optimal route, `engine.test` and `crete-play` re-pinned, T is the strategist). Row 19: Tasks 19–25 (full-screen manifests; per-game icon sets from one drawing, maskable, Apple and monochrome; `install-core.php` checks every icon; `app.ts` with `isInstalled`, `enterFullscreen`, `exitApp`; Quit in Tankity, Cylon and Crete; close where allowed, else title card, out of full screen, and the phone hint; unit tests for the closable, not-closable and browser-tab cases; each game's spec presses its exit; `games-pwa` checks start URL, scope, display and icons). Install and Share: Tasks 26–31 (the probe and its two answers; `install.ts` with every platform branch unit-tested; the bar, `dist/install.js` per page game; the site pages' mount, script and prompt stash, checked by `site-game-pages`; The CIC's bar on the home page; `games-install` within 15 s, selected and weighted).
 - **Placeholder scan.** The only values a task cannot know in advance are Crete's re-pinned maze numbers; Task 17 Step 4 gives the command that prints them and where each goes.
-- **Type consistency.** `AudioCore`, `BusName`, `ToneSpec`, `NoiseSpec` (Task 1) are used with those names in Tasks 2–4. `Dialog`/`Button`/`Panel`/`KeyChip` props (Task 6) match their uses in Tasks 7, 8, 10, 11, 22 and in Plan C (Tankity's chips use `KeyChip`'s `at` and `decorative`; its title card is a `Dialog`). Task 24 uses Plan C's `backToTitle()` and `test/menu.test.mjs` by those names. `HsRow`/`highScoreRows`/`HsList`/`renderHsRows` (Task 9) match Tasks 11–12. `Bot`, `BotAction`, `dasher`, `strategist`, `WAIT_LIMIT` (Task 16) match Task 17; `Trial`, `Judge`, `RunPick`, `trial`, `perform`, `generateRun(seed, judge)` (Task 17) match Task 18's sweep. `AppEnv`, `ExitOutcome`, `exitApp`, `enterFullscreen`, `browserAppEnv`, `EXIT_HINT`, `CLOSE_WAIT_MS` (Task 21) match Tasks 22–24. `INSTALL_ICONS` (Task 20) and `ICONS` (Task 19) are held equal by a test.
-- **Review Focus.** Each of the five lines has its test in the named task.
+- **Type consistency.** `AudioCore`, `BusName`, `ToneSpec`, `NoiseSpec` (Task 1) are used with those names in Tasks 2–4. `Dialog`/`Button`/`Panel`/`KeyChip` props (Task 6) match their uses in Tasks 7, 8, 10, 11, 22 and in Plan C (Tankity's chips use `KeyChip`'s `at` and `decorative`; its title card is a `Dialog`). Task 24 uses Plan C's `backToTitle()` and `test/menu.test.mjs` by those names. `HsRow`/`highScoreRows`/`HsList`/`renderHsRows` (Task 9) match Tasks 11–12. `Bot`, `BotAction`, `dasher`, `strategist`, `WAIT_LIMIT` (Task 16) match Task 17; `Trial`, `Judge`, `RunPick`, `trial`, `perform`, `generateRun(seed, judge)` (Task 17) match Task 18's sweep. `AppEnv`, `ExitOutcome`, `exitApp`, `enterFullscreen`, `browserAppEnv`, `EXIT_HINT`, `CLOSE_WAIT_MS` (Task 21) match Tasks 22–24. `INSTALL_ICONS` (Task 20) and `ICONS` (Task 19) are held equal by a test. `InstallEnv`, `InstallSetup`, `InstallView`, `Install`, `createInstall`, `browserInstallEnv`, `asksInstall`, `withInstall`, `OUT_OF_SCOPE_PROMPTS`, `IOS_STEPS`, `PROMPT_STASH` (Task 27) match Tasks 28–30; `mountInstallBar` and the bar's ids (Task 28) match Tasks 29–31; `PROMPT_STASH` and `INSTALL_PROMPT_STASH` (Task 29) are held equal by a test.
+- **Review Focus.** Each of the six lines has its test in the named task.

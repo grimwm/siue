@@ -7,6 +7,12 @@
     "build": "for g in crete; do node _kit/build/build.mjs $g || exit 1; done",
     "check": "for g in crete; do node _kit/build/build.mjs $g --check || exit 1; done"
   },
-  "devDependencies": { "esbuild": "0.28.2", "typescript": "7.0.2" },
-  "dependencies": { "preact": "11.0.1" }
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "preact": "11.0.1"
+  }
 }

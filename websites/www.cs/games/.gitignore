@@ -1,2 +1,3 @@
 node_modules/
 _kit/build/.tmp-*/
+_kit/test/.tmp-*/

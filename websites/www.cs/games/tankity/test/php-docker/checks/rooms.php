@@ -1,18 +1,12 @@
 <?php
-// Live test for the shared-memory room shelf. Run: php rooms-test.php
-// Spins its own php -S on a free 127.0.0.1 port with a private shared-memory
-// key, so it never touches real rooms or a port in use, and removes that
-// memory when done. Skips honestly where SysV is missing.
-// Exit 0 when every check passes, 1 otherwise.
+// The shared-memory room shelf, live. Spins its own php -S on a free
+// 127.0.0.1 port with a private shared-memory key, so it never touches real
+// rooms or a port in use, and removes that memory when done.
 declare(strict_types=1);
+if (!defined('TANKITY_GAME_DIR')) {
+    define('TANKITY_GAME_DIR', dirname(__DIR__, 3));
+}
 
-$fail = 0;
-$check = function (string $name, bool $cond, string $extra = '') use (&$fail): void {
-    echo ($cond ? 'PASS' : 'FAIL') . ' ' . $name . ($extra !== '' ? ' :: ' . $extra : '') . "\n";
-    if (!$cond) {
-        $fail++;
-    }
-};
 
 $tmp = sys_get_temp_dir() . '/tankity-rooms-test-' . getmypid();
 @mkdir($tmp);
@@ -23,16 +17,21 @@ $env = array_merge(getenv(), [
     'TANKITY_SHM_KEY' => (string) $shmKey,
 ]);
 if (!function_exists('shm_attach') || !function_exists('sem_get')) {
-    echo "SKIP no-sysv\n";
+    $check('sysv-available', false, 'shm_attach and sem_get are required');
     @unlink($tmp . '/test.yaml');
     @rmdir($tmp);
-    exit(0);
+    return;
 }
 // The room functions, in this process, for aging records and cleaning up.
 putenv('CONFIG_FILE=' . $tmp . '/test.yaml');
 putenv('TANKITY_SHM_KEY=' . $shmKey);
-define('TANKITY_ROOMS_LIB', true);
-require __DIR__ . '/rooms.php';
+// Both scripts share one PHPUnit process: define and load once, and re-read the
+// config this script just pointed CONFIG_FILE at.
+if (!defined('TANKITY_ROOMS_LIB')) {
+    define('TANKITY_ROOMS_LIB', true);
+}
+require_once TANKITY_GAME_DIR . '/rooms.php';
+tankity_config(true);
 /* Removes every segment and semaphore a private shelf made. */
 function room_test_wipe(int $base): void
 {
@@ -72,7 +71,7 @@ fclose($probe);
 $base = 'http://127.0.0.1:' . $port;
 $spawn = function () use ($env, $port) {
     return proc_open(
-        [PHP_BINARY, '-S', '127.0.0.1:' . $port, '-t', __DIR__],
+        [PHP_BINARY, '-S', '127.0.0.1:' . $port, '-t', TANKITY_GAME_DIR],
         [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
         $pipes,
         null,
@@ -81,8 +80,8 @@ $spawn = function () use ($env, $port) {
 };
 $proc = $spawn();
 if (!is_resource($proc)) {
-    echo "FAIL server-spawn\n";
-    exit(1);
+    $check('server-spawn', false, '');
+    return;
 }
 
 $get = function (string $url, int $timeout = 5) {
@@ -140,7 +139,7 @@ $ping = $get($base . '/rooms.php?action=ping');
 $check('heartbeat-counts', ($ping['rooms']['used'] ?? -1) === 1);
 
 // A request holding one room's lock never stalls the shelf: ping reads
-// the registry, and another room answers at once (rooms-store-test.php
+// the registry, and another room answers at once (rooms-store.php
 // covers the full lock behaviour).
 $held = sem_get(room_key($code, $shmKey), 1);
 $check('lock-held', $held !== false && @sem_acquire($held));
@@ -434,4 +433,3 @@ proc_close($proc);
 room_test_wipe($shmKey);
 @unlink($tmp . '/test.yaml');
 @rmdir($tmp);
-exit($fail ? 1 : 0);

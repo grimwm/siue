@@ -1,24 +1,20 @@
-// The room client without a browser or a server. Run here: `node net-test.js`.
-// js/net.js (compiled from src/net.ts) takes its fetch, timers and clock as
+// The room client without a browser or a server.
+// src/net.ts takes its fetch, timers and clock as
 // arguments, so every case below drives it with a fake server, fake timers and
 // a clock the test moves by hand: the 429 retry, Ready's one-at-a-time ordering
 // under rapid toggles, polling, the turn clock and the catch-up decision for a
 // hidden tab. Replies come from protocol/*.json where a real shape matters.
+import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
   RoomClient, prettyRoomError, inviteUrl, standingsRows, shouldCatchUp, planCatchUp, isVolleyOpener,
   MATCH_POLL_MS, LOBBY_POLL_MS, RETRY_429_MS, RETRY_429_TRIES,
-} from './js/net.js';
+} from '../src/net.ts';
 
-const __dirname = import.meta.dirname;
-const fixture = name => JSON.parse(fs.readFileSync(path.join(__dirname, 'protocol', name + '.json'), 'utf8')).body;
+const GAME_DIR = path.join(import.meta.dirname, '..');
+const fixture = name => JSON.parse(fs.readFileSync(path.join(GAME_DIR, 'protocol', name + '.json'), 'utf8')).body;
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
 const j = v => JSON.stringify(v);
 
 /** A fake host. `respond(url, init)` returns a status and body (or a promise of
@@ -577,5 +573,3 @@ check('invite-url-escapes-the-code', inviteUrl('A&B', {}) === '?code=A%26B');
   check('standings-best-first', flipped[0].name === 'ABC' && flipped[0].mine, JSON.stringify(flipped[0]));
 }
 
-if (failed) { console.log(`\n${failed} check(s) failed`); process.exit(1); }
-console.log('\nNET-OK');

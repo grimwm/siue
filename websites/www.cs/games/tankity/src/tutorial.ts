@@ -6,6 +6,8 @@
  * replays it any time. The coach overlay (src/ui/tutorial.tsx) draws what
  * this says; the rest of the game asks it three questions (is it on, arm it,
  * note a shot) through the object createTutorial returns. */
+import { browserStorage } from '../../_kit/ports.browser.ts';
+import { pref, text } from '../../_kit/prefs.ts';
 import type { GameState, GameTank } from './game-types.ts';
 import type { RoomClient } from './net.ts';
 import type { sfx as SfxApi } from './audio.ts';
@@ -64,17 +66,14 @@ export function createTutorial(deps: TutorialDeps) {
   function fmtKeys(text: string): string {
     return String(text).replace(/\{([a-z]+):([a-zA-Z]+)\}/g, (_, ctx: string, a: string) => (TOUCH && TOUCH_NAMES[ctx + ':' + a]) || keyHint(ctx, a));
   }
+  const storage = browserStorage();
+  const seen = pref('tankity-tutorial', '', text, storage);
   function tutorialSeen(): boolean {
-    try {
-      return window.localStorage.getItem('tankity-tutorial') === 'done';
-    } catch (_) {
-      return true; // without storage there is nowhere to remember, so never nag
-    }
+    // Without storage there is nowhere to remember, so never nag.
+    return storage === null || seen.get() === 'done';
   }
   function markTutorialSeen(): void {
-    try {
-      window.localStorage.setItem('tankity-tutorial', 'done');
-    } catch (_) { /* private mode etc. */ }
+    seen.set('done');
   }
   /* The coach is a Preact component (src/ui/tutorial.tsx); the game says which
      move the player is on and what to call the keys. */

@@ -8,7 +8,7 @@
  * (`make test`); it is never bundled.
  *
  * A JSON import types every string as plain `string`, so the literal unions
- * (phase, event `t`, seat mode) cannot be checked here; protocol-test.js
+ * (phase, event `t`, seat mode) cannot be checked here; test/protocol.test.mjs
  * checks those values against protocol.ts. */
 import type { ErrorReply, RoomReply, SeatReply } from './protocol.ts';
 import createReply from '../protocol/create-reply.json' with { type: 'json' };

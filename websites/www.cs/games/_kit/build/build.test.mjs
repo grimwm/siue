@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -96,4 +96,13 @@ test('a bad build.json is refused with a reason', t => {
   const r = run(dir);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /out/);
+});
+
+test('a per-game node_modules is refused: everything resolves from games/node_modules', t => {
+  const dir = scratch(t);
+  mkdirSync(join(dir, 'node_modules'));
+  const r = run(dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /node_modules.*delete it/);
+  assert.ok(!existsSync(join(dir, 'dist')));
 });

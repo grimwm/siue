@@ -130,7 +130,7 @@ function room_arsenal(): array
 }
 
 /* ---------- router ---------- */
-// rooms-sim-test.php includes this file for its functions only.
+// test/php/checks/rooms-sim.php includes this file for its functions only.
 if (defined('TANKITY_ROOMS_LIB')) {
     return;
 }

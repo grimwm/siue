@@ -95,6 +95,10 @@ function listDist(dir, base = dir) {
 
 /** Type-checks and bundles; writes dist/ unless check. */
 export async function build(gameDir, { check = false } = {}) {
+  // A second node_modules would make preact resolve to another copy than the one the tests load.
+  if (existsSync(join(gameDir, 'node_modules'))) {
+    throw new BuildError(`${relative(GAMES, join(gameDir, 'node_modules'))} exists: delete it; everything resolves from games/node_modules`);
+  }
   const cfg = loadBuildJson(gameDir);
   typecheck(gameDir, cfg);
   const files = await bundle(gameDir, cfg);

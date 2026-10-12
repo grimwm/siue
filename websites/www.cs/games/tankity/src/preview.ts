@@ -8,7 +8,7 @@
  * The state is a plain PreviewState that main.ts keeps (G.preview) and the
  * renderer draws from the view; this module only steps it. It never touches
  * the page: weapons, particle effects and the result text come in as a
- * PreviewEnv, so it compiles in the DOM-free program and preview-test.js
+ * PreviewEnv, so it compiles in the DOM-free program and test/preview.test.mjs
  * drives it on a clock the test moves by hand. */
 import {
   GRAV, FLAT_GRAV, ROLL_LIFT, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage,

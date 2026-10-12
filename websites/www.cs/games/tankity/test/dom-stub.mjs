@@ -1,8 +1,7 @@
-// A small DOM for the Node tests (smoke-test.js, ui-test.js): a real tree, with
+// A small DOM for the Node tests (smoke.test.mjs, ui.test.mjs): a real tree, with
 // parents, siblings, insert and remove, because the Preact overlays render into
-// it, plus the handful of properties game.js reads. Not a browser: no layout, no
-// events beyond the click(), submit() and fire() helpers below, no selectors beyond .class and #id. It lives in tools/
-// so it never ships (it is test support, not part of the game).
+// it, plus the handful of properties src/main.ts reads. Not a browser: no layout, no
+// events beyond the click(), submit() and fire() helpers below, no selectors beyond .class and #id.
 // Copyright (C) 2026 William Grim
 // SPDX-License-Identifier: GPL-3.0-or-later
 

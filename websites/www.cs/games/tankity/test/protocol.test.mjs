@@ -1,52 +1,60 @@
-// The client's protocol types against the server and its fixtures. Run here:
-// `node protocol-test.js`.
-// src/protocol-fixtures.check.ts (run by tools/ts-build.mjs) holds the fixtures'
-// shapes to src/protocol.ts, but a JSON import types every string as `string`,
-// so the literal unions are checked here: the compiler reads them out of
-// protocol.ts, and they are compared with the fixtures, with the action, phase
-// and event names rooms.php spells out, and with the events the client handles
-// (game.js and the typed modules it wires, src/*.ts).
+// The client's protocol types against the server and its fixtures.
+// src/protocol-fixtures.check.ts holds the fixtures' shapes to src/protocol.ts
+// (the check program, type-checked below), but a JSON import types every string
+// as `string`, so the literal unions are read out of protocol.ts here and
+// compared with the fixtures, with the action, phase and event names rooms.php
+// spells out, and with the events the client handles (src/*.ts).
+import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import ts from 'typescript';
+import { execFileSync } from 'node:child_process';
 
-const __dirname = import.meta.dirname;
-const read = file => fs.readFileSync(path.join(__dirname, file), 'utf8');
+const GAME_DIR = path.join(import.meta.dirname, '..');
+const read = file => fs.readFileSync(path.join(GAME_DIR, file), 'utf8');
 // The room server is rooms.php plus the files it requires from server/.
 const php = ['rooms.php', ...['settings', 'store', 'sim', 'ai', 'rules', 'protocol'].map(f => `server/${f}.php`)].map(read).join('\n');
-const game = [read('game.js'), ...fs.readdirSync(path.join(__dirname, 'src')).filter(f => f.endsWith('.ts')).map(f => read('src/' + f))].join('\n');
+const srcFiles = (dir => fs.readdirSync(path.join(GAME_DIR, dir), { recursive: true }).filter(f => /\.tsx?$/.test(f)).map(f => `${dir}/${f}`))('src');
+const game = srcFiles.map(read).join('\n');
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
-
-// ---- the literal unions, as the compiler sees them ----
-const file = path.join(__dirname, 'src', 'protocol.ts');
-const program = ts.createProgram([file], { target: ts.ScriptTarget.ES2022, strict: true, noEmit: true, skipLibCheck: true });
-const checker = program.getTypeChecker();
-const sf = program.getSourceFile(file);
-const problems = ts.getPreEmitDiagnostics(program);
-check('protocol-types-compile', problems.length === 0, problems.map(d => ts.flattenDiagnosticMessageText(d.messageText, ' ')).join('; '));
-
-function declared(name) {
-  const node = sf.statements.find(st => (ts.isTypeAliasDeclaration(st) || ts.isInterfaceDeclaration(st)) && st.name.text === name);
-  if (!node) throw new Error(`protocol.ts declares no ${name}`);
-  return checker.getTypeAtLocation(node.name);
+// ---- the check program: fixtures assigned to the protocol types ----
+let tscOut = '';
+try {
+  execFileSync(path.join(GAME_DIR, '..', 'node_modules', '.bin', 'tsc'), ['-p', 'src/tsconfig.check.json', '--noEmit'], { cwd: GAME_DIR, encoding: 'utf8', stdio: 'pipe' });
+} catch (e) {
+  tscOut = String(e.stdout || '') + String(e.stderr || '') || String(e);
 }
-function literals(type) {
-  const parts = type.isUnion() ? type.types : [type];
-  return parts.map(t => { if (!t.isStringLiteral()) throw new Error('not a string-literal union: ' + checker.typeToString(type)); return t.value; });
+check('protocol-types-compile', tscOut === '', tscOut.trim());
+
+// ---- the literal unions, read from protocol.ts ----
+const proto = read('src/protocol.ts');
+const quoted = text => [...text.matchAll(/'(\w+)'/g)].map(m => m[1]);
+function aliasBody(name) {
+  const m = proto.match(new RegExp(`export type ${name}\\s*=\\s*([^;]+);`));
+  if (!m) throw new Error(`protocol.ts declares no type ${name}`);
+  return m[1];
 }
-const PHASES = literals(declared('RoomPhase'));
-const SEAT_MODES = literals(declared('SeatMode'));
-const EVENT_TYPES = literals(declared('RoomEventType'));
-const tankKinds = literals(checker.getTypeOfSymbol(declared('RoomTank').getProperty('kind')));
-const POST_ACTIONS = declared('PostBodies').getProperties().map(p => p.name);
+function blockOf(name) {
+  const m = proto.match(new RegExp(`export interface ${name}\\b[^{]*\\{([\\s\\S]*?)\\n\\}`));
+  if (!m) throw new Error(`protocol.ts declares no interface ${name}`);
+  return m[1];
+}
+const PHASES = quoted(aliasBody('RoomPhase'));
+const SEAT_MODES = quoted(aliasBody('SeatMode'));
+const tankKinds = quoted(blockOf('RoomTank').match(/\bkind: ([^;]+);/)[1]);
+const POST_ACTIONS = [...blockOf('PostBodies').matchAll(/^  (\w+):/gm)].map(m => m[1]);
+// Each event interface names its tag; the volley openers share one generic.
+const tagOf = new Map();
+for (const m of proto.matchAll(/export interface (\w+) extends EventBase \{ t: '(\w+)'/g)) tagOf.set(m[1], m[2]);
+for (const m of proto.matchAll(/export type (\w+) = VolleyOpener<'(\w+)'>/g)) tagOf.set(m[1], m[2]);
+const ShotBlock = proto.match(/export interface (ShotEvent) extends EventBase \{\s*t: '(\w+)'/);
+if (ShotBlock) tagOf.set(ShotBlock[1], ShotBlock[2]);
+const EVENT_TYPES = aliasBody('RoomEvent').split('|').map(n => n.trim()).filter(Boolean).map(n => {
+  if (!tagOf.has(n)) throw new Error(`RoomEvent member ${n} has no t tag`);
+  return tagOf.get(n);
+});
 
 // ---- every fixture's literals ----
-const dir = path.join(__dirname, 'protocol');
+const dir = path.join(GAME_DIR, 'protocol');
 const fixtures = fs.readdirSync(dir).filter(f => f.endsWith('.json') && f !== 'sim-vectors.json');
 const inFixtures = new Set();
 for (const f of fixtures) {
@@ -88,5 +96,3 @@ const typos = [...handled].filter(t => !EVENT_TYPES.includes(t));
 check('client-handles-events', handled.size > 0, 'no \'e.t === ...\' branches found in the client source');
 check('client-handles-only-real-events', typos.length === 0, typos.join());
 
-if (failed) { console.log(`\n${failed} check(s) failed`); process.exit(1); }
-console.log('\nPROTOCOL-OK');

@@ -17,7 +17,7 @@
  *
  * Nothing here reaches for the page: events and targets are the small
  * structural shapes below, which a browser's KeyboardEvent, Window and button
- * satisfy, so this module compiles in the DOM-free program and input-test.js
+ * satisfy, so this module compiles in the DOM-free program and test/input.test.mjs
  * drives it with plain objects and a fake clock. */
 
 /* ---------- the key table ---------- */

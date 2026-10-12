@@ -61,8 +61,7 @@ test:
 	vendor/bin/phpunit --testsuite kit
 	cd games && npm ci --silent && node --test _kit/test/ _kit/build/ && node_modules/.bin/tsc -p _kit/tsconfig.json
 	for t in games/*/test.sh; do echo "== $$t"; $$t || exit 1; done
-	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php rooms-test.php'
-	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php rooms-store-test.php'
+	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html && vendor/bin/phpunit --testsuite tankity-docker'
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php protocol/generate.php --check'
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php protocol/sim-vectors.php --check'
 	@url=$$($(MAKE) --no-print-directory -s url) && curl -sf --max-time 300 "$${url}games/tankity/rooms-web-test.php" | tail -1

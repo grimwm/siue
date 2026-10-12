@@ -1,16 +1,11 @@
 <?php
-// Focused test for .config.yaml precedence. Run: php config-test.php
-// Exit 0 when every check passes, 1 otherwise.
+// .config.yaml precedence: defaults, file values, environment overrides.
 declare(strict_types=1);
-require_once __DIR__ . '/config.php';
+if (!defined('TANKITY_GAME_DIR')) {
+    define('TANKITY_GAME_DIR', dirname(__DIR__, 3));
+}
+require_once TANKITY_GAME_DIR . '/config.php';
 
-$fail = 0;
-$check = function (string $name, bool $cond) use (&$fail): void {
-    echo ($cond ? 'PASS' : 'FAIL') . ' ' . $name . "\n";
-    if (!$cond) {
-        $fail++;
-    }
-};
 
 $oldConfigFile = getenv('CONFIG_FILE');
 $oldMax = getenv('TANKITY_MAX_ROOMS');
@@ -20,7 +15,7 @@ $tmp = sys_get_temp_dir() . '/tankity-config-test-' . getmypid();
 // Default path is the game directory when CONFIG_FILE is unset.
 putenv('CONFIG_FILE');
 tankity_config(true);
-$check('default-path', tankity_config_path() === __DIR__ . '/.config.yaml');
+$check('default-path', tankity_config_path() === TANKITY_GAME_DIR . '/.config.yaml');
 
 // A missing file falls back to built-in defaults.
 putenv('CONFIG_FILE=' . $tmp . '/nope.yaml');
@@ -66,4 +61,3 @@ if (is_string($oldConfigFile)) {
 if (is_string($oldMax)) {
     putenv('TANKITY_MAX_ROOMS=' . $oldMax);
 }
-exit($fail ? 1 : 0);

@@ -1,28 +1,35 @@
-// Headless smoke for the Scorched Earth rewrite. Run here: `node smoke-test.js`.
-// Exercises the exact shipped module (game.js and the js/ it imports) with a
-// small DOM + canvas stub (tools/dom-stub.mjs), driving only public inputs
+// Headless smoke for the Scorched Earth rewrite.
+// Exercises the exact shipped bundle (dist/fx.js, then dist/main.js) with a
+// small DOM + canvas stub (test/dom-stub.mjs), driving only public inputs
 // (keydown/keyup). The stub is a real tree because the Preact overlays render
-// into it; Preact itself is node_modules/preact, the release tools/vendor.mjs
-// copies into vendor/.
+// into it. Also holds the static checks on the page, CSS, source and PHP.
 // Fails loudly on any exception, a stuck turn loop, an unscrolled Space, or a
 // silent battlefield.
-import crypto from 'node:crypto';
+import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { sweepHit } from './js/sim.js';
-import { els, makeEl, click, submit, document } from './tools/dom-stub.mjs';
+import { sweepHit } from '../src/sim.ts';
+import { els, makeEl, click, submit, document } from './dom-stub.mjs';
 
-const __dirname = import.meta.dirname;
-const gameJs = fs.readFileSync(path.join(__dirname, 'game.js'), 'utf8');
-// The page's code is game.js and the typed modules it wires (src/*.ts); the checks that read
+const GAME_DIR = path.join(import.meta.dirname, '..');
+const read = file => fs.readFileSync(path.join(GAME_DIR, file), 'utf8');
+const mainSrc = read('src/main.ts');
+// The page's code is src/main.ts and the typed modules it wires (src/*.ts); the checks that read
 // the source for a rule look at all of it, so they hold wherever a function lives.
-const moduleFiles = fs.readdirSync(path.join(__dirname, 'src')).filter(f => f.endsWith('.ts') && !f.endsWith('.check.ts')).sort();
-const moduleSrc = Object.fromEntries(moduleFiles.map(f => [f, fs.readFileSync(path.join(__dirname, 'src', f), 'utf8')]));
-const src = [gameJs, ...Object.values(moduleSrc)].join('\n');
-const audioSrc = fs.readFileSync(path.join(__dirname, 'src', 'audio.ts'), 'utf8');
-const renderSrc = fs.readFileSync(path.join(__dirname, 'src', 'render.ts'), 'utf8');
-const fxSrc = fs.readFileSync(path.join(__dirname, 'fx.js'), 'utf8');
+const moduleFiles = fs.readdirSync(path.join(GAME_DIR, 'src')).filter(f => f.endsWith('.ts') && f !== 'main.ts' && !f.endsWith('.check.ts')).sort();
+const moduleSrc = Object.fromEntries(moduleFiles.map(f => [f, read('src/' + f)]));
+const src = [mainSrc, ...Object.values(moduleSrc)].join('\n');
+const audioSrc = read('src/audio.ts');
+const renderSrc = read('src/render.ts');
+
+// The game and its audio keep timers running for good; remember every one so the
+// run can end by clearing them instead of by killing the process.
+const liveTimers = new Set();
+for (const name of ['setTimeout', 'setInterval']) {
+  const real = globalThis[name];
+  globalThis[name] = (...args) => { const h = real(...args); liveTimers.add(h); return h; };
+}
 
 const listeners = {}; // type -> [fn] on window
 global.document = document;
@@ -43,7 +50,7 @@ global.fetch = async (url) => {
     // below keep exercising the baked fallback arsenal (the file's own arsenal
     // is validated separately from disk).
     return { ok: true, json: async () => {
-      const g = JSON.parse(fs.readFileSync(path.join(__dirname, 'game.json'), 'utf8'));
+      const g = JSON.parse(read('game.json'));
       delete g.arsenal;
       return g;
     } };
@@ -83,12 +90,12 @@ globalThis.AudioContext = class {
 };
 
 // ---- boot the exact shipped module ----
-eval(fxSrc);
-await import(pathToFileURL(path.join(__dirname, 'game.js')).href);
+eval(read('dist/fx.js'));
+await import(pathToFileURL(path.join(GAME_DIR, 'dist/main.js')).href);
 
 // ---- driver: every press below comes from game.json's keys, so the suite proves the
 // file and the shipped bindings agree instead of hardcoding keys twice ----
-const GAME = JSON.parse(fs.readFileSync(path.join(__dirname, 'game.json'), 'utf8'));
+const GAME = JSON.parse(read('game.json'));
 const KEYS = GAME.keys;
 for (const ctx of ['aim', 'shop', 'global', 'scroll']) {
   if (!KEYS[ctx]) throw new Error('game.json is missing keys context ' + ctx);
@@ -121,11 +128,6 @@ function frames(n) {
   for (let i = 0; i < n; i++) { ts += 16.7; global.__raf(ts); }
 }
 const logText = () => els['log'].children.map(li => li.textContent).join('\n');
-const errors = [];
-function check(name, cond, extra) {
-  console.log((cond ? 'PASS' : 'FAIL') + ' ' + name + (extra !== undefined ? ' :: ' + extra : ''));
-  if (!cond) errors.push(name);
-}
 
 // Boot runs a demo battle: no veils, no ambush shop, crew drives every tank.
 for (const id of ['new-game', 'round-banner', 'round-banner-text', 'preview-result']) {
@@ -163,14 +165,14 @@ check('music-on', pressed('btn-music') === 'true', pressed('btn-music'));
 TAP('global', 'sound');
 click(els['btn-music']); click(els['btn-music']); // end unmuted with a fresh scheduler
 // ---- game rooms: lobby + net play against a scripted server ----
-const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
-const css = fs.readFileSync(path.join(__dirname, 'game.css'), 'utf8');
+const html = fs.readFileSync(path.join(GAME_DIR, 'index.html'), 'utf8');
+const css = fs.readFileSync(path.join(GAME_DIR, 'game.css'), 'utf8');
 // The room server is rooms.php plus the files it requires from server/.
 const phpFiles = ['rooms.php', ...['settings', 'store', 'sim', 'ai', 'rules', 'protocol'].map(f => `server/${f}.php`)];
-const phpText = Object.fromEntries(phpFiles.map(f => [f, fs.readFileSync(path.join(__dirname, f), 'utf8')]));
+const phpText = Object.fromEntries(phpFiles.map(f => [f, fs.readFileSync(path.join(GAME_DIR, f), 'utf8')]));
 const php = Object.values(phpText).join('\n');
 // The lobby and the menu are Preact components (src/ui): their ids exist once
-// the game has drawn them, not in index.html (ui-test.js checks their shape).
+// the game has drawn them, not in index.html (ui.test.mjs checks their shape).
 const rendered = id => !!els[id] && !!els[id].localName;
 for (const id of ['lobby-veil', 'round-banner', 'round-banner-text', 'preview-result']) {
   check('lobby-markup-' + id, html.includes('id="' + id + '"'));
@@ -182,59 +184,14 @@ for (const id of ['rooms-open', 'host-form', 'host-initials', 'join-form',
   check('lobby-rendered-' + id, rendered(id));
 }
 check('no-status-codes', !/server said no/.test(src));
-// The module graph. A browser keys a module by its URL, so two spellings of one
-// file (with and without a ?v=, or with two versions) would load two copies,
-// one of them stale. What keeps that from happening, all checked here:
-//   - every import between our files carries a ?v=, and every importer of a
-//     file spells the same one, the content hash install-files.php writes;
-//   - every bare import (preact) is an entry of index.html's import map, whose
-//     URLs carry content-hash versions too;
-//   - every js/ file is reachable from game.js, so none loads unversioned.
-// `php tools/install-files.php --check` (make test) is what fails when a value
-// is stale; these are the rules it cannot see from the browser's side.
-const hashOf = text => crypto.createHash('sha256').update(text).digest('hex').slice(0, 10);
-const jsFiles = dir => fs.readdirSync(path.join(__dirname, dir), { withFileTypes: true })
-  .flatMap(e => (e.isDirectory() ? jsFiles(dir + '/' + e.name) : /\.js$/.test(e.name) ? [dir + '/' + e.name] : []));
-const IMPORT_RE = /^[ \t]*(?:import|export)\b[^;'"]*?\bfrom\s*(['"])([^'"\n]+)\1|^[ \t]*import\s*(['"])([^'"\n]+)\3/gm;
-const importsOf = text => [...text.matchAll(IMPORT_RE)].map(m => m[2] ?? m[4]);
-const mapMatch = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
-const importMap = mapMatch ? JSON.parse(mapMatch[1]).imports : {};
-const graph = {}; // file -> { text, relative: [{ target, version }], bare: [spec] }
-for (const f of ['game.js', ...jsFiles('js')]) {
-  const text = fs.readFileSync(path.join(__dirname, f), 'utf8');
-  const node = { text, relative: [], bare: [] };
-  for (const spec of importsOf(text)) {
-    if (!spec.startsWith('.')) { node.bare.push(spec); continue; }
-    const [rel, query] = spec.split('?');
-    node.relative.push({ target: path.posix.join(path.posix.dirname(f), rel), version: query });
-  }
-  graph[f] = node;
-}
-const edges = Object.entries(graph).flatMap(([f, n]) => n.relative.map(r => ({ from: f, ...r })));
-check('imports-carry-a-version', edges.length > 0 && edges.every(e => /^v=[0-9a-f]{10}$/.test(e.version ?? '')),
-  edges.filter(e => !/^v=[0-9a-f]{10}$/.test(e.version ?? '')).map(e => `${e.from} -> ${e.target}`).join());
-check('imports-name-real-js-modules', edges.every(e => e.target.startsWith('js/') && graph[e.target]),
-  edges.filter(e => !(e.target.startsWith('js/') && graph[e.target])).map(e => `${e.from} -> ${e.target}`).join());
-const versionsOf = target => new Set(edges.filter(e => e.target === target).map(e => e.version));
-check('one-version-per-module', Object.keys(graph).every(f => versionsOf(f).size <= 1),
-  Object.keys(graph).filter(f => versionsOf(f).size > 1).join());
-check('import-versions-are-content-hashes', edges.every(e => !graph[e.target] || e.version === 'v=' + hashOf(graph[e.target].text)));
-const reached = new Set(['game.js']);
-for (const f of reached) for (const r of graph[f].relative) if (graph[r.target]) reached.add(r.target);
-check('every-js-file-reachable-from-game', Object.keys(graph).every(f => reached.has(f)),
-  Object.keys(graph).filter(f => !reached.has(f)).join());
-const bareSpecs = new Set(Object.values(graph).flatMap(n => n.bare));
-check('bare-imports-are-in-the-import-map', bareSpecs.size > 0 && [...bareSpecs].every(s => s in importMap), [...bareSpecs].join());
-check('import-map-files-are-versioned', Object.keys(importMap).length > 0 && Object.values(importMap).every(url => {
-  const m = /^\.\/(vendor\/[\w./-]+\.js)\?v=([0-9a-f]{10})$/.exec(url);
-  return m && hashOf(fs.readFileSync(path.join(__dirname, m[1]), 'utf8')) === m[2];
-}), JSON.stringify(importMap));
-check('import-map-precedes-the-game-script', mapMatch && html.indexOf('type="importmap"') < html.indexOf('src="game.js?v='));
-// A vendored file may import only what the map names, so it never reaches for a second Preact.
-check('vendored-files-import-only-mapped-names', jsFiles('vendor').every(f =>
-  importsOf(fs.readFileSync(path.join(__dirname, f), 'utf8')).every(s => s in importMap)), jsFiles('vendor').join());
-for (const f of ['game.js', 'game.css', 'fx.js']) {
-  check('page-versions-' + f, new RegExp('(?:src|href)="' + f.replace('.', '\\.') + '\\?v=[0-9a-f]+"').test(html));
+// The page loads the effects bundle, then the game bundle, and nothing else:
+// no import map, and the game bundle carries Preact so it has no bare imports.
+check('page-loads-fx-then-the-game-bundle', /<script src="dist\/fx\.js\?v=[0-9a-f]{10}" defer><\/script>\s*<script type="module" src="dist\/main\.js\?v=[0-9a-f]{10}"><\/script>/.test(html), '');
+check('page-has-no-import-map', !/type="importmap"/.test(html), '');
+check('bundle-has-no-bare-imports', !/\bfrom\s*["'](?!\.)/.test(read('dist/main.js')), '');
+check('fx-bundle-sets-the-global', /TankityFX/.test(read('dist/fx.js')), '');
+for (const f of ['dist/main.js', 'game.css', 'dist/fx.js']) {
+  check('page-versions-' + f, new RegExp('(?:src|href)="' + f.replace(/[./]/g, '\\$&') + '\\?v=[0-9a-f]+"').test(html));
 }
 check('room-cap', /ROOM_MAX_ROOMS/.test(php) && /room_max_rooms/.test(php) && /every room is taken/.test(php));
 check('no-seed-leak', (() => {
@@ -314,7 +271,7 @@ check('menu-esc', els['menu-overlay'].hidden === true);
     && /if \(G\.demo\) music\.playTheme\(\); else music\.forRound\(G\.round\)/.test(src), songNames.join(','));
 // Every scrollable panel shows its keys, dimmed while everything fits.
 // (The overlays in src/ui draw theirs: one OverlayHead per navId, and the tutorial's own line.)
-const uiFile = f => fs.readFileSync(path.join(__dirname, 'src', 'ui', f + '.tsx'), 'utf8');
+const uiFile = f => fs.readFileSync(path.join(GAME_DIR, 'src', 'ui', f + '.tsx'), 'utf8');
 const uiNavs = ['help', 'shop', 'lobby', 'menu', 'guns', 'scores', 'log', 'endveil'].flatMap(f => uiFile(f).match(/navId="/g) || []).length
   + (uiFile('tutorial').match(/class="nav-hint"/g) || []).length;
 const navCount = (html.match(/class="nav-hint[" ]/g) || []).length + uiNavs;
@@ -350,7 +307,7 @@ function blockedOf(src) {
 check('blocked-parity',
   blockedOf(php) === blockedOf(src),
   blockedOf(src).split(',').length + ' entries');
-for (const [f, text] of [['game.js', gameJs], ...moduleFiles.map(m => ['src/' + m, moduleSrc[m]]), ['index.html', html], ['game.css', css], ...phpFiles.map(f => [f, phpText[f]])]) {
+for (const [f, text] of [['src/main.ts', mainSrc], ...moduleFiles.map(m => ['src/' + m, moduleSrc[m]]), ['index.html', html], ['game.css', css], ...phpFiles.map(f => [f, phpText[f]])]) {
   check('no-dashes-' + f, !/[—–]/.test(text));
 }
 check('net-round-event', /e\.t === 'round'/.test(src) && /'t' => 'round'/.test(php));
@@ -364,7 +321,7 @@ const terr720 = () => new Array(720).fill(300);
 // ---- protocol fixtures: real server replies (protocol/*.json) ----
 // The hand-written snapshots below must keep the shape the server really
 // sends, and a later phase feeds the client the fixtures themselves.
-const FX_DIR = path.join(__dirname, 'protocol');
+const FX_DIR = path.join(GAME_DIR, 'protocol');
 const fx = name => JSON.parse(fs.readFileSync(path.join(FX_DIR, name + '.json'), 'utf8'));
 const fxReply = f => ({ ok: f.status < 400, status: f.status, json: async () => f.body });
 const PFX = { on: false, room: 'lobby-host', actError: '', delta: 0, full: 0 };
@@ -570,7 +527,7 @@ function lobbyRoom() {
 }
 // Freeze regression: ten minutes in a background tab must not backlog the
 // music scheduler into scheduling thousands of catch-up notes at once.
-(async () => {
+await (async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // ?code=zz99 was set before boot: the lobby opens with the code filled in
   openBootGate();
@@ -1206,7 +1163,7 @@ function lobbyRoom() {
   void document.getElementById('leave-veil'); void document.getElementById('leave-go');
   void document.getElementById('leave-stay');
   // (shop-leave is in the shop component, src/ui/shop.tsx; the rest are in the page.)
-  const shopSrc = fs.readFileSync(path.join(__dirname, 'src', 'ui', 'shop.tsx'), 'utf8');
+  const shopSrc = fs.readFileSync(path.join(GAME_DIR, 'src', 'ui', 'shop.tsx'), 'utf8');
   check('leave-markup', html.includes('id="leave-veil"') && ['leave-go', 'leave-stay', 'rematch', 'again', 'end-score-form'].every(rendered) && rendered('menu-leave')
     && shopSrc.includes('id="shop-leave"'));
   check('leave-buttons-in-room', els['menu-leave'].hidden === false && els['shop-leave'].hidden === false,
@@ -1300,13 +1257,13 @@ function lobbyRoom() {
   {
     const FX = window.TankityFX;
     check('fx-engine-loaded', !!FX && typeof FX.createSystem === 'function');
-    const built = JSON.parse(fs.readFileSync(path.join(__dirname, 'game.json'), 'utf8'));
+    const built = JSON.parse(read('game.json'));
     const defs = FX.dress(built.effects);
     const arsenal = built.arsenal;
     const keys = arsenal.ammo.map(a => a.key).concat('laststand');
     check('fx-file-valid', FX.validate(defs, keys).length === 0, FX.validate(defs, keys).slice(0, 3).join(' | '));
     // game.yaml ends with the effects: block, written exactly as the editor exports it.
-    const yaml = fs.readFileSync(path.join(__dirname, 'game.yaml'), 'utf8');
+    const yaml = fs.readFileSync(path.join(GAME_DIR, 'game.yaml'), 'utf8');
     const at = yaml.search(/^effects:$/m);
     check('fx-yaml-canonical', at >= 0 && yaml.slice(at) === FX.toYaml(defs), 'the effects: block of game.yaml is not what FX.toYaml writes');
     const missing = [];
@@ -1361,7 +1318,6 @@ function lobbyRoom() {
     check('own-shell-passes-out-of-gunner', hits(s, mx, my, 330, 360) === null && s.clear === true);
     check('own-shell-hits-gunner-coming-back', (hits(s, 330, 360, 300, 370) || {}).t === drone);
   }
-  if (errors.length) { console.error('SMOKE-FAILED: ' + errors.join(',')); process.exit(1); }
   console.log('SMOKE-OK turn=' + els['hud-turn'].textContent + ' score=' + els['hud-score'].textContent);
-  process.exit(0);
+  for (const h of liveTimers) { clearTimeout(h); clearInterval(h); }
 })();

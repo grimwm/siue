@@ -1,20 +1,16 @@
-// The input module without a browser. Run here: `node input-test.js`.
-// js/input.js (compiled from src/input.ts) takes plain event objects, so the
+// The input module without a browser.
+// src/input.ts takes plain event objects, so the
 // key table, the command routing, the held keys and the arm movement run here
 // against the shipped game.json and a fake clock.
+import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import {
   FALLBACK_KEYS, buildKeymap, lookupKey, keycap, createInput, stepArm, Held, ARM_RATE, touchOnly, gridCommand,
-} from './js/input.js';
+} from '../src/input.ts';
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
 const near = (a, b) => Math.abs(a - b) < 1e-9;
 
-const GAME = JSON.parse(fs.readFileSync(new URL('./game.json', import.meta.url)));
+const GAME = JSON.parse(fs.readFileSync(new URL('../game.json', import.meta.url)));
 const map = buildKeymap(GAME.keys);
 
 // ---- tokens: code first, then key (either case), modifiers win while held ----
@@ -282,5 +278,3 @@ function rig(extraCtx = {}) {
   check('drive-keys-do-not-move-the-arm', (() => { const s = stepArm(held, 1, { angle: 62, power: 55 }, 1); return s.angle === 62 && s.power === 55 && s.idle; })());
 }
 
-if (failed) { console.log('INPUT-FAILED'); process.exit(1); }
-console.log('INPUT-OK');

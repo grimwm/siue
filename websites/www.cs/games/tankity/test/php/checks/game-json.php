@@ -1,17 +1,12 @@
 <?php
-// Tests for tools/game-json.php: the YAML-subset parser, the game.yaml
-// schema checks, and the --check workflow. Run: php game-json-test.php
-// Exit 0 when every check passes, 1 otherwise.
+// tools/game-json.php: the YAML-subset parser, the game.yaml schema checks,
+// and the --check workflow.
 declare(strict_types=1);
-require_once __DIR__ . '/tools/game-json.php';
+if (!defined('TANKITY_GAME_DIR')) {
+    define('TANKITY_GAME_DIR', dirname(__DIR__, 3));
+}
+require_once TANKITY_GAME_DIR . '/tools/game-json.php';
 
-$fail = 0;
-$check = function (string $name, bool $cond, string $extra = '') use (&$fail): void {
-    echo ($cond ? 'PASS' : 'FAIL') . ' ' . $name . ($extra !== '' ? ' :: ' . $extra : '') . "\n";
-    if (!$cond) {
-        $fail++;
-    }
-};
 /** The message a parse or render throws, or null when it succeeds. */
 $errOf = function (callable $f): ?string {
     try {
@@ -345,7 +340,7 @@ $e = (string) $errOf(fn() => $render($mut('audio/sfx/boom.mp3', 'audio/sfx/link.
 $check('schema-symlink-escape', str_contains($e, 'must stay inside the game folder'), $e);
 
 // ---- the shipped game.yaml ----
-$repoDir = __DIR__;
+$repoDir = TANKITY_GAME_DIR;
 $e = $errOf(function () use ($repoDir, &$shipped) {
     $shipped = tankity_config_render((string) file_get_contents("$repoDir/game.yaml"), $repoDir);
 });
@@ -395,5 +390,3 @@ file_put_contents("$work/tankity/game.yaml", $y);
 $check('cli-check-fails-on-missing-audio-file', $rc === 1 && str_contains($msg, 'file not found'), $msg);
 
 exec('rm -rf ' . escapeshellarg($tmp) . ' ' . escapeshellarg(dirname($tmp) . '/tankity-outside-' . getmypid()));
-echo $fail === 0 ? "GAME-JSON-OK\n" : "TANKITY-CONFIG-FAIL $fail\n";
-exit($fail === 0 ? 0 : 1);

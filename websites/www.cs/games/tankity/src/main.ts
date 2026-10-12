@@ -5,7 +5,7 @@
  * Ctrl/Space = fire · Q = weapon · N = next round / new match · M = music.
  */
 /* The page's entry module: it builds the game's state, wires the typed modules
- * together and runs the main loop. Everything else is in a module, compiled
+ * together and runs the main loop. Everything else is in a module,
  * bundled into dist/main.js:
  *   sim.ts       the game math (RNG, terrain, flight, hits, blasts)
  *   ai.ts        the drone AI

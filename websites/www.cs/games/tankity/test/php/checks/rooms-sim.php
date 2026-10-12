@@ -1,18 +1,13 @@
 <?php
 // Unit checks for the room server's simulation, no web server or shared
-// memory needed. Run: php rooms-sim-test.php
-// Exit 0 when every check passes, 1 otherwise.
+// memory needed.
 declare(strict_types=1);
+if (!defined('TANKITY_GAME_DIR')) {
+    define('TANKITY_GAME_DIR', dirname(__DIR__, 3));
+}
 const TANKITY_ROOMS_LIB = true;
-require __DIR__ . '/rooms.php';
+require TANKITY_GAME_DIR . '/rooms.php';
 
-$fail = 0;
-$check = function (string $name, bool $cond, string $extra = '') use (&$fail): void {
-    echo ($cond ? 'PASS' : 'FAIL') . ' ' . $name . ($extra !== '' ? ' :: ' . $extra : '') . "\n";
-    if (!$cond) {
-        $fail++;
-    }
-};
 
 $tank = function (int $seat, string $kind, float $x, int $hp) {
     return ['seat' => $seat, 'kind' => $kind, 'name' => 'T' . $seat, 'x' => $x, 'y' => 400.0,
@@ -342,7 +337,7 @@ $events = [];
 room_advance($stall, $events);
 $check('drone-stalemate-ends-the-round', $stall['phase'] === 'shop' && in_array('roundlost', array_column($events, 't'), true),
     $stall['phase'] . ' ' . json_encode(array_column($events, 't')));
-$flowSrc = (string) file_get_contents(__DIR__ . '/src/flow.ts');
+$flowSrc = (string) file_get_contents(TANKITY_GAME_DIR . '/src/flow.ts');
 $check('solo-and-rooms-share-the-stalemate-cap', (bool) preg_match('/WATCH_TURNS = ' . ROOM_WATCH_TURNS . ';/', $flowSrc));
 
 $room = $shopRoom();
@@ -877,7 +872,7 @@ $check('tactic-hit-records-attacker-and-damage', ($room['tanks'][1]['lastHitBy']
 // have the keys and types the fixtures record, which the client's smoke test
 // is run against. The values are not compared (generate.php --check does that
 // in the room container); a changed shape fails here, on any PHP.
-require_once __DIR__ . '/protocol/scenarios.php';
+require_once TANKITY_GAME_DIR . '/protocol/scenarios.php';
 // Roller: touching down it does not burst but rolls the ground, downhill
 // gaining speed, and bursts on a unit, at rest in a dip, or off the board.
 $roller = $weapons['roller'];
@@ -976,7 +971,7 @@ $land = room_sim_shot($hills, 0.0, 74.0, 342.0, 45.0, 40.0, 'roller', 1, 720);
 $check('roller-aim-predicts-the-rest', !$land['oob'] && abs($land['x'] - 300.0) < 12.0, json_encode($land));
 
 foreach (protocol_snapshots() as $name => [$about, $status, $body]) {
-    $file = __DIR__ . "/protocol/$name.json";
+    $file = TANKITY_GAME_DIR . "/protocol/$name.json";
     $fixture = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
     $check("protocol-$name-present", is_array($fixture) && ($fixture['status'] ?? null) === $status);
     $want = json_encode(protocol_shape($fixture['body'] ?? null));
@@ -984,11 +979,11 @@ foreach (protocol_snapshots() as $name => [$about, $status, $body]) {
     $check("protocol-$name-shape", $want === $have, $want === $have ? '' : 'run make protocol and read the diff; then teach the client the new shape');
 }
 foreach (['error-too-fast' => 429, 'error-not-your-turn' => 409, 'create-reply' => 200, 'join-reply' => 200] as $name => $status) {
-    $fixture = json_decode((string) @file_get_contents(__DIR__ . "/protocol/$name.json"), true);
+    $fixture = json_decode((string) @file_get_contents(TANKITY_GAME_DIR . "/protocol/$name.json"), true);
     $check("protocol-$name", is_array($fixture) && ($fixture['status'] ?? null) === $status
         && (isset($fixture['body']['error']) || isset($fixture['body']['token'])));
 }
-$fire = json_decode((string) @file_get_contents(__DIR__ . '/protocol/play-after-fire.json'), true);
+$fire = json_decode((string) @file_get_contents(TANKITY_GAME_DIR . '/protocol/play-after-fire.json'), true);
 $types = array_column($fire['body']['room']['events'] ?? [], 't');
 $check('protocol-fire-has-shot-and-hit', in_array('fire', $types, true) && in_array('shot', $types, true) && in_array('hit', $types, true),
     implode(',', $types));
@@ -1057,9 +1052,6 @@ foreach (['settings', 'store', 'sim', 'ai', 'rules', 'protocol'] as $lib) {
     $outLib = [];
     $codeLib = 0;
     exec(escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg('require $argv[1]; echo "RAN";') . ' '
-        . escapeshellarg(__DIR__ . '/server/' . $lib . '.php') . ' 2>&1', $outLib, $codeLib);
+        . escapeshellarg(TANKITY_GAME_DIR . '/server/' . $lib . '.php') . ' 2>&1', $outLib, $codeLib);
     $check("server-$lib-guarded", $codeLib === 0 && $outLib === [], $codeLib . ' ' . implode('|', array_slice($outLib, 0, 2)));
 }
-
-echo $fail === 0 ? "SIM-OK\n" : "SIM-FAIL $fail\n";
-exit($fail === 0 ? 0 : 1);

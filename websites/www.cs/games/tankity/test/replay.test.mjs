@@ -1,24 +1,20 @@
-// The room volley replay without a browser. Run here: `node replay-test.js`.
-// js/replay.js (compiled from src/replay.ts) plays recorded volleys through an
+// The room volley replay without a browser.
+// src/replay.ts plays recorded volleys through an
 // environment of callbacks, so each case steps the replay on a clock the test
 // moves by hand and checks what the room would show: the shell's place at
 // fixed times against the path points the server recorded (protocol/play-after-fire.json),
 // the blasts and hits at the moments the events say, the catch-up for a hidden
 // tab, and the 3x replay of the volley it keeps.
+import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createReplay, shellAt, shellVel, parsePath, PATH_HZ, FAST_SPEED } from './js/replay.js';
+import { createReplay, shellAt, shellVel, parsePath, PATH_HZ, FAST_SPEED } from '../src/replay.ts';
 
-const fixture = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'protocol', 'play-after-fire.json'), 'utf8')).body.room;
+const fixture = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'protocol', 'play-after-fire.json'), 'utf8')).body.room;
 const EVENTS = fixture.events;
 const byT = t => EVENTS.filter(e => e.t === t);
 const [shotA, shotB] = byT('shot');
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
 const near = (a, b, eps = 1e-9) => Math.abs(a - b) < eps;
 
 const DT = 1 / 64; // a binary fraction, so frame sums are exact
@@ -258,5 +254,3 @@ function frames(rp, n) {
   check('the volley after a watch volley plays at normal speed', Math.abs((n - firstDone) - normal.n) <= 3, `${n - firstDone} vs ${normal.n}`);
 }
 
-if (failed) { console.log(`\n${failed} failed`); process.exit(1); }
-console.log('\nreplay-test: ok');

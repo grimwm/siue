@@ -1,25 +1,19 @@
 <?php
-// Live test for the room slot table. Run: php rooms-store-test.php
-// Needs SysV (run it in the docker PHP, like rooms-test.php). It uses a
+// The room slot table, live. Needs SysV, so it runs in the docker PHP. It uses a
 // private shared-memory key, a free 127.0.0.1 port and a four-slot table,
-// and removes every segment and semaphore it made. Skips where SysV is missing.
+// and removes every segment and semaphore it made.
 // Covers: code -> key mapping, exclusive create (and a forced collision),
 // a missing code, the cap, a closed room freeing its segment and registry
 // entry, the idle sweep, occupancy, and per-room locking (another room never
 // waits, the same room does, crashes release, a join racing a close).
-// Exit 0 when every check passes, 1 otherwise.
 declare(strict_types=1);
+if (!defined('TANKITY_GAME_DIR')) {
+    define('TANKITY_GAME_DIR', dirname(__DIR__, 3));
+}
 
-$fail = 0;
-$check = function (string $name, bool $cond, string $extra = '') use (&$fail): void {
-    echo ($cond ? 'PASS' : 'FAIL') . ' ' . $name . ($extra !== '' ? ' :: ' . $extra : '') . "\n";
-    if (!$cond) {
-        $fail++;
-    }
-};
 if (!function_exists('shm_attach') || !function_exists('sem_get') || !function_exists('proc_open')) {
-    echo "SKIP no-sysv\n";
-    exit(0);
+    $check('sysv-available', false, 'shm_attach, sem_get and proc_open are required');
+    return;
 }
 
 const CAP = 4;
@@ -34,8 +28,13 @@ $env = array_merge(getenv(), [
 ]);
 putenv('CONFIG_FILE=' . $tmp . '/test.yaml');
 putenv('TANKITY_SHM_KEY=' . $shmKey);
-define('TANKITY_ROOMS_LIB', true);
-require __DIR__ . '/rooms.php';
+// Both scripts share one PHPUnit process: define and load once, and re-read the
+// config this script just pointed CONFIG_FILE at.
+if (!defined('TANKITY_ROOMS_LIB')) {
+    define('TANKITY_ROOMS_LIB', true);
+}
+require_once TANKITY_GAME_DIR . '/rooms.php';
+tankity_config(true);
 
 $cleanup = function () use ($shmKey, $tmp): void {
     $id = @shm_attach(room_registry_key($shmKey), ROOM_REGISTRY_BYTES);
@@ -85,16 +84,16 @@ $port = (int) substr(strrchr(stream_socket_get_name($probe, false), ':'), 1);
 fclose($probe);
 $base = 'http://127.0.0.1:' . $port;
 $proc = proc_open(
-    [PHP_BINARY, '-S', '127.0.0.1:' . $port, '-t', __DIR__],
+    [PHP_BINARY, '-S', '127.0.0.1:' . $port, '-t', TANKITY_GAME_DIR],
     [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
     $pipes,
     null,
     $env
 );
 if (!is_resource($proc)) {
-    echo "FAIL server-spawn\n";
+    $check('server-spawn', false, '');
     $cleanup();
-    exit(1);
+    return;
 }
 register_shutdown_function(function () use (&$proc, $cleanup): void {
     if (is_resource($proc)) {
@@ -191,7 +190,7 @@ $roomSegs = function (): int {
     return $n;
 };
 $regHold = proc_open(
-    [PHP_BINARY, '-r', 'define("TANKITY_ROOMS_LIB", true); require $argv[1] . "/rooms.php"; $s = sem_get(room_registry_key(), 1); sem_acquire($s); echo "LOCKED\n"; fflush(STDOUT); usleep(3500000); sem_release($s);', __DIR__],
+    [PHP_BINARY, '-r', 'define("TANKITY_ROOMS_LIB", true); require $argv[1] . "/rooms.php"; $s = sem_get(room_registry_key(), 1); sem_acquire($s); echo "LOCKED\n"; fflush(STDOUT); usleep(3500000); sem_release($s);', TANKITY_GAME_DIR],
     [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']],
     $regPipes, null, $env
 );
@@ -294,7 +293,7 @@ room_unlock($lock);
 PHP);
 $hold = function (string $code, string $secs, string $mode) use ($env, $tmp) {
     $p = proc_open(
-        [PHP_BINARY, $tmp . '/holder.php', $code, $secs, $mode, __DIR__],
+        [PHP_BINARY, $tmp . '/holder.php', $code, $secs, $mode, TANKITY_GAME_DIR],
         [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']],
         $pipes,
         null,
@@ -419,6 +418,3 @@ $reap($p, $pipes);
 $check('race-replies-whole', !$bad, json_encode($replies));
 $check('race-ends-in-404', ($last['error'] ?? '') === 'no such room' && !$segExists($R['code']));
 $check('race-leaves-no-stray-semaphore', $freeSem($R['code']));
-
-echo $fail ? "STORE-FAILED\n" : "STORE-OK\n";
-exit($fail ? 1 : 0);

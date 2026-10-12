@@ -112,7 +112,7 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
     `cylon.js`. The page hashes `cylon.js` as it stands, so run the game's
     tool first; `--check` (in `make test` and `make deploy`) reports the page
     stale when either was forgotten.
-    Each tool has its own test beside it (`install-files-test.php`).
+    The kit's `InstallCoreTest` covers the shared install logic.
 - Per-game data: Operation Tankity keeps its arsenal, key bindings and audio
   in `games/tankity/game.yaml` and serves `game.json`, written by
   `php tools/game-json.php` in its folder (`--check` runs in `make test` and
@@ -133,7 +133,7 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
 - The page imports a mounted game's entry module and hands it what it needs as
   options. The CIC takes `onTheme(combat)`, which `index.html` wires to
   `main.js`'s `applyCombatTheme`; the game defines nothing the site's scripts
-  define and calls nothing they define (`games/cylon/smoke-test.js` checks).
+  define and calls nothing they define (`games/cylon/test/smoke.test.mjs` checks).
   The games list loads after the game has been given the chance to define its
   `start` function.
 

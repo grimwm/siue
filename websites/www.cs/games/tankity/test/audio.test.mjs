@@ -1,14 +1,10 @@
-// The audio module's pure parts, without a browser. Run here: `node audio-test.js`.
-// js/audio.js (compiled from src/audio.ts) must import with no page and no
+// The audio module's pure parts, without a browser.
+// src/audio.ts must import with no page and no
 // AudioContext; what it computes without one is the loop-point trim that keeps
 // a track's silence out of its seam, and which track a level plays.
-import { trimSilence, trackForLevel, sfx, music, initAudio, noteGesture } from './js/audio.js';
+import { check } from '../../_kit/test/check.ts';
+import { trimSilence, trackForLevel, sfx, music, initAudio, noteGesture } from '../src/audio.ts';
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
 const near = (a, b) => Math.abs(a - b) < 1e-9;
 
 // A synthetic mono buffer: 1 s at 100 Hz, silent except samples 20..79.
@@ -84,6 +80,3 @@ check('silent-without-webaudio', threw === '', threw);
   check('handoff-stop-mid-load-silences-all', heard().length === 0, heard().join());
 }
 
-if (failed) { console.log('AUDIO-FAILED'); process.exit(1); }
-console.log('AUDIO-OK');
-process.exit(0);

@@ -5,6 +5,8 @@
  * chosen, what is muted, whether a room runs, and what each button does.
  * The page's other controls (sound, music, fullscreen, a fresh match, the
  * rooms) arrive as deps. */
+import { browserStorage } from '../../_kit/ports.browser.ts';
+import { pref, text } from '../../_kit/prefs.ts';
 import type { sfx as SfxApi } from './audio.ts';
 import type { GameState, GameTank } from './game-types.ts';
 import type { RoomClient } from './net.ts';
@@ -56,17 +58,15 @@ export function createMenu(deps: MenuDeps) {
   ];
   /* The unit picker in the Game menu: one button per body, each with a small
      drawing of it. The choice is remembered and, in a room, shared. */
+  const bodyPref = pref('tankity-body', 'tank', text, browserStorage());
   function loadBody(): string {
-    try {
-      const b = window.localStorage.getItem('tankity-body');
-      if (UNIT_BODIES.some(u => u.key === b)) return b as string;
-    } catch (_) { /* storage off: default body */ }
-    return 'tank';
+    const b = bodyPref.get();
+    return UNIT_BODIES.some(u => u.key === b) ? b : 'tank';
   }
   function chooseBody(key: string): void {
     if (!UNIT_BODIES.some(u => u.key === key)) return;
     G.body = key;
-    try { window.localStorage.setItem('tankity-body', key); } catch (_) { /* fine */ }
+    bodyPref.set(key);
     const mine = net.on ? myTank() : (G.tanks || []).find(t => t.isPlayer);
     if (mine) mine.body = key;
     net.sendBody(key);
@@ -84,9 +84,9 @@ export function createMenu(deps: MenuDeps) {
   function textScale(): number {
     return (TEXT_SIZES.find(t => t.key === TEXT_SIZE) || TEXT_SIZES[1]!).scale;
   }
+  const textPref = pref('tankity-text', 'm', text, browserStorage());
   function loadTextSize(): void {
-    let key = 'm';
-    try { key = window.localStorage.getItem('tankity-text') || 'm'; } catch (_) { /* no storage: default */ }
+    const key = textPref.get();
     applyTextSize(TEXT_SIZES.some(t => t.key === key) ? key : 'm');
   }
   function applyTextSize(key: string): void {
@@ -99,7 +99,7 @@ export function createMenu(deps: MenuDeps) {
   }
   function chooseTextSize(key: string): void {
     if (!TEXT_SIZES.some(t => t.key === key)) return;
-    try { window.localStorage.setItem('tankity-text', key); } catch (_) { /* fine */ }
+    textPref.set(key);
     applyTextSize(key);
     sfx.play('click');
   }

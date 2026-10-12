@@ -1,16 +1,12 @@
-// The renderer reads and paints; it never writes. Run here: `node render-test.js`.
-// js/render.js (compiled from src/render.ts) is driven with a recording canvas
+// The renderer reads and paints; it never writes.
+// src/render.ts is driven with a recording canvas
 // stub and a view that is frozen all the way down: any assignment to the view
 // (a tank, a boom, the terrain) throws in module code, so a frame that tried to
 // advance or change game state fails here without a browser.
-import { createRenderer, drawChassis } from './js/render.js';
-import { W, H, facing, isGroundUnit, muzzle, surfY, hashSeed, mulberry32, gauss } from './js/sim.js';
+import { check } from '../../_kit/test/check.ts';
+import { createRenderer, drawChassis } from '../src/render.ts';
+import { W, H, facing, isGroundUnit, muzzle, surfY, hashSeed, mulberry32, gauss } from '../src/sim.ts';
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
 
 function deepFreeze(o) {
   if (o && typeof o === 'object' && !Object.isFrozen(o) && !(o instanceof Function)) {
@@ -130,5 +126,3 @@ const live = deepFreeze({ ...view, turnUnit: view.tanks[1], aim: { unit: view.ta
   check('sky-builds-once-per-match-key', builds === 2, `builds=${builds}`);
 }
 
-if (failed) { console.log(`RENDER-FAILED: ${failed}`); process.exit(1); }
-console.log('RENDER-OK');

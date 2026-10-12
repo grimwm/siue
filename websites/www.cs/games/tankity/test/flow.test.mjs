@@ -1,14 +1,10 @@
-// The solo match flow without a browser. Run here: `node flow-test.js`.
-// js/flow.js (compiled from src/flow.ts) is a table of which event is legal in
+// The solo match flow without a browser.
+// src/flow.ts is a table of which event is legal in
 // which phase; this checks every legal move, that every other pair is
 // rejected, and walks a whole match from the demo to the match-over veil.
-import { PHASES, EVENTS, FLOW, transition, WATCH_SPEED, warSpeed, runWar } from './js/flow.js';
+import { check } from '../../_kit/test/check.ts';
+import { PHASES, EVENTS, FLOW, transition, WATCH_SPEED, warSpeed, runWar } from '../src/flow.ts';
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
 
 // Every legal transition, written out independently of the table.
 const LEGAL = [
@@ -107,5 +103,3 @@ check('the demo never speeds up', warSpeed(false, true) === 1 && warSpeed(true, 
   check('runWar stops when the phase leaves the war', runWar(0.05, 3, () => false) === 1);
 }
 
-console.log(failed ? `${failed} failed` : 'all passed');
-process.exit(failed ? 1 : 0);

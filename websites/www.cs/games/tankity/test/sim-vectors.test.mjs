@@ -1,25 +1,27 @@
 // Replays the shared sim vectors (protocol/sim-vectors.json) through the
-// browser sim, js/sim.js (compiled from src/sim.ts). Run here: `node sim-vectors-test.js`.
+// browser sim, src/sim.ts.
 // The vectors are written by `php protocol/sim-vectors.php` from rooms.php, so
 // a change to the browser sim or the room server's that the other side does
 // not follow fails here (or in the generator's --check) until they agree.
-// Exit 0 when every case matches or is a marked known difference.
+// Passes when every case matches or is a marked known difference.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const dir = import.meta.dirname;
+const dir = path.join(import.meta.dirname, '..');
 const VECTORS = JSON.parse(fs.readFileSync(path.join(dir, 'protocol', 'sim-vectors.json'), 'utf8'));
 const GAME = JSON.parse(fs.readFileSync(path.join(dir, 'game.json'), 'utf8'));
 const TOL = VECTORS.tolerance;
 
 /* ---- where the sim comes from ----
-   The only place that reaches for it: the compiled modules, which take their
+   The only place that reaches for it: the modules, which take their
    state as arguments, so the cases below pass a plain state object G. The
-   physics is js/sim.js and the drone AI js/ai.js; `sim` holds both. */
+   physics is src/sim.ts and the drone AI src/ai.ts; `sim` holds both. */
 const sim = {
-  ...await import(pathToFileURL(path.join(dir, 'js', 'sim.js')).href),
-  ...await import(pathToFileURL(path.join(dir, 'js', 'ai.js')).href),
+  ...await import(pathToFileURL(path.join(dir, 'src', 'sim.ts')).href),
+  ...await import(pathToFileURL(path.join(dir, 'src', 'ai.ts')).href),
 };
 const arsenal = sim.buildArsenal(GAME.arsenal);
 
@@ -214,7 +216,7 @@ if (wl !== loaded) {
   failures.push(`weapons: the vectors cover ${wl} but the sim loads ${loaded} from game.json; run make sim-vectors`);
 }
 for (const [group, cases] of Object.entries(VECTORS.groups)) {
-  if (!RUN[group]) { failures.push(`${group}: no runner for this group in sim-vectors-test.js`); continue; }
+  if (!RUN[group]) { failures.push(`${group}: no runner for this group in sim-vectors.test.mjs`); continue; }
   for (const c of cases) {
     total++;
     let got, bad;
@@ -240,8 +242,8 @@ for (const [group, cases] of Object.entries(VECTORS.groups)) {
 }
 failed = failures.length;
 for (const f of failures) console.log('FAIL ' + f);
-if (failed) {
-  console.error(`SIM-VECTORS-FAILED ${failed} of ${total}: client (js/sim.js) and server (rooms.php) disagree; fix the side that is wrong, then run make sim-vectors`);
-  process.exit(1);
-}
-console.log(`SIM-VECTORS-OK ${total} cases (${known} known differences)`);
+const summary = `SIM-VECTORS-OK ${total} cases (${known} known differences)`;
+test('client and server sims agree on every shared vector', () => {
+  assert.equal(failed, 0, `SIM-VECTORS-FAILED ${failed} of ${total}: client (src/sim.ts) and server (rooms.php) disagree; fix the side that is wrong, then run make sim-vectors`);
+  console.log(summary);
+});

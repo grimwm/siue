@@ -1,30 +1,48 @@
-// Tests for the Preact overlays in src/ui (compiled to js/ui): each is rendered
-// with sample props into the Node DOM stub (tools/dom-stub.mjs) and its key DOM
+// Tests for the Preact overlays in src/ui: each is rendered
+// with sample props into the Node DOM stub (test/dom-stub.mjs) and its key DOM
 // asserted: the ids and classes game.css and the browser specs rely on, the
 // title bar's cells, the shop's rows, and that every click reaches the callback
-// the game passed. Run: node ui-test.js. Exit 0 when every check passes.
+// the game passed.
+import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import { click, fire, submit, document, makeEl, els } from './tools/dom-stub.mjs';
+import * as esbuild from 'esbuild';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { click, fire, submit, document, makeEl, els } from './dom-stub.mjs';
 
 globalThis.document = document;
-const { renderHelp } = await import('./js/ui/help.js');
-const { renderShop } = await import('./js/ui/shop.js');
-const { renderLobby } = await import('./js/ui/lobby.js');
-const { renderMenu } = await import('./js/ui/menu.js');
-const { renderGuns } = await import('./js/ui/guns.js');
-const { renderScores } = await import('./js/ui/scores.js');
-const { renderLog } = await import('./js/ui/log.js');
-const { renderTutorial } = await import('./js/ui/tutorial.js');
-const { renderHud } = await import('./js/ui/hud.js');
-const { renderEndVeil } = await import('./js/ui/endveil.js');
-const { renderLeave } = await import('./js/ui/leave.js');
 
-const errors = [];
-function check(name, cond, extra) {
-  console.log((cond ? 'PASS' : 'FAIL') + ' ' + name + (extra !== undefined && !cond ? ' :: ' + extra : ''));
-  if (!cond) errors.push(name);
-}
+// All UI components in ONE bundle, with preact left external: the test and
+// every component then share the single preact Node loads from
+// games/node_modules (hooks and contexts break across two copies).
+const UI = ['help', 'shop', 'lobby', 'menu', 'guns', 'scores', 'log', 'tutorial', 'hud', 'endveil', 'leave'];
+const tmp = mkdtempSync(join(import.meta.dirname, '.tmp-'));
+process.on('exit', () => rmSync(tmp, { recursive: true, force: true }));
+const out = join(tmp, 'ui.mjs');
+await esbuild.build({
+  stdin: {
+    contents: UI.map(n => `export * as ${n} from '../src/ui/${n}.tsx';`).join('\n'),
+    resolveDir: import.meta.dirname,
+    loader: 'ts',
+  },
+  bundle: true, format: 'esm', platform: 'neutral', external: ['preact', 'preact/*'],
+  jsx: 'automatic', jsxImportSource: 'preact', outfile: out, logLevel: 'silent',
+});
+const ui = await import(pathToFileURL(out).href);
+const { renderHelp } = ui.help;
+const { renderShop } = ui.shop;
+const { renderLobby } = ui.lobby;
+const { renderMenu } = ui.menu;
+const { renderGuns } = ui.guns;
+const { renderScores } = ui.scores;
+const { renderLog } = ui.log;
+const { renderTutorial } = ui.tutorial;
+const { renderHud } = ui.hud;
+const { renderEndVeil } = ui.endveil;
+const { renderLeave } = ui.leave;
+
 const walk = (el, out = []) => { for (const c of el.children) { out.push(c); walk(c, out); } return out; };
 const hasClass = (el, name) => String(el.className || '').split(' ').includes(name);
 const byClass = (el, name) => walk(el).filter(n => hasClass(n, name));
@@ -85,7 +103,7 @@ const keyHint = (ctx, action, idx) => (idx ? KEYS[`${ctx}:${action}:${idx}`] : u
 }
 
 // ---- shop ----
-const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'game.json'), 'utf8'));
+const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const ammo = GAME.arsenal.ammo.filter(a => a.pack > 0);
 const gear = GAME.arsenal.gear;
 /** The shelf the way game.js lays it out: a heading per category, the free Shell under Shells. */
@@ -715,6 +733,3 @@ function gunTiles(n = 10, loaded = 0) {
   renderHud(bar, hp({ lives: { text: '', title: '' }, score: { text: '-', title: '' } }));
   check('hud-no-lives-no-label', attr(byId(bar, 'hud-lives'), 'aria-label') === undefined && attr(byId(bar, 'hud-score'), 'title') === undefined);
 }
-
-console.log(errors.length ? 'UI-FAILED: ' + errors.join(',') : 'UI-OK');
-process.exit(errors.length ? 1 : 0);

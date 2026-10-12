@@ -1,23 +1,19 @@
-// The firing-range preview without a browser. Run here: `node preview-test.js`.
-// js/preview.js (compiled from src/preview.ts) takes its weapons, effects and
+// The firing-range preview without a browser.
+// src/preview.ts takes its weapons, effects and
 // result line as an environment, so each case steps the demo on a clock the
 // test moves by hand (fixed 1/60 s frames) and records what the environment
 // was asked to do. The arsenal is the real one, from game.json.
+import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildArsenal, stepBallistic, shotSpeed, GRAV, FLAT_GRAV } from './js/sim.js';
+import { buildArsenal, stepBallistic, shotSpeed, GRAV, FLAT_GRAV } from '../src/sim.ts';
 import {
   PV_W, PV_H, PV_FOE_HP, PV_WIND, createPreview, stepPreview, solvePreview, previewShot, makePreviewTerrain,
-} from './js/preview.js';
+} from '../src/preview.ts';
 
-const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'game.json'), 'utf8'));
+const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const arsenal = buildArsenal(GAME.arsenal);
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
 
 const DT = 1 / 60;
 
@@ -185,5 +181,3 @@ function run(pv, env, seconds, done = () => false) {
   check('two demos on the same frames end in the same state', pick(pa) === pick(pb));
 }
 
-if (failed) { console.log(`\n${failed} failed`); process.exit(1); }
-console.log('\npreview-test: ok');

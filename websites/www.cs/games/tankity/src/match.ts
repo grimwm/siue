@@ -179,6 +179,7 @@ export function createMatch(deps: MatchDeps) {
     resetMatch(seedStr);
     // No round yet: spend the starting stake in the shop first.
     advance('matchStart');
+    refreshNavHints(); // the rotate hint shows from the first name card
     music.leaveTheme(); // a new match leaves the demo's theme at once
     startBanner('Round 1. The battery holds these hills.', openShop);
     say(`Match ${G.seed}: $600 stake in your pocket. Buy guns first. The battery holds these hills.`, 'info');

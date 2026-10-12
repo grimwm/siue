@@ -117,3 +117,13 @@ for (const [width, height, touch] of [[375, 667, false], [390, 844, true], [844,
     await ctx.close();
   });
 }
+
+test('R opens Scores over the title card and Esc closes it', async ({ browser }) => {
+  const { page, errors } = await newPlayer(browser);
+  await page.keyboard.press('r');
+  await expect(page.locator('#report-overlay')).toBeVisible();
+  await expect(page.locator('#score-h')).toContainText(/Scores/i);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#report-overlay')).toBeHidden();
+  expect(errors).toEqual([]);
+});

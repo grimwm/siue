@@ -14,6 +14,54 @@ const DEVICES = [
 const phone = ([, w, h]) => Math.min(w, h) < 600;
 const landscapePhone = ([, w, h]) => phone([0, w, h]) && w > h;
 
+/* The width each screen deals (spec 6.6): a device's portrait and landscape give the same. */
+const DEALT = { '1280x720': 1200, '1024x640': 1344, '1180x820': 984, '820x1180': 984, '393x852': 1224, '852x393': 1224, '360x740': 1176, '740x360': 1176 };
+/* The landscape box src/field.ts computes for a viewport, which the measured box must match. */
+function landscapeBox(vw, vh) {
+  const long = Math.max(vw, vh), short = Math.min(vw, vh);
+  return short <= 500 ? { w: long - 10, h: short - 75 } : { w: Math.min(long - 18, 1118), h: short - 294 };
+}
+
+/* The battlefield as drawn: no band of page between the bars, the ground at
+   both screen edges with no cut, and where the field sits. */
+function battlefield() {
+  const cv = document.getElementById('stage');
+  const box = document.getElementById('field').getBoundingClientRect();
+  const r = cv.getBoundingClientRect();
+  const bar = document.getElementById('hud-bar').getBoundingClientRect();
+  const deck = document.getElementById('deck');
+  const floating = getComputedStyle(deck).position === 'absolute';
+  const probs = [];
+  if (Math.abs(r.left - box.left) > 0.5 || Math.abs(r.right - box.right) > 0.5 || Math.abs(r.top - box.top) > 0.5 || Math.abs(r.bottom - box.bottom) > 0.5) {
+    probs.push('the canvas does not fill the battlefield');
+  }
+  if (Math.abs(box.top - bar.bottom) > 0.5) probs.push(`${Math.round(box.top - bar.bottom)}px between the status bar and the battlefield`);
+  if (!floating && Math.abs(deck.getBoundingClientRect().top - box.bottom) > 0.5) probs.push(`${Math.round(deck.getBoundingClientRect().top - box.bottom)}px between the battlefield and the deck`);
+  const holder = getComputedStyle(document.querySelector('.canvas-holder')).backgroundColor.match(/\d+/g).map(Number);
+  const c = cv.getContext('2d'), W = cv.width, H = cv.height;
+  const px = c.getImageData(0, 0, W, H).data;
+  const at = (x, y) => { const i = (y * W + x) * 4; return [px[i], px[i + 1], px[i + 2], px[i + 3]]; };
+  for (let y = 0; y < H; y += 2) {
+    let band = true;
+    for (let x = 0; x < W && band; x += 7) {
+      const [r0, g0, b0, a0] = at(x, y);
+      band = a0 < 255 || (r0 === holder[0] && g0 === holder[1] && b0 === holder[2]);
+    }
+    if (band) { probs.push(`a band of background at canvas row ${y}`); break; }
+  }
+  // Ground: dirt, hills, grass (warm or green), never the night sky (blue at least as strong as red).
+  const ground = ([r0, g0, b0]) => r0 > b0 + 10 || (g0 > b0 + 40 && g0 > r0);
+  const top = x => { let y = H - 1; while (y > 0 && ground(at(x, y))) y--; return y; };
+  const dpr = W / r.width;
+  for (const [edge, inward] of [[0, Math.round(8 * dpr)], [W - 1, W - 1 - Math.round(8 * dpr)]]) {
+    const te = top(edge), ti = top(inward);
+    if (te >= H - 1) probs.push(`no ground at canvas column ${edge}`);
+    if (Math.abs(te - ti) > 6 * dpr) probs.push(`the ground is cut at canvas column ${edge}: ${H - te} vs ${H - ti} px high`);
+  }
+  const [fx, fy, fw, fh] = cv.dataset.field.split(',').map(Number);
+  return { probs, w: Number(cv.dataset.w), field: { x: fx, y: fy, w: fw, h: fh }, canvas: { w: r.width, h: r.height }, box: { w: box.width, h: box.height } };
+}
+
 async function open(browser, [, width, height, touch], { text } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
   await ctx.addInitScript(recorderScript);
@@ -100,7 +148,7 @@ function chipSpreads() {
 }
 
 function smallTargets() {
-  return [...document.querySelectorAll('#hud-bar button, #deck button')]
+  return [...document.querySelectorAll('#hud-bar button, #deck button, #field .rotate-x')]
     .filter(el => el.getClientRects().length)
     .map(el => [el.id || el.dataset.aim, el.getBoundingClientRect()])
     .filter(([, r]) => r.width < 43.5 || r.height < 43.5)
@@ -114,6 +162,22 @@ for (const dev of DEVICES) {
       await page.evaluate(setWorst, room);
       expect(await page.evaluate(measure), room ? 'room' : 'solo').toEqual([]);
       await page.screenshot({ path: `test-results/tankity-layout-${dev[1]}x${dev[2]}-${room ? 'room' : 'solo'}.png` });
+    }
+    // The battlefield fills the screen between the bars, the ground meets both
+    // edges, and the field's width is the one this device deals either way up.
+    const bf = await page.evaluate(battlefield);
+    expect(bf.probs).toEqual([]);
+    expect(bf.w).toBe(DEALT[`${dev[1]}x${dev[2]}`]);
+    if (dev[1] > dev[2]) {
+      const want = landscapeBox(dev[1], dev[2]);
+      expect(Math.abs(bf.box.w - want.w), 'box width vs src/field.ts').toBeLessThanOrEqual(2);
+      expect(Math.abs(bf.box.h - want.h), 'box height vs src/field.ts').toBeLessThanOrEqual(2);
+    } else {
+      // Portrait: the field spans the full width, with sky above and dirt below.
+      expect(Math.abs(bf.field.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(bf.field.w - bf.canvas.w)).toBeLessThanOrEqual(1);
+      expect(bf.field.y).toBeGreaterThan(0);
+      expect(bf.field.y + bf.field.h).toBeLessThan(bf.canvas.h);
     }
     const chips = await page.evaluate(chipSpreads);
     if (!dev[3]) {
@@ -291,3 +355,35 @@ for (const [name, width, height, touch, narrow] of SHOP_SCREENS) {
     await ctx.close();
   });
 }
+
+test('the width holds through a resize and the next match takes the new one', async ({ browser }) => {
+  const { ctx, page } = await open(browser, DEVICES[0]);
+  await page.locator('.title-play').click();
+  await page.clock.runFor(200);
+  expect(Number(await page.locator('#stage').getAttribute('data-w'))).toBe(1200);
+  await page.setViewportSize({ width: 1024, height: 640 });
+  await page.clock.runFor(200);
+  expect(Number(await page.locator('#stage').getAttribute('data-w')), 'mid-match: rescaled, not re-dealt').toBe(1200);
+  expect((await page.evaluate(battlefield)).probs).toEqual([]);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /Play this seed/ }).click(); // a new deal (Menu, Task 14)
+  await page.clock.runFor(200);
+  expect(Number(await page.locator('#stage').getAttribute('data-w'))).toBe(1344);
+  await ctx.close();
+});
+
+test('the rotate hint: portrait only, in a match, gone once dismissed', async ({ browser }) => {
+  const { ctx, page } = await open(browser, DEVICES[4]);
+  expect(await page.locator('.rotate-hint').count(), 'not over the demo').toBe(0);
+  await page.locator('.title-play').click();
+  await page.clock.runFor(200);
+  await expect(page.locator('.rotate-hint')).toContainText('Turn sideways for the full battlefield');
+  await page.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(page.locator('.rotate-hint')).toHaveCount(0);
+  await page.reload();
+  await page.waitForSelector('#hud-score > span');
+  await page.locator('.title-play').click();
+  await page.clock.runFor(200);
+  expect(await page.locator('.rotate-hint').count(), 'remembered').toBe(0);
+  await ctx.close();
+});

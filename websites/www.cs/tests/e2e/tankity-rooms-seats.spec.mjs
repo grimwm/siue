@@ -8,7 +8,7 @@ const modes = page => page.locator('#lobby-seats .seat-tile').evaluateAll(ts => 
 
 /* Menu, then Leave room, then the in-page question (shot taken when asked). */
 async function leaveFromMenu(page, shot) {
-  await page.keyboard.press('c');
+  await page.keyboard.press('Escape');
   await page.click('#menu-leave');
   await expect(page.locator('#leave-veil')).toBeVisible();
   if (shot) await page.screenshot({ path: shot });
@@ -54,7 +54,7 @@ test('a guest leaves mid-match from the menu and lands in solo; the host plays o
   // Solo hills: the room panels are gone and the leave buttons hide again.
   await expect(guest.page.locator('#leave-veil')).toBeHidden();
   await expect(guest.page.locator('#lobby-veil')).toBeHidden();
-  await guest.page.keyboard.press('c');
+  await guest.page.keyboard.press('Escape');
   await expect(guest.page.locator('#menu-leave')).toBeHidden();
   await guest.page.keyboard.press('Escape');
   // A fresh solo match deals in: banner, then the pre-match shop (no room button there).
@@ -106,7 +106,7 @@ test('the host leaves mid-match: the guest keeps playing, the room goes with the
 test('ESC on the leave question means stay, and the match goes on', async ({ browser }) => {
   const { host, guest } = await roomPair(browser);
   // Open the question from the menu, ESC keeps the match.
-  await host.page.keyboard.press('c');
+  await host.page.keyboard.press('Escape');
   await host.page.click('#menu-leave');
   await expect(host.page.locator('#leave-veil')).toBeVisible();
   await host.page.keyboard.press('Escape');

@@ -1,5 +1,5 @@
 <?php
-// websites/www.cs/games/_kit/php/tests/InstallCoreTest.php
+// Tests install-core.php: YAML card, ?v= hashes, install block, manifest, precache and sync.
 declare(strict_types=1);
 
 require_once __DIR__ . '/../install-core.php';
@@ -143,9 +143,55 @@ final class InstallCoreTest extends TestCase
 
     public function testRunReturnsOneOnACheckThatFindsStaleFiles(): void
     {
-        ob_start();
-        $code = install_run($this->dir, self::PLAY, ['install-files.php', '--check']);
-        ob_end_clean();
+        $err = fopen('php://memory', 'w+');
+        $code = install_run($this->dir, self::PLAY, ['install-files.php', '--check'], $err);
+        rewind($err);
+        $text = (string) stream_get_contents($err);
         $this->assertSame(1, $code);
+        foreach (['index.html', 'manifest.webmanifest', 'sw.js'] as $f) {
+            $this->assertStringContainsString("install-files: $f is stale", $text);
+        }
+    }
+
+    public function testRunWritesAndReturnsZero(): void
+    {
+        $err = fopen('php://memory', 'w+');
+        $out = fopen('php://memory', 'w+');
+        $code = install_run($this->dir, self::PLAY, ['install-files.php'], $err, $out);
+        rewind($err);
+        rewind($out);
+        $this->assertSame(0, $code);
+        $this->assertSame('', stream_get_contents($err));
+        $text = (string) stream_get_contents($out);
+        foreach (['index.html', 'manifest.webmanifest', 'sw.js'] as $f) {
+            $this->assertStringContainsString("install-files: wrote $f", $text);
+        }
+    }
+
+    public function testPrecacheSkipsToolingAndKeepsNestedFiles(): void
+    {
+        mkdir("$this->dir/dist/sub", 0777, true);
+        foreach (['package.json', 'tsconfig.json', 'build.json', 'sw.js', 'dist/sub/x.js'] as $f) {
+            file_put_contents("$this->dir/$f", '{}');
+        }
+        [$names] = install_precache($this->dir, [], 'og.png', ['dist'], []);
+        $this->assertContains('dist/sub/x.js', $names);
+        foreach (['package.json', 'tsconfig.json', 'build.json', 'sw.js'] as $f) {
+            $this->assertNotContains($f, $names);
+        }
+    }
+
+    public function testPrecacheSkipsAnImageInsideAPrecacheFolder(): void
+    {
+        file_put_contents("$this->dir/dist/og.png", 'png');
+        [$names] = install_precache($this->dir, [], 'dist/og.png', ['dist'], []);
+        $this->assertNotContains('dist/og.png', $names);
+        $this->assertContains('dist/main.js', $names);
+    }
+
+    public function testAnUnreadableVersionedFileIsAProblem(): void
+    {
+        [, $problems] = install_page_versions($this->dir, '<p></p>', 'index.html', ['gone.js']);
+        $this->assertSame(['gone.js is not readable, but index.html references it'], $problems);
     }
 }

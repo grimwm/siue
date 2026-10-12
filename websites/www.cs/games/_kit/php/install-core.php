@@ -214,6 +214,7 @@ function install_manifest(array $card, string $id): string
 /**
  * The static files the service worker precaches, and a hash of them.
  * @param array<string, string> $override name -> content about to be written
+ * @param string $image the share-only picture, relative to the game folder as configured
  * @param list<string> $dirs folders precached recursively
  * @param list<string> $exclude fnmatch patterns on file names
  * @return array{0: list<string>, 1: string} [file names, hash]
@@ -338,7 +339,7 @@ function install_sync(string $dir, array $config, bool $write): array
     if (!$notes) {
         $outputs['manifest.webmanifest'] = install_manifest($card, basename($dir));
         if ($kind === 'play') {
-            [$names, $hash] = install_precache($dir, $outputs, basename($card['image']), $config['precache_dirs'] ?? [], $config['precache_exclude'] ?? []);
+            [$names, $hash] = install_precache($dir, $outputs, $card['image'], $config['precache_dirs'] ?? [], $config['precache_exclude'] ?? []);
             $outputs['sw.js'] = install_sw($card, basename($dir), $names, $hash);
         }
     }
@@ -354,19 +355,19 @@ function install_sync(string $dir, array $config, bool $write): array
     return [$stale, $notes];
 }
 
-/** The tools/install-files.php command line: write, or --check. Returns the exit code. */
-function install_run(string $dir, array $config, array $argv): int
+/** The tools/install-files.php command line: write, or --check. Returns the exit code; $err and $out are injectable streams. */
+function install_run(string $dir, array $config, array $argv, $err = STDERR, $out = STDOUT): int
 {
     $check = in_array('--check', $argv, true);
     [$stale, $notes] = install_sync($dir, $config, !$check);
     foreach ($notes as $n) {
-        fwrite(STDERR, "install-files: $n\n");
+        fwrite($err, "install-files: $n\n");
     }
     foreach ($stale as $f) {
         if ($check) {
-            fwrite(STDERR, "install-files: $f is stale; run php tools/install-files.php in the game folder\n");
+            fwrite($err, "install-files: $f is stale; run php tools/install-files.php in the game folder\n");
         } else {
-            echo "install-files: wrote $f\n";
+            fwrite($out, "install-files: wrote $f\n");
         }
     }
     return $notes || ($check && $stale) ? 1 : 0;

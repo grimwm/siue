@@ -144,7 +144,7 @@ Before staging, `deploy.sh` refuses to ship a stale generated file: the site's g
 
 - Changes go through a branch and a pull request. Do not commit to `main`.
 - The main checkout stays on `main`. Branch work happens in a git worktree under `.claude/worktrees/` (that directory is git-ignored), with its own compose project name so its site does not collide with another checkout's (see "Running locally").
-- Run `make test` and `make e2e-changed` before opening the pull request; CI runs the same suites.
+- Before opening the pull request, run `make test` plus the one or two browser specs your change is about (`make e2e E2E_ARGS="<spec>"`). CI runs every spec the change selects, across four runners.
 - Design specs and implementation plans go in `docs/superpowers/specs/` and `docs/superpowers/plans/`.
 - Large authoring sources (`.blend`, `.wav`, `.flac`, `.aif`) are in Git LFS; run `git lfs install` once and `git lfs pull` after cloning. Served images and compressed audio are in plain git.
 

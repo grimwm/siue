@@ -32,8 +32,8 @@ export const BRK_ON = 22;
 /* How well the drones aim, by difficulty. The ranging shot's wobble is
    wobStart - wobStep x round, never below wobFloor; angle and power stray by
    9 and 12 times it. The numbers are tuned against measured hit rates
-   (src/ai-measure.ts, test/ai-hitrate.test.mjs): hard is the battery's
-   original aim, normal lands a ranging shot 10-25% of the time from round 1
+   (src/ai-measure.ts, test/ai-hitrate.test.mjs): hard is the sharpest
+   (full correction, fastest-shrinking wobble), normal lands a ranging shot 10-25% of the time from round 1
    to round 10, easy about half as often as normal. server/ai.php
    ROOM_DIFFICULTY is the same table. */
 export interface AimSkill {

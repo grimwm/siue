@@ -59,7 +59,9 @@ import { createMatch } from './match.ts';
 import { createRoom } from './room.ts';
 import { createLobby } from './lobby.ts';
 import { createMenu } from './menu.ts';
+import { createTitle } from './title.ts';
 import { difficultySetting } from './difficulty.ts';
+import { initialsPref } from './initials.ts';
 import { browserStorage } from '../../_kit/ports.browser.ts';
 import type { Arsenal, Weapon, Gear } from './sim.ts';
 import type { GameState, GameTank, MatchState } from './game-types.ts';
@@ -417,6 +419,10 @@ const {
 });
 /* The Difficulty setting: the Menu picks it, a new solo match and a hosted room read it. */
 const difficulty = difficultySetting(browserStorage());
+/* The player's initials (src/initials.ts): one set per browser, edited on the
+   title card; the rooms host and join with it, and filed scores carry it. */
+const savedInitials = initialsPref(browserStorage(), Math.random);
+const getInitials = (): string => savedInitials.get();
 /* The solo match (src/match.ts): dealing, turns, blasts, the drone's shot, the end veil. A dependency
    on a module wired further down is passed as an arrow, so it resolves when it is called. */
 const {
@@ -425,7 +431,7 @@ const {
 } = createMatch({
   G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
-  tutorialFired, fileReport, savedCallsign, freshMatchFromSeedBox,
+  tutorialFired, fileReport, savedCallsign, backToTitle: () => backToTitle(),
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
   netFire: () => netFire(), netLeave: quiet => netLeave(quiet), netNext: want => netNext(want),
   netRematch: () => netRematch(), openLobby: () => openLobby(),
@@ -459,8 +465,9 @@ const {
   netLeave, netRematch,
 } = createLobby({
   G, $, net, MATCH, HUD, END, SCORES, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
-  closeOverlays, closePreview, endTutorial, freshMatchFromSeedBox, hideShop, paintHud, refreshNavHints, renderEndVeil,
+  closeOverlays, closePreview, endTutorial, hideShop, savedInitials: getInitials, paintHud, refreshNavHints, renderEndVeil,
   renderMenu: () => renderMenu(),
+  closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
   renderScoresOverlay, renderShop,
 });
 /* The game menu's settings (src/menu.ts). */
@@ -468,6 +475,21 @@ const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
   G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, openRooms, placeLogBelowMenu,
   randomRun, freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound, tutorialOpen,
 });
+/* The title card over the demo (src/title.ts). */
+const { titleOpen, openTitle, closeTitle, renderTitle } = createTitle({
+  $, keyHint, initials: savedInitials,
+  play: () => { unlock(); sfx.play('click'); randomRun(); },
+  friends: () => openRooms(),
+  tutorial: () => { sfx.play('click'); tutorialOpen(); },
+  settings: () => { const mv = $('menu-overlay'); if (mv && mv.hidden) toggleOverlay('menu-overlay', 'btn-menu'); },
+  settingsOpen: () => { const mv = $('menu-overlay'); return !!mv && !mv.hidden; },
+});
+/* After a match or a room: the demo again, under the card. */
+function backToTitle(): void {
+  closeOverlays();
+  startDemo();
+  openTitle();
+}
 function myTank(): GameTank | null {
   for (const t of G.tanks) if (t.isPlayer) return t;
   return null;
@@ -486,6 +508,7 @@ function applyKeys(def: unknown): void {
   renderHelpOverlay();
   renderShop();
   renderMenu();
+  renderTitle();
   renderLobby();
   renderGuns();
   renderScoresOverlay();
@@ -513,6 +536,7 @@ function freshMatchFromSeedBox(opts?: { tut?: boolean }): void {
   // A new match takes the whole frame: shut any panels so the menu never
   // sits over the briefing and the shop never opens underneath it.
   closeOverlays();
+  closeTitle();
   // Leaving a coached battle counts as having seen it; asking for the
   // tutorial (U or the menu) always deals this match with the coach on.
   endTutorial(tutorialActive());
@@ -666,6 +690,7 @@ function bindKeys(): void {
     // The leave question holds every key but ESC (which answers "stay").
     modalOpen: () => { const ask = $('leave-veil'); return !!ask && !ask.hidden; },
     modalEscape: () => { closeLeaveVeil(); },
+    cardOpen: () => titleOpen(),
     onHold: () => { unlock(); music.start(); },
   });
   input.bind(window);
@@ -692,6 +717,7 @@ function init(): void {
   loadTextSize(); // draws the menu
   renderKeyHints();
   startDemo();
+  openTitle();
   renderShop();
   loadScores();
   // Light the connection dot from the start, not only when the lobby opens.
@@ -843,7 +869,15 @@ function toggleOverlay(id: string, btnId?: string): void {
   if (OVERLAY_PAINT[id]) OVERLAY_PAINT[id]();
   const btn = btnId && $(btnId);
   if (btn) btn.setAttribute('aria-expanded', String(!ov.hidden));
+  if (id === 'menu-overlay') menuFocus(!ov.hidden);
   refreshNavHints();
+}
+/* Focus goes into the menu when it opens, and back to what opens it when it
+   closes: the card's Settings while the card is up, else the Menu button. */
+function menuFocus(open: boolean): void {
+  renderTitle();
+  const to = open ? $('menu-close') : titleOpen() ? $('title-settings') : $('btn-menu');
+  if (to && to.focus) to.focus();
 }
 function toggleFullscreen(): void {
   try {

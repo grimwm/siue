@@ -206,7 +206,7 @@ function lobbyProps(over = {}) {
   const props = {
     keyHint, onClose: () => { calls.close++; }, online: true, count: '3 / 10 rooms occupied', status: '', inRoom: false,
     maps: MAPS, mapId: '', drawMapIcon: (cv, profile) => { calls.icons.push(profile); }, mapsRev: 1, prefillCode: '',
-    onPickMap: id => calls.pick.push(id), onHost: i => calls.host.push(i), onJoin: (c, i) => calls.join.push([c, i]),
+    onPickMap: id => calls.pick.push(id), initials: 'ZED', onHost: () => calls.host.push('host'), onJoin: c => calls.join.push(c),
     code: '', link: '', hills: 'Hills: Random hills', seats: [], mySeat: 0, isHost: false, seatsHint: '',
     onSeatMode: (i, m) => calls.seat.push([i, m]), onCopy: () => { calls.copy++; }, onStart: () => { calls.start++; }, onLeave: () => { calls.leave++; },
     ...over,
@@ -261,20 +261,19 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
   check('lobby-map-hidden-value-follows-pick', byId(card, 'lobby-map').value === 'canyon');
   click(picker.children[2]);
   check('lobby-map-click-reports-id', calls.pick.join() === 'twin');
-  // The host form: initials as typed, on submit.
+  // The forms carry no initials: the rooms use the set saved on the title card.
   const hostForm = byId(card, 'host-form');
-  byId(card, 'host-initials').value = 'abc';
   submit(hostForm);
-  check('lobby-host-submit', calls.host.join() === 'abc' && hasClass(byId(card, 'host-go'), 'btn-primary') && text(byId(card, 'host-go')) === 'Host a room');
-  check('lobby-initials-boxes', attr(byId(card, 'host-initials'), 'placeholder') === 'ABC' && attr(byId(card, 'host-initials'), 'maxLength') === '3'
-    && attr(byId(card, 'join-code'), 'maxLength') === '4' && attr(byId(card, 'join-initials'), 'placeholder') === 'ZED');
+  check('lobby-host-submit', calls.host.length === 1 && hasClass(byId(card, 'host-go'), 'btn-primary') && text(byId(card, 'host-go')) === 'Host a room');
+  check('lobby-no-initials-boxes', !byId(card, 'host-initials') && !byId(card, 'join-initials') && attr(byId(card, 'join-code'), 'maxLength') === '4');
+  check('lobby-says-whose-initials', /ZED/.test(text(byId(card, 'lobby-initials'))) && /title card/.test(text(byId(card, 'lobby-initials'))),
+    text(byId(card, 'lobby-initials')));
   byId(card, 'join-code').value = 'tst1';
-  byId(card, 'join-initials').value = 'def';
   submit(byId(card, 'join-form'));
-  check('lobby-join-submit', JSON.stringify(calls.join) === '[["tst1","def"]]', JSON.stringify(calls.join));
-  // The typed boxes survive every redraw; an invite's code fills the code box once.
+  check('lobby-join-submit', JSON.stringify(calls.join) === '["tst1"]', JSON.stringify(calls.join));
+  // The typed code survives every redraw; an invite's code fills the code box once.
   renderLobby(veil, { ...props, status: 'Raising the flag…' });
-  check('lobby-redraw-keeps-typing', byId(card, 'host-initials').value === 'abc' && byId(card, 'join-code').value === 'tst1');
+  check('lobby-redraw-keeps-typing', byId(card, 'join-code').value === 'tst1');
   renderLobby(veil, { ...props, prefillCode: 'ZZ99' });
   check('lobby-invite-code-prefills', byId(card, 'join-code').value === 'ZZ99');
   byId(card, 'join-code').value = 'AAAA';
@@ -548,7 +547,7 @@ function gunTiles(n = 10, loaded = 0) {
     && attr(input, 'placeholder') === 'e.g. tankity' && text(form.children[2]) === 'File score' && attr(form.children[2], 'type') === 'submit');
   check('end-callsign-prefilled', input.value === 'ZED', input.value);
   const again = byId(card, 'again');
-  check('end-again', hasClass(again, 'btn-primary') && text(again) === 'Play again N', text(again));
+  check('end-again', hasClass(again, 'btn-primary') && text(again) === 'Continue', text(again));
   input.value = ' zed ';
   submit(form);
   check('end-submit-reports-the-box-as-typed', calls.filed.join('|') === ' zed ', JSON.stringify(calls.filed));

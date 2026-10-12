@@ -93,7 +93,7 @@ export interface KeyLike {
   ctrlKey?: boolean;
   shiftKey?: boolean;
   repeat?: boolean;
-  target?: { tagName?: string } | null;
+  target?: { tagName?: string; click?(): void } | null;
   preventDefault(): void;
 }
 
@@ -222,6 +222,8 @@ export interface InputContext {
   /** A question holds every key but ESC; modalEscape answers it. */
   modalOpen?(): boolean;
   modalEscape?(): void;
+  /** The title card is up: the aim keys rest, and Space or Ctrl presses the card's focused button. */
+  cardOpen?(): boolean;
   /** Something held or pressed started play (the page unlocks audio). */
   onHold?(cmd: HoldCommand): void;
 }
@@ -332,6 +334,7 @@ export function createInput(opts: { touch: boolean }): Input {
       return;
     }
     const act = lookup('aim', e) as HoldCommand | null;
+    if (act && ctx.cardOpen && ctx.cardOpen()) return;
     if (act) {
       // Shift pressed or let go mid-hold turns a barrel key into a drive key
       // (or back): only the action the chord names now stays down.
@@ -347,6 +350,13 @@ export function createInput(opts: { touch: boolean }): Input {
     // from the same table as everything else.
     if (global === 'fire') {
       e.preventDefault();
+      // On the title card Space and Ctrl press the focused button; their own
+      // default is the page scroll suppressed just above.
+      const target = e.target;
+      if (ctx.cardOpen && ctx.cardOpen() && target && target.tagName === 'BUTTON' && target.click) {
+        if (!press.repeat) target.click();
+        return;
+      }
       const fn = commands.fire;
       if (fn && !press.repeat) fn(press);
       return;

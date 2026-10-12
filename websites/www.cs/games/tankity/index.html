@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Tankity">
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
-<link rel="stylesheet" href="game.css?v=44cc9bc1a0">
+<link rel="stylesheet" href="game.css?v=e4a07702c6">
 </head>
 <body>
 <header class="topbar">
@@ -28,6 +28,7 @@
     <div class="canvas-holder">
       <canvas id="stage" width="1080" height="690" role="img"
         aria-label="Hillside artillery battlefield. Your tank, the drone battery, wind and turn order are announced in the log and HUD."></canvas>
+      <div id="title-root" data-ui></div>
       <div class="hudbar" id="hud-bar" aria-label="Battle status" data-ui></div>
       <div id="round-banner" class="banner" hidden><span id="round-banner-text"></span></div>
       <div id="dialogue" class="dialogue" hidden>
@@ -86,6 +87,6 @@
 </main>
 
 <script src="dist/fx.js?v=7e1e68411c" defer></script>
-<script type="module" src="dist/main.js?v=8a28ff1df2"></script>
+<script type="module" src="dist/main.js?v=e69429dbe4"></script>
 </body>
 </html>

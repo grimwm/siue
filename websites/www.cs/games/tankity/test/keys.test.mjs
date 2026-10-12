@@ -118,3 +118,33 @@ test('letting go of Shift with an arrow still down goes back to aiming at once',
   input.keyup(shift({ shiftKey: false }));
   assert.ok(input.held.has('barrelLeft') && !input.held.has('driveLeft'));
 });
+
+test('card: Space presses the focused card button, never fires, never scrolls', () => {
+  const input = rig();
+  const calls = [];
+  input.register({ fire: () => { calls.push('fire'); } }, { cardOpen: () => true });
+  let clicked = 0, prevented = 0;
+  input.keydown({ ...ev({ code: 'Space', key: ' ' }), target: { tagName: 'BUTTON', click: () => { clicked++; } }, preventDefault: () => { prevented++; } });
+  assert.equal(clicked, 1);
+  assert.equal(prevented, 1);
+  assert.deepEqual(calls, []);
+});
+
+test('card: the aim keys hold nothing, and the letter keys still reach their commands', () => {
+  const input = rig();
+  const calls = [];
+  const log = name => () => { calls.push(name); };
+  input.register({ new: log('new'), rooms: log('rooms'), escape: log('escape') }, { cardOpen: () => true });
+  input.keydown(arrowLeft());
+  assert.ok(!input.held.has('barrelLeft'));
+  for (const [code, key] of [['KeyN', 'n'], ['KeyO', 'o'], ['Escape', 'Escape']]) input.keydown(ev({ code, key }));
+  assert.deepEqual(calls, ['new', 'rooms', 'escape']);
+});
+
+test('card: with no button focused, the fire key reaches the game (which explains the demo)', () => {
+  const input = rig();
+  const calls = [];
+  input.register({ fire: () => { calls.push('fire'); } }, { cardOpen: () => true });
+  input.keydown(ev({ code: 'Space', key: ' ' }));
+  assert.deepEqual(calls, ['fire']);
+});

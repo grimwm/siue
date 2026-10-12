@@ -3,8 +3,8 @@
  * game owns the state (the room, the status line, the picked hills) and hands
  * in a finished view of it; this draws it and reports what the player did. The
  * veil element (#lobby-veil) stays in index.html and the game shows and hides it.
- * The initials and room-code boxes are the one thing the page keeps: what the
- * player typed lives in the input, and is handed over on submit.
+ * The room-code box is the one thing the page keeps: what the player typed
+ * lives in the input, and is handed over on submit. Initials come from the title card.
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
@@ -50,8 +50,10 @@ export interface LobbyProps {
   /** An invite link's code, put in the Room code box when it arrives. */
   prefillCode: string;
   onPickMap: (id: string) => void;
-  onHost: (initials: string) => void;
-  onJoin: (code: string, initials: string) => void;
+  /** The player's saved initials, set on the title card. */
+  initials: string;
+  onHost: () => void;
+  onJoin: (code: string) => void;
   /** The room, once in one. */
   code: string;
   link: string;
@@ -111,9 +113,7 @@ function SeatTile({ seat, index, mySeat, isHost, onMode }: {
 
 export function Lobby(p: LobbyProps) {
   const card = useRef<HTMLDivElement>(null);
-  const hostInitials = useRef<HTMLInputElement>(null);
   const joinCode = useRef<HTMLInputElement>(null);
-  const joinInitials = useRef<HTMLInputElement>(null);
   // An invite link fills the code once; the player may then retype it.
   useLayoutEffect(() => { if (p.prefillCode && joinCode.current) joinCode.current.value = p.prefillCode; }, [p.prefillCode]);
   // The veil scrolls; keep it where the player left it across redraws.
@@ -125,7 +125,7 @@ export function Lobby(p: LobbyProps) {
           onClose={p.onClose} navId="nav-lobby" scrollOnly nav={<ScrollKeys line />} />
         <p class="hint" id="lobby-intro" hidden={p.inRoom}>
           Host a room and read the 4-letter code to your friends, or join theirs.
-          Everyone picks 3-letter initials (kept clean, lowercase is fine). There is no chat,
+          Everyone plays under the initials on their title card. There is no chat,
           only artillery. Empty seats go to the drone battery, and a quiet crew fires
           on its own after a while so no room ever stalls. The host may also pick named
           hills, like Canyon 3, so the crew can replay a favorite without ever seeing its seed.
@@ -135,8 +135,11 @@ export function Lobby(p: LobbyProps) {
             title={p.online ? 'room server: connected' : 'room server: not connected'} />{' '}
           <span id="lobby-count" aria-live="polite">{p.count}</span>
         </p>
+        <p class="hint" id="lobby-initials" hidden={p.inRoom}>
+          You play as <strong>{p.initials}</strong>. Change your initials on the title card.
+        </p>
         <div class="lobby-rows" id="lobby-rows" hidden={p.inRoom}>
-          <form id="host-form" class="lobby-form" action="#" onSubmit={ev => { ev.preventDefault(); p.onHost(hostInitials.current?.value ?? ''); }}>
+          <form id="host-form" class="lobby-form" action="#" onSubmit={ev => { ev.preventDefault(); p.onHost(); }}>
             <span class="map-label" id="lobby-map-label">Hills</span>
             <input type="hidden" id="lobby-map" name="map" value={p.mapId} />
             <div class="unit-picker map-picker" id="lobby-map-picker" role="group" aria-labelledby="lobby-map-label">
@@ -144,19 +147,13 @@ export function Lobby(p: LobbyProps) {
                 <MapTile key={m.id} map={m} pressed={p.mapId === m.id} draw={p.drawMapIcon} rev={p.mapsRev} onPick={p.onPickMap} />
               ))}
             </div>
-            <label for="host-initials">Your initials</label>
-            <input id="host-initials" name="initials" type="text" autocomplete="off" spellcheck={false}
-              maxLength={3} minLength={3} placeholder="ABC" ref={hostInitials} />
             <button type="submit" id="host-go" class="btn-primary">Host a room</button>
           </form>
           <form id="join-form" class="lobby-form" action="#"
-            onSubmit={ev => { ev.preventDefault(); p.onJoin(joinCode.current?.value ?? '', joinInitials.current?.value ?? ''); }}>
+            onSubmit={ev => { ev.preventDefault(); p.onJoin(joinCode.current?.value ?? ''); }}>
             <label for="join-code">Room code</label>
             <input id="join-code" name="code" type="text" autocomplete="off" spellcheck={false}
               maxLength={4} minLength={4} placeholder="7K2Q" ref={joinCode} />
-            <label for="join-initials">Your initials</label>
-            <input id="join-initials" name="initials" type="text" autocomplete="off" spellcheck={false}
-              maxLength={3} minLength={3} placeholder="ZED" ref={joinInitials} />
             <button type="submit" id="join-go" class="btn-primary">Join room</button>
           </form>
         </div>

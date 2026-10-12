@@ -119,6 +119,8 @@ export interface State {
   foeSpawnDist: number;
   frozen: number;
   bashCd: number;
+  /** Turns waited in a row; any other turn the player spends resets it. */
+  stillTurns: number;
   dazed: number;
   hint: string | null;
   hintTimer: number;
@@ -357,6 +359,7 @@ function blankState(): State {
     foeSpawnDist: 0,
     frozen: 0,
     bashCd: 0,
+    stillTurns: 0,
     dazed: 0,
     hint: null,
     hintTimer: 0,
@@ -383,6 +386,10 @@ export interface Game {
   tryMove(dr: number, dc: number): void;
   bash(): void;
   useItem(kind: ItemKind): void;
+  /** Spend a turn in place; the creature still moves. */
+  wait(): void;
+  /** Whether the jammer has somewhere far enough to throw the creature. */
+  canJam(): boolean;
   hint(): void;
   clearHint(): void;
   toggleAnswer(): void;
@@ -427,6 +434,7 @@ export function createGame(hooks: Hooks): Game {
       foeSpawnDist: foeDist,
       frozen: 0,
       bashCd: 0,
+      stillTurns: 0,
       dazed: 0,
       hint: null,
       hintTimer: 0,
@@ -570,6 +578,7 @@ export function createGame(hooks: Hooks): Game {
     G.player.r = nr;
     G.player.c = nc;
     G.turns += 1;
+    G.stillTurns = 0;
     sfx("move");
     resolveTile();
     if (!G.over) creaturePhase(0);
@@ -613,6 +622,7 @@ export function createGame(hooks: Hooks): Game {
     G.bashCd = BASH_COOLDOWN;
     G.dazed = 1;
     G.turns += 1;
+    G.stillTurns = 0;
     sfx("bash");
     say(
       "You slam the static with a CRT monitor. The 👹 reels backwards, dazed — it moves once, not twice.",
@@ -681,7 +691,7 @@ export function createGame(hooks: Hooks): Game {
       );
       return;
     }
-    if (kind === "jammer" && !farSpot(6)) {
+    if (kind === "jammer" && !canJam()) {
       say(
         "Signal Jammer hisses. Nowhere far is left to throw it — no turn spent.",
         "info",
@@ -700,6 +710,7 @@ export function createGame(hooks: Hooks): Game {
       return;
     }
     G.turns += 1;
+    G.stillTurns = 0;
     if (kind === "snack") {
       const got = heal(G.snackHeal);
       say(`Sugar Puffs (+${got} HP). Theseus types faster.`, "good");
@@ -717,24 +728,51 @@ export function createGame(hooks: Hooks): Game {
     render();
   }
 
-  function farSpot(minDist: number): Cell | null {
+  function farCells(minDist: number): Cell[] {
     const dist = bfsDist(G.walls, G.player);
     const cands: Cell[] = [];
     for (let r = 1; r < ROWS - 1; r++) {
       for (let c = 1; c < COLS - 1; c++) {
-        const k = key(r, c);
-        if (!G.walls[r]![c] && !G.safe.has(k) && dist[r]![c]! >= minDist)
+        if (!G.walls[r]![c] && !G.safe.has(key(r, c)) && dist[r]![c]! >= minDist)
           cands.push({ r, c });
       }
     }
+    return cands;
+  }
+
+  function farSpot(minDist: number): Cell | null {
+    const cands = farCells(minDist);
     if (!cands.length) return null;
     return cands[Math.floor(G.rng() * cands.length)]!;
   }
 
+  function canJam(): boolean {
+    return farCells(6).length > 0;
+  }
+
+  function wait(): void {
+    if (blockedMsg()) return;
+    G.turns += 1;
+    G.stillTurns += 1;
+    say("You hold still behind the blue lines and let it pace.", "info");
+    creaturePhase(0);
+    render();
+  }
+
   /* ---------- hint: one move in advance ---------- */
   function goalPath(): Cell[] {
-    const p = bfsPath(G.walls, G.player, G.exit);
-    if (p.length) return p;
+    const open = bfsPath(G.walls, G.player, G.exit);
+    if (open.length) return open;
+    if (G.fuses > 0) {
+      const unbarred = G.walls.map((row) => row.slice());
+      for (const k of G.barriers) {
+        const [br, bc] = unkey(k);
+        unbarred[br]![bc] = false;
+      }
+      const through = bfsPath(unbarred, G.player, G.exit);
+      const crossed = through.filter((c) => G.barriers.has(key(c.r, c.c))).length;
+      if (through.length && crossed <= G.fuses) return through;
+    }
     const d = bfsDist(G.walls, G.player);
     let target: Cell | null = null,
       bestD = 1e9;
@@ -847,6 +885,6 @@ export function createGame(hooks: Hooks): Game {
 
   return {
     G, newRun, tryMove, bash, useItem, hint, clearHint, toggleAnswer, toggleAuto,
-    stopAuto, autoStep, goalPath, foeStep, creaturePhase, foeDistance,
+    wait, canJam, stopAuto, autoStep, goalPath, foeStep, creaturePhase, foeDistance,
   };
 }

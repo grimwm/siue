@@ -243,4 +243,6 @@ body:not(.cylon-nav-combat) .site-nav-power {
   --kit-install-accent: #ff3b3b;
 }
 .cylon-install:empty { display: none; }
+/* The pill sits at the screen's bottom, so the address opens above it. */
+.cylon-install .kit-install-url { top: auto; bottom: calc(100% + 0.4rem); left: 0; right: auto; }
 .cylon-install .kit-install-btn { padding: 0.25rem 0.5rem; font-size: 0.8rem; }

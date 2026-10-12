@@ -40,7 +40,10 @@ icon (512) is that art as a white silhouette for Android's themed icons. The
 PNGs are checked in; rerun after editing the drawing. The run records the
 drawing's hash in `<game>/tools/icons.json`, and `--check` (part of `npm run
 check`) fails when the drawing changed without a rerun or an icon is missing;
-it compares the hash, not PNG bytes, which differ between platforms.
+it compares the hash, not PNG bytes, which differ between platforms. It also
+fails when the icons were rendered by another `@resvg/resvg-js` version than
+the installed one. Each game's `test.sh` runs the check, so `make test` fails
+on a stale icon.
 `install-core.php` checks each icon's size.
 
 ## Ports and adapters (`ports.ts`)

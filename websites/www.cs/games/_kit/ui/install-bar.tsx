@@ -64,7 +64,7 @@ export function InstallBar(p: InstallBarProps) {
 
 // The bar's own look, first in <head> so the page's CSS can restyle it.
 const CSS = `
-.kit-install { display: inline-flex; align-items: center; gap: 0.5rem; }
+.kit-install { position: relative; display: inline-flex; align-items: center; gap: 0.5rem; }
 .kit-install-btn { font: 600 0.9rem/1.1 system-ui, sans-serif; padding: 0.3rem 0.75rem; border: 1px solid var(--kit-install-accent, #f0b429); border-radius: 6px; background: transparent; color: var(--kit-install-accent, #f0b429); cursor: pointer; }
 .kit-install-btn:hover, .kit-install-btn:focus-visible { background: color-mix(in srgb, var(--kit-install-accent, #f0b429) 18%, transparent); }
 .kit-install-btn:focus-visible { outline: 2px solid var(--kit-install-accent, #f0b429); outline-offset: 2px; }
@@ -74,7 +74,8 @@ const CSS = `
 .kit-install-status { color: var(--kit-install-accent, #f0b429); white-space: nowrap; }
 /* Always in the page, so a screen reader announces the text when it arrives; empty, it takes no room. */
 .kit-install-status:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.kit-install-url { width: min(22rem, 55vw); padding: 0.25rem 0.4rem; font: 500 0.85rem/1.2 ui-monospace, monospace; }
+/* Under the buttons, out of the bar's layout, and never wider than the screen. */
+.kit-install-url { position: absolute; top: calc(100% + 0.4rem); right: 0; z-index: 3000; width: min(22rem, calc(100vw - 1.5rem)); padding: 0.25rem 0.4rem; font: 500 0.85rem/1.2 ui-monospace, monospace; }
 .kit-install-veil { position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center; padding: 1rem; background: rgba(0, 0, 0, 0.6); }
 .kit-install-veil[hidden] { display: none; }
 .kit-install-panel { max-width: 22rem; padding: 1.25rem; border-radius: 12px; background: #11141b; color: #eef1f6; font: 500 1rem/1.45 system-ui, sans-serif; }

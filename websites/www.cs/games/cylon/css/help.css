@@ -115,7 +115,7 @@
 .cylon-exit-hint {
   position: fixed;
   left: 50%;
-  bottom: 1.5rem;
+  bottom: 3.75rem; /* above Install and Share's corner pill */
   transform: translateX(-50%);
   z-index: 2200;
   margin: 0;

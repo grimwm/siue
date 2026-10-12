@@ -48,6 +48,7 @@ for (const id of PAGE_GAMES) {
     await page.goto(`play/${id}/`);
     const bar = page.locator('#play-install');
     await expect(bar.locator('#share-btn')).toBeVisible();
+    await expect(bar.locator('#install-btn'), 'no offer yet, no Install').toHaveCount(0);
     await offerInstall(page);
     await expect(bar.locator('#install-btn')).toBeVisible();
     await bar.locator('#share-btn').click();
@@ -63,8 +64,9 @@ test('the game page asked to install (?install) highlights Install, and a click 
   const errors = watchErrors(page);
   await page.goto('games/crete/?install');
   await expect(page.locator('.kit-install-corner #share-btn')).toBeVisible();
-  await offerInstall(page);
   const install = page.locator('.kit-install-corner #install-btn');
+  await expect(install, 'no offer yet, no Install').toHaveCount(0);
+  await offerInstall(page);
   await expect(install).toBeVisible();
   await expect(install).toHaveClass(/kit-install-asked/);
   await install.click();
@@ -90,10 +92,14 @@ test('on an iPhone, Install opens the game page with the Add to Home Screen step
   await context.close();
 });
 
-test('The CIC: the game bar has Share, and the page links the game\'s manifest', async ({ page }) => {
+test('The CIC: Share is there, Install comes with the browser\'s offer, and the page links the game\'s manifest', async ({ page }) => {
+  await onlyTestOffers(page);
   const errors = watchErrors(page);
   await page.goto('./?game=cylon');
   await expect(page.locator('#cylon-install-root #share-btn')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('#cylon-install-root #install-btn'), 'no offer yet, no Install').toHaveCount(0);
+  await offerInstall(page);
+  await expect(page.locator('#cylon-install-root #install-btn')).toBeVisible();
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', /games\/cylon\/manifest\.webmanifest$/);
   expect(errors).toEqual([]);
 });

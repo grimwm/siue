@@ -114,6 +114,10 @@ while IFS= read -r -d '' f; do
     # package files and each game's build.json; test/ is skipped above); the
     # built dist/ ships.
     games/_kit/* | games/node_modules/* | games/package.json | games/package-lock.json | games/.gitignore | games/*/build.json) continue ;;
+    # Tankity's storage (its database, its run store) belongs to the server:
+    # never staged, so never uploaded, never chmodded, and never in the
+    # manifest a PRUNE reads.
+    games/tankity/data/*) continue ;;
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).
     play/*) ;;

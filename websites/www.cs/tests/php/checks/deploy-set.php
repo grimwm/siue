@@ -10,7 +10,7 @@ $site = dirname(__DIR__, 3);
 // scratch game folder (a real game's install files hash its whole folder),
 // removed again afterwards. The build.json probe sits one folder down
 // because the games' check script would try to build a game with a real one.
-$probes = ['games/zz-probe/nested/build.json', 'games/zz-probe/test/engine.test.mjs', 'games/zz-probe/dist/main.js', 'games/zz-probe/dist/main.js.map'];
+$probes = ['games/zz-probe/nested/build.json', 'games/zz-probe/test/engine.test.mjs', 'games/zz-probe/dist/main.js', 'games/zz-probe/dist/main.js.map', 'games/tankity/data/zz-deploy-probe.sqlite'];
 $made = [];
 foreach ($probes as $f) {
     if (file_exists("$site/$f")) {
@@ -31,7 +31,7 @@ try {
     foreach ($made as $f) {
         unlink("$site/$f");
     }
-    foreach (['games/zz-probe/test', 'games/zz-probe/dist', 'games/zz-probe/nested', 'games/zz-probe'] as $d) {
+    foreach (['games/tankity/data', 'games/zz-probe/test', 'games/zz-probe/dist', 'games/zz-probe/nested', 'games/zz-probe'] as $d) {
         if (is_dir("$site/$d") && count(scandir("$site/$d")) === 2) {
             rmdir("$site/$d");
         }
@@ -104,6 +104,8 @@ $check('node_modules never ships', array_filter($out, fn(string $f): bool => str
 $check('composer-files-stay-home', !array_intersect(['composer.json', 'composer.lock', 'phpunit.xml'], $out), '');
 $check('vendor-stays-home', !array_filter($out, fn($f) => str_starts_with($f, 'vendor/')), '');
 $check('kit-php-stays-home', !array_filter($out, fn($f) => str_starts_with($f, 'games/_kit/')), '');
+// Tankity's storage belongs to the server: nothing under games/tankity/data/ ships.
+$check('tankity-data-stays-home', !array_filter($out, fn($f) => str_starts_with($f, 'games/tankity/data/')), '');
 
 // games/node_modules is gitignored, so it can never be listed; assert absence.
 foreach (['games/_kit/ports.ts', 'games/_kit/test/prefs.test.mjs', 'games/node_modules/x/index.js', 'games/package.json', 'games/package-lock.json', 'games/.gitignore', 'games/zz-probe/nested/build.json', 'games/zz-probe/test/engine.test.mjs'] as $f) {

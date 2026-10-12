@@ -1,6 +1,8 @@
 // A small DOM for Node tests that render Preact: a real tree, with parents,
 // siblings, insert and remove, plus the handful of properties games read. Not
 // a browser: no layout, no event bubbling; selectors are .class, #id or a tag.
+// document.getElementById makes any id it is asked for, so a misspelled id
+// finds a phantom element rather than nothing.
 // Copyright (C) 2026 William Grim
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -46,20 +48,26 @@ export function makeEl(id) {
     get nextSibling() { return siblingOf(this, 1); },
     remove() { detach(this); },
     scrollIntoView() { globalThis.__scrolledTo = this; },
-    querySelector(sel) {
+    querySelectorAll(sel) { return this._select(sel, false); },
+    querySelector(sel) { return this._select(sel, true); },
+    _select(sel, first) {
       const want = sel.startsWith('.') ? sel.slice(1) : null;
       const wid = sel.startsWith('#') ? sel.slice(1) : null;
       const tag = !want && !wid ? sel : null;
+      const found = [];
       const walk = (node) => {
         for (const c of node.children || []) {
           if (!c || typeof c !== 'object') continue;
-          if ((want && String(c.className || '').split(' ').includes(want)) || (wid && c.id === wid) || (tag && c.localName === tag)) return c;
-          const d = walk(c);
-          if (d) return d;
+          if ((want && String(c.className || '').split(' ').includes(want)) || (wid && c.id === wid) || (tag && c.localName === tag)) {
+            found.push(c);
+            if (first) return true;
+          }
+          if (walk(c)) return true;
         }
-        return null;
+        return false;
       };
-      return walk(this);
+      walk(this);
+      return first ? found[0] || null : found;
     },
     append(...nodes) { for (const n of nodes) this.appendChild(n); return this; },
     get firstChild() { return this.children[0] || null; },
@@ -80,8 +88,8 @@ export function makeEl(id) {
     removeAttribute(k) { if (k === 'class') this.className = ''; else delete this._attrs[k]; },
     getBoundingClientRect: () => ({ width: 720, height: 460 }),
     getContext: () => makeCallable(),
-    blur: () => {},
-    focus() { globalThis.__focused = this; },
+    blur() { globalThis.__blurred = this; if (document.activeElement === this) document.activeElement = null; },
+    focus() { globalThis.__focused = this; document.activeElement = this; },
   };
   el._id = id;
   return el;
@@ -114,6 +122,7 @@ const docListeners = {};
 export const document = {
   readyState: 'complete',
   activeElement: null,
+  body: makeEl('body'),
   getElementById: id => (els[id] = els[id] || makeEl(id)),
   createElement: tag => makeEl(tag),
   createElementNS: (ns, tag) => makeRenderedEl(tag),

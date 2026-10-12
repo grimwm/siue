@@ -1,8 +1,10 @@
 // A modal panel inside its veil. The game says whether it is open; the dialog
 // moves focus in when it opens and back when it closes, and Escape or a click
-// on the veil itself calls onDismiss when the game gives one.
+// on the veil itself calls onDismiss when the game gives one. A game whose own
+// key router already handles Escape should not pass onDismiss for it.
 import type { ComponentChildren } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
+import { lastPressed } from './button.tsx';
 
 export interface DialogProps {
   open: boolean;
@@ -18,7 +20,7 @@ export interface DialogProps {
   kickerId?: string;
   kickerClass?: string;
   describedBy?: string;
-  /** The element focused on opening; otherwise the panel's first button. */
+  /** The element focused on opening; otherwise the panel's first usable button, else the panel. */
   focusId?: string;
   onDismiss?: () => void;
   children?: ComponentChildren;
@@ -29,26 +31,37 @@ export function Dialog(p: DialogProps) {
   const returnTo = useRef<Element | null>(null);
   const wasOpen = useRef(false);
 
+  const pressedOnVeil = useRef(false);
+
+  const giveFocusBack = (): void => {
+    (returnTo.current as HTMLElement | null)?.focus?.();
+    returnTo.current = null;
+  };
+
   // Layout effects run as soon as the DOM is updated, so focus moves before
   // the player can press another key.
   useLayoutEffect(() => {
     if (p.open && !wasOpen.current) {
-      returnTo.current = document.activeElement ?? null;
+      // A kit Button blurs itself before it opens us, leaving nothing focused.
+      const active = document.activeElement;
+      returnTo.current = active && active !== document.body ? active : lastPressed();
       const named = p.focusId ? document.getElementById(p.focusId) : null;
-      const target = (named ?? panel.current?.querySelector('button') ?? null) as HTMLElement | null;
-      target?.focus?.();
+      const usable = Array.from(panel.current?.querySelectorAll('button') ?? []).find(b => !b.disabled && !b.hidden);
+      ((named ?? usable ?? panel.current) as HTMLElement | null)?.focus?.();
     } else if (!p.open && wasOpen.current) {
-      (returnTo.current as HTMLElement | null)?.focus?.();
-      returnTo.current = null;
+      giveFocusBack();
     }
     wasOpen.current = p.open;
   }, [p.open]);
+
+  // A game that unmounts an open dialog still gets its focus back.
+  useLayoutEffect(() => () => { if (wasOpen.current) giveFocusBack(); }, []);
 
   useLayoutEffect(() => {
     const dismiss = p.onDismiss;
     if (!p.open || !dismiss) return undefined;
     const onKey = (ev: KeyboardEvent): void => {
-      if (ev.key !== 'Escape') return;
+      if (ev.key !== 'Escape' || ev.isComposing) return;
       ev.preventDefault();
       dismiss();
     };
@@ -58,10 +71,16 @@ export function Dialog(p: DialogProps) {
 
   return (
     <div id={p.id} class={p.veilClass} hidden={!p.open}
-      onClick={ev => { if (ev.target === ev.currentTarget) p.onDismiss?.(); }}>
+      onPointerDown={ev => { pressedOnVeil.current = ev.target === ev.currentTarget; }}
+      onClick={ev => {
+        // A drag that began in the panel (selecting text) ends on the veil with a click there too.
+        const dismiss = pressedOnVeil.current && ev.target === ev.currentTarget;
+        pressedOnVeil.current = false;
+        if (dismiss) p.onDismiss?.();
+      }}>
       <div class={p.panelClass} role={p.role ?? 'dialog'} aria-modal="true" aria-labelledby={p.titleId}
-        aria-describedby={p.describedBy} ref={panel}>
-        {p.kicker !== undefined && <p class={p.kickerClass} id={p.kickerId}>{p.kicker}</p>}
+        aria-describedby={p.describedBy} tabIndex={-1} ref={panel}>
+        {p.kicker != null && p.kicker !== false && <p class={p.kickerClass} id={p.kickerId}>{p.kicker}</p>}
         <h2 id={p.titleId} class={p.titleClass}>{p.title}</h2>
         {p.children}
       </div>

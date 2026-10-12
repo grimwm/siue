@@ -18,12 +18,19 @@ export interface ButtonProps {
   children?: ComponentChildren;
 }
 
+let pressed: Element | null = null;
+
+/** The button last clicked, which has already blurred itself: a Dialog it opens returns focus here. */
+export function lastPressed(): Element | null {
+  return pressed;
+}
+
 export function Button(p: ButtonProps) {
   return (
     <button type="button" id={p.id} class={p.class} disabled={p.disabled} aria-label={p.label} title={p.title}
-      aria-pressed={p.pressed} onClick={ev => { ev.currentTarget.blur(); p.onClick(); }}>
+      aria-pressed={p.pressed} onClick={ev => { pressed = ev.currentTarget; ev.currentTarget.blur(); p.onClick(); }}>
       {p.children}
-      {p.keyLabel ? <> <KeyChip label={p.keyLabel} /></> : null}
+      {p.keyLabel ? <> <KeyChip label={p.keyLabel} decorative /></> : null}
     </button>
   );
 }

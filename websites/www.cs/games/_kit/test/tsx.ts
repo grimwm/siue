@@ -14,7 +14,7 @@ export async function importTsx(fromDir: string, modules: Record<string, string>
   const out = join(tmp, 'bundle.mjs');
   await esbuild.build({
     stdin: {
-      contents: Object.entries(modules).map(([name, path]) => `export * as ${name} from ${JSON.stringify(path)};`).join('\n'),
+      contents: Object.entries(modules).map(([name, path]) => `export * as ${JSON.stringify(name)} from ${JSON.stringify(path)};`).join('\n'),
       resolveDir: fromDir,
       loader: 'ts',
     },

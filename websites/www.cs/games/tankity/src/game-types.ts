@@ -11,7 +11,7 @@ import type { PreviewState } from './preview.ts';
 import type { RoomSnapshot } from './protocol.ts';
 import type { Boom, DrawTank, Spark } from './render.ts';
 import type { AimChoice } from './ai.ts';
-import type { Arsenal, Cloud, World } from './sim.ts';
+import type { Arsenal, Cloud, Hills, World } from './sim.ts';
 
 /** The arsenal tables as main.ts holds them now. They are replaced when
  * game.json arrives, so a module reads them through this view each time
@@ -54,6 +54,10 @@ export interface GameState extends World {
   seed: string;
   body: string; // the unit look the player chose
   clouds: Cloud[];
+  /** This match's field width: dealt at the start of a solo match (field.ts), ROOM_W in a room; fixed for the match. */
+  w: number;
+  /** The round's hills, for the scenery past the field's edges; null until a room sends them. */
+  hills: Hills | null;
   tanks: GameTank[];
   turn: number;
   phase: Phase;

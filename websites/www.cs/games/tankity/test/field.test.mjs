@@ -5,7 +5,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FIELD_COL, FIELD_W_MAX, FIELD_W_MIN, H, ROOM_W, fieldWidthOk } from '../src/sim.ts';
-import { createFieldWidth, fieldWidth, fieldWidthFor, fitField, landscapeBox, visibleWorld } from '../src/field.ts';
+import { stepArm } from '../src/input.ts';
+import { createFieldWidth, powerScale, powerText, fieldWidth, fieldWidthFor, fitField, landscapeBox, visibleWorld } from '../src/field.ts';
 
 test('the width is 460 × the landscape aspect, on a whole column', () => {
   assert.equal(fieldWidth({ w: 1118, h: 426 }), 1200); // 1207.2 → 50.3 columns → 50
@@ -19,6 +20,11 @@ test('the width clamps to 720–1440', () => {
   assert.equal(fieldWidth({ w: 3000, h: 400 }), FIELD_W_MAX);
   assert.equal(fieldWidth({ w: 1000, h: 0 }), FIELD_W_MAX, 'a collapsed box never divides by zero');
   assert.equal(ROOM_W, FIELD_W_MIN);
+});
+
+test('a viewport with no size deals the room field', () => {
+  assert.equal(fieldWidth({ w: NaN, h: NaN }), ROOM_W);
+  assert.equal(fieldWidth({ w: undefined, h: undefined }), ROOM_W);
 });
 
 test("a portrait box is read in its landscape aspect", () => {
@@ -72,4 +78,23 @@ test('a wider box centres the field; a taller one spans it and puts 60 % of the 
   const seen = visibleWorld(tall, { w: 383, h: 568 });
   assert.ok(seen.x0 === 0 && Math.abs(seen.x1 - 1224) < 1e-9);
   assert.ok(seen.y0 < 0 && seen.y1 > H, 'sky above the field and dirt below it are in view');
+});
+
+test('a press of power is 720/W of a step, so a shot moves as far on any field', () => {
+  const held = { has: k => k === 'powerUp', axis: () => 0, aiming: () => true };
+  const step = w => stepArm(held, 1, { angle: 45, power: 50 }, 1, w).power - 50;
+  assert.equal(step(720), 45);
+  assert.equal(step(), 45, 'a room is the default');
+  assert.ok(Math.abs(step(1080) - 30) < 1e-12);
+  assert.ok(Math.abs(step(1440) - 22.5) < 1e-12);
+  assert.equal(powerScale(720), 1);
+  assert.equal(powerScale(1440), 0.5);
+});
+
+test('power shows whole on a room field and with one decimal on a wider one', () => {
+  assert.equal(powerText(55.4, 720), '55');
+  assert.equal(powerText(55.5, 720), '56');
+  assert.equal(powerText(55.46, 1080), '55.5');
+  assert.equal(powerText(100, 1440), '100.0');
+  assert.equal(powerText(10, 1440), '10.0');
 });

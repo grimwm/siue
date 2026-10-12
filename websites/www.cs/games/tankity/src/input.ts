@@ -19,6 +19,8 @@
  * structural shapes below, which a browser's KeyboardEvent, Window and button
  * satisfy, so this module compiles in the DOM-free program and test/input.test.mjs
  * drives it with plain objects and a fake clock. */
+import { powerScale } from './field.ts';
+import { ROOM_W } from './sim.ts';
 
 /* ---------- the key table ---------- */
 
@@ -185,15 +187,16 @@ export interface ArmStep {
   idle: boolean;
 }
 
-/** One frame of held-key arm movement. `facing` is +1 or -1, the way the tank looks. */
-export function stepArm(held: Held, dt: number, arm: { angle: number; power: number }, facing: number): ArmStep {
+/** One frame of held-key arm movement. `facing` is +1 or -1, the way the tank looks; `w` is the match's field width, which scales the power step. */
+export function stepArm(held: Held, dt: number, arm: { angle: number; power: number }, facing: number, w = ROOM_W): ArmStep {
   const { angleMin, angleMax, powerMin, powerMax } = ARM_LIMITS;
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
   let { angle, power } = arm;
+  const powerRate = ARM_RATE.power * powerScale(w);
   const swing = held.axis('barrelRight', 'barrelLeft');
   if (swing) angle = clamp(angle + swing * facing * ARM_RATE.barrelDegrees * dt, angleMin, angleMax);
-  if (held.has('powerUp')) power = clamp(power + ARM_RATE.power * dt, powerMin, powerMax);
-  if (held.has('powerDown')) power = clamp(power - ARM_RATE.power * dt, powerMin, powerMax);
+  if (held.has('powerUp')) power = clamp(power + powerRate * dt, powerMin, powerMax);
+  if (held.has('powerDown')) power = clamp(power - powerRate * dt, powerMin, powerMax);
   return {
     angle, power,
     adjusting: swing !== 0 || held.has('powerUp') || held.has('powerDown'),

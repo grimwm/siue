@@ -14,13 +14,13 @@ import { createRenderer } from './render.ts';
 import type { BattleView, DrawTank, Renderer } from './render.ts';
 import type { Replay } from './replay.ts';
 import {
-  hashSeed, mulberry32, gauss, W, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
+  hashSeed, mulberry32, gauss, ROOM_W, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
 } from './sim.ts';
 import type { Weapon } from './sim.ts';
 
 /** The slice of the game's state the view reads and steps (main.ts's G). */
 export type ViewState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'cam' | 'terrain' | 'clouds' | 'time' | 'shake'
-  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'preview'>;
+  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'preview' | 'w' | 'hills'>;
 
 /** What the view needs from the page and the rest of the game. */
 export interface ViewDeps {
@@ -40,7 +40,7 @@ export function createView(deps: ViewDeps) {
 
   /* The camera only ever pulls back, slowly, to keep every live tank framed. */
   function updateCamera(dt: number): void {
-    let tz = 1, tx = W / 2, ty = H / 2;
+    let tz = 1, tx = G.w / 2, ty = H / 2;
     const live = G.tanks.filter(t => t.hp > 0);
     if (live.length) {
       let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -51,7 +51,7 @@ export function createView(deps: ViewDeps) {
       const pad = 70;
       const spanX = Math.max(1, (x1 - x0) + pad * 2);
       const spanY = Math.max(1, (y1 - y0) + pad * 2);
-      tz = clamp(Math.min(W / spanX, H / spanY, 1), 0.45, 1);
+      tz = clamp(Math.min(G.w / spanX, H / spanY, 1), 0.45, 1);
       tx = (x0 + x1) / 2;
       ty = (y0 + y1) / 2;
     }
@@ -130,7 +130,7 @@ export function createView(deps: ViewDeps) {
     if (!renderer) {
       renderer = createRenderer(cv, {
         fx: FX,
-        size: { w: W, h: H },
+        size: { w: ROOM_W, h: H },
         sim: { facing, isGroundUnit, muzzle, surfY: simSurfY, hashSeed, mulberry32, gauss },
         shownAngle,
         look: wkey => (tables.weapons[wkey] || {}).gfx || {},

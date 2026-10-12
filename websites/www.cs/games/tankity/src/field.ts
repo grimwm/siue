@@ -24,7 +24,9 @@ export function landscapeBox(vw: number, vh: number): Box {
 /** 460 × the box's long side ÷ its short side, clamped, on a whole column. */
 export function fieldWidth(box: Box): number {
   const long = Math.max(box.w, box.h), short = Math.max(1, Math.min(box.w, box.h));
-  return Math.round(clamp(460 * long / short, FIELD_W_MIN, FIELD_W_MAX) / FIELD_COL) * FIELD_COL;
+  const raw = 460 * long / short;
+  if (!Number.isFinite(raw)) return ROOM_W; // a viewport that reports no size deals the room field
+  return Math.round(clamp(raw, FIELD_W_MIN, FIELD_W_MAX) / FIELD_COL) * FIELD_COL;
 }
 
 export function fieldWidthFor(vw: number, vh: number): number {
@@ -59,4 +61,15 @@ export interface WorldRect { x0: number; y0: number; x1: number; y1: number }
 /** The world rectangle the whole box shows at that fit, before the camera. */
 export function visibleWorld(fit: Fit, box: Box): WorldRect {
   return { x0: -fit.ox / fit.s, y0: -fit.oy / fit.s, x1: (box.w - fit.ox) / fit.s, y1: (box.h - fit.oy) / fit.s };
+}
+
+/** Shells fly sqrt(w / ROOM_W) faster on a wide field, so a power point moves
+ *  one further by w / ROOM_W; a press changes power by the inverse, and one
+ *  press moves a shot about as far on every field. Exactly 1 at ROOM_W. */
+export function powerScale(w: number): number {
+  return ROOM_W / w;
+}
+/** The status bar's power: a whole number on a room's field, one decimal on a wider one where a step is under a point. */
+export function powerText(power: number, w: number): string {
+  return w > ROOM_W ? power.toFixed(1) : String(Math.round(power));
 }

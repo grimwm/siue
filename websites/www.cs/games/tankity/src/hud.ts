@@ -5,6 +5,7 @@
  * deck's Weapon button (src/ui/gun-label.tsx) says about the loaded gun. Each
  * redraws only when its text changed, since the loop asks every frame. */
 import type { GameState, GameTank, MatchState, Tables } from './game-types.ts';
+import { powerText } from './field.ts';
 import type { RoomClient } from './net.ts';
 import { renderHud as drawHud } from './ui/hud.tsx';
 import type { HudProps } from './ui/hud.tsx';
@@ -15,7 +16,7 @@ import type { KeyHintFn } from './ui/chrome.tsx';
 
 /** The slice of the game's state the status bar reads (main.ts's G). */
 export type HudState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'ammo' | 'selected' | 'lives' | 'cash' | 'round'
-  | 'score' | 'nextOneUp' | 'wind' | 'shield' | 'bunker' | 'jammer' | 'laststand' | 'plate'>;
+  | 'score' | 'nextOneUp' | 'wind' | 'shield' | 'bunker' | 'jammer' | 'laststand' | 'plate' | 'w'>;
 
 /** The bar's values: HudProps without what the page supplies each draw. */
 export type HudValues = Omit<HudProps, 'menuOpen' | 'menuKey' | 'onMenu'>;
@@ -122,7 +123,7 @@ export function createHud(deps: HudDeps) {
       G.phase === 'banner' ? 'get ready...' :
       t.isPlayer ? (G.phase === 'aim' ? 'YOU. Aim!' : 'you fired…') : `${t.id} aiming…`;
     HUD.angle = `${Math.round(me().angle)}°`;
-    HUD.power = `${Math.round(me().power)}`;
+    HUD.power = powerText(me().power, G.w);
     HUD.wind = windText();
     renderLoadout();
     renderStanding(me(), G.tanks.filter(x => !x.isPlayer).map(foe).join(', '));
@@ -139,7 +140,7 @@ export function createHud(deps: HudDeps) {
       !mine || mine.hp <= 0 ? 'wrecked. Watching ' + seatName(turnTank.seat!) + '...' :
       MATCH.myTurn ? 'YOU. Aim!' : `${seatName(turnTank.seat!)} aiming...`;
     HUD.angle = mine ? `${Math.round(mine.angle)}°` : '-';
-    HUD.power = mine ? `${Math.round(mine.power)}` : '-';
+    HUD.power = mine ? powerText(mine.power, G.w) : '-';
     HUD.wind = windText();
     renderLoadout();
     renderStanding(mine, G.tanks.filter(x => !x.isPlayer).map(foe).join(', '));

@@ -8,7 +8,7 @@
   </defs>
   <g id="bg">
     <rect width="512" height="512" fill="url(#sky)"/>
-    <path d="M0 365 C 40 335, 80 345, 120 362 S 200 345, 250 350 S 300 415, 370 425 S 440 380, 512 398 V512 H0 Z" fill="#7a4a1f" stroke="#3dbd3d" stroke-width="7"/>
+    <path d="M0 392 C 110 376, 170 366, 256 366 S 410 376, 512 392 V512 H0 Z" fill="#7a4a1f" stroke="#3dbd3d" stroke-width="7"/>
   </g>
   <g id="art">
     <g fill="#ffffff">
@@ -21,9 +21,12 @@
       <circle cx="340" cy="90" r="5"/><circle cx="398" cy="96" r="6"/><circle cx="416" cy="122" r="7"/>
       <circle cx="432" cy="158" r="8"/><circle cx="440" cy="200" r="9"/>
     </g>
-    <rect x="196" y="262" width="86" height="15" rx="5" fill="#c99a1f" transform="rotate(-28 200 270)"/>
-    <path d="M128 324 a43 43 0 0 1 86 0 z" fill="#e8b423"/>
-    <rect x="82" y="320" width="178" height="33" rx="16.5" fill="#2b2b33"/>
-    <g fill="#9a9aa6"><circle cx="120" cy="336" r="9"/><circle cx="153" cy="336" r="9"/><circle cx="188" cy="336" r="9"/><circle cx="221" cy="336" r="9"/></g>
+    <!-- The tank, 1.4x, centred on the hill. -->
+    <g transform="translate(256 346) scale(1.4) translate(-171 -336)">
+      <rect x="196" y="262" width="86" height="15" rx="5" fill="#c99a1f" transform="rotate(-28 200 270)"/>
+      <path d="M128 324 a43 43 0 0 1 86 0 z" fill="#e8b423"/>
+      <rect x="82" y="320" width="178" height="33" rx="16.5" fill="#2b2b33"/>
+      <g fill="#9a9aa6"><circle cx="120" cy="336" r="9"/><circle cx="153" cy="336" r="9"/><circle cx="188" cy="336" r="9"/><circle cx="221" cy="336" r="9"/></g>
+    </g>
   </g>
 </svg>

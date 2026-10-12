@@ -113,11 +113,11 @@ export interface ChatDeps {
   keyHint: KeyHintFn;
   toggleOverlay(id: string, btnId?: string): void;
   refreshNavHints(): void;
-  placeLogBelowMenu(): void;
+  placeLogBelowStatus(): void;
 }
 
 export function createChatter(deps: ChatDeps) {
-  const { G, $, keyHint, toggleOverlay, refreshNavHints, placeLogBelowMenu } = deps;
+  const { G, $, keyHint, toggleOverlay, refreshNavHints, placeLogBelowStatus } = deps;
 
   function talk(id: string, text: string, force?: boolean): void {
     if (!SPEAKERS[id]) return;
@@ -142,7 +142,7 @@ export function createChatter(deps: ChatDeps) {
     }
     const tx = document.getElementById('dlg-line');
     if (tx) tx.textContent = line.text;
-    placeLogBelowMenu(); // the status bar may have grown
+    placeLogBelowStatus(); // the status bar may have grown
     box.hidden = false;
   }
   function pumpDialogue(dt: number): void {

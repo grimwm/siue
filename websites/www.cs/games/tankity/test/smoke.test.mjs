@@ -212,8 +212,7 @@ check('css-menu-centered', /\.menubar\s*\{[^}]*justify-content:\s*center/.test(c
 check('css-menu-row', /\.menubar\s*\{[^}]*flex-wrap:\s*nowrap/.test(css));
 check('css-menu-block', /\.menubar\s*\{[^}]*background/.test(css));
 check('css-stats-strip', /\.hudbar\s*\{[^}]*position:\s*static/.test(css));
-check('pad-note', html.includes('class="pad-note"') && html.includes('barrel'));
-check('key-hints', html.includes('data-keyhint="global:escape" aria-hidden="true">Esc<') && html.includes('data-keyhint="global:fire" aria-hidden="true">Space<'));
+check('key-hints', html.includes('data-keyhint="global:fire" aria-hidden="true">Space<') && html.includes('data-keyhint="aim:driveLeft" aria-hidden="true">Shift+←<'));
 check('key-style', /\n\.key\s*\{[^}]*background:\s*#14183a/.test(css) && /@media \(hover: hover\) and \(pointer: fine\)/.test(css));
 // Panels live over the battle, never beside it; L/H/R flip them without pausing.
 check('no-side-panels', !/<aside/.test(html));
@@ -240,9 +239,10 @@ check('report-toggle', els['report-overlay'].hidden === false);
 click(els['report-close']);
 check('report-close', els['report-overlay'].hidden === true);
 // Seed, sound, music and fullscreen live in the in-frame settings menu.
-for (const id of ['menu-overlay', 'btn-menu']) {
+for (const id of ['menu-overlay', 'deck', 'hud-bar', 'field']) {
   check('menu-markup-' + id, html.includes('id="' + id + '"'));
 }
+check('menu-button-in-the-status-bar', rendered('btn-menu'));
 for (const id of ['menu-close', 'seed-form', 'new-game']) {
   check('menu-rendered-' + id, rendered(id));
 }
@@ -253,8 +253,8 @@ check('menu-grid-cols', /\.menu-grid\s*\{[^}]*repeat\(3, 1fr\)/.test(css));
 // Secondary is the default (navbar style); gold is opt-in via .btn-primary.
 check('buttons-secondary-default', /\nbutton\s*\{[^}]*background:\s*var\(--panel\)/.test(css) && /\nbutton\s*\{[^}]*border:\s*1px solid var\(--line\)/.test(css));
 check('buttons-primary-gold', /button\.btn-primary[^{]*\{[^}]*background:\s*var\(--accent\)/.test(css));
-const menubarHtml = html.slice(html.indexOf('id="menubar"'), html.indexOf('id="log-overlay"'));
-check('menubar-one-primary', (menubarHtml.match(/btn-primary/g) || []).length === 1 && /id="btn-menu" class="tool btn-primary"/.test(menubarHtml));
+const deckHtml = html.slice(html.indexOf('id="deck"'), html.indexOf('id="log-overlay"'));
+check('deck-groups', ['grp-aim', 'grp-drive', 'grp-more', 'grp-weapon', 'grp-fire'].every(g => deckHtml.includes(g)) && !/btn-primary/.test(deckHtml));
 TAP('global', 'escape');
 check('menu-toggle', els['menu-overlay'].hidden === false && els['btn-menu'].getAttribute('aria-expanded') === 'true');
 click(els['menu-close']);
@@ -965,7 +965,7 @@ await (async () => {
       check('solo-round-ends-after-the-last-wreck', /goes to the battery.*2 lives left/.test(after[after.length - 1] || ''), after.slice(-2).join(' | '));
       frames(600); // the name card runs on sim time, then the shop opens
       check('solo-lost-round-opens-the-shop', els['shop-veil'].hidden === false);
-      check('solo-lost-round-costs-a-life', /^♥♥$/.test(els['hud-lives'].textContent), els['hud-lives'].textContent);
+      check('solo-lost-round-costs-a-life', /^♥ 2$/.test(els['hud-lives'].textContent), els['hud-lives'].textContent);
     }
   }
   // The stub only knows elements the game asked for; ask for the lobby ones.
@@ -1090,7 +1090,7 @@ await (async () => {
   NET_LOBBY = false;
   click(els['lobby-start']); await tick(10);
   check('net-turn', /YOU/.test(els['hud-turn'].textContent), els['hud-turn'].textContent);
-  check('net-hud', /Shell.*∞/.test(els['hud-weapon'].textContent) && /\$600/.test(els['hud-score'].textContent),
+  check('net-hud', /Shell.*∞/.test(els['hud-weapon'].textContent) && /ROOM/.test(els['hud-score'].textContent),
     els['hud-weapon'].textContent + ' | ' + els['hud-score'].textContent);
   // fire over the same public key as solo play; the server settles it
   sawFire = false;
@@ -1209,7 +1209,7 @@ await (async () => {
   click(els['lobby-start']); await tick(10);
   check('fx-play-turn', /YOU/.test(els['hud-turn'].textContent) && els['lobby-veil'].hidden === true && els['shop-veil'].hidden === true,
     els['hud-turn'].textContent);
-  check('fx-play-hud', els['hud-armor'].textContent.startsWith(fxRoomOf('play-my-turn').tanks[0].hp + ' ') && /\$600/.test(els['hud-score'].textContent),
+  check('fx-play-hud', els['hud-armor'].textContent.startsWith(fxRoomOf('play-my-turn').tanks[0].hp + ' ') && /ROOM/.test(els['hud-score'].textContent),
     els['hud-armor'].textContent + ' | ' + els['hud-score'].textContent);
   // 429 (retried, then said kindly) and 409 (the server's own words).
   PFX.actError = 'error-too-fast';

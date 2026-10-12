@@ -190,7 +190,7 @@ const { fxSet, installEffects, fxMuzzle, fxImpact, fxSpecial, fxTrail } = create
 G.fx = FX ? FX.createSystem({ max: FX_BUDGET }) : null;
 /* What the crew says (src/chatter.ts): the trash-talk queue and the radio log. */
 const { talk, exchange, pumpDialogue, say, renderLogOverlay } = createChatter({
-  G, $, keyHint, toggleOverlay, refreshNavHints, placeLogBelowMenu,
+  G, $, keyHint, toggleOverlay, refreshNavHints, placeLogBelowStatus,
 });
 const me = () => G.tanks[0]!;
 const alive = () => G.tanks.filter(t => t.hp > 0);
@@ -400,7 +400,9 @@ const replay = createReplay({
 /* ---------- the typed modules, wired in dependency order ---------- */
 /* The status bar's values (src/hud.ts). */
 const { HUD, paintHud, windText, renderHUD } = createHud({
-  G, $, tables, net, MATCH, me, cur, myTank, seatName, drawShellIcon, openGuns: () => openGuns(),
+  G, $, tables, net, MATCH, me, cur, myTank, seatName, drawShellIcon, keyHint, touch: TOUCH,
+  menuOpen: () => { const mv = $('menu-overlay'); return !!mv && !mv.hidden; },
+  onMenu: () => toggleOverlay('menu-overlay', 'btn-menu'),
 });
 /* The camera and the frame the canvas paints (src/view.ts). */
 const { updateCamera, shownAngle, shownPower, render } = createView({
@@ -472,7 +474,8 @@ const {
 });
 /* The game menu's settings (src/menu.ts). */
 const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
-  G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowMenu,
+  G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
+  nextSong: () => { unlock(); music.next(); },
   freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
 });
 /* The title card over the demo (src/title.ts). */
@@ -505,6 +508,7 @@ function seatName(seat: number): string {
 function applyKeys(def: unknown): void {
   if (!input.setKeys(def)) return;
   renderKeyHints();
+  paintHud();
   renderHelpOverlay();
   renderShop();
   renderMenu();
@@ -554,37 +558,6 @@ function openRooms(): void {
   unlock();
   sfx.play('click');
   openLobby();
-}
-/* Toolbar tips: resting the pointer (or keyboard focus) on an icon button
-   for a moment shows its name, what it does and its key in a styled card.
-   Touch screens have no hover, and their buttons keep spoken names. */
-const TIP_DELAY_MS = 700;
-function bindToolTips(): void {
-  const tip = $('tool-tip');
-  if (!tip || !document.querySelectorAll) return;
-  let timer = 0;
-  const hide = () => { clearTimeout(timer); timer = 0; tip.hidden = true; };
-  const show = (btn: HTMLElement): void => {
-    const name = tip.querySelector('.tool-tip-name');
-    const desc = tip.querySelector('.tool-tip-desc');
-    const key = btn.querySelector('.key');
-    if (name) name.textContent = btn.getAttribute('data-tip') || '';
-    if (desc) desc.textContent = (btn.getAttribute('data-tip-desc') || '') + (key && key.textContent && !TOUCH ? ` (${key.textContent})` : '');
-    tip.style.setProperty('--tool', btn.style.getPropertyValue('--tool') || '#ffc93c');
-    tip.hidden = false;
-    const r = btn.getBoundingClientRect(), t = tip.getBoundingClientRect();
-    const left = Math.max(6, Math.min(window.innerWidth - t.width - 6, r.left + r.width / 2 - t.width / 2));
-    tip.style.left = `${left}px`;
-    tip.style.top = `${r.bottom + 8}px`;
-  };
-  document.querySelectorAll<HTMLElement>('.guide-actions .tool').forEach(btn => {
-    const arm = () => { clearTimeout(timer); timer = setTimeout(() => show(btn), TIP_DELAY_MS); };
-    btn.addEventListener('mouseenter', arm);
-    btn.addEventListener('mouseleave', hide);
-    btn.addEventListener('focus', () => { if (!btn.matches || btn.matches(':focus-visible')) arm(); });
-    btn.addEventListener('blur', hide);
-    btn.addEventListener('pointerdown', hide);
-  });
 }
 /* Another panel (menu, help, report, log) open above the shop takes the keys. */
 function shopCovered(): boolean {
@@ -704,7 +677,6 @@ function init(): void {
   if (TOUCH) document.documentElement.classList.add('touch');
   renderHelpOverlay();
   bindKeys();
-  bindToolTips();
   loadGameConfig();
   G.body = loadBody();
   paintHud();
@@ -742,8 +714,6 @@ function init(): void {
     const b = $(btnId);
     if (b) b.addEventListener('click', ev => { blurTarget(ev); toggleOverlay(ovId, btnId); });
   }
-  const menuBtn = $('btn-menu');
-  if (menuBtn) menuBtn.addEventListener('click', ev => { blurTarget(ev); toggleOverlay('menu-overlay', 'btn-menu'); });
   if (document.addEventListener) document.addEventListener('fullscreenchange', syncFullscreenLabel);
   if (document.addEventListener) document.addEventListener('fullscreenchange', lockEscapeInFullscreen);
   const pvClose = $('preview-close');
@@ -762,21 +732,14 @@ function init(): void {
   window.addEventListener('keydown', kickAudio, true);
   window.addEventListener('pagehide', () => net.sendLeave());
   window.addEventListener('resize', refreshNavHints);
-  window.addEventListener('resize', placeLogBelowMenu);
-  placeLogBelowMenu();
+  window.addEventListener('resize', placeLogBelowStatus);
+  placeLogBelowStatus();
   requestAnimationFrame(frame);
 }
-/* The log hangs just under the menu strip, whose height changes with the
-   frame width, so it never covers the battle buttons. */
-function placeLogBelowMenu(): void {
-  // The speech bubble rides just above the status bar, never over it.
-  const hud = document.querySelector && document.querySelector<HTMLElement>('.hudbar');
-  const dlg = $('dialogue');
-  const holder = dlg && dlg.parentElement;
-  if (hud && dlg && holder && holder.offsetHeight && hud.offsetHeight) {
-    dlg.style.bottom = `${holder.offsetHeight - hud.offsetTop + 6}px`;
-  }
-  const bar = $('menubar');
+/* The radio log hangs just under the status bar, whose height changes with
+   the frame width. */
+function placeLogBelowStatus(): void {
+  const bar = $('hud-bar');
   const log = $('log-overlay');
   if (!bar || !log || !bar.offsetHeight) return;
   log.style.top = `${bar.offsetTop + bar.offsetHeight + 6}px`;
@@ -869,6 +832,7 @@ function toggleOverlay(id: string, btnId?: string): void {
   const btn = btnId && $(btnId);
   if (btn) btn.setAttribute('aria-expanded', String(!ov.hidden));
   if (id === 'menu-overlay') menuFocus(!ov.hidden);
+  paintHud();
   refreshNavHints();
 }
 /* Focus goes into the menu when it opens, and back to what opens it when it

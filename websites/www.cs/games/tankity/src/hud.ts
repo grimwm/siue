@@ -1,54 +1,55 @@
-/* Operation Tankity: the status bar's values.
+/* Operation Tankity: the status bar's values and the Weapon button's face.
  *
- * What the status bar (src/ui/hud.tsx) shows: whose turn it is, the angle,
- * power and fuel, the loaded gun and the rest of the rack, armor, lives and
- * score, for a solo match and for a room. The text is kept here, and the bar
- * is redrawn only when it changed, since the loop asks every frame. The
- * game's state, the arsenal tables and the room client arrive as deps. */
+ * What the status bar (src/ui/hud.tsx) shows: the aim numbers, the AMMO,
+ * ARMOR, lives and WIND pills and the match badge, solo or room; and what the
+ * deck's Weapon button (src/ui/gun-label.tsx) says about the loaded gun. Each
+ * redraws only when its text changed, since the loop asks every frame. */
 import type { GameState, GameTank, MatchState, Tables } from './game-types.ts';
 import type { RoomClient } from './net.ts';
 import { renderHud as drawHud } from './ui/hud.tsx';
 import type { HudProps } from './ui/hud.tsx';
+import { renderGunLabel as drawGun } from './ui/gun-label.tsx';
+import type { GunLabelProps } from './ui/gun-label.tsx';
+import { weaponLine } from './weapon-label.ts';
+import type { KeyHintFn } from './ui/chrome.tsx';
 
 /** The slice of the game's state the status bar reads (main.ts's G). */
 export type HudState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'ammo' | 'selected' | 'lives' | 'cash' | 'round'
   | 'score' | 'nextOneUp' | 'wind' | 'shield' | 'bunker' | 'jammer' | 'laststand' | 'plate'>;
 
-/** The text the bar shows: HudProps without the parts the game supplies each draw. */
-export type HudValues = Omit<HudProps, 'drawIcon' | 'arsenalRev' | 'onWeapon'>;
+/** The bar's values: HudProps without what the page supplies each draw. */
+export type HudValues = Omit<HudProps, 'menuOpen' | 'menuKey' | 'onMenu'>;
+type GunValues = Omit<GunLabelProps, 'drawIcon' | 'arsenalRev'>;
 
 /** What the status bar needs from the page and the rest of the game. */
 export interface HudDeps {
   G: HudState;
   $(id: string): HTMLElement | null;
   tables: Tables;
-  net: Pick<RoomClient, 'on'>;
+  net: Pick<RoomClient, 'on' | 'code' | 'seat'>;
   MATCH: Pick<MatchState, 'myTurn'>;
   me(): GameTank;
   cur(): GameTank;
   myTank(): GameTank | null;
   seatName(seat: number): string;
   drawShellIcon(cv: HTMLCanvasElement, wkey: string): void;
-  openGuns(): void;
+  keyHint: KeyHintFn;
+  /** A touch screen: the Menu button shows no key chip. */
+  touch: boolean;
+  menuOpen(): boolean;
+  onMenu(): void;
 }
 
 export function createHud(deps: HudDeps) {
-  const { G, $, tables, net, MATCH, me, cur, myTank, seatName, drawShellIcon, openGuns } = deps;
+  const { G, $, tables, net, MATCH, me, cur, myTank, seatName, drawShellIcon, keyHint, touch, menuOpen, onMenu } = deps;
 
-  /* The loaded weapon: the shell beside its name. A dozen shells no longer fit on
-     one line, so only the loaded gun shows; the rest of the rack is read out for
-     screen readers and lives in the weapon picker. */
-  function renderLoadout(): void {
-    const count = (w: string) => (w === 'shell' ? '∞' : '×' + (G.ammo![w] || 0));
-    const rack = tables.order.filter(w => w !== G.selected && ((G.ammo![w] || 0) > 0 || w === 'shell'))
-      .map(w => `${tables.weapons[w]!.name} ${count(w)}`).concat(trickChips());
-    HUD.weapon = {
-      key: G.selected,
-      text: `${tables.weapons[G.selected]!.name} ${count(G.selected)}`,
-      sr: rack.length ? ` · also ${rack.join(' · ')}` : '',
-    };
-  }
-  /* Fitted tricks ride the HUD beside the shells. In room matches netOnSnapshot
+  const HUD: HudValues = {
+    turn: '-', angle: '-', power: '-', fuel: '-', ammo: '-', armor: { shown: '-', sr: '' }, lives: null,
+    wind: '-', badge: null, online: false, runStats: '',
+  };
+  const GUN: GunValues = { gun: null, name: '-', sr: '', line: '' };
+
+  /* Fitted tricks ride the rack line for readers. In room matches netOnSnapshot
   // keeps these G fields mirrored from the server snapshot. */
   function trickChips(): string[] {
     const chips: string[] = [];
@@ -59,31 +60,46 @@ export function createHud(deps: HudDeps) {
     if ((G.plate || 0) > 0) chips.push(`plate(+${25 * G.plate})`);
     return chips;
   }
-  /* The status bar is a Preact component (src/ui/hud.tsx). The game keeps the
-     text it shows in HUD, and redraws only when that changed: the loop asks every
-     frame. Armor carries what the bar leaves to the battlefield (the rivals'
-     armor rides over their units) as screen-reader text. */
-  const HUD: HudValues = {
-    turn: '-', angle: '-', power: '-', fuel: '-', wind: '-', weapon: null,
-    armor: { shown: '-', sr: '' }, lives: { text: '-', title: '' }, score: { text: '-', title: '' },
-    online: false, runStats: '',
-  };
+  /* The loaded gun: the Weapon button names it with its damage and blast
+     size, the AMMO pill counts it, and readers also hear the rest of the rack. */
+  function renderLoadout(): void {
+    const count = (w: string) => (w === 'shell' ? '∞' : '×' + (G.ammo![w] || 0));
+    const rack = tables.order.filter(w => w !== G.selected && ((G.ammo![w] || 0) > 0 || w === 'shell'))
+      .map(w => `${tables.weapons[w]!.name} ${count(w)}`).concat(trickChips());
+    const w = tables.weapons[G.selected]!;
+    HUD.ammo = count(G.selected);
+    GUN.gun = G.selected;
+    GUN.name = w.name;
+    GUN.sr = ` ${count(G.selected)}${rack.length ? ` · also ${rack.join(' · ')}` : ''}`;
+    GUN.line = weaponLine(w);
+  }
   let hudShown = '';
+  let gunShown = '';
   function paintHud(): void {
+    const slot = $('deck-gun');
+    const gunSig = JSON.stringify(GUN) + '|' + tables.rev;
+    if (slot && gunSig !== gunShown) {
+      gunShown = gunSig;
+      drawGun(slot, { ...GUN, drawIcon: drawShellIcon, arsenalRev: tables.rev });
+    }
     const bar = $('hud-bar');
     if (!bar) return;
-    const sig = JSON.stringify(HUD) + '|' + tables.rev;
+    const open = menuOpen();
+    const menuKey = touch ? '' : keyHint('global', 'escape');
+    const sig = JSON.stringify(HUD) + '|' + open + '|' + menuKey;
     if (sig === hudShown) return;
     hudShown = sig;
-    drawHud(bar, { ...HUD, drawIcon: drawShellIcon, arsenalRev: tables.rev, onWeapon: openGuns });
+    drawHud(bar, { ...HUD, menuOpen: open, menuKey, onMenu });
   }
   function renderStanding(mine: GameTank | null, others: string): void {
     HUD.armor = {
       shown: mine ? `${Math.max(0, Math.round(mine.hp))}` : '-',
       sr: `${mine ? `you ${Math.max(0, Math.round(mine.hp))} · ` : ''}${others}`,
     };
-    HUD.lives = { text: '♥'.repeat(Math.max(0, G.lives)), title: `${G.lives} lives` };
-    HUD.score = { text: `$${G.cash} · round ${G.round} · ${G.score} pts`, title: `Next 1-up at ${G.nextOneUp} points` };
+    HUD.lives = G.lives;
+    HUD.badge = net.on
+      ? { kind: 'room', code: net.code, seat: `P${net.seat + 1}`, round: G.round }
+      : { kind: 'solo', cash: G.cash, round: G.round, score: G.score, nextOneUp: G.nextOneUp };
   }
   function windText(): string {
     if (G.wind === 0) return '· 0';

@@ -375,7 +375,7 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 .frame-overlay[hidden] { display: none; }
 .log-overlay {
   position: absolute;
-  top: 6.4rem; /* placeLogBelowMenu() sets the measured value */
+  top: 6.4rem; /* placeLogBelowStatus() sets the measured value */
   right: 0.5rem;
   width: min(20rem, 42%);
   max-height: 55%;

@@ -53,6 +53,9 @@ has('crete-bundle-runs-its-specs', select([`${S}games/crete/dist/main.js`, `${S}
 check('crete-lockfile-alone-runs-no-browser', select([`${S}games/crete/package-lock.json`]), 'NONE');
 check('crete-build-tool-and-tests-run-nothing', select([`${S}games/crete/tools/install-files.php`, `${S}games/crete/.gitignore`, `${S}games/crete/test/engine.test.mjs`, `${S}games/crete/test/smoke.test.mjs`]), 'NONE');
 check('crete-skips-tankity', select([`${S}games/crete/src/ui.ts`]).some(s => s.startsWith('tankity-')), false);
+check('kit-guard-alone-runs-nothing', select([`${S}games/_kit/php/score-guard.php`]), 'NONE');
+check('kit-install-core-runs-everything', select([`${S}games/_kit/php/install-core.php`]), 'ALL');
+has('a-games-copy-runs-its-specs', select([`${S}games/cylon/server/score-guard.php`]), ['cylon-play.spec.mjs']);
 has('site-sources-run-the-shell', select([`${S}src/main.ts`, `${S}src/play/play.ts`]), ['games-hub.spec.mjs', 'home-eye.spec.mjs']);
 has('site-tsconfig-runs-the-shell', select([`${S}tsconfig.json`, `${S}package.json`]), ['games-hub.spec.mjs', 'home-eye.spec.mjs']);
 check('site-lockfile-alone-runs-no-browser', select([`${S}package-lock.json`]), 'NONE');

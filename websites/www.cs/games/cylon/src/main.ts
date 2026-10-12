@@ -34,8 +34,9 @@ import { createReticle } from './reticle.ts';
 import { createUnits } from './units.ts';
 import { createGameOver } from './gameover.ts';
 import { createChrome } from './chrome.ts';
+import { renderHelp } from './ui/help.tsx';
 import * as state from './state.ts';
-import { createScoresClient, formatHighScoreRows, weeklyResetText } from './scores.ts';
+import { createScoresClient, highScoreRows, weeklyResetText } from './scores.ts';
 import type { Timer } from './types.ts';
 import type { EndReason } from './state.ts';
 
@@ -106,18 +107,8 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const gameToggleBtn = document.getElementById('cylon-game-toggle');
     const gameToggleLabel = document.getElementById('cylon-game-toggle-label');
     const cicEnterBtn = document.getElementById('cic-enter-btn');
-    const highScoresEl = document.getElementById('cylon-high-scores');
-    const gameOverEl = document.getElementById('cylon-gameover');
-    const gameOverReasonEl = document.getElementById('cylon-gameover-reason');
-    const gameOverKosEl = document.getElementById('cylon-gameover-kos');
-    const gameOverHitsEl = document.getElementById('cylon-gameover-hits');
-    const gameOverEntryEl = document.getElementById('cylon-gameover-entry');
-    const gameOverBoardEl = document.getElementById('cylon-gameover-board');
-    const gameOverScoresEl = document.getElementById('cylon-gameover-scores');
-    const gameOverAllTimeEl = document.getElementById('cylon-gameover-alltime');
-    const scoreSubmitBtn = document.getElementById('cylon-score-submit') as HTMLButtonElement | null;
-    const initialsErrorEl = document.getElementById('cylon-initials-error');
-    const playAgainBtn = document.getElementById('cylon-play-again') as HTMLButtonElement | null;
+    const settingsPanel = document.getElementById('cylon-settings-panel');
+    const gameOverRoot = document.getElementById('cylon-gameover-root');
     const reticleEl = document.getElementById('cylon-reticle');
     const navBurger = document.getElementById('site-nav-burger');
     const navMenu = document.getElementById('site-nav-menu');
@@ -129,13 +120,8 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const BRAND_COMBAT = 'The CIC';
     const INTRO_TITLE_SETTLE_MS = 880;
     const helpBtn = document.getElementById('cylon-help-btn');
-    const helpEl = document.getElementById('cylon-help');
-    const helpPlatformEl = document.getElementById('cylon-help-platform');
-    const helpDesktopEl = document.getElementById('cylon-help-desktop');
-    const helpMobileEl = document.getElementById('cylon-help-mobile');
-    const helpCloseBtn = document.getElementById('cylon-help-close');
-    const initialLetters = [0, 1, 2].map((i) => document.getElementById(`cylon-initial-${i}`));
-    const initialsRoot = document.getElementById('cylon-initials');
+    const helpRoot = document.getElementById('cylon-help-root');
+    let helpOpen = false;
     if (!eye || !field) return;
 
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -201,32 +187,19 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const NAV_FADE_MS = Math.round(2850 * 0.45); // match --cylon-desolate-fade * 0.45
 
     /** The game-over panel and the high scores (src/gameover.ts). */
-    const { renderHighScores, fetchHighScores, hideGameOver, showGameOver, bindGameOverUi } = createGameOver({
+    const { renderHighScores, fetchHighScores, hideGameOver, showGameOver, resetText } = createGameOver({
         game,
         state,
         scores,
-        formatHighScoreRows,
         weeklyResetText,
         currentHp,
         setGameEnabled,
         resetRunStats,
-        highScoresEl,
-        gameOverEl,
-        gameOverReasonEl,
-        gameOverKosEl,
-        gameOverHitsEl,
-        gameOverEntryEl,
-        gameOverBoardEl,
-        gameOverScoresEl,
-        allTimeNoteEl: gameOverAllTimeEl,
-        scoreSubmitBtn,
-        initialsErrorEl,
-        playAgainBtn,
-        initialLetters,
-        initialsRoot,
+        root: gameOverRoot,
+        boardChanged: () => renderSettings(),
     });
     /** The settings and the nav chrome (src/chrome.ts). */
-    const { settings, saveSettings, syncGameToggleUi, syncNavChrome, bindSettings, bindGameToggle, bindNavMenu } = createChrome({
+    const { settings, saveSettings, syncGameToggleUi, syncNavChrome, renderSettings, bindSettings, bindGameToggle, bindNavMenu } = createChrome({
         settingsRoot,
         gameToggleBtn,
         gameToggleLabel,
@@ -239,7 +212,9 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         BRAND_COMBAT,
         NAV_FADE_MS,
         reduceMotion,
-        renderHighScores,
+        settingsPanel,
+        boardRows: () => highScoreRows(scores.board()),
+        resetText,
         fetchHighScores,
         setGameEnabled,
         setEyeTracking: (on) => setEyeTracking(on),
@@ -637,17 +612,12 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         }, { passive: false });
     }
 
-    function syncHelpContent() {
-        const mobile = coarsePointer;
-        if (helpPlatformEl) {
-            helpPlatformEl.textContent = mobile ? 'Touch controls' : 'Desktop controls';
-        }
-        if (helpDesktopEl) helpDesktopEl.hidden = mobile;
-        if (helpMobileEl) helpMobileEl.hidden = !mobile;
+    function drawHelp() {
+        if (helpRoot) renderHelp(helpRoot, { open: helpOpen, touch: coarsePointer, onClose: closeHelp });
     }
 
     function openHelp() {
-        if (!helpEl) return;
+        if (!helpRoot) return;
         if (!game.paused) {
             game.paused = true;
             game.pauseStartedAt = Date.now();
@@ -663,14 +633,16 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
             audio.syncMusic();
             updateAbilityButtons();
         }
-        syncHelpContent();
-        helpEl.hidden = false;
-        helpCloseBtn?.focus();
+        // Safari and iOS leave a clicked button unfocused; the dialog returns focus to what was focused when it opened.
+        helpBtn?.focus();
+        helpOpen = true;
+        drawHelp();
     }
 
     function closeHelp() {
-        if (!helpEl) return;
-        helpEl.hidden = true;
+        if (!helpOpen) return;
+        helpOpen = false;
+        drawHelp();
         if (game.paused) {
             const elapsed = Date.now() - game.pauseStartedAt;
             applyPauseTimeSkew(elapsed);
@@ -680,10 +652,10 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
             updateAbilityButtons();
             syncReticleVisibility();
         }
-        helpBtn?.focus();
     }
 
     function bindHelp() {
+        drawHelp();
         if (helpBtn) {
             helpBtn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -691,25 +663,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
                 openHelp();
             });
         }
-        if (helpCloseBtn) {
-            helpCloseBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                closeHelp();
-            });
-        }
-        if (helpEl) {
-            helpEl.addEventListener('click', (e) => {
-                if (e.target === helpEl) closeHelp();
-            });
-        }
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && helpEl && !helpEl.hidden) {
-                e.preventDefault();
-                closeHelp();
-            }
-        });
     }
-
 
     function currentHp() {
         return rules.currentHp(game.run.hitCount);
@@ -961,8 +915,9 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
             document.body.classList.remove('cylon-touch-play');
             hideGameOver();
             game.run = state.clearPendingScore(state.clearGameOver(game.run));
-            if (helpEl && !helpEl.hidden) {
-                helpEl.hidden = true;
+            if (helpOpen) {
+                helpOpen = false;
+                drawHelp();
             }
             resetAbilityCooldowns();
             syncGameToggleUi();
@@ -1065,7 +1020,6 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     bindSettings();
     bindGameToggle();
     bindAbilityControls();
-    bindGameOverUi();
     bindPlayerMissShots();
     bindReticle();
     bindPlayScrollLock();

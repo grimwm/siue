@@ -46,6 +46,14 @@ localStorage key, in the raw form that key already holds (`text` or
 `subscribe` tells the UI when a value changes. Blocked or missing storage
 falls back to a value that lives for the session; nothing throws.
 
+## Score guard (`php/score-guard.php`)
+
+`Kit\ScoreGuard` is the gate in front of a score endpoint: the Origin (else Referer) allow-list, CSRF double-submit (the header must equal the cookie), single-use run tokens that expire, per-client rate limits keyed by an HMAC of the address (`startRun()` and `consumeRun()` count their own; `rateTake($kind, $perHour)` caps any other endpoint), and three-letter initials (`initials()`: `[A-Za-z]{3}` in, `[A-Z]{3}` out; `coerceInitials()` for rows stored before that rule). It reads only the keys in `ScoreGuard::CONFIG_KEYS`, checked by `ScoreGuard::validateConfig()`; a game's config may hold more. A game lists `score-guard.php` under `kit_php` in its `install-files.php` config, which keeps a copy in the game's `server/` (deny that folder in `.htaccess` and in `docker/nginx/default.conf`).
+
+A POST endpoint must call both `originAllowed()` and `csrfOk()`: a request with neither Origin nor Referer passes the first, so the CSRF pair is what stops it.
+
+The same file holds `Kit\StoreModes`, the one place a game's PHP takes file modes from: 0700/0600 for what only PHP writes, and for a path the deploy account also writes (a game's own `data/`) 0700/0600 when PHP runs as the deploying account, 0777/0666 when it runs as a web user every site shares. In that second case any other site's PHP on the host can read and write the game's stored files; no mode prevents it.
+
 ## Sound (`audio/core.ts`)
 
 `createAudioCore()` is a facade over the game's one `AudioContext`. It makes
@@ -61,6 +69,28 @@ what each setting means stay in the game. Without Web Audio, or when making
 the context throws, every call is silent. Tests use `fakeAudioContext()` from
 `test/audio.ts`, which records every node and parameter call.
 
+## Components (`ui/`)
+
+Preact components every game draws its overlays with. A page keeps an empty
+mount point; the game's module renders a component into it with a finished
+view of its state and callbacks, and redraws when the state changes.
+
+- `Dialog`: a modal panel in its veil. `open` shows it; on opening it focuses
+  `focusId` (or its first visible, enabled button, else the panel itself),
+  on closing it gives focus back; Escape and
+  a click on the veil (one that also began there) call `onDismiss`; a game
+  whose own key router already handles Escape should not pass `onDismiss`.
+  Focus returns to what had it, or to the kit `Button` that opened the
+  dialog. The game passes its own ids and classes, so its CSS and browser
+  specs keep working.
+- `Button`: blurs itself before calling `onClick`, so the key that pressed it
+  cannot press it again; `keyLabel` adds a `KeyChip`.
+- `Panel`: a section named by its `<h2>`.
+- `KeyChip`: one key as a `<kbd class="key-chip">`; the game styles it and
+  reads the label from its key table. `at` records the key-table slot as
+  `data-keyhint`; `decorative` hides a chip that sits beside words already
+  naming the action from screen readers.
+
 ## Tests (`test/`)
 
 Unit tests are `*.test.mjs` files run with `node --test`. They import
@@ -70,3 +100,9 @@ sources directly (`../src/engine.ts`): Node strips the types. Doubles:
 detail)` runs an older PASS/FAIL script under `node:test` unchanged, one
 test per check; write new tests with `test()` and `assert` directly. PHP
 has the same bridge: `php/testing/LegacyCheckCase.php`.
+
+Components are tested in Node: `importTsx(import.meta.dirname, { name: '../src/ui/x.tsx' })`
+bundles `.tsx` with esbuild (preact left external, so the test and the
+components share one copy), and `dom-stub.mjs` is a small DOM to render into:
+`makeEl`, `click`, `fire(el, type, extra)`, `fireDocument(type, extra)`, and
+`globalThis.__focused` for the element last focused.

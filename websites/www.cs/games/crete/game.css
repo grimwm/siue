@@ -195,3 +195,6 @@ button:disabled { opacity: 0.45; cursor: default; }
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
 }
+
+/* The inventory's mount point is not a box of its own: its panel is the grid item. */
+#inventory-root { display: contents; }

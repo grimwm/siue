@@ -1,4 +1,2 @@
 node_modules/
-_kit/build/.tmp-*/
-_kit/test/.tmp-*/
-tankity/test/.tmp-*/
+**/.tmp-*/

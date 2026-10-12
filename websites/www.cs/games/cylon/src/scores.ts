@@ -67,26 +67,23 @@ export function weeklyResetText(config: ScoreConfig): string {
   return `Play often — scores reset every ${day} at midnight ${zone}.`;
 }
 
-/** The board as list items. */
-export function formatHighScoreRows(list: readonly ScoreEntry[]): string {
-  if (!list.length) {
-    return '<li class="cylon-hs-empty">No scores yet</li>';
-  }
+/** One board row, ready to draw. */
+export interface HsRow {
+  rank: number;
+  initials: string;
+  /** The day it was set, in the player's locale; '' when unknown. */
+  date: string;
+  score: number;
+}
+
+export function highScoreRows(list: readonly ScoreEntry[]): HsRow[] {
   return list.map((entry, i) => {
     const when = entry.at ? new Date(entry.at) : null;
     const date = when && !Number.isNaN(when.getTime())
-      ? when.toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      })
+      ? when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
       : '';
-    const initials = (entry.initials || 'AAA').toString().slice(0, 3).toUpperCase();
-    const dateHtml = date
-      ? `<span class="cylon-hs-date">${date}</span>`
-      : '<span class="cylon-hs-date"></span>';
-    return `<li><span class="cylon-hs-rank">#${i + 1}</span><strong class="cylon-hs-initials">${initials}</strong>${dateHtml}<span class="cylon-hs-score">${entry.score} KOs</span></li>`;
-  }).join('');
+    return { rank: i + 1, initials: (entry.initials || 'AAA').toString().slice(0, 3).toUpperCase(), date, score: entry.score };
+  });
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {

@@ -43,6 +43,10 @@ const RULES = [
   // The kit's own tests and docs, and a game's unit tests: not what a browser runs.
   [new RegExp(`^${SITE}games/[^/]+/test/`), 'NONE'],
   [new RegExp(`^${SITE}games/_kit/(README\\.md|test/|php/tests/|build/(build\\.test\\.mjs|fixture/))`), 'NONE'],
+  // The score guard reaches a browser only as the copy each game commits in
+  // its server/, and that copy selects its own game's specs. The rest of the
+  // kit's PHP (install-core.php) writes every game's pages: ALL, below.
+  [new RegExp(`^${SITE}games/_kit/php/score-guard\\.php$`), 'NONE'],
   // The kit's sources and the games' shared lockfile feed every game's build.
   [new RegExp(`^${SITE}games/(_kit/|package(-lock)?\\.json$)`), 'ALL'],
   // A game's lockfile only pins the compiler; what the browser runs is dist/,

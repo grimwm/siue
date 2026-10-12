@@ -46,7 +46,7 @@
 <link href="site.css?v=6080beaf2a" rel="stylesheet">
 <link href="games/cylon/css/eye.css?v=b1b8b1e855" rel="stylesheet">
 <link href="games/cylon/css/nav.css?v=0801887fbb" rel="stylesheet">
-<link href="games/cylon/css/help.css?v=1a91ca8063" rel="stylesheet">
+<link href="games/cylon/css/help.css?v=188dcc1db3" rel="stylesheet">
 <link href="games/cylon/css/hud.css?v=00884fe12d" rel="stylesheet">
 <link href="games/cylon/css/gameover.css?v=60f2ab3871" rel="stylesheet">
 <link href="games/cylon/css/settings.css?v=b117352054" rel="stylesheet">
@@ -121,33 +121,7 @@
           <i class="bi bi-gear" aria-hidden="true"></i>
           <span class="visually-hidden">Game settings</span>
         </button>
-        <div class="cylon-settings-panel" id="cylon-settings-panel" hidden>
-          <p class="cylon-settings-title">Options</p>
-          <label class="cylon-setting">
-            <input type="checkbox" data-setting="soundEnabled" checked>
-            <span>Sound effects</span>
-          </label>
-          <label class="cylon-setting cylon-setting-slider">
-            <span>SFX volume</span>
-            <input type="range" min="0" max="100" step="1" value="50" data-setting="soundVolume" aria-label="Sound effects volume">
-          </label>
-          <label class="cylon-setting">
-            <input type="checkbox" data-setting="musicEnabled" checked>
-            <span>Music</span>
-          </label>
-          <label class="cylon-setting cylon-setting-slider">
-            <span>Music volume</span>
-            <input type="range" min="0" max="100" step="1" value="50" data-setting="musicVolume" aria-label="Music volume">
-          </label>
-          <label class="cylon-setting">
-            <input type="checkbox" data-setting="eyeEnabled" checked>
-            <span>Eye tracking</span>
-          </label>
-          <p class="cylon-settings-title cylon-settings-scores-title">Weekly high scores</p>
-          <p class="cylon-settings-hint" id="cylon-weekly-reset">Play often — scores reset every Sunday at midnight Central.</p>
-          <ol class="cylon-high-scores" id="cylon-high-scores"></ol>
-          <p class="cylon-settings-hint">Start with 30 HP — occasional nukes and small missiles (2 HP each). Last 10s without a hit to heal 1. Cyan/pink missiles chase you; orange locks where you just aimed. More drones as KOs rise. Drag the reticle to dodge · tap drones · Grenade / Raptor in the bar.</p>
-        </div>
+        <div class="cylon-settings-panel" id="cylon-settings-panel" hidden></div>
       </div>
     </div>
   </div>
@@ -232,7 +206,7 @@
   // list's ?game= link and Play button call; a game that fails to load must
   // not take the list down with it.
   try {
-    const { initializeCylonEffects } = await import('./games/cylon/dist/main.js?v=e7e375132c');
+    const { initializeCylonEffects } = await import('./games/cylon/dist/main.js?v=fa920d43c0');
     await initializeCylonEffects({ onTheme: applyCombatTheme });
   } catch (err) {
     console.error('Cylon failed to start', err);

@@ -30,7 +30,8 @@ php tools/install-files.php                # then rewrite the ?v= versions and s
 | --- | --- | --- |
 | `engine` | seeded RNG, maze generation, search, the run's state and every rule (moves, items, bash, the chase, hint, route, play-through) | DOM-free |
 | `audio` | the Web Audio synth and the mute switch | DOM lib |
-| `ui` | drawing the board, HUD, inventory, log and ending; keys and clicks | DOM lib |
+| `ui` | drawing the board, HUD and log, choosing what the ending and inventory say; keys and clicks | DOM lib |
+| `ui/end.tsx`, `ui/inventory.tsx` | the ending card and the inventory panel, drawn with the kit's `Dialog`, `Panel`, `Button` and `KeyChip`; `ui.ts` hands them a finished view | DOM lib |
 
 The split follows one seam: what the game *is* versus what the player *sees*. The engine never names the page. Everything it shows or plays goes out through `Hooks` (`say`, `sfx`, `render`, `showEnd`), and its timers arrive as an argument, so `test/engine.test.mjs` plays whole runs against recording hooks and a manual clock. `ui.ts` and `audio.ts` are the other ends of those hooks. `ui.ts` imports only *types* from the engine and takes what it needs at run time as arguments.
 

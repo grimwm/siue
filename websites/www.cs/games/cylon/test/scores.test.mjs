@@ -3,7 +3,7 @@
 // the fake server below answers it the way scores.php does: a GET gives the
 // board, the config and a CSRF token; a POST op=start gives a run token; a POST
 // op=score checks the run token and the initials.
-import { createScoresClient, formatHighScoreRows, weeklyResetText } from '../src/scores.ts';
+import { createScoresClient, highScoreRows, weeklyResetText } from '../src/scores.ts';
 import { check } from '../../_kit/test/check.ts';
 
 
@@ -153,8 +153,8 @@ function fakeServer(opts = {}) {
 check('reset-text-sunday-central', weeklyResetText({ weekStartsOn: 'sunday', timezone: 'America/Chicago' }) === 'Play often — scores reset every Sunday at midnight Central.', weeklyResetText({ weekStartsOn: 'sunday', timezone: 'America/Chicago' }));
 check('reset-text-monday-central', weeklyResetText({ weekStartsOn: 'monday', timezone: 'America/Chicago' }) === 'Play often — scores reset every Monday at midnight Central.', weeklyResetText({ weekStartsOn: 'monday', timezone: 'America/Chicago' }));
 check('reset-text-sunday-other-zone', weeklyResetText({ weekStartsOn: 'sunday', timezone: 'UTC' }) === 'Play often — scores reset every Sunday at midnight UTC.', '');
-check('empty-board-text', formatHighScoreRows([]) === '<li class="cylon-hs-empty">No scores yet</li>', '');
-const rows = formatHighScoreRows([{ initials: 'abcdef', score: 9, at: 'not a date' }, { score: 4 }]);
-check('rows-rank-initials-score', rows.includes('#1</span><strong class="cylon-hs-initials">ABC</strong>') && rows.includes('9 KOs') && rows.includes('#2'), rows);
-check('rows-default-initials-and-empty-date', rows.includes('>AAA</strong>') && !rows.includes('Invalid'), rows);
-check('rows-show-a-date', /cylon-hs-date">\w+ \d+, 2026</.test(formatHighScoreRows([{ initials: 'A', score: 1, at: '2026-10-05T12:00:00Z' }])), formatHighScoreRows([{ initials: 'A', score: 1, at: '2026-10-05T12:00:00Z' }]));
+check('empty-board-has-no-rows', highScoreRows([]).length === 0, '');
+const rows = highScoreRows([{ initials: 'abcdef', score: 9, at: 'not a date' }, { score: 4 }]);
+check('rows-rank-initials-score', rows[0].rank === 1 && rows[0].initials === 'ABC' && rows[0].score === 9 && rows[1].rank === 2, JSON.stringify(rows));
+check('rows-default-initials-and-empty-date', rows[1].initials === 'AAA' && rows[0].date === '' && rows[1].date === '', JSON.stringify(rows));
+check('rows-show-a-date', /^\w+ \d+, 2026$/.test(highScoreRows([{ initials: 'A', score: 1, at: '2026-10-05T12:00:00Z' }])[0].date), JSON.stringify(highScoreRows([{ initials: 'A', score: 1, at: '2026-10-05T12:00:00Z' }])));

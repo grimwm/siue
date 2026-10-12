@@ -74,11 +74,6 @@
 }
 
 
-.cylon-help-body[hidden] {
-  display: none !important;
-}
-
-
 .cylon-help-body ol {
   margin: 0;
   padding-left: 1.2rem;

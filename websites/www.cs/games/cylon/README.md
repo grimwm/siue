@@ -6,10 +6,12 @@ Homepage mini-game module. Licensed under the GNU GPL v3 (see `LICENSE`).
 - `css/*.css` — the stylesheets: the scanner eye and glare, the combat nav, the overlays, the battlefield and the world-ended look (see Stylesheets)
 - `src/main.ts` — the game's entry: it exports `initializeCylonEffects(options)`. The site shell stays in the site's own scripts.
 - `src/*.ts` — the typed modules `main.ts` imports
+- `src/ui/` — the Preact overlays (How to Play, game over, settings, the board), drawn with the kit's components; `mount.html` and the site page keep empty mount points (`#cylon-help-root`, `#cylon-gameover-root`, `#cylon-settings-panel`)
 - `dist/main.js`, `dist/main.js.map` — the one esbuild bundle the site loads; generated and checked in
 - `build.json`, `tsconfig.json`, `src/tsconfig.dom.json` — the kit build config (see Source layout and build)
-- `mount.html` — scanner, battlefield, FX, help, game-over (injected into `#game-root`)
+- `mount.html` — scanner, battlefield, FX and the help and game-over mount points (injected into `#game-root`)
 - `scores.php` — high-score API
+- `server/score-guard.php` — the kit's score guard (origin, CSRF, run tokens, rate limits, initials), copied by `tools/install-files.php`; never edit the copy
 - `data/config.json` — timezone, week boundary, board size, blocked initials, and request limits
 - `data/scores.json` — live boards (created on the server; not part of the source tree)
 - `test/*.test.mjs` — unit and static checks on `node:test`; `test/php/ScoresTest.php` — PHPUnit cases for `scores.php` (`vendor/bin/phpunit --testsuite cylon` from the site root)
@@ -17,7 +19,7 @@ Homepage mini-game module. Licensed under the GNU GPL v3 (see `LICENSE`).
 - `tools/install-files.php` — writes `manifest.webmanifest` (the work is `games/_kit/php/install-core.php`)
 
 ## High scores
-`scores.php` keeps two boards of at most `maxScores` rows each (score, hits, initials, time): the weekly board, which resets Sunday 00:00 America/Chicago (DST follows the timezone, not a fixed offset), and an all-time board that no reset touches. Every accepted score is ranked onto both, highest first, an earlier time winning a tie. The store is one JSON object, `{"week": [...], "alltime": [...]}`, read and rewritten under one `flock`; a store that is still a bare array is read as both boards. `GET` and `POST` answer with `scores` (this week) and `alltime`. The game-over panel shows them as This week and All time tabs, and the settings panel lists the weekly board. `CYLON_SCORES_FILE` points the store somewhere else; the PHPUnit suite uses it, and defines `CYLON_SCORES_LIBRARY` so that requiring `scores.php` serves no request.
+`scores.php` keeps two boards of at most `maxScores` rows each (score, hits, initials, time): the weekly board, which resets Sunday 00:00 America/Chicago (DST follows the timezone, not a fixed offset), and an all-time board that no reset touches. Every accepted score is ranked onto both, highest first, an earlier time winning a tie. The store is one JSON object, `{"week": [...], "alltime": [...]}`, read and rewritten under one `flock`; a store that is still a bare array is read as both boards. `GET` and `POST` answer with `scores` (this week) and `alltime`. The game-over panel shows them as This week and All time tabs, and the settings panel lists the weekly board. `CYLON_SCORES_FILE` points the store somewhere else; the PHPUnit suite uses it, and defines `CYLON_SCORES_LIBRARY` so that requiring `scores.php` serves no request. Every POST passes the kit's score guard first (`server/score-guard.php`), configured by the guard keys in `data/config.json`.
 
 ## Loading it
 The page loads the entry module and calls it once:
@@ -67,13 +69,13 @@ php tools/install-files.php                # rewrite manifest.webmanifest if met
 | `abilities` | the grenade and the raptor: arming, the throw, the call, the strike and landing timers and the cooldown rule (`createAbilities`), with the effects handed in as callbacks | DOM-free |
 | `field` | the terrain holes (hold, fade, the cap of 24, pause) and the page's glyph debris (scatter, restore, the nuke's reshuffle): `createHoles`, `createDebris` | DOM (the elements handed in) |
 | `audio` | the WebAudio buses, the sound effects by name, the music bed, volumes and mute (`createAudio`) | DOM (WebAudio types) |
-| `scores` | the `scores.php` client (tokens, board, qualifying rule, submission) and the board's markup | DOM (`fetch`) |
+| `scores` | the `scores.php` client (tokens, board, qualifying rule, submission) and the board's rows as data | DOM (`fetch`) |
 | `intro` | the opening strike: the nuke's flight to screen center, the timed steps, the "The CIC" title and its glide into the nav brand (`createIntro`) | DOM (window, the elements handed in) |
 | `landscape` | the landscape writers: the body's CSS variables for the fracture, ash and land shift, the blast hotspot, the letter kicks (`createLandscape`) | DOM (`<body>`, the debris elements) |
 | `eye` | the scanner eye and its glare: the sweep, tracking the cursor, the Raptor's disorientation (`createEye`) | DOM (the eye and glare elements handed in) |
 | `reticle` | the aim: the cursor's viewport and page coordinates, the reticle, the touch drag (`createReticle`) | DOM (window, the reticle handed in) |
 | `units` | the drones, the missiles and the mid-run nuke, from spawn to removal (`createUnits`) | DOM (the battlefield and the elements handed in) |
-| `gameover` | the game-over panel, the initials entry and the board's two places (`createGameOver`) | DOM (the elements handed in) |
+| `gameover` | the game-over panel's state and the initials entry, drawn by `ui/gameover.tsx` (`createGameOver`) | DOM (the mount element handed in) |
 | `chrome` | the settings and their panel, the Game On toggle, the civil and combat nav and the mobile menu (`createChrome`) | DOM (the nav elements handed in, `document`, the kit's `browserStorage`) |
 | `types` | the shapes the modules share: `Game`, `Settings`, `Mouse`, `Bot`, `Missile` | types and the settings key, defaults and guard |
 
@@ -95,7 +97,7 @@ php tools/install-files.php                # rewrite manifest.webmanifest if met
 
 `units` hands `main.ts` `createUnits(deps)`, whose dependencies are the elements, the `game` record, the sound, the holes and debris, the landscape writers, the eye's centre, the hull (`registerHit`) and the tuning constants. It returns the drones' `allBots()`, `knockOutBot(bot)`, `clearAllBots()`, `wipeAllBotsWithScore()`, `herdBotsIntoView()`, `scheduleAmbush(first)` (the wave timer) and `bindPlayerMissShots()`; the missiles' `canLaunchMissile(asTracker)`, `launchSmallMissile(opts)` and `clearActiveMissiles()`; and the nuke's `launchNuke()` and `detonateNukeAt(x, y, opts)`. The drone count, the missile list and the wave, tracker-pair and volley timers are inside it. When the next missile or nuke launches is the run clock's (`main.ts`), which asks `units` to launch one.
 
-`gameover` hands `main.ts` `createGameOver(deps)`: `renderHighScores()` draws the board in the settings panel and on the panel, `fetchHighScores()`, `showGameOver(reason)`, `hideGameOver()` and `bindGameOverUi()`; the initials entry's state is inside it. `chrome` hands it `createChrome(deps)`: `settings` (the one live object, read through the kit pref with the volume migration), `saveSettings()`, `syncNavChrome()` (the fade between civil and combat), `syncGameToggleUi()` and the binders for the panel, the toggle and the burger. `gameover` and `chrome` call back into the game for what changes a run: `setGameEnabled`, `resetRunStats`, `setEyeTracking` and the sound's `settingChanged`.
+`gameover` hands `main.ts` `createGameOver(deps)`: `renderHighScores()` redraws the panel and tells the settings panel the board changed, `fetchHighScores()`, `showGameOver(reason)`, `hideGameOver()` and `resetText()`; the initials entry's state is inside it. `chrome` hands it `createChrome(deps)`: `settings` (the one live object, read through the kit pref with the volume migration), `saveSettings()`, `syncNavChrome()` (the fade between civil and combat), `syncGameToggleUi()`, `renderSettings()` and the binders for the panel, the toggle and the burger. `gameover` and `chrome` call back into the game for what changes a run: `setGameEnabled`, `resetRunStats`, `setEyeTracking` and the sound's `settingChanged`.
 
 Still in `main.ts`, and why: the hull (`registerHit`, healing: it ends the run), the run clock (the missile, nuke and heal timers and the pause that skews them: they span `units`, `holes` and the hull), the help overlay (it is the pause), the grenade's blast and the raptor's strike band (the callbacks `abilities` runs: they use the drones, the holes and the landscape together), the ability buttons, the world-ended look (it drives `debris` and the nav) and the run's start and end (`setGameEnabled`, `endGame`). They reach across every module, so they are the wiring.
 

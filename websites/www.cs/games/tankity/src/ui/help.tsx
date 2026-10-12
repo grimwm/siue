@@ -17,7 +17,8 @@ export interface HelpProps {
 
 /** Every binding, grouped the way a player meets them: [keys, what they do].
  *  Two keys in one row read as a range ("1–9"). */
-export const HELP_KEYS: readonly (readonly [string, readonly (readonly [readonly string[], string])[]])[] = [
+// A row's keys are a range (1–9) unless the row says they are alternatives (Space or Ctrl).
+export const HELP_KEYS: readonly (readonly [string, readonly (readonly [readonly string[], string, 'or'?])[]])[] = [
   ['Aiming and firing', [
     [['aim:barrelLeft'], 'swing the barrel left'],
     [['aim:barrelRight'], 'swing the barrel right'],
@@ -25,7 +26,7 @@ export const HELP_KEYS: readonly (readonly [string, readonly (readonly [readonly
     [['aim:powerDown'], 'less power'],
     [['aim:driveLeft'], 'drive left (uses fuel)'],
     [['aim:driveRight'], 'drive right (uses fuel)'],
-    [['global:fire'], 'fire and end your turn'],
+    [['global:fire', 'global:fire:2'], 'fire and end your turn', 'or'],
     [['global:guns'], 'pick a weapon (a digit, or the arrows and Enter, loads one)'],
   ]],
   ['Panels and settings', [
@@ -116,9 +117,9 @@ export function Help({ keyHint, onClose }: HelpProps) {
           <section key={group} aria-labelledby={`help-keys-${g}`}>
             <h3 id={`help-keys-${g}`}>{group}</h3>
             <dl>
-              {rows.map(([ats, what]) => (
+              {rows.map(([ats, what, join]) => (
                 <div key={ats.join()}>
-                  <dt>{ats.map((at, i) => <Fragment key={at}>{i > 0 && '–'}<Key at={at} cls="hk" /></Fragment>)}</dt>
+                  <dt>{ats.map((at, i) => <Fragment key={at}>{i > 0 && (join === 'or' ? ' or ' : '–')}<Key at={at} cls="hk" /></Fragment>)}</dt>
                   <dd>{what}</dd>
                 </div>
               ))}

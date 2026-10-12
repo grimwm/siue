@@ -24,7 +24,7 @@ test('touch screens get no key labels and no key bindings', async ({ page }) => 
       .filter(el => el.getClientRects().length > 0).map(el => el.id || el.className));
     expect(shown).toEqual([]);
     const text = await page.evaluate(() => document.body.innerText);
-    expect(text).not.toMatch(/\((C|N|ESC|E|M|F|T|O|U|H|L|R|Q|A|D|Ctrl|B|V)\)/);
+    expect(text).not.toMatch(/\((C|N|Esc|ESC|E|M|F|T|O|U|H|L|R|Q|A|D|Ctrl|B|V)\)/);
   };
   await noKeys();
   await page.locator('#new-game').tap();

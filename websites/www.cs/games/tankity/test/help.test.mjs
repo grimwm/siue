@@ -28,10 +28,17 @@ const capOf = (section, at) => walk(keyList(section)).find(n => n.getAttribute?.
 
 test('Help lists every action in the key table, and only those', () => {
   const { section } = draw();
-  const listed = new Set(walk(keyList(section)).map(n => n.getAttribute?.('data-keyhint')).filter(Boolean)
-    .map(at => at.split(':').slice(0, 2).join(':')));
+  const rows = walk(keyList(section)).filter(n => n.localName === 'dt')
+    .map(dt => walk(dt).map(n => n.getAttribute?.('data-keyhint')).filter(Boolean)[0].split(':').slice(0, 2).join(':'));
   const bound = Object.entries(GAME.keys).flatMap(([ctx, actions]) => Object.keys(actions).map(a => `${ctx}:${a}`));
-  assert.deepEqual([...listed].sort(), bound.sort());
+  assert.deepEqual([...rows].sort(), bound.sort(), 'each action has exactly one row');
+});
+
+test('Help names both fire keys, Space or Ctrl', () => {
+  const { section } = draw();
+  assert.equal(capOf(section, 'global:fire'), keyHint('global', 'fire'));
+  assert.equal(capOf(section, 'global:fire:2'), keyHint('global', 'fire', 2));
+  assert.match(keyHint('global', 'fire', 2), /^Ctrl$/);
 });
 
 test('each key shows its cap from the live table', () => {

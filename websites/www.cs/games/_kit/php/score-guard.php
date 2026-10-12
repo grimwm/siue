@@ -20,7 +20,7 @@ final class ScoreGuard
     public const CONFIG_KEYS = ['runTtlSec', 'startsPerHour', 'scoresPerHour', 'csrfCookie', 'storageKey', 'blockedInitials', 'allowedHosts'];
 
     private const WINDOW_SEC = 3600;
-    private const TOKEN = '/^[a-f0-9]{32}$/';
+    private const TOKEN = '/^[a-f0-9]{32}\z/';
 
     /** @var array<string, string> */
     private array $cookies;
@@ -71,7 +71,7 @@ final class ScoreGuard
             }
             $out[$key] = $data[$key];
         }
-        foreach (['csrfCookie' => '/^[A-Za-z0-9_]{1,32}$/', 'storageKey' => '/^[A-Za-z0-9_-]{1,32}$/'] as $key => $pattern) {
+        foreach (['csrfCookie' => '/^[A-Za-z0-9_]{1,32}\z/', 'storageKey' => '/^[A-Za-z0-9_-]{1,32}\z/'] as $key => $pattern) {
             if (!is_string($data[$key]) || !preg_match($pattern, $data[$key])) {
                 throw new \RuntimeException("config $key has an invalid value");
             }
@@ -83,7 +83,7 @@ final class ScoreGuard
         $blocked = [];
         foreach ($data['blockedInitials'] as $initials) {
             $initials = strtoupper(is_scalar($initials) ? (string) $initials : '');
-            if (!preg_match('/^[A-Z]{3}$/', $initials)) {
+            if (!preg_match('/^[A-Z]{3}\z/', $initials)) {
                 throw new \RuntimeException('config blockedInitials entries must be 3 letters');
             }
             $blocked[$initials] = true;
@@ -95,7 +95,7 @@ final class ScoreGuard
         $hosts = [];
         foreach ($data['allowedHosts'] as $host) {
             $host = strtolower(is_scalar($host) ? (string) $host : '');
-            if (!preg_match('/^[a-z0-9.-]+$/', $host)) {
+            if (!preg_match('/^[a-z0-9.-]+\z/', $host)) {
                 throw new \RuntimeException('config allowedHosts has an invalid host');
             }
             $hosts[$host] = true;
@@ -107,7 +107,7 @@ final class ScoreGuard
     /** Exactly three letters in either case, as uppercase; null for anything else. */
     public static function initials(mixed $value): ?string
     {
-        return is_string($value) && preg_match('/^[A-Za-z]{3}$/', $value) ? strtoupper($value) : null;
+        return is_string($value) && preg_match('/^[A-Za-z]{3}\z/', $value) ? strtoupper($value) : null;
     }
 
     /**
@@ -117,7 +117,7 @@ final class ScoreGuard
      */
     public static function coerceInitials(mixed $value, string $pad): string
     {
-        if (!preg_match('/^[A-Z]$/', $pad)) {
+        if (!preg_match('/^[A-Z]\z/', $pad)) {
             throw new \InvalidArgumentException('pad must be one uppercase letter');
         }
         $letters = (string) preg_replace('/[^A-Z]/', '', strtoupper(is_scalar($value) ? (string) $value : ''));
@@ -179,6 +179,7 @@ final class ScoreGuard
         return (string) preg_replace('/:\d+$/', '', strtolower((string) ($this->server['HTTP_HOST'] ?? '')));
     }
 
+    // Only the browser-set Origin and Referer are trusted; a script can forge neither.
     private static function urlHost(string $url): string
     {
         $host = parse_url($url, PHP_URL_HOST);

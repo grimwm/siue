@@ -198,6 +198,22 @@ final class InstallCoreTest extends TestCase
         $this->assertDirectoryDoesNotExist("$this->dir/server");
     }
 
+    public function testKitPhpMustBeAList(): void
+    {
+        file_put_contents("$this->dir/metadata.yaml", "title: Arty\ndescription: Lob.\nstart: artyStart\n");
+        [$stale, $notes] = install_sync($this->dir, ['kind' => 'start', 'kit_php' => 'score-guard.php'], true);
+        $this->assertSame([], $stale);
+        $this->assertSame(['config: kit_php must be a list of file names in games/_kit/php'], $notes);
+    }
+
+    public function testAServerFolderThatCannotBeMadeIsANote(): void
+    {
+        file_put_contents("$this->dir/metadata.yaml", "title: Arty\ndescription: Lob.\nstart: artyStart\n");
+        file_put_contents("$this->dir/server", 'in the way');
+        [, $notes] = install_sync($this->dir, ['kind' => 'start', 'kit_php' => ['install-core.php']], true);
+        $this->assertSame(['cannot create the folder for server/install-core.php'], $notes);
+    }
+
     public function testRunReturnsOneOnACheckThatFindsStaleFiles(): void
     {
         $err = fopen('php://memory', 'w+');

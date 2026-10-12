@@ -345,6 +345,9 @@ function install_sync(string $dir, array $config, bool $write): array
     }
     // Kit PHP is never deployed, so a game ships its own copy; the copy is an
     // output like the manifest, and --check refuses one edited by hand.
+    if (!is_array($config['kit_php'] ?? [])) {
+        return [[], array_merge($notes, ['config: kit_php must be a list of file names in games/_kit/php'])];
+    }
     foreach ($config['kit_php'] ?? [] as $file) {
         if (!is_string($file) || !preg_match('/^[a-z0-9-]+\.php$/', $file)) {
             return [[], array_merge($notes, ['config: kit_php entries are file names in games/_kit/php, such as score-guard.php'])];
@@ -360,8 +363,9 @@ function install_sync(string $dir, array $config, bool $write): array
         if ((string) @file_get_contents("$dir/$name") !== $content) {
             $stale[] = $name;
             if ($write) {
-                if (!is_dir(dirname("$dir/$name"))) {
-                    mkdir(dirname("$dir/$name"), 0755, true);
+                if (!is_dir(dirname("$dir/$name")) && !@mkdir(dirname("$dir/$name"), 0755, true) && !is_dir(dirname("$dir/$name"))) {
+                    $notes[] = "cannot create the folder for $name";
+                    continue;
                 }
                 file_put_contents("$dir/$name", $content);
             }

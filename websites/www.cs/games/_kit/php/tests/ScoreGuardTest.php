@@ -171,4 +171,39 @@ final class ScoreGuardTest extends TestCase
         $this->assertSame('/', $this->cookiesSet[0][2]['path']);
         $this->assertFalse($this->cookiesSet[0][2]['secure']);
     }
+
+    public function testATrailingNewlineIsNotInitialsOrAToken(): void
+    {
+        $this->assertNull(ScoreGuard::initials("abc\n"));
+        $this->assertNull(ScoreGuard::initials("ass\n"), 'a blocked word must not slip past as ASS plus a newline');
+        $this->assertFalse($this->guard()->isBlocked('ABC'));
+        $token = str_repeat('ab', 16);
+        $g = $this->guard(['HTTP_X_TEST_CSRF' => "$token\n"], ['test_csrf' => "$token\n"]);
+        $this->assertFalse($g->csrfOk());
+        $fresh = $g->csrfToken();
+        $this->assertNotSame("$token\n", $fresh);
+        $this->assertMatchesRegularExpression('/\A[a-f0-9]{32}\z/', $fresh);
+        $this->assertCount(1, $this->cookiesSet);
+    }
+
+    public function testAPostWithNoOriginNorRefererNeedsTheCsrfPair(): void
+    {
+        $bare = $this->guard();
+        $this->assertFalse($bare->originAllowed() && $bare->csrfOk());
+        $headerOnly = $this->guard(['HTTP_X_TEST_CSRF' => str_repeat('ab', 16)]);
+        $this->assertTrue($headerOnly->originAllowed(), 'the origin check alone lets a header-bearing request through');
+        $this->assertFalse($headerOnly->csrfOk(), 'without the matching cookie the CSRF check refuses it');
+    }
+
+    public function testConfigRejectsANewlineSuffix(): void
+    {
+        foreach ([['csrfCookie' => "ok\n"], ['storageKey' => "ok\n"], ['allowedHosts' => ["a.test\n"]]] as $bad) {
+            try {
+                ScoreGuard::validateConfig($bad + self::CONFIG);
+                $this->fail('accepted ' . json_encode($bad));
+            } catch (RuntimeException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+    }
 }

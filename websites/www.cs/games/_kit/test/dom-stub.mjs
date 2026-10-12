@@ -1,7 +1,6 @@
-// A small DOM for the Node tests (smoke.test.mjs, ui.test.mjs): a real tree, with
-// parents, siblings, insert and remove, because the Preact overlays render into
-// it, plus the handful of properties src/main.ts reads. Not a browser: no layout, no
-// events beyond the click(), submit() and fire() helpers below, no selectors beyond .class and #id.
+// A small DOM for Node tests that render Preact: a real tree, with parents,
+// siblings, insert and remove, plus the handful of properties games read. Not
+// a browser: no layout, no event bubbling; selectors are .class, #id or a tag.
 // Copyright (C) 2026 William Grim
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -38,7 +37,7 @@ export function makeText(data) {
 export function makeEl(id) {
   const el = {
     id, nodeType: 1, parentNode: null, hidden: true, value: '', innerHTML: '',
-    disabled: false, style: {}, className: '', scrollTop: 0, scrollHeight: 0,
+    disabled: false, checked: false, style: {}, className: '', scrollTop: 0, scrollHeight: 0,
     children: [], _text: '', _attrs: {},
     get textContent() { return this.children.length ? this.children.map(c => c.textContent).join('') : this._text; },
     set textContent(v) { for (const c of this.children) c.parentNode = null; this.children = []; this._text = String(v); },
@@ -50,10 +49,11 @@ export function makeEl(id) {
     querySelector(sel) {
       const want = sel.startsWith('.') ? sel.slice(1) : null;
       const wid = sel.startsWith('#') ? sel.slice(1) : null;
+      const tag = !want && !wid ? sel : null;
       const walk = (node) => {
         for (const c of node.children || []) {
           if (!c || typeof c !== 'object') continue;
-          if ((want && String(c.className || '').split(' ').includes(want)) || (wid && c.id === wid)) return c;
+          if ((want && String(c.className || '').split(' ').includes(want)) || (wid && c.id === wid) || (tag && c.localName === tag)) return c;
           const d = walk(c);
           if (d) return d;
         }
@@ -81,6 +81,7 @@ export function makeEl(id) {
     getBoundingClientRect: () => ({ width: 720, height: 460 }),
     getContext: () => makeCallable(),
     blur: () => {},
+    focus() { globalThis.__focused = this; },
   };
   el._id = id;
   return el;
@@ -109,12 +110,19 @@ export function fire(el, type, extra = {}) {
 export function submit(el) {
   for (const f of ((el._l || {}).submit || [])) f.call(el, { currentTarget: el, preventDefault: () => {} });
 }
+const docListeners = {};
 export const document = {
   readyState: 'complete',
+  activeElement: null,
   getElementById: id => (els[id] = els[id] || makeEl(id)),
   createElement: tag => makeEl(tag),
   createElementNS: (ns, tag) => makeRenderedEl(tag),
   createTextNode: t => makeText(t),
   querySelectorAll: () => [],
-  addEventListener: () => {},
+  addEventListener(t, f) { (docListeners[t] = docListeners[t] || []).push(f); },
+  removeEventListener(t, f) { docListeners[t] = (docListeners[t] || []).filter(g => g !== f); },
 };
+/** Calls the document's listeners for an event type, as a key press would. */
+export function fireDocument(type, extra = {}) {
+  for (const f of docListeners[type] || []) f({ type, preventDefault: () => {}, ...extra });
+}

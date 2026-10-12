@@ -1,6 +1,6 @@
 // Headless smoke for the Scorched Earth rewrite. Exercises the exact shipped
 // bundle (dist/fx.js, then dist/main.js) with a small DOM + canvas stub
-// (test/dom-stub.mjs), driving only public inputs (keydown/keyup). The stub is a
+// (games/_kit/test/dom-stub.mjs), driving only public inputs (keydown/keyup). The stub is a
 // real tree because the Preact overlays render into it. Also holds the static
 // checks on the page, CSS, source and PHP. Fails loudly on any exception, a stuck
 // turn loop, an unscrolled Space, or a silent battlefield.
@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { sweepHit } from '../src/sim.ts';
-import { els, makeEl, click, submit, document } from './dom-stub.mjs';
+import { els, makeEl, click, submit, document } from '../../_kit/test/dom-stub.mjs';
 
 const GAME_DIR = path.join(import.meta.dirname, '..');
 const read = file => fs.readFileSync(path.join(GAME_DIR, file), 'utf8');

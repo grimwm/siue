@@ -70,3 +70,9 @@ sources directly (`../src/engine.ts`): Node strips the types. Doubles:
 detail)` runs an older PASS/FAIL script under `node:test` unchanged, one
 test per check; write new tests with `test()` and `assert` directly. PHP
 has the same bridge: `php/testing/LegacyCheckCase.php`.
+
+Components are tested in Node: `importTsx(import.meta.dirname, { name: '../src/ui/x.tsx' })`
+bundles `.tsx` with esbuild (preact left external, so the test and the
+components share one copy), and `dom-stub.mjs` is a small DOM to render into:
+`makeEl`, `click`, `fire(el, type, extra)`, `fireDocument(type, extra)`, and
+`globalThis.__focused` for the element last focused.

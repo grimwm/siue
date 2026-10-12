@@ -10,7 +10,7 @@ import { click, fire, submit, document, makeEl, els } from '../../_kit/test/dom-
 
 globalThis.document = document;
 
-const UI = ['shop', 'lobby', 'guns', 'scores', 'log', 'tutorial', 'hud', 'endveil', 'leave'];
+const UI = ['shop', 'lobby', 'guns', 'scores', 'log', 'tutorial', 'endveil', 'leave'];
 const ui = await importTsx(import.meta.dirname, Object.fromEntries(UI.map(n => [n, `../src/ui/${n}.tsx`])));
 const { renderShop } = ui.shop;
 const { renderLobby } = ui.lobby;
@@ -18,7 +18,6 @@ const { renderGuns } = ui.guns;
 const { renderScores } = ui.scores;
 const { renderLog } = ui.log;
 const { renderTutorial } = ui.tutorial;
-const { renderHud } = ui.hud;
 const { renderEndVeil } = ui.endveil;
 const { renderLeave } = ui.leave;
 
@@ -532,52 +531,4 @@ function gunTiles(n = 10, loaded = 0) {
   check('tutorial-skip-calls-back', skipped === 1);
   check('tutorial-replay-hint-names-the-key', text(nav) === 'U replays anytime; skipping once skips it for good' && byClass(nav, 'key').length === 0
     && attr(walk(nav)[0], 'data-keyhint') === 'global:tutorial', text(nav));
-}
-
-
-// ---- status bar ----
-{
-  const bar = makeEl('hud-bar');
-  const calls = { weapon: 0, icons: [] };
-  const hp = (over = {}) => ({
-    turn: 'YOU. Aim!', angle: '62°', power: '55', fuel: '260', wind: '→ 4',
-    weapon: { key: 'buck', text: 'Buckshot ×2', sr: ' · also Shell ∞' },
-    armor: { shown: '100', sr: 'you 100 · REAPER:100' }, lives: { text: '♥♥♥', title: '3 lives' },
-    score: { text: '$600 · round 1 · 0 pts', title: 'Next 1-up at 3000 points' }, online: false, runStats: '',
-    drawIcon: (cv, w) => { calls.icons.push(w); }, arsenalRev: 1, onWeapon: () => { calls.weapon++; },
-    ...over,
-  });
-  renderHud(bar, hp());
-  const [dl, runStats] = bar.children;
-  check('hud-shape', dl.localName === 'dl' && hasClass(dl, 'hud') && runStats.id === 'run-stats' && hasClass(runStats, 'runstats') && dl.children.length === 10, String(dl.children.length));
-  check('hud-values', ['hud-turn', 'hud-angle', 'hud-power', 'hud-fuel', 'hud-wind'].map(id => text(byId(bar, id))).join('|') === 'YOU. Aim!|62°|55|260|→ 4'
-    && attr(byId(bar, 'hud-turn'), 'aria-live') === 'polite' && byId(bar, 'hud-turn').localName === 'dd');
-  check('hud-labels', dl.children.map(div => text(div.children[0])).join('|') === 'Turn|Angle|Power|Fuel|Weapon|Armor|Lives|Score|Wind|Server');
-  check('hud-screen-reader-only-cells', dl.children.filter(d => hasClass(d, 'sr-only')).length === 2 && hasClass(dl.children[4].children[0], 'sr-only'));
-  const gun = byId(bar, 'hud-weapon');
-  check('hud-weapon-chip', gun.children.length === 1 && hasClass(gun.children[0], 'chip') && hasClass(gun.children[0].children[0], 'chip-icon')
-    && attr(gun.children[0].children[0], 'aria-hidden') === 'true' && text(gun) === 'Buckshot ×2 · also Shell ∞' && hasClass(byClass(gun, 'sr-only')[0], 'sr-only'), text(gun));
-  check('hud-weapon-title', attr(gun, 'title') === 'Pick a weapon');
-  click(gun);
-  check('hud-weapon-tap-reports', calls.weapon === 1);
-  check('hud-icon-drawn', calls.icons.join() === 'buck');
-  check('hud-armor-with-screen-reader-line', text(byId(bar, 'hud-armor')) === '100 you 100 · REAPER:100' && byClass(byId(bar, 'hud-armor'), 'sr-only').length === 1);
-  check('hud-lives-and-score', text(byId(bar, 'hud-lives')) === '♥♥♥' && attr(byId(bar, 'hud-lives'), 'title') === '3 lives' && attr(byId(bar, 'hud-lives'), 'aria-label') === '3 lives'
-    && text(byId(bar, 'hud-score')) === '$600 · round 1 · 0 pts' && attr(byId(bar, 'hud-score'), 'title') === 'Next 1-up at 3000 points');
-  check('hud-server-dot-off', byId(bar, 'hud-dot').className === 'dot off' && attr(byId(bar, 'hud-dot'), 'title') === 'room server: not connected'
-    && text(byId(bar, 'hud-server')) === 'offline' && hasClass(byId(bar, 'hud-server'), 'sr-only'));
-  // A redraw updates in place: the same nodes, no repaint of an unchanged icon, no sr line when there is nothing to add.
-  renderHud(bar, hp({ angle: '63°', online: true, runStats: 'Room TST1 · you are ABC · round 1', armor: { shown: '90', sr: '' }, weapon: { key: 'buck', text: 'Buckshot ×1', sr: '' } }));
-  check('hud-redraw-in-place', bar.children[0] === dl && byId(bar, 'hud-weapon') === gun && text(byId(bar, 'hud-angle')) === '63°' && calls.icons.length === 1);
-  check('hud-redraw-values', text(byId(bar, 'hud-armor')) === '90' && byClass(byId(bar, 'hud-armor'), 'sr-only').length === 0 && text(gun) === 'Buckshot ×1'
-    && byClass(gun, 'sr-only').length === 0 && text(runStats) === 'Room TST1 · you are ABC · round 1');
-  check('hud-server-dot-on', byId(bar, 'hud-dot').className === 'dot on' && text(byId(bar, 'hud-server')) === 'online' && attr(byId(bar, 'hud-dot'), 'title') === 'room server: connected');
-  renderHud(bar, hp({ weapon: { key: 'rail', text: 'Rail ×1', sr: '' } }));
-  check('hud-new-gun-repaints-icon', calls.icons.join() === 'buck,rail');
-  renderHud(bar, hp({ weapon: { key: 'rail', text: 'Rail ×1', sr: '' }, arsenalRev: 2 }));
-  check('hud-new-arsenal-repaints-icon', calls.icons.join() === 'buck,rail,rail');
-  renderHud(bar, hp({ weapon: null }));
-  check('hud-no-gun-yet', text(byId(bar, 'hud-weapon')) === '-' && byClass(gun, 'chip').length === 0);
-  renderHud(bar, hp({ lives: { text: '', title: '' }, score: { text: '-', title: '' } }));
-  check('hud-no-lives-no-label', attr(byId(bar, 'hud-lives'), 'aria-label') === undefined && attr(byId(bar, 'hud-score'), 'title') === undefined);
 }

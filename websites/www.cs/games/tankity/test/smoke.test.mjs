@@ -607,13 +607,14 @@ await (async () => {
   // Stock up: Buckshot ($80), Mortar ($200), Rail ($140) of the $600 stake.
   // (Each render appends, so read the last nine list items: two category
   // headers, the free Shell row, and six rows to buy. Each row holds an icon
-  // canvas, an info div, then an acts span.)
+  // canvas and a text div whose last child is the acts row.)
   const shopLis = () => els['shop-list'].children.slice(-9);
-  const shopRows = () => shopLis().filter(li => li.children.length === 3 && li.className !== 'shop-free');
+  const shopRows = () => shopLis().filter(li => li.children.length === 2 && li.className !== 'shop-free');
   const rowName = li => li.children[1].children[0].textContent;
+  const actsOf = li => li.children[1].children[3]; // the text column's fourth child, under the description
   const buyRow = label => {
     const row = shopRows().find(li => rowName(li).includes(label));
-    const acts = row.children[2];
+    const acts = actsOf(row);
     click(acts.children[acts.children.length - 1]);
   };
   buyRow('Buckshot');
@@ -655,7 +656,7 @@ await (async () => {
   check('keys-file-drives', KEYS.shop.buy[0] === 'b' && KEYS.global.fire[0] === 'Space' && KEYS.aim.barrelLeft[0] === 'ArrowLeft' && KB('shop', 'buy')[0] === 'b',
     `${KEYS.shop.buy[0]}|${KEYS.global.fire[0]}|${KEYS.aim.barrelLeft[0]}`);
   {
-    const ammoActs = shopRows().find(li => rowName(li).includes('Buckshot')).children[2].children;
+    const ammoActs = actsOf(shopRows().find(li => rowName(li).includes('Buckshot'))).children;
     check('shop-btn-hints', ammoActs[0].children[1].textContent === 'V' && ammoActs[1].children[1].textContent === 'B',
       `${ammoActs[0].children[1].textContent}|${ammoActs[1].children[1].textContent}`);
   }
@@ -664,7 +665,7 @@ await (async () => {
   const shopCash1 = els['shop-cash'].textContent;
   // Bulk packs: Right raises the count, capped by the chest; B buys them all
   // and the count falls back to what is still affordable on every row.
-  const buyBtn = li => { const acts = li.children[2]; return acts.children[acts.children.length - 1]; };
+  const buyBtn = li => { const acts = actsOf(li); return acts.children[acts.children.length - 1]; };
   for (let i = 0; i < 4; i++) { TAP('shop', 'selDown'); frames(3); }
   const fuelRow = () => shopRows().find(li => rowName(li).includes('Fuel'));
   TAP('shop', 'qtyUp'); frames(3);

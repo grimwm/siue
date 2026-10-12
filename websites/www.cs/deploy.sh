@@ -229,7 +229,7 @@ fi
 # The scores file is the server's: create it if missing, and keep it 666 so
 # PHP (a different user) can write it in place.
 if ! "${sshpass[@]}" scp -q "$HOST:$SCORES" "$work/scores" 2>/dev/null; then
-  echo "[]" >"$work/scores"
+  echo '{"week":[],"alltime":[]}' >"$work/scores"
   chmod 666 "$work/scores"
   "${sshpass[@]}" scp -q -p "$work/scores" "$HOST:$SCORES"
   echo "  created $SCORES"

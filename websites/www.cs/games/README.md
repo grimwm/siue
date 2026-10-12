@@ -15,8 +15,10 @@ games/
     index.html, game.css, sw.js, tools/install-files.php
   cylon/           # The CIC — Cylon defense
     css/           # the stylesheets, linked by the home page in order
-    cylon.js       # the game, an ES module the home page imports
-    src/, js/      # TypeScript modules and the JavaScript compiled from them
+    build.json     # entries and type programs for _kit/build/build.mjs
+    src/           # TypeScript; main.ts is the entry the home page imports
+    dist/          # the esbuild bundle (main.js), checked in
+    test/          # node:test suites and the scores PHPUnit cases
     mount.html     # FX / overlays, fetched into the home page
     scores.php     # high-score API
     data/config.json
@@ -100,17 +102,17 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
       page at `?game=<id>` with the site root as scope, and it gets no
       service worker. `main.js` links that manifest when the game launches,
       so installing from there installs the game, not the whole site.
-      Its tool also keeps the `?v=` cache-busters inside the game's entry
-      module (`cylon.js`): each `./js/<name>.js` import and the `mount.html`
-      fetch carry a hash of that file.
+      Its tool also keeps the `?v=` cache-buster on the `mount.html` fetch
+      inside the bundle (`dist/main.js`, built by the kit) as a hash of that
+      file.
   - Home page: `php tools/site-versions.php` (site root) writes the `?v=`
     cache-busters in `index.html`, the one page the site shares with a mounted
     game: `site.css`, `main.js`, the game's stylesheets `games/cylon/css/*.css`
-    (one `<link>` each, in cascade order) and the entry module
-    `games/cylon/cylon.js`, each a hash of its file's content. Each file has
-    one writer: this tool owns `index.html`, the game's own tool owns
-    `cylon.js`. The page hashes `cylon.js` as it stands, so run the game's
-    tool first; `--check` (in `make test` and `make deploy`) reports the page
+    (one `<link>` each, in cascade order) and the entry bundle
+    `games/cylon/dist/main.js`, each a hash of its file's content. Each file
+    has one writer: this tool owns `index.html`, the kit build owns
+    `dist/main.js`. The page hashes the bundle as it stands, so run the build
+    first; `--check` (in `make test` and `make deploy`) reports the page
     stale when either was forgotten.
     Each tool has its own test beside it (`install-files-test.php`).
 - Per-game data: Operation Tankity keeps its arsenal, key bindings and audio
@@ -134,7 +136,7 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
 - The page imports a mounted game's entry module and hands it what it needs as
   options. The CIC takes `onTheme(combat)`, which `index.html` wires to
   `main.js`'s `applyCombatTheme`; the game defines nothing the site's scripts
-  define and calls nothing they define (`games/cylon/smoke-test.js` checks).
+  define and calls nothing they define (`games/cylon/test/smoke.test.mjs` checks).
   The games list loads after the game has been given the chance to define its
   `start` function.
 

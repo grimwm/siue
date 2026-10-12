@@ -7,10 +7,9 @@
  * in: the host serves static files and has no Node, so what ships is what is
  * committed.
  *
- * This is the thin sibling of the games' tools/ts-build.mjs (games/tankity,
- * games/cylon), which are copies of each other because a game
- * folder is self-contained. The site is not a game, so its tool lives here and
- * differs in the one way that matters: the output is not a js/ folder of its
+ * This is the thin sibling of games/tankity/tools/ts-build.mjs, a per-game copy
+ * because a game folder is self-contained. The site is not a game, so its tool
+ * lives here and differs in the one way that matters: the output is not a js/ folder of its
  * own but the site root itself, so it checks and writes only the files its
  * sources produce and never prunes. A source that is deleted leaves its
  * compiled file for a person to delete.

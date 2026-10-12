@@ -8,6 +8,7 @@
 import type { Game, ItemDef, ItemKind, LogTone } from "./engine.ts";
 import { renderEndCard } from "./ui/end.tsx";
 import { renderInventory } from "./ui/inventory.tsx";
+import { renderTitleCard } from "./ui/title.tsx";
 import type { EndView } from "./ui/end.tsx";
 
 /** What the page borrows from the engine at run time. */
@@ -31,6 +32,8 @@ export interface Controls {
   toggleMute(): void;
   /** Wake the speakers: any gesture does. */
   wake(): void;
+  /** Leave the game (Q, or the Quit button). */
+  quit(): void;
 }
 
 export interface Ui {
@@ -43,6 +46,9 @@ export interface Ui {
   showSeed(seed: string): void;
   setMuteLabel(muted: boolean): void;
   bindControls(controls: Controls): void;
+  /** The title card, after Quit; `hint` adds how to close an installed app. */
+  showTitle(hint: boolean): void;
+  hideTitle(): void;
 }
 
 const LOOT_EMOJI: Record<string, string> = {
@@ -221,6 +227,22 @@ export function createUi(deps: UiDeps): Ui {
     drawEnd();
   }
 
+  /* ---------- the title card, after Quit ---------- */
+  let title = { open: false, hint: false };
+  let play = (): void => {};
+  function drawTitle(): void {
+    renderTitleCard($("title-root"), { ...title, onPlay: () => play() });
+  }
+  function showTitle(hint: boolean): void {
+    title = { open: true, hint };
+    drawTitle();
+  }
+  function hideTitle(): void {
+    if (!title.open) return;
+    title = { open: false, hint: false };
+    drawTitle();
+  }
+
   function showSeed(seed: string): void {
     try {
       const url = new URL(window.location.href);
@@ -238,7 +260,7 @@ export function createUi(deps: UiDeps): Ui {
   }
 
   /* ---------- input: moves, items, bash, and guides never share a key ---------- */
-  function bindControls({ game, restart, toggleMute, wake }: Controls): void {
+  function bindControls({ game, restart, toggleMute, wake, quit }: Controls): void {
     const G = game.G;
     document.addEventListener("keydown", (ev) => {
       const tag = (ev.target as HTMLElement | null)?.tagName;
@@ -265,6 +287,11 @@ export function createUi(deps: UiDeps): Ui {
       }
       if (k === "h") {
         game.hint();
+        return;
+      }
+      if (k === "q") {
+        ev.preventDefault();
+        quit();
         return;
       }
       if (G.over || G.auto) return;
@@ -302,6 +329,7 @@ export function createUi(deps: UiDeps): Ui {
       restart(seedBox().value);
     });
     again = () => restart(seedBox().value);
+    play = () => restart(seedBox().value);
     $("random-run").addEventListener("click", () => {
       wake();
       restart("");
@@ -309,6 +337,10 @@ export function createUi(deps: UiDeps): Ui {
     $("mute").addEventListener("click", () => {
       wake();
       toggleMute();
+    });
+    $("quit").addEventListener("click", () => {
+      wake();
+      quit();
     });
     $("btn-hint").addEventListener("click", () => {
       wake();
@@ -329,8 +361,9 @@ export function createUi(deps: UiDeps): Ui {
   }
 
   drawEnd();
+  drawTitle();
   return {
-    say, render, showEnd, hideEnd, showSeed, setMuteLabel, bindControls,
+    say, render, showEnd, hideEnd, showSeed, setMuteLabel, bindControls, showTitle, hideTitle,
     clearLog: () => { $("log").innerHTML = ""; },
   };
 }

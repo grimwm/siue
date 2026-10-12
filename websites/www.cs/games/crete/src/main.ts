@@ -6,6 +6,7 @@ import {
 import { createAudio } from './audio.ts';
 import { createUi } from './ui.ts';
 import { browserTimers } from '../../_kit/ports.browser.ts';
+import { exitApp, browserAppEnv } from '../../_kit/app.ts';
 
 declare global {
   interface Window {
@@ -35,6 +36,7 @@ function toggleMute(): void {
 
 function restart(seedStr: string): void {
   ui.hideEnd();
+  ui.hideTitle();
   game.stopAuto();
   game.clearHint();
   game.newRun(seedStr);
@@ -46,8 +48,17 @@ function restart(seedStr: string): void {
   ui.render(game);
 }
 
+/* Quit: the run ends; an installed app closes where it may, and otherwise
+   (always in a browser tab) the title card shows. */
+async function quit(): Promise<void> {
+  game.quit();
+  ui.hideEnd();
+  const outcome = await exitApp(browserAppEnv());
+  if (outcome !== 'closed') ui.showTitle(outcome === 'title-with-hint');
+}
+
 function start(): void {
-  ui.bindControls({ game, restart, toggleMute, wake: audio.ensure });
+  ui.bindControls({ game, restart, toggleMute, wake: audio.ensure, quit: () => { void quit(); } });
   let seed = '';
   try {
     seed = new URL(window.location.href).searchParams.get('seed') || '';

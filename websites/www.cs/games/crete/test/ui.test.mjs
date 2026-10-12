@@ -7,9 +7,10 @@ import { importTsx } from '../../_kit/test/tsx.ts';
 import { document, makeEl, click } from '../../_kit/test/dom-stub.mjs';
 
 globalThis.document = document;
-const ui = await importTsx(import.meta.dirname, { end: '../src/ui/end.tsx', inventory: '../src/ui/inventory.tsx' });
+const ui = await importTsx(import.meta.dirname, { end: '../src/ui/end.tsx', inventory: '../src/ui/inventory.tsx', title: '../src/ui/title.tsx' });
 const { renderEndCard } = ui.end;
 const { renderInventory } = ui.inventory;
+const { renderTitleCard } = ui.title;
 
 const walk = (el, out = []) => { for (const c of el.children) if (c.nodeType === 1) { out.push(c); walk(c, out); } return out; };
 const byId = (el, id) => walk(el).find(n => n.id === id);
@@ -107,4 +108,24 @@ test('closing the ending card after a Use click leaves focus off the inventory b
   } finally {
     mock.timers.reset();
   }
+});
+
+test('the title card names the game and focuses Play; Play calls back', () => {
+  const root = makeEl('title-root');
+  let played = 0;
+  renderTitleCard(root, { open: false, hint: false, onPlay: () => { played++; } });
+  assert.equal(byId(root, 'title-veil').hidden, true);
+  renderTitleCard(root, { open: true, hint: false, onPlay: () => { played++; } });
+  assert.equal(byId(root, 'title-veil').hidden, false);
+  assert.equal(byId(root, 'title-name').textContent, 'The Island of Crete');
+  assert.equal(byId(root, 'title-hint'), undefined);
+  assert.equal(globalThis.__focused?.id, 'title-play');
+  click(byId(root, 'title-play'));
+  assert.equal(played, 1);
+});
+
+test('an installed app that could not close says how to', () => {
+  const root = makeEl('title-root');
+  renderTitleCard(root, { open: true, hint: true, onPlay() {} });
+  assert.equal(byId(root, 'title-hint').textContent, 'Swipe the app away to close it.');
 });

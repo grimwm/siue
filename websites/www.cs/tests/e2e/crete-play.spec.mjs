@@ -65,3 +65,15 @@ test('items, bash, mute and a new run answer their keys', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.__mazeTest.G.turns)).toBe(0);
   expect(errors).toEqual([]);
 });
+
+test('Quit (Q) ends the run and shows the title card in a browser tab; Play starts a new run', async ({ page }) => {
+  const errors = await open(page, WIN_SEED);
+  await page.keyboard.press('q');
+  await expect(page.locator('#title-veil')).toBeVisible();
+  await expect(page.locator('#title-hint')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__mazeTest.G.over)).toBe(true);
+  await page.locator('#title-play').click();
+  await expect(page.locator('#title-veil')).toBeHidden();
+  expect(await page.evaluate(() => ({ over: window.__mazeTest.G.over, turns: window.__mazeTest.G.turns }))).toEqual({ over: false, turns: 0 });
+  expect(errors).toEqual([]);
+});

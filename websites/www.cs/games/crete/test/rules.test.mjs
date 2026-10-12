@@ -188,3 +188,13 @@ test('a spare fuse a few steps off the way beats a long way round that crosses o
   assert.ok(at(route, 7, 7) !== -1, 'and goes straight through the second barrier');
   assert.equal(at(route, 13, 7), -1, 'not the long way round');
 });
+
+test('quitting ends the run where it stands: no ending card, no turn, play-through stopped', () => {
+  const ends = [];
+  const clock = manualClock();
+  const game = E.createGame({ say() {}, sfx() {}, render() {}, showEnd: won => ends.push(won), timers: clock.timers });
+  game.newRun('quit');
+  game.toggleAuto();
+  game.quit();
+  assert.deepEqual([game.G.over, game.G.won, game.G.auto, game.G.turns, ends.length, clock.pending()], [true, false, false, 0, 0, 0]);
+});

@@ -11,8 +11,8 @@ test('touch screens get no key labels and no key bindings', async ({ page }) => 
   await page.goto('games/tankity/');
   await expect(page.locator('html')).toHaveClass(/touch/);
 
-  // Keys do nothing: C would open the menu.
-  await page.keyboard.press('c');
+  // Keys do nothing: Esc would open the menu.
+  await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
   await expect(page.locator('#menu-overlay')).toBeHidden();
 
@@ -24,7 +24,7 @@ test('touch screens get no key labels and no key bindings', async ({ page }) => 
       .filter(el => el.getClientRects().length > 0).map(el => el.id || el.className));
     expect(shown).toEqual([]);
     const text = await page.evaluate(() => document.body.innerText);
-    expect(text).not.toMatch(/\((C|N|ESC|E|M|F|T|O|U|H|L|R|Q|A|D|Ctrl|B|V)\)/);
+    expect(text).not.toMatch(/\((C|N|Esc|ESC|E|M|F|T|O|U|H|L|R|Q|A|D|Ctrl|B|V)\)/);
   };
   await noKeys();
   await page.locator('#new-game').tap();

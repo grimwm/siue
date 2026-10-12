@@ -27,7 +27,7 @@ test('every shop row carries a painted icon, and the HUD shows the loaded shell'
   await page.locator('#shop-veil .card').screenshot({ path: 'test-results/tankity-shop-icons.png' });
   await page.setViewportSize({ width: 1280, height: 860 });
 
-  // Buy Buckshot, play on: Q cycles the loaded shell and the HUD icon follows.
+  // Buy Buckshot, play on: loading it from the picker changes the HUD icon.
   const buck = page.locator('#shop-list li', { hasText: 'Buckshot' });
   await buck.getByRole('button', { name: /^Buy/ }).click();
   await page.click('#shop-next');
@@ -44,7 +44,8 @@ test('every shop row carries a painted icon, and the HUD shows the loaded shell'
   const before = await loaded();
   expect(before.text).toMatch(/^Shell/);
   expect(before.n).toBeGreaterThan(80);
-  await page.keyboard.press('q');
+  await page.keyboard.press('g');
+  await page.keyboard.press('2'); // the rack's second tile: Buckshot
   await expect.poll(async () => (await loaded()).text).toMatch(/^Buckshot/);
   const after = await loaded();
   expect(after.sig).not.toBe(before.sig);
@@ -109,7 +110,7 @@ test('the lobby offers Random plus every server map as a silhouette tile, and pi
 
 test('menu toggles are icon tiles that flip aria-pressed and keep their keys', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
-  await page.keyboard.press('c');
+  await page.keyboard.press('Escape');
   await expect(page.locator('#menu-overlay')).toBeVisible();
   const sound = page.locator('#btn-sound');
   const music = page.locator('#btn-music');

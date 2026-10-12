@@ -93,6 +93,8 @@ php tools/install-files.php      # after the last edit to any served file
 - Key tokens match `event.code` first, then `event.key`; the first token of an
   action names the key on buttons. Touch-only screens (coarse pointer, no
   mouse) get no key bindings or labels.
+  Driving is Shift plus an arrow; W, A, S, D, Q and C are bound nowhere. Esc
+  toggles the menu: it closes whatever is open and, with nothing open, opens the menu.
 
 ## Architecture rules
 

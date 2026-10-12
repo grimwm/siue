@@ -5,18 +5,18 @@ import { newPlayer } from './helpers.mjs';
 const CLOSABLE = [
   ['h', 'help-overlay', 'help-close'],
   ['r', 'report-overlay', 'report-close'],
-  ['c', 'menu-overlay', 'menu-close'],
+  ['Escape', 'menu-overlay', 'menu-close'],
   ['l', 'log-overlay', 'log-close'],
 ];
 
-test('each panel has a title bar whose × closes it and shows ESC', async ({ browser }) => {
+test('each panel has a title bar whose × closes it and shows Esc', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
   for (const [key, ov, x] of CLOSABLE) {
     await page.keyboard.press(key);
     await expect(page.locator('#' + ov)).toBeVisible();
     const close = page.locator(`#${ov} .ov-head #${x}`);
     await expect(close).toBeVisible();
-    await expect(close).toContainText('ESC');
+    await expect(close).toContainText('Esc');
     await close.click();
     await expect(page.locator('#' + ov)).toBeHidden();
   }
@@ -68,7 +68,7 @@ test('text size is a menu setting that this browser remembers', async ({ browser
   const { page, ctx } = await newPlayer(browser);
   const rootPx = p => p.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
   expect(await rootPx(page)).toBe(16);
-  await page.keyboard.press('c');
+  await page.keyboard.press('Escape');
   await page.click('#text-picker button[title="Huge text"]');
   await expect(page.locator('#text-picker button[title="Huge text"]')).toHaveAttribute('aria-pressed', 'true');
   expect(await rootPx(page)).toBeCloseTo(20.8, 1);
@@ -116,7 +116,7 @@ test('scrolled panels stay where the player left them when they redraw', async (
   await page.setViewportSize({ width: 1000, height: 640 });
   const top = sel => page.locator(sel).evaluate(el => el.scrollTop);
   // The menu: scroll it, then flip a toggle and the text size (each redraws it).
-  await page.keyboard.press('c');
+  await page.keyboard.press('Escape');
   await page.locator('#menu-overlay').hover();
   await page.mouse.wheel(0, 300);
   await expect.poll(() => top('#menu-overlay')).toBeGreaterThan(20);
@@ -127,7 +127,7 @@ test('scrolled panels stay where the player left them when they redraw', async (
   await page.click('#btn-sound');
   await page.keyboard.press('Escape');
   // Closed and reopened it starts at the top, and a redraw keeps it there.
-  await page.keyboard.press('c');
+  await page.keyboard.press('Escape');
   await expect(page.locator('#menu-overlay')).toBeVisible();
   await page.click('#btn-sound');
   expect(await top('#menu-overlay')).toBe(0);

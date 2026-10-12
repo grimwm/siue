@@ -7,6 +7,7 @@
 import { createContext } from 'preact';
 import type { ComponentChildren } from 'preact';
 import { useContext, useLayoutEffect, useRef } from 'preact/hooks';
+import { KeyChip } from '../../../_kit/ui/key-chip.tsx';
 
 /** The key shown for an action: the first token its context lists, or the
  *  nth with `idx`. Empty when the action has no key. */
@@ -16,16 +17,17 @@ export type KeyHintFn = (ctx: string, action: string, idx?: number) => string;
 export const KeyHints = createContext<KeyHintFn>(() => '');
 
 /** A live key label. `at` is "context:action" or "context:action:n". A bare
- *  one is the "(B)" cap on a button (class `key`, which touch screens hide
- *  centrally); otherwise it is the plain key name inside a sentence, or a cap
- *  with its own classes (`cls`, as on the close button's ESC). */
+ *  one is the key chip on a button: the kit's KeyChip as a dark keycap the
+ *  CSS shows only where there is a mouse or trackpad, hidden from screen
+ *  readers (the button's words are its name). Otherwise it is the plain key
+ *  name inside a sentence, or a cap with its own classes (`cls`, as on the
+ *  close button's Esc). */
 export function Key({ at, bare, cls }: { at: string; bare?: boolean; cls?: string }) {
   const hint = useContext(KeyHints);
   const [ctx = '', action = '', idx] = at.split(':');
   const cap = hint(ctx, action, Number(idx ?? 0));
-  return (
-    <span class={bare ? 'key' : cls} data-keyhint={at}>{cap ? (bare ? `(${cap})` : cap) : ''}</span>
-  );
+  if (bare) return <KeyChip label={cap} class="key" at={at} decorative />;
+  return <span class={cls} data-keyhint={at}>{cap}</span>;
 }
 
 export interface OverlayHeadProps {
@@ -47,6 +49,8 @@ export interface OverlayHeadProps {
 
 /** Title bar: title left, key hints centre, × right, on the grid in game.css. */
 export function OverlayHead(p: OverlayHeadProps) {
+  const hint = useContext(KeyHints);
+  const esc = hint('global', 'escape', 0);
   return (
     <header class="ov-head">
       <div class="ov-title">
@@ -54,7 +58,7 @@ export function OverlayHead(p: OverlayHeadProps) {
         <h2 id={p.titleId}>{p.title}</h2>
       </div>
       {p.onClose && (
-        <button type="button" class="ov-x" id={p.closeId} aria-label="Close" title="Close (ESC)"
+        <button type="button" class="ov-x" id={p.closeId} aria-label="Close" title={esc ? `Close (${esc})` : 'Close'}
           onClick={ev => { ev.currentTarget.blur(); p.onClose?.(); }}>
           <Key at="global:escape" cls="key esc-cap" />
           <span class="x-glyph" aria-hidden="true">×</span>

@@ -32,7 +32,6 @@ export interface TutorialDeps {
   sfx: Pick<typeof SfxApi, 'play'>;
   me(): GameTank;
   keyHint: KeyHintFn;
-  keyCap(ctx: string, action: string): string;
   say(text: string, tone?: string): void;
   refreshNavHints(): void;
   closeOverlays(): boolean;
@@ -40,13 +39,13 @@ export interface TutorialDeps {
 }
 
 export function createTutorial(deps: TutorialDeps) {
-  const { G, $, TOUCH, net, sfx, me, keyHint, keyCap, say, refreshNavHints, closeOverlays, freshMatchFromSeedBox } = deps;
+  const { G, $, TOUCH, net, sfx, me, keyHint, say, refreshNavHints, closeOverlays, freshMatchFromSeedBox } = deps;
 
   /* What a touch player taps instead, for prose that names a key. */
   const TOUCH_NAMES: Record<string, string> = {
     'aim:barrelLeft': '◀', 'aim:barrelRight': '▶', 'aim:powerUp': '▲', 'aim:powerDown': '▼',
     'aim:driveLeft': 'Drive ◀', 'aim:driveRight': 'Drive ▶',
-    'global:cycle': 'Weapons', 'global:fire': 'Fire',
+    'global:guns': 'Weapons', 'global:fire': 'FIRE',
   };
   /* ---------- tutorial: coached opening moves, skippable forever ---------- */
   // The tutorial arms on a fresh New Game and starts at the first live
@@ -60,7 +59,7 @@ export function createTutorial(deps: TutorialDeps) {
     { text: 'Hold {aim:barrelLeft} or {aim:barrelRight} to swing the barrel. Watch the muzzle stub move.', done: (t: GameTank) => t.angle !== 62 },
     { text: 'Hold {aim:powerUp} or {aim:powerDown} to change power. More power means longer legs.', done: (t: GameTank) => t.power !== 55 },
     { text: 'Tap {aim:driveLeft} or {aim:driveRight} to drive while fuel lasts. Hills are cover.', done: (t: GameTank) => TUT && Math.abs(t.x - TUT.x0) > 2 },
-    { text: 'Press {global:cycle} to cycle shells. The HUD shows what is loaded.', done: () => TUT && G.selected !== TUT.sel0 },
+    { text: 'Press {global:guns} and pick another shell. The Weapons button shows what is loaded.', done: () => TUT && G.selected !== TUT.sel0 },
     { text: 'Press {global:fire} to fire. Then read the wind and adjust.', done: () => TUT && TUT.fired },
   ];
   function fmtKeys(text: string): string {
@@ -80,7 +79,8 @@ export function createTutorial(deps: TutorialDeps) {
       keyHint,
       text: TUT ? `Move ${TUT.step + 1} of ${TUT_STEPS.length}: ${fmtKeys(TUT_STEPS[TUT.step]!.text)}` : '',
       progress: TUT ? 'Follow along in the hills behind this card.' : '',
-      skip: `Skip tutorial${keyCap('global', 'escape')}`,
+      skip: 'Skip tutorial',
+      skipKey: TOUCH ? undefined : 'global:escape',
       onSkip: skipTutorial,
     });
     refreshNavHints();

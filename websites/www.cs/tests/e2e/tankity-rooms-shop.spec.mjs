@@ -23,7 +23,7 @@ test('the shop starts the next round when everyone is ready, and Ready can be ta
 
   // Both see Ready, the head count and the clock.
   for (const p of [host.page, guest.page]) {
-    await expect(btn(p)).toHaveText(/^Ready( \(N\))?$/);
+    await expect(btn(p)).toHaveText(/^Ready( N)?$/);
     await expect(btn(p)).toHaveAttribute('aria-pressed', 'false');
     await expect(line(p)).toContainText(/^0\/2 ready · shop closes in \d:\d\d · ABC {2}ZED/);
   }

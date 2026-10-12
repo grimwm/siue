@@ -52,7 +52,7 @@ test('a tab that was hidden catches up at once and hands over the controls', asy
 test('everyone sees when the player whose turn it is sits in a menu', async ({ browser }) => {
   const { host, guest, roomState } = await roomPair(browser);
   await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);
-  await host.page.keyboard.press('c');
+  await host.page.keyboard.press('Escape');
   const hostMenu = () => { const r = lastRoom(roomState.guest); const t = r && r.tanks.find(x => x.seat === 0); return t && t.menu; };
   await expect.poll(hostMenu, { timeout: 10_000 }).toBe(true);
   await guest.page.locator('#stage').screenshot({ path: 'test-results/tankity-menu-badge.png' });

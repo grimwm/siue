@@ -1,8 +1,8 @@
 /* Operation Tankity: Scorched Earth.
  * Turn-based artillery across destructible hills. You and the drone battery
  * trade shells: angle, power, wind, craters. Last one rolling wins the round.
- * Controls: hold Left/Right = angle · hold Up/Down = power · A/D = drive ·
- * Ctrl/Space = fire · Q = weapon · N = next round / new match · M = music.
+ * Controls: hold ←/→ = angle · hold ↑/↓ = power · Shift+←/→ = drive ·
+ * Space or Ctrl = fire · G = weapons · Esc = menu · N = next round / new match.
  */
 /* The page's entry module: it builds the game's state, wires the typed modules
  * together and runs the main loop. Everything else is in a module,
@@ -413,7 +413,7 @@ const {
   renderTutorial, maybeStartTutorial, tutorialOpen, endTutorial, skipTutorial, tickTutorial,
   isActive: tutorialActive, arm: armTutorial, noteFired: tutorialFired,
 } = createTutorial({
-  G, $, TOUCH, net, sfx, me, keyHint, keyCap, say, refreshNavHints, closeOverlays, freshMatchFromSeedBox,
+  G, $, TOUCH, net, sfx, me, keyHint, say, refreshNavHints, closeOverlays, freshMatchFromSeedBox,
 });
 /* The Difficulty setting: the Menu picks it, a new solo match and a hosted room read it. */
 const difficulty = difficultySetting(browserStorage());
@@ -434,20 +434,20 @@ const {
 const {
   openShop, hideShop, renderShop, renderShopReady, buyItem, shopSelect, shopQtyUp, shopQtyDown,
 } = createShop({
-  G, $, tables, net, sfx, me, keyCap, keyHint, say, advance, render, renderHUD, refreshNavHints,
+  G, $, tables, net, sfx, me, touch: TOUCH, keyHint, say, advance, render, renderHUD, refreshNavHints,
   drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil: () => openLeaveVeil(), netBuy: (it, qty) => netBuy(it, qty),
 });
 /* The weapon picker (src/guns.ts). */
 const {
-  GUN_COLS, rackGuns, gunsOpen, openGuns, closeGuns, renderGuns, pickGun, moveGunCursor, cycleWeapon, gunGrid,
+  GUN_COLS, rackGuns, gunsOpen, openGuns, closeGuns, renderGuns, pickGun, moveGunCursor, gunGrid,
   cursorAt: gunCursorAt,
 } = createGuns({
   G, $, tables, net, sfx, keyHint, say, refreshNavHints, renderHUD, drawShellIcon, demoBlock,
-  netPick: w => netPick(w), netCycle: () => netCycle(),
+  netPick: w => netPick(w),
 });
 /* A running room match on this client (src/room.ts): moves sent, snapshots adopted, events told, the turn alert. */
 const {
-  netFire, netPick, netCycle, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
+  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
 } = createRoom({
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
   decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
@@ -494,10 +494,6 @@ function applyKeys(def: unknown): void {
   renderEndVeil();
   renderLeaveVeil();
 }
-/* " (KEY)" for a button label; nothing on touch screens. */
-function keyCap(ctx: string, action: string): string {
-  return TOUCH ? '' : ` (${keyHint(ctx, action)})`;
-}
 /* The shown key for an action: the first token its context lists, or the
 // nth with data-keyhint="context:action:n" where prose names two keys. */
 function keyHint(ctx: string, action: string, idx?: number): string {
@@ -510,9 +506,7 @@ function renderKeyHints(): void {
   document.querySelectorAll('[data-keyhint]').forEach(el => {
     if (el.closest && el.closest('[data-ui]')) return;
     const [kctx, kact, kidx] = (el.getAttribute('data-keyhint') || '').split(':');
-    const cap = kctx !== undefined && kact !== undefined ? keyHint(kctx, kact, +(kidx || 0)) : '';
-    const bare = el.className === 'key';
-    el.textContent = cap ? (bare ? `(${cap})` : cap) : '';
+    el.textContent = kctx !== undefined && kact !== undefined ? keyHint(kctx, kact, +(kidx || 0)) : '';
   });
 }
 function freshMatchFromSeedBox(opts?: { tut?: boolean }): void {
@@ -551,7 +545,7 @@ function bindToolTips(): void {
     const desc = tip.querySelector('.tool-tip-desc');
     const key = btn.querySelector('.key');
     if (name) name.textContent = btn.getAttribute('data-tip') || '';
-    if (desc) desc.textContent = (btn.getAttribute('data-tip-desc') || '') + (key && !TOUCH ? ` ${key.textContent}` : '');
+    if (desc) desc.textContent = (btn.getAttribute('data-tip-desc') || '') + (key && key.textContent && !TOUCH ? ` (${key.textContent})` : '');
     tip.style.setProperty('--tool', btn.style.getPropertyValue('--tool') || '#ffc93c');
     tip.hidden = false;
     const r = btn.getBoundingClientRect(), t = tip.getBoundingClientRect();
@@ -627,21 +621,26 @@ function bindKeys(): void {
       if (it && it.kind === 'ammo') { openPreview(it.w!); return true; }
       return 'quiet'; // V does nothing else in the shop
     },
-    // ESC in the shop shuts the firing range first, then any open panel
-    // (the menu can sit above the shop), and only rolls out to the round
-    // when nothing is left to shut. N is the plain way out.
+    // Esc in the shop shuts the firing range first, then any open panel (the
+    // menu can sit above the shop), and with nothing open it opens the menu.
+    // It never starts the round: that is N or the Start button.
     close: () => {
       if (G.preview) closePreview();
       else if (closeLeaveVeil()) { /* the question closed */ }
-      else if (!closeOverlays()) { if (net.on) netNext(true); else nextRound(); } // ESC readies, never unreadies
+      else if (!closeOverlays()) toggleOverlay('menu-overlay', 'btn-menu');
       return true;
     },
+    // Esc toggles the menu: it shuts the topmost thing that is open. Panels
+    // come before the tutorial because the coach sends the player into one
+    // (the gun picker); with none open Esc skips a running tutorial, and
+    // otherwise opens the menu.
     escape: () => {
       if (G.preview) { closePreview(); return; }
       if (closeLeaveVeil()) return;
-      if (tutorialActive()) { skipTutorial(); return; }
       if (closeLobbyVeil()) return;
-      closeOverlays();
+      if (closeOverlays()) return;
+      if (tutorialActive()) { skipTutorial(); return; }
+      toggleOverlay('menu-overlay', 'btn-menu');
     },
     fire: () => { unlock(); music.start(); playerFire(); },
     music: () => { toggleMusic(); },
@@ -650,11 +649,6 @@ function bindKeys(): void {
     log: () => { toggleOverlay('log-overlay', 'btn-log'); },
     help: () => { toggleOverlay('help-overlay', 'btn-help'); },
     report: () => { toggleOverlay('report-overlay', 'scores-open'); },
-    // C opens the menu; ESC does the closing.
-    menu: () => {
-      const mv = $('menu-overlay');
-      if (mv && mv.hidden) toggleOverlay('menu-overlay', 'btn-menu');
-    },
     // Random hills and the rooms lobby stay out of the shop so a buying
     // spree never misfires into a new match.
     random: () => { if (G.phase !== 'shop') randomRun(); },
@@ -663,7 +657,6 @@ function bindKeys(): void {
       if (G.phase === 'shop') nextRound();
       else freshMatchFromSeedBox();
     },
-    cycle: () => { cycleWeapon(); if (gunsOpen()) renderGuns(); },
     guns: () => { if (gunsOpen()) closeGuns(); else openGuns(); },
     tutorial: () => { tutorialOpen(); },
     battlePreview: () => { togglePreview(); },
@@ -817,7 +810,7 @@ function refreshNavHints(): void {
   }
 }
 /* ESC shuts whatever is overlaid: the firing range first, then the lobby,
-then every open panel. The shop keeps its own ESC (next round). */
+then every open panel. */
 function closeLobbyVeil(): boolean {
   const veil = $('lobby-veil');
   if (!veil || veil.hidden) return false;

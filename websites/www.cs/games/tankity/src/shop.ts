@@ -28,7 +28,8 @@ export interface ShopDeps {
   net: Pick<RoomClient, 'on' | 'seats' | 'readyNow' | 'shopClockLeft'>;
   sfx: Pick<typeof SfxApi, 'play'>;
   me(): GameTank;
-  keyCap(ctx: string, action: string): string;
+  /** A touch screen: no key chips. */
+  touch: boolean;
   keyHint: KeyHintFn;
   say(text: string, tone?: string): void;
   advance(event: FlowEvent): void;
@@ -45,7 +46,7 @@ export interface ShopDeps {
 
 export function createShop(deps: ShopDeps) {
   const {
-    G, $, tables, net, sfx, me, keyCap, keyHint, say, advance, render, renderHUD, refreshNavHints,
+    G, $, tables, net, sfx, me, touch, keyHint, say, advance, render, renderHUD, refreshNavHints,
     drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil, netBuy,
   } = deps;
 
@@ -68,20 +69,21 @@ export function createShop(deps: ShopDeps) {
      component keeps no state of its own. In a room the start button is the Ready
      toggle: pressed reads "Ready ✓", and a line under it counts who is ready and
      the time left before the shop closes on its own (rooms.php ROOM_SHOP_SECS). */
-  function shopReadyView(): { next: { label: string; pressed?: boolean }; readyLine: string | null; sig: string } {
+  function shopReadyView(): { next: { label: string; keyAt?: string; pressed?: boolean }; readyLine: string | null; sig: string } {
+    const keyAt = touch ? undefined : 'shop:next';
     if (!net.on) {
-      const label = `Start round ${G.round + 1}${keyCap('shop', 'next')}`;
-      return { next: { label }, readyLine: null, sig: label };
+      const label = `Start round ${G.round + 1}`;
+      return { next: { label, keyAt }, readyLine: null, sig: label };
     }
     const mine = net.readyNow();
     const voters = net.seats.filter(s => s.human && s.lives > 0);
     const ready = voters.filter(s => s.ready).length;
     const left = net.shopClockLeft();
     const clock = left === null ? '' : ` · shop closes in ${Math.floor(Math.ceil(left) / 60)}:${String(Math.ceil(left) % 60).padStart(2, '0')}`;
-    const label = `${mine ? 'Ready ✓' : 'Ready'}${keyCap('shop', 'next')}`;
+    const label = mine ? 'Ready ✓' : 'Ready';
     const status = `${ready}/${voters.length} ready${clock}`;
     const marks = voters.map(s => `${String(s.name).toUpperCase()}${s.ready ? ' ✓' : ''}`).join('  ');
-    return { next: { label, pressed: mine }, readyLine: `${status} · ${marks}`, sig: label + '|' + status + '|' + marks };
+    return { next: { label, keyAt, pressed: mine }, readyLine: `${status} · ${marks}`, sig: label + '|' + status + '|' + marks };
   }
   /* The start button and ready line as last drawn. The clocks call this every
      frame, so the shop redraws only when what it would show has changed. */

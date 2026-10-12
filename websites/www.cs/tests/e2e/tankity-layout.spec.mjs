@@ -387,3 +387,37 @@ test('the rotate hint: portrait only, in a match, gone once dismissed', async ({
   expect(await page.locator('.rotate-hint').count(), 'remembered').toBe(0);
   await ctx.close();
 });
+
+/* In portrait the field's ground melts into the dirt: down the foot of the field, the
+   median luminance of a row (so a stray spark or crater cannot hide or fake an edge)
+   differs from the next row's by no more than SEAM_STEP levels of 255. The old hard line was 50. */
+const SEAM_STEP = 8;
+function seamSteps() {
+  const cv = document.getElementById('stage');
+  const c = cv.getContext('2d'), W = cv.width, H = cv.height;
+  const dpr = W / cv.getBoundingClientRect().width;
+  const [, fy, , fh] = cv.dataset.field.split(',').map(Number);
+  const floor = Math.round((fy + fh) * dpr); // the field's bottom edge in canvas pixels
+  const unit = (fh / 460) * dpr; // a world unit in canvas pixels; the lowest hills sit 45 units above the floor
+  const y0 = Math.max(0, floor - Math.round(30 * unit)), y1 = Math.min(H - 1, floor + Math.round(70 * unit));
+  const px = c.getImageData(0, y0, W, y1 - y0 + 1).data;
+  const median = y => {
+    const v = [];
+    for (let x = 0; x < W; x += 3) { const i = ((y - y0) * W + x) * 4; v.push(0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]); }
+    return v.sort((a, b) => a - b)[v.length >> 1];
+  };
+  let worst = 0, at = 0, prev = median(y0);
+  for (let y = y0 + 1; y <= y1; y++) {
+    const m = median(y);
+    if (Math.abs(m - prev) > worst) { worst = Math.abs(m - prev); at = y - floor; }
+    prev = m;
+  }
+  return { worst, at };
+}
+
+test('portrait: the ground melts into the dirt with no straight edge across the width', async ({ browser }) => {
+  const { ctx, page } = await open(browser, DEVICES[4]);
+  const { worst, at } = await page.evaluate(seamSteps);
+  expect(worst, `largest luminance step ${worst.toFixed(1)} at ${at}px from the field's floor`).toBeLessThanOrEqual(SEAM_STEP);
+  await ctx.close();
+});

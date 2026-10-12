@@ -629,10 +629,10 @@ body { height: 100dvh; display: flex; flex-direction: column; }
 #dialogue span + span { overflow: hidden; text-overflow: ellipsis; }
 #dialogue span:first-child { font-weight: 800; letter-spacing: 0.04em; }
 
-/* "Turn sideways": a small chip at the top of the battlefield, in portrait only. */
+/* "Turn sideways": a small chip at the bottom of the battlefield, in portrait only. */
 #rotate-hint-root { display: contents; }
 .rotate-hint {
-  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 3;
+  position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 3; /* below the chatter toast, which sits at the top */
   display: flex; align-items: center; gap: 6px; padding: 2px 4px 2px 12px;
   background: rgba(12, 15, 46, 0.92); border: 1px solid #3a3fb0; border-radius: 999px;
   color: #eef; font: 600 12px/1.2 system-ui, sans-serif; white-space: nowrap;

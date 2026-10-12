@@ -42,7 +42,11 @@ export function createView(deps: ViewDeps) {
 
   /* The camera only ever pulls back, slowly, to keep every live tank framed. */
   function updateCamera(dt: number): void {
-    let tz = 1, tx = G.w / 2, ty = H / 2;
+    // Always centred: the view is never narrower than the field (fitField), so panning would only
+    // cut one edge of the field off and show scenery at the other.
+    let tz = 1;
+    const tx = G.w / 2;
+    let ty = H / 2;
     const live = G.tanks.filter(t => t.hp > 0);
     if (live.length) {
       let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -54,7 +58,6 @@ export function createView(deps: ViewDeps) {
       const spanX = Math.max(1, (x1 - x0) + pad * 2);
       const spanY = Math.max(1, (y1 - y0) + pad * 2);
       tz = clamp(Math.min(G.w / spanX, H / spanY, 1), 0.45, 1);
-      tx = (x0 + x1) / 2;
       ty = (y0 + y1) / 2;
     }
     const k = Math.min(1, dt * 1.5);

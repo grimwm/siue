@@ -793,11 +793,9 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     for (let x = sx0; x <= sx1 + 24; x += 24) c.lineTo(x, 396 - 18 * Math.sin(x / 190 + 2));
     c.lineTo(sx1 + 24, H);
     c.fill();
-    // The dirt and its layers, from the field's floor down to the canvas's.
+    // The dirt under the field's floor, down to the canvas's; its layers come after the ground.
     c.fillStyle = '#2e1a08';
     c.fillRect(sx0, H - 2, sx1 - sx0, Math.max(0, sy1 - H + 2));
-    c.fillStyle = '#26150a';
-    for (let y = H + 18; y < sy1; y += 36) c.fillRect(sx0, y, sx1 - sx0, 6);
     // Scenery: the round's hills past both edges, dimmed; drawn, never hit.
     if (view.hills) {
       const hills = view.hills;
@@ -813,10 +811,10 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
         rim.addColorStop(1, '#2f6a2f');
         c.fillStyle = body;
         c.beginPath();
-        c.moveTo(a, H + 10);
+        c.moveTo(a, H + 70);
         for (let x = a; x < b; x += 4) c.lineTo(x, sceneryY(hills, view.terrain, x));
         c.lineTo(b, sceneryY(hills, view.terrain, b));
-        c.lineTo(b, H + 10);
+        c.lineTo(b, H + 70);
         c.fill();
         c.strokeStyle = rim;
         c.lineWidth = 3;
@@ -833,10 +831,10 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     // The field's ground with its flat green rim, edge to edge (no cliff at either edge).
     c.fillStyle = '#7a4a1e';
     c.beginPath();
-    c.moveTo(0, H + 10);
+    c.moveTo(0, H + 70);
     for (let x = 0; x < W; x += 4) c.lineTo(x, terrain(x));
     c.lineTo(W - 1, terrain(W - 1));
-    c.lineTo(W - 1, H + 10);
+    c.lineTo(W - 1, H + 70);
     c.fill();
     c.strokeStyle = '#00aa00';
     c.lineWidth = 3;
@@ -848,6 +846,15 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     }
     c.lineTo(W - 1, terrain(W - 1));
     c.stroke();
+    // The ground melts into the dirt: the surface colour fades to the dirt's over the foot of the
+    // field, below the lowest ground, and the layers start under that, so no straight edge shows.
+    const melt = c.createLinearGradient(0, H - 30, 0, H + 60);
+    melt.addColorStop(0, 'rgba(46, 26, 8, 0)');
+    melt.addColorStop(1, 'rgba(46, 26, 8, 1)');
+    c.fillStyle = melt;
+    c.fillRect(sx0, H - 30, sx1 - sx0, 120); // opaque from H + 60, so the polygons' own bottom edge never shows
+    c.fillStyle = '#26150a';
+    for (let y = H + 60; y < sy1; y += 36) c.fillRect(sx0, y, sx1 - sx0, 6);
     // Combatants (dead ones leave a smoking wreck marker).
     for (const t of view.tanks) {
       if (t.hp <= 0) {

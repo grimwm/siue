@@ -1,16 +1,7 @@
 <?php
 // Tests for games/hub.php, the metadata.yaml reader behind the Games page.
-// Run: php tests/games-hub-test.php. Exit 0 when every check passes, 1 otherwise.
 declare(strict_types=1);
-require_once __DIR__ . '/../games/hub.php';
-
-$fail = 0;
-$check = function (string $name, bool $cond) use (&$fail): void {
-    echo ($cond ? 'PASS' : 'FAIL') . ' ' . $name . "\n";
-    if (!$cond) {
-        $fail++;
-    }
-};
+require_once __DIR__ . '/../../../games/hub.php';
 
 $tmp = sys_get_temp_dir() . '/games-hub-test-' . getmypid();
 $game = function (string $id, ?string $yaml, array $files = []) use ($tmp): void {
@@ -160,15 +151,10 @@ $check('list-reports-broken-and-bad-name', $errorIds === ['Bad_Name', 'broken'])
 $check('list-missing-dir-empty', games_hub_list("$tmp/nope") === ['games' => [], 'errors' => []]);
 
 // The games shipped with the site must all be valid.
-$real = games_hub_list(__DIR__ . '/../games');
-$check('repo-games-no-errors', $real['errors'] === []);
-foreach ($real['errors'] as $e) {
-    echo "  {$e['id']}: {$e['error']}\n";
-}
+$real = games_hub_list(__DIR__ . '/../../../games');
+$check('repo-games-no-errors', $real['errors'] === [], json_encode($real['errors']));
 $realIds = array_column($real['games'], 'id');
 sort($realIds);
 $check('repo-games-all-listed', $realIds === ['crete', 'cylon', 'tankity']);
 
 exec('rm -rf ' . escapeshellarg($tmp));
-echo $fail === 0 ? "GAMES-HUB-OK\n" : "GAMES-HUB-FAIL $fail\n";
-exit($fail === 0 ? 0 : 1);

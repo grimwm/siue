@@ -33,6 +33,9 @@ const RULES = [
   [new RegExp(`^${SITE}deploy\\.sh$`), 'NONE'],
   [new RegExp(`^${SITE}docker/(check-parity\\.sh|expected-.*\\.txt)$`), 'NONE'],
   [new RegExp(`^${SITE}tests/[^/]+\\.php$`), 'NONE'], // unit tests
+  [new RegExp(`^${SITE}(composer\\.(json|lock)|phpunit\\.xml)$`), 'NONE'],
+  [new RegExp(`^${SITE}tests/php/`), 'NONE'],
+  [new RegExp(`^${SITE}games/_kit/php/(testing|tests)/`), 'NONE'],
   [new RegExp(`^${SITE}games/[^/]+/[^/]*-test\\.(php|js)$`), 'NONE'], // unit and smoke tests
   [new RegExp(`^${SITE}games/[^/]+/test\\.sh$`), 'NONE'], // a game's unit-suite runner
   [new RegExp(`^${SITE}games/[^/]+/(tools|protocol|fx/blender|audio/sfx/src)/`), 'NONE'], // generators, fixtures, sources

@@ -1,17 +1,8 @@
 <?php
 // Tests for tools/site-versions.php, which writes the ?v= cache-busters in the
-// home page. Run: php tests/site-versions-test.php
-// Exit 0 when every check passes, 1 otherwise.
+// home page.
 declare(strict_types=1);
-require_once __DIR__ . '/../tools/site-versions.php';
-
-$fail = 0;
-$check = function (string $name, bool $cond, string $extra = '') use (&$fail): void {
-    echo ($cond ? 'PASS' : 'FAIL') . ' ' . $name . ($extra !== '' ? ' :: ' . $extra : '') . "\n";
-    if (!$cond) {
-        $fail++;
-    }
-};
+require_once __DIR__ . '/../../../tools/site-versions.php';
 
 $tmp = sys_get_temp_dir() . '/site-versions-test-' . getmypid();
 @mkdir("$tmp/games/cylon/css", 0777, true);
@@ -93,9 +84,7 @@ unlink("$tmp/main.js");
 $check('unreadable-file-fails', $problems === ['index.html references main.js, which is not readable'], json_encode($problems));
 
 // The repository's own page is in sync (run php games/cylon/tools/install-files.php, then php tools/site-versions.php).
-[$stale, $problems] = site_versions_sync(dirname(__DIR__), false);
+[$stale, $problems] = site_versions_sync(dirname(__DIR__, 3), false);
 $check('repo-page-in-sync', $stale === false && $problems === [], json_encode([$stale, $problems]));
 
 exec('rm -rf ' . escapeshellarg($tmp));
-echo $fail === 0 ? "SITE-VERSIONS-OK\n" : "SITE-VERSIONS-FAIL $fail\n";
-exit($fail === 0 ? 0 : 1);

@@ -170,7 +170,7 @@ const G: GameState = {
   dlgQ: [], dlgT: 0, lastTalk: -99, banterT: 30, bannerT: 0, bannerDone: null,
   cam: { z: 1, cx: 360, cy: 230 },
   over: false, won: false,
-  tactics: {}, demo: false, demoHint: false, watchTurns: 0, preview: null, windTop: undefined,
+  tactics: {}, demo: false, demoHint: false, watchTurns: 0, preview: null,
 };
 /* Tables start from the baked fallback (G exists from here on); the file
 // arsenal replaces them the moment it arrives. */
@@ -403,7 +403,7 @@ const { HUD, paintHud, windText, renderHUD } = createHud({
   G, $, tables, net, MATCH, me, cur, myTank, seatName, drawShellIcon, openGuns: () => openGuns(),
 });
 /* The camera and the frame the canvas paints (src/view.ts). */
-const { updateCamera, shownAngle, shownPower, render, windGaugeTop } = createView({
+const { updateCamera, shownAngle, shownPower, render } = createView({
   G, $, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
 /* The high scores (src/scores.ts). */
@@ -769,7 +769,6 @@ function init(): void {
 /* The log hangs just under the menu strip, whose height changes with the
    frame width, so it never covers the battle buttons. */
 function placeLogBelowMenu(): void {
-  G.windTop = windGaugeTop();
   // The speech bubble rides just above the status bar, never over it.
   const hud = document.querySelector && document.querySelector<HTMLElement>('.hudbar');
   const dlg = $('dialogue');

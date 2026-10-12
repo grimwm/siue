@@ -175,6 +175,45 @@ final class InstallCoreTest extends TestCase
         $this->assertFileDoesNotExist("$this->dir/sw.js");
     }
 
+    public function testKitPhpIsCopiedIntoServerAndChecked(): void
+    {
+        file_put_contents("$this->dir/metadata.yaml", "title: Arty\ndescription: Lob.\nstart: artyStart\n");
+        $config = ['kind' => 'start', 'kit_php' => ['install-core.php']];
+        [$stale] = install_sync($this->dir, $config, true);
+        $this->assertSame(['manifest.webmanifest', 'server/install-core.php'], $stale);
+        $this->assertFileEquals(dirname(__DIR__) . '/install-core.php', "$this->dir/server/install-core.php");
+        $this->assertSame([[], []], install_sync($this->dir, $config, false));
+        file_put_contents("$this->dir/server/install-core.php", '<?php // edited by hand');
+        $this->assertSame([['server/install-core.php'], []], install_sync($this->dir, $config, false));
+    }
+
+    public function testKitPhpMustNameAKitFile(): void
+    {
+        file_put_contents("$this->dir/metadata.yaml", "title: Arty\ndescription: Lob.\nstart: artyStart\n");
+        [$stale, $notes] = install_sync($this->dir, ['kind' => 'start', 'kit_php' => ['nope.php']], true);
+        $this->assertSame([], $stale);
+        $this->assertSame(['config: kit_php names nope.php, which games/_kit/php does not have'], $notes);
+        [, $notes] = install_sync($this->dir, ['kind' => 'start', 'kit_php' => ['../install-core.php']], true);
+        $this->assertSame(['config: kit_php entries are file names in games/_kit/php, such as score-guard.php'], $notes);
+        $this->assertDirectoryDoesNotExist("$this->dir/server");
+    }
+
+    public function testKitPhpMustBeAList(): void
+    {
+        file_put_contents("$this->dir/metadata.yaml", "title: Arty\ndescription: Lob.\nstart: artyStart\n");
+        [$stale, $notes] = install_sync($this->dir, ['kind' => 'start', 'kit_php' => 'score-guard.php'], true);
+        $this->assertSame([], $stale);
+        $this->assertSame(['config: kit_php must be a list of file names in games/_kit/php'], $notes);
+    }
+
+    public function testAServerFolderThatCannotBeMadeIsANote(): void
+    {
+        file_put_contents("$this->dir/metadata.yaml", "title: Arty\ndescription: Lob.\nstart: artyStart\n");
+        file_put_contents("$this->dir/server", 'in the way');
+        [, $notes] = install_sync($this->dir, ['kind' => 'start', 'kit_php' => ['install-core.php']], true);
+        $this->assertSame(['cannot create the folder for server/install-core.php'], $notes);
+    }
+
     public function testRunReturnsOneOnACheckThatFindsStaleFiles(): void
     {
         $err = fopen('php://memory', 'w+');

@@ -3,6 +3,7 @@
 // included), ranking, the all-time board, and the legacy file shape.
 declare(strict_types=1);
 
+use Kit\ScoreGuard;
 use PHPUnit\Framework\TestCase;
 
 final class ScoresTest extends TestCase
@@ -247,5 +248,65 @@ final class ScoresTest extends TestCase
             $this->assertSame(1, substr_count($body, 'flock($fh, LOCK_EX)'), "$fn takes exactly one exclusive lock");
             $this->assertSame(1, substr_count($body, 'openScoresFile('), "$fn opens one file");
         }
+    }
+
+    public function testTheGuardGetsCylonsBlockList(): void
+    {
+        $this->assertTrue(guard()->isBlocked('ass'));
+        $this->assertTrue(guard()->isBlocked('KKK'));
+        $this->assertFalse(guard()->isBlocked('ZED'));
+    }
+
+    public function testTheTimeRuleMatchesTheConfig(): void
+    {
+        $score = cfg('koBurst') + 10 * cfg('maxKosPerSec');
+        $this->assertTrue(scoreFitsTime($score)(10));
+        $this->assertFalse(scoreFitsTime($score)(9));
+        $this->assertFalse(scoreFitsTime(1)(cfg('minRunSec') - 1));
+        $this->assertTrue(scoreFitsTime(1)(cfg('minRunSec')));
+    }
+
+    public function testStoredInitialsAreCoercedAsBefore(): void
+    {
+        $rows = normalizeScores([['score' => 1, 'initials' => 'a1'], ['score' => 2], ['score' => 3, 'initials' => 'ass']]);
+        $this->assertSame(['AAA', 'AAA'], array_column($rows, 'initials'));
+    }
+
+    public function testTheConfigStillRejectsKeysCylonDoesNotKnow(): void
+    {
+        $config = json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/data/config.json'), true);
+        $this->assertIsArray(validateConfig($config));
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('unknown config keys: surprise');
+        validateConfig($config + ['surprise' => 1]);
+    }
+
+    /** @param array<string, string> $server @return array<string, mixed> */
+    private function post(array $server, array $cookies = []): array
+    {
+        $code = '$_SERVER = ' . var_export($server + [
+            'REQUEST_METHOD' => 'POST', 'CONTENT_TYPE' => 'application/json',
+            'HTTP_HOST' => 'game.test', 'REMOTE_ADDR' => '203.0.113.7',
+        ], true) . '; $_COOKIE = ' . var_export($cookies, true) . '; require ' . var_export(dirname(__DIR__, 2) . '/scores.php', true) . ';';
+        $out = (string) shell_exec('CYLON_SCORES_FILE=' . escapeshellarg($this->store) . ' ' . escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg($code));
+        return json_decode($out, true) ?? ['raw' => $out];
+    }
+
+    public function testAPostWithNoOriginOrRefererNeedsAValidCsrfPair(): void
+    {
+        $token = str_repeat('ab', 16);
+        $this->assertSame('forbidden', $this->post([])['error'] ?? null, 'no Origin, no Referer, no CSRF');
+        $this->assertSame('forbidden', $this->post(['HTTP_X_CYLON_CSRF' => $token])['error'] ?? null, 'header without the cookie');
+        $this->assertSame('forbidden', $this->post(['HTTP_X_CYLON_CSRF' => str_repeat('cd', 16)], ['cylon_csrf' => $token])['error'] ?? null, 'header differs from the cookie');
+        $this->assertSame('forbidden', $this->post(['HTTP_ORIGIN' => 'https://evil.example', 'HTTP_X_CYLON_CSRF' => $token], ['cylon_csrf' => $token])['error'] ?? null, 'foreign origin');
+        $this->assertSame('invalid json', $this->post(['HTTP_X_CYLON_CSRF' => $token, 'HTTP_ORIGIN' => 'https://game.test'], ['cylon_csrf' => $token])['error'] ?? null, 'both checks pass, so the body is read');
+    }
+
+    public function testTheRunsFileIsPrivate(): void
+    {
+        $runs = $this->dir . '/runs.json';
+        $g = new ScoreGuard(array_intersect_key(gameConfig(), array_flip(ScoreGuard::CONFIG_KEYS)), 'X-Cylon-CSRF', 'test-salt', ['REMOTE_ADDR' => '203.0.113.7'], [], $runs);
+        $this->assertNotNull($g->startRun());
+        $this->assertSame(0600, fileperms($runs) & 0777);
     }
 }

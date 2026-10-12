@@ -10,6 +10,7 @@ Homepage mini-game module. Licensed under the GNU GPL v3 (see `LICENSE`).
 - `build.json`, `tsconfig.json`, `src/tsconfig.dom.json` — the kit build config (see Source layout and build)
 - `mount.html` — scanner, battlefield, FX, help, game-over (injected into `#game-root`)
 - `scores.php` — high-score API
+- `server/score-guard.php` — the kit's score guard (origin, CSRF, run tokens, rate limits, initials), copied by `tools/install-files.php`; never edit the copy
 - `data/config.json` — timezone, week boundary, board size, blocked initials, and request limits
 - `data/scores.json` — live boards (created on the server; not part of the source tree)
 - `test/*.test.mjs` — unit and static checks on `node:test`; `test/php/ScoresTest.php` — PHPUnit cases for `scores.php` (`vendor/bin/phpunit --testsuite cylon` from the site root)
@@ -17,7 +18,7 @@ Homepage mini-game module. Licensed under the GNU GPL v3 (see `LICENSE`).
 - `tools/install-files.php` — writes `manifest.webmanifest` (the work is `games/_kit/php/install-core.php`)
 
 ## High scores
-`scores.php` keeps two boards of at most `maxScores` rows each (score, hits, initials, time): the weekly board, which resets Sunday 00:00 America/Chicago (DST follows the timezone, not a fixed offset), and an all-time board that no reset touches. Every accepted score is ranked onto both, highest first, an earlier time winning a tie. The store is one JSON object, `{"week": [...], "alltime": [...]}`, read and rewritten under one `flock`; a store that is still a bare array is read as both boards. `GET` and `POST` answer with `scores` (this week) and `alltime`. The game-over panel shows them as This week and All time tabs, and the settings panel lists the weekly board. `CYLON_SCORES_FILE` points the store somewhere else; the PHPUnit suite uses it, and defines `CYLON_SCORES_LIBRARY` so that requiring `scores.php` serves no request.
+`scores.php` keeps two boards of at most `maxScores` rows each (score, hits, initials, time): the weekly board, which resets Sunday 00:00 America/Chicago (DST follows the timezone, not a fixed offset), and an all-time board that no reset touches. Every accepted score is ranked onto both, highest first, an earlier time winning a tie. The store is one JSON object, `{"week": [...], "alltime": [...]}`, read and rewritten under one `flock`; a store that is still a bare array is read as both boards. `GET` and `POST` answer with `scores` (this week) and `alltime`. The game-over panel shows them as This week and All time tabs, and the settings panel lists the weekly board. `CYLON_SCORES_FILE` points the store somewhere else; the PHPUnit suite uses it, and defines `CYLON_SCORES_LIBRARY` so that requiring `scores.php` serves no request. Every POST passes the kit's score guard first (`server/score-guard.php`), configured by the guard keys in `data/config.json`.
 
 ## Loading it
 The page loads the entry module and calls it once:

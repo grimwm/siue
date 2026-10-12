@@ -360,14 +360,19 @@ export function createInput(opts: { touch: boolean }): Input {
     if (isTyping(e.target)) return;
     aimDown.delete(e.code || e.key || '');
     // A chord comes apart in either order: an arrow lets go of whatever it
-    // held with or without Shift, and Shift lets go of every Shift+ hold.
+    // held with or without Shift, and the last Shift up turns every Shift+ hold
+    // back into the plain hold of the arrow still down.
     for (const shiftKey of [false, true]) {
       const act = lookup('aim', { key: e.key, code: e.code, ctrlKey: e.ctrlKey, shiftKey }) as HoldCommand | null;
       if (act) held.release(act);
     }
-    if (e.key === 'Shift') {
+    if (e.key === 'Shift' && !e.shiftKey) {
       for (const [action, tokens] of Object.entries(defs.aim)) {
         if (tokens.some(t => t.startsWith('Shift+'))) held.release(action as HoldCommand);
+      }
+      for (const k of aimDown.values()) {
+        const plain = lookup('aim', { ...k, shiftKey: false }) as HoldCommand | null;
+        if (plain) held.press(plain);
       }
     }
   }

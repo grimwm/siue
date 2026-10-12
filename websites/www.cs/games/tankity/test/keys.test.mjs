@@ -109,3 +109,12 @@ test('chord: Shift going down mid-hold drives at once, with no further repeat fr
   assert.ok(input.held.has('driveLeft'));
   assert.ok(!input.held.has('barrelLeft'));
 });
+
+test('letting go of Shift with an arrow still down goes back to aiming at once', () => {
+  const input = rig();
+  input.keydown(arrowLeft());
+  input.keydown(shift({ shiftKey: true }));
+  assert.ok(input.held.has('driveLeft') && !input.held.has('barrelLeft'));
+  input.keyup(shift({ shiftKey: false }));
+  assert.ok(input.held.has('barrelLeft') && !input.held.has('driveLeft'));
+});

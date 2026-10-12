@@ -170,3 +170,31 @@ test('suspend suspends a context that exists and makes none that does not', () =
   core.suspend();
   assert.equal(ctx.suspends, 1);
 });
+
+test('a context whose buses cannot be built is silent and throws nothing', () => {
+  const ctx = fakeAudioContext();
+  ctx.createGain = () => { throw new Error('no gain nodes'); };
+  const core = createAudioCore({ createContext: () => ctx });
+  assert.doesNotThrow(() => {
+    core.tone({ freq: 440, dur: 0.1 });
+    core.noise({ dur: 0.1, vol: 0.1 });
+    core.unlock(() => {});
+  });
+  assert.equal(core.peek(), null);
+  assert.equal(core.bus('sfx'), null);
+});
+
+test('unlock primes and reports ready only once resume resolves, for every caller waiting', async () => {
+  const ctx = fakeAudioContext('suspended', { holdResume: true });
+  const core = createAudioCore({ createContext: () => ctx });
+  const ready = [];
+  core.unlock(() => ready.push('first'));
+  core.unlock(() => ready.push('second'));
+  await tick();
+  assert.deepEqual(ready, []);
+  assert.equal(ctx.nodes.filter(n => n.kind === 'osc').length, 0);
+  ctx.settleResume();
+  await tick();
+  assert.deepEqual(ready, ['first', 'second']);
+  assert.equal(ctx.nodes.filter(n => n.kind === 'osc').length, 1);
+});

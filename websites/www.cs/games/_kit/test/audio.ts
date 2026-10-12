@@ -47,6 +47,8 @@ export interface FakeContext {
   buffers: number;
   resumes: number;
   suspends: number;
+  /** Settles a resume() held by the `holdResume` option. */
+  settleResume(): void;
   resume(): Promise<void>;
   suspend(): Promise<void>;
   createGain(): FakeNode;
@@ -68,7 +70,8 @@ function param(value: number): FakeParam {
   };
 }
 
-export function fakeAudioContext(state = 'running'): FakeContext {
+export function fakeAudioContext(state = 'running', opts: { holdResume?: boolean } = {}): FakeContext {
+  const held: Array<() => void> = [];
   const ctx: FakeContext = {
     state,
     currentTime: 10,
@@ -78,7 +81,13 @@ export function fakeAudioContext(state = 'running'): FakeContext {
     buffers: 0,
     resumes: 0,
     suspends: 0,
-    resume() { ctx.resumes++; ctx.state = 'running'; return Promise.resolve(); },
+    settleResume() { ctx.state = 'running'; held.splice(0).forEach(r => r()); },
+    resume() {
+      ctx.resumes++;
+      if (opts.holdResume) return new Promise<void>(r => held.push(r));
+      ctx.state = 'running';
+      return Promise.resolve();
+    },
     suspend() { ctx.suspends++; ctx.state = 'suspended'; return Promise.resolve(); },
     createGain: () => node('gain', { gain: param(1) }),
     createOscillator: () => node('osc', { type: 'sine', frequency: param(440) }),

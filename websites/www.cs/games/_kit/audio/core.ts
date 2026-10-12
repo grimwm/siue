@@ -70,6 +70,7 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
   const make = opts.createContext ?? defaultContext;
   let ctx: AudioContext | null = null;
   let primed = false;
+  let waiting: Array<() => void> = [];
   let loopNoise: AudioBuffer | null = null;
   const gains: Record<BusName, number> = { sfx: 1, music: 1 };
   const muted: Record<BusName, boolean> = { sfx: false, music: false };
@@ -91,17 +92,22 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
   function context(): AudioContext | null {
     if (!ctx) {
       // Asked again on every call: a page can gain Web Audio later (a test, a polyfill).
+      // Built whole or not at all: a half-made context would play with no buses.
       try {
-        ctx = make();
+        const made = make();
+        if (!made) return null;
+        const built: Partial<Record<BusName, GainNode>> = {};
+        for (const name of BUSES) {
+          const g = made.createGain();
+          g.connect(made.destination);
+          built[name] = g;
+        }
+        ctx = made;
+        Object.assign(buses, built);
+        for (const name of BUSES) applyGain(name);
       } catch {
         ctx = null;
-      }
-      if (!ctx) return null;
-      for (const name of BUSES) {
-        const g = ctx.createGain();
-        g.connect(ctx.destination);
-        buses[name] = g;
-        applyGain(name);
+        return null;
       }
     }
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
@@ -187,6 +193,7 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
   function unlock(onReady?: () => void): void {
     const c = context();
     if (!c || primed) return;
+    if (onReady) waiting.push(onReady);
     const prime = (): void => {
       if (primed || c.state !== 'running') return;
       primed = true;
@@ -201,7 +208,9 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
       } catch {
         // Priming is a courtesy for iOS; a context that refuses it still plays.
       }
-      onReady?.();
+      const ready = waiting;
+      waiting = [];
+      for (const cb of ready) cb();
     };
     if (c.state === 'running') prime();
     else c.resume().then(prime, () => {});

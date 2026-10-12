@@ -11,12 +11,13 @@ import { CLOCK_SHOW_S } from './net.ts';
 import type { RoomClient } from './net.ts';
 import { PV_W, PV_H, PV_FOE_HP } from './preview.ts';
 import { fitField, visibleWorld } from './field.ts';
+import { createGhosts } from './ghosts.ts';
 import { createRenderer } from './render.ts';
 import type { BattleView, DrawTank, Renderer } from './render.ts';
 import type { Replay } from './replay.ts';
 import { sceneryY } from './scenery.ts';
 import {
-  hashSeed, mulberry32, gauss, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
+  hashSeed, mulberry32, gauss, GRAV, FLAT_GRAV, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
 } from './sim.ts';
 import type { Weapon } from './sim.ts';
 
@@ -49,15 +50,13 @@ export function createView(deps: ViewDeps) {
     let ty = H / 2;
     const live = G.tanks.filter(t => t.hp > 0);
     if (live.length) {
-      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      let y0 = Infinity, y1 = -Infinity;
       for (const t of live) {
-        x0 = Math.min(x0, t.x); x1 = Math.max(x1, t.x);
         y0 = Math.min(y0, t.y - 56); y1 = Math.max(y1, t.y);
       }
       const pad = 70;
-      const spanX = Math.max(1, (x1 - x0) + pad * 2);
       const spanY = Math.max(1, (y1 - y0) + pad * 2);
-      tz = clamp(Math.min(G.w / spanX, H / spanY, 1), 0.45, 1);
+      tz = clamp(Math.min(H / spanY, 1), 0.45, 1); // the field is always in view across, so only height pulls back
       ty = (y0 + y1) / 2;
     }
     const k = Math.min(1, dt * 1.5);
@@ -106,18 +105,26 @@ export function createView(deps: ViewDeps) {
   /* The snapshot of everything the canvas shows this frame. render.ts reads it
      and paints; it never writes back. The rules live here: whose turn marker
      shows, whether the aim arm is up, when the clock counts down on the canvas. */
+  const ghosts = createGhosts();
+  let ghostTime = 0;
   function battleView(): BattleView {
     const t = cur();
     const aiming = (G.phase === 'aim' || G.phase === 'think') && t && t.hp > 0 && !G.over;
     const left = net.turnClockLeft();
     const pv = G.preview;
+    // Shells the sim retires past the field's edge fly on, drawn only, over the scenery.
+    const flying = replay.flying();
+    if (G.time < ghostTime) ghosts.clear(); // a new match restarted the clock
+    const flyOn = ghosts.frame([...G.shells, ...flying], G.w, Math.min(0.1, Math.max(0, G.time - ghostTime)), G.wind,
+      wkey => (tables.weapons[wkey]?.flat ? FLAT_GRAV : GRAV));
+    ghostTime = G.time;
     return {
       time: G.time, shake: G.shake, cam: G.cam,
       skyKey: net.on ? 'room:' + net.code : String(G.seed || ''),
       terrain: G.terrain, field: { w: G.w, h: H }, hills: G.hills, clouds: G.clouds, tanks: G.tanks,
       turnUnit: turnTank(), online: net.on,
       aim: aiming ? { unit: t, length: aimArmLength(shownPower(t)) } : null,
-      booms: G.booms, fx: G.fx, shells: G.shells, replay: replay.flying(), sparks: G.parts,
+      booms: G.booms, fx: G.fx, shells: G.shells, replay: flying, ghosts: flyOn, sparks: G.parts,
       wind: G.wind,
       textScale: textScale(),
       turnClock: left !== null && left <= CLOCK_SHOW_S && left > 0 ? { left, myTurn: MATCH.myTurn } : null,

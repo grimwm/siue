@@ -3,7 +3,7 @@
 // the status bar wraps or clips, the deck fits, the page fits the screen,
 // chips in a row line up, and phone targets are thumb-sized.
 import { test, expect } from '@playwright/test';
-import { recorderScript, newPlayer } from './helpers.mjs';
+import { recorderScript, newPlayer, groundProbe } from './helpers.mjs';
 
 const DEVICES = [
   ['Desktop', 1280, 720, false], ['Laptop, small window', 1024, 640, false],
@@ -22,8 +22,7 @@ function landscapeBox(vw, vh) {
   return short <= 500 ? { w: long - 10, h: short - 75 } : { w: Math.min(long - 18, 1118), h: short - 294 };
 }
 
-/* The battlefield as drawn: no band of page between the bars, the ground at
-   both screen edges with no cut, and where the field sits. */
+/* The battlefield as drawn: no band of page between the bars, and where the field sits. */
 function battlefield() {
   const cv = document.getElementById('stage');
   const box = document.getElementById('field').getBoundingClientRect();
@@ -48,15 +47,6 @@ function battlefield() {
       band = a0 < 255 || (r0 === holder[0] && g0 === holder[1] && b0 === holder[2]);
     }
     if (band) { probs.push(`a band of background at canvas row ${y}`); break; }
-  }
-  // Ground: dirt, hills, grass (warm or green), never the night sky (blue at least as strong as red).
-  const ground = ([r0, g0, b0]) => r0 > b0 + 10 || (g0 > b0 + 40 && g0 > r0);
-  const top = x => { let y = H - 1; while (y > 0 && ground(at(x, y))) y--; return y; };
-  const dpr = W / r.width;
-  for (const [edge, inward] of [[0, Math.round(8 * dpr)], [W - 1, W - 1 - Math.round(8 * dpr)]]) {
-    const te = top(edge), ti = top(inward);
-    if (te >= H - 1) probs.push(`no ground at canvas column ${edge}`);
-    if (Math.abs(te - ti) > 6 * dpr) probs.push(`the ground is cut at canvas column ${edge}: ${H - te} vs ${H - ti} px high`);
   }
   const [fx, fy, fw, fh] = cv.dataset.field.split(',').map(Number);
   return { probs, w: Number(cv.dataset.w), field: { x: fx, y: fy, w: fw, h: fh }, canvas: { w: r.width, h: r.height }, box: { w: box.width, h: box.height } };
@@ -167,6 +157,8 @@ for (const dev of DEVICES) {
     // edges, and the field's width is the one this device deals either way up.
     const bf = await page.evaluate(battlefield);
     expect(bf.probs).toEqual([]);
+    const gp = await page.evaluate(groundProbe);
+    expect(gp.probs, 'the drawn ground at the edges and the seams').toEqual([]);
     expect(bf.w).toBe(DEALT[`${dev[1]}x${dev[2]}`]);
     if (dev[1] > dev[2]) {
       const want = landscapeBox(dev[1], dev[2]);
@@ -178,6 +170,13 @@ for (const dev of DEVICES) {
       expect(Math.abs(bf.field.w - bf.canvas.w)).toBeLessThanOrEqual(1);
       expect(bf.field.y).toBeGreaterThan(0);
       expect(bf.field.y + bf.field.h).toBeLessThan(bf.canvas.h);
+      // And the pixels agree: the field's own ground (#7a4a1e, not scenery's dimmed fill) meets both screen edges.
+      expect(gp.seams, 'no scenery in portrait').toBe(0);
+      for (const e of gp.edge) {
+        expect(e.body[0], `ground fill at column ${e.x}`).toBeGreaterThanOrEqual(105);
+        expect(e.y, 'inside the drawn field').toBeGreaterThan(bf.field.y);
+        expect(e.y).toBeLessThan(bf.field.y + bf.field.h);
+      }
     }
     const chips = await page.evaluate(chipSpreads);
     if (!dev[3]) {
@@ -415,9 +414,11 @@ function seamSteps() {
   return { worst, at };
 }
 
-test('portrait: the ground melts into the dirt with no straight edge across the width', async ({ browser }) => {
-  const { ctx, page } = await open(browser, DEVICES[4]);
-  const { worst, at } = await page.evaluate(seamSteps);
-  expect(worst, `largest luminance step ${worst.toFixed(1)} at ${at}px from the field's floor`).toBeLessThanOrEqual(SEAM_STEP);
-  await ctx.close();
-});
+for (const dev of DEVICES.filter(d => d[2] > d[1])) {
+  test(`portrait ${dev[1]}×${dev[2]}: the ground melts into the dirt with no straight edge across the width`, async ({ browser }) => {
+    const { ctx, page } = await open(browser, dev);
+    const { worst, at } = await page.evaluate(seamSteps);
+    expect(worst, `largest luminance step ${worst.toFixed(1)} at ${at}px from the field's floor`).toBeLessThanOrEqual(SEAM_STEP);
+    await ctx.close();
+  });
+}

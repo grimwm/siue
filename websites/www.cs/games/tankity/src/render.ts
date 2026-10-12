@@ -109,6 +109,7 @@ export interface BattleView {
   fx: FxSystem | null;
   shells: readonly Flying[];
   replay: readonly Flying[]; // shells of a room replay, at their place now
+  ghosts: readonly Flying[]; // shells the sim retired past the field's edge, flying on over the scenery (draw only)
   sparks: readonly Spark[];
   wind: number;
   textScale: number;
@@ -809,22 +810,19 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
         const rim = c.createLinearGradient(edge, 0, away, 0);
         rim.addColorStop(0, '#00aa00');
         rim.addColorStop(1, '#2f6a2f');
+        const xs: number[] = [], ys: number[] = [];
+        for (let x = a; x < b; x += 4) { xs.push(x); ys.push(sceneryY(hills, view.terrain, x)); }
+        xs.push(b); ys.push(sceneryY(hills, view.terrain, b));
         c.fillStyle = body;
         c.beginPath();
         c.moveTo(a, H + 70);
-        for (let x = a; x < b; x += 4) c.lineTo(x, sceneryY(hills, view.terrain, x));
-        c.lineTo(b, sceneryY(hills, view.terrain, b));
+        xs.forEach((x, i) => c.lineTo(x, ys[i]!));
         c.lineTo(b, H + 70);
         c.fill();
         c.strokeStyle = rim;
         c.lineWidth = 3;
         c.beginPath();
-        for (let x = a; x < b; x += 4) {
-          const y = sceneryY(hills, view.terrain, x);
-          if (x === a) c.moveTo(x, y);
-          else c.lineTo(x, y);
-        }
-        c.lineTo(b, sceneryY(hills, view.terrain, b));
+        xs.forEach((x, i) => (i ? c.lineTo(x, ys[i]!) : c.moveTo(x, ys[i]!)));
         c.stroke();
       }
     }
@@ -933,6 +931,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     // paths the server simulated.
     for (const s of view.shells) drawShell(c, s, time);
     for (const s of view.replay) drawShell(c, s, time);
+    for (const s of view.ghosts) drawShell(c, s, time);
     c.globalAlpha = 1;
     drawWindStreaks(c, view);
     if (view.preview) drawPreview(view.preview, time);

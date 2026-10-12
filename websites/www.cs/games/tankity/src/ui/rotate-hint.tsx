@@ -1,5 +1,5 @@
 // games/tankity/src/ui/rotate-hint.tsx
-/* The "turn sideways" chip over the top of the battlefield. */
+/* The "turn sideways" chip at the foot of the battlefield. */
 import { render } from 'preact';
 
 export function RotateHint({ onDismiss }: { onDismiss(): void }) {

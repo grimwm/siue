@@ -248,3 +248,31 @@ export function expectFullSwing(seen) {
   }
   expect([10, 170], `reached a stop: ${seen.join(' ')}`).toContain(seen[seen.length - 1]);
 }
+
+/* The drawn ground, read from the pixels: the terrain's green rim is the lowest green pixel in a
+   column (units, tags and tanks sit above it; the far dunes, the dirt and the sky are never green).
+   It must reach both outer screen edges and continue across the field/scenery seams without a step
+   beyond the hills' own slope (at most about 1.4 px a px, over the 8 px sampled). */
+export function groundProbe() {
+  const cv = document.getElementById('stage'), c = cv.getContext('2d'), W = cv.width, H = cv.height;
+  const dpr = W / cv.getBoundingClientRect().width;
+  const px = c.getImageData(0, 0, W, H).data;
+  const at = (x, y) => { const i = (y * W + x) * 4; return [px[i], px[i + 1], px[i + 2]]; };
+  const rim = x => { for (let y = H - 1; y >= 0; y--) { const p = at(x, y); if (p[1] > p[0] + 25 && p[1] > p[2] + 25) return { y, p }; } return null; };
+  const [fx, fy, fw, fh] = cv.dataset.field.split(',').map(Number);
+  const probs = [], edge = [];
+  for (const x of [1, W - 2]) {
+    const r = rim(x);
+    if (!r) probs.push(`no ground at canvas column ${x}`);
+    else edge.push({ x, y: r.y / dpr, body: at(x, Math.min(H - 1, r.y + Math.round(8 * dpr))) }); // the ground's own fill, a little below its rim
+  }
+  let seams = 0;
+  for (const sx of [fx, fx + fw].map(v => Math.round(v * dpr))) {
+    if (sx < 8 * dpr || sx > W - 8 * dpr) continue; // the field meets the screen edge: no seam to cross
+    seams++;
+    const a = rim(sx - Math.round(4 * dpr)), b = rim(sx + Math.round(4 * dpr));
+    if (!a || !b) probs.push(`no ground at the seam, canvas column ${sx}`);
+    else if (Math.abs(a.y - b.y) > 8 * dpr * 1.4 + 3 * dpr) probs.push(`the ground steps ${Math.abs(a.y - b.y)} px across the seam at canvas column ${sx}`);
+  }
+  return { probs, seams, edge, field: { x: fx, y: fy, w: fw, h: fh } };
+}

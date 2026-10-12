@@ -803,7 +803,7 @@ const portraitQuery = window.matchMedia('(orientation: portrait)');
 function refreshRotateHint(): void {
   const root = document.getElementById('rotate-hint-root');
   if (!root) return;
-  const show = rotateHintShows({ portrait: portraitQuery.matches, dismissed: rotateHint.get() === 'dismissed', playing: !G.demo && (G.tanks.length > 0 || G.phase === 'banner' || G.phase === 'shop') });
+  const show = rotateHintShows({ portrait: portraitQuery.matches, dismissed: rotateHint.get() === 'dismissed', playing: !G.demo && !G.over && (G.tanks.length > 0 || G.phase === 'banner' || G.phase === 'shop') });
   renderRotateHint(root, show, () => { rotateHint.set('dismissed'); refreshRotateHint(); });
 }
 portraitQuery.addEventListener?.('change', refreshRotateHint);

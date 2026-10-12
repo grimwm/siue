@@ -67,6 +67,7 @@ const view = deepFreeze({
   fx: fxSystem,
   shells: [{ x: 200, y: 200, vx: 30, vy: -40, wkey: 'mortar' }],
   replay: [{ x: 220, y: 210, vx: 10, vy: 10, wkey: 'nuke' }],
+  ghosts: [{ x: 760, y: 200, vx: 200, vy: 20, wkey: 'shell' }],
   sparks: [{ x: 50, y: 50, life: 0.3, color: '#fff' }],
   wind: -5, textScale: 1.1,
   turnClock: { left: 2.4, myTurn: true },

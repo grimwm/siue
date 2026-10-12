@@ -266,6 +266,26 @@ for (const [name, width, height, touch, narrow] of SHOP_SCREENS) {
         expect(first.x).toBeLessThan(row.col.x + 2); // start-aligned
       }
     }
+    // Start sits in a footer below the scrolling list, and the last row's buttons
+    // are reachable by scrolling and not covered by it.
+    const foot = await page.evaluate(() => {
+      const list = document.querySelector('#shop-list');
+      const lastLi = [...list.querySelectorAll('li:not(.shop-cat)')].pop();
+      list.scrollTop = list.scrollHeight;
+      const covered = [...lastLi.querySelectorAll('.acts button')].map(b => {
+        const r = b.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return hit === b || b.contains(hit) ? null : `${hit && hit.tagName}#${hit && hit.id}`;
+      });
+      const next = document.querySelector('#shop-next').getBoundingClientRect();
+      return { listBottom: list.getBoundingClientRect().bottom, nextTop: next.top, nextBottom: next.bottom,
+        covered, scrolls: list.scrollHeight > list.clientHeight };
+    });
+    expect(foot.nextTop).toBeGreaterThanOrEqual(foot.listBottom);
+    expect(foot.nextBottom).toBeLessThanOrEqual(height);
+    expect(foot.scrolls).toBe(true);
+    expect(foot.covered.length).toBeGreaterThan(0);
+    expect(foot.covered.filter(Boolean)).toEqual([]);
     // Rows with a Preview and a Buy are the ones the halves rule is about.
     expect(m.rows.some(r => r.buttons.length === 2)).toBe(true);
     await ctx.close();

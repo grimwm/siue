@@ -278,8 +278,11 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 /* min-width: 0 all the way down: a grid or flex child never grows past what
    the screen gives it just to fit its content. */
 #shop-veil { grid-template-columns: minmax(0, 1fr); }
-#shop-veil .card { max-width: 44rem; min-width: 0; }
-#shop-list { max-height: 52vh; overflow-y: auto; min-width: 0; padding-left: 0; }
+/* The card is a column that never outgrows the screen: the list takes what is
+   left and scrolls, and Start (and Leave room) stay in a footer below it. */
+#shop-veil .card { max-width: 44rem; min-width: 0; display: flex; flex-direction: column; max-height: calc(100dvh - 2rem); }
+#shop-veil .card > button { align-self: flex-start; }
+#shop-list { flex: 1 1 auto; min-height: 6rem; overflow-y: auto; min-width: 0; padding-left: 0; margin-bottom: 0.7rem; }
 /* Two columns: the icon, then the text with Preview and Buy under it. */
 #shop-list li { display: grid; grid-template-columns: 72px minmax(0, 1fr); column-gap: 0.75rem; align-items: start; padding: 0.35rem 0.4rem; }
 .shop-item { min-width: 0; display: grid; gap: 0.1rem; }

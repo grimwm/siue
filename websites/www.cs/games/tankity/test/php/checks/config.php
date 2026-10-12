@@ -9,6 +9,7 @@ require_once TANKITY_GAME_DIR . '/config.php';
 
 $oldConfigFile = getenv('CONFIG_FILE');
 $oldMax = getenv('TANKITY_MAX_ROOMS');
+$oldDir = getenv('TANKITY_DATA_DIR');
 $tmp = sys_get_temp_dir() . '/tankity-config-test-' . getmypid();
 @mkdir($tmp);
 
@@ -25,12 +26,15 @@ $check('missing-default', tankity_setting('TANKITY_MAX_ROOMS', 'max_rooms', 10) 
 // File values are picked up; comments and quotes are tolerated.
 file_put_contents(
     $tmp . '/a.yaml',
-    "# a comment\nmax_rooms: 3\nscores_dir: \"/tmp/sco\" # trailing note\nroom_max_age: '60'\nblank: \n"
+    "# a comment\nmax_rooms: 3\ndata_dir: \"/tmp/sco\" # trailing note\nroom_max_age: '60'\nblank: \n"
 );
 putenv('CONFIG_FILE=' . $tmp . '/a.yaml');
 tankity_config(true);
 $check('file-max', tankity_setting('TANKITY_MAX_ROOMS', 'max_rooms', 10) === '3');
-$check('file-dir', tankity_setting('TANKITY_SCORES_DIR', 'scores_dir', '/var/tmp') === '/tmp/sco');
+$check('file-dir', tankity_setting('TANKITY_DATA_DIR', 'data_dir', '') === '/tmp/sco');
+putenv('TANKITY_DATA_DIR=/tmp/env-dir');
+$check('env-dir-beats-file', tankity_setting('TANKITY_DATA_DIR', 'data_dir', '') === '/tmp/env-dir');
+putenv('TANKITY_DATA_DIR');
 $check('file-age', tankity_setting('TANKITY_ROOM_MAX_AGE', 'room_max_age', 86400) === '60');
 $check('file-blank-default', tankity_setting('TANKITY_X', 'blank', 'dflt') === 'dflt');
 
@@ -60,4 +64,7 @@ if (is_string($oldConfigFile)) {
 }
 if (is_string($oldMax)) {
     putenv('TANKITY_MAX_ROOMS=' . $oldMax);
+}
+if (is_string($oldDir)) {
+    putenv('TANKITY_DATA_DIR=' . $oldDir);
 }

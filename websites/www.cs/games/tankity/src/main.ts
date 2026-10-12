@@ -630,14 +630,17 @@ function bindKeys(): void {
       else if (!closeOverlays()) toggleOverlay('menu-overlay', 'btn-menu');
       return true;
     },
-    // Esc toggles the menu: it shuts the topmost thing that is open, and with
-    // nothing open it opens the menu.
+    // Esc toggles the menu: it shuts the topmost thing that is open. Panels
+    // come before the tutorial because the coach sends the player into one
+    // (the gun picker); with none open Esc skips a running tutorial, and
+    // otherwise opens the menu.
     escape: () => {
       if (G.preview) { closePreview(); return; }
       if (closeLeaveVeil()) return;
-      if (tutorialActive()) { skipTutorial(); return; }
       if (closeLobbyVeil()) return;
-      if (!closeOverlays()) toggleOverlay('menu-overlay', 'btn-menu');
+      if (closeOverlays()) return;
+      if (tutorialActive()) { skipTutorial(); return; }
+      toggleOverlay('menu-overlay', 'btn-menu');
     },
     fire: () => { unlock(); music.start(); playerFire(); },
     music: () => { toggleMusic(); },
@@ -807,7 +810,7 @@ function refreshNavHints(): void {
   }
 }
 /* ESC shuts whatever is overlaid: the firing range first, then the lobby,
-then every open panel. The shop keeps its own ESC (next round). */
+then every open panel. */
 function closeLobbyVeil(): boolean {
   const veil = $('lobby-veil');
   if (!veil || veil.hidden) return false;

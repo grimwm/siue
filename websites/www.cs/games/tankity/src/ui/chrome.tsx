@@ -49,6 +49,8 @@ export interface OverlayHeadProps {
 
 /** Title bar: title left, key hints centre, × right, on the grid in game.css. */
 export function OverlayHead(p: OverlayHeadProps) {
+  const hint = useContext(KeyHints);
+  const esc = hint('global', 'escape', 0);
   return (
     <header class="ov-head">
       <div class="ov-title">
@@ -56,7 +58,7 @@ export function OverlayHead(p: OverlayHeadProps) {
         <h2 id={p.titleId}>{p.title}</h2>
       </div>
       {p.onClose && (
-        <button type="button" class="ov-x" id={p.closeId} aria-label="Close" title="Close (ESC)"
+        <button type="button" class="ov-x" id={p.closeId} aria-label="Close" title={esc ? `Close (${esc})` : 'Close'}
           onClick={ev => { ev.currentTarget.blur(); p.onClose?.(); }}>
           <Key at="global:escape" cls="key esc-cap" />
           <span class="x-glyph" aria-hidden="true">×</span>

@@ -1254,7 +1254,6 @@ await (async () => {
   check('fx-hand-snapshots-match', FX_DRIFT.size === 0, [...FX_DRIFT].slice(0, 6).join('; '));
   click(els['shop-leave']); frames(2);
   click(els['leave-go']); await tick(10); frames(5);
-  TAP('global', 'escape'); frames(5);
   TAP('global', 'new'); frames(150);
   for (let i = 0; i < 6 && (els['shop-veil'].hidden === false || els['round-banner'].hidden === false); i++) {
     if (els['shop-veil'].hidden === false) click(els['shop-next']);
@@ -1263,6 +1262,17 @@ await (async () => {
   TAP('global', 'tutorial'); frames(5);
   check('tutorial-opens', els['tutorial-overlay'].hidden === false);
   check('tutorial-step', /Move 1 of 5/.test(els['tutorial-text'].textContent), els['tutorial-text'].textContent);
+  // The coach sends the player into the gun picker (move 4): Esc there shuts
+  // the picker and leaves the tutorial running; a second Esc skips it.
+  TAP('global', 'guns'); frames(3);
+  check('esc-picker-open', els['gun-overlay'].hidden === false);
+  TAP('global', 'escape'); frames(3);
+  check('esc-closes-picker-first', els['gun-overlay'].hidden === true && els['tutorial-overlay'].hidden === false
+    && window.localStorage.getItem('tankity-tutorial') !== 'done');
+  TAP('global', 'escape'); frames(3);
+  check('esc-then-skips-tutorial', els['tutorial-overlay'].hidden === true && window.localStorage.getItem('tankity-tutorial') === 'done');
+  TAP('global', 'tutorial'); frames(5);
+  check('tutorial-reopens', els['tutorial-overlay'].hidden === false);
   click(els['tutorial-skip']); frames(3);
   check('tutorial-skips', els['tutorial-overlay'].hidden === true);
   check('tutorial-remembered', window.localStorage.getItem('tankity-tutorial') === 'done');

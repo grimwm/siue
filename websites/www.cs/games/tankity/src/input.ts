@@ -296,8 +296,20 @@ export function createInput(opts: { touch: boolean }): Input {
     return out === 'quiet';
   }
 
+  /* Aim keys physically down, so Shift arriving mid-hold can turn them into
+     drives at once instead of waiting for an auto-repeat that some platforms
+     stop sending when a second key goes down. */
+  const aimDown = new Map<string, { key?: string; code?: string; ctrlKey?: boolean }>();
+
   function keydown(e: KeyLike): void {
     if (isTyping(e.target)) return;
+    if (e.key === 'Shift') {
+      for (const k of aimDown.values()) {
+        const act = lookup('aim', { ...k, shiftKey: true }) as HoldCommand | null;
+        const plain = lookup('aim', { ...k, shiftKey: false }) as HoldCommand | null;
+        if (act && plain && act !== plain) { held.release(plain); held.press(act); }
+      }
+    }
     const press: Press = { key: e.key || '', repeat: !!e.repeat };
     const global = lookup('global', e);
     if (ctx.modalOpen && ctx.modalOpen()) {
@@ -325,6 +337,7 @@ export function createInput(opts: { touch: boolean }): Input {
       // (or back): only the action the chord names now stays down.
       const other = lookup('aim', { key: e.key, code: e.code, ctrlKey: e.ctrlKey, shiftKey: !e.shiftKey }) as HoldCommand | null;
       if (other && other !== act) held.release(other);
+      aimDown.set(e.code || e.key || '', { key: e.key, code: e.code, ctrlKey: e.ctrlKey });
       held.press(act);
       e.preventDefault();
       if (ctx.onHold) ctx.onHold(act);
@@ -345,6 +358,7 @@ export function createInput(opts: { touch: boolean }): Input {
 
   function keyup(e: KeyLike): void {
     if (isTyping(e.target)) return;
+    aimDown.delete(e.code || e.key || '');
     // A chord comes apart in either order: an arrow lets go of whatever it
     // held with or without Shift, and Shift lets go of every Shift+ hold.
     for (const shiftKey of [false, true]) {
@@ -386,7 +400,7 @@ export function createInput(opts: { touch: boolean }): Input {
       }
       // Turn-based play never needs a blur pause (that only stranded players on
       // a seemingly frozen screen). Just drop held keys so the barrel stops.
-      win.addEventListener('blur', () => held.clear());
+      win.addEventListener('blur', () => { held.clear(); aimDown.clear(); });
     },
     bindHold(btn, cmd) {
       btn.addEventListener('pointerdown', ev => {

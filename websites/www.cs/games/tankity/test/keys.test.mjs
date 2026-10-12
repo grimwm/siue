@@ -100,3 +100,12 @@ test('chord: Shift pressed during a barrel hold turns it into a drive, never bot
   assert.ok(input.held.has('barrelLeft'));
   assert.ok(!input.held.has('driveLeft'));
 });
+
+test('chord: Shift going down mid-hold drives at once, with no further repeat from the arrow', () => {
+  const input = rig();
+  input.keydown(arrowLeft());
+  assert.ok(input.held.has('barrelLeft'));
+  input.keydown(shift({ shiftKey: true }));
+  assert.ok(input.held.has('driveLeft'));
+  assert.ok(!input.held.has('barrelLeft'));
+});

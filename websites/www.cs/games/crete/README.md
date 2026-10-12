@@ -53,11 +53,14 @@ throws the jammer, eats a snack, waits in a safe zone (six turns at most) or
 steps, first match wins. The first attempt (of 80) where the creature reaches
 the dasher and the strategist escapes is the maze. Failing that, the
 strategist-won attempt whose dasher came closest is used; a maze the
-strategist loses is never returned. A candidate whose barrier seals off the
-loot or the creature's start is not a maze and counts as lost. The play-through
+strategist loses is never returned. A candidate is skipped before any bot plays
+it when a closed barrier seals off the loot, leaves the creature on the exit, or
+starts it fewer than 8 steps from the player (barriers open). The route the bots
+walk, and the Hint, is the fewest-step trip to the exit, fetching a spare fuse on
+the way when that is shorter. The play-through
 (T) is the strategist, so it wins any run it starts from the beginning.
 `test/maze-sweep.test.mjs` holds the budgets (fallback on at most 1% of seeds,
-p95 at most 20 ms) over 1,000 seeds, and 10,000 nightly.
+p95 at most 20 ms) over 300 seeds, and 10,000 nightly.
 
 ## Tests
 

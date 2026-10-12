@@ -82,7 +82,9 @@ test('a route crosses a barrier the player holds a fuse for', () => {
   assert.ok(route.some(p => p.r === 7 && p.c === 7), 'through the barrier');
 });
 
-test('without enough fuses the route goes to the nearest fuse first', () => {
+const at = (route, r, c) => route.findIndex(p => p.r === r && p.c === c);
+
+test('without a fuse the route is one trip: the fuse first, then through the barrier to the exit', () => {
   const h = harness();
   arena(h.G, { r: 7, c: 3 }, { r: 1, c: 1 });
   wallAcross(h.G, 7);
@@ -90,7 +92,9 @@ test('without enough fuses the route goes to the nearest fuse first', () => {
   h.G.barriers.add(E.key(7, 7));
   h.G.exit = { r: 7, c: 11 };
   h.G.pickups.set(E.key(2, 2), 'fuse');
-  assert.deepEqual(h.game.goalPath().at(-1), { r: 2, c: 2 });
+  const route = h.game.goalPath();
+  assert.deepEqual(route.at(-1), { r: 7, c: 11 });
+  assert.ok(at(route, 2, 2) !== -1 && at(route, 2, 2) < at(route, 7, 7), 'fuse before barrier');
 });
 
 test('an open way to the exit is preferred to one through a barrier', () => {
@@ -158,9 +162,29 @@ test('when two barriers really are in the way, one fuse sends it for another and
   twoBarriers(h);
   h.G.pickups.set(E.key(2, 2), 'fuse');
   h.G.fuses = 1;
-  assert.deepEqual(h.game.goalPath().at(-1), { r: 2, c: 2 });
+  const one = h.game.goalPath();
+  assert.ok(at(one, 2, 2) !== -1 && at(one, 2, 2) < at(one, 7, 5) && at(one, 7, 5) < at(one, 7, 7), 'fetches the spare fuse before the first barrier');
+  assert.deepEqual(one.at(-1), { r: 7, c: 11 });
   h.G.fuses = 2;
   const route = h.game.goalPath();
   assert.deepEqual(route.at(-1), { r: 7, c: 11 });
-  assert.ok([5, 7].every(c => route.some(p => p.r === 7 && p.c === c)));
+  assert.ok([5, 7].every(c => at(route, 7, c) !== -1));
+  assert.equal(at(route, 2, 2), -1, 'no fuse fetched that it does not need');
+});
+
+test('a spare fuse a few steps off the way beats a long way round that crosses one barrier', () => {
+  const h = harness();
+  arena(h.G, { r: 7, c: 3 }, { r: 1, c: 1 });
+  wallAcross(h.G, 5);
+  wallAcross(h.G, 7);
+  for (const c of [5, 7]) h.G.barriers.add(E.key(7, c));
+  h.G.walls[13][7] = false; // the gap is a long walk away
+  h.G.exit = { r: 7, c: 11 };
+  h.G.pickups.set(E.key(8, 4), 'fuse'); // two steps from the first barrier
+  h.G.fuses = 1;
+  const route = h.game.goalPath();
+  assert.deepEqual(route.at(-1), { r: 7, c: 11 });
+  assert.ok(at(route, 8, 4) !== -1, 'takes the fuse');
+  assert.ok(at(route, 7, 7) !== -1, 'and goes straight through the second barrier');
+  assert.equal(at(route, 13, 7), -1, 'not the long way round');
 });

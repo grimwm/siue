@@ -463,6 +463,8 @@ export interface Game {
   foeDistance(): number;
 }
 
+const popcount = (n: number): number => (n === 0 ? 0 : (n & 1) + popcount(n >> 1));
+
 export function createGame(hooks: Hooks): Game {
   const G = blankState();
   const { say, sfx, timers } = hooks;
@@ -828,57 +830,82 @@ export function createGame(hooks: Hooks): Game {
 
   /* ---------- hint: one move in advance ---------- */
   /**
-   * The shortest route to the exit that crosses at most `fuses` closed
-   * barriers (each crossing spends a fuse), or [] when none does. Searching
-   * (cell, fuses spent) rather than the shortest route with every barrier
-   * open, since a longer way round can cross fewer barriers.
+   * The fewest-step trip to the exit, counting any fuses worth fetching on
+   * the way, and with equal steps the one that spends fewer fuses. The search
+   * runs over (cell, which board fuses are already taken, barriers crossed):
+   * stepping on a fuse takes it, crossing a barrier spends one. Empty when
+   * the exit is out of reach even with every fuse.
    */
-  function routeOpening(fuses: number): Cell[] {
-    if (fuses <= 0) return [];
-    const W = fuses + 1;
-    const idx = (r: number, c: number, used: number): number => (r * COLS + c) * W + used;
-    const from = new Int32Array(ROWS * COLS * W).fill(-2);
-    const start = idx(G.player.r, G.player.c, 0);
+  function bestTrip(): Cell[] {
+    const fuseCells: number[] = [];
+    for (const [k, v] of G.pickups) {
+      if (v !== "fuse") continue;
+      const [r, c] = unkey(k);
+      fuseCells.push(r * COLS + c);
+    }
+    const masks = 1 << fuseCells.length;
+    const maxSpent = G.fuses + fuseCells.length;
+    const K = maxSpent + 1;
+    const total = ROWS * COLS * masks * K;
+    const idx = (cell: number, mask: number, spent: number): number => (cell * masks + mask) * K + spent;
+    const from = new Int32Array(total).fill(-2);
+    const dist = new Int32Array(total).fill(-1);
+    const startCell = G.player.r * COLS + G.player.c;
+    const start = idx(startCell, 0, 0);
     from[start] = -1;
+    dist[start] = 0;
     const queue = [start];
+    let best = -1;
     for (let head = 0; head < queue.length; head++) {
       const cur = queue[head]!;
-      const used = cur % W;
-      const cell = (cur - used) / W;
+      if (best !== -1 && dist[cur]! > dist[best]!) break;
+      const spent = cur % K;
+      const rest = (cur - spent) / K;
+      const mask = rest % masks;
+      const cell = (rest - mask) / masks;
       const r = Math.floor(cell / COLS),
         c = cell % COLS;
       if (r === G.exit.r && c === G.exit.c) {
-        const path: Cell[] = [];
-        for (let at = cur; at !== -1; at = from[at]!) {
-          const u = at % W;
-          const cl = (at - u) / W;
-          path.push({ r: Math.floor(cl / COLS), c: cl % COLS });
-        }
-        return path.reverse();
+        if (best === -1 || spent < best % K) best = cur;
+        continue;
       }
+      const held = G.fuses + popcount(mask) - spent;
       for (const [dr, dc] of DIRS) {
         const nr = r + dr,
           nc = c + dc;
         if (!inBounds(nr, nc)) continue;
-        let nu = used;
+        let nSpent = spent,
+          nMask = mask;
         if (G.walls[nr]![nc]) {
-          if (!G.barriers.has(key(nr, nc)) || used + 1 > fuses) continue;
-          nu = used + 1;
+          if (!G.barriers.has(key(nr, nc)) || held < 1) continue;
+          nSpent += 1;
+        } else {
+          const f = fuseCells.indexOf(nr * COLS + nc);
+          if (f !== -1) nMask |= 1 << f;
         }
-        const next = idx(nr, nc, nu);
+        const next = idx(nr * COLS + nc, nMask, nSpent);
         if (from[next] !== -2) continue;
         from[next] = cur;
+        dist[next] = dist[cur]! + 1;
         queue.push(next);
       }
     }
-    return [];
+    if (best === -1) return [];
+    const path: Cell[] = [];
+    for (let at = best; at !== -1; at = from[at]!) {
+      const spent = at % K;
+      const cell = Math.floor(((at - spent) / K) / masks);
+      path.push({ r: Math.floor(cell / COLS), c: cell % COLS });
+    }
+    return path.reverse();
   }
 
   function goalPath(): Cell[] {
     const open = bfsPath(G.walls, G.player, G.exit);
     if (open.length) return open;
-    const through = routeOpening(G.fuses);
-    if (through.length) return through;
+    const trip = bestTrip();
+    if (trip.length) return trip;
+    // Out of reach even with every fuse: head for the nearest one.
     const d = bfsDist(G.walls, G.player);
     let target: Cell | null = null,
       bestD = 1e9;

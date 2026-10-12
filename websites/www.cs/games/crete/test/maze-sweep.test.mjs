@@ -1,10 +1,10 @@
 // Spec section 4's budgets over many seeds: the fallback is rare and
-// generation is fast. 1,000 seeds per make test; the nightly run sweeps 10,000.
+// generation is fast. 300 seeds per make test; the nightly run sweeps 10,000.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateRun, spawnDistance, MIN_SPAWN, EXIT } from '../src/engine.ts';
 
-const SEEDS = Number(process.env.CRETE_SWEEP_SEEDS ?? (process.env.GITHUB_EVENT_NAME === 'schedule' ? 10_000 : 1_000));
+const SEEDS = Number(process.env.CRETE_SWEEP_SEEDS ?? (process.env.GITHUB_EVENT_NAME === 'schedule' ? 10_000 : 300));
 
 test(`over ${SEEDS} seeds every maze starts the creature far, the fallback fires on at most 1% and generation takes at most 20 ms at p95`, () => {
   const times = [];

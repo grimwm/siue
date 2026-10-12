@@ -1,14 +1,10 @@
 // The run's numbers: difficulty, caps, delays, waves, hull tint, volume curve.
-// Run here: `node rules-test.js`. js/rules.js (compiled from src/rules.ts) is
+// src/rules.ts is
 // pure, so every value is checked against a hand-worked figure with a fixed
 // random source; no browser is involved.
-import * as rules from './js/rules.js';
+import * as rules from '../src/rules.ts';
+import { check } from '../../_kit/test/check.ts';
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
 const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
 const fixed = v => () => v;
 /** A random source that replays a list, then fails loudly if asked for more. */
@@ -66,6 +62,3 @@ check('sfx-50-is-the-former-default', near(rules.volumeToGain(50), 0.85 * 0.85),
 check('sfx-100-is-full', near(rules.volumeToGain(100), 1) && rules.volumeToGain(0) === 0, '');
 check('music-50-is-1.25', near(rules.volumeToGain(50, 'music'), 1.25) && near(rules.volumeToGain(100, 'music'), 2.5), '');
 check('volume-clamps-and-survives-garbage', rules.volumeToGain(250) === 1 && rules.volumeToGain('x') === 0 && rules.volumeToGain(-4, 'music') === 0, '');
-
-console.log(failed ? `RULES-FAIL ${failed}` : 'RULES-OK');
-process.exit(failed ? 1 : 0);

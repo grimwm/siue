@@ -1,16 +1,16 @@
 /* Cylon Defense: the types the browser-side modules share.
  *
- * cylon.js owns a few pieces of mutable state that more than one module reads
+ * main.ts owns a few pieces of mutable state that more than one module reads
  * or writes (the run's record, the schedule, whether the game is paused), and
  * a few plain records (the cursor, the settings). They are handed to each
- * module as these types; the modules import nothing at run time, so this file
- * is types only and compiles to nothing. */
-import type * as playfieldModule from './playfield.js';
-import type * as rulesModule from './rules.js';
-import type { RunState, Schedule } from './state.js';
-import type * as stateModule from './state.js';
+ * module as these types; the modules take them as arguments. Apart from the settings
+ * constants and guard, this file is types only. */
+import type * as playfieldModule from './playfield.ts';
+import type * as rulesModule from './rules.ts';
+import type { RunState, Schedule } from './state.ts';
+import type * as stateModule from './state.ts';
 
-/** The modules the factories call into, as the objects cylon.js imported them. */
+/** The modules the factories call into, as the objects main.ts imported them. */
 export type StateApi = typeof stateModule;
 export type RulesApi = typeof rulesModule;
 export type PlayfieldApi = typeof playfieldModule;
@@ -18,7 +18,7 @@ export type PlayfieldApi = typeof playfieldModule;
 export type Timer = ReturnType<typeof setTimeout>;
 
 /**
- * The state the modules share. cylon.js replaces `run` and `schedule` with what
+ * The state the modules share. main.ts replaces `run` and `schedule` with what
  * each state transition returns, so it lives in one record the modules read
  * through; none of them keeps a copy.
  */
@@ -54,6 +54,26 @@ export interface Settings {
   eyeEnabled: boolean;
   /** The settings panel writes by data-setting name. */
   [key: string]: boolean | number;
+}
+
+export const SETTINGS_KEY = 'cylon-settings';
+
+export const DEFAULT_SETTINGS: Settings = {
+  gameEnabled: false,
+  soundEnabled: true,
+  musicEnabled: true,
+  // UI midpoints; gain curves map 50% to the intended default loudness
+  soundVolume: 50,
+  musicVolume: 50,
+  eyeEnabled: true,
+};
+
+/**
+ * Accepts any stored object, so a partial or older one still loads; the caller
+ * spreads it over DEFAULT_SETTINGS and clamps the volumes.
+ */
+export function isSettings(v: unknown): v is Partial<Settings> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 /** The cursor, in viewport and in page coordinates. */

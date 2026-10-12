@@ -15,3 +15,10 @@
         SetOutputFilter DEFLATE
     </FilesMatch>
 </IfModule>
+
+# Game pages revalidate too (see the site root .htaccess).
+<IfModule mod_headers.c>
+    <FilesMatch "\.html$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+</IfModule>

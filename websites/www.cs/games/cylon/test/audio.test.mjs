@@ -1,15 +1,16 @@
-// The sound module against a fake AudioContext. Run here: `node audio-test.js`.
-// js/audio.js (compiled from src/audio.ts) gets its settings, its session state,
+// The sound module against a fake AudioContext.
+// src/audio.ts gets its settings, its session state,
 // its volume curve and its context as arguments, so Node needs no WebAudio: the
 // fake below records the nodes the module builds and the gains it sets.
-import { createAudio } from './js/audio.js';
-import { volumeToGain } from './js/rules.js';
+import { createAudio } from '../src/audio.ts';
+import { volumeToGain } from '../src/rules.ts';
+import { check } from '../../_kit/test/check.ts';
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
+// Several checks start the music, whose scheduler is a real interval; unref it
+// so a finished file does not wait on it.
+const realSetInterval = globalThis.setInterval;
+globalThis.setInterval = (...args) => realSetInterval(...args).unref();
+
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 function fakeParam(initial = 1) {
@@ -229,5 +230,3 @@ for (const [name, settings] of [['sound-off', { soundEnabled: false }], ['volume
   audio.settingChanged('soundVolume');
   check('replaced-settings-object-is-read-live', ctx.sfxBus().gain.value === volumeToGain(100, 'sfx'));
 }
-
-process.exit(failed ? 1 : 0);

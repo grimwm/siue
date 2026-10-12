@@ -9,7 +9,7 @@
  *
  * It touches only the reticle element it is handed and `window`. Browser-only:
  * it compiles in the DOM program. */
-import type { AimPoint, Game, Mouse, Settings } from './types.js';
+import type { AimPoint, Game, Mouse, Settings } from './types.ts';
 
 export interface ReticleDeps {
   /** The reticle; without it only the aim point is kept. */

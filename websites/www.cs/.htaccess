@@ -1,0 +1,7 @@
+# Pages revalidate on every visit, so a browser never keeps a page that names
+# files a deploy has removed. Assets keep their ?v= content-hash busting.
+<IfModule mod_headers.c>
+    <FilesMatch "\.html$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+</IfModule>

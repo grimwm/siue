@@ -1,14 +1,9 @@
 // Where drones may stand: the playable box, the clear spots, the entry edges.
-// Run here: `node playfield-test.js`. js/playfield.js (compiled from
-// src/playfield.ts) is arithmetic on numbers the page measured, driven here
+// src/playfield.ts is arithmetic on numbers the page measured, driven here
 // with a seeded random source; no browser is involved.
-import * as pf from './js/playfield.js';
+import * as pf from '../src/playfield.ts';
+import { check } from '../../_kit/test/check.ts';
 
-let failed = 0;
-const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
-  if (!ok) failed++;
-};
 
 /** Mulberry32, so a failure repeats. */
 function seeded(seed) {
@@ -68,14 +63,16 @@ check('entry-spots-repeat-by-seed', JSON.stringify(pf.candidateSpots(b, seeded(7
 
 // Finding a spot: a clear one near the drone, back into view when it is off screen.
 const field = { bounds: b, forbidden: [link], doc, bot: BOT };
+let unsafePatrols = 0;
 for (let seed = 1; seed <= 40; seed++) {
   const rng = seeded(seed);
   const patrol = pf.findSafeSpot(field, { x: 500, y: 320 }, rng);
   if (!patrol || !pf.isSafeSpot(patrol.x, patrol.y, field.forbidden, doc, BOT) || !pf.isInBounds(b, patrol.x, patrol.y)) {
+    unsafePatrols++;
     check(`find-safe-spot-near-seed-${seed}`, false, JSON.stringify(patrol));
   }
 }
-check('find-safe-spot-near-always-clear', failed === 0, '');
+check('find-safe-spot-near-always-clear', unsafePatrols === 0, '');
 const patrolSpot = pf.findSafeSpot(field, { x: 300, y: 500 }, seeded(3));
 check('patrol-step-stays-near', patrolSpot.edge === 'patrol' && Math.abs(patrolSpot.x - 300) <= 100 && Math.abs(patrolSpot.y - 500) <= 70, JSON.stringify(patrolSpot));
 const back = pf.findSafeSpot(field, { x: -900, y: 5000 }, seeded(3));
@@ -90,6 +87,3 @@ check('same-seed-same-spot', JSON.stringify(pf.findSafeSpot(field, { x: 300, y: 
 check('march-from-the-left', JSON.stringify(pf.marchOrigin(b, { x: b.left, y: 300, edge: 'left' }, BOT)) === JSON.stringify({ x: b.left - 44 + 6, y: 300 }), '');
 check('march-from-the-right', JSON.stringify(pf.marchOrigin(b, { x: b.right, y: 300, edge: 'right' }, BOT)) === JSON.stringify({ x: b.right + 44 - 6, y: 300 }), '');
 check('march-from-below', JSON.stringify(pf.marchOrigin(b, { x: 500, y: b.bottom, edge: 'bottom' }, BOT)) === JSON.stringify({ x: 500, y: b.bottom + 56 - 6 }), '');
-
-console.log(failed ? `PLAYFIELD-FAIL ${failed}` : 'PLAYFIELD-OK');
-process.exit(failed ? 1 : 0);

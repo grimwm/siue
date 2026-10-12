@@ -4,8 +4,8 @@
  * drones may be out at once, how many missiles of each kind, how long until
  * the next missile or nuke, how big a wave is, plus the hull-point tint and
  * the volume curve. Pure functions of the score, the clock and a random
- * source, so they compile in the DOM-free program and rules-test.js pins
- * them. cylon.js owns the state (the score, the timers) and passes it in. */
+ * source, so they compile in the DOM-free program and test/rules.test.mjs pins
+ * them. main.ts owns the state (the score, the timers) and passes it in. */
 
 /** Hull points the player starts with. */
 export const MAX_HITS = 30;

@@ -43,10 +43,10 @@ for tool in games/*/tools/install-files.php; do
 done
 
 # The home page's own ?v= cache-busters (site.css, main.js, the mounted game's
-# css and entry module): refuse a stale one. It hashes games/cylon/cylon.js, so
-# the loop above has to pass first.
+# css and entry module): refuse a stale one. It hashes games/cylon/dist/main.js,
+# which the kit build check below guards.
 if ! php tools/site-versions.php --check; then
-  echo "deploy: run php games/cylon/tools/install-files.php, then php tools/site-versions.php, and commit the result" >&2
+  echo "deploy: run (cd games && npm run build), then php tools/site-versions.php, and commit the result" >&2
   exit 1
 fi
 
@@ -122,7 +122,7 @@ while IFS= read -r -d '' f; do
     # and the TypeScript build setup (package*.json, tsconfig.json,
     # node_modules; the compiled js/ and the vendored vendor/ ship, the
     # TypeScript sources in src/ do not).
-    games/*-test.* | games/*/test.sh | games/README.md | games/*/README.md | games/*/tools/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/*/fx-editor.* | games/*/fx/blender/*) continue ;;
+    games/*-test.* | games/*/test.sh | games/README.md | games/*/README.md | games/*/tools/* | games/*/test/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/*/fx-editor.* | games/*/fx/blender/*) continue ;;
     games/*/package.json | games/*/package-lock.json | games/*/tsconfig.json | games/*/node_modules/* | games/*/.gitignore) continue ;;
     # Authoring sources (Git LFS audio and Blender scenes, see .gitattributes;
     # TypeScript in games/*/src/): never served.
@@ -133,6 +133,7 @@ while IFS= read -r -d '' f; do
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).
     play/*) ;;
+    .htaccess) ;;
     */*) continue ;;
     *.html | *.js | *.css | *.php | *.png | *.ico | *.webmanifest) ;;
     *) continue ;;
@@ -225,10 +226,17 @@ if [ "${PRUNE:-0}" = 1 ] && [ -s "$work/gone" ]; then
   sftp_batch "$work/prune"
 fi
 
-# The scores file is the server's: create it if missing, and keep it 666 so
-# PHP (a different user) can write it in place.
-if ! "${sshpass[@]}" scp -q "$HOST:$SCORES" "$work/scores" 2>/dev/null; then
-  echo "[]" >"$work/scores"
+# The scores file is the server's: create it only when a listing of its folder
+# succeeds and does not show it, and keep it 666 so PHP (a different user) can
+# write it in place. A failed listing stops here, before the stamp, so a
+# network error can never replace live scores with an empty board.
+scores_dir=$(dirname "$SCORES")
+if ! listing=$(printf 'ls -1 %s\n' "$scores_dir" | "${sshpass[@]}" sftp -q -oBatchMode=no -b - "$HOST" 2>&1); then
+  echo "deploy: cannot list $scores_dir on $HOST; scores left untouched, rerun the deploy" >&2
+  exit 1
+fi
+if ! grep -q "/$(basename "$SCORES")\$" <<<"$listing"; then
+  echo '{"week":[],"alltime":[]}' >"$work/scores"
   chmod 666 "$work/scores"
   "${sshpass[@]}" scp -q -p "$work/scores" "$HOST:$SCORES"
   echo "  created $SCORES"

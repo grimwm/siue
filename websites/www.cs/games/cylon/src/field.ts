@@ -9,7 +9,7 @@
  *
  * Neither looks anything up on its own. The elements, the document, the
  * viewport, the random source, the clock, the timers and the game's pause and
- * liveness predicates come in as `deps`, so nothing here reaches cylon.js's
+ * liveness predicates come in as `deps`, so nothing here reaches main.ts's
  * state and a test can drive the holes with fake elements and a fake clock.
  * Browser-only: it compiles in the DOM program. */
 

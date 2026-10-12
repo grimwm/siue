@@ -10,7 +10,7 @@
  *   - games/cylon/css/*.css, the mounted game's stylesheets, one <link> each.
  *     The order of those <link> tags is the cascade, so the page must list
  *     them in the order below, and every file in the folder must be linked;
- *   - games/cylon/cylon.js, the mounted game's entry module, loaded by an
+ *   - games/cylon/dist/main.js, the mounted game's built entry module, loaded by an
  *     import() in the page's module script.
  * Each reference must appear exactly once, or nothing is written and the
  * problem is reported. The game's stylesheets are linked rather than
@@ -21,10 +21,9 @@
  *   php tools/site-versions.php --check  report it stale, exit 1 if so
  *
  * Who writes which `?v=`: this tool owns every one in index.html; the game's
- * own tools/install-files.php owns the ones inside games/cylon/cylon.js (its
- * js/ imports and its mount.html fetch). The two never touch the same file.
- * The page hashes cylon.js as it stands, so run the game's tool first: if
- * cylon.js changes afterwards, this tool's --check names index.html stale
+ * build (games/_kit/build/build.mjs) bakes the mount.html version into
+ * games/cylon/dist/main.js. The page hashes that bundle as built, so build
+ * first: if it changes afterwards, this tool's --check names index.html stale
  * until it is rerun. (make test and deploy.sh run them in that order.)
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -53,7 +52,7 @@ const SITE_VERSIONS_REFS = [
     ['attr', 'games/cylon/css/units.css'],
     ['attr', 'games/cylon/css/world.css'],
     ['attr', 'games/cylon/css/intro.css'],
-    ['import', 'games/cylon/cylon.js'],
+    ['import', 'games/cylon/dist/main.js'],
 ];
 
 /** The folder of the game's stylesheets, relative to the site root. */
@@ -152,7 +151,7 @@ if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
     }
     if ($stale) {
         if ($check) {
-            fwrite(STDERR, 'site-versions: ' . SITE_VERSIONS_PAGE . " is stale; run php tools/site-versions.php (after php games/cylon/tools/install-files.php)\n");
+            fwrite(STDERR, 'site-versions: ' . SITE_VERSIONS_PAGE . " is stale; run php tools/site-versions.php (after cd games && npm run build)\n");
         } else {
             echo 'site-versions: wrote ' . SITE_VERSIONS_PAGE . "\n";
         }

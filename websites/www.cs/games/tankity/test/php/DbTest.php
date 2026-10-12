@@ -65,8 +65,14 @@ final class DbTest extends TestCase
     public function testASymlinkedDatabaseIsRefused(): void
     {
         symlink($this->dir . '/elsewhere.sqlite', $this->dir . '/' . TANKITY_DB_FILE);
-        $this->expectException(TankityStorageRefused::class);
-        tankity_db();
+        $before = umask();
+        try {
+            tankity_db();
+            $this->fail('a symlinked database was opened');
+        } catch (TankityStorageRefused) {
+            // refused
+        }
+        $this->assertSame($before, umask(), 'the umask is untouched by a refused open');
     }
 
     public function testTheSchemaStepsRunOnce(): void

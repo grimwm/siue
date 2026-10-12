@@ -65,25 +65,48 @@ function room_begin(): PDO
         tankity_depth($db, 1);
         return $db;
     } catch (Throwable $e) {
-        if (tankity_busy($e)) {
-            room_json_out(503, ['error' => 'this room is busy; try again']);
-        }
-        if ($e instanceof TankityStorageRefused) {
-            room_json_out(503, ['error' => 'storage unavailable']);
-        }
-        error_log('tankity rooms: ' . $e->getMessage());
-        room_json_out(500, ['error' => 'store unavailable']);
+        room_store_fail($e);
     }
+}
+
+/* Answers a storage failure as JSON, never as an uncaught fatal: busy and a
+   refused or unusable directory are 503 (the client retries), anything else
+   is logged and 500. */
+function room_store_fail(Throwable $e): never
+{
+    if (tankity_busy($e)) {
+        room_json_out(503, ['error' => 'this room is busy; try again']);
+    }
+    if ($e instanceof TankityStorageRefused) {
+        room_json_out(503, ['error' => 'storage unavailable']);
+    }
+    error_log('tankity rooms: ' . $e->getMessage());
+    room_json_out(500, ['error' => 'store unavailable']);
 }
 function room_unlock($lock): void
 {
     if (!$lock instanceof RoomLock || !$lock->open) {
         return;
     }
-    $lock->open = false;
-    unset($GLOBALS['ROOM_HELD'][$lock->code]);
-    tankity_depth($lock->db, -1);
-    $lock->db->exec('COMMIT');
+    // Commit first: if it fails (the DELETE journal waits on readers) the
+    // transaction is rolled back before the request answers, never left open.
+    try {
+        $lock->db->exec('COMMIT');
+    } catch (Throwable $e) {
+        try {
+            $lock->db->exec('ROLLBACK');
+        } catch (PDOException) {
+            // SQLite already rolled the transaction back.
+        }
+        $failed = $e;
+    } finally {
+        $lock->open = false;
+        unset($GLOBALS['ROOM_HELD'][$lock->code]);
+        tankity_depth($lock->db, -1);
+    }
+    if (isset($failed)) {
+        room_store_fail($failed);
+    }
 }
 /* Drops a room whose creation failed after allocation, or anything a request
    held but never saved. */

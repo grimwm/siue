@@ -109,6 +109,31 @@ final class DataDirTest extends TestCase
         }
     }
 
+    public function testASquatByAnotherAccountIsRefusedEvenWhenWeCannotWriteIt(): void
+    {
+        $log = $this->root . '/php.log';
+        $old = ini_set('error_log', $log);
+        try {
+            if (tankity_euid() === 0) {
+                $theirs = $this->root . '/theirs';
+                mkdir($theirs, 0700);
+                chown($theirs, 12345);
+            } else {
+                $theirs = '/usr'; // root's, and not writable by us
+                $this->assertFalse(is_writable($theirs));
+            }
+            try {
+                tankity_claim_dir($theirs, true);
+                $this->fail('a directory of another account was accepted');
+            } catch (TankityStorageRefused) {
+                // refused, which is the point
+            }
+            $this->assertStringContainsString("$theirs belongs to another account; remove it, or set data_dir", (string) file_get_contents($log));
+        } finally {
+            ini_set('error_log', $old === false ? '' : $old);
+        }
+    }
+
     public function testAnExistingDirectoryIsVerifiedNeverJustUsed(): void
     {
         $mine = $this->root . '/mine';

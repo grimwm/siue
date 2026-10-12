@@ -5,13 +5,18 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /* One SQLite writer for every room, under the load the lobby allows: 8 rooms
-   playing, each with three humans and a drone, and four players per room
+   in play, each with three humans and a drone, and four players per room
    polling at the client's pace (src/net.ts MATCH_POLL_MS) for ten seconds,
-   against the docker site (nginx and PHP-FPM), as browsers reach it. */
+   against the docker site (nginx and PHP-FPM), as browsers reach it. Every
+   poll of a playing room takes the write lock (the drone's turns run in it),
+   and each human also sends an aim act every few seconds, as a player moving
+   the barrel does. The journal is whatever the site picks for its filesystem
+   (WAL on the container's overlay). */
 final class RoomsLoadTest extends TestCase
 {
     private const ROOMS = 8;
     private const POLL_SECS = 1.6;
+    private const ACT_SECS = 3.0;
     private const RUN_SECS = 10.0;
     private const ROOMS_P95_MS = 300;
     private const BASE = 'http://nginx/games/tankity/rooms.php';
@@ -51,15 +56,19 @@ final class RoomsLoadTest extends TestCase
         }
         $mh = curl_multi_init();
         $next = [];
+        $nextAct = [];
         foreach ($seats as $k => $_) {
             $next[$k] = microtime(true) + ($k % 16) * 0.1; // spread the first polls as browsers' clocks are spread
+            $nextAct[$k] = microtime(true) + 1.0 + ($k % 8) * 0.3;
         }
+        $actors = [];
+        $actCodes = [];
         $busy = [];
         $codes = [];
         $lat = [];
         $active = [];
         $end = microtime(true) + self::RUN_SECS;
-        while (microtime(true) < $end || $active) {
+        while (microtime(true) < $end || $active || $actors) {
             $now = microtime(true);
             foreach ($seats as $k => [$code, $token]) {
                 if ($now < $end && $now >= $next[$k] && !isset($active[$k])) {
@@ -70,8 +79,27 @@ final class RoomsLoadTest extends TestCase
                     $next[$k] = $now + self::POLL_SECS;
                 }
             }
+            foreach ($seats as $k => [$code, $token, $csrf]) {
+                if ($token !== '' && $now < $end && $now >= $nextAct[$k] && !isset($actors[$k])) {
+                    $h = curl_init(self::BASE . '?action=act');
+                    curl_setopt_array($h, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10,
+                        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+                        CURLOPT_POSTFIELDS => json_encode(['code' => $code, 'token' => $token, 'csrf' => $csrf, 'kind' => 'aim', 'angle' => 40 + $k % 50, 'power' => 60])]);
+                    curl_multi_add_handle($mh, $h);
+                    $actors[$k] = $h;
+                    $nextAct[$k] = $now + self::ACT_SECS;
+                }
+            }
             curl_multi_exec($mh, $running);
             while (($info = curl_multi_info_read($mh)) !== false) {
+                foreach ($actors as $k => $h) {
+                    if ($h === $info['handle']) {
+                        $actCodes[] = (int) curl_getinfo($h, CURLINFO_RESPONSE_CODE);
+                        curl_multi_remove_handle($mh, $h);
+                        unset($actors[$k]);
+                        continue 2;
+                    }
+                }
                 foreach ($active as $k => [$h, $t0]) {
                     if ($h === $info['handle']) {
                         $status = (int) curl_getinfo($h, CURLINFO_RESPONSE_CODE);
@@ -98,6 +126,9 @@ final class RoomsLoadTest extends TestCase
         $this->assertGreaterThan(self::ROOMS * 4 * 5, count($codes), 'every player polled');
         $this->assertSame([], $busy, 'no poll answered 503');
         $this->assertSame([200], array_values(array_unique($codes)));
+        $this->assertNotEmpty($actCodes, 'the humans acted');
+        $this->assertSame([], array_diff($actCodes, [200, 409]), 'an act is accepted or told it is not the seat\'s turn, never busy');
+        fwrite(STDERR, sprintf("\nRoomsLoadTest: %d polls, %d acts, p95 %.0f ms, max %.0f ms\n", count($lat), count($actCodes), $p95, end($lat)));
         $this->assertLessThan(self::ROOMS_P95_MS, $p95, sprintf('p95 %.0f ms over %d polls', $p95, count($lat)));
     }
 }

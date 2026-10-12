@@ -138,8 +138,7 @@ if ($action === 'ping') {
     try {
         $rooms = ['used' => room_count(), 'max' => room_max_rooms()];
     } catch (Throwable $e) {
-        error_log('tankity rooms: ' . $e->getMessage());
-        room_json_out($e instanceof TankityStorageRefused ? 503 : 500, ['error' => 'store unavailable']);
+        room_store_fail($e);
     }
     room_json_out(200, ['ok' => true, 'game' => 'operation-tankity', 'rooms' => $rooms]);
 }
@@ -222,9 +221,14 @@ if ($action === 'create' && $method === 'POST') {
     if ($initials === null) {
         room_json_out(422, ['error' => 'initials must be 3 letters, kept clean']);
     }
-    room_sweep();
-    $max = room_max_rooms();
-    if (room_count() >= $max) {
+    try {
+        room_sweep();
+        $max = room_max_rooms();
+        $full = room_count() >= $max;
+    } catch (Throwable $e) {
+        room_store_fail($e);
+    }
+    if ($full) {
         room_json_out(409, ['error' => "every room is taken ($max / $max). Try again later."]);
     }
     $map = null;
@@ -440,7 +444,11 @@ if ($action === 'state') {
     // A lobby or a finished match changes only by an act: a poll reads it
     // without the write lock. A seated poll still refreshes the room's touch
     // every ROOM_HEARTBEAT_SECS, so a waiting lobby stays live.
-    $peek = room_peek($code);
+    try {
+        $peek = room_peek($code);
+    } catch (Throwable $e) {
+        room_store_fail($e);
+    }
     if ($peek === null) {
         room_json_out(404, ['error' => 'no such room']);
     }

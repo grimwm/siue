@@ -26,9 +26,9 @@ final class TankityStorageRefused extends RuntimeException
 }
 
 /* Logs one line naming the path and the problem, then refuses. */
-function tankity_refuse(string $dir, string $problem): never
+function tankity_refuse(string $dir, string $problem, string $remedy = 'remove it, or set data_dir'): never
 {
-    error_log("tankity storage: $dir $problem; remove it, or set data_dir");
+    error_log("tankity storage: $dir $problem; $remedy");
     throw new TankityStorageRefused("$dir $problem");
 }
 
@@ -63,27 +63,37 @@ function tankity_claim_dir(string $dir, bool $private): string
     // verified below, never adopted.
     if (!file_exists($dir) && !is_link($dir)) {
         if (!@mkdir($dir, tankity_mode('dir'), true) && !file_exists($dir) && !is_link($dir)) {
-            throw new RuntimeException("cannot create $dir");
+            tankity_refuse($dir, 'cannot be created', 'fix its parent directory, or set data_dir');
         }
     }
     clearstatcache(true, $dir);
     $st = @lstat($dir); // lstat: a link is reported as a link, not followed
     if ($st === false) {
-        throw new RuntimeException("$dir is not a writable directory");
+        tankity_refuse($dir, 'is not a writable directory', 'fix its permissions, or set data_dir');
     }
-    if (($st['mode'] & 0170000) === 0120000) {
-        $private ? tankity_refuse($dir, 'is a symbolic link') : throw new RuntimeException("$dir is not a writable directory");
-    }
-    if (($st['mode'] & 0170000) !== 0040000 || !is_writable($dir)) {
-        throw new RuntimeException("$dir is not a writable directory");
+    $isLink = ($st['mode'] & 0170000) === 0120000;
+    if ($isLink && !$private) {
+        tankity_refuse($dir, 'is a symbolic link, not a writable directory', 'point data_dir at the directory itself');
     }
     if ($private) {
+        // Ownership comes before writability: a directory someone else made is
+        // not writable to us, and that squat must be refused and logged, not
+        // reported as a plain permissions problem.
+        if ($isLink) {
+            tankity_refuse($dir, 'is a symbolic link');
+        }
+        if (($st['mode'] & 0170000) !== 0040000) {
+            tankity_refuse($dir, 'is not a directory');
+        }
         if ($st['uid'] !== tankity_euid()) {
             tankity_refuse($dir, 'belongs to another account');
         }
         if (($st['mode'] & 0777) !== tankity_mode('dir')) {
             tankity_refuse($dir, sprintf('has mode %04o, not %04o', $st['mode'] & 0777, tankity_mode('dir')));
         }
+    }
+    if (($st['mode'] & 0170000) !== 0040000 || !is_writable($dir)) {
+        tankity_refuse($dir, 'is not a writable directory', 'fix its permissions, or set data_dir');
     }
     return $dir;
 }
@@ -109,6 +119,10 @@ function tankity_pick_dir(string $preferred, string $fallback, ?Closure $writabl
 {
     $writable ??= fn(string $p): bool => is_writable($p);
     if (is_dir($preferred) && !is_link($preferred)) {
+        // A checkout or deploy may have made it 0755; PHP's own directory is private.
+        if (fileowner($preferred) === tankity_euid() && (fileperms($preferred) & 0077) !== 0) {
+            @chmod($preferred, tankity_mode('dir'));
+        }
         $usable = $writable($preferred);
     } else {
         $usable = !file_exists($preferred) && $writable(dirname($preferred)) && @mkdir($preferred, tankity_mode('dir'));
@@ -129,8 +143,9 @@ function tankity_pick_dir(string $preferred, string $fallback, ?Closure $writabl
 function tankity_data_dir(): string
 {
     $set = trim((string) tankity_setting('TANKITY_DATA_DIR', 'data_dir', ''));
+    static $claimed = [];
     if ($set !== '') {
-        return tankity_claim_dir(rtrim($set, '/'), false);
+        return $claimed[$set] ??= tankity_claim_dir(rtrim($set, '/'), false);
     }
     static $picked = null;
     return $picked ??= tankity_pick_dir(dirname(__DIR__) . '/data', '/var/tmp/' . tankity_username() . '-tankity');

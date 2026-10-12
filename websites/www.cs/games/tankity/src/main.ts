@@ -63,6 +63,7 @@ import { createTitle } from './title.ts';
 import { difficultySetting } from './difficulty.ts';
 import { initialsPref } from './initials.ts';
 import { browserStorage } from '../../_kit/ports.browser.ts';
+import { exitApp, enterFullscreen, browserAppEnv, EXIT_HINT } from '../../_kit/app.ts';
 import type { Arsenal, Weapon, Gear } from './sim.ts';
 import type { GameState, GameTank, MatchState } from './game-types.ts';
 import type { PreviewEnv } from './preview.ts';
@@ -477,6 +478,7 @@ const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
   G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
   nextSong: () => { unlock(); music.next(); },
   freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
+  quit: () => { void quitGame(); },
 });
 /* The title card over the demo (src/title.ts). */
 const { titleOpen, openTitle, closeTitle, renderTitle } = createTitle({
@@ -842,20 +844,30 @@ function menuFocus(open: boolean): void {
   const to = open ? $('menu-close') : titleOpen() ? $('title-settings') : $('btn-menu');
   if (to && to.focus) to.focus();
 }
+/* Menu → Quit: the match ends (a room is left quietly) and the page returns
+   to the title card over the demo; an installed app then closes where it may. */
+async function quitGame(): Promise<void> {
+  if (net.on) netLeave(true);
+  endTutorial(tutorialActive());
+  backToTitle();
+  say('You left the match.', 'info');
+  const outcome = await exitApp(browserAppEnv());
+  if (outcome === 'title-with-hint') say(`${EXIT_HINT}.`, 'info');
+}
 function toggleFullscreen(): void {
-  try {
-    // The frame carries the canvas plus its HUD and pads, so the whole
-    // battle goes fullscreen together.
-    const el = $('frame') || document.documentElement;
-    if (!el || !el.requestFullscreen || !document.exitFullscreen) {
-      say('Fullscreen is not supported in this browser.', 'info');
-      return;
-    }
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void el.requestFullscreen();
-  } catch (_) {
-    say('Fullscreen is not available right now.', 'info');
+  // The frame carries the canvas plus its HUD and pads, so the whole battle goes fullscreen together.
+  const el = $('frame') || document.documentElement;
+  if (typeof el.requestFullscreen !== 'function' || typeof document.exitFullscreen !== 'function') {
+    say('Fullscreen is not supported in this browser.', 'info');
+    return;
   }
+  if (document.fullscreenElement) {
+    void document.exitFullscreen();
+    return;
+  }
+  void enterFullscreen(browserAppEnv(), el).then(ok => {
+    if (!ok) say('Fullscreen is not available right now.', 'info');
+  });
 }
 /* In fullscreen the browser takes ESC to leave fullscreen, so the game never
    sees it. Where Keyboard Lock exists (Chromium), claim ESC for the game:

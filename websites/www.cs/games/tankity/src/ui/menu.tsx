@@ -44,6 +44,8 @@ export interface MenuProps {
   /** Show the Leave room button (inside a room). */
   inRoom: boolean;
   onLeave: () => void;
+  /** Quit: end the match and leave the game. */
+  onQuit: () => void;
   /** The phone-only row (the deck has no room for them there): Next song, Radio and Help. */
   onNextSong: () => void;
   onRadio: () => void;
@@ -155,6 +157,8 @@ export function Menu(p: MenuProps) {
         </button>
         <button type="button" id="menu-leave" class="btn-leave" title="Leave this game room and go back to the title card"
           hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave room</button>
+        <button type="button" id="menu-quit" class="btn-leave" title="End this match and leave the game"
+          onClick={blurThen(p.onQuit)}>Quit</button>
       </form>
     </KeyHints.Provider>
   );

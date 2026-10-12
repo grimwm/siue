@@ -133,3 +133,14 @@ test('phones get Next song, Radio and Help in the menu, each saying whether its 
   assert.equal(byId(section, 'menu-radio').getAttribute('aria-expanded'), 'false');
   assert.equal(byId(section, 'menu-help').getAttribute('aria-expanded'), 'true');
 });
+
+test('Quit is always in the menu and reports a press', () => {
+  let quits = 0;
+  const { section } = draw({ onQuit: () => { quits++; } });
+  const quit = byId(section, 'menu-quit');
+  assert.equal(quit.localName, 'button');
+  assert.equal(quit.textContent, 'Quit');
+  assert.equal(quit.className, 'btn-leave');
+  click(quit);
+  assert.equal(quits, 1);
+});

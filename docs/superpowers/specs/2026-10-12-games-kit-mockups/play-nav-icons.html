@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Play Nav Icons</title>
+<style>
+  :root { --theme: #05060f; --accent: #ffc93c; --ink: #eef1f6; --dim: rgba(238,241,246,.72); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: #0b0c10; color: var(--ink); font: 600 15px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  h2 { font-size: 15px; color: var(--accent); margin: 22px 0 4px; }
+  p.note { color: #a9adb8; font-weight: 400; margin: 0 0 10px; max-width: 80ch; }
+  .frame { margin: 6px 0 2px; border: 1px solid #333; overflow: hidden; background: #000; }
+  .lab { font: 400 12px system-ui; color: #8a8f99; margin-top: 8px; }
+  nav { display: flex; align-items: center; gap: .25rem 1.1rem; min-height: 3rem; padding: .35rem 1rem; background: linear-gradient(180deg, #1a1c26, var(--theme)); border-bottom: 2px solid var(--accent); }
+  nav a, nav .b { color: var(--dim); text-decoration: none; white-space: nowrap; }
+  .brand { color: var(--ink) !important; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+  .gh, .ib { display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .gh { width: 2rem; height: 2rem; margin-right: -.5rem; }
+  .pill { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .7rem; border: 1px solid var(--accent); border-radius: 6px; color: var(--accent) !important; background: transparent; font: inherit; font-size: 14px; }
+  .now { margin-left: auto; display: inline-flex; align-items: center; gap: .45rem; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .now .t { overflow: hidden; text-overflow: ellipsis; }
+  .now img, .now .gi { width: 20px; height: 20px; border-radius: 4px; flex: none; background: radial-gradient(circle at 70% 30%, #fff 0 3px, transparent 4px), linear-gradient(#0b1030 60%, #7a4b22 60%); }
+  .acts { display: inline-flex; gap: .5rem; flex: none; }
+  svg { width: 18px; height: 18px; flex: none; }
+  /* icon-only buttons: a square of 44 px touch area */
+  .icon-only .pill { width: 2.5rem; height: 2.5rem; padding: 0; justify-content: center; flex: none; }
+  .icon-only .pill .txt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .compact { gap: .25rem .7rem; padding: .35rem .6rem; }
+  .compact .brand { letter-spacing: .04em; }
+  .nolinks .hc { display: none; }
+  .noname .now .t { display: none; }
+  .wrapflag { font: 400 12px system-ui; color: #ff7b7b; }
+</style>
+</head>
+<body>
+<h1>Play page top bar: icon buttons</h1>
+<p class="note">Games, Install and Share get icons. On desktop each icon sits beside its word. On phones each becomes a 40 px square icon button, and its name is still read by screen readers and shown as a tooltip. Each option is drawn at 1280 px and at three Samsung widths: 360, 384 and 412 px (the S Ultras are 384–412). A red note marks a width where the bar would wrap.</p>
+
+<template id="icons">
+  <svg data-i="games" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 11v3M5.5 12.5h3"/><circle cx="15.5" cy="11.5" r="1" fill="currentColor"/><circle cx="17.5" cy="13.5" r="1" fill="currentColor"/></svg>
+  <svg data-i="install" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+  <svg data-i="share-nodes" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+  <svg data-i="share-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>
+  <svg data-i="gh" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>
+</template>
+
+<div id="out"></div>
+
+<script>
+const T = document.getElementById('icons').content;
+const icon = n => T.querySelector(`[data-i="${n}"]`).outerHTML;
+function bar(opts) {
+  const share = opts.share === 'box' ? 'share-box' : 'share-nodes';
+  return `<nav class="${opts.cls || ''}">
+    <a class="brand" href="#">William Grim</a>
+    <a class="hc" href="#">Home</a><a class="hc" href="#">Contact</a>
+    <a class="gh" href="#" aria-label="Source on GitHub">${icon('gh')}</a>
+    <a class="pill" href="#" title="Games">${icon('games')}<span class="txt">Games</span></a>
+    <span class="now"><span class="gi"></span><span class="t">Operation Tankity</span></span>
+    <span class="acts">
+      <button class="pill" title="Install Operation Tankity">${icon('install')}<span class="txt">Install</span></button>
+      <button class="pill" title="Share a link to this game">${icon(share)}<span class="txt">Share</span></button>
+    </span></nav>`;
+}
+const OPTIONS = [
+  { title: 'A · Icons on phones, words kept on desktop', note: 'Below 600 px, Games, Install and Share become icon-only squares. Everything else stays: the brand, Home, Contact, GitHub and the game name, which shortens with "…" if space runs out.', phone: 'icon-only compact', share: 'nodes' },
+  { title: 'B · Like A, and the game name shows only its picture on phones', note: 'The same icon buttons, plus the game name collapses to its 20 px picture on phones. Every width has spare room; the page title below the bar still names the game.', phone: 'icon-only compact noname', share: 'nodes' },
+  { title: 'D · C, and the game name shows only its picture on phones', note: 'Phones show the brand, GitHub, Games, the game\'s picture, Install and Share, all on one line with room to spare. The page title under the bar names the game, and desktop is unchanged.', phone: 'icon-only compact nolinks noname', share: 'nodes' },
+  { title: 'C · Like A, with Home and Contact folded away on phones', note: 'Phones show the brand (which links home), GitHub, the Games icon, the game name, Install and Share. Contact stays reachable from the home page and the Games page.', phone: 'icon-only compact nolinks', share: 'nodes' },
+];
+const out = document.getElementById('out');
+for (const o of OPTIONS) {
+  const sec = document.createElement('section');
+  sec.innerHTML = `<h2>${o.title}</h2><p class="note">${o.note}</p>`;
+  for (const w of [1280, 412, 384, 360]) {
+    const f = document.createElement('div'); f.className = 'frame'; f.style.width = w + 'px';
+    f.innerHTML = bar({ cls: w <= 600 ? o.phone : '', share: o.share });
+    const lab = document.createElement('div'); lab.className = 'lab'; lab.textContent = w + ' px';
+    sec.append(lab, f);
+    requestAnimationFrame(() => {
+      const nav = f.querySelector('nav'); const kids = [...nav.children].filter(k => getComputedStyle(k).display !== 'none');
+      const mids = kids.map(k => { const r = k.getBoundingClientRect(); return r.top + r.height / 2; }); const tops = { size: Math.max(...mids) - Math.min(...mids) > 8 ? 2 : 1 };
+      if (tops.size > 1 || nav.scrollWidth > nav.clientWidth + 1) { const m = document.createElement('div'); m.className = 'wrapflag'; m.textContent = 'wraps or overflows at ' + w + ' px'; sec.insertBefore(m, f.nextSibling); }
+    });
+  }
+  out.append(sec);
+}
+const s = document.createElement('section');
+s.innerHTML = `<h2>The share icon</h2><p class="note">Left: the three-dot share sign Android and Chrome use. Right: the box-and-arrow Apple uses. Option D picks per platform: the box on iPhone, iPad and Mac, the dots everywhere else.</p>`;
+const f = document.createElement('div'); f.className = 'frame'; f.style.width = '412px';
+f.innerHTML = `<nav class="icon-only compact"><span class="b">Share icon:</span><button class="pill">${icon('share-nodes')}<span class="txt">Share</span></button><button class="pill">${icon('share-box')}<span class="txt">Share</span></button></nav>`;
+s.append(f); out.append(s);
+</script>
+</body>
+</html>

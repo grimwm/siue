@@ -80,7 +80,7 @@ globalThis.AudioContext = class {
   get currentTime() { return AC_TIME.t; }
   // Like a real pre-gesture context, resume stays pending until the test
   // flips __acState itself, so the suspend gate can be observed.
-  resume() {}
+  resume() { return new Promise(() => {}); }
   createOscillator() { return new FakeNode(); }
   createGain() { return new FakeNode(); }
   createBuffer(ch, len) { return { getChannelData: () => new Float32Array(len) }; }

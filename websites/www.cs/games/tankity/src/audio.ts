@@ -6,6 +6,9 @@
  * WebAudio, fetch and timers only: nothing here touches the page (a track
  * announcing itself is a callback, see music.onTrackStart). */
 
+import { createAudioCore } from '../../_kit/audio/core.ts';
+import type { BusName } from '../../_kit/audio/core.ts';
+
 /* ---------- the public interface ---------- */
 
 /** The names of the battlefield events that have a voice. */
@@ -22,9 +25,8 @@ export interface AudioConfig {
   music?: unknown;
 }
 
-/* ---------- audio context and voices ---------- */
-let AC: AudioContext | null = null;
-let soundMuted = false;
+/* ---------- audio context and voices: the kit's core ---------- */
+const core = createAudioCore();
 let musicMuted = false;
 let musicOn = false;
 let lastMusicTick = 0;
@@ -32,64 +34,21 @@ let musicTimer = 0;
 let nextNoteT = 0;
 let stepIdx = 0;
 
+/** The context for an effect: none while sound is muted. */
 function ctx(): AudioContext | null {
-  if (soundMuted) return null;
-  return audioCtx();
+  return core.isMuted('sfx') ? null : core.context();
 }
+/** The context for music, which plays whatever the sound toggle says. */
 function audioCtx(): AudioContext | null {
-  try {
-    const webkit = (globalThis as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    AC = AC || new (globalThis.AudioContext || webkit!)();
-    if (AC.state === 'suspended') void AC.resume();
-    return AC;
-  } catch (_) { return null; }
-}
-function envGain(ac: AudioContext, t: number, vol: number, dur: number): GainNode {
-  const g = ac.createGain();
-  g.gain.setValueAtTime(vol, t);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  g.connect(ac.destination);
-  return g;
+  return core.context();
 }
 function blip(freq: number, dur: number, type?: OscillatorType | null, vol?: number | null,
-  slideTo?: number | null, when?: number | null, cx?: AudioContext | null): void {
-  const ac = cx || ctx();
-  if (!ac) return;
-  try {
-    const t = ac.currentTime + (when || 0);
-    const o = ac.createOscillator();
-    o.type = type || 'square';
-    o.frequency.setValueAtTime(freq, t);
-    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t + dur);
-    o.connect(envGain(ac, t, vol || 0.05, dur));
-    o.start(t);
-    o.stop(t + dur + 0.02);
-  } catch (_) { /* silent */ }
+  slideTo?: number | null, when?: number | null, bus: BusName = 'sfx'): void {
+  core.tone({ freq, dur, type: type || 'square', vol: vol || 0.05, slideTo: slideTo ? Math.max(20, slideTo) : null, when: when || 0 }, bus);
 }
-let noiseBuf: AudioBuffer | null = null;
 function noise(dur: number, vol: number, filterFreq?: number | null, slideTo?: number | null,
-  when?: number | null, cx?: AudioContext | null): void {
-  const ac = cx || ctx();
-  if (!ac) return;
-  try {
-    if (!noiseBuf) {
-      noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
-      const d = noiseBuf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    }
-    const t = ac.currentTime + (when || 0);
-    const src = ac.createBufferSource();
-    src.buffer = noiseBuf;
-    src.loop = true;
-    const f = ac.createBiquadFilter();
-    f.type = 'lowpass';
-    f.frequency.setValueAtTime(filterFreq || 1200, t);
-    if (slideTo) f.frequency.exponentialRampToValueAtTime(Math.max(40, slideTo), t + dur);
-    src.connect(f);
-    f.connect(envGain(ac, t, vol || 0.08, dur));
-    src.start(t);
-    src.stop(t + dur + 0.02);
-  } catch (_) { /* silent */ }
+  when?: number | null, bus: BusName = 'sfx'): void {
+  core.noise({ dur, vol: vol || 0.08, filterFreq: filterFreq || 1200, slideTo: slideTo ? Math.max(40, slideTo) : null, when: when || 0 }, bus);
 }
 /* Synthesized SFX bank: every battlefield event gets a voice. A sound file
    from game.json's audio.sfx replaces a voice (see sfx below). */
@@ -152,7 +111,7 @@ export function initAudio(config?: AudioConfig | null): void {
   if (musicOn && trackMode()) { stopSynth(); playTrack(); }
 }
 function loadSfx(): void {
-  if (!gestured || soundMuted) return;
+  if (!gestured || core.isMuted('sfx')) return;
   const ac = audioCtx();
   if (!ac || typeof fetch !== 'function') return;
   for (const s of Object.values(SFX_FILES)) {
@@ -169,7 +128,7 @@ function loadSfx(): void {
 /* True when a file voiced the event; false hands it to the synthesizer. */
 function playSample(name: SfxName): boolean {
   const s = SFX_FILES[name];
-  if (!s || soundMuted) return false;
+  if (!s || core.isMuted('sfx')) return false;
   if (s.state === 'idle') loadSfx(); // this one plays synthesized; the rest wait for the files
   if (s.state !== 'ready') return false;
   const ac = audioCtx();
@@ -180,7 +139,7 @@ function playSample(name: SfxName): boolean {
     const g = ac.createGain();
     g.gain.setValueAtTime(s.volume, ac.currentTime);
     src.connect(g);
-    g.connect(ac.destination);
+    g.connect(core.bus('sfx') ?? ac.destination);
     src.start();
     return true;
   } catch (_) { return false; }
@@ -191,18 +150,9 @@ export const sfx = {
   /** The event's file when game.json has one that loaded, else its synthesized voice. */
   play(name: SfxName): void { if (!playSample(name)) SYNTH[name](); },
   /** The two-note ping for a turn that comes up in a hidden tab. */
-  turnPing(): void {
-    if (!soundMuted) {
-      const ac = audioCtx();
-      if (ac) { blip(880, 0.12, 'sine', 0.08, null, 0); blip(1320, 0.18, 'sine', 0.07, null, 0.13); }
-    }
-  },
+  turnPing(): void { blip(880, 0.12, 'sine', 0.08, null, 0); blip(1320, 0.18, 'sine', 0.07, null, 0.13); },
   /** Three beeps as the turn clock runs low. */
-  clockWarn(): void {
-    if (!soundMuted && audioCtx()) {
-      for (let i = 0; i < 3; i++) blip(988, 0.09, 'square', 0.07, null, i * 0.16);
-    }
-  },
+  clockWarn(): void { for (let i = 0; i < 3; i++) blip(988, 0.09, 'square', 0.07, null, i * 0.16); },
 };
 
 /* Punchy procedural war-grooves: four songs of 32 steps (two bars each),
@@ -259,27 +209,21 @@ function musicStep(): void {
       const at = Math.max(0, nextNoteT - ac.currentTime);
       if (i % 4 === 0) {
         // Kick: sub drop plus a click transient so it cuts through.
-        const t = ac.currentTime + at;
-        const o = ac.createOscillator();
-        o.type = 'sine';
-        o.frequency.setValueAtTime(160, t);
-        o.frequency.exponentialRampToValueAtTime(38, t + 0.13);
-        o.connect(envGain(ac, t, 0.24, 0.15));
-        o.start(t); o.stop(t + 0.17);
-        blip(1100, 0.02, 'square', 0.05, null, at, ac);
+        core.tone({ freq: 160, dur: 0.15, type: 'sine', vol: 0.24, slideTo: 38, slideDur: 0.13, when: at }, 'music');
+        blip(1100, 0.02, 'square', 0.05, null, at, 'music');
       }
-      if (i === 0 && (stepIdx >> 4) % 2 === 0) noise(0.5, 0.03, 9000, 4000, at, ac); // crash
+      if (i === 0 && (stepIdx >> 4) % 2 === 0) noise(0.5, 0.03, 9000, 4000, at, 'music'); // crash
       if (i === 4 || i === 12) {
         // Snare: noise crack plus a 190 Hz body.
-        noise(0.1, 0.08, 6000, 1800, at, ac);
-        blip(190, 0.09, 'triangle', 0.09, 120, at, ac);
-      } else if (i % 2 === 1) noise(0.04, 0.035, 9000, 7000, at, ac); // hats
+        noise(0.1, 0.08, 6000, 1800, at, 'music');
+        blip(190, 0.09, 'triangle', 0.09, 120, at, 'music');
+      } else if (i % 2 === 1) noise(0.04, 0.035, 9000, 7000, at, 'music'); // hats
       const bass = song.bass[i];
-      if (bass) blip(bass, 0.22, 'sawtooth', 0.075, null, at, ac);
+      if (bass) blip(bass, 0.22, 'sawtooth', 0.075, null, at, 'music');
       const lead = song.lead[i];
       if (lead && (stepIdx >> 4) % 2 === 1) {
-        blip(lead, 0.16, 'square', 0.022, null, at, ac);
-        blip(lead, 0.12, 'square', 0.012, null, at + stepDur * 3, ac);
+        blip(lead, 0.16, 'square', 0.022, null, at, 'music');
+        blip(lead, 0.12, 'square', 0.012, null, at + stepDur * 3, 'music');
       }
       nextNoteT += stepDur;
       stepIdx++;
@@ -301,7 +245,6 @@ interface TrackEntry { buf: AudioBuffer; start: number; end: number }
    fade that one out. */
 interface Play { idx: number; voices: { src: AudioBufferSourceNode; gain: GainNode }[]; timer: number; heard: Play | null }
 const TRACK_CACHE: Record<string, Promise<TrackEntry | null>> = {}; // file -> decoded track
-let musicBus: GainNode | null = null; // gain node every track runs through
 let trackPlay: Play | null = null;
 function trackMode(): boolean {
   return MUSIC_LIST.length > 0 && trackFails < MUSIC_LIST.length && typeof fetch === 'function';
@@ -333,10 +276,8 @@ function loadTrack(t: Track): Promise<TrackEntry | null> {
   return TRACK_CACHE[t.file]!;
 }
 function bus(): GainNode | null {
-  const ac = audioCtx();
-  if (!ac) return null;
-  if (!musicBus) { musicBus = ac.createGain(); musicBus.connect(ac.destination); }
-  return musicBus;
+  audioCtx();
+  return core.bus('music');
 }
 /* One pass of a track from `when`, fading in over `fadeIn` seconds, with the
    next pass scheduled to overlap its last XFADE_S. */
@@ -493,10 +434,10 @@ export function noteGesture(musicToggle: boolean): void {
   if (!musicOn) startMusic();
   else if (trackMode()) playTrack(); // a play refused before the first gesture
 }
-export function isSoundMuted(): boolean { return soundMuted; }
+export function isSoundMuted(): boolean { return core.isMuted('sfx'); }
 export function setSoundMuted(muted: boolean): void {
-  soundMuted = muted;
-  if (!soundMuted) ctx();
+  core.setMuted('sfx', muted);
+  if (!muted) ctx();
 }
 export function isMusicMuted(): boolean { return musicMuted; }
 export function setMusicMuted(muted: boolean): void {

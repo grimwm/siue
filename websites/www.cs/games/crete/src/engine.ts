@@ -311,7 +311,7 @@ export function layoutFor(seed: string, attempt: number): Layout {
 
 /** Candidates a seed gets before falling back. */
 export const MAX_ATTEMPTS = 80;
-/** Past MAX_ATTEMPTS, draws continue only to find a maze the strategist wins; the sweep shows none ever needs to. */
+/** Past MAX_ATTEMPTS, draws continue only to find a maze the strategist wins; a safety bound; no swept seed gets near it. */
 const LAST_ATTEMPT = 399;
 
 export interface Trial {
@@ -332,6 +332,34 @@ export interface RunPick {
   rng: Rng;
 }
 
+/** The creature never starts nearer than this to the player, barriers open. */
+export const MIN_SPAWN = 8;
+
+/** Steps from the start to the creature with every barrier open: what it takes the creature to arrive once the player has opened them. */
+export function spawnDistance(layout: Layout): number {
+  const open = layout.walls.map((row) => row.slice());
+  for (const k of layout.barriers) {
+    const [r, c] = unkey(k);
+    open[r]![c] = false;
+  }
+  return bfsDist(open, START)[layout.foe.r]![layout.foe.c]!;
+}
+
+/**
+ * Whether a candidate is a board at all. A closed barrier near the start can
+ * seal off a pocket: too small for the loot, or leaving the creature on the
+ * exit or a step or two from the player. Those are not mazes, whatever the
+ * bots make of them.
+ */
+export function layoutOk(layout: Layout): boolean {
+  const { foe } = layout;
+  return (
+    layout.pickups.size === LOOT.length &&
+    !(foe.r === EXIT.r && foe.c === EXIT.c) &&
+    spawnDistance(layout) >= MIN_SPAWN
+  );
+}
+
 function pick(seed: string, attempt: number, fallback: boolean): RunPick {
   return { attempt, fallback, layout: layoutFor(seed, attempt), rng: runRng(seed, attempt) };
 }
@@ -345,6 +373,7 @@ function pick(seed: string, attempt: number, fallback: boolean): RunPick {
 export function generateRun(seed: string, judge: Judge = trial): RunPick {
   let best: { attempt: number; closest: number } | null = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (!layoutOk(layoutFor(seed, attempt))) continue;
     const dash = judge(seed, attempt, dasher);
     // A non-meeting candidate can only matter as a closer fallback.
     if (!dash.met && best && dash.closest >= best.closest) continue;
@@ -354,7 +383,7 @@ export function generateRun(seed: string, judge: Judge = trial): RunPick {
   }
   if (best) return pick(seed, best.attempt, true);
   for (let attempt = MAX_ATTEMPTS; attempt <= LAST_ATTEMPT; attempt++) {
-    if (judge(seed, attempt, strategist).won) return pick(seed, attempt, true);
+    if (layoutOk(layoutFor(seed, attempt)) && judge(seed, attempt, strategist).won) return pick(seed, attempt, true);
   }
   throw new Error(`Crete: no winnable maze for seed ${seed}`);
 }
@@ -985,11 +1014,6 @@ export function trial(seed: string, attempt: number, bot: Bot): Trial {
   const game = createGame({ say() {}, sfx() {}, render() {}, showEnd() {}, timers: INERT_TIMERS });
   game.startRun(seed, attempt);
   const G = game.G;
-  // A closed barrier near the start can seal off a pocket too small for the loot
-  // or for the creature to start anywhere but on the exit; such a candidate is not a maze.
-  if (G.pickups.size < LOOT.length || (G.foe.r === G.exit.r && G.foe.c === G.exit.c)) {
-    return { won: false, met: false, closest: Infinity };
-  }
   let closest = manhattan(G.player, G.foe);
   for (let i = 0; i < TRIAL_ACTIONS && !G.over; i++) {
     const action = bot(game);

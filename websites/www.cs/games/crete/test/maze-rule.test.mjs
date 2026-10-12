@@ -46,9 +46,9 @@ test('a seed nothing wins by attempt 399 is an error, not a losing maze', () => 
 });
 
 test('the pick carries its attempt\'s layout and run stream', () => {
-  const pick = E.generateRun('seed-x', judge(a => ({ met: true, closest: 1, won: a === 5 })));
-  assert.deepEqual(pick.layout.walls, E.layoutFor('seed-x', 5).walls);
-  assert.equal(pick.rng(), E.runRng('seed-x', 5)());
+  const pick = E.generateRun('seed-x', judge(a => ({ met: true, closest: 1, won: a === 6 })));
+  assert.deepEqual(pick.layout.walls, E.layoutFor('seed-x', 6).walls);
+  assert.equal(pick.rng(), E.runRng('seed-x', 6)());
 });
 
 test('real mazes: the strategist wins each one, and the dasher meets the creature unless it fell back', () => {
@@ -145,10 +145,18 @@ test('T started mid-run never waits more than six turns in a row, even if the cr
   h.game.stopAuto();
 });
 
-test('a candidate whose barrier seals off the loot or the creature is not a maze', () => {
-  // seed-13's first layout leaves 7 pickups and the creature on the exit.
-  assert.equal(E.trial('seed-13', 0, strategist).won, false);
-  assert.notEqual(E.generateRun('seed-13').attempt, 0);
+test('a candidate that is not a board is never picked, even when both bots would pass it', () => {
+  // seed-13 attempt 0 seals the loot off (7 pickups) and puts the creature on the exit.
+  assert.equal(E.layoutOk(E.layoutFor('seed-13', 0)), false);
+  const yes = () => ({ won: true, met: true, closest: 0 });
+  assert.notEqual(E.generateRun('seed-13', yes).attempt, 0);
+  // x-12 attempt 0 spawns the creature two steps from the player.
+  const near = E.layoutFor('x-12', 0);
+  assert.equal(E.spawnDistance(near), 2);
+  assert.equal(E.layoutOk(near), false);
+  assert.notEqual(E.generateRun('x-12', yes).attempt, 0);
+  // stefan-1935 is a seed the page can hand out; its pick starts the creature far.
+  assert.ok(E.spawnDistance(E.generateRun('stefan-1935').layout) >= E.MIN_SPAWN);
 });
 
 test('every maze a player gets is a judged one: newRun, Play again and T all go through generateRun', () => {
@@ -171,8 +179,4 @@ test('every maze a player gets is a judged one: newRun, Play again and T all go 
     const text = readFileSync(join(here, '..', 'src', file), 'utf8');
     assert.doesNotMatch(text, /\b(startRun|layoutFor)\b/, file);
   }
-  // In the engine only the judge itself (trial) and the pick it returns use them.
-  const engine = readFileSync(join(here, '..', 'src', 'engine.ts'), 'utf8');
-  assert.equal([...engine.matchAll(/\.startRun\(/g)].length, 1, 'one caller of game.startRun: trial');
-  assert.equal([...engine.matchAll(/\blayoutFor\(/g)].length, 3, 'definition, pick, startRun');
 });

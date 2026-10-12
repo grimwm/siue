@@ -74,6 +74,7 @@ for (let i = 0; i < 60; i++) {
   if (l.safe.has(E.key(E.START.r, E.START.c)) || l.safe.has(E.key(E.EXIT.r, E.EXIT.c))) problems.push(`${i}: safe zone on start or exit`);
   if (l.safe.has(E.key(l.foe.r, l.foe.c)) || !open(l.foe.r, l.foe.c)) problems.push(`${i}: creature in a safe zone or wall`);
   if (l.foe.r === E.EXIT.r && l.foe.c === E.EXIT.c) problems.push(`${i}: creature on the exit`);
+  if (E.spawnDistance(l) < E.MIN_SPAWN) problems.push(`${i}: creature ${E.spawnDistance(l)} steps from the start`);
 }
 check('every-generated-maze-is-fair', problems.length === 0, problems.slice(0, 3).join('; '));
 

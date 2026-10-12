@@ -52,7 +52,7 @@ foreach (['games/cylon/cylon.js', 'games/cylon/js/rules.js', 'games/cylon/js/pla
 foreach (['main.js', 'play/play.js', 'play/play.css', 'index.html'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
-// Crete: the entry module, the compiled modules it imports, its page and PWA files.
+// Crete: the bundle, its page and PWA files.
 foreach (['games/crete/index.html', 'games/crete/dist/main.js', 'games/crete/game.css', 'games/crete/sw.js', 'games/crete/manifest.webmanifest'] as $f) {
     $check("ships $f", isset($set[$f]));
 }

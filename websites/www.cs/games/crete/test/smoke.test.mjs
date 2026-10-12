@@ -2,7 +2,7 @@
 // version, the engine never names the page, and the test hook is exposed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const GAME = join(import.meta.dirname, '..');
@@ -21,6 +21,18 @@ test('the engine never names the page', () => {
   assert.doesNotMatch(strip(read('src/engine.ts')), /\b(document|window|navigator|localStorage|AudioContext)\b/);
 });
 
-test('the bundle exposes the browser specs\' test hook', () => {
+test('the entry hands the browser specs their test hook, and the bundle ships it', () => {
+  assert.match(read('src/main.ts'), /window\.__mazeTest = \{/);
   assert.match(read('dist/main.js'), /__mazeTest/);
+});
+
+// Games do not know the site: nothing the site's script defines may appear in
+// the game. Skipped when the game is copied out of the site.
+const siteMain = join(GAME, '..', '..', 'main.js');
+test('the game reaches no function the site script defines', { skip: !existsSync(siteMain) }, () => {
+  const names = [...readFileSync(siteMain, 'utf8').matchAll(/^(?:async )?function (\w+)\(/gm)].map(m => m[1]);
+  assert.ok(names.length > 5, String(names));
+  const code = strip(readdirSync(join(GAME, 'src')).filter(f => f.endsWith('.ts')).map(f => read('src', f)).join('\n'));
+  const reached = names.filter(n => new RegExp(`\\b${n}\\b`).test(code));
+  assert.deepEqual(reached, []);
 });

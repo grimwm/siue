@@ -8,7 +8,7 @@
  * committed.
  *
  * This is the thin sibling of the games' tools/ts-build.mjs (games/tankity,
- * games/cylon, games/crete), which are copies of each other because a game
+ * games/cylon), which are copies of each other because a game
  * folder is self-contained. The site is not a game, so its tool lives here and
  * differs in the one way that matters: the output is not a js/ folder of its
  * own but the site root itself, so it checks and writes only the files its

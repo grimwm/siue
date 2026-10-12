@@ -7,7 +7,7 @@ import { useLayoutEffect, useRef } from 'preact/hooks';
 import { Button } from './button.tsx';
 import { Dialog } from './dialog.tsx';
 import { createInstall, IOS_STEPS } from '../install.ts';
-import type { Install, InstallEnv, InstallSetup, InstallView } from '../install.ts';
+import type { Install, InstallEnv, InstallSetup, InstallView, ShareIcon } from '../install.ts';
 
 export interface InstallBarProps {
   view: InstallView;
@@ -28,6 +28,25 @@ function ShareGlyph() {
   );
 }
 
+const ICON = { viewBox: '0 0 24 24', width: 18, height: 18, 'aria-hidden': 'true', focusable: 'false', fill: 'none', stroke: 'currentColor',
+  'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', class: 'kit-install-icon' } as const;
+
+/** A download arrow into a tray. */
+function InstallIcon() {
+  return (
+    <svg {...ICON}><path d="M12 3v12M7 10l5 5 5-5" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
+  );
+}
+
+/** Apple's box and arrow, or the three-dot sign, by platform. */
+function ShareIconGlyph(p: { icon: ShareIcon }) {
+  return p.icon === 'box' ? (
+    <svg {...ICON}><path d="M12 15V3M8 7l4-4 4 4" /><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1" /></svg>
+  ) : (
+    <svg {...ICON}><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></svg>
+  );
+}
+
 export function InstallBar(p: InstallBarProps) {
   const v = p.view;
   const field = useRef<HTMLInputElement>(null);
@@ -41,9 +60,13 @@ export function InstallBar(p: InstallBarProps) {
     <span class="kit-install">
       {v.install && (
         <Button id="install-btn" class={v.highlight ? 'kit-install-btn kit-install-asked' : 'kit-install-btn'}
-          title="Install this game as an app" onClick={p.onInstall}>Install</Button>
+          title="Install this game as an app" onClick={p.onInstall}>
+          <InstallIcon /><span class="kit-install-txt">Install</span>
+        </Button>
       )}
-      <Button id="share-btn" class="kit-install-btn" title="Share a link to this game" onClick={p.onShare}>Share</Button>
+      <Button id="share-btn" class="kit-install-btn" title="Share a link to this game" onClick={p.onShare}>
+        <ShareIconGlyph icon={v.shareIcon} /><span class="kit-install-txt">Share</span>
+      </Button>
       <span id="share-status" class="kit-install-status" role="status">{v.share === 'copied' ? 'Link copied' : null}</span>
       {v.share === 'field' && (
         <input id="share-url" class="kit-install-url" type="text" readOnly value={p.shareUrl} aria-label="Link to this game"
@@ -65,13 +88,15 @@ export function InstallBar(p: InstallBarProps) {
 // The bar's own look, first in <head> so the page's CSS can restyle it.
 const CSS = `
 .kit-install { position: relative; display: inline-flex; align-items: center; gap: 0.5rem; }
-.kit-install-btn { font: 600 0.9rem/1.1 system-ui, sans-serif; padding: 0.3rem 0.75rem; border: 1px solid var(--kit-install-accent, #f0b429); border-radius: 6px; background: transparent; color: var(--kit-install-accent, #f0b429); cursor: pointer; }
+.kit-install-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; font: 600 0.9rem/1.1 system-ui, sans-serif; padding: 0.3rem 0.75rem; border: 1px solid var(--kit-install-accent, #f0b429); border-radius: 6px; background: transparent; color: var(--kit-install-accent, #f0b429); cursor: pointer; }
 .kit-install-btn:hover, .kit-install-btn:focus-visible { background: color-mix(in srgb, var(--kit-install-accent, #f0b429) 18%, transparent); }
 .kit-install-btn:focus-visible { outline: 2px solid var(--kit-install-accent, #f0b429); outline-offset: 2px; }
 .kit-install-asked { background: var(--kit-install-accent, #f0b429); color: #000; animation: kit-install-pulse 1.2s ease-in-out 3; }
 @keyframes kit-install-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--kit-install-accent, #f0b429) 40%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .kit-install-asked { animation: none; } }
 .kit-install-status { color: var(--kit-install-accent, #f0b429); white-space: nowrap; }
+/* Shown, it floats under the buttons at every width, so it never widens the bar or pushes it onto a second line. */
+.kit-install-status:not(:empty) { position: absolute; top: calc(100% + 0.4rem); right: 0; z-index: 3000; padding: 0.3rem 0.6rem; border-radius: 6px; background: #11141b; }
 /* Always in the page, so a screen reader announces the text when it arrives; empty, it takes no room. */
 .kit-install-status:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 /* Under the buttons, out of the bar's layout, and never wider than the screen. */
@@ -80,6 +105,12 @@ const CSS = `
 .kit-install-veil[hidden] { display: none; }
 .kit-install-panel { max-width: 22rem; padding: 1.25rem; border-radius: 12px; background: #11141b; color: #eef1f6; font: 500 1rem/1.45 system-ui, sans-serif; }
 .kit-install-panel h2 { margin: 0 0 0.5rem; font-size: 1.15rem; }
+/* A phone has no room for the words: each button is an icon square, its word kept for screen readers. A tap lands 2px beyond the square too. */
+@media (max-width: 600px) {
+  .kit-install-btn { position: relative; width: 2.5rem; height: 2.5rem; padding: 0; flex: none; }
+  .kit-install-btn::after { content: ''; position: absolute; inset: -2px; }
+  .kit-install-txt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 .kit-install-glyph { vertical-align: -0.3em; margin-right: 0.4rem; }
 .kit-install-corner { position: fixed; top: 0.5rem; right: 0.5rem; z-index: 2900; }
 `;

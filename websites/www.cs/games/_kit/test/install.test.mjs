@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createInstall, asksInstall, withInstall, COPIED_MS, IOS_STEPS, PROMPT_STASH, detectPlatform, browserInstallEnv } from '../install.ts';
+import { createInstall, asksInstall, withInstall, COPIED_MS, IOS_STEPS, PROMPT_STASH, detectPlatform, detectShareIcon, browserInstallEnv } from '../install.ts';
 import { runInNewContext } from 'node:vm';
 import { manualClock } from './clock.ts';
 
@@ -17,7 +17,7 @@ const PLAY = {
 };
 const GAME = { ...PLAY, installPage: null };
 
-function setup({ platform = 'chromium', installed = false, framed = false, share = null, copy = null, early = null } = {}, how = PLAY) {
+function setup({ platform = 'chromium', shareIcon = 'dots', installed = false, framed = false, share = null, copy = null, early = null } = {}, how = PLAY) {
   const clock = manualClock();
   const went = [];
   const views = [];
@@ -28,6 +28,7 @@ function setup({ platform = 'chromium', installed = false, framed = false, share
     onInstalled: cb => { installedNow = cb; },
     installed: () => installed,
     platform: () => platform,
+    shareIcon: () => shareIcon,
     framed: () => framed,
     share,
     copy,
@@ -244,4 +245,24 @@ test('a prompt that fires before the bar loads is held back by the page\'s first
     if (realNavigator) Object.defineProperty(globalThis, 'navigator', realNavigator);
     else delete globalThis.navigator;
   }
+});
+
+test('the Share icon is Apple\'s box on iPhone, iPad (also as a touch Mac) and Mac, and the three dots everywhere else', () => {
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1';
+  const IPAD = 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1';
+  const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15';
+  const CHROME_MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/130.0 Safari/537.36';
+  assert.equal(detectShareIcon(IPHONE, 'iPhone', 5), 'box');
+  assert.equal(detectShareIcon(IPAD, 'iPad', 5), 'box');
+  assert.equal(detectShareIcon(MAC, 'MacIntel', 5), 'box', 'iPadOS in desktop mode says it is a Mac');
+  assert.equal(detectShareIcon(MAC, 'MacIntel', 0), 'box', 'a Mac');
+  assert.equal(detectShareIcon(CHROME_MAC, 'MacIntel', 0), 'box', 'Chrome on a Mac still uses the system share sheet');
+  assert.equal(detectShareIcon('Mozilla/5.0 (Linux; Android 16; SM-S938U) Chrome/130.0 Mobile Safari/537.36', 'Linux armv81', 5), 'dots');
+  assert.equal(detectShareIcon('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36', 'Win32', 0), 'dots');
+  assert.equal(detectShareIcon('Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/130.0', 'Linux x86_64', 0), 'dots');
+});
+
+test('the view carries the platform\'s Share icon', () => {
+  assert.equal(setup({ shareIcon: 'box' }).install.view().shareIcon, 'box');
+  assert.equal(setup({}).install.view().shareIcon, 'dots');
 });

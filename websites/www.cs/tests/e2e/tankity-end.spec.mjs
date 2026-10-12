@@ -94,7 +94,7 @@ test('a lost match shows the end veil: result, score, callsign form, and Continu
     await page.clock.runFor(1000);
     return hud(page, 'hud-turn');
   }, { timeout: 30_000 }).toMatch(/YOU|Aim/);
-  expect(await hud(page, 'hud-lives')).toBe('♥♥♥');
+  expect(await hud(page, 'hud-lives')).toBe('♥ 3');
   await expect(veil).toBeHidden();
   expect(errors).toEqual([]);
 });

@@ -163,7 +163,7 @@ test('drones show an aim arm that swings smoothly before firing', async ({ brows
   for (const l of lengths) expect(l).toBeGreaterThan(13.9), expect(l).toBeLessThan(50.1);
 });
 
-test('the menu is a compact card and Menu is the only primary on the navbar', async ({ browser }) => {
+test('the menu is a compact card, and gold marks only Menu and the aim keys', async ({ browser }) => {
   const { page } = await newPlayer(browser);
   await page.keyboard.press('Escape');
   const card = page.locator('#menu-overlay');
@@ -182,10 +182,10 @@ test('the menu is a compact card and Menu is the only primary on the navbar', as
       expect(overlap, `menu buttons ${i} and ${j} overlap`).toBe(false);
     }
   }
-  // Gold means primary: only Menu on the navbar, the aim pad stays gold.
-  const navbar = await page.locator('.guide-actions button').evaluateAll(bs => bs.map(b => [b.id, getComputedStyle(b).backgroundColor]));
-  const gold = navbar.filter(([, bg]) => bg === 'rgb(255, 201, 60)').map(([id]) => id);
-  expect(gold).toEqual(['btn-menu']);
+  // Gold marks the primary control and the aim keys, nothing else on the bars.
+  const gold = await page.locator('#hud-bar button, #deck button').evaluateAll(bs => bs
+    .filter(b => getComputedStyle(b).backgroundColor === 'rgb(255, 201, 60)').map(b => b.id || b.getAttribute('data-aim')));
+  expect(gold.sort()).toEqual(['btn-menu', 'down', 'left', 'right', 'up']);
   await expect(page.locator('#btn-pause')).toHaveCount(0);
   await page.screenshot({ path: 'test-results/tankity-menu.png' });
   // The footer never repeats the Close button's key.

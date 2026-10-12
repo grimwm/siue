@@ -65,7 +65,7 @@ test('a guest leaves mid-match from the menu and lands on the title card; the ho
   await expect(guest.page.locator('#shop-leave')).toBeHidden();
   await guest.page.click('#shop-next');
   // The HUD shows the solo battery, not the room's players.
-  await expect.poll(() => hud(guest.page, 'hud-armor'), { timeout: 30_000 }).not.toMatch(/abc/);
+  await expect.poll(() => guest.page.locator('.pill.armor').getAttribute('aria-label'), { timeout: 30_000 }).not.toMatch(/abc/i);
   await expect.poll(() => hud(guest.page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU\. Aim!|aiming…/);
   // The guest's seat flew to the battery; the room stays for the host.
   await expect.poll(() => lastRoom(roomState.host)?.seats?.[1]?.mode, { timeout: 10_000 }).toBe('ai');

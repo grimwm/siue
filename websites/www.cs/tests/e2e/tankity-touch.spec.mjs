@@ -21,7 +21,7 @@ test('touch screens get no key labels and no key bindings', async ({ page }) => 
   await page.locator('#title-settings').tap();
   await expect(page.locator('#menu-overlay')).toBeVisible();
   const noKeys = async () => {
-    const shown = await page.evaluate(() => [...document.querySelectorAll('.key, .nav-hint, .pad-note, .keys-only')]
+    const shown = await page.evaluate(() => [...document.querySelectorAll('.key, .nav-hint, .keys-only')]
       .filter(el => el.getClientRects().length > 0).map(el => el.id || el.className));
     expect(shown).toEqual([]);
     const text = await page.evaluate(() => document.body.innerText);

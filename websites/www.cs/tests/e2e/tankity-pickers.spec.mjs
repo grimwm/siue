@@ -33,13 +33,12 @@ test('every shop row carries a painted icon, and the HUD shows the loaded shell'
   await page.click('#shop-next');
   await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU|Aim/);
   const loaded = () => page.evaluate(() => {
-    const chip = document.querySelector('#hud-weapon .chip'); // only the loaded gun shows
-    const cv = chip && chip.querySelector('canvas');
+    const cv = document.querySelector('#btn-weapon .gun-icon');
     if (!cv) return null;
     const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
     let n = 0;
     for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
-    return { text: chip.textContent, n, sig: cv.toDataURL() };
+    return { text: document.getElementById('hud-weapon').textContent, n, sig: cv.toDataURL() };
   });
   const before = await loaded();
   expect(before.text).toMatch(/^Shell/);
@@ -53,7 +52,7 @@ test('every shop row carries a painted icon, and the HUD shows the loaded shell'
   // The words stay in the HUD for readers and tests; the status bar has no favorites row.
   expect(await hud(page, 'hud-weapon')).toMatch(/^Buckshot ×\d+ · also Shell ∞/);
   expect(await page.locator('#hud-favs').count()).toBe(0);
-  await page.locator('.hudbar').first().screenshot({ path: 'test-results/tankity-hud-icons.png' });
+  await page.locator('#deck').screenshot({ path: 'test-results/tankity-hud-icons.png' });
   expect(errors).toEqual([]);
 });
 

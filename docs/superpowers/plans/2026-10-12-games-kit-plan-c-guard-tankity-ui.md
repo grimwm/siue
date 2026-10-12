@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-12-games-kit-design.md`, section 10 rows 10–13, and the sections they point to: 6.1, 6.2, 6.3, 6.4 and 8 (the guard paragraph). Visual reference: `docs/superpowers/specs/2026-10-12-games-kit-mockups/` (`title-card.html` option A, `controls-and-key-chips.html`, `layout-all-devices.html`; `layout-measure.mjs` is the overflow check `tankity-layout` reuses).
 
-**Landing order across plans:** difficulty PR → B6 ∥ C10 → B7 → (B8 ∥ B9) ∥ (C11 → C12 → C13) → B19 → D14 → D15 → D16 → E17 → row 18.
+**Landing order across plans:** difficulty PR → B6 ∥ C10 → B7 → (B8 ∥ B9) ∥ (C11 → C12 → C13) → B19 → D20 → D14 → D15 → D16 → E17 → row 18. (D20 is Plan D's storage PR, spec row 20.)
 
 **Cross-plan dependencies:**
 - Tankity's Difficulty setting (branch `games/tankity-difficulty`: `src/difficulty.ts`, `DIFFICULTY`/`aimSkill` in `src/ai.ts`, the Menu's Difficulty picker, the `difficulty` dep of `createMenu`/`createMatch`/`createLobby`) lands before PR 11. Every search/replace anchor below that quotes `main.ts`, `menu.ts`, `ui/menu.tsx` or `lobby.ts` is written against that code.

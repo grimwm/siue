@@ -61,7 +61,7 @@ Left out on purpose: a generic state machine (only Tankity's `flow.ts` needs one
 - Imports use `.ts` extensions, so Node runs the unit tests straight from `src/` (CI moves to Node 24 LTS).
 - Cache busting: each page references `dist/main.js?v=<hash>` and `game.css?v=<hash>`, written by `install-core.php`; `sw.js` precaches the bundle, its CSS and assets; `tools/site-versions.php` hashes `cylon/dist/main.js` for the home page.
 - Removed: per-import `?v=` rewriting, the Preact import map, `tankity/vendor/` and `tools/vendor.mjs`, the per-game `package.json`/lockfiles/`ts-build.mjs`, and the module lists in `sw.js`.
-- Deploy ships `dist/*.js` and `.map`; it skips `src/`, `_kit/`, `build.json`, `node_modules`, `vendor/` (Composer), `composer.*` and `phpunit.xml`.
+- Deploy ships `dist/*.js` and `.map`; it skips `src/`, `_kit/`, `build.json`, `node_modules`, `vendor/` (Composer), `composer.*` and `phpunit.xml`, and never stages anything under `games/tankity/data/` (section 12).
 
 ## 3. Testing and when it runs
 
@@ -152,7 +152,8 @@ Visible labels match each `aria-label` (WCAG 2.5.3); `aria-expanded` on everythi
 
 ### 7.2 Match end
 
-- Solo is endless and ends at ♥ 0.
+- Solo is endless and ends at ♥ 0; there is no round limit.
+- A tank left over a crater falls while shells are still flying, and a later shell of the same volley meets it where it has fallen to. The war (a drone's aim, the flight, the falls) runs in fixed 1/60 s steps, each dropping the tanks and then moving the shells, in the browser and in the server's play of a solo round alike; shared sim vectors pin the two.
 - A room that started with two or more humans ends when only one human has lives left. That human wins and gets a winner's bonus (the round bonus × 2). A room with one human plays like solo.
 - The 40-turn watch cap (`WATCH_TURNS`) stays.
 - Sim vectors cover the last-human-standing rule.
@@ -162,19 +163,22 @@ Visible labels match each `aria-label` (WCAG 2.5.3); `aria-expanded` on everythi
 Mockup: `scoreboards.html`.
 
 - After every round, at the top of the shop: score (with this round's gain), rounds won, kills, lives or "out in round N". Rows sort by score; eliminated players stay listed, greyed.
-- Match over: "♛ XYZ wins: last tank standing", final standings, **Play again (same room)** (keeps code and seats, resets lives, scores and cash) and **Leave room**, and "Filed · #12 all-time" when the run places.
+- Match over: "♛ XYZ wins: last tank standing", final standings, **Play again (same room)** (keeps code and seats, resets lives, scores and cash) and **Leave room**, and "Filed · #12 all-time on Normal" when the run places on its difficulty's board.
 - You're out: the same table with **Watch the finish** and **Leave room**; while watching, Menu → Standings shows it.
 - Solo: a table of your rounds so far (points, kills, cash, lives, total); at game over it heads the end card.
 
 ## 8. High scores and their integrity
 
-- Runs file themselves the moment they end, in solo and rooms. There is no form or button. Menu → Scores always shows the current all-time board with your entries highlighted.
+- Runs file themselves the moment they end, in solo and rooms. There is no form or button.
+- **One all-time board per difficulty** (Easy, Normal, Hard), each keeping its best 100 runs. A run files on the board of the difficulty it was played at; a room's is its host's. Menu → Scores opens on the board of the player's current difficulty, with a switcher to the other two, and highlights your entries.
 - **Initials:** exactly three letters. Players may type either case; the client displays uppercase and the server uppercases before validating (`[A-Za-z]{3}` in, `[A-Z]{3}` stored). One set per player in the kit's `prefs`, shared by solo and rooms, set in a three-box picker on the title card. A browser that never sets any gets three random letters once.
-- Existing solo entries (free-text callsigns, 1–24 characters) are converted once: letters uppercased, everything else dropped, cut or padded with X to three.
+- Existing solo entries (free-text callsigns, 1–24 characters) are converted once onto the Normal board, each callsign's best run: letters uppercased, everything else dropped, cut or padded with X to three.
 - `games/_kit/php/score-guard.php`, generalized from Cylon's `scores.php`: Origin/Referer allow-list; CSRF double-submit (cookie must match header); single-use, expiring run tokens; per-IP rate limits keyed by an HMAC of the IP; initials validation and blocklist; validated config. Cylon moves onto it with no behaviour change; Tankity's score and room endpoints use it.
 - Rooms: the server computes and files every score itself; the client never sends one.
-- **Solo uses server replay.** At game over the browser sends the seed and the move log (each shot's angle, power and weapon; each drive; each shop purchase). The server replays it with the same PHP sim the rooms use and computes the score. A log that does not replay to a finished game is rejected. Limits: 60 rounds and 2 s of CPU per replay. A run that ends offline waits in the browser and files itself when next online.
-- PHPUnit covers every guard rule (bad origin, missing or mismatched CSRF, reused or expired token, rate limit) and replay (a tampered move log, a forged score field, and an honest run that files at exactly the score the browser showed).
+- **The server keeps a solo run as it is played; nothing is replayed at the end.** A dealt match starts a run (the seed and the difficulty) on a single-use guard run token, and the server deals the same match and stores it. As each round ends the browser sends that round's inputs (each shop purchase before it; each shot's weapon, angle, power and where the tank had driven to) with its claim of how the round ended (the end, score, cash, lives and rounds won). The server plays the round from the run's stored state with the same PHP rules and the same fixed-step flight, stores the new state and the running score in SQLite, and answers its own claim. When the match ends the server already holds the score: filing spends the run token and files that score; any score the client sends is ignored.
+- The server's play is the authority. A round it cannot play (an illegal shot or purchase, shots after the round ended) or whose outcome differs from the client's claim voids the run: once the two disagree, no later round could match, so nothing from that run files. A round sent twice answers its stored reply; one out of order is refused.
+- Limits are per round, not per run: at most 2 s of CPU and 200 player shots per round, and rounds are rate-limited per IP. A run expires two hours after the last round the server accepted, and a day after it started at the latest; an expired run cannot advance or file. Rounds that could not be sent wait in the browser and go, in order, when it is next online.
+- PHPUnit covers every guard rule (bad origin, missing or mismatched CSRF, reused or expired token, rate limit) and the per-round play (a tampered round, a lying claim, a forged score field, a round sent twice or out of order, an expired run, and an honest run that files at exactly the score the browser showed).
 
 ## 9. Comments and docs
 
@@ -198,6 +202,15 @@ Each PR tightens the comments in the files it touches:
   - The kit owns this as one helper (`app.ts`: `isInstalled()`, `enterFullscreen()`, `exitApp()`), so all three behave the same.
 - Tests: `games-pwa` checks each manifest's start URL, scope, display and icons; unit tests cover `exitApp()` for the closable, not-closable and browser-tab cases; each game's spec presses its exit and checks it returns to the title card in a browser tab.
 
+## 12. Tankity storage
+
+- Everything Tankity keeps lives in one SQLite database, `tankity.sqlite`, with the score guard's run store beside it: rooms (one row each, replacing SysV shared memory), the boards, the solo runs, and the per-callsign scores from before the boards until they are converted. Writers take turns through `BEGIN IMMEDIATE` and a 2 s busy timeout; a request that waits longer answers "busy". The shared-memory code, its `shm_key` / `TANKITY_SHM_KEY` setting and the ping's `store` report are removed.
+- **Where:** the `data_dir` setting (`TANKITY_DATA_DIR`, or `.config.yaml`; the environment wins) names the directory. When set it is used exactly: created mode 0700 when missing, and an error ("store unavailable", logged) when PHP cannot write it, never a silent move elsewhere. When unset: `games/tankity/data/` if PHP can write there (PHP then writes `data/.htaccess`, `Require all denied`), else `/var/tmp/<username>-tankity/`, where `<username>` is `get_current_user()` (the owner of the running script, the account the site is deployed as; `uid<N>` when it cannot be resolved). A created directory is 0700 and its files 0600; a `/var/tmp` directory that is a symlink, belongs to another account or is open to group or others is refused.
+- `data/` is never served (the `.htaccess` above; the local nginx denies `/games/tankity/data/`) and never deployed: `deploy.sh` never stages, uploads into, changes modes in or prunes it, and git ignores it.
+- **Journal mode:** WAL when the directory is on a local filesystem (read from `/proc/self/mounts`), DELETE on anything else, including when the filesystem cannot be determined; chosen at run time, with a `journal_mode` setting to override. A read-only probe of the host (SQLite version, which directory PHP can write, each one's filesystem) runs before any of this ships.
+- **Migration:** the old score files (`/var/tmp/<callsign>-operation-tankity.json`, or under a `scores_dir` that is still set: the setting is retired and read only for this) are imported once, idempotently, losing no run; each file is deleted only after its import committed and only if it did not change meanwhile.
+- **Cleanup:** the host has no cron, so requests run housekeeping, at most every five minutes, each job bounded: idle rooms, expired solo runs, converted per-callsign rows, the old files once imported, and temp files a dead writer left. Every job takes the clock as an argument, so tests use a fake one.
+
 ## 10. PR order
 
 | # | PR | Notes |
@@ -216,13 +229,14 @@ Each PR tightens the comments in the files it touches:
 | 12 | Tankity title card (with initials) and settings-only menu | |
 | 13 | Tankity layout, pills, deck, phone layouts; `a11y` and eight-device layout specs | |
 | 14 | Tankity armor rules (client, server, sim vectors) | |
-| 15 | Tankity match end, scoreboards, Play again, auto-filed scores | |
-| 16 | Tankity score integrity: guard, solo replay, initials, board conversion | after 10 and 15 |
+| 15 | Tankity match end, scoreboards, Play again, auto-filed scores, a board per difficulty, board conversion | after 20 |
+| 20 | Tankity storage: one SQLite database (rooms off shared memory, scores), its location and the import of the old score files, cleanup on requests; host probe first | after 13 and 19, before 14 |
+| 16 | Tankity score integrity: guard, the server plays each solo round from stored state, initials | after 10 and 15 |
 | 17 | Tankity music | |
 | 19 | Install and exit: full-screen manifests, per-game icon sets (maskable, Apple, monochrome), kit `app.ts`, Quit in each game | after 5; Tankity's Quit lands with 12 if 12 is in flight |
 | 18 | Typed tests: every remaining `*.test.mjs` becomes `*.test.ts` on `node:test` directly, and every PHP check script a real PHPUnit `TestCase`; each game's `tsconfig.test.json` (with `@types/node`) joins its `build.json` programs; the `check()` and `LegacyCheckCase` bridges are deleted | last; tests in any area a plan B–E PR touches are rewritten in that PR onto `node:test` as `*.test.mjs` (section 3), and this row renames them to `*.test.ts` with the rest |
 
-After 6, the Crete line (7–9) and the Tankity line (11–17) touch different files and run in parallel worktrees; 14, 15 and 17 are independent of each other. Each implementing agent's job stays at about 20 minutes or less.
+After 6, the Crete line (7–9) and the Tankity line (11–17, with 20 in front of 14) touch different files and run in parallel worktrees; 14 and 17 are independent of each other, and 15 needs 20's database. Each implementing agent's job stays at about 20 minutes or less.
 
 New specs and their budgets: `tankity-start`, `tankity-layout` (the eight-device measurement, plus chip centres within 1 px of their row), `a11y` (axe-core over the title card, deck and open menu), each ≤ 15 s. Existing specs that use `#btn-menu`, `C`, `W`/`S`, `A`/`D` or `Q` change in the PR that changes those keys.
 

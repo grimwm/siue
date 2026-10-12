@@ -308,6 +308,21 @@ export const START: Readonly<Cell> = { r: 1, c: 1 };
 /** The exit cell. */
 export const EXIT: Readonly<Cell> = { r: ROWS - 2, c: COLS - 2 };
 
+/** Attempt `attempt`'s layout stream. */
+export function mazeRng(seed: string, attempt: number): Rng {
+  return mulberry32(hashSeed(`${seed}:maze:${attempt}`));
+}
+
+/** Attempt `attempt`'s run stream: the creature's tie-breaks, the jammer, the snack. */
+export function runRng(seed: string, attempt: number): Rng {
+  return mulberry32(hashSeed(`${seed}:run:${attempt}`));
+}
+
+/** Attempt `attempt`'s maze; a fresh copy each call, since a run changes it as it plays. */
+export function layoutFor(seed: string, attempt: number): Layout {
+  return buildMaze(mazeRng(seed, attempt), START, EXIT);
+}
+
 /**
  * A run's maze for a seed: the same seed always gives the same maze. Mazes are
  * generated until the escape math works (the optimal route plus a spare
@@ -383,6 +398,8 @@ const DIR_WORD: Record<string, string> = {
 export interface Game {
   G: State;
   newRun(seedStr: string): void;
+  /** A run on attempt `attempt`'s layout and run stream. */
+  startRun(seed: string, attempt: number): void;
   tryMove(dr: number, dc: number): void;
   bash(): void;
   useItem(kind: ItemKind): void;
@@ -411,6 +428,14 @@ export function createGame(hooks: Hooks): Game {
   function newRun(seedStr: string): void {
     const seed = chooseSeed(seedStr);
     const { rng, layout } = generateRun(seed);
+    applyRun(seed, layout, rng);
+  }
+
+  function startRun(seed: string, attempt: number): void {
+    applyRun(seed, layoutFor(seed, attempt), runRng(seed, attempt));
+  }
+
+  function applyRun(seed: string, layout: Layout, rng: Rng): void {
     const { walls, safe, barriers, pickups, foe, foeDist, optimal, margin } = layout;
     Object.assign(G, {
       seed,
@@ -884,7 +909,7 @@ export function createGame(hooks: Hooks): Game {
   }
 
   return {
-    G, newRun, tryMove, bash, useItem, hint, clearHint, toggleAnswer, toggleAuto,
+    G, newRun, startRun, tryMove, bash, useItem, hint, clearHint, toggleAnswer, toggleAuto,
     wait, canJam, stopAuto, autoStep, goalPath, foeStep, creaturePhase, foeDistance,
   };
 }

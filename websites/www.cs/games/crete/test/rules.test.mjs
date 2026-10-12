@@ -102,3 +102,31 @@ test('an open way to the exit is preferred to one through a barrier', () => {
   h.G.fuses = 1;
   assert.ok(!h.game.goalPath().some(p => p.r === 7 && p.c === 7));
 });
+
+test('each attempt has its own maze stream and run stream, derived from the seed', () => {
+  const a = E.mazeRng('stefan-1984', 3);
+  const b = E.mulberry32(E.hashSeed('stefan-1984:maze:3'));
+  assert.deepEqual([a(), a(), a()], [b(), b(), b()]);
+  const r = E.runRng('stefan-1984', 3);
+  const s = E.mulberry32(E.hashSeed('stefan-1984:run:3'));
+  assert.deepEqual([r(), r()], [s(), s()]);
+});
+
+test('an attempt always lays out the same maze, as a fresh copy', () => {
+  const one = E.layoutFor('lay', 2);
+  const two = E.layoutFor('lay', 2);
+  assert.deepEqual(one.walls, two.walls);
+  assert.notEqual(one.walls, two.walls);
+  assert.notDeepEqual(E.layoutFor('lay', 3).walls, one.walls);
+});
+
+test('starting a run on an attempt plays that maze from that run stream', () => {
+  const h = harness();
+  h.game.startRun('lay', 2);
+  assert.equal(h.G.seed, 'lay');
+  assert.deepEqual(h.G.walls, E.layoutFor('lay', 2).walls);
+  const stream = E.runRng('lay', 2);
+  assert.equal(h.G.snackHeal, 4 + Math.floor(stream() * 3));
+  assert.equal(h.G.rng(), stream());
+  assert.deepEqual([h.G.turns, h.G.hp, h.G.over], [0, E.MAX_HP, false]);
+});

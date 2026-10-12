@@ -31,6 +31,8 @@ has('cylon-runs-home-and-cylon', select([`${S}games/cylon/css/units.css`]), ['ho
 has('site-shell-runs-the-shell', select([`${S}main.js`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'home-eye.spec.mjs']);
 check('site-shell-skips-tankity', select([`${S}site.css`]).some(s => s.startsWith('tankity-')), false);
 has('union-of-files', select([`${S}games/crete/src/main.ts`, `${S}tests/e2e/tankity-audio.spec.mjs`]), ['games-hub.spec.mjs', 'tankity-audio.spec.mjs']);
+has('play-page-runs-install-spec', select([`${S}play/play.css`, `${S}tools/site-game-pages.php`]), ['games-install.spec.mjs']);
+has('a-page-game-runs-install-spec', select([`${S}games/crete/index.html`, `${S}games/tankity/index.html`]), ['games-install.spec.mjs']);
 check('generated-sources-run-nothing', select([`${S}games/tankity/game.yaml`, `${S}games/tankity/fx/blender/moon.blend`]), 'NONE');
 check('effects-editor-runs-the-effects-spec', select([`${S}games/tankity/fx-editor.html`]), ['tankity-fx-editor.spec.mjs']);
 check('effects-editor-source-runs-the-effects-spec', select([`${S}games/tankity/src/fx/editor.ts`, `${S}games/tankity/dist/fx-editor.js`]), ['tankity-fx-editor.spec.mjs']);

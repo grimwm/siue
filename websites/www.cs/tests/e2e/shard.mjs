@@ -35,6 +35,7 @@ export const WEIGHTS = {
   'cylon-play.spec.mjs': 25,
   'tankity-touch.spec.mjs': 3,
   'games-pwa.spec.mjs': 3,
+  'games-install.spec.mjs': 10,
 };
 export const DEFAULT_S = 30;
 

@@ -1,9 +1,8 @@
 <?php
 // Web-runnable sibling of test/php-docker/checks/rooms.php: exercises rooms.php through the
-// real web server (same box, same SAPI, same store) instead of spawning its
-// own php -S, which shared hosting does not allow. Lives in its own
-// directory with its own .config.yaml, scratch store, and private shared
-// memory key, so the live shelf is never touched. Open in a browser.
+// real web server (same box, same SAPI, same database) instead of spawning
+// its own php -S, which shared hosting does not allow. Strangers may share
+// the shelf, so every count is relative and it only ages its own rooms.
 declare(strict_types=1);
 
 header('Content-Type: text/plain; charset=utf-8');
@@ -25,7 +24,7 @@ $base = $scheme . '://' . $host . $dir;
 $origin = $scheme . '://' . $host;
 
 // Read-only peek at the same .config.yaml the server reads, so expectations
-// follow the config instead of hardcoding a ceiling or a memory key.
+// follow the config instead of hardcoding a ceiling.
 $cfgMax = 10;
 foreach (file(__DIR__ . '/.config.yaml') ?: [] as $line) {
     if (preg_match('/^\s*max_rooms\s*:\s*(\d+)/', $line, $m)) $cfgMax = (int) $m[1];
@@ -77,18 +76,24 @@ $post = function (string $action, array $body) use ($base, $origin) {
 define('TANKITY_ROOMS_LIB', true);
 require __DIR__ . '/rooms.php';
 $ageRoom = function (string $c): void {
-    [$room, $lock] = room_load($c);
-    if (is_array($room)) {
+    tankity_tx(tankity_db(), function (PDO $db) use ($c): void {
+        $q = $db->prepare('SELECT data FROM rooms WHERE code = ?');
+        $q->execute([$c]);
+        $room = room_decode($q->fetchColumn());
+        if ($room === null) {
+            return;
+        }
         $room['touched'] = time() - 3600;
-        room_seg_write($lock['shm'], $room);
-    }
-    room_unlock($lock);
+        $u = $db->prepare('UPDATE rooms SET data = ?, touched = ? WHERE code = ?');
+        $u->bindValue(1, serialize($room), PDO::PARAM_LOB);
+        $u->bindValue(2, $room['touched'], PDO::PARAM_INT);
+        $u->bindValue(3, $c);
+        $u->execute();
+    });
 };
 
 $ping = $get($base . '/rooms.php?action=ping');
 $check('server-up', $ping !== null);
-$store = (string) ($ping['rooms']['store'] ?? '?');
-$check('store-known', $store === 'memory', 'store=' . $store);
 $check('cap-from-file', ($ping['rooms']['max'] ?? 0) === $cfgMax, 'max=' . ($ping['rooms']['max'] ?? '?'));
 // Baseline, not emptiness: strangers may share the shelf, so every count
 // below is relative to what was already live. Our own rooms are the only
@@ -122,18 +127,15 @@ $check('heartbeat-ok', ($state['ok'] ?? false) === true);
 $ping = $get($base . '/rooms.php?action=ping');
 $check('heartbeat-counts', ($ping['rooms']['used'] ?? -1) === $baseUsed + 1, 'used=' . ($ping['rooms']['used'] ?? '?'));
 
-// A request holding one room's lock never stalls the shelf: ping reads
-// the registry without a lock.
-$held = sem_get(room_key($code), 1);
-$check('lock-held', $held !== false && @sem_acquire($held));
+// A request holding the write lock never stalls the shelf's count: ping only reads.
+$held = tankity_db();
+$held->exec('BEGIN IMMEDIATE');
 $lockT = microtime(true);
 $pingHeld = $get($base . '/rooms.php?action=ping');
 $lockDt = microtime(true) - $lockT;
-if (isset($held) && $held !== false) {
-    @sem_release($held);
-}
+$held->exec('ROLLBACK');
 $check('ping-ignores-room-lock', $pingHeld !== null && ($pingHeld['rooms']['used'] ?? -1) >= 1
-    && $lockDt < 2.0, sprintf('wait=%.2fs', $lockDt));
+    && $lockDt < 1.0, sprintf('wait=%.2fs', $lockDt));
 
 // The ceiling uses the live count, and refusals stay human: fill the shelf
 // to the configured max, then prove one more guest is refused kindly.
@@ -278,13 +280,13 @@ $check('gzip-errors-compress-too', is_array($errJson) && ($errJson['error'] ?? '
 $check('gzip-error-status-kept', strpos($hErr[0] ?? '', '404') !== false, $hErr[0] ?? '');
 // Leave the shared shelf as found: only this match is swept.
 $ageRoom($mcode);
-$get($base . '/rooms.php?action=ping'); // the sweep runs on ping, not on state
+$get($base . '/rooms.php?action=ping');
 $gone = $get($base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
 $check('match-cleaned', ($gone['error'] ?? '') === 'no such room', $gone['error'] ?? '');
 
 // server/*.php are libraries for rooms.php, never endpoints: asked for directly
 // they answer 403 (.htaccess, nginx) or 404 (their own guard) and send no code.
-foreach (['settings', 'store', 'sim', 'ai', 'rules', 'protocol'] as $lib) {
+foreach (['settings', 'db', 'store', 'sim', 'ai', 'rules', 'protocol'] as $lib) {
     [$hLib, $bLib] = $rawGet($base . '/server/' . $lib . '.php', '');
     $statusLib = (int) substr($hLib[0] ?? '', 9, 3);
     $check("server-$lib-not-served", in_array($statusLib, [403, 404], true) && stripos($bLib, '<?php') === false && stripos($bLib, 'function ') === false,

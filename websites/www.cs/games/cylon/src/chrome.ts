@@ -111,7 +111,7 @@ export function createChrome(d: ChromeDeps): Chrome {
   }
 
   function applySetting(key: SettingKey, value: boolean | number): void {
-    // The key table says which settings are volumes and which are switches; a mismatched value is ignored.
+    // Volumes take numbers and switches take booleans; a value of the wrong type is ignored.
     if (key === 'soundVolume' || key === 'musicVolume') {
       if (typeof value === 'number') settings[key] = Math.max(0, Math.min(100, value || 0));
     } else if (typeof value === 'boolean') {

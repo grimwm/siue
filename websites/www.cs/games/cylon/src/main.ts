@@ -631,6 +631,8 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
             audio.syncMusic();
             updateAbilityButtons();
         }
+        // Safari and iOS leave a clicked button unfocused; the dialog returns focus to what was focused when it opened.
+        helpBtn?.focus();
         helpOpen = true;
         drawHelp();
     }

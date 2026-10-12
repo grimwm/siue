@@ -81,3 +81,9 @@ test('no Cylon file says Monday', () => {
   const stale = Object.entries(files).filter(([, body]) => /\bMonday\b/.test(body)).map(([name]) => name);
   assert.deepEqual(stale, []);
 });
+
+test('opening How to Play focuses its button first, so closing can return focus on Safari', () => {
+  const open = strip(main).match(/function openHelp\(\) \{[\s\S]*?\n    \}\n/)[0];
+  const focusAt = open.indexOf('helpBtn?.focus()');
+  assert.ok(focusAt > 0 && focusAt < open.indexOf('helpOpen = true'));
+});

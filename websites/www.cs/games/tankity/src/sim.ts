@@ -31,7 +31,18 @@ export function gauss(rng: Rng): number {
 }
 
 /* ---------- board + physics tuning ---------- */
-export const W = 720, H = 460;
+/** The field is always H tall. A room's is ROOM_W wide; a solo match's is
+ *  dealt from the screen (field.ts), a whole number of FIELD_COL columns. */
+export const H = 460;
+export const ROOM_W = 720;
+export const W = ROOM_W; // every reader still takes the room width; the sim takes the match's
+export const FIELD_W_MIN = 720, FIELD_W_MAX = 1440, FIELD_COL = 24;
+/** A shell's longest flight, in 1/60 s steps (12 s). Not a width. */
+export const FLIGHT_STEPS = 720;
+/** A width a match may be played at: a whole number of columns, in range. */
+export function fieldWidthOk(w: unknown): w is number {
+  return typeof w === 'number' && Number.isInteger(w) && w >= FIELD_W_MIN && w <= FIELD_W_MAX && w % FIELD_COL === 0;
+}
 export const GRAV = 95;
 export const FLAT_GRAV = 90; // flat bolts arc a little, so short shots and demos still land
 export const TUNE = {

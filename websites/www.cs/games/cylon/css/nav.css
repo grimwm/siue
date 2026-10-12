@@ -229,4 +229,9 @@ body:not(.cylon-nav-combat) .site-nav-power {
   }
 }
 
-
+/* Install and Share (games/_kit/ui/install-bar.tsx), in the game bar when the address opens The CIC. */
+.cylon-install { display: inline-flex; --kit-install-accent: #ff3b3b; }
+.cylon-install:empty { display: none; }
+@media (max-width: 560px) {
+  .cylon-install .kit-install-btn { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+}

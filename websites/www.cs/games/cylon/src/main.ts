@@ -38,6 +38,8 @@ import { renderHelp } from './ui/help.tsx';
 import * as state from './state.ts';
 import { createScoresClient, highScoreRows, weeklyResetText } from './scores.ts';
 import { exitApp, browserAppEnv, EXIT_HINT } from '../../_kit/app.ts';
+import { mountInstallBar } from '../../_kit/ui/install-bar.tsx';
+import { asksInstall, browserInstallEnv, OUT_OF_SCOPE_PROMPTS } from '../../_kit/install.ts';
 import type { Timer } from './types.ts';
 import type { EndReason } from './state.ts';
 
@@ -56,6 +58,28 @@ export interface CylonOptions {
 // Everything the game fetches is found relative to this bundle (in dist/), wherever it is served from.
 const CYLON_MOUNT_URL = new URL(`../mount.html?v=${MOUNT_HTML_V}`, import.meta.url).href;
 const CYLON_SCORES_URL = new URL('../scores.php', import.meta.url).href;
+
+/** Whether Chrome offers The CIC's install prompt on index.html, inside its manifest's scope, once the page links that manifest (measured in Chrome). */
+const PROMPTS_IN_SCOPE: boolean = true;
+
+/**
+ * Install and Share in the game bar, when the address opens The CIC
+ * (?game=cylon). The page links Cylon's manifest before the bar listens, so a
+ * held-back prompt is the game's, not the site's.
+ */
+function mountInstall(): void {
+    const root = document.getElementById('cylon-install-root');
+    if (!root || new URLSearchParams(location.search).get('game') !== 'cylon') return;
+    document.querySelector('link[rel="manifest"]')?.setAttribute('href', 'games/cylon/manifest.webmanifest');
+    const inScope = location.pathname.endsWith('/index.html');
+    mountInstallBar(root, {
+        title: 'The CIC',
+        shareUrl: new URL('play/cylon/', location.href).href,
+        installPage: inScope || !PROMPTS_IN_SCOPE ? null : new URL('index.html?game=cylon', location.href).href,
+        promptsHere: PROMPTS_IN_SCOPE && (inScope || OUT_OF_SCOPE_PROMPTS),
+        asked: asksInstall(location.search),
+    }, browserInstallEnv());
+}
 
 async function mountCylonDom() {
     const root = document.getElementById('game-root');
@@ -1040,6 +1064,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     bindPlayScrollLock();
     bindNavMenu();
     bindHelp();
+    mountInstall();
     resizeBattlefield();
     updateHitsUi();
     syncNavChrome();

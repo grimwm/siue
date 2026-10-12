@@ -65,6 +65,9 @@ import { difficultySetting } from './difficulty.ts';
 import { initialsPref } from './initials.ts';
 import { browserStorage } from '../../_kit/ports.browser.ts';
 import { exitApp, enterFullscreen, browserAppEnv, EXIT_HINT } from '../../_kit/app.ts';
+import { pref, text } from '../../_kit/prefs.ts';
+import { ROTATE_HINT_KEY, rotateHintShows } from './rotate-hint.ts';
+import { renderRotateHint } from './ui/rotate-hint.tsx';
 import type { Arsenal, Weapon, Gear } from './sim.ts';
 import type { GameState, GameTank, MatchState } from './game-types.ts';
 import type { PreviewEnv } from './preview.ts';
@@ -794,6 +797,16 @@ const NAV_HINTS: [string, string][] = [
   ['menu-overlay', 'nav-menu'], ['log-overlay', 'nav-log'],
   ['tutorial-overlay', 'nav-tutorial'], ['gun-overlay', 'nav-gun'],
 ];
+/* The rotate hint: portrait, a real match, until the player closes it once. */
+const rotateHint = pref(ROTATE_HINT_KEY, '', text, browserStorage());
+const portraitQuery = window.matchMedia('(orientation: portrait)');
+function refreshRotateHint(): void {
+  const root = document.getElementById('rotate-hint-root');
+  if (!root) return;
+  const show = rotateHintShows({ portrait: portraitQuery.matches, dismissed: rotateHint.get() === 'dismissed', playing: !G.demo && G.tanks.length > 0 });
+  renderRotateHint(root, show, () => { rotateHint.set('dismissed'); refreshRotateHint(); });
+}
+portraitQuery.addEventListener?.('change', refreshRotateHint);
 function refreshNavHints(): void {
   for (const [panelId, hintId] of NAV_HINTS) {
     const panel = $(panelId), hint = $(hintId);
@@ -801,6 +814,7 @@ function refreshNavHints(): void {
     const fits = (panel.scrollHeight || 0) <= (panel.clientHeight || 0) + 1;
     hint.setAttribute('aria-disabled', String(fits));
   }
+  refreshRotateHint();
 }
 /* ESC shuts whatever is overlaid: the firing range first, then the lobby,
 then every open panel. */

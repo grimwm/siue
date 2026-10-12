@@ -89,6 +89,25 @@ export function formatHighScoreRows(list: readonly ScoreEntry[]): string {
   }).join('');
 }
 
+/** One board row, ready to draw. */
+export interface HsRow {
+  rank: number;
+  initials: string;
+  /** The day it was set, in the player's locale; '' when unknown. */
+  date: string;
+  score: number;
+}
+
+export function highScoreRows(list: readonly ScoreEntry[]): HsRow[] {
+  return list.map((entry, i) => {
+    const when = entry.at ? new Date(entry.at) : null;
+    const date = when && !Number.isNaN(when.getTime())
+      ? when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+      : '';
+    return { rank: i + 1, initials: (entry.initials || 'AAA').toString().slice(0, 3).toUpperCase(), date, score: entry.score };
+  });
+}
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }

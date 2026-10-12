@@ -299,8 +299,8 @@ check('cam-wide-sky', /fillRect\(-W - 10, -2 \* H - 10, 3 \* W/.test(renderSrc))
 // (invite-prefill runs inside the async block below: openLobby unhides late)
 // The clean-initials list must match the server copy exactly (cylon rule).
 function blockedOf(src) {
-  const start = src.indexOf('BLOCKED_INITIALS = [');
-  const end = src.indexOf('];', start);
+  const start = src.search(/BLOCKED_INITIALS = (Object\.freeze\()?\[/);
+  const end = src.indexOf(']', start);
   return [...src.slice(start, end).matchAll(/'([A-Z]{3})'/g)].map(m => m[1]).sort().join(',');
 }
 check('blocked-parity',

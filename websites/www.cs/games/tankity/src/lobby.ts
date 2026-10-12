@@ -10,6 +10,7 @@ import type { sfx as SfxApi } from './audio.ts';
 import type { GameState, MatchState } from './game-types.ts';
 import { DIFFICULTY_NAMES } from './difficulty.ts';
 import type { DifficultySetting } from './difficulty.ts';
+import { validInitials } from './initials.ts';
 import type { HudValues } from './hud.ts';
 import type { EndState } from './match.ts';
 import { inviteUrl, prettyRoomError } from './net.ts';
@@ -86,29 +87,10 @@ export function createLobby(deps: LobbyDeps) {
   } = deps;
 
   /* ---------- game rooms: server-hosted multiplayer ---------- */
-  // The clean-initials rule mirrors rooms.php (which borrows it from the cylon
-  // game): an exact-3 uppercase block list, compared uppercase, while any letter
-  // case may play.
-  const BLOCKED_INITIALS = [
-    'ASS',
-    'FUK', 'FUC', 'FCK', 'FUX', 'FUQ',
-    'SHT', 'SHI',
-    'DIK', 'DIC', 'DCK',
-    'COK', 'COC', 'COQ',
-    'CUM', 'JIZ',
-    'CNT', 'PUS', 'VAG', 'CLT',
-    'SEX', 'XXX', 'TIT',
-    'FAG', 'FGT',
-    'NIG', 'NGR',
-    'WTF', 'FFS',
-    'POO', 'PEE',
-    'KKK',
-  ];
+  /* Room initials keep the case the player typed (rooms.php compares them
+     uppercase); src/initials.ts holds the rule and the blocked words. */
   function netValidInitials(raw: unknown): string | null {
-    const s = String(raw || '').trim();
-    if (!/^[A-Za-z]{3}$/.test(s)) return null;
-    if (BLOCKED_INITIALS.indexOf(s.toUpperCase()) >= 0) return null;
-    return s;
+    return validInitials(raw) === null ? null : String(raw).trim();
   }
   /* The lobby is a Preact component (src/ui/lobby.tsx). This is everything it
      shows that the game decides: the status line, the occupancy count, the

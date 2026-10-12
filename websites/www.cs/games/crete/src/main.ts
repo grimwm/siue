@@ -40,7 +40,7 @@ function restart(seedStr: string): void {
   game.newRun(seedStr);
   ui.clearLog();
   ui.say(`Seed ${G.seed}. Theseus boots the maze. The exit 🚪 glows in the dark.`, 'info');
-  ui.say(`Shortest escape is ${G.optimal} moves. You can afford ${G.budget} wrong turns — then it has you.`, 'info');
+  ui.say(`Shortest escape is ${G.optimal} moves. It will find you on the way: plan for the meeting.`, 'info');
   ui.say('Two 🛡️ safe zones wait on the escape route. The 👹 already moves twice to your once.', 'info');
   ui.showSeed(G.seed);
   ui.render(game);

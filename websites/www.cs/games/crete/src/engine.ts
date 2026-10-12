@@ -11,6 +11,8 @@
 import type { Timers } from '../../_kit/ports.ts';
 import { ROWS, COLS, DIRS, key, inBounds, unkey, grid, bfsDist, bfsPath, manhattan } from './grid.ts';
 import type { Cell } from './grid.ts';
+import { dasher, strategist } from './bots.ts';
+import type { Bot, BotAction } from './bots.ts';
 export { ROWS, COLS, key, bfsDist, bfsPath, manhattan };
 export type { Cell };
 export type { Timers };
@@ -41,7 +43,6 @@ export function mulberry32(a: number): Rng {
 export const MAX_HP = 20;
 export const TOTAL_PAGES = 3;
 const BARRIER_COUNT = 2;
-const MISTAKE_BUDGET = 6;
 const BASH_RANGE = 1;
 const BASH_PUSH = 3;
 const BASH_COOLDOWN = 3;
@@ -111,8 +112,6 @@ export interface State {
   opened: number;
   /** Moves on the shortest route with every barrier open. */
   optimal: number;
-  /** Wrong turns you can afford. */
-  budget: number;
   inv: Record<ItemKind, number>;
   fuses: number;
   snackHeal: number;
@@ -179,9 +178,9 @@ export interface Layout {
   foe: Cell;
   foeDist: number;
   optimal: number;
-  /** Spare turns: the creature's distance minus your optimal route. */
-  margin: number;
 }
+
+const LOOT: PickupKind[] = ["shard", "snack", "jammer", "page", "page", "page", "fuse", "fuse"];
 
 function buildMaze(rng: Rng, start: Cell, exit: Cell): Layout {
   const walls = carveMaze(rng);
@@ -252,17 +251,7 @@ function buildMaze(rng: Rng, start: Cell, exit: Cell): Layout {
     }
   }
   const pickups = new Map<string, PickupKind>();
-  const loot: PickupKind[] = [
-    "shard",
-    "snack",
-    "jammer",
-    "page",
-    "page",
-    "page",
-    "fuse",
-    "fuse",
-  ];
-  for (const kind of loot) {
+  for (const kind of LOOT) {
     if (!open.length) break;
     const spot = open.splice(Math.floor(rng() * open.length), 1)[0]!;
     pickups.set(key(spot.r, spot.c), kind);
@@ -270,8 +259,6 @@ function buildMaze(rng: Rng, start: Cell, exit: Cell): Layout {
   }
 
   // The creature starts far: farthest from you, never camping the exit.
-  // margin = spare turns = foe distance minus your optimal route. That is how
-  // many wrong turns you can afford before escape becomes impossible.
   const dist = bfsDist(walls, start);
   const distExit = bfsDist(walls, exit);
   const openWalls = walls.map((row) => row.slice());
@@ -299,8 +286,7 @@ function buildMaze(rng: Rng, start: Cell, exit: Cell): Layout {
   }
   if (!foe) foe = { ...exit };
   if (foeDist < 0) foeDist = 0;
-  const margin = foeDist - optimal;
-  return { walls, safe, barriers, pickups, foe, foeDist, optimal, margin };
+  return { walls, safe, barriers, pickups, foe, foeDist, optimal };
 }
 
 /** The player's start cell. */
@@ -323,25 +309,54 @@ export function layoutFor(seed: string, attempt: number): Layout {
   return buildMaze(mazeRng(seed, attempt), START, EXIT);
 }
 
+/** Candidates a seed gets before falling back. */
+export const MAX_ATTEMPTS = 80;
+/** Past MAX_ATTEMPTS, draws continue only to find a maze the strategist wins; the sweep shows none ever needs to. */
+const LAST_ATTEMPT = 399;
+
+export interface Trial {
+  won: boolean;
+  /** The creature ended a turn beside the bot, or caught it. */
+  met: boolean;
+  /** The fewest steps (Manhattan) between them at the end of any turn. */
+  closest: number;
+}
+
+export type Judge = (seed: string, attempt: number, bot: Bot) => Trial;
+
+export interface RunPick {
+  attempt: number;
+  /** No candidate passed both checks; this is the best winnable one. */
+  fallback: boolean;
+  layout: Layout;
+  rng: Rng;
+}
+
+function pick(seed: string, attempt: number, fallback: boolean): RunPick {
+  return { attempt, fallback, layout: layoutFor(seed, attempt), rng: runRng(seed, attempt) };
+}
+
 /**
- * A run's maze for a seed: the same seed always gives the same maze. Mazes are
- * generated until the escape math works (the optimal route plus a spare
- * mistake budget fits inside the creature's starting distance); attempts just
- * advance the same rng stream. The rng comes back too, since the run keeps
- * drawing from it.
+ * A run's maze for a seed: the same seed always gives the same maze. The first
+ * attempt whose dasher meets the creature and whose strategist escapes is
+ * kept (spec section 4); failing that, the strategist-won attempt whose dasher
+ * came closest. A maze the strategist loses is never returned.
  */
-export function generateRun(seed: string): { rng: Rng; layout: Layout } {
-  const rng = mulberry32(hashSeed(seed));
-  let best: Layout | null = null;
-  for (let attempt = 0; attempt < 80; attempt++) {
-    const cand = buildMaze(rng, START, EXIT);
-    if (!best || cand.margin > best.margin) best = cand;
-    if (cand.margin >= MISTAKE_BUDGET) {
-      best = cand;
-      break;
-    }
+export function generateRun(seed: string, judge: Judge = trial): RunPick {
+  let best: { attempt: number; closest: number } | null = null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const dash = judge(seed, attempt, dasher);
+    // A non-meeting candidate can only matter as a closer fallback.
+    if (!dash.met && best && dash.closest >= best.closest) continue;
+    if (!judge(seed, attempt, strategist).won) continue;
+    if (dash.met) return pick(seed, attempt, false);
+    best = { attempt, closest: dash.closest };
   }
-  return { rng, layout: best! };
+  if (best) return pick(seed, best.attempt, true);
+  for (let attempt = MAX_ATTEMPTS; attempt <= LAST_ATTEMPT; attempt++) {
+    if (judge(seed, attempt, strategist).won) return pick(seed, attempt, true);
+  }
+  throw new Error(`Crete: no winnable maze for seed ${seed}`);
 }
 
 /** The seed a run uses: the typed one, or a fresh random one. */
@@ -367,7 +382,6 @@ function blankState(): State {
     score: 0,
     opened: 0,
     optimal: 0,
-    budget: 0,
     inv: { shard: 1, snack: 1, jammer: 1 },
     fuses: 0,
     snackHeal: 5,
@@ -436,7 +450,7 @@ export function createGame(hooks: Hooks): Game {
   }
 
   function applyRun(seed: string, layout: Layout, rng: Rng): void {
-    const { walls, safe, barriers, pickups, foe, foeDist, optimal, margin } = layout;
+    const { walls, safe, barriers, pickups, foe, foeDist, optimal } = layout;
     Object.assign(G, {
       seed,
       rng,
@@ -452,7 +466,6 @@ export function createGame(hooks: Hooks): Game {
       score: 0,
       opened: 0,
       optimal,
-      budget: margin,
       inv: { shard: 1, snack: 1, jammer: 1 },
       fuses: 0,
       snackHeal: 4 + Math.floor(rng() * 3),
@@ -886,19 +899,12 @@ export function createGame(hooks: Hooks): Game {
     }
     autoPilot = true;
     try {
-      if (
-        Math.abs(G.foe.r - G.player.r) + Math.abs(G.foe.c - G.player.c) === 1 &&
-        G.bashCd === 0
-      ) {
-        bash();
-        return;
-      }
-      const p = goalPath();
-      if (p.length < 2) {
+      const action = strategist(game);
+      if (action.kind === "stuck") {
         stopAuto("Play-through is stuck. Your move.");
         return;
       }
-      tryMove(p[1]!.r - G.player.r, p[1]!.c - G.player.c);
+      perform(game, action);
     } finally {
       autoPilot = false;
     }
@@ -908,8 +914,49 @@ export function createGame(hooks: Hooks): Game {
     return bfsDist(G.walls, G.player)[G.foe.r]![G.foe.c]!;
   }
 
-  return {
-    G, newRun, startRun, tryMove, bash, useItem, hint, clearHint, toggleAnswer, toggleAuto,
-    wait, canJam, stopAuto, autoStep, goalPath, foeStep, creaturePhase, foeDistance,
+  const game: Game = {
+    G, newRun, startRun, tryMove, bash, useItem, wait, canJam, hint, clearHint, toggleAnswer, toggleAuto,
+    stopAuto, autoStep, goalPath, foeStep, creaturePhase, foeDistance,
   };
+  return game;
+}
+
+/** Carries out a bot's choice through the same actions a player has. */
+export function perform(game: Game, action: BotAction): void {
+  switch (action.kind) {
+    case "bash": game.bash(); break;
+    case "item": game.useItem(action.item); break;
+    case "wait": game.wait(); break;
+    case "move": game.tryMove(action.dr, action.dc); break;
+    case "stuck": break;
+  }
+}
+
+const INERT_TIMERS: Timers = {
+  setTimeout: () => 0,
+  clearTimeout: () => {},
+  setInterval: () => 0,
+  clearInterval: () => {},
+};
+/** A bot that has not finished by then has lost. */
+const TRIAL_ACTIONS = 600;
+
+/** Plays attempt `attempt` of `seed` with `bot` under the real rules, from the stream the real run would use. */
+export function trial(seed: string, attempt: number, bot: Bot): Trial {
+  const game = createGame({ say() {}, sfx() {}, render() {}, showEnd() {}, timers: INERT_TIMERS });
+  game.startRun(seed, attempt);
+  const G = game.G;
+  // A closed barrier near the start can seal off a pocket too small for the loot
+  // or for the creature to start anywhere but on the exit; such a candidate is not a maze.
+  if (G.pickups.size < LOOT.length || (G.foe.r === G.exit.r && G.foe.c === G.exit.c)) {
+    return { won: false, met: false, closest: Infinity };
+  }
+  let closest = manhattan(G.player, G.foe);
+  for (let i = 0; i < TRIAL_ACTIONS && !G.over; i++) {
+    const action = bot(game);
+    if (action.kind === "stuck") break;
+    perform(game, action);
+    closest = Math.min(closest, manhattan(G.player, G.foe));
+  }
+  return { won: G.won, met: closest <= 1, closest };
 }

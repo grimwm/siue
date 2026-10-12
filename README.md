@@ -20,27 +20,31 @@ Open course materials may be placed here from time-to-time as well.
         ├── Makefile      # up | down | url | test | e2e | parity | deploy | ...
         ├── deploy.sh     # what `make deploy` runs
         ├── index.html, main.js, site.css   # the home page, which hosts the Cylon game
+        ├── .htaccess     # pages revalidate (Cache-Control: no-cache); nginx mirrors it locally
+        ├── composer.json, phpunit.xml      # PHPUnit, dev only (vendor/ never deploys)
         ├── games.php     # the Games page's catalog endpoint
         ├── games/        # the games, one folder each
         ├── play/         # the site's generated page per game (navbar plus the game in a frame)
         ├── src/          # TypeScript for main.js and play/play.js
         ├── tools/        # generators and build for the site's own files
-        └── tests/        # PHP unit tests and the Playwright browser suite (tests/e2e/)
+        └── tests/        # PHPUnit cases (tests/php/) and the Playwright browser suite (tests/e2e/)
 ```
 
 **The www.cs site.** The home page hosts the Cylon Defense game (a scanner eye is its backdrop) and has Contact and Games panels. The Games page lists every game folder that has a valid `metadata.yaml`. `play/<id>/` is the site's page for a game: a navbar over the game running in a frame.
 
-**Games** (`websites/www.cs/games/`). How the catalog, `metadata.yaml`, the generated `play/` pages and the install files work is in [games/README.md](websites/www.cs/games/README.md). Each game has its own README:
+**Games** (`websites/www.cs/games/`). How the catalog, `metadata.yaml`, the generated `play/` pages and the install files work is in [games/README.md](websites/www.cs/games/README.md). Every game is built with the shared games kit (`games/_kit/`: type checks, bundling, install-file core, ports, prefs and test doubles), described in [games/_kit/README.md](websites/www.cs/games/_kit/README.md). Each game has its own README:
 
 | Game | What it is | Docs |
 | --- | --- | --- |
-| Cylon Defense | The home-page mini-game; scores kept by `scores.php` | [games/cylon/README.md](websites/www.cs/games/cylon/README.md) |
+| Cylon Defense | The home-page mini-game; `scores.php` keeps a weekly board (reset Sunday 00:00 America/Chicago) and an all-time board | [games/cylon/README.md](websites/www.cs/games/cylon/README.md) |
 | The Island of Crete | A turn-based chase on a seeded maze, played on its own page | [games/crete/README.md](websites/www.cs/games/crete/README.md) |
 | Operation Tankity | Scorched-earth artillery, solo or in network rooms | [games/tankity/README.md](websites/www.cs/games/tankity/README.md) |
 
-**tools/** (site root) holds `site-game-pages.php` (writes `play/<id>/index.html`), `site-versions.php` (the home page's `?v=` cache-busters) and `ts-build.mjs` (compiles the site's TypeScript). Each game keeps its own tools in its own `tools/`.
+**tools/** (site root) holds `site-game-pages.php` (writes `play/<id>/index.html`), `site-versions.php` (the home page's `?v=` cache-busters) and `ts-build.mjs` (compiles the site's TypeScript). Each game keeps its own generators in its own `tools/`.
 
-**tests/** holds the site-level PHP tests and `tests/e2e/`, the Playwright browser suite. Each game's unit tests sit in its folder and run through its `test.sh`.
+**Games build.** `games/package.json` is the one npm install for every game: `cd websites/www.cs/games && npm ci`, then `npm run build` (writes each game's checked-in `dist/`) or `npm run check` (fails on a stale build or a type error). A game has `build.json`, `src/`, `dist/` and `test/` (`node:test` `*.test.mjs` files). Tankity builds three bundles: `main`, `fx` and `fx-editor`.
+
+**tests/** holds the site-level PHPUnit cases (`tests/php/`) and `tests/e2e/`, the Playwright browser suite. Each game's unit tests sit in its `test/` folder and run through its `test.sh`.
 
 **docs/superpowers/** holds design specs (`specs/`) and implementation plans (`plans/`).
 
@@ -49,9 +53,10 @@ Open course materials may be placed here from time-to-time as well.
 | Tool | Version | Used for |
 | --- | --- | --- |
 | Docker with Compose v2 | any recent | the local site (`make up`); `make test` runs some suites inside the PHP container |
-| PHP CLI | 8.4 | host-side tests and generators. CI runs 8.4, and the container (and the server) run PHP 8.4 (`websites/www.cs/docker/expected-php-version.txt`) |
-| Node | 22 (CI's version) | TypeScript builds, the JavaScript unit suites, the browser suite |
-| npm | the one shipped with Node | `npm ci` in the site, each game and `tests/e2e/` (run by the make targets) |
+| PHP CLI | 8.4 | host-side tests and generators. CI runs 8.4, and the container (and the server) run PHP 8.4 (`websites/www.cs/docker/expected-php-version.txt`); PHPUnit 12 needs 8.3 or newer |
+| Composer | 2 | PHPUnit (dev only), installed by `make test` into `websites/www.cs/vendor/` |
+| Node | 24 (CI's version) | TypeScript builds, the JavaScript unit suites, the browser suite |
+| npm | the one shipped with Node | `npm ci` in the site, `games/` and `tests/e2e/` (run by the make targets) |
 | Google Chrome | current | the Playwright suite uses the installed Chrome (`channel: 'chrome'`) |
 | Python 3 | any 3.x | `scripts/deploy-hash` and its test; `deploy.sh` calls it |
 | curl | any | `make test` (the Tankity web test) and `make e2e` |
@@ -90,13 +95,16 @@ Pass the same `COMPOSE` to every target that talks to the containers (`up`, `dow
 
 - the selector and shard tests for the browser suite (`tests/e2e/select-test.mjs`, `shard-test.mjs`, `select.mjs --check`);
 - `npm ci` and the site's TypeScript build check (`tools/ts-build.mjs --check`);
-- the PHP tests for the games hub, the site's game pages and the home-page versions, plus the `--check` runs of their generators and the deploy-set test;
-- every game's `test.sh` (its build check, install-file check and unit suites);
-- Tankity's room, store, protocol and shared-sim-vector suites inside the PHP container, and its web test over HTTP.
+- `composer install`, then PHPUnit's `site` suite (the games hub, the site's game pages, the home-page versions and the deploy set) and `kit` suite, plus the `--check` runs of the site's generators;
+- the games kit's own tests and type check (`cd games && npm ci`);
+- every game's `test.sh` (its build check, install-file check and unit suites, including Cylon's `cylon` PHPUnit suite and Tankity's `tankity` suite);
+- Tankity's `tankity-docker` PHPUnit suite, its protocol and shared-sim-vector checks inside the PHP container, and its web test over HTTP.
+
+`phpunit.xml` defines the suites `site`, `kit`, `cylon`, `tankity` and `tankity-docker`; run one with `vendor/bin/phpunit --testsuite <name>` from `websites/www.cs`. `vendor/` is git-ignored and never deploys.
 
 `make -C websites/www.cs protocol` and `make -C websites/www.cs sim-vectors` rewrite Tankity's generated fixtures when they change on purpose.
 
-**Browser suite.** `make -C websites/www.cs e2e` runs the Playwright specs in `tests/e2e/` against the local site (or any site root in `E2E_BASE_URL`). `E2E_ARGS` goes to `playwright test`:
+**Browser suite.** `make -C websites/www.cs e2e` runs the Playwright specs in `tests/e2e/` against the local site (or any site root in `E2E_BASE_URL`). The specs include play-throughs of Crete and Cylon (`crete-play.spec.mjs`, `cylon-play.spec.mjs`) beside Tankity's and the Games page's; CI runs every spec nightly. `E2E_ARGS` goes to `playwright test`:
 
 ```sh
 make -C websites/www.cs e2e E2E_ARGS="games-hub.spec.mjs"
@@ -117,7 +125,7 @@ make -C websites/www.cs e2e E2E_ARGS="tankity-solo.spec.mjs -g 'some title'"
 
 | Job | Runs | What |
 | --- | --- | --- |
-| `units` | on a pull request whose diff touches `websites/`, `scripts/`, `compose.yaml`, `Makefile` or `ci.yml`; on a push to main (same paths); on every scheduled or manual run | PHP 8.4 and Node 22, `make up`, `make test`, `make down` |
+| `units` | on a pull request whose diff touches `websites/`, `scripts/`, `compose.yaml`, `Makefile` or `ci.yml`; on a push to main (same paths); on every scheduled or manual run | PHP 8.4, Composer and Node 24, `make up`, `make test`, `make down` |
 | `e2e (1/4)` to `e2e (4/4)` | on pull requests, the nightly schedule and manual runs | `select.mjs` picks specs for a pull request (every spec otherwise); `shard.mjs` gives each of four runners its share; each starts its own site and runs its share through `make e2e` on the runner's Chrome |
 
 Triggers: pull requests; pushes to `main` that change `websites/**`, `scripts/**`, `compose.yaml`, `Makefile` or `ci.yml`; a daily schedule (08:17 UTC); and `workflow_dispatch`. A pull request that touches nothing a job covers passes that job without starting the sites. A failed e2e shard uploads its `test-results` as an artifact.
@@ -138,7 +146,7 @@ Deploys www.cs when a `ci` run completes successfully for a push to `main` of th
 | `PRUNE=1` | also deletes files the last deploy sent that this one does not; without it they are reported and left |
 | `HOST`, `SSHPASS_FILE` | (www.cs) the login and its password file |
 
-Before staging, `deploy.sh` refuses to ship a stale generated file: the site's game pages, each game's install files, the home page's `?v=` versions, Tankity's `game.json` and vendored Preact, and the compiled TypeScript. The error names the command that regenerates it. The deploy set leaves out tests, READMEs, each game's `tools/`, TypeScript sources and build setup, authoring sources (Git LFS audio and Blender files), and Cylon's live `scores.json`, which the server owns.
+Before staging, `deploy.sh` refuses to ship a stale generated file: the site's game pages, each game's install files, the home page's `?v=` versions, Tankity's `game.json`, the games' built `dist/` (it gates on `npm run check` in `games/`, which also fails on a type error), and the site's compiled TypeScript. The error names the command that regenerates it. It also refuses a real deploy while `games/zz-probe` exists, a leftover of the deploy-set test. The deploy set leaves out tests (`test/`), READMEs, each game's `tools/`, TypeScript sources and build setup (`_kit/`, `node_modules/`, `build.json`, package and tsconfig files), authoring sources (Git LFS audio and Blender files), and Cylon's live `scores.json`, which the server owns. Only when a successful listing of the server's scores folder shows the file missing does the deploy seed an empty one; a failed listing leaves scores untouched.
 
 ## Working on the repo
 
@@ -154,4 +162,4 @@ Give it a directory like the one above, prefix its services and network with its
 
 ## Licenses
 
-Each game (`websites/www.cs/games/cylon`, `crete`, `tankity`) carries a `LICENSE` file: GNU General Public License v3. Tankity's vendored Preact (`games/tankity/vendor/preact/`) keeps its own `LICENSE`. The rest of the repository, including the site pages, tools and scripts, has no license file.
+Each game (`websites/www.cs/games/cylon`, `crete`, `tankity`) carries a `LICENSE` file: GNU General Public License v3. Preact is bundled from npm into each game's `dist/`; its license is `games/node_modules/preact/LICENSE` after `npm ci`, and the built bundles carry no license comment. The rest of the repository, including the site pages, tools and scripts, has no license file.

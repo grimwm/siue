@@ -13,6 +13,12 @@ games/
     dist/          # the esbuild bundle, checked in
     test/          # node:test suites
     index.html, game.css, sw.js, tools/install-files.php
+  tankity/         # Operation Tankity
+    build.json     # entries and type programs for _kit/build/build.mjs
+    src/           # TypeScript; main.ts is the entry, src/fx/ the effects engine and editor
+    dist/          # three esbuild bundles (main.js, fx.js, fx-editor.js), checked in
+    test/          # node:test suites and PHP checks
+    index.html, game.css, game.json (from game.yaml), rooms.php, scores.php, sw.js
   cylon/           # The CIC — Cylon defense
     css/           # the stylesheets, linked by the home page in order
     build.json     # entries and type programs for _kit/build/build.mjs

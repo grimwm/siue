@@ -21,7 +21,7 @@ help:
 	@echo "  down   - Stop the local site"
 	@echo "  url    - Print the local site's URL (its port is ephemeral)"
 	@echo "  parity - Check the docker PHP against www.cs.siue.edu's modules/ini"
-	@echo "  test   - Unit suites: the site's TypeScript build, games hub, site game pages, home-page versions, deploy set, each game's tools, Tankity (incl. game.yaml, the TypeScript build, vendored Preact), Cylon (its kit build check, unit tests and scores PHPUnit), Crete (its kit build check and engine tests) (needs make up)"
+	@echo "  test   - Unit suites: the site's TypeScript build, games hub, site game pages, home-page versions, deploy set, each game's tools, Tankity (incl. game.yaml, its kit build check and unit tests), Cylon (its kit build check, unit tests and scores PHPUnit), Crete (its kit build check and engine tests) (needs make up)"
 	@echo "  protocol - Rewrite the Tankity room protocol fixtures (needs make up)"
 	@echo "  sim-vectors - Rewrite the Tankity shared sim test vectors (needs make up)"
 	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL;"

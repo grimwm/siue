@@ -105,7 +105,7 @@ const keyHint = (ctx, action, idx) => (idx ? KEYS[`${ctx}:${action}:${idx}`] : u
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const ammo = GAME.arsenal.ammo.filter(a => a.pack > 0);
 const gear = GAME.arsenal.gear;
-/** The shelf the way game.js lays it out: a heading per category, the free Shell under Shells. */
+/** The shelf the way main.ts lays it out: a heading per category, the free Shell under Shells. */
 function shelf({ sel = 0, qty = 1, cash = 600, round = 1 } = {}) {
   const entries = [];
   let lastCat = '';

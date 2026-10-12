@@ -59,7 +59,7 @@ foreach (['games/crete/index.html', 'games/crete/dist/main.js', 'games/crete/gam
     $check("ships $f", isset($set[$f]));
 }
 // The game is loaded from its own folder; nothing of it sits at the site root.
-foreach (['cylon.js', 'cylon-mount.html'] as $f) {
+foreach (['mount.html', 'cylon-mount.html'] as $f) {
     $check("no root copy of $f", !isset($set[$f]) && !file_exists("$site/$f"));
 }
 $sheets = glob("$site/games/tankity/fx/sprites/*.png") ?: [];

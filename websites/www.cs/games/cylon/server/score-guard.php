@@ -179,7 +179,7 @@ final class ScoreGuard
         return (string) preg_replace('/:\d+$/', '', strtolower((string) ($this->server['HTTP_HOST'] ?? '')));
     }
 
-    // Only the browser-set Origin and Referer are trusted; a script can forge neither.
+    // Only browser-set Origin and Referer headers are trusted: non-browser clients can forge both, so CSRF is what stops them.
     private static function urlHost(string $url): string
     {
         $host = parse_url($url, PHP_URL_HOST);
@@ -348,6 +348,18 @@ final class ScoreGuard
         return $store;
     }
 
+    /** @param resource $fh */
+    private static function overwrite($fh, string $bytes): bool
+    {
+        $len = strlen($bytes);
+        if (!rewind($fh) || fwrite($fh, $bytes) !== $len || !ftruncate($fh, $len)) {
+            return false;
+        }
+        fflush($fh);
+        @fsync($fh);
+        return true;
+    }
+
     /** Runs $fn on the store under one exclusive lock and writes back what it leaves. */
     private function withStore(callable $fn): mixed
     {
@@ -366,12 +378,13 @@ final class ScoreGuard
             if ($encoded === false) {
                 throw new \RuntimeException('run store encode failed');
             }
-            rewind($fh);
-            ftruncate($fh, 0);
-            if (fwrite($fh, $encoded) === false) {
+            // Write over the old bytes and cut to length afterwards, so a failed
+            // write never leaves the store emptier than it was; put the old
+            // bytes back if the new ones did not all land.
+            if (!self::overwrite($fh, $encoded)) {
+                self::overwrite($fh, $raw === false ? '' : $raw);
                 throw new \RuntimeException('run store write failed');
             }
-            fflush($fh);
             flock($fh, LOCK_UN);
             // Only PHP writes the store: StoreModes decides what that means on this host.
             @chmod($this->runsPath, StoreModes::modes()['file']);

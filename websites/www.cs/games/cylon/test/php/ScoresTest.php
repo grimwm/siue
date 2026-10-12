@@ -3,6 +3,7 @@
 // included), ranking, the all-time board, and the legacy file shape.
 declare(strict_types=1);
 
+use Kit\ScoreGuard;
 use PHPUnit\Framework\TestCase;
 
 final class ScoresTest extends TestCase
@@ -303,12 +304,9 @@ final class ScoresTest extends TestCase
 
     public function testTheRunsFileIsPrivate(): void
     {
-        $runs = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . '/' . cfg('storageKey') . '-runs.json';
-        $existed = is_file($runs);
-        $this->assertNotNull(guard()->startRun());
+        $runs = $this->dir . '/runs.json';
+        $g = new ScoreGuard(array_intersect_key(gameConfig(), array_flip(ScoreGuard::CONFIG_KEYS)), 'X-Cylon-CSRF', 'test-salt', ['REMOTE_ADDR' => '203.0.113.7'], [], $runs);
+        $this->assertNotNull($g->startRun());
         $this->assertSame(0600, fileperms($runs) & 0777);
-        if (!$existed) {
-            unlink($runs);
-        }
     }
 }

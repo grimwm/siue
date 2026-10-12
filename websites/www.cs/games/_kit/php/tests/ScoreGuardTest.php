@@ -337,4 +337,112 @@ final class ScoreGuardTest extends TestCase
         $this->guard()->startRun();
         $this->assertSame(0600, fileperms($this->runs) & 0777);
     }
+
+    public function testAShortWriteFailsAndKeepsThePreviousStore(): void
+    {
+        ShortWriteStream::$files = [];
+        ShortWriteStream::$shortOnce = false;
+        $this->runs = 'shortwrite://runs.json';
+        $first = (string) $this->guard()->startRun();
+        $before = ShortWriteStream::$files['runs.json'];
+        ShortWriteStream::$shortOnce = true;
+        try {
+            $this->guard(['REMOTE_ADDR' => '198.51.100.9'])->startRun();
+            $this->fail('a short write must not look like success');
+        } catch (RuntimeException $e) {
+            $this->assertSame('run store write failed', $e->getMessage());
+        }
+        $this->assertSame($before, ShortWriteStream::$files['runs.json'], 'the previous store is put back');
+        $this->assertNull($this->guard()->consumeRun($first), 'and still honours its tokens');
+    }
 }
+
+/** An in-memory file whose next write can land only half its bytes. */
+final class ShortWriteStream
+{
+    /** @var array<string, string> */
+    public static array $files = [];
+    public static bool $shortOnce = false;
+    public static bool $refuseNext = false;
+    /** @var resource|null */
+    public $context;
+    private string $name = '';
+    private int $pos = 0;
+
+    public function stream_open(string $path, string $mode, int $options, ?string &$opened): bool
+    {
+        $this->name = substr($path, strlen('shortwrite://'));
+        self::$files[$this->name] ??= '';
+        return true;
+    }
+
+    public function stream_read(int $count): string
+    {
+        $out = substr(self::$files[$this->name], $this->pos, $count);
+        $this->pos += strlen($out);
+        return $out;
+    }
+
+    public function stream_write(string $data): int
+    {
+        // PHP retries a short write, so the stream takes half and then refuses the rest once.
+        if (self::$refuseNext) {
+            self::$refuseNext = false;
+            return 0;
+        }
+        if (self::$shortOnce) {
+            self::$shortOnce = false;
+            self::$refuseNext = true;
+            $data = substr($data, 0, intdiv(strlen($data), 2));
+        }
+        $file = self::$files[$this->name];
+        self::$files[$this->name] = substr($file, 0, $this->pos) . $data . substr($file, $this->pos + strlen($data));
+        $this->pos += strlen($data);
+        return strlen($data);
+    }
+
+    public function stream_eof(): bool
+    {
+        return $this->pos >= strlen(self::$files[$this->name]);
+    }
+
+    public function stream_tell(): int
+    {
+        return $this->pos;
+    }
+
+    public function stream_seek(int $offset, int $whence): bool
+    {
+        $this->pos = $offset;
+        return true;
+    }
+
+    public function stream_truncate(int $size): bool
+    {
+        self::$files[$this->name] = str_pad(substr(self::$files[$this->name], 0, $size), $size, "\0");
+        return true;
+    }
+
+    public function stream_lock(int $operation): bool
+    {
+        return true;
+    }
+
+    public function stream_flush(): bool
+    {
+        return true;
+    }
+
+    /** @return array<string, int> */
+    public function stream_stat(): array
+    {
+        return ['size' => strlen(self::$files[$this->name])];
+    }
+
+    public function stream_set_option(int $option, int $arg1, ?int $arg2): bool
+    {
+        return false;
+    }
+}
+
+stream_wrapper_register('shortwrite', ShortWriteStream::class);

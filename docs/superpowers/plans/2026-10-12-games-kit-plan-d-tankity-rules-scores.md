@@ -6889,6 +6889,8 @@ MSG
 
 ### Task 21a: Deterministic math: one `sin`, `cos` and `atan2` for the browser and the server
 
+> **Also binding (from PR 13b):** terrain generation (`sim.ts`'s hills and `server/sim.php`'s twin) uses this module too, and the `field` terrain vectors, compared at 1e-9 since PR 13b because PHP's and V8's `sin` differ by an ulp in a few columns, become exact (bit for bit) in this task.
+
 An honest run must never be voided because V8's `Math.sin` and the host's libm `sin()` differ in the last bit. Every transcendental the solo simulation path uses (the browser's `src/sim.ts` and the server's `server/sim.php`, `server/rules.php`, and from Task 29 `server/flight.php`) goes through one module per language built only from `+ − × ÷`, `Math.floor`/`floor`, and decimal constants that both languages parse to the same double (both round decimal literals correctly). IEEE 754 makes each of those operations exact-to-the-same-bit on both sides; neither V8 nor PHP's VM fuses a multiply and an add. Rendering-only code (`render.ts`, `preview.ts`, `replay.ts`, particles in `match.ts`, `room.ts`) keeps `Math.*`.
 
 The approximations are fdlibm's (`__kernel_sin`, `__kernel_cos`, `atan`), with a two-constant Cody–Waite reduction by π/2. Accuracy is about 1 ulp on the ranges the game feeds them (`|x| < 1e5`); the point is that both sides compute the same bits.

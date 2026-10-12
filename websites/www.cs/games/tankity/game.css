@@ -735,10 +735,29 @@ button.btn-leave[hidden] { display: none; }
 input.initial { width: 2rem; height: 2rem; max-width: none; padding: 0; text-align: center; font-size: 1rem; font-weight: 800; text-transform: uppercase; }
 .title-note { min-height: 1em; margin: 0 0 0.3rem; font-size: 0.72rem; color: var(--bad); }
 #frame .title-link { background: none; border: 0; color: #9aa3c7; text-decoration: underline; font-weight: 600; padding: 0.25rem 0.5rem; }
-@media (max-width: 600px) {
-  .title-veil { background: rgba(5, 6, 15, 0.75); }
-  .title-card { width: 92%; }
+/* The demo's own "press Play" banner would sit over the card. */
+#title-root:has(.title-veil:not([hidden])) ~ .banner { display: none; }
+/* Phones, portrait or landscape: the card fills the screen instead of the
+   canvas-shaped box, so every control is in reach without an inner scroll. */
+@media (max-width: 600px), (max-height: 480px) {
+  .title-veil {
+    position: fixed;
+    inset: 0;
+    aspect-ratio: auto;
+    border-radius: 0;
+    padding: 0.4rem;
+    background: rgba(5, 6, 15, 0.85);
+  }
+  .title-card { width: min(100%, 24rem); padding: 0.7rem 0.8rem; }
   #frame .title-play { padding: 0.9rem; }
+}
+@media (max-height: 480px) {
+  .title-card { padding: 0.4rem 0.8rem; }
+  .title-card h2 { font-size: 1rem; margin-bottom: 0.1rem; }
+  .title-tag { margin-bottom: 0.3rem; }
+  #frame .title-play { padding: 0.5rem; margin-bottom: 0.3rem; }
+  .title-row { margin-bottom: 0.3rem; }
+  .title-note { margin-bottom: 0; }
 }
 /* Thumb-sized on touch screens. */
 @media (pointer: coarse) {

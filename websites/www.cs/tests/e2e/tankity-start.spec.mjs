@@ -76,3 +76,34 @@ test('Play with friends opens the rooms; closing them shows the card again', asy
   await expect(page.locator('#shop-veil')).toBeVisible({ timeout: 10_000 });
   expect(errors).toEqual([]);
 });
+
+test('Ctrl alone never starts a match from the card, and Esc works from an initials box', async ({ browser }) => {
+  const { page, errors } = await newPlayer(browser);
+  await expect(page.locator('#title-play')).toBeFocused();
+  await page.keyboard.press('Control');
+  await page.waitForTimeout(300);
+  await expect(page.locator('#title-card')).toBeVisible();
+  await expect(page.locator('#shop-veil')).toBeHidden();
+  await page.click('#title-initial-2');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#menu-overlay')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('on a phone, portrait or landscape, every card control is in view without an inner scroll', async ({ browser }) => {
+  const { page, errors } = await newPlayer(browser);
+  for (const [width, height] of [[375, 667], [667, 375]]) {
+    await page.setViewportSize({ width, height });
+    await expect(page.locator('#title-card')).toBeVisible();
+    for (const id of ['#title-play', '#rooms-open', '#tutorial-open', '#title-initial-1', '#title-initial-3', '#title-settings']) {
+      const box = await page.locator(id).boundingBox();
+      expect(box, `${id} at ${width}x${height}`).not.toBeNull();
+      expect(box.y, `${id} top at ${width}x${height}`).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height, `${id} bottom at ${width}x${height}`).toBeLessThanOrEqual(height);
+      expect(box.x + box.width, `${id} right at ${width}x${height}`).toBeLessThanOrEqual(width);
+    }
+    const scrolls = await page.locator('#title-card').evaluate(el => el.scrollHeight > el.clientHeight + 1);
+    expect(scrolls, `the card scrolls at ${width}x${height}`).toBe(false);
+  }
+  expect(errors).toEqual([]);
+});

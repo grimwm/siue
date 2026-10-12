@@ -148,3 +148,23 @@ test('card: with no button focused, the fire key reaches the game (which explain
   input.keydown(ev({ code: 'Space', key: ' ' }));
   assert.deepEqual(calls, ['fire']);
 });
+
+test('card: Ctrl alone never presses the focused card button; it only reaches fire', () => {
+  const input = rig();
+  const calls = [];
+  input.register({ fire: () => { calls.push('fire'); } }, { cardOpen: () => true });
+  let clicked = 0;
+  input.keydown({ ...ev({ code: 'ControlLeft', key: 'Control', ctrlKey: true }), target: { tagName: 'BUTTON', click: () => { clicked++; } } });
+  assert.equal(clicked, 0);
+  assert.deepEqual(calls, ['fire']);
+});
+
+test('Esc still works while a text box has focus; other keys stay the box\'s', () => {
+  const input = rig();
+  const calls = [];
+  input.register({ escape: () => { calls.push('escape'); }, new: () => { calls.push('new'); } });
+  const inBox = o => ({ ...ev(o), target: { tagName: 'INPUT' } });
+  input.keydown(inBox({ code: 'Escape', key: 'Escape' }));
+  input.keydown(inBox({ code: 'KeyN', key: 'n' }));
+  assert.deepEqual(calls, ['escape']);
+});

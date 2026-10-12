@@ -115,6 +115,26 @@ for an installed app, `'title-with-hint'`: the game then shows its title card
 and, with the hint, `EXIT_HINT`. Pages pass `browserAppEnv()`; tests pass a
 fake environment and a manual clock.
 
+## Install and Share (`install.ts`, `ui/install-bar.tsx`)
+
+`createInstall(env, setup, onChange)` decides what the Install and Share
+buttons show; the browser is a port (`InstallEnv`: the held-back install
+prompt, `appinstalled`, whether the page runs installed, the platform, whether
+it is framed, `navigator.share`, the clipboard, navigation, timers), so tests
+pass a fake and `browserInstallEnv()` is the real one. Chromium gets Install
+only while a held-back `beforeinstallprompt` is in hand, and a click spends it;
+iOS, which has no install API, gets Install always, opening the "Tap Share,
+then Add to Home Screen" steps; other browsers get none; an installed app never
+does. `?install` highlights the button, or on iOS opens the steps, and never
+prompts by itself.
+
+Chromium offers to install from a page outside the manifest's scope
+(`OUT_OF_SCOPE_PROMPTS`, measured in Chrome), so the site's `/play/<id>/`
+pages prompt themselves. iOS saves the page it is on, so on a site page its
+Install opens the game's own page with `?install`, where the steps open. Share
+uses Web Share, then the clipboard ("Link copied"), then a selectable field; a
+cancelled share sheet is no error.
+
 ## Tests (`test/`)
 
 Unit tests are `*.test.mjs` files run with `node --test`. They import

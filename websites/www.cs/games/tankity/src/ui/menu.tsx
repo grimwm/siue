@@ -44,6 +44,12 @@ export interface MenuProps {
   /** Show the Leave room button (inside a room). */
   inRoom: boolean;
   onLeave: () => void;
+  /** The phone-only row (the deck has no room for them there): Next song, Radio and Help. */
+  onNextSong: () => void;
+  onRadio: () => void;
+  onHelp: () => void;
+  radioOpen: boolean;
+  helpOpen: boolean;
 }
 
 function UnitTile({ unit, picked, draw, onPick }: {
@@ -134,6 +140,14 @@ export function Menu(p: MenuProps) {
               </svg>
               <span>Fullscreen <Key at="global:fullscreen" bare /></span>
             </button>
+          </div>
+        </div>
+        <div class="unit-row phone-extras" role="group" aria-labelledby="extras-label">
+          <span class="unit-label" id="extras-label">More</span>
+          <div class="unit-picker">
+            <button type="button" id="menu-track" class="m-track" onClick={blurThen(p.onNextSong)}>Next song</button>
+            <button type="button" id="menu-radio" class="m-radio" aria-expanded={p.radioOpen} onClick={blurThen(p.onRadio)}>Radio</button>
+            <button type="button" id="menu-help" class="m-help" aria-expanded={p.helpOpen} onClick={blurThen(p.onHelp)}>Help</button>
           </div>
         </div>
         <button type="button" id="scores-open" title="High scores, and file your run" onClick={blurThen(p.onScores)}>

@@ -135,7 +135,7 @@ for (const id of ['new-game', 'round-banner', 'round-banner-text', 'preview-resu
   void document.getElementById(id);
 }
 frames(30);
-check('demo-plays', els['shop-veil'].hidden === true && /you 100/.test(els['hud-armor'].textContent),
+check('demo-plays', els['shop-veil'].hidden === true && els['hud-armor'].textContent === '100',
   els['hud-armor'].textContent);
 const rendered = id => !!els[id] && !!els[id].localName;
 const titleVeil = () => els['title-root'].children[0];
@@ -204,16 +204,10 @@ check('no-seed-leak', (() => {
 })());
 check('lobby-css-acts-right', /\.card \.acts\s*\{[^}]*justify-content:\s*flex-end/.test(css));
 for (const id of ['btn-sound', 'btn-music']) check('audio-rendered-' + id, rendered(id));
-check('css-fit-windowed', /\.canvas-holder\s*\{[^}]*100vh/.test(css));
+check('css-fit-windowed', /\nbody\s*\{[^}]*height:\s*100dvh/.test(css) && /\n\.field\s*\{[^}]*flex:\s*1/.test(css));
+check('css-breakpoints', ['@container (max-width: 1100px)', '@container (max-width: 860px)', '@container (max-width: 760px)'].every(q => css.includes(q)));
 check('css-fit-fullscreen', /#frame:fullscreen\s*\{[^}]*overflow:\s*hidden/.test(css));
-check('css-actions-grid', /\.guide-actions\s*\{[^}]*display:\s*grid/.test(css));
-check('css-menu-top', /\.menubar\s*\{[^}]*top:\s*0\.5rem/.test(css));
-check('css-menu-centered', /\.menubar\s*\{[^}]*justify-content:\s*center/.test(css));
-check('css-menu-row', /\.menubar\s*\{[^}]*flex-wrap:\s*nowrap/.test(css));
-check('css-menu-block', /\.menubar\s*\{[^}]*background/.test(css));
-check('css-stats-strip', /\.hudbar\s*\{[^}]*position:\s*static/.test(css));
-check('pad-note', html.includes('class="pad-note"') && html.includes('barrel'));
-check('key-hints', html.includes('data-keyhint="global:escape" aria-hidden="true">Esc<') && html.includes('data-keyhint="global:fire" aria-hidden="true">Space<'));
+check('key-hints', html.includes('data-keyhint="global:fire" aria-hidden="true">Space<') && html.includes('data-keyhint="aim:driveLeft" aria-hidden="true">Shift+←<'));
 check('key-style', /\n\.key\s*\{[^}]*background:\s*#14183a/.test(css) && /@media \(hover: hover\) and \(pointer: fine\)/.test(css));
 // Panels live over the battle, never beside it; L/H/R flip them without pausing.
 check('no-side-panels', !/<aside/.test(html));
@@ -240,9 +234,10 @@ check('report-toggle', els['report-overlay'].hidden === false);
 click(els['report-close']);
 check('report-close', els['report-overlay'].hidden === true);
 // Seed, sound, music and fullscreen live in the in-frame settings menu.
-for (const id of ['menu-overlay', 'btn-menu']) {
+for (const id of ['menu-overlay', 'deck', 'hud-bar', 'field']) {
   check('menu-markup-' + id, html.includes('id="' + id + '"'));
 }
+check('menu-button-in-the-status-bar', rendered('btn-menu'));
 for (const id of ['menu-close', 'seed-form', 'new-game']) {
   check('menu-rendered-' + id, rendered(id));
 }
@@ -253,8 +248,8 @@ check('menu-grid-cols', /\.menu-grid\s*\{[^}]*repeat\(3, 1fr\)/.test(css));
 // Secondary is the default (navbar style); gold is opt-in via .btn-primary.
 check('buttons-secondary-default', /\nbutton\s*\{[^}]*background:\s*var\(--panel\)/.test(css) && /\nbutton\s*\{[^}]*border:\s*1px solid var\(--line\)/.test(css));
 check('buttons-primary-gold', /button\.btn-primary[^{]*\{[^}]*background:\s*var\(--accent\)/.test(css));
-const menubarHtml = html.slice(html.indexOf('id="menubar"'), html.indexOf('id="log-overlay"'));
-check('menubar-one-primary', (menubarHtml.match(/btn-primary/g) || []).length === 1 && /id="btn-menu" class="tool btn-primary"/.test(menubarHtml));
+const deckHtml = html.slice(html.indexOf('id="deck"'), html.indexOf('id="log-overlay"'));
+check('deck-groups', ['grp-aim', 'grp-drive', 'grp-more', 'grp-weapon', 'grp-fire'].every(g => deckHtml.includes(g)) && !/btn-primary/.test(deckHtml));
 TAP('global', 'escape');
 check('menu-toggle', els['menu-overlay'].hidden === false && els['btn-menu'].getAttribute('aria-expanded') === 'true');
 click(els['menu-close']);
@@ -863,7 +858,7 @@ await (async () => {
   check('preshop', shopOpen && /\$600/.test(shopCash0), shopCash0);
   check('shop-buy', /\$180/.test(shopCash1), shopCash1);
   check('boot-turn', /YOU/.test(turn0), turn0);
-  check('boot-hud', /62°/.test(angle0) && wind0.length > 0 && /you 100/.test(armor0),
+  check('boot-hud', /62°/.test(angle0) && wind0.length > 0 && armor0 === '100',
     `${angle0} | ${wind0} | ${armor0}`);
   // Firing range: V opens the demo with its damage stats, frames render it,
   // V closes it again. Roll into a live aiming phase with a Shell loaded so
@@ -965,7 +960,7 @@ await (async () => {
       check('solo-round-ends-after-the-last-wreck', /goes to the battery.*2 lives left/.test(after[after.length - 1] || ''), after.slice(-2).join(' | '));
       frames(600); // the name card runs on sim time, then the shop opens
       check('solo-lost-round-opens-the-shop', els['shop-veil'].hidden === false);
-      check('solo-lost-round-costs-a-life', /^♥♥$/.test(els['hud-lives'].textContent), els['hud-lives'].textContent);
+      check('solo-lost-round-costs-a-life', /^♥ 2$/.test(els['hud-lives'].textContent), els['hud-lives'].textContent);
     }
   }
   // The stub only knows elements the game asked for; ask for the lobby ones.
@@ -1090,7 +1085,7 @@ await (async () => {
   NET_LOBBY = false;
   click(els['lobby-start']); await tick(10);
   check('net-turn', /YOU/.test(els['hud-turn'].textContent), els['hud-turn'].textContent);
-  check('net-hud', /Shell.*∞/.test(els['hud-weapon'].textContent) && /\$600/.test(els['hud-score'].textContent),
+  check('net-hud', /Shell.*∞/.test(els['hud-weapon'].textContent) && /ROOM/.test(els['hud-score'].textContent),
     els['hud-weapon'].textContent + ' | ' + els['hud-score'].textContent);
   // fire over the same public key as solo play; the server settles it
   sawFire = false;
@@ -1209,7 +1204,7 @@ await (async () => {
   click(els['lobby-start']); await tick(10);
   check('fx-play-turn', /YOU/.test(els['hud-turn'].textContent) && els['lobby-veil'].hidden === true && els['shop-veil'].hidden === true,
     els['hud-turn'].textContent);
-  check('fx-play-hud', els['hud-armor'].textContent.startsWith(fxRoomOf('play-my-turn').tanks[0].hp + ' ') && /\$600/.test(els['hud-score'].textContent),
+  check('fx-play-hud', els['hud-armor'].textContent === String(fxRoomOf('play-my-turn').tanks[0].hp) && /ROOM/.test(els['hud-score'].textContent),
     els['hud-armor'].textContent + ' | ' + els['hud-score'].textContent);
   // 429 (retried, then said kindly) and 409 (the server's own words).
   PFX.actError = 'error-too-fast';
@@ -1229,7 +1224,7 @@ await (async () => {
   check('fx-fire-replayed', /ABC hits REAPER for \d+/.test(logText()) && /REAPER fires/.test(logText()) &&
     /REAPER hits YOU for \d+/.test(logText()) === hitMe,
     logText().split('\n').slice(-3).join(' | '));
-  check('fx-fire-turn-back', /YOU/.test(els['hud-turn'].textContent) && els['hud-armor'].textContent.startsWith(after.tanks[0].hp + ' '),
+  check('fx-fire-turn-back', /YOU/.test(els['hud-turn'].textContent) && els['hud-armor'].textContent === String(after.tanks[0].hp),
     els['hud-turn'].textContent + ' | armor ' + els['hud-armor'].textContent);
   // The round is won: the room moves to the shop with the prize paid.
   PFX.room = 'shop-after-win';

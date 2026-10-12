@@ -119,3 +119,17 @@ test('key labels follow the table, and no key means no cap', () => {
   menu.renderMenu(bare, { ...props, keyHint: () => '' });
   assert.equal(byId(bare, 'new-game').textContent, 'Play this seed ');
 });
+
+test('phones get Next song, Radio and Help in the menu, each saying whether its panel is open', () => {
+  const calls = { song: 0, radio: 0, help: 0 };
+  const { section } = draw({
+    onNextSong: () => { calls.song++; }, onRadio: () => { calls.radio++; }, onHelp: () => { calls.help++; },
+    radioOpen: false, helpOpen: true,
+  });
+  const extras = walk(section).find(n => String(n.className || '').split(' ').includes('phone-extras'));
+  assert.ok(extras);
+  for (const id of ['menu-track', 'menu-radio', 'menu-help']) click(byId(extras, id));
+  assert.deepEqual(calls, { song: 1, radio: 1, help: 1 });
+  assert.equal(byId(section, 'menu-radio').getAttribute('aria-expanded'), 'false');
+  assert.equal(byId(section, 'menu-help').getAttribute('aria-expanded'), 'true');
+});

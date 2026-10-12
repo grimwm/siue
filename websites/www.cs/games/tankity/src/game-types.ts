@@ -87,7 +87,6 @@ export interface GameState extends World {
   demoHint: boolean;
   watchTurns: number; // drone-only turns since the player fell
   preview: (PreviewState<HTMLElement | null> & { fx: FxSys | null }) | null;
-  windTop: number | undefined; // the wind gauge's top in world units, under the menu strip
 }
 
 /** What the page keeps of a room match: whose turn it reads as, the aim and

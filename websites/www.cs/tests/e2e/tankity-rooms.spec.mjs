@@ -38,10 +38,11 @@ test('two players: drive, real shell flights on both screens, turns after the re
   // Once settled, each HUD's armor list matches the server's numbers.
   await guest.page.waitForTimeout(1500);
   const server = lastRoom(roomState.guest).tanks;
-  const armorText = await hud(guest.page, 'hud-armor');
+  // The armor pill's name carries your armor and each rival's, in words.
+  const armorText = await guest.page.locator('.pill.armor').getAttribute('aria-label');
   const mine = server.find(t => t.name === 'ZED');
-  expect(armorText).toContain(`you ${mine.hp}`);
-  for (const t of server.filter(t => t.name !== 'ZED')) expect(armorText).toContain(`${t.name}:${t.hp}`);
+  expect(armorText).toContain(`Armor ${mine.hp} of`);
+  for (const t of server.filter(t => t.name !== 'ZED')) expect(armorText).toContain(`${t.name} ${t.hp} of`);
 
   await guest.page.screenshot({ path: 'test-results/tankity-room-guest.png' });
   expect(host.errors).toEqual([]);

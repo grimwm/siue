@@ -1,4 +1,4 @@
-/* The game menu: the seed box and New Game, the unit and text-size pickers, the
+/* The game menu: the seed box and New Game, the unit, text-size and Difficulty pickers, the
  * sound, music and fullscreen toggles, and the buttons that open the rooms, the
  * tutorial and the scores. The game owns the state (the unit, the text size,
  * what is muted, whether a room is running) and hands in a finished view of it;
@@ -28,6 +28,10 @@ export interface MenuProps {
   sizes: { key: string; name: string; scale: number }[];
   size: string;
   onPickSize: (key: string) => void;
+  /** How well the drones aim: the choices, the saved one. */
+  difficulties: { key: string; name: string }[];
+  difficulty: string;
+  onPickDifficulty: (key: string) => void;
   /** Toggle states (pressed means on). */
   sound: boolean;
   music: boolean;
@@ -90,6 +94,18 @@ export function Menu(p: MenuProps) {
             ))}
           </div>
         </div>
+        <div class="unit-row" role="group" aria-labelledby="difficulty-label">
+          <span class="unit-label" id="difficulty-label">Difficulty</span>
+          <div class="unit-picker" id="difficulty-picker">
+            {p.difficulties.map(d => (
+              <button type="button" class="unit-choice" key={d.key} data-difficulty={d.key} aria-pressed={p.difficulty === d.key}
+                title={`${d.name} drones`} onClick={blurThen(() => p.onPickDifficulty(d.key))}>
+                <span>{d.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <p class="hint" id="difficulty-hint">How well the drones aim. A change starts with your next match; in a room, the host's setting counts.</p>
         <div class="unit-row" role="group" aria-labelledby="options-label">
           <span class="unit-label" id="options-label">Options</span>
           <div class="unit-picker" id="toggle-picker">

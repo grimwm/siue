@@ -8,6 +8,8 @@
  * and the rest of the game arrive as deps. */
 import type { sfx as SfxApi } from './audio.ts';
 import type { GameState, MatchState } from './game-types.ts';
+import { DIFFICULTY_NAMES } from './difficulty.ts';
+import type { DifficultySetting } from './difficulty.ts';
 import type { HudValues } from './hud.ts';
 import type { EndState } from './match.ts';
 import { inviteUrl, prettyRoomError } from './net.ts';
@@ -33,6 +35,7 @@ export interface LobbyView {
   code: string;
   link: string;
   hills: string;
+  drones: string;
   seats: LobbySeat[];
   mySeat: number;
   isHost: boolean;
@@ -53,6 +56,8 @@ export interface LobbyDeps {
   SCORES: { formHidden: boolean };
   replay: Replay;
   sfx: Pick<typeof SfxApi, 'play'>;
+  /** The Menu's Difficulty: a hosted room takes it for good. */
+  difficulty: Pick<DifficultySetting, 'get'>;
   unlock(): void;
   say(text: string, tone?: string): void;
   keyHint: KeyHintFn;
@@ -75,7 +80,7 @@ export interface LobbyDeps {
 
 export function createLobby(deps: LobbyDeps) {
   const {
-    G, $, net, MATCH, HUD, END, SCORES, replay, sfx, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
+    G, $, net, MATCH, HUD, END, SCORES, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
     closeOverlays, closePreview, endTutorial, freshMatchFromSeedBox, hideShop, paintHud, refreshNavHints, renderEndVeil, renderMenu,
     renderScoresOverlay, renderShop,
   } = deps;
@@ -111,7 +116,7 @@ export function createLobby(deps: LobbyDeps) {
      (code, link, hills, seats). The initials and code boxes stay the page's own. */
   const LOBBY: LobbyView = {
     status: '', count: '', online: false, inRoom: false, mapId: '', mapsRev: 0, prefill: '',
-    code: '', link: '', hills: 'Hills: Random hills', seats: [], mySeat: 0, isHost: false, seatsHint: '',
+    code: '', link: '', hills: 'Hills: Random hills', drones: '', seats: [], mySeat: 0, isHost: false, seatsHint: '',
   };
   function lobbySay(text: string): void {
     LOBBY.status = text;
@@ -150,6 +155,7 @@ export function createLobby(deps: LobbyDeps) {
       code: LOBBY.code,
       link: LOBBY.link,
       hills: LOBBY.hills,
+      drones: LOBBY.drones,
       seats: LOBBY.seats,
       mySeat: LOBBY.mySeat,
       isHost: LOBBY.isHost,
@@ -240,7 +246,7 @@ export function createLobby(deps: LobbyDeps) {
     lobbySay('Raising the flag…');
     MATCH.initials = initials;
     try {
-      await net.host(initials, mapId || '', G.body);
+      await net.host(initials, mapId || '', G.body, difficulty.get());
       say(`Room ${net.code} hosted. Read the code to your friends.`, 'info');
       await netRefreshRoster();
       loadOccupancy();
@@ -338,6 +344,7 @@ export function createLobby(deps: LobbyDeps) {
       net.mapName = room.mapName || 'Random hills';
     }
     LOBBY.hills = 'Hills: ' + (net.mapName || 'Random hills');
+    if (room && room.difficulty) LOBBY.drones = `Drones: ${DIFFICULTY_NAMES[room.difficulty] || 'Normal'} (the host's Difficulty)`;
     LOBBY.seats = ((room && room.seats) || net.seats || []).map(s => ({ human: !!s.human, name: String(s.name || ''), mode: s.mode }));
     LOBBY.mySeat = net.seat;
     LOBBY.isHost = net.seat === 0;

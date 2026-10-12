@@ -287,6 +287,7 @@ battle buttons on the right, sky behind both. */
 }
 .menu-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
 .menu-grid button { width: 100%; }
+.menu-grid > .hint { grid-column: 1 / -1; margin: 0; font-size: 0.8rem; }
 .seed-row, .unit-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.4rem; }
 .seed-row label, .unit-label { font-size: 0.8rem; color: var(--wash-ink); flex: none; }
 /* The picker rows share one label column, so their tiles line up. */

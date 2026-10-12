@@ -8,6 +8,7 @@
             "phase": "lobby",
             "map": null,
             "mapName": "Random hills",
+            "difficulty": "normal",
             "round": 0,
             "wind": 0,
             "turn": null,

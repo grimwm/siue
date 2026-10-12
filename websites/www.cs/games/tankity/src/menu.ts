@@ -1,6 +1,6 @@
 /* Operation Tankity: the game menu's settings.
  *
- * The unit look and the text size, both remembered in this browser, and the
+ * The unit look, the text size and the Difficulty, all remembered in this browser, and the
  * props the game menu overlay (src/ui/menu.tsx) is drawn from: what is
  * chosen, what is muted, whether a room runs, and what each button does.
  * The page's other controls (sound, music, fullscreen, a fresh match, the
@@ -8,6 +8,9 @@
 import { browserStorage } from '../../_kit/ports.browser.ts';
 import { pref, text } from '../../_kit/prefs.ts';
 import type { sfx as SfxApi } from './audio.ts';
+import { DIFFICULTIES } from './ai.ts';
+import { DIFFICULTY_NAMES, isDifficulty } from './difficulty.ts';
+import type { DifficultySetting } from './difficulty.ts';
 import type { GameState, GameTank } from './game-types.ts';
 import type { RoomClient } from './net.ts';
 import { drawUnitIcon } from './ui/icons.ts';
@@ -23,6 +26,7 @@ export interface MenuDeps {
   $(id: string): HTMLElement | null;
   net: Pick<RoomClient, 'on' | 'sendBody'>;
   sfx: Pick<typeof SfxApi, 'play'>;
+  difficulty: DifficultySetting;
   unlock(): void;
   isSoundMuted(): boolean;
   isMusicMuted(): boolean;
@@ -43,7 +47,7 @@ export interface MenuDeps {
 
 export function createMenu(deps: MenuDeps) {
   const {
-    G, $, net, sfx, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, openRooms, placeLogBelowMenu,
+    G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, openRooms, placeLogBelowMenu,
     randomRun, freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound, tutorialOpen,
   } = deps;
 
@@ -103,6 +107,15 @@ export function createMenu(deps: MenuDeps) {
     applyTextSize(key);
     sfx.play('click');
   }
+  /* Difficulty: how well the drones aim (ai.ts DIFFICULTY). Kept in this
+     browser; the match in progress keeps the aim it was dealt. */
+  const DIFFICULTY_CHOICES = DIFFICULTIES.map(key => ({ key, name: DIFFICULTY_NAMES[key] }));
+  function chooseDifficulty(key: string): void {
+    if (!isDifficulty(key)) return;
+    difficulty.set(key);
+    sfx.play('click');
+    renderMenu();
+  }
   /* The game menu is a Preact component (src/ui/menu.tsx): it gets what it shows
      (the unit, the text size, what is muted, whether a room runs) and reports
      clicks. The seed box stays the page's own. */
@@ -125,6 +138,9 @@ export function createMenu(deps: MenuDeps) {
       sizes: TEXT_SIZES,
       size: TEXT_SIZE,
       onPickSize: chooseTextSize,
+      difficulties: DIFFICULTY_CHOICES,
+      difficulty: difficulty.get(),
+      onPickDifficulty: chooseDifficulty,
       sound: !isSoundMuted(),
       music: !isMusicMuted(),
       fullscreen: !!document.fullscreenElement,

@@ -629,11 +629,23 @@ room_end_round($room, $events);
 $check('another-human-with-lives-keeps-the-match', $room['phase'] === 'shop' && $room['seats'][0]['lives'] === 0
     && $room['seats'][1]['lives'] === 2 && in_array('eliminated', $types($events), true) && $types($events)[count($events) - 1] === 'roundwin');
 
+// Difficulty: only the three exact words count; anything else, and a room
+// stored before the setting, aims at normal.
+foreach ([['easy', 'easy'], ['normal', 'normal'], ['hard', 'hard'], [null, 'normal'], ['', 'normal'], ['HARD', 'normal'],
+    [' hard', 'normal'], ['brutal', 'normal'], [2, 'normal'], [['hard'], 'normal'], [true, 'normal']] as $i => [$raw, $want]) {
+    $check("difficulty-parse-$i", room_parse_difficulty($raw) === $want, json_encode($raw) . ' -> ' . room_parse_difficulty($raw));
+}
+$old = room_new('OLDR', 'abc');
+unset($old['difficulty']);
+$check('difficulty-old-room-is-normal', room_difficulty($old) === 'normal' && room_snapshot($old, null, 0)['difficulty'] === 'normal');
+$check('difficulty-new-room-is-normal', room_new('NEWR', 'abc')['difficulty'] === 'normal');
+$check('difficulty-table-matches-the-levels', array_keys(ROOM_DIFFICULTY) === ['easy', 'normal', 'hard']);
+
 // Drone bracketing: a drone that keeps shooting at a target standing still
 // walks its shots in. The target is a tough human (nobody dies mid-test), the
 // ground is flat, and each turn is what the room's caller does for a drone:
 // choose, move if it wants to, fire the volley, which records the burst.
-$bracketRoom = function (int $seed, int $round, array $extra = []) use ($flatRoom) {
+$bracketRoom = function (int $seed, int $round, array $extra = [], string $level = 'normal') use ($flatRoom) {
     $mk = fn(int $seat, string $kind, float $x, int $dir) => ['seat' => $seat, 'kind' => $kind, 'name' => 'T' . $seat, 'x' => $x, 'y' => 400.0,
         'angle' => 62.0, 'power' => 55.0, 'hp' => 100000, 'maxHp' => 100000, 'fuel' => 0.0, 'dirS' => $dir, 'ammo' => []];
     $room = $flatRoom(array_merge([$mk(0, 'human', 200.0, 1), $mk(1, 'ai', 500.0, -1)], $extra));
@@ -641,6 +653,7 @@ $bracketRoom = function (int $seed, int $round, array $extra = []) use ($flatRoo
     $room['round'] = $round;
     $room['rng'] = $seed;
     $room['jammer'] = [];
+    $room['difficulty'] = $level;
     return $room;
 };
 $droneTurn = function (array &$room, int $idx): float {
@@ -665,7 +678,9 @@ $misses = [[], [], [], []];
 $hitWithin4 = 0;
 foreach ([1, 3] as $round) {
     for ($seed = 1; $seed <= $seeds; $seed++) {
-        $room = $bracketRoom($seed * 7919, $round);
+        // Hard: the full-correction aim these thresholds describe; each
+        // level's hit rates are test/ai-hitrate.test.mjs's.
+        $room = $bracketRoom($seed * 7919, $round, [], 'hard');
         $hit = false;
         for ($k = 0; $k < 4; $k++) {
             $hp = $room['tanks'][0]['hp'];
@@ -686,7 +701,7 @@ $check('bracket-hits-within-4-shots-in-most-seeds', $hitWithin4 >= 0.75 * 2 * $s
 // standing target adds one, up to the cap; then it starts over.
 $room = $bracketRoom(77, 2);
 $ns = [];
-for ($k = 0; $k < ROOM_BRK_MAX + 2; $k++) {
+for ($k = 0; $k < ROOM_DIFFICULTY['normal']['brkMax'] + 2; $k++) {
     $droneTurn($room, 1);
     $ns[] = $room['tanks'][1]['brk']['n'];
 }

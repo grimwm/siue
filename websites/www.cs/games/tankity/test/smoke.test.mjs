@@ -421,12 +421,14 @@ function playRoom(turn, events) {
 }
 const okJson = d => ({ ok: true, json: async () => d });
 let createdMap = '';
+let createdDifficulty;
 let failCreate = '';
 let failMode = '';
 let sawFire = false;
 const mapFields = () => ({
   map: createdMap || null,
   mapName: createdMap ? 'Canyon 3' : 'Random hills',
+  difficulty: ['easy', 'hard'].includes(createdDifficulty) ? createdDifficulty : 'normal',
 });
 global.fetch = async (url, opts) => {
   const u = String(url);
@@ -453,6 +455,7 @@ global.fetch = async (url, opts) => {
     if (failMode === 'stumble') return { ok: false, json: async () => { throw new Error('Unexpected token <'); } };
     if (failCreate) return { ok: false, json: async () => ({ error: failCreate }) };
     createdMap = body.map || '';
+    createdDifficulty = body.difficulty;
     return okJson({ ok: true, code: 'TST1', seat: 0, token: 'tok0', csrf: 'cs0' });
   }
   if (u.includes('action=map')) {
@@ -962,9 +965,14 @@ await (async () => {
   for (const id of ['host-initials', 'host-form', 'lobby-status', 'lobby-code',
     'lobby-room', 'lobby-seats', 'lobby-start']) void document.getElementById(id);
   // the hills picker fills from the server catalog, seeds never attached
-  for (const id of ['rooms-open', 'lobby-map', 'lobby-hills', 'lobby-count']) {
+  for (const id of ['rooms-open', 'lobby-map', 'lobby-hills', 'lobby-drones', 'lobby-count', 'difficulty-picker']) {
     void document.getElementById(id);
   }
+  // The host's Menu Difficulty goes with the create and the lobby shows it.
+  const difficultyTile = key => els['difficulty-picker'].children.find(t => t.getAttribute('data-difficulty') === key);
+  click(difficultyTile('hard'));
+  check('difficulty-pick-saved', window.localStorage.getItem('tankity-difficulty') === 'hard'
+    && difficultyTile('hard').getAttribute('aria-pressed') === 'true', window.localStorage.getItem('tankity-difficulty'));
   click(els['rooms-open']); await tick(10);
   const tiles = () => els['lobby-map-picker'].children;
   const tileOn = () => tiles().filter(t => t.getAttribute('aria-pressed') === 'true').map(t => t.getAttribute('data-map'));
@@ -1035,6 +1043,10 @@ await (async () => {
   check('seats-hint-host', /Tap a seat/.test(els['seats-hint'].textContent), els['seats-hint'].textContent);
   check('room-hills', els['lobby-hills'].textContent === 'Hills: Canyon 3',
     els['lobby-hills'].textContent);
+  check('room-difficulty-sent', createdDifficulty === 'hard', String(createdDifficulty));
+  check('room-difficulty-shown', els['lobby-drones'].textContent === "Drones: Hard (the host's Difficulty)" && !els['lobby-drones'].hidden,
+    els['lobby-drones'].textContent);
+  click(difficultyTile('normal'));
   check('map-tile-pressed', tileOn().join() === 'canyon 3', tileOn().join());
   // the host can swap back to a random draw before starting
   click(tiles()[0]); await tick(10);

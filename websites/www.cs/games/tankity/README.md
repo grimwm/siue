@@ -15,7 +15,9 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `src/main.ts`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml`, and where each came from                                                                                                                     |
 | `src/sim.ts` | The game math in TypeScript: RNG, terrain, flight, hit tests, blasts. Pure: state in, what happened out; no page, sound or particles |
-| `src/ai.ts` | The drone AI: ballistic aim, bracketing and the six strategies (`aiChoose`, `pickTactic`). Pure; imports the sim, never the reverse (the sim keeps `brkLand`, which a blast calls) |
+| `src/ai.ts` | The drone AI: ballistic aim, bracketing, the six strategies (`aiChoose`, `pickTactic`) and the difficulty table (`DIFFICULTY`). Pure; imports the sim, never the reverse (the sim keeps `brkLand`, which a blast calls) |
+| `src/ai-measure.ts` | `measureHitRates`: a drone bracketing a stationary player on seeded hills with the real sim, counting the shots that take armor off, per shot of the bracket. The difficulty table is tuned against it. Pure, never bundled |
+| `src/difficulty.ts` | The Difficulty setting as the player keeps it (`tankity-difficulty`, missing or unknown reads as normal) and the levels' names |
 | `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes. It never touches the page |
 | `src/net.ts` | The room client: transport (one fetcher, the 429 retry), the session, polling, the act/buy/ready/leave senders, the turn and shop clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers and the clock are passed in |
 | `src/replay.ts` | The room volley replay: the queue of events waiting to play and the volley on screen. Eases the shooter's barrel, flies each shell along the path the server recorded (positions and velocities for the renderer), lands blasts and hits when the events say, and plays a volley kept back by a catch-up, or fired by a drone with no human standing (`watch`), at triple speed (`FAST_SPEED`). Sound, particles, craters, armor and log lines happen through callbacks; it never touches the page |
@@ -34,7 +36,7 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | `src/view.ts` | The camera, and the `BattleView` snapshot the canvas paints each frame (whose turn marker shows, whether the aim arm is up, when the clock counts down). `createView(deps)` |
 | `src/tutorial.ts` | The coach: the steps, their key-name text, remembering a finished lesson, and the overlay's props. `createTutorial(deps)` |
 | `src/scores.ts` | The high scores: filing a report with `scores.php`, the local fallback, and the overlay's props. `createScores(deps)` |
-| `src/menu.ts` | The game menu's settings (the unit look and the text size, both remembered in this browser) and the menu overlay's props. `createMenu(deps)` |
+| `src/menu.ts` | The game menu's settings (the unit look, the text size and the Difficulty, all remembered in this browser) and the menu overlay's props. `createMenu(deps)` |
 | `src/protocol.ts` | The room wire protocol as types: replies, the room snapshot, the discriminated union of events, and each action's request body. Types only |
 | `src/protocol-fixtures.check.ts`, `src/tsconfig.check.json` | Type-check only, never emitted: assigns every `protocol/*.json` to its type (see Protocol fixtures) |
 | `src/ui/*.tsx` | The Preact overlays and panels (see Preact overlays): `chrome.tsx` holds the shared key labels, title bar and scroll keeper; `help.tsx`, `shop.tsx`, `lobby.tsx`, `menu.tsx`, `guns.tsx`, `scores.tsx`, `log.tsx`, `tutorial.tsx`, `hud.tsx`, `endveil.tsx` and `leave.tsx` one each |
@@ -246,31 +248,62 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
   bracket in progress on a target the strategy still wants is kept.
 - Ranging shot: a brute-force search (which a strategy can narrow) (angle 25-155 in steps of 6, power 20-100
   in steps of 6, over the shell and any loaded gun) for the landing nearest the
-  target, plus Gaussian wobble: skill = min(1, 0.35 + round x 0.12), wob =
-  max(0.25, 1.2 - skill), angle +-9 x wob, power +-12 x wob, doubled against a
-  jammer's owner. Then a 35% chance to shuffle 8-35 px.
+  target, plus Gaussian wobble: wob = max(`wobFloor`, `wobStart` - `wobStep` x
+  round), angle +-9 x wob, power +-12 x wob, doubled against a jammer's owner.
+  Then a 35% chance to shuffle 8-35 px.
 - Bracketing: each drone remembers its last shot (`brk` on the tank in a room,
   on the drone object solo: target index, angle, power, weapon, corrections so
   far `n`, target x and own x then, and `land`, the x where the volley first
   burst, filled in when it does). While the same target stands within
   `BRK_DRIFT` = 3 px of where it stood, the drone is within 1 px of where it
   fired from, and its gun is still loaded, the next shot is a correction: the
-  sim's landing for the last aim is shifted by the measured miss (`land` against
-  the target's x; a burst within `BRK_ON` = 22 px, the hull, counts as on target
-  and holds the aim), a coarse then fine search near the last aim finds the
-  angle and power for that landing, and the wobble shrinks to wob x
-  `BRK_SHRINK`^n (0.65 per correction), never below `BRK_FLOOR` = 0.2 (so a
-  drone never locks into a bad aim). A bracketing drone does not shuffle.
+  sim's landing for the last aim is shifted by `correct` times the measured miss
+  (`land` against the target's x; a burst within `BRK_ON` = 22 px, the hull,
+  counts as on target and holds the aim), a coarse then fine search near the
+  last aim finds the angle and power for that landing, and the wobble shrinks
+  to wob x `brkShrink`^n, never below `brkFloor` (so a drone never locks into a
+  bad aim). A bracketing drone does not shuffle.
 - Restart: the target moved or died, the drone moved or its gun ran dry, or
-  `BRK_MAX` = 5 corrections went by, and the next shot is a fresh ranging shot
+  `brkMax` corrections went by, and the next shot is a fresh ranging shot
   with full wobble.
-- Measured (flat and rolling ground, a target that stays put, 120 seeds per
-  row, a hit is any damage): in round 1 at 250-350 px the median miss is
-  50-110 px on the ranging shot, 24-60 on the second, 17-40 on the third and
-  14-18 (the hull's edge) on the fourth; the hit chance is 22-37% on the first
-  shot, 28-61% on the second, 48-83% on the third and 66-85% on the fourth.
-  Round 6 starts at an 18 px median and 86-88% hits. A target that drives off
-  sends the drone back to the first row.
+
+### Difficulty
+
+How well the drones aim is one of three levels, one row each of `DIFFICULTY` in
+`src/ai.ts`, mirrored by `ROOM_DIFFICULTY` in `server/ai.php` (the sim vectors
+hold both to the same aim at every level):
+
+| Level | `wobStart` | `wobStep` | `wobFloor` | `correct` | `brkShrink` | `brkFloor` | `brkMax` |
+|---|---|---|---|---|---|---|---|
+| `easy` | 5 | 0.3 | 2 | 0.5 | 0.6 | 0.8 | 5 |
+| `normal` | 3.7 | 0.33 | 1.15 | 0.6 | 0.5 | 0.4 | 5 |
+| `hard` | 0.85 | 0.12 | 0.25 | 1 | 0.65 | 0.2 | 5 |
+
+- Solo: the Menu's Difficulty picker (Easy, Normal, Hard; Normal by default),
+  saved in this browser as `tankity-difficulty`. A match reads it when it is
+  dealt (`G.difficulty`), so a change waits for the next match.
+- Rooms: the host's Menu setting rides on `action=create` (`difficulty`), is
+  stored in the room for good (`$room['difficulty']`; joiners cannot change it)
+  and is in every snapshot (`difficulty`), where the lobby shows it. Only the
+  exact words count: anything else, and a room stored before the setting, is
+  normal.
+- Hit rates (`src/ai-measure.ts`: one drone with only the Shell bracketing a
+  stationary player on 1000 seeded hills, wind and spots; a hit is any armor
+  taken), percent on the ranging shot / after one correction / after two:
+
+  | Level | Round 1 | Round 5 | Round 10 |
+  |---|---|---|---|
+  | `easy` | 9 / 11 / 16 | 10 / 14 / 19 | 17 / 22 / 28 |
+  | `normal` | 10 / 17 / 26 | 15 / 27 / 42 | 27 / 40 / 54 |
+  | `hard` | 34 / 51 / 65 | 74 / 81 / 81 | 74 / 84 / 82 |
+
+  A shell landing anywhere on the field reaches the hull about one time in
+  ten (the blast reaches 40 px each side), so normal's first round of
+  ranging shots, and easy's, are close to that floor; easy is gentler mainly
+  in how slowly it walks its shots in. `test/ai-hitrate.test.mjs` keeps normal
+  within 5 points of 10/15/25% (ranging) and 25/40/55% (after two
+  corrections), easy within 5 points of half of normal, and hard at or above
+  normal.
 - The memory is a few numbers per drone and rides in the room's JSON; the
   snapshot a client sees leaves it out.
 
@@ -531,6 +564,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `node --test 'test/*.test.mjs'`                | Every Node test below, run by `test.sh` (the UI test bundles `src/ui/*.tsx` once with esbuild, Preact left external) |
 | `test/ui.test.mjs`                             | The Preact overlays (`src/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the scores, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
 | `test/smoke.test.mjs`                          | The shipped bundles (`dist/fx.js`, then `dist/main.js`) in a stub DOM, driven by the `game.json` key table and the `protocol/` fixtures; also checks the page loads exactly those two scripts with no import map and that the bundle has no bare imports, every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps; a solo player who wrecks their own tank sees the drones fight on to one and the lost round open the shop |
+| `test/ai-hitrate.test.mjs`                     | The drones' measured hit rates per difficulty against the targets (see Difficulty), the table's shape, hard being the sharpest aim (its exact constants), unknown levels aiming at normal, and the saved setting's default and form |
 | `test/prefs-legacy.test.mjs`                   | The saved settings (`tankity-body`, `tankity-text`, `tankity-tutorial`, `tankity-local`, `tankity-callsign`) read back through the kit's prefs exactly as the code before it wrote them |
 | `test/audio.test.mjs`                          | `src/audio.ts` imports without a browser; the loop-point trim and the round-to-track mapping are right |
 | `test/render.test.mjs`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, and rebuilds the sky only when the match key changes |
@@ -610,7 +644,8 @@ outputs; `test/sim-vectors.test.mjs` replays every case through the sim,
   roll ends, whole volleys for every weapon in `game.json` (and a roller down
   into a valley, into a unit, back onto its gunner, off either edge and
   stopping on a rise), the drone's aim, sequences of drone shots that bracket a
-  target in (and re-range when it drives off), each drone strategy's choice of
+  target in (and re-range when it drives off), the aim and a bracket at each
+  difficulty (and an unknown word aiming at normal), each drone strategy's choice of
   target, gun and arc and a flip after a dry spell, and tank settling.
 - Shared rules the cases pin: only a kill the player's own shot made pays the
   300 bonus, and a volley's projectiles (buckshot pellets, cluster bomblets)

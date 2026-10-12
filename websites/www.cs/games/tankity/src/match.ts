@@ -10,6 +10,7 @@
  * The game's state, the page and the rest of the game arrive as deps. */
 import { aiChoose as simAiChoose, pickTactic } from './ai.ts';
 import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
+import type { DifficultySetting } from './difficulty.ts';
 import { FOE_DYING, FOE_FIRE, FOE_HIT, FOE_MISS, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, pick } from './chatter.ts';
 import type { FxSys } from './fx/types.ts';
 import { transition, WATCH_TURNS } from './flow.ts';
@@ -46,6 +47,8 @@ export interface MatchDeps {
   net: Pick<RoomClient, 'on'>;
   sfx: Pick<typeof SfxApi, 'play'>;
   music: Pick<typeof MusicApi, 'leaveTheme' | 'start' | 'stop' | 'playTheme' | 'forRound'>;
+  /** The Menu's Difficulty; a match reads it once, when it is dealt. */
+  difficulty: Pick<DifficultySetting, 'get'>;
   unlock(): void;
   alive(): GameTank[];
   foesAlive(): GameTank[];
@@ -83,7 +86,7 @@ export interface MatchDeps {
 
 export function createMatch(deps: MatchDeps) {
   const {
-    G, $, TOUCH, tables, net, sfx, music, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
+    G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
     render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closeGuns, closePreview, hideShop, openShop,
     endTutorial, maybeStartTutorial, tutorialFired, fileReport, savedCallsign, freshMatchFromSeedBox, netFire, netLeave,
     netNext, netRematch, openLobby,
@@ -104,6 +107,7 @@ export function createMatch(deps: MatchDeps) {
     const seed = (seedStr || '').trim() || ('scorched-' + Math.floor(Math.random() * 9000 + 1000));
     G.seed = seed;
     G.rng = mulberry32(hashSeed(seed));
+    G.difficulty = difficulty.get(); // a change in the Menu waits for the next match
     G.lives = TUNE.lives;
     G.score = 0;
     G.cash = 600;

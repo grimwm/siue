@@ -153,7 +153,8 @@ test('on a touch screen the toggle tiles drop their key caps', async ({ browser 
   const page = await ctx.newPage();
   await page.goto('games/tankity/');
   await expect(page.locator('html')).toHaveClass(/touch/);
-  await page.locator('#btn-menu').tap();
+  // On a phone the title card fills the screen; its Settings opens the menu.
+  await page.locator('#title-settings').tap();
   await expect(page.locator('#menu-overlay')).toBeVisible();
   await expect(page.locator('#btn-sound')).toBeVisible();
   await expect(page.locator('#btn-sound .key')).toBeHidden();

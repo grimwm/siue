@@ -31,7 +31,7 @@ test('a tab that was hidden catches up at once and hands over the controls', asy
   });
   await host.page.keyboard.press('Control');
   // While hidden, the host's shot and the drones' volleys pile up for the guest.
-  await expect.poll(() => host.page.evaluate(() => document.getElementById('hud-turn').textContent), { timeout: 60_000 }).toMatch(/zed aiming/);
+  await expect.poll(() => host.page.evaluate(() => document.getElementById('hud-turn').textContent), { timeout: 60_000 }).toMatch(/ZED aiming/);
   await guest.page.waitForTimeout(2500); // a poll or two lands while hidden
   const shown = Date.now();
   await guest.page.evaluate(() => {

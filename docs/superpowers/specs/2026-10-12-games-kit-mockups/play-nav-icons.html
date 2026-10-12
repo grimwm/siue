@@ -21,7 +21,7 @@
   .pill { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .7rem; border: 1px solid var(--accent); border-radius: 6px; color: var(--accent) !important; background: transparent; font: inherit; font-size: 14px; }
   .now { margin-left: auto; display: inline-flex; align-items: center; gap: .45rem; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .now .t { overflow: hidden; text-overflow: ellipsis; }
-  .now img, .now .gi { width: 20px; height: 20px; border-radius: 4px; flex: none; background: radial-gradient(circle at 70% 30%, #fff 0 3px, transparent 4px), linear-gradient(#0b1030 60%, #7a4b22 60%); }
+  .now img, .now .gi, .now2 .gi { width: 20px; height: 20px; border-radius: 4px; flex: none; background: radial-gradient(circle at 70% 30%, #fff 0 3px, transparent 4px), linear-gradient(#0b1030 60%, #7a4b22 60%); }
   .acts { display: inline-flex; gap: .5rem; flex: none; }
   svg { width: 18px; height: 18px; flex: none; }
   /* icon-only buttons: a square of 44 px touch area */
@@ -31,6 +31,12 @@
   .compact .brand { letter-spacing: .04em; }
   .nolinks .hc { display: none; }
   .noname .now .t { display: none; }
+  .gh2 { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; border-radius: 6px; color: var(--dim); flex: none; }
+  .icon-only .gh2 { width: 2.5rem; height: 2.5rem; }
+  .gh2 svg { width: 20px; height: 20px; }
+  .grp { margin-left: auto; display: inline-flex; align-items: center; gap: .5rem; min-width: 0; }
+  .now2 { display: inline-flex; align-items: center; gap: .45rem; color: var(--accent); white-space: nowrap; padding: 0 .25rem; }
+  .noname .now2 .t { display: none; }
   .wrapflag { font: 400 12px system-ui; color: #ff7b7b; }
 </style>
 </head>
@@ -64,6 +70,19 @@ function bar(opts) {
       <button class="pill" title="Share a link to this game">${icon(share)}<span class="txt">Share</span></button>
     </span></nav>`;
 }
+function barGrouped(opts) {
+  const share = opts.share === 'box' ? 'share-box' : 'share-nodes';
+  return `<nav class="${opts.cls || ''}">
+    <a class="brand" href="#">William Grim</a>
+    <a class="hc" href="#">Home</a><a class="hc" href="#">Contact</a>
+    <a class="gh2" href="#" aria-label="Source on GitHub" title="Source on GitHub">${icon('gh')}</a>
+    <span class="grp">
+      <a class="pill" href="#" title="Games">${icon('games')}<span class="txt">Games</span></a>
+      <span class="now2"><span class="gi"></span><span class="t">Operation Tankity</span></span>
+      <button class="pill" title="Install Operation Tankity">${icon('install')}<span class="txt">Install</span></button>
+      <button class="pill" title="Share a link to this game">${icon(share)}<span class="txt">Share</span></button>
+    </span></nav>`;
+}
 const OPTIONS = [
   { title: 'A · Icons on phones, words kept on desktop', note: 'Below 600 px, Games, Install and Share become icon-only squares. Everything else stays: the brand, Home, Contact, GitHub and the game name, which shortens with "…" if space runs out.', phone: 'icon-only compact', share: 'nodes' },
   { title: 'B · Like A, and the game name shows only its picture on phones', note: 'The same icon buttons, plus the game name collapses to its 20 px picture on phones. Every width has spare room; the page title below the bar still names the game.', phone: 'icon-only compact noname', share: 'nodes' },
@@ -71,6 +90,17 @@ const OPTIONS = [
   { title: 'C · Like A, with Home and Contact folded away on phones', note: 'Phones show the brand (which links home), GitHub, the Games icon, the game name, Install and Share. Contact stays reachable from the home page and the Games page.', phone: 'icon-only compact nolinks', share: 'nodes' },
 ];
 const out = document.getElementById('out');
+{
+  const sec = document.createElement('section');
+  sec.innerHTML = `<h2>E · Chosen: plain links left, game buttons right</h2><p class="note">Left: WILLIAM GRIM, Home and Contact (desktop only), then GitHub as an aligned square. Right: everything in the game style, together: Games, the game's picture (and its name on desktop), Install, Share. Phones show icons only.</p>`;
+  for (const w of [1280, 412, 384, 360]) {
+    const f = document.createElement('div'); f.className = 'frame'; f.style.width = w + 'px';
+    f.innerHTML = barGrouped({ cls: w <= 600 ? 'icon-only compact nolinks noname' : '', share: 'nodes' });
+    const lab = document.createElement('div'); lab.className = 'lab'; lab.textContent = w + ' px';
+    sec.append(lab, f);
+  }
+  out.append(sec);
+}
 for (const o of OPTIONS) {
   const sec = document.createElement('section');
   sec.innerHTML = `<h2>${o.title}</h2><p class="note">${o.note}</p>`;

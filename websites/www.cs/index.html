@@ -48,7 +48,7 @@
 <link href="games/cylon/css/nav.css?v=0801887fbb" rel="stylesheet">
 <link href="games/cylon/css/help.css?v=1a91ca8063" rel="stylesheet">
 <link href="games/cylon/css/hud.css?v=00884fe12d" rel="stylesheet">
-<link href="games/cylon/css/gameover.css?v=02983236b5" rel="stylesheet">
+<link href="games/cylon/css/gameover.css?v=60f2ab3871" rel="stylesheet">
 <link href="games/cylon/css/settings.css?v=b117352054" rel="stylesheet">
 <link href="games/cylon/css/controls.css?v=885650b81f" rel="stylesheet">
 <link href="games/cylon/css/fx.css?v=495c940bea" rel="stylesheet">
@@ -144,7 +144,7 @@
             <span>Eye tracking</span>
           </label>
           <p class="cylon-settings-title cylon-settings-scores-title">Weekly high scores</p>
-          <p class="cylon-settings-hint" id="cylon-weekly-reset">Play often — scores reset every Monday at midnight Central.</p>
+          <p class="cylon-settings-hint" id="cylon-weekly-reset">Play often — scores reset every Sunday at midnight Central.</p>
           <ol class="cylon-high-scores" id="cylon-high-scores"></ol>
           <p class="cylon-settings-hint">Start with 30 HP — occasional nukes and small missiles (2 HP each). Last 10s without a hit to heal 1. Cyan/pink missiles chase you; orange locks where you just aimed. More drones as KOs rise. Drag the reticle to dodge · tap drones · Grenade / Raptor in the bar.</p>
         </div>
@@ -232,7 +232,7 @@
   // list's ?game= link and Play button call; a game that fails to load must
   // not take the list down with it.
   try {
-    const { initializeCylonEffects } = await import('./games/cylon/cylon.js?v=9e6ac8e99b');
+    const { initializeCylonEffects } = await import('./games/cylon/dist/main.js?v=e7e375132c');
     await initializeCylonEffects({ onTheme: applyCombatTheme });
   } catch (err) {
     console.error('Cylon failed to start', err);

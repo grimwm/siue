@@ -9,8 +9,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
-import { KeyHints, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.js';
-import type { KeyHintFn } from './chrome.js';
+import { KeyHints, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.tsx';
+import type { KeyHintFn } from './chrome.tsx';
 
 /** One hills tile. The Random tile has the empty id and no profile. */
 export interface LobbyMap {
@@ -57,6 +57,8 @@ export interface LobbyProps {
   link: string;
   /** "Hills: Canyon 3". */
   hills: string;
+  /** "Drones: Hard (the host's Difficulty)"; empty hides the line. */
+  drones: string;
   seats: LobbySeat[];
   /** This player's seat number. */
   mySeat: number;
@@ -174,6 +176,7 @@ export function Lobby(p: LobbyProps) {
             </button>
           </p>
           <p class="hint" id="lobby-hills">{p.hills}</p>
+          <p class="hint" id="lobby-drones" hidden={!p.drones}>{p.drones}</p>
           <div class="unit-row" role="group" aria-labelledby="seats-label">
             <span class="unit-label" id="seats-label">Seats</span>
             <div class="unit-picker seat-grid" id="lobby-seats">

@@ -202,6 +202,19 @@ test('the unit picker changes the body and remembers it', async ({ browser }) =>
   await expect(again.locator('#unit-picker button[title=Buggy]')).toHaveAttribute('aria-pressed', 'true');
 });
 
+test('the Difficulty picker starts on Normal and keeps a choice across a reload', async ({ browser }) => {
+  const { page } = await newPlayer(browser);
+  await page.keyboard.press('c');
+  const tile = name => page.locator('#difficulty-picker button', { hasText: name });
+  await expect(tile('Normal')).toHaveAttribute('aria-pressed', 'true');
+  await tile('Hard').click();
+  await expect(tile('Hard')).toHaveAttribute('aria-pressed', 'true');
+  await page.reload();
+  await page.keyboard.press('c');
+  await expect(tile('Hard')).toHaveAttribute('aria-pressed', 'true');
+  await expect(tile('Normal')).toHaveAttribute('aria-pressed', 'false');
+});
+
 test('the log hint offers scroll keys only when the log scrolls', async ({ browser }) => {
   const { page } = await newPlayer(browser);
   await page.keyboard.press('l');

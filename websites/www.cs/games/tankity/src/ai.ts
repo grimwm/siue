@@ -6,8 +6,9 @@
  * algorithm, kept in step by the shared vectors in protocol/sim-vectors.json.
  * brkLand stays in sim.ts: explode calls it, and sim.ts must not import this
  * file. */
-import { W, clamp, facing, gauss, muzzle, simShot, spotTaken, surfY } from './sim.js';
-import type { Arsenal, Rng, Tank, Weapon, World } from './sim.js';
+import { W, clamp, facing, gauss, muzzle, simShot, spotTaken, surfY } from './sim.ts';
+import type { Arsenal, Difficulty, Rng, Tank, Weapon, World } from './sim.ts';
+export type { Difficulty } from './sim.ts';
 
 /* ---------- drone AI: real ballistic solutions, plus round-scaled error ---------- */
 export interface AimChoice {
@@ -19,16 +20,42 @@ export interface AimChoice {
 /* Drone bracketing, like real artillery. The first shot at a target is the
    ballistic solution plus the round's wobble (the ranging shot). While the
    target and the gunner both stay put, each next shot starts from the last aim
-   and corrects by the measured miss, with the wobble shrinking by BRK_SHRINK
-   per correction down to BRK_FLOOR (never zero, so a drone cannot lock into a
-   bad aim). A target that moved more than BRK_DRIFT px, a gunner that moved, a
-   dead target, or BRK_MAX corrections without a kill all send it back to a
-   fresh solution. server/ai.php room_ai_choose is the same algorithm. */
-export const BRK_SHRINK = 0.65;
-export const BRK_FLOOR = 0.2;
-export const BRK_MAX = 5;
+   and corrects by a share (`correct`) of the measured miss, with the wobble
+   shrinking by `brkShrink` per correction down to `brkFloor` (never zero, so a
+   drone cannot lock into a bad aim). A target that moved more than BRK_DRIFT
+   px, a gunner that moved, a dead target, or `brkMax` corrections without a
+   kill all send it back to a fresh solution. server/ai.php room_ai_choose is
+   the same algorithm. */
 export const BRK_DRIFT = 3;
 export const BRK_ON = 22;
+
+/* How well the drones aim, by difficulty. The ranging shot's wobble is
+   wobStart - wobStep x round, never below wobFloor; angle and power stray by
+   9 and 12 times it. The numbers are tuned against measured hit rates
+   (src/ai-measure.ts, test/ai-hitrate.test.mjs): hard is the sharpest
+   (full correction, fastest-shrinking wobble), normal lands a ranging shot 10-25% of the time from round 1
+   to round 10, easy about half as often as normal. server/ai.php
+   ROOM_DIFFICULTY is the same table. */
+export interface AimSkill {
+  wobStart: number;
+  wobStep: number;
+  wobFloor: number;
+  correct: number; // the share of the measured miss a correction takes out
+  brkShrink: number;
+  brkFloor: number;
+  brkMax: number;
+}
+export const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal', 'hard'];
+export const DIFFICULTY: Readonly<Record<Difficulty, Readonly<AimSkill>>> = {
+  easy: { wobStart: 5, wobStep: 0.3, wobFloor: 2, correct: 0.5, brkShrink: 0.6, brkFloor: 0.8, brkMax: 5 },
+  normal: { wobStart: 3.7, wobStep: 0.33, wobFloor: 1.15, correct: 0.6, brkShrink: 0.5, brkFloor: 0.4, brkMax: 5 },
+  hard: { wobStart: 0.85, wobStep: 0.12, wobFloor: 0.25, correct: 1, brkShrink: 0.65, brkFloor: 0.2, brkMax: 5 },
+};
+/* The table row for a stored difficulty; anything else (an older save, a
+   room from before the setting) aims at normal. */
+export function aimSkill(d: string | undefined): Readonly<AimSkill> {
+  return DIFFICULTIES.includes(d as Difficulty) ? DIFFICULTY[d as Difficulty] : DIFFICULTY.normal;
+}
 
 /* The best (angle, power) near a last aim for a shot to burst on goalX: a
    coarse sweep, then a fine one around its best. Nearer the last aim wins ties. */
@@ -130,7 +157,8 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
   // on the same spot, the same gun still loaded, under the correction cap, and
   // a strategy that still wants that target.
   let cont: Tank | null = null;
-  if (mem && mem.n < BRK_MAX && Math.abs(t.x - mem.ox) <= 1 && keys.includes(mem.w)) {
+  const skill = aimSkill(world.difficulty);
+  if (mem && mem.n < skill.brkMax && Math.abs(t.x - mem.ox) <= 1 && keys.includes(mem.w)) {
     const c = world.tanks[mem.t];
     if (c && c !== t && c.hp > 0 && Math.abs(c.x - mem.tx) <= BRK_DRIFT && (want === null || want === c)) cont = c;
   }
@@ -141,8 +169,7 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
   else target = rivals[0] || t;
   // Deliberately shaky hands: dangerous up close, forgiving at range.
   // A jammer doubles the wobble of anything aimed at our tank.
-  const skill = Math.min(1, 0.35 + world.round * 0.12);
-  let wob = Math.max(0.25, 1.2 - skill) * (s === 'sniper' ? SNIPER_WOB : 1);
+  let wob = Math.max(skill.wobFloor, skill.wobStart - skill.wobStep * world.round) * (s === 'sniper' ? SNIPER_WOB : 1);
   let ba: number, bp: number, w: string, n: number;
   if (cont) {
     w = mem!.w;
@@ -152,9 +179,10 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
     let miss = target.x - landed;
     if (Math.abs(miss) <= BRK_ON) miss = 0; // a burst on the hull is on target: hold the aim
     // Where the sim must put a shot so that, shifted by the measured miss of
-    // the last one, it bursts on the target.
-    [ba, bp] = aiCorrect(world, arsenal, m.x, m.y, w, dirS, mem!.a, mem!.p, sim.x + miss);
-    wob = Math.max(BRK_FLOOR, wob * BRK_SHRINK ** n);
+    // the last one, it bursts on the target (or, taking out only part of the
+    // miss, nearer it).
+    [ba, bp] = aiCorrect(world, arsenal, m.x, m.y, w, dirS, mem!.a, mem!.p, sim.x + miss * skill.correct);
+    wob = Math.max(skill.brkFloor, wob * skill.brkShrink ** n);
   } else {
     let guns = keys;
     if (s === 'glory') {

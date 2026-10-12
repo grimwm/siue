@@ -1,19 +1,19 @@
-/* Operation Tankity: the shapes game.js shares with its typed modules.
+/* Operation Tankity: the shapes main.ts shares with its typed modules.
  *
- * Types only, so this file compiles to nothing and has no js/ output. game.js
- * is plain JavaScript and keeps the game's state in one object (G) and the
- * arsenal in a few tables; each typed module declares the slice it reads and
- * writes by picking from these, so none of them takes the whole game. */
-import type { DialogueLine } from './chatter.js';
-import type { FxSys } from './effects.js';
-import type { Phase } from './flow.js';
-import type { PreviewState } from './preview.js';
-import type { RoomSnapshot } from './protocol.js';
-import type { Boom, DrawTank, Spark } from './render.js';
-import type { AimChoice } from './ai.js';
-import type { Arsenal, Cloud, World } from './sim.js';
+ * Types only, so this file bundles to nothing. main.ts keeps the game's state
+ * in one object (G) and the arsenal in a few tables; each typed module
+ * declares the slice it reads and writes by picking from these, so none of
+ * them takes the whole game. */
+import type { DialogueLine } from './chatter.ts';
+import type { FxSys } from './fx/types.ts';
+import type { Phase } from './flow.ts';
+import type { PreviewState } from './preview.ts';
+import type { RoomSnapshot } from './protocol.ts';
+import type { Boom, DrawTank, Spark } from './render.ts';
+import type { AimChoice } from './ai.ts';
+import type { Arsenal, Cloud, World } from './sim.ts';
 
-/** The arsenal tables as game.js holds them now. They are replaced when
+/** The arsenal tables as main.ts holds them now. They are replaced when
  * game.json arrives, so a module reads them through this view each time
  * instead of keeping a copy. */
 export interface Tables {
@@ -36,7 +36,7 @@ export interface AimSwing {
   dur: number;
 }
 
-/** A unit on the field as game.js keeps it: the sim's tank plus what the page adds. */
+/** A unit on the field as main.ts keeps it: the sim's tank plus what the page adds. */
 export interface GameTank extends DrawTank {
   seat?: number; // a room seat (rooms only)
   showP?: number; // the eased power a rival's arm glides to
@@ -47,7 +47,7 @@ export interface GameTank extends DrawTank {
 /** A spark with its drift, as the battlefield keeps them. */
 export interface Particle extends Spark { vx: number; vy: number }
 
-/** The game's state (game.js's G): solo and room matches, the shop, the
+/** The game's state (main.ts's G): solo and room matches, the shop, the
  * dialogue queue, the banner, the camera. It is the sim's World plus the
  * page's own bookkeeping. */
 export interface GameState extends World {

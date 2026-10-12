@@ -3,9 +3,11 @@
  * The shapes rooms.php sends and accepts, written from its `room_snapshot`,
  * from every `$events[] = ['t' => ...]` / `room_emit` site and from the action
  * handlers in its router. Types only: nothing here exists at run time, so
- * this file compiles to nothing and has no js/ output. Keeping the client's
+ * this file bundles to nothing. Keeping the client's
  * idea of the protocol honest is src/protocol-fixtures.check.ts, which
  * assigns the server's real replies (protocol/*.json) to these types. */
+
+import type { Difficulty } from './sim.ts';
 
 /* ---------- replies ---------- */
 
@@ -92,6 +94,8 @@ export interface RoomSnapshot {
   /** The picked hills' id; null for random hills. */
   map: string | null;
   mapName: string;
+  /** How well the drones aim: the host's setting at create. */
+  difficulty: Difficulty;
   round: number;
   wind: number;
   /** The seat whose turn it is; null outside play. */
@@ -203,7 +207,7 @@ export type BodyKind = 'tank' | 'hover' | 'walker' | 'buggy';
  * for the whole world, `full: true`; action=state takes the same three as
  * query parameters. */
 export interface PostBodies {
-  create: { initials: string; map: string; body: string };
+  create: { initials: string; map: string; body: string; difficulty: Difficulty };
   join: { code: string; initials: string; body: string };
   start: Record<string, never>;
   act: ActBody;

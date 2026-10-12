@@ -8,6 +8,9 @@
  * You move once per turn; the creature moves twice. Reach the exit alive.
  */
 
+import type { Timers } from '../../_kit/ports.ts';
+export type { Timers };
+
 /* ---------- seeded RNG (mulberry32 + string hash) ---------- */
 export type Rng = () => number;
 
@@ -74,14 +77,6 @@ export type LogTone = "good" | "bad" | "info";
 export type SfxName =
   | "move" | "bump" | "pickup" | "page" | "open" | "bash" | "hurt"
   | "win" | "lose" | "heart" | "hint" | "answerOn" | "answerOff";
-
-/** The timer functions the engine needs; the page passes its own. */
-export interface Timers {
-  setTimeout(fn: () => void, ms: number): number;
-  clearTimeout(id: number): void;
-  setInterval(fn: () => void, ms: number): number;
-  clearInterval(id: number): void;
-}
 
 export interface Hooks {
   say(text: string, tone?: LogTone): void;

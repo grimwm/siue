@@ -5,20 +5,20 @@
  * down on the canvas). src/render.ts reads that snapshot and paints it; it
  * never writes back. The game's state, the room client and the replay arrive
  * as deps. */
-import type { GameState, GameTank, MatchState, Tables } from './game-types.js';
-import type { FxEngine } from './effects.js';
-import { CLOCK_SHOW_S } from './net.js';
-import type { RoomClient } from './net.js';
-import { PV_W, PV_H, PV_FOE_HP } from './preview.js';
-import { createRenderer } from './render.js';
-import type { BattleView, DrawTank, Renderer } from './render.js';
-import type { Replay } from './replay.js';
+import type { GameState, GameTank, MatchState, Tables } from './game-types.ts';
+import type { FxEngine } from './fx/types.ts';
+import { CLOCK_SHOW_S } from './net.ts';
+import type { RoomClient } from './net.ts';
+import { PV_W, PV_H, PV_FOE_HP } from './preview.ts';
+import { createRenderer } from './render.ts';
+import type { BattleView, DrawTank, Renderer } from './render.ts';
+import type { Replay } from './replay.ts';
 import {
   hashSeed, mulberry32, gauss, W, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
-} from './sim.js';
-import type { Weapon } from './sim.js';
+} from './sim.ts';
+import type { Weapon } from './sim.ts';
 
-/** The slice of the game's state the view reads and steps (game.js's G). */
+/** The slice of the game's state the view reads and steps (main.ts's G). */
 export type ViewState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'cam' | 'terrain' | 'clouds' | 'time' | 'shake'
   | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'windTop' | 'preview'>;
 

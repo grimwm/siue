@@ -12,19 +12,20 @@
  * nothing else. What the replay causes (a blast, a muzzle flash, a trail, a
  * sound, a log line, a tank's armor) happens through the ReplayEnv it is built
  * with; where the shells are now it hands back from flying(), for the
- * renderer. game.js decides when a room snapshot is adopted: it asks idle()
+ * renderer. main.ts decides when a room snapshot is adopted: it asks idle()
  * after step(). Nothing here touches the page, so it compiles in the DOM-free
- * program and replay-test.js steps recorded volleys on a clock the test moves
+ * program and test/replay.test.mjs steps recorded volleys on a clock the test moves
  * by hand. */
-import { planCatchUp, isVolleyOpener } from './net.js';
-import type { RoomEvent, RoomSnapshot, ShotEvent, VolleyOpenerEvent } from './protocol.js';
+import type { TrailState } from './fx/trail.ts';
+import { planCatchUp, isVolleyOpener } from './net.ts';
+import type { RoomEvent, RoomSnapshot, ShotEvent, VolleyOpenerEvent } from './protocol.ts';
 
 /** rooms.php records a path point every 5 sim steps at 60/s. */
 export const PATH_HZ = 12;
 /** A volley kept back by a catch-up plays this much faster. */
 export const FAST_SPEED = 3;
 
-/** The tank fields the replay reads and writes (game.js's own tank objects). */
+/** The tank fields the replay reads and writes (main.ts's own tank objects). */
 export interface ReplayTank {
   seat?: number;
   x: number; y: number;
@@ -54,7 +55,7 @@ export interface ReplayEnv {
 
 /** One shell of the volley: its event, its recorded path, and whether it has landed.
  * `fx` is the trail's own bookkeeping, filled in by the host. */
-export interface ReplayShot { e: ShotEvent; pts: [number, number][]; landed: boolean; fx: unknown }
+export interface ReplayShot { e: ShotEvent; pts: [number, number][]; landed: boolean; fx: TrailState | null }
 
 /** Where a replayed shell is on screen. */
 export interface ReplayFlying { x: number; y: number; vx: number; vy: number; wkey: string }

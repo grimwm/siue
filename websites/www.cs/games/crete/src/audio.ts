@@ -1,11 +1,10 @@
-/* The Island of Crete: sound. A tiny Web Audio synth, no assets. The engine
- * names an event (`sfx('hurt')`) and this module voices it; a browser with no
- * audio, or a muted player, stays silent. This file needs the DOM lib (the
- * audio context hangs off `window`), so it is in the second program
- * (src/tsconfig.dom.json). It imports nothing at run time.
- */
-
-import type { SfxName } from "./engine.js";
+/* The Island of Crete: sound. A tiny synth on the kit's audio core, no
+ * assets: the engine names an event (`sfx('hurt')`) and this module voices
+ * it. A muted player, or a browser without Web Audio, hears nothing. DOM
+ * program (src/tsconfig.dom.json). */
+import { createAudioCore } from "../../_kit/audio/core.ts";
+import type { AudioCore } from "../../_kit/audio/core.ts";
+import type { SfxName } from "./engine.ts";
 
 export interface Audio {
   /** Wake the audio context; call from a user gesture. */
@@ -35,58 +34,20 @@ const VOICES: Record<SfxName, Voice[]> = {
   answerOff: [[420, 0.08, "sine", 0.04]],
 };
 
-export function createAudio(): Audio {
-  type Ctor = typeof AudioContext;
-  let ac: AudioContext | null = null;
-  let muted = false;
-
-  /** The context, made on first use; throws where there is no audio. */
-  function context(): AudioContext {
-    const w = window as unknown as { AudioContext?: Ctor; webkitAudioContext?: Ctor };
-    const Make = w.AudioContext || w.webkitAudioContext;
-    if (!Make) throw new Error("no Web Audio");
-    ac = ac || new Make();
-    return ac;
-  }
-
-  function ensure(): void {
-    if (muted) return;
-    try {
-      const ctx = context();
-      if (ctx.state === "suspended") void ctx.resume();
-    } catch (_) {
-      /* headless harness or no audio: stay silent */
-    }
-  }
-
-  function tone(freq: number, dur: number, type?: OscillatorType, vol?: number, when?: number): void {
-    if (muted) return;
-    try {
-      const ctx = context();
-      const t = ctx.currentTime + (when || 0);
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = type || "square";
-      o.frequency.value = freq;
-      g.gain.setValueAtTime(vol || 0.04, t);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      o.connect(g);
-      g.connect(ctx.destination);
-      o.start(t);
-      o.stop(t + dur + 0.02);
-    } catch (_) {
-      /* silent */
-    }
-  }
-
+export function createAudio(core: AudioCore = createAudioCore()): Audio {
   return {
-    ensure,
+    ensure() {
+      if (!core.isMuted("sfx")) core.unlock();
+    },
     sfx(name) {
-      for (const v of VOICES[name]) tone(...v);
+      for (const [freq, dur, type, vol, when] of VOICES[name]) {
+        core.tone({ freq, dur, type: type ?? "square", vol: vol ?? 0.04, when: when ?? 0 });
+      }
     },
     toggleMute() {
-      muted = !muted;
-      if (!muted) ensure();
+      const muted = !core.isMuted("sfx");
+      core.setMuted("sfx", muted);
+      if (!muted) core.unlock();
       return muted;
     },
   };

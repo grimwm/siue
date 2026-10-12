@@ -6,10 +6,25 @@ Pluggable mini-games for the SIUE personal site.
 ```
 games/
   README.md
+  _kit/            # shared build, test and PHP tooling
+  crete/           # The Island of Crete
+    build.json     # entries and type programs for _kit/build/build.mjs
+    src/           # TypeScript; main.ts is the entry
+    dist/          # the esbuild bundle, checked in
+    test/          # node:test suites
+    index.html, game.css, sw.js, tools/install-files.php
+  tankity/         # Operation Tankity
+    build.json     # entries and type programs for _kit/build/build.mjs
+    src/           # TypeScript; main.ts is the entry, src/fx/ the effects engine and editor
+    dist/          # three esbuild bundles (main.js, fx.js, fx-editor.js), checked in
+    test/          # node:test suites and PHP checks
+    index.html, game.css, game.json (from game.yaml), rooms.php, scores.php, sw.js
   cylon/           # The CIC — Cylon defense
     css/           # the stylesheets, linked by the home page in order
-    cylon.js       # the game, an ES module the home page imports
-    src/, js/      # TypeScript modules and the JavaScript compiled from them
+    build.json     # entries and type programs for _kit/build/build.mjs
+    src/           # TypeScript; main.ts is the entry the home page imports
+    dist/          # the esbuild bundle (main.js), checked in
+    test/          # node:test suites and the scores PHPUnit cases
     mount.html     # FX / overlays, fetched into the home page
     scores.php     # high-score API
     data/config.json
@@ -51,9 +66,9 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
 - Check every game with `php tests/games-hub-test.php`.
 - `make screenshots` plays each game briefly in a real browser and rewrites
   its `screenshot.jpg` (800x450). Rerun it when a game's look changes.
-- Games know nothing about the site, and each game folder is self-contained:
-  it carries the tools that build its own generated files, needs only PHP
-  (and Node, for a game written in TypeScript), and works copied anywhere.
+- Games know nothing about the site. A built game folder is self-contained and
+  works copied anywhere; its source needs `games/_kit/` beside it to rebuild
+  (`cd games && npm ci && node _kit/build/build.mjs <id>`).
   The site's side lives outside the games.
   - Site: `php tools/site-game-pages.php` (site root) writes the site's page
     for each game, `play/<id>/index.html`:
@@ -93,29 +108,28 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
       page at `?game=<id>` with the site root as scope, and it gets no
       service worker. `main.js` links that manifest when the game launches,
       so installing from there installs the game, not the whole site.
-      Its tool also keeps the `?v=` cache-busters inside the game's entry
-      module (`cylon.js`): each `./js/<name>.js` import and the `mount.html`
-      fetch carry a hash of that file.
+      Its tool also keeps the `?v=` cache-buster on the `mount.html` fetch
+      inside the bundle (`dist/main.js`, built by the kit) as a hash of that
+      file.
   - Home page: `php tools/site-versions.php` (site root) writes the `?v=`
     cache-busters in `index.html`, the one page the site shares with a mounted
     game: `site.css`, `main.js`, the game's stylesheets `games/cylon/css/*.css`
-    (one `<link>` each, in cascade order) and the entry module
-    `games/cylon/cylon.js`, each a hash of its file's content. Each file has
-    one writer: this tool owns `index.html`, the game's own tool owns
-    `cylon.js`. The page hashes `cylon.js` as it stands, so run the game's
-    tool first; `--check` (in `make test` and `make deploy`) reports the page
+    (one `<link>` each, in cascade order) and the entry bundle
+    `games/cylon/dist/main.js`, each a hash of its file's content. Each file
+    has one writer: this tool owns `index.html`, the kit build owns
+    `dist/main.js`. The page hashes the bundle as it stands, so run the build
+    first; `--check` (in `make test` and `make deploy`) reports the page
     stale when either was forgotten.
-    Each tool has its own test beside it (`install-files-test.php`).
+    The kit's `InstallCoreTest` covers the shared install logic.
 - Per-game data: Operation Tankity keeps its arsenal, key bindings and audio
   in `games/tankity/game.yaml` and serves `game.json`, written by
   `php tools/game-json.php` in its folder (`--check` runs in `make test` and
   `make deploy`). See `games/tankity/README.md`.
 - Deploys skip `README.md` files, every game's `tools/` folder, tests,
-  `games/tankity/game.yaml`, and the TypeScript setup (`src/`, `package*.json`,
-  `tsconfig.json`, `node_modules/`); nothing at runtime reads them. The
-  compiled `js/` ships. Tankity and Cylon each carry their own copy of
-  `tools/ts-build.mjs`, because a game folder stands alone; `make test` and
-  `make deploy` run each one's `--check`.
+  `games/tankity/game.yaml`, and the TypeScript setup (`src/`, `build.json`,
+  `package*.json`, `tsconfig.json`, `node_modules/`); nothing at runtime reads them. The
+  built `dist/` ships. Every game is built by the shared kit in `_kit/`;
+  `make test` and `make deploy` run each game's `--check`.
 - Every card opens, and **Copy link** copies, the game's site page
   (`play/<id>/`). The game's own page (`games/<id>/`) still runs on its own,
   without the navbar.
@@ -127,7 +141,7 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
 - The page imports a mounted game's entry module and hands it what it needs as
   options. The CIC takes `onTheme(combat)`, which `index.html` wires to
   `main.js`'s `applyCombatTheme`; the game defines nothing the site's scripts
-  define and calls nothing they define (`games/cylon/smoke-test.js` checks).
+  define and calls nothing they define (`games/cylon/test/smoke.test.mjs` checks).
   The games list loads after the game has been given the chance to define its
   `start` function.
 

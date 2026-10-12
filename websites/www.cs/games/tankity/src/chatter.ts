@@ -5,9 +5,9 @@
  * happening. The line tables are plain data; `talk`, `exchange`, `say` and the
  * pump live in a factory because they keep a little state (the log's lines)
  * and reach the game's state and the page through the deps it is handed. */
-import type { KeyHintFn } from './ui/chrome.js';
-import { renderLog as drawLog } from './ui/log.js';
-import type { LogLine } from './ui/log.js';
+import type { KeyHintFn } from './ui/chrome.tsx';
+import { renderLog as drawLog } from './ui/log.tsx';
+import type { LogLine } from './ui/log.tsx';
 
 /* ---------- dialogue: subtitled trash-talk, kid-friendly ---------- */
 export const SPEAKERS: Record<string, { name: string; color: string }> = {
@@ -98,7 +98,7 @@ export function drawPortrait(cv: HTMLCanvasElement | null, id: string): void {
 /** One line in the speech bubble queue. */
 export interface DialogueLine { id: string; text: string }
 
-/** The slice of the game's state the dialogue reads and writes (game.js's G). */
+/** The slice of the game's state the dialogue reads and writes (main.ts's G). */
 export interface ChatState {
   time: number;
   lastTalk: number;

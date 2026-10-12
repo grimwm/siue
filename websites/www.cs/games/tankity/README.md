@@ -9,39 +9,42 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
 | File                                                            | What it is                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html`, `game.css`, `game.js`                             | The page and the entry module (an ES module): the game's state, the main loop, the keys, the page's plumbing (overlays, the firing range, loading `game.json`) and the wiring that hands each typed module below the pieces of the game it needs. It imports every module from `js/` |
+| `index.html`, `game.css`                                        | The page and its styles. The page loads `dist/fx.js` (deferred), then `dist/main.js` (an ES module) |
+| `src/main.ts`                                                   | The entry module: the game's state, the main loop, the keys, the page's plumbing (overlays, the firing range, loading `game.json`) and the wiring that hands each typed module below the pieces of the game it needs. It is bundled into `dist/main.js` |
 | `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (21 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
-| `game.json`                                                     | Generated from `game.yaml`; the only data file `game.js`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
+| `game.json`                                                     | Generated from `game.yaml`; the only data file `src/main.ts`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml`, and where each came from                                                                                                                     |
 | `src/sim.ts` | The game math in TypeScript: RNG, terrain, flight, hit tests, blasts. Pure: state in, what happened out; no page, sound or particles |
-| `src/ai.ts` | The drone AI: ballistic aim, bracketing and the six strategies (`aiChoose`, `pickTactic`). Pure; imports the sim, never the reverse (the sim keeps `brkLand`, which a blast calls) |
+| `src/ai.ts` | The drone AI: ballistic aim, bracketing, the six strategies (`aiChoose`, `pickTactic`) and the difficulty table (`DIFFICULTY`). Pure; imports the sim, never the reverse (the sim keeps `brkLand`, which a blast calls) |
+| `src/ai-measure.ts` | `measureHitRates`: a drone bracketing a stationary player on seeded hills with the real sim, counting the shots that take armor off, per shot of the bracket. The difficulty table is tuned against it. Pure, never bundled |
+| `src/difficulty.ts` | The Difficulty setting as the player keeps it (`tankity-difficulty`, missing or unknown reads as normal) and the levels' names |
 | `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes. It never touches the page |
 | `src/net.ts` | The room client: transport (one fetcher, the 429 retry), the session, polling, the act/buy/ready/leave senders, the turn and shop clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers and the clock are passed in |
 | `src/replay.ts` | The room volley replay: the queue of events waiting to play and the volley on screen. Eases the shooter's barrel, flies each shell along the path the server recorded (positions and velocities for the renderer), lands blasts and hits when the events say, and plays a volley kept back by a catch-up, or fired by a drone with no human standing (`watch`), at triple speed (`FAST_SPEED`). Sound, particles, craters, armor and log lines happen through callbacks; it never touches the page |
 | `src/preview.ts` | The firing-range preview simulation: a fixed dummy, the solver that aims at it with the war's own ballistics, the shell loop (seeker, cluster, pierce, proximity, roller), the damage tally and the result timing, on its own small field. Weapons, effects and the result line are passed in; it never touches the page |
 | `src/flow.ts` | The solo match flow: the `Phase` union (`banner`, `shop`, `aim`, `think`, `fly`, `settle`, `over`), the events that move between them and one table, `FLOW`, with `transition(phase, event)` returning the next phase or `null` for an illegal move. `match.ts` stores the result in `G.phase`; room matches take their phase from the server and skip it. It also holds the solo watch speed (`WATCH_SPEED`, `warSpeed`, `runWar`). Pure; it never touches the page |
 | `src/render.ts` | The battlefield on the canvas: sky and moon, clouds, hills, the units and their bodies, aim arm, blasts, shells, sparks, the wind gauge, the on-canvas turn clock and the firing-range preview. Reads a `BattleView` that `view.ts` builds each frame and paints it; it never changes game state |
-| `src/game-types.ts` | Types only, so no `js/` file: the shapes `game.js` shares with its modules. `GameState` (the sim's `World` plus the page's bookkeeping: the shop, the dialogue queue, the banner, the camera), `GameTank`, `MatchState` (a room match's turn, unsent aim and waiting snapshot) and `Tables` (the arsenal as `game.js` holds it now). Each module picks the slice it reads and writes |
+| `src/game-types.ts` | Types only: the shapes `main.ts` shares with its modules. `GameState` (the sim's `World` plus the page's bookkeeping: the shop, the dialogue queue, the banner, the camera), `GameTank`, `MatchState` (a room match's turn, unsent aim and waiting snapshot) and `Tables` (the arsenal as `main.ts` holds it now). Each module picks the slice it reads and writes |
 | `src/match.ts` | The solo match: dealing a match and its rounds, whose turn it is, firing and what a blast does to each unit, a drone's aim and shot, the end of a round and of the match, the name cards, the end veil's props and the cosmetics decay. `createMatch(deps)` |
 | `src/room.ts` | A running room match on this client: the moves it sends (fire, aim, drive, load a gun, buy, Ready), adopting the room snapshot once the replay before it has played, turning events into log lines, talk and sounds, a room frame, the turn alert for a hidden tab, and the final standings. `createRoom(deps)` |
 | `src/lobby.ts` | Getting into and out of a room: the lobby overlay's props, the initials check, the server dot, the hills picker, hosting and joining, the roster, the invite link, starting the match, the leave question, leaving and the rematch. `createLobby(deps)` |
 | `src/shop.ts` | The field shop: what a pack costs and how many the chest covers, each row's stat lines, the Ready line in a room, what a purchase does to the stock and the gear, and the shop overlay's props. `createShop(deps)` |
 | `src/guns.ts` | The weapon picker: the rack's tiles, the cursor and its keys, loading a gun and cycling through the rack. `createGuns(deps)` |
 | `src/chatter.ts` | What the crew says: the speakers, the line tables, the portrait, the speech-bubble queue, and the radio log with its overlay props. `createChatter(deps)` |
-| `src/effects.ts` | Weapon looks on the `fx.js` engine: the baked fallback, installing `game.json`'s effects over it, and the muzzle, impact, special and trail plays. `createEffects(deps)` |
+| `src/effects.ts` | Weapon looks on the effects engine (`src/fx/engine.ts`): the baked fallback, installing `game.json`'s effects over it, and the muzzle, impact, special and trail plays. `createEffects(deps)` |
 | `src/hud.ts` | The status bar's values, for a solo match and for a room, redrawn only when they change. `createHud(deps)` |
 | `src/view.ts` | The camera, and the `BattleView` snapshot the canvas paints each frame (whose turn marker shows, whether the aim arm is up, when the clock counts down). `createView(deps)` |
 | `src/tutorial.ts` | The coach: the steps, their key-name text, remembering a finished lesson, and the overlay's props. `createTutorial(deps)` |
 | `src/scores.ts` | The high scores: filing a report with `scores.php`, the local fallback, and the overlay's props. `createScores(deps)` |
-| `src/menu.ts` | The game menu's settings (the unit look and the text size, both remembered in this browser) and the menu overlay's props. `createMenu(deps)` |
-| `src/protocol.ts` | The room wire protocol as types: replies, the room snapshot, the discriminated union of events, and each action's request body. Types only, so it has no `js/` file |
+| `src/menu.ts` | The game menu's settings (the unit look, the text size and the Difficulty, all remembered in this browser) and the menu overlay's props. `createMenu(deps)` |
+| `src/protocol.ts` | The room wire protocol as types: replies, the room snapshot, the discriminated union of events, and each action's request body. Types only |
 | `src/protocol-fixtures.check.ts`, `src/tsconfig.check.json` | Type-check only, never emitted: assigns every `protocol/*.json` to its type (see Protocol fixtures) |
 | `src/ui/*.tsx` | The Preact overlays and panels (see Preact overlays): `chrome.tsx` holds the shared key labels, title bar and scroll keeper; `help.tsx`, `shop.tsx`, `lobby.tsx`, `menu.tsx`, `guns.tsx`, `scores.tsx`, `log.tsx`, `tutorial.tsx`, `hud.tsx`, `endveil.tsx` and `leave.tsx` one each |
 | `src/ui/icons.ts` | The small canvas pictures (a shell, a trick, a hills silhouette, a unit thumbnail). Each draws on the canvas and the weapon or trick it is handed and reads nothing else |
-| `js/*.js`, `js/ui/*.js` | `src/*.ts` and `src/ui/*.tsx` compiled by `tools/ts-build.mjs`; checked in and deployed (the host has no Node). Never edit by hand |
-| `vendor/preact/` | Preact's ES module builds and licence, copied from `node_modules` by `tools/vendor.mjs`; checked in and deployed. Never edit by hand |
-| `package.json`, `package-lock.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json` | The build setup (TypeScript and Preact pinned exactly). Never deployed, like `src/`, `tools/` and `node_modules/` |
-| `ui-test.js`, `tools/dom-stub.mjs` | Renders the Preact overlays with sample props and asserts their DOM; the stub is the small Node DOM that it and `smoke-test.js` share. Never deployed |
+| `dist/main.js`, `dist/fx.js`, `dist/fx-editor.js` (and `.map`s) | The bundles the games kit builds from `src/` (see Source layout and build); checked in and deployed (the host has no Node), except the dev-only `fx-editor.js`. Never edit by hand |
+| `build.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json` | The build setup: the three entries and the three type-check programs. Never deployed, like `src/`, `test/` and `tools/` |
+| `test/*.test.mjs`, `test/dom-stub.mjs` | The Node tests (`node:test`, see Tests); the stub is the small Node DOM that `ui.test.mjs` and `smoke.test.mjs` share. Never deployed |
+| `test/php/`, `test/php-docker/` | The PHPUnit cases (`tankity` and `tankity-docker` suites) and, in `checks/`, the check scripts they run. Never deployed |
 | `rooms.php` | Room server entry point: request parsing, the `$action` handlers, `room_json_out` (gzip), `room_gate`. It requires the files below, and keeps the two helpers that resolve against its own location (`room_shm_key` takes `ftok(rooms.php)`, `room_arsenal` reads `game.json`) |
 | `server/settings.php` | What a room is (`ROOM_*` shape constants) and the host's knobs (`room_max_rooms`, `room_max_age`, `room_live_secs`, `room_scores_dir`) |
 | `server/store.php` | Shared-memory segments, the registry of live codes, semaphores and locks (`room_sem_take`, `room_lock`, `room_hold`), create/close/discard, `room_load`/`room_save`, the sweep, room codes |
@@ -51,10 +54,10 @@ Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 | `server/protocol.php` | The event log, `room_want`, snapshots and deltas (`terrainRev`, resync) |
 | `server/.htaccess` | `Require all denied`: the files in `server/` are libraries, never endpoints. Each also answers 404 if asked for directly (`TANKITY_ROOMS_INCLUDED` is defined only by `rooms.php`) |
 | `scores.php`, `config.php`                                      | Score API; `.config.yaml` reader                                                                                                                                                            |
-| `fx.js` | The effects engine (particle pool, emitters, screen flash, shell glow), shared by `game.js` and the editor; exposes `window.TankityFX` |
+| `src/fx/engine.ts`, `src/fx/types.ts`, `src/fx/trail.ts` | The effects engine (particle pool, emitters, screen flash, shell glow), shared by the game and the editor; bundled as the classic script `dist/fx.js`, which sets `window.TankityFX`. `types.ts` is the engine's public shape (`FxEngine`) |
 | `fx/sprites/` | Sprite sheets (`fireball`, `smoke`, `shock`, `energy`, `mushroom`, `moon`) and `sprites.json`, rendered by `fx/blender/render_fx.py` |
 | `fx/blender/render_fx.py` | Headless Blender script that builds and renders the sprite sheets; its header documents the command and every option. Dev only |
-| `fx-editor.html`, `fx-editor.js`, `fx-editor.css` | Dev-only live effects editor (see Weapon effects). Never deployed |
+| `fx-editor.html`, `fx-editor.css`, `src/fx/editor.ts` | Dev-only live effects editor (see Weapon effects); `editor.ts` is bundled as the classic script `dist/fx-editor.js`, which sets `window.fxEditor`. Never deployed |
 | `.config.yaml`                                                  | Server settings, read-only, never sent to browsers; env vars win (`TANKITY_MAX_ROOMS`, `TANKITY_ROOM_MAX_AGE`, `TANKITY_ROOM_LIVE_SECS`, `TANKITY_SHM_KEY`; `CONFIG_FILE` points elsewhere) |
 | `metadata.yaml`, `og.png`                                       | Games-page card and link preview (see `../README.md`)                                                                                                                                       |
 | `manifest.webmanifest`, `sw.js`, `icon-192.png`, `icon-512.png` | Install and offline support; the first two are generated by `tools/install-files.php`                                                                                                     |
@@ -74,7 +77,7 @@ php tools/install-files.php      # after the last edit to any served file
 - The generator carries its own small YAML-subset parser (the host has no YAML
   extension); the subset is listed at the top of `game.yaml`. It rejects
   unknown keys, bad enums, colours, ranges and audio paths, naming the line.
-- `game.js` and `rooms.php` hold a frozen fallback copy of a few arsenal rows,
+- `src/main.ts` and `rooms.php` hold a frozen fallback copy of a few arsenal rows,
   and `src/input.ts` one of the key table (shaped like `game.json`'s sections); keep them in step
   with `game.yaml` defaults.
 - `install-files.php` rewrites `manifest.webmanifest`, `sw.js` and the `?v=` hashes (see Source layout and build), and keeps the
@@ -82,8 +85,7 @@ php tools/install-files.php      # after the last edit to any served file
   version = hash of the served static files, so any edit makes it stale).
   Music and sound files are never precached; sound effects are cached by the
   worker the first time they play, music streams from the network.
-- `make test` and `make deploy` both run the `--check`s (the generators, the TypeScript build, the vendored
-  Preact) and the deploy refuses stale output. `game.yaml`, `tools/` and this file are not deployed.
+- `make test` and `make deploy` both run the `--check`s (the generators and the kit build) and the deploy refuses stale output. `game.yaml`, `tools/` and this file are not deployed.
 - Audio plays only after the first tap or key press, never while its toggle
   (E sound, M music) is off, and a missing or undecodable file silently leaves
   the synthesized sound or song in place. Add a line to `audio/CREDITS.md` for
@@ -246,31 +248,62 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
   bracket in progress on a target the strategy still wants is kept.
 - Ranging shot: a brute-force search (which a strategy can narrow) (angle 25-155 in steps of 6, power 20-100
   in steps of 6, over the shell and any loaded gun) for the landing nearest the
-  target, plus Gaussian wobble: skill = min(1, 0.35 + round x 0.12), wob =
-  max(0.25, 1.2 - skill), angle +-9 x wob, power +-12 x wob, doubled against a
-  jammer's owner. Then a 35% chance to shuffle 8-35 px.
+  target, plus Gaussian wobble: wob = max(`wobFloor`, `wobStart` - `wobStep` x
+  round), angle +-9 x wob, power +-12 x wob, doubled against a jammer's owner.
+  Then a 35% chance to shuffle 8-35 px.
 - Bracketing: each drone remembers its last shot (`brk` on the tank in a room,
   on the drone object solo: target index, angle, power, weapon, corrections so
   far `n`, target x and own x then, and `land`, the x where the volley first
   burst, filled in when it does). While the same target stands within
   `BRK_DRIFT` = 3 px of where it stood, the drone is within 1 px of where it
   fired from, and its gun is still loaded, the next shot is a correction: the
-  sim's landing for the last aim is shifted by the measured miss (`land` against
-  the target's x; a burst within `BRK_ON` = 22 px, the hull, counts as on target
-  and holds the aim), a coarse then fine search near the last aim finds the
-  angle and power for that landing, and the wobble shrinks to wob x
-  `BRK_SHRINK`^n (0.65 per correction), never below `BRK_FLOOR` = 0.2 (so a
-  drone never locks into a bad aim). A bracketing drone does not shuffle.
+  sim's landing for the last aim is shifted by `correct` times the measured miss
+  (`land` against the target's x; a burst within `BRK_ON` = 22 px, the hull,
+  counts as on target and holds the aim), a coarse then fine search near the
+  last aim finds the angle and power for that landing, and the wobble shrinks
+  to wob x `brkShrink`^n, never below `brkFloor` (so a drone never locks into a
+  bad aim). A bracketing drone does not shuffle.
 - Restart: the target moved or died, the drone moved or its gun ran dry, or
-  `BRK_MAX` = 5 corrections went by, and the next shot is a fresh ranging shot
+  `brkMax` corrections went by, and the next shot is a fresh ranging shot
   with full wobble.
-- Measured (flat and rolling ground, a target that stays put, 120 seeds per
-  row, a hit is any damage): in round 1 at 250-350 px the median miss is
-  50-110 px on the ranging shot, 24-60 on the second, 17-40 on the third and
-  14-18 (the hull's edge) on the fourth; the hit chance is 22-37% on the first
-  shot, 28-61% on the second, 48-83% on the third and 66-85% on the fourth.
-  Round 6 starts at an 18 px median and 86-88% hits. A target that drives off
-  sends the drone back to the first row.
+
+### Difficulty
+
+How well the drones aim is one of three levels, one row each of `DIFFICULTY` in
+`src/ai.ts`, mirrored by `ROOM_DIFFICULTY` in `server/ai.php` (the sim vectors
+hold both to the same aim at every level):
+
+| Level | `wobStart` | `wobStep` | `wobFloor` | `correct` | `brkShrink` | `brkFloor` | `brkMax` |
+|---|---|---|---|---|---|---|---|
+| `easy` | 5 | 0.3 | 2 | 0.5 | 0.6 | 0.8 | 5 |
+| `normal` | 3.7 | 0.33 | 1.15 | 0.6 | 0.5 | 0.4 | 5 |
+| `hard` | 0.85 | 0.12 | 0.25 | 1 | 0.65 | 0.2 | 5 |
+
+- Solo: the Menu's Difficulty picker (Easy, Normal, Hard; Normal by default),
+  saved in this browser as `tankity-difficulty`. A match reads it when it is
+  dealt (`G.difficulty`), so a change waits for the next match.
+- Rooms: the host's Menu setting rides on `action=create` (`difficulty`), is
+  stored in the room for good (`$room['difficulty']`; joiners cannot change it)
+  and is in every snapshot (`difficulty`), where the lobby shows it. Only the
+  exact words count: anything else, and a room stored before the setting, is
+  normal.
+- Hit rates (`src/ai-measure.ts`: one drone with only the Shell bracketing a
+  stationary player on 1000 seeded hills, wind and spots; a hit is any armor
+  taken), percent on the ranging shot / after one correction / after two:
+
+  | Level | Round 1 | Round 5 | Round 10 |
+  |---|---|---|---|
+  | `easy` | 9 / 11 / 16 | 10 / 14 / 19 | 17 / 22 / 28 |
+  | `normal` | 10 / 17 / 26 | 15 / 27 / 42 | 27 / 40 / 54 |
+  | `hard` | 34 / 51 / 65 | 74 / 81 / 81 | 74 / 84 / 82 |
+
+  A shell landing anywhere on the field reaches the hull about one time in
+  ten (the blast reaches 40 px each side), so normal's first round of
+  ranging shots, and easy's, are close to that floor; easy is gentler mainly
+  in how slowly it walks its shots in. `test/ai-hitrate.test.mjs` keeps normal
+  within 5 points of 10/15/25% (ranging) and 25/40/55% (after two
+  corrections), easy within 5 points of half of normal, and hard at or above
+  normal.
 - The memory is a few numbers per drone and rides in the room's JSON; the
   snapshot a client sees leaves it out.
 
@@ -309,96 +342,72 @@ how it aims; all of them bracket a standing target the same way.
 
 ## Source layout and build
 
-The client is native ES modules with no bundler: `game.js` is loaded by
-`index.html` with `<script type="module">`, and `src/*.ts` and `src/ui/*.tsx`
-compile one file to one file into `js/`. Both `js/` and `fx.js` (a classic
-script exposing `window.TankityFX`, loaded first) are served as they are, and
-so is `vendor/`, the one library.
+The client is TypeScript in `src/`, bundled by the games kit (`../_kit`, see its
+README) into three files in `dist/`, listed in `build.json`:
+
+| Entry | Bundle | Format | What it is |
+| ----- | ------ | ------ | ---------- |
+| `src/main.ts` | `dist/main.js` | ES module | The game; `index.html` loads it with `<script type="module">` |
+| `src/fx/engine.ts` | `dist/fx.js` | classic script | The effects engine; sets `window.TankityFX` exactly once, and loads first (`defer`) |
+| `src/fx/editor.ts` | `dist/fx-editor.js` | classic script | The dev-only effects editor; sets `window.fxEditor` |
+
+Preact is bundled into `dist/main.js`. Modules never import in a cycle: `ai.ts` imports `sim.ts`, so `brkLand`, which a blast calls, stays in the sim.
 
 ```
-npm ci && node tools/ts-build.mjs          # compile src/ to js/ (type errors fail it)
-node tools/ts-build.mjs --check            # fail if js/ is missing, stale or has extra files
-node tools/vendor.mjs                      # copy Preact from node_modules to vendor/preact/
-node tools/vendor.mjs --check              # fail if vendor/ drifted from the pinned version
+cd .. && npm ci                            # once, in games/: TypeScript, esbuild, Preact
+node _kit/build/build.mjs tankity          # type-check src/ and write dist/
+node _kit/build/build.mjs tankity --check  # fail if dist/ is stale, missing or has extra files
+php tools/install-files.php                # after a rebuild: ?v= cache-busters and sw.js
 ```
 
-- `js/` is generated and committed, like `game.json` and `sw.js`: edit `src/`,
-  rebuild, commit both. `make test` runs `npm ci` and both `--check`s, and
-  `deploy.sh` refuses a stale `js/` or `vendor/`. Rerun
-  `php tools/install-files.php` after a rebuild: the service worker precaches
-  `js/**/*.js` and `vendor/**/*.js` and versions its cache by their content.
-- `tsconfig.json`: strict, `noUncheckedIndexedAccess`, ES2022 modules, imports
-  written with their `.js` extension (the file the browser fetches), comments
-  kept, no source maps. It lists the DOM-free modules (the sim, the AI, the room
-  client, the input, the firing range, the replay and the flow), which compile without DOM types, so they cannot reach for the page.
-  `src/tsconfig.dom.json` extends it with the DOM lib for the modules that need
-  WebAudio, `fetch`, timers, canvas and the document (`audio.ts`, `render.ts`,
-  the modules `game.js` wires, which reach the page through the `$` it hands them, and the overlays in `ui/`), and with `"jsx": "react-jsx"` and
-  `"jsxImportSource": "preact"` for the `.tsx` files;
-  `src/tsconfig.check.json` is a
-  third program that type-checks the protocol fixtures and emits nothing.
-  `ts-build.mjs` compiles each config as its own program, so adding the DOM lib
-  for the audio never lets the sim see `document`. A module that holds only
-  types (`protocol.ts`) compiles to nothing and has no `js/` file.
-- **Imports.** A browser keys a module by its URL, so a file imported under two
-  spellings (with and without a `?v=`, or with two versions) loads twice and
-  one copy is stale. Three rules keep that from happening:
-  1. Every import between our own files carries `?v=<hash>`, the first 10 hex
-     characters of the SHA-256 of the imported file, and every importer spells
-     the same one. `tools/install-files.php` writes them, never by hand: it
-     adds a missing `?v=` and edits the compiled `js/` files in place (tsc
-     emits `from "./chrome.js"`; `ts-build.mjs` ignores the versions when it
-     compares). It works dependencies first, hashing each file after its
-     imports are versioned, so one run converges however deep the chain:
-     change `sim.js` and everything importing it, `game.js`, `index.html` and
-     `sw.js` re-version together.
-  2. A bare import (`preact`, `preact/hooks`, `preact/jsx-runtime`) must be an
-     entry of the import map in `index.html`, whose URLs (`./vendor/preact/...`)
-     carry content hashes too. The map precedes the game's script.
-  3. Every `js/` file is reachable from `game.js` through those imports.
-
-  Our own modules may import each other, but never in a cycle: `ai.ts` imports
-  `sim.ts`, so `brkLand`, which a blast in `sim.ts` calls, stays in the sim.
-
-  The tool fails, writing nothing, on an import of a file that is missing or
-  outside `js/`, a bare import the map lacks, a cycle, an unreachable `js/`
-  file, a dynamic `import('...')` of a literal, a malformed map or one placed
-  after the game's script, or a page tag that is missing. Then `index.html`'s
-  `game.js?v=`, `game.css?v=` and `fx.js?v=` carry the hash of their file (so a
-  changed module re-versions `game.js` and the page too). Because versions are
-  functions of content, two branches that touch different files do not
-  conflict over them. `smoke-test.js` re-checks the same rules from the
-  browser's side: versions are present, equal one per module and equal the
-  content hash; bare imports are mapped; everything is reachable. The service
-  worker serves network first, revalidating, so it never holds a stale module
-  for an online player, and its precache lets the import map and the vendored
-  files load offline. The Node tests need no map: `preact` resolves to
-  `node_modules/preact`, the release `vendor/` is copied from.
-- **How the modules get the game.** `game.js` owns the state (`G`, the room
+- `dist/` is generated and committed, like `game.json` and `sw.js`: edit
+  `src/`, rebuild, commit both. `make test` runs `npm ci` in `games/` and the
+  `--check`, and `deploy.sh` refuses a stale `dist/`. Rerun
+  `php tools/install-files.php` after a rebuild: it writes the `?v=` hash of
+  `dist/main.js`, `dist/fx.js` and `game.css` into `index.html` and precaches
+  `dist/` (not the editor) in `sw.js`, versioning the cache by content.
+- Three programs are type-checked (`build.json`). `tsconfig.json` extends the
+  kit's base (strict, `noUncheckedIndexedAccess`, `erasableSyntaxOnly`, imports
+  written with their `.ts`/`.tsx` extension) and lists the DOM-free modules (the
+  sim, the AI, the room client, the input, the firing range, the replay and the
+  flow), which compile without DOM types, so they cannot reach for the page.
+  `src/tsconfig.dom.json` adds the DOM lib for the modules that need WebAudio,
+  `fetch`, timers, canvas and the document (`audio.ts`, `render.ts`, the three
+  entries, the modules `main.ts` wires, which reach the page through the `$` it
+  hands them, and the overlays in `ui/`). `src/tsconfig.check.json` type-checks
+  the protocol fixtures and emits nothing. Each is its own program, so adding
+  the DOM lib for the audio never lets the sim see `document`. A module that
+  holds only types (`protocol.ts`, `fx/types.ts`) adds nothing to a bundle.
+- **Cache-busting.** Because every module is inside a bundle, only three
+  files carry a `?v=`: `dist/main.js`, `dist/fx.js` and `game.css` in
+  `index.html`, each the first 10 hex characters of the file's SHA-256, written
+  by `tools/install-files.php`. Versions are functions of content, so two
+  branches that touch different files do not conflict over them.
+- **`window.TankityFX`.** `dist/fx.js` assigns `window.TankityFX = api` once.
+  The browser specs record that assignment, so keep it a single plain
+  assignment of the whole API.
+- **How the modules get the game.** `main.ts` owns the state (`G`, the room
   client `net`, `MATCH`, the arsenal tables) and each of `match`, `room`,
   `lobby`, `shop`, `guns`, `chatter`, `effects`, `hud`, `view`, `tutorial`,
   `scores` and `menu` is a factory, `createX(deps)`, that returns the functions
-  `game.js` calls. `deps` is a typed object (the module exports its interface)
+  `main.ts` calls. `deps` is a typed object (the module exports its interface)
   naming everything the module takes from the page and from the rest of the
   game: a slice of the state (`Pick<GameState, ...>` from `src/game-types.ts`),
   the room client, the sound, the page's `$`, and the other modules' functions.
   A module reaches for no global of the game's, so what it can touch is what its
   `deps` lists. The arsenal changes when `game.json` arrives, so modules read it
   through the `tables` getters (`tables.weapons`, `tables.order`, ...), never
-  from a copy. `game.js` wires the factories in dependency order; a dependency
+  from a copy. `main.ts` wires the factories in dependency order; a dependency
   on a module wired further down is passed as an arrow (`openShop: () =>
   openShop()`), which resolves when it is called. What a module keeps for itself
   (the log's lines, the coach's step, the gun cursor) stays in its closure, and
   the rest of the game asks through the object it returns (`isActive`, `cursorAt`).
 - **Preact overlays.** The panels that are mostly markup are Preact components
   in `src/ui/`, drawn into the elements `index.html` keeps (`#help-overlay`,
-  `#shop-veil`, marked `data-ui`). Preact is a pinned dependency (`package.json`
-  holds an exact version, `package-lock.json` the same) and `tools/vendor.mjs`
-  copies its three ES builds and licence to `vendor/preact/`, so the game stays
-  self-contained and works offline; `--check` fails if the pin, the lockfile,
-  `node_modules` or the copies disagree. To upgrade: change the version, run
-  `npm install`, `node tools/vendor.mjs`, `node tools/ts-build.mjs` and
-  `php tools/install-files.php`. The rules for a component: props in, DOM and
+  `#shop-veil`, marked `data-ui`). Preact is a pinned dependency of `games/package.json`, bundled into
+  `dist/main.js`, so the game stays self-contained and works offline. To
+  upgrade: change the version in `games/package.json`, run `npm install` in
+  `games/`, then rebuild and run `php tools/install-files.php`. The rules for a component: props in, DOM and
   callbacks out. The module that owns an overlay (`shop.ts` for the shop,
   `lobby.ts` for the lobby, and so on) builds a finished view of the state (the shop's
   rows, the cash line, the start button's label) and hands it in with the
@@ -460,12 +469,12 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
   installs game.json's audio section, `sfx.play(name)` (plus `sfx.turnPing()` and
   `sfx.clockWarn()`) voices an event, `music.start/stop/next/playTheme/forRound/
   leaveTheme` drive the soundtrack, `music.watchdog()` runs every frame,
-  `music.onTrackStart(cb)` reports the track that begins (`game.js` shows it as
+  `music.onTrackStart(cb)` reports the track that begins (`main.ts` shows it as
   a log line), `noteGesture` and `unlock` wake the speakers, and
   `setSoundMuted`/`setMusicMuted` (with `isSoundMuted`/`isMusicMuted`) are the
   toggles.
 - `net.ts` exports `RoomClient`, built with a `RoomEnv` (fetch, timers, a
-  clock, the leave beacon: `game.js` passes the page's) and `RoomHandlers`
+  clock, the leave beacon: `main.ts` passes the page's) and `RoomHandlers`
   (`onSnapshot(room, fresh, first)`, `onReachable`, `onReadyChange`,
   `onError`). The client owns the session (`code`, `seat`, `token`, `csrf`,
   the event cursor `since`, the hills held and their `terrainRev`),
@@ -475,7 +484,7 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
   events past its cursor as seen and hands them over; `room.ts` queues the
   events in the replay and calls `shouldCatchUp` to decide when a hidden tab skips, and the
   HUD, the lobby and the shop keep what draws or animates. Because every environmental call is injected, `net.ts` is
-  in the DOM-free program and `net-test.js` runs it against a fake server.
+  in the DOM-free program and `test/net.test.mjs` runs it against a fake server.
 - `replay.ts` exports `createReplay(env)`, which returns the replay: `push(events)`
   queues a snapshot's events, `step(dt)` plays them (the volley on screen, then
   whatever is next in the queue), `idle()` says nothing is playing or waiting
@@ -486,17 +495,17 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
   all. `ReplayEnv` is everything the replay causes: the tank for a seat, a
   weapon's effect kind, the log line for an event, `launch`, `blast`, `muzzle`,
   `special` and `trail`. `shellAt`/`shellVel` read a recorded path (points
-  `PATH_HZ` = 12 a second apart). `replay-test.js` steps the recorded volleys of
+  `PATH_HZ` = 12 a second apart). `test/replay.test.mjs` steps the recorded volleys of
   `protocol/play-after-fire.json` and checks every shell against its path.
 - `preview.ts` exports `createPreview(wkey, env, fx, canvas)` (null for an unknown
   weapon), `stepPreview(pv, dt, env)` and the solver. The state it returns is a
-  plain `PreviewState` that `game.js` keeps as `G.preview` and the renderer
+  plain `PreviewState` that `main.ts` keeps as `G.preview` and the renderer
   draws; `PreviewEnv` supplies the weapon table, the effect hooks and the result
-  line. `preview-test.js` steps it on frames the test counts.
+  line. `test/preview.test.mjs` steps it on frames the test counts.
 - `flow.ts` exports `transition(phase, event)`, the `FLOW` table behind it and the `Phase` and
   `FlowEvent` types. `match.ts` wraps it in `advance(event)`, which stores the next phase in
   `G.phase` (the same strings the e2e specs read) or, for a move the table rejects, leaves the
-  phase alone and warns on the console. `flow-test.js` walks the table.
+  phase alone and warns on the console. `test/flow.test.mjs` walks the table.
 - `render.ts` exports `createRenderer(canvas, deps)`, which returns
   `{ frame(view) }`, and `drawChassis` (the unit picker draws its small bodies
   with the battlefield's painter). `deps` (`RenderDeps`) is everything it
@@ -510,10 +519,10 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
   Rendering reads and draws; whatever advances lives in the update step
   (`decayFx` in `match.ts` ages the blast discs and shake, `trackMotion` in `view.ts` notes which ground
   units moved), and `battleView()` in `view.ts` just assembles the snapshot. The sky is built
-  from the match key and cached inside the renderer. `render-test.js` paints a
+  from the match key and cached inside the renderer. `test/render.test.mjs` paints a
   deep-frozen view, so a frame that wrote to the game state would throw.
 
-- `input.ts` maps physical keys and touches to named commands, and `game.js`
+- `input.ts` maps physical keys and touches to named commands, and `main.ts`
   says what each command does. The commands are the action names of
   `game.json`'s `keys` section (`barrelLeft`, `fire`, `guns`, `lineDown`, ...),
   so rebinding a key in `game.yaml` changes nothing in either file. `createInput({ touch })`
@@ -538,47 +547,45 @@ node tools/vendor.mjs --check              # fail if vendor/ drifted from the pi
   frame of held-key arm movement at 42 degrees per second for the barrel and 45
   power per second, clamped to 10-170 and 10-100, reporting whether a key is
   adjusting and whether none is down (the room client sends the aim when the
-  keys are released). Driving stays in `game.js` because it depends on terrain
+  keys are released). Driving stays in `main.ts` because it depends on terrain
   and fuel. `touchOnly(matchMedia)` is the one test for a touch-only screen;
-  `game.js` keeps its result as `TOUCH`, which hides key hints (`.touch .key`)
+  `main.ts` keeps its result as `TOUCH`, which hides key hints (`.touch .key`)
   and rewrites prose, so there is one source of truth. What stays in
-  `game.js`: `bindKeys`, which says what each command does by calling into the shop, the weapon picker and the other
+  `main.ts`: `bindKeys`, which says what each command does by calling into the shop, the weapon picker and the other
   modules, scrolling a panel, the key hint text, and the capture-phase
-  keydown that wakes audio. The module touches no page API, so `input-test.js`
+  keydown that wakes audio. The module touches no page API, so `test/input.test.mjs`
   drives it with plain event objects.
 
 ## Tests
 
 | Command                                        | Covers                                                                                     |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `node tools/ts-build.mjs --check`              | `js/` is exactly what `src/` compiles to, `src/` type-checks, and every `protocol/*.json` fits its type in `protocol.ts` (run `npm ci` first) |
-| `node tools/vendor.mjs --check`, `node vendor-test.js` | `vendor/preact/` is byte-for-byte what the pinned Preact in `node_modules` ships (pin, lockfile and install agree); the check's own failure cases |
-| `node ui-test.js`                              | The Preact overlays (`js/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the scores, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
-| `node smoke-test.js`                           | The shipped client (`game.js` imported as a module) in a stub DOM (loads `fx.js` first), driven by the `game.json` key table and the `protocol/` fixtures; also checks every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps; a solo player who wrecks their own tank sees the drones fight on to one and the lost round open the shop |
-| `php config-test.php`                          | `.config.yaml` precedence                                                                  |
-| `php rooms-sim-test.php`                       | Server sim units: pierce, repair, spawns, spacing, replay stamping; drone bracketing (misses shrink over shots at a standing target, hits within four, a moved target or gunner resets the corrections, the target is kept until it dies); drone strategies (each picks its target in a constructed scene, the lobber's arcs and area guns, the sniper's steadier hands, flips only after three dry turns, dealing, damage bookkeeping); one unit left standing ends a round (free-for-all, drones fighting on, lives, winnings, `roundwin` seat), the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller: it rolls down a slope and damages a unit at the bottom, settles and craters in a valley, bursts at the board's edge, hits a drone overhead, and its recorded path follows the ground |
+| `node ../_kit/build/build.mjs tankity --check` | `dist/` is exactly what `src/` bundles to, `src/` type-checks, and every `protocol/*.json` fits its type in `protocol.ts` (run `npm ci` in `games/` first) |
+| `node --test 'test/*.test.mjs'`                | Every Node test below, run by `test.sh` (the UI test bundles `src/ui/*.tsx` once with esbuild, Preact left external) |
+| `test/ui.test.mjs`                             | The Preact overlays (`src/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the scores, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
+| `test/smoke.test.mjs`                          | The shipped bundles (`dist/fx.js`, then `dist/main.js`) in a stub DOM, driven by the `game.json` key table and the `protocol/` fixtures; also checks the page loads exactly those two scripts with no import map and that the bundle has no bare imports, every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps; a solo player who wrecks their own tank sees the drones fight on to one and the lost round open the shop |
+| `test/ai-hitrate.test.mjs`                     | The drones' measured hit rates per difficulty against the targets (see Difficulty), the table's shape, hard being the sharpest aim (its exact constants), unknown levels aiming at normal, and the saved setting's default and form |
+| `test/prefs-legacy.test.mjs`                   | The saved settings (`tankity-body`, `tankity-text`, `tankity-tutorial`, `tankity-local`, `tankity-callsign`) read back through the kit's prefs exactly as the code before it wrote them |
+| `test/audio.test.mjs`                          | `src/audio.ts` imports without a browser; the loop-point trim and the round-to-track mapping are right |
+| `test/render.test.mjs`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, and rebuilds the sky only when the match key changes |
+| `test/input.test.mjs`                          | `src/input.ts` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, ESC, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
+| `test/net.test.mjs`                            | `src/net.ts` against a fake server and timers: the 429 retry, Ready's ordering under rapid toggles, polling, the leave beacon, the clocks, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect) |
+| `test/replay.test.mjs`                         | `src/replay.ts` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, and a `watch` volley at 3x for that volley only |
+| `test/preview.test.mjs`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |
+| `test/flow.test.mjs`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
+| `test/protocol.test.mjs`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
+| `test/sim-vectors.test.mjs`                    | `src/sim.ts` and `src/ai.ts` agree with `rooms.php` on every shared sim vector (see Sim vectors) |
+| `phpunit --testsuite tankity` (host PHP)       | `ConfigTest` (`.config.yaml` precedence), `GameJsonTest` (the YAML parser, the `game.yaml` schema including effects, `--check` staleness) and `RoomsSimTest` (server sim units: pierce, repair, spawns, spacing, replay stamping; drone bracketing and strategies; one unit left standing ends a round, the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller) |
+| `phpunit --testsuite tankity-docker`           | `RoomsTest` (the room shelf over its own `php -S`) and `RoomsStoreTest` (per-room storage: exclusive create, cap, close, sweep, per-room locks and crashes). Needs SysV, so it runs inside the PHP container (`make test` does) |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (needs SysV; run inside the PHP container)                 |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
-| `node audio-test.js`                            | `js/audio.js` imports without a browser; the loop-point trim and the round-to-track mapping are right |
-| `node render-test.js`                           | `js/render.js` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, and rebuilds the sky only when the match key changes |
-| `node input-test.js`                            | `js/input.js` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, ESC, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
-| `node net-test.js`                              | `js/net.js` against a fake server and timers: the 429 retry, Ready's ordering under rapid toggles, polling, the leave beacon, the clocks, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect) |
-| `node replay-test.js`                           | `js/replay.js` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, and a `watch` volley at 3x for that volley only |
-| `node preview-test.js`                          | `js/preview.js` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |
-| `node flow-test.js`                             | `js/flow.js`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
-| `node protocol-test.js`                         | `src/protocol.ts` against the server: the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`game.js` and `src/*.ts`) |
-| `node sim-vectors-test.js`                     | `js/sim.js` agrees with `rooms.php` on every shared sim vector (see Sim vectors)              |
-| `php rooms-test.php`                           | The room shelf over its own `php -S` (needs SysV; run inside the PHP container)            |
-| `php rooms-store-test.php`                     | Per-room storage: exclusive create, cap, close, sweep, per-room locks and crashes (SysV; PHP container) |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
-| `php game-json-test.php`                       | The YAML parser, the `game.yaml` schema (effects included), `--check` staleness            |
-| `php install-files-test.php`                   | The manifest, install block, `?v=` content hashes and `sw.js` precache, `--check` staleness                   |
 | `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only); `E2E_BASE_URL` points it at the live site |
 | `make e2e-changed` (site root) | Only the browser specs your changes need (`tests/e2e/select.mjs` maps touched files to specs; CI uses the same map) |
 
 `make test` from the site root runs every suite above except e2e. CI runs
 `make test` as `units` and `make e2e` as `e2e` on every pull request. Deploys
-skip `*-test.*`, `README.md` files, `protocol/`, the effects editor and the Blender script.
+skip `test/`, `README.md` files, `protocol/`, the effects editor and the Blender script.
 
 ## Protocol fixtures
 
@@ -605,21 +612,21 @@ is `{about, status, body}`.
   `rooms.php` emits), the replies (`SeatReply`, `RoomReply`, `ErrorReply`, ...)
   and `PostBodies`/`PostReplies`, which type `RoomClient.post`.
   `src/protocol-fixtures.check.ts` imports every fixture and assigns it to its
-  type; `node tools/ts-build.mjs --check` (so `make test`) fails with the
+  type; `node ../_kit/build/build.mjs tankity --check` (so `make test`) fails with the
   offending fixture and key when a fixture holds a field the types lack, lacks
   one they need, or changes a type. A JSON import types strings as `string`,
-  so `protocol-test.js` checks the literal values (phase, seat mode, event
+  so `test/protocol.test.mjs` checks the literal values (phase, seat mode, event
   `t`). Add a fixture to the `fixturesFit` list when `generate.php` gains one.
   `rooms.php` stores a `join` event without a `seq`, which no snapshot ever
   carries; it has no member in the union.
-- `rooms-sim-test.php` compares the keys and types of today's `room_snapshot`
+- `test/php/checks/rooms-sim.php` compares the keys and types of today's `room_snapshot`
   output with each fixture, on any PHP.
-- `smoke-test.js` checks that every hand-written snapshot its fake server
+- `test/smoke.test.mjs` checks that every hand-written snapshot its fake server
   sends has the fixtures' keys and types, then serves the fixtures themselves
   to the client: lobby, start, a fired turn replayed, the shop, a 429 and a
   409. A server change the client does not handle fails there.
 - The fixtures are not precached by the service worker (only top-level
-  static files, `fx/sprites/` and `js/` are) and are not deployed.
+  static files, `fx/sprites/` and `dist/` are) and are not deployed.
 
 ## Sim vectors
 
@@ -627,8 +634,8 @@ The game's math runs twice: in `src/sim.ts` (solo, demo and the client's own
 shell flight) and in `rooms.php` (the authoritative room server). `protocol/sim-vectors.json`
 keeps the two honest: `protocol/sim-vectors.php` calls `rooms.php`'s real
 functions over a spread of cases and writes each case's inputs and expected
-outputs; `sim-vectors-test.js` replays every case through the compiled sim,
-`js/sim.js` and the drone AI, `js/ai.js`, and compares within 1e-4.
+outputs; `test/sim-vectors.test.mjs` replays every case through the sim,
+`src/sim.ts` and the drone AI, `src/ai.ts`, and compares within 1e-4.
 
 - Covered: the RNG and terrain generator, spawn spots, shot speed, muzzle,
   gravity and wind, hit boxes, the swept hit test (owner-clear rule, lance
@@ -637,7 +644,8 @@ outputs; `sim-vectors-test.js` replays every case through the compiled sim,
   roll ends, whole volleys for every weapon in `game.json` (and a roller down
   into a valley, into a unit, back onto its gunner, off either edge and
   stopping on a rise), the drone's aim, sequences of drone shots that bracket a
-  target in (and re-range when it drives off), each drone strategy's choice of
+  target in (and re-range when it drives off), the aim and a bracket at each
+  difficulty (and an unknown word aiming at normal), each drone strategy's choice of
   target, gun and arc and a flip after a dry spell, and tank settling.
 - Shared rules the cases pin: only a kill the player's own shot made pays the
   300 bonus, and a volley's projectiles (buckshot pellets, cluster bomblets)
@@ -658,7 +666,7 @@ outputs; `sim-vectors-test.js` replays every case through the compiled sim,
 - A case with a `known` reason is a difference the two sides have on purpose;
   the replay lists it and does not fail. The replay does fail when a known
   case starts to agree, so the reason is removed with the difference.
-- The replay imports `js/sim.js` and passes each case its own plain state
+- The replay imports `src/sim.ts` and passes each case its own plain state
   object; nothing is stubbed, because the sim has no side effects to stub.
 
 ## Weapon effects
@@ -679,7 +687,7 @@ holds named extras: `split` (cluster bloom), `steer` (seeker pulse), `pierce`
 (lance through a tank), `arc` (EMP, over each tank it fries). An effect is
 `emitters` (one `- { ... }` line each) and an optional `screen: { shake,
 flash: { color, alpha, dur } }`. An emitter's fields and defaults are
-`DEFAULTS` in `fx.js` (shape `dot | streak | ring | spark | smoke | sprite |
+`DEFAULTS` in `src/fx/engine.ts` (shape `dot | streak | ring | spark | smoke | sprite |
 bolt | beam`, count or rate, delay, duration, life, speed, aim/angle/spread,
 offset/edge, gravity, drag, wind, size over life, alpha keyframes, colour
 ramp, `glow` = additive, sprite sheet/fps/scale/anchor/tint); only non-default
@@ -688,18 +696,18 @@ fields are written. `game.yaml` documents each field with its range, and
 `rate`, an emitter that emits nothing, a sprite with no sheet or a sheet
 that does not exist, and out-of-range numbers (checked against the unit they
 are written in). The generated `game.json` carries the section as plain JSON.
-`game.js` reads it from `game.json`, carries a baked Shell fallback for when
+`main.ts` reads it from `game.json`, carries a baked Shell fallback for when
 that does not arrive, and derives a plain effect from `gfx` for any weapon
 the data does not describe. `unit: "r"` multiplies size, speed, offset and
 length by the blast radius, so keep sizes in r small (a `dot` of size 1 is a
 disc of radius r).
 
-Engine (`fx.js`): one preallocated pool per canvas (battlefield 700 particles,
+Engine (`src/fx/engine.ts`): one preallocated pool per canvas (battlefield 700 particles,
 firing range 260, hard caps; a full pool recycles slots, and trails stop
 feeding it past 80 % so a blast always has room), no allocation per frame (colour
 ramps are cached lookup tables), additive particles drawn in a second pass.
 `FX.play` (`muzzle`, `impact`, `special`, `trail`) is how a weapon's entry is
-played; `game.js` (battlefield, and the effects the firing range and the room replay ask for)
+played; `main.ts` (battlefield, and the effects the firing range and the room replay ask for)
 and the editor both go through it. Reduced motion (`prefers-reduced-motion`)
 cuts counts and rates (x0.35, x0.4), shortens lives and drops the screen
 flash; shake was already off. Sprite sheets load lazily from `fx/sprites/`; until
@@ -719,14 +727,14 @@ Download effects.yaml) exports the whole `effects:` block, which runs to the
 end of `game.yaml`: paste it over the old block, then run
 `php tools/game-json.php` and `php tools/install-files.php`. Unsaved edits are
 kept in `localStorage` until Reload file re-reads `game.json`. `deploy.sh`
-skips `games/*/fx-editor.*` and `games/*/fx/blender/*`, the service worker
+skips `games/*/fx-editor.*` (so `dist/fx-editor.js` too) and `games/*/fx/blender/*`, the service worker
 precache leaves the editor out and includes `fx/sprites/`, and nginx denies the
 Blender folder. The Blender scenes (`fx/blender/*.blend`) are the sources of the sheets and live in Git LFS.
 
 ## Night sky
 
 Each match draws its own sky from the match key (the solo seed, or the room
-code) through a generator of its own (`buildSky` in `game.js`), so it never
+code) through a generator of its own (`buildSky` in `main.ts`), so it never
 touches the sim's random numbers and every client in a room sees the same
 stars: about 290 square pixel stars in three sizes, varied brightness and a few
 warm or cool tints, a slanted milky band with a faint glow, a few clusters, a

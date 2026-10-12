@@ -17,6 +17,16 @@ test('the Games page builds a card per metadata.yaml, each with a share link', a
   await page.screenshot({ path: 'test-results/games-hub.png', fullPage: true });
 });
 
+// Pages revalidate on every visit, so a browser never keeps a page that names
+// files a deploy removed (nginx here, .htaccess on the host).
+test('pages answer with Cache-Control: no-cache', async ({ request }) => {
+  for (const path of ['./', 'play/tankity/', 'games/crete/']) {
+    const res = await request.get(path);
+    expect(res.ok(), path).toBe(true);
+    expect(res.headers()['cache-control'] ?? '', path).toContain('no-cache');
+  }
+});
+
 test('a page game opens from its card, framed under the site navbar', async ({ page }) => {
   await page.goto('./');
   await page.click('#cic-enter-btn');

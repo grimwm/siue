@@ -1,14 +1,17 @@
 /* Cylon Defense: the settings and the nav chrome.
  *
  * The player's settings (sound, music, their volumes, the eye) persist in
- * localStorage and show in the gear's panel; the Game On toggle sits beside
+ * localStorage (one kit pref) and show in the gear's panel; the Game On toggle sits beside
  * it. The nav has two looks, civil and combat, and the chrome fades between
  * them when the game is switched. The mobile menu's burger is bound here too.
  *
  * It touches only the nav elements it is handed and `document`; what the
  * settings change in the game (the eye, the sound) goes out through callbacks.
  * Browser-only: it compiles in the DOM program. */
-import type { Settings, Timer } from './types.js';
+import { pref, json } from '../../_kit/prefs.ts';
+import { browserStorage } from '../../_kit/ports.browser.ts';
+import { DEFAULT_SETTINGS, SETTINGS_KEY, isSettings } from './types.ts';
+import type { Settings, Timer } from './types.ts';
 
 export interface ChromeDeps {
   settingsRoot: HTMLElement | null;
@@ -56,17 +59,9 @@ export function createChrome(d: ChromeDeps): Chrome {
   // one the panel's handler has always called.
   const audio = { settingChanged: (key: string): void => d.settingChanged(key) };
 
-  const SETTINGS_KEY = 'cylon-settings';
-  const defaults = {
-    gameEnabled: false,
-    soundEnabled: true,
-    musicEnabled: true,
-    // UI midpoints; gain curves map 50% to the intended default loudness
-    soundVolume: 50,
-    musicVolume: 50,
-    eyeEnabled: true
-  };
-  let settings: Settings = loadSettings();
+  const defaults = DEFAULT_SETTINGS;
+  const saved = pref<Partial<Settings>>(SETTINGS_KEY, DEFAULT_SETTINGS, json(isSettings), browserStorage());
+  let settings: Settings = Object.assign({}, defaults, saved.get());
   // Game stays off until the player explicitly enables it
   settings.gameEnabled = false;
   settings.soundVolume = Math.max(0, Math.min(100, Number(settings.soundVolume) || defaults.soundVolume));
@@ -82,28 +77,14 @@ export function createChrome(d: ChromeDeps): Chrome {
     migrated = true;
   }
   if (migrated) {
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    } catch {
-      /* ignore quota / private mode */
-    }
+    saved.set(settings);
   }
 
   let navChromeFadeGen = 0;
   let navChromeFadeTimer: Timer | null = null;
 
-  function loadSettings(): Settings {
-    try {
-      const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) return { ...defaults };
-      return { ...defaults, ...JSON.parse(raw) };
-    } catch {
-      return { ...defaults };
-    }
-  }
-
   function saveSettings() {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    saved.set(settings);
     syncSettingsUi();
     syncGameToggleUi();
   }

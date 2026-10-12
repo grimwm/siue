@@ -89,6 +89,7 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
         'phase' => $room['phase'],
         'map' => $room['map'],
         'mapName' => room_map_name($room['map'] ?? null),
+        'difficulty' => room_difficulty($room),
         'round' => $room['round'],
         'wind' => $room['wind'],
         'turn' => $room['phase'] === 'play' && count($room['tanks']) ? $room['tanks'][$room['turn']]['seat'] ?? null : null,

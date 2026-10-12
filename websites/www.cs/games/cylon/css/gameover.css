@@ -231,3 +231,46 @@
 }
 
 
+
+.cylon-hs-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  margin: 0 0 0.6rem;
+}
+
+.cylon-hs-tab {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--rail-edge);
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
+.cylon-hs-tab[aria-selected="true"] {
+  color: #fff;
+  border-color: #c03030;
+  background: linear-gradient(180deg, #8a1515 0%, #5a0c0c 100%);
+}
+
+.cylon-hs-tab:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.cylon-gameover-alltime {
+  margin: 0 0 0.6rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffd24a;
+}
+
+.cylon-gameover-alltime[hidden] {
+  display: none;
+}

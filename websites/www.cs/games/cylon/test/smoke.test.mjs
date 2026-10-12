@@ -1,0 +1,83 @@
+// Static checks on what ships: the entry's export and theme hook, the mount and
+// score fetches, no name clashes with the site's main.js, and no stale "Monday".
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const GAME = join(import.meta.dirname, '..');
+const read = (...p) => readFileSync(join(GAME, ...p), 'utf8');
+const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const main = read('src/main.ts');
+
+test('the entry exports initializeCylonEffects with an options object', () => {
+  assert.match(main, /^export async function initializeCylonEffects\(options\b/m);
+  assert.match(read('dist/main.js'), /initializeCylonEffects/);
+});
+
+test('the entry finds its files by its own URL', () => {
+  assert.doesNotMatch(main, /data-cylon-base|data-cylon-api|cylonAsset/);
+  assert.ok(main.includes('import.meta.url'));
+});
+
+test('the theme reaches the site only through options.onTheme', () => {
+  assert.match(main, /options\.onTheme/);
+});
+
+test('mount.html is fetched with its build-time version', () => {
+  assert.match(main, /new URL\(`\.\.\/mount\.html\?v=\$\{MOUNT_HTML_V\}`, import\.meta\.url\)/);
+  assert.doesNotMatch(read('dist/main.js'), /MOUNT_HTML_V/);
+});
+
+test('the scores endpoint is found next to the game folder, not the bundle', () => {
+  assert.match(main, /new URL\('\.\.\/scores\.php', import\.meta\.url\)/);
+});
+
+test('the site page imports the bundle with a version', () => {
+  assert.match(read('..', '..', 'index.html'), /import\('\.\/games\/cylon\/dist\/main\.js\?v=[0-9a-f]+'\)/);
+});
+
+// Games do not know the site: nothing the site's scripts define may appear in
+// the game. Skipped when the game is copied out of the site.
+const siteMain = join(GAME, '..', '..', 'main.js');
+const gameCode = () => strip(readdirSync(join(GAME, 'src')).filter(f => f.endsWith('.ts')).map(f => read('src', f)).join('\n'));
+
+test('the game reaches no function the site script defines', { skip: !existsSync(siteMain) }, () => {
+  const names = [...readFileSync(siteMain, 'utf8').matchAll(/^(?:async )?function (\w+)\(/gm)].map(m => m[1]);
+  assert.ok(names.length > 5, String(names));
+  const code = gameCode();
+  assert.deepEqual(names.filter(n => new RegExp(`\\b${n}\\b`).test(code)), []);
+});
+
+test('the game reaches no variable the site script defines', { skip: !existsSync(siteMain) }, () => {
+  const names = [...readFileSync(siteMain, 'utf8').matchAll(/^(?:const|let|var) (\w+)\s*=/gm)].map(m => m[1]);
+  const code = gameCode();
+  assert.deepEqual(names.filter(n => new RegExp(`\\b${n}\\b`).test(code)), []);
+});
+
+// The board resets on Sunday; no page, manifest or description may still say Monday.
+test('no Cylon file says Monday', () => {
+  const home = read('..', '..', 'index.html');
+  // The whole Cylon settings block: from its container to the matching closing tag.
+  const at = home.indexOf('id="cylon-weekly-reset"');
+  const start = home.indexOf('<div class="cylon-settings" id="cylon-settings"');
+  const tag = /<div|<\/div>/g;
+  tag.lastIndex = start;
+  let depth = 0;
+  let end = -1;
+  for (let m = tag.exec(home); m; m = tag.exec(home)) {
+    depth += m[0] === '<div' ? 1 : -1;
+    if (depth === 0) { end = m.index; break; }
+  }
+  const homeCylon = end > start ? home.slice(start, end) : '';
+  assert.ok(at > start && start >= 0 && homeCylon.includes('cylon-weekly-reset'), `${start}..${end}`);
+  const files = {
+    'metadata.yaml': read('metadata.yaml'),
+    'manifest.webmanifest': read('manifest.webmanifest'),
+    'mount.html': read('mount.html'),
+    'index.html (cylon block)': homeCylon,
+    'play/cylon/index.html': read('..', '..', 'play', 'cylon', 'index.html'),
+  };
+  const stale = Object.entries(files).filter(([, body]) => /\bMonday\b/.test(body)).map(([name]) => name);
+  assert.deepEqual(stale, []);
+});

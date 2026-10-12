@@ -12,7 +12,7 @@ if (!defined('TANKITY_ROOMS_INCLUDED')) {
 }
 
 // Mirrors cylon: exact-3 uppercase initials, blocked set enforced both sides.
-// (Keep in sync with BLOCKED_INITIALS in game.js.)
+// (Keep in sync with BLOCKED_INITIALS in src/lobby.ts.)
 const BLOCKED_INITIALS = [
     'ASS',
     'FUK', 'FUC', 'FCK', 'FUX', 'FUQ',
@@ -282,6 +282,7 @@ function room_new(string $code, string $initials): array
         'rng' => $rng,
         'phase' => 'lobby', // lobby | shop | play | over
         'map' => null, // a ROOM_MAPS id, or null for a random draw
+        'difficulty' => 'normal', // the drones' aim: a ROOM_DIFFICULTY word, set by the host at create
         'round' => 0,
         'wind' => 0,
         'terrain' => [],

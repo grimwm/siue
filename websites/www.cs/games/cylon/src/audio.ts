@@ -1,11 +1,13 @@
 /* Cylon Defense: sound.
  *
  * The WebAudio buses, the sound effects and the music bed, behind a small
- * interface: cylon.js asks for an effect by name, tells the module when a
+ * interface: main.ts asks for an effect by name, tells the module when a
  * setting changed or the session's state moved, and never sees the context, the
  * buses or the bed's timer. Nothing here touches the page: the settings, the
  * session state and the volume curve (rules.volumeToGain) are handed in, and a
  * browser without WebAudio gets a module that stays silent. */
+
+import { createAudioCore } from '../../_kit/audio/core.ts';
 
 /* ---------- the public interface ---------- */
 
@@ -83,12 +85,6 @@ const EXPLOSIONS: Record<'small' | 'medium' | 'large', ExplosionProfile> = {
     thumpFreq: 42, crackFreq: 300
   }
 };
-
-function defaultContext(): AudioContext | null {
-  const g = globalThis as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
-  const Ctx = g.AudioContext || g.webkitAudioContext;
-  return Ctx ? new Ctx() : null;
-}
 
 function pulseTaiko(ctx: AudioContext, master: AudioNode, when: number, gain = 0.09): void {
   const osc = ctx.createOscillator();
@@ -201,89 +197,40 @@ function playTensionStrand(ctx: AudioContext, master: AudioNode, when: number, f
 /* ---------- the module ---------- */
 
 export function createAudio(deps: AudioDeps): CylonAudio {
-  const makeContext = deps.createContext ?? defaultContext;
   const settings = deps.settings;
+  const core = createAudioCore({ createContext: deps.createContext });
 
-  let audioCtx: AudioContext | null = null;
-  let sfxBus: GainNode | null = null;
-  let musicBus: GainNode | null = null;
   let musicMaster: GainNode | null = null;
   let musicNodes: AudioNode[] = [];
   let musicTimer: ReturnType<typeof setInterval> | null = null;
   let musicPlaying = false;
-  let primed = false;
 
-  function ensureAudioContext(): AudioContext | null {
-    if (!audioCtx) {
-      const made = makeContext();
-      if (!made) return null;
-      audioCtx = made;
-    }
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume().catch(() => {});
-    }
-    if (!sfxBus) {
-      sfxBus = audioCtx.createGain();
-      sfxBus.connect(audioCtx.destination);
-    }
-    if (!musicBus) {
-      musicBus = audioCtx.createGain();
-      musicBus.connect(audioCtx.destination);
-    }
-    applyBusVolumes();
-    return audioCtx;
-  }
-
+  /** The buses follow the settings: effects are muted when off or at 0, and the
+   *  bed is heard only while it plays in a live session. */
   function applyBusVolumes(): void {
     const s = settings();
-    if (sfxBus) {
-      sfxBus.gain.value = s.soundEnabled ? deps.volumeToGain(s.soundVolume, 'sfx') : 0;
-    }
-    if (musicBus) {
-      // Keep the bed going through game-over overlays (session still On)
-      const on = s.musicEnabled && deps.sessionActive() && musicPlaying;
-      const target = on ? deps.volumeToGain(s.musicVolume, 'music') : 0;
-      if (audioCtx) {
-        const now = audioCtx.currentTime;
-        // Hard set: delayed automation can mute a just-started bed
-        musicBus.gain.cancelScheduledValues(now);
-        musicBus.gain.setValueAtTime(target, now);
-      } else {
-        musicBus.gain.value = target;
-      }
-    }
+    core.setMuted('sfx', !s.soundEnabled || s.soundVolume <= 0);
+    core.setGain('sfx', deps.volumeToGain(s.soundVolume, 'sfx'));
+    const on = s.musicEnabled && deps.sessionActive() && musicPlaying;
+    core.setGain('music', on ? deps.volumeToGain(s.musicVolume, 'music') : 0);
   }
 
+  function ensureAudioContext(): AudioContext | null {
+    applyBusVolumes();
+    return core.context();
+  }
+
+  /** The context for an effect: none while effects are off. */
   function ensureAudio(): AudioContext | null {
-    const s = settings();
-    if (!s.soundEnabled || s.soundVolume <= 0) return null;
-    return ensureAudioContext();
+    applyBusVolumes();
+    return core.isMuted('sfx') ? null : core.context();
   }
 
   function unlock(): void {
     const s = settings();
     if (!s.soundEnabled && !s.musicEnabled) return;
-    const ctx = ensureAudioContext();
-    if (!ctx || primed) return;
-
-    const prime = (): void => {
-      if (primed || ctx.state !== 'running') return;
-      const g = ctx.createGain();
-      g.gain.value = 0.0001;
-      const osc = ctx.createOscillator();
-      osc.connect(g);
-      g.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.01);
-      primed = true;
-      syncMusic();
-    };
-
-    if (ctx.state === 'running') {
-      prime();
-    } else {
-      ctx.resume().then(prime).catch(() => {});
-    }
+    applyBusVolumes();
+    core.unlock(syncMusic);
   }
 
   function tearDown(nodes: AudioNode[], master: AudioNode): void {
@@ -302,7 +249,7 @@ export function createAudio(deps: AudioDeps): CylonAudio {
       clearInterval(musicTimer);
       musicTimer = null;
     }
-    const ctx = audioCtx;
+    const ctx = core.peek();
     const master = musicMaster;
     const nodes = musicNodes;
     musicPlaying = false;
@@ -331,8 +278,8 @@ export function createAudio(deps: AudioDeps): CylonAudio {
     const s0 = settings();
     if (musicPlaying || !s0.musicEnabled || s0.musicVolume <= 0 || !deps.sessionActive()) return;
     const ctx = ensureAudioContext();
-    if (!ctx || !musicBus) return;
-    const bus = musicBus;
+    const bus = core.bus('music');
+    if (!ctx || !bus) return;
 
     const begin = (): void => {
       if (musicPlaying || !settings().musicEnabled || !deps.sessionActive()) return;
@@ -437,22 +384,23 @@ export function createAudio(deps: AudioDeps): CylonAudio {
       let bar = 0;
 
       const scheduleWindow = (): void => {
-        if (!musicPlaying || !audioCtx || !musicMaster) return;
-        const t = audioCtx.currentTime + 0.05;
+        const ac = core.peek();
+        if (!musicPlaying || !ac || !musicMaster) return;
+        const t = ac.currentTime + 0.05;
         // One 4-beat bar per call, sparse on purpose
         const when0 = t;
         const when2 = t + beat * 2;
 
-        pulseTaiko(audioCtx, musicMaster, when0, bar % 2 === 0 ? 0.11 : 0.08);
+        pulseTaiko(ac, musicMaster, when0, bar % 2 === 0 ? 0.11 : 0.08);
         if (bar % 2 === 1) {
-          pulseTaiko(audioCtx, musicMaster, when2, 0.06);
+          pulseTaiko(ac, musicMaster, when2, 0.06);
         } else {
-          pulseRitualHit(audioCtx, musicMaster, when2, 0.03);
+          pulseRitualHit(ac, musicMaster, when2, 0.03);
         }
 
         // Long dark horn every bar, changing pitch so it moves
         playDarkHorn(
-          audioCtx,
+          ac,
           musicMaster,
           when0 + beat * 0.15,
           hornNotes[bar % hornNotes.length] ?? 73.42,
@@ -463,7 +411,7 @@ export function createAudio(deps: AudioDeps): CylonAudio {
         // High tension strand every other bar
         if (bar % 2 === 0) {
           playTensionStrand(
-            audioCtx,
+            ac,
             musicMaster,
             when0 + beat * 0.5,
             strands[(bar / 2) % strands.length] ?? 293.66,
@@ -474,8 +422,8 @@ export function createAudio(deps: AudioDeps): CylonAudio {
 
         // Heavier double-hit as intensity marker
         if (bar % 4 === 3) {
-          pulseTaiko(audioCtx, musicMaster, when0 + beat * 0.75, 0.07);
-          pulseRitualHit(audioCtx, musicMaster, when0 + beat * 1.1, 0.04);
+          pulseTaiko(ac, musicMaster, when0 + beat * 0.75, 0.07);
+          pulseRitualHit(ac, musicMaster, when0 + beat * 1.1, 0.04);
         }
 
         bar += 1;
@@ -506,48 +454,11 @@ export function createAudio(deps: AudioDeps): CylonAudio {
   /* ---------- sound effects ---------- */
 
   function playTone({ freq = 440, freqEnd = null, type = 'square', duration = 0.12, gain = 0.08, delay = 0 }: ToneSpec): void {
-    const ctx = ensureAudio();
-    if (!ctx) return;
-    const t0 = ctx.currentTime + delay;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, t0);
-    if (freqEnd != null) {
-      osc.frequency.exponentialRampToValueAtTime(Math.max(freqEnd, 1), t0 + duration);
-    }
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(gain, t0 + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
-    osc.connect(g);
-    g.connect(sfxBus || ctx.destination);
-    osc.start(t0);
-    osc.stop(t0 + duration + 0.02);
+    core.tone({ freq, dur: duration, type, vol: gain, slideTo: freqEnd, when: delay, attack: 0.01 });
   }
 
   function playNoiseBurst({ duration = 0.18, gain = 0.06, delay = 0, filterFreq = 900, filterType = 'bandpass' }: NoiseSpec = {}): void {
-    const ctx = ensureAudio();
-    if (!ctx) return;
-    const t0 = ctx.currentTime + delay;
-    const len = Math.floor(ctx.sampleRate * duration);
-    const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < len; i++) {
-      data[i] = (Math.random() * 2 - 1) * (1 - i / len);
-    }
-    const src = ctx.createBufferSource();
-    const g = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-    filter.type = filterType;
-    filter.frequency.value = filterFreq;
-    src.buffer = buffer;
-    g.gain.setValueAtTime(gain, t0);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
-    src.connect(filter);
-    filter.connect(g);
-    g.connect(sfxBus || ctx.destination);
-    src.start(t0);
-    src.stop(t0 + duration + 0.02);
+    core.noise({ dur: duration, vol: gain, when: delay, filterFreq, filterType, source: 'fade' });
   }
 
   function playExplosion(size: keyof typeof EXPLOSIONS, delay = 0): void {
@@ -689,25 +600,19 @@ export function createAudio(deps: AudioDeps): CylonAudio {
   };
 
   return {
-    sfx(name) { voices[name](); },
+    sfx(name) {
+      applyBusVolumes();
+      voices[name]();
+    },
     prime() { ensureAudio(); },
     unlock,
     syncMusic,
     settingChanged(key) {
       const s = settings();
-      if (key === 'musicEnabled' || key === 'musicVolume') {
-        syncMusic();
-      }
-      if (key === 'soundEnabled' || key === 'soundVolume') {
-        ensureAudioContext();
-        applyBusVolumes();
-      }
-      if (key === 'soundEnabled' && !s.soundEnabled && !s.musicEnabled && audioCtx) {
-        audioCtx.suspend().catch(() => {});
-      }
-      if ((key === 'soundEnabled' || key === 'musicEnabled') && (s.soundEnabled || s.musicEnabled)) {
-        ensureAudioContext();
-      }
-    }
+      if (key === 'musicEnabled' || key === 'musicVolume') syncMusic();
+      if (key === 'soundEnabled' || key === 'soundVolume') ensureAudioContext();
+      if (key === 'soundEnabled' && !s.soundEnabled && !s.musicEnabled) core.suspend();
+      if ((key === 'soundEnabled' || key === 'musicEnabled') && (s.soundEnabled || s.musicEnabled)) ensureAudioContext();
+    },
   };
 }

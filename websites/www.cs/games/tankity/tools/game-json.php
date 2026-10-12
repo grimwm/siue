@@ -4,7 +4,7 @@
  * from the one file a maintainer edits, game.yaml (arsenal,
  * keys, audio, effects). Browsers cannot read YAML and the server has no YAML
  * extension, so the YAML is checked here and written out as JSON; the client
- * (game.js) and the room server (rooms.php) read only the JSON.
+ * (src/main.ts) and the room server (rooms.php) read only the JSON.
  *
  *   php tools/game-json.php          validate game.yaml, rewrite game.json
  *   php tools/game-json.php --check  exit 1 if game.yaml is invalid or
@@ -396,7 +396,7 @@ const TANKITY_SFX_EVENTS = ['move', 'click', 'launch', 'boom', 'clank', 'thud', 
 const TANKITY_AUDIO_EXT = ['mp3', 'ogg', 'm4a', 'wav'];
 const TANKITY_FX_SLOTS = ['muzzle', 'trail', 'impact'];
 const TANKITY_FX_SPECIALS = ['split', 'steer', 'pierce', 'arc'];
-/** Emitter enums; fx.js SHAPES, AIMS, EASES and SCHEMA are the same lists. */
+/** Emitter enums; src/fx/engine.ts SHAPES, AIMS, EASES and SCHEMA are the same lists. */
 const TANKITY_FX_ENUMS = [
     'shape' => ['dot', 'streak', 'ring', 'spark', 'smoke', 'sprite', 'bolt', 'beam'],
     'aim' => ['fixed', 'forward', 'back', 'normal'],
@@ -1020,7 +1020,7 @@ function tankity_build_fx_effect(TankityCheck $c, mixed $ef, string $p, bool $dr
 }
 
 /**
- * One emitter. Only what the author wrote is kept (fx.js DEFAULTS fill the
+ * One emitter. Only what the author wrote is kept (src/fx/engine.ts DEFAULTS fill the
  * rest), in the order written. Size, speed, offset and length are checked
  * against the unit they are written in: with `unit: r` they multiply the
  * blast radius, so a pixel-sized number there would swallow the screen.

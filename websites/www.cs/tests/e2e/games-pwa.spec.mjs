@@ -5,6 +5,8 @@ import { test, expect } from '@playwright/test';
 const GAMES = ['cylon', 'tankity', 'crete'];
 const PAGE_GAMES = ['tankity', 'crete'];
 const RENDERED = { tankity: '#stage', crete: 'h1' };
+// The entry script each page loads: both games' bundles.
+const ENTRY = { tankity: 'dist/main.js', crete: 'dist/main.js' };
 
 async function manifestOf(request, baseURL, id) {
   // A page game links its manifest from its own page; Cylon, which runs in
@@ -88,22 +90,22 @@ for (const id of PAGE_GAMES) {
       return { name, urls: keys.map(r => new URL(r.url).pathname.split('/').pop()) };
     });
     expect(cached.name).toMatch(new RegExp(`^game-${id}-[0-9a-f]{12}$`));
-    expect(cached.urls).toEqual(expect.arrayContaining(['game.js', 'game.css', 'index.html', 'icon-512.png']));
+    expect(cached.urls).toEqual(expect.arrayContaining([ENTRY[id].split('/').pop(), 'game.css', 'index.html', 'icon-512.png']));
     expect(cached.urls.some(u => u.endsWith('.php'))).toBe(false);
     if (id === 'tankity') {
-      // The vendored Preact and the overlay modules that import it are precached too.
-      expect(cached.urls).toEqual(expect.arrayContaining(['preact.module.js', 'hooks.module.js', 'jsx-runtime.module.js', 'chrome.js', 'help.js', 'shop.js']));
+      // The effects engine bundle, its sprite manifest and game.json are precached with the main bundle.
+      expect(cached.urls).toEqual(expect.arrayContaining(['fx.js', 'main.js', 'sprites.json', 'game.json']));
     }
 
     // Offline: the page still loads and renders.
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator(RENDERED[id]).first()).toBeVisible();
-    await expect(page.locator('script[src^="game.js"]')).toHaveCount(1);
+    await expect(page.locator(`script[src^="${ENTRY[id]}"]`)).toHaveCount(1);
     expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
     expect(errors).toEqual([]);
     if (id === 'tankity') {
-      // Offline, the import map and the vendored Preact answer from the cache and draw the overlays.
+      // Offline, the precached main bundle (Preact and the overlays are inside it) draws the overlays.
       await expect(page.locator('#help-overlay ul.help li').first()).toBeAttached();
       await expect(page.locator('#help-overlay #help-close')).toBeAttached();
     }

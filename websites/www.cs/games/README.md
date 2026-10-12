@@ -6,6 +6,13 @@ Pluggable mini-games for the SIUE personal site.
 ```
 games/
   README.md
+  _kit/            # shared build, test and PHP tooling
+  crete/           # The Island of Crete
+    build.json     # entries and type programs for _kit/build/build.mjs
+    src/           # TypeScript; main.ts is the entry
+    dist/          # the esbuild bundle, checked in
+    test/          # node:test suites
+    index.html, game.css, sw.js, tools/install-files.php
   cylon/           # The CIC — Cylon defense
     css/           # the stylesheets, linked by the home page in order
     cylon.js       # the game, an ES module the home page imports
@@ -51,9 +58,9 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
 - Check every game with `php tests/games-hub-test.php`.
 - `make screenshots` plays each game briefly in a real browser and rewrites
   its `screenshot.jpg` (800x450). Rerun it when a game's look changes.
-- Games know nothing about the site, and each game folder is self-contained:
-  it carries the tools that build its own generated files, needs only PHP
-  (and Node, for a game written in TypeScript), and works copied anywhere.
+- Games know nothing about the site. A built game folder is self-contained and
+  works copied anywhere; its source needs `games/_kit/` beside it to rebuild
+  (`cd games && npm ci && node _kit/build/build.mjs <id>`).
   The site's side lives outside the games.
   - Site: `php tools/site-game-pages.php` (site root) writes the site's page
     for each game, `play/<id>/index.html`:

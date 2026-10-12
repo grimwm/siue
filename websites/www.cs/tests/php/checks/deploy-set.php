@@ -4,9 +4,39 @@
 declare(strict_types=1);
 
 $site = dirname(__DIR__, 3);
+// Probes for the kit's build setup, tests and per-game build config (kept
+// home) and a game's built dist/ (shipped), asserted below against the one
+// deploy-list run. The probes are untracked files in a
+// scratch game folder (a real game's install files hash its whole folder),
+// removed again afterwards. The build.json probe sits one folder down
+// because the games' check script would try to build a game with a real one.
+$probes = ['games/zz-probe/nested/build.json', 'games/zz-probe/test/engine.test.mjs', 'games/zz-probe/dist/main.js', 'games/zz-probe/dist/main.js.map'];
+$made = [];
+foreach ($probes as $f) {
+    if (file_exists("$site/$f")) {
+        continue;
+    }
+    $dir = dirname("$site/$f");
+    if (!is_dir($dir)) {
+        mkdir($dir, 0777, true);
+    }
+    file_put_contents("$site/$f", "probe\n");
+    $made[] = $f;
+}
 $out = [];
 $code = 0;
-exec('cd ' . escapeshellarg($site) . ' && LIST=1 ./deploy.sh 2>&1', $out, $code);
+try {
+    exec('cd ' . escapeshellarg($site) . ' && LIST=1 ./deploy.sh 2>&1', $out, $code);
+} finally {
+    foreach ($made as $f) {
+        unlink("$site/$f");
+    }
+    foreach (['games/zz-probe/test', 'games/zz-probe/dist', 'games/zz-probe/nested', 'games/zz-probe'] as $d) {
+        if (is_dir("$site/$d") && count(scandir("$site/$d")) === 2) {
+            rmdir("$site/$d");
+        }
+    }
+}
 $check('list-runs', $code === 0, implode(' | ', array_slice($out, -3)));
 $set = array_flip($out);
 
@@ -22,8 +52,8 @@ foreach (['games/cylon/cylon.js', 'games/cylon/js/rules.js', 'games/cylon/js/pla
 foreach (['main.js', 'play/play.js', 'play/play.css', 'index.html'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
-// Crete: the entry module, the compiled modules it imports, its page and PWA files.
-foreach (['games/crete/index.html', 'games/crete/game.js', 'games/crete/game.css', 'games/crete/js/engine.js', 'games/crete/js/audio.js', 'games/crete/js/ui.js', 'games/crete/sw.js', 'games/crete/manifest.webmanifest'] as $f) {
+// Crete: the bundle, its page and PWA files.
+foreach (['games/crete/index.html', 'games/crete/dist/main.js', 'games/crete/game.css', 'games/crete/sw.js', 'games/crete/manifest.webmanifest'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
 // The game is loaded from its own folder; nothing of it sits at the site root.
@@ -42,6 +72,7 @@ foreach ($sheets as $abs) {
 // needs no entry here: it is kept back by what it is.
 const NEVER_SHIPS = '~'
     . '(^|/)src/|(^|/)tools/|^tests/|/protocol/|/node_modules/'
+    . '|^games/(_kit/|package(-lock)?\.json$|\.gitignore$)|/build\.json$|/test/'
     . '|-test\.[a-z]+$|(^|/)test\.sh$|(^|/)tsconfig[^/]*\.json$|(^|/)package(-lock)?\.json$'
     . '|(^|/)\.gitignore$|(^|/)README\.md$|/fx-editor\.|/fx/blender/|^games/tankity/game\.yaml$'
     . '|\.(blend1?|wav|flac|aiff?)$'
@@ -67,3 +98,11 @@ $check('node_modules never ships', array_filter($out, fn(string $f): bool => str
 $check('composer-files-stay-home', !array_intersect(['composer.json', 'composer.lock', 'phpunit.xml'], $out), '');
 $check('vendor-stays-home', !array_filter($out, fn($f) => str_starts_with($f, 'vendor/')), '');
 $check('kit-php-stays-home', !array_filter($out, fn($f) => str_starts_with($f, 'games/_kit/')), '');
+
+// games/node_modules is gitignored, so it can never be listed; assert absence.
+foreach (['games/_kit/ports.ts', 'games/_kit/test/prefs.test.mjs', 'games/node_modules/x/index.js', 'games/package.json', 'games/package-lock.json', 'games/.gitignore', 'games/zz-probe/nested/build.json', 'games/zz-probe/test/engine.test.mjs'] as $f) {
+    $check("never-ships-$f", !in_array($f, $out, true), '');
+}
+foreach (['games/zz-probe/dist/main.js', 'games/zz-probe/dist/main.js.map'] as $f) {
+    $check("ships-$f", in_array($f, $out, true), '');
+}

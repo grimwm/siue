@@ -57,8 +57,15 @@ if ! php games/tankity/tools/game-json.php --check; then
   exit 1
 fi
 
-# A game's browser modules can be TypeScript (src/) compiled into js/, which is
-# what ships: refuse a stale build. Each game carries its own compiler setup.
+# A game built with the shared kit ships its dist/: refuse a stale build or a
+# failing type check.
+if ! (cd games && npm ci --silent && npm run --silent check); then
+  echo "deploy: run (cd games && npm run build) and commit dist/" >&2
+  exit 1
+fi
+
+# A game not yet on the kit compiles its own TypeScript (src/) into js/, which
+# is what ships: refuse a stale build. Each such game carries its own compiler setup.
 for tool in games/*/tools/ts-build.mjs; do
   game=$(dirname "$(dirname "$tool")")
   if ! (cd "$game" && npm ci --silent && node tools/ts-build.mjs --check); then
@@ -78,6 +85,13 @@ fi
 # host): refuse a copy that has drifted from the pinned version.
 if ! (cd games/tankity && node tools/vendor.mjs --check); then
   echo "deploy: run node games/tankity/tools/vendor.mjs and commit the result" >&2
+  exit 1
+fi
+
+# deploy-set.php plants probe files under games/zz-probe while it lists the set;
+# a killed test could leave them behind, so a real deploy refuses to ship them.
+if [ "${LIST:-0}" != 1 ] && [ -e games/zz-probe ]; then
+  echo "deploy: games/zz-probe is a leftover of tests/php/checks/deploy-set.php; delete it" >&2
   exit 1
 fi
 
@@ -113,7 +127,9 @@ while IFS= read -r -d '' f; do
     # Authoring sources (Git LFS audio and Blender scenes, see .gitattributes;
     # TypeScript in games/*/src/): never served.
     *.blend | *.blend1 | *.wav | *.flac | *.aif | *.aiff | games/*/src/*) continue ;;
-    games/_kit/*) continue ;;
+    # The shared build kit, its tests and the games' build setup (the kit's
+    # package files, each game's build.json and test/); the built dist/ ships.
+    games/_kit/* | games/node_modules/* | games/package.json | games/package-lock.json | games/.gitignore | games/*/build.json | games/*/test/*) continue ;;
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).
     play/*) ;;

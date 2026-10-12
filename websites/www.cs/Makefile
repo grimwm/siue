@@ -21,7 +21,7 @@ help:
 	@echo "  down   - Stop the local site"
 	@echo "  url    - Print the local site's URL (its port is ephemeral)"
 	@echo "  parity - Check the docker PHP against www.cs.siue.edu's modules/ini"
-	@echo "  test   - Unit suites: the site's TypeScript build, games hub, site game pages, home-page versions, deploy set, each game's tools, Tankity (incl. game.yaml, the TypeScript build, vendored Preact), Cylon (the TypeScript build, its pure modules), Crete (the TypeScript build, its engine) (needs make up)"
+	@echo "  test   - Unit suites: the site's TypeScript build, games hub, site game pages, home-page versions, deploy set, each game's tools, Tankity (incl. game.yaml, the TypeScript build, vendored Preact), Cylon (the TypeScript build, its pure modules), Crete (its kit build check and engine tests) (needs make up)"
 	@echo "  protocol - Rewrite the Tankity room protocol fixtures (needs make up)"
 	@echo "  sim-vectors - Rewrite the Tankity shared sim test vectors (needs make up)"
 	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL;"
@@ -59,6 +59,7 @@ test:
 	composer install --quiet --no-interaction
 	vendor/bin/phpunit --testsuite site
 	vendor/bin/phpunit --testsuite kit
+	cd games && npm ci --silent && node --test '_kit/test/*.test.mjs' '_kit/build/*.test.mjs' && node_modules/.bin/tsc -p _kit/tsconfig.json
 	for t in games/*/test.sh; do echo "== $$t"; $$t || exit 1; done
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php rooms-test.php'
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php rooms-store-test.php'

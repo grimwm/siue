@@ -61,8 +61,7 @@ const RULES = [
   [new RegExp(`^${SITE}games/tankity/(src/|dist/|build\\.json$|tsconfig\\.json$)`), [...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs']],
   // A game's own folder.
   [new RegExp(`^${SITE}games/tankity/`), [...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs']],
-  // Cylon's TypeScript (src/, the compiled js/, tsconfig.json, package.json) and
-  // the rest of its folder: the home page and the games hub load it.
+  // Cylon's folder (src/, the dist/ bundle the kit builds, build.json, tests): the home page and the games hub load it.
   [new RegExp(`^${SITE}games/cylon/`), shell],
   [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'crete-play.spec.mjs']],
   // The site's own TypeScript (src/ compiles to main.js and play/play.js) and the

@@ -114,6 +114,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const gameOverEntryEl = document.getElementById('cylon-gameover-entry');
     const gameOverBoardEl = document.getElementById('cylon-gameover-board');
     const gameOverScoresEl = document.getElementById('cylon-gameover-scores');
+    const gameOverAllTimeEl = document.getElementById('cylon-gameover-alltime');
     const scoreSubmitBtn = document.getElementById('cylon-score-submit') as HTMLButtonElement | null;
     const initialsErrorEl = document.getElementById('cylon-initials-error');
     const playAgainBtn = document.getElementById('cylon-play-again') as HTMLButtonElement | null;
@@ -217,6 +218,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         gameOverEntryEl,
         gameOverBoardEl,
         gameOverScoresEl,
+        allTimeNoteEl: gameOverAllTimeEl,
         scoreSubmitBtn,
         initialsErrorEl,
         playAgainBtn,

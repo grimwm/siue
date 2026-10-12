@@ -35,6 +35,8 @@ export interface GameOverDeps {
   gameOverEntryEl: HTMLElement | null;
   gameOverBoardEl: HTMLElement | null;
   gameOverScoresEl: HTMLElement | null;
+  /** The "New all-time #n!" note on the game-over panel. */
+  allTimeNoteEl: HTMLElement | null;
   scoreSubmitBtn: HTMLButtonElement | null;
   initialsErrorEl: HTMLElement | null;
   playAgainBtn: HTMLButtonElement | null;
@@ -57,13 +59,12 @@ export interface GameOver {
 export function createGameOver(d: GameOverDeps): GameOver {
   const { game, state, scores, formatHighScoreRows, weeklyResetText, currentHp, setGameEnabled, resetRunStats,
     highScoresEl, gameOverEl, gameOverReasonEl, gameOverKosEl, gameOverHitsEl, gameOverEntryEl, gameOverBoardEl,
-    gameOverScoresEl, scoreSubmitBtn, initialsErrorEl, playAgainBtn, initialLetters, initialsRoot } = d;
+    gameOverScoresEl, allTimeNoteEl, scoreSubmitBtn, initialsErrorEl, playAgainBtn, initialLetters, initialsRoot } = d;
 
   let activeInitialIdx = 0;
   type Board = 'week' | 'alltime';
   let activeBoard: Board = 'week';
   const tabs = (): HTMLElement[] => Array.from(gameOverBoardEl?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []);
-  const allTimeNoteEl = (): HTMLElement | null => document.getElementById('cylon-gameover-alltime');
 
   function renderHighScores(list: readonly ScoreEntry[] = scores.board()): void {
     if (highScoresEl) highScoresEl.innerHTML = formatHighScoreRows(list);
@@ -87,7 +88,7 @@ export function createGameOver(d: GameOverDeps): GameOver {
   }
 
   function showAllTimeRank(rank: number | null): void {
-    const note = allTimeNoteEl();
+    const note = allTimeNoteEl;
     if (!note) return;
     note.hidden = rank === null;
     note.textContent = rank === null ? '' : `New all-time #${rank}!`;

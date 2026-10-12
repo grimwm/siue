@@ -5,7 +5,7 @@
  * (src/tsconfig.dom.json). It imports nothing at run time.
  */
 
-import type { SfxName } from "./engine.js";
+import type { SfxName } from "./engine.ts";
 
 export interface Audio {
   /** Wake the audio context; call from a user gesture. */

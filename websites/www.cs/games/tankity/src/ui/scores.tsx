@@ -9,8 +9,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
 import { useRef } from 'preact/hooks';
-import { KeyHints, OverlayHead, ScrollKeys, useScrollKeep } from './chrome.js';
-import type { KeyHintFn } from './chrome.js';
+import { KeyHints, OverlayHead, ScrollKeys, useScrollKeep } from './chrome.tsx';
+import type { KeyHintFn } from './chrome.tsx';
 
 export interface ScoresProps {
   keyHint: KeyHintFn;

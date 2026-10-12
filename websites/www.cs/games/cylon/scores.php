@@ -4,17 +4,15 @@
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * GET  -> { "scores", "csrf", "week", "config" }
+ * GET  -> { "scores" (this week), "alltime", "csrf", "week", "config" }
  * POST { "op": "start" } -> { "run" }
  * POST { "op": "score", "score", "hits", "initials", "run" }
  *
  * Settings: data/config.json (validated on load).
- * Scores: data/scores.json, or /var/tmp/<storageKey>-scores.json when data/ is not writable.
+ * Scores: data/scores.json, or /var/tmp/<storageKey>-scores.json when data/ is not writable;
+ *   CYLON_SCORES_FILE overrides both (tests). The file is {"week": [...], "alltime": [...]}.
  * Run tokens: sys_get_temp_dir()/<storageKey>-runs.json
  */
-
-header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store');
 
 function gameConfig(): array {
     static $config = null;
@@ -152,6 +150,10 @@ function scorePathUsable(string $path): bool {
 
 /** Prefer data/scores.json; fall back to durable world-writable /var/tmp. */
 function resolveScorePath(): string {
+    $override = getenv('CYLON_SCORES_FILE');
+    if (is_string($override) && $override !== '') {
+        return $override;
+    }
     $preferred = __DIR__ . '/data/scores.json';
     if (scorePathUsable($preferred)) {
         return $preferred;
@@ -215,7 +217,7 @@ function localWeek(?string $iso = null): string {
     return $dt->setTime(0, 0)->modify('-' . $back . ' days')->format('Y-m-d');
 }
 
-/** Keep entries from the current local week (Monday 00:00 through next Monday). */
+/** Keep entries from the current local week (its first day 00:00 through the next week's). */
 function scoresForThisWeek(array $scores): array {
     $week = localWeek();
     $kept = [];
@@ -465,9 +467,15 @@ function consumeRun(string $id, int $score): ?string {
     });
 }
 
-/** @param resource $fh */
-function writeScoresHandle($fh, array $scores, string $path): void {
-    $payload = json_encode(array_values($scores), JSON_UNESCAPED_SLASHES);
+/**
+ * Both boards in the store's on-disk shape.
+ * @param resource $fh
+ */
+function writeScoresHandle($fh, array $store, string $path): void {
+    $payload = json_encode([
+        'week' => array_values($store['week']),
+        'alltime' => array_values($store['alltime']),
+    ], JSON_UNESCAPED_SLASHES);
     if ($payload === false) {
         throw new RuntimeException('encode failed');
     }
@@ -515,7 +523,7 @@ function openScoresFile(string $path, string $mode) {
         }
         if (flock($bootstrap, LOCK_EX)) {
             if (filesize($path) === 0) {
-                fwrite($bootstrap, '[]');
+                fwrite($bootstrap, '{"week":[],"alltime":[]}');
                 fflush($bootstrap);
             }
             flock($bootstrap, LOCK_UN);
@@ -531,29 +539,79 @@ function openScoresFile(string $path, string $mode) {
     return $fh;
 }
 
+/**
+ * Parse the store file's contents. A bare array is the older single-board
+ * file: its rows seed both boards, so nothing already ranked is lost.
+ * @return array{week: array, alltime: array, legacy: bool}
+ */
+function parseStore($raw): array {
+    if (!is_string($raw) || $raw === '') {
+        return ['week' => [], 'alltime' => [], 'legacy' => false];
+    }
+    // A store that will not parse is left alone for repair: carrying on would
+    // overwrite every board with an empty one.
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        throw new RuntimeException('scores file is not valid JSON');
+    }
+    if (array_is_list($data) && $data !== []) {
+        $rows = normalizeScores($data);
+        return ['week' => $rows, 'alltime' => sortScores($rows), 'legacy' => true];
+    }
+    $hasWeek = array_key_exists('week', $data);
+    $hasAllTime = array_key_exists('alltime', $data);
+    if ((!$hasWeek && !$hasAllTime) && $data !== []) {
+        throw new RuntimeException('scores file has neither week nor alltime');
+    }
+    if (($hasWeek && !is_array($data['week'])) || ($hasAllTime && !is_array($data['alltime']))) {
+        throw new RuntimeException('scores file boards must be lists');
+    }
+    $week = normalizeScores($data['week'] ?? []);
+    // A store without an all-time list gets one seeded from the weekly rows, so
+    // nothing already ranked is lost; it is rewritten with both on the next save.
+    $alltime = $hasAllTime ? normalizeScores($data['alltime']) : $week;
+    return ['week' => $week, 'alltime' => sortScores($alltime), 'legacy' => !$hasAllTime];
+}
+
+/** @return array{scores: array, alltime: array} the response fields for both boards */
+function boardPayload(array $store): array {
+    return ['scores' => $store['week'], 'alltime' => $store['alltime']];
+}
+
+/**
+ * Both boards, ranked. A read after the week turns rewrites the file without the
+ * old week's rows; the all-time board is never pruned by time.
+ * @return array{week: array, alltime: array}
+ */
 function readScoresLocked(): array {
     $path = resolveScorePath();
     $fh = openScoresFile($path, 'c+');
     try {
-        // Exclusive: a read after midnight rewrites the file without yesterday's rows.
+        // Exclusive: a read after the week turns rewrites the file without last week's rows.
         if (!flock($fh, LOCK_EX)) {
             throw new RuntimeException('unable to lock scores file for reading');
         }
         rewind($fh);
         $raw = stream_get_contents($fh);
-        $scores = normalizeScores(json_decode($raw !== false && $raw !== '' ? $raw : '[]', true));
-        $week = scoresForThisWeek($scores);
-        if (count($week) !== count($scores)) {
-            writeScoresHandle($fh, $week, $path);
+        $store = parseStore($raw !== false ? $raw : '');
+        $week = scoresForThisWeek($store['week']);
+        if ($store['legacy'] || count($week) !== count($store['week'])) {
+            $store['week'] = $week;
+            writeScoresHandle($fh, $store, $path);
             @chmod($path, 0666);
         }
         flock($fh, LOCK_UN);
-        return sortScores($week);
+        return ['week' => sortScores($week), 'alltime' => $store['alltime']];
     } finally {
         fclose($fh);
     }
 }
 
+/**
+ * Ranks the score onto both boards. `rank` is its 1-based place on the all-time
+ * board, or null when it did not make the cut (a tie at the last place keeps the older row).
+ * @return array{week: array, alltime: array, rank: ?int}
+ */
 function addScoreLocked(int $score, int $hits, string $initials): array {
     $path = resolveScorePath();
     $fh = openScoresFile($path, 'c+');
@@ -564,22 +622,42 @@ function addScoreLocked(int $score, int $hits, string $initials): array {
 
         rewind($fh);
         $raw = stream_get_contents($fh);
-        $scores = scoresForThisWeek(normalizeScores(json_decode($raw !== false && $raw !== '' ? $raw : '[]', true)));
-        $scores[] = [
+        $store = parseStore($raw !== false ? $raw : '');
+        $row = [
             'score' => $score,
             'hits' => $hits,
             'initials' => sanitizeInitials($initials),
             'at' => gmdate('c'),
         ];
-        $scores = sortScores($scores);
-        writeScoresHandle($fh, $scores, $path);
+        $week = scoresForThisWeek($store['week']);
+        $week[] = $row;
+        $store['week'] = sortScores($week);
+        $store['alltime'][] = $row;
+        $store['alltime'] = sortScores($store['alltime']);
+        // Equal rows sort in insertion order, so the new one is the last of its twins.
+        $rank = null;
+        foreach ($store['alltime'] as $i => $r) {
+            if ($r === $row) {
+                $rank = $i + 1;
+            }
+        }
+        $store['rank'] = $rank;
+        writeScoresHandle($fh, $store, $path);
         flock($fh, LOCK_UN);
         @chmod($path, 0666);
-        return $scores;
+        return $store;
     } finally {
         fclose($fh);
     }
 }
+
+// Tests load the functions above without serving a request.
+if (defined('CYLON_SCORES_LIBRARY')) {
+    return;
+}
+
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store');
 
 try {
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -587,7 +665,7 @@ try {
 
     if ($method === 'GET') {
         respond([
-            'scores' => readScoresLocked(),
+            ...boardPayload(readScoresLocked()),
             'csrf' => $csrf,
             'week' => localWeek(),
             'tz' => cfg('timezone'),
@@ -599,13 +677,13 @@ try {
     if ($method === 'POST') {
         $contentType = (string) ($_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '');
         if (stripos($contentType, 'application/json') === false || !originAllowed() || !csrfOk()) {
-            respond(['error' => 'forbidden', 'scores' => []], 403);
+            respond(['error' => 'forbidden', 'scores' => [], 'alltime' => []], 403);
         }
 
         $raw = file_get_contents('php://input');
         $data = json_decode($raw ?: '{}', true);
         if (!is_array($data)) {
-            respond(['error' => 'invalid json', 'scores' => []], 400);
+            respond(['error' => 'invalid json', 'scores' => [], 'alltime' => []], 400);
         }
 
         $op = (string) ($data['op'] ?? '');
@@ -614,7 +692,7 @@ try {
                 $run = startRun();
             } catch (RuntimeException $e) {
                 if ($e->getMessage() === 'rate') {
-                    respond(['error' => 'rate', 'scores' => []], 429);
+                    respond(['error' => 'rate', 'scores' => [], 'alltime' => []], 429);
                 }
                 throw $e;
             }
@@ -622,30 +700,31 @@ try {
         }
 
         if ($op !== 'score') {
-            respond(['error' => 'invalid json', 'scores' => []], 400);
+            respond(['error' => 'invalid json', 'scores' => [], 'alltime' => []], 400);
         }
 
         $score = isset($data['score']) ? (int) $data['score'] : 0;
         $hits = isset($data['hits']) ? (int) $data['hits'] : 0;
         $initials = sanitizeInitials($data['initials'] ?? 'AAA');
         if ($score < 1 || $score > cfg('maxScoreValue')) {
-            respond(['error' => 'invalid score', 'scores' => []], 400);
+            respond(['error' => 'invalid score', 'scores' => [], 'alltime' => []], 400);
         }
         if (isBlockedInitials($initials)) {
-            respond(['error' => 'invalid initials', 'scores' => readScoresLocked()], 400);
+            respond(['error' => 'invalid initials', ...boardPayload(readScoresLocked())], 400);
         }
         $problem = consumeRun((string) ($data['run'] ?? ''), $score);
         if ($problem === 'rate') {
-            respond(['error' => 'rate', 'scores' => readScoresLocked()], 429);
+            respond(['error' => 'rate', ...boardPayload(readScoresLocked())], 429);
         }
         if ($problem !== null) {
-            respond(['error' => $problem, 'scores' => readScoresLocked()], 400);
+            respond(['error' => $problem, ...boardPayload(readScoresLocked())], 400);
         }
         $hits = max(0, min(cfg('maxHitsStored'), $hits));
 
         respond([
             'ok' => true,
-            'scores' => addScoreLocked($score, $hits, $initials),
+            ...boardPayload($added = addScoreLocked($score, $hits, $initials)),
+            'alltimeRank' => $added['rank'],
             'week' => localWeek(),
             'tz' => cfg('timezone'),
             'config' => publicConfig(),
@@ -653,8 +732,8 @@ try {
         ]);
     }
 
-    respond(['error' => 'method not allowed', 'scores' => []], 405);
+    respond(['error' => 'method not allowed', 'scores' => [], 'alltime' => []], 405);
 } catch (Throwable $e) {
     error_log('scores.php: ' . $e->getMessage());
-    respond(['error' => 'server error', 'scores' => []], 500);
+    respond(['error' => 'server error', 'scores' => [], 'alltime' => []], 500);
 }

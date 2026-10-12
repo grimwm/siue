@@ -1,0 +1,5 @@
+{
+  "programs": ["tsconfig.json", "src/tsconfig.dom.json"],
+  "entries": [{ "in": "src/main.ts", "out": "main", "format": "esm" }],
+  "versions": { "NOTE_V": "note.txt" }
+}

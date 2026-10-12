@@ -6,17 +6,17 @@
  * overlay (src/ui/shop.tsx) is drawn from. A room buys through the server
  * (the `netBuy` dep), so a solo purchase and a room purchase share the same
  * rows. The game's state, the arsenal tables and the page arrive as deps. */
-import type { FlowEvent } from './flow.js';
-import type { GameState, GameTank, Tables } from './game-types.js';
-import type { RoomClient } from './net.js';
-import { TUNE, clamp } from './sim.js';
-import type { ShopRow } from './sim.js';
-import type { sfx as SfxApi } from './audio.js';
-import type { KeyHintFn } from './ui/chrome.js';
-import { renderShop as drawShop } from './ui/shop.js';
-import type { ShopEntry, ShopFreeRow } from './ui/shop.js';
+import type { FlowEvent } from './flow.ts';
+import type { GameState, GameTank, Tables } from './game-types.ts';
+import type { RoomClient } from './net.ts';
+import { TUNE, clamp } from './sim.ts';
+import type { ShopRow } from './sim.ts';
+import type { sfx as SfxApi } from './audio.ts';
+import type { KeyHintFn } from './ui/chrome.tsx';
+import { renderShop as drawShop } from './ui/shop.tsx';
+import type { ShopEntry, ShopFreeRow } from './ui/shop.tsx';
 
-/** The slice of the game's state the shop reads and writes (game.js's G). */
+/** The slice of the game's state the shop reads and writes (main.ts's G). */
 export type ShopState = Pick<GameState, 'ammo' | 'shopSel' | 'shopQty' | 'round' | 'cash' | 'phase' | 'tanks' | 'lives'
   | 'score' | 'shield' | 'jammer' | 'bunker' | 'laststand' | 'plate' | 'repairBank' | 'fuelBank'>;
 

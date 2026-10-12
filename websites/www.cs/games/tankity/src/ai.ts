@@ -6,8 +6,8 @@
  * algorithm, kept in step by the shared vectors in protocol/sim-vectors.json.
  * brkLand stays in sim.ts: explode calls it, and sim.ts must not import this
  * file. */
-import { W, clamp, facing, gauss, muzzle, simShot, spotTaken, surfY } from './sim.js';
-import type { Arsenal, Rng, Tank, Weapon, World } from './sim.js';
+import { W, clamp, facing, gauss, muzzle, simShot, spotTaken, surfY } from './sim.ts';
+import type { Arsenal, Rng, Tank, Weapon, World } from './sim.ts';
 
 /* ---------- drone AI: real ballistic solutions, plus round-scaled error ---------- */
 export interface AimChoice {

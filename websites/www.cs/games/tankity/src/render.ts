@@ -3,19 +3,20 @@
  * Everything that paints the 2D canvas: the night sky and its moon, clouds,
  * hills, the units (tank bodies, drones, name tags, turn marker, menu badge),
  * the aim arm, blast discs, shells, particles, wind streaks and gauge, the
- * turn clock, and the firing-range preview. game.js builds a BattleView each
+ * turn clock, and the firing-range preview. main.ts builds a BattleView each
  * frame and calls `frame(view)`; this module reads it and paints, and never
  * changes game state. Anything that advances (a boom's age, the shake decay,
- * a unit's last x) is stepped by game.js before the frame is built.
+ * a unit's last x) is stepped by main.ts before the frame is built.
  *
  * It reaches the page only through its canvases and the RenderDeps it is
  * built with: the effects engine (a typed slice of window.TankityFX), the sim
- * helpers it shares with game.js, the page's reduced-motion setting and its
- * random numbers. Like the other modules it imports nothing at run time (the
- * ?v= lives on game.js's imports), so the sim helpers arrive as dependencies. */
-import type { Cloud, Rng, Tank } from './sim.js';
+ * helpers it shares with main.ts, the page's reduced-motion setting and its
+ * random numbers. Like the other modules it imports nothing at run time, so
+ * the sim helpers arrive as dependencies. */
+import type { TrailCarrier } from './fx/trail.ts';
+import type { Cloud, Rng, Tank } from './sim.ts';
 
-/* ---------- what game.js hands over ---------- */
+/* ---------- what main.ts hands over ---------- */
 
 /** A tank as drawn: the sim's Tank plus the look and the aim the page keeps on it. */
 export interface DrawTank extends Tank {
@@ -30,7 +31,7 @@ export interface DrawTank extends Tank {
 }
 
 /** Anything that flies as a shell: its place, its velocity and what it is. */
-export interface Flying { x: number; y: number; vx: number; vy: number; wkey: string }
+export interface Flying extends TrailCarrier { x: number; y: number; vx: number; vy: number; wkey: string }
 
 /** A blast disc growing and fading over `life` seconds, `t` in. */
 export interface Boom { x: number; y: number; r: number; wkey: string; t: number; life: number }
@@ -38,13 +39,13 @@ export interface Boom { x: number; y: number; r: number; wkey: string; t: number
 /** A spark of debris. */
 export interface Spark { x: number; y: number; life: number; color: string }
 
-/** The slice of an effects system (fx.js createSystem) the battlefield draws with. */
+/** The slice of an effects system (fx/engine.ts createSystem) the battlefield draws with. */
 export interface FxSystem {
   draw(c: CanvasRenderingContext2D): void;
   drawFlash(c: CanvasRenderingContext2D, w: number, h: number): void;
 }
 
-/** A sprite sheet fx.js loads (the moon's phases). */
+/** A sprite sheet fx/engine.ts loads (the moon's phases). */
 export interface SpriteSheet {
   img: CanvasImageSource;
   fw: number;
@@ -114,7 +115,7 @@ export interface BattleView {
   preview: PreviewView | null;
 }
 
-/** The sim helpers the battlefield shares with game.js. */
+/** The sim helpers the battlefield shares with main.ts. */
 export interface RenderSim {
   facing(t: Tank): number;
   isGroundUnit(t: Tank): boolean;

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php" cacheDirectory=".phpunit.cache" colors="true" failOnWarning="true"
+         failOnRisky="true" executionOrder="defects">
+  <testsuites>
+    <testsuite name="site"><directory>tests/php</directory></testsuite>
+    <testsuite name="cylon"><directory>games/cylon/test/php</directory></testsuite>
+    <testsuite name="tankity"><directory>games/tankity/test/php</directory></testsuite>
+    <testsuite name="tankity-docker"><directory>games/tankity/test/php-docker</directory></testsuite>
+    <testsuite name="kit"><directory>games/_kit/php/tests</directory></testsuite>
+  </testsuites>
+</phpunit>

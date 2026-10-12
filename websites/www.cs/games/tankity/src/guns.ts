@@ -5,14 +5,14 @@
  * rack. The picker overlay (src/ui/guns.tsx) draws what this says. In a room
  * a pick goes to the server (the `netPick` and `netCycle` deps). The game's
  * state, the arsenal tables and the page arrive as deps. */
-import type { GameState, Tables } from './game-types.js';
-import type { RoomClient } from './net.js';
-import { clamp } from './sim.js';
-import type { sfx as SfxApi } from './audio.js';
-import type { KeyHintFn } from './ui/chrome.js';
-import { renderGuns as drawGuns } from './ui/guns.js';
+import type { GameState, Tables } from './game-types.ts';
+import type { RoomClient } from './net.ts';
+import { clamp } from './sim.ts';
+import type { sfx as SfxApi } from './audio.ts';
+import type { KeyHintFn } from './ui/chrome.tsx';
+import { renderGuns as drawGuns } from './ui/guns.tsx';
 
-/** The slice of the game's state the picker reads and writes (game.js's G). */
+/** The slice of the game's state the picker reads and writes (main.ts's G). */
 export type GunsState = Pick<GameState, 'ammo' | 'selected' | 'over' | 'phase'>;
 
 /** What the picker needs from the page and the rest of the game. */

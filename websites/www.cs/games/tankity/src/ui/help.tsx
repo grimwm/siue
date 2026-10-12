@@ -5,8 +5,8 @@
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
-import { KeyHints, Key, OverlayHead, ScrollKeys } from './chrome.js';
-import type { KeyHintFn } from './chrome.js';
+import { KeyHints, Key, OverlayHead, ScrollKeys } from './chrome.tsx';
+import type { KeyHintFn } from './chrome.tsx';
 
 export interface HelpProps {
   /** The live key table (see KeyHintFn). */

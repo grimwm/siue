@@ -1,6 +1,6 @@
 {
   "timezone": "America/Chicago",
-  "weekStartsOn": "monday",
+  "weekStartsOn": "sunday",
   "maxScores": 10,
   "maxScoreValue": 100000,
   "maxHitsStored": 500,

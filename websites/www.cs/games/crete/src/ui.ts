@@ -1,12 +1,11 @@
 /* The Island of Crete: the page. Draws the board, the HUD, the inventory, the
  * log and the ending, and turns keys and clicks into game actions. It reads
- * the engine's state and calls its actions; it holds no rules. The engine is
- * not imported (a compiled module imports nothing, so one ?v= on game.js's
- * imports versions everything): only its types are, and `createUi` takes what
- * it borrows as arguments. Needs the DOM lib, so it is in the second program
+ * the engine's state and calls its actions; it holds no rules. Only the
+ * engine's types are imported; `createUi` takes the values it borrows as
+ * arguments. Needs the DOM lib, so it is in the second program
  * (src/tsconfig.dom.json).
  */
-import type { Game, ItemDef, ItemKind, LogTone } from "./engine.js";
+import type { Game, ItemDef, ItemKind, LogTone } from "./engine.ts";
 
 /** What the page borrows from the engine at run time. */
 export interface UiDeps {

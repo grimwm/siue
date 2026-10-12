@@ -33,29 +33,35 @@ const RULES = [
   [new RegExp(`^${SITE}deploy\\.sh$`), 'NONE'],
   [new RegExp(`^${SITE}docker/(check-parity\\.sh|expected-.*\\.txt)$`), 'NONE'],
   [new RegExp(`^${SITE}tests/[^/]+\\.php$`), 'NONE'], // unit tests
+  [new RegExp(`^${SITE}(composer\\.(json|lock)|phpunit\\.xml)$`), 'NONE'],
+  [new RegExp(`^${SITE}tests/php/`), 'NONE'],
+  [new RegExp(`^${SITE}games/_kit/php/(testing|tests)/`), 'NONE'],
   [new RegExp(`^${SITE}games/[^/]+/[^/]*-test\\.(php|js)$`), 'NONE'], // unit and smoke tests
   [new RegExp(`^${SITE}games/[^/]+/test\\.sh$`), 'NONE'], // a game's unit-suite runner
   [new RegExp(`^${SITE}games/[^/]+/(tools|protocol|fx/blender|audio/sfx/src)/`), 'NONE'], // generators, fixtures, sources
   [new RegExp(`^${SITE}games/[^/]+/(audio/sfx/build_sfx\\.sh|game\\.yaml|\\.gitignore)$`), 'NONE'],
-  // A game's lockfile only pins the compiler (and Tankity's Preact); what the
-  // browser runs is js/ and vendor/, which have their own rules below. The unit
-  // suites still check the build and that vendor/ matches the pin.
+  // The kit's own tests and docs, and a game's unit tests: not what a browser runs.
+  [new RegExp(`^${SITE}games/[^/]+/test/`), 'NONE'],
+  [new RegExp(`^${SITE}games/_kit/(README\\.md|test/|php/tests/|build/(build\\.test\\.mjs|fixture/))`), 'NONE'],
+  // The kit's sources and the games' shared lockfile feed every game's build.
+  [new RegExp(`^${SITE}games/(_kit/|package(-lock)?\\.json$)`), 'ALL'],
+  // A game's lockfile only pins the compiler; what the browser runs is dist/,
+  // which has its own rule below. The unit suites still check the build.
   [new RegExp(`^${SITE}games/[^/]+/package-lock\\.json$`), 'NONE'],
   // The dev-only effects editor: only the effects spec opens it.
-  [new RegExp(`^${SITE}games/tankity/fx-editor\\.(html|js|css)$`), ['tankity-fx-editor.spec.mjs']],
+  [new RegExp(`^${SITE}games/tankity/(fx-editor\\.(html|css)|src/fx/editor\\.ts|dist/fx-editor\\.js(\\.map)?)$`), ['tankity-fx-editor.spec.mjs']],
   // The test harness, the stack and CI: everything.
   [new RegExp(`^${SITE}tests/e2e/(helpers\\.mjs|playwright\\.config\\.mjs|package(-lock)?\\.json|run\\.sh|select\\.mjs)$`), 'ALL'],
   [new RegExp(`^${SITE}tests/e2e/(.+\\.spec\\.mjs)$`), m => [m[1]]],
   [/^(compose\.yaml|Makefile|\.github\/workflows\/ci\.yml)$/, 'ALL'],
   [new RegExp(`^${SITE}(Makefile|compose\\.yaml|docker/)`), 'ALL'],
   [new RegExp(`^${SITE}games/\\.htaccess$`), 'ALL'],
-  // Tankity's TypeScript: the sources, the compiled modules the browser loads,
-  // and the settings that decide how one becomes the other.
-  [new RegExp(`^${SITE}games/tankity/(src/|js/|tsconfig\\.json$|package\\.json$)`), [...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs']],
+  // Tankity's TypeScript: the sources, the bundles the browser loads, and the
+  // settings that decide how one becomes the other.
+  [new RegExp(`^${SITE}games/tankity/(src/|dist/|build\\.json$|tsconfig\\.json$)`), [...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs']],
   // A game's own folder.
   [new RegExp(`^${SITE}games/tankity/`), [...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs']],
-  // Cylon's TypeScript (src/, the compiled js/, tsconfig.json, package.json) and
-  // the rest of its folder: the home page and the games hub load it.
+  // Cylon's folder (src/, the dist/ bundle the kit builds, build.json, tests): the home page and the games hub load it.
   [new RegExp(`^${SITE}games/cylon/`), shell],
   [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'crete-play.spec.mjs']],
   // The site's own TypeScript (src/ compiles to main.js and play/play.js) and the

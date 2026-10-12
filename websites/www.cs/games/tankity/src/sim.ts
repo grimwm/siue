@@ -1,7 +1,7 @@
 /* Operation Tankity: the game math.
  *
  * The pure part of the sim, shared by the solo game, the demo and the client's
- * own shell flight in game.js, and kept in step with the room server's sim
+ * own shell flight in main.ts, and kept in step with the room server's sim
  * (rooms.php) by the shared vectors in protocol/sim-vectors.json. Nothing here
  * touches the page, sound, particles or chat: state goes in as arguments, and
  * what happened (a blast's hits, a volley's trails) comes back as data for the
@@ -183,7 +183,7 @@ export interface Cloud {
   s: number;
   v: number;
 }
-/* The slice of the game's state the sim reads and writes (game.js's G). */
+/* The slice of the game's state the sim reads and writes (main.ts's G). */
 export interface World {
   tanks: Tank[];
   terrain: number[];

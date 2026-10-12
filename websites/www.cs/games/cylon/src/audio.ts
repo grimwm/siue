@@ -1,7 +1,7 @@
 /* Cylon Defense: sound.
  *
  * The WebAudio buses, the sound effects and the music bed, behind a small
- * interface: cylon.js asks for an effect by name, tells the module when a
+ * interface: main.ts asks for an effect by name, tells the module when a
  * setting changed or the session's state moved, and never sees the context, the
  * buses or the bed's timer. Nothing here touches the page: the settings, the
  * session state and the volume curve (rules.volumeToGain) are handed in, and a

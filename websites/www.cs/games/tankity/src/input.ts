@@ -1,6 +1,6 @@
 /* Operation Tankity: keyboard and touch input.
  *
- * Input maps physical keys and touches to named commands; game.js registers
+ * Input maps physical keys and touches to named commands; main.ts registers
  * what each command does right now. The names are the actions of game.json's
  * `keys` section (barrelLeft, fire, guns, lineDown, ...), so a rebinding in
  * game.yaml changes which key reaches a command and nothing here. A handler
@@ -17,7 +17,7 @@
  *
  * Nothing here reaches for the page: events and targets are the small
  * structural shapes below, which a browser's KeyboardEvent, Window and button
- * satisfy, so this module compiles in the DOM-free program and input-test.js
+ * satisfy, so this module compiles in the DOM-free program and test/input.test.mjs
  * drives it with plain objects and a fake clock. */
 
 /* ---------- the key table ---------- */

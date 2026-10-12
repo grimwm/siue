@@ -30,6 +30,7 @@ export const WEIGHTS = {
   'games-hub.spec.mjs': 8,
   'home-eye.spec.mjs': 8,
   'cylon-help.spec.mjs': 6,
+  'cylon-play.spec.mjs': 25,
   'tankity-touch.spec.mjs': 3,
   'games-pwa.spec.mjs': 3,
 };

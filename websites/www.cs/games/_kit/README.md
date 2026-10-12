@@ -31,6 +31,15 @@ code starts with `/*! Third-party licenses: THIRD_PARTY_LICENSES.txt */`, and
 `--check` covers the file like any other output. A game with no npm packages
 gets neither.
 
+`node _kit/build/icons.mjs <game>` renders the game's six install icons from
+one drawing, `<game>/tools/icon.svg`: a 512×512 SVG with a full-bleed
+`<g id="bg">` and a `<g id="art">` that stays within 256 px of the centre. Any
+(192, 512) and Apple (180) icons are the drawing; maskable (192, 512) icons
+keep the backdrop and scale the art by 0.8 into the safe zone; the monochrome
+icon (512) is that art as a white silhouette for Android's themed icons. The
+PNGs are checked in; rerun after editing the drawing. `install-core.php`
+checks each one's size.
+
 ## Ports and adapters (`ports.ts`)
 
 An engine never reaches for the page. It takes `Timers`, a `Clock`, an `Rng`

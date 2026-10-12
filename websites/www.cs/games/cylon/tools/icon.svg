@@ -1,0 +1,23 @@
+<!-- websites/www.cs/games/cylon/tools/icon.svg: the Cylon eye. Source of every install icon (games/_kit/build/icons.mjs). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="void" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#05060d"/>
+      <stop offset="1" stop-color="#0a0c16"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#ff2a2a"/>
+      <stop offset="0.55" stop-color="#ff1a1a" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#ff0000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g id="bg"><rect width="512" height="512" fill="url(#void)"/></g>
+  <g id="art">
+    <circle cx="256" cy="256" r="190" fill="url(#glow)"/>
+    <rect x="76" y="250" width="360" height="12" fill="#c81e1e" opacity="0.85"/>
+    <circle cx="256" cy="256" r="75" fill="#05060d"/>
+    <rect x="181" y="250" width="150" height="12" fill="#8a1a1a"/>
+    <circle cx="256" cy="256" r="30" fill="#ff3b3b"/>
+    <circle cx="256" cy="256" r="11" fill="#ffffff"/>
+  </g>
+</svg>

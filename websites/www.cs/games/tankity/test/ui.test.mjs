@@ -1,35 +1,17 @@
 // Tests for the Preact overlays in src/ui: each is rendered with sample props into
-// the Node DOM stub (test/dom-stub.mjs) and its key DOM asserted: the ids and
+// the Node DOM stub (games/_kit/test/dom-stub.mjs) and its key DOM asserted: the ids and
 // classes game.css and the browser specs rely on, the title bar's cells, the
 // shop's rows, and that every click reaches the callback the game passed.
 import { check } from '../../_kit/test/check.ts';
+import { importTsx } from '../../_kit/test/tsx.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import * as esbuild from 'esbuild';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { click, fire, submit, document, makeEl, els } from './dom-stub.mjs';
+import { click, fire, submit, document, makeEl, els } from '../../_kit/test/dom-stub.mjs';
 
 globalThis.document = document;
 
-// All UI components in ONE bundle, with preact left external: the test and
-// every component then share the single preact Node loads from
-// games/node_modules (hooks and contexts break across two copies).
 const UI = ['help', 'shop', 'lobby', 'menu', 'guns', 'scores', 'log', 'tutorial', 'hud', 'endveil', 'leave'];
-const tmp = mkdtempSync(join(import.meta.dirname, '.tmp-'));
-process.on('exit', () => rmSync(tmp, { recursive: true, force: true }));
-const out = join(tmp, 'ui.mjs');
-await esbuild.build({
-  stdin: {
-    contents: UI.map(n => `export * as ${n} from '../src/ui/${n}.tsx';`).join('\n'),
-    resolveDir: import.meta.dirname,
-    loader: 'ts',
-  },
-  bundle: true, format: 'esm', platform: 'neutral', external: ['preact', 'preact/*'],
-  jsx: 'automatic', jsxImportSource: 'preact', outfile: out, logLevel: 'silent',
-});
-const ui = await import(pathToFileURL(out).href);
+const ui = await importTsx(import.meta.dirname, Object.fromEntries(UI.map(n => [n, `../src/ui/${n}.tsx`])));
 const { renderHelp } = ui.help;
 const { renderShop } = ui.shop;
 const { renderLobby } = ui.lobby;

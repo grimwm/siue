@@ -6,6 +6,9 @@
  * (src/tsconfig.dom.json).
  */
 import type { Game, ItemDef, ItemKind, LogTone } from "./engine.ts";
+import { renderEndCard } from "./ui/end.tsx";
+import { renderInventory } from "./ui/inventory.tsx";
+import type { EndView } from "./ui/end.tsx";
 
 /** What the page borrows from the engine at run time. */
 export interface UiDeps {
@@ -153,38 +156,31 @@ export function createUi(deps: UiDeps): Ui {
       `Seed ${G.seed} · optimal route ${G.optimal} moves · mistake budget ${G.budget} ` +
       `· Sugar Puffs heal ${G.snackHeal} · creature pace 2/turn, spawned ${G.foeSpawnDist} away`;
 
-    const inv = $("inventory");
-    inv.innerHTML = "";
-    for (const kind of Object.keys(ITEMS) as ItemKind[]) {
-      const def = ITEMS[kind];
-      const li = document.createElement("li");
-      const left = document.createElement("span");
-      const name = document.createElement("span");
-      name.className = "name";
-      name.textContent = `${LOOT_EMOJI[kind]} ${def.name} × ${G.inv[kind]} `;
-      const k = document.createElement("kbd");
-      k.textContent = def.key;
-      name.appendChild(k);
-      const desc = document.createElement("span");
-      desc.className = "desc";
-      const useNote =
-        kind === "shard" ? " Move right after." : " Using it costs your turn.";
-      desc.textContent =
-        (kind === "snack" ? `Heal ${G.snackHeal} HP.` : def.desc) + useNote;
-      left.appendChild(name);
-      left.appendChild(desc);
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = `Use (${def.key})`;
-      btn.disabled = G.over || G.inv[kind] <= 0;
-      btn.addEventListener("click", () => game.useItem(kind));
-      li.appendChild(left);
-      li.appendChild(btn);
-      inv.appendChild(li);
-    }
+    renderInventory($("inventory-root"), {
+      rows: (Object.keys(ITEMS) as ItemKind[]).map((kind) => {
+        const def = ITEMS[kind];
+        const useNote = kind === "shard" ? " Move right after." : " Using it costs your turn.";
+        return {
+          kind,
+          emoji: LOOT_EMOJI[kind] ?? "🎁",
+          name: def.name,
+          key: def.key,
+          count: G.inv[kind],
+          desc: (kind === "snack" ? `Heal ${G.snackHeal} HP.` : def.desc) + useNote,
+          disabled: G.over || G.inv[kind] <= 0,
+        };
+      }),
+      onUse: (kind) => game.useItem(kind),
+    });
   }
 
   /* ---------- endings ---------- */
+  let end: EndView = { open: false, kicker: "", title: "", text: "", score: "" };
+  let again = (): void => {};
+  function drawEnd(): void {
+    renderEndCard($("end-root"), { ...end, onAgain: () => again() });
+  }
+
   function showEnd(game: Game, won: boolean): void {
     const G = game.G;
     let title: string, text: string;
@@ -207,22 +203,22 @@ export function createUi(deps: UiDeps): Ui {
       title = "Taken: The PAX Ending";
       text = G.deathCause || "The creature reached you.";
     }
-    $("end-kicker").textContent = won
-      ? "You escaped"
-      : "Run over — permadeath, no continues";
-    $("end-title").textContent = title;
-    $("end-text").textContent = text;
-    $("end-score").textContent =
-      `Score ${G.score} · ${G.turns} turns · pages ${G.pages}/${TOTAL_PAGES} · ` +
-      `barriers opened ${G.opened} · seed ${G.seed}`;
-    $("end-veil").hidden = false;
+    end = {
+      open: true,
+      kicker: won ? "You escaped" : "Run over — permadeath, no continues",
+      title,
+      text,
+      score:
+        `Score ${G.score} · ${G.turns} turns · pages ${G.pages}/${TOTAL_PAGES} · ` +
+        `barriers opened ${G.opened} · seed ${G.seed}`,
+    };
+    drawEnd();
     render(game);
-    const again = document.getElementById("again");
-    if (again) again.focus();
   }
 
   function hideEnd(): void {
-    $("end-veil").hidden = true;
+    end = { ...end, open: false };
+    drawEnd();
   }
 
   function showSeed(seed: string): void {
@@ -305,7 +301,7 @@ export function createUi(deps: UiDeps): Ui {
       ev.preventDefault();
       restart(seedBox().value);
     });
-    $("again").addEventListener("click", () => restart(seedBox().value));
+    again = () => restart(seedBox().value);
     $("random-run").addEventListener("click", () => {
       wake();
       restart("");
@@ -332,6 +328,7 @@ export function createUi(deps: UiDeps): Ui {
     });
   }
 
+  drawEnd();
   return {
     say, render, showEnd, hideEnd, showSeed, setMuteLabel, bindControls,
     clearLog: () => { $("log").innerHTML = ""; },

@@ -46,6 +46,7 @@ foreach (['games/tankity/dist/main.js', 'games/tankity/dist/fx.js', 'games/tanki
 }
 // The licenses of the npm code inside a game's bundle ship beside it.
 $check('ships games/tankity/dist/THIRD_PARTY_LICENSES.txt', isset($set['games/tankity/dist/THIRD_PARTY_LICENSES.txt']));
+$check('ships games/crete/dist/THIRD_PARTY_LICENSES.txt', isset($set['games/crete/dist/THIRD_PARTY_LICENSES.txt']));
 // Cylon: the bundle, its page pieces and server.
 foreach (['games/cylon/dist/main.js', 'games/cylon/css/eye.css', 'games/cylon/css/units.css', 'games/cylon/css/intro.css', 'games/cylon/mount.html', 'games/cylon/scores.php', 'games/cylon/manifest.webmanifest'] as $f) {
     $check("ships $f", isset($set[$f]));

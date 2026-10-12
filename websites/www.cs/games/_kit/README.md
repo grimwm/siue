@@ -61,6 +61,28 @@ what each setting means stay in the game. Without Web Audio, or when making
 the context throws, every call is silent. Tests use `fakeAudioContext()` from
 `test/audio.ts`, which records every node and parameter call.
 
+## Components (`ui/`)
+
+Preact components every game draws its overlays with. A page keeps an empty
+mount point; the game's module renders a component into it with a finished
+view of its state and callbacks, and redraws when the state changes.
+
+- `Dialog`: a modal panel in its veil. `open` shows it; on opening it focuses
+  `focusId` (or its first visible, enabled button, else the panel itself),
+  on closing it gives focus back; Escape and
+  a click on the veil (one that also began there) call `onDismiss`; a game
+  whose own key router already handles Escape should not pass `onDismiss`.
+  Focus returns to what had it, or to the kit `Button` that opened the
+  dialog. The game passes its own ids and classes, so its CSS and browser
+  specs keep working.
+- `Button`: blurs itself before calling `onClick`, so the key that pressed it
+  cannot press it again; `keyLabel` adds a `KeyChip`.
+- `Panel`: a section named by its `<h2>`.
+- `KeyChip`: one key as a `<kbd class="key-chip">`; the game styles it and
+  reads the label from its key table. `at` records the key-table slot as
+  `data-keyhint`; `decorative` hides a chip that sits beside words already
+  naming the action from screen readers.
+
 ## Tests (`test/`)
 
 Unit tests are `*.test.mjs` files run with `node --test`. They import
@@ -70,3 +92,9 @@ sources directly (`../src/engine.ts`): Node strips the types. Doubles:
 detail)` runs an older PASS/FAIL script under `node:test` unchanged, one
 test per check; write new tests with `test()` and `assert` directly. PHP
 has the same bridge: `php/testing/LegacyCheckCase.php`.
+
+Components are tested in Node: `importTsx(import.meta.dirname, { name: '../src/ui/x.tsx' })`
+bundles `.tsx` with esbuild (preact left external, so the test and the
+components share one copy), and `dom-stub.mjs` is a small DOM to render into:
+`makeEl`, `click`, `fire(el, type, extra)`, `fireDocument(type, extra)`, and
+`globalThis.__focused` for the element last focused.

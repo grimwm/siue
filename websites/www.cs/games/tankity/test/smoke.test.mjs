@@ -239,7 +239,7 @@ TAP('global', 'report');
 check('report-toggle', els['report-overlay'].hidden === false);
 click(els['report-close']);
 check('report-close', els['report-overlay'].hidden === true);
-// New Game, seed, sound, music, fullscreen, and rooms live in the in-frame menu.
+// Seed, sound, music and fullscreen live in the in-frame settings menu.
 for (const id of ['menu-overlay', 'btn-menu']) {
   check('menu-markup-' + id, html.includes('id="' + id + '"'));
 }
@@ -264,8 +264,8 @@ TAP('global', 'escape');
 check('menu-reopen', els['menu-overlay'].hidden === false);
 TAP('global', 'escape');
 check('menu-esc', els['menu-overlay'].hidden === true);
-  // Tutorial: the menu carries a replay button (pressed for real at the end).
-  check('menu-tutorial', !!els['tutorial-open'] && !!els['tutorial-overlay'] && !!els['tutorial-skip']);
+  // Tutorial: the title card carries a replay button (pressed for real at the end).
+  check('title-tutorial', !!els['tutorial-open'] && !!els['tutorial-overlay'] && !!els['tutorial-skip']);
   // Four 32-step songs; the round picks the song.
   const songNames = (audioSrc.match(/name: '[^']+'/g) || []).filter(n => /Rollout|High Ground|Crater Blues|Last Tank/.test(n));
   check('songs', songNames.length === 4 && /songIdx = \(round - 1\) % SONGS\.length/.test(audioSrc)

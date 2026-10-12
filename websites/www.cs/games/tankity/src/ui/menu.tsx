@@ -1,6 +1,6 @@
-/* The game menu: the seed box and New Game, the unit, text-size and Difficulty pickers, the
- * sound, music and fullscreen toggles, and the buttons that open the rooms, the
- * tutorial and the scores. The game owns the state (the unit, the text size,
+/* The settings menu: the seed box and Play this seed, the unit, text-size and
+ * Difficulty pickers, the sound, music and fullscreen toggles, the scores, and
+ * Leave room in a room. The game owns the state (the unit, the text size,
  * what is muted, whether a room is running) and hands in a finished view of it;
  * this draws it and reports clicks. The section element (#menu-overlay) stays
  * in index.html and the game shows and hides it. The seed box is the one thing
@@ -16,8 +16,9 @@ export interface MenuProps {
   keyHint: KeyHintFn;
   /** The × button: the game closes the menu. */
   onClose: () => void;
-  /** The New Game button, and Enter in the seed box. */
-  onNewGame: () => void;
+  /** The Play this seed button. */
+  onPlaySeed: () => void;
+  /** Enter in the seed box. */
   onSubmit: () => void;
   /** The unit pickers: bodies with their key, the chosen one, a painter for the thumbnails. */
   units: { key: string; name: string }[];
@@ -39,9 +40,6 @@ export interface MenuProps {
   onSound: () => void;
   onMusic: () => void;
   onFullscreen: () => void;
-  onRandom: () => void;
-  onRooms: () => void;
-  onTutorial: () => void;
   onScores: () => void;
   /** Show the Leave room button (inside a room). */
   inRoom: boolean;
@@ -67,14 +65,14 @@ export function Menu(p: MenuProps) {
   useScrollKeep(() => form.current?.parentElement);
   return (
     <KeyHints.Provider value={p.keyHint}>
-      <OverlayHead titleId="menu-h" title="Game menu" closeId="menu-close" onClose={p.onClose}
+      <OverlayHead titleId="menu-h" title="Settings" closeId="menu-close" onClose={p.onClose}
         navId="nav-menu" scrollOnly nav={<ScrollKeys line />} />
       <form id="seed-form" class="menu-grid" action="#" ref={form} onSubmit={ev => { ev.preventDefault(); p.onSubmit(); }}>
         <div class="seed-row">
           <label for="seed-input">Seed</label>
           <input id="seed-input" name="seed" type="text" inputMode="text" autocomplete="off" spellcheck={false}
             placeholder="e.g. bam-bam-01" />
-          <button type="button" id="new-game" class="btn-primary" onClick={blurThen(p.onNewGame)}>New Game{' '}<Key at="global:new" bare /></button>
+          <button type="button" id="new-game" class="btn-primary" onClick={blurThen(p.onPlaySeed)}>Play this seed{' '}<Key at="global:new" bare /></button>
         </div>
         <div class="unit-row" id="unit-row" role="group" aria-labelledby="unit-label">
           <span class="unit-label" id="unit-label">Unit</span>
@@ -138,15 +136,6 @@ export function Menu(p: MenuProps) {
             </button>
           </div>
         </div>
-        <button type="button" id="random-run" title="Ignore the seed box and start on a fresh random seed" onClick={blurThen(p.onRandom)}>
-          Random seed <Key at="global:random" bare />
-        </button>
-        <button type="button" id="rooms-open" title="Host or join a multiplayer game room" onClick={blurThen(p.onRooms)}>
-          Rooms <Key at="global:rooms" bare />
-        </button>
-        <button type="button" id="tutorial-open" title="Replay the opening-moves tutorial" onClick={blurThen(p.onTutorial)}>
-          Tutorial <Key at="global:tutorial" bare />
-        </button>
         <button type="button" id="scores-open" title="High scores, and file your run" onClick={blurThen(p.onScores)}>
           Scores <Key at="global:report" bare />
         </button>

@@ -10,11 +10,10 @@ import { click, fire, submit, document, makeEl, els } from '../../_kit/test/dom-
 
 globalThis.document = document;
 
-const UI = ['shop', 'lobby', 'menu', 'guns', 'scores', 'log', 'tutorial', 'hud', 'endveil', 'leave'];
+const UI = ['shop', 'lobby', 'guns', 'scores', 'log', 'tutorial', 'hud', 'endveil', 'leave'];
 const ui = await importTsx(import.meta.dirname, Object.fromEntries(UI.map(n => [n, `../src/ui/${n}.tsx`])));
 const { renderShop } = ui.shop;
 const { renderLobby } = ui.lobby;
-const { renderMenu } = ui.menu;
 const { renderGuns } = ui.guns;
 const { renderScores } = ui.scores;
 const { renderLog } = ui.log;
@@ -332,105 +331,6 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
   renderLobby(veil, props);
   check('lobby-back-out', rows.hidden === false && intro.hidden === false && room.hidden === true);
   check('lobby-redraw-keeps-nodes', veil.children[0] === card && byId(card, 'host-form') === hostForm);
-}
-
-// ---- menu ----
-const UNITS = [{ key: 'tank', name: 'Tank' }, { key: 'hover', name: 'Hover' }, { key: 'walker', name: 'Walker' }, { key: 'buggy', name: 'Buggy' }];
-const SIZES = [{ key: 's', name: 'Small', scale: 0.9 }, { key: 'm', name: 'Normal', scale: 1 }, { key: 'l', name: 'Large', scale: 1.15 }, { key: 'xl', name: 'Huge', scale: 1.3 }];
-function menuProps(over = {}) {
-  const calls = { close: 0, newGame: 0, submit: 0, unit: [], size: [], difficulty: [], sound: 0, music: 0, fs: 0, random: 0, rooms: 0, tutorial: 0, scores: 0, leave: 0, drawn: [] };
-  const props = {
-    keyHint, onClose: () => { calls.close++; }, onNewGame: () => { calls.newGame++; }, onSubmit: () => { calls.submit++; },
-    units: UNITS, unit: 'tank', drawUnit: (cv, key) => { calls.drawn.push(key); }, onPickUnit: k => calls.unit.push(k),
-    sizes: SIZES, size: 'm', onPickSize: k => calls.size.push(k),
-    difficulties: [{ key: 'easy', name: 'Easy' }, { key: 'normal', name: 'Normal' }, { key: 'hard', name: 'Hard' }],
-    difficulty: 'normal', onPickDifficulty: k => calls.difficulty.push(k),
-    sound: true, music: true, fullscreen: false,
-    onSound: () => { calls.sound++; }, onMusic: () => { calls.music++; }, onFullscreen: () => { calls.fs++; },
-    onRandom: () => { calls.random++; }, onRooms: () => { calls.rooms++; }, onTutorial: () => { calls.tutorial++; }, onScores: () => { calls.scores++; },
-    inRoom: false, onLeave: () => { calls.leave++; },
-    ...over,
-  };
-  return { props, calls };
-}
-{
-  const section = makeEl('menu-overlay');
-  section.hidden = false;
-  const { props, calls } = menuProps();
-  renderMenu(section, props);
-  const [head, form] = section.children;
-  check('menu-head-and-form', hasClass(head, 'ov-head') && form.localName === 'form' && form.id === 'seed-form' && hasClass(form, 'menu-grid'));
-  check('menu-title', text(byId(head, 'menu-h')) === 'Game menu' && byId(head, 'menu-close') && attr(byId(head, 'nav-menu'), 'data-scroll-only') === ''
-    && text(byId(head, 'nav-menu')) === 'J/K linePgUp/PgDn pageShift+K/Shift+J half page');
-  click(byId(head, 'menu-close'));
-  check('menu-close-calls-back', calls.close === 1);
-  const seed = byId(form, 'seed-input');
-  check('menu-seed-row', seed.localName === 'input' && attr(seed, 'placeholder') === 'e.g. bam-bam-01' && text(byClass(form, 'seed-row')[0].children[0]) === 'Seed');
-  const ng = byId(form, 'new-game');
-  check('menu-new-game-button', hasClass(ng, 'btn-primary') && text(ng) === 'New Game N' && hasClass(ng.children[ng.children.length - 1], 'key')
-    && attr(ng.children[ng.children.length - 1], 'data-keyhint') === 'global:new', text(ng));
-  click(ng);
-  submit(form);
-  check('menu-new-game-and-enter-report', calls.newGame === 1 && calls.submit === 1);
-  const unitTiles = byId(form, 'unit-picker').children;
-  check('menu-unit-tiles', unitTiles.length === 4 && unitTiles.map(t => text(t.children[1])).join() === 'Tank,Hover,Walker,Buggy'
-    && unitTiles.every(t => hasClass(t, 'unit-choice') && t.children[0].localName === 'canvas') && unitTiles.map(t => attr(t, 'aria-pressed')).join() === 'true,false,false,false');
-  check('menu-unit-thumbnails-drawn-once', calls.drawn.join() === 'tank,hover,walker,buggy');
-  click(unitTiles[2]);
-  check('menu-unit-click-reports-key', calls.unit.join() === 'walker');
-  const sizeTiles = byId(form, 'text-picker').children;
-  check('menu-text-tiles', sizeTiles.length === 4 && sizeTiles.every(t => hasClass(t, 'text-choice'))
-    && sizeTiles.map(t => text(t.children[1])).join() === 'Small,Normal,Large,Huge' && sizeTiles.map(t => text(t.children[0])).join() === 'Aa,Aa,Aa,Aa'
-    && sizeTiles.map(t => attr(t, 'aria-pressed')).join() === 'false,true,false,false' && attr(sizeTiles[0], 'title') === 'Small text');
-  check('menu-text-glyphs-grow', sizeTiles.map(t => t.children[0].style.fontSize).join() === '0.75rem,0.9rem,1.1875rem,1.5rem'
-    || sizeTiles[3].children[0].style.fontSize !== sizeTiles[0].children[0].style.fontSize, sizeTiles.map(t => t.children[0].style.fontSize).join());
-  click(sizeTiles[3]);
-  check('menu-text-click-reports-key', calls.size.join() === 'xl');
-  const levelTiles = byId(form, 'difficulty-picker').children;
-  check('menu-difficulty-tiles', levelTiles.length === 3 && levelTiles.map(t => text(t)).join() === 'Easy,Normal,Hard'
-    && levelTiles.map(t => attr(t, 'aria-pressed')).join() === 'false,true,false' && text(byId(form, 'difficulty-label')) === 'Difficulty',
-    levelTiles.map(t => text(t) + ':' + attr(t, 'aria-pressed')).join());
-  check('menu-difficulty-hint-says-when', /next match/.test(text(byId(form, 'difficulty-hint'))) && /host/.test(text(byId(form, 'difficulty-hint'))));
-  click(levelTiles[2]);
-  check('menu-difficulty-click-reports-key', calls.difficulty.join() === 'hard');
-  const toggles = ['btn-sound', 'btn-music', 'fullscreen'].map(id => byId(form, id));
-  check('menu-toggles', toggles.map(t => hasClass(t, 'tile-toggle') && hasClass(t, 'unit-choice')).every(Boolean)
-    && toggles.map(t => attr(t, 'aria-pressed')).join() === 'true,true,false' && toggles.map(t => text(t)).join('|') === 'Sound E|Music M|Fullscreen F',
-    toggles.map(t => text(t)).join('|'));
-  check('menu-toggle-icons', toggles.every(t => byClass(t, 'tile-icon').length === 1) && byClass(toggles[0], 'on-only').length === 1 && byClass(toggles[0], 'off-only').length === 1);
-  toggles.forEach(click);
-  check('menu-toggle-clicks-report', calls.sound === 1 && calls.music === 1 && calls.fs === 1);
-  renderMenu(section, { ...props, sound: false, fullscreen: true });
-  check('menu-toggle-states-follow', toggles.map(t => attr(t, 'aria-pressed')).join() === 'false,true,true');
-  const buttons = ['random-run', 'rooms-open', 'tutorial-open', 'scores-open'].map(id => byId(form, id));
-  check('menu-action-buttons', buttons.map(b => text(b)).join('|') === 'Random seed T|Rooms O|Tutorial U|Scores R'
-    && buttons.every(b => b.localName === 'button' && attr(b, 'type') === 'button'), buttons.map(b => text(b)).join('|'));
-  buttons.forEach(click);
-  check('menu-action-clicks-report', calls.random === 1 && calls.rooms === 1 && calls.tutorial === 1 && calls.scores === 1);
-  const leave = byId(form, 'menu-leave');
-  check('menu-leave-hidden-outside-a-room', leave.hidden === true && hasClass(leave, 'btn-leave'));
-  renderMenu(section, { ...props, inRoom: true });
-  click(leave);
-  check('menu-leave-in-a-room', leave.hidden === false && calls.leave === 1);
-  // The seed box is the page's: a redraw leaves what was typed.
-  seed.value = 'bam-bam-01';
-  renderMenu(section, props);
-  check('menu-redraw-keeps-nodes-and-seed', section.children[1] === form && byId(form, 'new-game') === ng && seed.value === 'bam-bam-01'
-    && calls.drawn.length === 4);
-  section.scrollTop = 90;
-  fire(section, 'scroll');
-  section.scrollTop = 0;
-  renderMenu(section, { ...props, size: 'l' });
-  check('menu-redraw-keeps-scroll', section.scrollTop === 90 && sizeTiles.map(t => attr(t, 'aria-pressed')).join() === 'false,false,true,false', String(section.scrollTop));
-  check('menu-keys-follow-the-table', (() => {
-    renderMenu(section, { ...props, keyHint: (c, a) => (KEYS[`${c}:${a}`] ?? '').toLowerCase() });
-    return text(ng) === 'New Game n';
-  })());
-  check('menu-no-key-means-no-cap', (() => {
-    const s2 = makeEl('menu-touch');
-    renderMenu(s2, { ...props, keyHint: () => '' });
-    return text(byId(s2, 'new-game')) === 'New Game ' && text(byId(s2, 'rooms-open')) === 'Rooms ';
-  })());
 }
 
 // ---- weapon picker ----

@@ -472,8 +472,8 @@ const {
 });
 /* The game menu's settings (src/menu.ts). */
 const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
-  G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, openRooms, placeLogBelowMenu,
-  randomRun, freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound, tutorialOpen,
+  G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowMenu,
+  freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
 });
 /* The title card over the demo (src/title.ts). */
 const { titleOpen, openTitle, closeTitle, renderTitle } = createTitle({

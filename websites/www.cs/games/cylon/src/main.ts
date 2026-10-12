@@ -111,6 +111,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const settingsPanel = document.getElementById('cylon-settings-panel');
     const gameOverRoot = document.getElementById('cylon-gameover-root');
     const exitHintEl = document.getElementById('cylon-exit-hint');
+    let exitHintTimer: Timer | null = null;
     const reticleEl = document.getElementById('cylon-reticle');
     const navBurger = document.getElementById('site-nav-burger');
     const navMenu = document.getElementById('site-nav-menu');
@@ -944,7 +945,6 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         }
     }
 
-    let exitHintTimer: Timer | null = null;
     /** The session is off: an installed app closes where it may, or says how to close it. */
     async function leaveApp() {
         const outcome = await exitApp(browserAppEnv());

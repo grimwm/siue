@@ -5,7 +5,7 @@
   "description": "Build and test tooling for every game: TypeScript type checks and esbuild bundles into each game's checked-in dist/.",
   "scripts": {
     "build": "for f in */build.json; do [ -f $f ] || continue; node _kit/build/build.mjs ${f%/*} || exit 1; done",
-    "check": "for f in */build.json; do [ -f $f ] || continue; node _kit/build/build.mjs ${f%/*} --check || exit 1; done"
+    "check": "for f in */build.json; do [ -f $f ] || continue; node _kit/build/build.mjs ${f%/*} --check || exit 1; done; for f in */tools/icon.svg; do [ -f $f ] || continue; node _kit/build/icons.mjs ${f%%/*} --check || exit 1; done"
   },
   "devDependencies": {
     "@resvg/resvg-js": "2.6.2",

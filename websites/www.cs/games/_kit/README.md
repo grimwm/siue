@@ -37,8 +37,11 @@ one drawing, `<game>/tools/icon.svg`: a 512×512 SVG with a full-bleed
 (192, 512) and Apple (180) icons are the drawing; maskable (192, 512) icons
 keep the backdrop and scale the art by 0.8 into the safe zone; the monochrome
 icon (512) is that art as a white silhouette for Android's themed icons. The
-PNGs are checked in; rerun after editing the drawing. `install-core.php`
-checks each one's size.
+PNGs are checked in; rerun after editing the drawing. The run records the
+drawing's hash in `<game>/tools/icons.json`, and `--check` (part of `npm run
+check`) fails when the drawing changed without a rerun or an icon is missing;
+it compares the hash, not PNG bytes, which differ between platforms.
+`install-core.php` checks each icon's size.
 
 ## Ports and adapters (`ports.ts`)
 

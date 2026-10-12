@@ -54,7 +54,8 @@ async function quit(): Promise<void> {
   game.quit();
   ui.hideEnd();
   const outcome = await exitApp(browserAppEnv());
-  if (outcome !== 'closed') ui.showTitle(outcome === 'title-with-hint');
+  // A new run started inside the close wait: the card would cover it.
+  if (outcome !== 'closed' && game.G.over) ui.showTitle(outcome === 'title-with-hint');
 }
 
 function start(): void {

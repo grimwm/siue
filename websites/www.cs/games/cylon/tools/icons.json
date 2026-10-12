@@ -1,0 +1,12 @@
+{
+  "source": "ca123ef34bf01563bfa7f35ea176da44191bbfffe871a6fa13fd1d2dacb6314d",
+  "resvg": "2.6.2",
+  "files": [
+    "icon-192.png",
+    "icon-512.png",
+    "icon-maskable-192.png",
+    "icon-maskable-512.png",
+    "icon-monochrome-512.png",
+    "icon-apple-180.png"
+  ]
+}

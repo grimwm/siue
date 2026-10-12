@@ -49,7 +49,11 @@ export async function enterFullscreen(env: AppEnv, el: Element): Promise<boolean
 export async function exitApp(env: AppEnv): Promise<ExitOutcome> {
   const installed = isInstalled(env);
   if (installed) {
-    env.closeWindow();
+    try {
+      env.closeWindow();
+    } catch {
+      // A refusal is the same as a window that stays: fall back to the title card.
+    }
     const gone = await new Promise<boolean>(resolve => {
       env.timers.setTimeout(() => resolve(env.closed()), CLOSE_WAIT_MS);
     });

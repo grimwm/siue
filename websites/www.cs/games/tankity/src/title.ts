@@ -24,6 +24,7 @@ export function createTitle(deps: TitleDeps) {
   const { $, keyHint, initials, play, friends, tutorial, settings, settingsOpen } = deps;
   let open = false;
   let problem = '';
+  let hint = '';
 
   function titleOpen(): boolean {
     return open;
@@ -41,21 +42,29 @@ export function createTitle(deps: TitleDeps) {
     const el = $('title-root');
     if (!el) return;
     drawTitle(el, {
-      keyHint, open, initials: initials.get(), problem, settingsOpen: settingsOpen(),
+      keyHint, open, initials: initials.get(), problem, hint, settingsOpen: settingsOpen(),
       onInitials: chooseInitials, onPlay: play, onFriends: friends, onTutorial: tutorial, onSettings: settings,
     });
   }
   /* The Dialog focuses Play as the card shows, so a keyboard player lands on it. */
   function openTitle(): void {
     problem = '';
+    hint = '';
     open = true;
     renderTitle();
   }
   function closeTitle(): void {
     if (!open) return;
     open = false;
+    hint = '';
+    renderTitle();
+  }
+  /** Words on the card, for as long as it stays open (an installed app's way out). */
+  function showHint(text: string): void {
+    if (!open) return;
+    hint = text;
     renderTitle();
   }
 
-  return { titleOpen, openTitle, closeTitle, renderTitle };
+  return { titleOpen, openTitle, closeTitle, showHint, renderTitle };
 }

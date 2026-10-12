@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { ICONS, iconSvg, rasterize, renderPng, writeIcons } from './icons.mjs';
+import { ICONS, iconSvg, rasterize, renderPng, writeIcons, checkIcons } from './icons.mjs';
 
 const SOURCE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">'
   + '<g id="bg"><rect width="512" height="512" fill="#112233"/></g>'
@@ -67,4 +67,24 @@ test('install-core.php checks exactly the icons this renders', () => {
   const php = readFileSync(join(import.meta.dirname, '..', 'php', 'install-core.php'), 'utf8');
   const listed = [...php.matchAll(/\['file' => '([^']+)', 'size' => (\d+)/g)].map(m => [m[1], Number(m[2])]);
   assert.deepEqual(listed, ICONS.map(i => [i.file, i.size]));
+});
+
+test('--check passes on fresh icons, names a changed drawing or a missing icon, and writes nothing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'icons-check-'));
+  try {
+    mkdirSync(join(dir, 'tools'));
+    writeFileSync(join(dir, 'tools', 'icon.svg'), SOURCE);
+    assert.match(checkIcons(dir)[0], /tools\/icons\.json is missing/);
+    writeIcons(dir);
+    assert.deepEqual(checkIcons(dir), []);
+    const before = readFileSync(join(dir, 'icon-512.png'));
+    writeFileSync(join(dir, 'tools', 'icon.svg'), SOURCE.replace('#ff0000', '#00ff00'));
+    assert.match(checkIcons(dir).join('\n'), /icon\.svg changed since the icons were rendered/);
+    assert.deepEqual(readFileSync(join(dir, 'icon-512.png')), before, 'checking rewrites nothing');
+    writeFileSync(join(dir, 'tools', 'icon.svg'), SOURCE);
+    rmSync(join(dir, 'icon-apple-180.png'));
+    assert.deepEqual(checkIcons(dir), ['icon-apple-180.png is missing']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -289,7 +289,7 @@ export function createUi(deps: UiDeps): Ui {
         game.hint();
         return;
       }
-      if (k === "q") {
+      if (k === "q" && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
         ev.preventDefault();
         quit();
         return;

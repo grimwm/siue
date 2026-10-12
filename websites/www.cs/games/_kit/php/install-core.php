@@ -11,6 +11,8 @@ const INSTALL_DEFAULT_COLOR = '#0c0e12';
 
 /* Registers the page's service worker; harmless where service workers do
    not exist (plain http, file://, a test's stub DOM). */
+const INSTALL_SW_REGISTER = "<script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>";
+
 /** Every install icon (rendered by games/_kit/build/icons.mjs): file, size and
  *  purpose. `apple` is the home-screen icon iOS reads from the page; the rest
  *  go in the manifest. */
@@ -22,8 +24,6 @@ const INSTALL_ICONS = [
     ['file' => 'icon-monochrome-512.png', 'size' => 512, 'purpose' => 'monochrome'],
     ['file' => 'icon-apple-180.png', 'size' => 180, 'purpose' => 'apple'],
 ];
-
-const INSTALL_SW_REGISTER = "<script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>";
 
 function install_esc(string $s): string
 {
@@ -201,7 +201,8 @@ function install_icon_problems(string $dir): array
 }
 
 /** The manifest JSON. Every URL is relative, so the game runs from whatever
- *  path serves it. A `start` game runs on the site page, so it starts there, with its scope narrowed to that page: an installed app stays in the game. */
+ *  path serves it. A `start` game runs on the site page, so it starts there,
+ *  with its scope narrowed to that page: an installed app stays in the game. */
 function install_manifest(array $card, string $id): string
 {
     $start = isset($card['start']);

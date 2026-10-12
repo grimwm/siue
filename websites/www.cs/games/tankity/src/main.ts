@@ -481,7 +481,7 @@ const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
   quit: () => { void quitGame(); },
 });
 /* The title card over the demo (src/title.ts). */
-const { titleOpen, openTitle, closeTitle, renderTitle } = createTitle({
+const { titleOpen, openTitle, closeTitle, showHint: showTitleHint, renderTitle } = createTitle({
   $, keyHint, initials: savedInitials,
   play: () => { unlock(); sfx.play('click'); randomRun(); },
   friends: () => openRooms(),
@@ -852,7 +852,8 @@ async function quitGame(): Promise<void> {
   backToTitle();
   say('You left the match.', 'info');
   const outcome = await exitApp(browserAppEnv());
-  if (outcome === 'title-with-hint') say(`${EXIT_HINT}.`, 'info');
+  // The card may be gone already: a match started inside the close wait.
+  if (outcome === 'title-with-hint') showTitleHint(`${EXIT_HINT}.`);
 }
 function toggleFullscreen(): void {
   // The frame carries the canvas plus its HUD and pads, so the whole battle goes fullscreen together.

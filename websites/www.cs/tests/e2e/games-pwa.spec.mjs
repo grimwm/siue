@@ -38,6 +38,7 @@ for (const id of GAMES) {
     const start = new URL(m.start_url, url);
     const scope = new URL(m.scope, url);
     expect(start.origin).toBe(new URL(url).origin);
+    expect((await request.get(start.href)).status(), 'the start URL answers').toBe(200);
     expect(start.pathname.startsWith(scope.pathname)).toBe(true);
     // A page game starts at its own folder; The CIC at the site page that hosts it.
     expect(start.pathname).toBe(scope.pathname);

@@ -101,3 +101,28 @@ test('retyping the last letter of a saved set reports it at once; retyping the f
   assert.equal(byId(root, 'title-initial-2').value, '');
   assert.deepEqual(calls.initials, ['BDX']);
 });
+
+test('an installed app that could not close says how, on the card, and only when asked', () => {
+  const { root } = draw();
+  assert.equal(byId(root, 'title-hint'), undefined);
+  const shown = draw({ hint: 'Swipe the app away to close it.' });
+  assert.equal(byId(shown.root, 'title-hint').textContent, 'Swipe the app away to close it.');
+  assert.equal(byId(shown.root, 'title-hint').getAttribute('role'), 'status');
+});
+
+test('the hint belongs to the open card: gone when a match starts, not shown on a closed card', async () => {
+  const { title: card } = await importTsx(import.meta.dirname, { title: '../src/title.ts' });
+  const root = makeEl('title-root');
+  const t = card.createTitle({
+    $: id => (id === 'title-root' ? root : null), keyHint: () => '', initials: { get: () => 'BDJ', set() {} },
+    play() {}, friends() {}, tutorial() {}, settings() {}, settingsOpen: () => false,
+  });
+  t.showHint('nobody sees this');
+  assert.equal(byId(root, 'title-hint'), undefined, 'a closed card shows nothing');
+  t.openTitle();
+  t.showHint('Swipe the app away to close it.');
+  assert.equal(byId(root, 'title-hint').textContent, 'Swipe the app away to close it.');
+  t.closeTitle();
+  t.openTitle();
+  assert.equal(byId(root, 'title-hint'), undefined, 'the next card starts clean');
+});

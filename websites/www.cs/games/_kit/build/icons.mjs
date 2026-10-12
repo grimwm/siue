@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Renders a game's install icons from one drawing, <game>/tools/icon.svg:
-//   node _kit/build/icons.mjs <game>      (from websites/www.cs/games)
+//   node _kit/build/icons.mjs <game> [--check]      (from websites/www.cs/games)
 // The drawing is 512x512 with two groups: id="bg", the full-bleed backdrop,
 // and id="art", which stays within 256 px of the centre. Maskable and
 // monochrome icons scale the art by 0.8 into the safe zone (radius 204.8).
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { Resvg } from '@resvg/resvg-js';
 
@@ -47,17 +48,46 @@ export function renderPng(svg, size) {
   return render(svg, size).asPng();
 }
 
+const RESVG_VERSION = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'node_modules', '@resvg', 'resvg-js', 'package.json'), 'utf8')).version;
+const sha = text => createHash('sha256').update(text).digest('hex');
+
+/** Renders the six icons and records, in tools/icons.json, what they came from. PNG bytes
+ *  vary by platform, so the check compares the drawing's hash, not pixels. */
 export function writeIcons(gameDir) {
   const source = readFileSync(join(gameDir, 'tools', 'icon.svg'), 'utf8');
   for (const icon of ICONS) writeFileSync(join(gameDir, icon.file), renderPng(iconSvg(source, icon.look), icon.size));
-  return ICONS.map(i => i.file);
+  const files = ICONS.map(i => i.file);
+  writeFileSync(join(gameDir, 'tools', 'icons.json'), JSON.stringify({ source: sha(source), resvg: RESVG_VERSION, files }, null, 2) + '\n');
+  return files;
+}
+
+/** Problems with a game's icons: the drawing changed since they were rendered, or one is missing. Writes nothing. */
+export function checkIcons(gameDir) {
+  const recordPath = join(gameDir, 'tools', 'icons.json');
+  if (!existsSync(recordPath)) return ['tools/icons.json is missing: run node _kit/build/icons.mjs <game>'];
+  const record = JSON.parse(readFileSync(recordPath, 'utf8'));
+  const problems = [];
+  if (record.source !== sha(readFileSync(join(gameDir, 'tools', 'icon.svg'), 'utf8'))) {
+    problems.push('tools/icon.svg changed since the icons were rendered: run node _kit/build/icons.mjs <game>');
+  }
+  for (const file of ICONS.map(i => i.file)) {
+    if (!record.files?.includes(file)) problems.push(`tools/icons.json does not list ${file}`);
+    if (!existsSync(join(gameDir, file))) problems.push(`${file} is missing`);
+  }
+  return problems;
 }
 
 if (resolve(process.argv[1] ?? '') === resolve(import.meta.filename)) {
-  const name = process.argv[2];
+  const [name, flag] = process.argv.slice(2);
   if (!name) {
-    console.error('usage: node _kit/build/icons.mjs <game>');
+    console.error('usage: node _kit/build/icons.mjs <game> [--check]');
     process.exit(1);
   }
-  for (const f of writeIcons(resolve(import.meta.dirname, '..', '..', name))) console.log(`icons: wrote ${name}/${f}`);
+  const dir = resolve(import.meta.dirname, '..', '..', name);
+  if (flag === '--check') {
+    const problems = checkIcons(dir);
+    for (const p of problems) console.error(`icons: ${name}: ${p}`);
+    process.exit(problems.length ? 1 : 0);
+  }
+  for (const f of writeIcons(dir)) console.log(`icons: wrote ${name}/${f}`);
 }

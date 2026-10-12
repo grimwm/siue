@@ -44,7 +44,7 @@ test('an installed app that cannot close falls back to its title card, out of fu
   let settled = false;
   const out = exitApp(env).then(v => { settled = true; return v; });
   clock.advance(CLOSE_WAIT_MS - 1);
-  await Promise.resolve();
+  await new Promise(r => setImmediate(r));
   assert.equal(settled, false, 'it gives the window its moment to close');
   clock.advance(1);
   assert.equal(await out, 'title-with-hint');

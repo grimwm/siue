@@ -50,6 +50,37 @@ export function typecheck(gameDir, cfg) {
   }
 }
 
+const LICENSES_FILE = 'THIRD_PARTY_LICENSES.txt';
+const BANNER = `/*! Third-party licenses: ${LICENSES_FILE} */`;
+const LICENSE_NAME_RE = /^licen[sc]e(\.(md|txt))?$/i;
+
+/** The npm packages an esbuild metafile's inputs came from: name -> package dir. */
+function packagesOf(metafile, gameDir) {
+  const found = new Map();
+  for (const input of Object.keys(metafile.inputs)) {
+    const parts = input.split('/');
+    const i = parts.lastIndexOf('node_modules');
+    if (i < 0) continue;
+    const n = parts[i + 1]?.startsWith('@') ? 2 : 1;
+    const name = parts.slice(i + 1, i + 1 + n).join('/');
+    found.set(name, resolve(gameDir, ...parts.slice(0, i + 1 + n)));
+  }
+  return found;
+}
+
+/** One notice per package: name, version, license field and the full license text. */
+function licenseBlock(name, dir) {
+  const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
+  const field = pkg.license ?? pkg.licenses;
+  const license = typeof field === 'string' ? field
+    : Array.isArray(field) ? field.map(l => l.type ?? l).join(' OR ')
+    : field?.type ?? 'UNKNOWN';
+  const file = readdirSync(dir).filter(f => LICENSE_NAME_RE.test(f)).sort()[0];
+  if (!file) throw new BuildError(`${name}: no license file (LICENSE, LICENSE.md, LICENSE.txt) in the package; the bundle cannot ship it without its notice`);
+  const text = readFileSync(join(dir, file), 'utf8').replace(/\r\n?/g, '\n').trim();
+  return `${name} ${pkg.version}\nLicense: ${license}\n\n${text}\n`;
+}
+
 const hash10 = text => createHash('sha256').update(text).digest('hex').slice(0, 10);
 
 /** Bundles every entry in memory: dist-relative path -> file text. */
@@ -60,28 +91,43 @@ export async function bundle(gameDir, cfg) {
   }
   const outdir = join(gameDir, 'dist');
   const files = new Map();
+  const packages = new Map();
   for (const format of FORMATS) {
     const entries = cfg.entries.filter(e => e.format === format);
     if (!entries.length) continue;
-    const result = await esbuild.build({
-      absWorkingDir: gameDir,
-      entryPoints: entries.map(e => ({ in: e.in, out: e.out })),
-      outdir,
-      bundle: true,
-      format,
-      platform: 'browser',
-      target: 'es2022',
-      minify: true,
-      sourcemap: 'linked',
-      jsx: 'automatic',
-      jsxImportSource: 'preact',
-      charset: 'utf8',
-      legalComments: 'eof',
-      define,
-      write: false,
-      logLevel: 'silent',
-    });
-    for (const f of result.outputFiles) files.set(relative(outdir, f.path).split(sep).join('/'), f.text);
+    // One build per entry so a banner lands only on bundles that contain npm code.
+    for (const e of entries) {
+      const options = {
+        absWorkingDir: gameDir,
+        entryPoints: [{ in: e.in, out: e.out }],
+        outdir,
+        bundle: true,
+        format,
+        platform: 'browser',
+        target: 'es2022',
+        minify: true,
+        sourcemap: 'linked',
+        jsx: 'automatic',
+        jsxImportSource: 'preact',
+        charset: 'utf8',
+        legalComments: 'eof',
+        define,
+        write: false,
+        logLevel: 'silent',
+        metafile: true,
+      };
+      let result = await esbuild.build(options);
+      const used = packagesOf(result.metafile, gameDir);
+      if (used.size) {
+        result = await esbuild.build({ ...options, banner: { js: BANNER } });
+        for (const [name, dir] of used) packages.set(name, dir);
+      }
+      for (const f of result.outputFiles) files.set(relative(outdir, f.path).split(sep).join('/'), f.text);
+    }
+  }
+  if (packages.size) {
+    const blocks = [...packages].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, dir]) => licenseBlock(name, dir));
+    files.set(LICENSES_FILE, `Third-party code bundled into this game's scripts.\n\n${blocks.join('\n---\n\n')}`);
   }
   return files;
 }

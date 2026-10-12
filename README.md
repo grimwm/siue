@@ -162,4 +162,4 @@ Give it a directory like the one above, prefix its services and network with its
 
 ## Licenses
 
-Each game (`websites/www.cs/games/cylon`, `crete`, `tankity`) carries a `LICENSE` file: GNU General Public License v3. Preact is bundled from npm into each game's `dist/`; its license is `games/node_modules/preact/LICENSE` after `npm ci`, and the built bundles carry no license comment. The rest of the repository, including the site pages, tools and scripts, has no license file.
+Each game (`websites/www.cs/games/cylon`, `crete`, `tankity`) carries a `LICENSE` file: GNU General Public License v3. Tankity bundles Preact (MIT) from npm; the build writes the license of every npm package a game bundles to that game's `dist/THIRD_PARTY_LICENSES.txt`, and each such bundle opens with a comment pointing to it. The rest of the repository, including the site pages, tools and scripts, has no license file.

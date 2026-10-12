@@ -1,18 +1,9 @@
 <?php
 // Tests for the set of files deploy.sh ships (LIST=1 ./deploy.sh, which needs
-// no host or password). Run: php tests/deploy-set-test.php
-// Exit 0 when every check passes, 1 otherwise.
+// no host or password). Run by the PHPUnit case beside it.
 declare(strict_types=1);
 
-$fail = 0;
-$check = function (string $name, bool $cond, string $extra = '') use (&$fail): void {
-    echo ($cond ? 'PASS' : 'FAIL') . ' ' . $name . ($extra !== '' ? ' :: ' . $extra : '') . "\n";
-    if (!$cond) {
-        $fail++;
-    }
-};
-
-$site = dirname(__DIR__);
+$site = dirname(__DIR__, 3);
 $out = [];
 $code = 0;
 exec('cd ' . escapeshellarg($site) . ' && LIST=1 ./deploy.sh 2>&1', $out, $code);
@@ -73,6 +64,5 @@ $missing = array_values(array_filter($built, fn(string $f): bool => !isset($set[
 $check('ships every compiled and vendored file', count($built) > 10 && $missing === [], implode(', ', $missing));
 
 $check('node_modules never ships', array_filter($out, fn(string $f): bool => str_contains($f, 'node_modules')) === []);
-
-echo $fail === 0 ? "DEPLOY-SET-OK\n" : "DEPLOY-SET-FAIL $fail\n";
-exit($fail === 0 ? 0 : 1);
+$check('composer-files-stay-home', !array_intersect(['composer.json', 'composer.lock', 'phpunit.xml'], $out), '');
+$check('vendor-stays-home', !array_filter($out, fn($f) => str_starts_with($f, 'vendor/')), '');

@@ -1,16 +1,7 @@
 <?php
-// Tests for tools/site-game-pages.php. Run: php tests/site-game-pages-test.php
-// Exit 0 when every check passes, 1 otherwise.
+// Tests for tools/site-game-pages.php.
 declare(strict_types=1);
-require_once __DIR__ . '/../tools/site-game-pages.php';
-
-$fail = 0;
-$check = function (string $name, bool $cond, string $extra = '') use (&$fail): void {
-    echo ($cond ? 'PASS' : 'FAIL') . ' ' . $name . ($extra !== '' ? ' :: ' . $extra : '') . "\n";
-    if (!$cond) {
-        $fail++;
-    }
-};
+require_once __DIR__ . '/../../../tools/site-game-pages.php';
 
 $site = 'https://example.edu/~me/';
 $tmp = sys_get_temp_dir() . '/site-game-pages-test-' . getmypid();
@@ -122,9 +113,7 @@ $check('game-folders-untouched', !is_file("$root/arty/manifest.webmanifest") && 
     && !is_file("$root/mounted/manifest.webmanifest") && !is_file("$root/mounted/index.html"));
 
 // The site's own games are in sync with their metadata.
-[$stale, $notes, $broken] = site_pages_sync(__DIR__ . '/../games', SITE_PAGES_SITE, false);
+[$stale, $notes, $broken] = site_pages_sync(__DIR__ . '/../../../games', SITE_PAGES_SITE, false);
 $check('repo-games-in-sync', $stale === [], 'run: php tools/site-game-pages.php  (stale: ' . implode(', ', $stale) . ')');
 
 exec('rm -rf ' . escapeshellarg($tmp));
-echo $fail === 0 ? "SITE-PAGES-OK\n" : "SITE-PAGES-FAIL $fail\n";
-exit($fail === 0 ? 0 : 1);

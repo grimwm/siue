@@ -54,12 +54,11 @@ test:
 	node tests/e2e/shard-test.mjs
 	node tests/e2e/select.mjs --check
 	npm ci --silent && node tools/ts-build.mjs --check
-	php tests/games-hub-test.php
-	php tests/site-game-pages-test.php
 	php tools/site-game-pages.php --check
-	php tests/site-versions-test.php
 	php tools/site-versions.php --check
-	php tests/deploy-set-test.php
+	composer install --quiet --no-interaction
+	vendor/bin/phpunit --testsuite site
+	vendor/bin/phpunit --testsuite kit
 	for t in games/*/test.sh; do echo "== $$t"; $$t || exit 1; done
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php rooms-test.php'
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php rooms-store-test.php'

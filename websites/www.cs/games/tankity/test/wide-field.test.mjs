@@ -30,6 +30,7 @@ test('a wider field is the same hills, continued', () => {
 
 test('the units spread over the whole width, never inside each other\'s blast', () => {
   const biggest = Math.max(...arsenal.order.map(k => arsenal.weapons[k].radius));
+  assert.ok(sim.SPAWN_GAP > biggest + 14, `SPAWN_GAP ${sim.SPAWN_GAP} clears the blast's real reach (radius + 14 from a hull's centre)`);
   assert.ok(sim.SPAWN_GAP >= biggest + 20, `SPAWN_GAP ${sim.SPAWN_GAP} vs blast ${biggest} + a hull's half-width`);
   const span = w => {
     let total = 0;
@@ -90,4 +91,19 @@ test('out of bounds is the field edge, and the scenery is not the sim', () => {
   }
   const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'sim.ts'), 'utf8');
   assert.ok(!/world\.hills|G\.hills/.test(src), 'the sim never reads the scenery\'s hills');
+});
+
+test('a steep rail shot at full power bursts on a wide field and does not expire in the air', () => {
+  for (const w of WIDTHS) {
+    const world = { tanks: [], terrain: Array(w).fill(400), wind: 0, round: 1, rng: sim.mulberry32(1), shells: [], score: 0, cash: 0, ammo: { rail: 9 },
+      selected: 'rail', shield: false, bunker: 0, laststand: false, jammer: 0 };
+    const t = { id: 'T', isPlayer: true, x: 200, y: 400, angle: 85, power: 100, hp: 100, fuel: 0, dirS: 1, ammo: { rail: 9 } };
+    world.tanks.push(t);
+    sim.fireWeapon(world, arsenal, t, 'rail');
+    const blasts = [];
+    for (let f = 0; world.shells.length && f < 5000; f++) blasts.push(...sim.stepShells(world, arsenal, 1 / 60).filter(e => e.kind === 'blast'));
+    assert.ok(blasts.length > 0, `${w}: the rail shot burst`);
+    const r = sim.simShot(world, arsenal, 200, 400, 85, 100, 'rail', 1);
+    assert.ok(!r.oob, `${w}: the aim guide sees it land on the field`);
+  }
 });

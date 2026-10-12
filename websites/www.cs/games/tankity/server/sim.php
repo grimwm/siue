@@ -60,7 +60,7 @@ const ROOM_W = 720; // a room's field; a solo run's is dealt (src/field.ts) and 
 const FIELD_W_MIN = 720;
 const FIELD_W_MAX = 1440;
 const FIELD_COL = 24;
-const ROOM_FLIGHT_STEPS = 720; // a shell's longest flight in 1/60 s steps (12 s); not a width
+const ROOM_FLIGHT_STEPS = 720; // a shell's longest flight on a room's field in 1/60 s steps (12 s), times room_field_reach() on a wider one; not a width
 
 /* src/sim.ts fieldWidthOk(): an int in range on a whole column, else null. */
 function room_field_width(mixed $w): ?int
@@ -328,7 +328,7 @@ function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $a
     $vy = -sin($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0), room_field_reach($w));
     $grav = $flat ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
     $dt = 1 / 60;
-    for ($i = 0; $i < ROOM_FLIGHT_STEPS; $i++) {
+    for ($i = 0, $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($w)); $i < $steps; $i++) {
         $vx += $wind * ROOM_TURN_WIND * $dt;
         $vy += $grav * $dt;
         $x += $vx * $dt;
@@ -540,7 +540,8 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
     $grav = !empty($w['flat']) ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
     $pierced = null; // the tank a lance went through, never hit twice
     $clear = false; // out of its gunner's box yet
-    for ($step = 0; $step < ROOM_FLIGHT_STEPS; $step++) {
+    $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($width));
+    for ($step = 0; $step < $steps; $step++) {
         if (($w['effect'] ?? 'shot') === 'seeker') {
             $dv = room_seek_push($room['tanks'], $ownerIdx, $sx, $sy, (float) ($w['steer'] ?? 70.0), $dt);
             if ($dv !== null) {
@@ -607,7 +608,7 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
             return ['hit', $sx, $sy, $vx, $vy, null, $path, $flown];
         }
     }
-    return ['oob', $sx, $sy, $vx, $vy, null, $path, ROOM_FLIGHT_STEPS * $dt];
+    return ['oob', $sx, $sy, $vx, $vy, null, $path, $steps * $dt];
 }
 /* A roller touched down at column $sx with velocity ($vx, $vy), $steps sim
 // steps into its flight: roll it to its burst. Returns room_fly_arc's tuple

@@ -36,7 +36,8 @@ export function gauss(rng: Rng): number {
 export const H = 460;
 export const ROOM_W = 720;
 export const FIELD_W_MIN = 720, FIELD_W_MAX = 1440, FIELD_COL = 24;
-/** A shell's longest flight, in 1/60 s steps (12 s). Not a width. */
+/** A shell's longest flight on a room's field, in 1/60 s steps (12 s); a wider field's shells fly
+ *  fieldReach(w) times longer. Not a width. */
 export const FLIGHT_STEPS = 720;
 /** A width a match may be played at: a whole number of columns, in range. */
 export function fieldWidthOk(w: unknown): w is number {
@@ -428,7 +429,7 @@ export function fireWeapon(world: World, arsenal: Arsenal, t: Tank, wkey: string
     world.shells.push({
       x: m.x, y: m.y,
       vx: Math.cos(a) * spd * s, vy: -Math.sin(a) * spd,
-      wkey, owner: t, life: 12,
+      wkey, owner: t, life: 12 * fieldReach(world.terrain.length), // flights last as long as the field is wide
       age: 0, pierced: false, split: false, order: [i],
     });
   }
@@ -518,7 +519,7 @@ export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal
   };
   const dt = 1 / 60;
   const grav = w.flat ? FLAT_GRAV : GRAV;
-  for (let i = 0; i < FLIGHT_STEPS; i++) {
+  for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * reach); i < steps; i++) {
     stepBallistic(st, dt, world.wind, grav);
     if (st.x < 0 || st.x >= fw) return { x: st.x, y: st.y, oob: true };
     if (st.y >= H + 40) return { x: st.x, y: st.y, oob: true };
@@ -547,7 +548,7 @@ export function steerShell(tanks: readonly Tank[], s: Shell, w: Weapon, dt: numb
 /* Cluster shells split on fuse into a deterministic fan: fixed offsets, no
 // random numbers, so the room server replays the exact same bloom. Returns
 // the bomblets. */
-export function splitShell(s: Shell, w: Weapon): Shell[] {
+export function splitShell(s: Shell, w: Weapon, reach = 1): Shell[] {
   const n = Math.max(2, w.split || 4);
   const fan = w.fan || 0.22;
   const sp = Math.hypot(s.vx, s.vy) * 0.85;
@@ -558,7 +559,7 @@ export function splitShell(s: Shell, w: Weapon): Shell[] {
     bomblets.push({
       x: s.x, y: s.y,
       vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-      wkey: s.wkey, owner: s.owner, life: 12,
+      wkey: s.wkey, owner: s.owner, life: 12 * reach,
       age: 0, pierced: false, split: true, order: [...(s.order || []), i],
       dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius,
     });
@@ -783,7 +784,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
     if (w.effect === 'cluster' && !s.split && s.age >= (w.fuse || 0.9)) {
       s.split = true;
       events.push({ kind: 'split', wkey: s.wkey, x: s.x, y: s.y, ang: Math.atan2(s.vy, s.vx) });
-      world.shells.push(...splitShell(s, w));
+      world.shells.push(...splitShell(s, w, fieldReach(world.terrain.length)));
       s.dead = true;
       continue;
     }

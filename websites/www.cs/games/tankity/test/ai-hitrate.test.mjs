@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildArsenal } from '../src/sim.ts';
+import { buildArsenal, fieldWidthOk } from '../src/sim.ts';
 import { DIFFICULTIES, DIFFICULTY, aimSkill } from '../src/ai.ts';
 import { measureHitRates } from '../src/ai-measure.ts';
 import { difficultySetting } from '../src/difficulty.ts';
@@ -17,7 +17,7 @@ const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'ga
 const arsenal = buildArsenal(GAME.arsenal);
 
 // Enough seeded cases that a rate sits within a couple of points of its
-// long-run value (checked against 1000), few enough to stay near two seconds.
+// long-run value (checked against 1000), few enough to stay near seven seconds across the three widths.
 const CASES = 600;
 const ROUNDS = [1, 5, 10];
 // Percent hits, per round: the ranging shot, and the shot after two corrections.
@@ -25,6 +25,7 @@ const NORMAL = { ranging: { 1: 10, 5: 15, 10: 25 }, twice: { 1: 25, 5: 40, 10: 5
 const BAND = 5;
 
 const WIDTHS = (process.env.TANKITY_HITRATE_WIDTHS || '720,1080,1440').split(',').map(Number);
+for (const w of WIDTHS) assert.ok(fieldWidthOk(w), `${w} is not a width a match can be dealt at`);
 const rates = {};
 for (const w of WIDTHS) {
   rates[w] = {};
@@ -34,7 +35,6 @@ for (const w of WIDTHS) {
   }
 }
 const cell = (d, r, shot, w = 720) => rates[w][d][r][shot];
-
 
 test('the table has the three levels, each with every knob', () => {
   assert.deepEqual([...DIFFICULTIES], ['easy', 'normal', 'hard']);

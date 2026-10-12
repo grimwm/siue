@@ -100,6 +100,18 @@ view of its state and callbacks, and redraws when the state changes.
   `data-keyhint`; `decorative` hides a chip that sits beside words already
   naming the action from screen readers.
 
+## Installed apps (`app.ts`)
+
+Each game installs as its own app (its manifest asks for full screen, then
+standalone). `isInstalled(env)` reads the display mode (or iOS's
+`navigator.standalone`); `enterFullscreen(env, el)` asks once and reports
+whether it worked; `exitApp(env)` is every game's Quit: an installed app asks
+to close its window, and where that does nothing within `CLOSE_WAIT_MS`, or in
+a browser tab (never closed), it leaves full screen and answers `'title'` or,
+for an installed app, `'title-with-hint'`: the game then shows its title card
+and, with the hint, `EXIT_HINT`. Pages pass `browserAppEnv()`; tests pass a
+fake environment and a manual clock.
+
 ## Tests (`test/`)
 
 Unit tests are `*.test.mjs` files run with `node --test`. They import

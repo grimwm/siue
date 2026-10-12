@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shop Row Options</title>
+<style>
+  :root { --panel: #1b1f12; --head: #0d0f3d; --accent: #ffc93c; --text: #f1eedc; --dim: #a9a98c; --vals: #ffe94a; --sel: rgba(255,255,255,.07); --line: #2c3a10; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b0c10; color: var(--text); font: 15px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 20px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .note { color: var(--dim); margin: 0 0 18px; max-width: 70ch; }
+  .opts { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+  .opt > h2 { font-size: 15px; margin: 0 0 4px; color: var(--accent); }
+  .opt > p { margin: 0 0 8px; color: var(--dim); font-size: 13px; max-width: 393px; }
+  .phone { width: 393px; border: 1px solid #333; border-radius: 22px; padding: 10px 0; background: #05060f; }
+  .desk { width: 760px; border: 1px solid #333; border-radius: 10px; padding: 10px 0; background: #05060f; }
+  .card { margin: 0 12px; background: var(--panel); border: 1px solid var(--accent); border-radius: 12px; overflow: hidden; }
+  .card header { background: var(--head); padding: 10px 16px; border-bottom: 2px solid #2b2bb0; }
+  .kicker { color: var(--accent); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; }
+  .card h3 { margin: 2px 0 0; font-size: 20px; }
+  .cash { color: var(--dim); padding: 8px 16px 0; font-size: 13px; }
+  ul { list-style: none; margin: 6px 0 10px; padding: 0 10px; display: grid; gap: 4px; }
+  .cat { color: var(--dim); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; font-weight: 700; padding: 6px 6px 0; }
+  li.row { display: grid; grid-template-columns: var(--icon, 64px) 1fr; column-gap: 10px; padding: 8px 6px; border-radius: 8px; align-items: start; }
+  li.row.sel { background: var(--sel); }
+  .icon { width: var(--icon, 64px); height: calc(var(--icon, 64px) * .65); border-radius: 6px; background: radial-gradient(circle at 60% 50%, #ffe08a 0 9px, #c9902a 10px 13px, transparent 14px), linear-gradient(110deg, transparent 30%, rgba(255,200,90,.25) 45%, transparent 60%); align-self: center; }
+  .name { font-weight: 700; }
+  .vals { color: var(--vals); font-weight: 600; }
+  .sub { color: var(--dim); font-size: 13px; }
+  .own { color: var(--dim); font-size: 12px; font-weight: 600; }
+  button { font: inherit; font-size: 13px; font-weight: 700; color: var(--text); background: transparent; border: 1.5px solid #6b6b45; border-radius: 8px; padding: 6px 12px; min-height: 36px; }
+  button.buy { background: var(--accent); color: #1b1300; border-color: var(--accent); }
+  button:disabled { opacity: .45; }
+  kbd { font: 700 10px/1 ui-monospace, monospace; background: #111; color: #eee; border-radius: 4px; padding: 2px 4px; margin-left: 6px; vertical-align: 1px; }
+  .acts { display: flex; gap: 8px; margin-top: 8px; }
+  /* A: under the description, side by side, start-aligned */
+  .a .acts { justify-content: flex-start; }
+  /* B: under the description, two equal halves across the column */
+  .b .acts button { flex: 1; }
+  /* C: price as a chip on the name line; buttons right-aligned under the text; smaller icon */
+  .c { --icon: 48px; }
+  .c .head { display: flex; align-items: baseline; gap: 8px; }
+  .c .price { margin-left: auto; color: #1b1300; background: var(--vals); border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+  .c .acts { justify-content: flex-end; }
+  /* D: desktop keeps today's right-hand column */
+  .d li.row > div:nth-child(2) { display: grid; grid-template-columns: 1fr auto; column-gap: 14px; }
+  .d li.row > div:nth-child(2) > :not(.acts) { grid-column: 1; }
+  .d .acts { grid-column: 2; grid-row: 1 / span 4; flex-direction: column; margin: 0; align-self: center; }
+  .d .acts button { min-width: 6.5rem; }
+  .start { margin: 0 16px 12px; }
+  .start button { background: var(--accent); color: #1b1300; border: 0; }
+</style>
+</head>
+<body>
+<h1>Shop row: where Preview and Buy go</h1>
+<p class="note">Each option puts the buttons in the second column, under the description, so nothing on a 393 px phone is wider than the screen. The text is the real shop text. The Buckshot row is selected.</p>
+
+<div class="opts">
+<template id="rows">
+  <div class="cat">Shells</div>
+  <li class="row">
+    <div class="icon"></div>
+    <div>
+      <div class="head"><span class="name">Shell <span class="vals">∞ (free)</span></span></div>
+      <div class="sub">34 damage, blast 26, free, straight, honest. Direct hits count double.</div>
+      <div class="sub">Always loaded, never runs out.</div>
+      <div class="acts"><button>Preview<kbd>P</kbd></button></div>
+    </div>
+  </li>
+  <li class="row sel">
+    <div class="icon"></div>
+    <div>
+      <div class="head"><span class="name">1. Buckshot <span class="vals">×2 ($80)</span></span><span class="price">$80 · ×2</span></div>
+      <div class="own">you own 1</div>
+      <div class="sub">17 damage ×5 pellets, blast 14, spreads 9°. Best up close.</div>
+      <div class="acts"><button>Preview<kbd>P</kbd></button><button class="buy">Buy ×2<kbd>B</kbd></button></div>
+    </div>
+  </li>
+  <li class="row">
+    <div class="icon"></div>
+    <div>
+      <div class="head"><span class="name">2. Mortar <span class="vals">×1 ($240)</span></span><span class="price">$240</span></div>
+      <div class="sub">52 damage, blast 44, a high lob that drops straight down.</div>
+      <div class="acts"><button>Preview<kbd>P</kbd></button><button class="buy" disabled>Buy<kbd>B</kbd></button></div>
+    </div>
+  </li>
+</template>
+
+<section class="opt a"><h2>A · Side by side, under the text</h2>
+<p>Preview, then Buy, at the start of the text column. The price stays on the name line, as now.</p>
+<div class="phone"><div class="card"><header><div class="kicker">Between rounds</div><h3>Pre-match shop</h3></header><div class="cash">War chest: $600</div><ul data-rows></ul><div class="start"><button>Start round 1</button></div></div></div></section>
+
+<section class="opt b"><h2>B · Two equal halves</h2>
+<p>The buttons share the text column's full width. They are the biggest touch targets, and the row reads most like a card.</p>
+<div class="phone"><div class="card"><header><div class="kicker">Between rounds</div><h3>Pre-match shop</h3></header><div class="cash">War chest: $600</div><ul data-rows></ul><div class="start"><button>Start round 1</button></div></div></div></section>
+
+<section class="opt c"><h2>C · Price chip, buttons right</h2>
+<p>A smaller icon. The price is a yellow chip at the end of the name line, and the buttons sit under the text at the right edge, near the thumb.</p>
+<div class="phone"><div class="card"><header><div class="kicker">Between rounds</div><h3>Pre-match shop</h3></header><div class="cash">War chest: $600</div><ul data-rows></ul><div class="start"><button>Start round 1</button></div></div></div></section>
+</div>
+
+<h1 style="margin-top:28px">On a desktop</h1>
+<p class="note">Either the same row everywhere (option A shown at desktop width), or desktop keeps today's right-hand button column and only phones use the new row.</p>
+<div class="opts">
+<section class="opt a"><h2>Same row everywhere (A)</h2>
+<div class="desk"><div class="card"><header><div class="kicker">Between rounds</div><h3>Pre-match shop</h3></header><div class="cash">War chest: $600</div><ul data-rows></ul></div></div></section>
+<section class="opt d"><h2>D · Desktop keeps the right column</h2>
+<div class="desk"><div class="card"><header><div class="kicker">Between rounds</div><h3>Pre-match shop</h3></header><div class="cash">War chest: $600</div><ul data-rows></ul></div></div></section>
+</div>
+
+<script>
+  const t = document.getElementById('rows');
+  document.querySelectorAll('[data-rows]').forEach(ul => {
+    ul.append(t.content.cloneNode(true));
+    if (!ul.closest('.c')) ul.querySelectorAll('.price').forEach(p => p.remove());
+    else ul.querySelectorAll('.vals').forEach(v => { if (v.textContent.includes('$')) v.remove(); });
+  });
+</script>
+</body>
+</html>

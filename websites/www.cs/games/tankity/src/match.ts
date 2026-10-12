@@ -8,22 +8,22 @@
  * says it. A room match is run by the server, so nothing here runs in one
  * except the pieces a room shares (the banner, the cosmetics, the end veil).
  * The game's state, the page and the rest of the game arrive as deps. */
-import { aiChoose as simAiChoose, pickTactic } from './ai.js';
-import type { sfx as SfxApi, music as MusicApi } from './audio.js';
-import { FOE_DYING, FOE_FIRE, FOE_HIT, FOE_MISS, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, pick } from './chatter.js';
-import type { FxSys } from './effects.js';
-import { transition, WATCH_TURNS } from './flow.js';
-import type { FlowEvent } from './flow.js';
-import type { GameState, GameTank, Tables } from './game-types.js';
-import type { RoomClient } from './net.js';
+import { aiChoose as simAiChoose, pickTactic } from './ai.ts';
+import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
+import { FOE_DYING, FOE_FIRE, FOE_HIT, FOE_MISS, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, pick } from './chatter.ts';
+import type { FxSys } from './fx/types.ts';
+import { transition, WATCH_TURNS } from './flow.ts';
+import type { FlowEvent } from './flow.ts';
+import type { GameState, GameTank, Tables } from './game-types.ts';
+import type { RoomClient } from './net.ts';
 import {
   hashSeed, mulberry32, gauss, W, H, GRAV, TUNE, clamp, droneRack as simDroneRack, genTerrain as simGenTerrain,
   spawnSpots, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling,
-} from './sim.js';
-import type { Blast, Shell } from './sim.js';
-import { renderEndVeil as drawEndVeil } from './ui/endveil.js';
-import type { KeyHintFn } from './ui/chrome.js';
+} from './sim.ts';
+import type { Blast, Shell } from './sim.ts';
+import { renderEndVeil as drawEndVeil } from './ui/endveil.tsx';
+import type { KeyHintFn } from './ui/chrome.tsx';
 
 /** What the end veil says and which buttons it offers. */
 export interface EndState {

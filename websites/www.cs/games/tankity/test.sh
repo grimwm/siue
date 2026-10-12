@@ -1,19 +1,16 @@
 #!/bin/sh
 # This game's own unit suite and build checks, run from its folder; the
-# site's `make test` runs every games/*/test.sh. Tests that need the docker
-# PHP stay in the site Makefile. New test files go here, not in the Makefile.
+# site's `make test` runs every games/*/test.sh (after `npm ci` in games/).
+# Tests that need the docker PHP stay in the site Makefile. New test files go
+# here, not in the Makefile.
 set -e
 cd "$(dirname "$0")"
-npm ci --silent
-node tools/ts-build.mjs --check
-node tools/vendor.mjs --check
+node ../_kit/build/build.mjs tankity --check
 php game-json-test.php
-php install-files-test.php
 php tools/game-json.php --check
 php tools/install-files.php --check
 node smoke-test.js
 node ui-test.js
-node vendor-test.js
 node audio-test.js
 node render-test.js
 node net-test.js

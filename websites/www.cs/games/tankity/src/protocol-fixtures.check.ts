@@ -4,13 +4,13 @@
  * rooms.php's own output) is imported here and held against the type that
  * says what the client expects of it. `tsc` then fails when rooms.php changes
  * a reply's shape and the fixtures are regenerated, and when a fixture holds
- * a field protocol.ts does not know. tools/ts-build.mjs runs it (`make test`);
- * it is never emitted.
+ * a field protocol.ts does not know. the kit build (build.json) type-checks it
+ * (`make test`); it is never bundled.
  *
  * A JSON import types every string as plain `string`, so the literal unions
  * (phase, event `t`, seat mode) cannot be checked here; protocol-test.js
  * checks those values against protocol.ts. */
-import type { ErrorReply, RoomReply, SeatReply } from './protocol.js';
+import type { ErrorReply, RoomReply, SeatReply } from './protocol.ts';
 import createReply from '../protocol/create-reply.json' with { type: 'json' };
 import joinReply from '../protocol/join-reply.json' with { type: 'json' };
 import errorNotYourTurn from '../protocol/error-not-your-turn.json' with { type: 'json' };

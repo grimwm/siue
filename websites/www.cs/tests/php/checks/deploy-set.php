@@ -40,8 +40,8 @@ try {
 $check('list-runs', $code === 0, implode(' | ', array_slice($out, -3)));
 $set = array_flip($out);
 
-// Served: the effects engine, the compiled ES modules, the vendored Preact and the rendered sprite sheets (the effects data rides game.json).
-foreach (['games/tankity/fx.js', 'games/tankity/js/sim.js', 'games/tankity/js/net.js', 'games/tankity/js/ui/shop.js', 'games/tankity/js/ui/help.js', 'games/tankity/vendor/preact/preact.module.js', 'games/tankity/vendor/preact/hooks.module.js', 'games/tankity/vendor/preact/jsx-runtime.module.js', 'games/tankity/vendor/preact/LICENSE', 'games/tankity/fx/sprites/sprites.json', 'games/tankity/game.js', 'games/tankity/game.json', 'games/tankity/sw.js', 'games/tankity/rooms.php', 'games/tankity/server/settings.php', 'games/tankity/server/store.php', 'games/tankity/server/sim.php', 'games/tankity/server/ai.php', 'games/tankity/server/rules.php', 'games/tankity/server/protocol.php', 'games/tankity/server/.htaccess'] as $f) {
+// Served: the game and effects-engine bundles and the rendered sprite sheets (the effects data rides game.json).
+foreach (['games/tankity/dist/main.js', 'games/tankity/dist/fx.js', 'games/tankity/fx/sprites/sprites.json', 'games/tankity/game.json', 'games/tankity/sw.js', 'games/tankity/rooms.php', 'games/tankity/server/settings.php', 'games/tankity/server/store.php', 'games/tankity/server/sim.php', 'games/tankity/server/ai.php', 'games/tankity/server/rules.php', 'games/tankity/server/protocol.php', 'games/tankity/server/.htaccess'] as $f) {
     $check("ships $f", isset($set[$f]));
 }
 // Cylon: the bundle, its page pieces and server.
@@ -83,7 +83,7 @@ $tracked = [];
 exec('cd ' . escapeshellarg($site) . ' && git ls-files', $tracked);
 $kept = array_values(array_filter($tracked, fn(string $f): bool => (bool) preg_match(NEVER_SHIPS, $f)));
 $check('the rule matches the authoring files', count($kept) > 80, (string) count($kept));
-foreach (['games/tankity/src/sim.ts', 'games/tankity/smoke-test.js', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/fx-editor.js',
+foreach (['games/tankity/src/sim.ts', 'games/tankity/smoke-test.js', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/dist/fx-editor.js',
     'games/cylon/src/state.ts', 'games/crete/src/engine.ts', 'src/main.ts', 'tools/ts-build.mjs', 'tsconfig.json'] as $f) {
     $check("the rule covers $f", in_array($f, $kept, true));
 }
@@ -91,10 +91,10 @@ $shipped = array_values(array_filter($kept, fn(string $f): bool => isset($set[$f
 $check('keeps back every authoring file', $shipped === [], implode(', ', $shipped));
 $leaks = array_values(array_filter($out, fn(string $f): bool => (bool) preg_match(NEVER_SHIPS, $f)));
 $check('ships no authoring or test files', $leaks === [], implode(', ', $leaks));
-// Every compiled module and vendored file ships.
-$built = array_values(array_filter($tracked, fn(string $f): bool => (bool) preg_match('~^games/[^/]+/(js|vendor)/~', $f)));
+// Every built bundle and its map ships, except the dev-only effects editor's.
+$built = array_values(array_filter($tracked, fn(string $f): bool => (bool) preg_match('~^games/[^/]+/dist/~', $f) && !str_contains($f, '/fx-editor.')));
 $missing = array_values(array_filter($built, fn(string $f): bool => !isset($set[$f])));
-$check('ships every compiled and vendored file', count($built) > 10 && $missing === [], implode(', ', $missing));
+$check('ships every built file', count($built) >= 8 && $missing === [], implode(', ', $missing));
 
 $check('node_modules never ships', array_filter($out, fn(string $f): bool => str_contains($f, 'node_modules')) === []);
 $check('composer-files-stay-home', !array_intersect(['composer.json', 'composer.lock', 'phpunit.xml'], $out), '');

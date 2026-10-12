@@ -8,22 +8,22 @@
  * was hidden, and shows the final standings. Joining and leaving a room is
  * lobby.ts. The game's state, the room client and the rest of the game arrive
  * as deps. */
-import type { sfx as SfxApi, music as MusicApi } from './audio.js';
+import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
 import {
   FOE_DYING, FOE_FIRE, FOE_HIT, FOE_IDLE, TANK_FIRE, TANK_HIT, TANK_IDLE, TANK_OWS, pick,
-} from './chatter.js';
-import type { FxSys } from './effects.js';
-import type { GameState, GameTank, MatchState, Tables } from './game-types.js';
-import type { HudValues } from './hud.js';
-import { stepArm } from './input.js';
-import type { Input } from './input.js';
-import { prettyRoomError, shouldCatchUp, standingsRows } from './net.js';
-import type { RoomClient } from './net.js';
-import type { RoomEvent, RoomSnapshot } from './protocol.js';
-import type { Replay } from './replay.js';
-import { H, TUNE, W, carveCrater, clamp, facing } from './sim.js';
-import type { ShopRow } from './sim.js';
-import type { EndState } from './match.js';
+} from './chatter.ts';
+import type { FxSys } from './fx/types.ts';
+import type { GameState, GameTank, MatchState, Tables } from './game-types.ts';
+import type { HudValues } from './hud.ts';
+import { stepArm } from './input.ts';
+import type { Input } from './input.ts';
+import { prettyRoomError, shouldCatchUp, standingsRows } from './net.ts';
+import type { RoomClient } from './net.ts';
+import type { RoomEvent, RoomSnapshot } from './protocol.ts';
+import type { Replay } from './replay.ts';
+import { H, TUNE, W, carveCrater, clamp, facing } from './sim.ts';
+import type { ShopRow } from './sim.ts';
+import type { EndState } from './match.ts';
 
 /** What a room match needs from the page and the rest of the game. */
 export interface RoomDeps {

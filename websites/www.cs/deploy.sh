@@ -64,27 +64,10 @@ if ! (cd games && npm ci --silent && npm run --silent check); then
   exit 1
 fi
 
-# A game not yet on the kit compiles its own TypeScript (src/) into js/, which
-# is what ships: refuse a stale build. Each such game carries its own compiler setup.
-for tool in games/*/tools/ts-build.mjs; do
-  game=$(dirname "$(dirname "$tool")")
-  if ! (cd "$game" && npm ci --silent && node tools/ts-build.mjs --check); then
-    echo "deploy: run node $tool and commit the result" >&2
-    exit 1
-  fi
-done
-
 # The site's own scripts (main.js, play/play.js) are TypeScript in src/ too, with
 # their compiler setup at the site root: refuse a stale build.
 if ! (npm ci --silent && node tools/ts-build.mjs --check); then
   echo "deploy: run node tools/ts-build.mjs and commit the result" >&2
-  exit 1
-fi
-
-# Its one library, Preact, ships as a copy in vendor/ (no node_modules on the
-# host): refuse a copy that has drifted from the pinned version.
-if ! (cd games/tankity && node tools/vendor.mjs --check); then
-  echo "deploy: run node games/tankity/tools/vendor.mjs and commit the result" >&2
   exit 1
 fi
 
@@ -120,8 +103,8 @@ while IFS= read -r -d '' f; do
     # its sources are in games/*/src/ below), the effects editor and the
     # Blender script behind the effect sprites (the rendered sheets do ship),
     # and the TypeScript build setup (package*.json, tsconfig.json,
-    # node_modules; the compiled js/ and the vendored vendor/ ship, the
-    # TypeScript sources in src/ do not).
+    # node_modules; the built dist/ ships, the TypeScript sources in src/ do
+    # not).
     games/*-test.* | games/*/test.sh | games/README.md | games/*/README.md | games/*/tools/* | games/*/test/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/*/fx-editor.* | games/*/fx/blender/*) continue ;;
     games/*/package.json | games/*/package-lock.json | games/*/tsconfig.json | games/*/node_modules/* | games/*/.gitignore) continue ;;
     # Authoring sources (Git LFS audio and Blender scenes, see .gitattributes;

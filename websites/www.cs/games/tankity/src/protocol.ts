@@ -3,7 +3,7 @@
  * The shapes rooms.php sends and accepts, written from its `room_snapshot`,
  * from every `$events[] = ['t' => ...]` / `room_emit` site and from the action
  * handlers in its router. Types only: nothing here exists at run time, so
- * this file compiles to nothing and has no js/ output. Keeping the client's
+ * this file bundles to nothing. Keeping the client's
  * idea of the protocol honest is src/protocol-fixtures.check.ts, which
  * assigns the server's real replies (protocol/*.json) to these types. */
 

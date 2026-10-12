@@ -6,7 +6,7 @@
  */
 /* The page's entry module: it builds the game's state, wires the typed modules
  * together and runs the main loop. Everything else is in a module, compiled
- * from src/ to js/ and imported here:
+ * bundled into dist/main.js:
  *   sim.ts       the game math (RNG, terrain, flight, hits, blasts)
  *   ai.ts        the drone AI
  *   flow.ts      the solo phase moves
@@ -32,35 +32,42 @@
  * as props and keep none of their own. Each typed module is a factory
  * (createShop, createMatch, ...) that takes the pieces of the game it needs as
  * a deps object, so none of them reaches for a global; the wiring is below.
- * Each import's ?v= is the module's content hash, written by
- * tools/install-files.php, so a browser never pairs a cached module with a
- * newer game.js. What stays here is the state, the main loop, the keys and the
- * page's own plumbing (overlays, the firing range, the arsenal's loading). */
-import { W, TUNE, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './js/sim.js?v=b64eb535e1';
+ * What stays here is the state, the main loop, the keys and the page's own
+ * plumbing (overlays, the firing range, the arsenal's loading). */
+import { W, TUNE, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './sim.ts';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
-} from './js/audio.js?v=ce8cdf6a6e';
-import { RoomClient, prettyRoomError } from './js/net.js?v=38d45fb1ea';
-import { runWar, warSpeed } from './js/flow.js?v=fb268dfd34';
-import { createPreview, stepPreview } from './js/preview.js?v=8e81275ae7';
-import { createReplay } from './js/replay.js?v=7cc0680c3b';
-import { createInput, touchOnly, stepArm } from './js/input.js?v=9287dbfb97';
-import { renderHelp } from './js/ui/help.js?v=7366b18437';
-import { drawShellIcon as paintShellIcon, drawGearIcon as paintGearIcon } from './js/ui/icons.js?v=b8eec86a1f';
-import { createChatter, pick, TANK_IDLE, FOE_IDLE } from './js/chatter.js?v=48b9223047';
-import { createEffects, FX, FX_BUDGET } from './js/effects.js?v=1be294b3bc';
-import { createShop } from './js/shop.js?v=6612e3149e';
-import { createHud } from './js/hud.js?v=a4c4a2d226';
-import { createView } from './js/view.js?v=fce3ec2057';
-import { createTutorial } from './js/tutorial.js?v=aa28ddad64';
-import { createGuns } from './js/guns.js?v=114898edec';
-import { createScores } from './js/scores.js?v=8402272957';
-import { createMatch } from './js/match.js?v=5da6150168';
-import { createRoom } from './js/room.js?v=5b52f793c0';
-import { createLobby } from './js/lobby.js?v=7937aa554a';
-import { createMenu } from './js/menu.js?v=01ee148e37';
+} from './audio.ts';
+import type { AudioConfig } from './audio.ts';
+import { RoomClient, prettyRoomError } from './net.ts';
+import { runWar, warSpeed } from './flow.ts';
+import type { HoldCommand } from './input.ts';
+import { createPreview, stepPreview } from './preview.ts';
+import { createReplay } from './replay.ts';
+import { createInput, touchOnly, stepArm } from './input.ts';
+import { renderHelp } from './ui/help.tsx';
+import { drawShellIcon as paintShellIcon, drawGearIcon as paintGearIcon } from './ui/icons.ts';
+import { createChatter, pick, TANK_IDLE, FOE_IDLE } from './chatter.ts';
+import { createEffects, FX, FX_BUDGET } from './effects.ts';
+import { createShop } from './shop.ts';
+import { createHud } from './hud.ts';
+import { createView } from './view.ts';
+import { createTutorial } from './tutorial.ts';
+import { createGuns } from './guns.ts';
+import { createScores } from './scores.ts';
+import { createMatch } from './match.ts';
+import { createRoom } from './room.ts';
+import { createLobby } from './lobby.ts';
+import { createMenu } from './menu.ts';
+import type { Arsenal, Weapon, Gear } from './sim.ts';
+import type { GameState, GameTank, MatchState } from './game-types.ts';
+import type { PreviewEnv } from './preview.ts';
+import type { RoomEnv } from './net.ts';
+import type { FxSetData, FxSys } from './fx/types.ts';
 
-const $ = id => document.getElementById(id);
+function $<T extends HTMLElement = HTMLElement>(id: string): T | null {
+  return document.getElementById(id) as T | null;
+}
 
 /* Keys and touch live in src/input.ts: it holds the key table (game.yaml's keys
 // section, served as game.json, with a frozen fallback), turns a key press or a
@@ -81,7 +88,11 @@ music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${
 // from that file so adding a shell never touches this code. Until it arrives
 // (or when it cannot, e.g. file:// play), this baked fallback, shaped like
 // game.json's arsenal section, keeps the war rolling. */
-const FALLBACK_ARSENAL = {
+/* game.json's arsenal section. */
+interface ArsenalData { ammo?: Weapon[]; gear?: Gear[] }
+/* game.json as the page reads it; each part may be missing. */
+interface GameConfig { effects?: Record<string, FxSetData>; arsenal?: ArsenalData; keys?: unknown; audio?: AudioConfig }
+const FALLBACK_ARSENAL: ArsenalData = {
   ammo: [
     { key: 'shell', name: 'Shell', cat: 'Shells', dmg: 34, radius: 26, price: 0, pack: 0, minRound: 1, ai: true, aiRound: 1, effect: 'shot', speed: 1.0, note: 'Free, straight, honest.', gfx: { shell: '#ffe27a', trail: '#ffd75e', blast: ['#ffb13c', '#fff3c4'], painter: 'disc', shake: 0.3 } },
     { key: 'buck', name: 'Buckshot', cat: 'Shells', dmg: 17, radius: 20, price: 80, pack: 2, minRound: 1, ai: true, aiRound: 2, effect: 'pellets', pellets: 3, spread: 0.10, speed: 1.0, note: 'Three pellets, forgiving aim.', gfx: { shell: '#ffd166', trail: '#ffb13c', blast: ['#ffb13c', '#fff3c4'], painter: 'disc', shake: 0.3 } },
@@ -94,16 +105,16 @@ const FALLBACK_ARSENAL = {
     { key: 'fuel', name: 'Fuel +60', cat: 'Hull and fuel', price: 60, n: 60, effect: 'fuel', note: 'Adds 60 driving fuel.' },
   ],
 };
-let ARSENAL = null; // the same tables, as the sim takes them
-let WEAPONS = {};
-let WORDER = [];
-let SHOP = [];
-let GEAR = {};
+let ARSENAL: Arsenal | null = null; // the same tables, as the sim takes them
+let WEAPONS: Arsenal['weapons'] = {};
+let WORDER: Arsenal['order'] = [];
+let SHOP: Arsenal['shop'] = [];
+let GEAR: Arsenal['gear'] = {};
 let ARSENAL_REV = 0; // counts arsenal rebuilds; the shop repaints its icons when it changes
 /* The icons draw what they are handed (src/ui/icons.ts); these look the weapon or trick up by key. */
-const drawShellIcon = (cv, wkey) => paintShellIcon(cv, WEAPONS[wkey]);
-const drawGearIcon = (cv, gkey) => paintGearIcon(cv, GEAR[gkey]);
-function buildArsenal(data) {
+const drawShellIcon = (cv: HTMLCanvasElement, wkey: string): void => paintShellIcon(cv, WEAPONS[wkey]);
+const drawGearIcon = (cv: HTMLCanvasElement, gkey: string): void => paintGearIcon(cv, GEAR[gkey]);
+function buildArsenal(data: ArsenalData | null | undefined): boolean {
   const a = simBuildArsenal(data);
   if (!a) return false;
   ARSENAL_REV++;
@@ -111,7 +122,7 @@ function buildArsenal(data) {
   G.shopSel = clamp(G.shopSel || 0, 0, SHOP.length - 1);
   return true;
 }
-function applyArsenal(data) {
+function applyArsenal(data: ArsenalData | null | undefined): void {
   if (data && Array.isArray(data.ammo) && data.ammo.length && buildArsenal(data)) {
     say(`Arsenal loaded: ${WORDER.length} shells, ${Object.keys(GEAR).length} tricks.`, 'info');
     if (G.phase === 'shop') renderShop();
@@ -121,11 +132,11 @@ function applyArsenal(data) {
 /* One file feeds the client: arsenal, keys, audio and effects all come from
    game.json (written from game.yaml). Any part that is missing or fails
    leaves that part's baked fallback in charge. */
-async function loadGameConfig() {
+async function loadGameConfig(): Promise<void> {
   try {
     const res = await fetch('game.json', { headers: { Accept: 'application/json' } });
     if (!res.ok) return;
-    const data = await res.json();
+    const data: GameConfig | null = await res.json();
     if (!data) return;
     installEffects(data.effects);
     applyArsenal(data.arsenal);
@@ -135,9 +146,13 @@ async function loadGameConfig() {
 }
 
 /* ---------- state ---------- */
-const G = {
-  seed: '', rng: null, body: 'tank',
-  terrain: null, clouds: [],
+/* Typed non-null for the modules, but null until the first match is dealt
+   (startDemo in init); every reader that can run earlier checks first (view.ts
+   skips painting, the frame loop waits on G.terrain). */
+const NOT_DEALT = null!;
+const G: GameState = {
+  seed: '', rng: NOT_DEALT, body: 'tank',
+  terrain: NOT_DEALT, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // banner | shop | aim | think | fly | settle | over (src/flow.ts)
   thinkT: 0, settleT: 0,
   shells: [], parts: [], booms: [], fx: null,
@@ -151,6 +166,7 @@ const G = {
   dlgQ: [], dlgT: 0, lastTalk: -99, banterT: 30, bannerT: 0, bannerDone: null,
   cam: { z: 1, cx: 360, cy: 230 },
   over: false, won: false,
+  tactics: {}, demo: false, demoHint: false, watchTurns: 0, preview: null, windTop: undefined,
 };
 /* Tables start from the baked fallback (G exists from here on); the file
 // arsenal replaces them the moment it arrives. */
@@ -172,24 +188,24 @@ G.fx = FX ? FX.createSystem({ max: FX_BUDGET }) : null;
 const { talk, exchange, pumpDialogue, say, renderLogOverlay } = createChatter({
   G, $, keyHint, toggleOverlay, refreshNavHints, placeLogBelowMenu,
 });
-const me = () => G.tanks[0];
+const me = () => G.tanks[0]!;
 const alive = () => G.tanks.filter(t => t.hp > 0);
 const foesAlive = () => G.tanks.filter(t => !t.isPlayer && t.hp > 0);
 
-function surfY(x) {
+function surfY(x: number): number {
   return simSurfY(G.terrain, x);
 }
 
 /* ---------- reading the state ---------- */
-function cur() {
-  return G.tanks[G.turn];
+function cur(): GameTank {
+  return G.tanks[G.turn]!;
 }
-function spotTaken(t, x) {
+function spotTaken(t: GameTank, x: number): boolean {
   return simSpotTaken(G.tanks, t, x);
 }
 /* The help is a Preact component too (src/ui/help.tsx), drawn into the section
    in the page; it redraws when the key table changes. */
-function renderHelpOverlay() {
+function renderHelpOverlay(): void {
   const section = $('help-overlay');
   if (section) renderHelp(section, { keyHint, onClose: () => toggleOverlay('help-overlay', 'btn-help') });
 }
@@ -197,7 +213,7 @@ function renderHelpOverlay() {
 /* ---------- firing range: a live mini demo sharing the real ballistics ---------- */
 /* The demo itself is src/preview.ts; this is its environment, and the opening
  * and closing of its veil. */
-const previewEnv = {
+const previewEnv: PreviewEnv<FxSys> = {
   weapon: key => WEAPONS[key],
   muzzle: (sys, wkey, x, y, ang) => fxMuzzle(sys, wkey, x, y, ang),
   impact: (sys, wkey, x, y, r) => { fxImpact(sys, wkey, x, y, r); },
@@ -208,7 +224,7 @@ const previewEnv = {
     if (pr) pr.textContent = text;
   },
 };
-function openPreview(wkey) {
+function openPreview(wkey: string): void {
   const w = WEAPONS[wkey];
   if (!w) return;
   G.preview = createPreview(wkey, previewEnv, FX ? FX.createSystem({ max: 260 }) : null,
@@ -225,13 +241,13 @@ function openPreview(wkey) {
   refreshNavHints();
   sfx.play('click');
 }
-function closePreview() {
+function closePreview(): void {
   if (G.preview && G.preview.fx) G.preview.fx.clear();
   G.preview = null;
   const veil = $('preview-veil');
   if (veil) veil.hidden = true;
 }
-function togglePreview() {
+function togglePreview(): void {
   if (G.preview) closePreview();
   else openPreview(G.selected);
 }
@@ -239,7 +255,7 @@ function togglePreview() {
 
 /* ---------- main loop ---------- */
 let lastT = 0;
-function frame(ts) {
+function frame(ts: number): void {
   requestAnimationFrame(frame);
   // The music watchdog re-pins a wedged scheduler to the live clock; it never
   // tears the timer down (see audio.ts).
@@ -337,17 +353,17 @@ function frame(ts) {
   renderHUD();
 }
 
-/* The room client (js/net.js, from src/net.ts) owns the session, the
+/* The room client (src/net.ts) owns the session, the
    transport, polling, the senders and the clocks, and reaches this page only
    through the handlers below: it reports the snapshot and the events it has
    not seen (netOnSnapshot), whether the server answers (the dots), and a
    Ready change or a failed send. fetch, timers and the clock are handed in. */
-function browserRoomEnv() {
+function browserRoomEnv(): RoomEnv {
   return {
     fetch: (url, init) => fetch(url, init),
     setTimeout: (fn, ms) => setTimeout(fn, ms),
     setInterval: (fn, ms) => setInterval(fn, ms),
-    clearInterval: id => clearInterval(id),
+    clearInterval: id => clearInterval(id as number),
     now: () => performance.now(),
     beacon: (url, body) => typeof navigator !== 'undefined' && !!navigator.sendBeacon && navigator.sendBeacon(url, body),
   };
@@ -362,7 +378,7 @@ const net = new RoomClient(browserRoomEnv(), {
    drive it has not sent, the room snapshot waiting for the replay to drain,
    and the last snapshot it drew. The replay queue and the volley on screen
    live in `replay` (src/replay.ts), declared below. */
-const MATCH = {
+const MATCH: MatchState = {
   myTurn: false, aimDirty: false, driveAcc: 0, driveT: 0,
   pendingRoom: null,
   lastPhase: '', lastTurn: -1, lastRound: -1, initials: '',
@@ -448,11 +464,11 @@ const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
   G, $, net, sfx, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, openRooms, placeLogBelowMenu,
   randomRun, freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound, tutorialOpen,
 });
-function myTank() {
+function myTank(): GameTank | null {
   for (const t of G.tanks) if (t.isPlayer) return t;
   return null;
 }
-function seatName(seat) {
+function seatName(seat: number): string {
   const s = net.seats[seat];
   if (!s || !s.name) return 'seat ' + (seat + 1);
   return s.name;
@@ -460,7 +476,7 @@ function seatName(seat) {
 
 
 /* ---------- input + init ---------- */
-function applyKeys(def) {
+function applyKeys(def: unknown): void {
   if (!input.setKeys(def)) return;
   renderKeyHints();
   renderHelpOverlay();
@@ -475,27 +491,27 @@ function applyKeys(def) {
   renderLeaveVeil();
 }
 /* " (KEY)" for a button label; nothing on touch screens. */
-function keyCap(ctx, action) {
+function keyCap(ctx: string, action: string): string {
   return TOUCH ? '' : ` (${keyHint(ctx, action)})`;
 }
 /* The shown key for an action: the first token its context lists, or the
 // nth with data-keyhint="context:action:n" where prose names two keys. */
-function keyHint(ctx, action, idx) {
+function keyHint(ctx: string, action: string, idx?: number): string {
   return input.hint(ctx, action, idx);
 }
 /* Fill every [data-keyhint] span in the page at boot and again if game.json
 // loads late, so labels can never drift from behavior. The Preact overlays
 // (marked data-ui) fill their own from the same keyHint. */
-function renderKeyHints() {
+function renderKeyHints(): void {
   document.querySelectorAll('[data-keyhint]').forEach(el => {
     if (el.closest && el.closest('[data-ui]')) return;
-    const parts = (el.getAttribute('data-keyhint') || '').split(':');
-    const cap = parts.length >= 2 ? keyHint(parts[0], parts[1], +(parts[2] || 0)) : '';
+    const [kctx, kact, kidx] = (el.getAttribute('data-keyhint') || '').split(':');
+    const cap = kctx !== undefined && kact !== undefined ? keyHint(kctx, kact, +(kidx || 0)) : '';
     const bare = el.className === 'key';
     el.textContent = cap ? (bare ? `(${cap})` : cap) : '';
   });
 }
-function freshMatchFromSeedBox(opts) {
+function freshMatchFromSeedBox(opts?: { tut?: boolean }): void {
   // A new match takes the whole frame: shut any panels so the menu never
   // sits over the briefing and the shop never opens underneath it.
   closeOverlays();
@@ -503,16 +519,16 @@ function freshMatchFromSeedBox(opts) {
   // tutorial (U or the menu) always deals this match with the coach on.
   endTutorial(tutorialActive());
   if (opts && opts.tut) armTutorial();
-  const seedInput = $('seed-input');
+  const seedInput = $<HTMLInputElement>('seed-input');
   startSolo(seedInput ? seedInput.value : '');
   render(); renderHUD();
 }
-function randomRun() {
-  const seedBox = $('seed-input');
+function randomRun(): void {
+  const seedBox = $<HTMLInputElement>('seed-input');
   if (seedBox) seedBox.value = 'scorched-' + Math.floor(Math.random() * 90000 + 10000);
   freshMatchFromSeedBox();
 }
-function openRooms() {
+function openRooms(): void {
   unlock();
   sfx.play('click');
   openLobby();
@@ -521,12 +537,12 @@ function openRooms() {
    for a moment shows its name, what it does and its key in a styled card.
    Touch screens have no hover, and their buttons keep spoken names. */
 const TIP_DELAY_MS = 700;
-function bindToolTips() {
+function bindToolTips(): void {
   const tip = $('tool-tip');
   if (!tip || !document.querySelectorAll) return;
   let timer = 0;
   const hide = () => { clearTimeout(timer); timer = 0; tip.hidden = true; };
-  const show = btn => {
+  const show = (btn: HTMLElement): void => {
     const name = tip.querySelector('.tool-tip-name');
     const desc = tip.querySelector('.tool-tip-desc');
     const key = btn.querySelector('.key');
@@ -539,7 +555,7 @@ function bindToolTips() {
     tip.style.left = `${left}px`;
     tip.style.top = `${r.bottom + 8}px`;
   };
-  document.querySelectorAll('.guide-actions .tool').forEach(btn => {
+  document.querySelectorAll<HTMLElement>('.guide-actions .tool').forEach(btn => {
     const arm = () => { clearTimeout(timer); timer = setTimeout(() => show(btn), TIP_DELAY_MS); };
     btn.addEventListener('mouseenter', arm);
     btn.addEventListener('mouseleave', hide);
@@ -549,13 +565,13 @@ function bindToolTips() {
   });
 }
 /* Another panel (menu, help, report, log) open above the shop takes the keys. */
-function shopCovered() {
+function shopCovered(): boolean {
   return ['menu-overlay', 'help-overlay', 'report-overlay', 'log-overlay', 'gun-overlay'].some(id => { const el = $(id); return el && !el.hidden; });
 }
 /* A line key (j/k): in the shop it walks the rows, like the arrows; in the gun
 // picker it moves the cursor; with any other panel open it scrolls that panel.
 // Paging keys only ever scroll. */
-function lineKey(dir) {
+function lineKey(dir: number): boolean {
   if (G.phase === 'shop' && !G.over && !G.preview && !shopCovered()) return shopSelect(dir);
   if (gunsOpen()) { moveGunCursor(dir); return true; }
   return scrollOverlay(dir, 0);
@@ -566,7 +582,7 @@ function lineKey(dir) {
 // and the key falls through to the next candidate. The order they are offered
 // in (panel scrolling, the gun grid, the shop, ESC, the held aim keys, fire,
 // then the plain global keys) is src/input.ts's. */
-function bindKeys() {
+function bindKeys(): void {
   input.register({
     lineDown: () => lineKey(1),
     lineUp: () => lineKey(-1),
@@ -580,7 +596,7 @@ function bindKeys() {
     gridDown: () => gunGrid(GUN_COLS),
     confirm: p => {
       if (!gunsOpen()) return undefined;
-      if (!p.repeat) pickGun(rackGuns()[gunCursorAt()]);
+      if (!p.repeat) pickGun(rackGuns()[gunCursorAt()]!);
       return true;
     },
     digit: p => {
@@ -601,10 +617,10 @@ function bindKeys() {
       buyItem(row, G.shopQty);
       return true;
     },
-    buy: () => { buyItem(SHOP[G.shopSel], G.shopQty); return true; },
+    buy: () => { buyItem(SHOP[G.shopSel]!, G.shopQty); return true; },
     preview: () => {
       const it = SHOP[G.shopSel];
-      if (it && it.kind === 'ammo') { openPreview(it.w); return true; }
+      if (it && it.kind === 'ammo') { openPreview(it.w!); return true; }
       return 'quiet'; // V does nothing else in the shop
     },
     // ESC in the shop shuts the firing range first, then any open panel
@@ -657,7 +673,12 @@ function bindKeys() {
   });
   input.bind(window);
 }
-function init() {
+const AIM_COMMANDS: Record<string, HoldCommand> = { up: 'powerUp', down: 'powerDown', left: 'barrelLeft', right: 'barrelRight' };
+/* A pad button that was clicked should not keep keyboard focus, or Space would press it again. */
+function blurTarget(ev: Event): void {
+  (ev.currentTarget as HTMLElement).blur();
+}
+function init(): void {
   if (TOUCH) document.documentElement.classList.add('touch');
   renderHelpOverlay();
   bindKeys();
@@ -680,37 +701,38 @@ function init() {
   loadOccupancy();
   maybeApplyInviteCode();
 
-  document.querySelectorAll('[data-aim]').forEach(btn => {
-    const act = { up: 'powerUp', down: 'powerDown', left: 'barrelLeft', right: 'barrelRight' }[btn.getAttribute('data-aim')];
-    input.bindHold(btn, act);
+  document.querySelectorAll<HTMLElement>('[data-aim]').forEach(btn => {
+    const act = AIM_COMMANDS[btn.getAttribute('data-aim') ?? ''];
+    if (act) input.bindHold(btn, act);
   });
   const cannon = $('btn-cannon');
-  if (cannon) cannon.addEventListener('click', ev => { ev.currentTarget.blur(); unlock(); music.start(); playerFire(); });
+  if (cannon) cannon.addEventListener('click', ev => { blurTarget(ev); unlock(); music.start(); playerFire(); });
   const track = $('btn-track');
-  if (track) track.addEventListener('click', ev => { ev.currentTarget.blur(); unlock(); music.next(); });
+  if (track) track.addEventListener('click', ev => { blurTarget(ev); unlock(); music.next(); });
   const weapon = $('btn-weapon');
-  if (weapon) weapon.addEventListener('click', ev => { ev.currentTarget.blur(); if (gunsOpen()) closeGuns(); else openGuns(); });
-  for (const [id, act] of [['btn-drive-l', 'driveLeft'], ['btn-drive-r', 'driveRight']]) {
+  if (weapon) weapon.addEventListener('click', ev => { blurTarget(ev); if (gunsOpen()) closeGuns(); else openGuns(); });
+  for (const [id, act] of [['btn-drive-l', 'driveLeft'], ['btn-drive-r', 'driveRight']] as const) {
     const btn = $(id);
     if (btn) input.bindHold(btn, act);
   }
-  for (const [btnId, ovId] of [['btn-log', 'log-overlay'], ['btn-help', 'help-overlay']]) {
+  for (const [btnId, ovId] of [['btn-log', 'log-overlay'], ['btn-help', 'help-overlay']] as const) {
     const b = $(btnId);
-    if (b) b.addEventListener('click', ev => { ev.currentTarget.blur(); toggleOverlay(ovId, btnId); });
+    if (b) b.addEventListener('click', ev => { blurTarget(ev); toggleOverlay(ovId, btnId); });
   }
   const menuBtn = $('btn-menu');
-  if (menuBtn) menuBtn.addEventListener('click', ev => { ev.currentTarget.blur(); toggleOverlay('menu-overlay', 'btn-menu'); });
+  if (menuBtn) menuBtn.addEventListener('click', ev => { blurTarget(ev); toggleOverlay('menu-overlay', 'btn-menu'); });
   if (document.addEventListener) document.addEventListener('fullscreenchange', syncFullscreenLabel);
   if (document.addEventListener) document.addEventListener('fullscreenchange', lockEscapeInFullscreen);
   const pvClose = $('preview-close');
-  if (pvClose) pvClose.addEventListener('click', ev => { ev.currentTarget.blur(); closePreview(); });
+  if (pvClose) pvClose.addEventListener('click', ev => { blurTarget(ev); closePreview(); });
   // Any touch or keypress unlocks the speakers and (re)starts a non-muted
   // song, so music never sits claiming to play while silent after a refresh.
   // This fires before the game keys, and starting twice is a harmless no-op.
-  const kickAudio = ev => {
+  const kickAudio = (ev: Event): void => {
     // A first tap that turns the music off must not fetch a track.
-    const hit = ev.type === 'keydown' ? input.lookup('global', ev)
-      : (ev.target && ev.target.closest && ev.target.closest('#btn-music') ? 'music' : '');
+    const target = ev.target as Element | null;
+    const hit = ev.type === 'keydown' ? input.lookup('global', ev as KeyboardEvent)
+      : (target && target.closest && target.closest('#btn-music') ? 'music' : '');
     noteGesture(hit === 'music');
   };
   window.addEventListener('pointerdown', kickAudio, true);
@@ -723,10 +745,10 @@ function init() {
 }
 /* The log hangs just under the menu strip, whose height changes with the
    frame width, so it never covers the battle buttons. */
-function placeLogBelowMenu() {
+function placeLogBelowMenu(): void {
   G.windTop = windGaugeTop();
   // The speech bubble rides just above the status bar, never over it.
-  const hud = document.querySelector && document.querySelector('.hudbar');
+  const hud = document.querySelector && document.querySelector<HTMLElement>('.hudbar');
   const dlg = $('dialogue');
   const holder = dlg && dlg.parentElement;
   if (hud && dlg && holder && holder.offsetHeight && hud.offsetHeight) {
@@ -737,11 +759,11 @@ function placeLogBelowMenu() {
   if (!bar || !log || !bar.offsetHeight) return;
   log.style.top = `${bar.offsetTop + bar.offsetHeight + 6}px`;
 }
-function toggleSound() {
+function toggleSound(): void {
   setSoundMuted(!isSoundMuted());
   renderMenu();
 }
-function toggleMusic() {
+function toggleMusic(): void {
   setMusicMuted(!isMusicMuted());
   renderMenu();
 }
@@ -749,7 +771,7 @@ function toggleMusic() {
 line, page, and half-page keys. Mouse wheels and touch keep working as
 before; these keys are the no-mouse way to reach what does not fit. */
 const SCROLL_LINE = 40;
-function overlayScrollTarget() {
+function overlayScrollTarget(): HTMLElement | null {
   // The shop list scrolls inside its card, so it takes the keys directly.
   const shopVeil = $('shop-veil');
   if (shopVeil && !shopVeil.hidden) return $('shop-list');
@@ -760,7 +782,7 @@ function overlayScrollTarget() {
   }
   return null;
 }
-function scrollOverlay(lines, pages) {
+function scrollOverlay(lines: number, pages: number): boolean {
   const el = overlayScrollTarget();
   if (!el) return false;
   refreshNavHints();
@@ -774,7 +796,7 @@ function scrollOverlay(lines, pages) {
 }
 /* Every scrollable panel carries a visible key footer. It reads disabled
 while everything fits, and lights up the moment content overflows. */
-const NAV_HINTS = [
+const NAV_HINTS: [string, string][] = [
   // The shop scrolls its list, not its veil.
   ['shop-list', 'nav-shop'], ['lobby-veil', 'nav-lobby'],
   ['preview-veil', 'nav-preview'], ['end-veil', 'nav-end'],
@@ -782,7 +804,7 @@ const NAV_HINTS = [
   ['menu-overlay', 'nav-menu'], ['log-overlay', 'nav-log'],
   ['tutorial-overlay', 'nav-tutorial'], ['gun-overlay', 'nav-gun'],
 ];
-function refreshNavHints() {
+function refreshNavHints(): void {
   for (const [panelId, hintId] of NAV_HINTS) {
     const panel = $(panelId), hint = $(hintId);
     if (!panel || !hint) continue;
@@ -792,17 +814,17 @@ function refreshNavHints() {
 }
 /* ESC shuts whatever is overlaid: the firing range first, then the lobby,
 then every open panel. The shop keeps its own ESC (next round). */
-function closeLobbyVeil() {
+function closeLobbyVeil(): boolean {
   const veil = $('lobby-veil');
   if (!veil || veil.hidden) return false;
   veil.hidden = true;
   refreshNavHints();
   return true;
 }
-function closeOverlays() {
+function closeOverlays(): boolean {
   let shut = closeGuns();
   for (const [ovId, btnId] of [['log-overlay', 'btn-log'], ['help-overlay', 'btn-help'],
-      ['report-overlay', 'scores-open'], ['menu-overlay', 'btn-menu']]) {
+      ['report-overlay', 'scores-open'], ['menu-overlay', 'btn-menu']] as const) {
     const ov = $(ovId);
     if (ov && !ov.hidden) { toggleOverlay(ovId, btnId); shut = true; }
   }
@@ -811,13 +833,13 @@ function closeOverlays() {
 /* In-frame panels overlay the battle and never pause it. */
 /* The panels a component draws: redrawn on open and close, so each knows it
    was closed and forgets its scroll (the browser reopens it at the top). */
-const OVERLAY_PAINT = {
+const OVERLAY_PAINT: Record<string, () => void> = {
   'menu-overlay': () => renderMenu(),
   'log-overlay': () => renderLogOverlay(),
   'report-overlay': () => renderScoresOverlay(),
   'help-overlay': () => renderHelpOverlay(),
 };
-function toggleOverlay(id, btnId) {
+function toggleOverlay(id: string, btnId?: string): void {
   const ov = $(id);
   if (!ov) return;
   ov.hidden = !ov.hidden;
@@ -826,7 +848,7 @@ function toggleOverlay(id, btnId) {
   if (btn) btn.setAttribute('aria-expanded', String(!ov.hidden));
   refreshNavHints();
 }
-function toggleFullscreen() {
+function toggleFullscreen(): void {
   try {
     // The frame carries the canvas plus its HUD and pads, so the whole
     // battle goes fullscreen together.
@@ -844,13 +866,13 @@ function toggleFullscreen() {
 /* In fullscreen the browser takes ESC to leave fullscreen, so the game never
    sees it. Where Keyboard Lock exists (Chromium), claim ESC for the game:
    a tap closes menus as usual and holding ESC still leaves fullscreen. */
-function lockEscapeInFullscreen() {
-  const kb = navigator.keyboard;
+function lockEscapeInFullscreen(): void {
+  const kb = (navigator as Navigator & { keyboard?: { lock?(keys: string[]): Promise<void>; unlock(): void } }).keyboard;
   if (!kb || !kb.lock) return;
   if (document.fullscreenElement) kb.lock(['Escape']).catch(() => {});
   else kb.unlock();
 }
-function syncFullscreenLabel() {
+function syncFullscreenLabel(): void {
   renderMenu();
 }
 

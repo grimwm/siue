@@ -5,14 +5,14 @@
  * chosen, what is muted, whether a room runs, and what each button does.
  * The page's other controls (sound, music, fullscreen, a fresh match, the
  * rooms) arrive as deps. */
-import type { sfx as SfxApi } from './audio.js';
-import type { GameState, GameTank } from './game-types.js';
-import type { RoomClient } from './net.js';
-import { drawUnitIcon } from './ui/icons.js';
-import { renderMenu as drawMenu } from './ui/menu.js';
-import type { KeyHintFn } from './ui/chrome.js';
+import type { sfx as SfxApi } from './audio.ts';
+import type { GameState, GameTank } from './game-types.ts';
+import type { RoomClient } from './net.ts';
+import { drawUnitIcon } from './ui/icons.ts';
+import { renderMenu as drawMenu } from './ui/menu.tsx';
+import type { KeyHintFn } from './ui/chrome.tsx';
 
-/** The slice of the game's state the menu reads and writes (game.js's G). */
+/** The slice of the game's state the menu reads and writes (main.ts's G). */
 export type MenuState = Pick<GameState, 'body' | 'tanks'>;
 
 /** What the menu needs from the page and the rest of the game. */

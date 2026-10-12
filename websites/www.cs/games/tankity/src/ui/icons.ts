@@ -5,8 +5,8 @@
  * game menu a thumbnail per unit. Each function draws on the canvas it is
  * handed and reads nothing else: the weapon or trick to draw arrives as an
  * argument, so no game state is needed here. */
-import { drawChassis } from '../render.js';
-import type { Gear, Gfx, Weapon } from '../sim.js';
+import { drawChassis } from '../render.ts';
+import type { Gear, Gfx, Weapon } from '../sim.ts';
 
 /** A paint job with every color the shell icon draws. */
 type Paint = Required<Pick<Gfx, 'shell' | 'trail' | 'blast'>> & Pick<Gfx, 'painter'>;

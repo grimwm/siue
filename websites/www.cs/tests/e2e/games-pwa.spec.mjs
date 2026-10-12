@@ -5,8 +5,8 @@ import { test, expect } from '@playwright/test';
 const GAMES = ['cylon', 'tankity', 'crete'];
 const PAGE_GAMES = ['tankity', 'crete'];
 const RENDERED = { tankity: '#stage', crete: 'h1' };
-// The entry script each page loads: Tankity's source file, Crete's bundle.
-const ENTRY = { tankity: 'game.js', crete: 'dist/main.js' };
+// The entry script each page loads: both games' bundles.
+const ENTRY = { tankity: 'dist/main.js', crete: 'dist/main.js' };
 
 async function manifestOf(request, baseURL, id) {
   // A page game links its manifest from its own page; Cylon, which runs in

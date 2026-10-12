@@ -8,7 +8,7 @@
 #
 # Nothing reads this file at runtime. Browsers cannot read YAML and the web
 # host has no YAML extension, so a generator checks it and writes game.json,
-# which game.js (the client) and rooms.php (the room server) both load:
+# which src/main.ts (the client) and rooms.php (the room server) both load:
 #
 #   php tools/game-json.php          check this file, rewrite game.json
 #   php tools/game-json.php --check  fail if this file is invalid or
@@ -566,7 +566,7 @@ audio:
 # effects
 # --------------------------------------------------------------------------
 # What every weapon looks like in flight: the muzzle flash, the trail, the
-# blast and a few extras, drawn by the particle engine in fx.js. Looks never
+# blast and a few extras, drawn by the particle engine in src/fx/engine.ts. Looks never
 # change the sim. The blast radius, damage and screen shake default come from
 # the arsenal above; effects only decorate them, scaling to the radius the
 # sim hands them (`unit: r`). The effects editor (fx-editor.html, local site

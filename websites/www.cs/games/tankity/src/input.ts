@@ -1,6 +1,6 @@
 /* Operation Tankity: keyboard and touch input.
  *
- * Input maps physical keys and touches to named commands; game.js registers
+ * Input maps physical keys and touches to named commands; main.ts registers
  * what each command does right now. The names are the actions of game.json's
  * `keys` section (barrelLeft, fire, guns, lineDown, ...), so a rebinding in
  * game.yaml changes which key reaches a command and nothing here. A handler

@@ -4,11 +4,11 @@
  * store cannot be reached they fall back to this browser's localStorage. The
  * scores overlay (src/ui/scores.tsx) draws the lines kept here. The game's
  * state and the page arrive as deps. */
-import type { GameState } from './game-types.js';
-import type { KeyHintFn } from './ui/chrome.js';
-import { renderScores as drawScores } from './ui/scores.js';
+import type { GameState } from './game-types.ts';
+import type { KeyHintFn } from './ui/chrome.tsx';
+import { renderScores as drawScores } from './ui/scores.tsx';
 
-/** The slice of the game's state a filed report is written from (game.js's G). */
+/** The slice of the game's state a filed report is written from (main.ts's G). */
 export type ScoresState = Pick<GameState, 'score' | 'roundsWon' | 'won' | 'seed'>;
 
 /** A finished run as it is filed. */

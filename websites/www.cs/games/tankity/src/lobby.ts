@@ -6,20 +6,20 @@
  * match, the question before leaving one, leaving it, and a rematch on the
  * same hills. A running match is room.ts. The game's state, the room client
  * and the rest of the game arrive as deps. */
-import type { sfx as SfxApi } from './audio.js';
-import type { GameState, MatchState } from './game-types.js';
-import type { HudValues } from './hud.js';
-import type { EndState } from './match.js';
-import { inviteUrl, prettyRoomError } from './net.js';
-import type { RoomClient } from './net.js';
-import type { RoomEvent, RoomSnapshot } from './protocol.js';
-import type { Replay } from './replay.js';
-import type { ScoresState } from './scores.js';
-import type { KeyHintFn } from './ui/chrome.js';
-import { drawMapIcon } from './ui/icons.js';
-import { renderLeave as drawLeave } from './ui/leave.js';
-import { renderLobby as drawLobby } from './ui/lobby.js';
-import type { LobbySeat } from './ui/lobby.js';
+import type { sfx as SfxApi } from './audio.ts';
+import type { GameState, MatchState } from './game-types.ts';
+import type { HudValues } from './hud.ts';
+import type { EndState } from './match.ts';
+import { inviteUrl, prettyRoomError } from './net.ts';
+import type { RoomClient } from './net.ts';
+import type { RoomEvent, RoomSnapshot } from './protocol.ts';
+import type { Replay } from './replay.ts';
+import type { ScoresState } from './scores.ts';
+import type { KeyHintFn } from './ui/chrome.tsx';
+import { drawMapIcon } from './ui/icons.ts';
+import { renderLeave as drawLeave } from './ui/leave.tsx';
+import { renderLobby as drawLobby } from './ui/lobby.tsx';
+import type { LobbySeat } from './ui/lobby.tsx';
 
 /** What the lobby shows that the game decides (see LOBBY). */
 export interface LobbyView {
@@ -39,7 +39,7 @@ export interface LobbyView {
   seatsHint: string;
 }
 
-/** The slice of the game's state getting into a room touches (game.js's G). */
+/** The slice of the game's state getting into a room touches (main.ts's G). */
 export type LobbyState = Pick<GameState, 'body' | 'demo' | 'over'>;
 
 /** What the lobby needs from the page and the rest of the game. */

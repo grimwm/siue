@@ -118,11 +118,10 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
   `php tools/game-json.php` in its folder (`--check` runs in `make test` and
   `make deploy`). See `games/tankity/README.md`.
 - Deploys skip `README.md` files, every game's `tools/` folder, tests,
-  `games/tankity/game.yaml`, and the TypeScript setup (`src/`, `package*.json`,
-  `tsconfig.json`, `node_modules/`); nothing at runtime reads them. The
-  compiled `js/` ships. Tankity and Cylon each carry their own copy of
-  `tools/ts-build.mjs`, because a game folder stands alone; `make test` and
-  `make deploy` run each one's `--check`.
+  `games/tankity/game.yaml`, and the TypeScript setup (`src/`, `build.json`,
+  `package*.json`, `tsconfig.json`, `node_modules/`); nothing at runtime reads them. The
+  built `dist/` ships. Every game is built by the shared kit in `_kit/`;
+  `make test` and `make deploy` run each game's `--check`.
 - Every card opens, and **Copy link** copies, the game's site page
   (`play/<id>/`). The game's own page (`games/<id>/`) still runs on its own,
   without the navbar.

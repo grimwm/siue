@@ -5,7 +5,7 @@
  * sim.ts), so the demo flies exactly like a real shot. It aims, fires at a
  * fixed dummy, shows how the volley went, then resets and goes again.
  *
- * The state is a plain PreviewState that game.js keeps (G.preview) and the
+ * The state is a plain PreviewState that main.ts keeps (G.preview) and the
  * renderer draws from the view; this module only steps it. It never touches
  * the page: weapons, particle effects and the result text come in as a
  * PreviewEnv, so it compiles in the DOM-free program and preview-test.js
@@ -13,23 +13,24 @@
 import {
   GRAV, FLAT_GRAV, ROLL_LIFT, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage,
   groundAt, groundSlope, rollStart, rollStep, rollOut,
-} from './sim.js';
-import type { Weapon } from './sim.js';
+} from './sim.ts';
+import type { Weapon } from './sim.ts';
 
 export const PV_W = 360, PV_H = 200, PV_WIND = 3, PV_FOE_HP = 60;
 
-/** The slice of an effects system (fx.js createSystem) the preview drives. */
+/** The slice of an effects system (fx/engine.ts createSystem) the preview drives. */
 export interface PreviewFx { wind: number; step(dt: number): void; clear(): void }
 
 /** What the preview needs from its host. The effect hooks get the preview's
- * own system (null when there is none) and do nothing for null. */
-export interface PreviewEnv {
+ * own system (null when there is none) and do nothing for null. `F` is the
+ * system type the host hands to createPreview, so its hooks receive that type. */
+export interface PreviewEnv<F extends PreviewFx = PreviewFx> {
   weapon(key: string): Readonly<Weapon> | undefined;
-  muzzle(fx: PreviewFx | null, wkey: string, x: number, y: number, ang: number): void;
-  impact(fx: PreviewFx | null, wkey: string, x: number, y: number, r: number): void;
-  special(fx: PreviewFx | null, wkey: string, name: string, x: number, y: number, ang: number): void;
+  muzzle(fx: F | null, wkey: string, x: number, y: number, ang: number): void;
+  impact(fx: F | null, wkey: string, x: number, y: number, r: number): void;
+  special(fx: F | null, wkey: string, name: string, x: number, y: number, ang: number): void;
   /** A shell in flight: drip its trail from its own position and velocity. */
-  trail(fx: PreviewFx | null, shell: PreviewShell, dt: number): void;
+  trail(fx: F | null, shell: PreviewShell, dt: number): void;
   /** The result line under the stage, once a volley has landed. */
   showResult(text: string): void;
 }
@@ -80,7 +81,7 @@ export function makePreviewTerrain(): number[] {
 }
 
 /** A fresh demo of weapon `wkey`, or null for a weapon the arsenal lacks. */
-export function createPreview<C>(wkey: string, env: PreviewEnv, fx: PreviewFx | null, cv: C): PreviewState<C> | null {
+export function createPreview<C, F extends PreviewFx>(wkey: string, env: PreviewEnv<F>, fx: F | null, cv: C): (PreviewState<C> & { fx: F | null }) | null {
   if (!env.weapon(wkey)) return null;
   return {
     wkey, terr: makePreviewTerrain(),

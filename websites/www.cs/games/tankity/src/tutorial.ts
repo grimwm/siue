@@ -6,13 +6,13 @@
  * replays it any time. The coach overlay (src/ui/tutorial.tsx) draws what
  * this says; the rest of the game asks it three questions (is it on, arm it,
  * note a shot) through the object createTutorial returns. */
-import type { GameState, GameTank } from './game-types.js';
-import type { RoomClient } from './net.js';
-import type { sfx as SfxApi } from './audio.js';
-import type { KeyHintFn } from './ui/chrome.js';
-import { renderTutorial as drawTutorial } from './ui/tutorial.js';
+import type { GameState, GameTank } from './game-types.ts';
+import type { RoomClient } from './net.ts';
+import type { sfx as SfxApi } from './audio.ts';
+import type { KeyHintFn } from './ui/chrome.tsx';
+import { renderTutorial as drawTutorial } from './ui/tutorial.tsx';
 
-/** The slice of the game's state the coach reads (game.js's G). */
+/** The slice of the game's state the coach reads (main.ts's G). */
 export type TutorialState = Pick<GameState, 'demo' | 'over' | 'tanks' | 'phase' | 'selected'>;
 
 /** Where the player is in the lesson. */

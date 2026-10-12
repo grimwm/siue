@@ -1,7 +1,7 @@
 /* Operation Tankity: sound.
  *
  * Synthesized voices and songs, optionally replaced by the files in game.json's
- * audio section, behind a small interface: game.js asks for an effect, a track
+ * audio section, behind a small interface: main.ts asks for an effect, a track
  * or a mute and never sees the context, the timers or the track cache. Uses
  * WebAudio, fetch and timers only: nothing here touches the page (a track
  * announcing itself is a callback, see music.onTrackStart). */

@@ -36,6 +36,7 @@ export const WEIGHTS = {
   'tankity-touch.spec.mjs': 3,
   'games-pwa.spec.mjs': 3,
   'games-install.spec.mjs': 10,
+  'play-nav.spec.mjs': 14,
 };
 export const DEFAULT_S = 30;
 

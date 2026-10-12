@@ -15,7 +15,7 @@ const { InstallBar } = bar;
 
 const walk = (el, out = []) => { for (const c of el.children) if (c.nodeType === 1) { out.push(c); walk(c, out); } return out; };
 const byId = (el, id) => walk(el).find(n => n.id === id);
-const VIEW = { off: false, install: false, highlight: false, steps: false, share: 'idle' };
+const VIEW = { off: false, install: false, highlight: false, steps: false, share: 'idle', shareIcon: 'dots' };
 const calls = [];
 const roots = [];
 afterEach(() => {
@@ -97,4 +97,34 @@ test('the "Link copied" status line is always in the page, and its empty state h
   const empty = css.match(/\.kit-install-status:empty \{([^}]*)\}/)[1];
   assert.doesNotMatch(empty, /display\s*:\s*none/);
   assert.match(empty, /clip-path/);
+});
+
+const svgOf = el => walk(el).find(n => n.localName === 'svg');
+const pathsOf = el => walk(svgOf(el)).map(n => n.localName).join(',');
+
+test('Install and Share each carry an icon (hidden from screen readers) beside their word, which a phone hides visually, not with display: none', () => {
+  const root = draw({ install: true });
+  for (const [id, word, title] of [['install-btn', 'Install', 'Install this game as an app'], ['share-btn', 'Share', 'Share a link to this game']]) {
+    const btn = byId(root, id);
+    assert.ok(svgOf(btn), `${id} has an icon`);
+    assert.equal(svgOf(btn).getAttribute('aria-hidden'), 'true');
+    const txt = walk(btn).find(n => n.className === 'kit-install-txt');
+    assert.equal(txt.textContent, word, `${id}'s word stays in the page, so it is the accessible name`);
+    assert.equal(btn.textContent, word);
+    assert.equal(btn.getAttribute('title'), title);
+  }
+  const src = readFileSync(join(import.meta.dirname, '..', 'ui', 'install-bar.tsx'), 'utf8');
+  const phone = src.match(/@media \(max-width: 600px\) \{([\s\S]*?)\n\}/)[1];
+  const txtRule = phone.match(/\.kit-install-txt \{([^}]*)\}/)[1];
+  assert.match(txtRule, /clip-path/);
+  assert.doesNotMatch(txtRule, /display\s*:\s*none/);
+  assert.match(phone, /\.kit-install-btn \{[^}]*width: 2\.5rem/);
+});
+
+test('Share draws the box on an Apple platform and the three dots elsewhere', () => {
+  const dots = pathsOf(byId(draw({ shareIcon: 'dots' }), 'share-btn'));
+  const box = pathsOf(byId(draw({ shareIcon: 'box' }), 'share-btn'));
+  assert.notEqual(dots, box);
+  assert.match(dots, /circle/);
+  assert.doesNotMatch(box, /circle/);
 });

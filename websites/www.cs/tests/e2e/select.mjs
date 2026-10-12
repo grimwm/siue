@@ -19,7 +19,7 @@ const SITE = 'websites/www.cs/';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SPECS = readdirSync(HERE).filter(f => f.endsWith('.spec.mjs')).sort();
 const tankity = SPECS.filter(f => f.startsWith('tankity-'));
-const shell = ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'games-install.spec.mjs', 'home-eye.spec.mjs', 'cylon-help.spec.mjs', 'cylon-play.spec.mjs'];
+const shell = ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'games-install.spec.mjs', 'play-nav.spec.mjs', 'home-eye.spec.mjs', 'cylon-help.spec.mjs', 'cylon-play.spec.mjs'];
 
 /* [pattern, what to run]: 'NONE', 'ALL', a list of specs, or a function of
    the regex match returning a list. */
@@ -62,12 +62,12 @@ const RULES = [
   [new RegExp(`^${SITE}games/\\.htaccess$`), 'ALL'],
   // Tankity's TypeScript: the sources, the bundles the browser loads, and the
   // settings that decide how one becomes the other.
-  [new RegExp(`^${SITE}games/tankity/(src/|dist/|build\\.json$|tsconfig\\.json$)`), [...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs', 'games-install.spec.mjs']],
+  [new RegExp(`^${SITE}games/tankity/(src/|dist/|build\\.json$|tsconfig\\.json$)`), [...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs', 'games-install.spec.mjs', 'play-nav.spec.mjs']],
   // A game's own folder.
-  [new RegExp(`^${SITE}games/tankity/`), [...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs', 'games-install.spec.mjs']],
+  [new RegExp(`^${SITE}games/tankity/`), [...tankity, 'games-pwa.spec.mjs', 'games-hub.spec.mjs', 'games-install.spec.mjs', 'play-nav.spec.mjs']],
   // Cylon's folder (src/, the dist/ bundle the kit builds, build.json, tests): the home page and the games hub load it.
   [new RegExp(`^${SITE}games/cylon/`), shell],
-  [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'crete-play.spec.mjs', 'games-install.spec.mjs']],
+  [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'crete-play.spec.mjs', 'games-install.spec.mjs', 'play-nav.spec.mjs']],
   // The site's own TypeScript (src/ compiles to main.js and play/play.js) and the
   // settings that decide how: the lockfile only pins the compiler.
   [new RegExp(`^${SITE}package-lock\\.json$`), 'NONE'],

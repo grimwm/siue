@@ -245,4 +245,8 @@ body:not(.cylon-nav-combat) .site-nav-power {
 .cylon-install:empty { display: none; }
 /* The pill sits at the screen's bottom, so the address opens above it. */
 .cylon-install .kit-install-url { top: auto; bottom: calc(100% + 0.4rem); left: 0; right: auto; }
-.cylon-install .kit-install-btn { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+@media (min-width: 601px) {
+  .cylon-install .kit-install-btn { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+}
+/* On a phone the buttons are icon squares (the kit's), and "Link copied" opens above the pill. */
+.cylon-install .kit-install-status:not(:empty) { top: auto; bottom: calc(100% + 0.4rem); right: auto; left: 0; }

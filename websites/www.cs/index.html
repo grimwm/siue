@@ -45,7 +45,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <link href="site.css?v=6080beaf2a" rel="stylesheet">
 <link href="games/cylon/css/eye.css?v=b1b8b1e855" rel="stylesheet">
-<link href="games/cylon/css/nav.css?v=bad3936441" rel="stylesheet">
+<link href="games/cylon/css/nav.css?v=d2df81767f" rel="stylesheet">
 <link href="games/cylon/css/help.css?v=03d5772c3e" rel="stylesheet">
 <link href="games/cylon/css/hud.css?v=00884fe12d" rel="stylesheet">
 <link href="games/cylon/css/gameover.css?v=60f2ab3871" rel="stylesheet">
@@ -206,7 +206,7 @@
   // list's ?game= link and Play button call; a game that fails to load must
   // not take the list down with it.
   try {
-    const { initializeCylonEffects } = await import('./games/cylon/dist/main.js?v=ef2e51bc47');
+    const { initializeCylonEffects } = await import('./games/cylon/dist/main.js?v=dfd1b72b9b');
     await initializeCylonEffects({ onTheme: applyCombatTheme });
   } catch (err) {
     console.error('Cylon failed to start', err);

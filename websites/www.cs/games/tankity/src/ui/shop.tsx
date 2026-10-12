@@ -6,6 +6,7 @@
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
+import type { ComponentChildren } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import { KeyHints, Key, OverlayHead, ScrollKeys } from './chrome.tsx';
 import type { KeyHintFn } from './chrome.tsx';
@@ -83,7 +84,8 @@ function Name({ name, vals }: { name: string; vals: string }) {
   return <div class="shop-name">{`${name} `}<span class="shop-vals">{vals}</span></div>;
 }
 
-function Body({ row, draw, rev }: { row: ShopRowText; draw: ShopProps['drawIcon']; rev: number }) {
+/** Two columns: the icon, then the text with the buttons under it. */
+function Body({ row, draw, rev, children }: { row: ShopRowText; draw: ShopProps['drawIcon']; rev: number; children: ComponentChildren }) {
   return (
     <>
       <Icon icon={row.icon} draw={draw} rev={rev} />
@@ -91,6 +93,7 @@ function Body({ row, draw, rev }: { row: ShopRowText; draw: ShopProps['drawIcon'
         <Name name={row.name} vals={row.vals} />
         <div class="shop-sub">{row.sub}</div>
         <div class="shop-sub">{row.sub2}</div>
+        <div class="acts">{children}</div>
       </div>
     </>
   );
@@ -133,17 +136,15 @@ export function Shop(p: ShopProps) {
             if (e.kind === 'free') {
               return (
                 <li class="shop-free" key="free">
-                  <Body row={e} draw={p.drawIcon} rev={p.arsenalRev} />
-                  <span class="acts">
+                  <Body row={e} draw={p.drawIcon} rev={p.arsenalRev}>
                     <button type="button" onClick={blurThen(() => p.onPreview(e.weapon))}>Preview</button>
-                  </span>
+                  </Body>
                 </li>
               );
             }
             return (
               <li class={e.selected ? 'sel' : undefined} key={`item:${e.index}`}>
-                <Body row={{ ...e, name: `${e.index + 1}. ${e.name}` }} draw={p.drawIcon} rev={p.arsenalRev} />
-                <span class="acts">
+                <Body row={{ ...e, name: `${e.index + 1}. ${e.name}` }} draw={p.drawIcon} rev={p.arsenalRev}>
                   {e.weapon !== undefined && (
                     <button type="button" onClick={blurThen(() => p.onPreview(e.weapon!))}>
                       Preview <Key at="shop:preview" bare />
@@ -152,7 +153,7 @@ export function Shop(p: ShopProps) {
                   <button type="button" disabled={e.disabled} onClick={() => p.onBuy(e.index)}>
                     {e.locked ? 'Locked' : <>{e.qty > 1 ? `Buy ×${e.qty} ` : 'Buy '}<Key at="shop:buy" bare /></>}
                   </button>
-                </span>
+                </Body>
               </li>
             );
           })}

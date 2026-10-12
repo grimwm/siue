@@ -208,3 +208,86 @@ test('chatter is a one-line toast inside the battlefield, never over the status 
   expect(errors).toEqual([]);
   await ctx.close();
 });
+
+/* The between-rounds shop: nothing is wider than the screen, and each row's
+   Preview and Buy sit under the description, in the text column. */
+const SHOP_SCREENS = [
+  ['Small Android, 320 px', 320, 640, true, true], ['iPhone 15, portrait', 393, 852, true, true],
+  ['iPhone 15, landscape', 852, 393, true, false], ['Desktop', 1280, 720, false, false],
+];
+
+for (const [name, width, height, touch, narrow] of SHOP_SCREENS) {
+  test(`the shop fits ${name} and keeps Preview and Buy under the text`, async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
+    const page = await ctx.newPage();
+    await page.goto('games/tankity/');
+    await page.waitForSelector('#hud-score > span');
+    if (touch) { // keys do nothing on a touch screen: the title card's Settings holds New game
+      await page.locator('#title-settings').tap();
+      await page.locator('#new-game').tap();
+    } else {
+      await page.keyboard.press('n');
+    }
+    await page.waitForSelector('#shop-veil:not([hidden])');
+    const m = await page.evaluate(() => {
+      const box = el => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, r: r.right, b: r.bottom, w: r.width }; };
+      const wide = [...document.querySelectorAll('#shop-veil *')].filter(e => e.getBoundingClientRect().right > innerWidth + 0.5)
+        .map(e => `${e.tagName}.${e.className}`);
+      const rows = [...document.querySelectorAll('#shop-list li:not(.shop-cat)')].map(li => {
+        const col = li.querySelector('.shop-item');
+        const subs = [...col.querySelectorAll('.shop-sub')];
+        const buttons = [...li.querySelectorAll('.acts button')].map(box);
+        return { shell: li.classList.contains('shop-free'), col: box(col), desc: box(subs[subs.length - 1]), buttons };
+      });
+      return { scroll: document.documentElement.scrollWidth, inner: innerWidth, wide, rows };
+    });
+    expect(m.scroll).toBeLessThanOrEqual(m.inner);
+    expect(m.wide).toEqual([]);
+    expect(m.rows.length).toBe(21);
+    for (const row of m.rows) {
+      expect(row.buttons.length).toBe(row.shell ? 1 : row.buttons.length);
+      for (const b of row.buttons) {
+        expect(b.y).toBeGreaterThanOrEqual(row.desc.b - 1);
+        expect(b.x).toBeGreaterThanOrEqual(row.col.x - 1);
+        expect(b.r).toBeLessThanOrEqual(row.col.r + 1);
+      }
+      const [first, second] = row.buttons;
+      if (second) expect(Math.abs(first.y - second.y)).toBeLessThan(2); // side by side
+      if (narrow) {
+        if (second) {
+          expect(first.w).toBeGreaterThan(row.col.w * 0.45);
+          expect(first.w).toBeLessThan(row.col.w * 0.55);
+          expect(Math.abs(first.w - second.w)).toBeLessThan(2);
+        } else if (row.shell) {
+          expect(first.w).toBeGreaterThan(row.col.w * 0.95);
+        }
+      } else {
+        for (const b of row.buttons) expect(b.w).toBeLessThan(row.col.w * 0.6);
+        expect(first.x).toBeLessThan(row.col.x + 2); // start-aligned
+      }
+    }
+    // Start sits in a footer below the scrolling list, and the last row's buttons
+    // are reachable by scrolling and not covered by it.
+    const foot = await page.evaluate(() => {
+      const list = document.querySelector('#shop-list');
+      const lastLi = [...list.querySelectorAll('li:not(.shop-cat)')].pop();
+      list.scrollTop = list.scrollHeight;
+      const covered = [...lastLi.querySelectorAll('.acts button')].map(b => {
+        const r = b.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return hit === b || b.contains(hit) ? null : `${hit && hit.tagName}#${hit && hit.id}`;
+      });
+      const next = document.querySelector('#shop-next').getBoundingClientRect();
+      return { listBottom: list.getBoundingClientRect().bottom, nextTop: next.top, nextBottom: next.bottom,
+        covered, scrolls: list.scrollHeight > list.clientHeight };
+    });
+    expect(foot.nextTop).toBeGreaterThanOrEqual(foot.listBottom);
+    expect(foot.nextBottom).toBeLessThanOrEqual(height);
+    expect(foot.scrolls).toBe(true);
+    expect(foot.covered.length).toBeGreaterThan(0);
+    expect(foot.covered.filter(Boolean)).toEqual([]);
+    // Rows with a Preview and a Buy are the ones the halves rule is about.
+    expect(m.rows.some(r => r.buttons.length === 2)).toBe(true);
+    await ctx.close();
+  });
+}

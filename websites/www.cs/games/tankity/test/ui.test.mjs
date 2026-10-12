@@ -24,6 +24,8 @@ const { renderLeave } = ui.leave;
 const walk = (el, out = []) => { for (const c of el.children) { out.push(c); walk(c, out); } return out; };
 const hasClass = (el, name) => String(el.className || '').split(' ').includes(name);
 const byClass = (el, name) => walk(el).filter(n => hasClass(n, name));
+/** A shop row's Preview/Buy row: the text column's fourth child, under the description. */
+const actsOf = li => li.children[1].children[3];
 const byId = (el, id) => walk(el).find(n => n.id === id);
 const text = el => el.textContent;
 
@@ -100,27 +102,28 @@ function shopProps(over = {}) {
     list.children.filter(li => hasClass(li, 'shop-cat')).map(text).join('|'));
   const free = list.children.find(li => hasClass(li, 'shop-free'));
   check('shop-shell-row-heads-the-shells', list.children.indexOf(free) === 1 && text(byClass(free, 'shop-name')[0]) === 'Shell ∞ (free)'
-    && free.children.length === 3, text(byClass(free, 'shop-name')[0]));
+    && free.children.length === 2, text(byClass(free, 'shop-name')[0]));
   check('shop-free-row-has-preview-only', byClass(free, 'acts')[0].children.map(text).join() === 'Preview');
   const items = list.children.filter(li => !hasClass(li, 'shop-cat') && !hasClass(li, 'shop-free'));
   const first = items[0];
-  check('shop-row-shape', first.children.length === 3 && first.children[0].localName === 'canvas' && first.children[0].className === 'shop-icon'
-    && first.children[0].getAttribute('aria-hidden') === 'true' && hasClass(first.children[1], 'shop-item') && hasClass(first.children[2], 'acts'));
+  check('shop-row-shape', first.children.length === 2 && first.children[0].localName === 'canvas' && first.children[0].className === 'shop-icon'
+    && first.children[0].getAttribute('aria-hidden') === 'true' && hasClass(first.children[1], 'shop-item')
+    && hasClass(actsOf(first), 'acts'));
   const [name, sub, sub2] = first.children[1].children;
   check('shop-row-lines', hasClass(name, 'shop-name') && hasClass(sub, 'shop-sub') && hasClass(sub2, 'shop-sub'));
   check('shop-row-name-numbers-in-own-colour', text(name) === `1. ${GAME.arsenal.ammo.find(a => a.pack > 0).name} ($${ammo[0].price})`
     && byClass(name, 'shop-vals').map(text).join() === `($${ammo[0].price})`, text(name));
   check('shop-selection', first.className === 'sel' && items.filter(li => hasClass(li, 'sel')).length === 1
     && items.slice(1).every(li => li.className === ''), items.map(li => li.className).join());
-  const acts = first.children[2].children;
+  const acts = actsOf(first).children;
   check('shop-buy-and-preview-buttons', acts.length === 2 && text(acts[0]) === 'Preview V' && text(acts[1]) === 'Buy B'
     && acts.every(b => b.localName === 'button' && b.getAttribute('type') === 'button') && hasClass(acts[0].children[1], 'key')
     && acts[0].children[1].getAttribute('data-keyhint') === 'shop:preview'
     && acts[0].children[1].localName === 'kbd' && acts[0].children[1].getAttribute('aria-hidden') === 'true', acts.map(text).join('|'));
   const gearRow = items[items.length - 1];
-  check('shop-gear-row-has-no-preview', gearRow.children[2].children.length === 1 && /^Buy /.test(text(gearRow.children[2].children[0])));
+  check('shop-gear-row-has-no-preview', actsOf(gearRow).children.length === 1 && /^Buy /.test(text(actsOf(gearRow).children[0])));
   const locked = items.find(li => /^\d+\. NUKE/.test(text(byClass(li, 'shop-name')[0])));
-  const lockedBtn = locked.children[2].children[1];
+  const lockedBtn = actsOf(locked).children[1];
   check('shop-locked-row', text(lockedBtn) === 'Locked' && lockedBtn.disabled === true && /Unlocks in round 4/.test(text(locked.children[1].children[2])),
     text(lockedBtn));
   check('shop-icons-drawn-once-per-row', calls.icons.length === 21 && calls.icons.every(([cls]) => cls === 'shop-icon')
@@ -135,8 +138,8 @@ function shopProps(over = {}) {
   // Buttons report to the game.
   click(acts[1]);
   click(acts[0]);
-  click(free.children[2].children[0]);
-  click(gearRow.children[2].children[0]);
+  click(actsOf(free).children[0]);
+  click(actsOf(gearRow).children[0]);
   check('shop-clicks-reach-the-game', calls.buy.join() === '0,19' && calls.preview.join() === `${ammo[0].key},shell`, `${calls.buy}|${calls.preview}`);
   // Start button: a plain label outside a room, and no ready line or Leave button.
   const next = byId(card, 'shop-next');
@@ -164,12 +167,12 @@ function shopProps(over = {}) {
   // Pack counts: the bulk total shows after the price in the numbers' colour, and the button names the packs.
   renderShop(veil, shopProps({ entries: shelf({ qty: 3, sel: 2 }) }).props);
   const bulk = list.children.filter(li => !hasClass(li, 'shop-cat') && !hasClass(li, 'shop-free'))[2];
-  check('shop-bulk-row', /×3 = \$/.test(text(byClass(bulk, 'shop-vals')[0])) && /^Buy ×3 B$/.test(text(bulk.children[2].children[bulk.children[2].children.length - 1])),
-    text(bulk.children[1].children[0]) + '|' + text(bulk.children[2]));
+  check('shop-bulk-row', /×3 = \$/.test(text(byClass(bulk, 'shop-vals')[0])) && /^Buy ×3 B$/.test(text(actsOf(bulk).children[actsOf(bulk).children.length - 1])),
+    text(bulk.children[1].children[0]) + '|' + text(actsOf(bulk)));
   check('shop-cant-afford-disables-buy', (() => {
     renderShop(veil, shopProps({ entries: shelf({ cash: 50 }) }).props);
     const row = list.children.filter(li => !hasClass(li, 'shop-cat') && !hasClass(li, 'shop-free'))[0];
-    const btn = row.children[2].children[row.children[2].children.length - 1];
+    const btn = actsOf(row).children[actsOf(row).children.length - 1];
     return btn.disabled === true;
   })());
   // The title changes with the round; the pre-match shop says so.

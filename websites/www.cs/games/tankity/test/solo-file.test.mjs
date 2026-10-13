@@ -529,6 +529,20 @@ test('the run being played here is not evicted', () => {
   assert.equal(f.waiting(), PENDING_MAX);
 });
 
+test('abandoned() names the unfinished runs an earlier page left, never a finished one or one being played here', () => {
+  const storage = memoryStorage();
+  const old = make(async () => { throw new Error('offline'); }, storage);
+  old.begin('left', 'seed-1', 'normal', 720);
+  old.round('left', round(1));
+  played(old, 'done');
+  const f = make(async () => { throw new Error('offline'); }, storage); // a reload
+  f.begin('mine', 'seed-1', 'normal', 720);
+  assert.deepEqual(f.abandoned(), ['left']);
+  assert.equal(f.drop('left'), true);
+  assert.deepEqual(f.abandoned(), []);
+  assert.deepEqual(JSON.parse(storage.data.get(PENDING_KEY)).runs.map(r => r.id), ['done', 'mine']);
+});
+
 test('drop lets go of a run that will not finish, never a finished one', async () => {
   const s = server();
   const f = make(s.fetch);

@@ -60,6 +60,8 @@ export interface GameState extends World {
   difficulty: Difficulty;
   /** This solo match's round being recorded; null in the demo, rooms, and runs the server could not play. */
   rec: RoundRecorder | null;
+  /** This solo run in the filer; null when it is not sent (the demo, rooms, a run that cannot be filed). */
+  runId: string | null;
   body: string; // the unit look the player chose
   clouds: Cloud[];
   /** This match's field width: dealt at the start of a solo match (field.ts), ROOM_W in a room; fixed for the match. */

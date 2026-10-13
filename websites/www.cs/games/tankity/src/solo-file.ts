@@ -231,6 +231,13 @@ export function createFiler(env: FilerEnv) {
     return true;
   }
 
+  /** Held runs nobody can finish here: no initials and not being played by this page. At load
+      that is every unfinished run, as the page that played it is gone. */
+  function abandoned(): string[] {
+    save();
+    return held.filter(r => r.initials === null && !live.has(r.id)).map(r => r.id);
+  }
+
   /* One POST: its body when the server took it; otherwise it throws what the
      answer means. `skip` says a 409 out of order that the run is already past. */
   async function post(csrf: string, body: { op: string } & Record<string, unknown>, skip?: (data: Record<string, unknown>) => boolean): Promise<Record<string, unknown>> {
@@ -420,7 +427,7 @@ export function createFiler(env: FilerEnv) {
   }
 
   return {
-    begin, round, finish, drop, flush, nextTry, wake,
+    begin, round, finish, drop, abandoned, flush, nextTry, wake,
     waiting: () => held.length,
     /** False when the last save did not reach storage: the runs then last only as long as this page. */
     stored: () => kept,

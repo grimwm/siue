@@ -57,7 +57,7 @@ import { createTutorial } from './tutorial.ts';
 import { createGuns } from './guns.ts';
 import { createScores } from './scores.ts';
 import { createMatch } from './match.ts';
-import { soloOneUps } from './solo.ts';
+import { createFiler } from './solo-file.ts';
 import { createRoom } from './room.ts';
 import { createLobby } from './lobby.ts';
 import { createMenu } from './menu.ts';
@@ -137,8 +137,7 @@ function applyArsenal(data: ArsenalData | null | undefined): void {
   if (data && Array.isArray(data.ammo) && data.ammo.length && buildArsenal(data)) {
     ARSENAL_FROM_FILE = true;
     // A mid-match change of arsenal cannot be played on the server.
-    if (G.rec) say('The game data changed mid-match, so this run will not be filed.', 'info');
-    G.rec = null;
+    stopFiling('The game data changed mid-match, so this run will not be filed.');
     say(`Arsenal loaded: ${WORDER.length} shells, ${Object.keys(GEAR).length} tricks.`, 'info');
     if (G.phase === 'shop') renderShop();
     renderHUD();
@@ -166,7 +165,7 @@ async function loadGameConfig(): Promise<void> {
    skips painting, the frame loop waits on G.terrain). */
 const NOT_DEALT = null!;
 const G: GameState = {
-  seed: '', difficulty: 'normal', rec: null, rng: NOT_DEALT, body: 'tank',
+  seed: '', difficulty: 'normal', rec: null, runId: null, rng: NOT_DEALT, body: 'tank',
   terrain: NOT_DEALT, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // banner | shop | aim | think | fly | settle | over (src/flow.ts)
   thinkT: 0, settleT: 0,
@@ -332,15 +331,7 @@ function frame(ts: number): void {
       }
     }
   }
-  if (!net.on) {
-    for (const up of soloOneUps(G)) {
-      if (up.kind === 'life') {
-        sfx.play('win');
-        say(`1-UP! Extra life! (${up.lives}/${TUNE.maxLives} lives)`, 'good');
-        talk('tank', 'Another life! I am basically immortal!', true);
-      } else say('Max lives already, so take +500 points instead!', 'good');
-    }
-  }
+  checkOneUps();
   if (G.phase === 'aim' && cur().isPlayer && !G.demo) {
     const t = me();
     const arm = stepArm(input.held, dt, t, facing(t), G.w);
@@ -427,9 +418,15 @@ const { HUD, paintHud, windText, renderHUD } = createHud({
 const { updateCamera, shownAngle, shownPower, render } = createView({
   G, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
-/* The high scores (src/scores.ts). */
-const { renderScoresOverlay, openScores, fileSolo } = createScores({
-  $, keyHint, say, toggleOverlay, initials: () => getInitials(), difficulty: () => difficulty.get(),
+/* The high scores (src/scores.ts), and the solo runs on their way to them (src/solo-file.ts): one
+   filer per page, on this browser's storage (null where reading it throws) and Web Locks where there are any. */
+const filer = createFiler({
+  fetch: (url, init) => fetch(url, init), storage: browserStorage(),
+  locks: (typeof navigator !== 'undefined' && navigator.locks) || null,
+});
+const { renderScoresOverlay, openScores, soloBegin, soloRound, soloFinish, soloDrop, boot: bootScores, wake: wakeScores } = createScores({
+  $, keyHint, say, toggleOverlay, initials: () => getInitials(), difficulty: () => difficulty.get(), filer,
+  timers: { setTimeout: (fn, ms) => Number(setTimeout(fn, ms)), clearTimeout: id => clearTimeout(id) },
 });
 /* The coach (src/tutorial.ts). */
 const {
@@ -450,14 +447,15 @@ const getInitials = (): string => savedInitials.get();
 const field = createFieldWidth(() => ({ w: window.innerWidth, h: window.innerHeight }));
 const {
   advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-  stepWar, decayFx, soloShopBoard, endVeilEscape,
+  stepWar, decayFx, soloShopBoard, endVeilEscape, checkOneUps, stopFiling,
 } = createMatch({
   field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
   tutorialFired, backToTitle: () => backToTitle(),
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
   netFire: () => netFire(), netLeave: quiet => netLeave(quiet), netNext: want => netNext(want),
-  netAgain: () => netAgain(), initials: getInitials, fileSolo: (run, done) => { void fileSolo(run, done); },
+  netAgain: () => netAgain(), initials: getInitials,
+  soloBegin, soloRound, soloFinish: (id, who, done) => { void soloFinish(id, who, done); }, soloDrop,
 });
 /* The field shop (src/shop.ts): prices, rows, buying, the Ready line. */
 const {
@@ -723,6 +721,10 @@ function init(): void {
   renderShop();
   // Light the connection dot from the start, not only when the lobby opens.
   loadOccupancy();
+  // Runs an earlier page could not get to the score server go on now, and when the network or the page comes back.
+  void bootScores();
+  window.addEventListener('online', wakeScores);
+  if (document.addEventListener) document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wakeScores(); });
   maybeApplyInviteCode();
 
   document.querySelectorAll<HTMLElement>('[data-aim]').forEach(btn => {

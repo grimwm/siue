@@ -118,7 +118,12 @@ export function createHud(deps: HudDeps) {
   }
   function renderHUD(): void {
     if (net.on) { renderNetHUD(); return; }
-    if (!G.tanks.length) return;
+    if (!G.tanks.length) {
+      // The pre-match shop opens before any tank is mustered; the standing
+      // (armor, lives, badge) still has to follow what is bought there.
+      if (G.phase === 'shop') { HUD.turn = 'shop. Spend it!'; renderStanding(null, ''); paintHud(); }
+      return;
+    }
     const t = cur() || me();
     HUD.turn =
       G.phase === 'shop' ? 'shop. Spend it!' :

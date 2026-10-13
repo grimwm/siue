@@ -49,6 +49,24 @@ final class RoomStandingsTest extends TestCase
         $this->assertSame(0, $room['stats'][1]['kills']);
     }
 
+    public function testAHumanOnHumanKillCountsAndASelfWreckDoesNot(): void
+    {
+        $room = $this->room();
+        $other = $this->idx($room, 1);
+        $room['tanks'][$other]['hp'] = 1;
+        $t = $room['tanks'][$other];
+        $events = [];
+        room_explode($room, $events, $room['tanks'][$this->idx($room, 0)], 'shell', (float) $t['x'], (float) $t['y'] - 30.0, $other, null);
+        $this->assertLessThanOrEqual(0, $room['tanks'][$other]['hp'], 'the wreck happened');
+        $this->assertSame(1, $room['stats'][0]['kills'], 'one human wrecking another is a kill');
+        $self = $this->idx($room, 0);
+        $room['tanks'][$self]['hp'] = 1;
+        $me = $room['tanks'][$self];
+        room_explode($room, $events, $room['tanks'][$self], 'shell', (float) $me['x'], (float) $me['y'] - 30.0, $self, null);
+        $this->assertLessThanOrEqual(0, $room['tanks'][$self]['hp'], 'the self-wreck happened');
+        $this->assertSame(1, $room['stats'][0]['kills'], 'wrecking your own tank is not a kill');
+    }
+
     public function testRoundEndRecordsWinGainAndOut(): void
     {
         $room = $this->room();

@@ -26,7 +26,7 @@ export const BOARD_KEEP = 100;
 /** Where a run went: its place on its difficulty's board. */
 export function filedLine(rank: number | null, score: number, difficulty: Difficulty): string {
   const on = DIFFICULTY_NAMES[difficulty];
-  return rank !== null ? `Filed · #${rank} all-time on ${on}` : `Filed · ${fmt(score)} pts, outside the all-time top ${BOARD_KEEP} on ${on}`;
+  return rank !== null ? `Filed · #${rank} all-time on ${on}` : `Filed · ${fmt(score)} pts, outside the best ${BOARD_KEEP} on ${on}`;
 }
 
 /** One finished solo round. */

@@ -363,8 +363,8 @@ from browsers can never push a room's rows off it. `scores.php` refuses a
 cross-site request (403), anything but JSON (415), a seed starting `room:`
 (only the room server files those), and more than 60 reports an hour from one
 address (429; IPv6 addresses count by their /64 and IPv4 ones inside IPv6 by the
-IPv4 address). A solo score is the browser's own claim until the server plays
-each solo round.
+IPv4 address). A solo score is the browser's own claim: the server does not
+play a solo run.
 
 ## Drone aim
 

@@ -68,7 +68,7 @@ try {
         }
         $seed = isset($in['seed']) ? substr((string) $in['seed'], 0, 64) : '';
         if (stripos(ltrim($seed), 'room:') === 0) {
-            json_out(400, ['error' => 'that seed names a room match']);
+            json_out(400, ['error' => 'seeds that begin with room: are reserved for room matches; use another seed']);
         }
         $initials = board_convert_name($name, $guard);
         $place = board_file(['difficulty' => $level, 'initials' => $initials, 'score' => $score, 'rounds' => $banked,

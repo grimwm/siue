@@ -91,7 +91,7 @@ test('solo: the rounds so far, with a total', () => {
 
 test('the filed line', () => {
   assert.equal(filedLine(12, 9210, 'normal'), 'Filed · #12 all-time on Normal');
-  assert.equal(filedLine(null, 40, 'hard'), `Filed · 40 pts, outside the all-time top ${BOARD_KEEP} on Hard`);
+  assert.equal(filedLine(null, 40, 'hard'), `Filed · 40 pts, outside the best ${BOARD_KEEP} on Hard`);
 });
 
 test('Esc on an end card: back to the battle, watch the finish, or keep the card', () => {

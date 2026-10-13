@@ -583,6 +583,31 @@ const bodyOf = entry => JSON.parse(entry.init.body);
   check('current-poll-still-applied', seen.snapshots.length === 1, j(seen.snapshots.length));
 }
 
+// An act, a quiet act and a menu flag answered after the room went back to its lobby are dropped too.
+{
+  let release;
+  const { net, seen } = makeClient(() => new Promise(r => { release = () => r(roomReply({ phase: 'over' })); }));
+  net.beginMatch();
+  const sent = [];
+  sent.push(net.act({ kind: 'fire', angle: 45, power: 50 }));
+  net.toLobby();
+  release();
+  await sent[0];
+  check('late-act-after-lobby-dropped', seen.snapshots.length === 0, j(seen.snapshots.length));
+  net.beginMatch();
+  net.sendQuiet({ kind: 'aim', angle: 40, power: 50 });
+  net.toLobby();
+  release();
+  await new Promise(r => setTimeout(r, 0));
+  check('late-quiet-act-after-lobby-dropped', seen.snapshots.length === 0, j(seen.snapshots.length));
+  net.beginMatch();
+  net.setMenu(true);
+  net.toLobby();
+  release();
+  await new Promise(r => setTimeout(r, 0));
+  check('late-menu-flag-after-lobby-dropped', seen.snapshots.length === 0, j(seen.snapshots.length));
+}
+
 // ---- invite link ----
 check('invite-url', inviteUrl('AB3D', { origin: 'https://host', pathname: '/games/tankity/' }) === 'https://host/games/tankity/?code=AB3D');
 check('invite-url-needs-a-code', inviteUrl('', { origin: 'https://host', pathname: '/x' }) === '');

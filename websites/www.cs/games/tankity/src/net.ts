@@ -473,6 +473,12 @@ export class RoomClient {
 
   /* ---- acts ---- */
 
+  /** A reply belongs to the match it was sent in: one that lands after the room went back to its lobby,
+   * or into the next match, is dropped, so an old 'over' room cannot reopen its end card. */
+  private applyIfCurrent(epoch: number, room: RoomSnapshot | null | undefined): void {
+    if (this.on && epoch === this.matchEpoch) this.apply(room);
+  }
+
   /** An act that waits for its answer, one at a time (firing). The reply is
    * applied; a failure rejects, and a second call while one is out is
    * dropped. */
@@ -480,7 +486,8 @@ export class RoomClient {
     if (this.busy) return;
     this.busy = true;
     try {
-      this.apply((await this.post('act', body)).room);
+      const epoch = this.matchEpoch;
+      this.applyIfCurrent(epoch, (await this.post('act', body)).room);
     } finally {
       this.busy = false;
     }
@@ -489,7 +496,8 @@ export class RoomClient {
   /** An act that does not wait (aim, drive, weapon): the reply is applied,
    * a failure is dropped. */
   sendQuiet(body: ActBody): void {
-    this.post('act', body).then(d => this.apply(d.room)).catch(() => {});
+    const epoch = this.matchEpoch;
+    this.post('act', body).then(d => this.applyIfCurrent(epoch, d.room)).catch(() => {});
   }
 
   /** Tells the room this player is in a menu (or out of it), once per change,
@@ -497,7 +505,8 @@ export class RoomClient {
   setMenu(open: boolean): void {
     if (open === this.menuSent || !this.code) return;
     this.menuSent = open;
-    this.post('act', { kind: 'menu', open }).then(d => this.apply(d.room)).catch(() => { this.menuSent = !open; });
+    const epoch = this.matchEpoch;
+    this.post('act', { kind: 'menu', open }).then(d => this.applyIfCurrent(epoch, d.room)).catch(() => { this.menuSent = !open; });
   }
 
   /** The unit look changes any time; in a match the answer is applied. */

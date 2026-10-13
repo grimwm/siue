@@ -46,7 +46,7 @@ const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'ga
 const ammo = GAME.arsenal.ammo.filter(a => a.pack > 0);
 const gear = GAME.arsenal.gear;
 /** The shelf the way main.ts lays it out: a heading per category, the free Shell under Shells. */
-function shelf({ sel = 0, qty = 1, cash = 600, round = 1 } = {}) {
+function shelf({ sel = 0, qty = 1, cash = 600, round = 1 } = {}) { // sel -1 is the free Shell row
   const entries = [];
   let lastCat = '';
   [...ammo.map(a => ({ ...a, kind: 'ammo', w: a.key })), ...gear.map(g => ({ ...g, kind: 'gear', g: g.key }))].forEach((it, index) => {
@@ -54,7 +54,7 @@ function shelf({ sel = 0, qty = 1, cash = 600, round = 1 } = {}) {
       lastCat = it.cat;
       entries.push({ kind: 'cat', name: it.cat });
       if (it.kind === 'ammo' && !entries.some(e => e.kind === 'free')) {
-        entries.push({ kind: 'free', weapon: 'shell', name: 'Shell', vals: '∞ (free)', sub: 'A plain shell.', sub2: 'Always loaded, never runs out.', icon: { kind: 'ammo', w: 'shell' } });
+        entries.push({ kind: 'free', weapon: 'shell', selected: sel === -1, name: 'Shell', vals: '∞ (free)', sub: 'A plain shell.', sub2: 'Always loaded, never runs out.', icon: { kind: 'ammo', w: 'shell' } });
       }
     }
     const locked = (it.minRound || 0) > round;
@@ -103,7 +103,7 @@ function shopProps(over = {}) {
   const free = list.children.find(li => hasClass(li, 'shop-free'));
   check('shop-shell-row-heads-the-shells', list.children.indexOf(free) === 1 && text(byClass(free, 'shop-name')[0]) === 'Shell ∞ (free)'
     && free.children.length === 2, text(byClass(free, 'shop-name')[0]));
-  check('shop-free-row-has-preview-only', byClass(free, 'acts')[0].children.map(text).join() === 'Preview');
+  check('shop-free-row-has-preview-only', byClass(free, 'acts')[0].children.map(text).join() === 'Preview V');
   const items = list.children.filter(li => !hasClass(li, 'shop-cat') && !hasClass(li, 'shop-free'));
   const first = items[0];
   check('shop-row-shape', first.children.length === 2 && first.children[0].localName === 'canvas' && first.children[0].className === 'shop-icon'
@@ -179,8 +179,15 @@ function shopProps(over = {}) {
   renderShop(veil, shopProps({ title: 'Pre-match shop' }).props);
   check('shop-title-follows-the-round', text(byId(card, 'shop-title')) === 'Pre-match shop');
   // The highlighted row stays in view: scrolled to when the selection moves, left alone otherwise.
+  // A draw into the hidden veil cannot scroll (nothing is laid out), so the
+  // first draw once it shows still brings the row in: the pre-match shop
+  // opened with Buckshot selected but scrolled out of sight on short screens.
   delete globalThis.__scrolledTo;
   const fresh = makeEl('fresh-veil');
+  fresh.hidden = true;
+  renderShop(fresh, shopProps({ entries: shelf({ sel: 3 }) }).props);
+  check('shop-hidden-draw-does-not-scroll', globalThis.__scrolledTo === undefined);
+  fresh.hidden = false;
   renderShop(fresh, shopProps({ entries: shelf({ sel: 3 }) }).props);
   check('shop-first-draw-scrolls-to-selection', globalThis.__scrolledTo && hasClass(globalThis.__scrolledTo, 'sel'));
   delete globalThis.__scrolledTo;
@@ -188,6 +195,12 @@ function shopProps(over = {}) {
   check('shop-redraw-same-selection-leaves-scroll', globalThis.__scrolledTo === undefined);
   renderShop(fresh, shopProps({ entries: shelf({ sel: 4 }) }).props);
   check('shop-moved-selection-scrolls', globalThis.__scrolledTo && hasClass(globalThis.__scrolledTo, 'sel')
+    && byId(fresh, 'shop-list').children.filter(li => hasClass(li, 'sel')).length === 1);
+  // The free Shell row takes the highlight like any other row.
+  delete globalThis.__scrolledTo;
+  renderShop(fresh, shopProps({ entries: shelf({ sel: -1 }) }).props);
+  const freeLi = byId(fresh, 'shop-list').children.find(li => hasClass(li, 'shop-free'));
+  check('shop-shell-row-selectable', hasClass(freeLi, 'sel') && globalThis.__scrolledTo === freeLi
     && byId(fresh, 'shop-list').children.filter(li => hasClass(li, 'sel')).length === 1);
   check('shop-registers-ids-for-the-page', els['shop-next'] !== undefined && els['shop-list'] !== undefined);
 }

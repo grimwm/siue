@@ -624,7 +624,7 @@ await (async () => {
   // headers, the free Shell row, and six rows to buy. Each row holds an icon
   // canvas and a text div whose last child is the acts row.)
   const shopLis = () => els['shop-list'].children.slice(-9);
-  const shopRows = () => shopLis().filter(li => li.children.length === 2 && li.className !== 'shop-free');
+  const shopRows = () => shopLis().filter(li => li.children.length === 2 && !String(li.className).split(' ').includes('shop-free'));
   const rowName = li => li.children[1].children[0].textContent;
   const actsOf = li => li.children[1].children[3]; // the text column's fourth child, under the description
   const buyRow = label => {
@@ -670,6 +670,23 @@ await (async () => {
     check('shop-repair-greyed-at-full', acts.children[acts.children.length - 1].disabled === true && /Armor full \(100 of 100\)/.test(repairRow.textContent),
       repairRow.textContent);
   }
+  // The keys reach every row: Up from the first priced row (Buckshot) lands
+  // on the free Shell, where V previews it and B only says it is free.
+  const freeLi = () => shopLis().find(li => String(li.className).split(' ').includes('shop-free'));
+  check('shop-opens-on-first-row', shopRows()[0].className === 'sel', shopRows().map(li => li.className).join(','));
+  TAP('shop', 'selUp'); frames(3);
+  check('shop-up-reaches-shell', freeLi().className === 'shop-free sel' && shopRows().every(li => li.className === ''),
+    freeLi().className);
+  TAP('shop', 'selUp'); frames(3);
+  check('shop-up-stops-at-shell', freeLi().className === 'shop-free sel');
+  const cashAtShell = els['shop-cash'].textContent;
+  TAP('shop', 'buy'); frames(3);
+  check('shop-shell-buy-says-free', /free and always loaded/.test(logTail()) && els['shop-cash'].textContent === cashAtShell, logTail());
+  TAP('shop', 'preview'); frames(3);
+  check('shop-shell-preview', els['preview-veil'].hidden === false);
+  TAP('shop', 'close'); frames(3);
+  TAP('shop', 'selDown'); frames(3);
+  check('shop-down-back-to-first-row', shopRows()[0].className === 'sel' && freeLi().className === 'shop-free');
   // Keyboard alone can shop: arrows highlight, Enter buys, digits buy outright.
   TAP('shop', 'selDown'); frames(3);
   check('shop-keys', shopRows()[1].className === 'sel', shopRows().map(li => li.className).join(','));

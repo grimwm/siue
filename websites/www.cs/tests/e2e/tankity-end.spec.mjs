@@ -1,8 +1,9 @@
 // Operation Tankity: a solo match played to its end, and the end-of-match veil.
 import { test, expect } from '@playwright/test';
 import { newPlayer, hud, dealSolo, loseMatch } from './helpers.mjs';
+import { local } from './fx-helpers.mjs';
 
-test('a lost match shows the end card: result, scoreboard, score, and Continue back to the title card', async ({ browser }) => {
+test('a lost match shows the end card: result, the rounds table, where it was filed, and Continue back to the title card', async ({ browser, baseURL }) => {
   test.setTimeout(180_000);
   const { page, errors } = await newPlayer(browser, undefined, { clock: true });
   await dealSolo(page);
@@ -26,14 +27,16 @@ test('a lost match shows the end card: result, scoreboard, score, and Continue b
   await veil.locator('.card').screenshot({ path: 'test-results/tankity-end-veil.png' });
 
   // The scoreboard heads the card; no callsign form, no rematch.
-  await expect(veil.locator('.board-table')).toBeVisible();
+  await expect(veil.locator('.board-table thead')).toContainText('Round');
+  await expect(veil.locator('.board-table tfoot')).toContainText('Total');
   await expect(veil.locator('#end-score-form')).toHaveCount(0);
   await expect(veil.locator('#rematch')).toHaveCount(0);
   await expect(veil.locator('#end-leave')).toHaveCount(0);
 
   // The run filed itself and the card says how it went: always a line, never a blank, and never still "Filing".
   await expect(page.locator('#end-filed')).toBeVisible();
-  await expect(page.locator('#end-filed')).toHaveText(/^(Filed ·|Couldn't file your score: )/);
+  // Filing writes a real score, so only the local site is expected to say Filed.
+  await expect(page.locator('#end-filed')).toHaveText(local(baseURL) ? /^Filed · / : /^(Filed ·|Couldn't file your score: )/, { timeout: 10_000 });
 
   // Keyboard: focus lands on Continue, and Esc leaves the card (and fullscreen) alone.
   await expect(page.locator('#again')).toBeFocused();

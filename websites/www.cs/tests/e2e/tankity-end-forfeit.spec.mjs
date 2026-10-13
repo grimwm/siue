@@ -1,5 +1,5 @@
 // Operation Tankity rooms: a Leave by one of the last two humans ends the match as a forfeit, the
-// remaining human wins and files, and leaving that end card sends the next solo match its own card,
+// remaining human wins and files, Play again then makes them the host, and after leaving the lobby the next solo match has its own card,
 // whose filed line says so when the filing is refused.
 import { test, expect } from '@playwright/test';
 import { hud, lastRoom, loseMatch } from './helpers.mjs';
@@ -32,9 +32,14 @@ test('when one of the last two humans leaves, the other wins the match; a solo m
   await expect(veil.locator('.board-table')).toContainText(`+${room.winBonus.toLocaleString('en-US')} win`);
   await expect(veil.locator('#end-filed')).toHaveText(/^Filed · /, { timeout: 10_000 });
 
-  // Leave room from the end card goes to the title card with no room left over.
-  await veil.locator('#end-leave').click();
-  await expect(guest.page.locator('#title-card')).toBeVisible();
+  // The host left, so Play again makes the one who stayed the host: Start is theirs. Not wanting another match,
+  // they leave from the lobby and land on the title card, not on the finished field.
+  await veil.locator('#again').click();
+  await expect(guest.page.locator('#lobby-veil')).toBeVisible();
+  await expect(guest.page.locator('#lobby-start')).toBeVisible();
+  await guest.page.click('#lobby-leave');
+  await expect(guest.page.locator('#title-card')).toBeVisible({ timeout: 5_000 });
+  await expect(guest.page.locator('#lobby-veil')).toBeHidden();
   await expect(veil).toBeHidden();
 
   // The next solo match ends on the solo card (Continue, no room buttons), and a refused filing says so.

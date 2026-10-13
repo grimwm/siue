@@ -142,7 +142,8 @@ export function createLobby(deps: LobbyDeps) {
       onSeatMode: netSeatMode,
       onCopy: copyInvite,
       onStart: () => { sfx.play('click'); startRoom(); },
-      onLeave: () => { netLeave(); openLobby(); },
+      // Reached through Play again, the match behind the lobby is over: leaving goes to the title card, not back to its frozen field.
+      onLeave: () => { const ended = !net.on && G.over; netLeave(); if (ended) backToTitle(); else openLobby(); },
     });
     refreshNavHints();
   }

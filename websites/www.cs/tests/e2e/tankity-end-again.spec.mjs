@@ -8,7 +8,7 @@ test('Play again from the end card brings both players to the same lobby, and th
   test.setTimeout(240_000);
   const pair = await endPair(browser);
   const { host, guest, roomState, code } = pair;
-  const start = lastRoom(roomState.host).you;
+  const start = lastRoom(roomState.guest).you;
   await playToOver(pair);
 
   // 1. Both see the over card; Esc leaves it up and never exits full screen.
@@ -24,6 +24,7 @@ test('Play again from the end card brings both players to the same lobby, and th
   }
   const lastMatch = /goes to the battery|out of lives|for good this time|wins the match/gi;
   const radioBefore = ((await hud(host.page, 'log')) || '').match(lastMatch) || [];
+  expect(radioBefore.length, 'the last match left lines to not replay').toBeGreaterThan(0);
 
   // 2. The guest presses Play again; both land in the lobby of the same room, the host without pressing anything.
   await guest.page.locator('#again').click();
@@ -71,6 +72,7 @@ test('Play again from the end card brings both players to the same lobby, and th
   await host.page.waitForTimeout(2500); // a stale card or a replayed event would show by now
   for (const pl of [host, guest]) await expect(pl.page.locator('#end-veil')).toBeHidden();
   expect(((await hud(host.page, 'log')) || '').match(lastMatch) || []).toHaveLength(radioBefore.length);
+
   expect(host.errors).toEqual([]);
   expect(guest.errors).toEqual([]);
   await host.ctx.close(); await guest.ctx.close();

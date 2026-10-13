@@ -1,7 +1,8 @@
 // Operation Tankity rooms: the you're-out card and Menu -> Standings, while the others fight on.
 // A real room is played to round 1; the guest's snapshots are then rewritten to say it has no
-// lives left and the room started with one human, so the match goes on (the server's own
-// elimination is covered by RoomStandingsTest).
+// lives left, the drone seat is a second living human (a real elimination in a two-human room
+// ends the match), and an 'eliminated' event arrives, as in real play. The server's own
+// elimination is covered by RoomStandingsTest. Esc on each card never exits full screen.
 import { test, expect } from '@playwright/test';
 import { roomPair } from './helpers.mjs';
 
@@ -10,7 +11,10 @@ test("a player out of lives sees the you're-out card once; Menu → Standings br
   const { host, guest } = await roomPair(browser, {
     beforeStart: async ({ host }) => { await host.page.locator('#lobby-seats .seat-tile').nth(3).click(); },
   });
-  let out = false;
+  let out = false, told = false;
+  const countExits = page => page.evaluate(() => { window.__exits = 0; const x = document.exitFullscreen; document.exitFullscreen = function () { window.__exits++; return x ? x.call(document) : Promise.resolve(); }; });
+  const exits = page => page.evaluate(() => window.__exits);
+  await countExits(host.page); await countExits(guest.page);
   await guest.page.route(/rooms\.php/, async route => {
     const res = await route.fetch();
     let body = await res.text();
@@ -18,8 +22,16 @@ test("a player out of lives sees the you're-out card once; Menu → Standings br
       const j = JSON.parse(body);
       if (out && j.room && j.room.you) {
         j.room.you.lives = 0;
-        j.room.startHumans = 1;
-        for (const s of j.room.seats || []) if (s.seat === j.room.you.seat) s.lives = 0;
+        // Seat 3 is a living human, so the host and it are still in: the match goes on.
+        for (const s of j.room.seats || []) {
+          if (s.seat === j.room.you.seat) s.lives = 0;
+          if (s.seat === 3) Object.assign(s, { human: true, bot: false, name: 'FAK', lives: 3 });
+        }
+        if (!told) {
+          told = true;
+          const top = Math.max(0, ...(j.room.events || []).map(e => e.seq || 0));
+          j.room.events = [...(j.room.events || []), { seq: top + 1000, t: 'eliminated', seat: j.room.you.seat }];
+        }
         body = JSON.stringify(j);
       }
     } catch (_) { /* not JSON */ }
@@ -31,6 +43,7 @@ test("a player out of lives sees the you're-out card once; Menu → Standings br
   await expect(gveil.locator('#end-title')).toHaveText("You're out");
   await expect(gveil.locator('#end-watch')).toHaveText('Watch the finish');
   await expect(gveil.locator('#end-leave')).toBeVisible();
+  await expect(guest.page.locator('#log')).toContainText('for good this time'); // the event path, not a reload
 
   // Watch the finish closes it, and later polls leave it closed.
   await gveil.locator('#end-watch').click();
@@ -44,6 +57,7 @@ test("a player out of lives sees the you're-out card once; Menu → Standings br
   await expect(gveil.locator('#end-title')).toHaveText("You're out");
   await guest.page.keyboard.press('Escape');
   await expect(gveil).toBeHidden();
+  expect(await exits(guest.page)).toBe(0);
 
   // The host is still in: Menu → Standings is a look, up across polls until Back to the battle or Esc.
   const hveil = host.page.locator('#end-veil');
@@ -61,6 +75,7 @@ test("a player out of lives sees the you're-out card once; Menu → Standings br
   await expect(hveil).toBeVisible();
   await host.page.keyboard.press('Escape');
   await expect(hveil).toBeHidden();
+  expect(await exits(host.page)).toBe(0);
   expect(host.errors).toEqual([]);
   expect(guest.errors).toEqual([]);
   await host.ctx.close(); await guest.ctx.close();

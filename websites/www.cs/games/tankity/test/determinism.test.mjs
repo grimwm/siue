@@ -16,7 +16,7 @@ const read = f => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]
 
 // Files a later task adds are banned from the moment they exist.
 const present = files => files.filter(f => fs.existsSync(path.join(dir, f)));
-const TS_RULES = present(['src/sim.ts', 'src/ai.ts', 'src/armor.ts', 'src/detmath.ts', 'src/solo.ts']);
+const TS_RULES = present(['src/sim.ts', 'src/ai.ts', 'src/armor.ts', 'src/detmath.ts', 'src/solo.ts', 'src/solo-log.ts', 'src/solo-play.ts']);
 const TRANSCENDENTAL_TS = /Math\.(sin|cos|tan|asin|acos|atan|exp|expm1|log|pow|cbrt)\w*\b/;
 const TRANSCENDENTAL_PHP = /(?<![\w>$])(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|exp|expm1|log|log2|log10|log1p|pow|hypot)\(/;
 

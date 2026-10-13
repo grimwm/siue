@@ -341,10 +341,13 @@ for (const [name, width, height, touch, narrow] of SHOP_SCREENS) {
         return hit === b || b.contains(hit) ? null : `${hit && hit.tagName}#${hit && hit.id}`;
       });
       const next = document.querySelector('#shop-next').getBoundingClientRect();
-      return { listBottom: list.getBoundingClientRect().bottom, nextTop: next.top, nextBottom: next.bottom,
+      return { listBottom: list.getBoundingClientRect().bottom, listLeft: list.getBoundingClientRect().left,
+        nextTop: next.top, nextBottom: next.bottom, nextRight: next.right,
         covered, scrolls: list.scrollHeight > list.clientHeight };
     });
-    expect(foot.nextTop).toBeGreaterThanOrEqual(foot.listBottom);
+    // One column: Start sits below the list. Two columns: it sits in the left column, beside the list.
+    if (narrow) expect(foot.nextTop).toBeGreaterThanOrEqual(foot.listBottom);
+    else expect(foot.nextRight).toBeLessThanOrEqual(foot.listLeft + 1);
     expect(foot.nextBottom).toBeLessThanOrEqual(height);
     expect(foot.scrolls).toBe(true);
     expect(foot.covered.length).toBeGreaterThan(0);

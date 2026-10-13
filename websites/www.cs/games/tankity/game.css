@@ -511,9 +511,8 @@ button.btn-leave[hidden] { display: none; }
   margin: 0;
   font-size: 0.75rem;
 }
-/* A hint that does not fit its cell wraps between its words; a key chip never splits. */
-.ov-keys > span { text-align: center; min-width: 0; }
-.ov-keys [data-keyhint], .ov-keys .key { white-space: nowrap; }
+/* A hint that does not fit its cell wraps between its words, and a chip wider than the cell (wider fonts) wraps rather than spilling out. */
+.ov-keys > span { text-align: center; min-width: 0; overflow-wrap: anywhere; }
 .log-overlay .ov-head { margin-bottom: 0.3rem; padding-top: 0.35rem; border-radius: 9px 9px 0 0; }
 .log-overlay .ov-head h2 { font-size: 0.85rem; }
 .log-overlay .ov-keys { font-size: 0.68rem; }

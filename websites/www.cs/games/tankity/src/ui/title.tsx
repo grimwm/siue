@@ -46,7 +46,8 @@ export function Title(p: TitleProps) {
           <button type="button" id="rooms-open" onClick={blurThen(p.onFriends)}>Play with friends <Key at="global:rooms" bare /></button>
           <button type="button" id="tutorial-open" onClick={blurThen(p.onTutorial)}>Tutorial <Key at="global:tutorial" bare /></button>
         </div>
-        <InitialsPicker idPrefix="title" initials={p.initials} rev={p.initialsRev} onInitials={p.onInitials} />
+        <InitialsPicker idPrefix="title" initials={p.initials} rev={p.initialsRev} onInitials={p.onInitials}
+          problem={p.problem} noteId="title-initials-note" />
         <p class="title-note" id="title-initials-note" role="status">{p.problem}</p>
         {p.hint && <p class="title-hint" id="title-hint" role="status">{p.hint}</p>}
         <button type="button" id="title-settings" class="title-link" aria-haspopup="dialog" aria-expanded={p.settingsOpen}

@@ -146,7 +146,8 @@ export function Lobby(p: LobbyProps) {
           <span id="lobby-count" aria-live="polite">{p.count}</span>
         </p>
         <div class="lobby-initials" id="lobby-initials" hidden={p.inRoom}>
-          <InitialsPicker idPrefix="lobby" initials={p.initials} rev={p.initialsRev} onInitials={p.onInitials} fieldRef={initialsField} />
+          <InitialsPicker idPrefix="lobby" initials={p.initials} rev={p.initialsRev} onInitials={p.onInitials} fieldRef={initialsField}
+            problem={p.initialsProblem} noteId="lobby-initials-note" />
           <p class="hint" id="lobby-initials-note" role="status">{p.initialsProblem}</p>
         </div>
         <div class="lobby-rows" id="lobby-rows" hidden={p.inRoom}>

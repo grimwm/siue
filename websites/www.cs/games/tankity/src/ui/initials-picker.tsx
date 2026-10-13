@@ -19,6 +19,10 @@ export interface InitialsPickerProps {
   onInitials: (word: string) => void;
   /** The fieldset, for reading what the boxes hold (typedLetters). */
   fieldRef?: Ref<HTMLFieldSetElement>;
+  /** The visible rejection text; while it is non-empty each box is marked invalid and points at the note. */
+  problem?: string;
+  /** The id of the element that shows `problem`. */
+  noteId?: string;
 }
 
 /** What the boxes hold, one character per box, a space for an empty one. */
@@ -27,7 +31,7 @@ export function typedLetters(field: Element | null | undefined): string {
   return [0, 1, 2].map(i => (boxes[i]?.value || ' ').slice(0, 1)).join('');
 }
 
-export function InitialsPicker({ idPrefix, initials, rev = 0, onInitials, fieldRef }: InitialsPickerProps) {
+export function InitialsPicker({ idPrefix, initials, rev = 0, onInitials, fieldRef, problem, noteId }: InitialsPickerProps) {
   const boxes = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)];
   useLayoutEffect(() => {
     boxes.forEach((b, i) => { if (b.current) b.current.value = initials[i] ?? ''; });
@@ -61,6 +65,7 @@ export function InitialsPicker({ idPrefix, initials, rev = 0, onInitials, fieldR
       {[0, 1, 2].map(i => (
         <input key={i} ref={boxes[i]} id={`${idPrefix}-initial-${i + 1}`} class="initial" type="text" inputMode="text"
           autocomplete="off" spellcheck={false} aria-label={`Initial ${i + 1} of 3`}
+          aria-invalid={problem ? true : undefined} aria-describedby={problem && noteId ? noteId : undefined}
           onInput={ev => typed(i, ev)}
           onFocus={ev => (ev.currentTarget as HTMLInputElement).select?.()} />
       ))}

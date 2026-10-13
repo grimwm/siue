@@ -83,3 +83,16 @@ test('a pasted set fills this box and the ones after it', () => {
   fire(b2, 'input', { data: null, inputType: 'insertFromPaste' });
   assert.deepEqual(boxes().map(b => b.value), ['X', 'Q', 'W'], 'only letters, only as many boxes as remain');
 });
+
+test('a visible rejection marks every box invalid and ties it to the note; a clear one removes both', () => {
+  const { boxes, redraw } = draw({ problem: 'Pick other initials.', noteId: 'lobby-initials-note' });
+  for (const b of boxes()) {
+    assert.equal(b.getAttribute('aria-invalid'), 'true');
+    assert.equal(b.getAttribute('aria-describedby'), 'lobby-initials-note');
+  }
+  redraw({ problem: '', noteId: 'lobby-initials-note' });
+  for (const b of boxes()) {
+    assert.ok(b.getAttribute('aria-invalid') == null);
+    assert.ok(b.getAttribute('aria-describedby') == null);
+  }
+});

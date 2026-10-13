@@ -70,28 +70,41 @@ function board_top(string $difficulty, int $n): array
     return $out;
 }
 
+/* The highest-scoring readable run of a callsign's data, or null. */
+function board_best_run(array $d): ?array
+{
+    $best = null;
+    foreach ($d['runs'] as $r) {
+        if (is_array($r) && isset($r['score']) && ($best === null || (int) $r['score'] > (int) $best['score'])) {
+            $best = $r;
+        }
+    }
+    return $best;
+}
+
 /* Moves up to $limit per-callsign rows onto the Normal board (the only level
    there was): each callsign's best run, its name converted, the row deleted in
-   the same transaction, so nothing is converted twice. Answers the rows moved. */
+   the same transaction, so nothing is converted twice. Older runs go first, so
+   equal scores keep the board's older-run-ahead order. Answers the rows moved. */
 function board_convert_callsigns(int $limit = 200): int
 {
     $guard = tankity_guard();
-    $q = tankity_db()->prepare('SELECT slug FROM callsigns ORDER BY slug LIMIT ?');
-    $q->execute([$limit]);
+    $order = [];
+    foreach (tankity_db()->query('SELECT slug FROM callsigns')->fetchAll(PDO::FETCH_COLUMN) as $slug) {
+        $order[(string) $slug] = (string) (board_best_run(legacy_read(tankity_db(), (string) $slug))['ts'] ?? '');
+    }
+    uksort($order, fn($a, $b) => [$order[$a], $a] <=> [$order[$b], $b]);
     $moved = 0;
-    foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $slug) {
+    foreach (array_slice(array_keys($order), 0, $limit) as $slug) {
         tankity_tx(tankity_db(), function (PDO $db) use ($slug, $guard, &$moved): void {
             $d = legacy_read($db, (string) $slug);
-            $best = null;
-            foreach ($d['runs'] as $r) {
-                if (is_array($r) && isset($r['score']) && ($best === null || (int) $r['score'] > (int) $best['score'])) {
-                    $best = $r;
-                }
-            }
-            if ($best !== null) {
+            $best = board_best_run($d);
+            if ($best === null) {
+                error_log("tankity board: callsign $slug has no readable run; dropped");
+            } else {
                 board_file(['difficulty' => 'normal', 'initials' => board_convert_name((string) $slug, $guard),
                     'score' => max(0, (int) $best['score']), 'rounds' => max(0, (int) ($best['banked'] ?? 0)),
-                    'seed' => (string) ($best['seed'] ?? ''), 'at' => (string) ($best['ts'] ?? '')]);
+                    'seed' => (string) ($best['seed'] ?? ''), 'at' => (string) ($best['ts'] ?? '') ?: gmdate('c')]);
             }
             $db->prepare('DELETE FROM callsigns WHERE slug = ?')->execute([$slug]);
             $moved++;

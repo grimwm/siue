@@ -113,6 +113,48 @@ final class BoardTest extends TestCase
         $this->assertSame([], board_top('easy', 10));
     }
 
+    public function testEqualScoresKeepTheOlderRunAhead(): void
+    {
+        foreach (['zed' => '2026-01-01T00:00:00+00:00', 'amy' => '2026-02-01T00:00:00+00:00'] as $name => $ts) {
+            legacy_write(tankity_db(), $name, ['runs' => [['score' => 100, 'banked' => 1, 'won' => false, 'seed' => $name, 'ts' => $ts]]]);
+        }
+        board_convert_callsigns();
+        $this->assertSame(['ZED', 'AMY'], array_column(board_top('normal', 10), 'initials'));
+    }
+
+    public function testARunWithoutADateIsDatedByTheConversion(): void
+    {
+        legacy_write(tankity_db(), 'old', ['runs' => [['score' => 5, 'banked' => 0, 'won' => false, 'seed' => 'x']]]);
+        board_convert_callsigns();
+        $this->assertNotSame('', board_top('normal', 1)[0]['at']);
+    }
+
+    public function testARowWithNoRunIsDroppedWithALogLine(): void
+    {
+        legacy_write(tankity_db(), 'void', ['runs' => []]);
+        $log = tempnam(sys_get_temp_dir(), 'log');
+        $was = ini_set('error_log', $log);
+        board_convert_callsigns();
+        ini_set('error_log', (string) $was);
+        $this->assertStringContainsString('callsign void has no readable run', (string) file_get_contents($log));
+        unlink($log);
+        $this->assertSame(0, (int) tankity_db()->query('SELECT COUNT(*) FROM callsigns')->fetchColumn());
+    }
+
+    public function testAFailurePartWayLeavesTheUnconvertedRowsAlone(): void
+    {
+        legacy_write(tankity_db(), 'fine', ['runs' => [['score' => 10, 'banked' => 0, 'won' => false, 'seed' => 'a', 'ts' => '2026-01-01T00:00:00+00:00']]]);
+        legacy_write(tankity_db(), 'bom', ['runs' => [['score' => 20, 'banked' => 0, 'won' => false, 'seed' => 'b', 'ts' => '2026-02-01T00:00:00+00:00']]]);
+        tankity_db()->exec("CREATE TRIGGER fail_bom BEFORE INSERT ON board WHEN NEW.initials = 'BOM' BEGIN SELECT RAISE(ABORT, 'boom'); END");
+        try {
+            board_convert_callsigns();
+            $this->fail('the failing row should have thrown');
+        } catch (PDOException) {
+        }
+        $this->assertSame(['FIN'], array_column(board_top('normal', 10), 'initials'));
+        $this->assertSame(['bom'], tankity_db()->query('SELECT slug FROM callsigns')->fetchAll(PDO::FETCH_COLUMN));
+    }
+
     public function testTheLiveCallsignsAllSurviveTheConversion(): void
     {
         foreach (['wmg' => 400, 'bob' => 300, 'test2' => 200, 'test' => 100] as $name => $score) {

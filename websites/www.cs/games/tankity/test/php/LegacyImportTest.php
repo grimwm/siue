@@ -183,4 +183,18 @@ final class LegacyImportTest extends TestCase
         $this->assertSame(550, $best);
         $this->assertCount(LEGACY_RUNS_KEPT, $this->runs('ace'));
     }
+
+    public function testAnImportedFileThatSurvivesIsNotFiledAgainAfterConversion(): void
+    {
+        $path = $this->file('wg', [$this->entry(640, '2026-01-01T00:00:00+00:00')]);
+        $copy = file_get_contents($path);
+        legacy_import();
+        $this->assertSame(1, board_convert_callsigns());
+        file_put_contents($path, $copy); // another deployment wrote the file back
+        legacy_import();
+        board_convert_callsigns();
+        legacy_import();
+        board_convert_callsigns();
+        $this->assertCount(1, board_top('normal', 10));
+    }
 }

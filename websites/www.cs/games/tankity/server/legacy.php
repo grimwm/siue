@@ -124,7 +124,17 @@ function legacy_import(?string $dir = null, int $limit = LEGACY_IMPORT_BATCH, ?i
         }
         $slug = legacy_slug(basename($path, '-' . LEGACY_SLUG . '.json'));
         $runs = $data['runs'];
-        tankity_tx(tankity_db(), function (PDO $db) use ($slug, $runs): void {
+        $name = basename($path);
+        $hash = sha1((string) $raw);
+        tankity_tx(tankity_db(), function (PDO $db) use ($slug, $runs, $name, $hash): void {
+            // Converting a callsign deletes its row, so the row can no longer tell
+            // that this file was imported; this record does.
+            $done = $db->prepare('SELECT 1 FROM legacy_imported WHERE name = ? AND hash = ?');
+            $done->execute([$name, $hash]);
+            if ($done->fetchColumn() !== false) {
+                return;
+            }
+            $db->prepare('INSERT INTO legacy_imported (name, hash, at) VALUES (?, ?, ?)')->execute([$name, $hash, gmdate('c')]);
             $d = legacy_read($db, $slug);
             // Counts, not a set: two genuinely identical runs in a file are both kept,
             // and an import that runs twice still adds nothing the second time.

@@ -70,3 +70,16 @@ test('a letter typed into a box that already holds one replaces it, wherever the
   assert.equal(c.value, 'X');
   assert.deepEqual(calls, ['BDX']);
 });
+
+test('a pasted set fills this box and the ones after it', () => {
+  const { boxes, calls } = draw({ initials: 'BDJ' });
+  const [a] = boxes();
+  a.value = 'xyz';
+  fire(a, 'input', { data: 'xyz', inputType: 'insertFromPaste' });
+  assert.deepEqual(boxes().map(b => b.value), ['X', 'Y', 'Z']);
+  assert.deepEqual(calls, ['XYZ']);
+  const [, b2] = boxes();
+  b2.value = 'q1w2e';
+  fire(b2, 'input', { data: null, inputType: 'insertFromPaste' });
+  assert.deepEqual(boxes().map(b => b.value), ['X', 'Q', 'W'], 'only letters, only as many boxes as remain');
+});

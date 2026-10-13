@@ -37,14 +37,17 @@ export function InitialsPicker({ idPrefix, initials, rev = 0, onInitials, fieldR
     // One letter per box, shown uppercase whatever case was typed. The typed
     // letter replaces the one there wherever the caret sat (a box focused
     // without its letter selected), so the boxes have no length limit.
-    const data = (ev as InputEvent).data;
-    const letter = (data || box.value).replace(/[^A-Za-z]/g, '').slice(-1).toUpperCase();
-    box.value = letter;
-    if (!letter) return;
+    const { data, inputType } = ev as InputEvent;
+    const letters = (data || box.value).replace(/[^A-Za-z]/g, '').toUpperCase();
+    // A paste or drop fills this box and the ones after it, in order.
+    const pasted = inputType === 'insertFromPaste' || inputType === 'insertFromDrop';
+    const spread = pasted ? letters.slice(0, 3 - i) : letters.slice(-1);
+    box.value = spread[0] ?? '';
+    if (!spread) return;
     // Retyping from a box starts a new set: the boxes after it empty, so a
     // half-typed set is never saved as a mix of new and old letters.
-    for (const later of boxes.slice(i + 1)) if (later.current) later.current.value = '';
-    const next = boxes[i + 1]?.current;
+    boxes.slice(i + 1).forEach((later, k) => { if (later.current) later.current.value = spread[k + 1] ?? ''; });
+    const next = boxes[Math.min(i + spread.length, 2)]?.current;
     if (next) {
       next.focus?.();
       next.select?.();

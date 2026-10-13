@@ -76,6 +76,17 @@ function board_top(string $difficulty, int $n): array
     return $out;
 }
 
+/* Whether a run is already on the Normal board: the same converted name, score,
+   rounds, seed and date. A rewritten old file brings its old runs back; this is
+   how an import tells the ones already converted. */
+function board_has_run(string $initials, array $run): bool
+{
+    $q = tankity_db()->prepare("SELECT 1 FROM board WHERE difficulty = 'normal' AND initials = ? AND score = ? AND rounds = ? AND seed = ? AND at = ?");
+    $q->execute([$initials, max(0, (int) ($run['score'] ?? 0)), max(0, (int) ($run['banked'] ?? 0)),
+        (string) ($run['seed'] ?? ''), (string) ($run['ts'] ?? '')]);
+    return $q->fetchColumn() !== false;
+}
+
 /* The highest-scoring readable run of a callsign's data, or null. */
 function board_best_run(array $d): ?array
 {

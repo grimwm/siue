@@ -10,6 +10,8 @@ if (count(get_included_files()) === 1) {
     exit;
 }
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/guard.php';
+require_once __DIR__ . '/board.php';
 
 const LEGACY_SLUG = 'operation-tankity';
 const LEGACY_RUNS_KEPT = 50;
@@ -136,13 +138,14 @@ function legacy_import(?string $dir = null, int $limit = LEGACY_IMPORT_BATCH, ?i
             }
             $db->prepare('INSERT INTO legacy_imported (name, hash, at) VALUES (?, ?, ?)')->execute([$name, $hash, gmdate('c')]);
             $d = legacy_read($db, $slug);
+            $initials = board_convert_name($slug, tankity_guard());
             // Counts, not a set: two genuinely identical runs in a file are both kept,
             // and an import that runs twice still adds nothing the second time.
             $have = array_count_values(array_map('legacy_run_key', $d['runs']));
             $seen = [];
             foreach ($runs as $r) {
-                if (!is_array($r) || !isset($r['score'])) {
-                    continue;
+                if (!is_array($r) || !isset($r['score']) || board_has_run($initials, $r)) {
+                    continue; // unreadable, or a run the board already holds from an earlier conversion
                 }
                 $k = legacy_run_key($r);
                 $seen[$k] = ($seen[$k] ?? 0) + 1;

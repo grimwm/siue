@@ -303,7 +303,20 @@ function tankity_depth(PDO $db, int $delta = 0): int
 function tankity_tx(PDO $db, callable $fn): mixed
 {
     if (tankity_depth($db) > 0) {
-        return $fn($db);
+        // Nested: a savepoint, so a throw the caller catches takes this part's
+        // writes back and leaves the outer transaction's own intact.
+        static $n = 0;
+        $sp = 'tankity_sp' . ++$n;
+        $db->exec("SAVEPOINT $sp");
+        try {
+            $out = $fn($db);
+        } catch (Throwable $e) {
+            $db->exec("ROLLBACK TO $sp");
+            $db->exec("RELEASE $sp");
+            throw $e;
+        }
+        $db->exec("RELEASE $sp");
+        return $out;
     }
     $db->exec('BEGIN IMMEDIATE');
     tankity_depth($db, 1);

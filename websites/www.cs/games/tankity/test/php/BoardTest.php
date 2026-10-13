@@ -171,4 +171,20 @@ final class BoardTest extends TestCase
         $this->assertNotNull(tankity_guard([], ['HTTP_HOST' => 'localhost', 'REMOTE_ADDR' => '192.0.2.1'], [], fn(): int => 1_000_000, function (): void {})->startRun());
         $this->assertFileExists($this->dir . '/' . TANKITY_GUARD_RUNS);
     }
+
+    public function testASavepointKeepsAFailedFilingOutOfTheOuterTransaction(): void
+    {
+        $db = tankity_db();
+        tankity_tx($db, function () {
+            board_file($this->entry('AAA', 5));
+            try {
+                tankity_tx(tankity_db(), function (PDO $d) {
+                    $d->exec("INSERT INTO board (difficulty, initials, score, rounds, seed, at) VALUES ('normal', 'BAD', 1, 0, '', '')");
+                    throw new RuntimeException('after the insert');
+                });
+            } catch (RuntimeException) {
+            }
+        });
+        $this->assertSame(['AAA'], array_column(board_top('normal', 10), 'initials'), 'the half-done insert did not commit');
+    }
 }

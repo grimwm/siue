@@ -92,4 +92,51 @@ final class RoomFilingTest extends TestCase
         room_end_round($room, $events);
         $this->assertContains('OUT', array_column(board_top('normal', 10), 'initials'));
     }
+
+    public function testALeaverIsNotFiled(): void
+    {
+        $room = $this->duel();
+        $room['seats'][2] = room_seat_human('LVR', 't2', []);
+        room_seat_economy($room, 2);
+        $room['startHumans'] = 3;
+        $room['scores'][2] = 9000;
+        $this->assertTrue(room_leave($room, 2));
+        $events = [];
+        room_end_round($room, $events);
+        $this->assertNotContains('LVR', array_column(board_top('normal', 10), 'initials'), 'a player who quits mid-match is not filed');
+        $this->assertArrayNotHasKey(2, $room['filed']);
+    }
+
+    public function testAnEliminationBeforeTheLastRoundIsFiledThenAndNotAgain(): void
+    {
+        $room = $this->duel();
+        $room['seats'][2] = room_seat_human('THR', 't2', []);
+        room_seat_economy($room, 2);
+        $room['startHumans'] = 3;
+        room_start_round($room);
+        foreach ($room['tanks'] as &$t) {
+            $t['hp'] = $t['seat'] === 1 ? 0 : 100;
+        }
+        unset($t);
+        $events = [];
+        room_end_round($room, $events);
+        $this->assertSame(['OUT'], array_column(board_top('normal', 10), 'initials'), 'filed when the last life went');
+        room_file_seat($room, 1);
+        $this->assertCount(1, board_top('normal', 10));
+    }
+
+    public function testAFailedFilingIsLoggedAndReadsAsNotFiled(): void
+    {
+        $room = $this->duel();
+        tankity_db()->exec("CREATE TRIGGER no_filing BEFORE INSERT ON board BEGIN SELECT RAISE(ABORT, 'disk full'); END");
+        $log = tempnam(sys_get_temp_dir(), 'tl');
+        $was = ini_set('error_log', $log);
+        room_file_seat($room, 0);
+        ini_set('error_log', (string) $was);
+        $this->assertStringContainsString('tankity board', (string) file_get_contents($log));
+        @unlink($log);
+        $snap = room_snapshot($room, 0, 0);
+        $this->assertFalse($snap['you']['filed'], 'a failure is not "did not place"');
+        $this->assertNull($snap['you']['filedRank']);
+    }
 }

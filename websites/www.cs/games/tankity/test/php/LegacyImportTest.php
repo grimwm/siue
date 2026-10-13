@@ -197,4 +197,18 @@ final class LegacyImportTest extends TestCase
         board_convert_callsigns();
         $this->assertCount(1, board_top('normal', 10));
     }
+
+    public function testARewrittenFileDoesNotFileTheSameRunTwice(): void
+    {
+        $path = $this->file('wg', [$this->entry(640, '2026-01-01T00:00:00+00:00')]);
+        legacy_import();
+        board_convert_callsigns();
+        // Another deployment rewrites the file with one more run: the bytes differ,
+        // the old run is the one already on the board.
+        $this->file('wg', [$this->entry(640, '2026-01-01T00:00:00+00:00'), $this->entry(100, '2026-03-01T00:00:00+00:00')]);
+        legacy_import();
+        board_convert_callsigns();
+        $scores = array_column(board_top('normal', 10), 'score');
+        $this->assertSame(1, count(array_keys($scores, 640)), 'the 640 run is on the board once');
+    }
 }

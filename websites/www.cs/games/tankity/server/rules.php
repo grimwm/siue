@@ -704,8 +704,11 @@ function room_file_seat(array &$room, int $seat): void
             'score' => (int) ($room['scores'][$seat] ?? 0), 'rounds' => (int) ($room['stats'][$seat]['won'] ?? 0),
             'seed' => 'room:' . $room['code']]);
     } catch (Throwable $e) {
-        error_log('tankity board: ' . $e->getMessage());
-        $rank = null;
+        // false, not null: the snapshot tells a filing that failed from a score
+        // that filed but made no place. The write was rolled back, and a match
+        // files once, so it is not retried.
+        error_log("tankity board: room {$room['code']} seat $seat not filed: " . $e->getMessage());
+        $rank = false;
     }
     $room['filed'][$seat] = $rank;
 }

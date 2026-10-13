@@ -26,6 +26,8 @@ const sim = {
 const arsenal = sim.buildArsenal(GAME.arsenal);
 const armorRules = await import(pathToFileURL(path.join(dir, 'src', 'armor.ts')).href);
 
+const standings = await import(pathToFileURL(path.join(dir, 'src', 'standings.ts')).href);
+
 /* ---- state the cases run over ---- */
 const G = {};
 function buildTerrain(spec, w = 720) {
@@ -145,6 +147,11 @@ const RUN = {
       out.push({ armor: hull.armor, max: armorRules.maxArmor(hull.plates), hp });
     }
     return out;
+  },
+  'match-end'(c) {
+    const seats = c.lives.map((l, seat) => ({ seat, human: l !== null, lives: l ?? 0 }));
+    const o = standings.matchOutcome(seats, c.startHumans);
+    return { over: o.over, winner: o.winner, bonus: standings.winnerBonus(c.round) };
   },
   volley(c) {
     world(c);

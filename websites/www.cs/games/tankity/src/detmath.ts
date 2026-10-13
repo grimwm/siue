@@ -66,7 +66,8 @@ export function datan(x: number): number {
   const r = id < 0 ? t - t * (s1 + s2) : ATAN_HI[id]! - ((t * (s1 + s2) - ATAN_LO[id]!) - t);
   return x < 0 ? -r : r;
 }
-// y = -0 with x < 0 gives +π, unlike libm's -π: `y >= 0` holds for -0. The server does the same, and the sim never aims from -0.
+// Where it differs from Math.atan2: y = -0 with x < 0 gives +π (`y >= 0` holds for -0) where Math gives -π,
+// and (±0, ±0) gives +0 where Math gives ±0 or ±π. The server does the same, and no outcome depends on either.
 export function datan2(y: number, x: number): number {
   if (x > 0) return datan(y / x);
   if (x < 0) return y >= 0 ? datan(y / x) + PI : datan(y / x) - PI;

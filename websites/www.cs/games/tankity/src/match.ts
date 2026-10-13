@@ -1,10 +1,11 @@
 /* Operation Tankity: the solo match.
  *
- * Dealing a match and its rounds, whose turn it is, firing and what a blast
- * does to each unit, a drone's aim and shot, the end of a round and of the
+ * Playing a solo match on the page: announcing whose turn it is, firing and what a blast
+ * does to each unit, a drone's shot, the words and banners for the end of a round and of the
  * match, the name cards between rounds, and the end veil's props. The pure
  * parts are elsewhere (the sim moves shells and decides hits, the AI chooses
- * an aim, flow.ts names the phase moves); this decides what happens next and
+ * an aim, solo.ts deals, settles and orders the turns, flow.ts names the phase
+ * moves); this decides what happens next and
  * says it. A room match is run by the server, so nothing here runs in one
  * except the pieces a room shares (the banner, the cosmetics, the end veil).
  * The game's state, the page and the rest of the game arrive as deps. */

@@ -4,8 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildArsenal, SPAWN_GAP, TUNE } from '../src/sim.ts';
-import { soloAim, soloDeal, soloMuster, soloSettle, soloNextTurn, soloOneUps } from '../src/solo.ts';
+import { buildArsenal, SPAWN_GAP, TUNE, surfY } from '../src/sim.ts';
+import { soloAim, soloDeal, soloMuster, soloSettle, soloNextTurn, soloOneUps, snapTanks } from '../src/solo.ts';
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const arsenal = buildArsenal(GAME.arsenal);
@@ -98,9 +98,22 @@ test('the deal keeps its difficulty, and the drones aim with it', () => {
 test('1-ups: a life per 3000, or 500 points at five lives', () => {
   const G = fresh('alpha');
   G.score = 6100;
-  assert.deepEqual(soloOneUps(G), ['life', 'life']);
+  G.lives = 3;
+  assert.deepEqual(soloOneUps(G), [{ kind: 'life', lives: 4 }, { kind: 'life', lives: 5 }]);
   assert.equal(G.lives, 5);
   G.score = 12000;
-  assert.deepEqual(soloOneUps(G), ['points', 'points']);
+  assert.deepEqual(soloOneUps(G), [{ kind: 'points', lives: 5 }, { kind: 'points', lives: 5 }]);
   assert.equal(G.score, 13000);
+});
+
+test('snapTanks puts standing tanks on the ground and leaves wrecks where they hang', () => {
+  const G = round1('alpha');
+  const [a, b] = G.tanks;
+  a.y = surfY(G.terrain, a.x) - 0.3; a.vy = 2;
+  b.hp = 0; b.y = 5; b.vy = 3;
+  snapTanks(G);
+  assert.equal(a.y, surfY(G.terrain, a.x));
+  assert.equal(a.vy, 0);
+  assert.equal(b.y, 5);
+  assert.equal(b.vy, 3);
 });

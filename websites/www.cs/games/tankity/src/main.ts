@@ -328,9 +328,9 @@ function frame(ts: number): void {
   }
   if (!net.on) {
     for (const up of soloOneUps(G)) {
-      if (up === 'life') {
+      if (up.kind === 'life') {
         sfx.play('win');
-        say(`1-UP! Extra life! (${G.lives}/${TUNE.maxLives} lives)`, 'good');
+        say(`1-UP! Extra life! (${up.lives}/${TUNE.maxLives} lives)`, 'good');
         talk('tank', 'Another life! I am basically immortal!', true);
       } else say('Max lives already, so take +500 points instead!', 'good');
     }

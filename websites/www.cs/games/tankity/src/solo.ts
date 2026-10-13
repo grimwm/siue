@@ -163,14 +163,14 @@ export function soloSettle(G: SoloState): Settled {
   return { kind: 'roundWon', bonus, prize };
 }
 
-export type OneUp = 'life' | 'points';
+export type OneUp = { kind: 'life' | 'points'; lives: number };
 /** Every 3000 points a life, up to five; past five, 500 points instead. */
 export function soloOneUps(G: SoloState): OneUp[] {
   const out: OneUp[] = [];
   while (G.score >= G.nextOneUp) {
     G.nextOneUp += TUNE.oneUpEvery;
-    if (G.lives < TUNE.maxLives) { G.lives += 1; out.push('life'); }
-    else { G.score += 500; out.push('points'); }
+    if (G.lives < TUNE.maxLives) { G.lives += 1; out.push({ kind: 'life', lives: G.lives }); }
+    else { G.score += 500; out.push({ kind: 'points', lives: G.lives }); }
   }
   return out;
 }

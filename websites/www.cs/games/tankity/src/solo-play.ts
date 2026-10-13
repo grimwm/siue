@@ -1,13 +1,12 @@
-// games/tankity/src/solo-play.ts
 /* Operation Tankity: solo matches without a page.
  *
- * flyVolley() takes the war's fixed steps (tanks fall, then shells move);
- * soloRound() plays one round from the shop the way server/solo.php does;
- * playSolo() drives the rules with a bot and records each round as the page
- * would send it; replaySolo() checks every claim. tools/solo-runs.mjs records
- * bot runs for the PHP side to match. Not part of the page bundle. */
+ * soloRound() plays one round from the shop the way server/solo.php does, and
+ * refuses what it refuses; playSolo() drives the rules with a bot and records
+ * each round as the page would send it; replaySolo() checks every claim.
+ * Not part of the page bundle. */
 import { ROOM_W, anyTankFalling, clamp, facing, fallTanks, fieldWidthOk, fireWeapon, hashSeed, muzzle, mulberry32, simShot, spotTaken, stepShells, surfY } from './sim.ts';
 import type { Arsenal, Difficulty, World } from './sim.ts';
+import { DIFFICULTIES } from './ai.ts';
 import { SOLO_STEP, soloAim, soloBuy, soloDeal, soloMuster, soloOneUps, soloSettle } from './solo.ts';
 import type { Settled, SoloState, SoloTank } from './solo.ts';
 import { closeRound, newRecorder, recordBuy, recordShot, ROUND_MAX_BUYS, ROUND_MAX_SHOTS } from './solo-log.ts';
@@ -55,7 +54,7 @@ function droneTurn(G: SoloState, arsenal: Arsenal, t: SoloTank): void {
 /** Drives the player's tank to x (paying fuel) and fires; an error when the move is not legal. */
 export function playerFire(G: SoloState, arsenal: Arsenal, m: SoloShot): string | null {
   const me = G.tanks[0]!;
-  if (!arsenal.weapons[m.w]) return 'no such weapon';
+  if (!Object.hasOwn(arsenal.weapons, m.w)) return 'no such weapon';
   if (!(m.a >= 10 && m.a <= 170 && m.p >= 10 && m.p <= 100 && m.x >= 12 && m.x <= G.w - 12)) return 'out of range';
   // The page drops the player's tank while it aims, so it is on the ground when it fires.
   me.y = surfY(G.terrain, me.x);
@@ -73,6 +72,12 @@ export function playerFire(G: SoloState, arsenal: Arsenal, m: SoloShot): string 
   return fireWeapon(G, arsenal, me, m.w) ? null : 'none left';
 }
 
+const isMove = (m: unknown): m is SoloShot => {
+  const o = m as Record<string, unknown> | null;
+  return !!o && typeof o === 'object' && typeof o['w'] === 'string'
+    && [o['a'], o['p'], o['x']].every(v => typeof v === 'number' && Number.isFinite(v));
+};
+
 function claimOf(G: SoloState, end: Exclude<Settled['kind'], 'next'>): RoundClaim {
   return { end, score: G.score, cash: G.cash, lives: G.lives, roundsWon: G.roundsWon };
 }
@@ -80,12 +85,16 @@ function claimOf(G: SoloState, end: Exclude<Settled['kind'], 'next'>): RoundClai
 /** One round from the shop: its purchases, the muster, then turns until the
  *  round ends, the player's turns taking `shots` in order. server/solo.php
  *  solo_round() is the same, refusal for refusal. */
-export function soloRound(G: SoloState, arsenal: Arsenal, buys: readonly SoloBuy[], shots: readonly SoloShot[]): RoundResult {
-  if (buys.length > ROUND_MAX_BUYS) return { ok: false, error: 'bad buys' };
-  if (shots.length > ROUND_MAX_SHOTS) return { ok: false, error: 'too many shots' };
-  for (const b of buys) {
-    const row = arsenal.shop.find(r => (r.kind === 'ammo' ? r.w : r.g) === b.i);
-    if (!row || !soloBuy(G, row, b.q).ok) return { ok: false, error: 'bad buy' };
+export function soloRound(G: SoloState, arsenal: Arsenal, buysIn: unknown, shotsIn: unknown): RoundResult {
+  // Records arrive as JSON: anything may be anything, and none of it may throw.
+  if (!Array.isArray(buysIn) || buysIn.length > ROUND_MAX_BUYS) return { ok: false, error: 'bad buys' };
+  if (!Array.isArray(shotsIn) || shotsIn.length > ROUND_MAX_SHOTS) return { ok: false, error: 'too many shots' };
+  const shots = shotsIn as unknown[];
+  for (const b of buysIn as unknown[]) {
+    const o = b as { i?: unknown; q?: unknown } | null;
+    if (!o || typeof o !== 'object' || typeof o.i !== 'string' || !Number.isInteger(o.q) || (o.q as number) < 1) return { ok: false, error: 'bad buy' };
+    const row = arsenal.shop.find(r => (r.kind === 'ammo' ? r.w : r.g) === o.i);
+    if (!row || !soloBuy(G, row, o.q as number).ok) return { ok: false, error: 'bad buy' };
     soloOneUps(G);
   }
   G.round += 1;
@@ -94,12 +103,14 @@ export function soloRound(G: SoloState, arsenal: Arsenal, buys: readonly SoloBuy
   for (;;) {
     const t = G.tanks[G.turn]!;
     if (t.isPlayer) {
+      if (i >= shots.length) return { ok: false, error: 'unfinished' };
       const m = shots[i++];
-      if (!m) return { ok: false, error: 'unfinished' };
+      if (!isMove(m)) return { ok: false, error: 'bad move' };
       const err = playerFire(G, arsenal, m);
       if (err) return { ok: false, error: err };
     } else droneTurn(G, arsenal, t);
     flyVolley(G, arsenal);
+    if (G.shells.length) return { ok: false, error: 'too slow' };
     soloOneUps(G);
     const end = soloSettle(G);
     if (end.kind === 'next') continue;
@@ -143,6 +154,7 @@ function playTurns(G: SoloState, arsenal: Arsenal, bot: Bot, rec: ReturnType<typ
       recordShot(rec, G.tanks[0]!, m.w);
     } else droneTurn(G, arsenal, t);
     flyVolley(G, arsenal);
+    if (G.shells.length) throw new Error(`${G.seed}: a volley outlasted ${FLIGHT_MAX_STEPS} steps`);
     soloOneUps(G);
     const end = soloSettle(G);
     if (end.kind === 'next') continue;
@@ -151,21 +163,30 @@ function playTurns(G: SoloState, arsenal: Arsenal, bot: Bot, rec: ReturnType<typ
   }
 }
 
-/** Plays a recorded run round by round and checks every claim. */
-export function replaySolo(p: Pick<Played, 'seed' | 'difficulty' | 'w' | 'rounds'>, arsenal: Arsenal):
+const CLAIM_KEYS = ['end', 'score', 'cash', 'lives', 'roundsWon'] as const;
+
+/** Plays a recorded run round by round and checks every claim. Whatever the
+ *  record holds, it answers a refusal and does not throw. */
+export function replaySolo(p: unknown, arsenal: Arsenal):
   { ok: true; score: number; roundsWon: number; rounds: number } | { ok: false; round: number; error: string } {
+  const run = p as Partial<Pick<Played, 'seed' | 'difficulty' | 'w' | 'rounds'>> | null;
+  if (!run || typeof run !== 'object' || typeof run.seed !== 'string' || !DIFFICULTIES.includes(run.difficulty as Difficulty)
+    || !Array.isArray(run.rounds)) return { ok: false, round: 1, error: 'bad run' };
+  if (!fieldWidthOk(run.w)) return { ok: false, round: 1, error: 'bad width' };
+  const rounds = run.rounds as unknown[];
   const G = blankSolo();
-  if (!fieldWidthOk(p.w)) return { ok: false, round: 1, error: 'bad width' };
-  soloDeal(G, arsenal, p.seed, p.difficulty, p.w);
-  for (const [k, r] of p.rounds.entries()) {
-    if (r.n !== k + 1) return { ok: false, round: r.n, error: 'out of order' };
-    const got = soloRound(G, arsenal, r.buys, r.shots);
-    if (!got.ok) return { ok: false, round: r.n, error: got.error };
-    if (JSON.stringify(got.claim) !== JSON.stringify(r.claim)) return { ok: false, round: r.n, error: 'mismatch' };
-    if (got.claim.end === 'matchLost' && k !== p.rounds.length - 1) return { ok: false, round: r.n + 1, error: 'the run is over' };
+  soloDeal(G, arsenal, run.seed, run.difficulty as Difficulty, run.w);
+  for (const [k, r] of rounds.entries()) {
+    const o = r as Partial<SoloRoundLog> | null;
+    if (!o || typeof o !== 'object' || !o.claim || typeof o.claim !== 'object') return { ok: false, round: k + 1, error: 'bad round' };
+    if (o.n !== k + 1) return { ok: false, round: Number.isInteger(o.n) ? o.n! : k + 1, error: 'out of order' };
+    const got = soloRound(G, arsenal, o.buys, o.shots);
+    if (!got.ok) return { ok: false, round: o.n, error: got.error };
+    if (CLAIM_KEYS.some(key => got.claim[key] !== o.claim![key])) return { ok: false, round: o.n, error: 'mismatch' };
+    if (got.claim.end === 'matchLost' && k !== rounds.length - 1) return { ok: false, round: o.n + 1, error: 'the run is over' };
   }
-  const last = p.rounds.at(-1);
-  if (!last || last.claim.end !== 'matchLost') return { ok: false, round: p.rounds.length, error: 'unfinished' };
+  const last = rounds.at(-1) as SoloRoundLog | undefined;
+  if (!last || last.claim.end !== 'matchLost') return { ok: false, round: rounds.length, error: 'unfinished' };
   return { ok: true, score: G.score, roundsWon: G.roundsWon, rounds: G.round };
 }
 

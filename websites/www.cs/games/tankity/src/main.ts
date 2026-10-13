@@ -167,6 +167,7 @@ const G: GameState = {
   shells: [], parts: [], booms: [], fx: null,
   wind: 0, round: 1, firstTurn: 0,
   lives: TUNE.lives, score: 0, cash: 0, nextOneUp: TUNE.oneUpEvery,
+  rounds: [], roundStart: { score: 0, cash: 0 },
   roundsWon: 0, ammo: null, selected: 'shell',
   shopSel: 0, shopQty: 1,
   fuelBank: 0, armor: TUNE.playerArmor,
@@ -391,6 +392,7 @@ const MATCH: MatchState = {
   myTurn: false, aimDirty: false, driveAcc: 0, driveT: 0,
   pendingRoom: null,
   lastPhase: '', lastTurn: -1, lastRound: -1, initials: '',
+  roundTo: '', out: false, outShown: false, lastRoom: null,
 };
 const replay = createReplay({
   tank: seat => G.tanks.find(t => t.seat === seat),
@@ -436,7 +438,7 @@ const getInitials = (): string => savedInitials.get();
 const field = createFieldWidth(() => ({ w: window.innerWidth, h: window.innerHeight }));
 const {
   advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-  stepWar, decayFx,
+  stepWar, decayFx, soloShopBoard,
 } = createMatch({
   field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
@@ -451,6 +453,7 @@ const {
 } = createShop({
   G, $, tables, net, sfx, me, touch: TOUCH, keyHint, say, advance, render, renderHUD, refreshNavHints,
   drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil: () => openLeaveVeil(), netBuy: (it, qty) => netBuy(it, qty),
+  board: () => (net.on ? roomShopBoard() : soloShopBoard()),
 });
 /* The weapon picker (src/guns.ts). */
 const {
@@ -463,6 +466,7 @@ const {
 /* A running room match on this client (src/room.ts): moves sent, snapshots adopted, events told, the turn alert. */
 const {
   netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
+  roomShopBoard,
 } = createRoom({
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
   decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,

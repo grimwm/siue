@@ -48,7 +48,7 @@ function SoloTable({ board }: { board: SoloBoard }) {
 
 export function Standings({ board }: { board: Board }) {
   return (
-    <section class="board" aria-label="Standings">
+    <section class="board" aria-label="Standings" tabindex={-1}>
       {board.caption && <div class="kicker">{board.caption}</div>}
       {board.title && <h3 class="board-title">{board.title}</h3>}
       {board.kind === 'room' ? <RoomTable board={board} /> : <SoloTable board={board} />}

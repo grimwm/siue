@@ -8,6 +8,7 @@
  * rows. The game's state, the arsenal tables and the page arrive as deps. */
 import type { FlowEvent } from './flow.ts';
 import type { GameState, GameTank, Tables } from './game-types.ts';
+import type { Board } from './standings.ts';
 import type { RoomClient } from './net.ts';
 import { PLATE_ARMOR, armorLabel, maxArmor, plateNote, repairNote, repairPacksWanted, repairRestores } from './armor.ts';
 import { TUNE, clamp } from './sim.ts';
@@ -43,6 +44,7 @@ export interface ShopDeps {
   nextRound(): void;
   openLeaveVeil(): void;
   netBuy(it: ShopRow, qty: number): void;
+  board(): Board | null;
 }
 
 /** G.shopSel on the free Shell row, which sits above the shelf's first row. */
@@ -51,7 +53,7 @@ export const SHELL_ROW = -1;
 export function createShop(deps: ShopDeps) {
   const {
     G, $, tables, net, sfx, me, touch, keyHint, say, advance, render, renderHUD, refreshNavHints,
-    drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil, netBuy,
+    drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil, netBuy, board,
   } = deps;
 
   function openShop(): void {
@@ -149,7 +151,7 @@ export function createShop(deps: ShopDeps) {
         ? `War chest: $${G.cash} · spend your stake before the first hill`
         : `War chest: $${G.cash} · armor ${G.armor}/${maxArmor(G.plate)} · round ${G.round} cleared`,
       entries,
-      board: null,
+      board: G.phase === 'shop' ? board() : null,
       next: ready.next,
       readyLine: ready.readyLine,
       inRoom: net.on,

@@ -48,6 +48,10 @@ export function makeEl(id) {
     get nextSibling() { return siblingOf(this, 1); },
     remove() { detach(this); },
     scrollIntoView() { globalThis.__scrolledTo = this; },
+    // A fixed layout: rows of a #shop-list are 100 tall, stacked, in a 300 tall list.
+    get offsetTop() { return this.parentNode && this.parentNode.id === 'shop-list' ? this.parentNode.children.indexOf(this) * 100 : 0; },
+    get offsetHeight() { return this.parentNode && this.parentNode.id === 'shop-list' ? 100 : undefined; },
+    get clientHeight() { return this.id === 'shop-list' ? 300 : undefined; },
     querySelectorAll(sel) { return this._select(sel, false); },
     querySelector(sel) { return this._select(sel, true); },
     _select(sel, first) {

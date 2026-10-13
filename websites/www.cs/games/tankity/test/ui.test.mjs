@@ -182,25 +182,27 @@ function shopProps(over = {}) {
   // A draw into the hidden veil cannot scroll (nothing is laid out), so the
   // first draw once it shows still brings the row in: the pre-match shop
   // opened with Buckshot selected but scrolled out of sight on short screens.
-  delete globalThis.__scrolledTo;
+  // The stub lays shop rows out 100 tall in a 300 tall list; a row is in view
+  // when the list's scrollTop frames it.
+  const inView = (list, li) => { const top = li.offsetTop; return top >= list.scrollTop && top + li.offsetHeight <= list.scrollTop + list.clientHeight; };
+  const selIn = list => list.children.find(li => hasClass(li, 'sel'));
   const fresh = makeEl('fresh-veil');
   fresh.hidden = true;
   renderShop(fresh, shopProps({ entries: shelf({ sel: 3 }) }).props);
-  check('shop-hidden-draw-does-not-scroll', globalThis.__scrolledTo === undefined);
+  check('shop-hidden-draw-does-not-scroll', byId(fresh, 'shop-list').scrollTop === 0);
   fresh.hidden = false;
   renderShop(fresh, shopProps({ entries: shelf({ sel: 3 }) }).props);
-  check('shop-first-draw-scrolls-to-selection', globalThis.__scrolledTo && hasClass(globalThis.__scrolledTo, 'sel'));
-  delete globalThis.__scrolledTo;
+  check('shop-first-draw-scrolls-to-selection', byId(fresh, 'shop-list').scrollTop > 0 && inView(byId(fresh, 'shop-list'), selIn(byId(fresh, 'shop-list'))));
+  const keptTop = byId(fresh, 'shop-list').scrollTop;
   renderShop(fresh, shopProps({ entries: shelf({ sel: 3, qty: 2 }) }).props);
-  check('shop-redraw-same-selection-leaves-scroll', globalThis.__scrolledTo === undefined);
+  check('shop-redraw-same-selection-leaves-scroll', byId(fresh, 'shop-list').scrollTop === keptTop);
   renderShop(fresh, shopProps({ entries: shelf({ sel: 4 }) }).props);
-  check('shop-moved-selection-scrolls', globalThis.__scrolledTo && hasClass(globalThis.__scrolledTo, 'sel')
+  check('shop-moved-selection-scrolls', inView(byId(fresh, 'shop-list'), selIn(byId(fresh, 'shop-list')))
     && byId(fresh, 'shop-list').children.filter(li => hasClass(li, 'sel')).length === 1);
   // The free Shell row takes the highlight like any other row.
-  delete globalThis.__scrolledTo;
   renderShop(fresh, shopProps({ entries: shelf({ sel: -1 }) }).props);
   const freeLi = byId(fresh, 'shop-list').children.find(li => hasClass(li, 'shop-free'));
-  check('shop-shell-row-selectable', hasClass(freeLi, 'sel') && globalThis.__scrolledTo === freeLi
+  check('shop-shell-row-selectable', hasClass(freeLi, 'sel') && inView(byId(fresh, 'shop-list'), freeLi)
     && byId(fresh, 'shop-list').children.filter(li => hasClass(li, 'sel')).length === 1);
   check('shop-registers-ids-for-the-page', els['shop-next'] !== undefined && els['shop-list'] !== undefined);
 }

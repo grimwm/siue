@@ -693,8 +693,7 @@ await (async () => {
   // Keyboard alone can shop: arrows highlight, Enter buys, digits buy outright.
   TAP('shop', 'selDown'); frames(3);
   check('shop-keys', shopRows()[1].className === 'sel', shopRows().map(li => li.className).join(','));
-  check('shop-scroll-follows', globalThis.__scrolledTo && globalThis.__scrolledTo.className === 'sel',
-    globalThis.__scrolledTo && globalThis.__scrolledTo.className);
+  check('shop-scroll-follows', (() => { const li = shopRows()[1], list = els['shop-list']; return li.offsetTop >= list.scrollTop && li.offsetTop + li.offsetHeight <= list.scrollTop + list.clientHeight; })());
   check('keys-file-drives', KEYS.shop.buy[0] === 'b' && KEYS.global.fire[0] === 'Space' && KEYS.aim.barrelLeft[0] === 'ArrowLeft' && KB('shop', 'buy')[0] === 'b',
     `${KEYS.shop.buy[0]}|${KEYS.global.fire[0]}|${KEYS.aim.barrelLeft[0]}`);
   {

@@ -287,7 +287,7 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 .board-table tfoot td { font-weight: 800; border-bottom: 0; }
 /* In the shop the scoreboard must not squeeze the list or push the page sideways:
  * it keeps to its own band and the longest cell (a room's last column) wraps. */
-#shop-veil .board { flex: 0 0 auto; max-height: 34dvh; overflow-y: auto; min-width: 0; }
+#shop-veil .board { flex: 0 1 auto; min-height: 0; max-height: 34dvh; overflow-y: auto; min-width: 0; }
 #shop-veil .board-table td.last { white-space: normal; }
 
 .help { margin: 0; padding-left: 1.1rem; }
@@ -300,9 +300,11 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 #shop-veil { grid-template-columns: minmax(0, 1fr); }
 /* The card is a column that never outgrows the screen: the list takes what is
    left and scrolls, and Start (and Leave room) stay in a footer below it. */
-#shop-veil .card { max-width: 44rem; min-width: 0; display: flex; flex-direction: column; max-height: calc(100dvh - 2rem); }
-#shop-veil .card > button { align-self: flex-start; }
-#shop-list { flex: 1 1 auto; min-height: 6rem; overflow-y: auto; min-width: 0; padding-left: 0; margin-bottom: 0.7rem; }
+#shop-veil .card { max-width: 44rem; min-width: 0; display: flex; flex-direction: column; max-height: calc(100dvh - 2rem); overflow-y: auto; }
+/* Start stays inside the card, at its bottom edge, whatever the screen. */
+.shop-foot { position: sticky; bottom: 0; background: var(--panel); padding-top: 0.3rem; display: flex; flex-direction: column; align-items: flex-start; }
+/* The list gives up room first (shrink weight 100); only at its one-row minimum does the board shrink. */
+#shop-list { flex: 1 100 auto; min-height: 7.5rem; overflow-y: auto; min-width: 0; padding-left: 0; margin-bottom: 0.7rem; }
 /* Two columns: the icon, then the text with Preview and Buy under it. */
 #shop-list li { display: grid; grid-template-columns: 72px minmax(0, 1fr); column-gap: 0.75rem; align-items: start; padding: 0.35rem 0.4rem; }
 .shop-item { min-width: 0; display: grid; gap: 0.1rem; }
@@ -315,6 +317,17 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 #shop-list li .shop-icon { width: 72px; height: 47px; align-self: center; }
 #shop-list li .acts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.35rem 0 0; justify-content: flex-start; }
 #shop-list li .acts button { min-width: 0; margin-top: 0; }
+/* A short screen (a phone on its side) gives the board a compact strip. */
+@media (max-height: 480px) {
+  #shop-veil .board { min-height: 3.4rem; max-height: 4.5rem; margin-bottom: 0.3rem; }
+  #shop-cash { margin: 0.3rem 0; }
+  #shop-list { margin-bottom: 0.3rem; }
+  /* The key hints give way, so the list keeps a full row and Start stays in the card. */
+  #shop-veil #nav-shop { display: none; }
+  .shop-foot { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0 0.5rem; }
+  .shop-foot .runstats { flex: 1 0 100%; margin: 0 0 0.2rem; }
+  .shop-foot button { margin-top: 0; }
+}
 /* Phones: the buttons share the text column's width in equal halves (a lone
    Preview takes all of it), so nothing sets the card wider than the screen. */
 @media (max-width: 600px) {

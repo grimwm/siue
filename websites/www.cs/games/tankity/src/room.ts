@@ -19,6 +19,8 @@ import { stepArm } from './input.ts';
 import type { Input } from './input.ts';
 import { prettyRoomError, shouldCatchUp, standingsRows } from './net.ts';
 import type { RoomClient } from './net.ts';
+import { roomBoard } from './standings.ts';
+import type { Board } from './standings.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
 import { H, ROOM_W, TUNE, carveCrater, clamp, facing, genTerrain, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
@@ -165,6 +167,7 @@ export function createRoom(deps: RoomDeps) {
   }
   function netAdopt(room: RoomSnapshot): void {
     net.seats = room.seats || [];
+    MATCH.lastRoom = room;
     net.hostSeat = room.hostSeat;
     if (room.map !== undefined) {
       net.map = room.map;
@@ -357,6 +360,7 @@ export function createRoom(deps: RoomDeps) {
       return;
     }
     if (e.t === 'roundwin') {
+      MATCH.roundTo = seatName(e.seat);
       if (e.seat === net.seat) {
         sfx.play('win');
         say(`You take round ${e.round}. Winnings paid. Spend them.`, 'good');
@@ -364,6 +368,7 @@ export function createRoom(deps: RoomDeps) {
       return;
     }
     if (e.t === 'roundlost') {
+      MATCH.roundTo = 'the battery';
       sfx.play('lose');
       say(`Round ${e.round} goes to the battery. Every wrecked player loses a life; restock and roll again.`, 'bad');
       return;
@@ -554,7 +559,13 @@ export function createRoom(deps: RoomDeps) {
     refreshNavHints();
   }
 
+  /* The shop's scoreboard in a room: everyone's match after the round just ended. */
+  function roomShopBoard(): Board | null {
+    return MATCH.lastRoom && MATCH.lastRoom.round > 0 ? roomBoard(MATCH.lastRoom, net.seat, 'shop', MATCH.roundTo || 'the battery') : null;
+  }
+
   return {
     netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
+    roomShopBoard,
   };
 }

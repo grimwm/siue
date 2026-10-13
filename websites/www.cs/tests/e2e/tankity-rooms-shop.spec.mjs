@@ -90,6 +90,38 @@ test('a lost round goes through the shop too: a life gone, then everyone ready s
   for (const p of [host.page, guest.page]) await expect(p.locator('#shop-veil')).toBeVisible();
   expect(lastRoom(roomState.host).you.lives).toBe(2);
   await expect(host.page.locator('#log')).toContainText('goes to the battery');
+  // The shop opens under a populated scoreboard, and on a phone (both ways up)
+  // it never scrolls sideways, keeps the highlighted row and Start in sight,
+  // and walking to the last row leaves the title and the board where they are.
+  const fits = () => host.page.evaluate(() => {
+    const inView = r => r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth;
+    const sideways = [document.documentElement, document.body, ...document.querySelectorAll('#shop-veil, #shop-veil .card, #shop-veil .board')]
+      .some(el => el.scrollWidth > el.clientWidth);
+    const sel = document.querySelector('#shop-list li.sel').getBoundingClientRect();
+    const list = document.getElementById('shop-list').getBoundingClientRect();
+    return {
+      sideways,
+      rowShown: sel.top >= list.top - 1 && sel.bottom <= list.bottom + 1,
+      startShown: inView(document.getElementById('shop-next').getBoundingClientRect()),
+      titleShown: inView(document.getElementById('shop-title').getBoundingClientRect()),
+      // The board's own box must have room for its title and a line, not just sit at a visible coordinate.
+      boardShown: inView(document.querySelector('#shop-veil .board').getBoundingClientRect())
+        && document.querySelector('#shop-veil .board').clientHeight >= 48,
+    };
+  });
+  for (const [width, height] of [[393, 852], [852, 393]]) {
+    await host.page.setViewportSize({ width, height });
+    await expect(host.page.locator('#shop-veil .board .board-table tbody tr')).toHaveCount(2);
+    const all = { sideways: false, rowShown: true, startShown: true, titleShown: true, boardShown: true };
+    // The resize event reaches the page a moment after the viewport changes.
+    await expect.poll(fits, { message: `${width}x${height} on open` }).toEqual(all);
+    for (let i = 0; i < 30; i++) await host.page.keyboard.press('ArrowDown');
+    expect(await fits(), `${width}x${height} at the last row`).toEqual(all);
+    for (let i = 0; i < 30; i++) await host.page.keyboard.press('ArrowUp');
+    expect(await fits(), `${width}x${height} at the first row`).toEqual(all);
+  }
+  await host.page.setViewportSize({ width: 1280, height: 860 });
+  await expect(host.page.locator('#log')).toContainText('goes to the battery');
   for (const p of [host.page, guest.page]) await p.locator('#shop-next').click();
   await expect.poll(() => lastRoom(roomState.host).phase, { timeout: 15_000 }).toBe('play');
   expect(lastRoom(roomState.host).round).toBe(round + 1);

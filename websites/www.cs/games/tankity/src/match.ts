@@ -25,6 +25,8 @@ import {
   anyTankFalling as simAnyTankFalling,
 } from './sim.ts';
 import type { Blast, Shell } from './sim.ts';
+import { soloBoard } from './standings.ts';
+import type { Board } from './standings.ts';
 import { renderEndVeil as drawEndVeil } from './ui/endveil.tsx';
 import type { KeyHintFn } from './ui/chrome.tsx';
 
@@ -118,6 +120,8 @@ export function createMatch(deps: MatchDeps) {
     G.lives = TUNE.lives;
     G.score = 0;
     G.cash = 600;
+    G.rounds = [];
+    G.roundStart = { score: 0, cash: 600 };
     G.nextOneUp = TUNE.oneUpEvery;
     G.roundsWon = 0;
     G.round = 0;
@@ -226,6 +230,7 @@ export function createMatch(deps: MatchDeps) {
     }
     G.turn = G.firstTurn % G.tanks.length;
     G.firstTurn++;
+    G.roundStart = { score: G.score, cash: G.cash };
     G.shells = [];
     G.parts = [];
     G.booms = [];
@@ -381,6 +386,20 @@ export function createMatch(deps: MatchDeps) {
   function anyTankFalling(): boolean {
     return simAnyTankFalling(G);
   }
+  /* One line of the solo scoreboard: what the round just ended paid. */
+  function recordRound(won: boolean): void {
+    G.rounds.push({
+      round: G.round, won,
+      points: G.score - G.roundStart.score,
+      kills: me().kills || 0,
+      cash: G.cash - G.roundStart.cash,
+      lives: G.lives,
+    });
+  }
+  /* The shop's scoreboard in a solo match: the rounds so far. */
+  function soloShopBoard(): Board | null {
+    return G.rounds.length ? soloBoard(G.rounds, 'shop') : null;
+  }
   function settle(): void {
     if (G.demo) {
       if (me().hp <= 0) {
@@ -406,8 +425,10 @@ export function createMatch(deps: MatchDeps) {
       G.armor = maxArmor(G.plate); // a fresh tank next round, plates kept
       if (G.lives <= 0) {
         G.lives = 0;
+        recordRound(false);
         endMatch(false, 'The tank is scrap across these hills. The battery keeps the high ground.');
       } else {
+        recordRound(false);
         say(`Round ${G.round} goes to the battery. ${G.lives} ${G.lives === 1 ? 'life' : 'lives'} left. Restock and roll again.`, 'bad');
         talk('tank', 'I will be back... after shopping!', true);
         advance('tankLost');
@@ -420,6 +441,7 @@ export function createMatch(deps: MatchDeps) {
       const prize = TUNE.roundWinCash + G.round * 100;
       G.score += bonus;
       G.cash += prize;
+      recordRound(true);
       G.armor = me().hp;
       sfx.play('win');
       say(`Round ${G.round} won! +${bonus} pts, +$${prize}. The battery rebuilds meaner, so spend it wisely.`, 'good');
@@ -619,6 +641,6 @@ export function createMatch(deps: MatchDeps) {
 
   return {
     advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-    stepWar, decayFx,
+    stepWar, decayFx, soloShopBoard,
   };
 }

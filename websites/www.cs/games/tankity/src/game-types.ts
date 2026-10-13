@@ -11,6 +11,7 @@ import type { PreviewState } from './preview.ts';
 import type { RoomSnapshot } from './protocol.ts';
 import type { Boom, DrawTank, Spark } from './render.ts';
 import type { AimChoice } from './ai.ts';
+import type { SoloRound } from './standings.ts';
 import type { Arsenal, Cloud, Hills, World } from './sim.ts';
 
 /** The arsenal tables as main.ts holds them now. They are replaced when
@@ -69,6 +70,8 @@ export interface GameState extends World {
   firstTurn: number;
   lives: number;
   nextOneUp: number;
+  rounds: SoloRound[]; // this solo match's finished rounds, for its scoreboard
+  roundStart: { score: number; cash: number }; // score and cash when this round began
   roundsWon: number;
   shopSel: number;
   shopQty: number;
@@ -106,4 +109,8 @@ export interface MatchState {
   lastTurn: number | null;
   lastRound: number;
   initials: string;
+  roundTo: string; // who took the last round: a seat's name, or "the battery"
+  out: boolean; // this seat lost its last life this match
+  outShown: boolean; // the you're-out card has been shown
+  lastRoom: RoomSnapshot | null; // the last snapshot adopted, for the scoreboards
 }

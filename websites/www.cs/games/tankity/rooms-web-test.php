@@ -69,6 +69,16 @@ $post = function (string $action, array $body) use ($base, $origin) {
     $raw = @file_get_contents($base . '/rooms.php?action=' . $action, false, $ctx);
     return $raw === false ? null : json_decode($raw, true);
 };
+$postStatus = function (string $action, array $body) use ($base, $origin): array {
+    $ctx = stream_context_create(['http' => [
+        'method' => 'POST', 'timeout' => 8, 'ignore_errors' => true,
+        'header' => "Content-Type: application/json\r\nOrigin: $origin\r\nX-CSRF-Token: " . ($body['csrf'] ?? '') . "\r\n",
+        'content' => json_encode($body),
+    ]]);
+    $raw = @file_get_contents($base . '/rooms.php?action=' . $action, false, $ctx);
+    $line = $http_response_header[0] ?? '';
+    return [(int) (preg_match('~ (\d{3})~', $line, $m) ? $m[1] : 0), $raw === false ? null : json_decode($raw, true)];
+};
 
 // The room functions, in this process: it runs on the same box with the same
 // settings as the server, so slot keys and the cap come out identical. Used
@@ -285,9 +295,9 @@ $hcode = (string) ($hand['code'] ?? '');
 $hh = $post('join', ['code' => $hcode, 'initials' => 'nxt']);
 $hctl = fn(array $who): array => ['code' => $hcode, 'token' => (string) ($who['token'] ?? ''), 'csrf' => (string) ($who['csrf'] ?? '')];
 usleep(300000);
-$guestStart = $post('start', $hctl($hh));
-$check('guest-start-refused', ($guestStart['ok'] ?? false) !== true && ($guestStart['error'] ?? '') === 'only the host starts the match',
-    json_encode($guestStart['error'] ?? null));
+[$guestStatus, $guestStart] = $postStatus('start', $hctl($hh));
+$check('guest-start-refused', $guestStatus === 403 && ($guestStart['ok'] ?? false) !== true && ($guestStart['error'] ?? '') === 'only the host starts the match',
+    json_encode([$guestStatus, $guestStart['error'] ?? null]));
 $post('start', $hctl($hand));
 usleep(300000);
 $post('leave', $hctl($hand));
@@ -311,6 +321,9 @@ $hStart = $post('start', $hctl($hh));
 $check('host-handoff-starts', (int) ($hh['seat'] ?? -1) === 1 && ($hAgain['ok'] ?? false) === true
     && ($hStart['ok'] ?? false) === true && ($hStart['room']['hostSeat'] ?? -1) === 1,
     json_encode([$hAgain['error'] ?? null, $hStart['error'] ?? null, $hStart['room']['hostSeat'] ?? null]));
+// After the handoff the old host's token no longer starts anything.
+[$staleStatus, $staleStart] = $postStatus('start', $hctl($hand));
+$check('old-host-start-refused', $staleStatus >= 400 && ($staleStart['ok'] ?? false) !== true, json_encode([$staleStatus, $staleStart['error'] ?? null]));
 $ageRoom($hcode);
 
 // Leave the shared shelf as found: only this match is swept.

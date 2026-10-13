@@ -110,6 +110,16 @@ function laidOut(el: HTMLElement): boolean {
   return true;
 }
 
+/* Scroll the list itself to its highlighted row: scrollIntoView would also
+   scroll the card, taking the title and the board out of sight. */
+function showSelected(el: HTMLElement): void {
+  const row = el.querySelector<HTMLElement>('.sel');
+  if (!row) return;
+  const top = row.offsetTop - el.offsetTop;
+  if (top < el.scrollTop) el.scrollTop = top;
+  else if (top + row.offsetHeight > el.scrollTop + el.clientHeight) el.scrollTop = top + row.offsetHeight - el.clientHeight;
+}
+
 export function Shop(p: ShopProps) {
   const list = useRef<HTMLUListElement>(null);
   const shownSel = useRef(-1);
@@ -131,9 +141,21 @@ export function Shop(p: ShopProps) {
       return;
     }
     shownSel.current = sel;
-    el.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+    showSelected(el);
     scrolled.current = el.scrollTop;
   });
+  // Turning the phone resizes the list: keep the highlighted row in it.
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onResize = () => {
+      const el = list.current;
+      if (!el || !laidOut(el)) return;
+      showSelected(el);
+      scrolled.current = el.scrollTop;
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const blurThen = (fn: () => void) => (ev: Event) => { (ev.currentTarget as HTMLElement).blur(); fn(); };
   return (
     <KeyHints.Provider value={p.keyHint}>
@@ -174,11 +196,13 @@ export function Shop(p: ShopProps) {
             );
           })}
         </ul>
-        <p id="shop-ready" class="runstats" hidden={p.readyLine === null}>{p.readyLine}</p>
-        <button type="button" id="shop-next" class="btn-primary" aria-pressed={p.next.pressed}
-          onClick={blurThen(p.onNext)}>{p.next.label}{p.next.keyAt && <>{' '}<Key at={p.next.keyAt} bare /></>}</button>
-        <button type="button" id="shop-leave" class="btn-leave" title="Leave this game room and go back to the title card"
-          hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave room</button>
+        <div class="shop-foot">
+          <p id="shop-ready" class="runstats" hidden={p.readyLine === null}>{p.readyLine}</p>
+          <button type="button" id="shop-next" class="btn-primary" aria-pressed={p.next.pressed}
+            onClick={blurThen(p.onNext)}>{p.next.label}{p.next.keyAt && <>{' '}<Key at={p.next.keyAt} bare /></>}</button>
+          <button type="button" id="shop-leave" class="btn-leave" title="Leave this game room and go back to the title card"
+            hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave room</button>
+        </div>
       </div>
     </KeyHints.Provider>
   );

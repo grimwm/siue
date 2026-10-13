@@ -393,6 +393,57 @@ $ageRoom($mcode);
 $ping = $get($base . '/rooms.php?action=ping');
 $check('match-cleaned', ($ping['rooms']['used'] ?? -1) === 0);
 
+// A refused purchase answers with room_buy's status and line, in the JSON
+// error field, and takes no cash. The room is staged straight into the shop
+// because reaching it by play is slow.
+$bought = $post('create', ['initials' => 'shp']);
+$bcode = (string) ($bought['code'] ?? '');
+[$stage, $stageLock] = room_load($bcode);
+$stage['phase'] = 'shop';
+$stage['round'] = 1;
+$stage['shop'] = ['at' => microtime(true), 'ready' => []];
+$stage['cash'][0] = 100;
+$stage['armor'][0] = 30;
+room_save($stageLock, $bcode, $stage);
+room_unlock($stageLock);
+$buy = function (string $item) use ($base, $bought, $bcode): array {
+    $ctx = stream_context_create(['http' => [
+        'method' => 'POST', 'timeout' => 5, 'ignore_errors' => true,
+        'header' => "Content-Type: application/json\r\n",
+        'content' => json_encode(['code' => $bcode, 'token' => $bought['token'], 'csrf' => $bought['csrf'], 'item' => $item, 'qty' => 1]),
+    ]]);
+    $raw = @file_get_contents($base . '/rooms.php?action=buy', false, $ctx);
+    $status = 0;
+    foreach ($http_response_header ?? [] as $h) {
+        if (preg_match('#^HTTP/\S+ (\d+)#', $h, $mm)) {
+            $status = (int) $mm[1];
+        }
+    }
+    return [$status, $raw === false ? null : json_decode($raw, true)];
+};
+foreach ([
+    'unknown-item' => ['nope', 422, 'not for sale'],
+    'locked-item' => ['nuke', 409, 'nukes unlock in round 4'],
+    'short-on-cash' => ['repair', 409, 'short on cash'],
+] as $name => [$item, $want, $line]) {
+    usleep(300000);
+    [$status, $reply] = $buy($item);
+    $check("buy-refused-$name", $status === $want && ($reply['error'] ?? null) === $line && !isset($reply['ok']),
+        "$status " . json_encode($reply));
+}
+[$stage, $stageLock] = room_load($bcode);
+$stage['cash'][0] = 500;
+$stage['armor'][0] = 100;
+room_save($stageLock, $bcode, $stage);
+room_unlock($stageLock);
+usleep(300000);
+[$status, $reply] = $buy('repair');
+$check('buy-refused-armor-at-max', $status === 409 && ($reply['error'] ?? null) === 'armor is full', "$status " . json_encode($reply));
+[$stage, $stageLock] = room_load($bcode);
+room_unlock($stageLock);
+$check('buy-refused-takes-no-cash', ($stage['cash'][0] ?? -1) === 500, (string) ($stage['cash'][0] ?? '?'));
+$ageRoom($bcode);
+
 proc_terminate($proc);
 proc_close($proc);
 // Remove the private shelf.

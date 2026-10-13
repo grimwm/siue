@@ -277,7 +277,7 @@ function room_ai_choose(array &$room, array $tank): array
         // of the last one, it bursts on the target (or, taking out only part
         // of the miss, nearer it).
         [$ba, $bp] = room_ai_correct($room, $mx, $my, $w, $dirS, (float) $mem['a'], (float) $mem['p'], $sim['x'] + $miss * $skill['correct']);
-        $wob = max($skill['brkFloor'] * $fa['floor'], $wob * $skill['brkShrink'] ** $n);
+        $wob = max($skill['brkFloor'] * $fa['floor'], $wob * room_powi($skill['brkShrink'], $n));
     } else {
         $guns = $keys;
         if ($s === 'glory') {

@@ -814,6 +814,28 @@ compare within 1e-4 and the armor cases compare exactly.
 - The replay imports `src/sim.ts` and passes each case its own plain state
   object; nothing is stubbed, because the sim has no side effects to stub.
 
+
+## Solo determinism
+
+A solo score is earned by the server playing every round with the PHP sim
+(`server/sim.php`, `ai.php`, `rules.php`), so every number the outcome depends
+on must come out the same in the browser and on the server:
+
+- the drones aim from one table per difficulty (`DIFFICULTY` in `src/ai.ts`,
+  `ROOM_DIFFICULTY` in `server/ai.php`, the same numbers);
+- no `Math.hypot`/`hypot()`, powers or other last-bit-sensitive helpers in the
+  rule modules: distances are `dist()`/`room_dist()`, whole powers are
+  `powi()`/`room_powi()`, hit boxes multiply, and degrees go through `rad()`
+  in PHP `deg2rad`'s order;
+- a seeker within 1 px of its target does not steer, a cluster's bomblets may
+  burst on the ground at once, and a drone's bracket learns where a lance
+  first burst, on both sides;
+- `sin`, `cos` and `atan2` remain `Math.*` and libm; a last-bit difference
+  there changes an outcome only at an exact boundary.
+
+`test/determinism.test.mjs` keeps the banned calls out; the sim vectors keep
+the two sides agreeing.
+
 ## Weapon effects
 
 Looks are data and the blast radius stays the sim's. The arsenal in `game.yaml` owns

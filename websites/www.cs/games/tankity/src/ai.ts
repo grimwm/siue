@@ -6,7 +6,7 @@
  * algorithm, kept in step by the shared vectors in protocol/sim-vectors.json.
  * brkLand stays in sim.ts: explode calls it, and sim.ts must not import this
  * file. */
-import { clamp, facing, gauss, muzzle, simShot, spotTaken, surfY } from './sim.ts';
+import { clamp, facing, gauss, muzzle, powi, simShot, spotTaken, surfY } from './sim.ts';
 import type { Arsenal, Difficulty, Rng, Tank, Weapon, World } from './sim.ts';
 export type { Difficulty } from './sim.ts';
 
@@ -204,7 +204,7 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
     // the last one, it bursts on the target (or, taking out only part of the
     // miss, nearer it).
     [ba, bp] = aiCorrect(world, arsenal, m.x, m.y, w, dirS, mem!.a, mem!.p, sim.x + miss * skill.correct);
-    wob = Math.max(skill.brkFloor * fa.floor, wob * skill.brkShrink ** n);
+    wob = Math.max(skill.brkFloor * fa.floor, wob * powi(skill.brkShrink, n));
   } else {
     let guns = keys;
     if (s === 'glory') {

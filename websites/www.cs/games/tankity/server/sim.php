@@ -110,6 +110,20 @@ function room_rng_range(int &$a, float $lo, float $hi): float
 {
     return $lo + room_rng_next($a) * ($hi - $lo);
 }
+/* A distance as the root of the squares (src/sim.ts dist()). */
+function room_dist(float $dx, float $dy): float
+{
+    return sqrt($dx * $dx + $dy * $dy);
+}
+/* $b to a small whole power by repeated multiplication (src/sim.ts powi()). */
+function room_powi(float $b, int $n): float
+{
+    $r = 1.0;
+    for ($i = 0; $i < $n; $i++) {
+        $r *= $b;
+    }
+    return $r;
+}
 function room_gauss(int &$a): float
 {
     return (room_rng_next($a) + room_rng_next($a) + room_rng_next($a) - 1.5) * 2.0;
@@ -224,7 +238,7 @@ function room_seek_push(array $tanks, int $ownerIdx, float $sx, float $sy, float
         if ($t['hp'] <= 0 || $idx === $ownerIdx) {
             continue;
         }
-        $d = hypot($t['x'] - $sx, ($t['y'] - 12) - $sy);
+        $d = room_dist($t['x'] - $sx, ($t['y'] - 12) - $sy);
         if ($d < $bd) {
             $bd = $d;
             $best = $t;
@@ -241,7 +255,7 @@ function room_seek_push(array $tanks, int $ownerIdx, float $sx, float $sy, float
 // splitShell() is the same. [[vx, vy], ...]. */
 function room_split_vel(float $vx, float $vy, int $n, float $fan): array
 {
-    $sp = hypot($vx, $vy) * 0.85;
+    $sp = room_dist($vx, $vy) * 0.85;
     $base = atan2($vy, $vx);
     $out = [];
     for ($k = 0; $k < $n; $k++) {
@@ -389,7 +403,7 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
         }
         // Distance from the unit's body (its hit box centre), drone or tank.
         [$cx, $cy] = room_unit_box($t);
-        $d = hypot($cx - $x, $cy - $y);
+        $d = room_dist($cx - $x, $cy - $y);
         if ($d > $r + 14) {
             continue;
         }
@@ -483,7 +497,9 @@ function room_unit_box(array $t): array
 function room_in_box(array $t, float $x, float $y): bool
 {
     [$cx, $cy, $rx, $ry] = room_unit_box($t);
-    return (($x - $cx) / $rx) ** 2 + (($y - $cy) / $ry) ** 2 <= 1;
+    $u = ($x - $cx) / $rx;
+    $v = ($y - $cy) / $ry;
+    return $u * $u + $v * $v <= 1;
 }
 /* The first unit a shell touches anywhere along its step from (x0, y0) to
 // (x1, y1), sampled every 3 px so a fast shell cannot skip through one, with
@@ -493,7 +509,7 @@ function room_in_box(array $t, float $x, float $y): bool
 // is the same. */
 function room_sweep_hit(array $room, float $x0, float $y0, float $x1, float $y1, ?int $skip, int $ownerIdx, bool &$clear): ?array
 {
-    $n = max(1, (int) ceil(hypot($x1 - $x0, $y1 - $y0) / 3));
+    $n = max(1, (int) ceil(room_dist($x1 - $x0, $y1 - $y0) / 3));
     for ($i = 1; $i <= $n; $i++) {
         $px = $x0 + ($x1 - $x0) * $i / $n;
         $py = $y0 + ($y1 - $y0) * $i / $n;
@@ -518,7 +534,7 @@ function room_sweep_hit(array $room, float $x0, float $y0, float $x1, float $y1,
 // src/sim.ts rollHit() is the same. */
 function room_roll_hit(array $room, float $x0, float $y0, float $x1, float $y1, int $ownerIdx, bool &$clear): ?array
 {
-    $n = max(1, (int) ceil(hypot($x1 - $x0, $y1 - $y0) / 3));
+    $n = max(1, (int) ceil(room_dist($x1 - $x0, $y1 - $y0) / 3));
     for ($i = 1; $i <= $n; $i++) {
         $px = $x0 + ($x1 - $x0) * $i / $n;
         $py = $y0 + ($y1 - $y0) * $i / $n;
@@ -584,7 +600,7 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
                 if ($t['hp'] <= 0 || $idx === $ownerIdx) {
                     continue;
                 }
-                $d = hypot($sx - $t['x'], $sy - ($t['y'] - 12));
+                $d = room_dist($sx - $t['x'], $sy - ($t['y'] - 12));
                 if ($d < $bd) {
                     $bd = $d;
                     $direct = $idx;
@@ -594,6 +610,8 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
         if ($direct !== null) {
             if (($w['effect'] ?? 'shot') === 'pierce' && $pierced === null) {
                 $pierced = $direct;
+                // The bracket learns where the volley first burst, as src/sim.ts explode() does.
+                room_brk_land($room['tanks'][$ownerIdx], $sx);
                 $mark = count($events);
                 room_explode($room, $events, $tank, $wkey, $sx, $sy, $direct, $ov);
                 $events[] = ['t' => 'burst', 'x' => round($sx, 1), 'y' => round($sy, 1), 'r' => (float) (($ov['radius'] ?? null) ?? $w['radius']), 'w' => $wkey];

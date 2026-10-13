@@ -58,6 +58,23 @@ export const TUNE = {
 Object.freeze(TUNE);
 
 export const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
+/* Degrees to radians in PHP deg2rad()'s order, (deg / 180) * PI, so the
+   server's play and the browser agree to the last bit. */
+export function rad(deg: number): number {
+  return (deg / 180) * Math.PI;
+}
+/* A distance as the root of the squares: correctly rounded in every engine,
+   where Math.hypot and C's hypot() may differ in the last bit. */
+export function dist(dx: number, dy: number): number {
+  return Math.sqrt(dx * dx + dy * dy);
+}
+/* b to a small whole power by repeated multiplication: Math.pow and PHP's **
+   may round the last bit differently. */
+export function powi(b: number, n: number): number {
+  let r = 1;
+  for (let i = 0; i < n; i++) r *= b;
+  return r;
+}
 
 /* ---------- types ---------- */
 /* A weapon's paint job: the sim reads the shake; the icons and effects read the colors. */
@@ -377,14 +394,15 @@ export function unitHitBox(t: Pick<Tank, 'isPlayer' | 'human' | 'x' | 'y'>): Hit
 }
 export function inHitBox(t: Pick<Tank, 'isPlayer' | 'human' | 'x' | 'y'>, x: number, y: number): boolean {
   const b = unitHitBox(t);
-  return ((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2 <= 1;
+  const u = (x - b.cx) / b.rx, v = (y - b.cy) / b.ry;
+  return u * u + v * v <= 1;
 }
 
 /* ---------- firing and flight ---------- */
 export function muzzle(t: Pick<Tank, 'angle' | 'dirS' | 'isPlayer' | 'x' | 'y'>): { x: number; y: number } {
-  const rad = t.angle * Math.PI / 180;
+  const a = rad(t.angle);
   const s = facing(t);
-  return { x: t.x + Math.cos(rad) * 20 * s, y: t.y - 14 - Math.sin(rad) * 20 };
+  return { x: t.x + Math.cos(a) * 20 * s, y: t.y - 14 - Math.sin(a) * 20 };
 }
 /** How much faster shells fly on a field w wide: range and height grow by
  *  w / ROOM_W, so full power still crosses the field and the wind bends a shot
@@ -419,12 +437,12 @@ export function fireWeapon(world: World, arsenal: Arsenal, t: Tank, wkey: string
     spent = true;
   }
   const m = muzzle(t);
-  const rad = t.angle * Math.PI / 180;
+  const r0 = rad(t.angle);
   const s = facing(t);
   const shots = w.pellets || 1;
   for (let i = 0; i < shots; i++) {
     const off = shots === 1 ? 0 : (i - (shots - 1) / 2) * (w.spread || 0);
-    const a = rad + off;
+    const a = r0 + off;
     const spd = shotSpeed(t.power, w.flat, w.speed, fieldReach(world.terrain.length));
     world.shells.push({
       x: m.x, y: m.y,
@@ -433,7 +451,7 @@ export function fireWeapon(world: World, arsenal: Arsenal, t: Tank, wkey: string
       age: 0, pierced: false, split: false, order: [i],
     });
   }
-  return { x: m.x, y: m.y, ang: Math.atan2(-Math.sin(rad), Math.cos(rad) * s), spent };
+  return { x: m.x, y: m.y, ang: Math.atan2(-Math.sin(r0), Math.cos(r0) * s), spent };
 }
 /* One ballistic step. Shared by the real shells, the AI predictor, the aim
  * guide, and the firing-range preview, so the demo flies exactly like war. */
@@ -511,11 +529,11 @@ export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal
   power: number, wkey: string, dirS: number): { x: number; y: number; oob: boolean } {
   const w = arsenal.weapons[wkey]!;
   const fw = world.terrain.length, reach = fieldReach(fw);
-  const rad = angle * Math.PI / 180;
+  const r = rad(angle);
   const st: Motion = {
     x, y,
-    vx: Math.cos(rad) * shotSpeed(power, w.flat, w.speed, reach) * dirS,
-    vy: -Math.sin(rad) * shotSpeed(power, w.flat, w.speed, reach),
+    vx: Math.cos(r) * shotSpeed(power, w.flat, w.speed, reach) * dirS,
+    vy: -Math.sin(r) * shotSpeed(power, w.flat, w.speed, reach),
   };
   const dt = 1 / 60;
   const grav = w.flat ? FLAT_GRAV : GRAV;
@@ -535,15 +553,14 @@ export function steerShell(tanks: readonly Tank[], s: Shell, w: Weapon, dt: numb
   let best: Tank | null = null, bd = Infinity;
   for (const t of tanks) {
     if (t.hp <= 0 || t === s.owner) continue;
-    const d = Math.hypot(t.x - s.x, (t.y - 12) - s.y);
+    const d = dist(t.x - s.x, (t.y - 12) - s.y);
     if (d < bd) { bd = d; best = t; }
   }
-  if (!best) return;
-  const dx = best.x - s.x, dy = (best.y - 12) - s.y;
-  const d = Math.max(1, Math.hypot(dx, dy));
+  // On top of its target a seeker has nowhere to bend (server/sim.php room_seek_push).
+  if (!best || bd <= 1) return;
   const push = (w.steer || 70) * dt;
-  s.vx += (dx / d) * push;
-  s.vy += (dy / d) * push;
+  s.vx += ((best.x - s.x) / bd) * push;
+  s.vy += (((best.y - 12) - s.y) / bd) * push;
 }
 /* Cluster shells split on fuse into a deterministic fan: fixed offsets, no
 // random numbers, so the room server replays the exact same bloom. Returns
@@ -551,7 +568,7 @@ export function steerShell(tanks: readonly Tank[], s: Shell, w: Weapon, dt: numb
 export function splitShell(s: Shell, w: Weapon, reach = 1): Shell[] {
   const n = Math.max(2, w.split || 4);
   const fan = w.fan || 0.22;
-  const sp = Math.hypot(s.vx, s.vy) * 0.85;
+  const sp = dist(s.vx, s.vy) * 0.85;
   const base = Math.atan2(s.vy, s.vx);
   const bomblets: Shell[] = [];
   for (let i = 0; i < n; i++) {
@@ -573,7 +590,7 @@ export function splitShell(s: Shell, w: Weapon, reach = 1): Shell[] {
    straight up) hits it like anyone else. */
 export function sweepHit(tanks: readonly Tank[], s: Pick<Shell, 'owner' | 'pierced' | 'clear'>,
   x0: number, y0: number, x1: number, y1: number): { t: Tank; x: number; y: number } | null {
-  const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 3));
+  const n = Math.max(1, Math.ceil(dist(x1 - x0, y1 - y0) / 3));
   for (let i = 1; i <= n; i++) {
     const px = x0 + (x1 - x0) * i / n, py = y0 + (y1 - y0) * i / n;
     if (!s.clear && !inHitBox(s.owner, px, py)) s.clear = true;
@@ -592,7 +609,7 @@ export function sweepHit(tanks: readonly Tank[], s: Pick<Shell, 'owner' | 'pierc
    been outside the gunner's real box. rooms.php room_roll_hit() is the same. */
 export function rollHit(tanks: readonly Tank[], s: Pick<Shell, 'owner' | 'clear'>,
   x0: number, y0: number, x1: number, y1: number): { t: Tank; x: number; y: number } | null {
-  const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 3));
+  const n = Math.max(1, Math.ceil(dist(x1 - x0, y1 - y0) / 3));
   for (let i = 1; i <= n; i++) {
     const px = x0 + (x1 - x0) * i / n, py = y0 + (y1 - y0) * i / n;
     if (!s.clear && !inHitBox(s.owner, px, py)) s.clear = true;
@@ -653,7 +670,7 @@ export function explode(world: World, arsenal: Arsenal, x: number, y: number, wk
     if (t.hp <= 0) continue;
     // Distance from the unit's body (its hit box centre), drone or tank.
     const b = unitHitBox(t);
-    const d = Math.hypot(b.cx - x, b.cy - y);
+    const d = dist(b.cx - x, b.cy - y);
     if (d > r + 14) continue;
     // A shield absorbs one hit whole, then it is gone.
     if (t.isPlayer && world.shield) {
@@ -804,12 +821,14 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
       let bd = w.prox || 34;
       for (const t of world.tanks) {
         if (t.hp <= 0 || t === s.owner) continue;
-        const d = Math.hypot(s.x - t.x, s.y - (t.y - 12));
+        const d = dist(s.x - t.x, s.y - (t.y - 12));
         if (d < bd) { bd = d; direct = t; }
       }
     }
     const ov = s.dw ? { dmg: s.dw, radius: s.dr } : null;
-    const grounded = s.age >= 0.1 && s.y >= surfY(world.terrain, s.x);
+    // A bomblet may burst on the ground at once; a fresh shell ignores it for
+    // 0.1 s (server/sim.php room_fly_arc starts bomblets at age 99).
+    const grounded = (s.split || s.age >= 0.1) && s.y >= surfY(world.terrain, s.x);
     const bursts = !!direct || (grounded && w.effect !== 'roller');
     if (bursts && waitsOnEarlier(world, s)) {
       s.x = x0; s.y = y0;

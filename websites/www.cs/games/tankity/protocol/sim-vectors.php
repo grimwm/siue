@@ -138,8 +138,6 @@ function sv_aim_at(array $room, int $seat, string $wkey, float $targetX): array
 // written []; a path also covers everything under it). Any other field of a
 // known case must still match.
 const SV_KNOWN_PATHS = [
-    'seek-push/half-a-pixel-away' => ['out'],
-    'seek-push/exactly-one-pixel-away' => ['out'],
     'ai-aim/no-rivals-left' => ['out.angle', 'out.power'],
 ];
 $cases = [];
@@ -297,10 +295,8 @@ $seek('no-rival', [$human(100)], 0, 150, 300, 70, 1 / 60);
 $seek('only-dead-rivals', [$human(100), $drone(200, 0)], 0, 150, 300, 70, 1 / 60);
 $seek('strong-steer-short-step', [$human(100), $drone(400)], 0, 150, 200, 250, 0.01);
 $seek('straight-down-at-it', [$human(100), $drone(150)], 0, 150, 100, 70, 1 / 60);
-$seek('half-a-pixel-away', [$human(100), $drone(150)], 0, 150.5, 388, 70, 1 / 60,
-    'room_seek_push skips steering within 1 px of the target; the browser sim clamps the distance to 1 and still steers. Unreachable in play: a shell that close is already inside the rival\'s hit box and has burst.');
-$seek('exactly-one-pixel-away', [$human(100), $drone(150)], 0, 150, 389, 70, 1 / 60,
-    'same 1 px rule as half-a-pixel-away');
+$seek('half-a-pixel-away', [$human(100), $drone(150)], 0, 150.5, 388, 70, 1 / 60);
+$seek('exactly-one-pixel-away', [$human(100), $drone(150)], 0, 150, 389, 70, 1 / 60);
 foreach ([[0.0, 0.0], [300.0, 0.0], [0.0, -250.0], [-140.0, 90.0]] as [$vx, $vy]) {
     foreach ([2, 4, 5] as $n) {
         $fan = $n === 5 ? 0.1 : 0.22;
@@ -537,6 +533,8 @@ $bracket('jammed-target-wobbles-double', ['terrain' => $flat, 'wind' => 0, 'roun
     'tanks' => [$human(200, 9999) + ['jammer' => 2], $drone(500, 9999) + ['dirS' => -1]]]);
 $bracket('drone-with-a-rack', ['terrain' => $flat, 'wind' => 2, 'round' => 4, 'seed' => 11, 'shooter' => 1, 'target' => 0, 'shots' => 6,
     'tanks' => [$human(210, 9999), $drone(510, 9999) + ['dirS' => -1, 'ammo' => ['mortar' => 2]]]]);
+$bracket('lance-marks-its-first-burst', ['terrain' => $flat, 'wind' => 0, 'round' => 6, 'seed' => 23, 'shooter' => 2, 'target' => 0, 'shots' => 4,
+    'tanks' => [$human(150, 9999), $drone(330, 9999), $drone(560, 9999) + ['dirS' => -1, 's' => 'glory', 'ammo' => ['lance' => 9]]]]);
 
 /* ---- difficulty: the same scenes under each level's aim ----
  * A word neither side knows aims at normal on both. */

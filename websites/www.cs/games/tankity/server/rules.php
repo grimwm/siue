@@ -120,19 +120,17 @@ function room_shop_settle(array &$room): bool
     if (!$all && room_shop_left($room) > 0) {
         return false;
     }
-    // Apply stockpiled repairs and fuel before fresh hills.
+    // Fuel bought in the shop rides in a bank until the tanks muster.
     foreach ($room['seats'] as $idx => $s) {
         if (!($s['human'] ?? false)) {
             continue;
         }
-        $room['repairApplied'][$idx] = $room['repair'][$idx] ?? 0;
         $room['fuelApplied'][$idx] = $room['fuelBonus'][$idx] ?? 0;
-        $room['repair'][$idx] = 0;
         $room['fuelBonus'][$idx] = 0;
     }
     unset($room['shop']);
     room_start_round($room);
-    room_apply_banked($room);
+    room_apply_fuel($room);
     $events = [['t' => 'round', 'round' => $room['round'], 'wind' => $room['wind']]];
     room_advance($room, $events);
     foreach ($events as $e) {
@@ -316,6 +314,8 @@ function room_seat_economy(array &$room, int $seat): void
     $room['ammo'][$seat] = ['shell' => -1, 'buck' => 1, 'mortar' => 0, 'rail' => 0, 'nuke' => 0];
     $room['weapon'][$seat] = 'shell';
     $room['nextUp'][$seat] = 3000;
+    $room['plate'][$seat] = 0;
+    $room['armor'][$seat] = ROOM_ARMOR;
 }
 /* Seats that will field a unit: every human and every drone seat. */
 function room_fielded(array $room): int
@@ -407,7 +407,8 @@ function room_start_round(array &$room): void
         if (!$s['human'] && ($s['mode'] ?? 'ai') === 'open') {
             continue; // nobody plays an open seat
         }
-        $armor = $s['human'] ? 100 + 25 * ($room['plate'][$idx] ?? 0) : 60 + 6 * ($room['round'] - 1);
+        $armor = $s['human'] ? room_muster_armor($room, $idx) : 60 + 6 * ($room['round'] - 1);
+        $max = $s['human'] ? room_max_armor($room, $idx) : $armor;
         $room['tanks'][] = [
             'seat' => $idx,
             'kind' => $s['human'] ? 'human' : 'ai',
@@ -417,7 +418,7 @@ function room_start_round(array &$room): void
             'angle' => 62.0,
             'power' => 55.0,
             'hp' => $armor,
-            'maxHp' => $armor,
+            'maxHp' => $max,
             'fuel' => $s['human'] ? 80 : 0,
             'dirS' => $slots[$seat % count($slots)] < $w / 2 ? 1 : -1, // face the middle
             'ammo' => $s['human']
@@ -571,6 +572,12 @@ function room_end_round(array &$room, array &$events): void
             $room['bunker'][$idx]--;
         }
     }
+    // Armor carries into the next round; a wrecked tank re-musters at full max.
+    foreach ($room['tanks'] as $t) {
+        if ($t['kind'] === 'human') {
+            room_carry_armor($room, (int) $t['seat'], (int) $t['hp'], $t['hp'] <= 0);
+        }
+    }
     $alive = array_values(array_filter($room['tanks'], fn($t) => $t['hp'] > 0));
     $winner = count($alive) === 1 && $alive[0]['kind'] === 'human' ? $alive[0] : null;
     $wrecked = [];
@@ -643,6 +650,47 @@ function room_check_oneups(array &$room, array &$events, int $seat): void
     $room['seats'][$seat]['lives'] = $lives;
     $room['nextUp'][$seat] = $next;
 }
+/* ---------- armor (src/armor.ts is the same) ---------- */
+const ROOM_ARMOR = 100;
+const ROOM_PLATE_ARMOR = 25;
+/* A human seat's max armor: 100 plus 25 per hull plate fitted. */
+function room_max_armor(array $room, int $seat): int
+{
+    return ROOM_ARMOR + ROOM_PLATE_ARMOR * (int) ($room['plate'][$seat] ?? 0);
+}
+/* The armor a seat's next tank musters with: what its last round ended with. */
+function room_muster_armor(array $room, int $seat): int
+{
+    return (int) ($room['armor'][$seat] ?? room_max_armor($room, $seat));
+}
+/* The fewest repair packs that fill the hull; 0 at full armor. */
+function room_repair_packs_wanted(array $room, int $seat, int $per): int
+{
+    $missing = room_max_armor($room, $seat) - room_muster_armor($room, $seat);
+    return $missing <= 0 || $per <= 0 ? 0 : (int) ceil($missing / $per);
+}
+/* Restores up to $n armor, never past max; returns what it restored. */
+function room_repair(array &$room, int $seat, int $n): int
+{
+    $have = room_muster_armor($room, $seat);
+    $back = max(0, min($n, room_max_armor($room, $seat) - $have));
+    $room['armor'][$seat] = $have + $back;
+    return $back;
+}
+/* A plate raises max armor and adds the same armor now. */
+function room_fit_plate(array &$room, int $seat, int $qty): void
+{
+    $have = room_muster_armor($room, $seat);
+    $room['plate'][$seat] = (int) ($room['plate'][$seat] ?? 0) + $qty;
+    $room['armor'][$seat] = $have + ROOM_PLATE_ARMOR * $qty;
+}
+/* The next round's armor: this round's end, or, after a wreck, a fresh tank at
+   full max (the plates stay fitted). */
+function room_carry_armor(array &$room, int $seat, int $hp, bool $wrecked): void
+{
+    $max = room_max_armor($room, $seat);
+    $room['armor'][$seat] = $wrecked ? $max : min($hp, $max);
+}
 function room_find_seat(array $room, string $token): ?int
 {
     foreach ($room['seats'] as $idx => $s) {
@@ -653,17 +701,13 @@ function room_find_seat(array $room, string $token): ?int
     return null;
 }
 
-/* Banked shop repair and fuel go onto the freshly mustered human tanks.
-   Tanks muster at full armor, so repair rides on top for this round, the
-   same as solo play. */
-function room_apply_banked(array &$room): void
+/* Fuel bought in the shop goes onto the freshly mustered human tanks. */
+function room_apply_fuel(array &$room): void
 {
     foreach ($room['tanks'] as &$t) {
         if ($t['kind'] !== 'human') {
             continue;
         }
-        $t['hp'] += ($room['repairApplied'][$t['seat']] ?? 0);
-        $t['maxHp'] = $t['hp'];
         $t['fuel'] += ($room['fuelApplied'][$t['seat']] ?? 0);
     }
     unset($t);

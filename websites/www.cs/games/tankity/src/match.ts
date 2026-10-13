@@ -10,7 +10,7 @@
  * except the pieces a room shares (the banner, the cosmetics, the end veil).
  * The game's state, the page and the rest of the game arrive as deps. */
 import { maxArmor } from './armor.ts';
-import { newRecorder, recordShot, replayableSeed } from './solo-log.ts';
+import { ROUND_MAX_SHOTS, newRecorder, recordShot, replayableSeed } from './solo-log.ts';
 import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
 import type { DifficultySetting } from './difficulty.ts';
 import { FOE_DYING, FOE_FIRE, FOE_HIT, FOE_MISS, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, pick } from './chatter.ts';
@@ -233,6 +233,10 @@ export function createMatch(deps: MatchDeps) {
     closePreview();
     const wkey = G.selected;
     if (fireWeapon(me(), wkey)) {
+      if (G.rec && G.rec.shots.length >= ROUND_MAX_SHOTS) {
+        G.rec = null; // the server refuses a round with more shots than this
+        say('This round ran past what the score server can play, so this run will not be filed.', 'info');
+      }
       if (G.rec) recordShot(G.rec, me(), wkey);
       tutorialFired();
       talk('tank', pick(TANK_FIRE));

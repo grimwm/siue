@@ -156,7 +156,7 @@ test('buyPacks: one-shot tricks are one pack, Repair what the hull needs, the re
   for (const k of ['fuel', 'jammer', 'bunker', 'plate']) assert.equal(buyPacks(G, row(k), 3), 3, k);
 });
 
-test('Extra life at max lives pays 500 points; Last stand stays at one; Fuel, Jammer and Bunker stack', () => {
+test('Extra life at max lives pays 500 points; Last stand stays at one; Fuel stacks; Jammer and Bunker keep the longer', () => {
   const G = fresh('shop');
   G.cash = 5000;
   G.lives = TUNE.maxLives;
@@ -167,8 +167,10 @@ test('Extra life at max lives pays 500 points; Last stand stays at one; Fuel, Ja
   const fuel = G.fuelBank;
   soloBuy(G, row('fuel'), 2);
   assert.equal(G.fuelBank, fuel + 2 * row('fuel').n);
-  soloBuy(G, row('jammer'), 2);
-  assert.equal(G.jammer, 2 * row('jammer').n);
-  soloBuy(G, row('bunker'), 2);
-  assert.equal(G.bunker, 2 * row('bunker').n);
+  for (const k of ['jammer', 'bunker']) {
+    soloBuy(G, row(k), 2);
+    assert.equal(G[k], 2 * row(k).n, k);
+    soloBuy(G, row(k), 1);
+    assert.equal(G[k], 2 * row(k).n, `${k}: a smaller lot after a bigger one adds nothing`);
+  }
 });

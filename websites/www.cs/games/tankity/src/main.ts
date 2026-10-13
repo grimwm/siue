@@ -136,7 +136,9 @@ function buildArsenal(data: ArsenalData | null | undefined): boolean {
 function applyArsenal(data: ArsenalData | null | undefined): void {
   if (data && Array.isArray(data.ammo) && data.ammo.length && buildArsenal(data)) {
     ARSENAL_FROM_FILE = true;
-    G.rec = null; // a mid-match change of arsenal cannot be played on the server
+    // A mid-match change of arsenal cannot be played on the server.
+    if (G.rec) say('The game data changed mid-match, so this run will not be filed.', 'info');
+    G.rec = null;
     say(`Arsenal loaded: ${WORDER.length} shells, ${Object.keys(GEAR).length} tricks.`, 'info');
     if (G.phase === 'shop') renderShop();
     renderHUD();

@@ -4,14 +4,15 @@
  * covers, the two stat lines under each row, the Ready line in a room, the
  * line after a purchase, and the props the shop overlay (src/ui/shop.tsx) is
  * drawn from. What a solo purchase does is solo.ts's soloBuy; a room buys
- * through the server (the `netBuy` dep), so both share the same rows. The game's state, the arsenal tables and the page arrive as deps. */
+ * through the server (the `netBuy` dep), so both share the same rows. The
+ * game's state, the arsenal tables and the page arrive as deps. */
 import type { FlowEvent } from './flow.ts';
 import type { GameState, GameTank, Tables } from './game-types.ts';
 import type { Board } from './standings.ts';
 import type { RoomClient } from './net.ts';
 import { armorLabel, maxArmor, plateNote, repairNote } from './armor.ts';
-import { ONE_SHOT, buyPacks, soloBuy } from './solo.ts';
-import { recordBuy } from './solo-log.ts';
+import { buyPacks, isOneShot, soloBuy } from './solo.ts';
+import { ROUND_MAX_BUYS, recordBuy } from './solo-log.ts';
 import { TUNE, clamp } from './sim.ts';
 import type { ShopRow } from './sim.ts';
 import type { sfx as SfxApi } from './audio.ts';
@@ -183,7 +184,7 @@ export function createShop(deps: ShopDeps) {
   /* Packs of this row the chest can cover right now, capped at 9. */
   function maxPacks(it: ShopRow): number {
     const price = packPrice(it);
-    if (ONE_SHOT.has(it.effect || '') && it.kind === 'gear') return G.cash >= price ? 1 : 0;
+    if (isOneShot(it)) return G.cash >= price ? 1 : 0;
     return Math.max(0, Math.min(9, Math.floor(G.cash / price)));
   }
   /* A row's name, then its numbers (pack size, price, what you own, the bulk
@@ -257,6 +258,8 @@ export function createShop(deps: ShopDeps) {
       netBuy(it, packs);
       return;
     }
+    // The server refuses a round with more purchases than this, which would void the run.
+    if (G.rec && G.rec.buys.length >= ROUND_MAX_BUYS) { say("That's the most you can buy in one shop visit.", 'info'); return; }
     const lives = G.lives;
     const r = soloBuy(G, it, qty);
     if (!r.ok) {

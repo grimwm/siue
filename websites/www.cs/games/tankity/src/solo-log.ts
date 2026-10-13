@@ -38,19 +38,22 @@ export function closeRound(r: RoundRecorder, n: number, claim: RoundClaim): Solo
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const int = (v: unknown): v is number => Number.isInteger(v);
+const inRange = (v: unknown, lo: number, hi: number): boolean => num(v) && v >= lo && v <= hi;
+const short = (v: unknown): v is string => typeof v === 'string' && v.length >= 1 && v.length <= 32;
+const nonneg = (v: unknown): boolean => int(v) && (v as number) >= 0;
 const ENDS: readonly string[] = ['roundWon', 'tankLost', 'matchLost'];
 function isBuy(v: unknown): v is SoloBuy {
   const o = v as Record<string, unknown> | null;
-  return !!o && typeof o === 'object' && typeof o['i'] === 'string' && int(o['q']);
+  return !!o && typeof o === 'object' && short(o['i']) && int(o['q']) && (o['q'] as number) >= 1 && (o['q'] as number) <= 9;
 }
 function isShot(v: unknown): v is SoloShot {
   const o = v as Record<string, unknown> | null;
-  return !!o && typeof o === 'object' && typeof o['w'] === 'string' && num(o['a']) && num(o['p']) && num(o['x']);
+  return !!o && typeof o === 'object' && short(o['w']) && inRange(o['a'], 10, 170) && inRange(o['p'], 10, 100) && num(o['x']);
 }
 function isClaim(v: unknown): v is RoundClaim {
   const o = v as Record<string, unknown> | null;
   return !!o && typeof o === 'object' && ENDS.includes(o['end'] as string)
-    && int(o['score']) && int(o['cash']) && int(o['lives']) && int(o['roundsWon']);
+    && nonneg(o['score']) && nonneg(o['cash']) && nonneg(o['lives']) && nonneg(o['roundsWon']);
 }
 export function isRoundLog(v: unknown): v is SoloRoundLog {
   if (!v || typeof v !== 'object') return false;

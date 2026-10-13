@@ -185,6 +185,10 @@ export function soloAim(G: SoloState, arsenal: Arsenal, t: SoloTank): AimChoice 
 /** Tricks that do their one thing once: buying more is money on fire. */
 export const ONE_SHOT: ReadonlySet<string> = new Set(['shield', 'extralife', 'laststand']);
 
+export function isOneShot(row: Pick<ShopRow, 'kind' | 'effect'>): boolean {
+  return row.kind === 'gear' && ONE_SHOT.has(row.effect || '');
+}
+
 export type BuyResult = { ok: true; qty: number; total: number } | { ok: false; why: 'locked' | 'cash' | 'full'; total: number };
 
 /** How many packs a purchase of `qtyIn` really buys: one for a one-shot trick,
@@ -192,7 +196,7 @@ export type BuyResult = { ok: true; qty: number; total: number } | { ok: false; 
  * and gates by this, a room's log line reports it, and soloBuy charges it. */
 export function buyPacks(G: Pick<SoloState, 'armor' | 'plate'>, row: ShopRow, qtyIn: number): number {
   const qty = clamp(Math.floor(qtyIn || 1), 1, 9);
-  if (row.kind === 'gear' && ONE_SHOT.has(row.effect || '')) return 1;
+  if (isOneShot(row)) return 1;
   if (row.effect === 'repair') return Math.min(qty, repairPacksWanted(G.armor, G.plate, row.n));
   return qty;
 }

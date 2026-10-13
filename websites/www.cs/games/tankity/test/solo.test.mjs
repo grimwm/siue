@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildArsenal, SPAWN_GAP, TUNE, surfY } from '../src/sim.ts';
-import { soloAim, soloBuy, soloDeal, soloMuster, soloSettle, soloNextTurn, soloOneUps, snapTanks } from '../src/solo.ts';
+import { buyPacks, soloAim, soloBuy, soloDeal, soloMuster, soloSettle, soloNextTurn, soloOneUps, snapTanks } from '../src/solo.ts';
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const arsenal = buildArsenal(GAME.arsenal);
@@ -143,4 +143,32 @@ test('a plate and the chest', () => {
   G.cash = 300;
   soloBuy(G, row('plate'), 1);
   assert.deepEqual([G.plate, G.armor, G.cash], [1, 125, 0]);
+});
+
+test('buyPacks: one-shot tricks are one pack, Repair what the hull needs, the rest the count', () => {
+  const G = fresh('shop');
+  for (const k of ['shield', 'extralife', 'laststand']) assert.equal(buyPacks(G, row(k), 3), 1, k);
+  assert.equal(buyPacks(G, row('repair'), 9), 0, 'a full hull wants none');
+  G.armor = 80;
+  assert.equal(buyPacks(G, row('repair'), 9), 1);
+  G.armor = 30;
+  assert.equal(buyPacks(G, row('repair'), 9), 2, 'a room asks for 2 packs, not 9');
+  for (const k of ['fuel', 'jammer', 'bunker', 'plate']) assert.equal(buyPacks(G, row(k), 3), 3, k);
+});
+
+test('Extra life at max lives pays 500 points; Last stand stays at one; Fuel, Jammer and Bunker stack', () => {
+  const G = fresh('shop');
+  G.cash = 5000;
+  G.lives = TUNE.maxLives;
+  const score = G.score;
+  assert.equal(soloBuy(G, row('extralife'), 3).qty, 1);
+  assert.deepEqual([G.lives, G.score], [TUNE.maxLives, score + 500]);
+  assert.equal(soloBuy(G, row('laststand'), 4).qty, 1);
+  const fuel = G.fuelBank;
+  soloBuy(G, row('fuel'), 2);
+  assert.equal(G.fuelBank, fuel + 2 * row('fuel').n);
+  soloBuy(G, row('jammer'), 2);
+  assert.equal(G.jammer, 2 * row('jammer').n);
+  soloBuy(G, row('bunker'), 2);
+  assert.equal(G.bunker, 2 * row('bunker').n);
 });

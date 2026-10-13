@@ -80,6 +80,11 @@ export function warSpeed(playerAlive: boolean, demo: boolean): number {
 
 /** Steps one frame may run, so a tab coming back from a long stall never freezes. */
 export const MAX_STEPS = 30;
+/** Every war step is this long. */
+export const SOLO_STEP = 1 / 60;
+/** The remainder a war starts with: half a step, so a steady 60 Hz display
+ * runs one step per frame instead of alternating 0 and 2. */
+export const WAR_REST = SOLO_STEP / 2;
 /** Runs `step` in fixed `h`-second steps for `dt` more seconds of war plus the
  * remainder `acc` carried from the last frame; returns the new remainder. The
  * step size never varies, so the server, which knows only the moves, takes

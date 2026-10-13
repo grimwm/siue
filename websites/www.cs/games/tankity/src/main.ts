@@ -40,7 +40,7 @@ import {
 } from './audio.ts';
 import type { AudioConfig } from './audio.ts';
 import { RoomClient, prettyRoomError } from './net.ts';
-import { runFixed, warSpeed } from './flow.ts';
+import { SOLO_STEP, WAR_REST, runFixed, warSpeed } from './flow.ts';
 import type { HoldCommand } from './input.ts';
 import { createPreview, stepPreview } from './preview.ts';
 import { createReplay } from './replay.ts';
@@ -57,7 +57,7 @@ import { createTutorial } from './tutorial.ts';
 import { createGuns } from './guns.ts';
 import { createScores } from './scores.ts';
 import { createMatch } from './match.ts';
-import { SOLO_STEP, soloOneUps } from './solo.ts';
+import { soloOneUps } from './solo.ts';
 import { createRoom } from './room.ts';
 import { createLobby } from './lobby.ts';
 import { createMenu } from './menu.ts';
@@ -270,8 +270,6 @@ function togglePreview(): void {
 
 /* ---------- main loop ---------- */
 let lastT = 0;
-/* Rests at half a step so a 60 Hz display, whose frames are a step plus or minus timestamp noise, runs one step per frame instead of 0 or 2. */
-const WAR_REST = SOLO_STEP / 2;
 let warAcc = WAR_REST;
 function frame(ts: number): void {
   requestAnimationFrame(frame);

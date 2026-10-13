@@ -1,17 +1,16 @@
 /* Operation Tankity: the field shop.
  *
- * The shop's rules and its view: what a pack costs and how many the chest
- * covers, the two stat lines under each row, the Ready line in a room, what a
- * purchase does to the player's stock and gear, and the props the shop
- * overlay (src/ui/shop.tsx) is drawn from. A room buys through the server
- * (the `netBuy` dep), so a solo purchase and a room purchase share the same
- * rows. The game's state, the arsenal tables and the page arrive as deps. */
+ * The shop's view and what it says: what a pack costs and how many the chest
+ * covers, the two stat lines under each row, the Ready line in a room, the
+ * line after a purchase, and the props the shop overlay (src/ui/shop.tsx) is
+ * drawn from. What a solo purchase does is solo.ts's soloBuy; a room buys
+ * through the server (the `netBuy` dep), so both share the same rows. The game's state, the arsenal tables and the page arrive as deps. */
 import type { FlowEvent } from './flow.ts';
 import type { GameState, GameTank, Tables } from './game-types.ts';
 import type { Board } from './standings.ts';
 import type { RoomClient } from './net.ts';
-import { armorLabel, maxArmor, plateNote, repairNote, repairPacksWanted } from './armor.ts';
-import { soloBuy } from './solo.ts';
+import { armorLabel, maxArmor, plateNote, repairNote } from './armor.ts';
+import { ONE_SHOT, buyPacks, soloBuy } from './solo.ts';
 import { recordBuy } from './solo-log.ts';
 import { TUNE, clamp } from './sim.ts';
 import type { ShopRow } from './sim.ts';
@@ -20,12 +19,9 @@ import type { KeyHintFn } from './ui/chrome.tsx';
 import { renderShop as drawShop } from './ui/shop.tsx';
 import type { ShopEntry, ShopFreeRow } from './ui/shop.tsx';
 
-/** The shop reads and writes the whole game state; soloBuy needs the referee's slice of it. */
-export type ShopState = GameState;
-
 /** What the shop needs from the page and the rest of the game. */
 export interface ShopDeps {
-  G: ShopState;
+  G: GameState;
   $(id: string): HTMLElement | null;
   tables: Tables;
   net: Pick<RoomClient, 'on' | 'seats' | 'readyNow' | 'shopClockLeft'>;
@@ -126,8 +122,8 @@ export function createShop(deps: ShopDeps) {
       }
       const locked = (it.minRound || 0) > G.round;
       const unit = packPrice(it);
-      // A repair buys only the packs the hull needs, so it prices by those.
-      const packs = it.effect === 'repair' ? Math.min(qty, repairPacksWanted(G.armor, G.plate, it.n)) : qty;
+      // A repair buys only the packs the hull needs and a one-shot trick one, so each prices by those.
+      const packs = buyPacks(G, it, qty);
       const total = unit * packs;
       const parts = shopName(it, unit);
       entries.push({
@@ -140,7 +136,7 @@ export function createShop(deps: ShopDeps) {
         icon: it.kind === 'ammo' ? { kind: 'ammo', w: it.w! } : { kind: 'gear', g: it.g! },
         selected: idx === G.shopSel,
         locked,
-        disabled: locked || G.cash < total || (it.effect === 'repair' && packs === 0),
+        disabled: locked || G.cash < total || packs === 0,
         qty: packs,
         weapon: it.kind === 'ammo' ? it.w : undefined,
       });
@@ -186,7 +182,9 @@ export function createShop(deps: ShopDeps) {
   }
   /* Packs of this row the chest can cover right now, capped at 9. */
   function maxPacks(it: ShopRow): number {
-    return Math.max(0, Math.min(9, Math.floor(G.cash / packPrice(it))));
+    const price = packPrice(it);
+    if (ONE_SHOT.has(it.effect || '') && it.kind === 'gear') return G.cash >= price ? 1 : 0;
+    return Math.max(0, Math.min(9, Math.floor(G.cash / price)));
   }
   /* A row's name, then its numbers (pack size, price, what you own, the bulk
      total) in their own colour. */
@@ -252,9 +250,11 @@ export function createShop(deps: ShopDeps) {
   function buyItem(it: ShopRow, qty?: number): void {
     qty = clamp(Math.floor(qty || 1), 1, 9);
     if (net.on) {
-      // A room says the local line first; the server would answer 409.
-      if (it.effect === 'repair' && repairPacksWanted(G.armor, G.plate, it.n) === 0) { say('Armor is full already.', 'info'); return; }
-      netBuy(it, qty);
+      // A room says the local line first (the server would answer 409), and
+      // asks for what the server will sell so the log line is true.
+      const packs = buyPacks(G, it, qty);
+      if (packs === 0) { say('Armor is full already.', 'info'); return; }
+      netBuy(it, packs);
       return;
     }
     const lives = G.lives;

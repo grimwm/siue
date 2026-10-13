@@ -3,8 +3,7 @@
 // every tank exactly as the browser did.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runFixed, MAX_STEPS } from '../src/flow.ts';
-import { SOLO_STEP } from '../src/solo.ts';
+import { runFixed, MAX_STEPS, SOLO_STEP, WAR_REST } from '../src/flow.ts';
 import { fallTanks, mulberry32 } from '../src/sim.ts';
 
 function drive(frames) {
@@ -43,7 +42,7 @@ test('a watched war runs three steps in a frame of three', () => {
 test('a 60 Hz display with +-0.5 ms timestamp jitter runs one step per frame', () => {
   const r = mulberry32(5);
   const counts = new Set();
-  let acc = SOLO_STEP / 2;
+  let acc = WAR_REST;
   let last = 0;
   for (let i = 1; i <= 3600; i++) {
     const ts = i * SOLO_STEP + (r() - 0.5) * 0.001;

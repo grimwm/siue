@@ -1,18 +1,17 @@
 /* Operation Tankity: the solo referee.
  *
  * The rules of a match against the drone battery, without a page: dealing,
- * mustering a round, the turn order, settling a volley, 1-ups and a drone's
- * aim. match.ts plays them with words and sound. Nothing here reads a clock
+ * mustering a round, the turn order, settling a volley, 1-ups, a drone's
+ * aim and what a purchase does. match.ts plays them with words and sound. Nothing here reads a clock
  * or Math.random, so the same seed deals the same match anywhere. */
 import { aiChoose, pickTactic } from './ai.ts';
 import type { AimChoice } from './ai.ts';
 import { carryArmor, fitPlates, maxArmor, repairPacksWanted, repairRestores } from './armor.ts';
-import { WATCH_TURNS } from './flow.ts';
+import { SOLO_STEP, WATCH_TURNS } from './flow.ts';
 import { TUNE, clamp, droneRack, fieldWidthOk, gauss, genTerrain, hashSeed, mulberry32, spawnSpots, surfY } from './sim.ts';
 import type { Arsenal, Cloud, Difficulty, Hills, ShopRow, Tank, World } from './sim.ts';
 
-/** Every war step is this long. */
-export const SOLO_STEP = 1 / 60;
+export { SOLO_STEP };
 export const FOES = [
   { id: 'reaper', color: '#ff0000' },
   { id: 'wraith', color: '#00ffff' },
@@ -188,16 +187,21 @@ export const ONE_SHOT: ReadonlySet<string> = new Set(['shield', 'extralife', 'la
 
 export type BuyResult = { ok: true; qty: number; total: number } | { ok: false; why: 'locked' | 'cash' | 'full'; total: number };
 
+/** How many packs a purchase of `qtyIn` really buys: one for a one-shot trick,
+ * and for Repair no more than the hull needs (0 when it is full). The shop prices
+ * and gates by this, a room's log line reports it, and soloBuy charges it. */
+export function buyPacks(G: Pick<SoloState, 'armor' | 'plate'>, row: ShopRow, qtyIn: number): number {
+  const qty = clamp(Math.floor(qtyIn || 1), 1, 9);
+  if (row.kind === 'gear' && ONE_SHOT.has(row.effect || '')) return 1;
+  if (row.effect === 'repair') return Math.min(qty, repairPacksWanted(G.armor, G.plate, row.n));
+  return qty;
+}
+
 /** One purchase, by server/rules.php room_buy()'s rules. */
 export function soloBuy(G: SoloState, row: ShopRow, qtyIn: number): BuyResult {
-  let qty = clamp(Math.floor(qtyIn || 1), 1, 9);
   if ((row.minRound || 0) > G.round) return { ok: false, why: 'locked', total: 0 };
-  if (row.kind === 'gear' && ONE_SHOT.has(row.effect || '')) qty = 1;
-  if (row.effect === 'repair') {
-    const want = repairPacksWanted(G.armor, G.plate, row.n);
-    if (want === 0) return { ok: false, why: 'full', total: 0 };
-    qty = Math.min(qty, want);
-  }
+  const qty = buyPacks(G, row, qtyIn);
+  if (qty === 0) return { ok: false, why: 'full', total: 0 };
   const total = (row.price || 0) * qty;
   if (G.cash < total) return { ok: false, why: 'cash', total };
   G.cash -= total;

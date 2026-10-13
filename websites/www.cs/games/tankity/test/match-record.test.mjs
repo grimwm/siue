@@ -1,6 +1,6 @@
 // The page's match keeps one round's log at a time: the buys and shots of a
 // round are gone when it ends, so the server's per-round limits never count
-// the whole match. Drives the real createMatch with stubbed surroundings.
+// the whole match. Drives the real createMatch (and createShop) with stubbed surroundings.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -8,11 +8,12 @@ import path from 'node:path';
 import { importTsx } from '../../_kit/test/tsx.ts';
 
 const m = await importTsx(import.meta.dirname, {
-  sim: '../src/sim.ts', log: '../src/solo-log.ts', match: '../src/match.ts', play: '../src/solo-play.ts',
+  sim: '../src/sim.ts', log: '../src/solo-log.ts', match: '../src/match.ts', play: '../src/solo-play.ts', shop: '../src/shop.ts',
 });
 const { buildArsenal, surfY, TUNE, ROOM_W } = m.sim;
 const { ROUND_MAX_BUYS, newRecorder, recordBuy } = m.log;
 const { createMatch } = m.match;
+const { createShop } = m.shop;
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const arsenal = buildArsenal(GAME.arsenal);
@@ -34,7 +35,9 @@ function harness() {
     keyHint: () => '', windText: () => '', closeGuns: () => false, fxImpact: () => 0, openShop: () => match.advance('shopOpen'),
     music: { leaveTheme() {}, start() {}, stop() {}, playTheme() {}, forRound() {} }, sfx: { play() {} },
   };
-  // Every other dependency is a no-op the match calls and ignores.
+  // Every other dependency is a no-op the match calls and ignores. Only
+  // functions may be left out: a value the match reads (G, tables, net, TOUCH,
+  // field, difficulty) must be in base, or it arrives here as a function.
   const deps = new Proxy(base, { get: (t, k) => (k in t ? t[k] : () => undefined) });
   const match = createMatch(deps);
   return { G, match };
@@ -75,4 +78,27 @@ test('the shots of a round do not add up across rounds', () => {
     assert.ok(G.rec, 'the recording is still on');
     assert.equal(G.rec.shots.length, 0, `round ${r} ended with its shot count cleared`);
   }
+});
+
+test('sixty buys through the shop, a round played, and the next shop buys again', () => {
+  const { G, match } = harness();
+  match.startSolo('wiring');
+  match.tickBanner(10);
+  const lines = [];
+  const shop = createShop({
+    G, $: () => null, tables: { arsenal, weapons: arsenal.weapons, shop: arsenal.shop, gear: arsenal.gear, order: arsenal.order },
+    net: { on: false, seats: () => [], readyNow: () => false, shopClockLeft: () => 0 }, sfx: { play() {} }, me: () => G.tanks[0],
+    touch: false, keyHint: () => '', say: t => lines.push(t), advance() {}, render() {}, renderHUD() {}, refreshNavHints() {},
+    drawShellIcon() {}, drawGearIcon() {}, openPreview() {}, nextRound() {}, openLeaveVeil() {}, netBuy() {}, board: () => null,
+  });
+  const mortar = arsenal.shop.find(r => r.w === 'mortar');
+  G.cash = 1e6;
+  for (let k = 0; k <= ROUND_MAX_BUYS; k++) shop.buyItem(mortar, 1);
+  assert.equal(G.rec.buys.length, ROUND_MAX_BUYS);
+  assert.match(lines.at(-1), /most you can buy in one shop visit/);
+  match.nextRound();
+  playRound(G, match);
+  G.cash = 1e6;
+  shop.buyItem(mortar, 2);
+  assert.deepEqual(G.rec.buys, [{ i: 'mortar', q: 2 }], 'the next visit counts from one');
 });

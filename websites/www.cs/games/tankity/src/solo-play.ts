@@ -1,9 +1,8 @@
-/* Operation Tankity: solo matches without a page.
+/* Operation Tankity: solo matches without a page; not part of the page bundle.
  *
  * soloRound() plays one round from the shop the way server/solo.php does, and
  * refuses what it refuses; playSolo() drives the rules with a bot and records
- * each round as the page would send it; replaySolo() checks every claim.
- * Not part of the page bundle. */
+ * each round as the page would send it; replaySolo() checks every claim. */
 import { ROOM_W, anyTankFalling, clamp, facing, fallTanks, fieldWidthOk, fireWeapon, hashSeed, muzzle, mulberry32, simShot, spotTaken, stepShells, surfY } from './sim.ts';
 import type { Arsenal, Difficulty, World } from './sim.ts';
 import { DIFFICULTIES } from './ai.ts';
@@ -28,16 +27,16 @@ export function blankSolo(): SoloState {
 
 /** The war's fixed steps for one volley, as the page's frame takes them:
  *  each drops the tanks, then moves the shells; once the last shell is gone,
- *  steps drop the tanks until none is falling. server/flight.php flight_volley()
- *  is the same. Answers the steps taken. */
-export function flyVolley(G: World, arsenal: Arsenal, onStep?: (G: World) => void): number {
+ *  steps drop the tanks until none is falling, maxSteps in all. server/flight.php
+ *  flight_volley() is the same. Answers the steps taken. */
+export function flyVolley(G: World, arsenal: Arsenal, onStep?: (G: World) => void, maxSteps = FLIGHT_MAX_STEPS): number {
   let steps = 0;
-  for (; G.shells.length && steps < FLIGHT_MAX_STEPS; steps++) {
+  for (; G.shells.length && steps < maxSteps; steps++) {
     fallTanks(G, SOLO_STEP);
     stepShells(G, arsenal, SOLO_STEP);
     if (onStep) onStep(G);
   }
-  for (; anyTankFalling(G) && steps < FLIGHT_MAX_STEPS; steps++) {
+  for (; anyTankFalling(G) && steps < maxSteps; steps++) {
     fallTanks(G, SOLO_STEP);
     if (onStep) onStep(G);
   }
@@ -84,8 +83,9 @@ function claimOf(G: SoloState, end: Exclude<Settled['kind'], 'next'>): RoundClai
 
 /** One round from the shop: its purchases, the muster, then turns until the
  *  round ends, the player's turns taking `shots` in order. server/solo.php
- *  solo_round() is the same, refusal for refusal. */
-export function soloRound(G: SoloState, arsenal: Arsenal, buysIn: unknown, shotsIn: unknown): RoundResult {
+ *  solo_round() is the same, refusal for refusal. A volley still flying after
+ *  maxSteps steps is refused (a test lowers it to reach that refusal). */
+export function soloRound(G: SoloState, arsenal: Arsenal, buysIn: unknown, shotsIn: unknown, maxSteps = FLIGHT_MAX_STEPS): RoundResult {
   // Records arrive as JSON: anything may be anything, and none of it may throw.
   if (!Array.isArray(buysIn) || buysIn.length > ROUND_MAX_BUYS) return { ok: false, error: 'bad buys' };
   if (!Array.isArray(shotsIn) || shotsIn.length > ROUND_MAX_SHOTS) return { ok: false, error: 'too many shots' };
@@ -109,7 +109,7 @@ export function soloRound(G: SoloState, arsenal: Arsenal, buysIn: unknown, shots
       const err = playerFire(G, arsenal, m);
       if (err) return { ok: false, error: err };
     } else droneTurn(G, arsenal, t);
-    flyVolley(G, arsenal);
+    flyVolley(G, arsenal, undefined, maxSteps);
     if (G.shells.length) return { ok: false, error: 'too slow' };
     soloOneUps(G);
     const end = soloSettle(G);
@@ -148,6 +148,8 @@ function playTurns(G: SoloState, arsenal: Arsenal, bot: Bot, rec: ReturnType<typ
   for (;;) {
     const t = G.tanks[G.turn]!;
     if (t.isPlayer) {
+      // The page stops recording past the limit and the server refuses such a round: a run must stay inside it.
+      if (rec.shots.length >= ROUND_MAX_SHOTS) throw new Error(`${G.seed}: round ${G.round} needs more than ${ROUND_MAX_SHOTS} shots`);
       const m = bot.aim(G, arsenal);
       const err = playerFire(G, arsenal, m);
       if (err) throw new Error(`${G.seed}: the bot made an illegal move (${err})`);

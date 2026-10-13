@@ -261,19 +261,19 @@ function flight_step_shells(array &$s, float $h): void
 }
 
 /* The war's steps for one volley: each drops the tanks, then moves the shells;
-   once the last shell is gone, steps drop the tanks until none is falling.
-   $onStep sees the state after each step. Answers the steps taken. */
-function flight_volley(array &$s, ?Closure $onStep = null): int
+   once the last shell is gone, steps drop the tanks until none is falling,
+   $maxSteps in all. $onStep sees the state after each step. Answers the steps taken. */
+function flight_volley(array &$s, ?Closure $onStep = null, int $maxSteps = FLIGHT_MAX_STEPS): int
 {
     $steps = 0;
-    for (; ($s['shells'] ?? []) && $steps < FLIGHT_MAX_STEPS; $steps++) {
+    for (; ($s['shells'] ?? []) && $steps < $maxSteps; $steps++) {
         flight_fall($s, FLIGHT_STEP);
         flight_step_shells($s, FLIGHT_STEP);
         if ($onStep !== null) {
             $onStep($s);
         }
     }
-    for (; flight_falling($s) && $steps < FLIGHT_MAX_STEPS; $steps++) {
+    for (; flight_falling($s) && $steps < $maxSteps; $steps++) {
         flight_fall($s, FLIGHT_STEP);
         if ($onStep !== null) {
             $onStep($s);

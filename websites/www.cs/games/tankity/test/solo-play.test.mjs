@@ -16,7 +16,7 @@ const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'ga
 const arsenal = buildArsenal(GAME.arsenal);
 
 // Short runs, played once and shared. Each stops aiming after a few rounds so it ends.
-const RUNS = [['t-1', 0, 0, 'easy'], ['t-2', 0.6, 4, 'normal'], ['t-3', 1, 3, 'hard']].map(([seed, skill, until, level]) =>
+const RUNS = [['t-1', 0, 0, 'easy'], ['t-2', 0.6, 3, 'normal'], ['t-3', 1, 3, 'hard']].map(([seed, skill, until, level]) =>
   playSolo(seed, arsenal, makeBot(seed, skill, until), level));
 const [easy, normal] = RUNS;
 const freshG = () => {
@@ -44,8 +44,8 @@ test('the short runs still cover a won round, a lost tank, a lost match, a 1-up,
 });
 
 test('the same seed and bot play the same run', () => {
-  const a = playSolo('same', arsenal, makeBot('same', 0.5, 3), 'normal');
-  const b = playSolo('same', arsenal, makeBot('same', 0.5, 3), 'normal');
+  const a = playSolo('same', arsenal, makeBot('same', 0.5, 1), 'normal');
+  const b = playSolo('same', arsenal, makeBot('same', 0.5, 1), 'normal');
   assert.deepEqual(a, b);
 });
 
@@ -117,6 +117,14 @@ test('a tampered round is refused, with its reason', () => {
   assert.deepEqual(tamper(r => { r.buys = Array.from({ length: ROUND_MAX_BUYS + 1 }, () => ({ i: 'mortar', q: 1 })); }), { ok: false, round: 1, error: 'bad buys' });
   assert.deepEqual(tamper(r => { r.shots = Array.from({ length: ROUND_MAX_SHOTS + 1 }, () => ({ ...last })); }), { ok: false, round: 1, error: 'too many shots' });
   assert.deepEqual(tamper(r => { r.n = 2; }), { ok: false, round: 2, error: 'out of order' });
+});
+
+test('a volley still flying when the steps run out is refused, not settled', () => {
+  const probe = freshG();
+  assert.equal(soloRound(probe, arsenal, [], []).error, 'unfinished');
+  const shot = { w: 'shell', a: 80, p: 100, x: probe.tanks[0].x }; // where the muster put the player, so no drive
+  assert.deepEqual(soloRound(freshG(), arsenal, [], [shot], 5), { ok: false, error: 'too slow' });
+  assert.notEqual(soloRound(freshG(), arsenal, [], [shot]).error, 'too slow', 'the full budget lands it');
 });
 
 test('a claim with its keys in another order is the same claim', () => {

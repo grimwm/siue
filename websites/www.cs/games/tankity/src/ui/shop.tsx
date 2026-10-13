@@ -203,7 +203,7 @@ export function Shop(p: ShopProps) {
                       Preview <Key at="shop:preview" bare />
                     </button>
                   )}
-                  <button type="button" disabled={e.disabled} onClick={() => p.onBuy(e.index)}>
+                  <button type="button" disabled={e.disabled} onClick={blurThen(() => p.onBuy(e.index))}>
                     {e.locked ? 'Locked' : <>{e.qty > 1 ? `Buy ×${e.qty} ` : 'Buy '}<Key at="shop:buy" bare /></>}
                   </button>
                 </Body>

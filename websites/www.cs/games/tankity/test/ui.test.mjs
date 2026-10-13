@@ -139,6 +139,15 @@ function shopProps(over = {}) {
   click(actsOf(free).children[0]);
   click(actsOf(gearRow).children[0]);
   check('shop-clicks-reach-the-game', calls.buy.join() === '0,19' && calls.preview.join() === `${ammo[0].key},shell`, `${calls.buy}|${calls.preview}`);
+  // A Buy click drops the button's focus, so Enter later buys the selected row and not the one last clicked.
+  check('shop-buy-click-drops-focus', (() => {
+    let blurred = 0;
+    const btn = actsOf(free).children[0];
+    const real = btn.blur; btn.blur = () => { blurred++; };
+    click(btn);
+    btn.blur = real;
+    return blurred === 1;
+  })());
   // Start button: a plain label outside a room, and no ready line or Leave button.
   const next = byId(card, 'shop-next');
   const readyLine = byId(card, 'shop-ready');

@@ -44,6 +44,8 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `src/ui/gun-label.tsx` | The Weapon button's face: shell icon, name, the damage and blast line, and the rest of the rack for readers |
 | `src/view.ts` | The camera, and the `BattleView` snapshot the canvas paints each frame (whose turn marker shows, whether the aim arm is up, when the clock counts down). `createView(deps)` |
 | `src/tutorial.ts` | The coach: the steps, their key-name text, remembering a finished lesson, and the overlay's props. `createTutorial(deps)` |
+| `src/standings.ts` | This match's scoreboards: the room's match-end rule (`matchOutcome`, `winnerBonus`), room and solo rows (`roomBoard`, `soloBoard`), the filed line |
+| `src/ui/standings.tsx` | The scoreboard table, at the top of the shop and on the end cards |
 | `src/scores.ts` | The high scores: filing a report with `scores.php`, the local fallback, and the overlay's props. `createScores(deps)` |
 | `src/menu.ts` | The settings menu (the unit look, the text size and the Difficulty, all remembered in this browser) and the menu overlay's props. `createMenu(deps)` |
 | `src/title.ts` | The title card over the demo: whether it shows, the initials it edits, and its props. `createTitle(deps)` |
@@ -60,6 +62,9 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `server/settings.php` | What a room is (`ROOM_*` shape constants) and the host's knobs (`room_max_rooms`, `room_max_age`, `room_live_secs`) |
 | `server/store.php` | Rooms as rows: the room lock (`RoomLock`, one write transaction from `room_load` to `room_unlock`), create/register/close/discard, `room_save`, `room_count`, the sweep, room codes |
 | `server/db.php` | Where Tankity keeps its files (`tankity_data_dir`), the database (`tankity_db`), the journal mode for its filesystem, the schema steps, `tankity_tx` |
+| `server/guard.php` | Tankity's settings for the kit's `Kit\ScoreGuard` (`tankity_guard()`, `tankity_initials()`; its run store is `guard-runs.json` in the storage directory), and `BLOCKED_INITIALS` (the same list as `src/initials.ts`) |
+| `server/score-guard.php` | The kit's score guard, a generated copy written by `tools/install-files.php` (`kit_php`); never edit it |
+| `server/board.php` | The all-time boards, one per difficulty, best 100 per source on each, rows in the database (`board_file`, `board_top`), and the move of the per-callsign rows onto the Normal board (`board_convert_callsigns`) |
 | `server/legacy.php` | The per-callsign score runs (`legacy_add_run`, `legacy_top`) and the one-time import of the old score files (`legacy_import`) |
 | `server/housekeep.php` | Cleanup on requests, at most every five minutes (`tankity_housekeep`, `tankity_jobs`) |
 | `data/` | Runtime only, when PHP may write here: `tankity.sqlite` and the deny `.htaccess` PHP writes. Never in git, never deployed |
@@ -277,8 +282,9 @@ cannot prevent that.
 ignores it), so a deploy never uploads into it, changes its modes or prunes
 it.
 
-The directory holds `tankity.sqlite` (rooms; the per-callsign runs) and its
-journal. The journal mode is WAL when the directory is on a local filesystem
+The directory holds `tankity.sqlite` (rooms, the boards, the per-callsign runs and the table that
+records which of them were converted) and its journal, and `guard-runs.json` (the score guard's run
+tokens and rate stamps). The journal mode is WAL when the directory is on a local filesystem
 (`/proc/self/mounts`) and DELETE on anything else, including when the mount
 table cannot be read; `journal_mode` overrides. `PRAGMA user_version` is the
 schema version (`tankity_schema_steps()`); a newer server runs the missing
@@ -291,6 +297,13 @@ every run of every file goes into its callsign's row, none twice, and the file
 is deleted only after that commit and only if it did not change meanwhile.
 A file that is not ours (another owner, a link, over 4 MiB, not JSON, no runs
 list) is left alone, and the error log names it and says why.
+
+Housekeeping also moves the per-callsign rows onto the Normal board once: a
+callsign becomes its three initials (letters uppercased, the rest dropped, cut
+or padded with `X`; a set the blocklist refuses becomes `AAA`), the row's best
+run is filed as a `client` run and the row is deleted in the same transaction,
+so a row never converts twice. The `legacy_imported` table records which old
+score files were imported, so a file's runs are never imported twice either.
 
 Housekeeping has no cron: any request to `rooms.php` or `scores.php` runs it,
 at most every five minutes, each job bounded (idle rooms, 100 at a time; old
@@ -308,6 +321,50 @@ round they muster with 60 + 6 × (round − 1) armor.
 The rules live in `src/armor.ts` and `server/rules.php` (`room_max_armor` ..
 `room_carry_armor`, used by `room_buy` and the round start and end); the
 `armor` group of the sim vectors keeps them identical.
+
+## Match end and scoreboards
+
+Solo is endless and ends at ♥ 0. A room with one human plays the same way. A
+room that started with two or more humans ends when only one human has lives
+left: that human wins, with a winner's bonus of twice the round bonus
+(`room_match_outcome`, `room_winner_bonus`; `src/standings.ts` is the same
+rule, pinned by the `match-end` vectors). The drones' 40-turn watch cap stays.
+
+Leaving a room mid-match is a forfeit: the leaver's seat goes to the battery
+and the other of the last two humans wins when that round ends, with the
+normal bonus. A player who left is not filed. A seat that is out of the match
+cannot buy in the shop (`room_buy` answers 409). When the host leaves, the
+lowest seated human hosts the room, so Play again always has someone to start it.
+
+The server keeps each human's match (rounds won, kills, this round's gain, the
+round the last life went) and sends it in every snapshot, with the winner and
+the winner's bonus. The shop opens under this match's scoreboard after every
+round (beside the weapon list on any wide screen, above it on a phone held
+upright); a finished room match shows the final standings with ♛ on the
+winner, **Play again (same room)** (back to the lobby with the same code and
+seats, every human on fresh lives, score and cash) and **Leave room**; losing
+your last life while others play shows the same table with **Watch the
+finish**, and Menu → Standings brings it back. A solo match shows its rounds
+the same way and heads its end card with them.
+
+Scores file themselves: a room's server files each human when the last life
+goes and the winner when the match ends; a solo run is sent the moment it ends.
+There is one all-time board per difficulty (Easy, Normal, Hard); a run files on
+its difficulty's board (a room's is its host's), and the rows from before the
+boards had a difficulty are on Normal. Menu → Scores opens on the player's
+current difficulty, with a switcher to the other two, shows the top 20 with the
+player's own runs marked, and an end card says "Filed · #12 all-time on Normal"
+when a run places, or says why it could not file.
+
+A row has a source: `room` when the server filed it from a match, `client` when
+a browser reported it (solo runs, and the rows converted from the old
+per-callsign files). Each board keeps the best 100 of each source, so reports
+from browsers can never push a room's rows off it. `scores.php` refuses a
+cross-site request (403), anything but JSON (415), a seed starting `room:`
+(only the room server files those), and more than 60 reports an hour from one
+address (429; IPv6 addresses count by their /64 and IPv4 ones inside IPv6 by the
+IPv4 address). A solo score is the browser's own claim until the server plays
+each solo round.
 
 ## Drone aim
 
@@ -632,6 +689,9 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `node ../_kit/build/build.mjs tankity --check` | `dist/` is exactly what `src/` bundles to, `src/` type-checks, and every `protocol/*.json` fits its type in `protocol.ts` (run `npm ci` in `games/` first) |
 | `node --test 'test/*.test.mjs'`                | Every Node test below, run by `test.sh` (the UI test bundles `src/ui/*.tsx` once with esbuild, Preact left external) |
+| `test/standings.test.mjs`                      | `src/standings.ts`: the match-end rule against the `match-end` vectors, room and solo rows, the winner's bonus line, the filed line, and what Esc does on each end card |
+| `test/standings-ui.test.mjs`                   | The scoreboard table (`src/ui/standings.tsx`): a room's rows, you, the crown, the lost-out marks, and a solo run's rounds with the total |
+| `test/scores-ui.test.mjs`                      | The scores overlay (`src/ui/scores.tsx`): one board, the player's own runs marked, the switcher; and the filing in `src/scores.ts`, where a failure always has words |
 | `test/ui.test.mjs`                             | The Preact overlays (`src/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the scores, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
 | `test/smoke.test.mjs`                          | The shipped bundles (`dist/fx.js`, then `dist/main.js`) in a stub DOM, driven by the `game.json` key table and the `protocol/` fixtures; also checks the page loads exactly those two scripts with no import map and that the bundle has no bare imports, every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps; a solo player who wrecks their own tank sees the drones fight on to one and the lost round open the shop |
 | `test/ai-hitrate.test.mjs`                     | The drones' measured hit rates per difficulty against the targets (see Difficulty), the table's shape, hard being the sharpest aim (its exact constants), unknown levels aiming at normal, and the saved setting's default and form |
@@ -653,13 +713,18 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/protocol.test.mjs`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
 | `test/sim-vectors.test.mjs`                    | `src/sim.ts`, `src/ai.ts` and `src/armor.ts` agree with `rooms.php` on every shared sim vector; armor cases compare exactly (see Sim vectors) |
 | `phpunit --testsuite tankity` (host PHP)       | `ConfigTest` (`.config.yaml` precedence), `DataDirTest`, `DbTest`, `RoomStoreTest`, `LegacyImportTest` and `HousekeepTest` (storage: the directory and its checks, the database and its journal, rooms as rows, the old files' import, cleanup on a fake clock), `GameJsonTest` (the YAML parser, the `game.yaml` schema including effects, `--check` staleness) and `RoomsSimTest` (server sim units: pierce, spawns, spacing, replay stamping; drone bracketing and strategies; one unit left standing ends a round, the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller) |
+| `RoomMatchEndTest` (host PHP) | The match-end rule: one human plays like solo, the last human standing wins twice the round bonus, a leave is a forfeit, two out at once, the watch cap |
+| `RoomStandingsTest` (host PHP) | Each human's rounds won, kills, round gain and out round, in the snapshot with the winner's bonus |
+| `RoomFilingTest` (host PHP) | A room files each human once on its Difficulty's board, the winner before the eliminated, leavers not at all, and a failed filing logged and read as not filed |
+| `RoomAgainTest` (host PHP) | Play again keeps code and seats and resets lives, score and cash; a second press is harmless; the lowest human hosts when the host left |
+| `BoardTest`, `ScoresEndpointTest` (host PHP) | The boards (one per difficulty, ties, the trim, per-source keeping, the callsign conversion) and `scores.php` (the converted rows, origin, content type, forged room seeds, the throttle) |
 | `RoomArmorTest`, `RoomBuyTest` (host PHP) | Armor carry-over and re-muster, the capped repair, plates, and every shop purchase rule |
 | `phpunit --testsuite tankity-docker`           | `RoomsTest` (the room shelf over its own `php -S`), `RoomsStoreTest` (the store under real concurrency: exact cap under a race, close, sweep, a held writer and the 503, a killed holder), `RoomsRefusedStoreTest` (a store PHP refuses answers JSON 503 on every endpoint, with one log line per request), `RoomsStoreFailureTest` (a database error partway through a save answers JSON 503 and leaves nothing behind) and `RoomsLoadTest` (8 playing rooms, each with 3 seated players and a watcher, polling at the client's pace against the docker site: no 503, p95 under 300 ms). Runs inside the PHP container, which matches the host's PHP (`make test` does) |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (run inside the PHP container)                 |
 | `tests/tankity-data-deny.sh` | `games/tankity/data/` is refused over HTTP (`make test` runs it) |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
-| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only); `E2E_BASE_URL` points it at the live site |
+| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only), and the end of a match (`tankity-end`: a solo match; `tankity-end-again`: Play again in a room; `tankity-end-forfeit`: a leave, the winner, and the solo card after it; `tankity-end-out`: the you're-out card and Menu → Standings); `E2E_BASE_URL` points it at the live site |
 | `make e2e-changed` (site root) | Only the browser specs your changes need (`tests/e2e/select.mjs` maps touched files to specs; CI uses the same map) |
 
 `make test` from the site root runs every suite above except e2e. CI runs

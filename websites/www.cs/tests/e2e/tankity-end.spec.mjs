@@ -1,40 +1,11 @@
 // Operation Tankity: a solo match played to its end, and the end-of-match veil.
 import { test, expect } from '@playwright/test';
-import { newPlayer, hud, aimTo, setPower } from './helpers.mjs';
-
-/* Lose on purpose: the only way a solo match ends is the last life going. Lob
-   mortar shells at the lowest power straight up, so they come down on our own
-   tank, until the veil opens. Six mortars rarely suffice (a lob can miss), so
-   the loop goes on with the free shell. Each lob waits on the HUD for our next turn, never
-   on a timer; the page clock is driven by hand (page.clock.runFor) so the
-   drones' turns play out in a blink instead of seconds. When our tank falls
-   the drones fight on (at triple speed) until one is left; the lost round then
-   opens the shop, and the loop starts the next round from it. */
-async function loseMatch(page) {
-  const veil = page.locator('#end-veil');
-  const aiming = async () => {
-    await page.clock.runFor(4000);
-    // A lost round goes through the shop, after the drones have fought it out.
-    if (await page.locator('#shop-veil').isVisible()) await page.click('#shop-next');
-    return (await veil.isVisible()) || /Aim/.test(await hud(page, 'hud-turn'));
-  };
-  for (let shot = 0; shot < 30 && await veil.isHidden(); shot++) {
-    await expect.poll(aiming, { timeout: 60_000 }).toBe(true);
-    if (await veil.isVisible()) break;
-    await aimTo(page, 90);
-    await setPower(page, 12);
-    await page.keyboard.press('Space');
-    // The shot is away once the HUD stops asking for our aim. This looks
-    // without turning the clock: a whole volley fits in one runFor.
-    await expect.poll(() => hud(page, 'hud-turn'), { timeout: 10_000 }).not.toMatch(/Aim/);
-  }
-}
+import { newPlayer, hud, dealSolo, loseMatch } from './helpers.mjs';
 
 test('a lost match shows the end card: result, scoreboard, score, and Continue back to the title card', async ({ browser }) => {
   test.setTimeout(180_000);
   const { page, errors } = await newPlayer(browser, undefined, { clock: true });
-  await page.keyboard.press('n');
-  await page.waitForSelector('#shop-veil:not([hidden])');
+  await dealSolo(page);
   for (let i = 0; i < 3; i++) await page.keyboard.press('2'); // Mortar: the $600 stake buys three packs, six shells
   await page.click('#shop-next');
   await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU|Aim/);

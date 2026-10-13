@@ -109,6 +109,13 @@ export function Help({ keyHint, onClose }: HelpProps) {
           next match without ever revealing the seed.
         </li>
         <li>
+          A room with two or more people ends when only one has lives left: that player wins a bonus of
+          twice the round bonus, and everyone sees the standings. Leaving counts as giving up, so the one
+          who stays wins. <strong>Play again (same room)</strong> brings everyone back to the lobby with
+          fresh lives; lose your last life and you watch the finish. Every score files itself on the
+          all-time board for the room's Difficulty, except the scores of players who left early.
+        </li>
+        <li>
           Opening the page runs a demo battle behind the start. Every round gets its own name card before the
           shop and the shooting, and the camera pulls back as the battle spreads. Panels never pause the battle.
         </li>

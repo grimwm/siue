@@ -425,7 +425,7 @@ export function createLobby(deps: LobbyDeps) {
     net.toLobby();
     MATCH.out = false; MATCH.outShown = false; MATCH.lastPhase = 'lobby'; MATCH.roundTo = '';
     replay.clear(); MATCH.pendingRoom = null; MATCH.myTurn = false;
-    G.over = false;
+    // G.over stays up under the lobby: the last match's tanks must not run the solo turn loop; startNetMatch clears it.
     if ($('end-veil')) $('end-veil')!.hidden = true;
     hideShop();
     void openLobby();

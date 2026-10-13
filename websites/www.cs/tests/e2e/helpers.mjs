@@ -281,3 +281,32 @@ export function groundProbe() {
   }
   return { probs, seams, edge, field: { x: fx, y: fy, w: fw, h: fh } };
 }
+
+/* Lose on purpose: the only way a solo match ends is the last life going. Lob
+   mortar shells at the lowest power straight up, so they come down on our own
+   tank, until the veil opens. Six mortars rarely suffice (a lob can miss), so
+   the loop goes on with the free shell. Each lob waits on the HUD for our next turn, never
+   on a timer; the page clock is driven by hand (page.clock.runFor) so the
+   drones' turns play out in a blink instead of seconds. When our tank falls
+   the drones fight on (at triple speed) until one is left; the lost round then
+   opens the shop, and the loop starts the next round from it. */
+export async function loseMatch(page) {
+  const veil = page.locator('#end-veil');
+  const aiming = async () => {
+    await page.clock.runFor(4000);
+    // A lost round goes through the shop, after the drones have fought it out.
+    if (await page.locator('#shop-veil').isVisible()) await page.click('#shop-next');
+    return (await veil.isVisible()) || /Aim/.test(await hud(page, 'hud-turn'));
+  };
+  for (let shot = 0; shot < 60 && await veil.isHidden(); shot++) {
+    await expect.poll(aiming, { timeout: 60_000 }).toBe(true);
+    if (await veil.isVisible()) break;
+    await aimTo(page, 90);
+    await setPower(page, 12);
+    await page.keyboard.press('Space');
+    // The shot is away once the HUD stops asking for our aim. This looks
+    // without turning the clock: a whole volley fits in one runFor.
+    await expect.poll(() => hud(page, 'hud-turn'), { timeout: 10_000 }).not.toMatch(/Aim/);
+  }
+}
+

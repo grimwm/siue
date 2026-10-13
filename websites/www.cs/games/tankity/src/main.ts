@@ -392,7 +392,7 @@ const MATCH: MatchState = {
   myTurn: false, aimDirty: false, driveAcc: 0, driveT: 0,
   pendingRoom: null,
   lastPhase: '', lastTurn: -1, lastRound: -1, initials: '',
-  roundTo: '', winBonus: 0, out: false, outShown: false, lastRoom: null,
+  roundTo: '', out: false, outShown: false, lastRoom: null,
 };
 const replay = createReplay({
   tank: seat => G.tanks.find(t => t.seat === seat),
@@ -438,14 +438,14 @@ const getInitials = (): string => savedInitials.get();
 const field = createFieldWidth(() => ({ w: window.innerWidth, h: window.innerHeight }));
 const {
   advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-  stepWar, decayFx, soloShopBoard,
+  stepWar, decayFx, soloShopBoard, endVeilEscape,
 } = createMatch({
   field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
   tutorialFired, backToTitle: () => backToTitle(),
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
   netFire: () => netFire(), netLeave: quiet => netLeave(quiet), netNext: want => netNext(want),
-  netAgain: () => {}, initials: getInitials, fileSolo: (_run, done) => done(''),
+  netAgain: () => netAgain(), initials: getInitials, fileSolo: (_run, done) => done(''),
 });
 /* The field shop (src/shop.ts): prices, rows, buying, the Ready line. */
 const {
@@ -466,16 +466,17 @@ const {
 /* A running room match on this client (src/room.ts): moves sent, snapshots adopted, events told, the turn alert. */
 const {
   netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
-  roomShopBoard,
+  roomShopBoard, openStandings,
 } = createRoom({
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
+  backToLobby: () => netBackToLobby(),
   decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
   renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText,
 });
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving, the rematch. */
 const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-  netLeave,
+  netLeave, netAgain, netBackToLobby,
 } = createLobby({
   G, $, net, MATCH, HUD, END, SCORES, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
   closeOverlays, closePreview, endTutorial, hideShop, savedInitials: getInitials, paintHud, refreshNavHints, renderEndVeil,
@@ -487,7 +488,7 @@ const {
 const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
   G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
   nextSong: () => { unlock(); music.next(); },
-  freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
+  openStandings: () => openStandings(), freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
   quit: () => { void quitGame(); },
 });
 /* The title card over the demo (src/title.ts). */
@@ -644,6 +645,7 @@ function bindKeys(): void {
       if (closeLeaveVeil()) return;
       if (closeLobbyVeil()) return;
       if (closeOverlays()) return;
+      if (endVeilEscape()) return;
       if (tutorialActive()) { skipTutorial(); return; }
       toggleOverlay('menu-overlay', 'btn-menu');
     },

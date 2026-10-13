@@ -98,6 +98,8 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
         'round' => $room['round'],
         'startHumans' => (int) ($room['startHumans'] ?? 0),
         'winner' => $room['winner'] ?? null,
+        // The winner's match bonus, so a client that missed the matchwin event still shows it.
+        'winBonus' => (int) ($room['winBonus'] ?? 0),
         'wind' => $room['wind'],
         'turn' => $room['phase'] === 'play' && count($room['tanks']) ? $room['tanks'][$room['turn']]['seat'] ?? null : null,
         // Seconds left before the crew fires for the human whose turn it is.

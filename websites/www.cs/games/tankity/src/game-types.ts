@@ -112,6 +112,5 @@ export interface MatchState {
   roundTo: string; // who took the last round: a seat's name, or "the battery"
   out: boolean; // this seat lost its last life this match
   outShown: boolean; // the you're-out card has been shown
-  winBonus: number; // the server's matchwin bonus for this match, 0 until it is told
   lastRoom: RoomSnapshot | null; // the last snapshot adopted, for the scoreboards
 }

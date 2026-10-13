@@ -13,6 +13,7 @@
             "round": 0,
             "startHumans": 0,
             "winner": null,
+            "winBonus": 0,
             "wind": 0,
             "turn": null,
             "turnLeft": null,

@@ -365,6 +365,7 @@ export function createLobby(deps: LobbyDeps) {
     net.beginMatch(lobbyTold.code === net.code ? lobbyTold.seq : 0);
     MATCH.lastPhase = '';
     MATCH.lastRound = -1;
+    MATCH.out = false; MATCH.outShown = false; MATCH.roundTo = '';
     replay.clear(); MATCH.pendingRoom = null;
     MATCH.aimDirty = false;
     G.over = false;
@@ -414,10 +415,30 @@ export function createLobby(deps: LobbyDeps) {
     closeLeaveVeil();
     if (net.on) netLeave();
   }
+  /* Play again (same room): the room goes back to its lobby for everyone. */
+  async function netAgain(): Promise<void> {
+    try {
+      await net.post('again', {});
+      netBackToLobby();
+    } catch (err) { say(prettyRoomError(err), 'bad'); }
+  }
+  /* The room is in its lobby again: the match poll stops, the lobby shows the
+     seats, and the host's Start begins the next match. */
+  function netBackToLobby(): void {
+    net.toLobby();
+    MATCH.out = false; MATCH.outShown = false; MATCH.lastPhase = 'lobby'; MATCH.roundTo = '';
+    replay.clear(); MATCH.pendingRoom = null; MATCH.myTurn = false;
+    G.over = false;
+    if ($('end-veil')) $('end-veil')!.hidden = true;
+    hideShop();
+    void openLobby();
+  }
   function netLeave(quiet?: boolean): void {
     const wasOn = net.on;
     net.leave(); // tells the server, stops both polls, clears the session
     replay.clear(); MATCH.pendingRoom = null; MATCH.myTurn = false; MATCH.lastPhase = ''; MATCH.lastTurn = -1; MATCH.lastRound = -1;
+    MATCH.out = false; MATCH.outShown = false; MATCH.lastRoom = null;
+    END.buttons = 'solo'; END.board = null; END.filed = null;
     SCORES.formHidden = false;
     renderScoresOverlay();
     hideShop();
@@ -433,6 +454,6 @@ export function createLobby(deps: LobbyDeps) {
   }
   return {
     renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-    netLeave,
+    netLeave, netAgain, netBackToLobby,
   };
 }

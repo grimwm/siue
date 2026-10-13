@@ -45,17 +45,18 @@ export type Board =
 /** After a round (top of the shop), the match over, you're out, or a look from the menu. */
 export type RoomCard = 'shop' | 'over' | 'out' | 'peek';
 
-/** `bonus` is the winner's match bonus from the room's matchwin event (0 when it was not seen). */
-export function roomBoard(room: Pick<RoomSnapshot, 'code' | 'round' | 'seats' | 'winner'>, mySeat: number, card: RoomCard, roundTo: string, bonus = 0): Board {
+/** The winner's match bonus comes from the snapshot, so a client that missed the matchwin event (reload, rejoin) shows it too. */
+export function roomBoard(room: Pick<RoomSnapshot, 'code' | 'round' | 'seats' | 'winner' | 'winBonus'>, mySeat: number, card: RoomCard, roundTo: string): Board {
   const over = card === 'over';
   const winner = room.winner;
+  const bonus = room.winBonus;
   const rows = room.seats
     .filter(s => s.human)
     .sort((a, b) => b.score - a.score || a.seat - b.seat)
     .map((s, i): BoardRow => {
       const crown = over && s.seat === winner;
       // The final card credits the match bonus alone (the winner's snapshot gain also holds the
-      // last round's points); `bonus` is the server's matchwin event, never worked out here.
+      // last round's points); the bonus is the server's, never worked out here.
       // The per-seat round gains belong to the shop card.
       const gain = crown ? (bonus > 0 ? `+${fmt(bonus)} win` : '') : over || !s.gain ? '' : `+${fmt(s.gain)}`;
       const alive = s.lives > 0;
@@ -84,4 +85,13 @@ export function soloBoard(rounds: readonly SoloRound[], card: 'shop' | 'over'): 
     rows: [...rounds],
     total: { points: rounds.reduce((a, r) => a + r.points, 0), kills: rounds.reduce((a, r) => a + r.kills, 0) },
   };
+}
+
+/** What Esc does on an end card: a look from the menu ('peek') goes back to
+ *  the battle and the you're-out card ('out') watches the finish, both as their
+ *  button does; a finished room match ('over') keeps its card until a button is
+ *  pressed; a solo card ('solo') leaves Esc to its usual job. */
+export function endCardEscape(buttons: 'solo' | 'over' | 'out' | 'peek'): 'watch' | 'stay' | 'pass' {
+  if (buttons === 'out' || buttons === 'peek') return 'watch';
+  return buttons === 'over' ? 'stay' : 'pass';
 }

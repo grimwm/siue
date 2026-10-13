@@ -439,6 +439,7 @@ const mapFields = () => ({
   hostSeat: 0,
   startHumans: 1,
   winner: null,
+  winBonus: 0,
 });
 global.fetch = async (url, opts) => {
   const u = String(url);

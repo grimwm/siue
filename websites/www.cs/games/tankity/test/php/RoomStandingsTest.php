@@ -67,6 +67,7 @@ final class RoomStandingsTest extends TestCase
         $snap = room_snapshot($room, 0, 0);
         $this->assertSame(2, $snap['startHumans']);
         $this->assertSame(0, $snap['winner']);
+        $this->assertSame(room_winner_bonus(1), $snap['winBonus'], 'a client that missed matchwin still shows the bonus');
         $this->assertSame(['roundsWon' => 1, 'kills' => 0, 'out' => null],
             array_intersect_key($snap['seats'][0], ['roundsWon' => 0, 'kills' => 0, 'out' => 0]));
         $this->assertSame(1, $snap['seats'][1]['out']);

@@ -41,6 +41,8 @@ export interface MenuProps {
   onMusic: () => void;
   onFullscreen: () => void;
   onScores: () => void;
+  /** This room match's scoreboard (shown only in a room). */
+  onStandings: () => void;
   /** Show the Leave room button (inside a room). */
   inRoom: boolean;
   onLeave: () => void;
@@ -155,6 +157,8 @@ export function Menu(p: MenuProps) {
         <button type="button" id="scores-open" title="High scores, and file your run" onClick={blurThen(p.onScores)}>
           Scores <Key at="global:report" bare />
         </button>
+        <button type="button" id="menu-standings" title="This match's scoreboard" hidden={!p.inRoom}
+          onClick={blurThen(p.onStandings)}>Standings</button>
         <button type="button" id="menu-leave" class="btn-leave" title="Leave this game room and go back to the title card"
           hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave room</button>
         <button type="button" id="menu-quit" class="btn-leave" title="End this match and leave the game"

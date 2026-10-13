@@ -1,7 +1,7 @@
 // This match's scoreboards (src/standings.ts): the room's match-end rule first.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BOARD_KEEP, filedLine, fmt, matchOutcome, roomBoard, soloBoard } from '../src/standings.ts';
+import { BOARD_KEEP, endCardEscape, filedLine, fmt, matchOutcome, roomBoard, soloBoard } from '../src/standings.ts';
 
 const seats = (...lives) => lives.map((l, seat) => ({ seat, human: l !== null, lives: l ?? 0 }));
 
@@ -51,16 +51,17 @@ test('after a round: humans only, by score, with this round\'s gain and lives or
 });
 
 test('match over: the winner is crowned and the last column says when each went out', () => {
-  const over = { ...ROOM, round: 9, winner: 1, seats: ROOM.seats.map(s => s.seat === 0 ? { ...s, lives: 0, out: 9 } : s.seat === 1 ? { ...s, gain: 5000 } : s) };
-  const b = roomBoard(over, 0, 'over', 'WG', 4200);
+  const over = { ...ROOM, round: 9, winner: 1, winBonus: 4200, seats: ROOM.seats.map(s => s.seat === 0 ? { ...s, lives: 0, out: 9 } : s.seat === 1 ? { ...s, gain: 5000 } : s) };
+  const b = roomBoard(over, 0, 'over', 'WG');
   assert.equal(b.caption, 'Room ABCD · match over after round 9');
   assert.equal(b.title, '♛ WG wins: last tank standing');
   assert.equal(b.lastHead, 'Out in');
   assert.deepEqual(b.rows.map(r => [r.name, r.crown, r.gain, r.last]), [
     ['WG', true, '+4,200 win', '♥ 2'], ['AK', false, '', 'round 9'], ['JR', false, '', 'round 5'],
   ]);
-    // Without the server's matchwin event there is no bonus to credit.
-  assert.equal(roomBoard(over, 0, 'over', 'WG').rows[0].gain, '');
+  // A client whose first snapshot is already 'over' (reload, rejoin) never read the matchwin event: the snapshot carries the bonus.
+  assert.equal(roomBoard(over, 0, 'over', 'WG').rows[0].gain, '+4,200 win');
+  assert.equal(roomBoard({ ...over, winBonus: 0 }, 0, 'over', 'WG').rows[0].gain, '');
   const nobody = roomBoard({ ...over, winner: null }, 0, 'over', 'the battery');
   assert.equal(nobody.title, 'Match over: the battery holds the hills');
 });
@@ -87,4 +88,11 @@ test('solo: the rounds so far, with a total', () => {
 test('the filed line', () => {
   assert.equal(filedLine(12, 9210, 'normal'), 'Filed · #12 all-time on Normal');
   assert.equal(filedLine(null, 40, 'hard'), `Filed · 40 pts, outside the all-time top ${BOARD_KEEP} on Hard`);
+});
+
+test('Esc on an end card: back to the battle, watch the finish, or keep the card', () => {
+  assert.equal(endCardEscape('peek'), 'watch');
+  assert.equal(endCardEscape('out'), 'watch');
+  assert.equal(endCardEscape('over'), 'stay');
+  assert.equal(endCardEscape('solo'), 'pass');
 });

@@ -70,6 +70,7 @@ final class RoomAgainTest extends TestCase
         $this->assertSame(0, $room['round']);
         $this->assertSame([], $room['tanks']);
         $this->assertNull($room['winner']);
+        $this->assertSame(0, room_snapshot($room, 0, 0)['winBonus']);
     }
 
     public function testALeaversSeatGoesBackToTheBattery(): void

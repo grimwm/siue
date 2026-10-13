@@ -557,6 +557,7 @@ function room_match_begin(array &$room): void
     $room['stats'] = [];
     $room['filed'] = [];
     $room['winner'] = null;
+    $room['winBonus'] = 0;
     foreach ($room['seats'] as $idx => $s) {
         if ($s['human'] ?? false) {
             $room['startHumans']++;
@@ -669,6 +670,7 @@ function room_end_round(array &$room, array &$events): void
                 $room['stats'][$w]['gain'] += $bonus;
             }
             $room['winner'] = $w;
+            $room['winBonus'] = $bonus;
             $events[] = ['t' => 'matchwin', 'seat' => $w, 'bonus' => $bonus];
             room_file_seat($room, $w);
         }
@@ -922,6 +924,7 @@ function room_again(array &$room): bool
         }
     }
     $room['winner'] = null;
+    $room['winBonus'] = 0;
     $room['startHumans'] = 0;
     $room['phase'] = 'lobby';
     $room['round'] = 0;

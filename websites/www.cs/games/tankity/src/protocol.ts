@@ -116,6 +116,8 @@ export interface RoomSnapshot {
   startHumans: number;
   /** The seat that won the match; null until then, and when nobody did. */
   winner: number | null;
+  /** The winner's match bonus (0 until there is a winner); the matchwin event carries it too. */
+  winBonus: number;
   wind: number;
   /** The seat whose turn it is; null outside play. */
   turn: number | null;

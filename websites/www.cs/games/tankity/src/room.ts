@@ -17,11 +17,11 @@ import type { GameState, GameTank, MatchState, Tables } from './game-types.ts';
 import type { HudValues } from './hud.ts';
 import { stepArm } from './input.ts';
 import type { Input } from './input.ts';
-import { prettyRoomError, shouldCatchUp, standingsRows } from './net.ts';
+import { prettyRoomError, shouldCatchUp } from './net.ts';
 import type { RoomClient } from './net.ts';
-import { roomBoard } from './standings.ts';
+import { filedLine, matchOutcome, roomBoard } from './standings.ts';
 import { focusEndVeil } from './ui/endveil.tsx';
-import type { Board } from './standings.ts';
+import type { Board, RoomCard } from './standings.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
 import { H, ROOM_W, TUNE, carveCrater, clamp, facing, genTerrain, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
@@ -50,6 +50,7 @@ export interface RoomDeps {
   decayFx(dt: number): void;
   fallTanks(dt: number): void;
   fxImpact(sys: FxSys | null, key: string, x: number, y: number, r: number): number | undefined;
+  backToLobby(): void;
   hideShop(): void;
   pumpDialogue(dt: number): void;
   refreshNavHints(): void;
@@ -68,7 +69,7 @@ export interface RoomDeps {
 export function createRoom(deps: RoomDeps) {
   const {
     G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
-    decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
+    backToLobby, decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
     renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText,
   } = deps;
 
@@ -256,11 +257,13 @@ export function createRoom(deps: RoomDeps) {
     HUD.runStats = `Room ${net.code} · you are ${seatName(net.seat)} · round ${G.round}`;
     if (room.phase !== 'shop') net.dropReadyWish();
     if (room.phase === 'play') {
-      MATCH.winBonus = 0;
+      // A next match started before this client saw the room go back to its lobby.
+      if (MATCH.lastPhase === 'over') { MATCH.out = false; MATCH.outShown = false; }
       G.over = false;
       G.phase = MATCH.myTurn ? 'aim' : 'think';
       hideShop();
-      if ($('end-veil')) $('end-veil')!.hidden = true;
+      // The you're-out and Standings cards stay up until their own button; any other card is last match's.
+      if ($('end-veil') && END.buttons !== 'out' && END.buttons !== 'peek') $('end-veil')!.hidden = true;
       if ($('lobby-veil')) $('lobby-veil')!.hidden = true;
       if (MATCH.lastPhase !== 'play' || room.round !== MATCH.lastRound) {
         // A started match takes the whole frame, same as solo: shut the menu
@@ -272,6 +275,11 @@ export function createRoom(deps: RoomDeps) {
         if (MATCH.myTurn) talk('tank', 'tankity tank! My hill now!', true);
       } else if (MATCH.myTurn && MATCH.lastTurn !== net.seat) {
         say('Your move. Aim!', 'info');
+      }
+      // Out of lives while others fight on: the you're-out card, once.
+      if (MATCH.out && !MATCH.outShown && !matchOutcome(room.seats, room.startHumans).over) {
+        MATCH.outShown = true;
+        roomCard(room, 'out');
       }
     } else if (room.phase === 'shop') {
       G.phase = 'shop';
@@ -287,6 +295,10 @@ export function createRoom(deps: RoomDeps) {
       G.over = true;
       hideShop();
       netShowStandings(room);
+    } else if (room.phase === 'lobby') {
+      // Someone pressed Play again: the room is back in its lobby.
+      if (MATCH.lastPhase && MATCH.lastPhase !== 'lobby') backToLobby();
+      return;
     }
     MATCH.lastPhase = room.phase;
     MATCH.lastTurn = room.turn;
@@ -369,7 +381,12 @@ export function createRoom(deps: RoomDeps) {
       } else say(`${seatName(e.seat)} takes round ${e.round}.`, 'info');
       return;
     }
-    if (e.t === 'matchwin') { MATCH.winBonus = e.bonus; return; }
+    if (e.t === 'matchwin') {
+      if (e.seat === net.seat) { sfx.play('win'); say(`Last tank standing! +${e.bonus} winner's bonus.`, 'good'); }
+      else say(`${seatName(e.seat)} is the last tank standing.`, 'info');
+      return;
+    }
+    if (e.t === 'again') { say(`${seatName(e.seat)} wants another round in this room.`, 'info'); return; }
     if (e.t === 'roundlost') {
       MATCH.roundTo = 'the battery';
       sfx.play('lose');
@@ -378,6 +395,7 @@ export function createRoom(deps: RoomDeps) {
     }
     if (e.t === 'eliminated') {
       if (e.seat === net.seat) {
+        MATCH.out = true;
         sfx.play('lose');
         say('The battery got you for good this time. Filing your report.', 'bad');
       } else say(`${seatName(e.seat)} is out of lives.`, 'info');
@@ -542,18 +560,16 @@ export function createRoom(deps: RoomDeps) {
       }
     }
   }
-  function netShowStandings(room: RoomSnapshot): void {
-    net.stopPolling();
-    const rows = standingsRows((room && room.seats) || [], net.seat);
-    const champ = rows[0];
-    END.kicker = `Room ${net.code} · final standings`;
-    END.title = champ && champ.mine ? 'Top gun! The hills are yours.' : (champ ? `${champ.name} holds the hills.` : 'Match over.');
-    END.text = `The battery never quits, and neither do you. Room ${net.code} ended on round ${room.round || '?'}.`;
-    END.score = rows.map(r => `${r.name} ${r.score}${r.mine ? ' (you)' : ''}`).join(' · ') +
-      (room.you ? ` · you banked $${room.you.cash || 0}` : '');
-    END.board = roomBoard(room, net.seat, 'over', '', MATCH.winBonus);
-    END.filed = null;
-    END.buttons = 'over';
+  /* The scoreboard card for a room: match over, you're out, or a look from the menu. */
+  function roomCard(room: RoomSnapshot, card: Exclude<RoomCard, 'shop'>): void {
+    const board = roomBoard(room, net.seat, card, MATCH.roundTo || 'the battery');
+    END.kicker = board.caption;
+    END.title = board.title;
+    END.text = '';
+    END.score = room.you ? `You banked $${room.you.cash || 0} · ${room.you.score || 0} pts` : '';
+    END.board = { ...board, caption: '', title: '' };
+    END.filed = room.you && room.you.filed ? filedLine(room.you.filedRank, room.you.score || 0, room.difficulty) : null;
+    END.buttons = card;
     renderEndVeil();
     const veil = $('end-veil');
     if (veil) {
@@ -563,6 +579,15 @@ export function createRoom(deps: RoomDeps) {
       if (opening) focusEndVeil(veil);
     }
   }
+  /* Menu → Standings while a room match runs. */
+  function openStandings(): void {
+    if (!net.on || !MATCH.lastRoom) return;
+    roomCard(MATCH.lastRoom, MATCH.out ? 'out' : 'peek');
+  }
+  function netShowStandings(room: RoomSnapshot): void {
+    // The poll keeps running: a Play again from anyone brings this room back to its lobby.
+    roomCard(room, 'over');
+  }
 
   /* The shop's scoreboard in a room: everyone's match after the round just ended. */
   function roomShopBoard(): Board | null {
@@ -571,6 +596,6 @@ export function createRoom(deps: RoomDeps) {
 
   return {
     netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
-    roomShopBoard,
+    roomShopBoard, openStandings,
   };
 }

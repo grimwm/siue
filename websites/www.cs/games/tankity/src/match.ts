@@ -25,7 +25,7 @@ import {
   anyTankFalling as simAnyTankFalling,
 } from './sim.ts';
 import type { Blast, Difficulty, Shell } from './sim.ts';
-import { soloBoard } from './standings.ts';
+import { endCardEscape, soloBoard } from './standings.ts';
 import type { Board } from './standings.ts';
 import { renderEndVeil as drawEndVeil, focusEndVeil } from './ui/endveil.tsx';
 import type { EndVeilProps } from './ui/endveil.tsx';
@@ -473,6 +473,14 @@ export function createMatch(deps: MatchDeps) {
       onWatch: () => { veil.hidden = true; refreshNavHints(); },
     });
   }
+  /* Esc while the end card shows; true when it handled the key. */
+  function endVeilEscape(): boolean {
+    const veil = $('end-veil');
+    if (!veil || veil.hidden) return false;
+    const act = endCardEscape(END.buttons);
+    if (act === 'watch') { veil.hidden = true; refreshNavHints(); }
+    return act !== 'pass';
+  }
   function endMatch(won: boolean, text: string): void {
     if (G.demo) { startDemo(); return; }
     if (G.over) return;
@@ -634,6 +642,6 @@ export function createMatch(deps: MatchDeps) {
 
   return {
     advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-    stepWar, decayFx, soloShopBoard,
+    stepWar, decayFx, soloShopBoard, endVeilEscape,
   };
 }

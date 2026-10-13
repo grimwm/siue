@@ -1,9 +1,11 @@
 // A modal panel inside its veil. The game says whether it is open; the dialog
-// moves focus in when it opens and back when it closes, and Escape or a click
-// on the veil itself calls onDismiss when the game gives one. A game whose own
-// key router already handles Escape should not pass onDismiss for it.
+// moves focus in when it opens and back when it closes, and Q (the kit's back
+// key, keys.ts) or a click on the veil itself calls onDismiss when the game
+// gives one. Escape does nothing here. A game whose own key router already
+// handles Q should not pass onDismiss for it.
 import type { ComponentChildren } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
+import { isBackKey, typesText } from '../keys.ts';
 import { lastPressed } from './button.tsx';
 
 export interface DialogProps {
@@ -60,13 +62,16 @@ export function Dialog(p: DialogProps) {
   useLayoutEffect(() => {
     const dismiss = p.onDismiss;
     if (!p.open || !dismiss) return undefined;
+    // Captured, and stopped there: an open dialog owns Q, so the game's own
+    // key router under it never also acts on it (Crete's Q is Quit).
     const onKey = (ev: KeyboardEvent): void => {
-      if (ev.key !== 'Escape' || ev.isComposing) return;
+      if (!isBackKey(ev) || typesText(ev.target)) return;
       ev.preventDefault();
-      dismiss();
+      ev.stopPropagation();
+      if (!ev.repeat) dismiss();
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
   }, [p.open, p.onDismiss]);
 
   return (

@@ -426,8 +426,8 @@ arsenal:
 #
 # Token syntax
 #   - A token is matched against the browser's event.code first (ArrowLeft,
-#     KeyA, Digit1, ControlLeft, Escape, Space, PageDown), then against
-#     event.key (a, A, 1, Enter, Escape, " "). A single letter matches either
+#     KeyA, Digit1, ControlLeft, Space, PageDown), then against
+#     event.key (a, A, 1, Enter, " "). A single letter matches either
 #     case, so "a" works with Shift or Caps Lock.
 #   - "Ctrl+F" needs the Control key held and "Shift+KeyJ" the Shift key; the
 #     part after the plus is matched against event.code, then event.key, like
@@ -436,13 +436,16 @@ arsenal:
 #     themselves (Ctrl+D bookmarks, Ctrl+U view source), so prefer Shift+.
 #   - The FIRST token of an action names the key on buttons, hints and help
 #     text (it is printed as a keycap: arrows show as ← ↑ → ↓, KeyG as G,
-#     Escape as Esc, ControlLeft as Ctrl). Put the one you want shown first;
+#     ControlLeft as Ctrl). Put the one you want shown first;
 #     later tokens are silent alternatives.
 #   - Quote digits ("1") and a lone space (" "), or YAML reads a number.
 #   - Touch-only screens ignore this whole section.
-# Driving is Shift plus an arrow, and W, A, S, D, Q and C are bound nowhere:
+# Driving is Shift plus an arrow, and W, A, S, D and C are bound nowhere:
 # the arrows do all the aiming, so the other hand only ever needs Shift,
-# Space or Ctrl. Esc opens the menu and closes whatever is open.
+# Space or Ctrl. Q opens the menu and closes whatever is open.
+#   - Never bind Escape (or Esc): Safari and Firefox always leave full screen
+#     on it, whatever the page does, so the game never asks for it. The
+#     check refuses it.
 # Only the actions below exist; each must have at least one token.
 keys:
   aim:
@@ -460,7 +463,7 @@ keys:
     buyRow: ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
     buy: [b, Enter]
     preview: [v, p]
-    close: [Escape]
+    close: [q]
     next: [n]
   global:
     music: [m]
@@ -478,7 +481,7 @@ keys:
     battlePreview: [v]
     fullscreen: [f]
     fire: [Space, " ", ControlLeft, ControlRight, Control]
-    escape: [Escape]
+    back: [q]
   scroll:
     lineDown: [j]
     lineUp: [k]

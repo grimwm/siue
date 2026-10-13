@@ -92,7 +92,7 @@ test('the weapon picker greys out guns with none in stock, and I shows only the 
   expect(stocked).toBeLessThan(all);
   const box = await page.locator('#gun-stock').boundingBox();
   expect(box.height).toBeGreaterThanOrEqual(44);
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await expect(page.locator('#gun-overlay')).toBeHidden();
   await page.reload();
   await startSolo(page);

@@ -2,7 +2,7 @@
 // A real room is played to round 1; the guest's snapshots are then rewritten to say it has no
 // lives left, the drone seat is a second living human (a real elimination in a two-human room
 // ends the match), and an 'eliminated' event arrives, as in real play. The server's own
-// elimination is covered by RoomStandingsTest. Esc on each card never exits full screen.
+// elimination is covered by RoomStandingsTest. Q on each card never exits full screen.
 import { test, expect } from '@playwright/test';
 import { roomPair } from './helpers.mjs';
 
@@ -55,15 +55,15 @@ test("a player out of lives sees the you're-out card once; Menu → Standings br
   await guest.page.waitForTimeout(3500);
   await expect(gveil).toBeHidden();
 
-  // Esc closes it the same way; Menu → Standings brings it back as "You're out".
+  // Q closes it the same way; Menu → Standings brings it back as "You're out".
   await guest.page.click('#btn-menu');
   await guest.page.click('#menu-standings');
   await expect(gveil.locator('#end-title')).toHaveText("You're out");
-  await guest.page.keyboard.press('Escape');
+  await guest.page.keyboard.press('q');
   await expect(gveil).toBeHidden();
   expect(await exits(guest.page)).toBe(0);
 
-  // The host is still in: Menu → Standings is a look, up across polls until Back to the battle or Esc.
+  // The host is still in: Menu → Standings is a look, up across polls until Back to the battle or Q.
   const hveil = host.page.locator('#end-veil');
   await host.page.click('#btn-menu');
   await host.page.click('#menu-standings');
@@ -77,7 +77,7 @@ test("a player out of lives sees the you're-out card once; Menu → Standings br
   await host.page.click('#btn-menu');
   await host.page.click('#menu-standings');
   await expect(hveil).toBeVisible();
-  await host.page.keyboard.press('Escape');
+  await host.page.keyboard.press('q');
   await expect(hveil).toBeHidden();
   expect(await exits(host.page)).toBe(0);
 

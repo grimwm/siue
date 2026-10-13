@@ -30,7 +30,7 @@ function DesktopSteps() {
         <li>Flip <strong>Game On</strong> in the top bar.</li>
         <li><strong>Move the mouse</strong> to dodge bolts and nukes — the eye and drones track your cursor.</li>
         <li><strong>Click drones</strong> to KO them and score.</li>
-        <li><strong>Grenade</strong> (<KeyChip label="G" />): arm, then click where you want the blast.</li>
+        <li><strong>Grenade</strong> (<KeyChip label="G" />): arm, then click where you want the blast; <KeyChip label="Q" /> puts it away.</li>
         <li><strong>Raptor</strong> (<KeyChip label="R" />): orbital strike that clears the field and dazes the eye.</li>
         <SharedSteps />
         <li>You start with <strong>30 HP</strong> — hit 0, or take a nuke, then enter 3 initials for the board.</li>

@@ -19,7 +19,7 @@ function props(over = {}) {
     p: {
       turn: 'YOU. Aim!', angle: '162°', power: '100', fuel: '100', ammo: '×2',
       armor: { shown: '100', max: 125, sr: 'REAPER 60 of 60' }, lives: 5, wind: '← 12', badge: SOLO,
-      online: false, runStats: '', menuOpen: false, menuKey: 'Esc', onMenu: () => { calls.menu++; }, ...over,
+      online: false, runStats: '', menuOpen: false, menuKey: 'Q', onMenu: () => { calls.menu++; }, ...over,
     },
   };
 }
@@ -34,14 +34,14 @@ test('the bar runs Menu, angle, power, fuel, AMMO, ARMOR, lives, WIND, then the 
   assert.equal(byId(bar, 'hud-turn').getAttribute('aria-live'), 'polite');
 });
 
-test('Menu has its Esc chip, says whether the menu is open, and reports a tap', () => {
+test('Menu has its Q chip, says whether the menu is open, and reports a tap', () => {
   const bar = makeEl('hud-bar');
   const { p, calls } = props({ menuOpen: true });
   hud.renderHud(bar, p);
   const menu = byId(bar, 'btn-menu');
   assert.equal(menu.getAttribute('aria-expanded'), 'true');
   const chip = walk(menu).find(n => n.localName === 'kbd');
-  assert.equal(chip.textContent, 'Esc');
+  assert.equal(chip.textContent, 'Q');
   assert.equal(chip.getAttribute('aria-hidden'), 'true');
   click(menu);
   assert.equal(calls.menu, 1);

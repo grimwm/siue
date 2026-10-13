@@ -2,7 +2,7 @@
  * Turn-based artillery across destructible hills. You and the drone battery
  * trade shells: angle, power, wind, craters. Last one rolling wins the round.
  * Controls: hold ←/→ = angle · hold ↑/↓ = power · Shift+←/→ = drive ·
- * Space or Ctrl = fire · G = weapons · Esc = menu · N = next round / new match.
+ * Space or Ctrl = fire · G = weapons · Q = menu · N = next round / new match.
  */
 /* The page's entry module: it builds the game's state, wires the typed modules
  * together and runs the main loop. Everything else is in a module,
@@ -438,7 +438,7 @@ const getInitials = (): string => savedInitials.get();
 const field = createFieldWidth(() => ({ w: window.innerWidth, h: window.innerHeight }));
 const {
   advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-  stepWar, decayFx, soloShopBoard, endVeilEscape,
+  stepWar, decayFx, soloShopBoard, endVeilBack,
 } = createMatch({
   field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
@@ -588,7 +588,7 @@ function lineKey(dir: number): boolean {
 // game.json's keys section); this says what each does in the current context.
 // A handler that returns true used the key; one that returns nothing declines,
 // and the key falls through to the next candidate. The order they are offered
-// in (panel scrolling, the gun grid, the shop, ESC, the held aim keys, fire,
+// in (panel scrolling, the gun grid, the shop, Q, the held aim keys, fire,
 // then the plain global keys) is src/input.ts's. */
 /* Every card and overlay that takes the keyboard from the battlefield. */
 const OVERLAYS = '#log-overlay, #help-overlay, #report-overlay, #menu-overlay, #gun-overlay, #tutorial-overlay, #end-veil, #shop-veil, #lobby-veil, #preview-veil';
@@ -629,25 +629,28 @@ function bindKeys(): void {
     },
     buy: () => { buySelected(); return true; },
     preview: () => (previewSelected() ? true : 'quiet'), // V does nothing else in the shop
-    // Esc in the shop shuts the firing range first, then any open panel (the
-    // menu can sit above the shop), and with nothing open it opens the menu.
+    // Q in the shop shuts the firing range first, then any open panel (the
+    // menu can sit above the shop) or the Standings card, and with nothing
+    // open it opens the menu.
     // It never starts the round: that is N or the Start button.
     close: () => {
       if (G.preview) closePreview();
       else if (closeLeaveVeil()) { /* the question closed */ }
-      else if (!closeOverlays()) toggleOverlay('menu-overlay', 'btn-menu');
+      else if (closeOverlays() || endVeilBack()) { /* a panel or the Standings card closed */ }
+      else toggleOverlay('menu-overlay', 'btn-menu');
       return true;
     },
-    // Esc toggles the menu: it shuts the topmost thing that is open. Panels
+    // Q toggles the menu: it shuts the topmost thing that is open. Panels
     // come before the tutorial because the coach sends the player into one
-    // (the gun picker); with none open Esc skips a running tutorial, and
-    // otherwise opens the menu.
-    escape: () => {
+    // (the gun picker); with none open Q skips a running tutorial, and
+    // otherwise opens the menu. Esc does nothing: Safari and Firefox always
+    // leave full screen on it, so the game never asks for it.
+    back: () => {
       if (G.preview) { closePreview(); return; }
       if (closeLeaveVeil()) return;
       if (closeLobbyVeil()) return;
       if (closeOverlays()) return;
-      if (endVeilEscape()) return;
+      if (endVeilBack()) return;
       if (tutorialActive()) { skipTutorial(); return; }
       toggleOverlay('menu-overlay', 'btn-menu');
     },
@@ -673,9 +676,9 @@ function bindKeys(): void {
     fullscreen: () => { toggleFullscreen(); },
   }, {
     shopLive: p => G.phase === 'shop' && !G.over && !p.repeat,
-    // The leave question holds every key but ESC (which answers "stay").
+    // The leave question holds every key but Q (which answers "stay").
     modalOpen: () => { const ask = $('leave-veil'); return !!ask && !ask.hidden; },
-    modalEscape: () => { closeLeaveVeil(); },
+    modalBack: () => { closeLeaveVeil(); },
     cardOpen: () => titleOpen(),
     overlayOpen: target => {
       if (!(target instanceof Element)) return false;
@@ -826,7 +829,7 @@ function refreshNavHints(): void {
   }
   refreshRotateHint();
 }
-/* ESC shuts whatever is overlaid: the firing range first, then the lobby,
+/* Q shuts whatever is overlaid: the firing range first, then the lobby,
 then every open panel. */
 function closeLobbyVeil(): boolean {
   const veil = $('lobby-veil');
@@ -897,12 +900,13 @@ function toggleFullscreen(): void {
     if (!ok) say('Fullscreen is not available right now.', 'info');
   });
 }
-/* In fullscreen the browser takes ESC to leave fullscreen, so the game never
-   sees it. Where Keyboard Lock exists (Chromium), claim ESC for the game:
-   a tap closes menus and previews as usual and holding ESC still leaves
-   fullscreen. The lock is the top-level page's, because the /play/ pages run
-   the game in a frame and Chromium refuses a frame's lock. Safari and Firefox
-   have no Keyboard Lock: there ESC always leaves fullscreen, by the browser.
+/* In fullscreen the browser takes Esc to leave fullscreen. The game never
+   asks for Esc (Q is its back key), but a player may press it from habit.
+   Where Keyboard Lock exists (Chromium), hold Esc so a tap does nothing and
+   only holding it leaves fullscreen. The lock is the top-level page's,
+   because the /play/ pages run the game in a frame and Chromium refuses a
+   frame's lock. Safari and Firefox have no Keyboard Lock: there Esc always
+   leaves fullscreen, by the browser, which is why nothing asks for it.
    Guarded by test/fullscreen.test.mjs and tests/e2e/tankity-fullscreen-esc.spec.mjs. */
 function lockEscapeInFullscreen(): void {
   void holdEscape(!!document.fullscreenElement, topKeyLock(window), msg => console.warn(msg));

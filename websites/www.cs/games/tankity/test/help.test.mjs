@@ -46,7 +46,7 @@ test('each key shows its cap from the live table', () => {
   assert.equal(capOf(section, 'aim:driveLeft'), 'Shift+←');
   assert.equal(capOf(section, 'aim:barrelLeft'), '←');
   assert.equal(capOf(section, 'global:fire'), 'Space');
-  assert.equal(capOf(section, 'global:escape'), 'Esc');
+  assert.equal(capOf(section, 'global:back'), 'Q');
   assert.equal(capOf(section, 'shop:buyRow:0'), '1');
   assert.equal(capOf(section, 'shop:buyRow:8'), '9');
 });
@@ -71,5 +71,5 @@ test('a remapped table rewrites the list in place', () => {
   const list = keyList(section);
   help.renderHelp(section, { keyHint: (c, a, i) => keyHint(c, a, i).toLowerCase(), onClose() {} });
   assert.equal(keyList(section), list);
-  assert.equal(capOf(section, 'global:escape'), 'esc');
+  assert.equal(capOf(section, 'global:back'), 'q');
 });

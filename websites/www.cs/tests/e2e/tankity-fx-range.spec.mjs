@@ -25,7 +25,7 @@ test('every weapon has its own look on the firing range', async ({ browser }) =>
     const r = (await rec(page)).pv;
     expect(r.lighter, `${title}: additive glow`).toBeGreaterThan(0);
     expect(r.blobs, `${title}: glow sprites`).toBeGreaterThan(0);
-    await page.keyboard.press('Escape');
+    await page.keyboard.press('q');
     await expect(page.locator('#preview-veil')).toBeHidden();
     await page.keyboard.press('ArrowDown');
   }

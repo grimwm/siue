@@ -63,7 +63,7 @@ function InitialsPicker({ initials, onInitials }: Pick<TitleProps, 'initials' | 
 }
 
 export function Title(p: TitleProps) {
-  // No onDismiss: Esc opens the settings menu over the card, never closes it.
+  // No onDismiss: Q opens the settings menu over the card, never closes it.
   return (
     <KeyHints.Provider value={p.keyHint}>
       <Dialog open={p.open} id="title-card" veilClass="title-veil" panelClass="title-card" titleId="title-h"
@@ -80,7 +80,7 @@ export function Title(p: TitleProps) {
         <p class="title-note" id="title-initials-note" role="status">{p.problem}</p>
         {p.hint && <p class="title-hint" id="title-hint" role="status">{p.hint}</p>}
         <button type="button" id="title-settings" class="title-link" aria-haspopup="dialog" aria-expanded={p.settingsOpen}
-          onClick={blurThen(p.onSettings)}>Settings <Key at="global:escape" bare /></button>
+          onClick={blurThen(p.onSettings)}>Settings <Key at="global:back" bare /></button>
       </Dialog>
     </KeyHints.Provider>
   );

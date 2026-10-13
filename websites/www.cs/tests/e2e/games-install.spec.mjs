@@ -75,7 +75,7 @@ test('the game page asked to install (?install) highlights Install, and a click 
   expect(errors).toEqual([]);
 });
 
-test('on an iPhone, Install opens the game page with the Add to Home Screen steps; Escape closes them', async ({ browser }) => {
+test('on an iPhone, Install opens the game page with the Add to Home Screen steps; Q closes them', async ({ browser }) => {
   const context = await browser.newContext({ userAgent: IPHONE });
   const page = await context.newPage();
   const errors = watchErrors(page);
@@ -87,7 +87,12 @@ test('on an iPhone, Install opens the game page with the Add to Home Screen step
   await expect(page.locator('#install-steps-text')).toHaveText('Tap Share, then Add to Home Screen.');
   await expect(page.locator('#install-steps-done')).toBeFocused();
   await page.keyboard.press('Escape');
+  await expect(page.locator('#install-steps')).toBeVisible();
+  // The steps own Q: it closes them, and Crete's own Q (Quit) never sees it.
+  const titleShown = await page.locator('#title-veil').isVisible();
+  await page.keyboard.press('q');
   await expect(page.locator('#install-steps')).toBeHidden();
+  expect(await page.locator('#title-veil').isVisible()).toBe(titleShown);
   expect(errors).toEqual([]);
   await context.close();
 });

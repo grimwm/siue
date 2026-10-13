@@ -10,7 +10,7 @@ globalThis.document = document;
 const { title } = await importTsx(import.meta.dirname, { title: '../src/ui/title.tsx' });
 const walk = (el, out = []) => { for (const c of el.children || []) { out.push(c); walk(c, out); } return out; };
 const byId = (el, id) => walk(el).find(n => n.id === id);
-const KEYS = { 'global:new': 'N', 'global:rooms': 'O', 'global:tutorial': 'U', 'global:escape': 'Esc' };
+const KEYS = { 'global:new': 'N', 'global:rooms': 'O', 'global:tutorial': 'U', 'global:back': 'Q' };
 
 function draw(over = {}) {
   const root = makeEl('title-root');

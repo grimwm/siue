@@ -31,7 +31,7 @@ export const HELP_KEYS: readonly (readonly [string, readonly (readonly [readonly
     [['global:gunStock'], 'in the weapon picker: show every gun, or only those in stock'],
   ]],
   ['Panels and settings', [
-    [['global:escape'], 'open the menu, or close whatever is open'],
+    [['global:back'], 'open the menu, or close whatever is open'],
     [['global:log'], 'the radio log'],
     [['global:help'], 'this help'],
     [['global:report'], 'the scores'],

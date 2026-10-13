@@ -116,6 +116,8 @@ export function createFiler(env: FilerEnv) {
   async function sendOne(id: string, csrf: string): Promise<FileOutcome | null> {
     let r = find(id);
     if (!r) return null;
+    // The server expires a run that never played a round within minutes: start it only with a round to send.
+    if (!r.run && !r.rounds.length) return null;
     if (!r.run) {
       const started = await post(csrf, { op: 'start', seed: r.seed, difficulty: r.difficulty, w: r.w });
       if (typeof started['run'] !== 'string') throw new Fail('start');

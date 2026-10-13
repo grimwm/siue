@@ -281,3 +281,14 @@ test('storage holding junk is ignored, and at most PENDING_MAX runs are kept', a
   for (const id of ['1', '2', '3', '4']) f.begin(id, 'seed-1', 'normal', 720);
   assert.equal(f.waiting(), 3);
 });
+
+test('a run is not started on the server until it has a round to send', async () => {
+  const s = server();
+  const f = createFiler({ fetch: s.fetch, storage: memoryStorage() });
+  f.begin('q', 'seed-1', 'normal', 720);
+  assert.deepEqual(await f.flush(), []);
+  assert.deepEqual(ops(s), [], 'dealt but not yet played: nothing is held open on the server');
+  f.round('q', round(1));
+  await f.flush();
+  assert.deepEqual(ops(s), ['start', 'round1']);
+});

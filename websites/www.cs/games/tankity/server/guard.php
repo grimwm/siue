@@ -43,7 +43,7 @@ function tankity_guard_config(array $override = []): array
     return ScoreGuard::validateConfig($override + [
         'runTtlSec' => 86400,
         'startsPerHour' => 120,
-        'scoresPerHour' => 60,
+        'scoresPerHour' => (int) tankity_setting('TANKITY_SCORES_PER_HOUR', 'scores_per_hour', '60'),
         'csrfCookie' => 'tankity_csrf',
         'storageKey' => 'operation-tankity',
         'blockedInitials' => BLOCKED_INITIALS,
@@ -75,4 +75,18 @@ function tankity_initials(ScoreGuard $guard, mixed $raw): ?string
 {
     $initials = ScoreGuard::initials(is_string($raw) ? trim($raw) : $raw);
     return $initials !== null && !$guard->isBlocked($initials) ? $initials : null;
+}
+
+/* Whether a browser request came from this site: a cross-site Origin is
+   refused; callers that send none (curl) pass, and their tokens still gate them. */
+function room_origin_ok(): bool
+{
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    if ($origin === '') {
+        return true; // curl-style callers send none; the tokens still gate them
+    }
+    $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    $host = preg_replace('/:\d+$/', '', $host);
+    $o = parse_url($origin, PHP_URL_HOST);
+    return is_string($o) && $o !== '' && strcasecmp($o, $host) === 0;
 }

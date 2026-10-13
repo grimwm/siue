@@ -203,7 +203,8 @@ function tankity_journal_mode(string $dir, ?string $mounts = null): string
 
 /* The schema, one step per version. A database at version N runs the steps
    after N, each in its own transaction. Step 2 is the boards; step 3 remembers the old score files already
-   imported, so a file that outlives its import is never filed twice. */
+   imported, so a file that outlives its import is never filed twice; step 4 tells
+   a row the server filed from a match from a browser's own claim. */
 function tankity_schema_steps(): array
 {
     return [
@@ -220,6 +221,10 @@ function tankity_schema_steps(): array
         ],
         3 => [
             'CREATE TABLE legacy_imported (name TEXT NOT NULL, hash TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY (name, hash))',
+        ],
+        4 => [
+            // 'room' rows are filed by the server from a match; 'client' rows are a browser's own claim.
+            "ALTER TABLE board ADD COLUMN source TEXT NOT NULL DEFAULT 'room'",
         ],
     ];
 }

@@ -35,25 +35,31 @@ function board_convert_name(string $name, ScoreGuard $guard): string
 }
 
 /* Files a run on its difficulty's board: its 1-based place, or null when it
-   did not make the best BOARD_KEEP. A board never holds more than that. */
+   did not make the best BOARD_KEEP of its source. A run's source is 'room' (the
+   server filed it from a match; the default) or 'client' (a browser's own
+   claim). Each source keeps its own best BOARD_KEEP, so no number of client
+   rows can push a room row off; the view ranks both together. */
 function board_file(array $run): ?int
 {
     $level = board_level($run['difficulty'] ?? null);
     if ($level === null) {
         throw new InvalidArgumentException('no such board: ' . var_export($run['difficulty'] ?? null, true));
     }
-    return tankity_tx(tankity_db(), function (PDO $db) use ($run, $level): ?int {
-        $db->prepare('INSERT INTO board (difficulty, initials, score, rounds, seed, at) VALUES (?, ?, ?, ?, ?, ?)')->execute([
+    $source = ($run['source'] ?? 'room') === 'client' ? 'client' : 'room';
+    return tankity_tx(tankity_db(), function (PDO $db) use ($run, $level, $source): ?int {
+        $db->prepare('INSERT INTO board (difficulty, initials, score, rounds, seed, at, source) VALUES (?, ?, ?, ?, ?, ?, ?)')->execute([
             $level, (string) $run['initials'], (int) $run['score'], (int) $run['rounds'],
-            substr((string) $run['seed'], 0, 64), (string) ($run['at'] ?? gmdate('c')),
+            substr((string) $run['seed'], 0, 64), (string) ($run['at'] ?? gmdate('c')), $source,
         ]);
         $id = (int) $db->lastInsertId();
         $q = $db->prepare('SELECT COUNT(*) FROM board WHERE difficulty = ? AND (score > ? OR (score = ? AND id < ?))');
         $q->execute([$level, (int) $run['score'], (int) $run['score'], $id]);
         $place = (int) $q->fetchColumn() + 1;
-        $db->prepare('DELETE FROM board WHERE difficulty = ? AND id NOT IN
-            (SELECT id FROM board WHERE difficulty = ? ORDER BY score DESC, id LIMIT ?)')->execute([$level, $level, BOARD_KEEP]);
-        return $place <= BOARD_KEEP ? $place : null;
+        $db->prepare('DELETE FROM board WHERE difficulty = ? AND source = ? AND id NOT IN
+            (SELECT id FROM board WHERE difficulty = ? AND source = ? ORDER BY score DESC, id LIMIT ?)')->execute([$level, $source, $level, $source, BOARD_KEEP]);
+        $kept = $db->prepare('SELECT COUNT(*) FROM board WHERE id = ?');
+        $kept->execute([$id]);
+        return (int) $kept->fetchColumn() === 1 ? $place : null;
     });
 }
 

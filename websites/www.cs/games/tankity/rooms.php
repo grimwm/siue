@@ -82,17 +82,6 @@ function room_json_out(int $code, array $payload): void
     echo json_encode($payload, JSON_UNESCAPED_SLASHES);
     exit;
 }
-function room_origin_ok(): bool
-{
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-    if ($origin === '') {
-        return true; // curl-style callers send none; the tokens still gate them
-    }
-    $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
-    $host = preg_replace('/:\d+$/', '', $host);
-    $o = parse_url($origin, PHP_URL_HOST);
-    return is_string($o) && $o !== '' && strcasecmp($o, $host) === 0;
-}
 /* The arsenal lives in game.yaml, served as game.json (tools/game-json.php
 // writes it): the browser reads the same file, so prices, packs, ballistics,
 // and effects can never disagree. When the file is missing the baked fallback

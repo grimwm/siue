@@ -120,6 +120,7 @@ let WEAPONS: Arsenal['weapons'] = {};
 let WORDER: Arsenal['order'] = [];
 let SHOP: Arsenal['shop'] = [];
 let GEAR: Arsenal['gear'] = {};
+let ARSENAL_FROM_FILE = false;
 let ARSENAL_REV = 0; // counts arsenal rebuilds; the shop repaints its icons when it changes
 /* The icons draw what they are handed (src/ui/icons.ts); these look the weapon or trick up by key. */
 const drawShellIcon = (cv: HTMLCanvasElement, wkey: string): void => paintShellIcon(cv, WEAPONS[wkey]);
@@ -134,6 +135,8 @@ function buildArsenal(data: ArsenalData | null | undefined): boolean {
 }
 function applyArsenal(data: ArsenalData | null | undefined): void {
   if (data && Array.isArray(data.ammo) && data.ammo.length && buildArsenal(data)) {
+    ARSENAL_FROM_FILE = true;
+    G.rec = null; // a mid-match change of arsenal cannot be played on the server
     say(`Arsenal loaded: ${WORDER.length} shells, ${Object.keys(GEAR).length} tricks.`, 'info');
     if (G.phase === 'shop') renderShop();
     renderHUD();
@@ -161,7 +164,7 @@ async function loadGameConfig(): Promise<void> {
    skips painting, the frame loop waits on G.terrain). */
 const NOT_DEALT = null!;
 const G: GameState = {
-  seed: '', difficulty: 'normal', rng: NOT_DEALT, body: 'tank',
+  seed: '', difficulty: 'normal', rec: null, rng: NOT_DEALT, body: 'tank',
   terrain: NOT_DEALT, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // banner | shop | aim | think | fly | settle | over (src/flow.ts)
   thinkT: 0, settleT: 0,
@@ -191,6 +194,7 @@ const tables = {
   get shop() { return SHOP; },
   get gear() { return GEAR; },
   get rev() { return ARSENAL_REV; },
+  get fromFile() { return ARSENAL_FROM_FILE; },
 };
 /* Weapon looks (src/effects.ts): muzzle flashes, trails, blasts. */
 const { fxSet, installEffects, fxMuzzle, fxImpact, fxSpecial, fxTrail } = createEffects({ G, tables });

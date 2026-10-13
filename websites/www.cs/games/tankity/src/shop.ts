@@ -12,6 +12,7 @@ import type { Board } from './standings.ts';
 import type { RoomClient } from './net.ts';
 import { armorLabel, maxArmor, plateNote, repairNote, repairPacksWanted } from './armor.ts';
 import { soloBuy } from './solo.ts';
+import { recordBuy } from './solo-log.ts';
 import { TUNE, clamp } from './sim.ts';
 import type { ShopRow } from './sim.ts';
 import type { sfx as SfxApi } from './audio.ts';
@@ -265,6 +266,7 @@ export function createShop(deps: ShopDeps) {
       return;
     }
     sfx.play('cash');
+    if (G.rec) recordBuy(G.rec, it, r.qty);
     const lots = r.qty > 1 ? `${r.qty} × ` : '';
     if (it.kind === 'ammo') say(`Bought ${lots}${it.label}.`, 'good');
     else boughtLine(it, lots, lives);

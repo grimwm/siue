@@ -10,6 +10,7 @@
  * except the pieces a room shares (the banner, the cosmetics, the end veil).
  * The game's state, the page and the rest of the game arrive as deps. */
 import { maxArmor } from './armor.ts';
+import { newRecorder, recordShot, replayableSeed } from './solo-log.ts';
 import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
 import type { DifficultySetting } from './difficulty.ts';
 import { FOE_DYING, FOE_FIRE, FOE_HIT, FOE_MISS, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, pick } from './chatter.ts';
@@ -141,6 +142,7 @@ export function createMatch(deps: MatchDeps) {
   // Attract mode: the crew drives every tank until a human takes over.
   function startDemo(): void {
     resetMatch('scorched-demo');
+    G.rec = null;
     G.demo = true;
     G.round = 1;
     advance('demo');
@@ -150,6 +152,11 @@ export function createMatch(deps: MatchDeps) {
   }
   function newMatch(seedStr?: string): void {
     resetMatch(seedStr);
+    // The server plays every round of this run as it ends; one it could not play is not recorded.
+    G.rec = tables.fromFile && replayableSeed(G.seed) ? newRecorder() : null;
+    if (!G.rec) say(replayableSeed(G.seed)
+      ? 'The game data did not load, so this run cannot be filed.'
+      : 'This seed has characters the score server cannot play, so this run will not be filed.', 'info');
     // No round yet: spend the starting stake in the shop first.
     advance('matchStart');
     refreshNavHints(); // the rotate hint shows from the first name card
@@ -224,10 +231,12 @@ export function createMatch(deps: MatchDeps) {
     if (demoBlock()) return;
     if (G.phase !== 'aim' || !cur().isPlayer || G.over) return;
     closePreview();
-    if (fireWeapon(me(), G.selected)) {
+    const wkey = G.selected;
+    if (fireWeapon(me(), wkey)) {
+      if (G.rec) recordShot(G.rec, me(), wkey);
       tutorialFired();
       talk('tank', pick(TANK_FIRE));
-      say(`You fire ${tables.weapons[G.selected]!.name}.`, 'info');
+      say(`You fire ${tables.weapons[wkey]!.name}.`, 'info');
     }
     render();
   }

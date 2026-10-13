@@ -43,7 +43,8 @@ function tankity_guard_config(array $override = []): array
     return ScoreGuard::validateConfig($override + [
         'runTtlSec' => 86400,
         'startsPerHour' => 120,
-        'scoresPerHour' => (int) tankity_setting('TANKITY_SCORES_PER_HOUR', 'scores_per_hour', '60'),
+        // A filing is cheap; one campus NAT is one address, so this is sized for a class.
+        'scoresPerHour' => (int) tankity_setting('TANKITY_SCORES_PER_HOUR', 'scores_per_hour', '240'),
         'csrfCookie' => 'tankity_csrf',
         'storageKey' => 'operation-tankity',
         'blockedInitials' => BLOCKED_INITIALS,

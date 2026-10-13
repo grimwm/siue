@@ -58,7 +58,8 @@ function tankity_housekeep(int $now, array $jobs): ?array
 
 /* Every cleanup job this request can run, in order: old files into callsign
    rows, callsign rows onto the Normal board, then the room sweep where the
-   room library is loaded. */
+   room library is loaded, and expired solo runs where the score endpoint is
+   loaded. */
 function tankity_jobs(): array
 {
     $jobs = ['legacy' => fn(int $now): int => array_sum(legacy_import(null, LEGACY_IMPORT_BATCH, $now))];
@@ -67,6 +68,9 @@ function tankity_jobs(): array
     }
     if (function_exists('room_sweep')) {
         $jobs['rooms'] = fn(int $now): int => room_sweep($now);
+    }
+    if (function_exists('solo_runs_expire')) {
+        $jobs['solo'] = fn(int $now): int => solo_runs_expire($now);
     }
     return $jobs;
 }

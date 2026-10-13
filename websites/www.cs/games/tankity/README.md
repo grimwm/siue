@@ -66,24 +66,25 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `server/db.php` | Where Tankity keeps its files (`tankity_data_dir`), the database (`tankity_db`), the journal mode for its filesystem, the schema steps, `tankity_tx` |
 | `server/guard.php` | Tankity's settings for the kit's `Kit\ScoreGuard` (`tankity_guard()`, `tankity_initials()`; its run store is `guard-runs.json` in the storage directory), and `BLOCKED_INITIALS` (the same list as `src/initials.ts`) |
 | `server/score-guard.php` | The kit's score guard, a generated copy written by `tools/install-files.php` (`kit_php`); never edit it |
-| `server/board.php` | The all-time boards, one per difficulty, best 100 per source on each, rows in the database (`board_file`, `board_top`), and the move of the per-callsign rows onto the Normal board (`board_convert_callsigns`) |
+| `server/board.php` | The all-time boards, one per difficulty, best 100 of the server-played rows and best 100 of the browser claims on each, rows in the database (`board_file`, `board_top`, each row's `source` and `standin`), and the move of the per-callsign rows onto the Normal board (`board_convert_callsigns`) |
 | `server/legacy.php` | The per-callsign score rows from before the boards (the `callsigns` table) and the one-time import of the old score files into it (`legacy_import`) |
 | `server/housekeep.php` | Cleanup on requests, at most every five minutes (`tankity_housekeep`, `tankity_jobs`) |
+| `server/scores-api.php` | The score endpoint's work (`tankity_scores_handle`): the board GET, and the solo run's `start`, `round` and `file` ops on the `solo_runs` table; expired runs go with `solo_runs_expire` |
 | `data/` | Runtime only, when PHP may write here: `tankity.sqlite` and the deny `.htaccess` PHP writes. Never in git, never deployed |
 | `server/detmath.php` | `det_sin`, `det_cos`, `det_atan`, `det_atan2` and `det_round` (`Math.round`): the same bits as `src/detmath.ts` |
 | `server/sim.php` | The deterministic sim that `src/sim.ts` mirrors: RNG, terrain, the curated hills, weapons, ballistics, the Roller (`room_roll_*`), hit boxes and sweeps, explosions, settling |
 | `server/flight.php` | A solo volley as the browser's war flies it: fixed 1/60 s steps (`flight_volley`), each dropping the tanks (`flight_fall`) and then moving every shell (`flight_step_shells`), shells living 12 s times the field's reach; `src/solo-play.ts` `flyVolley` is the same |
 | `server/ai.php` | Drone aim, bracketing, the strategies and their flips, `room_ai_rack` |
-| `server/solo.php` | The solo referee in PHP over the room sim: `solo_deal` (refuses a width `room_field_width` does not accept) and `solo_muster`, drawing the random stream in `src/solo.ts`'s order; `solo_round` plays one round of a run from its stored state (the buys, the muster, the player's recorded shots and the drones' turns, each volley flown by `server/flight.php`) to the browser's claim, refusing what `src/solo-play.ts` `soloRound` refuses with the same reasons, at most `SOLO_ROUND_CPU` seconds of CPU, 200 shots and 60 buys a round |
+| `server/solo.php` | The solo referee in PHP over the room sim: `solo_deal` (refuses a width `room_field_width` does not accept) and `solo_muster`, drawing the random stream in `src/solo.ts`'s order; `solo_round` plays one round of a run from its stored state (the buys, the muster, the player's recorded shots and the drones' turns, each volley flown by `server/flight.php`) to the browser's claim, refusing what `src/solo-play.ts` `soloRound` refuses with the same reasons, at most `solo_round_cpu()` seconds of CPU (`round_cpu`, default `SOLO_ROUND_CPU` = 4.0), 200 shots and 60 buys a round |
 | `server/rules.php` | Seats and economy, rounds (`room_start_round`, `room_advance`, `room_end_round`), the turn clock, drone pacing and watch turns, the shop, firing a volley, lives and winnings, scores |
 | `server/protocol.php` | The event log, `room_want`, snapshots and deltas (`terrainRev`, resync) |
 | `server/.htaccess` | `Require all denied`: the files in `server/` are libraries, never endpoints. Each also answers 404 if asked for directly (`TANKITY_ROOMS_INCLUDED` is defined only by `rooms.php`) |
-| `scores.php`, `config.php`                                      | Score API; `.config.yaml` reader                                                                                                                                                            |
+| `scores.php`, `config.php`                                      | Score API (answers the request; the work is `server/scores-api.php`); `.config.yaml` reader                                                                                                |
 | `src/fx/engine.ts`, `src/fx/types.ts`, `src/fx/trail.ts` | The effects engine (particle pool, emitters, screen flash, shell glow), shared by the game and the editor; bundled as the classic script `dist/fx.js`, which sets `window.TankityFX`. `types.ts` is the engine's public shape (`FxEngine`) |
 | `fx/sprites/` | Sprite sheets (`fireball`, `smoke`, `shock`, `energy`, `mushroom`, `moon`) and `sprites.json`, rendered by `fx/blender/render_fx.py` |
 | `fx/blender/render_fx.py` | Headless Blender script that builds and renders the sprite sheets; its header documents the command and every option. Dev only |
 | `fx-editor.html`, `fx-editor.css`, `src/fx/editor.ts` | Dev-only live effects editor (see Weapon effects); `editor.ts` is bundled as the classic script `dist/fx-editor.js`, which sets `window.fxEditor`. Never deployed |
-| `.config.yaml`                                                  | Server settings, read-only, never sent to browsers; env vars win (`TANKITY_MAX_ROOMS`, `TANKITY_ROOM_MAX_AGE`, `TANKITY_ROOM_LIVE_SECS`, `TANKITY_DATA_DIR`, `TANKITY_JOURNAL`, and `TANKITY_SCORES_DIR` (retired: read only as where the old score files are); `CONFIG_FILE` points elsewhere) |
+| `.config.yaml`                                                  | Server settings, read-only, never sent to browsers; env vars win (`TANKITY_MAX_ROOMS`, `TANKITY_ROOM_MAX_AGE`, `TANKITY_ROOM_LIVE_SECS`, `TANKITY_DATA_DIR`, `TANKITY_JOURNAL`, `TANKITY_ROUND_CPU`, `TANKITY_ROUNDS_PER_HOUR`, `TANKITY_SCORES_PER_HOUR`, `TANKITY_ALLOWED_HOSTS`, and `TANKITY_SCORES_DIR` (retired: read only as where the old score files are); `CONFIG_FILE` points elsewhere) |
 | `metadata.yaml`, `og.png`                                       | Games-page card and link preview (see `../README.md`)                                                                                                                                       |
 | `manifest.webmanifest`, `sw.js`, `icon-192.png`, `icon-512.png` | Install and offline support; the first two are generated by `tools/install-files.php`                                                                                                     |
 
@@ -314,7 +315,8 @@ score files were imported, so a file's runs are never imported twice either.
 
 Housekeeping has no cron: any request to `rooms.php` or `scores.php` runs it,
 at most every five minutes, each job bounded (idle rooms, 100 at a time; old
-files, 200 at a time; leftover temp files over an hour old).
+files, 200 at a time; leftover temp files over an hour old; expired solo runs,
+100 at a time).
 
 ## Armor
 
@@ -363,15 +365,36 @@ current difficulty, with a switcher to the other two, shows the top 20 with the
 player's own runs marked, and an end card says "Filed · #12 all-time on Normal"
 when a run places, or says why it could not file.
 
-A row has a source: `room` when the server filed it from a match, `client` when
-a browser reported it (solo runs, and the rows converted from the old
-per-callsign files). Each board keeps the best 100 of each source, so reports
-from browsers can never push a room's rows off it. `scores.php` refuses a
-cross-site request (403), anything but JSON (415), a seed starting `room:`
-(only the room server files those), and more than 60 reports an hour from one
-address (429; IPv6 addresses count by their /64 and IPv4 ones inside IPv6 by the
-IPv4 address). A solo score is the browser's own claim: the server does not
-play a solo run.
+A row has a source: `room` when the server filed it from a match, `solo` when
+the server played a solo run round by round, `client` for the rows converted
+from the old per-callsign files (a browser's own claim). Each board keeps the
+best 100 of the server-played rows (`room` and `solo` together) and the best
+100 of the claims, so claims can never push a played row off it. A converted
+row whose callsign the blocklist refused is marked `standin`: its `AAA` is not
+anyone's initials.
+
+`scores.php` takes no score on a browser's word. A solo run is three requests,
+each a JSON POST from this site (a cross-site Origin, a missing or wrong CSRF
+header and cookie pair, or anything but JSON is 403; a body over 256 KiB, 413):
+
+- `{op: 'start', seed, difficulty, w}` deals the run on the server and answers
+  only its id, a 128-bit random token. The seed must be printable ASCII and may
+  not start `room:` (only the room server files those).
+- `{op: 'round', run, n, buys, shots, claim}` plays round `n` from the run's
+  stored state (JSON, floats kept) and answers the server's claim. A claim that
+  differs in any of its five fields, or a round the referee refuses, voids the
+  run; a round sent again answers its stored reply; one out of order is 409.
+- `{op: 'file', run, initials}` files a run that is over at the score the
+  server holds, as `solo`, and a filing asked again within the hour answers the
+  same reply.
+
+GET never sends a seed. A run expires two hours after its last request and a
+day after it started; at most 1000 are live at once (503 `busy` past that).
+Every address has hourly caps: 120 starts, `rounds_per_hour` rounds (600) and
+`scores_per_hour` filings (240). IPv6 addresses count by their /64 and IPv4
+ones inside IPv6 by the IPv4 address, so a class behind one campus NAT shares
+one allowance; a 429 holds the run as it is, to be sent again later. Each round
+may take `round_cpu` seconds of CPU (4.0).
 
 ## Drone aim
 
@@ -740,7 +763,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `RoomStandingsTest` (host PHP) | Each human's rounds won, kills, round gain and out round, in the snapshot with the winner's bonus |
 | `RoomFilingTest` (host PHP) | A room files each human once on its Difficulty's board, the winner before the eliminated, leavers not at all, and a failed filing logged and read as not filed |
 | `RoomAgainTest` (host PHP) | Play again keeps code and seats and resets lives, score and cash; a second press is harmless; the lowest human hosts when the host left |
-| `BoardTest`, `ScoresEndpointTest` (host PHP) | The boards (one per difficulty, ties, the trim, per-source keeping, the callsign conversion) and `scores.php` (the converted rows, origin, content type, forged room seeds, the throttle) |
+| `BoardTest`, `ScoresEndpointTest`, `ScoresApiTest` (host PHP) | The boards (one per difficulty, ties, the trim, the verified and claimed pools, a required source, stand-ins, the callsign conversion), `scores.php` as a request (the converted rows in the page's shape, no seeds, a bare score report refused), and every rule of `server/scores-api.php`: origin, CSRF, JSON only, the body cap, the throttles and their /64 and IPv4-in-IPv6 keying, start checks, rounds played from the stored state, claims compared field by field, void, out-of-order and repeated rounds, expiry, the live-run cap, and filing once at the server's score |
 | `RoomArmorTest`, `RoomBuyTest` (host PHP) | Armor carry-over and re-muster, the capped repair, plates, and every shop purchase rule |
 | `phpunit --testsuite tankity-docker`           | `RoomsTest` (the room shelf over its own `php -S`), `RoomsStoreTest` (the store under real concurrency: exact cap under a race, close, sweep, a held writer and the 503, a killed holder), `RoomsRefusedStoreTest` (a store PHP refuses answers JSON 503 on every endpoint, with one log line per request), `RoomsStoreFailureTest` (a database error partway through a save answers JSON 503 and leaves nothing behind) and `RoomsLoadTest` (8 playing rooms, each with 3 seated players and a watcher, polling at the client's pace against the docker site: no 503, p95 under 300 ms). Runs inside the PHP container, which matches the host's PHP (`make test` does) |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (run inside the PHP container)                 |

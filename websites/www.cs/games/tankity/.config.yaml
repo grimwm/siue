@@ -13,6 +13,12 @@
 #                     Unset: games/tankity/data/, else /var/tmp/<user>-tankity/)
 #   journal_mode   <- TANKITY_JOURNAL (wal or delete; otherwise chosen from
 #                     the storage directory's filesystem)
+#   round_cpu      <- TANKITY_ROUND_CPU (seconds of CPU the server may spend
+#                     playing one solo round; default 4.0)
+#   rounds_per_hour <- TANKITY_ROUNDS_PER_HOUR (solo rounds per address an
+#                     hour; default 600)
+#   scores_per_hour <- TANKITY_SCORES_PER_HOUR (solo filings per address an
+#                     hour; default 240)
 #   scores_dir     <- TANKITY_SCORES_DIR (retired: only where score files
 #                     from before the database are imported from; default /var/tmp)
 # Point CONFIG_FILE at another file to load settings from elsewhere.

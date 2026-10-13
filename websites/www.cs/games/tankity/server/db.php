@@ -204,7 +204,9 @@ function tankity_journal_mode(string $dir, ?string $mounts = null): string
 /* The schema, one step per version. A database at version N runs the steps
    after N, each in its own transaction. Step 2 is the boards; step 3 remembers the old score files already
    imported, so a file that outlives its import is never filed twice; step 4 tells
-   a row the server filed from a match from a browser's own claim. */
+   a row the server filed from a match from a browser's own claim; step 5 is the
+   solo runs the server plays, and marks a board row whose initials stand in for
+   a converted name the blocklist refused. */
 function tankity_schema_steps(): array
 {
     return [
@@ -227,6 +229,16 @@ function tankity_schema_steps(): array
             "ALTER TABLE board ADD COLUMN source TEXT NOT NULL DEFAULT 'room'",
             // Before this column only room filing (seed 'room:CODE') and the legacy conversion (a browser's claim) wrote rows.
             "UPDATE board SET source = 'client' WHERE seed NOT LIKE 'room:%'",
+        ],
+        5 => [
+            // state is the run's JSON; reply answers a repeated round, filed a repeated filing.
+            'CREATE TABLE solo_runs (id TEXT PRIMARY KEY, difficulty TEXT NOT NULL, seed TEXT NOT NULL, created INTEGER NOT NULL,
+                touched INTEGER NOT NULL, round INTEGER NOT NULL, status TEXT NOT NULL, state TEXT NOT NULL, reply TEXT NOT NULL,
+                filed TEXT NOT NULL)',
+            'CREATE INDEX solo_runs_touched ON solo_runs (touched)',
+            'ALTER TABLE board ADD COLUMN standin INTEGER NOT NULL DEFAULT 0',
+            // The converted rows no longer say which names were refused; every client AAA is taken for a stand-in.
+            "UPDATE board SET standin = 1 WHERE source = 'client' AND initials = 'AAA'",
         ],
     ];
 }

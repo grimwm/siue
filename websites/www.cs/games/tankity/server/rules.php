@@ -706,7 +706,7 @@ function room_file_seat(array &$room, int $seat): void
     try {
         $rank = board_file(['difficulty' => room_difficulty($room), 'initials' => strtoupper((string) ($s['initials'] ?? 'AAA')),
             'score' => (int) ($room['scores'][$seat] ?? 0), 'rounds' => (int) ($room['stats'][$seat]['won'] ?? 0),
-            'seed' => 'room:' . $room['code']]);
+            'seed' => 'room:' . $room['code'], 'source' => 'room']);
     } catch (Throwable $e) {
         // false, not null: the snapshot tells a filing that failed from a score
         // that filed but made no place. The write was rolled back, and a match

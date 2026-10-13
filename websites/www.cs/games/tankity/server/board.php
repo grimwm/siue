@@ -19,6 +19,8 @@ const BOARD_LEVELS = ['easy', 'normal', 'hard']; // server/ai.php ROOM_DIFFICULT
 const BOARD_KEEP = 100;
 const BOARD_SHOW = 20;
 const BOARD_STANDIN = 'AAA'; // what a converted name the blocklist refuses becomes
+// Who filed a row. 'room' and 'solo' the server played; 'client' is a browser's own claim (the converted old rows).
+const BOARD_SOURCES = ['room' => 'verified', 'solo' => 'verified', 'client' => 'client'];
 
 function board_level(mixed $raw): ?string
 {
@@ -30,33 +32,45 @@ function board_level(mixed $raw): ?string
    the stand-in for a set the guard blocks. */
 function board_convert_name(string $name, ScoreGuard $guard): string
 {
-    $three = ScoreGuard::coerceInitials($name, 'X');
-    return $guard->isBlocked($three) ? BOARD_STANDIN : $three;
+    return board_is_standin($name, $guard) ? BOARD_STANDIN : ScoreGuard::coerceInitials($name, 'X');
+}
+
+/* Whether a callsign converts to the stand-in rather than to its own letters
+   (a callsign "aaa" converts to AAA too, and is no stand-in). */
+function board_is_standin(string $name, ScoreGuard $guard): bool
+{
+    return $guard->isBlocked(ScoreGuard::coerceInitials($name, 'X'));
 }
 
 /* Files a run on its difficulty's board: its 1-based place, or null when it
-   did not make the best BOARD_KEEP of its source. A run's source is 'room' (the
-   server filed it from a match; the default) or 'client' (a browser's own
-   claim). Each source keeps its own best BOARD_KEEP, so no number of client
-   rows can push a room row off; the view ranks both together. */
+   did not make the best BOARD_KEEP of its pool. A run must name its source
+   (BOARD_SOURCES). The rows the server played, room and solo, are one pool
+   and browser claims another; each keeps its own best BOARD_KEEP, so no
+   number of claims can push a played row off, and the view ranks them all
+   together. 'standin' marks initials that stand in for a refused name. */
 function board_file(array $run): ?int
 {
     $level = board_level($run['difficulty'] ?? null);
     if ($level === null) {
         throw new InvalidArgumentException('no such board: ' . var_export($run['difficulty'] ?? null, true));
     }
-    $source = ($run['source'] ?? 'room') === 'client' ? 'client' : 'room';
-    return tankity_tx(tankity_db(), function (PDO $db) use ($run, $level, $source): ?int {
-        $db->prepare('INSERT INTO board (difficulty, initials, score, rounds, seed, at, source) VALUES (?, ?, ?, ?, ?, ?, ?)')->execute([
+    $source = $run['source'] ?? null;
+    if (!is_string($source) || !isset(BOARD_SOURCES[$source])) {
+        throw new InvalidArgumentException('no such source: ' . var_export($source, true));
+    }
+    $pool = array_keys(BOARD_SOURCES, BOARD_SOURCES[$source], true);
+    return tankity_tx(tankity_db(), function (PDO $db) use ($run, $level, $source, $pool): ?int {
+        $db->prepare('INSERT INTO board (difficulty, initials, score, rounds, seed, at, source, standin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')->execute([
             $level, (string) $run['initials'], (int) $run['score'], (int) $run['rounds'],
-            substr((string) $run['seed'], 0, 64), (string) ($run['at'] ?? gmdate('c')), $source,
+            substr((string) $run['seed'], 0, 64), (string) ($run['at'] ?? gmdate('c')), $source, empty($run['standin']) ? 0 : 1,
         ]);
         $id = (int) $db->lastInsertId();
         $q = $db->prepare('SELECT COUNT(*) FROM board WHERE difficulty = ? AND (score > ? OR (score = ? AND id < ?))');
         $q->execute([$level, (int) $run['score'], (int) $run['score'], $id]);
         $place = (int) $q->fetchColumn() + 1;
-        $db->prepare('DELETE FROM board WHERE difficulty = ? AND source = ? AND id NOT IN
-            (SELECT id FROM board WHERE difficulty = ? AND source = ? ORDER BY score DESC, id LIMIT ?)')->execute([$level, $source, $level, $source, BOARD_KEEP]);
+        $in = implode(', ', array_fill(0, count($pool), '?'));
+        $db->prepare("DELETE FROM board WHERE difficulty = ? AND source IN ($in) AND id NOT IN
+            (SELECT id FROM board WHERE difficulty = ? AND source IN ($in) ORDER BY score DESC, id LIMIT ?)")->execute([$level, ...$pool, $level, ...$pool, BOARD_KEEP]);
         $kept = $db->prepare('SELECT COUNT(*) FROM board WHERE id = ?');
         $kept->execute([$id]);
         return (int) $kept->fetchColumn() === 1 ? $place : null;
@@ -66,12 +80,12 @@ function board_file(array $run): ?int
 /* A board's best $n runs with their places. */
 function board_top(string $difficulty, int $n): array
 {
-    $q = tankity_db()->prepare('SELECT initials, score, rounds, seed, at FROM board WHERE difficulty = ? ORDER BY score DESC, id LIMIT ?');
+    $q = tankity_db()->prepare('SELECT initials, score, rounds, seed, at, standin FROM board WHERE difficulty = ? ORDER BY score DESC, id LIMIT ?');
     $q->execute([$difficulty, $n]);
     $out = [];
     foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $i => $r) {
         $out[] = ['initials' => (string) $r['initials'], 'score' => (int) $r['score'], 'rounds' => (int) $r['rounds'],
-            'seed' => (string) $r['seed'], 'at' => (string) $r['at'], 'place' => $i + 1];
+            'seed' => (string) $r['seed'], 'at' => (string) $r['at'], 'place' => $i + 1, 'standin' => (int) $r['standin'] === 1];
     }
     return $out;
 }
@@ -124,7 +138,7 @@ function board_convert_callsigns(int $limit = 200): int
                 board_file(['difficulty' => 'normal', 'initials' => board_convert_name((string) $slug, $guard),
                     'score' => max(0, (int) $best['score']), 'rounds' => max(0, (int) ($best['banked'] ?? 0)),
                     'seed' => (string) ($best['seed'] ?? ''), 'at' => (string) ($best['ts'] ?? '') ?: gmdate('c'),
-                    'source' => 'client']);
+                    'source' => 'client', 'standin' => board_is_standin((string) $slug, $guard)]);
             }
             $db->prepare('DELETE FROM callsigns WHERE slug = ?')->execute([$slug]);
             $moved++;

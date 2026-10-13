@@ -93,7 +93,17 @@ function solo_muster(array &$s): void
     $s['phase'] = 'play';
 }
 
-const SOLO_ROUND_CPU = 2.0; // seconds of CPU one round may take on the server
+// Seconds of CPU one round may take on the server, unless round_cpu says otherwise:
+// over twice the worst recorded honest round measured on the live host.
+const SOLO_ROUND_CPU = 4.0;
+
+/* The round budget: round_cpu (TANKITY_ROUND_CPU) when it is a positive number of seconds, else SOLO_ROUND_CPU. */
+function solo_round_cpu(): float
+{
+    $raw = trim((string) tankity_setting('TANKITY_ROUND_CPU', 'round_cpu', ''));
+    $sec = is_numeric($raw) ? (float) $raw : 0.0;
+    return is_finite($sec) && $sec > 0 ? $sec : SOLO_ROUND_CPU;
+}
 
 /* src/solo.ts soloNextTurn(): the next unit standing, after the one that fired. */
 function solo_next_turn(array &$s): void

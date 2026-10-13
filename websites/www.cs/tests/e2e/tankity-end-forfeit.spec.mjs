@@ -21,7 +21,11 @@ test('when one of the last two humans leaves, the other wins the match; a solo m
   await expect(guest.page.locator('#end-veil')).toBeHidden();
 
   // The guest's round ends the match: the one human left wins, by forfeit.
-  await lobUntil(pair, { guest: LOB }, () => guest.page.evaluate(() => !document.getElementById('end-veil').hidden));
+  // (If the guest's own shots had already won the round, the shop is open: ready up, the leaver's seat is a bot now.)
+  await lobUntil(pair, { guest: LOB }, async () => {
+    if (await guest.page.locator('#shop-veil').isVisible()) await guest.page.locator('#shop-next').click();
+    return guest.page.evaluate(() => !document.getElementById('end-veil').hidden);
+  });
   const veil = guest.page.locator('#end-veil');
   await expect(veil.locator('#end-title')).toContainText('♛ ZED wins');
   await expect(veil.locator('#again')).toHaveText('Play again (same room)');

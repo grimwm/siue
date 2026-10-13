@@ -102,11 +102,13 @@ test('the lobby shows the hills first, hosts under the saved initials, then show
   const [hills, host] = [await box('#lobby-map-picker'), await box('#host-go')];
   expect(hills.y + hills.height).toBeLessThanOrEqual(host.y);
   const saved = await page.evaluate(() => localStorage.getItem('tankity-initials'));
-  await expect(page.locator('#lobby-initials')).toContainText(saved);
+  const boxes = [1, 2, 3].map(n => page.locator(`#lobby-initial-${n}`));
+  for (const [i, b] of boxes.entries()) await expect(b).toHaveValue(saved[i]);
   await expect(page.locator('#host-initials')).toHaveCount(0);
   await page.click('#host-go');
   await expect(page.locator('#lobby-room')).toBeVisible();
   await expect(page.locator('#lobby-rows')).toBeHidden();
+  await expect(page.locator('#lobby-initials')).toBeHidden();
   await expect(page.locator('#lobby-intro')).toBeHidden();
   await page.locator('#lobby-veil .card').screenshot({ path: 'test-results/tankity-lobby-hosted.png' });
   // Leaving brings the forms back.

@@ -31,6 +31,7 @@ export const WEIGHTS = {
   'tankity-hud.spec.mjs': 27,
   'tankity-armor.spec.mjs': 15,
   'tankity-overlays.spec.mjs': 21,
+  'tankity-lobby-initials.spec.mjs': 15,
   'tankity-pickers.spec.mjs': 10,
   'tankity-fullscreen-esc.spec.mjs': 5,
   'tankity-a11y.spec.mjs': 10,

@@ -2,7 +2,7 @@
 // empty, junk, or refuses to save.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validInitials, randomInitials, initialsPref, BLOCKED_INITIALS } from '../src/initials.ts';
+import { validInitials, randomInitials, initialsPref, readInitials, saveInitials, BLOCKED_INITIALS, INITIALS_REFUSED, INITIALS_SHORT } from '../src/initials.ts';
 import { mulberry32 } from '../../_kit/test/rng.ts';
 import { memoryStorage, throwingStorage } from '../../_kit/test/record.ts';
 
@@ -57,4 +57,23 @@ test('storage that throws still gives initials for the session', () => {
   assert.match(got, /^[A-Z]{3}$/);
   p.set('ZED');
   assert.equal(p.get(), 'ZED');
+});
+
+test('the three boxes read as a set, or say why not and which box to fix', () => {
+  assert.deepEqual(readInitials('zed'), { initials: 'ZED' });
+  assert.deepEqual(readInitials('Z D'), { problem: INITIALS_SHORT, box: 1 });
+  assert.deepEqual(readInitials('Z  '), { problem: INITIALS_SHORT, box: 1 });
+  assert.deepEqual(readInitials('   '), { problem: INITIALS_SHORT, box: 0 });
+  assert.deepEqual(readInitials(''), { problem: INITIALS_SHORT, box: 0 });
+  assert.deepEqual(readInitials('ass'), { problem: INITIALS_REFUSED, box: 0 });
+  assert.match(INITIALS_SHORT, /three/);
+  assert.match(INITIALS_REFUSED, /not allowed/);
+});
+
+test('a typed set is saved when allowed; a refused one leaves the saved set and says why', () => {
+  const p = initialsPref(memoryStorage({ 'tankity-initials': 'ZED' }), mulberry32(1));
+  assert.equal(saveInitials(p, 'abc'), '');
+  assert.equal(p.get(), 'ABC');
+  assert.equal(saveInitials(p, 'ASS'), INITIALS_REFUSED);
+  assert.equal(p.get(), 'ABC');
 });

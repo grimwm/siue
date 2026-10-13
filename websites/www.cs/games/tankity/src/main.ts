@@ -40,7 +40,7 @@ import {
 } from './audio.ts';
 import type { AudioConfig } from './audio.ts';
 import { RoomClient, prettyRoomError } from './net.ts';
-import { runWar, warSpeed } from './flow.ts';
+import { runFixed, warSpeed } from './flow.ts';
 import type { HoldCommand } from './input.ts';
 import { createPreview, stepPreview } from './preview.ts';
 import { createReplay } from './replay.ts';
@@ -57,7 +57,7 @@ import { createTutorial } from './tutorial.ts';
 import { createGuns } from './guns.ts';
 import { createScores } from './scores.ts';
 import { createMatch } from './match.ts';
-import { soloOneUps } from './solo.ts';
+import { SOLO_STEP, soloOneUps } from './solo.ts';
 import { createRoom } from './room.ts';
 import { createLobby } from './lobby.ts';
 import { createMenu } from './menu.ts';
@@ -266,6 +266,7 @@ function togglePreview(): void {
 
 /* ---------- main loop ---------- */
 let lastT = 0;
+let warAcc = 0;
 function frame(ts: number): void {
   requestAnimationFrame(frame);
   // The music watchdog re-pins a wedged scheduler to the live clock; it never
@@ -301,7 +302,10 @@ function frame(ts: number): void {
   if (G.over) { pumpDialogue(dt); render(); renderHUD(); return; }
   G.time += dt;
   decayFx(dt);
-  fallTanks(dt);
+  // In the war, tanks fall inside its fixed steps (below), shells or no
+  // shells; anywhere else they fall by the frame.
+  const war = G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle';
+  if (!war) fallTanks(dt);
   tickTutorial();
   for (const cl of G.clouds) {
     cl.x += cl.v * dt;
@@ -348,13 +352,17 @@ function frame(ts: number): void {
         }
       }
     }
-  } else if (G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle') {
-    // With the player's tank wrecked the drones play on at triple speed.
-    runWar(dt, warSpeed(me().hp > 0, G.demo), (d, i) => {
-      if (i > 0) fallTanks(d);
-      stepWar(d);
+  } else if (war) {
+    // Fixed SOLO_STEP steps whatever the frame rate, each dropping the tanks
+    // and then moving the war on (server/flight.php takes the same steps);
+    // with the player's tank wrecked the drones play on at triple speed.
+    warAcc = runFixed(warAcc, dt * warSpeed(me().hp > 0, G.demo), SOLO_STEP, h => {
+      fallTanks(h);
+      stepWar(h);
       return !G.over && (G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle');
     });
+  } else {
+    warAcc = 0;
   }
   updateCamera(dt);
   render();

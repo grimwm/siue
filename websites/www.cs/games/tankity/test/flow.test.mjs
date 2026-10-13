@@ -2,7 +2,7 @@
 // legal in which phase; this checks every legal move, that every other pair is
 // rejected, and walks a whole match from the demo to the match-over veil.
 import { check } from '../../_kit/test/check.ts';
-import { PHASES, EVENTS, FLOW, transition, WATCH_SPEED, warSpeed, runWar } from '../src/flow.ts';
+import { PHASES, EVENTS, FLOW, transition, WATCH_SPEED, warSpeed } from '../src/flow.ts';
 
 
 // Every legal transition, written out independently of the table.
@@ -81,24 +81,9 @@ go('matchStart'); expect('a rematch starts over', 'banner');
 
 check('the script visited every phase', PHASES.every(p => trail.includes(p)), trail.join(' '));
 
-// The war speeds up once the player's tank is wrecked: three sub-steps a
-// frame, each the normal step, until the phase leaves think/fly/settle.
+// The war speeds up threefold once the player's tank is wrecked.
 check('watch speed is triple', WATCH_SPEED === 3);
 check('normal speed while the player stands', warSpeed(true, false) === 1);
 check('triple speed once the player is wrecked', warSpeed(false, false) === 3);
 check('the demo never speeds up', warSpeed(false, true) === 1 && warSpeed(true, true) === 1);
-{
-  // A fake clock: 60 frames of 1/60 s. A drone that needs 2 s of think time
-  // fires after 120 frames at normal speed and after 40 when watched.
-  const frames = speed => {
-    let thinkT = 2, f = 0;
-    while (thinkT > 0 && f < 1000) { f++; runWar(1 / 60, speed, d => { thinkT -= d; return thinkT > 0; }); }
-    return f;
-  };
-  check('a think delay takes 120 frames at normal speed', Math.abs(frames(1) - 120) <= 1, String(frames(1)));
-  check('a think delay takes a third of the frames when watched', Math.abs(frames(warSpeed(false, false)) - 40) <= 1, String(frames(3)));
-  let steps = 0;
-  check('runWar runs speed sub-steps of the same dt', runWar(0.05, 3, d => { steps += d; return true; }) === 3 && Math.abs(steps - 0.15) < 1e-9);
-  check('runWar stops when the phase leaves the war', runWar(0.05, 3, () => false) === 1);
-}
 

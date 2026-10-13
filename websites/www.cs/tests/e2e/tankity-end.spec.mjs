@@ -40,8 +40,10 @@ test('a lost match shows the end card: result, the rounds table, where it was fi
 
   // Keyboard: focus lands on Continue, and Esc leaves the card (and fullscreen) alone.
   await expect(page.locator('#again')).toBeFocused();
+  await page.evaluate(() => { window.__exits = 0; const x = document.exitFullscreen; document.exitFullscreen = function () { window.__exits++; return x ? x.call(document) : Promise.resolve(); }; });
   await page.keyboard.press('Escape');
   await expect(veil).toBeVisible();
+  expect(await page.evaluate(() => window.__exits)).toBe(0);
 
   // Both phone shapes: no sideways scroll, and Continue stays in view without scrolling the page.
   for (const size of [{ width: 852, height: 393 }, { width: 393, height: 852 }]) {

@@ -173,6 +173,18 @@ test('overlay: Space and Enter press the focused button (the end card\'s Play ag
   assert.deepEqual(calls, []);
 });
 
+test('shop: after a Buy click drops its focus, Enter buys the selected row, not the row last clicked', () => {
+  const input = rig();
+  const bought = [];
+  let selected = 0;
+  input.register({ buy: () => { bought.push(selected); return true; }, selDown: () => { selected++; return true; } }, { overlayOpen: t => t.tagName === 'BUTTON', shopLive: () => true });
+  // The click on row 0's Buy blurred it (shop.tsx), so the focus is on the page; the arrow moves the selection.
+  const onPage = o => ({ ...ev(o), target: { tagName: 'BODY' }, preventDefault: () => {} });
+  input.keydown(onPage({ code: 'ArrowDown', key: 'ArrowDown' }));
+  input.keydown(onPage({ code: 'Enter', key: 'Enter' }));
+  assert.deepEqual(bought, [1]);
+});
+
 test('overlay: Ctrl never presses the focused button', () => {
   const input = rig();
   let clicked = 0;

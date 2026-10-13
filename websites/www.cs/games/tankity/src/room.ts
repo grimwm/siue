@@ -19,7 +19,7 @@ import { stepArm } from './input.ts';
 import type { Input } from './input.ts';
 import { prettyRoomError, shouldCatchUp } from './net.ts';
 import type { RoomClient } from './net.ts';
-import { filedLine, matchOutcome, roomBoard } from './standings.ts';
+import { matchOutcome, roomBoard, roomFiledLine } from './standings.ts';
 import { focusEndVeil } from './ui/endveil.tsx';
 import type { Board, RoomCard } from './standings.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
@@ -574,9 +574,7 @@ export function createRoom(deps: RoomDeps) {
     END.text = '';
     END.score = room.you ? `You banked $${room.you.cash || 0} · ${room.you.score || 0} pts` : '';
     END.board = { ...board, caption: '', title: '' };
-    END.filed = !room.you ? null
-      : room.you.filed ? filedLine(room.you.filedRank, room.you.score || 0, room.difficulty)
-      : room.you.filedFailed ? "Couldn't file your score: the score server had a problem. It is not kept in this browser." : null;
+    END.filed = roomFiledLine(room.you, room.difficulty);
     END.buttons = card;
     renderEndVeil();
     const veil = $('end-veil');

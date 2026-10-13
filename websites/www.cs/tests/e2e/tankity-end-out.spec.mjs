@@ -29,8 +29,9 @@ test("a player out of lives sees the you're-out card once; Menu → Standings br
         }
         if (!told) {
           told = true;
+          // The next seq after the newest real event, so the client's cursor is at most one event ahead.
           const top = Math.max(0, ...(j.room.events || []).map(e => e.seq || 0));
-          j.room.events = [...(j.room.events || []), { seq: top + 1000, t: 'eliminated', seat: j.room.you.seat }];
+          j.room.events = [...(j.room.events || []), { seq: top + 1, t: 'eliminated', seat: j.room.you.seat }];
         }
         body = JSON.stringify(j);
       }
@@ -76,6 +77,14 @@ test("a player out of lives sees the you're-out card once; Menu → Standings br
   await host.page.keyboard.press('Escape');
   await expect(hveil).toBeHidden();
   expect(await exits(host.page)).toBe(0);
+
+  // Leave room on an end card (the over card's button is the same one) lands on the title card.
+  await guest.page.click('#btn-menu');
+  await guest.page.click('#menu-standings');
+  await expect(gveil.locator('#end-leave')).toBeVisible();
+  await gveil.locator('#end-leave').click();
+  await expect(guest.page.locator('#title-card')).toBeVisible({ timeout: 5_000 });
+  await expect(gveil).toBeHidden();
   expect(host.errors).toEqual([]);
   expect(guest.errors).toEqual([]);
   await host.ctx.close(); await guest.ctx.close();

@@ -1,7 +1,7 @@
 // This match's scoreboards (src/standings.ts): the room's match-end rule first.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BOARD_KEEP, endCardEscape, filedLine, fmt, matchOutcome, roomBoard, soloBoard } from '../src/standings.ts';
+import { BOARD_KEEP, endCardEscape, filedLine, fmt, matchOutcome, roomBoard, roomFiledLine, soloBoard } from '../src/standings.ts';
 
 const seats = (...lives) => lives.map((l, seat) => ({ seat, human: l !== null, lives: l ?? 0 }));
 
@@ -99,4 +99,12 @@ test('Esc on an end card: back to the battle, watch the finish, or keep the card
   assert.equal(endCardEscape('out'), 'watch');
   assert.equal(endCardEscape('over'), 'stay');
   assert.equal(endCardEscape('solo'), 'pass');
+});
+
+test('a room card says where the score went, or why it did not, and nothing before the server tried', () => {
+  const you = o => ({ filed: false, filedFailed: false, filedRank: null, score: 4200, ...o });
+  assert.equal(roomFiledLine(you({ filed: true, filedRank: 3 }), 'normal'), 'Filed · #3 all-time on Normal');
+  assert.match(roomFiledLine(you({ filedFailed: true }), 'normal'), /^Couldn't file your score: .+/);
+  assert.equal(roomFiledLine(you({}), 'normal'), null);
+  assert.equal(roomFiledLine(undefined, 'normal'), null);
 });

@@ -2,12 +2,14 @@
 // The scores overlay (src/ui/scores.tsx): one difficulty's board with the
 // player's own runs marked, a switcher to the others, and no form. Also the
 // filing that feeds it (src/scores.ts): a failure always has words.
-import { test } from 'node:test';
+import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { click, document, makeEl } from '../../_kit/test/dom-stub.mjs';
 import { importTsx } from '../../_kit/test/tsx.ts';
 
 globalThis.document = document;
+const realFetch = globalThis.fetch, realWindow = globalThis.window;
+afterEach(() => { globalThis.fetch = realFetch; globalThis.window = realWindow; });
 const { scores, logic } = await importTsx(import.meta.dirname, { scores: '../src/ui/scores.tsx', logic: '../src/scores.ts' });
 const walk = (el, out = []) => { for (const c of el.children || []) { if (c.nodeType === 1) { out.push(c); walk(c, out); } } return out; };
 const byId = (el, id) => walk(el).find(n => n.id === id);
@@ -155,7 +157,23 @@ test('opening Scores starts on the current difficulty and reads the board again'
   s.openScores();
   assert.equal(s.SCORES.level, 'hard');
   assert.equal(s.SCORES.rows, null, 'no other board\'s rows under the pressed button');
+  assert.equal(s.SCORES.note, 'Loading…');
   await new Promise(r => setTimeout(r, 0));
   assert.equal(asked[asked.length - 1], 'scores.php?difficulty=hard');
   assert.equal(asked.length, 3, 'every open reads the board again');
+});
+
+test('reopening Scores shows the last board read, not a blank list, until the fresh one returns', async () => {
+  globalThis.window = { localStorage: memory() };
+  let release;
+  const first = { ok: true, status: 200, json: async () => ({ scores: [{ name: 'AAA', best: 5, banked: 1, place: 1 }] }) };
+  globalThis.fetch = async () => first;
+  const s = logic.createScores({ $: () => makeEl('report-overlay'), keyHint: () => '', say() {}, toggleOverlay() {}, initials: () => 'WGR', difficulty: () => 'normal' });
+  await s.loadScores('normal');
+  globalThis.fetch = () => new Promise(r => { release = () => r(first); });
+  s.openScores();
+  assert.equal(s.SCORES.rows.length, 1, 'the last board stays up');
+  assert.equal(s.SCORES.note, 'Loading…');
+  release(); await new Promise(r => setTimeout(r, 0));
+  assert.match(s.SCORES.note, /all-time board/);
 });

@@ -29,6 +29,13 @@ export function filedLine(rank: number | null, score: number, difficulty: Diffic
   return rank !== null ? `Filed · #${rank} all-time on ${on}` : `Filed · ${fmt(score)} pts, outside the best ${BOARD_KEEP} on ${on}`;
 }
 
+/** The filed line of a room card: where the score went, why it did not, or nothing while the server has not tried. */
+export function roomFiledLine(you: { filed: boolean; filedFailed: boolean; filedRank: number | null; score: number } | undefined, difficulty: Difficulty): string | null {
+  if (!you) return null;
+  if (you.filed) return filedLine(you.filedRank, you.score || 0, difficulty);
+  return you.filedFailed ? "Couldn't file your score: the score server had a problem. It is not kept in this browser." : null;
+}
+
 /** One finished solo round. */
 export interface SoloRound { round: number; won: boolean; points: number; kills: number; cash: number; lives: number }
 

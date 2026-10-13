@@ -57,6 +57,7 @@ export function createScores(deps: ScoresDeps) {
      the player has since left would otherwise show another difficulty's rows
      under the pressed button. */
   let loads = 0;
+  let shown: Difficulty | null = null; // the board SCORES.rows holds
   async function loadScores(level: Difficulty = difficulty()): Promise<void> {
     // AAA is also what the board shows for a name its blocklist refuses, so those rows cannot be told apart: none is marked.
     const me = initials().toUpperCase() === 'AAA' ? '' : initials().toUpperCase();
@@ -71,12 +72,14 @@ export function createScores(deps: ScoresDeps) {
         text: `#${r.place} ${r.name} \u00b7 ${fmt(r.best)} pts \u00b7 ${r.banked} rounds won`, mine: !!me && r.name.toUpperCase() === me,
       }));
       SCORES.note = `The all-time board on ${DIFFICULTY_NAMES[level]}. Your runs are marked.`;
+      shown = level;
     } catch (_) {
       if (mine !== loads) return;
       // A row with no difficulty counts as Normal.
       SCORES.rows = localRows.get().filter(r => (r.difficulty ?? 'normal') === level)
         .map((r, i) => ({ text: `#${i + 1} ${r.name} \u00b7 ${fmt(r.score)} pts \u00b7 ${r.banked} rounds won`, mine: !!me && r.name.toUpperCase() === me }));
       SCORES.note = `The score server is out of reach: these are this browser's runs on ${DIFFICULTY_NAMES[level]} only.`;
+      shown = level;
     }
     renderScoresOverlay();
   }
@@ -84,8 +87,9 @@ export function createScores(deps: ScoresDeps) {
      Difficulty may have changed, and a room match files on the server unseen. */
   function openScores(): void {
     SCORES.level = difficulty();
-    SCORES.rows = null;
-    SCORES.note = '';
+    // The last board read stays up while the fresh one loads, when it is this board's.
+    if (shown !== SCORES.level) SCORES.rows = null;
+    SCORES.note = 'Loading…';
     renderScoresOverlay();
     void loadScores();
   }

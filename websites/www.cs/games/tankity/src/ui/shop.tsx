@@ -27,8 +27,9 @@ interface ShopRowText {
   icon: ShopIcon;
 }
 
-/** The Shell: always loaded, so it has no number and no Buy button. */
-export interface ShopFreeRow extends ShopRowText { kind: 'free'; weapon: string }
+/** The Shell: always loaded, so it has no number and no Buy button. The keys
+ *  still reach it, so V previews it like any other shell. */
+export interface ShopFreeRow extends ShopRowText { kind: 'free'; weapon: string; selected: boolean }
 
 export interface ShopItemRow extends ShopRowText {
   kind: 'item';
@@ -99,18 +100,28 @@ function Body({ row, draw, rev, children }: { row: ShopRowText; draw: ShopProps[
   );
 }
 
+/** Whether the element and every ancestor are shown (a hidden veil lays nothing out). */
+function laidOut(el: HTMLElement): boolean {
+  for (let n: Node | null = el; n; n = n.parentNode) if ((n as { hidden?: unknown }).hidden === true) return false;
+  return true;
+}
+
 export function Shop(p: ShopProps) {
   const list = useRef<HTMLUListElement>(null);
   const shownSel = useRef(-1);
   const scrolled = useRef(0); // where the player left the list
-  const sel = p.entries.find((e): e is ShopItemRow => e.kind === 'item' && e.selected)?.index ?? -1;
+  const picked = p.entries.find((e): e is ShopItemRow | ShopFreeRow => (e.kind === 'item' || e.kind === 'free') && e.selected);
+  const sel = !picked ? -2 : picked.kind === 'free' ? -1 : picked.index;
   // Riding the selection with the keys keeps the highlighted row in view.
   // Redraws that leave it alone (buys, pack counts, room polls) keep the
   // scroll exactly: a row that rewraps would otherwise let the browser's
-  // scroll anchoring nudge the list.
+  // scroll anchoring nudge the list. A draw into the hidden veil cannot
+  // scroll (nothing is laid out), so it does not count as showing the
+  // selection: the first draw after the veil opens brings the row into view.
   useLayoutEffect(() => {
     const el = list.current;
     if (!el) return;
+    if (!laidOut(el)) { shownSel.current = NaN; return; }
     if (shownSel.current === sel) {
       if (el.scrollTop !== scrolled.current) el.scrollTop = scrolled.current;
       return;
@@ -135,9 +146,9 @@ export function Shop(p: ShopProps) {
             if (e.kind === 'cat') return <li class="shop-cat" key={`cat:${e.name}`}>{e.name}</li>;
             if (e.kind === 'free') {
               return (
-                <li class="shop-free" key="free">
+                <li class={e.selected ? 'shop-free sel' : 'shop-free'} key="free">
                   <Body row={e} draw={p.drawIcon} rev={p.arsenalRev}>
-                    <button type="button" onClick={blurThen(() => p.onPreview(e.weapon))}>Preview</button>
+                    <button type="button" onClick={blurThen(() => p.onPreview(e.weapon))}>Preview <Key at="shop:preview" bare /></button>
                   </Body>
                 </li>
               );

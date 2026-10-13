@@ -433,7 +433,7 @@ const TANKITY_KEY_ACTIONS = [
     'aim' => ['barrelLeft', 'barrelRight', 'powerUp', 'powerDown', 'driveLeft', 'driveRight'],
     'shop' => ['selUp', 'selDown', 'qtyUp', 'qtyDown', 'buyRow', 'buy', 'preview', 'close', 'next'],
     'global' => ['music', 'nextTrack', 'sound', 'log', 'help', 'report', 'random', 'rooms', 'new', 'guns',
-        'tutorial', 'battlePreview', 'fullscreen', 'fire', 'escape'],
+        'gunStock', 'tutorial', 'battlePreview', 'fullscreen', 'fire', 'escape'],
     'scroll' => ['lineDown', 'lineUp', 'pageDown', 'pageUp', 'halfDown', 'halfUp'],
 ];
 

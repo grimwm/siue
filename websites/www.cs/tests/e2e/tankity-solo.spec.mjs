@@ -81,6 +81,49 @@ test('J and K walk the shop rows like the arrows', async ({ browser }) => {
   await expect(page.locator('#nav-shop')).toContainText('J');
 });
 
+test('the arrows reach every shop row on a short screen, and V previews any shell', async ({ browser }) => {
+  const { page, errors } = await newPlayer(browser);
+  await page.setViewportSize({ width: 852, height: 393 });
+  await page.keyboard.press('n');
+  await page.waitForSelector('#shop-veil:not([hidden])');
+  const rows = page.locator('#shop-list li:not(.shop-cat)');
+  const selName = () => page.locator('#shop-list li.sel .shop-name').textContent();
+  const selInView = () => page.locator('#shop-list li.sel').evaluate(el => {
+    const r = el.getBoundingClientRect(), l = el.parentElement.getBoundingClientRect();
+    // Most of the row shows (on a short screen a row can be taller than the list).
+    return Math.min(r.bottom, l.bottom) - Math.max(r.top, l.top) >= 0.8 * Math.min(r.height, l.height);
+  });
+  // The shop opens on Buckshot, scrolled into sight (it used to sit below a
+  // short list, out of view, so Up seemed to do nothing).
+  await expect.poll(selName).toMatch(/^1\. Buckshot/);
+  expect(await selInView()).toBe(true);
+  // Up reaches the free Shell row, and V previews it.
+  await page.keyboard.press('ArrowUp');
+  await expect.poll(selName).toMatch(/^Shell ∞/);
+  expect(await selInView()).toBe(true);
+  await page.keyboard.press('v');
+  await expect(page.locator('#preview-veil')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#preview-veil')).toBeHidden();
+  // Down walks every row in turn, locked and unaffordable ones included.
+  const total = await rows.count();
+  const seen = [await selName()];
+  for (let i = 1; i < total; i++) {
+    await page.keyboard.press('ArrowDown');
+    seen.push(await selName());
+    expect(await selInView()).toBe(true);
+  }
+  expect(new Set(seen).size).toBe(total);
+  // A locked shell still previews.
+  for (let i = 0; i < total; i++) await page.keyboard.press('ArrowUp');
+  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowDown');
+  await expect.poll(selName).toMatch(/^5\. Flak/);
+  await expect(page.locator('#shop-list li.sel button', { hasText: 'Locked' })).toBeDisabled();
+  await page.keyboard.press('v');
+  await expect(page.locator('#preview-veil')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test('firing the last round of a weapon loads the Shell again', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
   await startSolo(page);

@@ -32,7 +32,9 @@ test('the weapon picker shows the whole rack and loads with keys or clicks', asy
   await page.keyboard.press('g');
   const tiles = page.locator('#gun-grid .gun-choice');
   await expect(page.locator('#gun-overlay')).toBeVisible();
-  expect(await tiles.count()).toBe(4); // Shell, Buckshot, Mortar, Rail
+  // Every gun shows; past Shell, Buckshot, Mortar and Rail none are in stock.
+  expect(await tiles.count()).toBeGreaterThan(4);
+  expect(await page.locator('#gun-grid .gun-choice:not([aria-disabled="true"])').count()).toBe(4);
   await expect(tiles.first()).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('j');
@@ -50,6 +52,56 @@ test('the weapon picker shows the whole rack and loads with keys or clicks', asy
   await page.click('#gun-grid .gun-choice >> nth=0');
   expect(await hud(page, 'hud-weapon')).toMatch(/^Shell /);
   await expect(page.locator('#gun-overlay')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('the weapon picker greys out guns with none in stock, and I shows only the ones in stock', async ({ browser }) => {
+  const { page, errors } = await newPlayer(browser);
+  await startSolo(page);
+  await page.keyboard.press('g');
+  await expect(page.locator('#gun-overlay')).toBeVisible();
+  const tiles = page.locator('#gun-grid .gun-choice');
+  const all = await tiles.count();
+  const empty = page.locator('#gun-grid .gun-choice[aria-disabled="true"]');
+  expect(await empty.count()).toBeGreaterThan(0);
+  await expect(page.locator('#gun-stock')).toHaveText(/^Show: All/);
+  // The cursor walks every tile, greyed ones included.
+  const cursorAt = () => tiles.evaluateAll(els => els.findIndex(e => e.classList.contains('cursor')));
+  for (let i = 1; i < all; i++) {
+    await page.keyboard.press('j');
+    expect(await cursorAt()).toBe(i);
+  }
+  // Enter on a greyed gun loads nothing and says why; the picker stays open.
+  const firstEmpty = await tiles.evaluateAll(els => els.findIndex(e => e.getAttribute('aria-disabled') === 'true'));
+  for (let i = all - 1; i > firstEmpty; i--) await page.keyboard.press('k');
+  expect(await cursorAt()).toBe(firstEmpty);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#gun-overlay')).toBeVisible();
+  expect(await page.locator('#log').textContent()).toMatch(/None in stock: /);
+  expect(await hud(page, 'hud-weapon')).toMatch(/^Shell /);
+  // A pointer reaches it too, to read its note, and a click does nothing more.
+  await empty.first().hover();
+  await expect(empty.first()).toHaveAttribute('title', /None in stock\./);
+  await empty.first().click({ force: true }); // Playwright counts aria-disabled as not clickable; a pointer still can
+  await expect(page.locator('#gun-overlay')).toBeVisible();
+  // I (or the button) shows only the guns in stock, and the choice is remembered.
+  await page.keyboard.press('i');
+  await expect(page.locator('#gun-stock')).toHaveText(/^Show: In stock/);
+  await expect(empty).toHaveCount(0);
+  const stocked = await tiles.count();
+  expect(stocked).toBeLessThan(all);
+  const box = await page.locator('#gun-stock').boundingBox();
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#gun-overlay')).toBeHidden();
+  await page.reload();
+  await startSolo(page);
+  await page.keyboard.press('g');
+  await expect(page.locator('#gun-stock')).toHaveText(/^Show: In stock/);
+  await expect(tiles).toHaveCount(stocked);
+  await page.click('#gun-stock');
+  await expect(page.locator('#gun-stock')).toHaveText(/^Show: All/);
+  await expect(tiles).toHaveCount(all);
   expect(errors).toEqual([]);
 });
 

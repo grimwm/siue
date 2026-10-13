@@ -37,6 +37,8 @@ export interface OverlayHeadProps {
   kickerId?: string;
   titleId: string;
   title: string;
+  /** Controls that sit in the bar beside the × (the weapon picker's toggle). */
+  tools?: ComponentChildren;
   /** With a close handler the bar has the × button; its id is `closeId`. */
   closeId?: string;
   onClose?: () => void;
@@ -47,16 +49,17 @@ export interface OverlayHeadProps {
   nav: ComponentChildren;
 }
 
-/** Title bar: title left, key hints centre, × right, on the grid in game.css. */
+/** Title bar: title left, any tools then × right, key hints below, on the grid in game.css. */
 export function OverlayHead(p: OverlayHeadProps) {
   const hint = useContext(KeyHints);
   const esc = hint('global', 'escape', 0);
   return (
-    <header class="ov-head">
+    <header class={p.tools ? 'ov-head has-tools' : 'ov-head'}>
       <div class="ov-title">
         {p.kicker !== undefined && <p class="kicker" id={p.kickerId}>{p.kicker}</p>}
         <h2 id={p.titleId}>{p.title}</h2>
       </div>
+      {p.tools && <div class="ov-tools">{p.tools}</div>}
       {p.onClose && (
         <button type="button" class="ov-x" id={p.closeId} aria-label="Close" title={esc ? `Close (${esc})` : 'Close'}
           onClick={ev => { ev.currentTarget.blur(); p.onClose?.(); }}>

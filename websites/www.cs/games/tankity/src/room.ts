@@ -271,10 +271,11 @@ export function createRoom(deps: RoomDeps) {
       G.phase = 'shop';
       // Polls repeat the shop phase; only arriving in it shuts open panels.
       if (MATCH.lastPhase !== 'shop') { closePreview(); closeOverlays(); }
-      renderShop();
+      // Shown first, then drawn: only a laid-out list can bring the
+      // highlighted row into view.
       const veil = $('shop-veil');
       if (veil) veil.hidden = false;
-      refreshNavHints();
+      renderShop();
       if (MATCH.lastPhase === 'play') talk('tank', 'Shopping! Then back to bam bam.', true);
     } else if (room.phase === 'over') {
       G.over = true;

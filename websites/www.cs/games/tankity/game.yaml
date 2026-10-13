@@ -473,6 +473,7 @@ keys:
     rooms: [o]
     new: [n]
     guns: [g]
+    gunStock: [i]
     tutorial: [u]
     battlePreview: [v]
     fullscreen: [f]

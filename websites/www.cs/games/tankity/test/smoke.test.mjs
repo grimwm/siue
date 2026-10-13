@@ -624,7 +624,7 @@ await (async () => {
   // headers, the free Shell row, and six rows to buy. Each row holds an icon
   // canvas and a text div whose last child is the acts row.)
   const shopLis = () => els['shop-list'].children.slice(-9);
-  const shopRows = () => shopLis().filter(li => li.children.length === 2 && li.className !== 'shop-free');
+  const shopRows = () => shopLis().filter(li => li.children.length === 2 && !String(li.className).split(' ').includes('shop-free'));
   const rowName = li => li.children[1].children[0].textContent;
   const actsOf = li => li.children[1].children[3]; // the text column's fourth child, under the description
   const buyRow = label => {
@@ -670,6 +670,23 @@ await (async () => {
     check('shop-repair-greyed-at-full', acts.children[acts.children.length - 1].disabled === true && /Armor full \(100 of 100\)/.test(repairRow.textContent),
       repairRow.textContent);
   }
+  // The keys reach every row: Up from the first priced row (Buckshot) lands
+  // on the free Shell, where V previews it and B only says it is free.
+  const freeLi = () => shopLis().find(li => String(li.className).split(' ').includes('shop-free'));
+  check('shop-opens-on-first-row', shopRows()[0].className === 'sel', shopRows().map(li => li.className).join(','));
+  TAP('shop', 'selUp'); frames(3);
+  check('shop-up-reaches-shell', freeLi().className === 'shop-free sel' && shopRows().every(li => li.className === ''),
+    freeLi().className);
+  TAP('shop', 'selUp'); frames(3);
+  check('shop-up-stops-at-shell', freeLi().className === 'shop-free sel');
+  const cashAtShell = els['shop-cash'].textContent;
+  TAP('shop', 'buy'); frames(3);
+  check('shop-shell-buy-says-free', /free and always loaded/.test(logTail()) && els['shop-cash'].textContent === cashAtShell, logTail());
+  TAP('shop', 'preview'); frames(3);
+  check('shop-shell-preview', els['preview-veil'].hidden === false);
+  TAP('shop', 'close'); frames(3);
+  TAP('shop', 'selDown'); frames(3);
+  check('shop-down-back-to-first-row', shopRows()[0].className === 'sel' && freeLi().className === 'shop-free');
   // Keyboard alone can shop: arrows highlight, Enter buys, digits buy outright.
   TAP('shop', 'selDown'); frames(3);
   check('shop-keys', shopRows()[1].className === 'sel', shopRows().map(li => li.className).join(','));
@@ -777,6 +794,27 @@ await (async () => {
   const qLog = logText();
   for (let n = 1; n <= 4; n++) pickTile(n);
   const cycleNames = [...logText().matchAll(/Loaded: (\w+)\./g)].map(m => m[1]);
+  // The picker shows every gun, the empty ones greyed out (aria-disabled);
+  // loading one only says none are in stock. I shows just the guns in stock.
+  {
+    TAP('global', 'guns'); frames(2);
+    const tiles = () => els['gun-grid'].children;
+    const nuke = () => tiles().find(t => /NUKE/.test(t.textContent));
+    const all = tiles().length;
+    check('guns-show-all', !!nuke() && nuke().getAttribute('aria-disabled') === 'true'
+      && tiles()[0].getAttribute('aria-disabled') === undefined, `${all} tiles`);
+    const n = tiles().indexOf(nuke()) + 1;
+    if (n <= 9) { keyDown(String(n), 'Digit' + n); keyUp(String(n), 'Digit' + n); frames(2); }
+    else click(nuke());
+    check('guns-empty-pick-says-none', els['gun-overlay'].hidden === false && /None in stock: NUKE/.test(logText()), logTail());
+    TAP('global', 'gunStock'); frames(2);
+    check('guns-in-stock-only', tiles().length < all && !nuke() && tiles().every(t => t.getAttribute('aria-disabled') === undefined)
+      && /In stock/.test(els['gun-stock'].textContent), `${tiles().length}`);
+    TAP('global', 'gunStock'); frames(2);
+    check('guns-show-all-again', tiles().length === all && /All/.test(els['gun-stock'].textContent));
+    TAP('global', 'guns'); frames(2);
+    check('guns-closed', els['gun-overlay'].hidden === true);
+  }
   // Watch the canvas: blast discs must match their weapon radii exactly,
   // and the camera zoom must stay inside its sane range.
   const boomR = [];

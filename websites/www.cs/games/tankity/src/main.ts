@@ -50,7 +50,7 @@ import { renderHelp } from './ui/help.tsx';
 import { drawShellIcon as paintShellIcon, drawGearIcon as paintGearIcon } from './ui/icons.ts';
 import { createChatter, pick, TANK_IDLE, FOE_IDLE } from './chatter.ts';
 import { createEffects, FX, FX_BUDGET } from './effects.ts';
-import { createShop } from './shop.ts';
+import { SHELL_ROW, createShop } from './shop.ts';
 import { createHud } from './hud.ts';
 import { createView } from './view.ts';
 import { createTutorial } from './tutorial.ts';
@@ -128,7 +128,7 @@ function buildArsenal(data: ArsenalData | null | undefined): boolean {
   if (!a) return false;
   ARSENAL_REV++;
   ARSENAL = a; WEAPONS = a.weapons; WORDER = a.order; SHOP = a.shop; GEAR = a.gear;
-  G.shopSel = clamp(G.shopSel || 0, 0, SHOP.length - 1);
+  G.shopSel = clamp(G.shopSel || 0, SHELL_ROW, SHOP.length - 1);
   return true;
 }
 function applyArsenal(data: ArsenalData | null | undefined): void {
@@ -447,7 +447,7 @@ const {
 });
 /* The field shop (src/shop.ts): prices, rows, buying, the Ready line. */
 const {
-  openShop, hideShop, renderShop, renderShopReady, buyItem, shopSelect, shopQtyUp, shopQtyDown,
+  openShop, hideShop, renderShop, renderShopReady, buyItem, buySelected, previewSelected, shopSelect, shopQtyUp, shopQtyDown,
 } = createShop({
   G, $, tables, net, sfx, me, touch: TOUCH, keyHint, say, advance, render, renderHUD, refreshNavHints,
   drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil: () => openLeaveVeil(), netBuy: (it, qty) => netBuy(it, qty),
@@ -455,7 +455,7 @@ const {
 /* The weapon picker (src/guns.ts). */
 const {
   GUN_COLS, rackGuns, gunsOpen, openGuns, closeGuns, renderGuns, pickGun, moveGunCursor, gunGrid,
-  cursorAt: gunCursorAt,
+  cursorAt: gunCursorAt, toggleStock: toggleGunStock,
 } = createGuns({
   G, $, tables, net, sfx, keyHint, say, refreshNavHints, renderHUD, drawShellIcon, demoBlock,
   netPick: w => netPick(w),
@@ -620,12 +620,8 @@ function bindKeys(): void {
       buyItem(row, G.shopQty);
       return true;
     },
-    buy: () => { buyItem(SHOP[G.shopSel]!, G.shopQty); return true; },
-    preview: () => {
-      const it = SHOP[G.shopSel];
-      if (it && it.kind === 'ammo') { openPreview(it.w!); return true; }
-      return 'quiet'; // V does nothing else in the shop
-    },
+    buy: () => { buySelected(); return true; },
+    preview: () => (previewSelected() ? true : 'quiet'), // V does nothing else in the shop
     // Esc in the shop shuts the firing range first, then any open panel (the
     // menu can sit above the shop), and with nothing open it opens the menu.
     // It never starts the round: that is N or the Start button.
@@ -663,6 +659,7 @@ function bindKeys(): void {
       else freshMatchFromSeedBox();
     },
     guns: () => { if (gunsOpen()) closeGuns(); else openGuns(); },
+    gunStock: () => { if (gunsOpen()) toggleGunStock(); },
     tutorial: () => { tutorialOpen(); },
     battlePreview: () => { togglePreview(); },
     fullscreen: () => { toggleFullscreen(); },

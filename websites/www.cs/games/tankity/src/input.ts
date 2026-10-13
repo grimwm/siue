@@ -33,7 +33,7 @@ export type HoldCommand = 'barrelLeft' | 'barrelRight' | 'powerUp' | 'powerDown'
 type ShopCommand = 'selUp' | 'selDown' | 'qtyUp' | 'qtyDown' | 'buyRow' | 'buy' | 'preview' | 'close' | 'next';
 type GlobalCommand =
   | 'music' | 'sound' | 'log' | 'help' | 'report' | 'random' | 'rooms' | 'new'
-  | 'guns' | 'nextTrack' | 'tutorial' | 'battlePreview' | 'fullscreen' | 'fire' | 'escape';
+  | 'guns' | 'gunStock' | 'nextTrack' | 'tutorial' | 'battlePreview' | 'fullscreen' | 'fire' | 'escape';
 type ScrollCommand = 'lineDown' | 'lineUp' | 'pageDown' | 'pageUp' | 'halfDown' | 'halfUp';
 /** Keys no one rebinds: how a grid (the gun picker) is walked and loaded. */
 type GridCommand = 'gridLeft' | 'gridRight' | 'gridUp' | 'gridDown' | 'confirm' | 'digit';
@@ -62,7 +62,7 @@ export const FALLBACK_KEYS: KeyDefs = Object.freeze({
   }),
   global: Object.freeze({
     music: ['m'], nextTrack: ['BracketRight', ']'], sound: ['e'], log: ['l'], help: ['h'],
-    report: ['r'], random: ['t'], rooms: ['o'], new: ['n'], guns: ['g'], tutorial: ['u'],
+    report: ['r'], random: ['t'], rooms: ['o'], new: ['n'], guns: ['g'], gunStock: ['i'], tutorial: ['u'],
     battlePreview: ['v'], fullscreen: ['f'],
     fire: ['Space', ' ', 'ControlLeft', 'ControlRight', 'Control'],
     escape: ['Escape'],

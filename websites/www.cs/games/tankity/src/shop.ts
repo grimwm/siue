@@ -45,6 +45,9 @@ export interface ShopDeps {
   netBuy(it: ShopRow, qty: number): void;
 }
 
+/** G.shopSel on the free Shell row, which sits above the shelf's first row. */
+export const SHELL_ROW = -1;
+
 export function createShop(deps: ShopDeps) {
   const {
     G, $, tables, net, sfx, me, touch, keyHint, say, advance, render, renderHUD, refreshNavHints,
@@ -54,12 +57,16 @@ export function createShop(deps: ShopDeps) {
   function openShop(): void {
     advance('shopOpen');
     G.shopQty = 1;
-    renderShop();
-    const veil = $('shop-veil');
-    if (veil) veil.hidden = false;
-    refreshNavHints(); // only a shown list has a height to measure
+    showShop();
     render();
     renderHUD();
+  }
+  /* Show the veil, then draw: only a shown list is laid out, so only then can
+     the highlighted row be scrolled into view (and the nav hints measured). */
+  function showShop(): void {
+    const veil = $('shop-veil');
+    if (veil) veil.hidden = false;
+    renderShop();
   }
   function hideShop(): void {
     const veil = $('shop-veil');
@@ -95,7 +102,7 @@ export function createShop(deps: ShopDeps) {
   function renderShop(): void {
     const veil = $('shop-veil');
     if (!veil || !G.ammo) return; // no match has dealt a hand yet
-    G.shopSel = clamp(G.shopSel || 0, 0, tables.shop.length - 1);
+    G.shopSel = clamp(G.shopSel || 0, SHELL_ROW, tables.shop.length - 1);
     G.shopQty = clamp(G.shopQty || 1, 1, 9);
     const ready = shopReadyView();
     shopReadyShown = ready.sig;
@@ -111,7 +118,7 @@ export function createShop(deps: ShopDeps) {
         // heads the shells with no number and no Buy button.
         if (it.kind === 'ammo' && !shellRowShown) {
           shellRowShown = true;
-          entries.push(shellShopRow());
+          entries.push(shellShopRow(G.shopSel === SHELL_ROW));
         }
       }
       const locked = (it.minRound || 0) > G.round;
@@ -154,6 +161,20 @@ export function createShop(deps: ShopDeps) {
     });
     refreshNavHints();
   }
+  /* Buy or preview what the keys have highlighted. The Shell row has nothing
+     to buy, so B there only says so. */
+  function buySelected(): void {
+    const row = tables.shop[G.shopSel];
+    if (row) buyItem(row, G.shopQty);
+    else say(`The ${tables.weapons.shell!.name} is free and always loaded.`, 'info');
+  }
+  function previewSelected(): boolean {
+    const row = tables.shop[G.shopSel];
+    const w = row ? (row.kind === 'ammo' ? row.w : undefined) : 'shell';
+    if (!w) return false;
+    openPreview(w);
+    return true;
+  }
   /* Every row names the goods on one line and the numbers below it. */
   /* One pack price shared by the menu, the till, and the affordable count. */
   function packPrice(it: ShopRow): number {
@@ -172,10 +193,11 @@ export function createShop(deps: ShopDeps) {
     }
     return { name: it.label, vals: `($${price})` };
   }
-  function shellShopRow(): ShopFreeRow {
+  function shellShopRow(selected: boolean): ShopFreeRow {
     return {
       kind: 'free',
       weapon: 'shell',
+      selected,
       name: tables.weapons.shell!.name,
       vals: '∞ (free)',
       sub: shopSub({ kind: 'ammo', w: 'shell' }),
@@ -251,7 +273,8 @@ export function createShop(deps: ShopDeps) {
     }
     // After a buy the pack count only ever drops, down to what the chest
     // can still cover for the highlighted row.
-    G.shopQty = Math.max(1, Math.min(G.shopQty, maxPacks(tables.shop[G.shopSel]!)));
+    const row = tables.shop[G.shopSel];
+    G.shopQty = row ? Math.max(1, Math.min(G.shopQty, maxPacks(row))) : 1;
     renderShop();
     renderHUD();
   }
@@ -301,8 +324,11 @@ export function createShop(deps: ShopDeps) {
         say(`Bought ${lots}${it.label}.`, 'good');
     }
   }
+  /* The keys walk every row: the free Shell (SHELL_ROW) above the priced
+  // rows, locked rows and ones the chest cannot cover, so Preview always
+  // has a row to act on. Only Buy turns down what cannot be bought. */
   function shopSelect(dir: number): boolean {
-    G.shopSel = clamp(G.shopSel + dir, 0, tables.shop.length - 1);
+    G.shopSel = clamp(G.shopSel + dir, SHELL_ROW, tables.shop.length - 1);
     sfx.play('click');
     renderShop();
     return true;
@@ -310,7 +336,8 @@ export function createShop(deps: ShopDeps) {
   /* Qty keys pick how many packs ride on every buy, capped at what the chest
   // can cover for that row. */
   function shopQtyUp(): boolean {
-    const max = Math.max(1, maxPacks(tables.shop[G.shopSel]!));
+    const row = tables.shop[G.shopSel];
+    const max = row ? Math.max(1, maxPacks(row)) : 1;
     if (G.shopQty < max) { G.shopQty++; sfx.play('click'); }
     else sfx.play('thud');
     renderShop();
@@ -325,5 +352,5 @@ export function createShop(deps: ShopDeps) {
     return true;
   }
 
-  return { openShop, hideShop, renderShop, renderShopReady, buyItem, shopSelect, shopQtyUp, shopQtyDown };
+  return { openShop, hideShop, renderShop, renderShopReady, buyItem, buySelected, previewSelected, shopSelect, shopQtyUp, shopQtyDown };
 }

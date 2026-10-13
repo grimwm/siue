@@ -16,7 +16,6 @@ import { inviteUrl, prettyRoomError } from './net.ts';
 import type { RoomClient } from './net.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
-import type { ScoresState } from './scores.ts';
 import type { KeyHintFn } from './ui/chrome.tsx';
 import { drawMapIcon } from './ui/icons.ts';
 import { renderLeave as drawLeave } from './ui/leave.tsx';
@@ -53,7 +52,6 @@ export interface LobbyDeps {
   MATCH: MatchState;
   HUD: Pick<HudValues, 'online'>;
   END: EndState;
-  SCORES: { formHidden: boolean };
   replay: Replay;
   sfx: Pick<typeof SfxApi, 'play'>;
   /** The Menu's Difficulty: a hosted room takes it for good. */
@@ -78,15 +76,14 @@ export interface LobbyDeps {
   paintHud(): void;
   refreshNavHints(): void;
   renderMenu(): void;
-  renderScoresOverlay(): void;
   renderShop(): void;
 }
 
 export function createLobby(deps: LobbyDeps) {
   const {
-    G, $, net, MATCH, HUD, END, SCORES, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
+    G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
     closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, savedInitials, hideShop, paintHud, refreshNavHints, renderMenu,
-    renderScoresOverlay, renderShop,
+    renderShop,
   } = deps;
 
   /* ---------- game rooms: server-hosted multiplayer ---------- */
@@ -368,8 +365,6 @@ export function createLobby(deps: LobbyDeps) {
     replay.clear(); MATCH.pendingRoom = null;
     MATCH.aimDirty = false;
     G.over = false;
-    SCORES.formHidden = true;
-    renderScoresOverlay();
     const veil = $('lobby-veil');
     if (veil) veil.hidden = true;
     net.apply(room);
@@ -441,8 +436,6 @@ export function createLobby(deps: LobbyDeps) {
     replay.clear(); MATCH.pendingRoom = null; MATCH.myTurn = false; MATCH.lastPhase = ''; MATCH.lastTurn = -1; MATCH.lastRound = -1;
     MATCH.out = false; MATCH.outShown = false; MATCH.lastRoom = null;
     END.buttons = 'solo'; END.board = null; END.filed = null;
-    SCORES.formHidden = false;
-    renderScoresOverlay();
     hideShop();
     if ($('end-veil')) $('end-veil')!.hidden = true;
     if ($('lobby-veil')) $('lobby-veil')!.hidden = true;

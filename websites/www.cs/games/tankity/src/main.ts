@@ -416,8 +416,8 @@ const { updateCamera, shownAngle, shownPower, render } = createView({
   G, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
 /* The high scores (src/scores.ts). */
-const { SCORES, renderScoresOverlay, loadScores } = createScores({
-  G, $, keyHint, say, toggleOverlay,
+const { renderScoresOverlay, loadScores, fileSolo } = createScores({
+  $, keyHint, say, toggleOverlay, initials: () => getInitials(), difficulty: () => difficulty.get(),
 });
 /* The coach (src/tutorial.ts). */
 const {
@@ -445,7 +445,7 @@ const {
   tutorialFired, backToTitle: () => backToTitle(),
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
   netFire: () => netFire(), netLeave: quiet => netLeave(quiet), netNext: want => netNext(want),
-  netAgain: () => netAgain(), initials: getInitials, fileSolo: (_run, done) => done(''),
+  netAgain: () => netAgain(), initials: getInitials, fileSolo: (run, done) => { void fileSolo(run, done); },
 });
 /* The field shop (src/shop.ts): prices, rows, buying, the Ready line. */
 const {
@@ -478,11 +478,11 @@ const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
   netLeave, netAgain, netBackToLobby,
 } = createLobby({
-  G, $, net, MATCH, HUD, END, SCORES, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
+  G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
   closeOverlays, closePreview, endTutorial, hideShop, savedInitials: getInitials, paintHud, refreshNavHints,
   renderMenu: () => renderMenu(),
   closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
-  renderScoresOverlay, renderShop,
+  renderShop,
 });
 /* The game menu's settings (src/menu.ts). */
 const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({

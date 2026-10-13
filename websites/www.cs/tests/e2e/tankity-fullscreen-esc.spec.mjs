@@ -1,7 +1,8 @@
 // websites/www.cs/tests/e2e/tankity-fullscreen-esc.spec.mjs
 // Esc never takes the player out of full screen: in Tankity's /play/ page,
 // where the game runs in a frame, full screen holds through a weapon preview
-// opened from the shop and one opened over the gun picker, each shut with Esc.
+// opened from the shop, one over the gun picker, and the Scores overlay, each
+// shut with Esc.
 // Chrome only leaves full screen on a real Esc unless the page holds Esc with
 // Keyboard Lock, and a frame's lock() is refused, so this checks that the
 // lock is taken, and granted, on the top-level page. (A test's Esc never
@@ -75,6 +76,16 @@ test('Esc on a weapon preview, from the shop and over the gun picker, keeps the 
   expect(await full()).toBe('frame');
   await page.keyboard.press('Escape');
   await expect(game.locator('#gun-overlay')).toBeHidden();
+  expect(await full()).toBe('frame');
+
+  // The Scores overlay, opened from the menu, with its board switcher focused: Esc closes it, full screen holds.
+  await game.locator('#btn-menu').click();
+  await game.locator('#scores-open').click();
+  await expect(game.locator('#report-overlay')).toBeVisible();
+  await game.locator('#scores-level-hard').click();
+  await expect(game.locator('#scores-level-hard')).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Escape');
+  await expect(game.locator('#report-overlay')).toBeHidden();
   expect(await full()).toBe('frame');
 
   // No lock was asked of the frame (Chrome refuses it there), and none was refused anywhere.

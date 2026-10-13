@@ -10,12 +10,11 @@ import { click, fire, submit, document, makeEl, els } from '../../_kit/test/dom-
 
 globalThis.document = document;
 
-const UI = ['shop', 'lobby', 'guns', 'scores', 'log', 'tutorial', 'leave'];
+const UI = ['shop', 'lobby', 'guns', 'log', 'tutorial', 'leave'];
 const ui = await importTsx(import.meta.dirname, Object.fromEntries(UI.map(n => [n, `../src/ui/${n}.tsx`])));
 const { renderShop } = ui.shop;
 const { renderLobby } = ui.lobby;
 const { renderGuns } = ui.guns;
-const { renderScores } = ui.scores;
 const { renderLog } = ui.log;
 const { renderTutorial } = ui.tutorial;
 const { renderLeave } = ui.leave;
@@ -447,41 +446,6 @@ function gunTiles(n = 10, loaded = 0) {
     && /None in stock/.test(attr(emptyTile, 'title')), attr(emptyTile, 'aria-disabled'));
   click(emptyTile);
   check('guns-empty-tile-click-reports', calls.pick.join() === 'gun2');
-}
-
-// ---- scores ----
-{
-  const section = makeEl('report-overlay');
-  section.hidden = false;
-  const calls = { close: 0, filed: [] };
-  const sp = (over = {}) => ({ keyHint, onClose: () => { calls.close++; }, rows: null, note: '', formHidden: false, onFile: n => calls.filed.push(n), ...over });
-  renderScores(section, sp());
-  const [head, form, list, note] = section.children;
-  check('scores-shape', hasClass(head, 'ov-head') && text(byId(head, 'score-h')) === 'Scores' && byId(head, 'report-close') && attr(byId(head, 'nav-report'), 'data-scroll-only') === ''
-    && form.id === 'score-form' && hasClass(form, 'seedbox') && list.id === 'scores' && hasClass(list, 'scores') && list.localName === 'ol'
-    && note.id === 'scores-note' && hasClass(note, 'hint'));
-  click(byId(head, 'report-close'));
-  check('scores-close-calls-back', calls.close === 1);
-  check('scores-form', text(form.children[0]) === 'Callsign' && attr(byId(form, 'name-input'), 'maxLength') === '24'
-    && attr(byId(form, 'name-input'), 'placeholder') === 'e.g. tankity' && text(byId(form, 'save-score')) === 'File report' && attr(byId(form, 'save-score'), 'type') === 'submit');
-  check('scores-before-load-shows-nothing', list.children.length === 0 && text(note) === '');
-  renderScores(section, sp({ rows: [] , note: 'Showing reports from file store.' }));
-  check('scores-empty', list.children.length === 1 && text(list.children[0]) === 'No after-action reports filed yet. Be the first legend.' && text(note) === 'Showing reports from file store.');
-  renderScores(section, sp({ rows: ['ZED: 4200 pts (3 rounds won)', 'ABC: 100 pts (0 rounds won)'], note: 'Showing reports from file store.' }));
-  check('scores-rows', list.children.length === 2 && list.children.every(li => li.localName === 'li') && text(list.children[0]) === 'ZED: 4200 pts (3 rounds won)');
-  byId(form, 'name-input').value = '  zed ';
-  submit(form);
-  check('scores-submit-reports-the-box-as-typed', calls.filed.join('|') === '  zed ', JSON.stringify(calls.filed));
-  check('scores-form-visible', !form.style.display);
-  renderScores(section, sp({ rows: ['a'], formHidden: true }));
-  check('scores-form-hidden-for-rooms', form.style.display === 'none' && byId(form, 'name-input').value === '  zed ');
-  renderScores(section, sp({ rows: ['a'] }));
-  check('scores-form-back', !form.style.display && section.children[1] === form);
-  section.scrollTop = 40;
-  fire(section, 'scroll');
-  section.scrollTop = 0;
-  renderScores(section, sp({ rows: ['a', 'b'] }));
-  check('scores-reload-keeps-scroll', section.scrollTop === 40, String(section.scrollTop));
 }
 
 // ---- leave question ----

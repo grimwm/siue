@@ -60,6 +60,10 @@ test('a lost match shows the end card: result, scoreboard, score, and Continue b
   await expect(veil.locator('#rematch')).toHaveCount(0);
   await expect(veil.locator('#end-leave')).toHaveCount(0);
 
+  // The run filed itself and the card says how it went: always a line, never a blank, and never still "Filing".
+  await expect(page.locator('#end-filed')).toBeVisible();
+  await expect(page.locator('#end-filed')).toHaveText(/^(Filed ·|Couldn't file your score: )/);
+
   // Keyboard: focus lands on Continue, and Esc leaves the card (and fullscreen) alone.
   await expect(page.locator('#again')).toBeFocused();
   await page.keyboard.press('Escape');
@@ -98,5 +102,25 @@ test('a lost match shows the end card: result, scoreboard, score, and Continue b
   }, { timeout: 30_000 }).toMatch(/YOU|Aim/);
   expect(await hud(page, 'hud-lives')).toBe('♥ 3');
   await expect(veil).toBeHidden();
+
+  // Scores: the board switcher at phone width has no sideways scroll, 44 px targets, and works from the keyboard.
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.click('#btn-menu');
+  await page.click('#scores-open');
+  await expect(page.locator('#report-overlay')).toBeVisible();
+  await expect(page.locator('#scores-level-normal')).toHaveAttribute('aria-pressed', 'true');
+  const sw = await page.evaluate(() => {
+    const de = document.documentElement;
+    const hs = ['easy', 'normal', 'hard'].map(l => document.getElementById('scores-level-' + l).getBoundingClientRect());
+    const o = document.getElementById('report-overlay');
+    return { sideways: de.scrollWidth > de.clientWidth || o.scrollWidth > o.clientWidth, minH: Math.min(...hs.map(r => r.height)), minW: Math.min(...hs.map(r => r.width)) };
+  });
+  expect(sw.sideways).toBe(false);
+  expect(sw.minH).toBeGreaterThanOrEqual(44);
+  expect(sw.minW).toBeGreaterThanOrEqual(44);
+  await page.locator('#scores-level-easy').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#scores-level-easy')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#scores-level-normal')).toHaveAttribute('aria-pressed', 'false');
   expect(errors).toEqual([]);
 });

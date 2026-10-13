@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildArsenal, SPAWN_GAP, TUNE, surfY } from '../src/sim.ts';
-import { soloAim, soloDeal, soloMuster, soloSettle, soloNextTurn, soloOneUps, snapTanks } from '../src/solo.ts';
+import { soloAim, soloBuy, soloDeal, soloMuster, soloSettle, soloNextTurn, soloOneUps, snapTanks } from '../src/solo.ts';
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const arsenal = buildArsenal(GAME.arsenal);
@@ -116,4 +116,31 @@ test('snapTanks puts standing tanks on the ground and leaves wrecks where they h
   assert.equal(a.vy, 0);
   assert.equal(b.y, 5);
   assert.equal(b.vy, 3);
+});
+
+const row = key => arsenal.shop.find(r => (r.w ?? r.g) === key);
+
+test('the shop: round-one goods before round one, later goods wait', () => {
+  const G = fresh('shop');
+  assert.deepEqual(soloBuy(G, row('mortar'), 1), { ok: true, qty: 1, total: 200 });
+  assert.equal(G.ammo.mortar, 2);
+  assert.equal(soloBuy(G, row('cluster'), 1).why, 'locked');
+});
+
+test('one-shot tricks never stack; Repair buys only what fills the hull', () => {
+  const G = fresh('shop');
+  assert.deepEqual(soloBuy(G, row('shield'), 3), { ok: true, qty: 1, total: 250 });
+  assert.equal(soloBuy(G, row('repair'), 1).why, 'full');
+  G.armor = 30;
+  assert.deepEqual(soloBuy(G, row('repair'), 9), { ok: true, qty: 2, total: 240 });
+  assert.equal(G.armor, 100);
+});
+
+test('a plate and the chest', () => {
+  const G = fresh('shop');
+  G.cash = 299;
+  assert.equal(soloBuy(G, row('plate'), 1).why, 'cash');
+  G.cash = 300;
+  soloBuy(G, row('plate'), 1);
+  assert.deepEqual([G.plate, G.armor, G.cash], [1, 125, 0]);
 });

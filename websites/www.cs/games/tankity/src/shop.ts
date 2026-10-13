@@ -10,7 +10,8 @@ import type { FlowEvent } from './flow.ts';
 import type { GameState, GameTank, Tables } from './game-types.ts';
 import type { Board } from './standings.ts';
 import type { RoomClient } from './net.ts';
-import { PLATE_ARMOR, armorLabel, maxArmor, plateNote, repairNote, repairPacksWanted, repairRestores } from './armor.ts';
+import { armorLabel, maxArmor, plateNote, repairNote, repairPacksWanted } from './armor.ts';
+import { soloBuy } from './solo.ts';
 import { TUNE, clamp } from './sim.ts';
 import type { ShopRow } from './sim.ts';
 import type { sfx as SfxApi } from './audio.ts';
@@ -18,9 +19,8 @@ import type { KeyHintFn } from './ui/chrome.tsx';
 import { renderShop as drawShop } from './ui/shop.tsx';
 import type { ShopEntry, ShopFreeRow } from './ui/shop.tsx';
 
-/** The slice of the game's state the shop reads and writes (main.ts's G). */
-export type ShopState = Pick<GameState, 'ammo' | 'shopSel' | 'shopQty' | 'round' | 'cash' | 'phase' | 'tanks' | 'lives'
-  | 'score' | 'shield' | 'jammer' | 'bunker' | 'laststand' | 'plate' | 'armor' | 'fuelBank'>;
+/** The shop reads and writes the whole game state; soloBuy needs the referee's slice of it. */
+export type ShopState = GameState;
 
 /** What the shop needs from the page and the rest of the game. */
 export interface ShopDeps {
@@ -250,77 +250,54 @@ export function createShop(deps: ShopDeps) {
   }
   function buyItem(it: ShopRow, qty?: number): void {
     qty = clamp(Math.floor(qty || 1), 1, 9);
-    if (it.effect === 'repair') {
-      const want = repairPacksWanted(G.armor, G.plate, it.n);
-      if (want === 0) { say('Armor is full already.', 'info'); return; }
-      qty = Math.min(qty, want);
-    }
-    if (net.on) { netBuy(it, qty); return; }
-    const total = packPrice(it) * qty;
-    if ((it.minRound || 0) > G.round) {
-      say(`That unlocks in round ${it.minRound}.`, 'info');
+    if (net.on) {
+      // A room says the local line first; the server would answer 409.
+      if (it.effect === 'repair' && repairPacksWanted(G.armor, G.plate, it.n) === 0) { say('Armor is full already.', 'info'); return; }
+      netBuy(it, qty);
       return;
     }
-    if (G.cash < total) {
-      say(`That costs $${total}, and the chest holds $${G.cash}.`, 'info');
+    const lives = G.lives;
+    const r = soloBuy(G, it, qty);
+    if (!r.ok) {
+      if (r.why === 'locked') say(`That unlocks in round ${it.minRound}.`, 'info');
+      else if (r.why === 'full') say('Armor is full already.', 'info');
+      else say(`That costs $${r.total}, and the chest holds $${G.cash}.`, 'info');
       return;
     }
-    G.cash -= total;
     sfx.play('cash');
-    const lots = qty > 1 ? `${qty} × ` : '';
-    if (it.kind === 'ammo') {
-      G.ammo![it.w!] = (G.ammo![it.w!] || 0) + it.n * qty;
-      say(`Bought ${lots}${it.label}.`, 'good');
-    } else {
-      applyGear(it, qty, lots);
-    }
+    const lots = r.qty > 1 ? `${r.qty} × ` : '';
+    if (it.kind === 'ammo') say(`Bought ${lots}${it.label}.`, 'good');
+    else boughtLine(it, lots, lives);
     // After a buy the pack count only ever drops, down to what the chest
-    // can still cover for the highlighted row.
+    // can still cover for the highlighted row; the free Shell row has none.
     const row = tables.shop[G.shopSel];
     G.shopQty = row ? Math.max(1, Math.min(G.shopQty, maxPacks(row))) : 1;
     renderShop();
     renderHUD();
   }
-  /* One-shot and banked gear, shared by every shelf row that is not ammo. */
-  function applyGear(it: ShopRow, qty: number, lots: string): void {
-    const n = (it.n || 0) * qty;
+  /* What a trick purchase says, from the state soloBuy left. */
+  function boughtLine(it: ShopRow, lots: string, livesBefore: number): void {
     switch (it.effect) {
       case 'repair':
-        G.armor += repairRestores(G.armor, G.plate, it.n || 0, qty);
+      case 'plate':
         say(`Bought ${lots}${it.label}: armor ${armorLabel(G.armor, G.plate)}.`, 'good');
         break;
       case 'fuel':
-        G.fuelBank += n;
         say(`Bought ${lots}${it.label}, banked for next round.`, 'good');
         break;
-      case 'plate':
-        G.plate += qty;
-        G.armor += PLATE_ARMOR * qty;
-        say(`Bought ${lots}${it.label}: armor ${armorLabel(G.armor, G.plate)}.`, 'good');
-        break;
       case 'shield':
-        G.shield = true;
         say(`Bought ${it.label}. Next hit bounces off.`, 'good');
         break;
       case 'extralife':
-        if (G.lives < TUNE.maxLives) {
-          G.lives += 1;
-          say(`Bought ${it.label}! (${G.lives}/${TUNE.maxLives} lives)`, 'good');
-        } else {
-          G.score += 500;
-          say('Max lives already, so take +500 points instead!', 'good');
-        }
+        say(G.lives > livesBefore ? `Bought ${it.label}! (${G.lives}/${TUNE.maxLives} lives)` : 'Max lives already, so take +500 points instead!', 'good');
         break;
       case 'jammer':
-        G.jammer = Math.max(G.jammer, n);
         say(`Bought ${it.label}. Drones aim shaky for ${G.jammer} rounds.`, 'good');
         break;
       case 'bunker':
-        G.bunker = Math.max(G.bunker, n);
         say(`Bought ${it.label}. Dug in for ${G.bunker} rounds.`, 'good');
         break;
       case 'laststand':
-        G.laststand = true;
         say(`Bought ${it.label}. Go down glowing.`, 'good');
         break;
       default:

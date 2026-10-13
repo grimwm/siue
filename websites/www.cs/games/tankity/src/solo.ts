@@ -6,10 +6,10 @@
  * or Math.random, so the same seed deals the same match anywhere. */
 import { aiChoose, pickTactic } from './ai.ts';
 import type { AimChoice } from './ai.ts';
-import { carryArmor, maxArmor } from './armor.ts';
+import { carryArmor, fitPlates, maxArmor, repairPacksWanted, repairRestores } from './armor.ts';
 import { WATCH_TURNS } from './flow.ts';
 import { TUNE, clamp, droneRack, fieldWidthOk, gauss, genTerrain, hashSeed, mulberry32, spawnSpots, surfY } from './sim.ts';
-import type { Arsenal, Cloud, Difficulty, Hills, Tank, World } from './sim.ts';
+import type { Arsenal, Cloud, Difficulty, Hills, ShopRow, Tank, World } from './sim.ts';
 
 /** Every war step is this long. */
 export const SOLO_STEP = 1 / 60;
@@ -181,4 +181,40 @@ export function soloAim(G: SoloState, arsenal: Arsenal, t: SoloTank): AimChoice 
   const plan = aiChoose(G, arsenal, t);
   if (plan.tactic) G.tactics[t.id] = plan.tactic;
   return plan;
+}
+
+/** Tricks that do their one thing once: buying more is money on fire. */
+export const ONE_SHOT: ReadonlySet<string> = new Set(['shield', 'extralife', 'laststand']);
+
+export type BuyResult = { ok: true; qty: number; total: number } | { ok: false; why: 'locked' | 'cash' | 'full'; total: number };
+
+/** One purchase, by server/rules.php room_buy()'s rules. */
+export function soloBuy(G: SoloState, row: ShopRow, qtyIn: number): BuyResult {
+  let qty = clamp(Math.floor(qtyIn || 1), 1, 9);
+  if ((row.minRound || 0) > G.round) return { ok: false, why: 'locked', total: 0 };
+  if (row.kind === 'gear' && ONE_SHOT.has(row.effect || '')) qty = 1;
+  if (row.effect === 'repair') {
+    const want = repairPacksWanted(G.armor, G.plate, row.n);
+    if (want === 0) return { ok: false, why: 'full', total: 0 };
+    qty = Math.min(qty, want);
+  }
+  const total = (row.price || 0) * qty;
+  if (G.cash < total) return { ok: false, why: 'cash', total };
+  G.cash -= total;
+  if (row.kind === 'ammo') {
+    G.ammo![row.w!] = (G.ammo![row.w!] || 0) + row.n * qty;
+    return { ok: true, qty, total };
+  }
+  const n = (row.n || 0) * qty;
+  switch (row.effect) {
+    case 'repair': G.armor += repairRestores(G.armor, G.plate, row.n || 0, qty); break;
+    case 'fuel': G.fuelBank += n; break;
+    case 'plate': { const h = fitPlates({ armor: G.armor, plates: G.plate }, qty); G.armor = h.armor; G.plate = h.plates; break; }
+    case 'shield': G.shield = true; break;
+    case 'extralife': if (G.lives < TUNE.maxLives) G.lives += 1; else G.score += 500; break;
+    case 'jammer': G.jammer = Math.max(G.jammer, n); break;
+    case 'bunker': G.bunker = Math.max(G.bunker, n); break;
+    case 'laststand': G.laststand = true; break;
+  }
+  return { ok: true, qty, total };
 }

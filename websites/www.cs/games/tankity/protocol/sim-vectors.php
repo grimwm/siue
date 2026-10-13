@@ -723,6 +723,9 @@ $tactic('lobber-with-area-guns', array_replace($scene('lobber', ['ammo' => ['rai
 foreach ([2, 9, 31] as $seed) {
     $tactic("lobber-plain-shells-seed$seed", array_replace($scene('lobber'), ['seed' => $seed, 'turns' => 2]));
 }
+// A ridge between them stops every high arc short, so the lobber falls back to flat shots.
+$tactic('lobber-falls-back-to-flat-behind-a-ridge', ['terrain' => ['flat' => 400, 'set' => [[300, 500, 60]]], 'wind' => 1, 'round' => 3, 'seed' => 12,
+    'shooter' => 1, 'turns' => 2, 'tanks' => [$human(250, 80), $drone(530, 100) + ['dirS' => -1, 's' => 'lobber']]]);
 foreach ([1, 4, 8, 16] as $seed) {
     $tactic("dry-spell-flips-seed$seed", array_replace($scene('bully'), ['seed' => $seed, 'turns' => 9, 'round' => 6]));
 }

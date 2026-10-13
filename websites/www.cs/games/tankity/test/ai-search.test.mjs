@@ -21,42 +21,54 @@ const COARSE = 11 * 7;
 const FINE = 8;
 const BRACKET = 1 + 5 * 7 + 8 + 8; // the last shot measured, then 6-, 3- and 1-step grids
 
-/* One drone turn on flat ground; how many planning flights each gun flew. */
+/* One drone turn on flat ground; how many planning flights each gun flew.
+   A flight is simShot reading the wind (aiChoose never does) after looking
+   its gun up, so how often aiChoose itself looks a gun up does not count. */
 function turn({ s = 'hunter', ammo = {}, brk, targetX = 560, wind = 0 } = {}) {
   const flown = {};
+  let gun = null;
   const weapons = new Proxy(arsenal.weapons, {
     get(t, k) {
-      if (typeof k === 'string' && k in t) flown[k] = (flown[k] || 0) + 1;
+      if (typeof k === 'string' && k in t) gun = k;
       return t[k];
     },
   });
   const drone = { id: 'D', isPlayer: false, x: 120, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo, s, brk };
   const human = { id: 'P', isPlayer: true, x: targetX, y: 400, hp: 100, angle: 45, power: 50, dirS: -1, fuel: 80, vy: 0, ammo: {} };
-  const G = { tanks: [drone, human], terrain: Array(720).fill(400), wind, round: 1, difficulty: 'normal', score: 0, jammer: 0,
-    rng: mulberry32(7) };
+  const G = new Proxy({ tanks: [drone, human], terrain: Array(720).fill(400), wind, round: 1, difficulty: 'normal', score: 0, jammer: 0,
+    rng: mulberry32(7) }, {
+    get(t, k) {
+      if (k === 'wind' && gun !== null) {
+        flown[gun] = (flown[gun] || 0) + 1;
+        gun = null;
+      }
+      return t[k];
+    },
+  });
   const choice = aiChoose(G, { ...arsenal, weapons }, drone);
   return { flown, choice };
 }
 
 test('a fresh aim flies a coarse grid and the fine neighbours of its best, per arc', () => {
   const { flown } = turn();
-  assert.equal(flown.shell, 1 + COARSE + FINE); // one read is the arc check
+  assert.equal(flown.shell, COARSE + FINE);
 });
 
 test('a fresh aim searches each distinct arc the same way', () => {
   const { flown } = turn({ ammo: { buck: 2, heavy: 2, needle: 2 } });
-  assert.equal(flown.shell, 1 + COARSE + FINE);
-  assert.equal(flown.heavy, 1 + COARSE + FINE);
-  assert.equal(flown.needle, 1 + COARSE + FINE);
-  assert.equal(flown.buck, 1);
+  assert.equal(flown.shell, COARSE + FINE);
+  assert.equal(flown.heavy, COARSE + FINE);
+  assert.equal(flown.needle, COARSE + FINE);
+  assert.equal(flown.buck, undefined, 'buck flies the shell\'s arc');
 });
 
 test('a lobber searches the high arcs coarse to fine', () => {
   const { flown } = turn({ s: 'lobber', ammo: { cluster: 2 } });
   const high = Math.ceil((156 - (25 + 6 * Math.ceil((LOB_ANGLE + 1 - 25) / 6))) / 12);
-  // area guns only (cluster), read again by the area check; flat arcs only when no high one lands near
-  assert.ok(flown.cluster <= 2 + high * 7 + FINE + 3 * 7 + FINE, `cluster flown ${flown.cluster}`);
-  assert.ok(flown.cluster >= 2 + high * 7 + FINE - 3, `cluster flown ${flown.cluster}`); // fine neighbours past the grid's edge are skipped
+  // area guns only (cluster); flat arcs only when no high one lands near
+  assert.ok(flown.cluster <= high * 7 + FINE + 3 * 7 + FINE, `cluster flown ${flown.cluster}`);
+  assert.ok(flown.cluster >= high * 7 + FINE - 3, `cluster flown ${flown.cluster}`); // fine neighbours past the grid's edge are skipped
+  assert.deepEqual(Object.keys(flown), ['cluster']);
 });
 
 test('a bracket correction searches coarse to fine around the last aim', () => {

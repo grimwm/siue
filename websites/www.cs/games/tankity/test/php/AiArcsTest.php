@@ -68,6 +68,8 @@ final class AiArcsTest extends TestCase
                     $tries[] = $v * 0.2;
                 } elseif (is_bool($v)) {
                     $tries[] = !$v;
+                } elseif (is_string($v)) {
+                    $tries[] = $v . '~'; // a string field the flight reads while every gun holds the same value
                 }
                 foreach ($tries as $t) {
                     if ($t === $v) {
@@ -84,6 +86,34 @@ final class AiArcsTest extends TestCase
             }
         }
         $this->assertGreaterThan(10, $bending);
+    }
+
+    public function testTheFlightKeyIsExactWhateverThePrecisionSetting(): void
+    {
+        $shell = room_weapons()['shell'];
+        $near = ['speed' => 1.0000000000000002] + $shell;
+        $was = ini_get('serialize_precision');
+        try {
+            foreach (['-1', '17', '6'] as $p) {
+                ini_set('serialize_precision', $p);
+                $this->assertNotSame(room_flight_key($shell), room_flight_key($near), "serialize_precision $p");
+            }
+        } finally {
+            ini_set('serialize_precision', (string) $was);
+        }
+        $this->assertSame(room_flight_key(['speed' => 0.0] + $shell), room_flight_key(['speed' => -0.0] + $shell));
+    }
+
+    public function testAFlightFieldThatIsNotAFiniteNumberIsRefused(): void
+    {
+        foreach ([['speed' => INF], ['speed' => NAN], ['effect' => 'roller', 'friction' => -INF]] as $bad) {
+            try {
+                room_flight_key($bad + room_weapons()['shell']);
+                $this->fail(json_encode(array_keys($bad)) . ' was keyed');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
     }
 
     public function testAGunPlansOncePerDistinctArcTheFirstOfEachInRackOrder(): void

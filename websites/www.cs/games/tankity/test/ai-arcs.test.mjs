@@ -43,6 +43,8 @@ test('a change to any field that bends a planning flight changes the flight key'
       const tries = [...seen];
       if (typeof row[f] === 'number') tries.push(row[f] * 1.37 + 0.11, row[f] * 0.2);
       if (typeof row[f] === 'boolean' || row[f] === undefined) tries.push(true, false);
+      // A fresh value: a string field the flight reads while every gun holds the same value.
+      if (typeof row[f] === 'string') tries.push(`${row[f]}~`);
       for (const v of tries) {
         if (v === row[f]) continue;
         const ars = withRow(row.key, { [f]: v });
@@ -54,6 +56,29 @@ test('a change to any field that bends a planning flight changes the flight key'
     }
   }
   assert.ok(bending > 10, `the check saw ${bending} bending changes`);
+});
+
+test('the flight key holds every gun field the planning flight reads', () => {
+  // Read-traced, so a field simShot starts reading fails here at the code edit, before any gun in game.yaml sets it.
+  const reads = run => {
+    const seen = new Set();
+    run(w => new Proxy(w, { get(t, k) { if (typeof k === 'string') seen.add(k); return t[k]; } }));
+    return seen;
+  };
+  let checked = 0;
+  for (const [k, w] of Object.entries(arsenal.weapons)) {
+    for (const def of [w, { ...w, effect: 'roller' }]) {
+      const keyed = reads(spy => flightKey(spy(def)));
+      const flown = reads(spy => {
+        const ars = { ...arsenal, weapons: { ...arsenal.weapons, [k]: spy(def) } };
+        for (const [a, p, dirS] of SHOTS) simShot(world, ars, 360, 380, a, p, k, dirS);
+      });
+      assert.ok(flown.size > 0, `simShot read nothing of ${k}`);
+      for (const f of flown) assert.ok(keyed.has(f), `simShot reads ${k}.${f}, which flightKey leaves out`);
+      checked++;
+    }
+  }
+  assert.ok(checked >= 2 * AMMO.length);
 });
 
 test('a gun plans once per distinct arc, the first gun of each in rack order', () => {

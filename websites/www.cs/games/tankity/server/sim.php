@@ -340,8 +340,16 @@ function room_roll_out(array $terrain, float $x, float $vx, float $vy, array $w)
 function room_flight_key(array $def): string
 {
     $roll = ($def['effect'] ?? 'shot') === 'roller';
-    return json_encode([!empty($def['flat']), (float) ($def['speed'] ?? 1.0), $roll,
-        $roll ? (float) (($def['friction'] ?? 0.3) ?: 0.3) : 0.0, $roll ? (float) (($def['rollTime'] ?? 5.0) ?: 5.0) : 0.0]);
+    $nums = [(float) ($def['speed'] ?? 1.0), $roll ? (float) (($def['friction'] ?? 0.3) ?: 0.3) : 0.0,
+        $roll ? (float) (($def['rollTime'] ?? 5.0) ?: 5.0) : 0.0];
+    foreach ($nums as $v) {
+        if (!is_finite($v)) {
+            throw new InvalidArgumentException('a gun\'s flight field is not a finite number');
+        }
+    }
+    $nums = array_map(fn(float $v): float => $v == 0.0 ? 0.0 : $v, $nums); // -0 flies as 0, and JSON.stringify writes it 0
+    // %.17g writes every double exactly whatever serialize_precision says, so two guns that differ never share a key.
+    return (!empty($def['flat']) ? 'flat' : 'arc') . ($roll ? ' roll ' : ' fly ') . implode(' ', array_map(fn(float $v): string => sprintf('%.17g', $v), $nums));
 }
 /* Full trajectory; returns landing info. Mirrors src/sim.ts simShot. A
 // roller's landing is where its roll ends. $top is the highest ground (the

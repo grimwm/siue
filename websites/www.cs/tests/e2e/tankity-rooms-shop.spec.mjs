@@ -90,35 +90,51 @@ test('a lost round goes through the shop too: a life gone, then everyone ready s
   for (const p of [host.page, guest.page]) await expect(p.locator('#shop-veil')).toBeVisible();
   expect(lastRoom(roomState.host).you.lives).toBe(2);
   await expect(host.page.locator('#log')).toContainText('goes to the battery');
-  // The shop opens under a populated scoreboard, and on a phone (both ways up)
-  // it never scrolls sideways, keeps the highlighted row and Start in sight,
-  // and walking to the last row leaves the title and the board where they are.
+  // The shop opens under a populated scoreboard. On a phone either way up and
+  // on a desktop it never scrolls sideways or past the screen, shows the
+  // board's player rows and Start, keeps the highlighted row in its list, and a
+  // tap on that row's Preview or Buy lands on the button, not on whatever
+  // covers it. Walking the list leaves the title and the board where they are.
   const fits = () => host.page.evaluate(() => {
     const inView = r => r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth;
-    const sideways = [document.documentElement, document.body, ...document.querySelectorAll('#shop-veil, #shop-veil .card, #shop-veil .board')]
+    const within = (r, box) => r.top >= box.top - 1 && r.bottom <= box.bottom + 1;
+    const sideways = [document.documentElement, document.body, ...document.querySelectorAll('#shop-veil, #shop-veil .card')]
       .some(el => el.scrollWidth > el.clientWidth);
-    const sel = document.querySelector('#shop-list li.sel').getBoundingClientRect();
+    const card = document.querySelector('#shop-veil .card');
+    const board = document.querySelector('#shop-veil .board');
+    const boardBox = board.getBoundingClientRect();
+    const row = document.querySelector('#shop-list li.sel');
     const list = document.getElementById('shop-list').getBoundingClientRect();
+    const tapped = [...row.querySelectorAll('.acts button')].every(b => {
+      const r = b.getBoundingClientRect();
+      return b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+    });
     return {
       sideways,
-      rowShown: sel.top >= list.top - 1 && sel.bottom <= list.bottom + 1,
+      cardFits: card.scrollHeight <= card.clientHeight + 1 && inView(card.getBoundingClientRect()),
+      rowShown: within(row.getBoundingClientRect(), list),
+      tapped,
       startShown: inView(document.getElementById('shop-next').getBoundingClientRect()),
       titleShown: inView(document.getElementById('shop-title').getBoundingClientRect()),
-      // The board's own box must have room for its title and a line, not just sit at a visible coordinate.
-      boardShown: inView(document.querySelector('#shop-veil .board').getBoundingClientRect())
-        && document.querySelector('#shop-veil .board').clientHeight >= 48,
+      boardRowsShown: [...board.querySelectorAll('tbody tr')]
+        .every(tr => { const r = tr.getBoundingClientRect(); return within(r, boardBox) && inView(r); }),
     };
   });
-  for (const [width, height] of [[393, 852], [852, 393]]) {
+  const rows = await host.page.locator('#shop-list li:not(.shop-cat)').count();
+  const all = { sideways: false, cardFits: true, rowShown: true, tapped: true, startShown: true, titleShown: true, boardRowsShown: true };
+  for (const [width, height] of [[852, 393], [393, 852], [1280, 720]]) {
     await host.page.setViewportSize({ width, height });
     await expect(host.page.locator('#shop-veil .board .board-table tbody tr')).toHaveCount(2);
-    const all = { sideways: false, rowShown: true, startShown: true, titleShown: true, boardShown: true };
+    for (let i = 0; i < rows; i++) await host.page.keyboard.press('ArrowUp');
+    await expect(host.page.locator('#shop-list li.sel')).toHaveClass(/shop-free/);
     // The resize event reaches the page a moment after the viewport changes.
-    await expect.poll(fits, { message: `${width}x${height} on open` }).toEqual(all);
-    for (let i = 0; i < 30; i++) await host.page.keyboard.press('ArrowDown');
+    await expect.poll(fits, { message: `${width}x${height} at the first row` }).toEqual(all);
+    for (let i = 0; i < rows >> 1; i++) await host.page.keyboard.press('ArrowDown');
+    expect(await fits(), `${width}x${height} at the middle row`).toEqual(all);
+    for (let i = 0; i < rows; i++) await host.page.keyboard.press('ArrowDown');
     expect(await fits(), `${width}x${height} at the last row`).toEqual(all);
-    for (let i = 0; i < 30; i++) await host.page.keyboard.press('ArrowUp');
-    expect(await fits(), `${width}x${height} at the first row`).toEqual(all);
+    for (let i = 0; i < rows; i++) await host.page.keyboard.press('ArrowUp');
+    await host.page.screenshot({ path: `test-results/tankity-shop-${width}x${height}.png` });
   }
   await host.page.setViewportSize({ width: 1280, height: 860 });
   await expect(host.page.locator('#log')).toContainText('goes to the battery');

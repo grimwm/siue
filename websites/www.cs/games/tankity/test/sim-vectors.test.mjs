@@ -209,7 +209,7 @@ const RUN = {
     return { wkey: choice.wkey, angle: choice.angle, power: choice.power, moved: t.x - x0 };
   },
   'ai-bracket'(c) {
-    world(c);
+    world(c, c.w || 720);
     G.rng = sim.mulberry32(c.seed);
     const t = G.tanks[c.shooter], steps = [];
     for (let k = 0; k < c.shots; k++) {

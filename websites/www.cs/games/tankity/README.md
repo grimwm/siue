@@ -793,8 +793,10 @@ width (terrain heights included), armor and match-end cases compare exactly.
   bunker, EMP, last stand, kill bonus), landing prediction, where a roller's
   roll ends, whole volleys for every weapon in `game.json` (and a roller down
   into a valley, into a unit, back onto its gunner, off either edge and
-  stopping on a rise), the drone's aim, sequences of drone shots that bracket a
-  target in (and re-range when it drives off), the aim and a bracket at each
+  stopping on a rise, and cluster bomblets bursting at once in a ledge), the
+  drone's aim, sequences of drone shots that bracket a target in (and
+  re-range when it drives off, keep a lance's first burst, and shrink to the
+  wobble floor of a wide field), the aim and a bracket at each
   difficulty (and an unknown word aiming at normal), each drone strategy's choice of
   target, gun and arc and a flip after a dry spell, and tank settling.
 - Shared rules the cases pin: only a kill the player's own shot made pays the
@@ -819,12 +821,11 @@ width (terrain heights included), armor and match-end cases compare exactly.
 - The replay imports `src/sim.ts` and passes each case its own plain state
   object; nothing is stubbed, because the sim has no side effects to stub.
 
-
 ## Solo determinism
 
-A solo score is earned by the server playing every round with the PHP sim
-(`server/sim.php`, `ai.php`, `rules.php`), so every number the outcome depends
-on must come out the same in the browser and on the server:
+The browser's solo rules (`src/sim.ts`, `ai.ts`, `armor.ts`) and the server's
+(`server/sim.php`, `ai.php`, `rules.php`) compute the same numbers to the last
+bit, so the server can replay a solo game and reach the browser's outcome:
 
 - the drones aim from one table per difficulty (`DIFFICULTY` in `src/ai.ts`,
   `ROOM_DIFFICULTY` in `server/ai.php`, the same numbers);

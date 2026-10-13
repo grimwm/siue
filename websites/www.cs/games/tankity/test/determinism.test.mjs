@@ -11,6 +11,7 @@ import { rad, dist, powi } from '../src/sim.ts';
 import { DIFFICULTIES, DIFFICULTY, aimSkill } from '../src/ai.ts';
 
 const dir = path.join(import.meta.dirname, '..');
+// Strips /* */ and // comments only: a PHP # comment naming a banned call fails the test (falsely, never silently).
 const read = f => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
 // Files a later task adds are banned from the moment they exist.

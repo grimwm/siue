@@ -456,6 +456,9 @@ $volley('point-blank-at-the-neighbour', array_replace($shell, ['shooter' => 0, '
 $volley('straight-up-comes-back-on-the-gunner', array_replace($shell, ['shooter' => 0, 'tanks' => [$human(300, 100), $drone(600, 100)], 'angle' => 90, 'power' => 40]));
 $volley('wind-drives-it-back-onto-the-gunner', array_replace($shell, ['wind' => -12, 'shooter' => 0, 'tanks' => [$human(300, 100), $drone(600, 100)], 'angle' => 80, 'power' => 45]));
 $volley('lob-off-the-board', array_replace($shell, ['shooter' => 0, 'tanks' => [$human(600, 100), $drone(100, 100)], 'angle' => 40, 'power' => 100]));
+// Splits just short of a ledge: the first bomblet is inside it within 0.04 s and bursts there at once, on both sides.
+$volley('cluster-splits-at-a-ledge', ['terrain' => ['flat' => 400, 'set' => [[258, 330, 392]]], 'wkey' => 'cluster', 'shooter' => 0,
+    'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(300, 100) + ['y' => 392.0]], 'angle' => 10, 'power' => 47]);
 $volley('fired-into-the-hillside', ['terrain' => ['slope' => [420, 260]], 'wkey' => 'shell', 'shooter' => 0, 'tanks' => [$human(100, 100), $drone(500, 100)], 'angle' => 5, 'power' => 50]);
 $volley('shielded-human-eats-a-drone-shell', array_replace($shell, ['shooter' => 1, 'tanks' => [$human(380, 100) + ['shield' => true], $drone(100, 100) + ['dirS' => 1]],
     'angle' => sv_aim_at(sv_room(array_replace($shell, ['tanks' => [$human(380, 100), $drone(100, 100) + ['dirS' => 1]]])), 1, 'shell', 380.0)[0],
@@ -519,7 +522,8 @@ $aim('no-rivals-left', ['terrain' => $flat, 'wind' => 0, 'round' => 1, 'seed' =>
  * wants to, fire the volley (which records where it burst). The target may be
  * driven off at a step; 'hp' is large so nobody dies mid-sequence. */
 $bracket = function (string $name, array $c) use ($add): void {
-    $room = sv_room($c);
+    $w = $c['w'] ?? SV_WIDTH;
+    $room = sv_room($c, $w);
     $seat = $c['shooter'];
     $steps = [];
     for ($k = 0; $k < $c['shots']; $k++) {
@@ -529,10 +533,10 @@ $bracket = function (string $name, array $c) use ($add): void {
         $choice = room_ai_choose($room, $room['tanks'][$seat]);
         $room['tanks'][$seat]['angle'] = $choice['angle'];
         $room['tanks'][$seat]['power'] = $choice['power'];
-        $nx = max(12.0, min(SV_WIDTH - 12.0, $room['tanks'][$seat]['x'] + $choice['dx']));
+        $nx = max(12.0, min($w - 12.0, $room['tanks'][$seat]['x'] + $choice['dx']));
         if (abs($choice['dx']) > 0.5) {
             $room['tanks'][$seat]['x'] = $nx;
-            $room['tanks'][$seat]['y'] = $room['terrain'][max(0, min(SV_WIDTH - 1, (int) round($nx)))];
+            $room['tanks'][$seat]['y'] = $room['terrain'][max(0, min($w - 1, (int) round($nx)))];
         }
         $room['tanks'][$seat]['brk']['ox'] = $room['tanks'][$seat]['x'];
         if ($choice['wkey'] !== 'shell') {
@@ -564,8 +568,10 @@ $bracket('jammed-target-wobbles-double', ['terrain' => $flat, 'wind' => 0, 'roun
     'tanks' => [$human(200, 9999) + ['jammer' => 2], $drone(500, 9999) + ['dirS' => -1]]]);
 $bracket('drone-with-a-rack', ['terrain' => $flat, 'wind' => 2, 'round' => 4, 'seed' => 11, 'shooter' => 1, 'target' => 0, 'shots' => 6,
     'tanks' => [$human(210, 9999), $drone(510, 9999) + ['dirS' => -1, 'ammo' => ['mortar' => 2]]]]);
-$bracket('lance-marks-its-first-burst', ['terrain' => $flat, 'wind' => 0, 'round' => 6, 'seed' => 23, 'shooter' => 2, 'target' => 0, 'shots' => 4,
-    'tanks' => [$human(150, 9999), $drone(330, 9999), $drone(560, 9999) + ['dirS' => -1, 's' => 'glory', 'ammo' => ['lance' => 9]]]]);
+// A unit on a ledge stands in the lance's line, so the lance pierces it before it lands: the bracket keeps that first burst.
+$bracket('lance-marks-its-first-burst', ['terrain' => ['flat' => 400, 'set' => [[465, 485, 330]]], 'wind' => 0, 'round' => 6, 'seed' => 23,
+    'shooter' => 2, 'target' => 0, 'shots' => 4,
+    'tanks' => [$human(150, 9999), $drone(475, 9999) + ['y' => 330.0], $drone(560, 9999) + ['dirS' => -1, 's' => 'glory', 'ammo' => ['lance' => 9]]]]);
 
 /* ---- difficulty: the same scenes under each level's aim ----
  * A word neither side knows aims at normal on both. */
@@ -581,6 +587,13 @@ foreach (['easy', 'normal', 'hard', 'brutal'] as $level) {
         $bracket("$level-stationary-round$round", ['terrain' => $hills, 'wind' => 2, 'round' => $round, 'seed' => $seed, 'shooter' => 1, 'target' => 0,
             'shots' => 7, 'difficulty' => $level, 'tanks' => [$human(200, 9999), $drone(520, 9999) + ['dirS' => -1, 'angle' => 60]]]);
     }
+}
+
+/* On a wide field the wobble's floor is scaled up (room_field_aim's floor > 1), so
+ * a long bracket that shrinks down to it pins that scale on both sides. */
+foreach ([1080, 1440] as $w) {
+    $bracket("wide-field-$w-shrinks-to-its-floor", ['w' => $w, 'terrain' => $flat, 'wind' => 2, 'round' => 6, 'seed' => 42, 'shooter' => 1, 'target' => 0,
+        'shots' => 8, 'tanks' => [$human(250, 9999), $drone($w - 250, 9999) + ['dirS' => -1, 'angle' => 60]]]);
 }
 
 /* ---- strategies: who a drone picks and how it aims ----

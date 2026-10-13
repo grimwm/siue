@@ -10,7 +10,7 @@
  * except the pieces a room shares (the banner, the cosmetics, the end veil).
  * The game's state, the page and the rest of the game arrive as deps. */
 import { maxArmor } from './armor.ts';
-import { ROUND_MAX_SHOTS, newRecorder, recordShot, replayableSeed } from './solo-log.ts';
+import { ROUND_MAX_SHOTS, clearRound, newRecorder, recordShot, replayableSeed } from './solo-log.ts';
 import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
 import type { DifficultySetting } from './difficulty.ts';
 import { FOE_DYING, FOE_FIRE, FOE_HIT, FOE_MISS, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, pick } from './chatter.ts';
@@ -364,6 +364,7 @@ export function createMatch(deps: MatchDeps) {
     }
     const end = soloSettle(G);
     if (end.kind === 'next') { announceTurn(); return; }
+    if (G.rec) clearRound(G.rec); // the round is over; its buys and shots are not the next round's
     if (end.kind === 'roundWon') {
       recordRound(true);
       sfx.play('win');

@@ -28,11 +28,15 @@ export function recordBuy(r: RoundRecorder, row: Pick<ShopRow, 'kind' | 'w' | 'g
 export function recordShot(r: RoundRecorder, t: Pick<Tank, 'x' | 'angle' | 'power'>, w: string): void {
   r.shots.push({ w, a: t.angle, p: t.power, x: t.x });
 }
+/** Starts the next round's log: the limits count one round, not the match. */
+export function clearRound(r: RoundRecorder): void {
+  r.buys = [];
+  r.shots = [];
+}
 /** The round as sent; the recorder is emptied for the next one. */
 export function closeRound(r: RoundRecorder, n: number, claim: RoundClaim): SoloRoundLog {
   const round = { n, buys: r.buys, shots: r.shots, claim };
-  r.buys = [];
-  r.shots = [];
+  clearRound(r);
   return round;
 }
 

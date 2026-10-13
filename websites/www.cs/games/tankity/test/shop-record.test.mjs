@@ -1,6 +1,6 @@
 // The shop's wiring to the round recorder and to a room's server: a solo buy
-// lands in G.rec, the 61st buy of a visit is refused with a line, a round at
-// the limit still replays, and a room's Repair asks netBuy for what the hull
+// lands in G.rec, the 61st buy of a visit is refused with a line, the next
+// visit starts counting again, and a room's Repair asks netBuy for what the hull
 // takes, not the count on the dial.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,7 +14,7 @@ const m = await importTsx(import.meta.dirname, {
 });
 const { buildArsenal } = m.sim;
 const { soloDeal } = m.solo;
-const { ROUND_MAX_BUYS, newRecorder } = m.log;
+const { ROUND_MAX_BUYS, clearRound, newRecorder } = m.log;
 const { blankSolo, soloRound } = m.play;
 const { createShop } = m.shop;
 
@@ -45,7 +45,7 @@ test('a solo buy lands in the recorder with the count sold', () => {
   assert.deepEqual(G.rec.buys, [{ i: 'mortar', q: 3 }]);
 });
 
-test('buy 61 of a visit is refused with a line and a round at 60 still replays', () => {
+test('buy 61 of a visit is refused with a line, and the server\'s buy checks take sixty', () => {
   const { G, shop, lines } = shopFor(false);
   G.cash = 1e6;
   for (let k = 0; k < ROUND_MAX_BUYS; k++) shop.buyItem(rowOf('mortar'), 1);
@@ -70,6 +70,16 @@ test('buy 61 of a visit is refused with a line and a round at 60 still replays',
   soloDeal(over, arsenal, 'rec', 'normal', 720);
   over.cash = 1e6;
   assert.deepEqual(soloRound(over, arsenal, [...G.rec.buys, G.rec.buys[0]], []), { ok: false, error: 'bad buys' }, 'sixty-one is what the server refuses');
+});
+
+test('a new round\'s shop visit buys again after sixty in the last one', () => {
+  const { G, shop, lines } = shopFor(false);
+  G.cash = 1e6;
+  for (let k = 0; k <= ROUND_MAX_BUYS; k++) shop.buyItem(rowOf('mortar'), 1);
+  assert.match(lines.at(-1), /most you can buy/);
+  clearRound(G.rec); // what the match does when a round ends
+  shop.buyItem(rowOf('mortar'), 2);
+  assert.deepEqual(G.rec.buys, [{ i: 'mortar', q: 2 }]);
 });
 
 test('a room\'s Repair asks netBuy for what the hull takes, not the dial', () => {

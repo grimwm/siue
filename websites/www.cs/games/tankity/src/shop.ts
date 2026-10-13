@@ -259,7 +259,7 @@ export function createShop(deps: ShopDeps) {
       return;
     }
     // The server refuses a round with more purchases than this, which would void the run.
-    if (G.rec && G.rec.buys.length >= ROUND_MAX_BUYS) { say("That's the most you can buy in one shop visit.", 'info'); return; }
+    if (G.rec && G.rec.buys.length >= ROUND_MAX_BUYS) { say("That's the most you can buy in one shop visit; raise the count to buy more at once.", 'info'); return; }
     const lives = G.lives;
     const r = soloBuy(G, it, qty);
     if (!r.ok) {

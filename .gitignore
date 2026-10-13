@@ -1,3 +1,6 @@
 *.swp
 .claude/worktrees/
 .DS_Store
+
+# The Playwright MCP's scratch folder.
+.playwright-mcp/

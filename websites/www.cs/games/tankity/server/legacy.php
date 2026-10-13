@@ -1,9 +1,10 @@
 <?php
 // games/tankity/server/legacy.php
-// The per-callsign score runs: the callsigns table (one row per callsign, in
-// the shape the old files had), what scores.php and the rooms file into it,
-// and the one-time import of the old <scores_dir>/<callsign>-operation-tankity.json
-// files. Loaded by rooms.php and scores.php; it serves nothing.
+// The per-callsign score runs from before the boards: the callsigns table (one
+// row per callsign, in the shape the old files had) and the one-time import of
+// the old <scores_dir>/<callsign>-operation-tankity.json files into it;
+// server/board.php then moves each row onto the Normal board. Loaded by
+// rooms.php and scores.php; it serves nothing.
 declare(strict_types=1);
 if (count(get_included_files()) === 1) {
     http_response_code(404);
@@ -14,7 +15,6 @@ require_once __DIR__ . '/guard.php';
 require_once __DIR__ . '/board.php';
 
 const LEGACY_SLUG = 'operation-tankity';
-const LEGACY_RUNS_KEPT = 50;
 const LEGACY_IMPORT_BATCH = 200; // old files per housekeeping pass
 const LEGACY_FILE_MAX = 4194304; // a callsign file is a few KB; anything bigger is not one
 const LEGACY_TMP_AGE = 3600; // a temp file this old was left by a writer that died
@@ -52,35 +52,6 @@ function legacy_write(PDO $db, string $slug, array $data): void
     }
     $row = ['name' => $slug, 'runs' => array_values($data['runs']), 'best' => $best];
     $db->prepare('INSERT OR REPLACE INTO callsigns (slug, data) VALUES (?, ?)')->execute([$slug, json_encode($row, JSON_UNESCAPED_SLASHES)]);
-}
-
-/* Appends one run to a callsign, keeping its last LEGACY_RUNS_KEPT; answers the new best. */
-function legacy_add_run(string $slug, array $run): int
-{
-    return tankity_tx(tankity_db(), function (PDO $db) use ($slug, $run): int {
-        $d = legacy_read($db, $slug);
-        $d['runs'][] = $run;
-        $d['runs'] = array_slice($d['runs'], -LEGACY_RUNS_KEPT);
-        legacy_write($db, $slug, $d);
-        return legacy_read($db, $slug)['best'];
-    });
-}
-
-/* Each callsign's best and its latest run, best first. */
-function legacy_top(int $n): array
-{
-    $rows = [];
-    foreach (tankity_db()->query('SELECT slug, data FROM callsigns') as $r) {
-        $d = json_decode((string) $r['data'], true);
-        if (!is_array($d) || empty($d['runs'])) {
-            continue;
-        }
-        $last = end($d['runs']);
-        $rows[] = ['name' => (string) $r['slug'], 'best' => (int) ($d['best'] ?? 0), 'banked' => (int) ($last['banked'] ?? 0),
-            'won' => (bool) ($last['won'] ?? false), 'ts' => (string) ($last['ts'] ?? '')];
-    }
-    usort($rows, fn($a, $b) => $b['best'] <=> $a['best']);
-    return array_slice($rows, 0, $n);
 }
 
 /* What makes two runs the same run, so an import that runs twice adds nothing twice. */

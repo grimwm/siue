@@ -80,6 +80,10 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
             'bot' => !$s['human'] && !empty($s['bot']),
             'lives' => $s['lives'] ?? 0,
             'score' => $room['scores'][$idx] ?? 0,
+            'roundsWon' => (int) ($room['stats'][$idx]['won'] ?? 0),
+            'kills' => (int) ($room['stats'][$idx]['kills'] ?? 0),
+            'gain' => (int) ($room['stats'][$idx]['gain'] ?? 0),
+            'out' => $room['stats'][$idx]['out'] ?? null,
             // Pressed Ready at the shop (always false elsewhere).
             'ready' => $room['phase'] === 'shop' && room_shop_ready($room, $idx),
         ];
@@ -91,6 +95,8 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
         'mapName' => room_map_name($room['map'] ?? null),
         'difficulty' => room_difficulty($room),
         'round' => $room['round'],
+        'startHumans' => (int) ($room['startHumans'] ?? 0),
+        'winner' => $room['winner'] ?? null,
         'wind' => $room['wind'],
         'turn' => $room['phase'] === 'play' && count($room['tanks']) ? $room['tanks'][$room['turn']]['seat'] ?? null : null,
         // Seconds left before the crew fires for the human whose turn it is.

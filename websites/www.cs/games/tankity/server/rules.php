@@ -390,6 +390,10 @@ function room_spawn_spots(int &$rng, int $n, int $width): array
 function room_start_round(array &$room): void
 {
     $room['watchTurns'] = 0;
+    // Each human's gain this round counts from here.
+    foreach ($room['stats'] ?? [] as $idx => $st) {
+        $room['stats'][$idx]['from'] = $room['scores'][$idx] ?? 0;
+    }
     $room['round'] += 1;
     $w = ROOM_W;
     if ($room['map'] !== null && isset(ROOM_MAPS[$room['map']])) {
@@ -642,6 +646,9 @@ function room_end_round(array &$room, array &$events): void
         if (isset($wrecked[$idx])) {
             $s['lives'] = max(0, ($s['lives'] ?? 3) - 1);
             if ($s['lives'] <= 0) {
+                if (isset($room['stats'][$idx])) {
+                    $room['stats'][$idx]['out'] = (int) $room['round'];
+                }
                 room_save_score($s['initials'], $room['scores'][$idx] ?? 0, $room);
                 $events[] = ['t' => 'eliminated', 'seat' => $idx];
             }
@@ -657,13 +664,22 @@ function room_end_round(array &$room, array &$events): void
     } else {
         $events[] = ['t' => 'roundlost', 'round' => $room['round']];
     }
+    if ($winner !== null && isset($room['stats'][$winner['seat']])) {
+        $room['stats'][$winner['seat']]['won']++;
+    }
     unset($room['pace']);
+    foreach ($room['stats'] ?? [] as $idx => $st) {
+        $room['stats'][$idx]['gain'] = ($room['scores'][$idx] ?? 0) - $st['from'];
+    }
     $outcome = room_match_outcome($room);
     if ($outcome['over']) {
         if ($outcome['winner'] !== null) {
             $w = $outcome['winner'];
             $bonus = room_winner_bonus((int) $room['round']);
             $room['scores'][$w] = ($room['scores'][$w] ?? 0) + $bonus;
+            if (isset($room['stats'][$w])) {
+                $room['stats'][$w]['gain'] += $bonus;
+            }
             $room['winner'] = $w;
             $events[] = ['t' => 'matchwin', 'seat' => $w, 'bonus' => $bonus];
         }

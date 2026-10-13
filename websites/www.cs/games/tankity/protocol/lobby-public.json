@@ -10,6 +10,8 @@
             "mapName": "Random hills",
             "difficulty": "normal",
             "round": 0,
+            "startHumans": 0,
+            "winner": null,
             "wind": 0,
             "turn": null,
             "turnLeft": null,
@@ -26,6 +28,10 @@
                     "bot": false,
                     "lives": 3,
                     "score": 0,
+                    "roundsWon": 0,
+                    "kills": 0,
+                    "gain": 0,
+                    "out": null,
                     "ready": false
                 },
                 {
@@ -36,6 +42,10 @@
                     "bot": false,
                     "lives": 3,
                     "score": 0,
+                    "roundsWon": 0,
+                    "kills": 0,
+                    "gain": 0,
+                    "out": null,
                     "ready": false
                 },
                 {
@@ -46,6 +56,10 @@
                     "bot": false,
                     "lives": 0,
                     "score": 0,
+                    "roundsWon": 0,
+                    "kills": 0,
+                    "gain": 0,
+                    "out": null,
                     "ready": false
                 },
                 {
@@ -56,6 +70,10 @@
                     "bot": false,
                     "lives": 0,
                     "score": 0,
+                    "roundsWon": 0,
+                    "kills": 0,
+                    "gain": 0,
+                    "out": null,
                     "ready": false
                 }
             ],

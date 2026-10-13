@@ -49,6 +49,11 @@ export interface RoomSeat {
   bot: boolean;
   lives: number;
   score: number;
+  /** This match: rounds won, units wrecked, score gained in the last finished round, and the round the last life went (null while alive). */
+  roundsWon: number;
+  kills: number;
+  gain: number;
+  out: number | null;
   ready: boolean;
 }
 
@@ -100,6 +105,10 @@ export interface RoomSnapshot {
   /** How well the drones aim: the host's setting at create. */
   difficulty: Difficulty;
   round: number;
+  /** Humans seated when the match started; two or more makes it last-human-standing. */
+  startHumans: number;
+  /** The seat that won the match; null until then, and when nobody did. */
+  winner: number | null;
   wind: number;
   /** The seat whose turn it is; null outside play. */
   turn: number | null;

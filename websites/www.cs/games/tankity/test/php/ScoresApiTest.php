@@ -1049,7 +1049,8 @@ final class ScoresApiTest extends TestCase
         // A thousand addresses starting runs as fast as allowed: every row is gone within the hour it was made.
         $passes = intdiv(3600, HOUSEKEEP_EVERY);
         $this->assertGreaterThanOrEqual(1000 * SOLO_STARTS_PER_HOUR, $passes * SOLO_EXPIRE_BATCH);
-        $this->assertGreaterThanOrEqual(1000 * 3 * intdiv(3600, SOLO_RATE_SLOT), $passes * SOLO_RATE_EXPIRE_BATCH);
+        // A count row per slot for each kind: start, round, score and the rooms' create-or-join.
+        $this->assertGreaterThanOrEqual(1000 * 4 * intdiv(3600, SOLO_RATE_SLOT), $passes * SOLO_RATE_EXPIRE_BATCH);
     }
 
     public function testTheRoomServerSweepsSoloRunsToo(): void

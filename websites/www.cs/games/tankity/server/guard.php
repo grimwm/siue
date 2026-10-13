@@ -78,17 +78,14 @@ function tankity_initials(ScoreGuard $guard, mixed $raw): ?string
     return $initials !== null && !$guard->isBlocked($initials) ? $initials : null;
 }
 
-/* Whether a browser request came from this site: a cross-site Origin is
-   refused; callers that send none (curl) pass, gated by rooms.php's tokens or
-   scores.php's per-address throttle. */
+/* Whether a room request came from an allowed page: its Origin, else its
+   Referer, must name the request's own host or one in allowed_hosts. Callers
+   that send neither (curl) pass, gated by the seat and room tokens and the
+   hourly allowance on creating and joining. */
 function room_origin_ok(): bool
 {
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-    if ($origin === '') {
-        return true; // not a browser: the caller's tokens or throttle gate it
+    if (($_SERVER['HTTP_ORIGIN'] ?? '') === '' && ($_SERVER['HTTP_REFERER'] ?? '') === '') {
+        return true; // curl-style callers send neither; the seat and room tokens still gate them
     }
-    $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
-    $host = preg_replace('/:\d+$/', '', $host);
-    $o = parse_url($origin, PHP_URL_HOST);
-    return is_string($o) && $o !== '' && strcasecmp($o, $host) === 0;
+    return tankity_guard()->originAllowed();
 }

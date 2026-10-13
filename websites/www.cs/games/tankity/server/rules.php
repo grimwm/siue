@@ -11,19 +11,10 @@ if (!defined('TANKITY_ROOMS_INCLUDED')) {
     exit;
 }
 
-/* Cylon-style initials: exactly 3 letters, stored uppercase, and not a
- * blocked word. */
+/* Exactly three letters, typed in either case, stored uppercase; a blocked set is refused. */
 function room_valid_initials($raw): ?string
 {
-    if (!is_string($raw)) {
-        return null;
-    }
-    $s = trim($raw);
-    if (!preg_match('/^[A-Za-z]{3}$/', $s)) {
-        return null;
-    }
-    $s = strtoupper($s);
-    return in_array($s, BLOCKED_INITIALS, true) ? null : $s;
+    return tankity_initials(tankity_guard(), $raw);
 }
 /* Seconds a human gets for a turn before the crew fires for them. */
 const ROOM_TURN_SECS = 120;

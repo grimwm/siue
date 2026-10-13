@@ -31,6 +31,8 @@
 #                     once; about the host's cores; default 8)
 #   playing_per_client <- TANKITY_PLAYING_PER_CLIENT (of those, how many one
 #                     address may hold; default 4)
+#   room_joins_per_hour <- TANKITY_ROOM_JOINS_PER_HOUR (rooms created and
+#                     joined, together, per address an hour; default 300)
 #   scores_dir     <- TANKITY_SCORES_DIR (retired: only where score files
 #                     from before the database are imported from; default /var/tmp)
 # Point CONFIG_FILE at another file to load settings from elsewhere.

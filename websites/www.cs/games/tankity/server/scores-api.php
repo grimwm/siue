@@ -24,7 +24,8 @@ const SOLO_RUN_FILED_KEEP = 3600; // a filed run answers a repeated filing this 
 const SOLO_LEASE_SLACK = 30; // seconds a round's lease outlasts its CPU budget, for a slow wall clock
 // Rows housekeeping deletes per pass (one a minute): a thousand addresses
 // each starting runs as fast as SOLO_STARTS_PER_HOUR allows add 120000 run rows
-// an hour and 18000 count rows, and every pass is bounded by rows, not time.
+// an hour and 24000 count rows (one a ten-minute slot for each of the three
+// solo caps and the rooms'), and every pass is bounded by rows, not time.
 const SOLO_EXPIRE_BATCH = 2500;
 // Of those, runs that still hold state (tens of KB each at the widest field):
 // fewer a pass, so freeing their pages never holds the write lock for long.
@@ -57,6 +58,10 @@ const SOLO_RUNS_PER_CLIENT = 100;
 // SOLO_PLAYING_PER_CLIENT of them, so it cannot take them all.
 const SOLO_MAX_PLAYING = 8;
 const SOLO_PLAYING_PER_CLIENT = 4;
+// Rooms created and joined, together, by one address an hour: a class behind
+// one campus NAT hosting and joining all evening fits; a script minting rooms
+// and seats does not.
+const ROOM_JOINS_PER_HOUR = 300;
 
 /* A positive whole-number setting, or $default when it is unset. A value set
    but refused is logged once (naming the setting and the value), then the
@@ -119,6 +124,11 @@ function solo_held_per_client(): int
     return solo_setting('TANKITY_HELD_PER_CLIENT', 'held_per_client', SOLO_HELD_PER_CLIENT);
 }
 
+function room_joins_per_hour(): int
+{
+    return solo_setting('TANKITY_ROOM_JOINS_PER_HOUR', 'room_joins_per_hour', ROOM_JOINS_PER_HOUR);
+}
+
 /* How much of its $kind allowance an address ($client, the guard's key) has
    used in the last hour: the counts of the slots that hour touches, the slot
    it began in counted whole. So no hour holds more than the cap, and an
@@ -142,6 +152,14 @@ function solo_rate_take(PDO $db, string $client, string $kind, int $perHour, int
     $db->prepare('INSERT INTO solo_rate (client, kind, slot, n) VALUES (?, ?, ?, 1)
         ON CONFLICT (client, kind, slot) DO UPDATE SET n = n + 1')->execute([$client, $kind, intdiv($now, SOLO_RATE_SLOT)]);
     return true;
+}
+
+/* Takes one of an address's room_joins_per_hour() creates and joins, in its
+   own write transaction; false, and nothing taken, when they are spent. */
+function room_rate_take(string $client, int $now): bool
+{
+    $perHour = room_joins_per_hour();
+    return tankity_tx(tankity_db(), fn(PDO $db): bool => solo_rate_take($db, $client, 'room', $perHour, $now));
 }
 
 /* Deletes counts too old to matter, at most $limit; answers how many. */

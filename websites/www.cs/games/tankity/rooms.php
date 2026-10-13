@@ -91,6 +91,19 @@ function room_json_out(int $code, array $payload): void
     echo json_encode($payload, JSON_UNESCAPED_SLASHES);
     exit;
 }
+/* Creating and joining a room spend one of the address's hourly allowance
+   (room_rate_take in server/scores-api.php); a 429 once it is spent. */
+function room_rate_gate(): void
+{
+    try {
+        $allowed = room_rate_take(tankity_guard()->clientKey(), time());
+    } catch (Throwable $e) {
+        room_store_fail($e);
+    }
+    if (!$allowed) {
+        room_json_out(429, ['error' => 'too many rooms from here; try again later']);
+    }
+}
 /* The arsenal lives in game.yaml, served as game.json (tools/game-json.php
 // writes it): the browser reads the same file, so prices, packs, ballistics,
 // and effects can never disagree. When the file is missing the baked fallback
@@ -224,6 +237,7 @@ if ($action === 'create' && $method === 'POST') {
     if (!room_origin_ok()) {
         room_json_out(403, ['error' => 'bad origin']);
     }
+    room_rate_gate();
     $initials = room_valid_initials($body['initials'] ?? null);
     if ($initials === null) {
         room_json_out(422, ['error' => 'initials must be 3 letters, kept clean']);
@@ -281,6 +295,7 @@ if ($action === 'join' && $method === 'POST') {
     if (!room_origin_ok()) {
         room_json_out(403, ['error' => 'bad origin']);
     }
+    room_rate_gate();
     $code = strtoupper(trim((string) ($body['code'] ?? '')));
     $initials = room_valid_initials($body['initials'] ?? null);
     if (!preg_match('/^[A-Z0-9]{4}$/', $code) || $initials === null) {

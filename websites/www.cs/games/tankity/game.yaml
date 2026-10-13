@@ -127,9 +127,9 @@
 # gear row fields
 #   key, name, cat, price, note   as for ammo (gear is always sold: no pack)
 #   n         the amount, read by the effect:
-#               repair     armor restored (banked for next round)
+#               repair     armor restored, up to max armor
 #               fuel       driving fuel added
-#               plate      max armor added, ready next round
+#               plate      max armor added, and the same armor now
 #               shield     hits absorbed
 #               extralife  lives added (capped at 5 in play)
 #               jammer     rounds drones aim worse at you
@@ -355,7 +355,7 @@ arsenal:
       price: 120
       n: 40
       effect: repair
-      note: Restores 40 armor, banked for next round.
+      note: Restores up to 40 armor, never past max.
 
     - key: fuel
       name: Fuel +60
@@ -371,7 +371,7 @@ arsenal:
       price: 300
       n: 25
       effect: plate
-      note: Raises max armor by 25, ready next round.
+      note: Raises max armor by 25 and adds 25 armor now.
 
     - key: shield
       name: Shield (1 hit)

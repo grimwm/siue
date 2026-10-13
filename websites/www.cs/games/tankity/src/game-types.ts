@@ -73,7 +73,7 @@ export interface GameState extends World {
   shopSel: number;
   shopQty: number;
   fuelBank: number;
-  repairBank: number;
+  armor: number; // the armor the next round musters with (src/armor.ts)
   plate: number;
   time: number;
   shake: number;

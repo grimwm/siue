@@ -9,6 +9,7 @@
  * except the pieces a room shares (the banner, the cosmetics, the end veil).
  * The game's state, the page and the rest of the game arrive as deps. */
 import { aiChoose as simAiChoose, pickTactic } from './ai.ts';
+import { maxArmor } from './armor.ts';
 import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
 import type { DifficultySetting } from './difficulty.ts';
 import { FOE_DYING, FOE_FIRE, FOE_HIT, FOE_MISS, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, pick } from './chatter.ts';
@@ -128,7 +129,7 @@ export function createMatch(deps: MatchDeps) {
     G.shopSel = 0;
     G.shopQty = 1;
     G.fuelBank = 0;
-    G.repairBank = 0;
+    G.armor = TUNE.playerArmor;
     G.plate = 0;
     G.shield = false;
     G.jammer = 0;
@@ -199,17 +200,14 @@ export function createMatch(deps: MatchDeps) {
     // Spread four combatants across the hills; every round, anyone may land
     // anywhere, never on top of each other.
     const order = spawnSpots(1 + FOE_DEFS.length, G.rng, G.w); // spread over the whole field
-    // Shop fuel and repairs ride in banks: the round rebuilds every tank from
-    // scratch, so anything bought spends only if it waits here for muster.
-    const musterMax = TUNE.playerArmor + 25 * (G.plate || 0);
-    const musterHp = musterMax + (G.repairBank || 0);
+    // Fuel bought in the shop waits in a bank until the tank musters; armor
+    // carries over from the last round (src/armor.ts).
     const musterFuel = TUNE.fuel + (G.fuelBank || 0);
-    G.repairBank = 0;
     G.fuelBank = 0;
     G.tanks = [{
       id: 'tank', isPlayer: true, color: '#ffff00', body: G.body,
       x: order[0]!, y: 0, angle: 62, power: 55,
-      hp: musterHp, maxHp: musterHp, fuel: musterFuel,
+      hp: G.armor, maxHp: maxArmor(G.plate), fuel: musterFuel,
     }];
     FOE_DEFS.forEach((f, i) => {
       // Endless escalation: thicker armor and a deeper magazine every round.
@@ -387,10 +385,12 @@ export function createMatch(deps: MatchDeps) {
     if (G.demo) {
       if (me().hp <= 0) {
         say('Demo tank wrecked. Rolling a fresh one.', 'info');
+        G.armor = maxArmor(G.plate);
         newRound('Back in! Same hills, fresh tank.', 'tankLost');
         return;
       }
       if (!foesAlive().length) {
+        G.armor = me().hp;
         G.round += 1;
         newRound(undefined, 'roundWon');
         return;
@@ -403,6 +403,7 @@ export function createMatch(deps: MatchDeps) {
       // The last unit is a drone (or the last two fell together): the round
       // goes to the battery, the player loses a life, and the shop opens.
       G.lives -= 1;
+      G.armor = maxArmor(G.plate); // a fresh tank next round, plates kept
       if (G.lives <= 0) {
         G.lives = 0;
         endMatch(false, 'The tank is scrap across these hills. The battery keeps the high ground.');
@@ -419,6 +420,7 @@ export function createMatch(deps: MatchDeps) {
       const prize = TUNE.roundWinCash + G.round * 100;
       G.score += bonus;
       G.cash += prize;
+      G.armor = me().hp;
       sfx.play('win');
       say(`Round ${G.round} won! +${bonus} pts, +$${prize}. The battery rebuilds meaner, so spend it wisely.`, 'good');
       exchange('tank', 'tankity tank! Hill claimed!', pick(['reaper', 'wraith', 'spotter']),

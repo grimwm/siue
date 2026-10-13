@@ -652,6 +652,13 @@ await (async () => {
   for (const k of ['shell', 'buck', 'mortar', 'rail', 'nuke', 'repair', 'fuel']) {
     check('arsenal-keeps-' + k, arsenal.ammo.some(a => a.key === k) || arsenal.gear.some(g => g.key === k));
   }
+  // A full hull has nothing to repair: the Repair row greys out and says so.
+  {
+    const repairRow = shopRows().find(li => rowName(li).includes('Repair'));
+    const acts = actsOf(repairRow);
+    check('shop-repair-greyed-at-full', acts.children[acts.children.length - 1].disabled === true && /Armor full \(100 of 100\)/.test(repairRow.textContent),
+      repairRow.textContent);
+  }
   // Keyboard alone can shop: arrows highlight, Enter buys, digits buy outright.
   TAP('shop', 'selDown'); frames(3);
   check('shop-keys', shopRows()[1].className === 'sel', shopRows().map(li => li.className).join(','));

@@ -722,7 +722,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/preview.test.mjs`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |
 | `test/flow.test.mjs`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
 | `test/protocol.test.mjs`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
-| `test/sim-vectors.test.mjs`                    | `src/sim.ts`, `src/ai.ts`, `src/armor.ts`, `src/solo.ts` and `src/solo-play.ts` agree with `rooms.php` on every shared sim vector; the detmath, field, armor, match-end and volley-fall cases compare exactly (see Sim vectors) |
+| `test/sim-vectors.test.mjs`                    | `src/sim.ts`, `src/ai.ts`, `src/armor.ts`, `src/solo.ts` and `src/solo-play.ts` agree with `rooms.php` on every shared sim vector; the detmath, field, armor, match-end, solo-deal and volley-fall cases compare exactly (see Sim vectors) |
 | `phpunit --testsuite tankity` (host PHP)       | `ConfigTest` (`.config.yaml` precedence), `DataDirTest`, `DbTest`, `RoomStoreTest`, `LegacyImportTest` and `HousekeepTest` (storage: the directory and its checks, the database and its journal, rooms as rows, the old files' import, cleanup on a fake clock), `GameJsonTest` (the YAML parser, the `game.yaml` schema including effects, `--check` staleness) and `RoomsSimTest` (server sim units: pierce, spawns, spacing, replay stamping; drone bracketing and strategies; one unit left standing ends a round, the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller) |
 | `RoomMatchEndTest` (host PHP) | The match-end rule: one human plays like solo, the last human standing wins twice the round bonus, a leave is a forfeit, two out at once, the watch cap |
 | `RoomStandingsTest` (host PHP) | Each human's rounds won, kills, round gain and out round, in the snapshot with the winner's bonus |
@@ -793,7 +793,8 @@ outputs; `test/sim-vectors.test.mjs` replays every case through the sim,
 `src/sim.ts`, the drone AI, `src/ai.ts`, and the armor rules, `src/armor.ts`; the sim and AI
 compare within 1e-4; the deterministic math (`detmath`), the field at each
 width (terrain heights included), armor and match-end cases compare exactly;
-the solo volleys (`volley-fall`) compare exactly too, with -0 equal to 0.
+the solo deal (`solo-deal`) and solo volleys (`volley-fall`) compare exactly
+too, with -0 equal to 0.
 
 - Covered: the RNG and terrain generator, spawn spots, shot speed, muzzle,
   gravity and wind, hit boxes, the swept hit test (owner-clear rule, lance

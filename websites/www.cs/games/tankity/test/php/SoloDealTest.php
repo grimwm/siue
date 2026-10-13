@@ -62,7 +62,7 @@ final class SoloDealTest extends TestCase
             $this->assertSame('play', $s['phase']);
             $this->assertCount(4, $s['tanks']);
             foreach ($s['tanks'] as $t) {
-                $this->assertSame($s['terrain'][(int) $t['x']], $t['y']);
+                $this->assertSame($s['terrain'][max(0, min(count($s['terrain']) - 1, (int) det_round((float) $t['x'])))], $t['y']);
                 $this->assertSame($t['x'] < 720 ? 1 : -1, $t['dirS']);
             }
             $this->assertSame([100, 60 + 6 * ($r - 1)], [$s['tanks'][0]['hp'], $s['tanks'][1]['hp']]);

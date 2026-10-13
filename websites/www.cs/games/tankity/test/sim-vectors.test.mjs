@@ -294,8 +294,9 @@ function expectedFor(group, c, out) {
 /* ---- compare and report ---- */
 function diff(want, got, at, out, exact = false, tol = TOL) {
   if (typeof want === 'number' && typeof got === 'number') {
-    // exact: Object.is, so -0 differs from 0; 'zeros-equal': ===, the same bits but for the sign of zero.
-    const same = exact === 'zeros-equal' ? want === got : exact ? Object.is(want, got) : Math.abs(want - got) <= tol;
+    // exact: Object.is, so -0 differs from 0 (detmath pins the sign); 'zeros-equal': the same, but -0 equals 0.
+    const same = exact === 'zeros-equal' ? Object.is(want, got) || (want === 0 && got === 0)
+      : exact ? Object.is(want, got) : Math.abs(want - got) <= tol;
     if (!same) out.push(`${at}: expected ${want}, got ${got}`);
   } else if (Array.isArray(want) && Array.isArray(got)) {
     if (want.length !== got.length) out.push(`${at}: expected ${want.length} items, got ${got.length}`);

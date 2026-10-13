@@ -158,6 +158,11 @@ $add = function (string $group, string $name, array $in, $out, ?string $known = 
 $exact = function (string $group, string $name, array $in, $out) use (&$cases): void {
     $cases[$group][] = ['name' => $name, 'in' => $in, 'out' => $out, 'exact' => true];
 };
+/* The same, but -0 and 0 count as equal: for values PHP keeps as an int or
+   +0 where Math.round or a fall may leave -0 (a dealt wind, a tank's y). */
+$exactZeros = function (string $group, string $name, array $in, $out) use (&$cases): void {
+    $cases[$group][] = ['name' => $name, 'in' => $in, 'out' => $out, 'exact' => 'zeros-equal'];
+};
 $weapons = room_weapons();
 
 /* ---- the deterministic math: every function on a grid and its edges ----
@@ -505,7 +510,7 @@ if (isset($weapons['roller'])) {
  * bursts holds, for every step that carved ground or cost armor, the step
  * and each tank's y then, so a fall a step early or late shows.
  * Compared exactly, with -0 equal to 0. */
-$volleyFall = function (string $name, array $c) use (&$cases): void {
+$volleyFall = function (string $name, array $c) use ($exactZeros): void {
     if (!isset(room_weapons()[$c['wkey']])) {
         return;
     }
@@ -535,7 +540,7 @@ $volleyFall = function (string $name, array $c) use (&$cases): void {
         $was = $is;
     });
     $out = sv_outcome($before, $room) + ['ys' => array_column($room['tanks'], 'y'), 'steps' => $steps, 'midFall' => $midFall, 'bursts' => $bursts];
-    $cases['volley-fall'][] = ['name' => $name, 'in' => $c, 'out' => $out, 'exact' => 'zeros-equal'];
+    $exactZeros('volley-fall', $name, $c, $out);
 };
 // The group's own units: 200 hp, facing each other. Named apart from $drone and $human, which later groups use.
 $vfDrone = fn(float $x, int $hp = 200, array $more = []): array => ['kind' => 'ai', 'x' => $x, 'y' => 400, 'hp' => $hp, 'dirS' => -1] + $more;
@@ -794,7 +799,7 @@ $matchEnd('a-leaver-counts-as-out', [3, null, null, null], 2, 3);
 /* ---- a solo match's deal and musters: the random stream in the browser's order ----
  * Per round: terrain samples, wind, every unit's x and y, the drones'
  * strategies, who opens, each unit's armor, and the next number on the stream. */
-$soloDeal = function (string $seed, int $rounds, int $w) use ($add): void {
+$soloDeal = function (string $seed, int $rounds, int $w) use ($exactZeros): void {
     $s = solo_deal($seed, 'normal', $w); // a deal and its musters draw nothing that depends on the difficulty
     $out = [];
     for ($r = 1; $r <= $rounds; $r++) {
@@ -809,7 +814,7 @@ $soloDeal = function (string $seed, int $rounds, int $w) use ($add): void {
             'tactics' => array_values(array_filter(array_column($s['tanks'], 's'))), 'turn' => $s['turn'], 'hp' => array_column($s['tanks'], 'hp'),
             'next' => room_rng_next($peek)];
     }
-    $add('solo-deal', "$seed@$w", ['seed' => $seed, 'rounds' => $rounds, 'w' => $w], $out);
+    $exactZeros('solo-deal', "$seed@$w", ['seed' => $seed, 'rounds' => $rounds, 'w' => $w], $out);
 };
 foreach (['scorched-1000', 'scorched-4242', 'alpha', 'runs-long-70', 'a b c'] as $seed) {
     $soloDeal($seed, 3, 720);

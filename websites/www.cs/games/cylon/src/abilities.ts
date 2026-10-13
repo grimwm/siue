@@ -30,7 +30,7 @@ export type Ability = 'grenade' | 'raptor';
  *  browser's (Ctrl+R reloads). */
 export function abilityKey(e: BackKeyEvent): Ability | 'disarm' | null {
   if (e.ctrlKey || e.metaKey || e.altKey) return null;
-  if (isBackKey(e)) return 'disarm';
+  if (isBackKey(e)) return e.repeat ? null : 'disarm';
   const k = (e.key ?? '').toLowerCase();
   return k === 'r' ? 'raptor' : k === 'g' ? 'grenade' : null;
 }

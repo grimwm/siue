@@ -184,6 +184,16 @@ test('Q with Ctrl, Cmd or Alt is a shortcut, not a dismissal', () => {
   assert.equal(dismissed, 0);
 });
 
+test('a held Q dismisses once and never reaches the game under the dialog', () => {
+  const root = mount();
+  let dismissed = 0;
+  render(dialog({ open: true, onDismiss: () => { dismissed++; } }), root);
+  const rep = fireDocument('keydown', { key: 'q', repeat: true });
+  assert.equal(dismissed, 0);
+  assert.equal(rep.prevented, true);
+  assert.equal(rep.stopped, true);
+});
+
 test('Q typed into a box in the dialog is a letter, not a dismissal', () => {
   const root = mount();
   let dismissed = 0;

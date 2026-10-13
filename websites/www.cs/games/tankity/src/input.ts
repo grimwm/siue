@@ -93,9 +93,11 @@ export interface KeyLike {
   key?: string;
   code?: string;
   ctrlKey?: boolean;
+  altKey?: boolean;
+  metaKey?: boolean;
   shiftKey?: boolean;
   repeat?: boolean;
-  target?: { tagName?: string; click?(): void } | null;
+  target?: { tagName?: string; readOnly?: boolean; click?(): void } | null;
   preventDefault(): void;
 }
 
@@ -311,9 +313,17 @@ export function createInput(opts: { touch: boolean }): Input {
   const aimDown = new Map<string, { key?: string; code?: string; ctrlKey?: boolean }>();
 
   function keydown(e: KeyLike): void {
-    // A box keeps every key, Q included: initials and codes may have a Q.
-    // Esc is bound to nothing, so it never reaches a command below.
-    if (isTyping(e.target)) return;
+    // An editable box keeps every key, Q included: initials and codes may have
+    // a Q. A read-only field (the invite link) types nothing, so Q still goes
+    // back from it and every other key stays the field's. Esc is bound to
+    // nothing, so it never reaches a command below.
+    if (isTyping(e.target)) {
+      const readOnly = !!e.target && e.target.tagName === 'INPUT' && !!e.target.readOnly;
+      if (!readOnly || lookup('global', e) !== 'back') return;
+    }
+    // Only plain Q is back: Cmd+Q quits the browser, and Ctrl+Q and Alt+Q are
+    // shortcuts too. They fall to the browser untouched.
+    if ((e.ctrlKey || e.altKey || e.metaKey) && (lookup('global', e) === 'back' || lookup('shop', e) === 'close')) return;
     if (e.key === 'Shift') {
       for (const k of aimDown.values()) {
         const act = lookup('aim', { ...k, shiftKey: true }) as HoldCommand | null;
@@ -324,7 +334,7 @@ export function createInput(opts: { touch: boolean }): Input {
     const press: Press = { key: e.key || '', repeat: !!e.repeat };
     const global = lookup('global', e);
     if (ctx.modalOpen && ctx.modalOpen()) {
-      if (global === 'back') { e.preventDefault(); if (ctx.modalBack) ctx.modalBack(); }
+      if (global === 'back') { e.preventDefault(); if (ctx.modalBack && !press.repeat) ctx.modalBack(); }
       return;
     }
     // Panel scrolling runs before every other binding so an open panel keeps
@@ -347,9 +357,10 @@ export function createInput(opts: { touch: boolean }): Input {
     // The shop answers to its own keys; everything else falls through.
     if (ctx.shopLive && ctx.shopLive(press) && offer(e, lookup('shop', e), press)) return;
     if (global === 'back') {
+      // Holding Q is one back, not a menu that opens and shuts with the key repeat.
       e.preventDefault();
       const fn = commands.back;
-      if (fn) fn(press);
+      if (fn && !press.repeat) fn(press);
       return;
     }
     const act = lookup('aim', e) as HoldCommand | null;

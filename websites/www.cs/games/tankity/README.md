@@ -121,8 +121,9 @@ php tools/install-files.php      # after the last edit to any served file
 - Key tokens match `event.code` first, then `event.key`; the first token of an
   action names the key on buttons. Touch-only screens (coarse pointer, no
   mouse) get no key bindings or labels.
-  Driving is Shift plus an arrow; W, A, S, D, Q and C are bound nowhere. Esc
-  toggles the menu: it closes whatever is open and, with nothing open, opens the menu.
+  Driving is Shift plus an arrow; W, A, S, D and C are bound nowhere. Q toggles
+  the menu: it closes whatever is open and, with nothing open, opens the menu.
+  Esc is bound to nothing.
 
 ## Architecture rules
 
@@ -670,9 +671,13 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   `shopLive`), the global `back` (Q), the held aim keys (always suppressed, so
   the arrows never scroll the page), `fire` (suppressed, once per press), then
   the other global commands (once per press). A question that holds the keys
-  (`modalOpen`) lets only Q through. A text box keeps every key, Q included; Esc is bound to nothing. `stepArm(held, dt, arm, facing)` is one
-  frame of held-key arm movement at 42 degrees per second for the barrel and 45
-  power per second, clamped to 10-170 and 10-100, reporting whether a key is
+  (`modalOpen`) lets only Q through. An editable text box keeps every key, Q
+  included; a read-only field (the invite link) keeps every key but Q, which
+  still goes back. Only plain Q is back: Ctrl+Q, Alt+Q and Cmd+Q are the
+  browser's, and a held Q goes back once, not on every auto-repeat. Esc is
+  bound to nothing. `stepArm(held, dt, arm, facing)` is one frame of held-key
+  arm movement at 42 degrees per second for the barrel and 45 power per second,
+  clamped to 10-170 and 10-100, reporting whether a key is
   adjusting and whether none is down (the room client sends the aim when the
   keys are released). Driving stays in `main.ts` because it depends on terrain
   and fuel. `touchOnly(matchMedia)` is the one test for a touch-only screen;
@@ -689,7 +694,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `node ../_kit/build/build.mjs tankity --check` | `dist/` is exactly what `src/` bundles to, `src/` type-checks, and every `protocol/*.json` fits its type in `protocol.ts` (run `npm ci` in `games/` first) |
 | `node --test 'test/*.test.mjs'`                | Every Node test below, run by `test.sh` (the UI test bundles `src/ui/*.tsx` once with esbuild, Preact left external) |
-| `test/standings.test.mjs`                      | `src/standings.ts`: the match-end rule against the `match-end` vectors, room and solo rows, the winner's bonus line, the filed line, and what Esc does on each end card |
+| `test/standings.test.mjs`                      | `src/standings.ts`: the match-end rule against the `match-end` vectors, room and solo rows, the winner's bonus line, the filed line, and what Q does on each end card |
 | `test/standings-ui.test.mjs`                   | The scoreboard table (`src/ui/standings.tsx`): a room's rows, you, the crown, the lost-out marks, and a solo run's rounds with the total |
 | `test/scores-ui.test.mjs`                      | The scores overlay (`src/ui/scores.tsx`): one board, the player's own runs marked, the switcher; and the filing in `src/scores.ts`, where a failure always has words |
 | `test/ui.test.mjs`                             | The Preact overlays (`src/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |

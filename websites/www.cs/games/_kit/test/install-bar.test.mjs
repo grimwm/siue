@@ -73,6 +73,8 @@ test('a blocked clipboard shows the address in a focused field; Q closes it, Esc
   assert.deepEqual(calls, []);
   fire(field, 'keydown', { type: 'keydown', key: 'q', ctrlKey: true });
   assert.deepEqual(calls, []);
+  fire(field, 'keydown', { type: 'keydown', key: 'q', repeat: true });
+  assert.deepEqual(calls, []);
   fire(field, 'keydown', { type: 'keydown', key: 'Q' });
   assert.deepEqual(calls, ['close-share']);
 });

@@ -16,6 +16,8 @@ export interface BackKeyEvent {
   metaKey?: boolean;
   altKey?: boolean;
   isComposing?: boolean;
+  /** An auto-repeat keydown: a held key, not another press. */
+  repeat?: boolean;
 }
 
 /** True when the press is the back key. */

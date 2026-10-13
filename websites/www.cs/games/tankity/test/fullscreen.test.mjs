@@ -135,9 +135,13 @@ function gameFiles() {
     const src = path.join(dir, game.name === '_kit' ? '.' : 'src');
     if (fs.existsSync(src)) out.push(...sources(src));
     for (const f of ['index.html']) if (fs.existsSync(path.join(dir, f))) out.push(path.join(dir, f));
+    for (const f of fs.readdirSync(dir)) if (f.endsWith('.css')) out.push(path.join(dir, f));
     const play = path.join(GAMES, '..', 'play', game.name, 'index.html');
     if (fs.existsSync(play)) out.push(play);
   }
+  // The hub page that hosts Cylon's markup, and the /play/ page's own script and styles.
+  const www = path.join(GAMES, '..');
+  for (const f of ['index.html', 'play/play.js', 'play/play.css']) out.push(path.join(www, f));
   return out.map(f => ({ rel: path.relative(GAMES, f).split(path.sep).join('/'), src: fs.readFileSync(f, 'utf8') }));
 }
 /* The code and text of a file with its comments gone (they may explain why Esc is never used). */
@@ -145,13 +149,20 @@ const uncommented = src => src.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\
 
 test('no game listens for Esc, and no button, hint or help text names it', () => {
   const files = gameFiles();
-  for (const g of ['tankity/src/main.ts', 'cylon/src/main.ts', 'crete/src/ui.ts', '_kit/ui/dialog.tsx', '_kit/ui/install-bar.tsx', 'tankity/index.html', '../play/tankity/index.html']) {
+  for (const g of ['tankity/src/main.ts', 'cylon/src/main.ts', 'crete/src/ui.ts', '_kit/ui/dialog.tsx', '_kit/ui/install-bar.tsx', 'tankity/index.html', '../play/tankity/index.html',
+    '../index.html', '../play/play.js', '../play/play.css', 'tankity/game.css', 'crete/game.css']) {
     assert.ok(files.some(f => f.rel === g), `${g} is scanned`);
   }
   const hits = [];
   for (const { rel, src } of files) {
     for (const m of uncommented(src).matchAll(/\bEsc\b|\bESC\b|['"`]Escape['"`]|\bEscape key\b/g)) hits.push(`${rel}: ${m[0]}`);
   }
+  // Nor does any code test for Escape by its key code.
+  const codes = [];
+  for (const { rel, src } of files) {
+    for (const m of uncommented(src).matchAll(/\b(?:keyCode|which|charCode)\s*[=!]==?\s*27\b|\b27\s*[=!]==?\s*\w+\.(?:keyCode|which)\b|\bcase\s+27\s*:/g)) codes.push(`${rel}: ${m[0]}`);
+  }
+  assert.deepEqual(codes, [], 'a key code 27 test');
   // What is left is the Keyboard Lock that keeps Chrome from leaving full
   // screen on Esc, and its console warning when the lock is refused.
   assert.deepEqual(hits.sort(), ["_kit/app.ts: 'Escape'", '_kit/app.ts: Esc']);

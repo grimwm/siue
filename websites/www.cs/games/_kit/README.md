@@ -122,9 +122,11 @@ fake environment and a manual clock.
 
 ## The back key (`keys.ts`)
 
-Q closes whatever is open, in every game: `isBackKey(ev)` is Q in either case
-with no Ctrl, Cmd or Alt and nothing being composed, and `typesText(target)`
-says when Q is a letter instead (a box that takes text). No game listens for
+Q closes whatever is open in every game but one: `isBackKey(ev)` is Q in either
+case with no Ctrl, Cmd or Alt and nothing being composed, and `typesText(target)`
+says when Q is a letter instead (a box that takes text). A held Q acts once:
+callers ignore `ev.repeat`. Crete is the exception: with nothing open, Q is Quit
+there, and Q is back only for the install steps and the Share field. No game listens for
 Escape and no hint names it: Safari and Firefox always leave full screen on
 Esc, and no page can stop them (`tankity/test/fullscreen.test.mjs` fails on a
 binding, listener or visible hint that asks for it).

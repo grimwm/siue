@@ -68,7 +68,7 @@ export function Dialog(p: DialogProps) {
       if (!isBackKey(ev) || typesText(ev.target)) return;
       ev.preventDefault();
       ev.stopPropagation();
-      dismiss();
+      if (!ev.repeat) dismiss();
     };
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);

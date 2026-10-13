@@ -130,6 +130,7 @@ check('cooldown-seconds-zero-when-ready', ab.cooldownSeconds(0, 5) === 0 && ab.c
   const k = (key, mods = {}) => ab.abilityKey({ key, ...mods });
   check('key-r-and-g', k('r') === 'raptor' && k('R') === 'raptor' && k('g') === 'grenade' && k('G') === 'grenade');
   check('key-q-disarms', k('q') === 'disarm' && k('Q') === 'disarm');
+  check('key-q-held-disarms-once', k('q', { repeat: true }) === null);
   check('key-escape-does-nothing', k('Escape') === null);
   check('key-modifiers-are-the-browser-s', k('r', { ctrlKey: true }) === null && k('q', { metaKey: true }) === null && k('g', { altKey: true }) === null);
 }

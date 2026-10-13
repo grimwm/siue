@@ -74,7 +74,7 @@ export function InstallBar(p: InstallBarProps) {
           ref={field} onKeyDown={ev => {
             if (!isBackKey(ev)) return;
             ev.preventDefault();
-            p.onCloseShare();
+            if (!ev.repeat) p.onCloseShare();
           }} />
       )}
       <Dialog open={v.steps} id="install-steps" veilClass="kit-install-veil" panelClass="kit-install-panel"

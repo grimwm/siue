@@ -164,6 +164,48 @@ function rig(extraCtx = {}) {
   }
 }
 {
+  // Only plain Q is back: Ctrl+Q, Alt+Q and Cmd+Q (which quits the browser) are the browser's.
+  const r = rig();
+  r.input.register({ close: r.log('close'), back: r.log('back') }, { shopLive: () => true });
+  for (const mod of ['ctrlKey', 'altKey', 'metaKey']) {
+    const q = ev({ key: 'q', code: 'KeyQ', [mod]: true });
+    r.input.keydown(q);
+    check(`modified-q-is-not-back-${mod}`, r.calls.length === 0 && q.prevented === 0, r.calls.join());
+  }
+}
+{
+  // Holding Q does not flicker the menu: an auto-repeat is not another back.
+  const r = rig();
+  let live = false;
+  let asked = false;
+  r.input.register({ close: r.log('close'), back: r.log('back') },
+    { shopLive: p => live && !p.repeat, modalOpen: () => asked, modalBack: () => r.calls.push('stay') });
+  r.input.keydown(ev({ key: 'q', code: 'KeyQ' }));
+  const rep = ev({ key: 'q', code: 'KeyQ', repeat: true });
+  r.input.keydown(rep);
+  check('held-q-goes-back-once', r.calls.join() === 'back', r.calls.join());
+  live = true;
+  r.calls.length = 0;
+  r.input.keydown(ev({ key: 'q', code: 'KeyQ', repeat: true }));
+  check('held-q-in-the-shop-does-not-fall-through', r.calls.length === 0, r.calls.join());
+  asked = true;
+  r.input.keydown(ev({ key: 'q', code: 'KeyQ', repeat: true }));
+  check('held-q-does-not-answer-a-question-again', r.calls.length === 0, r.calls.join());
+}
+{
+  // Q goes back from a read-only field (the invite link); an editable box keeps it.
+  const r = rig();
+  r.input.register({ back: r.log('back') });
+  r.input.keydown(ev({ key: 'q', code: 'KeyQ', target: { tagName: 'INPUT', readOnly: true } }));
+  check('q-goes-back-from-a-read-only-field', r.calls.join() === 'back', r.calls.join());
+  r.calls.length = 0;
+  r.input.keydown(ev({ key: 'q', code: 'KeyQ', target: { tagName: 'INPUT' } }));
+  r.input.keydown(ev({ key: 'q', code: 'KeyQ', target: { tagName: 'TEXTAREA', readOnly: false } }));
+  check('an-editable-box-keeps-q', r.calls.length === 0, r.calls.join());
+  r.input.keydown(ev({ key: 'm', code: 'KeyM', target: { tagName: 'INPUT', readOnly: true } }));
+  check('a-read-only-field-keeps-the-other-keys', r.calls.length === 0, r.calls.join());
+}
+{
   // The gun grid's fixed keys.
   check('grid-keys', gridCommand('ArrowLeft') === 'gridLeft' && gridCommand('Enter') === 'confirm'
     && gridCommand(' ') === 'confirm' && gridCommand('7') === 'digit' && gridCommand('0') === null && gridCommand('a') === null);

@@ -125,7 +125,9 @@ function tankity_pick_dir(string $preferred, string $fallback, ?Closure $writabl
         }
         $usable = $writable($preferred);
     } else {
-        $usable = !file_exists($preferred) && $writable(dirname($preferred)) && @mkdir($preferred, tankity_mode('dir'));
+        // A request that lost the mkdir race uses the directory the winner made.
+        $usable = !file_exists($preferred) && $writable(dirname($preferred))
+            && (@mkdir($preferred, tankity_mode('dir')) || (is_dir($preferred) && !is_link($preferred)));
         if ($usable) {
             @chmod($preferred, tankity_mode('dir'));
         }
@@ -143,12 +145,23 @@ function tankity_pick_dir(string $preferred, string $fallback, ?Closure $writabl
 function tankity_data_dir(): string
 {
     $set = trim((string) tankity_setting('TANKITY_DATA_DIR', 'data_dir', ''));
+    // A refusal is remembered for the request: it was logged once, and the
+    // endpoint, housekeeping and the score code all ask again.
+    static $refused = [];
     static $claimed = [];
-    if ($set !== '') {
-        return $claimed[$set] ??= tankity_claim_dir(rtrim($set, '/'), false);
-    }
     static $picked = null;
-    return $picked ??= tankity_pick_dir(dirname(__DIR__) . '/data', '/var/tmp/' . tankity_username() . '-tankity');
+    if (isset($refused[$set])) {
+        throw $refused[$set];
+    }
+    try {
+        if ($set !== '') {
+            return $claimed[$set] ??= tankity_claim_dir(rtrim($set, '/'), false);
+        }
+        return $picked ??= tankity_pick_dir(dirname(__DIR__) . '/data', '/var/tmp/' . tankity_username() . '-tankity');
+    } catch (TankityStorageRefused $e) {
+        $refused[$set] = $e;
+        throw $e;
+    }
 }
 
 /* The filesystem type holding $path: the longest mount point in the mount

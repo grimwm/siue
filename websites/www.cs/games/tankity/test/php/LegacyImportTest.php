@@ -10,6 +10,7 @@ final class LegacyImportTest extends TestCase
 {
     private string $dir;
     private string $old;
+    private string|false $errorLog;
 
     public static function setUpBeforeClass(): void
     {
@@ -22,10 +23,12 @@ final class LegacyImportTest extends TestCase
         $this->old = $this->dir . '/old';
         mkdir($this->old, 0700);
         putenv('TANKITY_SCORES_DIR=' . $this->old);
+        $this->errorLog = ini_set('error_log', $this->dir . '/setup.log');
     }
 
     protected function tearDown(): void
     {
+        ini_set('error_log', $this->errorLog === false ? '' : $this->errorLog);
         putenv('TANKITY_SCORES_DIR');
         tankity_test_rm($this->dir);
     }
@@ -82,6 +85,18 @@ final class LegacyImportTest extends TestCase
         $this->assertSame([100, 300], array_column($this->runs('wg'), 'score'), 'merged, oldest first');
     }
 
+    public function testIdenticalRunsInOneFileAreAllKeptAndNeverAddedTwice(): void
+    {
+        $same = $this->entry(100, '2026-01-01T00:00:00+00:00');
+        $path = $this->file('wg', [$same, $same]);
+        $copy = (string) file_get_contents($path);
+        legacy_import();
+        $this->assertSame([100, 100], array_column($this->runs('wg'), 'score'));
+        file_put_contents($path, $copy);
+        legacy_import();
+        $this->assertSame([100, 100], array_column($this->runs('wg'), 'score'));
+    }
+
     public function testAFileThatChangedIsKeptForTheNextPass(): void
     {
         $path = $this->file('wg', [$this->entry(100, '2026-01-01T00:00:00+00:00')]);
@@ -109,6 +124,34 @@ final class LegacyImportTest extends TestCase
         file_put_contents($this->old . '/big-operation-tankity.json', json_encode(['runs' => [$this->entry(1, 'x')], 'pad' => str_repeat('x', LEGACY_FILE_MAX)]));
         $this->assertSame([0, 0], legacy_import());
         $this->assertFileExists($this->dir . '/elsewhere.json');
+    }
+
+    public function testEverySkippedFileIsLoggedWithItsReason(): void
+    {
+        $log = $this->dir . '/php.log';
+        $prev = ini_set('error_log', $log);
+        try {
+            file_put_contents($this->old . '/bad-operation-tankity.json', '{not json');
+            file_put_contents($this->old . '/empty-operation-tankity.json', '{"name":"empty"}');
+            file_put_contents($this->old . '/big-operation-tankity.json', str_repeat('x', LEGACY_FILE_MAX + 1));
+            file_put_contents($this->dir . '/target.json', '{}');
+            symlink($this->dir . '/target.json', $this->old . '/link-operation-tankity.json');
+            $this->file('good', [$this->entry(5, '2026-01-01T00:00:00+00:00')]);
+            $this->assertSame([1, 1], legacy_import());
+        } finally {
+            ini_set('error_log', (string) $prev);
+        }
+        $lines = array_values(array_filter(explode("\n", (string) file_get_contents($log))));
+        $this->assertCount(4, $lines, 'one line per skipped file, none for the good one');
+        $text = implode("\n", $lines);
+        foreach ([
+            '/bad-operation-tankity.json is not valid JSON',
+            '/empty-operation-tankity.json has no runs list',
+            '/big-operation-tankity.json is too big to be a score file',
+            '/link-operation-tankity.json is not a plain file',
+        ] as $want) {
+            $this->assertStringContainsString($want, $text);
+        }
     }
 
     public function testOldTempFilesGoAndFreshOnesStay(): void

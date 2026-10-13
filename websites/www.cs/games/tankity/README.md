@@ -269,7 +269,7 @@ Everything Tankity keeps is in one directory, picked in this order:
 
 Who else can reach the data depends on which user PHP runs as. As the deploying account: nobody else. As a web user every site
 on the host shares: any other site's PHP runs as that user and can read and
-write Tankity's database and run store, as it can Cylon's scores; the modes
+write Tankity's database, as it can Cylon's scores; the modes
 cannot prevent that.
 
 `deploy.sh` never stages anything under `games/tankity/data/` (and git
@@ -288,7 +288,8 @@ Score files from before the database, `<scores_dir>/<callsign>-operation-tankity
 setting is retired and read only for this), are imported by housekeeping:
 every run of every file goes into its callsign's row, none twice, and the file
 is deleted only after that commit and only if it did not change meanwhile.
-An unreadable file is left alone.
+A file that is not ours (another owner, a link, over 4 MiB, not JSON, no runs
+list) is left alone, and the error log names it and says why.
 
 Housekeeping has no cron: any request to `rooms.php` or `scores.php` runs it,
 at most every five minutes, each job bounded (idle rooms, 100 at a time; old
@@ -638,7 +639,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/protocol.test.mjs`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
 | `test/sim-vectors.test.mjs`                    | `src/sim.ts` and `src/ai.ts` agree with `rooms.php` on every shared sim vector (see Sim vectors) |
 | `phpunit --testsuite tankity` (host PHP)       | `ConfigTest` (`.config.yaml` precedence), `DataDirTest`, `DbTest`, `RoomStoreTest`, `LegacyImportTest` and `HousekeepTest` (storage: the directory and its checks, the database and its journal, rooms as rows, the old files' import, cleanup on a fake clock), `GameJsonTest` (the YAML parser, the `game.yaml` schema including effects, `--check` staleness) and `RoomsSimTest` (server sim units: pierce, repair, spawns, spacing, replay stamping; drone bracketing and strategies; one unit left standing ends a round, the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller) |
-| `phpunit --testsuite tankity-docker`           | `RoomsTest` (the room shelf over its own `php -S`), `RoomsStoreTest` (the store under real concurrency: exact cap under a race, close, sweep, a held writer and the 503, a killed holder), `RoomsRefusedStoreTest` (a store PHP refuses answers JSON 503 on every endpoint) and `RoomsLoadTest` (8 playing rooms, 4 players each, polling at the client's pace against the docker site: no 503, p95 under 300 ms). Runs inside the PHP container, which matches the host's PHP (`make test` does) |
+| `phpunit --testsuite tankity-docker`           | `RoomsTest` (the room shelf over its own `php -S`), `RoomsStoreTest` (the store under real concurrency: exact cap under a race, close, sweep, a held writer and the 503, a killed holder), `RoomsRefusedStoreTest` (a store PHP refuses answers JSON 503 on every endpoint, with one log line per request), `RoomsStoreFailureTest` (a database error partway through a save answers JSON 503 and leaves nothing behind) and `RoomsLoadTest` (8 playing rooms, each with 3 seated players and a watcher, polling at the client's pace against the docker site: no 503, p95 under 300 ms). Runs inside the PHP container, which matches the host's PHP (`make test` does) |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (run inside the PHP container)                 |
 | `tests/tankity-data-deny.sh` | `games/tankity/data/` is refused over HTTP (`make test` runs it) |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |

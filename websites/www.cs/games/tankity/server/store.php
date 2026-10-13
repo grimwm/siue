@@ -69,19 +69,20 @@ function room_begin(): PDO
     }
 }
 
-/* Answers a storage failure as JSON, never as an uncaught fatal: busy and a
-   refused or unusable directory are 503 (the client retries), anything else
-   is logged and 500. */
+/* Answers a storage failure as JSON, never as an uncaught fatal: busy, a
+   refused directory and a database error (disk full, read-only) are 503 (the
+   client retries); anything else is logged and 500. A refusal was logged
+   where it was made. */
 function room_store_fail(Throwable $e): never
 {
     if (tankity_busy($e)) {
         room_json_out(503, ['error' => 'this room is busy; try again']);
     }
     if ($e instanceof TankityStorageRefused) {
-        room_json_out(503, ['error' => 'storage unavailable']);
+        room_json_out(503, ['error' => 'store unavailable']);
     }
     error_log('tankity rooms: ' . $e->getMessage());
-    room_json_out(500, ['error' => 'store unavailable']);
+    room_json_out($e instanceof PDOException ? 503 : 500, ['error' => 'store unavailable']);
 }
 function room_unlock($lock): void
 {
@@ -177,9 +178,13 @@ function room_register(string $code, int $max): ?bool
         return null;
     }
     $now = time();
-    $q = $lock->db->prepare('SELECT COUNT(*) FROM rooms WHERE code <> ? AND touched >= ? AND created >= ?');
-    $q->execute([$code, $now - room_live_secs(), $now - room_max_age()]);
-    return (int) $q->fetchColumn() < $max;
+    try {
+        $q = $lock->db->prepare('SELECT COUNT(*) FROM rooms WHERE code <> ? AND touched >= ? AND created >= ?');
+        $q->execute([$code, $now - room_live_secs(), $now - room_max_age()]);
+        return (int) $q->fetchColumn() < $max;
+    } catch (PDOException $e) {
+        room_store_fail($e);
+    }
 }
 
 /* A room as stored, read without the write lock, for a poll that changes
@@ -222,11 +227,15 @@ function room_save($lock, string $code, array $room): bool
     if (strlen($raw) > ROOM_MAX_BYTES) {
         return false;
     }
-    $q = $lock->db->prepare('UPDATE rooms SET data = ?, touched = ? WHERE code = ?');
-    $q->bindValue(1, $raw, PDO::PARAM_LOB);
-    $q->bindValue(2, $room['touched'], PDO::PARAM_INT);
-    $q->bindValue(3, $code);
-    $q->execute();
+    try {
+        $q = $lock->db->prepare('UPDATE rooms SET data = ?, touched = ? WHERE code = ?');
+        $q->bindValue(1, $raw, PDO::PARAM_LOB);
+        $q->bindValue(2, $room['touched'], PDO::PARAM_INT);
+        $q->bindValue(3, $code);
+        $q->execute();
+    } catch (PDOException $e) {
+        room_store_fail($e);
+    }
     $lock->saved = true;
     return $q->rowCount() === 1;
 }
@@ -237,7 +246,11 @@ function room_close($lock): void
     if (!$lock instanceof RoomLock || !$lock->open) {
         return;
     }
-    $lock->db->prepare('DELETE FROM rooms WHERE code = ?')->execute([$lock->code]);
+    try {
+        $lock->db->prepare('DELETE FROM rooms WHERE code = ?')->execute([$lock->code]);
+    } catch (PDOException $e) {
+        room_store_fail($e);
+    }
     $lock->saved = true;
     room_unlock($lock);
 }

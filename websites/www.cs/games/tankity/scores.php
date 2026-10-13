@@ -47,9 +47,9 @@ try {
     }
     json_out(405, ['error' => 'method not allowed']);
 } catch (Throwable $e) {
-    error_log('tankity scores.php: ' . $e->getMessage());
     if ($e instanceof TankityStorageRefused) {
         json_out(503, ['error' => 'store unavailable']);
     }
+    error_log('tankity scores.php: ' . $e->getMessage());
     json_out(tankity_busy($e) ? 503 : 500, ['error' => tankity_busy($e) ? 'store busy' : 'store unavailable']);
 }

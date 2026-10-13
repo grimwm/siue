@@ -90,8 +90,8 @@ function legacy_run_key(array $r): string
 
 /* Imports up to $limit old files: each file's runs merge into its callsign's
    row (every run kept, none twice), and the file is deleted only after that
-   commit, and only if it is byte for byte what was read. An unreadable file
-   is left for a person. Temp files a dead writer left go too. $afterCommit is
+   commit, and only if it is byte for byte what was read. A file it skips
+   is logged with the reason and left for a person. Temp files a dead writer left go too. $afterCommit is
    the tests' seam between the commit and the delete. Answers [imported, deleted]. */
 function legacy_import(?string $dir = null, int $limit = LEGACY_IMPORT_BATCH, ?int $now = null, ?Closure $afterCommit = null): array
 {
@@ -104,23 +104,40 @@ function legacy_import(?string $dir = null, int $limit = LEGACY_IMPORT_BATCH, ?i
     foreach (array_slice($paths, 0, $limit) as $path) {
         // /var/tmp is shared: only a plain file this account owns is ours to read and delete.
         $st = @lstat($path);
-        if ($st === false || ($st['mode'] & 0170000) !== 0100000 || $st['uid'] !== tankity_euid() || $st['size'] > LEGACY_FILE_MAX) {
-            continue;
-        }
-        $raw = @file_get_contents($path);
+        $why = match (true) {
+            $st === false => 'cannot be read',
+            ($st['mode'] & 0170000) !== 0100000 => 'is not a plain file',
+            $st['uid'] !== tankity_euid() => 'belongs to another account',
+            $st['size'] > LEGACY_FILE_MAX => 'is too big to be a score file',
+            default => null,
+        };
+        $raw = $why === null ? @file_get_contents($path) : false;
         $data = is_string($raw) ? json_decode($raw, true) : null;
-        if (!is_array($data) || !is_array($data['runs'] ?? null)) {
+        if ($why === null && !is_array($data)) {
+            $why = is_string($raw) ? 'is not valid JSON' : 'cannot be read';
+        } elseif ($why === null && !is_array($data['runs'] ?? null)) {
+            $why = 'has no runs list';
+        }
+        if ($why !== null) {
+            error_log("tankity legacy import: $path $why; left in place");
             continue;
         }
         $slug = legacy_slug(basename($path, '-' . LEGACY_SLUG . '.json'));
         $runs = $data['runs'];
         tankity_tx(tankity_db(), function (PDO $db) use ($slug, $runs): void {
             $d = legacy_read($db, $slug);
-            $have = array_flip(array_map('legacy_run_key', $d['runs']));
+            // Counts, not a set: two genuinely identical runs in a file are both kept,
+            // and an import that runs twice still adds nothing the second time.
+            $have = array_count_values(array_map('legacy_run_key', $d['runs']));
+            $seen = [];
             foreach ($runs as $r) {
-                if (is_array($r) && isset($r['score']) && !isset($have[legacy_run_key($r)])) {
+                if (!is_array($r) || !isset($r['score'])) {
+                    continue;
+                }
+                $k = legacy_run_key($r);
+                $seen[$k] = ($seen[$k] ?? 0) + 1;
+                if ($seen[$k] > ($have[$k] ?? 0)) {
                     $d['runs'][] = $r;
-                    $have[legacy_run_key($r)] = true;
                 }
             }
             usort($d['runs'], fn($a, $b) => strcmp((string) ($a['ts'] ?? ''), (string) ($b['ts'] ?? '')));

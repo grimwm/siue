@@ -36,7 +36,7 @@ function tankity_housekeep(int $now, array $jobs): ?array
             return true;
         });
     } catch (Throwable $e) {
-        if (!tankity_busy($e)) {
+        if (!tankity_busy($e) && !$e instanceof TankityStorageRefused) {
             error_log('tankity housekeeping: ' . $e->getMessage());
         }
         return null;

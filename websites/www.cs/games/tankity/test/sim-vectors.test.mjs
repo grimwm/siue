@@ -1,6 +1,6 @@
 // Replays the shared sim vectors (protocol/sim-vectors.json) through the browser
-// sim, src/sim.ts, src/armor.ts and src/solo.ts. The vectors are written by
-// `php protocol/sim-vectors.php` from rooms.php, so a change to the browser sim
+// sim: src/sim.ts, src/armor.ts, src/solo.ts and src/solo-play.ts. The vectors
+// are written by `php protocol/sim-vectors.php` from rooms.php, so a change to the browser sim
 // or the room server's that the other side does not follow fails here (or in
 // the generator's --check) until they agree. Passes when every case matches or
 // is a marked known difference.
@@ -29,6 +29,7 @@ const armorRules = await import(pathToFileURL(path.join(dir, 'src', 'armor.ts'))
 const standings = await import(pathToFileURL(path.join(dir, 'src', 'standings.ts')).href);
 const det = await import(pathToFileURL(path.join(dir, 'src', 'detmath.ts')).href);
 const solo = await import(pathToFileURL(path.join(dir, 'src', 'solo.ts')).href);
+const soloPlay = await import(pathToFileURL(path.join(dir, 'src', 'solo-play.ts')).href);
 
 /* ---- state the cases run over ---- */
 const G = {};
@@ -175,6 +176,27 @@ const RUN = {
     for (let frame = 0; G.shells.length && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
     return outcome(before);
   },
+  'volley-fall'(c) {
+    world(c, c.w || 720);
+    const before = G.terrain.slice(), shooter = G.tanks[c.shooter];
+    shooter.angle = c.angle;
+    shooter.power = c.power;
+    (shooter.isPlayer ? G.ammo : shooter.ammo)[c.wkey] = 99;
+    sim.fireWeapon(G, arsenal, shooter, c.wkey);
+    let ys = G.tanks.map(t => t.y), midFall = false, step = 0;
+    const bursts = [];
+    let was = JSON.stringify([G.terrain, G.tanks.map(t => t.hp)]);
+    const steps = soloPlay.flyVolley(G, arsenal, w => {
+      step++;
+      const now = w.tanks.map(t => t.y);
+      if (w.shells.length && now.some((y, i) => y !== ys[i])) midFall = true;
+      ys = now;
+      const is = JSON.stringify([w.terrain, w.tanks.map(t => t.hp)]);
+      if (is !== was) bursts.push([step, now]);
+      was = is;
+    });
+    return { ...outcome(before), ys: G.tanks.map(t => t.y), steps, midFall, bursts };
+  },
   field(c) {
     if (c.kind === 'terrain') {
       const r = sim.mulberry32(sim.hashSeed(c.seed));
@@ -272,7 +294,9 @@ function expectedFor(group, c, out) {
 /* ---- compare and report ---- */
 function diff(want, got, at, out, exact = false, tol = TOL) {
   if (typeof want === 'number' && typeof got === 'number') {
-    if (exact ? !Object.is(want, got) : !(Math.abs(want - got) <= tol)) out.push(`${at}: expected ${want}, got ${got}`);
+    // exact: Object.is, so -0 differs from 0; 'zeros-equal': ===, the same bits but for the sign of zero.
+    const same = exact === 'zeros-equal' ? want === got : exact ? Object.is(want, got) : Math.abs(want - got) <= tol;
+    if (!same) out.push(`${at}: expected ${want}, got ${got}`);
   } else if (Array.isArray(want) && Array.isArray(got)) {
     if (want.length !== got.length) out.push(`${at}: expected ${want.length} items, got ${got.length}`);
     for (let i = 0; i < Math.min(want.length, got.length); i++) diff(want[i], got[i], `${at}[${i}]`, out, exact, tol);
@@ -299,7 +323,7 @@ for (const [group, cases] of Object.entries(VECTORS.groups)) {
     let got, bad;
     try {
       got = RUN[group](c.in);
-      bad = diff(expectedFor(group, c.in, c.out), got, 'out', [], c.exact === true);
+      bad = diff(expectedFor(group, c.in, c.out), got, 'out', [], c.exact === 'zeros-equal' ? 'zeros-equal' : c.exact === true);
     } catch (e) {
       bad = [`threw ${e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e}`];
     }

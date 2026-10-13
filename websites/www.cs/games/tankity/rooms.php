@@ -41,6 +41,7 @@ require_once __DIR__ . '/config.php';
 //   server/store.php     rooms as rows: the room lock, room lifecycle, the sweep
 //   server/detmath.php   sin, cos, atan2 and Math.round, the same bits as src/detmath.ts
 //   server/sim.php       the deterministic sim (mirrors src/sim.ts)
+//   server/flight.php    a solo volley in fixed steps, tanks falling between
 //   server/ai.php        drone aim, bracketing and strategies
 //   server/rules.php     seats, rounds, turn clock, pacing, the shop, scores
 //   server/solo.php      the solo referee, for the server's play of solo rounds
@@ -56,6 +57,7 @@ require_once __DIR__ . '/server/settings.php';
 require_once __DIR__ . '/server/store.php';
 require_once __DIR__ . '/server/detmath.php';
 require_once __DIR__ . '/server/sim.php';
+require_once __DIR__ . '/server/flight.php';
 require_once __DIR__ . '/server/ai.php';
 require_once __DIR__ . '/server/rules.php';
 require_once __DIR__ . '/server/solo.php';

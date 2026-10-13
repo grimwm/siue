@@ -498,6 +498,73 @@ if (isset($weapons['roller'])) {
     $rollerVolley('roller-into-the-hillside', ['slope' => [420, 260]], [$tankAt(['slope' => [420, 260]], 'human', 100, 1), $tankAt(['slope' => [420, 260]], 'ai', 500, -1)], 5, 50);
 }
 
+/* ---- volleys as the solo war flies them: fixed steps, tanks falling between ----
+ * Each step drops the tanks, then moves every shell (server/flight.php);
+ * the browser's flyVolley() takes the same steps. midFall says a tank moved
+ * while a shell was still in the air, so the cases really cover the falls;
+ * bursts holds, for every step that carved ground or cost armor, the step
+ * and each tank's y then, so a fall a step early or late shows.
+ * Compared exactly, with -0 equal to 0. */
+$volleyFall = function (string $name, array $c) use (&$cases): void {
+    if (!isset(room_weapons()[$c['wkey']])) {
+        return;
+    }
+    $room = sv_room($c, $c['w'] ?? SV_WIDTH);
+    $room['shells'] = [];
+    $before = $room;
+    $seat = $c['shooter'];
+    $room['tanks'][$seat]['angle'] = (float) $c['angle'];
+    $room['tanks'][$seat]['power'] = (float) $c['power'];
+    flight_launch($room, $seat, $c['wkey']);
+    $ys = array_column($room['tanks'], 'y');
+    $midFall = false;
+    $bursts = [];
+    $step = 0;
+    $was = [$room['terrain'], array_column($room['tanks'], 'hp')];
+    $steps = flight_volley($room, function (array $s) use (&$ys, &$midFall, &$bursts, &$step, &$was): void {
+        $step++;
+        $now = array_column($s['tanks'], 'y');
+        if ($s['shells'] && $now !== $ys) {
+            $midFall = true;
+        }
+        $ys = $now;
+        $is = [$s['terrain'], array_column($s['tanks'], 'hp')];
+        if ($is !== $was) {
+            $bursts[] = [$step, $now];
+        }
+        $was = $is;
+    });
+    $out = sv_outcome($before, $room) + ['ys' => array_column($room['tanks'], 'y'), 'steps' => $steps, 'midFall' => $midFall, 'bursts' => $bursts];
+    $cases['volley-fall'][] = ['name' => $name, 'in' => $c, 'out' => $out, 'exact' => 'zeros-equal'];
+};
+// The group's own units: 200 hp, facing each other. Named apart from $drone and $human, which later groups use.
+$vfDrone = fn(float $x, int $hp = 200, array $more = []): array => ['kind' => 'ai', 'x' => $x, 'y' => 400, 'hp' => $hp, 'dirS' => -1] + $more;
+$vfHuman = fn(float $x, int $hp = 200, array $more = []): array => ['kind' => 'human', 'x' => $x, 'y' => 400, 'hp' => $hp, 'dirS' => 1] + $more;
+// A pellet craters under a drone; the next pellet meets it on its way down.
+$volleyFall('buck-meets-a-sinking-drone', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'buck', 'angle' => 47, 'power' => 62,
+    'tanks' => [$vfHuman(120), $vfDrone(330), $vfDrone(560)]]);
+$volleyFall('mortar-digs-out-a-tank', ['terrain' => $flat, 'wind' => 2, 'shooter' => 1, 'wkey' => 'mortar', 'angle' => 50, 'power' => 58,
+    'tanks' => [$vfHuman(260), $vfDrone(560), $vfDrone(660)]]);
+$volleyFall('cluster-over-a-pit', ['terrain' => ['flat' => 400, 'set' => [[300, 360, 420]]], 'wind' => -3, 'shooter' => 0, 'wkey' => 'cluster', 'angle' => 55, 'power' => 66,
+    'tanks' => [$vfHuman(100), $vfDrone(330, 300, ['y' => 380]), $vfDrone(600)]]);
+$volleyFall('roller-into-the-crater-it-follows', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'roller', 'angle' => 30, 'power' => 50,
+    'tanks' => [$vfHuman(100), $vfDrone(400), $vfDrone(640)]]);
+$volleyFall('lance-through-and-down', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'lance', 'angle' => 12, 'power' => 80,
+    'tanks' => [$vfHuman(100), $vfDrone(300, 500), $vfDrone(420, 500)]]);
+$volleyFall('already-hanging-over-a-pit', ['terrain' => ['flat' => 400, 'set' => [[420, 470, 440]]], 'wind' => 0, 'shooter' => 0, 'wkey' => 'shell', 'angle' => 60, 'power' => 60,
+    'tanks' => [$vfHuman(120), $vfDrone(445), $vfDrone(640)]]);
+// Aimed so the outcome turns on the falls: drop no tank until the volley is over and the damage changes.
+$volleyFall('buck-pellet-catches-the-drone-it-sank', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'buck', 'angle' => 30, 'power' => 40,
+    'tanks' => [$vfHuman(120), $vfDrone(330), $vfDrone(560)]]);
+$volleyFall('bomblets-chase-a-sinking-drone', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'cluster', 'angle' => 34, 'power' => 36,
+    'tanks' => [$vfHuman(120), $vfDrone(330), $vfDrone(560)]]);
+// A lance through the first drone and into the second, bursting on each.
+$volleyFall('lance-pierces-two-drones', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'lance', 'angle' => 5, 'power' => 85,
+    'tanks' => [$vfHuman(100), $vfDrone(300, 500), $vfDrone(420, 500)]]);
+// A flat bolt fired almost straight up on the widest field flies about 14 s: past 12, inside 12 x fieldReach(1440).
+$volleyFall('wide-field-bolt-outlives-twelve-seconds', ['w' => 1440, 'terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'lance', 'angle' => 88, 'power' => 100,
+    'tanks' => [$vfHuman(300), $vfDrone(1100)]]);
+
 /* ---- the drone's aim ---- */
 $aim = function (string $name, array $c, ?string $known = null) use ($add): void {
     $room = sv_room($c);

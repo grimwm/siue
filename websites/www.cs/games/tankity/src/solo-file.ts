@@ -13,10 +13,12 @@
  *     so the run starts again and replays them, at most MAX_RESTARTS times;
  *   - refused: voided or malformed. The run is dropped with the reason.
  * After a pass that waited or failed, flush() sends nothing until nextTry()
- * has passed, so every try is a backed-off one and a short outage cannot use
- * them all. A filing asked twice names the same run, and the server answers the
- * stored reply, so a retry never files a second score; a run that may have
- * filed is never started again. Fetch, storage, clock and rng arrive as arguments. */
+ * has passed. That time is stored with the queue, so a reload or another tab
+ * cannot spend tries faster, and a short outage cannot use them all. A filing
+ * asked twice names the same run, and the server answers the stored reply, so a
+ * retry never files a second score; a run that may have filed is never started
+ * again. Every tab holds the whole queue; with Web Locks one pass runs at a time.
+ * Fetch, storage, locks, clock and rng arrive as arguments. */
 import type { Clock, Rng, StorageLike } from '../../_kit/ports.ts';
 import { isDifficulty } from './difficulty.ts';
 import { fieldWidthOk } from './sim.ts';
@@ -42,30 +44,47 @@ export type FileOutcome =
   | { id: string; kind: 'sent' }
   | { id: string; kind: 'waiting' };
 interface FetchLike { method?: string; headers?: Record<string, string>; body?: string; credentials?: 'same-origin' }
+/** navigator.locks, or a stand-in: an exclusive lock held while `fn` runs. */
+export interface LocksLike { request<T>(name: string, fn: () => Promise<T>): Promise<T> }
 export interface FilerEnv {
   fetch(url: string, init?: FetchLike): Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
   storage: StorageLike | null;
+  locks?: LocksLike | null;
   clock?: Clock;
   rng?: Rng;
 }
+/** Why the next try waits: offline (wake() may cut it short), told to wait (429/503), or failing. */
+type Cause = 'offline' | 'busy' | 'fail' | null;
+interface Timing { dueAt: number; lag: number; cause: Cause }
+const NO_WAIT: Timing = { dueAt: 0, lag: 0, cause: null };
 
 export const PENDING_KEY = 'tankity-pending-runs';
 export const PENDING_MAX = 5;
 /** Backed-off tries in a row before a failing run is dropped: about four minutes of failures. */
 export const MAX_TRIES = 8;
 export const MAX_RESTARTS = 2;
-/** The pause, in ms, after the first pass that waited or failed; it doubles up to the cap, ±25%. */
+/** The pause, in ms, after the first pass that waited or failed; it doubles up to the cap, then ±25%. */
 export const BACKOFF_FIRST = 2000;
 export const BACKOFF_MAX = 5 * 60 * 1000;
 const URL = 'scores.php';
 
 const count = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
-function isPendingRuns(v: unknown): v is PendingRun[] {
-  return Array.isArray(v) && v.every(r => r && typeof r === 'object' && typeof r.id === 'string' && typeof r.seed === 'string'
+function isPendingRun(r: any): r is PendingRun {
+  return !!r && typeof r === 'object' && typeof r.id === 'string' && typeof r.seed === 'string'
     && isDifficulty(r.difficulty) && fieldWidthOk(r.w) && (r.run === null || typeof r.run === 'string')
     && Array.isArray(r.rounds) && r.rounds.every(isRoundLog) && count(r.sent) && r.sent <= r.rounds.length
     && (r.initials === null || typeof r.initials === 'string') && count(r.tries) && count(r.restarts)
-    && typeof r.fileAsked === 'boolean');
+    && typeof r.fileAsked === 'boolean';
+}
+/* The stored queue: its runs (one unreadable run is left out, not the rest) and when the next try is due. */
+function parseQueue(raw: string): ({ runs: PendingRun[] } & Timing) | null {
+  const v: any = JSON.parse(raw);
+  if (!v || typeof v !== 'object' || !Array.isArray(v.runs)) return null;
+  const cause: Cause = ['offline', 'busy', 'fail'].includes(v.cause) ? v.cause : null;
+  return {
+    runs: v.runs.filter(isPendingRun),
+    dueAt: Number.isFinite(v.dueAt) ? v.dueAt : 0, lag: count(v.lag) ? v.lag : 0, cause,
+  };
 }
 
 /** Why the server dropped a run, in the end card's words; null when it did not. */
@@ -80,8 +99,14 @@ function why(status: number, op: string, data: Record<string, unknown>): string 
   return null;
 }
 
-/** The server (or the network) said wait: nothing is spent. */
-class Wait extends Error {}
+/** The server (or the network) said wait: nothing is spent. `net`: no answer came at all. */
+class Wait extends Error {
+  readonly net: boolean;
+  constructor(why: string, net = false) {
+    super(why);
+    this.net = net;
+  }
+}
 /** A try failed and counts. */
 class Fail extends Error {}
 /** The run is over for good. */
@@ -96,13 +121,14 @@ class Refused extends Error {
 class Gone extends Refused {}
 
 /* Two copies of one run (this tab's and storage's) to one: rounds only grow, so
-   the longer list wins; the server-side progress comes from the copy further on. */
+   the longer list wins; the server-side progress comes from the copy further on.
+   Two tabs that started the same run at once agree on the smaller run id. */
 function mergeRun(a: PendingRun, b: PendingRun): PendingRun {
   const rank = (r: PendingRun): number[] => [r.restarts, r.run ? 1 : 0, r.sent, r.fileAsked ? 1 : 0];
   const ra = rank(a);
   const rb = rank(b);
   const i = ra.findIndex((v, k) => v !== rb[k]);
-  const ahead = i < 0 || ra[i]! > rb[i]! ? a : b;
+  const ahead = i >= 0 ? (ra[i]! > rb[i]! ? a : b) : (b.run ?? '') < (a.run ?? '') ? b : a;
   return { ...ahead, rounds: a.rounds.length >= b.rounds.length ? a.rounds : b.rounds, initials: a.initials ?? b.initials };
 }
 
@@ -111,13 +137,11 @@ export function createFiler(env: FilerEnv) {
   const rng = env.rng ?? Math.random;
   /* Storage is read again before every write and merged by id, so two tabs
      never erase each other's runs; the kit's pref keeps one copy per tab. */
-  function readDisk(): PendingRun[] | null {
+  function readDisk(): ({ runs: PendingRun[] } & Timing) | null {
     if (!env.storage) return null;
     try {
       const raw = env.storage.getItem(PENDING_KEY);
-      if (raw == null) return [];
-      const v: unknown = JSON.parse(raw);
-      return isPendingRuns(v) ? v : null;
+      return raw == null ? { runs: [], ...NO_WAIT } : parseQueue(raw);
     } catch {
       return null;
     }
@@ -125,7 +149,7 @@ export function createFiler(env: FilerEnv) {
   function writeDisk(runs: PendingRun[]): boolean {
     if (!env.storage) return false;
     try {
-      env.storage.setItem(PENDING_KEY, JSON.stringify(runs));
+      env.storage.setItem(PENDING_KEY, JSON.stringify({ runs, ...timing }));
       return true;
     } catch {
       return false;
@@ -133,21 +157,24 @@ export function createFiler(env: FilerEnv) {
   }
 
   // Runs in hand stay here too, so blocked storage still sends this session's runs.
-  let held: PendingRun[] = readDisk() ?? [];
+  const first = readDisk();
+  let held: PendingRun[] = first?.runs ?? [];
+  let timing: Timing = first ? { dueAt: first.dueAt, lag: first.lag, cause: first.cause } : NO_WAIT;
   let kept = env.storage !== null;
   const seen = new Set(held.map(r => r.id)); // ids storage has held
   const live = new Set<string>(); // begun here and still being played
-  const gone = new Set<string>(); // filed or dropped here
+  /* Filed here: never taken back from storage. A run evicted or dropped is not
+     tombstoned, so a tab still playing it puts it back and files it. */
+  const gone = new Set<string>();
   let busy: Promise<FileOutcome[]> | null = null;
-  let lag = 0; // passes in a row that waited or failed
-  let dueAt = 0; // no request before this time
 
-  function save(change: (runs: PendingRun[]) => PendingRun[] = r => r): void {
+  function save(change: (runs: PendingRun[]) => PendingRun[] = r => r, retime?: (t: Timing) => Timing): void {
     const disk = readDisk();
     if (disk) {
+      timing = { dueAt: disk.dueAt, lag: disk.lag, cause: disk.cause };
       const ours = new Map(held.map(r => [r.id, r]));
       const next: PendingRun[] = [];
-      for (const d of disk) {
+      for (const d of disk.runs) {
         seen.add(d.id);
         if (gone.has(d.id)) continue;
         const h = ours.get(d.id);
@@ -159,12 +186,13 @@ export function createFiler(env: FilerEnv) {
       held = next;
     }
     held = change(held);
+    if (retime) timing = retime(timing);
     kept = writeDisk(held);
     if (kept) for (const r of held) seen.add(r.id);
   }
   const update = (id: string, fn: (r: PendingRun) => PendingRun): void => save(runs => runs.map(r => (r.id === id ? fn(r) : r)));
-  const remove = (id: string): void => {
-    gone.add(id);
+  const remove = (id: string, filed = false): void => {
+    if (filed) gone.add(id);
     live.delete(id);
     save(runs => runs.filter(r => r.id !== id));
   };
@@ -180,7 +208,6 @@ export function createFiler(env: FilerEnv) {
       const abandoned = runs.filter(r => r.initials === null && !live.has(r.id));
       const evict = abandoned.slice(0, Math.max(0, runs.length + 1 - PENDING_MAX));
       if (runs.length - evict.length >= PENDING_MAX) return runs;
-      for (const r of evict) gone.add(r.id);
       ok = true;
       live.add(id);
       return [...runs.filter(r => !evict.includes(r)),
@@ -196,7 +223,7 @@ export function createFiler(env: FilerEnv) {
     live.delete(id);
   }
   /** Lets go of a run that will never finish (quit, Play again mid-match). A finished run is
-      never dropped: false then, and for an id not held. */
+      never dropped: false then, and for an id not held. A tab still playing it keeps it. */
   function drop(id: string): boolean {
     const r = find(id);
     if (!r || r.initials !== null) return false;
@@ -217,7 +244,7 @@ export function createFiler(env: FilerEnv) {
       status = res.status;
       data = ((await res.json().catch(() => null)) || {}) as Record<string, unknown>;
     } catch (_) {
-      throw new Wait('offline');
+      throw new Wait('offline', true);
     }
     if (status === 429 || status === 503) throw new Wait(String(status));
     if (status === 200) return data;
@@ -261,20 +288,24 @@ export function createFiler(env: FilerEnv) {
           if (!r) return null;
         }
         if (!r.initials) return null;
-        const { run, initials, fileAsked: asked } = r;
-        if (!asked) update(id, x => ({ ...x, fileAsked: true }));
+        const { run, fileAsked: asked } = r;
+        if (!asked) update(id, x => (x.run === run ? { ...x, fileAsked: true } : x));
+        // The save merged storage: another tab may have moved the run on. File what is held now.
+        r = find(id);
+        if (!r) return null;
+        if (r.run !== run || !r.initials) continue;
         let filed: Record<string, unknown>;
         try {
-          filed = await post(csrf, { op: 'file', run, initials });
+          filed = await post(csrf, { op: 'file', run, initials: r.initials });
         } catch (e) {
           if (e instanceof Gone && asked) {
-            remove(id);
+            remove(id, true);
             return { id, kind: 'sent' };
           }
           throw e;
         }
         if (!filed['ok']) throw new Fail('file');
-        remove(id);
+        remove(id, true);
         return {
           id, kind: 'filed', score: Number(filed['score']),
           rank: typeof filed['rank'] === 'number' ? filed['rank'] : null,
@@ -282,7 +313,10 @@ export function createFiler(env: FilerEnv) {
         };
       } catch (e) {
         if (!(e instanceof Gone)) throw e;
-        if ((find(id)?.restarts ?? MAX_RESTARTS) >= MAX_RESTARTS) throw new Refused('the score server kept losing it', e.detail);
+        const cur = find(id);
+        // Another tab filed or dropped it during this pass: nothing to report here.
+        if (!cur) return null;
+        if (cur.restarts >= MAX_RESTARTS) throw new Refused('the score server kept losing it', e.detail);
         // Start again from round 1 in this same pass; no try is spent.
         update(id, x => ({ ...x, run: null, sent: 0, fileAsked: false, restarts: x.restarts + 1 }));
       }
@@ -295,7 +329,7 @@ export function createFiler(env: FilerEnv) {
     try {
       res = await env.fetch(URL, { credentials: 'same-origin' });
     } catch (_) {
-      throw new Wait('offline');
+      throw new Wait('offline', true);
     }
     const data = (await res.json().catch(() => null)) as { csrf?: unknown } | null;
     if (!res.ok || !data || typeof data.csrf !== 'string') throw new Wait(String(res.status));
@@ -312,15 +346,17 @@ export function createFiler(env: FilerEnv) {
     save();
     const ids = held.filter(due).map(r => r.id);
     if (!ids.length) return [];
-    if (now() < dueAt) return ids.map(pending).filter(o => o !== null);
+    if (now() < timing.dueAt) return ids.map(pending).filter(o => o !== null);
     const out: FileOutcome[] = [];
     let waited = false;
+    let told = false; // a wait the server asked for, not just no answer
     let failed = false;
     let csrf = '';
     try {
       csrf = await token();
-    } catch (_) {
+    } catch (e) {
       waited = true;
+      told = !(e instanceof Wait && e.net);
     }
     for (const id of ids) {
       let o: FileOutcome | null;
@@ -336,6 +372,7 @@ export function createFiler(env: FilerEnv) {
             o = { id, kind: 'refused', why: e.message, ...(e.detail ? { detail: e.detail } : {}) };
           } else if (e instanceof Wait) {
             waited = true;
+            told ||= !e.net;
             o = pending(id);
           } else if ((find(id)?.tries ?? 0) + 1 >= MAX_TRIES) {
             remove(id);
@@ -350,29 +387,40 @@ export function createFiler(env: FilerEnv) {
       if (o) out.push(o);
     }
     if (waited || failed) {
-      lag += 1;
-      const pause = BACKOFF_FIRST * 2 ** Math.min(lag - 1, 20) * (0.75 + 0.5 * rng());
-      dueAt = now() + Math.min(BACKOFF_MAX, pause);
+      save(undefined, t => {
+        const lag = t.lag + 1;
+        // Jitter after the cap, so clients that reached it together still spread out.
+        const pause = Math.min(BACKOFF_MAX, BACKOFF_FIRST * 2 ** Math.min(lag - 1, 20)) * (0.75 + 0.5 * rng());
+        return { dueAt: now() + pause, lag, cause: failed ? 'fail' : told ? 'busy' : 'offline' };
+      });
     } else {
-      lag = 0;
-      dueAt = 0;
+      save(undefined, () => NO_WAIT);
     }
     return out;
   }
 
-  /** Sends everything due; concurrent calls share one attempt. Before nextTry() it sends nothing. */
+  /** Sends everything due; concurrent calls share one attempt, and with locks one tab's pass at a time.
+      Before nextTry() it sends nothing. */
   function flush(): Promise<FileOutcome[]> {
-    if (!busy) busy = flushNow().finally(() => { busy = null; });
+    if (!busy) busy = (env.locks ? env.locks.request(PENDING_KEY, flushNow) : flushNow()).finally(() => { busy = null; });
     return busy;
   }
 
   /** Ms until the next flush() can do anything; null when no run has a request to make. The one retry signal. */
   function nextTry(): number | null {
-    return held.some(due) ? Math.max(0, dueAt - now()) : null;
+    const disk = readDisk();
+    if (disk) timing = { dueAt: disk.dueAt, lag: disk.lag, cause: disk.cause };
+    return held.some(due) ? Math.max(0, timing.dueAt - now()) : null;
+  }
+
+  /** The network is back (online, the page shown again): ends a wait that came from no answer at
+      all. A 429, 503 or failing server keeps its pause, or every tab of a busy class would retry at once. */
+  function wake(): void {
+    save(undefined, t => (t.cause === 'offline' ? { ...t, dueAt: 0 } : t));
   }
 
   return {
-    begin, round, finish, drop, flush, nextTry,
+    begin, round, finish, drop, flush, nextTry, wake,
     waiting: () => held.length,
     /** False when the last save did not reach storage: the runs then last only as long as this page. */
     stored: () => kept,

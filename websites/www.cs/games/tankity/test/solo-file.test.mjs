@@ -31,10 +31,10 @@ function server(answer = () => null) {
 }
 const ops = s => s.calls.filter(c => c.op).map(c => c.op + (c.n ? c.n : ''));
 
-/** A filer on a clock the test moves; `again()` waits out nextTry() and flushes. */
-function make(fetch, storage = memoryStorage(), rng = () => 0.5) {
-  const clock = { t: 1_000_000, now: () => clock.t };
-  const f = createFiler({ fetch, storage, clock, rng });
+/** A filer on a clock the test moves; `again()` waits out nextTry() and flushes.
+    Tabs on one storage share one clock (`clock`), as they share the wall clock. */
+function make(fetch, storage = memoryStorage(), { rng = () => 0.5, clock = { t: 1_000_000, now: () => clock.t }, locks = null } = {}) {
+  const f = createFiler({ fetch, storage, clock, rng, locks });
   f.clock = clock;
   f.again = () => { clock.t += f.nextTry() ?? 0; return f.flush(); };
   return f;
@@ -94,7 +94,8 @@ test('offline: the run waits in storage and goes on with the next try', async ()
   assert.deepEqual(await down.flush(), [{ id: 'b', kind: 'waiting' }]);
   assert.match(storage.data.get(PENDING_KEY), /"id":"b"/);
   const later = make(server().fetch, storage);
-  assert.equal((await later.flush())[0].kind, 'filed');
+  assert.ok(later.nextTry() > 0, 'a reload keeps the pause');
+  assert.equal((await later.again())[0].kind, 'filed');
   assert.equal(later.waiting(), 0);
 });
 
@@ -240,14 +241,14 @@ test('nextTry grows from BACKOFF_FIRST to BACKOFF_MAX while the server says wait
   assert.equal(f.nextTry(), 0, 'a clean pass leaves no pause');
 });
 
-test('the pause is jittered by a quarter either way, and the cap still holds', async () => {
+test('the pause is jittered by a quarter either way, at the cap too', async () => {
   for (const [r, factor] of [[0, 0.75], [1, 1.25]]) {
-    const f = make(server(op => op === 'round' ? [429, {}] : null).fetch, memoryStorage(), () => r);
+    const f = make(server(op => op === 'round' ? [429, {}] : null).fetch, memoryStorage(), { rng: () => r });
     played(f, 'j');
     await f.flush();
     assert.equal(f.nextTry(), BACKOFF_FIRST * factor);
     for (let i = 0; i < 12; i++) await f.again();
-    assert.ok(f.nextTry() <= BACKOFF_MAX);
+    assert.equal(f.nextTry(), BACKOFF_MAX * factor, 'jittered after the cap, so capped clients still spread out');
   }
 });
 
@@ -396,7 +397,7 @@ test('the filing flag survives a reload', async () => {
   await one.flush();
   const s = server(op => op === 'file' ? [410, { error: 'expired' }] : null);
   const two = make(s.fetch, storage);
-  assert.deepEqual(await two.flush(), [{ id: 'l', kind: 'sent' }]);
+  assert.deepEqual(await two.again(), [{ id: 'l', kind: 'sent' }]);
   assert.deepEqual(ops(s), ['file']);
 });
 
@@ -504,7 +505,7 @@ test('a full queue of finished runs refuses a new one and keeps all of them', ()
   const f = make(async () => { throw new Error('offline'); }, storage);
   for (let i = 0; i < PENDING_MAX; i++) played(f, `done${i}`);
   assert.equal(f.begin('new', 'seed-1', 'normal', 720), false);
-  const ids = JSON.parse(storage.data.get(PENDING_KEY)).map(r => r.id);
+  const ids = JSON.parse(storage.data.get(PENDING_KEY)).runs.map(r => r.id);
   assert.deepEqual(ids, Array.from({ length: PENDING_MAX }, (_, i) => `done${i}`));
 });
 
@@ -516,7 +517,7 @@ test('a full queue evicts an abandoned run (no initials, not being played here),
   for (let i = 1; i < PENDING_MAX; i++) played(old, `done${i}`);
   const f = make(async () => { throw new Error('offline'); }, storage); // a reload: 'left' can never finish
   assert.equal(f.begin('new', 'seed-1', 'normal', 720), true);
-  const ids = JSON.parse(storage.data.get(PENDING_KEY)).map(r => r.id);
+  const ids = JSON.parse(storage.data.get(PENDING_KEY)).runs.map(r => r.id);
   assert.deepEqual(ids, [...Array.from({ length: PENDING_MAX - 1 }, (_, i) => `done${i + 1}`), 'new']);
 });
 
@@ -549,7 +550,7 @@ test('two tabs on one storage keep each other\'s runs', async () => {
   played(a, 'X');
   b.begin('Y', 'seed-1', 'normal', 720);
   b.round('Y', round(1));
-  const ids = () => JSON.parse(storage.data.get(PENDING_KEY)).map(r => r.id).sort();
+  const ids = () => JSON.parse(storage.data.get(PENDING_KEY)).runs.map(r => r.id).sort();
   assert.deepEqual(ids(), ['X', 'Y']);
   a.round('X', round(3)); // A saves again: Y must survive
   assert.deepEqual(ids(), ['X', 'Y']);
@@ -565,8 +566,8 @@ test('a run another tab filed is not sent again from this one', async () => {
   const a = make(async () => { throw new Error('offline'); }, storage);
   played(a, 'X');
   await a.flush();
-  const b = make(s.fetch, storage);
-  assert.equal((await b.flush())[0].kind, 'filed');
+  const b = make(s.fetch, storage, { clock: a.clock });
+  assert.equal((await b.again())[0].kind, 'filed');
   a.clock.t += 10 * 60 * 1000;
   assert.deepEqual(await a.flush(), [], 'A sees it gone');
   assert.equal(s.calls.filter(c => c.op === 'file').length, 1);
@@ -582,4 +583,178 @@ test('a run is not started on the server until it has a round to send', async ()
   f.round('q', round(1));
   await f.flush();
   assert.deepEqual(ops(s), ['start', 'round1']);
+});
+
+/** Web Locks as a test double: one holder at a time, in request order. */
+function fakeLocks() {
+  let tail = Promise.resolve();
+  const held = [];
+  return {
+    held,
+    request(name, fn) {
+      const p = tail.then(async () => { held.push(name); try { return await fn(); } finally { held.pop(); } });
+      tail = p.catch(() => {});
+      return p;
+    },
+  };
+}
+/** A server that hands out a new run id per start and counts the runs filed. */
+function runServer() {
+  let starts = 0;
+  const s = server();
+  const filed = new Set();
+  const fetch = async (url, init = {}) => {
+    await new Promise(r => setTimeout(r, 0)); // let the other tab interleave
+    const body = init.body && JSON.parse(init.body);
+    if (body && body.op === 'start') { s.calls.push({ op: 'start' }); return reply(200, { ok: true, run: String.fromCharCode(98 + starts++).repeat(32) }); }
+    if (body && body.op === 'file') filed.add(body.run);
+    return s.fetch(url, init);
+  };
+  return { fetch, calls: s.calls, filed };
+}
+
+test('N1: a run evicted by another tab while still in play comes back and files when it finishes', async () => {
+  const storage = memoryStorage();
+  const clock = { t: 1_000_000, now: () => clock.t };
+  const offline = async () => { throw new Error('offline'); };
+  const ids = () => JSON.parse(storage.data.get(PENDING_KEY)).runs.map(r => r.id);
+  const a = make(offline, storage, { clock });
+  const b = make(offline, storage, { clock });
+  a.begin('L', 'seed-1', 'normal', 720);
+  a.round('L', round(1));
+  for (let i = 1; i < PENDING_MAX; i++) played(b, `done${i}`);
+  assert.equal(b.begin('new', 'seed-1', 'normal', 720), true, 'B sees L as abandoned and evicts it');
+  assert.ok(!ids().includes('L'));
+  a.round('L', round(2, 'matchLost'));
+  a.finish('L', 'ABC');
+  assert.ok(ids().includes('L'), 'A puts it back');
+  b.round('new', round(1)); // B saves
+  assert.ok(ids().includes('L'), 'B does not take it out again');
+  a.wake(); // A saves
+  assert.ok(ids().includes('L'), 'A keeps it after finishing');
+  const s = server();
+  const c = make(s.fetch, storage, { clock });
+  clock.t += c.nextTry() ?? 0;
+  const out = await c.flush();
+  assert.deepEqual(out.find(o => o.id === 'L'), { id: 'L', kind: 'filed', score: 100, rank: 7, difficulty: 'hard' });
+});
+
+test('N1: a run dropped by a tab that was not playing it comes back from the tab that is', () => {
+  const storage = memoryStorage();
+  const offline = async () => { throw new Error('offline'); };
+  const ids = () => JSON.parse(storage.data.get(PENDING_KEY)).runs.map(r => r.id);
+  const a = make(offline, storage);
+  a.begin('L', 'seed-1', 'normal', 720);
+  const b = make(offline, storage); // a page load that drops what it cannot finish
+  assert.equal(b.drop('L'), true);
+  assert.deepEqual(ids(), []);
+  a.round('L', round(1));
+  assert.deepEqual(ids(), ['L']);
+  b.wake();
+  assert.deepEqual(ids(), ['L']);
+});
+
+test('N2: with locks, two tabs flushing one unstarted run start it once and file it once', async () => {
+  const storage = memoryStorage();
+  const locks = fakeLocks();
+  const s = runServer();
+  const a = make(s.fetch, storage, { locks });
+  played(a, 'X');
+  const b = make(s.fetch, storage, { locks, clock: a.clock });
+  const [oa, ob] = await Promise.all([a.flush(), b.flush()]);
+  assert.deepEqual([...oa, ...ob].map(o => o.kind), ['filed']);
+  assert.equal(s.calls.filter(c => c.op === 'start').length, 1);
+  assert.equal(s.calls.filter(c => c.op === 'file').length, 1);
+  assert.equal(locks.held.length, 0);
+});
+
+test('N2: without locks, two tabs in lockstep agree on one run and file only it', async () => {
+  const storage = memoryStorage();
+  const s = runServer();
+  const a = make(s.fetch, storage);
+  played(a, 'X');
+  const b = make(s.fetch, storage, { clock: a.clock });
+  await Promise.all([a.flush(), b.flush()]);
+  assert.equal(s.calls.filter(c => c.op === 'start').length, 2, 'both started (the race locks prevent)');
+  assert.deepEqual([...s.filed], ['b'.repeat(32)], 'only the smaller run id is filed');
+});
+
+test('N2: the merge breaks a tie between two started copies by the smaller run id, either way round', () => {
+  for (const [mine, theirs] of [['c', 'b'], ['b', 'c']]) {
+    const storage = memoryStorage();
+    const base = { id: 'X', seed: 'seed-1', difficulty: 'hard', w: 1200, rounds: [round(1)], sent: 0, initials: null, tries: 0, restarts: 0, fileAsked: false };
+    storage.setItem(PENDING_KEY, JSON.stringify({ runs: [{ ...base, run: mine.repeat(32) }], dueAt: 0, lag: 0, cause: null }));
+    const f = make(async () => { throw new Error('offline'); }, storage);
+    storage.setItem(PENDING_KEY, JSON.stringify({ runs: [{ ...base, run: theirs.repeat(32) }], dueAt: 0, lag: 0, cause: null }));
+    f.wake();
+    assert.equal(JSON.parse(storage.data.get(PENDING_KEY)).runs[0].run, 'b'.repeat(32));
+  }
+});
+
+test('N3: a 410 for a run another tab took during this pass answers nothing', async () => {
+  const storage = memoryStorage();
+  const one = make(async () => { throw new Error('offline'); }, storage);
+  played(one, 'X');
+  const s = server();
+  const fetch = async (url, init = {}) => {
+    const body = init.body && JSON.parse(init.body);
+    if (body && body.op === 'round') {
+      // Another tab files X meanwhile and takes it out of storage.
+      const q = JSON.parse(storage.data.get(PENDING_KEY));
+      storage.setItem(PENDING_KEY, JSON.stringify({ ...q, runs: q.runs.filter(r => r.id !== 'X') }));
+      return reply(410, { error: 'expired' });
+    }
+    return s.fetch(url, init);
+  };
+  const two = make(fetch, storage, { clock: one.clock }); // a reload: X is not being played here
+  assert.deepEqual(await two.again(), []);
+  assert.equal(two.waiting(), 0);
+});
+
+test('the pause is kept in storage: a reload or another tab cannot spend tries faster', async () => {
+  const storage = memoryStorage();
+  const s = server(op => op === 'file' ? [500, {}] : null);
+  const a = make(s.fetch, storage);
+  played(a, 'g');
+  await a.flush();
+  const files = () => s.calls.filter(c => c.op === 'file').length;
+  assert.equal(files(), 1);
+  for (let i = 0; i < 5; i++) {
+    const reload = make(s.fetch, storage, { clock: a.clock });
+    assert.ok(reload.nextTry() > 0);
+    assert.deepEqual(await reload.flush(), [{ id: 'g', kind: 'waiting' }]);
+  }
+  assert.equal(files(), 1, 'no reload asked again inside the pause');
+  const reload = make(s.fetch, storage, { clock: a.clock });
+  await reload.again();
+  assert.equal(reload.nextTry(), 2 * BACKOFF_FIRST, 'the next pass doubles the shared pause');
+  assert.equal(JSON.parse(storage.data.get(PENDING_KEY)).runs[0].tries, 2);
+});
+
+test('wake() ends a wait for the network, never one a 429, 503 or failing server asked for', async () => {
+  const cases = [
+    ['offline', async () => { throw new Error('offline'); }, 0],
+    ['offline post', async (url, init = {}) => { if (!init.method) return reply(200, { csrf: 'tok' }); throw new Error('offline'); }, 0],
+    ['429', server(op => op === 'round' ? [429, {}] : null).fetch, BACKOFF_FIRST],
+    ['503', server(op => op === 'round' ? [503, { error: 'busy' }] : null).fetch, BACKOFF_FIRST],
+    ['429 csrf', async () => reply(429, {}), BACKOFF_FIRST],
+    ['500', server(op => op === 'round' ? [500, {}] : null).fetch, BACKOFF_FIRST],
+  ];
+  for (const [name, fetch, after] of cases) {
+    const f = make(fetch);
+    played(f, 'w');
+    await f.flush();
+    assert.equal(f.nextTry(), BACKOFF_FIRST, name);
+    f.wake();
+    assert.equal(f.nextTry(), after, name);
+  }
+});
+
+test('one unreadable run in storage is left out, not the rest', () => {
+  const storage = memoryStorage();
+  const f = make(async () => { throw new Error('offline'); }, storage);
+  played(f, 'ok');
+  const q = JSON.parse(storage.data.get(PENDING_KEY));
+  storage.setItem(PENDING_KEY, JSON.stringify({ ...q, runs: [...q.runs, { id: 'bad' }] }));
+  assert.equal(make(async () => null, storage).waiting(), 1);
 });

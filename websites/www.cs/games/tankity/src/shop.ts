@@ -116,20 +116,22 @@ export function createShop(deps: ShopDeps) {
       }
       const locked = (it.minRound || 0) > G.round;
       const unit = packPrice(it);
-      const total = unit * qty;
+      // A repair buys only the packs the hull needs, so it prices by those.
+      const packs = it.effect === 'repair' ? Math.min(qty, repairPacksWanted(G.armor, G.plate, it.n)) : qty;
+      const total = unit * packs;
       const parts = shopName(it, unit);
       entries.push({
         kind: 'item',
         index: idx,
         name: parts.name,
-        vals: `${parts.vals}${qty > 1 ? ` ×${qty} = $${total}` : ''}`,
+        vals: `${parts.vals}${packs > 1 ? ` ×${packs} = $${total}` : ''}`,
         sub: shopSub(it),
         sub2: shopSub2(it, locked),
         icon: it.kind === 'ammo' ? { kind: 'ammo', w: it.w! } : { kind: 'gear', g: it.g! },
         selected: idx === G.shopSel,
         locked,
-        disabled: locked || G.cash < total || (it.effect === 'repair' && G.armor >= maxArmor(G.plate)),
-        qty,
+        disabled: locked || G.cash < total || (it.effect === 'repair' && packs === 0),
+        qty: packs,
         weapon: it.kind === 'ammo' ? it.w : undefined,
       });
     });

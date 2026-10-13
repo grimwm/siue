@@ -606,6 +606,9 @@ await (async () => {
   frames(120);
   check('banner-done', els['round-banner'].hidden === true);
   const shopOpen = els['shop-veil'].hidden === false;
+  // The pre-match shop has no tank: the aim, power, wind and fuel read '-', not the demo's last values.
+  check('shop-prematch-hud-dashes', ['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel'].every(id => els[id].textContent === '-'),
+    ['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel'].map(id => els[id].textContent).join('|'));
   const shopCash0 = els['shop-cash'].textContent;
   // Esc in the shop shuts panels first and, with none open, opens the menu: it never starts the round (N does).
   TAP('global', 'escape');
@@ -1119,6 +1122,11 @@ await (async () => {
     const repairRow = shopRows().find(li => rowName(li).includes('Repair'));
     const buy = actsOf(repairRow).children[actsOf(repairRow).children.length - 1];
     check('net-shop-repair-enabled-when-damaged', buy.disabled === false && !/Armor full/.test(repairRow.textContent), repairRow.textContent);
+    // A repair is priced and labelled by the packs the hull needs, however many are dialled in.
+    TAP('shop', 'qtyUp'); TAP('shop', 'qtyUp'); frames(3);
+    const dialled = shopRows().find(li => rowName(li).includes('Repair'));
+    check('net-shop-repair-priced-by-need', !/×/.test(dialled.textContent), dialled.textContent);
+    check('net-shop-armor-pill', els['hud-armor'].textContent === '60', els['hud-armor'].textContent);
     click(buy); await tick(10);
     check('net-shop-repair-goes-to-server', buysSent.includes('repair'), buysSent.join());
   }

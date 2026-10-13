@@ -34,6 +34,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `src/match.ts` | The solo match: dealing a match and its rounds, whose turn it is, firing and what a blast does to each unit, a drone's aim and shot, the end of a round and of the match, the name cards, the end veil's props and the cosmetics decay. `createMatch(deps)` |
 | `src/room.ts` | A running room match on this client: the moves it sends (fire, aim, drive, load a gun, buy, Ready), adopting the room snapshot once the replay before it has played, turning events into log lines, talk and sounds, a room frame, the turn alert for a hidden tab, and the final standings. `createRoom(deps)` |
 | `src/lobby.ts` | Getting into and out of a room: the lobby overlay's props, the server dot, the hills picker, hosting and joining under the saved initials, the roster, the invite link, starting the match, the leave question, leaving and the rematch. `createLobby(deps)` |
+| `src/armor.ts` | Armor between rounds: max armor (100 plus 25 per plate), what a repair restores and how many packs fill the hull, a plate's armor, what the next round musters with, and the armor words the shop and the ARMOR pill use. The room server's armor rules (`rooms.php`) agree with it |
 | `src/shop.ts` | The field shop: what a pack costs and how many the chest covers, each row's stat lines, the Ready line in a room, what a purchase does to the stock and the gear, and the shop overlay's props. `createShop(deps)` |
 | `src/guns.ts` | The weapon picker: the rack's tiles, the cursor and its keys, loading a gun and cycling through the rack. `createGuns(deps)` |
 | `src/chatter.ts` | What the crew says: the speakers, the line tables, the portrait, the speech-bubble queue, and the radio log with its overlay props. `createChatter(deps)` |
@@ -650,7 +651,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/preview.test.mjs`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |
 | `test/flow.test.mjs`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
 | `test/protocol.test.mjs`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
-| `test/sim-vectors.test.mjs`                    | `src/sim.ts` and `src/ai.ts` agree with `rooms.php` on every shared sim vector (see Sim vectors) |
+| `test/sim-vectors.test.mjs`                    | `src/sim.ts`, `src/ai.ts` and `src/armor.ts` agree with `rooms.php` on every shared sim vector; armor cases compare exactly (see Sim vectors) |
 | `phpunit --testsuite tankity` (host PHP)       | `ConfigTest` (`.config.yaml` precedence), `DataDirTest`, `DbTest`, `RoomStoreTest`, `LegacyImportTest` and `HousekeepTest` (storage: the directory and its checks, the database and its journal, rooms as rows, the old files' import, cleanup on a fake clock), `GameJsonTest` (the YAML parser, the `game.yaml` schema including effects, `--check` staleness) and `RoomsSimTest` (server sim units: pierce, spawns, spacing, replay stamping; drone bracketing and strategies; one unit left standing ends a round, the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller) |
 | `RoomArmorTest`, `RoomBuyTest` (host PHP) | Armor carry-over and re-muster, the capped repair, plates, and every shop purchase rule |
 | `phpunit --testsuite tankity-docker`           | `RoomsTest` (the room shelf over its own `php -S`), `RoomsStoreTest` (the store under real concurrency: exact cap under a race, close, sweep, a held writer and the 503, a killed holder), `RoomsRefusedStoreTest` (a store PHP refuses answers JSON 503 on every endpoint, with one log line per request), `RoomsStoreFailureTest` (a database error partway through a save answers JSON 503 and leaves nothing behind) and `RoomsLoadTest` (8 playing rooms, each with 3 seated players and a watcher, polling at the client's pace against the docker site: no 503, p95 under 300 ms). Runs inside the PHP container, which matches the host's PHP (`make test` does) |
@@ -713,7 +714,8 @@ shell flight) and in `rooms.php` (the authoritative room server). `protocol/sim-
 keeps the two honest: `protocol/sim-vectors.php` calls `rooms.php`'s real
 functions over a spread of cases and writes each case's inputs and expected
 outputs; `test/sim-vectors.test.mjs` replays every case through the sim,
-`src/sim.ts` and the drone AI, `src/ai.ts`, and compares within 1e-4.
+`src/sim.ts`, the drone AI, `src/ai.ts`, and the armor rules, `src/armor.ts`; the sim and AI
+compare within 1e-4 and the armor cases compare exactly.
 
 - Covered: the RNG and terrain generator, spawn spots, shot speed, muzzle,
   gravity and wind, hit boxes, the swept hit test (owner-clear rule, lance

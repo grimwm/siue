@@ -121,7 +121,14 @@ export function createHud(deps: HudDeps) {
     if (!G.tanks.length) {
       // The pre-match shop opens before any tank is mustered; the standing
       // (armor, lives, badge) still has to follow what is bought there.
-      if (G.phase === 'shop') { HUD.turn = 'shop. Spend it!'; renderStanding(null, ''); paintHud(); }
+      if (G.phase === 'shop') {
+        HUD.turn = 'shop. Spend it!';
+        // No tank yet: the aim, power, wind and fuel are not the demo's last values.
+        HUD.angle = HUD.power = HUD.wind = HUD.fuel = '-';
+        if (G.ammo) renderLoadout();
+        renderStanding(null, '');
+        paintHud();
+      }
       return;
     }
     const t = cur() || me();

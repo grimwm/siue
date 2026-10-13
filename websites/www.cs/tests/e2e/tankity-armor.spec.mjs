@@ -7,6 +7,10 @@ test('Repair greys out at full armor, a plate raises max and armor, and the pill
   await dealSolo(page);
   const row = name => page.locator('#shop-list li', { hasText: name });
   const buy = name => row(name).locator('.acts button').last();
+  // No tank is mustered yet: the bar shows dashes, not the demo's last aim.
+  for (const id of ['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel']) {
+    await expect.poll(async () => { await page.clock.runFor(500); return hud(page, id); }, { timeout: 5_000 }).toBe('-');
+  }
   await expect(row('Repair')).toContainText('Armor full (100 of 100).');
   await expect(buy('Repair')).toBeDisabled();
   await buy('Hull plate').click();

@@ -558,6 +558,31 @@ const bodyOf = entry => JSON.parse(entry.init.body);
   check('plan-other-phase-is-not-our-turn', planCatchUp([op('fire')], false, { phase: 'shop', turn: null }, 0) === null);
 }
 
+// A match poll in flight when Play again takes the room to its lobby answers
+// with the old 'over' room: it is dropped, so the end card cannot come back
+// over the lobby. So is one that answers after the next match began.
+{
+  let release;
+  const { net, seen } = makeClient(() => new Promise(r => { release = () => r(roomReply({ phase: 'over' })); }));
+  net.beginMatch();
+  const late = net.refresh();
+  net.toLobby();
+  release();
+  await late;
+  check('late-poll-after-lobby-dropped', seen.snapshots.length === 0, j(seen.snapshots.length));
+  net.beginMatch();
+  const old = net.refresh();
+  net.toLobby();
+  net.beginMatch();
+  release();
+  await old;
+  check('late-poll-after-next-match-dropped', seen.snapshots.length === 0, j(seen.snapshots.length));
+  const fresh = net.refresh();
+  release();
+  await fresh;
+  check('current-poll-still-applied', seen.snapshots.length === 1, j(seen.snapshots.length));
+}
+
 // ---- invite link ----
 check('invite-url', inviteUrl('AB3D', { origin: 'https://host', pathname: '/games/tankity/' }) === 'https://host/games/tankity/?code=AB3D');
 check('invite-url-needs-a-code', inviteUrl('', { origin: 'https://host', pathname: '/x' }) === '');

@@ -414,10 +414,13 @@ export function createLobby(deps: LobbyDeps) {
     closeLeaveVeil();
     if (net.on) netLeave();
   }
-  /* Play again (same room): the room goes back to its lobby for everyone. */
+  /* Play again (same room): the room goes back to its lobby for everyone. The
+     reply's seats and host draw the lobby at once (the room may have a new
+     host), not the match's last ones until the lobby's first poll. */
   async function netAgain(): Promise<void> {
     try {
-      await net.post('again', {});
+      const d = await net.post('again', {});
+      if (d.room) { net.seats = d.room.seats || []; net.hostSeat = d.room.hostSeat; }
       netBackToLobby();
     } catch (err) { say(prettyRoomError(err), 'bad'); }
   }

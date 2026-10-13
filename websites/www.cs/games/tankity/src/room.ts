@@ -259,6 +259,8 @@ export function createRoom(deps: RoomDeps) {
     if (room.phase === 'play') {
       // A next match started before this client saw the room go back to its lobby.
       if (MATCH.lastPhase === 'over') { MATCH.out = false; MATCH.outShown = false; }
+      // The snapshot says so too: a reload after going out missed the event.
+      if (room.you && room.you.lives === 0) MATCH.out = true;
       G.over = false;
       G.phase = MATCH.myTurn ? 'aim' : 'think';
       hideShop();
@@ -283,6 +285,7 @@ export function createRoom(deps: RoomDeps) {
       }
     } else if (room.phase === 'shop') {
       G.phase = 'shop';
+      if (room.you && room.you.lives === 0) MATCH.out = true;
       // Polls repeat the shop phase; only arriving in it shuts open panels.
       if (MATCH.lastPhase !== 'shop') { closePreview(); closeOverlays(); }
       // Shown first, then drawn: only a laid-out list can bring the
@@ -300,6 +303,9 @@ export function createRoom(deps: RoomDeps) {
       if (MATCH.lastPhase && MATCH.lastPhase !== 'lobby') backToLobby();
       return;
     }
+    // An open Standings or you're-out card follows the match, not the poll it opened on.
+    const endVeil = $('end-veil');
+    if (room.phase !== 'over' && endVeil && !endVeil.hidden && (END.buttons === 'peek' || END.buttons === 'out')) roomCard(room, END.buttons);
     MATCH.lastPhase = room.phase;
     MATCH.lastTurn = room.turn;
     MATCH.lastRound = room.round;

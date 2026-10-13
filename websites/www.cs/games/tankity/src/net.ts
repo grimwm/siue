@@ -165,6 +165,10 @@ export class RoomClient {
   on = false;
   /** The first snapshot of the match has been taken. */
   synced = false;
+  /** Bumped whenever a match begins or ends for this client: a match poll that
+   *  answers after it (an 'over' room once Play again took it to the lobby) is
+   *  stale and dropped. */
+  private matchEpoch = 0;
   seats: RoomSeat[] = [];
   /** The seat that starts the match, as the last snapshot said. */
   hostSeat = 0;
@@ -357,7 +361,7 @@ export class RoomClient {
     this.stopPolling();
     this.stopLobbyWatch();
     this.on = false; this.code = ''; this.seat = -1; this.token = ''; this.csrf = ''; this.since = 0;
-    this.seats = []; this.synced = false;
+    this.seats = []; this.synced = false; this.matchEpoch++;
     this.dropTerrain();
   }
 
@@ -367,6 +371,7 @@ export class RoomClient {
    * runs until stopPolling. */
   beginMatch(since = 0): void {
     this.on = true;
+    this.matchEpoch++;
     this.since = since;
     this.synced = false;
     this.dropTerrain();
@@ -381,18 +386,22 @@ export class RoomClient {
     this.stopPolling();
     this.on = false;
     this.synced = false;
+    this.matchEpoch++;
   }
 
   stopPolling(): void {
     if (this.pollId) { this.env.clearInterval(this.pollId); this.pollId = 0; }
   }
 
-  /** One match poll: fetch the room and apply it. A failed poll is retried by
-   * the next one. */
+  /** One match poll: fetch the room and apply it, unless the match it asked
+   * about ended for this client meanwhile. A failed poll is retried by the
+   * next one. */
   async refresh(): Promise<void> {
     if (!this.on) return;
+    const epoch = this.matchEpoch;
     try {
-      this.apply(await this.getState());
+      const room = await this.getState();
+      if (this.on && epoch === this.matchEpoch) this.apply(room);
     } catch (_) { /* the next poll retries; the hills wait */ }
   }
 

@@ -213,7 +213,14 @@ final class ScoreGuard
         if (str_contains($addr, ':')) {
             $packed = @inet_pton($addr);
             if ($packed !== false && strlen($packed) === 16) {
-                $addr = bin2hex(substr($packed, 0, 8)) . '/64';
+                // An IPv4 client seen through IPv6 (::ffff:a.b.c.d, or NAT64's
+                // 64:ff9b::/96) keys on its IPv4 address; every such client shares
+                // the same first 64 bits, so the /64 would put them all in one bucket.
+                $mapped = substr($packed, 0, 12) === str_repeat("\0", 10) . "\xff\xff"
+                    || substr($packed, 0, 12) === "\x00\x64\xff\x9b" . str_repeat("\0", 8);
+                $addr = $mapped
+                    ? (string) inet_ntop(substr($packed, 12))
+                    : bin2hex(substr($packed, 0, 8)) . '/64';
             }
         }
         return substr(hash_hmac('sha256', $addr, $this->rateSalt), 0, 24);

@@ -263,6 +263,19 @@ final class ScoreGuardTest extends TestCase
         $this->assertSame('rate', $this->guard()->consumeRun($runs[2]));
     }
 
+    public function testAnIpv4AddressInsideIpv6KeepsItsOwnBucket(): void
+    {
+        // A dual-stack listener reports IPv4 clients as ::ffff:a.b.c.d; their first
+        // 64 bits are all the same, so a /64 key would put every IPv4 client in one bucket.
+        $v4 = $this->guard(['REMOTE_ADDR' => '198.51.100.9'])->clientKey();
+        $this->assertSame($v4, $this->guard(['REMOTE_ADDR' => '::ffff:198.51.100.9'])->clientKey());
+        $this->assertSame($v4, $this->guard(['REMOTE_ADDR' => '64:ff9b::198.51.100.9'])->clientKey());
+        $this->assertNotSame(
+            $this->guard(['REMOTE_ADDR' => '::ffff:198.51.100.9'])->clientKey(),
+            $this->guard(['REMOTE_ADDR' => '::ffff:198.51.100.10'])->clientKey()
+        );
+    }
+
     public function testAnIpv6BlockSharesOneBucketAndIpv4IsUnchanged(): void
     {
         $a = $this->guard(['REMOTE_ADDR' => '2001:db8:1:2::1']);

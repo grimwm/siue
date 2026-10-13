@@ -13,6 +13,8 @@ define('TANKITY_ROOMS_LIB', true);
 require_once __DIR__ . '/rooms.php';
 require_once __DIR__ . '/server/scores-api.php';
 
+// A backstop past the round's own CPU budget: one request plays at most one round.
+set_time_limit((int) ceil(solo_round_cpu()) + 15);
 try {
     tankity_housekeep(time(), tankity_jobs());
     // One byte past the cap is enough to refuse a body; the rest is never read.

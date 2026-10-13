@@ -18,7 +18,13 @@ const SCORES_MAX_DEPTH = 8; // a round's JSON nests 3 deep
 const SOLO_RUN_IDLE = 7200; // a run expires two hours after its last accepted request
 const SOLO_RUN_MAX_AGE = 86400; // and a day after it started, at the latest
 const SOLO_RUN_FILED_KEEP = 3600; // a filed run answers a repeated filing this long
-const SOLO_MAX_LIVE_RUNS = 1000;
+const SOLO_MAX_LIVE_RUNS = 1000; // live or waiting to file, across the server: about 30 MB of state at most
+// Runs one address may hold (live, over or void, not yet expired): a flood from
+// one address can neither fill the table nor take every other player's place.
+const SOLO_MAX_RUNS_PER_CLIENT = 100;
+const SOLO_MAX_PLAYING = 8; // rounds being played at once across the server; past it a round waits (503)
+const SOLO_LEASE_SLACK = 30; // seconds a round's lease outlasts its CPU budget, for a slow wall clock
+const SOLO_EXPIRE_BATCH = 1000; // runs housekeeping deletes per pass: more than an hour of starts can add
 // Per address, unless rounds_per_hour says otherwise. One campus NAT is one
 // address, so this is sized for a class, not for one player.
 const SOLO_ROUNDS_PER_HOUR = 600;
@@ -71,9 +77,54 @@ function solo_runs_live(PDO $db, int $now): int
     return (int) $q->fetchColumn();
 }
 
+/* The unexpired runs one address holds, void ones included (a filed run holds nothing). */
+function solo_runs_of(PDO $db, string $client, int $now): int
+{
+    $q = $db->prepare("SELECT COUNT(*) FROM solo_runs WHERE client = ? AND status IN ('live', 'over', 'void') AND touched >= ? AND created >= ?");
+    $q->execute([$client, $now - SOLO_RUN_IDLE, $now - SOLO_RUN_MAX_AGE]);
+    return (int) $q->fetchColumn();
+}
+
+/* A void run answers nothing but 'void', so it keeps no state. */
 function solo_run_void(string $id, int $now): void
 {
-    tankity_tx(tankity_db(), fn(PDO $db) => $db->prepare("UPDATE solo_runs SET status = 'void', touched = ? WHERE id = ? AND status = 'live'")->execute([$now, $id]));
+    tankity_tx(tankity_db(), function (PDO $db) use ($id, $now): void {
+        $db->prepare("UPDATE solo_runs SET status = 'void', state = '{}', touched = ? WHERE id = ? AND status = 'live'")->execute([$now, $id]);
+        $db->prepare('UPDATE solo_runs SET playing = 0 WHERE id = ?')->execute([$id]);
+    });
+}
+
+/* Takes the lease to play round $n of a run: [null, state] when this request
+   may play it, else the reply to send. One request plays a round at a time
+   (a copy sent meanwhile waits, then gets the stored reply), and at most
+   SOLO_MAX_PLAYING rounds play across the server. A request that dies
+   mid-round leaves a lease that runs out. */
+function solo_run_lease(string $id, int $n, int $now): array
+{
+    return tankity_tx(tankity_db(), function (PDO $db) use ($id, $n, $now): array {
+        $row = solo_run_row($db, $id);
+        if ($row === null) {
+            return [[404, ['error' => 'no such run']], null];
+        }
+        if ((int) $row['round'] === $n && $row['reply'] !== '') {
+            return [[200, json_decode((string) $row['reply'], true)], null];
+        }
+        if ($row['status'] !== 'live' || (int) $row['round'] !== $n - 1) {
+            return [[409, $row['status'] === 'void' ? ['error' => 'void'] : ['error' => 'out of order', 'round' => (int) $row['round']]], null];
+        }
+        $busy = $db->prepare('SELECT COUNT(*) FROM solo_runs WHERE playing > ?');
+        $busy->execute([$now]);
+        if ((int) $row['playing'] > $now || (int) $busy->fetchColumn() >= SOLO_MAX_PLAYING) {
+            return [[503, ['error' => 'busy']], null];
+        }
+        $db->prepare('UPDATE solo_runs SET playing = ? WHERE id = ?')->execute([$now + (int) ceil(solo_round_cpu()) + SOLO_LEASE_SLACK, $id]);
+        return [null, (string) $row['state']];
+    });
+}
+
+function solo_run_release(string $id): void
+{
+    tankity_tx(tankity_db(), fn(PDO $db) => $db->prepare('UPDATE solo_runs SET playing = 0 WHERE id = ?')->execute([$id]));
 }
 
 /* src/solo-log.ts isClaim, with JSON's whole numbers as PHP decodes them. */
@@ -128,27 +179,33 @@ function tankity_scores_start(array $in, ScoreGuard $guard, int $now): array
     if (stripos(ltrim($seed), 'room:') === 0) {
         return [422, ['error' => 'seeds that begin with room: are reserved for room matches; use another seed']];
     }
-    $state = solo_state_encode(solo_deal($seed, $level, $w)); // the state records the width every round is played at
-    return tankity_tx(tankity_db(), function (PDO $db) use ($guard, $now, $level, $seed, $state): array {
+    $client = $guard->clientKey();
+    return tankity_tx(tankity_db(), function (PDO $db) use ($guard, $now, $level, $seed, $w, $client): array {
         if (solo_runs_live($db, $now) >= SOLO_MAX_LIVE_RUNS) {
             return [503, ['error' => 'busy']];
+        }
+        if (solo_runs_of($db, $client, $now) >= SOLO_MAX_RUNS_PER_CLIENT) {
+            return [429, ['error' => 'rate']];
         }
         $id = $guard->startRun();
         if ($id === null) {
             return [429, ['error' => 'rate']];
         }
-        $db->prepare("INSERT INTO solo_runs (id, difficulty, seed, created, touched, round, status, state, reply, filed)
-            VALUES (?, ?, ?, ?, ?, 0, 'live', ?, '', '')")->execute([$id, $level, $seed, $now, $now, $state]);
+        // Dealt only once the start is allowed; the state records the width every round is played at.
+        $state = solo_state_encode(solo_deal($seed, $level, $w));
+        $db->prepare("INSERT INTO solo_runs (id, difficulty, seed, created, touched, round, status, state, reply, filed, client)
+            VALUES (?, ?, ?, ?, ?, 0, 'live', ?, '', '', ?)")->execute([$id, $level, $seed, $now, $now, $state, $client]);
         return [200, ['ok' => true, 'run' => $id]];
     });
 }
 
 /* One round: the server plays it from the stored state outside the write lock
-   (it can take up to solo_round_cpu()), then stores the result unless another
-   request stored this round first. The client's claim must be the server's
-   own, or the run is void. $obj is the same body decoded with objects, so a
-   JSON object sent where a list belongs is refused as the browser's referee
-   refuses it, not read as a list. */
+   (it can take up to solo_round_cpu()), holding the run's lease, then stores
+   the result if the run is still at the round before. One request plays one
+   round, and a round stored is never played again. The client's claim must be
+   the server's own, or the run is void. $obj is the same body decoded with
+   objects, so a JSON object sent where a list belongs is refused as the
+   browser's referee refuses it, not read as a list. */
 function tankity_scores_round(array $in, object $obj, ScoreGuard $guard, int $now): array
 {
     $n = $in['n'] ?? null;
@@ -175,9 +232,18 @@ function tankity_scores_round(array $in, object $obj, ScoreGuard $guard, int $no
     if ($row['status'] !== 'live' || (int) $row['round'] !== $n - 1) {
         return [409, ['error' => 'out of order', 'round' => (int) $row['round']]];
     }
+    [$answer, $stored] = solo_run_lease($id, $n, $now);
+    if ($answer !== null) {
+        return $answer;
+    }
     $buys = is_array($obj->buys ?? null) ? $in['buys'] : null;
     $shots = is_array($obj->shots ?? null) ? $in['shots'] : null;
-    $got = solo_round(solo_state_decode((string) $row['state']), $buys, $shots, solo_round_cpu());
+    try {
+        $got = solo_round(solo_state_decode($stored), $buys, $shots, solo_round_cpu());
+    } catch (Throwable $e) {
+        solo_run_release($id);
+        throw $e;
+    }
     if (!$got['ok']) {
         solo_run_void($id, $now);
         return [422, ['error' => 'void', 'why' => $got['error']]];
@@ -195,7 +261,7 @@ function tankity_scores_round(array $in, object $obj, ScoreGuard $guard, int $no
             return $row !== null && (int) $row['round'] === $n && $row['reply'] !== ''
                 ? [200, json_decode((string) $row['reply'], true)] : [409, ['error' => 'out of order', 'round' => (int) ($row['round'] ?? 0)]];
         }
-        $db->prepare('UPDATE solo_runs SET state = ?, round = ?, status = ?, touched = ?, reply = ? WHERE id = ?')->execute([
+        $db->prepare('UPDATE solo_runs SET state = ?, round = ?, status = ?, touched = ?, reply = ?, playing = 0 WHERE id = ?')->execute([
             $state, $n, $got['claim']['end'] === 'matchLost' ? 'over' : 'live', $now, json_encode($reply, JSON_UNESCAPED_SLASHES), $id,
         ]);
         return [200, $reply];
@@ -277,7 +343,8 @@ function tankity_scores_handle(string $method, array $query, string $raw, ScoreG
     if (stripos($type, 'application/json') !== 0 || !$guard->originAllowed() || !$guard->csrfOk()) {
         return [403, ['error' => 'forbidden']];
     }
-    if (strlen($raw) > SCORES_MAX_BODY) {
+    // The declared length first: the caller then reads no more than the cap.
+    if ((int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > SCORES_MAX_BODY || strlen($raw) > SCORES_MAX_BODY) {
         return [413, ['error' => 'too large']];
     }
     $in = json_decode($raw, true, SCORES_MAX_DEPTH);

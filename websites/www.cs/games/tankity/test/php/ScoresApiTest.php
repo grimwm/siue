@@ -591,6 +591,113 @@ final class ScoresApiTest extends TestCase
         $this->assertSame(404, $at('198.51.100.8'));
     }
 
+    // ---- denial of service: what one client, or many, can make the server spend
+
+    /** Stored runs for the client this test's request comes from (or another key), all fresh. */
+    private function seedRuns(int $count, string $status, ?string $client = null, int $from = 0): void
+    {
+        $client ??= $this->guard()->clientKey();
+        tankity_tx(tankity_db(), function (PDO $db) use ($count, $status, $client, $from): void {
+            $q = $db->prepare("INSERT INTO solo_runs (id, difficulty, seed, created, touched, round, status, state, reply, filed, client)
+                VALUES (?, 'normal', 's', ?, ?, 0, ?, '{}', '', '', ?)");
+            for ($i = 0; $i < $count; $i++) {
+                $q->execute([sprintf('%032x', $from + $i), $this->now, $this->now, $status, $client]);
+            }
+        });
+    }
+
+    public function testADeclaredBodyPastTheCapIsRefusedBeforeItIsRead(): void
+    {
+        $_SERVER['CONTENT_LENGTH'] = (string) (SCORES_MAX_BODY + 1);
+        $this->assertSame([413, ['error' => 'too large']], $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720]));
+        $_SERVER['CONTENT_LENGTH'] = (string) SCORES_MAX_BODY;
+        $this->assertSame(200, $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720])[0]);
+    }
+
+    public function testOneClientHoldsAtMostItsShareOfRuns(): void
+    {
+        $this->override['startsPerHour'] = 1000;
+        $this->seedRuns(SOLO_MAX_RUNS_PER_CLIENT - 2, 'live');
+        $this->seedRuns(1, 'over', null, 5000);
+        $this->seedRuns(1, 'void', null, 6000);
+        $this->seedRuns(3, 'filed', null, 7000); // a filed run holds no place
+        $this->assertSame([429, ['error' => 'rate']], $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720]));
+        $this->assertSame(SOLO_MAX_RUNS_PER_CLIENT + 3, (int) tankity_db()->query('SELECT COUNT(*) FROM solo_runs')->fetchColumn());
+        $_SERVER['REMOTE_ADDR'] = '198.51.100.200';
+        $this->assertSame(200, $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720])[0], 'another address is not held to it');
+    }
+
+    public function testAStartRecordsWhoStartedIt(): void
+    {
+        $id = $this->start($this->recorded());
+        $this->assertSame($this->guard()->clientKey(), $this->row($id)['client']);
+    }
+
+    public function testAVoidRunKeepsNoState(): void
+    {
+        $run = $this->recorded();
+        $id = $this->start($run);
+        $r = $run['rounds'][0];
+        $r['claim']['cash']++;
+        $this->assertSame(422, $this->round($id, $r)[0]);
+        $this->assertSame(['void', '{}', 0], [$this->row($id)['status'], $this->row($id)['state'], (int) $this->row($id)['playing']]);
+    }
+
+    public function testARoundAlreadyInPlayIsNotPlayedTwiceAtOnce(): void
+    {
+        $run = $this->recorded();
+        $id = $this->start($run);
+        tankity_db()->prepare('UPDATE solo_runs SET playing = ? WHERE id = ?')->execute([$this->now + 10, $id]);
+        $cpu = solo_cpu_now();
+        $this->assertSame([503, ['error' => 'busy']], $this->round($id, $run['rounds'][0]));
+        $this->assertLessThan(0.05, solo_cpu_now() - $cpu, 'nothing was played');
+        $this->assertSame(0, (int) $this->row($id)['round']);
+        $this->now += 11;
+        $this->assertSame(200, $this->round($id, $run['rounds'][0])[0], 'a lease left by a request that died runs out');
+        $this->assertSame(0, (int) $this->row($id)['playing'], 'and a played round gives it back');
+    }
+
+    public function testOnlyAFewRoundsArePlayedAtOnceAcrossTheServer(): void
+    {
+        $run = $this->recorded();
+        $id = $this->start($run);
+        $this->seedRuns(SOLO_MAX_PLAYING, 'live', 'someone-else', 100);
+        tankity_db()->prepare("UPDATE solo_runs SET playing = ? WHERE client = 'someone-else'")->execute([$this->now + 30]);
+        $this->assertSame([503, ['error' => 'busy']], $this->round($id, $run['rounds'][0]));
+        $this->assertSame('live', $this->row($id)['status'], 'a busy server holds the run as it is');
+        tankity_db()->exec("UPDATE solo_runs SET playing = 0 WHERE id = '" . sprintf('%032x', 100) . "'");
+        $this->assertSame(200, $this->round($id, $run['rounds'][0])[0]);
+    }
+
+    public function testAStoredRoundIsAnsweredWithoutPlayingItAgain(): void
+    {
+        $run = $this->recorded();
+        $id = $this->start($run);
+        $first = $this->round($id, $run['rounds'][0]);
+        tankity_db()->prepare('UPDATE solo_runs SET playing = ? WHERE id = ?')->execute([$this->now + 10, $id]);
+        $this->assertSame($first, $this->round($id, $run['rounds'][0]), 'a repeat is answered from the row, lease or none');
+    }
+
+    public function testAStartRefusedForRateDealsNothing(): void
+    {
+        $this->override['startsPerHour'] = 1;
+        $this->assertSame(200, $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 1440])[0]);
+        $cpu = solo_cpu_now();
+        for ($i = 0; $i < 50; $i++) {
+            $this->assertSame(429, $this->post(['op' => 'start', 'seed' => "s$i", 'difficulty' => 'normal', 'w' => 1440])[0]);
+        }
+        $this->assertSame(1, (int) tankity_db()->query('SELECT COUNT(*) FROM solo_runs')->fetchColumn());
+        $this->assertLessThan(1.0, solo_cpu_now() - $cpu);
+    }
+
+    public function testHousekeepingKeepsUpWithAFlood(): void
+    {
+        $this->seedRuns(SOLO_EXPIRE_BATCH, 'void', 'flood');
+        tankity_db()->exec('UPDATE solo_runs SET touched = touched - ' . (SOLO_RUN_IDLE + 1));
+        $this->assertGreaterThanOrEqual(1000, SOLO_EXPIRE_BATCH);
+        $this->assertSame(SOLO_EXPIRE_BATCH, tankity_jobs()['solo']($this->now));
+    }
+
     // ---- the boards' sources
 
     public function testBrowserClaimsNeverEvictServerFiledRows(): void

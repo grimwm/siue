@@ -231,10 +231,12 @@ function tankity_schema_steps(): array
             "UPDATE board SET source = 'client' WHERE seed NOT LIKE 'room:%'",
         ],
         5 => [
-            // state is the run's JSON; reply answers a repeated round, filed a repeated filing.
-            'CREATE TABLE solo_runs (id TEXT PRIMARY KEY, difficulty TEXT NOT NULL, seed TEXT NOT NULL, created INTEGER NOT NULL,
+            // state is the run's JSON; reply answers a repeated round, filed a repeated filing; client is the
+            // guard's key for the address that started it; playing is when a round being played gives up its lease.
+            "CREATE TABLE solo_runs (id TEXT PRIMARY KEY, difficulty TEXT NOT NULL, seed TEXT NOT NULL, created INTEGER NOT NULL,
                 touched INTEGER NOT NULL, round INTEGER NOT NULL, status TEXT NOT NULL, state TEXT NOT NULL, reply TEXT NOT NULL,
-                filed TEXT NOT NULL)',
+                filed TEXT NOT NULL, client TEXT NOT NULL DEFAULT '', playing INTEGER NOT NULL DEFAULT 0)",
+            'CREATE INDEX solo_runs_client ON solo_runs (client)',
             'CREATE INDEX solo_runs_touched ON solo_runs (touched)',
             'ALTER TABLE board ADD COLUMN standin INTEGER NOT NULL DEFAULT 0',
             // The converted rows no longer say which names were refused; every client AAA is taken for a stand-in.

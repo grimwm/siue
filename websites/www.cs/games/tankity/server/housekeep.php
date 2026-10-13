@@ -70,7 +70,7 @@ function tankity_jobs(): array
         $jobs['rooms'] = fn(int $now): int => room_sweep($now);
     }
     if (function_exists('solo_runs_expire')) {
-        $jobs['solo'] = fn(int $now): int => solo_runs_expire($now);
+        $jobs['solo'] = fn(int $now): int => solo_runs_expire($now, SOLO_EXPIRE_BATCH);
     }
     return $jobs;
 }

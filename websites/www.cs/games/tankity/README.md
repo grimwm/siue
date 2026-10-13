@@ -389,7 +389,11 @@ header and cookie pair, or anything but JSON is 403; a body over 256 KiB, 413):
   same reply.
 
 GET never sends a seed. A run expires two hours after its last request and a
-day after it started; at most 1000 are live at once (503 `busy` past that).
+day after it started; at most 1000 are live at once (503 `busy` past that), and
+one address holds at most 100 (429). A round is played outside the database's
+write lock under a lease on its run, so a copy sent while it plays waits (503)
+and then gets the stored reply; at most 8 rounds play at once across the server
+(503 `busy`), and a void or filed run keeps no state.
 Every address has hourly caps: 120 starts, `rounds_per_hour` rounds (600) and
 `scores_per_hour` filings (240). IPv6 addresses count by their /64 and IPv4
 ones inside IPv6 by the IPv4 address, so a class behind one campus NAT shares

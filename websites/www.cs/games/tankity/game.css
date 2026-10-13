@@ -328,6 +328,22 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
   .shop-foot .runstats { flex: 1 0 100%; margin: 0 0 0.2rem; }
   .shop-foot button { margin-top: 0; }
 }
+/* The end card is a column that never outgrows the screen: the scoreboard takes
+   what is left and scrolls on its own, and the score line, the filed line and
+   the buttons stay in a footer below it. */
+#end-veil .card { max-width: 40rem; min-width: 0; display: flex; flex-direction: column; max-height: calc(100dvh - 2rem); overflow: hidden; }
+#end-veil .end-board { flex: 1 1 auto; min-height: 4.5rem; overflow-y: auto; min-width: 0; }
+#end-veil .end-board .board { margin-bottom: 0.4rem; }
+#end-veil .board-table td.last { white-space: normal; }
+.end-foot { flex: none; padding-top: 0.3rem; display: flex; flex-direction: column; }
+.end-foot p { margin: 0.2rem 0; }
+.end-acts { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.3rem; }
+.end-acts button { margin-top: 0; }
+@media (max-height: 480px) {
+  #end-veil .card { padding-top: 0; padding-bottom: 0.6rem; }
+  #end-veil #nav-end { display: none; }
+  #end-veil #end-text { margin: 0.2rem 0; }
+}
 /* Phones: the buttons share the text column's width in equal halves (a lone
    Preview takes all of it), so nothing sets the card wider than the screen. */
 @media (max-width: 600px) {

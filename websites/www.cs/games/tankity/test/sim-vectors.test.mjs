@@ -151,7 +151,7 @@ const RUN = {
   'match-end'(c) {
     const seats = c.lives.map((l, seat) => ({ seat, human: l !== null, lives: l ?? 0 }));
     const o = standings.matchOutcome(seats, c.startHumans);
-    return { over: o.over, winner: o.winner, bonus: standings.winnerBonus(c.round) };
+    return { over: o.over, winner: o.winner, bonus: 2 * (sim.TUNE.roundWinScore + c.round * 150) };
   },
   volley(c) {
     world(c);

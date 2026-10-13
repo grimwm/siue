@@ -1,7 +1,6 @@
 // Operation Tankity: a solo match played to its end, and the end-of-match veil.
 import { test, expect } from '@playwright/test';
 import { newPlayer, hud, aimTo, setPower } from './helpers.mjs';
-import { local } from './fx-helpers.mjs';
 
 /* Lose on purpose: the only way a solo match ends is the last life going. Lob
    mortar shells at the lowest power straight up, so they come down on our own
@@ -31,7 +30,7 @@ async function loseMatch(page) {
   }
 }
 
-test('a lost match shows the end veil: result, score, callsign form, and Continue back to the title card', async ({ browser, baseURL }) => {
+test('a lost match shows the end card: result, scoreboard, score, and Continue back to the title card', async ({ browser }) => {
   test.setTimeout(180_000);
   const { page, errors } = await newPlayer(browser, undefined, { clock: true });
   await page.keyboard.press('n');
@@ -53,29 +52,30 @@ test('a lost match shows the end veil: result, score, callsign form, and Continu
   await expect(veil.locator('#end-title')).toHaveText('Tank down');
   await expect(veil.locator('#end-text')).toContainText('The tank is scrap');
   await expect(veil.locator('#end-score')).toHaveText(/^Score \d+ · \d+ rounds won · \d+ rounds played · seed \S+$/);
-  await expect(veil.locator('#rematch')).toBeHidden(); // rematch is for rooms
   await veil.locator('.card').screenshot({ path: 'test-results/tankity-end-veil.png' });
 
-  // The score form: a blank callsign is refused, a typed one is filed. Filing
-  // writes a real score, so only the local site gets it; the live leaderboard
-  // is left alone.
-  const form = page.locator('#end-score-form');
-  await expect(form).toBeVisible();
-  const send = form.getByRole('button');
-  await expect(send).toHaveText('File score');
-  await expect(send).toBeEnabled();
-  if (local(baseURL)) {
-    await page.locator('#end-name').fill('');
-    await send.click();
-    await expect(send).toHaveText('File score'); // nothing filed without a callsign
-    await page.locator('#end-name').fill('e2e-ace');
-    const filed = page.waitForResponse(r => r.url().includes('scores.php') && r.request().method() === 'POST');
-    await send.click();
-    expect((await filed).ok()).toBe(true);
-    await expect(send).toHaveText('Filed');
-    await expect(send).toBeDisabled();
-    expect(await page.evaluate(() => localStorage.getItem('tankity-callsign'))).toBe('e2e-ace');
-    await expect(page.locator('#end-name')).toHaveValue('e2e-ace');
+  // The scoreboard heads the card; no callsign form, no rematch.
+  await expect(veil.locator('.board-table')).toBeVisible();
+  await expect(veil.locator('#end-score-form')).toHaveCount(0);
+  await expect(veil.locator('#rematch')).toHaveCount(0);
+  await expect(veil.locator('#end-leave')).toHaveCount(0);
+
+  // Keyboard: focus lands on Continue, and Esc leaves the card (and fullscreen) alone.
+  await expect(page.locator('#again')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(veil).toBeVisible();
+
+  // Both phone shapes: no sideways scroll, and Continue stays in view without scrolling the page.
+  for (const size of [{ width: 852, height: 393 }, { width: 393, height: 852 }]) {
+    await page.setViewportSize(size);
+    const fit = await page.evaluate(() => {
+      const r = document.getElementById('again').getBoundingClientRect();
+      const de = document.documentElement;
+      return { sideways: de.scrollWidth > de.clientWidth, bottom: r.bottom, top: r.top, h: window.innerHeight };
+    });
+    expect(fit.sideways, `sideways scroll at ${size.width}x${size.height}`).toBe(false);
+    expect(fit.top).toBeGreaterThanOrEqual(0);
+    expect(fit.bottom).toBeLessThanOrEqual(fit.h);
   }
 
   // Continue goes back to the title card over the demo; Play deals a fresh

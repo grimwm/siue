@@ -392,7 +392,7 @@ const MATCH: MatchState = {
   myTurn: false, aimDirty: false, driveAcc: 0, driveT: 0,
   pendingRoom: null,
   lastPhase: '', lastTurn: -1, lastRound: -1, initials: '',
-  roundTo: '', out: false, outShown: false, lastRoom: null,
+  roundTo: '', winBonus: 0, out: false, outShown: false, lastRoom: null,
 };
 const replay = createReplay({
   tank: seat => G.tanks.find(t => t.seat === seat),
@@ -416,7 +416,7 @@ const { updateCamera, shownAngle, shownPower, render } = createView({
   G, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
 /* The high scores (src/scores.ts). */
-const { SCORES, renderScoresOverlay, loadScores, savedCallsign, fileReport } = createScores({
+const { SCORES, renderScoresOverlay, loadScores, fileReport } = createScores({
   G, $, keyHint, say, toggleOverlay,
 });
 /* The coach (src/tutorial.ts). */
@@ -442,10 +442,10 @@ const {
 } = createMatch({
   field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
-  tutorialFired, fileReport, savedCallsign, backToTitle: () => backToTitle(),
+  tutorialFired, backToTitle: () => backToTitle(),
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
   netFire: () => netFire(), netLeave: quiet => netLeave(quiet), netNext: want => netNext(want),
-  netRematch: () => netRematch(), openLobby: () => openLobby(),
+  netAgain: () => {}, initials: getInitials, fileSolo: (_run, done) => done(''),
 });
 /* The field shop (src/shop.ts): prices, rows, buying, the Ready line. */
 const {
@@ -475,7 +475,7 @@ const {
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving, the rematch. */
 const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-  netLeave, netRematch,
+  netLeave,
 } = createLobby({
   G, $, net, MATCH, HUD, END, SCORES, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
   closeOverlays, closePreview, endTutorial, hideShop, savedInitials: getInitials, paintHud, refreshNavHints, renderEndVeil,
@@ -772,7 +772,8 @@ function overlayScrollTarget(): HTMLElement | null {
   for (const id of ['lobby-veil', 'preview-veil', 'end-veil',
       'gun-overlay', 'help-overlay', 'report-overlay', 'menu-overlay', 'log-overlay']) {
     const el = $(id);
-    if (el && !el.hidden) return el;
+    // The end card scrolls its scoreboard, not the veil.
+    if (el && !el.hidden) return id === 'end-veil' ? ($('end-board') ?? el) : el;
   }
   return null;
 }
@@ -793,7 +794,7 @@ while everything fits, and lights up the moment content overflows. */
 const NAV_HINTS: [string, string][] = [
   // The shop scrolls its list, not its veil.
   ['shop-list', 'nav-shop'], ['lobby-veil', 'nav-lobby'],
-  ['preview-veil', 'nav-preview'], ['end-veil', 'nav-end'],
+  ['preview-veil', 'nav-preview'], ['end-board', 'nav-end'],
   ['help-overlay', 'nav-help'], ['report-overlay', 'nav-report'],
   ['menu-overlay', 'nav-menu'], ['log-overlay', 'nav-log'],
   ['tutorial-overlay', 'nav-tutorial'], ['gun-overlay', 'nav-gun'],

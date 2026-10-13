@@ -1250,7 +1250,7 @@ await (async () => {
   void document.getElementById('leave-stay');
   // (shop-leave is in the shop component, src/ui/shop.tsx; the rest are in the page.)
   const shopSrc = fs.readFileSync(path.join(GAME_DIR, 'src', 'ui', 'shop.tsx'), 'utf8');
-  check('leave-markup', html.includes('id="leave-veil"') && ['leave-go', 'leave-stay', 'rematch', 'again', 'end-score-form'].every(rendered) && rendered('menu-leave')
+  check('leave-markup', html.includes('id="leave-veil"') && ['leave-go', 'leave-stay', 'again'].every(rendered) && rendered('menu-leave')
     && shopSrc.includes('id="shop-leave"'));
   check('leave-buttons-in-room', els['menu-leave'].hidden === false && els['shop-leave'].hidden === false,
     `${els['menu-leave'].hidden} ${els['shop-leave'].hidden}`);

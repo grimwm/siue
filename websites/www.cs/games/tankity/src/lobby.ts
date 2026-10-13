@@ -3,8 +3,7 @@
  * The lobby overlay (src/ui/lobby.tsx) and what stands behind it: checking
  * the initials, the room server's dot and occupancy, the hills picker, hosting
  * and joining, the roster while the room waits, the invite link, starting the
- * match, the question before leaving one, leaving it, and a rematch on the
- * same hills. A running match is room.ts. The game's state, the room client
+ * match, the question before leaving one, and leaving it. A running match is room.ts. The game's state, the room client
  * and the rest of the game arrive as deps. */
 import type { sfx as SfxApi } from './audio.ts';
 import type { GameState, MatchState } from './game-types.ts';
@@ -418,9 +417,6 @@ export function createLobby(deps: LobbyDeps) {
   function netLeave(quiet?: boolean): void {
     const wasOn = net.on;
     net.leave(); // tells the server, stops both polls, clears the session
-    END.rematch = null;
-    END.backToRooms = false;
-    renderEndVeil();
     replay.clear(); MATCH.pendingRoom = null; MATCH.myTurn = false; MATCH.lastPhase = ''; MATCH.lastTurn = -1; MATCH.lastRound = -1;
     SCORES.formHidden = false;
     renderScoresOverlay();
@@ -435,24 +431,8 @@ export function createLobby(deps: LobbyDeps) {
       backToTitle();
     }
   }
-  async function netRematch(): Promise<void> {
-    // Same hills again, decided entirely server side: the map id reselects the
-    // hidden seed, and no seed string ever crosses the wire.
-    const initials = MATCH.initials;
-    const map = net.map;
-    if (!netValidInitials(initials)) {
-      say('No callsign kept for the rematch. Rejoin from the lobby.', 'bad');
-      openLobby();
-      return;
-    }
-    netLeave(true);
-    openLobby();
-    await hostRoom(initials, map || '');
-    if (map) { LOBBY.mapId = map; renderLobby(); }
-  }
-
   return {
     renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-    netLeave, netRematch,
+    netLeave,
   };
 }

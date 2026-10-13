@@ -76,10 +76,6 @@ export function createScores(deps: ScoresDeps) {
     SCORES.note = `Showing reports from ${src}.`;
     renderScoresOverlay();
   }
-  /* The last callsign filed, so the next report is one tap. */
-  function savedCallsign(): string {
-    return callsign.get();
-  }
   async function fileReport(name: string): Promise<void> {
     callsign.set(name);
     const entry = { name, score: G.score, banked: G.roundsWon, won: G.won, seed: G.seed, difficulty: G.difficulty ?? 'normal' };
@@ -98,5 +94,5 @@ export function createScores(deps: ScoresDeps) {
     loadScores();
   }
 
-  return { SCORES, renderScoresOverlay, loadScores, savedCallsign, fileReport };
+  return { SCORES, renderScoresOverlay, loadScores, fileReport };
 }

@@ -20,6 +20,7 @@ import type { Input } from './input.ts';
 import { prettyRoomError, shouldCatchUp, standingsRows } from './net.ts';
 import type { RoomClient } from './net.ts';
 import { roomBoard } from './standings.ts';
+import { focusEndVeil } from './ui/endveil.tsx';
 import type { Board } from './standings.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
@@ -255,6 +256,7 @@ export function createRoom(deps: RoomDeps) {
     HUD.runStats = `Room ${net.code} · you are ${seatName(net.seat)} · round ${G.round}`;
     if (room.phase !== 'shop') net.dropReadyWish();
     if (room.phase === 'play') {
+      MATCH.winBonus = 0;
       G.over = false;
       G.phase = MATCH.myTurn ? 'aim' : 'think';
       hideShop();
@@ -367,6 +369,7 @@ export function createRoom(deps: RoomDeps) {
       } else say(`${seatName(e.seat)} takes round ${e.round}.`, 'info');
       return;
     }
+    if (e.t === 'matchwin') { MATCH.winBonus = e.bonus; return; }
     if (e.t === 'roundlost') {
       MATCH.roundTo = 'the battery';
       sfx.play('lose');
@@ -548,15 +551,17 @@ export function createRoom(deps: RoomDeps) {
     END.text = `The battery never quits, and neither do you. Room ${net.code} ended on round ${room.round || '?'}.`;
     END.score = rows.map(r => `${r.name} ${r.score}${r.mine ? ' (you)' : ''}`).join(' · ') +
       (room.you ? ` · you banked $${room.you.cash || 0}` : '');
-    END.backToRooms = true;
-    END.formHidden = true; // room standings are not high-score runs
-    END.rematch = net.map
-      ? `Rematch on ${net.mapName || 'these hills'}`
-      : 'Rematch on random hills';
+    END.board = roomBoard(room, net.seat, 'over', '', MATCH.winBonus);
+    END.filed = null;
+    END.buttons = 'over';
     renderEndVeil();
     const veil = $('end-veil');
-    if (veil) veil.hidden = false;
-    refreshNavHints();
+    if (veil) {
+      const opening = veil.hidden;
+      veil.hidden = false;
+      refreshNavHints();
+      if (opening) focusEndVeil(veil);
+    }
   }
 
   /* The shop's scoreboard in a room: everyone's match after the round just ended. */

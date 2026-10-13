@@ -10,7 +10,7 @@ import { click, fire, submit, document, makeEl, els } from '../../_kit/test/dom-
 
 globalThis.document = document;
 
-const UI = ['shop', 'lobby', 'guns', 'scores', 'log', 'tutorial', 'endveil', 'leave'];
+const UI = ['shop', 'lobby', 'guns', 'scores', 'log', 'tutorial', 'leave'];
 const ui = await importTsx(import.meta.dirname, Object.fromEntries(UI.map(n => [n, `../src/ui/${n}.tsx`])));
 const { renderShop } = ui.shop;
 const { renderLobby } = ui.lobby;
@@ -18,7 +18,6 @@ const { renderGuns } = ui.guns;
 const { renderScores } = ui.scores;
 const { renderLog } = ui.log;
 const { renderTutorial } = ui.tutorial;
-const { renderEndVeil } = ui.endveil;
 const { renderLeave } = ui.leave;
 
 const walk = (el, out = []) => { for (const c of el.children) { out.push(c); walk(c, out); } return out; };
@@ -465,49 +464,6 @@ function gunTiles(n = 10, loaded = 0) {
   section.scrollTop = 0;
   renderScores(section, sp({ rows: ['a', 'b'] }));
   check('scores-reload-keeps-scroll', section.scrollTop === 40, String(section.scrollTop));
-}
-
-// ---- end veil ----
-{
-  const veil = makeEl('end-veil');
-  veil.hidden = false;
-  const calls = { filed: [], rematch: 0, again: 0 };
-  const ep = (over = {}) => ({
-    keyHint, kicker: 'Match over', title: 'Hills claimed!', text: 'All rivals down.', score: 'Score 10 · seed 7',
-    formHidden: false, filed: false, callsign: 'ZED', rematch: null, backToRooms: false,
-    onFile: n => calls.filed.push(n), onRematch: () => { calls.rematch++; }, onAgain: () => { calls.again++; }, ...over,
-  });
-  renderEndVeil(veil, ep());
-  const card = veil.children[0];
-  check('end-card', hasClass(card, 'card') && card.getAttribute('role') === 'dialog' && attr(card, 'aria-modal') === 'true'
-    && attr(card, 'aria-labelledby') === 'end-title');
-  const head = card.children[0];
-  check('end-head', hasClass(head, 'ov-head') && text(byId(head, 'end-kicker')) === 'Match over' && hasClass(byId(head, 'end-kicker'), 'kicker')
-    && text(byId(head, 'end-title')) === 'Hills claimed!' && attr(byId(head, 'nav-end'), 'data-scroll-only') === '');
-  check('end-text-and-score', text(byId(card, 'end-text')) === 'All rivals down.' && text(byId(card, 'end-score')) === 'Score 10 · seed 7'
-    && hasClass(byId(card, 'end-score'), 'runstats'));
-  const rematch = byId(card, 'rematch');
-  check('end-rematch-hidden-in-solo', rematch.hidden === true || attr(rematch, 'hidden') !== undefined);
-  const form = byId(card, 'end-score-form');
-  const input = byId(form, 'end-name');
-  check('end-form', hasClass(form, 'seedbox') && !form.hidden && text(form.children[0]) === 'Callsign' && attr(input, 'maxLength') === '24'
-    && attr(input, 'placeholder') === 'e.g. tankity' && text(form.children[2]) === 'File score' && attr(form.children[2], 'type') === 'submit');
-  check('end-callsign-prefilled', input.value === 'ZED', input.value);
-  const again = byId(card, 'again');
-  check('end-again', hasClass(again, 'btn-primary') && text(again) === 'Continue', text(again));
-  input.value = ' zed ';
-  submit(form);
-  check('end-submit-reports-the-box-as-typed', calls.filed.join('|') === ' zed ', JSON.stringify(calls.filed));
-  renderEndVeil(veil, ep({ callsign: 'ABC' }));
-  check('end-redraw-keeps-typed-callsign', input.value === ' zed ' && byId(veil, 'end-name') === input);
-  renderEndVeil(veil, ep({ filed: true }));
-  check('end-filed', text(form.children[2]) === 'Filed' && form.children[2].disabled === true && byId(veil, 'end-score-form') === form);
-  renderEndVeil(veil, ep({ formHidden: true, rematch: 'Rematch on random hills', backToRooms: true, kicker: 'Room ABCD · final standings' }));
-  check('end-room-standings', form.hidden === true && text(byId(veil, 'rematch')) === 'Rematch on random hills' && !byId(veil, 'rematch').hidden
-    && text(byId(veil, 'again')) === 'Back to rooms' && text(byId(veil, 'end-kicker')) === 'Room ABCD · final standings', text(byId(veil, 'again')));
-  click(byId(veil, 'rematch'));
-  click(byId(veil, 'again'));
-  check('end-buttons-report', calls.rematch === 1 && calls.again === 1);
 }
 
 // ---- leave question ----

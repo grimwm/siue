@@ -24,22 +24,22 @@ import {
   spawnSpots, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling,
 } from './sim.ts';
-import type { Blast, Shell } from './sim.ts';
+import type { Blast, Difficulty, Shell } from './sim.ts';
 import { soloBoard } from './standings.ts';
 import type { Board } from './standings.ts';
-import { renderEndVeil as drawEndVeil } from './ui/endveil.tsx';
+import { renderEndVeil as drawEndVeil, focusEndVeil } from './ui/endveil.tsx';
+import type { EndVeilProps } from './ui/endveil.tsx';
 import type { KeyHintFn } from './ui/chrome.tsx';
 
-/** What the end veil says and which buttons it offers. */
+/** What the end card says and which buttons it offers (src/ui/endveil.tsx). */
 export interface EndState {
   kicker: string;
   title: string;
   text: string;
   score: string;
-  formHidden: boolean;
-  filed: boolean;
-  rematch: string | null;
-  backToRooms: boolean;
+  board: Board | null;
+  filed: string | null;
+  buttons: EndVeilProps['buttons'];
 }
 
 /** What the solo match needs from the page and the rest of the game. */
@@ -80,23 +80,25 @@ export interface MatchDeps {
   endTutorial(seen: boolean): void;
   maybeStartTutorial(): void;
   tutorialFired(): void;
-  fileReport(name: string): Promise<void>;
-  savedCallsign(): string;
   /** Back to the title card over a fresh demo. */
   backToTitle(): void;
   netFire(): void;
   netLeave(quiet?: boolean): void;
   netNext(want?: boolean): void;
-  netRematch(): Promise<void>;
-  openLobby(): Promise<void>;
+  /** Play again: the room goes back to its lobby with its seats. */
+  netAgain(): void;
+  /** The player's initials, which a finished solo run files under. */
+  initials(): string;
+  /** Files a finished solo run; `done` gets the line that says where it went. */
+  fileSolo(run: { initials: string; score: number; banked: number; seed: string; difficulty: Difficulty }, done: (line: string) => void): void;
 }
 
 export function createMatch(deps: MatchDeps) {
   const {
     field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
     render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closeGuns, closePreview, hideShop, openShop,
-    endTutorial, maybeStartTutorial, tutorialFired, fileReport, savedCallsign, backToTitle, netFire, netLeave,
-    netNext, netRematch, openLobby,
+    endTutorial, maybeStartTutorial, tutorialFired, backToTitle, netFire, netLeave,
+    netNext, netAgain, initials, fileSolo,
   } = deps;
 
   /* Rolling hills from seeded sines, and the clouds over them. */
@@ -460,30 +462,15 @@ export function createMatch(deps: MatchDeps) {
   }
   /* The end veil is a Preact component (src/ui/endveil.tsx); the game keeps what
      it says and which buttons it offers. */
-  const END: EndState = { kicker: '', title: '', text: '', score: '', formHidden: false, filed: false, rematch: null, backToRooms: false };
+  const END: EndState = { kicker: '', title: '', text: '', score: '', board: null, filed: null, buttons: 'solo' };
   function renderEndVeil(): void {
     const veil = $('end-veil');
     if (!veil) return;
     drawEndVeil(veil, {
-      keyHint,
-      kicker: END.kicker,
-      title: END.title,
-      text: END.text,
-      score: END.score,
-      formHidden: END.formHidden,
-      filed: END.filed,
-      callsign: savedCallsign(),
-      rematch: END.rematch,
-      backToRooms: END.backToRooms,
-      onFile: raw => {
-        const name = raw.trim();
-        if (!name) { say('Give your callsign first, hero.', 'info'); return; }
-        fileReport(name);
-        END.filed = true;
-        renderEndVeil();
-      },
-      onRematch: () => { sfx.play('click'); netRematch(); },
-      onAgain: () => { if (net.on) { netLeave(); openLobby(); } else backToTitle(); },
+      keyHint, ...END,
+      onAgain: () => { sfx.play('click'); if (net.on) netAgain(); else backToTitle(); },
+      onLeave: () => { sfx.play('click'); netLeave(); },
+      onWatch: () => { veil.hidden = true; refreshNavHints(); },
     });
   }
   function endMatch(won: boolean, text: string): void {
@@ -504,12 +491,18 @@ export function createMatch(deps: MatchDeps) {
       END.title = won ? 'Hills claimed!' : 'Tank down';
       END.text = text;
       END.score = `Score ${G.score} · ${G.roundsWon} rounds won · ${G.round} rounds played · seed ${G.seed}`;
-      // File the run right here, with the last callsign ready.
-      END.formHidden = false;
-      END.filed = false;
+      END.board = G.rounds.length ? { ...soloBoard(G.rounds, 'over'), caption: '', title: '' } : null;
+      END.buttons = 'solo';
+      END.filed = 'Filing…';
       renderEndVeil();
       veil.hidden = false;
       refreshNavHints();
+      focusEndVeil(veil);
+      // A finished run files itself: no form, no button.
+      fileSolo({ initials: initials(), score: G.score, banked: G.roundsWon, seed: G.seed, difficulty: G.difficulty ?? 'normal' }, line => {
+        END.filed = line;
+        renderEndVeil();
+      });
     }
     renderHUD();
   }

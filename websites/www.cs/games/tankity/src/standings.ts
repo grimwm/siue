@@ -1,11 +1,10 @@
 /* Operation Tankity: this match's scoreboards.
  *
- * The room's match-end rule and the winner's bonus (server/rules.php
- * room_match_outcome() is the same, pinned by the 'match-end' sim vectors),
- * and the rows the scoreboards show. Pure: seats and rounds in, rows out. */
+ * The room's match-end rule (server/rules.php room_match_outcome() is the
+ * same, pinned by the 'match-end' sim vectors) and the rows the scoreboards show. Pure: seats and rounds in, rows out. */
 import { DIFFICULTY_NAMES } from './difficulty.ts';
 import type { RoomSeat, RoomSnapshot } from './protocol.ts';
-import { TUNE, type Difficulty } from './sim.ts';
+import type { Difficulty } from './sim.ts';
 
 /** No human with a life left ends the match with no winner; in a room that
  * started with two or more humans, exactly one left ends it, and wins. */
@@ -14,11 +13,6 @@ export function matchOutcome(seats: readonly Pick<RoomSeat, 'seat' | 'human' | '
   if (!left.length) return { over: true, winner: null };
   if (startHumans >= 2 && left.length === 1) return { over: true, winner: left[0]! };
   return { over: false, winner: null };
-}
-
-/** Twice the round bonus of the round the match ended in. */
-export function winnerBonus(round: number): number {
-  return 2 * (TUNE.roundWinScore + round * 150);
 }
 
 /** "8,420". */
@@ -51,7 +45,8 @@ export type Board =
 /** After a round (top of the shop), the match over, you're out, or a look from the menu. */
 export type RoomCard = 'shop' | 'over' | 'out' | 'peek';
 
-export function roomBoard(room: Pick<RoomSnapshot, 'code' | 'round' | 'seats' | 'winner'>, mySeat: number, card: RoomCard, roundTo: string): Board {
+/** `bonus` is the winner's match bonus from the room's matchwin event (0 when it was not seen). */
+export function roomBoard(room: Pick<RoomSnapshot, 'code' | 'round' | 'seats' | 'winner'>, mySeat: number, card: RoomCard, roundTo: string, bonus = 0): Board {
   const over = card === 'over';
   const winner = room.winner;
   const rows = room.seats
@@ -60,8 +55,9 @@ export function roomBoard(room: Pick<RoomSnapshot, 'code' | 'round' | 'seats' | 
     .map((s, i): BoardRow => {
       const crown = over && s.seat === winner;
       // The final card credits the match bonus alone (the winner's snapshot gain also holds the
-      // last round's points); the per-seat round gains belong to the shop card.
-      const gain = crown ? `+${fmt(winnerBonus(room.round))} win` : over || !s.gain ? '' : `+${fmt(s.gain)}`;
+      // last round's points); `bonus` is the server's matchwin event, never worked out here.
+      // The per-seat round gains belong to the shop card.
+      const gain = crown ? (bonus > 0 ? `+${fmt(bonus)} win` : '') : over || !s.gain ? '' : `+${fmt(s.gain)}`;
       const alive = s.lives > 0;
       const last = over
         ? (crown || (alive && s.out === null) ? `♥ ${s.lives}` : `round ${s.out ?? room.round}`)

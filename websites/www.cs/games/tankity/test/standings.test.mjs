@@ -1,7 +1,7 @@
 // This match's scoreboards (src/standings.ts): the room's match-end rule first.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BOARD_KEEP, filedLine, fmt, matchOutcome, roomBoard, soloBoard, winnerBonus } from '../src/standings.ts';
+import { BOARD_KEEP, filedLine, fmt, matchOutcome, roomBoard, soloBoard } from '../src/standings.ts';
 
 const seats = (...lives) => lives.map((l, seat) => ({ seat, human: l !== null, lives: l ?? 0 }));
 
@@ -18,11 +18,6 @@ test('two or more humans: the last one with lives wins', () => {
 
 test('nobody left: over with no winner', () => {
   assert.deepEqual(matchOutcome(seats(0, 0, null, null), 2), { over: true, winner: null });
-});
-
-test("the winner's bonus is twice the round bonus", () => {
-  assert.equal(winnerBonus(1), 1800);
-  assert.equal(winnerBonus(9), 2 * (750 + 9 * 150));
 });
 
 
@@ -57,13 +52,15 @@ test('after a round: humans only, by score, with this round\'s gain and lives or
 
 test('match over: the winner is crowned and the last column says when each went out', () => {
   const over = { ...ROOM, round: 9, winner: 1, seats: ROOM.seats.map(s => s.seat === 0 ? { ...s, lives: 0, out: 9 } : s.seat === 1 ? { ...s, gain: 5000 } : s) };
-  const b = roomBoard(over, 0, 'over', 'WG');
+  const b = roomBoard(over, 0, 'over', 'WG', 4200);
   assert.equal(b.caption, 'Room ABCD · match over after round 9');
   assert.equal(b.title, '♛ WG wins: last tank standing');
   assert.equal(b.lastHead, 'Out in');
   assert.deepEqual(b.rows.map(r => [r.name, r.crown, r.gain, r.last]), [
     ['WG', true, '+4,200 win', '♥ 2'], ['AK', false, '', 'round 9'], ['JR', false, '', 'round 5'],
   ]);
+    // Without the server's matchwin event there is no bonus to credit.
+  assert.equal(roomBoard(over, 0, 'over', 'WG').rows[0].gain, '');
   const nobody = roomBoard({ ...over, winner: null }, 0, 'over', 'the battery');
   assert.equal(nobody.title, 'Match over: the battery holds the hills');
 });

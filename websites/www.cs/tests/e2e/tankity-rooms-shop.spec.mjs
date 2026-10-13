@@ -90,6 +90,66 @@ test('a lost round goes through the shop too: a life gone, then everyone ready s
   for (const p of [host.page, guest.page]) await expect(p.locator('#shop-veil')).toBeVisible();
   expect(lastRoom(roomState.host).you.lives).toBe(2);
   await expect(host.page.locator('#log')).toContainText('goes to the battery');
+  // The shop opens under a populated scoreboard. On a phone either way up and
+  // on a desktop it never scrolls sideways or past the screen, shows the
+  // board's player rows and Start, keeps the highlighted row in its list, and a
+  // tap on that row's Preview or Buy lands on the button, not on whatever
+  // covers it. Walking the list leaves the title and the board where they are.
+  const fits = () => host.page.evaluate(() => {
+    const inView = r => r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth;
+    const within = (r, box) => r.top >= box.top - 1 && r.bottom <= box.bottom + 1;
+    const sideways = [document.documentElement, document.body, ...document.querySelectorAll('#shop-veil, #shop-veil .card')]
+      .some(el => el.scrollWidth > el.clientWidth);
+    const card = document.querySelector('#shop-veil .card');
+    const board = document.querySelector('#shop-veil .board');
+    const boardBox = board.getBoundingClientRect();
+    const row = document.querySelector('#shop-list li.sel');
+    const list = document.getElementById('shop-list').getBoundingClientRect();
+    const tapped = [...row.querySelectorAll('.acts button')].every(b => {
+      const r = b.getBoundingClientRect();
+      return b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+    });
+    const next = document.getElementById('shop-next').getBoundingClientRect();
+    const leave = document.getElementById('shop-leave').getBoundingClientRect();
+    const listEl = document.getElementById('shop-list');
+    const rowH = Math.max(...[...listEl.querySelectorAll('li:not(.shop-cat)')].map(li => li.offsetHeight));
+    return {
+      sideways,
+      // Wide screens put the board beside the list; portrait phones stack them.
+      twoColumns: list.left >= boardBox.right,
+      // A desktop's list shows several whole rows, not one.
+      rows: Math.min(3, Math.floor(listEl.clientHeight / rowH)),
+      buttonsSideBySide: Math.abs(next.top - leave.top) < 4 && leave.left >= next.right,
+      // The key hints wrap; none is cut off.
+      hintsWhole: [...document.querySelectorAll('#nav-shop > span')].every(sp => sp.scrollWidth <= sp.clientWidth + 1),
+      cardFits: card.scrollHeight <= card.clientHeight + 1 && inView(card.getBoundingClientRect()),
+      rowShown: within(row.getBoundingClientRect(), list),
+      tapped,
+      startShown: inView(document.getElementById('shop-next').getBoundingClientRect()),
+      titleShown: inView(document.getElementById('shop-title').getBoundingClientRect()),
+      boardRowsShown: [...board.querySelectorAll('tbody tr')]
+        .every(tr => { const r = tr.getBoundingClientRect(); return within(r, boardBox) && inView(r); }),
+    };
+  });
+  const rows = await host.page.locator('#shop-list li:not(.shop-cat)').count();
+  const base = { sideways: false, buttonsSideBySide: true, hintsWhole: true, cardFits: true, rowShown: true, tapped: true, startShown: true, titleShown: true, boardRowsShown: true };
+  for (const [width, height, shape] of [[852, 393, { twoColumns: true, rows: 2 }], [393, 852, { twoColumns: false, rows: 1 }], [1280, 720, { twoColumns: true, rows: 3 }]]) {
+    const all = { ...base, ...shape };
+    await host.page.setViewportSize({ width, height });
+    await expect(host.page.locator('#shop-veil .board .board-table tbody tr')).toHaveCount(2);
+    for (let i = 0; i < rows; i++) await host.page.keyboard.press('ArrowUp');
+    await expect(host.page.locator('#shop-list li.sel')).toHaveClass(/shop-free/);
+    // The resize event reaches the page a moment after the viewport changes.
+    await expect.poll(fits, { message: `${width}x${height} at the first row` }).toEqual(all);
+    for (let i = 0; i < rows >> 1; i++) await host.page.keyboard.press('ArrowDown');
+    expect(await fits(), `${width}x${height} at the middle row`).toEqual(all);
+    for (let i = 0; i < rows; i++) await host.page.keyboard.press('ArrowDown');
+    expect(await fits(), `${width}x${height} at the last row`).toEqual(all);
+    for (let i = 0; i < rows; i++) await host.page.keyboard.press('ArrowUp');
+    await host.page.screenshot({ path: `test-results/tankity-shop-${width}x${height}.png` });
+  }
+  await host.page.setViewportSize({ width: 1280, height: 860 });
+  await expect(host.page.locator('#log')).toContainText('goes to the battery');
   for (const p of [host.page, guest.page]) await p.locator('#shop-next').click();
   await expect.poll(() => lastRoom(roomState.host).phase, { timeout: 15_000 }).toBe('play');
   expect(lastRoom(roomState.host).round).toBe(round + 1);

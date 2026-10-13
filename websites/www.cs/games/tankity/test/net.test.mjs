@@ -558,6 +558,56 @@ const bodyOf = entry => JSON.parse(entry.init.body);
   check('plan-other-phase-is-not-our-turn', planCatchUp([op('fire')], false, { phase: 'shop', turn: null }, 0) === null);
 }
 
+// A match poll in flight when Play again takes the room to its lobby answers
+// with the old 'over' room: it is dropped, so the end card cannot come back
+// over the lobby. So is one that answers after the next match began.
+{
+  let release;
+  const { net, seen } = makeClient(() => new Promise(r => { release = () => r(roomReply({ phase: 'over' })); }));
+  net.beginMatch();
+  const late = net.refresh();
+  net.toLobby();
+  release();
+  await late;
+  check('late-poll-after-lobby-dropped', seen.snapshots.length === 0, j(seen.snapshots.length));
+  net.beginMatch();
+  const old = net.refresh();
+  net.toLobby();
+  net.beginMatch();
+  release();
+  await old;
+  check('late-poll-after-next-match-dropped', seen.snapshots.length === 0, j(seen.snapshots.length));
+  const fresh = net.refresh();
+  release();
+  await fresh;
+  check('current-poll-still-applied', seen.snapshots.length === 1, j(seen.snapshots.length));
+}
+
+// An act, a quiet act and a menu flag answered after the room went back to its lobby are dropped too.
+{
+  let release;
+  const { net, seen } = makeClient(() => new Promise(r => { release = () => r(roomReply({ phase: 'over' })); }));
+  net.beginMatch();
+  const sent = [];
+  sent.push(net.act({ kind: 'fire', angle: 45, power: 50 }));
+  net.toLobby();
+  release();
+  await sent[0];
+  check('late-act-after-lobby-dropped', seen.snapshots.length === 0, j(seen.snapshots.length));
+  net.beginMatch();
+  net.sendQuiet({ kind: 'aim', angle: 40, power: 50 });
+  net.toLobby();
+  release();
+  await new Promise(r => setTimeout(r, 0));
+  check('late-quiet-act-after-lobby-dropped', seen.snapshots.length === 0, j(seen.snapshots.length));
+  net.beginMatch();
+  net.setMenu(true);
+  net.toLobby();
+  release();
+  await new Promise(r => setTimeout(r, 0));
+  check('late-menu-flag-after-lobby-dropped', seen.snapshots.length === 0, j(seen.snapshots.length));
+}
+
 // ---- invite link ----
 check('invite-url', inviteUrl('AB3D', { origin: 'https://host', pathname: '/games/tankity/' }) === 'https://host/games/tankity/?code=AB3D');
 check('invite-url-needs-a-code', inviteUrl('', { origin: 'https://host', pathname: '/x' }) === '');

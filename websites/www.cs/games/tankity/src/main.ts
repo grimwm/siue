@@ -167,6 +167,7 @@ const G: GameState = {
   shells: [], parts: [], booms: [], fx: null,
   wind: 0, round: 1, firstTurn: 0,
   lives: TUNE.lives, score: 0, cash: 0, nextOneUp: TUNE.oneUpEvery,
+  rounds: [], roundStart: { score: 0, cash: 0 },
   roundsWon: 0, ammo: null, selected: 'shell',
   shopSel: 0, shopQty: 1,
   fuelBank: 0, armor: TUNE.playerArmor,
@@ -391,6 +392,7 @@ const MATCH: MatchState = {
   myTurn: false, aimDirty: false, driveAcc: 0, driveT: 0,
   pendingRoom: null,
   lastPhase: '', lastTurn: -1, lastRound: -1, initials: '',
+  roundTo: '', out: false, outShown: false, lastRoom: null,
 };
 const replay = createReplay({
   tank: seat => G.tanks.find(t => t.seat === seat),
@@ -414,8 +416,8 @@ const { updateCamera, shownAngle, shownPower, render } = createView({
   G, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
 /* The high scores (src/scores.ts). */
-const { SCORES, renderScoresOverlay, loadScores, savedCallsign, fileReport } = createScores({
-  G, $, keyHint, say, toggleOverlay,
+const { renderScoresOverlay, openScores, fileSolo } = createScores({
+  $, keyHint, say, toggleOverlay, initials: () => getInitials(), difficulty: () => difficulty.get(),
 });
 /* The coach (src/tutorial.ts). */
 const {
@@ -436,14 +438,14 @@ const getInitials = (): string => savedInitials.get();
 const field = createFieldWidth(() => ({ w: window.innerWidth, h: window.innerHeight }));
 const {
   advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-  stepWar, decayFx,
+  stepWar, decayFx, soloShopBoard, endVeilEscape,
 } = createMatch({
   field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
-  tutorialFired, fileReport, savedCallsign, backToTitle: () => backToTitle(),
+  tutorialFired, backToTitle: () => backToTitle(),
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
   netFire: () => netFire(), netLeave: quiet => netLeave(quiet), netNext: want => netNext(want),
-  netRematch: () => netRematch(), openLobby: () => openLobby(),
+  netAgain: () => netAgain(), initials: getInitials, fileSolo: (run, done) => { void fileSolo(run, done); },
 });
 /* The field shop (src/shop.ts): prices, rows, buying, the Ready line. */
 const {
@@ -451,6 +453,7 @@ const {
 } = createShop({
   G, $, tables, net, sfx, me, touch: TOUCH, keyHint, say, advance, render, renderHUD, refreshNavHints,
   drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil: () => openLeaveVeil(), netBuy: (it, qty) => netBuy(it, qty),
+  board: () => (net.on ? roomShopBoard() : soloShopBoard()),
 });
 /* The weapon picker (src/guns.ts). */
 const {
@@ -463,27 +466,29 @@ const {
 /* A running room match on this client (src/room.ts): moves sent, snapshots adopted, events told, the turn alert. */
 const {
   netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
+  roomShopBoard, openStandings,
 } = createRoom({
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
+  backToLobby: () => netBackToLobby(),
   decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
   renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText,
 });
-/* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving, the rematch. */
+/* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving. */
 const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-  netLeave, netRematch,
+  netLeave, netAgain, netBackToLobby,
 } = createLobby({
-  G, $, net, MATCH, HUD, END, SCORES, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
-  closeOverlays, closePreview, endTutorial, hideShop, savedInitials: getInitials, paintHud, refreshNavHints, renderEndVeil,
+  G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
+  closeOverlays, closePreview, endTutorial, hideShop, savedInitials: getInitials, paintHud, refreshNavHints,
   renderMenu: () => renderMenu(),
   closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
-  renderScoresOverlay, renderShop,
+  renderShop,
 });
 /* The game menu's settings (src/menu.ts). */
 const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
   G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
   nextSong: () => { unlock(); music.next(); },
-  freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
+  openStandings: () => openStandings(), freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
   quit: () => { void quitGame(); },
 });
 /* The title card over the demo (src/title.ts). */
@@ -585,6 +590,8 @@ function lineKey(dir: number): boolean {
 // and the key falls through to the next candidate. The order they are offered
 // in (panel scrolling, the gun grid, the shop, ESC, the held aim keys, fire,
 // then the plain global keys) is src/input.ts's. */
+/* Every card and overlay that takes the keyboard from the battlefield. */
+const OVERLAYS = '#log-overlay, #help-overlay, #report-overlay, #menu-overlay, #gun-overlay, #tutorial-overlay, #end-veil, #shop-veil, #lobby-veil, #preview-veil';
 function bindKeys(): void {
   input.register({
     lineDown: () => lineKey(1),
@@ -640,6 +647,7 @@ function bindKeys(): void {
       if (closeLeaveVeil()) return;
       if (closeLobbyVeil()) return;
       if (closeOverlays()) return;
+      if (endVeilEscape()) return;
       if (tutorialActive()) { skipTutorial(); return; }
       toggleOverlay('menu-overlay', 'btn-menu');
     },
@@ -669,6 +677,11 @@ function bindKeys(): void {
     modalOpen: () => { const ask = $('leave-veil'); return !!ask && !ask.hidden; },
     modalEscape: () => { closeLeaveVeil(); },
     cardOpen: () => titleOpen(),
+    overlayOpen: target => {
+      if (!(target instanceof Element)) return false;
+      const holder = target.closest<HTMLElement>(OVERLAYS);
+      return !!holder && !holder.hidden;
+    },
     onHold: () => { unlock(); music.start(); },
   });
   input.bind(window);
@@ -696,7 +709,6 @@ function init(): void {
   startDemo();
   openTitle();
   renderShop();
-  loadScores();
   // Light the connection dot from the start, not only when the lobby opens.
   loadOccupancy();
   maybeApplyInviteCode();
@@ -768,7 +780,8 @@ function overlayScrollTarget(): HTMLElement | null {
   for (const id of ['lobby-veil', 'preview-veil', 'end-veil',
       'gun-overlay', 'help-overlay', 'report-overlay', 'menu-overlay', 'log-overlay']) {
     const el = $(id);
-    if (el && !el.hidden) return el;
+    // The end card scrolls its scoreboard, not the veil.
+    if (el && !el.hidden) return id === 'end-veil' ? ($('end-board') ?? el) : el;
   }
   return null;
 }
@@ -789,7 +802,7 @@ while everything fits, and lights up the moment content overflows. */
 const NAV_HINTS: [string, string][] = [
   // The shop scrolls its list, not its veil.
   ['shop-list', 'nav-shop'], ['lobby-veil', 'nav-lobby'],
-  ['preview-veil', 'nav-preview'], ['end-veil', 'nav-end'],
+  ['preview-veil', 'nav-preview'], ['end-board', 'nav-end'],
   ['help-overlay', 'nav-help'], ['report-overlay', 'nav-report'],
   ['menu-overlay', 'nav-menu'], ['log-overlay', 'nav-log'],
   ['tutorial-overlay', 'nav-tutorial'], ['gun-overlay', 'nav-gun'],
@@ -837,7 +850,7 @@ function closeOverlays(): boolean {
 const OVERLAY_PAINT: Record<string, () => void> = {
   'menu-overlay': () => renderMenu(),
   'log-overlay': () => renderLogOverlay(),
-  'report-overlay': () => renderScoresOverlay(),
+  'report-overlay': () => { if ($('report-overlay')!.hidden) renderScoresOverlay(); else openScores(); },
   'help-overlay': () => renderHelpOverlay(),
 };
 function toggleOverlay(id: string, btnId?: string): void {

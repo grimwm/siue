@@ -350,6 +350,7 @@ usleep(300000);
 $go = $post('start', $h2);
 $seatsFielded = array_map(fn($t) => $t['seat'], $go['room']['tanks'] ?? []);
 sort($seatsFielded);
+$check('start-sets-start-humans', ($go['room']['startHumans'] ?? -1) === 2, (string) ($go['room']['startHumans'] ?? '?'));
 $check('start-skips-open-seat', ($go['ok'] ?? false) === true && $seatsFielded === [0, 1, 3], json_encode($seatsFielded));
 usleep(300000);
 $late = $post('join', ['code' => $c2, 'initials' => 'smd']);
@@ -434,7 +435,20 @@ foreach ([
     room_unlock($afterLock);
     $check("buy-refused-$name-takes-no-cash", ($after['cash'][0] ?? -1) === 100, (string) ($after['cash'][0] ?? '?'));
 }
+// A seat that is out of the match is refused, and keeps its cash.
 [$stage, $stageLock] = room_load($bcode);
+$stage['seats'][0]['lives'] = 0;
+room_save($stageLock, $bcode, $stage);
+room_unlock($stageLock);
+usleep(300000);
+[$status, $reply] = $buy('mortar');
+$check('buy-refused-out-of-match', $status === 409 && ($reply['error'] ?? null) === 'You are out of this match.' && !isset($reply['ok']),
+    "$status " . json_encode($reply));
+[$after, $afterLock] = room_load($bcode);
+room_unlock($afterLock);
+$check('buy-refused-out-of-match-takes-no-cash', ($after['cash'][0] ?? -1) === 100, (string) ($after['cash'][0] ?? '?'));
+[$stage, $stageLock] = room_load($bcode);
+$stage['seats'][0]['lives'] = 3;
 $stage['cash'][0] = 500;
 $stage['armor'][0] = 100;
 room_save($stageLock, $bcode, $stage);

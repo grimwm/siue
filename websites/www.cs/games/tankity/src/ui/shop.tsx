@@ -10,6 +10,8 @@ import type { ComponentChildren } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import { KeyHints, Key, OverlayHead, ScrollKeys } from './chrome.tsx';
 import type { KeyHintFn } from './chrome.tsx';
+import { Standings } from './standings.tsx';
+import type { Board } from '../standings.ts';
 
 /** What a row's icon shows: a weapon's shell or a piece of gear, by key. */
 export type ShopIcon = { kind: 'ammo'; w: string } | { kind: 'gear'; g: string };
@@ -54,6 +56,8 @@ export interface ShopProps {
   /** The war-chest line. */
   cash: string;
   entries: ShopEntry[];
+  /** This match's scoreboard, at the top of the shop after every round; null before the first. */
+  board: Board | null;
   /** The start button: its words ("Start round 2", "Ready ✓" in a room), the
    *  key its chip names (none on touch screens), and `pressed`, set only in a
    *  room, where the button toggles and reads aria-pressed. */
@@ -106,10 +110,29 @@ function laidOut(el: HTMLElement): boolean {
   return true;
 }
 
+/* Scroll the list itself to its highlighted row: scrollIntoView would also
+   scroll the card, taking the title and the board out of sight. */
+function showSelected(el: HTMLElement): void {
+  const row = el.querySelector<HTMLElement>('.sel');
+  if (!row) return;
+  const top = row.offsetTop - el.offsetTop;
+  if (top < el.scrollTop) el.scrollTop = top;
+  else if (top + row.offsetHeight > el.scrollTop + el.clientHeight) el.scrollTop = top + row.offsetHeight - el.clientHeight;
+}
+
+/** Whether the highlighted row sits wholly inside the list's view. */
+function selectedInView(el: HTMLElement): boolean {
+  const row = el.querySelector<HTMLElement>('.sel');
+  if (!row) return false;
+  const top = row.offsetTop - el.offsetTop;
+  return top >= el.scrollTop && top + row.offsetHeight <= el.scrollTop + el.clientHeight;
+}
+
 export function Shop(p: ShopProps) {
   const list = useRef<HTMLUListElement>(null);
   const shownSel = useRef(-1);
   const scrolled = useRef(0); // where the player left the list
+  const selShown = useRef(true); // the highlighted row was in view at the last scroll
   const picked = p.entries.find((e): e is ShopItemRow | ShopFreeRow => (e.kind === 'item' || e.kind === 'free') && e.selected);
   const sel = !picked ? -2 : picked.kind === 'free' ? -1 : picked.index;
   // Riding the selection with the keys keeps the highlighted row in view.
@@ -127,9 +150,23 @@ export function Shop(p: ShopProps) {
       return;
     }
     shownSel.current = sel;
-    el.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+    showSelected(el);
     scrolled.current = el.scrollTop;
+    selShown.current = true;
   });
+  // Turning the phone resizes the list: a highlighted row that was in view
+  // stays in it. A list the player scrolled away from it by hand stays put.
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onResize = () => {
+      const el = list.current;
+      if (!el || !laidOut(el) || !selShown.current) return;
+      showSelected(el);
+      scrolled.current = el.scrollTop;
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const blurThen = (fn: () => void) => (ev: Event) => { (ev.currentTarget as HTMLElement).blur(); fn(); };
   return (
     <KeyHints.Provider value={p.keyHint}>
@@ -140,8 +177,13 @@ export function Shop(p: ShopProps) {
           <span><Key at="shop:buy" /> buy · <Key at="shop:preview" /> preview</span>
           <ScrollKeys />
         </>} />
+        {p.board && <Standings board={p.board} />}
         <p id="shop-cash" class="runstats">{p.cash}</p>
-        <ul id="shop-list" class="scores" ref={list} onScroll={(ev: Event) => { scrolled.current = (ev.currentTarget as HTMLElement).scrollTop; }}>
+        <ul id="shop-list" class="scores" ref={list} onScroll={(ev: Event) => {
+          const el = ev.currentTarget as HTMLElement;
+          scrolled.current = el.scrollTop;
+          selShown.current = selectedInView(el);
+        }}>
           {p.entries.map(e => {
             if (e.kind === 'cat') return <li class="shop-cat" key={`cat:${e.name}`}>{e.name}</li>;
             if (e.kind === 'free') {
@@ -161,7 +203,7 @@ export function Shop(p: ShopProps) {
                       Preview <Key at="shop:preview" bare />
                     </button>
                   )}
-                  <button type="button" disabled={e.disabled} onClick={() => p.onBuy(e.index)}>
+                  <button type="button" disabled={e.disabled} onClick={blurThen(() => p.onBuy(e.index))}>
                     {e.locked ? 'Locked' : <>{e.qty > 1 ? `Buy ×${e.qty} ` : 'Buy '}<Key at="shop:buy" bare /></>}
                   </button>
                 </Body>
@@ -169,11 +211,13 @@ export function Shop(p: ShopProps) {
             );
           })}
         </ul>
-        <p id="shop-ready" class="runstats" hidden={p.readyLine === null}>{p.readyLine}</p>
-        <button type="button" id="shop-next" class="btn-primary" aria-pressed={p.next.pressed}
-          onClick={blurThen(p.onNext)}>{p.next.label}{p.next.keyAt && <>{' '}<Key at={p.next.keyAt} bare /></>}</button>
-        <button type="button" id="shop-leave" class="btn-leave" title="Leave this game room and go back to the title card"
-          hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave room</button>
+        <div class="shop-foot">
+          <p id="shop-ready" class="runstats" hidden={p.readyLine === null}>{p.readyLine}</p>
+          <button type="button" id="shop-next" class="btn-primary" aria-pressed={p.next.pressed}
+            onClick={blurThen(p.onNext)}>{p.next.label}{p.next.keyAt && <>{' '}<Key at={p.next.keyAt} bare /></>}</button>
+          <button type="button" id="shop-leave" class="btn-leave" title="Leave this game room and go back to the title card"
+            hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave room</button>
+        </div>
       </div>
     </KeyHints.Provider>
   );

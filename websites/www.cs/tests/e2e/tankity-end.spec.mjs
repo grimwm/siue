@@ -1,41 +1,12 @@
 // Operation Tankity: a solo match played to its end, and the end-of-match veil.
 import { test, expect } from '@playwright/test';
-import { newPlayer, hud, aimTo, setPower } from './helpers.mjs';
+import { newPlayer, hud, dealSolo, loseMatch } from './helpers.mjs';
 import { local } from './fx-helpers.mjs';
 
-/* Lose on purpose: the only way a solo match ends is the last life going. Lob
-   mortar shells at the lowest power straight up, so they come down on our own
-   tank, until the veil opens. Six mortars rarely suffice (a lob can miss), so
-   the loop goes on with the free shell. Each lob waits on the HUD for our next turn, never
-   on a timer; the page clock is driven by hand (page.clock.runFor) so the
-   drones' turns play out in a blink instead of seconds. When our tank falls
-   the drones fight on (at triple speed) until one is left; the lost round then
-   opens the shop, and the loop starts the next round from it. */
-async function loseMatch(page) {
-  const veil = page.locator('#end-veil');
-  const aiming = async () => {
-    await page.clock.runFor(4000);
-    // A lost round goes through the shop, after the drones have fought it out.
-    if (await page.locator('#shop-veil').isVisible()) await page.click('#shop-next');
-    return (await veil.isVisible()) || /Aim/.test(await hud(page, 'hud-turn'));
-  };
-  for (let shot = 0; shot < 30 && await veil.isHidden(); shot++) {
-    await expect.poll(aiming, { timeout: 60_000 }).toBe(true);
-    if (await veil.isVisible()) break;
-    await aimTo(page, 90);
-    await setPower(page, 12);
-    await page.keyboard.press('Space');
-    // The shot is away once the HUD stops asking for our aim. This looks
-    // without turning the clock: a whole volley fits in one runFor.
-    await expect.poll(() => hud(page, 'hud-turn'), { timeout: 10_000 }).not.toMatch(/Aim/);
-  }
-}
-
-test('a lost match shows the end veil: result, score, callsign form, and Continue back to the title card', async ({ browser, baseURL }) => {
+test('a lost match shows the end card: result, the rounds table, where it was filed, and Continue back to the title card', async ({ browser, baseURL }) => {
   test.setTimeout(180_000);
   const { page, errors } = await newPlayer(browser, undefined, { clock: true });
-  await page.keyboard.press('n');
-  await page.waitForSelector('#shop-veil:not([hidden])');
+  await dealSolo(page);
   for (let i = 0; i < 3; i++) await page.keyboard.press('2'); // Mortar: the $600 stake buys three packs, six shells
   await page.click('#shop-next');
   await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU|Aim/);
@@ -53,35 +24,46 @@ test('a lost match shows the end veil: result, score, callsign form, and Continu
   await expect(veil.locator('#end-title')).toHaveText('Tank down');
   await expect(veil.locator('#end-text')).toContainText('The tank is scrap');
   await expect(veil.locator('#end-score')).toHaveText(/^Score \d+ · \d+ rounds won · \d+ rounds played · seed \S+$/);
-  await expect(veil.locator('#rematch')).toBeHidden(); // rematch is for rooms
   await veil.locator('.card').screenshot({ path: 'test-results/tankity-end-veil.png' });
 
-  // The score form: a blank callsign is refused, a typed one is filed. Filing
-  // writes a real score, so only the local site gets it; the live leaderboard
-  // is left alone.
-  const form = page.locator('#end-score-form');
-  await expect(form).toBeVisible();
-  const send = form.getByRole('button');
-  await expect(send).toHaveText('File score');
-  await expect(send).toBeEnabled();
-  if (local(baseURL)) {
-    await page.locator('#end-name').fill('');
-    await send.click();
-    await expect(send).toHaveText('File score'); // nothing filed without a callsign
-    await page.locator('#end-name').fill('e2e-ace');
-    const filed = page.waitForResponse(r => r.url().includes('scores.php') && r.request().method() === 'POST');
-    await send.click();
-    expect((await filed).ok()).toBe(true);
-    await expect(send).toHaveText('Filed');
-    await expect(send).toBeDisabled();
-    expect(await page.evaluate(() => localStorage.getItem('tankity-callsign'))).toBe('e2e-ace');
-    await expect(page.locator('#end-name')).toHaveValue('e2e-ace');
+  // The scoreboard heads the card; no callsign form, no rematch.
+  await expect(veil.locator('.board-table thead')).toContainText('Round');
+  await expect(veil.locator('.board-table tfoot')).toContainText('Total');
+  await expect(veil.locator('#end-score-form')).toHaveCount(0);
+  await expect(veil.locator('#rematch')).toHaveCount(0);
+  await expect(veil.locator('#end-leave')).toHaveCount(0);
+
+  // The run filed itself and the card says how it went: always a line, never a blank, and never still "Filing".
+  await expect(page.locator('#end-filed')).toBeVisible();
+  // Filing writes a real score, so only the local site is expected to say Filed.
+  await expect(page.locator('#end-filed')).toHaveText(local(baseURL) ? /^Filed · / : /^(Filed ·|Couldn't file your score: )/, { timeout: 10_000 });
+
+  // Keyboard: focus lands on Continue, and Esc leaves the card (and fullscreen) alone.
+  await expect(page.locator('#again')).toBeFocused();
+  await page.evaluate(() => { window.__exits = 0; const x = document.exitFullscreen; document.exitFullscreen = function () { window.__exits++; return x ? x.call(document) : Promise.resolve(); }; });
+  await page.keyboard.press('Escape');
+  await expect(veil).toBeVisible();
+  expect(await page.evaluate(() => window.__exits)).toBe(0);
+
+  // Both phone shapes: no sideways scroll, and Continue stays in view without scrolling the page.
+  for (const size of [{ width: 852, height: 393 }, { width: 393, height: 852 }]) {
+    await page.setViewportSize(size);
+    const fit = await page.evaluate(() => {
+      const r = document.getElementById('again').getBoundingClientRect();
+      const de = document.documentElement;
+      return { sideways: de.scrollWidth > de.clientWidth, bottom: r.bottom, top: r.top, h: window.innerHeight };
+    });
+    expect(fit.sideways, `sideways scroll at ${size.width}x${size.height}`).toBe(false);
+    expect(fit.top).toBeGreaterThanOrEqual(0);
+    expect(fit.bottom).toBeLessThanOrEqual(fit.h);
   }
 
-  // Continue goes back to the title card over the demo; Play deals a fresh
+  // Space presses the focused Continue (it is not the fire key over a card),
+  // which goes back to the title card over the demo; Play deals a fresh
   // match: the shop comes back with the result gone, and once the first
   // round starts all three lives are back.
-  await page.click('#again');
+  await page.locator('#again').focus();
+  await page.keyboard.press('Space');
   await expect(page.locator('#title-card')).toBeVisible();
   await page.click('#title-play');
   await expect.poll(async () => {
@@ -96,5 +78,25 @@ test('a lost match shows the end veil: result, score, callsign form, and Continu
   }, { timeout: 30_000 }).toMatch(/YOU|Aim/);
   expect(await hud(page, 'hud-lives')).toBe('♥ 3');
   await expect(veil).toBeHidden();
+
+  // Scores: the board switcher at phone width has no sideways scroll, 44 px targets, and works from the keyboard.
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.click('#btn-menu');
+  await page.click('#scores-open');
+  await expect(page.locator('#report-overlay')).toBeVisible();
+  await expect(page.locator('#scores-level-normal')).toHaveAttribute('aria-pressed', 'true');
+  const sw = await page.evaluate(() => {
+    const de = document.documentElement;
+    const hs = ['easy', 'normal', 'hard'].map(l => document.getElementById('scores-level-' + l).getBoundingClientRect());
+    const o = document.getElementById('report-overlay');
+    return { sideways: de.scrollWidth > de.clientWidth || o.scrollWidth > o.clientWidth, minH: Math.min(...hs.map(r => r.height)), minW: Math.min(...hs.map(r => r.width)) };
+  });
+  expect(sw.sideways).toBe(false);
+  expect(sw.minH).toBeGreaterThanOrEqual(44);
+  expect(sw.minW).toBeGreaterThanOrEqual(44);
+  await page.locator('#scores-level-easy').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#scores-level-easy')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#scores-level-normal')).toHaveAttribute('aria-pressed', 'false');
   expect(errors).toEqual([]);
 });

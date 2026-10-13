@@ -37,6 +37,8 @@ export interface MenuDeps {
   freshMatchFromSeedBox(opts?: { tut?: boolean }): void;
   toggleFullscreen(): void;
   quit(): void;
+  /** The room match's scoreboard card (room.ts openStandings). */
+  openStandings(): void;
   toggleMusic(): void;
   toggleOverlay(id: string, btnId?: string): void;
   toggleSound(): void;
@@ -46,7 +48,7 @@ export interface MenuDeps {
 export function createMenu(deps: MenuDeps) {
   const {
     G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
-    freshMatchFromSeedBox, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong,
+    freshMatchFromSeedBox, openStandings, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong,
   } = deps;
 
   /* Ground units: every human (you, and the people in a room) picks a body.
@@ -146,6 +148,8 @@ export function createMenu(deps: MenuDeps) {
       onMusic: toggleMusic,
       onFullscreen: toggleFullscreen,
       onScores: () => toggleOverlay('report-overlay', 'scores-open'),
+      // The card replaces the menu: close it first, so Esc then goes back to the battle.
+      onStandings: () => { toggleOverlay('menu-overlay', 'btn-menu'); openStandings(); },
       inRoom: net.on,
       onLeave: openLeaveVeil,
       onQuit: quit,

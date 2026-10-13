@@ -159,6 +159,50 @@ test('card: Ctrl alone never presses the focused card button; it only reaches fi
   assert.deepEqual(calls, ['fire']);
 });
 
+test('overlay: Space and Enter press the focused button (the end card\'s Play again), never fire', () => {
+  const input = rig();
+  const calls = [];
+  input.register({ fire: () => { calls.push('fire'); }, buy: () => { calls.push('buy'); return true; } }, { overlayOpen: () => true, shopLive: () => true });
+  let clicked = 0, prevented = 0;
+  const onButton = o => ({ ...ev(o), target: { tagName: 'BUTTON', click: () => { clicked++; } }, preventDefault: () => { prevented++; } });
+  input.keydown(onButton({ code: 'Space', key: ' ' }));
+  input.keydown(onButton({ code: 'Enter', key: 'Enter' }));
+  input.keydown(onButton({ code: 'Space', key: ' ', repeat: true }));
+  assert.equal(clicked, 2);
+  assert.equal(prevented, 3);
+  assert.deepEqual(calls, []);
+});
+
+test('shop: after a Buy click drops its focus, Enter buys the selected row, not the row last clicked', () => {
+  const input = rig();
+  const bought = [];
+  let selected = 0;
+  input.register({ buy: () => { bought.push(selected); return true; }, selDown: () => { selected++; return true; } }, { overlayOpen: t => t.tagName === 'BUTTON', shopLive: () => true });
+  // The click on row 0's Buy blurred it (shop.tsx), so the focus is on the page; the arrow moves the selection.
+  const onPage = o => ({ ...ev(o), target: { tagName: 'BODY' }, preventDefault: () => {} });
+  input.keydown(onPage({ code: 'ArrowDown', key: 'ArrowDown' }));
+  input.keydown(onPage({ code: 'Enter', key: 'Enter' }));
+  assert.deepEqual(bought, [1]);
+});
+
+test('overlay: Ctrl never presses the focused button', () => {
+  const input = rig();
+  let clicked = 0;
+  input.register({ fire: () => {} }, { overlayOpen: () => true });
+  input.keydown({ ...ev({ code: 'ControlLeft', key: 'Control', ctrlKey: true }), target: { tagName: 'BUTTON', click: () => { clicked++; } } });
+  assert.equal(clicked, 0);
+});
+
+test('battlefield: with no overlay up, Space on a focused button fires', () => {
+  const input = rig();
+  const calls = [];
+  input.register({ fire: () => { calls.push('fire'); } }, { overlayOpen: () => false });
+  let clicked = 0;
+  input.keydown({ ...ev({ code: 'Space', key: ' ' }), target: { tagName: 'BUTTON', click: () => { clicked++; } } });
+  assert.equal(clicked, 0);
+  assert.deepEqual(calls, ['fire']);
+});
+
 test('Esc still works while a text box has focus; other keys stay the box\'s', () => {
   const input = rig();
   const calls = [];
@@ -167,4 +211,15 @@ test('Esc still works while a text box has focus; other keys stay the box\'s', (
   input.keydown(inBox({ code: 'Escape', key: 'Escape' }));
   input.keydown(inBox({ code: 'KeyN', key: 'n' }));
   assert.deepEqual(calls, ['escape']);
+});
+
+test('overlay: a focused button outside the open overlay (the HUD under the radio log) still fires on Space', () => {
+  const input = rig();
+  const calls = [];
+  const inside = { tagName: 'BUTTON', click: () => { calls.push('inside'); } };
+  const outside = { tagName: 'BUTTON', click: () => { calls.push('outside'); } };
+  input.register({ fire: () => { calls.push('fire'); } }, { overlayOpen: t => t === inside });
+  input.keydown({ ...ev({ code: 'Space', key: ' ' }), target: outside });
+  input.keydown({ ...ev({ code: 'Space', key: ' ' }), target: inside });
+  assert.deepEqual(calls, ['fire', 'inside']);
 });

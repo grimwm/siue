@@ -105,8 +105,15 @@ export function Help({ keyHint, onClose }: HelpProps) {
         <li>
           <strong>Rooms</strong> lets friends share a hillside: host a room, read out the code, and take
           turns with the battery filling empty seats. Initials only, no chat, and the server settles every
-          shot so nobody can fudge a hit. The host can pick named hills, and a rematch replays them without
-          ever revealing the seed.
+          shot so nobody can fudge a hit. The host can pick named hills, and Play again keeps them for the
+          next match without ever revealing the seed.
+        </li>
+        <li>
+          A room with two or more people ends when only one has lives left: that player wins a bonus of
+          twice the round bonus, and everyone sees the standings. Leaving counts as giving up, so the one
+          who stays wins. <strong>Play again (same room)</strong> brings everyone back to the lobby with
+          fresh lives; lose your last life and you watch the finish. Every score files itself on the
+          all-time board for the room's Difficulty, except the scores of players who left early.
         </li>
         <li>
           Opening the page runs a demo battle behind the start. Every round gets its own name card before the

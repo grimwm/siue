@@ -69,6 +69,16 @@ $post = function (string $action, array $body) use ($base, $origin) {
     $raw = @file_get_contents($base . '/rooms.php?action=' . $action, false, $ctx);
     return $raw === false ? null : json_decode($raw, true);
 };
+$postStatus = function (string $action, array $body) use ($base, $origin): array {
+    $ctx = stream_context_create(['http' => [
+        'method' => 'POST', 'timeout' => 8, 'ignore_errors' => true,
+        'header' => "Content-Type: application/json\r\nOrigin: $origin\r\nX-CSRF-Token: " . ($body['csrf'] ?? '') . "\r\n",
+        'content' => json_encode($body),
+    ]]);
+    $raw = @file_get_contents($base . '/rooms.php?action=' . $action, false, $ctx);
+    $line = $http_response_header[0] ?? '';
+    return [(int) (preg_match('~ (\d{3})~', $line, $m) ? $m[1] : 0), $raw === false ? null : json_decode($raw, true)];
+};
 
 // The room functions, in this process: it runs on the same box with the same
 // settings as the server, so slot keys and the cap come out identical. Used
@@ -278,6 +288,46 @@ $check('gzip-shrinks-the-reply', $bGz !== '' && strlen($bGz) * 2 < strlen($bPlai
 $errJson = $bErr === '' ? null : json_decode((string) @gzdecode($bErr), true);
 $check('gzip-errors-compress-too', is_array($errJson) && ($errJson['error'] ?? '') === 'no such room' && strtolower($headerOf($hErr, 'Content-Encoding')) === 'gzip');
 $check('gzip-error-status-kept', strpos($hErr[0] ?? '', '404') !== false, $hErr[0] ?? '');
+// Host handoff: the host leaves mid-match, the match ends, and the next human
+// (seat 1, not seat 0) plays again and starts the room.
+$hand = $post('create', ['initials' => 'hnd']);
+$hcode = (string) ($hand['code'] ?? '');
+$hh = $post('join', ['code' => $hcode, 'initials' => 'nxt']);
+$hctl = fn(array $who): array => ['code' => $hcode, 'token' => (string) ($who['token'] ?? ''), 'csrf' => (string) ($who['csrf'] ?? '')];
+usleep(300000);
+[$guestStatus, $guestStart] = $postStatus('start', $hctl($hh));
+$check('guest-start-refused', $guestStatus === 403 && ($guestStart['ok'] ?? false) !== true && ($guestStart['error'] ?? '') === 'only the host starts the match',
+    json_encode([$guestStatus, $guestStart['error'] ?? null]));
+$post('start', $hctl($hand));
+usleep(300000);
+$post('leave', $hctl($hand));
+tankity_tx(tankity_db(), function (PDO $db) use ($hcode): void {
+    $q = $db->prepare('SELECT data FROM rooms WHERE code = ?');
+    $q->execute([$hcode]);
+    $room = room_decode($q->fetchColumn());
+    if ($room === null) {
+        return;
+    }
+    $room['phase'] = 'over';
+    $u = $db->prepare('UPDATE rooms SET data = ? WHERE code = ?');
+    $u->bindValue(1, serialize($room), PDO::PARAM_LOB);
+    $u->bindValue(2, $hcode);
+    $u->execute();
+});
+usleep(300000);
+$hAgain = $post('again', $hctl($hh));
+usleep(300000);
+$hStart = $post('start', $hctl($hh));
+$check('host-handoff-starts', (int) ($hh['seat'] ?? -1) === 1 && ($hAgain['ok'] ?? false) === true
+    && ($hStart['ok'] ?? false) === true && ($hStart['room']['hostSeat'] ?? -1) === 1,
+    json_encode([$hAgain['error'] ?? null, $hStart['error'] ?? null, $hStart['room']['hostSeat'] ?? null]));
+// The old host left, so its seat token is dead: it starts nothing. (The host
+// gate itself, a seated non-host refused, is guest-start-refused above.)
+[$staleStatus, $staleStart] = $postStatus('start', $hctl($hand));
+$check('old-host-start-refused', $staleStatus === 401 && ($staleStart['ok'] ?? false) !== true && ($staleStart['error'] ?? '') === 'bad seat token',
+    json_encode([$staleStatus, $staleStart['error'] ?? null]));
+$ageRoom($hcode);
+
 // Leave the shared shelf as found: only this match is swept.
 $ageRoom($mcode);
 $get($base . '/rooms.php?action=ping');

@@ -1,102 +1,134 @@
 /* Operation Tankity: the high scores.
  *
- * Reports are filed with scores.php and read back from it; when the server
- * store cannot be reached they fall back to this browser's localStorage. The
- * scores overlay (src/ui/scores.tsx) draws the lines kept here. The game's
- * state and the page arrive as deps. */
+ * One all-time board per difficulty from scores.php, this player's rows marked,
+ * opening on the player's own difficulty with a switcher to the others; and a
+ * finished solo run filed the moment it ends, on its difficulty's board. When
+ * the server cannot be read the board falls back to this browser's own rows. A
+ * filing that fails says why on the end card and keeps the run in this browser.
+ * The page arrives as deps. */
 import { browserStorage } from '../../_kit/ports.browser.ts';
-import { json, pref, text } from '../../_kit/prefs.ts';
-import type { GameState } from './game-types.ts';
+import { json, pref } from '../../_kit/prefs.ts';
+import { DIFFICULTY_NAMES } from './difficulty.ts';
 import { isScoreRows, type ScoreEntry } from './score-rows.ts';
+import type { Difficulty } from './sim.ts';
+import { filedLine, fmt } from './standings.ts';
 import type { KeyHintFn } from './ui/chrome.tsx';
 import { renderScores as drawScores } from './ui/scores.tsx';
 
-/** The slice of the game's state a filed report is written from (main.ts's G). */
-export type ScoresState = Pick<GameState, 'score' | 'roundsWon' | 'won' | 'seed'>;
+/** A board row as scores.php sends it. */
+interface BoardRow { name: string; best: number; banked: number; place: number }
 
-/** A line of the high-score list as scores.php sends it. */
-interface ScoreRow { name: string; best: number; banked: number; won: boolean }
-
-/** What the scores need from the page and the rest of the game. */
 export interface ScoresDeps {
-  G: ScoresState;
   $(id: string): HTMLElement | null;
   keyHint: KeyHintFn;
   say(text: string, tone?: string): void;
   toggleOverlay(id: string, btnId?: string): void;
+  initials(): string;
+  /** The Menu's Difficulty: the board Scores opens on. */
+  difficulty(): Difficulty;
+}
+
+export interface SoloRun { initials: string; score: number; banked: number; seed: string; difficulty: Difficulty }
+
+/** Why a filing failed, in words for the end card. */
+export function filingFailure(status: number | null, error: string): string {
+  if (status === null) return 'the score server is out of reach';
+  if (status === 429) return 'too many reports from this connection just now, try again later';
+  if (status === 403) return 'the request was refused (it must come from this site)';
+  if (status === 415) return 'the server refused the report format';
+  if (status >= 500) return `the score server had a problem (${error || 'http ' + status})`;
+  return error || 'http ' + status;
 }
 
 export function createScores(deps: ScoresDeps) {
-  const { G, $, keyHint, say, toggleOverlay } = deps;
-  const storage = browserStorage();
-  const localRows = pref<ScoreEntry[]>('tankity-local', [], json(isScoreRows), storage);
-  const callsign = pref('tankity-callsign', '', text, storage);
+  const { $, keyHint, say, toggleOverlay, initials, difficulty } = deps;
+  const localRows = pref<ScoreEntry[]>('tankity-local', [], json(isScoreRows), browserStorage());
 
-  /* ---------- scores: file-backed API with localStorage fallback ---------- */
-  function localScores(): ScoreEntry[] {
-    return localRows.get();
-  }
-  function saveLocal(entry: ScoreEntry): void {
-    const arr = [...localScores(), entry];
-    arr.sort((a, b) => b.score - a.score);
-    localRows.set(arr.slice(0, 10));
-  }
-  /* The scores overlay is a Preact component (src/ui/scores.tsx); the game loads
-     the list and hands in finished lines. */
-  const SCORES: { rows: string[] | null; note: string; formHidden: boolean } = { rows: null, note: '', formHidden: false };
+  const SCORES: { level: Difficulty; rows: { text: string; mine: boolean }[] | null; note: string } = { level: 'normal', rows: null, note: '' };
   function renderScoresOverlay(): void {
     const section = $('report-overlay');
     if (!section) return;
     drawScores(section, {
-      keyHint,
-      onClose: () => toggleOverlay('report-overlay', 'scores-open'),
-      rows: SCORES.rows,
-      note: SCORES.note,
-      formHidden: SCORES.formHidden,
-      onFile: raw => {
-        const name = raw.trim();
-        if (!name) { say('Give your callsign first, hero.', 'info'); return; }
-        fileReport(name);
-      },
+      keyHint, onClose: () => toggleOverlay('report-overlay', 'scores-open'),
+      level: SCORES.level, onLevel: lv => { void loadScores(lv); }, rows: SCORES.rows, note: SCORES.note,
     });
   }
-  async function loadScores(): Promise<void> {
-    let rows: ScoreRow[] = [];
-    let src = 'file store';
+  /* Loads one board. Only the latest load may draw: a slower reply for a board
+     the player has since left would otherwise show another difficulty's rows
+     under the pressed button. */
+  let loads = 0;
+  let shown: Difficulty | null = null; // the board SCORES.rows holds
+  async function loadScores(level: Difficulty = difficulty()): Promise<void> {
+    // AAA is also what the board shows for a name its blocklist refuses, so those rows cannot be told apart: none is marked.
+    const me = initials().toUpperCase() === 'AAA' ? '' : initials().toUpperCase();
+    const mine = ++loads;
+    SCORES.level = level;
     try {
-      const res = await fetch('scores.php', { headers: { Accept: 'application/json' } });
+      const res = await fetch(`scores.php?difficulty=${level}`, { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error('http ' + res.status);
-      const data = await res.json();
-      rows = data.scores || [];
+      const data = (await res.json()) as { scores?: BoardRow[] };
+      if (mine !== loads) return;
+      SCORES.rows = (data.scores || []).map(r => ({
+        text: `#${r.place} ${r.name} \u00b7 ${fmt(r.best)} pts \u00b7 ${r.banked} rounds won`, mine: !!me && r.name.toUpperCase() === me,
+      }));
+      SCORES.note = `The all-time board on ${DIFFICULTY_NAMES[level]}. Your runs are marked.`;
+      shown = level;
     } catch (_) {
-      rows = localScores().map(s => ({ name: s.name, best: s.score, banked: s.banked, won: s.won }));
-      src = 'this browser only (server store unreachable)';
+      if (mine !== loads) return;
+      // A row with no difficulty counts as Normal.
+      SCORES.rows = localRows.get().filter(r => (r.difficulty ?? 'normal') === level)
+        .map((r, i) => ({ text: `#${i + 1} ${r.name} \u00b7 ${fmt(r.score)} pts \u00b7 ${r.banked} rounds won`, mine: !!me && r.name.toUpperCase() === me }));
+      SCORES.note = `The score server is out of reach: these are this browser's runs on ${DIFFICULTY_NAMES[level]} only.`;
+      shown = level;
     }
-    SCORES.rows = rows.slice(0, 10).map(r => `${r.name}: ${r.best} pts (${r.banked} rounds won${r.won ? ', champion' : ''})`);
-    SCORES.note = `Showing reports from ${src}.`;
     renderScoresOverlay();
   }
-  /* The last callsign filed, so the next report is one tap. */
-  function savedCallsign(): string {
-    return callsign.get();
+  /* The overlay opens on the player's current difficulty and reads the board afresh: the
+     Difficulty may have changed, and a room match files on the server unseen. */
+  function openScores(): void {
+    SCORES.level = difficulty();
+    // The last board read stays up while the fresh one loads, when it is this board's.
+    if (shown !== SCORES.level) SCORES.rows = null;
+    SCORES.note = 'Loading…';
+    renderScoresOverlay();
+    void loadScores();
   }
-  async function fileReport(name: string): Promise<void> {
-    callsign.set(name);
-    const entry = { name, score: G.score, banked: G.roundsWon, won: G.won, seed: G.seed };
+  function saveLocal(entry: ScoreEntry): void {
+    localRows.set([...localRows.get(), entry].sort((a, b) => b.score - a.score).slice(0, 10));
+  }
+  /* Files a finished solo run on its difficulty's board; `done` always gets a
+     line for the end card, a failure's reason included (an empty line would hide
+     the card's filed line and read as "did not place"). */
+  async function fileSolo(run: SoloRun, done: (line: string) => void): Promise<void> {
+    let ok = false;
+    // A copy is kept in this browser only when the server surely did not file the run: no reply at all,
+    // or an error status. A 200 whose body is unreadable may well have filed it.
+    let keep = true;
     try {
-      const res = await fetch('scores.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entry),
-      });
-      if (!res.ok) throw new Error('http ' + res.status);
-      say(`Report filed for ${name}. The base salutes you.`, 'good');
-    } catch (_) {
-      saveLocal(entry);
-      say(`Server store unreachable, so the report stays in ${name}'s browser instead.`, 'info');
+      let res: Response;
+      try {
+        res = await fetch('scores.php', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: run.initials, score: run.score, banked: run.banked, seed: run.seed, difficulty: run.difficulty }),
+        });
+      } catch (_) {
+        throw filingFailure(null, '');
+      }
+      const data = (await res.json().catch(() => null)) as { ok?: boolean; place?: number | null; error?: string } | null;
+      if (res.ok && !data) keep = false;
+      if (!res.ok || !data || !data.ok) throw filingFailure(res.ok ? 200 : res.status, (data && data.error) || '');
+      ok = true;
+      done(filedLine(data.place ?? null, run.score, run.difficulty));
+    } catch (why) {
+      if (keep) saveLocal({ name: run.initials, score: run.score, banked: run.banked, won: false, seed: run.seed, difficulty: run.difficulty });
+      say(keep ? 'The run could not be filed; it stays in this browser.' : 'The server answered, but the reply could not be read.', 'info');
+      done(keep
+        ? `Couldn't file your score: ${typeof why === 'string' ? why : 'unexpected reply'}. Kept in this browser.`
+        : `The server's reply could not be read, so the run may be filed: ${typeof why === 'string' ? why : 'unexpected reply'}. Check Scores.`);
     }
-    loadScores();
+    // Refresh the board the player is looking at; one never opened gets the run's own.
+    if (ok) void loadScores(SCORES.rows ? SCORES.level : run.difficulty);
   }
 
-  return { SCORES, renderScoresOverlay, loadScores, savedCallsign, fileReport };
+  return { SCORES, renderScoresOverlay, openScores, loadScores, fileSolo };
 }

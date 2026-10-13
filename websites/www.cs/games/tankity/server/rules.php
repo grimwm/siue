@@ -11,23 +11,6 @@ if (!defined('TANKITY_ROOMS_INCLUDED')) {
     exit;
 }
 
-// Mirrors cylon: exact-3 uppercase initials, blocked set enforced both sides.
-// (Keep in sync with BLOCKED_INITIALS in src/initials.ts.)
-const BLOCKED_INITIALS = [
-    'ASS',
-    'FUK', 'FUC', 'FCK', 'FUX', 'FUQ',
-    'SHT', 'SHI',
-    'DIK', 'DIC', 'DCK',
-    'COK', 'COC', 'COQ',
-    'CUM', 'JIZ',
-    'CNT', 'PUS', 'VAG', 'CLT',
-    'SEX', 'XXX', 'TIT',
-    'FAG', 'FGT',
-    'NIG', 'NGR',
-    'WTF', 'FFS',
-    'POO', 'PEE',
-    'KKK',
-];
 /* Cylon-style initials: exactly 3 letters, stored uppercase, and not a
  * blocked word. */
 function room_valid_initials($raw): ?string
@@ -285,6 +268,7 @@ function room_new(string $code, string $initials): array
         'phase' => 'lobby', // lobby | shop | play | over
         'map' => null, // a ROOM_MAPS id, or null for a random draw
         'difficulty' => 'normal', // the drones' aim: a ROOM_DIFFICULTY word, set by the host at create
+        'host' => 0, // the seat that starts the match; the lowest human takes it if the host leaves
         'round' => 0,
         'wind' => 0,
         'terrain' => [],
@@ -305,7 +289,8 @@ function room_new(string $code, string $initials): array
 /* A seat nobody sits in: the drone battery by default, or open (no unit). */
 function room_idle_seat(int $slot, string $mode = 'ai'): array
 {
-    $name = ROOM_AI_NAMES[($slot - 1) % count(ROOM_AI_NAMES)];
+    $n = count(ROOM_AI_NAMES);
+    $name = ROOM_AI_NAMES[(($slot - 1) % $n + $n) % $n]; // one name per seat, so slot 0 and slot 3 never share
     return ['human' => false, 'name' => $name, 'initials' => $name, 'lives' => 0, 'mode' => $mode === 'open' ? 'open' : 'ai'];
 }
 function room_seat_human(string $initials, string $token, array $body): array
@@ -390,6 +375,10 @@ function room_spawn_spots(int &$rng, int $n, int $width): array
 function room_start_round(array &$room): void
 {
     $room['watchTurns'] = 0;
+    // Each human's gain this round counts from here.
+    foreach ($room['stats'] ?? [] as $idx => $st) {
+        $room['stats'][$idx]['from'] = $room['scores'][$idx] ?? 0;
+    }
     $room['round'] += 1;
     $w = ROOM_W;
     if ($room['map'] !== null && isset(ROOM_MAPS[$room['map']])) {
@@ -559,6 +548,50 @@ function room_round_settled(array $room): bool
     }
     return $alive <= 1;
 }
+/* ---------- this match ---------- */
+/* Called by the start handler: how many humans started (last-human-standing
+   needs two), and each human's match stats from zero. */
+function room_match_begin(array &$room): void
+{
+    $room['startHumans'] = 0;
+    $room['stats'] = [];
+    $room['filed'] = [];
+    $room['winner'] = null;
+    $room['winBonus'] = 0;
+    foreach ($room['seats'] as $idx => $s) {
+        if ($s['human'] ?? false) {
+            $room['startHumans']++;
+            $room['stats'][$idx] = ['won' => 0, 'kills' => 0, 'gain' => 0, 'from' => 0, 'out' => null];
+        }
+    }
+}
+/* Whether the match is over after a round, and who won. No human with a life
+   left ends it with no winner; in a room that started with two or more humans,
+   exactly one left ends it and that one wins. Leaving is a forfeit: a leaver's
+   seat is no longer human, so the other of the last two wins at the end of
+   that round with the normal bonus. A room without room_match_begin
+   reads startHumans as 1 and plays like solo. */
+function room_match_outcome(array $room): array
+{
+    $left = [];
+    foreach ($room['seats'] as $idx => $s) {
+        if (($s['human'] ?? false) && ($s['lives'] ?? 0) > 0) {
+            $left[] = $idx;
+        }
+    }
+    if (!$left) {
+        return ['over' => true, 'winner' => null];
+    }
+    if (($room['startHumans'] ?? 1) >= 2 && count($left) === 1) {
+        return ['over' => true, 'winner' => $left[0]];
+    }
+    return ['over' => false, 'winner' => null];
+}
+/* The winner's bonus: twice the round bonus of the round the match ended in. */
+function room_winner_bonus(int $round): int
+{
+    return 2 * (750 + $round * 150);
+}
 /* Settle a round: only a human who is the last unit standing is paid (the
 // round bonus and prize, 'roundwin' with the winner's seat); a drone survivor
 // or nobody left is 'roundlost'. Every human whose tank was wrecked loses a
@@ -594,7 +627,6 @@ function room_end_round(array &$room, array &$events): void
             $wrecked[$t['seat']] = true;
         }
     }
-    $anyLeft = false;
     foreach ($room['seats'] as $idx => &$s) {
         if (!($s['human'] ?? false)) {
             continue;
@@ -602,12 +634,11 @@ function room_end_round(array &$room, array &$events): void
         if (isset($wrecked[$idx])) {
             $s['lives'] = max(0, ($s['lives'] ?? 3) - 1);
             if ($s['lives'] <= 0) {
-                room_save_score($s['initials'], $room['scores'][$idx] ?? 0, $room);
+                if (isset($room['stats'][$idx])) {
+                    $room['stats'][$idx]['out'] = (int) $room['round'];
+                }
                 $events[] = ['t' => 'eliminated', 'seat' => $idx];
             }
-        }
-        if (($s['lives'] ?? 0) > 0) {
-            $anyLeft = true;
         }
     }
     unset($s);
@@ -620,27 +651,70 @@ function room_end_round(array &$room, array &$events): void
     } else {
         $events[] = ['t' => 'roundlost', 'round' => $room['round']];
     }
+    if ($winner !== null && isset($room['stats'][$winner['seat']])) {
+        $room['stats'][$winner['seat']]['won']++;
+    }
     unset($room['pace']);
-    if (!$anyLeft) {
+    foreach ($room['stats'] ?? [] as $idx => $st) {
+        $room['stats'][$idx]['gain'] = ($room['scores'][$idx] ?? 0) - $st['from'];
+    }
+    // Leave is a forfeit: a leaver is no longer human, so the other of the last
+    // two wins here, at the end of the round they left in.
+    $outcome = room_match_outcome($room);
+    if ($outcome['over']) {
+        if ($outcome['winner'] !== null) {
+            $w = $outcome['winner'];
+            $bonus = room_winner_bonus((int) $room['round']);
+            $room['scores'][$w] = ($room['scores'][$w] ?? 0) + $bonus;
+            if (isset($room['stats'][$w])) {
+                $room['stats'][$w]['gain'] += $bonus;
+            }
+            $room['winner'] = $w;
+            $room['winBonus'] = $bonus;
+            $events[] = ['t' => 'matchwin', 'seat' => $w, 'bonus' => $bonus];
+            room_file_seat($room, $w);
+        }
+        room_file_eliminated($room, $wrecked);
         $room['phase'] = 'over';
         $events[] = ['t' => 'matchover'];
         return;
     }
+    room_file_eliminated($room, $wrecked);
     // Every round starts from the shop, won or lost.
     $room['phase'] = 'shop';
     $room['shop'] = ['at' => microtime(true), 'ready' => []];
 }
-/* Files a room score with the per-callsign runs, as local play does. Inside a
-   room's transaction: it commits with the room. A failure is logged, never
-   allowed to break the round. */
-function room_save_score(string $initials, int $score, array $room): void
+/* Files the humans this round eliminated. The winner is filed first when the
+   match ends, so each rank is the place on a board that already holds it. */
+function room_file_eliminated(array &$room, array $wrecked): void
 {
-    try {
-        legacy_add_run(legacy_slug($initials), ['score' => $score, 'banked' => 0, 'won' => false,
-            'seed' => 'room:' . $room['code'], 'ts' => gmdate('c')]);
-    } catch (Throwable $e) {
-        error_log('tankity rooms: score not filed: ' . $e->getMessage());
+    foreach ($room['seats'] as $idx => $s) {
+        if (($s['human'] ?? false) && ($s['lives'] ?? 0) <= 0 && isset($wrecked[$idx])) {
+            room_file_seat($room, $idx);
+        }
     }
+}
+/* Files a human seat's match score on the board of the room's difficulty,
+   once per match. Inside the room's transaction: it commits with the room. A
+   failure is logged, never allowed to break the round. */
+function room_file_seat(array &$room, int $seat): void
+{
+    if (array_key_exists($seat, $room['filed'] ?? [])) {
+        return;
+    }
+    $s = $room['seats'][$seat] ?? [];
+    try {
+        $rank = board_file(['difficulty' => room_difficulty($room), 'initials' => strtoupper((string) ($s['initials'] ?? 'AAA')),
+            'score' => (int) ($room['scores'][$seat] ?? 0), 'rounds' => (int) ($room['stats'][$seat]['won'] ?? 0),
+            'seed' => 'room:' . $room['code']]);
+    } catch (Throwable $e) {
+        // false, not null: the snapshot tells a filing that failed from a score
+        // that filed but made no place. The write was rolled back, and a match
+        // files once, so it is not retried.
+        error_log("tankity board: room {$room['code']} seat $seat not filed: " . $e->getMessage());
+        $rank = false;
+    }
+    $room['filed'][$seat] = $rank;
 }
 /* 1-ups, same economy as local play. */
 function room_check_oneups(array &$room, array &$events, int $seat): void
@@ -705,6 +779,10 @@ function room_carry_armor(array &$room, int $seat, int $hp, bool $wrecked): void
    shop (round 0) as the browser's shelf does. */
 function room_buy(array &$room, int $seat, string $item, int $qty): ?array
 {
+    // An eliminated human stays in the shop phase while others play on; refused so a seat that is out cannot move cash standings.
+    if (($room['seats'][$seat]['lives'] ?? 1) <= 0) {
+        return [409, 'You are out of this match.'];
+    }
     $weapons = room_weapons();
     $qty = max(1, min(9, $qty));
     $gear = null;
@@ -798,6 +876,64 @@ function room_apply_fuel(array &$room): void
     unset($t);
 }
 
+/* The seat that holds the host's powers. */
+function room_host(array $room): int
+{
+    return (int) ($room['host'] ?? 0);
+}
+/* Make sure a human holds the host: the lowest-numbered human takes it if the
+   host's seat is vacated. False when no human is seated. */
+function room_rehost(array &$room): bool
+{
+    if ($room['seats'][room_host($room)]['human'] ?? false) {
+        return true;
+    }
+    foreach ($room['seats'] as $idx => $s) {
+        if ($s['human'] ?? false) {
+            $room['host'] = $idx;
+            return true;
+        }
+    }
+    return false;
+}
+/* Play again (same room): back to the lobby with the same code and seats, every
+   human on fresh lives, score and cash. The room's map and Difficulty stay (the
+   host chose them at create). A seat a player left goes back to the battery.
+   Pressed twice (two players at once), the second press finds the lobby and
+   changes nothing. False while the match is still on. */
+function room_again(array &$room): bool
+{
+    if ($room['phase'] === 'lobby') {
+        return true;
+    }
+    if ($room['phase'] !== 'over') {
+        return false;
+    }
+    if (!room_rehost($room)) {
+        return false; // everyone left; nobody is there to start a lobby
+    }
+    foreach (['plate', 'armor', 'shield', 'jammer', 'bunker', 'laststand', 'fuelBonus', 'fuelApplied', 'tactic', 'stats', 'filed', 'menu', 'shop', 'pace', 'clock'] as $k) {
+        unset($room[$k]);
+    }
+    foreach ($room['seats'] as $idx => $s) {
+        if ($s['human'] ?? false) {
+            $room['seats'][$idx]['lives'] = 3;
+            room_seat_economy($room, $idx);
+        } elseif (!empty($s['bot'])) {
+            $room['seats'][$idx] = room_idle_seat($idx);
+        }
+    }
+    $room['winner'] = null;
+    $room['winBonus'] = 0;
+    $room['startHumans'] = 0;
+    $room['phase'] = 'lobby';
+    $room['round'] = 0;
+    $room['tanks'] = [];
+    $room['terrain'] = [];
+    room_terrain_changed($room);
+    return true;
+}
+
 /* A human walks away. The last human out closes the room, freeing its slot
    at once; otherwise the battery takes over the seat, host included: a match
    that has begun carries on for everyone else (nothing after the lobby is
@@ -811,7 +947,7 @@ function room_leave(array &$room, int $seat): bool
             $humans++;
         }
     }
-    if ($humans === 0 || ($room['phase'] === 'lobby' && $seat === 0)) {
+    if ($humans === 0 || ($room['phase'] === 'lobby' && $seat === room_host($room))) {
         return false; // close the room
     }
     if ($room['phase'] === 'lobby') {
@@ -822,6 +958,7 @@ function room_leave(array &$room, int $seat): bool
     // A bot drives the seat from here; 'bot' marks the unit for everyone.
     $room['seats'][$seat] = ['human' => false, 'name' => $name, 'initials' => $name, 'mode' => 'ai', 'bot' => true,
         'lives' => $room['seats'][$seat]['lives'] ?? 0];
+    room_rehost($room);
     foreach ($room['tanks'] as &$t) {
         if ($t['seat'] === $seat) {
             $t['kind'] = 'ai';

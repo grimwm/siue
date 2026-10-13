@@ -177,7 +177,7 @@ click(els['btn-music']); click(els['btn-music']); // end unmuted with a fresh sc
 const html = fs.readFileSync(path.join(GAME_DIR, 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(GAME_DIR, 'game.css'), 'utf8');
 // The room server is rooms.php plus the files it requires from server/.
-const phpFiles = ['rooms.php', ...['settings', 'store', 'sim', 'ai', 'rules', 'protocol'].map(f => `server/${f}.php`)];
+const phpFiles = ['rooms.php', ...['settings', 'store', 'sim', 'ai', 'rules', 'protocol', 'guard', 'board'].map(f => `server/${f}.php`)];
 const phpText = Object.fromEntries(phpFiles.map(f => [f, fs.readFileSync(path.join(GAME_DIR, f), 'utf8')]));
 const php = Object.values(phpText).join('\n');
 // The lobby and the menu are Preact components (src/ui): their ids exist once
@@ -406,15 +406,15 @@ function scriptTank(seat, x, name, kind) {
 function scriptSeats() {
   // Server shape: humans arrive as name=initials, drones as name=AI name.
   return [
-    { seat: 0, human: true, name: 'abc', mode: 'human', bot: false, lives: 3, score: 0, ready: NET_SHOP && mockReady },
-    { seat: 1, human: false, name: 'REAPER', mode: 'ai', bot: false, lives: 0, score: 0, ready: false },
+    { seat: 0, human: true, name: 'abc', mode: 'human', bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: NET_SHOP && mockReady },
+    { seat: 1, human: false, name: 'REAPER', mode: 'ai', bot: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false },
   ];
 }
 function scriptYou() {
   return {
     ammo: { shell: -1, buck: 1, mortar: 0, rail: 0, nuke: 0 },
     cash: 600, score: 0, lives: 3, fuel: 80, weapon: 'shell', nextUp: 3000,
-    seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, plate: 0, armor: seatArmor, maxArmor: 100,
+    seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, plate: 0, armor: seatArmor, maxArmor: 100, filed: false, filedRank: null, filedFailed: false,
   };
 }
 function playRoom(turn, events) {
@@ -436,6 +436,10 @@ const mapFields = () => ({
   map: createdMap || null,
   mapName: createdMap ? 'Canyon 3' : 'Random hills',
   difficulty: ['easy', 'hard'].includes(createdDifficulty) ? createdDifficulty : 'normal',
+  hostSeat: 0,
+  startHumans: 1,
+  winner: null,
+  winBonus: 0,
 });
 global.fetch = async (url, opts) => {
   const u = String(url);
@@ -529,9 +533,9 @@ let stateCalls = 0;
 function lobbyRoom() {
   const aiNames = { 1: 'REAPER', 2: 'WRAITH', 3: 'SPOTTER' };
   const seats = [0, 1, 2, 3].map(i => {
-    if (i === 0) return { seat: 0, human: true, name: 'abc', mode: 'human', bot: false, lives: 3, score: 0, ready: false };
-    if (i === 1 && extraGuest) return { seat: 1, human: true, name: 'def', mode: 'human', bot: false, lives: 3, score: 0, ready: false };
-    return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], bot: false, lives: 0, score: 0, ready: false };
+    if (i === 0) return { seat: 0, human: true, name: 'abc', mode: 'human', bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
+    if (i === 1 && extraGuest) return { seat: 1, human: true, name: 'def', mode: 'human', bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
+    return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], bot: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
   });
   return fxConform(Object.assign(
     { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], terrainRev: 1, hills: null, round: 0, wind: 0, turn: null, turnLeft: null, shopLeft: null, you: scriptYou(), csrf: 'cs0' },
@@ -690,8 +694,7 @@ await (async () => {
   // Keyboard alone can shop: arrows highlight, Enter buys, digits buy outright.
   TAP('shop', 'selDown'); frames(3);
   check('shop-keys', shopRows()[1].className === 'sel', shopRows().map(li => li.className).join(','));
-  check('shop-scroll-follows', globalThis.__scrolledTo && globalThis.__scrolledTo.className === 'sel',
-    globalThis.__scrolledTo && globalThis.__scrolledTo.className);
+  check('shop-scroll-follows', (() => { const li = shopRows()[1], list = els['shop-list']; return li.offsetTop >= list.scrollTop && li.offsetTop + li.offsetHeight <= list.scrollTop + list.clientHeight; })());
   check('keys-file-drives', KEYS.shop.buy[0] === 'b' && KEYS.global.fire[0] === 'Space' && KEYS.aim.barrelLeft[0] === 'ArrowLeft' && KB('shop', 'buy')[0] === 'b',
     `${KEYS.shop.buy[0]}|${KEYS.global.fire[0]}|${KEYS.aim.barrelLeft[0]}`);
   {
@@ -1248,7 +1251,7 @@ await (async () => {
   void document.getElementById('leave-stay');
   // (shop-leave is in the shop component, src/ui/shop.tsx; the rest are in the page.)
   const shopSrc = fs.readFileSync(path.join(GAME_DIR, 'src', 'ui', 'shop.tsx'), 'utf8');
-  check('leave-markup', html.includes('id="leave-veil"') && ['leave-go', 'leave-stay', 'rematch', 'again', 'end-score-form'].every(rendered) && rendered('menu-leave')
+  check('leave-markup', html.includes('id="leave-veil"') && ['leave-go', 'leave-stay', 'again'].every(rendered) && rendered('menu-leave')
     && shopSrc.includes('id="shop-leave"'));
   check('leave-buttons-in-room', els['menu-leave'].hidden === false && els['shop-leave'].hidden === false,
     `${els['menu-leave'].hidden} ${els['shop-leave'].hidden}`);

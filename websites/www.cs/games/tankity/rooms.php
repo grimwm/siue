@@ -33,6 +33,9 @@ require_once __DIR__ . '/config.php';
 // pipeline: parsing, the JSON reply, the gate, and one handler per action.
 //   server/settings.php  room shape and the host's knobs
 //   server/db.php        the storage directory, the database, transactions
+//   server/guard.php     the score guard's settings and the blocked initials
+//   server/score-guard.php  the kit's score guard (a generated copy; never edit it)
+//   server/board.php     the boards, one per difficulty
 //   server/legacy.php    the per-callsign score runs and the import of the old score files
 //   server/housekeep.php throttled cleanup on requests
 //   server/store.php     rooms as rows: the room lock, room lifecycle, the sweep
@@ -45,6 +48,8 @@ define('TANKITY_ROOMS_INCLUDED', true);
 require_once __DIR__ . '/server/db.php';
 require_once __DIR__ . '/server/legacy.php';
 require_once __DIR__ . '/server/housekeep.php';
+require_once __DIR__ . '/server/guard.php';
+require_once __DIR__ . '/server/board.php';
 require_once __DIR__ . '/server/settings.php';
 require_once __DIR__ . '/server/store.php';
 require_once __DIR__ . '/server/sim.php';
@@ -76,17 +81,6 @@ function room_json_out(int $code, array $payload): void
     room_gzip_begin();
     echo json_encode($payload, JSON_UNESCAPED_SLASHES);
     exit;
-}
-function room_origin_ok(): bool
-{
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-    if ($origin === '') {
-        return true; // curl-style callers send none; the tokens still gate them
-    }
-    $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
-    $host = preg_replace('/:\d+$/', '', $host);
-    $o = parse_url($origin, PHP_URL_HOST);
-    return is_string($o) && $o !== '' && strcasecmp($o, $host) === 0;
 }
 /* The arsenal lives in game.yaml, served as game.json (tools/game-json.php
 // writes it): the browser reads the same file, so prices, packs, ballistics,
@@ -159,7 +153,7 @@ if ($action === 'maps') {
 
 if ($action === 'map' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true);
-    if ($seat !== 0) {
+    if ($seat !== room_host($room)) {
         room_unlock($fh);
         room_json_out(403, ['error' => 'only the host picks the hills']);
     }
@@ -372,7 +366,7 @@ function room_gate(array $body, bool $needCsrf, bool $throttle = true): array
 /* The host decides each non-human seat: drone battery ('ai') or 'open'. */
 if ($action === 'seatmode' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true);
-    if ($seat !== 0) {
+    if ($seat !== room_host($room)) {
         room_unlock($fh);
         room_json_out(403, ['error' => 'only the host sets the seats']);
     }
@@ -402,7 +396,7 @@ if ($action === 'seatmode' && $method === 'POST') {
 
 if ($action === 'start' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true);
-    if ($seat !== 0) {
+    if ($seat !== room_host($room)) {
         room_unlock($fh);
         room_json_out(403, ['error' => 'only the host starts the match']);
     }
@@ -423,6 +417,7 @@ if ($action === 'start' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(409, ['error' => 'A match needs at least two tanks. Switch a seat to AI so there is someone to battle.']);
     }
+    room_match_begin($room);
     room_start_round($room);
     $events = [];
     $events[] = ['t' => 'round', 'round' => $room['round'], 'wind' => $room['wind']];
@@ -655,6 +650,23 @@ if ($action === 'buy' && $method === 'POST') {
     }
     room_unlock($fh);
     $out = room_reply_snapshot($room, $seat, $body);
+    room_json_out(200, ['ok' => true, 'room' => $out]);
+}
+
+/* Play again (same room): anyone seated may press it once the match is over. */
+if ($action === 'again' && $method === 'POST') {
+    [$room, $fh, $path, $seat] = room_gate($body, true, false);
+    if (!room_again($room)) {
+        room_unlock($fh);
+        room_json_out(409, ['error' => 'no match to play again: it is still on, or nobody is left']);
+    }
+    room_emit($room, ['t' => 'again', 'seat' => $seat]);
+    if (!room_save($fh, $path, $room)) {
+        room_unlock($fh);
+        room_json_out(500, ['error' => 'store write failed']);
+    }
+    $out = room_reply_snapshot($room, $seat, $body);
+    room_unlock($fh);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 

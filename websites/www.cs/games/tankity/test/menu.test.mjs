@@ -144,3 +144,15 @@ test('Quit is always in the menu and reports a press', () => {
   click(quit);
   assert.equal(quits, 1);
 });
+
+test('Standings shows only in a room and reports a press', () => {
+  let shown = 0;
+  const { section, props } = draw({ onStandings: () => { shown++; } });
+  assert.equal(byId(section, 'menu-standings').hidden, true);
+  menu.renderMenu(section, { ...props, inRoom: true });
+  const standings = byId(section, 'menu-standings');
+  assert.equal(standings.hidden, false);
+  assert.equal(standings.textContent, 'Standings');
+  click(standings);
+  assert.equal(shown, 1);
+});

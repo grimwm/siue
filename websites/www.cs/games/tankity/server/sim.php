@@ -425,6 +425,9 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
         }
         if ($t['hp'] <= 0) {
             $events[] = ['t' => 'kill', 'seat' => $t['seat'], 'by' => $tank['seat']];
+            if ($tank['kind'] === 'human' && $t['seat'] !== $tank['seat'] && isset($room['stats'][$tank['seat']])) {
+                $room['stats'][$tank['seat']]['kills']++;
+            }
             if ($tank['kind'] === 'human' && $t['kind'] === 'ai') {
                 $room['scores'][$tank['seat']] = ($room['scores'][$tank['seat']] ?? 0) + 300;
                 $room['cash'][$tank['seat']] = ($room['cash'][$tank['seat']] ?? 0) + 300;

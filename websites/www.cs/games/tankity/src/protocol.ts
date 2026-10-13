@@ -49,6 +49,12 @@ export interface RoomSeat {
   bot: boolean;
   lives: number;
   score: number;
+  /** This match: rounds won, units wrecked, and the score gained in the last finished round. */
+  roundsWon: number;
+  kills: number;
+  gain: number;
+  /** The round the last life went; null while alive, and for a player who left. */
+  out: number | null;
   ready: boolean;
 }
 
@@ -89,6 +95,12 @@ export interface RoomYou {
   /** The armor the next round musters with (what the last one ended with). */
   armor: number;
   maxArmor: number;
+  /** This seat's match score was filed on the all-time board (false: not yet, or the filing failed); filedRank is its place when filed
+   * (null: outside the board). */
+  filed: boolean;
+  filedRank: number | null;
+  /** The server tried to file this seat's score and could not. */
+  filedFailed: boolean;
 }
 
 export interface RoomSnapshot {
@@ -99,7 +111,15 @@ export interface RoomSnapshot {
   mapName: string;
   /** How well the drones aim: the host's setting at create. */
   difficulty: Difficulty;
+  /** The seat that starts the match: seat 0 until it leaves, then the lowest-numbered human. */
+  hostSeat: number;
   round: number;
+  /** Humans seated when the match started; two or more makes it last-human-standing. */
+  startHumans: number;
+  /** The seat that won the match; null until then, and when nobody did. */
+  winner: number | null;
+  /** The winner's match bonus (0 until there is a winner); the matchwin event carries it too. */
+  winBonus: number;
   wind: number;
   /** The seat whose turn it is; null outside play. */
   turn: number | null;
@@ -142,6 +162,8 @@ export interface RoundWinEvent extends EventBase { t: 'roundwin'; round: number;
  * wrecked human lost a life, and the shop opens before the next round. */
 export interface RoundLostEvent extends EventBase { t: 'roundlost'; round: number }
 export interface MatchOverEvent extends EventBase { t: 'matchover' }
+/** The last human standing in a room that started with two or more: `bonus` is twice the round bonus. */
+export interface MatchWinEvent extends EventBase { t: 'matchwin'; seat: number; bonus: number }
 export interface EliminatedEvent extends EventBase { t: 'eliminated'; seat: number }
 export interface OneUpEvent extends EventBase { t: 'oneup'; seat: number; lives: number }
 /** Someone took a seat in the lobby. */
@@ -149,6 +171,8 @@ export interface OneUpEvent extends EventBase { t: 'oneup'; seat: number; lives:
  * departed seat already shows the drone that took it over. */
 export interface JoinEvent extends EventBase { t: 'join'; seat: number; name: string }
 export interface LeftEvent extends EventBase { t: 'left'; seat: number; name: string }
+/** Someone pressed Play again: the room is back in its lobby. */
+export interface AgainEvent extends EventBase { t: 'again'; seat: number }
 
 /** What opens a volley: a human fires, the drone fires, or the crew fires for
  * a human who ran the turn clock out. `x`, `a` and `pw` are where the barrel
@@ -183,7 +207,7 @@ export interface TacticEvent extends EventBase { t: 'tactic'; seat: number; s: s
 
 /** The events a snapshot carries, discriminated by `t`. */
 export type RoomEvent =
-  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent
+  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent
   | FireEvent | AiFireEvent | AutoEvent
   | ShotEvent | BurstEvent | HitEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
 
@@ -218,6 +242,7 @@ export interface PostBodies {
   act: ActBody;
   buy: { item: string; qty: number };
   ready: { ready: boolean };
+  again: Record<string, never>;
   body: { body: string };
   map: { map: string };
   seatmode: { seat: number; mode: 'ai' | 'open'; since?: number };
@@ -232,6 +257,7 @@ export interface PostReplies {
   act: RoomReply;
   buy: RoomReply;
   ready: RoomReply;
+  again: RoomReply;
   body: RoomReply;
   map: RoomReply;
   seatmode: RoomReply;

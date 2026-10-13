@@ -80,6 +80,10 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
             'bot' => !$s['human'] && !empty($s['bot']),
             'lives' => $s['lives'] ?? 0,
             'score' => $room['scores'][$idx] ?? 0,
+            'roundsWon' => (int) ($room['stats'][$idx]['won'] ?? 0),
+            'kills' => (int) ($room['stats'][$idx]['kills'] ?? 0),
+            'gain' => (int) ($room['stats'][$idx]['gain'] ?? 0),
+            'out' => $room['stats'][$idx]['out'] ?? null,
             // Pressed Ready at the shop (always false elsewhere).
             'ready' => $room['phase'] === 'shop' && room_shop_ready($room, $idx),
         ];
@@ -90,7 +94,12 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
         'map' => $room['map'],
         'mapName' => room_map_name($room['map'] ?? null),
         'difficulty' => room_difficulty($room),
+        'hostSeat' => room_host($room),
         'round' => $room['round'],
+        'startHumans' => (int) ($room['startHumans'] ?? 0),
+        'winner' => $room['winner'] ?? null,
+        // The winner's match bonus, so a client that missed the matchwin event still shows it.
+        'winBonus' => (int) ($room['winBonus'] ?? 0),
         'wind' => $room['wind'],
         'turn' => $room['phase'] === 'play' && count($room['tanks']) ? $room['tanks'][$room['turn']]['seat'] ?? null : null,
         // Seconds left before the crew fires for the human whose turn it is.
@@ -139,6 +148,9 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
             'plate' => (int) ($room['plate'][$seat] ?? 0),
             'armor' => room_muster_armor($room, $seat),
             'maxArmor' => room_max_armor($room, $seat),
+            'filed' => array_key_exists($seat, $room['filed'] ?? []) && $room['filed'][$seat] !== false,
+            'filedRank' => is_int($room['filed'][$seat] ?? null) ? $room['filed'][$seat] : null,
+            'filedFailed' => array_key_exists($seat, $room['filed'] ?? []) && $room['filed'][$seat] === false,
         ];
         $out['csrf'] = $room['csrf'];
     }

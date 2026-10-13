@@ -10,15 +10,13 @@ import { click, fire, submit, document, makeEl, els } from '../../_kit/test/dom-
 
 globalThis.document = document;
 
-const UI = ['shop', 'lobby', 'guns', 'scores', 'log', 'tutorial', 'endveil', 'leave'];
+const UI = ['shop', 'lobby', 'guns', 'log', 'tutorial', 'leave'];
 const ui = await importTsx(import.meta.dirname, Object.fromEntries(UI.map(n => [n, `../src/ui/${n}.tsx`])));
 const { renderShop } = ui.shop;
 const { renderLobby } = ui.lobby;
 const { renderGuns } = ui.guns;
-const { renderScores } = ui.scores;
 const { renderLog } = ui.log;
 const { renderTutorial } = ui.tutorial;
-const { renderEndVeil } = ui.endveil;
 const { renderLeave } = ui.leave;
 
 const walk = (el, out = []) => { for (const c of el.children) { out.push(c); walk(c, out); } return out; };
@@ -71,7 +69,7 @@ function shelf({ sel = 0, qty = 1, cash = 600, round = 1 } = {}) { // sel -1 is 
 function shopProps(over = {}) {
   const calls = { buy: [], preview: [], next: 0, leave: 0, icons: [] };
   const props = {
-    keyHint, title: 'Field shop', cash: 'War chest: $600', entries: shelf(),
+    keyHint, title: 'Field shop', cash: 'War chest: $600', entries: shelf(), board: null,
     next: { label: 'Start round 2', keyAt: 'shop:next' }, readyLine: null, inRoom: false,
     drawIcon: (canvas, icon) => { calls.icons.push([canvas.className, icon]); },
     arsenalRev: 1,
@@ -141,6 +139,15 @@ function shopProps(over = {}) {
   click(actsOf(free).children[0]);
   click(actsOf(gearRow).children[0]);
   check('shop-clicks-reach-the-game', calls.buy.join() === '0,19' && calls.preview.join() === `${ammo[0].key},shell`, `${calls.buy}|${calls.preview}`);
+  // A Buy click drops the button's focus, so Enter later buys the selected row and not the one last clicked.
+  check('shop-buy-click-drops-focus', (() => {
+    let blurred = 0;
+    const btn = actsOf(free).children[0];
+    const real = btn.blur; btn.blur = () => { blurred++; };
+    click(btn);
+    btn.blur = real;
+    return blurred === 1;
+  })());
   // Start button: a plain label outside a room, and no ready line or Leave button.
   const next = byId(card, 'shop-next');
   const readyLine = byId(card, 'shop-ready');
@@ -182,26 +189,46 @@ function shopProps(over = {}) {
   // A draw into the hidden veil cannot scroll (nothing is laid out), so the
   // first draw once it shows still brings the row in: the pre-match shop
   // opened with Buckshot selected but scrolled out of sight on short screens.
-  delete globalThis.__scrolledTo;
+  // The stub lays shop rows out 100 tall in a 300 tall list; a row is in view
+  // when the list's scrollTop frames it.
+  const inView = (list, li) => { const top = li.offsetTop; return top >= list.scrollTop && top + li.offsetHeight <= list.scrollTop + list.clientHeight; };
+  const selIn = list => list.children.find(li => hasClass(li, 'sel'));
   const fresh = makeEl('fresh-veil');
   fresh.hidden = true;
   renderShop(fresh, shopProps({ entries: shelf({ sel: 3 }) }).props);
-  check('shop-hidden-draw-does-not-scroll', globalThis.__scrolledTo === undefined);
+  check('shop-hidden-draw-does-not-scroll', byId(fresh, 'shop-list').scrollTop === 0);
   fresh.hidden = false;
   renderShop(fresh, shopProps({ entries: shelf({ sel: 3 }) }).props);
-  check('shop-first-draw-scrolls-to-selection', globalThis.__scrolledTo && hasClass(globalThis.__scrolledTo, 'sel'));
-  delete globalThis.__scrolledTo;
+  check('shop-first-draw-scrolls-to-selection', byId(fresh, 'shop-list').scrollTop > 0 && inView(byId(fresh, 'shop-list'), selIn(byId(fresh, 'shop-list'))));
+  const keptTop = byId(fresh, 'shop-list').scrollTop;
   renderShop(fresh, shopProps({ entries: shelf({ sel: 3, qty: 2 }) }).props);
-  check('shop-redraw-same-selection-leaves-scroll', globalThis.__scrolledTo === undefined);
+  check('shop-redraw-same-selection-leaves-scroll', byId(fresh, 'shop-list').scrollTop === keptTop);
   renderShop(fresh, shopProps({ entries: shelf({ sel: 4 }) }).props);
-  check('shop-moved-selection-scrolls', globalThis.__scrolledTo && hasClass(globalThis.__scrolledTo, 'sel')
+  check('shop-moved-selection-scrolls', inView(byId(fresh, 'shop-list'), selIn(byId(fresh, 'shop-list')))
     && byId(fresh, 'shop-list').children.filter(li => hasClass(li, 'sel')).length === 1);
   // The free Shell row takes the highlight like any other row.
-  delete globalThis.__scrolledTo;
   renderShop(fresh, shopProps({ entries: shelf({ sel: -1 }) }).props);
   const freeLi = byId(fresh, 'shop-list').children.find(li => hasClass(li, 'shop-free'));
-  check('shop-shell-row-selectable', hasClass(freeLi, 'sel') && globalThis.__scrolledTo === freeLi
+  check('shop-shell-row-selectable', hasClass(freeLi, 'sel') && inView(byId(fresh, 'shop-list'), freeLi)
     && byId(fresh, 'shop-list').children.filter(li => hasClass(li, 'sel')).length === 1);
+  // A resize (the phone turning, a window drag) brings the highlighted row back
+  // only when it was in view; a list scrolled away from it by hand stays put.
+  const onResize = [];
+  globalThis.window = { addEventListener: (t, f) => { if (t === 'resize') onResize.push(f); }, removeEventListener() {} };
+  const turned = makeEl('turned-veil');
+  turned.hidden = false;
+  renderShop(turned, shopProps({ entries: shelf({ sel: 4 }) }).props);
+  delete globalThis.window;
+  const tl = byId(turned, 'shop-list');
+  tl.scrollTop = 0;
+  fire(tl, 'scroll');
+  for (const f of onResize) f();
+  check('shop-resize-keeps-a-hand-scroll', onResize.length === 1 && tl.scrollTop === 0);
+  tl.scrollTop = selIn(tl).offsetTop;
+  fire(tl, 'scroll');
+  tl.scrollTop = 0; // the layout moved under the row, no scroll of the player's
+  for (const f of onResize) f();
+  check('shop-resize-keeps-the-row-in-view', inView(tl, selIn(tl)));
   check('shop-registers-ids-for-the-page', els['shop-next'] !== undefined && els['shop-list'] !== undefined);
 }
 
@@ -428,84 +455,6 @@ function gunTiles(n = 10, loaded = 0) {
     && /None in stock/.test(attr(emptyTile, 'title')), attr(emptyTile, 'aria-disabled'));
   click(emptyTile);
   check('guns-empty-tile-click-reports', calls.pick.join() === 'gun2');
-}
-
-// ---- scores ----
-{
-  const section = makeEl('report-overlay');
-  section.hidden = false;
-  const calls = { close: 0, filed: [] };
-  const sp = (over = {}) => ({ keyHint, onClose: () => { calls.close++; }, rows: null, note: '', formHidden: false, onFile: n => calls.filed.push(n), ...over });
-  renderScores(section, sp());
-  const [head, form, list, note] = section.children;
-  check('scores-shape', hasClass(head, 'ov-head') && text(byId(head, 'score-h')) === 'Scores' && byId(head, 'report-close') && attr(byId(head, 'nav-report'), 'data-scroll-only') === ''
-    && form.id === 'score-form' && hasClass(form, 'seedbox') && list.id === 'scores' && hasClass(list, 'scores') && list.localName === 'ol'
-    && note.id === 'scores-note' && hasClass(note, 'hint'));
-  click(byId(head, 'report-close'));
-  check('scores-close-calls-back', calls.close === 1);
-  check('scores-form', text(form.children[0]) === 'Callsign' && attr(byId(form, 'name-input'), 'maxLength') === '24'
-    && attr(byId(form, 'name-input'), 'placeholder') === 'e.g. tankity' && text(byId(form, 'save-score')) === 'File report' && attr(byId(form, 'save-score'), 'type') === 'submit');
-  check('scores-before-load-shows-nothing', list.children.length === 0 && text(note) === '');
-  renderScores(section, sp({ rows: [] , note: 'Showing reports from file store.' }));
-  check('scores-empty', list.children.length === 1 && text(list.children[0]) === 'No after-action reports filed yet. Be the first legend.' && text(note) === 'Showing reports from file store.');
-  renderScores(section, sp({ rows: ['ZED: 4200 pts (3 rounds won)', 'ABC: 100 pts (0 rounds won)'], note: 'Showing reports from file store.' }));
-  check('scores-rows', list.children.length === 2 && list.children.every(li => li.localName === 'li') && text(list.children[0]) === 'ZED: 4200 pts (3 rounds won)');
-  byId(form, 'name-input').value = '  zed ';
-  submit(form);
-  check('scores-submit-reports-the-box-as-typed', calls.filed.join('|') === '  zed ', JSON.stringify(calls.filed));
-  check('scores-form-visible', !form.style.display);
-  renderScores(section, sp({ rows: ['a'], formHidden: true }));
-  check('scores-form-hidden-for-rooms', form.style.display === 'none' && byId(form, 'name-input').value === '  zed ');
-  renderScores(section, sp({ rows: ['a'] }));
-  check('scores-form-back', !form.style.display && section.children[1] === form);
-  section.scrollTop = 40;
-  fire(section, 'scroll');
-  section.scrollTop = 0;
-  renderScores(section, sp({ rows: ['a', 'b'] }));
-  check('scores-reload-keeps-scroll', section.scrollTop === 40, String(section.scrollTop));
-}
-
-// ---- end veil ----
-{
-  const veil = makeEl('end-veil');
-  veil.hidden = false;
-  const calls = { filed: [], rematch: 0, again: 0 };
-  const ep = (over = {}) => ({
-    keyHint, kicker: 'Match over', title: 'Hills claimed!', text: 'All rivals down.', score: 'Score 10 · seed 7',
-    formHidden: false, filed: false, callsign: 'ZED', rematch: null, backToRooms: false,
-    onFile: n => calls.filed.push(n), onRematch: () => { calls.rematch++; }, onAgain: () => { calls.again++; }, ...over,
-  });
-  renderEndVeil(veil, ep());
-  const card = veil.children[0];
-  check('end-card', hasClass(card, 'card') && card.getAttribute('role') === 'dialog' && attr(card, 'aria-modal') === 'true'
-    && attr(card, 'aria-labelledby') === 'end-title');
-  const head = card.children[0];
-  check('end-head', hasClass(head, 'ov-head') && text(byId(head, 'end-kicker')) === 'Match over' && hasClass(byId(head, 'end-kicker'), 'kicker')
-    && text(byId(head, 'end-title')) === 'Hills claimed!' && attr(byId(head, 'nav-end'), 'data-scroll-only') === '');
-  check('end-text-and-score', text(byId(card, 'end-text')) === 'All rivals down.' && text(byId(card, 'end-score')) === 'Score 10 · seed 7'
-    && hasClass(byId(card, 'end-score'), 'runstats'));
-  const rematch = byId(card, 'rematch');
-  check('end-rematch-hidden-in-solo', rematch.hidden === true || attr(rematch, 'hidden') !== undefined);
-  const form = byId(card, 'end-score-form');
-  const input = byId(form, 'end-name');
-  check('end-form', hasClass(form, 'seedbox') && !form.hidden && text(form.children[0]) === 'Callsign' && attr(input, 'maxLength') === '24'
-    && attr(input, 'placeholder') === 'e.g. tankity' && text(form.children[2]) === 'File score' && attr(form.children[2], 'type') === 'submit');
-  check('end-callsign-prefilled', input.value === 'ZED', input.value);
-  const again = byId(card, 'again');
-  check('end-again', hasClass(again, 'btn-primary') && text(again) === 'Continue', text(again));
-  input.value = ' zed ';
-  submit(form);
-  check('end-submit-reports-the-box-as-typed', calls.filed.join('|') === ' zed ', JSON.stringify(calls.filed));
-  renderEndVeil(veil, ep({ callsign: 'ABC' }));
-  check('end-redraw-keeps-typed-callsign', input.value === ' zed ' && byId(veil, 'end-name') === input);
-  renderEndVeil(veil, ep({ filed: true }));
-  check('end-filed', text(form.children[2]) === 'Filed' && form.children[2].disabled === true && byId(veil, 'end-score-form') === form);
-  renderEndVeil(veil, ep({ formHidden: true, rematch: 'Rematch on random hills', backToRooms: true, kicker: 'Room ABCD · final standings' }));
-  check('end-room-standings', form.hidden === true && text(byId(veil, 'rematch')) === 'Rematch on random hills' && !byId(veil, 'rematch').hidden
-    && text(byId(veil, 'again')) === 'Back to rooms' && text(byId(veil, 'end-kicker')) === 'Room ABCD · final standings', text(byId(veil, 'again')));
-  click(byId(veil, 'rematch'));
-  click(byId(veil, 'again'));
-  check('end-buttons-report', calls.rematch === 1 && calls.again === 1);
 }
 
 // ---- leave question ----

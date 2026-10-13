@@ -141,7 +141,7 @@ export function planCatchUp(
 
 /** The POST actions whose reply is a room, which therefore take the delta
  * fields (since, have, full). */
-const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready', 'body', 'map', 'seatmode']);
+const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready', 'again', 'body', 'map', 'seatmode']);
 
 /* ---------- the client ---------- */
 
@@ -165,7 +165,14 @@ export class RoomClient {
   on = false;
   /** The first snapshot of the match has been taken. */
   synced = false;
+  /** Bumped whenever a match begins or ends for this client: a match poll that
+   *  answers after it (an 'over' room once Play again took it to the lobby) is
+   *  stale and dropped. */
+  private matchEpoch = 0;
   seats: RoomSeat[] = [];
+  /** The seat that starts the match, as the last snapshot said. */
+  hostSeat = 0;
+  get isHost(): boolean { return this.seat === this.hostSeat; }
   /** The hills: the picked map's id (null for random), its name, the catalog. */
   map: string | null = null;
   mapName = 'Random hills';
@@ -323,7 +330,7 @@ export class RoomClient {
 
   private forget(): void {
     this.code = ''; this.token = ''; this.csrf = ''; this.seat = -1; this.since = 0;
-    this.seats = [];
+    this.seats = []; this.hostSeat = 0;
     this.dropTerrain();
   }
 
@@ -354,7 +361,7 @@ export class RoomClient {
     this.stopPolling();
     this.stopLobbyWatch();
     this.on = false; this.code = ''; this.seat = -1; this.token = ''; this.csrf = ''; this.since = 0;
-    this.seats = []; this.synced = false;
+    this.seats = []; this.synced = false; this.matchEpoch++;
     this.dropTerrain();
   }
 
@@ -364,6 +371,7 @@ export class RoomClient {
    * runs until stopPolling. */
   beginMatch(since = 0): void {
     this.on = true;
+    this.matchEpoch++;
     this.since = since;
     this.synced = false;
     this.dropTerrain();
@@ -372,16 +380,28 @@ export class RoomClient {
     this.pollId = this.env.setInterval(() => { void this.refresh(); }, MATCH_POLL_MS);
   }
 
+  /** The room went back to its lobby (Play again): the match poll stops and the
+   * session stays, so the lobby can watch the room. */
+  toLobby(): void {
+    this.stopPolling();
+    this.on = false;
+    this.synced = false;
+    this.matchEpoch++;
+  }
+
   stopPolling(): void {
     if (this.pollId) { this.env.clearInterval(this.pollId); this.pollId = 0; }
   }
 
-  /** One match poll: fetch the room and apply it. A failed poll is retried by
-   * the next one. */
+  /** One match poll: fetch the room and apply it, unless the match it asked
+   * about ended for this client meanwhile. A failed poll is retried by the
+   * next one. */
   async refresh(): Promise<void> {
     if (!this.on) return;
+    const epoch = this.matchEpoch;
     try {
-      this.apply(await this.getState());
+      const room = await this.getState();
+      if (this.on && epoch === this.matchEpoch) this.apply(room);
     } catch (_) { /* the next poll retries; the hills wait */ }
   }
 
@@ -453,6 +473,12 @@ export class RoomClient {
 
   /* ---- acts ---- */
 
+  /** A reply belongs to the match it was sent in: one that lands after the room went back to its lobby,
+   * or into the next match, is dropped, so an old 'over' room cannot reopen its end card. */
+  private applyIfCurrent(epoch: number, room: RoomSnapshot | null | undefined): void {
+    if (this.on && epoch === this.matchEpoch) this.apply(room);
+  }
+
   /** An act that waits for its answer, one at a time (firing). The reply is
    * applied; a failure rejects, and a second call while one is out is
    * dropped. */
@@ -460,7 +486,8 @@ export class RoomClient {
     if (this.busy) return;
     this.busy = true;
     try {
-      this.apply((await this.post('act', body)).room);
+      const epoch = this.matchEpoch;
+      this.applyIfCurrent(epoch, (await this.post('act', body)).room);
     } finally {
       this.busy = false;
     }
@@ -469,7 +496,8 @@ export class RoomClient {
   /** An act that does not wait (aim, drive, weapon): the reply is applied,
    * a failure is dropped. */
   sendQuiet(body: ActBody): void {
-    this.post('act', body).then(d => this.apply(d.room)).catch(() => {});
+    const epoch = this.matchEpoch;
+    this.post('act', body).then(d => this.applyIfCurrent(epoch, d.room)).catch(() => {});
   }
 
   /** Tells the room this player is in a menu (or out of it), once per change,
@@ -477,7 +505,8 @@ export class RoomClient {
   setMenu(open: boolean): void {
     if (open === this.menuSent || !this.code) return;
     this.menuSent = open;
-    this.post('act', { kind: 'menu', open }).then(d => this.apply(d.room)).catch(() => { this.menuSent = !open; });
+    const epoch = this.matchEpoch;
+    this.post('act', { kind: 'menu', open }).then(d => this.applyIfCurrent(epoch, d.room)).catch(() => { this.menuSent = !open; });
   }
 
   /** The unit look changes any time; in a match the answer is applied. */

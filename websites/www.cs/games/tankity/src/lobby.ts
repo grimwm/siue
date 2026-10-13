@@ -3,9 +3,8 @@
  * The lobby overlay (src/ui/lobby.tsx) and what stands behind it: checking
  * the initials, the room server's dot and occupancy, the hills picker, hosting
  * and joining, the roster while the room waits, the invite link, starting the
- * match, the question before leaving one, leaving it, and a rematch on the
- * same hills. A running match is room.ts. The game's state, the room client
- * and the rest of the game arrive as deps. */
+ * match, the question before leaving one, and leaving it. A running match is
+ * room.ts. The game's state, the room client and the rest arrive as deps. */
 import type { sfx as SfxApi } from './audio.ts';
 import type { GameState, MatchState } from './game-types.ts';
 import { DIFFICULTY_NAMES } from './difficulty.ts';
@@ -17,7 +16,6 @@ import { inviteUrl, prettyRoomError } from './net.ts';
 import type { RoomClient } from './net.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
-import type { ScoresState } from './scores.ts';
 import type { KeyHintFn } from './ui/chrome.tsx';
 import { drawMapIcon } from './ui/icons.ts';
 import { renderLeave as drawLeave } from './ui/leave.tsx';
@@ -54,7 +52,6 @@ export interface LobbyDeps {
   MATCH: MatchState;
   HUD: Pick<HudValues, 'online'>;
   END: EndState;
-  SCORES: { formHidden: boolean };
   replay: Replay;
   sfx: Pick<typeof SfxApi, 'play'>;
   /** The Menu's Difficulty: a hosted room takes it for good. */
@@ -78,17 +75,15 @@ export interface LobbyDeps {
   hideShop(): void;
   paintHud(): void;
   refreshNavHints(): void;
-  renderEndVeil(): void;
   renderMenu(): void;
-  renderScoresOverlay(): void;
   renderShop(): void;
 }
 
 export function createLobby(deps: LobbyDeps) {
   const {
-    G, $, net, MATCH, HUD, END, SCORES, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
-    closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, savedInitials, hideShop, paintHud, refreshNavHints, renderEndVeil, renderMenu,
-    renderScoresOverlay, renderShop,
+    G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
+    closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, savedInitials, hideShop, paintHud, refreshNavHints, renderMenu,
+    renderShop,
   } = deps;
 
   /* ---------- game rooms: server-hosted multiplayer ---------- */
@@ -147,7 +142,8 @@ export function createLobby(deps: LobbyDeps) {
       onSeatMode: netSeatMode,
       onCopy: copyInvite,
       onStart: () => { sfx.play('click'); startRoom(); },
-      onLeave: () => { netLeave(); openLobby(); },
+      // Reached through Play again, the match behind the lobby is over: leaving goes to the title card, not back to its frozen field.
+      onLeave: () => { const ended = !net.on && G.over; netLeave(); if (ended) backToTitle(); else openLobby(); },
     });
     refreshNavHints();
   }
@@ -172,7 +168,7 @@ export function createLobby(deps: LobbyDeps) {
   let mapPickSeq = 0;
   async function mapChosen(): Promise<void> {
     renderLobby();
-    if (!net.code || net.seat !== 0 || net.on) return;
+    if (!net.code || !net.isHost || net.on) return;
     const seq = ++mapPickSeq;
     try {
       for (let tries = 0; ; tries++) {
@@ -253,6 +249,7 @@ export function createLobby(deps: LobbyDeps) {
     try {
       room = await net.getState();
       net.seats = room.seats || [];
+      net.hostSeat = room.hostSeat;
     } catch (err) { /* roster fills in on the next tick */ }
     netRenderRoster(room);
   }
@@ -265,6 +262,7 @@ export function createLobby(deps: LobbyDeps) {
       () => { const veil = $('lobby-veil'); return !!veil && !veil.hidden; },
       room => {
         net.seats = room.seats || [];
+        net.hostSeat = room.hostSeat;
         // Arrivals (not our own) and departures, each told once.
         for (const e of room.events || []) {
           if ((e.seq || 0) <= lobbyTold.seq || (e.t !== 'join' && e.t !== 'left')) continue;
@@ -330,24 +328,26 @@ export function createLobby(deps: LobbyDeps) {
     LOBBY.hills = 'Hills: ' + (net.mapName || 'Random hills');
     if (room && room.difficulty) LOBBY.drones = `Drones: ${DIFFICULTY_NAMES[room.difficulty] || 'Normal'} (the host's Difficulty)`;
     LOBBY.seats = ((room && room.seats) || net.seats || []).map(s => ({ human: !!s.human, name: String(s.name || ''), mode: s.mode }));
+    if (room) net.hostSeat = room.hostSeat;
     LOBBY.mySeat = net.seat;
-    LOBBY.isHost = net.seat === 0;
-    LOBBY.seatsHint = net.seat === 0
+    LOBBY.isHost = net.isHost;
+    LOBBY.seatsHint = net.isHost
       ? 'Tap a seat nobody holds to switch it between AI and Open. Open seats field no tank.'
       : 'The host decides which empty seats are AI and which stay open.';
-    lobbySay(net.seat === 0 ? 'You host. Start when your crew is in.' : 'Hang tight. The host starts the match.');
+    lobbySay(net.isHost ? 'You host. Start when your crew is in.' : 'Hang tight. The host starts the match.');
   }
   /* The host flips a seat nobody holds between the drone battery and open. */
   async function netSeatMode(seat: number, mode: 'ai' | 'open'): Promise<void> {
-    if (net.seat !== 0 || net.on) return;
+    if (!net.isHost || net.on) return;
     try {
       const d = await net.post('seatmode', { seat, mode, since: net.since });
       net.seats = d.room.seats || [];
+      net.hostSeat = d.room.hostSeat;
       netRenderRoster(d.room);
     } catch (err) { lobbySay(prettyRoomError(err)); }
   }
   async function startRoom(): Promise<void> {
-    if (net.seat !== 0) return;
+    if (!net.isHost) return;
     lobbySay('Rolling out…');
     try {
       const data = await net.post('start', {});
@@ -362,11 +362,10 @@ export function createLobby(deps: LobbyDeps) {
     net.beginMatch(lobbyTold.code === net.code ? lobbyTold.seq : 0);
     MATCH.lastPhase = '';
     MATCH.lastRound = -1;
+    MATCH.out = false; MATCH.outShown = false; MATCH.roundTo = '';
     replay.clear(); MATCH.pendingRoom = null;
     MATCH.aimDirty = false;
     G.over = false;
-    SCORES.formHidden = true;
-    renderScoresOverlay();
     const veil = $('lobby-veil');
     if (veil) veil.hidden = true;
     net.apply(room);
@@ -411,15 +410,33 @@ export function createLobby(deps: LobbyDeps) {
     closeLeaveVeil();
     if (net.on) netLeave();
   }
+  /* Play again (same room): the room goes back to its lobby for everyone. The
+     reply's seats and host draw the lobby at once (the room may have a new
+     host), not the match's last ones until the lobby's first poll. */
+  async function netAgain(): Promise<void> {
+    try {
+      const d = await net.post('again', {});
+      if (d.room) { net.seats = d.room.seats || []; net.hostSeat = d.room.hostSeat; }
+      netBackToLobby();
+    } catch (err) { say(prettyRoomError(err), 'bad'); }
+  }
+  /* The room is in its lobby again: the match poll stops, the lobby shows the
+     seats, and the host's Start begins the next match. */
+  function netBackToLobby(): void {
+    net.toLobby();
+    MATCH.out = false; MATCH.outShown = false; MATCH.lastPhase = 'lobby'; MATCH.roundTo = '';
+    replay.clear(); MATCH.pendingRoom = null; MATCH.myTurn = false;
+    // G.over stays up under the lobby: the last match's tanks must not run the solo turn loop; startNetMatch clears it.
+    if ($('end-veil')) $('end-veil')!.hidden = true;
+    hideShop();
+    void openLobby();
+  }
   function netLeave(quiet?: boolean): void {
     const wasOn = net.on;
     net.leave(); // tells the server, stops both polls, clears the session
-    END.rematch = null;
-    END.backToRooms = false;
-    renderEndVeil();
     replay.clear(); MATCH.pendingRoom = null; MATCH.myTurn = false; MATCH.lastPhase = ''; MATCH.lastTurn = -1; MATCH.lastRound = -1;
-    SCORES.formHidden = false;
-    renderScoresOverlay();
+    MATCH.out = false; MATCH.outShown = false; MATCH.lastRoom = null;
+    END.buttons = 'solo'; END.board = null; END.filed = null;
     hideShop();
     if ($('end-veil')) $('end-veil')!.hidden = true;
     if ($('lobby-veil')) $('lobby-veil')!.hidden = true;
@@ -431,24 +448,8 @@ export function createLobby(deps: LobbyDeps) {
       backToTitle();
     }
   }
-  async function netRematch(): Promise<void> {
-    // Same hills again, decided entirely server side: the map id reselects the
-    // hidden seed, and no seed string ever crosses the wire.
-    const initials = MATCH.initials;
-    const map = net.map;
-    if (!netValidInitials(initials)) {
-      say('No callsign kept for the rematch. Rejoin from the lobby.', 'bad');
-      openLobby();
-      return;
-    }
-    netLeave(true);
-    openLobby();
-    await hostRoom(initials, map || '');
-    if (map) { LOBBY.mapId = map; renderLobby(); }
-  }
-
   return {
     renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-    netLeave, netRematch,
+    netLeave, netAgain, netBackToLobby,
   };
 }

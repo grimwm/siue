@@ -14,8 +14,8 @@ if (!defined('TANKITY_ROOMS_INCLUDED')) {
 const ROOM_GAME = 'operation-tankity';
 const ROOM_CODE_LEN = 4;
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
-const ROOM_SEATS = 4; // seat 0 is always the host; every other seat starts as AI
-const ROOM_AI_NAMES = ['REAPER', 'WRAITH', 'SPOTTER'];
+const ROOM_SEATS = 4; // seat 0 hosts a new room (see room_host); every other seat starts as AI
+const ROOM_AI_NAMES = ['REAPER', 'WRAITH', 'SPOTTER', 'HUNTER'];
 const ROOM_MAX_ROOMS = 10; // built-in default; .config.yaml and env can raise it
 function room_max_rooms(): int
 {

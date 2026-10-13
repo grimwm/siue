@@ -202,7 +202,9 @@ function tankity_journal_mode(string $dir, ?string $mounts = null): string
 }
 
 /* The schema, one step per version. A database at version N runs the steps
-   after N, each in its own transaction. */
+   after N, each in its own transaction. Step 2 is the boards; step 3 remembers the old score files already
+   imported, so a file that outlives its import is never filed twice; step 4 tells
+   a row the server filed from a match from a browser's own claim. */
 function tankity_schema_steps(): array
 {
     return [
@@ -211,6 +213,20 @@ function tankity_schema_steps(): array
             'CREATE TABLE rooms (code TEXT PRIMARY KEY, data BLOB NOT NULL, created INTEGER NOT NULL, touched INTEGER NOT NULL)',
             'CREATE INDEX rooms_touched ON rooms (touched)',
             'CREATE TABLE callsigns (slug TEXT PRIMARY KEY, data TEXT NOT NULL)',
+        ],
+        2 => [
+            'CREATE TABLE board (id INTEGER PRIMARY KEY AUTOINCREMENT, difficulty TEXT NOT NULL, initials TEXT NOT NULL,
+                score INTEGER NOT NULL, rounds INTEGER NOT NULL, seed TEXT NOT NULL, at TEXT NOT NULL)',
+            'CREATE INDEX board_rank ON board (difficulty, score DESC, id)',
+        ],
+        3 => [
+            'CREATE TABLE legacy_imported (name TEXT NOT NULL, hash TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY (name, hash))',
+        ],
+        4 => [
+            // 'room' rows are filed by the server from a match; 'client' rows are a browser's own claim.
+            "ALTER TABLE board ADD COLUMN source TEXT NOT NULL DEFAULT 'room'",
+            // Before this column only room filing (seed 'room:CODE') and the legacy conversion (a browser's claim) wrote rows.
+            "UPDATE board SET source = 'client' WHERE seed NOT LIKE 'room:%'",
         ],
     ];
 }
@@ -289,7 +305,20 @@ function tankity_depth(PDO $db, int $delta = 0): int
 function tankity_tx(PDO $db, callable $fn): mixed
 {
     if (tankity_depth($db) > 0) {
-        return $fn($db);
+        // Nested: a savepoint, so a throw the caller catches takes this part's
+        // writes back and leaves the outer transaction's own intact.
+        static $n = 0;
+        $sp = 'tankity_sp' . ++$n;
+        $db->exec("SAVEPOINT $sp");
+        try {
+            $out = $fn($db);
+        } catch (Throwable $e) {
+            $db->exec("ROLLBACK TO $sp");
+            $db->exec("RELEASE $sp");
+            throw $e;
+        }
+        $db->exec("RELEASE $sp");
+        return $out;
     }
     $db->exec('BEGIN IMMEDIATE');
     tankity_depth($db, 1);

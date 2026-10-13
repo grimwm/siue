@@ -462,6 +462,15 @@
       {"name":"plates-then-repair-to-the-new-max","in":{"ops":[["plate",3],["muster"],["damage",15],["end"],["repair",1],["muster"]]},"out":[{"armor":175,"max":175,"hp":0},{"armor":175,"max":175,"hp":175},{"armor":175,"max":175,"hp":160},{"armor":160,"max":175,"hp":160},{"armor":175,"max":175,"hp":160},{"armor":175,"max":175,"hp":175}],"exact":true},
       {"name":"wreck-re-musters-at-full-max","in":{"ops":[["plate",2],["muster"],["damage",500],["end"],["muster"]]},"out":[{"armor":150,"max":150,"hp":0},{"armor":150,"max":150,"hp":150},{"armor":150,"max":150,"hp":0},{"armor":150,"max":150,"hp":0},{"armor":150,"max":150,"hp":150}],"exact":true},
       {"name":"full-armor-repair-restores-nothing","in":{"ops":[["muster"],["repair",2],["muster"]]},"out":[{"armor":100,"max":100,"hp":100},{"armor":100,"max":100,"hp":100},{"armor":100,"max":100,"hp":100}],"exact":true}
+    ],
+    "match-end": [
+      {"name":"one-human-alive-plays-on","in":{"lives":[2,null,null,null],"startHumans":1,"round":3},"out":{"over":false,"winner":null,"bonus":2400},"exact":true},
+      {"name":"one-human-out-ends","in":{"lives":[0,null,null,null],"startHumans":1,"round":5},"out":{"over":true,"winner":null,"bonus":3000},"exact":true},
+      {"name":"last-of-two-wins","in":{"lives":[1,0,null,null],"startHumans":2,"round":4},"out":{"over":true,"winner":0,"bonus":2700},"exact":true},
+      {"name":"last-of-three-wins-after-a-double-out","in":{"lives":[2,0,0,null],"startHumans":3,"round":7},"out":{"over":true,"winner":0,"bonus":3600},"exact":true},
+      {"name":"two-of-three-play-on","in":{"lives":[1,1,0,null],"startHumans":3,"round":2},"out":{"over":false,"winner":null,"bonus":2100},"exact":true},
+      {"name":"last-two-fall-together","in":{"lives":[0,0,null,null],"startHumans":2,"round":6},"out":{"over":true,"winner":null,"bonus":3300},"exact":true},
+      {"name":"a-leaver-counts-as-out","in":{"lives":[3,null,null,null],"startHumans":2,"round":3},"out":{"over":true,"winner":0,"bonus":2400},"exact":true}
     ]
   }
 }

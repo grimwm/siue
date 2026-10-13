@@ -64,7 +64,6 @@ final class LegacyImportTest extends TestCase
         $this->assertSame([450], array_column($this->runs('r2-d2'), 'score'));
         $this->assertFileDoesNotExist($a);
         $this->assertFileDoesNotExist($b);
-        $this->assertSame(['r2-d2', 'wg'], array_column(legacy_top(10), 'name'), 'best first: 450 beats 69');
     }
 
     public function testAnInterruptedImportResumesWithoutDuplicates(): void
@@ -79,7 +78,7 @@ final class LegacyImportTest extends TestCase
 
     public function testRunsAlreadyInTheDatabaseMergeWithTheFile(): void
     {
-        legacy_add_run('wg', $this->entry(300, '2026-05-01T00:00:00+00:00'));
+        legacy_write(tankity_db(), 'wg', ['name' => 'wg', 'runs' => [$this->entry(300, '2026-05-01T00:00:00+00:00')]]);
         $this->file('wg', [$this->entry(100, '2026-01-01T00:00:00+00:00')]);
         legacy_import();
         $this->assertSame([100, 300], array_column($this->runs('wg'), 'score'), 'merged, oldest first');
@@ -175,19 +174,31 @@ final class LegacyImportTest extends TestCase
         $this->assertSame([1, 1], legacy_import(null, 2));
     }
 
-    public function testANewRunKeepsTheLastFiftyAndAnswersTheBest(): void
+    public function testAnImportedFileThatSurvivesIsNotFiledAgainAfterConversion(): void
     {
-        for ($i = 1; $i <= 55; $i++) {
-            $best = legacy_add_run('ace', $this->entry($i * 10, sprintf('2026-02-01T00:%02d:00+00:00', $i)));
-        }
-        $this->assertSame(550, $best);
-        $this->assertCount(LEGACY_RUNS_KEPT, $this->runs('ace'));
+        $path = $this->file('wg', [$this->entry(640, '2026-01-01T00:00:00+00:00')]);
+        $copy = file_get_contents($path);
+        legacy_import();
+        $this->assertSame(1, board_convert_callsigns());
+        file_put_contents($path, $copy); // another deployment wrote the file back
+        legacy_import();
+        board_convert_callsigns();
+        legacy_import();
+        board_convert_callsigns();
+        $this->assertCount(1, board_top('normal', 10));
     }
 
-    public function testARoomScoreGoesToTheSameCallsign(): void
+    public function testARewrittenFileDoesNotFileTheSameRunTwice(): void
     {
-        room_save_score('WGR', 640, ['code' => 'ABCD']);
-        $this->assertSame([['score' => 640, 'banked' => 0, 'won' => false, 'seed' => 'room:ABCD']],
-            array_map(fn(array $r): array => array_diff_key($r, ['ts' => 1]), $this->runs('wgr')));
+        $path = $this->file('wg', [$this->entry(640, '2026-01-01T00:00:00+00:00')]);
+        legacy_import();
+        board_convert_callsigns();
+        // Another deployment rewrites the file with one more run: the bytes differ,
+        // the old run is the one already on the board.
+        $this->file('wg', [$this->entry(640, '2026-01-01T00:00:00+00:00'), $this->entry(100, '2026-03-01T00:00:00+00:00')]);
+        legacy_import();
+        board_convert_callsigns();
+        $scores = array_column(board_top('normal', 10), 'score');
+        $this->assertSame(1, count(array_keys($scores, 640)), 'the 640 run is on the board once');
     }
 }

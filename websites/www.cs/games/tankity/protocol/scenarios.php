@@ -35,6 +35,7 @@ function protocol_play(): array
     $room['seats'][2] = room_idle_seat(2, 'open');
     $room['seats'][3] = room_idle_seat(3, 'open');
     room_seat_economy($room, 0);
+    room_match_begin($room);
     room_start_round($room);
     $events = [['t' => 'round', 'round' => $room['round'], 'wind' => $room['wind']]];
     room_advance($room, $events);

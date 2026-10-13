@@ -9,7 +9,11 @@
             "map": null,
             "mapName": "Random hills",
             "difficulty": "normal",
+            "hostSeat": 0,
             "round": 0,
+            "startHumans": 0,
+            "winner": null,
+            "winBonus": 0,
             "wind": 0,
             "turn": null,
             "turnLeft": null,
@@ -26,6 +30,10 @@
                     "bot": false,
                     "lives": 3,
                     "score": 0,
+                    "roundsWon": 0,
+                    "kills": 0,
+                    "gain": 0,
+                    "out": null,
                     "ready": false
                 },
                 {
@@ -36,6 +44,10 @@
                     "bot": false,
                     "lives": 3,
                     "score": 0,
+                    "roundsWon": 0,
+                    "kills": 0,
+                    "gain": 0,
+                    "out": null,
                     "ready": false
                 },
                 {
@@ -46,6 +58,10 @@
                     "bot": false,
                     "lives": 0,
                     "score": 0,
+                    "roundsWon": 0,
+                    "kills": 0,
+                    "gain": 0,
+                    "out": null,
                     "ready": false
                 },
                 {
@@ -56,6 +72,10 @@
                     "bot": false,
                     "lives": 0,
                     "score": 0,
+                    "roundsWon": 0,
+                    "kills": 0,
+                    "gain": 0,
+                    "out": null,
                     "ready": false
                 }
             ],
@@ -82,7 +102,10 @@
                 "laststand": false,
                 "plate": 0,
                 "armor": 100,
-                "maxArmor": 100
+                "maxArmor": 100,
+                "filed": false,
+                "filedRank": null,
+                "filedFailed": false
             },
             "csrf": "fixture-csrf"
         }

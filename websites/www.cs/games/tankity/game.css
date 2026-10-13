@@ -270,6 +270,26 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 
 .runstats { color: var(--dim); font-size: 0.9rem; }
 
+/* This match's scoreboard (src/ui/standings.tsx). */
+.board { margin: 0 0 10px; }
+.board .kicker { font-size: 0.7rem; letter-spacing: 0.14em; color: var(--dim); text-transform: uppercase; }
+.board-title { margin: 2px 0 8px; font-size: 1.1rem; color: var(--gold, #ffc93c); }
+.board-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.board-table th { text-align: left; font-size: 0.62rem; letter-spacing: 0.1em; color: var(--dim); font-weight: 600; padding: 3px 4px; border-bottom: 1px solid #3a3fb0; }
+.board-table td { padding: 5px 4px; border-bottom: 1px solid #1b2050; white-space: nowrap; }
+.board-table .n { text-align: right; }
+.board-table tr.me td { background: #141a46; }
+.board-table tr.out td { color: #7d84a8; }
+.board-table .pl { font-weight: 800; }
+.board-table .you { font-size: 0.6rem; color: #111; background: var(--gold, #ffc93c); border-radius: 4px; padding: 1px 4px; margin-left: 4px; }
+.board-table .delta { color: #7f7; font-size: 0.66rem; margin-left: 3px; }
+.board-table .crown { color: var(--gold, #ffc93c); }
+.board-table tfoot td { font-weight: 800; border-bottom: 0; }
+/* In the shop the scoreboard must not squeeze the list or push the page sideways:
+ * it keeps to its own band and the longest cell (a room's last column) wraps. */
+#shop-veil .board { flex: 0 1 auto; min-height: 0; max-height: 34dvh; overflow-y: auto; min-width: 0; }
+#shop-veil .board-table td.last { white-space: normal; }
+
 .help { margin: 0; padding-left: 1.1rem; }
 .help li { margin-bottom: 0.35rem; }
 
@@ -280,9 +300,13 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 #shop-veil { grid-template-columns: minmax(0, 1fr); }
 /* The card is a column that never outgrows the screen: the list takes what is
    left and scrolls, and Start (and Leave room) stay in a footer below it. */
-#shop-veil .card { max-width: 44rem; min-width: 0; display: flex; flex-direction: column; max-height: calc(100dvh - 2rem); }
-#shop-veil .card > button { align-self: flex-start; }
-#shop-list { flex: 1 1 auto; min-height: 6rem; overflow-y: auto; min-width: 0; padding-left: 0; margin-bottom: 0.7rem; }
+#shop-veil .card { max-width: 44rem; min-width: 0; display: flex; flex-direction: column; max-height: calc(100dvh - 2rem); overflow-y: auto; }
+/* Start sits below the list, never over it: the list gives up the room. */
+.shop-foot { flex: none; padding-top: 0.3rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0 0.5rem; }
+/* The ready line takes its own row; Start and Leave room sit side by side under it. */
+.shop-foot .runstats { flex: 1 0 100%; }
+/* The list gives up room first (shrink weight 100); only at its one-row minimum does the board shrink. */
+#shop-list { flex: 1 100 auto; min-height: 7.5rem; overflow-y: auto; min-width: 0; padding-left: 0; margin-bottom: 0.7rem; }
 /* Two columns: the icon, then the text with Preview and Buy under it. */
 #shop-list li { display: grid; grid-template-columns: 72px minmax(0, 1fr); column-gap: 0.75rem; align-items: start; padding: 0.35rem 0.4rem; }
 .shop-item { min-width: 0; display: grid; gap: 0.1rem; }
@@ -295,6 +319,67 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 #shop-list li .shop-icon { width: 72px; height: 47px; align-self: center; }
 #shop-list li .acts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.35rem 0 0; justify-content: flex-start; }
 #shop-list li .acts button { min-width: 0; margin-top: 0; }
+/* A short screen (a phone on its side) gives the board a compact strip. */
+@media (max-height: 480px) {
+  #shop-veil .board { min-height: 3.4rem; max-height: 4.5rem; margin-bottom: 0.3rem; }
+  #shop-cash { margin: 0.3rem 0; }
+  #shop-list { margin-bottom: 0.3rem; }
+  /* The key hints give way, so the list keeps a full row and Start stays in the card. */
+  #shop-veil #nav-shop { display: none; }
+  .shop-foot .runstats { margin: 0 0 0.2rem; }
+  .shop-foot button { margin-top: 0; }
+}
+/* Wherever the screen is wide enough, the shop is two columns: the board, war
+   chest and Start on the left, the list filling the right, so the list shows
+   several rows instead of one card's width of them. That is any screen 760 px
+   wide, and also a phone on its side (the way most play): under about 520 px
+   tall one column cannot stack the board's rows, a full shop row and Start,
+   and 4:3 or wider leaves each column room. Portrait phones stay one column.
+   The left column stacks from the top; the board gives up height first. */
+@media (min-width: 760px), (max-height: 520px) and (min-aspect-ratio: 4/3) {
+  #shop-veil .card {
+    max-width: 70rem; height: min(calc(100dvh - 2rem), 52rem); max-height: none; overflow: hidden;
+    display: grid; column-gap: 1.25rem;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    grid-template-rows: auto minmax(0, auto) auto 1fr;
+    grid-template-areas: "head head" "board list" "cash list" "foot list";
+  }
+  #shop-veil .ov-head { grid-area: head; }
+  #shop-veil .board { grid-area: board; min-height: 0; max-height: none; margin: 0; }
+  #shop-cash { grid-area: cash; margin: 0.6rem 0; }
+  #shop-list { grid-area: list; min-height: 0; margin: 0; }
+  .shop-foot { grid-area: foot; align-self: start; }
+}
+/* A phone on its side: a one-line header and a tighter board. */
+@media (max-height: 520px) and (min-aspect-ratio: 4/3) {
+  #shop-veil { padding: 0.5rem; }
+  #shop-veil .card { max-width: 60rem; height: calc(100dvh - 1rem); padding-bottom: 0.6rem; column-gap: 1rem; }
+  #shop-veil .ov-head { padding-top: 0.4rem; padding-bottom: 0.35rem; margin-bottom: 0.5rem; }
+  #shop-veil .ov-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.75rem; }
+  #shop-veil .ov-head .kicker { order: 1; margin: 0; }
+  #shop-veil .ov-head h2 { font-size: 1.15rem; }
+  #shop-veil .board-title { margin-bottom: 4px; }
+  #shop-veil .board-table { font-size: 0.75rem; }
+  #shop-veil .board-table th, #shop-veil .board-table td { padding-left: 3px; padding-right: 3px; }
+  #shop-veil #nav-shop { display: none; }
+  #shop-cash { margin: 0.4rem 0; }
+}
+/* The end card is a column that never outgrows the screen: the scoreboard takes
+   what is left and scrolls on its own, and the score line, the filed line and
+   the buttons stay in a footer below it. */
+#end-veil .card { max-width: 40rem; min-width: 0; display: flex; flex-direction: column; max-height: calc(100dvh - 2rem); overflow: hidden; }
+#end-veil .end-board { flex: 1 1 auto; min-height: 4.5rem; overflow-y: auto; min-width: 0; }
+#end-veil .end-board .board { margin-bottom: 0.4rem; }
+#end-veil .board-table td.last { white-space: normal; }
+.end-foot { flex: none; padding-top: 0.3rem; display: flex; flex-direction: column; }
+.end-foot p { margin: 0.2rem 0; }
+.end-acts { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.3rem; }
+.end-acts button { margin-top: 0; }
+@media (max-height: 480px) {
+  #end-veil .card { padding-top: 0; padding-bottom: 0.6rem; }
+  #end-veil #nav-end { display: none; }
+  #end-veil #end-text { margin: 0.2rem 0; }
+}
 /* Phones: the buttons share the text column's width in equal halves (a lone
    Preview takes all of it), so nothing sets the card wider than the screen. */
 @media (max-width: 600px) {
@@ -377,6 +462,8 @@ button.btn-leave[hidden] { display: none; }
 .touch-only { display: none; }
 .touch .touch-only { display: revert; }
 .touch .key, .touch .keys-only, .touch .nav-hint { display: none; }
+/* Key hints, like the key chips, are for a fine pointer: a phone has no keys. */
+@media (pointer: coarse) { .nav-hint { display: none; } }
 
 /* Overlay title bars: title and close on top, the panel's keys in a grid
    below. They stay pinned while the panel scrolls. Each container sets its
@@ -424,7 +511,8 @@ button.btn-leave[hidden] { display: none; }
   margin: 0;
   font-size: 0.75rem;
 }
-.ov-keys > span { text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A hint that does not fit its cell wraps between its words, and a chip wider than the cell (wider fonts) wraps rather than spilling out. */
+.ov-keys > span { text-align: center; min-width: 0; overflow-wrap: anywhere; }
 .log-overlay .ov-head { margin-bottom: 0.3rem; padding-top: 0.35rem; border-radius: 9px 9px 0 0; }
 .log-overlay .ov-head h2 { font-size: 0.85rem; }
 .log-overlay .ov-keys { font-size: 0.68rem; }
@@ -721,3 +809,9 @@ body { height: 100dvh; display: flex; flex-direction: column; }
   #deck .w-narrow { display: inline; }
   .phone-extras { display: flex; }
 }
+
+/* The Scores overlay: the player's own rows in gold, and a board switcher with full-size touch targets. */
+#scores li.mine { color: var(--gold, #ffc93c); font-weight: 700; }
+.scores-levels { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.scores-levels button { min-height: 44px; min-width: 44px; padding: 0 14px; }
+.scores-levels button[aria-pressed="true"] { background: var(--gold, #ffc93c); color: #14183a; }

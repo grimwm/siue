@@ -10,4 +10,5 @@ php tools/install-files.php --check
 node tools/solo-runs.mjs --check
 node ../_kit/build/icons.mjs tankity --check
 node --test 'test/*.test.mjs'
-../../vendor/bin/phpunit -c ../../phpunit.xml --testsuite tankity
+# The slow recorded solo runs play in PHP in CI's units job, after make test.
+../../vendor/bin/phpunit -c ../../phpunit.xml --testsuite tankity --exclude-group slow

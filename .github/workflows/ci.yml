@@ -103,6 +103,15 @@ jobs:
           TANKITY_HITRATE_WIDTHS: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '720,912,1080,1200,1440' || '720,1080,1440' }}
         run: make test
 
+      # make test plays the quick recorded solo runs through the PHP referee; this plays the slow ones
+      # (the vendor dir is make test's), then times every recorded round against SOLO_ROUND_CPU.
+      - name: Tankity recorded solo runs in PHP (the slow ones) and the CPU per round
+        if: steps.scope.outputs.run == '1'
+        working-directory: websites/www.cs
+        run: |
+          vendor/bin/phpunit --testsuite tankity --group slow
+          (cd games/tankity && php -d xdebug.mode=off tools/round-bench.php)
+
       - name: Container logs
         if: failure() && steps.scope.outputs.run == '1'
         run: docker compose logs --no-color --tail 200

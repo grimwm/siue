@@ -74,7 +74,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `server/sim.php` | The deterministic sim that `src/sim.ts` mirrors: RNG, terrain, the curated hills, weapons, ballistics, the Roller (`room_roll_*`), hit boxes and sweeps, explosions, settling |
 | `server/flight.php` | A solo volley as the browser's war flies it: fixed 1/60 s steps (`flight_volley`), each dropping the tanks (`flight_fall`) and then moving every shell (`flight_step_shells`), shells living 12 s times the field's reach; `src/solo-play.ts` `flyVolley` is the same |
 | `server/ai.php` | Drone aim, bracketing, the strategies and their flips, `room_ai_rack` |
-| `server/solo.php` | The solo referee in PHP over the room sim: `solo_deal` (refuses a width `room_field_width` does not accept) and `solo_muster`, drawing the random stream in `src/solo.ts`'s order |
+| `server/solo.php` | The solo referee in PHP over the room sim: `solo_deal` (refuses a width `room_field_width` does not accept) and `solo_muster`, drawing the random stream in `src/solo.ts`'s order; `solo_round` plays one round of a run from its stored state (the buys, the muster, the player's recorded shots and the drones' turns, each volley flown by `server/flight.php`) to the browser's claim, refusing what `src/solo-play.ts` `soloRound` refuses with the same reasons, at most `SOLO_ROUND_CPU` seconds of CPU, 200 shots and 60 buys a round |
 | `server/rules.php` | Seats and economy, rounds (`room_start_round`, `room_advance`, `room_end_round`), the turn clock, drone pacing and watch turns, the shop, firing a volley, lives and winnings, scores |
 | `server/protocol.php` | The event log, `room_want`, snapshots and deltas (`terrainRev`, resync) |
 | `server/.htaccess` | `Require all denied`: the files in `server/` are libraries, never endpoints. Each also answers 404 if asked for directly (`TANKITY_ROOMS_INCLUDED` is defined only by `rooms.php`) |
@@ -105,6 +105,7 @@ only PHP (and Node for the TypeScript, see Source layout) and this folder. Run f
 php tools/game-json.php          # validate game.yaml, rewrite game.json
 php tools/game-json.php --check  # fail if invalid or game.json is stale
 php tools/install-files.php      # after the last edit to any served file
+php -d xdebug.mode=off tools/round-bench.php  # CPU per round of every recorded solo run in solo_round
 ```
 
 - The generator carries its own small YAML-subset parser (the host has no YAML
@@ -714,6 +715,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/php/FieldWidthTest.php`                  | The server's width rule, hills, reach and aim, units spread outside each other's blast, and a room dealt at 720 |
 | `test/php/FlightTest.php`                      | `server/flight.php`: the `volley-fall` vectors drop a tank mid-volley and compare exactly, a tank over a pit falls under gravity and lands on the ground, a later pellet or bomblet waits on an earlier one of its gunner's, shell life scales with the field |
 | `test/php/SoloDealTest.php`                    | `server/solo.php`: only an accepted width is dealt, the deal opens in the shop with the stake and draws only hills and clouds, a muster stands each unit on its column and rotates the opener |
+| `test/php/SoloRoundTest.php`                   | `server/solo.php` `solo_round`: every recorded run in `protocol/solo-runs.json` plays round by round to the browser's claims (runs marked `slow` are the `slow` group, which `make test` skips and CI's units job runs), a tampered round, an over run, the CPU and step budgets are refused, and every case of `test/solo-refusals.json` gets the reason `soloRound` gives (`test/solo-play.test.mjs` plays the same table) |
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
 | `test/render.test.mjs`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, and rebuilds the sky only when the match key or the visible area changes |
 | `test/input.test.mjs`                          | `src/input.ts` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, ESC, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
@@ -722,7 +724,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/preview.test.mjs`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |
 | `test/flow.test.mjs`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
 | `test/protocol.test.mjs`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
-| `test/sim-vectors.test.mjs`                    | `src/sim.ts`, `src/ai.ts`, `src/armor.ts`, `src/solo.ts` and `src/solo-play.ts` agree with `rooms.php` on every shared sim vector; the detmath, field, armor, match-end, solo-deal and volley-fall cases compare exactly (see Sim vectors) |
+| `test/sim-vectors.test.mjs`                    | `src/sim.ts`, `src/ai.ts`, `src/armor.ts`, `src/solo.ts` and `src/solo-play.ts` agree with `rooms.php` on every shared sim vector; the detmath, field, armor, match-end, solo-deal, volley-fall and solo-turn cases compare exactly (see Sim vectors) |
 | `phpunit --testsuite tankity` (host PHP)       | `ConfigTest` (`.config.yaml` precedence), `DataDirTest`, `DbTest`, `RoomStoreTest`, `LegacyImportTest` and `HousekeepTest` (storage: the directory and its checks, the database and its journal, rooms as rows, the old files' import, cleanup on a fake clock), `GameJsonTest` (the YAML parser, the `game.yaml` schema including effects, `--check` staleness) and `RoomsSimTest` (server sim units: pierce, spawns, spacing, replay stamping; drone bracketing and strategies; one unit left standing ends a round, the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller) |
 | `RoomMatchEndTest` (host PHP) | The match-end rule: one human plays like solo, the last human standing wins twice the round bonus, a leave is a forfeit, two out at once, the watch cap |
 | `RoomStandingsTest` (host PHP) | Each human's rounds won, kills, round gain and out round, in the snapshot with the winner's bonus |
@@ -793,7 +795,7 @@ outputs; `test/sim-vectors.test.mjs` replays every case through the sim,
 `src/sim.ts`, the drone AI, `src/ai.ts`, and the armor rules, `src/armor.ts`; the sim and AI
 compare within 1e-4; the deterministic math (`detmath`), the field at each
 width (terrain heights included), armor and match-end cases compare exactly;
-the solo deal (`solo-deal`) and solo volleys (`volley-fall`) compare exactly
+the solo deal (`solo-deal`), solo volleys (`volley-fall`) and solo turns (`solo-turn`) compare exactly
 too, with -0 equal to 0.
 
 - Covered: the RNG and terrain generator, spawn spots, shot speed, muzzle,
@@ -813,7 +815,9 @@ too, with -0 equal to 0.
   solo volleys flown in fixed steps with tanks falling between them
   (`volley-fall`: `server/flight.php` against `src/solo-play.ts` `flyVolley`;
   the damage, crater, each tank's y, the steps, and each tank's y at every
-  step that carved ground or cost armor).
+  step that carved ground or cost armor), and a solo turn (`solo-turn`: the
+  player's tank landed before its shot, and a settle standing every living unit
+  exactly on the ground before it counts them, for each way a volley ends).
 - Shared rules the cases pin: only a kill the player's own shot made pays the
   300 bonus, and a volley's projectiles (buckshot pellets, cluster bomblets)
   burst in launch order, each against the ground the earlier ones left. The

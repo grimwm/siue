@@ -191,3 +191,23 @@ test('the shooter is landed before a shot fires, as the page lands it while aimi
   };
   assert.deepEqual(run(40), run(0));
 });
+
+// The same table test/php/SoloRoundTest.php plays through solo_round: both sides must give each case's reason.
+test('the shared refusal table gets the same answers solo_round gives', () => {
+  const dir = path.join(import.meta.dirname, '..');
+  const table = JSON.parse(fs.readFileSync(path.join(dir, 'test', 'solo-refusals.json'), 'utf8'));
+  const runs = JSON.parse(fs.readFileSync(path.join(dir, 'protocol', 'solo-runs.json'), 'utf8')).runs;
+  for (const c of table.cases) {
+    const G = blankSolo();
+    let { buys, shots } = c;
+    if (c.run) {
+      const run = runs.find(r => r.name === c.run);
+      soloDeal(G, arsenal, run.seed, run.difficulty, run.w);
+      buys = run.rounds[0].buys;
+      shots = [...run.rounds[0].shots, c.append];
+    } else soloDeal(G, arsenal, table.seed, 'normal', 720);
+    if (c.buysRepeat) buys = Array.from({ length: c.buysRepeat }, () => c.buys);
+    if (c.shotsRepeat) shots = Array.from({ length: c.shotsRepeat }, () => c.shots);
+    assert.deepEqual(soloRound(G, arsenal, buys, shots), { ok: false, error: c.error }, c.name);
+  }
+});

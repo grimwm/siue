@@ -343,17 +343,22 @@ function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $a
     $vy = -det_sin($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0), room_field_reach($w));
     $grav = $flat ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
     $dt = 1 / 60;
+    // The drones' aim search runs this hundreds of times a turn: the per-step
+    // products are formed once, in the same order, so every value is the same.
+    $windStep = $wind * ROOM_TURN_WIND * $dt;
+    $gravStep = $grav * $dt;
+    $roller = ($weapons[$wkey]['effect'] ?? 'shot') === 'roller';
     for ($i = 0, $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($w)); $i < $steps; $i++) {
-        $vx += $wind * ROOM_TURN_WIND * $dt;
-        $vy += $grav * $dt;
+        $vx += $windStep;
+        $vy += $gravStep;
         $x += $vx * $dt;
         $y += $vy * $dt;
         if ($x < 0 || $x >= $w || $y >= 500) {
             return ['x' => $x, 'y' => $y, 'oob' => true];
         }
-        $xi = max(0, min($w - 1, (int) round($x)));
+        $xi = $x < 0.5 ? 0 : ($x >= $w - 0.5 ? $w - 1 : (int) round($x));
         if ($i >= 6 && $y >= $terrain[$xi]) { // the real flight ignores ground for its first 0.1 s
-            if (($weapons[$wkey]['effect'] ?? 'shot') === 'roller') {
+            if ($roller) {
                 [$rx, $ry] = room_roll_out($terrain, $x, $vx, $vy, $weapons[$wkey]);
                 return ['x' => $rx, 'y' => $ry, 'oob' => false];
             }
@@ -561,6 +566,8 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
     $pierced = null; // the tank a lance went through, never hit twice
     $clear = false; // out of its gunner's box yet
     $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($width));
+    $windStep = $room['wind'] * ROOM_TURN_WIND * $dt;
+    $gravStep = $grav * $dt;
     for ($step = 0; $step < $steps; $step++) {
         if (($w['effect'] ?? 'shot') === 'seeker') {
             $dv = room_seek_push($room['tanks'], $ownerIdx, $sx, $sy, (float) ($w['steer'] ?? 70.0), $dt);
@@ -569,8 +576,8 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
                 $vy += $dv[1];
             }
         }
-        $vx += $room['wind'] * ROOM_TURN_WIND * $dt;
-        $vy += $grav * $dt;
+        $vx += $windStep;
+        $vy += $gravStep;
         $px = $sx;
         $py = $sy;
         $sx += $vx * $dt;

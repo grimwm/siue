@@ -276,6 +276,26 @@ const RUN = {
     }
     return out;
   },
+  'solo-turn'(c) {
+    const S = soloPlay.blankSolo();
+    solo.soloDeal(S, arsenal, 'solo-turn', 'normal', 720);
+    S.round = 1;
+    solo.soloMuster(S, arsenal);
+    S.lives = c.lives ?? 3;
+    S.watchTurns = c.watchTurns ?? 0;
+    const tank = t => ({ x: t.x, y: t.y, vy: t.vy ?? 0, hp: t.hp, fuel: t.fuel });
+    if (c.kind === 'fire') {
+      const me = S.tanks[0];
+      me.y -= c.lift;
+      me.vy = 90;
+      const error = soloPlay.playerFire(S, arsenal, { ...c.shot, x: me.x + (c.drive || 0) });
+      return { error, me: tank(me), shells: S.shells.map(sh => [sh.x, sh.y, sh.vx, sh.vy]) };
+    }
+    c.hp.forEach((hp, i) => { S.tanks[i].hp = hp; S.tanks[i].y -= c.lift[i]; });
+    const end = solo.soloSettle(S).kind;
+    return { end, tanks: S.tanks.map(tank), wind: S.wind, turn: S.turn, score: S.score, cash: S.cash, lives: S.lives,
+      roundsWon: S.roundsWon, armor: S.armor, watchTurns: S.watchTurns };
+  },
   settle(c) {
     world({ terrain: c.terrain, tanks: [{ kind: 'ai', x: c.x, y: c.y, hp: c.hp }] });
     for (let i = 0; i < 5000 && sim.anyTankFalling(G); i++) sim.fallTanks(G, 1 / 60);

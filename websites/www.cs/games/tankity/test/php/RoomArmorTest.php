@@ -67,6 +67,21 @@ final class RoomArmorTest extends TestCase
         $this->assertSame(100, $me['maxHp']);
     }
 
+    public function testARepairPaidForBeforeTheArmorRulesStillLands(): void
+    {
+        // A room saved by the earlier version banked the repair in `repair[seat]`.
+        $room = $this->room();
+        $this->setHp($room, 'human', 40);
+        $this->setHp($room, 'ai', 0);
+        $events = [];
+        room_end_round($room, $events);
+        $room['repair'][0] = 30;
+        room_shop_set_ready($room, 0, true);
+        $this->assertTrue(room_shop_settle($room));
+        $this->assertSame(70, $this->human($room)['hp']);
+        $this->assertSame(0, $room['repair'][0]);
+    }
+
     public function testAWreckReMustersAtFullMaxWithPlatesKept(): void
     {
         $room = $this->room();

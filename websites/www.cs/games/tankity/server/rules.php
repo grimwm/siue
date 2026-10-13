@@ -125,6 +125,12 @@ function room_shop_settle(array &$room): bool
         if (!($s['human'] ?? false)) {
             continue;
         }
+        // A repair a room banked before armor was tracked lands now, capped at max.
+        $legacyRepair = (int) ($room['repair'][$idx] ?? 0);
+        if ($legacyRepair > 0) {
+            room_repair($room, $idx, $legacyRepair);
+            $room['repair'][$idx] = 0;
+        }
         $room['fuelApplied'][$idx] = $room['fuelBonus'][$idx] ?? 0;
         $room['fuelBonus'][$idx] = 0;
     }

@@ -26,6 +26,10 @@ const SOLO_LEASE_SLACK = 30; // seconds a round's lease outlasts its CPU budget,
 // each starting runs as fast as SOLO_STARTS_PER_HOUR allows add 120000 run rows
 // an hour and 18000 count rows, and every pass is bounded by rows, not time.
 const SOLO_EXPIRE_BATCH = 2500;
+// Of those, runs that still hold state (tens of KB each at the widest field):
+// fewer a pass, so freeing their pages never holds the write lock for long.
+// Every place still frees within the hour.
+const SOLO_EXPIRE_PLAYED_BATCH = 250;
 const SOLO_RATE_EXPIRE_BATCH = 5000;
 // The hourly caps count in slots of this many seconds, and a check sums the
 // last hour's slots and the one it began in: never more than the cap in any
@@ -42,8 +46,8 @@ const SOLO_SCORES_PER_HOUR = 240;
 // SOLO_HELD_PER_CLIENT addresses, while one campus NAT still fits a full lab.
 // A played run's state is up to about 27 KB. A run not yet played holds no
 // state and no place.
-const SOLO_MAX_HELD = 5000;
-const SOLO_HELD_PER_CLIENT = 50;
+const SOLO_MAX_HELD = 3000; // about 86 MB of played runs at the widest field
+const SOLO_HELD_PER_CLIENT = 30; // a 30-seat lab behind one address
 // Runs one address may hold (unplayed, live, over or void, not yet expired):
 // a flood from one address can neither fill the table nor take every other
 // player's place.
@@ -173,18 +177,32 @@ function solo_run_expired(array $row, int $now): bool
     return $now - (int) $row['touched'] > $idle || $now - (int) $row['created'] > SOLO_RUN_MAX_AGE;
 }
 
-/* Deletes expired runs, filed runs past their keep included, at most $limit;
-   answers how many. A run whose round is being played is never deleted: its
-   lease runs out first. */
-function solo_runs_expire(int $now, int $limit = 100): int
+/* Deletes expired runs, filed runs past their keep included: at most
+   $playedLimit that still hold state (past round 0, live or over) and at most
+   $limit others; answers how many. A run whose round is being played is never
+   deleted: its lease runs out first. */
+function solo_runs_expire(int $now, int $limit = SOLO_EXPIRE_BATCH, int $playedLimit = SOLO_EXPIRE_PLAYED_BATCH): int
 {
-    return tankity_tx(tankity_db(), function (PDO $db) use ($now, $limit): int {
-        $q = $db->prepare("DELETE FROM solo_runs WHERE id IN (SELECT id FROM solo_runs WHERE playing <= ? AND (
-            (status <> 'filed' AND (touched < ? OR created < ?)) OR (status = 'filed' AND touched < ?)
-            OR (status = 'live' AND round = 0 AND touched < ?)) LIMIT ?)");
-        $q->execute([$now, $now - SOLO_RUN_IDLE, $now - SOLO_RUN_MAX_AGE, $now - SOLO_RUN_FILED_KEEP, $now - SOLO_RUN_UNPLAYED_IDLE, $limit]);
-        return $q->rowCount();
+    return tankity_tx(tankity_db(), function (PDO $db) use ($now, $limit, $playedLimit): int {
+        $gone = 0;
+        foreach (['', 'NOT '] as $i => $not) {
+            $q = $db->prepare("DELETE FROM solo_runs WHERE id IN (SELECT id FROM solo_runs WHERE playing <= ? AND (
+                (status <> 'filed' AND (touched < ? OR created < ?)) OR (status = 'filed' AND touched < ?)
+                OR (status = 'live' AND round = 0 AND touched < ?)) AND {$not}(round > 0 AND status IN ('live', 'over')) LIMIT ?)");
+            $q->execute([$now, $now - SOLO_RUN_IDLE, $now - SOLO_RUN_MAX_AGE, $now - SOLO_RUN_FILED_KEEP, $now - SOLO_RUN_UNPLAYED_IDLE,
+                $i === 0 ? $playedLimit : $limit]);
+            $gone += $q->rowCount();
+        }
+        return $gone;
     });
+}
+
+/* The count of played runs holding a place, answered from a covering index
+   (solo_runs_held, or solo_runs_held_by for one address). */
+function solo_runs_held_sql(bool $perClient): string
+{
+    return "SELECT COUNT(*) FROM solo_runs WHERE round > 0 AND status IN ('live', 'over') AND touched >= ? AND created >= ?"
+        . ($perClient ? ' AND client = ?' : '');
 }
 
 /* Runs that hold a place: past their first round (or playing it), live or
@@ -194,7 +212,7 @@ function solo_runs_held(PDO $db, int $now, ?string $client = null): int
 {
     $who = $client === null ? '' : ' AND client = ?';
     $args = $client === null ? [] : [$client];
-    $played = $db->prepare("SELECT COUNT(*) FROM solo_runs WHERE round > 0 AND status IN ('live', 'over') AND touched >= ? AND created >= ?$who");
+    $played = $db->prepare(solo_runs_held_sql($client !== null));
     $played->execute([$now - SOLO_RUN_IDLE, $now - SOLO_RUN_MAX_AGE, ...$args]);
     $first = $db->prepare("SELECT COUNT(*) FROM solo_runs WHERE playing > ? AND round = 0$who");
     $first->execute([$now, ...$args]);
@@ -210,12 +228,25 @@ function solo_runs_of(PDO $db, string $client, int $now): int
     return (int) $q->fetchColumn();
 }
 
-/* A void run answers nothing but 'void', so it keeps no state. */
-function solo_run_void(string $id, int $now): void
+/* The reply for a round this request played after the run moved past it:
+   the stored reply when another copy stored round $n, else out of order. */
+function solo_run_moved_on(?array $row, int $n): array
 {
-    tankity_tx(tankity_db(), function (PDO $db) use ($id, $now): void {
-        $db->prepare("UPDATE solo_runs SET status = 'void', state = '{}', touched = ? WHERE id = ? AND status = 'live'")->execute([$now, $id]);
-        $db->prepare('UPDATE solo_runs SET playing = 0 WHERE id = ?')->execute([$id]);
+    return $row !== null && (int) $row['round'] === $n && $row['reply'] !== ''
+        ? [200, json_decode((string) $row['reply'], true)] : [409, ['error' => 'out of order', 'round' => (int) ($row['round'] ?? 0)]];
+}
+
+/* Voids a run the referee refused at round $n, if it is still at the round
+   before, giving back this request's lease ($lease) and no other: null when
+   voided (a void run answers nothing but 'void', so it keeps no state), else
+   the reply for a run that moved on. */
+function solo_run_void(string $id, int $n, int $lease, int $now): ?array
+{
+    return tankity_tx(tankity_db(), function (PDO $db) use ($id, $n, $lease, $now): ?array {
+        $db->prepare('UPDATE solo_runs SET playing = 0 WHERE id = ? AND playing = ?')->execute([$id, $lease]);
+        $q = $db->prepare("UPDATE solo_runs SET status = 'void', state = '{}', touched = ? WHERE id = ? AND status = 'live' AND round = ?");
+        $q->execute([$now, $id, $n - 1]);
+        return $q->rowCount() === 1 ? null : solo_run_moved_on(solo_run_row($db, $id), $n);
     });
 }
 
@@ -275,8 +306,7 @@ function solo_run_store(string $id, int $n, int $lease, array $got, int $now): a
         $row = solo_run_row($db, $id);
         if ($row === null || $row['status'] !== 'live' || (int) $row['round'] !== $n - 1) {
             // Another request stored this round (or the run moved on) while this one played it.
-            return $row !== null && (int) $row['round'] === $n && $row['reply'] !== ''
-                ? [200, json_decode((string) $row['reply'], true)] : [409, ['error' => 'out of order', 'round' => (int) ($row['round'] ?? 0)]];
+            return solo_run_moved_on($row, $n);
         }
         $db->prepare('UPDATE solo_runs SET state = ?, round = ?, status = ?, touched = ?, reply = ?,
             playing = CASE WHEN playing = ? THEN 0 ELSE playing END WHERE id = ?')->execute([
@@ -401,12 +431,10 @@ function tankity_scores_round(array $in, object $obj, ScoreGuard $guard, int $no
         $s = $n === 1 ? solo_deal((string) $row['seed'], (string) $row['difficulty'], (int) $row['w']) : solo_state_decode((string) $row['state']);
         $got = solo_round($s, $buys, $shots, solo_round_cpu());
         if (!$got['ok']) {
-            solo_run_void($id, $now);
-            return [422, ['error' => 'void', 'why' => $got['error']]];
+            return solo_run_void($id, $n, $lease, $now) ?? [422, ['error' => 'void', 'why' => $got['error']]];
         }
         if (!solo_claim_matches($got['claim'], $in['claim'])) {
-            solo_run_void($id, $now);
-            return [422, ['error' => 'void', 'why' => 'mismatch', 'server' => $got['claim']]];
+            return solo_run_void($id, $n, $lease, $now) ?? [422, ['error' => 'void', 'why' => 'mismatch', 'server' => $got['claim']]];
         }
         return solo_run_store($id, $n, $lease, $got, $now);
     } catch (Throwable $e) {

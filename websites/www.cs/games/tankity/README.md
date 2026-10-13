@@ -297,7 +297,8 @@ converted) and its journal. The journal mode is WAL when the directory is on a l
 (`/proc/self/mounts`) and DELETE on anything else, including when the mount
 table cannot be read; `journal_mode` overrides. `PRAGMA user_version` is the
 schema version (`tankity_schema_steps()`); a newer server runs the missing
-steps on its first request.
+steps on its first request, and a database at a version this server does not
+know is refused (503) rather than read.
 
 Score files from before the database, `<scores_dir>/<callsign>-operation-tankity.json`
 (`/var/tmp` unless a `scores_dir` from before `data_dir` says otherwise; the
@@ -317,7 +318,8 @@ score files were imported, so a file's runs are never imported twice either.
 Housekeeping has no cron: any request to `rooms.php` or `scores.php` runs it,
 at most once a minute, each job bounded by rows (idle rooms, 100 at a time;
 old files, 200 at a time; leftover temp files over an hour old; expired solo
-runs, 2500 at a time, never one whose round is being played; old throttle
+runs, 2500 at a time and only 250 of them still holding a played run's state,
+never one whose round is being played; old throttle
 counts, 5000 at a time). That keeps up with a thousand addresses starting solo
 runs as fast as their caps allow.
 
@@ -395,11 +397,12 @@ header and cookie pair, or anything but JSON is 403; a body over 256 KiB, 413):
 GET never sends a seed. A run expires two hours after its last request and a
 day after it started, and one with no round played 15 minutes after its start
 (the browser starts a run only when it has a round to send). A run past its
-first round, live or waiting to file, holds a place: `max_held` places (5000)
+first round, live or waiting to file, holds a place: `max_held` places (3000)
 across the server, past which a first round or a start waits (503 `busy`), and
-`held_per_client` (50) for the runs one address started (429). Filling every
-place takes a hundred addresses, while one campus NAT still fits a full lab;
-runs that were never played fill nothing. One address holds at most
+`held_per_client` (30) for the runs one address started (429). Filling every
+place takes a hundred addresses, while one campus NAT still fits a 30-seat lab;
+a played run keeps up to about 29 KB on disk at the widest field, so a full
+table is about 86 MB. Runs that were never played fill nothing. One address holds at most
 `runs_per_client` runs of any kind (100; 429). A round is played outside the
 database's write lock under a lease on its run, so a copy sent while it plays
 waits (503) and then gets the stored reply; at most `max_playing` rounds (8)

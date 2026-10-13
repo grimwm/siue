@@ -40,6 +40,22 @@ final class DbTest extends TestCase
         }
     }
 
+    public function testADatabaseNewerThanThisServerIsRefused(): void
+    {
+        // A schema this code does not know would fail later on a column it lacks; refuse it up front.
+        $path = $this->dir . '/' . TANKITY_DB_FILE;
+        $future = new PDO('sqlite:' . $path);
+        $future->exec('PRAGMA user_version = ' . (max(array_keys(tankity_schema_steps())) + 1));
+        $future = null;
+        $this->expectErrorLog();
+        try {
+            tankity_db();
+            $this->fail('a newer database was opened');
+        } catch (TankityStorageRefused $e) {
+            $this->assertStringContainsString('newer', $e->getMessage());
+        }
+    }
+
     public function testTheDirectoryAndEveryDatabaseFileArePrivateUnderALooseUmask(): void
     {
         $old = umask(0022);

@@ -242,7 +242,10 @@ function tankity_schema_steps(): array
                 playing INTEGER NOT NULL DEFAULT 0, lessee TEXT NOT NULL DEFAULT '')",
             'CREATE INDEX solo_runs_client ON solo_runs (client)',
             'CREATE INDEX solo_runs_touched ON solo_runs (touched)',
-            'CREATE INDEX solo_runs_played ON solo_runs (touched) WHERE round > 0',
+            // Held places are counted on every start and first round, under the write lock: these cover
+            // those counts, across the server and per address, so no table row is read.
+            'CREATE INDEX solo_runs_held ON solo_runs (touched, created, status, round) WHERE round > 0',
+            'CREATE INDEX solo_runs_held_by ON solo_runs (client, touched, created, status, round) WHERE round > 0',
             'CREATE INDEX solo_runs_playing ON solo_runs (playing)',
             // An address's starts, rounds and filings, one row per kind and SOLO_RATE_SLOT seconds.
             'CREATE TABLE solo_rate (client TEXT NOT NULL, kind TEXT NOT NULL, slot INTEGER NOT NULL, n INTEGER NOT NULL,
@@ -258,6 +261,9 @@ function tankity_schema_steps(): array
 function tankity_schema(PDO $db): void
 {
     $have = (int) $db->query('PRAGMA user_version')->fetchColumn();
+    if ($have > max(array_keys(tankity_schema_steps()))) {
+        tankity_refuse(TANKITY_DB_FILE, "is at schema $have, newer than this server knows", 'deploy the newer server, or reset the database');
+    }
     foreach (tankity_schema_steps() as $version => $sql) {
         if ($version <= $have) {
             continue;

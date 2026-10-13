@@ -611,8 +611,8 @@ final class ScoresApiTest extends TestCase
             'play slots' => ['TANKITY_MAX_PLAYING', 'max_playing', 'solo_max_playing', 8],
             'play slots an address' => ['TANKITY_PLAYING_PER_CLIENT', 'playing_per_client', 'solo_playing_per_client', 4],
             'runs an address' => ['TANKITY_RUNS_PER_CLIENT', 'runs_per_client', 'solo_runs_per_client', 100],
-            'places' => ['TANKITY_MAX_HELD', 'max_held', 'solo_max_held', 5000],
-            'places an address' => ['TANKITY_HELD_PER_CLIENT', 'held_per_client', 'solo_held_per_client', 50],
+            'places' => ['TANKITY_MAX_HELD', 'max_held', 'solo_max_held', 3000],
+            'places an address' => ['TANKITY_HELD_PER_CLIENT', 'held_per_client', 'solo_held_per_client', 30],
         ];
     }
 
@@ -876,6 +876,32 @@ final class ScoresApiTest extends TestCase
         $this->assertSame([1, $newer], [(int) $this->row($id)['round'], (int) $this->row($id)['playing']]);
     }
 
+    public function testAVoidLeavesANewerLeaseAlone(): void
+    {
+        $run = $this->recorded();
+        $id = $this->start($run);
+        [, , $lease] = solo_run_lease($id, 1, $this->guard()->clientKey(), $this->now);
+        $newer = $lease + 100;
+        tankity_db()->prepare('UPDATE solo_runs SET playing = ? WHERE id = ?')->execute([$newer, $id]);
+        $this->assertNull(solo_run_void($id, 1, $lease, $this->now));
+        $this->assertSame(['void', $newer], [$this->row($id)['status'], (int) $this->row($id)['playing']]);
+    }
+
+    public function testAVoidNeverReachesARunThatMovedOn(): void
+    {
+        // A copy that played round 1 differently from the one that stored it answers what was stored.
+        $run = $this->recorded();
+        $id = $this->start($run);
+        [, , $lease] = solo_run_lease($id, 1, $this->guard()->clientKey(), $this->now);
+        $stored = ['ok' => true, 'n' => 1] + $run['rounds'][0]['claim'];
+        tankity_db()->prepare('UPDATE solo_runs SET round = 1, reply = ?, playing = 0 WHERE id = ?')->execute([json_encode($stored), $id]);
+        $this->assertSame([200, $stored], solo_run_void($id, 1, $lease, $this->now));
+        $this->assertSame(['live', 1], [$this->row($id)['status'], (int) $this->row($id)['round']]);
+        tankity_db()->exec("UPDATE solo_runs SET round = 2, reply = '' WHERE id = '$id'");
+        $this->assertSame([409, ['error' => 'out of order', 'round' => 2]], solo_run_void($id, 1, $lease, $this->now));
+        $this->assertSame('live', $this->row($id)['status']);
+    }
+
     public function testOneAddressHoldsOnlyItsShareOfPlaces(): void
     {
         putenv('TANKITY_STARTS_PER_HOUR=10');
@@ -889,6 +915,23 @@ final class ScoresApiTest extends TestCase
         $this->assertSame([429, ['error' => 'rate']], $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720]));
         $_SERVER['REMOTE_ADDR'] = '198.51.100.251';
         $this->assertSame(200, $this->round($this->start($run), $run['rounds'][0])[0], 'another address still holds places');
+    }
+
+    public function testTheHeldPlacesAreCountedFromTheIndexAlone(): void
+    {
+        // Counted inside the write lock on every start and first round, refused ones included: no table rows read.
+        foreach ([false, true] as $perClient) {
+            $plan = tankity_db()->prepare('EXPLAIN QUERY PLAN ' . solo_runs_held_sql($perClient));
+            $plan->execute($perClient ? [1, 2, 'c'] : [1, 2]);
+            $detail = implode(' | ', array_column($plan->fetchAll(PDO::FETCH_ASSOC), 'detail'));
+            $this->assertStringContainsString('USING COVERING INDEX', $detail, $perClient ? 'per address' : 'across the server');
+        }
+    }
+
+    public function testTheWorstCaseStorageStaysUnderAHundredMegabytes(): void
+    {
+        // A played run at the widest field keeps about 28.8 KB on disk.
+        $this->assertLessThanOrEqual(100_000_000, solo_max_held() * 28_800);
     }
 
     public function testTheCapsTakeAboutAHundredAddressesToFill(): void
@@ -988,8 +1031,21 @@ final class ScoresApiTest extends TestCase
         $this->assertSame(2, solo_runs_expire($this->now));
     }
 
+    public function testAPassDeletesFewRunsThatHoldState(): void
+    {
+        // A played run's state is tens of KB; deleting thousands in one transaction holds the lock too long.
+        $this->seedRuns(SOLO_EXPIRE_PLAYED_BATCH + 50, 'live', 'flood', 0, 1);
+        $this->seedRuns(300, 'void', 'flood', 100_000, 1);
+        $this->seedRuns(300, 'live', 'flood', 200_000, 0);
+        tankity_db()->exec('UPDATE solo_runs SET touched = touched - ' . (SOLO_RUN_IDLE + 1));
+        $this->assertSame(SOLO_EXPIRE_PLAYED_BATCH + 600, tankity_jobs()['solo']($this->now));
+        $this->assertSame(50, (int) tankity_db()->query('SELECT COUNT(*) FROM solo_runs')->fetchColumn());
+        $this->assertLessThanOrEqual(250, SOLO_EXPIRE_PLAYED_BATCH);
+    }
+
     public function testTheSweepKeepsUpWithAFlood(): void
     {
+        $this->assertGreaterThanOrEqual(SOLO_MAX_HELD, intdiv(3600, HOUSEKEEP_EVERY) * SOLO_EXPIRE_PLAYED_BATCH, 'every place frees within the hour');
         // A thousand addresses starting runs as fast as allowed: every row is gone within the hour it was made.
         $passes = intdiv(3600, HOUSEKEEP_EVERY);
         $this->assertGreaterThanOrEqual(1000 * SOLO_STARTS_PER_HOUR, $passes * SOLO_EXPIRE_BATCH);

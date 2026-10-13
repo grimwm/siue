@@ -24,9 +24,9 @@
 #   runs_per_client <- TANKITY_RUNS_PER_CLIENT (solo runs one address may hold
 #                     at once; default 100)
 #   max_held       <- TANKITY_MAX_HELD (solo runs past their first round the
-#                     server keeps at once; default 5000)
+#                     server keeps at once; up to about 29 KB each; default 3000)
 #   held_per_client <- TANKITY_HELD_PER_CLIENT (of those, how many one address
-#                     may have started; default 50)
+#                     may have started; default 30)
 #   max_playing    <- TANKITY_MAX_PLAYING (solo rounds the server plays at
 #                     once; about the host's cores; default 8)
 #   playing_per_client <- TANKITY_PLAYING_PER_CLIENT (of those, how many one

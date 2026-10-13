@@ -525,10 +525,21 @@ export function rollOut(terrain: readonly number[], x: number, vx: number, vy: n
   r.x = clamp(r.x, 0, terrain.length - 1);
   return { x: r.x, y: groundAt(terrain, r.x) };
 }
+/* Everything simShot reads from a gun, as one string: guns with the same key
+   fly the same planning arc from the same muzzle, so the drones search one of
+   them (ai.ts arcGuns). A field simShot starts to read belongs here too;
+   test/ai-arcs.test.mjs changes every field of every gun to catch one that
+   is missing. server/sim.php room_flight_key is the same. */
+export function flightKey(w: Weapon): string {
+  const roll = w.effect === 'roller';
+  return JSON.stringify([!!w.flat, w.speed, roll, roll ? w.friction || 0.3 : 0, roll ? w.rollTime || 5 : 0]);
+}
 /* Predict where a shot lands (used by the AI and the aim guide); a roller's
-   landing is where its roll ends. */
+   landing is where its roll ends. `top` is the highest ground (the least
+   terrain y): above it a shell cannot touch down, so the search skips the
+   ground lookup there. */
 export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal, x: number, y: number, angle: number,
-  power: number, wkey: string, dirS: number): { x: number; y: number; oob: boolean } {
+  power: number, wkey: string, dirS: number, top = -Infinity): { x: number; y: number; oob: boolean } {
   const w = arsenal.weapons[wkey]!;
   const fw = world.terrain.length, reach = fieldReach(fw);
   const r = rad(angle);
@@ -543,7 +554,7 @@ export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal
     stepBallistic(st, dt, world.wind, grav);
     if (st.x < 0 || st.x >= fw) return { x: st.x, y: st.y, oob: true };
     if (st.y >= H + 40) return { x: st.x, y: st.y, oob: true };
-    if (i >= 6 && st.y >= world.terrain[clamp(Math.round(st.x), 0, fw - 1)]!) {
+    if (i >= 6 && st.y >= top && st.y >= world.terrain[clamp(Math.round(st.x), 0, fw - 1)]!) {
       if (w.effect === 'roller') return { ...rollOut(world.terrain, st.x, st.vx, st.vy, w), oob: false };
       return { x: st.x, y: st.y, oob: false };
     }

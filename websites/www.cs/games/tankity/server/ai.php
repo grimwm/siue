@@ -56,17 +56,35 @@ function room_difficulty(array $room): string
     return room_parse_difficulty($room['difficulty'] ?? null);
 }
 
+/* The guns a fresh aim searches: the first of each planning arc, in rack
+ * order. A later gun with the same arc lands every shot where the first did,
+ * and the search keeps only a strictly better shot, so it could never win.
+ * src/ai.ts arcGuns is the same. */
+function room_ai_arc_guns(array $weapons, array $guns): array
+{
+    $seen = [];
+    $out = [];
+    foreach ($guns as $k) {
+        $f = room_flight_key($weapons[$k]);
+        if (!isset($seen[$f])) {
+            $seen[$f] = true;
+            $out[] = $k;
+        }
+    }
+    return $out;
+}
+
 /* The best (angle, power) near a last aim for a shot to burst on goalX: a
  * coarse sweep, then a fine one around its best. Nearer the last aim wins ties. */
-function room_ai_correct(array $room, float $mx, float $my, string $wkey, int $dirS, float $a0, float $p0, float $goalX): array
+function room_ai_correct(array $room, float $mx, float $my, string $wkey, int $dirS, float $a0, float $p0, float $goalX, float $high): array
 {
     $width = count($room['terrain']);
     $best = null;
-    $try = function (int $a, int $p) use (&$best, $room, $mx, $my, $wkey, $dirS, $a0, $p0, $goalX, $width): void {
+    $try = function (int $a, int $p) use (&$best, $room, $mx, $my, $wkey, $dirS, $a0, $p0, $goalX, $width, $high): void {
         if ($a < 10 || $a > 170 || $p < 10 || $p > 100) {
             return;
         }
-        $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $a, (float) $p, $wkey, $dirS, $width);
+        $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $a, (float) $p, $wkey, $dirS, $width, $high);
         $err = ($land['oob'] ? 400 + abs($land['x'] - $goalX) * 0.2 : abs($land['x'] - $goalX)) + 0.02 * (abs($a - $a0) + abs($p - $p0));
         if ($best === null || $err < $best['err']) {
             $best = ['err' => $err, 'a' => $a, 'p' => $p];
@@ -260,6 +278,7 @@ function room_ai_choose(array &$room, array $tank): array
         $me = count($rivals) > 1 ? $rivals[(int) floor(room_rng_next($rng) * count($rivals))] : $rivals[0];
     }
     $width = count($room['terrain']);
+    $high = min($room['terrain']);
     $fa = room_field_aim($width);
     // Deliberately shaky hands: dangerous up close, forgiving at range.
     // A jammer doubles the wobble of anything aimed at its owner.
@@ -267,7 +286,7 @@ function room_ai_choose(array &$room, array $tank): array
     if ($cont !== null) {
         $w = $mem['w'];
         $n = $mem['n'] + 1;
-        $sim = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $mem['a'], (float) $mem['p'], $w, $dirS, $width);
+        $sim = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $mem['a'], (float) $mem['p'], $w, $dirS, $width, $high);
         $landed = $mem['land'] ?? $sim['x'];
         $miss = $me['x'] - $landed;
         if (abs($miss) <= ROOM_BRK_ON) {
@@ -276,7 +295,7 @@ function room_ai_choose(array &$room, array $tank): array
         // Where the sim must put a shot so that, shifted by the measured miss
         // of the last one, it bursts on the target (or, taking out only part
         // of the miss, nearer it).
-        [$ba, $bp] = room_ai_correct($room, $mx, $my, $w, $dirS, (float) $mem['a'], (float) $mem['p'], $sim['x'] + $miss * $skill['correct']);
+        [$ba, $bp] = room_ai_correct($room, $mx, $my, $w, $dirS, (float) $mem['a'], (float) $mem['p'], $sim['x'] + $miss * $skill['correct'], $high);
         $wob = max($skill['brkFloor'] * $fa['floor'], $wob * room_powi($skill['brkShrink'], $n));
     } else {
         $guns = $keys;
@@ -292,10 +311,11 @@ function room_ai_choose(array &$room, array $tank): array
             $area = array_values(array_filter($keys, fn($k) => room_area_gun($weapons[$k])));
             $guns = count($area) ? $area : $keys;
         }
+        $guns = room_ai_arc_guns($weapons, $guns);
         $best = null;
-        $consider = function (string $wkey, int $a) use (&$best, $room, $mx, $my, $dirS, $me, $width): void {
+        $consider = function (string $wkey, int $a) use (&$best, $room, $mx, $my, $dirS, $me, $width, $high): void {
             for ($p = 20; $p <= 100; $p += 6) {
-                $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $a, (float) $p, $wkey, $dirS, $width);
+                $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $a, (float) $p, $wkey, $dirS, $width, $high);
                 $err = $land['oob'] ? 400 + abs($land['x'] - $me['x']) * 0.2 : abs($land['x'] - $me['x']);
                 if ($best === null || $err < $best['err']) {
                     $best = ['err' => $err, 'a' => $a, 'p' => $p, 'wkey' => $wkey];

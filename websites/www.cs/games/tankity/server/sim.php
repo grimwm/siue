@@ -332,22 +332,39 @@ function room_roll_out(array $terrain, float $x, float $vx, float $vy, array $w)
     $x = max(0.0, min((float) ($n - 1), $x));
     return [$x, room_ground_at($terrain, $x)];
 }
-/* Full trajectory; returns landing info. Mirrors src/sim.ts simShot. A
-// roller's landing is where its roll ends. */
-function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $angle, float $power, string $wkey, int $dirS, int $w): array
+/* Everything room_sim_flight reads from a gun, as one string: guns with the
+ * same key fly the same planning arc from the same muzzle, so the drones search
+ * one of them (ai.php room_ai_arc_guns). A field the flight starts to read
+ * belongs here too; test/php/AiArcsTest.php changes every field of every gun
+ * to catch one that is missing. src/sim.ts flightKey is the same. */
+function room_flight_key(array $def): string
 {
-    $weapons = room_weapons();
-    $flat = !empty($weapons[$wkey]['flat']);
+    $roll = ($def['effect'] ?? 'shot') === 'roller';
+    return json_encode([!empty($def['flat']), (float) ($def['speed'] ?? 1.0), $roll,
+        $roll ? (float) (($def['friction'] ?? 0.3) ?: 0.3) : 0.0, $roll ? (float) (($def['rollTime'] ?? 5.0) ?: 5.0) : 0.0]);
+}
+/* Full trajectory; returns landing info. Mirrors src/sim.ts simShot. A
+// roller's landing is where its roll ends. $top is the highest ground (the
+// least terrain y): above it a shell cannot touch down, so the search skips
+// the ground lookup there. */
+function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $angle, float $power, string $wkey, int $dirS, int $w, float $top = -INF): array
+{
+    return room_sim_flight($terrain, $wind, $x, $y, $angle, $power, room_weapons()[$wkey] ?? [], $dirS, $w, $top);
+}
+/* room_sim_shot for a gun's definition rather than its key. */
+function room_sim_flight(array $terrain, float $wind, float $x, float $y, float $angle, float $power, array $def, int $dirS, int $w, float $top = -INF): array
+{
+    $flat = !empty($def['flat']);
     $rad = deg2rad($angle);
-    $vx = det_cos($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0), room_field_reach($w)) * $dirS;
-    $vy = -det_sin($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0), room_field_reach($w));
+    $vx = det_cos($rad) * room_shot_speed($power, $flat, (float) ($def['speed'] ?? 1.0), room_field_reach($w)) * $dirS;
+    $vy = -det_sin($rad) * room_shot_speed($power, $flat, (float) ($def['speed'] ?? 1.0), room_field_reach($w));
     $grav = $flat ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
     $dt = 1 / 60;
     // The drones' aim search runs this hundreds of times a turn: the per-step
     // products are formed once, in the same order, so every value is the same.
     $windStep = $wind * ROOM_TURN_WIND * $dt;
     $gravStep = $grav * $dt;
-    $roller = ($weapons[$wkey]['effect'] ?? 'shot') === 'roller';
+    $roller = ($def['effect'] ?? 'shot') === 'roller';
     for ($i = 0, $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($w)); $i < $steps; $i++) {
         $vx += $windStep;
         $vy += $gravStep;
@@ -356,10 +373,13 @@ function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $a
         if ($x < 0 || $x >= $w || $y >= 500) {
             return ['x' => $x, 'y' => $y, 'oob' => true];
         }
+        if ($i < 6 || $y < $top) { // the real flight ignores ground for its first 0.1 s
+            continue;
+        }
         $xi = $x < 0.5 ? 0 : ($x >= $w - 0.5 ? $w - 1 : (int) round($x));
-        if ($i >= 6 && $y >= $terrain[$xi]) { // the real flight ignores ground for its first 0.1 s
+        if ($y >= $terrain[$xi]) {
             if ($roller) {
-                [$rx, $ry] = room_roll_out($terrain, $x, $vx, $vy, $weapons[$wkey]);
+                [$rx, $ry] = room_roll_out($terrain, $x, $vx, $vy, $def);
                 return ['x' => $rx, 'y' => $ry, 'oob' => false];
             }
             return ['x' => $x, 'y' => $y, 'oob' => false];

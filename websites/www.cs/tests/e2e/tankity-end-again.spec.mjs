@@ -22,6 +22,14 @@ test('Play again from the end card brings both players to the same lobby, and th
     await expect(veil).toBeVisible();
     expect(await pl.page.evaluate(() => window.__exits)).toBe(0);
   }
+  // The room table fits both phone shapes: no sideways scroll on the page or inside the table's box, Play again in view.
+  for (const size of [{ width: 393, height: 852 }, { width: 852, height: 393 }, { width: 1280, height: 860 }]) {
+    await host.page.setViewportSize(size);
+    await expect.poll(() => host.page.evaluate(() => {
+      const de = document.documentElement, b = document.querySelector('#end-veil .end-board'), r = document.getElementById('again').getBoundingClientRect();
+      return { page: de.scrollWidth > de.clientWidth, table: b.scrollWidth > b.clientWidth, shown: r.top >= 0 && r.bottom <= innerHeight };
+    }), { message: `room end card at ${size.width}x${size.height}` }).toEqual({ page: false, table: false, shown: true });
+  }
   const lastMatch = /goes to the battery|out of lives|for good this time|wins the match/gi;
   const radioBefore = ((await hud(host.page, 'log')) || '').match(lastMatch) || [];
   expect(radioBefore.length, 'the last match left lines to not replay').toBeGreaterThan(0);

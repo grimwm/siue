@@ -1,12 +1,11 @@
 <?php
-// Unit checks for the room server's simulation, no web server or shared
-// memory needed.
+// Unit checks for the room server's simulation, no web server needed.
 declare(strict_types=1);
 if (!defined('TANKITY_GAME_DIR')) {
     define('TANKITY_GAME_DIR', dirname(__DIR__, 3));
 }
-const TANKITY_ROOMS_LIB = true;
-require TANKITY_GAME_DIR . '/rooms.php';
+// The room library, storing in this test process's own directory.
+require_once __DIR__ . '/../rooms-lib.php';
 
 
 $tank = function (int $seat, string $kind, float $x, int $hp) {

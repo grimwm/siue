@@ -1,6 +1,6 @@
 <?php
 // Operation Tankity rooms. Room server settings: what a room is (code shape, seats, AI names) and the knobs the
-// host can turn (room cap, room age, live window, scores directory) through
+// host can turn (room cap, room age, live window) through
 // .config.yaml or the environment. Loaded by rooms.php; it runs nothing on its own.
 declare(strict_types=1);
 
@@ -40,15 +40,4 @@ function room_live_secs(): int
         return max(60, (int) trim($raw));
     }
     return 600;
-}
-
-/* Room score files still live on disk (scores are files; rooms are not),
-using the scores setting with the same /var/tmp default as scores.php. */
-function room_scores_dir(): string
-{
-    $d = (string) tankity_setting('TANKITY_SCORES_DIR', 'scores_dir', '');
-    if (trim($d) !== '') {
-        return rtrim(trim($d), '/');
-    }
-    return '/var/tmp';
 }

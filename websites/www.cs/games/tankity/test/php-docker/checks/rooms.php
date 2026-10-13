@@ -1,7 +1,7 @@
 <?php
-// The shared-memory room shelf, live. Spins its own php -S on a free
-// 127.0.0.1 port with a private shared-memory key, so it never touches real
-// rooms or a port in use, and removes that memory when done.
+// The room shelf, live. Spins its own php -S on a free 127.0.0.1 port with a
+// private data directory, so it never touches real rooms or a port in use,
+// and removes that directory when done.
 declare(strict_types=1);
 if (!defined('TANKITY_GAME_DIR')) {
     define('TANKITY_GAME_DIR', dirname(__DIR__, 3));
@@ -9,53 +9,14 @@ if (!defined('TANKITY_GAME_DIR')) {
 
 
 $tmp = sys_get_temp_dir() . '/tankity-rooms-test-' . getmypid();
-@mkdir($tmp);
-$shmKey = 100000 + (getmypid() % 50000);
+@mkdir($tmp, 0700);
 file_put_contents($tmp . '/test.yaml', "max_rooms: 2\nroom_max_age: 3600\nroom_live_secs: 60\n");
-$env = array_merge(getenv(), [
-    'CONFIG_FILE' => $tmp . '/test.yaml',
-    'TANKITY_SHM_KEY' => (string) $shmKey,
-]);
-if (!function_exists('shm_attach') || !function_exists('sem_get')) {
-    $check('sysv-available', false, 'shm_attach and sem_get are required');
-    @unlink($tmp . '/test.yaml');
-    @rmdir($tmp);
-    return;
-}
-// The room functions, in this process, for aging records and cleaning up.
+$env = array_merge(getenv(), ['CONFIG_FILE' => $tmp . '/test.yaml', 'TANKITY_DATA_DIR' => $tmp . '/data']);
+// The room functions, in this process, for aging records and holding the lock.
 putenv('CONFIG_FILE=' . $tmp . '/test.yaml');
-putenv('TANKITY_SHM_KEY=' . $shmKey);
-// Both scripts share one PHPUnit process: define and load once, and re-read the
-// config this script just pointed CONFIG_FILE at.
-if (!defined('TANKITY_ROOMS_LIB')) {
-    define('TANKITY_ROOMS_LIB', true);
-}
-require_once TANKITY_GAME_DIR . '/rooms.php';
+putenv('TANKITY_DATA_DIR=' . $tmp . '/data');
+require_once dirname(__DIR__, 2) . '/php/rooms-lib.php';
 tankity_config(true);
-/* Removes every segment and semaphore a private shelf made. */
-function room_test_wipe(int $base): void
-{
-    $id = @shm_attach(room_registry_key($base), ROOM_REGISTRY_BYTES);
-    $reg = $id === false ? [] : @shm_get_var($id, ROOM_REGISTRY_VAR);
-    foreach (array_keys(is_array($reg) ? $reg : []) as $c) {
-        $k = room_key((string) $c, $base);
-        $seg = @shmop_open($k, 'w', 0, 0);
-        if ($seg !== false) {
-            @shmop_delete($seg);
-        }
-        $sem = @sem_get($k, 1);
-        if ($sem !== false) {
-            @sem_remove($sem);
-        }
-    }
-    if ($id !== false) {
-        @shm_remove($id);
-    }
-    $sem = @sem_get(room_registry_key($base), 1);
-    if ($sem !== false) {
-        @sem_remove($sem);
-    }
-}
 $storedInitials = function (string $c) {
     [$room, $lock] = room_load($c);
     room_unlock($lock);
@@ -66,14 +27,7 @@ $storedDifficulty = function (string $c) {
     room_unlock($lock);
     return is_array($room) ? ($room['difficulty'] ?? '(missing)') : '(no room)';
 };
-$ageRoom = function (string $c): void {
-    [$room, $lock] = room_load($c);
-    if (is_array($room)) {
-        $room['touched'] = time() - 3600;
-        room_seg_write($lock['shm'], $room);
-    }
-    room_unlock($lock);
-};
+$ageRoom = function (string $c): void { room_test_age($c, 3600); };
 // Ask the kernel for a free port, then hand it to php -S.
 $probe = stream_socket_server('tcp://127.0.0.1:0');
 $port = (int) substr(strrchr(stream_socket_get_name($probe, false), ':'), 1);
@@ -119,8 +73,6 @@ $waitUp = function () use ($get, &$base) {
 
 $ping = $waitUp();
 $check('server-up', $ping !== null);
-$store = (string) ($ping['rooms']['store'] ?? '?');
-$check('store-known', $store === 'memory', 'store=' . $store);
 $check('cap-from-file', ($ping['rooms']['max'] ?? 0) === 2, 'max=' . ($ping['rooms']['max'] ?? '?'));
 $check('empty-shelf', ($ping['rooms']['used'] ?? -1) === 0);
 
@@ -152,19 +104,16 @@ $check('snapshot-shows-the-difficulty', ($state['room']['difficulty'] ?? null) =
 $ping = $get($base . '/rooms.php?action=ping');
 $check('heartbeat-counts', ($ping['rooms']['used'] ?? -1) === 1);
 
-// A request holding one room's lock never stalls the shelf: ping reads
-// the registry, and another room answers at once (rooms-store.php
-// covers the full lock behaviour).
-$held = sem_get(room_key($code, $shmKey), 1);
-$check('lock-held', $held !== false && @sem_acquire($held));
+// A request holding the write lock never stalls the shelf's count: ping only
+// reads (RoomsStoreTest covers the full lock behaviour).
+$held = tankity_db();
+$held->exec('BEGIN IMMEDIATE');
 $lockT = microtime(true);
 $pingHeld = $get($base . '/rooms.php?action=ping', 20);
 $lockDt = microtime(true) - $lockT;
-if (isset($held) && $held !== false) {
-    @sem_release($held);
-}
+$held->exec('ROLLBACK');
 $check('ping-ignores-room-lock', $pingHeld !== null && ($pingHeld['rooms']['used'] ?? -1) >= 1
-    && $lockDt < 2.0, sprintf('wait=%.2fs', $lockDt));
+    && $lockDt < 1.0, sprintf('wait=%.2fs', $lockDt));
 
 // The ceiling uses the live count, and refusals stay human.
 $second = $post('create', ['initials' => 'abc', 'difficulty' => 'HARD']);
@@ -176,9 +125,9 @@ $check('cap-live', ($second['ok'] ?? false) === true && ($third['ok'] ?? false) 
     'second=' . ($second['code'] ?? '?') . ' thirdErr=' . ($third['error'] ?? '?'));
 $check('cap-human', isset($third['error']) && strpos($third['error'], 'taken') !== false, $third['error'] ?? '');
 
-// Rooms live in SysV memory, which outlives a web-server restart (only a host
-// restart wipes it): a restarted server still sees the same shelf. Then age
-// every room out so the sweep frees the cap for the match below.
+// Rooms live in the database, which outlives a web-server restart: a
+// restarted server still sees the same shelf. Then age every room out so the
+// cap is free for the match below.
 proc_terminate($proc);
 proc_close($proc);
 $proc = $spawn();
@@ -446,7 +395,7 @@ $check('match-cleaned', ($ping['rooms']['used'] ?? -1) === 0);
 
 proc_terminate($proc);
 proc_close($proc);
-// Remove the private shelf so test runs never pile up segments.
-room_test_wipe($shmKey);
-@unlink($tmp . '/test.yaml');
-@rmdir($tmp);
+// Remove the private shelf.
+tankity_test_rm($tmp);
+putenv('CONFIG_FILE');
+tankity_config(true);

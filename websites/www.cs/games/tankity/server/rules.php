@@ -615,45 +615,17 @@ function room_end_round(array &$room, array &$events): void
     $room['phase'] = 'shop';
     $room['shop'] = ['at' => microtime(true), 'ready' => []];
 }
-/* File a room score into the same per-initials store as local play. */
+/* Files a room score with the per-callsign runs, as local play does. Inside a
+   room's transaction: it commits with the room. A failure is logged, never
+   allowed to break the round. */
 function room_save_score(string $initials, int $score, array $room): void
 {
-    $slug = strtolower(preg_replace('/[^a-z0-9_-]+/i', '-', $initials) ?: 'anonymous');
-    $path = room_scores_dir() . '/' . $slug . '-' . ROOM_GAME . '.json';
-    $fh = @fopen($path, 'c+b');
-    if ($fh === false) {
-        return;
+    try {
+        legacy_add_run(legacy_slug($initials), ['score' => $score, 'banked' => 0, 'won' => false,
+            'seed' => 'room:' . $room['code'], 'ts' => gmdate('c')]);
+    } catch (Throwable $e) {
+        error_log('tankity rooms: score not filed: ' . $e->getMessage());
     }
-    if (!flock($fh, LOCK_EX)) {
-        fclose($fh);
-        return;
-    }
-    rewind($fh);
-    $raw = stream_get_contents($fh);
-    $data = is_string($raw) && trim($raw) !== '' ? json_decode($raw, true) : null;
-    if (!is_array($data) || !isset($data['runs']) || !is_array($data['runs'])) {
-        $data = ['name' => $slug, 'runs' => [], 'best' => 0];
-    }
-    $data['runs'][] = ['score' => $score, 'banked' => 0, 'won' => false, 'seed' => 'room:' . $room['code'], 'ts' => gmdate('c')];
-    $data['runs'] = array_slice($data['runs'], -50);
-    $best = 0;
-    foreach ($data['runs'] as $r) {
-        $best = max($best, (int) $r['score']);
-    }
-    $data['best'] = $best;
-    $tmp = $path . '.tmp.' . getmypid();
-    $fh2 = fopen($tmp, 'wb');
-    if ($fh2 !== false) {
-        fwrite($fh2, (string) json_encode($data, JSON_UNESCAPED_SLASHES));
-        fflush($fh2);
-        if (function_exists('fsync')) {
-            fsync($fh2);
-        }
-        fclose($fh2);
-        rename($tmp, $path);
-    }
-    flock($fh, LOCK_UN);
-    fclose($fh);
 }
 /* 1-ups, same economy as local play. */
 function room_check_oneups(array &$room, array &$events, int $seat): void

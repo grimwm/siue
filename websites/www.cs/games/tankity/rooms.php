@@ -15,13 +15,11 @@
 //     range-checked against authoritative state; turn order is enforced.
 //   - AI seats (the default for seats nobody holds) run the same sim inline, so no cron is needed.
 //
-// Storage: rooms live in SysV shared memory, never on disk. A host restart
-// wipes the shelf, which is the point: rooms are play sessions, not records.
-// (Score files stay on disk next to where rooms used to be.) Each room is its
-// own shared-memory segment with its own semaphore, both keyed by the room's
-// code and allocated when the room is created, so a request only ever waits
-// for the one room it touches. A small registry lists the live codes; it is
-// written only when a room is created or closed.
+// Storage: rooms are rows in Tankity's SQLite database (server/db.php), one
+// serialized room per row. A request holds its room inside one write
+// transaction (BEGIN IMMEDIATE) from load to unlock, so writers take turns;
+// one that waits past the busy timeout answers 503. Rooms are play sessions:
+// idle ones are deleted by whoever loads them and by housekeeping.
 declare(strict_types=1);
 
 // A JSON API must never leak diagnostics into its output: one stray warning
@@ -34,13 +32,19 @@ require_once __DIR__ . '/config.php';
 // The server is split by concern under server/. This file keeps the request
 // pipeline: parsing, the JSON reply, the gate, and one handler per action.
 //   server/settings.php  room shape and the host's knobs
-//   server/store.php     shared memory, the registry, locks, room lifecycle
+//   server/db.php        the storage directory, the database, transactions
+//   server/legacy.php    the per-callsign score runs and the import of the old score files
+//   server/housekeep.php throttled cleanup on requests
+//   server/store.php     rooms as rows: the room lock, room lifecycle, the sweep
 //   server/sim.php       the deterministic sim (mirrors src/sim.ts)
 //   server/ai.php        drone aim, bracketing and strategies
 //   server/rules.php     seats, rounds, turn clock, pacing, the shop, scores
 //   server/protocol.php  events, snapshots and deltas
 // Those files do nothing unless this one requires them.
 define('TANKITY_ROOMS_INCLUDED', true);
+require_once __DIR__ . '/server/db.php';
+require_once __DIR__ . '/server/legacy.php';
+require_once __DIR__ . '/server/housekeep.php';
 require_once __DIR__ . '/server/settings.php';
 require_once __DIR__ . '/server/store.php';
 require_once __DIR__ . '/server/sim.php';
@@ -48,19 +52,7 @@ require_once __DIR__ . '/server/ai.php';
 require_once __DIR__ . '/server/rules.php';
 require_once __DIR__ . '/server/protocol.php';
 
-// These two resolve against this file's own location, so they stay here:
-// room_shm_key() derives the shared-memory key from rooms.php's path, and
-// room_arsenal() reads game.json next to it.
-
-function room_shm_key(): int
-{
-    $raw = (string) tankity_setting('TANKITY_SHM_KEY', 'shm_key', '');
-    if (preg_match('/^\d+$/', trim($raw))) {
-        return (int) trim($raw);
-    }
-    $k = @ftok(__FILE__, 'R');
-    return $k === -1 ? 0x54414e4b : $k;
-}
+// room_arsenal() resolves against this file's own location (game.json next to it), so it stays here.
 /* A client that sends Accept-Encoding: gzip gets the JSON compressed (the
    host's Apache has no compression of its own for PHP output; a room snapshot
    shrinks about eight-fold). ob_gzhandler negotiates the encoding, sets
@@ -134,6 +126,8 @@ function room_arsenal(): array
 if (defined('TANKITY_ROOMS_LIB')) {
     return;
 }
+// No cron on the host: requests do the cleanup, at most every few minutes.
+tankity_housekeep(time(), tankity_jobs());
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = $_GET['action'] ?? ($_POST['action'] ?? '');
 $body = [];
@@ -143,10 +137,13 @@ if ($method === 'POST') {
     $body = is_array($dec) ? $dec : $_POST;
 }
 if ($action === 'ping') {
-    // Health plus occupancy for the lobby shelf. No secrets in here.
-    room_sweep();
-    $max = room_max_rooms();
-    $rooms = ['used' => room_count(), 'max' => $max, 'store' => 'memory'];
+    // Health plus occupancy for the lobby shelf. No secrets in here. A read:
+    // idle rooms are not counted, and housekeeping deletes them.
+    try {
+        $rooms = ['used' => room_count(), 'max' => room_max_rooms()];
+    } catch (Throwable $e) {
+        room_store_fail($e);
+    }
     room_json_out(200, ['ok' => true, 'game' => 'operation-tankity', 'rooms' => $rooms]);
 }
 
@@ -185,8 +182,8 @@ if ($action === 'map' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
     }
-    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 if ($action === 'leave' && $method === 'POST') {
@@ -215,8 +212,8 @@ if ($action === 'body' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
     }
-    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
@@ -228,9 +225,14 @@ if ($action === 'create' && $method === 'POST') {
     if ($initials === null) {
         room_json_out(422, ['error' => 'initials must be 3 letters, kept clean']);
     }
-    room_sweep();
-    $max = room_max_rooms();
-    if (room_count() >= $max) {
+    try {
+        room_sweep();
+        $max = room_max_rooms();
+        $full = room_count() >= $max;
+    } catch (Throwable $e) {
+        room_store_fail($e);
+    }
+    if ($full) {
         room_json_out(409, ['error' => "every room is taken ($max / $max). Try again later."]);
     }
     $map = null;
@@ -241,7 +243,7 @@ if ($action === 'create' && $method === 'POST') {
         }
     }
     $lock = room_alloc();
-    $code = $lock['code'];
+    $code = $lock->code;
     $room = room_new($code, $initials);
     $room['map'] = $map;
     // The host's setting for the whole room; nobody changes it after this.
@@ -282,9 +284,6 @@ if ($action === 'join' && $method === 'POST') {
         room_json_out(422, ['error' => 'need a 4-character room code and clean 3-letter initials']);
     }
     $loaded = room_load($code);
-    if ($loaded === null) {
-        room_json_out(500, ['error' => 'store unavailable']);
-    }
     [$room, $fh, $path] = $loaded;
     if (!is_array($room)) {
         room_unlock($fh);
@@ -338,9 +337,6 @@ function room_gate(array $body, bool $needCsrf, bool $throttle = true): array
         room_json_out(422, ['error' => 'bad room code']);
     }
     $loaded = room_load($code);
-    if ($loaded === null) {
-        room_json_out(500, ['error' => 'store unavailable']);
-    }
     [$room, $fh, $path] = $loaded;
     if (!is_array($room)) {
         room_unlock($fh);
@@ -399,8 +395,8 @@ if ($action === 'seatmode' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
     }
-    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
@@ -439,8 +435,8 @@ if ($action === 'start' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
     }
-    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
@@ -449,10 +445,24 @@ if ($action === 'state') {
     if (!preg_match('/^[A-Z0-9]{4}$/', $code)) {
         room_json_out(422, ['error' => 'bad room code']);
     }
-    $loaded = room_load($code);
-    if ($loaded === null) {
-        room_json_out(500, ['error' => 'store unavailable']);
+    // A lobby or a finished match changes only by an act: a poll reads it
+    // without the write lock. A seated poll still refreshes the room's touch
+    // every ROOM_HEARTBEAT_SECS, so a waiting lobby stays live.
+    try {
+        $peek = room_peek($code);
+    } catch (Throwable $e) {
+        room_store_fail($e);
     }
+    if ($peek === null) {
+        room_json_out(404, ['error' => 'no such room']);
+    }
+    $peekToken = (string) ($body['token'] ?? $_GET['token'] ?? '');
+    $peekSeat = $peekToken !== '' ? room_find_seat($peek, $peekToken) : null;
+    if (in_array($peek['phase'], ['lobby', 'over'], true)
+        && ($peekSeat === null || time() - (int) ($peek['touched'] ?? 0) < ROOM_HEARTBEAT_SECS)) {
+        room_json_out(200, ['ok' => true, 'room' => room_reply_snapshot($peek, $peekSeat, $body)]);
+    }
+    $loaded = room_load($code);
     [$room, $fh, $path] = $loaded;
     if (!is_array($room)) {
         room_unlock($fh);
@@ -478,8 +488,8 @@ if ($action === 'state') {
         // without holding its slot forever after everyone leaves.
         room_save($fh, $path, $room);
     }
-    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
@@ -620,8 +630,8 @@ if ($action === 'act' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
     }
-    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
@@ -707,8 +717,8 @@ if ($action === 'buy' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
     }
-    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
@@ -730,8 +740,8 @@ if ($action === 'ready' && $method === 'POST') {
             room_json_out(500, ['error' => 'store write failed']);
         }
     }
-    $out = room_reply_snapshot($room, $seat, $body);
     room_unlock($fh);
+    $out = room_reply_snapshot($room, $seat, $body);
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 

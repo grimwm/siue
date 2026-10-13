@@ -5,19 +5,14 @@
 // Snapshots are built in process with rooms.php's own functions
 // (scenarios.php). The create/join replies and the act errors come from a
 // real rooms.php served by php -S on a free 127.0.0.1 port with a private
-// shared-memory key, so this needs SysV: run it where the room tests run
-// (the docker PHP; see README.md).
+// data directory (run it in the docker PHP: make protocol).
 declare(strict_types=1);
 require __DIR__ . '/scenarios.php';
 
 $check = in_array('--check', $argv, true);
-if (!function_exists('shm_attach') || !function_exists('sem_get')) {
-    fwrite(STDERR, "protocol: needs sysvshm and sysvsem; run it in the docker PHP (make protocol)\n");
-    exit(1);
-}
 
 /* ---- the live server ---- */
-$shmKey = 200000 + (getmypid() % 50000);
+$data = sys_get_temp_dir() . '/tankity-protocol-' . getmypid() . '-' . bin2hex(random_bytes(3));
 $probe = stream_socket_server('tcp://127.0.0.1:0');
 $port = (int) substr(strrchr(stream_socket_get_name($probe, false), ':'), 1);
 fclose($probe);
@@ -27,37 +22,19 @@ $proc = proc_open(
     [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
     $pipes,
     null,
-    array_merge(getenv(), ['TANKITY_SHM_KEY' => (string) $shmKey, 'TANKITY_MAX_ROOMS' => '2'])
+    array_merge(getenv(), ['TANKITY_DATA_DIR' => $data, 'TANKITY_MAX_ROOMS' => '2'])
 );
-/* Removes every segment and semaphore the private shelf made. */
-function room_test_wipe(int $base): void
-{
-    $id = @shm_attach(room_registry_key($base), ROOM_REGISTRY_BYTES);
-    $reg = $id === false ? [] : @shm_get_var($id, ROOM_REGISTRY_VAR);
-    foreach (array_keys(is_array($reg) ? $reg : []) as $c) {
-        $k = room_key((string) $c, $base);
-        $seg = @shmop_open($k, 'w', 0, 0);
-        if ($seg !== false) {
-            @shmop_delete($seg);
-        }
-        $sem = @sem_get($k, 1);
-        if ($sem !== false) {
-            @sem_remove($sem);
-        }
-    }
-    if ($id !== false) {
-        @shm_remove($id);
-    }
-    $sem = @sem_get(room_registry_key($base), 1);
-    if ($sem !== false) {
-        @sem_remove($sem);
-    }
-}
-$cleanup = function () use ($proc, $shmKey): void {
+$cleanup = function () use ($proc, $data): void {
     if (is_resource($proc)) {
         proc_terminate($proc);
     }
-    room_test_wipe($shmKey);
+    // The server's private store: the database and its journal.
+    foreach (glob($data . '/{,.}*', GLOB_BRACE) ?: [] as $f) {
+        if (is_file($f)) {
+            @unlink($f);
+        }
+    }
+    @rmdir($data);
 };
 register_shutdown_function($cleanup);
 

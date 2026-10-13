@@ -30,7 +30,7 @@ export interface MapsReply { ok: true; maps: MapInfo[] }
 export interface MapInfo { id: string; name: string; profile: number[] }
 
 /** action=ping: health plus occupancy for the lobby shelf. */
-export interface PingReply { ok: true; game: string; rooms: { used: number; max: number; store: string } }
+export interface PingReply { ok: true; game: string; rooms: { used: number; max: number } }
 
 /* ---------- the room snapshot ---------- */
 

@@ -8,23 +8,22 @@
  * says it. A room match is run by the server, so nothing here runs in one
  * except the pieces a room shares (the banner, the cosmetics, the end veil).
  * The game's state, the page and the rest of the game arrive as deps. */
-import { aiChoose as simAiChoose, pickTactic } from './ai.ts';
 import { maxArmor } from './armor.ts';
 import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
 import type { DifficultySetting } from './difficulty.ts';
 import { FOE_DYING, FOE_FIRE, FOE_HIT, FOE_MISS, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, pick } from './chatter.ts';
 import type { FxSys } from './fx/types.ts';
-import { transition, WATCH_TURNS } from './flow.ts';
+import { transition } from './flow.ts';
 import type { FlowEvent } from './flow.ts';
 import type { GameState, GameTank, Tables } from './game-types.ts';
 import type { FieldWidth } from './field.ts';
 import type { RoomClient } from './net.ts';
 import {
-  hashSeed, mulberry32, gauss, H, GRAV, TUNE, clamp, droneRack as simDroneRack, genTerrain as simGenTerrain,
-  spawnSpots, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
+  gauss, H, GRAV, TUNE, clamp, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling,
 } from './sim.ts';
 import type { Blast, Difficulty, Shell } from './sim.ts';
+import { snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloSettle } from './solo.ts';
 import { endCardEscape, soloBoard } from './standings.ts';
 import type { Board } from './standings.ts';
 import { renderEndVeil as drawEndVeil, focusEndVeil } from './ui/endveil.tsx';
@@ -101,46 +100,15 @@ export function createMatch(deps: MatchDeps) {
     netNext, netAgain, initials, fileSolo,
   } = deps;
 
-  /* Rolling hills from seeded sines, and the clouds over them. */
-  function genTerrain(): void {
-    const g = simGenTerrain(G.rng, G.w);
-    G.terrain = g.terrain;
-    G.clouds = g.clouds;
-    G.hills = g.hills;
-  }
-  const FOE_DEFS = [
-    { id: 'reaper', color: '#ff0000' },
-    { id: 'wraith', color: '#00ffff' },
-    { id: 'spotter', color: '#ff00ff' },
-  ];
   function resetMatch(seedStr?: string): void {
     const seed = (seedStr || '').trim() || ('scorched-' + Math.floor(Math.random() * 9000 + 1000));
-    G.seed = seed;
-    G.rng = mulberry32(hashSeed(seed));
-    G.w = field.deal(); // fixed until the next deal
-    G.difficulty = difficulty.get(); // a change in the Menu waits for the next match
-    G.lives = TUNE.lives;
-    G.score = 0;
-    G.cash = 600;
-    G.rounds = [];
-    G.roundStart = { score: 0, cash: 600 };
-    G.nextOneUp = TUNE.oneUpEvery;
-    G.roundsWon = 0;
-    G.round = 0;
-    G.tactics = {}; // each drone's strategy, kept from round to round
-    G.firstTurn = 0;
-    G.ammo = { shell: Infinity, buck: 1 };
-    for (const k of tables.order) if (!(k in G.ammo)) G.ammo[k] = 0;
-    G.selected = 'shell';
+    // The Menu's Difficulty, read once per match: a change waits for the next one.
+    // The width comes from the screen at the deal and holds until the next one (spec 6.6).
+    soloDeal(G, tables.arsenal!, seed, difficulty.get(), field.deal());
     G.shopSel = 0;
     G.shopQty = 1;
-    G.fuelBank = 0;
-    G.armor = TUNE.playerArmor;
-    G.plate = 0;
-    G.shield = false;
-    G.jammer = 0;
-    G.bunker = 0;
-    G.laststand = false;
+    G.rounds = [];
+    G.roundStart = { score: 0, cash: G.cash };
     G.over = false;
     const endVeil = $('end-veil');
     if (endVeil) endVeil.hidden = true; // a new match never sits on the last one's result
@@ -156,9 +124,6 @@ export function createMatch(deps: MatchDeps) {
     G.bannerDone = null;
     G.cam = { z: 1, cx: G.w / 2, cy: H / 2 };
     if ($('round-banner')) $('round-banner')!.hidden = true;
-    genTerrain();
-    G.tanks = [];
-    G.shells = [];
     G.parts = [];
     G.booms = [];
     if (G.fx) G.fx.clear();
@@ -200,40 +165,8 @@ export function createMatch(deps: MatchDeps) {
     newMatch(seedStr);
   }
   function newRound(bannerText?: string, event?: FlowEvent): void {
-    genTerrain();
-    G.watchTurns = 0; // drone-only turns since the player fell (see WATCH_TURNS)
-    G.wind = Math.round((G.rng() * 2 - 1) * 8);
-    // Spread four combatants across the hills; every round, anyone may land
-    // anywhere, never on top of each other.
-    const order = spawnSpots(1 + FOE_DEFS.length, G.rng, G.w); // spread over the whole field
-    // Fuel bought in the shop waits in a bank until the tank musters; armor
-    // carries over from the last round (src/armor.ts).
-    const musterFuel = TUNE.fuel + (G.fuelBank || 0);
-    G.fuelBank = 0;
-    G.tanks = [{
-      id: 'tank', isPlayer: true, color: '#ffff00', body: G.body,
-      x: order[0]!, y: 0, angle: 62, power: 55,
-      hp: G.armor, maxHp: maxArmor(G.plate), fuel: musterFuel,
-    }];
-    FOE_DEFS.forEach((f, i) => {
-      // Endless escalation: thicker armor and a deeper magazine every round.
-      const armor = TUNE.droneArmor + 6 * (G.round - 1);
-      G.tanks.push({
-        id: f.id, isPlayer: false, color: f.color,
-        x: order[i + 1]!, y: 0, angle: 62, power: 55,
-        hp: armor, maxHp: armor, fuel: 0,
-        ammo: droneRack(),
-        s: (G.tactics = G.tactics || {})[f.id] || (G.tactics[f.id] = pickTactic(G.rng)),
-      });
-    });
-    for (const t of G.tanks) {
-      t.y = surfY(t.x);
-      t.dirS = t.x < G.w / 2 ? 1 : -1; // face the middle of the field
-    }
-    G.turn = G.firstTurn % G.tanks.length;
-    G.firstTurn++;
+    soloMuster(G, tables.arsenal!);
     G.roundStart = { score: G.score, cash: G.cash };
-    G.shells = [];
     G.parts = [];
     G.booms = [];
     if (G.fx) G.fx.clear();
@@ -357,16 +290,9 @@ export function createMatch(deps: MatchDeps) {
     }
   }
   /* ---------- turn advance, rounds, shop ---------- */
-  function nextTurn(): void {
+  /* Says whose turn it is, after soloSettle or soloNextTurn picked it. */
+  function announceTurn(): void {
     if (G.over) return;
-    const n = G.tanks.length;
-    for (let k = 1; k <= n; k++) {
-      const t = G.tanks[(G.turn + k) % n]!;
-      if (t.hp > 0) {
-        G.turn = (G.turn + k) % n;
-        break;
-      }
-    }
     const t = cur();
     if (t.isPlayer && !G.demo) {
       advance('playerUp');
@@ -405,8 +331,8 @@ export function createMatch(deps: MatchDeps) {
   function settle(): void {
     if (G.demo) {
       if (me().hp <= 0) {
+        G.armor = maxArmor(G.plate); // a fresh tank next round, plates kept
         say('Demo tank wrecked. Rolling a fresh one.', 'info');
-        G.armor = maxArmor(G.plate);
         newRound('Back in! Same hills, fresh tank.', 'tankLost');
         return;
       }
@@ -416,49 +342,33 @@ export function createMatch(deps: MatchDeps) {
         newRound(undefined, 'roundWon');
         return;
       }
-    } else if (alive().length > 1 && !(me().hp <= 0 && ++G.watchTurns >= WATCH_TURNS)) {
-      // A round ends only with one unit left standing: with the player's tank
-      // wrecked, the drones fight on while the player watches (for at most
-      // WATCH_TURNS turns, so a stalemate cannot run forever).
-    } else if (me().hp <= 0) {
-      // The last unit is a drone (or the last two fell together): the round
-      // goes to the battery, the player loses a life, and the shop opens.
-      G.lives -= 1;
-      G.armor = maxArmor(G.plate); // a fresh tank next round, plates kept
-      if (G.lives <= 0) {
-        G.lives = 0;
-        recordRound(false);
-        endMatch(false, 'The tank is scrap across these hills. The battery keeps the high ground.');
-      } else {
-        recordRound(false);
-        say(`Round ${G.round} goes to the battery. ${G.lives} ${G.lives === 1 ? 'life' : 'lives'} left. Restock and roll again.`, 'bad');
-        talk('tank', 'I will be back... after shopping!', true);
-        advance('tankLost');
-        startBanner(`Round ${G.round} lost. Restock and roll again.`, openShop);
-      }
+      snapTanks(G);
+      G.wind = clamp(Math.round(G.wind + gauss(G.rng) * 2), -12, 12);
+      soloNextTurn(G);
+      announceTurn();
       return;
-    } else {
-      G.roundsWon += 1;
-      const bonus = TUNE.roundWinScore + G.round * 150;
-      const prize = TUNE.roundWinCash + G.round * 100;
-      G.score += bonus;
-      G.cash += prize;
+    }
+    const end = soloSettle(G);
+    if (end.kind === 'next') { announceTurn(); return; }
+    if (end.kind === 'roundWon') {
       recordRound(true);
-      G.armor = me().hp;
       sfx.play('win');
-      say(`Round ${G.round} won! +${bonus} pts, +$${prize}. The battery rebuilds meaner, so spend it wisely.`, 'good');
+      say(`Round ${G.round} won! +${end.bonus} pts, +$${end.prize}. The battery rebuilds meaner, so spend it wisely.`, 'good');
       exchange('tank', 'tankity tank! Hill claimed!', pick(['reaper', 'wraith', 'spotter']),
         pick(['Lucky shot, treads...', 'The hill was... too hilly...', 'Recharge... revenge...']));
-      // Trick timers tick down on claimed rounds, not on wrecked restarts.
-      if (G.jammer > 0) G.jammer--;
-      if (G.bunker > 0) G.bunker--;
       advance('roundWon');
       startBanner(`Round ${G.round} claimed! Spend the winnings.`, openShop);
       return;
     }
-    // Wind shifts a little after every shot.
-    G.wind = clamp(Math.round(G.wind + gauss(G.rng) * 2), -12, 12);
-    nextTurn();
+    recordRound(false);
+    if (end.kind === 'matchLost') {
+      endMatch(false, 'The tank is scrap across these hills. The battery keeps the high ground.');
+      return;
+    }
+    say(`Round ${G.round} goes to the battery. ${G.lives} ${G.lives === 1 ? 'life' : 'lives'} left. Restock and roll again.`, 'bad');
+    talk('tank', 'I will be back... after shopping!', true);
+    advance('tankLost');
+    startBanner(`Round ${G.round} lost. Restock and roll again.`, openShop);
   }
   /* The end veil is a Preact component (src/ui/endveil.tsx); the game keeps what
      it says and which buttons it offers. */
@@ -507,7 +417,7 @@ export function createMatch(deps: MatchDeps) {
       refreshNavHints();
       focusEndVeil(veil);
       // A finished run files itself: no form, no button.
-      fileSolo({ initials: initials(), score: G.score, banked: G.roundsWon, seed: G.seed, difficulty: G.difficulty ?? 'normal' }, line => {
+      fileSolo({ initials: initials(), score: G.score, banked: G.roundsWon, seed: G.seed, difficulty: G.difficulty }, line => {
         END.filed = line;
         renderEndVeil();
       });
@@ -548,22 +458,12 @@ export function createMatch(deps: MatchDeps) {
     newRound(undefined, 'shopDone');
   }
   /* ---------- drone AI: real ballistic solutions, plus round-scaled error ---------- */
-  /* Drone magazine from the data file: shells the battery may load by round. */
-  function droneRack() {
-    return simDroneRack(tables.arsenal!, G.round);
-  }
-  function aiChoose(t: GameTank) {
-    return simAiChoose(G, tables.arsenal!, t);
-  }
   /* The shooter swings its barrel and power to the plan in plain sight before
      firing, so everyone can watch the shot line up. Longer swings take a bit
      longer, eased at both ends. */
   function aiPlanAim(t: GameTank): void {
-    const plan = aiChoose(t);
-    if (plan.tactic) {
-      G.tactics[t.id] = plan.tactic;
-      say(`${t.id.toUpperCase()} switches to ${plan.tactic} tactics.`, 'info');
-    }
+    const plan = soloAim(G, tables.arsenal!, t);
+    if (plan.tactic) say(`${t.id.toUpperCase()} switches to ${plan.tactic} tactics.`, 'info');
     const swing = Math.max(Math.abs(plan.angle - t.angle), Math.abs(plan.power - t.power));
     t.aim = {
       plan, a0: t.angle, p0: t.power, k: 0,

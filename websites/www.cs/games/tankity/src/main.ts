@@ -57,6 +57,7 @@ import { createTutorial } from './tutorial.ts';
 import { createGuns } from './guns.ts';
 import { createScores } from './scores.ts';
 import { createMatch } from './match.ts';
+import { soloOneUps } from './solo.ts';
 import { createRoom } from './room.ts';
 import { createLobby } from './lobby.ts';
 import { createMenu } from './menu.ts';
@@ -160,7 +161,7 @@ async function loadGameConfig(): Promise<void> {
    skips painting, the frame loop waits on G.terrain). */
 const NOT_DEALT = null!;
 const G: GameState = {
-  seed: '', rng: NOT_DEALT, body: 'tank',
+  seed: '', difficulty: 'normal', rng: NOT_DEALT, body: 'tank',
   terrain: NOT_DEALT, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // banner | shop | aim | think | fly | settle | over (src/flow.ts)
   thinkT: 0, settleT: 0,
@@ -321,16 +322,13 @@ function frame(ts: number): void {
       }
     }
   }
-  while (!net.on && G.score >= G.nextOneUp) {
-    G.nextOneUp += TUNE.oneUpEvery;
-    if (G.lives < TUNE.maxLives) {
-      G.lives += 1;
-      sfx.play('win');
-      say(`1-UP! Extra life! (${G.lives}/${TUNE.maxLives} lives)`, 'good');
-      talk('tank', 'Another life! I am basically immortal!', true);
-    } else {
-      G.score += 500;
-      say('Max lives already, so take +500 points instead!', 'good');
+  if (!net.on) {
+    for (const up of soloOneUps(G)) {
+      if (up === 'life') {
+        sfx.play('win');
+        say(`1-UP! Extra life! (${G.lives}/${TUNE.maxLives} lives)`, 'good');
+        talk('tank', 'Another life! I am basically immortal!', true);
+      } else say('Max lives already, so take +500 points instead!', 'good');
     }
   }
   if (G.phase === 'aim' && cur().isPlayer && !G.demo) {

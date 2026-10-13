@@ -3,7 +3,7 @@
 // an installed app that can close, one that cannot, and a browser tab.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isInstalled, enterFullscreen, exitApp, EXIT_HINT, CLOSE_WAIT_MS } from '../app.ts';
+import { isInstalled, enterFullscreen, exitApp, EXIT_HINT, CLOSE_WAIT_MS, topKeyLock, holdEscape } from '../app.ts';
 import { manualClock } from './clock.ts';
 
 function fakeEnv({ modes = [], ios = false, full = false, closes = false, refuse = false } = {}) {
@@ -76,4 +76,53 @@ test('entering full screen asks once, and says whether it worked', async () => {
   assert.deepEqual(on.log, []);
   const refused = fakeEnv({ refuse: true });
   assert.equal(await enterFullscreen(refused.env, {}), false);
+});
+
+// Keyboard Lock (Chromium) keeps a tap of Esc for the game in full screen.
+// Chromium refuses lock() from inside a frame, and the site's /play/ pages run
+// every game in one: the lock must come from the top-level page.
+function fakeLock({ refuse = false } = {}) {
+  const log = [];
+  return {
+    log,
+    lock: async keys => { log.push(['lock', ...keys]); if (refuse) throw new Error('lock() must be called from a primary top-level browsing context.'); },
+    unlock: () => { log.push(['unlock']); },
+  };
+}
+
+test('the lock is the top-level page\'s, also for a game inside a same-origin frame', () => {
+  const top = fakeLock();
+  const own = fakeLock();
+  const topWin = { navigator: { keyboard: top } };
+  topWin.top = topWin;
+  assert.equal(topKeyLock({ top: topWin, navigator: { keyboard: own } }), top, 'in a frame: the top page\'s lock');
+  assert.equal(topKeyLock(topWin), top, 'top-level: its own');
+});
+
+test('a frame whose top page is out of reach, or a browser without Keyboard Lock, has no lock', () => {
+  const crossOrigin = { get navigator() { throw new Error('SecurityError'); } };
+  assert.equal(topKeyLock({ top: crossOrigin, navigator: { keyboard: fakeLock() } }), null);
+  const noKb = { navigator: {} };
+  noKb.top = noKb;
+  assert.equal(topKeyLock(noKb), null);
+  const noLockFn = { navigator: { keyboard: { unlock() {} } } };
+  noLockFn.top = noLockFn;
+  assert.equal(topKeyLock(noLockFn), null);
+});
+
+test('in full screen Esc is claimed, out of it released, and without Keyboard Lock nothing happens', async () => {
+  const kb = fakeLock();
+  const warn = [];
+  assert.equal(await holdEscape(true, kb, m => warn.push(m)), 'locked');
+  assert.equal(await holdEscape(false, kb, m => warn.push(m)), 'released');
+  assert.deepEqual(kb.log, [['lock', 'Escape'], ['unlock']]);
+  assert.equal(await holdEscape(true, null, m => warn.push(m)), 'unsupported');
+  assert.deepEqual(warn, []);
+});
+
+test('a refused lock is reported, never swallowed', async () => {
+  const warn = [];
+  assert.equal(await holdEscape(true, fakeLock({ refuse: true }), m => warn.push(m)), 'refused');
+  assert.equal(warn.length, 1);
+  assert.match(warn[0], /Esc will leave full screen.*top-level browsing context/);
 });

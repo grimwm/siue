@@ -71,6 +71,9 @@ const RULES = [
   // The site's own TypeScript (src/ compiles to main.js and play/play.js) and the
   // settings that decide how: the lockfile only pins the compiler.
   [new RegExp(`^${SITE}package-lock\\.json$`), 'NONE'],
+  // The /play/ pages frame the games, and how decides whether Esc can be held
+  // in full screen (Chrome refuses Keyboard Lock to a frame).
+  [new RegExp(`^${SITE}(src/play/|play/)`), [...shell, 'tankity-fullscreen-esc.spec.mjs']],
   [new RegExp(`^${SITE}(src/|package\\.json$|tsconfig\\.json$)`), shell],
   // The site shell around the games.
   [new RegExp(`^${SITE}(index\\.html|main\\.js|site\\.css|games\\.php|games/hub\\.php|games/README|site\\.webmanifest|[^/]+\\.(png|ico)|play/|tools/)`), shell],

@@ -89,6 +89,11 @@ globalThis.AudioContext = class {
 };
 
 // ---- boot the exact shipped module ----
+// The whole run plays in full screen: Esc on previews, the shop, the gun
+// picker and the menu must never leave it (checked at the end, 'esc-keeps-fullscreen').
+const fsExits = [];
+document.fullscreenElement = document.getElementById('frame');
+document.exitFullscreen = async () => { fsExits.push(new Error('exitFullscreen').stack); };
 eval(read('dist/fx.js'));
 await import(pathToFileURL(path.join(GAME_DIR, 'dist/main.js')).href);
 
@@ -898,6 +903,11 @@ await (async () => {
     `${pvTitle} | turn=${els['hud-turn'].textContent} | ${els['hud-weapon'].textContent}`);
   check('preview-runs', pvDraws > 100, `frames=${pvDraws}`);
   check('preview-close', els['preview-veil'].hidden === true);
+  // Esc shuts the firing range too, and stays in full screen.
+  TAP('global', 'battlePreview'); frames(5);
+  check('preview-reopen', els['preview-veil'].hidden === false);
+  TAP('global', 'escape'); frames(3);
+  check('preview-esc', els['preview-veil'].hidden === true && fsExits.length === 0, `exits=${fsExits.length}`);
   // The Shell demo (26 radius) must paint its disc at exactly warhead size.
   const pvBoomMax = pvBoomR.length ? Math.max(...pvBoomR) : -1;
   const pvBoomOk = pvBoomR.length >= 3 && Math.abs(pvBoomMax - 26) < 1.5;
@@ -1363,5 +1373,7 @@ await (async () => {
     check('own-shell-passes-out-of-gunner', hits(s, mx, my, 330, 360) === null && s.clear === true);
     check('own-shell-hits-gunner-coming-back', (hits(s, 330, 360, 300, 370) || {}).t === drone);
   }
+  check('esc-keeps-fullscreen', fsExits.length === 0 && document.fullscreenElement === els['frame'],
+    `exitFullscreen called ${fsExits.length}x: ${fsExits[0] || ''}`);
   for (const h of liveTimers) { clearTimeout(h); clearInterval(h); }
 })();

@@ -64,6 +64,7 @@ has('site-sources-run-the-shell', select([`${S}src/main.ts`, `${S}src/play/play.
 has('site-tsconfig-runs-the-shell', select([`${S}tsconfig.json`, `${S}package.json`]), ['games-hub.spec.mjs', 'home-eye.spec.mjs']);
 check('site-lockfile-alone-runs-no-browser', select([`${S}package-lock.json`]), 'NONE');
 has('play-script-runs-the-shell', select([`${S}play/play.js`]), ['games-hub.spec.mjs']);
+has('play-pages-run-the-fullscreen-esc-spec', select([`${S}play/tankity/index.html`, `${S}src/play/play.ts`]), ['tankity-fullscreen-esc.spec.mjs']);
 check('kit-change-runs-everything', select([`${S}games/_kit/prefs.ts`]), 'ALL');
 check('kit-lockfile-runs-everything', select([`${S}games/package-lock.json`]), 'ALL');
 check('kit-tests-run-no-browser-specs', select([`${S}games/_kit/test/prefs.test.mjs`, `${S}games/_kit/README.md`, `${S}games/_kit/php/tests/InstallCoreTest.php`]), 'NONE');

@@ -69,6 +69,60 @@ export async function exitApp(env: AppEnv): Promise<ExitOutcome> {
   return installed ? 'title-with-hint' : 'title';
 }
 
+/** Keyboard Lock (Chromium only; Safari and Firefox have none). */
+export interface KeyLock {
+  lock(keys: string[]): Promise<void>;
+  unlock(): void;
+}
+
+/** The parts of a window topKeyLock reads; a Window is one. */
+export interface LockWindow {
+  readonly top: LockWindow | null;
+  /** Its keyboard (Keyboard Lock), where the browser has one; DOM typings leave it out. */
+  readonly navigator: object;
+}
+
+/**
+ * The top-level page's Keyboard Lock. Chromium refuses lock() from inside a
+ * frame ("must be called from a primary top-level browsing context"), and the
+ * site's /play/ pages run every game in one, so a game in a same-origin frame
+ * locks through its top page. Null where there is no lock to take: no Keyboard
+ * Lock, or a top page on another origin.
+ */
+export function topKeyLock(win: LockWindow): KeyLock | null {
+  try {
+    const kb = ((win.top ?? win).navigator as { keyboard?: Partial<KeyLock> }).keyboard;
+    return kb && typeof kb.lock === 'function' && typeof kb.unlock === 'function' ? (kb as KeyLock) : null;
+  } catch {
+    return null;
+  }
+}
+
+export type EscapeHold = 'locked' | 'released' | 'unsupported' | 'refused';
+
+/**
+ * In full screen the browser takes Esc to leave it, so the game never sees a
+ * tap. Where Keyboard Lock exists, claim Esc while full screen: a tap reaches
+ * the game and only holding Esc leaves. Called on every fullscreenchange. A
+ * refused lock is reported through warn: without the lock, a tap of Esc leaves
+ * full screen. Guarded by _kit/test/app.test.mjs and
+ * tests/e2e/tankity-fullscreen-esc.spec.mjs.
+ */
+export async function holdEscape(full: boolean, kb: KeyLock | null, warn: (msg: string) => void): Promise<EscapeHold> {
+  if (!kb) return 'unsupported';
+  if (!full) {
+    kb.unlock();
+    return 'released';
+  }
+  try {
+    await kb.lock(['Escape']);
+    return 'locked';
+  } catch (err) {
+    warn(`Keyboard Lock refused, so Esc will leave full screen: ${err instanceof Error ? err.message : String(err)}`);
+    return 'refused';
+  }
+}
+
 export function browserAppEnv(): AppEnv {
   return {
     matches: q => typeof window.matchMedia === 'function' && window.matchMedia(q).matches,

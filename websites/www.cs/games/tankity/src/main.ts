@@ -64,7 +64,7 @@ import { createTitle } from './title.ts';
 import { difficultySetting } from './difficulty.ts';
 import { initialsPref } from './initials.ts';
 import { browserStorage } from '../../_kit/ports.browser.ts';
-import { exitApp, enterFullscreen, browserAppEnv, EXIT_HINT } from '../../_kit/app.ts';
+import { exitApp, enterFullscreen, browserAppEnv, EXIT_HINT, holdEscape, topKeyLock } from '../../_kit/app.ts';
 import { pref, text } from '../../_kit/prefs.ts';
 import { ROTATE_HINT_KEY, rotateHintShows } from './rotate-hint.ts';
 import { renderRotateHint } from './ui/rotate-hint.tsx';
@@ -889,12 +889,13 @@ function toggleFullscreen(): void {
 }
 /* In fullscreen the browser takes ESC to leave fullscreen, so the game never
    sees it. Where Keyboard Lock exists (Chromium), claim ESC for the game:
-   a tap closes menus as usual and holding ESC still leaves fullscreen. */
+   a tap closes menus and previews as usual and holding ESC still leaves
+   fullscreen. The lock is the top-level page's, because the /play/ pages run
+   the game in a frame and Chromium refuses a frame's lock. Safari and Firefox
+   have no Keyboard Lock: there ESC always leaves fullscreen, by the browser.
+   Guarded by test/fullscreen.test.mjs and tests/e2e/tankity-fullscreen-esc.spec.mjs. */
 function lockEscapeInFullscreen(): void {
-  const kb = (navigator as Navigator & { keyboard?: { lock?(keys: string[]): Promise<void>; unlock(): void } }).keyboard;
-  if (!kb || !kb.lock) return;
-  if (document.fullscreenElement) kb.lock(['Escape']).catch(() => {});
-  else kb.unlock();
+  void holdEscape(!!document.fullscreenElement, topKeyLock(window), msg => console.warn(msg));
 }
 function syncFullscreenLabel(): void {
   renderMenu();

@@ -176,6 +176,24 @@ test('Escape during text composition is left to the input method', () => {
   assert.equal(dismissed, 0);
 });
 
+test('Escape dismisses a dialog without leaving full screen', () => {
+  const root = mount();
+  let exits = 0;
+  document.fullscreenElement = root;
+  document.exitFullscreen = async () => { exits++; };
+  try {
+    let dismissed = 0;
+    render(dialog({ open: true, onDismiss: () => { dismissed++; } }), root);
+    fireDocument('keydown', { key: 'Escape' });
+    assert.equal(dismissed, 1);
+    assert.equal(exits, 0);
+    assert.equal(document.fullscreenElement, root);
+  } finally {
+    delete document.fullscreenElement;
+    delete document.exitFullscreen;
+  }
+});
+
 test('a closed dialog ignores Escape', () => {
   const root = mount();
   let dismissed = 0;

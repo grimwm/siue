@@ -118,6 +118,15 @@ for an installed app, `'title-with-hint'`: the game then shows its title card
 and, with the hint, `EXIT_HINT`. Pages pass `browserAppEnv()`; tests pass a
 fake environment and a manual clock.
 
+Esc in full screen: the browser takes it to leave, so a game holds it with
+`holdEscape(!!document.fullscreenElement, topKeyLock(window), warn)` on every
+`fullscreenchange`. A tap then reaches the game and only holding Esc leaves.
+`topKeyLock` is the top-level page's Keyboard Lock, because Chrome refuses
+`lock()` inside a frame and the `/play/` pages run each game in one; a refusal
+goes to `warn`. Keyboard Lock is Chromium's only: in Safari and Firefox Esc
+always leaves full screen. Only the Fullscreen toggle and Quit may call
+`exitFullscreen` (`tankity/test/fullscreen.test.mjs`).
+
 ## Install and Share (`install.ts`, `ui/install-bar.tsx`)
 
 `createInstall(env, setup, onChange)` decides what the Install and Share

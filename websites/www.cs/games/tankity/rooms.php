@@ -33,6 +33,9 @@ require_once __DIR__ . '/config.php';
 // pipeline: parsing, the JSON reply, the gate, and one handler per action.
 //   server/settings.php  room shape and the host's knobs
 //   server/db.php        the storage directory, the database, transactions
+//   server/guard.php     the score guard's settings and the blocked initials
+//   server/score-guard.php  the kit's score guard (a generated copy; never edit it)
+//   server/board.php     the boards, one per difficulty
 //   server/legacy.php    the per-callsign score runs and the import of the old score files
 //   server/housekeep.php throttled cleanup on requests
 //   server/store.php     rooms as rows: the room lock, room lifecycle, the sweep
@@ -45,6 +48,8 @@ define('TANKITY_ROOMS_INCLUDED', true);
 require_once __DIR__ . '/server/db.php';
 require_once __DIR__ . '/server/legacy.php';
 require_once __DIR__ . '/server/housekeep.php';
+require_once __DIR__ . '/server/guard.php';
+require_once __DIR__ . '/server/board.php';
 require_once __DIR__ . '/server/settings.php';
 require_once __DIR__ . '/server/store.php';
 require_once __DIR__ . '/server/sim.php';

@@ -177,7 +177,7 @@ click(els['btn-music']); click(els['btn-music']); // end unmuted with a fresh sc
 const html = fs.readFileSync(path.join(GAME_DIR, 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(GAME_DIR, 'game.css'), 'utf8');
 // The room server is rooms.php plus the files it requires from server/.
-const phpFiles = ['rooms.php', ...['settings', 'store', 'sim', 'ai', 'rules', 'protocol'].map(f => `server/${f}.php`)];
+const phpFiles = ['rooms.php', ...['settings', 'store', 'sim', 'ai', 'rules', 'protocol', 'guard', 'board'].map(f => `server/${f}.php`)];
 const phpText = Object.fromEntries(phpFiles.map(f => [f, fs.readFileSync(path.join(GAME_DIR, f), 'utf8')]));
 const php = Object.values(phpText).join('\n');
 // The lobby and the menu are Preact components (src/ui): their ids exist once

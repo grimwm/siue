@@ -11,23 +11,6 @@ if (!defined('TANKITY_ROOMS_INCLUDED')) {
     exit;
 }
 
-// Mirrors cylon: exact-3 uppercase initials, blocked set enforced both sides.
-// (Keep in sync with BLOCKED_INITIALS in src/initials.ts.)
-const BLOCKED_INITIALS = [
-    'ASS',
-    'FUK', 'FUC', 'FCK', 'FUX', 'FUQ',
-    'SHT', 'SHI',
-    'DIK', 'DIC', 'DCK',
-    'COK', 'COC', 'COQ',
-    'CUM', 'JIZ',
-    'CNT', 'PUS', 'VAG', 'CLT',
-    'SEX', 'XXX', 'TIT',
-    'FAG', 'FGT',
-    'NIG', 'NGR',
-    'WTF', 'FFS',
-    'POO', 'PEE',
-    'KKK',
-];
 /* Cylon-style initials: exactly 3 letters, stored uppercase, and not a
  * blocked word. */
 function room_valid_initials($raw): ?string

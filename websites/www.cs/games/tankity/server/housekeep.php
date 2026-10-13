@@ -56,11 +56,15 @@ function tankity_housekeep(int $now, array $jobs): ?array
     return $out;
 }
 
-/* Every cleanup job this request can run: the room sweep only where the room
-   library is loaded. */
+/* Every cleanup job this request can run, in order: old files into callsign
+   rows, callsign rows onto the Normal board, then the room sweep where the
+   room library is loaded. */
 function tankity_jobs(): array
 {
     $jobs = ['legacy' => fn(int $now): int => array_sum(legacy_import(null, LEGACY_IMPORT_BATCH, $now))];
+    if (function_exists('board_convert_callsigns')) {
+        $jobs['callsigns'] = fn(int $now): int => board_convert_callsigns();
+    }
     if (function_exists('room_sweep')) {
         $jobs['rooms'] = fn(int $now): int => room_sweep($now);
     }

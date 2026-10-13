@@ -202,7 +202,7 @@ function tankity_journal_mode(string $dir, ?string $mounts = null): string
 }
 
 /* The schema, one step per version. A database at version N runs the steps
-   after N, each in its own transaction. */
+   after N, each in its own transaction. Step 2 is the boards. */
 function tankity_schema_steps(): array
 {
     return [
@@ -211,6 +211,11 @@ function tankity_schema_steps(): array
             'CREATE TABLE rooms (code TEXT PRIMARY KEY, data BLOB NOT NULL, created INTEGER NOT NULL, touched INTEGER NOT NULL)',
             'CREATE INDEX rooms_touched ON rooms (touched)',
             'CREATE TABLE callsigns (slug TEXT PRIMARY KEY, data TEXT NOT NULL)',
+        ],
+        2 => [
+            'CREATE TABLE board (id INTEGER PRIMARY KEY AUTOINCREMENT, difficulty TEXT NOT NULL, initials TEXT NOT NULL,
+                score INTEGER NOT NULL, rounds INTEGER NOT NULL, seed TEXT NOT NULL, at TEXT NOT NULL)',
+            'CREATE INDEX board_rank ON board (difficulty, score DESC, id)',
         ],
     ];
 }

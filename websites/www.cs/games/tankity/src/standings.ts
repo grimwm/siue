@@ -45,7 +45,8 @@ export type Board =
 /** After a round (top of the shop), the match over, you're out, or a look from the menu. */
 export type RoomCard = 'shop' | 'over' | 'out' | 'peek';
 
-/** The winner's match bonus comes from the snapshot, so a client that missed the matchwin event (reload, rejoin) shows it too. */
+/** The winner's match bonus comes from the snapshot, so a client that missed the matchwin event (reload, rejoin) shows it too.
+ *  `roundTo` names who took the last round; '' when this client never heard (it reloaded in the shop). */
 export function roomBoard(room: Pick<RoomSnapshot, 'code' | 'round' | 'seats' | 'winner' | 'winBonus'>, mySeat: number, card: RoomCard, roundTo: string): Board {
   const over = card === 'over';
   const winner = room.winner;
@@ -68,7 +69,7 @@ export function roomBoard(room: Pick<RoomSnapshot, 'code' | 'round' | 'seats' | 
   const champ = room.seats.find(s => s.seat === winner);
   const caption = over ? `Room ${room.code} · match over after round ${room.round}`
     : card === 'shop' ? `Room ${room.code} · after round ${room.round}` : `Room ${room.code} · round ${room.round}`;
-  const title = card === 'shop' ? `Round ${room.round} to ${roundTo}`
+  const title = card === 'shop' ? (roundTo ? `Round ${room.round} to ${roundTo}` : `Round ${room.round} is over`)
     : card === 'out' ? "You're out"
     : card === 'peek' ? 'Standings'
     : champ ? `♛ ${champ.name} wins: last tank standing` : 'Match over: the battery holds the hills';

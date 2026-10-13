@@ -120,10 +120,19 @@ function showSelected(el: HTMLElement): void {
   else if (top + row.offsetHeight > el.scrollTop + el.clientHeight) el.scrollTop = top + row.offsetHeight - el.clientHeight;
 }
 
+/** Whether the highlighted row sits wholly inside the list's view. */
+function selectedInView(el: HTMLElement): boolean {
+  const row = el.querySelector<HTMLElement>('.sel');
+  if (!row) return false;
+  const top = row.offsetTop - el.offsetTop;
+  return top >= el.scrollTop && top + row.offsetHeight <= el.scrollTop + el.clientHeight;
+}
+
 export function Shop(p: ShopProps) {
   const list = useRef<HTMLUListElement>(null);
   const shownSel = useRef(-1);
   const scrolled = useRef(0); // where the player left the list
+  const selShown = useRef(true); // the highlighted row was in view at the last scroll
   const picked = p.entries.find((e): e is ShopItemRow | ShopFreeRow => (e.kind === 'item' || e.kind === 'free') && e.selected);
   const sel = !picked ? -2 : picked.kind === 'free' ? -1 : picked.index;
   // Riding the selection with the keys keeps the highlighted row in view.
@@ -143,13 +152,15 @@ export function Shop(p: ShopProps) {
     shownSel.current = sel;
     showSelected(el);
     scrolled.current = el.scrollTop;
+    selShown.current = true;
   });
-  // Turning the phone resizes the list: keep the highlighted row in it.
+  // Turning the phone resizes the list: a highlighted row that was in view
+  // stays in it. A list the player scrolled away from it by hand stays put.
   useLayoutEffect(() => {
     if (typeof window === 'undefined') return;
     const onResize = () => {
       const el = list.current;
-      if (!el || !laidOut(el)) return;
+      if (!el || !laidOut(el) || !selShown.current) return;
       showSelected(el);
       scrolled.current = el.scrollTop;
     };
@@ -168,7 +179,11 @@ export function Shop(p: ShopProps) {
         </>} />
         {p.board && <Standings board={p.board} />}
         <p id="shop-cash" class="runstats">{p.cash}</p>
-        <ul id="shop-list" class="scores" ref={list} onScroll={(ev: Event) => { scrolled.current = (ev.currentTarget as HTMLElement).scrollTop; }}>
+        <ul id="shop-list" class="scores" ref={list} onScroll={(ev: Event) => {
+          const el = ev.currentTarget as HTMLElement;
+          scrolled.current = el.scrollTop;
+          selShown.current = selectedInView(el);
+        }}>
           {p.entries.map(e => {
             if (e.kind === 'cat') return <li class="shop-cat" key={`cat:${e.name}`}>{e.name}</li>;
             if (e.kind === 'free') {

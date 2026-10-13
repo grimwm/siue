@@ -203,6 +203,24 @@ function shopProps(over = {}) {
   const freeLi = byId(fresh, 'shop-list').children.find(li => hasClass(li, 'shop-free'));
   check('shop-shell-row-selectable', hasClass(freeLi, 'sel') && inView(byId(fresh, 'shop-list'), freeLi)
     && byId(fresh, 'shop-list').children.filter(li => hasClass(li, 'sel')).length === 1);
+  // A resize (the phone turning, a window drag) brings the highlighted row back
+  // only when it was in view; a list scrolled away from it by hand stays put.
+  const onResize = [];
+  globalThis.window = { addEventListener: (t, f) => { if (t === 'resize') onResize.push(f); }, removeEventListener() {} };
+  const turned = makeEl('turned-veil');
+  turned.hidden = false;
+  renderShop(turned, shopProps({ entries: shelf({ sel: 4 }) }).props);
+  delete globalThis.window;
+  const tl = byId(turned, 'shop-list');
+  tl.scrollTop = 0;
+  fire(tl, 'scroll');
+  for (const f of onResize) f();
+  check('shop-resize-keeps-a-hand-scroll', onResize.length === 1 && tl.scrollTop === 0);
+  tl.scrollTop = selIn(tl).offsetTop;
+  fire(tl, 'scroll');
+  tl.scrollTop = 0; // the layout moved under the row, no scroll of the player's
+  for (const f of onResize) f();
+  check('shop-resize-keeps-the-row-in-view', inView(tl, selIn(tl)));
   check('shop-registers-ids-for-the-page', els['shop-next'] !== undefined && els['shop-list'] !== undefined);
 }
 

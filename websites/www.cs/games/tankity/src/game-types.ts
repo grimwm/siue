@@ -109,7 +109,7 @@ export interface MatchState {
   lastTurn: number | null;
   lastRound: number;
   initials: string;
-  roundTo: string; // who took the last round: a seat's name, or "the battery"
+  roundTo: string; // who took the last round: a seat's name, "the battery", or '' when not heard (a reload in the shop)
   out: boolean; // this seat lost its last life this match
   outShown: boolean; // the you're-out card has been shown
   lastRoom: RoomSnapshot | null; // the last snapshot adopted, for the scoreboards

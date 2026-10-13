@@ -37,6 +37,10 @@ test('numbers read with thousands separators', () => {
   assert.equal(fmt(98760), '98,760');
 });
 
+test('after a reload in the shop the round\'s taker is unknown: the title names nobody', () => {
+  assert.equal(roomBoard(ROOM, 0, 'shop', '').title, 'Round 6 is over');
+});
+
 test('after a round: humans only, by score, with this round\'s gain and lives or the round they went out', () => {
   const b = roomBoard(ROOM, 0, 'shop', 'WG');
   assert.equal(b.kind, 'room');

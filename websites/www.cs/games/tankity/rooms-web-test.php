@@ -321,9 +321,11 @@ $hStart = $post('start', $hctl($hh));
 $check('host-handoff-starts', (int) ($hh['seat'] ?? -1) === 1 && ($hAgain['ok'] ?? false) === true
     && ($hStart['ok'] ?? false) === true && ($hStart['room']['hostSeat'] ?? -1) === 1,
     json_encode([$hAgain['error'] ?? null, $hStart['error'] ?? null, $hStart['room']['hostSeat'] ?? null]));
-// After the handoff the old host's token no longer starts anything.
+// The old host left, so its seat token is dead: it starts nothing. (The host
+// gate itself, a seated non-host refused, is guest-start-refused above.)
 [$staleStatus, $staleStart] = $postStatus('start', $hctl($hand));
-$check('old-host-start-refused', $staleStatus >= 400 && ($staleStart['ok'] ?? false) !== true, json_encode([$staleStatus, $staleStart['error'] ?? null]));
+$check('old-host-start-refused', $staleStatus === 401 && ($staleStart['ok'] ?? false) !== true && ($staleStart['error'] ?? '') === 'bad seat token',
+    json_encode([$staleStatus, $staleStart['error'] ?? null]));
 $ageRoom($hcode);
 
 // Leave the shared shelf as found: only this match is swept.

@@ -562,7 +562,7 @@ export function createRoom(deps: RoomDeps) {
   }
   /* The scoreboard card for a room: match over, you're out, or a look from the menu. */
   function roomCard(room: RoomSnapshot, card: Exclude<RoomCard, 'shop'>): void {
-    const board = roomBoard(room, net.seat, card, MATCH.roundTo || 'the battery');
+    const board = roomBoard(room, net.seat, card, MATCH.roundTo);
     END.kicker = board.caption;
     END.title = board.title;
     END.text = '';
@@ -591,7 +591,7 @@ export function createRoom(deps: RoomDeps) {
 
   /* The shop's scoreboard in a room: everyone's match after the round just ended. */
   function roomShopBoard(): Board | null {
-    return MATCH.lastRoom && MATCH.lastRoom.round > 0 ? roomBoard(MATCH.lastRoom, net.seat, 'shop', MATCH.roundTo || 'the battery') : null;
+    return MATCH.lastRoom && MATCH.lastRoom.round > 0 ? roomBoard(MATCH.lastRoom, net.seat, 'shop', MATCH.roundTo) : null;
   }
 
   return {

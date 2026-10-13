@@ -211,3 +211,12 @@ test('the shared refusal table gets the same answers solo_round gives', () => {
     assert.deepEqual(soloRound(G, arsenal, buys, shots), { ok: false, error: c.error }, c.name);
   }
 });
+
+// server/flight.php's FlightTest holds the same shell: a held shell goes back to its gunner's-box flag too.
+test('a held shell keeps its gunner\'s clear flag', () => {
+  const me = { id: 'tank', isPlayer: true, x: 100, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80 };
+  const shell = (x, y, vy, order) => ({ x, y, vx: 0, vy, wkey: 'buck', owner: me, life: 12, age: 0.5, pierced: false, split: false, order, clear: false });
+  const G = { terrain: Array(720).fill(400), wind: 0, round: 1, tanks: [me], shells: [shell(300, 100, 0, [0]), shell(100, 395, 900, [1])] };
+  stepShells(G, arsenal, SOLO_STEP);
+  assert.deepEqual([G.shells[1].x, G.shells[1].y, G.shells[1].clear], [100, 395, false]);
+});

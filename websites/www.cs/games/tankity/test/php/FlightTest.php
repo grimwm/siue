@@ -21,7 +21,7 @@ final class FlightTest extends TestCase
         $this->assertGreaterThanOrEqual(4, count($cases));
         $this->assertNotEmpty(array_filter($cases, fn(array $c): bool => $c['out']['midFall']), 'some case drops a tank mid-volley');
         foreach ($cases as $c) {
-            $this->assertSame('zeros-equal', $c['exact'], "{$c['name']} is compared exactly");
+            $this->assertTrue($c['exact'], "{$c['name']} is compared exactly");
         }
     }
 
@@ -62,5 +62,52 @@ final class FlightTest extends TestCase
             flight_launch($s, 0, 'shell');
             $this->assertSame(12.0 * room_field_reach($w), $s['shells'][0]['life'], "life at $w");
         }
+    }
+
+    /* D22 for bomblets: a cluster that blooms on the widest field gives each bomblet 12 s times the field's reach. */
+    public function testBombletLifeScalesWithTheField(): void
+    {
+        $w = 1440;
+        $s = ['terrain' => array_fill(0, $w, 400.0), 'shells' => [], 'wind' => 0.0,
+            'tanks' => [['seat' => 0, 'kind' => 'human', 'x' => 300.0, 'y' => 400.0, 'hp' => 100, 'angle' => 80.0, 'power' => 90.0, 'dirS' => 1]]];
+        flight_launch($s, 0, 'cluster');
+        for ($i = 0; $i < 200 && !array_filter($s['shells'], fn(array $sh): bool => $sh['split']); $i++) {
+            flight_step_shells($s, FLIGHT_STEP);
+        }
+        $born = array_values(array_filter($s['shells'], fn(array $sh): bool => $sh['split']));
+        $this->assertNotEmpty($born, 'the cluster bloomed');
+        foreach ($born as $b) {
+            // Born and flown one step: one step short of its full life.
+            $this->assertEqualsWithDelta(12.0 * room_field_reach($w) - FLIGHT_STEP, $b['life'], 1e-9);
+        }
+        $this->assertGreaterThan(12.5, $born[0]['life'], 'past the 12 s a 720 field gives');
+    }
+
+    /* A shell held for an earlier one of its volley goes back to where it was,
+       out-of-its-gunner's-box flag included: a pellet that dips out of its own
+       hull's box into the ground and is held is still inside the box, so the
+       gunner's hull must not catch it on its next step. */
+    public function testAHeldShellKeepsItsGunnersClearFlag(): void
+    {
+        $shell = fn(float $x, float $y, float $vy, array $order): array => ['x' => $x, 'y' => $y, 'vx' => 0.0, 'vy' => $vy, 'w' => 'buck', 'owner' => 0,
+            'life' => 12.0, 'age' => 0.5, 'pierced' => null, 'split' => false, 'order' => $order, 'dead' => false, 'clear' => false,
+            'dw' => null, 'dr' => null, 'rolling' => false, 'ru' => 0.0, 'rt' => 0];
+        $s = ['terrain' => array_fill(0, 720, 400.0), 'wind' => 0.0, 'round' => 1, 'scores' => [], 'cash' => [],
+            'tanks' => [['seat' => 0, 'kind' => 'human', 'x' => 100.0, 'y' => 400.0, 'hp' => 100, 'angle' => 45.0, 'power' => 50.0, 'dirS' => 1]],
+            // Pellet 0 still high in the air; pellet 1 inside its gunner's box, heading into the ground below it.
+            'shells' => [$shell(300.0, 100.0, 0.0, [0]), $shell(100.0, 395.0, 900.0, [1])]];
+        flight_step_shells($s, FLIGHT_STEP);
+        $this->assertSame([100.0, 395.0, false], [$s['shells'][1]['x'], $s['shells'][1]['y'], $s['shells'][1]['clear']]);
+    }
+
+    /* flight_volley's step budget: a volley still flying when it runs out keeps its shells, and solo_round refuses it. */
+    public function testTheStepBudgetStopsAVolley(): void
+    {
+        $s = ['terrain' => array_fill(0, 720, 400.0), 'shells' => [], 'wind' => 0.0,
+            'tanks' => [['seat' => 0, 'kind' => 'human', 'x' => 100.0, 'y' => 400.0, 'hp' => 100, 'angle' => 80.0, 'power' => 100.0, 'dirS' => 1]]];
+        flight_launch($s, 0, 'shell');
+        $this->assertSame(5, flight_volley($s, null, 5));
+        $this->assertCount(1, $s['shells']);
+        $this->assertSame(0, flight_volley($s, null, 0));
     }
 }

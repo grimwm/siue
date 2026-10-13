@@ -159,7 +159,7 @@ $exact = function (string $group, string $name, array $in, $out) use (&$cases): 
     $cases[$group][] = ['name' => $name, 'in' => $in, 'out' => $out, 'exact' => true];
 };
 /* The same, but -0 and 0 count as equal: for values PHP keeps as an int or
-   +0 where Math.round or a fall may leave -0 (a dealt wind, a tank's y). */
+   +0 where Math.round may leave -0 (a dealt or shifted wind). */
 $exactZeros = function (string $group, string $name, array $in, $out) use (&$cases): void {
     $cases[$group][] = ['name' => $name, 'in' => $in, 'out' => $out, 'exact' => 'zeros-equal'];
 };
@@ -509,8 +509,8 @@ if (isset($weapons['roller'])) {
  * while a shell was still in the air, so the cases really cover the falls;
  * bursts holds, for every step that carved ground or cost armor, the step
  * and each tank's y then, so a fall a step early or late shows.
- * Compared exactly, with -0 equal to 0. */
-$volleyFall = function (string $name, array $c) use ($exactZeros): void {
+ * Compared exactly. */
+$volleyFall = function (string $name, array $c) use ($exact): void {
     if (!isset(room_weapons()[$c['wkey']])) {
         return;
     }
@@ -540,7 +540,7 @@ $volleyFall = function (string $name, array $c) use ($exactZeros): void {
         $was = $is;
     });
     $out = sv_outcome($before, $room) + ['ys' => array_column($room['tanks'], 'y'), 'steps' => $steps, 'midFall' => $midFall, 'bursts' => $bursts];
-    $exactZeros('volley-fall', $name, $c, $out);
+    $exact('volley-fall', $name, $c, $out);
 };
 // The group's own units: 200 hp, facing each other. Named apart from $drone and $human, which later groups use.
 $vfDrone = fn(float $x, int $hp = 200, array $more = []): array => ['kind' => 'ai', 'x' => $x, 'y' => 400, 'hp' => $hp, 'dirS' => -1] + $more;
@@ -554,7 +554,8 @@ $volleyFall('cluster-over-a-pit', ['terrain' => ['flat' => 400, 'set' => [[300, 
     'tanks' => [$vfHuman(100), $vfDrone(330, 300, ['y' => 380]), $vfDrone(600)]]);
 $volleyFall('roller-into-the-crater-it-follows', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'roller', 'angle' => 30, 'power' => 50,
     'tanks' => [$vfHuman(100), $vfDrone(400), $vfDrone(640)]]);
-$volleyFall('lance-through-and-down', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'lance', 'angle' => 12, 'power' => 80,
+// Low and slow: through the first drone, then down into the ground short of the second.
+$volleyFall('lance-through-and-down', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'lance', 'angle' => 6, 'power' => 50,
     'tanks' => [$vfHuman(100), $vfDrone(300, 500), $vfDrone(420, 500)]]);
 $volleyFall('already-hanging-over-a-pit', ['terrain' => ['flat' => 400, 'set' => [[420, 470, 440]]], 'wind' => 0, 'shooter' => 0, 'wkey' => 'shell', 'angle' => 60, 'power' => 60,
     'tanks' => [$vfHuman(120), $vfDrone(445), $vfDrone(640)]]);
@@ -816,7 +817,7 @@ $soloDeal = function (string $seed, int $rounds, int $w) use ($exactZeros): void
     }
     $exactZeros('solo-deal', "$seed@$w", ['seed' => $seed, 'rounds' => $rounds, 'w' => $w], $out);
 };
-foreach (['scorched-1000', 'scorched-4242', 'alpha', 'runs-long-70', 'a b c'] as $seed) {
+foreach (['scorched-1000', 'scorched-4242', 'alpha', 'deal-long', 'a b c'] as $seed) {
     $soloDeal($seed, 3, 720);
 }
 $soloDeal('alpha', 3, 1440); // a wide field: the same draws, spread over 1440

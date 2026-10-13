@@ -713,7 +713,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/rotate-hint.test.mjs`                    | The rotate hint's rule and its chip |
 | `test/php/DetMathTest.php`                     | `server/detmath.php` is within 1e-15 of libm, rounds halves and keeps the sign of zero like `Math.round`, and the `detmath` vectors cover every function |
 | `test/php/FieldWidthTest.php`                  | The server's width rule, hills, reach and aim, units spread outside each other's blast, and a room dealt at 720 |
-| `test/php/FlightTest.php`                      | `server/flight.php`: the `volley-fall` vectors drop a tank mid-volley and compare exactly, a tank over a pit falls under gravity and lands on the ground, a later pellet or bomblet waits on an earlier one of its gunner's, shell life scales with the field |
+| `test/php/FlightTest.php`                      | `server/flight.php`: the `volley-fall` vectors drop a tank mid-volley and compare exactly, a tank over a pit falls under gravity and lands on the ground, a later pellet or bomblet waits on an earlier one of its gunner's and a held one keeps its gunner's-box flag, shell and bomblet life scale with the field, and the step budget stops a volley |
 | `test/php/SoloDealTest.php`                    | `server/solo.php`: only an accepted width is dealt, the deal opens in the shop with the stake and draws only hills and clouds, a muster stands each unit on its column and rotates the opener |
 | `test/php/SoloRoundTest.php`                   | `server/solo.php` `solo_round`: every recorded run in `protocol/solo-runs.json` plays round by round to the browser's claims (runs marked `slow` are the `slow` group, which `make test` skips and CI's units job runs), a tampered round, an over run, the CPU and step budgets are refused, and every case of `test/solo-refusals.json` gets the reason `soloRound` gives (`test/solo-play.test.mjs` plays the same table) |
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
@@ -794,9 +794,10 @@ functions over a spread of cases and writes each case's inputs and expected
 outputs; `test/sim-vectors.test.mjs` replays every case through the sim,
 `src/sim.ts`, the drone AI, `src/ai.ts`, and the armor rules, `src/armor.ts`; the sim and AI
 compare within 1e-4; the deterministic math (`detmath`), the field at each
-width (terrain heights included), armor and match-end cases compare exactly;
-the solo deal (`solo-deal`), solo volleys (`volley-fall`) and solo turns (`solo-turn`) compare exactly
-too, with -0 equal to 0.
+width (terrain heights included), armor, match-end and solo volley
+(`volley-fall`) cases compare exactly; the solo deal (`solo-deal`) and solo
+turns (`solo-turn`) compare exactly too, with -0 equal to 0 (a wind
+`Math.round` leaves at -0 is the server's 0).
 
 - Covered: the RNG and terrain generator, spawn spots, shot speed, muzzle,
   gravity and wind, hit boxes, the swept hit test (owner-clear rule, lance

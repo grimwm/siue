@@ -409,7 +409,7 @@ function scriptYou() {
   return {
     ammo: { shell: -1, buck: 1, mortar: 0, rail: 0, nuke: 0 },
     cash: 600, score: 0, lives: 3, fuel: 80, weapon: 'shell', nextUp: 3000,
-    seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, plate: 0, armor: 100, maxArmor: 100,
+    seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, plate: 0, armor: seatArmor, maxArmor: 100,
   };
 }
 function playRoom(turn, events) {
@@ -500,6 +500,7 @@ global.fetch = async (url, opts) => {
     return okJson({ ok: true, room: playRoom(curTurn, []) });
   }
   if (u.includes('action=buy')) {
+    buysSent.push(body.item);
     return okJson({ ok: true, room: playRoom(curTurn, []) });
   }
   if (u.includes('action=join')) {
@@ -509,6 +510,8 @@ global.fetch = async (url, opts) => {
 };
 let NET_LOBBY = true;
 let NET_SHOP = false;
+let seatArmor = 100;
+const buysSent = [];
 let mockReady = false;
 const readySent = [];
 let extraGuest = false;
@@ -1108,8 +1111,17 @@ await (async () => {
   // Between rounds the room shops; V opens the firing range, and it stays
   // open through the polls that keep the shop fresh.
   NET_SHOP = true;
+  seatArmor = 60;
   await sleep(1800); await tick(10);
   check('net-shop', els['shop-veil'].hidden === false, `shop hidden=${els['shop-veil'].hidden}`);
+  // A damaged seat's Repair reads the room's armor, so it is enabled and asks the server.
+  {
+    const repairRow = shopRows().find(li => rowName(li).includes('Repair'));
+    const buy = actsOf(repairRow).children[actsOf(repairRow).children.length - 1];
+    check('net-shop-repair-enabled-when-damaged', buy.disabled === false && !/Armor full/.test(repairRow.textContent), repairRow.textContent);
+    click(buy); await tick(10);
+    check('net-shop-repair-goes-to-server', buysSent.includes('repair'), buysSent.join());
+  }
   // The shop button is the Ready toggle: it shows who is ready and the clock,
   // sends the wanted state in click order, and a fast double click ends unready.
   check('net-ready-idle', /^Ready/.test(els['shop-next'].textContent) && !/✓/.test(els['shop-next'].textContent)
@@ -1132,6 +1144,7 @@ await (async () => {
     `opened=${pvOpened} open-after-polls=${els['preview-veil'].hidden === false}`);
   TAP('global', 'escape'); await tick(5);
   NET_SHOP = false;
+  seatArmor = 100;
   await sleep(1800); await tick(10);
   // typing in a box is typing, not playing
   const logLen = els['log'].children.length;

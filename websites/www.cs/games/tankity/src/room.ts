@@ -244,6 +244,7 @@ export function createRoom(deps: RoomDeps) {
       G.bunker = room.you.bunker || 0;
       G.laststand = !!room.you.laststand;
       G.plate = room.you.plate || 0;
+      G.armor = room.you.armor ?? G.armor;
       G.nextOneUp = room.you.nextUp || 3000;
       if (mine) mine.fuel = room.you.fuel || 0;
     }

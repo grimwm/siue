@@ -6,6 +6,7 @@
  * redraws only when its text changed, since the loop asks every frame. */
 import type { GameState, GameTank, MatchState, Tables } from './game-types.ts';
 import { powerText } from './field.ts';
+import { maxArmor } from './armor.ts';
 import type { RoomClient } from './net.ts';
 import { renderHud as drawHud } from './ui/hud.tsx';
 import type { HudProps } from './ui/hud.tsx';
@@ -16,7 +17,7 @@ import type { KeyHintFn } from './ui/chrome.tsx';
 
 /** The slice of the game's state the status bar reads (main.ts's G). */
 export type HudState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'ammo' | 'selected' | 'lives' | 'cash' | 'round'
-  | 'score' | 'nextOneUp' | 'wind' | 'shield' | 'bunker' | 'jammer' | 'laststand' | 'plate' | 'w'>;
+  | 'score' | 'nextOneUp' | 'wind' | 'shield' | 'bunker' | 'jammer' | 'laststand' | 'plate' | 'armor' | 'w'>;
 
 /** The bar's values: HudProps without what the page supplies each draw. */
 export type HudValues = Omit<HudProps, 'menuOpen' | 'menuKey' | 'onMenu'>;
@@ -99,9 +100,11 @@ export function createHud(deps: HudDeps) {
     return `${name} ${Math.max(0, Math.round(x.hp))} of ${x.maxHp}`;
   }
   function renderStanding(mine: GameTank | null, others: string): void {
+    // In the shop the next round's armor is what counts; on the field, the tank's.
+    const shop = G.phase === 'shop';
     HUD.armor = {
-      shown: mine ? `${Math.max(0, Math.round(mine.hp))}` : '-',
-      max: mine ? mine.maxHp : null,
+      shown: shop ? `${G.armor}` : mine ? `${Math.max(0, Math.round(mine.hp))}` : '-',
+      max: shop ? maxArmor(G.plate || 0) : mine ? mine.maxHp : null,
       sr: others,
     };
     HUD.lives = G.lives;

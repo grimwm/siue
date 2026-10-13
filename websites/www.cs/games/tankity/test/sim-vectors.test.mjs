@@ -1,8 +1,8 @@
 // Replays the shared sim vectors (protocol/sim-vectors.json) through the browser
 // sim, src/sim.ts and src/armor.ts. The vectors are written by
-// `php protocol/sim-vectors.php` from rooms.php, so a change to the browser sim or the room server's that the other
-// side does not follow fails here (or in the generator's --check) until they
-// agree. Passes when every case matches or is a marked known difference.
+// `php protocol/sim-vectors.php` from rooms.php, so a change to the browser sim
+// or the room server's that the other side does not follow fails here (or in
+// the generator's --check) until they agree. Passes when every case matches or is a marked known difference.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

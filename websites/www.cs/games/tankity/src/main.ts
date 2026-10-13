@@ -429,7 +429,8 @@ const {
 /* The Difficulty setting: the Menu picks it, a new solo match and a hosted room read it. */
 const difficulty = difficultySetting(browserStorage());
 /* The player's initials (src/initials.ts): one set per browser, edited on the
-   title card; the rooms host and join with it, and filed scores carry it. */
+   title card and in the rooms lobby; the rooms host and join with it, and
+   filed scores carry it. */
 const savedInitials = initialsPref(browserStorage(), Math.random);
 const getInitials = (): string => savedInitials.get();
 /* The solo match (src/match.ts): dealing, turns, blasts, the drone's shot, the end veil. A dependency
@@ -479,7 +480,7 @@ const {
   netLeave, netAgain, netBackToLobby,
 } = createLobby({
   G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
-  closeOverlays, closePreview, endTutorial, hideShop, savedInitials: getInitials, paintHud, refreshNavHints,
+  closeOverlays, closePreview, endTutorial, hideShop, initials: savedInitials, initialsSaved: () => renderTitle(), paintHud, refreshNavHints,
   renderMenu: () => renderMenu(),
   closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
   renderShop,

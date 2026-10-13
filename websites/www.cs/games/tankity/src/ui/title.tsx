@@ -5,9 +5,9 @@
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
-import { useRef } from 'preact/hooks';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
 import { KeyHints, Key, blurThen } from './chrome.tsx';
+import { InitialsPicker } from './initials-picker.tsx';
 import type { KeyHintFn } from './chrome.tsx';
 
 export interface TitleProps {
@@ -16,6 +16,8 @@ export interface TitleProps {
   open: boolean;
   /** The saved initials, three uppercase letters. */
   initials: string;
+  /** A change puts the saved set back in the boxes (the card opening). */
+  initialsRev?: number;
   /** Why the last typed set was refused, or empty. */
   problem: string;
   /** An installed app that could not close itself says how, or empty. */
@@ -28,38 +30,6 @@ export interface TitleProps {
   onFriends: () => void;
   onTutorial: () => void;
   onSettings: () => void;
-}
-
-function InitialsPicker({ initials, onInitials }: Pick<TitleProps, 'initials' | 'onInitials'>) {
-  const boxes = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)];
-  function typed(i: number, ev: Event): void {
-    const box = ev.currentTarget as HTMLInputElement;
-    // One letter per box, shown uppercase whatever case was typed.
-    const letter = box.value.replace(/[^A-Za-z]/g, '').slice(-1).toUpperCase();
-    box.value = letter;
-    if (!letter) return;
-    // Retyping from a box starts a new set: the boxes after it empty, so a
-    // half-typed set is never saved as a mix of new and old letters.
-    for (const later of boxes.slice(i + 1)) if (later.current) later.current.value = '';
-    const next = boxes[i + 1]?.current;
-    if (next) {
-      next.focus?.();
-      next.select?.();
-    }
-    const word = boxes.map(b => b.current?.value ?? '').join('');
-    if (/^[A-Z]{3}$/.test(word)) onInitials(word);
-  }
-  return (
-    <fieldset class="initials">
-      <legend>Your initials</legend>
-      {[0, 1, 2].map(i => (
-        <input key={i} ref={boxes[i]} id={`title-initial-${i + 1}`} class="initial" type="text" inputMode="text"
-          autocomplete="off" spellcheck={false} maxLength={1} aria-label={`Initial ${i + 1} of 3`}
-          value={initials[i] ?? ''} onInput={ev => typed(i, ev)}
-          onFocus={ev => (ev.currentTarget as HTMLInputElement).select?.()} />
-      ))}
-    </fieldset>
-  );
 }
 
 export function Title(p: TitleProps) {
@@ -76,7 +46,8 @@ export function Title(p: TitleProps) {
           <button type="button" id="rooms-open" onClick={blurThen(p.onFriends)}>Play with friends <Key at="global:rooms" bare /></button>
           <button type="button" id="tutorial-open" onClick={blurThen(p.onTutorial)}>Tutorial <Key at="global:tutorial" bare /></button>
         </div>
-        <InitialsPicker initials={p.initials} onInitials={p.onInitials} />
+        <InitialsPicker idPrefix="title" initials={p.initials} rev={p.initialsRev} onInitials={p.onInitials}
+          problem={p.problem} noteId="title-initials-note" />
         <p class="title-note" id="title-initials-note" role="status">{p.problem}</p>
         {p.hint && <p class="title-hint" id="title-hint" role="status">{p.hint}</p>}
         <button type="button" id="title-settings" class="title-link" aria-haspopup="dialog" aria-expanded={p.settingsOpen}

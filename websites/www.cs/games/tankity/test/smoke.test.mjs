@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { sweepHit } from '../src/sim.ts';
-import { els, makeEl, click, submit, document } from '../../_kit/test/dom-stub.mjs';
+import { els, makeEl, click, submit, fire, document } from '../../_kit/test/dom-stub.mjs';
 
 const GAME_DIR = path.join(import.meta.dirname, '..');
 const read = file => fs.readFileSync(path.join(GAME_DIR, file), 'utf8');
@@ -1085,10 +1085,32 @@ await (async () => {
     }
   }
   failMode = '';
-  // The rooms use the initials saved on the title card; the lobby only names them.
-  check('lobby-no-initials-boxes', !rendered('host-initials') && !rendered('join-initials'));
-  check('lobby-names-saved-initials', els['lobby-initials'].textContent.includes(window.localStorage.getItem('tankity-initials')),
-    els['lobby-initials'].textContent);
+  // The lobby has its own initials boxes, the saved set in them (the title card's too).
+  const lobbyBox = n => els[`lobby-initial-${n}`];
+  const typeBox = (n, v) => { lobbyBox(n).value = v; fire(lobbyBox(n), 'input'); };
+  check('lobby-no-per-form-initials', !rendered('host-initials') && !rendered('join-initials'));
+  check('lobby-initials-prefilled', [1, 2, 3].map(n => lobbyBox(n).value).join('') === window.localStorage.getItem('tankity-initials'),
+    [1, 2, 3].map(n => lobbyBox(n).value).join(''));
+  // Half-typed boxes stop Host with a line and put the player in the empty box; nothing is sent.
+  createdInitials = ''; // set again only by a create that reaches the server
+  typeBox(1, 'k');
+  submit(els['host-form']); await tick(10);
+  check('lobby-half-typed-refused', /all three/.test(els['lobby-initials-note'].textContent) && createdInitials === ''
+    && globalThis.__focused === lobbyBox(2), els['lobby-initials-note'].textContent);
+  // A blocked set says so at once and stops Host too; the saved set stays.
+  const savedBefore = window.localStorage.getItem('tankity-initials');
+  typeBox(1, 'a'); typeBox(2, 's'); typeBox(3, 's');
+  check('lobby-blocked-said-at-once', /not allowed/.test(els['lobby-initials-note'].textContent)
+    && window.localStorage.getItem('tankity-initials') === savedBefore, els['lobby-initials-note'].textContent);
+  submit(els['host-form']); await tick(10);
+  check('lobby-blocked-refused', /not allowed/.test(els['lobby-initials-note'].textContent) && createdInitials === ''
+    && globalThis.__focused === lobbyBox(1));
+  // An allowed set is saved as it is typed, for the title card too, and the line clears.
+  typeBox(1, 'k'); typeBox(2, 'e'); typeBox(3, 'n');
+  check('lobby-initials-saved', window.localStorage.getItem('tankity-initials') === 'KEN' && els['lobby-initials-note'].textContent === '',
+    window.localStorage.getItem('tankity-initials'));
+  check('lobby-initials-on-the-title-card', [1, 2, 3].map(n => els[`title-initial-${n}`].value).join('') === 'KEN',
+    [1, 2, 3].map(n => els[`title-initial-${n}`].value).join(''));
   // host a room on picked hills: code shows, roster opens, hills named
   click(tiles()[1]); // before hosting, a tile only sets the value
   submit(els['host-form']); await tick(10);

@@ -41,6 +41,28 @@ export function randomInitials(rng: Rng): string {
   return 'TNK';
 }
 
+/** What the initials line says about a typed set the blocked list refuses. */
+export const INITIALS_REFUSED = 'Those initials are not allowed. Pick others.';
+/** What it says when Host or Join meets boxes that are not all filled. */
+export const INITIALS_SHORT = 'Fill in all three initials first.';
+
+/** What the three boxes hold (a space for an empty box), read as a set: the
+ *  set, uppercase, or why not and the box (0-based) to put the player in. */
+export function readInitials(letters: string): { initials: string } | { problem: string; box: number } {
+  for (let i = 0; i < 3; i++) if (!/^[A-Za-z]$/.test(letters[i] ?? '')) return { problem: INITIALS_SHORT, box: i };
+  const ok = validInitials(letters.slice(0, 3));
+  return ok === null ? { problem: INITIALS_REFUSED, box: 0 } : { initials: ok };
+}
+
+/** Saves a typed set when it is allowed. Returns the line to show: empty when
+ *  saved, INITIALS_REFUSED when not (the saved set stays). */
+export function saveInitials(saved: Pref<string>, word: string): string {
+  const ok = validInitials(word);
+  if (ok === null) return INITIALS_REFUSED;
+  saved.set(ok);
+  return '';
+}
+
 const INITIALS: Codec<string> = {
   parse(raw) {
     const v = validInitials(raw);

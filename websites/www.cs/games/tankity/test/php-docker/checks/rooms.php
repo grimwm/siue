@@ -434,7 +434,20 @@ foreach ([
     room_unlock($afterLock);
     $check("buy-refused-$name-takes-no-cash", ($after['cash'][0] ?? -1) === 100, (string) ($after['cash'][0] ?? '?'));
 }
+// A seat that is out of the match is refused, and keeps its cash.
 [$stage, $stageLock] = room_load($bcode);
+$stage['seats'][0]['lives'] = 0;
+room_save($stageLock, $bcode, $stage);
+room_unlock($stageLock);
+usleep(300000);
+[$status, $reply] = $buy('mortar');
+$check('buy-refused-out-of-match', $status === 409 && ($reply['error'] ?? null) === 'You are out of this match.' && !isset($reply['ok']),
+    "$status " . json_encode($reply));
+[$after, $afterLock] = room_load($bcode);
+room_unlock($afterLock);
+$check('buy-refused-out-of-match-takes-no-cash', ($after['cash'][0] ?? -1) === 100, (string) ($after['cash'][0] ?? '?'));
+[$stage, $stageLock] = room_load($bcode);
+$stage['seats'][0]['lives'] = 3;
 $stage['cash'][0] = 500;
 $stage['armor'][0] = 100;
 room_save($stageLock, $bcode, $stage);

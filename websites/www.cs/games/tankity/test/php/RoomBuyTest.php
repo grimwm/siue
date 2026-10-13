@@ -21,6 +21,14 @@ final class RoomBuyTest extends TestCase
         return $room;
     }
 
+    public function testASeatOutOfTheMatchCannotBuy(): void
+    {
+        $room = $this->room();
+        $room['seats'][0]['lives'] = 0;
+        $this->assertSame([409, 'You are out of this match.'], room_buy($room, 0, 'mortar', 1));
+        $this->assertSame(600, $room['cash'][0]);
+    }
+
     public function testRepairAtFullArmorIsRefusedAndCostsNothing(): void
     {
         $room = $this->room();

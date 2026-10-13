@@ -43,6 +43,7 @@ require_once __DIR__ . '/config.php';
 //   server/sim.php       the deterministic sim (mirrors src/sim.ts)
 //   server/ai.php        drone aim, bracketing and strategies
 //   server/rules.php     seats, rounds, turn clock, pacing, the shop, scores
+//   server/solo.php      the solo referee, for the server's play of solo rounds
 //   server/protocol.php  events, snapshots and deltas
 // Those files do nothing unless this one requires them.
 define('TANKITY_ROOMS_INCLUDED', true);
@@ -57,6 +58,7 @@ require_once __DIR__ . '/server/detmath.php';
 require_once __DIR__ . '/server/sim.php';
 require_once __DIR__ . '/server/ai.php';
 require_once __DIR__ . '/server/rules.php';
+require_once __DIR__ . '/server/solo.php';
 require_once __DIR__ . '/server/protocol.php';
 
 // room_arsenal() resolves against this file's own location (game.json next to it), so it stays here.

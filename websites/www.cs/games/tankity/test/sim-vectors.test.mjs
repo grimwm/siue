@@ -1,5 +1,5 @@
 // Replays the shared sim vectors (protocol/sim-vectors.json) through the browser
-// sim, src/sim.ts and src/armor.ts. The vectors are written by
+// sim, src/sim.ts, src/armor.ts and src/solo.ts. The vectors are written by
 // `php protocol/sim-vectors.php` from rooms.php, so a change to the browser sim
 // or the room server's that the other side does not follow fails here (or in
 // the generator's --check) until they agree. Passes when every case matches or
@@ -28,6 +28,7 @@ const armorRules = await import(pathToFileURL(path.join(dir, 'src', 'armor.ts'))
 
 const standings = await import(pathToFileURL(path.join(dir, 'src', 'standings.ts')).href);
 const det = await import(pathToFileURL(path.join(dir, 'src', 'detmath.ts')).href);
+const solo = await import(pathToFileURL(path.join(dir, 'src', 'solo.ts')).href);
 
 /* ---- state the cases run over ---- */
 const G = {};
@@ -237,6 +238,21 @@ const RUN = {
         wkey: choice.wkey, angle: choice.angle, power: choice.power, x: t.x, n: t.brk.n });
     }
     return steps;
+  },
+  /* The browser's stream cannot be copied the way PHP copies its integer state,
+     so for round r this deals afresh, musters rounds 1..r, and reads `next` off that fresh stream. */
+  'solo-deal'(c) {
+    const out = [];
+    for (let r = 1; r <= c.rounds; r++) {
+      const S = { body: 'tank' };
+      solo.soloDeal(S, arsenal, c.seed, 'normal', c.w);
+      for (let k = 1; k <= r; k++) { S.round = k; solo.soloMuster(S, arsenal); }
+      const samples = [];
+      for (let x = 0; x < c.w; x += 60) samples.push(S.terrain[x]);
+      out.push({ samples, wind: S.wind, xs: S.tanks.map(t => t.x), ys: S.tanks.map(t => t.y),
+        tactics: S.tanks.filter(t => t.s).map(t => t.s), turn: S.turn, hp: S.tanks.map(t => t.hp), next: S.rng() });
+    }
+    return out;
   },
   settle(c) {
     world({ terrain: c.terrain, tanks: [{ kind: 'ai', x: c.x, y: c.y, hp: c.hp }] });

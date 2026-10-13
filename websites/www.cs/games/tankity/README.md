@@ -295,6 +295,19 @@ Housekeeping has no cron: any request to `rooms.php` or `scores.php` runs it,
 at most every five minutes, each job bounded (idle rooms, 100 at a time; old
 files, 200 at a time; leftover temp files over an hour old).
 
+## Armor
+
+A human's tank carries its armor from round to round. Max armor is 100 plus
+25 per hull plate; fitting a plate raises the max and adds 25 armor at once.
+Repair +40 restores up to max and never beyond: the shop greys it out at full
+armor and says what it would restore. Losing a life sends the next round out
+in a fresh tank at full max, plates still fitted. Drones are unchanged: each
+round they muster with 60 + 6 × (round − 1) armor.
+
+The rules live in `src/armor.ts` and `server/rules.php` (`room_max_armor` ..
+`room_carry_armor`, used by `room_buy` and the round start and end); the
+`armor` group of the sim vectors keeps them identical.
+
 ## Drone aim
 
 Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` in
@@ -638,7 +651,8 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/flow.test.mjs`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
 | `test/protocol.test.mjs`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
 | `test/sim-vectors.test.mjs`                    | `src/sim.ts` and `src/ai.ts` agree with `rooms.php` on every shared sim vector (see Sim vectors) |
-| `phpunit --testsuite tankity` (host PHP)       | `ConfigTest` (`.config.yaml` precedence), `DataDirTest`, `DbTest`, `RoomStoreTest`, `LegacyImportTest` and `HousekeepTest` (storage: the directory and its checks, the database and its journal, rooms as rows, the old files' import, cleanup on a fake clock), `GameJsonTest` (the YAML parser, the `game.yaml` schema including effects, `--check` staleness) and `RoomsSimTest` (server sim units: pierce, repair, spawns, spacing, replay stamping; drone bracketing and strategies; one unit left standing ends a round, the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller) |
+| `phpunit --testsuite tankity` (host PHP)       | `ConfigTest` (`.config.yaml` precedence), `DataDirTest`, `DbTest`, `RoomStoreTest`, `LegacyImportTest` and `HousekeepTest` (storage: the directory and its checks, the database and its journal, rooms as rows, the old files' import, cleanup on a fake clock), `GameJsonTest` (the YAML parser, the `game.yaml` schema including effects, `--check` staleness) and `RoomsSimTest` (server sim units: pierce, spawns, spacing, replay stamping; drone bracketing and strategies; one unit left standing ends a round, the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller) |
+| `RoomArmorTest`, `RoomBuyTest` (host PHP) | Armor carry-over and re-muster, the capped repair, plates, and every shop purchase rule |
 | `phpunit --testsuite tankity-docker`           | `RoomsTest` (the room shelf over its own `php -S`), `RoomsStoreTest` (the store under real concurrency: exact cap under a race, close, sweep, a held writer and the 503, a killed holder), `RoomsRefusedStoreTest` (a store PHP refuses answers JSON 503 on every endpoint, with one log line per request), `RoomsStoreFailureTest` (a database error partway through a save answers JSON 503 and leaves nothing behind) and `RoomsLoadTest` (8 playing rooms, each with 3 seated players and a watcher, polling at the client's pace against the docker site: no 503, p95 under 300 ms). Runs inside the PHP container, which matches the host's PHP (`make test` does) |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (run inside the PHP container)                 |
 | `tests/tankity-data-deny.sh` | `games/tankity/data/` is refused over HTTP (`make test` runs it) |

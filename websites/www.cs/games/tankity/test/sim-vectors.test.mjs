@@ -23,6 +23,7 @@ const sim = {
   ...await import(pathToFileURL(path.join(dir, 'src', 'ai.ts')).href),
 };
 const arsenal = sim.buildArsenal(GAME.arsenal);
+const armorRules = await import(pathToFileURL(path.join(dir, 'src', 'armor.ts')).href);
 
 /* ---- state the cases run over ---- */
 const G = {};
@@ -129,6 +130,20 @@ const RUN = {
   'roll-out'(c) {
     const r = sim.rollOut(buildTerrain(c.terrain), c.x, c.vx, c.vy, arsenal.weapons[c.wkey]);
     return { x: r.x, y: r.y };
+  },
+  armor(c) {
+    let hull = { armor: armorRules.maxArmor(0), plates: 0 };
+    let hp = 0;
+    const out = [];
+    for (const [op, n] of c.ops) {
+      if (op === 'muster') hp = hull.armor;
+      else if (op === 'damage') hp = Math.max(0, hp - n);
+      else if (op === 'end') hull = armorRules.carryArmor(hull, hp, hp <= 0);
+      else if (op === 'repair') hull = { armor: hull.armor + armorRules.repairRestores(hull.armor, hull.plates, 40, n), plates: hull.plates };
+      else if (op === 'plate') hull = armorRules.fitPlates(hull, n);
+      out.push({ armor: hull.armor, max: armorRules.maxArmor(hull.plates), hp });
+    }
+    return out;
   },
   volley(c) {
     world(c);

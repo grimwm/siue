@@ -453,6 +453,15 @@
       {"name":"half-pixel-rounds-up","in":{"terrain":{"hills":[380,50,150]},"x":10.5,"y":380,"hp":50},"out":402.232},
       {"name":"hill-slope","in":{"terrain":{"hills":[380,50,150]},"x":200.4,"y":300,"hp":50},"out":423.301},
       {"name":"wreck-stays-put","in":{"terrain":{"flat":400},"x":300,"y":200,"hp":0},"out":200.0}
+    ],
+    "armor": [
+      {"name":"damage-carries-over","in":{"ops":[["muster"],["damage",36],["end"],["muster"]]},"out":[{"armor":100,"max":100,"hp":100},{"armor":100,"max":100,"hp":64},{"armor":64,"max":100,"hp":64},{"armor":64,"max":100,"hp":64}]},
+      {"name":"repair-capped-at-max","in":{"ops":[["muster"],["damage",15],["end"],["repair",1],["muster"]]},"out":[{"armor":100,"max":100,"hp":100},{"armor":100,"max":100,"hp":85},{"armor":85,"max":100,"hp":85},{"armor":100,"max":100,"hp":85},{"armor":100,"max":100,"hp":100}]},
+      {"name":"repair-from-low-needs-three","in":{"ops":[["muster"],["damage",90],["end"],["repair",3],["muster"]]},"out":[{"armor":100,"max":100,"hp":100},{"armor":100,"max":100,"hp":10},{"armor":10,"max":100,"hp":10},{"armor":100,"max":100,"hp":10},{"armor":100,"max":100,"hp":100}]},
+      {"name":"plate-raises-max-and-armor","in":{"ops":[["muster"],["damage",40],["end"],["plate",1],["muster"]]},"out":[{"armor":100,"max":100,"hp":100},{"armor":100,"max":100,"hp":60},{"armor":60,"max":100,"hp":60},{"armor":85,"max":125,"hp":60},{"armor":85,"max":125,"hp":85}]},
+      {"name":"plates-then-repair-to-the-new-max","in":{"ops":[["plate",3],["muster"],["damage",15],["end"],["repair",1],["muster"]]},"out":[{"armor":175,"max":175,"hp":0},{"armor":175,"max":175,"hp":175},{"armor":175,"max":175,"hp":160},{"armor":160,"max":175,"hp":160},{"armor":175,"max":175,"hp":160},{"armor":175,"max":175,"hp":175}]},
+      {"name":"wreck-re-musters-at-full-max","in":{"ops":[["plate",2],["muster"],["damage",500],["end"],["muster"]]},"out":[{"armor":150,"max":150,"hp":0},{"armor":150,"max":150,"hp":150},{"armor":150,"max":150,"hp":0},{"armor":150,"max":150,"hp":0},{"armor":150,"max":150,"hp":150}]},
+      {"name":"full-armor-repair-restores-nothing","in":{"ops":[["muster"],["repair",2],["muster"]]},"out":[{"armor":100,"max":100,"hp":100},{"armor":100,"max":100,"hp":100},{"armor":100,"max":100,"hp":100}]}
     ]
   }
 }

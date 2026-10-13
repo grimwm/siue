@@ -68,14 +68,11 @@ $end = room_fly_arc($room, $events, $room['tanks'][0], $weapons['shell'], 'shell
     300.0 + cos($a) * 20, 386.0 - sin($a) * 20, cos($a) * 120, -sin($a) * 120, 0.0, false, null);
 $check('drone-shot-does-not-hit-itself', $end[5] !== 0 && $hitsOn($events, 0) === [], json_encode([$end[0], $end[5]]));
 
-// Banked repair rides above full armor for the round, as in solo play;
-// banked fuel adds on. Drones are untouched.
+// Banked fuel adds on when the tanks muster; drones are untouched.
 $room = $flatRoom([$tank(0, 'human', 100.0, 125), $tank(1, 'ai', 300.0, 60)]);
-$room['repairApplied'] = [0 => 40];
 $room['fuelApplied'] = [0 => 60];
-room_apply_banked($room);
+room_apply_fuel($room);
 $me = $room['tanks'][0];
-$check('repair-above-max', $me['hp'] === 165 && $me['maxHp'] === 165, "hp={$me['hp']} max={$me['maxHp']}");
 $check('fuel-banked', $me['fuel'] === 140.0, 'fuel=' . $me['fuel']);
 $check('drone-untouched', $room['tanks'][1]['hp'] === 60);
 

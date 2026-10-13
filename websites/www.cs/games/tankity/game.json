@@ -350,7 +350,7 @@
                 "price": 120,
                 "n": 40,
                 "effect": "repair",
-                "note": "Restores 40 armor, banked for next round."
+                "note": "Restores up to 40 armor, never past max."
             },
             {
                 "key": "fuel",
@@ -368,7 +368,7 @@
                 "price": 300,
                 "n": 25,
                 "effect": "plate",
-                "note": "Raises max armor by 25, ready next round."
+                "note": "Raises max armor by 25 and adds 25 armor now."
             },
             {
                 "key": "shield",

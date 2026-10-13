@@ -9,6 +9,7 @@
 import type { FlowEvent } from './flow.ts';
 import type { GameState, GameTank, Tables } from './game-types.ts';
 import type { RoomClient } from './net.ts';
+import { PLATE_ARMOR, armorLabel, maxArmor, plateNote, repairNote, repairPacksWanted, repairRestores } from './armor.ts';
 import { TUNE, clamp } from './sim.ts';
 import type { ShopRow } from './sim.ts';
 import type { sfx as SfxApi } from './audio.ts';
@@ -18,7 +19,7 @@ import type { ShopEntry, ShopFreeRow } from './ui/shop.tsx';
 
 /** The slice of the game's state the shop reads and writes (main.ts's G). */
 export type ShopState = Pick<GameState, 'ammo' | 'shopSel' | 'shopQty' | 'round' | 'cash' | 'phase' | 'tanks' | 'lives'
-  | 'score' | 'shield' | 'jammer' | 'bunker' | 'laststand' | 'plate' | 'repairBank' | 'fuelBank'>;
+  | 'score' | 'shield' | 'jammer' | 'bunker' | 'laststand' | 'plate' | 'armor' | 'fuelBank'>;
 
 /** What the shop needs from the page and the rest of the game. */
 export interface ShopDeps {
@@ -115,20 +116,22 @@ export function createShop(deps: ShopDeps) {
       }
       const locked = (it.minRound || 0) > G.round;
       const unit = packPrice(it);
-      const total = unit * qty;
+      // A repair buys only the packs the hull needs, so it prices by those.
+      const packs = it.effect === 'repair' ? Math.min(qty, repairPacksWanted(G.armor, G.plate, it.n)) : qty;
+      const total = unit * packs;
       const parts = shopName(it, unit);
       entries.push({
         kind: 'item',
         index: idx,
         name: parts.name,
-        vals: `${parts.vals}${qty > 1 ? ` ×${qty} = $${total}` : ''}`,
+        vals: `${parts.vals}${packs > 1 ? ` ×${packs} = $${total}` : ''}`,
         sub: shopSub(it),
         sub2: shopSub2(it, locked),
         icon: it.kind === 'ammo' ? { kind: 'ammo', w: it.w! } : { kind: 'gear', g: it.g! },
         selected: idx === G.shopSel,
         locked,
-        disabled: locked || G.cash < total,
-        qty,
+        disabled: locked || G.cash < total || (it.effect === 'repair' && packs === 0),
+        qty: packs,
         weapon: it.kind === 'ammo' ? it.w : undefined,
       });
     });
@@ -137,7 +140,7 @@ export function createShop(deps: ShopDeps) {
       title: G.round === 0 ? 'Pre-match shop' : 'Field shop',
       cash: G.round === 0
         ? `War chest: $${G.cash} · spend your stake before the first hill`
-        : `War chest: $${G.cash} · armor ${me().hp}/${TUNE.playerArmor} · round ${G.round} cleared`,
+        : `War chest: $${G.cash} · armor ${G.armor}/${maxArmor(G.plate)} · round ${G.round} cleared`,
       entries,
       next: ready.next,
       readyLine: ready.readyLine,
@@ -196,20 +199,16 @@ export function createShop(deps: ShopDeps) {
       if (locked) return `Unlocks in round ${it.minRound}.`;
       return `Pack of ${it.n}. You own ${G.ammo![it.w!] || 0}.`;
     }
-    const maxArmor = TUNE.playerArmor + 25 * (G.plate || 0);
     switch (it.effect) {
-      case 'repair': {
-        const cur = G.tanks.length ? me().hp : TUNE.playerArmor;
-        const banked = G.repairBank ? `, plus ${G.repairBank} banked for next round` : '';
-        return `Your armor is at ${cur} of ${maxArmor}${banked}.`;
-      }
+      case 'repair':
+        return repairNote(G.armor, G.plate, it.n, G.shopQty || 1);
       case 'fuel': {
         const fuel = G.tanks.length ? Math.round(me().fuel) : TUNE.fuel;
         const banked = G.fuelBank ? `, plus ${G.fuelBank} banked for next round` : '';
         return `Your tank holds ${fuel} fuel${banked}.`;
       }
       case 'plate':
-        return `Max armor ${maxArmor}${G.plate ? ` (${G.plate} fitted)` : ''}, ready next round.`;
+        return plateNote(G.plate);
       case 'shield':
         return G.shield ? 'Shield is up for the next hit.' : 'No shield fitted.';
       case 'extralife':
@@ -226,6 +225,11 @@ export function createShop(deps: ShopDeps) {
   }
   function buyItem(it: ShopRow, qty?: number): void {
     qty = clamp(Math.floor(qty || 1), 1, 9);
+    if (it.effect === 'repair') {
+      const want = repairPacksWanted(G.armor, G.plate, it.n);
+      if (want === 0) { say('Armor is full already.', 'info'); return; }
+      qty = Math.min(qty, want);
+    }
     if (net.on) { netBuy(it, qty); return; }
     const total = packPrice(it) * qty;
     if ((it.minRound || 0) > G.round) {
@@ -256,8 +260,8 @@ export function createShop(deps: ShopDeps) {
     const n = (it.n || 0) * qty;
     switch (it.effect) {
       case 'repair':
-        G.repairBank += n;
-        say(`Bought ${lots}${it.label}, banked for next round.`, 'good');
+        G.armor += repairRestores(G.armor, G.plate, it.n || 0, qty);
+        say(`Bought ${lots}${it.label}: armor ${armorLabel(G.armor, G.plate)}.`, 'good');
         break;
       case 'fuel':
         G.fuelBank += n;
@@ -265,7 +269,8 @@ export function createShop(deps: ShopDeps) {
         break;
       case 'plate':
         G.plate += qty;
-        say(`Bought ${lots}${it.label}, plated for next round.`, 'good');
+        G.armor += PLATE_ARMOR * qty;
+        say(`Bought ${lots}${it.label}: armor ${armorLabel(G.armor, G.plate)}.`, 'good');
         break;
       case 'shield':
         G.shield = true;

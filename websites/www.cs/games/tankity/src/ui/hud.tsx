@@ -92,7 +92,7 @@ export function Hud(p: HudProps) {
         </div>
         <div class="hud-row r2">
           <span class="pill ammo"><span class="k">AMMO</span> <span class="v" id="hud-ammo">{p.ammo}</span></span>
-          <span class="pill armor" role="img"
+          <span class="pill armor" role="img" title={p.armor.max === null ? undefined : `${p.armor.shown} of ${p.armor.max}`}
             aria-label={`Armor ${p.armor.shown}${p.armor.max === null ? '' : ` of ${p.armor.max}`}${p.armor.sr ? `, ${p.armor.sr}` : ''}`}>
             <Label full="ARMOR" short="ARM" />{' '}
             <span class="v" id="hud-armor">{p.armor.shown}</span>

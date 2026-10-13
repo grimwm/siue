@@ -105,10 +105,15 @@ export async function newPlayer(browser, path = 'games/tankity/', { clock = fals
 
 export const hud = (page, id) => page.textContent('#' + id);
 
+/* Solo match from the title card: Play deals in and the pre-match shop opens. */
+export async function dealSolo(page) {
+  await page.click('#title-play');
+  await page.waitForSelector('#shop-veil:not([hidden])');
+}
+
 /* Solo match: deal in, leave the shop, wait for our first aim. */
 export async function startSolo(page) {
-  await page.keyboard.press('n');
-  await page.waitForSelector('#shop-veil:not([hidden])');
+  await dealSolo(page);
   await page.click('#shop-next');
   await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU|Aim/);
 }

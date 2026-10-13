@@ -123,8 +123,10 @@ test('armor is named with its maximum and the rivals in words; before a match th
   const pill = walk(bar).find(n => hasClass(n, 'armor'));
   assert.equal(pill.getAttribute('aria-label'), 'Armor 100 of 125, REAPER 60 of 60');
   assert.equal(pill.getAttribute('role'), 'img');
+  assert.equal(pill.getAttribute('title'), '100 of 125');
   hud.renderHud(bar, props({ armor: { shown: '-', max: null, sr: '' }, lives: null, badge: null }).p);
   assert.equal(walk(bar).find(n => hasClass(n, 'armor')).getAttribute('aria-label'), 'Armor -');
+  assert.equal(walk(bar).find(n => hasClass(n, 'armor')).getAttribute('title'), undefined);
   assert.equal(byId(bar, 'hud-lives').textContent, '-');
   assert.equal(byId(bar, 'hud-score').textContent, '-');
 });

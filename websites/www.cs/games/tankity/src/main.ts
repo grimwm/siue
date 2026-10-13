@@ -110,7 +110,7 @@ const FALLBACK_ARSENAL: ArsenalData = {
     { key: 'nuke', name: 'NUKE', cat: 'Shells', dmg: 95, radius: 70, price: 500, pack: 1, minRound: 4, ai: false, aiRound: 99, effect: 'shot', speed: 1.0, note: 'Levels whole hillsides.', gfx: { shell: '#ff6b6b', trail: '#ff6b6b', blast: ['#ff6b6b', '#fff3c4'], painter: 'disc', shake: 0.9 } },
   ],
   gear: [
-    { key: 'repair', name: 'Repair +40 armor', cat: 'Hull and fuel', price: 120, n: 40, effect: 'repair', note: 'Restores 40 armor, banked for next round.' },
+    { key: 'repair', name: 'Repair +40 armor', cat: 'Hull and fuel', price: 120, n: 40, effect: 'repair', note: 'Restores up to 40 armor, never past max.' },
     { key: 'fuel', name: 'Fuel +60', cat: 'Hull and fuel', price: 60, n: 60, effect: 'fuel', note: 'Adds 60 driving fuel.' },
   ],
 };
@@ -169,7 +169,7 @@ const G: GameState = {
   lives: TUNE.lives, score: 0, cash: 0, nextOneUp: TUNE.oneUpEvery,
   roundsWon: 0, ammo: null, selected: 'shell',
   shopSel: 0, shopQty: 1,
-  fuelBank: 0, repairBank: 0,
+  fuelBank: 0, armor: TUNE.playerArmor,
   plate: 0, shield: false, jammer: 0, bunker: 0, laststand: false,
   time: 0, shake: 0,
   dlgQ: [], dlgT: 0, lastTalk: -99, banterT: 30, bannerT: 0, bannerDone: null,

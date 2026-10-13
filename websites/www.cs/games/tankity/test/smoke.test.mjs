@@ -409,7 +409,7 @@ function scriptYou() {
   return {
     ammo: { shell: -1, buck: 1, mortar: 0, rail: 0, nuke: 0 },
     cash: 600, score: 0, lives: 3, fuel: 80, weapon: 'shell', nextUp: 3000,
-    seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, plate: 0,
+    seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, plate: 0, armor: seatArmor, maxArmor: 100,
   };
 }
 function playRoom(turn, events) {
@@ -500,6 +500,7 @@ global.fetch = async (url, opts) => {
     return okJson({ ok: true, room: playRoom(curTurn, []) });
   }
   if (u.includes('action=buy')) {
+    buysSent.push(body.item);
     return okJson({ ok: true, room: playRoom(curTurn, []) });
   }
   if (u.includes('action=join')) {
@@ -509,6 +510,8 @@ global.fetch = async (url, opts) => {
 };
 let NET_LOBBY = true;
 let NET_SHOP = false;
+let seatArmor = 100;
+const buysSent = [];
 let mockReady = false;
 const readySent = [];
 let extraGuest = false;
@@ -603,6 +606,9 @@ await (async () => {
   frames(120);
   check('banner-done', els['round-banner'].hidden === true);
   const shopOpen = els['shop-veil'].hidden === false;
+  // The pre-match shop has no tank: the aim, power, wind and fuel read '-', not the demo's last values.
+  check('shop-prematch-hud-dashes', ['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel'].every(id => els[id].textContent === '-'),
+    ['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel'].map(id => els[id].textContent).join('|'));
   const shopCash0 = els['shop-cash'].textContent;
   // Esc in the shop shuts panels first and, with none open, opens the menu: it never starts the round (N does).
   TAP('global', 'escape');
@@ -651,6 +657,13 @@ await (async () => {
   check('arsenal-cats', cats.join('|') === 'Shells|Hull and fuel|Tricks', cats.join('|'));
   for (const k of ['shell', 'buck', 'mortar', 'rail', 'nuke', 'repair', 'fuel']) {
     check('arsenal-keeps-' + k, arsenal.ammo.some(a => a.key === k) || arsenal.gear.some(g => g.key === k));
+  }
+  // A full hull has nothing to repair: the Repair row greys out and says so.
+  {
+    const repairRow = shopRows().find(li => rowName(li).includes('Repair'));
+    const acts = actsOf(repairRow);
+    check('shop-repair-greyed-at-full', acts.children[acts.children.length - 1].disabled === true && /Armor full \(100 of 100\)/.test(repairRow.textContent),
+      repairRow.textContent);
   }
   // Keyboard alone can shop: arrows highlight, Enter buys, digits buy outright.
   TAP('shop', 'selDown'); frames(3);
@@ -1101,8 +1114,22 @@ await (async () => {
   // Between rounds the room shops; V opens the firing range, and it stays
   // open through the polls that keep the shop fresh.
   NET_SHOP = true;
+  seatArmor = 60;
   await sleep(1800); await tick(10);
   check('net-shop', els['shop-veil'].hidden === false, `shop hidden=${els['shop-veil'].hidden}`);
+  // A damaged seat's Repair reads the room's armor, so it is enabled and asks the server.
+  {
+    const repairRow = shopRows().find(li => rowName(li).includes('Repair'));
+    const buy = actsOf(repairRow).children[actsOf(repairRow).children.length - 1];
+    check('net-shop-repair-enabled-when-damaged', buy.disabled === false && !/Armor full/.test(repairRow.textContent), repairRow.textContent);
+    // A repair is priced and labelled by the packs the hull needs, however many are dialled in.
+    TAP('shop', 'qtyUp'); TAP('shop', 'qtyUp'); frames(3);
+    const dialled = shopRows().find(li => rowName(li).includes('Repair'));
+    check('net-shop-repair-priced-by-need', !/×/.test(dialled.textContent), dialled.textContent);
+    check('net-shop-armor-pill', els['hud-armor'].textContent === '60', els['hud-armor'].textContent);
+    click(buy); await tick(10);
+    check('net-shop-repair-goes-to-server', buysSent.includes('repair'), buysSent.join());
+  }
   // The shop button is the Ready toggle: it shows who is ready and the clock,
   // sends the wanted state in click order, and a fast double click ends unready.
   check('net-ready-idle', /^Ready/.test(els['shop-next'].textContent) && !/✓/.test(els['shop-next'].textContent)
@@ -1125,6 +1152,7 @@ await (async () => {
     `opened=${pvOpened} open-after-polls=${els['preview-veil'].hidden === false}`);
   TAP('global', 'escape'); await tick(5);
   NET_SHOP = false;
+  seatArmor = 100;
   await sleep(1800); await tick(10);
   // typing in a box is typing, not playing
   const logLen = els['log'].children.length;

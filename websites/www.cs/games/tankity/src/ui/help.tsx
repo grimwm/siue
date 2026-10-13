@@ -28,6 +28,7 @@ export const HELP_KEYS: readonly (readonly [string, readonly (readonly [readonly
     [['aim:driveRight'], 'drive right (uses fuel)'],
     [['global:fire', 'global:fire:2'], 'fire and end your turn', 'or'],
     [['global:guns'], 'pick a weapon (a digit, or the arrows and Enter, loads one)'],
+    [['global:gunStock'], 'in the weapon picker: show every gun, or only those in stock'],
   ]],
   ['Panels and settings', [
     [['global:escape'], 'open the menu, or close whatever is open'],

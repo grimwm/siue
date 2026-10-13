@@ -398,6 +398,8 @@ button.btn-leave[hidden] { display: none; }
   border-bottom: 1px solid var(--wash-edge);
   border-radius: 11px 11px 0 0;
 }
+.ov-head.has-tools { grid-template-columns: minmax(0, 1fr) auto auto; }
+.ov-tools { display: flex; align-items: center; gap: 0.4rem; }
 .ov-title { min-width: 0; }
 .ov-head h2, .card .ov-head h2, .card-overlay .ov-head h2 { margin: 0; }
 .ov-head .kicker { margin-bottom: 0.1rem; }
@@ -437,6 +439,11 @@ button.btn-leave[hidden] { display: none; }
 .gun-choice .gun-count { color: var(--wash-ink); font-size: 0.75rem; }
 .gun-choice[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
 .gun-choice.cursor { outline: 2px solid var(--wash-key); outline-offset: 1px; }
+/* None in stock: greyed, but still a button the cursor and pointer reach. */
+.gun-choice[aria-disabled="true"] { color: var(--wash-ink); border-style: dashed; }
+.gun-choice[aria-disabled="true"] canvas { opacity: 0.35; filter: grayscale(1); }
+/* All guns or only those in stock: a 44 px target in the title bar. */
+.card-overlay .ov-tools .gun-stock { margin: 0; min-height: 44px; padding: 0.3rem 0.8rem; white-space: nowrap; }
 
 .touch .gun-choice.cursor { outline: none; }
 

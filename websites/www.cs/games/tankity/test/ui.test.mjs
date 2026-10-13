@@ -37,7 +37,7 @@ const KEYS = {
   'shop:buy': 'B', 'shop:preview': 'V', 'global:fire': 'Ctrl',
   'shop:buy:1': 'Enter', 'aim:barrelLeft': '◀', 'aim:barrelRight': '▶',
   'global:new': 'N', 'global:sound': 'E', 'global:music': 'M', 'global:fullscreen': 'F', 'global:random': 'T',
-  'global:rooms': 'O', 'global:tutorial': 'U', 'global:report': 'R', 'shop:next': 'N',
+  'global:rooms': 'O', 'global:tutorial': 'U', 'global:report': 'R', 'shop:next': 'N', 'global:gunStock': 'I',
 };
 const keyHint = (ctx, action, idx) => (idx ? KEYS[`${ctx}:${action}:${idx}`] : undefined) ?? KEYS[`${ctx}:${action}`] ?? '';
 
@@ -350,21 +350,22 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
 
 // ---- weapon picker ----
 function gunTiles(n = 10, loaded = 0) {
-  return Array.from({ length: n }, (_, i) => ({ key: i === 0 ? 'shell' : `gun${i}`, name: i === 0 ? 'Shell' : `Gun ${i}`, title: `note ${i}`, count: i === 0 ? '∞' : `×${i}`, loaded: i === loaded }));
+  return Array.from({ length: n }, (_, i) => ({ key: i === 0 ? 'shell' : `gun${i}`, name: i === 0 ? 'Shell' : `Gun ${i}`, title: `note ${i}`, count: i === 0 ? '∞' : `×${i}`, loaded: i === loaded, empty: false }));
 }
 {
   const section = makeEl('gun-overlay');
   section.hidden = false;
-  const calls = { close: 0, pick: [], icons: [] };
+  const calls = { close: 0, pick: [], icons: [], toggle: 0 };
   const gp = (over = {}) => ({
     keyHint, onClose: () => { calls.close++; }, tiles: gunTiles(), cursor: 0, drawIcon: (cv, w) => { calls.icons.push(w); }, arsenalRev: 1,
+    inStockOnly: false, onToggleStock: () => { calls.toggle++; },
     onPick: w => calls.pick.push(w), ...over,
   });
   delete globalThis.__scrolledTo;
   renderGuns(section, gp());
   const [head, grid] = section.children;
   check('guns-head-and-grid', hasClass(head, 'ov-head') && text(byId(head, 'gun-h')) === 'Weapons' && byId(head, 'gun-close') && grid.id === 'gun-grid'
-    && hasClass(grid, 'gun-grid') && attr(grid, 'role') === 'group' && attr(grid, 'aria-label') === 'Weapons you own');
+    && hasClass(grid, 'gun-grid') && attr(grid, 'role') === 'group' && attr(grid, 'aria-label') === 'All weapons');
   const nav = byId(head, 'nav-gun');
   check('guns-nav', hasClass(nav, 'nav-hint') && attr(nav, 'data-scroll-only') === undefined && text(nav) === '◀▶▲▼ or JK moveEnter loads1-9 load that tile', text(nav));
   click(byId(head, 'gun-close'));
@@ -398,6 +399,35 @@ function gunTiles(n = 10, loaded = 0) {
   check('guns-smaller-rack', grid.children.length === 4 && grid.children[1] === tiles[1] && calls.icons.length === 10);
   renderGuns(section, gp({ cursor: 1, tiles: gunTiles(4), arsenalRev: 2 }));
   check('guns-new-arsenal-repaints', calls.icons.length === 14, String(calls.icons.length));
+}
+
+// The weapon picker's toggle and its empty tiles.
+{
+  const section = makeEl('gun-overlay-2');
+  section.hidden = false;
+  const calls = { pick: [], toggle: 0 };
+  const gp = (over = {}) => ({
+    keyHint, onClose: () => {}, tiles: gunTiles(), cursor: 0, drawIcon: () => {}, arsenalRev: 1,
+    inStockOnly: false, onToggleStock: () => { calls.toggle++; }, onPick: w => calls.pick.push(w), ...over,
+  });
+  renderGuns(section, gp());
+  const [head, grid] = section.children;
+  const tools = walk(head).find(n => hasClass(n, 'ov-tools'));
+  // Every gun, or only those in stock, with its key chip.
+  const stock = byId(tools, 'gun-stock');
+  check('guns-stock-toggle', hasClass(head, 'has-tools') && !!tools && stock.localName === 'button' && attr(stock, 'type') === 'button'
+    && text(stock) === 'Show: All I' && attr(stock.children[stock.children.length - 1], 'data-keyhint') === 'global:gunStock', text(stock));
+  click(stock);
+  check('guns-stock-toggle-reports', calls.toggle === 1);
+  renderGuns(section, gp({ inStockOnly: true }));
+  check('guns-stock-toggle-in-stock', text(stock) === 'Show: In stock I' && attr(grid, 'aria-label') === 'Weapons in stock', text(stock));
+  // None in stock: greyed (aria-disabled) but still a button, and a click still reports (the game says why not).
+  renderGuns(section, gp({ tiles: gunTiles().map((t, i) => (i === 2 ? { ...t, count: '×0', empty: true } : t)) }));
+  const emptyTile = grid.children[2];
+  check('guns-empty-tile', attr(emptyTile, 'aria-disabled') === 'true' && emptyTile.disabled !== true && attr(grid.children[1], 'aria-disabled') === undefined
+    && /None in stock/.test(attr(emptyTile, 'title')), attr(emptyTile, 'aria-disabled'));
+  click(emptyTile);
+  check('guns-empty-tile-click-reports', calls.pick.join() === 'gun2');
 }
 
 // ---- scores ----

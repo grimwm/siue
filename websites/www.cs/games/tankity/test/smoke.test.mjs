@@ -794,6 +794,27 @@ await (async () => {
   const qLog = logText();
   for (let n = 1; n <= 4; n++) pickTile(n);
   const cycleNames = [...logText().matchAll(/Loaded: (\w+)\./g)].map(m => m[1]);
+  // The picker shows every gun, the empty ones greyed out (aria-disabled);
+  // loading one only says none are in stock. I shows just the guns in stock.
+  {
+    TAP('global', 'guns'); frames(2);
+    const tiles = () => els['gun-grid'].children;
+    const nuke = () => tiles().find(t => /NUKE/.test(t.textContent));
+    const all = tiles().length;
+    check('guns-show-all', !!nuke() && nuke().getAttribute('aria-disabled') === 'true'
+      && tiles()[0].getAttribute('aria-disabled') === undefined, `${all} tiles`);
+    const n = tiles().indexOf(nuke()) + 1;
+    if (n <= 9) { keyDown(String(n), 'Digit' + n); keyUp(String(n), 'Digit' + n); frames(2); }
+    else click(nuke());
+    check('guns-empty-pick-says-none', els['gun-overlay'].hidden === false && /None in stock: NUKE/.test(logText()), logTail());
+    TAP('global', 'gunStock'); frames(2);
+    check('guns-in-stock-only', tiles().length < all && !nuke() && tiles().every(t => t.getAttribute('aria-disabled') === undefined)
+      && /In stock/.test(els['gun-stock'].textContent), `${tiles().length}`);
+    TAP('global', 'gunStock'); frames(2);
+    check('guns-show-all-again', tiles().length === all && /All/.test(els['gun-stock'].textContent));
+    TAP('global', 'guns'); frames(2);
+    check('guns-closed', els['gun-overlay'].hidden === true);
+  }
   // Watch the canvas: blast discs must match their weapon radii exactly,
   // and the camera zoom must stay inside its sane range.
   const boomR = [];

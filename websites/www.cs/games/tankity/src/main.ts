@@ -455,7 +455,7 @@ const {
 /* The weapon picker (src/guns.ts). */
 const {
   GUN_COLS, rackGuns, gunsOpen, openGuns, closeGuns, renderGuns, pickGun, moveGunCursor, gunGrid,
-  cursorAt: gunCursorAt,
+  cursorAt: gunCursorAt, toggleStock: toggleGunStock,
 } = createGuns({
   G, $, tables, net, sfx, keyHint, say, refreshNavHints, renderHUD, drawShellIcon, demoBlock,
   netPick: w => netPick(w),
@@ -659,6 +659,7 @@ function bindKeys(): void {
       else freshMatchFromSeedBox();
     },
     guns: () => { if (gunsOpen()) closeGuns(); else openGuns(); },
+    gunStock: () => { if (gunsOpen()) toggleGunStock(); },
     tutorial: () => { tutorialOpen(); },
     battlePreview: () => { togglePreview(); },
     fullscreen: () => { toggleFullscreen(); },

@@ -521,6 +521,9 @@
             "guns": [
                 "g"
             ],
+            "gunStock": [
+                "i"
+            ],
             "tutorial": [
                 "u"
             ],

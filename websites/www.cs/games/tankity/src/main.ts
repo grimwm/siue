@@ -630,12 +630,14 @@ function bindKeys(): void {
     buy: () => { buySelected(); return true; },
     preview: () => (previewSelected() ? true : 'quiet'), // V does nothing else in the shop
     // Q in the shop shuts the firing range first, then any open panel (the
-    // menu can sit above the shop), and with nothing open it opens the menu.
+    // menu can sit above the shop) or the Standings card, and with nothing
+    // open it opens the menu.
     // It never starts the round: that is N or the Start button.
     close: () => {
       if (G.preview) closePreview();
       else if (closeLeaveVeil()) { /* the question closed */ }
-      else if (!closeOverlays()) toggleOverlay('menu-overlay', 'btn-menu');
+      else if (closeOverlays() || endVeilBack()) { /* a panel or the Standings card closed */ }
+      else toggleOverlay('menu-overlay', 'btn-menu');
       return true;
     },
     // Q toggles the menu: it shuts the topmost thing that is open. Panels

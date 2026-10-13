@@ -108,6 +108,9 @@ test('the Q handlers shut panels and previews and never reach the toggle or Quit
   const LEAVE = /toggleFullscreen|quitGame|exitApp|exitFullscreen|requestFullscreen|\.quit\b/;
   const keys = body('tankity/src/main.ts', 'bindKeys');
   for (const k of ['close', 'back', 'modalBack']) assert.doesNotMatch(handler(keys, k), LEAVE, k);
+  // The shop's Q answers the same open things as the global back: Menu -> Standings
+  // can sit over a room's shop, and Q must close that card before it opens the menu.
+  assert.match(handler(keys, 'close'), /endVeilBack\(\)/, 'shop Q reaches the end card');
   for (const fn of ['openPreview', 'closePreview', 'togglePreview']) assert.doesNotMatch(body('tankity/src/main.ts', fn), LEAVE, fn);
   assert.doesNotMatch(FILES.find(f => f.rel === 'tankity/src/preview.ts').src, LEAVE, 'preview.ts');
   for (const rel of ['_kit/ui/dialog.tsx', '_kit/ui/install-bar.tsx']) {

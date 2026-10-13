@@ -25,11 +25,16 @@ export function isBackKey(ev: BackKeyEvent): boolean {
   return (ev.key === 'q' || ev.key === 'Q') && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !ev.isComposing;
 }
 
+/** Input types that take no typed text, so Q is not a letter there. */
+const NON_TEXT_INPUTS: ReadonlySet<string> = new Set(
+  ['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'image', 'color', 'file']);
+
 /** True when a key pressed on `target` types into it, so Q is a letter there. */
 export function typesText(target: unknown): boolean {
-  const t = target as { tagName?: string; readOnly?: boolean; isContentEditable?: boolean } | null | undefined;
+  const t = target as { tagName?: string; type?: string; readOnly?: boolean; isContentEditable?: boolean } | null | undefined;
   if (!t) return false;
   if (t.isContentEditable) return true;
   if (t.tagName === 'SELECT') return true;
+  if (t.tagName === 'INPUT' && t.type && NON_TEXT_INPUTS.has(t.type)) return false;
   return (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') && !t.readOnly;
 }

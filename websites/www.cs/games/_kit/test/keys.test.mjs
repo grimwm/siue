@@ -27,5 +27,11 @@ test('boxes that take letters type Q; a read-only field and a button do not', ()
   assert.equal(typesText({ tagName: 'DIV', isContentEditable: true }), true);
   assert.equal(typesText({ tagName: 'INPUT', readOnly: true }), false);
   assert.equal(typesText({ tagName: 'BUTTON' }), false);
+  for (const type of ['range', 'checkbox', 'radio', 'button', 'submit', 'color', 'file']) {
+    assert.equal(typesText({ tagName: 'INPUT', type }), false, type);
+  }
+  for (const type of ['text', 'search', 'number', 'email', 'password', 'url', 'tel', undefined]) {
+    assert.equal(typesText({ tagName: 'INPUT', type }), true, String(type));
+  }
   assert.equal(typesText(null), false);
 });

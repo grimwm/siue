@@ -110,9 +110,36 @@ final class RoomArmorTest extends TestCase
         $room = $this->room();
         foreach ($room['tanks'] as $t) {
             if ($t['kind'] === 'ai') {
-                $this->assertSame(60 + 6 * ($room['round'] - 1), $t['hp']);
+                $this->assertSame(60, $t['hp']);
             }
         }
+    }
+
+    public function testDronesStayOnTheirOwnCurveInLaterRounds(): void
+    {
+        $room = $this->room();
+        $this->setHp($room, 'ai', 0);
+        $events = [];
+        room_end_round($room, $events);
+        room_shop_set_ready($room, 0, true);
+        room_shop_settle($room);
+        foreach ($room['tanks'] as $t) {
+            if ($t['kind'] === 'ai') {
+                $this->assertSame(66, $t['hp']);
+                $this->assertSame(66, $t['maxHp']);
+            }
+        }
+    }
+
+    public function testAnEliminatedSeatKeepsItsArmorUntouched(): void
+    {
+        $room = $this->room();
+        $room['seats'][0]['lives'] = 1;
+        $room['armor'][0] = 40;
+        $this->setHp($room, 'human', 0);
+        $events = [];
+        room_end_round($room, $events);
+        $this->assertSame(40, $room['armor'][0]);
     }
 
     public function testFuelStillBanksAndNothingElseDoes(): void

@@ -574,7 +574,9 @@ function room_end_round(array &$room, array &$events): void
     }
     // Armor carries into the next round; a wrecked tank re-musters at full max.
     foreach ($room['tanks'] as $t) {
-        if ($t['kind'] === 'human') {
+        // A seat this round eliminates has no next tank; its armor stays as it was.
+        $out = $t['hp'] <= 0 && ($room['seats'][$t['seat']]['lives'] ?? 3) <= 1;
+        if ($t['kind'] === 'human' && !$out) {
             room_carry_armor($room, (int) $t['seat'], (int) $t['hp'], $t['hp'] <= 0);
         }
     }

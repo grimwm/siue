@@ -46,6 +46,8 @@ require_once __DIR__ . '/config.php';
 //   server/rules.php     seats, rounds, turn clock, pacing, the shop, scores
 //   server/solo.php      the solo referee, for the server's play of solo rounds
 //   server/protocol.php  events, snapshots and deltas
+//   server/scores-api.php the solo score endpoint's work, here so housekeeping
+//                        from either endpoint also sweeps solo runs
 // Those files do nothing unless this one requires them.
 define('TANKITY_ROOMS_INCLUDED', true);
 require_once __DIR__ . '/server/db.php';
@@ -62,6 +64,7 @@ require_once __DIR__ . '/server/ai.php';
 require_once __DIR__ . '/server/rules.php';
 require_once __DIR__ . '/server/solo.php';
 require_once __DIR__ . '/server/protocol.php';
+require_once __DIR__ . '/server/scores-api.php';
 
 // room_arsenal() resolves against this file's own location (game.json next to it), so it stays here.
 /* A client that sends Accept-Encoding: gzip gets the JSON compressed (the
@@ -126,7 +129,7 @@ function room_arsenal(): array
 if (defined('TANKITY_ROOMS_LIB')) {
     return;
 }
-// No cron on the host: requests do the cleanup, at most every few minutes.
+// No cron on the host: requests do the cleanup, at most once a minute.
 tankity_housekeep(time(), tankity_jobs());
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = $_GET['action'] ?? ($_POST['action'] ?? '');

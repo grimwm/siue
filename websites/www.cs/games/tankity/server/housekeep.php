@@ -11,7 +11,7 @@ if (count(get_included_files()) === 1) {
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/legacy.php';
 
-const HOUSEKEEP_EVERY = 300;
+const HOUSEKEEP_EVERY = 60;
 
 /* Runs $jobs (name => fn(int $now): int, what it removed) when the last run
    is HOUSEKEEP_EVERY seconds old. A plain read decides that, so a request

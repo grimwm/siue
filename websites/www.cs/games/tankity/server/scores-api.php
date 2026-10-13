@@ -21,18 +21,29 @@ const SOLO_RUN_IDLE = 7200; // a run expires two hours after its last accepted r
 const SOLO_RUN_UNPLAYED_IDLE = 900;
 const SOLO_RUN_MAX_AGE = 86400; // and a day after it started, at the latest
 const SOLO_RUN_FILED_KEEP = 3600; // a filed run answers a repeated filing this long
-// Runs past their first round, live or waiting to file, across the server:
-// about 30 MB of state at most. A run not yet played holds no state and no place.
-const SOLO_MAX_LIVE_RUNS = 1000;
 const SOLO_LEASE_SLACK = 30; // seconds a round's lease outlasts its CPU budget, for a slow wall clock
-const SOLO_EXPIRE_BATCH = 1000; // runs housekeeping deletes per pass: more than an hour of starts can add
-const SOLO_RATE_EXPIRE_BATCH = 20000; // throttle rows (a few dozen bytes each) housekeeping deletes per pass
+// Rows housekeeping deletes per pass (one a minute): a thousand addresses
+// each starting runs as fast as SOLO_STARTS_PER_HOUR allows add 120000 run rows
+// an hour and 18000 count rows, and every pass is bounded by rows, not time.
+const SOLO_EXPIRE_BATCH = 2500;
+const SOLO_RATE_EXPIRE_BATCH = 5000;
+// The hourly caps count in slots of this many seconds, and a check sums the
+// last hour's slots and the one it began in: never more than the cap in any
+// hour, and an allowance spent all at once comes back at most one slot late.
+const SOLO_RATE_SLOT = 600;
 const SOLO_RUN_ID = '/^[a-f0-9]{32}\z/'; // a run's id: 128 random bits, and the only key to it
 // The defaults of the settings below. Every cap but the play slots is per
 // address, and one campus NAT is one address, so they are sized for a class.
 const SOLO_STARTS_PER_HOUR = 120;
 const SOLO_ROUNDS_PER_HOUR = 600;
 const SOLO_SCORES_PER_HOUR = 240;
+// Runs past their first round (live or waiting to file) hold a place, across
+// the server and per address: filling every place takes SOLO_MAX_HELD /
+// SOLO_HELD_PER_CLIENT addresses, while one campus NAT still fits a full lab.
+// A played run's state is up to about 27 KB. A run not yet played holds no
+// state and no place.
+const SOLO_MAX_HELD = 5000;
+const SOLO_HELD_PER_CLIENT = 50;
 // Runs one address may hold (unplayed, live, over or void, not yet expired):
 // a flood from one address can neither fill the table nor take every other
 // player's place.
@@ -41,13 +52,27 @@ const SOLO_RUNS_PER_CLIENT = 100;
 // about the host's cores, which only its operator knows. One address may hold
 // SOLO_PLAYING_PER_CLIENT of them, so it cannot take them all.
 const SOLO_MAX_PLAYING = 8;
-const SOLO_PLAYING_PER_CLIENT = 2;
+const SOLO_PLAYING_PER_CLIENT = 4;
 
-/* A positive whole-number setting, or $default when it is unset or anything else. */
+/* A positive whole-number setting, or $default when it is unset. A value set
+   but refused is logged once (naming the setting and the value), then the
+   default is used. */
 function solo_setting(string $env, string $key, int $default): int
 {
-    $raw = trim((string) tankity_setting($env, $key, ''));
-    return preg_match('/^\d{1,6}$/', $raw) && (int) $raw > 0 ? (int) $raw : $default;
+    static $logged = [];
+    $set = tankity_setting($env, $key, '');
+    $raw = trim(is_scalar($set) ? (string) $set : '');
+    if (preg_match('/^\d{1,6}$/', $raw) && (int) $raw > 0) {
+        return (int) $raw;
+    }
+    if ($raw !== '' || !is_scalar($set)) {
+        $shown = is_scalar($set) ? var_export(substr($raw, 0, 40), true) : get_debug_type($set);
+        if (!isset($logged[$key][$shown])) {
+            $logged[$key][$shown] = true;
+            error_log("tankity setting $key ($env): refused $shown, not a whole number from 1 to 999999; using $default");
+        }
+    }
+    return $default;
 }
 
 function solo_starts_per_hour(): int
@@ -80,20 +105,26 @@ function solo_playing_per_client(): int
     return solo_setting('TANKITY_PLAYING_PER_CLIENT', 'playing_per_client', SOLO_PLAYING_PER_CLIENT);
 }
 
+function solo_max_held(): int
+{
+    return solo_setting('TANKITY_MAX_HELD', 'max_held', SOLO_MAX_HELD);
+}
+
+function solo_held_per_client(): int
+{
+    return solo_setting('TANKITY_HELD_PER_CLIENT', 'held_per_client', SOLO_HELD_PER_CLIENT);
+}
+
 /* How much of its $kind allowance an address ($client, the guard's key) has
-   used in the last hour. The counts are per clock hour; the hour before counts
-   for the share of it still inside the last 3600 seconds, so the cap slides
-   rather than doubling across the hour's turn. Two indexed rows at most. */
+   used in the last hour: the counts of the slots that hour touches, the slot
+   it began in counted whole. So no hour holds more than the cap, and an
+   allowance spent at once comes back at most SOLO_RATE_SLOT seconds after the
+   hour. Seven indexed rows at most. */
 function solo_rate_used(PDO $db, string $client, string $kind, int $now): int
 {
-    $hour = intdiv($now, 3600);
-    $q = $db->prepare('SELECT hour, n FROM solo_rate WHERE client = ? AND kind = ? AND hour >= ?');
-    $q->execute([$client, $kind, $hour - 1]);
-    $used = 0;
-    foreach ($q->fetchAll(PDO::FETCH_NUM) as [$h, $n]) {
-        $used += (int) $h === $hour ? (int) $n : intdiv((int) $n * (3600 - $now % 3600), 3600);
-    }
-    return $used;
+    $q = $db->prepare('SELECT COALESCE(SUM(n), 0) FROM solo_rate WHERE client = ? AND kind = ? AND slot >= ?');
+    $q->execute([$client, $kind, intdiv($now - 3600, SOLO_RATE_SLOT)]);
+    return (int) $q->fetchColumn();
 }
 
 /* Takes one of an address's $perHour $kind slots inside the caller's write
@@ -104,8 +135,8 @@ function solo_rate_take(PDO $db, string $client, string $kind, int $perHour, int
     if (solo_rate_used($db, $client, $kind, $now) >= $perHour) {
         return false;
     }
-    $db->prepare('INSERT INTO solo_rate (client, kind, hour, n) VALUES (?, ?, ?, 1)
-        ON CONFLICT (client, kind, hour) DO UPDATE SET n = n + 1')->execute([$client, $kind, intdiv($now, 3600)]);
+    $db->prepare('INSERT INTO solo_rate (client, kind, slot, n) VALUES (?, ?, ?, 1)
+        ON CONFLICT (client, kind, slot) DO UPDATE SET n = n + 1')->execute([$client, $kind, intdiv($now, SOLO_RATE_SLOT)]);
     return true;
 }
 
@@ -113,8 +144,8 @@ function solo_rate_take(PDO $db, string $client, string $kind, int $perHour, int
 function solo_rate_expire(int $now, int $limit = SOLO_RATE_EXPIRE_BATCH): int
 {
     return tankity_tx(tankity_db(), function (PDO $db) use ($now, $limit): int {
-        $q = $db->prepare('DELETE FROM solo_rate WHERE rowid IN (SELECT rowid FROM solo_rate WHERE hour < ? LIMIT ?)');
-        $q->execute([intdiv($now, 3600) - 1, $limit]);
+        $q = $db->prepare('DELETE FROM solo_rate WHERE rowid IN (SELECT rowid FROM solo_rate WHERE slot < ? LIMIT ?)');
+        $q->execute([intdiv($now - 3600, SOLO_RATE_SLOT), $limit]);
         return $q->rowCount();
     });
 }
@@ -142,26 +173,31 @@ function solo_run_expired(array $row, int $now): bool
     return $now - (int) $row['touched'] > $idle || $now - (int) $row['created'] > SOLO_RUN_MAX_AGE;
 }
 
-/* Deletes expired runs, filed runs past their keep included, at most $limit; answers how many. */
+/* Deletes expired runs, filed runs past their keep included, at most $limit;
+   answers how many. A run whose round is being played is never deleted: its
+   lease runs out first. */
 function solo_runs_expire(int $now, int $limit = 100): int
 {
     return tankity_tx(tankity_db(), function (PDO $db) use ($now, $limit): int {
-        $q = $db->prepare("DELETE FROM solo_runs WHERE id IN (SELECT id FROM solo_runs WHERE
+        $q = $db->prepare("DELETE FROM solo_runs WHERE id IN (SELECT id FROM solo_runs WHERE playing <= ? AND (
             (status <> 'filed' AND (touched < ? OR created < ?)) OR (status = 'filed' AND touched < ?)
-            OR (status = 'live' AND round = 0 AND touched < ?) LIMIT ?)");
-        $q->execute([$now - SOLO_RUN_IDLE, $now - SOLO_RUN_MAX_AGE, $now - SOLO_RUN_FILED_KEEP, $now - SOLO_RUN_UNPLAYED_IDLE, $limit]);
+            OR (status = 'live' AND round = 0 AND touched < ?)) LIMIT ?)");
+        $q->execute([$now, $now - SOLO_RUN_IDLE, $now - SOLO_RUN_MAX_AGE, $now - SOLO_RUN_FILED_KEEP, $now - SOLO_RUN_UNPLAYED_IDLE, $limit]);
         return $q->rowCount();
     });
 }
 
 /* Runs that hold a place: past their first round (or playing it), live or
-   waiting to file, and not yet expired. */
-function solo_runs_live(PDO $db, int $now): int
+   waiting to file, and not yet expired; across the server, or those one
+   address ($client) started. */
+function solo_runs_held(PDO $db, int $now, ?string $client = null): int
 {
-    $played = $db->prepare("SELECT COUNT(*) FROM solo_runs WHERE round > 0 AND status IN ('live', 'over') AND touched >= ? AND created >= ?");
-    $played->execute([$now - SOLO_RUN_IDLE, $now - SOLO_RUN_MAX_AGE]);
-    $first = $db->prepare('SELECT COUNT(*) FROM solo_runs WHERE playing > ? AND round = 0');
-    $first->execute([$now]);
+    $who = $client === null ? '' : ' AND client = ?';
+    $args = $client === null ? [] : [$client];
+    $played = $db->prepare("SELECT COUNT(*) FROM solo_runs WHERE round > 0 AND status IN ('live', 'over') AND touched >= ? AND created >= ?$who");
+    $played->execute([$now - SOLO_RUN_IDLE, $now - SOLO_RUN_MAX_AGE, ...$args]);
+    $first = $db->prepare("SELECT COUNT(*) FROM solo_runs WHERE playing > ? AND round = 0$who");
+    $first->execute([$now, ...$args]);
     return (int) $played->fetchColumn() + (int) $first->fetchColumn();
 }
 
@@ -187,9 +223,11 @@ function solo_run_void(string $id, int $now): void
    [null, row, lease] when this request may play it, else [reply, null, 0].
    One request plays a round at a time (a copy sent meanwhile waits, then gets
    the stored reply); at most solo_max_playing() rounds play across the server
-   and solo_playing_per_client() for one address; a first round also needs a
-   live run's place. Only then is the round charged to the address. A request
-   that dies mid-round leaves a lease that runs out. */
+   and solo_playing_per_client() for one address. A first round also needs a
+   place: one of solo_max_held() (503 past it) and one of the
+   solo_held_per_client() of the address that started the run (429). Only then
+   is the round charged to the address. A request that dies mid-round leaves a
+   lease that runs out. */
 function solo_run_lease(string $id, int $n, string $client, int $now): array
 {
     return tankity_tx(tankity_db(), function (PDO $db) use ($id, $n, $client, $now): array {
@@ -207,10 +245,11 @@ function solo_run_lease(string $id, int $n, string $client, int $now): array
         $busy->execute([$client, $now]);
         [$playing, $mine] = array_map('intval', $busy->fetch(PDO::FETCH_NUM));
         if ((int) $row['playing'] > $now || $playing >= solo_max_playing() || $mine >= solo_playing_per_client()
-            || ($n === 1 && solo_runs_live($db, $now) >= SOLO_MAX_LIVE_RUNS)) {
+            || ($n === 1 && solo_runs_held($db, $now) >= solo_max_held())) {
             return [[503, ['error' => 'busy']], null, 0];
         }
-        if (!solo_rate_take($db, $client, 'round', solo_rounds_per_hour(), $now)) {
+        if (($n === 1 && solo_runs_held($db, $now, (string) $row['client']) >= solo_held_per_client())
+            || !solo_rate_take($db, $client, 'round', solo_rounds_per_hour(), $now)) {
             return [[429, ['error' => 'rate']], null, 0];
         }
         $lease = $now + (int) ceil(solo_round_cpu()) + SOLO_LEASE_SLACK;
@@ -224,6 +263,27 @@ function solo_run_lease(string $id, int $n, string $client, int $now): array
 function solo_run_release(string $id, int $lease): void
 {
     tankity_tx(tankity_db(), fn(PDO $db) => $db->prepare('UPDATE solo_runs SET playing = 0 WHERE id = ? AND playing = ?')->execute([$id, $lease]));
+}
+
+/* Stores round $n as played ($got from solo_round) if the run is still at the
+   round before, giving back this request's lease ($lease) and no other. */
+function solo_run_store(string $id, int $n, int $lease, array $got, int $now): array
+{
+    $reply = ['ok' => true, 'n' => $n] + $got['claim'];
+    $state = solo_state_encode($got['s']);
+    return tankity_tx(tankity_db(), function (PDO $db) use ($id, $n, $lease, $got, $reply, $state, $now): array {
+        $row = solo_run_row($db, $id);
+        if ($row === null || $row['status'] !== 'live' || (int) $row['round'] !== $n - 1) {
+            // Another request stored this round (or the run moved on) while this one played it.
+            return $row !== null && (int) $row['round'] === $n && $row['reply'] !== ''
+                ? [200, json_decode((string) $row['reply'], true)] : [409, ['error' => 'out of order', 'round' => (int) ($row['round'] ?? 0)]];
+        }
+        $db->prepare('UPDATE solo_runs SET state = ?, round = ?, status = ?, touched = ?, reply = ?,
+            playing = CASE WHEN playing = ? THEN 0 ELSE playing END WHERE id = ?')->execute([
+            $state, $n, $got['claim']['end'] === 'matchLost' ? 'over' : 'live', $now, json_encode($reply, JSON_UNESCAPED_SLASHES), $lease, $id,
+        ]);
+        return [200, $reply];
+    });
 }
 
 /* src/solo-log.ts isClaim, with JSON's whole numbers as PHP decodes them. */
@@ -284,10 +344,11 @@ function tankity_scores_start(array $in, ScoreGuard $guard, int $now): array
     }
     $client = $guard->clientKey();
     return tankity_tx(tankity_db(), function (PDO $db) use ($now, $level, $seed, $w, $client): array {
-        if (solo_runs_live($db, $now) >= SOLO_MAX_LIVE_RUNS) {
+        if (solo_runs_held($db, $now) >= solo_max_held()) {
             return [503, ['error' => 'busy']];
         }
-        if (solo_rate_used($db, $client, 'round', $now) >= solo_rounds_per_hour()
+        if (solo_runs_held($db, $now, $client) >= solo_held_per_client()
+            || solo_rate_used($db, $client, 'round', $now) >= solo_rounds_per_hour()
             || solo_runs_of($db, $client, $now) >= solo_runs_per_client()
             || !solo_rate_take($db, $client, 'start', solo_starts_per_hour(), $now)) {
             return [429, ['error' => 'rate']];
@@ -347,23 +408,15 @@ function tankity_scores_round(array $in, object $obj, ScoreGuard $guard, int $no
             solo_run_void($id, $now);
             return [422, ['error' => 'void', 'why' => 'mismatch', 'server' => $got['claim']]];
         }
-        $reply = ['ok' => true, 'n' => $n] + $got['claim'];
-        $state = solo_state_encode($got['s']);
-        return tankity_tx(tankity_db(), function (PDO $db) use ($id, $n, $got, $reply, $state, $now): array {
-            $row = solo_run_row($db, $id);
-            if ($row === null || $row['status'] !== 'live' || (int) $row['round'] !== $n - 1) {
-                // Another request stored this round (or the run moved on) while this one played it.
-                return $row !== null && (int) $row['round'] === $n && $row['reply'] !== ''
-                    ? [200, json_decode((string) $row['reply'], true)] : [409, ['error' => 'out of order', 'round' => (int) ($row['round'] ?? 0)]];
-            }
-            $db->prepare('UPDATE solo_runs SET state = ?, round = ?, status = ?, touched = ?, reply = ?, playing = 0 WHERE id = ?')->execute([
-                $state, $n, $got['claim']['end'] === 'matchLost' ? 'over' : 'live', $now, json_encode($reply, JSON_UNESCAPED_SLASHES), $id,
-            ]);
-            return [200, $reply];
-        });
+        return solo_run_store($id, $n, $lease, $got, $now);
     } catch (Throwable $e) {
         // Whatever failed, the run waits for the round to be sent again, not for its lease to run out.
-        solo_run_release($id, $lease);
+        // A release that fails too is logged; the caller sees what failed first.
+        try {
+            solo_run_release($id, $lease);
+        } catch (Throwable $released) {
+            error_log('tankity scores: releasing a lease after a failed round: ' . $released->getMessage());
+        }
         throw $e;
     }
 }

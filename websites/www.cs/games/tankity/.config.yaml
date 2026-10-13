@@ -23,10 +23,14 @@
 #                     hour; default 240)
 #   runs_per_client <- TANKITY_RUNS_PER_CLIENT (solo runs one address may hold
 #                     at once; default 100)
+#   max_held       <- TANKITY_MAX_HELD (solo runs past their first round the
+#                     server keeps at once; default 5000)
+#   held_per_client <- TANKITY_HELD_PER_CLIENT (of those, how many one address
+#                     may have started; default 50)
 #   max_playing    <- TANKITY_MAX_PLAYING (solo rounds the server plays at
 #                     once; about the host's cores; default 8)
 #   playing_per_client <- TANKITY_PLAYING_PER_CLIENT (of those, how many one
-#                     address may hold; default 2)
+#                     address may hold; default 4)
 #   scores_dir     <- TANKITY_SCORES_DIR (retired: only where score files
 #                     from before the database are imported from; default /var/tmp)
 # Point CONFIG_FILE at another file to load settings from elsewhere.

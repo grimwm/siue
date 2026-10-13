@@ -12,7 +12,7 @@ final class ScoresApiTest extends TestCase
     private string $dir;
     private int $now;
     private const SETTINGS = ['TANKITY_STARTS_PER_HOUR', 'TANKITY_SCORES_PER_HOUR', 'TANKITY_ROUNDS_PER_HOUR', 'TANKITY_ROUND_CPU',
-        'TANKITY_MAX_PLAYING', 'TANKITY_PLAYING_PER_CLIENT', 'TANKITY_RUNS_PER_CLIENT'];
+        'TANKITY_MAX_PLAYING', 'TANKITY_PLAYING_PER_CLIENT', 'TANKITY_RUNS_PER_CLIENT', 'TANKITY_MAX_HELD', 'TANKITY_HELD_PER_CLIENT'];
     private const TOKEN = '0123456789abcdef0123456789abcdef';
 
     public static function setUpBeforeClass(): void
@@ -94,6 +94,12 @@ final class ScoresApiTest extends TestCase
             $this->assertSame($r['claim'], array_intersect_key($out, $r['claim']));
         }
         return $id;
+    }
+
+    /** What error_log() wrote during this test (PHPUnit captures it once expectErrorLog() is called). */
+    private function logged(): string
+    {
+        return (string) @file_get_contents((string) ini_get('error_log'));
     }
 
     private function row(string $id): array
@@ -249,14 +255,15 @@ final class ScoresApiTest extends TestCase
     public function testOnlyPlayedRunsFillTheLiveRunCap(): void
     {
         putenv('TANKITY_STARTS_PER_HOUR=10');
+        putenv('TANKITY_MAX_HELD=20');
         $run = $this->recorded();
         // A start costs a played run's place nothing: a flood of them fills no cap.
-        $this->seedRuns(SOLO_MAX_LIVE_RUNS, 'live', 'flood', 0);
+        $this->seedRuns(solo_max_held(), 'live', 'flood', 0);
         $played = $this->start($run);
         $waiting = $this->start($run);
         $this->assertSame(200, $this->round($played, $run['rounds'][0])[0]);
-        $this->seedRuns(SOLO_MAX_LIVE_RUNS - 1, 'live', 'others', 10_000, 1);
-        tankity_db()->exec("UPDATE solo_runs SET status = 'over' WHERE client = 'others' AND id < '" . sprintf('%032x', 10_100) . "'");
+        $this->seedRuns(solo_max_held() - 1, 'live', 'others', 10_000, 1);
+        tankity_db()->exec("UPDATE solo_runs SET status = 'over' WHERE client = 'others' AND id < '" . sprintf('%032x', 10_010) . "'");
         $this->assertSame([503, ['error' => 'busy']], $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720]));
         $this->assertSame([503, ['error' => 'busy']], $this->round($waiting, $run['rounds'][0]), 'a first round waits for a place');
         $this->assertSame(['live', 0], [$this->row($waiting)['status'], (int) $this->row($waiting)['round']]);
@@ -494,7 +501,7 @@ final class ScoresApiTest extends TestCase
     {
         $this->assertArrayHasKey('solo', tankity_jobs());
         tankity_tx(tankity_db(), function (PDO $db): void {
-            $q = $db->prepare("INSERT INTO solo_runs (id, difficulty, seed, created, touched, round, status, state, reply, filed) VALUES (?, 'normal', 's', ?, ?, 0, ?, '{}', '', '')");
+            $q = $db->prepare("INSERT INTO solo_runs (id, difficulty, seed, w, created, touched, round, status, state, reply, filed) VALUES (?, 'normal', 's', 720, ?, ?, 0, ?, '{}', '', '')");
             $old = $this->now - SOLO_RUN_IDLE - 1;
             foreach (['live', 'over', 'void'] as $i => $status) {
                 $q->execute([sprintf('%032x', $i), $old, $old, $status]);
@@ -585,6 +592,7 @@ final class ScoresApiTest extends TestCase
 
     public function testTheRoundsCapIsASetting(): void
     {
+        $this->expectErrorLog();
         $this->assertSame(SOLO_ROUNDS_PER_HOUR, solo_rounds_per_hour());
         $this->assertSame(600, SOLO_ROUNDS_PER_HOUR);
         putenv('TANKITY_ROUNDS_PER_HOUR=25');
@@ -601,14 +609,17 @@ final class ScoresApiTest extends TestCase
             'starts' => ['TANKITY_STARTS_PER_HOUR', 'starts_per_hour', 'solo_starts_per_hour', 120],
             'filings' => ['TANKITY_SCORES_PER_HOUR', 'scores_per_hour', 'solo_scores_per_hour', 240],
             'play slots' => ['TANKITY_MAX_PLAYING', 'max_playing', 'solo_max_playing', 8],
-            'play slots an address' => ['TANKITY_PLAYING_PER_CLIENT', 'playing_per_client', 'solo_playing_per_client', 2],
+            'play slots an address' => ['TANKITY_PLAYING_PER_CLIENT', 'playing_per_client', 'solo_playing_per_client', 4],
             'runs an address' => ['TANKITY_RUNS_PER_CLIENT', 'runs_per_client', 'solo_runs_per_client', 100],
+            'places' => ['TANKITY_MAX_HELD', 'max_held', 'solo_max_held', 5000],
+            'places an address' => ['TANKITY_HELD_PER_CLIENT', 'held_per_client', 'solo_held_per_client', 50],
         ];
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('capSettings')]
     public function testTheCapsAreSettings(string $env, string $key, string $fn, int $default): void
     {
+        $this->expectErrorLog();
         putenv($env);
         $this->assertSame($default, $fn(), $key);
         putenv("$env=3");
@@ -616,6 +627,7 @@ final class ScoresApiTest extends TestCase
         foreach (['0', '-1', 'many', '2.5'] as $bad) {
             putenv("$env=$bad");
             $this->assertSame($default, $fn(), $bad);
+            $this->assertStringContainsString("$key ($env): refused '$bad'", $this->logged());
         }
     }
 
@@ -628,7 +640,7 @@ final class ScoresApiTest extends TestCase
         $this->assertSame(200, $this->round($id, $run['rounds'][0])[0]);
         $this->assertSame([429, ['error' => 'rate']], $this->round($id, $run['rounds'][1]));
         $this->assertSame('live', $this->row($id)['status']);
-        $this->now += 3601;
+        $this->now += 3600 + SOLO_RATE_SLOT;
         $this->assertSame(200, $this->round($id, $run['rounds'][1])[0]);
     }
 
@@ -641,7 +653,7 @@ final class ScoresApiTest extends TestCase
         $this->assertSame([429, ['error' => 'rate']], $this->post(['op' => 'file', 'run' => $id, 'initials' => 'ABC']));
         $this->assertSame('over', $this->row($id)['status']);
         $this->assertSame([], board_top($run['difficulty'], 5));
-        $this->now += 3601;
+        $this->now += 3600 + SOLO_RATE_SLOT;
         $this->assertSame(200, $this->post(['op' => 'file', 'run' => $id, 'initials' => 'ABC'])[0]);
     }
 
@@ -692,11 +704,11 @@ final class ScoresApiTest extends TestCase
         $quiet = $changes() - $before;
         // Thousands of addresses, each with a count of its own and a run it never played.
         tankity_tx(tankity_db(), function (PDO $db): void {
-            $rate = $db->prepare("INSERT INTO solo_rate (client, kind, hour, n) VALUES (?, 'round', ?, 600)");
-            $runs = $db->prepare("INSERT INTO solo_runs (id, difficulty, seed, created, touched, round, status, state, reply, filed, client)
-                VALUES (?, 'normal', 's', ?, ?, 0, 'live', '', '', '', ?)");
+            $rate = $db->prepare("INSERT INTO solo_rate (client, kind, slot, n) VALUES (?, 'round', ?, 600)");
+            $runs = $db->prepare("INSERT INTO solo_runs (id, difficulty, seed, w, created, touched, round, status, state, reply, filed, client)
+                VALUES (?, 'normal', 's', 720, ?, ?, 0, 'live', '', '', '', ?)");
             for ($i = 0; $i < 5000; $i++) {
-                $rate->execute(["addr$i", intdiv($this->now, 3600)]);
+                $rate->execute(["addr$i", intdiv($this->now, SOLO_RATE_SLOT)]);
                 $runs->execute([sprintf('%032x', 1_000_000 + $i), $this->now, $this->now, "addr$i"]);
             }
         });
@@ -715,8 +727,8 @@ final class ScoresApiTest extends TestCase
     {
         $client ??= $this->guard()->clientKey();
         tankity_tx(tankity_db(), function (PDO $db) use ($count, $status, $client, $from, $round): void {
-            $q = $db->prepare("INSERT INTO solo_runs (id, difficulty, seed, created, touched, round, status, state, reply, filed, client)
-                VALUES (?, 'normal', 's', ?, ?, ?, ?, '{}', '', '', ?)");
+            $q = $db->prepare("INSERT INTO solo_runs (id, difficulty, seed, w, created, touched, round, status, state, reply, filed, client)
+                VALUES (?, 'normal', 's', 720, ?, ?, ?, ?, '{}', '', '', ?)");
             for ($i = 0; $i < $count; $i++) {
                 $q->execute([sprintf('%032x', $from + $i), $this->now, $this->now, $round, $status, $client]);
             }
@@ -825,7 +837,102 @@ final class ScoresApiTest extends TestCase
             tankity_db()->exec('DROP TRIGGER IF EXISTS fail_store');
         }
         $this->assertSame(['live', 0, 0], [$this->row($id)['status'], (int) $this->row($id)['round'], (int) $this->row($id)['playing']]);
+        $this->assertSame(1, solo_rate_used(tankity_db(), $this->guard()->clientKey(), 'round', $this->now), 'the round played is still charged');
         $this->assertSame(200, $this->round($id, $run['rounds'][0])[0], 'sent again at once, it plays rather than wait out a lease');
+    }
+
+    public function testAFailedReleaseKeepsTheOriginalError(): void
+    {
+        $this->expectErrorLog();
+        $run = $this->recorded();
+        $id = $this->start($run);
+        tankity_db()->exec("CREATE TEMP TRIGGER fail_store BEFORE UPDATE ON solo_runs WHEN NEW.round > OLD.round
+            BEGIN SELECT RAISE(ABORT, 'disk trouble'); END");
+        tankity_db()->exec("CREATE TEMP TRIGGER fail_release BEFORE UPDATE ON solo_runs WHEN NEW.round = OLD.round AND NEW.playing = 0 AND OLD.playing > 0
+            BEGIN SELECT RAISE(ABORT, 'release trouble'); END");
+        try {
+            $this->round($id, $run['rounds'][0]);
+            $this->fail('storing the round was to fail');
+        } catch (PDOException $e) {
+            $this->assertStringContainsString('disk trouble', $e->getMessage(), 'the store failure is what the caller sees');
+        } finally {
+            tankity_db()->exec('DROP TRIGGER IF EXISTS fail_store');
+            tankity_db()->exec('DROP TRIGGER IF EXISTS fail_release');
+        }
+        $this->assertStringContainsString('release trouble', $this->logged());
+    }
+
+    public function testStoringARoundLeavesANewerLeaseAlone(): void
+    {
+        // A request slow enough to outlive its lease must not free the lease of the copy that took over.
+        $run = $this->recorded();
+        $id = $this->start($run);
+        [$answer, $row, $lease] = solo_run_lease($id, 1, $this->guard()->clientKey(), $this->now);
+        $this->assertNull($answer);
+        $got = solo_round(solo_deal((string) $row['seed'], (string) $row['difficulty'], (int) $row['w']), $run['rounds'][0]['buys'], $run['rounds'][0]['shots']);
+        $newer = $lease + 100;
+        tankity_db()->prepare('UPDATE solo_runs SET playing = ? WHERE id = ?')->execute([$newer, $id]);
+        $this->assertSame(200, solo_run_store($id, 1, $lease, $got, $this->now)[0]);
+        $this->assertSame([1, $newer], [(int) $this->row($id)['round'], (int) $this->row($id)['playing']]);
+    }
+
+    public function testOneAddressHoldsOnlyItsShareOfPlaces(): void
+    {
+        putenv('TANKITY_STARTS_PER_HOUR=10');
+        putenv('TANKITY_HELD_PER_CLIENT=2');
+        $run = $this->recorded();
+        $ids = [$this->start($run), $this->start($run), $this->start($run)];
+        $this->assertSame(200, $this->round($ids[0], $run['rounds'][0])[0]);
+        $this->assertSame(200, $this->round($ids[1], $run['rounds'][0])[0]);
+        $this->assertSame([429, ['error' => 'rate']], $this->round($ids[2], $run['rounds'][0]), 'its runs already hold its share');
+        $this->assertSame(['live', 0, 0], [$this->row($ids[2])['status'], (int) $this->row($ids[2])['round'], (int) $this->row($ids[2])['playing']]);
+        $this->assertSame([429, ['error' => 'rate']], $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720]));
+        $_SERVER['REMOTE_ADDR'] = '198.51.100.251';
+        $this->assertSame(200, $this->round($this->start($run), $run['rounds'][0])[0], 'another address still holds places');
+    }
+
+    public function testTheCapsTakeAboutAHundredAddressesToFill(): void
+    {
+        $this->assertGreaterThanOrEqual(100, intdiv(solo_max_held(), solo_held_per_client()));
+        $this->assertGreaterThanOrEqual(30, solo_held_per_client(), 'one campus NAT still fits a full lab');
+    }
+
+    public function testABadSettingIsLoggedOnceWithItsValue(): void
+    {
+        $this->expectErrorLog();
+        putenv('TANKITY_MAX_PLAYING=8 cores');
+        $this->assertSame(SOLO_MAX_PLAYING, solo_max_playing());
+        $this->assertSame(SOLO_MAX_PLAYING, solo_max_playing());
+        $log = $this->logged();
+        $this->assertSame(1, substr_count($log, 'max_playing'), $log);
+        $this->assertStringContainsString("'8 cores'", $log);
+        putenv('TANKITY_MAX_PLAYING=6');
+        $this->assertSame(6, solo_max_playing());
+        $this->assertSame(1, substr_count($this->logged(), 'max_playing'), 'a good value logs nothing');
+    }
+
+    public function testTheHourlyCapHoldsInEverySlidingHour(): void
+    {
+        $db = tankity_db();
+        $cap = 4;
+        $base = intdiv($this->now, SOLO_RATE_SLOT) * SOLO_RATE_SLOT;
+        $taken = [];
+        // A burst at the last second of a slot, then a try every 30 s for seventy minutes.
+        foreach ([0, 0, 0, 0, 0] as $_) {
+            if (tankity_tx($db, fn(PDO $db): bool => solo_rate_take($db, 'c', 'round', $cap, $base + SOLO_RATE_SLOT - 1))) {
+                $taken[] = $base + SOLO_RATE_SLOT - 1;
+            }
+        }
+        for ($t = $base + SOLO_RATE_SLOT; $t <= $base + SOLO_RATE_SLOT + 3600 + SOLO_RATE_SLOT; $t += 30) {
+            if (tankity_tx($db, fn(PDO $db): bool => solo_rate_take($db, 'c', 'round', $cap, $t))) {
+                $taken[] = $t;
+            }
+        }
+        foreach ($taken as $t) {
+            $inHour = count(array_filter($taken, fn(int $u): bool => $u > $t - 3600 && $u <= $t));
+            $this->assertLessThanOrEqual($cap, $inHour, "the hour ending at $t");
+        }
+        $this->assertGreaterThan($cap, count($taken), 'the allowance comes back within an hour and a slot');
     }
 
     public function testAStoredRoundIsAnsweredWithoutPlayingItAgain(): void
@@ -859,15 +966,42 @@ final class ScoresApiTest extends TestCase
 
     public function testHousekeepingDropsCountsTooOldToMatter(): void
     {
-        $hour = intdiv($this->now, 3600);
-        tankity_tx(tankity_db(), function (PDO $db) use ($hour): void {
-            $q = $db->prepare("INSERT INTO solo_rate (client, kind, hour, n) VALUES ('a', 'round', ?, 5)");
-            foreach ([$hour - 3, $hour - 2, $hour - 1, $hour] as $h) {
-                $q->execute([$h]);
+        $slot = intdiv($this->now, SOLO_RATE_SLOT);
+        $window = intdiv(3600, SOLO_RATE_SLOT);
+        tankity_tx(tankity_db(), function (PDO $db) use ($slot, $window): void {
+            $q = $db->prepare("INSERT INTO solo_rate (client, kind, slot, n) VALUES ('a', 'round', ?, 5)");
+            foreach ([$slot - $window - 2, $slot - $window - 1, $slot - $window, $slot] as $s) {
+                $q->execute([$s]);
             }
         });
         $this->assertSame(2, tankity_jobs()['soloRate']($this->now));
-        $this->assertSame([$hour - 1, $hour], array_map('intval', tankity_db()->query('SELECT hour FROM solo_rate ORDER BY hour')->fetchAll(PDO::FETCH_COLUMN)));
+        $this->assertSame([$slot - $window, $slot], array_map('intval', tankity_db()->query('SELECT slot FROM solo_rate ORDER BY slot')->fetchAll(PDO::FETCH_COLUMN)));
+    }
+
+    public function testHousekeepingNeverDeletesARunInPlay(): void
+    {
+        $this->seedRuns(1, 'live', null, 0, 0);
+        $this->seedRuns(1, 'live', null, 1, 3);
+        tankity_db()->prepare('UPDATE solo_runs SET touched = ?, playing = ?')->execute([$this->now - SOLO_RUN_IDLE - 1, $this->now + 20]);
+        $this->assertSame(0, solo_runs_expire($this->now), 'both are past their idle limit, but a round is being played');
+        $this->now += 21;
+        $this->assertSame(2, solo_runs_expire($this->now));
+    }
+
+    public function testTheSweepKeepsUpWithAFlood(): void
+    {
+        // A thousand addresses starting runs as fast as allowed: every row is gone within the hour it was made.
+        $passes = intdiv(3600, HOUSEKEEP_EVERY);
+        $this->assertGreaterThanOrEqual(1000 * SOLO_STARTS_PER_HOUR, $passes * SOLO_EXPIRE_BATCH);
+        $this->assertGreaterThanOrEqual(1000 * 3 * intdiv(3600, SOLO_RATE_SLOT), $passes * SOLO_RATE_EXPIRE_BATCH);
+    }
+
+    public function testTheRoomServerSweepsSoloRunsToo(): void
+    {
+        // The housekeeping slot is shared: a pass claimed from rooms.php must not skip the solo sweep.
+        $rooms = escapeshellarg(dirname(__DIR__, 2) . '/rooms.php');
+        $out = shell_exec(PHP_BINARY . ' -r ' . escapeshellarg("define('TANKITY_ROOMS_LIB', true); require $rooms; echo implode(',', array_keys(tankity_jobs()));"));
+        $this->assertStringContainsString('solo,soloRate', (string) $out);
     }
 
     // ---- the boards' sources

@@ -285,6 +285,9 @@ $hcode = (string) ($hand['code'] ?? '');
 $hh = $post('join', ['code' => $hcode, 'initials' => 'nxt']);
 $hctl = fn(array $who): array => ['code' => $hcode, 'token' => (string) ($who['token'] ?? ''), 'csrf' => (string) ($who['csrf'] ?? '')];
 usleep(300000);
+$guestStart = $post('start', $hctl($hh));
+$check('guest-start-refused', ($guestStart['ok'] ?? false) !== true && ($guestStart['error'] ?? '') === 'only the host starts the match',
+    json_encode($guestStart['error'] ?? null));
 $post('start', $hctl($hand));
 usleep(300000);
 $post('leave', $hctl($hand));

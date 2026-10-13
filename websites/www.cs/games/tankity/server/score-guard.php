@@ -206,7 +206,9 @@ final class ScoreGuard
 
     /** This client's rate-limit key: an HMAC of its address, so the store never holds an IP.
      * IPv6 clients key on their /64, since one subscriber holds the whole block and could
-     * otherwise mint a fresh budget per address. */
+     * otherwise mint a fresh budget per address. An IPv4 client seen through IPv6
+     * (::ffff:a.b.c.d, or the NAT64 prefix 64:ff9b::/96) keys on its embedded IPv4
+     * address, so it shares a bucket with the same client arriving natively. */
     public function clientKey(): string
     {
         $addr = (string) ($this->server['REMOTE_ADDR'] ?? '');

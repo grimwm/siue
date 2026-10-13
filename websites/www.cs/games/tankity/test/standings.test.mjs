@@ -56,13 +56,13 @@ test('after a round: humans only, by score, with this round\'s gain and lives or
 });
 
 test('match over: the winner is crowned and the last column says when each went out', () => {
-  const over = { ...ROOM, round: 9, winner: 1, seats: ROOM.seats.map(s => s.seat === 0 ? { ...s, lives: 0, out: 9 } : s.seat === 1 ? { ...s, gain: 2000 } : s) };
+  const over = { ...ROOM, round: 9, winner: 1, seats: ROOM.seats.map(s => s.seat === 0 ? { ...s, lives: 0, out: 9 } : s.seat === 1 ? { ...s, gain: 5000 } : s) };
   const b = roomBoard(over, 0, 'over', 'WG');
   assert.equal(b.caption, 'Room ABCD · match over after round 9');
   assert.equal(b.title, '♛ WG wins: last tank standing');
   assert.equal(b.lastHead, 'Out in');
   assert.deepEqual(b.rows.map(r => [r.name, r.crown, r.gain, r.last]), [
-    ['WG', true, '+2,000 win', '♥ 2'], ['AK', false, '', 'round 9'], ['JR', false, '', 'round 5'],
+    ['WG', true, '+4,200 win', '♥ 2'], ['AK', false, '', 'round 9'], ['JR', false, '', 'round 5'],
   ]);
   const nobody = roomBoard({ ...over, winner: null }, 0, 'over', 'the battery');
   assert.equal(nobody.title, 'Match over: the battery holds the hills');

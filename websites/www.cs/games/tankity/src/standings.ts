@@ -59,8 +59,9 @@ export function roomBoard(room: Pick<RoomSnapshot, 'code' | 'round' | 'seats' | 
     .sort((a, b) => b.score - a.score || a.seat - b.seat)
     .map((s, i): BoardRow => {
       const crown = over && s.seat === winner;
-      // The final card credits the win; the last round's per-seat gains belong to the shop card.
-      const gain = s.gain && (!over || crown) ? `+${fmt(s.gain)}${crown ? ' win' : ''}` : '';
+      // The final card credits the match bonus alone (the winner's snapshot gain also holds the
+      // last round's points); the per-seat round gains belong to the shop card.
+      const gain = crown ? `+${fmt(winnerBonus(room.round))} win` : over || !s.gain ? '' : `+${fmt(s.gain)}`;
       const alive = s.lives > 0;
       const last = over
         ? (crown || (alive && s.out === null) ? `♥ ${s.lives}` : `round ${s.out ?? room.round}`)

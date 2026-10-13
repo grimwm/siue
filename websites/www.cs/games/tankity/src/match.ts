@@ -99,6 +99,8 @@ export interface MatchDeps {
   soloFinish(id: string, initials: string, done: (line: string) => void): void;
   /** Lets go of a run that will never finish. */
   soloDrop(id: string): void;
+  /** The end card a finished run reported on is gone: its later outcome goes to the radio log. */
+  soloForget(id: string): void;
 }
 
 export function createMatch(deps: MatchDeps) {
@@ -106,12 +108,13 @@ export function createMatch(deps: MatchDeps) {
     field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
     render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closeGuns, closePreview, hideShop, openShop,
     endTutorial, maybeStartTutorial, tutorialFired, backToTitle, netFire, netLeave,
-    netNext, netAgain, initials, soloBegin, soloRound, soloFinish, soloDrop,
+    netNext, netAgain, initials, soloBegin, soloRound, soloFinish, soloDrop, soloForget,
   } = deps;
 
-  /* A run the server will not get the rest of: the recording stops and the filer lets the run go. */
-  function stopFiling(why: string): void {
-    if (G.rec) say(why, 'info');
+  /* A run the server will not get the rest of: the recording stops and the filer lets the run go.
+     Without `why` nothing is said (a room match taking over). */
+  function stopFiling(why?: string): void {
+    if (G.rec && why) say(why, 'info');
     G.rec = null;
     if (G.runId) soloDrop(G.runId);
     G.runId = null;
@@ -122,10 +125,15 @@ export function createMatch(deps: MatchDeps) {
     crypto.getRandomValues(b);
     return Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
   }
+  /** The run the end card reports on; only that run's outcome may change the card. */
+  let cardRun: string | null = null;
   function resetMatch(seedStr?: string): void {
     // A match left before its end (Quit, a new match, the tutorial) will never finish: let its run go.
     if (G.runId) soloDrop(G.runId);
     G.runId = null;
+    // The last card is gone: its run, if it is still on its way, reports in the radio log.
+    if (cardRun) soloForget(cardRun);
+    cardRun = null;
     const seed = (seedStr || '').trim() || ('scorched-' + Math.floor(Math.random() * 9000 + 1000));
     // The Menu's Difficulty, read once per match: a change waits for the next one.
     // The width comes from the screen at the deal and holds until the next one (spec 6.6).
@@ -482,8 +490,10 @@ export function createMatch(deps: MatchDeps) {
       refreshNavHints();
       focusEndVeil(veil);
     }
+    cardRun = id;
     if (id) {
       soloFinish(id, initials(), line => {
+        if (cardRun !== id) return;
         END.filed = line;
         renderEndVeil();
       });

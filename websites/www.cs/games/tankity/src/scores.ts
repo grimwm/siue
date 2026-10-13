@@ -9,7 +9,7 @@
 import type { Timers } from '../../_kit/ports.ts';
 import { DIFFICULTY_NAMES } from './difficulty.ts';
 import type { Difficulty } from './sim.ts';
-import { PENDING_MAX } from './solo-file.ts';
+import { BACKOFF_LONGEST, PENDING_MAX } from './solo-file.ts';
 import type { FileOutcome, createFiler } from './solo-file.ts';
 import type { SoloRoundLog } from './solo-log.ts';
 import { filedLine, fmt } from './standings.ts';
@@ -19,7 +19,13 @@ import { renderScores as drawScores } from './ui/scores.tsx';
 /** A board row as scores.php sends it; `standin` marks initials that stand in for a refused name. */
 interface BoardRow { name: string; best: number; banked: number; place: number; standin?: boolean }
 
-export type SoloFiler = Pick<ReturnType<typeof createFiler>, 'begin' | 'round' | 'finish' | 'drop' | 'abandoned' | 'flush' | 'nextTry' | 'wake' | 'stored'>;
+export type SoloFiler = Pick<ReturnType<typeof createFiler>, 'begin' | 'round' | 'finish' | 'drop' | 'abandoned' | 'flush' | 'nextTry' | 'wake' | 'stored' | 'outcome' | 'holds'>;
+
+/** The radio log's line for how a run whose card is gone ended. */
+export function earlierLine(o: FileOutcome): string {
+  if (o.kind === 'filed' && o.rank !== null) return `An earlier run: Filed · #${o.rank} · ${fmt(o.score)} pts on ${DIFFICULTY_NAMES[o.difficulty]}`;
+  return `An earlier run: ${lineFor(o)}`;
+}
 
 export interface ScoresDeps {
   $(id: string): HTMLElement | null;
@@ -105,21 +111,31 @@ export function createScores(deps: ScoresDeps) {
     timer = null;
     const ms = filer.nextTry();
     if (ms === null) return;
-    timer = timers.setTimeout(() => { timer = null; void flushPending(); }, Math.max(RETRY_FLOOR, ms));
+    timer = timers.setTimeout(() => { timer = null; void flushPending(); }, Math.min(BACKOFF_LONGEST, Math.max(RETRY_FLOOR, ms)));
   }
-  /** The end card's line for a run of this page that has not filed yet, by id, so a later flush can update it. */
+  /** The end card's line for a run of this page that has not filed yet, by id, so a later flush can update it;
+      a run leaves it when its card is gone (soloForget), and then reports as an earlier run. */
   const waitingLines = new Map<string, (line: string) => void>();
   /** This page's runs still being played, with the refusal that ended one early. */
   const playing = new Map<string, FileOutcome | null>();
-  /* Sends everything due: at load, after each round, at game over, and when the timer fires. */
-  async function flushPending(): Promise<void> {
+  /* Sends everything due: at load, after each round, at game over, and when the timer fires.
+     False when the pass threw. */
+  async function flushPending(): Promise<boolean> {
     let outcomes: FileOutcome[] = [];
+    let ok = true;
     try {
       outcomes = await filer.flush();
     } catch (e) {
+      ok = false;
       console.warn('tankity scores: the filer failed', e);
     }
     arm();
+    // A card's run that another tab sent: its outcome is in the shared queue.
+    for (const id of waitingLines.keys()) {
+      if (outcomes.some(o => o.id === id)) continue;
+      const o = filer.outcome(id);
+      if (o) outcomes.push(o);
+    }
     let filed: Difficulty | null = null;
     for (const o of outcomes) {
       if (o.kind === 'refused' && o.detail) console.warn(`tankity scores: run ${o.id} refused (${o.detail})`);
@@ -132,16 +148,17 @@ export function createScores(deps: ScoresDeps) {
           playing.set(o.id, o);
           say(`This match can no longer be filed: ${o.why}.`, 'info');
         }
-      } else if (o.kind !== 'waiting') say(`An earlier run: ${lineFor(o)}`, o.kind === 'refused' ? 'info' : 'good'); // never this match's card
+      } else if (o.kind !== 'waiting') say(earlierLine(o), o.kind === 'refused' ? 'info' : 'good'); // never this match's card
       if (o.kind !== 'waiting') waitingLines.delete(o.id);
     }
     // Refresh the board the player is looking at; one never opened gets the run's own.
     if (filed) void loadScores(SCORES.rows ? SCORES.level : filed);
+    return ok;
   }
   /* The page has loaded: runs an earlier page left unfinished can never be finished, and what waits goes on. */
-  function boot(): Promise<void> {
+  async function boot(): Promise<void> {
     for (const id of filer.abandoned()) filer.drop(id);
-    return flushPending();
+    await flushPending();
   }
   /* The network is back or the page is shown again: an offline wait ends, through the one timer. */
   function wake(): void {
@@ -171,13 +188,20 @@ export function createScores(deps: ScoresDeps) {
     filer.finish(id, who);
     let told = false;
     waitingLines.set(id, line => { told = true; done(line); });
-    await flushPending();
+    let ok = await flushPending();
     // A pass already under way when the run finished did not see its initials: one more now does.
-    if (!told) await flushPending();
-    if (!told) {
+    if (!told) ok = (await flushPending()) && ok;
+    if (told) return;
+    // A pass that threw, or a run still in the queue, is still on its way.
+    if (!ok || filer.holds(id)) done(lineFor({ id, kind: 'waiting' }, filer.stored()));
+    else {
       waitingLines.delete(id);
       done('Not filed: this browser no longer holds the run.');
     }
+  }
+  /* The card a finished run reported on is gone (a new match was dealt): its later outcome goes to the radio log. */
+  function soloForget(id: string): void {
+    waitingLines.delete(id);
   }
   /* A run that will never finish (quit, a new match mid-match, a run that can no longer be filed). */
   function soloDrop(id: string): void {
@@ -185,5 +209,5 @@ export function createScores(deps: ScoresDeps) {
     filer.drop(id);
   }
 
-  return { SCORES, renderScoresOverlay, openScores, loadScores, soloBegin, soloRound, soloFinish, soloDrop, flushPending, boot, wake };
+  return { SCORES, renderScoresOverlay, openScores, loadScores, soloBegin, soloRound, soloFinish, soloDrop, soloForget, flushPending, boot, wake };
 }

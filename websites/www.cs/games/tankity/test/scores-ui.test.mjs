@@ -68,6 +68,9 @@ function fakeFiler({ outcomes = [], next = null, begin = true, stored = true, ab
     nextTry: () => f.next,
     wake: () => calls.push(['wake']),
     stored: () => stored,
+    ends: new Map(), held: new Set(),
+    outcome: id => f.ends.get(id) ?? null,
+    holds: id => f.held.has(id),
   };
   return f;
 }
@@ -96,7 +99,7 @@ test('a finished run files through the filer, and the end card gets the line for
   await s.soloFinish('run', 'WGR', l => lines.push(l));
   assert.deepEqual(filer.calls.slice(0, 2), [['finish', 'run', 'WGR'], ['flush']], 'finish, then flush');
   assert.deepEqual(lines, ['Filed · #3 all-time on Normal']);
-  assert.ok(said.some(([t]) => t === 'An earlier run: Filed · #1 all-time on Easy'), 'an earlier page\'s run is told in the radio log, not on this card');
+  assert.ok(said.some(([t]) => t === 'An earlier run: Filed · #1 · 9 pts on Easy'), 'an earlier page\'s run is told in the radio log, not on this card');
 });
 
 test('a run still waiting at game over gets its line again when a later flush files it', async () => {
@@ -302,4 +305,66 @@ test('reopening Scores shows the last board read, not a blank list, until the fr
   assert.equal(s.SCORES.note, 'Loading…');
   release(); await new Promise(r => setTimeout(r, 0));
   assert.match(s.SCORES.note, /all-time board/);
+});
+
+test('M1: a run another tab filed shows its filed line on this tab\'s card, never as an earlier run', async () => {
+  const filer = fakeFiler({ outcomes: [{ id: 'run', kind: 'waiting' }], next: 3000 });
+  const { s, said, timers } = scoresWith(filer);
+  const lines = [];
+  await s.soloFinish('run', 'WGR', l => lines.push(l));
+  assert.match(lines[0], /^Saved in this browser/);
+  // Another tab filed it: this tab's pass finds nothing to send, and the shared queue has the outcome.
+  filer.outcomes = [];
+  filer.ends.set('run', { id: 'run', kind: 'filed', score: 4200, rank: 3, difficulty: 'normal' });
+  timers.fire();
+  await tick();
+  assert.deepEqual(lines.slice(1), ['Filed · #3 all-time on Normal']);
+  assert.ok(!said.some(([t]) => /earlier run/.test(t)));
+});
+
+test('M1: a run filed by another tab before this one asked still gets its own line at game over', async () => {
+  const filer = fakeFiler({ outcomes: [] });
+  filer.ends.set('run', { id: 'run', kind: 'filed', score: 4200, rank: 3, difficulty: 'normal' });
+  const { s } = scoresWith(filer);
+  const lines = [];
+  await s.soloFinish('run', 'WGR', l => lines.push(l));
+  assert.deepEqual(lines, ['Filed · #3 all-time on Normal']);
+});
+
+test('M2: a pass that throws, or a run still held, leaves the waiting line, never "no longer holds"', async () => {
+  for (const [why, setup] of [
+    ['a pass threw', f => { f.flush = async () => { throw new Error('SecurityError'); }; }],
+    ['still held', f => { f.held.add('run'); }],
+  ]) {
+    const filer = fakeFiler({ outcomes: [] });
+    setup(filer);
+    const { s } = scoresWith(filer);
+    const lines = [];
+    await s.soloFinish('run', 'WGR', l => lines.push(l));
+    assert.equal(lines.length, 1, why);
+    assert.match(lines[0], /^Saved in this browser/, why);
+  }
+  const gone = fakeFiler({ outcomes: [] });
+  const lines = [];
+  await scoresWith(gone).s.soloFinish('run', 'WGR', l => lines.push(l));
+  assert.deepEqual(lines, ['Not filed: this browser no longer holds the run.']);
+});
+
+test('M6: the retry timer is never armed past the longest pause', async () => {
+  const filer = fakeFiler({ next: 40 * 24 * 3600 * 1000 });
+  const { s, timers } = scoresWith(filer);
+  await s.flushPending();
+  assert.equal([...timers.live.values()][0].ms, file.BACKOFF_LONGEST);
+});
+
+test('I1: a forgotten run (its card is gone) reports later in the radio log as an earlier run', async () => {
+  const filer = fakeFiler({ outcomes: [{ id: 'one', kind: 'waiting' }] });
+  const { s, said } = scoresWith(filer);
+  const lines = [];
+  await s.soloFinish('one', 'WGR', l => lines.push(l));
+  s.soloForget('one');
+  filer.outcomes = [{ id: 'one', kind: 'filed', score: 8000, rank: 4, difficulty: 'hard' }];
+  await s.flushPending();
+  assert.equal(lines.length, 1);
+  assert.ok(said.some(([t]) => t === 'An earlier run: Filed · #4 · 8,000 pts on Hard'));
 });

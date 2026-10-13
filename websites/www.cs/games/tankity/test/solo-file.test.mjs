@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStorage, throwingStorage } from '../../_kit/test/record.ts';
-import { createFiler, PENDING_KEY, PENDING_MAX, MAX_TRIES, MAX_RESTARTS, BACKOFF_FIRST, BACKOFF_MAX } from '../src/solo-file.ts';
+import { createFiler, timedFetch, PENDING_KEY, PENDING_MAX, MAX_TRIES, MAX_RESTARTS, BACKOFF_FIRST, BACKOFF_MAX, BACKOFF_LONGEST, FETCH_TIMEOUT } from '../src/solo-file.ts';
 
 const claim = end => ({ end, score: 100, cash: 700, lives: end === 'matchLost' ? 0 : 3, roundsWon: 0 });
 const round = (n, end = 'tankLost') => ({ n, buys: [], shots: [{ w: 'shell', a: 45, p: 50, x: 100 }], claim: claim(end) });
@@ -771,4 +771,97 @@ test('one unreadable run in storage is left out, not the rest', () => {
   const q = JSON.parse(storage.data.get(PENDING_KEY));
   storage.setItem(PENDING_KEY, JSON.stringify({ ...q, runs: [...q.runs, { id: 'bad' }] }));
   assert.equal(make(async () => null, storage).waiting(), 1);
+});
+
+test('M4: under a long squeeze (round 1 waits on 429 until the unplayed run expires) restarts are free; the run files', async () => {
+  // Every cycle: start, round 1 told to wait (429), and 15 minutes later round 1 finds the run gone (410).
+  const cycles = MAX_RESTARTS + 3;
+  let left = cycles;
+  let waitNext = true;
+  const s = server(op => {
+    if (op !== 'round' || left === 0) return null;
+    if (waitNext) { waitNext = false; return [429, { error: 'too many' }]; }
+    waitNext = true;
+    left--;
+    return [410, { error: 'expired' }];
+  });
+  const f = make(s.fetch);
+  played(f, 'sq');
+  let out = await f.flush();
+  for (let i = 0; i < 40 && !out.some(o => o.kind !== 'waiting'); i++) {
+    f.clock.t += 15 * 60 * 1000; // past the wait and the server's unplayed TTL
+    out = await f.flush();
+  }
+  assert.deepEqual(out, [{ id: 'sq', kind: 'filed', score: 100, rank: 7, difficulty: 'hard' }], '45 minutes and more of squeeze never refuse an honest run');
+  assert.equal(s.calls.filter(c => c.op === 'start').length, cycles + 1);
+});
+
+test('M4: the server losing a run with no wait in between still counts toward MAX_RESTARTS', async () => {
+  let waited = false;
+  const s = server(op => {
+    if (op !== 'round') return null;
+    if (!waited) { waited = true; return [503, { error: 'busy' }]; } // one wait, long before
+    return [404, { error: 'no such run' }];
+  });
+  const f = make(s.fetch);
+  played(f, 'lose');
+  await f.flush();
+  const out = await f.again();
+  assert.deepEqual(out, [{ id: 'lose', kind: 'refused', why: 'the score server kept losing it', detail: 'no such run' }]);
+});
+
+test('M1: a run filed by another tab leaves its outcome in the shared queue, by id, for the tab that owns it', async () => {
+  const storage = memoryStorage();
+  const clock = { t: 1_000_000, now: () => clock.t };
+  const a = make(async () => { throw new Error('offline'); }, storage, { clock });
+  played(a, 'mine');
+  assert.deepEqual(await a.flush(), [{ id: 'mine', kind: 'waiting' }]);
+  const s = server();
+  const b = make(s.fetch, storage, { clock });
+  clock.t += BACKOFF_LONGEST;
+  assert.deepEqual(await b.flush(), [{ id: 'mine', kind: 'filed', score: 100, rank: 7, difficulty: 'hard' }]);
+  assert.deepEqual(a.outcome('mine'), { id: 'mine', kind: 'filed', score: 100, rank: 7, difficulty: 'hard' });
+  assert.equal(a.outcome('other'), null);
+  assert.equal(a.holds('mine'), false);
+});
+
+test('M1: a refusal is kept by id too, and old outcomes are let go', async () => {
+  const storage = memoryStorage();
+  const s = server(op => op === 'round' ? [422, { error: 'void' }] : null);
+  const f = make(s.fetch, storage);
+  played(f, 'v');
+  await f.flush();
+  assert.equal(f.outcome('v').kind, 'refused');
+  for (let i = 0; i < 40; i++) { f.clock.t += 1000; const g = make(server().fetch, storage, { clock: f.clock }); played(g, `x${i}`); await g.flush(); }
+  assert.equal(f.outcome('v'), null, 'the shared queue keeps only the latest outcomes');
+});
+
+test('M2: holds() says whether the queue still has a run', () => {
+  const f = make(async () => { throw new Error('offline'); });
+  played(f, 'h');
+  assert.equal(f.holds('h'), true);
+  assert.equal(f.holds('nope'), false);
+});
+
+test('M6: a dueAt stored far ahead (a clock that jumped back, a stray value) waits at most the longest pause', () => {
+  const storage = memoryStorage();
+  const clock = { t: 1_000_000, now: () => clock.t };
+  storage.setItem(PENDING_KEY, JSON.stringify({ runs: [], dueAt: clock.t + 40 * 24 * 3600 * 1000, lag: 3, cause: 'busy' }));
+  const f = make(async () => { throw new Error('offline'); }, storage, { clock });
+  played(f, 'far');
+  const wait = f.nextTry();
+  assert.ok(wait <= BACKOFF_LONGEST, `${wait}`);
+  assert.equal(BACKOFF_LONGEST, BACKOFF_MAX * 1.25);
+});
+
+test('M5: timedFetch gives every request a deadline, and an abort waits as offline (no try spent)', async () => {
+  const seen = [];
+  const hang = (url, init) => { seen.push(init); return new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason))); };
+  const f = make(timedFetch(hang, 20));
+  played(f, 't');
+  assert.deepEqual(await f.flush(), [{ id: 't', kind: 'waiting' }]);
+  assert.ok(seen.every(i => i.signal), 'every request carries a signal');
+  assert.ok(FETCH_TIMEOUT >= 10_000 && FETCH_TIMEOUT <= 60_000);
+  const passthrough = timedFetch(async (u, i) => ({ ok: true, status: 200, json: async () => i }), 50, null);
+  assert.deepEqual(await (await passthrough('x', { method: 'GET' })).json(), { method: 'GET' }, 'without AbortSignal.timeout the request goes as it was');
 });

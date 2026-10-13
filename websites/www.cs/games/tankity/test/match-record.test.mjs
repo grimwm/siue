@@ -10,6 +10,7 @@ import { importTsx } from '../../_kit/test/tsx.ts';
 
 const m = await importTsx(import.meta.dirname, {
   sim: '../src/sim.ts', log: '../src/solo-log.ts', match: '../src/match.ts', play: '../src/solo-play.ts', shop: '../src/shop.ts',
+  scores: '../src/scores.ts',
 });
 const { replaySolo } = m.play;
 const { buildArsenal, surfY, TUNE, ROOM_W } = m.sim;
@@ -115,6 +116,7 @@ function filing(room = true) {
     soloRound: (id, log) => calls.push(['round', id, log]),
     soloFinish: (id, who, done) => { calls.push(['finish', id, who]); done('Filed · test'); },
     soloDrop: id => calls.push(['drop', id]),
+    soloForget: id => calls.push(['forget', id]),
     say: t => said.push(t), initials: () => 'WGR',
   };
 }
@@ -207,4 +209,52 @@ test('a round past the shot limit stops the recording and drops the run', () => 
   assert.equal(G.rec, null);
   assert.equal(G.runId, null);
   assert.deepEqual(f.calls.filter(c => c[0] === 'drop'), [['drop', id]]);
+});
+
+test('I1: a late filing of an earlier match never lands on the current card; the radio log names it', async () => {
+  const said = [];
+  const queue = { outcomes: [], held: new Set() };
+  const filer = {
+    begin: id => { queue.held.add(id); return queue.held.size < 2; }, // match 2 finds the queue full
+    round() {}, finish() {}, drop() { return true; }, abandoned: () => [], wake() {}, stored: () => true,
+    flush: async () => queue.outcomes, nextTry: () => null, outcome: () => null, holds: id => queue.held.has(id),
+  };
+  const timers = { setTimeout: () => 1, clearTimeout() {} };
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ scores: [] }) });
+  const sc = m.scores.createScores({ $: () => null, keyHint: () => '', say: t => said.push(t), toggleOverlay() {}, initials: () => 'WGR',
+    difficulty: () => 'normal', filer, timers });
+  const { G, match } = harness({
+    say: t => said.push(t), initials: () => 'WGR',
+    soloBegin: sc.soloBegin, soloRound: sc.soloRound, soloDrop: sc.soloDrop, soloForget: sc.soloForget,
+    soloFinish: (id, who, done) => { void sc.soloFinish(id, who, done); },
+  });
+  match.startSolo('late-1');
+  const first = G.runId;
+  queue.outcomes = [{ id: first, kind: 'waiting' }];
+  playOut(G, match);
+  await new Promise(r => setTimeout(r, 0));
+  assert.match(match.END.filed, /^Saved in this browser/, 'match 1 is waiting');
+  match.startDemo(); // Continue
+  match.startSolo('late-2'); // the queue is full: not filed
+  assert.equal(G.runId, null);
+  queue.outcomes = [];
+  playOut(G, match);
+  assert.equal(match.END.filed, 'This run cannot be filed (see the radio log).');
+  queue.outcomes = [{ id: first, kind: 'filed', score: 8000, rank: 4, difficulty: 'normal' }];
+  await sc.flushPending();
+  assert.equal(match.END.filed, 'This run cannot be filed (see the radio log).', 'match 2\'s card keeps its own line');
+  assert.ok(said.includes('An earlier run: Filed · #4 · 8,000 pts on Normal'), said.slice(-3).join(' | '));
+});
+
+test('M3: a run stopped without words (a room starting mid-match) is dropped and nothing is said', () => {
+  const f = filing();
+  const { G, match } = harness(f);
+  match.startSolo('rooms');
+  const id = G.runId;
+  const before = f.said.length;
+  match.stopFiling();
+  assert.equal(G.rec, null);
+  assert.equal(G.runId, null);
+  assert.deepEqual(f.calls.filter(c => c[0] === 'drop'), [['drop', id]]);
+  assert.equal(f.said.length, before);
 });

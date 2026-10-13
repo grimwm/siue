@@ -77,13 +77,15 @@ export interface LobbyDeps {
   refreshNavHints(): void;
   renderMenu(): void;
   renderShop(): void;
+  /** A room match takes over the field: a solo run being played is let go, without a word. */
+  stopSolo(): void;
 }
 
 export function createLobby(deps: LobbyDeps) {
   const {
     G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
     closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, savedInitials, hideShop, paintHud, refreshNavHints, renderMenu,
-    renderShop,
+    renderShop, stopSolo,
   } = deps;
 
   /* ---------- game rooms: server-hosted multiplayer ---------- */
@@ -355,6 +357,7 @@ export function createLobby(deps: LobbyDeps) {
     } catch (err) { lobbySay(prettyRoomError(err)); }
   }
   function startNetMatch(room: RoomSnapshot): void {
+    stopSolo();
     endTutorial(false);
     closeTitle();
     G.demo = false;

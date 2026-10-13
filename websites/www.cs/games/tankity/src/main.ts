@@ -57,7 +57,7 @@ import { createTutorial } from './tutorial.ts';
 import { createGuns } from './guns.ts';
 import { createScores } from './scores.ts';
 import { createMatch } from './match.ts';
-import { createFiler } from './solo-file.ts';
+import { createFiler, timedFetch } from './solo-file.ts';
 import { createRoom } from './room.ts';
 import { createLobby } from './lobby.ts';
 import { createMenu } from './menu.ts';
@@ -421,10 +421,13 @@ const { updateCamera, shownAngle, shownPower, render } = createView({
 /* The high scores (src/scores.ts), and the solo runs on their way to them (src/solo-file.ts): one
    filer per page, on this browser's storage (null where reading it throws) and Web Locks where there are any. */
 const filer = createFiler({
-  fetch: (url, init) => fetch(url, init), storage: browserStorage(),
+  // Every request has a deadline (an abort counts as offline), so a pass never holds the cross-tab lock for ever.
+  fetch: timedFetch((url, init) => fetch(url, init as RequestInit)), storage: browserStorage(),
   locks: (typeof navigator !== 'undefined' && navigator.locks) || null,
 });
-const { renderScoresOverlay, openScores, soloBegin, soloRound, soloFinish, soloDrop, boot: bootScores, wake: wakeScores } = createScores({
+const {
+  renderScoresOverlay, openScores, soloBegin, soloRound, soloFinish, soloDrop, soloForget, boot: bootScores, wake: wakeScores,
+} = createScores({
   $, keyHint, say, toggleOverlay, initials: () => getInitials(), difficulty: () => difficulty.get(), filer,
   timers: { setTimeout: (fn, ms) => Number(setTimeout(fn, ms)), clearTimeout: id => clearTimeout(id) },
 });
@@ -455,7 +458,7 @@ const {
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
   netFire: () => netFire(), netLeave: quiet => netLeave(quiet), netNext: want => netNext(want),
   netAgain: () => netAgain(), initials: getInitials,
-  soloBegin, soloRound, soloFinish: (id, who, done) => { void soloFinish(id, who, done); }, soloDrop,
+  soloBegin, soloRound, soloFinish: (id, who, done) => { void soloFinish(id, who, done); }, soloDrop, soloForget,
 });
 /* The field shop (src/shop.ts): prices, rows, buying, the Ready line. */
 const {
@@ -492,7 +495,7 @@ const {
   closeOverlays, closePreview, endTutorial, hideShop, savedInitials: getInitials, paintHud, refreshNavHints,
   renderMenu: () => renderMenu(),
   closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
-  renderShop,
+  renderShop, stopSolo: () => stopFiling(),
 });
 /* The game menu's settings (src/menu.ts). */
 const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({

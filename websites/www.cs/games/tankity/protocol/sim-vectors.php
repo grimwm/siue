@@ -176,8 +176,15 @@ for ($i = -60; $i <= 60; $i++) {
     $det('cos', $x);
     $det('atan', $x / 7);
 }
+// Inside the game's range: 1200 more points, so a one-ulp change in any kernel term fails many cases.
+for ($i = 0; $i < 400; $i++) {
+    $x = (($i * 7919) % 20011) / 100.0 - 100.0 + 0.00031;
+    $det('sin', $x);
+    $det('cos', $x + 0.5);
+    $det('atan', $x / 9.7);
+}
 // Past 1e5 the reduction loses accuracy (never fed by the game), but both sides still agree to the bit.
-$edges = [0.0, -0.0, M_PI_4, -M_PI_4, M_PI_2, M_PI, 3 * M_PI_2, 2 * M_PI, -M_PI_2 * 7, 30.9, 1e-9, -1e-300, 5e-324,
+$edges = [-0.0, M_PI_4, -M_PI_4, M_PI_2, M_PI, 3 * M_PI_2, 2 * M_PI, -M_PI_2 * 7, 30.9, 1e-9, -1e-300, 5e-324,
     0.4375, 0.6875, 1.1875, 2.4375, -2.4375, 1e5, 1e6, 1e15, -1e22];
 foreach ($edges as $x) {
     $det('sin', $x);
@@ -589,8 +596,8 @@ foreach (['easy', 'normal', 'hard', 'brutal'] as $level) {
     }
 }
 
-/* On a wide field the wobble's floor is scaled up (room_field_aim's floor > 1), so
- * a long bracket that shrinks down to it pins that scale on both sides. */
+/* On a wide field the wobble's floor is scaled by room_field_aim (0.5 at 1080, 0.4 at
+ * 1440, so not 1), so a long bracket that shrinks down to it pins that scale on both sides. */
 foreach ([1080, 1440] as $w) {
     $bracket("wide-field-$w-shrinks-to-its-floor", ['w' => $w, 'terrain' => $flat, 'wind' => 2, 'round' => 6, 'seed' => 42, 'shooter' => 1, 'target' => 0,
         'shots' => 8, 'tanks' => [$human(250, 9999), $drone($w - 250, 9999) + ['dirS' => -1, 'angle' => 60]]]);

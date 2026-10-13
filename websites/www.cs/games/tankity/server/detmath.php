@@ -108,6 +108,7 @@ function det_atan(float $x): float
     return $x < 0 ? -$r : $r;
 }
 
+// y = -0.0 with x < 0 gives +π, unlike libm's -π: `$y >= 0` holds for -0.0. src/detmath.ts does the same, and the sim never aims from -0.
 function det_atan2(float $y, float $x): float
 {
     if ($x > 0) {

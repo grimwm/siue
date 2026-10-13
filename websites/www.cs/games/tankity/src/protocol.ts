@@ -99,6 +99,8 @@ export interface RoomYou {
    * (null: outside the board). */
   filed: boolean;
   filedRank: number | null;
+  /** The server tried to file this seat's score and could not. */
+  filedFailed: boolean;
 }
 
 export interface RoomSnapshot {

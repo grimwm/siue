@@ -104,7 +104,8 @@
                 "armor": 100,
                 "maxArmor": 100,
                 "filed": false,
-                "filedRank": null
+                "filedRank": null,
+                "filedFailed": false
             },
             "csrf": "fixture-csrf"
         }

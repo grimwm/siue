@@ -138,5 +138,7 @@ final class RoomFilingTest extends TestCase
         $snap = room_snapshot($room, 0, 0);
         $this->assertFalse($snap['you']['filed'], 'a failure is not "did not place"');
         $this->assertNull($snap['you']['filedRank']);
+        $this->assertTrue($snap['you']['filedFailed'], 'the card can say it failed');
+        $this->assertFalse(room_snapshot($this->duel(), 0, 0)['you']['filedFailed'], 'a score not filed yet has not failed');
     }
 }

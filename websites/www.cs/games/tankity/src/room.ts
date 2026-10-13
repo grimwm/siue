@@ -574,7 +574,9 @@ export function createRoom(deps: RoomDeps) {
     END.text = '';
     END.score = room.you ? `You banked $${room.you.cash || 0} · ${room.you.score || 0} pts` : '';
     END.board = { ...board, caption: '', title: '' };
-    END.filed = room.you && room.you.filed ? filedLine(room.you.filedRank, room.you.score || 0, room.difficulty) : null;
+    END.filed = !room.you ? null
+      : room.you.filed ? filedLine(room.you.filedRank, room.you.score || 0, room.difficulty)
+      : room.you.filedFailed ? "Couldn't file your score: the score server had a problem. It is not kept in this browser." : null;
     END.buttons = card;
     renderEndVeil();
     const veil = $('end-veil');

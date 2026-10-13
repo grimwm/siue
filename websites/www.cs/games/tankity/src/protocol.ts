@@ -164,6 +164,8 @@ export interface OneUpEvent extends EventBase { t: 'oneup'; seat: number; lives:
  * departed seat already shows the drone that took it over. */
 export interface JoinEvent extends EventBase { t: 'join'; seat: number; name: string }
 export interface LeftEvent extends EventBase { t: 'left'; seat: number; name: string }
+/** Someone pressed Play again: the room is back in its lobby. */
+export interface AgainEvent extends EventBase { t: 'again'; seat: number }
 
 /** What opens a volley: a human fires, the drone fires, or the crew fires for
  * a human who ran the turn clock out. `x`, `a` and `pw` are where the barrel
@@ -198,7 +200,7 @@ export interface TacticEvent extends EventBase { t: 'tactic'; seat: number; s: s
 
 /** The events a snapshot carries, discriminated by `t`. */
 export type RoomEvent =
-  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent
+  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent
   | FireEvent | AiFireEvent | AutoEvent
   | ShotEvent | BurstEvent | HitEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
 
@@ -233,6 +235,7 @@ export interface PostBodies {
   act: ActBody;
   buy: { item: string; qty: number };
   ready: { ready: boolean };
+  again: Record<string, never>;
   body: { body: string };
   map: { map: string };
   seatmode: { seat: number; mode: 'ai' | 'open'; since?: number };
@@ -247,6 +250,7 @@ export interface PostReplies {
   act: RoomReply;
   buy: RoomReply;
   ready: RoomReply;
+  again: RoomReply;
   body: RoomReply;
   map: RoomReply;
   seatmode: RoomReply;

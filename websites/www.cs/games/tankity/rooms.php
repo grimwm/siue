@@ -664,6 +664,23 @@ if ($action === 'buy' && $method === 'POST') {
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
+/* Play again (same room): anyone seated may press it once the match is over. */
+if ($action === 'again' && $method === 'POST') {
+    [$room, $fh, $path, $seat] = room_gate($body, true, false);
+    if (!room_again($room)) {
+        room_unlock($fh);
+        room_json_out(409, ['error' => 'the match is still on']);
+    }
+    room_emit($room, ['t' => 'again', 'seat' => $seat]);
+    if (!room_save($fh, $path, $room)) {
+        room_unlock($fh);
+        room_json_out(500, ['error' => 'store write failed']);
+    }
+    $out = room_reply_snapshot($room, $seat, $body);
+    room_unlock($fh);
+    room_json_out(200, ['ok' => true, 'room' => $out]);
+}
+
 /* Ready is a toggle on the wire as a wanted state: {"ready": true|false}.
    Not throttled: it follows the player's own click, like the menu flag, and
    a swallowed click would leave the button disagreeing with the room. */

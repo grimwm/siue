@@ -141,7 +141,7 @@ export function planCatchUp(
 
 /** The POST actions whose reply is a room, which therefore take the delta
  * fields (since, have, full). */
-const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready', 'body', 'map', 'seatmode']);
+const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready', 'again', 'body', 'map', 'seatmode']);
 
 /* ---------- the client ---------- */
 
@@ -370,6 +370,14 @@ export class RoomClient {
     this.stopLobbyWatch();
     this.stopPolling();
     this.pollId = this.env.setInterval(() => { void this.refresh(); }, MATCH_POLL_MS);
+  }
+
+  /** The room went back to its lobby (Play again): the match poll stops and the
+   * session stays, so the lobby can watch the room. */
+  toLobby(): void {
+    this.stopPolling();
+    this.on = false;
+    this.synced = false;
   }
 
   stopPolling(): void {

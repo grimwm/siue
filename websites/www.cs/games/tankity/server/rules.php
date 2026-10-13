@@ -869,6 +869,40 @@ function room_apply_fuel(array &$room): void
     unset($t);
 }
 
+/* Play again (same room): back to the lobby with the same code and seats, every
+   human on fresh lives, score and cash. The room's map and Difficulty stay (the
+   host chose them at create). A seat a player left goes back to the battery.
+   Pressed twice (two players at once), the second press finds the lobby and
+   changes nothing. False while the match is still on. */
+function room_again(array &$room): bool
+{
+    if ($room['phase'] === 'lobby') {
+        return true;
+    }
+    if ($room['phase'] !== 'over') {
+        return false;
+    }
+    foreach (['plate', 'armor', 'shield', 'jammer', 'bunker', 'laststand', 'fuelBonus', 'fuelApplied', 'tactic', 'stats', 'filed', 'menu', 'shop', 'pace', 'clock'] as $k) {
+        unset($room[$k]);
+    }
+    foreach ($room['seats'] as $idx => $s) {
+        if ($s['human'] ?? false) {
+            $room['seats'][$idx]['lives'] = 3;
+            room_seat_economy($room, $idx);
+        } elseif (!empty($s['bot'])) {
+            $room['seats'][$idx] = room_idle_seat($idx);
+        }
+    }
+    $room['winner'] = null;
+    $room['startHumans'] = 0;
+    $room['phase'] = 'lobby';
+    $room['round'] = 0;
+    $room['tanks'] = [];
+    $room['terrain'] = [];
+    room_terrain_changed($room);
+    return true;
+}
+
 /* A human walks away. The last human out closes the room, freeing its slot
    at once; otherwise the battery takes over the seat, host included: a match
    that has begun carries on for everyone else (nothing after the lobby is

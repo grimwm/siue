@@ -3,8 +3,8 @@
  * The lobby overlay (src/ui/lobby.tsx) and what stands behind it: checking
  * the initials, the room server's dot and occupancy, the hills picker, hosting
  * and joining, the roster while the room waits, the invite link, starting the
- * match, the question before leaving one, and leaving it. A running match is room.ts. The game's state, the room client
- * and the rest of the game arrive as deps. */
+ * match, the question before leaving one, and leaving it. A running match is
+ * room.ts. The game's state, the room client and the rest arrive as deps. */
 import type { sfx as SfxApi } from './audio.ts';
 import type { GameState, MatchState } from './game-types.ts';
 import { DIFFICULTY_NAMES } from './difficulty.ts';
@@ -77,7 +77,6 @@ export interface LobbyDeps {
   hideShop(): void;
   paintHud(): void;
   refreshNavHints(): void;
-  renderEndVeil(): void;
   renderMenu(): void;
   renderScoresOverlay(): void;
   renderShop(): void;
@@ -86,7 +85,7 @@ export interface LobbyDeps {
 export function createLobby(deps: LobbyDeps) {
   const {
     G, $, net, MATCH, HUD, END, SCORES, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
-    closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, savedInitials, hideShop, paintHud, refreshNavHints, renderEndVeil, renderMenu,
+    closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, savedInitials, hideShop, paintHud, refreshNavHints, renderMenu,
     renderScoresOverlay, renderShop,
   } = deps;
 

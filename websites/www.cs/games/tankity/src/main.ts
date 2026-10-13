@@ -416,7 +416,7 @@ const { updateCamera, shownAngle, shownPower, render } = createView({
   G, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
 /* The high scores (src/scores.ts). */
-const { SCORES, renderScoresOverlay, loadScores, fileReport } = createScores({
+const { SCORES, renderScoresOverlay, loadScores } = createScores({
   G, $, keyHint, say, toggleOverlay,
 });
 /* The coach (src/tutorial.ts). */
@@ -473,13 +473,13 @@ const {
   decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
   renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText,
 });
-/* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving, the rematch. */
+/* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving. */
 const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
   netLeave, netAgain, netBackToLobby,
 } = createLobby({
   G, $, net, MATCH, HUD, END, SCORES, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
-  closeOverlays, closePreview, endTutorial, hideShop, savedInitials: getInitials, paintHud, refreshNavHints, renderEndVeil,
+  closeOverlays, closePreview, endTutorial, hideShop, savedInitials: getInitials, paintHud, refreshNavHints,
   renderMenu: () => renderMenu(),
   closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
   renderScoresOverlay, renderShop,

@@ -105,8 +105,8 @@ export function Help({ keyHint, onClose }: HelpProps) {
         <li>
           <strong>Rooms</strong> lets friends share a hillside: host a room, read out the code, and take
           turns with the battery filling empty seats. Initials only, no chat, and the server settles every
-          shot so nobody can fudge a hit. The host can pick named hills, and a rematch replays them without
-          ever revealing the seed.
+          shot so nobody can fudge a hit. The host can pick named hills, and Play again keeps them for the
+          next match without ever revealing the seed.
         </li>
         <li>
           Opening the page runs a demo battle behind the start. Every round gets its own name card before the

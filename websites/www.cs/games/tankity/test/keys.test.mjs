@@ -159,6 +159,38 @@ test('card: Ctrl alone never presses the focused card button; it only reaches fi
   assert.deepEqual(calls, ['fire']);
 });
 
+test('overlay: Space and Enter press the focused button (the end card\'s Play again), never fire', () => {
+  const input = rig();
+  const calls = [];
+  input.register({ fire: () => { calls.push('fire'); }, buy: () => { calls.push('buy'); return true; } }, { overlayOpen: () => true, shopLive: () => true });
+  let clicked = 0, prevented = 0;
+  const onButton = o => ({ ...ev(o), target: { tagName: 'BUTTON', click: () => { clicked++; } }, preventDefault: () => { prevented++; } });
+  input.keydown(onButton({ code: 'Space', key: ' ' }));
+  input.keydown(onButton({ code: 'Enter', key: 'Enter' }));
+  input.keydown(onButton({ code: 'Space', key: ' ', repeat: true }));
+  assert.equal(clicked, 2);
+  assert.equal(prevented, 3);
+  assert.deepEqual(calls, []);
+});
+
+test('overlay: Ctrl never presses the focused button', () => {
+  const input = rig();
+  let clicked = 0;
+  input.register({ fire: () => {} }, { overlayOpen: () => true });
+  input.keydown({ ...ev({ code: 'ControlLeft', key: 'Control', ctrlKey: true }), target: { tagName: 'BUTTON', click: () => { clicked++; } } });
+  assert.equal(clicked, 0);
+});
+
+test('battlefield: with no overlay up, Space on a focused button fires', () => {
+  const input = rig();
+  const calls = [];
+  input.register({ fire: () => { calls.push('fire'); } }, { overlayOpen: () => false });
+  let clicked = 0;
+  input.keydown({ ...ev({ code: 'Space', key: ' ' }), target: { tagName: 'BUTTON', click: () => { clicked++; } } });
+  assert.equal(clicked, 0);
+  assert.deepEqual(calls, ['fire']);
+});
+
 test('Esc still works while a text box has focus; other keys stay the box\'s', () => {
   const input = rig();
   const calls = [];

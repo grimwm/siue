@@ -78,10 +78,12 @@ test('a lost match shows the end card: result, scoreboard, score, and Continue b
     expect(fit.bottom).toBeLessThanOrEqual(fit.h);
   }
 
-  // Continue goes back to the title card over the demo; Play deals a fresh
+  // Space presses the focused Continue (it is not the fire key over a card),
+  // which goes back to the title card over the demo; Play deals a fresh
   // match: the shop comes back with the result gone, and once the first
   // round starts all three lives are back.
-  await page.click('#again');
+  await expect(page.locator('#again')).toBeFocused();
+  await page.keyboard.press('Space');
   await expect(page.locator('#title-card')).toBeVisible();
   await page.click('#title-play');
   await expect.poll(async () => {

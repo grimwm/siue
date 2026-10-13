@@ -590,6 +590,8 @@ function lineKey(dir: number): boolean {
 // and the key falls through to the next candidate. The order they are offered
 // in (panel scrolling, the gun grid, the shop, ESC, the held aim keys, fire,
 // then the plain global keys) is src/input.ts's. */
+/* Every card and overlay that takes the keyboard from the battlefield. */
+const OVERLAYS = '#log-overlay, #help-overlay, #report-overlay, #menu-overlay, #gun-overlay, #tutorial-overlay, #end-veil, #shop-veil, #lobby-veil, #preview-veil';
 function bindKeys(): void {
   input.register({
     lineDown: () => lineKey(1),
@@ -675,6 +677,7 @@ function bindKeys(): void {
     modalOpen: () => { const ask = $('leave-veil'); return !!ask && !ask.hidden; },
     modalEscape: () => { closeLeaveVeil(); },
     cardOpen: () => titleOpen(),
+    overlayOpen: () => titleOpen() || [...document.querySelectorAll<HTMLElement>(OVERLAYS)].some(el => !el.hidden),
     onHold: () => { unlock(); music.start(); },
   });
   input.bind(window);

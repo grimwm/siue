@@ -227,6 +227,9 @@ export interface InputContext {
   modalEscape?(): void;
   /** The title card is up: the aim keys rest, and Space presses the card's focused button. */
   cardOpen?(): boolean;
+  /** A card or overlay is up (the shop, the end card, a menu, ...): Space and
+   *  Enter press its focused button. Only the battlefield fires on Space. */
+  overlayOpen?(): boolean;
   /** Something held or pressed started play (the page unlocks audio). */
   onHold?(cmd: HoldCommand): void;
 }
@@ -329,6 +332,16 @@ export function createInput(opts: { touch: boolean }): Input {
     if (offer(e, lookup('scroll', e), press)) return;
     const grid = gridCommand(e.key);
     if (grid && offer(e, grid, { ...press, key: e.key || '' })) return;
+    // Over a card or overlay, Space and Enter press the focused button, the way
+    // a page's buttons work; the button's own activation is cancelled so it
+    // presses once. Ctrl never does: it begins browser shortcuts.
+    const target = e.target;
+    if ((e.key === ' ' || e.key === 'Enter') && !e.ctrlKey && target && target.tagName === 'BUTTON' && target.click
+      && ((ctx.cardOpen && ctx.cardOpen()) || (ctx.overlayOpen && ctx.overlayOpen()))) {
+      e.preventDefault();
+      if (!press.repeat) target.click();
+      return;
+    }
     // The shop answers to its own keys; everything else falls through.
     if (ctx.shopLive && ctx.shopLive(press) && offer(e, lookup('shop', e), press)) return;
     if (global === 'escape') {
@@ -354,14 +367,6 @@ export function createInput(opts: { touch: boolean }): Input {
     // from the same table as everything else.
     if (global === 'fire') {
       e.preventDefault();
-      // On the title card Space presses the focused button (its own default,
-      // the page scroll, is suppressed just above). Ctrl does not: it begins
-      // browser shortcuts, so it must never start a match.
-      const target = e.target;
-      if (ctx.cardOpen && ctx.cardOpen() && e.key === ' ' && target && target.tagName === 'BUTTON' && target.click) {
-        if (!press.repeat) target.click();
-        return;
-      }
       const fn = commands.fire;
       if (fn && !press.repeat) fn(press);
       return;

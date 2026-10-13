@@ -409,7 +409,7 @@ function scriptYou() {
   return {
     ammo: { shell: -1, buck: 1, mortar: 0, rail: 0, nuke: 0 },
     cash: 600, score: 0, lives: 3, fuel: 80, weapon: 'shell', nextUp: 3000,
-    seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, plate: 0,
+    seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, plate: 0, armor: 100, maxArmor: 100,
   };
 }
 function playRoom(turn, events) {

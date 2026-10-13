@@ -137,6 +137,8 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
             'bunker' => (int) ($room['bunker'][$seat] ?? 0),
             'laststand' => ($room['laststand'][$seat] ?? false) ? true : false,
             'plate' => (int) ($room['plate'][$seat] ?? 0),
+            'armor' => room_muster_armor($room, $seat),
+            'maxArmor' => room_max_armor($room, $seat),
         ];
         $out['csrf'] = $room['csrf'];
     }

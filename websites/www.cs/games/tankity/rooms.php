@@ -644,74 +644,10 @@ if ($action === 'buy' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(409, ['error' => 'shop is closed']);
     }
-    $item = (string) ($body['item'] ?? '');
-    $weapons = room_weapons();
-    $price = null;
-    $pack = 0;
-    $gear = null;
-    if ($item !== 'shell' && isset($weapons[$item])) {
-        $minRound = $weapons[$item]['minRound'] ?? 1;
-        if ($room['round'] < $minRound) {
-            room_unlock($fh);
-            $msg = $item === 'nuke' ? 'nukes unlock in round 4' : 'unlocks in round ' . $minRound;
-            room_json_out(409, ['error' => $msg]);
-        }
-        $price = $weapons[$item]['price'];
-        $pack = $weapons[$item]['pack'] ?? 1;
-    } elseif (($gear = room_gear($item)) !== null) {
-        $price = (int) ($gear['price'] ?? 0);
-    } else {
+    $err = room_buy($room, $seat, (string) ($body['item'] ?? ''), (int) ($body['qty'] ?? 1));
+    if ($err !== null) {
         room_unlock($fh);
-        room_json_out(422, ['error' => 'not for sale']);
-    }
-    $qty = (int) ($body['qty'] ?? 1);
-    if ($qty < 1) $qty = 1;
-    if ($qty > 9) $qty = 9;
-    // One-shot tricks never stack: a second shield is just money on fire.
-    if ($gear !== null && in_array($gear['effect'] ?? '', ['shield', 'extralife', 'laststand'], true)) {
-        $qty = 1;
-    }
-    $total = $price * $qty;
-    $cash = $room['cash'][$seat] ?? 0;
-    if ($cash < $total) {
-        room_unlock($fh);
-        room_json_out(409, ['error' => 'short on cash']);
-    }
-    $room['cash'][$seat] = $cash - $total;
-    if ($pack > 0) {
-        $room['ammo'][$seat][$item] = ($room['ammo'][$seat][$item] ?? 0) + $pack * $qty;
-    } elseif ($gear !== null) {
-        $n = (int) ($gear['n'] ?? 0) * $qty;
-        switch ($gear['effect'] ?? '') {
-            case 'repair':
-                $room['repair'][$seat] = ($room['repair'][$seat] ?? 0) + $n;
-                break;
-            case 'fuel':
-                $room['fuelBonus'][$seat] = ($room['fuelBonus'][$seat] ?? 0) + $n;
-                break;
-            case 'plate':
-                $room['plate'][$seat] = ($room['plate'][$seat] ?? 0) + $qty;
-                break;
-            case 'shield':
-                $room['shield'][$seat] = true;
-                break;
-            case 'extralife':
-                if (($room['seats'][$seat]['lives'] ?? 3) < 5) {
-                    $room['seats'][$seat]['lives']++;
-                } else {
-                    $room['scores'][$seat] = ($room['scores'][$seat] ?? 0) + 500;
-                }
-                break;
-            case 'jammer':
-                $room['jammer'][$seat] = max($room['jammer'][$seat] ?? 0, $n);
-                break;
-            case 'bunker':
-                $room['bunker'][$seat] = max($room['bunker'][$seat] ?? 0, $n);
-                break;
-            case 'laststand':
-                $room['laststand'][$seat] = true;
-                break;
-        }
+        room_json_out($err[0], ['error' => $err[1]]);
     }
     if (!room_save($fh, $path, $room)) {
         room_unlock($fh);

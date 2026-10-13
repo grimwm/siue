@@ -86,6 +86,9 @@ export interface RoomYou {
   bunker: number;
   laststand: boolean;
   plate: number;
+  /** The armor the next round musters with (what the last one ended with). */
+  armor: number;
+  maxArmor: number;
 }
 
 export interface RoomSnapshot {

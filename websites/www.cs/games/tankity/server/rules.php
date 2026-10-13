@@ -691,6 +691,83 @@ function room_carry_armor(array &$room, int $seat, int $hp, bool $wrecked): void
     $max = room_max_armor($room, $seat);
     $room['armor'][$seat] = $wrecked ? $max : min($hp, $max);
 }
+/* One purchase: ammo packs or a piece of gear. Null when it went through, else
+   [HTTP status, the player's line]. One-shot tricks never stack, a repair buys
+   only the packs that fill the hull, and round-one goods sell in the pre-match
+   shop (round 0) as the browser's shelf does. */
+function room_buy(array &$room, int $seat, string $item, int $qty): ?array
+{
+    $weapons = room_weapons();
+    $qty = max(1, min(9, $qty));
+    $gear = null;
+    if ($item !== 'shell' && isset($weapons[$item])) {
+        $minRound = (int) ($weapons[$item]['minRound'] ?? 1);
+        $price = (int) $weapons[$item]['price'];
+        $pack = (int) ($weapons[$item]['pack'] ?? 1);
+    } elseif (($gear = room_gear($item)) !== null) {
+        $minRound = (int) ($gear['minRound'] ?? 1);
+        $price = (int) ($gear['price'] ?? 0);
+        $pack = 0;
+    } else {
+        return [422, 'not for sale'];
+    }
+    if ((int) $room['round'] < ($minRound <= 1 ? 0 : $minRound)) {
+        return [409, $item === 'nuke' ? 'nukes unlock in round 4' : 'unlocks in round ' . $minRound];
+    }
+    $effect = (string) ($gear['effect'] ?? '');
+    if (in_array($effect, ['shield', 'extralife', 'laststand'], true)) {
+        $qty = 1;
+    }
+    if ($effect === 'repair') {
+        $want = room_repair_packs_wanted($room, $seat, (int) ($gear['n'] ?? 0));
+        if ($want === 0) {
+            return [409, 'armor is full'];
+        }
+        $qty = min($qty, $want);
+    }
+    $total = $price * $qty;
+    $cash = $room['cash'][$seat] ?? 0;
+    if ($cash < $total) {
+        return [409, 'short on cash'];
+    }
+    $room['cash'][$seat] = $cash - $total;
+    if ($gear === null) {
+        $room['ammo'][$seat][$item] = ($room['ammo'][$seat][$item] ?? 0) + $pack * $qty;
+        return null;
+    }
+    $n = (int) ($gear['n'] ?? 0) * $qty;
+    switch ($effect) {
+        case 'repair':
+            room_repair($room, $seat, $n);
+            break;
+        case 'fuel':
+            $room['fuelBonus'][$seat] = ($room['fuelBonus'][$seat] ?? 0) + $n;
+            break;
+        case 'plate':
+            room_fit_plate($room, $seat, $qty);
+            break;
+        case 'shield':
+            $room['shield'][$seat] = true;
+            break;
+        case 'extralife':
+            if (($room['seats'][$seat]['lives'] ?? 3) < 5) {
+                $room['seats'][$seat]['lives'] = ($room['seats'][$seat]['lives'] ?? 3) + 1;
+            } else {
+                $room['scores'][$seat] = ($room['scores'][$seat] ?? 0) + 500;
+            }
+            break;
+        case 'jammer':
+            $room['jammer'][$seat] = max($room['jammer'][$seat] ?? 0, $n);
+            break;
+        case 'bunker':
+            $room['bunker'][$seat] = max($room['bunker'][$seat] ?? 0, $n);
+            break;
+        case 'laststand':
+            $room['laststand'][$seat] = true;
+            break;
+    }
+    return null;
+}
 function room_find_seat(array $room, string $token): ?int
 {
     foreach ($room['seats'] as $idx => $s) {

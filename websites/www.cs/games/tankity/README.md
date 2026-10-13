@@ -16,6 +16,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (21 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `src/main.ts`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml`, and where each came from                                                                                                                     |
+| `src/detmath.ts` | `dsin`, `dcos`, `datan`, `datan2`: the sim's trigonometry from `+ − × ÷` and `floor` only, the same bits as `server/detmath.php` |
 | `src/sim.ts` | The game math in TypeScript: RNG, terrain, flight, hit tests, blasts. Pure: state in, what happened out; no page, sound or particles |
 | `src/field.ts` | How wide a solo field is dealt (from the landscape battlefield box, whichever way the device is held), where the field sits in the box, and the power step and its display per width. DOM-free |
 | `src/ghosts.ts` | The draw-only flight of a shell the sim retired past the field's edge, until it is off the picture: no collision, blast or effect on the game |
@@ -68,6 +69,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `server/legacy.php` | The per-callsign score rows from before the boards (the `callsigns` table) and the one-time import of the old score files into it (`legacy_import`) |
 | `server/housekeep.php` | Cleanup on requests, at most every five minutes (`tankity_housekeep`, `tankity_jobs`) |
 | `data/` | Runtime only, when PHP may write here: `tankity.sqlite` and the deny `.htaccess` PHP writes. Never in git, never deployed |
+| `server/detmath.php` | `det_sin`, `det_cos`, `det_atan`, `det_atan2` and `det_round` (`Math.round`): the same bits as `src/detmath.ts` |
 | `server/sim.php` | The deterministic sim that `src/sim.ts` mirrors: RNG, terrain, the curated hills, weapons, ballistics, the Roller (`room_roll_*`), hit boxes and sweeps, explosions, settling |
 | `server/ai.php` | Drone aim, bracketing, the strategies and their flips, `room_ai_rack` |
 | `server/rules.php` | Seats and economy, rounds (`room_start_round`, `room_advance`, `room_end_round`), the turn clock, drone pacing and watch turns, the shop, firing a volley, lives and winnings, scores |
@@ -698,10 +700,12 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/prefs-legacy.test.mjs`                   | The saved settings (`tankity-body`, `tankity-text`, `tankity-tutorial`, `tankity-local`, `tankity-callsign`) read back through the kit's prefs exactly as the code before it wrote them |
 | `test/audio.test.mjs`                          | `src/audio.ts` imports without a browser; the loop-point trim and the round-to-track mapping are right |
 | `test/field.test.mjs`                          | The width from the landscape box (clamps, columns, portrait equals landscape), that a deal holds through a resize, fitting the field in a box, and the power step and display at 720, 1080 and 1440 |
+| `test/detmath.test.mjs`                        | `src/detmath.ts` is within 1e-15 of `Math` where the sim feeds it, keeps the sign of zero, and is exact at 0, 1 and the right angles |
 | `test/wide-field.test.mjs`                     | The sim at any width: the same hills continued, units spread outside each other's blast, reach and wind scaling, flights that last as long as the field, 720 unchanged |
 | `test/ghosts.test.mjs`                         | A shell retired past the edge keeps flying (draw only), one that burst inside leaves no ghost, a replay's last point keeps its velocity, ghosts are dropped off the picture |
 | `test/scenery.test.mjs`                        | The scenery continues the hills with no step over 1 px at the seam, cratered or not |
 | `test/rotate-hint.test.mjs`                    | The rotate hint's rule and its chip |
+| `test/php/DetMathTest.php`                     | `server/detmath.php` is within 1e-15 of libm, rounds halves and keeps the sign of zero like `Math.round`, and the `detmath` vectors cover every function |
 | `test/php/FieldWidthTest.php`                  | The server's width rule, hills, reach and aim, units spread outside each other's blast, and a room dealt at 720 |
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
 | `test/render.test.mjs`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, and rebuilds the sky only when the match key or the visible area changes |
@@ -711,7 +715,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/preview.test.mjs`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |
 | `test/flow.test.mjs`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
 | `test/protocol.test.mjs`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
-| `test/sim-vectors.test.mjs`                    | `src/sim.ts`, `src/ai.ts` and `src/armor.ts` agree with `rooms.php` on every shared sim vector; armor cases compare exactly (see Sim vectors) |
+| `test/sim-vectors.test.mjs`                    | `src/sim.ts`, `src/ai.ts` and `src/armor.ts` agree with `rooms.php` on every shared sim vector; the detmath, field, armor and match-end cases compare exactly (see Sim vectors) |
 | `phpunit --testsuite tankity` (host PHP)       | `ConfigTest` (`.config.yaml` precedence), `DataDirTest`, `DbTest`, `RoomStoreTest`, `LegacyImportTest` and `HousekeepTest` (storage: the directory and its checks, the database and its journal, rooms as rows, the old files' import, cleanup on a fake clock), `GameJsonTest` (the YAML parser, the `game.yaml` schema including effects, `--check` staleness) and `RoomsSimTest` (server sim units: pierce, spawns, spacing, replay stamping; drone bracketing and strategies; one unit left standing ends a round, the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller) |
 | `RoomMatchEndTest` (host PHP) | The match-end rule: one human plays like solo, the last human standing wins twice the round bonus, a leave is a forfeit, two out at once, the watch cap |
 | `RoomStandingsTest` (host PHP) | Each human's rounds won, kills, round gain and out round, in the snapshot with the winner's bonus |
@@ -780,7 +784,8 @@ keeps the two honest: `protocol/sim-vectors.php` calls `rooms.php`'s real
 functions over a spread of cases and writes each case's inputs and expected
 outputs; `test/sim-vectors.test.mjs` replays every case through the sim,
 `src/sim.ts`, the drone AI, `src/ai.ts`, and the armor rules, `src/armor.ts`; the sim and AI
-compare within 1e-4 and the armor cases compare exactly.
+compare within 1e-4; the deterministic math (`detmath`), the field at each
+width (terrain heights included), armor and match-end cases compare exactly.
 
 - Covered: the RNG and terrain generator, spawn spots, shot speed, muzzle,
   gravity and wind, hit boxes, the swept hit test (owner-clear rule, lance
@@ -830,8 +835,11 @@ on must come out the same in the browser and on the server:
 - a seeker within 1 px of its target does not steer, a cluster's bomblets may
   burst on the ground at once, and a drone's bracket learns where a lance
   first burst, on both sides;
-- `sin`, `cos` and `atan2` remain `Math.*` and libm; a last-bit difference
-  there changes an outcome only at an exact boundary.
+- `sin`, `cos` and `atan2` come from `src/detmath.ts` / `server/detmath.php`:
+  fdlibm's polynomials built only from `+ − × ÷` and `floor`, so both sides
+  compute the same bits whatever the browser's or the host's libm does; the
+  `detmath` vectors are compared without tolerance. Halves round toward +∞
+  (`Math.round`, `det_round`). Rendering keeps `Math.*`.
 
 `test/determinism.test.mjs` keeps the banned calls out; the sim vectors keep
 the two sides agreeing.

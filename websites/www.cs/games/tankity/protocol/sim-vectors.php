@@ -36,7 +36,7 @@ function sv_round($v)
     return $v;
 }
 
-/** A terrain from its recipe, to the nearest 0.001 so both languages build the same ground. */
+/** A terrain from its recipe, to the nearest 0.001 (det_sin, so the recipe means the same ground everywhere). */
 function sv_terrain(array $spec, int $w = SV_WIDTH): array
 {
     $t = [];
@@ -47,7 +47,7 @@ function sv_terrain(array $spec, int $w = SV_WIDTH): array
             $y = $spec['slope'][0] + ($spec['slope'][1] - $spec['slope'][0]) * $ix / ($w - 1);
         } else {
             [$base, $amp, $period] = $spec['hills'];
-            $y = $base + $amp * sin($ix * 2 * M_PI / $period);
+            $y = $base + $amp * det_sin($ix * 2 * M_PI / $period);
         }
         foreach ($spec['set'] ?? [] as [$x0, $x1, $sy]) {
             if ($ix >= $x0 && $ix <= $x1) {
@@ -154,11 +154,42 @@ $add = function (string $group, string $name, array $in, $out, ?string $known = 
     }
     $cases[$group][] = $case;
 };
-/* An exact case: written unrounded and compared with Object.is by the runner (terrain heights at 1e-9 until Plan D's deterministic math). */
+/* An exact case: written unrounded and compared with Object.is by the runner. */
 $exact = function (string $group, string $name, array $in, $out) use (&$cases): void {
     $cases[$group][] = ['name' => $name, 'in' => $in, 'out' => $out, 'exact' => true];
 };
 $weapons = room_weapons();
+
+/* ---- the deterministic math: every function on a grid and its edges ----
+ * Compared without tolerance: the browser must produce these exact doubles. */
+$det = function (string $fn, float $x, ?float $y = null) use ($exact): void {
+    $out = match ($fn) {
+        'sin' => det_sin($x), 'cos' => det_cos($x), 'atan' => det_atan($x),
+        'atan2' => det_atan2((float) $y, $x), 'round' => det_round($x),
+    };
+    $n = fn(float $v): string => json_encode($v, JSON_PRESERVE_ZERO_FRACTION);
+    $exact('detmath', "$fn(" . ($y === null ? '' : $n($y) . ', ') . $n($x) . ')', ['fn' => $fn, 'x' => $x] + ($y === null ? [] : ['y' => $y]), $out);
+};
+for ($i = -60; $i <= 60; $i++) {
+    $x = $i * 0.5236 + 0.00137 * $i;
+    $det('sin', $x);
+    $det('cos', $x);
+    $det('atan', $x / 7);
+}
+// Past 1e5 the reduction loses accuracy (never fed by the game), but both sides still agree to the bit.
+$edges = [0.0, -0.0, M_PI_4, -M_PI_4, M_PI_2, M_PI, 3 * M_PI_2, 2 * M_PI, -M_PI_2 * 7, 30.9, 1e-9, -1e-300, 5e-324,
+    0.4375, 0.6875, 1.1875, 2.4375, -2.4375, 1e5, 1e6, 1e15, -1e22];
+foreach ($edges as $x) {
+    $det('sin', $x);
+    $det('cos', $x);
+    $det('atan', $x);
+}
+foreach ([[1, 1], [1, -1], [-1, -1], [-1, 1], [0, 1], [0, -1], [1, 0], [-1, 0], [0, 0], [-0.0, -1], [-0.0, 1], [3e-7, -2], [-250.5, 31.25]] as [$y, $x]) {
+    $det('atan2', (float) $x, (float) $y);
+}
+foreach ([2.5, -2.5, 0.49999999999999994, -0.5, -0.4, -0.0, 0.0, 7.5, -7.5, 1e15 + 0.5, 4503599627370497.0, -4503599627370497.0] as $x) {
+    $det('round', $x);
+}
 
 /* ---- constants and the integer core ---- */
 $add('constants', 'physics', [], ['grav' => ROOM_GRAV, 'flatGrav' => ROOM_FLAT_GRAV, 'windK' => ROOM_TURN_WIND,
@@ -188,7 +219,7 @@ foreach ([[1, 3], [2, 1234], [3, 99], [4, 7], [5, 2026]] as [$n, $seed]) {
     $add('spawn-spots', "n$n-seed$seed", ['n' => $n, 'seed' => $seed], ['spots' => $spots, 'next' => room_rng_next($rng)]);
 }
 
-/* ---- the field at any width, exact except terrain heights (spec 7.4) ---- */
+/* ---- the field at any width, exact (spec 7.4) ---- */
 foreach ([720, 1080, 1440] as $w) {
     foreach (['tankity-twin-hills', 'scorch-01'] as $seed) {
         $rng = room_hash_seed($seed);

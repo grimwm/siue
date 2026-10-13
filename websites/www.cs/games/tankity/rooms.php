@@ -39,6 +39,7 @@ require_once __DIR__ . '/config.php';
 //   server/legacy.php    the per-callsign score runs and the import of the old score files
 //   server/housekeep.php throttled cleanup on requests
 //   server/store.php     rooms as rows: the room lock, room lifecycle, the sweep
+//   server/detmath.php   sin, cos, atan2 and Math.round, the same bits as src/detmath.ts
 //   server/sim.php       the deterministic sim (mirrors src/sim.ts)
 //   server/ai.php        drone aim, bracketing and strategies
 //   server/rules.php     seats, rounds, turn clock, pacing, the shop, scores
@@ -52,6 +53,7 @@ require_once __DIR__ . '/server/guard.php';
 require_once __DIR__ . '/server/board.php';
 require_once __DIR__ . '/server/settings.php';
 require_once __DIR__ . '/server/store.php';
+require_once __DIR__ . '/server/detmath.php';
 require_once __DIR__ . '/server/sim.php';
 require_once __DIR__ . '/server/ai.php';
 require_once __DIR__ . '/server/rules.php';

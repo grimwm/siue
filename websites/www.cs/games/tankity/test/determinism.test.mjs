@@ -1,7 +1,8 @@
 // The rule modules the server's solo play depends on must compute the same
 // numbers in the browser and on the server: no wall clock, no Math.random, no
-// Math.hypot, no powers, no degree conversion other than rad(). See README
-// "Solo determinism".
+// Math.hypot, no powers, no degree conversion other than rad(), and no libm
+// sin, cos or atan2 (src/detmath.ts and server/detmath.php instead). See
+// README "Solo determinism".
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,23 +13,46 @@ import { DIFFICULTIES, DIFFICULTY, aimSkill } from '../src/ai.ts';
 const dir = path.join(import.meta.dirname, '..');
 const read = f => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
-for (const file of ['src/sim.ts', 'src/ai.ts', 'src/armor.ts']) {
+// Files a later task adds are banned from the moment they exist.
+const present = files => files.filter(f => fs.existsSync(path.join(dir, f)));
+const TS_RULES = present(['src/sim.ts', 'src/ai.ts', 'src/armor.ts', 'src/detmath.ts', 'src/solo.ts']);
+const TRANSCENDENTAL_TS = /Math\.(sin|cos|tan|atan2?|asin|acos|exp|log|pow|cbrt)\b/;
+const TRANSCENDENTAL_PHP = /(?<![\w>$])(sin|cos|tan|atan2?|asin|acos|exp|log|pow)\(/;
+
+for (const file of TS_RULES) {
   test(`${file} uses only replay-safe math`, () => {
     const src = read(file);
-    for (const banned of [/Math\.random/, /Math\.hypot/, /\*\*/, /Date\.now|performance\.now/, /\* Math\.PI \/ 180/]) {
+    for (const banned of [/Math\.random/, /Math\.hypot/, /\*\*/, /Date\.now|performance\.now/, /\* Math\.PI \/ 180/, TRANSCENDENTAL_TS]) {
       assert.doesNotMatch(src, banned, `${file} must not use ${banned}`);
     }
   });
 }
 
-for (const file of ['server/sim.php', 'server/ai.php']) {
+for (const file of present(['server/sim.php', 'server/ai.php', 'server/detmath.php', 'server/solo.php', 'server/flight.php'])) {
   test(`${file} uses only replay-safe math`, () => {
     const src = read(file);
-    for (const banned of [/\bhypot\(/, /\*\*/, /\bmt_rand|\brand\(|random_int|microtime/]) {
+    for (const banned of [/\bhypot\(/, /\*\*/, /\bmt_rand|\brand\(|random_int|microtime/, TRANSCENDENTAL_PHP]) {
       assert.doesNotMatch(src, banned, `${file} must not use ${banned}`);
     }
   });
 }
+
+// rules.php also runs the live rooms, whose pacing reads the clock and whose
+// codes are random; only its shot math is held to the solo rules.
+test('server/rules.php fires with replay-safe math', () => {
+  const src = read('server/rules.php');
+  for (const banned of [/\bhypot\(/, TRANSCENDENTAL_PHP]) {
+    assert.doesNotMatch(src, banned, `server/rules.php must not use ${banned}`);
+  }
+});
+
+test('the bans see what they ban', () => {
+  for (const s of ['Math.sin(a)', 'Math.atan2(y, x)', 'Math.cos(r)', 'Math.pow(2, 3)']) assert.match(s, TRANSCENDENTAL_TS, s);
+  for (const s of ['sin($a)', ' atan2($y, $x)', '-cos($r)', 'pow(2, 3)']) assert.match(s, TRANSCENDENTAL_PHP, s);
+  for (const s of ['det_sin($a)', '$o->cos($r)', 'explode(",", $s)', 'error_log($m)', '$cos($x)']) {
+    assert.doesNotMatch(s, TRANSCENDENTAL_PHP, s);
+  }
+});
 
 test('rad() rounds like PHP deg2rad', () => {
   assert.equal(rad(62), (62 / 180) * Math.PI);

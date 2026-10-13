@@ -7,6 +7,8 @@
  * what happened (a blast's hits, a volley's trails) comes back as data for the
  * caller to show. */
 
+import { datan2, dcos, dsin } from './detmath.ts';
+
 /* ---------- seeded RNG (mulberry32 + string hash) ---------- */
 export type Rng = () => number;
 
@@ -309,9 +311,9 @@ export function drawHills(rng: Rng): Hills {
 /** The hills' height at column x, on or past the field (the scenery draws the same hills). */
 export function hillY(h: Hills, x: number): number {
   const y = 330
-    + h.a[0] * Math.sin(x * h.f[0] + h.p[0])
-    + h.a[1] * Math.sin(x * h.f[1] + h.p[1])
-    + h.a[2] * Math.sin(x * h.f[2] + h.p[2]);
+    + h.a[0] * dsin(x * h.f[0] + h.p[0])
+    + h.a[1] * dsin(x * h.f[1] + h.p[1])
+    + h.a[2] * dsin(x * h.f[2] + h.p[2]);
   return clamp(y, 190, 415);
 }
 /** The nine numbers as a room snapshot carries them. */
@@ -402,7 +404,7 @@ export function inHitBox(t: Pick<Tank, 'isPlayer' | 'human' | 'x' | 'y'>, x: num
 export function muzzle(t: Pick<Tank, 'angle' | 'dirS' | 'isPlayer' | 'x' | 'y'>): { x: number; y: number } {
   const a = rad(t.angle);
   const s = facing(t);
-  return { x: t.x + Math.cos(a) * 20 * s, y: t.y - 14 - Math.sin(a) * 20 };
+  return { x: t.x + dcos(a) * 20 * s, y: t.y - 14 - dsin(a) * 20 };
 }
 /** How much faster shells fly on a field w wide: range and height grow by
  *  w / ROOM_W, so full power still crosses the field and the wind bends a shot
@@ -446,12 +448,12 @@ export function fireWeapon(world: World, arsenal: Arsenal, t: Tank, wkey: string
     const spd = shotSpeed(t.power, w.flat, w.speed, fieldReach(world.terrain.length));
     world.shells.push({
       x: m.x, y: m.y,
-      vx: Math.cos(a) * spd * s, vy: -Math.sin(a) * spd,
+      vx: dcos(a) * spd * s, vy: -dsin(a) * spd,
       wkey, owner: t, life: 12 * fieldReach(world.terrain.length), // flights last as long as the field is wide
       age: 0, pierced: false, split: false, order: [i],
     });
   }
-  return { x: m.x, y: m.y, ang: Math.atan2(-Math.sin(r0), Math.cos(r0) * s), spent };
+  return { x: m.x, y: m.y, ang: datan2(-dsin(r0), dcos(r0) * s), spent };
 }
 /* One ballistic step. Shared by the real shells, the AI predictor, the aim
  * guide, and the firing-range preview, so the demo flies exactly like war. */
@@ -532,8 +534,8 @@ export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal
   const r = rad(angle);
   const st: Motion = {
     x, y,
-    vx: Math.cos(r) * shotSpeed(power, w.flat, w.speed, reach) * dirS,
-    vy: -Math.sin(r) * shotSpeed(power, w.flat, w.speed, reach),
+    vx: dcos(r) * shotSpeed(power, w.flat, w.speed, reach) * dirS,
+    vy: -dsin(r) * shotSpeed(power, w.flat, w.speed, reach),
   };
   const dt = 1 / 60;
   const grav = w.flat ? FLAT_GRAV : GRAV;
@@ -569,13 +571,13 @@ export function splitShell(s: Shell, w: Weapon, reach = 1): Shell[] {
   const n = Math.max(2, w.split || 4);
   const fan = w.fan || 0.22;
   const sp = dist(s.vx, s.vy) * 0.85;
-  const base = Math.atan2(s.vy, s.vx);
+  const base = datan2(s.vy, s.vx);
   const bomblets: Shell[] = [];
   for (let i = 0; i < n; i++) {
     const a = base + (i - (n - 1) / 2) * fan;
     bomblets.push({
       x: s.x, y: s.y,
-      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      vx: dcos(a) * sp, vy: dsin(a) * sp,
       wkey: s.wkey, owner: s.owner, life: 12 * reach,
       age: 0, pierced: false, split: true, order: [...(s.order || []), i],
       dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius,
@@ -800,7 +802,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
     // Cluster blooms on fuse, wherever it happens to be.
     if (w.effect === 'cluster' && !s.split && s.age >= (w.fuse || 0.9)) {
       s.split = true;
-      events.push({ kind: 'split', wkey: s.wkey, x: s.x, y: s.y, ang: Math.atan2(s.vy, s.vx) });
+      events.push({ kind: 'split', wkey: s.wkey, x: s.x, y: s.y, ang: datan2(s.vy, s.vx) });
       world.shells.push(...splitShell(s, w, fieldReach(world.terrain.length)));
       s.dead = true;
       continue;
@@ -841,7 +843,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
       // A lance punches through its first victim and keeps flying.
       if (w.effect === 'pierce' && !s.pierced) {
         s.pierced = direct;
-        events.push({ kind: 'pierce', wkey: s.wkey, x: s.x, y: s.y, ang: Math.atan2(s.vy, s.vx) });
+        events.push({ kind: 'pierce', wkey: s.wkey, x: s.x, y: s.y, ang: datan2(s.vy, s.vx) });
         events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, direct, ov) });
         continue;
       }

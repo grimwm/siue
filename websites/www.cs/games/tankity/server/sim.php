@@ -143,9 +143,9 @@ function room_hills_terrain(array $h, int $w): array
     $t = [];
     for ($x = 0; $x < $w; $x++) {
         $y = 330
-            + $a[0] * sin($x * $f[0] + $p[0])
-            + $a[1] * sin($x * $f[1] + $p[1])
-            + $a[2] * sin($x * $f[2] + $p[2]);
+            + $a[0] * det_sin($x * $f[0] + $p[0])
+            + $a[1] * det_sin($x * $f[1] + $p[1])
+            + $a[2] * det_sin($x * $f[2] + $p[2]);
         $t[$x] = max(190.0, min(415.0, $y));
     }
     return $t;
@@ -225,7 +225,7 @@ function room_muzzle(array $tank): array
 {
     $rad = deg2rad($tank['angle']);
     $dirS = $tank['dirS'] ?? -1;
-    return [$tank['x'] + cos($rad) * 20 * $dirS, $tank['y'] - 14 - sin($rad) * 20];
+    return [$tank['x'] + det_cos($rad) * 20 * $dirS, $tank['y'] - 14 - det_sin($rad) * 20];
 }
 /* The velocity a seeker gains this step toward the nearest live rival (a
 // point 12 px above its hull), or null when there is none to steer at.
@@ -256,11 +256,11 @@ function room_seek_push(array $tanks, int $ownerIdx, float $sx, float $sy, float
 function room_split_vel(float $vx, float $vy, int $n, float $fan): array
 {
     $sp = room_dist($vx, $vy) * 0.85;
-    $base = atan2($vy, $vx);
+    $base = det_atan2($vy, $vx);
     $out = [];
     for ($k = 0; $k < $n; $k++) {
         $ca = $base + ($k - ($n - 1) / 2) * $fan;
-        $out[] = [cos($ca) * $sp, sin($ca) * $sp];
+        $out[] = [det_cos($ca) * $sp, det_sin($ca) * $sp];
     }
     return $out;
 }
@@ -339,8 +339,8 @@ function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $a
     $weapons = room_weapons();
     $flat = !empty($weapons[$wkey]['flat']);
     $rad = deg2rad($angle);
-    $vx = cos($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0), room_field_reach($w)) * $dirS;
-    $vy = -sin($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0), room_field_reach($w));
+    $vx = det_cos($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0), room_field_reach($w)) * $dirS;
+    $vy = -det_sin($rad) * room_shot_speed($power, $flat, (float) ($weapons[$wkey]['speed'] ?? 1.0), room_field_reach($w));
     $grav = $flat ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
     $dt = 1 / 60;
     for ($i = 0, $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($w)); $i < $steps; $i++) {

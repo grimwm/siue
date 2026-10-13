@@ -208,8 +208,8 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
         $a = $rad + $off;
         $spd = room_shot_speed($tank['power'], !empty($w['flat']), (float) ($w['speed'] ?? 1.0), room_field_reach(count($room['terrain'])));
         [$mx, $my] = room_muzzle($tank);
-        $vx = cos($a) * $spd * $dirS;
-        $vy = -sin($a) * $spd;
+        $vx = det_cos($a) * $spd * $dirS;
+        $vy = -det_sin($a) * $spd;
         $res = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $mx, $my, $vx, $vy, 0.0, (float) ($w['fuse'] ?? 0.9), null, 0.0);
         if ($res[0] === 'split') {
             // The bloom reads as a burst on every screen; the bomblets do

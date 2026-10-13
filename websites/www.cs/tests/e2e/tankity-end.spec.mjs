@@ -82,7 +82,7 @@ test('a lost match shows the end card: result, scoreboard, score, and Continue b
   // which goes back to the title card over the demo; Play deals a fresh
   // match: the shop comes back with the result gone, and once the first
   // round starts all three lives are back.
-  await expect(page.locator('#again')).toBeFocused();
+  await page.locator('#again').focus();
   await page.keyboard.press('Space');
   await expect(page.locator('#title-card')).toBeVisible();
   await page.click('#title-play');

@@ -73,24 +73,39 @@ final class RoomStandingsTest extends TestCase
         $this->assertSame($room['scores'][0], $snap['seats'][0]['gain']);
     }
 
-    public function testGainIsPerRound(): void
+    private function killDrones(array &$room): void
     {
-        $room = $this->room();
-        $room['scores'][0] = 400;
-        $events = [];
-        $room['stats'][0]['from'] = 0;
         foreach ($room['tanks'] as &$t) {
             if ($t['kind'] === 'ai') {
                 $t['hp'] = 0;
             }
         }
         unset($t);
+    }
+
+    /* Round 2's gain is round 2's alone: the running total (400+ going in)
+       would differ from it. */
+    public function testGainIsPerRound(): void
+    {
+        $room = $this->room();
+        $room['scores'][0] = 400;
+        $this->killDrones($room);
+        $events = [];
         room_end_round($room, $events);
-        $first = $room['stats'][0]['gain'];
+        $this->assertSame('shop', $room['phase']);
         room_shop_set_ready($room, 0, true);
         room_shop_set_ready($room, 1, true);
         room_shop_settle($room);
         $this->assertSame($room['scores'][0], $room['stats'][0]['from']);
-        $this->assertGreaterThan(0, $first);
+        $before = $room['scores'][0];
+        $this->assertGreaterThanOrEqual(400, $before);
+        $room['scores'][0] += 250;
+        $this->killDrones($room);
+        $events = [];
+        room_end_round($room, $events);
+        $gain = $room['stats'][0]['gain'];
+        $this->assertSame($room['scores'][0] - $before, $gain);
+        $this->assertGreaterThanOrEqual(250, $gain);
+        $this->assertLessThan($room['scores'][0], $gain, 'not the running total');
     }
 }

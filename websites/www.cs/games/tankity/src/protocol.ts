@@ -49,10 +49,11 @@ export interface RoomSeat {
   bot: boolean;
   lives: number;
   score: number;
-  /** This match: rounds won, units wrecked, score gained in the last finished round, and the round the last life went (null while alive). */
+  /** This match: rounds won, units wrecked, and the score gained in the last finished round. */
   roundsWon: number;
   kills: number;
   gain: number;
+  /** The round the last life went; null while alive, and for a player who left. */
   out: number | null;
   ready: boolean;
 }

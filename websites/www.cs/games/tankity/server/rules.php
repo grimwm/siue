@@ -753,7 +753,7 @@ function room_carry_armor(array &$room, int $seat, int $hp, bool $wrecked): void
    shop (round 0) as the browser's shelf does. */
 function room_buy(array &$room, int $seat, string $item, int $qty): ?array
 {
-    // An eliminated human stays in the shop phase while others play on.
+    // An eliminated human stays in the shop phase while others play on; refused so a seat that is out cannot move cash standings.
     if (($room['seats'][$seat]['lives'] ?? 1) <= 0) {
         return [409, 'You are out of this match.'];
     }

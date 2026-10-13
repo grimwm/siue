@@ -10,7 +10,7 @@
             "mapName": "Random hills",
             "difficulty": "normal",
             "round": 1,
-            "startHumans": 0,
+            "startHumans": 1,
             "winner": null,
             "wind": -5,
             "turn": 0,

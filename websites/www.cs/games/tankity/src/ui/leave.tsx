@@ -1,6 +1,6 @@
 /* The leave-room question: asked in the page (never with a browser dialog)
  * before the player walks out of a running room match. The game says what to
- * ask and what each answer does; ESC, handled by the game, means stay. The
+ * ask and what each answer does; Q, handled by the game, means stay. The
  * veil (#leave-veil) stays in index.html and the game shows and hides it.
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later */
@@ -27,7 +27,7 @@ export function Leave(p: LeaveProps) {
         <p id="leave-text">{p.text}</p>
         <div class="acts">
           <button type="button" id="leave-stay" class="btn-primary" onClick={blurThen(p.onStay)}>
-            Stay in the match <Key at="global:escape" cls="key esc-cap" />
+            Stay in the match <Key at="global:back" cls="key" />
           </button>
           <button type="button" id="leave-go" class="btn-leave" onClick={blurThen(p.onLeave)}>Leave room</button>
         </div>

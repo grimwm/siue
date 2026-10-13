@@ -11,8 +11,8 @@ test('touch screens get no key labels and no key bindings', async ({ page }) => 
   await page.goto('games/tankity/');
   await expect(page.locator('html')).toHaveClass(/touch/);
 
-  // Keys do nothing: Esc would open the menu.
-  await page.keyboard.press('Escape');
+  // Keys do nothing: Q would open the menu.
+  await page.keyboard.press('q');
   await page.waitForTimeout(300);
   await expect(page.locator('#menu-overlay')).toBeHidden();
 

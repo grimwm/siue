@@ -33,7 +33,7 @@ export type HoldCommand = 'barrelLeft' | 'barrelRight' | 'powerUp' | 'powerDown'
 type ShopCommand = 'selUp' | 'selDown' | 'qtyUp' | 'qtyDown' | 'buyRow' | 'buy' | 'preview' | 'close' | 'next';
 type GlobalCommand =
   | 'music' | 'sound' | 'log' | 'help' | 'report' | 'random' | 'rooms' | 'new'
-  | 'guns' | 'gunStock' | 'nextTrack' | 'tutorial' | 'battlePreview' | 'fullscreen' | 'fire' | 'escape';
+  | 'guns' | 'gunStock' | 'nextTrack' | 'tutorial' | 'battlePreview' | 'fullscreen' | 'fire' | 'back';
 type ScrollCommand = 'lineDown' | 'lineUp' | 'pageDown' | 'pageUp' | 'halfDown' | 'halfUp';
 /** Keys no one rebinds: how a grid (the gun picker) is walked and loaded. */
 type GridCommand = 'gridLeft' | 'gridRight' | 'gridUp' | 'gridDown' | 'confirm' | 'digit';
@@ -57,7 +57,7 @@ export const FALLBACK_KEYS: KeyDefs = Object.freeze({
     buyRow: ['1', '2', '3', '4', '5', '6', '7', '8', '9'],
     buy: ['b', 'Enter'],
     preview: ['v', 'p'],
-    close: ['Escape'],
+    close: ['q'],
     next: ['n'],
   }),
   global: Object.freeze({
@@ -65,7 +65,7 @@ export const FALLBACK_KEYS: KeyDefs = Object.freeze({
     report: ['r'], random: ['t'], rooms: ['o'], new: ['n'], guns: ['g'], gunStock: ['i'], tutorial: ['u'],
     battlePreview: ['v'], fullscreen: ['f'],
     fire: ['Space', ' ', 'ControlLeft', 'ControlRight', 'Control'],
-    escape: ['Escape'],
+    back: ['q'],
   }),
   scroll: Object.freeze({
     lineDown: ['j'], lineUp: ['k'],
@@ -130,7 +130,6 @@ export function keycap(token: string): string {
   if (/^Ctrl\+/.test(token)) return 'Ctrl+' + keycap(token.slice(5));
   if (/^Shift\+/.test(token)) return 'Shift+' + keycap(token.slice(6));
   if (/^(ControlLeft|ControlRight|Control)$/.test(token)) return 'Ctrl';
-  if (token === 'Escape') return 'Esc';
   if (token === 'Enter') return 'Enter';
   if (token === 'PageUp') return 'PgUp';
   if (token === 'PageDown') return 'PgDn';
@@ -222,9 +221,9 @@ export type CommandTable = Partial<Record<Command, (press: Press) => Outcome>>;
 export interface InputContext {
   /** Whether shop commands are live right now (the shop is up, no auto-repeat). */
   shopLive?(press: Press): boolean;
-  /** A question holds every key but ESC; modalEscape answers it. */
+  /** A question holds every key but Q (the back key); modalBack answers it. */
   modalOpen?(): boolean;
-  modalEscape?(): void;
+  modalBack?(): void;
   /** The title card is up: the aim keys rest, and Space presses the card's focused button. */
   cardOpen?(): boolean;
   /** True when `target` is a control inside a card or overlay that is up (the
@@ -312,8 +311,9 @@ export function createInput(opts: { touch: boolean }): Input {
   const aimDown = new Map<string, { key?: string; code?: string; ctrlKey?: boolean }>();
 
   function keydown(e: KeyLike): void {
-    // A box keeps every key but Esc, which still closes what is open.
-    if (isTyping(e.target) && lookup('global', e) !== 'escape') return;
+    // A box keeps every key, Q included: initials and codes may have a Q.
+    // Esc is bound to nothing, so it never reaches a command below.
+    if (isTyping(e.target)) return;
     if (e.key === 'Shift') {
       for (const k of aimDown.values()) {
         const act = lookup('aim', { ...k, shiftKey: true }) as HoldCommand | null;
@@ -324,7 +324,7 @@ export function createInput(opts: { touch: boolean }): Input {
     const press: Press = { key: e.key || '', repeat: !!e.repeat };
     const global = lookup('global', e);
     if (ctx.modalOpen && ctx.modalOpen()) {
-      if (global === 'escape') { e.preventDefault(); if (ctx.modalEscape) ctx.modalEscape(); }
+      if (global === 'back') { e.preventDefault(); if (ctx.modalBack) ctx.modalBack(); }
       return;
     }
     // Panel scrolling runs before every other binding so an open panel keeps
@@ -346,9 +346,9 @@ export function createInput(opts: { touch: boolean }): Input {
     }
     // The shop answers to its own keys; everything else falls through.
     if (ctx.shopLive && ctx.shopLive(press) && offer(e, lookup('shop', e), press)) return;
-    if (global === 'escape') {
+    if (global === 'back') {
       e.preventDefault();
-      const fn = commands.escape;
+      const fn = commands.back;
       if (fn) fn(press);
       return;
     }

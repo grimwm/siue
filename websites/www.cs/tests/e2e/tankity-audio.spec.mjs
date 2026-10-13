@@ -98,8 +98,8 @@ test('with sound and music muted by the first tap, no sound file is requested; u
   await expect.poll(() => files.includes(musicFiles(config)[1])).toBe(true);
   expect(files.some(f => f.startsWith('audio/sfx/'))).toBe(false);
   await page.keyboard.press('e');
-  await page.keyboard.press('Escape');
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
+  await page.keyboard.press('q');
   await expect.poll(() => files.some(f => f.startsWith('audio/sfx/')), { timeout: 15_000 }).toBe(true);
   expect(errors).toEqual([]);
 });

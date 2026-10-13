@@ -1,5 +1,5 @@
 // Operation Tankity's start: the title card over the demo, its buttons and
-// initials, and the settings-only menu that Esc toggles.
+// initials, and the settings-only menu that Q toggles.
 import { test, expect } from '@playwright/test';
 import { newPlayer } from './helpers.mjs';
 
@@ -15,10 +15,10 @@ test('the title card greets the player over the demo, and Play deals a solo matc
   expect(errors).toEqual([]);
 });
 
-test('Esc opens the settings menu over the card and closes it, and focus comes back', async ({ browser }) => {
+test('Q opens the settings menu over the card and closes it, and focus comes back', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
   const menu = page.locator('#menu-overlay');
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await expect(menu).toBeVisible();
   await expect(page.locator('#menu-close')).toBeFocused();
   await expect(page.locator('#btn-menu')).toHaveAttribute('aria-expanded', 'true');
@@ -29,13 +29,13 @@ test('Esc opens the settings menu over the card and closes it, and focus comes b
   for (const gone of ['#random-run', '#menu-overlay #rooms-open', '#menu-overlay #tutorial-open']) {
     await expect(page.locator(gone)).toHaveCount(0);
   }
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await expect(menu).toBeHidden();
   await expect(page.locator('#title-card')).toBeVisible();
   await page.click('#title-settings');
   await expect(menu).toBeVisible();
   await expect(page.locator('#title-settings')).toHaveAttribute('aria-expanded', 'true');
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await expect(menu).toBeHidden();
   await expect(page.locator('#title-settings')).toBeFocused();
   await expect(page.locator('#title-settings')).toHaveAttribute('aria-expanded', 'false');
@@ -68,7 +68,7 @@ test('Play with friends opens the rooms; closing them shows the card again', asy
   const { page, errors } = await newPlayer(browser);
   await page.click('#rooms-open');
   await expect(page.locator('#lobby-veil')).toBeVisible();
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await expect(page.locator('#lobby-veil')).toBeHidden();
   await expect(page.locator('#title-card')).toBeVisible();
   await page.click('#tutorial-open');
@@ -77,7 +77,7 @@ test('Play with friends opens the rooms; closing them shows the card again', asy
   expect(errors).toEqual([]);
 });
 
-test('Ctrl alone never starts a match from the card, and Esc works from an initials box', async ({ browser }) => {
+test('Ctrl alone never starts a match from the card; in an initials box Q is a letter and Esc does nothing', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
   await expect(page.locator('#title-play')).toBeFocused();
   await page.keyboard.press('Control');
@@ -85,8 +85,12 @@ test('Ctrl alone never starts a match from the card, and Esc works from an initi
   await expect(page.locator('#title-card')).toBeVisible();
   await expect(page.locator('#shop-veil')).toBeHidden();
   await page.click('#title-initial-2');
+  await page.keyboard.press('q');
+  await expect(page.locator('#title-initial-2')).toHaveValue('Q');
+  await expect(page.locator('#menu-overlay')).toBeHidden();
   await page.keyboard.press('Escape');
-  await expect(page.locator('#menu-overlay')).toBeVisible();
+  await expect(page.locator('#menu-overlay')).toBeHidden();
+  await expect(page.locator('#title-card')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -118,12 +122,12 @@ for (const [width, height, touch] of [[375, 667, false], [390, 844, true], [844,
   });
 }
 
-test('R opens Scores over the title card and Esc closes it', async ({ browser }) => {
+test('R opens Scores over the title card and Q closes it', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
   await page.keyboard.press('r');
   await expect(page.locator('#report-overlay')).toBeVisible();
   await expect(page.locator('#score-h')).toContainText(/Scores/i);
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await expect(page.locator('#report-overlay')).toBeHidden();
   expect(errors).toEqual([]);
 });

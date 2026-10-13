@@ -7,6 +7,7 @@ import { useLayoutEffect, useRef } from 'preact/hooks';
 import { Button } from './button.tsx';
 import { Dialog } from './dialog.tsx';
 import { createInstall, IOS_STEPS } from '../install.ts';
+import { isBackKey } from '../keys.ts';
 import type { Install, InstallEnv, InstallSetup, InstallView, ShareIcon } from '../install.ts';
 
 export interface InstallBarProps {
@@ -71,7 +72,7 @@ export function InstallBar(p: InstallBarProps) {
       {v.share === 'field' && (
         <input id="share-url" class="kit-install-url" type="text" readOnly value={p.shareUrl} aria-label="Link to this game"
           ref={field} onKeyDown={ev => {
-            if (ev.key !== 'Escape') return;
+            if (!isBackKey(ev)) return;
             ev.preventDefault();
             p.onCloseShare();
           }} />

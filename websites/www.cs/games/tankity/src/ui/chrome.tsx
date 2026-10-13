@@ -21,7 +21,7 @@ export const KeyHints = createContext<KeyHintFn>(() => '');
  *  CSS shows only where there is a mouse or trackpad, hidden from screen
  *  readers (the button's words are its name). Otherwise it is the plain key
  *  name inside a sentence, or a cap with its own classes (`cls`, as on the
- *  close button's Esc). */
+ *  close button's Q). */
 export function Key({ at, bare, cls }: { at: string; bare?: boolean; cls?: string }) {
   const hint = useContext(KeyHints);
   const [ctx = '', action = '', idx] = at.split(':');
@@ -52,7 +52,7 @@ export interface OverlayHeadProps {
 /** Title bar: title left, any tools then × right, key hints below, on the grid in game.css. */
 export function OverlayHead(p: OverlayHeadProps) {
   const hint = useContext(KeyHints);
-  const esc = hint('global', 'escape', 0);
+  const esc = hint('global', 'back', 0);
   return (
     <header class={p.tools ? 'ov-head has-tools' : 'ov-head'}>
       <div class="ov-title">
@@ -63,7 +63,7 @@ export function OverlayHead(p: OverlayHeadProps) {
       {p.onClose && (
         <button type="button" class="ov-x" id={p.closeId} aria-label="Close" title={esc ? `Close (${esc})` : 'Close'}
           onClick={ev => { ev.currentTarget.blur(); p.onClose?.(); }}>
-          <Key at="global:escape" cls="key esc-cap" />
+          <Key at="global:back" cls="key" />
           <span class="x-glyph" aria-hidden="true">×</span>
         </button>
       )}

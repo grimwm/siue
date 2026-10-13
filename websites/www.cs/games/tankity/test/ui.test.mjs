@@ -29,7 +29,7 @@ const text = el => el.textContent;
 
 // The keys a game.json with the default bindings shows.
 const KEYS = {
-  'global:escape': 'ESC', 'scroll:lineDown': 'J', 'scroll:lineUp': 'K', 'scroll:pageUp': 'PgUp',
+  'global:back': 'Q', 'scroll:lineDown': 'J', 'scroll:lineUp': 'K', 'scroll:pageUp': 'PgUp',
   'scroll:pageDown': 'PgDn', 'scroll:halfUp': 'Shift+K', 'scroll:halfDown': 'Shift+J',
   'shop:selUp': '▲', 'shop:selDown': '▼', 'shop:qtyDown': '◀', 'shop:qtyUp': '▶',
   'shop:buy': 'B', 'shop:preview': 'V', 'global:fire': 'Ctrl',
@@ -267,7 +267,7 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
   const head = card.children[0];
   check('lobby-head', text(byClass(head, 'kicker')[0]) === 'Squad up, no chatter' && text(byId(head, 'lobby-title')) === 'Game rooms');
   const x = byId(head, 'lobby-close');
-  check('lobby-close-button', hasClass(x, 'ov-x') && attr(x, 'title') === 'Close (ESC)' && text(byClass(x, 'esc-cap')[0]) === 'ESC');
+  check('lobby-close-button', hasClass(x, 'ov-x') && attr(x, 'title') === 'Close (Q)' && text(byClass(x, 'key')[0]) === 'Q');
   const nav = byId(head, 'nav-lobby');
   check('lobby-nav', attr(nav, 'data-scroll-only') === '' && text(nav) === 'J/K linePgUp/PgDn pageShift+K/Shift+J half page', text(nav));
   click(x);
@@ -471,7 +471,7 @@ function gunTiles(n = 10, loaded = 0) {
   const stay = byId(card, 'leave-stay');
   const go = byId(card, 'leave-go');
   check('leave-buttons', hasClass(stay, 'btn-primary') && hasClass(go, 'btn-leave') && text(go) === 'Leave room'
-    && text(stay) === 'Stay in the match ESC' && hasClass(byClass(stay, 'key')[0], 'esc-cap'), text(stay));
+    && text(stay) === 'Stay in the match Q' && byClass(stay, 'key').length === 1, text(stay));
   click(stay);
   check('leave-stay-calls-back', calls.stay === 1 && calls.leave === 0);
   click(go);
@@ -511,7 +511,7 @@ function gunTiles(n = 10, loaded = 0) {
 {
   const section = makeEl('tutorial-overlay');
   let skipped = 0;
-  const tp = (over = {}) => ({ keyHint: (c, a) => (c === 'global' && a === 'tutorial' ? 'U' : c === 'global' && a === 'escape' ? 'Esc' : ''), text: '', progress: '', skip: 'Skip tutorial', skipKey: 'global:escape', onSkip: () => { skipped++; }, ...over });
+  const tp = (over = {}) => ({ keyHint: (c, a) => (c === 'global' && a === 'tutorial' ? 'U' : c === 'global' && a === 'back' ? 'Q' : ''), text: '', progress: '', skip: 'Skip tutorial', skipKey: 'global:back', onSkip: () => { skipped++; }, ...over });
   renderTutorial(section, tp());
   const [h, p1, p2, btn, nav] = section.children;
   check('tutorial-shape', h.localName === 'h2' && h.id === 'tutorial-h' && text(h) === 'Tutorial' && p1.id === 'tutorial-text' && p2.id === 'tutorial-progress' && hasClass(p2, 'hint')
@@ -519,7 +519,7 @@ function gunTiles(n = 10, loaded = 0) {
   check('tutorial-idle-is-blank', text(p1) === '' && text(p2) === '');
   renderTutorial(section, tp({ text: 'Move 2 of 5: Hold ▲ or ▼ to change power.', progress: 'Follow along in the hills behind this card.' }));
   check('tutorial-move', text(p1) === 'Move 2 of 5: Hold ▲ or ▼ to change power.' && text(p2) === 'Follow along in the hills behind this card.' && section.children[1] === p1);
-  check('tutorial-skip-label-has-the-esc-chip', text(btn) === 'Skip tutorial Esc' && byClass(btn, 'key').length === 1);
+  check('tutorial-skip-label-has-the-q-chip', text(btn) === 'Skip tutorial Q' && byClass(btn, 'key').length === 1);
   renderTutorial(section, tp({ skipKey: undefined }));
   check('tutorial-skip-label-without-key-on-touch', text(btn) === 'Skip tutorial');
   click(btn);

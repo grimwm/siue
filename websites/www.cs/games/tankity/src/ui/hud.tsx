@@ -34,7 +34,7 @@ export interface HudProps {
   runStats: string;
   /** The menu is open (the Menu button's aria-expanded). */
   menuOpen: boolean;
-  /** The Menu chip's text from the key table ("Esc"); empty shows none. */
+  /** The Menu chip's text from the key table ("Q"); empty shows none. */
   menuKey: string;
   onMenu: () => void;
 }
@@ -84,7 +84,7 @@ export function Hud(p: HudProps) {
             onClick={ev => { (ev.currentTarget as HTMLElement).blur(); p.onMenu(); }}>
             <svg class="menu-icon" viewBox="0 0 26 26" aria-hidden="true"><path d="M4 7h18M4 13h18M4 19h18" stroke="currentColor" stroke-width="3" stroke-linecap="round" /></svg>
             <span class="mword">Menu</span>
-            {p.menuKey && <KeyChip label={p.menuKey} class="key" at="global:escape" decorative />}
+            {p.menuKey && <KeyChip label={p.menuKey} class="key" at="global:back" decorative />}
           </button>
           <Stat id="hud-angle" full="ANGLE" short="ANG" value={p.angle} />
           <Stat id="hud-power" full="POWER" short="PWR" value={p.power} />

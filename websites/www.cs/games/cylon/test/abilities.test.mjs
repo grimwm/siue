@@ -124,3 +124,12 @@ check('cooldown-seconds-zero-when-ready', ab.cooldownSeconds(0, 5) === 0 && ab.c
   h.advance(5_000);
   check('reset-cancels-the-pending-strike', !h.log.includes('strike'), h.log.join());
 }
+{
+  // The keys: R calls the raptor, G arms the grenade, Q (the kit's back key) disarms it.
+  // Esc does nothing: Safari and Firefox always leave full screen on it.
+  const k = (key, mods = {}) => ab.abilityKey({ key, ...mods });
+  check('key-r-and-g', k('r') === 'raptor' && k('R') === 'raptor' && k('g') === 'grenade' && k('G') === 'grenade');
+  check('key-q-disarms', k('q') === 'disarm' && k('Q') === 'disarm');
+  check('key-escape-does-nothing', k('Escape') === null);
+  check('key-modifiers-are-the-browser-s', k('r', { ctrlKey: true }) === null && k('q', { metaKey: true }) === null && k('g', { altKey: true }) === null);
+}

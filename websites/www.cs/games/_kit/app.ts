@@ -101,9 +101,10 @@ export function topKeyLock(win: LockWindow): KeyLock | null {
 export type EscapeHold = 'locked' | 'released' | 'unsupported' | 'refused';
 
 /**
- * In full screen the browser takes Esc to leave it, so the game never sees a
- * tap. Where Keyboard Lock exists, claim Esc while full screen: a tap reaches
- * the game and only holding Esc leaves. Called on every fullscreenchange. A
+ * In full screen the browser takes Esc to leave it. No game asks for Esc (Q,
+ * keys.ts, is the back key), but a player may press it from habit. Where
+ * Keyboard Lock exists, claim Esc while full screen: a tap then does nothing
+ * and only holding Esc leaves. Called on every fullscreenchange. A
  * refused lock is reported through warn: without the lock, a tap of Esc leaves
  * full screen. Guarded by _kit/test/app.test.mjs and
  * tests/e2e/tankity-fullscreen-esc.spec.mjs.

@@ -38,9 +38,11 @@ test('a lost match shows the end card: result, the rounds table, where it was fi
   // Filing writes a real score, so only the local site is expected to say Filed.
   await expect(page.locator('#end-filed')).toHaveText(local(baseURL) ? /^Filed · / : /^(Filed ·|Couldn't file your score: )/, { timeout: 10_000 });
 
-  // Keyboard: focus lands on Continue, and Esc leaves the card (and fullscreen) alone.
+  // Keyboard: focus lands on Continue, and Q and Esc leave the card (and fullscreen) alone.
   await expect(page.locator('#again')).toBeFocused();
   await page.evaluate(() => { window.__exits = 0; const x = document.exitFullscreen; document.exitFullscreen = function () { window.__exits++; return x ? x.call(document) : Promise.resolve(); }; });
+  await page.keyboard.press('q');
+  await expect(veil).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(veil).toBeVisible();
   expect(await page.evaluate(() => window.__exits)).toBe(0);

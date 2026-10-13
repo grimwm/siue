@@ -12,7 +12,7 @@ const scan = async (page, include) => (await new AxeBuilder({ page }).include(in
 test('axe finds nothing on the title card, the status bar, the deck or the open menu', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
   for (const part of ['#title-card', '#hud-bar', '#deck']) expect(await scan(page, part), part).toEqual([]);
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await expect(page.locator('#menu-overlay')).toBeVisible();
   expect(await scan(page, '#menu-overlay')).toEqual([]);
   expect(errors).toEqual([]);
@@ -23,11 +23,11 @@ test('every panel opener carries aria-expanded and it follows the panel', async 
   for (const id of ['btn-menu', 'btn-log', 'btn-help', 'btn-weapon', 'title-settings']) {
     await expect(page.locator('#' + id)).toHaveAttribute('aria-expanded', 'false');
   }
-  for (const [btn, key, panel] of [['btn-log', 'l', 'log-overlay'], ['btn-help', 'h', 'help-overlay'], ['btn-menu', 'Escape', 'menu-overlay']]) {
+  for (const [btn, key, panel] of [['btn-log', 'l', 'log-overlay'], ['btn-help', 'h', 'help-overlay'], ['btn-menu', 'q', 'menu-overlay']]) {
     await page.keyboard.press(key);
     await expect(page.locator('#' + panel)).toBeVisible();
     await expect(page.locator('#' + btn)).toHaveAttribute('aria-expanded', 'true');
-    await page.keyboard.press(key === 'Escape' ? 'Escape' : key);
+    await page.keyboard.press(key);
     await expect(page.locator('#' + btn)).toHaveAttribute('aria-expanded', 'false');
   }
 });

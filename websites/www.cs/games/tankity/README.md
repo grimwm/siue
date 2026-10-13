@@ -5,7 +5,7 @@ from a $600 stake, solo or in network rooms (max 10 live). No chat; names are
 3-letter initials with a blocked list (`room_valid_initials` in rooms.php).
 Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
-The page opens on a title card over the dimmed demo: Play (solo, random hills), Play with friends (the rooms), Tutorial, Settings, and the player's initials, the one set solo and the rooms both use. The card comes back after a match ends and after leaving a room. Esc toggles the settings menu. Quit in the menu ends the match (leaving a room first) and returns to the title card over the demo; an installed app closes, or says how to close it (`games/_kit/app.ts`).
+The page opens on a title card over the dimmed demo: Play (solo, random hills), Play with friends (the rooms), Tutorial, Settings, and the player's initials, the one set solo and the rooms both use. The card comes back after a match ends and after leaving a room. Q toggles the settings menu and closes whatever is open; Esc does nothing (Safari and Firefox always leave full screen on it, so the game never asks for it, and `game.yaml` refuses it as a binding). Quit in the menu ends the match (leaving a room first) and returns to the title card over the demo; an installed app closes, or says how to close it (`games/_kit/app.ts`).
 
 ## Files
 
@@ -654,7 +654,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   `game.json`'s `keys` section (`barrelLeft`, `fire`, `guns`, `lineDown`, ...),
   so rebinding a key in `game.yaml` changes nothing in either file. `createInput({ touch })`
   returns the input: `register(commands, context)` takes a `CommandTable` (a
-  handler per command) and an `InputContext` (`shopLive`, `modalOpen`/`modalEscape`,
+  handler per command) and an `InputContext` (`shopLive`, `modalOpen`/`modalBack`,
   `onHold`); `bind(window)` listens (no key listeners on a touch-only screen, but
   blur still drops the held keys); `bindHold(button, command)` makes an
   on-screen pad button hold a command while the pointer is down; `held` is the
@@ -667,10 +667,10 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   scroll commands (`lineDown/Up`, `pageDown/Up`, `halfDown/Up`), the gun
   grid's fixed keys (`gridLeft/Right/Up/Down`, `confirm`, `digit`: arrows,
   Enter or Space, 1-9, never rebound), the shop commands (only while
-  `shopLive`), the global `escape`, the held aim keys (always suppressed, so
+  `shopLive`), the global `back` (Q), the held aim keys (always suppressed, so
   the arrows never scroll the page), `fire` (suppressed, once per press), then
   the other global commands (once per press). A question that holds the keys
-  (`modalOpen`) lets only ESC through. `stepArm(held, dt, arm, facing)` is one
+  (`modalOpen`) lets only Q through. A text box keeps every key, Q included; Esc is bound to nothing. `stepArm(held, dt, arm, facing)` is one
   frame of held-key arm movement at 42 degrees per second for the barrel and 45
   power per second, clamped to 10-170 and 10-100, reporting whether a key is
   adjusting and whether none is down (the room client sends the aim when the
@@ -705,7 +705,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/php/FieldWidthTest.php`                  | The server's width rule, hills, reach and aim, units spread outside each other's blast, and a room dealt at 720 |
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
 | `test/render.test.mjs`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, and rebuilds the sky only when the match key or the visible area changes |
-| `test/input.test.mjs`                          | `src/input.ts` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, ESC, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
+| `test/input.test.mjs`                          | `src/input.ts` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, Q, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
 | `test/net.test.mjs`                            | `src/net.ts` against a fake server and timers: the 429 retry, Ready's ordering under rapid toggles, polling, the leave beacon, the clocks, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect) |
 | `test/replay.test.mjs`                         | `src/replay.ts` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, and a `watch` volley at 3x for that volley only |
 | `test/preview.test.mjs`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |

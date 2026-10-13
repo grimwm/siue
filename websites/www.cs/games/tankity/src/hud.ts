@@ -88,7 +88,7 @@ export function createHud(deps: HudDeps) {
     const bar = $('hud-bar');
     if (!bar) return;
     const open = menuOpen();
-    const menuKey = touch ? '' : keyHint('global', 'escape');
+    const menuKey = touch ? '' : keyHint('global', 'back');
     const sig = JSON.stringify(HUD) + '|' + open + '|' + menuKey;
     if (sig === hudShown) return;
     hudShown = sig;

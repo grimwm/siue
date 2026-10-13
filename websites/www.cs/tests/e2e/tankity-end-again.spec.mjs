@@ -11,13 +11,15 @@ test('Play again from the end card brings both players to the same lobby, and th
   const start = lastRoom(roomState.guest).you;
   await playToOver(pair);
 
-  // 1. Both see the over card; Esc leaves it up and never exits full screen.
+  // 1. Both see the over card; Q and Esc leave it up and never exit full screen.
   for (const pl of [host, guest]) {
     const veil = pl.page.locator('#end-veil');
     await expect(veil.locator('#end-title')).toContainText('Match over');
     await expect(veil.locator('#again')).toHaveText('Play again (same room)');
     await expect(veil.locator('#end-leave')).toBeVisible();
     await pl.page.evaluate(() => { window.__exits = 0; const x = document.exitFullscreen; document.exitFullscreen = function () { window.__exits++; return x ? x.call(document) : Promise.resolve(); }; });
+    await pl.page.keyboard.press('q');
+    await expect(veil).toBeVisible();
     await pl.page.keyboard.press('Escape');
     await expect(veil).toBeVisible();
     expect(await pl.page.evaluate(() => window.__exits)).toBe(0);

@@ -83,9 +83,9 @@ test('in a room, firing the last round of a weapon loads the Shell again', async
 test('a unit body picked in a room reaches everyone', async ({ browser }) => {
   const { host, guest, roomState } = await roomPair(browser);
   await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);
-  await guest.page.keyboard.press('Escape');
+  await guest.page.keyboard.press('q');
   await guest.page.click('#unit-picker button[title=Walker]');
-  await guest.page.keyboard.press('Escape');
+  await guest.page.keyboard.press('q');
   await expect.poll(() => {
     const room = lastRoom(roomState.host);
     const t = room && room.tanks.find(x => x.name === 'ZED');

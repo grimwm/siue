@@ -26,7 +26,7 @@ const chord = buildKeymap({ aim: {}, shop: {}, scroll: {}, global: { page: ['Ctr
 check('lookup-ctrl-token', lookupKey(chord, 'global', { code: 'KeyU', key: 'u', ctrlKey: true }) === 'page');
 check('lookup-ctrl-token-needs-ctrl', lookupKey(chord, 'global', { code: 'KeyU', key: 'u' }) === 'plain');
 check('keycap-chords', keycap('Ctrl+KeyU') === 'Ctrl+U' && keycap('Shift+KeyJ') === 'Shift+J', keycap('Shift+KeyJ'));
-check('keycap-glyphs', keycap('ArrowLeft') === '←' && keycap('Escape') === 'Esc' && keycap('PageDown') === 'PgDn' && keycap(' ') === 'Space');
+check('keycap-glyphs', keycap('ArrowLeft') === '←' && keycap('q') === 'Q' && keycap('PageDown') === 'PgDn' && keycap(' ') === 'Space');
 
 // Browsers reserve Ctrl+U (view source) and Ctrl+D (bookmark): no shipped binding uses them.
 const tokens = Object.values(GAME.keys).flatMap(c => Object.values(c).flat());
@@ -139,21 +139,29 @@ function rig(extraCtx = {}) {
   check('declined-key-falls-through-quiet-key-stops', one.prevented === 0 && v.prevented === 0 && r.calls.length === 0, r.calls.join());
 }
 {
-  // ESC: the shop's close wins in the shop, else the global escape (which always suppresses the default).
+  // Q: the shop's close wins in the shop, else the global back (which always suppresses the default).
   const r = rig();
   let live = true;
   r.input.register({
     close: r.log('close'),
-    escape: r.log('escape'),
+    back: r.log('back'),
   }, { shopLive: () => live });
-  // close returns nothing here, so it declines and the global escape runs.
-  const a = ev({ key: 'Escape', code: 'Escape' });
+  // close returns nothing here, so it declines and the global back runs.
+  const a = ev({ key: 'q', code: 'KeyQ' });
   r.input.keydown(a);
-  check('escape-falls-to-global-when-close-declines', r.calls.join() === 'close,escape' && a.prevented === 1, r.calls.join());
+  check('q-falls-to-global-when-close-declines', r.calls.join() === 'close,back' && a.prevented === 1, r.calls.join());
   live = false;
   r.calls.length = 0;
-  r.input.keydown(ev({ key: 'Escape', code: 'Escape' }));
-  check('escape-outside-the-shop', r.calls.join() === 'escape');
+  r.input.keydown(ev({ key: 'Q', code: 'KeyQ', shiftKey: true }));
+  check('q-outside-the-shop', r.calls.join() === 'back', r.calls.join());
+  // Esc does nothing, in the shop or out of it, and leaves the browser's default alone.
+  for (const shop of [true, false]) {
+    live = shop;
+    r.calls.length = 0;
+    const esc = ev({ key: 'Escape', code: 'Escape' });
+    r.input.keydown(esc);
+    check(`escape-does-nothing-${shop ? 'in' : 'out of'}-the-shop`, r.calls.length === 0 && esc.prevented === 0, r.calls.join());
+  }
 }
 {
   // The gun grid's fixed keys.
@@ -173,16 +181,19 @@ function rig(extraCtx = {}) {
   check('grid-commands-take-arrows-while-open', r.calls.join() === 'right,digit3' && a.prevented === 1 && r.input.held.has('barrelRight'), r.calls.join());
 }
 {
-  // A question holds every key but ESC, which answers it.
+  // A question holds every key but Q, which answers it; Esc does nothing to it.
   const r = rig();
   let asked = true;
-  r.input.register({ music: r.log('music'), fire: r.log('fire'), escape: r.log('escape') },
-    { modalOpen: () => asked, modalEscape: () => { r.calls.push('stay'); asked = false; } });
+  r.input.register({ music: r.log('music'), fire: r.log('fire'), back: r.log('back') },
+    { modalOpen: () => asked, modalBack: () => { r.calls.push('stay'); asked = false; } });
   r.input.keydown(ev({ key: 'm', code: 'KeyM' }));
   r.input.keydown(ev({ key: 'ArrowLeft', code: 'ArrowLeft' }));
   const esc = ev({ key: 'Escape', code: 'Escape' });
   r.input.keydown(esc);
-  check('modal-holds-all-keys-but-escape', r.calls.join() === 'stay' && esc.prevented === 1 && !r.input.held.has('barrelLeft'), r.calls.join());
+  check('modal-ignores-escape', r.calls.length === 0 && esc.prevented === 0 && asked, r.calls.join());
+  const q = ev({ key: 'q', code: 'KeyQ' });
+  r.input.keydown(q);
+  check('modal-holds-all-keys-but-q', r.calls.join() === 'stay' && q.prevented === 1 && !r.input.held.has('barrelLeft'), r.calls.join());
 }
 {
   // A new table replaces the keys; one missing a context is refused.

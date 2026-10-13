@@ -25,7 +25,7 @@
 import * as rules from './rules.ts';
 import * as playfield from './playfield.ts';
 import { createAudio } from './audio.ts';
-import { createAbilities, cooldownSeconds } from './abilities.ts';
+import { abilityKey, createAbilities, cooldownSeconds } from './abilities.ts';
 import { createHoles, createDebris, HOLE_PRESETS } from './field.ts';
 import { createIntro } from './intro.ts';
 import { createLandscape } from './landscape.ts';
@@ -1010,16 +1010,14 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         bindAbilityTap(grenadeBtn, () => { abilities.readyGrenade(); });
         window.addEventListener('keydown', (e) => {
             if (isTypingTarget(e.target)) return;
-            // Don't steal browser shortcuts (Ctrl/Cmd+R refresh, etc.)
-            if (e.ctrlKey || e.metaKey || e.altKey) return;
-            if (e.key === 'Escape') {
+            // Ctrl/Cmd/Alt chords stay the browser's, and Esc does nothing (abilityKey).
+            const act = abilityKey(e);
+            if (act === 'disarm') {
                 abilities.cancelGrenadeArm();
-                return;
-            }
-            if (e.key === 'r' || e.key === 'R') {
+            } else if (act === 'raptor') {
                 e.preventDefault();
                 abilities.callRaptor();
-            } else if (e.key === 'g' || e.key === 'G') {
+            } else if (act === 'grenade') {
                 e.preventDefault();
                 abilities.readyGrenade();
             }

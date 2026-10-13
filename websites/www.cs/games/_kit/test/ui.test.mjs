@@ -140,43 +140,71 @@ test('a dialog with no usable button focuses its panel', () => {
   assert.equal(panel.getAttribute('tabIndex'), '-1');
 });
 
-test('Escape and a click on the veil dismiss; a click inside does not', () => {
+test('Q and a click on the veil dismiss; a click inside does not', () => {
   const root = mount();
   let dismissed = 0;
   render(dialog({ open: true, onDismiss: () => { dismissed++; } }), root);
-  fireDocument('keydown', { key: 'Escape' });
+  const q = fireDocument('keydown', { key: 'q' });
   assert.equal(dismissed, 1);
+  assert.equal(q.prevented, true);
+  // The dialog owns Q: the game's own key router under it never sees it.
+  assert.equal(q.stopped, true);
+  fireDocument('keydown', { key: 'Q' });
+  assert.equal(dismissed, 2, 'Q with Shift or Caps Lock');
   fireDocument('keydown', { key: 'Enter' });
-  assert.equal(dismissed, 1);
+  assert.equal(dismissed, 2);
   const veil = byId(root, 'veil');
   const panel = veil.children[0];
   fire(veil, 'pointerdown', { target: panel });
   fire(veil, 'click', { target: panel });
-  assert.equal(dismissed, 1);
+  assert.equal(dismissed, 2);
   fire(veil, 'pointerdown');
   fire(veil, 'click');
-  assert.equal(dismissed, 2);
+  assert.equal(dismissed, 3);
 });
 
-test('a drag that starts in the panel and ends on the veil does not dismiss', () => {
+test('Escape does nothing to a dialog: the browser keeps it for full screen', () => {
   const root = mount();
   let dismissed = 0;
   render(dialog({ open: true, onDismiss: () => { dismissed++; } }), root);
-  const veil = byId(root, 'veil');
-  fire(veil, 'pointerdown', { target: veil.children[0] });
-  fire(veil, 'click');
+  const esc = fireDocument('keydown', { key: 'Escape', code: 'Escape' });
   assert.equal(dismissed, 0);
+  assert.equal(esc.prevented, false);
+  assert.equal(esc.stopped, false);
 });
 
-test('Escape during text composition is left to the input method', () => {
+test('Q with Ctrl, Cmd or Alt is a shortcut, not a dismissal', () => {
   const root = mount();
   let dismissed = 0;
   render(dialog({ open: true, onDismiss: () => { dismissed++; } }), root);
-  fireDocument('keydown', { key: 'Escape', isComposing: true });
+  for (const mod of ['ctrlKey', 'metaKey', 'altKey']) {
+    const ev = fireDocument('keydown', { key: 'q', [mod]: true });
+    assert.equal(ev.prevented, false, mod);
+  }
   assert.equal(dismissed, 0);
 });
 
-test('Escape dismisses a dialog without leaving full screen', () => {
+test('Q typed into a box in the dialog is a letter, not a dismissal', () => {
+  const root = mount();
+  let dismissed = 0;
+  render(dialog({ open: true, onDismiss: () => { dismissed++; } }), root);
+  for (const tagName of ['INPUT', 'TEXTAREA', 'SELECT']) {
+    const ev = fireDocument('keydown', { key: 'q', target: { tagName } });
+    assert.equal(ev.prevented, false, tagName);
+  }
+  fireDocument('keydown', { key: 'q', target: { tagName: 'DIV', isContentEditable: true } });
+  assert.equal(dismissed, 0);
+});
+
+test('Q during text composition is left to the input method', () => {
+  const root = mount();
+  let dismissed = 0;
+  render(dialog({ open: true, onDismiss: () => { dismissed++; } }), root);
+  fireDocument('keydown', { key: 'q', isComposing: true });
+  assert.equal(dismissed, 0);
+});
+
+test('Q dismisses a dialog without leaving full screen, and so does nothing on Escape', () => {
   const root = mount();
   let exits = 0;
   document.fullscreenElement = root;
@@ -184,7 +212,9 @@ test('Escape dismisses a dialog without leaving full screen', () => {
   try {
     let dismissed = 0;
     render(dialog({ open: true, onDismiss: () => { dismissed++; } }), root);
-    fireDocument('keydown', { key: 'Escape' });
+    fireDocument('keydown', { key: 'q', code: 'KeyQ' });
+    assert.equal(dismissed, 1);
+    fireDocument('keydown', { key: 'Escape', code: 'Escape' });
     assert.equal(dismissed, 1);
     assert.equal(exits, 0);
     assert.equal(document.fullscreenElement, root);
@@ -194,12 +224,13 @@ test('Escape dismisses a dialog without leaving full screen', () => {
   }
 });
 
-test('a closed dialog ignores Escape', () => {
+test('a closed dialog ignores Q', () => {
   const root = mount();
   let dismissed = 0;
   render(dialog({ open: false, onDismiss: () => { dismissed++; } }), root);
-  fireDocument('keydown', { key: 'Escape' });
+  const ev = fireDocument('keydown', { key: 'q' });
   assert.equal(dismissed, 0);
+  assert.equal(ev.stopped, false);
 });
 
 test('an alert dialog says so, and can point at its description', () => {

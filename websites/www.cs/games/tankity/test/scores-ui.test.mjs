@@ -140,3 +140,22 @@ test('a player whose initials are AAA is not shown the blocklist stand-in rows a
     assert.deepEqual(s.SCORES.rows.map(r => r.mine), who === 'AAA' ? [false, false] : marked);
   }
 });
+
+test('opening Scores starts on the current difficulty and reads the board again', async () => {
+  const asked = [];
+  globalThis.window = { localStorage: memory() };
+  globalThis.fetch = async url => { asked.push(String(url)); return { ok: true, status: 200, json: async () => ({ scores: [] }) }; };
+  let now = 'normal';
+  const s = logic.createScores({ $: () => makeEl('report-overlay'), keyHint: () => '', say() {}, toggleOverlay() {}, initials: () => 'WGR', difficulty: () => now });
+  s.openScores();
+  await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(asked, ['scores.php?difficulty=normal']);
+  await s.loadScores('easy'); // the player browses another board
+  now = 'hard';               // changes the Difficulty in the menu
+  s.openScores();
+  assert.equal(s.SCORES.level, 'hard');
+  assert.equal(s.SCORES.rows, null, 'no other board\'s rows under the pressed button');
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(asked[asked.length - 1], 'scores.php?difficulty=hard');
+  assert.equal(asked.length, 3, 'every open reads the board again');
+});

@@ -416,7 +416,7 @@ const { updateCamera, shownAngle, shownPower, render } = createView({
   G, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
 /* The high scores (src/scores.ts). */
-const { renderScoresOverlay, loadScores, fileSolo } = createScores({
+const { renderScoresOverlay, openScores, fileSolo } = createScores({
   $, keyHint, say, toggleOverlay, initials: () => getInitials(), difficulty: () => difficulty.get(),
 });
 /* The coach (src/tutorial.ts). */
@@ -709,7 +709,6 @@ function init(): void {
   startDemo();
   openTitle();
   renderShop();
-  loadScores();
   // Light the connection dot from the start, not only when the lobby opens.
   loadOccupancy();
   maybeApplyInviteCode();
@@ -851,7 +850,7 @@ function closeOverlays(): boolean {
 const OVERLAY_PAINT: Record<string, () => void> = {
   'menu-overlay': () => renderMenu(),
   'log-overlay': () => renderLogOverlay(),
-  'report-overlay': () => renderScoresOverlay(),
+  'report-overlay': () => { if ($('report-overlay')!.hidden) renderScoresOverlay(); else openScores(); },
   'help-overlay': () => renderHelpOverlay(),
 };
 function toggleOverlay(id: string, btnId?: string): void {

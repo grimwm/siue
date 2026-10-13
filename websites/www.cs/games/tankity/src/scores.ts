@@ -80,6 +80,15 @@ export function createScores(deps: ScoresDeps) {
     }
     renderScoresOverlay();
   }
+  /* The overlay opens on the player's current difficulty and reads the board afresh: the
+     Difficulty may have changed, and a room match files on the server unseen. */
+  function openScores(): void {
+    SCORES.level = difficulty();
+    SCORES.rows = null;
+    SCORES.note = '';
+    renderScoresOverlay();
+    void loadScores();
+  }
   function saveLocal(entry: ScoreEntry): void {
     localRows.set([...localRows.get(), entry].sort((a, b) => b.score - a.score).slice(0, 10));
   }
@@ -117,5 +126,5 @@ export function createScores(deps: ScoresDeps) {
     if (ok) void loadScores(SCORES.rows ? SCORES.level : run.difficulty);
   }
 
-  return { SCORES, renderScoresOverlay, loadScores, fileSolo };
+  return { SCORES, renderScoresOverlay, openScores, loadScores, fileSolo };
 }

@@ -109,8 +109,19 @@ test('a lost round goes through the shop too: a life gone, then everyone ready s
       const r = b.getBoundingClientRect();
       return b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
     });
+    const next = document.getElementById('shop-next').getBoundingClientRect();
+    const leave = document.getElementById('shop-leave').getBoundingClientRect();
+    const listEl = document.getElementById('shop-list');
+    const rowH = Math.max(...[...listEl.querySelectorAll('li:not(.shop-cat)')].map(li => li.offsetHeight));
     return {
       sideways,
+      // Wide screens put the board beside the list; portrait phones stack them.
+      twoColumns: list.left >= boardBox.right,
+      // A desktop's list shows several whole rows, not one.
+      rows: Math.min(3, Math.floor(listEl.clientHeight / rowH)),
+      buttonsSideBySide: Math.abs(next.top - leave.top) < 4 && leave.left >= next.right,
+      // The key hints wrap; none is cut off.
+      hintsWhole: [...document.querySelectorAll('#nav-shop > span')].every(sp => sp.scrollWidth <= sp.clientWidth + 1),
       cardFits: card.scrollHeight <= card.clientHeight + 1 && inView(card.getBoundingClientRect()),
       rowShown: within(row.getBoundingClientRect(), list),
       tapped,
@@ -121,8 +132,9 @@ test('a lost round goes through the shop too: a life gone, then everyone ready s
     };
   });
   const rows = await host.page.locator('#shop-list li:not(.shop-cat)').count();
-  const all = { sideways: false, cardFits: true, rowShown: true, tapped: true, startShown: true, titleShown: true, boardRowsShown: true };
-  for (const [width, height] of [[852, 393], [393, 852], [1280, 720]]) {
+  const base = { sideways: false, buttonsSideBySide: true, hintsWhole: true, cardFits: true, rowShown: true, tapped: true, startShown: true, titleShown: true, boardRowsShown: true };
+  for (const [width, height, shape] of [[852, 393, { twoColumns: true, rows: 2 }], [393, 852, { twoColumns: false, rows: 1 }], [1280, 720, { twoColumns: true, rows: 3 }]]) {
+    const all = { ...base, ...shape };
     await host.page.setViewportSize({ width, height });
     await expect(host.page.locator('#shop-veil .board .board-table tbody tr')).toHaveCount(2);
     for (let i = 0; i < rows; i++) await host.page.keyboard.press('ArrowUp');

@@ -26,6 +26,35 @@ test('every step is exactly SOLO_STEP whatever the frame lengths', () => {
   }
 });
 
+test('a frame of exactly one step runs exactly one step', () => {
+  let n = 0;
+  let acc = 0;
+  for (let i = 0; i < 60; i++) acc = runFixed(acc, SOLO_STEP, SOLO_STEP, () => { n++; return true; });
+  assert.equal(n, 60);
+  assert.equal(acc, 0);
+});
+
+test('a watched war runs three steps in a frame of three', () => {
+  let n = 0;
+  runFixed(0, 3 * SOLO_STEP, SOLO_STEP, () => { n++; return true; });
+  assert.equal(n, 3);
+});
+
+test('a 60 Hz display with +-0.5 ms timestamp jitter runs one step per frame', () => {
+  const r = mulberry32(5);
+  const counts = new Set();
+  let acc = SOLO_STEP / 2;
+  let last = 0;
+  for (let i = 1; i <= 3600; i++) {
+    const ts = i * SOLO_STEP + (r() - 0.5) * 0.001;
+    let n = 0;
+    acc = runFixed(acc, ts - last, SOLO_STEP, () => { n++; return true; });
+    last = ts;
+    counts.add(n);
+  }
+  assert.deepEqual([...counts], [1]);
+});
+
 test('a tank over a crater falls through the same heights at any frame rate', () => {
   const fall = frames => {
     const world = { terrain: Array(720).fill(400), tanks: [{ x: 300, y: 300, hp: 50, vy: 0 }] };

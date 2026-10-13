@@ -176,9 +176,9 @@ for ($i = -60; $i <= 60; $i++) {
     $det('cos', $x);
     $det('atan', $x / 7);
 }
-// 1200 more points in +-100 for sin and cos, so a one-ulp change in a leading kernel term (the reduction,
+// 1200 more points in +-100 for sin, cos and atan, so a one-ulp change in a leading kernel term (the reduction,
 // S1, S2, C1, the first atan terms and the atan breakpoints) fails cases. The high-order terms change no
-// output in range, so no vector can pin them.
+// output at these points, so these vectors leave them unpinned.
 for ($i = 0; $i < 400; $i++) {
     $x = (($i * 7919) % 20011) / 100.0 - 100.0 + 0.00031;
     $det('sin', $x);

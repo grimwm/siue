@@ -266,7 +266,9 @@ function togglePreview(): void {
 
 /* ---------- main loop ---------- */
 let lastT = 0;
-let warAcc = 0;
+/* Rests at half a step so a 60 Hz display, whose frames are a step plus or minus timestamp noise, runs one step per frame instead of 0 or 2. */
+const WAR_REST = SOLO_STEP / 2;
+let warAcc = WAR_REST;
 function frame(ts: number): void {
   requestAnimationFrame(frame);
   // The music watchdog re-pins a wedged scheduler to the live clock; it never
@@ -362,7 +364,7 @@ function frame(ts: number): void {
       return !G.over && (G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle');
     });
   } else {
-    warAcc = 0;
+    warAcc = WAR_REST;
   }
   updateCamera(dt);
   render();

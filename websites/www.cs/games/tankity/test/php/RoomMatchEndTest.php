@@ -19,7 +19,7 @@ final class RoomMatchEndTest extends TestCase
         $room = room_new('ENDS', 'H00');
         for ($i = 0; $i < 4; $i++) {
             $room['seats'][$i] = $i < $humans
-                ? room_seat_human('H0' . $i, 't' . $i, []) + ['lives' => $lives]
+                ? room_seat_human('H0' . $i, 't' . $i, [])
                 : room_idle_seat($i, 'ai');
             if ($i < $humans) {
                 $room['seats'][$i]['lives'] = $lives;
@@ -71,6 +71,18 @@ final class RoomMatchEndTest extends TestCase
         $this->assertSame(2 * (750 + 150), room_winner_bonus(1));
         $this->assertSame($score0 + $win['bonus'], $room['scores'][0]);
         $this->assertSame('matchover', end($events)['t']);
+    }
+
+    public function testLeavingIsAForfeit(): void
+    {
+        $room = $this->room(2, 3);
+        $this->assertTrue(room_leave($room, 1));
+        $events = [];
+        room_end_round($room, $events);
+        $this->assertSame('over', $room['phase']);
+        $this->assertSame(0, $room['winner']);
+        $win = array_values(array_filter($events, fn($e) => $e['t'] === 'matchwin'))[0];
+        $this->assertSame(room_winner_bonus(1), $win['bonus']);
     }
 
     public function testTwoOutAtOnceLeaveOneWinner(): void

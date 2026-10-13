@@ -350,6 +350,7 @@ usleep(300000);
 $go = $post('start', $h2);
 $seatsFielded = array_map(fn($t) => $t['seat'], $go['room']['tanks'] ?? []);
 sort($seatsFielded);
+$check('start-sets-start-humans', ($go['room']['startHumans'] ?? -1) === 2, (string) ($go['room']['startHumans'] ?? '?'));
 $check('start-skips-open-seat', ($go['ok'] ?? false) === true && $seatsFielded === [0, 1, 3], json_encode($seatsFielded));
 usleep(300000);
 $late = $post('join', ['code' => $c2, 'initials' => 'smd']);

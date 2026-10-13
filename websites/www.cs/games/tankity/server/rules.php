@@ -581,7 +581,9 @@ function room_match_begin(array &$room): void
 }
 /* Whether the match is over after a round, and who won. No human with a life
    left ends it with no winner; in a room that started with two or more humans,
-   exactly one left ends it and that one wins. A room without room_match_begin
+   exactly one left ends it and that one wins. Leaving is a forfeit: a leaver's
+   seat is no longer human, so the other of the last two wins at the end of
+   that round with the normal bonus. A room without room_match_begin
    reads startHumans as 1 and plays like solo. */
 function room_match_outcome(array $room): array
 {
@@ -671,6 +673,8 @@ function room_end_round(array &$room, array &$events): void
     foreach ($room['stats'] ?? [] as $idx => $st) {
         $room['stats'][$idx]['gain'] = ($room['scores'][$idx] ?? 0) - $st['from'];
     }
+    // Leave is a forfeit: a leaver is no longer human, so the other of the last
+    // two wins here, at the end of the round they left in.
     $outcome = room_match_outcome($room);
     if ($outcome['over']) {
         if ($outcome['winner'] !== null) {

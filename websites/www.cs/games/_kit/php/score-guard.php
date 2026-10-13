@@ -204,10 +204,19 @@ final class ScoreGuard
             || ($this->server['REQUEST_SCHEME'] ?? '') === 'https';
     }
 
-    /** This client's rate-limit key: an HMAC of its address, so the store never holds an IP. */
+    /** This client's rate-limit key: an HMAC of its address, so the store never holds an IP.
+     * IPv6 clients key on their /64, since one subscriber holds the whole block and could
+     * otherwise mint a fresh budget per address. */
     public function clientKey(): string
     {
-        return substr(hash_hmac('sha256', (string) ($this->server['REMOTE_ADDR'] ?? ''), $this->rateSalt), 0, 24);
+        $addr = (string) ($this->server['REMOTE_ADDR'] ?? '');
+        if (str_contains($addr, ':')) {
+            $packed = @inet_pton($addr);
+            if ($packed !== false && strlen($packed) === 16) {
+                $addr = bin2hex(substr($packed, 0, 8)) . '/64';
+            }
+        }
+        return substr(hash_hmac('sha256', $addr, $this->rateSalt), 0, 24);
     }
 
     /** A new run token, or null when this client has started too many runs this hour. */

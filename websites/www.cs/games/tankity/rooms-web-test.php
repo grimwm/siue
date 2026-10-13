@@ -278,6 +278,38 @@ $check('gzip-shrinks-the-reply', $bGz !== '' && strlen($bGz) * 2 < strlen($bPlai
 $errJson = $bErr === '' ? null : json_decode((string) @gzdecode($bErr), true);
 $check('gzip-errors-compress-too', is_array($errJson) && ($errJson['error'] ?? '') === 'no such room' && strtolower($headerOf($hErr, 'Content-Encoding')) === 'gzip');
 $check('gzip-error-status-kept', strpos($hErr[0] ?? '', '404') !== false, $hErr[0] ?? '');
+// Host handoff: the host leaves mid-match, the match ends, and the next human
+// (seat 1, not seat 0) plays again and starts the room.
+$hand = $post('create', ['initials' => 'hnd']);
+$hcode = (string) ($hand['code'] ?? '');
+$hh = $post('join', ['code' => $hcode, 'initials' => 'nxt']);
+$hctl = fn(array $who): array => ['code' => $hcode, 'token' => (string) ($who['token'] ?? ''), 'csrf' => (string) ($who['csrf'] ?? '')];
+usleep(300000);
+$post('start', $hctl($hand));
+usleep(300000);
+$post('leave', $hctl($hand));
+tankity_tx(tankity_db(), function (PDO $db) use ($hcode): void {
+    $q = $db->prepare('SELECT data FROM rooms WHERE code = ?');
+    $q->execute([$hcode]);
+    $room = room_decode($q->fetchColumn());
+    if ($room === null) {
+        return;
+    }
+    $room['phase'] = 'over';
+    $u = $db->prepare('UPDATE rooms SET data = ? WHERE code = ?');
+    $u->bindValue(1, serialize($room), PDO::PARAM_LOB);
+    $u->bindValue(2, $hcode);
+    $u->execute();
+});
+usleep(300000);
+$hAgain = $post('again', $hctl($hh));
+usleep(300000);
+$hStart = $post('start', $hctl($hh));
+$check('host-handoff-starts', (int) ($hh['seat'] ?? -1) === 1 && ($hAgain['ok'] ?? false) === true
+    && ($hStart['ok'] ?? false) === true && ($hStart['room']['hostSeat'] ?? -1) === 1,
+    json_encode([$hAgain['error'] ?? null, $hStart['error'] ?? null, $hStart['room']['hostSeat'] ?? null]));
+$ageRoom($hcode);
+
 // Leave the shared shelf as found: only this match is swept.
 $ageRoom($mcode);
 $get($base . '/rooms.php?action=ping');

@@ -289,7 +289,8 @@ function room_new(string $code, string $initials): array
 /* A seat nobody sits in: the drone battery by default, or open (no unit). */
 function room_idle_seat(int $slot, string $mode = 'ai'): array
 {
-    $name = ROOM_AI_NAMES[(($slot - 1) % count(ROOM_AI_NAMES) + count(ROOM_AI_NAMES)) % count(ROOM_AI_NAMES)];
+    $n = count(ROOM_AI_NAMES);
+    $name = ROOM_AI_NAMES[(($slot - 1) % $n + $n) % $n]; // one name per seat, so slot 0 and slot 3 never share
     return ['human' => false, 'name' => $name, 'initials' => $name, 'lives' => 0, 'mode' => $mode === 'open' ? 'open' : 'ai'];
 }
 function room_seat_human(string $initials, string $token, array $body): array

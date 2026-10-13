@@ -47,6 +47,12 @@ final class RoomAgainTest extends TestCase
         return $room;
     }
 
+    public function testNoTwoIdleSeatsShareADroneName(): void
+    {
+        $names = array_map(fn(int $i): string => room_idle_seat($i)['name'], [0, 1, 2, 3]);
+        $this->assertCount(4, array_unique($names), implode(',', $names));
+    }
+
     public function testBackToTheLobbyWithSeatsKept(): void
     {
         $room = $this->over();

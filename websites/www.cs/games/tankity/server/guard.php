@@ -78,12 +78,13 @@ function tankity_initials(ScoreGuard $guard, mixed $raw): ?string
 }
 
 /* Whether a browser request came from this site: a cross-site Origin is
-   refused; callers that send none (curl) pass, and their tokens still gate them. */
+   refused; callers that send none (curl) pass, gated by rooms.php's tokens or
+   scores.php's per-address throttle. */
 function room_origin_ok(): bool
 {
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
     if ($origin === '') {
-        return true; // curl-style callers send none; the tokens still gate them
+        return true; // not a browser: the caller's tokens or throttle gate it
     }
     $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
     $host = preg_replace('/:\d+$/', '', $host);

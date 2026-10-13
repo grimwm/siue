@@ -9,6 +9,7 @@
             "map": null,
             "mapName": "Random hills",
             "difficulty": "normal",
+            "hostSeat": 0,
             "round": 1,
             "startHumans": 1,
             "winner": null,

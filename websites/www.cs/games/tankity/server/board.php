@@ -77,13 +77,15 @@ function board_top(string $difficulty, int $n): array
 }
 
 /* Whether a run is already on the Normal board: the same converted name, score,
-   rounds, seed and date. A rewritten old file brings its old runs back; this is
+   rounds, seed and date (the date only when the run has one). A rewritten old file brings its old runs back; this is
    how an import tells the ones already converted. */
 function board_has_run(string $initials, array $run): bool
 {
-    $q = tankity_db()->prepare("SELECT 1 FROM board WHERE difficulty = 'normal' AND initials = ? AND score = ? AND rounds = ? AND seed = ? AND at = ?");
-    $q->execute([$initials, max(0, (int) ($run['score'] ?? 0)), max(0, (int) ($run['banked'] ?? 0)),
-        (string) ($run['seed'] ?? ''), (string) ($run['ts'] ?? '')]);
+    // A dateless run was dated by its conversion, so the date cannot be compared.
+    $ts = (string) ($run['ts'] ?? '');
+    $q = tankity_db()->prepare("SELECT 1 FROM board WHERE difficulty = 'normal' AND initials = ? AND score = ? AND rounds = ? AND seed = ?" . ($ts === '' ? '' : ' AND at = ?'));
+    $q->execute(array_merge([$initials, max(0, (int) ($run['score'] ?? 0)), max(0, (int) ($run['banked'] ?? 0)),
+        (string) ($run['seed'] ?? '')], $ts === '' ? [] : [$ts]));
     return $q->fetchColumn() !== false;
 }
 
@@ -121,7 +123,8 @@ function board_convert_callsigns(int $limit = 200): int
             } else {
                 board_file(['difficulty' => 'normal', 'initials' => board_convert_name((string) $slug, $guard),
                     'score' => max(0, (int) $best['score']), 'rounds' => max(0, (int) ($best['banked'] ?? 0)),
-                    'seed' => (string) ($best['seed'] ?? ''), 'at' => (string) ($best['ts'] ?? '') ?: gmdate('c')]);
+                    'seed' => (string) ($best['seed'] ?? ''), 'at' => (string) ($best['ts'] ?? '') ?: gmdate('c'),
+                    'source' => 'client']);
             }
             $db->prepare('DELETE FROM callsigns WHERE slug = ?')->execute([$slug]);
             $moved++;

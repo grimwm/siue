@@ -268,6 +268,7 @@ function room_new(string $code, string $initials): array
         'phase' => 'lobby', // lobby | shop | play | over
         'map' => null, // a ROOM_MAPS id, or null for a random draw
         'difficulty' => 'normal', // the drones' aim: a ROOM_DIFFICULTY word, set by the host at create
+        'host' => 0, // the seat that starts the match; the lowest human takes it if the host leaves
         'round' => 0,
         'wind' => 0,
         'terrain' => [],
@@ -288,7 +289,7 @@ function room_new(string $code, string $initials): array
 /* A seat nobody sits in: the drone battery by default, or open (no unit). */
 function room_idle_seat(int $slot, string $mode = 'ai'): array
 {
-    $name = ROOM_AI_NAMES[($slot - 1) % count(ROOM_AI_NAMES)];
+    $name = ROOM_AI_NAMES[(($slot - 1) % count(ROOM_AI_NAMES) + count(ROOM_AI_NAMES)) % count(ROOM_AI_NAMES)];
     return ['human' => false, 'name' => $name, 'initials' => $name, 'lives' => 0, 'mode' => $mode === 'open' ? 'open' : 'ai'];
 }
 function room_seat_human(string $initials, string $token, array $body): array
@@ -872,6 +873,26 @@ function room_apply_fuel(array &$room): void
     unset($t);
 }
 
+/* The seat that holds the host's powers. */
+function room_host(array $room): int
+{
+    return (int) ($room['host'] ?? 0);
+}
+/* Make sure a human holds the host: the lowest-numbered human takes it if the
+   host's seat is vacated. False when no human is seated. */
+function room_rehost(array &$room): bool
+{
+    if ($room['seats'][room_host($room)]['human'] ?? false) {
+        return true;
+    }
+    foreach ($room['seats'] as $idx => $s) {
+        if ($s['human'] ?? false) {
+            $room['host'] = $idx;
+            return true;
+        }
+    }
+    return false;
+}
 /* Play again (same room): back to the lobby with the same code and seats, every
    human on fresh lives, score and cash. The room's map and Difficulty stay (the
    host chose them at create). A seat a player left goes back to the battery.
@@ -884,6 +905,9 @@ function room_again(array &$room): bool
     }
     if ($room['phase'] !== 'over') {
         return false;
+    }
+    if (!room_rehost($room)) {
+        return false; // everyone left; nobody is there to start a lobby
     }
     foreach (['plate', 'armor', 'shield', 'jammer', 'bunker', 'laststand', 'fuelBonus', 'fuelApplied', 'tactic', 'stats', 'filed', 'menu', 'shop', 'pace', 'clock'] as $k) {
         unset($room[$k]);
@@ -919,7 +943,7 @@ function room_leave(array &$room, int $seat): bool
             $humans++;
         }
     }
-    if ($humans === 0 || ($room['phase'] === 'lobby' && $seat === 0)) {
+    if ($humans === 0 || ($room['phase'] === 'lobby' && $seat === room_host($room))) {
         return false; // close the room
     }
     if ($room['phase'] === 'lobby') {
@@ -930,6 +954,7 @@ function room_leave(array &$room, int $seat): bool
     // A bot drives the seat from here; 'bot' marks the unit for everyone.
     $room['seats'][$seat] = ['human' => false, 'name' => $name, 'initials' => $name, 'mode' => 'ai', 'bot' => true,
         'lives' => $room['seats'][$seat]['lives'] ?? 0];
+    room_rehost($room);
     foreach ($room['tanks'] as &$t) {
         if ($t['seat'] === $seat) {
             $t['kind'] = 'ai';

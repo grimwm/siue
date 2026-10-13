@@ -436,6 +436,7 @@ const mapFields = () => ({
   map: createdMap || null,
   mapName: createdMap ? 'Canyon 3' : 'Random hills',
   difficulty: ['easy', 'hard'].includes(createdDifficulty) ? createdDifficulty : 'normal',
+  hostSeat: 0,
   startHumans: 1,
   winner: null,
 });

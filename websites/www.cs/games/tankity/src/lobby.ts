@@ -172,7 +172,7 @@ export function createLobby(deps: LobbyDeps) {
   let mapPickSeq = 0;
   async function mapChosen(): Promise<void> {
     renderLobby();
-    if (!net.code || net.seat !== 0 || net.on) return;
+    if (!net.code || !net.isHost || net.on) return;
     const seq = ++mapPickSeq;
     try {
       for (let tries = 0; ; tries++) {
@@ -253,6 +253,7 @@ export function createLobby(deps: LobbyDeps) {
     try {
       room = await net.getState();
       net.seats = room.seats || [];
+      net.hostSeat = room.hostSeat;
     } catch (err) { /* roster fills in on the next tick */ }
     netRenderRoster(room);
   }
@@ -265,6 +266,7 @@ export function createLobby(deps: LobbyDeps) {
       () => { const veil = $('lobby-veil'); return !!veil && !veil.hidden; },
       room => {
         net.seats = room.seats || [];
+        net.hostSeat = room.hostSeat;
         // Arrivals (not our own) and departures, each told once.
         for (const e of room.events || []) {
           if ((e.seq || 0) <= lobbyTold.seq || (e.t !== 'join' && e.t !== 'left')) continue;
@@ -330,24 +332,26 @@ export function createLobby(deps: LobbyDeps) {
     LOBBY.hills = 'Hills: ' + (net.mapName || 'Random hills');
     if (room && room.difficulty) LOBBY.drones = `Drones: ${DIFFICULTY_NAMES[room.difficulty] || 'Normal'} (the host's Difficulty)`;
     LOBBY.seats = ((room && room.seats) || net.seats || []).map(s => ({ human: !!s.human, name: String(s.name || ''), mode: s.mode }));
+    if (room) net.hostSeat = room.hostSeat;
     LOBBY.mySeat = net.seat;
-    LOBBY.isHost = net.seat === 0;
-    LOBBY.seatsHint = net.seat === 0
+    LOBBY.isHost = net.isHost;
+    LOBBY.seatsHint = net.isHost
       ? 'Tap a seat nobody holds to switch it between AI and Open. Open seats field no tank.'
       : 'The host decides which empty seats are AI and which stay open.';
-    lobbySay(net.seat === 0 ? 'You host. Start when your crew is in.' : 'Hang tight. The host starts the match.');
+    lobbySay(net.isHost ? 'You host. Start when your crew is in.' : 'Hang tight. The host starts the match.');
   }
   /* The host flips a seat nobody holds between the drone battery and open. */
   async function netSeatMode(seat: number, mode: 'ai' | 'open'): Promise<void> {
-    if (net.seat !== 0 || net.on) return;
+    if (!net.isHost || net.on) return;
     try {
       const d = await net.post('seatmode', { seat, mode, since: net.since });
       net.seats = d.room.seats || [];
+      net.hostSeat = d.room.hostSeat;
       netRenderRoster(d.room);
     } catch (err) { lobbySay(prettyRoomError(err)); }
   }
   async function startRoom(): Promise<void> {
-    if (net.seat !== 0) return;
+    if (!net.isHost) return;
     lobbySay('Rolling out…');
     try {
       const data = await net.post('start', {});

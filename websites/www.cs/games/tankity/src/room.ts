@@ -165,6 +165,7 @@ export function createRoom(deps: RoomDeps) {
   }
   function netAdopt(room: RoomSnapshot): void {
     net.seats = room.seats || [];
+    net.hostSeat = room.hostSeat;
     if (room.map !== undefined) {
       net.map = room.map;
       net.mapName = room.mapName || 'Random hills';

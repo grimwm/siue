@@ -94,6 +94,7 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
         'map' => $room['map'],
         'mapName' => room_map_name($room['map'] ?? null),
         'difficulty' => room_difficulty($room),
+        'hostSeat' => room_host($room),
         'round' => $room['round'],
         'startHumans' => (int) ($room['startHumans'] ?? 0),
         'winner' => $room['winner'] ?? null,

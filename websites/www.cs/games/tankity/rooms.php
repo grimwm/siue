@@ -153,7 +153,7 @@ if ($action === 'maps') {
 
 if ($action === 'map' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true);
-    if ($seat !== 0) {
+    if ($seat !== room_host($room)) {
         room_unlock($fh);
         room_json_out(403, ['error' => 'only the host picks the hills']);
     }
@@ -366,7 +366,7 @@ function room_gate(array $body, bool $needCsrf, bool $throttle = true): array
 /* The host decides each non-human seat: drone battery ('ai') or 'open'. */
 if ($action === 'seatmode' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true);
-    if ($seat !== 0) {
+    if ($seat !== room_host($room)) {
         room_unlock($fh);
         room_json_out(403, ['error' => 'only the host sets the seats']);
     }
@@ -396,7 +396,7 @@ if ($action === 'seatmode' && $method === 'POST') {
 
 if ($action === 'start' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true);
-    if ($seat !== 0) {
+    if ($seat !== room_host($room)) {
         room_unlock($fh);
         room_json_out(403, ['error' => 'only the host starts the match']);
     }
@@ -658,7 +658,7 @@ if ($action === 'again' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true, false);
     if (!room_again($room)) {
         room_unlock($fh);
-        room_json_out(409, ['error' => 'the match is still on']);
+        room_json_out(409, ['error' => 'no match to play again: it is still on, or nobody is left']);
     }
     room_emit($room, ['t' => 'again', 'seat' => $seat]);
     if (!room_save($fh, $path, $room)) {

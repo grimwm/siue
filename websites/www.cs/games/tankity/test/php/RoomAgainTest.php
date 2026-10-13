@@ -85,6 +85,35 @@ final class RoomAgainTest extends TestCase
         $this->assertFalse(room_again($playing));
     }
 
+    /* The host is seat 0 until it leaves; then the lowest-numbered human holds it. */
+    public function testWhenTheHostLeftTheLowestHumanHostsThePlayAgainLobby(): void
+    {
+        $room = $this->over();
+        $room['seats'][0] = ['human' => false, 'name' => 'HOS', 'initials' => 'HOS', 'mode' => 'ai', 'bot' => true, 'lives' => 0];
+        $this->assertTrue(room_again($room));
+        $this->assertSame(1, room_host($room));
+        $this->assertSame(1, room_snapshot($room, 1, 0)['hostSeat']);
+    }
+
+    public function testTheHostLeavingMidMatchHandsTheRoomOn(): void
+    {
+        $room = $this->over();
+        $room['phase'] = 'play';
+        $this->assertSame(0, room_snapshot($room, 1, 0)['hostSeat']);
+        $this->assertTrue(room_leave($room, 0));
+        $this->assertSame(1, room_host($room));
+        $this->assertSame(1, room_snapshot($room, 1, 0)['hostSeat']);
+    }
+
+    public function testNoHumanLeftMeansNoPlayAgain(): void
+    {
+        $room = $this->over();
+        $room['seats'][0] = ['human' => false, 'name' => 'X', 'initials' => 'X', 'mode' => 'ai', 'lives' => 0];
+        $room['seats'][1] = room_idle_seat(1, 'ai');
+        $this->assertFalse(room_again($room));
+        $this->assertSame('over', $room['phase']);
+    }
+
     /* The host's start runs room_match_begin, which clears what was filed, so the
        next match files its humans again. */
     public function testTheNextMatchFilesItsHumansAgain(): void

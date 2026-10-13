@@ -225,6 +225,8 @@ function tankity_schema_steps(): array
         4 => [
             // 'room' rows are filed by the server from a match; 'client' rows are a browser's own claim.
             "ALTER TABLE board ADD COLUMN source TEXT NOT NULL DEFAULT 'room'",
+            // Before this column only room filing (seed 'room:CODE') and the legacy conversion (a browser's claim) wrote rows.
+            "UPDATE board SET source = 'client' WHERE seed NOT LIKE 'room:%'",
         ],
     ];
 }

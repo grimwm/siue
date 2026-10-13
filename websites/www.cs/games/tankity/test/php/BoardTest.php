@@ -110,6 +110,7 @@ final class BoardTest extends TestCase
         $this->assertSame([4, 'b', '2026-02-01T00:00:00+00:00'], [$top[0]['rounds'], $top[0]['seed'], $top[0]['at']]);
         $this->assertSame(0, (int) tankity_db()->query('SELECT COUNT(*) FROM callsigns')->fetchColumn());
         $this->assertSame(0, board_convert_callsigns(), 'nothing is converted twice');
+        $this->assertSame(['client', 'client'], tankity_db()->query('SELECT source FROM board ORDER BY id')->fetchAll(PDO::FETCH_COLUMN), 'a legacy callsign was a browser claim');
         $this->assertSame([], board_top('easy', 10));
     }
 
@@ -127,6 +128,30 @@ final class BoardTest extends TestCase
         legacy_write(tankity_db(), 'old', ['runs' => [['score' => 5, 'banked' => 0, 'won' => false, 'seed' => 'x']]]);
         board_convert_callsigns();
         $this->assertNotSame('', board_top('normal', 1)[0]['at']);
+    }
+
+    public function testTheSourceColumnRelabelsRowsThatAreNotRoomMatches(): void
+    {
+        $db = new PDO('sqlite::memory:');
+        $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        foreach ([1, 2, 3] as $v) {
+            foreach (tankity_schema_steps()[$v] as $q) {
+                $db->exec($q);
+            }
+        }
+        $db->exec('PRAGMA user_version = 3');
+        $ins = $db->prepare("INSERT INTO board (difficulty, initials, score, rounds, seed, at) VALUES ('normal', ?, 1, 1, ?, 'x')");
+        $ins->execute(['OLD', 's']);
+        $ins->execute(['RUM', 'room:ABCD']);
+        tankity_schema($db);
+        $this->assertSame(['OLD' => 'client', 'RUM' => 'room'], $db->query('SELECT initials, source FROM board')->fetchAll(PDO::FETCH_KEY_PAIR));
+    }
+
+    public function testADatelessRunConvertedOnceIsRecognisedAfterwards(): void
+    {
+        legacy_write(tankity_db(), 'old', ['runs' => [['score' => 5, 'banked' => 0, 'won' => false, 'seed' => 'x']]]);
+        board_convert_callsigns();
+        $this->assertTrue(board_has_run(board_convert_name('old', tankity_guard()), ['score' => 5, 'banked' => 0, 'seed' => 'x']));
     }
 
     public function testARowWithNoRunIsDroppedWithALogLine(): void

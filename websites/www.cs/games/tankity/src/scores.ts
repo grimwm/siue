@@ -12,7 +12,7 @@ import type { KeyHintFn } from './ui/chrome.tsx';
 import { renderScores as drawScores } from './ui/scores.tsx';
 
 /** The slice of the game's state a filed report is written from (main.ts's G). */
-export type ScoresState = Pick<GameState, 'score' | 'roundsWon' | 'won' | 'seed'>;
+export type ScoresState = Pick<GameState, 'score' | 'roundsWon' | 'won' | 'seed' | 'difficulty'>;
 
 /** A line of the high-score list as scores.php sends it. */
 interface ScoreRow { name: string; best: number; banked: number; won: boolean }
@@ -64,7 +64,7 @@ export function createScores(deps: ScoresDeps) {
     let rows: ScoreRow[] = [];
     let src = 'file store';
     try {
-      const res = await fetch('scores.php', { headers: { Accept: 'application/json' } });
+      const res = await fetch('scores.php?difficulty=' + encodeURIComponent(G.difficulty ?? 'normal'), { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error('http ' + res.status);
       const data = await res.json();
       rows = data.scores || [];
@@ -82,7 +82,7 @@ export function createScores(deps: ScoresDeps) {
   }
   async function fileReport(name: string): Promise<void> {
     callsign.set(name);
-    const entry = { name, score: G.score, banked: G.roundsWon, won: G.won, seed: G.seed };
+    const entry = { name, score: G.score, banked: G.roundsWon, won: G.won, seed: G.seed, difficulty: G.difficulty ?? 'normal' };
     try {
       const res = await fetch('scores.php', {
         method: 'POST',

@@ -109,6 +109,8 @@ export interface RoomSnapshot {
   mapName: string;
   /** How well the drones aim: the host's setting at create. */
   difficulty: Difficulty;
+  /** The seat that starts the match: seat 0 until it leaves, then the lowest-numbered human. */
+  hostSeat: number;
   round: number;
   /** Humans seated when the match started; two or more makes it last-human-standing. */
   startHumans: number;

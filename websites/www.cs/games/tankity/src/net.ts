@@ -166,6 +166,9 @@ export class RoomClient {
   /** The first snapshot of the match has been taken. */
   synced = false;
   seats: RoomSeat[] = [];
+  /** The seat that starts the match, as the last snapshot said. */
+  hostSeat = 0;
+  get isHost(): boolean { return this.seat === this.hostSeat; }
   /** The hills: the picked map's id (null for random), its name, the catalog. */
   map: string | null = null;
   mapName = 'Random hills';
@@ -323,7 +326,7 @@ export class RoomClient {
 
   private forget(): void {
     this.code = ''; this.token = ''; this.csrf = ''; this.seat = -1; this.since = 0;
-    this.seats = [];
+    this.seats = []; this.hostSeat = 0;
     this.dropTerrain();
   }
 

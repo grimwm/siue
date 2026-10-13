@@ -430,6 +430,9 @@ foreach ([
     [$status, $reply] = $buy($item);
     $check("buy-refused-$name", $status === $want && ($reply['error'] ?? null) === $line && !isset($reply['ok']),
         "$status " . json_encode($reply));
+    [$after, $afterLock] = room_load($bcode);
+    room_unlock($afterLock);
+    $check("buy-refused-$name-takes-no-cash", ($after['cash'][0] ?? -1) === 100, (string) ($after['cash'][0] ?? '?'));
 }
 [$stage, $stageLock] = room_load($bcode);
 $stage['cash'][0] = 500;
@@ -441,7 +444,7 @@ usleep(300000);
 $check('buy-refused-armor-at-max', $status === 409 && ($reply['error'] ?? null) === 'armor is full', "$status " . json_encode($reply));
 [$stage, $stageLock] = room_load($bcode);
 room_unlock($stageLock);
-$check('buy-refused-takes-no-cash', ($stage['cash'][0] ?? -1) === 500, (string) ($stage['cash'][0] ?? '?'));
+$check('buy-refused-armor-at-max-takes-no-cash', ($stage['cash'][0] ?? -1) === 500, (string) ($stage['cash'][0] ?? '?'));
 $ageRoom($bcode);
 
 proc_terminate($proc);

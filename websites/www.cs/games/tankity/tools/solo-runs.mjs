@@ -13,12 +13,12 @@ const arsenal = buildArsenal(JSON.parse(fs.readFileSync(path.join(dir, 'game.jso
 // name, bot skill, the round the bot stops aiming, the drones' difficulty, the
 // field's width, and whether the run is slow (seconds, not tenths) to play.
 // Every difficulty is played, so the drones are checked at each level's aim;
-// the 5-life cap is reached at normal, at 1440 and past 60 rounds. long-64
+// the 5-life cap is reached at normal, at 1440 and past 60 rounds. long-63
 // plays past 60 rounds; slow runs are left to --check --all, and each run
 // carries its slow flag so every replayer splits the runs the same way.
 const PLAN = [
   ['wild-1', 0, 0, 'easy'], ['wild-2', 0, 0, 'hard'], ['middling-1', 0.5, 12, 'easy'], ['middling-2', 0.5, 12, 'normal', 720, true],
-  ['sharp-5', 1, 5, 'hard'], ['long-15', 1, 15, 'normal'], ['long-64', 1, 64, 'easy', 720, true], ['wide-1440', 0.5, 12, 'normal', 1440, true],
+  ['sharp-5', 1, 5, 'hard'], ['long-15', 1, 15, 'normal'], ['long-63', 1, 63, 'easy', 720, true], ['wide-1440', 0.5, 12, 'normal', 1440, true],
 ];
 const play = ([name, skill, until, difficulty, w = 720, slow = false]) => {
   const seed = `runs-${name}`;

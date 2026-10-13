@@ -380,9 +380,15 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
 
 - Target: whoever the drone's strategy picks (next section), except that a
   bracket in progress on a target the strategy still wants is kept.
-- Ranging shot: a brute-force search (which a strategy can narrow) (angle 25-155 in steps of 6, power 20-100
-  in steps of 6, over the shell and any loaded gun) for the landing nearest the
-  target, plus Gaussian wobble: wob = max(`wobFloor`, `wobStart` - `wobStep` x
+- Ranging shot: a search (which a strategy can narrow) for the landing nearest
+  the target, over the shell and any loaded gun, on the grid of angles 25-155
+  and powers 20-100 in steps of 6: every other point of it (steps of 12), then
+  the eight 6-step neighbours of the best. Guns that fly the same planning arc
+  share one search: their flight key (`flightKey` in `src/sim.ts`,
+  `room_flight_key` in `server/sim.php`) holds every field the planning flight
+  reads (flat, speed, and a roller's friction and roll time), so a gun given
+  its own arc is searched on its own, and the first gun of an arc in rack
+  order keeps it. Then Gaussian wobble: wob = max(`wobFloor`, `wobStart` - `wobStep` x
   round), angle +-9 x wob, power +-12 x wob, doubled against a jammer's owner.
   Then a 35% chance to shuffle 8-35 px.
 - Bracketing: each drone remembers its last shot (`brk` on the tank in a room,
@@ -393,8 +399,9 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
   fired from, and its gun is still loaded, the next shot is a correction: the
   sim's landing for the last aim is shifted by `correct` times the measured miss
   (`land` against the target's x; a burst within `BRK_ON` = 22 px, the hull,
-  counts as on target and holds the aim), a coarse then fine search near the
-  last aim finds the angle and power for that landing, and the wobble shrinks
+  counts as on target and holds the aim), a search near the last aim (angle
+  +-12 and power +-18 in steps of 6, then the 3-step and the 1-step neighbours
+  of the best) finds the angle and power for that landing, and the wobble shrinks
   to wob x `brkShrink`^n, never below `brkFloor` (so a drone never locks into a
   bad aim). A bracketing drone does not shuffle.
 - Restart: the target moved or died, the drone moved or its gun ran dry, or
@@ -702,6 +709,8 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/ui.test.mjs`                             | The Preact overlays (`src/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
 | `test/smoke.test.mjs`                          | The shipped bundles (`dist/fx.js`, then `dist/main.js`) in a stub DOM, driven by the `game.json` key table and the `protocol/` fixtures; also checks the page loads exactly those two scripts with no import map and that the bundle has no bare imports, every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps; a solo player who wrecks their own tank sees the drones fight on to one and the lost round open the shop |
 | `test/ai-hitrate.test.mjs`                     | The drones' measured hit rates per difficulty against the targets (see Difficulty), the table's shape, hard being the sharpest aim (its exact constants), unknown levels aiming at normal, and the saved setting's default and form |
+| `test/ai-arcs.test.mjs`                        | Guns share a drone's aim search only when their flight key matches: every field of every gun is changed, and any change that bends a planning flight must change the key; a gun given its own speed, flat flight or roll is searched on its own (`test/php/AiArcsTest.php` is the same for the server) |
+| `test/ai-search.test.mjs`                      | The planning flights one drone turn costs: a coarse grid and the fine neighbours of its best per distinct arc, a lobber's high arcs, and a bracket correction's three grids |
 | `test/prefs-legacy.test.mjs`                   | The saved settings (`tankity-body`, `tankity-text`, `tankity-tutorial`, `tankity-local`, `tankity-callsign`) read back through the kit's prefs exactly as the code before it wrote them |
 | `test/audio.test.mjs`                          | `src/audio.ts` imports without a browser; the loop-point trim and the round-to-track mapping are right |
 | `test/field.test.mjs`                          | The width from the landscape box (clamps, columns, portrait equals landscape), that a deal holds through a resize, fitting the field in a box, and the power step and display at 720, 1080 and 1440 |
@@ -711,6 +720,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/ghosts.test.mjs`                         | A shell retired past the edge keeps flying (draw only), one that burst inside leaves no ghost, a replay's last point keeps its velocity, ghosts are dropped off the picture |
 | `test/scenery.test.mjs`                        | The scenery continues the hills with no step over 1 px at the seam, cratered or not |
 | `test/rotate-hint.test.mjs`                    | The rotate hint's rule and its chip |
+| `test/php/AiArcsTest.php`                      | `server/ai.php` `room_ai_arc_guns` and `server/sim.php` `room_flight_key`: a flight by definition is the shot by key, guns with one key fly the same arcs, any field change that bends a flight changes the key, and a gun given its own arc is searched on its own |
 | `test/php/DetMathTest.php`                     | `server/detmath.php` is within 1e-15 of libm, rounds halves and keeps the sign of zero like `Math.round`, and the `detmath` vectors cover every function |
 | `test/php/FieldWidthTest.php`                  | The server's width rule, hills, reach and aim, units spread outside each other's blast, and a room dealt at 720 |
 | `test/php/FlightTest.php`                      | `server/flight.php`: the `volley-fall` vectors drop a tank mid-volley and compare exactly, a tank over a pit falls under gravity and lands on the ground, a later pellet or bomblet waits on an earlier one of its gunner's and a held one keeps its gunner's-box flag, shell and bomblet life scale with the field, and the step budget stops a volley |

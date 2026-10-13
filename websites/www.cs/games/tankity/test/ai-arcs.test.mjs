@@ -98,9 +98,9 @@ function flownPerGun(ars) {
 
 test('a drone flies the planning search for a gun with its own arc, and not for one that shares the shell\'s', () => {
   const same = flownPerGun(arsenal);
-  assert.ok(same.shell > 100, `shell flown ${same.shell}`);
+  assert.ok(same.shell > 50, `shell flown ${same.shell}`);
   assert.ok((same.buck || 0) < 5, `buck flown ${same.buck}`);
   const own = flownPerGun(withRow('buck', { speed: 1.2 }));
-  assert.ok(own.buck > 100, `buck with its own arc flown ${own.buck}`);
+  assert.ok(own.buck > 50, `buck with its own arc flown ${own.buck}`);
   assert.ok((own.mortar || 0) < 5, `mortar flown ${own.mortar}`);
 });

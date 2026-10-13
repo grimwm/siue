@@ -46,7 +46,7 @@ final class SoloRoundTest extends TestCase
         return self::runs(true);
     }
 
-    /** Plays $run round by round, carrying the state between rounds as the database does. */
+    /** Plays $run round by round, carrying the state between rounds as the store does: through JSON, zero fractions kept. */
     private function play(array $run, ?callable $tamper = null): array
     {
         $s = solo_deal($run['seed'], $run['difficulty'], $run['w']);
@@ -54,7 +54,7 @@ final class SoloRoundTest extends TestCase
             if ($tamper !== null) {
                 $r = $tamper($k, $r);
             }
-            $got = solo_round(unserialize(serialize($s)), $r['buys'], $r['shots'], 30.0);
+            $got = solo_round(json_decode(json_encode($s, JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR), true, 512, JSON_THROW_ON_ERROR), $r['buys'], $r['shots'], 30.0);
             if (!$got['ok']) {
                 return ['round' => $r['n'], 'error' => $got['error']];
             }
@@ -169,8 +169,8 @@ final class SoloRoundTest extends TestCase
     {
         $s = solo_deal('x', 'normal', ROOM_W);
         $this->assertSame(['ok' => false, 'error' => 'too many shots'],
-            solo_round($s, [], array_fill(0, SOLO_MAX_SHOTS + 1, ['w' => 'shell', 'a' => 45, 'p' => 50, 'x' => 100])));
-        $this->assertSame(['ok' => false, 'error' => 'bad buys'], solo_round($s, ['i' => 'mortar'], []));
+            solo_round($s, [], array_fill(0, SOLO_MAX_SHOTS + 1, ['w' => 'shell', 'a' => 45, 'p' => 50, 'x' => 100]), 30.0));
+        $this->assertSame(['ok' => false, 'error' => 'bad buys'], solo_round($s, ['i' => 'mortar'], [], 30.0));
     }
 
     public function testAnOverRunPlaysNoMore(): void
@@ -195,8 +195,8 @@ final class SoloRoundTest extends TestCase
         $probe['round'] = 1;
         solo_muster($probe);
         $shot = ['w' => 'shell', 'a' => 80, 'p' => 100, 'x' => $probe['tanks'][0]['x']];
-        $this->assertSame(['ok' => false, 'error' => 'too slow'], solo_round($s, [], [$shot], SOLO_ROUND_CPU, 5));
-        $this->assertNotSame('too slow', solo_round($s, [], [$shot])['error'] ?? null, 'the full budget lands it');
+        $this->assertSame(['ok' => false, 'error' => 'too slow'], solo_round($s, [], [$shot], 30.0, 5));
+        $this->assertNotSame('too slow', solo_round($s, [], [$shot], 30.0)['error'] ?? null, 'the full budget lands it');
     }
 
     /** The cases of test/solo-refusals.json, decoded as the endpoint decodes a request. */
@@ -229,7 +229,7 @@ final class SoloRoundTest extends TestCase
         if (isset($c['shotsRepeat'])) {
             $shots = array_fill(0, $c['shotsRepeat'], $c['shots']);
         }
-        $this->assertSame(['ok' => false, 'error' => $c['error']], solo_round($s, $buys, $shots));
+        $this->assertSame(['ok' => false, 'error' => $c['error']], solo_round($s, $buys, $shots, 30.0));
     }
 
     public function testTheShooterIsLandedBeforeTheShot(): void

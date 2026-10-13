@@ -105,7 +105,7 @@ only PHP (and Node for the TypeScript, see Source layout) and this folder. Run f
 php tools/game-json.php          # validate game.yaml, rewrite game.json
 php tools/game-json.php --check  # fail if invalid or game.json is stale
 php tools/install-files.php      # after the last edit to any served file
-php -d xdebug.mode=off tools/round-bench.php  # CPU per round of every recorded solo run in solo_round
+php -d xdebug.mode=off tools/round-bench.php [--budget=2.0]  # CPU per round of every recorded solo run; report only, --budget fails any round over it
 ```
 
 - The generator carries its own small YAML-subset parser (the host has no YAML

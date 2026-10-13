@@ -279,7 +279,11 @@ function solo_buy_count(mixed $q): ?int
    player's turns taking the round's shots in order. src/solo-play.ts
    soloRound() is the same, refusal for refusal (test/solo-refusals.json holds
    them to it). At most $cpuBudget seconds of CPU, SOLO_MAX_SHOTS shots,
-   SOLO_MAX_BUYS purchases and $maxSteps steps a volley. */
+   SOLO_MAX_BUYS purchases and $maxSteps steps a volley. The CPU budget is
+   checked between turns, so a round can overrun it by one drone aim search
+   and one volley: it bounds the work, it is not a hard cap. The state must be
+   stored as JSON with JSON_PRESERVE_ZERO_FRACTION, so integral floats come
+   back as floats. */
 function solo_round(array $s, mixed $buys, mixed $shots, float $cpuBudget = SOLO_ROUND_CPU, int $maxSteps = FLIGHT_MAX_STEPS): array
 {
     $no = fn(string $why): array => ['ok' => false, 'error' => $why];

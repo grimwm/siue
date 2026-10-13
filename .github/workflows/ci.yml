@@ -104,8 +104,9 @@ jobs:
         run: make test
 
       # make test plays the quick recorded solo runs through the PHP referee; this plays the slow ones
-      # (the vendor dir is make test's), then times every recorded round against SOLO_ROUND_CPU.
-      - name: Tankity recorded solo runs in PHP (the slow ones) and the CPU per round
+      # (the vendor dir is make test's), then prints the CPU per round. The timing only reports:
+      # a shared runner's speed must not fail a PR. Pass --budget= for a gating run.
+      - name: Tankity recorded solo runs in PHP (the slow ones) and the CPU per round (report only)
         if: steps.scope.outputs.run == '1'
         working-directory: websites/www.cs
         run: |

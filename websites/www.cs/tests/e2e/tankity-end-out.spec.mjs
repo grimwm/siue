@@ -30,7 +30,10 @@ test("a player out of lives sees the you're-out card once; Menu → Standings br
         if (!told) {
           told = true;
           // The next seq after the newest real event, so the client's cursor is at most one event ahead.
-          const top = Math.max(0, ...(j.room.events || []).map(e => e.seq || 0));
+          let since = 0; // the client's cursor, from the request
+          const m = route.request().url().match(/[?&]since=(\d+)/);
+          if (m) since = +m[1]; else { try { since = JSON.parse(route.request().postData() || '{}').since || 0; } catch (_) { /* no body */ } }
+          const top = Math.max(since, ...(j.room.events || []).map(e => e.seq || 0));
           j.room.events = [...(j.room.events || []), { seq: top + 1, t: 'eliminated', seat: j.room.you.seat }];
         }
         body = JSON.stringify(j);

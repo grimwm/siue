@@ -559,6 +559,47 @@ function room_round_settled(array $room): bool
     }
     return $alive <= 1;
 }
+/* ---------- this match ---------- */
+/* Called by the start handler: how many humans started (last-human-standing
+   needs two), and each human's match stats from zero. */
+function room_match_begin(array &$room): void
+{
+    $room['startHumans'] = 0;
+    $room['stats'] = [];
+    $room['filed'] = [];
+    $room['winner'] = null;
+    foreach ($room['seats'] as $idx => $s) {
+        if ($s['human'] ?? false) {
+            $room['startHumans']++;
+            $room['stats'][$idx] = ['won' => 0, 'kills' => 0, 'gain' => 0, 'from' => 0, 'out' => null];
+        }
+    }
+}
+/* Whether the match is over after a round, and who won. No human with a life
+   left ends it with no winner; in a room that started with two or more humans,
+   exactly one left ends it and that one wins. A room without room_match_begin
+   reads startHumans as 1 and plays like solo. */
+function room_match_outcome(array $room): array
+{
+    $left = [];
+    foreach ($room['seats'] as $idx => $s) {
+        if (($s['human'] ?? false) && ($s['lives'] ?? 0) > 0) {
+            $left[] = $idx;
+        }
+    }
+    if (!$left) {
+        return ['over' => true, 'winner' => null];
+    }
+    if (($room['startHumans'] ?? 1) >= 2 && count($left) === 1) {
+        return ['over' => true, 'winner' => $left[0]];
+    }
+    return ['over' => false, 'winner' => null];
+}
+/* The winner's bonus: twice the round bonus of the round the match ended in. */
+function room_winner_bonus(int $round): int
+{
+    return 2 * (750 + $round * 150);
+}
 /* Settle a round: only a human who is the last unit standing is paid (the
 // round bonus and prize, 'roundwin' with the winner's seat); a drone survivor
 // or nobody left is 'roundlost'. Every human whose tank was wrecked loses a
@@ -594,7 +635,6 @@ function room_end_round(array &$room, array &$events): void
             $wrecked[$t['seat']] = true;
         }
     }
-    $anyLeft = false;
     foreach ($room['seats'] as $idx => &$s) {
         if (!($s['human'] ?? false)) {
             continue;
@@ -605,9 +645,6 @@ function room_end_round(array &$room, array &$events): void
                 room_save_score($s['initials'], $room['scores'][$idx] ?? 0, $room);
                 $events[] = ['t' => 'eliminated', 'seat' => $idx];
             }
-        }
-        if (($s['lives'] ?? 0) > 0) {
-            $anyLeft = true;
         }
     }
     unset($s);
@@ -621,7 +658,15 @@ function room_end_round(array &$room, array &$events): void
         $events[] = ['t' => 'roundlost', 'round' => $room['round']];
     }
     unset($room['pace']);
-    if (!$anyLeft) {
+    $outcome = room_match_outcome($room);
+    if ($outcome['over']) {
+        if ($outcome['winner'] !== null) {
+            $w = $outcome['winner'];
+            $bonus = room_winner_bonus((int) $room['round']);
+            $room['scores'][$w] = ($room['scores'][$w] ?? 0) + $bonus;
+            $room['winner'] = $w;
+            $events[] = ['t' => 'matchwin', 'seat' => $w, 'bonus' => $bonus];
+        }
         $room['phase'] = 'over';
         $events[] = ['t' => 'matchover'];
         return;

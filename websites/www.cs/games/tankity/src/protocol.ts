@@ -142,6 +142,8 @@ export interface RoundWinEvent extends EventBase { t: 'roundwin'; round: number;
  * wrecked human lost a life, and the shop opens before the next round. */
 export interface RoundLostEvent extends EventBase { t: 'roundlost'; round: number }
 export interface MatchOverEvent extends EventBase { t: 'matchover' }
+/** The last human standing in a room that started with two or more: `bonus` is twice the round bonus. */
+export interface MatchWinEvent extends EventBase { t: 'matchwin'; seat: number; bonus: number }
 export interface EliminatedEvent extends EventBase { t: 'eliminated'; seat: number }
 export interface OneUpEvent extends EventBase { t: 'oneup'; seat: number; lives: number }
 /** Someone took a seat in the lobby. */
@@ -183,7 +185,7 @@ export interface TacticEvent extends EventBase { t: 'tactic'; seat: number; s: s
 
 /** The events a snapshot carries, discriminated by `t`. */
 export type RoomEvent =
-  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent
+  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent
   | FireEvent | AiFireEvent | AutoEvent
   | ShotEvent | BurstEvent | HitEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
 

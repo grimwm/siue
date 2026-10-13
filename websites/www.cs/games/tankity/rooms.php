@@ -423,6 +423,7 @@ if ($action === 'start' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(409, ['error' => 'A match needs at least two tanks. Switch a seat to AI so there is someone to battle.']);
     }
+    room_match_begin($room);
     room_start_round($room);
     $events = [];
     $events[] = ['t' => 'round', 'round' => $room['round'], 'wind' => $room['wind']];

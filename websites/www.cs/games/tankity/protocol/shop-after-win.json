@@ -914,7 +914,9 @@
                 "laststand": false,
                 "plate": 0,
                 "armor": 100,
-                "maxArmor": 100
+                "maxArmor": 100,
+                "filed": false,
+                "filedRank": null
             },
             "csrf": "fixture-csrf"
         }

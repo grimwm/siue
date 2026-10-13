@@ -95,6 +95,9 @@ export interface RoomYou {
   /** The armor the next round musters with (what the last one ended with). */
   armor: number;
   maxArmor: number;
+  /** This seat's match score went on the all-time board; filedRank is its place (null: outside the board). */
+  filed: boolean;
+  filedRank: number | null;
 }
 
 export interface RoomSnapshot {

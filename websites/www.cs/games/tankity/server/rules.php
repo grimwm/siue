@@ -634,7 +634,6 @@ function room_end_round(array &$room, array &$events): void
                 if (isset($room['stats'][$idx])) {
                     $room['stats'][$idx]['out'] = (int) $room['round'];
                 }
-                room_save_score($s['initials'], $room['scores'][$idx] ?? 0, $room);
                 $events[] = ['t' => 'eliminated', 'seat' => $idx];
             }
         }
@@ -669,26 +668,46 @@ function room_end_round(array &$room, array &$events): void
             }
             $room['winner'] = $w;
             $events[] = ['t' => 'matchwin', 'seat' => $w, 'bonus' => $bonus];
+            room_file_seat($room, $w);
         }
+        room_file_eliminated($room, $wrecked);
         $room['phase'] = 'over';
         $events[] = ['t' => 'matchover'];
         return;
     }
+    room_file_eliminated($room, $wrecked);
     // Every round starts from the shop, won or lost.
     $room['phase'] = 'shop';
     $room['shop'] = ['at' => microtime(true), 'ready' => []];
 }
-/* Files a room score with the per-callsign runs, as local play does. Inside a
-   room's transaction: it commits with the room. A failure is logged, never
-   allowed to break the round. */
-function room_save_score(string $initials, int $score, array $room): void
+/* Files the humans this round eliminated. The winner is filed first when the
+   match ends, so each rank is the place on a board that already holds it. */
+function room_file_eliminated(array &$room, array $wrecked): void
 {
-    try {
-        legacy_add_run(legacy_slug($initials), ['score' => $score, 'banked' => 0, 'won' => false,
-            'seed' => 'room:' . $room['code'], 'ts' => gmdate('c')]);
-    } catch (Throwable $e) {
-        error_log('tankity rooms: score not filed: ' . $e->getMessage());
+    foreach ($room['seats'] as $idx => $s) {
+        if (($s['human'] ?? false) && ($s['lives'] ?? 0) <= 0 && isset($wrecked[$idx])) {
+            room_file_seat($room, $idx);
+        }
     }
+}
+/* Files a human seat's match score on the board of the room's difficulty,
+   once per match. Inside the room's transaction: it commits with the room. A
+   failure is logged, never allowed to break the round. */
+function room_file_seat(array &$room, int $seat): void
+{
+    if (array_key_exists($seat, $room['filed'] ?? [])) {
+        return;
+    }
+    $s = $room['seats'][$seat] ?? [];
+    try {
+        $rank = board_file(['difficulty' => room_difficulty($room), 'initials' => strtoupper((string) ($s['initials'] ?? 'AAA')),
+            'score' => (int) ($room['scores'][$seat] ?? 0), 'rounds' => (int) ($room['stats'][$seat]['won'] ?? 0),
+            'seed' => 'room:' . $room['code']]);
+    } catch (Throwable $e) {
+        error_log('tankity board: ' . $e->getMessage());
+        $rank = null;
+    }
+    $room['filed'][$seat] = $rank;
 }
 /* 1-ups, same economy as local play. */
 function room_check_oneups(array &$room, array &$events, int $seat): void

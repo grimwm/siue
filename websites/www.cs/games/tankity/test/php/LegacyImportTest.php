@@ -183,11 +183,4 @@ final class LegacyImportTest extends TestCase
         $this->assertSame(550, $best);
         $this->assertCount(LEGACY_RUNS_KEPT, $this->runs('ace'));
     }
-
-    public function testARoomScoreGoesToTheSameCallsign(): void
-    {
-        room_save_score('WGR', 640, ['code' => 'ABCD']);
-        $this->assertSame([['score' => 640, 'banked' => 0, 'won' => false, 'seed' => 'room:ABCD']],
-            array_map(fn(array $r): array => array_diff_key($r, ['ts' => 1]), $this->runs('wgr')));
-    }
 }

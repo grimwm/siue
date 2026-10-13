@@ -149,6 +149,7 @@ export function createShop(deps: ShopDeps) {
         ? `War chest: $${G.cash} · spend your stake before the first hill`
         : `War chest: $${G.cash} · armor ${G.armor}/${maxArmor(G.plate)} · round ${G.round} cleared`,
       entries,
+      board: null,
       next: ready.next,
       readyLine: ready.readyLine,
       inRoom: net.on,

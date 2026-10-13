@@ -71,7 +71,7 @@ function shelf({ sel = 0, qty = 1, cash = 600, round = 1 } = {}) { // sel -1 is 
 function shopProps(over = {}) {
   const calls = { buy: [], preview: [], next: 0, leave: 0, icons: [] };
   const props = {
-    keyHint, title: 'Field shop', cash: 'War chest: $600', entries: shelf(),
+    keyHint, title: 'Field shop', cash: 'War chest: $600', entries: shelf(), board: null,
     next: { label: 'Start round 2', keyAt: 'shop:next' }, readyLine: null, inRoom: false,
     drawIcon: (canvas, icon) => { calls.icons.push([canvas.className, icon]); },
     arsenalRev: 1,

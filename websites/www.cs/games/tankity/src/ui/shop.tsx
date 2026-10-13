@@ -10,6 +10,8 @@ import type { ComponentChildren } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import { KeyHints, Key, OverlayHead, ScrollKeys } from './chrome.tsx';
 import type { KeyHintFn } from './chrome.tsx';
+import { Standings } from './standings.tsx';
+import type { Board } from '../standings.ts';
 
 /** What a row's icon shows: a weapon's shell or a piece of gear, by key. */
 export type ShopIcon = { kind: 'ammo'; w: string } | { kind: 'gear'; g: string };
@@ -54,6 +56,8 @@ export interface ShopProps {
   /** The war-chest line. */
   cash: string;
   entries: ShopEntry[];
+  /** This match's scoreboard, at the top of the shop after every round; null before the first. */
+  board: Board | null;
   /** The start button: its words ("Start round 2", "Ready ✓" in a room), the
    *  key its chip names (none on touch screens), and `pressed`, set only in a
    *  room, where the button toggles and reads aria-pressed. */
@@ -140,6 +144,7 @@ export function Shop(p: ShopProps) {
           <span><Key at="shop:buy" /> buy · <Key at="shop:preview" /> preview</span>
           <ScrollKeys />
         </>} />
+        {p.board && <Standings board={p.board} />}
         <p id="shop-cash" class="runstats">{p.cash}</p>
         <ul id="shop-list" class="scores" ref={list} onScroll={(ev: Event) => { scrolled.current = (ev.currentTarget as HTMLElement).scrollTop; }}>
           {p.entries.map(e => {

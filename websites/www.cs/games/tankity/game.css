@@ -270,6 +270,26 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 
 .runstats { color: var(--dim); font-size: 0.9rem; }
 
+/* This match's scoreboard (src/ui/standings.tsx). */
+.board { margin: 0 0 10px; }
+.board .kicker { font-size: 0.7rem; letter-spacing: 0.14em; color: var(--dim); text-transform: uppercase; }
+.board-title { margin: 2px 0 8px; font-size: 1.1rem; color: var(--gold, #ffc93c); }
+.board-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.board-table th { text-align: left; font-size: 0.62rem; letter-spacing: 0.1em; color: var(--dim); font-weight: 600; padding: 3px 4px; border-bottom: 1px solid #3a3fb0; }
+.board-table td { padding: 5px 4px; border-bottom: 1px solid #1b2050; white-space: nowrap; }
+.board-table .n { text-align: right; }
+.board-table tr.me td { background: #141a46; }
+.board-table tr.out td { color: #7d84a8; }
+.board-table .pl { font-weight: 800; }
+.board-table .you { font-size: 0.6rem; color: #111; background: var(--gold, #ffc93c); border-radius: 4px; padding: 1px 4px; margin-left: 4px; }
+.board-table .delta { color: #7f7; font-size: 0.66rem; margin-left: 3px; }
+.board-table .crown { color: var(--gold, #ffc93c); }
+.board-table tfoot td { font-weight: 800; border-bottom: 0; }
+/* In the shop the scoreboard must not squeeze the list or push the page sideways:
+ * it keeps to its own band and the longest cell (a room's last column) wraps. */
+#shop-veil .board { flex: 0 0 auto; max-height: 34dvh; overflow-y: auto; min-width: 0; }
+#shop-veil .board-table td.last { white-space: normal; }
+
 .help { margin: 0; padding-left: 1.1rem; }
 .help li { margin-bottom: 0.35rem; }
 

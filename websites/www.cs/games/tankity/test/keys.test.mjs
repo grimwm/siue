@@ -200,3 +200,14 @@ test('Esc still works while a text box has focus; other keys stay the box\'s', (
   input.keydown(inBox({ code: 'KeyN', key: 'n' }));
   assert.deepEqual(calls, ['escape']);
 });
+
+test('overlay: a focused button outside the open overlay (the HUD under the radio log) still fires on Space', () => {
+  const input = rig();
+  const calls = [];
+  const inside = { tagName: 'BUTTON', click: () => { calls.push('inside'); } };
+  const outside = { tagName: 'BUTTON', click: () => { calls.push('outside'); } };
+  input.register({ fire: () => { calls.push('fire'); } }, { overlayOpen: t => t === inside });
+  input.keydown({ ...ev({ code: 'Space', key: ' ' }), target: outside });
+  input.keydown({ ...ev({ code: 'Space', key: ' ' }), target: inside });
+  assert.deepEqual(calls, ['fire', 'inside']);
+});

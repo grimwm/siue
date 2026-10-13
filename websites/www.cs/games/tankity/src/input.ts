@@ -227,9 +227,11 @@ export interface InputContext {
   modalEscape?(): void;
   /** The title card is up: the aim keys rest, and Space presses the card's focused button. */
   cardOpen?(): boolean;
-  /** A card or overlay is up (the shop, the end card, a menu, ...): Space and
-   *  Enter press its focused button. Only the battlefield fires on Space. */
-  overlayOpen?(): boolean;
+  /** True when `target` is a control inside a card or overlay that is up (the
+   *  shop, the end card, a menu, ...): Space and Enter press it instead of
+   *  firing. A focused button elsewhere (the HUD, under the radio log or the
+   *  coach) and a key with no focused button fall through as usual. */
+  overlayOpen?(target: unknown): boolean;
   /** Something held or pressed started play (the page unlocks audio). */
   onHold?(cmd: HoldCommand): void;
 }
@@ -337,7 +339,7 @@ export function createInput(opts: { touch: boolean }): Input {
     // presses once. Ctrl never does: it begins browser shortcuts.
     const target = e.target;
     if ((e.key === ' ' || e.key === 'Enter') && !e.ctrlKey && target && target.tagName === 'BUTTON' && target.click
-      && ((ctx.cardOpen && ctx.cardOpen()) || (ctx.overlayOpen && ctx.overlayOpen()))) {
+      && ((ctx.cardOpen && ctx.cardOpen()) || (ctx.overlayOpen && ctx.overlayOpen(target)))) {
       e.preventDefault();
       if (!press.repeat) target.click();
       return;

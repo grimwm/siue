@@ -677,7 +677,11 @@ function bindKeys(): void {
     modalOpen: () => { const ask = $('leave-veil'); return !!ask && !ask.hidden; },
     modalEscape: () => { closeLeaveVeil(); },
     cardOpen: () => titleOpen(),
-    overlayOpen: () => titleOpen() || [...document.querySelectorAll<HTMLElement>(OVERLAYS)].some(el => !el.hidden),
+    overlayOpen: target => {
+      if (!(target instanceof Element)) return false;
+      const holder = target.closest<HTMLElement>(OVERLAYS);
+      return !!holder && !holder.hidden;
+    },
     onHold: () => { unlock(); music.start(); },
   });
   input.bind(window);

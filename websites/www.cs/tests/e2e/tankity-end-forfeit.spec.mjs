@@ -46,7 +46,8 @@ test('when one of the last two humans leaves, the other wins the match; a solo m
   await expect(guest.page.locator('#lobby-veil')).toBeHidden();
   await expect(veil).toBeHidden();
 
-  // The next solo match ends on the solo card (Continue, no room buttons), and a refused filing says so.
+  // The next solo match ends on the solo card (Continue, no room buttons), and a run the score server
+  // asks to wait for (429) stays saved in this browser and says so.
   await guest.page.clock.install();
   await guest.page.route(/scores\.php/, route => (route.request().method() === 'POST'
     ? route.fulfill({ status: 429, contentType: 'application/json', body: '{"error":"slow down"}' })
@@ -62,7 +63,7 @@ test('when one of the last two humans leaves, the other wins the match; a solo m
   await expect(veil.locator('#again')).toHaveText('Continue');
   await expect(veil.locator('#end-leave')).toHaveCount(0);
   await expect(veil.locator('#end-watch')).toHaveCount(0);
-  await expect(veil.locator('#end-filed')).toHaveText(/^Couldn't file your score: too many reports/, { timeout: 10_000 });
+  await expect(veil.locator('#end-filed')).toHaveText(/^Saved in this browser; it files itself when the score server answers\.$/, { timeout: 10_000 });
   expect(host.errors).toEqual([]);
   expect(guest.errors.filter(e => !/429/.test(e))).toEqual([]);
   await host.ctx.close(); await guest.ctx.close();

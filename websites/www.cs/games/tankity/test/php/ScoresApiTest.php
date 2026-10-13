@@ -10,8 +10,9 @@ use PHPUnit\Framework\TestCase;
 final class ScoresApiTest extends TestCase
 {
     private string $dir;
-    private array $override;
     private int $now;
+    private const SETTINGS = ['TANKITY_STARTS_PER_HOUR', 'TANKITY_SCORES_PER_HOUR', 'TANKITY_ROUNDS_PER_HOUR', 'TANKITY_ROUND_CPU',
+        'TANKITY_MAX_PLAYING', 'TANKITY_PLAYING_PER_CLIENT', 'TANKITY_RUNS_PER_CLIENT'];
     private const TOKEN = '0123456789abcdef0123456789abcdef';
 
     public static function setUpBeforeClass(): void
@@ -23,7 +24,7 @@ final class ScoresApiTest extends TestCase
     protected function setUp(): void
     {
         $this->dir = tankity_test_dir();
-        $this->override = ['startsPerHour' => 3];
+        putenv('TANKITY_STARTS_PER_HOUR=3');
         $this->now = 1_800_000_000;
         $_SERVER = ['HTTP_HOST' => 'localhost', 'HTTP_ORIGIN' => 'http://localhost', 'CONTENT_TYPE' => 'application/json',
             'REMOTE_ADDR' => '203.0.113.' . random_int(1, 254), 'HTTP_X_TANKITY_CSRF' => self::TOKEN, 'SCRIPT_NAME' => '/games/tankity/scores.php'];
@@ -32,15 +33,16 @@ final class ScoresApiTest extends TestCase
 
     protected function tearDown(): void
     {
-        putenv('TANKITY_ROUNDS_PER_HOUR');
-        putenv('TANKITY_ROUND_CPU');
+        foreach (self::SETTINGS as $name) {
+            putenv($name);
+        }
         tankity_test_rm($this->dir);
     }
 
     /** The guard for this test's request, on the test's clock; it sets no real cookie. */
     private function guard(): ScoreGuard
     {
-        return tankity_guard($this->override, $_SERVER, $_COOKIE, fn(): int => $this->now, function (): void {});
+        return tankity_guard([], $_SERVER, $_COOKIE, fn(): int => $this->now, function (): void {});
     }
 
     private function post(array $body): array
@@ -244,19 +246,54 @@ final class ScoresApiTest extends TestCase
         $this->assertSame($run['w'], $state['w'], 'the run is played at the width it started with');
     }
 
-    public function testStartsStopAtTheLiveRunCap(): void
+    public function testOnlyPlayedRunsFillTheLiveRunCap(): void
     {
-        $this->override['startsPerHour'] = 10;
-        tankity_tx(tankity_db(), function (PDO $db): void {
-            $q = $db->prepare("INSERT INTO solo_runs (id, difficulty, seed, created, touched, round, status, state, reply, filed) VALUES (?, 'normal', 's', ?, ?, 0, ?, '{}', '', '')");
-            for ($i = 0; $i < SOLO_MAX_LIVE_RUNS; $i++) {
-                $q->execute([sprintf('%032x', $i), $this->now, $this->now, $i % 2 ? 'live' : 'over']);
-            }
-        });
+        putenv('TANKITY_STARTS_PER_HOUR=10');
+        $run = $this->recorded();
+        // A start costs a played run's place nothing: a flood of them fills no cap.
+        $this->seedRuns(SOLO_MAX_LIVE_RUNS, 'live', 'flood', 0);
+        $played = $this->start($run);
+        $waiting = $this->start($run);
+        $this->assertSame(200, $this->round($played, $run['rounds'][0])[0]);
+        $this->seedRuns(SOLO_MAX_LIVE_RUNS - 1, 'live', 'others', 10_000, 1);
+        tankity_db()->exec("UPDATE solo_runs SET status = 'over' WHERE client = 'others' AND id < '" . sprintf('%032x', 10_100) . "'");
         $this->assertSame([503, ['error' => 'busy']], $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720]));
+        $this->assertSame([503, ['error' => 'busy']], $this->round($waiting, $run['rounds'][0]), 'a first round waits for a place');
+        $this->assertSame(['live', 0], [$this->row($waiting)['status'], (int) $this->row($waiting)['round']]);
         // Runs gone quiet do not count, though housekeeping has not deleted them yet.
-        tankity_db()->exec('UPDATE solo_runs SET touched = touched - ' . (SOLO_RUN_IDLE + 1) . " WHERE id = '" . sprintf('%032x', 0) . "'");
-        $this->assertSame(200, $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720])[0]);
+        tankity_db()->exec('UPDATE solo_runs SET touched = touched - ' . (SOLO_RUN_IDLE + 1) . " WHERE id = '" . sprintf('%032x', 10_000) . "'");
+        $this->assertSame(200, $this->round($waiting, $run['rounds'][0])[0]);
+    }
+
+    public function testAStartStoresOnlyWhatItsFirstRoundDealsFrom(): void
+    {
+        $run = $this->recorded();
+        $id = $this->start($run);
+        $row = $this->row($id);
+        $this->assertSame(['', $run['seed'], $run['difficulty'], $run['w'], 0], [$row['state'], $row['seed'], $row['difficulty'], (int) $row['w'], (int) $row['round']]);
+        $this->assertSame(200, $this->round($id, $run['rounds'][0])[0], 'round 1 deals, then plays');
+    }
+
+    public function testARunWithNoRoundPlayedExpiresInMinutes(): void
+    {
+        $run = $this->recorded();
+        $this->assertLessThanOrEqual(1800, SOLO_RUN_UNPLAYED_IDLE);
+        $unplayed = $this->start($run);
+        $played = $this->start($run);
+        $this->assertSame(200, $this->round($played, $run['rounds'][0])[0]);
+        $this->now += SOLO_RUN_UNPLAYED_IDLE + 1;
+        $this->assertSame([410, ['error' => 'expired']], $this->round($unplayed, $run['rounds'][0]));
+        $this->assertSame(1, solo_runs_expire($this->now));
+        $this->assertSame(200, $this->round($played, $run['rounds'][1])[0], 'a run under way keeps the longer idle limit');
+    }
+
+    public function testAStartWaitsWhileItsAddressHasNoRoundLeft(): void
+    {
+        // The browser keeps the run and starts it later, rather than open one here that could only expire unplayed.
+        putenv('TANKITY_ROUNDS_PER_HOUR=2');
+        $this->spend('round', 2);
+        $this->assertSame([429, ['error' => 'rate']], $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720]));
+        $this->assertSame(0, (int) tankity_db()->query('SELECT COUNT(*) FROM solo_runs')->fetchColumn());
     }
 
     // ---- rounds
@@ -319,7 +356,7 @@ final class ScoresApiTest extends TestCase
     {
         $run = $this->recorded();
         foreach (['end' => 'roundWon', 'score' => 1, 'cash' => 1, 'lives' => 1, 'roundsWon' => 1] as $field => $bump) {
-            $this->override['startsPerHour'] = 100;
+            putenv('TANKITY_STARTS_PER_HOUR=100');
             $id = $this->start($run);
             $r = $run['rounds'][0];
             $r['claim'][$field] = is_int($bump) ? $r['claim'][$field] + $bump : ($r['claim'][$field] === $bump ? 'tankLost' : $bump);
@@ -360,7 +397,7 @@ final class ScoresApiTest extends TestCase
     {
         // JSON objects in place of the lists: PHP would read {} as an empty list; src/solo-play.ts refuses them.
         $run = $this->recorded();
-        $this->override['startsPerHour'] = 10;
+        putenv('TANKITY_STARTS_PER_HOUR=10');
         $r = $run['rounds'][0];
         $body = (string) json_encode(['op' => 'round', 'run' => $this->start($run)] + $r);
         $objectBuys = (string) preg_replace('/"buys":\[.*?\],"shots"/', '"buys":{},"shots"', $body, 1, $done);
@@ -495,21 +532,33 @@ final class ScoresApiTest extends TestCase
         $this->assertCount(1, board_top($run['difficulty'], 5));
     }
 
-    public function testAFiledRunsTokenCannotBeSpentAgain(): void
+    public function testAFilingThatFailsPartWayLosesNothing(): void
     {
+        $run = $this->recorded();
+        $id = $this->playAll($run);
+        tankity_db()->exec("CREATE TEMP TRIGGER fail_board BEFORE INSERT ON board BEGIN SELECT RAISE(ABORT, 'disk trouble'); END");
+        try {
+            $this->post(['op' => 'file', 'run' => $id, 'initials' => 'ABC']);
+            $this->fail('the board insert was to fail');
+        } catch (PDOException $e) {
+            $this->assertStringContainsString('disk trouble', $e->getMessage());
+        } finally {
+            tankity_db()->exec('DROP TRIGGER IF EXISTS fail_board');
+        }
+        $this->assertSame('over', $this->row($id)['status'], 'the run is still there to file');
+        $this->assertSame(0, solo_rate_used(tankity_db(), $this->guard()->clientKey(), 'score', $this->now), 'and the filing cost nothing');
+        [$status, $out] = $this->post(['op' => 'file', 'run' => $id, 'initials' => 'ABC']);
+        $this->assertSame(200, $status, json_encode($out));
+        $this->assertCount(1, board_top($run['difficulty'], 5));
+    }
+
+    public function testTheKitGuardsStoreIsNeverWritten(): void
+    {
+        // Every count lives in the database: no request rewrites a file that grows with the addresses seen.
         $run = $this->recorded();
         $id = $this->playAll($run);
         $this->assertSame(200, $this->post(['op' => 'file', 'run' => $id, 'initials' => 'ABC'])[0]);
-        $this->assertSame('invalid run', $this->guard()->consumeRun($id));
-    }
-
-    public function testASpentTokenWithoutAFilingIsRefused(): void
-    {
-        $run = $this->recorded();
-        $id = $this->playAll($run);
-        $this->assertNull($this->guard()->consumeRun($id));
-        $this->assertSame([400, ['error' => 'invalid run']], $this->post(['op' => 'file', 'run' => $id, 'initials' => 'ABC']));
-        $this->assertSame([], board_top($run['difficulty'], 5));
+        $this->assertFileDoesNotExist(tankity_data_dir() . '/' . TANKITY_GUARD_RUNS);
     }
 
     public function testBadInitialsAreRefused(): void
@@ -529,11 +578,9 @@ final class ScoresApiTest extends TestCase
         putenv('TANKITY_ROUNDS_PER_HOUR=5');
         $run = $this->recorded();
         $id = $this->start($run);
-        $guard = $this->guard();
-        for ($i = 0; $i < solo_rounds_per_hour(); $i++) {
-            $guard->rateTake('round', solo_rounds_per_hour());
-        }
+        $this->spend('round', solo_rounds_per_hour());
         $this->assertSame([429, ['error' => 'rate']], $this->round($id, $run['rounds'][0]));
+        $this->assertSame(0, (int) $this->row($id)['playing'], 'a throttled round takes no lease');
     }
 
     public function testTheRoundsCapIsASetting(): void
@@ -544,7 +591,32 @@ final class ScoresApiTest extends TestCase
         $this->assertSame(25, solo_rounds_per_hour());
         putenv('TANKITY_ROUNDS_PER_HOUR=lots');
         $this->assertSame(SOLO_ROUNDS_PER_HOUR, solo_rounds_per_hour());
-        $this->assertSame(240, tankity_guard_config()['scoresPerHour']);
+        $this->assertSame(240, solo_scores_per_hour());
+    }
+
+    /** @return array<string, array{string, string, callable(): int, int}> */
+    public static function capSettings(): array
+    {
+        return [
+            'starts' => ['TANKITY_STARTS_PER_HOUR', 'starts_per_hour', 'solo_starts_per_hour', 120],
+            'filings' => ['TANKITY_SCORES_PER_HOUR', 'scores_per_hour', 'solo_scores_per_hour', 240],
+            'play slots' => ['TANKITY_MAX_PLAYING', 'max_playing', 'solo_max_playing', 8],
+            'play slots an address' => ['TANKITY_PLAYING_PER_CLIENT', 'playing_per_client', 'solo_playing_per_client', 2],
+            'runs an address' => ['TANKITY_RUNS_PER_CLIENT', 'runs_per_client', 'solo_runs_per_client', 100],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('capSettings')]
+    public function testTheCapsAreSettings(string $env, string $key, string $fn, int $default): void
+    {
+        putenv($env);
+        $this->assertSame($default, $fn(), $key);
+        putenv("$env=3");
+        $this->assertSame(3, $fn());
+        foreach (['0', '-1', 'many', '2.5'] as $bad) {
+            putenv("$env=$bad");
+            $this->assertSame($default, $fn(), $bad);
+        }
     }
 
     public function testAThrottledRunWaitsAndCarriesOn(): void
@@ -562,11 +634,12 @@ final class ScoresApiTest extends TestCase
 
     public function testAThrottledFilingSpendsNothingAndFilesLater(): void
     {
-        $this->override['scoresPerHour'] = 1;
+        putenv('TANKITY_SCORES_PER_HOUR=1');
         $run = $this->recorded();
         $id = $this->playAll($run);
-        $this->assertTrue($this->guard()->rateTake('score', 1));
+        $this->spend('score', 1);
         $this->assertSame([429, ['error' => 'rate']], $this->post(['op' => 'file', 'run' => $id, 'initials' => 'ABC']));
+        $this->assertSame('over', $this->row($id)['status']);
         $this->assertSame([], board_top($run['difficulty'], 5));
         $this->now += 3601;
         $this->assertSame(200, $this->post(['op' => 'file', 'run' => $id, 'initials' => 'ABC'])[0]);
@@ -575,33 +648,88 @@ final class ScoresApiTest extends TestCase
     public function testTheThrottleKeysOnTheSubscriberNotTheAddress(): void
     {
         putenv('TANKITY_ROUNDS_PER_HOUR=1');
-        $body = ['op' => 'round', 'run' => str_repeat('0', 32)] + $this->recorded()['rounds'][0];
-        $at = function (string $addr) use ($body): int {
+        putenv('TANKITY_STARTS_PER_HOUR=10');
+        $run = $this->recorded();
+        $ids = [$this->start($run), $this->start($run), $this->start($run), $this->start($run)];
+        // A run id is a bearer token: whichever address sends the round is the one charged.
+        $at = function (string $addr, int $run) use ($ids): int {
             $_SERVER['REMOTE_ADDR'] = $addr;
-            return $this->post($body)[0];
+            return $this->round($ids[$run], $this->recorded()['rounds'][0])[0];
         };
         // One IPv6 subscriber holds the whole /64.
-        $this->assertSame(404, $at('2001:db8:1:2::1'));
-        $this->assertSame(429, $at('2001:db8:1:2:ffff::9'));
-        $this->assertSame(404, $at('2001:db8:1:3::1'), 'the next /64 is someone else');
+        $this->assertSame(200, $at('2001:db8:1:2::1', 0));
+        $this->assertSame(429, $at('2001:db8:1:2:ffff::9', 1));
+        $this->assertSame(200, $at('2001:db8:1:3::1', 1), 'the next /64 is someone else');
         // An IPv4 client seen through IPv6 is the same client.
-        $this->assertSame(404, $at('198.51.100.7'));
-        $this->assertSame(429, $at('::ffff:198.51.100.7'));
-        $this->assertSame(429, $at('64:ff9b::198.51.100.7'));
-        $this->assertSame(404, $at('198.51.100.8'));
+        $this->assertSame(200, $at('198.51.100.7', 2));
+        $this->assertSame(429, $at('::ffff:198.51.100.7', 3));
+        $this->assertSame(429, $at('64:ff9b::198.51.100.7', 3));
+        $this->assertSame(200, $at('198.51.100.8', 3));
+    }
+
+    public function testARoundForNoSuchRunCostsNothing(): void
+    {
+        putenv('TANKITY_ROUNDS_PER_HOUR=1');
+        $round = $this->recorded()['rounds'][0];
+        $changes = tankity_db()->query('SELECT total_changes()')->fetchColumn();
+        for ($i = 0; $i < 5; $i++) {
+            $this->assertSame([404, ['error' => 'no such run']], $this->round(bin2hex(random_bytes(16)), $round));
+        }
+        $this->assertSame($changes, tankity_db()->query('SELECT total_changes()')->fetchColumn(), 'nothing was written');
+        $this->assertSame(0, (int) tankity_db()->query('SELECT COUNT(*) FROM solo_rate')->fetchColumn());
+    }
+
+    public function testAFloodOfAddressesDoesNotRaiseWhatARequestCosts(): void
+    {
+        putenv('TANKITY_STARTS_PER_HOUR=10');
+        $run = $this->recorded();
+        $first = $this->start($run);
+        $later = $this->start($run);
+        $changes = fn(): int => (int) tankity_db()->query('SELECT total_changes()')->fetchColumn();
+        $_SERVER['REMOTE_ADDR'] = '198.18.0.1';
+        $before = $changes();
+        $this->assertSame(200, $this->round($first, $run['rounds'][0])[0]);
+        $quiet = $changes() - $before;
+        // Thousands of addresses, each with a count of its own and a run it never played.
+        tankity_tx(tankity_db(), function (PDO $db): void {
+            $rate = $db->prepare("INSERT INTO solo_rate (client, kind, hour, n) VALUES (?, 'round', ?, 600)");
+            $runs = $db->prepare("INSERT INTO solo_runs (id, difficulty, seed, created, touched, round, status, state, reply, filed, client)
+                VALUES (?, 'normal', 's', ?, ?, 0, 'live', '', '', '', ?)");
+            for ($i = 0; $i < 5000; $i++) {
+                $rate->execute(["addr$i", intdiv($this->now, 3600)]);
+                $runs->execute([sprintf('%032x', 1_000_000 + $i), $this->now, $this->now, "addr$i"]);
+            }
+        });
+        $_SERVER['REMOTE_ADDR'] = '198.18.0.2';
+        $before = $changes();
+        $this->assertSame(200, $this->round($later, $run['rounds'][0])[0]);
+        $this->assertSame($quiet, $changes() - $before, 'the same rows written, however many addresses came before');
+        $this->assertSame(3, $quiet, 'the lease, the count and the stored round');
+        $this->assertFileDoesNotExist(tankity_data_dir() . '/' . TANKITY_GUARD_RUNS);
     }
 
     // ---- denial of service: what one client, or many, can make the server spend
 
     /** Stored runs for the client this test's request comes from (or another key), all fresh. */
-    private function seedRuns(int $count, string $status, ?string $client = null, int $from = 0): void
+    private function seedRuns(int $count, string $status, ?string $client = null, int $from = 0, int $round = 0): void
     {
         $client ??= $this->guard()->clientKey();
-        tankity_tx(tankity_db(), function (PDO $db) use ($count, $status, $client, $from): void {
+        tankity_tx(tankity_db(), function (PDO $db) use ($count, $status, $client, $from, $round): void {
             $q = $db->prepare("INSERT INTO solo_runs (id, difficulty, seed, created, touched, round, status, state, reply, filed, client)
-                VALUES (?, 'normal', 's', ?, ?, 0, ?, '{}', '', '', ?)");
+                VALUES (?, 'normal', 's', ?, ?, ?, ?, '{}', '', '', ?)");
             for ($i = 0; $i < $count; $i++) {
-                $q->execute([sprintf('%032x', $from + $i), $this->now, $this->now, $status, $client]);
+                $q->execute([sprintf('%032x', $from + $i), $this->now, $this->now, $round, $status, $client]);
+            }
+        });
+    }
+
+    /** Spends $times of this request's address's $kind allowance for the hour. */
+    private function spend(string $kind, int $times): void
+    {
+        $client = $this->guard()->clientKey();
+        tankity_tx(tankity_db(), function (PDO $db) use ($kind, $times, $client): void {
+            for ($i = 0; $i < $times; $i++) {
+                $this->assertTrue(solo_rate_take($db, $client, $kind, PHP_INT_MAX, $this->now));
             }
         });
     }
@@ -616,13 +744,13 @@ final class ScoresApiTest extends TestCase
 
     public function testOneClientHoldsAtMostItsShareOfRuns(): void
     {
-        $this->override['startsPerHour'] = 1000;
-        $this->seedRuns(SOLO_MAX_RUNS_PER_CLIENT - 2, 'live');
+        putenv('TANKITY_STARTS_PER_HOUR=1000');
+        $this->seedRuns(solo_runs_per_client() - 2, 'live');
         $this->seedRuns(1, 'over', null, 5000);
         $this->seedRuns(1, 'void', null, 6000);
         $this->seedRuns(3, 'filed', null, 7000); // a filed run holds no place
         $this->assertSame([429, ['error' => 'rate']], $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720]));
-        $this->assertSame(SOLO_MAX_RUNS_PER_CLIENT + 3, (int) tankity_db()->query('SELECT COUNT(*) FROM solo_runs')->fetchColumn());
+        $this->assertSame(solo_runs_per_client() + 3, (int) tankity_db()->query('SELECT COUNT(*) FROM solo_runs')->fetchColumn());
         $_SERVER['REMOTE_ADDR'] = '198.51.100.200';
         $this->assertSame(200, $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720])[0], 'another address is not held to it');
     }
@@ -669,6 +797,37 @@ final class ScoresApiTest extends TestCase
         $this->assertSame(200, $this->round($id, $run['rounds'][0])[0]);
     }
 
+    public function testOneAddressTakesOnlyItsShareOfThePlaySlots(): void
+    {
+        putenv('TANKITY_STARTS_PER_HOUR=10');
+        $run = $this->recorded();
+        $id = $this->start($run);
+        $this->seedRuns(solo_playing_per_client(), 'live', 'someone-else', 100);
+        tankity_db()->prepare("UPDATE solo_runs SET playing = ?, lessee = ? WHERE client = 'someone-else'")->execute([$this->now + 30, $this->guard()->clientKey()]);
+        $this->assertSame([503, ['error' => 'busy']], $this->round($id, $run['rounds'][0]), 'this address already plays its share');
+        $this->assertSame(0, (int) $this->row($id)['playing']);
+        $_SERVER['REMOTE_ADDR'] = '198.51.100.250';
+        $this->assertSame(200, $this->round($id, $run['rounds'][0])[0], 'another address still has slots');
+    }
+
+    public function testALeaseIsGivenBackWhenStoringTheRoundFails(): void
+    {
+        $run = $this->recorded();
+        $id = $this->start($run);
+        tankity_db()->exec("CREATE TEMP TRIGGER fail_store BEFORE UPDATE ON solo_runs WHEN NEW.round > OLD.round
+            BEGIN SELECT RAISE(ABORT, 'disk trouble'); END");
+        try {
+            $this->round($id, $run['rounds'][0]);
+            $this->fail('storing the round was to fail');
+        } catch (PDOException $e) {
+            $this->assertStringContainsString('disk trouble', $e->getMessage());
+        } finally {
+            tankity_db()->exec('DROP TRIGGER IF EXISTS fail_store');
+        }
+        $this->assertSame(['live', 0, 0], [$this->row($id)['status'], (int) $this->row($id)['round'], (int) $this->row($id)['playing']]);
+        $this->assertSame(200, $this->round($id, $run['rounds'][0])[0], 'sent again at once, it plays rather than wait out a lease');
+    }
+
     public function testAStoredRoundIsAnsweredWithoutPlayingItAgain(): void
     {
         $run = $this->recorded();
@@ -680,7 +839,7 @@ final class ScoresApiTest extends TestCase
 
     public function testAStartRefusedForRateDealsNothing(): void
     {
-        $this->override['startsPerHour'] = 1;
+        putenv('TANKITY_STARTS_PER_HOUR=1');
         $this->assertSame(200, $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 1440])[0]);
         $cpu = solo_cpu_now();
         for ($i = 0; $i < 50; $i++) {
@@ -696,6 +855,19 @@ final class ScoresApiTest extends TestCase
         tankity_db()->exec('UPDATE solo_runs SET touched = touched - ' . (SOLO_RUN_IDLE + 1));
         $this->assertGreaterThanOrEqual(1000, SOLO_EXPIRE_BATCH);
         $this->assertSame(SOLO_EXPIRE_BATCH, tankity_jobs()['solo']($this->now));
+    }
+
+    public function testHousekeepingDropsCountsTooOldToMatter(): void
+    {
+        $hour = intdiv($this->now, 3600);
+        tankity_tx(tankity_db(), function (PDO $db) use ($hour): void {
+            $q = $db->prepare("INSERT INTO solo_rate (client, kind, hour, n) VALUES ('a', 'round', ?, 5)");
+            foreach ([$hour - 3, $hour - 2, $hour - 1, $hour] as $h) {
+                $q->execute([$h]);
+            }
+        });
+        $this->assertSame(2, tankity_jobs()['soloRate']($this->now));
+        $this->assertSame([$hour - 1, $hour], array_map('intval', tankity_db()->query('SELECT hour FROM solo_rate ORDER BY hour')->fetchAll(PDO::FETCH_COLUMN)));
     }
 
     // ---- the boards' sources

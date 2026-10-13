@@ -30,12 +30,13 @@ const BLOCKED_INITIALS = [
     'POO', 'PEE',
     'KKK',
 ];
-// The guard's run tokens and rate stamps, beside the database.
+// Where the guard would keep run tokens and rate stamps; no Tankity request writes it.
 const TANKITY_GUARD_RUNS = 'guard-runs.json';
 
-/* The guard's config keys for Tankity, validated. A solo run's token is spent
-   when the run files, hours after it may have started; the run's own expiry
-   (solo_runs) is the tighter limit. Tests pass $override (a low limit). */
+/* The guard's config keys for Tankity, validated. Tankity uses the guard for
+   its origin, CSRF, address and initials checks only: the score endpoint keeps
+   its runs and per-address counts in the database (server/scores-api.php), so
+   the run and rate keys here serve no request. */
 function tankity_guard_config(array $override = []): array
 {
     $hosts = array_values(array_filter(array_map('trim',
@@ -43,8 +44,7 @@ function tankity_guard_config(array $override = []): array
     return ScoreGuard::validateConfig($override + [
         'runTtlSec' => 86400,
         'startsPerHour' => 120,
-        // A filing is cheap; one campus NAT is one address, so this is sized for a class.
-        'scoresPerHour' => (int) tankity_setting('TANKITY_SCORES_PER_HOUR', 'scores_per_hour', '240'),
+        'scoresPerHour' => 240,
         'csrfCookie' => 'tankity_csrf',
         'storageKey' => 'operation-tankity',
         'blockedInitials' => BLOCKED_INITIALS,

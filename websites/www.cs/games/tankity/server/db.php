@@ -206,7 +206,8 @@ function tankity_journal_mode(string $dir, ?string $mounts = null): string
    imported, so a file that outlives its import is never filed twice; step 4 tells
    a row the server filed from a match from a browser's own claim; step 5 is the
    solo runs the server plays, and marks a board row whose initials stand in for
-   a converted name the blocklist refused. */
+   a converted name the blocklist refused; step 6 lets a run be started without
+   being dealt, and counts each address's solo requests per hour. */
 function tankity_schema_steps(): array
 {
     return [
@@ -241,6 +242,18 @@ function tankity_schema_steps(): array
             'ALTER TABLE board ADD COLUMN standin INTEGER NOT NULL DEFAULT 0',
             // The converted rows no longer say which names were refused; every client AAA is taken for a stand-in.
             "UPDATE board SET standin = 1 WHERE source = 'client' AND initials = 'AAA'",
+        ],
+        6 => [
+            // w is the width a run is dealt at on its first round (a start stores no state); lessee is the
+            // address whose request holds the round's lease.
+            'ALTER TABLE solo_runs ADD COLUMN w INTEGER NOT NULL DEFAULT 0',
+            "ALTER TABLE solo_runs ADD COLUMN lessee TEXT NOT NULL DEFAULT ''",
+            'CREATE INDEX solo_runs_played ON solo_runs (touched) WHERE round > 0',
+            'CREATE INDEX solo_runs_playing ON solo_runs (playing)',
+            // An address's starts, rounds and filings, one row per kind and clock hour.
+            'CREATE TABLE solo_rate (client TEXT NOT NULL, kind TEXT NOT NULL, hour INTEGER NOT NULL, n INTEGER NOT NULL,
+                PRIMARY KEY (client, kind, hour))',
+            'CREATE INDEX solo_rate_hour ON solo_rate (hour)',
         ],
     ];
 }

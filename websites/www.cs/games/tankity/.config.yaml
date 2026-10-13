@@ -15,10 +15,18 @@
 #                     the storage directory's filesystem)
 #   round_cpu      <- TANKITY_ROUND_CPU (seconds of CPU the server may spend
 #                     playing one solo round; default 4.0)
+#   starts_per_hour <- TANKITY_STARTS_PER_HOUR (solo runs started per address
+#                     an hour; default 120)
 #   rounds_per_hour <- TANKITY_ROUNDS_PER_HOUR (solo rounds per address an
 #                     hour; default 600)
 #   scores_per_hour <- TANKITY_SCORES_PER_HOUR (solo filings per address an
 #                     hour; default 240)
+#   runs_per_client <- TANKITY_RUNS_PER_CLIENT (solo runs one address may hold
+#                     at once; default 100)
+#   max_playing    <- TANKITY_MAX_PLAYING (solo rounds the server plays at
+#                     once; about the host's cores; default 8)
+#   playing_per_client <- TANKITY_PLAYING_PER_CLIENT (of those, how many one
+#                     address may hold; default 2)
 #   scores_dir     <- TANKITY_SCORES_DIR (retired: only where score files
 #                     from before the database are imported from; default /var/tmp)
 # Point CONFIG_FILE at another file to load settings from elsewhere.

@@ -127,7 +127,8 @@ foreach ($fixtures as $name => [$about, $status, $body]) {
 }
 if ($check) {
     foreach (glob(__DIR__ . '/*.json') ?: [] as $f) {
-        if (basename($f) !== 'sim-vectors.json' && !isset($fixtures[basename($f, '.json')])) { // sim-vectors.php owns that one
+        // sim-vectors.php and tools/solo-runs.mjs own their files
+        if (!in_array(basename($f), ['sim-vectors.json', 'solo-runs.json'], true) && !isset($fixtures[basename($f, '.json')])) {
             $stale[] = basename($f) . ' (no scenario makes it)';
         }
     }

@@ -1,4 +1,4 @@
-.PHONY: help deploy up down url parity test protocol sim-vectors e2e screenshots
+.PHONY: help deploy up down url parity test protocol sim-vectors solo-runs e2e screenshots
 
 .DEFAULT_TARGET := help
 
@@ -24,6 +24,7 @@ help:
 	@echo "  test   - Unit suites: the site's TypeScript build, games hub, site game pages, home-page versions, deploy set, each game's tools, Tankity (incl. game.yaml, its kit build check and unit tests), Cylon (its kit build check, unit tests and scores PHPUnit), Crete (its kit build check and engine tests) (needs make up)"
 	@echo "  protocol - Rewrite the Tankity room protocol fixtures (needs make up)"
 	@echo "  sim-vectors - Rewrite the Tankity shared sim test vectors (needs make up)"
+	@echo "  solo-runs - Rewrite the Tankity recorded solo runs (node; no docker)"
 	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL;"
 	@echo "           one run per machine at a time (E2E_ARGS passes to playwright)"
 	@echo "  e2e-changed - Only the browser specs your changes against origin/main need"
@@ -87,3 +88,6 @@ e2e-changed:
 	@specs=$$( { git diff --name-only origin/main...HEAD; git diff --name-only HEAD; git ls-files --others --exclude-standard | sed 's|^|websites/www.cs/|'; } | sort -u | node tests/e2e/select.mjs ) && \
 	echo "e2e: $$specs" && \
 	case "$$specs" in NONE) ;; ALL) $(MAKE) --no-print-directory e2e ;; *) $(MAKE) --no-print-directory e2e E2E_ARGS="$$specs" ;; esac
+
+solo-runs:
+	cd games/tankity && node tools/solo-runs.mjs

@@ -424,7 +424,7 @@
                 "subDmg": 40,
                 "subRadius": 40,
                 "speed": 1.0,
-                "note": "Splits at the top of its arc into nine heavy warheads in a tight fan.",
+                "note": "Splits at the top of its arc into nine heavy warheads.",
                 "gfx": {
                     "shell": "#e8e8e8",
                     "trail": "#9a9aa8",

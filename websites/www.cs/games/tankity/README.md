@@ -419,7 +419,12 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
 - Ranging shot: a search (which a strategy can narrow) for the landing nearest
   the target, over the shell and any loaded gun, on the grid of angles 25-155
   and powers 20-98 in steps of 6: every other point of it (steps of 12), then
-  the eight 6-step neighbours of the best. Guns that fly the same planning arc
+  the eight 6-step neighbours of the best. A roller's planning flight rolls on
+  after it lands, several times a shell's cost, so roller arcs are searched
+  last, on steps of 24, and narrowed (12, then 6) only when their coarse best
+  beats the best landing so far; `room_sim_flights` counts a turn's flights,
+  and `test/php/AiArcsTest.php` holds a round-9 drone turn to 440 (the browser's
+  `test/ai-search.test.mjs` to the same). Guns that fly the same planning arc
   share one search: their flight key (`flightKey` in `src/sim.ts`,
   `room_flight_key` in `server/sim.php`) holds every field the planning flight
   reads (flat, speed, and a roller's friction and roll time), so a gun given
@@ -430,16 +435,21 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
 - Gun: the search keeps the best aim of each planning arc, and each loaded
   gun is scored by the harm it would do landing there (`aiHarm`,
   `room_ai_harm`): its blast on the target's body (`blastDamage` within
-  radius + 14), pellets and cluster bomblets each at the fan's spread at that
-  distance (a cluster's over `AI_SPLIT_LEFT` = 0.5 of the flight), a hop or
-  scatter gun's later munitions at a fixed `AI_SUB_SHARE` = 0.35 (a scatter
-  gun's within half the range of its fastest bomblet), and a fall term that is
-  0 while craters drop no unit into a hurting fall. A gun whose burst (or
-  munitions) could reach the drone's own body scores -Infinity and is never
-  fired. The most harmful gun of the best-landing arc fires (glory: of any
-  arc), ties to rack order; when no gun would hurt anyone, the arc's first gun
-  (glory: its strongest) fires, or, if that would reach the drone, the
-  best-landing gun that would not.
+  radius + 14), pellets each at the fan's spread at that distance, each later
+  munition at its own landing (`munitions`, `room_ai_munitions`: a hop gun's
+  leaps one after another from the landing velocity, a scatter gun's bomblets
+  from its burst, a cluster's from where its shot splits, `splitPoint`; each
+  flown with no wind down to the landing's height by one shared closed form,
+  `dropTime` / `room_drop_time`), and a fall term that is 0 while craters drop
+  no unit into a hurting fall, all capped at the target's armor. A gun whose
+  burst or munitions could reach the drone's own body, at the landing or on
+  the target's near side, with `AI_SAFE_MARGIN` = 1.25 for wobble, wind and
+  hills, scores -Infinity and is never fired. The most harmful gun of the
+  best-landing arc fires (glory: of any arc), the cheaper on a tie, then rack
+  order, so a weak target gets the cheapest gun that finishes it; when no gun
+  would hurt anyone, the arc's first gun (glory: its strongest) fires, or, if
+  that would reach the drone, the best-landing gun that would not (when every
+  gun would, the arc's first gun still fires).
 - Bracketing: each drone remembers its last shot (`brk` on the tank in a room,
   on the drone object solo: target index, angle, power, weapon, corrections so
   far `n`, target x and own x then, and `land`, the x where the volley first
@@ -660,10 +670,13 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   random numbers). Later warheads and bomblets burst with `subDmg` and
   `subRadius`, a bomblet on the ground at once, and none takes a direct hit
   on the unit the burst before it struck. `hopShell` and `scatterShells` in
-  `sim.ts` make them in the browser (each with an `order` after its parent,
-  so they burst in launch order); `room_fire_hops` and `room_fire_scatter` in
-  `server/rules.php` fly them on the server, each a `shot` event with its own
-  `t0`, which the room replay plays with the gun's `hop` or `scatter` special.
+  `sim.ts` make them in the browser (each with an `order` after its parent);
+  `room_fire_hops` and `room_fire_scatter` in `server/rules.php` fly them on
+  the server, each a `shot` event with its own `t0`, which the room replay
+  plays with the gun's `hop` or `scatter` special. Bomblets of one burst (a
+  scatter gun's, a cluster's) fly side by side and each bursts the step it
+  lands (`room_fly_siblings` steps them together with `room_arc_step`; the
+  browser never holds a bomblet for a sibling).
   A cluster with `apex: true` (Death's Head) splits at the first step it stops
   rising, never before 0.1 s, instead of on its fuse.
 - The sim takes its state as arguments (`World`, `Arsenal`) and reports what
@@ -782,7 +795,9 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/ai-hitrate.test.mjs`                     | The drones' measured hit rates per difficulty against the targets (see Difficulty), the table's shape, hard being the sharpest aim (its exact constants), unknown levels aiming at normal, and the saved setting's default and form. The harness is seeded, so it never flakes, but one cell runs close: at 1440 wide, round 10, easy's ranging shot (17.2%) is 0.33 points inside its band (half of normal's ±5). A later aim or weapon change can fail this test on that easy cell rather than on what it changed; read the failure for that before blaming the change |
 | `test/ai-arcs.test.mjs`                        | Guns share a drone's aim search only when their flight key matches: every field of every gun is changed (a string field to a value no gun holds), and any change that bends a planning flight must change the key; every gun field `simShot` reads, traced as it reads it, must be one `flightKey` reads; a gun given its own speed, flat flight or roll is searched on its own (`test/php/AiArcsTest.php` is the same for the server) |
 | `test/ai-search.test.mjs`                      | The planning flights one drone turn costs, counted as `simShot` flies them (not as `aiChoose` looks guns up): a coarse grid and the fine neighbours of its best per distinct arc (a full round-9 rack too, for every strategy, inside a time budget), a lobber's high arcs, and a bracket correction's three grids |
-| `test/ai-harm.test.mjs`                        | The gun a drone fires (`aiHarm`): a burst's blast on the target, Mortar over Shell on one arc, a big blast refused within reach of the drone itself, Funky's bomblets on a near miss, a hop gun's leaps, pellets and bomblets at the fan's spread, the fall term at 0, and the choice from a loaded rack (glory weighing every arc) |
+| `test/ai-harm.test.mjs`                        | The gun a drone fires (`aiHarm`), checked by firing it: predicted harm ranks Shell, Baby Nuke, Funky and Death's Head as their real bursts do; no self-damage from Funky with the target 160-220 px off or from any carried gun at 80-300 px; pressed against its target it spares itself; Mortar over Shell on one arc; a weak target gets the cheapest gun; picks over rounds 5-12 vary (no gun above 60%); the fall term at 0 |
+| `test/bomblets.test.mjs`                       | Every cluster and scatter gun's bomblets burst as they land, fired either way on flat ground and hills: no frame holds a shell |
+| `test/weapon-keys.test.mjs`                    | No logic in `src/` or `server/` compares a weapon to a key or lists keys (the Shell aside); how long a blast lingers and how big a shell flies (`gfx.linger`, `gfx.size`), a match's starting ammo (`start`) and the picker's grouped shelf come from `game.yaml` |
 | `test/prefs-legacy.test.mjs`                   | The saved settings (`tankity-body`, `tankity-text`, `tankity-tutorial`) read back through the kit's prefs exactly as the code before it wrote them, and the `tankity-local` and `tankity-scores-local` values |
 | `test/audio.test.mjs`                          | `src/audio.ts` imports without a browser; the loop-point trim and the round-to-track mapping are right |
 | `test/field.test.mjs`                          | The width from the landscape box (clamps, columns, portrait equals landscape), that a deal holds through a resize, fitting the field in a box, and the power step and display at 720, 1080 and 1440 |
@@ -794,7 +809,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/ghosts.test.mjs`                         | A shell retired past the edge keeps flying (draw only), one that burst inside leaves no ghost, a replay's last point keeps its velocity, ghosts are dropped off the picture |
 | `test/scenery.test.mjs`                        | The scenery continues the hills with no step over 1 px at the seam, cratered or not |
 | `test/rotate-hint.test.mjs`                    | The rotate hint's rule and its chip |
-| `test/php/AiArcsTest.php`                      | `server/ai.php` `room_ai_arc_guns` and `server/sim.php` `room_flight_key`: a flight by definition is the shot by key, guns with one key fly the same arcs, any field change that bends a flight changes the key, the key is exact whatever `serialize_precision` says and refuses a speed, friction or roll time that is not finite, and a gun given its own arc is searched on its own; `room_ai_harm` prefers the bigger blast on one arc, refuses a blast that reaches its own drone, and its fall term is 0 |
+| `test/php/AiArcsTest.php`                      | `server/ai.php` `room_ai_arc_guns` and `server/sim.php` `room_flight_key`: a flight by definition is the shot by key, guns with one key fly the same arcs, any field change that bends a flight changes the key, the key is exact whatever `serialize_precision` says and refuses a speed, friction or roll time that is not finite, and a gun given its own arc is searched on its own; `room_ai_harm` prefers the bigger blast on one arc, refuses a blast that reaches its own drone, and its fall term is 0; a round-9 drone turn flies at most 440 planning flights |
 | `test/php/DetMathTest.php`                     | `server/detmath.php` is within 1e-15 of libm, rounds halves and keeps the sign of zero like `Math.round`, and the `detmath` vectors cover every function |
 | `test/php/FieldWidthTest.php`                  | The server's width rule, hills, reach and aim, units spread outside each other's blast, and a room dealt at 720 |
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
@@ -806,7 +821,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/flow.test.mjs`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
 | `test/protocol.test.mjs`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
 | `test/sim-vectors.test.mjs`                    | `src/sim.ts`, `src/ai.ts` and `src/armor.ts` agree with `rooms.php` on every shared sim vector; the detmath, field, armor and match-end cases compare exactly (see Sim vectors) |
-| `phpunit --testsuite tankity` (host PHP)       | `ConfigTest` (`.config.yaml` precedence), `DataDirTest`, `DbTest`, `RoomStoreTest` and `HousekeepTest` (storage: the directory and its checks, the database and its journal, the v4 to v5 upgrade that leaves only room rows, rooms as rows, cleanup on a fake clock), `GameJsonTest` (the YAML parser, the `game.yaml` schema including effects, `--check` staleness) and `RoomsSimTest` (server sim units: pierce, a harmless burst, the rack and a row's defaults, spawns, spacing, replay stamping; drone bracketing and strategies; one unit left standing ends a round, the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller) |
+| `phpunit --testsuite tankity` (host PHP)       | `ConfigTest` (`.config.yaml` precedence), `DataDirTest`, `DbTest`, `RoomStoreTest` and `HousekeepTest` (storage: the directory and its checks, the database and its journal, the v4 to v5 upgrade that leaves only room rows, rooms as rows, cleanup on a fake clock), `GameJsonTest` (the YAML parser, the `game.yaml` schema including effects, `--check` staleness) and `RoomsSimTest` (server sim units: pierce, a harmless burst, the rack and a row's defaults, bomblets landing in time order, a drone never hurt by its own Funky, spawns, spacing, replay stamping; drone bracketing and strategies; one unit left standing ends a round, the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller) |
 | `RoomMatchEndTest` (host PHP) | The match-end rule: one human plays like solo, the last human standing wins twice the round bonus, a leave is a forfeit, two out at once, the watch cap |
 | `RoomStandingsTest` (host PHP) | Each human's rounds won, kills, round gain and out round, in the snapshot with the winner's bonus |
 | `RoomFilingTest` (host PHP) | A match two or more humans started files each human once on its Difficulty's board, the winner before the eliminated, a leaver not at all but the winner of a forfeit still; a match one human started files nothing and marks `filedLocal`; a failed filing logged and read as not filed |
@@ -899,12 +914,13 @@ with -0 equal to 0 only where a case says so.
   by round (`aiRack`), the harm every gun would do from seven landings, and a
   drone's gun choice from a mixed round-9 rack.
 - Shared rules the cases pin: only a kill the player's own shot made pays the
-  300 bonus, and a volley's projectiles (buckshot pellets, cluster and scatter
-  bomblets, a hop gun's warheads) burst in launch order, each against the
-  ground the earlier ones left. The
-  browser still flies a volley's shells together; a shell that reaches the
-  ground or a unit while an earlier one is in the air holds there until that
-  one has burst.
+  300 bonus, a volley's projectiles (buckshot pellets, a hop gun's warheads,
+  and one burst's bomblets as a group) burst in launch order, each against the
+  ground the earlier ones left, and bomblets of one burst burst in the order
+  they land, in list order within a step. The browser still flies a volley's
+  shells together; a shell that reaches the ground or a unit while an earlier
+  one (not a sibling bomblet) is in the air holds there until that one has
+  burst.
 - Not covered: pacing. The browser steps its war in fixed 1/60 s steps; the
   cases use 1/60 s for both.
 - Regenerate from the site folder with `make sim-vectors` (in the docker

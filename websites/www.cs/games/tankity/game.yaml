@@ -121,8 +121,8 @@
 #   Extra fields by effect (required for that effect; any other effect
 #   refuses them):
 #     pellets: pellets (1 to 12), spread (radians between pellets, 0 to 1)
-#     cluster: fuse (seconds, 0.1 to 10), split (2 to 12), fan (radians,
-#              0 to 1), subDmg, subRadius; apex (true or false, optional:
+#     cluster: fuse (seconds, 0.1 to 10), split (2 to 12), fan (radians
+#              between neighbouring bomblets, 0 to 1), subDmg, subRadius; apex (true or false, optional:
 #              true splits at the top of the arc and leaves fuse out)
 #     hop: hops (warheads, 2 to 6), hopKeep (the share of its speed each
 #          leap keeps, 0.2 to 0.9), subDmg, subRadius
@@ -444,7 +444,7 @@ arsenal:
       subDmg: 40
       subRadius: 40
       speed: 1.0
-      note: Splits at the top of its arc into nine heavy warheads in a tight fan.
+      note: Splits at the top of its arc into nine heavy warheads.
       gfx: {shell: "#e8e8e8", trail: "#9a9aa8", blast: ["#ff4d4d", "#fff3c4"], painter: spark, shake: 0.7}
 
     - key: babynuke

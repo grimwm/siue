@@ -80,6 +80,7 @@ export interface GameState extends World {
   fuelBank: number;
   armor: number; // the armor the next round musters with (src/armor.ts)
   plate: number;
+  chutes: number; // the player's parachutes
   time: number;
   shake: number;
   dlgQ: DialogueLine[];

@@ -416,8 +416,23 @@
                 "dmg": 50,
                 "radius": 44,
                 "note": "Your wreck detonates when you go down."
+            },
+            {
+                "key": "parachute",
+                "name": "Parachutes ×2",
+                "cat": "Tricks",
+                "price": 100,
+                "n": 2,
+                "effect": "parachute",
+                "note": "Opens on a fall that would cost more than a scratch; one per fall."
             }
-        ]
+        ],
+        "fall": {
+            "freePx": 10,
+            "perPx": 0.5,
+            "chuteOver": 5,
+            "aiRound": 3
+        }
     },
     "keys": {
         "aim": {

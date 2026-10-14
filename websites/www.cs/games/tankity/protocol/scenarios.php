@@ -43,7 +43,6 @@ function protocol_play(): array
     foreach ($events as $e) {
         room_emit($room, $e);
     }
-    room_settle_tanks($room);
     return $room;
 }
 
@@ -58,7 +57,6 @@ function protocol_fire(array $room, float $angle, float $power): array
     $events = [['t' => 'fire', 'seat' => $seat, 'w' => 'shell',
         'x' => round($me['x'], 1), 'a' => round($me['angle'], 1), 'pw' => round($me['power'], 1)]];
     room_fire_shot($room, $events, 0, 'shell');
-    room_settle_tanks($room);
     $rng = $room['rng'];
     $room['wind'] = (int) max(-12, min(12, round($room['wind'] + room_gauss($rng) * 2)));
     $room['rng'] = $rng;
@@ -68,7 +66,6 @@ function protocol_fire(array $room, float $angle, float $power): array
     } else {
         $room['turn'] = ($room['turn'] + 1) % max(1, count($room['tanks']));
         room_advance($room, $events);
-        room_settle_tanks($room);
     }
     foreach ($events as $e) {
         room_emit($room, $e);

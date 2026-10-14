@@ -47,7 +47,8 @@ const tankOf = (spec, i) => ({
   id: 'T' + i, isPlayer: spec.kind === 'human', x: spec.x, y: spec.y, hp: spec.hp === undefined ? 100 : spec.hp,
   angle: spec.angle === undefined ? 45 : spec.angle, power: spec.power === undefined ? 50 : spec.power,
   dirS: spec.dirS === undefined ? 1 : spec.dirS, fuel: spec.fuel === undefined ? 80 : spec.fuel, ammo: Object.assign({}, spec.ammo), vy: 0,
-  s: spec.s, dry: spec.dry, dealt: spec.dealt, lastHitBy: spec.lastHitBy, kills: spec.kills,
+  s: spec.s, dry: spec.dry, dealt: spec.dealt, lastHitBy: spec.lastHitBy, kills: spec.kills, fellBy: spec.fellBy,
+  chutes: spec.kind === 'human' ? undefined : spec.chutes,
 });
 /* A fresh world for a case: the tanks, the ground, the wind, and the human's tricks (G.shield and friends are the player's). */
 function world(c, w = 720) {
@@ -57,7 +58,7 @@ function world(c, w = 720) {
     tanks: (c.tanks || []).map(tankOf), terrain: buildTerrain(c.terrain || { flat: 400 }, w), wind: c.wind || 0, round: c.round || 1,
     shells: [], booms: [], clouds: [], fx: {}, ammo: {}, selected: 'shell', score: human.score || 0, cash: 0, shake: 0, shopSel: 0,
     shield: !!human.shield, bunker: human.bunker || 0, laststand: !!human.laststand, jammer: human.jammer || 0,
-    difficulty: c.difficulty,
+    chutes: human.chutes || 0, difficulty: c.difficulty,
   });
   return G;
 }
@@ -67,9 +68,9 @@ function outcome(before) {
     if (Math.abs(y - before[ix]) > 1e-9) { if (first === null) first = ix; last = ix; }
   });
   return {
-    tanks: G.tanks.map(t => ({ hp: t.hp, fuel: t.fuel })),
+    tanks: G.tanks.map(t => ({ hp: t.hp, fuel: t.fuel, y: t.y, chutes: t.isPlayer ? null : t.chutes || 0 })),
     crater: first === null ? null : { x0: first, y: G.terrain.slice(first, last + 1) },
-    score: G.score, cash: G.cash, shield: G.shield, laststand: G.laststand,
+    score: G.score, cash: G.cash, shield: G.shield, laststand: G.laststand, chutes: G.chutes,
   };
 }
 
@@ -170,9 +171,28 @@ const RUN = {
     shooter.power = c.power;
     (shooter.isPlayer ? G.ammo : shooter.ammo)[c.wkey] = 99;
     sim.fireWeapon(G, arsenal, shooter, c.wkey);
-    // 1/60 s frames, as the room server steps; a volley ends when its last shell has burst.
-    for (let frame = 0; G.shells.length && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
+    // As a solo match plays it: 1/60 s frames, falls animated every frame, and
+    // one settle when the last shell is down (src/match.ts), which must come out
+    // as the room server's volley does (server/rules.php room_fire_shot).
+    for (let frame = 0; G.shells.length && frame < 5000; frame++) {
+      sim.fallTanks(G, 1 / 60);
+      sim.stepShells(G, arsenal, 1 / 60);
+      sim.armChutes(G, arsenal);
+      if (!G.shells.length) sim.settleVolley(G, arsenal);
+    }
+    for (let frame = 0; frame < 5000 && sim.anyTankFalling(G); frame++) sim.fallTanks(G, 1 / 60);
     return outcome(before);
+  },
+  fall(c) {
+    world(c);
+    if (c.blast) sim.explode(G, arsenal, c.blast.x, c.blast.y, c.blast.wkey, G.tanks[c.blast.owner], null, null);
+    const events = sim.settleFalls(G, arsenal);
+    const seat = t => G.tanks.indexOf(t);
+    return {
+      tanks: G.tanks.map(t => ({ y: t.y, hp: t.hp, kills: t.kills || 0, lastHitBy: t.lastHitBy ?? null, chutes: t.isPlayer ? null : t.chutes || 0 })),
+      falls: events.filter(e => e.kind === 'fall').map(e => [seat(e.tank), e.dmg, seat(e.by || e.tank), e.chute, e.under]),
+      score: G.score, cash: G.cash, chutes: G.chutes,
+    };
   },
   field(c) {
     if (c.kind === 'terrain') {
@@ -220,6 +240,7 @@ const RUN = {
       t.ammo.shell = 99;
       sim.fireWeapon(G, arsenal, t, choice.wkey);
       for (let frame = 0; G.shells.length && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
+      sim.settleFalls(G, arsenal);
       const b = t.brk;
       steps.push({ wkey: choice.wkey, angle: choice.angle, power: choice.power, x: t.x, n: b.n, target: b.t, land: b.land });
     }
@@ -240,8 +261,7 @@ const RUN = {
   },
   settle(c) {
     world({ terrain: c.terrain, tanks: [{ kind: 'ai', x: c.x, y: c.y, hp: c.hp }] });
-    for (let i = 0; i < 5000 && sim.anyTankFalling(G); i++) sim.fallTanks(G, 1 / 60);
-    sim.fallTanks(G, 1 / 60);
+    sim.settleFalls(G, arsenal);
     return G.tanks[0].y;
   },
 };

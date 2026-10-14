@@ -249,6 +249,31 @@ export function drawGearIcon(cv: HTMLCanvasElement, g: Gear | undefined): void {
       c.fill();
       break;
     }
+    case 'parachute': { // a striped canopy on its lines over a crate
+      c.fillStyle = '#f4f1e8';
+      c.beginPath();
+      c.moveTo(cx - 14, cy - 2);
+      c.quadraticCurveTo(cx, cy - 22, cx + 14, cy - 2);
+      c.closePath();
+      c.fill();
+      c.fillStyle = '#ff7b39';
+      c.beginPath();
+      c.moveTo(cx - 5, cy - 2);
+      c.quadraticCurveTo(cx, cy - 18, cx + 5, cy - 2);
+      c.closePath();
+      c.fill();
+      c.strokeStyle = '#c9c2ae';
+      c.lineWidth = 1;
+      c.beginPath();
+      for (const dx of [-14, -5, 5, 14]) {
+        c.moveTo(cx + dx, cy - 2);
+        c.lineTo(cx, cy + 8);
+      }
+      c.stroke();
+      c.fillStyle = '#a8b08a';
+      c.fillRect(cx - 4, cy + 7, 8, 6);
+      break;
+    }
     default: // an unknown trick still gets a crate
       c.fillStyle = '#a8b08a';
       c.fillRect(cx - 8, cy - 8, 16, 16);

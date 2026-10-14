@@ -424,6 +424,11 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
     if ($carved) {
         room_terrain_changed($room);
     }
+    // A harmless burst (dmg 0) only carves: it touches no unit, so it spends
+    // no shield and credits nobody.
+    if ($dmg0 === 0) {
+        return;
+    }
     $ownerIdx = null;
     foreach ($room['tanks'] as $i => $o) {
         if ($o['seat'] === $tank['seat']) {

@@ -67,7 +67,7 @@ function outcome(before) {
     if (Math.abs(y - before[ix]) > 1e-9) { if (first === null) first = ix; last = ix; }
   });
   return {
-    tanks: G.tanks.map(t => ({ hp: t.hp, fuel: t.fuel })),
+    tanks: G.tanks.map(t => ({ hp: t.hp, fuel: t.fuel, lastHitBy: t.lastHitBy ?? null, dealt: !!t.dealt })),
     crater: first === null ? null : { x0: first, y: G.terrain.slice(first, last + 1) },
     score: G.score, cash: G.cash, shield: G.shield, laststand: G.laststand,
   };

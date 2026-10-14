@@ -93,7 +93,7 @@ function sv_outcome(array $before, array $room): array
     $tanks = [];
     $human = null;
     foreach ($room['tanks'] as $i => $t) {
-        $tanks[] = ['hp' => $t['hp'], 'fuel' => $t['fuel']];
+        $tanks[] = ['hp' => $t['hp'], 'fuel' => $t['fuel'], 'lastHitBy' => $t['lastHitBy'] ?? null, 'dealt' => !empty($t['dealt'])];
         if ($t['kind'] === 'human' && $human === null) {
             $human = $i;
         }
@@ -384,6 +384,13 @@ foreach ($weapons as $wkey => $def) {
             'tanks' => [$human(100), $drone(300, 100) + ['fuel' => 70]]]);
     }
 }
+// A harmless burst (dmg 0) carves and touches nobody: the shield stays, nobody is credited or blamed.
+$blast('harmless-next-to-a-shielded-human', array_replace($base, ['tanks' => [$drone(100), $human(300, 100) + ['shield' => true]], 'x' => 305, 'direct' => 1,
+    'ov' => ['dmg' => 0, 'radius' => 45]]));
+$blast('harmless-next-to-a-drone', array_replace($base, ['tanks' => [$human(100), $drone(300, 100), $drone(320, 100)], 'x' => 310, 'owner' => 0,
+    'ov' => ['dmg' => 0, 'radius' => 45]]));
+$blast('harmless-drone-on-a-drone', array_replace($base, ['tanks' => [$human(100), $drone(300, 100), $drone(320, 100)], 'x' => 320, 'owner' => 1, 'direct' => 2,
+    'ov' => ['dmg' => 0, 'radius' => 30]]));
 $blast('crater-clipped-at-left-edge', array_replace($base, ['tanks' => [$human(100), $drone(300)], 'x' => 4, 'y' => 400, 'wkey' => 'nuke']));
 $blast('crater-clipped-at-right-edge', array_replace($base, ['tanks' => [$human(100), $drone(300)], 'x' => 716, 'y' => 400, 'wkey' => 'nuke']));
 $blast('crater-floor-clamps-at-456', ['terrain' => ['flat' => 440], 'tanks' => [$human(100), $drone(300)], 'owner' => 0, 'wkey' => 'nuke', 'x' => 200, 'y' => 440]);

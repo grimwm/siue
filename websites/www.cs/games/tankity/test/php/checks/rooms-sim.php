@@ -42,6 +42,18 @@ $end = room_fly_arc($room, $events, $room['tanks'][0], $lance, 'lance', 0, 285.0
 // The arc hands its final impact back to the caller: [status, x, y, vx, vy, directIdx].
 $check('lance-pierces-to-next-tank', $end[0] === 'hit' && $end[5] === 2, json_encode([$end[0], $end[5]]));
 
+// A harmless burst (dmg 0) carves its crater and touches no unit: no hit, no
+// shield spent, nobody credited or blamed.
+$room = $flatRoom([$tank(0, 'ai', 100.0, 100), $tank(1, 'human', 300.0, 100), $tank(2, 'ai', 330.0, 100)]);
+$room['shield'][1] = true;
+$before = $room['terrain'];
+$events = [];
+room_explode($room, $events, $room['tanks'][0], 'shell', 310.0, 395.0, 1, ['dmg' => 0, 'radius' => 40]);
+$check('harmless-blast-no-events', $events === [], json_encode($events));
+$check('harmless-blast-keeps-shield-and-armor', $room['shield'][1] === true && $room['tanks'][1]['hp'] === 100 && $room['tanks'][2]['hp'] === 100);
+$check('harmless-blast-credits-nobody', !isset($room['tanks'][1]['lastHitBy']) && !isset($room['tanks'][2]['lastHitBy']) && empty($room['tanks'][0]['dealt']));
+$check('harmless-blast-still-carves', $room['terrain'] !== $before);
+
 // Hit boxes follow the drawn units, and a shell is tested along its whole
 // step: a fast shell crossing a drone's body in one step still hits it, and
 // one passing under a drone (where the old ground-level circle sat) does not.

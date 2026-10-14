@@ -673,12 +673,16 @@ export interface BlastOverride {
 export function explode(world: World, arsenal: Arsenal, x: number, y: number, wkey: string, owner: Tank,
   direct: Tank | null, ov: BlastOverride | null): Blast {
   const w = arsenal.weapons[wkey]!;
-  const dmg0 = (ov && ov.dmg) || w.dmg;
-  const r = (ov && ov.radius) || w.radius;
+  // An override's 0 is a real 0 (a harmless burst), as server/sim.php's isset() reads it.
+  const dmg0 = ov && ov.dmg !== undefined ? ov.dmg : w.dmg;
+  const r = ov && ov.radius !== undefined ? ov.radius : w.radius;
   const gfx = (ov && ov.gfx) || w.gfx || {};
   brkLand(owner, x);
   carveCrater(world.terrain, x, y, r, H - 4);
   const blast: Blast = { x, y, r, wkey, fx: (ov && ov.fx) || wkey, shake: gfx.shake || 0.5, owner, events: [] };
+  // A harmless burst (dmg 0) only carves: it touches no unit, so it spends no
+  // shield and credits nobody.
+  if (dmg0 === 0) return blast;
   for (const t of world.tanks) {
     if (t.hp <= 0) continue;
     // Distance from the unit's body (its hit box centre), drone or tank.

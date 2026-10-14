@@ -3,5 +3,5 @@
   // fetch, timers and clock as arguments). Modules that need browser types are
   // in src/tsconfig.dom.json. See games/_kit/README.md.
   "extends": "../_kit/build/tsconfig.base.json",
-  "files": ["src/detmath.ts", "src/sim.ts", "src/field.ts", "src/scenery.ts", "src/ghosts.ts", "src/rotate-hint.ts", "src/ai.ts", "src/ai-measure.ts", "src/difficulty.ts", "src/initials.ts", "src/net.ts", "src/input.ts", "src/preview.ts", "src/replay.ts", "src/flow.ts", "src/weapon-label.ts", "src/armor.ts", "src/solo.ts", "src/solo-log.ts", "src/solo-play.ts", "src/solo-file.ts", "src/standings.ts"]
+  "files": ["src/detmath.ts", "src/sim.ts", "src/field.ts", "src/scenery.ts", "src/ghosts.ts", "src/rotate-hint.ts", "src/ai.ts", "src/ai-measure.ts", "src/difficulty.ts", "src/initials.ts", "src/net.ts", "src/input.ts", "src/preview.ts", "src/replay.ts", "src/flow.ts", "src/weapon-label.ts", "src/armor.ts", "src/local-board.ts", "src/solo.ts", "src/solo-log.ts", "src/solo-play.ts", "src/solo-file.ts", "src/standings.ts"]
 }

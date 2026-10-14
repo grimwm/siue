@@ -142,12 +142,21 @@ export interface ShopRow {
   price: number;
   effect?: string;
 }
+/* What a drop costs and when a parachute opens (game.yaml arsenal.fall). */
+export interface FallRules {
+  freePx: number; // pixels a unit drops for free
+  perPx: number; // armor lost per pixel past freePx, rounded down
+  chuteOver: number; // a parachute opens only on a fall costing more than this
+  aiRound: number; // first round each drone carries a parachute
+}
+export const FALL_RULES: Readonly<FallRules> = Object.freeze({ freePx: 10, perPx: 0.5, chuteOver: 5, aiRound: 3 });
 /* The arsenal as the sim and the shop read it, built from game.json's arsenal section. */
 export interface Arsenal {
   weapons: Readonly<Record<string, Readonly<Weapon>>>;
   order: readonly string[];
   shop: readonly Readonly<ShopRow>[];
   gear: Readonly<Record<string, Readonly<Gear>>>;
+  fall: Readonly<FallRules>;
 }
 /* Shells left per weapon; the player's gun and the Shell itself are endless (Infinity). */
 export type Ammo = Record<string, number>;
@@ -170,6 +179,10 @@ export interface Tank {
   dealt?: boolean; // it hurt someone since its last turn
   lastHitBy?: number; // index in world.tanks of whoever last damaged this unit
   kills?: number; // units this drone has wrecked this round
+  chutes?: number; // a drone's parachutes (the player's are world.chutes)
+  fellBy?: number; // index in world.tanks of whoever last carved the ground from under this unit
+  fallFrom?: number; // the height a fall in progress started from
+  chute?: boolean; // a parachute is open over this unit
 }
 /* A drone's memory of its last shot, for bracketing a target in. */
 export interface Bracket {
@@ -231,6 +244,7 @@ export interface World {
   bunker: number;
   laststand: boolean;
   jammer: number;
+  chutes?: number; // the player's parachutes
   difficulty?: Difficulty; // the drones' aim this match; missing means normal
 }
 export interface HitBox {
@@ -243,7 +257,7 @@ export interface HitBox {
 /* ---------- the arsenal ---------- */
 /* Builds the read-only arsenal from game.json's arsenal section (or the baked
    fallback). Null when it holds no usable ammo row. */
-export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[] } | null | undefined): Arsenal | null {
+export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[]; fall?: Partial<FallRules> } | null | undefined): Arsenal | null {
   const w: Record<string, Weapon> = {};
   const order: string[] = [];
   const shop: ShopRow[] = [];
@@ -281,7 +295,8 @@ export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[] } | null | u
   for (const k of Object.keys(gear)) Object.freeze(gear[k]);
   Object.freeze(order);
   Object.freeze(shop);
-  return { weapons: w, order, shop, gear };
+  const fall = Object.freeze({ ...FALL_RULES, ...((data && data.fall) || {}) });
+  return { weapons: w, order, shop, gear, fall };
 }
 /* Drone magazine from the data file: shells the battery may load by round. */
 export function droneRack(arsenal: Arsenal, round: number): Ammo {
@@ -292,6 +307,10 @@ export function droneRack(arsenal: Arsenal, round: number): Ammo {
     rack[k] = (a && a.ai && round >= (a.aiRound || 99)) ? 2 : 0;
   }
   return rack;
+}
+/* Parachutes a drone musters with: one from the rules' round on. */
+export function droneChutes(arsenal: Pick<Arsenal, 'fall'>, round: number): number {
+  return round >= arsenal.fall.aiRound ? 1 : 0;
 }
 
 /* ---------- terrain ---------- */
@@ -677,7 +696,9 @@ export function explode(world: World, arsenal: Arsenal, x: number, y: number, wk
   const r = (ov && ov.radius) || w.radius;
   const gfx = (ov && ov.gfx) || w.gfx || {};
   brkLand(owner, x);
+  const was = world.tanks.map(t => surfY(world.terrain, t.x));
   carveCrater(world.terrain, x, y, r, H - 4);
+  markFalls(world, owner, was);
   const blast: Blast = { x, y, r, wkey, fx: (ov && ov.fx) || wkey, shake: gfx.shake || 0.5, owner, events: [] };
   for (const t of world.tanks) {
     if (t.hp <= 0) continue;
@@ -701,19 +722,34 @@ export function explode(world: World, arsenal: Arsenal, x: number, y: number, wk
       t.fuel = Math.max(0, (t.fuel || 0) - (w.drain || 0));
       blast.events.push({ kind: 'arc', tank: t });
     }
-    if (owner.isPlayer && !t.isPlayer) {
-      world.score += dmg * 2;
-      world.cash += dmg * 2;
-    }
-    if (t !== owner) {
-      t.lastHitBy = world.tanks.indexOf(owner); // an avenger and the shooter's dry spell read these
-      owner.dealt = true;
-      if (t.hp <= 0) owner.kills = (owner.kills || 0) + 1;
-    }
+    credit(world, t, owner, dmg);
     if (t.hp <= 0) blast.events.push(wreck(world, arsenal, t, owner));
     else blast.events.push({ kind: 'wound', tank: t, dmg, hp: t.hp, direct: !!direct });
   }
   return blast;
+}
+/* What damage t took from owner's shot pays: the player's shots at drones
+   score and earn twice the damage; any shot at someone else marks the victim's
+   last hit and the shooter's dealt and kills. */
+function credit(world: World, t: Tank, owner: Tank, dmg: number): void {
+  if (owner.isPlayer && !t.isPlayer) {
+    world.score += dmg * 2;
+    world.cash += dmg * 2;
+  }
+  if (t !== owner) {
+    t.lastHitBy = world.tanks.indexOf(owner); // an avenger and the shooter's dry spell read these
+    owner.dealt = true;
+    if (t.hp <= 0) owner.kills = (owner.kills || 0) + 1;
+  }
+}
+/* A blast that lowered the ground under a standing unit owns its fall:
+   `was` is the ground under each unit before the crater. */
+function markFalls(world: World, owner: Tank, was: readonly number[]): void {
+  world.tanks.forEach((t, i) => {
+    if (t.hp <= 0) return;
+    const now = surfY(world.terrain, t.x);
+    if (now > was[i]! && now > t.y + 0.5) t.fellBy = world.tanks.indexOf(owner);
+  });
 }
 /* A unit's wreck: only a kill the player's own shot made pays the bonus, never
    one a rival drone made. */
@@ -884,31 +920,166 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
 }
 
 /* ---------- tanks falling ---------- */
-/* Tanks left hanging over a crater fall under gravity every frame until they
-   land; ground that rose (a new round, fresh hills) takes them straight up. */
+/* Units left hanging over a crater drop straight down, never sideways, until
+   they rest on the ground or on a unit beneath them; ground that rose (a new
+   round, fresh hills) takes them straight up. A drop costs armor by its
+   height at rest (fallDamage), credited to whoever carved the ground away.
+   settleFalls lands every unit at once, as the room server does
+   (server/sim.php room_settle_tanks); fallTanks animates the same landings
+   frame by frame for the solo game and the demo. */
 export const FALL_GRAVITY = 700;
-/* Returns the tanks that touched down this frame. */
-export function fallTanks(world: Pick<World, 'tanks' | 'terrain'>, dt: number): Tank[] {
+/** px/s a unit drifts down under an open parachute. */
+export const CHUTE_SPEED = 60;
+/** The armor a drop of `drop` px costs: nothing for the first freePx, then
+ *  perPx a pixel, rounded down. */
+export function fallDamage(drop: number, rules: Readonly<FallRules>): number {
+  return drop <= rules.freePx ? 0 : Math.floor(rules.perPx * (drop - rules.freePx));
+}
+/** The top of a unit: what another unit lands on. */
+function unitTop(t: Pick<Tank, 'isPlayer' | 'human' | 'x' | 'y'>): number {
+  const b = unitHitBox(t);
+  return b.cy - b.ry;
+}
+/** The live unit t would land on, falling straight down from where it is, or null. */
+function unitBeneath(tanks: readonly Tank[], terrain: readonly number[], t: Tank): Tank | null {
+  let best: Tank | null = null, top = surfY(terrain, t.x);
+  for (const u of tanks) {
+    if (u === t || u.hp <= 0) continue;
+    if (Math.abs(u.x - t.x) >= unitHitBox(u).rx + unitHitBox(t).rx) continue;
+    const ut = unitTop(u);
+    if (ut >= t.y - 0.5 && ut < top) { top = ut; best = u; }
+  }
+  return best;
+}
+/** Where t comes to rest falling straight down: the ground, or the top of a
+ *  live unit beneath it, whichever is higher. */
+export function restY(tanks: readonly Tank[], terrain: readonly number[], t: Tank): number {
+  const u = unitBeneath(tanks, terrain, t);
+  return u ? unitTop(u) : surfY(terrain, t.x);
+}
+/* What a landing did, in order. */
+export type FallEvent =
+  /** The unit took dmg (0 when its parachute opened) and has hp left; under: it was landed on. by: whoever dug, null for nobody. */
+  | { kind: 'fall'; tank: Tank; dmg: number; hp: number; chute: boolean; under: boolean; by: Tank | null }
+  /** The fall wrecked it; a player's last stand blew up the wreck. */
+  | { kind: 'wreck'; tank: Tank; by: Tank | null; lastStand: Blast | null };
+/* Parachutes t holds: the player's are the world's. */
+function chutesOf(world: Pick<World, 'chutes'>, t: Tank): number {
+  return (t.isPlayer ? world.chutes : t.chutes) || 0;
+}
+function spendChute(world: Pick<World, 'chutes'>, t: Tank): void {
+  if (t.isPlayer) world.chutes = chutesOf(world, t) - 1;
+  else t.chutes = chutesOf(world, t) - 1;
+}
+/* Fall damage dmg lands on t: the bunker halves it as it halves a hit; a
+   shield never stops a fall. */
+function fallHurt(world: World, arsenal: Arsenal, t: Tank, raw: number, by: Tank | null, under: boolean, events: FallEvent[]): void {
+  let dmg = raw;
+  if (t.isPlayer && (world.bunker || 0) > 0) dmg = Math.max(1, Math.round(dmg / 2));
+  t.hp = Math.max(0, t.hp - dmg);
+  if (by) credit(world, t, by, dmg);
+  events.push({ kind: 'fall', tank: t, dmg, hp: t.hp, chute: false, under, by });
+  if (t.hp <= 0) {
+    const w = wreck(world, arsenal, t, by || t);
+    events.push({ kind: 'wreck', tank: t, by, lastStand: w.kind === 'wreck' ? w.lastStand : null });
+  }
+}
+/* t has come to rest at its landing height after dropping `drop` px onto
+   `onto` (null: the ground). Spends a parachute on a fall costing more than
+   chuteOver; the unit beneath takes the full fall either way. True when a
+   parachute opened. */
+function land(world: World, arsenal: Arsenal, t: Tank, drop: number, onto: Tank | null, events: FallEvent[]): boolean {
+  const raw = fallDamage(drop, arsenal.fall);
+  const i = t.fellBy;
+  t.fellBy = undefined;
+  if (raw <= 0) return false;
+  const digger = i === undefined ? null : world.tanks[i] || null;
+  const by = digger === t ? null : digger;
+  const chute = raw > arsenal.fall.chuteOver && chutesOf(world, t) > 0;
+  if (chute) {
+    spendChute(world, t);
+    events.push({ kind: 'fall', tank: t, dmg: 0, hp: t.hp, chute: true, under: false, by });
+  } else {
+    fallHurt(world, arsenal, t, raw, by, false, events);
+  }
+  if (onto && onto.hp > 0) fallHurt(world, arsenal, onto, raw, onto === digger ? null : digger, true, events);
+  return chute;
+}
+/* The live units, lowest first (ties in seat order): a stack lands from the bottom up. */
+function lowestFirst(tanks: readonly Tank[]): Tank[] {
+  return tanks.filter(t => t.hp > 0)
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => (b.t.y - a.t.y) || (a.i - b.i))
+    .map(o => o.t);
+}
+/* Lands every hanging unit at once and returns what the landings did. A last
+   stand's blast can open more pits, so it settles until nothing moves. A unit
+   that landed keeps `chute` (its parachute opened) until it lands again. */
+export function settleFalls(world: World, arsenal: Arsenal): FallEvent[] {
+  const events: FallEvent[] = [];
+  for (let pass = 0; pass < 8; pass++) {
+    let moved = false;
+    for (const t of lowestFirst(world.tanks)) {
+      if (t.hp <= 0) continue;
+      const onto = unitBeneath(world.tanks, world.terrain, t);
+      const rest = onto ? unitTop(onto) : surfY(world.terrain, t.x);
+      t.vy = 0;
+      t.fallFrom = undefined;
+      if (Math.abs(rest - t.y) <= 0.5) { t.y = rest; t.fellBy = undefined; continue; }
+      const drop = rest - t.y;
+      t.y = rest;
+      t.chute = false;
+      moved = true;
+      // The open parachute stays on the unit until its next landing, so a
+      // room's snapshot can show it floating down.
+      if (drop > 0) t.chute = land(world, arsenal, t, drop, onto, events);
+      else t.fellBy = undefined;
+    }
+    if (!moved) break;
+  }
+  return events;
+}
+/* One frame of falling. Returns the units that touched down. With the
+   arsenal, a landing costs armor and spends parachutes (events collects what
+   happened); without it the units only move, as in a room, whose server has
+   already settled the falls. A unit holding a parachute for a fall that will
+   cost more than chuteOver drifts down at CHUTE_SPEED under it (in a room the
+   snapshot says whose chute is open). */
+export function fallTanks(world: World | Pick<World, 'tanks' | 'terrain'>, dt: number, arsenal?: Arsenal, events?: FallEvent[]): Tank[] {
   const landed: Tank[] = [];
-  for (const t of world.tanks) {
+  for (const t of lowestFirst(world.tanks)) {
     if (t.hp <= 0) continue;
-    const gy = surfY(world.terrain, t.x);
+    const onto = unitBeneath(world.tanks, world.terrain, t);
+    const gy = onto ? unitTop(onto) : surfY(world.terrain, t.x);
     if (t.y < gy - 0.5) {
-      t.vy = (t.vy || 0) + FALL_GRAVITY * dt;
+      if (t.fallFrom === undefined) {
+        t.fallFrom = t.y;
+        if (arsenal) {
+          t.chute = fallDamage(gy - t.y, arsenal.fall) > arsenal.fall.chuteOver && chutesOf(world as World, t) > 0;
+        }
+      }
+      t.vy = t.chute ? CHUTE_SPEED : (t.vy || 0) + FALL_GRAVITY * dt;
       t.y = Math.min(gy, t.y + t.vy * dt);
       if (t.y >= gy) {
+        const drop = gy - t.fallFrom;
         t.vy = 0;
+        t.chute = false;
+        t.fallFrom = undefined;
         landed.push(t);
+        if (arsenal) land(world as World, arsenal, t, drop, onto, events || []);
       }
     } else {
       t.y = gy;
       t.vy = 0;
+      t.chute = false;
+      t.fallFrom = undefined;
+      t.fellBy = undefined;
     }
   }
   return landed;
 }
 export function anyTankFalling(world: Pick<World, 'tanks' | 'terrain'>): boolean {
-  return world.tanks.some(t => t.hp > 0 && t.y < surfY(world.terrain, t.x) - 0.5);
+  return world.tanks.some(t => t.hp > 0 && t.y < restY(world.tanks, world.terrain, t) - 0.5);
 }
 
 /* ---------- drone bracketing memory (the AI proper is in ai.ts) ---------- */

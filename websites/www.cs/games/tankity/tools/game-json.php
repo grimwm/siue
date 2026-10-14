@@ -390,7 +390,7 @@ function tankity_yaml_scalar(string $t): mixed
 /* ---------------------------------------------------------------- schema */
 
 const TANKITY_AMMO_EFFECTS = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller'];
-const TANKITY_GEAR_EFFECTS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand'];
+const TANKITY_GEAR_EFFECTS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand', 'parachute'];
 const TANKITY_PAINTERS = ['disc', 'beam', 'spark', 'ball'];
 const TANKITY_SFX_EVENTS = ['move', 'click', 'launch', 'boom', 'clank', 'thud', 'warn', 'cash', 'bark', 'win', 'lose', 'fanfare'];
 const TANKITY_AUDIO_EXT = ['mp3', 'ogg', 'm4a', 'wav'];
@@ -649,12 +649,13 @@ function tankity_config_build(mixed $doc, array $lines, string $gameDir): array
 
 function tankity_build_arsenal(TankityCheck $c, mixed $a): array
 {
-    $res = ['ammo' => [], 'gear' => []];
+    $res = ['ammo' => [], 'gear' => [], 'fall' => null];
     $a = $c->map($a, 'arsenal');
     if ($a === null) {
         return $res;
     }
-    $c->allow($a, ['ammo', 'gear'], 'arsenal');
+    $c->allow($a, ['ammo', 'gear', 'fall'], 'arsenal');
+    $res['fall'] = tankity_build_fall($c, $a['fall'] ?? null);
     $seen = [];
     $ammo = $c->lst($a['ammo'] ?? null, 'arsenal.ammo') ?? [];
     foreach ($ammo as $i => $row) {
@@ -758,6 +759,23 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         $res['gear'][] = tankity_ordered($o, ['key', 'name', 'cat', 'price', 'n', 'effect', 'minRound', 'dmg', 'radius', 'note']);
     }
     return $res;
+}
+
+/* arsenal.fall: what a drop costs and when a parachute opens. */
+function tankity_build_fall(TankityCheck $c, mixed $f): ?array
+{
+    $f = $c->map($f, 'arsenal.fall');
+    if ($f === null) {
+        return null;
+    }
+    $p = 'arsenal.fall';
+    $c->allow($f, ['freePx', 'perPx', 'chuteOver', 'aiRound'], $p);
+    return [
+        'freePx' => $c->num($f, 'freePx', $p, 0, 460),
+        'perPx' => $c->num($f, 'perPx', $p, 0, 10),
+        'chuteOver' => $c->int($f, 'chuteOver', $p, 0, 500),
+        'aiRound' => $c->int($f, 'aiRound', $p, 1, 99),
+    ];
 }
 
 function tankity_build_gfx(TankityCheck $c, mixed $g, string $p): ?array

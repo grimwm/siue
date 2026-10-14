@@ -8,7 +8,7 @@ import { aiChoose, pickTactic } from './ai.ts';
 import type { AimChoice } from './ai.ts';
 import { carryArmor, fitPlates, maxArmor, repairPacksWanted, repairRestores } from './armor.ts';
 import { SOLO_STEP, WATCH_TURNS } from './flow.ts';
-import { TUNE, clamp, droneRack, fieldWidthOk, gauss, genTerrain, hashSeed, mulberry32, spawnSpots, surfY } from './sim.ts';
+import { TUNE, clamp, droneChutes, droneRack, fieldWidthOk, gauss, genTerrain, hashSeed, mulberry32, restY, spawnSpots, surfY } from './sim.ts';
 import type { Arsenal, Cloud, Difficulty, Hills, ShopRow, Tank, World } from './sim.ts';
 
 export { SOLO_STEP };
@@ -39,6 +39,8 @@ export interface SoloState extends World {
   armor: number;
   plate: number;
   fuelBank: number;
+  /** The player's parachutes: they stack, and one opens on a hard fall. */
+  chutes: number;
 }
 
 /** A new match at a difficulty and a width: the stake, three lives, full armor, and the pre-match hills (drawn, never fought on). */
@@ -66,6 +68,7 @@ export function soloDeal(G: SoloState, arsenal: Arsenal, seed: string, difficult
   G.jammer = 0;
   G.bunker = 0;
   G.laststand = false;
+  G.chutes = 0;
   G.watchTurns = 0;
   const g = genTerrain(G.rng, G.w);
   G.terrain = g.terrain;
@@ -97,6 +100,7 @@ export function soloMuster(G: SoloState, arsenal: Arsenal): void {
       id: f.id, isPlayer: false, color: f.color,
       x: order[i + 1]!, y: 0, angle: 62, power: 55, hp: armor, maxHp: armor, fuel: 0,
       ammo: droneRack(arsenal, G.round),
+      chutes: droneChutes(arsenal, G.round),
       s: G.tactics[f.id] || (G.tactics[f.id] = pickTactic(G.rng)),
     });
   });
@@ -109,13 +113,15 @@ export function soloMuster(G: SoloState, arsenal: Arsenal): void {
   G.shells = [];
 }
 
-/** Standing tanks sit exactly on the ground once the falls are over (fallTanks
- *  stops within half a pixel), so a settled round starts from exact heights. */
+/** Standing tanks sit exactly where they rest (the ground, or a unit they
+ *  landed on) once the falls are over (fallTanks stops within half a pixel),
+ *  so a settled round starts from exact heights. */
 export function snapTanks(G: Pick<SoloState, 'tanks' | 'terrain'>): void {
   for (const t of G.tanks) {
     if (t.hp <= 0) continue;
-    t.y = surfY(G.terrain, t.x);
+    t.y = restY(G.tanks, G.terrain, t);
     t.vy = 0;
+    t.chute = false;
   }
 }
 
@@ -223,6 +229,7 @@ export function soloBuy(G: SoloState, row: ShopRow, qtyIn: number): BuyResult {
     case 'jammer': G.jammer = Math.max(G.jammer, n); break;
     case 'bunker': G.bunker = Math.max(G.bunker, n); break;
     case 'laststand': G.laststand = true; break;
+    case 'parachute': G.chutes += n; break;
   }
   return { ok: true, qty, total };
 }

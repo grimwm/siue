@@ -11,7 +11,7 @@ It is a `play` game: the folder is a complete page (`index.html`) with its own P
 - `src/engine.ts`, `src/audio.ts`, `src/ui.ts`: the typed modules (below).
 - `dist/`: the esbuild bundle (`main.js`, `main.js.map`), checked in and served as it is: the host has no Node.
 - `build.json`, `tsconfig.json`, `src/tsconfig.dom.json`: the build and its two type programs.
-- `test/`: the unit and static suites on `node:test`; `test.sh` runs them with the build checks.
+- `test/`: the unit and static suites, TypeScript on `node:test`; `tsconfig.test.json` type-checks them, so `build.mjs crete --check` fails on a type error in a test. `test.sh` runs them with the build checks.
 - `tools/install-files.php`: Crete's config for `../_kit/php/install-core.php` (manifest, service worker, install block, `?v=` versions).
 - `metadata.yaml`: the Games-page card and install colours.
 
@@ -35,7 +35,7 @@ php tools/install-files.php                # then rewrite the ?v= versions and s
 | `ui` | drawing the board, HUD and log, choosing what the ending and inventory say; keys and clicks | DOM lib |
 | `ui/end.tsx`, `ui/inventory.tsx`, `ui/title.tsx` | the ending card, the inventory panel and the title card Quit returns to, drawn with the kit's `Dialog`, `Panel`, `Button` and `KeyChip`; `ui.ts` hands them a finished view | DOM lib |
 
-The split follows one seam: what the game *is* versus what the player *sees*. The engine never names the page. Everything it shows or plays goes out through `Hooks` (`say`, `sfx`, `render`, `showEnd`), and its timers arrive as an argument, so `test/engine.test.mjs` plays whole runs against recording hooks and a manual clock. `ui.ts` and `audio.ts` are the other ends of those hooks. `ui.ts` imports only *types* from the engine and takes what it needs at run time as arguments.
+The split follows one seam: what the game *is* versus what the player *sees*. The engine never names the page. Everything it shows or plays goes out through `Hooks` (`say`, `sfx`, `render`, `showEnd`), and its timers arrive as an argument, so `test/engine.test.ts` plays whole runs against recording hooks and a manual clock. `ui.ts` and `audio.ts` are the other ends of those hooks. `ui.ts` imports only *types* from the engine and takes what it needs at run time as arguments.
 
 - `dist/` is generated: edit `src/`, rebuild, rerun `install-files.php`, commit all of it. `make test` runs `npm ci` and `--check`, and `deploy.sh` refuses a stale `dist/`.
 - `tsconfig.json` extends the kit's base, is strict and lists the DOM-free modules (`engine`, `grid`, `bots`), which compile without page types, so it cannot reach for `document`. `src/tsconfig.dom.json` extends it with the DOM lib for `audio.ts`, `ui.ts` and `main.ts`. Imports carry their `.ts` extension.
@@ -59,10 +59,10 @@ starts it fewer than 8 steps from the player (barriers open). The route the bots
 walk, and the Hint, is the fewest-step trip to the exit, fetching a spare fuse on
 the way when that is shorter. The play-through
 (T) is the strategist, so it wins any run it starts from the beginning.
-`test/maze-sweep.test.mjs` holds the budgets over 300 seeds, and 10,000 nightly:
+`test/maze-sweep.test.ts` holds the budgets over 300 seeds, and 10,000 nightly:
 the fallback on at most 1% of seeds, and at most 6 candidates per seed on average
 (20 at p95), which keeps generation to a few milliseconds.
 
 ## Tests
 
-From this folder: `./test.sh` (the build check, `install-files.php --check`, then `node --test 'test/*.test.mjs'`). Run `npm ci` in `games/` first. Browser specs: `crete-play`, `games-hub` and `games-pwa` in `../../tests/e2e`.
+From this folder: `./test.sh` (the build check, `install-files.php --check`, then `node --test` over `test/*.test.ts`, which fails when it finds none). Run `npm ci` in `games/` first. Browser specs: `crete-play`, `games-hub` and `games-pwa` in `../../tests/e2e`.

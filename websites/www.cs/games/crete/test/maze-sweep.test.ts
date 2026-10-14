@@ -9,10 +9,10 @@ import { generateRun, spawnDistance, MIN_SPAWN, EXIT } from '../src/engine.ts';
 const SEEDS = Number(process.env.CRETE_SWEEP_SEEDS ?? (process.env.GITHUB_EVENT_NAME === 'schedule' ? 10_000 : 300));
 
 test(`over ${SEEDS} seeds every maze starts the creature far, the fallback fires on at most 1% and a seed draws few candidates`, t => {
-  const times = [];
-  const attempts = [];
-  const fellBack = [];
-  const unfair = [];
+  const times: number[] = [];
+  const attempts: number[] = [];
+  const fellBack: string[] = [];
+  const unfair: string[] = [];
   for (let i = 0; i < SEEDS; i++) {
     const seed = `sweep-${i}`;
     const t0 = performance.now();
@@ -27,6 +27,7 @@ test(`over ${SEEDS} seeds every maze starts the creature far, the fallback fires
   attempts.sort((a, b) => a - b);
   const p95 = times[Math.floor(SEEDS * 0.95)];
   const p95Attempt = attempts[Math.floor(SEEDS * 0.95)];
+  assert.ok(p95 !== undefined && p95Attempt !== undefined);
   const meanAttempt = attempts.reduce((s, a) => s + a, 0) / SEEDS;
   t.diagnostic(`candidates: mean ${meanAttempt.toFixed(2)}, p95 ${p95Attempt}; time p95 ${p95.toFixed(1)} ms`);
   assert.deepEqual(unfair, [], 'seeds whose maze starts the creature near, or lacks loot');

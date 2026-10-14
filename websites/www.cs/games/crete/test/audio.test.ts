@@ -4,14 +4,22 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createAudio } from '../src/audio.ts';
 import { createAudioCore } from '../../_kit/audio/core.ts';
-import { fakeAudioContext } from '../../_kit/test/audio.ts';
+import { asAudioContext, fakeAudioContext, gainAt, nodeOf, nodesOf } from '../../_kit/test/audio.ts';
+import type { FakeContext, ParamCall } from '../../_kit/test/audio.ts';
+import type { SfxName } from '../src/engine.ts';
 
-const EVENTS = ['move', 'bump', 'pickup', 'page', 'open', 'bash', 'hurt', 'win', 'lose', 'heart', 'hint', 'answerOn', 'answerOff'];
-const rig = (state) => {
+const EVENTS: SfxName[] = ['move', 'bump', 'pickup', 'page', 'open', 'bash', 'hurt', 'win', 'lose', 'heart', 'hint', 'answerOn', 'answerOff'];
+const rig = (state?: string) => {
   const ctx = fakeAudioContext(state);
-  return { ctx, audio: createAudio(createAudioCore({ createContext: () => ctx })) };
+  return { ctx, audio: createAudio(createAudioCore({ createContext: () => asAudioContext(ctx) })) };
 };
-const oscs = ctx => ctx.nodes.filter(n => n.kind === 'osc');
+const oscs = (ctx: FakeContext) => nodesOf(ctx, 'osc');
+/** The first recorded call on a param; the test fails when there is none. */
+const firstCall = (calls: ParamCall[]): ParamCall => {
+  const call = calls[0];
+  assert.ok(call, 'a recorded call');
+  return call;
+};
 
 test('every event is voiced through the sfx bus', () => {
   const { ctx, audio } = rig();
@@ -20,23 +28,23 @@ test('every event is voiced through the sfx bus', () => {
     audio.sfx(name);
     assert.ok(oscs(ctx).length > before, name);
   }
-  const sfxBus = ctx.nodes.filter(n => n.kind === 'gain')[0];
-  assert.ok(oscs(ctx).every(o => o.to[0].to[0] === sfxBus));
+  const sfxBus = nodeOf(ctx, 'gain', 0);
+  assert.ok(oscs(ctx).every(o => gainAt(o.to, 0).to[0] === sfxBus));
 });
 
 test('the win is four rising square notes a tenth of a second apart', () => {
   const { ctx, audio } = rig();
   audio.sfx('win');
   const notes = oscs(ctx);
-  assert.deepEqual(notes.map(o => o.frequency.calls[0][1]), [523, 659, 784, 1046]);
-  assert.deepEqual(notes.map(o => +(o.started - 10).toFixed(6)), [0, 0.1, 0.2, 0.3]);
+  assert.deepEqual(notes.map(o => firstCall(o.frequency.calls)[1]), [523, 659, 784, 1046]);
+  assert.deepEqual(notes.map(o => { assert.ok(o.started !== null, 'note started'); return +(o.started - 10).toFixed(6); }), [0, 0.1, 0.2, 0.3]);
   assert.ok(notes.every(o => o.type === 'square'));
 });
 
 test('a note with no volume of its own plays at 0.04', () => {
   const { ctx, audio } = rig();
   audio.sfx('move');
-  assert.equal(oscs(ctx)[0].to[0].gain.calls[0][1], 0.04);
+  assert.equal(firstCall(gainAt(nodeOf(ctx, 'osc').to, 0).gain.calls)[1], 0.04);
 });
 
 test('muting silences every event; unmuting brings them back', () => {

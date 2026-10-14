@@ -241,9 +241,37 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
             $events[] = ['t' => 'fizzle', 'by' => $tank['seat'], 'w' => $wkey];
         }
         room_stamp($events, $mark, $res[7]);
+        if ($res[0] === 'hit' && ($w['effect'] ?? 'shot') === 'hop') {
+            room_fire_hops($room, $events, $seatIdx, $w, $wkey, $res, $res[7]);
+        }
     }
     unset($tank);
     room_pace_stamp($room, $events, $firstEvent);
+}
+/* A hop weapon's later warheads, after its first burst $res at $t seconds:
+// each leaps on from the last burst (room_hop_vel), one pixel up, and bursts
+// with subDmg/subRadius, until `hops` warheads have burst or one leaves the
+// field. Each is a 'shot' event of its own from the moment the last burst. */
+function room_fire_hops(array &$room, array &$events, int $seatIdx, array $w, string $wkey, array $res, float $t): void
+{
+    $sub = ['dmg' => (int) ($w['subDmg'] ?? $w['dmg']), 'radius' => (int) ($w['subRadius'] ?? $w['radius'])];
+    for ($hop = 1; $hop < (int) ($w['hops'] ?? 1) && $res[0] === 'hit'; $hop++) {
+        $tank = $room['tanks'][$seatIdx];
+        [$vx, $vy] = room_hop_vel($res[3], $res[4], (float) ($w['hopKeep'] ?? 0.5));
+        $res = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $res[1], $res[2] - 1.0, $vx, $vy, 0.0, false, $sub, $t, $res[5]);
+        $ev = room_shot_event($tank, $wkey, $t, $res, $res[0] === 'hit' ? (float) $sub['radius'] : 0.0);
+        $ev['at'] = round($t, 3);
+        $events[] = $ev;
+        $mark = count($events);
+        if ($res[0] === 'hit') {
+            room_brk_land($room['tanks'][$seatIdx], $res[1]);
+            room_explode($room, $events, $tank, $wkey, $res[1], $res[2], $res[5], $sub);
+        } else {
+            $events[] = ['t' => 'fizzle', 'by' => $tank['seat'], 'w' => $wkey];
+        }
+        $t += $res[7];
+        room_stamp($events, $mark, $t);
+    }
 }
 /* ---------- room state machine ---------- */
 function room_new(string $code, string $initials): array

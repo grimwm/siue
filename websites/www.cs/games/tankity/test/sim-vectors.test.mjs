@@ -129,6 +129,11 @@ const RUN = {
     return sim.splitShell({ x: 0, y: 0, vx: c.vx, vy: c.vy, wkey: 'shell', owner: null }, { split: c.n, fan: c.fan })
       .map(s => [s.vx, s.vy]);
   },
+  'hop-vel'(c) {
+    const s = { x: 0, y: 0, vx: c.vx, vy: c.vy, wkey: 'shell', owner: null, order: [0] };
+    const next = sim.hopShell(s, { hops: 3, hopKeep: c.keep, subDmg: 1, subRadius: 1 }, 0, 0, 1);
+    return [next.vx, next.vy];
+  },
   blast(c) {
     world(c);
     const before = G.terrain.slice();
@@ -269,7 +274,7 @@ function diff(want, got, at, out, exact = false, tol = TOL) {
   }
   return out;
 }
-const clip = (v, n) => { const s = JSON.stringify(v); return s.length > n ? s.slice(0, n) + '...' : s; };
+const clip = (v, n) => { const s = JSON.stringify(v) ?? String(v); return s.length > n ? s.slice(0, n) + '...' : s; };
 
 let failed = 0, known = 0, total = 0;
 const failures = [];

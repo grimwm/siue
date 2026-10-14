@@ -344,6 +344,13 @@ foreach ([[0.0, 0.0], [300.0, 0.0], [0.0, -250.0], [-140.0, 90.0]] as [$vx, $vy]
     }
 }
 
+/* ---- a hop warhead's leap from its burst ---- */
+foreach ([[180.0, 140.0], [-220.5, 95.25], [120.0, -40.0], [0.0, 0.0], [-0.0, -310.7]] as [$vx, $vy]) {
+    foreach ([0.2, 0.55, 0.9] as $keep) {
+        $add('hop-vel', "v$vx,$vy-keep$keep", ['vx' => $vx, 'vy' => $vy, 'keep' => $keep], room_hop_vel($vx, $vy, $keep));
+    }
+}
+
 /* ---- blast damage and the crater ---- */
 $blast = function (string $name, array $c, ?string $known = null) use ($add): void {
     $room = sv_room($c);
@@ -479,6 +486,24 @@ $volley('fired-into-the-hillside', ['terrain' => ['slope' => [420, 260]], 'wkey'
 $volley('shielded-human-eats-a-drone-shell', array_replace($shell, ['shooter' => 1, 'tanks' => [$human(380, 100) + ['shield' => true], $drone(100, 100) + ['dirS' => 1]],
     'angle' => sv_aim_at(sv_room(array_replace($shell, ['tanks' => [$human(380, 100), $drone(100, 100) + ['dirS' => 1]]])), 1, 'shell', 380.0)[0],
     'power' => sv_aim_at(sv_room(array_replace($shell, ['tanks' => [$human(380, 100), $drone(100, 100) + ['dirS' => 1]]])), 1, 'shell', 380.0)[1]]));
+
+/* Hop weapons: each burst throws the next warhead on, until the last has burst or one leaves the field. */
+foreach ($weapons as $wkey => $def) {
+    if (($def['effect'] ?? '') !== 'hop') {
+        continue;
+    }
+    $down = ['slope' => [300, 420]];
+    $onSlope = sv_terrain($down);
+    $c = ['terrain' => $down, 'wkey' => $wkey, 'shooter' => 0,
+        'tanks' => [$human(100, 100) + ['y' => $onSlope[100], 'dirS' => 1], $drone(640, 100) + ['y' => $onSlope[640]]]];
+    [$c['angle'], $c['power']] = sv_aim_at(sv_room($c), 0, $wkey, 250.0);
+    $volley("$wkey-down-a-slope", $c);
+    // The first warhead strikes the drone's body; the next leaps on past it (never a second direct hit on it) to the drone beyond.
+    $volley("$wkey-direct-hit-hops-on", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 36, 'power' => 49,
+        'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(380, 200), $drone(470, 200)]]);
+    $volley("$wkey-second-hop-leaves-the-field", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 35, 'power' => 30,
+        'tanks' => [$human(560, 100) + ['dirS' => 1], $drone(100, 100)]]);
+}
 
 /* A roller: rolls down into a valley, into a unit, off the edge, stops on a rise. */
 if (isset($weapons['roller'])) {

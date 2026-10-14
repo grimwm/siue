@@ -340,6 +340,35 @@
                     "painter": "disc",
                     "shake": 0.9
                 }
+            },
+            {
+                "key": "leapfrog",
+                "name": "Leapfrog",
+                "cat": "Shells",
+                "dmg": 40,
+                "radius": 26,
+                "price": 240,
+                "pack": 2,
+                "minRound": 3,
+                "ai": true,
+                "aiRound": 6,
+                "effect": "hop",
+                "hops": 3,
+                "hopKeep": 0.55,
+                "subDmg": 34,
+                "subRadius": 22,
+                "speed": 1.0,
+                "note": "Bursts, then leaps on and bursts twice more, each leap shorter.",
+                "gfx": {
+                    "shell": "#b5e86b",
+                    "trail": "#8fd14f",
+                    "blast": [
+                        "#8fd14f",
+                        "#f2ffd8"
+                    ],
+                    "painter": "spark",
+                    "shake": 0.35
+                }
             }
         ],
         "gear": [
@@ -1494,6 +1523,36 @@
                     {"shape":"streak","count":24,"life":[0.2,0.5],"speed":[200,460],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":13,"alpha":[1,0.9,0],"colors":["#ffffff","#fff3c4","#ff6b6b"],"glow":true},
                     {"shape":"smoke","count":0,"life":[1.4,2],"speed":[10,50],"angle":90,"spread":120,"gravity":-40,"drag":1.2,"size":[14.399999999999999,24],"sizeEnd":2.4,"alpha":[0,0.5,0.3,0],"colors":["#6a4a3a","#3a2a2a","#1a1a1a"],"wind":1,"rate":40,"duration":1.2,"delay":0.1,"offset":18},
                     {"shape":"smoke","count":8,"life":[1.68,2.4],"speed":[10,60],"angle":90,"spread":120,"gravity":-30,"drag":1.2,"size":[18,30],"sizeEnd":1.8,"alpha":[0,0.5,0.3,0],"colors":["#6a4a3a","#3a2a2a","#1a1a1a"],"wind":1}
+                ]
+            }
+        },
+        "leapfrog": {
+            "body": {
+                "halo": 9,
+                "alpha": 0.5,
+                "pulse": 5
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[7,7],"sizeEnd":0.4,"life":[0.09,0.09],"alpha":[0.85,0.5,0],"colors":["#ffffff","#b5e86b"],"glow":true},
+                    {"shape":"streak","count":7,"life":[0.1,0.22],"speed":[90,200],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":7,"alpha":[1,0.9,0],"colors":["#f2ffd8","#8fd14f"],"glow":true,"aim":"forward","spread":35},
+                    {"shape":"smoke","count":3,"life":[0.42,0.6],"speed":[10,40],"angle":90,"spread":50,"gravity":-20,"drag":1.2,"size":[4.2,7],"sizeEnd":1.8,"alpha":[0,0.5,0.3,0],"colors":["#9a9a9a","#555555","#2a2a2a"],"wind":1,"aim":"forward"}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"rate":44,"life":[0.22,0.4],"speed":[0,14],"size":[1.4,2.2],"sizeEnd":0.3,"colors":["#f2ffd8","#b5e86b","#5a9a2a"],"glow":true},
+                    {"shape":"spark","rate":6,"life":[0.2,0.3],"speed":[0,16],"size":[2.2,3.2],"sizeEnd":0.4,"colors":["#ffffff","#b5e86b"],"glow":true,"rotJitter":90,"spin":[-200,200]}
+                ]
+            },
+            "impact": {
+                "emitters": [
+                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[1.05,1.05],"life":[0.45,0.45],"alpha":[1,1,0],"rotJitter":14,"scale":1.15},
+                    {"count":1,"unit":"r","size":[0.6,0.6],"sizeEnd":0.6,"life":[0.2,0.2],"alpha":[0.6,0.35,0],"colors":["#ffffff","#b5e86b"],"glow":true},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.25,0.25],"sizeEnd":4,"ease":"out","life":[0.38,0.38],"width":3,"alpha":[0.9,0.5,0],"colors":["#f2ffd8","#8fd14f"],"glow":true},
+                    {"count":14,"life":[0.5,1],"speed":[70,180],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.3,2.6],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
+                    {"shape":"streak","count":10,"life":[0.2,0.45],"speed":[120,250],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":8,"alpha":[1,0.9,0],"colors":["#f2ffd8","#8fd14f"],"glow":true},
+                    {"shape":"smoke","count":3,"life":[0.7,1],"speed":[8,30],"angle":90,"spread":120,"gravity":-25,"drag":1.2,"size":[7,12],"sizeEnd":1.8,"alpha":[0,0.5,0.3,0],"colors":["#9a9a9a","#555555","#2a2a2a"],"wind":1}
                 ]
             }
         },

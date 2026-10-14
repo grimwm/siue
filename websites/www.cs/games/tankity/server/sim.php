@@ -193,10 +193,12 @@ function room_weapons(): array
             'rollTime' => (float) ($am['rollTime'] ?? 5.0),
             'ai' => !empty($am['ai']),
             'aiRound' => (int) ($am['aiRound'] ?? 99),
+            'hops' => (int) ($am['hops'] ?? 1),
+            'hopKeep' => (float) ($am['hopKeep'] ?? 0.5),
         ];
     }
     if (!isset($w['shell'])) {
-        $w['shell'] = ['dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'minRound' => 1, 'effect' => 'shot', 'speed' => 1.0, 'flat' => false, 'pellets' => 0, 'spread' => 0.0, 'fuse' => 0.9, 'split' => 4, 'fan' => 0.22, 'subDmg' => 34, 'subRadius' => 26, 'prox' => 34.0, 'steer' => 70.0, 'drain' => 0, 'friction' => 0.3, 'rollTime' => 5.0, 'ai' => true, 'aiRound' => 1];
+        $w['shell'] = ['dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'minRound' => 1, 'effect' => 'shot', 'speed' => 1.0, 'flat' => false, 'pellets' => 0, 'spread' => 0.0, 'fuse' => 0.9, 'split' => 4, 'fan' => 0.22, 'subDmg' => 34, 'subRadius' => 26, 'prox' => 34.0, 'steer' => 70.0, 'drain' => 0, 'friction' => 0.3, 'rollTime' => 5.0, 'ai' => true, 'aiRound' => 1, 'hops' => 1, 'hopKeep' => 0.5];
     }
     return $w;
 }
@@ -263,6 +265,13 @@ function room_split_vel(float $vx, float $vy, int $n, float $fan): array
         $out[] = [det_cos($ca) * $sp, det_sin($ca) * $sp];
     }
     return $out;
+}
+/* The velocity a hop warhead leaps on with from its burst: forward as the
+// last one flew, upward however it fell, both scaled by $keep. src/sim.ts
+// hopShell() is the same. [vx, vy]. */
+function room_hop_vel(float $vx, float $vy, float $keep): array
+{
+    return [$vx * $keep, -abs($vy) * $keep];
 }
 /* Rollers. A roller that touches down does not burst: it rolls along the
 // ground, a ball ROOM_ROLL_LIFT px above the surface, until it reaches a unit,
@@ -590,13 +599,15 @@ function room_roll_hit(array $room, float $x0, float $y0, float $x1, float $y1, 
     }
     return null;
 }
-function room_fly_arc(array &$room, array &$events, array $tank, array $w, string $wkey, int $ownerIdx, float $sx, float $sy, float $vx, float $vy, float $age, $fuse, $ov, float $t0 = 0.0): array
+function room_fly_arc(array &$room, array &$events, array $tank, array $w, string $wkey, int $ownerIdx, float $sx, float $sy, float $vx, float $vy, float $age, $fuse, $ov, float $t0 = 0.0, ?int $skip = null): array
 {
     $width = count($room['terrain']);
     $dt = 1 / 60;
     $path = [[$sx, $sy]];
     $grav = !empty($w['flat']) ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
-    $pierced = null; // the tank a lance went through, never hit twice
+    // The tank a lance went through, never hit twice; a warhead born from a
+    // burst on a unit ($skip) never takes a direct hit on that unit either.
+    $pierced = $skip;
     $clear = false; // out of its gunner's box yet
     $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($width));
     $windStep = $room['wind'] * ROOM_TURN_WIND * $dt;

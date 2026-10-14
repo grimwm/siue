@@ -100,6 +100,7 @@ export interface Weapon {
   minRound: number;
   ai?: boolean;
   aiRound?: number;
+  aiRack?: number; // shells of it a drone loads per round (2 when left out)
   effect: string;
   speed: number;
   flat?: boolean;
@@ -109,6 +110,10 @@ export interface Weapon {
   split?: number;
   fan?: number;
   fuse?: number;
+  apex?: boolean; // a cluster that splits at the top of its arc instead of on fuse
+  kick?: number; // scatter: the fastest bomblet's speed
+  hops?: number; // hop: warheads in all
+  hopKeep?: number; // hop: the share of its speed each leap keeps
   prox?: number;
   drain?: number;
   subDmg?: number;
@@ -206,6 +211,8 @@ export interface Shell extends Motion {
   rolling?: boolean;
   ru?: number;
   rt?: number;
+  /** A hop weapon's warhead: 1 for the first, counting up with each leap. */
+  hop?: number;
 }
 export interface Cloud {
   x: number;
@@ -596,6 +603,24 @@ export function splitShell(s: Shell, w: Weapon, reach = 1): Shell[] {
   }
   return bomblets;
 }
+/* A hop weapon's next warhead from the burst at (x, y), or null once `hops`
+   warheads have burst. It leaps on one pixel up, forward as the last one flew
+   and upward however it fell, both scaled by hopKeep, and bursts with
+   subDmg/subRadius. `skip` is the unit the last one burst on, which it never
+   hits directly. server/sim.php room_hop_vel and server/rules.php
+   room_fire_hops are the same. */
+export function hopShell(s: Shell, w: Weapon, x: number, y: number, reach: number, skip: Tank | false = false): Shell | null {
+  const hop = s.hop || 1;
+  if (hop >= (w.hops || 1)) return null;
+  const keep = w.hopKeep || 0.5;
+  return {
+    x, y: y - 1,
+    vx: s.vx * keep, vy: -Math.abs(s.vy) * keep,
+    wkey: s.wkey, owner: s.owner, life: 12 * reach,
+    age: 0, pierced: skip, split: false, order: [...(s.order || []), 0],
+    dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius, hop: hop + 1,
+  };
+}
 /* The first unit shell s touches anywhere along its step, sampled every
    3 px so a fast shell (or a slow frame) cannot skip through one. The
    muzzle sits inside its gunner's box, so a shell ignores its owner until
@@ -745,6 +770,8 @@ export type StepEvent =
   | { kind: 'split'; wkey: string; x: number; y: number; ang: number }
   /** A lance went through its first victim and flies on. */
   | { kind: 'pierce'; wkey: string; x: number; y: number; ang: number }
+  /** A hop weapon's next warhead leapt on from a burst; ang is its heading. */
+  | { kind: 'hop'; wkey: string; x: number; y: number; ang: number }
   | { kind: 'blast'; blast: Blast };
 /* True when a shell launched earlier in the same volley is still in the air. */
 function waitsOnEarlier(world: World, s: Shell): boolean {
@@ -789,6 +816,15 @@ function stepRoller(world: World, arsenal: Arsenal, s: Shell, w: Weapon, dt: num
   const bx = clamp(s.x, 0, t.length - 1);
   events.push({ kind: 'blast', blast: explode(world, arsenal, bx, groundAt(t, bx), s.wkey, s.owner, direct, null) });
   s.dead = true;
+}
+/* What a burst throws on: a hop weapon's next warhead. It joins the volley
+   this frame, so it flies this frame too. */
+function afterBurst(world: World, s: Shell, w: Weapon, direct: Tank | null, events: StepEvent[]): void {
+  if (w.effect !== 'hop') return;
+  const next = hopShell(s, w, s.x, s.y, fieldReach(world.terrain.length), direct || false);
+  if (!next) return;
+  world.shells.push(next);
+  events.push({ kind: 'hop', wkey: s.wkey, x: next.x, y: next.y, ang: datan2(next.vy, next.vx) });
 }
 /* Advances every shell dt seconds: flight, fuses, hits and bursts. Bomblets
    born this frame fly this frame too. A volley's shells fly together, but they
@@ -863,6 +899,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
         continue;
       }
       events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, direct, ov) });
+      afterBurst(world, s, w, direct, events);
       s.dead = true;
       continue;
     }
@@ -877,6 +914,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
     }
     if (grounded) {
       events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, null, ov) });
+      afterBurst(world, s, w, null, events);
       s.dead = true;
     }
   }

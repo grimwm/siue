@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FIELD_COL, FIELD_W_MAX, FIELD_W_MIN, H, ROOM_W, fieldWidthOk } from '../src/sim.ts';
 import { stepArm } from '../src/input.ts';
-import { createFieldWidth, powerScale, powerText, fieldWidth, fieldWidthFor, fitField, landscapeBox, visibleWorld } from '../src/field.ts';
+import { createFieldWidth, powerScale, angleText, powerText, fieldWidth, fieldWidthFor, fitField, landscapeBox, visibleWorld } from '../src/field.ts';
 
 test('the width is 460 × the landscape aspect, on a whole column', () => {
   assert.equal(fieldWidth({ w: 1118, h: 426 }), 1200); // 1207.2 → 50.3 columns → 50
@@ -97,4 +97,11 @@ test('power shows whole on a room field and with one decimal on a wider one', ()
   assert.equal(powerText(55.46, 1080), '55.5');
   assert.equal(powerText(100, 1440), '100.0');
   assert.equal(powerText(10, 1440), '10.0');
+});
+
+test('the status bar angle reads a far-side dip as the negative angle a near-side dip does', () => {
+  assert.equal(angleText(-20), '-20°');
+  assert.equal(angleText(200), '-20°');
+  assert.equal(angleText(180), '180°');
+  assert.equal(angleText(162.4), '162°');
 });

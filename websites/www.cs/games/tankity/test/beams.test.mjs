@@ -208,3 +208,14 @@ test('from level ground a beam held level hits an equal-height hull far off', ()
   fireBeam(W, arsenal, me, 'zap');
   assert.equal(far.hp, 55);
 });
+
+test('the last Laser spent at a dip leaves the drawn barrel at the Shell\'s minimum, not at the dip', () => {
+  const me = human(100, 400, { angle: -20 });
+  const W = world([me]);
+  W.ammo.zap = 1;
+  W.selected = 'zap';
+  const launch = fireWeapon(W, arsenal, me, 'zap');
+  assert.ok(launch.spent);
+  assert.equal(W.selected, 'shell');
+  assert.equal(me.angle, 10, 'the barrel is clamped to the gun now loaded');
+});

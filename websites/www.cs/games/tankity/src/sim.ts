@@ -506,6 +506,15 @@ export function flies(w: Pick<Weapon, 'effect'>): boolean {
    into world.shells, or, for a gun with no flight, resolves it at once (Launch.now).
    Null when t has none left. */
 export function fireWeapon(world: World, arsenal: Arsenal, t: Tank, wkey: string): Launch | null {
+  const launch = fireGun(world, arsenal, t, wkey);
+  // The loadout just changed to the Shell: the drawn barrel leaves a dip the Shell cannot fire from.
+  if (launch?.spent) {
+    const lim = aimLimits(arsenal.weapons[world.selected]);
+    t.angle = clamp(t.angle, lim.min, lim.max);
+  }
+  return launch;
+}
+function fireGun(world: World, arsenal: Arsenal, t: Tank, wkey: string): Launch | null {
   const w = arsenal.weapons[wkey]!;
   const store = (t.isPlayer ? world.ammo : t.ammo)!;
   if ((store[wkey] || 0) <= 0) return null;

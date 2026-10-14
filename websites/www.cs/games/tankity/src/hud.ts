@@ -5,7 +5,7 @@
  * deck's Weapon button (src/ui/gun-label.tsx) says about the loaded gun. Each
  * redraws only when its text changed, since the loop asks every frame. */
 import type { GameState, GameTank, MatchState, Tables } from './game-types.ts';
-import { powerText } from './field.ts';
+import { angleText, powerText } from './field.ts';
 import { maxArmor } from './armor.ts';
 import type { RoomClient } from './net.ts';
 import { turnNote } from './turn-time.ts';
@@ -139,7 +139,7 @@ export function createHud(deps: HudDeps) {
       G.over ? 'match over' :
       G.phase === 'banner' ? 'get ready...' :
       t.isPlayer ? (G.phase === 'aim' ? 'YOU. Aim!' : 'you fired…') : `${t.id} aiming…`;
-    HUD.angle = `${Math.round(me().angle)}°`;
+    HUD.angle = angleText(me().angle);
     HUD.power = powerText(me().power, G.w);
     HUD.wind = windText();
     renderLoadout();
@@ -157,7 +157,7 @@ export function createHud(deps: HudDeps) {
       !mine || mine.hp <= 0 ? 'wrecked. Watching ' + seatName(turnTank.seat!) + '...' :
       (MATCH.myTurn ? 'YOU. Aim!' : `${seatName(turnTank.seat!)} aiming...`)
         + turnNote(net.turnSecs, net.turnClockLeft(), net.closeClockLeft());
-    HUD.angle = mine ? `${Math.round(mine.angle)}°` : '-';
+    HUD.angle = mine ? angleText(mine.angle) : '-';
     HUD.power = mine ? powerText(mine.power, G.w) : '-';
     HUD.wind = windText();
     renderLoadout();

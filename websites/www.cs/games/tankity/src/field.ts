@@ -69,6 +69,11 @@ export function visibleWorld(fit: Fit, box: Box): WorldRect {
 export function powerScale(w: number): number {
   return ROOM_W / w;
 }
+/** The status bar's angle: a far-side dip (past 180, the mirror of a near-side dip) reads as that dip's negative angle. */
+export function angleText(angle: number): string {
+  const a = Math.round(angle);
+  return `${a > 180 ? 180 - a : a}°`;
+}
 /** The status bar's power: a whole number on a room's field, one decimal on a wider one where a step is under a point. */
 export function powerText(power: number, w: number): string {
   return w > ROOM_W ? power.toFixed(1) : String(Math.round(power));

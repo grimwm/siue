@@ -336,7 +336,7 @@ function noFlightHarm(world: World, arsenal: Arsenal, self: Tank, wkey: string, 
 /* A beam's aim at target: the beam runs from the muzzle along the barrel, a
    line through the barrel's pivot (14 px above the hull), so it is aimed from
    the pivot straight at the target's body, to the nearest whole degree and
-   within the barrel's 10..170, at full power. server/ai.php
+   inside the beam's limits (aimLimits), at full power. server/ai.php
    room_ai_beam_aim is the same. */
 export function beamAim(_world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string): { a: number; p: number } {
   const b = unitHitBox(target);

@@ -115,7 +115,6 @@ const ALLOW: Allow = {
     'tankity/test.sh',
   ],
   check: [
-    'crete/test/engine.test.ts',
     'cylon/test/abilities.test.mjs',
     'cylon/test/field.test.mjs',
     'cylon/test/playfield.test.mjs',

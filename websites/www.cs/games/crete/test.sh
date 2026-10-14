@@ -8,5 +8,5 @@ php tools/install-files.php --check
 node ../_kit/build/icons.mjs crete --check
 set -- test/*.test.mjs test/*.test.ts
 for f do [ -e "$f" ] && set -- "$@" "$f"; shift; done
-[ "$#" -gt 0 ] || { echo "test.sh: no test/*.test.mjs or test/*.test.ts" >&2; exit 1; }
+[ -e "$1" ] || { echo "test.sh: no test/*.test.mjs or test/*.test.ts" >&2; exit 1; }
 node --test "$@"

@@ -6,39 +6,66 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { importTsx } from '../../_kit/test/tsx.ts';
+import type { GameState, GameTank, Tables } from '../src/game-types.ts';
+import type { ShopDeps } from '../src/shop.ts';
+import type { ShopRow, Weapon } from '../src/sim.ts';
 
 // One bundle, so the shop and the rules share one copy of every module.
-const m = await importTsx(import.meta.dirname, { sim: '../src/sim.ts', solo: '../src/solo.ts', shop: '../src/shop.ts' });
+const m = await importTsx<{
+  sim: typeof import('../src/sim.ts');
+  solo: typeof import('../src/solo.ts');
+  shop: typeof import('../src/shop.ts');
+}>(import.meta.dirname, { sim: '../src/sim.ts', solo: '../src/solo.ts', shop: '../src/shop.ts' });
 const { buildArsenal } = m.sim;
 const { soloDeal } = m.solo;
 const { createShop } = m.shop;
 
-const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
-const arsenal = buildArsenal(GAME.arsenal);
+/** game.json, as far as these cases read it: the arsenal's gun rows. */
+const GAME: { arsenal: { ammo: Weapon[] } } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+const arsenal = (() => { const a = buildArsenal(GAME.arsenal); assert.ok(a, 'game.json has an arsenal'); return a; })();
+/** The first gun row of game.json that `pred` picks, which must be there. */
+function gun(pred: (w: Weapon) => boolean): Weapon {
+  const w = GAME.arsenal.ammo.find(pred);
+  assert.ok(w, 'no such gun in game.json');
+  return w;
+}
+/** The last item of a list the case reads, which must be there. */
+function last<T>(list: readonly T[]): T {
+  const v = list[list.length - 1];
+  assert.ok(v !== undefined, 'the list is empty');
+  return v;
+}
 
-function shopFor(on, seed = 'shop') {
-  const G = { body: 'tank' };
+function shopFor(on: boolean, seed = 'shop') {
+  // soloDeal sets every field the shop reads but `body`, so the partial literal stands for the whole state.
+  const G = { body: 'tank' } as GameState;
   soloDeal(G, arsenal, seed, 'normal', 720);
   Object.assign(G, { phase: 'shop', shopSel: 0, shopQty: 1, selected: 'shell' });
-  const lines = [], netBuys = [], preloads = [];
-  const tables = { arsenal, weapons: arsenal.weapons, shop: arsenal.shop, gear: arsenal.gear, order: arsenal.order };
+  const lines: string[] = [], netBuys: Array<[string | undefined, number]> = [], preloads: string[][] = [];
+  const tables: Tables = { rev: 0, arsenal, weapons: arsenal.weapons, shop: arsenal.shop, gear: arsenal.gear, order: arsenal.order };
+  const first = (): GameTank => { const t = G.tanks[0]; assert.ok(t, 'the deal has no tank yet'); return t; };
   const shop = createShop({
-    G, $: () => null, tables, net: { on, seats: () => [], readyNow: () => false, shopClockLeft: () => 0, closeClockLeft: () => null },
-    sfx: { play() {} }, me: () => G.tanks[0], touch: false, keyHint: () => '',
-    say: (t) => lines.push(t), advance() {}, render() {}, renderHUD() {}, refreshNavHints() {},
+    G, $: () => null, tables, net: { on, seats: [], readyNow: () => false, shopClockLeft: () => 0, closeClockLeft: () => null },
+    sfx: { play() {} }, me: first, touch: false, keyHint: () => '',
+    say: (t) => { lines.push(t); }, advance() {}, render() {}, renderHUD() {}, refreshNavHints() {},
     drawShellIcon() {}, drawGearIcon() {}, openPreview() {}, nextRound() {}, openLeaveVeil() {},
-    netBuy: (it, q) => netBuys.push([it.g, q]), board: () => null, preloadFx: keys => preloads.push([...keys]),
-  });
+    netBuy: (it, q) => { netBuys.push([it.g, q]); }, board: () => null, preloadFx: keys => { preloads.push([...keys]); },
+  } satisfies ShopDeps);
   return { G, shop, lines, netBuys, preloads };
 }
-const rowOf = (k) => arsenal.shop.find(r => (r.kind === 'ammo' ? r.w : r.g) === k);
+const rowOf = (k: string): ShopRow => {
+  const r = arsenal.shop.find(x => (x.kind === 'ammo' ? x.w : x.g) === k);
+  assert.ok(r, `no shop row ${k}`);
+  return r;
+};
 
 test('a solo visit has no cap on how many buys it makes', () => {
   const { G, shop, lines } = shopFor(false);
   G.cash = 1e6;
-  const before = G.ammo.mortar ?? 0;
+  const ammo = () => { assert.ok(G.ammo, 'the deal sets the ammo'); return G.ammo; };
+  const before = ammo().mortar ?? 0;
   for (let k = 0; k < 80; k++) shop.buyItem(rowOf('mortar'), 1);
-  assert.ok(G.ammo.mortar > before, 'the buys landed');
+  assert.ok(Number(ammo().mortar) > before, 'the buys landed');
   assert.ok(!lines.some(l => /most you can buy/.test(l)), lines.at(-1));
   assert.ok(G.cash < 1e6);
 });
@@ -58,19 +85,23 @@ test('a gun bought, and the rack as the round starts, get their effects fetched 
   const { G, shop, preloads } = shopFor(false);
   G.cash = 1e6;
   shop.buyItem(rowOf('mortar'), 1);
-  assert.deepEqual(preloads.at(-1), ['mortar']);
+  assert.deepEqual(last(preloads), ['mortar']);
   shop.buyItem(rowOf('repair'), 1);
   assert.equal(preloads.length, 1, 'gear has no effects to fetch');
   shop.hideShop();
-  const rack = preloads.at(-1);
+  const rack = last(preloads);
+  const ammo = G.ammo;
+  assert.ok(ammo, 'the deal sets the ammo');
   assert.ok(rack.includes('shell') && rack.includes('mortar'), rack.join(','));
-  assert.ok(rack.every(k => k === 'shell' || G.ammo[k] > 0), 'only guns in the rack');
+  assert.ok(rack.every(k => k === 'shell' || Number(ammo[k]) > 0), 'only guns in the rack');
 });
 
 test('a shop row says what its gun does: a blast doubles on a direct hit, a beam and a ring do not, a tracer does no damage', () => {
   const { ammoSub } = m.shop;
-  const byEffect = e => GAME.arsenal.ammo.find(a => a.effect === e);
-  assert.match(ammoSub(arsenal.weapons.shell), /^34 damage, blast 26, .*Direct hits count double\.$/);
+  const shell = arsenal.weapons.shell;
+  assert.ok(shell, 'the arsenal has Shell');
+  const byEffect = (e: string) => gun(a => a.effect === e);
+  assert.match(ammoSub(shell), /^34 damage, blast 26, .*Direct hits count double\.$/);
   const beam = byEffect('beam'), ring = byEffect('plasma'), tracer = byEffect('tracer');
   assert.match(ammoSub(beam), new RegExp(`^${beam.dmg} damage to every unit on its line, `));
   assert.doesNotMatch(ammoSub(beam), /double|blast/);
@@ -79,21 +110,21 @@ test('a shop row says what its gun does: a blast doubles on a direct hit, a beam
   assert.doesNotMatch(ammoSub(ring), /double/);
   assert.match(ammoSub(tracer), /^No damage, /);
   assert.doesNotMatch(ammoSub(tracer), /double|blast/);
-  assert.match(ammoSub({ ...arsenal.weapons.shell, dmg: 0, note: undefined }), /^No damage, blast 26\.$/);
+  assert.match(ammoSub({ ...shell, dmg: 0, note: undefined }), /^No damage, blast 26\.$/);
 });
 
 test('an earth gun\'s row says how it moves the ground, never that hits double', () => {
   const { ammoSub } = m.shop;
-  const plain = pred => ({ ...GAME.arsenal.ammo.find(pred), note: undefined });
-  assert.equal(ammoSub(plain(a => a.effect === 'dirt' && a.dmg === 0)), `No damage, a mound of dirt ${plain(a => a.effect === 'dirt' && a.dmg === 0).radius} round.`);
-  const charge = plain(a => a.effect === 'dirt' && a.dmg > 0);
+  const plain = (pred: (w: Weapon) => boolean): Weapon => ({ ...gun(pred), note: undefined });
+  assert.equal(ammoSub(plain((a) => a.effect === 'dirt' && a.dmg === 0)), `No damage, a mound of dirt ${plain((a) => a.effect === 'dirt' && a.dmg === 0).radius} round.`);
+  const charge = plain((a) => a.effect === 'dirt' && a.dmg > 0);
   assert.equal(ammoSub(charge), `${charge.dmg} damage, blast ${charge.radius}, then a mound of dirt ${charge.radius} round.`);
-  const pour = plain(a => a.effect === 'pour');
+  const pour = plain((a) => a.effect === 'pour');
   assert.equal(ammoSub(pour), `No damage, ${pour.volume} px² of liquid dirt.`);
-  const digger = plain(a => a.effect === 'dig' && !a.warheads), hog = plain(a => a.effect === 'dig' && a.warheads > 0);
+  const digger = plain((a) => a.effect === 'dig' && !a.warheads), hog = plain((a) => a.effect === 'dig' && Number(a.warheads) > 0);
   assert.equal(ammoSub(digger), `No damage, burrows ${digger.digLen} on.`);
   assert.equal(ammoSub(hog), `${hog.warheads} warheads of ${hog.subDmg} damage along a ${hog.digLen} burrow.`);
-  const riot = plain(a => a.effect === 'riot'), slump = plain(a => a.effect === 'slump');
+  const riot = plain((a) => a.effect === 'riot'), slump = plain((a) => a.effect === 'slump');
   assert.equal(ammoSub(riot), `No damage, clears the earth ${riot.radius} along the barrel.`);
   assert.equal(ammoSub(slump), `No damage, slopes slump within ${slump.radius}.`);
   for (const w of GAME.arsenal.ammo.filter(a => ['dirt', 'pour', 'dig', 'riot', 'slump'].includes(a.effect))) assert.doesNotMatch(ammoSub(w), /double/, w.key);
@@ -102,7 +133,7 @@ test('an earth gun\'s row says how it moves the ground, never that hits double',
 test('a napalm gun\'s row says what it burns a tick and how many ticks, never that hits double', () => {
   const { ammoSub } = m.shop;
   for (const w of GAME.arsenal.ammo.filter(a => a.effect === 'napalm')) {
-    const ticks = Math.floor(w.burn / w.tick + 1e-9);
+    const ticks = Math.floor(Number(w.burn) / Number(w.tick) + 1e-9);
     assert.equal(ammoSub({ ...w, note: undefined }), `${w.dmg} damage a tick, ${ticks} ticks, to all in a burning pool of ${w.volume} px².`);
     assert.doesNotMatch(ammoSub(w), /double/, w.key);
   }

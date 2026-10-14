@@ -4,23 +4,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { h, render } from 'preact';
-import { document, makeEl, fire } from '../../_kit/test/dom-stub.mjs';
+import { byId, fire, installDocument, makeEl, maybeById, renderTarget } from '../../_kit/test/dom-stub.ts';
+import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
+import type { InitialsPickerProps } from '../src/ui/initials-picker.tsx';
 
-globalThis.document = document;
-const { picker } = await importTsx(import.meta.dirname, { picker: '../src/ui/initials-picker.tsx' });
-const walk = (el, out = []) => { for (const c of el.children || []) { out.push(c); walk(c, out); } return out; };
-const byId = (el, id) => walk(el).find(n => n.id === id);
-const type = (box, value) => { box.value = value; fire(box, 'input'); };
+installDocument();
+const { picker } = await importTsx<{ picker: typeof import('../src/ui/initials-picker.tsx') }>(import.meta.dirname, { picker: '../src/ui/initials-picker.tsx' });
+const type = (box: StubElement, value: string) => { box.value = value; fire(box, 'input'); };
 
-function draw(over = {}) {
+function draw(over: Partial<InitialsPickerProps> = {}) {
   const root = makeEl('root');
-  const calls = [];
-  const field = { current: null };
-  const props = { idPrefix: 'lobby', initials: 'BDJ', rev: 0, onInitials: w => calls.push(w), fieldRef: field, ...over };
-  const redraw = (more = {}) => render(h(picker.InitialsPicker, { ...props, ...more }), root);
+  const calls: string[] = [];
+  const field: { current: HTMLFieldSetElement | null } = { current: null };
+  const props: InitialsPickerProps = { idPrefix: 'lobby', initials: 'BDJ', rev: 0, onInitials: w => { calls.push(w); }, fieldRef: field, ...over };
+  const redraw = (more: Partial<InitialsPickerProps> = {}) => render(h(picker.InitialsPicker, { ...props, ...more }), renderTarget(root));
   redraw();
-  const boxes = () => [1, 2, 3].map(n => byId(root, `${props.idPrefix}-initial-${n}`));
+  const boxes = (): [StubElement, StubElement, StubElement] =>
+    [byId(root, `${props.idPrefix}-initial-1`), byId(root, `${props.idPrefix}-initial-2`), byId(root, `${props.idPrefix}-initial-3`)];
   return { root, calls, redraw, boxes, field };
 }
 
@@ -29,7 +30,7 @@ test('the ids carry the prefix, so two pickers on one page never share one', () 
   const title = draw({ idPrefix: 'title' });
   assert.ok(lobby.boxes().every(Boolean));
   assert.ok(title.boxes().every(Boolean));
-  assert.equal(byId(lobby.root, 'title-initial-1'), undefined);
+  assert.equal(maybeById(lobby.root, 'title-initial-1'), undefined);
   assert.equal(lobby.boxes()[0].getAttribute('aria-label'), 'Initial 1 of 3');
 });
 

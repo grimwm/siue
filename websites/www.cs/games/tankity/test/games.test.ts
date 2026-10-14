@@ -3,42 +3,69 @@
 // turn is reported once and never for the room on screen.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import type { StorageLike } from '../../_kit/ports.ts';
 import { createGamesWatch, GAMES_POLL_MS, roomOnScreen } from '../src/games.ts';
+import type { GamesWatch, LiveRow } from '../src/games.ts';
+import type { MineRow } from '../src/protocol.ts';
 import { createSeatStore } from '../src/seats.ts';
+import type { SeatStore } from '../src/seats.ts';
 
-function mapStorage() {
-  const m = new Map();
-  return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)); }, removeItem: k => { m.delete(k); } };
+/** Item `i` of a list the case reads, which must be there. */
+function nth<T>(list: readonly T[], i: number): T {
+  const v = list[i];
+  assert.ok(v !== undefined, `no item ${i} of ${list.length}`);
+  return v;
 }
-const row = (code, over = {}) => ({
+
+function mapStorage(): StorageLike {
+  const m = new Map<string, string>();
+  return { getItem: k => m.get(k) ?? null, setItem: (k, v) => { m.set(k, String(v)); }, removeItem: k => { m.delete(k); } };
+}
+const row = (code: string, over: Partial<LiveRow> = {}): LiveRow => ({
   code, gone: false, seat: 1, phase: 'play', round: 2, turnSecs: 600, turn: 0, yourTurn: false, turnKey: null,
   turnLeft: null, shopLeft: null, players: ['ABC', 'ZED'], hostSeat: 0, turnName: 'ABC', expiresAt: 2e9, closesIn: 600, ...over,
 });
 const flush = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setImmediate(r)); };
 
-function rig({ codes = [], reply = asks => asks.map(a => row(a.code)) } = {}) {
+/** What `mine` answers: rows, or an error the ask rejects with. */
+type Reply = MineRow[] | Error;
+interface Rig {
+  store: SeatStore;
+  asks: string[][];
+  rows: string[][];
+  turns: string[];
+  intervals: Map<number, { fn: () => void; ms: number }>;
+  here: string;
+  reply: (asks: { code: string }[]) => Reply;
+  pending: Promise<MineRow[]> | null;
+  elsewhere: string[];
+  watch: GamesWatch;
+  tick(): void;
+}
+
+function rig({ codes = [], reply = asks => asks.map(a => row(a.code)) }: { codes?: string[]; reply?: Rig['reply'] } = {}): Rig {
   const store = createSeatStore(mapStorage(), () => 0);
   for (const c of [...codes].reverse()) store.remember({ code: c, seat: 1, token: 't' + c, csrf: 'c', initials: 'ZED' });
-  const r = {
-    store, asks: [], rows: [], turns: [], intervals: new Map(), nextId: 1, here: '', reply, pending: null, elsewhere: [],
-  };
-  r.watch = createGamesWatch({
+  const intervals: Rig['intervals'] = new Map();
+  let nextId = 1;
+  const state: Omit<Rig, 'watch' | 'tick'> = { store, asks: [], rows: [], turns: [], intervals, here: '', reply, pending: null, elsewhere: [] };
+  const watch = createGamesWatch({
     store,
     mine: asks => {
-      r.asks.push(asks.map(a => a.code));
-      if (r.pending) return r.pending;
-      const out = r.reply(asks);
+      state.asks.push(asks.map(a => a.code));
+      if (state.pending) return state.pending;
+      const out = state.reply(asks);
       return out instanceof Error ? Promise.reject(out) : Promise.resolve(out);
     },
-    setInterval: (fn, ms) => { const id = r.nextId++; r.intervals.set(id, { fn, ms }); return id; },
-    clearInterval: id => { r.intervals.delete(id); },
-    viewing: () => r.here,
-    elsewhere: code => r.elsewhere.includes(code),
-    onRows: rows => r.rows.push(rows.map(x => x.code)),
-    onTurn: x => r.turns.push(x.code + '#' + x.turnKey),
+    setInterval: (fn, ms) => { const id = nextId++; intervals.set(id, { fn, ms }); return id; },
+    clearInterval: id => { intervals.delete(Number(id)); },
+    viewing: () => state.here,
+    elsewhere: code => state.elsewhere.includes(code),
+    onRows: rows => { state.rows.push(rows.map(x => x.code)); },
+    onTurn: x => { state.turns.push(x.code + '#' + x.turnKey); },
   });
-  r.tick = () => { for (const { fn } of r.intervals.values()) fn(); };
-  return r;
+  const tick = () => { for (const { fn } of intervals.values()) fn(); };
+  return Object.assign(state, { watch, tick });
 }
 
 test('with no stored seats it asks nothing and lists nothing', async () => {
@@ -83,7 +110,7 @@ test('each turn is reported once, by its key', async () => {
 
 test('a row for the room that came on screen meanwhile never raises a turn', async () => {
   const r = rig({ codes: ['AAAA'] });
-  let release;
+  let release: (rows: MineRow[]) => void = () => {};
   r.pending = new Promise(res => { release = res; });
   r.watch.start();
   await flush();
@@ -110,9 +137,9 @@ test('it polls every 10 s, pollNow asks at once without doubling up, and stop cl
   const r = rig({ codes: ['AAAA'] });
   r.watch.start();
   assert.equal(GAMES_POLL_MS, 10_000);
-  assert.equal([...r.intervals.values()][0].ms, GAMES_POLL_MS);
+  assert.equal(nth([...r.intervals.values()], 0).ms, GAMES_POLL_MS);
   await flush();
-  let release;
+  let release: (rows: MineRow[]) => void = () => {};
   r.pending = new Promise(res => { release = res; });
   void r.watch.pollNow();
   void r.watch.pollNow();

@@ -3,26 +3,29 @@
 // toasts a room another tab is showing.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import type { StorageLike } from '../../_kit/ports.ts';
 import { createOnScreen, ON_SCREEN_KEY, ON_SCREEN_STALE_MS } from '../src/on-screen.ts';
+import type { ChannelLike } from '../src/on-screen.ts';
 
 function bus() {
-  const members = [];
+  const members: ChannelLike[] = [];
   return {
-    open() {
-      const ch = { onmessage: null, postMessage(m) { for (const o of members) if (o !== ch && o.onmessage) o.onmessage({ data: m }); }, close() {} };
+    open(): ChannelLike {
+      const ch: ChannelLike = { onmessage: null, postMessage(m) { for (const o of members) if (o !== ch && o.onmessage) o.onmessage({ data: m }); } };
       members.push(ch);
       return ch;
     },
   };
 }
 function sharedStorage() {
-  const m = new Map(), listeners = [];
-  const view = () => ({
-    getItem: k => (m.has(k) ? m.get(k) : null),
+  const m = new Map<string, string>();
+  const listeners: Array<{ owner: StorageLike; fn: (key: string | null) => void }> = [];
+  const view = (): StorageLike => ({
+    getItem: k => m.get(k) ?? null,
     setItem(k, v) { m.set(k, String(v)); for (const l of listeners) if (l.owner !== this) l.fn(k); },
     removeItem: k => { m.delete(k); },
   });
-  return { view, listen: (owner, fn) => listeners.push({ owner, fn }) };
+  return { view, listen: (owner: StorageLike, fn: (key: string | null) => void) => { listeners.push({ owner, fn }); } };
 }
 
 test('over a BroadcastChannel: another tab showing a room is known until it moves on or goes quiet', () => {
@@ -45,7 +48,7 @@ test('without BroadcastChannel: the localStorage key and its storage events carr
   let now = 1000;
   const s = sharedStorage();
   const sa = s.view(), sc = s.view();
-  let cListener = null;
+  let cListener: ((key: string | null) => void) | null = null;
   const a = createOnScreen({ tab: 'a', now: () => now, channel: null, storage: sa, listen: fn => s.listen(sa, fn) });
   const c = createOnScreen({ tab: 'c', now: () => now, channel: null, storage: sc, listen: fn => { cListener = fn; s.listen(sc, fn); } });
   a.set('7K2Q');

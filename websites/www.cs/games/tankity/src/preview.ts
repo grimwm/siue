@@ -15,6 +15,8 @@ import {
   groundAt, groundSlope, rollStart, rollStep, rollOut, hopShell, scatterShells, fallDamage, FALL_RULES,
 } from './sim.ts';
 import { BURY_EPS, DIG_STEP, addDirt, digHeading, fillPour, pourLevel, riotCarve, slumpGround } from './earth.ts';
+import { createEarthShow } from './earth-show.ts';
+import type { EarthShow } from './earth-show.ts';
 import type { Shell, Tank, Weapon } from './sim.ts';
 import { MARK_EVERY } from './marks.ts';
 import type { MarkKind } from './marks.ts';
@@ -73,6 +75,8 @@ export interface PreviewState<C = unknown> {
   sy: number; ty: number; // where the shooter and the dummy stand: on their ground, or buried under risen ground until a new range
   /** What the earth did to the dummy this volley: the px it dropped, how deep it ended up buried. */
   dropped: number; buriedBy: number;
+  /** The range's ground as drawn while earth settles (a mound rising, liquid dirt flowing), as the war's. */
+  show: EarthShow;
   wind: number;
   angle: number; power: number;
   phase: PreviewPhase;
@@ -95,6 +99,10 @@ export interface PreviewState<C = unknown> {
 const DIG_LEAD = 0.3;
 /** A slump's ridge under the dummy: px high, and px it falls away per column either side. */
 const RIDGE = 60, RIDGE_SLOPE = 6;
+/** The range's ground to draw: earth still settling eases in, as on the battlefield. */
+export function previewGround(pv: PreviewState): readonly number[] {
+  return pv.show.shown(pv.terr);
+}
 /* The range for gun w: its usual hills, with what shows an earth gun off. A
    slump gets a steep ridge for the dummy to stand on, a pour a dip for it to
    fill; a riot charge's shooter stands buried under a mound it digs itself
@@ -123,7 +131,7 @@ export function createPreview<C, F extends PreviewFx>(wkey: string, env: Preview
   const terr = makeRange(w, sx, tx);
   return {
     wkey, terr,
-    sx, tx, sy: makePreviewTerrain()[sx]!, ty: terr[tx]!, dropped: 0, buriedBy: 0, wind: PV_WIND,
+    sx, tx, sy: makePreviewTerrain()[sx]!, ty: terr[tx]!, dropped: 0, buriedBy: 0, show: createEarthShow(), wind: PV_WIND,
     angle: 60, power: 50, phase: 'aim', t: 0.6,
     shells: [], booms: [], volleys: 0, foeHp: PV_FOE_HP,
     fx,
@@ -279,18 +287,22 @@ function previewEarth(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: Rea
     return;
   }
   s.dead = true;
+  const before = pv.terr.slice(), x = Math.round(clamp(s.x, 0, PV_W - 1));
   if (w.effect === 'dirt') {
     if (w.dmg > 0) previewHurt(pv, s.x, s.y, w.dmg, w.radius);
     addDirt(pv.terr, s.x, s.y, w.radius);
     env.impact(pv.fx, pv.wkey, s.x, s.y, w.radius);
+    pv.show.begin(before, Math.max(0, Math.floor(s.x - w.radius)), Math.min(PV_W - 1, Math.ceil(s.x + w.radius)), 'dirt', x);
   } else if (w.effect === 'pour') {
-    const p = pourLevel(pv.terr, Math.round(clamp(s.x, 0, PV_W - 1)), w.volume || 0);
+    const p = pourLevel(pv.terr, x, w.volume || 0);
     fillPour(pv.terr, p);
     env.impact(pv.fx, pv.wkey, s.x, s.y, Math.max(12, (p.x1 - p.x0) / 2));
     if (p.x1 >= p.x0) env.special(pv.fx, pv.wkey, 'pour', p.x0, p.level, 0, p.x1 - p.x0);
+    pv.show.begin(before, p.x0, p.x1, 'pour', x);
   } else if (w.effect === 'slump') {
     slumpGround(pv.terr, s.x, w.radius, w.slope || 1, w.passes || 1);
     env.impact(pv.fx, pv.wkey, s.x, s.y, w.radius);
+    pv.show.begin(before, Math.max(0, Math.floor(s.x - w.radius)), Math.min(PV_W - 1, Math.ceil(s.x + w.radius)), 'slump', x);
   }
 }
 /* One step of a digger's burrow on the range: its trench, and each warhead as it falls due. */
@@ -427,6 +439,7 @@ function stepPreviewRoller(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w
 /** Advance the demo by `dt` seconds. */
 export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void {
   if (pv.fx) { pv.fx.wind = pv.wind; pv.fx.step(dt); }
+  pv.show.step(dt);
   for (const bm of pv.booms) bm.t += dt;
   pv.booms = pv.booms.filter(bm => bm.t < bm.life);
   if (pv.resultT > 0) pv.resultT -= dt;
@@ -547,6 +560,7 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
       pv.volleys += 1;
       if (pv.foeHp <= 0 || pv.volleys % 4 === 3 || pv.buriedBy > 0 || pv.dropped > 0 || weaponOf(env, pv.wkey).effect === 'riot') {
         pv.terr = makeRange(weaponOf(env, pv.wkey), pv.sx, pv.tx);
+        pv.show.clear();
         pv.sy = makePreviewTerrain()[pv.sx]!;
         pv.ty = pv.terr[pv.tx]!;
         pv.foeHp = PV_FOE_HP;

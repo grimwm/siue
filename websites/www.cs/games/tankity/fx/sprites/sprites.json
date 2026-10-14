@@ -359,5 +359,31 @@
     "frames": 8,
     "first": 40,
     "fps": 12
+  },
+  "flame": {
+    "file": "flame.png",
+    "frame": 96,
+    "cols": 4,
+    "rows": 4,
+    "frames": 16,
+    "fps": 16
+  },
+  "p_napalm": {
+    "file": "shells_fire.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 2,
+    "frames": 8,
+    "first": 0,
+    "fps": 12
+  },
+  "p_hotnapalm": {
+    "file": "shells_fire.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 2,
+    "frames": 8,
+    "first": 8,
+    "fps": 12
   }
 }

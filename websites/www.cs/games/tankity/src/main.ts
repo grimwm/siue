@@ -50,6 +50,7 @@ import { createPreview, stepPreview } from './preview.ts';
 import { createReplay } from './replay.ts';
 import { createMarks } from './marks.ts';
 import { createEarthShow } from './earth-show.ts';
+import { createFireShow } from './fire-show.ts';
 import { createFieldWidth } from './field.ts';
 import { createInput, touchOnly, stepArm } from './input.ts';
 import { renderHelp } from './ui/help.tsx';
@@ -185,7 +186,7 @@ const G: GameState = {
   terrain: NOT_DEALT, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // banner | shop | aim | think | fly | settle | over (src/flow.ts)
   thinkT: 0, settleT: 0,
-  shells: [], parts: [], booms: [], fx: null, marks: createMarks(), earth: createEarthShow(),
+  shells: [], parts: [], booms: [], fx: null, marks: createMarks(), earth: createEarthShow(), fire: createFireShow(),
   wind: 0, round: 1, firstTurn: 0,
   lives: TUNE.lives, score: 0, cash: 0, nextOneUp: TUNE.oneUpEvery,
   rounds: [], roundStart: { score: 0, cash: 0 },
@@ -248,7 +249,7 @@ const previewEnv: PreviewEnv<FxSys> = {
   weapon: key => WEAPONS[key],
   muzzle: (sys, wkey, x, y, ang) => fxMuzzle(sys, wkey, x, y, ang),
   impact: (sys, wkey, x, y, r) => { fxImpact(sys, wkey, x, y, r); },
-  special: (sys, wkey, name, x, y, ang) => fxSpecial(sys, wkey, name, x, y, ang),
+  special: (sys, wkey, name, x, y, ang, len) => fxSpecial(sys, wkey, name, x, y, ang, len),
   trail: (sys, shell, dt) => fxTrail(sys, shell, dt),
   showResult: text => {
     const pr = $('preview-result');
@@ -428,6 +429,7 @@ const replay = createReplay({
   beam: e => netBeam(e),
   ring: e => netRing(e),
   earth: e => netEarth(e),
+  burn: e => netBurn(e),
   mark: shot => netMark(shot),
 });
 /* ---------- the typed modules, wired in dependency order ---------- */
@@ -498,7 +500,7 @@ const {
 });
 /* A running room match on this client (src/room.ts): moves sent, snapshots adopted, events told, the turn alert. */
 const {
-  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netEarth, netMark, netTrailMark, netFrame,
+  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netEarth, netBurn, netMark, netTrailMark, netFrame,
   roomShopBoard, openStandings,
 } = createRoom({
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,

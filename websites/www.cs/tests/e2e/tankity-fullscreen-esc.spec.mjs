@@ -11,7 +11,7 @@
 // lock is taken, and granted, on the top-level page. (A test's Esc never
 // reaches the browser's own full-screen handling, so the lock is the proof.)
 // Unit guards: games/tankity/test/fullscreen.test.ts, games/_kit/test/app.test.ts.
-import { test, expect } from '@playwright/test';
+import { test, expect, devices } from '@playwright/test';
 import { recorderScript } from './helpers.mjs';
 
 /* Every frame records its Keyboard Lock calls and how each ended. A browser
@@ -128,5 +128,26 @@ test('Q closes a weapon preview, from the shop and over the gun picker, and the 
   await expect.poll(full).toBe(null);
   await expect.poll(async () => (await topLocks()).some(c => c.unlock)).toBe(true);
   expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+// On a phone the Play tap goes full screen from inside the /play/ page's frame
+// (its allow="fullscreen" lets the game's frame do it), and the page stays full
+// screen through the match like the desktop one.
+test('Play on a phone goes full screen through the /play/ page', async ({ browser }) => {
+  const { defaultBrowserType: _ignored, ...phone } = devices['Pixel 7'];
+  const ctx = await browser.newContext(phone);
+  await ctx.addInitScript(recorderScript);
+  const page = await ctx.newPage();
+  await page.goto('play/tankity/');
+  const game = page.frameLocator('#play-frame');
+  const frame = () => page.frames().find(f => /games\/tankity\//.test(f.url()));
+  await game.locator('#title-play').tap();
+  await expect.poll(() => frame().evaluate(() => (document.fullscreenElement ? document.fullscreenElement.id : null))).toBe('frame');
+  expect(await page.evaluate(() => document.fullscreenElement && document.fullscreenElement.id)).toBe('play-frame');
+  await expect(game.locator('#shop-veil')).toBeVisible();
+  await game.locator('#shop-next').tap();
+  await expect(game.locator('#shop-veil')).toBeHidden();
+  expect(await frame().evaluate(() => (document.fullscreenElement ? document.fullscreenElement.id : null))).toBe('frame');
   await ctx.close();
 });

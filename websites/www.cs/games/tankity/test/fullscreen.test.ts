@@ -93,8 +93,11 @@ test('only the Fullscreen toggle and Quit leave full screen', () => {
 
 test('one fullscreen element (#frame), so a preview or dialog never replaces it', () => {
   // Requesting full screen on another element swaps the fullscreen element and drops the Esc lock.
-  assert.deepEqual(sites(/\.requestFullscreen\s*\(/g), ['_kit/app.ts:browserAppEnv', '_kit/app.ts:enterFullscreen']);
-  assert.deepEqual(sites(/\benterFullscreen\s*\(/g), ['_kit/app.ts:enterFullscreen', 'tankity/src/main.ts:toggleFullscreen']);
+  // (withWebkitFullscreen hands a standard request on to the kit's own port.)
+  assert.deepEqual(sites(/\.requestFullscreen\s*\(/g), ['_kit/app.ts:browserAppEnv', '_kit/app.ts:enterFullscreen', 'tankity/src/play-fullscreen.ts:withWebkitFullscreen']);
+  // The one request outside the toggle is a touch device's Play tap (src/play-fullscreen.ts), on the same frame.
+  assert.deepEqual(sites(/\benterFullscreen\s*\(/g), ['_kit/app.ts:enterFullscreen', 'tankity/src/main.ts:toggleFullscreen', 'tankity/src/play-fullscreen.ts:fullscreenForPlay']);
+  assert.match(body('tankity/src/main.ts', 'playFullscreen'), /\$\('frame'\)/);
   // The top layer (<dialog>.showModal, popovers) answers Esc itself, before the game.
   assert.deepEqual(sites(/\.showModal\s*\(|\.showPopover\s*\(|\bpopover=/g), []);
 });

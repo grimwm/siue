@@ -661,8 +661,9 @@ export function createRoom(deps: RoomDeps) {
   /* Drive the replay; once nothing is left to play, the waiting room state
      takes over. */
   function netReplay(dt: number): void {
+    // A trench is cut at the replay's own pace, so a caught-up volley's warheads never burst ahead of it.
+    netDigs(dt * replay.speed());
     replay.step(dt);
-    netDigs(dt);
     if (replay.idle() && MATCH.pendingRoom) {
       const room = MATCH.pendingRoom;
       MATCH.pendingRoom = null;

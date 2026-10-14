@@ -467,3 +467,18 @@ for (const [file, t] of [['play-after-beam.json', 'beam'], ['play-after-ring.jso
   check('play-after-earth.json: a dig comes before its warheads\' bursts, which follow in time order', evs[dig + 1].t === 'burst' && evs[dig + 1].at >= evs[dig].at
     && evs[dig + 2].at >= evs[dig + 1].at && evs[dig].t1 >= evs[dig].at);
 }
+
+/* ---- the replay's speed, for what plays beside it (a trench cut step by step) ---- */
+{
+  const host = makeHost();
+  host.env.effect = () => undefined;
+  host.env.beam = () => {};
+  host.env.ring = () => {};
+  host.env.mark = () => {};
+  host.env.earth = () => {};
+  const rp = createReplay(host.env);
+  check('an idle replay plays at 1', rp.speed() === 1);
+  rp.push([{ t: 'aifire', seat: 1, w: 'shell', x: 400, a: 45, pw: 50, at: 0, watch: true }, { t: 'fizzle', by: 1, w: 'shell', at: 0.5 }]);
+  rp.step(DT);
+  check('a watched or caught-up volley plays at FAST_SPEED', rp.speed() === FAST_SPEED);
+}

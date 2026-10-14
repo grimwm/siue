@@ -99,6 +99,8 @@ export interface Replay {
   step(dt: number): void;
   /** Nothing is playing and nothing is waiting. */
   idle(): boolean;
+  /** How fast the volley on screen plays (FAST_SPEED kept back by a catch-up or watched, else 1), for what plays beside it. */
+  speed(): number;
   /** Shells of the volley on screen, at their place now. */
   flying(): ReplayFlying[];
   /** Skip all but the newest waiting volley (see planCatchUp). Returns the
@@ -281,6 +283,7 @@ export function createReplay(env: ReplayEnv): Replay {
       }
     },
     idle: () => !volley && !queue.length,
+    speed: () => (volley && volley.fast ? FAST_SPEED : 1),
     flying() {
       const out: ReplayFlying[] = [];
       if (volley && volley.ft >= 0) {

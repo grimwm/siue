@@ -447,12 +447,13 @@ export function createLobby(deps: LobbyDeps) {
   }
   /* The host sets the turn time, in the lobby or mid-match; it counts from
      the next turn. The slider shows the pick at once; only the newest pick's
-     answer is applied. */
+     answer is applied, and a refusal puts the room's setting back. */
   let turnSeq = 0;
   let turnSending = 0;
   async function netTurnTime(secs: number): Promise<void> {
     if (!net.code || !net.isHost) return;
     const seq = ++turnSeq;
+    const was = net.turnSecs;
     LOBBY.turnSecs = secs;
     net.turnSecs = secs;
     renderLobby();
@@ -465,6 +466,10 @@ export function createLobby(deps: LobbyDeps) {
       else netRenderRoster(d.room);
     } catch (err) {
       if (seq !== turnSeq) return;
+      // Refused (a full share of long rooms, say): the slider goes back to what the room keeps.
+      LOBBY.turnSecs = was;
+      net.turnSecs = was;
+      renderLobby();
       if (net.on) say(prettyRoomError(err), 'bad');
       else lobbySay(prettyRoomError(err));
     } finally {

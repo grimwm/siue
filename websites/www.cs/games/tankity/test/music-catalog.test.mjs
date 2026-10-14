@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const GAME = join(import.meta.dirname, '..');
 const MUSIC = join(GAME, 'audio', 'music');
@@ -120,5 +121,44 @@ test('the files carry no ID3 tags', () => {
       readSync(fd, tail, 0, 3, size - 128);
       assert.notEqual(tail.toString('latin1'), 'TAG', `${t.file} ends with an ID3v1 tag`);
     } finally { closeSync(fd); }
+  }
+});
+
+test('the soundtrack is sixteen tracks', () => {
+  assert.equal(tracks.length, 16);
+});
+
+test('no author supplies more than four of the sixteen', () => {
+  const byAuthor = new Map();
+  for (const t of tracks) byAuthor.set(t.credit, (byAuthor.get(t.credit) ?? 0) + 1);
+  for (const [author, n] of byAuthor) assert.ok(n <= 4, `${author} has ${n} tracks`);
+});
+
+/** ffmpeg and ffprobe are dev tools: the audio checks run where they exist (a developer's machine) and skip elsewhere. */
+const haveFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0 && spawnSync('ffprobe', ['-version']).status === 0;
+const targetLufs = Number(script.match(/^TARGET_LUFS=(-?[0-9.]+)/m)?.[1]);
+
+test('the files are 80 kbps stereo mp3, 40 to 240 s, with no tags', { skip: !haveFfmpeg && 'ffmpeg is not installed' }, () => {
+  for (const t of tracks) {
+    const r = spawnSync('ffprobe', ['-v', 'error', '-of', 'json', '-show_entries', 'format=duration,bit_rate,format_name:format_tags:stream=channels,codec_name', join(GAME, t.file)], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    const info = JSON.parse(r.stdout);
+    assert.equal(info.streams[0].codec_name, 'mp3', t.file);
+    assert.equal(info.streams[0].channels, 2, `${t.file} is not stereo`);
+    assert.ok(Math.abs(Number(info.format.bit_rate) - 80_000) < 4_000, `${t.file} bit rate ${info.format.bit_rate}`);
+    const seconds = Number(info.format.duration);
+    assert.ok(seconds >= 40 && seconds <= 240, `${t.file} lasts ${seconds} s`);
+    assert.equal(info.format.tags, undefined, `${t.file} carries tags`);
+  }
+});
+
+test('every track sits within 1 LU of the one loudness target', { skip: !haveFfmpeg && 'ffmpeg is not installed' }, () => {
+  assert.ok(Number.isFinite(targetLufs), 'TARGET_LUFS not found in build_music.sh');
+  for (const t of tracks) {
+    const r = spawnSync('ffmpeg', ['-nostdin', '-hide_banner', '-nostats', '-i', join(GAME, t.file), '-af', 'ebur128=framelog=quiet', '-f', 'null', '-'], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    const lufs = Number(r.stderr.match(/Integrated loudness:\s*I:\s*(-?[0-9.]+) LUFS/)?.[1]);
+    assert.ok(Number.isFinite(lufs), `no loudness for ${t.file}`);
+    assert.ok(Math.abs(lufs - targetLufs) <= 1, `${t.file} is ${lufs} LUFS; the target is ${targetLufs}`);
   }
 });

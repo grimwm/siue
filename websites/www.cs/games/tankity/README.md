@@ -16,7 +16,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `src/main.ts`                                                   | The entry module: the game's state, the main loop, the keys, the page's plumbing (overlays, the firing range, loading `game.json`) and the wiring that hands each typed module below the pieces of the game it needs. It is bundled into `dist/main.js` |
 | `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (21 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `src/main.ts`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
-| `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml`, and where each came from                                                                                                                     |
+| `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml` (sixteen music tracks built by `audio/music/build_music.sh`), and where each came from                                                                                                                     |
 | `src/detmath.ts` | `dsin`, `dcos`, `datan`, `datan2`: the sim's trigonometry from `+ − × ÷` and `floor` only, the same bits as `server/detmath.php` |
 | `src/sim.ts` | The game math in TypeScript: RNG, terrain, flight, hit tests, blasts. Pure: state in, what happened out; no page, sound or particles |
 | `src/field.ts` | How wide a solo field is dealt (from the landscape battlefield box, whichever way the device is held), where the field sits in the box, and the power step and its display per width. DOM-free |
@@ -27,7 +27,8 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `src/ai.ts` | The drone AI: ballistic aim, bracketing, the six strategies (`aiChoose`, `pickTactic`) and the difficulty table (`DIFFICULTY`). Pure; imports the sim, never the reverse (the sim keeps `brkLand`, which a blast calls) |
 | `src/ai-measure.ts` | `measureHitRates`: a drone bracketing a stationary player on seeded hills with the real sim, counting the shots that take armor off, per shot of the bracket. The difficulty table is tuned against it. Pure, never bundled |
 | `src/difficulty.ts` | The Difficulty setting as the player keeps it (`tankity-difficulty`, missing or unknown reads as normal) and the levels' names |
-| `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes. It never touches the page |
+| `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes, and tells `main.ts` why a track started (the Next song toast). It never touches the page |
+| `src/track-toast.ts` | The Next song toast's text ("♫ Title · Author") and its timer. DOM-free: it is handed the element and the timers |
 | `src/net.ts` | The room client: transport (one fetcher, the 429 retry; create and join never retry a 429), the session, polling, the act/buy/ready/leave senders, the turn and shop clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers and the clock are passed in |
 | `src/replay.ts` | The room volley replay: the queue of events waiting to play and the volley on screen. Eases the shooter's barrel, flies each shell along the path the server recorded (positions and velocities for the renderer), lands blasts and hits when the events say, and plays a volley kept back by a catch-up, or fired by a drone with no human standing (`watch`), at triple speed (`FAST_SPEED`). Sound, particles, craters, armor and log lines happen through callbacks; it never touches the page |
 | `src/preview.ts` | The firing-range preview simulation: a fixed dummy, the solver that aims at it with the war's own ballistics, the shell loop (seeker, cluster, pierce, proximity, roller), the damage tally and the result timing, on its own small field. Weapons, effects and the result line are passed in; it never touches the page |
@@ -124,7 +125,12 @@ php tools/install-files.php      # after the last edit to any served file
 - Audio plays only after the first tap or key press, never while its toggle
   (E sound, M music) is off, and a missing or undecodable file silently leaves
   the synthesized sound or song in place. Add a line to `audio/CREDITS.md` for
-  every file, and use only CC0 or otherwise redistributable audio.
+  every file, and use only CC0 or otherwise redistributable audio. Music is
+  rebuilt with `bash audio/music/build_music.sh`: each source is pinned by
+  SHA-256 and every track is normalised to one loudness (EBU R128), so a track
+  needs no volume; add its row to CREDITS.md with the page's License(s) text,
+  and `test/music-catalog.test.mjs` fails until game.yaml, CREDITS.md,
+  audio/music/ and the pins agree.
 - Key tokens match `event.code` first, then `event.key`; the first token of an
   action names the key on buttons. Touch-only screens (coarse pointer, no
   mouse) get no key bindings or labels.
@@ -804,6 +810,10 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/ai-search.test.mjs`                      | The planning flights one drone turn costs, counted as `simShot` flies them (not as `aiChoose` looks guns up): a coarse grid and the fine neighbours of its best per distinct arc, a lobber's high arcs, and a bracket correction's three grids |
 | `test/prefs-legacy.test.mjs`                   | The saved settings (`tankity-body`, `tankity-text`, `tankity-tutorial`) read back through the kit's prefs exactly as the code before it wrote them, and the `tankity-local` and `tankity-scores-local` values |
 | `test/audio.test.mjs`                          | `src/audio.ts` imports without a browser; the loop-point trim and the round-to-track mapping are right |
+| `test/audio-announce.test.mjs` | Only Next song starts are announced as `'next'`: the theme, a round change (even one that takes over while Next song is loading) and a failover are `'auto'` |
+| `test/track-toast.test.mjs` | `src/track-toast.ts`: "♫ Title · Author", the title alone or the file name standing in, and the toast hiding itself with one timer |
+| `test/music-build.test.mjs` | `audio/music/build_music.sh` without ffmpeg: the OpenGameArt License(s) reader (CC0 must be in the field itself) and the SHA-256 pin, which stops on a mismatch and never trusts a tampered cache |
+| `test/music-catalog.test.mjs` | `game.yaml`, `audio/CREDITS.md`, `audio/music/` and the script's pins agree: sixteen tracks, Battle Theme A first, no volume, no tags, at most four per author; with ffmpeg installed, every file is 80 kbps stereo, 40 to 240 s, and within 1 LU of the loudness target |
 | `test/field.test.mjs`                          | The width from the landscape box (clamps, columns, portrait equals landscape), that a deal holds through a resize, fitting the field in a box, and the power step and display at 720, 1080 and 1440 |
 | `test/detmath.test.mjs`                        | `src/detmath.ts` is within 1e-15 of `Math` where the sim feeds it, keeps the sign of zero, and is exact at 0, 1 and the right angles |
 | `test/solo.test.mjs`                           | `src/solo.ts` without a page: the deal and its width, a round's muster, settling a volley, the turn order, the drones' difficulty and 1-ups |

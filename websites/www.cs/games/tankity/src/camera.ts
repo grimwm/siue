@@ -35,7 +35,7 @@ export function shellTop(s: Rising, g: number): number {
   return s.vy < 0 && g > 0 ? s.y - (s.vy * s.vy) / (2 * g) : s.y;
 }
 
-export interface Aloft extends Rising { x: number; wkey: string; rolling?: boolean }
+export interface Aloft extends Rising { x: number; wkey: string; rolling?: boolean; digging?: boolean }
 /** Where shells can still hold the camera: the field's width, how far either
  *  side of its middle the view at ZOOM_FLOOR reaches, and (optional) the ground's
  *  row at x, under which a shell lies on the ground (a room replay's roller). */
@@ -48,13 +48,13 @@ const HOLD_GRACE = 2;
 /** The top of the volley in flight: the highest arc any of its shells has
  *  reached or will reach, held while a shell is still up, then null. lists[0]
  *  is the shells in play; the rest fly on past the field's edge (draw only)
- *  and hold only while they climb. A roller on the ground, or a shell the
+ *  and hold only while they climb. A roller on the ground, a digger burrowing, or a shell the
  *  floor's view cannot reach sideways, holds nothing. */
 export function volleyTop(prev: number | null, lists: readonly Iterable<Aloft>[], gravity: (wkey: string) => number, at?: Reach): number | null {
   let top = prev, any = false;
   for (let i = 0; i < lists.length; i++) {
     for (const s of lists[i]!) {
-      if (s.rolling || (i > 0 && s.vy >= 0)) continue;
+      if (s.rolling || s.digging || (i > 0 && s.vy >= 0)) continue;
       if (at && Math.abs(s.x - at.w / 2) > at.reach) continue;
       if (at && at.ground && s.vy > -30 && s.y >= at.ground(s.x) - ON_GROUND) continue;
       any = true;

@@ -8,7 +8,7 @@
  * caller to show. */
 
 import { datan2, dcos, dsin } from './detmath.ts';
-import { BURY_EPS, DIG_STEP, FLOOR, addDirt, applyEarth, carveCrater, digHeading, riotCarve } from './earth.ts';
+import { BURY_EPS, DIG_STEP, FLOOR, applyEarth, carveCrater, digHeading } from './earth.ts';
 import type { EarthOp } from './earth.ts';
 
 /* ---------- seeded RNG (mulberry32 + string hash) ---------- */
@@ -521,6 +521,15 @@ export function flies(w: Pick<Weapon, 'effect'>): boolean {
    into world.shells, or, for a gun with no flight, resolves it at once (Launch.now).
    Null when t has none left. */
 export function fireWeapon(world: World, arsenal: Arsenal, t: Tank, wkey: string): Launch | null {
+  const launch = fireGun(world, arsenal, t, wkey);
+  // The loadout just changed to the Shell: the drawn barrel leaves a dip the Shell cannot fire from.
+  if (launch?.spent) {
+    const lim = aimLimits(arsenal.weapons[world.selected]);
+    t.angle = clamp(t.angle, lim.min, lim.max);
+  }
+  return launch;
+}
+function fireGun(world: World, arsenal: Arsenal, t: Tank, wkey: string): Launch | null {
   const w = arsenal.weapons[wkey]!;
   const store = (t.isPlayer ? world.ammo : t.ammo)!;
   if ((store[wkey] || 0) <= 0) return null;
@@ -540,7 +549,7 @@ export function fireWeapon(world: World, arsenal: Arsenal, t: Tank, wkey: string
   const ang = datan2(-dsin(r0), dcos(r0) * s);
   if (w.effect === 'beam') return { x: m.x, y: m.y, ang, spent, now: [{ kind: 'beam', wkey, shot: fireBeam(world, arsenal, t, wkey) }] };
   if (w.effect === 'plasma') return { x: m.x, y: m.y, ang, spent, now: [{ kind: 'ring', wkey, shot: firePlasma(world, arsenal, t, wkey) }] };
-  if (w.effect === 'riot') return { x: m.x, y: m.y, ang, spent, now: [{ kind: 'earth', op: fireRiot(world, arsenal, t, wkey, ang), owner: t }] };
+  if (w.effect === 'riot') return { x: m.x, y: m.y, ang, spent, now: [fireRiot(world, arsenal, t, wkey, ang)] };
   const shots = w.pellets || 1;
   for (let i = 0; i < shots; i++) {
     const off = shots === 1 ? 0 : (i - (shots - 1) / 2) * (w.spread || 0);
@@ -650,16 +659,17 @@ export function ringDamage(ring: { x: number; y: number; r: number }, w: Pick<We
    its hull's centre out along the barrel (earth.ts riotCarve, heading a, the
    radius long, its widest crater radius x fan; the hull's own crater never
    cuts below where t stands), and owns the falls it digs,
-   its gunner's own included (credited to nobody). server/sim.php
-   room_fire_riot is the same. */
-export function fireRiot(world: World, arsenal: Arsenal, t: Tank, wkey: string, a: number): EarthOp {
+   its gunner's own included (credited to nobody). Returns what it did, as
+   the earth event the page plays. server/sim.php room_fire_riot is the same. */
+export function fireRiot(world: World, arsenal: Arsenal, t: Tank, wkey: string, a: number): StepEvent {
   const w = arsenal.weapons[wkey]!;
   const b = unitHitBox(t);
   const op: EarthOp = { t: 'riot', w: wkey, x: b.cx, y: b.cy, a, r: w.radius, fan: w.fan || 1, b: t.y };
   const was = world.tanks.map(u => surfY(world.terrain, u.x));
-  riotCarve(world.terrain, op.x, op.y, a, op.r, op.fan, op.b);
+  const before = world.terrain.slice();
+  const span = applyEarth(world.terrain, op);
   markFalls(world, t, was);
-  return op;
+  return { kind: 'earth', op, owner: t, before, ...span };
 }
 /* One ballistic step. Shared by the real shells, the AI predictor, the aim
  * guide, and the firing-range preview, so the demo flies exactly like war. */
@@ -1085,7 +1095,7 @@ export type StepEvent =
   | { kind: 'ring'; wkey: string; shot: PlasmaShot }
   /** An earth gun moved the ground (op, as the room wire carries it): dirt, a
    *  pour or a slump where it burst, a riot charge the moment it fired. */
-  | { kind: 'earth'; op: EarthOp; owner: Tank }
+  | { kind: 'earth'; op: EarthOp; owner: Tank; before: number[]; x0: number; x1: number }
   /** A digger touched down (step 0) or cut step `step` of its trench at (x, y), heading ang; r is the trench's half width. */
   | { kind: 'dig'; wkey: string; x: number; y: number; ang: number; r: number; step: number; owner: Tank }
   | { kind: 'blast'; blast: Blast };
@@ -1173,9 +1183,10 @@ function burstShell(world: World, arsenal: Arsenal, s: Shell, w: Weapon, direct:
   }
   if (op) {
     const was = world.tanks.map(t => surfY(world.terrain, t.x));
-    applyEarth(world.terrain, op);
+    const before = world.terrain.slice();
+    const span = applyEarth(world.terrain, op);
     markFalls(world, s.owner, was);
-    events.push({ kind: 'earth', op, owner: s.owner });
+    events.push({ kind: 'earth', op, owner: s.owner, before, ...span });
     s.dead = true;
     return;
   }

@@ -382,8 +382,8 @@ function room_ai_no_flight_harm(array $room, array $self, string $wkey, array $l
     return (float) $sum;
 }
 /* A beam's aim at $target: from the barrel's pivot (14 px above the hull)
- * straight at the target's body, to the nearest whole degree and within the
- * barrel's 10..170, at full power. [a, p]. src/ai.ts beamAim is the same. */
+ * straight at the target's body, to the nearest whole degree and inside the
+ * beam's limits (aimLimits), at full power. [a, p]. src/ai.ts beamAim is the same. */
 function room_ai_beam_aim(array $self, array $target, array $def): array
 {
     [$cx, $cy] = room_unit_box($target);

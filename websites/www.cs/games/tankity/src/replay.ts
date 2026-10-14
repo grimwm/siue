@@ -229,7 +229,7 @@ export function createReplay(env: ReplayEnv): Replay {
           const emp = t && v.shots.find(s => env.effect(s.e.w) === 'emp');
           if (t && emp) env.special(emp.e.w, 'arc', t.x, t.y - 12, 0);
           // Through a unit a beam struck, the beam passing, along its line, at its body.
-          const beam = t && v.events.find((b): b is BeamEvent => b.t === 'beam' && v.done.has(b));
+          const beam = t && v.events.find((b): b is BeamEvent => b.t === 'beam' && b.by === e.by && v.done.has(b));
           if (t && beam) {
             const body = unitHitBox({ isPlayer: !!t.isPlayer, human: t.human, x: t.x, y: t.y });
             env.special(beam.w, 'pierce', t.x, body.cy, Math.atan2(beam.y1 - beam.y0, beam.x1 - beam.x0));

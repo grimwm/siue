@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildArsenal, SPAWN_GAP, TUNE, surfY } from '../src/sim.ts';
+import { buildArsenal, droneRack, SPAWN_GAP, TUNE, surfY } from '../src/sim.ts';
 import { buyPacks, soloAim, soloBuy, soloDeal, soloMuster, soloSettle, soloNextTurn, soloOneUps, snapTanks } from '../src/solo.ts';
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
@@ -21,6 +21,21 @@ test('a deal keeps its width; a wide field is the same hills with the units spre
   assert.ok(xs[0] >= 30 && xs.at(-1) <= 1410);
   for (let i = 1; i < xs.length; i++) assert.ok(xs[i] - xs[i - 1] >= SPAWN_GAP, 'nobody starts inside another\'s blast');
   assert.throws(() => soloDeal({ body: 'tank' }, arsenal, 'x', 'normal', 1000), RangeError);
+});
+
+test('a drone loads aiRack of each gun it carries, 2 when the row names none', () => {
+  const rack = droneRack(arsenal, 9);
+  assert.equal(rack.shell, Infinity);
+  for (const row of GAME.arsenal.ammo) {
+    if (row.key === 'shell') continue;
+    const want = row.ai && 9 >= row.aiRound ? (row.aiRack ?? 2) : 0;
+    assert.equal(rack[row.key], want, row.key);
+  }
+  assert.equal(rack.deathshead, 1);
+  assert.equal(rack.mortar, 2);
+  assert.equal(droneRack(arsenal, 8).deathshead, 0, 'Death\'s Head waits for round 9');
+  const one = buildArsenal({ ammo: [{ key: 'shell', name: 'Shell', dmg: 34, radius: 26 }, { key: 'x', name: 'X', dmg: 1, radius: 1, ai: true, aiRound: 1 }] });
+  assert.equal(droneRack(one, 1).x, 2);
 });
 
 test('a deal is the stake, three lives and full armor', () => {

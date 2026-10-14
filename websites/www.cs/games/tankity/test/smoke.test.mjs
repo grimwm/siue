@@ -423,7 +423,7 @@ function scriptSeats() {
 }
 function scriptYou() {
   return {
-    ammo: { shell: -1, buck: 1, mortar: 0, rail: 0, nuke: 0 },
+    ammo: { shell: -1, buck: 1 },
     cash: 600, score: 0, lives: 3, fuel: 80, weapon: 'shell', nextUp: 3000,
     seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, chutes: 0, plate: 0, armor: seatArmor, maxArmor: 100, filed: false, filedRank: null, filedFailed: false, filedLocal: false,
   };
@@ -659,11 +659,11 @@ await (async () => {
     shopRows().map(li => li.children[0].className).join());
   check('nuke-stats', /95 damage/.test(nukeStats) && /round 4/.test(nukeStats), nukeStats);
   // The arsenal section of game.json is a second source the game reads at
-  // boot: it must hold 22 items and speak only effects and painters the code has.
+  // boot: it must hold every row and speak only effects and painters the code has.
   const arsenal = GAME.arsenal;
-  check('arsenal-count', arsenal.ammo.length === 13 && arsenal.gear.length === 9,
+  check('arsenal-count', arsenal.ammo.length === 19 && arsenal.gear.length === 9,
     `ammo=${arsenal.ammo.length} gear=${arsenal.gear.length}`);
-  const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller'];
+  const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter'];
   const PAINT = ['disc', 'beam', 'spark', 'ball'];
   const TRICKS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand', 'parachute'];
   check('arsenal-fx', arsenal.ammo.every(a => FX.includes(a.effect) && a.gfx && PAINT.includes(a.gfx.painter)
@@ -674,7 +674,7 @@ await (async () => {
   for (const r of arsenal.ammo.filter(a => a.pack > 0).concat(arsenal.gear)) {
     if (!cats.includes(r.cat)) cats.push(r.cat);
   }
-  check('arsenal-cats', cats.join('|') === 'Shells|Hull and fuel|Tricks', cats.join('|'));
+  check('arsenal-cats', cats.join('|') === 'Shells|Rollers|Hull and fuel|Tricks', cats.join('|'));
   for (const k of ['shell', 'buck', 'mortar', 'rail', 'nuke', 'repair', 'fuel']) {
     check('arsenal-keeps-' + k, arsenal.ammo.some(a => a.key === k) || arsenal.gear.some(g => g.key === k));
   }

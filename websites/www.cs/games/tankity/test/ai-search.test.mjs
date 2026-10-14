@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildArsenal, mulberry32 } from '../src/sim.ts';
-import { LOB_ANGLE, aiChoose } from '../src/ai.ts';
+import { LOB_ANGLE, aiChoose, arcGuns } from '../src/ai.ts';
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const arsenal = buildArsenal(GAME.arsenal);
@@ -60,6 +60,28 @@ test('a fresh aim searches each distinct arc the same way', () => {
   assert.equal(flown.heavy, COARSE + FINE);
   assert.equal(flown.needle, COARSE + FINE);
   assert.equal(flown.buck, undefined, 'buck flies the shell\'s arc');
+});
+
+test('a full round-9 rack searches every arc, rollers on a coarser grid, inside a fixed budget', () => {
+  const ammo = Object.fromEntries(GAME.arsenal.ammo.filter(a => a.ai && a.key !== 'shell' && a.aiRound <= 9).map(a => [a.key, a.aiRack ?? 2]));
+  const plan = arcGuns(arsenal, ['shell', ...Object.keys(ammo)]);
+  const rollers = plan.filter(k => arsenal.weapons[k].effect === 'roller');
+  assert.ok(rollers.length >= 3, plan.join());
+  for (const s of ['hunter', 'glory', 'sniper']) {
+    const { flown, choice } = turn({ s, ammo });
+    for (const k of plan) {
+      const n = flown[k] || 0;
+      // A roller arc: a 24-step grid (6 x 4), then two narrowing passes only when it beats the best so far.
+      if (rollers.includes(k)) assert.ok(n >= 24 && n <= 24 + 2 * FINE, `${s} ${k}: ${n}`);
+      else assert.ok(n >= COARSE && n <= COARSE + FINE, `${s} ${k}: ${n}`);
+    }
+    const total = Object.values(flown).reduce((a, b) => a + b, 0);
+    assert.ok(total <= 440, `${s}: ${total} flights, ${JSON.stringify(flown)} (test/php/AiArcsTest.php holds the server to the same 440)`);
+    assert.ok(choice.wkey === 'shell' || ammo[choice.wkey] > 0, choice.wkey);
+  }
+  const t0 = performance.now();
+  for (let i = 0; i < 20; i++) turn({ s: 'glory', ammo });
+  assert.ok((performance.now() - t0) / 20 < 40, 'a full rack\'s turn stays well under the frame budget of a busy room');
 });
 
 test('a lobber searches the high arcs coarse to fine', () => {

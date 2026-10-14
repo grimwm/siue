@@ -86,8 +86,11 @@ export interface Gfx {
   trail?: string;
   blast?: readonly [string, string];
   painter?: string;
+  linger?: number; // seconds the blast disc stays on screen
   [key: string]: unknown;
 }
+/* Seconds a weapon's blast disc lingers. */
+export const gfxLinger = (g: { linger?: number } | undefined): number => (g && g.linger) || 0.5;
 /* One ammo row of the arsenal (game.yaml, served as game.json). */
 export interface Weapon {
   key: string;
@@ -97,9 +100,11 @@ export interface Weapon {
   radius: number;
   price: number;
   pack: number;
+  start?: number; // shells of it every player starts a match with
   minRound: number;
   ai?: boolean;
   aiRound?: number;
+  aiRack?: number; // shells of it a drone loads per round (2 when left out)
   effect: string;
   speed: number;
   flat?: boolean;
@@ -109,6 +114,10 @@ export interface Weapon {
   split?: number;
   fan?: number;
   fuse?: number;
+  apex?: boolean; // a cluster that splits at the top of its arc instead of on fuse
+  kick?: number; // scatter: the fastest bomblet's speed
+  hops?: number; // hop: warheads in all
+  hopKeep?: number; // hop: the share of its speed each leap keeps
   prox?: number;
   drain?: number;
   subDmg?: number;
@@ -154,6 +163,8 @@ export const FALL_RULES: Readonly<FallRules> = Object.freeze({ freePx: 10, perPx
 export interface Arsenal {
   weapons: Readonly<Record<string, Readonly<Weapon>>>;
   order: readonly string[];
+  /** The ammo keys as the weapon picker shows them: each category together, in first-appearance order. */
+  shelf: readonly string[];
   shop: readonly Readonly<ShopRow>[];
   gear: Readonly<Record<string, Readonly<Gear>>>;
   fall: Readonly<FallRules>;
@@ -223,6 +234,8 @@ export interface Shell extends Motion {
   rolling?: boolean;
   ru?: number;
   rt?: number;
+  /** A hop weapon's warhead: 1 for the first, counting up with each leap. */
+  hop?: number;
 }
 export interface Cloud {
   x: number;
@@ -284,6 +297,15 @@ export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[]; fall?: Part
     shop.push({ kind: 'gear', g: g.key, n: g.n || 0, label: g.name, cat: g.cat || 'Tricks', minRound: openFrom, price: g.price || 0, effect: g.effect });
   }
   if (!order.length) return null;
+  // The shop shows each category under one heading, in the order the
+  // categories first appear; rows keep their order within one.
+  const catAt = new Map<string, number>();
+  for (const row of shop) if (!catAt.has(row.cat)) catAt.set(row.cat, catAt.size);
+  shop.sort((a, b) => catAt.get(a.cat)! - catAt.get(b.cat)!);
+  const ammoCat = (k: string): string => w[k]!.cat || 'Shells';
+  const shelfAt = new Map<string, number>();
+  for (const k of order) if (!shelfAt.has(ammoCat(k))) shelfAt.set(ammoCat(k), shelfAt.size);
+  const shelf = order.slice().sort((a, b) => shelfAt.get(ammoCat(a))! - shelfAt.get(ammoCat(b))!);
   // The arsenal is read-only after the build: every shell, row, and paint
   // job freezes, so a stray write fails loudly instead of bending ballistics
   // mid-match. Hot per-frame state (shells, particles, tanks) stays mutable
@@ -298,17 +320,29 @@ export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[]; fall?: Part
   for (const row of shop) Object.freeze(row);
   for (const k of Object.keys(gear)) Object.freeze(gear[k]);
   Object.freeze(order);
+  Object.freeze(shelf);
   Object.freeze(shop);
   const fall = Object.freeze({ ...FALL_RULES, ...((data && data.fall) || {}) });
-  return { weapons: w, order, shop, gear, fall };
+  return { weapons: w, order, shelf, shop, gear, fall };
 }
-/* Drone magazine from the data file: shells the battery may load by round. */
+/* A player's ammo at the start of a match: the endless Shell, plus each
+   row's start shells. server/rules.php room_start_ammo is the same. */
+export function startAmmo(arsenal: Arsenal): Ammo {
+  const ammo: Ammo = { shell: Infinity };
+  for (const k of arsenal.order) {
+    const n = arsenal.weapons[k]!.start || 0;
+    if (k !== 'shell' && n > 0) ammo[k] = n;
+  }
+  return ammo;
+}
+/* Drone magazine from the data file: aiRack (2 when a row names none) of each
+   gun the battery may load by round. server/ai.php room_ai_rack is the same. */
 export function droneRack(arsenal: Arsenal, round: number): Ammo {
   const rack: Ammo = { shell: Infinity };
   for (const k of arsenal.order) {
     if (k === 'shell') continue;
     const a = arsenal.weapons[k];
-    rack[k] = (a && a.ai && round >= (a.aiRound || 99)) ? 2 : 0;
+    rack[k] = (a && a.ai && round >= (a.aiRound || 99)) ? (a.aiRack || 2) : 0;
   }
   return rack;
 }
@@ -562,7 +596,7 @@ export function flightKey(w: Weapon): string {
    terrain y): above it a shell cannot touch down, so the search skips the
    ground lookup there. */
 export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal, x: number, y: number, angle: number,
-  power: number, wkey: string, dirS: number, top = -Infinity): { x: number; y: number; oob: boolean } {
+  power: number, wkey: string, dirS: number, top = -Infinity): { x: number; y: number; oob: boolean; vx: number; vy: number } {
   const w = arsenal.weapons[wkey]!;
   const fw = world.terrain.length, reach = fieldReach(fw);
   const r = rad(angle);
@@ -575,14 +609,38 @@ export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal
   const grav = w.flat ? FLAT_GRAV : GRAV;
   for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * reach); i < steps; i++) {
     stepBallistic(st, dt, world.wind, grav);
-    if (st.x < 0 || st.x >= fw) return { x: st.x, y: st.y, oob: true };
-    if (st.y >= H + 40) return { x: st.x, y: st.y, oob: true };
+    if (st.x < 0 || st.x >= fw) return { x: st.x, y: st.y, oob: true, vx: st.vx, vy: st.vy };
+    if (st.y >= H + 40) return { x: st.x, y: st.y, oob: true, vx: st.vx, vy: st.vy };
     if (i >= 6 && st.y >= top && st.y >= world.terrain[clamp(Math.round(st.x), 0, fw - 1)]!) {
-      if (w.effect === 'roller') return { ...rollOut(world.terrain, st.x, st.vx, st.vy, w), oob: false };
-      return { x: st.x, y: st.y, oob: false };
+      if (w.effect === 'roller') return { ...rollOut(world.terrain, st.x, st.vx, st.vy, w), oob: false, vx: 0, vy: 0 };
+      return { x: st.x, y: st.y, oob: false, vx: st.vx, vy: st.vy };
     }
   }
-  return { x: st.x, y: st.y, oob: true };
+  return { x: st.x, y: st.y, oob: true, vx: st.vx, vy: st.vy };
+}
+/* Where a cluster shot at (angle, power) splits, flown as the war flies it
+   (its fuse, or the top of its arc with apex), or null when it comes down or
+   leaves the field first. server/sim.php room_split_point is the same. */
+export function splitPoint(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal, x: number, y: number, angle: number,
+  power: number, wkey: string, dirS: number): Motion | null {
+  const w = arsenal.weapons[wkey]!;
+  const fw = world.terrain.length, reach = fieldReach(fw);
+  const r = rad(angle);
+  const st: Motion = {
+    x, y,
+    vx: dcos(r) * shotSpeed(power, w.flat, w.speed, reach) * dirS,
+    vy: -dsin(r) * shotSpeed(power, w.flat, w.speed, reach),
+  };
+  const dt = 1 / 60;
+  let age = 0;
+  for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * reach); i < steps; i++) {
+    age += dt;
+    stepBallistic(st, dt, world.wind, w.flat ? FLAT_GRAV : GRAV);
+    if (st.x < 0 || st.x >= fw || st.y >= H + 40) return null;
+    if (w.apex ? age >= 0.1 && st.vy >= 0 : age >= (w.fuse || 0.9)) return st;
+    if (i >= 6 && st.y >= world.terrain[clamp(Math.round(st.x), 0, fw - 1)]!) return null;
+  }
+  return null;
 }
 /* Seekers bend toward the nearest live rival before the ballistic step. */
 export function steerShell(tanks: readonly Tank[], s: Shell, w: Weapon, dt: number): void {
@@ -602,18 +660,83 @@ export function steerShell(tanks: readonly Tank[], s: Shell, w: Weapon, dt: numb
 // random numbers, so the room server replays the exact same bloom. Returns
 // the bomblets. */
 export function splitShell(s: Shell, w: Weapon, reach = 1): Shell[] {
-  const n = Math.max(2, w.split || 4);
-  const fan = w.fan || 0.22;
-  const sp = dist(s.vx, s.vy) * 0.85;
-  const base = datan2(s.vy, s.vx);
+  const vels = splitVel(s.vx, s.vy, Math.max(2, w.split || 4), w.fan || 0.22);
   const bomblets: Shell[] = [];
-  for (let i = 0; i < n; i++) {
-    const a = base + (i - (n - 1) / 2) * fan;
+  for (let i = 0; i < vels.length; i++) {
+    const [vx, vy] = vels[i]!;
     bomblets.push({
-      x: s.x, y: s.y,
-      vx: dcos(a) * sp, vy: dsin(a) * sp,
+      x: s.x, y: s.y, vx, vy,
       wkey: s.wkey, owner: s.owner, life: 12 * reach,
       age: 0, pierced: false, split: true, order: [...(s.order || []), i],
+      dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius,
+    });
+  }
+  return bomblets;
+}
+/* A cluster's bomblet velocities: n fanned `fan` radians apart around the
+   parent's heading, at 85% of its speed. server/sim.php room_split_vel. */
+export function splitVel(vx: number, vy: number, n: number, fan: number): [number, number][] {
+  const sp = dist(vx, vy) * 0.85;
+  const base = datan2(vy, vx);
+  const out: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const a = base + (i - (n - 1) / 2) * fan;
+    out.push([dcos(a) * sp, dsin(a) * sp]);
+  }
+  return out;
+}
+/* A scatter gun's bomblet velocities: n in a fixed fan `fan` radians wide,
+   centred straight up, bomblet i at kick x (0.6 + 0.4 x ((5i mod n) / (n - 1)))
+   px/s. server/sim.php room_scatter_vel. */
+export function scatterVel(n: number, fan: number, kick: number): [number, number][] {
+  const out: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + (i - (n - 1) / 2) * fan / (n - 1);
+    const sp = kick * (0.6 + 0.4 * ((i * 5) % n) / (n - 1));
+    out.push([dcos(a) * sp, dsin(a) * sp]);
+  }
+  return out;
+}
+/* How long a munition leaving height y0 at vertical speed vy takes to come
+   down to groundY, with no wind (y grows downward). The drones predict where
+   bomblets and leaps land with it. server/sim.php room_drop_time. */
+export function dropTime(y0: number, vy: number, groundY: number): number {
+  return (-vy + Math.sqrt(Math.max(0, vy * vy + 2 * GRAV * (groundY - y0)))) / GRAV;
+}
+/* A hop weapon's next warhead from the burst at (x, y), or null once `hops`
+   warheads have burst. It leaps on one pixel up, forward as the last one flew
+   and upward however it fell, both scaled by hopKeep, and bursts with
+   subDmg/subRadius. `skip` is the unit the last one burst on, which it never
+   hits directly. server/sim.php room_hop_vel and server/rules.php
+   room_fire_hops are the same. */
+export function hopShell(s: Shell, w: Weapon, x: number, y: number, reach: number, skip: Tank | false = false): Shell | null {
+  const hop = s.hop || 1;
+  if (hop >= (w.hops || 1)) return null;
+  const keep = w.hopKeep || 0.5;
+  return {
+    x, y: y - 1,
+    vx: s.vx * keep, vy: -Math.abs(s.vy) * keep,
+    wkey: s.wkey, owner: s.owner, life: 12 * reach,
+    age: 0, pierced: skip, split: false, order: [...(s.order || []), 0],
+    dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius, hop: hop + 1,
+  };
+}
+/* A scatter weapon's bomblets from its burst at (x, y): `split` of them
+   thrown from two pixels up in a fixed fan `fan` radians wide, centred
+   straight up. Bomblet i leaves at kick x (0.6 + 0.4 x ((5i mod n) / (n - 1)))
+   px/s, so neighbours fly to different heights with no random numbers. Each
+   bursts on the ground at once, with subDmg/subRadius, and never takes a
+   direct hit on `skip`, the unit the burst struck. server/sim.php
+   room_scatter_vel and server/rules.php room_fire_scatter are the same. */
+export function scatterShells(s: Shell, w: Weapon, x: number, y: number, reach: number, skip: Tank | false = false): Shell[] {
+  const vels = scatterVel(Math.max(2, w.split || 4), w.fan || 0.22, w.kick || 150);
+  const bomblets: Shell[] = [];
+  for (let i = 0; i < vels.length; i++) {
+    const [vx, vy] = vels[i]!;
+    bomblets.push({
+      x, y: y - 2, vx, vy,
+      wkey: s.wkey, owner: s.owner, life: 12 * reach,
+      age: 0, pierced: skip, split: true, order: [...(s.order || []), i],
       dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius,
     });
   }
@@ -696,14 +819,18 @@ export interface BlastOverride {
 export function explode(world: World, arsenal: Arsenal, x: number, y: number, wkey: string, owner: Tank,
   direct: Tank | null, ov: BlastOverride | null): Blast {
   const w = arsenal.weapons[wkey]!;
-  const dmg0 = (ov && ov.dmg) || w.dmg;
-  const r = (ov && ov.radius) || w.radius;
+  // An override's 0 is a real 0 (a harmless burst), as server/sim.php's isset() reads it.
+  const dmg0 = ov && ov.dmg !== undefined ? ov.dmg : w.dmg;
+  const r = ov && ov.radius !== undefined ? ov.radius : w.radius;
   const gfx = (ov && ov.gfx) || w.gfx || {};
   brkLand(owner, x);
   const was = world.tanks.map(t => surfY(world.terrain, t.x));
   carveCrater(world.terrain, x, y, r, H - 4);
   markFalls(world, owner, was);
   const blast: Blast = { x, y, r, wkey, fx: (ov && ov.fx) || wkey, shake: gfx.shake || 0.5, owner, events: [] };
+  // A harmless burst (dmg 0) only carves (and owns the falls it digs, as
+  // above): it touches no unit, so it spends no shield and credits no hit.
+  if (dmg0 === 0) return blast;
   for (const t of world.tanks) {
     if (t.hp <= 0) continue;
     // Distance from the unit's body (its hit box centre), drone or tank.
@@ -786,12 +913,25 @@ export type StepEvent =
   | { kind: 'split'; wkey: string; x: number; y: number; ang: number }
   /** A lance went through its first victim and flies on. */
   | { kind: 'pierce'; wkey: string; x: number; y: number; ang: number }
+  /** A hop weapon's next warhead leapt on from a burst; ang is its heading. */
+  | { kind: 'hop'; wkey: string; x: number; y: number; ang: number }
+  /** A scatter weapon's burst threw its bomblets up (ang is straight up). */
+  | { kind: 'scatter'; wkey: string; x: number; y: number; ang: number }
   | { kind: 'blast'; blast: Blast };
-/* True when a shell launched earlier in the same volley is still in the air. */
+/* Bomblets of one burst (both split, the same order but the last index):
+   they burst as they land, never waiting for each other. */
+function siblings(a: Shell, b: Shell): boolean {
+  const x = a.order || [], y = b.order || [];
+  if (!a.split || !b.split || x.length !== y.length) return false;
+  for (let i = 0; i < x.length - 1; i++) if (x[i] !== y[i]) return false;
+  return true;
+}
+/* True when a shell launched earlier in the same volley is still in the air;
+   a bomblet's siblings do not count. */
 function waitsOnEarlier(world: World, s: Shell): boolean {
   const mine = s.order || [];
   return world.shells.some(o => {
-    if (o === s || o.dead || o.owner !== s.owner) return false;
+    if (o === s || o.dead || o.owner !== s.owner || siblings(o, s)) return false;
     const theirs = o.order || [];
     for (let i = 0; i < Math.min(mine.length, theirs.length); i++) {
       if (theirs[i] !== mine[i]) return theirs[i]! < mine[i]!;
@@ -831,11 +971,28 @@ function stepRoller(world: World, arsenal: Arsenal, s: Shell, w: Weapon, dt: num
   events.push({ kind: 'blast', blast: explode(world, arsenal, bx, groundAt(t, bx), s.wkey, s.owner, direct, null) });
   s.dead = true;
 }
+/* What a burst throws on: a hop weapon's next warhead, or a scatter weapon's
+   bomblets (its own burst only, not theirs). They join the volley this frame,
+   so they fly this frame too. */
+function afterBurst(world: World, s: Shell, w: Weapon, direct: Tank | null, events: StepEvent[]): void {
+  const reach = fieldReach(world.terrain.length);
+  if (w.effect === 'hop') {
+    const next = hopShell(s, w, s.x, s.y, reach, direct || false);
+    if (!next) return;
+    world.shells.push(next);
+    events.push({ kind: 'hop', wkey: s.wkey, x: next.x, y: next.y, ang: datan2(next.vy, next.vx) });
+  } else if (w.effect === 'scatter' && !s.split) {
+    world.shells.push(...scatterShells(s, w, s.x, s.y, reach, direct || false));
+    events.push({ kind: 'scatter', wkey: s.wkey, x: s.x, y: s.y, ang: -Math.PI / 2 });
+  }
+}
 /* Advances every shell dt seconds: flight, fuses, hits and bursts. Bomblets
    born this frame fly this frame too. A volley's shells fly together, but they
    burst in launch order, as the room server resolves them: a shell that
    reaches something to burst on while an earlier one is still flying holds
-   where it is, and bursts against the ground that one left once it has landed. */
+   where it is, and bursts against the ground that one left once it has landed.
+   Bomblets of one burst are the exception: they burst as they land, in list
+   order within a frame (server/sim.php room_fly_siblings). */
 export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEvent[] {
   const events: StepEvent[] = [];
   for (const s of world.shells) {
@@ -855,8 +1012,9 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
       s.dead = true;
       continue;
     }
-    // Cluster blooms on fuse, wherever it happens to be.
-    if (w.effect === 'cluster' && !s.split && s.age >= (w.fuse || 0.9)) {
+    // Cluster blooms on fuse, wherever it happens to be; an apex cluster at
+    // the top of its arc (never before 0.1 s).
+    if (w.effect === 'cluster' && !s.split && (w.apex ? s.age >= 0.1 && s.vy >= 0 : s.age >= (w.fuse || 0.9))) {
       s.split = true;
       events.push({ kind: 'split', wkey: s.wkey, x: s.x, y: s.y, ang: datan2(s.vy, s.vx) });
       world.shells.push(...splitShell(s, w, fieldReach(world.terrain.length)));
@@ -904,6 +1062,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
         continue;
       }
       events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, direct, ov) });
+      afterBurst(world, s, w, direct, events);
       s.dead = true;
       continue;
     }
@@ -918,6 +1077,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
     }
     if (grounded) {
       events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, null, ov) });
+      afterBurst(world, s, w, null, events);
       s.dead = true;
     }
   }

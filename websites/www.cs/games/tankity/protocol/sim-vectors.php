@@ -98,7 +98,8 @@ function sv_outcome(array $before, array $room): array
     $tanks = [];
     $human = null;
     foreach ($room['tanks'] as $i => $t) {
-        $tanks[] = ['hp' => $t['hp'], 'fuel' => $t['fuel'], 'y' => (float) $t['y'], 'chutes' => $t['kind'] === 'ai' ? (int) ($t['chutes'] ?? 0) : null];
+        $tanks[] = ['hp' => $t['hp'], 'fuel' => $t['fuel'], 'y' => (float) $t['y'], 'chutes' => $t['kind'] === 'ai' ? (int) ($t['chutes'] ?? 0) : null,
+            'lastHitBy' => $t['lastHitBy'] ?? null, 'dealt' => !empty($t['dealt']), 'fellBy' => $t['fellBy'] ?? null];
         if ($t['kind'] === 'human' && $human === null) {
             $human = $i;
         }
@@ -350,6 +351,43 @@ foreach ([[0.0, 0.0], [300.0, 0.0], [0.0, -250.0], [-140.0, 90.0]] as [$vx, $vy]
     }
 }
 
+/* ---- a hop warhead's leap from its burst ---- */
+foreach ([[180.0, 140.0], [-220.5, 95.25], [120.0, -40.0], [0.0, 0.0], [-0.0, -310.7]] as [$vx, $vy]) {
+    foreach ([0.2, 0.55, 0.9] as $keep) {
+        $add('hop-vel', "v$vx,$vy-keep$keep", ['vx' => $vx, 'vy' => $vy, 'keep' => $keep], room_hop_vel($vx, $vy, $keep));
+    }
+}
+
+/* ---- a scatter weapon's bomblets: the fixed fan ---- */
+foreach ([[2, 0.2, 40.0], [2, 3.0, 400.0], [8, 2.4, 150.0], [8, 1.0, 222.5], [12, 2.4, 150.0], [12, 3.0, 61.0]] as [$n, $fan, $kick]) {
+    $add('scatter-vel', "n$n-fan$fan-kick$kick", ['n' => $n, 'fan' => $fan, 'kick' => $kick], room_scatter_vel($n, $fan, $kick));
+}
+
+/* ---- where a cluster splits: on its fuse, or (apex) at the top of its arc ---- */
+$clusterSplit = function (string $name, string $wkey, array $launch) use ($add, $weapons, $human, $drone): void {
+    $c = ['terrain' => ['flat' => 430], 'tanks' => [$human(60, 100), $drone(700, 100)], 'wkey' => $wkey] + $launch;
+    $room = sv_room($c);
+    $events = [];
+    $w = $weapons[$wkey];
+    $res = room_fly_arc($room, $events, $room['tanks'][0], $w, $wkey, 0, (float) $c['x'], (float) $c['y'], (float) $c['vx'], (float) $c['vy'], 0.0, (float) $w['fuse'], null);
+    $add('cluster-split', $name, $c, ['status' => $res[0], 'x' => $res[1], 'y' => $res[2], 'vx' => $res[3], 'vy' => $res[4], 'steps' => (int) round($res[7] * 60)]);
+};
+foreach ($weapons as $wkey => $def) {
+    if (($def['effect'] ?? '') !== 'cluster') {
+        continue;
+    }
+    $clusterSplit("$wkey-high-lob", $wkey, ['x' => 100, 'y' => 380, 'vx' => 120, 'vy' => -200]);
+    $clusterSplit("$wkey-flat-and-fast", $wkey, ['x' => 100, 'y' => 380, 'vx' => 260, 'vy' => -40]);
+    // Fired level or downhill it never rises: an apex cluster splits as soon as 0.1 s allows.
+    $clusterSplit("$wkey-fired-downhill", $wkey, ['x' => 100, 'y' => 300, 'vx' => 150, 'vy' => 20]);
+    $clusterSplit("$wkey-fired-level", $wkey, ['x' => 100, 'y' => 300, 'vx' => 150, 'vy' => 0]);
+}
+
+/* ---- the rack a drone brings to a round: aiRack of each gun it may load (the Shell is endless, -1) ---- */
+foreach ([1, 3, 6, 7, 9, 12] as $round) {
+    $add('rack', "round$round", ['round' => $round], room_ai_rack($round));
+}
+
 /* ---- blast damage and the crater ---- */
 $blast = function (string $name, array $c, ?string $known = null) use ($add): void {
     $room = sv_room($c);
@@ -390,6 +428,16 @@ foreach ($weapons as $wkey => $def) {
             'tanks' => [$human(100), $drone(300, 100) + ['fuel' => 70]]]);
     }
 }
+// A harmless burst (dmg 0) carves and touches nobody: the shield stays, nobody is credited or blamed.
+$blast('harmless-next-to-a-shielded-human', array_replace($base, ['tanks' => [$drone(100), $human(300, 100) + ['shield' => true]], 'x' => 305, 'direct' => 1,
+    'ov' => ['dmg' => 0, 'radius' => 45]]));
+$blast('harmless-next-to-a-drone', array_replace($base, ['tanks' => [$human(100), $drone(300, 100), $drone(320, 100)], 'x' => 310, 'owner' => 0,
+    'ov' => ['dmg' => 0, 'radius' => 45]]));
+$blast('harmless-drone-on-a-drone', array_replace($base, ['tanks' => [$human(100), $drone(300, 100), $drone(320, 100)], 'x' => 320, 'owner' => 1, 'direct' => 2,
+    'ov' => ['dmg' => 0, 'radius' => 30]]));
+// A harmless crater under a standing unit still credits its fall to the shooter, as any crater does.
+$blast('harmless-crater-under-a-drone-credits-its-fall', array_replace($base, ['tanks' => [$human(100), $drone(300, 100)], 'x' => 300, 'y' => 400,
+    'owner' => 0, 'ov' => ['dmg' => 0, 'radius' => 45]]));
 $blast('crater-clipped-at-left-edge', array_replace($base, ['tanks' => [$human(100), $drone(300)], 'x' => 4, 'y' => 400, 'wkey' => 'nuke']));
 $blast('crater-clipped-at-right-edge', array_replace($base, ['tanks' => [$human(100), $drone(300)], 'x' => 716, 'y' => 400, 'wkey' => 'nuke']));
 $blast('crater-floor-clamps-at-456', ['terrain' => ['flat' => 440], 'tanks' => [$human(100), $drone(300)], 'owner' => 0, 'wkey' => 'nuke', 'x' => 200, 'y' => 440]);
@@ -474,10 +522,54 @@ $volley('lob-off-the-board', array_replace($shell, ['shooter' => 0, 'tanks' => [
 // Splits just short of a ledge: the first bomblet is inside it within 0.04 s and bursts there at once, on both sides.
 $volley('cluster-splits-at-a-ledge', ['terrain' => ['flat' => 400, 'set' => [[258, 330, 392]]], 'wkey' => 'cluster', 'shooter' => 0,
     'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(300, 100) + ['y' => 392.0]], 'angle' => 10, 'power' => 47]);
+// An apex cluster lobbed over a ridge: its warheads fan down from the top of the arc.
+foreach ($weapons as $wkey => $def) {
+    if (($def['effect'] ?? '') === 'cluster' && !empty($def['apex'])) {
+        $volley("$wkey-over-a-ridge", ['terrain' => ['flat' => 400, 'set' => [[260, 300, 300]]], 'wkey' => $wkey, 'shooter' => 0,
+            'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(440, 100), $drone(480, 100)], 'angle' => 62, 'power' => 62]);
+    }
+}
 $volley('fired-into-the-hillside', ['terrain' => ['slope' => [420, 260]], 'wkey' => 'shell', 'shooter' => 0, 'tanks' => [$human(100, 100), $drone(500, 100)], 'angle' => 5, 'power' => 50]);
 $volley('shielded-human-eats-a-drone-shell', array_replace($shell, ['shooter' => 1, 'tanks' => [$human(380, 100) + ['shield' => true], $drone(100, 100) + ['dirS' => 1]],
     'angle' => sv_aim_at(sv_room(array_replace($shell, ['tanks' => [$human(380, 100), $drone(100, 100) + ['dirS' => 1]]])), 1, 'shell', 380.0)[0],
     'power' => sv_aim_at(sv_room(array_replace($shell, ['tanks' => [$human(380, 100), $drone(100, 100) + ['dirS' => 1]]])), 1, 'shell', 380.0)[1]]));
+
+/* Hop weapons: each burst throws the next warhead on, until the last has burst or one leaves the field. */
+foreach ($weapons as $wkey => $def) {
+    if (($def['effect'] ?? '') !== 'hop') {
+        continue;
+    }
+    $down = ['slope' => [300, 420]];
+    $onSlope = sv_terrain($down);
+    $c = ['terrain' => $down, 'wkey' => $wkey, 'shooter' => 0,
+        'tanks' => [$human(100, 100) + ['y' => $onSlope[100], 'dirS' => 1], $drone(640, 100) + ['y' => $onSlope[640]]]];
+    [$c['angle'], $c['power']] = sv_aim_at(sv_room($c), 0, $wkey, 250.0);
+    $volley("$wkey-down-a-slope", $c);
+    // The first warhead strikes the drone's body; the next leaps on past it (never a second direct hit on it) to the drone beyond.
+    $volley("$wkey-direct-hit-hops-on", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 36, 'power' => 49,
+        'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(380, 200), $drone(470, 200)]]);
+    $volley("$wkey-second-hop-leaves-the-field", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 35, 'power' => 30,
+        'tanks' => [$human(560, 100) + ['dirS' => 1], $drone(100, 100)]]);
+}
+
+/* Scatter weapons: the burst throws its bomblets up; each bursts where it lands, in order. */
+foreach ($weapons as $wkey => $def) {
+    if (($def['effect'] ?? '') !== 'scatter') {
+        continue;
+    }
+    $c = ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0,
+        'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(330, 100), $drone(250, 100)]];
+    [$c['angle'], $c['power']] = sv_aim_at(sv_room($c), 0, $wkey, 300.0);
+    $volley("$wkey-on-flat", $c);
+    // Bursting at the bottom of a narrow pit, the bomblets thrown sideways strike its walls at once.
+    $pit = ['flat' => 400, 'set' => [[290, 310, 440]]];
+    $c = ['terrain' => $pit, 'wkey' => $wkey, 'shooter' => 0, 'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(420, 100)]];
+    [$c['angle'], $c['power']] = sv_aim_at(sv_room($c), 0, $wkey, 300.0);
+    $volley("$wkey-in-a-pit", $c);
+    // The burst strikes the drone's body; no bomblet takes a direct hit on it.
+    $volley("$wkey-direct-hit", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 36, 'power' => 49,
+        'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(380, 200), $drone(470, 200)]]);
+}
 
 /* Falls a volley digs: Buckshot pellets digging one pit in several bursts,
  * and craters in fractional ground, with and without parachutes. The browser
@@ -549,6 +641,65 @@ foreach ([4, 9, 21] as $seed) {
 $aim('no-rivals-left', ['terrain' => $flat, 'wind' => 0, 'round' => 1, 'seed' => 3, 'shooter' => 0,
     'tanks' => [$drone(300, 60) + ['dirS' => -1], $drone(500, 0)]],
     'With nobody left to shoot at the server falls back to a fixed 62/55 Shell and the browser aims at itself. Unreachable: a round with no rival has already ended on both sides.');
+// A mixed rack: the drone fires the most harmful gun on its best arc, or (glory) of any arc.
+$mixed = ['buck' => 2, 'mortar' => 2, 'rail' => 2, 'heavy' => 2, 'needle' => 1, 'roller' => 2];
+foreach ($weapons as $k => $def) {
+    if (!empty($def['ai']) && !isset($mixed[$k]) && $k !== 'shell') {
+        $mixed[$k] = 1;
+    }
+}
+foreach (['hunter', 'glory', 'lobber'] as $s) {
+    foreach ([[3, 330], [17, 420], [40, 250]] as [$seed, $tx]) {
+        $aim("mixed-rack-$s-seed$seed", ['terrain' => $flat, 'wind' => 2, 'round' => 9, 'seed' => $seed, 'shooter' => 1,
+            'tanks' => [$human($tx, 100), $drone(120, 60) + ['dirS' => 1, 's' => $s, 'ammo' => $mixed]]]);
+    }
+}
+// The target 50 px off: every big blast would reach the drone itself, so it fires something smaller.
+$aim('mixed-rack-target-too-close', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1,
+    'tanks' => [$human(170, 100), $drone(120, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['heavy' => 1, 'mortar' => 1, 'nuke' => 1]]]]);
+
+/* ---- the harm a gun would do from an aim: what picks a drone's gun ----
+ * The landing is the drone's own planning flight for the aim; 'self' when the
+ * burst or its munitions could reach the drone's own body (it is never fired). */
+$harm = function (string $name, array $c) use ($add): void {
+    $room = sv_room($c);
+    $self = $room['tanks'][$c['self']];
+    $self['angle'] = (float) $c['a'];
+    [$mx, $my] = room_muzzle($self);
+    $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $c['a'], (float) $c['p'], $c['wkey'], $self['dirS'], SV_WIDTH);
+    $land += ['a' => $c['a'], 'p' => $c['p']];
+    $h = room_ai_harm($room, $room['tanks'][$c['self']], $room['tanks'][$c['target']], $c['wkey'], $land);
+    $add('ai-harm', $name, $c, ['land' => [$land['x'], $land['y']], 'harm' => is_infinite($h) ? 'self' : $h,
+        'selfHarm' => room_ai_self_harm($room, $room['tanks'][$c['self']], $room['tanks'][$c['target']], $c['wkey'], $land)]);
+};
+foreach ($weapons as $wkey => $def) {
+    $scene = ['terrain' => $flat, 'wind' => 2, 'self' => 0, 'target' => 1, 'wkey' => $wkey, 'tanks' => [$drone(100, 60) + ['dirS' => 1], $human(420, 100)]];
+    foreach ([[45, 70], [60, 64], [35, 58], [70, 40], [80, 30], [40, 100]] as [$a, $p]) {
+        $harm("$wkey-a$a-p$p", $scene + ['a' => $a, 'p' => $p]);
+    }
+    $harm("$wkey-weak-target", ['terrain' => $hills, 'wind' => -3, 'self' => 0, 'target' => 1, 'wkey' => $wkey,
+        'tanks' => [$drone(560, 60) + ['dirS' => -1], $human(330, 12)], 'a' => 50, 'p' => 62]);
+    foreach ([20, 45, 70] as $gap) {
+        $harm("$wkey-point-blank-$gap", ['terrain' => $flat, 'wind' => 0, 'self' => 0, 'target' => 1, 'wkey' => $wkey,
+            'tanks' => [$drone(300, 60) + ['dirS' => 1], $human(300 + $gap, 100)], 'a' => 80, 'p' => 25]);
+    }
+    $harm("$wkey-at-a-drone", ['terrain' => $flat, 'wind' => 0, 'self' => 0, 'target' => 1, 'wkey' => $wkey,
+        'tanks' => [$human(100, 60) + ['dirS' => 1], $drone(330, 100)], 'a' => 55, 'p' => 60]);
+}
+// Pressed against its target with big guns and a Needle: it fires something that spares it.
+$aim('pressed-against-its-target', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1, 'difficulty' => 'hard',
+    'tanks' => [$human(350, 100), $drone(300, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['heavy' => 1, 'babynuke' => 1, 'needle' => 1]]]]);
+// Point blank with a full round-9 rack, every strategy fires what would hurt it least.
+$rack9 = room_ai_rack(9);
+foreach (['hunter', 'glory', 'lobber', 'sniper'] as $s) {
+    foreach ([20, 40, 70] as $gap) {
+        $aim("point-blank-least-self-harm-$s-$gap", ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 2, 'shooter' => 1, 'difficulty' => 'hard',
+            'tanks' => [$human(300 + $gap, 100), $drone(300, 60) + ['dirS' => 1, 's' => $s, 'ammo' => $rack9]]]);
+    }
+}
+// A weak target gets the cheapest gun that finishes it.
+$aim('weak-target-cheapest-gun', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1, 'difficulty' => 'hard',
+    'tanks' => [$human(400, 10), $drone(120, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['mortar' => 2, 'babynuke' => 1]]]]);
 
 /* ---- bracketing: a drone's shots at one target, one after another ----
  * Each step is what the caller does for a drone turn: choose, move if it

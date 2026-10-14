@@ -849,10 +849,7 @@
                 "seat": 0,
                 "ammo": {
                     "shell": -1,
-                    "buck": 1,
-                    "mortar": 0,
-                    "rail": 0,
-                    "nuke": 0
+                    "buck": 1
                 },
                 "cash": 692,
                 "score": 92,

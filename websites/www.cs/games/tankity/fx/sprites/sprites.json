@@ -244,5 +244,32 @@
     "frames": 8,
     "first": 96,
     "fps": 12
+  },
+  "p_leapfrog": {
+    "file": "shells_blast.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 3,
+    "frames": 8,
+    "first": 0,
+    "fps": 12
+  },
+  "p_funky": {
+    "file": "shells_blast.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 3,
+    "frames": 8,
+    "first": 8,
+    "fps": 12
+  },
+  "p_deathshead": {
+    "file": "shells_blast.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 3,
+    "frames": 8,
+    "first": 16,
+    "fps": 12
   }
 }

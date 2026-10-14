@@ -306,7 +306,9 @@ for (const [name, width, height, touch, narrow] of SHOP_SCREENS) {
     });
     expect(m.scroll).toBeLessThanOrEqual(m.inner);
     expect(m.wide).toEqual([]);
-    expect(m.rows.length).toBe(22);
+    // The free Shell, every priced gun and every trick in game.json.
+    const data = await page.evaluate(() => fetch('game.json').then(r => r.json()));
+    expect(m.rows.length).toBe(1 + data.arsenal.ammo.filter(a => a.pack > 0).length + data.arsenal.gear.length);
     for (const row of m.rows) {
       expect(row.buttons.length).toBe(row.shell ? 1 : row.buttons.length);
       for (const b of row.buttons) {

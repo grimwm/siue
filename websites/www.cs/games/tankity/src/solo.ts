@@ -8,7 +8,7 @@ import { aiChoose, pickTactic } from './ai.ts';
 import type { AimChoice } from './ai.ts';
 import { carryArmor, fitPlates, maxArmor, repairPacksWanted, repairRestores } from './armor.ts';
 import { SOLO_STEP, WATCH_TURNS } from './flow.ts';
-import { TUNE, clamp, droneChutes, droneRack, fieldWidthOk, gauss, genTerrain, hashSeed, mulberry32, restY, spawnSpots, surfY } from './sim.ts';
+import { TUNE, clamp, droneChutes, droneRack, fieldWidthOk, gauss, genTerrain, hashSeed, mulberry32, restY, spawnSpots, startAmmo, surfY } from './sim.ts';
 import type { Arsenal, Cloud, Difficulty, Hills, ShopRow, Tank, World } from './sim.ts';
 
 export { SOLO_STEP };
@@ -58,7 +58,7 @@ export function soloDeal(G: SoloState, arsenal: Arsenal, seed: string, difficult
   G.round = 0;
   G.tactics = {};
   G.firstTurn = 0;
-  G.ammo = { shell: Infinity, buck: 1 };
+  G.ammo = startAmmo(arsenal);
   for (const k of arsenal.order) if (!(k in G.ammo)) G.ammo[k] = 0;
   G.selected = 'shell';
   G.fuelBank = 0;

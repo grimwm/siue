@@ -106,6 +106,42 @@ function run(pv, env, seconds, done = () => false) {
   check('the solution stays inside the angle and power limits', pv.angle >= 5 && pv.angle <= 85 && pv.power >= 10 && pv.power <= 100);
 }
 
+/* ---- leaping, scattering and apex guns: the war's own sub-munitions ---- */
+{
+  const lf = makeEnv();
+  const leap = createPreview('leapfrog', lf.env, lf.fx, null);
+  leap.tx = 180; // room on the stage for both leaps
+  run(leap, lf.env, 15, p => p.phase === 'show');
+  const w = arsenal.weapons.leapfrog;
+  check('Leapfrog bursts three times, the leaps with its sub blast', lf.log.impact.length === w.hops
+    && lf.log.impact[0].r === w.radius && lf.log.impact.slice(1).every(i => i.r === w.subRadius), JSON.stringify(lf.log.impact));
+  check('each leap plays the hop special', lf.log.special.filter(s => s.name === 'hop').length === w.hops - 1);
+  check('the leaps walk on the way it flew', lf.log.impact[1].x > lf.log.impact[0].x && lf.log.impact[2].x > lf.log.impact[1].x);
+  const edge = makeEnv();
+  const far = createPreview('leapfrog', edge.env, edge.fx, null);
+  run(far, edge.env, 15, p => p.phase === 'show');
+  check('a leap off the stage ends the chain, as in the war', edge.log.impact.length < w.hops && edge.log.impact.at(-1).x >= 360,
+    JSON.stringify(edge.log.impact.map(i => i.x)));
+
+  const fk = makeEnv();
+  const funky = createPreview('funky', fk.env, fk.fx, null);
+  run(funky, fk.env, 15, p => p.phase === 'show');
+  const f = arsenal.weapons.funky;
+  check('Funky bursts once, then each of its bomblets', fk.log.impact.length === 1 + f.split
+    && fk.log.impact[0].r === f.radius && fk.log.impact.slice(1).every(i => i.r === f.subRadius), JSON.stringify(fk.log.impact.map(i => i.r)));
+  const sc = fk.log.special.filter(s => s.name === 'scatter');
+  check('the bomblets go up with one scatter special at the burst', sc.length === 1 && Math.abs(sc[0].ang + Math.PI / 2) < 1e-12
+    && sc[0].x === fk.log.impact[0].x);
+
+  const dh = makeEnv();
+  const skull = createPreview('deathshead', dh.env, dh.fx, null);
+  const tops = [];
+  dh.env.special = (fx, wkey, name, x, y, ang) => { if (name === 'split') tops.push(Math.sin(ang)); };
+  run(skull, dh.env, 15, p => p.phase === 'show');
+  check('Death\'s Head splits at the top of its arc, heading level or down', tops.length === 1 && tops[0] >= 0 && tops[0] < 0.1, JSON.stringify(tops));
+  check('into its nine warheads', dh.log.impact.length === arsenal.weapons.deathshead.split, String(dh.log.impact.length));
+}
+
 /* ---- weapons with their own behaviour ---- */
 {
   const { env, fx } = makeEnv();

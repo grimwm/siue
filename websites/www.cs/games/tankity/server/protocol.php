@@ -138,7 +138,7 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
         }
         $out['you'] = [
             'seat' => $seat,
-            'ammo' => $room['ammo'][$seat] ?? ['shell' => -1, 'buck' => 0, 'mortar' => 0, 'rail' => 0, 'nuke' => 0],
+            'ammo' => $room['ammo'][$seat] ?? ['shell' => -1],
             'cash' => $room['cash'][$seat] ?? 0,
             'score' => $room['scores'][$seat] ?? 0,
             'lives' => $room['seats'][$seat]['lives'] ?? 0,

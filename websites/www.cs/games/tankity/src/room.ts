@@ -25,7 +25,7 @@ import { focusEndVeil } from './ui/endveil.tsx';
 import type { Board, RoomCard } from './standings.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
-import { H, ROOM_W, TUNE, carveCrater, clamp, facing, genTerrain, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
+import { H, ROOM_W, TUNE, carveCrater, clamp, facing, fallSeen, genTerrain, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
 import type { Difficulty, ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
 
@@ -201,6 +201,8 @@ export function createRoom(deps: RoomDeps) {
     }
     G.wind = room.wind || 0;
     const sameRound = G.round === (room.round || 1);
+    // Held fall words belong to this room's round: a new round, or another room, drops them.
+    if (!sameRound || heldCode !== net.code) { fallsHeld = []; heldCode = net.code; }
     G.round = room.round || 1;
     const before = new Map(G.tanks.map(t => [t.seat, t] as [number | undefined, GameTank]));
     // While we aim, the server only learns our angle and power when a key is
@@ -212,12 +214,16 @@ export function createRoom(deps: RoomDeps) {
       const seat = net.seats[t.seat];
       const ai = !seat || !seat.human;
       const id = mine ? 'tank' : String(t.name || '?').toLowerCase();
+      // The server sets units straight down where they rest; keep drawing one
+      // where it was so fallTanks() shows the fall, under a parachute already
+      // open (or armed by the replay, or by the snapshot) if it has one.
+      const same = !!was && Math.abs(was.x - t.x) < 1;
+      const drawnAt = same ? was!.drawY ?? was!.y : t.y;
+      const above = drawnAt < t.y - 0.5;
       return {
         id, seat: t.seat, isPlayer: mine,
         color: mine ? '#ffff00' : (ai ? (FOE_PAINT[id] || '#c9c9c9') : SEAT_PAINT[t.seat % SEAT_PAINT.length]!),
-        // The server drops tanks straight onto the ground; keep the drawn
-        // height from the last poll so fallTanks() shows the fall.
-        x: t.x, y: was && Math.abs(was.x - t.x) < 1 ? Math.min(was.y, t.y) : t.y, vy: was ? was.vy || 0 : 0,
+        x: t.x, y: t.y, drawY: above ? drawnAt : undefined, vy: same && above ? was!.vy || 0 : 0,
         angle: mine && was && aiming ? was.angle : t.angle,
         power: mine && was && aiming ? was.power : t.power,
         hp: t.hp, maxHp: t.maxHp || 100, fuel: 0, dirS: t.dirS || 1,
@@ -226,6 +232,9 @@ export function createRoom(deps: RoomDeps) {
         body: t.body || 'tank',
         menu: !!t.menu,
         bot: !!(seat && seat.bot),
+        chuteArmed: same && above && (!!t.chute || !!was!.chuteArmed || !!was!.chuteOpen),
+        chuteOpen: same && above && !!was!.chuteOpen,
+        shownHp: same && fallsHeld.some(h => 'seat' in h && h.seat === t.seat) ? was!.shownHp : undefined,
         // Keep the drawn aim where it was so the new one glides in.
         showA: was && !mine ? shownAngle(was) : undefined,
         showP: was && !mine ? shownPower(was) : undefined,
@@ -256,6 +265,7 @@ export function createRoom(deps: RoomDeps) {
       G.jammer = room.you.jammer || 0;
       G.bunker = room.you.bunker || 0;
       G.laststand = !!room.you.laststand;
+      G.chutes = room.you.chutes || 0;
       G.plate = room.you.plate || 0;
       G.armor = room.you.armor ?? G.armor;
       G.nextOneUp = room.you.nextUp || 3000;
@@ -320,8 +330,39 @@ export function createRoom(deps: RoomDeps) {
     render();
     renderHUD();
   }
+  let fellLast: number | null = null; // the seat the last event saw fall: its wreck reads as a fall, not a kill
+  /* A fall's words (and its wreck) wait until its unit is seen to land, as a
+     solo match's do; its armor bar holds until then. */
+  let fallsHeld: RoomEvent[] = [];
+  let heldCode: string | null = null;
   function netEvent(e: RoomEvent): void {
     if (!e || !e.t) return;
+    if (e.t === 'fall' || (e.t === 'kill' && fallsHeld.some(h => 'seat' in h && h.seat === e.seat))) {
+      const t = G.tanks.find(x => x.seat === e.seat);
+      if (t && (!fallSeen(G, t) || fallsHeld.some(h => 'seat' in h && h.seat === e.seat))) {
+        if (t.shownHp === undefined) t.shownHp = e.t === 'fall' ? t.hp + e.dmg : t.hp;
+        fallsHeld.push(e);
+        return;
+      }
+    }
+    sayNetEvent(e);
+  }
+  /* Says the held falls whose units have now been seen to land, in order. */
+  function releaseFalls(): void {
+    if (!fallsHeld.length) return;
+    if (heldCode !== net.code) { fallsHeld = []; return; }
+    const keep: RoomEvent[] = [];
+    for (const e of fallsHeld) {
+      const t = 'seat' in e ? G.tanks.find(x => x.seat === e.seat) : undefined;
+      if (!t) continue; // its unit is gone (a new round): nothing to say
+      if (!fallSeen(G, t)) { keep.push(e); continue; }
+      if (t) t.shownHp = undefined;
+      sayNetEvent(e);
+    }
+    fallsHeld = keep;
+  }
+  function sayNetEvent(e: RoomEvent): void {
+    if (e.t !== 'fall' && e.t !== 'kill') fellLast = null;
     if (e.t === 'shot' || e.t === 'burst') return; // flown by the replay
     if (e.t === 'fizzle') { say(`${seatName(e.by)} sends one into the sunset.`, 'info'); return; }
     if (e.t === 'fire') {
@@ -357,12 +398,31 @@ export function createRoom(deps: RoomDeps) {
       }
       return;
     }
+    if (e.t === 'fall') {
+      fellLast = e.seat;
+      const victim = e.seat === net.seat;
+      const digger = e.by !== e.seat ? e.by : null;
+      if (e.chute) {
+        say(victim ? 'Your parachute opens. You float down unhurt.' : `${seatName(e.seat)}'s parachute opens.`, victim ? 'good' : 'info');
+      } else if (victim) {
+        sfx.play('clank');
+        say(e.under
+          ? `${digger === null ? 'A falling unit' : `${seatName(digger)}'s dig drops a unit that`} lands on YOU for ${e.dmg}.`
+          : `${digger === null ? 'You lose your footing' : `${seatName(digger)} digs out your footing`}: the fall costs ${e.dmg}.`, 'bad');
+      } else if (digger === net.seat) {
+        say(`${seatName(e.seat)} falls into your crater for ${e.dmg}.`, 'good');
+      } else {
+        say(`${seatName(e.seat)} falls for ${e.dmg}.`, 'info');
+      }
+      return;
+    }
     if (e.t === 'kill') {
       const victim = e.seat === net.seat;
       sfx.play('boom');
       say(victim
         ? (e.by === net.seat ? 'You got yourself?! The hills are cruel.' : `${seatName(e.by)} wrecks YOU.`)
-        : `${seatName(e.by)} wrecks ${seatName(e.seat)}.`,
+        : e.by === e.seat && fellLast === e.seat ? `${seatName(e.seat)} fell to their doom.`
+          : `${seatName(e.by)} wrecks ${seatName(e.seat)}.`,
         victim ? 'bad' : 'info');
       const vt = G.tanks.find(x => x.seat === e.seat);
       const vid = foeTalkId(vt);
@@ -531,6 +591,7 @@ export function createRoom(deps: RoomDeps) {
     updateCamera(dt);
     decayFx(dt);
     fallTanks(dt);
+    releaseFalls();
     driftClouds(dt);
     netReplay(dt);
     pumpDialogue(dt);

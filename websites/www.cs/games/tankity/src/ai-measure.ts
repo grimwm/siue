@@ -6,7 +6,7 @@
  * here. Pure: no page, and the same seeds give the same numbers. */
 import { aiChoose } from './ai.ts';
 import type { Difficulty } from './ai.ts';
-import { ROOM_W, anyTankFalling, fallTanks, fireWeapon, genTerrain, hashSeed, mulberry32, spawnSpots, stepShells, surfY } from './sim.ts';
+import { ROOM_W, fireWeapon, genTerrain, hashSeed, mulberry32, settleFalls, spawnSpots, stepShells, surfY } from './sim.ts';
 import type { Arsenal, Tank, World } from './sim.ts';
 
 /** P(hit) per shot in a bracket: [0] the ranging shot, [1] after one correction, and so on. */
@@ -49,8 +49,8 @@ export function measureHitRates(arsenal: Arsenal, round: number, difficulty: Dif
       const before = player.hp;
       fireWeapon(world, arsenal, drone, choice.wkey);
       for (let f = 0; world.shells.length && f < 5000; f++) stepShells(world, arsenal, 1 / 60);
-      for (let f = 0; f < 5000 && anyTankFalling(world); f++) fallTanks(world, 1 / 60);
-      if (player.hp < before) hits[k]! += 1;
+      if (player.hp < before) hits[k]! += 1; // a hit is the shell's, not a fall's
+      settleFalls(world, arsenal);
     }
   }
   return hits.map(h => h / cases);

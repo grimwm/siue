@@ -86,10 +86,10 @@ export function cloudWrap(w: number, reach: number): number {
  *  arc too, down to ZOOM_FLOOR. extra: rows of sky a tall canvas shows above
  *  the field at full size (a portrait screen); the arc and the units may use
  *  them before the camera pulls back at all. */
-export function cameraTarget(w: number, h: number, units: readonly { y: number }[], sky: number | null, extra = 0, out?: CamPose): CamPose {
+export function cameraTarget(w: number, h: number, units: readonly { y: number; drawY?: number }[], sky: number | null, extra = 0, out?: CamPose): CamPose {
   const floorY = h + FLOOR_SLACK;
   let need = Infinity; // the highest row that must show
-  for (const u of units) need = Math.min(need, u.y - UNIT_TOP - PAD);
+  for (const u of units) need = Math.min(need, Math.min(u.y, u.drawY ?? u.y) - UNIT_TOP - PAD); // a fall shows above its rest
   let lo = UNIT_FLOOR;
   if (sky !== null && sky - SKY_PAD < need) {
     need = sky - SKY_PAD;

@@ -306,7 +306,7 @@ for (const [name, width, height, touch, narrow] of SHOP_SCREENS) {
     });
     expect(m.scroll).toBeLessThanOrEqual(m.inner);
     expect(m.wide).toEqual([]);
-    expect(m.rows.length).toBe(21);
+    expect(m.rows.length).toBe(22);
     for (const row of m.rows) {
       expect(row.buttons.length).toBe(row.shell ? 1 : row.buttons.length);
       for (const b of row.buttons) {

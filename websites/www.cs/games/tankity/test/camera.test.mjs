@@ -247,3 +247,10 @@ test('clouds wrap beyond what the floor view shows', () => {
   const r0 = cloudWrap(W, 0), lo0 = W / 2 - r0, hi0 = W / 2 + r0;
   assert.ok(lo0 < W / 2 - W / 2 / ZOOM_FLOOR && hi0 > W / 2 + W / 2 / ZOOM_FLOOR, 'before the canvas is measured: the field at the floor');
 });
+
+test('a unit seen falling (drawn above where it will rest) is framed where it is drawn', () => {
+  const t = cameraTarget(W, H, [{ y: 330 }, { y: 400, drawY: 40 }], null);
+  const { top } = viewEdges(t, H);
+  assert.ok(top <= 40 - 56, `top ${top} shows the falling unit at 40`);
+  assert.ok(t.z < 1);
+});

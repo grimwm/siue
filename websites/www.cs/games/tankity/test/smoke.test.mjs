@@ -411,7 +411,7 @@ function scriptTank(seat, x, name, kind) {
     seat, kind, name, x, y: 300, angle: 60, power: 55,
     hp: kind === 'human' ? 100 : 60, maxHp: kind === 'human' ? 100 : 60,
     dirS: seat === 0 ? 1 : -1,
-    body: kind === 'human' ? 'tank' : null, menu: false,
+    body: kind === 'human' ? 'tank' : null, menu: false, chute: false,
   };
 }
 function scriptSeats() {
@@ -425,7 +425,7 @@ function scriptYou() {
   return {
     ammo: { shell: -1, buck: 1, mortar: 0, rail: 0, nuke: 0 },
     cash: 600, score: 0, lives: 3, fuel: 80, weapon: 'shell', nextUp: 3000,
-    seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, plate: 0, armor: seatArmor, maxArmor: 100, filed: false, filedRank: null, filedFailed: false, filedLocal: false,
+    seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, chutes: 0, plate: 0, armor: seatArmor, maxArmor: 100, filed: false, filedRank: null, filedFailed: false, filedLocal: false,
   };
 }
 function playRoom(turn, events) {
@@ -659,13 +659,13 @@ await (async () => {
     shopRows().map(li => li.children[0].className).join());
   check('nuke-stats', /95 damage/.test(nukeStats) && /round 4/.test(nukeStats), nukeStats);
   // The arsenal section of game.json is a second source the game reads at
-  // boot: it must hold 21 items and speak only effects and painters the code has.
+  // boot: it must hold 22 items and speak only effects and painters the code has.
   const arsenal = GAME.arsenal;
-  check('arsenal-count', arsenal.ammo.length === 13 && arsenal.gear.length === 8,
+  check('arsenal-count', arsenal.ammo.length === 13 && arsenal.gear.length === 9,
     `ammo=${arsenal.ammo.length} gear=${arsenal.gear.length}`);
   const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller'];
   const PAINT = ['disc', 'beam', 'spark', 'ball'];
-  const TRICKS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand'];
+  const TRICKS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand', 'parachute'];
   check('arsenal-fx', arsenal.ammo.every(a => FX.includes(a.effect) && a.gfx && PAINT.includes(a.gfx.painter)
     && typeof a.dmg === 'number' && typeof a.radius === 'number' && typeof a.price === 'number'
     && typeof a.pack === 'number' && typeof a.minRound === 'number' && Array.isArray(a.gfx.blast)));

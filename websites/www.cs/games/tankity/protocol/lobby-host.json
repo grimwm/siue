@@ -101,6 +101,7 @@
                 "jammer": 0,
                 "bunker": 0,
                 "laststand": false,
+                "chutes": 0,
                 "plate": 0,
                 "armor": 100,
                 "maxArmor": 100,

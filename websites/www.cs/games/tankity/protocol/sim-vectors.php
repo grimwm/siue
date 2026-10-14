@@ -356,6 +356,26 @@ foreach ([[2, 0.2, 40.0], [2, 3.0, 400.0], [8, 2.4, 150.0], [8, 1.0, 222.5], [12
     $add('scatter-vel', "n$n-fan$fan-kick$kick", ['n' => $n, 'fan' => $fan, 'kick' => $kick], room_scatter_vel($n, $fan, $kick));
 }
 
+/* ---- where a cluster splits: on its fuse, or (apex) at the top of its arc ---- */
+$clusterSplit = function (string $name, string $wkey, array $launch) use ($add, $weapons, $human, $drone): void {
+    $c = ['terrain' => ['flat' => 430], 'tanks' => [$human(60, 100), $drone(700, 100)], 'wkey' => $wkey] + $launch;
+    $room = sv_room($c);
+    $events = [];
+    $w = $weapons[$wkey];
+    $res = room_fly_arc($room, $events, $room['tanks'][0], $w, $wkey, 0, (float) $c['x'], (float) $c['y'], (float) $c['vx'], (float) $c['vy'], 0.0, (float) $w['fuse'], null);
+    $add('cluster-split', $name, $c, ['status' => $res[0], 'x' => $res[1], 'y' => $res[2], 'vx' => $res[3], 'vy' => $res[4], 'steps' => (int) round($res[7] * 60)]);
+};
+foreach ($weapons as $wkey => $def) {
+    if (($def['effect'] ?? '') !== 'cluster') {
+        continue;
+    }
+    $clusterSplit("$wkey-high-lob", $wkey, ['x' => 100, 'y' => 380, 'vx' => 120, 'vy' => -200]);
+    $clusterSplit("$wkey-flat-and-fast", $wkey, ['x' => 100, 'y' => 380, 'vx' => 260, 'vy' => -40]);
+    // Fired level or downhill it never rises: an apex cluster splits as soon as 0.1 s allows.
+    $clusterSplit("$wkey-fired-downhill", $wkey, ['x' => 100, 'y' => 300, 'vx' => 150, 'vy' => 20]);
+    $clusterSplit("$wkey-fired-level", $wkey, ['x' => 100, 'y' => 300, 'vx' => 150, 'vy' => 0]);
+}
+
 /* ---- blast damage and the crater ---- */
 $blast = function (string $name, array $c, ?string $known = null) use ($add): void {
     $room = sv_room($c);
@@ -487,6 +507,13 @@ $volley('lob-off-the-board', array_replace($shell, ['shooter' => 0, 'tanks' => [
 // Splits just short of a ledge: the first bomblet is inside it within 0.04 s and bursts there at once, on both sides.
 $volley('cluster-splits-at-a-ledge', ['terrain' => ['flat' => 400, 'set' => [[258, 330, 392]]], 'wkey' => 'cluster', 'shooter' => 0,
     'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(300, 100) + ['y' => 392.0]], 'angle' => 10, 'power' => 47]);
+// An apex cluster lobbed over a ridge: its warheads fan down from the top of the arc.
+foreach ($weapons as $wkey => $def) {
+    if (($def['effect'] ?? '') === 'cluster' && !empty($def['apex'])) {
+        $volley("$wkey-over-a-ridge", ['terrain' => ['flat' => 400, 'set' => [[260, 300, 300]]], 'wkey' => $wkey, 'shooter' => 0,
+            'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(440, 100), $drone(480, 100)], 'angle' => 62, 'power' => 62]);
+    }
+}
 $volley('fired-into-the-hillside', ['terrain' => ['slope' => [420, 260]], 'wkey' => 'shell', 'shooter' => 0, 'tanks' => [$human(100, 100), $drone(500, 100)], 'angle' => 5, 'power' => 50]);
 $volley('shielded-human-eats-a-drone-shell', array_replace($shell, ['shooter' => 1, 'tanks' => [$human(380, 100) + ['shield' => true], $drone(100, 100) + ['dirS' => 1]],
     'angle' => sv_aim_at(sv_room(array_replace($shell, ['tanks' => [$human(380, 100), $drone(100, 100) + ['dirS' => 1]]])), 1, 'shell', 380.0)[0],

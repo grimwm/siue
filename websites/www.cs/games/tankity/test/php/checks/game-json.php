@@ -401,7 +401,7 @@ $check('shipped-yaml-valid', $e === null, (string) $e);
 $check('shipped-json-in-sync', $shipped !== null && $shipped === (string) @file_get_contents("$repoDir/game.json"),
     'run: php tools/game-json.php (in games/tankity)');
 $sd = json_decode((string) $shipped, true);
-$check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 15 && count($sd['arsenal']['gear'] ?? []) === 8
+$check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 16 && count($sd['arsenal']['gear'] ?? []) === 8
     && count($sd['audio']['sfx'] ?? []) >= 1 && count($sd['audio']['music'] ?? []) >= 1);
 $ammoKeys = array_column($sd['arsenal']['ammo'] ?? [], 'key');
 $rollerRow = $sd['arsenal']['ammo'][array_search('roller', $ammoKeys, true)] ?? [];

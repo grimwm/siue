@@ -661,7 +661,7 @@ await (async () => {
   // The arsenal section of game.json is a second source the game reads at
   // boot: it must hold every row and speak only effects and painters the code has.
   const arsenal = GAME.arsenal;
-  check('arsenal-count', arsenal.ammo.length === 15 && arsenal.gear.length === 8,
+  check('arsenal-count', arsenal.ammo.length === 16 && arsenal.gear.length === 8,
     `ammo=${arsenal.ammo.length} gear=${arsenal.gear.length}`);
   const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter'];
   const PAINT = ['disc', 'beam', 'spark', 'ball'];

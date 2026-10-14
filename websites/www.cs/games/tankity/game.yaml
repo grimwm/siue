@@ -416,6 +416,27 @@ arsenal:
       speed: 1.0
       note: Bursts and flings eight bomblets up in a wild fan; a near miss still pays.
       gfx: {shell: "#ff7eb6", trail: "#c77dff", blast: ["#ff7eb6", "#fff0fa"], painter: spark, shake: 0.4}
+
+    - key: deathshead
+      name: Death's Head
+      cat: Shells
+      dmg: 30
+      radius: 20
+      price: 900
+      pack: 1
+      minRound: 7
+      ai: true
+      aiRound: 9
+      aiRack: 1
+      effect: cluster
+      apex: true
+      split: 9
+      fan: 0.16
+      subDmg: 60
+      subRadius: 40
+      speed: 1.0
+      note: Splits at the top of its arc into nine heavy warheads in a tight fan.
+      gfx: {shell: "#e8e8e8", trail: "#9a9aa8", blast: ["#ff4d4d", "#fff3c4"], painter: spark, shake: 0.7}
   gear:
     - key: repair
       name: Repair +40 armor
@@ -1098,6 +1119,30 @@ effects:
         - { count: 14, life: [0.4, 0.9], speed: [80, 210], gravity: 220, drag: 0.8, size: [1.4, 2.4], colors: ["#ffffff", "#ff7eb6", "#7ee8ff", "#ffe27a", "#b5e86b"], glow: true }
         - { count: 8, life: [0.5, 1], speed: [50, 140], angle: 90, spread: 150, gravity: 340, drag: 0.4, size: [1.3, 2.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
         - { shape: smoke, count: 2, life: [0.63, 0.9], speed: [5, 30], angle: 90, spread: 120, gravity: -20, drag: 1.2, size: [6, 10], sizeEnd: 1.8, alpha: [0, 0.5, 0.3, 0], colors: ["#c8a0b8", "#664455", "#2a1a22"], wind: 1 }
+  deathshead:
+    body: { halo: 13, alpha: 0.55, pulse: 3 }
+    muzzle:
+      screen: { shake: 0.15 }
+      emitters:
+        - { count: 1, size: [12, 12], sizeEnd: 0.4, life: [0.13, 0.13], alpha: [0.85, 0.5, 0], colors: ["#ffffff", "#e8e8e8", "#ff4d4d"], glow: true }
+        - { shape: ring, count: 1, size: [4, 4], sizeEnd: 6, ease: out, life: [0.28, 0.28], width: 3, alpha: [1, 0.6, 0], colors: ["#ffffff", "#ff4d4d"], glow: true }
+        - { shape: smoke, count: 6, life: [0.7, 1], speed: [20, 70], angle: 90, spread: 100, gravity: -25, drag: 1.2, size: [7, 12], sizeEnd: 1.8, alpha: [0, 0.5, 0.3, 0], colors: ["#9a9a9a", "#555555", "#2a2a2a"], wind: 1, aim: forward }
+        - { shape: streak, count: 12, life: [0.25, 0.5], speed: [70, 190], gravity: 200, drag: 1.2, size: [1.2, 1.8], length: 8, alpha: [1, 0.9, 0], colors: ["#fff3c4", "#ff4d4d"], glow: true, aim: forward, spread: 80 }
+    trail:
+      emitters:
+        - { shape: smoke, count: 0, life: [0.8, 1.1], speed: [0, 10], angle: 90, spread: 120, gravity: -10, drag: 1.2, size: [4, 7], sizeEnd: 2.4, alpha: [0, 0.45, 0.25, 0], colors: ["#d8d8e0", "#6a6a78", "#222228"], wind: 1, rate: 24 }
+        - { rate: 34, life: [0.3, 0.55], speed: [0, 20], gravity: 120, size: [1.4, 2.6], sizeEnd: 0.3, colors: ["#ffffff", "#ff9f9f", "#ff4d4d"], glow: true }
+        - { shape: spark, rate: 5, life: [0.25, 0.4], speed: [0, 16], size: [3, 4.5], sizeEnd: 0.3, colors: ["#ffffff", "#ff4d4d"], glow: true, rotJitter: 90 }
+    impact:
+      screen: { flash: { color: "#ff4d4d", alpha: 0.12, dur: 0.2 } }
+      emitters:
+        - { shape: sprite, count: 1, sheet: fireball, unit: r, size: [1.1, 1.1], life: [0.6, 0.6], alpha: [1, 1, 0], rotJitter: 14, scale: 1.3 }
+        - { count: 1, unit: r, size: [0.72, 0.72], sizeEnd: 0.6, life: [0.25, 0.25], alpha: [0.6, 0.35, 0], colors: ["#ffffff", "#fff3c4", "#ff4d4d"], glow: true }
+        - { shape: ring, count: 1, unit: r, size: [0.2, 0.2], sizeEnd: 5, ease: out, life: [0.45, 0.45], width: 4, alpha: [1, 0.6, 0], colors: ["#fff3c4", "#ff4d4d"], glow: true }
+        - { shape: ring, count: 1, unit: r, size: [0.2, 0.2], sizeEnd: 4.4, ease: out, life: [0.6, 0.6], width: 3, alpha: [0.7, 0.35, 0], colors: ["#d8c090", "#8a6a3a"], glow: false }
+        - { count: 24, life: [0.5, 1], speed: [90, 250], angle: 90, spread: 150, gravity: 340, drag: 0.4, size: [1.5, 3], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: streak, count: 14, life: [0.2, 0.5], speed: [140, 300], gravity: 200, drag: 1.2, size: [1.2, 1.8], length: 10, alpha: [1, 0.9, 0], colors: ["#ffffff", "#fff3c4", "#ff4d4d"], glow: true }
+        - { shape: smoke, count: 5, life: [1, 1.4], speed: [10, 40], angle: 90, spread: 120, gravity: -35, drag: 1.2, size: [11, 18], sizeEnd: 1.8, alpha: [0, 0.5, 0.3, 0], colors: ["#6a4a3a", "#3a3030", "#1a1a1a"], wind: 1 }
   laststand:
     body: { halo: 9, alpha: 0.45 }
     muzzle:

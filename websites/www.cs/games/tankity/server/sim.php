@@ -196,10 +196,11 @@ function room_weapons(): array
             'hops' => (int) ($am['hops'] ?? 1),
             'hopKeep' => (float) ($am['hopKeep'] ?? 0.5),
             'kick' => (float) ($am['kick'] ?? 150.0),
+            'apex' => !empty($am['apex']),
         ];
     }
     if (!isset($w['shell'])) {
-        $w['shell'] = ['dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'minRound' => 1, 'effect' => 'shot', 'speed' => 1.0, 'flat' => false, 'pellets' => 0, 'spread' => 0.0, 'fuse' => 0.9, 'split' => 4, 'fan' => 0.22, 'subDmg' => 34, 'subRadius' => 26, 'prox' => 34.0, 'steer' => 70.0, 'drain' => 0, 'friction' => 0.3, 'rollTime' => 5.0, 'ai' => true, 'aiRound' => 1, 'hops' => 1, 'hopKeep' => 0.5, 'kick' => 150.0];
+        $w['shell'] = ['dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'minRound' => 1, 'effect' => 'shot', 'speed' => 1.0, 'flat' => false, 'pellets' => 0, 'spread' => 0.0, 'fuse' => 0.9, 'split' => 4, 'fan' => 0.22, 'subDmg' => 34, 'subRadius' => 26, 'prox' => 34.0, 'steer' => 70.0, 'drain' => 0, 'friction' => 0.3, 'rollTime' => 5.0, 'ai' => true, 'aiRound' => 1, 'hops' => 1, 'hopKeep' => 0.5, 'kick' => 150.0, 'apex' => false];
     }
     return $w;
 }
@@ -651,7 +652,8 @@ function room_fly_arc(array &$room, array &$events, array $tank, array $w, strin
             $path[] = [$sx, $sy];
             return ['oob', $sx, $sy, $vx, $vy, null, $path, $flown];
         }
-        if ($fuse !== false && ($w['effect'] ?? 'shot') === 'cluster' && $age >= $fuse) {
+        // A cluster splits on its fuse; an apex cluster at the top of its arc (never before 0.1 s).
+        if ($fuse !== false && ($w['effect'] ?? 'shot') === 'cluster' && (!empty($w['apex']) ? $age >= 0.1 && $vy >= 0 : $age >= $fuse)) {
             $path[] = [$sx, $sy];
             return ['split', $sx, $sy, $vx, $vy, null, $path, $flown];
         }

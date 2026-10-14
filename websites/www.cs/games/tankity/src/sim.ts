@@ -882,8 +882,9 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
       s.dead = true;
       continue;
     }
-    // Cluster blooms on fuse, wherever it happens to be.
-    if (w.effect === 'cluster' && !s.split && s.age >= (w.fuse || 0.9)) {
+    // Cluster blooms on fuse, wherever it happens to be; an apex cluster at
+    // the top of its arc (never before 0.1 s).
+    if (w.effect === 'cluster' && !s.split && (w.apex ? s.age >= 0.1 && s.vy >= 0 : s.age >= (w.fuse || 0.9))) {
       s.split = true;
       events.push({ kind: 'split', wkey: s.wkey, x: s.x, y: s.y, ang: datan2(s.vy, s.vx) });
       world.shells.push(...splitShell(s, w, fieldReach(world.terrain.length)));

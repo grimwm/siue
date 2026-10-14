@@ -138,6 +138,17 @@ const RUN = {
     const s = { x: 0, y: 0, vx: 0, vy: 0, wkey: 'shell', owner: null, order: [0] };
     return sim.scatterShells(s, { split: c.n, fan: c.fan, kick: c.kick, subDmg: 1, subRadius: 1 }, 0, 0, 1).map(b => [b.vx, b.vy]);
   },
+  'cluster-split'(c) {
+    world(c);
+    const shell = { x: c.x, y: c.y, vx: c.vx, vy: c.vy, wkey: c.wkey, owner: G.tanks[0], life: 12, age: 0, pierced: false, split: false, order: [0] };
+    G.shells = [shell];
+    for (let steps = 1; steps <= 720; steps++) {
+      const evs = sim.stepShells(G, arsenal, 1 / 60);
+      if (evs.some(e => e.kind === 'split')) return { status: 'split', x: shell.x, y: shell.y, vx: shell.vx, vy: shell.vy, steps };
+      if (shell.dead) return { status: 'landed', steps };
+    }
+    return { status: 'none' };
+  },
   blast(c) {
     world(c);
     const before = G.terrain.slice();

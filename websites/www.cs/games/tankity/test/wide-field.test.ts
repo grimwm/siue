@@ -1,4 +1,4 @@
-// games/tankity/test/wide-field.test.mjs
+// games/tankity/test/wide-field.test.ts
 // The sim at any width (spec 6.6): a wide field is the 720 field's hills
 // continued; the units spread over the whole width, never inside each other's
 // blast; full power crosses the field and the wind bends a shot by the same
@@ -9,11 +9,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as sim from '../src/sim.ts';
 import { FIELD_AIM, fieldAim } from '../src/ai.ts';
+import type { FallRules, Gear, Shell, StepEvent, Tank, Weapon, World } from '../src/sim.ts';
 
-const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
-const arsenal = sim.buildArsenal(GAME.arsenal);
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+function nth<T>(list: readonly T[], i: number): T {
+  return must(list[i], `item ${i}`);
+}
+
+const GAME: { arsenal: { ammo: Weapon[]; gear?: Gear[]; fall?: Partial<FallRules> } } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+const arsenal = must(sim.buildArsenal(GAME.arsenal), 'the arsenal');
+const gun = (k: string): Readonly<Weapon> => must(arsenal.weapons[k], `the ${k} row`);
 const WIDTHS = [720, 1080, 1440];
-const flat = w => ({ terrain: Array(w).fill(400), wind: 0 });
+const flat = (w: number) => ({ terrain: Array(w).fill(400), wind: 0 });
 
 test('a wider field is the same hills, continued', () => {
   for (const seed of ['scorch-01', 'tankity-riverbed', 'a']) {
@@ -30,16 +40,16 @@ test('a wider field is the same hills, continued', () => {
 
 test('the units spread over the whole width, never inside each other\'s blast', () => {
   // The blasts that hurt: a harmless row's radius (a riot scoop, a slump's reach, a mound of dirt) touches no unit.
-  const biggest = Math.max(...arsenal.order.filter(k => arsenal.weapons[k].dmg > 0).map(k => arsenal.weapons[k].radius));
+  const biggest = Math.max(...arsenal.order.filter(k => gun(k).dmg > 0).map(k => gun(k).radius));
   assert.ok(sim.SPAWN_GAP > biggest + 14, `SPAWN_GAP ${sim.SPAWN_GAP} clears the blast's real reach (radius + 14 from a hull's centre)`);
   assert.ok(sim.SPAWN_GAP >= biggest + 20, `SPAWN_GAP ${sim.SPAWN_GAP} vs blast ${biggest} + a hull's half-width`);
-  const span = w => {
+  const span = (w: number) => {
     let total = 0;
     for (let seed = 1; seed <= 400; seed++) {
       const xs = sim.spawnSpots(4, sim.mulberry32(seed), w).sort((a, b) => a - b);
-      for (let i = 1; i < xs.length; i++) assert.ok(xs[i] - xs[i - 1] >= sim.SPAWN_GAP, `${w} seed ${seed}`);
-      assert.ok(xs[0] >= 30 && xs[3] <= w - 30);
-      total += xs[3] - xs[0];
+      for (let i = 1; i < xs.length; i++) assert.ok(nth(xs, i) - nth(xs, i - 1) >= sim.SPAWN_GAP, `${w} seed ${seed}`);
+      assert.ok(nth(xs, 0) >= 30 && nth(xs, 3) <= w - 30);
+      total += nth(xs, 3) - nth(xs, 0);
     }
     return total / 400;
   };
@@ -61,7 +71,7 @@ test('full power crosses the field at every width', () => {
 });
 
 test('the wind bends a shot by the same share of its length at any width', () => {
-  const share = w => {
+  const share = (w: number) => {
     const still = sim.simShot(flat(w), arsenal, 30, 386, 45, 70, 'shell', 1);
     const blown = sim.simShot({ ...flat(w), wind: 8 }, arsenal, 30, 386, 45, 70, 'shell', 1);
     return (blown.x - still.x) / (still.x - 30);
@@ -82,9 +92,10 @@ test('out of bounds is the field edge, and the scenery is not the sim', () => {
     assert.ok(r.oob && r.x >= w, `${w}: ${JSON.stringify(r)}`);
     assert.equal(sim.surfY(Array.from({ length: w }, (_, i) => i), w + 50), w - 1);
     const terrain = Array(w).fill(400);
-    const world = { tanks: [], terrain, wind: 0, round: 1, rng: sim.mulberry32(1), shells: [], score: 0, cash: 0, ammo: {},
+    const world: World = { tanks: [], terrain, wind: 0, round: 1, rng: sim.mulberry32(1), shells: [], score: 0, cash: 0, ammo: {},
       selected: 'shell', shield: false, bunker: 0, laststand: false, jammer: 0 };
-    world.shells.push({ x: w + 25, y: 440, vx: 120, vy: 10, wkey: 'shell', owner: null, life: 5, age: 1 });
+    // A shell with no gunner, which Shell does not allow: stepShells never reads the owner of one off the field.
+    world.shells.push({ x: w + 25, y: 440, vx: 120, vy: 10, wkey: 'shell', owner: null, life: 5, age: 1 } as unknown as Shell);
     const events = sim.stepShells(world, arsenal, 1 / 60);
     assert.equal(world.shells.filter(s => !s.dead).length, 0);
     assert.ok(!events.some(e => e.kind === 'blast'));
@@ -96,12 +107,12 @@ test('out of bounds is the field edge, and the scenery is not the sim', () => {
 
 test('a steep rail shot at full power bursts on a wide field and does not expire in the air', () => {
   for (const w of WIDTHS) {
-    const world = { tanks: [], terrain: Array(w).fill(400), wind: 0, round: 1, rng: sim.mulberry32(1), shells: [], score: 0, cash: 0, ammo: { rail: 9 },
+    const world: World = { tanks: [], terrain: Array(w).fill(400), wind: 0, round: 1, rng: sim.mulberry32(1), shells: [], score: 0, cash: 0, ammo: { rail: 9 },
       selected: 'rail', shield: false, bunker: 0, laststand: false, jammer: 0 };
-    const t = { id: 'T', isPlayer: true, x: 200, y: 400, angle: 85, power: 100, hp: 100, fuel: 0, dirS: 1, ammo: { rail: 9 } };
+    const t: Tank = { id: 'T', isPlayer: true, x: 200, y: 400, angle: 85, power: 100, hp: 100, fuel: 0, dirS: 1, ammo: { rail: 9 } };
     world.tanks.push(t);
     sim.fireWeapon(world, arsenal, t, 'rail');
-    const blasts = [];
+    const blasts: StepEvent[] = [];
     for (let f = 0; world.shells.length && f < 5000; f++) blasts.push(...sim.stepShells(world, arsenal, 1 / 60).filter(e => e.kind === 'blast'));
     assert.ok(blasts.length > 0, `${w}: the rail shot burst`);
     const r = sim.simShot(world, arsenal, 200, 400, 85, 100, 'rail', 1);

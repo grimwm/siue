@@ -3,8 +3,32 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BOARD_KEEP, endCardBack, filedLine, fmt, localLine, matchOutcome, roomBoard, roomFiledLine, roomLocalSaver, soloBoard } from '../src/standings.ts';
 import { LOCAL_KEEP } from '../src/local-board.ts';
+import type { Board } from '../src/standings.ts';
+import type { RoomSeat, RoomSnapshot } from '../src/protocol.ts';
+import type { Difficulty } from '../src/sim.ts';
+import type { LocalRow } from '../src/local-board.ts';
 
-const seats = (...lives) => lives.map((l, seat) => ({ seat, human: l !== null, lives: l ?? 0 }));
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+function nth<T>(list: readonly T[], i: number): T {
+  return must(list[i], `item ${i}`);
+}
+/* A board known to be a room's, or a solo match's. */
+function roomRows(b: Board) {
+  assert.ok(b.kind === 'room', `a ${b.kind} board`);
+  return b;
+}
+function soloRows(b: Board) {
+  assert.ok(b.kind === 'solo', `a ${b.kind} board`);
+  return b;
+}
+type RoomIn = Parameters<typeof roomBoard>[0];
+type You = NonNullable<Parameters<typeof roomFiledLine>[0]>;
+type Snap = Parameters<ReturnType<typeof roomLocalSaver>['keep']>[0];
+
+const seats = (...lives: (number | null)[]) => lives.map((l, seat) => ({ seat, human: l !== null, lives: l ?? 0 }));
 
 test('one human plays like solo: over only when the last life goes', () => {
   assert.deepEqual(matchOutcome(seats(2, null, null, null), 1), { over: false, winner: null });
@@ -22,7 +46,7 @@ test('nobody left: over with no winner', () => {
 });
 
 
-const seat = (s, name, o) => ({ seat: s, human: true, name, mode: 'human', bot: false, ready: false, lives: 2, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ...o });
+const seat = (s: number, name: string, o: Partial<RoomSeat>): RoomSeat => ({ seat: s, human: true, name, mode: 'human', bot: false, ready: false, lives: 2, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ...o });
 const ROOM = {
   code: 'ABCD', round: 6, winner: null,
   seats: [
@@ -31,7 +55,7 @@ const ROOM = {
     seat(2, 'JR', { score: 3940, roundsWon: 1, kills: 4, lives: 0, out: 5 }),
     { seat: 3, human: false, name: 'reaper', mode: 'ai', bot: false, ready: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null },
   ],
-};
+} as RoomIn; // no winBonus: a match still going
 
 test('numbers read with thousands separators', () => {
   assert.equal(fmt(8420), '8,420');
@@ -43,7 +67,7 @@ test('after a reload in the shop the round\'s taker is unknown: the title names 
 });
 
 test('after a round: humans only, by score, with this round\'s gain and lives or the round they went out', () => {
-  const b = roomBoard(ROOM, 0, 'shop', 'WG');
+  const b = roomRows(roomBoard(ROOM, 0, 'shop', 'WG'));
   assert.equal(b.kind, 'room');
   assert.equal(b.caption, 'Room ABCD · after round 6');
   assert.equal(b.title, 'Round 6 to WG');
@@ -57,7 +81,7 @@ test('after a round: humans only, by score, with this round\'s gain and lives or
 
 test('match over: the winner is crowned and the last column says when each went out', () => {
   const over = { ...ROOM, round: 9, winner: 1, winBonus: 4200, seats: ROOM.seats.map(s => s.seat === 0 ? { ...s, lives: 0, out: 9 } : s.seat === 1 ? { ...s, gain: 5000 } : s) };
-  const b = roomBoard(over, 0, 'over', 'WG');
+  const b = roomRows(roomBoard(over, 0, 'over', 'WG'));
   assert.equal(b.caption, 'Room ABCD · match over after round 9');
   assert.equal(b.title, '♛ WG wins: last tank standing');
   assert.equal(b.lastHead, 'Out in');
@@ -65,8 +89,8 @@ test('match over: the winner is crowned and the last column says when each went 
     ['WG', true, '+4,200 win', '♥ 2'], ['AK', false, '', 'round 9'], ['JR', false, '', 'round 5'],
   ]);
   // A client whose first snapshot is already 'over' (reload, rejoin) never read the matchwin event: the snapshot carries the bonus.
-  assert.equal(roomBoard(over, 0, 'over', 'WG').rows[0].gain, '+4,200 win');
-  assert.equal(roomBoard({ ...over, winBonus: 0 }, 0, 'over', 'WG').rows[0].gain, '');
+  assert.equal(nth(roomRows(roomBoard(over, 0, 'over', 'WG')).rows, 0).gain, '+4,200 win');
+  assert.equal(nth(roomRows(roomBoard({ ...over, winBonus: 0 }, 0, 'over', 'WG')).rows, 0).gain, '');
   const nobody = roomBoard({ ...over, winner: null }, 0, 'over', 'the battery');
   assert.equal(nobody.title, 'Match over: the battery holds the hills');
 });
@@ -81,7 +105,7 @@ test('solo: the rounds so far, with a total', () => {
     { round: 1, won: true, points: 1020, kills: 3, cash: 600, lives: 3 },
     { round: 2, won: false, points: 240, kills: 1, cash: 0, lives: 2 },
   ];
-  const b = soloBoard(rounds, 'shop');
+  const b = soloRows(soloBoard(rounds, 'shop'));
   assert.equal(b.kind, 'solo');
   assert.equal(b.caption, 'Solo · after round 2');
   assert.equal(b.title, 'Round 2 lost');
@@ -103,9 +127,9 @@ test('Q on an end card: back to the battle, watch the finish, or keep the card',
 });
 
 test('a room card says where the score went, or why it did not, and nothing before the server tried', () => {
-  const you = o => ({ filed: false, filedFailed: false, filedRank: null, score: 4200, ...o });
+  const you = (o: Partial<You>): You => ({ filed: false, filedFailed: false, filedRank: null, score: 4200, ...o });
   assert.equal(roomFiledLine(you({ filed: true, filedRank: 3 }), 'normal'), 'Filed · #3 all-time on Normal');
-  assert.match(roomFiledLine(you({ filedFailed: true }), 'normal'), /^Couldn't file your score: .+/);
+  assert.match(must(roomFiledLine(you({ filedFailed: true }), 'normal'), 'the line'), /^Couldn't file your score: .+/);
   assert.equal(roomFiledLine(you({}), 'normal'), null);
   assert.equal(roomFiledLine(undefined, 'normal'), null);
 });
@@ -117,7 +141,7 @@ test('the local line: a place on this browser\'s board, outside it, or storage b
 });
 
 test('a one-human room card reads this browser\'s line, once it is saved', () => {
-  const you = o => ({ filed: false, filedFailed: false, filedRank: null, filedLocal: true, score: 4200, ...o });
+  const you = (o: Partial<You>): You => ({ filed: false, filedFailed: false, filedRank: null, filedLocal: true, score: 4200, ...o });
   assert.equal(roomFiledLine(you({}), 'normal', { place: 1, kept: true }), "Saved on this browser's board · #1 on Normal");
   assert.equal(roomFiledLine(you({}), 'hard', { place: null, kept: false }), "This browser can't keep scores (storage is blocked).");
   assert.equal(roomFiledLine(you({}), 'normal', null), null, 'not saved yet: nothing');
@@ -125,9 +149,9 @@ test('a one-human room card reads this browser\'s line, once it is saved', () =>
 });
 
 test('a one-human room match is saved once per match, whatever the polls, rejoins and reloads', () => {
-  const saves = [];
+  const saves: [Difficulty, LocalRow][] = [];
   const k = roomLocalSaver((level, row) => { saves.push([level, row]); return { place: 2, kept: true }; }, () => '2026-10-13T09:00:00.000Z');
-  const snap = o => ({ code: 'ABCD', difficulty: 'hard', matchId: 'm1', seats: [{ seat: 0, name: 'WGR', roundsWon: 3 }, { seat: 1, name: 'Reaper', roundsWon: 0 }],
+  const snap = (o: Partial<Snap> = {}): Snap => ({ code: 'ABCD', difficulty: 'hard', matchId: 'm1', seats: [{ seat: 0, name: 'WGR', roundsWon: 3 }, { seat: 1, name: 'Reaper', roundsWon: 0 }],
     you: { filedLocal: true, score: 5100 }, ...o });
   assert.equal(k.keep(snap({ you: { filedLocal: false, score: 5100 } }), 0), null, 'not yet marked: nothing saved');
   assert.deepEqual(k.keep(snap(), 0), { place: 2, kept: true });

@@ -7,10 +7,24 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildArsenal, gfxLinger, startAmmo } from '../src/sim.ts';
+import type { FallRules, Gear, Weapon } from '../src/sim.ts';
+
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+function nth<T>(list: readonly T[], i: number): T {
+  return must(list[i], `item ${i}`);
+}
 
 const dir = path.join(import.meta.dirname, '..');
-const GAME = JSON.parse(fs.readFileSync(path.join(dir, 'game.json'), 'utf8'));
-const arsenal = buildArsenal(GAME.arsenal);
+const GAME: {
+  arsenal: { ammo: Weapon[]; gear?: Gear[]; fall?: Partial<FallRules> };
+  effects: Record<string, { body: { size: number; sprite: string } }>;
+} = JSON.parse(fs.readFileSync(path.join(dir, 'game.json'), 'utf8'));
+const arsenal = must(buildArsenal(GAME.arsenal), 'the arsenal');
+const gun = (k: string): Readonly<Weapon> => must(arsenal.weapons[k], `the ${k} row`);
+const body = (k: string) => must(GAME.effects[k], `${k}'s effects`).body;
 const KEYS = GAME.arsenal.ammo.map(a => a.key).filter(k => k !== 'shell');
 
 const files = [
@@ -30,7 +44,7 @@ test('no logic compares a weapon to a key or lists weapon keys', () => {
     new RegExp(`['"](${keys})['"]\\s*,\\s*['"](${keys})['"]`), // ['nuke', 'babynuke'].includes(w)
   ];
   // Some effects share a name with a gun (`effect === 'roller'`): a compare that reads an effect is not about a key.
-  const aboutEffect = (line, at) => /effect/.test(line.slice(Math.max(0, at - 40), at + 40));
+  const aboutEffect = (line: string, at: number) => /effect/.test(line.slice(Math.max(0, at - 40), at + 40));
   for (const f of files) {
     fs.readFileSync(path.join(dir, f), 'utf8').split('\n').forEach((line, i) => {
       for (const ban of bans) {
@@ -44,12 +58,11 @@ test('no logic compares a weapon to a key or lists weapon keys', () => {
 });
 
 test('how long a blast lingers comes from its gfx, and how big a shell flies from its body', () => {
-  const w = arsenal.weapons;
-  assert.equal(gfxLinger(w.nuke.gfx), 0.8);
-  assert.equal(gfxLinger(w.babynuke.gfx), 0.7);
-  assert.equal(gfxLinger(w.shell.gfx), 0.5, 'the default');
-  for (const k of arsenal.order) assert.ok(GAME.effects[k].body.size > 0 && /^p_/.test(GAME.effects[k].body.sprite), `${k} flies a rendered body`);
-  assert.ok(GAME.effects.babynuke.body.size < GAME.effects.nuke.body.size && GAME.effects.babynuke.body.size > GAME.effects.mortar.body.size);
+  assert.equal(gfxLinger(gun('nuke').gfx), 0.8);
+  assert.equal(gfxLinger(gun('babynuke').gfx), 0.7);
+  assert.equal(gfxLinger(gun('shell').gfx), 0.5, 'the default');
+  for (const k of arsenal.order) assert.ok(body(k).size > 0 && /^p_/.test(body(k).sprite), `${k} flies a rendered body`);
+  assert.ok(body('babynuke').size < body('nuke').size && body('babynuke').size > body('mortar').size);
 });
 
 test('every player starts a match with the rows\' start shells and an endless Shell', () => {
@@ -60,11 +73,11 @@ test('the weapon picker shows each category together, the Rollers side by side',
   const shelf = arsenal.shelf;
   assert.equal(shelf.length, arsenal.order.length);
   assert.equal(shelf[0], 'shell');
-  const cats = shelf.map(k => arsenal.weapons[k].cat || 'Shells');
+  const cats = shelf.map(k => gun(k).cat || 'Shells');
   for (let i = 1; i < cats.length; i++) {
-    if (cats[i] !== cats[i - 1]) assert.ok(!cats.slice(0, i).includes(cats[i]), `${cats[i]} comes back after another category`);
+    if (cats[i] !== cats[i - 1]) assert.ok(!cats.slice(0, i).includes(must(cats[i], `category ${i}`)), `${cats[i]} comes back after another category`);
   }
-  const at = k => shelf.indexOf(k);
+  const at = (k: string) => shelf.indexOf(k);
   assert.deepEqual([at('babyroller') - at('roller'), at('heavyroller') - at('babyroller')], [1, 1]);
   assert.deepEqual(arsenal.order, GAME.arsenal.ammo.map(a => a.key), 'the rack keeps game.yaml order');
 });

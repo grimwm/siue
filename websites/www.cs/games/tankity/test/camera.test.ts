@@ -1,4 +1,4 @@
-// games/tankity/test/camera.test.mjs
+// games/tankity/test/camera.test.ts
 // Where the battlefield camera looks (src/camera.ts): the live units framed,
 // a volley's whole arc pulled into view up to the zoom floor with the ground
 // kept on screen, and an ease that never drops a unit out of frame.
@@ -8,10 +8,14 @@ import { H } from '../src/sim.ts';
 import {
   UNIT_FLOOR, ZOOM_FLOOR, SKY_PAD, cameraTarget, cloudWrap, easeCamera, shellTop, skyMarks, stepHold, viewEdges, volleyTop,
 } from '../src/camera.ts';
+import type { Aloft, CamPose, SkyMark } from '../src/camera.ts';
 
 const W = 1080;
 const flat = [{ y: 330 }, { y: 340 }, { y: 320 }];
-const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
+// a may be a volley top of null, which reads as 0 here as it always did.
+const near = (a: number | null, b: number, eps = 1e-6) => Math.abs(Number(a) - b) <= eps;
+/* A shell with no x: volleyTop reads x only when it is handed a Reach. */
+const aloft = (s: Omit<Aloft, 'x'>) => s as Aloft;
 
 test('with no volley the units are framed as before: level ground stays at full size', () => {
   const t = cameraTarget(W, H, flat, null);
@@ -106,15 +110,15 @@ test('volleyTop ratchets up while shells fly and clears once the volley has land
   const g = () => 95;
   let top = volleyTop(null, [[]], g);
   assert.equal(top, null);
-  top = volleyTop(top, [[{ y: 300, vy: -100, wkey: 'shell' }]], g);
+  top = volleyTop(top, [[aloft({ y: 300, vy: -100, wkey: 'shell' })]], g);
   assert.ok(near(top, 300 - 100 * 100 / 190));
   const peak = top;
-  top = volleyTop(top, [[{ y: 260, vy: 30, wkey: 'shell' }]], g); // past the apex, falling
+  top = volleyTop(top, [[aloft({ y: 260, vy: 30, wkey: 'shell' })]], g); // past the apex, falling
   assert.equal(top, peak, 'the framing holds while the volley flies');
-  top = volleyTop(top, [[{ y: 400, vy: -300, wkey: 'shell' }, { y: 100, vy: 0, wkey: 'shell' }]], g);
+  top = volleyTop(top, [[aloft({ y: 400, vy: -300, wkey: 'shell' }), aloft({ y: 100, vy: 0, wkey: 'shell' })]], g);
   assert.ok(near(top, 400 - 300 * 300 / 190));
   assert.equal(volleyTop(top, [[], []], g), null, 'landed: back to the units');
-  assert.equal(volleyTop(top, [[], [{ y: 500, vy: -10, wkey: 'shell' }]], g), top, 'a shell flying on past the edge holds it while it climbs');
+  assert.equal(volleyTop(top, [[], [aloft({ y: 500, vy: -10, wkey: 'shell' })]], g), top, 'a shell flying on past the edge holds it while it climbs');
 });
 
 test('volleyTop: a shell past the edge holds only while it climbs within the floor\'s reach; a roller on the ground never', () => {
@@ -136,7 +140,7 @@ test('volleyTop: a shell past the edge holds only while it climbs within the flo
 });
 
 test('volleyTop reads each weapon\'s own gravity', () => {
-  const top = volleyTop(null, [[{ y: 300, vy: -90, wkey: 'rail' }]], k => (k === 'rail' ? 90 : 95));
+  const top = volleyTop(null, [[aloft({ y: 300, vy: -90, wkey: 'rail' })]], k => (k === 'rail' ? 90 : 95));
   assert.ok(near(top, 300 - 90 * 90 / 180));
 });
 
@@ -154,7 +158,7 @@ test('easing out and back in keeps every unit in frame on every frame', () => {
   for (const reduced of [false, true]) {
     for (const units of [flat, [{ y: 120 }, { y: 440 }], [{ y: 420 }]]) {
       const cam = { ...cameraTarget(W, H, units, null) };
-      const check = label => {
+      const check = (label: string) => {
         const { top, bottom } = viewEdges(cam, H);
         for (const u of units) assert.ok(u.y - 56 >= top - 1e-6 && u.y <= bottom + 1e-6, `${label}: unit ${u.y} in [${top}, ${bottom}]`);
         assert.ok(bottom <= H + 8 + 1e-6, `${label}: ground pinned`);
@@ -182,7 +186,7 @@ test('easing is smooth: no frame moves the view edges further than the last on a
 });
 
 test('pulling back is quicker than coming home, and reduced motion is gentler both ways', () => {
-  const run = (from, to, reduced) => {
+  const run = (from: CamPose, to: CamPose, reduced: boolean) => {
     const cam = { ...from };
     easeCamera(cam, to, 1 / 60, reduced, H);
     return Math.abs(cam.z - from.z) / Math.abs(to.z - from.z);
@@ -203,11 +207,13 @@ test('a long frame never overshoots', () => {
 test('skyMarks: a shell above the view gets a mark at its x on the top edge, else none', () => {
   const cam = cameraTarget(W, H, flat, -5000);
   const { top } = viewEdges(cam, H);
-  const marks = [];
+  const marks: SkyMark[] = [];
   skyMarks([[{ x: 300, y: top - 200 }], [{ x: 500, y: top + 50 }]], top, marks);
   assert.equal(marks.length, 1);
-  assert.equal(marks[0].x, 300);
-  assert.ok(near(marks[0].above, 200, 1e-9));
+  const mark = marks[0];
+  assert.ok(mark, 'a mark');
+  assert.equal(mark.x, 300);
+  assert.ok(near(mark.above, 200, 1e-9));
   skyMarks([[], []], top, marks);
   assert.equal(marks.length, 0, 'the list is reused, not reallocated');
 });
@@ -229,7 +235,7 @@ test('stepHold rides out the one frame a climbing shell hands over to its ghost,
 
 test('a shell lying on the ground (a room replay\'s roller) holds nothing', () => {
   const g = () => 95;
-  const ground = x => 330 + x * 0;
+  const ground = (x: number) => 330 + x * 0;
   const at = { w: W, reach: 2000, ground };
   assert.equal(volleyTop(-200, [[{ x: 400, y: 327, vy: -1, wkey: 'roller' }]], g, at), null);
   assert.notEqual(volleyTop(-200, [[{ x: 400, y: 300, vy: 40, wkey: 'shell' }]], g, at), null, 'still in the air: held');

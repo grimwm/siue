@@ -8,11 +8,21 @@ import path from 'node:path';
 import { buildArsenal, buried, fallTanks, anyTankFalling, settleFalls, surfY } from '../src/sim.ts';
 import { addDirt } from '../src/earth.ts';
 import { snapTanks, soloDeal, soloMuster } from '../src/solo.ts';
+import type { FallRules, Gear, Tank, Weapon, World } from '../src/sim.ts';
+import type { SoloState } from '../src/solo.ts';
 
-const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
-const arsenal = buildArsenal(GAME.arsenal);
-const unit = (id, isPlayer, x, y, hp = 100, extra = {}) => ({ id, isPlayer, x, y, hp, angle: 45, power: 50, fuel: 80, ...extra });
-function world(tanks) {
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+function nth<T>(list: readonly T[], i: number): T {
+  return must(list[i], `item ${i}`);
+}
+
+const GAME: { arsenal: { ammo: Weapon[]; gear?: Gear[]; fall?: Partial<FallRules> } } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+const arsenal = must(buildArsenal(GAME.arsenal), 'the arsenal');
+const unit = (id: string, isPlayer: boolean, x: number, y: number, hp = 100, extra: Partial<Tank> = {}): Tank => ({ id, isPlayer, x, y, hp, angle: 45, power: 50, fuel: 80, ...extra });
+function world(tanks: Tank[]): World {
   return {
     tanks, terrain: new Array(720).fill(400), wind: 0, round: 1, rng: () => 0.5, shells: [],
     score: 0, cash: 0, ammo: { shell: Infinity }, selected: 'shell', shield: false, bunker: 0, laststand: false, jammer: 0, chutes: 0,
@@ -29,7 +39,7 @@ test('fresh dirt over a tank buries it: the settle, the falls and the snap leave
   for (let i = 0; i < 30; i++) fallTanks(G, 1 / 60);
   assert.equal(me.drawY, undefined, 'drawn where it is, under the dirt');
   assert.ok(!anyTankFalling(G));
-  snapTanks(G);
+  snapTanks(G as SoloState); // it reads only the tanks and the terrain
   assert.equal(me.y, 400, 'a settled round keeps it buried');
   assert.ok(buried(me, G.terrain));
 });
@@ -54,11 +64,12 @@ test('a few pixels of dirt is not burial; dug out, a buried tank drops and pays 
   G.terrain.fill(430);
   const ev = settleFalls(G, arsenal);
   assert.equal(me.y, 430);
-  assert.equal(ev[0].dmg, 10);
+  const first = nth(ev, 0);
+  assert.equal(first.kind === 'fall' ? first.dmg : undefined, 10);
 });
 
 test('a new round places every unit on the fresh hills', () => {
-  const G = {};
+  const G = {} as SoloState; // soloDeal fills it in
   soloDeal(G, arsenal, 'burial', 'normal', 720);
   soloMuster(G, arsenal);
   for (const t of G.tanks) t.y += 30;

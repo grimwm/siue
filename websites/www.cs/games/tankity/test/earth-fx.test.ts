@@ -3,18 +3,20 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { playEarthOp } from '../src/earth-fx.ts';
 import { createEarthShow } from '../src/earth-show.ts';
+import type { EarthFxDeps } from '../src/earth-fx.ts';
+import type { EarthOp } from '../src/earth.ts';
+import type { EarthShow } from '../src/earth-show.ts';
 
 function deps() {
-  const log = { impact: [], special: [], sound: [], said: [] };
-  return {
-    log, d: {
-      fxImpact: (k, x, y, r) => { log.impact.push([k, x, y, r]); return undefined; },
-      fxSpecial: (k, name, x, y, ang, len) => log.special.push([k, name, x, y, ang, len]),
-      sound: n => log.sound.push(n), shake() {}, show: createEarthShow(), say: t => log.said.push(t),
-    },
+  const log: { impact: unknown[][]; special: [string, string, number, number, number, number | undefined][]; sound: string[]; said: string[] } = { impact: [], special: [], sound: [], said: [] };
+  const d: EarthFxDeps & { show: EarthShow } = {
+    fxImpact: (k, x, y, r) => { log.impact.push([k, x, y, r]); return undefined; },
+    fxSpecial: (k, name, x, y, ang, len) => log.special.push([k, name, x, y, ang, len]),
+    sound: n => log.sound.push(n), shake() {}, show: createEarthShow(), say: t => log.said.push(t),
   };
+  return { log, d };
 }
-const flat = () => Array(100).fill(400);
+const flat = (): number[] => Array(100).fill(400);
 
 test('dirt that does no damage plays its impact and a thud once', () => {
   const { log, d } = deps();
@@ -34,8 +36,8 @@ test('dirt whose burst did damage leaves the impact and the boom to its blast: o
 test('liquid dirt that leaves no pool runs off the field: a spill at the edge it ran to, and a line', () => {
   const { log, d } = deps();
   const slope = Array.from({ length: 100 }, (_, x) => 300 + x);
-  playEarthOp({ t: 'pour', w: 'mud', x: 60, v: 4000 }, slope, slope, 60, 59, d, false);
+  playEarthOp({ t: 'pour', w: 'mud', x: 60, v: 4000 } as EarthOp, slope, slope, 60, 59, d, false);
   const spill = log.special.find(s => s[1] === 'pour');
-  assert.ok(spill && spill[2] + spill[5] === 99, `spilled at the right edge: ${JSON.stringify(log.special)}`);
+  assert.ok(spill && spill[2] + Number(spill[5]) === 99, `spilled at the right edge: ${JSON.stringify(log.special)}`);
   assert.equal(log.said.length, 1);
 });

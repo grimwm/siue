@@ -694,7 +694,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         if ($row === null) {
             continue;
         }
-        $c->allow($row, array_merge(['key', 'name', 'cat', 'dmg', 'radius', 'price', 'pack', 'minRound', 'ai', 'aiRound', 'aiRack',
+        $c->allow($row, array_merge(['key', 'name', 'cat', 'dmg', 'radius', 'price', 'pack', 'start', 'minRound', 'ai', 'aiRound', 'aiRack',
             'effect', 'speed', 'flat'], array_keys(TANKITY_AMMO_EXTRA), ['note', 'gfx']), $p);
         $o = [];
         $o['key'] = $c->str($row, 'key', $p, 24, true, '/^[a-z][a-z0-9]*$/');
@@ -710,6 +710,9 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         $o['radius'] = $c->int($row, 'radius', $p, 1, 200);
         $o['price'] = $c->int($row, 'price', $p, 0, 100000);
         $o['pack'] = $c->int($row, 'pack', $p, 0, 99);
+        if (array_key_exists('start', $row) && $row['start'] !== null) {
+            $o['start'] = $c->int($row, 'start', $p, 0, 9);
+        }
         $o['minRound'] = $c->int($row, 'minRound', $p, 1, 99);
         $o['ai'] = $c->bool($row, 'ai', $p);
         $o['aiRound'] = $c->int($row, 'aiRound', $p, 1, 99);
@@ -757,7 +760,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         }
         $o['note'] = $c->str($row, 'note', $p, 120);
         $o['gfx'] = tankity_build_gfx($c, $row['gfx'] ?? null, "$p.gfx");
-        $res['ammo'][] = tankity_ordered($o, array_merge(['key', 'name', 'cat', 'dmg', 'radius', 'price', 'pack', 'minRound', 'ai', 'aiRound', 'aiRack',
+        $res['ammo'][] = tankity_ordered($o, array_merge(['key', 'name', 'cat', 'dmg', 'radius', 'price', 'pack', 'start', 'minRound', 'ai', 'aiRound', 'aiRack',
             'effect'], array_keys(TANKITY_AMMO_EXTRA), ['flat', 'speed', 'note', 'gfx']));
     }
     if (!in_array('shell', array_column($res['ammo'], 'key'), true)) {
@@ -814,7 +817,7 @@ function tankity_build_gfx(TankityCheck $c, mixed $g, string $p): ?array
     if ($g === null) {
         return null;
     }
-    $c->allow($g, ['shell', 'trail', 'blast', 'painter', 'shake'], $p);
+    $c->allow($g, ['shell', 'trail', 'blast', 'painter', 'shake', 'linger', 'size'], $p);
     $o = [];
     foreach (['shell', 'trail'] as $k) {
         $o[$k] = array_key_exists($k, $g) ? $c->color($g[$k], "$p.$k") : null;
@@ -830,7 +833,9 @@ function tankity_build_gfx(TankityCheck $c, mixed $g, string $p): ?array
     }
     $o['painter'] = $c->enum($g, 'painter', $p, TANKITY_PAINTERS);
     $o['shake'] = $c->num($g, 'shake', $p, 0.0, 1.0);
-    return tankity_ordered($o, ['shell', 'trail', 'blast', 'painter', 'shake']);
+    $o['linger'] = $c->num($g, 'linger', $p, 0.1, 3.0, false);
+    $o['size'] = $c->num($g, 'size', $p, 1.0, 20.0, false);
+    return tankity_ordered($o, ['shell', 'trail', 'blast', 'painter', 'shake', 'linger', 'size']);
 }
 
 function tankity_build_keys(TankityCheck $c, mixed $k): array

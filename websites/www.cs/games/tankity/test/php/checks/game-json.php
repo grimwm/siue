@@ -240,6 +240,10 @@ $check('apex-cluster-needs-no-fuse', ($apex['apex'] ?? null) === true && !isset(
 $rack = $row1($mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 1\n"));
 $check('airack-validates', ($rack['aiRack'] ?? null) === 1 && array_search('aiRack', array_keys($rack), true) === array_search('aiRound', array_keys($rack), true) + 1,
     json_encode($rack));
+$look = $rowOf($mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, linger: 0.8, size: 7}'), 0);
+$check('gfx-linger-and-size-validate', ($look['gfx']['linger'] ?? null) === 0.8 && ($look['gfx']['size'] ?? null) === 7, json_encode($look['gfx'] ?? $look));
+$start = $row1($mut("      aiRound: 2\n", "      aiRound: 2\n      start: 1\n"));
+$check('start-validates', ($start['start'] ?? null) === 1, json_encode($start));
 $check('ball-painter-validates', (json_decode($render($mut('painter: spark', 'painter: ball')), true)['arsenal']['ammo'][1]['gfx']['painter'] ?? '') === 'ball');
 $check('volume-defaults-to-1', ($out['audio']['music'][0]['volume'] ?? 0) === 0.7
     && (json_decode($render($mut("      volume: 0.7\n", '')), true)['audio']['music'][0]['volume'] ?? 0) === 1.0);
@@ -286,6 +290,9 @@ $cases = [
     'pellets-on-a-roller' => [$asEffect("      effect: roller\n      friction: 0.5\n      rollTime: 6\n      pellets: 3\n"), 'arsenal.ammo[1].pellets: only the pellets effect uses this'],
     'airack-range-low' => [$mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 0\n"), 'arsenal.ammo[1].aiRack: must be a whole number from 1 to 9'],
     'airack-range-high' => [$mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 10\n"), 'arsenal.ammo[1].aiRack: must be a whole number from 1 to 9'],
+    'linger-range' => [$mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, linger: 9}'), 'arsenal.ammo[0].gfx.linger: must be a number from 0.1 to 3'],
+    'size-range' => [$mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, size: 40}'), 'arsenal.ammo[0].gfx.size: must be a number from 1 to 20'],
+    'start-range' => [$mut("      aiRound: 2\n", "      aiRound: 2\n      start: 10\n"), 'arsenal.ammo[1].start: must be a whole number from 0 to 9'],
     'airack-needs-ai' => [$mut("      ai: true\n      aiRound: 2\n", "      ai: false\n      aiRound: 2\n      aiRack: 1\n"), 'arsenal.ammo[1].aiRack: only a row with ai: true uses this'],
     'dmg-float' => [$mut("      dmg: 34\n", "      dmg: 34.5\n"), 'arsenal.ammo[0].dmg'],
     'dmg-string' => [$mut("      dmg: 34\n", "      dmg: lots\n"), 'arsenal.ammo[0].dmg'],

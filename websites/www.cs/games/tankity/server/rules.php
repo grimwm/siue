@@ -343,12 +343,29 @@ function room_seat_human(string $initials, string $token, array $body): array
 {
     return ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];
 }
+/* A seat's ammo at the start of a match: the endless Shell (-1), plus each
+// row's start shells. src/sim.ts startAmmo is the same. */
+function room_start_ammo(): array
+{
+    $ammo = ['shell' => -1];
+    foreach (room_weapons() as $k => $def) {
+        if ($k !== 'shell' && $def['start'] > 0) {
+            $ammo[$k] = $def['start'];
+        }
+    }
+    return $ammo;
+}
+/* What a buy or a pick of a locked row says: its name and its round. */
+function room_unlock_msg(string $name, int $minRound): string
+{
+    return "$name unlocks in round $minRound";
+}
 /* Every economy slot a new human seat needs, keyed by seat. */
 function room_seat_economy(array &$room, int $seat): void
 {
     $room['scores'][$seat] = 0;
     $room['cash'][$seat] = 600;
-    $room['ammo'][$seat] = ['shell' => -1, 'buck' => 1, 'mortar' => 0, 'rail' => 0, 'nuke' => 0];
+    $room['ammo'][$seat] = room_start_ammo();
     $room['weapon'][$seat] = 'shell';
     $room['nextUp'][$seat] = 3000;
     $room['plate'][$seat] = 0;
@@ -463,7 +480,7 @@ function room_start_round(array &$room): void
             'fuel' => $s['human'] ? 80 : 0,
             'dirS' => $slots[$seat % count($slots)] < $w / 2 ? 1 : -1, // face the middle
             'ammo' => $s['human']
-                ? ($room['ammo'][$idx] ?? ['shell' => -1, 'buck' => 1])
+                ? ($room['ammo'][$idx] ?? room_start_ammo())
                 : room_ai_rack($room['round']),
         ];
         $seat++;
@@ -855,7 +872,7 @@ function room_buy(array &$room, int $seat, string $item, int $qty): ?array
         return [422, 'not for sale'];
     }
     if ((int) $room['round'] < ($minRound <= 1 ? 0 : $minRound)) {
-        return [409, $item === 'nuke' ? 'nukes unlock in round 4' : 'unlocks in round ' . $minRound];
+        return [409, room_unlock_msg((string) (isset($weapons[$item]) ? $weapons[$item]['name'] : ($gear['name'] ?? $item)), $minRound)];
     }
     $effect = (string) ($gear['effect'] ?? '');
     if (in_array($effect, ['shield', 'extralife', 'laststand'], true)) {

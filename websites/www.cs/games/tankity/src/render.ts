@@ -15,6 +15,7 @@
  * the sim helpers arrive as dependencies. */
 import type { TrailCarrier } from './fx/trail.ts';
 import type { Box, Fit, WorldRect } from './field.ts';
+import { gfxSize } from './sim.ts';
 import type { Cloud, Hills, Rng, Tank } from './sim.ts';
 
 /* ---------- what main.ts hands over ---------- */
@@ -66,7 +67,7 @@ export interface FxApi {
 }
 
 /** A weapon's paint job as the battlefield reads it. */
-export interface Look { shell?: string; blast?: readonly string[]; painter?: string }
+export interface Look { shell?: string; blast?: readonly string[]; painter?: string; size?: number }
 
 /** The aim arm to draw: the unit whose turn it is, and the arm's length in world units. */
 export interface AimArm { unit: DrawTank; length: number }
@@ -607,7 +608,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     }
     c.fillStyle = deps.look(s.wkey).shell || '#ffe27a';
     c.beginPath();
-    c.arc(s.x, s.y, s.wkey === 'nuke' ? 7 : s.wkey === 'mortar' ? 4.5 : 3.5, 0, Math.PI * 2);
+    c.arc(s.x, s.y, gfxSize(deps.look(s.wkey)), 0, Math.PI * 2);
     c.fill();
     c.fillStyle = '#fff';
     c.beginPath();

@@ -584,7 +584,7 @@ if ($action === 'act' && $method === 'POST') {
         $minRound = $weapons[$wkey]['minRound'] ?? 1;
         if ($room['round'] < $minRound) {
             room_unlock($fh);
-            $msg = $wkey === 'nuke' ? 'nukes unlock in round 4' : 'unlocks in round ' . $minRound;
+            $msg = room_unlock_msg($weapons[$wkey]['name'], (int) $minRound);
             room_json_out(409, ['error' => $msg]);
         }
         $room['weapon'][$seat] = $wkey;
@@ -609,7 +609,7 @@ if ($action === 'act' && $method === 'POST') {
         $minRound = $weapons[$wkey]['minRound'] ?? 1;
         if ($room['round'] < $minRound) {
             room_unlock($fh);
-            $msg = $wkey === 'nuke' ? 'nukes unlock in round 4' : 'unlocks in round ' . $minRound;
+            $msg = room_unlock_msg($weapons[$wkey]['name'], (int) $minRound);
             room_json_out(409, ['error' => $msg]);
         }
         if ($wkey !== 'shell') {

@@ -86,8 +86,13 @@ export interface Gfx {
   trail?: string;
   blast?: readonly [string, string];
   painter?: string;
+  linger?: number; // seconds the blast disc stays on screen
+  size?: number; // the battlefield shell's radius, px
   [key: string]: unknown;
 }
+/* Seconds a weapon's blast disc lingers, and its shell's radius in flight. */
+export const gfxLinger = (g: { linger?: number } | undefined): number => (g && g.linger) || 0.5;
+export const gfxSize = (g: { size?: number } | undefined): number => (g && g.size) || 3.5;
 /* One ammo row of the arsenal (game.yaml, served as game.json). */
 export interface Weapon {
   key: string;
@@ -97,6 +102,7 @@ export interface Weapon {
   radius: number;
   price: number;
   pack: number;
+  start?: number; // shells of it every player starts a match with
   minRound: number;
   ai?: boolean;
   aiRound?: number;
@@ -294,6 +300,16 @@ export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[] } | null | u
   Object.freeze(order);
   Object.freeze(shop);
   return { weapons: w, order, shop, gear };
+}
+/* A player's ammo at the start of a match: the endless Shell, plus each
+   row's start shells. server/rules.php room_start_ammo is the same. */
+export function startAmmo(arsenal: Arsenal): Ammo {
+  const ammo: Ammo = { shell: Infinity };
+  for (const k of arsenal.order) {
+    const n = arsenal.weapons[k]!.start || 0;
+    if (k !== 'shell' && n > 0) ammo[k] = n;
+  }
+  return ammo;
 }
 /* Drone magazine from the data file: aiRack (2 when a row names none) of each
    gun the battery may load by round. server/ai.php room_ai_rack is the same. */

@@ -63,6 +63,8 @@
 #   price     dollars for one pack. 0 to 100000.
 #   pack      shells per purchase; 0 means the shop does not sell it (only
 #             the free `shell` uses 0). 0 to 99.
+#   start     shells of it every player starts a match with, 0 to 9.
+#             Optional (0 when left out).
 #   minRound  first round the shop sells it. 1 means from the pre-match shop;
 #             a later round locks the row ("Unlocks in round N") until then.
 #   ai        true lets the drone battery carry it. false keeps it player only.
@@ -153,6 +155,10 @@
 #             (pellets and cluster shells draw their own multi-dot icons.)
 #   shake     screen shake on an explosion in solo play and the range
 #             demos, 0 (none) to 1 (violent). Rooms shake by blast size.
+#   linger    seconds the blast disc stays on the battlefield, 0.1 to 3.
+#             Optional (0.5).
+#   size      the battlefield shell's radius in pixels, 1 to 20. Optional
+#             (3.5).
 #
 # gear row fields
 #   key, name, cat, price, note   as for ammo (gear is always sold: no pack)
@@ -192,6 +198,7 @@ arsenal:
       radius: 20
       price: 80
       pack: 2
+      start: 1
       minRound: 1
       ai: true
       aiRound: 2
@@ -215,7 +222,7 @@ arsenal:
       effect: shot
       speed: 1.0
       note: Big crater, slow shell.
-      gfx: {shell: "#ff9f43", trail: "#ff7b39", blast: ["#ff7b39", "#ffe27a"], painter: disc, shake: 0.5}
+      gfx: {shell: "#ff9f43", trail: "#ff7b39", blast: ["#ff7b39", "#ffe27a"], painter: disc, shake: 0.5, size: 4.5}
 
     - key: rail
       name: Rail
@@ -377,7 +384,7 @@ arsenal:
       effect: shot
       speed: 1.0
       note: Levels whole hillsides.
-      gfx: {shell: "#ff6b6b", trail: "#ff6b6b", blast: ["#ff6b6b", "#fff3c4"], painter: disc, shake: 0.9}
+      gfx: {shell: "#ff6b6b", trail: "#ff6b6b", blast: ["#ff6b6b", "#fff3c4"], painter: disc, shake: 0.9, linger: 0.8, size: 7}
 
     - key: leapfrog
       name: Leapfrog
@@ -454,7 +461,7 @@ arsenal:
       effect: shot
       speed: 1.0
       note: A small nuke at normal speed; flattens a hill, a step under NUKE.
-      gfx: {shell: "#ff9a8a", trail: "#ff7b6b", blast: ["#ff7b6b", "#fff3c4"], painter: disc, shake: 0.7}
+      gfx: {shell: "#ff9a8a", trail: "#ff7b6b", blast: ["#ff7b6b", "#fff3c4"], painter: disc, shake: 0.7, linger: 0.7, size: 5.5}
 
     - key: babyroller
       name: Baby Roller

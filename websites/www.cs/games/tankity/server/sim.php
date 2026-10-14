@@ -173,7 +173,7 @@ function room_weapons(): array
         $w[(string) $am['key']] = room_weapon_row($am);
     }
     if (!isset($w['shell'])) {
-        $w['shell'] = room_weapon_row(['dmg' => 34, 'radius' => 26, 'ai' => true, 'aiRound' => 1]);
+        $w['shell'] = room_weapon_row(['key' => 'shell', 'name' => 'Shell', 'dmg' => 34, 'radius' => 26, 'ai' => true, 'aiRound' => 1]);
     }
     return $w;
 }
@@ -182,10 +182,12 @@ function room_weapons(): array
 function room_weapon_row(array $am): array
 {
     return [
+        'name' => (string) ($am['name'] ?? ($am['key'] ?? '')),
         'dmg' => (int) ($am['dmg'] ?? 30),
         'radius' => (int) ($am['radius'] ?? 24),
         'price' => (int) ($am['price'] ?? 0),
         'pack' => (int) ($am['pack'] ?? 0),
+        'start' => (int) ($am['start'] ?? 0),
         'minRound' => (int) ($am['minRound'] ?? 1),
         'effect' => (string) ($am['effect'] ?? 'shot'),
         'speed' => (float) ($am['speed'] ?? 1.0),

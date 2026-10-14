@@ -48,10 +48,10 @@ $rack = room_ai_rack(9);
 $check('rack-round-9', $rack['shell'] === -1 && ($rack['deathshead'] ?? null) === 1 && ($rack['mortar'] ?? null) === 2, json_encode($rack));
 $check('rack-round-8-has-no-deaths-head', (room_ai_rack(8)['deathshead'] ?? null) === 0);
 $bare = room_weapon_row(['key' => 'x', 'dmg' => 5, 'radius' => 5]);
-$check('weapon-row-defaults', $bare['aiRack'] === 2 && $bare['apex'] === false && $bare['hops'] === 1 && $bare['hopKeep'] === 0.5
+$check('weapon-row-defaults', $bare['start'] === 0 && $bare['aiRack'] === 2 && $bare['apex'] === false && $bare['hops'] === 1 && $bare['hopKeep'] === 0.5
     && $bare['kick'] === 150.0 && $bare['fuse'] === 0.9 && $bare['fan'] === 0.22 && $bare['split'] === 4 && $bare['speed'] === 1.0, json_encode($bare));
 $check('weapon-row-reads-new-fields', room_weapon_row(['key' => 'x', 'aiRack' => 1, 'apex' => true, 'hops' => 3, 'hopKeep' => 0.55, 'kick' => 90])
-    === array_replace($bare, ['aiRack' => 1, 'apex' => true, 'hops' => 3, 'hopKeep' => 0.55, 'kick' => 90.0, 'dmg' => 30, 'radius' => 24, 'subDmg' => 30, 'subRadius' => 24]));
+    === array_replace($bare, ['name' => 'x', 'aiRack' => 1, 'apex' => true, 'hops' => 3, 'hopKeep' => 0.55, 'kick' => 90.0, 'dmg' => 30, 'radius' => 24, 'subDmg' => 30, 'subRadius' => 24]));
 
 // A harmless burst (dmg 0) carves its crater and touches no unit: no hit, no
 // shield spent, nobody credited or blamed.

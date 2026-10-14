@@ -61,8 +61,9 @@ export interface FxApi {
   reduced: boolean;
   sheets: { moon?: SpriteSheet };
   glow(c: CanvasRenderingContext2D, x: number, y: number, radius: number, color: string, alpha: number): void;
+  /** The shell's glow, and its rendered sprite when it has one (then true). */
   drawBody(c: CanvasRenderingContext2D, x: number, y: number, vx: number, vy: number,
-    body: unknown, color: string, time: number): void;
+    body: unknown, color: string, time: number): boolean | void;
 }
 
 /** A weapon's paint job as the battlefield reads it. */
@@ -570,9 +571,10 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
   }
 
   /* ---------- shells ---------- */
-  function drawShellBody(c: CanvasRenderingContext2D, wkey: string, x: number, y: number, vx: number, vy: number, time: number): void {
-    if (!FX) return;
-    FX.drawBody(c, x, y, vx, vy, deps.fxBody(wkey), deps.look(wkey).shell || '#ffe27a', time);
+  /** The shell's glow and, when its sheet has loaded, its rendered sprite (then true). */
+  function drawShellBody(c: CanvasRenderingContext2D, wkey: string, x: number, y: number, vx: number, vy: number, time: number): boolean {
+    if (!FX) return false;
+    return !!FX.drawBody(c, x, y, vx, vy, deps.fxBody(wkey), deps.look(wkey).shell || '#ffe27a', time);
   }
 
   /** A ball-painted shell (the roller): a coloured ball with a stripe across it that turns as the ball travels, a full turn per 2 pi radii of ground. */
@@ -598,9 +600,9 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.restore();
   }
 
-  /** A shell in flight: its glow body, a coloured ball (bigger for the big ones) and a white core. */
+  /** A shell in flight: its glow body and rendered sprite, or (no sprite yet) a coloured ball (bigger for the big ones) and a white core. */
   function drawShell(c: CanvasRenderingContext2D, s: Flying, time: number): void {
-    drawShellBody(c, s.wkey, s.x, s.y, s.vx, s.vy, time);
+    if (drawShellBody(c, s.wkey, s.x, s.y, s.vx, s.vy, time)) return;
     if (deps.look(s.wkey).painter === 'ball') {
       drawBall(c, s.x, s.y, deps.look(s.wkey).shell || '#c9a66b');
       return;
@@ -723,7 +725,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     for (const bm of pv.booms) drawBoom(c, bm, deps.look(bm.wkey));
     if (pv.fx) pv.fx.draw(c);
     for (const s of pv.shells) {
-      drawShellBody(c, pv.wkey, s.x, s.y, s.vx, s.vy, time);
+      if (drawShellBody(c, pv.wkey, s.x, s.y, s.vx, s.vy, time)) continue;
       if (deps.look(pv.wkey).painter === 'ball') {
         drawBall(c, s.x, s.y, deps.look(pv.wkey).shell || '#c9a66b');
         continue;

@@ -1438,6 +1438,16 @@ await (async () => {
     FX.play.trail(sys2, defs.shell, shellFx, 0.016, 0, 0, 100, 0);
     FX.play.trail(sys2, defs.shell, shellFx, 0.016, 90, 0, 100, 0);
     check('fx-trail-follows-path', sys2.live >= 1, 'live=' + sys2.live);
+    // A burst in the air leaves out the ground layers (dirt thrown up, burn marks).
+    const onGround = defs.mortar.impact.emitters.filter(e => e.ground);
+    check('fx-ground-layers-marked', onGround.length >= 2 && onGround.every(e => e.shape === 'sprite'), onGround.map(e => e.sheet).join(','));
+    const spawned = ground => { const s3 = FX.createSystem({ max: 5000 }); s3.emit(defs.mortar.impact, 100, 100, 0, 42, ground); s3.step(0.5); return s3.stats.spawned; };
+    check('fx-air-burst-skips-ground', spawned(false) < spawned(true) && spawned(undefined) === spawned(true), `air ${spawned(false)} ground ${spawned(true)}`);
+    // Every shell names a rendered body; until its sheet loads the caller draws the plain disc.
+    const noBody = arsenal.ammo.filter(a => !(defs[a.key].body && /^p_/.test(defs[a.key].body.sprite || ''))).map(a => a.key);
+    check('fx-every-shell-has-a-body-sprite', noBody.length === 0, noBody.join(','));
+    const ctx = { save() {}, restore() {}, translate() {}, rotate() {}, drawImage() {}, globalCompositeOperation: '', globalAlpha: 1 };
+    check('fx-body-falls-back-before-load', FX.drawBody(ctx, 0, 0, 10, 0, { halo: 0, sprite: 'p_shell', size: 15 }, '#ffffff', 0) === false);
   }
   {
     // A shell leaves the muzzle inside its gunner's box: it ignores its

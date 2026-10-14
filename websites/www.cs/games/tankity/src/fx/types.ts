@@ -11,6 +11,7 @@ export type Range = [number, number];
 export type Shape = 'dot' | 'streak' | 'ring' | 'spark' | 'smoke' | 'sprite' | 'bolt' | 'beam';
 export type Aim = 'fixed' | 'forward' | 'back' | 'normal';
 export type Ease = 'linear' | 'out' | 'in';
+export type Anim = 'once' | 'loop' | 'random';
 
 /* One emitter with every field set. An authored emitter holds only what
    differs; the rest rides its prototype (see adopt in engine.ts). */
@@ -31,6 +32,7 @@ export interface Emitter {
   anchor: 'center' | 'bottom';
   rotJitter: number; spin: Range;
   tint: string;
+  align: boolean; anim: Anim; ground: boolean;
 }
 
 export interface ScreenFx {
@@ -41,8 +43,13 @@ export interface ScreenFx {
 /** One emitter-set of a weapon (muzzle, trail, impact or a named special). */
 export interface FxEffect { emitters: Emitter[]; screen?: ScreenFx }
 
-/** The shell's own glow, from the weapon's `body` entry. */
-export interface FxBody { halo?: number; alpha?: number; pulse?: number; stretch?: number }
+/** The shell itself, from the weapon's `body` entry: its glow, and the
+    rendered shell when `sprite` names a sheet (`size` px across, `fps`,
+    `spin` degrees a second, or `roll` the ball's radius in px). */
+export interface FxBody {
+  halo?: number; alpha?: number; pulse?: number; stretch?: number;
+  sprite?: string; size?: number; fps?: number; spin?: number; roll?: number;
+}
 
 /** A weapon's effect set as the engine plays it. */
 export interface FxSet {
@@ -70,13 +77,15 @@ export interface FxSys extends FxSystem, PreviewFx {
   readonly stats: { spawned: number; recycled: number; peak: number };
   readonly flash: { a: number; dur: number; t: number; color: string };
   readonly live: number;
-  emit(ef: FxEffect | undefined, x: number, y: number, ang: number | undefined, r: number | undefined): number | undefined;
+  emit(ef: FxEffect | undefined, x: number, y: number, ang: number | undefined, r: number | undefined, ground?: boolean): number | undefined;
   newTrail(ef: FxEffect): TrailState;
   trail(ef: FxEffect | undefined, tr: TrailState, x: number, y: number, ang: number, dt: number, r: number): void;
 }
 
 export interface SpriteSheetData {
   name: string;
+  file: string;
+  first: number; // the sheet's first frame within its file
   img: HTMLImageElement;
   fw: number;
   fh: number;
@@ -96,9 +105,10 @@ export interface FxEngine extends FxApi {
   SPECIALS: readonly string[];
   EASES: readonly Ease[];
   AIMS: readonly Aim[];
-  SCHEMA: Readonly<Record<'shape' | 'aim' | 'ease' | 'unit' | 'anchor', readonly string[]>>;
+  ANIMS: readonly Anim[];
+  SCHEMA: Readonly<Record<'shape' | 'aim' | 'ease' | 'unit' | 'anchor' | 'anim', readonly string[]>>;
   sheets: Record<string, SpriteSheetData>;
-  BODY_DEFAULTS: Readonly<Required<FxBody>>;
+  BODY_DEFAULTS: Readonly<Required<Pick<FxBody, 'halo' | 'alpha' | 'pulse' | 'stretch'>>>;
   createSystem(opts: { max: number }): FxSys;
   loadSprites(base: string, done?: (any: boolean) => void): Promise<boolean>;
   adopt(em: Partial<Emitter>): Emitter;
@@ -113,7 +123,7 @@ export interface FxEngine extends FxApi {
   lutFor(colors: string[]): string[];
   play: {
     muzzle(sys: FxSys, set: FxSet, x: number, y: number, ang: number): number | undefined;
-    impact(sys: FxSys, set: FxSet, x: number, y: number, r: number): number | undefined;
+    impact(sys: FxSys, set: FxSet, x: number, y: number, r: number, ground?: boolean): number | undefined;
     special(sys: FxSys, set: FxSet, name: string, x: number, y: number, ang: number): void;
     trail(sys: FxSys, set: FxSet, s: TrailCarrier, dt: number, x: number, y: number, vx: number, vy: number): void;
   };

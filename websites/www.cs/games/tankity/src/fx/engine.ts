@@ -26,6 +26,7 @@ const SLOTS = ['muzzle', 'trail', 'impact'] as const;
 const SPECIALS = ['split', 'steer', 'pierce', 'arc'];
 const EASES = ['linear', 'out', 'in'] as const;
 const AIMS = ['fixed', 'forward', 'back', 'normal'] as const;
+const ANIMS = ['once', 'loop', 'random'] as const;
 
 /* Emitter defaults. Arrays here are shared: never edit one in place. */
 const DEFAULTS: Emitter = {
@@ -51,10 +52,13 @@ const DEFAULTS: Emitter = {
   anchor: 'center',             // sprite: center | bottom
   rotJitter: 0, spin: [0, 0],   // random start rotation (degrees); spin range (degrees/s)
   tint: '',                     // sprite: multiply the sheet by this colour
+  align: false,                 // sprite: turned to the direction it was launched
+  ground: false,                // impact: only when the blast touched the ground (dirt, scorch)
+  anim: 'once',                 // sprite: once (hold the last frame) | loop | random (loop from a random frame)
 };
-const SCHEMA_FIELDS = ['shape', 'aim', 'ease', 'unit', 'anchor'] as const;
+const SCHEMA_FIELDS = ['shape', 'aim', 'ease', 'unit', 'anchor', 'anim'] as const;
 const SCHEMA: Record<(typeof SCHEMA_FIELDS)[number], readonly string[]> = {
-  shape: SHAPES, aim: AIMS, ease: EASES, unit: ['px', 'r'], anchor: ['center', 'bottom'],
+  shape: SHAPES, aim: AIMS, ease: EASES, unit: ['px', 'r'], anchor: ['center', 'bottom'], anim: ANIMS,
 };
 
 /* ---------- colours ---------- */
@@ -127,10 +131,14 @@ function blobFor(color: string): HTMLCanvasElement | null {
   blobs.set(color, b);
   return b;
 }
-/* sprites.json: sheet name -> its file and layout. */
-interface SpriteIndex { [name: string]: { file?: string; frame: number; cols: number; frames: number; fps?: number } | undefined }
-/* Sprite sheets: name -> { img, fw, fh, cols, frames, ready, tints }. */
+/* sprites.json: sheet name -> its file and layout. Several sheets may share
+   one file (an atlas): `first` is the sheet's first frame in it. */
+interface SpriteIndex { [name: string]: { file?: string; frame: number; cols: number; frames: number; first?: number; fps?: number } | undefined }
+/* Sprite sheets: name -> { img, fw, fh, cols, frames, first, ready, tints }. */
 const sheets: Record<string, SpriteSheetData> = {};
+/* One image per file, shared by the sheets cut from it. */
+interface SheetFile { img: HTMLImageElement; url: string; asked: boolean; users: SpriteSheetData[]; settle: (ok: boolean) => void }
+const files: Record<string, SheetFile> = {};
 function tintedSheet(sh: SpriteSheetData, color: string): CanvasImageSource {
   let t = sh.tints[color];
   if (t !== undefined) return t;
@@ -151,26 +159,66 @@ function tintedSheet(sh: SpriteSheetData, color: string): CanvasImageSource {
       }
     } catch (_) { t = sh.img; }
   }
-  sh.tints[color] = t;
+  // Sheets cut from one file share their tinted copies.
+  const f = sh.file ? files[sh.file] : undefined;
+  for (const u of f ? f.users : [sh]) u.tints[color] = t;
   return t;
 }
-/* Read sprites.json (written by fx/blender/render_fx.py) and fetch each
-   sheet. Missing sheets or no Image support just leave sprite emitters
+/* Start fetching a sheet's image now (a sprite asked for it before its turn). */
+function want(sh: SpriteSheetData): void {
+  const f = sh.file ? files[sh.file] : undefined;
+  if (f && !f.asked) { f.asked = true; f.img.src = f.url; }
+}
+/* Read sprites.json (written by fx/blender/render_fx.py) and fetch the
+   sheets lazily: the moon and the shell bodies at once, the rest one file at
+   a time when the page is idle, or sooner when an effect first asks for
+   one. Missing sheets or no Image support just leave sprite emitters
    silent; every effect also carries non-sprite emitters. */
 function loadSprites(base: string, done?: (any: boolean) => void): Promise<boolean> {
   if (typeof fetch !== 'function' || typeof Image !== 'function') { if (done) done(false); return Promise.resolve(false); }
   return fetch(base + 'sprites.json').then((r): Promise<SpriteIndex | null> => r.json()).then(idx => {
     let pending = 0, any = false;
     const finish = () => { if (--pending <= 0 && done) done(any); };
+    const order: SheetFile[] = [];
     for (const name of Object.keys(idx || {})) {
       const d = idx![name];
       if (!d || !d.file || name[0] === '_') continue;
-      const sh: SpriteSheetData = sheets[name] = { name, img: new Image(), fw: d.frame, fh: d.frame, cols: d.cols, frames: d.frames, fps: d.fps || 24, ready: false, tints: {} };
-      pending++;
-      sh.img.onload = () => { sh.ready = true; any = true; finish(); };
-      sh.img.onerror = () => finish();
-      sh.img.src = base + d.file;
+      let f = files[d.file];
+      if (!f) {
+        const img = new Image();
+        const nf: SheetFile = f = files[d.file] = { img, url: base + d.file, asked: false, users: [], settle: () => {} };
+        pending++;
+        let settled = false;
+        nf.settle = ok => {
+          if (settled) return;
+          settled = true;
+          if (ok) { any = true; for (const u of nf.users) u.ready = true; }
+          finish();
+          next();
+        };
+        img.onload = () => nf.settle(true);
+        img.onerror = () => nf.settle(false);
+        order.push(nf);
+      }
+      const sh: SpriteSheetData = sheets[name] = { name, file: d.file, img: f.img, fw: d.frame, fh: d.frame, cols: d.cols, frames: d.frames, first: d.first || 0, fps: d.fps || 24, ready: false, tints: {} };
+      f.users.push(sh);
     }
+    // The moon and the shell bodies show at once; the blasts can wait for an idle moment.
+    const eager = (f: SheetFile): boolean => f.users.some(u => u.name === 'moon' || /^p_/.test(u.name));
+    const idle = (fn: () => void): void => {
+      const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+      if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(fn, { timeout: 1200 });
+      else setTimeout(fn, 60);
+    };
+    let at = 0;
+    function next(): void {
+      while (at < order.length && order[at]!.asked) at++;
+      if (at >= order.length) return;
+      const f = order[at++]!;
+      idle(() => { if (!f.asked) { f.asked = true; f.img.src = f.url; } else next(); });
+    }
+    for (const f of order) if (eager(f)) { f.asked = true; f.img.src = f.url; }
+    next();
     if (!pending && done) done(false);
     return true;
   }).catch(() => { if (done) done(false); return false; });
@@ -250,7 +298,7 @@ function derive(paint: Weapon['gfx'] | undefined): FxSet {
 /* One live particle. `em` and `lut` hold a placeholder until spawn() fills them. */
 interface Particle {
   x: number; y: number; vx: number; vy: number; age: number; life: number; s0: number; rot: number; vr: number;
-  g: number; d: number; wk: number; len: number; ez: number;
+  g: number; d: number; wk: number; len: number; ez: number; f0: number;
   em: Emitter; lut: string[]; pts: Float32Array | null;
 }
 /* A delayed or timed emitter waiting its turn. */
@@ -261,7 +309,7 @@ function createSystem(opts?: { max?: number }): FxSys {
   const max = (opts || {}).max || 700;
   const P: Particle[] = [];
   for (let i = 0; i < max; i++) {
-    P.push({ x: 0, y: 0, vx: 0, vy: 0, age: 0, life: 1, s0: 1, rot: 0, vr: 0, g: 0, d: 0, wk: 0, len: 0, ez: 0, em: DEFAULTS, lut: [], pts: null });
+    P.push({ x: 0, y: 0, vx: 0, vy: 0, age: 0, life: 1, s0: 1, rot: 0, vr: 0, g: 0, d: 0, wk: 0, len: 0, ez: 0, f0: 0, em: DEFAULTS, lut: [], pts: null });
   }
   const Q: Queued[] = [];
   for (let i = 0; i < 48; i++) Q.push({ on: false, em: DEFAULTS, x: 0, y: 0, ang: 0, k: 1, t: 0, acc: 0 });
@@ -309,7 +357,9 @@ function createSystem(opts?: { max?: number }): FxSys {
       }
     }
     p.x = px; p.y = py;
+    p.f0 = em.anim === 'random' ? Math.random() * 64 : 0;
     if (em.shape === 'beam') p.rot = a;
+    else if (em.align) p.rot += a;
     if (em.shape === 'bolt') {
       // A jagged polyline, fixed for the bolt's whole life.
       if (!p.pts) p.pts = new Float32Array(14);
@@ -330,12 +380,15 @@ function createSystem(opts?: { max?: number }): FxSys {
   }
   /* Fire an effect. x,y world point; ang the shell's heading (radians,
      canvas axes); r the blast radius for `unit: "r"` emitters. Returns the
-     effect's own screen-shake if it sets one, else undefined. */
-  function emit(ef: FxEffect | undefined, x: number, y: number, ang: number | undefined, r: number | undefined): number | undefined {
+     effect's own screen-shake if it sets one, else undefined. `ground`
+     false (a burst in the air) skips the emitters marked `ground`; left
+     out, every emitter plays. */
+  function emit(ef: FxEffect | undefined, x: number, y: number, ang: number | undefined, r: number | undefined, ground?: boolean): number | undefined {
     if (!ef) return undefined;
     const list = ef.emitters;
     for (let i = 0; i < list.length; i++) {
       const em = list[i]!;
+      if (em.ground && ground === false) continue;
       const k = em.unit === 'r' ? (r || 1) : 1;
       if (em.delay > 0 || em.duration > 0) {
         for (let j = 0; j < Q.length; j++) {
@@ -525,9 +578,11 @@ function createSystem(opts?: { max?: number }): FxSys {
         }
         case 'sprite': {
           const sh = sheets[em.sheet];
-          if (!sh || !sh.ready) break;
-          let f = em.fps > 0 ? (p.age * em.fps) | 0 : (t * sh.frames) | 0;
-          if (f >= sh.frames) f = sh.frames - 1;
+          if (!sh) break;
+          if (!sh.ready) { want(sh); break; }
+          let f = (em.fps > 0 ? p.age * em.fps : t * sh.frames) + p.f0;
+          f = em.anim === 'once' ? Math.min(f | 0, sh.frames - 1) : (f | 0) % sh.frames;
+          f += sh.first;
           const img = em.tint ? tintedSheet(sh, em.tint) : sh.img;
           const sx = (f % sh.cols) * sh.fw, sy = ((f / sh.cols) | 0) * sh.fh;
           const d = sz * 2 * em.scale;
@@ -576,11 +631,13 @@ function glow(c: CanvasRenderingContext2D, x: number, y: number, rad: number, co
   c.globalCompositeOperation = 'source-over';
   c.globalAlpha = oa;
 }
-/* The shell's own glow: a halo, a stretch of light behind it, and an
-   optional pulse. body = { halo, alpha, pulse, stretch } from game.yaml. */
-/* A shell body's settings when its weapon leaves them out. */
+/* The shell itself: a halo, a stretch of light behind it, an optional
+   pulse, and the rendered shell when the body names a sprite. body = { halo,
+   alpha, pulse, stretch, sprite, size, fps, spin, roll } from game.yaml.
+   Returns true when it drew the sprite, so the caller skips its plain disc. */
+/* A shell body's glow settings when its weapon leaves them out. */
 const BODY_DEFAULTS = Object.freeze({ halo: 9, alpha: 0.5, pulse: 0, stretch: 0 });
-function drawBody(c: CanvasRenderingContext2D, x: number, y: number, vx: number, vy: number, shellBody: FxBody | undefined, color: string, time: number): void {
+function drawBody(c: CanvasRenderingContext2D, x: number, y: number, vx: number, vy: number, shellBody: FxBody | undefined, color: string, time: number): boolean {
   const body = shellBody || {};
   const halo = body.halo === undefined ? BODY_DEFAULTS.halo : body.halo;
   let a = body.alpha === undefined ? BODY_DEFAULTS.alpha : body.alpha;
@@ -602,6 +659,28 @@ function drawBody(c: CanvasRenderingContext2D, x: number, y: number, vx: number,
     }
   }
   if (halo > 0 && a > 0) glow(c, x, y, halo, color, a);
+  return body.sprite ? drawBodySprite(c, x, y, vx, vy, body, time) : false;
+}
+/* The rendered shell: a frame of its sheet (nose to the right), turned to
+   its heading, or spun (`spin`, degrees a second), or rolled along the
+   ground (`roll`, the ball's radius: the frame follows the distance rolled). */
+function drawBodySprite(c: CanvasRenderingContext2D, x: number, y: number, vx: number, vy: number, body: FxBody, time: number): boolean {
+  const sh = sheets[body.sprite!];
+  if (!sh) return false;
+  if (!sh.ready) { want(sh); return false; }
+  const n = sh.frames, roll = body.roll || 0;
+  let f = roll > 0 ? Math.floor(x / roll / TAU * n) : Math.floor(time * (body.fps || 0));
+  f = ((f % n) + n) % n + sh.first;
+  const rot = roll > 0 ? 0 : body.spin ? time * body.spin * DEG : Math.hypot(vx, vy) > 1 ? Math.atan2(vy, vx) : 0;
+  const d = body.size || 12, sx = (f % sh.cols) * sh.fw, sy = ((f / sh.cols) | 0) * sh.fh;
+  if (rot) {
+    c.save();
+    c.translate(x, y);
+    c.rotate(rot);
+    c.drawImage(sh.img, sx, sy, sh.fw, sh.fh, -d / 2, -d / 2, d, d);
+    c.restore();
+  } else c.drawImage(sh.img, sx, sy, sh.fw, sh.fh, x - d / 2, y - d / 2, d, d);
+  return true;
 }
 
 /* How a weapon's effect set (one weapon's entry in `effects`) is played. The game
@@ -609,7 +688,7 @@ function drawBody(c: CanvasRenderingContext2D, x: number, y: number, vx: number,
    returns what the engine returns: emit() gives the effect's own screen shake. */
 const play: FxEngine['play'] = {
   muzzle(sys, set, x, y, ang) { return sys.emit(set.muzzle, x, y, ang, 0); },
-  impact(sys, set, x, y, r) { return sys.emit(set.impact, x, y, 0, r); },
+  impact(sys, set, x, y, r, ground) { return sys.emit(set.impact, x, y, 0, r, ground); },
   special(sys, set, name, x, y, ang) {
     const ef = set.special && set.special[name];
     if (ef) sys.emit(ef, x, y, ang, 0);
@@ -671,7 +750,7 @@ function toYaml(defs: Record<string, FxSet>): string {
 
 const api: FxEngine = {
   version: 1,
-  DEFAULTS, SHAPES, SLOTS, SPECIALS, EASES, AIMS, SCHEMA,
+  DEFAULTS, SHAPES, SLOTS, SPECIALS, EASES, AIMS, ANIMS, SCHEMA,
   reduced: false,
   sheets,
   createSystem, loadSprites, glow, drawBody, BODY_DEFAULTS,

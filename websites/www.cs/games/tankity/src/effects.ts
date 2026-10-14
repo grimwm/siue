@@ -44,7 +44,7 @@ const FALLBACK_FX: Record<string, FxSetData> = {
 };
 
 /** The slice of the game's state the effects read and write (main.ts's G). */
-export interface FxState { fx: FxSys | null; shake: number }
+export interface FxState { fx: FxSys | null; shake: number; terrain?: readonly number[] }
 
 /** What the effects need from the game. */
 export interface FxDeps {
@@ -94,9 +94,18 @@ export function createEffects(deps: FxDeps) {
     const kick = FX!.play.muzzle(sys, fxSet(wkey), x, y, ang);
     if (kick !== undefined && sys === G.fx) G.shake = Math.max(G.shake || 0, kick);
   }
-  /* Returns the effect's own screen shake, if it sets one. */
+  /* Returns the effect's own screen shake, if it sets one. On the
+     battlefield a burst in the air (the ground more than most of a radius
+     below it; a crater's floor is 0.75 r down) leaves out the emitters
+     marked `ground`: the dirt thrown up and the burn marks. */
   function fxImpact(sys: FxSys | null, key: string, x: number, y: number, r: number): number | undefined {
-    return sys ? FX!.play.impact(sys, fxSet(key), x, y, r) : undefined;
+    if (!sys) return undefined;
+    let ground: boolean | undefined;
+    if (sys === G.fx && G.terrain && G.terrain.length) {
+      const s = G.terrain[Math.max(0, Math.min(G.terrain.length - 1, Math.round(x)))];
+      ground = s === undefined || s - y <= r * 0.8;
+    }
+    return FX!.play.impact(sys, fxSet(key), x, y, r, ground);
   }
   function fxSpecial(sys: FxSys | null, key: string, name: string, x: number, y: number, ang: number): void {
     if (sys) FX!.play.special(sys, fxSet(key), name, x, y, ang);

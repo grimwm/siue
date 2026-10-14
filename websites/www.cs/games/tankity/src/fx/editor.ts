@@ -128,9 +128,20 @@ function buildExtra(): void {
   const w = entry()!;
   if (cur.slot === 'body') {
     const body = w.body || (w.body = {});
-    box.append(h('p', { class: 'help' }, 'The shell itself: halo (glow radius), alpha, pulse (Hz), stretch (light behind it).'));
+    box.append(h('p', { class: 'help' }, 'The shell itself: halo (glow radius), alpha, pulse (Hz), stretch (light behind it), and its rendered sprite: size (px), fps, spin (degrees a second) or roll (ball radius).'));
     for (const [k, min, max, step] of [['halo', 0, 40, 0.5], ['alpha', 0, 1, 0.05], ['pulse', 0, 20, 0.5], ['stretch', 0, 60, 1]] as const) {
       box.append(numberRow(k, body[k] === undefined ? FX.BODY_DEFAULTS[k] : body[k], min, max, step, v => { body[k] = v; touch(); }));
+    }
+    const names = Object.keys(FX.sheets).filter(n => /^p_/.test(n));
+    const sel = h('select', { id: 'body-sprite', 'aria-label': 'Body sprite' }, h('option', { value: '' }, '(none)'), ...names.map(n => h('option', { value: n }, n)));
+    if (body.sprite && !names.includes(body.sprite)) sel.append(h('option', { value: body.sprite }, body.sprite));
+    sel.value = body.sprite || '';
+    sel.addEventListener('change', () => { if (sel.value) body.sprite = sel.value; else delete body.sprite; touch(); buildExtra(); });
+    box.append(h('div', { class: 'row' }, h('span', {}, 'sprite'), sel));
+    if (body.sprite) {
+      for (const [k, min, max, step, def] of [['size', 1, 60, 0.5, 12], ['fps', 0, 60, 1, 0], ['spin', -1440, 1440, 10, 0], ['roll', 0, 20, 0.5, 0]] as const) {
+        box.append(numberRow(k, body[k] === undefined ? def : body[k], min, max, step, v => { if (v === def && k !== 'size') delete body[k]; else body[k] = v; touch(); }));
+      }
     }
     return;
   }
@@ -210,16 +221,16 @@ function move(i: number, d: number): void {
 type Field = keyof Emitter;
 const GROUPS: ReadonlyArray<readonly [string, readonly Field[]]> = [
   ['Look', ['shape', 'size', 'sizeEnd', 'ease', 'colors', 'alpha', 'glow', 'round', 'length', 'width', 'unit']],
-  ['Emission', ['count', 'rate', 'delay', 'duration']],
+  ['Emission', ['count', 'rate', 'delay', 'duration', 'ground']],
   ['Motion', ['life', 'speed', 'aim', 'angle', 'spread', 'offset', 'edge', 'gravity', 'drag', 'wind']],
-  ['Sprite', ['sheet', 'fps', 'scale', 'anchor', 'rotJitter', 'spin', 'tint']],
+  ['Sprite', ['sheet', 'fps', 'anim', 'scale', 'anchor', 'align', 'rotJitter', 'spin', 'tint']],
 ];
 type PairField = 'life' | 'speed' | 'size' | 'spin';
-type BoolField = 'glow' | 'round' | 'edge';
-type EnumField = 'shape' | 'aim' | 'ease' | 'unit' | 'anchor';
+type BoolField = 'glow' | 'round' | 'edge' | 'align' | 'ground';
+type EnumField = 'shape' | 'aim' | 'ease' | 'unit' | 'anchor' | 'anim';
 const isPair = (n: Field): n is PairField => n === 'life' || n === 'speed' || n === 'size' || n === 'spin';
-const isBool = (n: Field): n is BoolField => n === 'glow' || n === 'round' || n === 'edge';
-const ENUMS: Record<EnumField, readonly string[]> = { shape: FX.SHAPES, aim: FX.AIMS, ease: FX.EASES, unit: ['px', 'r'], anchor: ['center', 'bottom'] };
+const isBool = (n: Field): n is BoolField => n === 'glow' || n === 'round' || n === 'edge' || n === 'align' || n === 'ground';
+const ENUMS: Record<EnumField, readonly string[]> = { shape: FX.SHAPES, aim: FX.AIMS, ease: FX.EASES, unit: ['px', 'r'], anchor: ['center', 'bottom'], anim: FX.ANIMS };
 const isEnum = (n: Field): n is EnumField => n in ENUMS;
 function range(name: Field, em: Emitter): [number, number, number] {
   const r = em.unit === 'r';
@@ -495,7 +506,7 @@ function draw(): void {
   sys.draw(c);
   const w = weapon(), set = playing || playSet();
   for (const s of shells) {
-    FX.drawBody(c, s.x, s.y, s.vx, s.vy, set.body, (w.gfx && w.gfx.shell) || '#ffe27a', time);
+    if (FX.drawBody(c, s.x, s.y, s.vx, s.vy, set.body, (w.gfx && w.gfx.shell) || '#ffe27a', time)) continue;
     c.fillStyle = (w.gfx && w.gfx.shell) || '#ffe27a';
     c.beginPath(); c.arc(s.x, s.y, 3.5, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#ffffff';

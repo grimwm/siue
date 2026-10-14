@@ -12,7 +12,7 @@ const has = (name, got, specs) => check(name, Array.isArray(got) && specs.every(
 
 check('docs-only-runs-nothing', select(['README.md', `${S}games/tankity/README.md`, 'docs/plan.md']), 'NONE');
 check('game-test-runner-runs-nothing', select([`${S}games/tankity/test.sh`, `${S}games/cylon/test.sh`]), 'NONE');
-check('unit-tests-run-nothing', select([`${S}games/tankity/test/php/RoomsSimTest.php`, `${S}games/tankity/test/smoke.test.mjs`, `${S}tests/games-hub-test.php`]), 'NONE');
+check('unit-tests-run-nothing', select([`${S}games/tankity/test/php/RoomsSimTest.php`, `${S}games/tankity/test/smoke.test.ts`, `${S}tests/games-hub-test.php`]), 'NONE');
 check('phpunit-config-runs-no-browser-specs', select([`${S}phpunit.xml`]), 'NONE');
 check('site-php-tests-run-no-browser-specs', select([`${S}tests/php/SiteVersionsTest.php`]), 'NONE');
 check('kit-php-tests-run-no-browser-specs', select([`${S}games/_kit/php/tests/LegacyCheckCaseTest.php`]), 'NONE');

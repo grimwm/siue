@@ -60,7 +60,6 @@ const ALLOW: Allow = {
     'tankity/test/scenery.test.mjs',
     'tankity/test/seats.test.mjs',
     'tankity/test/sim-vectors.test.mjs',
-    'tankity/test/smoke.test.mjs',
     'tankity/test/standings.test.mjs',
     'tankity/test/track-toast.test.mjs',
     'tankity/test/weapon-keys.test.mjs',
@@ -69,9 +68,7 @@ const ALLOW: Allow = {
   ],
   program: [],
   runner: [],
-  check: [
-    'tankity/test/smoke.test.mjs',
-  ],
+  check: [],
   legacy: [],
 };
 

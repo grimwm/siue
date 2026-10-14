@@ -1,4 +1,4 @@
-// websites/www.cs/games/_kit/test/keys.test.mjs
+// websites/www.cs/games/_kit/test/keys.test.ts
 // The back key: Q in either case, never with Ctrl, Cmd or Alt, never Escape;
 // and which targets type Q as a letter.
 import { test } from 'node:test';

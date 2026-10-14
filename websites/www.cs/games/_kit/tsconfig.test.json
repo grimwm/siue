@@ -1,0 +1,8 @@
+{
+  // The kit's unit tests: Node runs them from source; this program type-checks them. See games/_kit/README.md.
+  // allowJs without checkJs gives build.test.ts and icons.test.ts inferred types from build.mjs and icons.mjs.
+  "extends": "./build/tsconfig.base.json",
+  "compilerOptions": { "lib": ["ES2022", "DOM"], "types": ["node"], "allowJs": true },
+  "include": ["test/**/*.test.ts", "build/*.test.ts"],
+  "exclude": ["test/fixture/**"]
+}

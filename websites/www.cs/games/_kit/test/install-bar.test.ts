@@ -1,4 +1,4 @@
-// websites/www.cs/games/_kit/test/install-bar.test.mjs
+// websites/www.cs/games/_kit/test/install-bar.test.ts
 // The Install and Share bar in the DOM stub: what each view draws, the iOS
 // steps dialog's focus and Q, and the address field.
 import { test, afterEach } from 'node:test';
@@ -7,36 +7,42 @@ import { h, render } from 'preact';
 import { importTsx } from './tsx.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { document, makeEl, click, fire, fireDocument } from './dom-stub.mjs';
+import type { InstallView } from '../install.ts';
+import { byId, childEl, click, document, fire, fireDocument, installDocument, makeEl, maybeById, renderTarget, walk } from './dom-stub.ts';
+import type { StubElement } from './dom-stub.ts';
 
-globalThis.document = document;
-const { bar } = await importTsx(import.meta.dirname, { bar: '../ui/install-bar.tsx' });
+installDocument();
+const { bar } = await importTsx<{ bar: typeof import('../ui/install-bar.tsx') }>(import.meta.dirname, { bar: '../ui/install-bar.tsx' });
 const { InstallBar } = bar;
 
-const walk = (el, out = []) => { for (const c of el.children) if (c.nodeType === 1) { out.push(c); walk(c, out); } return out; };
-const byId = (el, id) => walk(el).find(n => n.id === id);
-const VIEW = { off: false, install: false, highlight: false, steps: false, share: 'idle', shareIcon: 'dots' };
-const calls = [];
-const roots = [];
+/** The first capture group of a match the test knows succeeded. */
+const group = (m: RegExpMatchArray | null): string => {
+  assert.ok(m, 'no match');
+  assert.ok(m[1] !== undefined);
+  return m[1];
+};
+const VIEW: InstallView = { off: false, install: false, highlight: false, steps: false, share: 'idle', shareIcon: 'dots' };
+const calls: string[] = [];
+const roots: StubElement[] = [];
 afterEach(() => {
-  for (const root of roots.splice(0)) render(null, root);
+  for (const root of roots.splice(0)) render(null, renderTarget(root));
   calls.length = 0;
   document.activeElement = null;
   globalThis.__focused = null;
 });
-function draw(view, root = makeEl('root')) {
+function draw(view: Partial<InstallView>, root: StubElement = makeEl('root')): StubElement {
   if (!roots.includes(root)) roots.push(root);
   render(h(InstallBar, {
     view: { ...VIEW, ...view }, shareUrl: 'https://site.test/play/crete/',
     onInstall: () => calls.push('install'), onShare: () => calls.push('share'),
     onCloseSteps: () => calls.push('close-steps'), onCloseShare: () => calls.push('close-share'),
-  }), root);
+  }), renderTarget(root));
   return root;
 }
 
 test('Install is drawn only when the view offers it; Share always', () => {
   const root = draw({});
-  assert.equal(byId(root, 'install-btn'), undefined);
+  assert.equal(maybeById(root, 'install-btn'), undefined);
   assert.equal(byId(root, 'share-btn').textContent, 'Share');
   draw({ install: true }, root);
   const install = byId(root, 'install-btn');
@@ -85,7 +91,7 @@ test('iOS steps: a dialog with the Share glyph; Done is focused; Q and Done clos
   draw({ install: true, steps: true }, root);
   const veil = byId(root, 'install-steps');
   assert.equal(veil.hidden, false);
-  assert.equal(veil.children[0].getAttribute('role'), 'dialog');
+  assert.equal(childEl(veil).getAttribute('role'), 'dialog');
   assert.equal(byId(root, 'install-steps-title').textContent, 'Add to Home Screen');
   assert.equal(byId(root, 'install-steps-text').textContent, 'Tap Share, then Add to Home Screen.');
   assert.equal(walk(byId(root, 'install-steps-text')).some(n => n.localName === 'svg'), true);
@@ -102,28 +108,36 @@ test('the "Link copied" status line is always in the page, and its empty state h
   assert.ok(byId(root, 'share-status'), 'present while idle, so a screen reader hears the text arrive');
   assert.equal(byId(root, 'share-status').hidden, false);
   const css = readFileSync(join(import.meta.dirname, '..', 'ui', 'install-bar.tsx'), 'utf8');
-  const empty = css.match(/\.kit-install-status:empty \{([^}]*)\}/)[1];
+  const empty = group(css.match(/\.kit-install-status:empty \{([^}]*)\}/));
   assert.doesNotMatch(empty, /display\s*:\s*none/);
   assert.match(empty, /clip-path/);
 });
 
-const svgOf = el => walk(el).find(n => n.localName === 'svg');
-const pathsOf = el => walk(svgOf(el)).map(n => n.localName).join(',');
+const maybeSvg = (el: StubElement) => walk(el).find(n => n.localName === 'svg');
+const svgOf = (el: StubElement): StubElement => {
+  const svg = maybeSvg(el);
+  assert.ok(svg, 'no svg');
+  return svg;
+};
+const pathsOf = (el: StubElement) => walk(svgOf(el)).map(n => n.localName).join(',');
 
 test('Install and Share each carry an icon (hidden from screen readers) beside their word, which a phone hides visually, not with display: none', () => {
   const root = draw({ install: true });
-  for (const [id, word, title] of [['install-btn', 'Install', 'Install this game as an app'], ['share-btn', 'Share', 'Share a link to this game']]) {
+  const buttons: Array<[id: string, word: string, title: string]> = [['install-btn', 'Install', 'Install this game as an app'], ['share-btn', 'Share', 'Share a link to this game']];
+  for (const [id, word, title] of buttons) {
     const btn = byId(root, id);
-    assert.ok(svgOf(btn), `${id} has an icon`);
-    assert.equal(svgOf(btn).getAttribute('aria-hidden'), 'true');
+    const icon = maybeSvg(btn);
+    assert.ok(icon, `${id} has an icon`);
+    assert.equal(icon.getAttribute('aria-hidden'), 'true');
     const txt = walk(btn).find(n => n.className === 'kit-install-txt');
+    assert.ok(txt);
     assert.equal(txt.textContent, word, `${id}'s word stays in the page, so it is the accessible name`);
     assert.equal(btn.textContent, word);
     assert.equal(btn.getAttribute('title'), title);
   }
   const src = readFileSync(join(import.meta.dirname, '..', 'ui', 'install-bar.tsx'), 'utf8');
-  const phone = src.match(/@media \(max-width: 600px\) \{([\s\S]*?)\n\}/)[1];
-  const txtRule = phone.match(/\.kit-install-txt \{([^}]*)\}/)[1];
+  const phone = group(src.match(/@media \(max-width: 600px\) \{([\s\S]*?)\n\}/));
+  const txtRule = group(phone.match(/\.kit-install-txt \{([^}]*)\}/));
   assert.match(txtRule, /clip-path/);
   assert.doesNotMatch(txtRule, /display\s*:\s*none/);
   assert.match(phone, /\.kit-install-btn \{[^}]*width: 2\.5rem/);

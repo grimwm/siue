@@ -10,7 +10,7 @@
 // Keyboard Lock, and a frame's lock() is refused, so this checks that the
 // lock is taken, and granted, on the top-level page. (A test's Esc never
 // reaches the browser's own full-screen handling, so the lock is the proof.)
-// Unit guards: games/tankity/test/fullscreen.test.mjs, games/_kit/test/app.test.mjs.
+// Unit guards: games/tankity/test/fullscreen.test.mjs, games/_kit/test/app.test.ts.
 import { test, expect } from '@playwright/test';
 import { recorderScript } from './helpers.mjs';
 

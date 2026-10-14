@@ -4,7 +4,7 @@ import { manualClock } from './clock.ts';
 
 test('timeouts and intervals fire in time order as the clock advances', () => {
   const c = manualClock();
-  const log = [];
+  const log: string[] = [];
   c.timers.setTimeout(() => log.push(`t@${c.clock.now()}`), 50);
   const id = c.timers.setInterval(() => log.push(`i@${c.clock.now()}`), 30);
   c.advance(100);

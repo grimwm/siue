@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { pref, text, json } from '../prefs.ts';
 import { memoryStorage, throwingStorage } from './record.ts';
 
-const isNums = v => Array.isArray(v) && v.every(n => typeof n === 'number');
+const isNums = (v: unknown): v is number[] => Array.isArray(v) && v.every(n => typeof n === 'number');
 
 test('reads a value saved before prefs existed, in its old raw form', () => {
   const s = memoryStorage({ 'tankity-text': 'l', 'tankity-local': '[1,2]' });
@@ -21,7 +21,7 @@ test('falls back when nothing is saved or the saved value is malformed', () => {
 test('set writes the raw form and tells subscribers', () => {
   const s = memoryStorage();
   const p = pref('k', 'a', text, s);
-  const seen = [];
+  const seen: string[] = [];
   const off = p.subscribe(v => seen.push(v));
   p.set('b');
   off();

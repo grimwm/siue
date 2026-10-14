@@ -173,8 +173,14 @@ and the game's own page loads it to show a corner bar when the address has
 
 ## Tests (`test/`)
 
-Unit tests are `*.test.mjs` files run with `node --test`. They import
-sources directly (`../src/engine.ts`): Node strips the types. Doubles:
+Unit tests are `*.test.ts` files run with `node --test` (`_kit/test.sh`
+expands the list and fails when it finds none). They import sources directly
+(`../src/engine.ts`): Node strips the types, and nothing is compiled.
+`tsconfig.test.json` is the test program: `_kit/test.sh` type-checks it at
+full strictness, with `@types/node`, and a type error fails `make test`.
+Tests use no `any`, `@ts-ignore` or `@ts-nocheck` (`test/typed-tests.test.ts`
+enforces it); a deliberately partial fixture is built by a typed helper or
+`satisfies`, and `as unknown as` needs a one-line reason. Doubles:
 `manualClock()` (timers that fire only on `advance`), `mulberry32(seed)`,
 `recorder()`, `memoryStorage()`, `throwingStorage()`. `check(name, ok,
 detail)` runs an older PASS/FAIL script under `node:test` unchanged, one
@@ -183,6 +189,14 @@ has the same bridge: `php/testing/LegacyCheckCase.php`.
 
 Components are tested in Node: `importTsx(import.meta.dirname, { name: '../src/ui/x.tsx' })`
 bundles `.tsx` with esbuild (preact left external, so the test and the
-components share one copy), and `dom-stub.mjs` is a small DOM to render into:
+components share one copy), and `dom-stub.ts` is a small DOM to render into:
 `makeEl`, `click`, `fire(el, type, extra)`, `fireDocument(type, extra)`, and
-`globalThis.__focused` for the element last focused.
+`globalThis.__focused` for the element last focused. `importTsx<M>` takes the
+shape of what it loads, so the exports are typed:
+`importTsx<{ help: typeof import('../src/ui/help.tsx') }>(dir, { help: '../src/ui/help.tsx' })`.
+The stub is not a DOM, so it meets the real types through helpers, each one
+cast made in `dom-stub.ts`: `installDocument()`, `renderTarget(el)` for
+preact's `render`, `asElement(el)`, and `childEl`, `elementOf`, `byId`,
+`maybeById` and `walk` to read the tree. `test/audio.ts` does the same for
+the fake context: `asAudioContext`, `asAudioNode`, and `nodesOf`/`nodeOf`/
+`gainAt` to read the nodes it made.

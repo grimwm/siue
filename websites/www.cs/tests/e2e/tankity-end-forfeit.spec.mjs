@@ -1,9 +1,8 @@
 // Operation Tankity rooms: a Leave by one of the last two humans ends the match as a forfeit, the
-// remaining human wins and files, Play again then makes them the host, and after leaving the lobby the next solo match has its own card,
-// whose filed line says the run is saved in this browser while the score server asks it to wait. A solo run the server
-// plays differently (void) ends on a card that says it was not filed.
+// remaining human wins and files (two humans started the match), Play again then makes them the host, and after
+// leaving the lobby the next solo match has its own card, whose line says the run is saved on this browser's board.
 import { test, expect } from '@playwright/test';
-import { dealSolo, hud, lastRoom, loseMatch, newPlayer } from './helpers.mjs';
+import { hud, lastRoom, loseMatch } from './helpers.mjs';
 import { endPair, lobUntil, LOB, WIDE } from './rooms-end-helpers.mjs';
 
 test('when one of the last two humans leaves, the other wins the match; a solo match after it ends on the solo card', async ({ browser }) => {
@@ -47,12 +46,8 @@ test('when one of the last two humans leaves, the other wins the match; a solo m
   await expect(guest.page.locator('#lobby-veil')).toBeHidden();
   await expect(veil).toBeHidden();
 
-  // The next solo match ends on the solo card (Continue, no room buttons), and a run the score server
-  // asks to wait for (429) stays saved in this browser and says so.
+  // The next solo match ends on the solo card (Continue, no room buttons) and is saved on this browser's board.
   await guest.page.clock.install();
-  await guest.page.route(/scores\.php/, route => (route.request().method() === 'POST'
-    ? route.fulfill({ status: 429, contentType: 'application/json', body: '{"error":"slow down"}' })
-    : route.continue()));
   await guest.page.click('#title-play');
   await guest.page.waitForSelector('#shop-veil:not([hidden])');
   for (let i = 0; i < 3; i++) await guest.page.keyboard.press('2');
@@ -64,32 +59,8 @@ test('when one of the last two humans leaves, the other wins the match; a solo m
   await expect(veil.locator('#again')).toHaveText('Continue');
   await expect(veil.locator('#end-leave')).toHaveCount(0);
   await expect(veil.locator('#end-watch')).toHaveCount(0);
-  await expect(veil.locator('#end-filed')).toHaveText(/^Saved in this browser; it files itself when the score server answers\.$/, { timeout: 10_000 });
+  await expect(veil.locator('#end-filed')).toHaveText(/^Saved on this browser's board \u00b7 #1 on Normal$/, { timeout: 10_000 });
   expect(host.errors).toEqual([]);
-  expect(guest.errors.filter(e => !/429/.test(e))).toEqual([]);
+  expect(guest.errors).toEqual([]);
   await host.ctx.close(); await guest.ctx.close();
-});
-
-test('a solo run the score server voids ends on a card that says it was not filed', async ({ browser }) => {
-  test.setTimeout(240_000); // a whole solo match lost shot by shot, as in tankity-end, on a slow runner too
-  const { ctx, page, errors } = await newPlayer(browser, undefined, { clock: true });
-  // Every round comes back void, as if the server played it differently; the rest goes to the real server.
-  await page.route(/scores\.php/, route => {
-    const body = route.request().method() === 'POST' ? route.request().postDataJSON() : null;
-    return body && body.op === 'round'
-      ? route.fulfill({ status: 422, contentType: 'application/json', body: '{"error":"void"}' })
-      : route.continue();
-  });
-  await dealSolo(page);
-  for (let i = 0; i < 3; i++) await page.keyboard.press('2');
-  await page.click('#shop-next');
-  await expect.poll(async () => { await page.clock.runFor(1000); return hud(page, 'hud-turn'); }, { timeout: 30_000 }).toMatch(/YOU|Aim/);
-  await page.keyboard.press('g');
-  await page.locator('#gun-grid .gun-choice', { hasText: 'Mortar' }).click();
-  await loseMatch(page);
-  const veil = page.locator('#end-veil');
-  await expect(veil.locator('#again')).toHaveText('Continue');
-  await expect(veil.locator('#end-filed')).toHaveText(/^Not filed: /, { timeout: 10_000 });
-  expect(errors.filter(e => !/422/.test(e))).toEqual([]);
-  await ctx.close();
 });

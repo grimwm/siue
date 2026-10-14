@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildArsenal, mulberry32 } from '../src/sim.ts';
-import { LOB_ANGLE, aiChoose, arcGuns } from '../src/ai.ts';
+import { LOB_ANGLE, aiChoose, arcGuns, earthOps } from '../src/ai.ts';
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const arsenal = buildArsenal(GAME.arsenal);
@@ -19,6 +19,8 @@ const arsenal = buildArsenal(GAME.arsenal);
 // eight 6-step neighbours of the coarse best.
 const COARSE = 11 * 7;
 const FINE = 8;
+/** The most ground predictions one drone turn may make (server/ai.php room_ai_earth_ops, test/php/AiArcsTest.php: the same). */
+const GROUND_BUDGET = 240;
 const BRACKET = 1 + 5 * 7 + 8 + 8; // the last shot measured, then 6-, 3- and 1-step grids
 
 /* One drone turn on flat ground; how many planning flights each gun flew.
@@ -78,6 +80,14 @@ test('a full round-9 rack searches every arc, rollers on a coarser grid, inside 
     const total = Object.values(flown).reduce((a, b) => a + b, 0);
     assert.ok(total <= 440, `${s}: ${total} flights, ${JSON.stringify(flown)} (test/php/AiArcsTest.php holds the server to the same 440)`);
     assert.ok(choice.wkey === 'shell' || ammo[choice.wkey] > 0, choice.wkey);
+  }
+  // Ground predictions (earthHarm) beside the flights: a digger is weighed only at aims within its burrow of the target.
+  for (const s of ['hunter', 'glory', 'lobber', 'sniper']) {
+    for (const targetX of [300, 560]) {
+      const ops0 = earthOps();
+      turn({ s, ammo, targetX });
+      assert.ok(earthOps() - ops0 <= GROUND_BUDGET, `${s} at ${targetX}: ${earthOps() - ops0} ground predictions (test/php/AiArcsTest.php holds the server to the same ${GROUND_BUDGET})`);
+    }
   }
   const t0 = performance.now();
   for (let i = 0; i < 20; i++) turn({ s: 'glory', ammo });

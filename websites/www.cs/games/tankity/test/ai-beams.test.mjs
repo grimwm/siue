@@ -69,12 +69,24 @@ test('a beam scores every rival on its line, so two in line beat one', () => {
   assert.equal(aiHarm(G, arsenal, self, a, BEAM, land), 2 * arsenal.weapons[BEAM].dmg);
 });
 
-test('a beam the barrel cannot point at a ground target below it does no harm', () => {
-  const self = drone(100), target = human(400);
+test('a drone dips its beam at a ground target below it and hits it', () => {
+  for (const seed of [1, 2, 3, 4]) {
+    const self = drone(100, { ammo: { [BEAM]: 2 } }), target = human(400, { hp: 100 });
+    const G = world([self, target], flat(), { rng: mulberry32(seed) });
+    const aim = beamAim(G, arsenal, self, target, BEAM);
+    assert.ok(aim.a < 0 && aim.a >= arsenal.weapons[BEAM].aimMin, `dips to ${aim.a}`);
+    assert.equal(aiHarm(G, arsenal, self, target, BEAM, { x: 0, y: 0, oob: false, a: aim.a, p: aim.p }), arsenal.weapons[BEAM].dmg);
+    const { c, lost } = chooseAndFire(G, self);
+    assert.equal(c.wkey, BEAM, `seed ${seed}`);
+    assert.ok(lost[1] === arsenal.weapons[BEAM].dmg, `seed ${seed}: the tank takes the beam (${lost[1]})`);
+  }
+});
+
+test('a beam aimed at a target behind and below the drone dips on that side (past 180)', () => {
+  const self = drone(400, { dirS: 1 }), target = human(150);
   const G = world([self, target]);
   const aim = beamAim(G, arsenal, self, target, BEAM);
-  assert.equal(aim.a, 10, 'the barrel stops at 10 degrees');
-  assert.equal(aiHarm(G, arsenal, self, target, BEAM, { x: 0, y: 0, oob: false, a: aim.a, p: aim.p }), 0);
+  assert.ok(aim.a > 180 && aim.a <= 200, String(aim.a));
 });
 
 test('a drone with a plasma ring and a rival 40 px away fires the ring and spares itself', () => {

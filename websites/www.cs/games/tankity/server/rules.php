@@ -234,6 +234,20 @@ function room_humans_alive(array $room): bool
     }
     return false;
 }
+/* A human's aim, as an act sends it (null leaves that part as it is): the
+// angle kept inside the limits of the gun the seat has loaded
+// (room_aim_limits: 10..170, or a beam's dip), the power 10..100. Called
+// again with nulls after a gun switch, so the barrel comes back inside the
+// new gun's limits. */
+function room_set_aim(array &$room, int $idx, int $seat, $angle, $power): void
+{
+    $weapons = room_weapons();
+    [$lo, $hi] = room_aim_limits($weapons[$room['weapon'][$seat] ?? 'shell'] ?? null);
+    $t = &$room['tanks'][$idx];
+    $t['angle'] = max($lo, min($hi, is_numeric($angle) ? (float) $angle : (float) $t['angle']));
+    $t['power'] = max(10.0, min(100.0, is_numeric($power) ? (float) $power : (float) $t['power']));
+    unset($t);
+}
 function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey): void
 {
     $room['shots'] = ($room['shots'] ?? 0) + 1; // a fresh turn clock follows each shot
@@ -244,6 +258,9 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
     $tank = &$room['tanks'][$seatIdx];
     $weapons = room_weapons();
     $w = $weapons[$wkey] ?? $weapons['shell'];
+    // A gun always leaves inside its own limits (src/sim.ts fireWeapon is the same).
+    [$aimLo, $aimHi] = room_aim_limits($w);
+    $tank['angle'] = max($aimLo, min($aimHi, (float) $tank['angle']));
     $shots = ($w['pellets'] ?? 0) > 0 ? $w['pellets'] : 1;
     $rad = deg2rad($tank['angle']);
     $dirS = $tank['dirS'] ?? -1;

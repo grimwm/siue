@@ -384,11 +384,14 @@ function room_ai_no_flight_harm(array $room, array $self, string $wkey, array $l
 /* A beam's aim at $target: from the barrel's pivot (14 px above the hull)
  * straight at the target's body, to the nearest whole degree and within the
  * barrel's 10..170, at full power. [a, p]. src/ai.ts beamAim is the same. */
-function room_ai_beam_aim(array $self, array $target): array
+function room_ai_beam_aim(array $self, array $target, array $def): array
 {
     [$cx, $cy] = room_unit_box($target);
     $r = det_atan2(-($cy - ($self['y'] - 14)), ($cx - $self['x']) * ($self['dirS'] ?? -1));
-    return [max(10.0, min(170.0, det_round($r / M_PI * 180))), 100.0];
+    // Behind and below reads past 180, the far side's dip.
+    $deg = det_round($r / M_PI * 180);
+    [$lo, $hi] = room_aim_limits($def);
+    return [max($lo, min($hi, $deg < -90 ? $deg + 360 : $deg)), 100.0];
 }
 /* The harm to the target with no regard for the gunner (src/ai.ts targetHarm). */
 function room_ai_target_harm(array $room, array $self, array $target, string $wkey, array $land): float
@@ -718,7 +721,7 @@ function room_ai_choose(array &$room, array $tank): array
         // when it would do more harm than that pick (and any harm at all).
         $top = max(0.0, room_ai_harm($room, $tank, $me, $w, $aim['land']));
         foreach ($grounded as $k) {
-            [$ga, $gp] = $weapons[$k]['effect'] === 'beam' ? room_ai_beam_aim($tank, $me) : [(float) $tank['angle'], 100.0];
+            [$ga, $gp] = $weapons[$k]['effect'] === 'beam' ? room_ai_beam_aim($tank, $me, $weapons[$k]) : [(float) $tank['angle'], 100.0];
             $h = room_ai_harm($room, $tank, $me, $k, ['x' => $tank['x'], 'y' => $tank['y'], 'oob' => false, 'a' => $ga, 'p' => $gp]);
             if ($h > $top) {
                 [$w, $ba, $bp, $top] = [$k, $ga, $gp, $h];
@@ -728,8 +731,10 @@ function room_ai_choose(array &$room, array $tank): array
     if ($me['kind'] === 'human' && ($room['jammer'][$me['seat']] ?? 0) > 0) {
         $wob *= 2;
     }
-    $angle = max(10.0, min(170.0, round($ba + room_gauss($rng) * 9 * $wob)));
-    $power = max(10.0, min(100.0, round($bp + room_gauss($rng) * 12 * $wob)));
+    // det_round: PHP's round() takes halves away from zero, Math.round up; they differ below zero.
+    [$aimLo, $aimHi] = room_aim_limits($weapons[$w] ?? null);
+    $angle = max($aimLo, min($aimHi, det_round($ba + room_gauss($rng) * 9 * $wob)));
+    $power = max(10.0, min(100.0, det_round($bp + room_gauss($rng) * 12 * $wob)));
     // Drones shuffle for a better firing spot instead of camping one rut,
     // unless they are walking a bracket in, or fire a gun with no flight
     // (aimed from where they stand).

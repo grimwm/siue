@@ -238,6 +238,8 @@ foreach (['split', 'fan', 'kick', 'subDmg', 'subRadius'] as $k) {
 }
 $beam = $row1($asEffect("      effect: beam\n      range: 520\n"));
 $check('beam-effect-validates', ($beam['effect'] ?? '') === 'beam' && ($beam['range'] ?? null) === 520 && !isset($beam['pellets']), json_encode($beam));
+$dip = $row1($asEffect("      effect: beam\n      range: 520\n      aimMin: -20\n"));
+$check('beam-aimmin-validates', ($dip['aimMin'] ?? null) === -20, json_encode($dip));
 $plasma = $row1($asEffect("      effect: plasma\n"));
 $check('plasma-takes-no-extra-fields', ($plasma['effect'] ?? '') === 'plasma' && !isset($plasma['error']), json_encode($plasma));
 /** Buckshot turned into a harmless tracer: dmg 0, radius 0 and a mark. */
@@ -306,6 +308,8 @@ $cases = [
     'beam-range-low' => [$asEffect("      effect: beam\n      range: 40\n"), 'arsenal.ammo[1].range: must be a whole number from 60 to 1200'],
     'beam-range-high' => [$asEffect("      effect: beam\n      range: 1300\n"), 'arsenal.ammo[1].range: must be a whole number from 60 to 1200'],
     'range-on-a-shot' => [$asEffect("      effect: shot\n      range: 300\n"), 'arsenal.ammo[1].range: only the beam effect uses this'],
+    'aimmin-on-a-shot' => [$asEffect("      effect: shot\n      aimMin: -10\n"), 'arsenal.ammo[1].aimMin: only the beam effect uses this'],
+    'aimmin-range' => [$asEffect("      effect: beam\n      range: 520\n      aimMin: -40\n"), 'arsenal.ammo[1].aimMin: must be a whole number from -30 to 10'],
     'range-on-a-plasma' => [$asEffect("      effect: plasma\n      range: 300\n"), 'arsenal.ammo[1].range: only the beam effect uses this'],
     'tracer-needs-dmg-0' => [str_replace("      dmg: 0\n", "      dmg: 5\n", $tracerOf()), 'arsenal.ammo[1].dmg: a tracer does no damage; must be 0'],
     'radius-0-only-on-a-tracer' => [$mut("      radius: 26\n", "      radius: 0\n"), 'arsenal.ammo[0].radius: must be a whole number from 1 to 200'],

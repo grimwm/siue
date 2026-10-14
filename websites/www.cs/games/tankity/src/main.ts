@@ -38,7 +38,7 @@
  * a deps object, so none of them reaches for a global; the wiring is below.
  * What stays here is the state, the main loop, the keys and the page's own
  * plumbing (overlays, the firing range, the arsenal's loading). */
-import { ROOM_W, TUNE, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './sim.ts';
+import { ROOM_W, TUNE, aimLimits, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './sim.ts';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
 } from './audio.ts';
@@ -342,7 +342,7 @@ function frame(ts: number): void {
   checkOneUps();
   if (G.phase === 'aim' && cur().isPlayer && !G.demo) {
     const t = me();
-    const arm = stepArm(input.held, dt, t, facing(t), G.w);
+    const arm = stepArm(input.held, dt, t, facing(t), G.w, aimLimits(tables.weapons[G.selected]));
     t.angle = arm.angle;
     t.power = arm.power;
     if ((input.held.has('driveLeft') || input.held.has('driveRight')) && t.fuel > 0) {

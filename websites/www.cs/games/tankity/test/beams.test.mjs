@@ -7,11 +7,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { H, beamCarve, buildArsenal, carveCrater, fireBeam, firePlasma, fireWeapon, muzzle, mulberry32, stepShells, unitHitBox, inHitBox } from '../src/sim.ts';
+import { H, aimLimits, beamCarve, buildArsenal, carveCrater, fireBeam, firePlasma, fireWeapon, muzzle, mulberry32, stepShells, unitHitBox, inHitBox } from '../src/sim.ts';
 import { dcos, dsin } from '../src/detmath.ts';
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
-const ZAP = { key: 'zap', name: 'Zap', dmg: 45, radius: 6, price: 1, pack: 1, minRound: 1, effect: 'beam', range: 520, speed: 1 };
+const ZAP = { key: 'zap', name: 'Zap', dmg: 45, radius: 6, price: 1, pack: 1, minRound: 1, effect: 'beam', range: 520, aimMin: -20, speed: 1 };
 const RING = { key: 'ring', name: 'Ring', dmg: 60, radius: 90, price: 1, pack: 1, minRound: 1, effect: 'plasma', speed: 1 };
 const MARK = { key: 'mark', name: 'Mark', dmg: 0, radius: 0, price: 1, pack: 1, minRound: 1, effect: 'tracer', speed: 1, gfx: { shell: '#fff', trail: '#fff', painter: 'dash', mark: 'line' } };
 const arsenal = buildArsenal({ ammo: [...GAME.arsenal.ammo.filter(a => a.key === 'shell'), ZAP, RING, MARK], gear: GAME.arsenal.gear, fall: GAME.arsenal.fall });
@@ -180,4 +180,31 @@ test('a tracer that strikes a unit stops there, harmlessly', () => {
   for (let i = 0; i < 600 && W.shells.length; i++) for (const e of stepShells(W, arsenal, 1 / 60)) if (e.kind === 'mark') mark = e;
   assert.ok(mark && Math.abs(mark.x - 160) < 20, JSON.stringify(mark && { x: mark.x, y: mark.y }));
   assert.equal(d.hp, 100);
+});
+
+test('the barrel reaches 10..170, and a beam row\'s aimMin dips it below level on either side', () => {
+  assert.deepEqual(aimLimits(arsenal.weapons.shell), { min: 10, max: 170 });
+  assert.deepEqual(aimLimits(arsenal.weapons.zap), { min: -20, max: 200 });
+  assert.deepEqual(aimLimits(undefined), { min: 10, max: 170 });
+});
+
+test('a gun fires inside its own limits: a beam at -20, a Shell held at -20 leaves at 10', () => {
+  const me = human(100, 400, { angle: -20 });
+  const W = world([me]);
+  const b = fireWeapon(W, arsenal, me, 'zap');
+  assert.equal(me.angle, -20);
+  assert.ok(b.now[0].shot.y1 > b.now[0].shot.y0, 'the beam runs downhill');
+  fireWeapon(W, arsenal, me, 'shell');
+  assert.equal(me.angle, 10, 'the Shell is clamped to its own minimum before it leaves');
+  me.angle = 205;
+  fireWeapon(W, arsenal, me, 'zap');
+  assert.equal(me.angle, 200);
+});
+
+test('from level ground a beam held level hits an equal-height hull far off', () => {
+  const me = human(100, 400, { angle: 0 });
+  const far = drone(400, 400, { isPlayer: false, human: true });
+  const W = world([me, far]);
+  fireBeam(W, arsenal, me, 'zap');
+  assert.equal(far.hp, 55);
 });

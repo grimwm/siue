@@ -11,7 +11,7 @@
  * PreviewEnv, so it compiles in the DOM-free program and test/preview.test.mjs
  * drives it on a clock the test moves by hand. */
 import {
-  GRAV, FLAT_GRAV, ROLL_LIFT, BEAM_STEP, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage, beamCarve, flies,
+  GRAV, FLAT_GRAV, ROLL_LIFT, aimLimits, beamLine, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage, beamCarve, flies, unitHitBox,
   groundAt, groundSlope, rollStart, rollStep, rollOut, hopShell, scatterShells,
 } from './sim.ts';
 import type { Shell, Tank, Weapon } from './sim.ts';
@@ -182,29 +182,25 @@ function previewFire(pv: PreviewState, env: PreviewEnv): void {
   }
   env.muzzle(pv.fx, pv.wkey, pv.sx, y0, Math.atan2(-Math.sin(rad), Math.cos(rad)));
 }
-/* A beam on the range: aimed straight at the dummy at full power, marched in
-   the war's BEAM_STEP steps to the stage's edge, carving its channel with the
-   war's beamCarve and striking the dummy once for its flat damage. */
+/* A beam on the range, as the war fires one: aimed from the barrel's pivot
+   at the dummy's body, inside the gun's own limits (aimLimits), at full power,
+   run with the war's beamLine against a one-unit world (the dummy is a ground
+   unit with the war's hit box) and carved with the war's beamCarve. */
 function previewBeam(pv: PreviewState, env: PreviewEnv, w: Readonly<Weapon>): void {
-  const y0 = (pv.terr[pv.sx] ?? 0) - 12, fy = (pv.terr[pv.tx] ?? 0) - 12;
-  const ang = Math.atan2(fy - y0, pv.tx - pv.sx);
-  pv.angle = -ang * 180 / Math.PI;
+  const gunner: Tank = { id: 'range', isPlayer: true, x: pv.sx, y: pv.terr[pv.sx] ?? 0, angle: 0, power: 100, hp: 1, fuel: 0, dirS: 1 };
+  const dummy: Tank = { id: 'dummy', isPlayer: true, x: pv.tx, y: pv.terr[pv.tx] ?? 0, angle: 0, power: 0, hp: PV_FOE_HP, fuel: 0, dirS: -1 };
+  const box = unitHitBox(dummy), lim = aimLimits(w);
+  const deg = Math.round(Math.atan2(-(box.cy - (gunner.y - 14)), box.cx - gunner.x) * 180 / Math.PI);
+  pv.angle = clamp(deg, lim.min, lim.max);
   pv.power = 100;
-  const ux = Math.cos(ang), uy = Math.sin(ang), len = (w.range || 0);
-  let x1 = pv.sx, y1 = y0, hit = false;
-  for (let k = 1; k * BEAM_STEP <= len; k++) {
-    const px = pv.sx + ux * k * BEAM_STEP, py = y0 + uy * k * BEAM_STEP;
-    if (px < 0 || px >= PV_W || py >= PV_H || py < 0) break;
-    x1 = px;
-    y1 = py;
-    if (!hit && Math.hypot(px - pv.tx, py - fy) < 10) hit = true;
-  }
-  env.muzzle(pv.fx, pv.wkey, pv.sx, y0, ang);
-  env.special(pv.fx, pv.wkey, 'beam', pv.sx, y0, ang, Math.hypot(x1 - pv.sx, y1 - y0));
-  beamCarve(pv.terr, pv.sx, y0, x1, y1, w.radius, PV_H - 4);
-  env.impact(pv.fx, pv.wkey, x1, y1, w.radius);
-  if (hit) {
-    env.special(pv.fx, pv.wkey, 'pierce', pv.tx, fy, ang);
+  const line = beamLine({ tanks: [gunner, dummy], terrain: pv.terr }, gunner, w, pv.angle, 100);
+  const ang = Math.atan2(line.y1 - line.y0, line.x1 - line.x0);
+  env.muzzle(pv.fx, pv.wkey, line.x0, line.y0, ang);
+  env.special(pv.fx, pv.wkey, 'beam', line.x0, line.y0, ang, Math.hypot(line.x1 - line.x0, line.y1 - line.y0));
+  beamCarve(pv.terr, line.x0, line.y0, line.x1, line.y1, w.radius, PV_H - 4);
+  env.impact(pv.fx, pv.wkey, line.x1, line.y1, w.radius);
+  if (line.struck.includes(dummy)) {
+    env.special(pv.fx, pv.wkey, 'pierce', box.cx, box.cy, ang);
     pv.foeHp = Math.max(0, pv.foeHp - w.dmg);
     pv.volleyDmg = w.dmg;
     pv.volleyHits = 1;

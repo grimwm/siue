@@ -518,6 +518,8 @@ $shell = ['terrain' => $flat, 'wkey' => 'shell'];
 $volley('point-blank-at-the-neighbour', array_replace($shell, ['shooter' => 0, 'tanks' => [$human(100, 100), $drone(130, 100)], 'angle' => 5, 'power' => 30]));
 $volley('straight-up-comes-back-on-the-gunner', array_replace($shell, ['shooter' => 0, 'tanks' => [$human(300, 100), $drone(600, 100)], 'angle' => 90, 'power' => 40]));
 $volley('wind-drives-it-back-onto-the-gunner', array_replace($shell, ['wind' => -12, 'shooter' => 0, 'tanks' => [$human(300, 100), $drone(600, 100)], 'angle' => 80, 'power' => 45]));
+// A Shell held where a beam dipped leaves at its own minimum (10).
+$volley('shell-held-below-its-minimum', array_replace($shell, ['shooter' => 0, 'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(400, 100)], 'angle' => -20, 'power' => 60]));
 $volley('lob-off-the-board', array_replace($shell, ['shooter' => 0, 'tanks' => [$human(600, 100), $drone(100, 100)], 'angle' => 40, 'power' => 100]));
 // Splits just short of a ledge: the first bomblet is inside it within 0.04 s and bursts there at once, on both sides.
 $volley('cluster-splits-at-a-ledge', ['terrain' => ['flat' => 400, 'set' => [[258, 330, 392]]], 'wkey' => 'cluster', 'shooter' => 0,
@@ -613,6 +615,15 @@ foreach ($weapons as $wkey => $def) {
     $at = $onBeam($d + ['dirS' => -1], 160.0);
     $beamCase("$wkey-into-a-shield", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 1, 'angle' => 18, 'power' => 100,
         'tanks' => [array_replace($shielded, ['x' => $at['x'], 'y' => $at['y'] - 20]), $d]]);
+    // Dipped below level (aimMin): level ground, hulls on both sides, the far side's dip past 180.
+    $beamCase("$wkey-level-at-a-hull", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 0, 'power' => 100,
+        'tanks' => [$human(100, 100) + ['dirS' => 1], $human(380, 100), $drone(600, 100)]]);
+    $volley("$wkey-dips-into-a-valley", ['terrain' => ['hills' => [360, 40, 300]], 'wkey' => $wkey, 'shooter' => 0, 'angle' => (int) $def['aimMin'], 'power' => 90,
+        'tanks' => [array_replace($human(75, 100), ['dirS' => 1, 'y' => sv_terrain(['hills' => [360, 40, 300]])[75]]), array_replace($drone(260, 100), ['y' => sv_terrain(['hills' => [360, 40, 300]])[260]])]]);
+    $volley("$wkey-dips-on-the-far-side", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 185, 'power' => 100,
+        'tanks' => [$human(400, 100) + ['dirS' => 1], $human(150, 100), $drone(600, 100)]]);
+    $volley("$wkey-held-past-its-limit-fires-at-it", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0, 'angle' => -45, 'power' => 100,
+        'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(400, 100)]]);
     $beamCase("$wkey-stops-at-the-edge", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 12, 'power' => 100,
         'tanks' => [$human(600, 100) + ['dirS' => 1], $drone(300, 100)]]);
     $beamCase("$wkey-drone-fired-left-at-a-drone", ['terrain' => ['hills' => [330, 40, 200]], 'wind' => 4, 'wkey' => $wkey, 'shooter' => 1, 'angle' => 25, 'power' => 80,

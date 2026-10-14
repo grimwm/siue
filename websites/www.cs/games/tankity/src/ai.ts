@@ -7,7 +7,7 @@
  * algorithm, kept in step by the shared vectors in protocol/sim-vectors.json.
  * brkLand stays in sim.ts: explode calls it, and sim.ts must not import this
  * file. */
-import { FLIGHT_STEPS, GRAV, beamLine, blastDamage, clamp, dist, dropTime, facing, fieldReach, flies, flightKey, gauss, muzzle, powi, rad, ringDamage, ringOf, scatterVel, shotSpeed, simShot, splitPoint, splitVel, spotTaken, surfY, unitHitBox } from './sim.ts';
+import { FLIGHT_STEPS, GRAV, aimLimits, beamLine, blastDamage, clamp, dist, dropTime, facing, fieldReach, flies, flightKey, gauss, muzzle, powi, rad, ringDamage, ringOf, scatterVel, shotSpeed, simShot, splitPoint, splitVel, spotTaken, surfY, unitHitBox } from './sim.ts';
 import { datan2, dcos, dsin } from './detmath.ts';
 import type { Arsenal, Difficulty, Rng, Tank, Weapon, World } from './sim.ts';
 export type { Difficulty } from './sim.ts';
@@ -338,10 +338,12 @@ function noFlightHarm(world: World, arsenal: Arsenal, self: Tank, wkey: string, 
    the pivot straight at the target's body, to the nearest whole degree and
    within the barrel's 10..170, at full power. server/ai.php
    room_ai_beam_aim is the same. */
-export function beamAim(_world: World, _arsenal: Arsenal, self: Tank, target: Tank, _wkey: string): { a: number; p: number } {
+export function beamAim(_world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string): { a: number; p: number } {
   const b = unitHitBox(target);
   const r = datan2(-(b.cy - (self.y - 14)), (b.cx - self.x) * facing(self));
-  return { a: clamp(Math.round(r / Math.PI * 180), 10, 170), p: 100 };
+  // Behind and below reads past 180, the far side's dip.
+  const deg = Math.round(r / Math.PI * 180), lim = aimLimits(arsenal.weapons[wkey]);
+  return { a: clamp(deg < -90 ? deg + 360 : deg, lim.min, lim.max), p: 100 };
 }
 /* The harm to the target with no regard for the gunner (aiHarm without its
    guard), for choosing among guns that would all reach the gunner. */
@@ -576,7 +578,8 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
     }
   }
   if (target.isPlayer && (world.jammer || 0) > 0) wob *= 2;
-  const angle = clamp(Math.round(ba + gauss(world.rng) * 9 * wob), 10, 170);
+  const lim = aimLimits(arsenal.weapons[w]);
+  const angle = clamp(Math.round(ba + gauss(world.rng) * 9 * wob), lim.min, lim.max);
   const power = clamp(Math.round(bp + gauss(world.rng) * 12 * wob), 10, 100);
   // Drones shuffle for a better firing spot instead of camping one rut,
   // unless they are walking a bracket in, or fire a gun with no flight

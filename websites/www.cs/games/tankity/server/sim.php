@@ -212,6 +212,7 @@ function room_weapon_row(array $am): array
         'kick' => (float) ($am['kick'] ?? 150.0),
         'apex' => !empty($am['apex']),
         'range' => (float) ($am['range'] ?? 0),
+        'aimMin' => (float) ($am['aimMin'] ?? ROOM_AIM_MIN),
     ];
 }
 function room_gear(string $key): ?array
@@ -546,6 +547,16 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
         }
         room_hit_unit($room, $events, $idx, $dmg, $tank, $ownerIdx, $w, $directIdx === $idx);
     }
+}
+/* The barrel's lowest angle for most guns; the highest is 180 less it. */
+const ROOM_AIM_MIN = 10.0;
+/* How far the barrel turns with gun $def loaded: [aimMin, 180 - aimMin]
+// (a beam row's aimMin may dip below level on either side). src/sim.ts
+// aimLimits() is the same. */
+function room_aim_limits(?array $def): array
+{
+    $m = (float) ($def['aimMin'] ?? ROOM_AIM_MIN);
+    return [$m, 180.0 - $m];
 }
 /* ---------- beams and plasma: guns with no flight ---------- */
 /* Guns with no flight resolve the moment they fire (room_fire_beam,

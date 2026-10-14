@@ -411,6 +411,7 @@ const TANKITY_AMMO_EXTRA = [
     'friction' => ['num', ['roller' => [0.01, 5.0]]],
     'rollTime' => ['num', ['roller' => [0.5, 10.0]]],
     'range' => ['int', ['beam' => [60, 1200]]],
+    'aimMin' => ['int', ['beam' => [-30, 10]]],
 ];
 /** The fields each effect requires (a cluster with apex: true needs no fuse). */
 const TANKITY_AMMO_NEEDS = [

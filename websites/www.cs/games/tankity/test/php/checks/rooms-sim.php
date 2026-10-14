@@ -1275,3 +1275,40 @@ foreach ($weapons as $k => $def) {
     $check("standin-fires-$k", $wkey === $k && $room['tanks'][1]['hp'] < 100 && $room['tanks'][0]['hp'] === 100,
         json_encode([$wkey, array_column($room['tanks'], 'hp')]));
 }
+// The barrel's limits follow the loaded gun: a beam row's aimMin dips it
+// below level, any other gun stays 10..170, and every shot leaves inside its
+// own gun's limits.
+foreach ($weapons as $k => $def) {
+    if ($def['effect'] !== 'beam' || $def['aimMin'] >= 10.0) {
+        continue;
+    }
+    $dip = $def['aimMin'];
+    $room = $flatRoom([$tank(0, 'human', 100.0, 100), $tank(1, 'human', 400.0, 100)]);
+    $room['weapon'] = [0 => $k];
+    room_set_aim($room, 0, 0, $dip, 100);
+    $check("aim-dips-with-$k", $room['tanks'][0]['angle'] === $dip && $room['tanks'][0]['power'] === 100.0, json_encode($room['tanks'][0]));
+    room_set_aim($room, 0, 0, 180 - $dip + 9, null);
+    $check("aim-dips-the-far-side-with-$k", $room['tanks'][0]['angle'] === 180.0 - $dip);
+    room_set_aim($room, 0, 0, $dip, null);
+    $room['weapon'][0] = 'shell';
+    room_set_aim($room, 0, 0, null, null);
+    $check("switching-$k-to-shell-reclamps", $room['tanks'][0]['angle'] === 10.0, json_encode($room['tanks'][0]['angle']));
+    room_set_aim($room, 0, 0, -20, null);
+    $check('shell-aim-stays-at-10', $room['tanks'][0]['angle'] === 10.0);
+    // A room fire at the dip with the beam: level ground, a hull 300 px off takes it.
+    $room = $flatRoom([['angle' => 0.0, 'power' => 100.0] + $tank(0, 'human', 100.0, 100), $tank(1, 'human', 400.0, 100)]);
+    $room['weapon'] = [0 => $k];
+    $events = [['t' => 'fire', 'seat' => 0, 'w' => $k]];
+    room_fire_shot($room, $events, 0, $k);
+    $check("$k-level-hits-a-hull-far-off", $room['tanks'][1]['hp'] === 100 - (int) $def['dmg'], json_encode(array_column($room['tanks'], 'hp')));
+    $room = $flatRoom([['angle' => $dip, 'power' => 100.0] + $tank(0, 'human', 100.0, 100), $tank(1, 'human', 400.0, 100)]);
+    $events = [['t' => 'fire', 'seat' => 0, 'w' => $k]];
+    room_fire_shot($room, $events, 0, $k);
+    $beamEv = array_values(array_filter($events, fn($e) => $e['t'] === 'beam'))[0];
+    $check("$k-fires-at-the-dip", $room['tanks'][0]['angle'] === $dip && $beamEv['y1'] > $beamEv['y0'] && $room['tanks'][0]['hp'] === 100, json_encode($beamEv));
+    // A Shell held at the dip leaves at its own minimum.
+    $room = $flatRoom([['angle' => $dip, 'power' => 40.0] + $tank(0, 'human', 100.0, 100), $tank(1, 'human', 400.0, 100)]);
+    $events = [['t' => 'fire', 'seat' => 0, 'w' => 'shell']];
+    room_fire_shot($room, $events, 0, 'shell');
+    $check('shell-at-the-dip-fires-at-10', $room['tanks'][0]['angle'] === 10.0, json_encode($room['tanks'][0]['angle']));
+}

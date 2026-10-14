@@ -126,6 +126,7 @@ export interface Weapon {
   friction?: number;
   rollTime?: number;
   range?: number; // beam: its length at full power on a room's field, px
+  aimMin?: number; // beam: the barrel's lowest angle (below 0 dips under level), on either side
   note?: string;
   gfx?: Gfx;
 }
@@ -486,6 +487,17 @@ export interface Launch {
   /** What a gun with no flight (a beam, a plasma ring) did the moment it fired; empty for shells. */
   now: StepEvent[];
 }
+/** The barrel's lowest angle for most guns; the highest is 180 less it. */
+export const AIM_MIN = 10;
+/* How far the barrel turns with gun w loaded: aimMin up to 180 - aimMin
+   (10..170 unless a beam row's aimMin lets it dip below level on either
+   side). Angles count from the side the unit faces. A gun always leaves the
+   barrel inside its own limits (fireWeapon clamps). server/sim.php
+   room_aim_limits is the same. */
+export function aimLimits(w: Pick<Weapon, 'aimMin'> | null | undefined): { min: number; max: number } {
+  const m = w && w.aimMin !== undefined ? w.aimMin : AIM_MIN;
+  return { min: m, max: 180 - m };
+}
 /* Guns with no flight: they resolve the moment they fire (fireBeam, firePlasma). */
 export function flies(w: Pick<Weapon, 'effect'>): boolean {
   return w.effect !== 'beam' && w.effect !== 'plasma';
@@ -504,6 +516,9 @@ export function fireWeapon(world: World, arsenal: Arsenal, t: Tank, wkey: string
     world.selected = 'shell';
     spent = true;
   }
+  // A gun always leaves inside its own limits: a Shell held where a beam dipped fires at its own minimum.
+  const lim = aimLimits(w);
+  t.angle = clamp(t.angle, lim.min, lim.max);
   const m = muzzle(t);
   const r0 = rad(t.angle);
   const s = facing(t);

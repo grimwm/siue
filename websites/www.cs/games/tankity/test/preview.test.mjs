@@ -161,6 +161,8 @@ function run(pv, env, seconds, done = () => false) {
   check('the beam passes through the dummy, and bursts where it stops', bm.log.special.some(s => s.name === 'pierce')
     && bm.log.impact.length === 1 && bm.log.impact[0].r === arsenal.weapons[beamKey].radius);
   check('a beam result reads as a beam', /beam/i.test(beam.result), beam.result);
+  const lim = arsenal.weapons[beamKey].aimMin ?? 10;
+  check('the range aims its beam inside the gun\'s own limits, as the war does', beam.angle >= lim && beam.angle <= 180 - lim, String(beam.angle));
 
   const rg = makeEnv();
   const ringKey = byEffect('plasma');

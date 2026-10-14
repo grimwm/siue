@@ -25,7 +25,7 @@ import { focusEndVeil } from './ui/endveil.tsx';
 import type { Board, RoomCard } from './standings.ts';
 import type { BeamEvent, RingEvent, RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay, ReplayShot } from './replay.ts';
-import { H, ROOM_W, TUNE, beamCarve, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
+import { H, ROOM_W, TUNE, aimLimits, beamCarve, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
 import type { Difficulty, ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
 import { turnLabel } from './turn-time.ts';
@@ -647,10 +647,10 @@ export function createRoom(deps: RoomDeps) {
     }
     const t = myTank();
     if (t && t.hp > 0 && MATCH.myTurn) {
-      const arm = stepArm(input.held, dt, t, facing(t), G.w);
+      const arm = stepArm(input.held, dt, t, facing(t), G.w, aimLimits(tables.weapons[G.selected]));
       t.angle = arm.angle;
       t.power = arm.power;
-      if (arm.adjusting) MATCH.aimDirty = true;
+      if (arm.adjusting || arm.clamped) MATCH.aimDirty = true;
       if (arm.idle && MATCH.aimDirty) netSendAim();
       if ((input.held.has('driveLeft') || input.held.has('driveRight')) && t.fuel > 0) {
         const dir = input.held.axis('driveLeft', 'driveRight');

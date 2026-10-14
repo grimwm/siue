@@ -684,10 +684,11 @@ keys:
 # Paths are relative to this folder (games/tankity/), must stay inside it
 # and end in .mp3, .ogg, .m4a or .wav. Use mp3 for the widest browser
 # support. Keep sound effects tiny (a few KB; they are decoded in memory) and
-# stream-sized music at about 80 kbps. The generator checks that each file
-# exists. Where each file came from, its author and its licence are recorded
-# in audio/CREDITS.md; add a line there for every file you add, and only add
-# files that are CC0 or otherwise free to redistribute.
+# stream-sized music at about 80 kbps, built by audio/music/build_music.sh.
+# The generator checks that each file exists. Where each file came from, its
+# author and its licence are recorded in audio/CREDITS.md; add a line there
+# for every file you add, and only add files that are CC0 or otherwise free
+# to redistribute.
 #
 # sfx: one entry per event. An event with no file (or left out) keeps its
 # synthesized sound. Events and when they play:
@@ -711,8 +712,10 @@ keys:
 # through the whole list. Each track:
 #   file     path to the track (required).
 #   title    shown in the log when the track starts (required, max 60).
-#   volume   0 to 1, default 1.
-#   credit   optional author line shown beside the title (max 120).
+#   volume   0 to 1, default 1. Leave it out: audio/music/build_music.sh puts
+#            every file at one loudness, so no track needs a trim.
+#   credit   the author, shown beside the title in the Next song toast
+#            (max 120). The licence is in audio/CREDITS.md, not here.
 # With an empty list, or when no track can play, the built-in songs play and
 # follow the round as before. The Music toggle (M) pauses and resumes it.
 audio:
@@ -732,20 +735,52 @@ audio:
   music:
     - file: audio/music/battle-theme-a.mp3
       title: Battle Theme A
-      volume: 0.6
-      credit: cynicmusic, CC0
+      credit: cynicmusic
     - file: audio/music/chiptune-level-1.mp3
       title: Action Chiptune 1
-      volume: 0.6
-      credit: Juhani Junkala, CC0
+      credit: Juhani Junkala
     - file: audio/music/awake-megawall-10.mp3
       title: "Awake! (Megawall-10)"
-      volume: 0.6
-      credit: cynicmusic, CC0
+      credit: cynicmusic
     - file: audio/music/chiptune-level-3.mp3
       title: Action Chiptune 3
-      volume: 0.6
-      credit: Juhani Junkala, CC0
+      credit: Juhani Junkala
+    - file: audio/music/artillery-mans-stage.mp3
+      title: "Artillery Man's Stage"
+      credit: Spring Spring
+    - file: audio/music/abandoned-hopes.mp3
+      title: Abandoned Hopes
+      credit: Jonathan So
+    - file: audio/music/great-boss.mp3
+      title: Great Boss
+      credit: Spring Spring
+    - file: audio/music/inevitable-doom.mp3
+      title: Inevitable Doom
+      credit: celestialghost8
+    - file: audio/music/boss-battle-1.mp3
+      title: "Boss Battle #1"
+      credit: nene
+    - file: audio/music/chip-bit-danger.mp3
+      title: Chip Bit Danger
+      credit: Sudocolon
+    - file: audio/music/mecha-collection.mp3
+      title: Mecha Collection
+      credit: Jonathan So
+    - file: audio/music/hey-boss.mp3
+      title: "Hey Boss!"
+      credit: megupets
+    - file: audio/music/nes-shooter-mars.mp3
+      title: Mars (NES Shooter Music)
+      credit: SketchyLogic
+    - file: audio/music/8-bit-battle-theme.mp3
+      title: 8 bit battle theme
+      credit: celestialghost8
+    - file: audio/music/the-monarchs-rule.mp3
+      title: "The Monarch's Rule"
+      credit: Jonathan So
+    - file: audio/music/operation-unthinkable.mp3
+      title: Operation Unthinkable
+      credit: Spring Spring
 
 # --------------------------------------------------------------------------
 # effects

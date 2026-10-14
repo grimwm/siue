@@ -810,26 +810,98 @@
             {
                 "file": "audio/music/battle-theme-a.mp3",
                 "title": "Battle Theme A",
-                "volume": 0.6,
-                "credit": "cynicmusic, CC0"
+                "volume": 1.0,
+                "credit": "cynicmusic"
             },
             {
                 "file": "audio/music/chiptune-level-1.mp3",
                 "title": "Action Chiptune 1",
-                "volume": 0.6,
-                "credit": "Juhani Junkala, CC0"
+                "volume": 1.0,
+                "credit": "Juhani Junkala"
             },
             {
                 "file": "audio/music/awake-megawall-10.mp3",
                 "title": "Awake! (Megawall-10)",
-                "volume": 0.6,
-                "credit": "cynicmusic, CC0"
+                "volume": 1.0,
+                "credit": "cynicmusic"
             },
             {
                 "file": "audio/music/chiptune-level-3.mp3",
                 "title": "Action Chiptune 3",
-                "volume": 0.6,
-                "credit": "Juhani Junkala, CC0"
+                "volume": 1.0,
+                "credit": "Juhani Junkala"
+            },
+            {
+                "file": "audio/music/artillery-mans-stage.mp3",
+                "title": "Artillery Man's Stage",
+                "volume": 1.0,
+                "credit": "Spring Spring"
+            },
+            {
+                "file": "audio/music/abandoned-hopes.mp3",
+                "title": "Abandoned Hopes",
+                "volume": 1.0,
+                "credit": "Jonathan So"
+            },
+            {
+                "file": "audio/music/great-boss.mp3",
+                "title": "Great Boss",
+                "volume": 1.0,
+                "credit": "Spring Spring"
+            },
+            {
+                "file": "audio/music/inevitable-doom.mp3",
+                "title": "Inevitable Doom",
+                "volume": 1.0,
+                "credit": "celestialghost8"
+            },
+            {
+                "file": "audio/music/boss-battle-1.mp3",
+                "title": "Boss Battle #1",
+                "volume": 1.0,
+                "credit": "nene"
+            },
+            {
+                "file": "audio/music/chip-bit-danger.mp3",
+                "title": "Chip Bit Danger",
+                "volume": 1.0,
+                "credit": "Sudocolon"
+            },
+            {
+                "file": "audio/music/mecha-collection.mp3",
+                "title": "Mecha Collection",
+                "volume": 1.0,
+                "credit": "Jonathan So"
+            },
+            {
+                "file": "audio/music/hey-boss.mp3",
+                "title": "Hey Boss!",
+                "volume": 1.0,
+                "credit": "megupets"
+            },
+            {
+                "file": "audio/music/nes-shooter-mars.mp3",
+                "title": "Mars (NES Shooter Music)",
+                "volume": 1.0,
+                "credit": "SketchyLogic"
+            },
+            {
+                "file": "audio/music/8-bit-battle-theme.mp3",
+                "title": "8 bit battle theme",
+                "volume": 1.0,
+                "credit": "celestialghost8"
+            },
+            {
+                "file": "audio/music/the-monarchs-rule.mp3",
+                "title": "The Monarch's Rule",
+                "volume": 1.0,
+                "credit": "Jonathan So"
+            },
+            {
+                "file": "audio/music/operation-unthinkable.mp3",
+                "title": "Operation Unthinkable",
+                "volume": 1.0,
+                "credit": "Spring Spring"
             }
         ]
     },

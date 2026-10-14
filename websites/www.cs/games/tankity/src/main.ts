@@ -76,7 +76,8 @@ import type { LiveRow } from './games.ts';
 import { alertsPref, askNotify, notifyPermission, showTurnNotification } from './notify.ts';
 import { renderToasts } from './ui/toast.tsx';
 import type { AlertsState, GamesView } from './ui/games.tsx';
-import { browserStorage } from '../../_kit/ports.browser.ts';
+import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
+import { createTrackToast, trackToastText } from './track-toast.ts';
 import { exitApp, enterFullscreen, browserAppEnv, EXIT_HINT, holdEscape, topKeyLock } from '../../_kit/app.ts';
 import { pref, text } from '../../_kit/prefs.ts';
 import { ROTATE_HINT_KEY, rotateHintShows } from './rotate-hint.ts';
@@ -102,7 +103,12 @@ const TOUCH = touchOnly(typeof window.matchMedia === 'function' ? q => window.ma
 const input = createInput({ touch: TOUCH });
 
 /* ---------- audio: lives in src/audio.ts ---------- */
-music.onTrackStart(t => say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info'));
+const trackToastHost = $('track-toast');
+const trackToast = trackToastHost ? createTrackToast(trackToastHost, browserTimers) : null;
+music.onTrackStart((t, cause) => {
+  say(`Now playing: ${t.title || t.file}${t.credit ? ` (${t.credit})` : ''}.`, 'info');
+  if (cause === 'next' && trackToast) trackToast.show(trackToastText(t));
+});
 
 /* ---------- weapons ---------- */
 /* The arsenal lives in game.yaml (served as game.json), not here: ballistics,

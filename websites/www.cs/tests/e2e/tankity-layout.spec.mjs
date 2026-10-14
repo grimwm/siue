@@ -145,6 +145,51 @@ function smallTargets() {
     .map(([id, r]) => `${id} ${Math.round(r.width)}×${Math.round(r.height)}`);
 }
 
+/* The Next song toast, shown with a long title while a chatter line shows: it
+   must sit inside the battlefield, below the chatter, on one line, and over
+   neither bar nor any deck button. */
+/* The Next song toast while the menu is open (a phone's Next song is a menu
+   row): every point of it is the toast, not the menu card above it. */
+function toastOverMenu() {
+  const toast = document.getElementById('track-toast');
+  toast.textContent = '♫ Battle Theme A · cynicmusic';
+  toast.hidden = false;
+  toast.style.pointerEvents = 'auto'; // elementFromPoint passes through pointer-events: none
+  const r = toast.getBoundingClientRect();
+  const probs = [];
+  for (const [x, y] of [[r.left + 4, r.top + 4], [(r.left + r.right) / 2, (r.top + r.bottom) / 2], [r.right - 4, r.bottom - 4]]) {
+    const hit = document.elementFromPoint(x, y);
+    if (hit !== toast) probs.push(`${Math.round(x)},${Math.round(y)} is ${hit ? hit.id || hit.className || hit.tagName : 'nothing'}`);
+  }
+  toast.style.pointerEvents = '';
+  toast.hidden = true;
+  return probs;
+}
+
+function toastProblems() {
+  const probs = [];
+  const dlg = document.getElementById('dialogue');
+  dlg.hidden = false;
+  document.getElementById('dlg-name').textContent = 'REAPER';
+  document.getElementById('dlg-line').textContent = 'Wind check: hold that barrel steady and wait for it.';
+  const toast = document.getElementById('track-toast');
+  toast.textContent = '♫ Battle Theme A (Extended Mix) · A Composer With A Long Name';
+  toast.hidden = false;
+  const r = toast.getBoundingClientRect();
+  const over = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+  const field = document.getElementById('field').getBoundingClientRect();
+  if (r.top < field.top - 0.5 || r.bottom > field.bottom + 0.5 || r.left < field.left - 0.5 || r.right > field.right + 0.5) probs.push('toast leaves the battlefield');
+  if (r.top < dlg.getBoundingClientRect().bottom - 0.5) probs.push('toast is not below the chatter');
+  if (toast.getClientRects().length > 1 || getComputedStyle(toast).whiteSpace !== 'nowrap') probs.push('toast wraps');
+  if (over(r, document.getElementById('hud-bar').getBoundingClientRect())) probs.push('toast over the status bar');
+  for (const b of document.querySelectorAll('#deck button')) {
+    if (b.getClientRects().length && over(r, b.getBoundingClientRect())) probs.push(`toast over ${b.id || b.dataset.aim}`);
+  }
+  toast.hidden = true;
+  dlg.hidden = true;
+  return probs;
+}
+
 for (const dev of DEVICES) {
   test(`${dev[0]} ${dev[1]}×${dev[2]}: solo and room bars fit, the deck fits, the page fits`, async ({ browser }) => {
     const { ctx, page } = await open(browser, dev);
@@ -153,6 +198,7 @@ for (const dev of DEVICES) {
       expect(await page.evaluate(measure), room ? 'room' : 'solo').toEqual([]);
       await page.screenshot({ path: `test-results/tankity-layout-${dev[1]}x${dev[2]}-${room ? 'room' : 'solo'}.png` });
     }
+    expect(await page.evaluate(toastProblems), 'track toast').toEqual([]);
     // The battlefield fills the screen between the bars, the ground meets both
     // edges, and the field's width is the one this device deals either way up.
     const bf = await page.evaluate(battlefield);
@@ -220,6 +266,8 @@ for (const dev of DEVICES) {
       }
       await page.locator('#btn-menu').tap();
       await expect(page.locator('#menu-track')).toBeVisible();
+      // Next song is a menu row here and the menu stays open: the toast must show over it.
+      expect(await page.evaluate(toastOverMenu), 'track toast over the open menu').toEqual([]);
       for (const id of ['#menu-radio', '#menu-help']) {
         if (landscapePhone(dev)) await expect(page.locator(id)).toBeVisible();
         else await expect(page.locator(id)).toBeHidden();

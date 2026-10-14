@@ -16,37 +16,41 @@ function room_valid_initials($raw): ?string
 {
     return tankity_initials(tankity_guard(), $raw);
 }
-/* Seconds a human gets for a turn before the crew fires for them. */
-const ROOM_TURN_SECS = 120;
+/* A turn is identified by round, turn slot and the count of shots fired so
+// far, so the same player coming round again starts a fresh clock. */
+function room_turn_key(array $room): string
+{
+    return ($room['round'] ?? 1) . ':' . $room['turn'] . ':' . ($room['shots'] ?? 0);
+}
 /* Seconds left on the turn clock of whoever's turn it is (null when it is
-// not a human's turn). The clock starts when a turn begins: aiming and
-// driving do not reset it. A turn is identified by round, turn slot and the
-// count of shots fired so far, so the same player coming round again starts
-// a fresh clock. */
+// not a human's turn). The clock starts when a turn begins, stamped with the
+// room's turn time of that moment: aiming and driving do not reset it, and a
+// later change of the turn time waits for the next turn. A clock without
+// seconds (a room from before the setting) reads as the default. */
 function room_turn_left(array &$room): ?float
 {
     $t = $room['tanks'][$room['turn']] ?? null;
     if (($room['phase'] ?? '') !== 'play' || !$t || $t['kind'] !== 'human' || $t['hp'] <= 0) {
         return null;
     }
-    $key = ($room['round'] ?? 1) . ':' . $room['turn'] . ':' . ($room['shots'] ?? 0);
+    $key = room_turn_key($room);
     if (($room['clock']['key'] ?? '') !== $key) {
-        $room['clock'] = ['key' => $key, 'at' => microtime(true)];
+        $room['clock'] = ['key' => $key, 'at' => microtime(true), 'secs' => room_turn_secs($room)];
     }
-    return max(0.0, ROOM_TURN_SECS - (microtime(true) - (float) $room['clock']['at']));
+    $secs = (int) ($room['clock']['secs'] ?? ROOM_TURN_DEFAULT);
+    return max(0.0, $secs - (microtime(true) - (float) $room['clock']['at']));
 }
-/* Seconds the between-rounds shop stays open before the next round starts for
-// everyone, ready or not. */
-const ROOM_SHOP_SECS = 90;
 /* Seconds left on the shop clock (null outside the shop). It starts when the
-// round is won (room_end_round stamps shop.at). */
+// round is won (room_end_round stamps shop.at and shop.secs); a shop from
+// before the stamp reads 90. */
 function room_shop_left(array $room): ?float
 {
     if (($room['phase'] ?? '') !== 'shop') {
         return null;
     }
     $at = (float) ($room['shop']['at'] ?? microtime(true));
-    return max(0.0, ROOM_SHOP_SECS - (microtime(true) - $at));
+    $secs = (int) ($room['shop']['secs'] ?? 90);
+    return max(0.0, $secs - (microtime(true) - $at));
 }
 /* The seats the shop waits on: humans still in the match. Drones, open chairs,
 // leavers (their seat turns into a drone) and eliminated humans never block. */
@@ -118,19 +122,68 @@ function room_shop_settle(array &$room): bool
     }
     return true;
 }
-/* A random gun from a seat's rack: any shell it still has, the Shell always,
-// skipping anything its round has not unlocked. */
-function room_random_gun(array $room, int $seat): string
+/* A human's turn ran out: a drone takes this one shot for them, aimed as the
+// room's drones aim, with a gun from the player's own rack (the Shell when the
+// drone's pick is not in the rack or not yet unlocked). It never drives. The
+// seat stays the player's. Answers the gun. */
+function room_standin_shot(array &$room, int $cur): string
 {
-    $weapons = room_weapons();
-    $rack = ['shell'];
-    foreach ($room['ammo'][$seat] ?? [] as $wkey => $have) {
-        if ($wkey !== 'shell' && $have > 0 && isset($weapons[$wkey])
-            && ($weapons[$wkey]['minRound'] ?? 1) <= ($room['round'] ?? 1)) {
-            $rack[] = $wkey;
-        }
+    $t = $room['tanks'][$cur];
+    // room_ai_choose also leaves aim memory (s, dry, dealt, brk) on the tank; only the
+    // room-level strategy bookkeeping is restored, since nothing reads those for a human and
+    // the next stand-in is better for the bracket.
+    $tactic = $room['tactic'] ?? null; // the drone's strategy bookkeeping is not the player's
+    $choice = room_ai_choose($room, $t);
+    if ($tactic === null) {
+        unset($room['tactic']);
+    } else {
+        $room['tactic'] = $tactic;
     }
-    return $rack[random_int(0, count($rack) - 1)];
+    $wkey = (string) $choice['wkey'];
+    $def = room_weapons()[$wkey] ?? null;
+    $have = $room['ammo'][$t['seat']][$wkey] ?? 0;
+    if ($wkey !== 'shell' && ($def === null || $have <= 0 || ($room['round'] ?? 1) < ($def['minRound'] ?? 1))) {
+        $wkey = 'shell';
+    }
+    $room['tanks'][$cur]['angle'] = (float) $choice['angle'];
+    $room['tanks'][$cur]['power'] = (float) $choice['power'];
+    return $wkey;
+}
+/* Applies what is due as of now: in play, the turn that ran out and the
+// drones' paced turns; in the shop, its clock. The caller holds the room and
+// saves it. */
+function room_tick(array &$room): void
+{
+    if ($room['phase'] === 'play') {
+        $events = [];
+        room_advance($room, $events);
+        foreach ($events as $e) {
+            room_emit($room, $e);
+        }
+    } elseif ($room['phase'] === 'shop') {
+        room_shop_settle($room);
+    }
+}
+/* Whether room_tick would change anything, from a read. */
+function room_tick_due(array $room): bool
+{
+    if ($room['phase'] === 'shop') {
+        return room_shop_left($room) <= 0;
+    }
+    if ($room['phase'] !== 'play') {
+        return false;
+    }
+    $t = $room['tanks'][$room['turn']] ?? null;
+    if (!$t) {
+        return false;
+    }
+    if ($t['kind'] !== 'human' || $t['hp'] <= 0) {
+        return room_pace_ready($room);
+    }
+    if (($room['clock']['key'] ?? '') !== room_turn_key($room)) {
+        return true;
+    }
+    return room_turn_left($room) <= 0;
 }
 /* One fully simulated shot (all pellets, all bomblets), server side. No
  * client can fake this. Every event is stamped with its moment in the volley
@@ -324,9 +377,11 @@ function room_idle_seat(int $slot, string $mode = 'ai'): array
     $name = ROOM_AI_NAMES[(($slot - 1) % $n + $n) % $n]; // one name per seat, so slot 0 and slot 3 never share
     return ['human' => false, 'name' => $name, 'initials' => $name, 'lives' => 0, 'mode' => $mode === 'open' ? 'open' : 'ai'];
 }
-function room_seat_human(string $initials, string $token, array $body): array
+function room_seat_human(string $initials, string $token, array $body, string $addr): array
 {
-    return ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];
+    // addr: the hashed client address that took the seat (room_idle_limit counts distinct ones).
+    $seat = ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];
+    return $addr === '' ? $seat : $seat + ['addr' => $addr];
 }
 /* A seat's ammo at the start of a match: the endless Shell (-1), plus each
 // row's start shells. src/sim.ts startAmmo is the same. */
@@ -516,12 +571,13 @@ function room_advance(array &$room, array &$events): void
         $t = $room['tanks'][$cur];
         if ($t['kind'] === 'human') {
             // A human's turn runs on a clock (room_turn_left): when it runs
-            // out, the crew loads a random gun from the rack and fires it with
-            // the current aim, so one absent player never holds up the room.
+            // out, a drone aims and fires for them (room_standin_shot), so one
+            // absent player never holds up the room.
             if (room_turn_left($room) > 0) {
                 return; // waiting on this human's move
             }
-            $wkey = room_random_gun($room, $t['seat']);
+            $wkey = room_standin_shot($room, $cur);
+            $t = $room['tanks'][$cur];
             $have = $room['ammo'][$t['seat']][$wkey] ?? 0;
             $events[] = ['t' => 'auto', 'seat' => $t['seat'], 'w' => $wkey,
                 'x' => round($t['x'], 1), 'a' => round($t['angle'], 1), 'pw' => round($t['power'], 1)];
@@ -731,13 +787,14 @@ function room_end_round(array &$room, array &$events): void
         }
         room_file_eliminated($room, $wrecked);
         $room['phase'] = 'over';
+        $room['actedAt'] = time(); // the final standings stay up for one idle limit
         $events[] = ['t' => 'matchover'];
         return;
     }
     room_file_eliminated($room, $wrecked);
     // Every round starts from the shop, won or lost.
     $room['phase'] = 'shop';
-    $room['shop'] = ['at' => microtime(true), 'ready' => []];
+    $room['shop'] = ['at' => microtime(true), 'secs' => room_shop_secs(room_turn_secs($room)), 'ready' => []];
 }
 /* Files the humans this round eliminated. The winner is filed first when the
    match ends, so each rank is the place on a board that already holds it. */

@@ -397,6 +397,57 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
   check('lobby-redraw-keeps-nodes', veil.children[0] === card && byId(card, 'host-form') === hostForm);
 }
 
+// The turn time: a slider in the host form; in a room the host's slider, everyone else's label.
+{
+  const veil = makeEl('lobby-veil');
+  const turns = { form: [], room: [] };
+  const base = { turnSecs: 600, onTurnForm: s => turns.form.push(s), onTurnRoom: s => turns.room.push(s) };
+  renderLobby(veil, lobbyProps(base).props);
+  const form = byId(veil, 'host-form');
+  const range = byId(form, 'lobby-turn');
+  check('lobby-turn-in-host-form', !!range && attr(range, 'type') === 'range' && !!byId(form, 'host-go'));
+  range.value = '0';
+  fire(range, 'input');
+  check('lobby-turn-reports', turns.form.join() === '60', turns.form.join());
+  check('lobby-intro-turn-copy', /from one minute to a week/.test(text(byId(veil, 'lobby-intro'))) && !/crew fires/.test(text(byId(veil, 'lobby-intro'))));
+
+  const hostRoom = makeEl('lobby-veil');
+  renderLobby(hostRoom, lobbyProps({ ...base, inRoom: true, isHost: true, code: 'AB3D', seats: SEATS }).props);
+  const roomRange = byId(hostRoom, 'room-turn');
+  check('lobby-room-turn-host', !!roomRange && !byId(hostRoom, 'room-turn-label'));
+  roomRange.value = '5';
+  fire(roomRange, 'input');
+  check('lobby-room-turn-reports', turns.room.join() === '86400', turns.room.join());
+  check('lobby-room-close-rule', /single connection/.test(text(byId(hostRoom, 'turn-hint'))), text(byId(hostRoom, 'turn-hint')));
+
+  const guestRoom = makeEl('lobby-veil');
+  renderLobby(guestRoom, lobbyProps({ ...base, inRoom: true, isHost: false, code: 'AB3D', seats: SEATS, mySeat: 3 }).props);
+  check('lobby-room-turn-guest', !byId(guestRoom, 'room-turn') && text(byId(guestRoom, 'room-turn-label')) === 'Turn time: 10 min');
+}
+
+// Your games in the lobby when not in a room; the Turn alerts button in one.
+{
+  const row = { code: 'AB3D', gone: false, seat: 1, phase: 'lobby', round: 0, turnSecs: 120, turn: null, yourTurn: false, turnKey: null,
+    turnLeft: null, shopLeft: null, players: ['ABC', 'ZED'], hostSeat: 0, turnName: null, expiresAt: 2e9, closesIn: 600 };
+  let opened = '', alerted = 0;
+  const g = { rows: [row], alerts: 'off', age: 0, onOpen: c => { opened = c; }, onAlerts: () => { alerted++; } };
+  const out = makeEl('lobby-veil');
+  renderLobby(out, lobbyProps({ turnSecs: 120, onTurnForm() {}, onTurnRoom() {}, games: g }).props);
+  const list = byId(out, 'lobby-games');
+  check('lobby-your-games-out-of-room', !!list && /AB3D/.test(text(list)));
+  click(walk(list).find(n => n.localName === 'button' && /Open/.test(text(n))));
+  check('lobby-your-games-open', opened === 'AB3D');
+  const none = makeEl('lobby-veil');
+  renderLobby(none, lobbyProps({ turnSecs: 120, onTurnForm() {}, onTurnRoom() {}, games: { ...g, rows: [] } }).props);
+  check('lobby-your-games-hidden-when-empty', !byId(none, 'lobby-games'));
+  const inRoom = makeEl('lobby-veil');
+  renderLobby(inRoom, lobbyProps({ turnSecs: 120, onTurnForm() {}, onTurnRoom() {}, games: g, inRoom: true, seats: SEATS }).props);
+  const btn = byId(inRoom, 'room-alerts');
+  check('lobby-room-alerts-button', !!btn && text(btn) === 'Turn alerts: off' && !byId(inRoom, 'lobby-games'));
+  click(btn);
+  check('lobby-room-alerts-click', alerted === 1);
+}
+
 // ---- weapon picker ----
 function gunTiles(n = 10, loaded = 0) {
   return Array.from({ length: n }, (_, i) => ({ key: i === 0 ? 'shell' : `gun${i}`, name: i === 0 ? 'Shell' : `Gun ${i}`, title: `note ${i}`, count: i === 0 ? '∞' : `×${i}`, loaded: i === loaded, empty: false }));
@@ -498,6 +549,22 @@ function gunTiles(n = 10, loaded = 0) {
   check('leave-stay-calls-back', calls.stay === 1 && calls.leave === 0);
   click(go);
   check('leave-go-calls-back', calls.leave === 1 && calls.stay === 1);
+  check('leave-no-step-out-without-a-handler', !byId(card, 'leave-step'));
+}
+// Step out keeps the seat: the veil offers it when the game passes onStepOut.
+{
+  const veil = makeEl('leave-veil');
+  veil.hidden = false;
+  const calls = { stay: 0, leave: 0, step: 0 };
+  renderLeave(veil, {
+    keyHint, title: 'Leave this room?', text: 'Step out keeps your seat; Your games brings you back.',
+    onStay: () => { calls.stay++; }, onLeave: () => { calls.leave++; }, onStepOut: () => { calls.step++; },
+  });
+  const card = veil.children[0];
+  const step = byId(card, 'leave-step');
+  check('leave-step-out-button', !!step && text(step) === 'Step out' && /seat/.test(text(byId(card, 'leave-text'))));
+  click(step);
+  check('leave-step-out-calls-back', calls.step === 1 && calls.leave === 0 && calls.stay === 0);
 }
 
 // ---- radio log ----

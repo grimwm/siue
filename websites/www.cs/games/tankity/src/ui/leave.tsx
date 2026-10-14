@@ -1,6 +1,8 @@
 /* The leave-room question: asked in the page (never with a browser dialog)
- * before the player walks out of a running room match. The game says what to
- * ask and what each answer does; Q, handled by the game, means stay. The
+ * before the player walks out of a running room match. Three answers: stay,
+ * step out (back to the title card, the seat kept), or leave (the seat given
+ * up). The game says what to ask and what each answer does; Q, handled by the
+ * game, means stay. The
  * veil (#leave-veil) stays in index.html and the game shows and hides it.
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later */
@@ -14,6 +16,8 @@ export interface LeaveProps {
   /** The consequence, in one or two sentences. */
   text: string;
   onStay: () => void;
+  /** Step out: the seat waits in the room. Absent hides the button. */
+  onStepOut?: () => void;
   onLeave: () => void;
 }
 
@@ -29,6 +33,7 @@ export function Leave(p: LeaveProps) {
           <button type="button" id="leave-stay" class="btn-primary" onClick={blurThen(p.onStay)}>
             Stay in the match <Key at="global:back" cls="key" />
           </button>
+          {p.onStepOut && <button type="button" id="leave-step" onClick={blurThen(p.onStepOut)}>Step out</button>}
           <button type="button" id="leave-go" class="btn-leave" onClick={blurThen(p.onLeave)}>Leave room</button>
         </div>
       </div>

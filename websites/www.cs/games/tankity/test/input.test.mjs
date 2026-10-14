@@ -206,6 +206,16 @@ function rig(extraCtx = {}) {
   check('a-read-only-field-keeps-the-other-keys', r.calls.length === 0, r.calls.join());
 }
 {
+  // A slider (the turn time) types nothing: Q goes back from it, and its arrows stay its own.
+  const r = rig();
+  r.input.register({ back: r.log('back'), barrelLeft: r.log('aim') });
+  r.input.keydown(ev({ key: 'q', code: 'KeyQ', target: { tagName: 'INPUT', type: 'range' } }));
+  check('q-goes-back-from-a-slider', r.calls.join() === 'back', r.calls.join());
+  r.calls.length = 0;
+  r.input.keydown(ev({ key: 'ArrowLeft', code: 'ArrowLeft', target: { tagName: 'INPUT', type: 'range' } }));
+  check('a-slider-keeps-its-arrows', r.calls.length === 0, r.calls.join());
+}
+{
   // The gun grid's fixed keys.
   check('grid-keys', gridCommand('ArrowLeft') === 'gridLeft' && gridCommand('Enter') === 'confirm'
     && gridCommand(' ') === 'confirm' && gridCommand('7') === 'digit' && gridCommand('0') === null && gridCommand('a') === null);

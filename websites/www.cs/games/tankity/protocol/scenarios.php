@@ -10,14 +10,17 @@ if (!defined('TANKITY_ROOMS_LIB')) {
 require_once __DIR__ . '/../rooms.php';
 
 const PROTOCOL_CODE = 'FXT1';
+/** The stored touch time every fixture room carries: a fixed second, so expiresAt is stable. */
+const PROTOCOL_TOUCHED = 1_800_000_000;
 
 /** A lobby: the host ABC, a guest DEF, one drone seat, one open seat. */
 function protocol_lobby(): array
 {
     $room = room_new(PROTOCOL_CODE, 'ABC');
+    $room['created'] = $room['touched'] = PROTOCOL_TOUCHED; // expiresAt must not depend on the clock
     $room['csrf'] = 'fixture-csrf';
-    $room['seats'][0] = room_seat_human('ABC', 'fixture-token-0', []);
-    $room['seats'][1] = room_seat_human('DEF', 'fixture-token-1', ['body' => 'hover']);
+    $room['seats'][0] = room_seat_human('ABC', 'fixture-token-0', [], '');
+    $room['seats'][1] = room_seat_human('DEF', 'fixture-token-1', ['body' => 'hover'], '');
     $room['seats'][2] = room_idle_seat(2, 'ai');
     $room['seats'][3] = room_idle_seat(3, 'open');
     room_seat_economy($room, 0);
@@ -29,8 +32,9 @@ function protocol_lobby(): array
 function protocol_play(): array
 {
     $room = room_new(PROTOCOL_CODE, 'ABC');
+    $room['created'] = $room['touched'] = PROTOCOL_TOUCHED; // expiresAt must not depend on the clock
     $room['csrf'] = 'fixture-csrf';
-    $room['seats'][0] = room_seat_human('ABC', 'fixture-token-0', []);
+    $room['seats'][0] = room_seat_human('ABC', 'fixture-token-0', [], '');
     $room['seats'][1] = room_idle_seat(1, 'ai');
     $room['seats'][2] = room_idle_seat(2, 'open');
     $room['seats'][3] = room_idle_seat(3, 'open');
@@ -129,13 +133,47 @@ function protocol_snapshots(): array
         200, $ok(room_snapshot($won, 0, 0))];
 
     $shop = $won;
-    $shop['seats'][2] = room_seat_human('DEF', 'fixture-token-2', []);
+    $shop['seats'][2] = room_seat_human('DEF', 'fixture-token-2', [], '');
     room_seat_economy($shop, 2);
     room_shop_set_ready($shop, 0, true);
     $shop['shop']['at'] = microtime(true);
     $out['shop-ready'] = ['The shop with a second human seated: the host has pressed Ready (seats[].ready), the other has not, and the shop clock reads shopLeft.',
         200, $ok(room_snapshot($shop, 0, 0))];
+
+    // The host sets the turn time mid-play: one event, and the snapshot's turnSecs.
+    $timed = $play;
+    $timed['turnSecs'] = 600;
+    room_emit($timed, ['t' => 'turntime', 'seat' => 0, 'secs' => 600]);
+    $out['play-turntime'] = ['The host moved the turn time to 10 minutes: turnSecs reads 600 and one turntime event rides along (since = 1 skips the round event).',
+        200, $ok(room_snapshot($timed, 0, 1))];
+
+    // A browser's "Your games": a match with this seat up, a lobby it waits in, a room that is gone.
+    $out['mine-reply'] = ['action=mine for three stored seats, in the order asked: a running match where it is this seat\'s turn (turnKey names the turn), a lobby, and a room that is gone.',
+        200, ['ok' => true, 'rooms' => [
+            room_mine_row($play, 0),
+            room_mine_row($lobby, 1),
+            ['code' => 'GONE', 'gone' => true],
+        ]]];
+    foreach ($out as $name => [$about, $status, $body]) {
+        $out[$name][2] = protocol_fixed_close($body);
+    }
     return $out;
+}
+
+/* closesIn is seconds from the moment of the reply: in a fixture it is
+   counted from the fixture rooms' fixed touch time (PROTOCOL_TOUCHED), so it
+   is stable like expiresAt. */
+function protocol_fixed_close(array $v): array
+{
+    if (array_key_exists('closesIn', $v) && is_int($v['expiresAt'] ?? null)) {
+        $v['closesIn'] = max(0, $v['expiresAt'] - PROTOCOL_TOUCHED);
+    }
+    foreach ($v as $k => $item) {
+        if (is_array($item)) {
+            $v[$k] = protocol_fixed_close($item);
+        }
+    }
+    return $v;
 }
 
 /** The shape of a decoded JSON value: object keys with types, lists as the

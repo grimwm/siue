@@ -64,7 +64,10 @@ test:
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html && vendor/bin/phpunit --testsuite tankity-docker'
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php protocol/generate.php --check'
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php protocol/sim-vectors.php --check'
-	@url=$$($(MAKE) --no-print-directory -s url) && curl -sf --max-time 300 "$${url}games/tankity/rooms-web-test.php" | tail -1
+	@url=$$($(MAKE) --no-print-directory -s url) && \
+	if out=$$(curl -sf --max-time 300 "$${url}games/tankity/rooms-web-test.php"); then status=0; else status=$$?; fi; \
+	last=$$(printf '%s\n' "$$out" | tail -1); echo "$$last"; \
+	if [ $$status -ne 0 ] || [ "$$last" != WEB-OK ]; then printf '%s\n' "$$out" | grep '^FAIL' >&2; echo "rooms-web-test failed (curl $$status)" >&2; exit 1; fi
 	@url=$$($(MAKE) --no-print-directory -s url) && tests/tankity-data-deny.sh "$$url"
 
 protocol:

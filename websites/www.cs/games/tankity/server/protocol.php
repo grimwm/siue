@@ -106,7 +106,13 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
         'winBonus' => (int) ($room['winBonus'] ?? 0),
         'wind' => $room['wind'],
         'turn' => $room['phase'] === 'play' && count($room['tanks']) ? $room['tanks'][$room['turn']]['seat'] ?? null : null,
-        // Seconds left before the crew fires for the human whose turn it is.
+        // The room's turn time in seconds, one of the host's stops.
+        'turnSecs' => room_turn_secs($room),
+        // When the room closes for want of play, unix seconds (room_expires as stored),
+        // and the same as seconds from this reply, for clients whose clock is off.
+        'expiresAt' => room_expires($room),
+        'closesIn' => room_closes_in($room),
+        // Seconds left before a drone fires for the human whose turn it is.
         'turnLeft' => (function () use ($room) {
             $left = room_turn_left($room);
             return $left === null ? null : round($left, 1);
@@ -162,4 +168,33 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
         $out['csrf'] = $room['csrf'];
     }
     return $out;
+}
+
+/* One row of a browser's "Your games" list: what that seat needs to know
+   without loading the match. */
+function room_mine_row(array $room, int $seat): array
+{
+    $playing = $room['phase'] === 'play' && count($room['tanks']);
+    $turnSeat = $playing ? ($room['tanks'][$room['turn']]['seat'] ?? null) : null;
+    $left = room_turn_left($room);
+    $yours = $turnSeat === $seat && $left !== null;
+    $shop = room_shop_left($room);
+    $players = [];
+    foreach ($room['seats'] as $s) {
+        if ($s['human'] ?? false) {
+            $players[] = (string) $s['initials'];
+        }
+    }
+    return [
+        'code' => $room['code'], 'gone' => false, 'seat' => $seat, 'phase' => $room['phase'],
+        'round' => (int) $room['round'], 'turnSecs' => room_turn_secs($room), 'turn' => $turnSeat,
+        'yourTurn' => $yours, 'turnKey' => $yours ? room_turn_key($room) : null,
+        'turnLeft' => $left === null ? null : round($left, 1), 'shopLeft' => $shop === null ? null : round($shop, 1),
+        'players' => $players, 'hostSeat' => room_host($room),
+        // Whose turn it is by name: a human's initials or the drone's name; null outside play.
+        'turnName' => $turnSeat === null ? null
+            : (string) (($room['seats'][$turnSeat]['human'] ?? false) ? $room['seats'][$turnSeat]['initials'] : ($room['seats'][$turnSeat]['name'] ?? '')),
+        'expiresAt' => room_expires($room),
+        'closesIn' => room_closes_in($room),
+    ];
 }

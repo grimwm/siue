@@ -12,6 +12,9 @@ import { render } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import { KeyHints, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.tsx';
 import { InitialsPicker, typedLetters } from './initials-picker.tsx';
+import { TurnTime } from './turn-time.tsx';
+import { AlertsButton, YourGames } from './games.tsx';
+import type { GamesView } from './games.tsx';
 import type { KeyHintFn } from './chrome.tsx';
 
 /** One hills tile. The Random tile has the empty id and no profile. */
@@ -76,7 +79,17 @@ export interface LobbyProps {
   /** Only the host starts the match and flips the empty seats. */
   isHost: boolean;
   seatsHint: string;
+  /** In a room: who starts the match. */
+  roomHint?: string;
   onSeatMode: (seat: number, mode: 'ai' | 'open') => void;
+  /** The turn time: the host form's pick, or the room's. */
+  turnSecs: number;
+  /** The host form's slider moved (before hosting). */
+  onTurnForm: (secs: number) => void;
+  /** The host moved the room's slider. */
+  onTurnRoom: (secs: number) => void;
+  /** The rooms this browser sits in (out of a room) and the Turn alerts button (in one). */
+  games?: GamesView;
   onCopy: () => void;
   onStart: () => void;
   onLeave: () => void;
@@ -136,9 +149,10 @@ export function Lobby(p: LobbyProps) {
         <p class="hint" id="lobby-intro" hidden={p.inRoom}>
           Host a room and read the 4-letter code to your friends, or join theirs.
           Everyone plays under their own three initials, set here or on the title card. There is no chat,
-          only artillery. Empty seats go to the drone battery, and a quiet crew fires
-          on its own after a while so no room ever stalls. The host may also pick named
-          hills, like Canyon 3, so the crew can replay a favorite without ever seeing its seed.
+          only artillery. Empty seats go to the drone battery. The host sets how long a turn lasts, from
+          one minute to a week; when a turn runs out, a drone fires for that player, and closing the tab
+          keeps your seat. The host may also pick named hills, like Canyon 3, so the crew can replay a
+          favorite without ever seeing its seed.
         </p>
         <p class="hint">
           <span id="net-dot" class={`dot ${p.online ? 'on' : 'off'}`}
@@ -159,6 +173,7 @@ export function Lobby(p: LobbyProps) {
                 <MapTile key={m.id} map={m} pressed={p.mapId === m.id} draw={p.drawMapIcon} rev={p.mapsRev} onPick={p.onPickMap} />
               ))}
             </div>
+            <TurnTime id="lobby-turn" secs={p.turnSecs} onChange={p.onTurnForm} />
             <button type="submit" id="host-go" class="btn-primary">Host a room</button>
           </form>
           <form id="join-form" class="lobby-form" action="#"
@@ -170,6 +185,7 @@ export function Lobby(p: LobbyProps) {
           </form>
         </div>
         <p id="lobby-status" class="hint" aria-live="polite">{p.status}</p>
+        {!p.inRoom && p.games && p.games.rows.length > 0 && <YourGames id="lobby-games" {...p.games} />}
         <div id="lobby-room" hidden={!p.inRoom}>
           <p class="room-code" id="lobby-code">{p.code || '····'}</p>
           <p class="hint">Read this code to your friends, or send them the invite link. First seat hosts and starts the match.</p>
@@ -186,6 +202,12 @@ export function Lobby(p: LobbyProps) {
           </p>
           <p class="hint" id="lobby-hills">{p.hills}</p>
           <p class="hint" id="lobby-drones" hidden={!p.drones}>{p.drones}</p>
+          <TurnTime id="room-turn" secs={p.turnSecs} disabled={!p.isHost} onChange={p.onTurnRoom} />
+          <p class="hint" id="turn-hint">
+            A change counts from the next turn. With nobody playing, a room stays open one turn time for each
+            player on their own connection, and at least 10 minutes; played from a single connection, it closes
+            after 10 minutes of nobody acting.
+          </p>
           <div class="unit-row" role="group" aria-labelledby="seats-label">
             <span class="unit-label" id="seats-label">Seats</span>
             <div class="unit-picker seat-grid" id="lobby-seats">
@@ -195,6 +217,8 @@ export function Lobby(p: LobbyProps) {
             </div>
           </div>
           <p class="hint" id="seats-hint">{p.seatsHint}</p>
+          <p class="hint" id="room-hint">{p.roomHint ?? ''}</p>
+          {p.games && <AlertsButton id="room-alerts" state={p.games.alerts} onClick={p.games.onAlerts} />}
           <div class="acts">
             <button type="button" id="lobby-start" class="btn-primary" style={p.isHost ? undefined : { display: 'none' }}
               onClick={blurThen(p.onStart)}>Start match</button>

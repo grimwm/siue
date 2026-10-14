@@ -27,7 +27,9 @@ RUN sed -i \
     && ! grep -q '^listen.allowed_clients' /etc/php-fpm.d/www.conf
 
 # FPM clears its workers' environment; pass the settings compose.yaml sets.
-RUN echo 'env[TANKITY_ROOM_JOINS_PER_HOUR] = $TANKITY_ROOM_JOINS_PER_HOUR' >> /etc/php-fpm.d/www.conf
+RUN echo 'env[TANKITY_ROOM_JOINS_PER_HOUR] = $TANKITY_ROOM_JOINS_PER_HOUR' >> /etc/php-fpm.d/www.conf \
+    && echo 'env[TANKITY_ROOM_HOSTS_PER_ADDRESS] = $TANKITY_ROOM_HOSTS_PER_ADDRESS' >> /etc/php-fpm.d/www.conf \
+    && echo 'env[TANKITY_ROOM_LONG_SHARE] = $TANKITY_ROOM_LONG_SHARE' >> /etc/php-fpm.d/www.conf
 
 EXPOSE 9000
 CMD ["php-fpm", "--nodaemonize"]

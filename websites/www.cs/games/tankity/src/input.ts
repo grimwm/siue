@@ -97,7 +97,7 @@ export interface KeyLike {
   metaKey?: boolean;
   shiftKey?: boolean;
   repeat?: boolean;
-  target?: { tagName?: string; readOnly?: boolean; click?(): void } | null;
+  target?: { tagName?: string; readOnly?: boolean; type?: string; click?(): void } | null;
   preventDefault(): void;
 }
 
@@ -314,11 +314,13 @@ export function createInput(opts: { touch: boolean }): Input {
 
   function keydown(e: KeyLike): void {
     // An editable box keeps every key, Q included: initials and codes may have
-    // a Q. A read-only field (the invite link) types nothing, so Q still goes
-    // back from it and every other key stays the field's. Esc is bound to
-    // nothing, so it never reaches a command below.
+    // a Q. A read-only field (the invite link) or a slider (the turn time)
+    // types nothing, so Q still goes back from it and every other key, the
+    // slider's arrows included, stays the field's. Esc is bound to nothing,
+    // so it never reaches a command below.
     if (isTyping(e.target)) {
-      const readOnly = !!e.target && e.target.tagName === 'INPUT' && !!e.target.readOnly;
+      const t = e.target;
+      const readOnly = !!t && t.tagName === 'INPUT' && (!!t.readOnly || t.type === 'range');
       if (!readOnly || lookup('global', e) !== 'back') return;
     }
     // Only plain Q is back: Cmd+Q quits the browser, and Ctrl+Q and Alt+Q are

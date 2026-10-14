@@ -21,6 +21,10 @@
  *   match.ts     the solo match: rounds, turns, blasts, the drone's shot
  *   room.ts      a running room match on this client
  *   lobby.ts     getting into and out of a room
+ *   seats.ts     the room seats this browser holds
+ *   games.ts     Your games: those rooms, watched for your turn
+ *   notify.ts    opt-in turn alerts as browser notifications
+ *   turn-time.ts a room's turn time and its clocks
  *   shop.ts      the field shop
  *   guns.ts      the weapon picker
  *   hud.ts       the status bar's values
@@ -63,6 +67,15 @@ import { createMenu } from './menu.ts';
 import { createTitle } from './title.ts';
 import { difficultySetting } from './difficulty.ts';
 import { initialsPref } from './initials.ts';
+import { createSeatStore } from './seats.ts';
+import { createGamesWatch, roomOnScreen } from './games.ts';
+import { createToastQueue } from './toasts.ts';
+import { createOnScreen, ON_SCREEN_BEAT_MS } from './on-screen.ts';
+import type { ChannelLike } from './on-screen.ts';
+import type { LiveRow } from './games.ts';
+import { alertsPref, askNotify, notifyPermission, showTurnNotification } from './notify.ts';
+import { renderToasts } from './ui/toast.tsx';
+import type { AlertsState, GamesView } from './ui/games.tsx';
 import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
 import { createTrackToast, trackToastText } from './track-toast.ts';
 import { exitApp, enterFullscreen, browserAppEnv, EXIT_HINT, holdEscape, topKeyLock } from '../../_kit/app.ts';
@@ -380,6 +393,7 @@ const net = new RoomClient(browserRoomEnv(), {
   onSnapshot: (room, fresh, first) => netOnSnapshot(room, fresh, first),
   onReadyChange: () => renderShopReady(),
   onError: err => say(prettyRoomError(err), 'bad'),
+  onGone: (code, why) => netGone(code, why),
 });
 /* What the page keeps of a room match: whose turn it reads as, the aim and
    drive it has not sent, the room snapshot waiting for the replay to drain,
@@ -432,6 +446,9 @@ const difficulty = difficultySetting(browserStorage());
    filed scores carry it. */
 const savedInitials = initialsPref(browserStorage(), Math.random);
 const getInitials = (): string => savedInitials.get();
+/* The room seats this browser holds (src/seats.ts): closing the tab keeps
+   them; the room link and Your games resume them. */
+const seats = createSeatStore(browserStorage(), () => Date.now());
 /* The solo match (src/match.ts): dealing, turns, blasts, the drone's shot, the end veil. A dependency
    on a module wired further down is passed as an arrow, so it resolves when it is called. */
 /* Matches are dealt at the width the landscape box gives (spec 6.6). */
@@ -466,20 +483,22 @@ const {
 });
 /* A running room match on this client (src/room.ts): moves sent, snapshots adopted, events told, the turn alert. */
 const {
-  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
+  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netFrame,
   roomShopBoard, openStandings,
 } = createRoom({
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
   backToLobby: () => netBackToLobby(),
   decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
-  renderShopReady, shownAngle, shownPower, startBanner, updateCamera, driftClouds, windText, saveLocal,
+  renderShopReady, shownAngle, shownPower, startBanner, updateCamera, driftClouds, windText, saveLocal, renderMenu: () => renderMenu(),
+  alertsOn: () => alertsState() === 'on',
 });
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving. */
 const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-  netLeave, netAgain, netBackToLobby,
+  netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime, netGone,
 } = createLobby({
-  G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
+  G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, games: () => gamesView(),
+  steppedOut: (code, myTurn) => { if (myTurn) watch.quietNext(code); }, netEvent, seatName, closeLobbyVeil,
   closeOverlays, closePreview, endTutorial, hideShop, initials: savedInitials, initialsSaved: () => renderTitle(), paintHud, refreshNavHints,
   renderMenu: () => renderMenu(),
   closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
@@ -487,9 +506,9 @@ const {
 });
 /* The game menu's settings (src/menu.ts). */
 const { loadBody, loadTextSize, loadFlashes, textScale, renderMenu } = createMenu({
-  G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
+  G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
   nextSong: () => { unlock(); music.next(); },
-  openStandings: () => openStandings(), freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
+  openStandings: () => openStandings(), turnTime: secs => netTurnTime(secs), alerts: () => ({ state: alertsState(), onClick: toggleAlerts }), freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
   quit: () => { void quitGame(); },
   setFlashes: on => { if (FX) FX.flashes = on; },
 });
@@ -501,13 +520,131 @@ const { titleOpen, openTitle, closeTitle, showHint: showTitleHint, renderTitle }
   tutorial: () => { sfx.play('click'); tutorialOpen(); },
   settings: () => { const mv = $('menu-overlay'); if (mv && mv.hidden) toggleOverlay('menu-overlay', 'btn-menu'); },
   settingsOpen: () => { const mv = $('menu-overlay'); return !!mv && !mv.hidden; },
+  games: () => gamesView(),
 });
-/* After a match or a room: the demo again, under the card. */
+/* After a match or a room: the demo again, under the card, and Your games
+   asked at once (a room just stepped out of joins the list). */
 function backToTitle(): void {
   closeOverlays();
   startDemo();
   openTitle();
+  void watch.pollNow();
 }
+
+/* ---------- Your games, turn toasts and turn alerts ---------- */
+/* Turn alerts (src/notify.ts): off until the player turns them on with the
+   button, which asks the browser from its own click. */
+const alerts = alertsPref(browserStorage());
+function alertsState(): AlertsState {
+  const p = notifyPermission();
+  if (p === 'unsupported') return 'unsupported';
+  if (p === 'denied') return 'blocked';
+  return alerts.get() === 'on' && p === 'granted' ? 'on' : 'off';
+}
+function toggleAlerts(): void {
+  if (alertsState() === 'on') { alerts.set('off'); renderGames(); return; }
+  void askNotify().then(p => {
+    if (p === 'granted') {
+      alerts.set('on');
+      say('Turn alerts on: a notification says when it is your turn in a room, while the game is open in a tab.', 'info');
+    } else if (p === 'denied') {
+      say('This browser blocks notifications for the game. The toasts and the tab title still say when it is your turn.', 'info');
+    }
+    renderGames();
+  });
+}
+/* The rooms this browser sits in, but the one on screen, as the watcher last
+   heard them (src/games.ts). */
+let gamesRows: LiveRow[] = [];
+let gamesAt = 0;
+function gamesView(): GamesView {
+  const age = gamesRows.length ? (performance.now() - gamesAt) / 1000 : 0;
+  return { rows: gamesRows, alerts: alertsState(), age, onOpen: openGame, onAlerts: toggleAlerts };
+}
+function renderGames(): void {
+  renderTitle();
+  renderLobby();
+}
+/* Open a room from Your games, a toast or a notification: out of the room on
+   screen (its seat kept), into that one. */
+function openGame(code: string): void {
+  unlock();
+  closeLeaveVeil();
+  if (!seats.get(code)) {
+    // Given up in another tab, or found gone since the list was drawn: the room on screen stays.
+    say('That seat is no longer held here.', 'info');
+    void watch.pollNow();
+    return;
+  }
+  if (net.code !== code) {
+    if (net.code) netStepOut(true);
+    closeOverlays();
+  }
+  void resumeRoom(code).then(() => { void watch.pollNow(); });
+}
+/* The turn toasts (src/toasts.ts, drawn by src/ui/toast.tsx): one per room,
+   the newest few, each counting down only once the page is seen. */
+const toasts = createToastQueue({
+  setTimeout: (fn, ms) => setTimeout(fn, ms),
+  clearTimeout: id => clearTimeout(id as number),
+  hidden: () => !!document.hidden,
+  onChange: () => renderToastStack(),
+});
+function renderToastStack(): void {
+  const root = $('toast-root');
+  if (!root) return;
+  renderToasts(root, toasts.list().map(t => ({
+    id: t.id, text: t.text,
+    onGo: () => { toasts.close(t.id); openGame(t.code); },
+    onClose: () => toasts.close(t.id),
+  })));
+}
+/* Which room each tab shows (src/on-screen.ts): this tab reports its own,
+   and the watcher never toasts a room another tab is showing. */
+const onScreen = createOnScreen({
+  tab: Math.random().toString(36).slice(2),
+  now: () => Date.now(),
+  channel: (() => {
+    try { return typeof BroadcastChannel === 'function' ? new BroadcastChannel('tankity') as unknown as ChannelLike : null; } catch (_) { return null; }
+  })(),
+  storage: browserStorage(),
+  listen: fn => window.addEventListener('storage', e => fn(e.key)),
+});
+function screenRoom(): string {
+  return roomOnScreen(net, !($('lobby-veil')?.hidden ?? true));
+}
+function reportScreen(): void {
+  onScreen.set(document.hidden ? '' : screenRoom());
+}
+let rowsSig = '';
+const watch = createGamesWatch({
+  store: seats,
+  mine: list => net.mine(list),
+  setInterval: (fn, ms) => setInterval(fn, ms),
+  clearInterval: id => clearInterval(id as number),
+  viewing: screenRoom,
+  elsewhere: code => onScreen.elsewhere(code),
+  onRows: rows => {
+    gamesRows = rows;
+    gamesAt = performance.now();
+    // Redraw only when the list changed: the title card and lobby are not redrawn every poll for nothing.
+    const sig = JSON.stringify(rows);
+    if (sig !== rowsSig) { rowsSig = sig; renderGames(); }
+  },
+  onTurn: row => {
+    // `players` lists humans only, so a seat number is not an index into it: drop this seat's own initials.
+    const me = seats.get(row.code)?.initials ?? '';
+    const others = row.players.filter(p => p !== me);
+    toasts.push(row.code, `Your turn in ${row.code} · vs ${others.join(', ') || 'the drones'}`);
+    if (document.hidden) showTurnNotification({ code: row.code, others }, alertsState() === 'on', () => openGame(row.code));
+  },
+});
+/* A seat given up (Leave) or found gone drops out of the list at once. */
+seats.subscribe(() => {
+  gamesRows = gamesRows.filter(r => seats.get(r.code));
+  rowsSig = JSON.stringify(gamesRows);
+  renderGames();
+});
 function myTank(): GameTank | null {
   for (const t of G.tanks) if (t.isPlayer) return t;
   return null;
@@ -718,6 +855,17 @@ function init(): void {
   // Light the connection dot from the start, not only when the lobby opens.
   loadOccupancy();
   maybeApplyInviteCode();
+  // Your games: asked now and every GAMES_POLL_MS, and again whenever the tab comes back.
+  watch.start();
+  if (document.addEventListener) {
+    document.addEventListener('visibilitychange', () => {
+      reportScreen();
+      if (!document.hidden) { toasts.shown(); void watch.pollNow(); }
+    });
+  }
+  // The room this tab shows, told to the other tabs now and on a beat (they forget a quiet tab).
+  setInterval(reportScreen, ON_SCREEN_BEAT_MS);
+  window.addEventListener('pagehide', () => onScreen.set(''));
 
   document.querySelectorAll<HTMLElement>('[data-aim]').forEach(btn => {
     const act = AIM_COMMANDS[btn.getAttribute('data-aim') ?? ''];
@@ -753,7 +901,6 @@ function init(): void {
   };
   window.addEventListener('pointerdown', kickAudio, true);
   window.addEventListener('keydown', kickAudio, true);
-  window.addEventListener('pagehide', () => net.sendLeave());
   window.addEventListener('resize', refreshNavHints);
   window.addEventListener('resize', placeLogBelowStatus);
   placeLogBelowStatus();
@@ -839,6 +986,8 @@ function closeLobbyVeil(): boolean {
   if (!veil || veil.hidden) return false;
   veil.hidden = true;
   refreshNavHints();
+  // A room's lobby closed while seated: the seat waits, and Your games lists the room.
+  if (net.code && !net.on) { reportScreen(); void watch.pollNow(); }
   return true;
 }
 function closeOverlays(): boolean {
@@ -877,13 +1026,15 @@ function menuFocus(open: boolean): void {
   const to = open ? $('menu-close') : titleOpen() ? $('title-settings') : $('btn-menu');
   if (to && to.focus) to.focus();
 }
-/* Menu → Quit: the match ends (a room is left quietly) and the page returns
-   to the title card over the demo; an installed app then closes where it may. */
+/* Menu → Quit: the match ends and the page returns to the title card over the
+   demo; an installed app then closes where it may. A room is stepped out of,
+   like closing the tab: the seat waits there. */
 async function quitGame(): Promise<void> {
-  if (net.on) netLeave(true);
+  const room = net.on ? net.code : '';
+  if (room) netStepOut(true);
   endTutorial(tutorialActive());
   backToTitle();
-  say('You left the match.', 'info');
+  say(room ? `You stepped out of room ${room}; your seat waits. Leave room gives it up.` : 'You left the match.', 'info');
   const outcome = await exitApp(browserAppEnv());
   // The card may be gone already: a match started inside the close wait.
   if (outcome === 'title-with-hint') showTitleHint(`${EXIT_HINT}.`);

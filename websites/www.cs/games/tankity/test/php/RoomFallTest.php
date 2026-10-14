@@ -182,7 +182,7 @@ final class RoomFallTest extends TestCase
         $this->assertSame(0, room_drone_chutes(2));
         $this->assertSame(1, room_drone_chutes(3));
         $room = room_new('FALL', 'HUM');
-        $room['seats'][0] = room_seat_human('HUM', 't0', []);
+        $room['seats'][0] = room_seat_human('HUM', 't0', [], '');
         $room['seats'][1] = room_idle_seat(1, 'ai');
         $room['seats'][2] = room_idle_seat(2, 'open');
         $room['seats'][3] = room_idle_seat(3, 'open');
@@ -196,7 +196,7 @@ final class RoomFallTest extends TestCase
     public function testTheShopSellsParachutesThatStack(): void
     {
         $room = room_new('FALL', 'HUM');
-        $room['seats'][0] = room_seat_human('HUM', 't0', []);
+        $room['seats'][0] = room_seat_human('HUM', 't0', [], '');
         room_seat_economy($room, 0);
         $room['round'] = 1;
         $room['cash'][0] = 10000;

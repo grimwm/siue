@@ -14,7 +14,7 @@
 <script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__installPrompt = e; });</script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
-<link rel="stylesheet" href="game.css?v=95e216fabf">
+<link rel="stylesheet" href="game.css?v=e0ea63abcc">
 </head>
 <body>
 <header class="topbar">
@@ -100,11 +100,12 @@
         <p class="hint">Live demo on a small hill. Same shells, same wind math, same damage numbers.</p>
       </div>
     </div>
+    <div id="toast-root" class="toasts" aria-live="polite" data-ui></div>
   </section>
 </main>
 
 <script src="dist/fx.js?v=5b9091b057" defer></script>
-<script type="module" src="dist/main.js?v=36fcb85e0e"></script>
+<script type="module" src="dist/main.js?v=940ca51fc3"></script>
 <script src="dist/install.js?v=6eb4810890" defer></script>
 </body>
 </html>

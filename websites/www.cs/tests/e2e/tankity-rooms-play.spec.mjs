@@ -1,6 +1,6 @@
 // Operation Tankity rooms: what players do between and around their turns.
 import { test, expect } from '@playwright/test';
-import { roomPair, hud, lastRoom } from './helpers.mjs';
+import { roomPair, hud, lastRoom, leaveStoredSeats } from './helpers.mjs';
 
 const myTurn = page => hud(page, 'hud-turn').then(t => /YOU\. Aim!/.test(t));
 
@@ -64,7 +64,7 @@ test('everyone sees when the player whose turn it is sits in a menu', async ({ b
   await host.ctx.close(); await guest.ctx.close();
 });
 
-test('a room invite made on the site page points back to the site page', async ({ page }) => {
+test('a room invite made on the site page points back to the site page', async ({ page, browser }) => {
   await page.goto('play/tankity/');
   const game = page.frameLocator('#play-frame');
   await game.locator('#stage').waitFor();
@@ -72,12 +72,20 @@ test('a room invite made on the site page points back to the site page', async (
   await page.keyboard.press('o');
   await game.locator('#host-go').click();
   await expect(game.locator('#join-link')).toHaveValue(/\/play\/tankity\/\?code=[A-Z0-9]{4}$/);
-  // Opening it lands in the site page with the code handed to the game.
+  // Opening it in a friend's browser lands in the site page with the code handed to the game.
   const link = await game.locator('#join-link').inputValue();
-  const guest = await page.context().newPage();
+  const code = new URL(link).searchParams.get('code');
+  const friend = await browser.newContext();
+  const guest = await friend.newPage();
   await guest.goto(link);
   await expect(guest.locator('.play-nav')).toBeVisible();
-  await expect(guest.frameLocator('#play-frame').locator('#join-code')).toHaveValue(new URL(link).searchParams.get('code'));
+  await expect(guest.frameLocator('#play-frame').locator('#join-code')).toHaveValue(code);
+  await friend.close();
+  // The host's own browser holds the seat: the same link takes it back into the room.
+  const again = await page.context().newPage();
+  await again.goto(link);
+  await expect(again.frameLocator('#play-frame').locator('#lobby-code')).toHaveText(code);
+  await leaveStoredSeats(page.context());
 });
 
 test('a turn that arrives in a hidden tab changes its title and sends a notification', async ({ browser }) => {
@@ -88,6 +96,8 @@ test('a turn that arrives in a hidden tab changes its title and sends a notifica
   await guest.page.evaluate(() => {
     window.__notes = [];
     window.Notification = class { constructor(title, opts) { window.__notes.push({ title, body: opts && opts.body }); } close() {} static get permission() { return 'granted'; } };
+    // Turn alerts are opt-in: this player turned them on.
+    localStorage.setItem('tankity-turn-alerts', 'on');
     window.__hide = true;
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => window.__hide });
     document.dispatchEvent(new Event('visibilitychange'));
@@ -121,7 +131,7 @@ test('the turn clock warns its player at 30 seconds and counts the last 10 down 
       await route.fulfill({ response: res, body });
     });
   }
-  await expect.poll(() => host.page.locator('#log').textContent(), { timeout: 15_000 }).toMatch(/seconds left\. Fire, or the crew picks a gun/);
+  await expect.poll(() => host.page.locator('#log').textContent(), { timeout: 15_000 }).toMatch(/seconds left\. Fire, or a drone fires for you/);
   expect(await guest.page.locator('#log').textContent()).not.toMatch(/seconds left\. Fire/);
   left = 9;
   // Both screens paint the countdown: a big digit over the battlefield.

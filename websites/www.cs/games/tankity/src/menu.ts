@@ -1,6 +1,7 @@
 /* Operation Tankity: the game menu's settings.
  *
- * The settings menu: the unit look, the text size, the Difficulty and Screen flashes (all remembered in this browser), and the
+ * The settings menu: the unit look, the text size, the Difficulty and Screen flashes (all remembered in this browser), a
+ * room's turn time (the host's slider, everyone else's label), and the
  * props the game menu overlay (src/ui/menu.tsx) is drawn from: what is
  * chosen, what is muted, whether a room runs, and what each button does.
  * Sound, music, fullscreen and a match on the seed box's hills arrive as deps. */
@@ -15,6 +16,7 @@ import type { RoomClient } from './net.ts';
 import { drawUnitIcon } from './ui/icons.ts';
 import { renderMenu as drawMenu } from './ui/menu.tsx';
 import type { KeyHintFn } from './ui/chrome.tsx';
+import type { AlertsState } from './ui/games.tsx';
 
 /** The slice of the game's state the menu reads and writes (main.ts's G). */
 export type MenuState = Pick<GameState, 'body' | 'tanks'>;
@@ -23,7 +25,7 @@ export type MenuState = Pick<GameState, 'body' | 'tanks'>;
 export interface MenuDeps {
   G: MenuState;
   $(id: string): HTMLElement | null;
-  net: Pick<RoomClient, 'on' | 'sendBody'>;
+  net: Pick<RoomClient, 'on' | 'sendBody' | 'turnSecs' | 'isHost'>;
   sfx: Pick<typeof SfxApi, 'play'>;
   difficulty: DifficultySetting;
   unlock(): void;
@@ -31,7 +33,6 @@ export interface MenuDeps {
   isMusicMuted(): boolean;
   keyHint: KeyHintFn;
   myTank(): GameTank | null;
-  netLeave(quiet?: boolean): void;
   openLeaveVeil(): void;
   placeLogBelowStatus(): void;
   freshMatchFromSeedBox(opts?: { tut?: boolean }): void;
@@ -39,6 +40,10 @@ export interface MenuDeps {
   quit(): void;
   /** The room match's scoreboard card (room.ts openStandings). */
   openStandings(): void;
+  /** The host set the room's turn time. */
+  turnTime(secs: number): void;
+  /** The Turn alerts button's state and click. */
+  alerts(): { state: AlertsState; onClick: () => void };
   toggleMusic(): void;
   toggleOverlay(id: string, btnId?: string): void;
   toggleSound(): void;
@@ -49,8 +54,8 @@ export interface MenuDeps {
 
 export function createMenu(deps: MenuDeps) {
   const {
-    G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
-    freshMatchFromSeedBox, openStandings, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong, setFlashes,
+    G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
+    freshMatchFromSeedBox, openStandings, turnTime, alerts, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong, setFlashes,
   } = deps;
 
   /* Ground units: every human (you, and the people in a room) picks a body.
@@ -141,7 +146,8 @@ export function createMenu(deps: MenuDeps) {
       onClose: () => toggleOverlay('menu-overlay', 'btn-menu'),
       onPlaySeed: () => { unlock(); sfx.play('click'); freshMatchFromSeedBox(); },
       onSubmit: () => {
-        if (net.on) { netLeave(); return; }
+        // In a room, Enter asks the leave question like Leave room does.
+        if (net.on) { openLeaveVeil(); return; }
         sfx.play('click');
         freshMatchFromSeedBox();
       },
@@ -167,6 +173,9 @@ export function createMenu(deps: MenuDeps) {
       // The card replaces the menu: close it first, so Q then goes back to the battle.
       onStandings: () => { toggleOverlay('menu-overlay', 'btn-menu'); openStandings(); },
       inRoom: net.on,
+      turn: net.on ? { secs: net.turnSecs, host: net.isHost } : null,
+      onTurn: turnTime,
+      alerts: net.on ? alerts() : null,
       onLeave: openLeaveVeil,
       onQuit: quit,
       onNextSong: nextSong,

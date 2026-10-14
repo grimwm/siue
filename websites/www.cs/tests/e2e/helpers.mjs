@@ -99,6 +99,15 @@ export function recorderScript() {
    the game with page.clock.runFor() (time still flows on its own). */
 export async function newPlayer(browser, path = 'games/tankity/', { clock = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  // Closing a tab keeps its room seats, so a player's context gives them up
+  // (Leave, as the game's own button does) when a spec closes it: the suite
+  // creates far more rooms than the cap, and they would otherwise sit until
+  // their idle limit.
+  const close = ctx.close.bind(ctx);
+  ctx.close = async (...args) => {
+    await leaveStoredSeats(ctx);
+    return close(...args);
+  };
   await ctx.addInitScript(recorderScript);
   const page = await ctx.newPage();
   if (clock) await page.clock.install();
@@ -193,6 +202,26 @@ export function bowFromChord(track) {
 }
 
 /** Types a player's initials into the title card's three boxes, as a player would. */
+/* Every seat this context's browser stored (localStorage tankity-seats), left. */
+export async function leaveStoredSeats(ctx) {
+  const state = await ctx.storageState();
+  for (const origin of state.origins || []) {
+    const item = (origin.localStorage || []).find(e => e.name === 'tankity-seats');
+    if (!item) continue;
+    let seats = [];
+    try { seats = JSON.parse(item.value).seats || []; } catch (_) { continue; }
+    for (const s of seats) {
+      const res = await ctx.request.post(`${origin.origin}/games/tankity/rooms.php?action=leave`, {
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': s.csrf },
+        data: { code: s.code, token: s.token, csrf: s.csrf },
+        failOnStatusCode: false,
+      });
+      // Left, or already gone (no such room, no such seat). Anything else means the cleanup broke.
+      if (![200, 401, 404].includes(res.status())) throw new Error(`leaving room ${s.code} answered ${res.status()}`);
+    }
+  }
+}
+
 export async function setInitials(page, word) {
   await page.click('#title-initial-1');
   await page.keyboard.type(word);

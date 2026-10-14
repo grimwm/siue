@@ -3,11 +3,15 @@
  * Everything between the page and rooms.php that is not drawing: the
  * transport (one fetcher for every call, the 429 retry), the session (code,
  * seat, token, the event cursor), polling, the act/buy/ready/leave senders,
- * the turn and shop clocks, and the decisions about a replay queue that has
+ * the list of a browser's rooms (`mine`), the turn and shop clocks, and the decisions about a replay queue that has
  * piled up (a hidden tab). What it learns reaches the page through the
  * RoomHandlers it is built with (a snapshot with the events it has not seen,
  * a reachability flip, a Ready change, an error to show); it never touches
  * the document.
+ *
+ * A session is adopted three ways: hosting, joining, or resuming a seat the
+ * browser stored (seats.ts). `detach` drops it without telling anyone (the
+ * seat waits in the room); only `leave` gives it up.
  *
  * It does not reach for the browser either: fetch, timers, the clock and the
  * leave beacon come in as a RoomEnv, so this module compiles in the DOM-free
@@ -15,10 +19,11 @@
  * main.ts builds the real RoomEnv from the page's globals. The wire types are
  * in protocol.ts. */
 import type {
-  ActBody, ErrorReply, MapInfo, MapsReply, PingReply, PostAction, PostBodies, PostReplies,
+  ActBody, ErrorReply, MapInfo, MapsReply, MineRow, PingReply, PostAction, PostBodies, PostReplies,
   RoomEvent, RoomReply, RoomSeat, RoomSnapshot, VolleyOpenerEvent,
 } from './protocol.ts';
 import type { Difficulty } from './sim.ts';
+import type { StoredSeat } from './seats.ts';
 
 /* ---------- what the client needs from its host ---------- */
 
@@ -54,6 +59,10 @@ export interface RoomHandlers {
   onReadyChange(): void;
   /** A background send failed and the player should hear it. */
   onError(err: unknown): void;
+  /** The room this client sat in is gone ('closed': the server has no such
+   * room) or holds no seat for it any more ('seat': given up, in another tab
+   * say). The polls have stopped and the session is cleared. */
+  onGone?(code: string, why: 'closed' | 'seat'): void;
 }
 
 /* ---------- timing ---------- */
@@ -70,7 +79,7 @@ export const RETRY_429_TRIES = 3;
 const CHARGED_ACTIONS: ReadonlySet<string> = new Set(['create', 'join']);
 const CHARGED_RETRIES_503 = 1;
 
-/** The turn clock (rooms.php ROOM_TURN_SECS): its owner is alerted with 30
+/** The turn clock (the room's turnSecs): its owner is alerted with 30
  * seconds left and everyone sees the last 10 counted down. */
 export const CLOCK_WARN_S = 30;
 export const CLOCK_SHOW_S = 10;
@@ -89,6 +98,11 @@ export function standingsRows(
   return seats
     .map(s => ({ name: s.human ? s.name : s.name + ' (AI)', score: s.score || 0, mine: s.seat === mySeat }))
     .sort((a, b) => b.score - a.score);
+}
+
+/** The server says the room is gone: swept, closed, never there. */
+export function isGoneError(err: unknown): boolean {
+  return /no such room/.test(String((err && (err as { message?: unknown }).message) || err || ''));
 }
 
 export function prettyRoomError(err: unknown): string {
@@ -146,14 +160,14 @@ export function planCatchUp(
 
 /** The POST actions whose reply is a room, which therefore take the delta
  * fields (since, have, full). */
-const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready', 'again', 'body', 'map', 'seatmode']);
+const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready', 'again', 'body', 'map', 'seatmode', 'turntime']);
 
 /* ---------- the client ---------- */
 
 type Reply = { ok?: unknown; error?: unknown } & Record<string, unknown>;
 
 export class RoomClient {
-  /** The session: filled by host/join, cleared by leave. */
+  /** The session: filled by host, join or resume, cleared by leave or detach. */
   code = '';
   seat = -1;
   token = '';
@@ -182,6 +196,8 @@ export class RoomClient {
   map: string | null = null;
   mapName = 'Random hills';
   maps: MapInfo[] = [];
+  /** The room's turn time in seconds, as the last snapshot said. */
+  turnSecs = 120;
 
   /** The Ready state the player last asked for while a request is out. */
   private readyWant: boolean | null = null;
@@ -201,6 +217,8 @@ export class RoomClient {
   private shopLeft: number | null = null;
   private shopLeftAt = 0;
   private clockWarned = false;
+  private closeLeft: number | null = null;
+  private closeLeftAt = 0;
 
   private readonly env: RoomEnv;
   private readonly handlers: RoomHandlers;
@@ -297,7 +315,38 @@ export class RoomClient {
     if (!res.ok || !data.ok) throw new Error(String(data.error || STUMBLED));
     this.handlers.onReachable(true);
     this.needFull = false;
-    return (data as unknown as RoomReply).room;
+    const room = (data as unknown as RoomReply).room;
+    this.noteRoom(room);
+    return room;
+  }
+
+  /** Every seat this browser holds, one row each in the order asked: whose
+   * turn it is there, the clocks, the players, or `gone`. Tokens travel in the
+   * body. Throws the server's line on an error reply. */
+  async mine(seats: { code: string; token: string }[]): Promise<MineRow[]> {
+    // Its own path, not fetchJson: the watcher's trouble must not touch the
+    // room on screen (the server dot, a forced full refetch).
+    const res = await this.env.fetch('rooms.php?action=mine', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seats }),
+    });
+    const data = (await res.json().catch(() => null)) as Reply | null;
+    if (!data || !res.ok || !data.ok) throw new Error(String((data && data.error) || STUMBLED));
+    return (data as unknown as PostReplies['mine']).rooms;
+  }
+
+  /** What every snapshot says about time: the turn time, and how long until
+   * the room closes if nobody acts (`closesIn`, seconds from the reply,
+   * counted down from when it arrived, so the client's own clock never
+   * matters; absent means no sooner close is known). */
+  private noteRoom(room: Partial<Pick<RoomSnapshot, 'turnSecs' | 'closesIn'>> | null | undefined): void {
+    if (!room) return;
+    if (typeof room.turnSecs === 'number') this.turnSecs = room.turnSecs;
+    if (typeof room.closesIn === 'number' && Number.isFinite(room.closesIn)) {
+      this.closeLeft = room.closesIn;
+      this.closeLeftAt = this.env.now();
+    } else {
+      this.closeLeft = null;
+    }
   }
 
   /** Fills `maps` for the hills picker; an unreachable server leaves it as is. */
@@ -322,11 +371,11 @@ export class RoomClient {
   /* ---- joining and leaving ---- */
 
   /** Hosts a room: forgets any earlier session, creates, takes the seat. */
-  async host(initials: string, map: string, body: string, difficulty: Difficulty): Promise<void> {
+  async host(initials: string, map: string, body: string, difficulty: Difficulty, turn?: number): Promise<void> {
     this.forget();
     this.map = null;
     this.mapName = 'Random hills';
-    const data = await this.post('create', { initials, map, body, difficulty });
+    const data = await this.post('create', turn === undefined ? { initials, map, body, difficulty } : { initials, map, body, difficulty, turn });
     this.code = data.code; this.seat = data.seat; this.token = data.token; this.csrf = data.csrf;
   }
 
@@ -338,9 +387,15 @@ export class RoomClient {
     this.code = data.code; this.seat = data.seat; this.token = data.token; this.csrf = data.csrf;
   }
 
+  /** Adopts a seat this browser stored: the next poll asks as that seat. */
+  resume(s: Pick<StoredSeat, 'code' | 'seat' | 'token' | 'csrf'>): void {
+    this.forget();
+    this.code = s.code; this.seat = s.seat; this.token = s.token; this.csrf = s.csrf;
+  }
+
   private forget(): void {
     this.code = ''; this.token = ''; this.csrf = ''; this.seat = -1; this.since = 0;
-    this.seats = []; this.hostSeat = 0;
+    this.seats = []; this.hostSeat = 0; this.turnSecs = 120; this.closeLeft = null;
     this.dropTerrain();
   }
 
@@ -348,9 +403,9 @@ export class RoomClient {
     this.terrain = null; this.terrainRev = 0; this.needFull = false;
   }
 
-  /** Tells the server this seat is gone, so an emptied room frees its slot at
-   * once instead of after the idle window. Best effort; sendBeacon survives a
-   * closing tab. */
+  /** Tells the server this seat is given up (the explicit Leave), so an
+   * emptied room frees its slot at once instead of after its idle limit. Best
+   * effort: sendBeacon, else a keepalive fetch. Closing the tab sends nothing. */
   sendLeave(): void {
     if (!this.code || !this.token) return;
     const body = JSON.stringify({ code: this.code, token: this.token, csrf: this.csrf });
@@ -365,12 +420,18 @@ export class RoomClient {
     } catch (_) { /* the idle sweep closes it anyway */ }
   }
 
-  /** Leaves: tells the server, stops both polls, and clears the session. */
+  /** Leaves: tells the server, then detaches. */
   leave(): void {
     this.sendLeave();
+    this.detach();
+  }
+
+  /** Stops both polls and clears the session, telling nobody: the seat stays
+   * this player's in the room (Step out, or switching to another room). */
+  detach(): void {
     this.stopPolling();
     this.stopLobbyWatch();
-    this.on = false; this.code = ''; this.seat = -1; this.token = ''; this.csrf = ''; this.since = 0;
+    this.on = false; this.code = ''; this.seat = -1; this.token = ''; this.csrf = ''; this.since = 0; this.closeLeft = null;
     this.seats = []; this.synced = false; this.matchEpoch++;
     this.dropTerrain();
   }
@@ -411,8 +472,26 @@ export class RoomClient {
     const epoch = this.matchEpoch;
     try {
       const room = await this.getState();
-      if (this.on && epoch === this.matchEpoch) this.apply(room);
-    } catch (_) { /* the next poll retries; the hills wait */ }
+      if (!this.on || epoch !== this.matchEpoch) return;
+      if (this.seatLost(room)) { this.gone('seat'); return; }
+      this.apply(room);
+    } catch (err) {
+      if (this.on && epoch === this.matchEpoch && isGoneError(err)) this.gone('closed');
+      /* otherwise the next poll retries; the hills wait */
+    }
+  }
+
+  /** The room answered, but this seat is no longer a player's: given up
+   * (Leave in another tab) and taken by a bot. */
+  private seatLost(room: RoomSnapshot): boolean {
+    const mine = (room.seats || []).find(s => s.seat === this.seat);
+    return !room.you && !!mine && !mine.human;
+  }
+
+  private gone(why: 'closed' | 'seat'): void {
+    const code = this.code;
+    this.detach();
+    this.handlers.onGone?.(code, why);
   }
 
   /** Watches a lobby: every 2 s fetches the room for `onRoom`, until the
@@ -424,8 +503,13 @@ export class RoomClient {
       if (!this.code || this.on || !visible()) { this.stopLobbyWatch(); return; }
       void (async () => {
         try {
-          onRoom(await this.getState());
-        } catch (_) { /* keep listening */ }
+          const room = await this.getState();
+          if (this.seatLost(room)) { this.gone('seat'); return; }
+          onRoom(room);
+        } catch (err) {
+          if (isGoneError(err) && this.code) this.gone('closed');
+          /* otherwise keep listening */
+        }
       })();
     }, LOBBY_POLL_MS);
   }
@@ -474,6 +558,7 @@ export class RoomClient {
       void this.refresh().finally(() => { this.refetching = false; });
       return;
     }
+    this.noteRoom(room);
     const fresh = (room.events || []).filter(e => (e.seq || 0) > this.since);
     for (const e of fresh) this.since = Math.max(this.since, e.seq || 0);
     const first = !this.synced || room.resync === true;
@@ -596,6 +681,13 @@ export class RoomClient {
   shopClockLeft(): number | null {
     if (!this.on || typeof this.shopLeft !== 'number') return null;
     return Math.max(0, this.shopLeft - (this.env.now() - this.shopLeftAt) / 1000);
+  }
+
+  /** Seconds before the room closes with nobody acting, counted down
+   * locally from the last snapshot's `closesIn`; null when it did not say. */
+  closeClockLeft(): number | null {
+    if (typeof this.closeLeft !== 'number') return null;
+    return Math.max(0, this.closeLeft - (this.env.now() - this.closeLeftAt) / 1000);
   }
 
   /** True once per turn, when the clock first reads 30 seconds or less. */

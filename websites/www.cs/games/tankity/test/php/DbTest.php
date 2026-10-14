@@ -38,7 +38,7 @@ final class DbTest extends TestCase
         foreach (['meta', 'rooms', 'board', 'rate'] as $t) {
             $this->assertContains($t, $tables);
         }
-        $this->assertSame(5, max(array_keys(tankity_schema_steps())));
+        $this->assertSame(7, max(array_keys(tankity_schema_steps())));
         foreach (['solo_runs', 'solo_rate', 'callsigns', 'legacy_imported'] as $t) {
             $this->assertNotContains($t, $tables);
         }
@@ -64,7 +64,7 @@ final class DbTest extends TestCase
         }
         $db = null;
         $db = tankity_db();
-        $this->assertSame(5, (int) $db->query('PRAGMA user_version')->fetchColumn());
+        $this->assertSame(7, (int) $db->query('PRAGMA user_version')->fetchColumn());
         $this->assertSame([['RUM', 'room'], ['TWO', 'room']], $db->query('SELECT initials, source FROM board ORDER BY id')->fetchAll(PDO::FETCH_NUM));
         $this->assertSame(0, (int) $db->query('SELECT COUNT(*) FROM rate')->fetchColumn());
         $this->assertSame(['client', 'kind', 'slot', 'n'], $db->query('PRAGMA table_info(rate)')->fetchAll(PDO::FETCH_COLUMN, 1));
@@ -72,6 +72,25 @@ final class DbTest extends TestCase
         $tables = $db->query("SELECT name FROM sqlite_master WHERE type = 'table'")->fetchAll(PDO::FETCH_COLUMN);
         $this->assertNotContains('callsigns', $tables, 'the old callsigns were solo claims too');
         $this->assertNotContains('legacy_imported', $tables);
+    }
+
+    public function testStepSixGivesEveryRoomAnExpiry(): void
+    {
+        $db = new PDO('sqlite:' . $this->dir . '/' . TANKITY_DB_FILE, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        foreach ([1, 2, 3, 4, 5] as $v) {
+            foreach (tankity_schema_steps()[$v] as $q) {
+                $db->exec($q);
+            }
+        }
+        $db->exec('PRAGMA user_version = 5');
+        $db->exec("INSERT INTO rooms (code, data, created, touched) VALUES ('OLDR', 'x', 500, 1000)");
+        $db = null;
+        $db = tankity_db();
+        $this->assertSame(7, (int) $db->query('PRAGMA user_version')->fetchColumn());
+        $this->assertSame(1600, (int) $db->query("SELECT expires FROM rooms WHERE code = 'OLDR'")->fetchColumn());
+        $this->assertContains('rooms_expires', $db->query("SELECT name FROM sqlite_master WHERE type = 'index'")->fetchAll(PDO::FETCH_COLUMN));
+        $this->assertContains('host', $db->query('PRAGMA table_info(rooms)')->fetchAll(PDO::FETCH_COLUMN, 1));
+        $this->assertContains('rooms_host', $db->query("SELECT name FROM sqlite_master WHERE type = 'index'")->fetchAll(PDO::FETCH_COLUMN));
     }
 
     public function testADatabaseNewerThanThisServerIsRefused(): void

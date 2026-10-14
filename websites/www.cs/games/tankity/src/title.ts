@@ -2,11 +2,13 @@
  *
  * Whether the card shows, the initials it edits, and its props; the card
  * itself is src/ui/title.tsx on the kit's Dialog, which moves focus. What its
- * buttons do (a solo match, the rooms, the tutorial, the menu) arrives as deps. */
+ * buttons do (a solo match, the rooms, the tutorial, the menu) and the Your
+ * games list arrive as deps. */
 import { saveInitials } from './initials.ts';
 import type { Pref } from '../../_kit/prefs.ts';
 import { renderTitle as drawTitle } from './ui/title.tsx';
 import type { KeyHintFn } from './ui/chrome.tsx';
+import type { GamesView } from './ui/games.tsx';
 
 export interface TitleDeps {
   $(id: string): HTMLElement | null;
@@ -18,10 +20,12 @@ export interface TitleDeps {
   tutorial(): void;
   settings(): void;
   settingsOpen(): boolean;
+  /** The rooms this browser sits in, as the card lists them. */
+  games(): GamesView;
 }
 
 export function createTitle(deps: TitleDeps) {
-  const { $, keyHint, initials, play, friends, tutorial, settings, settingsOpen } = deps;
+  const { $, keyHint, initials, play, friends, tutorial, settings, settingsOpen, games } = deps;
   let open = false;
   let problem = '';
   let hint = '';
@@ -42,6 +46,7 @@ export function createTitle(deps: TitleDeps) {
     drawTitle(el, {
       keyHint, open, initials: initials.get(), initialsRev: rev, problem, hint, settingsOpen: settingsOpen(),
       onInitials: chooseInitials, onPlay: play, onFriends: friends, onTutorial: tutorial, onSettings: settings,
+      games: games(),
     });
   }
   /* The Dialog focuses Play as the card shows, so a keyboard player lands on it. */

@@ -157,6 +157,58 @@ test('Standings shows only in a room and reports a press', () => {
   assert.equal(shown, 1);
 });
 
+test('in a room the host gets the turn-time slider and everyone else its label; outside a room neither', () => {
+  const host = draw({ inRoom: true, turn: { secs: 600, host: true }, onTurn: () => {} });
+  const turns = [];
+  const h = draw({ inRoom: true, turn: { secs: 600, host: true }, onTurn: s => turns.push(s) });
+  const range = byId(h.section, 'menu-turn');
+  assert.equal(range.getAttribute('type'), 'range');
+  range.value = '4';
+  fire(range, 'input');
+  assert.deepEqual(turns, [28800]);
+  assert.ok(byId(host.section, 'menu-turn'));
+  const guest = draw({ inRoom: true, turn: { secs: 600, host: false }, onTurn: () => {} });
+  assert.equal(byId(guest.section, 'menu-turn'), undefined);
+  assert.equal(byId(guest.section, 'menu-turn-label').textContent, 'Turn time: 10 min');
+  const solo = draw({ inRoom: false, turn: null, onTurn: () => {} });
+  assert.equal(byId(solo.section, 'menu-turn'), undefined);
+  assert.equal(byId(solo.section, 'menu-turn-label'), undefined);
+});
+
+test('Quit says the room seat waits when in a room', () => {
+  const room = draw({ inRoom: true, turn: { secs: 120, host: false }, onTurn() {} });
+  assert.match(byId(room.section, 'menu-quit').getAttribute('title'), /your room seat waits/);
+  const solo = draw({ inRoom: false });
+  assert.equal(byId(solo.section, 'menu-quit').getAttribute('title'), 'End this match and leave the game');
+});
+
+test('in a room the menu has the Turn alerts button', () => {
+  let n = 0;
+  const { section } = draw({ inRoom: true, turn: { secs: 120, host: true }, onTurn() {}, alerts: { state: 'off', onClick: () => { n++; } } });
+  const btn = byId(section, 'menu-alerts');
+  assert.equal(btn.textContent, 'Turn alerts: off');
+  click(btn);
+  assert.equal(n, 1);
+  assert.equal(byId(draw({ inRoom: false, alerts: { state: 'off', onClick() {} } }).section, 'menu-alerts'), undefined);
+});
+
+test('Enter in the seed box during a room match asks the leave question, never leaves outright', async () => {
+  const { menuMod } = await importTsx(import.meta.dirname, { menuMod: '../src/menu.ts' });
+  const section = makeEl('menu-overlay');
+  const calls = { leave: 0, ask: 0, fresh: 0 };
+  const m = menuMod.createMenu({
+    G: { body: 'tank', tanks: [] }, $: id => (id === 'menu-overlay' ? section : null),
+    net: { on: true, sendBody() {}, turnSecs: 120, isHost: false },
+    sfx: { play() {} }, difficulty: { get: () => 'normal', set() {} }, unlock() {}, isSoundMuted: () => false, isMusicMuted: () => false,
+    keyHint: () => '', myTank: () => null, netLeave: () => { calls.leave++; }, openLeaveVeil: () => { calls.ask++; },
+    placeLogBelowStatus() {}, freshMatchFromSeedBox: () => { calls.fresh++; }, toggleFullscreen() {}, quit() {}, openStandings() {},
+    turnTime() {}, alerts: () => ({ state: 'off', onClick() {} }), setFlashes() {}, toggleMusic() {}, toggleOverlay() {}, toggleSound() {}, nextSong() {},
+  });
+  m.renderMenu();
+  submit(byId(section, 'seed-form'));
+  assert.deepEqual(calls, { leave: 0, ask: 1, fresh: 0 });
+});
+
 test('Screen flashes is an Options toggle: on by default, pressed follows the prop, a click reports', () => {
   let flips = 0;
   const { section, props } = draw({ flashes: true, onFlashes: () => { flips++; } });

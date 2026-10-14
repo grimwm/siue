@@ -7,10 +7,11 @@ use PHPUnit\Framework\TestCase;
 /* One SQLite writer for every room, under the load the lobby allows: 8 rooms
    in play, each with three humans and a drone, and four players per room
    polling at the client's pace (src/net.ts MATCH_POLL_MS) for ten seconds,
-   against the docker site (nginx and PHP-FPM), as browsers reach it. Every
-   poll of a playing room takes the write lock (the drone's turns run in it),
-   and each human also sends an aim act every few seconds, as a player moving
-   the barrel does. The journal is whatever the site picks for its filesystem
+   against the docker site (nginx and PHP-FPM), as browsers reach it. A poll
+   of a playing room takes the write lock only when something is due (a
+   drone's turn, which these rooms have every round, or a clock run out);
+   the rest are reads. Each human also sends an aim act every few seconds, as
+   a player moving the barrel does, and every act takes the lock. The journal is whatever the site picks for its filesystem
    (WAL on the container's overlay).
 
    What it guards is the single writer's capacity: that the write lock a poll

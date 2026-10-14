@@ -11,6 +11,9 @@ import { render } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import { KeyHints, Key, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.tsx';
 import type { KeyHintFn } from './chrome.tsx';
+import { TurnTime } from './turn-time.tsx';
+import { AlertsButton } from './games.tsx';
+import type { AlertsState } from './games.tsx';
 
 export interface MenuProps {
   keyHint: KeyHintFn;
@@ -48,6 +51,11 @@ export interface MenuProps {
   onStandings: () => void;
   /** Show the Leave room button (inside a room). */
   inRoom: boolean;
+  /** In a room: its turn time, and whether this player (the host) may change it. */
+  turn?: { secs: number; host: boolean } | null;
+  onTurn?: (secs: number) => void;
+  /** In a room: the Turn alerts button. */
+  alerts?: { state: AlertsState; onClick: () => void } | null;
   onLeave: () => void;
   /** Quit: end the match and leave the game. */
   onQuit: () => void;
@@ -166,6 +174,12 @@ export function Menu(p: MenuProps) {
             <button type="button" id="menu-help" class="m-help" aria-expanded={p.helpOpen} onClick={blurThen(p.onHelp)}>Help</button>
           </div>
         </div>
+        {p.inRoom && p.turn && (
+          <div class="unit-row" id="menu-turn-row">
+            <TurnTime id="menu-turn" secs={p.turn.secs} disabled={!p.turn.host} onChange={secs => p.onTurn?.(secs)} />
+          </div>
+        )}
+        {p.inRoom && p.alerts && <AlertsButton id="menu-alerts" state={p.alerts.state} onClick={p.alerts.onClick} />}
         <button type="button" id="scores-open" title="High scores, and file your run" onClick={blurThen(p.onScores)}>
           Scores <Key at="global:report" bare />
         </button>
@@ -173,7 +187,8 @@ export function Menu(p: MenuProps) {
           onClick={blurThen(p.onStandings)}>Standings</button>
         <button type="button" id="menu-leave" class="btn-leave" title="Leave this game room and go back to the title card"
           hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave room</button>
-        <button type="button" id="menu-quit" class="btn-leave" title="End this match and leave the game"
+        <button type="button" id="menu-quit" class="btn-leave"
+          title={p.inRoom ? 'Close the game; your room seat waits (Leave room gives it up)' : 'End this match and leave the game'}
           onClick={blurThen(p.onQuit)}>Quit</button>
       </form>
     </KeyHints.Provider>

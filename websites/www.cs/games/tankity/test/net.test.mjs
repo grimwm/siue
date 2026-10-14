@@ -654,3 +654,122 @@ check('invite-url-escapes-the-code', inviteUrl('A&B', {}) === '?code=A%26B');
   check('standings-best-first', flipped[0].name === 'ABC' && flipped[0].mine, JSON.stringify(flipped[0]));
 }
 
+
+// ---- seats that survive the tab: resume, detach, mine ----
+{
+  const { net, host } = makeClient(() => roomReply({ phase: 'lobby' }));
+  net.code = ''; net.token = ''; net.csrf = ''; net.seat = -1;
+  net.resume({ code: 'FXT1', seat: 1, token: 'tok', csrf: 'c', initials: 'ZED', at: 1 });
+  check('resume-adopts-the-seat', net.code === 'FXT1' && net.seat === 1 && net.token === 'tok' && net.csrf === 'c' && net.since === 0);
+  await net.getState();
+  check('resume-polls-with-the-stored-token', host.log[0].url.startsWith('rooms.php?action=state&code=FXT1&token=tok&'), host.log[0].url);
+}
+{
+  const { net, host } = makeClient(() => roomReply({ phase: 'play' }));
+  net.beginMatch();
+  net.detach();
+  check('detach-stops-the-poll', host.intervals.size === 0 && net.on === false);
+  check('detach-tells-nobody', host.beacons.length === 0 && host.log.length === 0);
+  check('detach-clears-the-session', net.code === '' && net.token === '' && net.seat === -1);
+}
+{
+  const { net, host } = makeClient(() => ok({ ok: true }));
+  net.beginMatch();
+  net.leave();
+  check('leave-still-beacons-once', host.beacons.length === 1 && host.intervals.size === 0 && net.code === '');
+}
+{
+  const reply = fixture('mine-reply');
+  const { net, host, seen } = makeClient(() => ok(reply));
+  const rows = await net.mine([{ code: 'FXT1', token: 'tok' }, { code: 'GONE', token: 't2' }]);
+  const req = host.log[0];
+  check('mine-posts-the-seats', req.url === 'rooms.php?action=mine' && req.init.method === 'POST'
+    && j(bodyOf(req)) === j({ seats: [{ code: 'FXT1', token: 'tok' }, { code: 'GONE', token: 't2' }] }), req.init.body);
+  check('mine-returns-the-rows', j(rows) === j(reply.rooms));
+  const bad = makeClient(() => ({ status: 422, body: { ok: false, error: 'too many rooms at once' } }));
+  let msg = '';
+  try { await bad.net.mine([]); } catch (err) { msg = err.message; }
+  check('mine-rejects-with-the-server-line', msg === 'too many rooms at once', msg);
+}
+{
+  const { net } = makeClient(() => roomReply());
+  check('turn-secs-defaults-to-two-minutes', net.turnSecs === 120);
+  net.apply({ phase: 'play', events: [], seats: [], turnLeft: 500, shopLeft: null, turnSecs: 600 });
+  check('turn-secs-from-the-snapshot', net.turnSecs === 600, String(net.turnSecs));
+  const lobby = makeClient(() => roomReply({ phase: 'lobby', turnSecs: 28800 }));
+  await lobby.net.getState();
+  check('turn-secs-from-a-lobby-poll', lobby.net.turnSecs === 28800, String(lobby.net.turnSecs));
+}
+
+// ---- the per-address hosting cap: its 429 is never retried and reads as the server says ----
+{
+  const line = 'too many rooms hosted from here; finish or leave one first';
+  const capped = makeClient(() => ({ status: 429, body: { ok: false, error: line } }));
+  let msg = '';
+  try { await capped.net.host('ABC', '', 'tank', 'normal'); } catch (err) { msg = err.message; }
+  check('host-cap-429-not-retried', capped.host.log.length === 1 && msg === line, msg);
+  check('host-cap-429-shown-as-sent', prettyRoomError(new Error(msg)) === line);
+}
+
+// ---- the room's closing time: closesIn, seconds from the reply, counted on the client's monotonic clock ----
+{
+  const { net, host } = makeClient(() => roomReply());
+  net.on = true;
+  // expiresAt says nothing useful against a wrong client clock; closesIn is what counts.
+  net.apply({ phase: 'play', events: [], seats: [], turnLeft: 86000, shopLeft: null, turnSecs: 86400, expiresAt: 5, closesIn: 600 });
+  check('close-left-from-closes-in', Math.abs(net.closeClockLeft() - 600) < 1e-9, String(net.closeClockLeft()));
+  host.clock += 60_000;
+  check('close-left-counts-down', Math.abs(net.closeClockLeft() - 540) < 1e-9, String(net.closeClockLeft()));
+  net.apply({ phase: 'play', events: [], seats: [], turnLeft: 86000, shopLeft: null, turnSecs: 86400 });
+  check('close-left-missing-is-no-close', net.closeClockLeft() === null);
+}
+
+// ---- the watcher's ask never touches the room on screen: no dot flip, no forced full refetch ----
+{
+  const failing = makeClient(() => new Error('offline'));
+  let threw = false;
+  try { await failing.net.mine([{ code: 'FXT1', token: 'tok' }]); } catch (_) { threw = true; }
+  check('mine-failure-rejects', threw);
+  check('mine-failure-leaves-the-dot', failing.seen.reachable.length === 0, JSON.stringify(failing.seen.reachable));
+  await failing.net.getState().catch(() => {});
+  check('mine-failure-forces-no-full-fetch', !failing.host.log.at(-1).url.includes('full=1'), failing.host.log.at(-1).url);
+  const fine = makeClient(() => ok(fixture('mine-reply')));
+  await fine.net.mine([{ code: 'FXT1', token: 'tok' }]);
+  check('mine-success-leaves-the-dot', fine.seen.reachable.length === 0, JSON.stringify(fine.seen.reachable));
+}
+
+// ---- a room that closed, or a seat given up elsewhere, stops the polls and says so ----
+{
+  const gone = [];
+  const host = makeHost(url => (url.includes('action=state') ? { status: 404, body: { ok: false, error: 'no such room' } } : roomReply()));
+  const net = new RoomClient(host.env, { onReachable() {}, onSnapshot() {}, onReadyChange() {}, onError() {}, onGone: (c, why) => gone.push([c, why]) });
+  net.code = 'FXT1'; net.token = 'tok'; net.seat = 0;
+  net.beginMatch();
+  [...host.intervals.values()][0].fn();
+  await flush();
+  check('gone-room-detaches', net.code === '' && net.on === false && host.intervals.size === 0);
+  check('gone-room-reported', j(gone) === j([['FXT1', 'closed']]), j(gone));
+}
+{
+  const gone = [];
+  // The seat was given up in another tab: the server answers the room, but to no seat.
+  const host = makeHost(() => roomReply({ phase: 'play', seats: [{ seat: 0, human: true, name: 'ABC' }, { seat: 1, human: false, bot: true, name: 'ZED' }] }));
+  const net = new RoomClient(host.env, { onReachable() {}, onSnapshot() {}, onReadyChange() {}, onError() {}, onGone: (c, why) => gone.push([c, why]) });
+  net.code = 'FXT1'; net.token = 'tok'; net.seat = 1;
+  net.beginMatch();
+  [...host.intervals.values()][0].fn();
+  await flush();
+  check('gone-seat-reported', j(gone) === j([['FXT1', 'seat']]) && net.code === '', j(gone));
+}
+{
+  // A plain network failure is not a closed room: the poll goes on.
+  const gone = [];
+  const host = makeHost(() => new Error('offline'));
+  const net = new RoomClient(host.env, { onReachable() {}, onSnapshot() {}, onReadyChange() {}, onError() {}, onGone: (c, why) => gone.push([c, why]) });
+  net.code = 'FXT1'; net.token = 'tok'; net.seat = 0;
+  net.beginMatch();
+  [...host.intervals.values()][0].fn();
+  await flush();
+  check('offline-is-not-gone', gone.length === 0 && net.code === 'FXT1' && host.intervals.size === 1);
+  net.stopPolling();
+}

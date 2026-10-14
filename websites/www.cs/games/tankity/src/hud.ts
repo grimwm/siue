@@ -8,6 +8,7 @@ import type { GameState, GameTank, MatchState, Tables } from './game-types.ts';
 import { powerText } from './field.ts';
 import { maxArmor } from './armor.ts';
 import type { RoomClient } from './net.ts';
+import { turnNote } from './turn-time.ts';
 import { renderHud as drawHud } from './ui/hud.tsx';
 import type { HudProps } from './ui/hud.tsx';
 import { renderGunLabel as drawGun } from './ui/gun-label.tsx';
@@ -28,7 +29,7 @@ export interface HudDeps {
   G: HudState;
   $(id: string): HTMLElement | null;
   tables: Tables;
-  net: Pick<RoomClient, 'on' | 'code' | 'seat'>;
+  net: Pick<RoomClient, 'on' | 'code' | 'seat' | 'turnSecs' | 'turnClockLeft' | 'closeClockLeft'>;
   MATCH: Pick<MatchState, 'myTurn'>;
   me(): GameTank;
   cur(): GameTank;
@@ -154,7 +155,8 @@ export function createHud(deps: HudDeps) {
       G.phase === 'shop' ? 'shop. Spend it!' :
       G.over ? 'match over' :
       !mine || mine.hp <= 0 ? 'wrecked. Watching ' + seatName(turnTank.seat!) + '...' :
-      MATCH.myTurn ? 'YOU. Aim!' : `${seatName(turnTank.seat!)} aiming...`;
+      (MATCH.myTurn ? 'YOU. Aim!' : `${seatName(turnTank.seat!)} aiming...`)
+        + turnNote(net.turnSecs, net.turnClockLeft(), net.closeClockLeft());
     HUD.angle = mine ? `${Math.round(mine.angle)}°` : '-';
     HUD.power = mine ? powerText(mine.power, G.w) : '-';
     HUD.wind = windText();

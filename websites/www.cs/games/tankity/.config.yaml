@@ -4,9 +4,9 @@
 # can write there, else in /var/tmp/<username>-tankity/ (README "Storage").
 # For each setting, the matching environment variable wins when set and non-empty:
 #   max_rooms      <- TANKITY_MAX_ROOMS (how many rooms can exist at once)
-#   room_max_age   <- TANKITY_ROOM_MAX_AGE (seconds a room record is kept)
 #   room_live_secs <- TANKITY_ROOM_LIVE_SECS (seconds since the last touch
-#                     before a room stops counting as occupied)
+#                     before a lobby closes; also the shortest idle limit of
+#                     a started room)
 #   data_dir       <- TANKITY_DATA_DIR (the one directory for everything
 #                     Tankity keeps: used exactly as given, created 0700 when
 #                     missing, an error when not writable, never a fallback.
@@ -15,7 +15,14 @@
 #                     the storage directory's filesystem)
 #   room_joins_per_hour <- TANKITY_ROOM_JOINS_PER_HOUR (rooms created and
 #                     joined, together, per address an hour; default 300)
+#   room_hosts_per_address <- TANKITY_ROOM_HOSTS_PER_ADDRESS (rooms one address
+#                     can host at once, expired ones not counted; default 4)
+#   room_long_share <- TANKITY_ROOM_LONG_SHARE (the fraction of max_rooms that
+#                     rooms with a turn time of 8 h or more may hold, at least
+#                     one room; above 0 up to 1; default 0.5)
+#   addr_key       <- TANKITY_ADDR_KEY (the key for the hash a room stores in
+#                     place of an address; unset: a random key made once and
+#                     kept in the database)
 # Point CONFIG_FILE at another file to load settings from elsewhere.
-max_rooms: 10
-room_max_age: 86400
+max_rooms: 50
 room_live_secs: 600

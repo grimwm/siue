@@ -95,15 +95,19 @@ test('a unit body picked in a room reaches everyone', async ({ browser }) => {
   await guest.ctx.close();
 });
 
-test('closing every player tab frees the room slot at once', async ({ browser, request }) => {
+test('closing every player tab keeps the room', async ({ browser, request }) => {
   const used = async () => (await (await request.get('games/tankity/rooms.php?action=ping')).json()).rooms.used;
   const { host, guest, code } = await roomPair(browser);
   const withRoom = await used();
+  await guest.page.close();
+  await host.page.close();
+  await new Promise(r => setTimeout(r, 5000));
+  expect(await used()).toBe(withRoom);
+  const still = await (await request.get(`games/tankity/rooms.php?action=state&code=${code}&since=0`)).json();
+  expect(still.ok).toBe(true);
+  expect(still.room.phase).toBe('play');
   await guest.ctx.close();
   await host.ctx.close();
-  await expect.poll(used, { timeout: 10_000 }).toBe(withRoom - 1);
-  const gone = await (await request.get(`games/tankity/rooms.php?action=state&code=${code}&token=x&since=0`)).json();
-  expect(gone.error).toMatch(/no such room|bad seat token/);
 });
 
 /* A room's field is 720 wide, so a wide box shows scenery either side: the drawn ground reaches both

@@ -27,7 +27,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `src/ai-measure.ts` | `measureHitRates`: a drone bracketing a stationary player on seeded hills with the real sim, counting the shots that take armor off, per shot of the bracket. The difficulty table is tuned against it. Pure, never bundled |
 | `src/difficulty.ts` | The Difficulty setting as the player keeps it (`tankity-difficulty`, missing or unknown reads as normal) and the levels' names |
 | `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes. It never touches the page |
-| `src/net.ts` | The room client: transport (one fetcher, the 429 retry; create and join never retry a 429), the session, polling, the act/buy/ready/leave senders, the turn and shop clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers and the clock are passed in |
+| `src/net.ts` | The room client: transport (one fetcher, the 429 retry; create and join never retry a 429), the session (host, join, or resume a stored seat; `detach` drops it telling nobody, `leave` gives it up), polling, the act/buy/ready/leave senders, `mine` (its own fetch path), the turn, shop and room-close clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers and the clock are passed in |
 | `src/replay.ts` | The room volley replay: the queue of events waiting to play and the volley on screen. Eases the shooter's barrel, flies each shell along the path the server recorded (positions and velocities for the renderer), lands blasts and hits when the events say, and plays a volley kept back by a catch-up, or fired by a drone with no human standing (`watch`), at triple speed (`FAST_SPEED`). Sound, particles, craters, armor and log lines happen through callbacks; it never touches the page |
 | `src/preview.ts` | The firing-range preview simulation: a fixed dummy, the solver that aims at it with the war's own ballistics, the shell loop (seeker, cluster, pierce, proximity, roller), the damage tally and the result timing, on its own small field. Weapons, effects and the result line are passed in; it never touches the page |
 | `src/flow.ts` | The solo match flow: the `Phase` union (`banner`, `shop`, `aim`, `think`, `fly`, `settle`, `over`), the events that move between them and one table, `FLOW`, with `transition(phase, event)` returning the next phase or `null` for an illegal move. `match.ts` stores the result in `G.phase`; room matches take their phase from the server and skip it. It also holds the solo watch speed (`WATCH_SPEED`, `warSpeed`) and the fixed-step runner `runFixed` (`MAX_STEPS` per frame). Pure; it never touches the page |
@@ -37,6 +37,13 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `src/solo.ts` | The solo rules, without a page: dealing a match, mustering a round, the turn order, settling a volley, 1-ups and a drone's aim. Reads no clock and no `Math.random` |
 | `src/room.ts` | A running room match on this client: the moves it sends (fire, aim, drive, load a gun, buy, Ready), adopting the room snapshot once the replay before it has played, turning events into log lines, talk and sounds, a room frame, the turn alert for a hidden tab, and the final standings. `createRoom(deps)` |
 | `src/lobby.ts` | Getting into and out of a room: the lobby overlay's props, the server dot, the hills picker, the initials boxes' line, hosting and joining under the initials the boxes hold, the roster, the invite link, starting the match, the leave question, leaving, and back to the lobby for Play again. `createLobby(deps)` |
+| `src/seats.ts` | The room seats this browser holds (`tankity-seats`: code, seat, token, CSRF token, initials; newest 12): remembered after host and join, forgotten on Leave or when the server says the room is gone. A malformed entry is dropped on its own |
+| `src/games.ts` | The Your games watcher: asks `action=mine` every 10 s (and when the tab comes back) for every stored seat but the room on screen, forgets gone rooms, and reports each turn once by its turn key. `roomOnScreen` says which room a tab shows. DOM-free |
+| `src/notify.ts` | Turn alerts as browser notifications: feature-detected, permission asked only from the Turn alerts click (promise or callback form), the opt-in `tankity-turn-alerts` setting, `showTurnNotification` |
+| `src/toasts.ts`, `src/ui/toast.tsx` | The turn toasts: one per room, the newest three, each closing 12 s after the page is first seen with it; drawn into `#toast-root` with Go and Dismiss |
+| `src/on-screen.ts` | Which room each tab of the game shows, told to the other tabs over a BroadcastChannel (else the `tankity-on-screen` localStorage key and its storage events), so no tab toasts a room another tab shows |
+| `src/turn-time.ts`, `src/ui/turn-time.tsx` | A room's turn time: the seven stops and labels (kept equal to `server/settings.php`), clock text at any length, the status bar's and the shop's notes, the settle delay; and the slider (a native range with its label) |
+| `src/ui/games.tsx` | Your games: one row per room (where it stands, whose turn, time left or the room's close), Open, and the Turn alerts button |
 | `src/armor.ts` | Armor between rounds: max armor (100 plus 25 per plate), what a repair restores and how many packs fill the hull, a plate's armor, what the next round musters with, and the armor words the shop and the ARMOR pill use. The room server's armor rules (`rooms.php`) agree with it |
 | `src/shop.ts` | The field shop: what a pack costs and how many the chest covers, each row's stat lines, the Ready line in a room, what a purchase does to the stock and the gear, and the shop overlay's props. `createShop(deps)` |
 | `src/guns.ts` | The weapon picker: the rack's tiles, the cursor and its keys, loading a gun and cycling through the rack. `createGuns(deps)` |
@@ -436,6 +443,48 @@ more) are capped at `floor(max_rooms * room_long_share)` rooms, at least one, so
 several addresses together cannot hold every place for a week; shorter turn times
 stay allowed when that share is full.
 
+## Long games
+
+A room plays over minutes, hours or a week.
+
+- **Turn time.** The host picks one of seven stops on a slider: Lightning 1 min,
+  2 min (the default), 10 min, 30 min, 8 h, 24 h, 1 week. It sits in the host
+  form, in the room's lobby and, during a match, in the menu; everyone else sees
+  the label. The slider sends its value once it has stood 400 ms, so a drag is
+  one change. A change counts from the next turn: the running turn clock and an
+  open shop keep theirs. In a match every player's radio log says who set it.
+  With a turn time of 10 min or more, the status bar shows the time left.
+- **When a turn runs out**, a drone fires for that player once: it aims as the
+  room's drones aim and fires from the player's own rack (the Shell when the
+  drone's pick is not stocked or not yet unlocked), and never drives. The seat
+  stays the player's.
+- **The shop** stays open 90 s in rooms of 2 min or less (60 s in Lightning) and
+  one turn time in longer rooms; all voters Ready still closes it at once.
+- **Closing.** See the idle rule above: a lobby lasts `room_live_secs` after its
+  last touch; a started room lasts one turn time per distinct address with
+  nobody acting, at least `room_live_secs`. Replies carry `expiresAt` and
+  `closesIn` (seconds from the reply, so the client's own clock never matters);
+  when the room would close before the running clock ends, the status bar, the
+  shop line and Your games say "Room closes in 9:00 unless someone plays".
+- **Seats outlive the tab.** Closing a tab sends nothing. The browser keeps every
+  seat it holds (`tankity-seats`); the room link (`?code=`) or Your games brings
+  the player back, into the lobby or the running match. In a match the leave
+  question offers Step out (back to the title card, seat kept) and Leave room
+  (the seat goes to the drone battery for good); Menu → Quit steps out. Only
+  Leave gives a seat up.
+- **Your games** lists those rooms on the title card and in the rooms lobby,
+  each with where it stands ("ZED's turn", "Your turn, 7h 59m left", "Shop
+  open"). A tab asks `action=mine` every 10 s and when it comes back into view;
+  the server applies any timeout that is due while answering.
+- **Toasts and turn alerts.** When your turn starts in a room not on screen, a
+  toast names it ("Your turn in 7K2Q · vs ZED"), with Go. Turn alerts are opt-in:
+  the Turn alerts button asks the browser for notifications from its click and
+  then a hidden tab also shows a notification. Both need a tab of the game open
+  somewhere; there is no Web Push. Browsers throttle timers in background tabs
+  (Chrome to about one poll a minute after a while, and Safari may suspend them
+  entirely), so a hidden Safari tab can be late or silent. Tabs tell each other
+  which room each shows, and no tab toasts a room another tab is showing.
+
 ## Drone aim
 
 Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` in
@@ -798,7 +847,14 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
 | `test/render.test.mjs`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, and rebuilds the sky only when the match key or the visible area changes |
 | `test/input.test.mjs`                          | `src/input.ts` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, Q, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
-| `test/net.test.mjs`                            | `src/net.ts` against a fake server and timers: the 429 retry (none for a create or join's 429, one for its 503), Ready's ordering under rapid toggles, polling, the leave beacon, the clocks, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect) |
+| `test/net.test.mjs`                            | `src/net.ts` against a fake server and timers: the 429 retry (none for a create or join's 429, one for its 503), Ready's ordering under rapid toggles, polling, the leave beacon (Leave only), resume, detach and `mine`, the clocks and `closesIn`, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect) |
+| `test/seats.test.mjs`                          | `src/seats.ts`: round trip, newest first, the 12-seat cap, a malformed entry dropped alone, storage that refuses writes |
+| `test/games.test.mjs`                          | `src/games.ts` with fake timers: what it asks, gone rooms forgotten, one report per turn key, never the room on screen or one another tab shows, the step-out hush |
+| `test/notify.test.mjs`                         | `src/notify.ts` against a stubbed Notification: missing, promise and callback permission, the opt-in setting, the notification's tag and click |
+| `test/toasts.test.mjs`                         | `src/toasts.ts`: one per room, the newest three, the countdown starting only on a visible page |
+| `test/on-screen.test.mjs`                      | `src/on-screen.ts` over a fake BroadcastChannel and over shared storage with storage events; stale tabs forgotten |
+| `test/turn-time.test.mjs`                      | `src/turn-time.ts` and the slider: the stops equal `server/settings.php`'s, labels, clock text, the status bar and shop notes, the settle delay |
+| `test/games-ui.test.mjs`                       | Your games, the toasts and the title card's list |
 | `test/replay.test.mjs`                         | `src/replay.ts` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, and a `watch` volley at 3x for that volley only |
 | `test/preview.test.mjs`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |
 | `test/flow.test.mjs`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
@@ -817,7 +873,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `tests/tankity-data-deny.sh` | `games/tankity/data/` is refused over HTTP (`make test` runs it) |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
-| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only), and the end of a match (`tankity-end`: a lost solo match is saved on this browser's board, shows under "This browser" in Scores and sends nothing to the score server; `tankity-end-again`: Play again in a room; `tankity-end-forfeit`: a leave, the winner filed online, and the solo card after it saved locally; `tankity-end-out`: the you're-out card and Menu → Standings); `E2E_BASE_URL` points it at the live site |
+| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only), and the end of a match (`tankity-end`: a lost solo match is saved on this browser's board, shows under "This browser" in Scores and sends nothing to the score server; `tankity-end-again`: Play again in a room; `tankity-end-forfeit`: a leave, the winner filed online, and the solo card after it saved locally; `tankity-end-out`: the you're-out card and Menu → Standings), and long games (`tankity-rooms-long`: the room link brings a closed tab back, Step out and Your games, the turn toast and Go, a lobby closed with Q listed, the turn time reaching everyone). Each player context gives up its stored seats when a spec closes it (`tests/e2e/helpers.mjs`); `E2E_BASE_URL` points it at the live site |
 | `make e2e-changed` (site root) | Only the browser specs your changes need (`tests/e2e/select.mjs` maps touched files to specs; CI uses the same map) |
 
 `make test` from the site root runs every suite above except e2e. CI runs

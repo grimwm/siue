@@ -53,6 +53,25 @@ $check('weapon-row-defaults', $bare['start'] === 0 && $bare['aiRack'] === 2 && $
 $check('weapon-row-reads-new-fields', room_weapon_row(['key' => 'x', 'aiRack' => 1, 'apex' => true, 'hops' => 3, 'hopKeep' => 0.55, 'kick' => 90])
     === array_replace($bare, ['name' => 'x', 'aiRack' => 1, 'apex' => true, 'hops' => 3, 'hopKeep' => 0.55, 'kick' => 90.0, 'dmg' => 30, 'radius' => 24, 'subDmg' => 30, 'subRadius' => 24]));
 
+// Bomblets of one burst burst as they land: every cluster and scatter gun's
+// shots after the first land in time order, fired either way.
+foreach ($weapons as $k => $def) {
+    if (!in_array($def['effect'], ['cluster', 'scatter'], true)) {
+        continue;
+    }
+    foreach ([[1, 120.0], [-1, 600.0]] as [$dirS, $x]) {
+        $room = $flatRoom([$tank(0, 'human', $x, 1000), $tank(1, 'ai', 360.0, 1000)]);
+        $room['tanks'][0] = ['dirS' => $dirS, 'angle' => 45.0, 'power' => 60.0] + $room['tanks'][0];
+        $room['tanks'][1]['y'] = 200.0;
+        $events = [['t' => 'fire', 'seat' => 0]];
+        room_fire_shot($room, $events, 0, $k);
+        $landings = array_map(fn($e) => $e['t1'], array_values(array_filter($events, fn($e) => ($e['t'] ?? '') === 'shot' && $e['t0'] > 0)));
+        $sorted = $landings;
+        sort($sorted);
+        $check("bomblets-land-in-order-$k-$dirS", count($landings) > 1 && $landings === $sorted, json_encode($landings));
+    }
+}
+
 // A harmless burst (dmg 0) carves its crater and touches no unit: no hit, no
 // shield spent, nobody credited or blamed.
 $room = $flatRoom([$tank(0, 'ai', 100.0, 100), $tank(1, 'human', 300.0, 100), $tank(2, 'ai', 330.0, 100)]);

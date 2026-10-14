@@ -627,88 +627,156 @@ function room_roll_hit(array $room, float $x0, float $y0, float $x1, float $y1, 
 }
 function room_fly_arc(array &$room, array &$events, array $tank, array $w, string $wkey, int $ownerIdx, float $sx, float $sy, float $vx, float $vy, float $age, $fuse, $ov, float $t0 = 0.0, ?int $skip = null): array
 {
-    $width = count($room['terrain']);
-    $dt = 1 / 60;
-    $path = [[$sx, $sy]];
-    $grav = !empty($w['flat']) ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
-    // The tank a lance went through, never hit twice; a warhead born from a
-    // burst on a unit ($skip) never takes a direct hit on that unit either.
-    $pierced = $skip;
-    $clear = false; // out of its gunner's box yet
-    $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($width));
-    $windStep = $room['wind'] * ROOM_TURN_WIND * $dt;
-    $gravStep = $grav * $dt;
-    for ($step = 0; $step < $steps; $step++) {
-        if (($w['effect'] ?? 'shot') === 'seeker') {
-            $dv = room_seek_push($room['tanks'], $ownerIdx, $sx, $sy, (float) ($w['steer'] ?? 70.0), $dt);
-            if ($dv !== null) {
-                $vx += $dv[0];
-                $vy += $dv[1];
-            }
-        }
-        $vx += $windStep;
-        $vy += $gravStep;
-        $px = $sx;
-        $py = $sy;
-        $sx += $vx * $dt;
-        $sy += $vy * $dt;
-        $age += $dt;
-        if (($step + 1) % ROOM_PATH_EVERY === 0) {
-            $path[] = [$sx, $sy];
-        }
-        $flown = ($step + 1) * $dt;
-        if ($sx < -20 || $sx > $width + 20 || $sy > 500) {
-            $path[] = [$sx, $sy];
-            return ['oob', $sx, $sy, $vx, $vy, null, $path, $flown];
-        }
-        // A cluster splits on its fuse; an apex cluster at the top of its arc (never before 0.1 s).
-        if ($fuse !== false && ($w['effect'] ?? 'shot') === 'cluster' && (!empty($w['apex']) ? $age >= 0.1 && $vy >= 0 : $age >= $fuse)) {
-            $path[] = [$sx, $sy];
-            return ['split', $sx, $sy, $vx, $vy, null, $path, $flown];
-        }
-        $direct = null;
-        $hit = room_sweep_hit($room, $px, $py, $sx, $sy, $pierced, $ownerIdx, $clear);
-        if ($hit !== null) {
-            // Burst where the shell touched the unit, not past it.
-            [$direct, $sx, $sy] = $hit;
-        }
-        if ($direct === null && ($w['effect'] ?? 'shot') === 'proximity') {
-            $bd = (float) ($w['prox'] ?? 34.0);
-            foreach ($room['tanks'] as $idx => $t) {
-                if ($t['hp'] <= 0 || $idx === $ownerIdx) {
-                    continue;
-                }
-                $d = room_dist($sx - $t['x'], $sy - ($t['y'] - 12));
-                if ($d < $bd) {
-                    $bd = $d;
-                    $direct = $idx;
-                }
-            }
-        }
-        if ($direct !== null) {
-            if (($w['effect'] ?? 'shot') === 'pierce' && $pierced === null) {
-                $pierced = $direct;
-                // The bracket learns where the volley first burst, as src/sim.ts explode() does.
-                room_brk_land($room['tanks'][$ownerIdx], $sx);
-                $mark = count($events);
-                room_explode($room, $events, $tank, $wkey, $sx, $sy, $direct, $ov);
-                $events[] = ['t' => 'burst', 'x' => round($sx, 1), 'y' => round($sy, 1), 'r' => (float) (($ov['radius'] ?? null) ?? $w['radius']), 'w' => $wkey];
-                room_stamp($events, $mark, $t0 + $flown);
-                continue;
-            }
-            $path[] = [$sx, $sy];
-            return ['hit', $sx, $sy, $vx, $vy, $direct, $path, $flown];
-        }
-        $xi = max(0, min($width - 1, (int) round($sx)));
-        if ($age >= 0.1 && $sy >= $room['terrain'][$xi]) {
-            if (($w['effect'] ?? 'shot') === 'roller') {
-                return room_roll_arc($room, $w, $ownerIdx, $sx, $vx, $vy, $clear, $path, $step + 1);
-            }
-            $path[] = [$sx, $sy];
-            return ['hit', $sx, $sy, $vx, $vy, null, $path, $flown];
+    $a = room_arc_start($sx, $sy, $vx, $vy, $age, $fuse, $skip);
+    $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach(count($room['terrain'])));
+    while ($a['step'] < $steps) {
+        $res = room_arc_step($room, $events, $tank, $w, $wkey, $ownerIdx, $a, $ov, $t0);
+        if ($res !== null) {
+            return $res;
         }
     }
-    return ['oob', $sx, $sy, $vx, $vy, null, $path, $steps * $dt];
+    return room_arc_timeout($a, $steps);
+}
+/* A shell in flight, as room_arc_step moves it: where it is, its velocity
+// and age, its fuse (false: none), the unit it may not hit directly (a
+// lance's first victim, or the unit the burst that threw it struck), whether
+// it has left its gunner's box, its recorded path and the steps flown. */
+function room_arc_start(float $sx, float $sy, float $vx, float $vy, float $age, $fuse, ?int $skip): array
+{
+    return ['x' => $sx, 'y' => $sy, 'vx' => $vx, 'vy' => $vy, 'age' => $age, 'fuse' => $fuse, 'pierced' => $skip,
+        'clear' => false, 'path' => [[$sx, $sy]], 'step' => 0];
+}
+/* An arc that flew its whole time without landing. */
+function room_arc_timeout(array $a, int $steps): array
+{
+    return ['oob', $a['x'], $a['y'], $a['vx'], $a['vy'], null, $a['path'], $steps * (1 / 60)];
+}
+/* One 1/60 s step of an arc: null while it flies on, else how it ended:
+// [status, x, y, vx, vy, directIdx, path, seconds flown], status 'hit' (a
+// burst; a roller's after its roll), 'oob' or 'split' (a cluster parent at
+// its bloom). Mirrors the stepShells effect hooks in src/sim.ts. */
+function room_arc_step(array &$room, array &$events, array $tank, array $w, string $wkey, int $ownerIdx, array &$a, $ov, float $t0): ?array
+{
+    $width = count($room['terrain']);
+    $dt = 1 / 60;
+    $effect = $w['effect'] ?? 'shot';
+    if ($effect === 'seeker') {
+        $dv = room_seek_push($room['tanks'], $ownerIdx, $a['x'], $a['y'], (float) ($w['steer'] ?? 70.0), $dt);
+        if ($dv !== null) {
+            $a['vx'] += $dv[0];
+            $a['vy'] += $dv[1];
+        }
+    }
+    $grav = !empty($w['flat']) ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
+    $a['vx'] += $room['wind'] * ROOM_TURN_WIND * $dt;
+    $a['vy'] += $grav * $dt;
+    $px = $a['x'];
+    $py = $a['y'];
+    $a['x'] += $a['vx'] * $dt;
+    $a['y'] += $a['vy'] * $dt;
+    $a['age'] += $dt;
+    $a['step']++;
+    $step = $a['step'];
+    if ($step % ROOM_PATH_EVERY === 0) {
+        $a['path'][] = [$a['x'], $a['y']];
+    }
+    $flown = $step * $dt;
+    if ($a['x'] < -20 || $a['x'] > $width + 20 || $a['y'] > 500) {
+        $a['path'][] = [$a['x'], $a['y']];
+        return ['oob', $a['x'], $a['y'], $a['vx'], $a['vy'], null, $a['path'], $flown];
+    }
+    // A cluster splits on its fuse; an apex cluster at the top of its arc (never before 0.1 s).
+    if ($a['fuse'] !== false && $effect === 'cluster' && (!empty($w['apex']) ? $a['age'] >= 0.1 && $a['vy'] >= 0 : $a['age'] >= $a['fuse'])) {
+        $a['path'][] = [$a['x'], $a['y']];
+        return ['split', $a['x'], $a['y'], $a['vx'], $a['vy'], null, $a['path'], $flown];
+    }
+    $direct = null;
+    $clear = $a['clear'];
+    $hit = room_sweep_hit($room, $px, $py, $a['x'], $a['y'], $a['pierced'], $ownerIdx, $clear);
+    $a['clear'] = $clear;
+    if ($hit !== null) {
+        // Burst where the shell touched the unit, not past it.
+        [$direct, $a['x'], $a['y']] = $hit;
+    }
+    if ($direct === null && $effect === 'proximity') {
+        $bd = (float) ($w['prox'] ?? 34.0);
+        foreach ($room['tanks'] as $idx => $t) {
+            if ($t['hp'] <= 0 || $idx === $ownerIdx) {
+                continue;
+            }
+            $d = room_dist($a['x'] - $t['x'], $a['y'] - ($t['y'] - 12));
+            if ($d < $bd) {
+                $bd = $d;
+                $direct = $idx;
+            }
+        }
+    }
+    if ($direct !== null) {
+        if ($effect === 'pierce' && $a['pierced'] === null) {
+            $a['pierced'] = $direct;
+            // The bracket learns where the volley first burst, as src/sim.ts explode() does.
+            room_brk_land($room['tanks'][$ownerIdx], $a['x']);
+            $mark = count($events);
+            room_explode($room, $events, $tank, $wkey, $a['x'], $a['y'], $direct, $ov);
+            $events[] = ['t' => 'burst', 'x' => round($a['x'], 1), 'y' => round($a['y'], 1), 'r' => (float) (($ov['radius'] ?? null) ?? $w['radius']), 'w' => $wkey];
+            room_stamp($events, $mark, $t0 + $flown);
+            return null;
+        }
+        $a['path'][] = [$a['x'], $a['y']];
+        return ['hit', $a['x'], $a['y'], $a['vx'], $a['vy'], $direct, $a['path'], $flown];
+    }
+    $xi = max(0, min($width - 1, (int) round($a['x'])));
+    if ($a['age'] >= 0.1 && $a['y'] >= $room['terrain'][$xi]) {
+        if ($effect === 'roller') {
+            return room_roll_arc($room, $w, $ownerIdx, $a['x'], $a['vx'], $a['vy'], $a['clear'], $a['path'], $step);
+        }
+        $a['path'][] = [$a['x'], $a['y']];
+        return ['hit', $a['x'], $a['y'], $a['vx'], $a['vy'], null, $a['path'], $flown];
+    }
+    return null;
+}
+/* Bomblets thrown together from (x, y) at $t seconds into the volley (a
+// cluster's bloom, a scatter gun's throw), one per velocity in $vels: they fly
+// side by side, step by step, and each bursts the step it lands, in list order
+// within a step, against the ground the ones before it left. src/sim.ts
+// stepShells is the same (a bomblet never waits for its siblings). Each is a
+// 'shot' event of its own from $t. */
+function room_fly_siblings(array &$room, array &$events, int $seatIdx, array $w, string $wkey, float $x, float $y, array $vels, float $age, array $sub, float $t, ?int $skip): void
+{
+    $arcs = [];
+    foreach ($vels as [$vx, $vy]) {
+        $arcs[] = room_arc_start($x, $y, $vx, $vy, $age, false, $skip);
+    }
+    $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach(count($room['terrain'])));
+    $live = array_keys($arcs);
+    for ($s = 0; $s < $steps && $live; $s++) {
+        foreach ($live as $i => $k) {
+            $res = room_arc_step($room, $events, $room['tanks'][$seatIdx], $w, $wkey, $seatIdx, $arcs[$k], $sub, $t);
+            if ($res !== null) {
+                room_land_sibling($room, $events, $seatIdx, $wkey, $res, $sub, $t);
+                unset($live[$i]);
+            }
+        }
+    }
+    foreach ($live as $k) {
+        room_land_sibling($room, $events, $seatIdx, $wkey, room_arc_timeout($arcs[$k], $steps), $sub, $t);
+    }
+}
+/* A bomblet's end: its shot event, then its burst (or a fizzle), stamped at its landing. */
+function room_land_sibling(array &$room, array &$events, int $seatIdx, string $wkey, array $res, array $sub, float $t): void
+{
+    $tank = $room['tanks'][$seatIdx];
+    $ev = room_shot_event($tank, $wkey, $t, $res, $res[0] === 'hit' ? (float) $sub['radius'] : 0.0);
+    $ev['at'] = round($t, 3);
+    $events[] = $ev;
+    $mark = count($events);
+    if ($res[0] === 'hit') {
+        room_brk_land($room['tanks'][$seatIdx], $res[1]);
+        room_explode($room, $events, $tank, $wkey, $res[1], $res[2], $res[5], $sub);
+    } else {
+        $events[] = ['t' => 'fizzle', 'by' => $tank['seat'], 'w' => $wkey];
+    }
+    room_stamp($events, $mark, $t + $res[7]);
 }
 /* A roller touched down at column $sx with velocity ($vx, $vy), $steps sim
 // steps into its flight: roll it to its burst. Returns room_fly_arc's tuple

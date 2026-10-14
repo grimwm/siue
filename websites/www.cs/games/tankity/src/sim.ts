@@ -828,11 +828,20 @@ export type StepEvent =
   /** A scatter weapon's burst threw its bomblets up (ang is straight up). */
   | { kind: 'scatter'; wkey: string; x: number; y: number; ang: number }
   | { kind: 'blast'; blast: Blast };
-/* True when a shell launched earlier in the same volley is still in the air. */
+/* Bomblets of one burst (both split, the same order but the last index):
+   they burst as they land, never waiting for each other. */
+function siblings(a: Shell, b: Shell): boolean {
+  const x = a.order || [], y = b.order || [];
+  if (!a.split || !b.split || x.length !== y.length) return false;
+  for (let i = 0; i < x.length - 1; i++) if (x[i] !== y[i]) return false;
+  return true;
+}
+/* True when a shell launched earlier in the same volley is still in the air;
+   a bomblet's siblings do not count. */
 function waitsOnEarlier(world: World, s: Shell): boolean {
   const mine = s.order || [];
   return world.shells.some(o => {
-    if (o === s || o.dead || o.owner !== s.owner) return false;
+    if (o === s || o.dead || o.owner !== s.owner || siblings(o, s)) return false;
     const theirs = o.order || [];
     for (let i = 0; i < Math.min(mine.length, theirs.length); i++) {
       if (theirs[i] !== mine[i]) return theirs[i]! < mine[i]!;
@@ -891,7 +900,9 @@ function afterBurst(world: World, s: Shell, w: Weapon, direct: Tank | null, even
    born this frame fly this frame too. A volley's shells fly together, but they
    burst in launch order, as the room server resolves them: a shell that
    reaches something to burst on while an earlier one is still flying holds
-   where it is, and bursts against the ground that one left once it has landed. */
+   where it is, and bursts against the ground that one left once it has landed.
+   Bomblets of one burst are the exception: they burst as they land, in list
+   order within a frame (server/sim.php room_fly_siblings). */
 export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEvent[] {
   const events: StepEvent[] = [];
   for (const s of world.shells) {

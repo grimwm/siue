@@ -30,6 +30,8 @@ import type { CensusRun } from './census-reporter.ts';
 export interface FileCount {
   leaves: number;
   names: string[];
+  /** Leaves recorded as skipped; absent in a record that predates this field or had none. */
+  skipped?: string[];
 }
 
 export interface NodeRecord {
@@ -108,7 +110,7 @@ export async function countFiles(files: string[]): Promise<NodeRecord> {
       else if (run.loadError !== undefined) problems.push(`${file}: failed to load\n${run.loadError}`);
       else if (run.failures.length) problems.push(...run.failures.map(f => `${file}: test failed: ${f.name}: ${f.error}`));
       else if (status !== 0) problems.push(`${file}: exit ${status}\n${output.trim()}`);
-      else record.files[key] = { leaves: run.leaves, names: run.names };
+      else record.files[key] = { leaves: run.leaves, names: run.names, ...(run.skipped ? { skipped: run.skipped } : {}) };
     });
     if (problems.length) throw new Refusal(problems.join('\n'));
     return record;
@@ -182,6 +184,8 @@ export function compareNode(before: NodeRecord, after: NodeRecord, removed: Set<
     const added = lacking(a.names, b.names);
     if (missing.length) diff.push(`missing: ${missing.join(', ')}`);
     if (added.length) diff.push(`new: ${added.join(', ')}`);
+    const newlySkipped = lacking(a.skipped ?? [], b.skipped ?? []);
+    if (newlySkipped.length) diff.push(`newly skipped: ${newlySkipped.join(', ')}`);
     if (diff.length) problems.push(`${key}: ${diff.join('; ')}`);
     table.push(`| ${key} | ${b.leaves} | ${a.leaves} | ${diff.length ? 'DIFFERS' : 'same'} |`);
   }

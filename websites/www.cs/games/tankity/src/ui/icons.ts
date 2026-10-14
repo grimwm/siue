@@ -40,7 +40,8 @@ export function iconCtx(cv: HTMLCanvasElement | null | undefined): CanvasRenderi
    shells fly flat as a bright streak; spark shells throw spokes; a plasma
    gun is rings around a core; a dash (a tracer) is its dashed path ending in
    the cross it marks; a drill (the diggers) is a body with a pointed,
-   fluted bit; a clod (the dirt guns) is a lumpy ball shedding crumbs. */
+   fluted bit; a clod (the dirt guns) is a lumpy ball shedding crumbs; a
+   flame (napalm) is a burning drop with tongues of flame licking up off it. */
 export function drawShellIcon(cv: HTMLCanvasElement, w: Weapon | undefined): void {
   const c = w && w.gfx && iconCtx(cv);
   if (!c) return;
@@ -163,6 +164,25 @@ export function drawShellIcon(cv: HTMLCanvasElement, w: Weapon | undefined): voi
       c.arc(cx + dx, cy + dy, 0.8, 0, Math.PI * 2);
       c.fill();
     }
+  } else if (g.painter === 'flame') {
+    // A flame: a burning drop in its shell colour, three tongues licking up and back off it in its trail colour, a hot core.
+    c.beginPath();
+    c.arc(cx + 1.5, cy + 3, 3.6, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = g.trail;
+    for (const [dx, h, w2] of [[-2.5, 9, 3], [1.5, 12, 3.4], [4.5, 8, 2.6]] as [number, number, number][]) {
+      const x = cx + dx, y = cy + 4;
+      c.beginPath();
+      c.moveTo(x - w2, y);
+      c.quadraticCurveTo(x - w2 * 1.1, y - h * 0.55, x - 1.5, y - h);
+      c.quadraticCurveTo(x + w2 * 0.2, y - h * 0.5, x + w2, y);
+      c.closePath();
+      c.fill();
+    }
+    c.fillStyle = g.blast[1];
+    c.beginPath();
+    c.arc(cx + 1.5, cy + 2.5, 1.6, 0, Math.PI * 2);
+    c.fill();
   } else if (w.effect === 'cluster') {
     c.beginPath();
     c.arc(cx, cy, 2.8, 0, Math.PI * 2);

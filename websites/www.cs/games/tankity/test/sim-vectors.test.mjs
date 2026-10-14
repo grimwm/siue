@@ -29,6 +29,7 @@ const armorRules = await import(pathToFileURL(path.join(dir, 'src', 'armor.ts'))
 const standings = await import(pathToFileURL(path.join(dir, 'src', 'standings.ts')).href);
 const det = await import(pathToFileURL(path.join(dir, 'src', 'detmath.ts')).href);
 const earth = await import(pathToFileURL(path.join(dir, 'src', 'earth.ts')).href);
+const fire = await import(pathToFileURL(path.join(dir, 'src', 'fire.ts')).href);
 
 /* ---- state the cases run over ---- */
 const G = {};
@@ -202,12 +203,12 @@ const RUN = {
     // one settle when the last shell is down (src/match.ts), which must come out
     // as the room server's volley does (server/rules.php room_fire_shot). A
     // gun with no flight settles the moment it fires.
-    if (!G.shells.length) sim.settleVolley(G, arsenal);
-    for (let frame = 0; G.shells.length && frame < 5000; frame++) {
+    if (!sim.volleyOn(G)) sim.settleVolley(G, arsenal);
+    for (let frame = 0; sim.volleyOn(G) && frame < 5000; frame++) {
       sim.fallTanks(G, 1 / 60);
       sim.stepShells(G, arsenal, 1 / 60);
       sim.armChutes(G, arsenal);
-      if (!G.shells.length) sim.settleVolley(G, arsenal);
+      if (!sim.volleyOn(G)) sim.settleVolley(G, arsenal);
     }
     for (let frame = 0; frame < 5000 && sim.anyTankFalling(G); frame++) sim.fallTanks(G, 1 / 60);
     return outcome(before);
@@ -291,7 +292,7 @@ const RUN = {
       t.power = choice.power;
       t.ammo.shell = 99;
       sim.fireWeapon(G, arsenal, t, choice.wkey);
-      for (let frame = 0; G.shells.length && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
+      for (let frame = 0; sim.volleyOn(G) && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
       sim.settleFalls(G, arsenal);
       const b = t.brk;
       steps.push({ wkey: choice.wkey, angle: choice.angle, power: choice.power, x: t.x, n: b.n, target: b.t, land: b.land });
@@ -316,7 +317,7 @@ const RUN = {
     if (c.op === 'crater') earth.carveCrater(t, c.x, c.y, c.r, earth.FLOOR);
     else if (c.op === 'dirt') earth.addDirt(t, c.x, c.y, c.r);
     else if (c.op === 'pour') {
-      const pool = earth.pourLevel(t, c.x, c.v);
+      const pool = earth.pourLevel(t, c.x, c.v, c.m || 0);
       out.pool = [pool.level, pool.x0, pool.x1];
       earth.fillPour(t, pool);
     } else if (c.op === 'slump') earth.slumpGround(t, c.x, c.r, c.slope, c.passes);
@@ -330,6 +331,13 @@ const RUN = {
     t.forEach((y, ix) => { if (Math.abs(y - before[ix]) > 1e-9) { if (first === null) first = ix; last = ix; } });
     out.cells = first === null ? null : { x0: first, y: t.slice(first, last + 1) };
     return out;
+  },
+  fire(c) {
+    const pool = fire.firePool(buildTerrain(c.terrain), c.x, c.v, c.flame, c.m || 0);
+    return { pool: [pool.level, pool.x0, pool.x1, pool.flame], in: c.units.map(u => fire.inFlames(pool, sim.unitHitBox({ isPlayer: u.kind === 'human', x: u.x, y: u.y }))) };
+  },
+  'fire-ticks'(c) {
+    return c.burn !== undefined ? [fire.burnTicks(c.burn, c.tick), fire.tickSteps(c.tick)] : fire.burnTotal(c.dmg, c.ticks, c.shield, c.bunker);
   },
   settle(c) {
     world({ terrain: c.terrain, tanks: [{ kind: c.kind || 'ai', x: c.x, y: c.y, hp: c.hp }] });

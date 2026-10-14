@@ -711,6 +711,41 @@ if (isset($weapons['dirtball'], $weapons['dirtcharge'], $weapons['liquiddirt'], 
         'tanks' => [array_replace($human(300, 100), ['y' => 300.0, 'dirS' => 1]), array_replace($drone(600, 100), ['y' => 420.0])]]);
 }
 
+/* The fire guns: a pool burns where the napalm lands, tick by tick, credited to its gunner. */
+foreach ($weapons as $wkey => $def) {
+    if (($def['effect'] ?? '') !== 'napalm') {
+        continue;
+    }
+    $vale = ['vee' => [360, 150, 330, 420]];
+    $onVale = sv_terrain($vale);
+    $sat = fn(array $u, int $x) => array_replace($u, ['x' => (float) $x, 'y' => $onVale[$x]]);
+    $earthVolley("$wkey-in-a-valley-burns-two", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 0,
+        'tanks' => [$sat($human(100, 100) + ['dirS' => 1], 100), $sat($drone(340, 100), 340), $sat($drone(385, 100), 385), $sat($drone(600, 100), 600)]], 360.0);
+    $earthVolley("$wkey-shield-eats-first-tick", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 1,
+        'tanks' => [$sat($human(360, 100) + ['shield' => true], 360), $sat($drone(620, 100) + ['dirS' => -1], 620)]], 360.0);
+    $earthVolley("$wkey-bunker-halves", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 1,
+        'tanks' => [$sat($human(360, 100) + ['bunker' => 2], 360), $sat($drone(620, 100) + ['dirS' => -1], 620)]], 360.0);
+    $earthVolley("$wkey-kills-credit-shooter", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 0,
+        'tanks' => [$sat($human(100, 100) + ['dirS' => 1], 100), $sat($drone(360, 14), 360), $sat($drone(600, 100), 600)]], 360.0);
+    $earthVolley("$wkey-kill-sets-off-a-last-stand", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 1,
+        'tanks' => [$sat($human(360, 9) + ['laststand' => true], 360), $sat($drone(600, 100) + ['dirS' => -1], 600), $sat($drone(390, 100), 390)]], 360.0);
+    // Lobbed straight up from the valley floor: it comes down on its own gunner's pool.
+    $volley("$wkey-burns-own-gunner-no-score", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 88, 'power' => 30,
+        'tanks' => [$sat($human(360, 100) + ['dirS' => 1], 360), $sat($drone(600, 100), 600)]]);
+    $earthVolley("$wkey-on-flat-burns-a-puddle", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 1,
+        'tanks' => [$human(400, 100), $drone(100, 100) + ['dirS' => 1], $drone(470, 100)]], 400.0);
+    $earthVolley("$wkey-by-the-edge-spills-the-rest", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 1,
+        'tanks' => [$human(30, 100), $drone(300, 100) + ['dirS' => -1]]], 10.0);
+    // A drone on the valley side, its ground a few px over the pool: napalm's flames fall short of its body, hot napalm's reach it.
+    $pool = room_fire_pool($onVale, 360.0, (float) $def['volume'], (float) $def['flame']);
+    $rim = 360;
+    while ($rim > 0 && $onVale[$rim - 1] > $pool['level'] - 7) {
+        $rim--;
+    }
+    $earthVolley("$wkey-flames-and-the-rim-drone", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 0,
+        'tanks' => [$sat($human(620, 100) + ['dirS' => -1], 620), $sat($drone($rim, 100), $rim - 1)]], 360.0);
+}
+
 /* Falls a volley digs: Buckshot pellets digging one pit in several bursts,
  * and craters in fractional ground, with and without parachutes. The browser
  * replays these as a solo match plays them (falls animated every frame, one
@@ -876,6 +911,40 @@ if (isset($weapons['digger'], $weapons['dirtball'], $weapons['disrupter'], $weap
         'tanks' => [array_replace($human(345, 100), ['y' => $onFlanks[345]]), array_replace($drone(265, 200), ['y' => $onFlanks[265], 'dirS' => 1, 's' => 'hunter', 'ammo' => ['disrupter' => 1]])]]);
     $aim('buried-human-fires-its-riot-charge', ['terrain' => ['flat' => 400, 'set' => [[270, 330, 360]]], 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 0,
         'tanks' => [$human(300, 100) + ['dirS' => 1, 'angle' => 70, 'ammo' => ['riotcharge' => 1, 'mortar' => 1]], $drone(600, 100)]]);
+}
+// Napalm: chosen against rivals sharing a valley; never fired when the drone's own column would be in the pool.
+foreach ($weapons as $wkey => $def) {
+    if (($def['effect'] ?? '') !== 'napalm') {
+        continue;
+    }
+    $vale = ['vee' => [360, 150, 330, 420]];
+    $onVale = sv_terrain($vale);
+    $sat = fn(array $u, int $x) => array_replace($u, ['x' => (float) $x, 'y' => $onVale[$x]]);
+    foreach ([1, 2] as $seed) {
+        $aim("$wkey-two-rivals-share-a-valley-seed$seed", ['terrain' => $vale, 'wind' => 0, 'round' => 9, 'seed' => $seed, 'shooter' => 2, 'difficulty' => 'hard',
+            'tanks' => [$sat($human(340, 100), 340), $sat($drone(385, 100), 385), $sat($drone(110, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => [$wkey => 1, 'mortar' => 1]], 110)]]);
+        $aim("$wkey-refused-in-its-own-valley-seed$seed", ['terrain' => $vale, 'wind' => 0, 'round' => 9, 'seed' => $seed, 'shooter' => 1, 'difficulty' => 'hard',
+            'tanks' => [$sat($human(400, 100), 400), $sat($drone(320, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => [$wkey => 2]], 320)]]);
+    }
+    $at = function (array $c, float $x) {
+        [$c['a'], $c['p']] = sv_aim_at(sv_room($c), $c['self'], $c['wkey'], $x);
+        return $c;
+    };
+    $harm("$wkey-two-in-a-valley", $at(['terrain' => $vale, 'wind' => 0, 'self' => 2, 'target' => 0, 'wkey' => $wkey,
+        'tanks' => [$sat($human(340, 100), 340), $sat($drone(385, 100), 385), $sat($drone(110, 60) + ['dirS' => 1], 110)]], 360.0));
+    $harm("$wkey-weak-rivals-capped", $at(['terrain' => $vale, 'wind' => 0, 'self' => 2, 'target' => 0, 'wkey' => $wkey,
+        'tanks' => [$sat($human(340, 9), 340), $sat($drone(385, 20), 385), $sat($drone(110, 60) + ['dirS' => 1], 110)]], 360.0));
+    $harm("$wkey-shield-and-bunker", $at(['terrain' => $vale, 'wind' => 0, 'self' => 1, 'target' => 0, 'wkey' => $wkey,
+        'tanks' => [$sat($human(360, 100) + ['shield' => true, 'bunker' => 2], 360), $sat($drone(620, 60) + ['dirS' => -1], 620)]], 360.0));
+    $harm("$wkey-own-pool", $at(['terrain' => $vale, 'wind' => 0, 'self' => 1, 'target' => 0, 'wkey' => $wkey,
+        'tanks' => [$sat($human(400, 100), 400), $sat($drone(320, 60) + ['dirS' => 1], 320)]], 400.0));
+    // On the valley side, above the pool: far enough up is safe; nearer, a stray landing's flames could reach it.
+    foreach ([250, 285] as $x) {
+        $harm("$wkey-drone-on-the-valley-side-$x", $at(['terrain' => $vale, 'wind' => 0, 'self' => 1, 'target' => 0, 'wkey' => $wkey,
+            'tanks' => [$sat($human(380, 100), 380), $sat($drone($x, 60) + ['dirS' => 1], $x)]], 380.0));
+    }
+    $harm("$wkey-on-flat-burns-nothing", $at(['terrain' => $flat, 'wind' => 0, 'self' => 1, 'target' => 0, 'wkey' => $wkey,
+        'tanks' => [$human(400, 100), $drone(120, 60) + ['dirS' => 1]]], 400.0));
 }
 // A weak target gets the cheapest gun that finishes it.
 $aim('weak-target-cheapest-gun', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1, 'difficulty' => 'hard',
@@ -1049,7 +1118,7 @@ $earth = function (string $name, array $c) use ($add): void {
             room_add_dirt($t, (float) $c['x'], (float) $c['y'], (float) $c['r']);
             break;
         case 'pour':
-            $pool = room_pour_level($t, (float) $c['x'], (float) $c['v']);
+            $pool = room_pour_level($t, (float) $c['x'], (float) $c['v'], (float) ($c['m'] ?? 0));
             $out['pool'] = [$pool['level'], $pool['x0'], $pool['x1']];
             room_fill_pour($t, $pool);
             break;
@@ -1089,6 +1158,15 @@ $vee = ['vee' => [300, 120, 330, 420]];
 foreach ([[300, 4000], [287.5, 4000], [250, 1500], [300, 20000], [300, 200]] as [$x, $v]) {
     $earth("pour-into-a-vee-x$x-v$v", ['op' => 'pour', 'terrain' => $vee, 'x' => $x, 'v' => $v]);
 }
+// A liquid that spreads no thinner than m px: a puddle on flat ground, at the
+// edge a puddle that spills the rest, a shallow dish, a deep vee as before.
+$earth('puddle-on-flat', ['op' => 'pour', 'terrain' => $flat, 'x' => 300, 'v' => 2200, 'm' => 20]);
+$earth('puddle-at-the-left-edge-spills-the-rest', ['op' => 'pour', 'terrain' => $flat, 'x' => 5, 'v' => 2200, 'm' => 20]);
+$earth('puddle-at-the-right-edge-spills-the-rest', ['op' => 'pour', 'terrain' => $flat, 'x' => 712, 'v' => 4000, 'm' => 20]);
+$earth('puddle-on-a-slope-runs-to-the-edge', ['op' => 'pour', 'terrain' => ['slope' => [300, 420]], 'x' => 500, 'v' => 4000, 'm' => 20]);
+$earth('puddle-over-a-shallow-dish', ['op' => 'pour', 'terrain' => ['flat' => 400, 'set' => [[250, 350, 404]]], 'x' => 300, 'v' => 2200, 'm' => 20]);
+$earth('puddle-on-hills-odd-depth', ['op' => 'pour', 'terrain' => ['hills' => [330, 40, 200]], 'x' => 140, 'v' => 600, 'm' => 13.5]);
+$earth('deep-vee-ignores-the-minimum', ['op' => 'pour', 'terrain' => $vee, 'x' => 300, 'v' => 4000, 'm' => 20]);
 $earth('pour-of-zero-volume', ['op' => 'pour', 'terrain' => $vee, 'x' => 300, 'v' => 0]);
 $earth('pour-on-a-slope-spills-off-the-edge', ['op' => 'pour', 'terrain' => ['slope' => [300, 420]], 'x' => 500, 'v' => 4000]);
 $earth('pour-at-the-edge-spills', ['op' => 'pour', 'terrain' => $flat, 'x' => 0, 'v' => 4000]);
@@ -1108,6 +1186,64 @@ $earth('dig-into-a-hill-and-out', ['op' => 'dig', 'terrain' => ['flat' => 400, '
 $earth('dig-down-at-a-slant', ['op' => 'dig', 'terrain' => $flat, 'x' => 300, 'y' => 401, 'vx' => -120, 'vy' => 200, 'n' => 45, 'r' => 15]);
 $earth('dig-to-the-floor', ['op' => 'dig', 'terrain' => ['flat' => 430], 'x' => 300, 'y' => 431, 'vx' => 0, 'vy' => 300, 'n' => 15, 'r' => 8]);
 $earth('dig-standing-still-goes-down', ['op' => 'dig', 'terrain' => $flat, 'x' => 300, 'y' => 401, 'vx' => 0, 'vy' => 0, 'n' => 3, 'r' => 8]);
+
+/* ---- fire: napalm's burning pool and who its flames reach (src/fire.ts) ----
+ * Each case pours a pool of volume v at column x on a terrain from its recipe
+ * (the ground itself never changes) with flames `flame` px tall; the output is
+ * the pool [level, x0, x1, flame] and, for each unit, whether its body reaches
+ * into the flames. */
+$fire = function (string $name, array $c) use ($add): void {
+    $t = sv_terrain($c['terrain']);
+    $pool = room_fire_pool($t, (float) $c['x'], (float) $c['v'], (float) $c['flame'], (float) ($c['m'] ?? 0));
+    $in = [];
+    foreach ($c['units'] as $u) {
+        $in[] = room_in_flames($pool, room_unit_box(['kind' => $u['kind'], 'x' => (float) $u['x'], 'y' => (float) $u['y']]));
+    }
+    $add('fire', $name, $c, ['pool' => [$pool['level'], $pool['x0'], $pool['x1'], $pool['flame']], 'in' => $in]);
+};
+$vale = ['vee' => [360, 150, 330, 420]];
+$onVale = sv_terrain($vale);
+$valePool = room_fire_pool($onVale, 360.0, 2200.0, 18.0);
+// A unit standing x px along the valley, on its ground.
+$inVale = fn(string $kind, int $x) => ['kind' => $kind, 'x' => $x, 'y' => $onVale[$x]];
+// The drone over the rim: its ground 6 px above the pool, its body's bottom 22 px above.
+$rimDrone = 0;
+for ($x = 360; $x > 0 && $onVale[$x] > $valePool['level'] - 6; $x--) {
+    $rimDrone = $x - 1;
+}
+$valeUnits = [$inVale('human', 360), $inVale('human', 330), $inVale('human', $valePool['x0'] - 21), $inVale('human', $valePool['x0'] - 20),
+    $inVale('human', 250), $inVale('ai', $rimDrone), $inVale('ai', 360)];
+$fire('napalm-in-a-valley', ['terrain' => $vale, 'x' => 360, 'v' => 2200, 'flame' => 18, 'units' => $valeUnits]);
+$fire('napalm-lands-on-the-valley-side', ['terrain' => $vale, 'x' => 280, 'v' => 2200, 'flame' => 18, 'units' => $valeUnits]);
+$fire('hot-flames-reach-the-rim-drone', ['terrain' => $vale, 'x' => 360, 'v' => 2200, 'flame' => 26, 'units' => $valeUnits]);
+$fire('hot-napalm-in-a-valley', ['terrain' => $vale, 'x' => 360, 'v' => 3200, 'flame' => 26, 'units' => $valeUnits]);
+$dish = ['flat' => 400, 'set' => [[250, 350, 404]]];
+$fire('thin-wide-pool-in-a-dish', ['terrain' => $dish, 'x' => 300, 'v' => 2200, 'flame' => 18,
+    'units' => [['kind' => 'human', 'x' => 300, 'y' => 404], ['kind' => 'human', 'x' => 365, 'y' => 400], ['kind' => 'human', 'x' => 380, 'y' => 400],
+        ['kind' => 'ai', 'x' => 300, 'y' => 404], ['kind' => 'ai', 'x' => 340, 'y' => 404]]]);
+$fire('flat-ground-holds-a-puddle', ['terrain' => $flat, 'x' => 300, 'v' => 2200, 'flame' => 18, 'm' => 20,
+    'units' => [['kind' => 'human', 'x' => 300, 'y' => 400], ['kind' => 'human', 'x' => 370, 'y' => 400], ['kind' => 'human', 'x' => 375, 'y' => 400],
+        ['kind' => 'ai', 'x' => 320, 'y' => 400]]]);
+$fire('hot-puddle-reaches-a-drone-over-it', ['terrain' => $flat, 'x' => 300, 'v' => 3200, 'flame' => 26, 'm' => 24,
+    'units' => [['kind' => 'ai', 'x' => 320, 'y' => 400], ['kind' => 'ai', 'x' => 420, 'y' => 400]]]);
+$fire('puddle-by-the-edge', ['terrain' => $flat, 'x' => 5, 'v' => 2200, 'flame' => 18, 'm' => 20,
+    'units' => [['kind' => 'human', 'x' => 12, 'y' => 400], ['kind' => 'human', 'x' => 60, 'y' => 400]]]);
+$fire('dead-flat-ground-holds-no-pool', ['terrain' => $flat, 'x' => 300, 'v' => 2200, 'flame' => 18,
+    'units' => [['kind' => 'human', 'x' => 300, 'y' => 400], ['kind' => 'ai', 'x' => 320, 'y' => 400]]]);
+$fire('slope-to-the-edge-spills-it-all', ['terrain' => ['slope' => [300, 420]], 'x' => 500, 'v' => 2200, 'flame' => 18,
+    'units' => [['kind' => 'human', 'x' => 700, 'y' => 417]]]);
+$fire('pool-on-hills', ['terrain' => ['hills' => [330, 40, 200]], 'x' => 140, 'v' => 2200, 'flame' => 18,
+    'units' => [['kind' => 'human', 'x' => 150, 'y' => sv_terrain(['hills' => [330, 40, 200]])[150]], ['kind' => 'ai', 'x' => 100, 'y' => sv_terrain(['hills' => [330, 40, 200]])[100]]]]);
+$fire('pit-near-the-left-edge', ['terrain' => ['flat' => 400, 'set' => [[8, 40, 430]]], 'x' => 20, 'v' => 2200, 'flame' => 18,
+    'units' => [['kind' => 'human', 'x' => 24, 'y' => 430], ['kind' => 'human', 'x' => 64, 'y' => 400], ['kind' => 'human', 'x' => 60, 'y' => 400]]]);
+// The ticks a pool burns ([burn, tick] => ticks, steps a tick) and what they cost a unit (shield, bunker).
+foreach ([[3.0, 0.5], [4.0, 0.5], [1.0, 0.3], [0.5, 0.1], [10.0, 2.0], [0.7, 0.7], [2.0, 0.15]] as [$burn, $tick]) {
+    $exact('fire-ticks', "burn-$burn-tick-$tick", ['burn' => $burn, 'tick' => $tick], [room_burn_ticks($burn, $tick), room_tick_steps($tick)]);
+}
+foreach ([[6, 6, false, false], [6, 6, true, false], [6, 6, false, true], [10, 8, true, true], [1, 5, false, true], [3, 1, true, false], [7, 0, false, false]] as [$dmg, $n, $sh, $bk]) {
+    $exact('fire-ticks', "total-$dmg-x$n" . ($sh ? '-shield' : '') . ($bk ? '-bunker' : ''), ['dmg' => $dmg, 'ticks' => $n, 'shield' => $sh, 'bunker' => $bk],
+        room_burn_total($dmg, $n, $sh, $bk));
+}
 
 /* ---- falling: units land, pay by the drop, spend parachutes, credit the digger ----
  * A case may first fire a blast (x, y, wkey, owner) that digs the pits; then

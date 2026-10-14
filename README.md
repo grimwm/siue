@@ -42,9 +42,9 @@ Open course materials may be placed here from time-to-time as well.
 
 **tools/** (site root) holds `site-game-pages.php` (writes `play/<id>/index.html`), `site-versions.php` (the home page's `?v=` cache-busters) and `ts-build.mjs` (compiles the site's TypeScript). Each game keeps its own generators in its own `tools/`.
 
-**Games build.** `games/package.json` is the one npm install for every game: `cd websites/www.cs/games && npm ci`, then `npm run build` (writes each game's checked-in `dist/`) or `npm run check` (fails on a stale build or a type error). A game has `build.json`, `src/`, `dist/` and `test/` (`node:test` `*.test.mjs` files). Tankity builds three bundles: `main`, `fx` and `fx-editor`.
+**Games build.** `games/package.json` is the one npm install for every game: `cd websites/www.cs/games && npm ci`, then `npm run build` (writes each game's checked-in `dist/`) or `npm run check` (fails on a stale build or a type error). A game has `build.json`, `src/`, `dist/` and `test/` (`node:test` `*.test.ts` files, type-checked by the game's `tsconfig.test.json`). Tankity builds three bundles: `main`, `fx` and `fx-editor`.
 
-**tests/** holds the site-level PHPUnit cases (`tests/php/`) and `tests/e2e/`, the Playwright browser suite. Each game's unit tests sit in its `test/` folder and run through its `test.sh`.
+**tests/** holds the site-level PHPUnit cases (`tests/php/`) and `tests/e2e/`, the Playwright browser suite. Each game's unit tests sit in its `test/` folder; `games/units.sh` runs them, and its `test.sh` runs its build checks and PHPUnit suite.
 
 **docs/superpowers/** holds design specs (`specs/`) and implementation plans (`plans/`).
 
@@ -96,8 +96,8 @@ Pass the same `COMPOSE` to every target that talks to the containers (`up`, `dow
 - the selector and shard tests for the browser suite (`tests/e2e/select-test.mjs`, `shard-test.mjs`, `select.mjs --check`);
 - `npm ci` and the site's TypeScript build check (`tools/ts-build.mjs --check`);
 - `composer install`, then PHPUnit's `site` suite (the games hub, the site's game pages, the home-page versions and the deploy set) and `kit` suite, plus the `--check` runs of the site's generators;
-- the games kit's own tests and type check (`cd games && npm ci`);
-- every game's `test.sh` (its build check, install-file check and unit suites, including Cylon's `cylon` PHPUnit suite and Tankity's `tankity` suite);
+- `npm ci` in `games/`, then every `games/*/test.sh`: the kit's type checks, and each game's build check (its tests' type check included), install-file check and icon check, plus Cylon's `cylon` PHPUnit suite and Tankity's `tankity` suite;
+- `games/units.sh`: every `*.test.ts` of the kit and the games in one parallel `node --test` run, failing on a folder with no test files;
 - Tankity's `tankity-docker` PHPUnit suite, its protocol and shared-sim-vector checks inside the PHP container, and its web test over HTTP.
 
 `phpunit.xml` defines the suites `site`, `kit`, `cylon`, `tankity` and `tankity-docker`; run one with `vendor/bin/phpunit --testsuite <name>` from `websites/www.cs`. `vendor/` is git-ignored and never deploys.

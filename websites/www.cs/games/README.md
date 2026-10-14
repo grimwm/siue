@@ -17,7 +17,7 @@ games/
     build.json     # entries and type programs for _kit/build/build.mjs
     src/           # TypeScript; main.ts is the entry, src/fx/ the effects engine and editor
     dist/          # three esbuild bundles (main.js, fx.js, fx-editor.js), checked in
-    test/          # node:test suites and PHP checks
+    test/          # node:test suites and PHPUnit cases
     index.html, game.css, game.json (from game.yaml), rooms.php, scores.php, sw.js
   cylon/           # The CIC — Cylon defense
     css/           # the stylesheets, linked by the home page in order
@@ -63,7 +63,8 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
   understood (the server has no YAML extension). Unknown keys are errors.
 - A broken file keeps only that game off the page; `games.php` lists why under
   `errors`, and the browser console repeats it.
-- Check every game with `php tests/games-hub-test.php`.
+- Check every game with `vendor/bin/phpunit --filter GamesHubTest` from
+  `websites/www.cs`.
 - `make screenshots` plays each game briefly in a real browser and rewrites
   its `screenshot.jpg` (800x450). Rerun it when a game's look changes.
 - Games know nothing about the site. A built game folder is self-contained and

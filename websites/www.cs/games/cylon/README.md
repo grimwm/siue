@@ -109,4 +109,4 @@ The page links the stylesheets in `css/`, in this order, and the order is the ca
 They are `<link>` tags in the site's `index.html`, each with a content-hash `?v=` that `php tools/site-versions.php` (site root) writes, not `@import`s from one file: an `@import` is fetched only after its parent arrives, a round trip the home page would wait out before it paints. That tool fails if a file in `css/` is not linked, is linked twice, or is linked out of order. `custom.css` at the site root imports them in the same order for any page that still links it.
 
 ## Tests
-From this folder, `./test.sh` runs the build check, the install check, `node --test test/*.test.ts` and the PHPUnit suite. Browser specs for the home page and the game are in `../../tests/e2e` (`home-eye`, `cylon-help`).
+From this folder, `./test.sh` runs the build check (its tests' type check included), the install and icon checks and the PHPUnit suite; `node --test test/*.test.ts` runs the unit tests, and `../units.sh` runs them with every other game's, as `make test` does. Browser specs for the home page and the game are in `../../tests/e2e` (`home-eye`, `cylon-help`).

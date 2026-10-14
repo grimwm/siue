@@ -100,7 +100,6 @@ const ALLOW: Allow = {
     'tankity/test/toasts.test.mjs',
     'tankity/test/track-toast.test.mjs',
     'tankity/test/turn-time.test.mjs',
-    'tankity/test/ui.test.mjs',
     'tankity/test/weapon-keys.test.mjs',
     'tankity/test/weapon-label.test.mjs',
     'tankity/test/wide-field.test.mjs',
@@ -122,7 +121,6 @@ const ALLOW: Allow = {
     'cylon/test/scores.test.mjs',
     'cylon/test/state.test.mjs',
     'tankity/test/smoke.test.mjs',
-    'tankity/test/ui.test.mjs',
   ],
   legacy: [
     'games/tankity/test/php-docker/RoomsTest.php',

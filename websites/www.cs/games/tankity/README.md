@@ -51,6 +51,8 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `src/ui/standings.tsx` | The scoreboard table, at the top of the shop and on the end cards |
 | `src/scores.ts` | The high scores: the board for a difficulty from `scores.php` (the latest load wins; the player's own rows marked, never a row the server flags `standin`), and a solo run through the filer: begun at the deal (a full queue is told then), each round sent as it ends, filed at game over with a line on the end card for every outcome (`lineFor`); only the card's own run changes it, and a run whose card is gone reports in the radio log (`earlierLine`). At load it drops runs an earlier page left unfinished and sends what waits; one retry timer follows `nextTry()`, and `wake()` runs on `online` and when the page is shown again. `createScores(deps)` |
 | `src/solo-file.ts` | Sending a solo run to `scores.php`: start, each round as it ends, file; the runs wait in this browser's storage (merged by id, so two tabs keep each other's; a run evicted or dropped by a tab not playing it comes back from the tab that is) until the server takes them. 429, 503 and offline wait without spending a try; other failures back off and drop a run only after `MAX_TRIES` backed-off tries; an expired run (410/404) starts again and replays every round, never once its filing was asked; at most twice, not counting a restart after the server told the run to wait (429/503). `begin` refuses when every slot holds a finished run, `drop` lets go of one that will never finish, `nextTry()` is the one retry signal, and the pause it gives is stored with the queue, so reloads and tabs share it. `wake()` ends a wait that came from being offline, never one a 429 or 503 asked for. With Web Locks (`env.locks`) one tab sends at a time. The queue keeps the latest outcomes by id (`outcome(id)`), so the tab whose card a run belongs to hears how it went when another tab sent it; a stored next try is never further off than `BACKOFF_LONGEST`. `timedFetch` gives each request a 30 s deadline, and an abort counts as offline. `createFiler(env)` |
+| `src/solo-log.ts` | A solo round as the server plays it: the purchases before it, each shot (gun, angle, power, where the tank drove) and the claim of how it ended (`RoundClaim`: the end, score, cash, lives, rounds won) |
+| `src/solo-play.ts` | Solo matches without a page, not in the bundle: `flyVolley` (the war's fixed steps), `soloRound` (the server's round, refusing what `server/solo.php` refuses), `playSolo` with a bot and `replaySolo` |
 | `src/menu.ts` | The settings menu (the unit look, the text size and the Difficulty, all remembered in this browser) and the menu overlay's props. `createMenu(deps)` |
 | `src/title.ts` | The title card over the demo: whether it shows, the initials it edits, and its props. `createTitle(deps)` |
 | `src/initials.ts` | A player's three-letter initials: the rule, the blocked words, the one saved set per browser (`tankity-initials`), random until chosen, saving a typed set, and reading the three boxes for Host and Join |
@@ -79,6 +81,8 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `server/flight.php` | A solo volley as the browser's war flies it: fixed 1/60 s steps (`flight_volley`), each dropping the tanks (`flight_fall`) and then moving every shell (`flight_step_shells`), shells living 12 s times the field's reach; `src/solo-play.ts` `flyVolley` is the same |
 | `server/ai.php` | Drone aim, bracketing, the strategies and their flips, `room_ai_rack` |
 | `server/solo.php` | The solo referee in PHP over the room sim: `solo_deal` (refuses a width `room_field_width` does not accept) and `solo_muster`, drawing the random stream in `src/solo.ts`'s order; `solo_round` plays one round of a run from its stored state (the buys, the muster, the player's recorded shots and the drones' turns, each volley flown by `server/flight.php`) to the browser's claim, refusing what `src/solo-play.ts` `soloRound` refuses with the same reasons, at most `solo_round_cpu()` seconds of CPU (`round_cpu`, default `SOLO_ROUND_CPU` = 4.0), 200 shots and 60 buys a round |
+| `tools/solo-runs.mjs`, `protocol/solo-runs.json` | Bot runs recorded round by round with the browser's rules; the PHP rounds must reach every claim (`--check` regenerates the quick runs, `--check --all` every run byte for byte) |
+| `tools/round-bench.php` | CPU per round of every recorded run; report only, and `--budget=SECONDS` fails any round over it |
 | `server/rules.php` | Seats and economy, rounds (`room_start_round`, `room_advance`, `room_end_round`), the turn clock, drone pacing and watch turns, the shop, firing a volley, lives and winnings, scores |
 | `server/protocol.php` | The event log, `room_want`, snapshots and deltas (`terrainRev`, resync) |
 | `server/.htaccess` | `Require all denied`: the files in `server/` are libraries, never endpoints. Each also answers 404 if asked for directly (`TANKITY_ROOMS_INCLUDED` is defined only by `rooms.php`) |
@@ -378,6 +382,8 @@ your last life while others play shows the same table with **Watch the
 finish**, and Menu → Standings brings it back. A solo match shows its rounds
 the same way and heads its end card with them.
 
+## Scores and the server's solo play
+
 Scores file themselves: a room's server files each human when the last life
 goes and the winner when the match ends; a solo run is sent the moment it ends.
 There is one all-time board per difficulty (Easy, Normal, Hard); a run files on
@@ -439,6 +445,26 @@ addresses count by their /64 and IPv4 ones inside IPv6 by the IPv4 address,
 so a class behind one campus NAT shares one allowance; a 429 holds the run as
 it is, to be sent again later. Each round may take `round_cpu` seconds of CPU
 (4.0).
+
+The settings, each a key in `.config.yaml` or an upper-case `TANKITY_` environment
+variable (the environment wins), with the defaults:
+
+| Setting | Default | What it bounds |
+| --- | --- | --- |
+| `round_cpu` | 4.0 | Seconds of CPU one round may take |
+| `max_playing` | 8 | Rounds playing at once across the server |
+| `playing_per_client` | 4 | Rounds playing at once for one address |
+| `runs_per_client` | 100 | Runs of any kind one address holds |
+| `starts_per_hour` | 120 | Runs one address starts in an hour |
+| `rounds_per_hour` | 600 | Rounds one address sends in an hour |
+| `scores_per_hour` | 240 | Filings one address sends in an hour |
+| `max_held` | 3000 | Runs past their first round, across the server |
+| `held_per_client` | 30 | Runs past their first round, for one address |
+| `room_joins_per_hour` | 300 | Rooms one address creates or joins in an hour |
+
+The browser keeps up to 5 runs waiting. A tab files under a cross-tab lock
+(Web Locks) so two tabs never send the same run, backs off after a failure, and
+restarts a run the server expired up to 2 times.
 
 ## Drone aim
 
@@ -787,6 +813,11 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/field.test.mjs`                          | The width from the landscape box (clamps, columns, portrait equals landscape), that a deal holds through a resize, fitting the field in a box, and the power step and display at 720, 1080 and 1440 |
 | `test/detmath.test.mjs`                        | `src/detmath.ts` is within 1e-15 of `Math` where the sim feeds it, keeps the sign of zero, and is exact at 0, 1 and the right angles |
 | `test/solo.test.mjs`                           | `src/solo.ts` without a page: the deal and its width, a round's muster, settling a volley, the turn order, the drones' difficulty and 1-ups |
+| `test/solo-log.test.mjs` | `src/solo-log.ts`: a round's buys and shots keep exact numbers through JSON, the caps, and what counts as a round log or a replayable seed |
+| `test/solo-play.test.mjs` | `src/solo-play.ts`: a bot plays round by round, every claim is what `soloRound` reaches, and a tampered or garbled round is refused with its reason |
+| `test/solo-file.test.mjs` | `src/solo-file.ts`: the GET, start, rounds in order, file; the offline queue, merge by id, backoff, restarts, the cross-tab lock and the 30 s deadline |
+| `test/fixed-step.test.mjs` | The solo war runs in fixed steps whatever the frame lengths, tank falls included |
+| `test/determinism.test.mjs` | The rule modules call no clock, no `Math.random` and no libm trigonometry (see Solo determinism) |
 | `test/wide-field.test.mjs`                     | The sim at any width: the same hills continued, units spread outside each other's blast, reach and wind scaling, flights that last as long as the field, 720 unchanged |
 | `test/ghosts.test.mjs`                         | A shell retired past the edge keeps flying (draw only), one that burst inside leaves no ghost, a replay's last point keeps its velocity, ghosts are dropped off the picture |
 | `test/scenery.test.mjs`                        | The scenery continues the hills with no step over 1 px at the seam, cratered or not |
@@ -819,10 +850,12 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `tests/tankity-data-deny.sh` | `games/tankity/data/` is refused over HTTP (`make test` runs it) |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
-| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only), and the end of a match (`tankity-end`: a solo match; `tankity-end-again`: Play again in a room; `tankity-end-forfeit`: a leave, the winner, and the solo card after it; `tankity-end-out`: the you're-out card and Menu → Standings); `E2E_BASE_URL` points it at the live site |
+| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only), and the end of a match (`tankity-end`: a solo match, and on a local site the score the server filed equals the one the card showed; `tankity-end-again`: Play again in a room; `tankity-end-forfeit`: a leave, the winner, and the solo card after it; `tankity-end-out`: the you're-out card and Menu → Standings); `E2E_BASE_URL` points it at the live site |
 | `make e2e-changed` (site root) | Only the browser specs your changes need (`tests/e2e/select.mjs` maps touched files to specs; CI uses the same map) |
 
-`make test` from the site root runs every suite above except e2e. CI runs
+`make test` from the site root runs every suite above except e2e and the `slow` group
+(the long recorded solo runs; CI's units job plays them with `--testsuite tankity --group slow`
+and then prints the CPU per round with `tools/round-bench.php`). CI runs
 `make test` as `units` and `make e2e` as `e2e` on every pull request. Deploys
 skip `test/`, `README.md` files, `protocol/`, the effects editor and the Blender script.
 

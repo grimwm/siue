@@ -15,6 +15,9 @@ test('a lost match shows the end card: result, the rounds table, where it was fi
   expect(await hud(page, 'hud-weapon')).toMatch(/^Mortar /);
   await expect(page.locator('#end-veil')).toBeHidden();
 
+  const filed = page.waitForResponse(r => r.url().includes('scores.php') && r.request().method() === 'POST'
+    && (r.request().postData() || '').includes('"op":"file"'), { timeout: 120_000 }).catch(() => null);
+
   await loseMatch(page);
 
   // The result and the score.
@@ -35,8 +38,16 @@ test('a lost match shows the end card: result, the rounds table, where it was fi
 
   // The run filed itself and the card says how it went: always a line, never a blank, and never still "Filing".
   await expect(page.locator('#end-filed')).toBeVisible();
-  // Filing writes a real score, so only the local site is expected to say Filed.
-  await expect(page.locator('#end-filed')).toHaveText(local(baseURL) ? /^Filed · / : /^(Filed ·|Couldn't file your score: )/, { timeout: 10_000 });
+  // Filing writes a real score, so only the local site is expected to say Filed; elsewhere the line says how the run went.
+  await expect(page.locator('#end-filed')).toHaveText(local(baseURL) ? /^Filed · / : /^(Filed · |Not filed: |Sent: |Saved in this browser|Waiting for the score server)/, { timeout: 10_000 });
+  // The server played every round as it ended and filed exactly the score this page showed.
+  if (local(baseURL)) {
+    const res = await filed;
+    expect(res, 'the run was sent for filing').toBeTruthy();
+    expect(res.status(), `scores.php refused the run: ${await res.text()}`).toBe(200);
+    const shown = Number((await veil.locator('#end-score').textContent()).match(/^Score (\d+)/)[1]);
+    expect((await res.json()).score).toBe(shown);
+  }
 
   // Keyboard: focus lands on Continue, and Q and Esc leave the card (and fullscreen) alone.
   await expect(page.locator('#again')).toBeFocused();

@@ -162,3 +162,27 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
     }
     return $out;
 }
+
+/* One row of a browser's "Your games" list: what that seat needs to know
+   without loading the match. */
+function room_mine_row(array $room, int $seat): array
+{
+    $playing = $room['phase'] === 'play' && count($room['tanks']);
+    $turnSeat = $playing ? ($room['tanks'][$room['turn']]['seat'] ?? null) : null;
+    $left = room_turn_left($room);
+    $yours = $turnSeat === $seat && $left !== null;
+    $shop = room_shop_left($room);
+    $players = [];
+    foreach ($room['seats'] as $s) {
+        if ($s['human'] ?? false) {
+            $players[] = (string) $s['initials'];
+        }
+    }
+    return [
+        'code' => $room['code'], 'gone' => false, 'seat' => $seat, 'phase' => $room['phase'],
+        'round' => (int) $room['round'], 'turnSecs' => room_turn_secs($room), 'turn' => $turnSeat,
+        'yourTurn' => $yours, 'turnKey' => $yours ? room_turn_key($room) : null,
+        'turnLeft' => $left === null ? null : round($left, 1), 'shopLeft' => $shop === null ? null : round($shop, 1),
+        'players' => $players, 'hostSeat' => room_host($room),
+    ];
+}

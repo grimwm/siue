@@ -138,6 +138,21 @@ function protocol_snapshots(): array
     $shop['shop']['at'] = microtime(true);
     $out['shop-ready'] = ['The shop with a second human seated: the host has pressed Ready (seats[].ready), the other has not, and the shop clock reads shopLeft.',
         200, $ok(room_snapshot($shop, 0, 0))];
+
+    // The host sets the turn time mid-play: one event, and the snapshot's turnSecs.
+    $timed = $play;
+    $timed['turnSecs'] = 600;
+    room_emit($timed, ['t' => 'turntime', 'seat' => 0, 'secs' => 600]);
+    $out['play-turntime'] = ['The host moved the turn time to 10 minutes: turnSecs reads 600 and one turntime event rides along (since = 1 skips the round event).',
+        200, $ok(room_snapshot($timed, 0, 1))];
+
+    // A browser's "Your games": a match with this seat up, a lobby it waits in, a room that is gone.
+    $out['mine-reply'] = ['action=mine for three stored seats, in the order asked: a running match where it is this seat\'s turn (turnKey names the turn), a lobby, and a room that is gone.',
+        200, ['ok' => true, 'rooms' => [
+            room_mine_row($play, 0),
+            room_mine_row($lobby, 1),
+            ['code' => 'GONE', 'gone' => true],
+        ]]];
     return $out;
 }
 

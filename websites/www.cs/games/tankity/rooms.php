@@ -130,6 +130,49 @@ function room_arsenal(): array
     return $a;
 }
 
+/* A browser's seats, one row each in the order asked; null when it asked for
+   too many or not for a list. A room with something due (a turn or shop that
+   ran out, a drone up) is ticked under the write lock and saved; the rest are
+   plain reads, and a lobby is never saved here, so asking keeps nothing
+   alive. A code that names no room, an expired room and a token that holds no
+   seat there are all `gone`. */
+const ROOM_MINE_MAX = 12;
+function room_mine(mixed $seats): ?array
+{
+    if (!is_array($seats) || !array_is_list($seats) || count($seats) > ROOM_MINE_MAX) {
+        return null;
+    }
+    $out = [];
+    foreach ($seats as $ask) {
+        $code = strtoupper(trim(is_array($ask) && is_string($ask['code'] ?? null) ? $ask['code'] : ''));
+        $token = is_array($ask) && is_string($ask['token'] ?? null) ? $ask['token'] : '';
+        $gone = ['code' => $code, 'gone' => true];
+        if (!preg_match('/^[A-Z0-9]{4}$/', $code) || $token === '') {
+            $out[] = $gone;
+            continue;
+        }
+        $room = room_peek($code);
+        $seat = $room !== null ? room_find_seat($room, $token) : null;
+        if ($seat === null) {
+            $out[] = $gone;
+            continue;
+        }
+        if (room_tick_due($room)) {
+            [$held, $lock] = room_load($code);
+            if (!is_array($held)) {
+                $out[] = $gone;
+                continue;
+            }
+            room_tick($held);
+            room_save($lock, $code, $held);
+            room_unlock($lock);
+            $room = $held;
+        }
+        $out[] = room_mine_row($room, $seat);
+    }
+    return $out;
+}
+
 /* ---------- router ---------- */
 // test/php/checks/rooms-sim.php includes this file for its functions only.
 if (defined('TANKITY_ROOMS_LIB')) {
@@ -164,6 +207,23 @@ if ($action === 'maps') {
         $list[] = ['id' => $id, 'name' => $m['name'], 'profile' => room_map_profile($id)];
     }
     room_json_out(200, ['ok' => true, 'maps' => $list]);
+}
+
+if ($action === 'mine' && $method === 'POST') {
+    // Reads, and ticks what is due; it changes nothing a GET state poll cannot,
+    // so it takes no CSRF token and no rate charge. Tokens travel in the body.
+    if (!room_origin_ok()) {
+        room_json_out(403, ['error' => 'bad origin']);
+    }
+    try {
+        $rows = room_mine($body['seats'] ?? null);
+    } catch (Throwable $e) {
+        room_store_fail($e);
+    }
+    if ($rows === null) {
+        room_json_out(422, ['error' => 'too many rooms at once']);
+    }
+    room_json_out(200, ['ok' => true, 'rooms' => $rows]);
 }
 
 if ($action === 'map' && $method === 'POST') {

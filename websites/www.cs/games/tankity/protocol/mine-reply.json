@@ -1,0 +1,48 @@
+{
+    "about": "action=mine for three stored seats, in the order asked: a running match where it is this seat's turn (turnKey names the turn), a lobby, and a room that is gone.",
+    "status": 200,
+    "body": {
+        "ok": true,
+        "rooms": [
+            {
+                "code": "FXT1",
+                "gone": false,
+                "seat": 0,
+                "phase": "play",
+                "round": 1,
+                "turnSecs": 120,
+                "turn": 0,
+                "yourTurn": true,
+                "turnKey": "1:0:0",
+                "turnLeft": 120,
+                "shopLeft": null,
+                "players": [
+                    "ABC"
+                ],
+                "hostSeat": 0
+            },
+            {
+                "code": "FXT1",
+                "gone": false,
+                "seat": 1,
+                "phase": "lobby",
+                "round": 0,
+                "turnSecs": 120,
+                "turn": null,
+                "yourTurn": false,
+                "turnKey": null,
+                "turnLeft": null,
+                "shopLeft": null,
+                "players": [
+                    "ABC",
+                    "DEF"
+                ],
+                "hostSeat": 0
+            },
+            {
+                "code": "GONE",
+                "gone": true
+            }
+        ]
+    }
+}

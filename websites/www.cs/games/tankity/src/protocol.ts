@@ -24,6 +24,28 @@ export interface RoomReply { ok: true; room: RoomSnapshot }
 /** leave answers with just this. */
 export interface OkReply { ok: true }
 
+/** One of a browser's seats, as action=mine reports it. `gone` covers no such
+ * room, an expired room and a token that holds no seat there: the browser
+ * forgets all three. */
+export type MineRow =
+  | { code: string; gone: true }
+  | {
+    code: string; gone: false; seat: number; phase: 'lobby' | 'play' | 'shop' | 'over';
+    round: number; turnSecs: number;
+    /** The seat whose turn it is (play only). */
+    turn: number | null;
+    yourTurn: boolean;
+    /** Identifies this turn ("round:turn:shots"); null unless yourTurn. One toast per key. */
+    turnKey: string | null;
+    turnLeft: number | null; shopLeft: number | null;
+    /** Every human's initials, this seat's included, in seat order. */
+    players: string[];
+    hostSeat: number;
+  };
+
+/** action=mine answers one row per seat asked, in the order asked. */
+export interface MineReply { ok: true; rooms: MineRow[] }
+
 /** action=maps: the hills picker's catalog. `profile` is round one's terrain
  * sampled to 0..1 (0 the lowest ground the generator allows). */
 export interface MapsReply { ok: true; maps: MapInfo[] }
@@ -256,6 +278,9 @@ export interface PostBodies {
   seatmode: { seat: number; mode: 'ai' | 'open'; since?: number };
   /** Host only, any phase; `secs` is one of the host's stops. */
   turntime: { secs: number };
+  /** The seats this browser holds (at most 12), asked about together; the
+   * reply is not a room, so no delta fields ride along. */
+  mine: { seats: { code: string; token: string }[] };
   leave: Record<string, never>;
 }
 
@@ -272,6 +297,7 @@ export interface PostReplies {
   map: RoomReply;
   seatmode: RoomReply;
   turntime: RoomReply;
+  mine: MineReply;
   leave: OkReply;
 }
 

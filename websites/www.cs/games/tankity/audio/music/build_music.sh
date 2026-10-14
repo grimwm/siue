@@ -44,6 +44,12 @@ battle-theme-a|https://opengameart.org/sites/default/files/battleThemeA.mp3|6042
 chiptune-level-1|https://opengameart.org/sites/default/files/5%20Action%20Chiptunes%20By%20Juhani%20Junkala.zip|ea189990c0fb9a700187ccc740eda72400341a082305a163867467d96346460d|Juhani Junkala [Retro Game Music Pack] Level 1.wav
 awake-megawall-10|https://opengameart.org/sites/default/files/awake10_megaWall.mp3|462c85304df0ea5369cb98aaae158108c92227fa5f442fb63a2da6febbe82ded|
 chiptune-level-3|https://opengameart.org/sites/default/files/5%20Action%20Chiptunes%20By%20Juhani%20Junkala.zip|ea189990c0fb9a700187ccc740eda72400341a082305a163867467d96346460d|Juhani Junkala [Retro Game Music Pack] Level 3.wav
+artillery-mans-stage|https://opengameart.org/sites/default/files/Artillery%20Man%27s%20Stage_0.ogg|0ac84d7f50d24db53de8e256ef5534606fe3b35ec82f8ebc4a6dd32bcfdb4e8a|
+abandoned-hopes|https://opengameart.org/sites/default/files/Abandoned%20Hopes.wav|556a2178173bf62a44bcc0e3e5c640f1b9421f8f9c28c49a6fd8c3b17f032f7d|
+great-boss|https://opengameart.org/sites/default/files/Great%20Boss_0.ogg|5a9eaa1236c36efbdf36c5b576c722057d8a7177f8277fd42105e013eaf19aac|
+inevitable-doom|https://opengameart.org/sites/default/files/Inevitable%20Doom.wav|cef9610f1a708fa039c6ef61f2851413f0d2d09b27cdca4943778a76d428be47|
+boss-battle-1|https://opengameart.org/sites/default/files/Boss%20Battle%20%231%20V1.wav|70508dcdb1e1b29884913f6d73949b0dfaa097390b23e9a53fd3067e1cb80781|
+chip-bit-danger|https://opengameart.org/sites/default/files/Chip%20Bit%20Danger.mp3|6656f7ee749dfcb060effcd9ce73da6be9d3006cd189463bc7e7429f2ccf600f|
 # END SOURCES
 EOF
 SOURCES=${MUSIC_SOURCES:-$DEFAULT_SOURCES}

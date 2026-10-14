@@ -655,6 +655,42 @@
                 "title": "Action Chiptune 3",
                 "volume": 1.0,
                 "credit": "Juhani Junkala"
+            },
+            {
+                "file": "audio/music/artillery-mans-stage.mp3",
+                "title": "Artillery Man's Stage",
+                "volume": 1.0,
+                "credit": "Spring Spring"
+            },
+            {
+                "file": "audio/music/abandoned-hopes.mp3",
+                "title": "Abandoned Hopes",
+                "volume": 1.0,
+                "credit": "Jonathan So"
+            },
+            {
+                "file": "audio/music/great-boss.mp3",
+                "title": "Great Boss",
+                "volume": 1.0,
+                "credit": "Spring Spring"
+            },
+            {
+                "file": "audio/music/inevitable-doom.mp3",
+                "title": "Inevitable Doom",
+                "volume": 1.0,
+                "credit": "celestialghost8"
+            },
+            {
+                "file": "audio/music/boss-battle-1.mp3",
+                "title": "Boss Battle #1",
+                "volume": 1.0,
+                "credit": "nene"
+            },
+            {
+                "file": "audio/music/chip-bit-danger.mp3",
+                "title": "Chip Bit Danger",
+                "volume": 1.0,
+                "credit": "Sudocolon"
             }
         ]
     },

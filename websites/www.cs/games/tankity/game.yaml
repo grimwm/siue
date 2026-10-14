@@ -598,6 +598,24 @@ audio:
     - file: audio/music/chiptune-level-3.mp3
       title: Action Chiptune 3
       credit: Juhani Junkala
+    - file: audio/music/artillery-mans-stage.mp3
+      title: "Artillery Man's Stage"
+      credit: Spring Spring
+    - file: audio/music/abandoned-hopes.mp3
+      title: Abandoned Hopes
+      credit: Jonathan So
+    - file: audio/music/great-boss.mp3
+      title: Great Boss
+      credit: Spring Spring
+    - file: audio/music/inevitable-doom.mp3
+      title: Inevitable Doom
+      credit: celestialghost8
+    - file: audio/music/boss-battle-1.mp3
+      title: "Boss Battle #1"
+      credit: nene
+    - file: audio/music/chip-bit-danger.mp3
+      title: Chip Bit Danger
+      credit: Sudocolon
 
 # --------------------------------------------------------------------------
 # effects

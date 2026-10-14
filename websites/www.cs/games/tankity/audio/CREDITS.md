@@ -58,6 +58,12 @@ into the table. The author is the composer the page names; OpenGameArt's own
 | `chiptune-level-1.mp3` | Action Chiptune 1 | Juhani Junkala | https://opengameart.org/content/5-chiptunes-action | CC0 | ea189990c0fb9a700187ccc740eda72400341a082305a163867467d96346460d |
 | `awake-megawall-10.mp3` | Awake! (Megawall-10) | cynicmusic | https://opengameart.org/content/awake-megawall-10 | CC0 | 462c85304df0ea5369cb98aaae158108c92227fa5f442fb63a2da6febbe82ded |
 | `chiptune-level-3.mp3` | Action Chiptune 3 | Juhani Junkala | https://opengameart.org/content/5-chiptunes-action | CC0 | ea189990c0fb9a700187ccc740eda72400341a082305a163867467d96346460d |
+| `artillery-mans-stage.mp3` | Artillery Man's Stage | Spring Spring | https://opengameart.org/content/artillery-mans-stage | CC0 | 0ac84d7f50d24db53de8e256ef5534606fe3b35ec82f8ebc4a6dd32bcfdb4e8a |
+| `abandoned-hopes.mp3` | Abandoned Hopes | Jonathan So | https://opengameart.org/content/abandoned-hopes | CC0 | 556a2178173bf62a44bcc0e3e5c640f1b9421f8f9c28c49a6fd8c3b17f032f7d |
+| `great-boss.mp3` | Great Boss | Spring Spring | https://opengameart.org/content/great-boss | CC0 | 5a9eaa1236c36efbdf36c5b576c722057d8a7177f8277fd42105e013eaf19aac |
+| `inevitable-doom.mp3` | Inevitable Doom | celestialghost8 | https://opengameart.org/content/inevitable-doom | CC0 | cef9610f1a708fa039c6ef61f2851413f0d2d09b27cdca4943778a76d428be47 |
+| `boss-battle-1.mp3` | Boss Battle #1 | nene | https://opengameart.org/content/boss-battle-1-8-bit-re-upload | CC0 | 70508dcdb1e1b29884913f6d73949b0dfaa097390b23e9a53fd3067e1cb80781 |
+| `chip-bit-danger.mp3` | Chip Bit Danger | Sudocolon | https://opengameart.org/content/chip-bit-danger | CC0 | 6656f7ee749dfcb060effcd9ce73da6be9d3006cd189463bc7e7429f2ccf600f |
 
 cynicmusic's site is https://cynicmusic.com; Juhani Junkala's tracks are
 "Level 1" and "Level 3" from his pack "5 Chiptunes (Action)".

@@ -287,10 +287,7 @@ function frame(ts: number): void {
   // Name cards: the hills drift, nothing plays.
   if (G.phase === 'banner') {
     G.time += dt;
-    for (const cl of G.clouds) {
-      cl.x += cl.v * dt;
-      if (cl.x - 40 > G.w) cl.x = -40;
-    }
+    driftClouds(dt);
     pumpDialogue(dt);
     updateCamera(dt);
     render();
@@ -306,10 +303,7 @@ function frame(ts: number): void {
   const war = G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle';
   if (!war) fallTanks(dt);
   tickTutorial();
-  for (const cl of G.clouds) {
-    cl.x += cl.v * dt;
-    if (cl.x - 40 > G.w) cl.x = -40;
-  }
+  driftClouds(dt);
   pumpDialogue(dt);
   G.banterT -= dt;
   if (G.banterT <= 0) {
@@ -409,7 +403,7 @@ const { HUD, paintHud, windText, renderHUD } = createHud({
   onMenu: () => toggleOverlay('menu-overlay', 'btn-menu'),
 });
 /* The camera and the frame the canvas paints (src/view.ts). */
-const { updateCamera, shownAngle, shownPower, render } = createView({
+const { updateCamera, driftClouds, shownAngle, shownPower, render } = createView({
   G, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
 /* The high scores (src/scores.ts): the online board and this browser's, on this browser's storage
@@ -472,7 +466,7 @@ const {
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
   backToLobby: () => netBackToLobby(),
   decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
-  renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText, saveLocal,
+  renderShopReady, shownAngle, shownPower, startBanner, updateCamera, driftClouds, windText, saveLocal,
 });
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving. */
 const {

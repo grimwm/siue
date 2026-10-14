@@ -16,8 +16,13 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: base.endsWith('/') ? base : base + '/',
-    channel: 'chrome',
     viewport: { width: 1280, height: 860 },
     screenshot: 'only-on-failure',
   },
+  // Chrome runs everything. E2E_WEBKIT=1 adds WebKit for the specs that judge
+  // drawing across engines (needs `npx playwright install webkit`; CI installs Chrome only).
+  projects: [
+    { name: 'chrome', use: { channel: 'chrome' } },
+    ...(process.env.E2E_WEBKIT ? [{ name: 'webkit', use: { browserName: 'webkit' }, testMatch: ['tankity-sky-camera.spec.mjs'] }] : []),
+  ],
 });

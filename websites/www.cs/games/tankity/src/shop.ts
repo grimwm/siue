@@ -42,6 +42,8 @@ export interface ShopDeps {
   openLeaveVeil(): void;
   netBuy(it: ShopRow, qty: number): void;
   board(): Board | null;
+  /** Fetch these guns' effect sheets ahead of their first shot. */
+  preloadFx(keys: readonly string[]): void;
 }
 
 /** G.shopSel on the free Shell row, which sits above the shelf's first row. */
@@ -50,7 +52,7 @@ export const SHELL_ROW = -1;
 export function createShop(deps: ShopDeps) {
   const {
     G, $, tables, net, sfx, me, touch, keyHint, say, advance, render, renderHUD, refreshNavHints,
-    drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil, netBuy, board,
+    drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil, netBuy, board, preloadFx,
   } = deps;
 
   function openShop(): void {
@@ -70,6 +72,9 @@ export function createShop(deps: ShopDeps) {
   function hideShop(): void {
     const veil = $('shop-veil');
     if (veil) veil.hidden = true;
+    // The round starts: whatever is in the rack gets its effects ready.
+    const rack = G.ammo || {};
+    preloadFx(['shell', ...Object.keys(rack).filter(k => (rack[k] || 0) > 0)]);
   }
   /* The shop is a Preact component (src/ui/shop.tsx) drawn into #shop-veil. This
      builds what it shows from the game's state and wires its clicks back; the
@@ -253,12 +258,14 @@ export function createShop(deps: ShopDeps) {
   }
   function buyItem(it: ShopRow, qty?: number): void {
     qty = clamp(Math.floor(qty || 1), 1, 9);
+    const fetchFx = (): void => { if (it.kind === 'ammo' && it.w) preloadFx([it.w]); };
     if (net.on) {
       // A room says the local line first (the server would answer 409), and
       // asks for what the server will sell so the log line is true.
       const packs = buyPacks(G, it, qty);
       if (packs === 0) { say('Armor is full already.', 'info'); return; }
       netBuy(it, packs);
+      fetchFx();
       return;
     }
     const lives = G.lives;
@@ -270,6 +277,7 @@ export function createShop(deps: ShopDeps) {
       return;
     }
     sfx.play('cash');
+    fetchFx();
     const lots = r.qty > 1 ? `${r.qty} × ` : '';
     if (it.kind === 'ammo') say(`Bought ${lots}${it.label}.`, 'good');
     else boughtLine(it, lots, lives);

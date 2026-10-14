@@ -192,7 +192,7 @@ const tables = {
   get rev() { return ARSENAL_REV; },
 };
 /* Weapon looks (src/effects.ts): muzzle flashes, trails, blasts. */
-const { fxSet, installEffects, fxMuzzle, fxImpact, fxSpecial, fxTrail } = createEffects({ G, tables });
+const { fxSet, installEffects, fxMuzzle, fxImpact, fxSpecial, fxTrail, fxPreload } = createEffects({ G, tables });
 G.fx = FX ? FX.createSystem({ max: FX_BUDGET }) : null;
 /* What the crew says (src/chatter.ts): the trash-talk queue and the radio log. */
 const { talk, exchange, pumpDialogue, say, renderLogOverlay } = createChatter({
@@ -454,6 +454,7 @@ const {
   G, $, tables, net, sfx, me, touch: TOUCH, keyHint, say, advance, render, renderHUD, refreshNavHints,
   drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil: () => openLeaveVeil(), netBuy: (it, qty) => netBuy(it, qty),
   board: () => (net.on ? roomShopBoard() : soloShopBoard()),
+  preloadFx: keys => fxPreload(keys),
 });
 /* The weapon picker (src/guns.ts). */
 const {
@@ -485,11 +486,12 @@ const {
   renderShop,
 });
 /* The game menu's settings (src/menu.ts). */
-const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
+const { loadBody, loadTextSize, loadFlashes, textScale, renderMenu } = createMenu({
   G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
   nextSong: () => { unlock(); music.next(); },
   openStandings: () => openStandings(), freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
   quit: () => { void quitGame(); },
+  setFlashes: on => { if (FX) FX.flashes = on; },
 });
 /* The title card over the demo (src/title.ts). */
 const { titleOpen, openTitle, closeTitle, showHint: showTitleHint, renderTitle } = createTitle({
@@ -700,6 +702,7 @@ function init(): void {
   bindKeys();
   loadGameConfig();
   G.body = loadBody();
+  loadFlashes();
   paintHud();
   renderLogOverlay();
   renderScoresOverlay();

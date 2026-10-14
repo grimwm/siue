@@ -1,5 +1,5 @@
 {
-  "_note": "Sprite sheets rendered by fx/blender/render_fx.py. frame = square px; frames fill rows left to right from the top-left, cols per row; fps = designed playback rate.",
+  "_note": "Sprite sheets rendered by fx/blender/render_fx.py. frame = square px; frames fill rows left to right from the top-left, cols per row; fps = designed playback rate. Sheets that share a file (an atlas) start at frame `first` of it.",
   "fireball": {
     "file": "fireball.png",
     "frame": 96,
@@ -32,14 +32,6 @@
     "frames": 16,
     "fps": 30
   },
-  "mushroom": {
-    "file": "mushroom.png",
-    "frame": 128,
-    "cols": 6,
-    "rows": 4,
-    "frames": 24,
-    "fps": 14
-  },
   "moon": {
     "file": "moon.png",
     "frame": 192,
@@ -54,6 +46,203 @@
     "cols": 4,
     "rows": 4,
     "frames": 16,
+    "fps": 12
+  },
+  "blast": {
+    "file": "blast.png",
+    "frame": 128,
+    "cols": 6,
+    "rows": 4,
+    "frames": 24,
+    "fps": 30
+  },
+  "plume": {
+    "file": "plume.png",
+    "frame": 96,
+    "cols": 5,
+    "rows": 4,
+    "frames": 20,
+    "fps": 12
+  },
+  "dirt": {
+    "file": "dirt.png",
+    "frame": 96,
+    "cols": 5,
+    "rows": 4,
+    "frames": 20,
+    "fps": 24
+  },
+  "debris": {
+    "file": "debris.png",
+    "frame": 32,
+    "cols": 8,
+    "rows": 2,
+    "frames": 16,
+    "fps": 20
+  },
+  "scorch": {
+    "file": "scorch.png",
+    "frame": 64,
+    "cols": 6,
+    "rows": 2,
+    "frames": 12,
+    "fps": 6
+  },
+  "flakburst": {
+    "file": "flakburst.png",
+    "frame": 96,
+    "cols": 5,
+    "rows": 4,
+    "frames": 20,
+    "fps": 24
+  },
+  "electric": {
+    "file": "electric.png",
+    "frame": 96,
+    "cols": 4,
+    "rows": 4,
+    "frames": 16,
+    "fps": 24
+  },
+  "nuke": {
+    "file": "nuke.png",
+    "frame": 160,
+    "cols": 8,
+    "rows": 4,
+    "frames": 32,
+    "fps": 12
+  },
+  "flare": {
+    "file": "flare.png",
+    "frame": 96,
+    "cols": 6,
+    "rows": 2,
+    "frames": 12,
+    "fps": 30
+  },
+  "muzzle": {
+    "file": "muzzle.png",
+    "frame": 64,
+    "cols": 8,
+    "rows": 1,
+    "frames": 8,
+    "fps": 30
+  },
+  "p_shell": {
+    "file": "shells.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 13,
+    "frames": 8,
+    "first": 0,
+    "fps": 12
+  },
+  "p_buck": {
+    "file": "shells.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 13,
+    "frames": 8,
+    "first": 8,
+    "fps": 12
+  },
+  "p_mortar": {
+    "file": "shells.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 13,
+    "frames": 8,
+    "first": 16,
+    "fps": 12
+  },
+  "p_rail": {
+    "file": "shells.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 13,
+    "frames": 8,
+    "first": 24,
+    "fps": 12
+  },
+  "p_cluster": {
+    "file": "shells.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 13,
+    "frames": 8,
+    "first": 32,
+    "fps": 12
+  },
+  "p_flak": {
+    "file": "shells.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 13,
+    "frames": 8,
+    "first": 40,
+    "fps": 12
+  },
+  "p_seeker": {
+    "file": "shells.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 13,
+    "frames": 8,
+    "first": 48,
+    "fps": 12
+  },
+  "p_lance": {
+    "file": "shells.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 13,
+    "frames": 8,
+    "first": 56,
+    "fps": 12
+  },
+  "p_heavy": {
+    "file": "shells.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 13,
+    "frames": 8,
+    "first": 64,
+    "fps": 12
+  },
+  "p_needle": {
+    "file": "shells.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 13,
+    "frames": 8,
+    "first": 72,
+    "fps": 12
+  },
+  "p_emp": {
+    "file": "shells.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 13,
+    "frames": 8,
+    "first": 80,
+    "fps": 12
+  },
+  "p_roller": {
+    "file": "shells.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 13,
+    "frames": 8,
+    "first": 88,
+    "fps": 12
+  },
+  "p_nuke": {
+    "file": "shells.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 13,
+    "frames": 8,
+    "first": 96,
     "fps": 12
   }
 }

@@ -16,7 +16,8 @@ import { createRenderer } from './render.ts';
 import type { BattleView, DrawTank, Renderer } from './render.ts';
 import type { Replay } from './replay.ts';
 import { sceneryY } from './scenery.ts';
-import { cameraTarget, easeCamera, skyMarks, volleyTop } from './camera.ts';
+import { ZOOM_FLOOR, cameraTarget, easeCamera, skyMarks, volleyTop } from './camera.ts';
+import type { Aloft, Reach } from './camera.ts';
 import {
   hashSeed, mulberry32, gauss, GRAV, FLAT_GRAV, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
 } from './sim.ts';
@@ -48,15 +49,18 @@ export function createView(deps: ViewDeps) {
   const calm = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   const gravity = (wkey: string): number => (tables.weapons[wkey]?.flat ? FLAT_GRAV : GRAV);
   let sky: number | null = null; // the volley's top row, held until it lands
-  let flyingOn: readonly { x: number; y: number; vx: number; vy: number; wkey: string }[] = []; // last frame's shells past the field's edge
-  const aloft: (readonly { y: number; vy: number; wkey: string }[])[] = [[], []];
+  // Last frame's shells: a room replay's (read once a frame, in battleView) and those flying on past the field's edge.
+  let replayed: readonly Aloft[] = [], flyingOn: readonly Aloft[] = [];
+  const aloft: (readonly Aloft[])[] = [[], []];
   let tallSky = 0; // rows of sky the canvas shows above the field at full size (fitCanvas)
+  const reach: Reach = { w: 0, reach: 0 }; // how far across the floor's view reaches (fitCanvas)
   function updateCamera(dt: number): void {
     units.length = 0;
     for (const t of G.tanks) if (t.hp > 0) units.push(t);
-    aloft[0] = net.on ? replay.flying() : G.shells;
-    aloft[1] = flyingOn; // a shell past the edge flies on over the scenery: the camera keeps its arc
-    sky = volleyTop(sky, aloft, gravity);
+    aloft[0] = net.on ? replayed : G.shells;
+    aloft[1] = flyingOn; // past the edge: held only while it climbs within the floor's reach
+    reach.w = G.w;
+    sky = volleyTop(sky, aloft, gravity, reach);
     easeCamera(G.cam, cameraTarget(G.w, H, units, sky, tallSky), dt, !!(calm && calm.matches), H);
   }
   /* Aim as drawn. Solo drones animate their real angle and power; in rooms the
@@ -104,6 +108,7 @@ export function createView(deps: ViewDeps) {
     const pv = G.preview;
     // Shells the sim retires past the field's edge fly on, drawn only, over the scenery.
     const flying = replay.flying();
+    replayed = flying;
     if (G.time < ghostTime) ghosts.clear(); // a new match restarted the clock
     const flyOn = ghosts.frame([...G.shells, ...flying], G.w, Math.min(0.1, Math.max(0, G.time - ghostTime)), G.wind,
       wkey => (tables.weapons[wkey]?.flat ? FLAT_GRAV : GRAV));
@@ -139,7 +144,9 @@ export function createView(deps: ViewDeps) {
     }
     const box = { w: cv.clientWidth || 1, h: cv.clientHeight || 1 };
     const fit = fitField(box, { w: G.w, h: H });
-    tallSky = Math.max(0, -visibleWorld(fit, box).y0);
+    const seen = visibleWorld(fit, box);
+    tallSky = Math.max(0, -seen.y0);
+    reach.reach = (seen.x1 - seen.x0) / 2 / ZOOM_FLOOR;
     const field = [fit.ox, fit.oy, G.w * fit.s, H * fit.s].map(v => Math.round(v)).join(',');
     if (published !== `${G.w}|${field}`) {
       published = `${G.w}|${field}`;

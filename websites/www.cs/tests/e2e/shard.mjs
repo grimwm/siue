@@ -14,7 +14,7 @@ export const WEIGHTS = {
   'crete-play.spec.mjs': 15,
   'tankity-start.spec.mjs': 12,
   'tankity-layout.spec.mjs': 15,
-  'tankity-sky-camera.spec.mjs': 30,
+  'tankity-sky-camera.spec.mjs': 70,
   'tankity-fx-editor.spec.mjs': 64,
   'tankity-fx-battle.spec.mjs': 74,
   'tankity-fx-range.spec.mjs': 73,

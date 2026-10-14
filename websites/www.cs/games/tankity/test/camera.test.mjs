@@ -27,8 +27,25 @@ test('a tall spread of units alone pulls back no further than the unit floor', (
   assert.ok(t.z < 1);
 });
 
-test('no units: the whole field, centred', () => {
-  assert.deepEqual(cameraTarget(W, H, [], null), { z: 1, cx: W / 2, cy: H / 2 });
+test('no units: the whole field, its floor at the bottom', () => {
+  const t = cameraTarget(W, H, [], null);
+  assert.equal(t.z, 1);
+  assert.equal(t.cx, W / 2);
+  assert.equal(viewEdges(t, H).bottom, H + 8);
+});
+
+test('the bottom edge sits on the field floor, never above the deepest ground, units high or low, volley or not', () => {
+  const highs = [[{ y: 150 }, { y: 170 }], [{ y: 250 }, { y: 260 }, { y: 280 }], [{ y: 150 }, { y: 280 }], flat, [{ y: 440 }]];
+  for (const units of highs) {
+    for (const sky of [null, 400, 100, -50, -300, -900, -5000]) {
+      for (const extra of [0, 400]) {
+        const t = cameraTarget(W, H, units, sky, extra);
+        const { top, bottom } = viewEdges(t, H);
+        assert.ok(near(bottom, H + 8, 1e-9), `units ${units.map(u => u.y)} sky ${sky}: bottom ${bottom}`);
+        for (const u of units) assert.ok(u.y - 56 >= top - 1e-9, `unit ${u.y} under the top`);
+      }
+    }
+  }
 });
 
 test('a volley top below the units changes nothing', () => {
@@ -97,7 +114,23 @@ test('volleyTop ratchets up while shells fly and clears once the volley has land
   top = volleyTop(top, [[{ y: 400, vy: -300, wkey: 'shell' }, { y: 100, vy: 0, wkey: 'shell' }]], g);
   assert.ok(near(top, 400 - 300 * 300 / 190));
   assert.equal(volleyTop(top, [[], []], g), null, 'landed: back to the units');
-  assert.equal(volleyTop(top, [[], [{ y: 500, vy: 0, wkey: 'shell' }]], g), top, 'a shell flying on past the edge holds it');
+  assert.equal(volleyTop(top, [[], [{ y: 500, vy: -10, wkey: 'shell' }]], g), top, 'a shell flying on past the edge holds it while it climbs');
+});
+
+test('volleyTop: a shell past the edge holds only while it climbs within the floor\'s reach; a roller on the ground never', () => {
+  const g = () => 95, reach = 2000;
+  const top = volleyTop(null, [[{ x: 500, y: 300, vy: -100, wkey: 'shell' }]], g, { w: W, reach });
+  assert.notEqual(top, null);
+  // Live shells landed; a ghost falls on past the edge: the hold ends.
+  assert.equal(volleyTop(top, [[], [{ x: W + 30, y: 200, vy: 50, wkey: 'shell' }]], g, { w: W, reach }), null);
+  // A ghost still climbing within reach keeps it.
+  assert.equal(volleyTop(top, [[], [{ x: W + 30, y: 200, vy: -50, wkey: 'shell' }]], g, { w: W, reach }) !== null, true);
+  // A climbing ghost the floor view cannot reach sideways does not.
+  assert.equal(volleyTop(top, [[], [{ x: W / 2 + reach + 1, y: 200, vy: -50, wkey: 'shell' }]], g, { w: W, reach }), null);
+  // A roller on the ground lets the camera come home.
+  assert.equal(volleyTop(top, [[{ x: 400, y: 330, vy: -2, wkey: 'roller', rolling: true }], []], g, { w: W, reach }), null);
+  // A live shell still in the air holds as before.
+  assert.notEqual(volleyTop(top, [[{ x: 400, y: 330, vy: 20, wkey: 'shell' }], []], g, { w: W, reach }), null);
 });
 
 test('volleyTop reads each weapon\'s own gravity', () => {

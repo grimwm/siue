@@ -492,6 +492,8 @@ function drawBoom(c: CanvasRenderingContext2D, bm: Boom, look: Look): void {
    pixel stars in sizes, brightnesses and a few tints; a faint milky band and
    a few clusters; a quiet twinkle on some (none under reduced motion); and a
    moon phase from the rendered sheet (fx/sprites/moon.png). */
+/** World rows the high cloud layer sits above the low one. */
+const HIGH_CLOUDS = -260;
 const SKY_TINTS = ['#ffe2b0', '#b8d0ff'];
 const SKY_PHASES = [0, 0, 1, 6, 2, 5, 3, 4]; // frames of moon.png, full and gibbous favoured
 interface Star { x: number; y: number; s: number; a: number; c: string; tw: number; ph: number }
@@ -806,15 +808,22 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.translate(-view.cam.cx, -view.cam.cy);
     // What the canvas shows through the camera: the scenery and the dirt fill all of it.
     const z = view.cam.z;
-    const sx0 = Math.floor(view.cam.cx + (rect.x0 - W / 2) / z) - 8, sx1 = Math.ceil(view.cam.cx + (rect.x1 - W / 2) / z) + 8;
-    const sy0 = view.cam.cy + (rect.y0 - H / 2) / z, sy1 = view.cam.cy + (rect.y1 - H / 2) / z + 8;
+    // A margin past the view's edges in world units, wide enough for the screen shake (up to 4 field units) at this zoom.
+    const m = Math.ceil((8 + 4 * view.shake) / z);
+    const sx0 = Math.floor(view.cam.cx + (rect.x0 - W / 2) / z) - m, sx1 = Math.ceil(view.cam.cx + (rect.x1 - W / 2) / z) + m;
+    const sy0 = view.cam.cy + (rect.y0 - H / 2) / z, sy1 = view.cam.cy + (rect.y1 - H / 2) / z + m;
     c.fillStyle = '#23233f';
+    // A tall sky (a portrait screen, or the camera pulled back) gets a high layer too: the same
+    // clouds mirrored across the field and set HIGH_CLOUDS higher, part of the world like the
+    // low ones, fading in as more of the sky comes into view.
+    const high = Math.max(0, Math.min(1, (-sy0 - 120) / 200)) * 0.6;
     for (const cl of view.clouds) {
-      for (const lift of sy0 < -120 ? [0, sy0 * 0.45] : [0]) { // a tall sky gets a high layer too
-        c.globalAlpha = lift ? 0.6 : 1;
+      for (let layer = 0; layer < (high > 0 ? 2 : 1); layer++) {
+        const x = layer ? W - cl.x - 22 * cl.s : cl.x, y = layer ? cl.y + HIGH_CLOUDS : cl.y, s = layer ? cl.s * 0.8 : cl.s;
+        c.globalAlpha = layer ? high : 1;
         c.beginPath();
-        c.ellipse(cl.x, cl.y + lift, 30 * cl.s, 10 * cl.s, 0, 0, Math.PI * 2);
-        c.ellipse(cl.x + 22 * cl.s, cl.y + 3 + lift, 20 * cl.s, 8 * cl.s, 0, 0, Math.PI * 2);
+        c.ellipse(x, y, 30 * s, 10 * s, 0, 0, Math.PI * 2);
+        c.ellipse(x + 22 * s, y + 3, 20 * s, 8 * s, 0, 0, Math.PI * 2);
         c.fill();
       }
     }
@@ -832,7 +841,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     // Scenery: the round's hills past both edges, dimmed; drawn, never hit.
     if (view.hills) {
       const hills = view.hills;
-      for (const [a, b] of [[sx0, 0], [W - 1, sx1]] as const) {
+      for (const [a, b] of [[sx0, 2], [W - 3, sx1]] as const) { // 2 columns under the field's edges: no hairline between the two
         if (b <= a) continue;
         // The scenery dims away from the field: full colour at the seam, so the edge never reads as a cut.
         const edge = a < 0 ? 0 : W - 1, away = a < 0 ? edge - 160 : edge + 160;

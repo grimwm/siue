@@ -35,12 +35,22 @@ export function shellTop(s: Rising, g: number): number {
   return s.vy < 0 && g > 0 ? s.y - (s.vy * s.vy) / (2 * g) : s.y;
 }
 
-/** The top of the volley in flight: the highest arc any of its shells (in any
- *  of the lists) has reached or will reach, held until none is left in the air, then null. */
-export function volleyTop(prev: number | null, lists: readonly Iterable<Rising & { wkey: string }>[], gravity: (wkey: string) => number): number | null {
+export interface Aloft extends Rising { x: number; wkey: string; rolling?: boolean }
+/** Where shells can still hold the camera: the field's width, and how far either
+ *  side of its middle the view at ZOOM_FLOOR reaches. */
+export interface Reach { w: number; reach: number }
+
+/** The top of the volley in flight: the highest arc any of its shells has
+ *  reached or will reach, held while a shell is still up, then null. lists[0]
+ *  is the shells in play; the rest fly on past the field's edge (draw only)
+ *  and hold only while they climb. A roller on the ground, or a shell the
+ *  floor's view cannot reach sideways, holds nothing. */
+export function volleyTop(prev: number | null, lists: readonly Iterable<Aloft>[], gravity: (wkey: string) => number, at?: Reach): number | null {
   let top = prev, any = false;
-  for (const shells of lists) {
-    for (const s of shells) {
+  for (let i = 0; i < lists.length; i++) {
+    for (const s of lists[i]!) {
+      if (s.rolling || (i > 0 && s.vy >= 0)) continue;
+      if (at && Math.abs(s.x - at.w / 2) > at.reach) continue;
       any = true;
       const y = shellTop(s, gravity(s.wkey));
       top = top === null ? y : Math.min(top, y);
@@ -49,36 +59,23 @@ export function volleyTop(prev: number | null, lists: readonly Iterable<Rising &
   return any ? top : null;
 }
 
-/** Where the camera wants to be on a field w × h: the live units framed, and
- *  with a volley in the air (sky: its top row) the arc too, down to ZOOM_FLOOR.
- *  extra: rows of sky a tall canvas shows above the field at full size (a
- *  portrait screen); the arc may use them before the camera moves at all. */
+/** Where the camera wants to be on a field w × h: the bottom edge on the
+ *  field's floor (no valley, crater or scenery dips out of view), every live
+ *  unit framed above it, and with a volley in the air (sky: its top row) the
+ *  arc too, down to ZOOM_FLOOR. extra: rows of sky a tall canvas shows above
+ *  the field at full size (a portrait screen); the arc and the units may use
+ *  them before the camera pulls back at all. */
 export function cameraTarget(w: number, h: number, units: readonly { y: number }[], sky: number | null, extra = 0): CamPose {
-  if (!units.length) return { z: 1, cx: w / 2, cy: h / 2 };
-  let y0 = Infinity, y1 = -Infinity;
-  for (const u of units) {
-    y0 = Math.min(y0, u.y - UNIT_TOP);
-    y1 = Math.max(y1, u.y);
-  }
-  const clampZ = (z: number, lo: number): number => Math.max(lo, Math.min(1, z));
-  // No void under the ground: the bottom edge stays at the field's floor.
   const floorY = h + FLOOR_SLACK;
-  let z = clampZ(h / Math.max(1, y1 - y0 + PAD * 2), UNIT_FLOOR);
-  let cy = Math.min((y0 + y1) / 2, floorY - h / 2 / z);
-  if (sky !== null) {
-    const need = sky - SKY_PAD, bottom = Math.min(y1 + PAD, floorY);
-    const above = (zz: number): number => (h / 2 + extra) / zz; // rows from the centre up to the canvas's top
-    if (cy - above(z) > need) {
-      const up = need + above(z);
-      if (up + h / 2 / z >= bottom) cy = up; // a lift is enough: the units stay above the bottom edge
-      else {
-        // Pull back with the units anchored at the bottom; past the floor the sky gives.
-        z = clampZ(Math.min((h + extra) / (bottom - need), z), ZOOM_FLOOR);
-        cy = bottom - h / 2 / z;
-      }
-    }
+  let need = Infinity; // the highest row that must show
+  for (const u of units) need = Math.min(need, u.y - UNIT_TOP - PAD);
+  let lo = UNIT_FLOOR;
+  if (sky !== null && sky - SKY_PAD < need) {
+    need = sky - SKY_PAD;
+    lo = ZOOM_FLOOR;
   }
-  return { z, cx: w / 2, cy };
+  const z = need === Infinity ? 1 : Math.max(lo, Math.min(1, (h + extra) / Math.max(1, floorY - need)));
+  return { z, cx: w / 2, cy: floorY - h / 2 / z };
 }
 
 /** One frame of easing toward the target, in place. The view's top and bottom

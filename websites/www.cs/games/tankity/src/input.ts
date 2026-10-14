@@ -97,6 +97,8 @@ export interface KeyLike {
   metaKey?: boolean;
   shiftKey?: boolean;
   repeat?: boolean;
+  isTrusted?: boolean;
+  isComposing?: boolean;
   target?: { tagName?: string; readOnly?: boolean; type?: string; click?(): void } | null;
   preventDefault(): void;
 }
@@ -149,11 +151,18 @@ export function isKeyDefs(def: unknown): def is KeyDefs {
   return !!d && !!d.aim && !!d.shop && !!d.global && !!d.scroll;
 }
 
-/** Phones and tablets: a touch screen with no mouse or trackpad. They get no
- * keyboard at all, so key bindings stay off and no label names a key. */
+/** Phones and tablets: a device whose primary pointer is coarse. A stylus (the
+ * S Pen) makes `any-pointer: fine` match too, so only the primary pointer
+ * counts. Touch devices get no key hints and bind no keys until a real
+ * keyboard key is pressed (see physicalKey). */
 export function touchOnly(matchMedia: ((query: string) => { matches: boolean }) | undefined): boolean {
-  return typeof matchMedia === 'function'
-    && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
+  return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+}
+
+/** A keydown from a physical keyboard: real (trusted), not an on-screen
+ * keyboard's placeholder ('Unidentified', 'Process') and not composing text. */
+export function physicalKey(e: Pick<KeyLike, 'key' | 'isTrusted' | 'isComposing'>): boolean {
+  return e.isTrusted === true && !e.isComposing && e.key !== undefined && e.key !== 'Unidentified' && e.key !== 'Process';
 }
 
 /* ---------- held keys and the arm ---------- */
@@ -296,7 +305,9 @@ export interface Input {
   bindHold(btn: HoldButton, cmd: HoldCommand): void;
 }
 
-export function createInput(opts: { touch: boolean }): Input {
+export function createInput(opts: { touch: boolean; onKeyboard?: () => void }): Input {
+  /** True until a physical key is pressed on a touch device. */
+  let touch = opts.touch;
   let defs: KeyDefs = FALLBACK_KEYS;
   let map = buildKeymap(defs);
   const held = new Held();
@@ -442,10 +453,18 @@ export function createInput(opts: { touch: boolean }): Input {
     keydown,
     keyup,
     bind(win) {
-      if (!opts.touch) {
-        win.addEventListener('keydown', keydown);
-        win.addEventListener('keyup', keyup);
-      }
+      // A touch device routes no keys until a real keyboard key arrives (a
+      // keyboard case on a tablet); that first key only turns the keys on.
+      win.addEventListener('keydown', e => {
+        if (touch) {
+          if (!physicalKey(e)) return;
+          touch = false;
+          opts.onKeyboard?.();
+          return;
+        }
+        keydown(e);
+      });
+      win.addEventListener('keyup', e => { if (!touch) keyup(e); });
       // Turn-based play never needs a blur pause (that only stranded players on
       // a seemingly frozen screen). Just drop held keys so the barrel stops.
       win.addEventListener('blur', () => { held.clear(); aimDown.clear(); });

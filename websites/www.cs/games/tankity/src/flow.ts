@@ -87,9 +87,9 @@ export const SOLO_STEP = 1 / 60;
 export const WAR_REST = SOLO_STEP / 2;
 /** Runs `step` in fixed `h`-second steps for `dt` more seconds of war plus the
  * remainder `acc` carried from the last frame; returns the new remainder. The
- * step size never varies, so the server, which knows only the moves, takes
- * the same steps and lands every shell and every falling tank where the
- * browser did. A step answering false (the phase left think/fly/settle) drops
+ * step size never varies, so the war plays the same at any frame rate: a
+ * 30 Hz phone, a 144 Hz monitor and a throttled tab land every shell and every
+ * falling tank in the same place. A step answering false (the phase left think/fly/settle) drops
  * the rest of the frame. */
 export function runFixed(acc: number, dt: number, h: number, step: (h: number) => boolean): number {
   let left = acc + dt;

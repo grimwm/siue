@@ -1,61 +1,28 @@
 /* Operation Tankity: the high scores.
  *
  * One all-time board per difficulty from scores.php, this player's rows marked,
- * opening on the player's own difficulty with a switcher to the others; and a
- * solo run sent through the filer (src/solo-file.ts): each round as it ends,
- * the filing at game over, on its difficulty's board. Every outcome has a line
- * for the end card; a run still waiting files itself later, on one retry timer
- * that follows the filer's nextTry(). The page arrives as deps. */
-import type { Timers } from '../../_kit/ports.ts';
+ * opening on the player's own difficulty with a switcher to the others. The
+ * page arrives as deps. */
 import { DIFFICULTY_NAMES } from './difficulty.ts';
 import type { Difficulty } from './sim.ts';
-import { BACKOFF_LONGEST, PENDING_MAX } from './solo-file.ts';
-import type { FileOutcome, createFiler } from './solo-file.ts';
-import type { SoloRoundLog } from './solo-log.ts';
-import { filedLine, fmt } from './standings.ts';
+import { fmt } from './standings.ts';
 import type { KeyHintFn } from './ui/chrome.tsx';
 import { renderScores as drawScores } from './ui/scores.tsx';
 
-/** A board row as scores.php sends it; `standin` marks initials that stand in for a refused name. */
-interface BoardRow { name: string; best: number; banked: number; place: number; standin?: boolean }
-
-export type SoloFiler = Pick<ReturnType<typeof createFiler>, 'begin' | 'round' | 'finish' | 'drop' | 'abandoned' | 'flush' | 'nextTry' | 'wake' | 'stored' | 'outcome' | 'holds'>;
-
-/** The radio log's line for how a run whose card is gone ended. */
-export function earlierLine(o: FileOutcome): string {
-  if (o.kind === 'filed' && o.rank !== null) return `An earlier run: Filed · #${o.rank} · ${fmt(o.score)} pts on ${DIFFICULTY_NAMES[o.difficulty]}`;
-  return `An earlier run: ${lineFor(o)}`;
-}
+/** A board row as scores.php sends it. */
+interface BoardRow { name: string; best: number; banked: number; place: number }
 
 export interface ScoresDeps {
   $(id: string): HTMLElement | null;
   keyHint: KeyHintFn;
-  say(text: string, tone?: string): void;
   toggleOverlay(id: string, btnId?: string): void;
   initials(): string;
   /** The Menu's Difficulty: the board Scores opens on. */
   difficulty(): Difficulty;
-  filer: SoloFiler;
-  timers: Pick<Timers, 'setTimeout' | 'clearTimeout'>;
-}
-
-/** The shortest wait before the retry timer flushes again, so a run due at once is never a tight loop. */
-const RETRY_FLOOR = 1000;
-
-/** The end card's line for a run's outcome. `kept`: the queue reached this browser's storage. */
-export function lineFor(o: FileOutcome, kept = true): string {
-  switch (o.kind) {
-    case 'filed': return filedLine(o.rank, o.score, o.difficulty);
-    case 'refused': return `Not filed: ${o.why}.`;
-    case 'sent': return 'Sent: the score server took the filing, but its answer was lost. Check Scores.';
-    case 'waiting': return kept
-      ? 'Saved in this browser; it files itself when the score server answers.'
-      : 'Waiting for the score server on this page; it is lost if you close this page.';
-  }
 }
 
 export function createScores(deps: ScoresDeps) {
-  const { $, keyHint, say, toggleOverlay, initials, difficulty, filer, timers } = deps;
+  const { $, keyHint, toggleOverlay, initials, difficulty } = deps;
 
   const SCORES: { level: Difficulty; rows: { text: string; mine: boolean }[] | null; note: string } = { level: 'normal', rows: null, note: '' };
   function renderScoresOverlay(): void {
@@ -81,8 +48,7 @@ export function createScores(deps: ScoresDeps) {
       const data = (await res.json()) as { scores?: BoardRow[] };
       if (mine !== loads) return;
       SCORES.rows = (data.scores || []).map(r => ({
-        // A stand-in row (AAA for a name the blocklist refused) is nobody's.
-        text: `#${r.place} ${r.name} \u00b7 ${fmt(r.best)} pts \u00b7 ${r.banked} rounds won`, mine: !!me && !r.standin && r.name.toUpperCase() === me,
+        text: `#${r.place} ${r.name} · ${fmt(r.best)} pts · ${r.banked} rounds won`, mine: !!me && r.name.toUpperCase() === me,
       }));
       SCORES.note = `The all-time board on ${DIFFICULTY_NAMES[level]}. Your runs are marked.`;
       shown = level;
@@ -104,110 +70,6 @@ export function createScores(deps: ScoresDeps) {
     renderScoresOverlay();
     void loadScores();
   }
-  /* The one retry timer: cleared and armed again from nextTry() after every flush, none when nothing is due. */
-  let timer: number | null = null;
-  function arm(): void {
-    if (timer !== null) timers.clearTimeout(timer);
-    timer = null;
-    const ms = filer.nextTry();
-    if (ms === null) return;
-    timer = timers.setTimeout(() => { timer = null; void flushPending(); }, Math.min(BACKOFF_LONGEST, Math.max(RETRY_FLOOR, ms)));
-  }
-  /** The end card's line for a run of this page that has not filed yet, by id, so a later flush can update it;
-      a run leaves it when its card is gone (soloForget), and then reports as an earlier run. */
-  const waitingLines = new Map<string, (line: string) => void>();
-  /** This page's runs still being played, with the refusal that ended one early. */
-  const playing = new Map<string, FileOutcome | null>();
-  /* Sends everything due: at load, after each round, at game over, and when the timer fires.
-     False when the pass threw. */
-  async function flushPending(): Promise<boolean> {
-    let outcomes: FileOutcome[] = [];
-    let ok = true;
-    try {
-      outcomes = await filer.flush();
-    } catch (e) {
-      ok = false;
-      console.warn('tankity scores: the filer failed', e);
-    }
-    arm();
-    // A card's run that another tab sent: its outcome is in the shared queue.
-    for (const id of waitingLines.keys()) {
-      if (outcomes.some(o => o.id === id)) continue;
-      const o = filer.outcome(id);
-      if (o) outcomes.push(o);
-    }
-    let filed: Difficulty | null = null;
-    for (const o of outcomes) {
-      if (o.kind === 'refused' && o.detail) console.warn(`tankity scores: run ${o.id} refused (${o.detail})`);
-      if (o.kind === 'filed') filed = o.difficulty;
-      const done = waitingLines.get(o.id);
-      if (done) done(lineFor(o, filer.stored()));
-      else if (playing.has(o.id)) {
-        // Only a refusal reaches a run still being played; its end card says so.
-        if (o.kind === 'refused') {
-          playing.set(o.id, o);
-          say(`This match can no longer be filed: ${o.why}.`, 'info');
-        }
-      } else if (o.kind !== 'waiting') say(earlierLine(o), o.kind === 'refused' ? 'info' : 'good'); // never this match's card
-      if (o.kind !== 'waiting') waitingLines.delete(o.id);
-    }
-    // Refresh the board the player is looking at; one never opened gets the run's own.
-    if (filed) void loadScores(SCORES.rows ? SCORES.level : filed);
-    return ok;
-  }
-  /* The page has loaded: runs an earlier page left unfinished can never be finished, and what waits goes on. */
-  async function boot(): Promise<void> {
-    for (const id of filer.abandoned()) filer.drop(id);
-    await flushPending();
-  }
-  /* The network is back or the page is shown again: an offline wait ends, through the one timer. */
-  function wake(): void {
-    filer.wake();
-    arm();
-  }
-  /* A dealt run; false when the filer holds no room for it, and the player is told now, before playing. */
-  function soloBegin(id: string, seed: string, level: Difficulty, w: number): boolean {
-    if (filer.begin(id, seed, level, w)) {
-      playing.set(id, null);
-      return true;
-    }
-    say(`This match won't be filed: ${PENDING_MAX} finished runs are still waiting to reach the score server.`, 'info');
-    return false;
-  }
-  /* A finished round: the server plays it from the run's state. */
-  function soloRound(id: string, log: SoloRoundLog): void {
-    filer.round(id, log);
-    void flushPending();
-  }
-  /* Game over: the run files under these initials. `done` gets the end card's
-     line now, and again if the run files later. */
-  async function soloFinish(id: string, who: string, done: (line: string) => void): Promise<void> {
-    const refused = playing.get(id);
-    playing.delete(id);
-    if (refused) { done(lineFor(refused)); return; }
-    filer.finish(id, who);
-    let told = false;
-    waitingLines.set(id, line => { told = true; done(line); });
-    let ok = await flushPending();
-    // A pass already under way when the run finished did not see its initials: one more now does.
-    if (!told) ok = (await flushPending()) && ok;
-    if (told) return;
-    // A pass that threw, or a run still in the queue, is still on its way.
-    if (!ok || filer.holds(id)) done(lineFor({ id, kind: 'waiting' }, filer.stored()));
-    else {
-      waitingLines.delete(id);
-      done('Not filed: this browser no longer holds the run.');
-    }
-  }
-  /* The card a finished run reported on is gone (a new match was dealt): its later outcome goes to the radio log. */
-  function soloForget(id: string): void {
-    waitingLines.delete(id);
-  }
-  /* A run that will never finish (quit, a new match mid-match, a run that can no longer be filed). */
-  function soloDrop(id: string): void {
-    playing.delete(id);
-    filer.drop(id);
-  }
 
-  return { SCORES, renderScoresOverlay, openScores, loadScores, soloBegin, soloRound, soloFinish, soloDrop, soloForget, flushPending, boot, wake };
+  return { SCORES, renderScoresOverlay, openScores, loadScores };
 }

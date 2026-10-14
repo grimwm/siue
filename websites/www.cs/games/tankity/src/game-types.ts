@@ -12,7 +12,6 @@ import type { RoomSnapshot } from './protocol.ts';
 import type { Boom, DrawTank, Spark } from './render.ts';
 import type { AimChoice } from './ai.ts';
 import type { SoloRound } from './standings.ts';
-import type { RoundRecorder } from './solo-log.ts';
 import type { Arsenal, Cloud, Difficulty, Hills, World } from './sim.ts';
 
 /** The arsenal tables as main.ts holds them now. They are replaced when
@@ -27,8 +26,6 @@ export interface Tables {
   readonly gear: Arsenal['gear'];
   /** Counts arsenal rebuilds; icons repaint when it changes. */
   readonly rev: number;
-  /** The arsenal came from game.json (the server's), not the baked fallback. */
-  readonly fromFile: boolean;
 }
 
 /** A drone swinging its barrel to the plan it chose, in plain sight, before it fires. */
@@ -58,10 +55,6 @@ export interface GameState extends World {
   seed: string;
   /** How well the drones aim this match; set at each solo deal; a room match leaves it alone. */
   difficulty: Difficulty;
-  /** This solo match's round being recorded; null in the demo, rooms, and runs the server could not play. */
-  rec: RoundRecorder | null;
-  /** This solo run in the filer; null when it is not sent (the demo, rooms, a run that cannot be filed). */
-  runId: string | null;
   body: string; // the unit look the player chose
   clouds: Cloud[];
   /** This match's field width: dealt at the start of a solo match (field.ts), ROOM_W in a room; fixed for the match. */

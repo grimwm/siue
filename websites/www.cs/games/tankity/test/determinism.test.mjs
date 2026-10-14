@@ -1,8 +1,8 @@
-// The rule modules the server's solo play depends on must compute the same
-// numbers in the browser and on the server: no wall clock, no Math.random, no
-// Math.hypot, no powers, no degree conversion other than rad(), and no libm
-// sin, cos or atan2 (src/detmath.ts and server/detmath.php instead). See
-// README "Solo determinism".
+// The shared sim stays bit-exact across the two languages: the room server's
+// sim and the browser's must compute the same numbers, so the rule modules use
+// no wall clock, no Math.random, no Math.hypot, no powers, no degree
+// conversion other than rad(), and no libm sin, cos or atan2 (src/detmath.ts
+// and server/detmath.php instead).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,7 +16,7 @@ const read = f => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]
 
 // Files a later task adds are banned from the moment they exist.
 const present = files => files.filter(f => fs.existsSync(path.join(dir, f)));
-const TS_RULES = present(['src/sim.ts', 'src/ai.ts', 'src/armor.ts', 'src/detmath.ts', 'src/solo.ts', 'src/solo-log.ts', 'src/solo-play.ts']);
+const TS_RULES = present(['src/sim.ts', 'src/ai.ts', 'src/armor.ts', 'src/detmath.ts', 'src/solo.ts']);
 const TRANSCENDENTAL_TS = /Math\.(sin|cos|tan|asin|acos|atan|exp|expm1|log|pow|cbrt)\w*\b/;
 const TRANSCENDENTAL_PHP = /(?<![\w>$])(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|exp|expm1|log|log2|log10|log1p|pow|hypot)\(/;
 
@@ -29,7 +29,7 @@ for (const file of TS_RULES) {
   });
 }
 
-for (const file of present(['server/sim.php', 'server/ai.php', 'server/detmath.php', 'server/solo.php', 'server/flight.php'])) {
+for (const file of present(['server/sim.php', 'server/ai.php', 'server/detmath.php'])) {
   test(`${file} uses only replay-safe math`, () => {
     const src = read(file);
     for (const banned of [/\bhypot\(/, /\*\*/, /\bmt_rand|\brand\(|random_int|microtime/, TRANSCENDENTAL_PHP]) {

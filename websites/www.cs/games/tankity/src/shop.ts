@@ -12,7 +12,6 @@ import type { Board } from './standings.ts';
 import type { RoomClient } from './net.ts';
 import { armorLabel, maxArmor, plateNote, repairNote } from './armor.ts';
 import { buyPacks, isOneShot, soloBuy } from './solo.ts';
-import { ROUND_MAX_BUYS, recordBuy } from './solo-log.ts';
 import { TUNE, clamp } from './sim.ts';
 import type { ShopRow } from './sim.ts';
 import type { sfx as SfxApi } from './audio.ts';
@@ -258,8 +257,6 @@ export function createShop(deps: ShopDeps) {
       netBuy(it, packs);
       return;
     }
-    // The server refuses a round with more purchases than this, which would void the run.
-    if (G.rec && G.rec.buys.length >= ROUND_MAX_BUYS) { say("That's the most you can buy in one shop visit; raise the count to buy more at once.", 'info'); return; }
     const lives = G.lives;
     const r = soloBuy(G, it, qty);
     if (!r.ok) {
@@ -269,7 +266,6 @@ export function createShop(deps: ShopDeps) {
       return;
     }
     sfx.play('cash');
-    if (G.rec) recordBuy(G.rec, it, r.qty);
     const lots = r.qty > 1 ? `${r.qty} × ` : '';
     if (it.kind === 'ammo') say(`Bought ${lots}${it.label}.`, 'good');
     else boughtLine(it, lots, lives);

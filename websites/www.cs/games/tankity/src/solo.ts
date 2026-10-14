@@ -1,4 +1,4 @@
-/* Operation Tankity: the solo referee.
+/* Operation Tankity: the solo rules.
  *
  * The rules of a match against the drone battery, without a page: dealing,
  * mustering a round, the turn order, settling a volley, 1-ups, a drone's

@@ -57,7 +57,6 @@ import { createTutorial } from './tutorial.ts';
 import { createGuns } from './guns.ts';
 import { createScores } from './scores.ts';
 import { createMatch } from './match.ts';
-import { createFiler, timedFetch } from './solo-file.ts';
 import { createRoom } from './room.ts';
 import { createLobby } from './lobby.ts';
 import { createMenu } from './menu.ts';
@@ -120,7 +119,6 @@ let WEAPONS: Arsenal['weapons'] = {};
 let WORDER: Arsenal['order'] = [];
 let SHOP: Arsenal['shop'] = [];
 let GEAR: Arsenal['gear'] = {};
-let ARSENAL_FROM_FILE = false;
 let ARSENAL_REV = 0; // counts arsenal rebuilds; the shop repaints its icons when it changes
 /* The icons draw what they are handed (src/ui/icons.ts); these look the weapon or trick up by key. */
 const drawShellIcon = (cv: HTMLCanvasElement, wkey: string): void => paintShellIcon(cv, WEAPONS[wkey]);
@@ -135,9 +133,6 @@ function buildArsenal(data: ArsenalData | null | undefined): boolean {
 }
 function applyArsenal(data: ArsenalData | null | undefined): void {
   if (data && Array.isArray(data.ammo) && data.ammo.length && buildArsenal(data)) {
-    ARSENAL_FROM_FILE = true;
-    // A mid-match change of arsenal cannot be played on the server.
-    stopFiling('The game data changed mid-match, so this run will not be filed.');
     say(`Arsenal loaded: ${WORDER.length} shells, ${Object.keys(GEAR).length} tricks.`, 'info');
     if (G.phase === 'shop') renderShop();
     renderHUD();
@@ -165,7 +160,7 @@ async function loadGameConfig(): Promise<void> {
    skips painting, the frame loop waits on G.terrain). */
 const NOT_DEALT = null!;
 const G: GameState = {
-  seed: '', difficulty: 'normal', rec: null, runId: null, rng: NOT_DEALT, body: 'tank',
+  seed: '', difficulty: 'normal', rng: NOT_DEALT, body: 'tank',
   terrain: NOT_DEALT, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // banner | shop | aim | think | fly | settle | over (src/flow.ts)
   thinkT: 0, settleT: 0,
@@ -195,7 +190,6 @@ const tables = {
   get shop() { return SHOP; },
   get gear() { return GEAR; },
   get rev() { return ARSENAL_REV; },
-  get fromFile() { return ARSENAL_FROM_FILE; },
 };
 /* Weapon looks (src/effects.ts): muzzle flashes, trails, blasts. */
 const { fxSet, installEffects, fxMuzzle, fxImpact, fxSpecial, fxTrail } = createEffects({ G, tables });
@@ -351,7 +345,7 @@ function frame(ts: number): void {
     }
   } else if (war) {
     // Fixed SOLO_STEP steps whatever the frame rate, each dropping the tanks
-    // and then moving the war on (server/flight.php takes the same steps);
+    // and then moving the war on, so the war plays the same at any frame rate;
     // with the player's tank wrecked the drones play on at triple speed.
     warAcc = runFixed(warAcc, dt * warSpeed(me().hp > 0, G.demo), SOLO_STEP, h => {
       fallTanks(h);
@@ -418,18 +412,9 @@ const { HUD, paintHud, windText, renderHUD } = createHud({
 const { updateCamera, shownAngle, shownPower, render } = createView({
   G, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
-/* The high scores (src/scores.ts), and the solo runs on their way to them (src/solo-file.ts): one
-   filer per page, on this browser's storage (null where reading it throws) and Web Locks where there are any. */
-const filer = createFiler({
-  // Every request has a deadline (an abort counts as offline), so a pass never holds the cross-tab lock for ever.
-  fetch: timedFetch((url, init) => fetch(url, init as RequestInit)), storage: browserStorage(),
-  locks: (typeof navigator !== 'undefined' && navigator.locks) || null,
-});
-const {
-  renderScoresOverlay, openScores, soloBegin, soloRound, soloFinish, soloDrop, soloForget, boot: bootScores, wake: wakeScores,
-} = createScores({
-  $, keyHint, say, toggleOverlay, initials: () => getInitials(), difficulty: () => difficulty.get(), filer,
-  timers: { setTimeout: (fn, ms) => Number(setTimeout(fn, ms)), clearTimeout: id => clearTimeout(id) },
+/* The high scores (src/scores.ts). */
+const { renderScoresOverlay, openScores } = createScores({
+  $, keyHint, toggleOverlay, initials: () => getInitials(), difficulty: () => difficulty.get(),
 });
 /* The coach (src/tutorial.ts). */
 const {
@@ -451,15 +436,14 @@ const getInitials = (): string => savedInitials.get();
 const field = createFieldWidth(() => ({ w: window.innerWidth, h: window.innerHeight }));
 const {
   advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-  stepWar, decayFx, soloShopBoard, endVeilBack, checkOneUps, stopFiling, leaveSolo,
+  stepWar, decayFx, soloShopBoard, endVeilBack, checkOneUps,
 } = createMatch({
   field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
   tutorialFired, backToTitle: () => backToTitle(),
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
   netFire: () => netFire(), netLeave: quiet => netLeave(quiet), netNext: want => netNext(want),
-  netAgain: () => netAgain(), initials: getInitials,
-  soloBegin, soloRound, soloFinish: (id, who, done) => { void soloFinish(id, who, done); }, soloDrop, soloForget,
+  netAgain: () => netAgain(),
 });
 /* The field shop (src/shop.ts): prices, rows, buying, the Ready line. */
 const {
@@ -496,7 +480,7 @@ const {
   closeOverlays, closePreview, endTutorial, hideShop, initials: savedInitials, initialsSaved: () => renderTitle(), paintHud, refreshNavHints,
   renderMenu: () => renderMenu(),
   closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
-  renderShop, stopSolo: () => leaveSolo(),
+  renderShop,
 });
 /* The game menu's settings (src/menu.ts). */
 const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
@@ -728,10 +712,6 @@ function init(): void {
   renderShop();
   // Light the connection dot from the start, not only when the lobby opens.
   loadOccupancy();
-  // Runs an earlier page could not get to the score server go on now, and when the network or the page comes back.
-  void bootScores();
-  window.addEventListener('online', wakeScores);
-  if (document.addEventListener) document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wakeScores(); });
   maybeApplyInviteCode();
 
   document.querySelectorAll<HTMLElement>('[data-aim]').forEach(btn => {

@@ -87,11 +87,6 @@ jobs:
             websites/www.cs/package-lock.json
             websites/www.cs/games/package-lock.json
 
-      # make test checks the quick runs; this replays every recorded run (needs only node).
-      - name: Tankity recorded solo runs (every run, replayed)
-        if: steps.scope.outputs.run == '1'
-        run: node websites/www.cs/games/tankity/tools/solo-runs.mjs --check --all
-
       - name: Start the local sites
         if: steps.scope.outputs.run == '1'
         run: make up
@@ -102,16 +97,6 @@ jobs:
           # The nightly run adds the two widths PRs skip (Tankity's hit rates per field width).
           TANKITY_HITRATE_WIDTHS: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '720,912,1080,1200,1440' || '720,1080,1440' }}
         run: make test
-
-      # make test plays the quick recorded solo runs through the PHP referee; this plays the slow ones
-      # (the vendor dir is make test's), then prints the CPU per round. The timing only reports:
-      # a shared runner's speed must not fail a PR. Pass --budget= for a gating run.
-      - name: Tankity recorded solo runs in PHP (the slow ones) and the CPU per round (report only)
-        if: steps.scope.outputs.run == '1'
-        working-directory: websites/www.cs
-        run: |
-          vendor/bin/phpunit --testsuite tankity --group slow
-          (cd games/tankity && php -d xdebug.mode=off tools/round-bench.php)
 
       - name: Container logs
         if: failure() && steps.scope.outputs.run == '1'

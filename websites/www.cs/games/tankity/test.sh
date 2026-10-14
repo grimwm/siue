@@ -7,8 +7,6 @@ cd "$(dirname "$0")"
 node ../_kit/build/build.mjs tankity --check
 php tools/game-json.php --check
 php tools/install-files.php --check
-node tools/solo-runs.mjs --check
 node ../_kit/build/icons.mjs tankity --check
 node --test 'test/*.test.mjs'
-# The slow recorded solo runs play in PHP in CI's units job, after make test.
-../../vendor/bin/phpunit -c ../../phpunit.xml --testsuite tankity --exclude-group slow
+../../vendor/bin/phpunit -c ../../phpunit.xml --testsuite tankity

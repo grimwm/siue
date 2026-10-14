@@ -10,8 +10,6 @@
  * except the pieces a room shares (the banner, the cosmetics, the end veil).
  * The game's state, the page and the rest of the game arrive as deps. */
 import { maxArmor } from './armor.ts';
-import { ROUND_MAX_SHOTS, closeRound, newRecorder, recordShot, replayableSeed } from './solo-log.ts';
-import type { RoundEnd, SoloRoundLog } from './solo-log.ts';
 import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
 import type { DifficultySetting } from './difficulty.ts';
 import { FOE_DYING, FOE_FIRE, FOE_HIT, FOE_MISS, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, pick } from './chatter.ts';
@@ -25,7 +23,7 @@ import {
   gauss, H, GRAV, TUNE, clamp, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling,
 } from './sim.ts';
-import type { Blast, Difficulty, Shell } from './sim.ts';
+import type { Blast, Shell } from './sim.ts';
 import { snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloOneUps, soloSettle } from './solo.ts';
 import { endCardBack, soloBoard } from './standings.ts';
 import type { Board } from './standings.ts';
@@ -89,18 +87,6 @@ export interface MatchDeps {
   netNext(want?: boolean): void;
   /** Play again: the room goes back to its lobby with its seats. */
   netAgain(): void;
-  /** The player's initials, which a finished solo run files under. */
-  initials(): string;
-  /** Holds a dealt run in the filer; false when it will not be filed (the player has been told why). */
-  soloBegin(id: string, seed: string, difficulty: Difficulty, w: number): boolean;
-  /** Sends a round as it ends. */
-  soloRound(id: string, log: SoloRoundLog): void;
-  /** Files a finished run; `done` gets the end card's line, and again if it files later. */
-  soloFinish(id: string, initials: string, done: (line: string) => void): void;
-  /** Lets go of a run that will never finish. */
-  soloDrop(id: string): void;
-  /** The end card a finished run reported on is gone: its later outcome goes to the radio log. */
-  soloForget(id: string): void;
 }
 
 export function createMatch(deps: MatchDeps) {
@@ -108,35 +94,10 @@ export function createMatch(deps: MatchDeps) {
     field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
     render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closeGuns, closePreview, hideShop, openShop,
     endTutorial, maybeStartTutorial, tutorialFired, backToTitle, netFire, netLeave,
-    netNext, netAgain, initials, soloBegin, soloRound, soloFinish, soloDrop, soloForget,
+    netNext, netAgain,
   } = deps;
 
-  /* A run the server will not get the rest of: the recording stops and the filer lets the run go.
-     Without `why` nothing is said (a room match taking over). */
-  function stopFiling(why?: string): void {
-    if (G.rec && why) say(why, 'info');
-    G.rec = null;
-    if (G.runId) soloDrop(G.runId);
-    G.runId = null;
-  }
-  /** A run id no other match shares, in this tab or another. */
-  function newRunId(): string {
-    const b = new Uint8Array(12);
-    crypto.getRandomValues(b);
-    return Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
-  }
-  /** The run the end card reports on; only that run's outcome may change the card. */
-  let cardRun: string | null = null;
-  /* The solo card and match are left (a new deal, a room match): a run in play is let go, and a
-     finished run still on its way reports in the radio log from now on. */
-  function leaveSolo(): void {
-    stopFiling();
-    if (cardRun) soloForget(cardRun);
-    cardRun = null;
-  }
   function resetMatch(seedStr?: string): void {
-    // A match left before its end (Quit, a new match, the tutorial) will never finish, and the last card is gone.
-    leaveSolo();
     const seed = (seedStr || '').trim() || ('scorched-' + Math.floor(Math.random() * 9000 + 1000));
     // The Menu's Difficulty, read once per match: a change waits for the next one.
     // The width comes from the screen at the deal and holds until the next one (spec 6.6).
@@ -176,7 +137,6 @@ export function createMatch(deps: MatchDeps) {
   // Attract mode: the crew drives every tank until a human takes over.
   function startDemo(): void {
     resetMatch('scorched-demo');
-    G.rec = null;
     G.demo = true;
     G.round = 1;
     advance('demo');
@@ -186,14 +146,6 @@ export function createMatch(deps: MatchDeps) {
   }
   function newMatch(seedStr?: string): void {
     resetMatch(seedStr);
-    // The server plays every round of this run as it ends; one it could not play is not recorded.
-    G.rec = tables.fromFile && replayableSeed(G.seed) ? newRecorder() : null;
-    if (!G.rec) say(replayableSeed(G.seed)
-      ? 'The game data did not load, so this run cannot be filed.'
-      : 'This seed has characters the score server cannot play, so this run will not be filed.', 'info');
-    // The run starts on the server with the seed, the difficulty and the width this match was dealt.
-    const id = newRunId();
-    if (G.rec && soloBegin(id, G.seed, G.difficulty, G.w)) G.runId = id;
     // No round yet: spend the starting stake in the shop first.
     advance('matchStart');
     refreshNavHints(); // the rotate hint shows from the first name card
@@ -270,9 +222,6 @@ export function createMatch(deps: MatchDeps) {
     closePreview();
     const wkey = G.selected;
     if (fireWeapon(me(), wkey)) {
-      // The server refuses a round with more shots than this.
-      if (G.rec && G.rec.shots.length >= ROUND_MAX_SHOTS) stopFiling('This round ran past what the score server can play, so this run will not be filed.');
-      if (G.rec) recordShot(G.rec, me(), wkey);
       tutorialFired();
       talk('tank', pick(TANK_FIRE));
       say(`You fire ${tables.weapons[wkey]!.name}.`, 'info');
@@ -378,7 +327,7 @@ export function createMatch(deps: MatchDeps) {
     return G.rounds.length ? soloBoard(G.rounds, 'shop') : null;
   }
   /* Solo 1-ups (a life per 3000 points, +500 past five lives), with their words.
-     The frame calls it, and settle() before and after it settles a round, as the server does. */
+     The frame calls it, and settle() before and after it settles a round. */
   function checkOneUps(): void {
     if (net.on || G.demo) return;
     for (const up of soloOneUps(G)) {
@@ -388,14 +337,6 @@ export function createMatch(deps: MatchDeps) {
         talk('tank', 'Another life! I am basically immortal!', true);
       } else say('Max lives already, so take +500 points instead!', 'good');
     }
-  }
-  /* A round is over: its log goes to the server with how this page saw it end
-     (the server plays it and must reach the same). The recorder is emptied
-     first, whether or not the run is sent, so the next round counts from none. */
-  function sendRound(end: RoundEnd): void {
-    if (!G.rec) return;
-    const log = closeRound(G.rec, G.round, { end, score: G.score, cash: G.cash, lives: G.lives, roundsWon: G.roundsWon });
-    if (G.runId) soloRound(G.runId, log);
   }
   function settle(): void {
     if (G.demo) {
@@ -417,12 +358,11 @@ export function createMatch(deps: MatchDeps) {
       announceTurn();
       return;
     }
-    // A threshold crossed by the last volley counts before the settle, as the server plays it.
+    // A threshold crossed by the last volley counts before the settle.
     checkOneUps();
     const end = soloSettle(G);
     if (end.kind === 'next') { announceTurn(); return; }
     if (end.kind !== 'matchLost') checkOneUps();
-    sendRound(end.kind);
     if (end.kind === 'roundWon') {
       recordRound(true);
       sfx.play('win');
@@ -476,10 +416,7 @@ export function createMatch(deps: MatchDeps) {
     refreshNavHints();
     if (won) sfx.play('win'); else sfx.play('lose');
     say(text, won ? 'good' : 'bad');
-    // A finished run files itself: no form, no button. Once handed to the filer nothing here drops it.
-    const id = G.runId;
-    G.runId = null;
-    END.filed = id ? 'Filing…' : 'This run cannot be filed (see the radio log).';
+    END.filed = null;
     const veil = $('end-veil');
     if (veil) {
       END.kicker = won ? 'Match over' : 'Match lost';
@@ -492,14 +429,6 @@ export function createMatch(deps: MatchDeps) {
       veil.hidden = false;
       refreshNavHints();
       focusEndVeil(veil);
-    }
-    cardRun = id;
-    if (id) {
-      soloFinish(id, initials(), line => {
-        if (cardRun !== id) return;
-        END.filed = line;
-        renderEndVeil();
-      });
     }
     renderHUD();
   }
@@ -621,6 +550,6 @@ export function createMatch(deps: MatchDeps) {
 
   return {
     advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-    stepWar, decayFx, soloShopBoard, endVeilBack, checkOneUps, stopFiling, leaveSolo,
+    stepWar, decayFx, soloShopBoard, endVeilBack, checkOneUps,
   };
 }

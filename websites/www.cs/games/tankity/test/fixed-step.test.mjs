@@ -1,6 +1,5 @@
 // The solo war runs in fixed SOLO_STEP steps whatever the frame lengths, tank
-// falls included, so the server's play of a round lands every shell and drops
-// every tank exactly as the browser did.
+// falls included, so a match plays the same at any frame rate.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runFixed, MAX_STEPS, SOLO_STEP, WAR_REST } from '../src/flow.ts';

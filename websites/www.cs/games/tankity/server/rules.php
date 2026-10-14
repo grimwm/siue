@@ -341,16 +341,22 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
             room_fly_siblings($room, $events, $seatIdx, $w, $wkey, $res[1], $res[2], $fanned, 99.0, $sub, $tSplit, null);
             continue;
         }
-        // An earth gun's burst is its own event (room_earth_burst), not a blast.
+        // An earth gun's burst is its own event (room_earth_burst), and a
+        // napalm shell's its pool (room_fire_burn), not a blast.
         $earth = in_array($effect, ['dirt', 'pour', 'slump', 'dig'], true);
-        $ev = room_shot_event($tank, $wkey, 0.0, $res, $res[0] === 'hit' && !$earth ? $radius : 0.0);
+        $fire = $effect === 'napalm';
+        $ev = room_shot_event($tank, $wkey, 0.0, $res, $res[0] === 'hit' && !$earth && !$fire ? $radius : 0.0);
         $ev['at'] = 0.0;
         $events[] = $ev;
         $mark = count($events);
-        if ($res[0] === 'hit' && $earth) {
+        if ($res[0] === 'hit' && ($earth || $fire)) {
             room_brk_land($tank, $res[1]);
             unset($tank);
-            room_earth_burst($room, $events, $seatIdx, $w, $wkey, $res, $res[7]);
+            if ($fire) {
+                room_fire_burn($room, $events, $seatIdx, $w, $wkey, $res, $res[7]);
+            } else {
+                room_earth_burst($room, $events, $seatIdx, $w, $wkey, $res, $res[7]);
+            }
             $tank = &$room['tanks'][$seatIdx];
         } elseif ($res[0] === 'hit') {
             room_brk_land($tank, $res[1]);
@@ -404,8 +410,8 @@ function room_earth_burst(array &$room, array &$events, int $seatIdx, array $w, 
         room_add_dirt($room['terrain'], $x, $y, (float) $w['radius']);
     } elseif ($effect === 'pour') {
         $col = (int) det_round(max(0.0, min((float) (count($room['terrain']) - 1), $x)));
-        $events[] = ['t' => 'pour', 'w' => $wkey, 'x' => $col, 'v' => (float) $w['volume']];
-        room_fill_pour($room['terrain'], room_pour_level($room['terrain'], (float) $col, (float) $w['volume']));
+        $events[] = ['t' => 'pour', 'w' => $wkey, 'x' => $col, 'v' => (float) $w['volume'], 'm' => (float) $w['poolMin']];
+        room_fill_pour($room['terrain'], room_pour_level($room['terrain'], (float) $col, (float) $w['volume'], (float) $w['poolMin']));
     } else {
         $events[] = ['t' => 'slump', 'w' => $wkey, 'x' => $x, 'r' => (float) $w['radius'], 'slope' => (float) $w['slope'], 'passes' => (int) $w['passes']];
         room_slump_ground($room['terrain'], $x, (float) $w['radius'], (float) $w['slope'], (int) $w['passes']);
@@ -414,6 +420,37 @@ function room_earth_burst(array &$room, array &$events, int $seatIdx, array $w, 
         room_terrain_changed($room);
     }
     room_mark_falls($room, $ground, $seatIdx);
+}
+/* A napalm shell bursts ($res, at $t seconds): its pool (room_fire_pool,
+// poured at the burst's column on the ground of this moment, which it never
+// changes) burns from then until its last tick, its 'burn' event first (the
+// pool, and t1 when it goes out). Every tick (room_tick_steps sim steps
+// apart, room_burn_ticks of them) each living unit, in seat order, whose body
+// reaches into the flames (room_in_flames) and is not buried under the ground
+// the pool lies on (room_buried) takes dmg through room_hit_unit
+// (a shield eats one tick whole, a bunker halves each), credited to the
+// gunner, its gunner's own burns included (they score nothing). Its hits and
+// kills are stamped at their tick. A pool that spilled away burns nothing.
+// The whole burn is part of the volley that fired it: the next turn starts
+// after its last tick. src/sim.ts stepFires is the same. */
+function room_fire_burn(array &$room, array &$events, int $seatIdx, array $w, string $wkey, array $res, float $t): void
+{
+    $col = (int) det_round(max(0.0, min((float) (count($room['terrain']) - 1), $res[1])));
+    $pool = room_fire_pool($room['terrain'], (float) $col, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin']);
+    $n = $pool['x0'] <= $pool['x1'] ? room_burn_ticks((float) $w['burn'], (float) $w['tick']) : 0;
+    $every = room_tick_steps((float) $w['tick']);
+    $events[] = ['t' => 'burn', 'by' => $room['tanks'][$seatIdx]['seat'], 'w' => $wkey, 'x' => $col, 'v' => (float) $w['volume'],
+        'level' => $pool['level'], 'x0' => $pool['x0'], 'x1' => $pool['x1'], 'flame' => $pool['flame'],
+        'at' => round($t, 3), 't1' => round($t + $n * $every / 60, 3)];
+    for ($k = 1; $k <= $n; $k++) {
+        $mark = count($events);
+        foreach (array_keys($room['tanks']) as $i) {
+            if ($room['tanks'][$i]['hp'] > 0 && !room_buried($room['tanks'][$i], $room['terrain']) && room_in_flames($pool, room_unit_box($room['tanks'][$i]))) {
+                room_hit_unit($room, $events, $i, (int) $w['dmg'], $room['tanks'][$seatIdx], $seatIdx, $w, false);
+            }
+        }
+        room_stamp($events, $mark, $t + $k * $every / 60);
+    }
 }
 /* A digger touched down ($res, at $t seconds; struck a unit in flight, it
 // stops at once): it burrows on along its heading ROOM_DIG_STEP px a step,

@@ -9,6 +9,7 @@ import type { FxSys } from './fx/types.ts';
 import type { Phase } from './flow.ts';
 import type { Marks } from './marks.ts';
 import type { EarthShow } from './earth-show.ts';
+import type { FireShow } from './fire-show.ts';
 import type { PreviewState } from './preview.ts';
 import type { RoomSnapshot } from './protocol.ts';
 import type { Boom, DrawTank, Spark } from './render.ts';
@@ -75,6 +76,8 @@ export interface GameState extends World {
   marks: Marks;
   /** The ground's picture while earth settles (src/earth-show.ts). */
   earth: EarthShow;
+  /** Napalm pools burning on screen (src/fire-show.ts). */
+  fire: FireShow;
   firstTurn: number;
   lives: number;
   nextOneUp: number;

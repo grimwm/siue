@@ -83,9 +83,12 @@ function room_pour_basin(array $terrain, int $xi, float $level): array
 // ROOM_POUR_ITERS halvings between the highest ground and the floor. A pool
 // that would reach either edge of the field spills off it, so the level stays
 // below what would reach one; what will not fit is lost (all of it, poured
-// on a slope down to an edge). ['level', 'x0', 'x1'] (x0 > x1: no pool).
+// on a slope down to an edge). With $poolMin above 0 a liquid spreads only
+// until it is $poolMin deep: when that fill would leave it shallower (or spill
+// it all), it lies instead as a puddle (room_pour_puddle) $poolMin deep at the
+// bottom it ran to. ['level', 'x0', 'x1'] (x0 > x1: no pool).
 // src/earth.ts pourLevel() is the same. */
-function room_pour_level(array $terrain, float $x, float $volume): array
+function room_pour_level(array $terrain, float $x, float $volume, float $poolMin = 0.0): array
 {
     $n = count($terrain);
     $xi = (int) det_round(max(0.0, min((float) ($n - 1), $x)));
@@ -115,7 +118,41 @@ function room_pour_level(array $terrain, float $x, float $volume): array
         }
     }
     [$a, $b, , $edge] = room_pour_basin($terrain, $xi, $hi);
-    return $edge ? ['level' => $hi, 'x0' => $xi, 'x1' => $xi - 1] : ['level' => $hi, 'x0' => $a, 'x1' => $b];
+    $pool = $edge ? ['level' => $hi, 'x0' => $xi, 'x1' => $xi - 1] : ['level' => $hi, 'x0' => $a, 'x1' => $b];
+    if (!($poolMin > 0) || ($pool['x0'] <= $pool['x1'] && $terrain[$xi] - $pool['level'] >= $poolMin)) {
+        return $pool;
+    }
+    return room_pour_puddle($terrain, $xi, $volume, $poolMin);
+}
+/* A puddle: liquid that spreads only until it is $d deep, its level $d over
+// the ground at column $xi, widening a column at a time, left then right in
+// turn (a side whose next column stands dry gives way to the other), until it
+// holds $volume. Once it reaches either edge of the field the rest spills
+// off. src/earth.ts puddle() is the same. */
+function room_pour_puddle(array $terrain, int $xi, float $volume, float $d): array
+{
+    $n = count($terrain);
+    $level = $terrain[$xi] - $d;
+    $a = $xi;
+    $b = $xi;
+    $vol = $d;
+    $left = true;
+    while ($vol < $volume && $a > 0 && $b < $n - 1) {
+        $l = $terrain[$a - 1] > $level - 0.5;
+        $r = $terrain[$b + 1] > $level - 0.5;
+        if (!$l && !$r) {
+            break;
+        }
+        if ($left ? $l : !$r) {
+            $a--;
+            $vol += max(0.0, $terrain[$a] - $level);
+        } else {
+            $b++;
+            $vol += max(0.0, $terrain[$b] - $level);
+        }
+        $left = !$left;
+    }
+    return ['level' => (float) $level, 'x0' => $a, 'x1' => $b];
 }
 /* Liquid dirt sets: every column of the pool rises to its level (none is
 // lowered). src/earth.ts fillPour() is the same. */

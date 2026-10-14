@@ -16,7 +16,8 @@ const read = f => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]
 
 // Files a later task adds are banned from the moment they exist.
 const present = files => files.filter(f => fs.existsSync(path.join(dir, f)));
-const TS_RULES = present(['src/sim.ts', 'src/ai.ts', 'src/armor.ts', 'src/detmath.ts', 'src/solo.ts']);
+const TS_RULES = present(['src/sim.ts', 'src/earth.ts', 'src/ai.ts', 'src/armor.ts', 'src/detmath.ts', 'src/solo.ts']);
+const PHP_RULES = present(['server/sim.php', 'server/earth.php', 'server/ai.php', 'server/detmath.php']);
 const TRANSCENDENTAL_TS = /Math\.(sin|cos|tan|asin|acos|atan|exp|expm1|log|pow|cbrt)\w*\b/;
 const TRANSCENDENTAL_PHP = /(?<![\w>$])(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|exp|expm1|log|log2|log10|log1p|pow|hypot)\(/;
 
@@ -29,7 +30,7 @@ for (const file of TS_RULES) {
   });
 }
 
-for (const file of present(['server/sim.php', 'server/ai.php', 'server/detmath.php'])) {
+for (const file of PHP_RULES) {
   test(`${file} uses only replay-safe math`, () => {
     const src = read(file);
     for (const banned of [/\bhypot\(/, /\*\*/, /\bmt_rand|\brand\(|random_int|microtime/, TRANSCENDENTAL_PHP]) {
@@ -37,6 +38,11 @@ for (const file of present(['server/sim.php', 'server/ai.php', 'server/detmath.p
     }
   });
 }
+
+test('the earth rules (terrain ops) are scanned in both languages', () => {
+  assert.ok(TS_RULES.includes('src/earth.ts'), 'src/earth.ts is missing');
+  assert.ok(PHP_RULES.includes('server/earth.php'), 'server/earth.php is missing');
+});
 
 // rules.php also runs the live rooms, whose pacing reads the clock and whose
 // codes are random; only its shot math is held to the solo rules.

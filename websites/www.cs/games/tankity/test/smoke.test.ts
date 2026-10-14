@@ -14,8 +14,8 @@ import type { Gear, Weapon } from '../src/sim.ts';
 import type { KeyContext, KeyDefs } from '../src/input.ts';
 import type { RoomSnapshot } from '../src/protocol.ts';
 import type { Emitter, FxSetData } from '../src/fx/types.ts';
-import { els, click, submit, fire, document, installDocument, childEl } from '../../_kit/test/dom-stub.ts';
-import type { StubElement, StubNode } from '../../_kit/test/dom-stub.ts';
+import { els, click, submit, fire, document, installDocument, childEl, elementOf } from '../../_kit/test/dom-stub.ts';
+import type { Callable, StubElement, StubNode } from '../../_kit/test/dom-stub.ts';
 
 /** A value the check expects to be there (a find that must succeed, a file the game has). */
 function must<T>(v: T | null | undefined, what: string): T {
@@ -31,6 +31,10 @@ function nth<T>(list: readonly T[], i: number): T {
 /** The element the game made with that id, which the check expects to be there. */
 function E(id: string): StubElement {
   return must(els[id], '#' + id);
+}
+/** Every child of a list the check knows holds only elements (rows, tiles). */
+function kids(el: StubElement): StubElement[] {
+  return el.children.map(elementOf);
 }
 /** The i-th child node (element or text), which the check expects to be there. */
 function nodeAt(el: StubNode, i: number): StubNode {
@@ -166,6 +170,8 @@ function pressToken(t: string | undefined): [string, string | undefined, Mods] {
   if (t === 'Control') return ['Control', 'ControlLeft', mods];
   return [t, /^[A-Z][A-Za-z]*$/.test(t) ? t : undefined, mods];
 }
+/** The keys game.json binds to an action, which the check expects it to bind. */
+const keyList = (ctx: KeyContext, a: string) => must(KEYS[ctx][a], `keys.${ctx}.${a}`);
 const KB = (ctx: KeyContext, a: string, i?: number) => pressToken((KEYS[ctx][a] || [])[i || 0]);
 const KBD = (ctx: KeyContext, a: string, n: number) => pressToken((KEYS[ctx][a] || [])[n - 1]);
 const KD = (ctx: KeyContext, a: string, i?: number, extra?: WinEvent) => { const [k, c, mods] = KB(ctx, a, i); keyDown(k, c, { ...mods, ...extra }); };
@@ -622,16 +628,16 @@ await (async () => {
   // ?code=zz99 was set before boot: the lobby opens with the code filled in
   openBootGate();
   await tick(10);
-  await test('invite-prefill', () => { assert.ok(els['join-code'].value === 'ZZ99' && els['lobby-veil'].hidden === false, `${els['join-code'].value} | hidden=${els['lobby-veil'] && els['lobby-veil'].hidden}`); });
-  els['lobby-veil'].hidden = true;
+  await test('invite-prefill', () => { assert.ok(E('join-code').value === 'ZZ99' && E('lobby-veil').hidden === false, `${E('join-code').value} | hidden=${els['lobby-veil'] && els['lobby-veil'].hidden}`); });
+  E('lobby-veil').hidden = true;
   // The log trims old lines at its cap, so match only the last few lines and
   // check after every press instead of anchoring on an absolute index.
-  const logTail = () => els['log'].children.slice(-4).map(li => li.textContent).join('\n');
+  const logTail = () => E('log').children.slice(-4).map(li => li.textContent).join('\n');
   // Match the rack marker, never the log: interleaved battle lines and the
   // trim cap make absolute log positions lie about what is loaded now. The
   // marker must sit in the same rack segment, so a later gun cannot fake it.
-  const selIs = name => new RegExp('^' + name + ' ').test(els['hud-weapon'].textContent);
-  const loadGun = name => {
+  const selIs = (name: string) => new RegExp('^' + name + ' ').test(E('hud-weapon').textContent);
+  const loadGun = (name: string) => {
     // G opens the rack; a digit loads that tile and shuts it. Try each in turn.
     for (let n = 1; n <= 6 && !selIs(name); n++) {
       TAP('global', 'guns'); frames(2);
@@ -640,7 +646,7 @@ await (async () => {
   };
   const waitAim = async () => {
     let g = 0;
-    while (g++ < 40 && !/YOU\. Aim!/.test(els['hud-turn'].textContent)) {
+    while (g++ < 40 && !/YOU\. Aim!/.test(E('hud-turn').textContent)) {
       await sleep(300); frames(10);
     }
   };
@@ -649,8 +655,8 @@ await (async () => {
   // shop veil is ground truth: HUD text goes stale across round resets.
   const ensureAim = async () => {
     await waitAim();
-    if (els['shop-veil'].hidden === false) {
-      click(els['shop-next']);
+    if (E('shop-veil').hidden === false) {
+      click(E('shop-next'));
       frames(120);
       await waitAim();
     }
@@ -660,75 +666,75 @@ await (async () => {
   await test('demo-fires', () => { assert.ok(/fires Shell/.test(logText())); });
   TAP('global', 'fire'); frames(3);
   await test('demo-locked', () => { assert.ok(/Demo mode/.test(logText())); });
-  const feudMark = els['log'].children.length;
+  const feudMark = E('log').children.length;
   frames(7000);
-  const feudNew = els['log'].children.slice(feudMark).map(li => li.textContent).join('\n');
+  const feudNew = E('log').children.slice(feudMark).map(li => li.textContent).join('\n');
   await test('ai-feuds', () => { assert.ok(/(reaper|wraith|spotter) hits (reaper|wraith|spotter)/.test(feudNew)); });
   // T deals random hills and O opens the lobby, both from the keyboard.
   TAP('global', 'rooms'); await tick(10);
-  await test('rooms-hotkey', () => { assert.ok(els['lobby-veil'].hidden === false); });
+  await test('rooms-hotkey', () => { assert.ok(E('lobby-veil').hidden === false); });
   TAP('global', 'back');
-  await test('lobby-esc', () => { assert.ok(els['lobby-veil'].hidden === true); });
+  await test('lobby-esc', () => { assert.ok(E('lobby-veil').hidden === true); });
   TAP('global', 'random'); frames(120);
-  await test('random-hotkey', () => { assert.ok(els['shop-veil'].hidden === false); });
+  await test('random-hotkey', () => { assert.ok(E('shop-veil').hidden === false); });
   await test('a-match-closes-the-card', () => { assert.ok(titleVeil().hidden === true); });
-  els['seed-input'].value = 'scorch-01';
+  E('seed-input').value = 'scorch-01';
   // New Game rolls the fanfare and the Round 1 card, then the pre-match shop.
   // It also takes the whole frame: an open menu shuts instead of sitting
   // over the briefing and the shop that follows it.
   TAP('global', 'back');
-  await test('menu-open-before-newgame', () => { assert.ok(els['menu-overlay'].hidden === false); });
-  click(els['new-game']);
-  await test('new-game-closes-menu', () => { assert.ok(els['menu-overlay'].hidden === true); });
-  await test('newgame-banner', () => { assert.ok(els['round-banner'].hidden === false && /Round 1/.test(els['round-banner-text'].textContent), els['round-banner-text'].textContent); });
+  await test('menu-open-before-newgame', () => { assert.ok(E('menu-overlay').hidden === false); });
+  click(E('new-game'));
+  await test('new-game-closes-menu', () => { assert.ok(E('menu-overlay').hidden === true); });
+  await test('newgame-banner', () => { assert.ok(E('round-banner').hidden === false && /Round 1/.test(E('round-banner-text').textContent), E('round-banner-text').textContent); });
   // No wall-clock wait: the card runs on sim time, so frames alone finish it.
   // (This is the refocus-freeze regression in miniature.)
   frames(120);
-  await test('banner-done', () => { assert.ok(els['round-banner'].hidden === true); });
-  const shopOpen = els['shop-veil'].hidden === false;
+  await test('banner-done', () => { assert.ok(E('round-banner').hidden === true); });
+  const shopOpen = E('shop-veil').hidden === false;
   // The pre-match shop has no tank: the aim, power, wind and fuel read '-', not the demo's last values.
-  await test('shop-prematch-hud-dashes', () => { assert.ok(['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel'].every(id => els[id].textContent === '-'), ['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel'].map(id => els[id].textContent).join('|')); });
-  const shopCash0 = els['shop-cash'].textContent;
+  await test('shop-prematch-hud-dashes', () => { assert.ok(['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel'].every(id => E(id).textContent === '-'), ['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel'].map(id => E(id).textContent).join('|')); });
+  const shopCash0 = E('shop-cash').textContent;
   // Esc in the shop shuts panels first and, with none open, opens the menu: it never starts the round (N does).
   TAP('global', 'back');
   TAP('shop', 'close'); frames(3);
-  await test('shop-esc-closes-menu', () => { assert.ok(els['menu-overlay'].hidden === true && els['shop-veil'].hidden === false); });
+  await test('shop-esc-closes-menu', () => { assert.ok(E('menu-overlay').hidden === true && E('shop-veil').hidden === false); });
   // Stock up: Buckshot ($80), Mortar ($200), Rail ($140) of the $600 stake.
   // (Each render appends, so read the last nine list items: two category
   // headers, the free Shell row, and six rows to buy. Each row holds an icon
   // canvas and a text div whose last child is the acts row.)
-  const shopLis = () => els['shop-list'].children.slice(-9);
+  const shopLis = () => kids(E('shop-list')).slice(-9);
   const shopRows = () => shopLis().filter(li => li.children.length === 2 && !String(li.className).split(' ').includes('shop-free'));
-  const rowName = li => li.children[1].children[0].textContent;
-  const actsOf = li => li.children[1].children[3]; // the text column's fourth child, under the description
-  const buyRow = label => {
-    const row = shopRows().find(li => rowName(li).includes(label));
+  const rowName = (li: StubElement) => nodeAt(nodeAt(li, 1), 0).textContent;
+  const actsOf = (li: StubElement) => childEl(childEl(li, 1), 3); // the text column's fourth child, under the description
+  const buyRow = (label: string) => {
+    const row = must(shopRows().find(li => rowName(li).includes(label)), label + ' row');
     const acts = actsOf(row);
-    click(acts.children[acts.children.length - 1]);
+    click(childEl(acts, acts.children.length - 1));
   };
   buyRow('Buckshot');
   // Categories group the shelf, and even the locked NUKE shows its damage.
   const catNames = shopLis().filter(li => li.className === 'shop-cat').map(li => li.textContent);
-  const nukeRow = shopRows().find(li => rowName(li).includes('NUKE'));
-  const nukeStats = nukeRow.children[1].children[1].textContent + ' ' + nukeRow.children[1].children[2].textContent;
+  const nukeRow = must(shopRows().find(li => rowName(li).includes('NUKE')), 'NUKE row');
+  const nukeStats = nodeAt(nodeAt(nukeRow, 1), 1).textContent + ' ' + nodeAt(nodeAt(nukeRow, 1), 2).textContent;
   await test('shop-cats', () => { assert.ok(catNames.join('|') === 'Shells|Hull and fuel', catNames.join('|')); });
   const freeRow = shopLis().find(li => li.className === 'shop-free');
   await test('shop-shell-row', () => { assert.ok(!!freeRow && /^Shell ∞/.test(rowName(freeRow)), freeRow ? rowName(freeRow) : 'missing'); });
-  await test('shop-icons', () => { assert.ok(shopRows().length >= 6 && shopRows().every(li => li.children[0].className === 'shop-icon' && li.children[0].getAttribute('aria-hidden') === 'true'), shopRows().map(li => li.children[0].className).join()); });
+  await test('shop-icons', () => { assert.ok(shopRows().length >= 6 && shopRows().every(li => childEl(li, 0).className === 'shop-icon' && childEl(li, 0).getAttribute('aria-hidden') === 'true'), shopRows().map(li => childEl(li, 0).className).join()); });
   await test('nuke-stats', () => { assert.ok(/95 damage/.test(nukeStats) && /round 4/.test(nukeStats), nukeStats); });
   // The arsenal section of game.json is a second source the game reads at
   // boot: it must hold every row and speak only effects and painters the code has.
   const arsenal = GAME.arsenal;
   await test('arsenal-count', () => { assert.ok(arsenal.ammo.length === 41 && arsenal.gear.length === 9, `ammo=${arsenal.ammo.length} gear=${arsenal.gear.length}`); });
   const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter', 'beam', 'plasma', 'tracer', 'dirt', 'pour', 'dig', 'riot', 'slump', 'napalm'];
-  const PAINT = ['disc', 'beam', 'spark', 'ball', 'dash', 'drill', 'clod', 'flame'];
-  const TRICKS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand', 'parachute'];
+  const PAINT: readonly (string | undefined)[] = ['disc', 'beam', 'spark', 'ball', 'dash', 'drill', 'clod', 'flame'];
+  const TRICKS: readonly (string | undefined)[] = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand', 'parachute'];
   await test('arsenal-fx', () => { assert.ok(arsenal.ammo.every(a => FX.includes(a.effect) && a.gfx && PAINT.includes(a.gfx.painter)
     && typeof a.dmg === 'number' && typeof a.radius === 'number' && typeof a.price === 'number'
     && typeof a.pack === 'number' && typeof a.minRound === 'number' && Array.isArray(a.gfx.blast))); });
   await test('arsenal-gear', () => { assert.ok(arsenal.gear.every(g => TRICKS.includes(g.effect) && typeof g.price === 'number' && typeof g.n === 'number')); });
-  const cats = [];
-  for (const r of arsenal.ammo.filter(a => a.pack > 0).concat(arsenal.gear)) {
+  const cats: (string | undefined)[] = [];
+  for (const r of [...arsenal.ammo.filter(a => a.pack > 0), ...arsenal.gear]) {
     if (!cats.includes(r.cat)) cats.push(r.cat);
   }
   await test('arsenal-cats', () => { assert.ok(cats.join('|') === 'Shells|Rollers|Beams|Tracers|Earth|Fire|Hull and fuel|Tricks', cats.join('|')); });
@@ -737,95 +743,95 @@ await (async () => {
   }
   // A full hull has nothing to repair: the Repair row greys out and says so.
   {
-    const repairRow = shopRows().find(li => rowName(li).includes('Repair'));
+    const repairRow = must(shopRows().find(li => rowName(li).includes('Repair')), 'Repair row');
     const acts = actsOf(repairRow);
-    await test('shop-repair-greyed-at-full', () => { assert.ok(acts.children[acts.children.length - 1].disabled === true && /Armor full \(100 of 100\)/.test(repairRow.textContent), repairRow.textContent); });
+    await test('shop-repair-greyed-at-full', () => { assert.ok(childEl(acts, acts.children.length - 1).disabled === true && /Armor full \(100 of 100\)/.test(repairRow.textContent), repairRow.textContent); });
   }
   // The keys reach every row: Up from the first priced row (Buckshot) lands
   // on the free Shell, where V previews it and B only says it is free.
-  const freeLi = () => shopLis().find(li => String(li.className).split(' ').includes('shop-free'));
-  await test('shop-opens-on-first-row', () => { assert.ok(shopRows()[0].className === 'sel', shopRows().map(li => li.className).join(',')); });
+  const freeLi = () => must(shopLis().find(li => String(li.className).split(' ').includes('shop-free')), 'Shell row');
+  await test('shop-opens-on-first-row', () => { assert.ok(nth(shopRows(), 0).className === 'sel', shopRows().map(li => li.className).join(',')); });
   TAP('shop', 'selUp'); frames(3);
   await test('shop-up-reaches-shell', () => { assert.ok(freeLi().className === 'shop-free sel' && shopRows().every(li => li.className === ''), freeLi().className); });
   TAP('shop', 'selUp'); frames(3);
   await test('shop-up-stops-at-shell', () => { assert.ok(freeLi().className === 'shop-free sel'); });
-  const cashAtShell = els['shop-cash'].textContent;
+  const cashAtShell = E('shop-cash').textContent;
   TAP('shop', 'buy'); frames(3);
-  await test('shop-shell-buy-says-free', () => { assert.ok(/free and always loaded/.test(logTail()) && els['shop-cash'].textContent === cashAtShell, logTail()); });
+  await test('shop-shell-buy-says-free', () => { assert.ok(/free and always loaded/.test(logTail()) && E('shop-cash').textContent === cashAtShell, logTail()); });
   TAP('shop', 'preview'); frames(3);
-  await test('shop-shell-preview', () => { assert.ok(els['preview-veil'].hidden === false); });
+  await test('shop-shell-preview', () => { assert.ok(E('preview-veil').hidden === false); });
   TAP('shop', 'close'); frames(3);
   TAP('shop', 'selDown'); frames(3);
-  await test('shop-down-back-to-first-row', () => { assert.ok(shopRows()[0].className === 'sel' && freeLi().className === 'shop-free'); });
+  await test('shop-down-back-to-first-row', () => { assert.ok(nth(shopRows(), 0).className === 'sel' && freeLi().className === 'shop-free'); });
   // Keyboard alone can shop: arrows highlight, Enter buys, digits buy outright.
   TAP('shop', 'selDown'); frames(3);
-  await test('shop-keys', () => { assert.ok(shopRows()[1].className === 'sel', shopRows().map(li => li.className).join(',')); });
-  await test('shop-scroll-follows', () => { assert.ok((() => { const li = shopRows()[1], list = els['shop-list']; return li.offsetTop >= list.scrollTop && li.offsetTop + li.offsetHeight <= list.scrollTop + list.clientHeight; })()); });
-  await test('keys-file-drives', () => { assert.ok(KEYS.shop.buy[0] === 'b' && KEYS.global.fire[0] === 'Space' && KEYS.aim.barrelLeft[0] === 'ArrowLeft' && KB('shop', 'buy')[0] === 'b', `${KEYS.shop.buy[0]}|${KEYS.global.fire[0]}|${KEYS.aim.barrelLeft[0]}`); });
+  await test('shop-keys', () => { assert.ok(nth(shopRows(), 1).className === 'sel', shopRows().map(li => li.className).join(',')); });
+  await test('shop-scroll-follows', () => { assert.ok((() => { const li = nth(shopRows(), 1), list = E('shop-list'); return li.offsetTop >= list.scrollTop && li.offsetTop + Number(li.offsetHeight) <= list.scrollTop + Number(list.clientHeight); })()); });
+  await test('keys-file-drives', () => { assert.ok(keyList('shop', 'buy')[0] === 'b' && keyList('global', 'fire')[0] === 'Space' && keyList('aim', 'barrelLeft')[0] === 'ArrowLeft' && KB('shop', 'buy')[0] === 'b', `${keyList('shop', 'buy')[0]}|${keyList('global', 'fire')[0]}|${keyList('aim', 'barrelLeft')[0]}`); });
   {
-    const ammoActs = actsOf(shopRows().find(li => rowName(li).includes('Buckshot'))).children;
-    await test('shop-btn-hints', () => { assert.ok(ammoActs[0].children[1].textContent === 'V' && ammoActs[1].children[1].textContent === 'B', `${ammoActs[0].children[1].textContent}|${ammoActs[1].children[1].textContent}`); });
+    const ammoActs = actsOf(must(shopRows().find(li => rowName(li).includes('Buckshot')), 'Buckshot row')).children;
+    await test('shop-btn-hints', () => { assert.ok(nodeAt(nth(ammoActs, 0), 1).textContent === 'V' && nodeAt(nth(ammoActs, 1), 1).textContent === 'B', `${nodeAt(nth(ammoActs, 0), 1).textContent}|${nodeAt(nth(ammoActs, 1), 1).textContent}`); });
   }
   TAP('shop', 'buy'); frames(3);
   TAPD('shop', 'buyRow', 3); frames(3);
-  const shopCash1 = els['shop-cash'].textContent;
+  const shopCash1 = E('shop-cash').textContent;
   // Bulk packs: Right raises the count, capped by the chest; B buys them all
   // and the count falls back to what is still affordable on every row.
-  const buyBtn = li => { const acts = actsOf(li); return acts.children[acts.children.length - 1]; };
+  const buyBtn = (li: StubElement) => { const acts = actsOf(li); return childEl(acts, acts.children.length - 1); };
   for (let i = 0; i < 4; i++) { TAP('shop', 'selDown'); frames(3); }
-  const fuelRow = () => shopRows().find(li => rowName(li).includes('Fuel'));
+  const fuelRow = () => must(shopRows().find(li => rowName(li).includes('Fuel')), 'Fuel row');
   TAP('shop', 'qtyUp'); frames(3);
   await test('shop-qty-2', () => { assert.ok(/×2 = \$120/.test(rowName(fuelRow())), rowName(fuelRow())); });
   TAP('shop', 'qtyUp'); frames(3);
   TAP('shop', 'qtyUp'); frames(3); // $180 left after the three guns: three packs is all the chest covers
   await test('shop-qty-cap', () => { assert.ok(/×3 = \$180/.test(rowName(fuelRow())), rowName(fuelRow())); });
   TAP('shop', 'buy'); frames(3);
-  await test('shop-bulk', () => { assert.ok(/\$0\b/.test(els['shop-cash'].textContent), els['shop-cash'].textContent); });
+  await test('shop-bulk', () => { assert.ok(/\$0\b/.test(E('shop-cash').textContent), E('shop-cash').textContent); });
   await test('shop-bulk-said', () => { assert.ok(/Bought 3 × Fuel/.test(logTail()), logTail()); });
   await test('shop-bulk-reset', () => { assert.ok(!/×[2-9] packs/.test(rowName(fuelRow())), rowName(fuelRow())); });
-  const buckRow = () => shopRows().find(li => rowName(li).includes('Buckshot'));
+  const buckRow = () => must(shopRows().find(li => rowName(li).includes('Buckshot')), 'Buckshot row');
   await test('shop-bulk-disabled', () => { assert.ok(buyBtn(fuelRow()).disabled === true && buyBtn(buckRow()).disabled === true, `fuel=${buyBtn(fuelRow()).disabled} buck=${buyBtn(buckRow()).disabled}`); });
   for (let i = 0; i < 4; i++) { TAP('shop', 'selUp'); frames(3); }
   TAP('shop', 'preview'); frames(3);
-  await test('shop-preview-p', () => { assert.ok(els['preview-veil'].hidden === false); });
+  await test('shop-preview-p', () => { assert.ok(E('preview-veil').hidden === false); });
   TAP('shop', 'close'); frames(3);
-  await test('shop-preview-esc', () => { assert.ok(els['preview-veil'].hidden === true && els['shop-veil'].hidden === false, `preview=${els['preview-veil'].hidden} shop=${els['shop-veil'].hidden}`); });
-  click(els['preview-close']); frames(3);
-  await test('shop-preview-shut', () => { assert.ok(els['preview-veil'].hidden === true); });
+  await test('shop-preview-esc', () => { assert.ok(E('preview-veil').hidden === true && E('shop-veil').hidden === false, `preview=${E('preview-veil').hidden} shop=${E('shop-veil').hidden}`); });
+  click(E('preview-close')); frames(3);
+  await test('shop-preview-shut', () => { assert.ok(E('preview-veil').hidden === true); });
   TAPD('shop', 'buyRow', 4); frames(3);
   await test('shop-locked', () => { assert.ok(/round 4/.test(logTail()), logTail()); });
-  click(els['shop-next']);
+  click(E('shop-next'));
   frames(120); // round card runs on sim time before the shooting
   // round 1, player's opening turn
-  const turn0 = els['hud-turn'].textContent;
-  const angle0 = els['hud-angle'].textContent;
-  const wind0 = els['hud-wind'].textContent;
-  const armor0 = els['hud-armor'].textContent;
-  await test('shop-bulk-banked', () => { assert.ok(els['hud-fuel'].textContent === '260', els['hud-fuel'].textContent); });
+  const turn0 = E('hud-turn').textContent;
+  const angle0 = E('hud-angle').textContent;
+  const wind0 = E('hud-wind').textContent;
+  const armor0 = E('hud-armor').textContent;
+  await test('shop-bulk-banked', () => { assert.ok(E('hud-fuel').textContent === '260', E('hud-fuel').textContent); });
 
   // Every demo lands its verdict with damage, never a clean miss.
   await ensureAim();
   // The keyboard drives: holding the drive key burns fuel (it used to set an
   // action name the drive code never read).
-  const fuelBeforeDrive = Number(els['hud-fuel'].textContent);
+  const fuelBeforeDrive = Number(E('hud-fuel').textContent);
   KD('aim', 'driveRight'); frames(30); KU('aim', 'driveRight'); frames(2);
   KD('aim', 'driveLeft'); frames(30); KU('aim', 'driveLeft'); frames(2);
-  const fuelAfterDrive = Number(els['hud-fuel'].textContent);
+  const fuelAfterDrive = Number(E('hud-fuel').textContent);
   await test('keyboard-drives', () => { assert.ok(fuelAfterDrive < fuelBeforeDrive, `fuel ${fuelBeforeDrive} -> ${fuelAfterDrive}`); });
   loadGun('Rail');
   TAP('global', 'battlePreview'); frames(5);
   frames(300);
   TAP('global', 'battlePreview'); frames(5);
-  const railVerdict = els['preview-result'].textContent;
-  const railSel = els['hud-weapon'].textContent;
+  const railVerdict = E('preview-result').textContent;
+  const railSel = E('hud-weapon').textContent;
   await test('rail-selected', () => { assert.ok(/^Rail /.test(railSel), railSel); });
   await ensureAim();
   loadGun('Mortar');
   TAP('global', 'battlePreview'); frames(5);
   frames(300);
   TAP('global', 'battlePreview'); frames(5);
-  const mortarVerdict = els['preview-result'].textContent;
-  const mortarSel = els['hud-weapon'].textContent;
+  const mortarVerdict = E('preview-result').textContent;
+  const mortarSel = E('hud-weapon').textContent;
   loadGun('Buckshot');
   await test('rail-hits', () => { assert.ok(/damage|hits/.test(railVerdict) && !/Clean miss/.test(railVerdict), railVerdict + ' | ' + railSel); });
   await test('mortar-selected', () => { assert.ok(/^Mortar /.test(mortarSel), mortarSel); });
@@ -835,26 +841,26 @@ await (async () => {
   KD('aim', 'barrelLeft');
   frames(30);
   KU('aim', 'barrelLeft');
-  const angle1 = els['hud-angle'].textContent;
-  const power0 = els['hud-power'].textContent;
+  const angle1 = E('hud-angle').textContent;
+  const power0 = E('hud-power').textContent;
   KD('aim', 'powerUp');
   frames(30);
   KU('aim', 'powerUp');
-  const power1 = els['hud-power'].textContent;
+  const power1 = E('hud-power').textContent;
 
   // Freeze regression probe (runs now, while it is still the player's aim
   // phase): defocus must not pause the match nor eat held keys.
   for (const f of listeners['blur'] || []) f();
   frames(10);
-  const angleB = els['hud-angle'].textContent;
+  const angleB = E('hud-angle').textContent;
   KD('aim', 'barrelLeft');
   frames(10);
   KU('aim', 'barrelLeft');
-  const angleC = els['hud-angle'].textContent;
+  const angleC = E('hud-angle').textContent;
 
   // G then 2 loads the rack's second gun (Buckshot); loading every tile in
   // turn proves the NUKE stays off the round-1 rack while each bought gun is on it.
-  const pickTile = n => { TAP('global', 'guns'); frames(2); keyDown(String(n), 'Digit' + n); keyUp(String(n), 'Digit' + n); frames(3); };
+  const pickTile = (n: number) => { TAP('global', 'guns'); frames(2); keyDown(String(n), 'Digit' + n); keyUp(String(n), 'Digit' + n); frames(3); };
   pickTile(2);
   const qLog = logText();
   for (let n = 1; n <= 4; n++) pickTile(n);
@@ -863,88 +869,91 @@ await (async () => {
   // loading one only says none are in stock. I shows just the guns in stock.
   {
     TAP('global', 'guns'); frames(2);
-    const tiles = () => els['gun-grid'].children;
+    const tiles = () => kids(E('gun-grid'));
     const nuke = () => tiles().find(t => /NUKE/.test(t.textContent));
     const all = tiles().length;
-    await test('guns-show-all', () => { assert.ok(!!nuke() && nuke().getAttribute('aria-disabled') === 'true'
-      && tiles()[0].getAttribute('aria-disabled') === undefined, `${all} tiles`); });
-    const n = tiles().indexOf(nuke()) + 1;
+    await test('guns-show-all', () => { assert.ok(!!nuke() && must(nuke(), 'NUKE tile').getAttribute('aria-disabled') === 'true'
+      && nth(tiles(), 0).getAttribute('aria-disabled') === undefined, `${all} tiles`); });
+    const nukeTile = nuke();
+    const n = (nukeTile ? tiles().indexOf(nukeTile) : -1) + 1;
     if (n <= 9) { keyDown(String(n), 'Digit' + n); keyUp(String(n), 'Digit' + n); frames(2); }
-    else click(nuke());
-    await test('guns-empty-pick-says-none', () => { assert.ok(els['gun-overlay'].hidden === false && /None in stock: NUKE/.test(logText()), logTail()); });
+    else click(must(nuke(), 'NUKE tile'));
+    await test('guns-empty-pick-says-none', () => { assert.ok(E('gun-overlay').hidden === false && /None in stock: NUKE/.test(logText()), logTail()); });
     TAP('global', 'gunStock'); frames(2);
     await test('guns-in-stock-only', () => { assert.ok(tiles().length < all && !nuke() && tiles().every(t => t.getAttribute('aria-disabled') === undefined)
-      && /In stock/.test(els['gun-stock'].textContent), `${tiles().length}`); });
+      && /In stock/.test(E('gun-stock').textContent), `${tiles().length}`); });
     TAP('global', 'gunStock'); frames(2);
-    await test('guns-show-all-again', () => { assert.ok(tiles().length === all && /All/.test(els['gun-stock'].textContent)); });
+    await test('guns-show-all-again', () => { assert.ok(tiles().length === all && /All/.test(E('gun-stock').textContent)); });
     TAP('global', 'guns'); frames(2);
-    await test('guns-closed', () => { assert.ok(els['gun-overlay'].hidden === true); });
+    await test('guns-closed', () => { assert.ok(E('gun-overlay').hidden === true); });
   }
   // Watch the canvas: blast discs must match their weapon radii exactly,
   // and the camera zoom must stay inside its sane range.
-  const boomR = [];
-  const zoomZ = [];
-  let lastFill = '';
+  const boomR: number[] = [];
+  const zoomZ: number[] = [];
+  let lastFill: unknown = '';
   // Drone aim arms: the only strokes drawn at alpha 0.75, width 2.
-  const arms = [];
-  let armAlpha = 1, armWidth = 1, armFrom = null;
+  const arms: { x0: number; y0: number; x1: number; y1: number }[] = [];
+  let armAlpha: unknown = 1, armWidth: unknown = 1, armFrom: [number, number] | null = null;
   {
+    // A recording 2D context: the traps answer every member, so the bare function is a Callable through them.
     const rec = new Proxy(function () {}, {
-      get(t, p) {
-        if (p === 'moveTo') return (x, y) => { armFrom = [x, y]; return rec; };
-        if (p === 'lineTo') return (x, y) => {
+      get(_t, p) {
+        if (p === 'moveTo') return (x: number, y: number) => { armFrom = [x, y]; return rec; };
+        if (p === 'lineTo') return (x: number, y: number) => {
           if (armAlpha === 0.75 && armWidth === 2 && armFrom) arms.push({ x0: armFrom[0], y0: armFrom[1], x1: x, y1: y });
           return rec;
         };
-        if (p === 'arc') return (x, y, r) => { if (lastFill === '#ffb13c') boomR.push(r); };
-        if (p === 'scale') return (x, y) => { zoomZ.push(x); };
+        if (p === 'arc') return (_x: number, _y: number, r: number) => { if (lastFill === '#ffb13c') boomR.push(r); };
+        if (p === 'scale') return (x: number, _y: number) => { zoomZ.push(x); };
         if (p === 'fillStyle') return lastFill;
         if (p === 'createLinearGradient') return () => ({ addColorStop() {} });
-        return (...a) => rec;
+        return (..._a: unknown[]) => rec;
       },
-      set(t, p, v) {
+      set(_t, p, v) {
         if (p === 'fillStyle') lastFill = v;
         if (p === 'globalAlpha') armAlpha = v;
         if (p === 'lineWidth') armWidth = v;
         return true;
       },
       apply() { return rec; },
-    });
-    els['stage'].getContext = () => rec;
+    }) as Callable;
+    E('stage').getContext = () => rec;
   }
   // The firing-range preview gets its own disc recorder: the demo must show
   // the same exact-radius explosion the warhead would carve in the war.
-  const pvBoomR = [];
-  let pvLastFill = '';
+  const pvBoomR: number[] = [];
+  let pvLastFill: unknown = '';
   {
+    // The same kind of recording context as the battlefield's, above.
     const pvrec = new Proxy(function () {}, {
-      get(t, p) {
-        if (p === 'arc') return (x, y, r) => { if (pvLastFill === '#ffb13c') pvBoomR.push(r); };
+      get(_t, p) {
+        if (p === 'arc') return (_x: number, _y: number, r: number) => { if (pvLastFill === '#ffb13c') pvBoomR.push(r); };
         if (p === 'fillStyle') return pvLastFill;
         if (p === 'createLinearGradient') return () => ({ addColorStop() {} });
-        return (...a) => pvrec;
+        return (..._a: unknown[]) => pvrec;
       },
-      set(t, p, v) { if (p === 'fillStyle') pvLastFill = v; return true; },
+      set(_t, p, v) { if (p === 'fillStyle') pvLastFill = v; return true; },
       apply() { return pvrec; },
-    });
-    els['preview-stage'].getContext = () => pvrec;
+    }) as Callable;
+    E('preview-stage').getContext = () => pvrec;
   }
   await ensureAim();
   loadGun('Buckshot');
   // Fire the spread: the turn must advance only after all three pellets land,
   // proving each resolves instead of the volley counting as one hit.
-  const volleyTurn = els['hud-turn'].textContent;
-  const volleyGun = els['hud-weapon'].textContent;
+  const volleyTurn = E('hud-turn').textContent;
+  const volleyGun = E('hud-weapon').textContent;
   // Match only lines said after the press: full-history matches exit on the
   // first frame and the pellets never land.
-  const freshFrom = mark => els['log'].children.slice(mark).map(li => li.textContent).join('\n');
-  let mark = els['log'].children.length;
+  const freshFrom = (mark: number) => E('log').children.slice(mark).map(li => li.textContent).join('\n');
+  let mark = E('log').children.length;
   TAP('global', 'fire');
   let guard = 0;
   while (guard++ < 1500 && !/You fire Buckshot/.test(freshFrom(mark))) frames(10);
   const spreadLog = logText();
   guard = 0;
-  mark = els['log'].children.length;
+  mark = E('log').children.length;
   while (guard++ < 4000 && !/(is aiming…|Your turn)/.test(freshFrom(mark))) frames(10);
   // A drone's turn: its aim arm must show, swing in small steps rather than
   // snapping, and stay within the power-scaled length (14..50). Step single
@@ -952,17 +961,17 @@ await (async () => {
   // battery gets its turn.
   {
     TAP('global', 'fire');
-    const seen = [];
+    const seen: typeof arms = [];
     for (let i = 0; i < 3000; i++) {
       arms.length = 0;
       frames(1);
-      if (arms.length) seen.push(arms[arms.length - 1]);
+      if (arms.length) seen.push(nth(arms, arms.length - 1));
       else if (seen.length) break;
     }
     const ang = seen.map(a => Math.atan2(a.y0 - a.y1, Math.abs(a.x1 - a.x0)) * 180 / Math.PI);
     const len = seen.map(a => Math.hypot(a.x1 - a.x0, a.y1 - a.y0));
     let maxStep = 0;
-    for (let i = 1; i < ang.length; i++) maxStep = Math.max(maxStep, Math.abs(ang[i] - ang[i - 1]));
+    for (let i = 1; i < ang.length; i++) maxStep = Math.max(maxStep, Math.abs(nth(ang, i) - nth(ang, i - 1)));
     await test('drone-aim-arm-shows', () => { assert.ok(seen.length >= 20, `frames=${seen.length}`); });
     await test('drone-aim-arm-glides', () => { assert.ok(seen.length >= 20 && maxStep < 6, `max step=${maxStep.toFixed(2)}°`); });
     await test('drone-aim-arm-power-length', () => { assert.ok(seen.length > 0 && len.every(l => l >= 13.9 && l <= 50.1), len.length ? `len ${Math.min(...len).toFixed(1)}..${Math.max(...len).toFixed(1)}` : 'none'); });
@@ -978,7 +987,7 @@ await (async () => {
   const midLog = logText();
 
   // dialogue must have spoken at least once by now
-  const dlg = els['dlg-line'].textContent;
+  const dlg = E('dlg-line').textContent;
 
   await test('preshop', () => { assert.ok(shopOpen && /\$600/.test(shopCash0), shopCash0); });
   await test('shop-buy', () => { assert.ok(/\$180/.test(shopCash1), shopCash1); });
@@ -990,26 +999,26 @@ await (async () => {
   await ensureAim();
   loadGun('Shell');
   TAP('global', 'battlePreview'); frames(5);
-  const pvTitle = els['preview-title'].textContent + ' | ' + els['preview-stats'].textContent;
-  const pvOpen = els['preview-veil'].hidden === false;
+  const pvTitle = E('preview-title').textContent + ' | ' + E('preview-stats').textContent;
+  const pvOpen = E('preview-veil').hidden === false;
   let pvDraws = 0;
   {
-    const pvEl = els['preview-stage'];
+    const pvEl = E('preview-stage');
     const orig = pvEl.getContext;
     pvEl.getContext = () => { pvDraws++; return orig(); };
   }
   frames(240); // ~4s: aim, fly, boom, verdict on the mini hill
   TAP('global', 'battlePreview'); frames(5);
-  await test('preview-open', () => { assert.ok(pvOpen && /^Shell \| 34 damage, blast 26\. Direct hits count double\.$/.test(pvTitle), `${pvTitle} | turn=${els['hud-turn'].textContent} | ${els['hud-weapon'].textContent}`); });
+  await test('preview-open', () => { assert.ok(pvOpen && /^Shell \| 34 damage, blast 26\. Direct hits count double\.$/.test(pvTitle), `${pvTitle} | turn=${E('hud-turn').textContent} | ${E('hud-weapon').textContent}`); });
   await test('preview-runs', () => { assert.ok(pvDraws > 100, `frames=${pvDraws}`); });
-  await test('preview-close', () => { assert.ok(els['preview-veil'].hidden === true); });
+  await test('preview-close', () => { assert.ok(E('preview-veil').hidden === true); });
   // Q shuts the firing range too, and stays in full screen; Esc leaves it open.
   TAP('global', 'battlePreview'); frames(5);
-  await test('preview-reopen', () => { assert.ok(els['preview-veil'].hidden === false); });
+  await test('preview-reopen', () => { assert.ok(E('preview-veil').hidden === false); });
   ESC(); frames(3);
-  await test('preview-ignores-esc', () => { assert.ok(els['preview-veil'].hidden === false && fsExits.length === 0, `exits=${fsExits.length}`); });
+  await test('preview-ignores-esc', () => { assert.ok(E('preview-veil').hidden === false && fsExits.length === 0, `exits=${fsExits.length}`); });
   TAP('global', 'back'); frames(3);
-  await test('preview-q', () => { assert.ok(els['preview-veil'].hidden === true && fsExits.length === 0, `exits=${fsExits.length}`); });
+  await test('preview-q', () => { assert.ok(E('preview-veil').hidden === true && fsExits.length === 0, `exits=${fsExits.length}`); });
   // The Shell demo (26 radius) must paint its disc at exactly warhead size.
   const pvBoomMax = pvBoomR.length ? Math.max(...pvBoomR) : -1;
   const pvBoomOk = pvBoomR.length >= 3 && Math.abs(pvBoomMax - 26) < 1.5;
@@ -1030,24 +1039,24 @@ await (async () => {
   await test('player-fired', () => { assert.ok(/You fire/.test(firedLog)); });
   await test('battery-answers', () => { assert.ok(/(is aiming…|fires )/.test(midLog)); });
   await test('dialogue-shown', () => { assert.ok(dlg.length > 0, dlg); });
-  await test('log-alive', () => { assert.ok(els['log'].children.length > 5, `lines=${els['log'].children.length}`); });
+  await test('log-alive', () => { assert.ok(E('log').children.length > 5, `lines=${E('log').children.length}`); });
   // Solo: the player lobs shells straight up onto their own tank. A round ends
   // only with one unit standing, so after the wreck the drones fight on (the
   // log keeps showing their shots) until one is left, the round goes to the
   // battery, a life is gone, and the shop opens before the next round. A match
   // is replayed until the tank falls with at least two drones still standing.
   {
-    let verdict = null;
-    const droneKills = ls => ls.filter(l => /wrecks? \w+! \(\+/.test(l)).length;
+    let verdict: { log: string[]; scrap: number; left: number; lobs: number } | null = null;
+    const droneKills = (ls: string[]) => ls.filter(l => /wrecks? \w+! \(\+/.test(l)).length;
     for (let attempt = 0; attempt < 12 && !verdict; attempt++) {
-      els['seed-input'].value = 'lob-' + attempt; // each attempt deals different hills
+      E('seed-input').value = 'lob-' + attempt; // each attempt deals different hills
       TAP('global', 'new'); frames(120);
-      if (els['shop-veil'].hidden === false) { click(els['shop-next']); frames(120); }
+      if (E('shop-veil').hidden === false) { click(E('shop-next')); frames(120); }
       // The log keeps only its newest lines, so collect them as they arrive.
-      const all = [];
-      let tail = els['log'].children.map(li => li.textContent);
+      const all: string[] = [];
+      let tail = E('log').children.map(li => li.textContent);
       const lines = () => {
-        const now = els['log'].children.map(li => li.textContent);
+        const now = E('log').children.map(li => li.textContent);
         let at = 0;
         for (let n = Math.min(tail.length, now.length); n > 0; n--) {
           if (tail.slice(-n).join('\n') === now.slice(0, n).join('\n')) { at = n; break; }
@@ -1056,10 +1065,10 @@ await (async () => {
         tail = now;
         return all;
       };
-      const angleNow = () => parseInt(els['hud-angle'].textContent, 10);
+      const angleNow = () => parseInt(E('hud-angle').textContent, 10);
       let lobs = 0;
       for (let g = 0; g < 4000 && !lines().some(l => /goes to the battery/.test(l)); g++) {
-        if (/YOU\. Aim!/.test(els['hud-turn'].textContent) && lobs < 60) {
+        if (/YOU\. Aim!/.test(E('hud-turn').textContent) && lobs < 60) {
           for (let k = 0; k < 200 && Math.abs(angleNow() - 90) > 2; k++) {
             const key = angleNow() < 90 ? 'barrelLeft' : 'barrelRight';
             const before = angleNow();
@@ -1087,8 +1096,8 @@ await (async () => {
       await test('solo-drones-fight-to-one', () => { assert.ok(droneKills(after) === left - 1, `left=${left} kills=${droneKills(after)}`); });
       await test('solo-round-ends-after-the-last-wreck', () => { assert.ok(/goes to the battery.*2 lives left/.test(after[after.length - 1] || ''), after.slice(-2).join(' | ')); });
       frames(600); // the name card runs on sim time, then the shop opens
-      await test('solo-lost-round-opens-the-shop', () => { assert.ok(els['shop-veil'].hidden === false); });
-      await test('solo-lost-round-costs-a-life', () => { assert.ok(/^♥ 2$/.test(els['hud-lives'].textContent), els['hud-lives'].textContent); });
+      await test('solo-lost-round-opens-the-shop', () => { assert.ok(E('shop-veil').hidden === false); });
+      await test('solo-lost-round-costs-a-life', () => { assert.ok(/^♥ 2$/.test(E('hud-lives').textContent), E('hud-lives').textContent); });
     }
   }
   // The stub only knows elements the game asked for; ask for the lobby ones.
@@ -1099,68 +1108,68 @@ await (async () => {
     void document.getElementById(id);
   }
   // The host's Menu Difficulty goes with the create and the lobby shows it.
-  const difficultyTile = key => els['difficulty-picker'].children.find(t => t.getAttribute('data-difficulty') === key);
+  const difficultyTile = key => E('difficulty-picker').children.find(t => t.getAttribute('data-difficulty') === key);
   click(difficultyTile('hard'));
   await test('difficulty-pick-saved', () => { assert.ok(window.localStorage.getItem('tankity-difficulty') === 'hard'
     && difficultyTile('hard').getAttribute('aria-pressed') === 'true', window.localStorage.getItem('tankity-difficulty')); });
-  click(els['rooms-open']); await tick(10);
-  const tiles = () => els['lobby-map-picker'].children;
+  click(E('rooms-open')); await tick(10);
+  const tiles = () => E('lobby-map-picker').children;
   const tileOn = () => tiles().filter(t => t.getAttribute('aria-pressed') === 'true').map(t => t.getAttribute('data-map'));
   await test('maps-catalog', () => { assert.ok(tiles().length === 3 && tiles().map(t => t.getAttribute('title')).join('|') === 'Random hills|Canyon 3|Twin Hills', tiles().map(t => t.getAttribute('title')).join('|')); });
   await test('maps-tiles-are-buttons', () => { assert.ok(tiles().every(t => t.getAttribute('type') === 'button' && t.children.length === 2
-    && t.children[0].getAttribute('aria-hidden') === 'true' && t.children[1].textContent === t.getAttribute('title'))); });
+    && childEl(t, 0).getAttribute('aria-hidden') === 'true' && nodeAt(t, 1).textContent === t.getAttribute('title'))); });
   await test('maps-random-selected', () => { assert.ok(tileOn().join() === '', tileOn().join()); });
-  await test('room-occupancy', () => { assert.ok(els['lobby-count'].textContent === '3 / 10 rooms occupied', els['lobby-count'].textContent); });
-  await test('room-dot-green', () => { assert.ok(els['net-dot'].className.includes('on') && els['hud-server'].textContent === 'online', `${els['net-dot'].className} | ${els['hud-server'].textContent}`); });
+  await test('room-occupancy', () => { assert.ok(E('lobby-count').textContent === '3 / 10 rooms occupied', E('lobby-count').textContent); });
+  await test('room-dot-green', () => { assert.ok(E('net-dot').className.includes('on') && E('hud-server').textContent === 'online', `${E('net-dot').className} | ${E('hud-server').textContent}`); });
   // a full shelf says so in plain words, never a status code
   failCreate = 'every room is taken (10 / 10). Try again later.';
-  submit(els['host-form']); await tick(10);
-  await test('room-full', () => { assert.ok(els['lobby-status'].textContent === failCreate, els['lobby-status'].textContent); });
+  submit(E('host-form')); await tick(10);
+  await test('room-full', () => { assert.ok(E('lobby-status').textContent === failCreate, E('lobby-status').textContent); });
   failCreate = '';
   // transport trouble arrives in human words, never a status code
   for (const [mode, want] of [['down', 'Could not reach'], ['page', 'page instead of game data'], ['stumble', 'stumbled']]) {
     failMode = mode;
-    submit(els['host-form']); await tick(10);
-    await test('room-err-' + mode, () => { assert.ok(els['lobby-status'].textContent.includes(want), els['lobby-status'].textContent); });
+    submit(E('host-form')); await tick(10);
+    await test('room-err-' + mode, () => { assert.ok(E('lobby-status').textContent.includes(want), E('lobby-status').textContent); });
     if (mode === 'down') {
-      await test('room-dot-red', () => { assert.ok(els['net-dot'].className.includes('off') && els['hud-server'].textContent === 'offline', `${els['net-dot'].className} | ${els['hud-server'].textContent}`); });
+      await test('room-dot-red', () => { assert.ok(E('net-dot').className.includes('off') && E('hud-server').textContent === 'offline', `${E('net-dot').className} | ${E('hud-server').textContent}`); });
     }
   }
   failMode = '';
   // The lobby has its own initials boxes, the saved set in them (the title card's too).
-  const lobbyBox = n => els[`lobby-initial-${n}`];
+  const lobbyBox = n => E(`lobby-initial-${n}`);
   const typeBox = (n, v) => { lobbyBox(n).value = v; fire(lobbyBox(n), 'input'); };
   await test('lobby-no-per-form-initials', () => { assert.ok(!rendered('host-initials') && !rendered('join-initials')); });
   await test('lobby-initials-prefilled', () => { assert.ok([1, 2, 3].map(n => lobbyBox(n).value).join('') === window.localStorage.getItem('tankity-initials'), [1, 2, 3].map(n => lobbyBox(n).value).join('')); });
   // Half-typed boxes stop Host with a line and put the player in the empty box; nothing is sent.
   createdInitials = ''; // set again only by a create that reaches the server
   typeBox(1, 'k');
-  submit(els['host-form']); await tick(10);
-  await test('lobby-half-typed-refused', () => { assert.ok(/all three/.test(els['lobby-initials-note'].textContent) && createdInitials === ''
-    && globalThis.__focused === lobbyBox(2), els['lobby-initials-note'].textContent); });
+  submit(E('host-form')); await tick(10);
+  await test('lobby-half-typed-refused', () => { assert.ok(/all three/.test(E('lobby-initials-note').textContent) && createdInitials === ''
+    && globalThis.__focused === lobbyBox(2), E('lobby-initials-note').textContent); });
   // A blocked set says so at once and stops Host too; the saved set stays.
   const savedBefore = window.localStorage.getItem('tankity-initials');
   typeBox(1, 'a'); typeBox(2, 's'); typeBox(3, 's');
-  await test('lobby-blocked-said-at-once', () => { assert.ok(/not allowed/.test(els['lobby-initials-note'].textContent)
-    && window.localStorage.getItem('tankity-initials') === savedBefore, els['lobby-initials-note'].textContent); });
-  submit(els['host-form']); await tick(10);
-  await test('lobby-blocked-refused', () => { assert.ok(/not allowed/.test(els['lobby-initials-note'].textContent) && createdInitials === ''
+  await test('lobby-blocked-said-at-once', () => { assert.ok(/not allowed/.test(E('lobby-initials-note').textContent)
+    && window.localStorage.getItem('tankity-initials') === savedBefore, E('lobby-initials-note').textContent); });
+  submit(E('host-form')); await tick(10);
+  await test('lobby-blocked-refused', () => { assert.ok(/not allowed/.test(E('lobby-initials-note').textContent) && createdInitials === ''
     && globalThis.__focused === lobbyBox(1)); });
   // An allowed set is saved as it is typed, for the title card too, and the line clears.
   typeBox(1, 'k'); typeBox(2, 'e'); typeBox(3, 'n');
-  await test('lobby-initials-saved', () => { assert.ok(window.localStorage.getItem('tankity-initials') === 'KEN' && els['lobby-initials-note'].textContent === '', window.localStorage.getItem('tankity-initials')); });
-  await test('lobby-initials-on-the-title-card', () => { assert.ok([1, 2, 3].map(n => els[`title-initial-${n}`].value).join('') === 'KEN', [1, 2, 3].map(n => els[`title-initial-${n}`].value).join('')); });
+  await test('lobby-initials-saved', () => { assert.ok(window.localStorage.getItem('tankity-initials') === 'KEN' && E('lobby-initials-note').textContent === '', window.localStorage.getItem('tankity-initials')); });
+  await test('lobby-initials-on-the-title-card', () => { assert.ok([1, 2, 3].map(n => E(`title-initial-${n}`).value).join('') === 'KEN', [1, 2, 3].map(n => E(`title-initial-${n}`).value).join('')); });
   // host a room on picked hills: code shows, roster opens, hills named
   click(tiles()[1]); // before hosting, a tile only sets the value
-  submit(els['host-form']); await tick(10);
-  await test('room-hosted', () => { assert.ok(els['lobby-code'].textContent === 'TST1' && els['lobby-room'].hidden === false, els['lobby-code'].textContent); });
+  submit(E('host-form')); await tick(10);
+  await test('room-hosted', () => { assert.ok(E('lobby-code').textContent === 'TST1' && E('lobby-room').hidden === false, E('lobby-code').textContent); });
   await test('room-hosted-with-saved-initials', () => { assert.ok(createdInitials === window.localStorage.getItem('tankity-initials'), createdInitials); });
-  await test('room-hides-forms', () => { assert.ok(els['lobby-rows'].hidden === true && els['lobby-intro'].hidden === true, `rows=${els['lobby-rows'].hidden} intro=${els['lobby-intro'].hidden}`); });
-  const seatTiles = () => els['lobby-seats'].children;
+  await test('room-hides-forms', () => { assert.ok(E('lobby-rows').hidden === true && E('lobby-intro').hidden === true, `rows=${E('lobby-rows').hidden} intro=${E('lobby-intro').hidden}`); });
+  const seatTiles = () => E('lobby-seats').children;
   const tileText = t => t.children.map(c => c.textContent).join(' ');
   await test('room-roster', () => { assert.ok(seatTiles().length === 4 && seatTiles().every(t => t.getAttribute('type') === 'button' && t.className.includes('unit-choice')), `tiles=${seatTiles().length}`); });
   // The grid shows initials for people, AI for drones; no lives or points.
-  await test('seat-grid-labels', () => { assert.ok(seatTiles().map(t => t.children[0].textContent).join('|') === 'ABC|AI|AI|AI'
+  await test('seat-grid-labels', () => { assert.ok(seatTiles().map(t => nodeAt(t, 0).textContent).join('|') === 'ABC|AI|AI|AI'
     && !seatTiles().some(t => /lives|pts|x3/.test(tileText(t))), seatTiles().map(tileText).join('|')); });
   await test('seat-grid-host-flips', () => { assert.ok(seatTiles()[0].getAttribute('aria-disabled') === 'true'
     && seatTiles().slice(1).every(t => t.getAttribute('aria-disabled') === undefined && ((t._l || {}).click || []).length > 0), seatTiles().map(t => t.getAttribute('aria-disabled')).join()); });
@@ -1168,65 +1177,65 @@ await (async () => {
   click(seatTiles()[2]); await tick(10);
   await test('seat-open-sent', () => { assert.ok(seatModeSent && seatModeSent.seat === 2 && seatModeSent.mode === 'open', JSON.stringify(seatModeSent)); });
   await test('seat-open-shown', () => { assert.ok(seatTiles()[2].children[0].textContent === 'Open' && seatTiles()[2].className.includes('seat-open')
-    && seatTiles()[1].children[0].textContent === 'AI', seatTiles().map(t => t.children[0].textContent).join('|')); });
+    && seatTiles()[1].children[0].textContent === 'AI', seatTiles().map(t => nodeAt(t, 0).textContent).join('|')); });
   click(seatTiles()[2]); await tick(10);
   await test('seat-back-to-ai', () => { assert.ok(seatModeSent.mode === 'ai' && seatTiles()[2].children[0].textContent === 'AI'); });
   click(seatTiles()[3]); await tick(10); // leave one open for the guest's view below
-  await test('seats-hint-host', () => { assert.ok(/Tap a seat/.test(els['seats-hint'].textContent), els['seats-hint'].textContent); });
-  await test('room-hills', () => { assert.ok(els['lobby-hills'].textContent === 'Hills: Canyon 3', els['lobby-hills'].textContent); });
+  await test('seats-hint-host', () => { assert.ok(/Tap a seat/.test(E('seats-hint').textContent), E('seats-hint').textContent); });
+  await test('room-hills', () => { assert.ok(E('lobby-hills').textContent === 'Hills: Canyon 3', E('lobby-hills').textContent); });
   await test('room-difficulty-sent', () => { assert.ok(createdDifficulty === 'hard', String(createdDifficulty)); });
-  await test('room-difficulty-shown', () => { assert.ok(els['lobby-drones'].textContent === "Drones: Hard (the host's Difficulty)" && !els['lobby-drones'].hidden, els['lobby-drones'].textContent); });
+  await test('room-difficulty-shown', () => { assert.ok(E('lobby-drones').textContent === "Drones: Hard (the host's Difficulty)" && !E('lobby-drones').hidden, E('lobby-drones').textContent); });
   click(difficultyTile('normal'));
   await test('map-tile-pressed', () => { assert.ok(tileOn().join() === 'canyon 3', tileOn().join()); });
   // the host can swap back to a random draw before starting
   click(tiles()[0]); await tick(10);
-  await test('map-change', () => { assert.ok(els['lobby-hills'].textContent === 'Hills: Random hills', els['lobby-hills'].textContent); });
+  await test('map-change', () => { assert.ok(E('lobby-hills').textContent === 'Hills: Random hills', E('lobby-hills').textContent); });
   // tapping a tile picks that map through the same request
   click(tiles()[2]); await tick(10);
-  await test('map-tile-pick', () => { assert.ok(els['lobby-map'].value === 'twin hills' && tileOn().join() === 'twin hills', `${els['lobby-map'].value} | ${tileOn().join()}`); });
+  await test('map-tile-pick', () => { assert.ok(E('lobby-map').value === 'twin hills' && tileOn().join() === 'twin hills', `${E('lobby-map').value} | ${tileOn().join()}`); });
   await test('map-tile-sent', () => { assert.ok(createdMap === 'twin hills', createdMap); });
   click(tiles()[0]); await tick(10);
-  await test('map-tile-random', () => { assert.ok(els['lobby-map'].value === '' && createdMap === '' && els['lobby-hills'].textContent === 'Hills: Random hills', `${els['lobby-map'].value} | ${els['lobby-hills'].textContent}`); });
+  await test('map-tile-random', () => { assert.ok(E('lobby-map').value === '' && createdMap === '' && E('lobby-hills').textContent === 'Hills: Random hills', `${E('lobby-map').value} | ${E('lobby-hills').textContent}`); });
   // a guest joining shows both initials on the roster, never undefined
   extraGuest = true;
   void document.getElementById('join-code');
-  els['join-code'].value = 'TST1';
-  submit(els['join-form']); await tick(10);
+  E('join-code').value = 'TST1';
+  submit(E('join-form')); await tick(10);
   const guestNames = seatTiles().map(tileText).join('|');
   await test('guest-seat', () => { assert.ok(/ABC/.test(guestNames) && /DEF/.test(guestNames) && !/undefined/.test(guestNames), guestNames); });
   // A guest sees the host's choices but cannot change them.
   await test('guest-sees-open', () => { assert.ok(seatTiles().map(t => t.getAttribute('data-mode')).join() === 'human,human,ai,open', seatTiles().map(t => t.getAttribute('data-mode')).join()); });
   await test('guest-cannot-flip', () => { assert.ok(seatTiles().every(t => t.getAttribute('aria-disabled') === 'true' && !((t._l || {}).click || []).length)
-    && /host decides/.test(els['seats-hint'].textContent), els['seats-hint'].textContent); });
+    && /host decides/.test(E('seats-hint').textContent), E('seats-hint').textContent); });
   seatModes[3] = 'ai';
   // back to hosting so the match can start
   extraGuest = false;
-  submit(els['host-form']); await tick(10);
+  submit(E('host-form')); await tick(10);
   // the invite link carries the room code, and copy hands it over
   void document.getElementById('join-link');
   void document.getElementById('copy-link');
-  await test('invite-link', () => { assert.ok(els['join-link'].value === 'http://localhost:8000/operation-tankity/index.html?code=TST1', els['join-link'].value); });
-  click(els['copy-link']); await tick(10);
-  await test('invite-copy', () => { assert.ok(copied === els['join-link'].value, String(copied)); });
+  await test('invite-link', () => { assert.ok(E('join-link').value === 'http://localhost:8000/operation-tankity/index.html?code=TST1', E('join-link').value); });
+  click(E('copy-link')); await tick(10);
+  await test('invite-copy', () => { assert.ok(copied === E('join-link').value, String(copied)); });
   // single-use invite: the boot already consumed ?code=zz99 above
   global.location.search = '';
   // start: the hills render from the server snapshot, first turn is ours
   NET_LOBBY = false;
-  click(els['lobby-start']); await tick(10);
-  await test('net-turn', () => { assert.ok(/YOU/.test(els['hud-turn'].textContent), els['hud-turn'].textContent); });
-  await test('net-hud', () => { assert.ok(/Shell.*∞/.test(els['hud-weapon'].textContent) && /ROOM/.test(els['hud-score'].textContent), els['hud-weapon'].textContent + ' | ' + els['hud-score'].textContent); });
+  click(E('lobby-start')); await tick(10);
+  await test('net-turn', () => { assert.ok(/YOU/.test(E('hud-turn').textContent), E('hud-turn').textContent); });
+  await test('net-hud', () => { assert.ok(/Shell.*∞/.test(E('hud-weapon').textContent) && /ROOM/.test(E('hud-score').textContent), E('hud-weapon').textContent + ' | ' + E('hud-score').textContent); });
   // fire over the same public key as solo play; the server settles it
   sawFire = false;
   TAP('global', 'fire'); await tick(10);
   await test('net-fire', () => { assert.ok(sawFire, 'intent sent'); });
   frames(180); // the turn passes once the replay of the shot has played out
-  await test('net-turn-passes', () => { assert.ok(/REAPER aiming/.test(els['hud-turn'].textContent), els['hud-turn'].textContent); });
+  await test('net-turn-passes', () => { assert.ok(/REAPER aiming/.test(E('hud-turn').textContent), E('hud-turn').textContent); });
   // Between rounds the room shops; V opens the firing range, and it stays
   // open through the polls that keep the shop fresh.
   NET_SHOP = true;
   seatArmor = 60;
   await sleep(1800); await tick(10);
-  await test('net-shop', () => { assert.ok(els['shop-veil'].hidden === false, `shop hidden=${els['shop-veil'].hidden}`); });
+  await test('net-shop', () => { assert.ok(E('shop-veil').hidden === false, `shop hidden=${E('shop-veil').hidden}`); });
   // A damaged seat's Repair reads the room's armor, so it is enabled and asks the server.
   {
     const repairRow = shopRows().find(li => rowName(li).includes('Repair'));
@@ -1236,42 +1245,42 @@ await (async () => {
     TAP('shop', 'qtyUp'); TAP('shop', 'qtyUp'); frames(3);
     const dialled = shopRows().find(li => rowName(li).includes('Repair'));
     await test('net-shop-repair-priced-by-need', () => { assert.ok(!/×/.test(dialled.textContent), dialled.textContent); });
-    await test('net-shop-armor-pill', () => { assert.ok(els['hud-armor'].textContent === '60', els['hud-armor'].textContent); });
+    await test('net-shop-armor-pill', () => { assert.ok(E('hud-armor').textContent === '60', E('hud-armor').textContent); });
     click(buy); await tick(10);
     await test('net-shop-repair-goes-to-server', () => { assert.ok(buysSent.includes('repair'), buysSent.join()); });
   }
   // The shop button is the Ready toggle: it shows who is ready and the clock,
   // sends the wanted state in click order, and a fast double click ends unready.
-  await test('net-ready-idle', () => { assert.ok(/^Ready/.test(els['shop-next'].textContent) && !/✓/.test(els['shop-next'].textContent)
-    && els['shop-next'].getAttribute('aria-pressed') === 'false'
-    && /^0\/1 ready · shop closes in 1:\d\d/.test(els['shop-ready'].textContent), els['shop-next'].textContent + ' | ' + els['shop-ready'].textContent); });
-  click(els['shop-next']); await tick(10);
-  await test('net-ready-on', () => { assert.ok(readySent.join() === 'true' && /^Ready ✓/.test(els['shop-next'].textContent)
-    && els['shop-next'].getAttribute('aria-pressed') === 'true' && /^1\/1 ready/.test(els['shop-ready'].textContent), readySent.join() + ' | ' + els['shop-next'].textContent + ' | ' + els['shop-ready'].textContent); });
-  click(els['shop-next']); click(els['shop-next']); await tick(10);
+  await test('net-ready-idle', () => { assert.ok(/^Ready/.test(E('shop-next').textContent) && !/✓/.test(E('shop-next').textContent)
+    && E('shop-next').getAttribute('aria-pressed') === 'false'
+    && /^0\/1 ready · shop closes in 1:\d\d/.test(E('shop-ready').textContent), E('shop-next').textContent + ' | ' + E('shop-ready').textContent); });
+  click(E('shop-next')); await tick(10);
+  await test('net-ready-on', () => { assert.ok(readySent.join() === 'true' && /^Ready ✓/.test(E('shop-next').textContent)
+    && E('shop-next').getAttribute('aria-pressed') === 'true' && /^1\/1 ready/.test(E('shop-ready').textContent), readySent.join() + ' | ' + E('shop-next').textContent + ' | ' + E('shop-ready').textContent); });
+  click(E('shop-next')); click(E('shop-next')); await tick(10);
   await test('net-ready-double-click-ordered', () => { assert.ok(readySent.join() === 'true,false,true' && mockReady === true, readySent.join()); });
-  click(els['shop-next']); await tick(10);
-  await test('net-ready-off', () => { assert.ok(readySent.join() === 'true,false,true,false' && !/✓/.test(els['shop-next'].textContent)
-    && els['shop-next'].getAttribute('aria-pressed') === 'false', readySent.join() + ' | ' + els['shop-next'].textContent); });
+  click(E('shop-next')); await tick(10);
+  await test('net-ready-off', () => { assert.ok(readySent.join() === 'true,false,true,false' && !/✓/.test(E('shop-next').textContent)
+    && E('shop-next').getAttribute('aria-pressed') === 'false', readySent.join() + ' | ' + E('shop-next').textContent); });
   TAP('shop', 'preview'); await tick(5);
-  const pvOpened = els['preview-veil'].hidden === false;
+  const pvOpened = E('preview-veil').hidden === false;
   await sleep(3400); await tick(10);
-  await test('net-preview-stays', () => { assert.ok(pvOpened && els['preview-veil'].hidden === false, `opened=${pvOpened} open-after-polls=${els['preview-veil'].hidden === false}`); });
+  await test('net-preview-stays', () => { assert.ok(pvOpened && E('preview-veil').hidden === false, `opened=${pvOpened} open-after-polls=${E('preview-veil').hidden === false}`); });
   TAP('global', 'back'); await tick(5);
   NET_SHOP = false;
   seatArmor = 100;
   await sleep(1800); await tick(10);
   // typing in a box is typing, not playing
-  const logLen = els['log'].children.length;
+  const logLen = E('log').children.length;
   for (const f of listeners['keydown'] || []) {
     f({ key: 'q', code: 'KeyQ', target: { tagName: 'INPUT' }, preventDefault: () => {}, repeat: false });
     f({ key: 'a', code: 'KeyA', target: { tagName: 'INPUT' }, preventDefault: () => {}, repeat: false });
   }
   frames(5);
-  await test('input-guard', () => { assert.ok(els['log'].children.length === logLen, `lines=${els['log'].children.length}`); });
+  await test('input-guard', () => { assert.ok(E('log').children.length === logLen, `lines=${E('log').children.length}`); });
   // A suspended context (fresh refresh, no gesture yet) schedules nothing;
   // the first ticks after resume play instead of sitting silent.
-  click(els['btn-music']); click(els['btn-music']); // end unmuted with a fresh scheduler
+  click(E('btn-music')); click(E('btn-music')); // end unmuted with a fresh scheduler
   acState = 'suspended';
   const notesCalm = FAKE_STATS.notes;
   AC_TIME.t += 5;
@@ -1283,7 +1292,7 @@ await (async () => {
   await test('music-resumes', () => { assert.ok(FAKE_STATS.notes > notesCalm, `scheduled=${FAKE_STATS.notes - notesCalm}`); });
   // The watchdog must never churn the timer: with a stale tick and steady
   // frames, steps still fire the moment the context runs again.
-  click(els['btn-music']); click(els['btn-music']); // end unmuted with a fresh scheduler
+  click(E('btn-music')); click(E('btn-music')); // end unmuted with a fresh scheduler
   acState = 'suspended';
   const stale0 = Date.now();
   while (Date.now() - stale0 < 1700) { frames(5); AC_TIME.t += 0.08; await new Promise(r => setTimeout(r, 25)); }
@@ -1309,26 +1318,26 @@ await (async () => {
   const shopSrc = fs.readFileSync(path.join(GAME_DIR, 'src', 'ui', 'shop.tsx'), 'utf8');
   await test('leave-markup', () => { assert.ok(html.includes('id="leave-veil"') && ['leave-go', 'leave-stay', 'again'].every(rendered) && rendered('menu-leave')
     && shopSrc.includes('id="shop-leave"')); });
-  await test('leave-buttons-in-room', () => { assert.ok(els['menu-leave'].hidden === false && els['shop-leave'].hidden === false, `${els['menu-leave'].hidden} ${els['shop-leave'].hidden}`); });
+  await test('leave-buttons-in-room', () => { assert.ok(E('menu-leave').hidden === false && E('shop-leave').hidden === false, `${E('menu-leave').hidden} ${E('shop-leave').hidden}`); });
   TAP('global', 'back'); frames(2);
-  click(els['menu-leave']); frames(2);
-  await test('leave-asks-first', () => { assert.ok(els['leave-veil'].hidden === false && leaveSent === 0); });
+  click(E('menu-leave')); frames(2);
+  await test('leave-asks-first', () => { assert.ok(E('leave-veil').hidden === false && leaveSent === 0); });
   TAP('global', 'back'); frames(2);
-  await test('leave-esc-stays', () => { assert.ok(els['leave-veil'].hidden === true && leaveSent === 0 && /YOU|aiming/.test(els['hud-turn'].textContent)
-    && els['menu-overlay'].hidden === false, els['hud-turn'].textContent); });
-  click(els['menu-leave']); frames(2);
-  click(els['leave-stay']); frames(2);
-  await test('leave-stay-stays', () => { assert.ok(els['leave-veil'].hidden === true && leaveSent === 0); });
+  await test('leave-esc-stays', () => { assert.ok(E('leave-veil').hidden === true && leaveSent === 0 && /YOU|aiming/.test(E('hud-turn').textContent)
+    && E('menu-overlay').hidden === false, E('hud-turn').textContent); });
+  click(E('menu-leave')); frames(2);
+  click(E('leave-stay')); frames(2);
+  await test('leave-stay-stays', () => { assert.ok(E('leave-veil').hidden === true && leaveSent === 0); });
   // Hosting remembered the seat in this browser; Leave forgets it.
   const storedCodes = () => { try { return JSON.parse(window.localStorage.getItem('tankity-seats') || '{}').seats.map(s => s.code); } catch (_) { return []; } };
   const heldBefore = storedCodes();
-  click(els['menu-leave']); frames(2);
-  click(els['leave-go']); await tick(10); frames(5);
+  click(E('menu-leave')); frames(2);
+  click(E('leave-go')); await tick(10); frames(5);
   await test('leave-sent', () => { assert.ok(leaveSent === 1, 'leaves=' + leaveSent); });
   await test('seat-remembered-then-forgotten', () => { assert.ok(heldBefore.length > 0 && storedCodes().length === heldBefore.length - 1, heldBefore.join() + ' -> ' + storedCodes().join()); });
-  await test('leave-cleaned-up', () => { assert.ok(els['leave-veil'].hidden === true && els['menu-overlay'].hidden === true
-    && els['shop-veil'].hidden === true && els['lobby-veil'].hidden === true
-    && els['menu-leave'].hidden === true && els['shop-leave'].hidden === true, `leave=${els['leave-veil'].hidden} menu=${els['menu-overlay'].hidden} shop=${els['shop-veil'].hidden}`); });
+  await test('leave-cleaned-up', () => { assert.ok(E('leave-veil').hidden === true && E('menu-overlay').hidden === true
+    && E('shop-veil').hidden === true && E('lobby-veil').hidden === true
+    && E('menu-leave').hidden === true && E('shop-leave').hidden === true, `leave=${E('leave-veil').hidden} menu=${E('menu-overlay').hidden} shop=${E('shop-veil').hidden}`); });
   await test('leave-back-to-title', () => { assert.ok(/Back from the room/.test(logText()) && titleVeil().hidden === false, logText().split('\n').slice(-1)[0]); });
   const polls0 = stateCalls;
   await sleep(3600); frames(5); // a stopped poll never drags the old room back
@@ -1338,12 +1347,12 @@ await (async () => {
   PFX.on = true; PFX.room = 'lobby-host';
   const fxRoomOf = name => fx(name).body.room;
   TAP('global', 'rooms'); await tick(10);
-  submit(els['host-form']); await tick(10);
-  await test('fx-lobby-code', () => { assert.ok(els['lobby-code'].textContent === fx('create-reply').body.code && els['lobby-room'].hidden === false, els['lobby-code'].textContent); });
-  await test('fx-lobby-seats', () => { assert.ok(els['lobby-seats'].children.map(t => t.children[0].textContent).join('|') === 'ABC|DEF|AI|Open', els['lobby-seats'].children.map(t => t.children[0].textContent).join('|')); });
-  click(els['lobby-start']); await tick(10);
-  await test('fx-play-turn', () => { assert.ok(/YOU/.test(els['hud-turn'].textContent) && els['lobby-veil'].hidden === true && els['shop-veil'].hidden === true, els['hud-turn'].textContent); });
-  await test('fx-play-hud', () => { assert.ok(els['hud-armor'].textContent === String(fxRoomOf('play-my-turn').tanks[0].hp) && /ROOM/.test(els['hud-score'].textContent), els['hud-armor'].textContent + ' | ' + els['hud-score'].textContent); });
+  submit(E('host-form')); await tick(10);
+  await test('fx-lobby-code', () => { assert.ok(E('lobby-code').textContent === fx('create-reply').body.code && E('lobby-room').hidden === false, E('lobby-code').textContent); });
+  await test('fx-lobby-seats', () => { assert.ok(E('lobby-seats').children.map(t => nodeAt(t, 0).textContent).join('|') === 'ABC|DEF|AI|Open', E('lobby-seats').children.map(t => nodeAt(t, 0).textContent).join('|')); });
+  click(E('lobby-start')); await tick(10);
+  await test('fx-play-turn', () => { assert.ok(/YOU/.test(E('hud-turn').textContent) && E('lobby-veil').hidden === true && E('shop-veil').hidden === true, E('hud-turn').textContent); });
+  await test('fx-play-hud', () => { assert.ok(E('hud-armor').textContent === String(fxRoomOf('play-my-turn').tanks[0].hp) && /ROOM/.test(E('hud-score').textContent), E('hud-armor').textContent + ' | ' + E('hud-score').textContent); });
   // 429 (retried, then said kindly) and 409 (the server's own words).
   PFX.actError = 'error-too-fast';
   TAP('global', 'fire'); await sleep(900); await tick(5);
@@ -1361,44 +1370,44 @@ await (async () => {
   const hitMe = after.events.some(e => e.t === 'hit' && e.seat === 0 && e.by === 1);
   await test('fx-fire-replayed', () => { assert.ok(/ABC hits REAPER for \d+/.test(logText()) && /REAPER fires/.test(logText()) &&
     /REAPER hits YOU for \d+/.test(logText()) === hitMe, logText().split('\n').slice(-3).join(' | ')); });
-  await test('fx-fire-turn-back', () => { assert.ok(/YOU/.test(els['hud-turn'].textContent) && els['hud-armor'].textContent === String(after.tanks[0].hp), els['hud-turn'].textContent + ' | armor ' + els['hud-armor'].textContent); });
+  await test('fx-fire-turn-back', () => { assert.ok(/YOU/.test(E('hud-turn').textContent) && E('hud-armor').textContent === String(after.tanks[0].hp), E('hud-turn').textContent + ' | armor ' + E('hud-armor').textContent); });
   // The round is won: the room moves to the shop with the prize paid.
   PFX.room = 'shop-after-win';
   await sleep(2200); await tick(10);
-  await test('fx-shop-opens', () => { assert.ok(els['shop-veil'].hidden === false, `shop hidden=${els['shop-veil'].hidden}`); });
-  await test('fx-shop-cash', () => { assert.ok(els['shop-cash'].textContent.includes(String(fxRoomOf('shop-after-win').you.cash)), els['shop-cash'].textContent); });
+  await test('fx-shop-opens', () => { assert.ok(E('shop-veil').hidden === false, `shop hidden=${E('shop-veil').hidden}`); });
+  await test('fx-shop-cash', () => { assert.ok(E('shop-cash').textContent.includes(String(fxRoomOf('shop-after-win').you.cash)), E('shop-cash').textContent); });
   // The server's own shop with the host readied and a second human waiting.
   PFX.room = 'shop-ready';
   await sleep(2200); await tick(10);
-  await test('fx-shop-ready', () => { assert.ok(/^Ready ✓/.test(els['shop-next'].textContent) && /^1\/2 ready · shop closes in 1:/.test(els['shop-ready'].textContent), els['shop-next'].textContent + ' | ' + els['shop-ready'].textContent); });
+  await test('fx-shop-ready', () => { assert.ok(/^Ready ✓/.test(E('shop-next').textContent) && /^1\/2 ready · shop closes in 1:/.test(E('shop-ready').textContent), E('shop-next').textContent + ' | ' + E('shop-ready').textContent); });
   PFX.on = false;
   // The server's delta replies reached the client as complete rooms: polls
   // that held the current hills got them left out, and everything above held.
   await test('fx-delta-polls-omit-the-hills', () => { assert.ok(PFX.delta > 0 && PFX.full > 0, `delta ${PFX.delta}, full ${PFX.full}`); });
   await test('fx-hand-snapshots-match', () => { assert.ok(FX_DRIFT.size === 0, [...FX_DRIFT].slice(0, 6).join('; ')); });
-  click(els['shop-leave']); frames(2);
-  click(els['leave-go']); await tick(10); frames(5);
+  click(E('shop-leave')); frames(2);
+  click(E('leave-go')); await tick(10); frames(5);
   TAP('global', 'new'); frames(150);
-  for (let i = 0; i < 6 && (els['shop-veil'].hidden === false || els['round-banner'].hidden === false); i++) {
-    if (els['shop-veil'].hidden === false) click(els['shop-next']);
+  for (let i = 0; i < 6 && (E('shop-veil').hidden === false || E('round-banner').hidden === false); i++) {
+    if (E('shop-veil').hidden === false) click(E('shop-next'));
     frames(60);
   }
   TAP('global', 'tutorial'); frames(5);
-  await test('tutorial-opens', () => { assert.ok(els['tutorial-overlay'].hidden === false); });
-  await test('tutorial-step', () => { assert.ok(/Move 1 of 5/.test(els['tutorial-text'].textContent), els['tutorial-text'].textContent); });
+  await test('tutorial-opens', () => { assert.ok(E('tutorial-overlay').hidden === false); });
+  await test('tutorial-step', () => { assert.ok(/Move 1 of 5/.test(E('tutorial-text').textContent), E('tutorial-text').textContent); });
   // The coach sends the player into the gun picker (move 4): Esc there shuts
   // the picker and leaves the tutorial running; a second Esc skips it.
   TAP('global', 'guns'); frames(3);
-  await test('esc-picker-open', () => { assert.ok(els['gun-overlay'].hidden === false); });
+  await test('esc-picker-open', () => { assert.ok(E('gun-overlay').hidden === false); });
   TAP('global', 'back'); frames(3);
-  await test('esc-closes-picker-first', () => { assert.ok(els['gun-overlay'].hidden === true && els['tutorial-overlay'].hidden === false
+  await test('esc-closes-picker-first', () => { assert.ok(E('gun-overlay').hidden === true && E('tutorial-overlay').hidden === false
     && window.localStorage.getItem('tankity-tutorial') !== 'done'); });
   TAP('global', 'back'); frames(3);
-  await test('esc-then-skips-tutorial', () => { assert.ok(els['tutorial-overlay'].hidden === true && window.localStorage.getItem('tankity-tutorial') === 'done'); });
+  await test('esc-then-skips-tutorial', () => { assert.ok(E('tutorial-overlay').hidden === true && window.localStorage.getItem('tankity-tutorial') === 'done'); });
   TAP('global', 'tutorial'); frames(5);
-  await test('tutorial-reopens', () => { assert.ok(els['tutorial-overlay'].hidden === false); });
-  click(els['tutorial-skip']); frames(3);
-  await test('tutorial-skips', () => { assert.ok(els['tutorial-overlay'].hidden === true); });
+  await test('tutorial-reopens', () => { assert.ok(E('tutorial-overlay').hidden === false); });
+  click(E('tutorial-skip')); frames(3);
+  await test('tutorial-skips', () => { assert.ok(E('tutorial-overlay').hidden === true); });
   await test('tutorial-remembered', () => { assert.ok(window.localStorage.getItem('tankity-tutorial') === 'done'); });
   // ---- weapon effects: data, engine caps, reduced motion ----
   {

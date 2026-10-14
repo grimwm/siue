@@ -46,7 +46,7 @@ export interface FxSystem {
   drawFlash(c: CanvasRenderingContext2D, w: number, h: number): void;
 }
 
-/** A sprite sheet fx/engine.ts loads (the moon's phases). */
+/** A sprite sheet fx/engine.ts loads (the moon's phases, the parachute). */
 export interface SpriteSheet {
   img: CanvasImageSource;
   fw: number;
@@ -59,7 +59,7 @@ export interface SpriteSheet {
 /** The slice of window.TankityFX this module calls. */
 export interface FxApi {
   reduced: boolean;
-  sheets: { moon?: SpriteSheet };
+  sheets: { moon?: SpriteSheet; parachute?: SpriteSheet };
   glow(c: CanvasRenderingContext2D, x: number, y: number, radius: number, color: string, alpha: number): void;
   drawBody(c: CanvasRenderingContext2D, x: number, y: number, vx: number, vy: number,
     body: unknown, color: string, time: number): void;
@@ -300,6 +300,49 @@ function drawGroundUnit(c: CanvasRenderingContext2D, t: DrawTank, time: number, 
   c.restore();
 }
 
+/* ---------- parachutes ---------- */
+/** The parachute sheet (fx/sprites/parachute.png): CHUTE_OPEN frames of the
+ *  canopy blooming open, then a loop of it swaying, CHUTE_FPS a second. */
+export const CHUTE_OPEN = 6, CHUTE_FPS = 12;
+/** The sheet frame `k` seconds after the parachute opened. */
+export function chuteFrame(k: number, frames: number): number {
+  const f = Math.max(0, Math.floor(k * CHUTE_FPS));
+  if (f < CHUTE_OPEN || frames <= CHUTE_OPEN) return Math.min(f, frames - 1);
+  return CHUTE_OPEN + (f - CHUTE_OPEN) % (frames - CHUTE_OPEN);
+}
+/** A canopy drawn with paths, for when the sheet has not loaded: it blooms
+ *  open over CHUTE_OPEN frames and sways after. (x, y) is where the lines
+ *  meet, on top of the unit; the canopy hangs above it. */
+export function drawChuteShape(c: CanvasRenderingContext2D, x: number, y: number, k: number): void {
+  const open = Math.min(1, k * CHUTE_FPS / CHUTE_OPEN);
+  const sway = open >= 1 ? Math.sin((k - CHUTE_OPEN / CHUTE_FPS) * 2.4) * 0.14 : 0;
+  const rw = 6 + 18 * open, rise = 30, dome = 6 + 8 * open;
+  c.save();
+  c.translate(x, y);
+  c.rotate(sway);
+  c.strokeStyle = 'rgba(230, 225, 210, 0.8)';
+  c.lineWidth = 1;
+  c.beginPath();
+  for (const f of [-1, -0.4, 0.4, 1]) {
+    c.moveTo(0, 0);
+    c.lineTo(f * rw, -rise);
+  }
+  c.stroke();
+  c.fillStyle = '#f4f1e8';
+  c.beginPath();
+  c.moveTo(-rw, -rise);
+  c.quadraticCurveTo(0, -rise - dome * 2, rw, -rise);
+  c.quadraticCurveTo(0, -rise - dome * 0.6, -rw, -rise);
+  c.fill();
+  c.fillStyle = '#ff7b39';
+  c.beginPath();
+  c.moveTo(-rw * 0.33, -rise - dome * 0.45);
+  c.quadraticCurveTo(0, -rise - dome * 2, rw * 0.33, -rise - dome * 0.45);
+  c.quadraticCurveTo(0, -rise - dome * 0.75, -rw * 0.33, -rise - dome * 0.45);
+  c.fill();
+  c.restore();
+}
+
 /** How far a drone bobs from its rest height at `time`. */
 function droneHover(t: DrawTank, time: number): number {
   return Math.sin(time * 2.2 + t.x) * 3;
@@ -502,6 +545,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
   const { fitField, visibleWorld, sceneryY } = sim;
   let W = 0, H = 0; // the field being drawn, from each frame's view
   let sky: Sky | null = null; // drawn from view.skyKey over the visible sky, rebuilt when either changes
+  const chuteFrom = new Map<string, number>(); // when each unit's parachute opened, by its id
 
   function buildSky(key: string, rect: WorldRect): Sky {
     const SKY_X0 = rect.x0 - 20, SKY_W = rect.x1 - rect.x0 + 40, SKY_Y0 = rect.y0 - 20, SKY_H = 420 - rect.y0; // a field-sized view gives -20…W+20 by -20…400
@@ -567,6 +611,18 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     FX.glow(c, mx, my, mr * 3.2, '#a8b8ff', 0.26);
     const f = sky.phase % sh.frames;
     c.drawImage(sh.img, (f % sh.cols) * sh.fw, ((f / sh.cols) | 0) * sh.fh, sh.fw, sh.fh, mx - mr, my - mr, mr * 2, mr * 2);
+  }
+
+  /* An open parachute over unit t, from the sheet when it has loaded. */
+  function drawChute(c: CanvasRenderingContext2D, t: DrawTank, time: number, ground: boolean): void {
+    if (!chuteFrom.has(t.id)) chuteFrom.set(t.id, time);
+    const k = time - chuteFrom.get(t.id)!;
+    const x = t.x, y = t.y - (ground ? 23 : 44);
+    const sh = FX && FX.sheets.parachute;
+    if (!sh || !sh.ready) { drawChuteShape(c, x, y, k); return; }
+    // The sheet's frame is square, the lines' knot at the middle of its bottom edge.
+    const size = 64, f = chuteFrame(k, sh.frames);
+    c.drawImage(sh.img, (f % sh.cols) * sh.fw, ((f / sh.cols) | 0) * sh.fh, sh.fw, sh.fh, x - size / 2, y - size, size, size);
   }
 
   /* ---------- shells ---------- */
@@ -866,6 +922,8 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
         continue;
       }
       const ground = sim.isGroundUnit(t);
+      if (t.chute) drawChute(c, t, time, ground);
+      else chuteFrom.delete(t.id);
       if (t === view.turnUnit) drawTurnMarker(c, t, time, ground);
       if (view.online && t.menu && !t.isPlayer && t === view.turnUnit) drawMenuBadge(c, t, time, ground);
       if (ground) drawGroundUnit(c, t, time, deps.shownAngle(t), sim.facing(t));

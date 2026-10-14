@@ -23,7 +23,7 @@ import {
   gauss, H, GRAV, TUNE, clamp, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling,
 } from './sim.ts';
-import type { Blast, Difficulty, Shell } from './sim.ts';
+import type { Blast, Difficulty, FallEvent, Shell } from './sim.ts';
 import { snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloOneUps, soloSettle } from './solo.ts';
 import { endCardBack, localLine, soloBoard } from './standings.ts';
 import type { LocalRow, Saved } from './local-board.ts';
@@ -310,9 +310,45 @@ export function createMatch(deps: MatchDeps) {
     renderHUD();
   }
   /* Tanks left hanging over a crater fall under gravity every frame until they
-     land; ground that rose (a new round, fresh hills) takes them straight up. */
+     land; ground that rose (a new round, fresh hills) takes them straight up.
+     In a solo match a landing costs armor and spends parachutes; a room's
+     server has already settled its falls, so there the units only move. */
   function fallTanks(dt: number): void {
-    if (simFallTanks(G, dt).some(t => t.isPlayer)) sfx.play('thud');
+    const events: FallEvent[] = [];
+    if (simFallTanks(G, dt, net.on ? undefined : tables.arsenal || undefined, events).some(t => t.isPlayer)) sfx.play('thud');
+    for (const e of events) showFall(e);
+    if (events.length) renderHUD();
+  }
+  /* A landing as the sim reports it: the words, and a wreck's sparks. */
+  function showFall(e: FallEvent): void {
+    const t = e.tank;
+    if (e.kind === 'wreck') {
+      sfx.play('boom');
+      burst(t.x, t.y - 12, '#ff5a5a', 26, 7);
+      if (e.lastStand) {
+        say('Last stand! The wreck detonates!', 'good');
+        showBlast(e.lastStand);
+      }
+      if (t.isPlayer) say('The fall wrecks your tank!', 'bad');
+      else if (e.by && e.by.isPlayer) {
+        say(`${t.id} falls to pieces in your crater! (+${TUNE.killBonus})`, 'good');
+        exchange(t.id, FOE_DYING[t.id] || '...', 'tank', pick(TANK_HIT));
+      } else say(`${t.id} falls to pieces.`, 'info');
+      return;
+    }
+    if (e.chute) {
+      say(t.isPlayer ? 'Your parachute opens. You float down unhurt.' : `${t.id}'s parachute opens.`, t.isPlayer ? 'good' : 'info');
+      return;
+    }
+    if (t.isPlayer) {
+      sfx.play('clank');
+      say(e.under ? `A falling unit lands on YOU for ${e.dmg}! (${e.hp} armor left)`
+        : `The fall costs you ${e.dmg}! (${e.hp} armor left)`, 'bad');
+    } else if (e.by && e.by.isPlayer) {
+      say(`${t.id} falls into your crater for ${e.dmg}! (${e.hp} armor left)`, 'good');
+    } else {
+      say(`${t.id} falls for ${e.dmg}.`, 'info');
+    }
   }
   function anyTankFalling(): boolean {
     return simAnyTankFalling(G);

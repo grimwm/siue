@@ -224,6 +224,8 @@ export function createRoom(deps: RoomDeps) {
         body: t.body || 'tank',
         menu: !!t.menu,
         bot: !!(seat && seat.bot),
+        // Floats down under its parachute while it is still drawn above where the server set it down.
+        chute: !!t.chute && !!was && was.y < t.y - 0.5,
         // Keep the drawn aim where it was so the new one glides in.
         showA: was && !mine ? shownAngle(was) : undefined,
         showP: was && !mine ? shownPower(was) : undefined,
@@ -254,6 +256,7 @@ export function createRoom(deps: RoomDeps) {
       G.jammer = room.you.jammer || 0;
       G.bunker = room.you.bunker || 0;
       G.laststand = !!room.you.laststand;
+      G.chutes = room.you.chutes || 0;
       G.plate = room.you.plate || 0;
       G.armor = room.you.armor ?? G.armor;
       G.nextOneUp = room.you.nextUp || 3000;
@@ -352,6 +355,23 @@ export function createRoom(deps: RoomDeps) {
       } else if (killer) {
         const vt = G.tanks.find(x => x.seat === e.seat);
         if (foeTalkId(vt)) talk('tank', pick(TANK_HIT));
+      }
+      return;
+    }
+    if (e.t === 'fall') {
+      const victim = e.seat === net.seat;
+      const digger = e.by !== e.seat ? e.by : null;
+      if (e.chute) {
+        say(victim ? 'Your parachute opens. You float down unhurt.' : `${seatName(e.seat)}'s parachute opens.`, victim ? 'good' : 'info');
+      } else if (victim) {
+        sfx.play('clank');
+        say(e.under
+          ? `${digger === null ? 'A falling unit' : `${seatName(digger)}'s dig drops a unit that`} lands on YOU for ${e.dmg}.`
+          : `${digger === null ? 'You lose your footing' : `${seatName(digger)} digs out your footing`}: the fall costs ${e.dmg}.`, 'bad');
+      } else if (digger === net.seat) {
+        say(`${seatName(e.seat)} falls into your crater for ${e.dmg}.`, 'good');
+      } else {
+        say(`${seatName(e.seat)} falls for ${e.dmg}.`, 'info');
       }
       return;
     }

@@ -7,17 +7,21 @@ import { fakeAudioContext } from '../../_kit/test/audio.ts';
 
 // The module makes its one context through the kit's audio core the first
 // time a sound needs it; this fake is that context.
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
 const ctx = fakeAudioContext();
-globalThis.AudioContext = function AudioContext() { return ctx; };
-const pending = {};
-globalThis.fetch = file => new Promise(res => {
+Reflect.set(globalThis, 'AudioContext', function AudioContext() { return ctx; });
+const pending: Record<string, () => void> = {};
+Reflect.set(globalThis, 'fetch', (file: string) => new Promise<{ ok: boolean; arrayBuffer(): Promise<{ file: string }> }>(res => {
   pending[file] = () => res({ ok: true, arrayBuffer: () => Promise.resolve({ file }) });
-});
-const land = async file => { pending[file](); for (let i = 0; i < 10; i++) await new Promise(r => setTimeout(r, 0)); };
+}));
+const land = async (file: string) => { must(pending[file], `a load of ${file}`)(); for (let i = 0; i < 10; i++) await new Promise(r => setTimeout(r, 0)); };
 
 test('Next song is announced; the theme and a round change are not', async () => {
   initAudio({ sfx: {}, music: [{ file: 'a.mp3', title: 'A' }, { file: 'b.mp3', title: 'B' }, { file: 'c.mp3', title: 'C' }] });
-  const started = [];
+  const started: string[] = [];
   music.onTrackStart((track, cause) => started.push(`${track.title}:${cause}`));
   noteGesture(false); // the theme
   await land('a.mp3');
@@ -32,7 +36,7 @@ test('Next song is announced; the theme and a round change are not', async () =>
 });
 
 test('a round that takes over while Next song is still loading is not announced', async () => {
-  const started = [];
+  const started: string[] = [];
   music.onTrackStart((track, cause) => started.push(`${track.title}:${cause}`));
   const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setTimeout(r, 0)); };
   music.start(); // the theme again, decoded by the test above
@@ -45,10 +49,10 @@ test('a round that takes over while Next song is still loading is not announced'
 });
 
 test('a track that stands in for a failed Next song is a failover, not announced', async () => {
-  const started = [];
+  const started: string[] = [];
   music.onTrackStart((track, cause) => started.push(`${track.title}:${cause}`));
   initAudio({ sfx: {}, music: [{ file: 'a.mp3', title: 'A' }, { file: 'x.mp3', title: 'X' }, { file: 'c.mp3', title: 'C' }] });
-  globalThis.fetch = file => Promise.resolve(file === 'x.mp3' ? { ok: false } : { ok: true, arrayBuffer: () => Promise.resolve({ file }) });
+  Reflect.set(globalThis, 'fetch', (file: string) => Promise.resolve(file === 'x.mp3' ? { ok: false } : { ok: true, arrayBuffer: () => Promise.resolve({ file }) }));
   const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setTimeout(r, 0)); };
   try {
     music.start();

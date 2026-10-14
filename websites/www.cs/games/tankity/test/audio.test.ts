@@ -6,7 +6,11 @@ import assert from 'node:assert/strict';
 import { trimSilence, trackForLevel, sfx, music, initAudio, noteGesture, setSoundMuted } from '../src/audio.ts';
 import { fakeAudioContext } from '../../_kit/test/audio.ts';
 
-const near = (a, b) => Math.abs(a - b) < 1e-9;
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 // The module makes its one context the first time a sound needs it after
 // AudioContext exists; every test after the hand-off shares this fake.
 const ctx = fakeAudioContext();
@@ -37,14 +41,14 @@ test('with no AudioContext (this is Node) nothing throws and nothing plays', () 
 });
 
 test('a skipped or stopped track that is still loading never keeps playing', async () => {
-  globalThis.AudioContext = function AudioContext() { return ctx; };
-  const pending = {};
-  globalThis.fetch = file => new Promise(res => {
+  Reflect.set(globalThis, 'AudioContext', function AudioContext() { return ctx; });
+  const pending: Record<string, () => void> = {};
+  Reflect.set(globalThis, 'fetch', (file: string) => new Promise<{ ok: boolean; arrayBuffer(): Promise<{ file: string }> }>(res => {
     pending[file] = () => res({ ok: true, arrayBuffer: () => Promise.resolve({ file }) });
-  });
+  }));
   const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setTimeout(r, 0)); };
-  const land = async file => { pending[file](); await settle(); };
-  const heard = () => ctx.nodes.filter(n => n.kind === 'source' && n.started !== null && n.stopped === null && n.buffer?.file).map(n => n.buffer.file);
+  const land = async (file: string) => { must(pending[file], `a load of ${file}`)(); await settle(); };
+  const heard = () => ctx.nodes.flatMap(n => (n.kind === 'source' && n.started !== null && n.stopped === null && n.buffer?.file ? [n.buffer.file] : []));
 
   initAudio({ sfx: {}, music: [{ file: 'a.mp3' }, { file: 'b.mp3' }, { file: 'c.mp3' }] });
   noteGesture(false); // starts the theme, a.mp3

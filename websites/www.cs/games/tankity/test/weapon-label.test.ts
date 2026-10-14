@@ -4,8 +4,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { blastSize, weaponLine, weaponLineSpoken, BLAST_CUTOFFS } from '../src/weapon-label.ts';
 
-const GAME = JSON.parse(fs.readFileSync(new URL('../game.json', import.meta.url), 'utf8'));
-const gun = key => GAME.arsenal.ammo.find(a => a.key === key);
+import type { Weapon } from '../src/sim.ts';
+
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+
+const GAME: { arsenal: { ammo: Weapon[] } } = JSON.parse(fs.readFileSync(new URL('../game.json', import.meta.url), 'utf8'));
+const gun = (key: string) => must(GAME.arsenal.ammo.find(a => a.key === key), `the ${key} row`);
 
 test('the cut-offs: below 20 is S, 20 up to 40 is M, 40 and up is L', () => {
   assert.deepEqual(BLAST_CUTOFFS, { smallBelow: 20, largeFrom: 40 });
@@ -27,7 +34,7 @@ test('readers hear the words, not the letters', () => {
 });
 
 test('a harmless gun reads no damage and what it does; a beam reads its damage and beam', () => {
-  const byEffect = e => GAME.arsenal.ammo.find(a => a.effect === e);
+  const byEffect = (e: string) => must(GAME.arsenal.ammo.find(a => a.effect === e), `a ${e} gun`);
   assert.equal(weaponLine({ dmg: 0, radius: 0, effect: 'tracer' }), 'no damage · path');
   assert.equal(weaponLine(byEffect('tracer')), 'no damage · path');
   assert.equal(weaponLine({ dmg: 45, radius: 6, effect: 'beam' }), '45 dmg · beam');
@@ -39,11 +46,11 @@ test('a harmless gun reads no damage and what it does; a beam reads its damage a
 });
 
 test('an earth gun reads earth; one that bursts as it lands (Dirt Charge) reads its blast; a sandhog its warheads\' damage', () => {
-  const find = pred => GAME.arsenal.ammo.find(pred);
+  const find = (pred: (a: Weapon) => boolean) => must(GAME.arsenal.ammo.find(pred), 'a matching gun');
   assert.equal(weaponLine(find(a => a.effect === 'dirt' && a.dmg === 0)), 'no damage · earth');
   const charge = find(a => a.effect === 'dirt' && a.dmg > 0);
   assert.equal(weaponLine(charge), `${charge.dmg} dmg · L`);
-  const hog = find(a => a.effect === 'dig' && a.warheads > 0);
+  const hog = find(a => a.effect === 'dig' && Number(a.warheads) > 0);
   assert.equal(weaponLine(hog), `${hog.subDmg} dmg · earth`);
   assert.equal(weaponLine(find(a => a.effect === 'riot')), 'no damage · earth');
   assert.equal(weaponLineSpoken(find(a => a.effect === 'slump')), 'no damage, moves earth');

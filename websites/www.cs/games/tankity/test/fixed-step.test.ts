@@ -4,9 +4,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runFixed, MAX_STEPS, SOLO_STEP, WAR_REST } from '../src/flow.ts';
 import { fallTanks, mulberry32 } from '../src/sim.ts';
+import type { Tank } from '../src/sim.ts';
 
-function drive(frames) {
-  const seen = [];
+function nth<T>(list: readonly T[], i: number): T {
+  const v = list[i];
+  assert.ok(v !== undefined, `item ${i} is missing`);
+  return v;
+}
+
+function drive(frames: number[]) {
+  const seen: number[] = [];
   let acc = 0;
   for (const dt of frames) acc = runFixed(acc, dt, SOLO_STEP, h => { seen.push(h); return true; });
   return seen;
@@ -54,11 +61,12 @@ test('a 60 Hz display with +-0.5 ms timestamp jitter runs one step per frame', (
 });
 
 test('a tank over a crater falls through the same heights at any frame rate', () => {
-  const fall = frames => {
-    const world = { terrain: Array(720).fill(400), tanks: [{ x: 300, y: 300, hp: 50, vy: 0 }] };
-    const ys = [];
+  const fall = (frames: number[]) => {
+    // A unit with only what a fall reads.
+    const world = { terrain: Array(720).fill(400), tanks: [{ x: 300, y: 300, hp: 50, vy: 0 } as Tank] };
+    const ys: number[] = [];
     let acc = 0;
-    for (const dt of frames) acc = runFixed(acc, dt, SOLO_STEP, h => { fallTanks(world, h); ys.push(world.tanks[0].drawY ?? world.tanks[0].y); return true; });
+    for (const dt of frames) acc = runFixed(acc, dt, SOLO_STEP, h => { fallTanks(world, h); ys.push(nth(world.tanks, 0).drawY ?? nth(world.tanks, 0).y); return true; });
     return ys;
   };
   const steady = fall(Array(120).fill(1 / 60));

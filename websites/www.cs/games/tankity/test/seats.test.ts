@@ -4,17 +4,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSeatStore, SEATS_KEY, SEATS_MAX } from '../src/seats.ts';
+import type { StoredSeat } from '../src/seats.ts';
 
-function mapStorage(init = {}) {
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+
+function mapStorage(init: Record<string, string> = {}) {
   const m = new Map(Object.entries(init));
   return {
     m,
-    getItem: k => (m.has(k) ? m.get(k) : null),
-    setItem: (k, v) => { m.set(k, String(v)); },
-    removeItem: k => { m.delete(k); },
+    getItem: (k: string) => (m.has(k) ? m.get(k) ?? null : null),
+    setItem: (k: string, v: string) => { m.set(k, String(v)); },
+    removeItem: (k: string) => { m.delete(k); },
   };
 }
-const seat = (code, extra = {}) => ({ code, seat: 1, token: 'tok-' + code, csrf: 'csrf-' + code, initials: 'ABC', ...extra });
+const seat = (code: string, extra: Partial<StoredSeat> = {}) => ({ code, seat: 1, token: 'tok-' + code, csrf: 'csrf-' + code, initials: 'ABC', ...extra });
 
 test('a remembered seat round-trips, survives a reload, and a second remember moves it first', () => {
   let t = 1000;
@@ -22,7 +28,7 @@ test('a remembered seat round-trips, survives a reload, and a second remember mo
   const store = createSeatStore(storage, () => t);
   store.remember(seat('AAAA'));
   assert.deepEqual(store.get('AAAA'), { ...seat('AAAA'), at: 1000 });
-  assert.equal(JSON.parse(storage.m.get(SEATS_KEY)).v, 1);
+  assert.equal(JSON.parse(must(storage.m.get(SEATS_KEY), 'the saved seats')).v, 1);
   // A second store over the same storage (another tab, a reload) reads it.
   assert.equal(createSeatStore(storage, () => t).get('AAAA')?.token, 'tok-AAAA');
 
@@ -31,8 +37,8 @@ test('a remembered seat round-trips, survives a reload, and a second remember mo
   t = 3000;
   store.remember(seat('AAAA', { token: 'tok2' }));
   assert.deepEqual(store.list().map(s => s.code), ['AAAA', 'BBBB']);
-  assert.equal(store.get('AAAA').token, 'tok2');
-  assert.equal(store.get('AAAA').at, 3000);
+  assert.equal(must(store.get('AAAA'), 'seat AAAA').token, 'tok2');
+  assert.equal(must(store.get('AAAA'), 'seat AAAA').at, 3000);
 
   store.forget('AAAA');
   assert.equal(store.get('AAAA'), null);

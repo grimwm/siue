@@ -9,16 +9,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const SCRIPT = join(import.meta.dirname, '..', 'audio', 'music', 'build_music.sh');
-const run = (args, env = {}) => spawnSync('bash', [SCRIPT, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
+const run = (args: string[], env: Record<string, string> = {}) => spawnSync('bash', [SCRIPT, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
 
 /** The part of an OpenGameArt page the reader looks at, in the page's own markup. */
-const page = (licenses, tags = ['chiptune']) => `<html><head><title>Level One | OpenGameArt.org</title></head><body>
+const page = (licenses: string[], tags = ['chiptune']) => `<html><head><title>Level One | OpenGameArt.org</title></head><body>
 <div class="field field-name-field-art-tags field-type-taxonomy-term-reference field-label-above"><div class="field-label">Tags:&nbsp;</div><div class="field-items">${tags.map(t => `<div class="field-item even"><a href="/art-search-advanced?field_art_tags_tid=${t}">${t}</a></div>`).join('')}</div></div>
 <div class="field field-name-field-art-licenses field-type-taxonomy-term-reference field-label-above"><div class="field-label">License(s):&nbsp;</div><div class="field-items">${licenses.map(l => `<div class="field-item even"><div class='license-icon'><a href='http://example.org/l'><div class='license-name'>${l}</div></a></div></div>`).join('')}</div></div><div class="field field-name-collect field-type-ds field-label-above"><div class='license-name'>CC0</div></div>
 <div class="field field-name-field-art-files field-type-file field-label-above"><div class="field-items"><a href="https://opengameart.org/sites/default/files/level%20one.ogg" type="audio/ogg">level one.ogg</a></div></div>
 </body></html>`;
 
-function vet(html) {
+function vet(html: string) {
   const dir = mkdtempSync(join(tmpdir(), 'vet-'));
   try {
     const file = join(dir, 'page.html');
@@ -58,7 +58,7 @@ test('only opengameart.org/content pages can be vetted', () => {
 });
 
 /** A one-source table whose "download" is a local file, so no network is needed. */
-function pinned(sha) {
+function pinned(sha?: string) {
   const dir = mkdtempSync(join(tmpdir(), 'pin-'));
   const src = join(dir, 'track.ogg');
   writeFileSync(src, 'not really audio');
@@ -109,7 +109,7 @@ test('the first <title> is the title, and a second one does not stop the reader'
 });
 
 /** A pinned zip served from a URL that does not end in .zip: it is known by its bytes. */
-function pinnedZip(member) {
+function pinnedZip(member: string) {
   const dir = mkdtempSync(join(tmpdir(), 'zip-'));
   writeFileSync(join(dir, 'Level 1.wav'), 'not really audio');
   const made = spawnSync('zip', ['-q', 'pack.zip', 'Level 1.wav'], { cwd: dir });

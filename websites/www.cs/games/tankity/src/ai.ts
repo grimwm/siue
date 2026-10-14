@@ -9,6 +9,7 @@
  * file. */
 import { FLIGHT_STEPS, GRAV, aimLimits, beamLine, blastDamage, buried, clamp, dist, dropTime, facing, fallDamage, fieldReach, flies, flightKey, gauss, inHitBox, isGroundUnit, muzzle, powi, rad, ringDamage, ringOf, scatterVel, shotSpeed, simShot, splitPoint, splitVel, spotTaken, surfY, unitHitBox } from './sim.ts';
 import { BURY_EPS, DIG_STEP, FLOOR, addDirt, carveCrater, digHeading, fillPour, pourLevel, riotCarve, slumpGround } from './earth.ts';
+import { burnTicks, burnTotal, firePool, inFlames } from './fire.ts';
 import { datan2, dcos, dsin } from './detmath.ts';
 import type { Arsenal, Difficulty, Rng, Tank, Weapon, World } from './sim.ts';
 export type { Difficulty } from './sim.ts';
@@ -151,7 +152,7 @@ export function flipTactic(rng: Rng, now: string): string {
 }
 /* Guns that hurt an area: pellets, bomblets, leaping warheads, a big blast. */
 function areaGun(w: Weapon): boolean {
-  return w.effect === 'pellets' || w.effect === 'cluster' || w.effect === 'scatter' || w.effect === 'hop' || w.radius >= 40;
+  return w.effect === 'pellets' || w.effect === 'cluster' || w.effect === 'scatter' || w.effect === 'hop' || w.effect === 'napalm' || w.radius >= 40;
 }
 
 /* ---------- which gun: the harm each would do ---------- */
@@ -303,6 +304,10 @@ function bursts(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: 
 export function aiHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string, land: Landing): number {
   if (!flies(arsenal.weapons[wkey]!)) return noFlightHarm(world, arsenal, self, wkey, land);
   if (land.oob) return 0;
+  if (arsenal.weapons[wkey]!.effect === 'napalm') {
+    const f = fireHarm(world, arsenal, self, wkey, land);
+    return f.self > 0 || f.near ? -Infinity : f.harm;
+  }
   const b = bursts(world, arsenal, self, target, wkey, land);
   if (b.own <= b.reach * AI_SAFE_MARGIN) return -Infinity;
   const e = earthHarm(world, arsenal, self, target, wkey, land);
@@ -314,7 +319,9 @@ export function aiHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank,
    server/ai.php room_ai_self_harm is the same. */
 export function aiSelfHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string, land: Landing): number {
   if (!flies(arsenal.weapons[wkey]!)) return 0; // a beam never crosses its gunner; a ring spares it; a riot charge never drops it
-  return land.oob ? 0 : bursts(world, arsenal, self, target, wkey, land).self + earthHarm(world, arsenal, self, target, wkey, land).self;
+  if (land.oob) return 0;
+  if (arsenal.weapons[wkey]!.effect === 'napalm') return fireHarm(world, arsenal, self, wkey, land).self;
+  return bursts(world, arsenal, self, target, wkey, land).self + earthHarm(world, arsenal, self, target, wkey, land).self;
 }
 /* The harm a gun with no flight would do fired by self at the aim land.a,
    land.p (where it lands means nothing to it): a beam's flat damage on every
@@ -362,7 +369,39 @@ export function beamAim(_world: World, arsenal: Arsenal, self: Tank, target: Tan
 function targetHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string, land: Landing): number {
   if (!flies(arsenal.weapons[wkey]!)) return noFlightHarm(world, arsenal, self, wkey, land);
   if (land.oob) return 0;
+  if (arsenal.weapons[wkey]!.effect === 'napalm') return fireHarm(world, arsenal, self, wkey, land).harm;
   return Math.min(target.hp, bursts(world, arsenal, self, target, wkey, land).harm + earthHarm(world, arsenal, self, target, wkey, land).harm);
+}
+/** How far either way a napalm shell's landing is taken to stray, px, and how
+ *  much bigger the drone's body is taken to be, px, when it asks whether a pool could burn it. */
+export const AI_FIRE_WOBBLE = 24;
+export const AI_FIRE_PAD = 8;
+/* What napalm wkey landing at land would burn: its pool poured at the
+   landing's column on the ground as it is (fire.ts firePool), and every tick
+   on every living unit in its flames (burnTotal: the player's shield eats
+   one, its bunker halves each). `harm` sums the rivals' burns, each no more
+   than that rival's armor; `self` is the drone's own; `near` when its body,
+   taken AI_FIRE_PAD px bigger, would stand in the flames of the pool, of
+   the pools a landing AI_FIRE_WOBBLE px either way would make, or of the pool
+   its own dip would hold (a pool runs downhill, so a shot that strays far
+   enough fills the drone's own dip). Either is a gun not to fire.
+   server/ai.php room_ai_fire_harm is the same. */
+export function fireHarm(world: World, arsenal: Arsenal, self: Tank, wkey: string, land: Landing): { harm: number; self: number; near: boolean } {
+  const w = arsenal.weapons[wkey]!;
+  const col = Math.round(clamp(land.x, 0, world.terrain.length - 1));
+  const pool = firePool(world.terrain, col, w.volume || 0, w.flame || 0);
+  const n = burnTicks(w.burn || 0, w.tick || 0.5);
+  let harm = 0, mine = 0;
+  for (const u of world.tanks) {
+    if (u.hp <= 0 || !inFlames(pool, unitHitBox(u))) continue;
+    const cost = burnTotal(w.dmg, n, u.isPlayer && !!world.shield, u.isPlayer && (world.bunker || 0) > 0);
+    if (u === self) mine = cost;
+    else harm += Math.min(u.hp, cost);
+  }
+  const b = unitHitBox(self), wide = { cx: b.cx, cy: b.cy, rx: b.rx + AI_FIRE_PAD, ry: b.ry + AI_FIRE_PAD };
+  let near = inFlames(pool, wide) || inFlames(firePool(world.terrain, self.x, w.volume || 0, w.flame || 0), wide);
+  for (const k of [-1, 1]) near = near || inFlames(firePool(world.terrain, col + k * AI_FIRE_WOBBLE, w.volume || 0, w.flame || 0), wide);
+  return { harm, self: mine, near };
 }
 /** What burying a ground unit is worth, in armor: it cannot drive, and its shells start in the dirt. */
 export const AI_BURY = 30;
@@ -488,9 +527,11 @@ function pickGun(world: World, arsenal: Arsenal, t: Tank, target: Tank, glory: b
   if (safe !== null) return safe;
   // Every gun would reach the drone: the one that hurts it least, then the
   // one that hurts the target most, then the cheaper (the Shell is always
-  // loaded, so it never takes more than the Shell would cost it).
+  // loaded, so it never takes more than the Shell would cost it). Never
+  // napalm: a pool that could burn the drone is never fired.
   let pick = bestGun, pickSelf = Infinity, pickHarm = -Infinity;
   for (const k of guns) {
+    if (arsenal.weapons[k]!.effect === 'napalm') continue;
     const land = byArc.get(arcOf.get(k)!)!.land;
     const mine = aiSelfHarm(world, arsenal, t, target, k, land), theirs = targetHarm(world, arsenal, t, target, k, land);
     if (mine < pickSelf || (mine === pickSelf && (theirs > pickHarm
@@ -560,8 +601,10 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
   let cont: Tank | null = null;
   const skill = aimSkill(world.difficulty);
   const fa = fieldAim(world.terrain.length);
-  // A beam or a ring has no landing to walk in: after one, the drone aims afresh.
-  if (mem && mem.n < skill.brkMax && Math.abs(t.x - mem.ox) <= 1 && keys.includes(mem.w) && flies(arsenal.weapons[mem.w]!)) {
+  // A beam or a ring has no landing to walk in, and a napalm pool lies where
+  // the ground takes it: after one, the drone aims afresh.
+  if (mem && mem.n < skill.brkMax && Math.abs(t.x - mem.ox) <= 1 && keys.includes(mem.w) && flies(arsenal.weapons[mem.w]!)
+    && arsenal.weapons[mem.w]!.effect !== 'napalm') {
     const c = world.tanks[mem.t];
     if (c && c !== t && c.hp > 0 && Math.abs(c.x - mem.tx) <= BRK_DRIFT && (want === null || want === c)) cont = c;
   }
@@ -684,10 +727,10 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
   const angle = clamp(Math.round(ba + gauss(world.rng) * 9 * wob), lim.min, lim.max);
   const power = clamp(Math.round(bp + gauss(world.rng) * 12 * wob), 10, 100);
   // Drones shuffle for a better firing spot instead of camping one rut,
-  // unless they are walking a bracket in, or fire a gun with no flight
-  // (aimed from where they stand).
+  // unless they are walking a bracket in, fire a gun with no flight (aimed
+  // from where they stand), or fire napalm (it judged its own dip from here).
   // Only a drone shuffles (riding the ground): a ground unit fired for by the battery never drives.
-  if (!cont && flies(arsenal.weapons[w]!) && world.rng() < 0.35) {
+  if (!cont && flies(arsenal.weapons[w]!) && arsenal.weapons[w]!.effect !== 'napalm' && world.rng() < 0.35) {
     const dx = (world.rng() < 0.5 ? -1 : 1) * (8 + world.rng() * 27);
     const nx = clamp(t.x + dx, 12, world.terrain.length - 12);
     if (!isGroundUnit(t) && !spotTaken(world.tanks, t, nx)) {

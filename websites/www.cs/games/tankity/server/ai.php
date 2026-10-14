@@ -172,7 +172,7 @@ function room_flip_tactic(int &$rng, string $now): string
 /* Guns that hurt an area: pellets, bomblets, leaping warheads, a big blast. */
 function room_area_gun(array $def): bool
 {
-    return in_array($def['effect'] ?? 'shot', ['pellets', 'cluster', 'scatter', 'hop'], true) || ($def['radius'] ?? 0) >= 40;
+    return in_array($def['effect'] ?? 'shot', ['pellets', 'cluster', 'scatter', 'hop', 'napalm'], true) || ($def['radius'] ?? 0) >= 40;
 }
 
 /* ---------- which gun: the harm each would do ---------- */
@@ -332,6 +332,10 @@ function room_ai_harm(array $room, array $self, array $target, string $wkey, arr
     if ($land['oob']) {
         return 0.0;
     }
+    if (room_weapons()[$wkey]['effect'] === 'napalm') {
+        $f = room_ai_fire_harm($room, $self, $wkey, $land);
+        return $f['self'] > 0 || $f['near'] ? -INF : $f['harm'];
+    }
     $b = room_ai_bursts($room, $self, $target, $wkey, $land);
     if ($b['own'] <= $b['reach'] * ROOM_AI_SAFE_MARGIN) {
         return -INF;
@@ -349,7 +353,13 @@ function room_ai_self_harm(array $room, array $self, array $target, string $wkey
     if (!room_flies(room_weapons()[$wkey])) {
         return 0; // a beam never crosses its gunner; a ring spares it; a riot charge never drops it
     }
-    return $land['oob'] ? 0 : room_ai_bursts($room, $self, $target, $wkey, $land)['self'] + room_ai_earth_harm($room, $self, $target, $wkey, $land)['self'];
+    if ($land['oob']) {
+        return 0;
+    }
+    if (room_weapons()[$wkey]['effect'] === 'napalm') {
+        return room_ai_fire_harm($room, $self, $wkey, $land)['self'];
+    }
+    return room_ai_bursts($room, $self, $target, $wkey, $land)['self'] + room_ai_earth_harm($room, $self, $target, $wkey, $land)['self'];
 }
 /* The harm a gun with no flight would do fired by $self at the aim
  * $land['a'], $land['p']: a beam's flat damage on every rival whose body its
@@ -422,7 +432,53 @@ function room_ai_target_harm(array $room, array $self, array $target, string $wk
     if ($land['oob']) {
         return 0.0;
     }
+    if (room_weapons()[$wkey]['effect'] === 'napalm') {
+        return room_ai_fire_harm($room, $self, $wkey, $land)['harm'];
+    }
     return min((float) $target['hp'], room_ai_bursts($room, $self, $target, $wkey, $land)['harm'] + room_ai_earth_harm($room, $self, $target, $wkey, $land)['harm']);
+}
+/* How far either way a napalm shell's landing is taken to stray, px, and how
+ * much bigger the drone's body is taken to be, px, when it asks whether a pool
+ * could burn it (src/ai.ts AI_FIRE_WOBBLE, AI_FIRE_PAD). */
+const ROOM_AI_FIRE_WOBBLE = 24.0;
+const ROOM_AI_FIRE_PAD = 8.0;
+/* What napalm $wkey landing at $land would burn (src/ai.ts fireHarm): its
+ * pool poured at the landing's column on the ground as it is, and every tick
+ * on every living unit in its flames (room_burn_total: a human's shield eats
+ * one, its bunker halves each). 'harm' sums the rivals' burns, each no more
+ * than that rival's armor; 'self' is the drone's own; 'near' when its body,
+ * taken ROOM_AI_FIRE_PAD px bigger, would stand in the flames of the pool, of
+ * the pools a landing ROOM_AI_FIRE_WOBBLE px either way would make, or of the
+ * pool its own dip would hold (a shot that strays far enough runs down into
+ * it). */
+function room_ai_fire_harm(array $room, array $self, string $wkey, array $land): array
+{
+    $w = room_weapons()[$wkey];
+    $col = (float) det_round(max(0.0, min((float) (count($room['terrain']) - 1), (float) $land['x'])));
+    $pool = room_fire_pool($room['terrain'], $col, (float) $w['volume'], (float) $w['flame']);
+    $n = room_burn_ticks((float) $w['burn'], (float) $w['tick']);
+    $harm = 0.0;
+    $mine = 0;
+    foreach ($room['tanks'] as $u) {
+        if ($u['hp'] <= 0 || !room_in_flames($pool, room_unit_box($u))) {
+            continue;
+        }
+        $human = $u['kind'] === 'human';
+        $cost = room_burn_total((int) $w['dmg'], $n, $human && !empty($room['shield'][$u['seat']]), $human && ($room['bunker'][$u['seat']] ?? 0) > 0);
+        if ($u['seat'] === $self['seat']) {
+            $mine = $cost;
+        } else {
+            $harm += min((float) $u['hp'], (float) $cost);
+        }
+    }
+    [$cx, $cy, $rx, $ry] = room_unit_box($self);
+    $wide = [$cx, $cy, $rx + ROOM_AI_FIRE_PAD, $ry + ROOM_AI_FIRE_PAD];
+    $near = room_in_flames($pool, $wide)
+        || room_in_flames(room_fire_pool($room['terrain'], (float) $self['x'], (float) $w['volume'], (float) $w['flame']), $wide);
+    foreach ([-1.0, 1.0] as $k) {
+        $near = $near || room_in_flames(room_fire_pool($room['terrain'], $col + $k * ROOM_AI_FIRE_WOBBLE, (float) $w['volume'], (float) $w['flame']), $wide);
+    }
+    return ['harm' => $harm, 'self' => $mine, 'near' => $near];
 }
 /* What burying a ground unit is worth, in armor (src/ai.ts AI_BURY). */
 const ROOM_AI_BURY = 30;
@@ -593,9 +649,13 @@ function room_ai_pick_gun(array $room, array $self, array $target, bool $glory, 
         return $safe;
     }
     // Every gun would reach the drone: the one that hurts it least, then the
-    // one that hurts the target most, then the cheaper.
+    // one that hurts the target most, then the cheaper. Never napalm: a pool
+    // that could burn the drone is never fired (the Shell is always loaded).
     [$pick, $pickSelf, $pickHarm] = [$bestGun, INF, -INF];
     foreach ($guns as $k) {
+        if ($weapons[$k]['effect'] === 'napalm') {
+            continue;
+        }
         $land = $byArc[$arcOf[$k]]['land'];
         $mine = room_ai_self_harm($room, $self, $target, $k, $land);
         $theirs = room_ai_target_harm($room, $self, $target, $k, $land);
@@ -711,9 +771,10 @@ function room_ai_choose(array &$room, array $tank): array
     // and a strategy that still wants that target.
     $cont = null;
     $skill = ROOM_DIFFICULTY[room_difficulty($room)];
-    // A beam or a ring has no landing to walk in: after one, the drone aims afresh.
+    // A beam or a ring has no landing to walk in, and a napalm pool lies where
+    // the ground takes it: after one, the drone aims afresh.
     if ($mem !== null && $mem['n'] < $skill['brkMax'] && abs($tank['x'] - $mem['ox']) <= 1.0 && in_array($mem['w'], $keys, true)
-        && room_flies($weapons[$mem['w']])) {
+        && room_flies($weapons[$mem['w']]) && $weapons[$mem['w']]['effect'] !== 'napalm') {
         foreach ($rivals as $r) {
             if ($r['idx'] === $mem['t'] && abs($r['x'] - $mem['tx']) <= ROOM_BRK_DRIFT && ($want === null || $want['idx'] === $r['idx'])) {
                 $cont = $r;
@@ -884,11 +945,11 @@ function room_ai_choose(array &$room, array $tank): array
     $angle = max($aimLo, min($aimHi, det_round($ba + room_gauss($rng) * 9 * $wob)));
     $power = max(10.0, min(100.0, det_round($bp + room_gauss($rng) * 12 * $wob)));
     // Drones shuffle for a better firing spot instead of camping one rut,
-    // unless they are walking a bracket in, or fire a gun with no flight
-    // (aimed from where they stand).
+    // unless they are walking a bracket in, fire a gun with no flight (aimed
+    // from where they stand), or fire napalm (it judged its own dip from here).
     // Only a drone shuffles: a ground unit fired for by the battery never drives.
     $dx = 0.0;
-    if ($cont === null && room_flies($weapons[$w]) && room_rng_next($rng) < 0.35) {
+    if ($cont === null && room_flies($weapons[$w]) && $weapons[$w]['effect'] !== 'napalm' && room_rng_next($rng) < 0.35) {
         $dx = (room_rng_next($rng) < 0.5 ? -1.0 : 1.0) * (8 + room_rng_next($rng) * 27);
         if ($tank['kind'] === 'human') {
             $dx = 0.0;

@@ -910,6 +910,40 @@ if (isset($weapons['digger'], $weapons['dirtball'], $weapons['disrupter'], $weap
     $aim('buried-human-fires-its-riot-charge', ['terrain' => ['flat' => 400, 'set' => [[270, 330, 360]]], 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 0,
         'tanks' => [$human(300, 100) + ['dirS' => 1, 'angle' => 70, 'ammo' => ['riotcharge' => 1, 'mortar' => 1]], $drone(600, 100)]]);
 }
+// Napalm: chosen against rivals sharing a valley; never fired when the drone's own column would be in the pool.
+foreach ($weapons as $wkey => $def) {
+    if (($def['effect'] ?? '') !== 'napalm') {
+        continue;
+    }
+    $vale = ['vee' => [360, 150, 330, 420]];
+    $onVale = sv_terrain($vale);
+    $sat = fn(array $u, int $x) => array_replace($u, ['x' => (float) $x, 'y' => $onVale[$x]]);
+    foreach ([1, 2] as $seed) {
+        $aim("$wkey-two-rivals-share-a-valley-seed$seed", ['terrain' => $vale, 'wind' => 0, 'round' => 9, 'seed' => $seed, 'shooter' => 2, 'difficulty' => 'hard',
+            'tanks' => [$sat($human(340, 100), 340), $sat($drone(385, 100), 385), $sat($drone(110, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => [$wkey => 1, 'mortar' => 1]], 110)]]);
+        $aim("$wkey-refused-in-its-own-valley-seed$seed", ['terrain' => $vale, 'wind' => 0, 'round' => 9, 'seed' => $seed, 'shooter' => 1, 'difficulty' => 'hard',
+            'tanks' => [$sat($human(400, 100), 400), $sat($drone(320, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => [$wkey => 2]], 320)]]);
+    }
+    $at = function (array $c, float $x) {
+        [$c['a'], $c['p']] = sv_aim_at(sv_room($c), $c['self'], $c['wkey'], $x);
+        return $c;
+    };
+    $harm("$wkey-two-in-a-valley", $at(['terrain' => $vale, 'wind' => 0, 'self' => 2, 'target' => 0, 'wkey' => $wkey,
+        'tanks' => [$sat($human(340, 100), 340), $sat($drone(385, 100), 385), $sat($drone(110, 60) + ['dirS' => 1], 110)]], 360.0));
+    $harm("$wkey-weak-rivals-capped", $at(['terrain' => $vale, 'wind' => 0, 'self' => 2, 'target' => 0, 'wkey' => $wkey,
+        'tanks' => [$sat($human(340, 9), 340), $sat($drone(385, 20), 385), $sat($drone(110, 60) + ['dirS' => 1], 110)]], 360.0));
+    $harm("$wkey-shield-and-bunker", $at(['terrain' => $vale, 'wind' => 0, 'self' => 1, 'target' => 0, 'wkey' => $wkey,
+        'tanks' => [$sat($human(360, 100) + ['shield' => true, 'bunker' => 2], 360), $sat($drone(620, 60) + ['dirS' => -1], 620)]], 360.0));
+    $harm("$wkey-own-pool", $at(['terrain' => $vale, 'wind' => 0, 'self' => 1, 'target' => 0, 'wkey' => $wkey,
+        'tanks' => [$sat($human(400, 100), 400), $sat($drone(320, 60) + ['dirS' => 1], 320)]], 400.0));
+    // On the valley side, above the pool: far enough up is safe; nearer, a stray landing's flames could reach it.
+    foreach ([250, 285] as $x) {
+        $harm("$wkey-drone-on-the-valley-side-$x", $at(['terrain' => $vale, 'wind' => 0, 'self' => 1, 'target' => 0, 'wkey' => $wkey,
+            'tanks' => [$sat($human(380, 100), 380), $sat($drone($x, 60) + ['dirS' => 1], $x)]], 380.0));
+    }
+    $harm("$wkey-on-flat-burns-nothing", $at(['terrain' => $flat, 'wind' => 0, 'self' => 1, 'target' => 0, 'wkey' => $wkey,
+        'tanks' => [$human(400, 100), $drone(120, 60) + ['dirS' => 1]]], 400.0));
+}
 // A weak target gets the cheapest gun that finishes it.
 $aim('weak-target-cheapest-gun', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1, 'difficulty' => 'hard',
     'tanks' => [$human(400, 10), $drone(120, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['mortar' => 2, 'babynuke' => 1]]]]);

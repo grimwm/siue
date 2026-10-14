@@ -69,8 +69,8 @@ test('every track names an mp3 in audio/music/, a title and an author, and carri
   assert.equal(new Set(tracks.map(t => t.title)).size, tracks.length, 'a title is used twice');
 });
 
-test('audio/music/ holds exactly the listed mp3 files and the build script', () => {
-  const onDisk = readdirSync(MUSIC).sort();
+test('audio/music/ holds exactly the listed mp3 files and the build script (dotfiles aside)', () => {
+  const onDisk = readdirSync(MUSIC).filter(f => !f.startsWith('.')).sort(); // Finder's .DS_Store is not the soundtrack
   const want = [...tracks.map(t => t.file.replace('audio/music/', '')), 'build_music.sh'].sort();
   assert.deepEqual(onDisk, want);
   let total = 0;

@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -100,4 +100,38 @@ test('a cached file that no longer matches its pin is not trusted', () => {
     writeFileSync(join(p.dir, 'cache', p.real), 'tampered');
     assert.equal(run(['--verify'], p.env).status, 1);
   } finally { rmSync(p.dir, { recursive: true, force: true }); }
+});
+
+test('the first <title> is the title, and a second one does not stop the reader', () => {
+  const r = vet(page(['CC0']).replace('</head>', '<title>Second | OpenGameArt.org</title>\n</head>'));
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^title: Level One$/m);
+});
+
+/** A pinned zip served from a URL that does not end in .zip: it is known by its bytes. */
+function pinnedZip(member) {
+  const dir = mkdtempSync(join(tmpdir(), 'zip-'));
+  writeFileSync(join(dir, 'Level 1.wav'), 'not really audio');
+  const made = spawnSync('zip', ['-q', 'pack.zip', 'Level 1.wav'], { cwd: dir });
+  assert.equal(made.status, 0, String(made.stderr));
+  const bytes = readFileSync(join(dir, 'pack.zip'));
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  const env = { MUSIC_CACHE: join(dir, 'cache'), MUSIC_SOURCES: `t|file://${join(dir, 'pack.zip')}?download=1|${sha}|${member}` };
+  return { dir, env };
+}
+
+test('a zip is opened by its contents, not its URL: a missing member stops the build', { skip: spawnSync('zip', ['-v']).status !== 0 && 'zip is not installed' }, () => {
+  const good = pinnedZip('Level 1.wav');
+  const bad = pinnedZip('Level 2.wav');
+  try {
+    const ok = run(['--verify'], good.env);
+    assert.equal(ok.status, 0, ok.stderr);
+    assert.match(ok.stdout, /^ok t$/m);
+    const r = run(['--verify'], bad.env);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /not in .*: Level 2\.wav/);
+  } finally {
+    rmSync(good.dir, { recursive: true, force: true });
+    rmSync(bad.dir, { recursive: true, force: true });
+  }
 });

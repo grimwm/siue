@@ -110,11 +110,18 @@ fetch() {
   printf '%s\n' "$f"
 }
 
+# is_zip FILE: true when FILE starts with a zip's local-header bytes (PK\3\4),
+# whatever its URL ends in (a query string, .ZIP, no extension).
+is_zip() {
+  [ "$(head -c 4 "$1" | od -An -tx1 | tr -d ' \n')" = 504b0304 ]
+}
+
 # source_audio URL SHA MEMBER: prints the path of an audio file ready to encode.
 source_audio() {
-  local url=$1 sha=$2 member=$3 f dir found
+  local url=$1 sha=$2 member=$3 f dir found kind=audio
   f=$(fetch "$url" "$sha") || exit 1
-  case "${url##*.}" in
+  if is_zip "$f"; then kind=zip; fi
+  case "$kind" in
     zip)
       dir="$WORK/x/$sha"
       if [ ! -d "$dir" ]; then
@@ -154,7 +161,8 @@ field_segment() {
 # vet_html FILE: print what the page says; exit 0 only if its License(s) field lists CC0.
 vet_html() {
   local file=$1 title licenses tags
-  title=$(sed -n 's/.*<title>\([^<|]*[^<| ]\) *|.*/\1/p' "$file" | head -n 1)
+  # awk reads to the end (no head closing the pipe early under pipefail) and takes the first <title>.
+  title=$(tr '\n' ' ' <"$file" | awk 'match($0, /<title>[^<]*/) { t = substr($0, RSTART + 7, RLENGTH - 7); sub(/ *\|.*$/, "", t); sub(/ +$/, "", t); print t }')
   licenses=$(field_segment field-art-licenses <"$file" | { grep -o "license-name'>[^<]*" || true; } | sed "s/license-name'>//" | paste -sd, - | sed 's/,/, /g')
   tags=$(field_segment field-art-tags <"$file" | { grep -o 'field_art_tags_tid=[^"&]*' || true; } | sed 's/.*=//' | paste -sd, - | sed 's/,/, /g')
   printf 'title: %s\nlicense: %s\ntags: %s\n' "$title" "$licenses" "$tags"

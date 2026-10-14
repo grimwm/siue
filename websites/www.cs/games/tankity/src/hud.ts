@@ -37,8 +37,8 @@ export interface HudDeps {
   seatName(seat: number): string;
   drawShellIcon(cv: HTMLCanvasElement, wkey: string): void;
   keyHint: KeyHintFn;
-  /** A touch screen: the Menu button shows no key chip. */
-  touch: boolean;
+  /** A touch screen: the Menu button shows no key chip. Asked each draw, since a physical key turns the chips on. */
+  touch(): boolean;
   menuOpen(): boolean;
   onMenu(): void;
 }
@@ -90,7 +90,7 @@ export function createHud(deps: HudDeps) {
     const bar = $('hud-bar');
     if (!bar) return;
     const open = menuOpen();
-    const menuKey = touch ? '' : keyHint('global', 'back');
+    const menuKey = touch() ? '' : keyHint('global', 'back');
     const sig = JSON.stringify(HUD) + '|' + open + '|' + menuKey;
     if (sig === hudShown) return;
     hudShown = sig;

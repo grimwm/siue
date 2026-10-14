@@ -99,7 +99,7 @@ export interface KeyLike {
   repeat?: boolean;
   isTrusted?: boolean;
   isComposing?: boolean;
-  target?: { tagName?: string; readOnly?: boolean; type?: string; click?(): void } | null;
+  target?: { tagName?: string; isContentEditable?: boolean; readOnly?: boolean; type?: string; click?(): void } | null;
   preventDefault(): void;
 }
 
@@ -160,9 +160,13 @@ export function touchOnly(matchMedia: ((query: string) => { matches: boolean }) 
 }
 
 /** A keydown from a physical keyboard: real (trusted), not an on-screen
- * keyboard's placeholder ('Unidentified', 'Process') and not composing text. */
-export function physicalKey(e: Pick<KeyLike, 'key' | 'isTrusted' | 'isComposing'>): boolean {
-  return e.isTrusted === true && !e.isComposing && e.key !== undefined && e.key !== 'Unidentified' && e.key !== 'Process';
+ * keyboard's placeholder ('Unidentified', 'Process'), not composing text and
+ * not typed into a field. */
+export function physicalKey(e: Pick<KeyLike, 'key' | 'isTrusted' | 'isComposing' | 'target'>): boolean {
+  // Typing into a field (the initials box) is what an on-screen keyboard does too.
+  const t = e.target;
+  const editable = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable === true);
+  return e.isTrusted === true && !e.isComposing && !editable && e.key !== undefined && e.key !== 'Unidentified' && e.key !== 'Process';
 }
 
 /* ---------- held keys and the arm ---------- */

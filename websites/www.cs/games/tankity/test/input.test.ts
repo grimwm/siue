@@ -378,6 +378,10 @@ await test('physical-key-not-on-screen-keyboard', () => {
   assert.ok(physicalKey({ key: 'Unidentified', isTrusted: true }) === false);
   assert.ok(physicalKey({ key: 'Process', isTrusted: true }) === false);
 });
+await test('physical-key-not-typed-into-a-field', () => {
+  assert.ok(physicalKey({ key: 'a', isTrusted: true, target: { tagName: 'INPUT' } }) === false);
+  assert.ok(physicalKey({ key: 'a', isTrusted: true, target: { tagName: 'BODY' } }) === true);
+});
 await test('physical-key-not-composing', () => { assert.ok(physicalKey({ key: 'a', isTrusted: true, isComposing: true }) === false); });
 
 function boundTouch() {

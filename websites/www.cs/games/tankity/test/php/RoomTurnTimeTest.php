@@ -111,42 +111,63 @@ final class RoomTurnTimeTest extends TestCase
         $this->assertSame($x, $room['tanks'][0]['x'], 'a stand-in never drives');
     }
 
-    public function testTheStandInOnlyFiresWhatTheRackHolds(): void
+    /* The human's turn, with the drone's pick forced to the Nuke: it is the
+       only gun in the tank's rack besides the Shell, and a "glory" gunner
+       takes the heaviest. $stock is the Nuke count in the player's rack. */
+    private function nukeRoom(int $round, int $stock, int $tankStock): array
     {
         $room = $this->playing();
-        $room['ammo'][0] = ['shell' => -1];
-        foreach (array_keys(room_weapons()) as $k) {
-            if ($k !== 'shell') {
-                $room['ammo'][0][$k] = 0;
-                $room['tanks'][0]['ammo'][$k] = 0;
-            }
-        }
+        $room['round'] = $round;
+        $room['ammo'][0]['nuke'] = $stock;
+        $room['tanks'][0]['ammo'] = ['shell' => -1, 'nuke' => $tankStock];
+        $room['tanks'][0]['s'] = 'glory';
+        $room['weapon'][0] = 'nuke';
+        return $room;
+    }
+
+    private function timeOut(array &$room): array
+    {
         room_turn_left($room);
         $room['clock']['at'] -= 200;
         $events = [];
         room_advance($room, $events);
-        $auto = current(array_filter($events, fn($e) => $e['t'] === 'auto'));
-        $this->assertSame('shell', $auto['w']);
+        return array_values(array_filter($events, fn($e) => $e['t'] === 'auto'))[0];
+    }
 
-        // Round 3, two Mortars in the rack: whatever the drone picks was stocked.
-        for ($i = 0; $i < 8; $i++) {
-            $room = $this->playing();
-            $room['round'] = 3;
-            $room['ammo'][0]['mortar'] = 2;
-            $room['tanks'][0]['ammo']['mortar'] = 2;
-            $before = $room['ammo'][0];
-            room_turn_left($room);
-            $room['clock']['at'] -= 200;
-            $events = [];
-            room_advance($room, $events);
-            $auto = current(array_filter($events, fn($e) => $e['t'] === 'auto'));
-            if ($auto['w'] === 'shell') {
-                $this->assertSame($before, $room['ammo'][0]);
-            } else {
-                $this->assertGreaterThan(0, $before[$auto['w']] ?? 0);
-                $this->assertSame($before[$auto['w']] - 1, $room['ammo'][0][$auto['w']]);
-            }
-        }
+    public function testTheStandInFiresAStockedUnlockedGunAndSpendsIt(): void
+    {
+        $room = $this->nukeRoom(4, 2, 2);
+        $this->assertSame('nuke', room_ai_choose($room, $room['tanks'][0])['wkey'], 'the scenario makes the drone pick the Nuke');
+        $auto = $this->timeOut($room);
+        $this->assertSame('nuke', $auto['w']);
+        $this->assertSame(1, $room['ammo'][0]['nuke'], 'one round of the rack is spent');
+        $this->assertSame(1, $room['tanks'][0]['ammo']['nuke']);
+        $this->assertSame('nuke', $room['weapon'][0], 'rounds are left, so the selection stays');
+    }
+
+    public function testTheLastRoundSpentFallsTheSelectionBackToShell(): void
+    {
+        $room = $this->nukeRoom(4, 1, 1);
+        $this->assertSame('nuke', $this->timeOut($room)['w']);
+        $this->assertSame(0, $room['ammo'][0]['nuke']);
+        $this->assertSame('shell', $room['weapon'][0]);
+    }
+
+    public function testTheStandInLeavesAStockedGunThatIsNotUnlockedYet(): void
+    {
+        $room = $this->nukeRoom(1, 1, 1);
+        $this->assertSame('nuke', room_ai_choose($room, $room['tanks'][0])['wkey']);
+        $auto = $this->timeOut($room);
+        $this->assertSame('shell', $auto['w'], 'the Nuke unlocks in round 4');
+        $this->assertSame(1, $room['ammo'][0]['nuke'], 'the rack is untouched');
+    }
+
+    public function testTheStandInFiresTheShellWhenTheRackIsEmpty(): void
+    {
+        $room = $this->nukeRoom(4, 0, 1);
+        $this->assertSame('nuke', room_ai_choose($room, $room['tanks'][0])['wkey']);
+        $this->assertSame('shell', $this->timeOut($room)['w']);
+        $this->assertSame(0, $room['ammo'][0]['nuke']);
     }
 
     public function testTickDue(): void

@@ -177,4 +177,63 @@ final class RoomGuardTest extends TestCase
         $this->assertSame(422, $this->call('join', ['code' => '??', 'initials' => 'gst'], [], $env)[0]);
         $this->assertSame(2, $this->roomCharges());
     }
+
+    /** @return array the stored room, decoded */
+    private function stored(string $code): array
+    {
+        $q = tankity_db()->prepare('SELECT data FROM rooms WHERE code = ?');
+        $q->execute([$code]);
+        return room_decode($q->fetchColumn());
+    }
+
+    private const FREE = ['TANKITY_ROOM_JOINS_PER_HOUR' => '1000'];
+
+    public function testAnAddressHostsFourRoomsAndNoMore(): void
+    {
+        for ($i = 0; $i < 4; $i++) {
+            [$st, $out] = $this->call('create', ['initials' => 'hst'], [], self::FREE);
+            $this->assertSame(200, $st, json_encode($out));
+            $this->assertNotSame('', (string) tankity_db()->query('SELECT host FROM rooms WHERE code = ' . tankity_db()->quote($out['code']))->fetchColumn(),
+                'the host column carries the address, or the cap would never count the room');
+        }
+        [$st, $out] = $this->call('create', ['initials' => 'hst'], [], self::FREE);
+        $this->assertSame(429, $st);
+        $this->assertStringContainsString('too many rooms hosted', $out['error']);
+        $this->assertSame(200, $this->call('create', ['initials' => 'two'], ['REMOTE_ADDR' => '203.0.113.10'], self::FREE)[0],
+            'another address hosts its own');
+    }
+
+    public function testTheHostingCapIsRecheckedUnderTheWriteLock(): void
+    {
+        // Learn this address's key from one room, then free the slot.
+        [$st, $first] = $this->call('create', ['initials' => 'hst'], [], self::FREE);
+        $this->assertSame(200, $st);
+        $db = tankity_db();
+        $key = (string) $db->query('SELECT host FROM rooms')->fetchColumn();
+        $db->exec('DELETE FROM rooms');
+        // The moment another create of the same address takes its code (after
+        // the plain-read check passed), four rooms of it appear: a race.
+        $db->exec("CREATE TRIGGER race AFTER INSERT ON rooms WHEN NEW.data = '' BEGIN "
+            . implode(' ', array_map(fn(int $n): string => "INSERT OR IGNORE INTO rooms (code, data, created, touched, expires, host) VALUES ('RAC$n', 'x', 1, 1, 4102444800, " . $db->quote($key) . ');', range(1, 4)))
+            . ' END');
+        [$st, $out] = $this->call('create', ['initials' => 'hst'], [], self::FREE);
+        $this->assertSame(429, $st, json_encode($out));
+        $this->assertSame(0, (int) $db->query('SELECT COUNT(*) FROM rooms')->fetchColumn(), 'the refused room was freed with the race it lost');
+    }
+
+    public function testAJoinRecordsTheGuestsAddressForTheIdleLimit(): void
+    {
+        $turn = 86400;
+        [$st, $host] = $this->call('create', ['initials' => 'hst', 'turn' => $turn], [], self::FREE);
+        $this->assertSame(200, $st, json_encode($host));
+        $this->assertSame(200, $this->call('join', ['code' => $host['code'], 'initials' => 'mat'], [], self::FREE)[0]);
+        $room = $this->stored($host['code']);
+        $this->assertSame($turn, $room['turnSecs']);
+        $this->assertSame(room_live_secs(), room_idle_limit($room), 'two seats at one address are one player\'s worth');
+        $this->assertNotSame('', (string) $room['seats'][1]['addr'], 'the join passed the address');
+
+        $this->assertSame(200, $this->call('join', ['code' => $host['code'], 'initials' => 'oth'], ['REMOTE_ADDR' => '203.0.113.10'], self::FREE)[0]);
+        $room = $this->stored($host['code']);
+        $this->assertSame(2 * $turn, room_idle_limit($room), 'a second address earns a turn each');
+    }
 }

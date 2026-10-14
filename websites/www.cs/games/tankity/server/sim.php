@@ -434,11 +434,14 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
             $ownerIdx = $i;
         }
     }
-    // The blast owns the fall of every standing unit whose ground it lowered.
+    // Of the blasts that lowered a standing unit's ground, the one that lowered
+    // it the most owns its fall (the first of equals).
     foreach ($room['tanks'] as $i => $o) {
         $now = room_surf_y($room['terrain'], (float) $o['x']);
-        if ($o['hp'] > 0 && $ownerIdx !== null && $now > $ground[$i] && $now > $o['y'] + 0.5) {
+        $deeper = $now - $ground[$i];
+        if ($o['hp'] > 0 && $ownerIdx !== null && $deeper > 0 && $now > $o['y'] + 0.5 && $deeper > ($o['fellDepth'] ?? 0.0)) {
             $room['tanks'][$i]['fellBy'] = $ownerIdx;
+            $room['tanks'][$i]['fellDepth'] = $deeper;
         }
     }
     foreach ($room['tanks'] as $idx => &$t) {
@@ -733,8 +736,8 @@ function room_roll_arc(array $room, array $w, int $ownerIdx, float $sx, float $v
 /* ---------- falling ---------- */
 /* Units left hanging over a crater drop straight down, never sideways, onto
 // the ground or a unit beneath them; ground that rose takes them straight up.
-// A drop costs armor by its height at rest, credited to whoever carved the
-// ground away. src/sim.ts fallDamage() .. settleFalls() are the same rules,
+// A drop costs armor by its height at rest, credited to the blast that
+// lowered the ground under it the most. src/sim.ts fallDamage() .. settleFalls() are the same rules,
 // pinned by the 'fall' sim vectors. */
 const ROOM_FALL_RULES = ['freePx' => 10, 'perPx' => 0.5, 'chuteOver' => 5, 'aiRound' => 3];
 /* game.yaml arsenal.fall: what a drop costs and when a parachute opens. */
@@ -798,31 +801,34 @@ function room_rest_y(array $tanks, array $terrain, int $idx): float
     $u = room_unit_beneath($tanks, $terrain, $idx);
     return $u === null ? room_surf_y($terrain, (float) $tanks[$idx]['x']) : room_unit_top($tanks[$u]);
 }
-/* Fall damage $raw lands on the unit at $idx: the bunker halves it as it
-// halves a hit; a shield never stops a fall. Credited to $byIdx (null: the
+/* What a fall of $raw would really cost the unit at $idx: the bunker halves
+// it as it halves a hit; a shield never stops a fall. */
+function room_fall_cost(array $room, int $idx, int $raw): int
+{
+    $t = $room['tanks'][$idx];
+    return $t['kind'] === 'human' && ($room['bunker'][$t['seat']] ?? 0) > 0 ? max(1, (int) round($raw / 2)) : $raw;
+}
+/* Fall damage $raw lands on the unit at $idx, credited to $byIdx (null: the
 // unit itself, so nobody). */
 function room_fall_hurt(array &$room, array &$events, int $idx, int $raw, ?int $byIdx, bool $under): void
 {
     $t = $room['tanks'][$idx];
-    $dmg = $raw;
-    if ($t['kind'] === 'human' && ($room['bunker'][$t['seat']] ?? 0) > 0) {
-        $dmg = max(1, (int) round($dmg / 2));
-    }
+    $dmg = room_fall_cost($room, $idx, $raw);
     $room['tanks'][$idx]['hp'] = max(0, $t['hp'] - $dmg);
     $owner = $byIdx === null ? $idx : $byIdx;
     $events[] = ['t' => 'fall', 'seat' => $t['seat'], 'dmg' => $dmg, 'by' => $room['tanks'][$owner]['seat'], 'chute' => false, 'under' => $under];
     room_credit($room, $events, $idx, $dmg, $room['tanks'][$owner], $owner);
 }
 /* The unit at $idx came to rest after dropping $drop px onto the unit at
-// $onto (null: the ground). Spends a parachute on a fall costing more than
-// chuteOver; the unit beneath takes the full fall either way. True when a
-// parachute opened. */
+// $onto (null: the ground). Spends a parachute when the fall would cost the
+// unit more than chuteOver; the unit beneath takes the full fall either way.
+// True when a parachute opened. */
 function room_land(array &$room, array &$events, int $idx, float $drop, ?int $onto): bool
 {
     $rules = room_fall_rules();
     $raw = room_fall_damage($drop, $rules);
     $digger = $room['tanks'][$idx]['fellBy'] ?? null;
-    unset($room['tanks'][$idx]['fellBy']);
+    unset($room['tanks'][$idx]['fellBy'], $room['tanks'][$idx]['fellDepth']);
     if ($raw <= 0) {
         return false;
     }
@@ -830,7 +836,7 @@ function room_land(array &$room, array &$events, int $idx, float $drop, ?int $on
     $t = $room['tanks'][$idx];
     $human = $t['kind'] === 'human';
     $have = $human ? (int) ($room['chutes'][$t['seat']] ?? 0) : (int) ($t['chutes'] ?? 0);
-    $chute = $raw > $rules['chuteOver'] && $have > 0;
+    $chute = room_fall_cost($room, $idx, $raw) > $rules['chuteOver'] && $have > 0;
     if ($chute) {
         if ($human) {
             $room['chutes'][$t['seat']] = $have - 1;
@@ -877,15 +883,16 @@ function room_settle_tanks(array &$room, ?array &$events = null): void
             $y = (float) $room['tanks'][$i]['y'];
             if (abs($rest - $y) <= 0.5) {
                 $room['tanks'][$i]['y'] = $rest;
-                unset($room['tanks'][$i]['fellBy']);
+                unset($room['tanks'][$i]['fellBy'], $room['tanks'][$i]['fellDepth']);
                 continue;
             }
             $room['tanks'][$i]['y'] = $rest;
+            unset($room['tanks'][$i]['chute']);
             $moved = true;
             if ($rest > $y) {
                 $room['tanks'][$i]['chute'] = room_land($room, $events, $i, $rest - $y, $onto);
             } else {
-                unset($room['tanks'][$i]['fellBy']);
+                unset($room['tanks'][$i]['fellBy'], $room['tanks'][$i]['fellDepth']);
             }
         }
         if (!$moved) {

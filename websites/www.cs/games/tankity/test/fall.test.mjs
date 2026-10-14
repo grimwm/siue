@@ -6,8 +6,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import * as sim from '../src/sim.ts';
 import {
-  buildArsenal, droneChutes, explode, fallDamage, fallTanks, anyTankFalling, restY, settleFalls, TUNE,
+  buildArsenal, droneChutes, explode, fallDamage, fallTanks, anyTankFalling, restY, settleAndShow, settleFalls, CHUTE_SPEED, TUNE,
 } from '../src/sim.ts';
 import { soloBuy, soloDeal, soloMuster } from '../src/solo.ts';
 
@@ -55,25 +56,22 @@ test('the shooter whose blast dug the pit is credited: score, cash, kills, the l
   const me = unit('tank', true, 100, 400);
   const foe = unit('reaper', false, 300, 400, 20);
   const G = world([me, foe]);
-  // A blast just beside the drone digs its ground away without reaching it.
+  // A Nuke bursting 70 px under the drone digs its ground to bedrock (456) without reaching it.
   explode(G, arsenal, 300, 470, 'nuke', me, null, null);
+  assert.equal(foe.hp, 20, 'the blast itself missed');
   assert.equal(foe.fellBy, 0, 'the pit remembers who dug it');
-  const hpBefore = foe.hp;
-  const scoreBefore = G.score;
   const ev = settleFalls(G, arsenal);
-  const fall = ev.find(e => e.kind === 'fall');
-  assert.ok(fall && fall.dmg > 0, 'the drone fell far enough to hurt');
-  assert.equal(fall.by, me);
-  assert.equal(foe.hp, Math.max(0, hpBefore - fall.dmg));
+  // 56 px: (56 - 10) * 0.5 = 23, more than its 20 armor.
+  assert.deepEqual(ev.map(e => [e.kind, e.tank.id, e.kind === 'fall' ? e.dmg : null, e.by && e.by.id]),
+    [['fall', 'reaper', 23, 'tank'], ['wreck', 'reaper', null, 'tank']]);
+  assert.equal(foe.hp, 0);
+  assert.equal(foe.y, 456);
   assert.equal(foe.lastHitBy, 0);
   assert.ok(me.dealt);
-  assert.equal(G.score - scoreBefore, fall.dmg * 2 + (foe.hp <= 0 ? TUNE.killBonus : 0));
-  if (foe.hp <= 0) {
-    assert.equal(me.kills, 1);
-    assert.ok(ev.some(e => e.kind === 'wreck' && e.tank === foe && e.by === me));
-  }
+  assert.equal(me.kills, 1);
+  assert.equal(G.score, 23 * 2 + TUNE.killBonus);
+  assert.equal(G.cash, 23 * 2 + TUNE.killBonus);
 });
-
 test('a fall that wrecks a drone pays the kill bonus to the digger', () => {
   const me = unit('tank', true, 100, 400);
   const foe = unit('reaper', false, 300, 300, 10, { fellBy: 0 });
@@ -186,46 +184,125 @@ test('the lowest units land first, so a stack settles from the bottom up', () =>
   assert.equal(low.hp, 100 - 20 - 33, 'its own fall, then the drone landing on it');
 });
 
-test('the browser animation lands with the same damage as the instant settle', () => {
-  for (const [y, chutes] of [[300, 0], [300, 1], [379, 1], [200, 0]]) {
-    const a = unit('tank', true, 100, y, 100, { fellBy: 1 });
-    const A = world([a, unit('reaper', false, 400, 400)], { chutes });
-    settleFalls(A, arsenal);
-    const b = unit('tank', true, 100, y, 100, { fellBy: 1 });
-    const B = world([b, unit('reaper', false, 400, 400)], { chutes });
-    const ev = [];
-    for (let i = 0; i < 5000 && anyTankFalling(B); i++) fallTanks(B, 1 / 60, arsenal, ev);
-    assert.equal(b.y, a.y);
-    assert.equal(b.hp, a.hp, `drop from ${y}`);
-    assert.equal(B.chutes, A.chutes);
-    assert.equal(B.score, A.score);
-  }
-});
-
-test('a parachute opens as the fall starts, slows the descent and folds on landing', () => {
-  const me = unit('tank', true, 100, 200);
-  const G = world([me, unit('reaper', false, 400, 400)], { chutes: 1 });
-  fallTanks(G, 1 / 60, arsenal, []);
-  assert.equal(me.chute, true);
-  let frames = 1;
-  while (anyTankFalling(G) && frames < 5000) { fallTanks(G, 1 / 60, arsenal, []); frames++; }
-  assert.ok(!me.chute, 'folded on landing');
-  const free = unit('tank', true, 100, 200);
-  const F = world([free, unit('reaper', false, 400, 400)]);
-  let freeFrames = 0;
-  while ((freeFrames === 0 || anyTankFalling(F)) && freeFrames < 5000) { fallTanks(F, 1 / 60, arsenal, []); freeFrames++; }
-  assert.ok(frames > 2 * freeFrames, `a chute floats down (${frames} frames against ${freeFrames})`);
-});
-
-test('without the rules the fall only moves the units (a room replays the server\'s settle)', () => {
-  const me = unit('tank', true, 100, 300);
+test('fallTanks only animates: it moves units, never armor, parachutes or credit', () => {
+  const me = unit('tank', true, 100, 300, 100, { fellBy: 1 });
   const G = world([me, unit('reaper', false, 400, 400)], { chutes: 1 });
   for (let i = 0; i < 5000 && anyTankFalling(G); i++) fallTanks(G, 1 / 60);
   assert.equal(me.y, 400);
   assert.equal(me.hp, 100);
   assert.equal(G.chutes, 1);
+  assert.equal(G.score, 0);
+  // In a room the snapshot (or the replay) opens a parachute: the unit floats down at CHUTE_SPEED.
+  const floater = unit('reaper', false, 300, 300, 60, { chute: true });
+  const R = world([unit('tank', true, 100, 400), floater]);
+  fallTanks(R, 1 / 60);
+  assert.equal(floater.y, 300 + CHUTE_SPEED / 60);
+  assert.equal(floater.chute, true);
+  // A solo match's units wait for their volley's settle: unsettled, they hang.
+  const hang = unit('tank', true, 100, 300);
+  const H = world([hang, unit('reaper', false, 400, 400)]);
+  fallTanks(H, 1 / 60, true);
+  assert.equal(hang.y, 300);
 });
 
+test('a settled fall plays out from where it started to where the settle put it', () => {
+  for (const [y, chutes, hp] of [[300, 0, 55], [300, 1, 100], [379, 1, 95], [200, 0, 5], [379.46, 0, 95]]) {
+    const me = unit('tank', true, 100, y);
+    const G = world([me, unit('reaper', false, 400, 400)], { chutes });
+    settleAndShow(G, arsenal);
+    assert.equal(me.hp, hp, `decided at the settle, from ${y}`);
+    assert.equal(me.y, y, 'drawn where it fell from');
+    assert.equal(me.restAt, 400);
+    for (let i = 0; i < 5000 && anyTankFalling(G); i++) fallTanks(G, 1 / 60, true);
+    assert.equal(me.y, 400);
+    assert.equal(me.hp, hp, 'the animation changed nothing');
+    assert.equal(me.restAt, undefined);
+  }
+});
+test('a parachute opens as the fall starts, slows the descent and folds on landing', () => {
+  const me = unit('tank', true, 100, 200);
+  const G = world([me, unit('reaper', false, 400, 400)], { chutes: 1 });
+  settleAndShow(G, arsenal);
+  assert.equal(me.chute, true);
+  assert.equal(G.chutes, 0);
+  let frames = 0;
+  while (anyTankFalling(G) && frames < 5000) { fallTanks(G, 1 / 60, true); frames++; }
+  assert.equal(me.chute, false, 'folded on landing');
+  const free = unit('tank', true, 100, 200);
+  const F = world([free, unit('reaper', false, 400, 400)]);
+  settleAndShow(F, arsenal);
+  let freeFrames = 0;
+  while (anyTankFalling(F) && freeFrames < 5000) { fallTanks(F, 1 / 60, true); freeFrames++; }
+  assert.equal(frames, Math.ceil(200 / CHUTE_SPEED * 60));
+  assert.ok(frames > 2 * freeFrames, `a chute floats down (${frames} frames against ${freeFrames})`);
+});
+
+/* A solo volley as the page plays it: falls animate every frame and the settle
+   runs once the last shell is down; and the same volley as the room server
+   resolves it: every shell, then one settle. */
+function soloVolley(G, shooter, wkey) {
+  sim.fireWeapon(G, arsenal, shooter, wkey);
+  for (let f = 0; f < 5000 && G.shells.length; f++) {
+    fallTanks(G, 1 / 60, true);
+    sim.stepShells(G, arsenal, 1 / 60);
+    if (!G.shells.length) settleAndShow(G, arsenal);
+  }
+  for (let f = 0; f < 5000 && anyTankFalling(G); f++) fallTanks(G, 1 / 60, true);
+}
+function roomVolley(G, shooter, wkey) {
+  sim.fireWeapon(G, arsenal, shooter, wkey);
+  for (let f = 0; f < 5000 && G.shells.length; f++) sim.stepShells(G, arsenal, 1 / 60);
+  settleFalls(G, arsenal);
+}
+const outcome = G => ({ hp: G.tanks.map(t => t.hp), y: G.tanks.map(t => t.y), chutes: [G.chutes, ...G.tanks.map(t => t.chutes || 0)], score: G.score });
+
+test('the same shot costs the same armor in a solo match and in a room', () => {
+  const cases = [
+    // Buckshot's pellets dig the drone's pit in several bursts: one fall, not one per pellet.
+    { wkey: 'buck', angle: 45, power: 46, ground: 400, drone: {} },
+    { wkey: 'buck', angle: 45, power: 46, ground: 400, drone: { chutes: 1 } },
+    // Fractional ground and a fall that stops just short of a whole pixel.
+    { wkey: 'shell', angle: 30, power: 51, ground: 400, drone: {} },
+    { wkey: 'shell', angle: 30, power: 51, ground: 420.54, drone: {} },
+    { wkey: 'mortar', angle: 33, power: 50, ground: 400.37, drone: { chutes: 1 } },
+  ];
+  let fell = 0;
+  for (const c of cases) {
+    const make = () => {
+      const G = world([unit('tank', true, 100, c.ground, 100, { dirS: 1 }), unit('reaper', false, 400, c.ground, 100, { dirS: -1, ...c.drone })],
+        { terrain: new Array(720).fill(c.ground), ammo: { shell: Infinity, buck: 9, mortar: 9 } });
+      Object.assign(G.tanks[0], { angle: c.angle, power: c.power });
+      return G;
+    };
+    const solo = make(), room = make();
+    soloVolley(solo, solo.tanks[0], c.wkey);
+    roomVolley(room, room.tanks[0], c.wkey);
+    assert.deepEqual(outcome(solo), outcome(room), JSON.stringify(c));
+    if (room.tanks[1].y > c.ground + 10) fell++;
+  }
+  assert.ok(fell >= 3, `the cases dig real pits (${fell})`);
+});
+
+test('the bunker counts toward the parachute: a fall it halves to the threshold keeps the chute', () => {
+  // 26 px: raw (26 - 10) * 0.5 = 8, halved to 4, not over 5.
+  const me = unit('tank', true, 100, 374);
+  const G = world([me, unit('reaper', false, 400, 400)], { chutes: 1, bunker: 2 });
+  settleFalls(G, arsenal);
+  assert.equal(me.hp, 96);
+  assert.equal(G.chutes, 1);
+});
+
+test('of several blasts under one unit, the one that lowered its ground the most is credited', () => {
+  const me = unit('tank', true, 100, 400);
+  const other = unit('wraith', false, 600, 400);
+  const foe = unit('reaper', false, 300, 400, 100);
+  const G = world([me, other, foe]);
+  explode(G, arsenal, 300, 440, 'mortar', me, null, null); // deep
+  explode(G, arsenal, 330, 445, 'shell', other, null, null); // shallower, later
+  assert.equal(foe.fellBy, 0);
+  const ev = settleFalls(G, arsenal);
+  assert.equal(ev.find(e => e.tank === foe).by, me);
+});
 test('drones carry a parachute from the rules\' round', () => {
   assert.equal(droneChutes(arsenal, 1), 0);
   assert.equal(droneChutes(arsenal, 2), 0);

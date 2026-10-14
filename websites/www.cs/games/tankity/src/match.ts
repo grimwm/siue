@@ -21,7 +21,7 @@ import type { FieldWidth } from './field.ts';
 import type { RoomClient } from './net.ts';
 import {
   gauss, H, GRAV, TUNE, clamp, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
-  anyTankFalling as simAnyTankFalling,
+  anyTankFalling as simAnyTankFalling, settleAndShow,
 } from './sim.ts';
 import type { Blast, Difficulty, FallEvent, Shell } from './sim.ts';
 import { snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloOneUps, soloSettle } from './solo.ts';
@@ -246,6 +246,7 @@ export function createMatch(deps: MatchDeps) {
         advance('shellsLanded');
       }
     }
+    if (!G.shells.length) settleVolleyFalls();
   }
   /* A blast as the sim reports it: the boom, then what it did to each unit in
      the order it happened. */
@@ -309,13 +310,17 @@ export function createMatch(deps: MatchDeps) {
     render();
     renderHUD();
   }
-  /* Tanks left hanging over a crater fall under gravity every frame until they
-     land; ground that rose (a new round, fresh hills) takes them straight up.
-     In a solo match a landing costs armor and spends parachutes; a room's
-     server has already settled its falls, so there the units only move. */
+  /* The falls' animation, every frame: units drop to where their volley's
+     settle put them (solo) or onto the ground the room sent (a room, whose
+     server settled the falls). Nothing here decides armor. */
   function fallTanks(dt: number): void {
-    const events: FallEvent[] = [];
-    if (simFallTanks(G, dt, net.on ? undefined : tables.arsenal || undefined, events).some(t => t.isPlayer)) sfx.play('thud');
+    if (simFallTanks(G, dt, !net.on).some(t => t.isPlayer)) sfx.play('thud');
+  }
+  /* A solo volley's last shell is down: its falls settle once, by the room
+     server's rules (sim.ts settleAndShow), and then play out. */
+  function settleVolleyFalls(): void {
+    if (net.on || !tables.arsenal) return;
+    const events = settleAndShow(G, tables.arsenal);
     for (const e of events) showFall(e);
     if (events.length) renderHUD();
   }

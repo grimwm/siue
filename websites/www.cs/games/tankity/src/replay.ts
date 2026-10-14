@@ -33,6 +33,7 @@ export interface ReplayTank {
   hp: number;
   showA?: number; // the aim the barrel shows
   showP?: number;
+  chute?: boolean; // floats down under a parachute (the host's fall animation reads it)
 }
 
 /** What the replay needs from its host. */
@@ -145,6 +146,13 @@ export function createReplay(env: ReplayEnv): Replay {
       aimDur: swing < 1 ? 0.15 : clamp(0.45 + swing / 110, 0.5, 1.4),
       shots: [], end: Math.max(0, ...events.map(e => ('t1' in e ? e.t1 : undefined) ?? e.at ?? 0)) + 0.6,
     };
+    // A parachute this volley opens is open from the start, so the unit floats
+    // down while the replay carves its pit, not after it has dropped.
+    for (const e of events) {
+      if (e.t !== 'fall' || !e.chute) continue;
+      const t = env.tank(e.seat);
+      if (t) t.chute = true;
+    }
     env.event(opener);
   }
 

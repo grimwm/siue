@@ -209,4 +209,33 @@ final class RoomFallTest extends TestCase
         $snap = room_snapshot($room, 0, 0);
         $this->assertSame(4 * (int) $g['n'], $snap['you']['chutes']);
     }
+
+    public function testTheBunkerCountsTowardTheParachute(): void
+    {
+        // 26 px: raw 8, halved to 4, not over 5: the chute stays packed.
+        $room = $this->room([$this->human(100, 374), $this->drone(400, 400)], ['chutes' => [0 => 1], 'bunker' => [0 => 2]]);
+        room_settle_tanks($room);
+        $this->assertSame(96, $room['tanks'][0]['hp']);
+        $this->assertSame(1, $room['chutes'][0]);
+    }
+
+    public function testTheBlastThatLoweredTheGroundMostIsCredited(): void
+    {
+        $room = $this->room([$this->human(100, 400), $this->drone(600, 400), $this->drone(300, 400)]);
+        $events = [];
+        room_explode($room, $events, $room['tanks'][0], 'mortar', 300.0, 440.0, null);
+        room_explode($room, $events, $room['tanks'][1], 'shell', 330.0, 445.0, null);
+        $this->assertSame(0, $room['tanks'][2]['fellBy']);
+        $events = [];
+        room_settle_tanks($room, $events);
+        $this->assertSame(0, array_values(array_filter($events, fn($e) => $e['t'] === 'fall' && $e['seat'] === 2))[0]['by']);
+    }
+
+    public function testARiseFoldsAnOpenParachute(): void
+    {
+        $room = $this->room([$this->human(100, 430, ['chute' => true]), $this->drone(400, 400)]);
+        room_settle_tanks($room);
+        $this->assertSame(400.0, $room['tanks'][0]['y']);
+        $this->assertArrayNotHasKey('chute', $room['tanks'][0]);
+    }
 }

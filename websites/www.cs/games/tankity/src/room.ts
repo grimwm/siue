@@ -224,8 +224,9 @@ export function createRoom(deps: RoomDeps) {
         body: t.body || 'tank',
         menu: !!t.menu,
         bot: !!(seat && seat.bot),
-        // Floats down under its parachute while it is still drawn above where the server set it down.
-        chute: !!t.chute && !!was && was.y < t.y - 0.5,
+        // Floats down under its parachute (opened by the replay, or by the
+        // snapshot) while it is still drawn above where the server set it down.
+        chute: !!was && was.y < t.y - 0.5 && (!!t.chute || !!was.chute),
         // Keep the drawn aim where it was so the new one glides in.
         showA: was && !mine ? shownAngle(was) : undefined,
         showP: was && !mine ? shownPower(was) : undefined,
@@ -321,8 +322,10 @@ export function createRoom(deps: RoomDeps) {
     render();
     renderHUD();
   }
+  let fellLast: number | null = null; // the seat the last event saw fall: its wreck reads as a fall, not a kill
   function netEvent(e: RoomEvent): void {
     if (!e || !e.t) return;
+    if (e.t !== 'fall' && e.t !== 'kill') fellLast = null;
     if (e.t === 'shot' || e.t === 'burst') return; // flown by the replay
     if (e.t === 'fizzle') { say(`${seatName(e.by)} sends one into the sunset.`, 'info'); return; }
     if (e.t === 'fire') {
@@ -359,6 +362,7 @@ export function createRoom(deps: RoomDeps) {
       return;
     }
     if (e.t === 'fall') {
+      fellLast = e.seat;
       const victim = e.seat === net.seat;
       const digger = e.by !== e.seat ? e.by : null;
       if (e.chute) {
@@ -380,7 +384,8 @@ export function createRoom(deps: RoomDeps) {
       sfx.play('boom');
       say(victim
         ? (e.by === net.seat ? 'You got yourself?! The hills are cruel.' : `${seatName(e.by)} wrecks YOU.`)
-        : `${seatName(e.by)} wrecks ${seatName(e.seat)}.`,
+        : e.by === e.seat && fellLast === e.seat ? `${seatName(e.seat)} fell to their doom.`
+          : `${seatName(e.by)} wrecks ${seatName(e.seat)}.`,
         victim ? 'bad' : 'info');
       const vt = G.tanks.find(x => x.seat === e.seat);
       const vid = foeTalkId(vt);

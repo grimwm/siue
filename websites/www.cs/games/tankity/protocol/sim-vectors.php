@@ -98,7 +98,7 @@ function sv_outcome(array $before, array $room): array
     $tanks = [];
     $human = null;
     foreach ($room['tanks'] as $i => $t) {
-        $tanks[] = ['hp' => $t['hp'], 'fuel' => $t['fuel']];
+        $tanks[] = ['hp' => $t['hp'], 'fuel' => $t['fuel'], 'y' => (float) $t['y'], 'chutes' => $t['kind'] === 'ai' ? (int) ($t['chutes'] ?? 0) : null];
         if ($t['kind'] === 'human' && $human === null) {
             $human = $i;
         }
@@ -116,7 +116,8 @@ function sv_outcome(array $before, array $room): array
         'score' => $human === null ? 0 : ($room['scores'][$human] ?? 0),
         'cash' => $human === null ? 0 : ($room['cash'][$human] ?? 0),
         'shield' => $human === null ? false : $room['shield'][$human],
-        'laststand' => $human === null ? false : $room['laststand'][$human]];
+        'laststand' => $human === null ? false : $room['laststand'][$human],
+        'chutes' => $human === null ? 0 : (int) ($room['chutes'][$human] ?? 0)];
 }
 
 /** The aim (angle, power) a shooter would pick to land a shell on x, found with the server's own predictor. */
@@ -477,6 +478,24 @@ $volley('fired-into-the-hillside', ['terrain' => ['slope' => [420, 260]], 'wkey'
 $volley('shielded-human-eats-a-drone-shell', array_replace($shell, ['shooter' => 1, 'tanks' => [$human(380, 100) + ['shield' => true], $drone(100, 100) + ['dirS' => 1]],
     'angle' => sv_aim_at(sv_room(array_replace($shell, ['tanks' => [$human(380, 100), $drone(100, 100) + ['dirS' => 1]]])), 1, 'shell', 380.0)[0],
     'power' => sv_aim_at(sv_room(array_replace($shell, ['tanks' => [$human(380, 100), $drone(100, 100) + ['dirS' => 1]]])), 1, 'shell', 380.0)[1]]));
+
+/* Falls a volley digs: Buckshot pellets digging one pit in several bursts,
+ * and craters in fractional ground, with and without parachutes. The browser
+ * replays these as a solo match plays them (falls animated every frame, one
+ * settle when the last shell is down). */
+foreach ([['flat' => 400], ['flat' => 420.54], ['flat' => 400.37]] as $ground) {
+    $gy = $ground['flat'];
+    $g = str_replace('.', '_', (string) $gy);
+    foreach ([[false, 0], [true, 1]] as [$withChute, $n]) {
+        $chuteTag = $withChute ? '-with-a-parachute' : '';
+        $volley("buck-digs-a-drone-in-bursts-ground-$g$chuteTag", ['terrain' => $ground, 'wkey' => 'buck', 'shooter' => 0, 'angle' => 45, 'power' => 46,
+            'tanks' => [['kind' => 'human', 'x' => 100.0, 'y' => $gy, 'hp' => 100, 'dirS' => 1], ['kind' => 'ai', 'x' => 400.0, 'y' => $gy, 'hp' => 100, 'dirS' => -1, 'chutes' => $n]]]);
+        $volley("shell-digs-short-of-a-pixel-ground-$g$chuteTag", ['terrain' => $ground, 'wkey' => 'shell', 'shooter' => 0, 'angle' => 30, 'power' => 51,
+            'tanks' => [['kind' => 'human', 'x' => 100.0, 'y' => $gy, 'hp' => 100, 'dirS' => 1], ['kind' => 'ai', 'x' => 400.0, 'y' => $gy, 'hp' => 100, 'dirS' => -1, 'chutes' => $n]]]);
+    }
+}
+$volley('mortar-on-its-own-gunner', ['terrain' => ['flat' => 400.37], 'wkey' => 'mortar', 'shooter' => 0, 'angle' => 90, 'power' => 15,
+    'tanks' => [['kind' => 'human', 'x' => 300.0, 'y' => 400.37, 'hp' => 200, 'dirS' => 1, 'chutes' => 1], ['kind' => 'ai', 'x' => 600.0, 'y' => 400.37, 'hp' => 100, 'dirS' => -1]]]);
 
 /* A roller: rolls down into a valley, into a unit, off the edge, stops on a rise. */
 if (isset($weapons['roller'])) {

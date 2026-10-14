@@ -253,3 +253,19 @@ function frames(rp, n) {
   check('the volley after a watch volley plays at normal speed', Math.abs((n - firstDone) - normal.n) <= 3, `${n - firstDone} vs ${normal.n}`);
 }
 
+
+/* ---- a parachute opens with the volley, so the unit floats down while the pit is dug ---- */
+{
+  const host = makeHost();
+  const rp = createReplay(host.env);
+  const fire = byT('fire')[0];
+  rp.push([fire, { t: 'fall', seat: 1, dmg: 0, by: 0, chute: true, under: false, at: 0.8 }]);
+  rp.step(0);
+  check('a chute fall opens its parachute as the volley starts', host.tanks[1].chute === true && !host.tanks[0].chute,
+    JSON.stringify(host.tanks.map(t => t.chute)));
+  const plain = makeHost();
+  const rp2 = createReplay(plain.env);
+  rp2.push([fire, { t: 'fall', seat: 1, dmg: 12, by: 0, chute: false, under: false, at: 0.8 }]);
+  rp2.step(0);
+  check('a fall without a parachute opens none', !plain.tanks[1].chute);
+}

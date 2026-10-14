@@ -68,9 +68,9 @@ function outcome(before) {
     if (Math.abs(y - before[ix]) > 1e-9) { if (first === null) first = ix; last = ix; }
   });
   return {
-    tanks: G.tanks.map(t => ({ hp: t.hp, fuel: t.fuel })),
+    tanks: G.tanks.map(t => ({ hp: t.hp, fuel: t.fuel, y: t.y, chutes: t.isPlayer ? null : t.chutes || 0 })),
     crater: first === null ? null : { x0: first, y: G.terrain.slice(first, last + 1) },
-    score: G.score, cash: G.cash, shield: G.shield, laststand: G.laststand,
+    score: G.score, cash: G.cash, shield: G.shield, laststand: G.laststand, chutes: G.chutes,
   };
 }
 
@@ -171,10 +171,15 @@ const RUN = {
     shooter.power = c.power;
     (shooter.isPlayer ? G.ammo : shooter.ammo)[c.wkey] = 99;
     sim.fireWeapon(G, arsenal, shooter, c.wkey);
-    // 1/60 s frames, as the room server steps; a volley ends when its last shell has burst.
-    for (let frame = 0; G.shells.length && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
-    // The dust settles as the volley ends (server/rules.php room_fire_shot).
-    sim.settleFalls(G, arsenal);
+    // As a solo match plays it: 1/60 s frames, falls animated every frame, and
+    // one settle when the last shell is down (src/match.ts), which must come out
+    // as the room server's volley does (server/rules.php room_fire_shot).
+    for (let frame = 0; G.shells.length && frame < 5000; frame++) {
+      sim.fallTanks(G, 1 / 60, true);
+      sim.stepShells(G, arsenal, 1 / 60);
+      if (!G.shells.length) sim.settleAndShow(G, arsenal);
+    }
+    for (let frame = 0; frame < 5000 && sim.anyTankFalling(G); frame++) sim.fallTanks(G, 1 / 60, true);
     return outcome(before);
   },
   fall(c) {

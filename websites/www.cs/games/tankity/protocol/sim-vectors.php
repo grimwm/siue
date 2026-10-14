@@ -1109,6 +1109,57 @@ $earth('dig-down-at-a-slant', ['op' => 'dig', 'terrain' => $flat, 'x' => 300, 'y
 $earth('dig-to-the-floor', ['op' => 'dig', 'terrain' => ['flat' => 430], 'x' => 300, 'y' => 431, 'vx' => 0, 'vy' => 300, 'n' => 15, 'r' => 8]);
 $earth('dig-standing-still-goes-down', ['op' => 'dig', 'terrain' => $flat, 'x' => 300, 'y' => 401, 'vx' => 0, 'vy' => 0, 'n' => 3, 'r' => 8]);
 
+/* ---- fire: napalm's burning pool and who its flames reach (src/fire.ts) ----
+ * Each case pours a pool of volume v at column x on a terrain from its recipe
+ * (the ground itself never changes) with flames `flame` px tall; the output is
+ * the pool [level, x0, x1, flame] and, for each unit, whether its body reaches
+ * into the flames. */
+$fire = function (string $name, array $c) use ($add): void {
+    $t = sv_terrain($c['terrain']);
+    $pool = room_fire_pool($t, (float) $c['x'], (float) $c['v'], (float) $c['flame']);
+    $in = [];
+    foreach ($c['units'] as $u) {
+        $in[] = room_in_flames($pool, room_unit_box(['kind' => $u['kind'], 'x' => (float) $u['x'], 'y' => (float) $u['y']]));
+    }
+    $add('fire', $name, $c, ['pool' => [$pool['level'], $pool['x0'], $pool['x1'], $pool['flame']], 'in' => $in]);
+};
+$vale = ['vee' => [360, 150, 330, 420]];
+$onVale = sv_terrain($vale);
+$valePool = room_fire_pool($onVale, 360.0, 2200.0, 18.0);
+// A unit standing x px along the valley, on its ground.
+$inVale = fn(string $kind, int $x) => ['kind' => $kind, 'x' => $x, 'y' => $onVale[$x]];
+// The drone over the rim: its ground 6 px above the pool, its body's bottom 22 px above.
+$rimDrone = 0;
+for ($x = 360; $x > 0 && $onVale[$x] > $valePool['level'] - 6; $x--) {
+    $rimDrone = $x - 1;
+}
+$valeUnits = [$inVale('human', 360), $inVale('human', 330), $inVale('human', $valePool['x0'] - 21), $inVale('human', $valePool['x0'] - 20),
+    $inVale('human', 250), $inVale('ai', $rimDrone), $inVale('ai', 360)];
+$fire('napalm-in-a-valley', ['terrain' => $vale, 'x' => 360, 'v' => 2200, 'flame' => 18, 'units' => $valeUnits]);
+$fire('napalm-lands-on-the-valley-side', ['terrain' => $vale, 'x' => 280, 'v' => 2200, 'flame' => 18, 'units' => $valeUnits]);
+$fire('hot-flames-reach-the-rim-drone', ['terrain' => $vale, 'x' => 360, 'v' => 2200, 'flame' => 26, 'units' => $valeUnits]);
+$fire('hot-napalm-in-a-valley', ['terrain' => $vale, 'x' => 360, 'v' => 3200, 'flame' => 26, 'units' => $valeUnits]);
+$dish = ['flat' => 400, 'set' => [[250, 350, 404]]];
+$fire('thin-wide-pool-in-a-dish', ['terrain' => $dish, 'x' => 300, 'v' => 2200, 'flame' => 18,
+    'units' => [['kind' => 'human', 'x' => 300, 'y' => 404], ['kind' => 'human', 'x' => 365, 'y' => 400], ['kind' => 'human', 'x' => 380, 'y' => 400],
+        ['kind' => 'ai', 'x' => 300, 'y' => 404], ['kind' => 'ai', 'x' => 340, 'y' => 404]]]);
+$fire('dead-flat-ground-holds-no-pool', ['terrain' => $flat, 'x' => 300, 'v' => 2200, 'flame' => 18,
+    'units' => [['kind' => 'human', 'x' => 300, 'y' => 400], ['kind' => 'ai', 'x' => 320, 'y' => 400]]]);
+$fire('slope-to-the-edge-spills-it-all', ['terrain' => ['slope' => [300, 420]], 'x' => 500, 'v' => 2200, 'flame' => 18,
+    'units' => [['kind' => 'human', 'x' => 700, 'y' => 417]]]);
+$fire('pool-on-hills', ['terrain' => ['hills' => [330, 40, 200]], 'x' => 140, 'v' => 2200, 'flame' => 18,
+    'units' => [['kind' => 'human', 'x' => 150, 'y' => sv_terrain(['hills' => [330, 40, 200]])[150]], ['kind' => 'ai', 'x' => 100, 'y' => sv_terrain(['hills' => [330, 40, 200]])[100]]]]);
+$fire('pit-near-the-left-edge', ['terrain' => ['flat' => 400, 'set' => [[8, 40, 430]]], 'x' => 20, 'v' => 2200, 'flame' => 18,
+    'units' => [['kind' => 'human', 'x' => 24, 'y' => 430], ['kind' => 'human', 'x' => 64, 'y' => 400], ['kind' => 'human', 'x' => 60, 'y' => 400]]]);
+// The ticks a pool burns ([burn, tick] => ticks, steps a tick) and what they cost a unit (shield, bunker).
+foreach ([[3.0, 0.5], [4.0, 0.5], [1.0, 0.3], [0.5, 0.1], [10.0, 2.0], [0.7, 0.7], [2.0, 0.15]] as [$burn, $tick]) {
+    $exact('fire-ticks', "burn-$burn-tick-$tick", ['burn' => $burn, 'tick' => $tick], [room_burn_ticks($burn, $tick), room_tick_steps($tick)]);
+}
+foreach ([[6, 6, false, false], [6, 6, true, false], [6, 6, false, true], [10, 8, true, true], [1, 5, false, true], [3, 1, true, false], [7, 0, false, false]] as [$dmg, $n, $sh, $bk]) {
+    $exact('fire-ticks', "total-$dmg-x$n" . ($sh ? '-shield' : '') . ($bk ? '-bunker' : ''), ['dmg' => $dmg, 'ticks' => $n, 'shield' => $sh, 'bunker' => $bk],
+        room_burn_total($dmg, $n, $sh, $bk));
+}
+
 /* ---- falling: units land, pay by the drop, spend parachutes, credit the digger ----
  * A case may first fire a blast (x, y, wkey, owner) that digs the pits; then
  * every hanging unit lands. The output is each unit's height, armor, kills,

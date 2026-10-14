@@ -2909,6 +2909,33 @@
       {"name":"dig-to-the-floor","in":{"op":"dig","terrain":{"flat":430},"x":300,"y":431,"vx":0,"vy":300,"n":15,"r":8},"out":{"heading":[0.0,1.0],"cells":{"x0":292,"y":[456.0,456.0,456.0,456.0,456.0,456.0,456.0,456.0,456.0,456.0,456.0,456.0,456.0,456.0,456.0,456.0,456.0]}}},
       {"name":"dig-standing-still-goes-down","in":{"op":"dig","terrain":{"flat":400},"x":300,"y":401,"vx":0,"vy":0,"n":3,"r":8},"out":{"heading":[0.0,1.0],"cells":{"x0":292,"y":[413.0,415.90474,416.96863,417.68375,418.19615,418.56215,418.80948,418.95294,419.0,418.95294,418.80948,418.56215,418.19615,417.68375,416.96863,415.90474,413.0]}}}
     ],
+    "fire": [
+      {"name":"napalm-in-a-valley","in":{"terrain":{"vee":[360,150,330,420]},"x":360,"v":2200,"flame":18,"units":[{"kind":"human","x":360,"y":420.0},{"kind":"human","x":330,"y":402.0},{"kind":"human","x":278,"y":370.8},{"kind":"human","x":279,"y":371.4},{"kind":"human","x":250,"y":354.0},{"kind":"ai","x":289,"y":377.4},{"kind":"ai","x":360,"y":420.0}]},"out":{"pool":[383.66504,299,421,18.0],"in":[true,true,false,true,false,false,true]}},
+      {"name":"napalm-lands-on-the-valley-side","in":{"terrain":{"vee":[360,150,330,420]},"x":280,"v":2200,"flame":18,"units":[{"kind":"human","x":360,"y":420.0},{"kind":"human","x":330,"y":402.0},{"kind":"human","x":278,"y":370.8},{"kind":"human","x":279,"y":371.4},{"kind":"human","x":250,"y":354.0},{"kind":"ai","x":289,"y":377.4},{"kind":"ai","x":360,"y":420.0}]},"out":{"pool":[383.66504,299,421,18.0],"in":[true,true,false,true,false,false,true]}},
+      {"name":"hot-flames-reach-the-rim-drone","in":{"terrain":{"vee":[360,150,330,420]},"x":360,"v":2200,"flame":26,"units":[{"kind":"human","x":360,"y":420.0},{"kind":"human","x":330,"y":402.0},{"kind":"human","x":278,"y":370.8},{"kind":"human","x":279,"y":371.4},{"kind":"human","x":250,"y":354.0},{"kind":"ai","x":289,"y":377.4},{"kind":"ai","x":360,"y":420.0}]},"out":{"pool":[383.66504,299,421,26.0],"in":[true,true,false,true,false,true,true]}},
+      {"name":"hot-napalm-in-a-valley","in":{"terrain":{"vee":[360,150,330,420]},"x":360,"v":3200,"flame":26,"units":[{"kind":"human","x":360,"y":420.0},{"kind":"human","x":330,"y":402.0},{"kind":"human","x":278,"y":370.8},{"kind":"human","x":279,"y":371.4},{"kind":"human","x":250,"y":354.0},{"kind":"ai","x":289,"y":377.4},{"kind":"ai","x":360,"y":420.0}]},"out":{"pool":[376.18231,287,433,26.0],"in":[true,true,true,true,false,true,true]}},
+      {"name":"thin-wide-pool-in-a-dish","in":{"terrain":{"flat":400,"set":[[250,350,404]]},"x":300,"v":2200,"flame":18,"units":[{"kind":"human","x":300,"y":404},{"kind":"human","x":365,"y":400},{"kind":"human","x":380,"y":400},{"kind":"ai","x":300,"y":404},{"kind":"ai","x":340,"y":404}]},"out":{"pool":[400.5,250,350,18.0],"in":[true,true,false,true,true]}},
+      {"name":"dead-flat-ground-holds-no-pool","in":{"terrain":{"flat":400},"x":300,"v":2200,"flame":18,"units":[{"kind":"human","x":300,"y":400},{"kind":"ai","x":320,"y":400}]},"out":{"pool":[400.5,300,299,18.0],"in":[false,false]}},
+      {"name":"slope-to-the-edge-spills-it-all","in":{"terrain":{"slope":[300,420]},"x":500,"v":2200,"flame":18,"units":[{"kind":"human","x":700,"y":417}]},"out":{"pool":[420.5,719,718,18.0],"in":[false]}},
+      {"name":"pool-on-hills","in":{"terrain":{"hills":[330,40,200]},"x":140,"v":2200,"flame":18,"units":[{"kind":"human","x":150,"y":290.0},{"kind":"ai","x":100,"y":330.0}]},"out":{"pool":[333.56558,3,97,18.0],"in":[false,false]}},
+      {"name":"pit-near-the-left-edge","in":{"terrain":{"flat":400,"set":[[8,40,430]]},"x":20,"v":2200,"flame":18,"units":[{"kind":"human","x":24,"y":430},{"kind":"human","x":64,"y":400},{"kind":"human","x":60,"y":400}]},"out":{"pool":[400.5,8,40,18.0],"in":[true,false,true]}}
+    ],
+    "fire-ticks": [
+      {"name":"burn-3-tick-0.5","in":{"burn":3.0,"tick":0.5},"out":[6,30],"exact":true},
+      {"name":"burn-4-tick-0.5","in":{"burn":4.0,"tick":0.5},"out":[8,30],"exact":true},
+      {"name":"burn-1-tick-0.3","in":{"burn":1.0,"tick":0.3},"out":[3,18],"exact":true},
+      {"name":"burn-0.5-tick-0.1","in":{"burn":0.5,"tick":0.1},"out":[5,6],"exact":true},
+      {"name":"burn-10-tick-2","in":{"burn":10.0,"tick":2.0},"out":[5,120],"exact":true},
+      {"name":"burn-0.7-tick-0.7","in":{"burn":0.7,"tick":0.7},"out":[1,42],"exact":true},
+      {"name":"burn-2-tick-0.15","in":{"burn":2.0,"tick":0.15},"out":[13,9],"exact":true},
+      {"name":"total-6-x6","in":{"dmg":6,"ticks":6,"shield":false,"bunker":false},"out":36,"exact":true},
+      {"name":"total-6-x6-shield","in":{"dmg":6,"ticks":6,"shield":true,"bunker":false},"out":30,"exact":true},
+      {"name":"total-6-x6-bunker","in":{"dmg":6,"ticks":6,"shield":false,"bunker":true},"out":18,"exact":true},
+      {"name":"total-10-x8-shield-bunker","in":{"dmg":10,"ticks":8,"shield":true,"bunker":true},"out":35,"exact":true},
+      {"name":"total-1-x5-bunker","in":{"dmg":1,"ticks":5,"shield":false,"bunker":true},"out":5,"exact":true},
+      {"name":"total-3-x1-shield","in":{"dmg":3,"ticks":1,"shield":true,"bunker":false},"out":0,"exact":true},
+      {"name":"total-7-x0","in":{"dmg":7,"ticks":0,"shield":false,"bunker":false},"out":0,"exact":true}
+    ],
     "fall": [
       {"name":"drop-0","in":{"terrain":{"flat":400},"tanks":[{"kind":"human","x":100.0,"y":400.0,"hp":300},{"kind":"ai","x":400.0,"y":400.0,"hp":100}]},"out":{"tanks":[{"y":400.0,"hp":300,"kills":0,"lastHitBy":null,"chutes":null},{"y":400.0,"hp":100,"kills":0,"lastHitBy":null,"chutes":0}],"falls":[],"score":0,"cash":0,"chutes":0}},
       {"name":"drop-5","in":{"terrain":{"flat":400},"tanks":[{"kind":"human","x":100.0,"y":395.0,"hp":300},{"kind":"ai","x":400.0,"y":400.0,"hp":100}]},"out":{"tanks":[{"y":400.0,"hp":300,"kills":0,"lastHitBy":null,"chutes":null},{"y":400.0,"hp":100,"kills":0,"lastHitBy":null,"chutes":0}],"falls":[],"score":0,"cash":0,"chutes":0}},

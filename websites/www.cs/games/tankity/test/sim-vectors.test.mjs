@@ -29,6 +29,7 @@ const armorRules = await import(pathToFileURL(path.join(dir, 'src', 'armor.ts'))
 const standings = await import(pathToFileURL(path.join(dir, 'src', 'standings.ts')).href);
 const det = await import(pathToFileURL(path.join(dir, 'src', 'detmath.ts')).href);
 const earth = await import(pathToFileURL(path.join(dir, 'src', 'earth.ts')).href);
+const fire = await import(pathToFileURL(path.join(dir, 'src', 'fire.ts')).href);
 
 /* ---- state the cases run over ---- */
 const G = {};
@@ -330,6 +331,13 @@ const RUN = {
     t.forEach((y, ix) => { if (Math.abs(y - before[ix]) > 1e-9) { if (first === null) first = ix; last = ix; } });
     out.cells = first === null ? null : { x0: first, y: t.slice(first, last + 1) };
     return out;
+  },
+  fire(c) {
+    const pool = fire.firePool(buildTerrain(c.terrain), c.x, c.v, c.flame);
+    return { pool: [pool.level, pool.x0, pool.x1, pool.flame], in: c.units.map(u => fire.inFlames(pool, sim.unitHitBox({ isPlayer: u.kind === 'human', x: u.x, y: u.y }))) };
+  },
+  'fire-ticks'(c) {
+    return c.burn !== undefined ? [fire.burnTicks(c.burn, c.tick), fire.tickSteps(c.tick)] : fire.burnTotal(c.dmg, c.ticks, c.shield, c.bunker);
   },
   settle(c) {
     world({ terrain: c.terrain, tanks: [{ kind: c.kind || 'ai', x: c.x, y: c.y, hp: c.hp }] });

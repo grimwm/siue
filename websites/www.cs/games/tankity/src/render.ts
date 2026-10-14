@@ -2,7 +2,7 @@
  *
  * Everything that paints the 2D canvas: the night sky and its moon, clouds,
  * hills, the scenery past the field's edges and the dirt below it, the units (tank bodies, drones, name tags, turn marker, menu badge),
- * the aim arm, blast discs, shells, particles, wind streaks, the
+ * the aim arm, blast discs, shells (with a mark on the top edge for one above the view), particles, wind streaks, the
  * turn clock, and the firing-range preview. main.ts builds a BattleView each
  * frame and calls `frame(view)`; this module reads it and paints, and never
  * changes game state. Anything that advances (a boom's age, the shake decay,
@@ -14,6 +14,7 @@
  * random numbers. Like the other modules it imports nothing at run time, so
  * the sim helpers arrive as dependencies. */
 import type { TrailCarrier } from './fx/trail.ts';
+import type { SkyMark } from './camera.ts';
 import type { Box, Fit, WorldRect } from './field.ts';
 import type { Cloud, Hills, Rng, Tank } from './sim.ts';
 
@@ -129,6 +130,7 @@ export interface RenderSim {
   fitField(box: Box, field: Box): Fit;
   visibleWorld(fit: Fit, box: Box): WorldRect;
   sceneryY(h: Hills, terrain: readonly number[], x: number): number;
+  skyMarks(lists: readonly (readonly { x: number; y: number }[])[], top: number, out: SkyMark[]): SkyMark[];
 }
 
 /** What createRenderer needs from its host. */
@@ -615,6 +617,36 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.fill();
   }
 
+  /* A shell higher than the camera can pull back to: a small arrow on the top
+     edge at its x, with how far above the view it flies, so it is never lost. */
+  const marks: SkyMark[] = [];
+  const inFlight: (readonly Flying[])[] = [[], [], []];
+  function drawSkyMarks(c: CanvasRenderingContext2D, view: BattleView, top: number, x0: number, x1: number): void {
+    if (!view.shells.length && !view.replay.length && !view.ghosts.length) return;
+    inFlight[0] = view.shells; inFlight[1] = view.replay; inFlight[2] = view.ghosts;
+    sim.skyMarks(inFlight, top, marks);
+    const z = view.cam.z, s = view.textScale;
+    for (const m of marks) {
+      const x = Math.max(x0 + 24 / z, Math.min(x1 - 24 / z, m.x));
+      c.save();
+      c.translate(x, top);
+      c.scale(1 / z, 1 / z); // a fixed size on screen, whatever the zoom
+      c.globalAlpha = 0.9;
+      c.fillStyle = '#ffe27a';
+      c.beginPath();
+      c.moveTo(0, 6);
+      c.lineTo(7, 17);
+      c.lineTo(-7, 17);
+      c.closePath();
+      c.fill();
+      c.font = `bold ${Math.round(10 * s)}px sans-serif`;
+      c.textAlign = 'center';
+      c.textBaseline = 'top';
+      c.fillText(String(Math.round(m.above)), 0, 20);
+      c.restore();
+    }
+  }
+
   /* ---------- wind ---------- */
   /* Wind lives on the battlefield, not in the status bar: faint streaks
      drift across the sky at the wind's speed; the number is the WIND pill's. */
@@ -933,6 +965,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     for (const s of view.replay) drawShell(c, s, time);
     for (const s of view.ghosts) drawShell(c, s, time);
     c.globalAlpha = 1;
+    drawSkyMarks(c, view, sy0, sx0, sx1);
     drawWindStreaks(c, view);
     if (view.preview) drawPreview(view.preview, time);
     // Particles.

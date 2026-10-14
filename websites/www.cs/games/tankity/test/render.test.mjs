@@ -6,6 +6,7 @@ import { check } from '../../_kit/test/check.ts';
 import { createRenderer, drawChassis } from '../src/render.ts';
 import { fitField, visibleWorld } from '../src/field.ts';
 import { sceneryY } from '../src/scenery.ts';
+import { skyMarks } from '../src/camera.ts';
 import { ROOM_W as W, H, facing, isGroundUnit, muzzle, surfY, hashSeed, mulberry32, gauss } from '../src/sim.ts';
 
 
@@ -40,7 +41,7 @@ const fxApi = { reduced: false, sheets: {}, glow() {}, drawBody() {} };
 const shownAngle = t => (t.showA === undefined ? t.angle : t.showA);
 const deps = {
   fx: fxApi,
-  sim: { facing, isGroundUnit, muzzle, surfY, hashSeed, mulberry32, gauss, fitField, visibleWorld, sceneryY },
+  sim: { facing, isGroundUnit, muzzle, surfY, hashSeed, mulberry32, gauss, fitField, visibleWorld, sceneryY, skyMarks },
   shownAngle,
   look: () => ({ shell: '#ffe27a', blast: ['#ffb13c', '#fff3c4'] }),
   fxBody: () => ({}),

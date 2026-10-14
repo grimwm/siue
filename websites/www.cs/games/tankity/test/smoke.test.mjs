@@ -310,8 +310,8 @@ TAP('global', 'help');
 const idleTop = els['help-overlay'].scrollTop;
 KD('scroll', 'lineDown');
 check('scroll-idle', els['help-overlay'].scrollTop === idleTop, `top=${els['help-overlay'].scrollTop}`);
-// The camera pins the ground to the viewport floor: no void below the world.
-check('cam-pins-ground', /H \+ 8 - halfView/.test(src));
+// The camera pins the ground to the viewport floor: no void below the world (test/camera.test.mjs checks the numbers).
+check('cam-pins-ground', /const floorY = h \+ FLOOR_SLACK/.test(src) && /bottom - \(h \+ FLOOR_SLACK\)/.test(src));
 check('cam-wide-sky', /fillRect\(rect\.x0 - 20, rect\.y0 - 20, rect\.x1 - rect\.x0 \+ 40/.test(renderSrc)); // the sky covers everything the canvas shows
 // (invite-prefill runs inside the async block below: openLobby unhides late)
 // The clean-initials list must match the server copy exactly (cylon rule).

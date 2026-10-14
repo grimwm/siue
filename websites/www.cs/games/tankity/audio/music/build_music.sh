@@ -50,6 +50,12 @@ great-boss|https://opengameart.org/sites/default/files/Great%20Boss_0.ogg|5a9eaa
 inevitable-doom|https://opengameart.org/sites/default/files/Inevitable%20Doom.wav|cef9610f1a708fa039c6ef61f2851413f0d2d09b27cdca4943778a76d428be47|
 boss-battle-1|https://opengameart.org/sites/default/files/Boss%20Battle%20%231%20V1.wav|70508dcdb1e1b29884913f6d73949b0dfaa097390b23e9a53fd3067e1cb80781|
 chip-bit-danger|https://opengameart.org/sites/default/files/Chip%20Bit%20Danger.mp3|6656f7ee749dfcb060effcd9ce73da6be9d3006cd189463bc7e7429f2ccf600f|
+mecha-collection|https://opengameart.org/sites/default/files/Mecha%20Collection.wav|d2d1e2b188c91a99efab0e5cb964861b5540095b0e1c2c646b83601a7874ecb5|
+hey-boss|https://opengameart.org/sites/default/files/Hey%20Boss.mp3|af6f6ed2a3c97f04c0b9b5092ee51bc2d8d69ae41b98172d6ed33037beb08caa|
+nes-shooter-mars|https://opengameart.org/sites/default/files/WAV.zip|cefe1973eda47bd0388d5e80c50cf224a6d7c473276a11a3c90d6b4b8e7f0e6a|Mars.wav
+8-bit-battle-theme|https://opengameart.org/sites/default/files/newbattle.wav|73d4f61dd69a89edb7948cdc0bac14ce878c6ab46bc8ec4118867b5ab147772b|
+the-monarchs-rule|https://opengameart.org/sites/default/files/The%20Monarch%27s%20Rule.wav|238239ff2d976e01f0f7521ec2858caf7070bb6abdaa45a883a9800f4c56bf81|
+operation-unthinkable|https://opengameart.org/sites/default/files/Operation%20Unthinkable_0.ogg|47f876174af5a8125dcb807aeced5a31e44b97336bf54b204bd8aabda43d33f4|
 # END SOURCES
 EOF
 SOURCES=${MUSIC_SOURCES:-$DEFAULT_SOURCES}

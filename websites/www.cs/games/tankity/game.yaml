@@ -616,6 +616,24 @@ audio:
     - file: audio/music/chip-bit-danger.mp3
       title: Chip Bit Danger
       credit: Sudocolon
+    - file: audio/music/mecha-collection.mp3
+      title: Mecha Collection
+      credit: Jonathan So
+    - file: audio/music/hey-boss.mp3
+      title: "Hey Boss!"
+      credit: megupets
+    - file: audio/music/nes-shooter-mars.mp3
+      title: Mars (NES Shooter Music)
+      credit: SketchyLogic
+    - file: audio/music/8-bit-battle-theme.mp3
+      title: 8 bit battle theme
+      credit: celestialghost8
+    - file: audio/music/the-monarchs-rule.mp3
+      title: "The Monarch's Rule"
+      credit: Jonathan So
+    - file: audio/music/operation-unthinkable.mp3
+      title: Operation Unthinkable
+      credit: Spring Spring
 
 # --------------------------------------------------------------------------
 # effects

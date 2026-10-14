@@ -64,6 +64,14 @@ into the table. The author is the composer the page names; OpenGameArt's own
 | `inevitable-doom.mp3` | Inevitable Doom | celestialghost8 | https://opengameart.org/content/inevitable-doom | CC0 | cef9610f1a708fa039c6ef61f2851413f0d2d09b27cdca4943778a76d428be47 |
 | `boss-battle-1.mp3` | Boss Battle #1 | nene | https://opengameart.org/content/boss-battle-1-8-bit-re-upload | CC0 | 70508dcdb1e1b29884913f6d73949b0dfaa097390b23e9a53fd3067e1cb80781 |
 | `chip-bit-danger.mp3` | Chip Bit Danger | Sudocolon | https://opengameart.org/content/chip-bit-danger | CC0 | 6656f7ee749dfcb060effcd9ce73da6be9d3006cd189463bc7e7429f2ccf600f |
+| `mecha-collection.mp3` | Mecha Collection | Jonathan So | https://opengameart.org/content/mecha-collection | CC0 | d2d1e2b188c91a99efab0e5cb964861b5540095b0e1c2c646b83601a7874ecb5 |
+| `hey-boss.mp3` | Hey Boss! | megupets | https://opengameart.org/content/hey-boss | CC0 | af6f6ed2a3c97f04c0b9b5092ee51bc2d8d69ae41b98172d6ed33037beb08caa |
+| `nes-shooter-mars.mp3` | Mars (NES Shooter Music) | SketchyLogic | https://opengameart.org/content/nes-shooter-music-5-tracks-3-jingles | CC0 | cefe1973eda47bd0388d5e80c50cf224a6d7c473276a11a3c90d6b4b8e7f0e6a |
+| `8-bit-battle-theme.mp3` | 8 bit battle theme | celestialghost8 | https://opengameart.org/content/8-bit-battle-theme-famitracker | CC0 | 73d4f61dd69a89edb7948cdc0bac14ce878c6ab46bc8ec4118867b5ab147772b |
+| `the-monarchs-rule.mp3` | The Monarch's Rule | Jonathan So | https://opengameart.org/content/the-monarchs-rule | CC0 | 238239ff2d976e01f0f7521ec2858caf7070bb6abdaa45a883a9800f4c56bf81 |
+| `operation-unthinkable.mp3` | Operation Unthinkable | Spring Spring | https://opengameart.org/content/operation-unthinkable | CC0 | 47f876174af5a8125dcb807aeced5a31e44b97336bf54b204bd8aabda43d33f4 |
 
 cynicmusic's site is https://cynicmusic.com; Juhani Junkala's tracks are
-"Level 1" and "Level 3" from his pack "5 Chiptunes (Action)".
+"Level 1" and "Level 3" from his pack "5 Chiptunes (Action)". Mars is the file
+`Mars.wav` from SketchyLogic's "NES Shooter Music (5 tracks, 3 jingles)", and
+Boss Battle #1 is nene's version 1 (`Boss Battle #1 V1.wav`).

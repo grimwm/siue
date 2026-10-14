@@ -7,7 +7,7 @@ import { dealSolo, hud, lastRoom, loseMatch, newPlayer } from './helpers.mjs';
 import { endPair, lobUntil, LOB, WIDE } from './rooms-end-helpers.mjs';
 
 test('when one of the last two humans leaves, the other wins the match; a solo match after it ends on the solo card', async ({ browser }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000); // a room match, then a whole solo match lost shot by shot (tankity-end's 180 s on its own)
   const pair = await endPair(browser);
   const { host, guest, roomState } = pair;
   const down = seat => () => { const t = lastRoom(roomState.guest).tanks.find(k => k.seat === seat); return !t || t.hp <= 0; };
@@ -71,7 +71,7 @@ test('when one of the last two humans leaves, the other wins the match; a solo m
 });
 
 test('a solo run the score server voids ends on a card that says it was not filed', async ({ browser }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(240_000); // a whole solo match lost shot by shot, as in tankity-end, on a slow runner too
   const { ctx, page, errors } = await newPlayer(browser, undefined, { clock: true });
   // Every round comes back void, as if the server played it differently; the rest goes to the real server.
   await page.route(/scores\.php/, route => {

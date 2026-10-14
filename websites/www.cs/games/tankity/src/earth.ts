@@ -65,8 +65,11 @@ function basin(terrain: readonly number[], xi: number, level: number): { x0: num
    POUR_ITERS halvings between the highest ground and the floor. A pool that
    would reach either edge of the field spills off it, so the level stays
    below what would reach one; what will not fit is lost (all of it, poured on
-   a slope down to an edge). server/earth.php room_pour_level is the same. */
-export function pourLevel(terrain: readonly number[], x: number, volume: number): Pool {
+   a slope down to an edge). With poolMin above 0 a liquid spreads only until
+   it is poolMin deep: when that fill would leave it shallower (or spill it
+   all), it lies instead as a puddle (puddle) poolMin deep at the bottom it ran
+   to. server/earth.php room_pour_level is the same. */
+export function pourLevel(terrain: readonly number[], x: number, volume: number, poolMin = 0): Pool {
   const n = terrain.length;
   const xi = pourBottom(terrain, x);
   if (!(volume > 0)) return { level: terrain[xi]!, x0: xi, x1: xi - 1 };
@@ -79,7 +82,32 @@ export function pourLevel(terrain: readonly number[], x: number, volume: number)
     else hi = mid;
   }
   const b = basin(terrain, xi, hi);
-  return b.edge ? { level: hi, x0: xi, x1: xi - 1 } : { level: hi, x0: b.x0, x1: b.x1 };
+  const pool = b.edge ? { level: hi, x0: xi, x1: xi - 1 } : { level: hi, x0: b.x0, x1: b.x1 };
+  if (!(poolMin > 0) || (pool.x0 <= pool.x1 && terrain[xi]! - pool.level >= poolMin)) return pool;
+  return puddle(terrain, xi, volume, poolMin);
+}
+/* A puddle: liquid that spreads only until it is d deep, its level d over the
+   ground at column xi, widening a column at a time, left then right in turn
+   (a side whose next column stands dry gives way to the other), until it
+   holds `volume`. Once it reaches either edge of the field the rest spills
+   off. On flat ground it is volume / d columns wide, centred on xi.
+   server/earth.php room_pour_puddle is the same. */
+function puddle(terrain: readonly number[], xi: number, volume: number, d: number): Pool {
+  const n = terrain.length, level = terrain[xi]! - d;
+  let a = xi, b = xi, vol = d, left = true;
+  while (vol < volume && a > 0 && b < n - 1) {
+    const l = terrain[a - 1]! > level - 0.5, r = terrain[b + 1]! > level - 0.5;
+    if (!l && !r) break;
+    if (left ? l : !r) {
+      a--;
+      vol += Math.max(0, terrain[a]! - level);
+    } else {
+      b++;
+      vol += Math.max(0, terrain[b]! - level);
+    }
+    left = !left;
+  }
+  return { level, x0: a, x1: b };
 }
 /* The column liquid poured at x runs down to: column by column to the lower
    neighbour (the right one on a tie), to the bottom of its dip. */
@@ -157,10 +185,10 @@ export function digCarve(terrain: number[], x: number, y: number, ux: number, uy
  *  each is replayed with applyEarth, which moves the ground exactly as the sim did.
  *  dirt: a disc of dirt; pour: liquid dirt at column x; dig: a trench of n steps
  *  from (x, y) along (ux, uy); riot: a scoop from a hull at (x, y), barrel heading
- *  a; slump: the slopes within r of x. `w` is the gun. */
+ *  a; slump: the slopes within r of x. `w` is the gun; a pour's m is its poolMin. */
 export type EarthOp =
   | { t: 'dirt'; w: string; x: number; y: number; r: number }
-  | { t: 'pour'; w: string; x: number; v: number }
+  | { t: 'pour'; w: string; x: number; v: number; m: number }
   | { t: 'dig'; w: string; x: number; y: number; ux: number; uy: number; n: number; r: number }
   | { t: 'riot'; w: string; x: number; y: number; a: number; r: number; fan: number; b: number }
   | { t: 'slump'; w: string; x: number; r: number; slope: number; passes: number };
@@ -175,7 +203,7 @@ export function applyEarth(terrain: number[], op: EarthOp): { x0: number; x1: nu
       addDirt(terrain, op.x, op.y, op.r);
       return span(op.x, op.r);
     case 'pour': {
-      const p = pourLevel(terrain, op.x, op.v);
+      const p = pourLevel(terrain, op.x, op.v, op.m);
       fillPour(terrain, p);
       return { x0: p.x0, x1: p.x1 };
     }

@@ -253,18 +253,25 @@ export interface RingEvent extends EventBase { t: 'ring'; by: number; w: string;
 /** The earth guns move the ground (src/earth.ts applyEarth replays each,
  * with the server's own unrounded numbers, so a client's ground matches the
  * server's). dirt: a disc of dirt of radius r where it burst; pour: liquid
- * dirt poured at column x, v px^2 of it; dig: a digger's trench from where it
+ * dirt poured at column x, v px^2 of it, spreading no thinner than m px; dig: a digger's trench from where it
  * touched down, n steps along (ux, uy), half width r, cut from `at` to t1 (its
  * warheads follow as burst events); riot: a riot charge's scoop from its
  * gunner's hull at (x, y), standing at b, barrel heading a; slump: the slopes
  * within r of x slump. Hits and falls follow as their own events. */
 export interface DirtEvent extends EventBase { t: 'dirt'; w: string; x: number; y: number; r: number }
-export interface PourEvent extends EventBase { t: 'pour'; w: string; x: number; v: number }
+export interface PourEvent extends EventBase { t: 'pour'; w: string; x: number; v: number; m: number }
 export interface DigEvent extends EventBase { t: 'dig'; by: number; w: string; x: number; y: number; ux: number; uy: number; n: number; r: number; t1: number }
 export interface RiotEvent extends EventBase { t: 'riot'; by: number; w: string; x: number; y: number; a: number; r: number; fan: number; b: number }
 export interface SlumpEvent extends EventBase { t: 'slump'; w: string; x: number; r: number; slope: number; passes: number }
 /** The events that move the earth. */
 export type EarthEvent = DirtEvent | PourEvent | DigEvent | RiotEvent | SlumpEvent;
+/** A napalm shell's pool, lit where it burst (src/fire.ts firePool, with the
+ * server's own numbers): poured at column x, v px^2 of it, its level over
+ * columns x0..x1 (x0 > x1: it spilled away and burns nothing), its flames
+ * `flame` px tall. It burns from `at` until its last tick at t1; each tick's
+ * hits and kills follow as their own events, stamped at the tick. The ground
+ * does not change. */
+export interface BurnEvent extends EventBase { t: 'burn'; by: number; w: string; x: number; v: number; level: number; x0: number; x1: number; flame: number; t1: number }
 /** A blast mid-flight (a lance passing through a unit, a digger's warhead). */
 export interface BurstEvent extends EventBase { t: 'burst'; x: number; y: number; r: number; w: string }
 export interface HitEvent extends EventBase { t: 'hit'; seat: number; dmg: number; by: number; direct: boolean }
@@ -283,7 +290,7 @@ export interface TacticEvent extends EventBase { t: 'tactic'; seat: number; s: s
 export type RoomEvent =
   | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent | TurnTimeEvent
   | FireEvent | AiFireEvent | AutoEvent
-  | ShotEvent | BeamEvent | RingEvent | BurstEvent | DirtEvent | PourEvent | DigEvent | RiotEvent | SlumpEvent | HitEvent | FallEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
+  | ShotEvent | BeamEvent | RingEvent | BurnEvent | BurstEvent | DirtEvent | PourEvent | DigEvent | RiotEvent | SlumpEvent | HitEvent | FallEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
 
 export type RoomEventType = RoomEvent['t'];
 /** The events that open a volley. */

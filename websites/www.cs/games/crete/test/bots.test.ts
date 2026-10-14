@@ -5,7 +5,7 @@ import * as E from '../src/engine.ts';
 import { dasher, strategist, WAIT_LIMIT } from '../src/bots.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 
-function board(player, foe, setup = () => {}) {
+function board(player: E.Cell, foe: E.Cell, setup: (G: E.State) => void = () => {}) {
   const game = E.createGame({ say() {}, sfx() {}, render() {}, showEnd() {}, timers: manualClock().timers });
   game.newRun('bots');
   const G = game.G;
@@ -49,7 +49,7 @@ test('the strategist eats a snack at 8 HP, not at 9', () => {
 });
 
 test('in a safe zone with the creature ahead, the strategist waits, but not more than six turns in a row', () => {
-  const safeAhead = G => { G.safe.add(E.key(5, 5)); G.inv.jammer = 0; };
+  const safeAhead = (G: E.State) => { G.safe.add(E.key(5, 5)); G.inv.jammer = 0; };
   assert.deepEqual(strategist(board({ r: 5, c: 5 }, { r: 5, c: 9 }, safeAhead)), { kind: 'wait' });
   assert.equal(WAIT_LIMIT, 6);
   const tired = strategist(board({ r: 5, c: 5 }, { r: 5, c: 9 }, G => { safeAhead(G); G.stillTurns = 6; }));
@@ -58,12 +58,12 @@ test('in a safe zone with the creature ahead, the strategist waits, but not more
 
 test('otherwise the strategist steps along the route, and says so when there is none', () => {
   assert.deepEqual(strategist(board({ r: 5, c: 5 }, { r: 12, c: 2 })), { kind: 'move', dr: 0, dc: 1 });
-  const walled = board({ r: 5, c: 5 }, { r: 12, c: 2 }, G => { G.walls[5][13] = true; });
+  const walled = board({ r: 5, c: 5 }, { r: 12, c: 2 }, G => { G.walls[5]![13] = true; });
   assert.deepEqual(strategist(walled), { kind: 'stuck' });
 });
 
 test('the dasher only ever steps along the route, even beside the creature', () => {
   assert.deepEqual(dasher(board({ r: 5, c: 5 }, { r: 5, c: 6 })), { kind: 'move', dr: 0, dc: 1 });
   assert.deepEqual(dasher(board({ r: 5, c: 5 }, { r: 5, c: 7 }, G => { G.hp = 1; })), { kind: 'move', dr: 0, dc: 1 });
-  assert.deepEqual(dasher(board({ r: 5, c: 5 }, { r: 12, c: 2 }, G => { G.walls[5][13] = true; })), { kind: 'stuck' });
+  assert.deepEqual(dasher(board({ r: 5, c: 5 }, { r: 12, c: 2 }, G => { G.walls[5]![13] = true; })), { kind: 'stuck' });
 });

@@ -6,6 +6,8 @@ import type { TestEvent } from 'node:test/reporters';
 export interface CensusRun {
   leaves: number;
   names: string[];
+  /** Names of the leaves that were skipped; omitted when none were. */
+  skipped?: string[];
   failures: { name: string; error: string }[];
   /** Set when the file itself failed (did not load, or its process died), not one of its tests. */
   loadError?: string;
@@ -36,7 +38,9 @@ export default async function* censusReporter(source: AsyncIterable<TestEvent>):
     if (details.type === 'suite' || !leaf) continue;
     run.leaves++;
     run.names.push(name);
+    if (event.data.skip !== undefined && event.data.skip !== false) (run.skipped ??= []).push(name);
   }
   run.names.sort();
+  run.skipped?.sort();
   yield `${JSON.stringify(run)}\n`;
 }

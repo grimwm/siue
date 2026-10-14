@@ -11,7 +11,7 @@ Regenerate (from this folder; Blender 4.2 or newer, tested on 5.2):
     /Applications/Blender.app/Contents/MacOS/Blender -b -P render_fx.py -- --out ../sprites
 
 Install Blender with `brew install --cask blender`. The EEVEE sheets take
-seconds; the Cycles ones (real volumes: blast, plume, dirt, flakburst, nuke)
+seconds; the Cycles ones (real volumes: blast, plume, dirt, flakburst, nuke, flame)
 take a few minutes in all on an Apple-silicon laptop, the nuke most of it.
 
 Options (after the `--`):
@@ -21,8 +21,8 @@ Options (after the `--`):
     --only A,B        Render just these sheets (names from SHEETS and ATLASES
                       below: fireball, smoke, shock, energy, moon,
                       blast, plume, dirt, debris, scorch, flakburst, electric,
-                      nuke, flare, muzzle, shells, shells_blast, shells_beams, shells_earth, parachute,
-                      beam, plasma). Default: all. sprites.json
+                      nuke, flare, muzzle, shells, shells_blast, shells_beams, shells_earth, shells_fire,
+                      parachute, beam, plasma, flame). Default: all. sprites.json
                       keeps the entries of sheets that were not re-rendered.
     --engine NAME     eevee (default; falls back to cycles if EEVEE cannot start
                       headless) or cycles.
@@ -53,7 +53,9 @@ conventions: `fireball` is natural colour (fire);
 an emitter's `tint` (multiply) colours them. `beam` lies across the whole
 frame, left to right through its middle, so copies laid end to end (aligned
 to a beam's heading) join into one line; `plasma` is a ring bursting out from
-the frame's centre to its edge. `moon` is seven phases of
+the frame's centre to its edge. `flame` is natural colour: one looping flame
+tongue standing on the frame's bottom edge (its last frame runs into its
+first). `moon` is seven phases of
 a procedural moon (maria and craters, lit by one sun lamp swung round it, a
 touch of earthshine on the dark side); the game picks one per match.
 `parachute` is a striped canopy on its lines, lit by a sun lamp: the first 6
@@ -1836,6 +1838,98 @@ def build_p_disrupter(frames, rng):
         mat_key(cm, 'alpha', f, 0.7 + 0.3 * math.sin(f / frames * math.tau * 2))
 
 
+def napalm_canister(frames, casing, liquid_col, liquid_glow, flame_glow, band, lick=0.55):
+    """A napalm canister: a stubby steel drum with a glass belly showing the
+    burning liquid inside sloshing as it turns, a hazard band, a vented nose
+    and a flame licking from its tail vents (a loop, flickering)."""
+    shell_rig(rim=(1.0, 0.7, 0.4))
+    b = spinner(frames, 0.5)
+    steel = pbr('casing', casing, 0.75, 0.38)
+    dark = pbr('dark', (0.06, 0.06, 0.07), 0.6, 0.5)
+    stripe = pbr('band', band, 0.1, 0.45)
+    glass = pbr('liquid', liquid_col, 0.0, 0.08, emit=liquid_glow, strength=1.2)
+    cyl_x(0.5, -1.2, 0.55, steel, b)
+    nose_x(0.5, 0.55, 0.7, steel, b)
+    nose_x(0.16, 1.18, 0.2, dark, b)
+    cyl_x(0.43, -1.45, -1.2, dark, b, r1=0.5)
+    cyl_x(0.515, 0.05, 0.3, stripe, b)
+    # the window: a glowing band of liquid set into the drum, its surface rocking as the drum turns
+    win = cyl_x(0.505, -0.85, -0.15, glass, b)
+    for f in range(frames):
+        t = f / frames * math.tau
+        win.scale = (1.0 + 0.04 * math.sin(t * 2), 1.0, 1.0)
+        win.keyframe_insert('scale', frame=f)
+    # flames licking back from the tail: emissive cones that flicker in length
+    licks = []
+    for i, (z, r) in enumerate(((0.0, 0.3), (0.22, 0.18), (-0.2, 0.2))):
+        bpy.ops.mesh.primitive_cone_add(vertices=24, radius1=r, radius2=0.0, depth=1.0, location=(-1.95, 0, z), rotation=(0, -math.pi / 2, 0))
+        o = bpy.context.active_object
+        cloud_displace(o, 0.12, 0.3)
+        m = ramp_material('lick%d' % i, [(0.0, (0.35, 0.02, 0.0)), (0.45, (0.9, 0.18, 0.01)), (0.8, flame_glow), (1.0, (1.0, 0.75, 0.3))], strength=1.6, alpha_power=0.9, noise=0.5, noise_scale=4.0)
+        o.data.materials.append(m)
+        licks.append((o, m, i))
+    for f in range(frames):
+        t = f / frames * math.tau
+        for o, m, i in licks:
+            k = lick * (0.75 + 0.25 * math.sin(t * 3 + i * 2.1))
+            o.scale = (k, 1.0, k * 1.6)
+            o.location = (-1.45 - 0.5 * k * 1.6, 0, o.location.z)
+            o.keyframe_insert('scale', frame=f)
+            o.keyframe_insert('location', frame=f)
+            mat_key(m, 'heat', f, 0.2 + 0.1 * math.sin(t * 4 + i))
+            mat_key(m, 'alpha', f, 0.85)
+
+
+def build_p_napalm(frames, rng):
+    """Napalm: a gunmetal canister, a yellow and black band, burning orange
+    liquid in its window and a flame licking from its tail."""
+    napalm_canister(frames, (0.2, 0.21, 0.22), (0.75, 0.18, 0.01), (1.0, 0.3, 0.02), (1.0, 0.42, 0.05), (0.95, 0.72, 0.05))
+
+
+def build_p_hotnapalm(frames, rng):
+    """Hot Napalm: a scorched red canister, a white band, white-hot yellow
+    liquid in its window and a longer flame from its tail."""
+    napalm_canister(frames, (0.45, 0.08, 0.05), (0.95, 0.55, 0.08), (1.0, 0.62, 0.12), (1.0, 0.62, 0.15), (0.92, 0.9, 0.85), lick=0.75)
+
+
+def build_flame(frames, rng):
+    """A flame tongue standing on the bottom edge of the frame, one loop: a
+    hot yellow root, an orange body licking up into a dark red tip that
+    breaks into wisps, swaying and breathing. A real volume (fire glowing in
+    thin dark smoke), natural colour. The noise it is cut from circles round
+    and comes back, so the last frame runs into the first; the burning pools
+    stand a row of them along the pool, each from its own frame."""
+    use_cycles(samples=96)
+    add_sun(energy=0.0, ambient=(0.0, 0.0, 0.0))
+    FLAME = [(0.0, (0.0, 0.0, 0.0)), (0.12, (0.25, 0.012, 0.0)), (0.35, (0.9, 0.1, 0.0)), (0.6, (1.0, 0.32, 0.01)),
+             (0.82, (1.0, 0.58, 0.06)), (1.0, (1.0, 0.86, 0.32))]
+    noise = bpy.data.objects.new('N', None)
+    link(noise)
+    lobes = []
+    for i in range(11):
+        k = i / 10                                     # 0 at the root .. 1 at the tip
+        lobes.append((lobe(), k, -1.55 + 2.75 * k, 1.05 - 0.75 * k, rng.uniform(0, math.tau)))
+    mat = vol_material('flame', [e for e, _, _, _, _ in lobes], noise, albedo=(0.04, 0.035, 0.03), fire=FLAME, emit=1.5,
+                       edge=0.32, warp=0.55, scale=2.4, density=6.0)
+    vol_domain(mat, half=(1.6, 1.0, 2.0))
+    for f in range(frames):
+        a = f / frames * math.tau
+        noise.location = (0.45 * math.cos(a), 0.0, 0.45 * math.sin(a))
+        noise.keyframe_insert('location', frame=f)
+        for o, k, z, s, ph in lobes:
+            sway = 0.26 * k * k * math.sin(a + ph * 0.25 + k * 2.4)
+            breathe = 1.0 + 0.1 * math.sin(2 * a + ph) * (0.4 + k)
+            o.location = (sway, 0.0, z + 0.1 * k * math.sin(a + ph))
+            o.scale = (s * breathe * (1.0 - 0.3 * k), s * (0.95 - 0.35 * k), s * (1.25 + 0.35 * k))
+            keys(o, f)
+        mat_key(mat, 'heat', f, 0.85)
+        mat_key(mat, 'cool', f, -0.06)
+        mat_key(mat, 'dens', f, 1.0)
+        mat_key(mat, 'evo', f, 0.35 * math.sin(a))
+        mat_key(mat, 'rough', f, 0.6)
+    look_flat(noise)
+
+
 # atlas name -> (frame px, frames per clip, fps, [(sheet name, builder)]):
 # one PNG, one row per clip; each clip is its own sheet in sprites.json.
 ATLASES = {
@@ -1858,6 +1952,10 @@ ATLASES = {
     'shells_earth': (48, 8, 12, [
         ('p_clod', build_p_clod), ('p_mud', build_p_mud), ('p_drill', build_p_drill), ('p_sandhog', build_p_sandhog),
         ('p_riot', build_p_riot), ('p_disrupter', build_p_disrupter),
+    ]),
+    # The Fire family's canisters.
+    'shells_fire': (48, 8, 12, [
+        ('p_napalm', build_p_napalm), ('p_hotnapalm', build_p_hotnapalm),
     ]),
 }
 
@@ -1882,6 +1980,7 @@ SHEETS = {
     'parachute': (build_parachute, 64, 16, 4, 12),
     'beam': (build_beam, 96, 12, 4, 24),
     'plasma': (build_plasma, 128, 20, 5, 30),
+    'flame': (build_flame, 96, 16, 4, 16),
 }
 
 

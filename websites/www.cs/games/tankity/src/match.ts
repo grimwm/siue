@@ -21,11 +21,13 @@ import type { FieldWidth } from './field.ts';
 import type { RoomClient } from './net.ts';
 import {
   gauss, H, GRAV, TUNE, clamp, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
-  anyTankFalling as simAnyTankFalling, armChutes, dueFalls, gfxLinger, settleVolley, unitHitBox,
+  anyTankFalling as simAnyTankFalling, armChutes, dueFalls, gfxLinger, settleVolley, unitHitBox, volleyOn,
 } from './sim.ts';
-import type { Blast, Difficulty, FallEvent, FallShow, Shell, StepEvent } from './sim.ts';
+import type { Blast, Difficulty, FallEvent, FallShow, Fire, Shell, StepEvent } from './sim.ts';
 import { playDigStep, playEarthOp } from './earth-fx.ts';
 import type { EarthFxDeps } from './earth-fx.ts';
+import { playBurn } from './fire-fx.ts';
+import type { FireFxDeps } from './fire-fx.ts';
 import { snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloOneUps, soloSettle } from './solo.ts';
 import { endCardBack, localLine, soloBoard } from './standings.ts';
 import type { LocalRow, Saved } from './local-board.ts';
@@ -110,6 +112,8 @@ export function createMatch(deps: MatchDeps) {
     fallsDue = []; // a fall still playing out in the last match never speaks in this one
     G.marks.clear();
     G.earth.clear();
+    G.fire.clear();
+    G.fires = [];
     const seed = (seedStr || '').trim() || ('scorched-' + Math.floor(Math.random() * 9000 + 1000));
     // The Menu's Difficulty, read once per match: a change waits for the next one.
     // The width comes from the screen at the deal and holds until the next one (spec 6.6).
@@ -177,6 +181,8 @@ export function createMatch(deps: MatchDeps) {
     fallsDue = [];
     G.marks.clear();
     G.earth.clear();
+    G.fire.clear();
+    G.fires = [];
     soloMuster(G, tables.arsenal!);
     G.roundStart = { score: G.score, cash: G.cash };
     G.parts = [];
@@ -215,6 +221,13 @@ export function createMatch(deps: MatchDeps) {
     shake: k => { G.shake = Math.max(G.shake || 0, k); },
     get show() { return G.earth; },
     say: text => say(text, 'info'),
+  };
+  /* How a napalm pool plays on the battlefield (fire-fx.ts). */
+  const fireFx: FireFxDeps = {
+    fxImpact: (key, x, y, r) => fxImpact(G.fx, key, x, y, r),
+    fxSpecial: (key, name, x, y, ang, len) => fxSpecial(G.fx, key, name, x, y, ang, len),
+    sound: name => sfx.play(name),
+    get show() { return G.fire; },
   };
   function fireWeapon(t: GameTank, wkey: string): boolean {
     const w = tables.weapons[wkey]!;
@@ -308,6 +321,12 @@ export function createMatch(deps: MatchDeps) {
         playEarthOp(e.op, G.terrain, e.before, e.x0, e.x1, earthFx, (tables.weapons[e.op.w]?.dmg || 0) > 0);
         G.settleT = TUNE.settleTime;
         advance('shellsLanded');
+      } else if (e.kind === 'fire') {
+        lightFire(e.fire);
+        G.settleT = TUNE.settleTime;
+        advance('shellsLanded');
+      } else if (e.kind === 'burn') {
+        showBurn(e.hits);
       } else {
         showBlast(e.blast);
         G.settleT = TUNE.settleTime;
@@ -316,7 +335,28 @@ export function createMatch(deps: MatchDeps) {
     }
     // A parachute opens with the first frame of its unit's fall.
     if (!net.on && tables.arsenal) armChutes(G, tables.arsenal);
-    if (!G.shells.length) settleVolleyFalls();
+    if (!volleyOn(G)) settleVolleyFalls();
+  }
+  /* A napalm shell's pool lights where it burst: its splash, the embers and
+     smoke over it for as long as it burns (the gun's `burn` special), and its
+     flames on screen (fire-show.ts). One that spilled away lights nothing. */
+  function lightFire(f: Fire): void {
+    playBurn(f.wkey, { x: f.col, ground: surfY(f.col), ...f.pool }, f.ticks * f.every / 60, fireFx);
+    if (f.pool.x0 > f.pool.x1) say(`The ${tables.weapons[f.wkey]?.name || 'napalm'} runs off and burns out.`, 'info');
+  }
+  /* A burning pool's tick: one line for the units it burned, then a shield
+     that ate the tick and a wreck as any hit's. */
+  function showBurn(b: Blast): void {
+    const burnt: string[] = [];
+    let me = false;
+    for (const e of b.events) {
+      if (e.kind !== 'wound') continue;
+      burnt.push(`${e.tank.isPlayer ? 'YOU' : e.tank.id} ${e.dmg}`);
+      if (e.tank.isPlayer) me = true;
+    }
+    if (burnt.length) say(`The flames burn ${burnt.join(', ')}.`, me ? 'bad' : b.owner.isPlayer ? 'good' : 'info');
+    if (me) renderHUD();
+    showHits({ ...b, events: b.events.filter(e => e.kind !== 'wound') });
   }
   /* A blast as the sim reports it: the boom, then what it did to each unit in
      the order it happened. */
@@ -649,6 +689,7 @@ export function createMatch(deps: MatchDeps) {
     if (G.shake > 0) G.shake = Math.max(0, G.shake - dt);
     if (G.fx) { G.fx.wind = G.wind; G.fx.step(dt); }
     G.earth.step(dt);
+    G.fire.step(dt);
     G.marks.step(dt);
     for (const bm of G.booms) bm.t += dt;
     G.booms = G.booms.filter(bm => bm.t < bm.life);
@@ -669,8 +710,8 @@ export function createMatch(deps: MatchDeps) {
     } else if (G.phase === 'fly' || G.phase === 'settle') {
       // A volley resolves pellet by pellet: explosions flip us to settle, but
       // stepping continues until every shell has landed or fizzled.
-      if (G.shells.length) stepShells(dt);
-      if (G.phase === 'fly' && !G.shells.length) {
+      if (volleyOn(G)) stepShells(dt);
+      if (G.phase === 'fly' && !volleyOn(G)) {
         if (marked) say('The tracer marks its path.', 'info');
         else {
           say('Shot fizzles out over the hills.', 'info');
@@ -678,7 +719,7 @@ export function createMatch(deps: MatchDeps) {
         }
         G.settleT = 0.6;
         advance('shellsLanded');
-      } else if (G.phase === 'settle' && !G.shells.length) {
+      } else if (G.phase === 'settle' && !volleyOn(G)) {
         G.settleT -= dt;
         // The turn waits for every tank to finish falling into its crater, and the earth to settle on screen.
         if (G.settleT <= 0 && !anyTankFalling() && !G.earth.busy()) settle();

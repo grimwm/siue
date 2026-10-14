@@ -288,6 +288,26 @@ function run(pv, env, seconds, done = () => false) {
   check('then the drawn ground is the ground', previewGround(pv) === pv.terr);
 }
 
+/* ---- napalm on the range: a pool in the dip under the dummy burns it tick by tick ---- */
+for (const wkey of arsenal.order.filter(k => arsenal.weapons[k].effect === 'napalm')) {
+  const w = arsenal.weapons[wkey];
+  const { env, log } = makeEnv();
+  const pv = createPreview(wkey, env, null, null);
+  const ground = pv.terr.slice();
+  let burningFrames = 0, hpWhileBurning = [];
+  run(pv, env, 15, p => {
+    if (p.burn) { burningFrames++; hpWhileBurning.push(p.foeHp); }
+    return p.phase === 'show';
+  });
+  const ticks = Math.floor(w.burn / w.tick + 1e-9);
+  check(`${wkey} on the range lights its pool (the burn special along it)`, log.special.some(s => s.name === 'burn' && s.len > 0) && !!pv.pool);
+  check(`${wkey} on the range burns for its burn seconds, the volley open until it is out`, Math.abs(burningFrames - w.burn * 60) <= 3, `${burningFrames} frames`);
+  check(`${wkey} on the range burns the dummy every tick`, PV_FOE_HP - pv.foeHp === Math.min(PV_FOE_HP, w.dmg * ticks)
+    && new Set(hpWhileBurning).size >= Math.min(ticks, Math.ceil(PV_FOE_HP / w.dmg)), `${pv.foeHp} hp`);
+  check(`${wkey} on the range never changes the ground`, JSON.stringify(pv.terr) === JSON.stringify(ground));
+  check(`${wkey} on the range says what it burned`, /^Burned the dummy: \d+ damage/.test(pv.result), pv.result);
+}
+
 /* ---- a digger stops at the dummy, as the war's does ---- */
 {
   const { env, fx } = makeEnv();

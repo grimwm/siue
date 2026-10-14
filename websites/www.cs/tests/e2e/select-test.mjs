@@ -56,7 +56,7 @@ has('home-page-tool-runs-the-shell', select([`${S}tools/site-versions.php`]), ['
 has('crete-sources-run-its-specs', select([`${S}games/crete/src/engine.ts`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'crete-play.spec.mjs']);
 has('crete-bundle-runs-its-specs', select([`${S}games/crete/dist/main.js`, `${S}games/crete/tsconfig.json`, `${S}games/crete/build.json`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs', 'crete-play.spec.mjs']);
 check('crete-lockfile-alone-runs-no-browser', select([`${S}games/crete/package-lock.json`]), 'NONE');
-check('crete-build-tool-and-tests-run-nothing', select([`${S}games/crete/tools/install-files.php`, `${S}games/crete/.gitignore`, `${S}games/crete/test/engine.test.mjs`, `${S}games/crete/test/smoke.test.mjs`]), 'NONE');
+check('crete-build-tool-and-tests-run-nothing', select([`${S}games/crete/tools/install-files.php`, `${S}games/crete/.gitignore`, `${S}games/crete/test/engine.test.ts`, `${S}games/crete/test/smoke.test.ts`]), 'NONE');
 check('crete-skips-tankity', select([`${S}games/crete/src/ui.ts`]).some(s => s.startsWith('tankity-')), false);
 check('kit-guard-alone-runs-nothing', select([`${S}games/_kit/php/score-guard.php`]), 'NONE');
 check('kit-install-core-runs-everything', select([`${S}games/_kit/php/install-core.php`]), 'ALL');
@@ -69,12 +69,12 @@ has('play-pages-run-the-fullscreen-esc-spec', select([`${S}play/tankity/index.ht
 check('kit-change-runs-everything', select([`${S}games/_kit/prefs.ts`]), 'ALL');
 check('kit-lockfile-runs-everything', select([`${S}games/package-lock.json`]), 'ALL');
 check('kit-tests-run-no-browser-specs', select([`${S}games/_kit/test/prefs.test.ts`, `${S}games/_kit/README.md`, `${S}games/_kit/php/tests/InstallCoreTest.php`]), 'NONE');
-check('game-unit-tests-run-no-browser-specs', select([`${S}games/crete/test/engine.test.mjs`]), 'NONE');
+check('game-unit-tests-run-no-browser-specs', select([`${S}games/crete/test/engine.test.ts`]), 'NONE');
 has('build-config-runs-the-games-specs', select([`${S}games/crete/build.json`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs']);
 has('built-output-runs-the-games-specs', select([`${S}games/crete/dist/main.js`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs']);
 check('game-test-program-runs-no-browser-specs', select([`${S}games/crete/tsconfig.test.json`, `${S}games/tankity/tsconfig.test.json`]), 'NONE');
 check('kit-test-program-and-runner-run-no-browser-specs', select([`${S}games/_kit/tsconfig.test.json`, `${S}games/_kit/test.sh`]), 'NONE');
-check('kit-build-and-icon-tests-run-no-browser-specs', select([`${S}games/_kit/build/build.test.ts`, `${S}games/_kit/build/icons.test.ts`]), 'NONE');
+check('kit-build-and-icon-tests-run-no-browser-specs', select([`${S}games/_kit/build/build.test.ts`, `${S}games/_kit/build/build.test.mjs`, `${S}games/_kit/build/icons.test.ts`]), 'NONE');
 check('kit-build-tool-still-runs-everything', select([`${S}games/_kit/build/build.mjs`]), 'ALL');
 check('a-removed-spec-is-dropped', select([`${S}tests/e2e/gone-away.spec.mjs`]), 'NONE');
 

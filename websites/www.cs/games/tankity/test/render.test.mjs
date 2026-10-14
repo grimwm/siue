@@ -20,12 +20,12 @@ function deepFreeze(o) {
 
 /* A canvas context that accepts every call and every property, and counts the calls. */
 function stubContext() {
-  const calls = { n: 0, fills: 0, texts: [] };
+  const calls = { n: 0, fills: 0, texts: [], by: {} };
   const ctx = new Proxy({}, {
     get(t, p) {
       if (p in t) return t[p];
       if (p === 'measureText') return s => ({ width: String(s).length * 6 });
-      return (...a) => { calls.n++; if (p === 'fill' || p === 'fillRect') calls.fills++; if (p === 'fillText') calls.texts.push(a[0]); return ctx; };
+      return (...a) => { calls.n++; calls.by[p] = (calls.by[p] || 0) + 1; if (p === 'fill' || p === 'fillRect') calls.fills++; if (p === 'fillText') calls.texts.push(a[0]); return ctx; };
     },
     set(t, p, v) { t[p] = v; return true; },
   });
@@ -70,6 +70,7 @@ const view = deepFreeze({
   replay: [{ x: 220, y: 210, vx: 10, vy: 10, wkey: 'nuke' }],
   ghosts: [{ x: 760, y: 200, vx: 200, vy: 20, wkey: 'shell' }],
   sparks: [{ x: 50, y: 50, life: 0.3, color: '#fff' }],
+  marks: [],
   wind: -5, textScale: 1.1,
   turnClock: { left: 2.4, myTurn: true },
   preview: null,
@@ -88,6 +89,18 @@ const live = deepFreeze({ ...view, turnUnit: view.tanks[1], aim: { unit: view.ta
   check('frame-paints-a-frozen-view', !threw && calls.n > 200 && calls.fills > 20, threw || `calls=${calls.n}`);
   // A player who left: the bot driving the unit is tagged, and only that unit.
   check('bot-unit-is-tagged', calls.texts.includes('BOT') && calls.texts.filter(t => t === 'BOT').length === 2, calls.texts.join(','));
+}
+
+{
+  // Tracer marks: a line is a dashed path ending in its cross; smoke is puffs
+  // along the path, drifting with the wind as it ages.
+  const pts = [100, 300, 160, 250, 220, 230, 280, 250, 340, 300];
+  const marks = [{ by: 0, wkey: 'tracer', kind: 'line', pts, landed: true, age: 1 }, { by: 1, wkey: 'smoke', kind: 'smoke', pts, landed: true, age: 6 }];
+  const none = stubCanvas(), lines = stubCanvas();
+  createRenderer(none.canvas, deps).frame(view);
+  createRenderer(lines.canvas, deps).frame(deepFreeze({ ...view, marks }));
+  check('marks-draw-a-dashed-line', (lines.calls.by.setLineDash || 0) >= 2 && !none.calls.by.setLineDash, JSON.stringify(lines.calls.by.setLineDash));
+  check('marks-draw-smoke-puffs', (lines.calls.by.arc || 0) >= (none.calls.by.arc || 0) + 5, `${lines.calls.by.arc} vs ${none.calls.by.arc}`);
 }
 
 {

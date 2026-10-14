@@ -17,6 +17,8 @@ import type { TrailCarrier } from './fx/trail.ts';
 import type { SkyMark } from './camera.ts';
 import type { Box, Fit, WorldRect } from './field.ts';
 import type { Cloud, Hills, Rng, Tank } from './sim.ts';
+import { smokeDrift } from './marks.ts';
+import type { Mark } from './marks.ts';
 
 /* ---------- what main.ts hands over ---------- */
 
@@ -68,7 +70,7 @@ export interface FxApi {
 }
 
 /** A weapon's paint job as the battlefield reads it. */
-export interface Look { shell?: string; blast?: readonly string[]; painter?: string }
+export interface Look { shell?: string; trail?: string; blast?: readonly string[]; painter?: string }
 
 /** The aim arm to draw: the unit whose turn it is, and the arm's length in world units. */
 export interface AimArm { unit: DrawTank; length: number }
@@ -113,6 +115,7 @@ export interface BattleView {
   replay: readonly Flying[]; // shells of a room replay, at their place now
   ghosts: readonly Flying[]; // shells the sim retired past the field's edge, flying on over the scenery (draw only)
   sparks: readonly Spark[];
+  marks: readonly Mark[]; // tracer marks the viewer sees (src/marks.ts shown)
   wind: number;
   textScale: number;
   turnClock: { left: number; myTurn: boolean } | null; // the on-canvas count-down, when it shows
@@ -506,6 +509,70 @@ function drawTurnMarker(c: CanvasRenderingContext2D, t: DrawTank, time: number, 
 }
 
 /** One explosion: the disc its weapon destroys, growing and fading. */
+/* A tracer's mark. A line: its path dashed in the trail colour over a faint
+   glow, ending in a cross where it came down. Smoke: soft puffs along the
+   path, each drifting with the wind (smokeDrift) and rising a little as it
+   ages, growing and thinning but never quite gone before the round ends. */
+function drawMark(c: CanvasRenderingContext2D, m: Mark, look: Look, wind: number): void {
+  const p = m.pts;
+  if (p.length < 4) return;
+  const col = look.trail || look.shell || '#ffffff';
+  c.save();
+  if (m.kind === 'line') {
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    c.strokeStyle = col;
+    c.globalAlpha = 0.22;
+    c.lineWidth = 5;
+    c.beginPath();
+    c.moveTo(p[0]!, p[1]!);
+    for (let i = 2; i < p.length; i += 2) c.lineTo(p[i]!, p[i + 1]!);
+    c.stroke();
+    c.globalAlpha = 0.9;
+    c.lineWidth = 1.8;
+    c.setLineDash([7, 6]);
+    c.stroke();
+    c.setLineDash([]);
+    if (m.landed) {
+      const x = p[p.length - 2]!, y = p[p.length - 1]!;
+      c.strokeStyle = look.shell || col;
+      c.lineWidth = 2.4;
+      c.globalAlpha = 1;
+      c.beginPath();
+      c.moveTo(x - 6, y - 6); c.lineTo(x + 6, y + 6);
+      c.moveTo(x + 6, y - 6); c.lineTo(x - 6, y + 6);
+      c.stroke();
+      c.lineWidth = 1.2;
+      c.globalAlpha = 0.6;
+      c.beginPath();
+      c.arc(x, y, 9, 0, Math.PI * 2);
+      c.stroke();
+    }
+  } else {
+    const drift = smokeDrift(m.age, wind), rise = Math.min(40, m.age * 2.5);
+    const r = 4 + Math.min(16, m.age * 1.4), fade = Math.max(0.3, 1 - m.age / 45);
+    c.fillStyle = col;
+    let at = 0;
+    for (let i = 2; i < p.length; i += 2) {
+      const x0 = p[i - 2]!, y0 = p[i - 1]!, x1 = p[i]!, y1 = p[i + 1]!;
+      const seg = Math.hypot(x1 - x0, y1 - y0);
+      for (; at <= seg; at += 9) {
+        const f = seg > 0 ? at / seg : 0, k = (i * 7 + Math.round(at)) % 10 / 10; // a fixed scatter per puff
+        const x = x0 + (x1 - x0) * f + drift * (0.7 + 0.5 * k), y = y0 + (y1 - y0) * f - rise * (0.6 + 0.4 * k);
+        c.globalAlpha = 0.18 * fade;
+        c.beginPath();
+        c.arc(x, y, r * (1.5 + 0.5 * k), 0, Math.PI * 2);
+        c.fill();
+        c.globalAlpha = 0.32 * fade;
+        c.beginPath();
+        c.arc(x, y, r * (0.8 + 0.3 * k), 0, Math.PI * 2);
+        c.fill();
+      }
+      at -= seg;
+    }
+  }
+  c.restore();
+}
 function drawBoom(c: CanvasRenderingContext2D, bm: Boom, look: Look): void {
   const p = Math.min(1, bm.t / bm.life);
   const rr = Math.max(0.1, bm.r * (1 - Math.pow(1 - p, 3)));
@@ -1050,6 +1117,8 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
       c.stroke();
       c.globalAlpha = 1;
     }
+    // Tracer marks, under the blasts and effects.
+    for (const m of view.marks) drawMark(c, m, deps.look(m.wkey), view.wind);
     // Blast discs: each explosion draws exactly the circle its weapon destroys,
     // under the effects (trails, muzzle and blast particles), shells on top.
     for (const bm of view.booms) drawBoom(c, bm, deps.look(bm.wkey));

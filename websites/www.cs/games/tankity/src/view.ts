@@ -25,13 +25,13 @@ import type { Weapon } from './sim.ts';
 
 /** The slice of the game's state the view reads and steps (main.ts's G). */
 export type ViewState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'cam' | 'terrain' | 'clouds' | 'time' | 'shake'
-  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'preview' | 'w' | 'hills'>;
+  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'preview' | 'w' | 'hills' | 'marks'>;
 
 /** What the view needs from the page and the rest of the game. */
 export interface ViewDeps {
   G: ViewState;
   tables: Pick<Tables, 'weapons'>;
-  net: Pick<RoomClient, 'on' | 'code' | 'turnClockLeft'>;
+  net: Pick<RoomClient, 'on' | 'code' | 'seat' | 'turnClockLeft'>;
   MATCH: Pick<MatchState, 'myTurn'>;
   replay: Pick<Replay, 'shooter' | 'flying'>;
   FX: FxEngine | null;
@@ -133,6 +133,8 @@ export function createView(deps: ViewDeps) {
       turnUnit: turnTank(), online: net.on,
       aim: aiming ? { unit: t, length: aimArmLength(shownPower(t)) } : null,
       booms: G.booms, fx: G.fx, shells: G.shells, replay: flying, ghosts: flyOn, sparks: G.parts,
+      // A line mark is its gunner's alone: the seat in a room, the player's unit in solo.
+      marks: G.marks.shown(net.on ? net.seat : G.tanks.findIndex(u => u.isPlayer)),
       wind: G.wind,
       textScale: textScale(),
       turnClock: left !== null && left <= CLOCK_SHOW_S && left > 0 ? { left, myTurn: MATCH.myTurn } : null,

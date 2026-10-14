@@ -68,13 +68,7 @@ function basin(terrain: readonly number[], xi: number, level: number): { x0: num
    a slope down to an edge). server/earth.php room_pour_level is the same. */
 export function pourLevel(terrain: readonly number[], x: number, volume: number): Pool {
   const n = terrain.length;
-  let xi = Math.round(Math.max(0, Math.min(n - 1, x)));
-  for (;;) {
-    const l = xi > 0 ? terrain[xi - 1]! : -Infinity, r = xi < n - 1 ? terrain[xi + 1]! : -Infinity;
-    if (r > terrain[xi]! && r >= l) xi++;
-    else if (l > terrain[xi]!) xi--;
-    else break;
-  }
+  const xi = pourBottom(terrain, x);
   if (!(volume > 0)) return { level: terrain[xi]!, x0: xi, x1: xi - 1 };
   let lo = Infinity, hi = FLOOR;
   for (const y of terrain) if (y < lo) lo = y;
@@ -86,6 +80,18 @@ export function pourLevel(terrain: readonly number[], x: number, volume: number)
   }
   const b = basin(terrain, xi, hi);
   return b.edge ? { level: hi, x0: xi, x1: xi - 1 } : { level: hi, x0: b.x0, x1: b.x1 };
+}
+/* The column liquid poured at x runs down to: column by column to the lower
+   neighbour (the right one on a tie), to the bottom of its dip. */
+export function pourBottom(terrain: readonly number[], x: number): number {
+  const n = terrain.length;
+  let xi = Math.round(Math.max(0, Math.min(n - 1, x)));
+  for (;;) {
+    const l = xi > 0 ? terrain[xi - 1]! : -Infinity, r = xi < n - 1 ? terrain[xi + 1]! : -Infinity;
+    if (r > terrain[xi]! && r >= l) xi++;
+    else if (l > terrain[xi]!) xi--;
+    else return xi;
+  }
 }
 /* Liquid dirt sets: every column of the pool rises to its level (none is
    lowered). server/earth.php room_fill_pour is the same. */

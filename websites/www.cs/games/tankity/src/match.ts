@@ -220,6 +220,7 @@ export function createMatch(deps: MatchDeps) {
     sound: name => sfx.play(name),
     shake: k => { G.shake = Math.max(G.shake || 0, k); },
     get show() { return G.earth; },
+    say: text => say(text, 'info'),
   };
   /* How a napalm pool plays on the battlefield (fire-fx.ts). */
   const fireFx: FireFxDeps = {
@@ -265,7 +266,7 @@ export function createMatch(deps: MatchDeps) {
         const kick = fxImpact(G.fx, e.wkey, s.x, s.y, s.r);
         G.shake = Math.max(G.shake || 0, kick !== undefined ? kick : s.hits.shake);
         showHits(s.hits);
-      } else if (e.kind === 'earth') playEarthOp(e.op, G.terrain, e.before, e.x0, e.x1, earthFx);
+      } else if (e.kind === 'earth') playEarthOp(e.op, G.terrain, e.before, e.x0, e.x1, earthFx, (tables.weapons[e.op.w]?.dmg || 0) > 0);
     }
     G.settleT = TUNE.settleTime;
     advance('shellsLanded');
@@ -317,7 +318,7 @@ export function createMatch(deps: MatchDeps) {
           advance('shellsLanded');
         }
       } else if (e.kind === 'earth') {
-        playEarthOp(e.op, G.terrain, e.before, e.x0, e.x1, earthFx);
+        playEarthOp(e.op, G.terrain, e.before, e.x0, e.x1, earthFx, (tables.weapons[e.op.w]?.dmg || 0) > 0);
         G.settleT = TUNE.settleTime;
         advance('shellsLanded');
       } else if (e.kind === 'fire') {

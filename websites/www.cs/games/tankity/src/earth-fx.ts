@@ -3,6 +3,7 @@
  * firing range (preview.ts): the impact and specials it plays, the shake, the
  * sound, and the ground's picture settling (earth-show.ts). The ground itself
  * has already moved (earth.ts applyEarth); `before` is how it was. */
+import { pourBottom } from './earth.ts';
 import type { EarthOp } from './earth.ts';
 import type { EarthShow } from './earth-show.ts';
 
@@ -12,25 +13,41 @@ export interface EarthFxDeps {
   sound(name: 'boom' | 'thud'): void;
   shake(k: number): void;
   show: EarthShow | null;
+  /** A line for the log (the solo war's and the room's say). */
+  say(text: string): void;
 }
+/** What the log says when liquid dirt runs off the field and leaves no pool. */
+export const SPILL_LINE = 'The liquid dirt runs off the field.';
 
 /** The smallest a pour's splash is sized, px. */
 export const POUR_SPLASH_MIN = 12;
 
-/* Plays op, which moved `terrain` from `before` over columns x0..x1. */
-export function playEarthOp(op: EarthOp, terrain: readonly number[], before: readonly number[], x0: number, x1: number, d: EarthFxDeps): void {
+/* Plays op, which moved `terrain` from `before` over columns x0..x1. `hurt`:
+   the gun's burst did damage (Dirt Charge), so its blast has played the
+   impact and the boom already, and only the mound is left to show. */
+export function playEarthOp(op: EarthOp, terrain: readonly number[], before: readonly number[], x0: number, x1: number, d: EarthFxDeps, hurt = false): void {
   const at = (x: number): number => terrain[Math.max(0, Math.min(terrain.length - 1, Math.round(x)))]!;
   if (op.t === 'dirt') {
-    d.sound('thud');
-    const kick = d.fxImpact(op.w, op.x, op.y, op.r);
-    d.shake(kick !== undefined ? kick : Math.min(0.6, op.r / 100));
+    if (!hurt) {
+      d.sound('thud');
+      const kick = d.fxImpact(op.w, op.x, op.y, op.r);
+      d.shake(kick !== undefined ? kick : Math.min(0.6, op.r / 100));
+    }
     d.show && d.show.begin(before, x0, x1, 'dirt', Math.round(op.x));
   } else if (op.t === 'pour') {
     d.sound('thud');
     const level = at(op.x);
     d.fxImpact(op.w, op.x, before[Math.round(op.x)] ?? level, Math.max(POUR_SPLASH_MIN, (x1 - x0) / 2));
-    if (x1 >= x0) d.fxSpecial(op.w, 'pour', x0, level, 0, x1 - x0);
-    d.show && d.show.begin(before, x0, x1, 'pour', op.x);
+    if (x1 >= x0) {
+      d.fxSpecial(op.w, 'pour', x0, level, 0, x1 - x0);
+      d.show && d.show.begin(before, x0, x1, 'pour', op.x);
+    } else {
+      // No pool: it ran off the field, past the edge on the side its dip opens to.
+      const n = terrain.length, low = pourBottom(before, op.x);
+      const edge = low === 0 || (low !== n - 1 && low < n / 2) ? 0 : n - 1;
+      d.fxSpecial(op.w, 'pour', edge === 0 ? 0 : edge - SPILL_LEN, at(edge), 0, SPILL_LEN);
+      d.say(SPILL_LINE);
+    }
   } else if (op.t === 'slump') {
     d.sound('boom');
     const kick = d.fxImpact(op.w, op.x, at(op.x), op.r);
@@ -43,6 +60,8 @@ export function playEarthOp(op: EarthOp, terrain: readonly number[], before: rea
     d.shake(kick !== undefined ? kick : 0.35);
   }
 }
+/** px of the field's edge a spill of liquid dirt plays along. */
+const SPILL_LEN = 12;
 /** Every this many steps a burrow plays its dig special at its head. */
 export const DIG_FX_EVERY = 3;
 /* A digger touching down (step 0: its impact, sized by the trench, when it

@@ -9,7 +9,7 @@ import type { GameState, GameTank, MatchState, Tables } from './game-types.ts';
 import type { FxEngine } from './fx/types.ts';
 import { CLOCK_SHOW_S } from './net.ts';
 import type { RoomClient } from './net.ts';
-import { PV_W, PV_H, PV_FOE_HP } from './preview.ts';
+import { PV_W, PV_H, PV_FOE_HP, previewGround } from './preview.ts';
 import { fitField, visibleWorld } from './field.ts';
 import { createGhosts } from './ghosts.ts';
 import { createRenderer } from './render.ts';
@@ -140,7 +140,7 @@ export function createView(deps: ViewDeps) {
       textScale: textScale(),
       turnClock: left !== null && left <= CLOCK_SHOW_S && left > 0 ? { left, myTurn: MATCH.myTurn } : null,
       preview: pv && pv.cv ? {
-        canvas: pv.cv as HTMLCanvasElement, width: PV_W, height: PV_H, terr: pv.terr, sx: pv.sx, tx: pv.tx, sy: pv.sy, ty: pv.ty,
+        canvas: pv.cv as HTMLCanvasElement, width: PV_W, height: PV_H, terr: previewGround(pv), sx: pv.sx, tx: pv.tx, sy: pv.sy, ty: pv.ty,
         angle: pv.angle, foeHp: pv.foeHp, foeHpMax: PV_FOE_HP, wkey: pv.wkey, wind: pv.wind,
         booms: pv.booms, shells: pv.shells, fx: pv.fx, result: pv.result, resultT: pv.resultT, trace: pv.trace,
       } : null,

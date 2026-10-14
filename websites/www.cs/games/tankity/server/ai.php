@@ -344,7 +344,15 @@ function room_ai_harm(array $room, array $self, array $target, string $wkey, arr
     if ($e['self'] > 0 || $e['near']) {
         return -INF;
     }
-    return min((float) $target['hp'], $b['harm'] + $e['harm']);
+    return room_ai_with_burial($target, $b['harm'] + $e['harm'], $e['bury']);
+}
+/* Harm capped at the target's armor, plus what burying it is worth, never
+ * enough to pass for a kill (src/ai.ts withBurial). */
+function room_ai_with_burial(array $target, float $hit, float $bury): float
+{
+    $hp = (float) $target['hp'];
+    $h = min($hp, $hit);
+    return $h >= $hp || $bury <= 0 ? $h : min($hp - 1, $h + $bury);
 }
 /* The damage gun $wkey landing at $land would do to $self, its own gunner,
  * with no margin (src/ai.ts aiSelfHarm). */
@@ -435,7 +443,8 @@ function room_ai_target_harm(array $room, array $self, array $target, string $wk
     if (room_weapons()[$wkey]['effect'] === 'napalm') {
         return room_ai_fire_harm($room, $self, $wkey, $land)['harm'];
     }
-    return min((float) $target['hp'], room_ai_bursts($room, $self, $target, $wkey, $land)['harm'] + room_ai_earth_harm($room, $self, $target, $wkey, $land)['harm']);
+    $e = room_ai_earth_harm($room, $self, $target, $wkey, $land);
+    return room_ai_with_burial($target, room_ai_bursts($room, $self, $target, $wkey, $land)['harm'] + $e['harm'], $e['bury']);
 }
 /* How far either way a napalm shell's landing is taken to stray, px, and how
  * much bigger the drone's body is taken to be, px, when it asks whether a pool
@@ -450,9 +459,10 @@ const ROOM_AI_FIRE_PAD = 8.0;
  * taken ROOM_AI_FIRE_PAD px bigger, would stand in the flames of the pool, of
  * the pools a landing ROOM_AI_FIRE_WOBBLE px either way would make, or of the
  * pool its own dip would hold (a shot that strays far enough runs down into
- * it). */
+ * it). One ground prediction (room_ai_earth_ops), as an earth harm is. */
 function room_ai_fire_harm(array $room, array $self, string $wkey, array $land): array
 {
+    room_ai_earth_ops(1);
     $w = room_weapons()[$wkey];
     $col = (float) det_round(max(0.0, min((float) (count($room['terrain']) - 1), (float) $land['x'])));
     $pool = room_fire_pool($room['terrain'], $col, (float) $w['volume'], (float) $w['flame']);
@@ -480,8 +490,19 @@ function room_ai_fire_harm(array $room, array $self, string $wkey, array $land):
     }
     return ['harm' => $harm, 'self' => $mine, 'near' => $near];
 }
-/* What burying a ground unit is worth, in armor (src/ai.ts AI_BURY). */
+/* Ground predictions made so far ($add counts more): a drone turn's cost
+ * beside its flights, which test/php/AiArcsTest.php holds to a budget
+ * (src/ai.ts earthOps). */
+function room_ai_earth_ops(int $add = 0): int
+{
+    static $n = 0;
+    $n += $add;
+    return $n;
+}
+/* What burying a ground unit is worth, in armor: ROOM_AI_BURY plus a point a
+ * px deeper, up to ROOM_AI_BURY_MAX (src/ai.ts AI_BURY). */
 const ROOM_AI_BURY = 30;
+const ROOM_AI_BURY_MAX = 70;
 /* How deep under the surface a target must end up for the burial to count. */
 const ROOM_AI_BURY_DEPTH = 12.0;
 /* What a fall of unit $u onto ground at y $ground would cost it, as the
@@ -507,21 +528,44 @@ function room_ai_drop_cost(array $room, array $u, float $ground): int
  * the same. */
 function room_ai_earth_harm(array $room, array $self, array $target, string $wkey, array $land): array
 {
+    room_ai_earth_ops(1);
     $w = room_weapons()[$wkey];
-    $t = $room['terrain'];
-    $fw = count($t);
+    $fw = count($room['terrain']);
     [$tx, $ty] = room_unit_box($target);
     [$sx, $sy] = room_unit_box($self);
     $harm = 0;
     $mine = 0;
     $near = false;
     $effect = $w['effect'];
+    // Only the ground under the target and the drone matters (src/ai.ts earthHarm).
+    $cols = [max(0, min($fw - 1, (int) det_round((float) $target['x']))), max(0, min($fw - 1, (int) det_round((float) $self['x'])))];
+    $at = [(float) $room['terrain'][$cols[0]], (float) $room['terrain'][$cols[1]]];
+    $carve = function (float $x, float $y, float $r) use (&$at, $cols, $fw): void {
+        foreach ($cols as $i => $ix) {
+            if ($ix < max(0, (int) floor($x - $r)) || $ix > min($fw - 1, (int) ceil($x + $r))) {
+                continue;
+            }
+            $dx = $ix - $x;
+            $at[$i] = min(ROOM_EARTH_FLOOR, max($at[$i], $y + sqrt(max(0.0, $r * $r - $dx * $dx)) * 0.75));
+        }
+    };
     if ($effect === 'dirt') {
-        room_add_dirt($t, (float) $land['x'], (float) $land['y'], (float) $w['radius']);
-    } elseif ($effect === 'pour') {
-        room_fill_pour($t, room_pour_level($t, det_round(max(0.0, min((float) ($fw - 1), (float) $land['x']))), (float) $w['volume']));
-    } elseif ($effect === 'slump') {
-        room_slump_ground($t, (float) $land['x'], (float) $w['radius'], (float) $w['slope'], (int) $w['passes']);
+        $r = (float) $w['radius'];
+        foreach ($cols as $i => $ix) {
+            if ($ix < max(0, (int) floor($land['x'] - $r)) || $ix > min($fw - 1, (int) ceil($land['x'] + $r))) {
+                continue;
+            }
+            $dx = $ix - $land['x'];
+            $at[$i] = max(ROOM_TOP_Y, min($at[$i], $land['y'] - sqrt(max(0.0, $r * $r - $dx * $dx))));
+        }
+    } elseif ($effect === 'pour' || $effect === 'slump') {
+        $t = $room['terrain'];
+        if ($effect === 'pour') {
+            room_fill_pour($t, room_pour_level($t, det_round(max(0.0, min((float) ($fw - 1), (float) $land['x']))), (float) $w['volume']));
+        } else {
+            room_slump_ground($t, (float) $land['x'], (float) $w['radius'], (float) $w['slope'], (int) $w['passes']);
+        }
+        $at = [(float) $t[$cols[0]], (float) $t[$cols[1]]];
     } elseif ($effect === 'dig') {
         $x = (float) $land['x'];
         $y = (float) $land['y'];
@@ -546,7 +590,7 @@ function room_ai_earth_harm(array $room, array $self, array $target, string $wke
             if ($hit) {
                 break;
             }
-            room_carve_crater($t, $x, $y, (float) $w['digR']);
+            $carve($x, $y, (float) $w['digR']);
             while (count($pts) < $heads && $i >= intdiv((count($pts) + 1) * $n + $heads - 1, $heads)) {
                 $pts[] = [$x, $y];
             }
@@ -557,7 +601,7 @@ function room_ai_earth_harm(array $room, array $self, array $target, string $wke
         $sd = (int) $w['subDmg'];
         $sr = (float) $w['subRadius'];
         foreach ($pts as [$px, $py]) {
-            room_carve_crater($t, $px, $py, $sr);
+            $carve($px, $py, $sr);
             $harm += room_ai_reach_damage($sd, room_dist($tx - $px, $ty - $py), $sr);
             $own = room_dist($sx - $px, $sy - $py);
             $mine += room_ai_reach_damage($sd, $own, $sr);
@@ -568,22 +612,23 @@ function room_ai_earth_harm(array $room, array $self, array $target, string $wke
     } else {
         $subs = room_ai_munitions($room, $self, $wkey, $land);
         if ($subs['burst']) {
-            room_carve_crater($t, (float) $land['x'], (float) $land['y'], (float) $w['radius']);
+            $carve((float) $land['x'], (float) $land['y'], (float) $w['radius']);
         }
         foreach ($subs['xs'] as $x) {
-            room_carve_crater($t, (float) $x, (float) $land['y'], (float) $subs['r']);
+            $carve((float) $x, (float) $land['y'], (float) $subs['r']);
         }
     }
-    $harm += room_ai_drop_cost($room, $target, room_surf_y($t, (float) $target['x']));
-    $mine += room_ai_drop_cost($room, $self, room_surf_y($t, (float) $self['x']));
+    $harm += room_ai_drop_cost($room, $target, $at[0]);
+    $mine += room_ai_drop_cost($room, $self, $at[1]);
+    $bury = 0.0;
     if (($effect === 'dirt' || $effect === 'pour') && $target['kind'] === 'human'
-        && !(room_surf_y($room['terrain'], (float) $target['x']) < $target['y'] - ROOM_AI_BURY_DEPTH) && room_surf_y($t, (float) $target['x']) < $target['y'] - ROOM_AI_BURY_DEPTH) {
-        $harm += ROOM_AI_BURY;
+        && !($room['terrain'][$cols[0]] < $target['y'] - ROOM_AI_BURY_DEPTH) && $at[0] < $target['y'] - ROOM_AI_BURY_DEPTH) {
+        $bury = min((float) ROOM_AI_BURY_MAX, ROOM_AI_BURY + ($target['y'] - $at[0]));
     }
-    if ($self['kind'] === 'human' && !room_buried($self, $room['terrain']) && room_surf_y($t, (float) $self['x']) < $self['y'] - ROOM_BURY_EPS) {
-        $mine += ROOM_AI_BURY;
+    if ($self['kind'] === 'human' && !room_buried($self, $room['terrain']) && $at[1] < $self['y'] - ROOM_BURY_EPS) {
+        $mine += ROOM_AI_BURY_MAX;
     }
-    return ['harm' => (float) $harm, 'self' => $mine, 'near' => $near];
+    return ['harm' => (float) $harm, 'bury' => $bury, 'self' => $mine, 'near' => $near];
 }
 /* The gun to fire once the search has found each arc's best aim ($byArc:
  * flight key => [err, a, p, land]). src/ai.ts pickGun is the same: the most
@@ -601,9 +646,14 @@ function room_ai_pick_gun(array $room, array $self, array $target, bool $glory, 
         if (!isset($harms[$k])) {
             $h = room_ai_harm($room, $self, $target, $k, $byArc[$arcOf[$k]]['land']);
             // A digger does its harm away from where it lands: it is weighed at
-            // every aim its arc searched, and fires the most harmful (the first of equals).
+            // every aim its arc searched that lands within its burrow's length
+            // of the target (no other can reach it), and fires the most
+            // harmful (the first of equals).
             if ($weapons[$k]['effect'] === 'dig') {
                 foreach ($lands[$arcOf[$k]] ?? [] as $aim) {
+                    if ($aim['land']['oob'] || abs($aim['land']['x'] - $target['x']) > $weapons[$k]['digLen']) {
+                        continue;
+                    }
                     $g = room_ai_harm($room, $self, $target, $k, $aim['land']);
                     if ($g > $h) {
                         $h = $g;

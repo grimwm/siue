@@ -8,7 +8,7 @@
  * brkLand stays in sim.ts: explode calls it, and sim.ts must not import this
  * file. */
 import { FLIGHT_STEPS, GRAV, aimLimits, beamLine, blastDamage, buried, clamp, dist, dropTime, facing, fallDamage, fieldReach, flies, flightKey, gauss, inHitBox, isGroundUnit, muzzle, powi, rad, ringDamage, ringOf, scatterVel, shotSpeed, simShot, splitPoint, splitVel, spotTaken, surfY, unitHitBox } from './sim.ts';
-import { BURY_EPS, DIG_STEP, FLOOR, addDirt, carveCrater, digHeading, fillPour, pourLevel, riotCarve, slumpGround } from './earth.ts';
+import { BURY_EPS, DIG_STEP, FLOOR, TOP_Y, digHeading, fillPour, pourLevel, riotCarve, slumpGround } from './earth.ts';
 import { burnTicks, burnTotal, firePool, inFlames } from './fire.ts';
 import { datan2, dcos, dsin } from './detmath.ts';
 import type { Arsenal, Difficulty, Rng, Tank, Weapon, World } from './sim.ts';
@@ -312,7 +312,14 @@ export function aiHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank,
   if (b.own <= b.reach * AI_SAFE_MARGIN) return -Infinity;
   const e = earthHarm(world, arsenal, self, target, wkey, land);
   if (e.self > 0 || e.near) return -Infinity;
-  return Math.min(target.hp, b.harm + e.harm);
+  return withBurial(target, b.harm + e.harm, e.bury);
+}
+/* Harm capped at the target's armor, plus what burying it is worth: never
+   enough to pass for a kill, so a gun that finishes the target beats one that
+   only buries it. server/ai.php room_ai_with_burial is the same. */
+function withBurial(target: Tank, hit: number, bury: number): number {
+  const h = Math.min(target.hp, hit);
+  return h >= target.hp || bury <= 0 ? h : Math.min(target.hp - 1, h + bury);
 }
 /* The damage gun wkey landing at land would do to self, its own gunner, with
    no margin: what decides the gun when every one would reach it.
@@ -370,7 +377,8 @@ function targetHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wk
   if (!flies(arsenal.weapons[wkey]!)) return noFlightHarm(world, arsenal, self, wkey, land);
   if (land.oob) return 0;
   if (arsenal.weapons[wkey]!.effect === 'napalm') return fireHarm(world, arsenal, self, wkey, land).harm;
-  return Math.min(target.hp, bursts(world, arsenal, self, target, wkey, land).harm + earthHarm(world, arsenal, self, target, wkey, land).harm);
+  const e = earthHarm(world, arsenal, self, target, wkey, land);
+  return withBurial(target, bursts(world, arsenal, self, target, wkey, land).harm + e.harm, e.bury);
 }
 /** How far either way a napalm shell's landing is taken to stray, px, and how
  *  much bigger the drone's body is taken to be, px, when it asks whether a pool could burn it. */
@@ -384,9 +392,11 @@ export const AI_FIRE_PAD = 8;
    taken AI_FIRE_PAD px bigger, would stand in the flames of the pool, of
    the pools a landing AI_FIRE_WOBBLE px either way would make, or of the pool
    its own dip would hold (a pool runs downhill, so a shot that strays far
-   enough fills the drone's own dip). Either is a gun not to fire.
+   enough fills the drone's own dip). Either is a gun not to fire. One
+   ground prediction (earthOps), as an earthHarm is.
    server/ai.php room_ai_fire_harm is the same. */
 export function fireHarm(world: World, arsenal: Arsenal, self: Tank, wkey: string, land: Landing): { harm: number; self: number; near: boolean } {
+  groundOps++;
   const w = arsenal.weapons[wkey]!;
   const col = Math.round(clamp(land.x, 0, world.terrain.length - 1));
   const pool = firePool(world.terrain, col, w.volume || 0, w.flame || 0);
@@ -403,8 +413,20 @@ export function fireHarm(world: World, arsenal: Arsenal, self: Tank, wkey: strin
   for (const k of [-1, 1]) near = near || inFlames(firePool(world.terrain, col + k * AI_FIRE_WOBBLE, w.volume || 0, w.flame || 0), wide);
   return { harm, self: mine, near };
 }
-/** What burying a ground unit is worth, in armor: it cannot drive, and its shells start in the dirt. */
+/* Ground predictions made so far (earthHarm and fireHarm calls): a drone turn's cost beside
+   its flights, which test/ai-search.test.mjs holds to a budget.
+   server/ai.php room_ai_earth_ops is the same count. */
+let groundOps = 0;
+export function earthOps(): number {
+  return groundOps;
+}
+/** What burying a ground unit is worth, in armor: it cannot drive, and its
+ *  shells start in the dirt, so it spends a turn digging out or shoots itself.
+ *  AI_BURY, plus a point for every px deeper than the surface, up to
+ *  AI_BURY_MAX: about a Shell's hit for a shallow burial, a Mortar's or more
+ *  for a deep one. */
 export const AI_BURY = 30;
+export const AI_BURY_MAX = 70;
 /** How deep under the surface a target must end up for the burial to count. */
 export const AI_BURY_DEPTH = 12;
 /* What a fall of unit u onto ground at y `ground` would cost it, as the
@@ -429,15 +451,38 @@ function dropCost(world: World, arsenal: Arsenal, u: Tank, ground: number): numb
    of the gunner's body (with AI_SAFE_MARGIN). server/ai.php room_ai_earth_harm
    is the same. */
 export function earthHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string, land: Landing):
-  { harm: number; self: number; near: boolean } {
+  { harm: number; bury: number; self: number; near: boolean } {
+  groundOps++;
   const w = arsenal.weapons[wkey]!;
-  const t = world.terrain.slice(), fw = t.length;
+  const fw = world.terrain.length;
   const tb = unitHitBox(target), sb = unitHitBox(self);
   let harm = 0, mine = 0, near = false;
-  if (w.effect === 'dirt') addDirt(t, land.x, land.y, w.radius);
-  else if (w.effect === 'pour') fillPour(t, pourLevel(t, Math.round(clamp(land.x, 0, fw - 1)), w.volume || 0));
-  else if (w.effect === 'slump') slumpGround(t, land.x, w.radius, w.slope || 1, w.passes || 1);
-  else if (w.effect === 'dig') {
+  // Only the ground under the target and the drone matters: a crater, dirt or
+  // a trench is worked out at those two columns alone (the same arithmetic as
+  // carveCrater and addDirt there); a pour or a slump moves the whole ground,
+  // so it runs on a copy.
+  const ct = clamp(Math.round(target.x), 0, fw - 1), cs = clamp(Math.round(self.x), 0, fw - 1);
+  const at = [world.terrain[ct]!, world.terrain[cs]!];
+  const carve = (x: number, y: number, r: number): void => {
+    [ct, cs].forEach((ix, i) => {
+      if (ix < Math.max(0, Math.floor(x - r)) || ix > Math.min(fw - 1, Math.ceil(x + r))) return;
+      const dx = ix - x;
+      at[i] = Math.min(FLOOR, Math.max(at[i]!, y + Math.sqrt(Math.max(0, r * r - dx * dx)) * 0.75));
+    });
+  };
+  if (w.effect === 'dirt') {
+    [ct, cs].forEach((ix, i) => {
+      if (ix < Math.max(0, Math.floor(land.x - w.radius)) || ix > Math.min(fw - 1, Math.ceil(land.x + w.radius))) return;
+      const dx = ix - land.x;
+      at[i] = Math.max(TOP_Y, Math.min(at[i]!, land.y - Math.sqrt(Math.max(0, w.radius * w.radius - dx * dx))));
+    });
+  } else if (w.effect === 'pour' || w.effect === 'slump') {
+    const t = world.terrain.slice();
+    if (w.effect === 'pour') fillPour(t, pourLevel(t, Math.round(clamp(land.x, 0, fw - 1)), w.volume || 0));
+    else slumpGround(t, land.x, w.radius, w.slope || 1, w.passes || 1);
+    at[0] = t[ct]!;
+    at[1] = t[cs]!;
+  } else if (w.effect === 'dig') {
     let x = land.x, y = land.y;
     const [ux, uy] = digHeading(land.vx || 0, land.vy || 0);
     const n = Math.ceil((w.digLen || 0) / DIG_STEP), W = w.warheads || 0, pts: [number, number][] = [];
@@ -447,13 +492,13 @@ export function earthHarm(world: World, arsenal: Arsenal, self: Tank, target: Ta
       x = nx;
       y = ny;
       if (world.tanks.some(u => u.hp > 0 && u !== self && inHitBox(u, nx, ny))) break;
-      carveCrater(t, x, y, w.digR || 0, FLOOR);
+      carve(x, y, w.digR || 0);
       while (pts.length < W && i >= Math.floor(((pts.length + 1) * n + W - 1) / W)) pts.push([x, y]);
     }
     while (pts.length < W) pts.push([x, y]);
     const sd = w.subDmg || w.dmg, sr = w.subRadius || w.radius;
     for (const [px, py] of pts) {
-      carveCrater(t, px, py, sr, FLOOR);
+      carve(px, py, sr);
       harm += reachDamage(sd, dist(tb.cx - px, tb.cy - py), sr);
       const own = dist(sb.cx - px, sb.cy - py);
       mine += reachDamage(sd, own, sr);
@@ -461,15 +506,16 @@ export function earthHarm(world: World, arsenal: Arsenal, self: Tank, target: Ta
     }
   } else {
     const subs = munitions(world, arsenal, self, wkey, land);
-    if (subs.burst) carveCrater(t, land.x, land.y, w.radius, FLOOR);
-    for (const x of subs.xs) carveCrater(t, x, land.y, subs.r, FLOOR);
+    if (subs.burst) carve(land.x, land.y, w.radius);
+    for (const x of subs.xs) carve(x, land.y, subs.r);
   }
-  harm += dropCost(world, arsenal, target, surfY(t, target.x));
-  mine += dropCost(world, arsenal, self, surfY(t, self.x));
+  harm += dropCost(world, arsenal, target, at[0]!);
+  mine += dropCost(world, arsenal, self, at[1]!);
+  let bury = 0;
   if ((w.effect === 'dirt' || w.effect === 'pour') && isGroundUnit(target)
-    && !(surfY(world.terrain, target.x) < target.y - AI_BURY_DEPTH) && surfY(t, target.x) < target.y - AI_BURY_DEPTH) harm += AI_BURY;
-  if (isGroundUnit(self) && !buried(self, world.terrain) && surfY(t, self.x) < self.y - BURY_EPS) mine += AI_BURY;
-  return { harm, self: mine, near };
+    && !(world.terrain[ct]! < target.y - AI_BURY_DEPTH) && at[0]! < target.y - AI_BURY_DEPTH) bury = Math.min(AI_BURY_MAX, AI_BURY + (target.y - at[0]!));
+  if (isGroundUnit(self) && !buried(self, world.terrain) && at[1]! < self.y - BURY_EPS) mine += AI_BURY_MAX;
+  return { harm, bury, self: mine, near };
 }
 /* A planning arc's best aim from the search, and where it lands. */
 interface ArcAim {
@@ -495,9 +541,13 @@ function pickGun(world: World, arsenal: Arsenal, t: Tank, target: Tank, glory: b
     if (h === undefined) {
       h = aiHarm(world, arsenal, t, target, k, byArc.get(arcOf.get(k)!)!.land);
       // A digger does its harm away from where it lands: it is weighed at
-      // every aim its arc searched, and fires the most harmful (the first of equals).
-      if (arsenal.weapons[k]!.effect === 'dig') {
+      // every aim its arc searched that lands within its burrow's length of
+      // the target (no other can reach it), and fires the most harmful (the
+      // first of equals).
+      const w = arsenal.weapons[k]!;
+      if (w.effect === 'dig') {
         for (const aim of landsOf.get(arcOf.get(k)!) || []) {
+          if (aim.land.oob || Math.abs(aim.land.x - target.x) > (w.digLen || 0)) continue;
           const g = aiHarm(world, arsenal, t, target, k, aim.land);
           if (g > h) {
             h = g;

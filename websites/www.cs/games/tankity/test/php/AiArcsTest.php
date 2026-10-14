@@ -193,9 +193,14 @@ final class AiArcsTest extends TestCase
         $room = self::harmRoom(100.0, 420.0);
         [$self, $target] = $room['tanks'];
         $land = ['x' => 420.0, 'y' => 400.0, 'oob' => false];
-        $this->assertSame((float) ROOM_AI_BURY, room_ai_earth_harm($room, $self, $target, 'dirtball', $land)['harm']);
+        // Dirt Ball's disc tops out 35 px over the hull: a burial worth ROOM_AI_BURY + 35, capped.
+        $this->assertSame(min((float) ROOM_AI_BURY_MAX, ROOM_AI_BURY + 35.0), room_ai_earth_harm($room, $self, $target, 'dirtball', $land)['bury']);
         $room['tanks'][1]['kind'] = 'ai';
-        $this->assertSame(0.0, room_ai_earth_harm($room, $self, $room['tanks'][1], 'dirtball', $land)['harm']);
+        $this->assertSame(0.0, room_ai_earth_harm($room, $self, $room['tanks'][1], 'dirtball', $land)['bury']);
+        // Never enough to pass for a kill: a 20-armor target scores 19 at most.
+        $room['tanks'][1]['kind'] = 'human';
+        $room['tanks'][1]['hp'] = 20;
+        $this->assertSame(19.0, room_ai_with_burial($room['tanks'][1], 0.0, 65.0));
     }
 
     /** The planning flights one drone turn costs with a full round-9 rack (three
@@ -217,9 +222,47 @@ final class AiArcsTest extends TestCase
                             's' => $s, 'ammo' => room_ai_rack(9)],
                     ]];
                 $before = room_sim_flights();
+                $ops = room_ai_earth_ops();
                 room_ai_choose($room, $room['tanks'][1]);
                 $this->assertLessThanOrEqual(440, room_sim_flights() - $before, "$s seed $seed");
+                // Ground predictions beside the flights (test/ai-search.test.mjs holds the browser to the same 240).
+                $this->assertLessThanOrEqual(240, room_ai_earth_ops() - $ops, "$s seed $seed: ground predictions");
             }
         }
+    }
+
+    /** A wall-clock backstop beside the counted budgets: a full round-9 rack's
+     *  turns cost little more than the same rack's without the earth guns,
+     *  both measured in this run (so a busy machine slows both alike), summed
+     *  over every strategy so a slow strategy's turns show. */
+    public function testTheEarthGunsAddLittleToADroneTurnsTime(): void
+    {
+        $terrain = [];
+        for ($x = 0; $x < 720; $x++) {
+            $terrain[] = 330 + 40 * det_sin($x * 2 * M_PI / 260);
+        }
+        $full = room_ai_rack(9);
+        $plain = array_filter($full, fn($k) => !in_array(room_weapons()[$k]['effect'], ['dirt', 'pour', 'dig', 'riot', 'slump'], true), ARRAY_FILTER_USE_KEY);
+        $total = function (array $rack) use ($terrain): float {
+            $ms = [];
+            foreach (['hunter', 'bully', 'sniper', 'avenger', 'glory', 'lobber'] as $s) {
+                foreach ([1, 2, 3] as $seed) {
+                    $room = ['terrain' => $terrain, 'wind' => 2.0, 'round' => 9, 'rng' => $seed, 'jammer' => [], 'scores' => [],
+                        'tanks' => [
+                            ['seat' => 0, 'kind' => 'human', 'x' => 150.0, 'y' => $terrain[150], 'hp' => 100, 'dirS' => 1, 'angle' => 45.0, 'power' => 50.0],
+                            ['seat' => 1, 'kind' => 'ai', 'x' => 560.0, 'y' => $terrain[560], 'hp' => 60, 'dirS' => -1, 'angle' => 45.0, 'power' => 50.0,
+                                's' => $s, 'ammo' => $rack],
+                        ]];
+                    $t0 = hrtime(true);
+                    room_ai_choose($room, $room['tanks'][1]);
+                    $ms[] = (hrtime(true) - $t0) / 1e6;
+                }
+            }
+            return array_sum($ms);
+        };
+        $total($full); // warm up
+        $base = min($total($plain), $total($plain));
+        $earth = min($total($full), $total($full));
+        $this->assertLessThan(1.25 * $base, $earth, sprintf('a full rack\'s turns take %.1f ms, the rack without the earth guns %.1f ms', $earth, $base));
     }
 }

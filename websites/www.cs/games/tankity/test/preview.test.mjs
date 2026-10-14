@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildArsenal, stepBallistic, shotSpeed, GRAV, FLAT_GRAV } from '../src/sim.ts';
 import {
-  PV_W, PV_H, PV_FOE_HP, PV_WIND, createPreview, stepPreview, solvePreview, previewShot, makePreviewTerrain,
+  PV_W, PV_H, PV_FOE_HP, PV_WIND, createPreview, stepPreview, solvePreview, previewShot, makePreviewTerrain, previewGround,
 } from '../src/preview.ts';
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
@@ -271,3 +271,19 @@ function run(pv, env, seconds, done = () => false) {
   check('two demos on the same frames end in the same state', pick(pa) === pick(pb));
 }
 
+
+/* ---- earth on the range settles on screen as in the war: liquid dirt flows out ---- */
+{
+  const { env } = makeEnv();
+  const pv = createPreview(arsenal.order.find(k => arsenal.weapons[k].effect === 'pour'), env, null, null);
+  run(pv, env, 12, p => p.phase === 'show');
+  let flowing = 0;
+  run(pv, env, 1, p => {
+    const shown = previewGround(p);
+    if (shown !== p.terr && shown.some((v, i) => v !== p.terr[i])) flowing++;
+    return false;
+  });
+  check('liquid dirt on the range flows out over several frames before it is the ground', flowing > 10, `${flowing} frames flowing`);
+  run(pv, env, 1.6);
+  check('then the drawn ground is the ground', previewGround(pv) === pv.terr);
+}

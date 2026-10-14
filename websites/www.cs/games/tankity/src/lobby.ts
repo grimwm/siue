@@ -3,8 +3,9 @@
  * The lobby overlay (src/ui/lobby.tsx) and what stands behind it: checking
  * the initials, the room server's dot and occupancy, the hills picker, hosting
  * and joining, the roster while the room waits, the invite link, starting the
- * match, the question before leaving one, and leaving it. A running match is
- * room.ts. The game's state, the room client and the rest arrive as deps. */
+ * match, the question before leaving one, and leaving it. Every seat taken is
+ * remembered in this browser (seats.ts): the room link, or Your games, resumes
+ * it; Step out keeps it; only Leave gives it up. A running match is room.ts. The game's state, the room client and the rest arrive as deps. */
 import type { sfx as SfxApi } from './audio.ts';
 import type { GameState, MatchState } from './game-types.ts';
 import { DIFFICULTY_NAMES } from './difficulty.ts';
@@ -17,6 +18,7 @@ import { inviteUrl, prettyRoomError } from './net.ts';
 import type { RoomClient } from './net.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
+import type { SeatStore } from './seats.ts';
 import type { KeyHintFn } from './ui/chrome.tsx';
 import { drawMapIcon } from './ui/icons.ts';
 import { renderLeave as drawLeave } from './ui/leave.tsx';
@@ -63,7 +65,8 @@ export interface LobbyDeps {
   unlock(): void;
   say(text: string, tone?: string): void;
   keyHint: KeyHintFn;
-  askNotifications(): void;
+  /** The seats this browser holds. */
+  seats: SeatStore;
   netEvent(e: RoomEvent): void;
   seatName(seat: number): string;
   closeLobbyVeil(): boolean;
@@ -87,7 +90,7 @@ export interface LobbyDeps {
 
 export function createLobby(deps: LobbyDeps) {
   const {
-    G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
+    G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, netEvent, seatName, closeLobbyVeil,
     closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, initials, initialsSaved, hideShop, paintHud, refreshNavHints, renderMenu,
     renderShop,
   } = deps;
@@ -253,12 +256,16 @@ export function createLobby(deps: LobbyDeps) {
     LOBBY.inRoom = inRoom;
     renderLobby();
   }
+  /* The seat just taken, remembered so closing the tab never gives it up. */
+  function rememberSeat(initials: string): void {
+    seats.remember({ code: net.code, seat: net.seat, token: net.token, csrf: net.csrf, initials });
+  }
   async function hostRoom(initials: string, mapId?: string | null): Promise<void> {
-    askNotifications(); // for the turn alert while this tab is hidden
     lobbySay('Raising the flag…');
     MATCH.initials = initials;
     try {
       await net.host(initials, mapId || '', G.body, difficulty.get());
+      rememberSeat(initials);
       say(`Room ${net.code} hosted. Read the code to your friends.`, 'info');
       await netRefreshRoster();
       loadOccupancy();
@@ -266,11 +273,11 @@ export function createLobby(deps: LobbyDeps) {
     } catch (err) { lobbySay(prettyRoomError(err)); }
   }
   async function joinRoom(code: string, initials: string): Promise<void> {
-    askNotifications(); // for the turn alert while this tab is hidden
     lobbySay('Knocking…');
     MATCH.initials = initials;
     try {
       await net.join(code, initials, G.body);
+      rememberSeat(initials);
       say(`Joined room ${net.code} as ${initials}.`, 'info');
       await netRefreshRoster();
       netLobbyWatch();
@@ -340,14 +347,72 @@ export function createLobby(deps: LobbyDeps) {
       lobbySay('Copy is blocked here. The invite link is in the box above; copy it by hand.');
     }
   }
-  /* A friend arriving on ?code=XXXX lands with the code already filled in. */
+  /* ?code=XXXX: a seat this browser holds there is resumed; otherwise a
+     friend arriving on the invite lands with the code already filled in. */
   function maybeApplyInviteCode(): void {
     if (typeof location === 'undefined' || !location.search) return;
     const m = /[?&]code=([A-Za-z0-9]{4})/.exec(location.search);
     if (!m) return;
-    LOBBY.prefill = m[1]!.toUpperCase();
+    const code = m[1]!.toUpperCase();
+    if (seats.get(code)) { void resumeRoom(code); return; }
+    LOBBY.prefill = code;
     renderLobby();
     openLobby();
+  }
+  /* Back into a room this browser holds a seat in: its lobby opens on the
+     roster, or its running match starts with the room's past as history (no
+     replay). A room the server no longer has, or a seat it no longer knows,
+     is forgotten. False when nothing was resumed. */
+  async function resumeRoom(code: string): Promise<boolean> {
+    const s = seats.get(code);
+    if (!s) return false;
+    if (net.code === code) {
+      // Already this room: show it.
+      if (net.on) closeTitle(); else await openLobby();
+      return true;
+    }
+    if (net.code) netStepOut(true);
+    net.resume(s);
+    MATCH.initials = s.initials;
+    let room: RoomSnapshot;
+    try {
+      room = await net.getState();
+    } catch (err) {
+      net.detach();
+      if (/no such room/.test(String((err as Error)?.message || err))) {
+        seats.forget(code);
+        await openLobby();
+        lobbySay(`Room ${code} has closed.`);
+      } else {
+        await openLobby();
+        lobbySay(prettyRoomError(err));
+      }
+      return false;
+    }
+    if (!room.you) {
+      // The room is there but holds no seat for this token: given to a drone.
+      net.detach();
+      seats.forget(code);
+      await openLobby();
+      lobbySay(`Your seat in room ${code} is gone.`);
+      return false;
+    }
+    net.seat = room.you.seat;
+    if (room.csrf) net.csrf = room.csrf;
+    net.seats = room.seats || [];
+    net.hostSeat = room.hostSeat;
+    rememberSeat(s.initials);
+    if (room.phase === 'lobby') {
+      // Who rolled in before this visit is history: the watch tells only what comes next.
+      lobbyTold.code = code;
+      lobbyTold.seq = (room.events || []).reduce((m, e) => Math.max(m, e.seq || 0), 0);
+      await openLobby();
+      netRenderRoster(room);
+      return true;
+    }
+    lobbyTold.code = code; lobbyTold.seq = 0;
+    startNetMatch(room);
+    return true;
   }
   function netRenderRoster(room: RoomSnapshot | null): void {
     LOBBY.inRoom = true;
@@ -418,8 +483,10 @@ export function createLobby(deps: LobbyDeps) {
     drawLeave(veil, {
       keyHint,
       title: 'Leave this room?',
-      text: 'The drone battery takes your seat and the match goes on without you. You head back to the title card.',
+      text: 'Step out keeps your seat: a drone fires for you when your turn runs out, and Your games brings you back. '
+        + 'Leave gives the seat to the drone battery for good.',
       onStay: closeLeaveVeil,
+      onStepOut: () => { closeLeaveVeil(); netStepOut(); },
       onLeave: confirmLeave,
     });
   }
@@ -463,9 +530,31 @@ export function createLobby(deps: LobbyDeps) {
     hideShop();
     void openLobby();
   }
+  /* Gives the seat up: the server hears it and this browser forgets it. */
   function netLeave(quiet?: boolean): void {
     const wasOn = net.on;
+    const code = net.code;
     net.leave(); // tells the server, stops both polls, clears the session
+    seats.forget(code);
+    dropRoom();
+    if (wasOn && !quiet) {
+      say('Back from the room. The battery takes your seat there.', 'info');
+      backToTitle();
+    }
+  }
+  /* Steps out: the seat waits in the room (a drone fires for it when its
+     turn runs out) and stays in Your games; nobody is told. */
+  function netStepOut(quiet?: boolean): void {
+    const code = net.code;
+    net.detach();
+    dropRoom();
+    if (!quiet && code) {
+      say(`Stepped out of room ${code}. Your seat waits; Your games brings you back.`, 'info');
+      backToTitle();
+    }
+  }
+  /* What leaving and stepping out both clear on this page. */
+  function dropRoom(): void {
     replay.clear(); MATCH.pendingRoom = null; MATCH.myTurn = false; MATCH.lastPhase = ''; MATCH.lastTurn = -1; MATCH.lastRound = -1;
     MATCH.out = false; MATCH.outShown = false; MATCH.lastRoom = null;
     END.buttons = 'solo'; END.board = null; END.filed = null;
@@ -475,13 +564,9 @@ export function createLobby(deps: LobbyDeps) {
     closeLeaveVeil();
     closeOverlays();
     syncLeaveButtons();
-    if (wasOn && !quiet) {
-      say('Back from the room. The battery takes your seat there.', 'info');
-      backToTitle();
-    }
   }
   return {
     renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-    netLeave, netAgain, netBackToLobby,
+    netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby,
   };
 }

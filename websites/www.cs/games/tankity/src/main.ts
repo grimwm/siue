@@ -63,6 +63,7 @@ import { createMenu } from './menu.ts';
 import { createTitle } from './title.ts';
 import { difficultySetting } from './difficulty.ts';
 import { initialsPref } from './initials.ts';
+import { createSeatStore } from './seats.ts';
 import { browserStorage } from '../../_kit/ports.browser.ts';
 import { exitApp, enterFullscreen, browserAppEnv, EXIT_HINT, holdEscape, topKeyLock } from '../../_kit/app.ts';
 import { pref, text } from '../../_kit/prefs.ts';
@@ -432,6 +433,9 @@ const difficulty = difficultySetting(browserStorage());
    filed scores carry it. */
 const savedInitials = initialsPref(browserStorage(), Math.random);
 const getInitials = (): string => savedInitials.get();
+/* The room seats this browser holds (src/seats.ts): closing the tab keeps
+   them; the room link and Your games resume them. */
+const seats = createSeatStore(browserStorage(), () => Date.now());
 /* The solo match (src/match.ts): dealing, turns, blasts, the drone's shot, the end veil. A dependency
    on a module wired further down is passed as an arrow, so it resolves when it is called. */
 /* Matches are dealt at the width the landscape box gives (spec 6.6). */
@@ -476,9 +480,9 @@ const {
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving. */
 const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-  netLeave, netAgain, netBackToLobby,
+  netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby,
 } = createLobby({
-  G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
+  G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, netEvent, seatName, closeLobbyVeil,
   closeOverlays, closePreview, endTutorial, hideShop, initials: savedInitials, initialsSaved: () => renderTitle(), paintHud, refreshNavHints,
   renderMenu: () => renderMenu(),
   closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
@@ -750,7 +754,6 @@ function init(): void {
   };
   window.addEventListener('pointerdown', kickAudio, true);
   window.addEventListener('keydown', kickAudio, true);
-  window.addEventListener('pagehide', () => net.sendLeave());
   window.addEventListener('resize', refreshNavHints);
   window.addEventListener('resize', placeLogBelowStatus);
   placeLogBelowStatus();
@@ -874,10 +877,11 @@ function menuFocus(open: boolean): void {
   const to = open ? $('menu-close') : titleOpen() ? $('title-settings') : $('btn-menu');
   if (to && to.focus) to.focus();
 }
-/* Menu → Quit: the match ends (a room is left quietly) and the page returns
-   to the title card over the demo; an installed app then closes where it may. */
+/* Menu → Quit: the match ends and the page returns to the title card over the
+   demo; an installed app then closes where it may. A room is stepped out of,
+   like closing the tab: the seat waits there. */
 async function quitGame(): Promise<void> {
-  if (net.on) netLeave(true);
+  if (net.on) netStepOut(true);
   endTutorial(tutorialActive());
   backToTitle();
   say('You left the match.', 'info');

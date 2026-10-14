@@ -494,6 +494,22 @@ function gunTiles(n = 10, loaded = 0) {
   check('leave-stay-calls-back', calls.stay === 1 && calls.leave === 0);
   click(go);
   check('leave-go-calls-back', calls.leave === 1 && calls.stay === 1);
+  check('leave-no-step-out-without-a-handler', !byId(card, 'leave-step'));
+}
+// Step out keeps the seat: the veil offers it when the game passes onStepOut.
+{
+  const veil = makeEl('leave-veil');
+  veil.hidden = false;
+  const calls = { stay: 0, leave: 0, step: 0 };
+  renderLeave(veil, {
+    keyHint, title: 'Leave this room?', text: 'Step out keeps your seat; Your games brings you back.',
+    onStay: () => { calls.stay++; }, onLeave: () => { calls.leave++; }, onStepOut: () => { calls.step++; },
+  });
+  const card = veil.children[0];
+  const step = byId(card, 'leave-step');
+  check('leave-step-out-button', !!step && text(step) === 'Step out' && /seat/.test(text(byId(card, 'leave-text'))));
+  click(step);
+  check('leave-step-out-calls-back', calls.step === 1 && calls.leave === 0 && calls.stay === 0);
 }
 
 // ---- radio log ----

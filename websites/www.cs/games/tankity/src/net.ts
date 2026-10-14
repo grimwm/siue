@@ -3,11 +3,15 @@
  * Everything between the page and rooms.php that is not drawing: the
  * transport (one fetcher for every call, the 429 retry), the session (code,
  * seat, token, the event cursor), polling, the act/buy/ready/leave senders,
- * the turn and shop clocks, and the decisions about a replay queue that has
+ * the list of a browser's rooms (`mine`), the turn and shop clocks, and the decisions about a replay queue that has
  * piled up (a hidden tab). What it learns reaches the page through the
  * RoomHandlers it is built with (a snapshot with the events it has not seen,
  * a reachability flip, a Ready change, an error to show); it never touches
  * the document.
+ *
+ * A session is adopted three ways: hosting, joining, or resuming a seat the
+ * browser stored (seats.ts). `detach` drops it without telling anyone (the
+ * seat waits in the room); only `leave` gives it up.
  *
  * It does not reach for the browser either: fetch, timers, the clock and the
  * leave beacon come in as a RoomEnv, so this module compiles in the DOM-free
@@ -15,10 +19,11 @@
  * main.ts builds the real RoomEnv from the page's globals. The wire types are
  * in protocol.ts. */
 import type {
-  ActBody, ErrorReply, MapInfo, MapsReply, PingReply, PostAction, PostBodies, PostReplies,
+  ActBody, ErrorReply, MapInfo, MapsReply, MineRow, PingReply, PostAction, PostBodies, PostReplies,
   RoomEvent, RoomReply, RoomSeat, RoomSnapshot, VolleyOpenerEvent,
 } from './protocol.ts';
 import type { Difficulty } from './sim.ts';
+import type { StoredSeat } from './seats.ts';
 
 /* ---------- what the client needs from its host ---------- */
 
@@ -70,7 +75,7 @@ export const RETRY_429_TRIES = 3;
 const CHARGED_ACTIONS: ReadonlySet<string> = new Set(['create', 'join']);
 const CHARGED_RETRIES_503 = 1;
 
-/** The turn clock (rooms.php ROOM_TURN_SECS): its owner is alerted with 30
+/** The turn clock (the room's turnSecs): its owner is alerted with 30
  * seconds left and everyone sees the last 10 counted down. */
 export const CLOCK_WARN_S = 30;
 export const CLOCK_SHOW_S = 10;
@@ -153,7 +158,7 @@ const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready
 type Reply = { ok?: unknown; error?: unknown } & Record<string, unknown>;
 
 export class RoomClient {
-  /** The session: filled by host/join, cleared by leave. */
+  /** The session: filled by host, join or resume, cleared by leave or detach. */
   code = '';
   seat = -1;
   token = '';
@@ -182,6 +187,8 @@ export class RoomClient {
   map: string | null = null;
   mapName = 'Random hills';
   maps: MapInfo[] = [];
+  /** The room's turn time in seconds, as the last snapshot said. */
+  turnSecs = 120;
 
   /** The Ready state the player last asked for while a request is out. */
   private readyWant: boolean | null = null;
@@ -297,7 +304,25 @@ export class RoomClient {
     if (!res.ok || !data.ok) throw new Error(String(data.error || STUMBLED));
     this.handlers.onReachable(true);
     this.needFull = false;
-    return (data as unknown as RoomReply).room;
+    const room = (data as unknown as RoomReply).room;
+    this.noteTurnSecs(room);
+    return room;
+  }
+
+  /** Every seat this browser holds, one row each in the order asked: whose
+   * turn it is there, the clocks, the players, or `gone`. Tokens travel in the
+   * body. Throws the server's line on an error reply. */
+  async mine(seats: { code: string; token: string }[]): Promise<MineRow[]> {
+    const { res, data } = await this.fetchJson('rooms.php?action=mine', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seats }),
+    });
+    if (!res.ok || !data.ok) throw new Error(String(data.error || STUMBLED));
+    this.handlers.onReachable(true);
+    return (data as unknown as PostReplies['mine']).rooms;
+  }
+
+  private noteTurnSecs(room: Partial<Pick<RoomSnapshot, 'turnSecs'>> | null | undefined): void {
+    if (room && typeof room.turnSecs === 'number') this.turnSecs = room.turnSecs;
   }
 
   /** Fills `maps` for the hills picker; an unreachable server leaves it as is. */
@@ -338,9 +363,15 @@ export class RoomClient {
     this.code = data.code; this.seat = data.seat; this.token = data.token; this.csrf = data.csrf;
   }
 
+  /** Adopts a seat this browser stored: the next poll asks as that seat. */
+  resume(s: Pick<StoredSeat, 'code' | 'seat' | 'token' | 'csrf'>): void {
+    this.forget();
+    this.code = s.code; this.seat = s.seat; this.token = s.token; this.csrf = s.csrf;
+  }
+
   private forget(): void {
     this.code = ''; this.token = ''; this.csrf = ''; this.seat = -1; this.since = 0;
-    this.seats = []; this.hostSeat = 0;
+    this.seats = []; this.hostSeat = 0; this.turnSecs = 120;
     this.dropTerrain();
   }
 
@@ -348,9 +379,9 @@ export class RoomClient {
     this.terrain = null; this.terrainRev = 0; this.needFull = false;
   }
 
-  /** Tells the server this seat is gone, so an emptied room frees its slot at
-   * once instead of after the idle window. Best effort; sendBeacon survives a
-   * closing tab. */
+  /** Tells the server this seat is given up (the explicit Leave), so an
+   * emptied room frees its slot at once instead of after its idle limit. Best
+   * effort: sendBeacon, else a keepalive fetch. Closing the tab sends nothing. */
   sendLeave(): void {
     if (!this.code || !this.token) return;
     const body = JSON.stringify({ code: this.code, token: this.token, csrf: this.csrf });
@@ -365,9 +396,15 @@ export class RoomClient {
     } catch (_) { /* the idle sweep closes it anyway */ }
   }
 
-  /** Leaves: tells the server, stops both polls, and clears the session. */
+  /** Leaves: tells the server, then detaches. */
   leave(): void {
     this.sendLeave();
+    this.detach();
+  }
+
+  /** Stops both polls and clears the session, telling nobody: the seat stays
+   * this player's in the room (Step out, or switching to another room). */
+  detach(): void {
     this.stopPolling();
     this.stopLobbyWatch();
     this.on = false; this.code = ''; this.seat = -1; this.token = ''; this.csrf = ''; this.since = 0;
@@ -474,6 +511,7 @@ export class RoomClient {
       void this.refresh().finally(() => { this.refetching = false; });
       return;
     }
+    this.noteTurnSecs(room);
     const fresh = (room.events || []).filter(e => (e.seq || 0) > this.since);
     for (const e of fresh) this.since = Math.max(this.since, e.seq || 0);
     const first = !this.synced || room.resync === true;

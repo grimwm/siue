@@ -21,6 +21,8 @@ const moduleSrc = Object.fromEntries(moduleFiles.map(f => [f, read('src/' + f)])
 const src = [mainSrc, ...Object.values(moduleSrc)].join('\n');
 const audioSrc = read('src/audio.ts');
 const renderSrc = read('src/render.ts');
+// Closing the tab keeps every seat: only an explicit Leave tells the server.
+check('no-leave-on-close', !/pagehide[^\n]*sendLeave|pagehide[^\n]*leave\(/.test(mainSrc));
 
 // The game and its audio keep timers running for good; remember every one so the
 // run can end by clearing them instead of by killing the process.

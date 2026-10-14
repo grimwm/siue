@@ -104,7 +104,9 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
         'winBonus' => (int) ($room['winBonus'] ?? 0),
         'wind' => $room['wind'],
         'turn' => $room['phase'] === 'play' && count($room['tanks']) ? $room['tanks'][$room['turn']]['seat'] ?? null : null,
-        // Seconds left before the crew fires for the human whose turn it is.
+        // The room's turn time in seconds, one of the host's stops.
+        'turnSecs' => room_turn_secs($room),
+        // Seconds left before a drone fires for the human whose turn it is.
         'turnLeft' => (function () use ($room) {
             $left = room_turn_left($room);
             return $left === null ? null : round($left, 1);

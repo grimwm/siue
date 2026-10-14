@@ -430,7 +430,7 @@ function scriptYou() {
 }
 function playRoom(turn, events) {
   return fxConform(Object.assign({
-    code: 'TST1', phase: NET_SHOP ? 'shop' : 'play', round: 1, wind: 2, turn, turnLeft: NET_SHOP ? null : 120, shopLeft: NET_SHOP ? 90 : null,
+    code: 'TST1', phase: NET_SHOP ? 'shop' : 'play', round: 1, wind: 2, turn, turnSecs: 120, turnLeft: NET_SHOP ? null : 120, shopLeft: NET_SHOP ? 90 : null,
     terrain: terr720(), terrainRev: 1, hills: [40, 20, 10, 1, 2, 3, 0.004, 0.008, 0.02],
     tanks: [scriptTank(0, 100, 'abc', 'human'), scriptTank(1, 600, 'REAPER', 'ai')],
     seats: scriptSeats(), events: events || [], you: scriptYou(), csrf: 'cs0',
@@ -549,7 +549,7 @@ function lobbyRoom() {
     return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], bot: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
   });
   return fxConform(Object.assign(
-    { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], terrainRev: 1, hills: null, round: 0, wind: 0, turn: null, turnLeft: null, shopLeft: null, you: scriptYou(), csrf: 'cs0' },
+    { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], terrainRev: 1, hills: null, round: 0, wind: 0, turn: null, turnSecs: 120, turnLeft: null, shopLeft: null, you: scriptYou(), csrf: 'cs0' },
     mapFields(),
   ));
 }

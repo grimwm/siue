@@ -17,6 +17,7 @@
             "winBonus": 0,
             "wind": -5,
             "turn": 0,
+            "turnSecs": 120,
             "turnLeft": 120,
             "shopLeft": null,
             "terrainRev": 2,

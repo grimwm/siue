@@ -127,7 +127,9 @@ export interface RoomSnapshot {
   wind: number;
   /** The seat whose turn it is; null outside play. */
   turn: number | null;
-  /** Seconds before the crew fires for the human on turn; null otherwise. */
+  /** The room's turn time in seconds, one of the host's stops. */
+  turnSecs: number;
+  /** Seconds before a drone fires for the human on turn; null otherwise. */
   turnLeft: number | null;
   /** Seconds before the shop closes; null outside the shop. */
   shopLeft: number | null;
@@ -177,8 +179,10 @@ export interface JoinEvent extends EventBase { t: 'join'; seat: number; name: st
 export interface LeftEvent extends EventBase { t: 'left'; seat: number; name: string }
 /** Someone pressed Play again: the room is back in its lobby. */
 export interface AgainEvent extends EventBase { t: 'again'; seat: number }
+/** The host changed the turn time (seconds); it applies from the next turn. */
+export interface TurnTimeEvent extends EventBase { t: 'turntime'; seat: number; secs: number }
 
-/** What opens a volley: a human fires, the drone fires, or the crew fires for
+/** What opens a volley: a human fires, the drone fires, or a drone fires for
  * a human who ran the turn clock out. `x`, `a` and `pw` are where the barrel
  * stood at the shot, for the replay to ease to. */
 interface VolleyOpener<T extends string> extends EventBase {
@@ -211,7 +215,7 @@ export interface TacticEvent extends EventBase { t: 'tactic'; seat: number; s: s
 
 /** The events a snapshot carries, discriminated by `t`. */
 export type RoomEvent =
-  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent
+  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent | TurnTimeEvent
   | FireEvent | AiFireEvent | AutoEvent
   | ShotEvent | BurstEvent | HitEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
 
@@ -240,7 +244,7 @@ export type BodyKind = 'tank' | 'hover' | 'walker' | 'buggy';
  * for the whole world, `full: true`; action=state takes the same three as
  * query parameters. */
 export interface PostBodies {
-  create: { initials: string; map: string; body: string; difficulty: Difficulty };
+  create: { initials: string; map: string; body: string; difficulty: Difficulty; turn?: number };
   join: { code: string; initials: string; body: string };
   start: Record<string, never>;
   act: ActBody;
@@ -250,6 +254,8 @@ export interface PostBodies {
   body: { body: string };
   map: { map: string };
   seatmode: { seat: number; mode: 'ai' | 'open'; since?: number };
+  /** Host only, any phase; `secs` is one of the host's stops. */
+  turntime: { secs: number };
   leave: Record<string, never>;
 }
 
@@ -265,6 +271,7 @@ export interface PostReplies {
   body: RoomReply;
   map: RoomReply;
   seatmode: RoomReply;
+  turntime: RoomReply;
   leave: OkReply;
 }
 

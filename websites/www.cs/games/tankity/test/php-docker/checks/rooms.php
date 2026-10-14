@@ -116,9 +116,15 @@ $check('ping-ignores-room-lock', $pingHeld !== null && ($pingHeld['rooms']['used
     && $lockDt < 1.0, sprintf('wait=%.2fs', $lockDt));
 
 // The ceiling uses the live count, and refusals stay human.
-$second = $post('create', ['initials' => 'abc', 'difficulty' => 'HARD']);
+$second = $post('create', ['initials' => 'abc', 'difficulty' => 'HARD', 'turn' => 28800]);
 $check('create-with-an-unknown-difficulty-stores-normal', $storedDifficulty((string) ($second['code'] ?? '')) === 'normal',
     $storedDifficulty((string) ($second['code'] ?? '')));
+$storedTurn = function (string $c) {
+    [$room, $lock] = room_load($c);
+    room_unlock($lock);
+    return is_array($room) ? room_turn_secs($room) : -1;
+};
+$check('create-with-a-turn-time-stores-it', $storedTurn((string) ($second['code'] ?? '')) === 28800, (string) $storedTurn((string) ($second['code'] ?? '')));
 usleep(1100000); // respect the creation throttle before the next attempt
 $third = $post('create', ['initials' => 'def']);
 $check('cap-live', ($second['ok'] ?? false) === true && ($third['ok'] ?? false) === false,
@@ -291,8 +297,9 @@ $check('leave-room-gone', ($gone['error'] ?? '') === 'no such room', $gone['erro
 // else may; open seats field no tank; a guest takes the first free chair.
 $seatsOf = fn($r) => $r['room']['seats'] ?? [];
 $modeOf = fn($r, int $i) => $seatsOf($r)[$i]['mode'] ?? '?';
-$m2 = $post('create', ['initials' => 'sma']);
+$m2 = $post('create', ['initials' => 'sma', 'turn' => 5]);
 $c2 = (string) ($m2['code'] ?? '');
+$check('create-with-an-unknown-turn-time-stores-the-default', $storedTurn($c2) === 120, (string) $storedTurn($c2));
 $h2 = ['code' => $c2, 'token' => (string) ($m2['token'] ?? ''), 'csrf' => (string) ($m2['csrf'] ?? '')];
 $snap = $get($base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $h2['token'] . '&since=0');
 $check('lobby-four-seats', count($seatsOf($snap)) === 4 && $modeOf($snap, 0) === 'human' && $modeOf($snap, 1) === 'ai'
@@ -358,6 +365,20 @@ $check('no-join-after-start', isset($late['error']));
 usleep(300000);
 $late = $post('seatmode', $h2 + ['seat' => 2, 'mode' => 'ai']);
 $check('no-seatmode-after-start', isset($late['error']));
+
+// The turn time: only the host sets it, only to a stop, in any phase; the
+// snapshot carries it and one event says who changed it.
+usleep(300000);
+$tGuest = $post('turntime', $g3a + ['secs' => 600]);
+$check('turntime-host-only', isset($tGuest['error']) && strpos($tGuest['error'] ?? '', 'host') !== false, json_encode($tGuest));
+usleep(300000);
+$tOdd = $post('turntime', $h2 + ['secs' => 90]);
+$check('turntime-only-a-stop', isset($tOdd['error']) && strpos($tOdd['error'] ?? '', 'turn time') !== false, json_encode($tOdd));
+usleep(300000);
+$tSet = $post('turntime', $h2 + ['secs' => 600]);
+$tEvents = array_values(array_filter($tSet['room']['events'] ?? [], fn($e) => ($e['t'] ?? '') === 'turntime'));
+$check('turntime-host-sets-mid-play', ($tSet['ok'] ?? false) === true && ($tSet['room']['turnSecs'] ?? 0) === 600
+    && count($tEvents) === 1 && $tEvents[0]['secs'] === 600 && $tEvents[0]['seat'] === 0, json_encode($tSet['room']['turnSecs'] ?? $tSet));
 
 // The host walks out mid-match: the match goes on for the guest (the host's
 // tank turns drone), the room stays on the shelf, and only the last human

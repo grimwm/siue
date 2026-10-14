@@ -266,9 +266,12 @@ if ($action === 'create' && $method === 'POST') {
     $room['map'] = $map;
     // The host's setting for the whole room; nobody changes it after this.
     $room['difficulty'] = room_parse_difficulty($body['difficulty'] ?? null);
+    $turn = $body['turn'] ?? null;
+    $room['turnSecs'] = is_int($turn) && in_array($turn, ROOM_TURN_STOPS, true) ? $turn : ROOM_TURN_DEFAULT;
+    $room['actedAt'] = time();
     $token = room_rand_token();
-    // A fresh seat is present, not idle: the 90-second auto-fire rule must
-    // not mistake a guest who just sat down for one who walked away.
+    // A fresh seat is present, not idle: the turn clock must not mistake a
+    // guest who just sat down for one who walked away.
     $room['seats'][0] = room_seat_human($initials, $token, $body);
     for ($i = 1; $i < ROOM_SEATS; $i++) {
         $room['seats'][$i] = room_idle_seat($i);
@@ -335,6 +338,7 @@ if ($action === 'join' && $method === 'POST') {
     $room['seats'][$seat] = room_seat_human($initials, $token, $body);
     room_seat_economy($room, $seat);
     room_emit($room, ['t' => 'join', 'seat' => $seat, 'name' => $initials]);
+    $room['actedAt'] = time();
     if (!room_save($fh, $path, $room)) {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
@@ -385,6 +389,7 @@ function room_gate(array $body, bool $needCsrf, bool $throttle = true): array
             $room['seats'][$seat]['lastAct'] = $now;
         }
     }
+    $room['actedAt'] = time(); // a human acted; polls and timeouts never come through here
     return [$room, $fh, $path, $seat];
 }
 
@@ -410,6 +415,32 @@ if ($action === 'seatmode' && $method === 'POST') {
         room_json_out(409, ['error' => 'a player is sitting there']);
     }
     $room['seats'][$target]['mode'] = $mode;
+    if (!room_save($fh, $path, $room)) {
+        room_unlock($fh);
+        room_json_out(500, ['error' => 'store write failed']);
+    }
+    room_unlock($fh);
+    $out = room_reply_snapshot($room, $seat, $body);
+    room_json_out(200, ['ok' => true, 'room' => $out]);
+}
+
+/* The host sets the turn time in any phase; it applies from the next turn
+   (the running clock and an open shop keep theirs). */
+if ($action === 'turntime' && $method === 'POST') {
+    [$room, $fh, $path, $seat] = room_gate($body, true, false);
+    if ($seat !== room_host($room)) {
+        room_unlock($fh);
+        room_json_out(403, ['error' => 'only the host sets the turn time']);
+    }
+    $secs = $body['secs'] ?? null;
+    if (!is_int($secs) || !in_array($secs, ROOM_TURN_STOPS, true)) {
+        room_unlock($fh);
+        room_json_out(422, ['error' => 'pick one of the turn times']);
+    }
+    if ($secs !== room_turn_secs($room)) {
+        $room['turnSecs'] = $secs;
+        room_emit($room, ['t' => 'turntime', 'seat' => $seat, 'secs' => $secs]);
+    }
     if (!room_save($fh, $path, $room)) {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
@@ -490,17 +521,9 @@ if ($action === 'state') {
     }
     $token = (string) ($body['token'] ?? $_GET['token'] ?? '');
     $seat = $token !== '' ? room_find_seat($room, $token) : null;
-    if ($room['phase'] === 'play') {
-        $events = [];
-        room_advance($room, $events);
-        foreach ($events as $e) {
-            room_emit($room, $e);
-        }
-        room_settle_tanks($room);
-        room_save($fh, $path, $room);
-    } elseif ($room['phase'] === 'shop') {
-        // The shop clock runs out on whoever polls first.
-        room_shop_settle($room);
+    if ($room['phase'] === 'play' || $room['phase'] === 'shop') {
+        // A turn or shop clock that ran out is applied by whoever polls first.
+        room_tick($room);
         room_save($fh, $path, $room);
     } elseif ($seat !== null) {
         // Heartbeat: a seated browser polls state every couple of seconds, so

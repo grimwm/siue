@@ -146,7 +146,7 @@ export function planCatchUp(
 
 /** The POST actions whose reply is a room, which therefore take the delta
  * fields (since, have, full). */
-const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready', 'again', 'body', 'map', 'seatmode']);
+const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready', 'again', 'body', 'map', 'seatmode', 'turntime']);
 
 /* ---------- the client ---------- */
 

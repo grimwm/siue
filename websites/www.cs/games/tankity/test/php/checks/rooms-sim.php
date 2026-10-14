@@ -201,10 +201,10 @@ $check('ai-turns-with-two-tanks', $room['phase'] === 'play' && $room['tanks'][$r
 // The human's turn clock started on the advance above; while it runs, aiming
 // (a fresh lastAct) never resets it and the room waits.
 $left = room_turn_left($room);
-$check('turn-clock-runs', $left !== null && $left > ROOM_TURN_SECS - 5 && $left <= ROOM_TURN_SECS, 'left=' . $left);
+$check('turn-clock-runs', $left !== null && $left > ROOM_TURN_DEFAULT - 5 && $left <= ROOM_TURN_DEFAULT, 'left=' . $left);
 $room['seats'][0]['lastAct'] = microtime(true);
 $room['clock']['at'] -= 30;
-$check('turn-clock-ignores-aim', room_turn_left($room) < ROOM_TURN_SECS - 29);
+$check('turn-clock-ignores-aim', room_turn_left($room) < ROOM_TURN_DEFAULT - 29);
 $events = [];
 room_advance($room, $events);
 $check('turn-clock-waits', count($events) === 0, json_encode($events));
@@ -215,18 +215,7 @@ $aiShots = count(array_filter($events, fn($e) => $e['t'] === 'aifire'));
 $check('lone-drone-fires', $aiShots >= 1 && $aiShots <= 2, 'aifire=' . $aiShots);
 $check('turn-clock-auto-fires', count(array_filter($events, fn($e) => $e['t'] === 'auto')) === 1);
 // The next time it is the human's turn, the clock starts afresh.
-$check('turn-clock-fresh-next-turn', ($room['tanks'][$room['turn']]['kind'] ?? '') !== 'human' || room_turn_left($room) > ROOM_TURN_SECS - 5);
-
-// The crew's random gun comes from the rack: the Shell always, anything with
-// ammo, never something the round has not unlocked.
-$room['round'] = 1;
-$room['ammo'][0] = ['shell' => -1, 'buck' => 2, 'mortar' => 0, 'nuke' => 3];
-$picked = [];
-for ($i = 0; $i < 200; $i++) {
-    $picked[room_random_gun($room, 0)] = true;
-}
-ksort($picked);
-$check('random-gun-from-rack', array_keys($picked) === ['buck', 'shell'], json_encode(array_keys($picked)));
+$check('turn-clock-fresh-next-turn', ($room['tanks'][$room['turn']]['kind'] ?? '') !== 'human' || room_turn_left($room) > ROOM_TURN_DEFAULT - 5);
 
 // A guest leaving the lobby frees the chair back to a drone seat; a host
 // leaving a begun match hands the tank to the battery and the room lives on.
@@ -302,7 +291,7 @@ $lostRoom = function (int $lives) {
     return [$room, $events, $cash];
 };
 [$room, $events, $cash] = $lostRoom(3);
-$check('lost-round-opens-the-shop', $room['phase'] === 'shop' && room_shop_left($room) > ROOM_SHOP_SECS - 2, $room['phase']);
+$check('lost-round-opens-the-shop', $room['phase'] === 'shop' && room_shop_left($room) > 90 - 2, $room['phase']);
 $check('lost-round-costs-a-life-pays-nothing', $room['seats'][0]['lives'] === 2 && ($room['cash'][0] ?? 0) === $cash);
 $check('lost-round-says-so', array_column($events, 't') === ['roundlost'], json_encode(array_column($events, 't')));
 room_shop_set_ready($room, 0, true);
@@ -337,7 +326,7 @@ $flowSrc = (string) file_get_contents(TANKITY_GAME_DIR . '/src/flow.ts');
 $check('solo-and-rooms-share-the-stalemate-cap', (bool) preg_match('/WATCH_TURNS = ' . ROOM_WATCH_TURNS . ';/', $flowSrc));
 
 $room = $shopRoom();
-$check('shop-opens-with-clock', $room['phase'] === 'shop' && room_shop_left($room) > ROOM_SHOP_SECS - 2 && room_shop_left($room) <= ROOM_SHOP_SECS,
+$check('shop-opens-with-clock', $room['phase'] === 'shop' && room_shop_left($room) > 90 - 2 && room_shop_left($room) <= 90,
     $room['phase'] . ' ' . (string) room_shop_left($room));
 $snap = room_snapshot($room, 0, 0);
 $check('shop-snapshot-carries-clock-and-ready', $snap['shopLeft'] > 85 && $snap['seats'][0]['ready'] === false && $snap['seats'][2]['ready'] === false);
@@ -387,10 +376,10 @@ $check('shop-duplicate-unready-idempotent', room_shop_ready($room, 0) === false)
 
 // The clock: an expired shop starts the round whatever the ready flags say.
 $room = $shopRoom();
-$room['shop']['at'] = microtime(true) - ROOM_SHOP_SECS - 1;
+$room['shop']['at'] = microtime(true) - 90 - 1;
 $check('shop-clock-expiry-starts', room_shop_left($room) === 0.0 && room_shop_settle($room) === true && $room['phase'] === 'play');
 $room = $shopRoom();
-$room['shop']['at'] = microtime(true) - ROOM_SHOP_SECS + 5;
+$room['shop']['at'] = microtime(true) - 90 + 5;
 $check('shop-clock-running-waits', room_shop_settle($room) === false && $room['phase'] === 'shop');
 
 // A leaver does not block: the seat becomes a drone, so the remaining human's

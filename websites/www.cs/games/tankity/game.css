@@ -725,9 +725,11 @@ body { height: 100dvh; display: flex; flex-direction: column; }
 
 /* The Next song announcement: one line inside the battlefield, under the
    chatter toast (#dialogue sits at top: 8px and is under 32 px tall), clipped
-   with an ellipsis rather than wrapped. */
+   with an ellipsis rather than wrapped. It shows over the title card (5) and
+   the menu (6), since a phone's Next song is a menu row that leaves the menu
+   open; it never takes a tap. */
 .track-toast {
-  position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 2;
+  position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 7;
   max-width: calc(100% - 16px); padding: 3px 10px;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   background: rgba(12, 15, 46, 0.88); border: 1px solid var(--accent); border-radius: 999px;

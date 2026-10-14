@@ -148,6 +148,24 @@ function smallTargets() {
 /* The Next song toast, shown with a long title while a chatter line shows: it
    must sit inside the battlefield, below the chatter, on one line, and over
    neither bar nor any deck button. */
+/* The Next song toast while the menu is open (a phone's Next song is a menu
+   row): every point of it is the toast, not the menu card above it. */
+function toastOverMenu() {
+  const toast = document.getElementById('track-toast');
+  toast.textContent = '♫ Battle Theme A · cynicmusic';
+  toast.hidden = false;
+  toast.style.pointerEvents = 'auto'; // elementFromPoint passes through pointer-events: none
+  const r = toast.getBoundingClientRect();
+  const probs = [];
+  for (const [x, y] of [[r.left + 4, r.top + 4], [(r.left + r.right) / 2, (r.top + r.bottom) / 2], [r.right - 4, r.bottom - 4]]) {
+    const hit = document.elementFromPoint(x, y);
+    if (hit !== toast) probs.push(`${Math.round(x)},${Math.round(y)} is ${hit ? hit.id || hit.className || hit.tagName : 'nothing'}`);
+  }
+  toast.style.pointerEvents = '';
+  toast.hidden = true;
+  return probs;
+}
+
 function toastProblems() {
   const probs = [];
   const dlg = document.getElementById('dialogue');
@@ -248,6 +266,8 @@ for (const dev of DEVICES) {
       }
       await page.locator('#btn-menu').tap();
       await expect(page.locator('#menu-track')).toBeVisible();
+      // Next song is a menu row here and the menu stays open: the toast must show over it.
+      expect(await page.evaluate(toastOverMenu), 'track toast over the open menu').toEqual([]);
       for (const id of ['#menu-radio', '#menu-help']) {
         if (landscapePhone(dev)) await expect(page.locator(id)).toBeVisible();
         else await expect(page.locator(id)).toBeHidden();

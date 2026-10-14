@@ -145,6 +145,33 @@ function smallTargets() {
     .map(([id, r]) => `${id} ${Math.round(r.width)}×${Math.round(r.height)}`);
 }
 
+/* The Next song toast, shown with a long title while a chatter line shows: it
+   must sit inside the battlefield, below the chatter, on one line, and over
+   neither bar nor any deck button. */
+function toastProblems() {
+  const probs = [];
+  const dlg = document.getElementById('dialogue');
+  dlg.hidden = false;
+  document.getElementById('dlg-name').textContent = 'REAPER';
+  document.getElementById('dlg-line').textContent = 'Wind check: hold that barrel steady and wait for it.';
+  const toast = document.getElementById('track-toast');
+  toast.textContent = '♫ Battle Theme A (Extended Mix) · A Composer With A Long Name';
+  toast.hidden = false;
+  const r = toast.getBoundingClientRect();
+  const over = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+  const field = document.getElementById('field').getBoundingClientRect();
+  if (r.top < field.top - 0.5 || r.bottom > field.bottom + 0.5 || r.left < field.left - 0.5 || r.right > field.right + 0.5) probs.push('toast leaves the battlefield');
+  if (r.top < dlg.getBoundingClientRect().bottom - 0.5) probs.push('toast is not below the chatter');
+  if (toast.getClientRects().length > 1 || getComputedStyle(toast).whiteSpace !== 'nowrap') probs.push('toast wraps');
+  if (over(r, document.getElementById('hud-bar').getBoundingClientRect())) probs.push('toast over the status bar');
+  for (const b of document.querySelectorAll('#deck button')) {
+    if (b.getClientRects().length && over(r, b.getBoundingClientRect())) probs.push(`toast over ${b.id || b.dataset.aim}`);
+  }
+  toast.hidden = true;
+  dlg.hidden = true;
+  return probs;
+}
+
 for (const dev of DEVICES) {
   test(`${dev[0]} ${dev[1]}×${dev[2]}: solo and room bars fit, the deck fits, the page fits`, async ({ browser }) => {
     const { ctx, page } = await open(browser, dev);
@@ -153,6 +180,7 @@ for (const dev of DEVICES) {
       expect(await page.evaluate(measure), room ? 'room' : 'solo').toEqual([]);
       await page.screenshot({ path: `test-results/tankity-layout-${dev[1]}x${dev[2]}-${room ? 'room' : 'solo'}.png` });
     }
+    expect(await page.evaluate(toastProblems), 'track toast').toEqual([]);
     // The battlefield fills the screen between the bars, the ground meets both
     // edges, and the field's width is the one this device deals either way up.
     const bf = await page.evaluate(battlefield);

@@ -2,8 +2,8 @@
  * DOM-free (it is handed the element and the timers), so Node tests it. */
 import type { Timers } from '../../_kit/ports.ts';
 
-/** What a toast needs from its element. */
-export interface ToastHost { textContent: string | null; hidden: boolean }
+/** What a toast needs from its element (the DOM's hidden also takes "until-found"). */
+export interface ToastHost { textContent: string | null; hidden: boolean | string }
 
 /** "♫ Title · Author"; just "♫ Title" when no author is credited. */
 export function trackToastText(track: { file: string; title?: string; credit?: string }): string {

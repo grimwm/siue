@@ -301,6 +301,17 @@ if ($action === 'create' && $method === 'POST') {
     if ($full) {
         room_json_out(409, ['error' => "every room is taken ($max / $max). Try again later."]);
     }
+    $hostKey = room_client_hash();
+    // Like the cap, answered from a read before anything is charged; the exact
+    // count is taken under the write lock below.
+    try {
+        $hosting = room_hosted($hostKey) >= room_hosts_per_address();
+    } catch (Throwable $e) {
+        room_store_fail($e);
+    }
+    if ($hosting) {
+        room_json_out(429, ['error' => 'too many rooms hosted from here; finish or leave one first']);
+    }
     room_rate_gate();
     $initials = room_valid_initials($body['initials'] ?? null);
     if ($initials === null) {
@@ -332,7 +343,8 @@ if ($action === 'create' && $method === 'POST') {
     $token = room_rand_token();
     // A fresh seat is present, not idle: the turn clock must not mistake a
     // guest who just sat down for one who walked away.
-    $room['seats'][0] = room_seat_human($initials, $token, $body);
+    $room['seats'][0] = room_seat_human($initials, $token, $body, $hostKey);
+    $room['hostKey'] = $hostKey;
     for ($i = 1; $i < ROOM_SEATS; $i++) {
         $room['seats'][$i] = room_idle_seat($i);
     }
@@ -344,6 +356,17 @@ if ($action === 'create' && $method === 'POST') {
     // The exact cap check: two creates racing for the last place cannot both win.
     // Every failure frees the segment just allocated before answering.
     $registered = room_register($code, $max);
+    if ($registered === true) {
+        try {
+            if (room_hosted($hostKey, $code) >= room_hosts_per_address()) {
+                room_discard($lock);
+                room_json_out(429, ['error' => 'too many rooms hosted from here; finish or leave one first']);
+            }
+        } catch (PDOException $e) {
+            room_discard($lock);
+            room_store_fail($e);
+        }
+    }
     if ($registered !== true) {
         room_discard($lock);
         if ($registered === null) {
@@ -395,7 +418,7 @@ if ($action === 'join' && $method === 'POST') {
     }
     $token = room_rand_token();
     // Same as create: joining means present, so the seat starts clocked in.
-    $room['seats'][$seat] = room_seat_human($initials, $token, $body);
+    $room['seats'][$seat] = room_seat_human($initials, $token, $body, room_client_hash());
     room_seat_economy($room, $seat);
     room_emit($room, ['t' => 'join', 'seat' => $seat, 'name' => $initials]);
     $room['actedAt'] = time();

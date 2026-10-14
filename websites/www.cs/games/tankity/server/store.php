@@ -130,16 +130,21 @@ function room_decode(mixed $raw): ?array
 }
 
 /* How long a started room (play, shop, over) lasts with no human acting:
-   every human gets one turn's worth, never less than the live window. */
+   every distinct address among its humans gets one turn's worth, never less
+   than the live window. One address, however many seats it holds, cannot buy
+   itself a long hold on the room cap, so a room with fewer than two distinct
+   addresses lasts the live window whatever its turn time. A seat with no
+   recorded address (an older room) counts as its own. */
 function room_idle_limit(array $r): int
 {
-    $humans = 0;
-    foreach ($r['seats'] ?? [] as $s) {
+    $addrs = [];
+    foreach ($r['seats'] ?? [] as $i => $s) {
         if ($s['human'] ?? false) {
-            $humans++;
+            $addrs[(string) ($s['addr'] ?? '') !== '' ? 'a' . $s['addr'] : 's' . $i] = true;
         }
     }
-    return max(room_live_secs(), max(1, $humans) * room_turn_secs($r));
+    $distinct = count($addrs);
+    return $distinct < 2 ? room_live_secs() : max(room_live_secs(), $distinct * room_turn_secs($r));
 }
 
 /* When a room closes: a lobby a live window after its last touch (seated
@@ -211,6 +216,18 @@ function room_register(string $code, int $max): ?bool
     }
 }
 
+/* Unexpired rooms an address hosts, not counting $except (the room being
+   made). Under the write lock room_alloc takes, the count is exact. */
+function room_hosted(string $hostKey, string $except = '', ?int $now = null): int
+{
+    if ($hostKey === '') {
+        return 0;
+    }
+    $q = tankity_db()->prepare('SELECT COUNT(*) FROM rooms WHERE host = ? AND code <> ? AND expires >= ?');
+    $q->execute([$hostKey, $except, $now ?? time()]);
+    return (int) $q->fetchColumn();
+}
+
 /* A room as stored, read without the write lock, for a poll that changes
    nothing; null when there is none or it is idle. */
 function room_peek(string $code): ?array
@@ -252,11 +269,12 @@ function room_save($lock, string $code, array $room): bool
         return false;
     }
     try {
-        $q = $lock->db->prepare('UPDATE rooms SET data = ?, touched = ?, expires = ? WHERE code = ?');
+        $q = $lock->db->prepare('UPDATE rooms SET data = ?, touched = ?, expires = ?, host = ? WHERE code = ?');
         $q->bindValue(1, $raw, PDO::PARAM_LOB);
         $q->bindValue(2, $room['touched'], PDO::PARAM_INT);
         $q->bindValue(3, room_expires($room), PDO::PARAM_INT);
-        $q->bindValue(4, $code);
+        $q->bindValue(4, (string) ($room['hostKey'] ?? ''));
+        $q->bindValue(5, $code);
         $q->execute();
     } catch (PDOException $e) {
         room_store_fail($e);

@@ -133,4 +133,56 @@ final class RoomIdleTest extends TestCase
         $this->assertSame(50, ROOM_MAX_ROOMS);
         $this->assertStringContainsString("\nmax_rooms: 50\n", (string) file_get_contents(dirname(__DIR__, 2) . '/.config.yaml'));
     }
+
+    private function seatsFrom(array $room, array $addrs): array
+    {
+        foreach ($addrs as $i => $addr) {
+            $room['seats'][$i] = room_seat_human('P' . chr(65 + $i) . 'X', "t$i", [], $addr);
+        }
+        return $room;
+    }
+
+    /* One address makes a one-human room, picks the week, and tries to hold a
+       slot of the cap for it. */
+    public function testALoneHumanOnTheWeekSettingExpiresAfterTheLiveWindow(): void
+    {
+        $room = $this->seatsFrom($this->started('SOLO', 'play', 0, 604800, 1000), ['aaaa']);
+        $this->assertSame(1600, room_expires($room));
+    }
+
+    public function testTwoSeatsFromOneAddressExpireAfterTheLiveWindow(): void
+    {
+        $room = $this->seatsFrom($this->started('TWOS', 'play', 0, 604800, 1000), ['aaaa', 'aaaa']);
+        $this->assertSame(1600, room_expires($room));
+        $this->assertSame(1600, room_expires(array_merge($room, ['phase' => 'over'])));
+    }
+
+    public function testDistinctAddressesEarnTheirTurnsButNeverLessThanTheWindow(): void
+    {
+        $room = $this->seatsFrom($this->started('DIST', 'play', 0, 28800, 1000), ['aaaa', 'bbbb', 'aaaa']);
+        $this->assertSame(1000 + 2 * 28800, room_expires($room));
+        $room['turnSecs'] = 60;
+        $this->assertSame(1600, room_expires($room));
+    }
+
+    public function testOneAddressCannotHostMoreThanItsShare(): void
+    {
+        foreach (['H1', 'H2', 'H3', 'H4', 'H5'] as $i => $c) {
+            $room = $this->started($c . 'XX', 'play', 1, 604800, time());
+            $room['hostKey'] = 'aaaa';
+            $this->save($room);
+        }
+        $other = $this->started('OTHR', 'lobby', 1, null, time());
+        $other['hostKey'] = 'bbbb';
+        $this->save($other);
+        $this->assertSame(4, room_hosts_per_address());
+        $this->assertSame(5, room_hosted('aaaa'));
+        $this->assertSame(4, room_hosted('aaaa', 'H1XX'));
+        $this->assertSame(1, room_hosted('bbbb'));
+        $this->assertSame(0, room_hosted(''));
+        // Expired rooms stop counting: the week-long hold is gone after the window.
+        room_test_age('H1XX', 700);
+        room_test_age('H2XX', 700);
+        $this->assertSame(3, room_hosted('aaaa'));
+    }
 }

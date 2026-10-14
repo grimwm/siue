@@ -207,7 +207,8 @@ function tankity_journal_mode(string $dir, ?string $mounts = null): string
    own claim; step 5 counts each address's requests (server/rate.php), keeps
    only the rows rooms filed, and drops the old callsign tables; step 6 stores
    each room's expiry (room_expires in server/store.php) so the cap count and
-   the sweep stay plain SQL. */
+   the sweep stay plain SQL; step 7 stores the address that hosts a room, so a
+   hosting cap per address does too. */
 function tankity_schema_steps(): array
 {
     return [
@@ -247,6 +248,11 @@ function tankity_schema_steps(): array
             'ALTER TABLE rooms ADD COLUMN expires INTEGER NOT NULL DEFAULT 0',
             'UPDATE rooms SET expires = touched + 600',
             'CREATE INDEX rooms_expires ON rooms (expires)',
+        ],
+        7 => [
+            // The hashed address that hosts a room (the rate table's client key; '' for older rooms).
+            "ALTER TABLE rooms ADD COLUMN host TEXT NOT NULL DEFAULT ''",
+            'CREATE INDEX rooms_host ON rooms (host, expires)',
         ],
     ];
 }

@@ -48,6 +48,20 @@ function room_joins_per_hour(): int
     return tankity_int_setting('TANKITY_ROOM_JOINS_PER_HOUR', 'room_joins_per_hour', ROOM_JOINS_PER_HOUR);
 }
 
+// Unexpired rooms one address can host at once: a room can outlive its host's
+// attention (long turn times), so the cap on rooms is shared out by address.
+const ROOM_HOSTS_PER_ADDRESS = 4;
+/* The address a room remembers for a seat: a hash of the guard's client key,
+   so the stored room never holds an address itself. */
+function room_client_hash(): string
+{
+    return substr(hash('sha256', 'tankity-addr|' . tankity_guard()->clientKey()), 0, 16);
+}
+function room_hosts_per_address(): int
+{
+    return tankity_int_setting('TANKITY_ROOM_HOSTS_PER_ADDRESS', 'room_hosts_per_address', ROOM_HOSTS_PER_ADDRESS);
+}
+
 /* How much of its $kind allowance an address ($client, the guard's key) has
    used in the last hour: the counts of the slots that hour touches, the slot
    it began in counted whole. Seven indexed rows at most. */

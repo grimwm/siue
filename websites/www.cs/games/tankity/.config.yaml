@@ -15,6 +15,8 @@
 #                     the storage directory's filesystem)
 #   room_joins_per_hour <- TANKITY_ROOM_JOINS_PER_HOUR (rooms created and
 #                     joined, together, per address an hour; default 300)
+#   room_hosts_per_address <- TANKITY_ROOM_HOSTS_PER_ADDRESS (rooms one address
+#                     can host at once, expired ones not counted; default 4)
 # Point CONFIG_FILE at another file to load settings from elsewhere.
 max_rooms: 50
 room_live_secs: 600

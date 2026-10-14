@@ -335,9 +335,11 @@ function room_idle_seat(int $slot, string $mode = 'ai'): array
     $name = ROOM_AI_NAMES[(($slot - 1) % $n + $n) % $n]; // one name per seat, so slot 0 and slot 3 never share
     return ['human' => false, 'name' => $name, 'initials' => $name, 'lives' => 0, 'mode' => $mode === 'open' ? 'open' : 'ai'];
 }
-function room_seat_human(string $initials, string $token, array $body): array
+function room_seat_human(string $initials, string $token, array $body, string $addr = ''): array
 {
-    return ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];
+    // addr: the hashed client address that took the seat (room_idle_limit counts distinct ones).
+    $seat = ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];
+    return $addr === '' ? $seat : $seat + ['addr' => $addr];
 }
 /* Every economy slot a new human seat needs, keyed by seat. */
 function room_seat_economy(array &$room, int $seat): void

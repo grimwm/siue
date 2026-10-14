@@ -158,11 +158,6 @@ $add = function (string $group, string $name, array $in, $out, ?string $known = 
 $exact = function (string $group, string $name, array $in, $out) use (&$cases): void {
     $cases[$group][] = ['name' => $name, 'in' => $in, 'out' => $out, 'exact' => true];
 };
-/* The same, but -0 and 0 count as equal: for values PHP keeps as an int or
-   +0 where Math.round may leave -0 (a dealt or shifted wind). */
-$exactZeros = function (string $group, string $name, array $in, $out) use (&$cases): void {
-    $cases[$group][] = ['name' => $name, 'in' => $in, 'out' => $out, 'exact' => 'zeros-equal'];
-};
 $weapons = room_weapons();
 
 /* ---- the deterministic math: every function on a grid and its edges ----
@@ -503,74 +498,6 @@ if (isset($weapons['roller'])) {
     $rollerVolley('roller-into-the-hillside', ['slope' => [420, 260]], [$tankAt(['slope' => [420, 260]], 'human', 100, 1), $tankAt(['slope' => [420, 260]], 'ai', 500, -1)], 5, 50);
 }
 
-/* ---- volleys as the solo war flies them: fixed steps, tanks falling between ----
- * Each step drops the tanks, then moves every shell (server/flight.php);
- * the browser's flyVolley() takes the same steps. midFall says a tank moved
- * while a shell was still in the air, so the cases really cover the falls;
- * bursts holds, for every step that carved ground or cost armor, the step
- * and each tank's y then, so a fall a step early or late shows.
- * Compared exactly. */
-$volleyFall = function (string $name, array $c) use ($exact): void {
-    if (!isset(room_weapons()[$c['wkey']])) {
-        return;
-    }
-    $room = sv_room($c, $c['w'] ?? SV_WIDTH);
-    $room['shells'] = [];
-    $before = $room;
-    $seat = $c['shooter'];
-    $room['tanks'][$seat]['angle'] = (float) $c['angle'];
-    $room['tanks'][$seat]['power'] = (float) $c['power'];
-    flight_launch($room, $seat, $c['wkey']);
-    $ys = array_column($room['tanks'], 'y');
-    $midFall = false;
-    $bursts = [];
-    $step = 0;
-    $was = [$room['terrain'], array_column($room['tanks'], 'hp')];
-    $steps = flight_volley($room, function (array $s) use (&$ys, &$midFall, &$bursts, &$step, &$was): void {
-        $step++;
-        $now = array_column($s['tanks'], 'y');
-        if ($s['shells'] && $now !== $ys) {
-            $midFall = true;
-        }
-        $ys = $now;
-        $is = [$s['terrain'], array_column($s['tanks'], 'hp')];
-        if ($is !== $was) {
-            $bursts[] = [$step, $now];
-        }
-        $was = $is;
-    });
-    $out = sv_outcome($before, $room) + ['ys' => array_column($room['tanks'], 'y'), 'steps' => $steps, 'midFall' => $midFall, 'bursts' => $bursts];
-    $exact('volley-fall', $name, $c, $out);
-};
-// The group's own units: 200 hp, facing each other. Named apart from $drone and $human, which later groups use.
-$vfDrone = fn(float $x, int $hp = 200, array $more = []): array => ['kind' => 'ai', 'x' => $x, 'y' => 400, 'hp' => $hp, 'dirS' => -1] + $more;
-$vfHuman = fn(float $x, int $hp = 200, array $more = []): array => ['kind' => 'human', 'x' => $x, 'y' => 400, 'hp' => $hp, 'dirS' => 1] + $more;
-// A pellet craters under a drone; the next pellet meets it on its way down.
-$volleyFall('buck-meets-a-sinking-drone', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'buck', 'angle' => 47, 'power' => 62,
-    'tanks' => [$vfHuman(120), $vfDrone(330), $vfDrone(560)]]);
-$volleyFall('mortar-digs-out-a-tank', ['terrain' => $flat, 'wind' => 2, 'shooter' => 1, 'wkey' => 'mortar', 'angle' => 50, 'power' => 58,
-    'tanks' => [$vfHuman(260), $vfDrone(560), $vfDrone(660)]]);
-$volleyFall('cluster-over-a-pit', ['terrain' => ['flat' => 400, 'set' => [[300, 360, 420]]], 'wind' => -3, 'shooter' => 0, 'wkey' => 'cluster', 'angle' => 55, 'power' => 66,
-    'tanks' => [$vfHuman(100), $vfDrone(330, 300, ['y' => 380]), $vfDrone(600)]]);
-$volleyFall('roller-into-the-crater-it-follows', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'roller', 'angle' => 30, 'power' => 50,
-    'tanks' => [$vfHuman(100), $vfDrone(400), $vfDrone(640)]]);
-// Low and slow: through the first drone, then down into the ground short of the second.
-$volleyFall('lance-through-and-down', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'lance', 'angle' => 6, 'power' => 50,
-    'tanks' => [$vfHuman(100), $vfDrone(300, 500), $vfDrone(420, 500)]]);
-$volleyFall('already-hanging-over-a-pit', ['terrain' => ['flat' => 400, 'set' => [[420, 470, 440]]], 'wind' => 0, 'shooter' => 0, 'wkey' => 'shell', 'angle' => 60, 'power' => 60,
-    'tanks' => [$vfHuman(120), $vfDrone(445), $vfDrone(640)]]);
-// Aimed so the outcome turns on the falls: drop no tank until the volley is over and the damage changes.
-$volleyFall('buck-pellet-catches-the-drone-it-sank', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'buck', 'angle' => 30, 'power' => 40,
-    'tanks' => [$vfHuman(120), $vfDrone(330), $vfDrone(560)]]);
-$volleyFall('bomblets-chase-a-sinking-drone', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'cluster', 'angle' => 34, 'power' => 36,
-    'tanks' => [$vfHuman(120), $vfDrone(330), $vfDrone(560)]]);
-// A lance through the first drone and into the second, bursting on each.
-$volleyFall('lance-pierces-two-drones', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'lance', 'angle' => 5, 'power' => 85,
-    'tanks' => [$vfHuman(100), $vfDrone(300, 500), $vfDrone(420, 500)]]);
-// A flat bolt fired almost straight up on the widest field flies about 14 s: past 12, inside 12 x fieldReach(1440).
-$volleyFall('wide-field-bolt-outlives-twelve-seconds', ['w' => 1440, 'terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'lance', 'angle' => 88, 'power' => 100,
-    'tanks' => [$vfHuman(300), $vfDrone(1100)]]);
-
 /* ---- the drone's aim ---- */
 $aim = function (string $name, array $c, ?string $known = null) use ($add): void {
     $room = sv_room($c);
@@ -800,78 +727,9 @@ $matchEnd('two-of-three-play-on', [1, 1, 0, null], 3, 2);
 $matchEnd('last-two-fall-together', [0, 0, null, null], 2, 6);
 $matchEnd('a-leaver-counts-as-out', [3, null, null, null], 2, 3);
 
-/* ---- a solo match's deal and musters: the random stream in the browser's order ----
- * Per round: terrain samples, wind, every unit's x and y, the drones'
- * strategies, who opens, each unit's armor, and the next number on the stream. */
-$soloDeal = function (string $seed, int $rounds, int $w) use ($exactZeros): void {
-    $s = solo_deal($seed, 'normal', $w); // a deal and its musters draw nothing that depends on the difficulty
-    $out = [];
-    for ($r = 1; $r <= $rounds; $r++) {
-        $s['round'] = $r;
-        solo_muster($s);
-        $samples = [];
-        for ($x = 0; $x < $w; $x += 60) {
-            $samples[] = $s['terrain'][$x];
-        }
-        $peek = $s['rng'];
-        $out[] = ['samples' => $samples, 'wind' => $s['wind'], 'xs' => array_column($s['tanks'], 'x'), 'ys' => array_column($s['tanks'], 'y'),
-            'tactics' => array_values(array_filter(array_column($s['tanks'], 's'))), 'turn' => $s['turn'], 'hp' => array_column($s['tanks'], 'hp'),
-            'next' => room_rng_next($peek)];
-    }
-    $exactZeros('solo-deal', "$seed@$w", ['seed' => $seed, 'rounds' => $rounds, 'w' => $w], $out);
-};
-foreach (['scorched-1000', 'scorched-4242', 'alpha', 'deal-long', 'a b c'] as $seed) {
-    $soloDeal($seed, 3, 720);
-}
-$soloDeal('alpha', 3, 1440); // a wide field: the same draws, spread over 1440
-$soloDeal('scorched-4242', 2, 1080);
-
-/* ---- a solo turn: the player's shot and the settle after a volley ----
- * From round 1 of a deal (seed, normal, 720). 'fire' hangs the player's tank
- * 'lift' px over its ground with a downward vy, then fires 'shot': the tank
- * is landed first, as the page lands it while aiming, so the shell leaves
- * from the ground. 'settle' sets each unit's hp and lifts it inside the half
- * pixel a fall stops short of, then settles: standing units sit exactly on
- * the ground before the count. Compared exactly, with -0 equal to 0. */
-$soloTurn = function (string $name, array $c) use ($exactZeros): void {
-    $s = solo_deal('solo-turn', 'normal', SV_WIDTH);
-    $s['round'] = 1;
-    solo_muster($s);
-    $s['seats'][0]['lives'] = $c['lives'] ?? 3;
-    $s['watchTurns'] = $c['watchTurns'] ?? 0;
-    $tank = fn(array $t): array => ['x' => $t['x'], 'y' => $t['y'], 'vy' => (float) ($t['vy'] ?? 0.0), 'hp' => $t['hp'], 'fuel' => $t['fuel']];
-    if ($c['kind'] === 'fire') {
-        $s['tanks'][0]['y'] -= $c['lift'];
-        $s['tanks'][0]['vy'] = 90.0;
-        $shot = $c['shot'] + ['x' => $s['tanks'][0]['x'] + ($c['drive'] ?? 0)];
-        $err = solo_player_fire($s, $shot);
-        $out = ['error' => $err, 'me' => $tank($s['tanks'][0]),
-            'shells' => array_map(fn($sh) => [$sh['x'], $sh['y'], $sh['vx'], $sh['vy']], $s['shells'])];
-    } else {
-        foreach ($c['hp'] as $i => $hp) {
-            $s['tanks'][$i]['hp'] = $hp;
-            $s['tanks'][$i]['y'] -= $c['lift'][$i];
-        }
-        $end = solo_settle($s);
-        $out = ['end' => $end, 'tanks' => array_map($tank, $s['tanks']), 'wind' => $s['wind'], 'turn' => $s['turn'],
-            'score' => $s['scores'][0], 'cash' => $s['cash'][0], 'lives' => $s['seats'][0]['lives'], 'roundsWon' => $s['roundsWon'],
-            'armor' => $s['armor'][0], 'watchTurns' => $s['watchTurns']];
-    }
-    $exactZeros('solo-turn', $name, $c, $out);
-};
-$soloTurn('fire-lands-a-hanging-shooter', ['kind' => 'fire', 'lift' => 40, 'shot' => ['w' => 'shell', 'a' => 60, 'p' => 70]]);
-$soloTurn('fire-lands-inside-half-a-pixel', ['kind' => 'fire', 'lift' => 0.4, 'shot' => ['w' => 'buck', 'a' => 120, 'p' => 45]]);
-$soloTurn('fire-drives-then-fires', ['kind' => 'fire', 'lift' => 12, 'drive' => -30.5, 'shot' => ['w' => 'shell', 'a' => 140, 'p' => 66]]);
-$soloTurn('fire-past-the-fuel-still-lands', ['kind' => 'fire', 'lift' => 20, 'drive' => -95, 'shot' => ['w' => 'shell', 'a' => 140, 'p' => 66]]);
-$soloTurn('settle-snaps-standing-units', ['kind' => 'settle', 'hp' => [100, 60, 60, 60], 'lift' => [0.3, 0.49, 0.1, 0.25]]);
-$soloTurn('settle-round-won', ['kind' => 'settle', 'hp' => [73, 0, 0, 0], 'lift' => [0.45, 0.2, 0, 0]]);
-$soloTurn('settle-wreck-watches-the-drones', ['kind' => 'settle', 'hp' => [0, 60, 12, 0], 'lift' => [3, 0.2, 0.4, 0], 'watchTurns' => 5]);
-$soloTurn('settle-tank-lost-after-the-watch', ['kind' => 'settle', 'hp' => [0, 60, 12, 0], 'lift' => [3, 0.2, 0.4, 0], 'watchTurns' => ROOM_WATCH_TURNS - 1]);
-$soloTurn('settle-match-lost', ['kind' => 'settle', 'hp' => [0, 60, 0, 0], 'lift' => [0, 0.3, 0, 0], 'lives' => 1]);
-
 /* ---- write or compare ---- */
 $weaponNames = array_keys($weapons);
-$head = ['about' => 'Game math cases generated by php protocol/sim-vectors.php from rooms.php; test/sim-vectors.test.mjs replays them through src/sim.ts, src/armor.ts and src/solo.ts. Do not edit by hand.',
+$head = ['about' => 'Game math cases generated by php protocol/sim-vectors.php from rooms.php; test/sim-vectors.test.mjs replays them through src/sim.ts, src/ai.ts, src/armor.ts, src/standings.ts and src/detmath.ts. Do not edit by hand.',
     'tolerance' => SV_TOLERANCE, 'weapons' => $weaponNames];
 $lines = [];
 foreach ($cases as $group => $list) {

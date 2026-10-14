@@ -1,5 +1,5 @@
 // Replays the shared sim vectors (protocol/sim-vectors.json) through the browser
-// sim: src/sim.ts, src/armor.ts, src/solo.ts and src/solo-play.ts. The vectors
+// sim: src/sim.ts, src/ai.ts, src/armor.ts, src/standings.ts and src/detmath.ts. The vectors
 // are written by `php protocol/sim-vectors.php` from rooms.php, so a change to the browser sim
 // or the room server's that the other side does not follow fails here (or in
 // the generator's --check) until they agree. Passes when every case matches or
@@ -28,8 +28,6 @@ const armorRules = await import(pathToFileURL(path.join(dir, 'src', 'armor.ts'))
 
 const standings = await import(pathToFileURL(path.join(dir, 'src', 'standings.ts')).href);
 const det = await import(pathToFileURL(path.join(dir, 'src', 'detmath.ts')).href);
-const solo = await import(pathToFileURL(path.join(dir, 'src', 'solo.ts')).href);
-const soloPlay = await import(pathToFileURL(path.join(dir, 'src', 'solo-play.ts')).href);
 
 /* ---- state the cases run over ---- */
 const G = {};
@@ -176,27 +174,6 @@ const RUN = {
     for (let frame = 0; G.shells.length && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
     return outcome(before);
   },
-  'volley-fall'(c) {
-    world(c, c.w || 720);
-    const before = G.terrain.slice(), shooter = G.tanks[c.shooter];
-    shooter.angle = c.angle;
-    shooter.power = c.power;
-    (shooter.isPlayer ? G.ammo : shooter.ammo)[c.wkey] = 99;
-    sim.fireWeapon(G, arsenal, shooter, c.wkey);
-    let ys = G.tanks.map(t => t.y), midFall = false, step = 0;
-    const bursts = [];
-    let was = JSON.stringify([G.terrain, G.tanks.map(t => t.hp)]);
-    const steps = soloPlay.flyVolley(G, arsenal, w => {
-      step++;
-      const now = w.tanks.map(t => t.y);
-      if (w.shells.length && now.some((y, i) => y !== ys[i])) midFall = true;
-      ys = now;
-      const is = JSON.stringify([w.terrain, w.tanks.map(t => t.hp)]);
-      if (is !== was) bursts.push([step, now]);
-      was = is;
-    });
-    return { ...outcome(before), ys: G.tanks.map(t => t.y), steps, midFall, bursts };
-  },
   field(c) {
     if (c.kind === 'terrain') {
       const r = sim.mulberry32(sim.hashSeed(c.seed));
@@ -261,41 +238,6 @@ const RUN = {
     }
     return steps;
   },
-  /* The browser's stream cannot be copied the way PHP copies its integer state,
-     so for round r this deals afresh, musters rounds 1..r, and reads `next` off that fresh stream. */
-  'solo-deal'(c) {
-    const out = [];
-    for (let r = 1; r <= c.rounds; r++) {
-      const S = { body: 'tank' };
-      solo.soloDeal(S, arsenal, c.seed, 'normal', c.w);
-      for (let k = 1; k <= r; k++) { S.round = k; solo.soloMuster(S, arsenal); }
-      const samples = [];
-      for (let x = 0; x < c.w; x += 60) samples.push(S.terrain[x]);
-      out.push({ samples, wind: S.wind, xs: S.tanks.map(t => t.x), ys: S.tanks.map(t => t.y),
-        tactics: S.tanks.filter(t => t.s).map(t => t.s), turn: S.turn, hp: S.tanks.map(t => t.hp), next: S.rng() });
-    }
-    return out;
-  },
-  'solo-turn'(c) {
-    const S = soloPlay.blankSolo();
-    solo.soloDeal(S, arsenal, 'solo-turn', 'normal', 720);
-    S.round = 1;
-    solo.soloMuster(S, arsenal);
-    S.lives = c.lives ?? 3;
-    S.watchTurns = c.watchTurns ?? 0;
-    const tank = t => ({ x: t.x, y: t.y, vy: t.vy ?? 0, hp: t.hp, fuel: t.fuel });
-    if (c.kind === 'fire') {
-      const me = S.tanks[0];
-      me.y -= c.lift;
-      me.vy = 90;
-      const error = soloPlay.playerFire(S, arsenal, { ...c.shot, x: me.x + (c.drive || 0) });
-      return { error, me: tank(me), shells: S.shells.map(sh => [sh.x, sh.y, sh.vx, sh.vy]) };
-    }
-    c.hp.forEach((hp, i) => { S.tanks[i].hp = hp; S.tanks[i].y -= c.lift[i]; });
-    const end = solo.soloSettle(S).kind;
-    return { end, tanks: S.tanks.map(tank), wind: S.wind, turn: S.turn, score: S.score, cash: S.cash, lives: S.lives,
-      roundsWon: S.roundsWon, armor: S.armor, watchTurns: S.watchTurns };
-  },
   settle(c) {
     world({ terrain: c.terrain, tanks: [{ kind: 'ai', x: c.x, y: c.y, hp: c.hp }] });
     for (let i = 0; i < 5000 && sim.anyTankFalling(G); i++) sim.fallTanks(G, 1 / 60);
@@ -314,9 +256,8 @@ function expectedFor(group, c, out) {
 /* ---- compare and report ---- */
 function diff(want, got, at, out, exact = false, tol = TOL) {
   if (typeof want === 'number' && typeof got === 'number') {
-    // exact: Object.is, so -0 differs from 0 (detmath pins the sign); 'zeros-equal': the same, but -0 equals 0.
-    const same = exact === 'zeros-equal' ? Object.is(want, got) || (want === 0 && got === 0)
-      : exact ? Object.is(want, got) : Math.abs(want - got) <= tol;
+    // exact: Object.is, so -0 differs from 0 (detmath pins the sign).
+    const same = exact ? Object.is(want, got) : Math.abs(want - got) <= tol;
     if (!same) out.push(`${at}: expected ${want}, got ${got}`);
   } else if (Array.isArray(want) && Array.isArray(got)) {
     if (want.length !== got.length) out.push(`${at}: expected ${want.length} items, got ${got.length}`);
@@ -344,7 +285,7 @@ for (const [group, cases] of Object.entries(VECTORS.groups)) {
     let got, bad;
     try {
       got = RUN[group](c.in);
-      bad = diff(expectedFor(group, c.in, c.out), got, 'out', [], c.exact === 'zeros-equal' ? 'zeros-equal' : c.exact === true);
+      bad = diff(expectedFor(group, c.in, c.out), got, 'out', [], c.exact === true);
     } catch (e) {
       bad = [`threw ${e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e}`];
     }

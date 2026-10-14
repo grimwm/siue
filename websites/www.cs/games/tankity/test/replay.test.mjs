@@ -467,3 +467,34 @@ for (const [file, t] of [['play-after-beam.json', 'beam'], ['play-after-ring.jso
   check('play-after-earth.json: a dig comes before its warheads\' bursts, which follow in time order', evs[dig + 1].t === 'burst' && evs[dig + 1].at >= evs[dig].at
     && evs[dig + 2].at >= evs[dig + 1].at && evs[dig].t1 >= evs[dig].at);
 }
+
+/* ---- the server's own napalm volley (protocol/play-after-burn.json) ---- */
+{
+  const evs = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'protocol', 'play-after-burn.json'), 'utf8')).body.room.events;
+  const host = makeHost();
+  const lit = [];
+  let t = 0, closed = null;
+  host.env.effect = () => undefined;
+  host.env.beam = () => {};
+  host.env.ring = () => {};
+  host.env.mark = () => {};
+  host.env.earth = () => {};
+  host.env.burn = e => lit.push({ e, t });
+  const rp = createReplay(host.env);
+  const from = evs.findIndex(e => e.t === 'fire'), next = evs.findIndex(e => e.t === 'aifire');
+  rp.push(evs.slice(from, next));
+  for (let i = 0; i < 4000 && !rp.idle(); i++) {
+    rp.step(DT);
+    t += DT;
+    if (closed === null && rp.idle()) closed = t;
+  }
+  const burn = evs.find(e => e.t === 'burn');
+  const hits = host.log.events.filter(e => e.t === 'hit');
+  check('play-after-burn.json: the replay lights the pool once, with the server\'s numbers', lit.length === 1 && lit[0].e === burn && burn.x0 <= burn.x1, JSON.stringify(lit.map(l => l.e)));
+  check('play-after-burn.json: the burn is not logged as a plain event', !host.log.events.some(e => e.t === 'burn'));
+  check('play-after-burn.json: every tick\'s hit plays, each after the pool lit', hits.length === evs.filter(e => e.t === 'hit').length && hits.length > 1
+    && hits.every(h => h.at > burn.at && h.at <= burn.t1));
+  check('play-after-burn.json: the volley stays open until the last tick has burned', closed !== null && closed >= burn.t1, `${closed} vs ${burn.t1}`);
+  check('play-after-burn.json: the shot has no blast (r 0) and the ground does not change', evs.find(e => e.t === 'shot' && e.by === 0).r === 0
+    && !evs.some(e => ['dirt', 'pour', 'dig', 'riot', 'slump', 'burst'].includes(e.t)));
+}

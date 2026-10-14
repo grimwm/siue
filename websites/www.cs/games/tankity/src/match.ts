@@ -26,6 +26,8 @@ import {
 import type { Blast, Difficulty, FallEvent, FallShow, Fire, Shell, StepEvent } from './sim.ts';
 import { playDigStep, playEarthOp } from './earth-fx.ts';
 import type { EarthFxDeps } from './earth-fx.ts';
+import { playBurn } from './fire-fx.ts';
+import type { FireFxDeps } from './fire-fx.ts';
 import { snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloOneUps, soloSettle } from './solo.ts';
 import { endCardBack, localLine, soloBoard } from './standings.ts';
 import type { LocalRow, Saved } from './local-board.ts';
@@ -219,6 +221,13 @@ export function createMatch(deps: MatchDeps) {
     shake: k => { G.shake = Math.max(G.shake || 0, k); },
     get show() { return G.earth; },
   };
+  /* How a napalm pool plays on the battlefield (fire-fx.ts). */
+  const fireFx: FireFxDeps = {
+    fxImpact: (key, x, y, r) => fxImpact(G.fx, key, x, y, r),
+    fxSpecial: (key, name, x, y, ang, len) => fxSpecial(G.fx, key, name, x, y, ang, len),
+    sound: name => sfx.play(name),
+    get show() { return G.fire; },
+  };
   function fireWeapon(t: GameTank, wkey: string): boolean {
     const w = tables.weapons[wkey]!;
     const launch = simFireWeapon(G, tables.arsenal!, t, wkey);
@@ -331,17 +340,8 @@ export function createMatch(deps: MatchDeps) {
      smoke over it for as long as it burns (the gun's `burn` special), and its
      flames on screen (fire-show.ts). One that spilled away lights nothing. */
   function lightFire(f: Fire): void {
-    const p = f.pool, w = tables.weapons[f.wkey];
-    sfx.play('thud');
-    if (p.x0 > p.x1) {
-      fxImpact(G.fx, f.wkey, f.col, surfY(f.col), POOL_SPLASH_MIN);
-      say(`The ${w ? w.name : 'napalm'} runs off and burns out.`, 'info');
-      return;
-    }
-    const dur = f.ticks * f.every / 60;
-    fxImpact(G.fx, f.wkey, (p.x0 + p.x1) / 2, p.level, Math.max(POOL_SPLASH_MIN, (p.x1 - p.x0) / 2));
-    fxSpecial(G.fx, f.wkey, 'burn', p.x0, p.level, 0, p.x1 - p.x0);
-    G.fire.light({ wkey: f.wkey, x0: p.x0, x1: p.x1, level: p.level, flame: p.flame }, dur);
+    playBurn(f.wkey, { x: f.col, ground: surfY(f.col), ...f.pool }, f.ticks * f.every / 60, fireFx);
+    if (f.pool.x0 > f.pool.x1) say(`The ${tables.weapons[f.wkey]?.name || 'napalm'} runs off and burns out.`, 'info');
   }
   /* A burning pool's tick: one line for the units it burned, then a shield
      that ate the tick and a wreck as any hit's. */
@@ -604,8 +604,6 @@ export function createMatch(deps: MatchDeps) {
   }
   /** The radius a tracer's landing effect is sized to: it has no blast of its own. */
   const MARK_R = 10;
-  /** The smallest a napalm pool's splash is sized, px. */
-  const POOL_SPLASH_MIN = 12;
   const BANNER_MS = 1500;
   // Banner timing rides the game clock, never wall time: hidden tabs throttle
   // setTimeout, which used to strand the game on its name card after refocus.

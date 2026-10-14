@@ -23,10 +23,12 @@ import { matchOutcome, roomBoard, roomFiledLine, roomLocalSaver } from './standi
 import type { LocalRow, Saved } from './local-board.ts';
 import { focusEndVeil } from './ui/endveil.tsx';
 import type { Board, RoomCard } from './standings.ts';
-import type { BeamEvent, DigEvent, EarthEvent, RingEvent, RoomEvent, RoomSnapshot } from './protocol.ts';
+import type { BeamEvent, BurnEvent, DigEvent, EarthEvent, RingEvent, RoomEvent, RoomSnapshot } from './protocol.ts';
 import { DIG_STEP, applyEarth, digCarve } from './earth.ts';
 import { playDigStep, playEarthOp } from './earth-fx.ts';
 import type { EarthFxDeps } from './earth-fx.ts';
+import { playBurn } from './fire-fx.ts';
+import type { FireFxDeps } from './fire-fx.ts';
 import type { Replay, ReplayShot } from './replay.ts';
 import { BURIED_LINE, H, ROOM_W, TUNE, aimLimits, beamCarve, buried, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
 import type { Difficulty, ShopRow } from './sim.ts';
@@ -375,10 +377,13 @@ export function createRoom(deps: RoomDeps) {
   }
   function sayNetEvent(e: RoomEvent): void {
     if (e.t !== 'fall' && e.t !== 'kill') fellLast = null;
-    if (e.t === 'shot' || e.t === 'burst' || e.t === 'beam' || e.t === 'ring' || e.t === 'dirt' || e.t === 'pour' || e.t === 'dig' || e.t === 'riot' || e.t === 'slump') return; // flown by the replay
+    if (e.t === 'shot' || e.t === 'burst' || e.t === 'beam' || e.t === 'ring' || e.t === 'burn' || e.t === 'dirt' || e.t === 'pour' || e.t === 'dig' || e.t === 'riot' || e.t === 'slump') return; // flown by the replay
     if (e.t === 'fizzle') { say(`${seatName(e.by)} sends one into the sunset.`, 'info'); return; }
     // A gunner's tracer line lasts until its next shot.
-    if (e.t === 'fire' || e.t === 'aifire' || e.t === 'auto') G.marks.fired(e.seat);
+    if (e.t === 'fire' || e.t === 'aifire' || e.t === 'auto') {
+      G.marks.fired(e.seat);
+      burning = null;
+    }
     if (e.t === 'fire') {
       if (e.seat === net.seat) say(`You fire ${tables.weapons[G.selected] ? tables.weapons[G.selected]!.name : 'a shell'}.`, 'info');
       else say(`${seatName(e.seat)} fires ${tables.weapons[e.w] ? tables.weapons[e.w]!.name : 'a shell'}.`, 'info');
@@ -394,6 +399,12 @@ export function createRoom(deps: RoomDeps) {
     if (e.t === 'hit') {
       const victim = e.seat === net.seat;
       const killer = e.by === net.seat;
+      if (burning !== null && burning === e.by && !e.direct) {
+        // A tick of the pool the gunner lit this volley.
+        say(victim ? `The flames burn YOU for ${e.dmg}.` : `The flames burn ${seatName(e.seat)} for ${e.dmg}.`, victim ? 'bad' : killer ? 'good' : 'info');
+        if (victim) renderHUD();
+        return;
+      }
       if (e.direct || victim || killer) {
         say(victim
           ? `${seatName(e.by)} hits YOU for ${e.dmg}.`
@@ -494,6 +505,7 @@ export function createRoom(deps: RoomDeps) {
     if (e.t === 'round') {
       G.marks.clear();
       G.earth.clear();
+      G.fire.clear();
       digs = [];
       say(`Round ${e.round}. Fresh barrels, same battery. Wind ${windText()}.`, 'info');
       talk('tank', 'Back in! These hills are mine!', true);
@@ -567,6 +579,22 @@ export function createRoom(deps: RoomDeps) {
       d.done = upTo;
     }
     digs = digs.filter(d => d.done < d.e.n);
+  }
+  /* How a napalm pool plays in a room (fire-fx.ts), as in the solo war. */
+  const fireFx: FireFxDeps = {
+    fxImpact: (key, x, y, r) => fxImpact(G.fx, key, x, y, r),
+    fxSpecial: (key, name, x, y, ang, len) => fxSpecial(G.fx, key, name, x, y, ang, len),
+    sound: name => sfx.play(name),
+    get show() { return G.fire; },
+  };
+  /* The gunner whose pool burns this volley: its ticks' hits read as burns. */
+  let burning: number | null = null;
+  /* A napalm pool the replay reached: lit with the server's own numbers, its
+     flames standing until its last tick (t1). Nothing in the ground changes. */
+  function netBurn(e: BurnEvent): void {
+    burning = e.by;
+    const col = Math.max(0, Math.min(G.terrain.length - 1, Math.round(e.x)));
+    playBurn(e.w, { x: e.x, ground: G.terrain[col] ?? H, level: e.level, x0: e.x0, x1: e.x1, flame: e.flame }, Math.max(0, e.t1 - (e.at ?? 0)), fireFx);
   }
   /* A plasma ring around its gunner: no crater. */
   function netRing(e: RingEvent): void {
@@ -761,7 +789,7 @@ export function createRoom(deps: RoomDeps) {
   }
 
   return {
-    netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netEarth, netMark, netTrailMark, netFrame,
+    netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netEarth, netBurn, netMark, netTrailMark, netFrame,
     roomShopBoard, openStandings,
   };
 }

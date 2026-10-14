@@ -1,6 +1,6 @@
 /* Operation Tankity: the game menu's settings.
  *
- * The settings menu: the unit look, the text size and the Difficulty (all remembered in this browser), a
+ * The settings menu: the unit look, the text size, the Difficulty and Screen flashes (all remembered in this browser), a
  * room's turn time (the host's slider, everyone else's label), and the
  * props the game menu overlay (src/ui/menu.tsx) is drawn from: what is
  * chosen, what is muted, whether a room runs, and what each button does.
@@ -48,12 +48,14 @@ export interface MenuDeps {
   toggleOverlay(id: string, btnId?: string): void;
   toggleSound(): void;
   nextSong(): void;
+  /** Screen flashes on or off in the effects engine. */
+  setFlashes(on: boolean): void;
 }
 
 export function createMenu(deps: MenuDeps) {
   const {
     G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
-    freshMatchFromSeedBox, openStandings, turnTime, alerts, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong,
+    freshMatchFromSeedBox, openStandings, turnTime, alerts, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong, setFlashes,
   } = deps;
 
   /* Ground units: every human (you, and the people in a room) picks a body.
@@ -121,6 +123,18 @@ export function createMenu(deps: MenuDeps) {
     sfx.play('click');
     renderMenu();
   }
+  /* Screen flashes: on unless a player turns them off (kept in this browser).
+     Off drops the full-screen flash and the large bright blast layers;
+     prefers-reduced-motion drops the flash whatever this says. */
+  const flashPref = pref('tankity-flashes', 'on', text, browserStorage());
+  const flashesOn = (): boolean => flashPref.get() !== 'off';
+  function loadFlashes(): void { setFlashes(flashesOn()); }
+  function toggleFlashes(): void {
+    flashPref.set(flashesOn() ? 'off' : 'on');
+    setFlashes(flashesOn());
+    sfx.play('click');
+    renderMenu();
+  }
   /* The game menu is a Preact component (src/ui/menu.tsx): it gets what it shows
      (the unit, the text size, what is muted, whether a room runs) and reports
      clicks. The seed box stays the page's own. */
@@ -150,6 +164,8 @@ export function createMenu(deps: MenuDeps) {
       sound: !isSoundMuted(),
       music: !isMusicMuted(),
       fullscreen: !!document.fullscreenElement,
+      flashes: flashesOn(),
+      onFlashes: toggleFlashes,
       onSound: toggleSound,
       onMusic: toggleMusic,
       onFullscreen: toggleFullscreen,
@@ -171,5 +187,5 @@ export function createMenu(deps: MenuDeps) {
     });
   }
 
-  return { loadBody, loadTextSize, textScale, renderMenu };
+  return { loadBody, loadTextSize, loadFlashes, textScale, renderMenu };
 }

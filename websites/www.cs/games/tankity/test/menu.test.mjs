@@ -202,9 +202,22 @@ test('Enter in the seed box during a room match asks the leave question, never l
     sfx: { play() {} }, difficulty: { get: () => 'normal', set() {} }, unlock() {}, isSoundMuted: () => false, isMusicMuted: () => false,
     keyHint: () => '', myTank: () => null, netLeave: () => { calls.leave++; }, openLeaveVeil: () => { calls.ask++; },
     placeLogBelowStatus() {}, freshMatchFromSeedBox: () => { calls.fresh++; }, toggleFullscreen() {}, quit() {}, openStandings() {},
-    turnTime() {}, alerts: () => ({ state: 'off', onClick() {} }), toggleMusic() {}, toggleOverlay() {}, toggleSound() {}, nextSong() {},
+    turnTime() {}, alerts: () => ({ state: 'off', onClick() {} }), setFlashes() {}, toggleMusic() {}, toggleOverlay() {}, toggleSound() {}, nextSong() {},
   });
   m.renderMenu();
   submit(byId(section, 'seed-form'));
   assert.deepEqual(calls, { leave: 0, ask: 1, fresh: 0 });
+});
+
+test('Screen flashes is an Options toggle: on by default, pressed follows the prop, a click reports', () => {
+  let flips = 0;
+  const { section, props } = draw({ flashes: true, onFlashes: () => { flips++; } });
+  const t = byId(section, 'btn-flashes');
+  assert.ok(byId(section, 'toggle-picker').children.includes(t), 'sits with Sound, Music and Fullscreen');
+  assert.equal(t.getAttribute('aria-pressed'), 'true');
+  assert.equal(t.textContent, 'Screen flashes');
+  click(t);
+  assert.equal(flips, 1);
+  menu.renderMenu(section, { ...props, flashes: false });
+  assert.equal(byId(section, 'btn-flashes').getAttribute('aria-pressed'), 'false');
 });

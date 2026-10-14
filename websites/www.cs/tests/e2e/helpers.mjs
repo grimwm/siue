@@ -4,7 +4,9 @@ import { expect } from '@playwright/test';
 /* Injected before any page script: records what the battlefield canvas
    draws, per animation frame, so tests can check motion without hooks in
    the game. Markers:
-   - shells: the 1.5 px white core every shell in flight has;
+   - shells: every shell in flight on the battlefield: its body drawn by
+             TankityFX.drawBody (the rendered sprite), or the 1.5 px white
+             core of the plain disc drawn before the sprite has loaded;
    - arms:   drone aim arms (stroked at alpha 0.75, width 2);
    Neither counts what the effects engine draws (a particle can match either
    look), so the recorder wraps each TankityFX system's draw to know when
@@ -14,7 +16,8 @@ import { expect } from '@playwright/test';
    the firing range ('preview-stage') separately:
    - lighter: times the canvas switched to additive compositing;
    - sheets:  effect sprite-sheet frames drawn (nine-argument drawImage; the
-              moon's 192 px frames are the sky and not counted);
+              moon's 192 px frames are the sky and a shell's own body
+              sprite is the shell, so neither is counted);
    - blobs:   soft glow sprites drawn (five-argument drawImage);
    - rings:   stroked 2 px arcs in a hex colour (the blast disc), kept only
               while rec.watchRings is set: [frame, radius, strokeStyle];
@@ -35,7 +38,7 @@ export function recorderScript() {
   const onStage = c => c.canvas && c.canvas.id === 'stage';
   const where = c => (c.canvas && c.canvas.id === 'stage' ? rec : c.canvas && c.canvas.id === 'preview-stage' ? rec.pv : null);
   // Effects-engine draws, told apart by wrapping each system's draw.
-  let inFx = 0, fxApi;
+  let inFx = 0, inBody = 0, fxApi;
   Object.defineProperty(window, 'TankityFX', {
     configurable: true,
     get() { return fxApi; },
@@ -45,6 +48,15 @@ export function recorderScript() {
         const sys = create.apply(this, a), draw = sys.draw;
         sys.draw = function (...b) { inFx++; try { return draw.apply(this, b); } finally { inFx--; } };
         return sys;
+      };
+      const drawBody = api.drawBody;
+      api.drawBody = function (c, x, y, ...rest) {
+        inBody++;
+        try {
+          const drew = drawBody.call(this, c, x, y, ...rest);
+          if (drew && onStage(c)) rec.shells.push([rec.frame, x, y]);
+          return drew;
+        } finally { inBody--; }
       };
       fxApi = api;
     },
@@ -62,7 +74,7 @@ export function recorderScript() {
   });
   P.drawImage = function (img, ...a) {
     const w = where(this);
-    if (w) { if (a.length === 8) { if (a[2] !== 192) w.sheets++; } else if (a.length === 4) w.blobs++; } // 192 px frames are the moon, not an effect
+    if (w) { if (a.length === 8) { if (a[2] !== 192 && !inBody) w.sheets++; } else if (a.length === 4) w.blobs++; } // 192 px frames are the moon, not an effect
     return drawImage.call(this, img, ...a);
   };
   let from = null;

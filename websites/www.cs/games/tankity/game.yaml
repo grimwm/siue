@@ -588,16 +588,16 @@ audio:
   music:
     - file: audio/music/battle-theme-a.mp3
       title: Battle Theme A
-      credit: cynicmusic, CC0
+      credit: cynicmusic
     - file: audio/music/chiptune-level-1.mp3
       title: Action Chiptune 1
-      credit: Juhani Junkala, CC0
+      credit: Juhani Junkala
     - file: audio/music/awake-megawall-10.mp3
       title: "Awake! (Megawall-10)"
-      credit: cynicmusic, CC0
+      credit: cynicmusic
     - file: audio/music/chiptune-level-3.mp3
       title: Action Chiptune 3
-      credit: Juhani Junkala, CC0
+      credit: Juhani Junkala
 
 # --------------------------------------------------------------------------
 # effects

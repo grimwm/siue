@@ -45,14 +45,19 @@ Sources and the licence each states:
 
 ## Music (`music/`)
 
-Each file is the author's track transcoded to stereo mp3 at 80 kbps with
-metadata stripped; the sound itself is unchanged.
+Each file is the author's track, loudness-normalised to one level and encoded
+as stereo mp3 at 80 kbps with metadata stripped by `music/build_music.sh`,
+which downloads the source and refuses it unless its SHA-256 (last column)
+matches. Each page below states CC0 in its License(s) field, copied exactly
+into the table. The author is the composer the page names; OpenGameArt's own
+"Author" line shows who uploaded it.
 
-Each page below states the license as "CC0" in its License(s) field.
+| File | Title | Author | Source page | License field | Download SHA-256 |
+|---|---|---|---|---|---|
+| `battle-theme-a.mp3` | Battle Theme A | cynicmusic | https://opengameart.org/content/battle-theme-a | CC0 | 6042399782e581d753d616bc703e66483d5eccb5fb687a20c9a552d68c49e620 |
+| `chiptune-level-1.mp3` | Action Chiptune 1 | Juhani Junkala | https://opengameart.org/content/5-chiptunes-action | CC0 | ea189990c0fb9a700187ccc740eda72400341a082305a163867467d96346460d |
+| `awake-megawall-10.mp3` | Awake! (Megawall-10) | cynicmusic | https://opengameart.org/content/awake-megawall-10 | CC0 | 462c85304df0ea5369cb98aaae158108c92227fa5f442fb63a2da6febbe82ded |
+| `chiptune-level-3.mp3` | Action Chiptune 3 | Juhani Junkala | https://opengameart.org/content/5-chiptunes-action | CC0 | ea189990c0fb9a700187ccc740eda72400341a082305a163867467d96346460d |
 
-| File | Title | Author | Source |
-|---|---|---|---|
-| `battle-theme-a.mp3` | Battle Theme A | cynicmusic (https://cynicmusic.com) | https://opengameart.org/content/battle-theme-a |
-| `awake-megawall-10.mp3` | Awake! (Megawall-10) | cynicmusic | https://opengameart.org/content/awake-megawall-10 |
-| `chiptune-level-1.mp3` | Action Chiptune, Level 1 | Juhani Junkala | https://opengameart.org/content/5-chiptunes-action (file "Level 1") |
-| `chiptune-level-3.mp3` | Action Chiptune, Level 3 | Juhani Junkala | https://opengameart.org/content/5-chiptunes-action (file "Level 3") |
+cynicmusic's site is https://cynicmusic.com; Juhani Junkala's tracks are
+"Level 1" and "Level 3" from his pack "5 Chiptunes (Action)".

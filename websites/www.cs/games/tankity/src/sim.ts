@@ -1099,12 +1099,15 @@ export function settleVolley(world: World, arsenal: Arsenal): FallShow[] {
 export function dueFalls(world: Pick<World, 'tanks' | 'terrain'>, pending: readonly FallShow[]): { due: FallShow[]; pending: FallShow[] } {
   const due: FallShow[] = [], rest: FallShow[] = [];
   for (const show of pending) {
-    const t = show.tank;
-    if ((t.drawY ?? t.y) < drawTarget(world, t) - 0.5) { rest.push(show); continue; }
+    if (!fallSeen(world, show.tank)) { rest.push(show); continue; }
     due.push(show);
     for (const e of show.events) e.tank.shownHp = undefined;
   }
   return { due, pending: rest };
+}
+/** True once t is drawn where it falls to: its fall has been seen to land. */
+export function fallSeen(world: Pick<World, 'tanks' | 'terrain'>, t: Tank): boolean {
+  return (t.drawY ?? t.y) >= drawTarget(world, t) - 0.5;
 }
 /* Where t is drawn falling to: where it rests under the rules, or the ground
    under it while the rules still hold it hanging (a wreck: the ground). */

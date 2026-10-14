@@ -25,7 +25,7 @@ import { focusEndVeil } from './ui/endveil.tsx';
 import type { Board, RoomCard } from './standings.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
-import { H, ROOM_W, TUNE, carveCrater, clamp, facing, genTerrain, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
+import { H, ROOM_W, TUNE, carveCrater, clamp, facing, fallSeen, genTerrain, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
 import type { Difficulty, ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
 
@@ -199,6 +199,8 @@ export function createRoom(deps: RoomDeps) {
     }
     G.wind = room.wind || 0;
     const sameRound = G.round === (room.round || 1);
+    // Held fall words belong to this room's round: a new round, or another room, drops them.
+    if (!sameRound || heldCode !== net.code) { fallsHeld = []; heldCode = net.code; }
     G.round = room.round || 1;
     const before = new Map(G.tanks.map(t => [t.seat, t] as [number | undefined, GameTank]));
     // While we aim, the server only learns our angle and power when a key is
@@ -230,6 +232,7 @@ export function createRoom(deps: RoomDeps) {
         bot: !!(seat && seat.bot),
         chuteArmed: same && above && (!!t.chute || !!was!.chuteArmed || !!was!.chuteOpen),
         chuteOpen: same && above && !!was!.chuteOpen,
+        shownHp: same && fallsHeld.some(h => 'seat' in h && h.seat === t.seat) ? was!.shownHp : undefined,
         // Keep the drawn aim where it was so the new one glides in.
         showA: was && !mine ? shownAngle(was) : undefined,
         showP: was && !mine ? shownPower(was) : undefined,
@@ -326,8 +329,37 @@ export function createRoom(deps: RoomDeps) {
     renderHUD();
   }
   let fellLast: number | null = null; // the seat the last event saw fall: its wreck reads as a fall, not a kill
+  /* A fall's words (and its wreck) wait until its unit is seen to land, as a
+     solo match's do; its armor bar holds until then. */
+  let fallsHeld: RoomEvent[] = [];
+  let heldCode: string | null = null;
   function netEvent(e: RoomEvent): void {
     if (!e || !e.t) return;
+    if (e.t === 'fall' || (e.t === 'kill' && fallsHeld.some(h => 'seat' in h && h.seat === e.seat))) {
+      const t = G.tanks.find(x => x.seat === e.seat);
+      if (t && (!fallSeen(G, t) || fallsHeld.some(h => 'seat' in h && h.seat === e.seat))) {
+        if (t.shownHp === undefined) t.shownHp = e.t === 'fall' ? t.hp + e.dmg : t.hp;
+        fallsHeld.push(e);
+        return;
+      }
+    }
+    sayNetEvent(e);
+  }
+  /* Says the held falls whose units have now been seen to land, in order. */
+  function releaseFalls(): void {
+    if (!fallsHeld.length) return;
+    if (heldCode !== net.code) { fallsHeld = []; return; }
+    const keep: RoomEvent[] = [];
+    for (const e of fallsHeld) {
+      const t = 'seat' in e ? G.tanks.find(x => x.seat === e.seat) : undefined;
+      if (!t) continue; // its unit is gone (a new round): nothing to say
+      if (!fallSeen(G, t)) { keep.push(e); continue; }
+      if (t) t.shownHp = undefined;
+      sayNetEvent(e);
+    }
+    fallsHeld = keep;
+  }
+  function sayNetEvent(e: RoomEvent): void {
     if (e.t !== 'fall' && e.t !== 'kill') fellLast = null;
     if (e.t === 'shot' || e.t === 'burst') return; // flown by the replay
     if (e.t === 'fizzle') { say(`${seatName(e.by)} sends one into the sunset.`, 'info'); return; }
@@ -557,6 +589,7 @@ export function createRoom(deps: RoomDeps) {
     updateCamera(dt);
     decayFx(dt);
     fallTanks(dt);
+    releaseFalls();
     for (const cl of G.clouds) {
       cl.x += cl.v * dt;
       if (cl.x - 40 > G.w) cl.x = -40;

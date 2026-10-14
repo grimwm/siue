@@ -97,3 +97,32 @@ test('the demo saves nothing', () => {
   }
   assert.deepEqual(saves, []);
 });
+
+test('a fall still playing out when a match is left never speaks in the next one', () => {
+  const said = [];
+  const { G, match } = harness({ say: t => said.push(t), difficulty: { get: () => 'normal' } });
+  const toFirstTurn = () => {
+    for (let i = 0; i < 10_000 && G.phase !== 'aim'; i++) {
+      if (G.phase === 'banner') match.tickBanner(10);
+      else if (G.phase === 'shop') match.nextRound();
+      else { match.fallTanks(1 / 60); match.stepWar(1 / 60); }
+    }
+    assert.equal(G.phase, 'aim');
+  };
+  match.startSolo('falls');
+  toFirstTurn();
+  // A drone hangs over a pit when its volley's last shell goes off the board.
+  const foe = G.tanks[1];
+  foe.y -= 120;
+  foe.fellBy = 0;
+  G.shells = [{ x: -100, y: 100, vx: -50, vy: 0, wkey: 'shell', owner: G.tanks[0], life: 1, age: 1, pierced: false, split: false, order: [0] }];
+  G.phase = 'fly';
+  match.stepWar(1 / 60);
+  assert.equal(match.fallsPending(), 1, 'its landing waits to be seen');
+  said.length = 0;
+  match.startSolo('next');
+  assert.equal(match.fallsPending(), 0, 'a new match starts with none');
+  toFirstTurn();
+  for (let i = 0; i < 600; i++) match.fallTanks(1 / 60);
+  assert.ok(!said.some(t => /falls|crater/.test(t)), said.join(' | '));
+});

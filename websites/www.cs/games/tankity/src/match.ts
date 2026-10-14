@@ -102,7 +102,9 @@ export function createMatch(deps: MatchDeps) {
     netNext, netAgain, initials, saveLocal,
   } = deps;
 
+  let fallsDue: FallShow[] = []; // solo landings waiting to be seen to touch down
   function resetMatch(seedStr?: string): void {
+    fallsDue = []; // a fall still playing out in the last match never speaks in this one
     const seed = (seedStr || '').trim() || ('scorched-' + Math.floor(Math.random() * 9000 + 1000));
     // The Menu's Difficulty, read once per match: a change waits for the next one.
     // The width comes from the screen at the deal and holds until the next one (spec 6.6).
@@ -167,6 +169,7 @@ export function createMatch(deps: MatchDeps) {
     newMatch(seedStr);
   }
   function newRound(bannerText?: string, event?: FlowEvent): void {
+    fallsDue = [];
     soloMuster(G, tables.arsenal!);
     G.roundStart = { score: G.score, cash: G.cash };
     G.parts = [];
@@ -316,8 +319,8 @@ export function createMatch(deps: MatchDeps) {
      at once, and on to where its volley's settle (or a room's server) put it.
      Nothing here decides armor. A settled landing's words, sparks and wreck
      show when its unit is seen to touch down. */
-  let fallsDue: FallShow[] = [];
   function fallTanks(dt: number): void {
+    if (net.on) fallsDue = []; // a room's falls speak through its own events (room.ts)
     if (simFallTanks(G, dt).some(t => t.isPlayer)) sfx.play('thud');
     if (!fallsDue.length) return;
     const d = dueFalls(G, fallsDue);
@@ -610,5 +613,7 @@ export function createMatch(deps: MatchDeps) {
   return {
     advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
     stepWar, decayFx, soloShopBoard, endVeilBack, checkOneUps,
+    /** Solo landings still waiting to be seen (tests read it). */
+    fallsPending: () => fallsDue.length,
   };
 }

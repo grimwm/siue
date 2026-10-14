@@ -666,10 +666,10 @@ await (async () => {
   // The arsenal section of game.json is a second source the game reads at
   // boot: it must hold every row and speak only effects and painters the code has.
   const arsenal = GAME.arsenal;
-  check('arsenal-count', arsenal.ammo.length === 23 && arsenal.gear.length === 9,
+  check('arsenal-count', arsenal.ammo.length === 39 && arsenal.gear.length === 9,
     `ammo=${arsenal.ammo.length} gear=${arsenal.gear.length}`);
-  const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter', 'beam', 'plasma', 'tracer'];
-  const PAINT = ['disc', 'beam', 'spark', 'ball', 'dash'];
+  const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter', 'beam', 'plasma', 'tracer', 'dirt', 'pour', 'dig', 'riot', 'slump'];
+  const PAINT = ['disc', 'beam', 'spark', 'ball', 'dash', 'drill', 'clod'];
   const TRICKS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand', 'parachute'];
   check('arsenal-fx', arsenal.ammo.every(a => FX.includes(a.effect) && a.gfx && PAINT.includes(a.gfx.painter)
     && typeof a.dmg === 'number' && typeof a.radius === 'number' && typeof a.price === 'number'
@@ -679,7 +679,7 @@ await (async () => {
   for (const r of arsenal.ammo.filter(a => a.pack > 0).concat(arsenal.gear)) {
     if (!cats.includes(r.cat)) cats.push(r.cat);
   }
-  check('arsenal-cats', cats.join('|') === 'Shells|Rollers|Beams|Tracers|Hull and fuel|Tricks', cats.join('|'));
+  check('arsenal-cats', cats.join('|') === 'Shells|Rollers|Beams|Tracers|Earth|Hull and fuel|Tricks', cats.join('|'));
   for (const k of ['shell', 'buck', 'mortar', 'rail', 'nuke', 'repair', 'fuel']) {
     check('arsenal-keeps-' + k, arsenal.ammo.some(a => a.key === k) || arsenal.gear.some(g => g.key === k));
   }

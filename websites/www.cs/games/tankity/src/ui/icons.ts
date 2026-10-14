@@ -39,7 +39,8 @@ export function iconCtx(cv: HTMLCanvasElement | null | undefined): CanvasRenderi
    shell color, in front of a faint blast ring sized by its radius. Beam
    shells fly flat as a bright streak; spark shells throw spokes; a plasma
    gun is rings around a core; a dash (a tracer) is its dashed path ending in
-   the cross it marks. */
+   the cross it marks; a drill (the diggers) is a body with a pointed,
+   fluted bit; a clod (the dirt guns) is a lumpy ball shedding crumbs. */
 export function drawShellIcon(cv: HTMLCanvasElement, w: Weapon | undefined): void {
   const c = w && w.gfx && iconCtx(cv);
   if (!c) return;
@@ -116,6 +117,52 @@ export function drawShellIcon(cv: HTMLCanvasElement, w: Weapon | undefined): voi
     c.arc(0, -2.2, 1, 0, Math.PI * 2);
     c.fill();
     c.restore();
+  } else if (g.painter === 'drill') {
+    // A drill: a body in its shell colour, a pointed bit with a dark spiral flute, nose to the right.
+    c.save();
+    c.translate(cx, cy);
+    c.rotate(0.35);
+    c.beginPath();
+    c.roundRect(-8, -3, 8, 6, 1.5);
+    c.fill();
+    c.fillStyle = '#d8b04a';
+    c.beginPath();
+    c.moveTo(0, -3.4);
+    c.lineTo(8, 0);
+    c.lineTo(0, 3.4);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = 'rgba(30,24,16,0.85)';
+    c.lineWidth = 0.9;
+    c.beginPath();
+    for (let i = 0; i <= 8; i++) {
+      const u = i / 8, r = 3.2 * (1 - u);
+      const x = u * 7.6, y = Math.sin(u * Math.PI * 5) * r;
+      if (i === 0) c.moveTo(x, y);
+      else c.lineTo(x, y);
+    }
+    c.stroke();
+    c.restore();
+  } else if (g.painter === 'clod') {
+    // A clod: a lumpy ball of dirt, darker lumps, and crumbs falling off it.
+    const lumps: [number, number, number][] = [[0, 0, 4.2], [-2.6, -1.8, 2.2], [2.4, -2, 2], [2.6, 1.8, 1.8], [-2.2, 2.2, 1.9]];
+    for (const [dx, dy, r] of lumps) {
+      c.beginPath();
+      c.arc(cx + dx, cy + dy, r, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.fillStyle = 'rgba(40,24,8,0.55)';
+    for (const [dx, dy] of [[-1.5, 0.5], [1.4, -0.8], [0.3, 2]] as [number, number][]) {
+      c.beginPath();
+      c.arc(cx + dx, cy + dy, 0.9, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.fillStyle = g.trail;
+    for (const [dx, dy] of [[-6, 4], [-8.5, 7], [-4, 8]] as [number, number][]) {
+      c.beginPath();
+      c.arc(cx + dx, cy + dy, 0.8, 0, Math.PI * 2);
+      c.fill();
+    }
   } else if (w.effect === 'cluster') {
     c.beginPath();
     c.arc(cx, cy, 2.8, 0, Math.PI * 2);

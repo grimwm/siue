@@ -21,7 +21,7 @@ Options (after the `--`):
     --only A,B        Render just these sheets (names from SHEETS and ATLASES
                       below: fireball, smoke, shock, energy, moon,
                       blast, plume, dirt, debris, scorch, flakburst, electric,
-                      nuke, flare, muzzle, shells, shells_blast, shells_beams, parachute,
+                      nuke, flare, muzzle, shells, shells_blast, shells_beams, shells_earth, parachute,
                       beam, plasma). Default: all. sprites.json
                       keeps the entries of sheets that were not re-rendered.
     --engine NAME     eevee (default; falls back to cycles if EEVEE cannot start
@@ -1700,6 +1700,142 @@ def build_p_smoketracer(frames, rng):
     part(puff, ramp_material('puff', [(0.0, (0.45, 0.45, 0.45)), (1.0, (0.85, 0.85, 0.83))], strength=0.9, alpha_power=1.4, noise=0.4), b)
 
 
+def build_p_clod(frames, rng):
+    """A ball of packed dirt: lumpy brown clods pressed together, a few
+    pebbles and roots, tumbling a full turn (the dirt guns)."""
+    shell_rig(rim=(0.9, 0.8, 0.6))
+    b = spinner(frames, 1.0, axis=1)
+    soil = [pbr('soil%d' % i, c, 0.0, 0.92) for i, c in enumerate(((0.36, 0.23, 0.12), (0.26, 0.16, 0.08), (0.46, 0.33, 0.19)))]
+    core = sphere(r=1.15, sub=3)
+    cloud_displace(core, 0.32, 0.5)
+    part(core, soil[0], b)
+    for i in range(14):
+        a, e = rng.uniform(0, math.tau), rng.uniform(-1.2, 1.2)
+        d = 1.0
+        o = clod(rng, rng.uniform(0.28, 0.45), rng.choice(soil))
+        o.location = (math.cos(a) * math.cos(e) * d, math.sin(a) * math.cos(e) * d, math.sin(e) * d)
+        o.parent = b
+    stone = pbr('stone', (0.55, 0.53, 0.5), 0.0, 0.6)
+    for i in range(5):
+        a, e = rng.uniform(0, math.tau), rng.uniform(-1.0, 1.0)
+        o = clod(rng, rng.uniform(0.1, 0.16), stone)
+        o.location = (math.cos(a) * math.cos(e) * 1.2, math.sin(a) * math.cos(e) * 1.2, math.sin(e) * 1.2)
+        o.parent = b
+
+
+def build_p_mud(frames, rng):
+    """A glob of liquid dirt: a glossy brown blob that wobbles, a tail of mud
+    stretched behind it and two drops flung off (Liquid Dirt)."""
+    shell_rig(rim=(0.9, 0.8, 0.6))
+    b = spinner(frames, 0.0)
+    mud = pbr('mud', (0.3, 0.18, 0.08), 0.0, 0.18)
+    wet = pbr('wet', (0.42, 0.27, 0.13), 0.0, 0.12)
+    blob = sphere(loc=(0.25, 0, 0), r=1.0, sub=4, scale=(0.9, 0.8, 0.8))
+    part(blob, mud, b)
+    tail = sphere(loc=(-0.65, 0, 0), r=1.0, sub=3, scale=(0.8, 0.42, 0.42))
+    part(tail, wet, b)
+    drops = []
+    for x, z, r in ((-1.45, 0.25, 0.16), (-1.3, -0.3, 0.12)):
+        d = sphere(loc=(x, 0, z), r=r, sub=2)
+        part(d, mud, b)
+        drops.append((d, x, z))
+    for f in range(frames):
+        t = f / frames * math.tau
+        k = 1.0 + 0.08 * math.sin(t * 2)
+        blob.scale = (0.9 * k, 0.8 / math.sqrt(k), 0.8 / math.sqrt(k))
+        blob.keyframe_insert('scale', frame=f)
+        tail.scale = (0.8 * (1.05 - 0.08 * math.sin(t * 2)), 0.42, 0.42 * (1.0 + 0.08 * math.cos(t * 2)))
+        tail.keyframe_insert('scale', frame=f)
+        for i, (d, x, z) in enumerate(drops):
+            d.location = (x - 0.12 * math.sin(t + i), 0, z + 0.06 * math.cos(t * 2 + i))
+            d.keyframe_insert('location', frame=f)
+
+
+def drill_bit(mat, parent, x0=0.2, length=1.25, r=0.42, turns=3):
+    """A conical drill bit pointing along +X from x0, with a dark raised spiral flute."""
+    bpy.ops.mesh.primitive_cone_add(vertices=40, radius1=r, radius2=0.02, depth=length, location=(x0 + length / 2, 0, 0), rotation=(0, math.pi / 2, 0))
+    part(bpy.context.active_object, mat, parent)
+    flute = pbr('flute', (0.12, 0.12, 0.14), 0.8, 0.35)
+    n = 30
+    for i in range(n):
+        u = i / (n - 1)
+        a = u * math.tau * turns
+        rad = r * (1 - u) + 0.02
+        o = sphere(loc=(x0 + u * length, -math.cos(a) * rad, math.sin(a) * rad), r=0.075 * (1 - 0.6 * u) + 0.02, sub=1)
+        part(o, flute, parent)
+
+
+def build_p_drill(frames, rng):
+    """A digger: a steel body with a yellow hazard band, a spinning drill bit
+    at the nose and short fins (the diggers)."""
+    shell_rig()
+    b = spinner(frames, 1.0)
+    steel, bitm, yellow, ink = pbr('steel', (0.5, 0.51, 0.55), 0.9, 0.3), pbr('bit', (0.95, 0.78, 0.38), 1.0, 0.25), pbr('yellow', (0.95, 0.72, 0.08), 0.1, 0.45), pbr('ink', (0.05, 0.05, 0.05), 0.0, 0.6)
+    cyl_x(0.42, -1.35, 0.2, steel, b)
+    cyl_x(0.43, -0.75, -0.35, yellow, b)
+    for ang in (0, 90, 180, 270):
+        decal(-0.55, ang + 45, 0.1, 0.36, ink, b, 0.435)
+    drill_bit(bitm, b)
+    fins(-1.45, -1.05, 0.3, steel, b, root=0.3, thick=0.04)
+
+
+def build_p_sandhog(frames, rng):
+    """A sandhog: a rust-red warhead body with a row of rivets and a black
+    band, a spinning drill bit at the nose (the burrowing bombs)."""
+    shell_rig()
+    b = spinner(frames, 1.0)
+    rust, bitm, band, rivet = pbr('rust', (0.5, 0.2, 0.1), 0.4, 0.45), pbr('bit', (0.95, 0.78, 0.38), 1.0, 0.25), pbr('band', (0.07, 0.06, 0.06), 0.3, 0.5), pbr('rivet', (0.8, 0.78, 0.72), 1.0, 0.3)
+    o = sphere(loc=(-0.45, 0, 0), r=1.0, sub=4, scale=(0.95, 0.55, 0.55))
+    part(o, rust, b)
+    cyl_x(0.5, -0.1, 0.25, band, b)
+    for ang in range(0, 360, 45):
+        a = math.radians(ang)
+        rv = sphere(loc=(-0.6, -math.cos(a) * 0.53, math.sin(a) * 0.53), r=0.06, sub=1)
+        part(rv, rivet, b)
+    drill_bit(bitm, b, x0=0.25, length=1.05, r=0.36)
+    fins(-1.5, -1.15, 0.28, band, b, root=0.2, thick=0.04)
+
+
+def build_p_riot(frames, rng):
+    """A riot bomb: a squat cream canister with black chevrons and a flat
+    blast plate for a nose (it moves earth and hurts nobody)."""
+    shell_rig()
+    b = spinner(frames, 0.5)
+    cream, ink, steel = pbr('cream', (0.86, 0.82, 0.7), 0.1, 0.5), pbr('ink', (0.06, 0.06, 0.06), 0.0, 0.6), pbr('steel', (0.45, 0.46, 0.5), 0.9, 0.35)
+    cyl_x(0.5, -1.0, 0.7, cream, b)
+    cyl_x(0.56, 0.7, 0.95, steel, b)
+    cyl_x(0.3, 0.95, 1.1, steel, b)
+    for ang in (0, 120, 240):
+        for x in (-0.5, 0.05):
+            decal(x, ang, 0.3, 0.07, ink, b, 0.505)
+            decal(x + 0.18, ang, 0.3, 0.07, ink, b, 0.505)
+    fins(-1.2, -0.85, 0.32, steel, b, root=0.32, thick=0.05)
+
+
+def build_p_disrupter(frames, rng):
+    """The Earth Disrupter: a teal body clasping a glowing core that pulses,
+    with three thin prongs at the nose that hum."""
+    shell_rig(rim=(0.6, 1.0, 0.9))
+    b = spinner(frames, 0.5)
+    teal, steel = pbr('teal', (0.12, 0.42, 0.38), 0.6, 0.3), pbr('steel', (0.55, 0.56, 0.6), 0.9, 0.3)
+    cyl_x(0.4, -1.3, -0.4, teal, b)
+    cyl_x(0.4, 0.35, 0.6, teal, b)
+    core = sphere(loc=(0, 0, 0), r=1.0, sub=3, scale=(0.42, 0.42, 0.42))
+    cm = ramp_material('core', [(0.0, (0.1, 0.7, 0.6)), (1.0, (0.85, 1.0, 0.95))], strength=2.4, alpha_power=0.7)
+    part(core, cm, b)
+    for ang in (0, 120, 240):
+        a = math.radians(ang)
+        bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=0.05, depth=0.8, location=(1.0, -math.cos(a) * 0.22, math.sin(a) * 0.22), rotation=(0, math.pi / 2, 0))
+        part(bpy.context.active_object, steel, b)
+    fins(-1.45, -1.05, 0.3, steel, b, root=0.3, thick=0.04)
+    for f in range(frames):
+        k = 1.0 + 0.18 * math.sin(f / frames * math.tau * 2)
+        core.scale = (0.42 * k, 0.42 * k, 0.42 * k)
+        core.keyframe_insert('scale', frame=f)
+        mat_key(cm, 'heat', f, 0.0)
+        mat_key(cm, 'alpha', f, 0.7 + 0.3 * math.sin(f / frames * math.tau * 2))
+
+
 # atlas name -> (frame px, frames per clip, fps, [(sheet name, builder)]):
 # one PNG, one row per clip; each clip is its own sheet in sprites.json.
 ATLASES = {
@@ -1717,6 +1853,11 @@ ATLASES = {
     # The tracers (the Laser and the Plasma Blast never fly, so wear p_rail and p_emp).
     'shells_beams': (48, 8, 12, [
         ('p_tracer', build_p_tracer), ('p_smoketracer', build_p_smoketracer),
+    ]),
+    # The Earth family's shells (the riot charges never fly, so wear p_riot unseen).
+    'shells_earth': (48, 8, 12, [
+        ('p_clod', build_p_clod), ('p_mud', build_p_mud), ('p_drill', build_p_drill), ('p_sandhog', build_p_sandhog),
+        ('p_riot', build_p_riot), ('p_disrupter', build_p_disrupter),
     ]),
 }
 

@@ -100,7 +100,7 @@ function shopProps(over = {}) {
   check('shop-list', list.localName === 'ul' && hasClass(list, 'scores'));
   const rows = list.children.filter(li => !hasClass(li, 'shop-cat'));
   check('shop-all-items', rows.length === ITEMS, String(rows.length));
-  check('shop-categories', list.children.filter(li => hasClass(li, 'shop-cat')).map(text).join('|') === 'Shells|Rollers|Beams|Tracers|Hull and fuel|Tricks',
+  check('shop-categories', list.children.filter(li => hasClass(li, 'shop-cat')).map(text).join('|') === 'Shells|Rollers|Beams|Tracers|Earth|Hull and fuel|Tricks',
     list.children.filter(li => hasClass(li, 'shop-cat')).map(text).join('|'));
   const free = list.children.find(li => hasClass(li, 'shop-free'));
   check('shop-shell-row-heads-the-shells', list.children.indexOf(free) === 1 && text(byClass(free, 'shop-name')[0]) === 'Shell ∞ (free)'

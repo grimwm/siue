@@ -39,7 +39,22 @@ test('a round that takes over while Next song is still loading is not announced'
   await settle();
   music.next(); // asks for B ...
   music.forRound(2); // ... but the round picks C before B can start
-  await settle();
+  await land('c.mp3'); // dropped from memory when A came back: fetched again
   music.stop();
+  assert.deepEqual(started, ['A:auto', 'C:auto']);
+});
+
+test('a track that stands in for a failed Next song is a failover, not announced', async () => {
+  const started = [];
+  music.onTrackStart((track, cause) => started.push(`${track.title}:${cause}`));
+  initAudio({ sfx: {}, music: [{ file: 'a.mp3', title: 'A' }, { file: 'x.mp3', title: 'X' }, { file: 'c.mp3', title: 'C' }] });
+  globalThis.fetch = file => Promise.resolve(file === 'x.mp3' ? { ok: false } : { ok: true, arrayBuffer: () => Promise.resolve({ file }) });
+  const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setTimeout(r, 0)); };
+  try {
+    music.start();
+    await settle();
+    music.next(); // asks for X, which fails to load; C stands in
+    await settle();
+  } finally { music.stop(); }
   assert.deepEqual(started, ['A:auto', 'C:auto']);
 });

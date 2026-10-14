@@ -268,6 +268,16 @@ export function trimSilence(buf: Pick<AudioBuffer, 'getChannelData' | 'sampleRat
 export function trackForLevel(level: number, count: number): number {
   return level <= 0 || count === 1 ? 0 : 1 + ((level - 1) % (count - 1));
 }
+/* A decoded track is about 35 MiB a minute, so only the theme (the demo and
+   intro come back to it) and the track now playing stay decoded; the fading
+   track keeps its own buffer until its voices stop. A dropped track is fetched
+   again when it comes round, from the service worker's cache. */
+function dropDecoded(playing: string): void {
+  const theme = MUSIC_LIST[0]?.file;
+  for (const file of Object.keys(TRACK_CACHE)) {
+    if (file !== playing && file !== theme) delete TRACK_CACHE[file];
+  }
+}
 function loadTrack(t: Track): Promise<TrackEntry | null> {
   const ac = audioCtx();
   if (!ac) return Promise.resolve(null);
@@ -341,6 +351,7 @@ function playTrack(): void {
     play.heard = null;
     fadeOutPlay(old, old ? SWITCH_S : 0);
     playPass(play, entry, typeof t.volume === 'number' ? t.volume : 1, ac.currentTime + 0.05, old ? SWITCH_S : 0.4);
+    dropDecoded(t.file);
     if (onTrackStart) onTrackStart(t, cause);
   });
 }
@@ -367,6 +378,7 @@ function nextTrack(): void {
 }
 function trackFailed(): void {
   trackFails++;
+  nextPending = false; // the stand-in is the player's choice failing over, not their choice
   const heard = heardPlay();
   if (trackMode()) { trackIdx = (trackIdx + 1) % MUSIC_LIST.length; trackPlay = heard; playTrack(); return; }
   // Every track failed: the built-in songs take over.
@@ -426,6 +438,8 @@ export const music = {
       }
     }
   },
+  /** The files held decoded in memory (the theme and the track playing). */
+  decodedTracks(): string[] { return Object.keys(TRACK_CACHE); },
   /** Called once a track begins to play, with its game.json entry and why it began. */
   onTrackStart(callback: ((track: Track, cause: TrackCause) => void) | null): void { onTrackStart = callback; },
 };

@@ -59,6 +59,10 @@ export interface RoomHandlers {
   onReadyChange(): void;
   /** A background send failed and the player should hear it. */
   onError(err: unknown): void;
+  /** The room this client sat in is gone ('closed': the server has no such
+   * room) or holds no seat for it any more ('seat': given up, in another tab
+   * say). The polls have stopped and the session is cleared. */
+  onGone?(code: string, why: 'closed' | 'seat'): void;
 }
 
 /* ---------- timing ---------- */
@@ -94,6 +98,11 @@ export function standingsRows(
   return seats
     .map(s => ({ name: s.human ? s.name : s.name + ' (AI)', score: s.score || 0, mine: s.seat === mySeat }))
     .sort((a, b) => b.score - a.score);
+}
+
+/** The server says the room is gone: swept, closed, never there. */
+export function isGoneError(err: unknown): boolean {
+  return /no such room/.test(String((err && (err as { message?: unknown }).message) || err || ''));
 }
 
 export function prettyRoomError(err: unknown): string {
@@ -463,8 +472,26 @@ export class RoomClient {
     const epoch = this.matchEpoch;
     try {
       const room = await this.getState();
-      if (this.on && epoch === this.matchEpoch) this.apply(room);
-    } catch (_) { /* the next poll retries; the hills wait */ }
+      if (!this.on || epoch !== this.matchEpoch) return;
+      if (this.seatLost(room)) { this.gone('seat'); return; }
+      this.apply(room);
+    } catch (err) {
+      if (this.on && epoch === this.matchEpoch && isGoneError(err)) this.gone('closed');
+      /* otherwise the next poll retries; the hills wait */
+    }
+  }
+
+  /** The room answered, but this seat is no longer a player's: given up
+   * (Leave in another tab) and taken by a bot. */
+  private seatLost(room: RoomSnapshot): boolean {
+    const mine = (room.seats || []).find(s => s.seat === this.seat);
+    return !room.you && !!mine && !mine.human;
+  }
+
+  private gone(why: 'closed' | 'seat'): void {
+    const code = this.code;
+    this.detach();
+    this.handlers.onGone?.(code, why);
   }
 
   /** Watches a lobby: every 2 s fetches the room for `onRoom`, until the
@@ -476,8 +503,13 @@ export class RoomClient {
       if (!this.code || this.on || !visible()) { this.stopLobbyWatch(); return; }
       void (async () => {
         try {
-          onRoom(await this.getState());
-        } catch (_) { /* keep listening */ }
+          const room = await this.getState();
+          if (this.seatLost(room)) { this.gone('seat'); return; }
+          onRoom(room);
+        } catch (err) {
+          if (isGoneError(err) && this.code) this.gone('closed');
+          /* otherwise keep listening */
+        }
       })();
     }, LOBBY_POLL_MS);
   }

@@ -26,7 +26,9 @@ export interface YourGamesProps extends GamesView {
   id: string;
 }
 
-/** Where a room stands, for its row; `age` is how long ago the row arrived. */
+/** Where a room stands, for its row; `age` is how long ago the row arrived.
+ * A row is not a live clock: it is redrawn when the list changes (each poll
+ * that brings different rows), so its time left is as fresh as that. */
 export function gameStatus(r: LiveRow, age: number): string {
   if (r.phase === 'lobby') return 'Waiting in the lobby';
   if (r.phase === 'over') return 'Match over';

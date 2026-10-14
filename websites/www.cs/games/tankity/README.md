@@ -480,6 +480,17 @@ A room plays over minutes, hours or a week.
   question offers Step out (back to the title card, seat kept) and Leave room
   (the seat goes to the drone battery for good); Menu → Quit steps out. Only
   Leave gives a seat up.
+- **A room's lobby closed with Q** keeps its seat and its heartbeat: this tab
+  keeps polling the lobby, so it stays open and listed in Your games. If the
+  host starts the match meanwhile, the match waits in Your games (and its turn
+  toast) rather than pulling the player out of what they are doing.
+- **A room that is gone** (swept after its idle limit) or a seat given up in
+  another tab stops the polls at once: the seat is forgotten and the player
+  lands in the rooms lobby with "Room CODE has closed." or "Your seat in room
+  CODE was given up."
+- **The lobby's status line** holds what the player's last act got (a refusal
+  such as a full long-game share, or a match that needs a drone) until the next
+  act; who starts the match is a separate line (`#room-hint`).
 - **Your games** lists those rooms on the title card and in the rooms lobby,
   each with where it stands ("ZED's turn", "Your turn, 7h 59m left", "Shop
   open"). A tab asks `action=mine` every 10 s and when it comes back into view;

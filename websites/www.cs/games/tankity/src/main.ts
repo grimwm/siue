@@ -393,6 +393,7 @@ const net = new RoomClient(browserRoomEnv(), {
   onSnapshot: (room, fresh, first) => netOnSnapshot(room, fresh, first),
   onReadyChange: () => renderShopReady(),
   onError: err => say(prettyRoomError(err), 'bad'),
+  onGone: (code, why) => netGone(code, why),
 });
 /* What the page keeps of a room match: whose turn it reads as, the aim and
    drive it has not sent, the room snapshot waiting for the replay to drain,
@@ -494,7 +495,7 @@ const {
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving. */
 const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-  netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime,
+  netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime, netGone,
 } = createLobby({
   G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, games: () => gamesView(),
   steppedOut: (code, myTurn) => { if (myTurn) watch.quietNext(code); }, netEvent, seatName, closeLobbyVeil,

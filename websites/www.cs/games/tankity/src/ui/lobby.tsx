@@ -79,6 +79,8 @@ export interface LobbyProps {
   /** Only the host starts the match and flips the empty seats. */
   isHost: boolean;
   seatsHint: string;
+  /** In a room: who starts the match. */
+  roomHint?: string;
   onSeatMode: (seat: number, mode: 'ai' | 'open') => void;
   /** The turn time: the host form's pick, or the room's. */
   turnSecs: number;
@@ -215,6 +217,7 @@ export function Lobby(p: LobbyProps) {
             </div>
           </div>
           <p class="hint" id="seats-hint">{p.seatsHint}</p>
+          <p class="hint" id="room-hint">{p.roomHint ?? ''}</p>
           {p.games && <AlertsButton id="room-alerts" state={p.games.alerts} onClick={p.games.onAlerts} />}
           <div class="acts">
             <button type="button" id="lobby-start" class="btn-primary" style={p.isHost ? undefined : { display: 'none' }}

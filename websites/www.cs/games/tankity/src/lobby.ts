@@ -44,6 +44,8 @@ export interface LobbyView {
   mySeat: number;
   isHost: boolean;
   seatsHint: string;
+  /** In a room: who starts the match ("You host…", "Hang tight…"), apart from the status line. */
+  roomHint: string;
   /** Bumped to put the saved initials back in the boxes; the line saying why typed ones cannot be used. */
   initialsRev: number;
   initialsProblem: string;
@@ -111,7 +113,7 @@ export function createLobby(deps: LobbyDeps) {
      boxes stay the page's own. */
   const LOBBY: LobbyView = {
     status: '', count: '', online: false, inRoom: false, mapId: '', mapsRev: 0, prefill: '',
-    code: '', link: '', hills: 'Hills: Random hills', drones: '', seats: [], mySeat: 0, isHost: false, seatsHint: '',
+    code: '', link: '', hills: 'Hills: Random hills', drones: '', seats: [], mySeat: 0, isHost: false, seatsHint: '', roomHint: '',
     initialsRev: 0, initialsProblem: '', turnSecs: TURN_DEFAULT,
   };
   function lobbySay(text: string): void {
@@ -180,6 +182,7 @@ export function createLobby(deps: LobbyDeps) {
       mySeat: LOBBY.mySeat,
       isHost: LOBBY.isHost,
       seatsHint: LOBBY.seatsHint,
+      roomHint: LOBBY.roomHint,
       onSeatMode: netSeatMode,
       turnSecs: LOBBY.turnSecs,
       onTurnForm: secs => { LOBBY.turnSecs = secs; renderLobby(); },
@@ -278,6 +281,7 @@ export function createLobby(deps: LobbyDeps) {
     try {
       await net.host(initials, mapId || '', G.body, difficulty.get(), LOBBY.turnSecs);
       rememberSeat(initials);
+      lobbySay('');
       say(`Room ${net.code} hosted. Read the code to your friends.`, 'info');
       await netRefreshRoster();
       loadOccupancy();
@@ -290,6 +294,7 @@ export function createLobby(deps: LobbyDeps) {
     try {
       await net.join(code, initials, G.body);
       rememberSeat(initials);
+      lobbySay('');
       say(`Joined room ${net.code} as ${initials}.`, 'info');
       await netRefreshRoster();
       netLobbyWatch();
@@ -309,8 +314,11 @@ export function createLobby(deps: LobbyDeps) {
   const lobbyTold = { code: '', seq: 0 };
   function netLobbyWatch(): void {
     if (lobbyTold.code !== net.code) { lobbyTold.code = net.code; lobbyTold.seq = 0; }
+    // It runs while this tab holds the lobby seat, shown or not: its polls are
+    // the heartbeat that keeps a waiting lobby open (a lobby closed with Q
+    // stays listed in Your games, and stays alive).
     net.watchLobby(
-      () => { const veil = $('lobby-veil'); return !!veil && !veil.hidden; },
+      () => true,
       room => {
         net.seats = room.seats || [];
         net.hostSeat = room.hostSeat;
@@ -321,7 +329,13 @@ export function createLobby(deps: LobbyDeps) {
           if (e.t === 'left' || e.seat !== net.seat) netEvent(e);
         }
         netRenderRoster(room);
-        if (room.phase && room.phase !== 'lobby') startNetMatch(room);
+        if (room.phase && room.phase !== 'lobby') {
+          const veil = $('lobby-veil');
+          // Shown: the match starts here. Closed: the player is elsewhere (the title
+          // card, a solo match); the room waits in Your games and its turn toasts.
+          if (veil && !veil.hidden) startNetMatch(room);
+          else net.stopLobbyWatch();
+        }
       },
     );
   }
@@ -378,11 +392,12 @@ export function createLobby(deps: LobbyDeps) {
   async function resumeRoom(code: string): Promise<boolean> {
     const s = seats.get(code);
     if (!s) return false;
-    if (net.code === code) {
-      // Already this room: show it.
-      if (net.on) closeTitle(); else await openLobby();
+    if (net.code === code && net.on) {
+      closeTitle(); // already this room's match
       return true;
     }
+    // This room's lobby, kept while closed: read it afresh (it may have started).
+    if (net.code === code) net.detach();
     if (net.code) netStepOut(true);
     net.resume(s);
     MATCH.initials = s.initials;
@@ -445,7 +460,9 @@ export function createLobby(deps: LobbyDeps) {
     LOBBY.seatsHint = net.isHost
       ? 'Tap a seat nobody holds to switch it between AI and Open. Open seats field no tank.'
       : 'The host decides which empty seats are AI and which stay open.';
-    lobbySay(net.isHost ? 'You host. Start when your crew is in.' : 'Hang tight. The host starts the match.');
+    // The status line is left alone: a refusal there stays until the player acts again.
+    LOBBY.roomHint = net.isHost ? 'You host. Start when your crew is in.' : 'Hang tight. The host starts the match.';
+    renderLobby();
   }
   /* The host sets the turn time, in the lobby or mid-match; it counts from
      the next turn. The slider shows the pick at once, and the pick is sent
@@ -461,6 +478,7 @@ export function createLobby(deps: LobbyDeps) {
   });
   function netTurnTime(secs: number): void {
     if (!net.code || !net.isHost) return;
+    if (!net.on) LOBBY.status = ''; // a new act: an earlier refusal has had its say
     if (turnHeld === null) turnHeld = net.turnSecs;
     LOBBY.turnSecs = secs;
     net.turnSecs = secs;
@@ -494,12 +512,24 @@ export function createLobby(deps: LobbyDeps) {
   /* The host flips a seat nobody holds between the drone battery and open. */
   async function netSeatMode(seat: number, mode: 'ai' | 'open'): Promise<void> {
     if (!net.isHost || net.on) return;
+    LOBBY.status = ''; // a new act: an earlier refusal has had its say
     try {
       const d = await net.post('seatmode', { seat, mode, since: net.since });
       net.seats = d.room.seats || [];
       net.hostSeat = d.room.hostSeat;
       netRenderRoster(d.room);
     } catch (err) { lobbySay(prettyRoomError(err)); }
+  }
+  /* The room this client sat in is gone (the server swept it) or its seat was
+     given up elsewhere: the seat is forgotten here too, and the player lands
+     in the lobby with a line saying so, to host or join again. */
+  function netGone(code: string, why: 'closed' | 'seat'): void {
+    seats.forget(code);
+    dropRoom();
+    LOBBY.inRoom = false;
+    void openLobby().then(() => {
+      lobbySay(why === 'closed' ? `Room ${code} has closed.` : `Your seat in room ${code} was given up.`);
+    });
   }
   async function startRoom(): Promise<void> {
     if (!net.isHost) return;
@@ -626,6 +656,6 @@ export function createLobby(deps: LobbyDeps) {
   }
   return {
     renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-    netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime,
+    netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime, netGone,
   };
 }

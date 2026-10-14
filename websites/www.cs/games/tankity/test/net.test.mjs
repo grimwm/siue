@@ -737,3 +737,39 @@ check('invite-url-escapes-the-code', inviteUrl('A&B', {}) === '?code=A%26B');
   await fine.net.mine([{ code: 'FXT1', token: 'tok' }]);
   check('mine-success-leaves-the-dot', fine.seen.reachable.length === 0, JSON.stringify(fine.seen.reachable));
 }
+
+// ---- a room that closed, or a seat given up elsewhere, stops the polls and says so ----
+{
+  const gone = [];
+  const host = makeHost(url => (url.includes('action=state') ? { status: 404, body: { ok: false, error: 'no such room' } } : roomReply()));
+  const net = new RoomClient(host.env, { onReachable() {}, onSnapshot() {}, onReadyChange() {}, onError() {}, onGone: (c, why) => gone.push([c, why]) });
+  net.code = 'FXT1'; net.token = 'tok'; net.seat = 0;
+  net.beginMatch();
+  [...host.intervals.values()][0].fn();
+  await flush();
+  check('gone-room-detaches', net.code === '' && net.on === false && host.intervals.size === 0);
+  check('gone-room-reported', j(gone) === j([['FXT1', 'closed']]), j(gone));
+}
+{
+  const gone = [];
+  // The seat was given up in another tab: the server answers the room, but to no seat.
+  const host = makeHost(() => roomReply({ phase: 'play', seats: [{ seat: 0, human: true, name: 'ABC' }, { seat: 1, human: false, bot: true, name: 'ZED' }] }));
+  const net = new RoomClient(host.env, { onReachable() {}, onSnapshot() {}, onReadyChange() {}, onError() {}, onGone: (c, why) => gone.push([c, why]) });
+  net.code = 'FXT1'; net.token = 'tok'; net.seat = 1;
+  net.beginMatch();
+  [...host.intervals.values()][0].fn();
+  await flush();
+  check('gone-seat-reported', j(gone) === j([['FXT1', 'seat']]) && net.code === '', j(gone));
+}
+{
+  // A plain network failure is not a closed room: the poll goes on.
+  const gone = [];
+  const host = makeHost(() => new Error('offline'));
+  const net = new RoomClient(host.env, { onReachable() {}, onSnapshot() {}, onReadyChange() {}, onError() {}, onGone: (c, why) => gone.push([c, why]) });
+  net.code = 'FXT1'; net.token = 'tok'; net.seat = 0;
+  net.beginMatch();
+  [...host.intervals.values()][0].fn();
+  await flush();
+  check('offline-is-not-gone', gone.length === 0 && net.code === 'FXT1' && host.intervals.size === 1);
+  net.stopPolling();
+}

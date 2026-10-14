@@ -214,11 +214,15 @@ function room_weapon_row(array $am): array
         'range' => (float) ($am['range'] ?? 0),
         'aimMin' => (float) ($am['aimMin'] ?? ROOM_AIM_MIN),
         'volume' => (float) ($am['volume'] ?? 0),
+        'poolMin' => (float) ($am['poolMin'] ?? 0),
         'digLen' => (float) ($am['digLen'] ?? 0),
         'digR' => (float) ($am['digR'] ?? 0),
         'warheads' => (int) ($am['warheads'] ?? 0),
         'slope' => (float) ($am['slope'] ?? 1.0),
         'passes' => (int) ($am['passes'] ?? 1),
+        'burn' => (float) ($am['burn'] ?? 0),
+        'tick' => (float) ($am['tick'] ?? 0.5),
+        'flame' => (float) ($am['flame'] ?? 0),
     ];
 }
 function room_gear(string $key): ?array

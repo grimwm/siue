@@ -10,6 +10,8 @@
 import { datan2, dcos, dsin } from './detmath.ts';
 import { BURY_EPS, DIG_STEP, FLOOR, applyEarth, carveCrater, digHeading } from './earth.ts';
 import type { EarthOp } from './earth.ts';
+import { burnTicks, firePool, inFlames, tickSteps } from './fire.ts';
+import type { FirePool } from './fire.ts';
 
 /* ---------- seeded RNG (mulberry32 + string hash) ---------- */
 export type Rng = () => number;
@@ -129,12 +131,16 @@ export interface Weapon {
   rollTime?: number;
   range?: number; // beam: its length at full power on a room's field, px
   aimMin?: number; // beam: the barrel's lowest angle (below 0 dips under level), on either side
-  volume?: number; // pour: px^2 of liquid dirt
+  volume?: number; // pour, napalm: px^2 of liquid
+  poolMin?: number; // pour, napalm: px deep a liquid spreads to, no thinner (a puddle on flat ground)
   digLen?: number; // dig: px it burrows
   digR?: number; // dig: the trench's half width
   warheads?: number; // dig: blasts along the burrow
   slope?: number; // slump: px a column may stand above its neighbour
   passes?: number; // slump: passes over the ground
+  burn?: number; // napalm: seconds its pool burns
+  tick?: number; // napalm: seconds between burns
+  flame?: number; // napalm: px its flames stand over the pool
   note?: string;
   gfx?: Gfx;
 }
@@ -255,6 +261,22 @@ export interface Shell extends Motion {
   dl?: number;
   dk?: number;
 }
+/* A napalm pool burning in the war: lit where its shell burst, it hurts
+   every unit in its flames once every `every` sim steps, `ticks` times, and
+   goes out with the last (stepFires). */
+export interface Fire {
+  wkey: string;
+  owner: Tank;
+  pool: FirePool;
+  /** The column it was poured at. */
+  col: number;
+  /** Sim steps between ticks (fire.ts tickSteps) and the ticks it burns in all (burnTicks). */
+  every: number;
+  ticks: number;
+  /** Sim steps it has burned, and ticks it has burnt. */
+  step: number;
+  done: number;
+}
 export interface Cloud {
   x: number;
   y: number;
@@ -271,6 +293,8 @@ export interface World {
   round: number;
   rng: Rng;
   shells: Shell[];
+  /** Napalm pools burning this volley (missing: none). */
+  fires?: Fire[];
   score: number;
   cash: number;
   ammo: Ammo | null; // the player's
@@ -1096,6 +1120,10 @@ export type StepEvent =
   /** An earth gun moved the ground (op, as the room wire carries it): dirt, a
    *  pour or a slump where it burst, a riot charge the moment it fired. */
   | { kind: 'earth'; op: EarthOp; owner: Tank; before: number[]; x0: number; x1: number }
+  /** A napalm shell burst: its pool is lit (it burns nothing yet; ticks are `burn` events). */
+  | { kind: 'fire'; fire: Fire }
+  /** A burning pool's tick: what it did to each unit in its flames. */
+  | { kind: 'burn'; fire: Fire; hits: Blast }
   /** A digger touched down (step 0) or cut step `step` of its trench at (x, y), heading ang; r is the trench's half width. */
   | { kind: 'dig'; wkey: string; x: number; y: number; ang: number; r: number; step: number; owner: Tank }
   | { kind: 'blast'; blast: Blast };
@@ -1166,10 +1194,15 @@ function burstShell(world: World, arsenal: Arsenal, s: Shell, w: Weapon, direct:
     op = { t: 'dirt', w: s.wkey, x: s.x, y: s.y, r: w.radius };
   } else if (w.effect === 'pour') {
     brkLand(s.owner, s.x);
-    op = { t: 'pour', w: s.wkey, x: Math.round(clamp(s.x, 0, fw - 1)), v: w.volume || 0 };
+    op = { t: 'pour', w: s.wkey, x: Math.round(clamp(s.x, 0, fw - 1)), v: w.volume || 0, m: w.poolMin || 0 };
   } else if (w.effect === 'slump') {
     brkLand(s.owner, s.x);
     op = { t: 'slump', w: s.wkey, x: s.x, r: w.radius, slope: w.slope || 1, passes: w.passes || 1 };
+  } else if (w.effect === 'napalm') {
+    brkLand(s.owner, s.x);
+    lightFire(world, s, w, events);
+    s.dead = true;
+    return;
   } else if (w.effect === 'dig') {
     brkLand(s.owner, s.x);
     [s.dux, s.duy] = digHeading(s.vx, s.vy);
@@ -1193,6 +1226,46 @@ function burstShell(world: World, arsenal: Arsenal, s: Shell, w: Weapon, direct:
   events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, direct, ov) });
   afterBurst(world, s, w, direct, events);
   s.dead = true;
+}
+/* A napalm shell's pool, lit where it burst (fire.ts firePool, at its
+   column, on the ground of this moment, which it never changes). A pool that
+   spilled away lights nothing. server/rules.php room_fire_burn is the same. */
+function lightFire(world: World, s: Shell, w: Weapon, events: StepEvent[]): void {
+  const col = Math.round(clamp(s.x, 0, world.terrain.length - 1));
+  const pool = firePool(world.terrain, col, w.volume || 0, w.flame || 0, w.poolMin || 0);
+  const fire: Fire = { wkey: s.wkey, owner: s.owner, pool, col, every: tickSteps(w.tick || 0.5),
+    ticks: pool.x0 <= pool.x1 ? burnTicks(w.burn || 0, w.tick || 0.5) : 0, step: 0, done: 0 };
+  events.push({ kind: 'fire', fire });
+  if (fire.ticks > 0) (world.fires || (world.fires = [])).push(fire);
+}
+/* One sim step (1/60 s) of every burning pool: a pool burns a tick each
+   `every` steps, and each living unit whose body reaches into its flames
+   (fire.ts inFlames) and is not buried under the ground the pool lies on, in world.tanks order, takes the gun's dmg through
+   hitUnit (a shield eats one tick whole, a bunker halves each), credited to
+   its gunner, the gunner's own burns included (they score nothing). It goes
+   out with its last tick. stepShells runs it first, every step.
+   server/rules.php room_fire_burn is the same. */
+export function stepFires(world: World, arsenal: Arsenal): StepEvent[] {
+  const events: StepEvent[] = [];
+  if (!world.fires || !world.fires.length) return events;
+  for (const f of world.fires) {
+    f.step++;
+    if (f.step % f.every !== 0 || f.done >= f.ticks) continue;
+    f.done++;
+    const w = arsenal.weapons[f.wkey]!;
+    const hits: Blast = { x: f.col, y: f.pool.level, r: 0, wkey: f.wkey, fx: f.wkey, shake: 0, owner: f.owner, events: [] };
+    for (const t of world.tanks) {
+      if (t.hp > 0 && !buried(t, world.terrain) && inFlames(f.pool, unitHitBox(t))) hitUnit(world, arsenal, t, f.owner, w.dmg, w, false, hits.events);
+    }
+    events.push({ kind: 'burn', fire: f, hits });
+  }
+  world.fires = world.fires.filter(f => f.done < f.ticks);
+  return events;
+}
+/* Whether a volley is still playing out: a shell in the air (or rolling, or
+   burrowing), or a pool still burning. Its falls settle once it is not. */
+export function volleyOn(world: Pick<World, 'shells' | 'fires'>): boolean {
+  return world.shells.length > 0 || !!(world.fires && world.fires.length);
 }
 /* One step of a digger's burrow: DIG_STEP px on along its heading, cutting
    its trench (a crater of digR there, owning the falls it digs), and
@@ -1251,7 +1324,8 @@ function afterBurst(world: World, s: Shell, w: Weapon, direct: Tank | null, even
     events.push({ kind: 'scatter', wkey: s.wkey, x: s.x, y: s.y, ang: -Math.PI / 2 });
   }
 }
-/* Advances every shell dt seconds: flight, fuses, hits and bursts. Bomblets
+/* Advances every burning pool one step (stepFires, first), then every shell
+   dt seconds: flight, fuses, hits and bursts. Bomblets
    born this frame fly this frame too. A volley's shells fly together, but they
    burst in launch order, as the room server resolves them: a shell that
    reaches something to burst on while an earlier one is still flying holds
@@ -1259,7 +1333,7 @@ function afterBurst(world: World, s: Shell, w: Weapon, direct: Tank | null, even
    Bomblets of one burst are the exception: they burst as they land, in list
    order within a frame (server/sim.php room_fly_siblings). */
 export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEvent[] {
-  const events: StepEvent[] = [];
+  const events: StepEvent[] = stepFires(world, arsenal);
   for (const s of world.shells) {
     const w = arsenal.weapons[s.wkey]!;
     if (s.rolling) {

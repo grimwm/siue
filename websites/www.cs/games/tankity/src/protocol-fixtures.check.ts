@@ -23,6 +23,7 @@ import playAfterFireDelta from '../protocol/play-after-fire-delta.json' with { t
 import playAfterBeam from '../protocol/play-after-beam.json' with { type: 'json' };
 import playAfterRing from '../protocol/play-after-ring.json' with { type: 'json' };
 import playAfterEarth from '../protocol/play-after-earth.json' with { type: 'json' };
+import playAfterBurn from '../protocol/play-after-burn.json' with { type: 'json' };
 import playResync from '../protocol/play-resync.json' with { type: 'json' };
 import playTurntime from '../protocol/play-turntime.json' with { type: 'json' };
 import mineReply from '../protocol/mine-reply.json' with { type: 'json' };
@@ -91,6 +92,7 @@ export const fixturesFit: {
   playAfterBeam: Fits<typeof playAfterBeam.body, RoomReply>;
   playAfterRing: Fits<typeof playAfterRing.body, RoomReply>;
   playAfterEarth: Fits<typeof playAfterEarth.body, RoomReply>;
+  playAfterBurn: Fits<typeof playAfterBurn.body, RoomReply>;
   playResync: Fits<typeof playResync.body, RoomReply>;
   playTurntime: Fits<typeof playTurntime.body, RoomReply>;
   mineReply: Fits<typeof mineReply.body, MineReply>;
@@ -109,6 +111,7 @@ export const fixturesFit: {
   playAfterBeam: true,
   playAfterRing: true,
   playAfterEarth: true,
+  playAfterBurn: true,
   playResync: true,
   playTurntime: true,
   mineReply: true,

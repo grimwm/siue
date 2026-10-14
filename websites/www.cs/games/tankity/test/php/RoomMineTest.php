@@ -95,6 +95,25 @@ final class RoomMineTest extends TestCase
         $this->assertFalse($other['yourTurn']);
         $this->assertNull($other['turnKey']);
         $this->assertSame(0, $other['turn']);
+        // Both rows name whose turn it is, so the list can say "ABC's turn".
+        $this->assertSame('ABC', $mine['turnName']);
+        $this->assertSame('ABC', $other['turnName']);
+    }
+
+    public function testTurnNameIsTheDronesOnADroneTurnAndNullOutsidePlay(): void
+    {
+        $room = $this->playing();
+        $drone = null;
+        foreach ($room['tanks'] as $i => $t) {
+            if ($t['kind'] !== 'human') {
+                $drone = $i;
+            }
+        }
+        $room['turn'] = $drone;
+        $seat = $room['tanks'][$drone]['seat'];
+        $this->assertSame($room['seats'][$seat]['name'], room_mine_row($room, 0)['turnName']);
+        $room['phase'] = 'shop';
+        $this->assertNull(room_mine_row($room, 0)['turnName']);
     }
 
     public function testMineAppliesADueTimeout(): void

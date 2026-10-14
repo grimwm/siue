@@ -20,7 +20,9 @@
                     "ABC"
                 ],
                 "hostSeat": 0,
-                "expiresAt": 1800000600
+                "turnName": "ABC",
+                "expiresAt": 1800000600,
+                "closesIn": 600
             },
             {
                 "code": "FXT1",
@@ -39,7 +41,9 @@
                     "DEF"
                 ],
                 "hostSeat": 0,
-                "expiresAt": 1800000600
+                "turnName": null,
+                "expiresAt": 1800000600,
+                "closesIn": 600
             },
             {
                 "code": "GONE",

@@ -201,4 +201,16 @@ final class RoomIdleTest extends TestCase
         $this->assertSame($expected, room_snapshot($play, null, 0)['expiresAt'], 'a watcher gets it too');
         $this->assertSame($expected, room_mine_row($play, 0)['expiresAt']);
     }
+
+    public function testClosesInIsSecondsFromNowSoAClientClockNeverMatters(): void
+    {
+        $play = $this->started('EXPC', 'play', 2, 600, time() - 100);
+        $play['seats'][1]['addr'] = 'other';
+        $play['seats'][0]['addr'] = 'one';
+        $want = room_expires($play) - time();
+        $this->assertEqualsWithDelta($want, room_snapshot($play, 0, 0)['closesIn'], 1);
+        $this->assertEqualsWithDelta($want, room_mine_row($play, 0)['closesIn'], 1);
+        $this->assertSame(0, room_closes_in($play, room_expires($play) + 50), 'never negative');
+        $this->assertSame(30, room_closes_in($play, room_expires($play) - 30));
+    }
 }

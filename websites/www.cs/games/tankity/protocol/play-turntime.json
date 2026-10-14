@@ -19,6 +19,7 @@
             "turn": 0,
             "turnSecs": 600,
             "expiresAt": 1800000600,
+            "closesIn": 600,
             "turnLeft": 120,
             "shopLeft": null,
             "terrainRev": 2,

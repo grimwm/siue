@@ -160,6 +160,14 @@ function room_expires(array $r): int
     return (int) ($r['actedAt'] ?? $touched) + room_idle_limit($r);
 }
 
+/* Seconds from now until the room closes for want of play, never negative.
+   Replies carry it beside expiresAt so a client counts down from when the
+   answer arrived, whatever its own clock says. */
+function room_closes_in(array $r, ?int $now = null): int
+{
+    return max(0, room_expires($r) - ($now ?? time()));
+}
+
 /* Past its expiry. The stored column (rooms.expires) is room_expires at the
    last save, so the count, the cap and the sweep agree with this. */
 function room_idle(array $r, ?int $now = null): bool

@@ -157,7 +157,26 @@ function protocol_snapshots(): array
             room_mine_row($lobby, 1),
             ['code' => 'GONE', 'gone' => true],
         ]]];
+    foreach ($out as $name => [$about, $status, $body]) {
+        $out[$name][2] = protocol_fixed_close($body);
+    }
     return $out;
+}
+
+/* closesIn is seconds from the moment of the reply: in a fixture it is
+   counted from the fixture rooms' fixed touch time (PROTOCOL_TOUCHED), so it
+   is stable like expiresAt. */
+function protocol_fixed_close(array $v): array
+{
+    if (array_key_exists('closesIn', $v) && is_int($v['expiresAt'] ?? null)) {
+        $v['closesIn'] = max(0, $v['expiresAt'] - PROTOCOL_TOUCHED);
+    }
+    foreach ($v as $k => $item) {
+        if (is_array($item)) {
+            $v[$k] = protocol_fixed_close($item);
+        }
+    }
+    return $v;
 }
 
 /** The shape of a decoded JSON value: object keys with types, lists as the

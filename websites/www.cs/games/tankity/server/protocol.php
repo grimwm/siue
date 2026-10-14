@@ -106,8 +106,10 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
         'turn' => $room['phase'] === 'play' && count($room['tanks']) ? $room['tanks'][$room['turn']]['seat'] ?? null : null,
         // The room's turn time in seconds, one of the host's stops.
         'turnSecs' => room_turn_secs($room),
-        // When the room closes for want of play, unix seconds (room_expires as stored).
+        // When the room closes for want of play, unix seconds (room_expires as stored),
+        // and the same as seconds from this reply, for clients whose clock is off.
         'expiresAt' => room_expires($room),
+        'closesIn' => room_closes_in($room),
         // Seconds left before a drone fires for the human whose turn it is.
         'turnLeft' => (function () use ($room) {
             $left = room_turn_left($room);
@@ -186,6 +188,10 @@ function room_mine_row(array $room, int $seat): array
         'yourTurn' => $yours, 'turnKey' => $yours ? room_turn_key($room) : null,
         'turnLeft' => $left === null ? null : round($left, 1), 'shopLeft' => $shop === null ? null : round($shop, 1),
         'players' => $players, 'hostSeat' => room_host($room),
+        // Whose turn it is by name: a human's initials or the drone's name; null outside play.
+        'turnName' => $turnSeat === null ? null
+            : (string) (($room['seats'][$turnSeat]['human'] ?? false) ? $room['seats'][$turnSeat]['initials'] : ($room['seats'][$turnSeat]['name'] ?? '')),
         'expiresAt' => room_expires($room),
+        'closesIn' => room_closes_in($room),
     ];
 }

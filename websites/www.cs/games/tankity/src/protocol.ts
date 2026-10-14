@@ -41,8 +41,12 @@ export type MineRow =
     /** Every human's initials, this seat's included, in seat order. */
     players: string[];
     hostSeat: number;
+    /** Whose turn it is by name (a human's initials or the drone's name); null outside play. */
+    turnName: string | null;
     /** When the room closes for want of play, unix seconds. */
     expiresAt: number;
+    /** The same as seconds from this reply: what a client counts down from. */
+    closesIn: number;
   };
 
 /** action=mine answers one row per seat asked, in the order asked. */
@@ -155,6 +159,8 @@ export interface RoomSnapshot {
   turnSecs: number;
   /** When the room closes for want of play, unix seconds; it can come before turnLeft runs out. */
   expiresAt: number;
+  /** Seconds from this reply until the room closes for want of play: what a client counts down from. */
+  closesIn: number;
   /** Seconds before a drone fires for the human on turn; null otherwise. */
   turnLeft: number | null;
   /** Seconds before the shop closes; null outside the shop. */

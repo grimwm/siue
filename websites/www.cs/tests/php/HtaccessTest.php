@@ -1,10 +1,19 @@
 <?php
+// Pages revalidate on every visit (root and games/), so a cached page never names removed files.
 declare(strict_types=1);
 
-final class HtaccessTest extends LegacyCheckCase
+use PHPUnit\Framework\TestCase;
+
+final class HtaccessTest extends TestCase
 {
-    protected static function script(): string
+    /** the root and games/ .htaccess send Cache-Control: no-cache for .html */
+    public function testPagesRevalidate(): void
     {
-        return __DIR__ . '/checks/htaccess.php';
+        $root = dirname(__DIR__, 2);
+        foreach (['.htaccess', 'games/.htaccess'] as $f) {
+            $text = (string) @file_get_contents("$root/$f");
+            self::assertTrue(str_contains($text, '<FilesMatch "\.html$">')
+                && str_contains($text, 'Header set Cache-Control "no-cache"'), "$f-pages-revalidate" . ' :: ' . $f);
+        }
     }
 }

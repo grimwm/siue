@@ -74,7 +74,7 @@ fi
 # deploy-set.php plants probe files under games/zz-probe while it lists the set;
 # a killed test could leave them behind, so a real deploy refuses to ship them.
 if [ "${LIST:-0}" != 1 ] && [ -e games/zz-probe ]; then
-  echo "deploy: games/zz-probe is a leftover of tests/php/checks/deploy-set.php; delete it" >&2
+  echo "deploy: games/zz-probe is a leftover of tests/php/DeploySetTest.php; delete it" >&2
   exit 1
 fi
 

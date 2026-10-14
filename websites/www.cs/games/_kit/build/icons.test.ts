@@ -11,8 +11,8 @@ import { ICONS, iconSvg, rasterize, renderPng, writeIcons, checkIcons } from './
 const SOURCE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">'
   + '<g id="bg"><rect width="512" height="512" fill="#112233"/></g>'
   + '<g id="art"><circle cx="256" cy="256" r="100" fill="#ff0000"/></g></svg>';
-const at = (img, x, y) => Array.from(img.pixels.slice((y * img.width + x) * 4, (y * img.width + x) * 4 + 4));
-const pngSize = png => [png.readUInt32BE(16), png.readUInt32BE(20)];
+const at = (img: ReturnType<typeof rasterize>, x: number, y: number) => Array.from(img.pixels.slice((y * img.width + x) * 4, (y * img.width + x) * 4 + 4));
+const pngSize = (png: Buffer) => [png.readUInt32BE(16), png.readUInt32BE(20)];
 
 test('a game gets six icons: any, maskable, monochrome and Apple', () => {
   assert.deepEqual(ICONS.map(i => [i.file, i.size, i.look]), [
@@ -74,7 +74,9 @@ test('--check passes on fresh icons, names a changed drawing or a missing icon, 
   try {
     mkdirSync(join(dir, 'tools'));
     writeFileSync(join(dir, 'tools', 'icon.svg'), SOURCE);
-    assert.match(checkIcons(dir)[0], /tools\/icons\.json is missing/);
+    const [missing] = checkIcons(dir);
+    assert.ok(missing !== undefined);
+    assert.match(missing, /tools\/icons\.json is missing/);
     writeIcons(dir);
     assert.deepEqual(checkIcons(dir), []);
     const before = readFileSync(join(dir, 'icon-512.png'));

@@ -2,12 +2,20 @@
 // and dismissal; the button's blur, chip and click; the panel; the key chip.
 import { test, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { h, render } from 'preact';
+import { h, render as preactRender } from 'preact';
 import { importTsx } from './tsx.ts';
-import { document, makeEl, click, fire, fireDocument } from './dom-stub.ts';
+import type { ComponentChildren } from 'preact';
+import type { DialogProps } from '../ui/dialog.tsx';
+import { childEl, document, fire, fireDocument, click, installDocument, makeEl, renderTarget } from './dom-stub.ts';
+import type { StubElement } from './dom-stub.ts';
 
-globalThis.document = document;
-const ui = await importTsx(import.meta.dirname, {
+installDocument();
+const ui = await importTsx<{
+  dialog: typeof import('../ui/dialog.tsx');
+  button: typeof import('../ui/button.tsx');
+  panel: typeof import('../ui/panel.tsx');
+  chip: typeof import('../ui/key-chip.tsx');
+}>(import.meta.dirname, {
   dialog: '../ui/dialog.tsx', button: '../ui/button.tsx', panel: '../ui/panel.tsx', chip: '../ui/key-chip.tsx',
 });
 const { Dialog } = ui.dialog;
@@ -15,11 +23,20 @@ const { Button } = ui.button;
 const { Panel } = ui.panel;
 const { KeyChip } = ui.chip;
 
-const walk = (el, out = []) => { for (const c of el.children) if (c.nodeType === 1) { out.push(c); walk(c, out); } return out; };
-const byId = (el, id) => walk(el).find(n => n.id === id);
+const walk = (el: StubElement, out: StubElement[] = []): StubElement[] => { for (const c of el.children) if (c.nodeType === 1) { out.push(c); walk(c, out); } return out; };
+/** The element with that id, or undefined; `byId` is for one the test knows is there. */
+const maybeById = (el: StubElement, id: string) => walk(el).find(n => n.id === id);
+const byId = (el: StubElement, id: string): StubElement => {
+  const found = maybeById(el, id);
+  assert.ok(found, `no #${id}`);
+  return found;
+};
+/** The <kbd> chips under an element. */
+const chips = (el: StubElement) => walk(el).filter(n => n.localName === 'kbd');
+const render = (vnode: ComponentChildren, root: StubElement): void => preactRender(vnode, renderTarget(root));
 // Every root a test renders into is unmounted afterwards, so no dialog's
 // document listeners outlive its test.
-const roots = [];
+const roots: StubElement[] = [];
 const mount = () => { const root = makeEl('root'); roots.push(root); return root; };
 afterEach(() => {
   for (const root of roots.splice(0)) render(null, root);
@@ -27,7 +44,7 @@ afterEach(() => {
   globalThis.__focused = null;
   globalThis.__blurred = null;
 });
-const dialog = (props, children) => h(Dialog, {
+const dialog = (props: Pick<DialogProps, 'open'> & Partial<DialogProps>, children?: ComponentChildren) => h(Dialog, {
   id: 'veil', veilClass: 'veil', panelClass: 'card', titleId: 'dlg-title', title: 'Ending', ...props,
 }, children);
 
@@ -37,7 +54,7 @@ test('a closed dialog is in the page, hidden, and names itself by its title', ()
   const veil = byId(root, 'veil');
   assert.equal(veil.hidden, true);
   assert.equal(veil.className, 'veil');
-  const panel = veil.children[0];
+  const panel = childEl(veil);
   assert.equal(panel.className, 'card');
   assert.equal(panel.getAttribute('role'), 'dialog');
   assert.equal(panel.getAttribute('aria-modal'), 'true');
@@ -51,9 +68,9 @@ test('the title class lands on the heading; a null kicker renders no paragraph',
   const root = mount();
   render(dialog({ open: false, titleClass: 'big', kicker: null, kickerId: 'dlg-kicker' }), root);
   assert.equal(byId(root, 'dlg-title').className, 'big');
-  assert.equal(byId(root, 'dlg-kicker'), undefined);
+  assert.equal(maybeById(root, 'dlg-kicker'), undefined);
   render(dialog({ open: false, titleClass: 'big', kicker: false, kickerId: 'dlg-kicker' }), root);
-  assert.equal(byId(root, 'dlg-kicker'), undefined);
+  assert.equal(maybeById(root, 'dlg-kicker'), undefined);
 });
 
 test('opening focuses the named element; closing gives focus back', () => {
@@ -73,7 +90,7 @@ test('a dialog opened by a kit Button gives focus back to that Button', () => {
   const trigger = mount();
   const host = mount();
   const content = h(Button, { id: 'again', onClick() {} }, 'Again');
-  const open = isOpen => render(dialog({ open: isOpen, focusId: 'again' }, content), host);
+  const open = (isOpen: boolean) => render(dialog({ open: isOpen, focusId: 'again' }, content), host);
   open(false);
   render(h(Button, { id: 'opener', onClick: () => open(true) }, 'Open'), trigger);
   const opener = byId(trigger, 'opener');
@@ -135,7 +152,7 @@ test('the fallback skips hidden and disabled buttons', () => {
 test('a dialog with no usable button focuses its panel', () => {
   const root = mount();
   render(dialog({ open: true }, h('button', { id: 'gone', hidden: true }, 'Gone')), root);
-  const panel = byId(root, 'veil').children[0];
+  const panel = childEl(byId(root, 'veil'));
   assert.equal(globalThis.__focused, panel);
   assert.equal(panel.getAttribute('tabIndex'), '-1');
 });
@@ -154,7 +171,7 @@ test('Q and a click on the veil dismiss; a click inside does not', () => {
   fireDocument('keydown', { key: 'Enter' });
   assert.equal(dismissed, 2);
   const veil = byId(root, 'veil');
-  const panel = veil.children[0];
+  const panel = childEl(veil);
   fire(veil, 'pointerdown', { target: panel });
   fire(veil, 'click', { target: panel });
   assert.equal(dismissed, 2);
@@ -246,7 +263,7 @@ test('a closed dialog ignores Q', () => {
 test('an alert dialog says so, and can point at its description', () => {
   const root = mount();
   render(dialog({ open: true, role: 'alertdialog', describedBy: 'why' }), root);
-  const panel = byId(root, 'veil').children[0];
+  const panel = childEl(byId(root, 'veil'));
   assert.equal(panel.getAttribute('role'), 'alertdialog');
   assert.equal(panel.getAttribute('aria-describedby'), 'why');
 });
@@ -265,7 +282,8 @@ test('a button blurs itself, then calls back; a key label becomes a chip', () =>
   click(b);
   assert.equal(pressed, 1);
   assert.equal(blurredFirst, true);
-  const chip = walk(b).find(n => n.localName === 'kbd');
+  const chip = chips(b)[0];
+  assert.ok(chip);
   assert.equal(chip.getAttribute('aria-hidden'), 'true');
   assert.equal(chip.className, 'key-chip');
   assert.equal(chip.textContent, 'Z');
@@ -290,7 +308,7 @@ test('a toggle button reports whether it is pressed', () => {
 test('a panel is a section named by its heading', () => {
   const root = mount();
   render(h(Panel, { id: 'inv', class: 'panel', titleId: 'inv-h', title: 'Inventory', titleClass: 'ph' }, h('ul', { id: 'list' })), root);
-  const section = root.children[0];
+  const section = childEl(root);
   assert.equal(section.localName, 'section');
   assert.equal(section.className, 'panel');
   assert.equal(section.id, 'inv');
@@ -303,7 +321,8 @@ test('a panel is a section named by its heading', () => {
 test('a key chip shows its key, with the default class or the given one', () => {
   const root = mount();
   render(h('p', null, h(KeyChip, { label: 'Space' }), h(KeyChip, { label: 'N', class: 'cap' })), root);
-  const [a, b] = walk(root).filter(n => n.localName === 'kbd');
+  const [a, b] = chips(root);
+  assert.ok(a && b);
   assert.deepEqual([a.className, a.textContent, b.className, b.textContent], ['key-chip', 'Space', 'cap', 'N']);
   assert.equal(a.getAttribute('aria-hidden'), undefined);
   assert.equal(a.getAttribute('data-keyhint'), undefined);
@@ -312,7 +331,7 @@ test('a key chip shows its key, with the default class or the given one', () => 
 test('a chip can name its key-table slot and stay out of the accessible name', () => {
   const root = mount();
   render(h(KeyChip, { label: 'N', class: 'key', at: 'global:new', decorative: true }), root);
-  const chip = root.children[0];
+  const chip = childEl(root);
   assert.equal(chip.className, 'key');
   assert.equal(chip.getAttribute('data-keyhint'), 'global:new');
   assert.equal(chip.getAttribute('aria-hidden'), 'true');

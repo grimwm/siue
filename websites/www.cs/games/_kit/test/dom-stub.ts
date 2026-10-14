@@ -5,6 +5,8 @@
 // finds a phantom element rather than nothing.
 // Copyright (C) 2026 William Grim
 // SPDX-License-Identifier: GPL-3.0-or-later
+import assert from 'node:assert/strict';
+import type { render } from 'preact';
 
 /** A canvas context's stand-in: every property read, call and write is accepted and answers itself. */
 export type Callable = { [key: string]: Callable } & (() => Callable);
@@ -93,9 +95,9 @@ export interface StubElement {
 
 declare global {
   // What scrollIntoView, blur and focus leave behind, for a test to read.
-  var __scrolledTo: StubElement | undefined;
-  var __blurred: StubElement | undefined;
-  var __focused: StubElement | undefined;
+  var __scrolledTo: StubElement | null | undefined;
+  var __blurred: StubElement | null | undefined;
+  var __focused: StubElement | null | undefined;
 }
 
 /** Elements by id: what document.getElementById answers, made on first ask. */
@@ -205,17 +207,33 @@ export function submit(el: StubElement): void {
 }
 type DocListener = (ev: DocEvent) => void;
 const docListeners: Record<string, DocListener[]> = {};
-export const document = {
+
+/** The `document` the stub offers, and the two fullscreen members a test may set and delete. */
+export interface StubDocument {
+  readyState: string;
+  activeElement: StubElement | null;
+  body: StubElement;
+  fullscreenElement?: StubElement;
+  exitFullscreen?: () => Promise<void>;
+  getElementById(id: string): StubElement;
+  createElement(tag: string): StubElement;
+  createElementNS(ns: string, tag: string): StubElement;
+  createTextNode(t: unknown): StubText;
+  querySelectorAll(sel?: string): StubElement[];
+  addEventListener(t: string, f: DocListener): void;
+  removeEventListener(t: string, f: DocListener): void;
+}
+export const document: StubDocument = {
   readyState: 'complete',
-  activeElement: null as StubElement | null,
+  activeElement: null,
   body: makeEl('body'),
-  getElementById: (id: string): StubElement => (els[id] = els[id] || makeEl(id)),
-  createElement: (tag: string) => makeEl(tag),
-  createElementNS: (_ns: string, tag: string) => makeRenderedEl(tag),
-  createTextNode: (t: unknown) => makeText(t),
-  querySelectorAll: (): StubElement[] => [],
-  addEventListener(t: string, f: DocListener) { (docListeners[t] = docListeners[t] || []).push(f); },
-  removeEventListener(t: string, f: DocListener) { docListeners[t] = (docListeners[t] || []).filter(g => g !== f); },
+  getElementById: id => (els[id] = els[id] || makeEl(id)),
+  createElement: tag => makeEl(tag),
+  createElementNS: (_ns, tag) => makeRenderedEl(tag),
+  createTextNode: t => makeText(t),
+  querySelectorAll: () => [],
+  addEventListener(t, f) { (docListeners[t] = docListeners[t] || []).push(f); },
+  removeEventListener(t, f) { docListeners[t] = (docListeners[t] || []).filter(g => g !== f); },
 };
 /** What a document listener is handed: the event, and whether a listener prevented or stopped it. */
 export interface DocEvent {
@@ -232,4 +250,35 @@ export function fireDocument(type: string, extra: Record<string, unknown> = {}):
   const ev: DocEvent = { type, prevented: false, stopped: false, ...extra, preventDefault: () => { ev.prevented = true; }, stopPropagation: () => { ev.stopped = true; } };
   for (const f of docListeners[type] || []) f(ev);
   return ev;
+}
+
+// What a test needs to hand the stub to code typed for the real DOM. The stub
+// is not a DOM (see the top of this file), so each crossing is one cast, made
+// here and nowhere else.
+
+/** Makes the stub the page's `document`. */
+export function installDocument(): void {
+  globalThis.document = document as unknown as Document;
+}
+
+/** Preact's `render` takes its container as a real DOM node. */
+export type RenderTarget = Parameters<typeof render>[1];
+export function renderTarget(el: StubElement): RenderTarget {
+  return el as unknown as RenderTarget;
+}
+
+/** A stub element as the DOM `Element` that code under test is handed. */
+export function asElement(el: StubElement): Element {
+  return el as unknown as Element;
+}
+
+/** A node the test knows is an element (not text); it fails, naming the node, when it is not. */
+export function elementOf(node: StubNode | null | undefined): StubElement {
+  assert.ok(node && node.nodeType === 1, 'expected an element node');
+  return node;
+}
+
+/** The i-th child, which the test knows is an element. */
+export function childEl(el: StubElement, i = 0): StubElement {
+  return elementOf(el.children[i]);
 }

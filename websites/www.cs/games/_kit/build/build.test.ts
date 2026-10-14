@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -9,14 +9,14 @@ const HERE = import.meta.dirname;
 const CLI = join(HERE, 'build.mjs');
 
 /** A scratch copy of the fixture inside _kit/build/, so preact resolves from games/node_modules. */
-function scratch(t) {
+function scratch(t: TestContext): string {
   const dir = mkdtempSync(join(HERE, '.tmp-'));
   cpSync(join(HERE, 'fixture'), dir, { recursive: true });
   // The fixture's tsconfig extends ../tsconfig.base.json; the scratch copy sits at the same depth.
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
-const run = (dir, ...args) => spawnSync(process.execPath, [CLI, dir, ...args], { encoding: 'utf8' });
+const run = (dir: string, ...args: string[]) => spawnSync(process.execPath, [CLI, dir, ...args], { encoding: 'utf8' });
 
 test('builds every entry with a linked source map', t => {
   const dir = scratch(t);

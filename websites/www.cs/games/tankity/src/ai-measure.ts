@@ -2,7 +2,7 @@
  *
  * One drone brackets a stationary player tank on seeded hills and wind, and
  * every volley counts as a hit when it takes armor off the player. The rates
- * the difficulty table is tuned against (test/ai-hitrate.test.mjs) come from
+ * the difficulty table is tuned against (test/ai-hitrate.test.ts) come from
  * here. Pure: no page, and the same seeds give the same numbers. */
 import { aiChoose } from './ai.ts';
 import type { Difficulty } from './ai.ts';

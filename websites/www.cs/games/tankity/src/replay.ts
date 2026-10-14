@@ -14,7 +14,7 @@
  * with; where the shells are now it hands back from flying(), for the
  * renderer. main.ts decides when a room snapshot is adopted: it asks idle()
  * after step(). Nothing here touches the page, so it compiles in the DOM-free
- * program and test/replay.test.mjs steps recorded volleys on a clock the test moves
+ * program and test/replay.test.ts steps recorded volleys on a clock the test moves
  * by hand. */
 import type { TrailState } from './fx/trail.ts';
 import { planCatchUp, isVolleyOpener } from './net.ts';

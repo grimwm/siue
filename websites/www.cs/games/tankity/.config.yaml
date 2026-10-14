@@ -13,8 +13,8 @@
 #                     Unset: games/tankity/data/, else /var/tmp/<user>-tankity/)
 #   journal_mode   <- TANKITY_JOURNAL (wal or delete; otherwise chosen from
 #                     the storage directory's filesystem)
-#   scores_dir     <- TANKITY_SCORES_DIR (retired: only where score files
-#                     from before the database are imported from; default /var/tmp)
+#   room_joins_per_hour <- TANKITY_ROOM_JOINS_PER_HOUR (rooms created and
+#                     joined, together, per address an hour; default 300)
 # Point CONFIG_FILE at another file to load settings from elsewhere.
 max_rooms: 10
 room_max_age: 86400

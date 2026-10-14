@@ -1,6 +1,6 @@
 // Replays the shared sim vectors (protocol/sim-vectors.json) through the browser
-// sim, src/sim.ts and src/armor.ts. The vectors are written by
-// `php protocol/sim-vectors.php` from rooms.php, so a change to the browser sim
+// sim: src/sim.ts, src/ai.ts, src/armor.ts, src/standings.ts and src/detmath.ts. The vectors
+// are written by `php protocol/sim-vectors.php` from rooms.php, so a change to the browser sim
 // or the room server's that the other side does not follow fails here (or in
 // the generator's --check) until they agree. Passes when every case matches or
 // is a marked known difference.
@@ -27,6 +27,7 @@ const arsenal = sim.buildArsenal(GAME.arsenal);
 const armorRules = await import(pathToFileURL(path.join(dir, 'src', 'armor.ts')).href);
 
 const standings = await import(pathToFileURL(path.join(dir, 'src', 'standings.ts')).href);
+const det = await import(pathToFileURL(path.join(dir, 'src', 'detmath.ts')).href);
 
 /* ---- state the cases run over ---- */
 const G = {};
@@ -36,7 +37,7 @@ function buildTerrain(spec, w = 720) {
     let y;
     if (spec.flat !== undefined) y = spec.flat;
     else if (spec.slope) y = spec.slope[0] + (spec.slope[1] - spec.slope[0]) * ix / (w - 1);
-    else y = spec.hills[0] + spec.hills[1] * Math.sin(ix * 2 * Math.PI / spec.hills[2]);
+    else y = spec.hills[0] + spec.hills[1] * det.dsin(ix * 2 * Math.PI / spec.hills[2]);
     for (const [x0, x1, sy] of spec.set || []) if (ix >= x0 && ix <= x1) y = sy;
     t.push(Math.round(y * 1000) / 1000);
   }
@@ -78,6 +79,15 @@ const RUN = {
     const st = { x: 0, y: 0, vx: 0, vy: 0 };
     sim.stepBallistic(st, 1, 1, 0);
     return { grav: sim.GRAV, flatGrav: sim.FLAT_GRAV, windK: st.vx, unitGap: sim.UNIT_GAP, spawnGap: sim.SPAWN_GAP };
+  },
+  detmath(c) {
+    switch (c.fn) {
+      case 'sin': return det.dsin(c.x);
+      case 'cos': return det.dcos(c.x);
+      case 'atan': return det.datan(c.x);
+      case 'atan2': return det.datan2(c.y, c.x);
+      default: return Math.round(c.x);
+    }
   },
   rng(c) {
     const hash = sim.hashSeed(c.seed), r = sim.mulberry32(hash);
@@ -199,7 +209,7 @@ const RUN = {
     return { wkey: choice.wkey, angle: choice.angle, power: choice.power, moved: t.x - x0 };
   },
   'ai-bracket'(c) {
-    world(c);
+    world(c, c.w || 720);
     G.rng = sim.mulberry32(c.seed);
     const t = G.tanks[c.shooter], steps = [];
     for (let k = 0; k < c.shots; k++) {
@@ -244,16 +254,16 @@ function expectedFor(group, c, out) {
 }
 
 /* ---- compare and report ---- */
-// Terrain heights use the platform's sin until Plan D's deterministic math (Task 21a) replaces it; they must then become exact.
-const TERRAIN_TOL = 1e-9;
 function diff(want, got, at, out, exact = false, tol = TOL) {
   if (typeof want === 'number' && typeof got === 'number') {
-    if (exact ? !Object.is(want, got) : !(Math.abs(want - got) <= tol)) out.push(`${at}: expected ${want}, got ${got}`);
+    // exact: Object.is, so -0 differs from 0 (detmath pins the sign).
+    const same = exact ? Object.is(want, got) : Math.abs(want - got) <= tol;
+    if (!same) out.push(`${at}: expected ${want}, got ${got}`);
   } else if (Array.isArray(want) && Array.isArray(got)) {
     if (want.length !== got.length) out.push(`${at}: expected ${want.length} items, got ${got.length}`);
     for (let i = 0; i < Math.min(want.length, got.length); i++) diff(want[i], got[i], `${at}[${i}]`, out, exact, tol);
   } else if (want && got && typeof want === 'object' && typeof got === 'object' && !Array.isArray(want) && !Array.isArray(got)) {
-    for (const k of new Set([...Object.keys(want), ...Object.keys(got)])) (exact && k === 'terrain' ? diff(want[k], got[k], `${at}.${k}`, out, false, TERRAIN_TOL) : diff(want[k], got[k], `${at}.${k}`, out, exact, tol));
+    for (const k of new Set([...Object.keys(want), ...Object.keys(got)])) diff(want[k], got[k], `${at}.${k}`, out, exact, tol);
   } else if (want !== got) {
     out.push(`${at}: expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
   }

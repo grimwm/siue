@@ -1,12 +1,12 @@
 // Operation Tankity rooms: a Leave by one of the last two humans ends the match as a forfeit, the
-// remaining human wins and files, Play again then makes them the host, and after leaving the lobby the next solo match has its own card,
-// whose filed line says so when the filing is refused.
+// remaining human wins and files (two humans started the match), Play again then makes them the host, and after
+// leaving the lobby the next solo match has its own card, whose line says the run is saved on this browser's board.
 import { test, expect } from '@playwright/test';
 import { hud, lastRoom, loseMatch } from './helpers.mjs';
 import { endPair, lobUntil, LOB, WIDE } from './rooms-end-helpers.mjs';
 
 test('when one of the last two humans leaves, the other wins the match; a solo match after it ends on the solo card', async ({ browser }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000); // a room match, then a whole solo match lost shot by shot (tankity-end's 180 s on its own)
   const pair = await endPair(browser);
   const { host, guest, roomState } = pair;
   const down = seat => () => { const t = lastRoom(roomState.guest).tanks.find(k => k.seat === seat); return !t || t.hp <= 0; };
@@ -46,11 +46,8 @@ test('when one of the last two humans leaves, the other wins the match; a solo m
   await expect(guest.page.locator('#lobby-veil')).toBeHidden();
   await expect(veil).toBeHidden();
 
-  // The next solo match ends on the solo card (Continue, no room buttons), and a refused filing says so.
+  // The next solo match ends on the solo card (Continue, no room buttons) and is saved on this browser's board.
   await guest.page.clock.install();
-  await guest.page.route(/scores\.php/, route => (route.request().method() === 'POST'
-    ? route.fulfill({ status: 429, contentType: 'application/json', body: '{"error":"slow down"}' })
-    : route.continue()));
   await guest.page.click('#title-play');
   await guest.page.waitForSelector('#shop-veil:not([hidden])');
   for (let i = 0; i < 3; i++) await guest.page.keyboard.press('2');
@@ -62,8 +59,8 @@ test('when one of the last two humans leaves, the other wins the match; a solo m
   await expect(veil.locator('#again')).toHaveText('Continue');
   await expect(veil.locator('#end-leave')).toHaveCount(0);
   await expect(veil.locator('#end-watch')).toHaveCount(0);
-  await expect(veil.locator('#end-filed')).toHaveText(/^Couldn't file your score: too many reports/, { timeout: 10_000 });
+  await expect(veil.locator('#end-filed')).toHaveText(/^Saved on this browser's board \u00b7 #1 on Normal$/, { timeout: 10_000 });
   expect(host.errors).toEqual([]);
-  expect(guest.errors.filter(e => !/429/.test(e))).toEqual([]);
+  expect(guest.errors).toEqual([]);
   await host.ctx.close(); await guest.ctx.close();
 });

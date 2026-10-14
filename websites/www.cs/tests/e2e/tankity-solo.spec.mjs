@@ -137,6 +137,33 @@ test('firing the last round of a weapon loads the Shell again', async ({ browser
   expect(errors).toEqual([]);
 });
 
+test('clicking Buy drops focus, and the guns toggle switches between every gun and those in stock', async ({ browser }) => {
+  const { page, errors } = await newPlayer(browser);
+  await page.keyboard.press('n');
+  await page.waitForSelector('#shop-veil:not([hidden])');
+  const buy = page.locator('#shop-list li.sel button', { hasText: /^Buy/ });
+  await buy.click();
+  await expect(page.locator('#log')).toContainText('Bought');
+  // The click must not leave the button focused: Space and Enter would buy again.
+  expect(await page.evaluate(() => !!document.activeElement?.closest('#shop-list'))).toBe(false);
+  await page.click('#shop-next');
+  await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU|Aim/);
+  await page.keyboard.press('g');
+  const tiles = page.locator('#gun-grid .gun-choice');
+  const all = await tiles.count();
+  expect(all).toBeGreaterThan(3);
+  await expect(page.locator('#gun-stock')).toHaveText(/Show: All/);
+  await page.click('#gun-stock');
+  await expect(page.locator('#gun-stock')).toHaveText(/Show: In stock/);
+  const stocked = await tiles.count();
+  expect(stocked).toBeLessThan(all);
+  expect(await page.locator('#gun-grid .gun-choice[aria-disabled="true"]').count()).toBe(0);
+  await page.click('#gun-stock');
+  await expect(page.locator('#gun-stock')).toHaveText(/Show: All/);
+  expect(await tiles.count()).toBe(all);
+  expect(errors).toEqual([]);
+});
+
 test('a tank falls smoothly into the crater under it', async ({ browser }) => {
   const { page } = await newPlayer(browser);
   // A Mortar's wide blast digs under our own hull even when the wind drifts

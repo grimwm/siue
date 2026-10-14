@@ -1,7 +1,8 @@
 // This match's scoreboards (src/standings.ts): the room's match-end rule first.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BOARD_KEEP, endCardBack, filedLine, fmt, matchOutcome, roomBoard, roomFiledLine, soloBoard } from '../src/standings.ts';
+import { BOARD_KEEP, endCardBack, filedLine, fmt, localLine, matchOutcome, roomBoard, roomFiledLine, roomLocalSaver, soloBoard } from '../src/standings.ts';
+import { LOCAL_KEEP } from '../src/local-board.ts';
 
 const seats = (...lives) => lives.map((l, seat) => ({ seat, human: l !== null, lives: l ?? 0 }));
 
@@ -107,4 +108,34 @@ test('a room card says where the score went, or why it did not, and nothing befo
   assert.match(roomFiledLine(you({ filedFailed: true }), 'normal'), /^Couldn't file your score: .+/);
   assert.equal(roomFiledLine(you({}), 'normal'), null);
   assert.equal(roomFiledLine(undefined, 'normal'), null);
+});
+
+test('the local line: a place on this browser\'s board, outside it, or storage blocked; never blank', () => {
+  assert.equal(localLine({ place: 3, kept: true }, 8240, 'normal'), "Saved on this browser's board · #3 on Normal");
+  assert.equal(localLine({ place: null, kept: true }, 8240, 'hard'), `Saved in this browser · 8,240 pts, outside its best ${LOCAL_KEEP} on Hard`);
+  assert.equal(localLine({ place: null, kept: false }, 8240, 'easy'), "This browser can't keep scores (storage is blocked).");
+});
+
+test('a one-human room card reads this browser\'s line, once it is saved', () => {
+  const you = o => ({ filed: false, filedFailed: false, filedRank: null, filedLocal: true, score: 4200, ...o });
+  assert.equal(roomFiledLine(you({}), 'normal', { place: 1, kept: true }), "Saved on this browser's board · #1 on Normal");
+  assert.equal(roomFiledLine(you({}), 'hard', { place: null, kept: false }), "This browser can't keep scores (storage is blocked).");
+  assert.equal(roomFiledLine(you({}), 'normal', null), null, 'not saved yet: nothing');
+  assert.equal(roomFiledLine(you({ filedLocal: false, filed: true, filedRank: 2 }), 'normal', { place: 1, kept: true }), 'Filed · #2 all-time on Normal');
+});
+
+test('a one-human room match is saved once per match, whatever the polls, rejoins and reloads', () => {
+  const saves = [];
+  const k = roomLocalSaver((level, row) => { saves.push([level, row]); return { place: 2, kept: true }; }, () => '2026-10-13T09:00:00.000Z');
+  const snap = o => ({ code: 'ABCD', difficulty: 'hard', matchId: 'm1', seats: [{ seat: 0, name: 'WGR', roundsWon: 3 }, { seat: 1, name: 'Reaper', roundsWon: 0 }],
+    you: { filedLocal: true, score: 5100 }, ...o });
+  assert.equal(k.keep(snap({ you: { filedLocal: false, score: 5100 } }), 0), null, 'not yet marked: nothing saved');
+  assert.deepEqual(k.keep(snap(), 0), { place: 2, kept: true });
+  assert.deepEqual(k.keep(snap(), 0), { place: 2, kept: true }, 'the next poll answers the same save');
+  assert.equal(saves.length, 1);
+  assert.deepEqual(saves[0], ['hard', { initials: 'WGR', score: 5100, rounds: 3, seed: '', at: '2026-10-13T09:00:00.000Z', kind: 'room', ref: 'room:ABCD:m1' }]);
+  k.keep(snap({ matchId: 'm2' }), 0);
+  assert.equal(saves.length, 2, 'Play again in the same room is another match');
+  assert.equal(k.keep(snap({ matchId: null }), 0), null, 'no match id: nothing to key it by');
+  assert.equal(k.keep(snap({ you: undefined }), 0), null);
 });

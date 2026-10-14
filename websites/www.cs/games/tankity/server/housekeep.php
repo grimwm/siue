@@ -9,9 +9,8 @@ if (count(get_included_files()) === 1) {
     exit;
 }
 require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/legacy.php';
 
-const HOUSEKEEP_EVERY = 300;
+const HOUSEKEEP_EVERY = 60;
 
 /* Runs $jobs (name => fn(int $now): int, what it removed) when the last run
    is HOUSEKEEP_EVERY seconds old. A plain read decides that, so a request
@@ -56,17 +55,16 @@ function tankity_housekeep(int $now, array $jobs): ?array
     return $out;
 }
 
-/* Every cleanup job this request can run, in order: old files into callsign
-   rows, callsign rows onto the Normal board, then the room sweep where the
-   room library is loaded. */
+/* Every cleanup job this request can run, in order: where the room library is
+   loaded, the room sweep and old per-address counts. */
 function tankity_jobs(): array
 {
-    $jobs = ['legacy' => fn(int $now): int => array_sum(legacy_import(null, LEGACY_IMPORT_BATCH, $now))];
-    if (function_exists('board_convert_callsigns')) {
-        $jobs['callsigns'] = fn(int $now): int => board_convert_callsigns();
-    }
+    $jobs = [];
     if (function_exists('room_sweep')) {
         $jobs['rooms'] = fn(int $now): int => room_sweep($now);
+    }
+    if (function_exists('rate_expire')) {
+        $jobs['rate'] = fn(int $now): int => rate_expire($now);
     }
     return $jobs;
 }

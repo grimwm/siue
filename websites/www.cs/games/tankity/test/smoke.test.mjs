@@ -194,7 +194,8 @@ for (const id of ['rooms-open', 'host-form', 'lobby-initials', 'join-form',
 }
 // The field's width is set where a match is dealt and nowhere else (spec 6.6).
 const widthWrites = [...src.matchAll(/\bG\.w\s*=(?!=)/g)].length;
-check('field-width-written-only-at-the-deal', widthWrites === 2 && /G\.w = field\.deal\(\)/.test(moduleSrc['match.ts']) && /G\.w = ROOM_W/.test(moduleSrc['room.ts']), `writes=${widthWrites}`);
+check('field-width-written-only-at-the-deal', widthWrites === 2 && /G\.w = w;/.test(moduleSrc['solo.ts']) && /G\.w = ROOM_W/.test(moduleSrc['room.ts'])
+  && /soloDeal\(G, tables\.arsenal!, seed, difficulty\.get\(\), field\.deal\(\)\)/.test(moduleSrc['match.ts']), `writes=${widthWrites}`);
 check('no-module-imports-a-fixed-width', !/import\s*\{[^}]*\bW\b[^}]*\}\s*from\s*'\.\/sim\.ts'/.test(src), 'a module still imports W from sim.ts');
 check('no-status-codes', !/server said no/.test(src));
 // The page loads the effects bundle, then the game bundle, and nothing else:
@@ -424,7 +425,7 @@ function scriptYou() {
   return {
     ammo: { shell: -1, buck: 1, mortar: 0, rail: 0, nuke: 0 },
     cash: 600, score: 0, lives: 3, fuel: 80, weapon: 'shell', nextUp: 3000,
-    seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, plate: 0, armor: seatArmor, maxArmor: 100, filed: false, filedRank: null, filedFailed: false,
+    seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, plate: 0, armor: seatArmor, maxArmor: 100, filed: false, filedRank: null, filedFailed: false, filedLocal: false,
   };
 }
 function playRoom(turn, events) {
@@ -447,7 +448,7 @@ const mapFields = () => ({
   mapName: createdMap ? 'Canyon 3' : 'Random hills',
   difficulty: ['easy', 'hard'].includes(createdDifficulty) ? createdDifficulty : 'normal',
   hostSeat: 0,
-  startHumans: 1,
+  startHumans: 1, matchId: null,
   winner: null,
   winBonus: 0,
 });

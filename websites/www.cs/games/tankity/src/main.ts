@@ -40,7 +40,7 @@ import {
 } from './audio.ts';
 import type { AudioConfig } from './audio.ts';
 import { RoomClient, prettyRoomError } from './net.ts';
-import { runWar, warSpeed } from './flow.ts';
+import { SOLO_STEP, WAR_REST, runFixed, warSpeed } from './flow.ts';
 import type { HoldCommand } from './input.ts';
 import { createPreview, stepPreview } from './preview.ts';
 import { createReplay } from './replay.ts';
@@ -160,7 +160,7 @@ async function loadGameConfig(): Promise<void> {
    skips painting, the frame loop waits on G.terrain). */
 const NOT_DEALT = null!;
 const G: GameState = {
-  seed: '', rng: NOT_DEALT, body: 'tank',
+  seed: '', difficulty: 'normal', rng: NOT_DEALT, body: 'tank',
   terrain: NOT_DEALT, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // banner | shop | aim | think | fly | settle | over (src/flow.ts)
   thinkT: 0, settleT: 0,
@@ -265,6 +265,7 @@ function togglePreview(): void {
 
 /* ---------- main loop ---------- */
 let lastT = 0;
+let warAcc = WAR_REST;
 function frame(ts: number): void {
   requestAnimationFrame(frame);
   // The music watchdog re-pins a wedged scheduler to the live clock; it never
@@ -300,7 +301,10 @@ function frame(ts: number): void {
   if (G.over) { pumpDialogue(dt); render(); renderHUD(); return; }
   G.time += dt;
   decayFx(dt);
-  fallTanks(dt);
+  // In the war, tanks fall inside its fixed steps (below), shells or no
+  // shells; anywhere else they fall by the frame.
+  const war = G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle';
+  if (!war) fallTanks(dt);
   tickTutorial();
   for (const cl of G.clouds) {
     cl.x += cl.v * dt;
@@ -321,18 +325,7 @@ function frame(ts: number): void {
       }
     }
   }
-  while (!net.on && G.score >= G.nextOneUp) {
-    G.nextOneUp += TUNE.oneUpEvery;
-    if (G.lives < TUNE.maxLives) {
-      G.lives += 1;
-      sfx.play('win');
-      say(`1-UP! Extra life! (${G.lives}/${TUNE.maxLives} lives)`, 'good');
-      talk('tank', 'Another life! I am basically immortal!', true);
-    } else {
-      G.score += 500;
-      say('Max lives already, so take +500 points instead!', 'good');
-    }
-  }
+  checkOneUps();
   if (G.phase === 'aim' && cur().isPlayer && !G.demo) {
     const t = me();
     const arm = stepArm(input.held, dt, t, facing(t), G.w);
@@ -350,13 +343,17 @@ function frame(ts: number): void {
         }
       }
     }
-  } else if (G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle') {
-    // With the player's tank wrecked the drones play on at triple speed.
-    runWar(dt, warSpeed(me().hp > 0, G.demo), (d, i) => {
-      if (i > 0) fallTanks(d);
-      stepWar(d);
+  } else if (war) {
+    // Fixed SOLO_STEP steps whatever the frame rate, each dropping the tanks
+    // and then moving the war on, so the war plays the same at any frame rate;
+    // with the player's tank wrecked the drones play on at triple speed.
+    warAcc = runFixed(warAcc, dt * warSpeed(me().hp > 0, G.demo), SOLO_STEP, h => {
+      fallTanks(h);
+      stepWar(h);
       return !G.over && (G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle');
     });
+  } else {
+    warAcc = WAR_REST;
   }
   updateCamera(dt);
   render();
@@ -415,9 +412,11 @@ const { HUD, paintHud, windText, renderHUD } = createHud({
 const { updateCamera, shownAngle, shownPower, render } = createView({
   G, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
-/* The high scores (src/scores.ts). */
-const { renderScoresOverlay, openScores, fileSolo } = createScores({
-  $, keyHint, say, toggleOverlay, initials: () => getInitials(), difficulty: () => difficulty.get(),
+/* The high scores (src/scores.ts): the online board and this browser's, on this browser's storage
+   (null where reading it throws); another tab's save redraws an open overlay. */
+const { renderScoresOverlay, openScores, saveLocal } = createScores({
+  $, keyHint, toggleOverlay, initials: () => getInitials(), difficulty: () => difficulty.get(), storage: browserStorage(),
+  onStorage: fn => window.addEventListener('storage', e => fn(e.key)),
 });
 /* The coach (src/tutorial.ts). */
 const {
@@ -439,14 +438,14 @@ const getInitials = (): string => savedInitials.get();
 const field = createFieldWidth(() => ({ w: window.innerWidth, h: window.innerHeight }));
 const {
   advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-  stepWar, decayFx, soloShopBoard, endVeilBack,
+  stepWar, decayFx, soloShopBoard, endVeilBack, checkOneUps,
 } = createMatch({
   field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
   tutorialFired, backToTitle: () => backToTitle(),
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
   netFire: () => netFire(), netLeave: quiet => netLeave(quiet), netNext: want => netNext(want),
-  netAgain: () => netAgain(), initials: getInitials, fileSolo: (run, done) => { void fileSolo(run, done); },
+  netAgain: () => netAgain(), initials: getInitials, saveLocal,
 });
 /* The field shop (src/shop.ts): prices, rows, buying, the Ready line. */
 const {
@@ -472,7 +471,7 @@ const {
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
   backToLobby: () => netBackToLobby(),
   decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
-  renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText,
+  renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText, saveLocal,
 });
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving. */
 const {

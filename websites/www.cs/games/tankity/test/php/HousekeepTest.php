@@ -18,14 +18,11 @@ final class HousekeepTest extends TestCase
     protected function setUp(): void
     {
         $this->dir = tankity_test_dir();
-        mkdir($this->dir . '/old', 0700);
-        putenv('TANKITY_SCORES_DIR=' . $this->dir . '/old');
         putenv('TANKITY_ROOM_LIVE_SECS=60');
     }
 
     protected function tearDown(): void
     {
-        putenv('TANKITY_SCORES_DIR');
         putenv('TANKITY_ROOM_LIVE_SECS');
         tankity_test_rm($this->dir);
     }
@@ -59,18 +56,27 @@ final class HousekeepTest extends TestCase
         }
     }
 
-    public function testIdleRoomsAndOldFilesGo(): void
+    public function testTheJobsAreTheRoomsAndTheRateCounts(): void
+    {
+        $this->assertSame(['rooms', 'rate'], array_keys(tankity_jobs()));
+    }
+
+    public function testOldRateCountsGo(): void
+    {
+        $now = 1_800_000_000;
+        $this->assertTrue(room_rate_take('lab', $now));
+        $this->assertSame(0, tankity_jobs()['rate']($now + 3600));
+        $this->assertSame(1, tankity_jobs()['rate']($now + 3600 + 2 * RATE_SLOT));
+    }
+
+    public function testIdleRoomsGo(): void
     {
         $lock = room_alloc();
         room_save($lock, $lock->code, room_new($lock->code, 'OLD'));
         room_unlock($lock);
         room_test_age($lock->code, 600);
-        file_put_contents($this->dir . '/old/wg-operation-tankity.json',
-            json_encode(['name' => 'wg', 'runs' => [['score' => 5, 'banked' => 1, 'won' => false, 'seed' => 'a', 'ts' => '2026-01-01T00:00:00+00:00']], 'best' => 5]));
         $out = tankity_housekeep(time(), tankity_jobs());
         $this->assertSame(1, $out['rooms']);
-        $this->assertSame(2, $out['legacy'], 'one file imported, the same file deleted');
         $this->assertSame(0, (int) tankity_db()->query('SELECT COUNT(*) FROM rooms')->fetchColumn());
-        $this->assertFileDoesNotExist($this->dir . '/old/wg-operation-tankity.json');
     }
 }

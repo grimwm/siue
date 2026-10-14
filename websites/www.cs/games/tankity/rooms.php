@@ -36,26 +36,28 @@ require_once __DIR__ . '/config.php';
 //   server/guard.php     the score guard's settings and the blocked initials
 //   server/score-guard.php  the kit's score guard (a generated copy; never edit it)
 //   server/board.php     the boards, one per difficulty
-//   server/legacy.php    the per-callsign score runs and the import of the old score files
 //   server/housekeep.php throttled cleanup on requests
 //   server/store.php     rooms as rows: the room lock, room lifecycle, the sweep
+//   server/detmath.php   sin, cos, atan2 and Math.round, the same bits as src/detmath.ts
 //   server/sim.php       the deterministic sim (mirrors src/sim.ts)
 //   server/ai.php        drone aim, bracketing and strategies
 //   server/rules.php     seats, rounds, turn clock, pacing, the shop, scores
 //   server/protocol.php  events, snapshots and deltas
+//   server/rate.php      per-address hourly allowances (creating and joining rooms)
 // Those files do nothing unless this one requires them.
 define('TANKITY_ROOMS_INCLUDED', true);
 require_once __DIR__ . '/server/db.php';
-require_once __DIR__ . '/server/legacy.php';
 require_once __DIR__ . '/server/housekeep.php';
 require_once __DIR__ . '/server/guard.php';
 require_once __DIR__ . '/server/board.php';
 require_once __DIR__ . '/server/settings.php';
 require_once __DIR__ . '/server/store.php';
+require_once __DIR__ . '/server/detmath.php';
 require_once __DIR__ . '/server/sim.php';
 require_once __DIR__ . '/server/ai.php';
 require_once __DIR__ . '/server/rules.php';
 require_once __DIR__ . '/server/protocol.php';
+require_once __DIR__ . '/server/rate.php';
 
 // room_arsenal() resolves against this file's own location (game.json next to it), so it stays here.
 /* A client that sends Accept-Encoding: gzip gets the JSON compressed (the
@@ -81,6 +83,19 @@ function room_json_out(int $code, array $payload): void
     room_gzip_begin();
     echo json_encode($payload, JSON_UNESCAPED_SLASHES);
     exit;
+}
+/* Creating and joining a room spend one of the address's hourly allowance
+   (room_rate_take in server/rate.php); a 429 once it is spent. */
+function room_rate_gate(): void
+{
+    try {
+        $allowed = room_rate_take(tankity_guard()->clientKey(), time());
+    } catch (Throwable $e) {
+        room_store_fail($e);
+    }
+    if (!$allowed) {
+        room_json_out(429, ['error' => 'too many rooms from here; try again later']);
+    }
 }
 /* The arsenal lives in game.yaml, served as game.json (tools/game-json.php
 // writes it): the browser reads the same file, so prices, packs, ballistics,
@@ -120,7 +135,7 @@ function room_arsenal(): array
 if (defined('TANKITY_ROOMS_LIB')) {
     return;
 }
-// No cron on the host: requests do the cleanup, at most every few minutes.
+// No cron on the host: requests do the cleanup, at most once a minute.
 tankity_housekeep(time(), tankity_jobs());
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = $_GET['action'] ?? ($_POST['action'] ?? '');
@@ -215,12 +230,9 @@ if ($action === 'create' && $method === 'POST') {
     if (!room_origin_ok()) {
         room_json_out(403, ['error' => 'bad origin']);
     }
-    $initials = room_valid_initials($body['initials'] ?? null);
-    if ($initials === null) {
-        room_json_out(422, ['error' => 'initials must be 3 letters, kept clean']);
-    }
+    // A full server is answered from a plain read before anything is charged:
+    // a lab clicking Host while every room is taken keeps its allowance.
     try {
-        room_sweep();
         $max = room_max_rooms();
         $full = room_count() >= $max;
     } catch (Throwable $e) {
@@ -228,6 +240,18 @@ if ($action === 'create' && $method === 'POST') {
     }
     if ($full) {
         room_json_out(409, ['error' => "every room is taken ($max / $max). Try again later."]);
+    }
+    room_rate_gate();
+    $initials = room_valid_initials($body['initials'] ?? null);
+    if ($initials === null) {
+        room_json_out(422, ['error' => 'initials must be 3 letters, kept clean']);
+    }
+    // Idle rooms never counted toward the cap; the sweep only drops their rows.
+    // Two creates racing for the last place are settled by room_register below.
+    try {
+        room_sweep();
+    } catch (Throwable $e) {
+        room_store_fail($e);
     }
     $map = null;
     if (isset($body['map']) && trim((string) $body['map']) !== '') {
@@ -272,6 +296,7 @@ if ($action === 'join' && $method === 'POST') {
     if (!room_origin_ok()) {
         room_json_out(403, ['error' => 'bad origin']);
     }
+    room_rate_gate();
     $code = strtoupper(trim((string) ($body['code'] ?? '')));
     $initials = room_valid_initials($body['initials'] ?? null);
     if (!preg_match('/^[A-Z0-9]{4}$/', $code) || $initials === null) {

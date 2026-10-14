@@ -6,7 +6,7 @@
  * algorithm, kept in step by the shared vectors in protocol/sim-vectors.json.
  * brkLand stays in sim.ts: explode calls it, and sim.ts must not import this
  * file. */
-import { clamp, facing, gauss, muzzle, simShot, spotTaken, surfY } from './sim.ts';
+import { clamp, facing, flightKey, gauss, muzzle, powi, simShot, spotTaken, surfY } from './sim.ts';
 import type { Arsenal, Difficulty, Rng, Tank, Weapon, World } from './sim.ts';
 export type { Difficulty } from './sim.ts';
 
@@ -78,23 +78,44 @@ export function aimSkill(d: string | undefined): Readonly<AimSkill> {
   return DIFFICULTIES.includes(d as Difficulty) ? DIFFICULTY[d as Difficulty] : DIFFICULTY.normal;
 }
 
+/* The guns a fresh aim searches: the first of each planning arc, in rack
+   order. A later gun with the same arc lands every shot where the first did,
+   and the search keeps only a strictly better shot, so it could never win. */
+export function arcGuns(arsenal: Arsenal, guns: readonly string[]): string[] {
+  const seen = new Set<string>();
+  return guns.filter(k => {
+    const f = flightKey(arsenal.weapons[k]!);
+    if (seen.has(f)) return false;
+    seen.add(f);
+    return true;
+  });
+}
+/* The highest ground: the least terrain y. */
+function groundTop(terrain: readonly number[]): number {
+  let top = Infinity;
+  for (const y of terrain) if (y < top) top = y;
+  return top;
+}
 /* The best (angle, power) near a last aim for a shot to burst on goalX: a
-   coarse sweep, then a fine one around its best. Nearer the last aim wins ties. */
+   6-step sweep, then 3- and 1-step neighbours of its best. Nearer the last
+   aim wins ties. */
 function aiCorrect(world: World, arsenal: Arsenal, mx: number, my: number, wkey: string, dirS: number,
-  a0: number, p0: number, goalX: number): [number, number] {
+  a0: number, p0: number, goalX: number, high: number): [number, number] {
   let best: { err: number; a: number; p: number } | null = null;
   const tryAim = (a: number, p: number): void => {
     if (a < 10 || a > 170 || p < 10 || p > 100) return;
-    const land = simShot(world, arsenal, mx, my, a, p, wkey, dirS);
+    const land = simShot(world, arsenal, mx, my, a, p, wkey, dirS, high);
     const err = (land.oob ? 400 + Math.abs(land.x - goalX) * 0.2 : Math.abs(land.x - goalX)) + 0.02 * (Math.abs(a - a0) + Math.abs(p - p0));
     if (!best || err < best.err) best = { err, a, p };
   };
-  for (let da = -15; da <= 15; da += 3) {
-    for (let dp = -18; dp <= 18; dp += 3) tryAim(a0 + da, p0 + dp);
+  for (let da = -12; da <= 12; da += 6) {
+    for (let dp = -18; dp <= 18; dp += 6) tryAim(a0 + da, p0 + dp);
   }
-  const { a: ca, p: cp } = best!;
-  for (let da = -2; da <= 2; da++) {
-    for (let dp = -2; dp <= 2; dp++) tryAim(ca + da, cp + dp);
+  for (const step of [3, 1]) {
+    const { a: ca, p: cp } = best!;
+    for (let da = -step; da <= step; da += step) {
+      for (let dp = -step; dp <= step; dp += step) if (da || dp) tryAim(ca + da, cp + dp);
+    }
   }
   const b = best!;
   return [b.a, b.p];
@@ -193,18 +214,19 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
   // A jammer doubles the wobble of anything aimed at our tank.
   let wob = Math.max(skill.wobFloor, skill.wobStart - skill.wobStep * world.round) * (s === 'sniper' ? SNIPER_WOB : 1) * fa.aim;
   let ba: number, bp: number, w: string, n: number;
+  const high = groundTop(world.terrain);
   if (cont) {
     w = mem!.w;
     n = mem!.n + 1;
-    const sim = simShot(world, arsenal, m.x, m.y, mem!.a, mem!.p, w, dirS);
+    const sim = simShot(world, arsenal, m.x, m.y, mem!.a, mem!.p, w, dirS, high);
     const landed = mem!.land === null ? sim.x : mem!.land;
     let miss = target.x - landed;
     if (Math.abs(miss) <= BRK_ON) miss = 0; // a burst on the hull is on target: hold the aim
     // Where the sim must put a shot so that, shifted by the measured miss of
     // the last one, it bursts on the target (or, taking out only part of the
     // miss, nearer it).
-    [ba, bp] = aiCorrect(world, arsenal, m.x, m.y, w, dirS, mem!.a, mem!.p, sim.x + miss * skill.correct);
-    wob = Math.max(skill.brkFloor * fa.floor, wob * skill.brkShrink ** n);
+    [ba, bp] = aiCorrect(world, arsenal, m.x, m.y, w, dirS, mem!.a, mem!.p, sim.x + miss * skill.correct, high);
+    wob = Math.max(skill.brkFloor * fa.floor, wob * powi(skill.brkShrink, n));
   } else {
     let guns = keys;
     if (s === 'glory') {
@@ -215,24 +237,36 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
       const area = keys.filter(k => areaGun(arsenal.weapons[k]!));
       if (area.length) guns = area;
     }
+    guns = arcGuns(arsenal, guns);
     let best: { err: number; a: number; p: number; wkey: string } | null = null;
-    const consider = (wkey: string, a: number): void => {
-      for (let p = 20; p <= 100; p += 6) {
-        const land = simShot(world, arsenal, m.x, m.y, a, p, wkey, dirS);
-        const err = land.oob ? 400 + Math.abs(land.x - target.x) * 0.2 : Math.abs(land.x - target.x);
-        if (!best || err < best.err) best = { err, a, p, wkey };
+    const consider = (wkey: string, a: number, p: number): number => {
+      const land = simShot(world, arsenal, m.x, m.y, a, p, wkey, dirS, high);
+      const err = land.oob ? 400 + Math.abs(land.x - target.x) * 0.2 : Math.abs(land.x - target.x);
+      if (!best || err < best.err) best = { err, a, p, wkey };
+      return err;
+    };
+    // One gun over angles lo..hi of the grid (25, 31, ...) and powers 20, 26,
+    // ... 98: every other point of it, then the eight neighbours of the best.
+    const search = (wkey: string, lo: number, hi: number): void => {
+      let ca = lo, cp = 20, ce = Infinity;
+      for (let a = lo; a <= hi; a += 12) {
+        for (let p = 20; p <= 100; p += 12) {
+          const err = consider(wkey, a, p);
+          if (err < ce) [ca, cp, ce] = [a, p, err];
+        }
+      }
+      for (let a = ca - 6; a <= ca + 6; a += 6) {
+        for (let p = cp - 6; p <= cp + 6; p += 6) {
+          if ((a !== ca || p !== cp) && a >= lo && a <= hi && p >= 20 && p <= 100) consider(wkey, a, p);
+        }
       }
     };
-    // The first angle on the grid (25, 31, ...) above LOB_ANGLE.
+    // The first angle on the grid above LOB_ANGLE.
     const highFrom = 25 + 6 * Math.ceil((LOB_ANGLE + 1 - 25) / 6);
-    for (const wkey of guns) {
-      for (let a = s === 'lobber' ? highFrom : 25; a <= 155; a += 6) consider(wkey, a);
-    }
+    for (const wkey of guns) search(wkey, s === 'lobber' ? highFrom : 25, 155);
     // A lobber falls back to flat shots only when no high arc lands near.
     if (s === 'lobber' && best!.err > LOB_OK) {
-      for (const wkey of guns) {
-        for (let a = 25; a < highFrom; a += 6) consider(wkey, a);
-      }
+      for (const wkey of guns) search(wkey, 25, highFrom - 1);
     }
     const pick = best!;
     [ba, bp, w, n] = [pick.a, pick.p, pick.wkey, 0];

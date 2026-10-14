@@ -203,8 +203,9 @@ function tankity_journal_mode(string $dir, ?string $mounts = null): string
 
 /* The schema, one step per version. A database at version N runs the steps
    after N, each in its own transaction. Step 2 is the boards; step 3 remembers the old score files already
-   imported, so a file that outlives its import is never filed twice; step 4 tells
-   a row the server filed from a match from a browser's own claim. */
+   imported; step 4 tells a row the server filed from a match from a browser's
+   own claim; step 5 counts each address's requests (server/rate.php), keeps
+   only the rows rooms filed, and drops the old callsign tables. */
 function tankity_schema_steps(): array
 {
     return [
@@ -228,12 +229,26 @@ function tankity_schema_steps(): array
             // Before this column only room filing (seed 'room:CODE') and the legacy conversion (a browser's claim) wrote rows.
             "UPDATE board SET source = 'client' WHERE seed NOT LIKE 'room:%'",
         ],
+        5 => [
+            // Per-address counts, one row per kind and RATE_SLOT seconds (rooms: kind 'room').
+            'CREATE TABLE rate (client TEXT NOT NULL, kind TEXT NOT NULL, slot INTEGER NOT NULL, n INTEGER NOT NULL,
+                PRIMARY KEY (client, kind, slot))',
+            'CREATE INDEX rate_slot ON rate (slot)',
+            // Only room matches with two or more humans are on the boards; solo scores live in the browser.
+            "DELETE FROM board WHERE source <> 'room'",
+            // The per-callsign runs from before the boards were solo claims too, and the old files are no longer read.
+            'DROP TABLE callsigns',
+            'DROP TABLE legacy_imported',
+        ],
     ];
 }
 
 function tankity_schema(PDO $db): void
 {
     $have = (int) $db->query('PRAGMA user_version')->fetchColumn();
+    if ($have > max(array_keys(tankity_schema_steps()))) {
+        tankity_refuse(TANKITY_DB_FILE, "is at schema $have, newer than this server knows", 'deploy the newer server, or reset the database');
+    }
     foreach (tankity_schema_steps() as $version => $sql) {
         if ($version <= $have) {
             continue;

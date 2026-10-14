@@ -1,17 +1,17 @@
 /* Operation Tankity: the high scores.
  *
- * One all-time board per difficulty from scores.php, this player's rows marked,
- * opening on the player's own difficulty with a switcher to the others; and a
- * finished solo run filed the moment it ends, on its difficulty's board. When
- * the server cannot be read the board falls back to this browser's own rows. A
- * filing that fails says why on the end card and keeps the run in this browser.
- * The page arrives as deps. */
-import { browserStorage } from '../../_kit/ports.browser.ts';
-import { json, pref } from '../../_kit/prefs.ts';
+ * Two boards per difficulty: the online one from scores.php (room matches two
+ * or more humans played), this player's rows marked, and this browser's own
+ * (src/local-board.ts: solo matches and one-human rooms), the run just saved
+ * marked. Scores opens on the player's own difficulty with a switcher to the
+ * others. Main's older `tankity-local` rows move onto this browser's board at
+ * every load, and when another tab writes them. The page arrives as deps. */
+import type { StorageLike } from '../../_kit/ports.ts';
 import { DIFFICULTY_NAMES } from './difficulty.ts';
-import { isScoreRows, type ScoreEntry } from './score-rows.ts';
+import { LEGACY_KEY, LOCAL_KEY, localBoard } from './local-board.ts';
+import type { LocalRow, Saved } from './local-board.ts';
 import type { Difficulty } from './sim.ts';
-import { filedLine, fmt } from './standings.ts';
+import { fmt } from './standings.ts';
 import type { KeyHintFn } from './ui/chrome.tsx';
 import { renderScores as drawScores } from './ui/scores.tsx';
 
@@ -21,28 +21,22 @@ interface BoardRow { name: string; best: number; banked: number; place: number }
 export interface ScoresDeps {
   $(id: string): HTMLElement | null;
   keyHint: KeyHintFn;
-  say(text: string, tone?: string): void;
   toggleOverlay(id: string, btnId?: string): void;
   initials(): string;
   /** The Menu's Difficulty: the board Scores opens on. */
   difficulty(): Difficulty;
-}
-
-export interface SoloRun { initials: string; score: number; banked: number; seed: string; difficulty: Difficulty }
-
-/** Why a filing failed, in words for the end card. */
-export function filingFailure(status: number | null, error: string): string {
-  if (status === null) return 'the score server is out of reach';
-  if (status === 429) return 'too many reports from this connection just now, try again later';
-  if (status === 403) return 'the request was refused (it must come from this site)';
-  if (status === 415) return 'the server refused the report format';
-  if (status >= 500) return `the score server had a problem (${error || 'http ' + status})`;
-  return error || 'http ' + status;
+  /** Where this browser's board is kept; null when there is no storage. */
+  storage: StorageLike | null;
+  /** Calls `fn` with the key another tab wrote (null: it cleared storage). */
+  onStorage(fn: (key: string | null) => void): void;
 }
 
 export function createScores(deps: ScoresDeps) {
-  const { $, keyHint, say, toggleOverlay, initials, difficulty } = deps;
-  const localRows = pref<ScoreEntry[]>('tankity-local', [], json(isScoreRows), browserStorage());
+  const { $, keyHint, toggleOverlay, initials, difficulty, storage, onStorage } = deps;
+  const board = localBoard(storage);
+  board.migrate();
+  /** The run this page saved last; its row is marked. */
+  let fresh: string | null = null;
 
   const SCORES: { level: Difficulty; rows: { text: string; mine: boolean }[] | null; note: string } = { level: 'normal', rows: null, note: '' };
   function renderScoresOverlay(): void {
@@ -51,16 +45,35 @@ export function createScores(deps: ScoresDeps) {
     drawScores(section, {
       keyHint, onClose: () => toggleOverlay('report-overlay', 'scores-open'),
       level: SCORES.level, onLevel: lv => { void loadScores(lv); }, rows: SCORES.rows, note: SCORES.note,
+      local: localRows(SCORES.level),
     });
   }
+  /** This browser's board for a level as the overlay lists it; null when storage is blocked. */
+  function localRows(level: Difficulty): { text: string; mine: boolean }[] | null {
+    const rows = board.rows(level);
+    return rows && rows.map((r, i) => ({
+      text: `#${i + 1} ${r.initials} \u00b7 ${fmt(r.score)} pts \u00b7 ${r.rounds} rounds won \u00b7 ${r.kind}`, mine: r.ref === fresh,
+    }));
+  }
+  /** Keeps a finished run on this browser's board: a solo match, or a room match only one human played. */
+  function saveLocal(level: Difficulty, row: LocalRow): Saved {
+    const saved = board.add(level, row);
+    if (saved.kept) fresh = row.ref;
+    renderScoresOverlay();
+    return saved;
+  }
+  // Another tab saved a run, or a stale page kept one under main's old key: an open overlay shows it.
+  onStorage(key => {
+    if (key === LEGACY_KEY) board.migrate();
+    if (key === null || key === LOCAL_KEY || key === LEGACY_KEY) renderScoresOverlay();
+  });
   /* Loads one board. Only the latest load may draw: a slower reply for a board
      the player has since left would otherwise show another difficulty's rows
      under the pressed button. */
   let loads = 0;
   let shown: Difficulty | null = null; // the board SCORES.rows holds
   async function loadScores(level: Difficulty = difficulty()): Promise<void> {
-    // AAA is also what the board shows for a name its blocklist refuses, so those rows cannot be told apart: none is marked.
-    const me = initials().toUpperCase() === 'AAA' ? '' : initials().toUpperCase();
+    const me = initials().toUpperCase();
     const mine = ++loads;
     SCORES.level = level;
     try {
@@ -69,22 +82,21 @@ export function createScores(deps: ScoresDeps) {
       const data = (await res.json()) as { scores?: BoardRow[] };
       if (mine !== loads) return;
       SCORES.rows = (data.scores || []).map(r => ({
-        text: `#${r.place} ${r.name} \u00b7 ${fmt(r.best)} pts \u00b7 ${r.banked} rounds won`, mine: !!me && r.name.toUpperCase() === me,
+        text: `#${r.place} ${r.name} · ${fmt(r.best)} pts · ${r.banked} rounds won`, mine: !!me && r.name.toUpperCase() === me,
       }));
-      SCORES.note = `The all-time board on ${DIFFICULTY_NAMES[level]}. Your runs are marked.`;
+      SCORES.note = `Room matches with two or more players on ${DIFFICULTY_NAMES[level]}. Your runs are marked.`;
       shown = level;
     } catch (_) {
       if (mine !== loads) return;
-      // A row with no difficulty counts as Normal.
-      SCORES.rows = localRows.get().filter(r => (r.difficulty ?? 'normal') === level)
-        .map((r, i) => ({ text: `#${i + 1} ${r.name} \u00b7 ${fmt(r.score)} pts \u00b7 ${r.banked} rounds won`, mine: !!me && r.name.toUpperCase() === me }));
-      SCORES.note = `The score server is out of reach: these are this browser's runs on ${DIFFICULTY_NAMES[level]} only.`;
+      SCORES.rows = null; // not "nobody has filed"
+      SCORES.note = 'The online board is out of reach right now.';
       shown = level;
     }
     renderScoresOverlay();
   }
   /* The overlay opens on the player's current difficulty and reads the board afresh: the
-     Difficulty may have changed, and a room match files on the server unseen. */
+     Difficulty may have changed, and a room match files on the server unseen. This browser's
+     board is read at every draw. */
   function openScores(): void {
     SCORES.level = difficulty();
     // The last board read stays up while the fresh one loads, when it is this board's.
@@ -93,42 +105,6 @@ export function createScores(deps: ScoresDeps) {
     renderScoresOverlay();
     void loadScores();
   }
-  function saveLocal(entry: ScoreEntry): void {
-    localRows.set([...localRows.get(), entry].sort((a, b) => b.score - a.score).slice(0, 10));
-  }
-  /* Files a finished solo run on its difficulty's board; `done` always gets a
-     line for the end card, a failure's reason included (an empty line would hide
-     the card's filed line and read as "did not place"). */
-  async function fileSolo(run: SoloRun, done: (line: string) => void): Promise<void> {
-    let ok = false;
-    // A copy is kept in this browser only when the server surely did not file the run: no reply at all,
-    // or an error status. A 200 whose body is unreadable may well have filed it.
-    let keep = true;
-    try {
-      let res: Response;
-      try {
-        res = await fetch('scores.php', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: run.initials, score: run.score, banked: run.banked, seed: run.seed, difficulty: run.difficulty }),
-        });
-      } catch (_) {
-        throw filingFailure(null, '');
-      }
-      const data = (await res.json().catch(() => null)) as { ok?: boolean; place?: number | null; error?: string } | null;
-      if (res.ok && !data) keep = false;
-      if (!res.ok || !data || !data.ok) throw filingFailure(res.ok ? 200 : res.status, (data && data.error) || '');
-      ok = true;
-      done(filedLine(data.place ?? null, run.score, run.difficulty));
-    } catch (why) {
-      if (keep) saveLocal({ name: run.initials, score: run.score, banked: run.banked, won: false, seed: run.seed, difficulty: run.difficulty });
-      say(keep ? 'The run could not be filed; it stays in this browser.' : 'The server answered, but the reply could not be read.', 'info');
-      done(keep
-        ? `Couldn't file your score: ${typeof why === 'string' ? why : 'unexpected reply'}. Kept in this browser.`
-        : `The server's reply could not be read, so the run may be filed: ${typeof why === 'string' ? why : 'unexpected reply'}. Check Scores.`);
-    }
-    // Refresh the board the player is looking at; one never opened gets the run's own.
-    if (ok) void loadScores(SCORES.rows ? SCORES.level : run.difficulty);
-  }
 
-  return { SCORES, renderScoresOverlay, openScores, loadScores, fileSolo };
+  return { SCORES, renderScoresOverlay, openScores, loadScores, saveLocal };
 }

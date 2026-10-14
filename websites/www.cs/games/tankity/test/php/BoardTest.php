@@ -2,12 +2,10 @@
 // games/tankity/test/php/BoardTest.php
 declare(strict_types=1);
 
-use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-/* The boards: one per difficulty, best runs first, ties keep the older run
-   ahead, the best BOARD_KEEP kept per board, and the per-callsign rows from
-   before the boards converted once onto the Normal board. */
+/* The online boards: one per difficulty, room matches only, best runs first,
+   ties keep the older run ahead, the best BOARD_KEEP kept per board. */
 final class BoardTest extends TestCase
 {
     private string $dir;
@@ -29,7 +27,22 @@ final class BoardTest extends TestCase
 
     private function entry(string $who, int $score, string $level = 'normal'): array
     {
-        return ['difficulty' => $level, 'initials' => $who, 'score' => $score, 'rounds' => 1, 'seed' => 's'];
+        return ['difficulty' => $level, 'initials' => $who, 'score' => $score, 'rounds' => 1, 'seed' => 's', 'source' => 'room'];
+    }
+
+    public function testARunMustSayWhoFiledIt(): void
+    {
+        foreach ([null, 'browser', '', 'solo'] as $source) {
+            try {
+                board_file(['source' => $source] + $this->entry('SRC', 1));
+                $this->fail('filed with source ' . var_export($source, true));
+            } catch (InvalidArgumentException) {
+            }
+        }
+        $row = $this->entry('SRC', 1);
+        unset($row['source']);
+        $this->expectException(InvalidArgumentException::class);
+        board_file($row);
     }
 
     public function testFilesAndRanksBestFirst(): void
@@ -78,58 +91,6 @@ final class BoardTest extends TestCase
         $this->assertSame(1, board_file($this->entry('LOW', 1, 'easy')), 'another board is not full');
     }
 
-    /** @return iterable<string, array{string, string}> */
-    public static function callsigns(): iterable
-    {
-        yield 'two letters pad with X' => ['bo', 'BOX'];
-        yield 'digits and dashes drop' => ['r2-d2', 'RDX'];
-        yield 'long names cut' => ['tankity-ace', 'TAN'];
-        yield 'no letters is XXX, which is blocked' => ['123', 'AAA'];
-        yield 'empty' => ['', 'AAA'];
-        yield 'a blocked set' => ['ass', 'AAA'];
-        yield 'already three' => ['wgr', 'WGR'];
-    }
-
-    #[DataProvider('callsigns')]
-    public function testOddCallsignsConvert(string $name, string $want): void
-    {
-        $this->assertSame($want, board_convert_name($name, tankity_guard()));
-    }
-
-    public function testConvertsCallsignRowsOnceOntoTheNormalBoard(): void
-    {
-        legacy_write(tankity_db(), 'wg', ['runs' => [
-            ['score' => 10, 'banked' => 0, 'won' => false, 'seed' => 'a', 'ts' => '2026-01-01T00:00:00+00:00'],
-            ['score' => 900, 'banked' => 4, 'won' => false, 'seed' => 'b', 'ts' => '2026-02-01T00:00:00+00:00'],
-        ]]);
-        legacy_write(tankity_db(), 'r2-d2', ['runs' => [['score' => 450, 'banked' => 2, 'won' => false, 'seed' => 'c', 'ts' => '2026-03-01T00:00:00+00:00']]]);
-        $this->assertSame(2, board_convert_callsigns());
-        $top = board_top('normal', 10);
-        $this->assertSame(['WGX', 'RDX'], array_column($top, 'initials'));
-        $this->assertSame([900, 450], array_column($top, 'score'));
-        $this->assertSame([4, 'b', '2026-02-01T00:00:00+00:00'], [$top[0]['rounds'], $top[0]['seed'], $top[0]['at']]);
-        $this->assertSame(0, (int) tankity_db()->query('SELECT COUNT(*) FROM callsigns')->fetchColumn());
-        $this->assertSame(0, board_convert_callsigns(), 'nothing is converted twice');
-        $this->assertSame(['client', 'client'], tankity_db()->query('SELECT source FROM board ORDER BY id')->fetchAll(PDO::FETCH_COLUMN), 'a legacy callsign was a browser claim');
-        $this->assertSame([], board_top('easy', 10));
-    }
-
-    public function testEqualScoresKeepTheOlderRunAhead(): void
-    {
-        foreach (['zed' => '2026-01-01T00:00:00+00:00', 'amy' => '2026-02-01T00:00:00+00:00'] as $name => $ts) {
-            legacy_write(tankity_db(), $name, ['runs' => [['score' => 100, 'banked' => 1, 'won' => false, 'seed' => $name, 'ts' => $ts]]]);
-        }
-        board_convert_callsigns();
-        $this->assertSame(['ZED', 'AMY'], array_column(board_top('normal', 10), 'initials'));
-    }
-
-    public function testARunWithoutADateIsDatedByTheConversion(): void
-    {
-        legacy_write(tankity_db(), 'old', ['runs' => [['score' => 5, 'banked' => 0, 'won' => false, 'seed' => 'x']]]);
-        board_convert_callsigns();
-        $this->assertNotSame('', board_top('normal', 1)[0]['at']);
-    }
-
     public function testTheSourceColumnRelabelsRowsThatAreNotRoomMatches(): void
     {
         $db = new PDO('sqlite::memory:');
@@ -143,58 +104,16 @@ final class BoardTest extends TestCase
         $ins = $db->prepare("INSERT INTO board (difficulty, initials, score, rounds, seed, at) VALUES ('normal', ?, 1, 1, ?, 'x')");
         $ins->execute(['OLD', 's']);
         $ins->execute(['RUM', 'room:ABCD']);
-        tankity_schema($db);
+        foreach (tankity_schema_steps()[4] as $q) {
+            $db->exec($q);
+        }
         $this->assertSame(['OLD' => 'client', 'RUM' => 'room'], $db->query('SELECT initials, source FROM board')->fetchAll(PDO::FETCH_KEY_PAIR));
     }
 
-    public function testADatelessRunConvertedOnceIsRecognisedAfterwards(): void
+    public function testOnlyRoomRowsCanBeFiled(): void
     {
-        legacy_write(tankity_db(), 'old', ['runs' => [['score' => 5, 'banked' => 0, 'won' => false, 'seed' => 'x']]]);
-        board_convert_callsigns();
-        $this->assertTrue(board_has_run(board_convert_name('old', tankity_guard()), ['score' => 5, 'banked' => 0, 'seed' => 'x']));
-    }
-
-    public function testARowWithNoRunIsDroppedWithALogLine(): void
-    {
-        legacy_write(tankity_db(), 'void', ['runs' => []]);
-        $log = tempnam(sys_get_temp_dir(), 'log');
-        $was = ini_set('error_log', $log);
-        board_convert_callsigns();
-        ini_set('error_log', (string) $was);
-        $this->assertStringContainsString('callsign void has no readable run', (string) file_get_contents($log));
-        unlink($log);
-        $this->assertSame(0, (int) tankity_db()->query('SELECT COUNT(*) FROM callsigns')->fetchColumn());
-    }
-
-    public function testAFailurePartWayLeavesTheUnconvertedRowsAlone(): void
-    {
-        legacy_write(tankity_db(), 'fine', ['runs' => [['score' => 10, 'banked' => 0, 'won' => false, 'seed' => 'a', 'ts' => '2026-01-01T00:00:00+00:00']]]);
-        legacy_write(tankity_db(), 'bom', ['runs' => [['score' => 20, 'banked' => 0, 'won' => false, 'seed' => 'b', 'ts' => '2026-02-01T00:00:00+00:00']]]);
-        tankity_db()->exec("CREATE TRIGGER fail_bom BEFORE INSERT ON board WHEN NEW.initials = 'BOM' BEGIN SELECT RAISE(ABORT, 'boom'); END");
-        try {
-            board_convert_callsigns();
-            $this->fail('the failing row should have thrown');
-        } catch (PDOException) {
-        }
-        $this->assertSame(['FIN'], array_column(board_top('normal', 10), 'initials'));
-        $this->assertSame(['bom'], tankity_db()->query('SELECT slug FROM callsigns')->fetchAll(PDO::FETCH_COLUMN));
-    }
-
-    public function testTheLiveCallsignsAllSurviveTheConversion(): void
-    {
-        foreach (['wmg' => 400, 'bob' => 300, 'test2' => 200, 'test' => 100] as $name => $score) {
-            legacy_write(tankity_db(), $name, ['runs' => [['score' => $score, 'banked' => 1, 'won' => false, 'seed' => $name, 'ts' => '2026-01-01T00:00:00+00:00']]]);
-        }
-        $this->assertSame(4, board_convert_callsigns());
-        $top = board_top('normal', 10);
-        $this->assertSame(['WMG', 'BOB', 'TES', 'TES'], array_column($top, 'initials'));
-        $this->assertSame([400, 300, 200, 100], array_column($top, 'score'), 'two callsigns that share initials both keep their row');
-    }
-
-    public function testTheGuardKeepsItsRunsInTheStorageDirectory(): void
-    {
-        $this->assertNotNull(tankity_guard([], ['HTTP_HOST' => 'localhost', 'REMOTE_ADDR' => '192.0.2.1'], [], fn(): int => 1_000_000, function (): void {})->startRun());
-        $this->assertFileExists($this->dir . '/' . TANKITY_GUARD_RUNS);
+        $this->expectException(InvalidArgumentException::class);
+        board_file(['source' => 'client'] + $this->entry('CLI', 1));
     }
 
     public function testASavepointKeepsAFailedFilingOutOfTheOuterTransaction(): void

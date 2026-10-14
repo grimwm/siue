@@ -35,8 +35,58 @@ final class DbTest extends TestCase
         $this->assertSame(TANKITY_BUSY_MS, (int) $db->query('PRAGMA busy_timeout')->fetchColumn());
         $this->assertSame(tankity_journal_mode($this->dir), strtolower((string) $db->query('PRAGMA journal_mode')->fetchColumn()));
         $tables = $db->query("SELECT name FROM sqlite_master WHERE type = 'table'")->fetchAll(PDO::FETCH_COLUMN);
-        foreach (['meta', 'rooms', 'callsigns'] as $t) {
+        foreach (['meta', 'rooms', 'board', 'rate'] as $t) {
             $this->assertContains($t, $tables);
+        }
+        $this->assertSame(5, max(array_keys(tankity_schema_steps())));
+        foreach (['solo_runs', 'solo_rate', 'callsigns', 'legacy_imported'] as $t) {
+            $this->assertNotContains($t, $tables);
+        }
+    }
+
+    public function testStepFiveKeepsOnlyTheRoomRowsAndAddsTheRateTable(): void
+    {
+        // Production is at v4: room rows the server filed, and 'client' rows a browser claimed.
+        $db = new PDO('sqlite:' . $this->dir . '/' . TANKITY_DB_FILE, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        foreach ([1, 2, 3, 4] as $v) {
+            foreach (tankity_schema_steps()[$v] as $q) {
+                $db->exec($q);
+            }
+        }
+        $db->exec('PRAGMA user_version = 4');
+        // Old callsign rows still waiting to convert, and the record of imported files.
+        $db->exec("INSERT INTO callsigns (slug, data) VALUES ('wmg', '{}')");
+        $db->exec("INSERT INTO legacy_imported (name, hash, at) VALUES ('wmg-operation-tankity.json', 'h', 'x')");
+        $ins = $db->prepare("INSERT INTO board (difficulty, initials, score, rounds, seed, at, source) VALUES (?, ?, ?, 1, ?, 'x', ?)");
+        foreach ([['normal', 'WMG', 900, 's', 'client'], ['normal', 'RUM', 500, 'room:ABCD', 'room'], ['hard', 'AAA', 800, 's', 'client'],
+            ['easy', 'TWO', 100, 'room:WXYZ', 'room']] as $r) {
+            $ins->execute($r);
+        }
+        $db = null;
+        $db = tankity_db();
+        $this->assertSame(5, (int) $db->query('PRAGMA user_version')->fetchColumn());
+        $this->assertSame([['RUM', 'room'], ['TWO', 'room']], $db->query('SELECT initials, source FROM board ORDER BY id')->fetchAll(PDO::FETCH_NUM));
+        $this->assertSame(0, (int) $db->query('SELECT COUNT(*) FROM rate')->fetchColumn());
+        $this->assertSame(['client', 'kind', 'slot', 'n'], $db->query('PRAGMA table_info(rate)')->fetchAll(PDO::FETCH_COLUMN, 1));
+        $this->assertNotContains('standin', $db->query('PRAGMA table_info(board)')->fetchAll(PDO::FETCH_COLUMN, 1));
+        $tables = $db->query("SELECT name FROM sqlite_master WHERE type = 'table'")->fetchAll(PDO::FETCH_COLUMN);
+        $this->assertNotContains('callsigns', $tables, 'the old callsigns were solo claims too');
+        $this->assertNotContains('legacy_imported', $tables);
+    }
+
+    public function testADatabaseNewerThanThisServerIsRefused(): void
+    {
+        // A schema this code does not know would fail later on a column it lacks; refuse it up front.
+        $path = $this->dir . '/' . TANKITY_DB_FILE;
+        $future = new PDO('sqlite:' . $path);
+        $future->exec('PRAGMA user_version = ' . (max(array_keys(tankity_schema_steps())) + 1));
+        $future = null;
+        $this->expectErrorLog();
+        try {
+            tankity_db();
+            $this->fail('a newer database was opened');
+        } catch (TankityStorageRefused $e) {
+            $this->assertStringContainsString('newer', $e->getMessage());
         }
     }
 

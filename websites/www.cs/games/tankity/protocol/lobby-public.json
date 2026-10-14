@@ -12,6 +12,7 @@
             "hostSeat": 0,
             "round": 0,
             "startHumans": 0,
+            "matchId": null,
             "winner": null,
             "winBonus": 0,
             "wind": 0,

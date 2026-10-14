@@ -12,7 +12,7 @@ import type { RoomSnapshot } from './protocol.ts';
 import type { Boom, DrawTank, Spark } from './render.ts';
 import type { AimChoice } from './ai.ts';
 import type { SoloRound } from './standings.ts';
-import type { Arsenal, Cloud, Hills, World } from './sim.ts';
+import type { Arsenal, Cloud, Difficulty, Hills, World } from './sim.ts';
 
 /** The arsenal tables as main.ts holds them now. They are replaced when
  * game.json arrives, so a module reads them through this view each time
@@ -53,6 +53,8 @@ export interface Particle extends Spark { vx: number; vy: number }
  * page's own bookkeeping. */
 export interface GameState extends World {
   seed: string;
+  /** How well the drones aim this match; set at each solo deal; a room match leaves it alone. */
+  difficulty: Difficulty;
   body: string; // the unit look the player chose
   clouds: Cloud[];
   /** This match's field width: dealt at the start of a solo match (field.ts), ROOM_W in a room; fixed for the match. */

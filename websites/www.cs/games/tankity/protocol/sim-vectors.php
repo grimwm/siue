@@ -36,7 +36,7 @@ function sv_round($v)
     return $v;
 }
 
-/** A terrain from its recipe, to the nearest 0.001 so both languages build the same ground. */
+/** A terrain from its recipe, to the nearest 0.001 (det_sin, so the recipe means the same ground everywhere). */
 function sv_terrain(array $spec, int $w = SV_WIDTH): array
 {
     $t = [];
@@ -47,7 +47,7 @@ function sv_terrain(array $spec, int $w = SV_WIDTH): array
             $y = $spec['slope'][0] + ($spec['slope'][1] - $spec['slope'][0]) * $ix / ($w - 1);
         } else {
             [$base, $amp, $period] = $spec['hills'];
-            $y = $base + $amp * sin($ix * 2 * M_PI / $period);
+            $y = $base + $amp * det_sin($ix * 2 * M_PI / $period);
         }
         foreach ($spec['set'] ?? [] as [$x0, $x1, $sy]) {
             if ($ix >= $x0 && $ix <= $x1) {
@@ -138,8 +138,6 @@ function sv_aim_at(array $room, int $seat, string $wkey, float $targetX): array
 // written []; a path also covers everything under it). Any other field of a
 // known case must still match.
 const SV_KNOWN_PATHS = [
-    'seek-push/half-a-pixel-away' => ['out'],
-    'seek-push/exactly-one-pixel-away' => ['out'],
     'ai-aim/no-rivals-left' => ['out.angle', 'out.power'],
 ];
 $cases = [];
@@ -156,11 +154,51 @@ $add = function (string $group, string $name, array $in, $out, ?string $known = 
     }
     $cases[$group][] = $case;
 };
-/* An exact case: written unrounded and compared with Object.is by the runner (terrain heights at 1e-9 until Plan D's deterministic math). */
+/* An exact case: written unrounded and compared with Object.is by the runner. */
 $exact = function (string $group, string $name, array $in, $out) use (&$cases): void {
     $cases[$group][] = ['name' => $name, 'in' => $in, 'out' => $out, 'exact' => true];
 };
 $weapons = room_weapons();
+
+/* ---- the deterministic math: every function on a grid and its edges ----
+ * Compared without tolerance: the browser must produce these exact doubles. */
+$det = function (string $fn, float $x, ?float $y = null) use ($exact): void {
+    $out = match ($fn) {
+        'sin' => det_sin($x), 'cos' => det_cos($x), 'atan' => det_atan($x),
+        'atan2' => det_atan2((float) $y, $x), 'round' => det_round($x),
+    };
+    $n = fn(float $v): string => json_encode($v, JSON_PRESERVE_ZERO_FRACTION);
+    $exact('detmath', "$fn(" . ($y === null ? '' : $n($y) . ', ') . $n($x) . ')', ['fn' => $fn, 'x' => $x] + ($y === null ? [] : ['y' => $y]), $out);
+};
+for ($i = -60; $i <= 60; $i++) {
+    $x = $i * 0.5236 + 0.00137 * $i;
+    $det('sin', $x);
+    $det('cos', $x);
+    $det('atan', $x / 7);
+}
+// 1200 more points in +-100 for sin, cos and atan, so a one-ulp change in a leading kernel term (the reduction,
+// S1, S2, C1, the first atan terms and the atan breakpoints) fails cases. The high-order terms change no
+// output at these points, so these vectors leave them unpinned.
+for ($i = 0; $i < 400; $i++) {
+    $x = (($i * 7919) % 20011) / 100.0 - 100.0 + 0.00031;
+    $det('sin', $x);
+    $det('cos', $x + 0.5);
+    $det('atan', $x / 9.7);
+}
+// Past 1e5 the reduction loses accuracy (never fed by the game), but both sides still agree to the bit.
+$edges = [-0.0, M_PI_4, -M_PI_4, M_PI_2, M_PI, 3 * M_PI_2, 2 * M_PI, -M_PI_2 * 7, 30.9, 1e-9, -1e-300, 5e-324,
+    0.4375, 0.6875, 1.1875, 2.4375, -2.4375, 1e5, 1e6, 1e15, -1e22];
+foreach ($edges as $x) {
+    $det('sin', $x);
+    $det('cos', $x);
+    $det('atan', $x);
+}
+foreach ([[1, 1], [1, -1], [-1, -1], [-1, 1], [0, 1], [0, -1], [1, 0], [-1, 0], [0, 0], [-0.0, -1], [-0.0, 1], [3e-7, -2], [-250.5, 31.25]] as [$y, $x]) {
+    $det('atan2', (float) $x, (float) $y);
+}
+foreach ([2.5, -2.5, 0.49999999999999994, -0.5, -0.4, -0.0, 0.0, 7.5, -7.5, 1e15 + 0.5, 4503599627370497.0, -4503599627370497.0] as $x) {
+    $det('round', $x);
+}
 
 /* ---- constants and the integer core ---- */
 $add('constants', 'physics', [], ['grav' => ROOM_GRAV, 'flatGrav' => ROOM_FLAT_GRAV, 'windK' => ROOM_TURN_WIND,
@@ -190,7 +228,7 @@ foreach ([[1, 3], [2, 1234], [3, 99], [4, 7], [5, 2026]] as [$n, $seed]) {
     $add('spawn-spots', "n$n-seed$seed", ['n' => $n, 'seed' => $seed], ['spots' => $spots, 'next' => room_rng_next($rng)]);
 }
 
-/* ---- the field at any width, exact except terrain heights (spec 7.4) ---- */
+/* ---- the field at any width, exact (spec 7.4) ---- */
 foreach ([720, 1080, 1440] as $w) {
     foreach (['tankity-twin-hills', 'scorch-01'] as $seed) {
         $rng = room_hash_seed($seed);
@@ -297,10 +335,8 @@ $seek('no-rival', [$human(100)], 0, 150, 300, 70, 1 / 60);
 $seek('only-dead-rivals', [$human(100), $drone(200, 0)], 0, 150, 300, 70, 1 / 60);
 $seek('strong-steer-short-step', [$human(100), $drone(400)], 0, 150, 200, 250, 0.01);
 $seek('straight-down-at-it', [$human(100), $drone(150)], 0, 150, 100, 70, 1 / 60);
-$seek('half-a-pixel-away', [$human(100), $drone(150)], 0, 150.5, 388, 70, 1 / 60,
-    'room_seek_push skips steering within 1 px of the target; the browser sim clamps the distance to 1 and still steers. Unreachable in play: a shell that close is already inside the rival\'s hit box and has burst.');
-$seek('exactly-one-pixel-away', [$human(100), $drone(150)], 0, 150, 389, 70, 1 / 60,
-    'same 1 px rule as half-a-pixel-away');
+$seek('half-a-pixel-away', [$human(100), $drone(150)], 0, 150.5, 388, 70, 1 / 60);
+$seek('exactly-one-pixel-away', [$human(100), $drone(150)], 0, 150, 389, 70, 1 / 60);
 foreach ([[0.0, 0.0], [300.0, 0.0], [0.0, -250.0], [-140.0, 90.0]] as [$vx, $vy]) {
     foreach ([2, 4, 5] as $n) {
         $fan = $n === 5 ? 0.1 : 0.22;
@@ -429,6 +465,9 @@ $volley('point-blank-at-the-neighbour', array_replace($shell, ['shooter' => 0, '
 $volley('straight-up-comes-back-on-the-gunner', array_replace($shell, ['shooter' => 0, 'tanks' => [$human(300, 100), $drone(600, 100)], 'angle' => 90, 'power' => 40]));
 $volley('wind-drives-it-back-onto-the-gunner', array_replace($shell, ['wind' => -12, 'shooter' => 0, 'tanks' => [$human(300, 100), $drone(600, 100)], 'angle' => 80, 'power' => 45]));
 $volley('lob-off-the-board', array_replace($shell, ['shooter' => 0, 'tanks' => [$human(600, 100), $drone(100, 100)], 'angle' => 40, 'power' => 100]));
+// Splits just short of a ledge: the first bomblet is inside it within 0.04 s and bursts there at once, on both sides.
+$volley('cluster-splits-at-a-ledge', ['terrain' => ['flat' => 400, 'set' => [[258, 330, 392]]], 'wkey' => 'cluster', 'shooter' => 0,
+    'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(300, 100) + ['y' => 392.0]], 'angle' => 10, 'power' => 47]);
 $volley('fired-into-the-hillside', ['terrain' => ['slope' => [420, 260]], 'wkey' => 'shell', 'shooter' => 0, 'tanks' => [$human(100, 100), $drone(500, 100)], 'angle' => 5, 'power' => 50]);
 $volley('shielded-human-eats-a-drone-shell', array_replace($shell, ['shooter' => 1, 'tanks' => [$human(380, 100) + ['shield' => true], $drone(100, 100) + ['dirS' => 1]],
     'angle' => sv_aim_at(sv_room(array_replace($shell, ['tanks' => [$human(380, 100), $drone(100, 100) + ['dirS' => 1]]])), 1, 'shell', 380.0)[0],
@@ -492,7 +531,8 @@ $aim('no-rivals-left', ['terrain' => $flat, 'wind' => 0, 'round' => 1, 'seed' =>
  * wants to, fire the volley (which records where it burst). The target may be
  * driven off at a step; 'hp' is large so nobody dies mid-sequence. */
 $bracket = function (string $name, array $c) use ($add): void {
-    $room = sv_room($c);
+    $w = $c['w'] ?? SV_WIDTH;
+    $room = sv_room($c, $w);
     $seat = $c['shooter'];
     $steps = [];
     for ($k = 0; $k < $c['shots']; $k++) {
@@ -502,10 +542,10 @@ $bracket = function (string $name, array $c) use ($add): void {
         $choice = room_ai_choose($room, $room['tanks'][$seat]);
         $room['tanks'][$seat]['angle'] = $choice['angle'];
         $room['tanks'][$seat]['power'] = $choice['power'];
-        $nx = max(12.0, min(SV_WIDTH - 12.0, $room['tanks'][$seat]['x'] + $choice['dx']));
+        $nx = max(12.0, min($w - 12.0, $room['tanks'][$seat]['x'] + $choice['dx']));
         if (abs($choice['dx']) > 0.5) {
             $room['tanks'][$seat]['x'] = $nx;
-            $room['tanks'][$seat]['y'] = $room['terrain'][max(0, min(SV_WIDTH - 1, (int) round($nx)))];
+            $room['tanks'][$seat]['y'] = $room['terrain'][max(0, min($w - 1, (int) round($nx)))];
         }
         $room['tanks'][$seat]['brk']['ox'] = $room['tanks'][$seat]['x'];
         if ($choice['wkey'] !== 'shell') {
@@ -537,6 +577,10 @@ $bracket('jammed-target-wobbles-double', ['terrain' => $flat, 'wind' => 0, 'roun
     'tanks' => [$human(200, 9999) + ['jammer' => 2], $drone(500, 9999) + ['dirS' => -1]]]);
 $bracket('drone-with-a-rack', ['terrain' => $flat, 'wind' => 2, 'round' => 4, 'seed' => 11, 'shooter' => 1, 'target' => 0, 'shots' => 6,
     'tanks' => [$human(210, 9999), $drone(510, 9999) + ['dirS' => -1, 'ammo' => ['mortar' => 2]]]]);
+// A unit on a ledge stands in the lance's line, so the lance pierces it before it lands: the bracket keeps that first burst.
+$bracket('lance-marks-its-first-burst', ['terrain' => ['flat' => 400, 'set' => [[465, 485, 330]]], 'wind' => 0, 'round' => 6, 'seed' => 23,
+    'shooter' => 2, 'target' => 0, 'shots' => 4,
+    'tanks' => [$human(150, 9999), $drone(475, 9999) + ['y' => 330.0], $drone(560, 9999) + ['dirS' => -1, 's' => 'glory', 'ammo' => ['lance' => 9]]]]);
 
 /* ---- difficulty: the same scenes under each level's aim ----
  * A word neither side knows aims at normal on both. */
@@ -552,6 +596,13 @@ foreach (['easy', 'normal', 'hard', 'brutal'] as $level) {
         $bracket("$level-stationary-round$round", ['terrain' => $hills, 'wind' => 2, 'round' => $round, 'seed' => $seed, 'shooter' => 1, 'target' => 0,
             'shots' => 7, 'difficulty' => $level, 'tanks' => [$human(200, 9999), $drone(520, 9999) + ['dirS' => -1, 'angle' => 60]]]);
     }
+}
+
+/* On a wide field the wobble's floor is scaled by room_field_aim (0.5 at 1080, 0.4 at
+ * 1440, so not 1), so a long bracket that shrinks down to it pins that scale on both sides. */
+foreach ([1080, 1440] as $w) {
+    $bracket("wide-field-$w-shrinks-to-its-floor", ['w' => $w, 'terrain' => $flat, 'wind' => 2, 'round' => 6, 'seed' => 42, 'shooter' => 1, 'target' => 0,
+        'shots' => 8, 'tanks' => [$human(250, 9999), $drone($w - 250, 9999) + ['dirS' => -1, 'angle' => 60]]]);
 }
 
 /* ---- strategies: who a drone picks and how it aims ----
@@ -599,6 +650,9 @@ $tactic('lobber-with-area-guns', array_replace($scene('lobber', ['ammo' => ['rai
 foreach ([2, 9, 31] as $seed) {
     $tactic("lobber-plain-shells-seed$seed", array_replace($scene('lobber'), ['seed' => $seed, 'turns' => 2]));
 }
+// A ridge between them stops every high arc short, so the lobber falls back to flat shots.
+$tactic('lobber-falls-back-to-flat-behind-a-ridge', ['terrain' => ['flat' => 400, 'set' => [[300, 500, 60]]], 'wind' => 1, 'round' => 3, 'seed' => 12,
+    'shooter' => 1, 'turns' => 2, 'tanks' => [$human(250, 80), $drone(530, 100) + ['dirS' => -1, 's' => 'lobber']]]);
 foreach ([1, 4, 8, 16] as $seed) {
     $tactic("dry-spell-flips-seed$seed", array_replace($scene('bully'), ['seed' => $seed, 'turns' => 9, 'round' => 6]));
 }
@@ -675,7 +729,7 @@ $matchEnd('a-leaver-counts-as-out', [3, null, null, null], 2, 3);
 
 /* ---- write or compare ---- */
 $weaponNames = array_keys($weapons);
-$head = ['about' => 'Game math cases generated by php protocol/sim-vectors.php from rooms.php; test/sim-vectors.test.mjs replays them through src/sim.ts and src/armor.ts. Do not edit by hand.',
+$head = ['about' => 'Game math cases generated by php protocol/sim-vectors.php from rooms.php; test/sim-vectors.test.mjs replays them through src/sim.ts, src/ai.ts, src/armor.ts, src/standings.ts and src/detmath.ts. Do not edit by hand.',
     'tolerance' => SV_TOLERANCE, 'weapons' => $weaponNames];
 $lines = [];
 foreach ($cases as $group => $list) {

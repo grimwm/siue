@@ -97,6 +97,8 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
         'hostSeat' => room_host($room),
         'round' => $room['round'],
         'startHumans' => (int) ($room['startHumans'] ?? 0),
+        // This match's id (new at every start, null in a lobby): one match from the next under the same code.
+        'matchId' => $room['matchId'] ?? null,
         'winner' => $room['winner'] ?? null,
         // The winner's match bonus, so a client that missed the matchwin event still shows it.
         'winBonus' => (int) ($room['winBonus'] ?? 0),
@@ -148,9 +150,11 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
             'plate' => (int) ($room['plate'][$seat] ?? 0),
             'armor' => room_muster_armor($room, $seat),
             'maxArmor' => room_max_armor($room, $seat),
-            'filed' => array_key_exists($seat, $room['filed'] ?? []) && $room['filed'][$seat] !== false,
+            // filed[seat]: a place (int), null (filed, no place), false (failed) or 'local' (fewer than two humans).
+            'filed' => array_key_exists($seat, $room['filed'] ?? []) && (is_int($room['filed'][$seat]) || $room['filed'][$seat] === null),
             'filedRank' => is_int($room['filed'][$seat] ?? null) ? $room['filed'][$seat] : null,
             'filedFailed' => array_key_exists($seat, $room['filed'] ?? []) && $room['filed'][$seat] === false,
+            'filedLocal' => ($room['filed'][$seat] ?? null) === 'local',
         ];
         $out['csrf'] = $room['csrf'];
     }

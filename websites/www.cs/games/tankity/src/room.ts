@@ -19,13 +19,14 @@ import { stepArm } from './input.ts';
 import type { Input } from './input.ts';
 import { prettyRoomError, shouldCatchUp } from './net.ts';
 import type { RoomClient } from './net.ts';
-import { matchOutcome, roomBoard, roomFiledLine } from './standings.ts';
+import { matchOutcome, roomBoard, roomFiledLine, roomLocalSaver } from './standings.ts';
+import type { LocalRow, Saved } from './local-board.ts';
 import { focusEndVeil } from './ui/endveil.tsx';
 import type { Board, RoomCard } from './standings.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
 import { H, ROOM_W, TUNE, carveCrater, clamp, facing, genTerrain, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
-import type { ShopRow } from './sim.ts';
+import type { Difficulty, ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
 
 /** What a room match needs from the page and the rest of the game. */
@@ -64,14 +65,18 @@ export interface RoomDeps {
   startBanner(text: string, done?: (() => void) | null): void;
   updateCamera(dt: number): void;
   windText(): string;
+  /** Keeps a room match only one human played on this browser's board. */
+  saveLocal(level: Difficulty, row: LocalRow): Saved;
 }
 
 export function createRoom(deps: RoomDeps) {
   const {
     G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
     backToLobby, decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
-    renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText,
+    renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText, saveLocal,
   } = deps;
+  /* A match only one human played goes on this browser's board, never the server's, once per match. */
+  const keeper = roomLocalSaver(saveLocal, () => new Date().toISOString());
 
   const KNOWN_FOES = ['reaper', 'wraith', 'spotter'];
   const FOE_PAINT: Record<string, string> = { reaper: '#ff0000', wraith: '#00ffff', spotter: '#ff00ff' };
@@ -254,6 +259,7 @@ export function createRoom(deps: RoomDeps) {
       G.nextOneUp = room.you.nextUp || 3000;
       if (mine) mine.fuel = room.you.fuel || 0;
     }
+    keeper.keep(room, net.seat);
     HUD.runStats = `Room ${net.code} · you are ${seatName(net.seat)} · round ${G.round}`;
     if (room.phase !== 'shop') net.dropReadyWish();
     if (room.phase === 'play') {
@@ -403,7 +409,7 @@ export function createRoom(deps: RoomDeps) {
       if (e.seat === net.seat) {
         MATCH.out = true;
         sfx.play('lose');
-        say('The battery got you for good this time. Filing your report.', 'bad');
+        say('The battery got you for good this time.', 'bad');
       } else say(`${seatName(e.seat)} is out of lives.`, 'info');
       return;
     }
@@ -574,7 +580,7 @@ export function createRoom(deps: RoomDeps) {
     END.text = '';
     END.score = room.you ? `You banked $${room.you.cash || 0} · ${room.you.score || 0} pts` : '';
     END.board = { ...board, caption: '', title: '' };
-    END.filed = roomFiledLine(room.you, room.difficulty);
+    END.filed = roomFiledLine(room.you, room.difficulty, keeper.keep(room, net.seat));
     END.buttons = card;
     renderEndVeil();
     const veil = $('end-veil');

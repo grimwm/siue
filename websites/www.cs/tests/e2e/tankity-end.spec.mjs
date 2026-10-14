@@ -1,9 +1,8 @@
 // Operation Tankity: a solo match played to its end, and the end-of-match veil.
 import { test, expect } from '@playwright/test';
 import { newPlayer, hud, dealSolo, loseMatch } from './helpers.mjs';
-import { local } from './fx-helpers.mjs';
 
-test('a lost match shows the end card: result, the rounds table, where it was filed, and Continue back to the title card', async ({ browser, baseURL }) => {
+test('a lost match shows the end card: result, the rounds table, where it was saved in this browser, and Continue back to the title card', async ({ browser, baseURL }) => {
   test.setTimeout(180_000);
   const { page, errors } = await newPlayer(browser, undefined, { clock: true });
   await dealSolo(page);
@@ -14,6 +13,10 @@ test('a lost match shows the end card: result, the rounds table, where it was fi
   await page.locator('#gun-grid .gun-choice', { hasText: 'Mortar' }).click();
   expect(await hud(page, 'hud-weapon')).toMatch(/^Mortar /);
   await expect(page.locator('#end-veil')).toBeHidden();
+
+  // A solo match never goes to the score server: nothing is POSTed to scores.php.
+  const posts = [];
+  page.on('request', r => { if (r.url().includes('scores.php') && r.method() === 'POST') posts.push(r.url()); });
 
   await loseMatch(page);
 
@@ -33,10 +36,9 @@ test('a lost match shows the end card: result, the rounds table, where it was fi
   await expect(veil.locator('#rematch')).toHaveCount(0);
   await expect(veil.locator('#end-leave')).toHaveCount(0);
 
-  // The run filed itself and the card says how it went: always a line, never a blank, and never still "Filing".
-  await expect(page.locator('#end-filed')).toBeVisible();
-  // Filing writes a real score, so only the local site is expected to say Filed.
-  await expect(page.locator('#end-filed')).toHaveText(local(baseURL) ? /^Filed · / : /^(Filed ·|Couldn't file your score: )/, { timeout: 10_000 });
+  // The run is saved on this browser's board and the card says where: always a line, never a blank.
+  await expect(page.locator('#end-filed')).toHaveText("Saved on this browser's board \u00b7 #1 on Normal", { timeout: 10_000 });
+  expect(posts, 'a solo run is not sent to the score server').toEqual([]);
 
   // Keyboard: focus lands on Continue, and Q and Esc leave the card (and fullscreen) alone.
   await expect(page.locator('#again')).toBeFocused();
@@ -87,6 +89,10 @@ test('a lost match shows the end card: result, the rounds table, where it was fi
   await page.click('#scores-open');
   await expect(page.locator('#report-overlay')).toBeVisible();
   await expect(page.locator('#scores-level-normal')).toHaveAttribute('aria-pressed', 'true');
+  // The lost match sits under "This browser" on Normal, tagged solo; Easy has none.
+  await expect(page.locator('#scores-local-h')).toHaveText('This browser');
+  await expect(page.locator('#scores-local li')).toHaveCount(1);
+  await expect(page.locator('#scores-local li').first()).toHaveText(/^#1 [A-Z]{3} \u00b7 [\d,]+ pts \u00b7 \d+ rounds won \u00b7 solo( \(just saved\))?$/);
   const sw = await page.evaluate(() => {
     const de = document.documentElement;
     const hs = ['easy', 'normal', 'hard'].map(l => document.getElementById('scores-level-' + l).getBoundingClientRect());
@@ -100,5 +106,7 @@ test('a lost match shows the end card: result, the rounds table, where it was fi
   await page.keyboard.press('Enter');
   await expect(page.locator('#scores-level-easy')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#scores-level-normal')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#scores-local li')).toHaveText('No runs saved in this browser on Easy yet.');
+  expect(posts).toEqual([]);
   expect(errors).toEqual([]);
 });

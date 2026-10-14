@@ -30,12 +30,13 @@ const BLOCKED_INITIALS = [
     'POO', 'PEE',
     'KKK',
 ];
-// The guard's run tokens and rate stamps, beside the database.
+// Where the guard would keep run tokens and rate stamps; no Tankity request writes it.
 const TANKITY_GUARD_RUNS = 'guard-runs.json';
 
-/* The guard's config keys for Tankity, validated. A solo run's token is spent
-   when the run files, hours after it may have started; the run's own expiry
-   (solo_runs) is the tighter limit. Tests pass $override (a low limit). */
+/* The guard's config keys for Tankity, validated. Tankity uses the guard for
+   its origin, address and initials checks only: rooms count each address's
+   creates and joins in the database (server/rate.php), and scores.php takes
+   no score, so the run and rate keys here serve no request. */
 function tankity_guard_config(array $override = []): array
 {
     $hosts = array_values(array_filter(array_map('trim',
@@ -43,7 +44,7 @@ function tankity_guard_config(array $override = []): array
     return ScoreGuard::validateConfig($override + [
         'runTtlSec' => 86400,
         'startsPerHour' => 120,
-        'scoresPerHour' => (int) tankity_setting('TANKITY_SCORES_PER_HOUR', 'scores_per_hour', '60'),
+        'scoresPerHour' => 240,
         'csrfCookie' => 'tankity_csrf',
         'storageKey' => 'operation-tankity',
         'blockedInitials' => BLOCKED_INITIALS,
@@ -77,17 +78,14 @@ function tankity_initials(ScoreGuard $guard, mixed $raw): ?string
     return $initials !== null && !$guard->isBlocked($initials) ? $initials : null;
 }
 
-/* Whether a browser request came from this site: a cross-site Origin is
-   refused; callers that send none (curl) pass, gated by rooms.php's tokens or
-   scores.php's per-address throttle. */
+/* Whether a room request came from an allowed page: its Origin, else its
+   Referer, must name the request's own host or one in allowed_hosts. Callers
+   that send neither (curl) pass, gated by the seat and room tokens and the
+   hourly allowance on creating and joining. */
 function room_origin_ok(): bool
 {
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-    if ($origin === '') {
-        return true; // not a browser: the caller's tokens or throttle gate it
+    if (($_SERVER['HTTP_ORIGIN'] ?? '') === '' && ($_SERVER['HTTP_REFERER'] ?? '') === '') {
+        return true; // curl-style callers send neither; the seat and room tokens still gate them
     }
-    $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
-    $host = preg_replace('/:\d+$/', '', $host);
-    $o = parse_url($origin, PHP_URL_HOST);
-    return is_string($o) && $o !== '' && strcasecmp($o, $host) === 0;
+    return tankity_guard()->originAllowed();
 }

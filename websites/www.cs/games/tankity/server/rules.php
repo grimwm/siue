@@ -11,19 +11,10 @@ if (!defined('TANKITY_ROOMS_INCLUDED')) {
     exit;
 }
 
-/* Cylon-style initials: exactly 3 letters, stored uppercase, and not a
- * blocked word. */
+/* Exactly three letters, typed in either case, stored uppercase; a blocked set is refused. */
 function room_valid_initials($raw): ?string
 {
-    if (!is_string($raw)) {
-        return null;
-    }
-    $s = trim($raw);
-    if (!preg_match('/^[A-Za-z]{3}$/', $s)) {
-        return null;
-    }
-    $s = strtoupper($s);
-    return in_array($s, BLOCKED_INITIALS, true) ? null : $s;
+    return tankity_initials(tankity_guard(), $raw);
 }
 /* Seconds a human gets for a turn before the crew fires for them. */
 const ROOM_TURN_SECS = 120;
@@ -208,8 +199,8 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
         $a = $rad + $off;
         $spd = room_shot_speed($tank['power'], !empty($w['flat']), (float) ($w['speed'] ?? 1.0), room_field_reach(count($room['terrain'])));
         [$mx, $my] = room_muzzle($tank);
-        $vx = cos($a) * $spd * $dirS;
-        $vy = -sin($a) * $spd;
+        $vx = det_cos($a) * $spd * $dirS;
+        $vy = -det_sin($a) * $spd;
         $res = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $mx, $my, $vx, $vy, 0.0, (float) ($w['fuse'] ?? 0.9), null, 0.0);
         if ($res[0] === 'split') {
             // The bloom reads as a burst on every screen; the bomblets do
@@ -550,9 +541,12 @@ function room_round_settled(array $room): bool
 }
 /* ---------- this match ---------- */
 /* Called by the start handler: how many humans started (last-human-standing
-   needs two), and each human's match stats from zero. */
+   and the online board need two), each human's match stats from zero, and a
+   fresh match id, so a browser tells one match from the next in a room whose
+   code Play again keeps. */
 function room_match_begin(array &$room): void
 {
+    $room['matchId'] = bin2hex(random_bytes(6));
     $room['startHumans'] = 0;
     $room['stats'] = [];
     $room['filed'] = [];
@@ -696,17 +690,25 @@ function room_file_eliminated(array &$room, array $wrecked): void
 }
 /* Files a human seat's match score on the board of the room's difficulty,
    once per match. Inside the room's transaction: it commits with the room. A
-   failure is logged, never allowed to break the round. */
+   failure is logged, never allowed to break the round. A match fewer than two
+   humans started never reaches the online board: the seat is marked 'local',
+   and the snapshot tells its browser to keep the score itself. A leaver's
+   seat turns into a drone but startHumans stays, so a two-human match one
+   player forfeits still files online. */
 function room_file_seat(array &$room, int $seat): void
 {
     if (array_key_exists($seat, $room['filed'] ?? [])) {
+        return;
+    }
+    if (($room['startHumans'] ?? 1) < 2) {
+        $room['filed'][$seat] = 'local';
         return;
     }
     $s = $room['seats'][$seat] ?? [];
     try {
         $rank = board_file(['difficulty' => room_difficulty($room), 'initials' => strtoupper((string) ($s['initials'] ?? 'AAA')),
             'score' => (int) ($room['scores'][$seat] ?? 0), 'rounds' => (int) ($room['stats'][$seat]['won'] ?? 0),
-            'seed' => 'room:' . $room['code']]);
+            'seed' => 'room:' . $room['code'], 'source' => 'room']);
     } catch (Throwable $e) {
         // false, not null: the snapshot tells a filing that failed from a score
         // that filed but made no place. The write was rolled back, and a match
@@ -912,7 +914,7 @@ function room_again(array &$room): bool
     if (!room_rehost($room)) {
         return false; // everyone left; nobody is there to start a lobby
     }
-    foreach (['plate', 'armor', 'shield', 'jammer', 'bunker', 'laststand', 'fuelBonus', 'fuelApplied', 'tactic', 'stats', 'filed', 'menu', 'shop', 'pace', 'clock'] as $k) {
+    foreach (['plate', 'armor', 'shield', 'jammer', 'bunker', 'laststand', 'fuelBonus', 'fuelApplied', 'tactic', 'stats', 'filed', 'matchId', 'menu', 'shop', 'pace', 'clock'] as $k) {
         unset($room[$k]);
     }
     foreach ($room['seats'] as $idx => $s) {

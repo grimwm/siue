@@ -6,7 +6,7 @@ import { h, render as preactRender } from 'preact';
 import { importTsx } from './tsx.ts';
 import type { ComponentChildren } from 'preact';
 import type { DialogProps } from '../ui/dialog.tsx';
-import { childEl, document, fire, fireDocument, click, installDocument, makeEl, renderTarget } from './dom-stub.ts';
+import { byId, childEl, click, document, fire, fireDocument, installDocument, makeEl, maybeById, renderTarget, walk } from './dom-stub.ts';
 import type { StubElement } from './dom-stub.ts';
 
 installDocument();
@@ -23,14 +23,6 @@ const { Button } = ui.button;
 const { Panel } = ui.panel;
 const { KeyChip } = ui.chip;
 
-const walk = (el: StubElement, out: StubElement[] = []): StubElement[] => { for (const c of el.children) if (c.nodeType === 1) { out.push(c); walk(c, out); } return out; };
-/** The element with that id, or undefined; `byId` is for one the test knows is there. */
-const maybeById = (el: StubElement, id: string) => walk(el).find(n => n.id === id);
-const byId = (el: StubElement, id: string): StubElement => {
-  const found = maybeById(el, id);
-  assert.ok(found, `no #${id}`);
-  return found;
-};
 /** The <kbd> chips under an element. */
 const chips = (el: StubElement) => walk(el).filter(n => n.localName === 'kbd');
 const render = (vnode: ComponentChildren, root: StubElement): void => preactRender(vnode, renderTarget(root));

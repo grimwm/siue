@@ -6,24 +6,35 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { DeferredPrompt, InstallEnv, InstallSetup, InstallView, Platform, ShareIcon } from '../install.ts';
 import { createInstall, asksInstall, withInstall, COPIED_MS, IOS_STEPS, PROMPT_STASH, detectPlatform, detectShareIcon, browserInstallEnv } from '../install.ts';
 import { runInNewContext } from 'node:vm';
 import { manualClock } from './clock.ts';
 
 // A site page (/play/crete/) and the game's own page (games/crete/).
-const PLAY = {
+const PLAY: InstallSetup = {
   title: 'The Island of Crete', shareUrl: 'https://site.test/play/crete/',
   installPage: 'https://site.test/games/crete/', promptsHere: true, asked: false,
 };
 const GAME = { ...PLAY, installPage: null };
 
-function setup({ platform = 'chromium', shareIcon = 'dots', installed = false, framed = false, share = null, copy = null, early = null } = {}, how = PLAY) {
+interface SetupOptions {
+  platform?: Platform;
+  shareIcon?: ShareIcon;
+  installed?: boolean;
+  framed?: boolean;
+  share?: InstallEnv['share'];
+  copy?: InstallEnv['copy'];
+  early?: DeferredPrompt | null;
+}
+
+function setup({ platform = 'chromium', shareIcon = 'dots', installed = false, framed = false, share = null, copy = null, early = null }: SetupOptions = {}, how: InstallSetup = PLAY) {
   const clock = manualClock();
-  const went = [];
-  const views = [];
-  let offer = () => {};
+  const went: Array<[string, boolean]> = [];
+  const views: InstallView[] = [];
+  let offer: (p: DeferredPrompt) => void = () => {};
   let installedNow = () => {};
-  const env = {
+  const env: InstallEnv = {
     onPrompt: cb => { offer = cb; if (early) cb(early); },
     onInstalled: cb => { installedNow = cb; },
     installed: () => installed,
@@ -36,7 +47,7 @@ function setup({ platform = 'chromium', shareIcon = 'dots', installed = false, f
     timers: clock.timers,
   };
   const install = createInstall(env, how, v => views.push(v));
-  return { install, went, views, clock, offer: p => offer(p), installedNow: () => installedNow() };
+  return { install, went, views, clock, offer: (p: DeferredPrompt) => offer(p), installedNow: () => installedNow() };
 }
 const fakePrompt = () => {
   const p = { shown: 0, prompt: async () => { p.shown++; } };
@@ -48,7 +59,9 @@ test('Chromium: Install stays hidden until the browser offers to install, then s
   assert.equal(t.install.view().install, false);
   t.offer(fakePrompt());
   assert.equal(t.install.view().install, true);
-  assert.equal(t.views.at(-1).install, true, 'the bar is redrawn');
+  const redrawn = t.views.at(-1);
+  assert.ok(redrawn);
+  assert.equal(redrawn.install, true, 'the bar is redrawn');
 });
 
 test('a prompt held back before the bar mounted shows Install', () => {
@@ -83,7 +96,7 @@ test('appinstalled hides Install for good', () => {
 });
 
 test('the installed app never shows Install or the steps, on any platform', () => {
-  for (const platform of ['chromium', 'ios', 'other']) {
+  for (const platform of ['chromium', 'ios', 'other'] satisfies Platform[]) {
     const t = setup({ platform, installed: true }, { ...GAME, asked: true });
     t.offer(fakePrompt());
     assert.deepEqual([t.install.view().install, t.install.view().steps, t.went], [false, false, []], platform);
@@ -137,7 +150,7 @@ test('Chromium on a page it does not prompt on: Install shows at once and opens 
 });
 
 test('inside the site page\'s frame the bar is off: no Install, no steps, no share', async () => {
-  const shared = [];
+  const shared: Array<{ title: string; url: string }> = [];
   const t = setup({ framed: true, platform: 'ios', share: async d => { shared.push(d); } }, { ...GAME, asked: true });
   t.offer(fakePrompt());
   await t.install.pressShare();
@@ -146,7 +159,7 @@ test('inside the site page\'s frame the bar is off: no Install, no steps, no sha
 });
 
 test('Share hands the title and the site page to the share sheet', async () => {
-  const shared = [];
+  const shared: Array<{ title: string; url: string }> = [];
   const t = setup({ share: async d => { shared.push(d); }, copy: async () => { throw new Error('unused'); } });
   await t.install.pressShare();
   assert.deepEqual(shared, [{ title: 'The Island of Crete', url: 'https://site.test/play/crete/' }]);
@@ -154,7 +167,7 @@ test('Share hands the title and the site page to the share sheet', async () => {
 });
 
 test('a cancelled share sheet is silent: no copy, no message, no redraw', async () => {
-  const copied = [];
+  const copied: string[] = [];
   const t = setup({
     share: async () => { throw Object.assign(new Error('cancelled'), { name: 'AbortError' }); },
     copy: async u => { copied.push(u); },
@@ -164,7 +177,7 @@ test('a cancelled share sheet is silent: no copy, no message, no redraw', async 
 });
 
 test('without Web Share the address is copied and "Link copied" shows, then clears', async () => {
-  const copied = [];
+  const copied: string[] = [];
   const t = setup({ copy: async u => { copied.push(u); } });
   await t.install.pressShare();
   assert.deepEqual(copied, ['https://site.test/play/crete/']);
@@ -176,7 +189,7 @@ test('without Web Share the address is copied and "Link copied" shows, then clea
 });
 
 test('a share sheet that refuses falls back to copying', async () => {
-  const copied = [];
+  const copied: string[] = [];
   const t = setup({
     share: async () => { throw Object.assign(new Error('no gesture'), { name: 'NotAllowedError' }); },
     copy: async u => { copied.push(u); },
@@ -220,30 +233,35 @@ test('platform: iPhone and iPad (also as a Mac with a touch screen) are iOS; Chr
 
 test('a prompt that fires before the bar loads is held back by the page\'s first script, and the bar picks it up', () => {
   const php = readFileSync(join(import.meta.dirname, '..', 'php', 'install-core.php'), 'utf8');
-  const script = php.match(/const INSTALL_PROMPT_STASH = "<script>(.*?)<\/script>";/)[1];
-  const handlers = [];
-  const fakeWindow = { addEventListener: (type, fn) => handlers.push([type, fn]) };
+  const stash = php.match(/const INSTALL_PROMPT_STASH = "<script>(.*?)<\/script>";/);
+  assert.ok(stash);
+  const script = stash[1];
+  assert.ok(script !== undefined);
+  const handlers: Array<[string, (e: unknown) => void]> = [];
+  const fakeWindow: { addEventListener(type: string, fn: (e: unknown) => void): void; [PROMPT_STASH]?: unknown } = { addEventListener: (type, fn) => { handlers.push([type, fn]); } };
   runInNewContext(script, { window: fakeWindow });
   assert.deepEqual(handlers.map(h => h[0]), ['beforeinstallprompt']);
   let prevented = 0;
   const early = { preventDefault: () => { prevented++; }, prompt: async () => {} };
-  handlers[0][1](early);
+  const [beforeInstall] = handlers;
+  assert.ok(beforeInstall);
+  beforeInstall[1](early);
   assert.equal(prevented, 1, 'the browser is told to hold the prompt back');
   assert.equal(fakeWindow[PROMPT_STASH], early);
 
   // The deferred bar script comes later: it finds the parked event.
-  globalThis.window = fakeWindow;
+  Reflect.set(globalThis, 'window', fakeWindow);
   const realNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
   Object.defineProperty(globalThis, 'navigator', { value: { userAgent: '', platform: '', maxTouchPoints: 0 }, configurable: true, writable: true });
   try {
-    const got = [];
+    const got: DeferredPrompt[] = [];
     browserInstallEnv().onPrompt(p => got.push(p));
     assert.deepEqual(got, [early]);
     assert.equal(fakeWindow[PROMPT_STASH], null, 'the parked prompt is taken once');
   } finally {
-    delete globalThis.window;
+    Reflect.deleteProperty(globalThis, 'window');
     if (realNavigator) Object.defineProperty(globalThis, 'navigator', realNavigator);
-    else delete globalThis.navigator;
+    else Reflect.deleteProperty(globalThis, 'navigator');
   }
 });
 

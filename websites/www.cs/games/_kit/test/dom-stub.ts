@@ -282,3 +282,21 @@ export function elementOf(node: StubNode | null | undefined): StubElement {
 export function childEl(el: StubElement, i = 0): StubElement {
   return elementOf(el.children[i]);
 }
+
+/** Every element under `el`, depth first. */
+export function walk(el: StubElement, out: StubElement[] = []): StubElement[] {
+  for (const c of el.children) if (c.nodeType === 1) { out.push(c); walk(c, out); }
+  return out;
+}
+
+/** The element under `el` with that id, or undefined. */
+export function maybeById(el: StubElement, id: string): StubElement | undefined {
+  return walk(el).find(n => n.id === id);
+}
+
+/** The element under `el` with that id, which the test knows is there; it fails, naming the id, when it is not. */
+export function byId(el: StubElement, id: string): StubElement {
+  const found = maybeById(el, id);
+  assert.ok(found, `no #${id}`);
+  return found;
+}

@@ -113,12 +113,7 @@ const ALLOW: Allow = {
     'tankity/test/smoke.test.mjs',
     'tankity/test/ui.test.mjs',
   ],
-  legacy: [
-    'games/tankity/test/php-docker/RoomsTest.php',
-    'games/tankity/test/php/ConfigTest.php',
-    'games/tankity/test/php/GameJsonTest.php',
-    'games/tankity/test/php/RoomsSimTest.php',
-  ],
+  legacy: [],
 };
 
 const SITE = join(import.meta.dirname, '..', '..', '..');

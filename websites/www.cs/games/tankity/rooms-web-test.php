@@ -1,5 +1,5 @@
 <?php
-// Web-runnable sibling of test/php-docker/checks/rooms.php: exercises rooms.php through the
+// Web-runnable sibling of test/php-docker/RoomsTest.php: exercises rooms.php through the
 // real web server (same box, same SAPI, same database) instead of spawning
 // its own php -S, which shared hosting does not allow. Strangers may share
 // the shelf, so every count is relative and it only ages its own rooms.

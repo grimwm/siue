@@ -23,9 +23,9 @@ import { matchOutcome, roomBoard, roomFiledLine, roomLocalSaver } from './standi
 import type { LocalRow, Saved } from './local-board.ts';
 import { focusEndVeil } from './ui/endveil.tsx';
 import type { Board, RoomCard } from './standings.ts';
-import type { RoomEvent, RoomSnapshot } from './protocol.ts';
-import type { Replay } from './replay.ts';
-import { H, ROOM_W, TUNE, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
+import type { BeamEvent, RingEvent, RoomEvent, RoomSnapshot } from './protocol.ts';
+import type { Replay, ReplayShot } from './replay.ts';
+import { H, ROOM_W, TUNE, beamCarve, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
 import type { Difficulty, ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
 
@@ -51,6 +51,7 @@ export interface RoomDeps {
   decayFx(dt: number): void;
   fallTanks(dt: number): void;
   fxImpact(sys: FxSys | null, key: string, x: number, y: number, r: number): number | undefined;
+  fxSpecial(sys: FxSys | null, key: string, name: string, x: number, y: number, ang: number, len?: number): void;
   backToLobby(): void;
   hideShop(): void;
   pumpDialogue(dt: number): void;
@@ -74,7 +75,7 @@ export interface RoomDeps {
 export function createRoom(deps: RoomDeps) {
   const {
     G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
-    backToLobby, decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
+    backToLobby, decayFx, fallTanks, fxImpact, fxSpecial, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
     renderShopReady, shownAngle, shownPower, startBanner, updateCamera, driftClouds, windText, saveLocal,
   } = deps;
   /* A match only one human played goes on this browser's board, never the server's, once per match. */
@@ -363,8 +364,10 @@ export function createRoom(deps: RoomDeps) {
   }
   function sayNetEvent(e: RoomEvent): void {
     if (e.t !== 'fall' && e.t !== 'kill') fellLast = null;
-    if (e.t === 'shot' || e.t === 'burst') return; // flown by the replay
+    if (e.t === 'shot' || e.t === 'burst' || e.t === 'beam' || e.t === 'ring') return; // flown by the replay
     if (e.t === 'fizzle') { say(`${seatName(e.by)} sends one into the sunset.`, 'info'); return; }
+    // A gunner's tracer line lasts until its next shot.
+    if (e.t === 'fire' || e.t === 'aifire' || e.t === 'auto') G.marks.fired(e.seat);
     if (e.t === 'fire') {
       if (e.seat === net.seat) say(`You fire ${tables.weapons[G.selected] ? tables.weapons[G.selected]!.name : 'a shell'}.`, 'info');
       else say(`${seatName(e.seat)} fires ${tables.weapons[e.w] ? tables.weapons[e.w]!.name : 'a shell'}.`, 'info');
@@ -478,6 +481,7 @@ export function createRoom(deps: RoomDeps) {
     if (e.t === 'join') { say(`${e.name || seatName(e.seat)} rolled into the room.`, 'info'); return; }
     if (e.t === 'left') { say(`${e.name || seatName(e.seat)} left; the battery takes that seat.`, 'info'); return; }
     if (e.t === 'round') {
+      G.marks.clear();
       say(`Round ${e.round}. Fresh barrels, same battery. Wind ${windText()}.`, 'info');
       talk('tank', 'Back in! These hills are mine!', true);
       return;
@@ -494,6 +498,35 @@ export function createRoom(deps: RoomDeps) {
     G.booms.push({ x, y, r, wkey, t: 0, life: gfxLinger(tables.weapons[wkey]?.gfx) });
     carveCrater(G.terrain, x, y, r, H - 4);
   }
+  /* A beam the replay reached: drawn along its line and its channel carved
+     with the server's own numbers (sim.ts beamCarve), so the hills match. */
+  function netBeam(e: BeamEvent): void {
+    const r = tables.weapons[e.w]?.radius ?? 0;
+    const len = Math.hypot(e.x1 - e.x0, e.y1 - e.y0), ang = Math.atan2(e.y1 - e.y0, e.x1 - e.x0);
+    fxSpecial(G.fx, e.w, 'beam', e.x0, e.y0, ang, len);
+    const kick = fxImpact(G.fx, e.w, e.x1, e.y1, r);
+    G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : 0.15));
+    if (r > 0) beamCarve(G.terrain, e.x0, e.y0, e.x1, e.y1, r);
+  }
+  /* A plasma ring around its gunner: no crater. */
+  function netRing(e: RingEvent): void {
+    sfx.play('boom');
+    const kick = fxImpact(G.fx, e.w, e.x, e.y, e.r);
+    G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : 0.4));
+  }
+  /* A tracer in flight (src/marks.ts): its path grows its mark. */
+  function netTrailMark(shot: ReplayShot, x: number, y: number): void {
+    const mark = tables.weapons[shot.e.w]?.gfx?.mark;
+    if (mark === 'line' || mark === 'smoke') G.marks.trail(shot, shot.e.by, shot.e.w, mark, x, y);
+  }
+  /* A tracer came down: its mark ends where it landed. */
+  function netMark(shot: ReplayShot): void {
+    netTrailMark(shot, shot.e.x1, shot.e.y1);
+    G.marks.land(shot, shot.e.x1, shot.e.y1);
+    fxImpact(G.fx, shot.e.w, shot.e.x1, shot.e.y1, MARK_R);
+  }
+  /** The radius a tracer's landing effect is sized to: it has no blast of its own. */
+  const MARK_R = 10;
   /* Your turn while the tab is out of sight: the tab title says so, a soft
      ping plays (unless Sound is off), and a notification pops up when the
      player allowed them. Inside a page on this host that frames the game (a
@@ -668,7 +701,7 @@ export function createRoom(deps: RoomDeps) {
   }
 
   return {
-    netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
+    netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netMark, netTrailMark, askNotifications, netFrame,
     roomShopBoard, openStandings,
   };
 }

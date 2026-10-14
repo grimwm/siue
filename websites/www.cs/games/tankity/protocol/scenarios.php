@@ -48,15 +48,15 @@ function protocol_play(): array
 
 /** The fire branch of the act handler: the shot, the wind drift, then the
  * crew's answer. */
-function protocol_fire(array $room, float $angle, float $power): array
+function protocol_fire(array $room, float $angle, float $power, string $wkey = 'shell'): array
 {
     $seat = 0;
     $room['tanks'][0]['angle'] = $angle;
     $room['tanks'][0]['power'] = $power;
     $me = $room['tanks'][0];
-    $events = [['t' => 'fire', 'seat' => $seat, 'w' => 'shell',
+    $events = [['t' => 'fire', 'seat' => $seat, 'w' => $wkey,
         'x' => round($me['x'], 1), 'a' => round($me['angle'], 1), 'pw' => round($me['power'], 1)]];
-    room_fire_shot($room, $events, 0, 'shell');
+    room_fire_shot($room, $events, 0, $wkey);
     $rng = $room['rng'];
     $room['wind'] = (int) max(-12, min(12, round($room['wind'] + room_gauss($rng) * 2)));
     $room['rng'] = $rng;
@@ -93,6 +93,17 @@ function protocol_hitting_aim(array $room): array
     throw new RuntimeException('no aim hits the drone from the opening position');
 }
 
+/** The first beam gun in the arsenal. */
+function protocol_beam_gun(): string
+{
+    foreach (room_weapons() as $k => $def) {
+        if ($def['effect'] === 'beam') {
+            return $k;
+        }
+    }
+    throw new RuntimeException('the arsenal has no beam gun');
+}
+
 /** Every deterministic fixture: name => [description, status, body]. */
 function protocol_snapshots(): array
 {
@@ -121,6 +132,10 @@ function protocol_snapshots(): array
         200, $ok(room_snapshot($fired, 0, 1, $fired['terrainRev']))];
     $out['play-resync'] = ['A poll whose since is newer than anything the room has recorded (the room was lost or restarted): the snapshot is full again and carries resync: true.',
         200, $ok(room_snapshot($fired, 0, 999, $fired['terrainRev']))];
+
+    // The drone stands below the host's barrel, out of a beam's reach: the beam cuts its line over it.
+    $out['play-after-beam'] = ['After the host fires a beam: fire, then the beam event with its unrounded line (no shot: nothing flies), then the drone answers.',
+        200, $ok(room_snapshot(protocol_fire($play, 30.0, 100.0, protocol_beam_gun()), 0, 0))];
 
     $kill = $play;
     $kill['tanks'][1]['hp'] = 1;

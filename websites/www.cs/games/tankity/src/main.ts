@@ -394,7 +394,10 @@ const replay = createReplay({
   blast: (x, y, r, wkey) => netBlast(x, y, r, wkey),
   muzzle: (wkey, x, y, ang) => fxMuzzle(G.fx, wkey, x, y, ang),
   special: (wkey, name, x, y, ang) => fxSpecial(G.fx, wkey, name, x, y, ang),
-  trail: (shot, dt, x, y, vx, vy, wkey) => fxTrail(G.fx, shot, dt, x, y, vx, vy, wkey),
+  trail: (shot, dt, x, y, vx, vy, wkey) => { fxTrail(G.fx, shot, dt, x, y, vx, vy, wkey); netTrailMark(shot, x, y); },
+  beam: e => netBeam(e),
+  ring: e => netRing(e),
+  mark: shot => netMark(shot),
 });
 /* ---------- the typed modules, wired in dependency order ---------- */
 /* The status bar's values (src/hud.ts). */
@@ -461,12 +464,12 @@ const {
 });
 /* A running room match on this client (src/room.ts): moves sent, snapshots adopted, events told, the turn alert. */
 const {
-  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
+  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netMark, netTrailMark, askNotifications, netFrame,
   roomShopBoard, openStandings,
 } = createRoom({
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
   backToLobby: () => netBackToLobby(),
-  decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
+  decayFx, fallTanks, fxImpact, fxSpecial, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
   renderShopReady, shownAngle, shownPower, startBanner, updateCamera, driftClouds, windText, saveLocal,
 });
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving. */

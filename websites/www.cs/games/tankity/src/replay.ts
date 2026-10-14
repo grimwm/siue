@@ -18,7 +18,7 @@
  * by hand. */
 import type { TrailState } from './fx/trail.ts';
 import { planCatchUp, isVolleyOpener } from './net.ts';
-import type { RoomEvent, RoomSnapshot, ShotEvent, VolleyOpenerEvent } from './protocol.ts';
+import type { BeamEvent, RingEvent, RoomEvent, RoomSnapshot, ShotEvent, VolleyOpenerEvent } from './protocol.ts';
 
 /** rooms.php records a path point every 5 sim steps at 60/s. */
 export const PATH_HZ = 12;
@@ -52,6 +52,12 @@ export interface ReplayEnv {
   special(wkey: string, name: string, x: number, y: number, ang: number): void;
   /** A shell in flight: drip its trail from the place and velocity the server's path gives it now. */
   trail(shot: ReplayShot, dt: number, x: number, y: number, vx: number, vy: number, wkey: string): void;
+  /** A beam fired: draw it along its line and carve its channel (sim.ts beamCarve). */
+  beam(e: BeamEvent): void;
+  /** A plasma ring fired around its gunner. */
+  ring(e: RingEvent): void;
+  /** A tracer came down at the end of its path: it bursts on nothing and leaves its mark. */
+  mark(shot: ReplayShot): void;
 }
 
 /** One shell of the volley: its event, its recorded path, and whether it has landed.
@@ -200,6 +206,10 @@ export function createReplay(env: ReplayEnv): Replay {
             env.special(e.w, kind, first[0], first[1], kind === 'hop' ? Math.atan2(hv[1], hv[0]) : -Math.PI / 2);
           }
         }
+      } else if (e.t === 'beam') {
+        env.beam(e);
+      } else if (e.t === 'ring') {
+        env.ring(e);
       } else if (e.t === 'burst') {
         env.blast(e.x, e.y, e.r, e.w);
         // A burst from a lance is the bolt passing through a tank.
@@ -215,6 +225,9 @@ export function createReplay(env: ReplayEnv): Replay {
           // Over a fried tank, the EMP's arcs.
           const emp = t && v.shots.find(s => env.effect(s.e.w) === 'emp');
           if (t && emp) env.special(emp.e.w, 'arc', t.x, t.y - 12, 0);
+          // Through a unit a beam struck, the beam passing, along its line.
+          const beam = t && v.events.find((b): b is BeamEvent => b.t === 'beam' && v.done.has(b));
+          if (t && beam) env.special(beam.w, 'pierce', t.x, t.y - 12, Math.atan2(beam.y1 - beam.y0, beam.x1 - beam.x0));
         } else if (e.t === 'fall') {
           const t = env.tank(e.seat);
           if (t) t.hp = Math.max(0, t.hp - e.dmg);
@@ -238,7 +251,7 @@ export function createReplay(env: ReplayEnv): Replay {
       else if (s.e.split) {
         const hv = shellVel(s, s.pts.length - 2);
         env.special(s.e.w, 'split', s.e.x1, s.e.y1, Math.atan2(hv[1], hv[0]));
-      }
+      } else if (env.effect(s.e.w) === 'tracer') env.mark(s);
     }
     if (ft >= v.end && v.events.every(e => v.done.has(e) || e.at === undefined) && v.shots.every(s => s.landed)) {
       for (const e of v.events) if (!v.done.has(e)) env.event(e);

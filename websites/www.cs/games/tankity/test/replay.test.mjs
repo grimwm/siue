@@ -8,7 +8,7 @@ import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createReplay, shellAt, shellVel, parsePath, PATH_HZ, FAST_SPEED } from '../src/replay.ts';
-import { anyTankFalling, fallTanks } from '../src/sim.ts';
+import { anyTankFalling, beamCarve, buildArsenal, fallTanks, fireBeam } from '../src/sim.ts';
 
 const fixture = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'protocol', 'play-after-fire.json'), 'utf8')).body.room;
 const EVENTS = fixture.events;
@@ -320,4 +320,56 @@ function frames(rp, n) {
   rp2.push([fire, { t: 'fall', seat: 1, dmg: 12, by: 0, chute: false, under: false, at: 0.8 }]);
   rp2.step(0);
   check('a fall without a parachute arms none', !plain.tanks[1].chuteArmed);
+}
+
+/* ---- guns with no flight, and tracers ---- */
+{
+  // A beam: the server's event, at the volley's start, carves the client's
+  // hills exactly as the war's own beam does (sim.ts beamCarve on the
+  // event's line), and each unit it hits shows the beam passing through.
+  const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+  const arsenal = buildArsenal(GAME.arsenal);
+  const BEAM = GAME.arsenal.ammo.find(a => a.effect === 'beam').key;
+  const RING = GAME.arsenal.ammo.find(a => a.effect === 'plasma').key;
+  const TRACER = GAME.arsenal.ammo.find(a => a.effect === 'tracer').key;
+  const hills = () => Array.from({ length: 720 }, (_, x) => (x >= 200 && x <= 280 ? 320 : 400));
+  const gunner = { id: 'P', isPlayer: true, x: 100, y: 400, angle: 14, power: 100, hp: 100, fuel: 80, dirS: 1 };
+  const war = { tanks: [gunner, { id: 'D', isPlayer: false, x: 600, y: 400, hp: 100, fuel: 80 }], terrain: hills(), wind: 0, round: 1, shells: [],
+    score: 0, cash: 0, ammo: {}, selected: 'shell', shield: false, bunker: 0, laststand: false, jammer: 0 };
+  const shot = fireBeam(war, arsenal, gunner, BEAM);
+  const host = makeHost();
+  const terrain = hills();
+  const beams = [];
+  host.env.effect = w => GAME.arsenal.ammo.find(a => a.key === w)?.effect;
+  host.env.beam = e => { beams.push(e); beamCarve(terrain, e.x0, e.y0, e.x1, e.y1, arsenal.weapons[e.w].radius); };
+  host.env.ring = () => {};
+  host.env.mark = () => {};
+  const rp = createReplay(host.env);
+  const beamEv = { t: 'beam', by: 0, w: BEAM, x0: shot.x0, y0: shot.y0, x1: shot.x1, y1: shot.y1, at: 0 };
+  rp.push([{ t: 'fire', seat: 0, w: BEAM, x: 251, a: 20, pw: 45, at: 0 }, beamEv, { t: 'hit', seat: 1, dmg: 45, by: 0, direct: false, at: 0 }]);
+  rp.step(0);
+  check('a beam waits for the barrel to ease, as a shot does', beams.length === 0);
+  for (let i = 0; i < 200 && !rp.idle(); i++) rp.step(DT);
+  check('a beam event plays once and carves the client terrain exactly as fireBeam did', beams.length === 1 && beams[0] === beamEv
+    && JSON.stringify(terrain) === JSON.stringify(war.terrain) && JSON.stringify(terrain) !== JSON.stringify(hills()));
+  check('the beam and its line are flown by the replay, not logged as events', !host.log.events.some(e => e.t === 'beam'));
+  const through = host.log.specials.filter(s => s.name === 'pierce');
+  check('a unit the beam hits shows it passing through, along the beam', through.length === 1 && through[0].w === BEAM
+    && near(through[0].ang, Math.atan2(shot.y1 - shot.y0, shot.x1 - shot.x0)), JSON.stringify(through));
+
+  // A ring: played once at its moment; no shot, no blast disc.
+  const rings = [];
+  host.env.ring = e => rings.push(e);
+  rp.push([{ t: 'aifire', seat: 1, w: RING, x: 415.1, a: host.tanks[1].angle, pw: 100, at: 0 }, { t: 'ring', by: 1, w: RING, x: 415.1, y: 312, r: 90, at: 0 }]);
+  for (let i = 0; i < 200 && !rp.idle(); i++) rp.step(DT);
+  check('a ring event plays once', rings.length === 1 && rings[0].r === 90);
+
+  // A tracer: its shot lands with radius 0 and leaves a mark, no blast.
+  const marks = [];
+  host.env.mark = s => marks.push(s);
+  const blasts = host.log.blasts.length;
+  rp.push([{ t: 'fire', seat: 0, w: TRACER, x: 251, a: 20, pw: 45, at: 0 },
+    { t: 'shot', by: 0, w: TRACER, x0: 270, y0: 320, x1: 330, y1: 326, t0: 0, t1: 0.5, r: 0, p: '270,320 300,310 330,326', at: 0 }]);
+  for (let i = 0; i < 200 && !rp.idle(); i++) rp.step(DT);
+  check('a tracer lands with its mark and no blast', marks.length === 1 && marks[0].e.w === TRACER && host.log.blasts.length === blasts);
 }

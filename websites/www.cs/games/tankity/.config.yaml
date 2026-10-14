@@ -17,6 +17,9 @@
 #                     joined, together, per address an hour; default 300)
 #   room_hosts_per_address <- TANKITY_ROOM_HOSTS_PER_ADDRESS (rooms one address
 #                     can host at once, expired ones not counted; default 4)
+#   room_long_share <- TANKITY_ROOM_LONG_SHARE (the fraction of max_rooms that
+#                     rooms with a turn time of 8 h or more may hold, at least
+#                     one room; above 0 up to 1; default 0.5)
 # Point CONFIG_FILE at another file to load settings from elsewhere.
 max_rooms: 50
 room_live_secs: 600

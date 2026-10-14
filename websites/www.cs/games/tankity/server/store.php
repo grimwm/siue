@@ -228,6 +228,24 @@ function room_hosted(string $hostKey, string $except = '', ?int $now = null): in
     return (int) $q->fetchColumn();
 }
 
+/* Unexpired long games (turn time of 8 h or more), not counting $except (the
+   room being made or changed). Reads each live room, at most the room cap's
+   worth; under the write lock the count is exact. */
+function room_long_count(string $except = '', ?int $now = null): int
+{
+    $q = tankity_db()->prepare('SELECT data FROM rooms WHERE code <> ? AND expires >= ?');
+    $q->execute([$except, $now ?? time()]);
+    $n = 0;
+    foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $raw) {
+        $r = room_decode($raw);
+        if ($r !== null && room_turn_secs($r) >= ROOM_LONG_TURN_SECS) {
+            $n++;
+        }
+    }
+    return $n;
+}
+const ROOM_LONG_FULL = 'every long-game slot is taken; pick a shorter turn time or try later';
+
 /* A room as stored, read without the write lock, for a poll that changes
    nothing; null when there is none or it is idle. */
 function room_peek(string $code): ?array

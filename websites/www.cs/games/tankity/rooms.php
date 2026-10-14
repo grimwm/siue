@@ -329,6 +329,8 @@ if ($action === 'create' && $method === 'POST') {
     if ($initials === null) {
         room_json_out(422, ['error' => 'initials must be 3 letters, kept clean']);
     }
+    $turn = $body['turn'] ?? null;
+    $turn = is_int($turn) && in_array($turn, ROOM_TURN_STOPS, true) ? $turn : ROOM_TURN_DEFAULT;
     // Idle rooms never counted toward the cap; the sweep only drops their rows.
     // Two creates racing for the last place are settled by room_register below.
     try {
@@ -349,8 +351,7 @@ if ($action === 'create' && $method === 'POST') {
     $room['map'] = $map;
     // The host's setting for the whole room; nobody changes it after this.
     $room['difficulty'] = room_parse_difficulty($body['difficulty'] ?? null);
-    $turn = $body['turn'] ?? null;
-    $room['turnSecs'] = is_int($turn) && in_array($turn, ROOM_TURN_STOPS, true) ? $turn : ROOM_TURN_DEFAULT;
+    $room['turnSecs'] = $turn;
     $room['actedAt'] = time();
     $token = room_rand_token();
     // A fresh seat is present, not idle: the turn clock must not mistake a
@@ -373,6 +374,10 @@ if ($action === 'create' && $method === 'POST') {
             if (room_hosted($hostKey, $code) >= room_hosts_per_address()) {
                 room_discard($lock);
                 room_json_out(429, ['error' => 'too many rooms hosted from here; finish or leave one first']);
+            }
+            if ($turn >= ROOM_LONG_TURN_SECS && room_long_count($code) >= room_long_cap($max)) {
+                room_discard($lock);
+                room_json_out(409, ['error' => ROOM_LONG_FULL]);
             }
         } catch (PDOException $e) {
             room_discard($lock);
@@ -533,6 +538,19 @@ if ($action === 'turntime' && $method === 'POST') {
         room_json_out(422, ['error' => 'pick one of the turn times']);
     }
     if ($secs !== room_turn_secs($room)) {
+        // A room moving up to a long stop takes one of the long share's places.
+        if ($secs >= ROOM_LONG_TURN_SECS && room_turn_secs($room) < ROOM_LONG_TURN_SECS) {
+            try {
+                $longFull = room_long_count((string) $room['code']) >= room_long_cap(room_max_rooms());
+            } catch (PDOException $e) {
+                room_unlock($fh);
+                room_store_fail($e);
+            }
+            if ($longFull) {
+                room_unlock($fh);
+                room_json_out(409, ['error' => ROOM_LONG_FULL]);
+            }
+        }
         $room['turnSecs'] = $secs;
         room_emit($room, ['t' => 'turntime', 'seat' => $seat, 'secs' => $secs]);
     }

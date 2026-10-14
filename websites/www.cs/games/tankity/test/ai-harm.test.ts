@@ -12,52 +12,62 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildArsenal, droneRack, fireWeapon, muzzle, mulberry32, simShot, stepShells } from '../src/sim.ts';
 import { aiChoose, aiHarm, aiSelfHarm, earthHarm } from '../src/ai.ts';
+import type { Ammo, FallRules, Gear, Tank, Weapon, World } from '../src/sim.ts';
+import type { Landing } from '../src/ai.ts';
 
-const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
-const arsenal = buildArsenal(GAME.arsenal);
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+function nth<T>(list: readonly T[], i: number): T {
+  return must(list[i], `item ${i}`);
+}
+
+const GAME: { arsenal: { ammo: Weapon[]; gear?: Gear[]; fall?: Partial<FallRules> } } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+const arsenal = must(buildArsenal(GAME.arsenal), 'the arsenal');
 const AI_GUNS = GAME.arsenal.ammo.filter(a => a.ai && a.key !== 'shell').map(a => a.key);
 
-const flat = () => Array(720).fill(400);
-const drone = (x, extra = {}) => ({ id: 'D' + x, isPlayer: false, x, y: 400, hp: 1000, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo: {}, s: 'hunter', ...extra });
-const human = (x, hp = 1000) => ({ id: 'P', isPlayer: true, x, y: 400, hp, angle: 45, power: 50, dirS: -1, fuel: 80, vy: 0, ammo: {} });
-const world = (tanks, extra = {}) => ({ tanks, terrain: flat(), wind: 0, round: 9, difficulty: 'hard', score: 0, cash: 0, jammer: 0,
+const flat = (): number[] => Array(720).fill(400);
+const drone = (x: number, extra: Partial<Tank> = {}): Tank => ({ id: 'D' + x, isPlayer: false, x, y: 400, hp: 1000, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo: {}, s: 'hunter', ...extra });
+const human = (x: number, hp = 1000): Tank => ({ id: 'P', isPlayer: true, x, y: 400, hp, angle: 45, power: 50, dirS: -1, fuel: 80, vy: 0, ammo: {} });
+const world = (tanks: Tank[], extra: Partial<World> = {}): World => ({ tanks, terrain: flat(), wind: 0, round: 9, difficulty: 'hard', score: 0, cash: 0, jammer: 0,
   rng: mulberry32(7), shells: [], ammo: {}, selected: 'shell', shield: false, bunker: 0, laststand: false, ...extra });
 
 /** Fly a volley to its end; returns each unit's hp loss. */
-function fly(G, gunner, wkey, angle, power) {
+function fly(G: World, gunner: Tank, wkey: string, angle: number, power: number): number[] {
   const before = G.tanks.map(t => t.hp);
   gunner.angle = angle;
   gunner.power = power;
-  (gunner.isPlayer ? G.ammo : gunner.ammo)[wkey] = 9;
+  must(gunner.isPlayer ? G.ammo : gunner.ammo, 'the gunner\'s ammo')[wkey] = 9;
   fireWeapon(G, arsenal, gunner, wkey);
   for (let f = 0; G.shells.length && f < 6000; f++) stepShells(G, arsenal, 1 / 60);
-  return G.tanks.map((t, i) => before[i] - t.hp);
+  return G.tanks.map((t, i) => nth(before, i) - t.hp);
 }
 /** The aim, on the drone's own planning flight, that lands nearest x. */
-function aimAt(G, gunner, wkey, x) {
-  let best = null;
+function aimAt(G: World, gunner: Tank, wkey: string, x: number) {
+  let best: { err: number; a: number; p: number; land: Landing } | null = null;
   for (let a = 15; a <= 85; a++) {
     for (let p = 20; p <= 100; p++) {
       const m = muzzle({ ...gunner, angle: a });
-      const land = simShot(G, arsenal, m.x, m.y, a, p, wkey, gunner.dirS);
+      const land = simShot(G, arsenal, m.x, m.y, a, p, wkey, must(gunner.dirS, 'dirS'));
       const err = land.oob ? Infinity : Math.abs(land.x - x);
       if (!best || err < best.err) best = { err, a, p, land: { ...land, a, p } };
     }
   }
-  return best;
+  return must(best, 'an aim');
 }
 
 test('predicted harm ranks Shell, Baby Nuke, Funky and Death\'s Head as their real bursts do', () => {
   const guns = ['shell', 'babynuke', 'funky', 'deathshead'];
-  const predicted = {}, real = {};
+  const predicted: Record<string, number> = {}, real: Record<string, number> = {};
   for (const k of guns) {
     const self = drone(120), target = human(460);
     const G = world([self, target]);
     const aim = aimAt(G, self, k, 460);
     predicted[k] = aiHarm(G, arsenal, self, target, k, aim.land);
-    real[k] = fly(G, self, k, aim.a, aim.p)[1];
+    real[k] = nth(fly(G, self, k, aim.a, aim.p), 1);
   }
-  const rank = o => guns.slice().sort((a, b) => o[a] - o[b]).join();
+  const rank = (o: Record<string, number>) => guns.slice().sort((a, b) => Number(o[a]) - Number(o[b])).join();
   assert.equal(rank(predicted), rank(real), `predicted ${JSON.stringify(predicted)} real ${JSON.stringify(real)}`);
 });
 
@@ -77,12 +87,12 @@ test('a drone never hurts itself with its own Funky Bomb, its target 160 to 220 
 
 const STRATEGIES = ['hunter', 'bully', 'sniper', 'avenger', 'glory', 'lobber'];
 /** The drone's own hp loss when it chooses from `ammo` at a target `gap` px off and fires it from where it aimed. */
-function selfLoss(ammo, s, gap, dir, seed) {
+function selfLoss(ammo: Ammo, s: string, gap: number, dir: number, seed: number) {
   const self = drone(300, { ammo: { ...ammo }, s, dirS: dir }), target = human(300 + dir * gap, 100);
   const G = world([self, target], { rng: mulberry32(seed) });
   const c = aiChoose(G, arsenal, self);
   self.x = 300; // the choice is judged from where it aimed (a drone may shuffle after choosing)
-  return { wkey: c.wkey, lost: fly(G, self, c.wkey, c.angle, c.power)[0] };
+  return { wkey: c.wkey, lost: nth(fly(G, self, c.wkey, c.angle, c.power), 0) };
 }
 
 test('point blank, every strategy fires what hurts itself least: never more than a Shell alone would', () => {
@@ -114,7 +124,7 @@ test('every strategy never hurts itself with any gun it carries, its target 80 t
 test('the self-harm score ranks a point-blank Heavy above a Shell above a Needle', () => {
   const self = drone(300), target = human(340, 100), G = world([self, target]);
   const land = { x: 340, y: 400, oob: false, vx: 0, vy: 0 };
-  const h = k => aiSelfHarm(G, arsenal, self, target, k, land);
+  const h = (k: string) => aiSelfHarm(G, arsenal, self, target, k, land);
   assert.ok(h('heavy') > h('shell') && h('shell') > h('needle'), JSON.stringify(['heavy', 'shell', 'needle'].map(h)));
 });
 
@@ -137,10 +147,10 @@ test('a weak target gets the cheapest gun that finishes it', () => {
 });
 
 test('drones vary their guns over rounds 5 to 12: no gun above 60% of picks', () => {
-  const picks = {};
+  const picks: Record<string, number> = {};
   let n = 0;
   for (let round = 5; round <= 12; round++) {
-    for (const [gap, hp] of [[140, 100], [220, 60], [300, 100], [380, 35], [460, 80], [520, 100]]) {
+    for (const [gap, hp] of [[140, 100], [220, 60], [300, 100], [380, 35], [460, 80], [520, 100]] satisfies [number, number][]) {
       for (const s of ['hunter', 'glory', 'lobber', 'sniper']) {
         const self = drone(100, { ammo: droneRack(arsenal, round), s });
         const G = world([self, human(100 + gap, hp)], { round, difficulty: 'normal', rng: mulberry32(round * 31 + gap) });

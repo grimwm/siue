@@ -155,7 +155,7 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
 - The page imports a mounted game's entry module and hands it what it needs as
   options. The CIC takes `onTheme(combat)`, which `index.html` wires to
   `main.js`'s `applyCombatTheme`; the game defines nothing the site's scripts
-  define and calls nothing they define (`games/cylon/test/smoke.test.mjs` checks).
+  define and calls nothing they define (`games/cylon/test/smoke.test.ts` checks).
   The games list loads after the game has been given the chance to define its
   `start` function.
 

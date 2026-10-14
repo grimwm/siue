@@ -5,7 +5,7 @@
  * where a drone enters from and goes to next. Everything here is arithmetic on
  * numbers the page measured (the scroll offset, the viewport, the nav bar's
  * bottom edge, the rectangles of the links to avoid), so it compiles in the
- * DOM-free program and test/playfield.test.mjs drives it with a seeded random
+ * DOM-free program and test/playfield.test.ts drives it with a seeded random
  * source. main.ts measures the page and moves the drone elements. */
 
 export interface Rect { left: number; top: number; right: number; bottom: number }

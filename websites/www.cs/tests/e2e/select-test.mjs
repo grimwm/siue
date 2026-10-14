@@ -47,7 +47,7 @@ check('tankity-lockfile-alone-runs-no-browser', select([`${S}games/tankity/packa
 check('tankity-lockfile-with-a-module-still-runs-its-specs', select([`${S}games/tankity/package-lock.json`, `${S}games/tankity/dist/main.js`]).includes('tankity-solo.spec.mjs'), true);
 check('tankity-build-tool-runs-nothing', select([`${S}games/tankity/tools/install-files.php`, `${S}games/tankity/test/dom-stub.mjs`, `${S}games/tankity/test/ui.test.mjs`, `${S}games/tankity/.gitignore`]), 'NONE');
 check('cylon-lockfile-alone-runs-no-browser', select([`${S}games/cylon/package-lock.json`]), 'NONE');
-check('cylon-build-tool-runs-nothing', select([`${S}games/cylon/tools/install-files.php`, `${S}games/cylon/.gitignore`, `${S}games/cylon/test/rules.test.mjs`]), 'NONE');
+check('cylon-build-tool-runs-nothing', select([`${S}games/cylon/tools/install-files.php`, `${S}games/cylon/.gitignore`, `${S}games/cylon/test/rules.test.ts`]), 'NONE');
 has('cylon-sources-run-the-shell-specs', select([`${S}games/cylon/src/rules.ts`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs', 'cylon-play.spec.mjs', 'games-hub.spec.mjs']);
 has('cylon-bundle-runs-the-shell-specs', select([`${S}games/cylon/dist/main.js`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs']);
 has('cylon-build-config-runs-the-shell-specs', select([`${S}games/cylon/tsconfig.json`, `${S}games/cylon/build.json`]), ['home-eye.spec.mjs', 'cylon-help.spec.mjs']);

@@ -13,7 +13,7 @@ import type { RoomClient } from './net.ts';
 import { armorLabel, maxArmor, plateNote, repairNote } from './armor.ts';
 import { buyPacks, isOneShot, soloBuy } from './solo.ts';
 import { TUNE, clamp } from './sim.ts';
-import type { ShopRow } from './sim.ts';
+import type { ShopRow, Weapon } from './sim.ts';
 import type { sfx as SfxApi } from './audio.ts';
 import type { KeyHintFn } from './ui/chrome.tsx';
 import { renderShop as drawShop } from './ui/shop.tsx';
@@ -49,6 +49,16 @@ export interface ShopDeps {
 /** G.shopSel on the free Shell row, which sits above the shelf's first row. */
 export const SHELL_ROW = -1;
 
+/** A gun's first shop line: its damage and what carries it (a blast, which
+ *  doubles on a direct hit; a beam's line; a plasma ring), then its note. */
+export function ammoSub(w: Pick<Weapon, 'dmg' | 'radius' | 'effect'> & { note?: string }): string {
+  const note = w.note ? `, ${w.note.charAt(0).toLowerCase() + w.note.slice(1).replace(/\.$/, '')}` : '';
+  const hurt = w.dmg > 0 ? `${w.dmg} damage` : 'No damage';
+  if (w.effect === 'beam') return `${hurt} to every unit on its line${note}.`;
+  if (w.effect === 'plasma') return `${hurt}, ring ${w.radius} at full power${note}.`;
+  if (w.effect === 'tracer') return `${hurt}${note}.`;
+  return `${hurt}, blast ${w.radius}${note}.${w.dmg > 0 ? ' Direct hits count double.' : ''}`;
+}
 export function createShop(deps: ShopDeps) {
   const {
     G, $, tables, net, sfx, me, touch, keyHint, say, advance, render, renderHUD, refreshNavHints,
@@ -216,9 +226,7 @@ export function createShop(deps: ShopDeps) {
   // keep their numbers so the NUKE shows its damage before round 4. */
   function shopSub(it: Pick<ShopRow, 'kind' | 'w' | 'g'> & Partial<Pick<ShopRow, 'label'>>): string {
     if (it.kind === 'ammo') {
-      const w = tables.weapons[it.w!]!;
-      const note = w.note ? `, ${w.note.charAt(0).toLowerCase() + w.note.slice(1).replace(/\.$/, '')}` : '';
-      return `${w.dmg} damage, blast ${w.radius}${note}. Direct hits count double.`;
+      return ammoSub(tables.weapons[it.w!]!);
     }
     const g = tables.gear[it.g!];
     return (g && g.note) || it.label!;

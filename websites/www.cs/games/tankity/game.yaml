@@ -566,7 +566,7 @@ arsenal:
       aiRound: 99
       effect: tracer
       speed: 1.0
-      note: Harmless. Shows you its whole path and landing until your next shot.
+      note: Shows you its whole path and landing until your next shot.
       gfx: {shell: "#9ef0ff", trail: "#5ad8f0", blast: ["#5ad8f0", "#e8fbff"], painter: dash, shake: 0, mark: line}
 
     - key: smoketracer
@@ -581,7 +581,7 @@ arsenal:
       aiRound: 99
       effect: tracer
       speed: 1.0
-      note: Harmless. Leaves a smoke trail that everyone sees for the round, drifting with the wind.
+      note: Leaves a smoke trail that everyone sees for the round, drifting with the wind.
       gfx: {shell: "#e8e4dc", trail: "#c8c2b8", blast: ["#c8c2b8", "#ffffff"], painter: dash, shake: 0, mark: smoke}
   gear:
     - key: repair

@@ -8,11 +8,7 @@ node ../_kit/build/build.mjs tankity --check
 php tools/game-json.php --check
 php tools/install-files.php --check
 node ../_kit/build/icons.mjs tankity --check
-set -- test/*.test.mjs test/*.test.ts
-for f in "$@"; do
-  shift
-  [ -e "$f" ] && set -- "$@" "$f"
-done
-[ -e "$1" ] || { echo "test.sh: no test/*.test.{mjs,ts}" >&2; exit 1; }
+set -- test/*.test.ts
+[ -e "$1" ] || { echo "test.sh: no test/*.test.ts" >&2; exit 1; }
 node --test "$@"
 ../../vendor/bin/phpunit -c ../../phpunit.xml --testsuite tankity

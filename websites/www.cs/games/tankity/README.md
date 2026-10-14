@@ -77,7 +77,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `src/ui/icons.ts` | The small canvas pictures (a shell, a trick, a hills silhouette, a unit thumbnail). Each draws on the canvas and the weapon or trick it is handed and reads nothing else |
 | `dist/main.js`, `dist/fx.js`, `dist/fx-editor.js` (and `.map`s) | The bundles the games kit builds from `src/` (see Source layout and build); checked in and deployed (the host has no Node), except the dev-only `fx-editor.js`. Never edit by hand |
 | `build.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json`, `tsconfig.test.json` | The build setup: the three entries and the four type-check programs. Never deployed, like `src/`, `test/` and `tools/` |
-| `test/*.test.ts`, `test/*.test.mjs` | The Node tests (`node:test`, see Tests); `tsconfig.test.json` type-checks the `.test.ts` ones. The kit's `_kit/test/dom-stub.ts` is the small Node DOM that `ui.test.ts` and `smoke.test.ts` share. Never deployed |
+| `test/*.test.ts` | The Node tests (`node:test`, see Tests), type-checked by `tsconfig.test.json`. The kit's `_kit/test/dom-stub.ts` is the small Node DOM that `ui.test.ts` and `smoke.test.ts` share. Never deployed |
 | `test/php/`, `test/php-docker/` | The PHPUnit cases (`tankity` and `tankity-docker` suites). Never deployed |
 | `rooms.php` | Room server entry point: request parsing, the `$action` handlers, `room_json_out` (gzip), `room_gate`. It requires the files below, and keeps the one helper that resolves against its own location (`room_arsenal` reads `game.json`) |
 | `server/settings.php` | What a room is (`ROOM_*` shape constants) and the host's knobs (`room_max_rooms`, `room_live_secs`) and the turn-time stops |
@@ -1072,7 +1072,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | Command                                        | Covers                                                                                     |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `node ../_kit/build/build.mjs tankity --check` | `dist/` is exactly what `src/` bundles to, `src/` type-checks, and every `protocol/*.json` fits its type in `protocol.ts` (run `npm ci` in `games/` first) |
-| `node --test` over `test/*.test.ts` and `test/*.test.mjs` | Every Node test below, run by `test.sh`, which fails when it finds none (the UI test bundles `src/ui/*.tsx` once with esbuild, Preact left external) |
+| `node --test` over `test/*.test.ts` | Every Node test below, run by `test.sh`, which fails when it finds none (the UI test bundles `src/ui/*.tsx` once with esbuild, Preact left external) |
 | `test/standings.test.ts`                      | `src/standings.ts`: the match-end rule against the `match-end` vectors, room and solo rows, the winner's bonus line, the filed and saved lines (online, local, a one-human room's), and what Q does on each end card |
 | `test/standings-ui.test.ts`                   | The scoreboard table (`src/ui/standings.tsx`): a room's rows, you, the crown, the lost-out marks, and a solo run's rounds with the total |
 | `test/scores-ui.test.ts`                      | The scores overlay (`src/ui/scores.tsx`): both lists, the player's own runs marked, the empty and blocked-storage lines, the switcher, and the data in `src/scores.ts`: the online list latest-load-wins, this browser's rows, a redraw when another tab saves |

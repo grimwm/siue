@@ -182,10 +182,8 @@ Tests use no `any`, `@ts-ignore` or `@ts-nocheck` (`test/typed-tests.test.ts`
 enforces it); a deliberately partial fixture is built by a typed helper or
 `satisfies`, and `as unknown as` needs a one-line reason. Doubles:
 `manualClock()` (timers that fire only on `advance`), `mulberry32(seed)`,
-`recorder()`, `memoryStorage()`, `throwingStorage()`. `check(name, ok,
-detail)` runs an older PASS/FAIL script under `node:test` unchanged, one
-test per check; write new tests with `test()` and `assert` directly. PHP
-has the same bridge: `php/testing/LegacyCheckCase.php`.
+`recorder()`, `memoryStorage()`, `throwingStorage()`. Tests use `test()`
+and `assert` directly; PHP tests are plain PHPUnit `TestCase`s.
 
 Components are tested in Node: `importTsx(import.meta.dirname, { name: '../src/ui/x.tsx' })`
 bundles `.tsx` with esbuild (preact left external, so the test and the

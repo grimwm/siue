@@ -367,7 +367,7 @@ TAP('global', 'help');
 const idleTop = E('help-overlay').scrollTop;
 KD('scroll', 'lineDown');
 await test('scroll-idle', () => { assert.ok(E('help-overlay').scrollTop === idleTop, `top=${E('help-overlay').scrollTop}`); });
-// The camera pins the ground to the viewport floor: no void below the world (test/camera.test.mjs checks the numbers).
+// The camera pins the ground to the viewport floor: no void below the world (test/camera.test.ts checks the numbers).
 await test('cam-pins-ground', () => { assert.ok(/const floorY = h \+ FLOOR_SLACK/.test(src) && /bottom - \(h \+ FLOOR_SLACK\)/.test(src)); });
 await test('cam-wide-sky', () => { assert.ok(/fillRect\(rect\.x0 - 20, rect\.y0 - 20, rect\.x1 - rect\.x0 \+ 40/.test(renderSrc)); }); // the sky covers everything the canvas shows
 // (invite-prefill runs inside the async block below: openLobby unhides late)

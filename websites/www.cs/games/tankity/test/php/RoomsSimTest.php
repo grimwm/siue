@@ -988,7 +988,7 @@ final class RoomsSimTest extends TestCase
         foreach ([1, 3] as $round) {
             for ($seed = 1; $seed <= $seeds; $seed++) {
                 // Hard: the full-correction aim these thresholds describe; each
-                // level's hit rates are test/ai-hitrate.test.mjs's.
+                // level's hit rates are test/ai-hitrate.test.ts's.
                 $room = self::bracketRoom($seed * 7919, $round, [], 'hard');
                 $hit = false;
                 for ($k = 0; $k < 4; $k++) {

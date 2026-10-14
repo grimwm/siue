@@ -989,7 +989,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   events past its cursor as seen and hands them over; `room.ts` queues the
   events in the replay and calls `shouldCatchUp` to decide when a hidden tab skips, and the
   HUD, the lobby and the shop keep what draws or animates. Because every environmental call is injected, `net.ts` is
-  in the DOM-free program and `test/net.test.mjs` runs it against a fake server.
+  in the DOM-free program and `test/net.test.ts` runs it against a fake server.
 - `replay.ts` exports `createReplay(env)`, which returns the replay: `push(events)`
   queues a snapshot's events, `step(dt)` plays them (the volley on screen, then
   whatever is next in the queue), `idle()` says nothing is playing or waiting
@@ -1120,7 +1120,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
 | `test/render.test.ts`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, rebuilds the sky only when the match key or the visible area changes, and draws an open parachute from its sheet (opening once, then swaying) or as a drawn canopy until the sheet loads, none over an armed or settled unit at rest, and units at their drawn height (a falling wreck whole) |
 | `test/input.test.ts`                          | `src/input.ts` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, Q, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
-| `test/net.test.mjs`                            | `src/net.ts` against a fake server and timers: the 429 retry (none for a create or join's 429, one for its 503), Ready's ordering under rapid toggles, polling, the leave beacon (Leave only), resume, detach and `mine`, the clocks and `closesIn`, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect) |
+| `test/net.test.ts`                            | `src/net.ts` against a fake server and timers: the 429 retry (none for a create or join's 429, one for its 503), Ready's ordering under rapid toggles, polling, the leave beacon (Leave only), resume, detach and `mine`, the clocks and `closesIn`, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect) |
 | `test/seats.test.mjs`                          | `src/seats.ts`: round trip, newest first, the 12-seat cap, a malformed entry dropped alone, storage that refuses writes |
 | `test/games.test.mjs`                          | `src/games.ts` with fake timers: what it asks, gone rooms forgotten, one report per turn key, never the room on screen or one another tab shows, the step-out hush |
 | `test/notify.test.mjs`                         | `src/notify.ts` against a stubbed Notification: missing, promise and callback permission, the opt-in setting, the notification's tag and click |

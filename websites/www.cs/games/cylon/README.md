@@ -14,7 +14,7 @@ Homepage mini-game module. Licensed under the GNU GPL v3 (see `LICENSE`).
 - `server/score-guard.php` — the kit's score guard (origin, CSRF, run tokens, rate limits, initials), copied by `tools/install-files.php`; never edit the copy
 - `data/config.json` — timezone, week boundary, board size, blocked initials, and request limits
 - `data/scores.json` — live boards (created on the server; not part of the source tree)
-- `test/*.test.mjs` — unit and static checks on `node:test`; `test/php/ScoresTest.php` — PHPUnit cases for `scores.php` (`vendor/bin/phpunit --testsuite cylon` from the site root)
+- `test/*.test.ts` — unit and static checks on `node:test`, type-checked by the build; `test/php/ScoresTest.php` — PHPUnit cases for `scores.php` (`vendor/bin/phpunit --testsuite cylon` from the site root)
 - `data/.htaccess` — denies HTTP access to `data/`
 - `tools/install-files.php` — writes `manifest.webmanifest` (the work is `games/_kit/php/install-core.php`)
 
@@ -87,7 +87,7 @@ php tools/install-files.php                # rewrite manifest.webmanifest if met
 
 `intro` hands `main.ts` `createIntro(deps)` and gets `play()`, `cancel()` and `playing()`. The flight, the timed steps that wait out a pause, the title's states and the token that cancels them are inside it; the elements, the settings and pause predicates, the sound, the detonation and the start of combat come in as `deps`, so it reaches none of `main.ts`'s state. It has no Node test: the `home-eye` and `cylon-help` browser specs and a play-through cover it.
 
-`audio` hands `main.ts` one object, `createAudio({ settings, sessionActive, volumeToGain, createContext? })`: `sfx(name)` plays an effect, `prime()` opens the context ahead of one, `unlock()` is the first-gesture handler, `syncMusic()` starts or stops the bed to match the settings and the session, and `settingChanged(key)` follows the settings panel. The context, the buses and the bed's timer stay inside it, and it exports no state. The settings, the session predicate and the volume curve (`rules.volumeToGain`) come in as arguments, so the module imports nothing; without an `AudioContext` it is silent. `test/audio.test.mjs` runs it against a fake context.
+`audio` hands `main.ts` one object, `createAudio({ settings, sessionActive, volumeToGain, createContext? })`: `sfx(name)` plays an effect, `prime()` opens the context ahead of one, `unlock()` is the first-gesture handler, `syncMusic()` starts or stops the bed to match the settings and the session, and `settingChanged(key)` follows the settings panel. The context, the buses and the bed's timer stay inside it, and it exports no state. The settings, the session predicate and the volume curve (`rules.volumeToGain`) come in as arguments, so the module imports nothing; without an `AudioContext` it is silent. `test/audio.test.ts` runs it against a fake context.
 
 `abilities` hands `main.ts` `createAbilities(deps)`: `readyGrenade()` arms (a second press disarms), `throwGrenadeAt(x, y)` throws, `callRaptor()` calls the strike (it strikes 700 ms later and lands at 1900 ms), `cancelGrenadeArm()`, `clearRaptor()`, `reset()` for a new run, and `grenadeArmed()` and `raptorInbound()` for the buttons. `abilityKey(ev)` reads a key press: R calls the raptor, G arms the grenade, Q (the kit back key) disarms it, and Esc does nothing. The cooldowns are the `Schedule`'s `grenadeReadyAt` (10 s) and `raptorReadyAt` (60 s), read and written through `readyAt` and `setReadyAt`, so a pause moves them with the rest. The blast, the eye, the raptor sprite, the strike band and the buttons come in as callbacks. `test/abilities.test.ts` drives it on a fake clock with fake timers.
 
@@ -109,4 +109,4 @@ The page links the stylesheets in `css/`, in this order, and the order is the ca
 They are `<link>` tags in the site's `index.html`, each with a content-hash `?v=` that `php tools/site-versions.php` (site root) writes, not `@import`s from one file: an `@import` is fetched only after its parent arrives, a round trip the home page would wait out before it paints. That tool fails if a file in `css/` is not linked, is linked twice, or is linked out of order. `custom.css` at the site root imports them in the same order for any page that still links it.
 
 ## Tests
-From this folder, `./test.sh` runs the build check, the install check, `node --test 'test/*.test.mjs'` and the PHPUnit suite. Browser specs for the home page and the game are in `../../tests/e2e` (`home-eye`, `cylon-help`).
+From this folder, `./test.sh` runs the build check, the install check, `node --test test/*.test.ts` and the PHPUnit suite. Browser specs for the home page and the game are in `../../tests/e2e` (`home-eye`, `cylon-help`).

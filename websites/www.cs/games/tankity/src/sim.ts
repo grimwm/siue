@@ -157,6 +157,8 @@ export interface ShopRow {
 export interface Arsenal {
   weapons: Readonly<Record<string, Readonly<Weapon>>>;
   order: readonly string[];
+  /** The ammo keys as the weapon picker shows them: each category together, in first-appearance order. */
+  shelf: readonly string[];
   shop: readonly Readonly<ShopRow>[];
   gear: Readonly<Record<string, Readonly<Gear>>>;
 }
@@ -284,6 +286,10 @@ export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[] } | null | u
   const catAt = new Map<string, number>();
   for (const row of shop) if (!catAt.has(row.cat)) catAt.set(row.cat, catAt.size);
   shop.sort((a, b) => catAt.get(a.cat)! - catAt.get(b.cat)!);
+  const ammoCat = (k: string): string => w[k]!.cat || 'Shells';
+  const shelfAt = new Map<string, number>();
+  for (const k of order) if (!shelfAt.has(ammoCat(k))) shelfAt.set(ammoCat(k), shelfAt.size);
+  const shelf = order.slice().sort((a, b) => shelfAt.get(ammoCat(a))! - shelfAt.get(ammoCat(b))!);
   // The arsenal is read-only after the build: every shell, row, and paint
   // job freezes, so a stray write fails loudly instead of bending ballistics
   // mid-match. Hot per-frame state (shells, particles, tanks) stays mutable
@@ -298,8 +304,9 @@ export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[] } | null | u
   for (const row of shop) Object.freeze(row);
   for (const k of Object.keys(gear)) Object.freeze(gear[k]);
   Object.freeze(order);
+  Object.freeze(shelf);
   Object.freeze(shop);
-  return { weapons: w, order, shop, gear };
+  return { weapons: w, order, shelf, shop, gear };
 }
 /* A player's ammo at the start of a match: the endless Shell, plus each
    row's start shells. server/rules.php room_start_ammo is the same. */

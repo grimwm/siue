@@ -56,3 +56,16 @@ test('how long a blast lingers and how big a shell flies come from its gfx', () 
 test('every player starts a match with the rows\' start shells and an endless Shell', () => {
   assert.deepEqual(startAmmo(arsenal), { shell: Infinity, buck: 1 });
 });
+
+test('the weapon picker shows each category together, the Rollers side by side', () => {
+  const shelf = arsenal.shelf;
+  assert.equal(shelf.length, arsenal.order.length);
+  assert.equal(shelf[0], 'shell');
+  const cats = shelf.map(k => arsenal.weapons[k].cat || 'Shells');
+  for (let i = 1; i < cats.length; i++) {
+    if (cats[i] !== cats[i - 1]) assert.ok(!cats.slice(0, i).includes(cats[i]), `${cats[i]} comes back after another category`);
+  }
+  const at = k => shelf.indexOf(k);
+  assert.deepEqual([at('babyroller') - at('roller'), at('heavyroller') - at('babyroller')], [1, 1]);
+  assert.deepEqual(arsenal.order, GAME.arsenal.ammo.map(a => a.key), 'the rack keeps game.yaml order');
+});

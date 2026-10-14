@@ -29,8 +29,8 @@ export interface ShopDeps {
   net: Pick<RoomClient, 'on' | 'seats' | 'readyNow' | 'shopClockLeft' | 'closeClockLeft'>;
   sfx: Pick<typeof SfxApi, 'play'>;
   me(): GameTank;
-  /** A touch screen: no key chips. */
-  touch: boolean;
+  /** A touch screen: no key chips. Asked each draw, since a physical key turns the chips on. */
+  touch(): boolean;
   keyHint: KeyHintFn;
   say(text: string, tone?: string): void;
   advance(event: FlowEvent): void;
@@ -107,10 +107,10 @@ export function createShop(deps: ShopDeps) {
      the time left before the shop closes on its own (the room's shop clock),
      or before the room itself closes when that comes first. */
   function shopReadyView(): { next: { label: string; keyAt?: string; pressed?: boolean }; readyLine: string | null; sig: string } {
-    const keyAt = touch ? undefined : 'shop:next';
+    const keyAt = touch() ? undefined : 'shop:next';
     if (!net.on) {
       const label = `Start round ${G.round + 1}`;
-      return { next: { label, keyAt }, readyLine: null, sig: label };
+      return { next: { label, keyAt }, readyLine: null, sig: label + '|' + (keyAt ?? '') };
     }
     const mine = net.readyNow();
     const voters = net.seats.filter(s => s.human && s.lives > 0);
@@ -119,7 +119,7 @@ export function createShop(deps: ShopDeps) {
     const label = mine ? 'Ready ✓' : 'Ready';
     const status = `${ready}/${voters.length} ready${clock}`;
     const marks = voters.map(s => `${String(s.name).toUpperCase()}${s.ready ? ' ✓' : ''}`).join('  ');
-    return { next: { label, keyAt, pressed: mine }, readyLine: `${status} · ${marks}`, sig: label + '|' + status + '|' + marks };
+    return { next: { label, keyAt, pressed: mine }, readyLine: `${status} · ${marks}`, sig: label + '|' + status + '|' + marks + '|' + (keyAt ?? '') };
   }
   /* The start button and ready line as last drawn. The clocks call this every
      frame, so the shop redraws only when what it would show has changed. */

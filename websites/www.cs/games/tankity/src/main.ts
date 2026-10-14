@@ -100,10 +100,26 @@ function $<T extends HTMLElement = HTMLElement>(id: string): T | null {
 // held pad button into a named command, and runs the held-key arm movement.
 // This file says what each command does (bindKeys below). */
 
-/* Phones and tablets: a touch screen with no mouse or trackpad. They get no
-// keyboard at all, so key bindings stay off and no label names a key. */
-const TOUCH = touchOnly(typeof window.matchMedia === 'function' ? q => window.matchMedia(q) : undefined);
-const input = createInput({ touch: TOUCH });
+/* Phones and tablets: a coarse primary pointer (a stylus does not change that).
+// They get no keyboard at first, so key bindings stay off and no label names a
+// key, until a physical key is pressed (a keyboard case): then the keys and
+// their hints come back, and stay for the session. */
+const KEYBOARD_SEEN = 'tankity-keyboard';
+function keyboardSeen(): boolean {
+  try { return sessionStorage.getItem(KEYBOARD_SEEN) === '1'; } catch { return false; }
+}
+const TOUCH = touchOnly(typeof window.matchMedia === 'function' ? q => window.matchMedia(q) : undefined) && !keyboardSeen();
+let touchNow = TOUCH;
+const input = createInput({
+  touch: TOUCH,
+  onKeyboard() {
+    touchNow = false;
+    try { sessionStorage.setItem(KEYBOARD_SEEN, '1'); } catch { /* the keys still show for this page */ }
+    document.documentElement.classList.remove('touch');
+    paintHud();
+    renderShopReady();
+  },
+});
 
 /* ---------- audio: lives in src/audio.ts ---------- */
 const trackToastHost = $('track-toast');
@@ -435,7 +451,7 @@ const replay = createReplay({
 /* ---------- the typed modules, wired in dependency order ---------- */
 /* The status bar's values (src/hud.ts). */
 const { HUD, paintHud, windText, renderHUD } = createHud({
-  G, $, tables, net, MATCH, me, cur, myTank, seatName, drawShellIcon, keyHint, touch: TOUCH,
+  G, $, tables, net, MATCH, me, cur, myTank, seatName, drawShellIcon, keyHint, touch: () => touchNow,
   menuOpen: () => { const mv = $('menu-overlay'); return !!mv && !mv.hidden; },
   onMenu: () => toggleOverlay('menu-overlay', 'btn-menu'),
 });
@@ -485,7 +501,7 @@ const {
 const {
   openShop, hideShop, renderShop, renderShopReady, buyItem, buySelected, previewSelected, shopSelect, shopQtyUp, shopQtyDown,
 } = createShop({
-  G, $, tables, net, sfx, me, touch: TOUCH, keyHint, say, advance, render, renderHUD, refreshNavHints,
+  G, $, tables, net, sfx, me, touch: () => touchNow, keyHint, say, advance, render, renderHUD, refreshNavHints,
   drawShellIcon, drawGearIcon, openPreview, nextRound, openLeaveVeil: () => openLeaveVeil(), netBuy: (it, qty) => netBuy(it, qty),
   board: () => (net.on ? roomShopBoard() : soloShopBoard()),
   preloadFx: keys => fxPreload(keys),

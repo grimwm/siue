@@ -167,7 +167,7 @@ test('in a room the turn line carries the time left on a long turn, or the room 
   const net: HudDeps['net'] = { on: true, code: 'AB3D', seat: 0, turnSecs: 28800, turnClockLeft: () => 3600, closeClockLeft: () => null };
   const h = m.hudMod.createHud({
     G, $: () => null, tables, net, MATCH: { myTurn: true }, me: () => tank, cur: () => tank, myTank: () => tank,
-    seatName: () => 'ABC', drawShellIcon() {}, keyHint: () => '', touch: false, menuOpen: () => false, onMenu() {},
+    seatName: () => 'ABC', drawShellIcon() {}, keyHint: () => '', touch: () => false, menuOpen: () => false, onMenu() {},
   });
   h.renderHUD();
   assert.equal(h.HUD.turn, 'YOU. Aim! · 1h 0m left');

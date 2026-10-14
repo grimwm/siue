@@ -17,11 +17,23 @@ test('the shipped guns read the way the deck shows them', () => {
   assert.equal(blastSize(gun('rail').radius), 'S');
   assert.equal(blastSize(gun('mortar').radius), 'L');
   assert.equal(blastSize(gun('nuke').radius), 'L');
-  for (const w of GAME.arsenal.ammo) assert.match(weaponLine(w), /^\d+ dmg · [SML]$/, w.key);
+  for (const w of GAME.arsenal.ammo) assert.match(weaponLine(w), /^(\d+ dmg|no damage) · (S|M|L|beam|path)$/, w.key);
 });
 
 test('readers hear the words, not the letters', () => {
   assert.equal(weaponLineSpoken(gun('shell')), '34 damage, medium blast');
   assert.equal(weaponLineSpoken({ dmg: 90, radius: 70 }), '90 damage, large blast');
   assert.equal(weaponLineSpoken({ dmg: 60, radius: 14 }), '60 damage, small blast');
+});
+
+test('a harmless gun reads no damage and what it does; a beam reads its damage and beam', () => {
+  const byEffect = e => GAME.arsenal.ammo.find(a => a.effect === e);
+  assert.equal(weaponLine({ dmg: 0, radius: 0, effect: 'tracer' }), 'no damage · path');
+  assert.equal(weaponLine(byEffect('tracer')), 'no damage · path');
+  assert.equal(weaponLine({ dmg: 45, radius: 6, effect: 'beam' }), '45 dmg · beam');
+  assert.equal(weaponLine(byEffect('beam')), `${byEffect('beam').dmg} dmg · beam`);
+  assert.equal(weaponLineSpoken({ dmg: 0, radius: 0, effect: 'tracer' }), 'no damage, shows its path');
+  assert.equal(weaponLineSpoken({ dmg: 45, radius: 6, effect: 'beam' }), '45 damage, beam');
+  assert.equal(weaponLine({ dmg: 60, radius: 90, effect: 'plasma' }), '60 dmg · L', 'a ring reads its size as a blast does');
+  assert.equal(weaponLine({ dmg: 0, radius: 45, effect: 'shot' }), 'no damage · L', 'a harmless blast keeps its size');
 });

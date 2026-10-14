@@ -164,7 +164,7 @@ test('clicking Buy drops focus, and the guns toggle switches between every gun a
   expect(errors).toEqual([]);
 });
 
-test('a tank falls smoothly into the crater under it, and the drop is free up to 10 px', async ({ browser }) => {
+test('a tank falls smoothly into the crater under it, and the drop costs half a point a pixel past 10', async ({ browser }) => {
   const { page } = await newPlayer(browser);
   // A Mortar's wide blast digs under our own hull even when the wind drifts
   // the shell: buy one in the pre-match shop and load it.
@@ -186,10 +186,14 @@ test('a tank falls smoothly into the crater under it, and the drop is free up to
     await resetRec(page);
     const logBefore = await page.locator('#log li').count();
     await page.keyboard.press('Control');
-    await page.waitForTimeout(5000);
+    // Our volley's falls settle once its shell is down and play out before
+    // the next unit starts to aim: read the tank's drop then, before any
+    // other shot can move it.
+    const saidSince = () => page.locator('#log li').evaluateAll((lis, n) => lis.slice(n).map(li => li.textContent).join(' '), logBefore);
+    await expect.poll(saidSince, { timeout: 30_000 }).toMatch(/is aiming|wreck|life|lives|Back in|Your turn/i);
+    const said = await saidSince();
     // A Mortar on our own hull can wreck the tank, and a fresh tank spawns
     // elsewhere: that jump is a respawn, not a fall, so try again.
-    const said = await page.locator('#log li').evaluateAll((lis, n) => lis.slice(n).map(li => li.textContent).join(' '), logBefore);
     if (/wreck|life|lives|Back in/i.test(said)) continue;
     const ys = (await rec(page)).tankY.map(p => p[1]);
     let moving = 0, maxStep = 0;
@@ -205,11 +209,10 @@ test('a tank falls smoothly into the crater under it, and the drop is free up to
   }
   // Our own pit credits nobody but still hurts: half a point a pixel past 10
   // (game.yaml arsenal.fall), said in the log when it costs anything. The
-  // drones' turns in the same window may drop the tank again, in falls of
-  // their own, so the drop seen only bounds what the falls cost.
+  // drop is the whole of our volley's fall, read before anyone else fires.
+  expect(falls.length, 'at least one volley left the tank standing').toBeGreaterThan(0);
   for (const [drop, cost] of falls) {
-    if (drop <= 10) expect(cost, `a ${drop.toFixed(1)} px drop is free`).toBe(0);
-    expect(cost, `a ${drop.toFixed(1)} px drop costs ${cost}`).toBeLessThanOrEqual(Math.max(0, Math.floor(0.5 * (drop - 10))) + 1);
+    expect(cost, `a ${drop.toFixed(2)} px drop`).toBe(Math.max(0, Math.floor(0.5 * (drop - 10) + 1e-9)));
   }
   // The old bug moved a tank one small step per turn; what matters is that
   // the fall is spread over frames, however deep the crater.

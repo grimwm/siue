@@ -3,7 +3,7 @@
 // to the view (a tank, a boom, the terrain) throws in module code, so a frame that
 // tried to advance or change game state fails here without a browser.
 import { check } from '../../_kit/test/check.ts';
-import { createRenderer, drawChassis } from '../src/render.ts';
+import { CHUTE_OPEN, chuteFrame, createRenderer, drawChassis } from '../src/render.ts';
 import { fitField, visibleWorld } from '../src/field.ts';
 import { sceneryY } from '../src/scenery.ts';
 import { ROOM_W as W, H, facing, isGroundUnit, muzzle, surfY, hashSeed, mulberry32, gauss } from '../src/sim.ts';
@@ -128,3 +128,32 @@ const live = deepFreeze({ ...view, turnUnit: view.tanks[1], aim: { unit: view.ta
   check('sky-builds-once-per-match-key', builds === 2, `builds=${builds}`);
 }
 
+
+{
+  // The parachute sheet: the opening frames once, then the sway frames on a loop.
+  const seq = Array.from({ length: 40 }, (_, i) => chuteFrame(i / 12, 16));
+  check('chute-opens-once-then-sways', seq.slice(0, CHUTE_OPEN).join() === '0,1,2,3,4,5'
+    && seq.slice(CHUTE_OPEN, CHUTE_OPEN + 10).join() === '6,7,8,9,10,11,12,13,14,15'
+    && seq[CHUTE_OPEN + 10] === 6 && seq.every(f => f >= 0 && f < 16), seq.join());
+}
+
+{
+  // A unit under an open parachute: the sheet when it has loaded, the drawn canopy until then.
+  const chuteView = deepFreeze({ ...view, tanks: [tank('wraith', 400, { chute: true }), tank('tank', 100, { isPlayer: true, chute: true })] });
+  const drawn = [];
+  const sheetCtx = () => {
+    const { ctx, calls } = stubContext();
+    return { ctx: new Proxy(ctx, { get: (t, p) => (p === 'drawImage' ? (...a) => { drawn.push(a); } : t[p]) }), calls };
+  };
+  const loaded = { img: { tag: 'parachute' }, fw: 64, fh: 64, cols: 4, frames: 16, ready: true };
+  const a = sheetCtx();
+  createRenderer({ width: 1440, height: 920, getContext: () => a.ctx }, { ...deps, fx: { ...fxApi, sheets: { parachute: loaded } } }).frame(chuteView);
+  check('chute-draws-from-the-sheet', drawn.filter(d => d[0] === loaded.img).length === 2, String(drawn.length));
+  drawn.length = 0;
+  const b = sheetCtx();
+  let threw = '';
+  try {
+    createRenderer({ width: 1440, height: 920, getContext: () => b.ctx }, { ...deps, fx: { ...fxApi, sheets: { parachute: { ...loaded, ready: false } } } }).frame(chuteView);
+  } catch (e) { threw = String(e); }
+  check('chute-falls-back-to-a-drawn-canopy', !threw && drawn.filter(d => d[0] === loaded.img).length === 0 && b.calls.n > a.calls.n, threw || `${b.calls.n} vs ${a.calls.n}`);
+}

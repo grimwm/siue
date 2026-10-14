@@ -47,5 +47,13 @@
     "rows": 2,
     "frames": 7,
     "fps": 0
+  },
+  "parachute": {
+    "file": "parachute.png",
+    "frame": 64,
+    "cols": 4,
+    "rows": 4,
+    "frames": 16,
+    "fps": 12
   }
 }

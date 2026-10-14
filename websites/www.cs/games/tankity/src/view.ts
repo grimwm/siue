@@ -140,7 +140,7 @@ export function createView(deps: ViewDeps) {
       textScale: textScale(),
       turnClock: left !== null && left <= CLOCK_SHOW_S && left > 0 ? { left, myTurn: MATCH.myTurn } : null,
       preview: pv && pv.cv ? {
-        canvas: pv.cv as HTMLCanvasElement, width: PV_W, height: PV_H, terr: pv.terr, sx: pv.sx, tx: pv.tx,
+        canvas: pv.cv as HTMLCanvasElement, width: PV_W, height: PV_H, terr: pv.terr, sx: pv.sx, tx: pv.tx, sy: pv.sy, ty: pv.ty,
         angle: pv.angle, foeHp: pv.foeHp, foeHpMax: PV_FOE_HP, wkey: pv.wkey, wind: pv.wind,
         booms: pv.booms, shells: pv.shells, fx: pv.fx, result: pv.result, resultT: pv.resultT, trace: pv.trace,
       } : null,

@@ -259,3 +259,17 @@ const camAt = z => ({ z, cx: W / 2, cy: H + 8 - H / 2 / z });
   check('a falling unit is drawn at its drawn height', at('TANK') === 200 - 38, String(at('TANK')));
   check('a wreck in mid-fall is drawn whole until it lands', at('WRAITH') === 150 - 56, String(at('WRAITH')));
 }
+
+{
+  // A ground unit under the dirt is drawn faint inside a dashed outline; a
+  // drone at the same depth (it rides the ground, so never) and a unit on its
+  // ground draw no outline.
+  const deep = Array.from(terrain);
+  for (let x = 230; x <= 270; x++) deep[x] = terrain[x] - 30;
+  const dug = deepFreeze({ ...view, terrain: deep, marks: [] });
+  const plain = stubCanvas(), buried = stubCanvas();
+  createRenderer(plain.canvas, deps).frame(view);
+  createRenderer(buried.canvas, deps).frame(dug);
+  check('a buried unit is drawn in a dashed outline', (buried.calls.by.roundRect || 0) > (plain.calls.by.roundRect || 0)
+    && (buried.calls.by.setLineDash || 0) > (plain.calls.by.setLineDash || 0), JSON.stringify([plain.calls.by.setLineDash, buried.calls.by.setLineDash]));
+}

@@ -86,12 +86,21 @@ function run(pv, env, seconds, done = () => false) {
     run(pv, env, 12, p => p.phase === 'show');
     check(`${key}: the first volley ends with a result`, pv.phase === 'show' && pv.result.length > 0, `phase ${pv.phase}`);
     // The solver aims an unsteered shot; the seeker bends its own way, so only it may miss.
-    // A harmless gun (a tracer) hurts nothing: its mark comes down by the dummy.
-    if (arsenal.weapons[key].dmg === 0) {
+    // A tracer hurts nothing: its mark comes down by the dummy. The earth guns
+    // (and a harmless crater) bury the dummy or drop it; a riot charge digs its
+    // buried shooter out.
+    const w = arsenal.weapons[key];
+    if (w.effect === 'tracer') {
       const end = pv.trace && pv.trace.pts.slice(-2);
       check(`${key}: the first volley comes down by the dummy`, !!end && Math.abs(end[0] - pv.tx) < 14 && pv.foeHp === PV_FOE_HP, JSON.stringify(end));
+    } else if (w.effect === 'riot') {
+      check(`${key}: the buried shooter digs itself out`, pv.terr[pv.sx] >= pv.sy - 2 && /^Dug out/.test(pv.result), `${pv.terr[pv.sx]} vs ${pv.sy}: ${pv.result}`);
+    } else if (w.effect === 'dirt' || w.effect === 'pour') {
+      check(`${key}: the first volley buries the dummy`, pv.buriedBy > 2 && /^Buried the dummy/.test(pv.result), pv.result);
+    } else if (w.effect === 'dig' || w.effect === 'slump' || w.dmg === 0) {
+      check(`${key}: the first volley drops the dummy, for fall damage`, pv.dropped > 10 && pv.foeHp < PV_FOE_HP && /^Dropped the dummy/.test(pv.result), pv.result);
     } else if (key !== 'seeker') {
-      check(`${key}: the first volley lands on the dummy`, pv.volleyHits >= 1 && pv.foeHp < PV_FOE_HP, `hits ${pv.volleyHits}, hp ${pv.foeHp}`);
+      check(`${key}: the first volley lands on the dummy`, pv.volleyDmg > 0 && pv.foeHp < PV_FOE_HP, `hits ${pv.volleyHits}, hp ${pv.foeHp}`);
     }
   }
   // The solved shot, replayed with sim.js alone, comes down on the target.
@@ -236,7 +245,7 @@ function run(pv, env, seconds, done = () => false) {
   const hills = pv.terr;
   run(pv, env, 12, p => p.phase === 'show');
   check('a blast carves the hills', pv.terr === hills && pv.terr.some((v, i) => v !== makePreviewTerrain()[i]));
-  check('a hurt dummy stays hurt through the result', pv.foeHp > 0 && pv.foeHp < PV_FOE_HP);
+  check('a hurt dummy stays hurt through the result', pv.foeHp < PV_FOE_HP);
   pv.foeHp = 0;
   run(pv, env, 4, p => p.phase === 'aim');
   check('a downed dummy and a scarred field are reset for the next volley',

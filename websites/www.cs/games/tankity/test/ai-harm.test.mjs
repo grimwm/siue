@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildArsenal, droneRack, fireWeapon, muzzle, mulberry32, simShot, stepShells } from '../src/sim.ts';
-import { aiChoose, aiHarm, aiSelfHarm, fallHarm } from '../src/ai.ts';
+import { aiChoose, aiHarm, aiSelfHarm, earthHarm } from '../src/ai.ts';
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const arsenal = buildArsenal(GAME.arsenal);
@@ -155,7 +155,10 @@ test('drones vary their guns over rounds 5 to 12: no gun above 60% of picks', ()
   assert.ok(Object.keys(picks).length >= 4, JSON.stringify(picks));
 });
 
-test('the fall term waits for terrain removal to drop units: it is 0', () => {
+test('the earth term counts the fall the ground a gun moves would give: a harmless crater under the target, never under the drone', () => {
   const self = drone(100), target = human(500), G = world([self, target]);
-  for (const k of arsenal.order) assert.equal(fallHarm(G, arsenal, self, target, k, { x: 500, y: 400, oob: false }), 0, k);
+  const e = earthHarm(G, arsenal, self, target, 'heavyriot', { x: 500, y: 400, oob: false });
+  assert.equal(e.harm, 23, 'Heavy Riot drops the target 56 px');
+  assert.equal(e.self, 0);
+  assert.equal(aiHarm(G, arsenal, self, target, 'heavyriot', { x: 100, y: 400, oob: false }), -Infinity);
 });

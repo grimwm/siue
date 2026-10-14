@@ -858,6 +858,25 @@ foreach ($weapons as $wkey => $def) {
             'tanks' => [$human(500, 100), $drone(200, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => [$wkey => 2]], $drone(520, 60)]]);
     }
 }
+// The earth guns: the ground a gun moves counts as harm (a fall, a burial, a dig's warheads); a gun whose ground would drop or bury the drone is never fired.
+if (isset($weapons['digger'], $weapons['dirtball'], $weapons['disrupter'], $weapons['riotcharge'])) {
+    $ridge = ['vee' => [420, 60, 420, 330]];
+    $onRidge = sv_terrain($ridge);
+    $aim('digger-under-a-ridge-tank', ['terrain' => $ridge, 'wind' => 0, 'round' => 9, 'seed' => 3, 'shooter' => 1, 'difficulty' => 'hard',
+        'tanks' => [array_replace($human(420, 100), ['y' => $onRidge[420]]), array_replace($drone(120, 200), ['y' => $onRidge[120], 'dirS' => 1, 's' => 'hunter', 'ammo' => ['digger' => 1]])]]);
+    foreach ([1, 2] as $seed) {
+        $aim("dirtball-buries-a-human-in-a-dip-seed$seed", ['terrain' => ['flat' => 400, 'set' => [[380, 440, 420]]], 'wind' => 0, 'round' => 9, 'seed' => $seed, 'shooter' => 1,
+            'difficulty' => 'hard', 'tanks' => [array_replace($human(410, 100), ['y' => 420.0]), $drone(120, 200) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['dirtball' => 1]]]]);
+        $aim("dirt-never-at-a-drone-seed$seed", ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => $seed, 'shooter' => 1, 'difficulty' => 'hard',
+            'tanks' => [$drone(420, 100) + ['dirS' => -1], $drone(120, 200) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['dirtball' => 2]]]]);
+    }
+    $flanks = ['vee' => [300, 60, 420, 330]];
+    $onFlanks = sv_terrain($flanks);
+    $aim('disrupter-refused-on-its-own-slope', ['terrain' => $flanks, 'wind' => 0, 'round' => 9, 'seed' => 4, 'shooter' => 1, 'difficulty' => 'hard',
+        'tanks' => [array_replace($human(345, 100), ['y' => $onFlanks[345]]), array_replace($drone(265, 200), ['y' => $onFlanks[265], 'dirS' => 1, 's' => 'hunter', 'ammo' => ['disrupter' => 1]])]]);
+    $aim('buried-human-fires-its-riot-charge', ['terrain' => ['flat' => 400, 'set' => [[270, 330, 360]]], 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 0,
+        'tanks' => [$human(300, 100) + ['dirS' => 1, 'angle' => 70, 'ammo' => ['riotcharge' => 1, 'mortar' => 1]], $drone(600, 100)]]);
+}
 // A weak target gets the cheapest gun that finishes it.
 $aim('weak-target-cheapest-gun', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1, 'difficulty' => 'hard',
     'tanks' => [$human(400, 10), $drone(120, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['mortar' => 2, 'babynuke' => 1]]]]);

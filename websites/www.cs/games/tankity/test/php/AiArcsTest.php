@@ -176,13 +176,26 @@ final class AiArcsTest extends TestCase
         $this->assertGreaterThan(0.0, room_ai_harm($room, $self, $target, 'needle', $land));
     }
 
-    public function testTheFallTermIsZeroUntilCratersDropUnitsIntoHurtingFalls(): void
+    public function testTheEarthTermCountsTheFallTheGroundItMovesWouldGive(): void
     {
         $room = self::harmRoom(100.0, 420.0);
         [$self, $target] = $room['tanks'];
-        foreach (array_keys(room_weapons()) as $k) {
-            $this->assertSame(0.0, room_ai_fall_harm($room, $self, $target, $k, ['x' => 420.0, 'y' => 400.0, 'oob' => false]), $k);
-        }
+        // A harmless crater right under the target drops it 0.75 r: Heavy Riot's 56 px costs 23.
+        $e = room_ai_earth_harm($room, $self, $target, 'heavyriot', ['x' => 420.0, 'y' => 400.0, 'oob' => false]);
+        $this->assertSame(23.0, $e['harm']);
+        $this->assertSame(0, $e['self']);
+        // Under the drone itself, the same crater is a gun never to fire.
+        $this->assertSame(-INF, room_ai_harm($room, $self, $target, 'heavyriot', ['x' => 100.0, 'y' => 400.0, 'oob' => false]));
+    }
+
+    public function testDirtCountsABurialOnlyOnAGroundUnit(): void
+    {
+        $room = self::harmRoom(100.0, 420.0);
+        [$self, $target] = $room['tanks'];
+        $land = ['x' => 420.0, 'y' => 400.0, 'oob' => false];
+        $this->assertSame((float) ROOM_AI_BURY, room_ai_earth_harm($room, $self, $target, 'dirtball', $land)['harm']);
+        $room['tanks'][1]['kind'] = 'ai';
+        $this->assertSame(0.0, room_ai_earth_harm($room, $self, $room['tanks'][1], 'dirtball', $land)['harm']);
     }
 
     /** The planning flights one drone turn costs with a full round-9 rack (three

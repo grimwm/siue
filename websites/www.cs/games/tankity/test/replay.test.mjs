@@ -354,6 +354,8 @@ function frames(rp, n) {
     && JSON.stringify(terrain) === JSON.stringify(war.terrain) && JSON.stringify(terrain) !== JSON.stringify(hills()));
   check('the beam and its line are flown by the replay, not logged as events', !host.log.events.some(e => e.t === 'beam'));
   const through = host.log.specials.filter(s => s.name === 'pierce');
+  check('a drone the beam hits shows it passing through its body, up in the air', through.length === 1 && through[0].y === host.tanks[1].y - 30,
+    JSON.stringify(through));
   check('a unit the beam hits shows it passing through, along the beam', through.length === 1 && through[0].w === BEAM
     && near(through[0].ang, Math.atan2(shot.y1 - shot.y0, shot.x1 - shot.x0)), JSON.stringify(through));
 
@@ -372,4 +374,23 @@ function frames(rp, n) {
     { t: 'shot', by: 0, w: TRACER, x0: 270, y0: 320, x1: 330, y1: 326, t0: 0, t1: 0.5, r: 0, p: '270,320 300,310 330,326', at: 0 }]);
   for (let i = 0; i < 200 && !rp.idle(); i++) rp.step(DT);
   check('a tracer lands with its mark and no blast', marks.length === 1 && marks[0].e.w === TRACER && host.log.blasts.length === blasts);
+}
+
+/* ---- the server's own beam and ring volleys (protocol/play-after-beam.json, play-after-ring.json) ---- */
+for (const [file, t] of [['play-after-beam.json', 'beam'], ['play-after-ring.json', 'ring']]) {
+  const evs = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'protocol', file), 'utf8')).body.room.events;
+  const at = evs.findIndex(e => e.t === t);
+  const own = evs[at], next = evs[at + 1];
+  check(`${file}: the ${t} is followed by its hit on the drone at the same moment`, own && next && next.t === 'hit' && next.seat === 1 && next.by === 0
+    && next.at === own.at && own.at === 0 && !evs.slice(0, evs.findIndex(e => e.t === 'aifire')).some(e => e.t === 'shot'), JSON.stringify(evs.slice(at, at + 3)));
+  const host = makeHost();
+  const seen = [];
+  host.env.effect = () => undefined;
+  host.env.beam = e => seen.push(e.t);
+  host.env.ring = e => seen.push(e.t);
+  host.env.mark = () => {};
+  const rp = createReplay(host.env);
+  rp.push(evs.slice(evs.findIndex(e => e.t === 'fire'), evs.findIndex(e => e.t === 'aifire')));
+  for (let i = 0; i < 400 && !rp.idle(); i++) rp.step(DT);
+  check(`${file}: the replay plays the ${t} once and logs its hit`, seen.length === 1 && seen[0] === t && host.log.events.some(e => e.t === 'hit'));
 }

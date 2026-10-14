@@ -187,7 +187,7 @@ const phpFiles = ['rooms.php', ...['settings', 'store', 'sim', 'ai', 'rules', 'p
 const phpText = Object.fromEntries(phpFiles.map(f => [f, fs.readFileSync(path.join(GAME_DIR, f), 'utf8')]));
 const php = Object.values(phpText).join('\n');
 // The lobby and the menu are Preact components (src/ui): their ids exist once
-// the game has drawn them, not in index.html (ui.test.mjs checks their shape).
+// the game has drawn them, not in index.html (ui.test.ts checks their shape).
 for (const id of ['lobby-veil', 'round-banner', 'round-banner-text', 'preview-result']) {
   check('lobby-markup-' + id, html.includes('id="' + id + '"'));
 }

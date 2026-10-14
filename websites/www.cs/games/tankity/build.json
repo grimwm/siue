@@ -1,5 +1,5 @@
 {
-  "programs": ["tsconfig.json", "src/tsconfig.dom.json", "src/tsconfig.check.json"],
+  "programs": ["tsconfig.json", "src/tsconfig.dom.json", "src/tsconfig.check.json", "tsconfig.test.json"],
   "entries": [
     { "in": "src/main.ts", "out": "main", "format": "esm" },
     { "in": "src/fx/engine.ts", "out": "fx", "format": "iife" },

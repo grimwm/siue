@@ -17,7 +17,7 @@
  *
  * Nothing here reaches for the page: events and targets are the small
  * structural shapes below, which a browser's KeyboardEvent, Window and button
- * satisfy, so this module compiles in the DOM-free program and test/input.test.mjs
+ * satisfy, so this module compiles in the DOM-free program and test/input.test.ts
  * drives it with plain objects and a fake clock. */
 import { powerScale } from './field.ts';
 import { ROOM_W } from './sim.ts';

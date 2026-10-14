@@ -150,7 +150,11 @@
 #     roller: friction (the share of its speed it loses per second, 0.01 to
 #             5; 0.6 rolls a fair way), rollTime (most seconds it rolls, 0.5
 #             to 10)
-#     beam: range (its length at full power, px, 60 to 1200)
+#     beam: range (its length at full power, px, 60 to 1200); aimMin
+#           (optional, -30 to 10, 10 when left out): the barrel's lowest
+#           angle while it is loaded, and 180 - aimMin its highest, so -20
+#           lets the barrel dip 20 degrees below level on either side. Any
+#           other gun aims 10 to 170, and fires inside its own limits
 #     plasma and tracer: none
 #
 # gfx fields (all colours are quoted "#rgb" or "#rrggbb")
@@ -535,8 +539,9 @@ arsenal:
       aiRound: 6
       effect: beam
       range: 520
+      aimMin: -20
       speed: 1.0
-      note: A dead-straight beam along the barrel; power sets its reach. Cuts through hills and every unit in line.
+      note: Dead straight along the barrel, which dips below level; power sets its reach. Cuts through hills.
       gfx: {shell: "#ff4d4d", trail: "#ff8a8a", blast: ["#ff3b3b", "#fff0f0"], painter: beam, shake: 0.2}
 
     - key: plasma
@@ -551,7 +556,7 @@ arsenal:
       aiRound: 5
       effect: plasma
       speed: 1.0
-      note: A ring of plasma around you that hurts everyone close and spares you. Power sets its size.
+      note: Spares you; power sets its size.
       gfx: {shell: "#c77dff", trail: "#9d4edd", blast: ["#b56cff", "#f6e8ff"], painter: spark, shake: 0.5}
 
     - key: tracer
@@ -940,7 +945,8 @@ audio:
 #                      reduced motion, or turn Screen flashes off in Settings,
 #                      get no flash; Screen flashes off also leaves out the
 #                      large bright layers (additive dots, blobs and sprites
-#                      sized by the blast radius, three quarters of it or more).
+#                      sized by the blast radius, three quarters of it or more,
+#                      and any of them 36 px or more in radius as it plays).
 #
 # emitter fields. Write only what differs from the default in brackets (the
 # editor never writes a default). `count` and `rate` say how much, the rest
@@ -1622,11 +1628,11 @@ effects:
     impact:
       screen: { flash: { color: "#b56cff", alpha: 0.14, dur: 0.3 } }
       emitters:
-        - { count: 1, unit: r, size: [0.45, 0.45], sizeEnd: 0.5, life: [0.3, 0.3], alpha: [0.8, 0.4, 0], colors: ["#ffffff", "#c77dff"], glow: true }
+        - { count: 1, unit: r, size: [0.25, 0.25], sizeEnd: 0.5, life: [0.3, 0.3], alpha: [0.8, 0.4, 0], colors: ["#e0aaff", "#c77dff"], glow: true }
         - { shape: sprite, count: 1, sheet: plasma, unit: r, size: [1, 1], life: [0.6, 0.6], alpha: [1, 1, 0.8, 0], rotJitter: 180, tint: "#c77dff", glow: true }
         - { shape: sprite, count: 1, sheet: plasma, unit: r, size: [0.9, 0.9], life: [0.7, 0.7], alpha: [0.8, 0.6, 0], rotJitter: 180, tint: "#5a189a", glow: true, delay: 0.06 }
         - { shape: sprite, count: 1, sheet: shock, unit: r, size: [0.9, 0.9], life: [0.5, 0.5], alpha: [1, 0.6, 0], rotJitter: 10, tint: "#e0aaff", glow: true }
-        - { shape: sprite, count: 1, sheet: energy, unit: r, size: [0.5, 0.5], life: [0.4, 0.4], alpha: [1, 1, 0], rotJitter: 180, tint: "#f3d9ff", glow: true, scale: 1.2 }
+        - { shape: sprite, count: 1, sheet: energy, unit: r, size: [0.5, 0.5], life: [0.4, 0.4], alpha: [1, 1, 0], rotJitter: 180, tint: "#c77dff", glow: true, scale: 1.2 }
         - { shape: ring, count: 1, unit: r, size: [0.15, 0.15], sizeEnd: 6.6, ease: out, life: [0.45, 0.45], width: 5, alpha: [1, 0.6, 0], colors: ["#ffffff", "#c77dff"], glow: true }
         - { shape: ring, count: 1, unit: r, size: [0.15, 0.15], sizeEnd: 6.2, ease: out, life: [0.6, 0.6], width: 2, alpha: [0.9, 0.5, 0], colors: ["#e0aaff", "#5a189a"], glow: true, delay: 0.08 }
         - { shape: bolt, count: 10, unit: r, length: 0.9, size: [1, 1], life: [0.14, 0.32], alpha: [1, 1, 0], colors: ["#e0aaff"], glow: true }

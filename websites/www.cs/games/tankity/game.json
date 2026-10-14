@@ -529,8 +529,9 @@
                 "aiRound": 6,
                 "effect": "beam",
                 "range": 520,
+                "aimMin": -20,
                 "speed": 1.0,
-                "note": "A dead-straight beam along the barrel; power sets its reach. Cuts through hills and every unit in line.",
+                "note": "Dead straight along the barrel, which dips below level; power sets its reach. Cuts through hills.",
                 "gfx": {
                     "shell": "#ff4d4d",
                     "trail": "#ff8a8a",
@@ -555,7 +556,7 @@
                 "aiRound": 5,
                 "effect": "plasma",
                 "speed": 1.0,
-                "note": "A ring of plasma around you that hurts everyone close and spares you. Power sets its size.",
+                "note": "Spares you; power sets its size.",
                 "gfx": {
                     "shell": "#c77dff",
                     "trail": "#9d4edd",
@@ -3144,11 +3145,11 @@
                     }
                 },
                 "emitters": [
-                    {"count":1,"unit":"r","size":[0.45,0.45],"sizeEnd":0.5,"life":[0.3,0.3],"alpha":[0.8,0.4,0],"colors":["#ffffff","#c77dff"],"glow":true},
+                    {"count":1,"unit":"r","size":[0.25,0.25],"sizeEnd":0.5,"life":[0.3,0.3],"alpha":[0.8,0.4,0],"colors":["#e0aaff","#c77dff"],"glow":true},
                     {"shape":"sprite","count":1,"sheet":"plasma","unit":"r","size":[1,1],"life":[0.6,0.6],"alpha":[1,1,0.8,0],"rotJitter":180,"tint":"#c77dff","glow":true},
                     {"shape":"sprite","count":1,"sheet":"plasma","unit":"r","size":[0.9,0.9],"life":[0.7,0.7],"alpha":[0.8,0.6,0],"rotJitter":180,"tint":"#5a189a","glow":true,"delay":0.06},
                     {"shape":"sprite","count":1,"sheet":"shock","unit":"r","size":[0.9,0.9],"life":[0.5,0.5],"alpha":[1,0.6,0],"rotJitter":10,"tint":"#e0aaff","glow":true},
-                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[0.5,0.5],"life":[0.4,0.4],"alpha":[1,1,0],"rotJitter":180,"tint":"#f3d9ff","glow":true,"scale":1.2},
+                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[0.5,0.5],"life":[0.4,0.4],"alpha":[1,1,0],"rotJitter":180,"tint":"#c77dff","glow":true,"scale":1.2},
                     {"shape":"ring","count":1,"unit":"r","size":[0.15,0.15],"sizeEnd":6.6,"ease":"out","life":[0.45,0.45],"width":5,"alpha":[1,0.6,0],"colors":["#ffffff","#c77dff"],"glow":true},
                     {"shape":"ring","count":1,"unit":"r","size":[0.15,0.15],"sizeEnd":6.2,"ease":"out","life":[0.6,0.6],"width":2,"alpha":[0.9,0.5,0],"colors":["#e0aaff","#5a189a"],"glow":true,"delay":0.08},
                     {"shape":"bolt","count":10,"unit":"r","length":0.9,"size":[1,1],"life":[0.14,0.32],"alpha":[1,1,0],"colors":["#e0aaff"],"glow":true},

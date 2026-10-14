@@ -27,7 +27,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `src/ai.ts` | The drone AI: ballistic aim, bracketing, the six strategies (`aiChoose`, `pickTactic`) and the difficulty table (`DIFFICULTY`). Pure; imports the sim, never the reverse (the sim keeps `brkLand`, which a blast calls) |
 | `src/ai-measure.ts` | `measureHitRates`: a drone bracketing a stationary player on seeded hills with the real sim, counting the shots that take armor off, per shot of the bracket. The difficulty table is tuned against it. Pure, never bundled |
 | `src/difficulty.ts` | The Difficulty setting as the player keeps it (`tankity-difficulty`, missing or unknown reads as normal) and the levels' names |
-| `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes, and tells `main.ts` why a track started (the Next song toast). It never touches the page |
+| `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes, keeps only the theme and the playing track decoded, and tells `main.ts` why a track started (the Next song toast). It never touches the page |
 | `src/track-toast.ts` | The Next song toast's text ("♫ Title · Author") and its timer. DOM-free: it is handed the element and the timers |
 | `src/net.ts` | The room client: transport (one fetcher, the 429 retry; create and join never retry a 429), the session, polling, the act/buy/ready/leave senders, the turn and shop clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers and the clock are passed in |
 | `src/replay.ts` | The room volley replay: the queue of events waiting to play and the volley on screen. Eases the shooter's barrel, flies each shell along the path the server recorded (positions and velocities for the renderer), lands blasts and hits when the events say, and plays a volley kept back by a catch-up, or fired by a drone with no human standing (`watch`), at triple speed (`FAST_SPEED`). Sound, particles, craters, armor and log lines happen through callbacks; it never touches the page |
@@ -131,6 +131,27 @@ php tools/install-files.php      # after the last edit to any served file
   needs no volume; add its row to CREDITS.md with the page's License(s) text,
   and `test/music-catalog.test.mjs` fails until game.yaml, CREDITS.md,
   audio/music/ and the pins agree.
+- A soundtrack track is looping action music for a tank battle, and each one
+  meets every rule below; `build_music.sh --vet`, `--sha` and `--probe` check
+  them:
+  - Licence: the OpenGameArt page's License(s) field lists CC0 (prose,
+    comments or a linked pack page do not count), copied verbatim into
+    CREDITS.md.
+  - Style: 16-bit action or chiptune like the rest. The page's tags or text
+    say chiptune, 8-bit, 16-bit, retro, NES, SNES, SID, FM, shooter, action,
+    battle, boss or arcade, and none of vocals, lyrics, singing, orchestral,
+    ambient, drone or piano. A menu, title or jingle piece alone does not fit.
+  - Shape: 40 to 240 s and a loudness range of at most 12 LU (`--probe`), with
+    no long fade-out or silence at either end: the player trims silence and
+    cross-fades, but a fade cannot loop. Longer or more dynamic pieces are left
+    out, not cut.
+  - Source and author: an mp3, ogg, wav or flac (or a zip holding one) on
+    opengameart.org, pinned by SHA-256; the composer is named on the page.
+  - Variety: sixteen tracks, Battle Theme A first, no author with more than
+    four, and no one pack supplying all the new ones.
+- Only the theme and the playing track are held decoded in memory (a decoded
+  track is about 35 MiB a minute); any other is fetched again, from the
+  service worker's cache, when it comes round.
 - Key tokens match `event.code` first, then `event.key`; the first token of an
   action names the key on buttons. Touch-only screens (coarse pointer, no
   mouse) get no key bindings or labels.
@@ -810,9 +831,10 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/ai-search.test.mjs`                      | The planning flights one drone turn costs, counted as `simShot` flies them (not as `aiChoose` looks guns up): a coarse grid and the fine neighbours of its best per distinct arc, a lobber's high arcs, and a bracket correction's three grids |
 | `test/prefs-legacy.test.mjs`                   | The saved settings (`tankity-body`, `tankity-text`, `tankity-tutorial`) read back through the kit's prefs exactly as the code before it wrote them, and the `tankity-local` and `tankity-scores-local` values |
 | `test/audio.test.mjs`                          | `src/audio.ts` imports without a browser; the loop-point trim and the round-to-track mapping are right |
-| `test/audio-announce.test.mjs` | Only Next song starts are announced as `'next'`: the theme, a round change (even one that takes over while Next song is loading) and a failover are `'auto'` |
+| `test/audio-announce.test.mjs` | Only Next song starts are announced as `'next'`: the theme, a round change (even one that takes over while Next song is loading) and a track standing in for a Next song that failed to load are `'auto'` |
+| `test/audio-cache.test.mjs` | Walking all sixteen tracks and every round keeps at most three tracks decoded, the theme and the playing one always among them; the theme is fetched once and a dropped track again when it returns |
 | `test/track-toast.test.mjs` | `src/track-toast.ts`: "♫ Title · Author", the title alone or the file name standing in, and the toast hiding itself with one timer |
-| `test/music-build.test.mjs` | `audio/music/build_music.sh` without ffmpeg: the OpenGameArt License(s) reader (CC0 must be in the field itself) and the SHA-256 pin, which stops on a mismatch and never trusts a tampered cache |
+| `test/music-build.test.mjs` | `audio/music/build_music.sh` without ffmpeg: the OpenGameArt License(s) reader (CC0 must be in the field itself; the first title wins), a zip known by its bytes rather than its URL, and the SHA-256 pin, which stops on a mismatch and never trusts a tampered cache |
 | `test/music-catalog.test.mjs` | `game.yaml`, `audio/CREDITS.md`, `audio/music/` and the script's pins agree: sixteen tracks, Battle Theme A first, no volume, no tags, at most four per author; with ffmpeg installed, every file is 80 kbps stereo, 40 to 240 s, and within 1 LU of the loudness target |
 | `test/field.test.mjs`                          | The width from the landscape box (clamps, columns, portrait equals landscape), that a deal holds through a resize, fitting the field in a box, and the power step and display at 720, 1080 and 1440 |
 | `test/detmath.test.mjs`                        | `src/detmath.ts` is within 1e-15 of `Math` where the sim feeds it, keeps the sign of zero, and is exact at 0, 1 and the right angles |

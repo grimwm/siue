@@ -1,103 +1,143 @@
 // Headless smoke for the Scorched Earth rewrite. Exercises the exact shipped
 // bundle (dist/fx.js, then dist/main.js) with a small DOM + canvas stub
-// (games/_kit/test/dom-stub.mjs), driving only public inputs (keydown/keyup). The stub is a
+// (games/_kit/test/dom-stub.ts), driving only public inputs (keydown/keyup). The stub is a
 // real tree because the Preact overlays render into it. Also holds the static
 // checks on the page, CSS, source and PHP. Fails loudly on any exception, a stuck
 // turn loop, an unscrolled Space, or a silent battlefield.
-import { check } from '../../_kit/test/check.ts';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { sweepHit } from '../src/sim.ts';
-import { els, makeEl, click, submit, fire, document } from '../../_kit/test/dom-stub.mjs';
+import type { Gear, Weapon } from '../src/sim.ts';
+import type { KeyContext, KeyDefs } from '../src/input.ts';
+import type { RoomSnapshot } from '../src/protocol.ts';
+import type { Emitter, FxSetData } from '../src/fx/types.ts';
+import { els, click, submit, fire, document, installDocument, childEl } from '../../_kit/test/dom-stub.ts';
+import type { StubElement, StubNode } from '../../_kit/test/dom-stub.ts';
+
+/** A value the check expects to be there (a find that must succeed, a file the game has). */
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `no ${what}`);
+  return v;
+}
+/** The i-th item of a list the check expects to hold it. */
+function nth<T>(list: readonly T[], i: number): T {
+  const v = list[i];
+  assert.ok(v !== undefined, `no item ${i} of ${list.length}`);
+  return v;
+}
+/** The element the game made with that id, which the check expects to be there. */
+function E(id: string): StubElement {
+  return must(els[id], '#' + id);
+}
+/** The i-th child node (element or text), which the check expects to be there. */
+function nodeAt(el: StubNode, i: number): StubNode {
+  return nth(el.children, i);
+}
 
 const GAME_DIR = path.join(import.meta.dirname, '..');
-const read = file => fs.readFileSync(path.join(GAME_DIR, file), 'utf8');
+const read = (file: string) => fs.readFileSync(path.join(GAME_DIR, file), 'utf8');
 const mainSrc = read('src/main.ts');
 // The page's code is src/main.ts and the typed modules it wires (src/*.ts); the checks that read
 // the source for a rule look at all of it, so they hold wherever a function lives.
 const moduleFiles = fs.readdirSync(path.join(GAME_DIR, 'src')).filter(f => f.endsWith('.ts') && f !== 'main.ts' && !f.endsWith('.check.ts')).sort();
 const moduleSrc = Object.fromEntries(moduleFiles.map(f => [f, read('src/' + f)]));
+const moduleOf = (f: string) => must(moduleSrc[f], 'src/' + f);
 const src = [mainSrc, ...Object.values(moduleSrc)].join('\n');
 const audioSrc = read('src/audio.ts');
 const renderSrc = read('src/render.ts');
 // Closing the tab keeps every seat: only an explicit Leave tells the server.
-check('no-leave-on-close', !/pagehide[^\n]*sendLeave|pagehide[^\n]*leave\(/.test(mainSrc));
+await test('no-leave-on-close', () => { assert.ok(!/pagehide[^\n]*sendLeave|pagehide[^\n]*leave\(/.test(mainSrc)); });
 
 // The game and its audio keep timers running for good; remember every one so the
 // run can end by clearing them instead of by killing the process.
-const liveTimers = new Set();
-for (const name of ['setTimeout', 'setInterval']) {
-  const real = globalThis[name];
-  globalThis[name] = (...args) => { const h = real(...args); liveTimers.add(h); return h; };
+const liveTimers = new Set<NodeJS.Timeout>();
+for (const name of ['setTimeout', 'setInterval'] as const) {
+  const real: (fn: () => void, ms?: number) => NodeJS.Timeout = globalThis[name];
+  Reflect.set(globalThis, name, (...args: Parameters<typeof real>) => { const h = real(...args); liveTimers.add(h); return h; });
 }
 
-const listeners = {}; // type -> [fn] on window
-global.document = document;
+/** What the test hands a window listener: a key press's fields, or nothing (a blur). */
+interface WinEvent { key?: string; code?: string; repeat?: boolean; shiftKey?: boolean; target?: { tagName: string }; preventDefault?: () => void }
+type WinListener = (ev?: WinEvent) => void;
+const listeners: Record<string, WinListener[]> = {}; // type -> [fn] on window
+installDocument();
 // Node has a BroadcastChannel, which would keep the run alive: the page takes
 // the localStorage fallback here, as in a browser without one.
-globalThis.BroadcastChannel = undefined;
-global.window = {
-  addEventListener: (t, f) => { (listeners[t] = listeners[t] || []).push(f); },
-  matchMedia: () => ({ matches: false }),
-  localStorage: { _m: {}, getItem(k) { return this._m[k] || null; }, setItem(k, v) { this._m[k] = String(v); } },
+Reflect.set(globalThis, 'BroadcastChannel', undefined);
+const stubStorage: { _m: Record<string, string>; getItem(k: string): string | null; setItem(k: string, v: unknown): void } = {
+  _m: {}, getItem(k) { return this._m[k] || null; }, setItem(k, v) { this._m[k] = String(v); },
 };
+Reflect.set(globalThis, 'window', {
+  addEventListener: (t: string, f: WinListener) => { (listeners[t] = listeners[t] || []).push(f); },
+  matchMedia: () => ({ matches: false }),
+  localStorage: stubStorage,
+});
 // Importing a module takes a turn of the event loop, so the boot's own requests
 // would answer before the checks below start. They wait here until the async
 // block opens the gate, as they did when the script was evaluated in place.
-let openBootGate;
-const bootGate = new Promise(r => { openBootGate = r; });
-global.fetch = async (url) => {
+let openBootGate: () => void = () => {};
+const bootGate = new Promise<void>(r => { openBootGate = r; });
+Reflect.set(globalThis, 'fetch', async (url: unknown) => {
   await bootGate;
   if (/game\.json$/.test(String(url))) {
     // Real keys, audio and effects; the arsenal section is withheld so the shop checks
     // below keep exercising the baked fallback arsenal (the file's own arsenal
     // is validated separately from disk).
     return { ok: true, json: async () => {
-      const g = JSON.parse(read('game.json'));
+      const g: { arsenal?: unknown } = JSON.parse(read('game.json'));
       delete g.arsenal;
       return g;
     } };
   }
   return { ok: true, json: async () => ({ scores: [] }) };
-};
-global.location = { origin: 'http://localhost:8000', pathname: '/operation-tankity/index.html', search: '' };
+});
+Reflect.set(globalThis, 'location', { origin: 'http://localhost:8000', pathname: '/operation-tankity/index.html', search: '' });
 // A friend arrives on an invite link: the boot consumes ?code= once.
 global.location.search = '?code=zz99';
+// What the page's clipboard copy handed over, the frame callback it asked for,
+// and the state the fake AudioContext reports: kept here, where the test reads them.
+let copied: string | undefined;
+let rafCb: FrameRequestCallback | undefined;
+let acState: AudioContextState | undefined;
 Object.defineProperty(globalThis, 'navigator',
-  { value: { clipboard: { writeText: async t => { globalThis.__copied = t; } } }, configurable: true });
-global.requestAnimationFrame = cb => { global.__raf = cb; return 1; };
+  { value: { clipboard: { writeText: async (t: string) => { copied = t; } } }, configurable: true });
+global.requestAnimationFrame = cb => { rafCb = cb; return 1; };
 // Fake WebAudio: proves the synth + scheduler run without a browser, and lets
 // the test jump the clock forward like a background tab would.
 const AC_TIME = { t: 0 };
 const FAKE_STATS = { notes: 0 };
 function fakeParam() { return { setValueAtTime() {}, exponentialRampToValueAtTime() {} }; }
 class FakeNode {
-  constructor() { this.frequency = fakeParam(); this.gain = fakeParam(); }
+  frequency = fakeParam();
+  gain = fakeParam();
   connect() {}
   start() { FAKE_STATS.notes++; }
   stop() {}
 }
 // The audio module reaches WebAudio through globalThis, as a browser's window is.
-globalThis.AudioContext = class {
-  constructor() { this.sampleRate = 44100; this.destination = {}; }
-  get state() { return globalThis.__acState || 'running'; }
+Reflect.set(globalThis, 'AudioContext', class {
+  sampleRate = 44100;
+  destination = {};
+  get state() { return acState || 'running'; }
   get currentTime() { return AC_TIME.t; }
   // Like a real pre-gesture context, resume stays pending until the test
-  // flips __acState itself, so the suspend gate can be observed.
+  // flips acState itself, so the suspend gate can be observed.
   resume() { return new Promise(() => {}); }
   createOscillator() { return new FakeNode(); }
   createGain() { return new FakeNode(); }
-  createBuffer(ch, len) { return { getChannelData: () => new Float32Array(len) }; }
+  createBuffer(_ch: number, len: number) { return { getChannelData: () => new Float32Array(len) }; }
   createBufferSource() { return new FakeNode(); }
   createBiquadFilter() { return new FakeNode(); }
-};
+});
 
 // ---- boot the exact shipped module ----
 // The whole run plays in full screen: Q on previews, the shop, the gun
 // picker and the menu, and Esc anywhere, must never leave it (checked at the
 // end, 'esc-keeps-fullscreen').
-const fsExits = [];
+const fsExits: (string | undefined)[] = [];
 document.fullscreenElement = document.getElementById('frame');
 document.exitFullscreen = async () => { fsExits.push(new Error('exitFullscreen').stack); };
 eval(read('dist/fx.js'));
@@ -105,53 +145,55 @@ await import(pathToFileURL(path.join(GAME_DIR, 'dist/main.js')).href);
 
 // ---- driver: every press below comes from game.json's keys, so the suite proves the
 // file and the shipped bindings agree instead of hardcoding keys twice ----
-const GAME = JSON.parse(read('game.json'));
+/** game.json, as far as these checks read it. */
+interface GameJson { keys: KeyDefs; arsenal: { ammo: Weapon[]; gear: Gear[] }; effects: Record<string, FxSetData> }
+const GAME: GameJson = JSON.parse(read('game.json'));
 const KEYS = GAME.keys;
-for (const ctx of ['aim', 'shop', 'global', 'scroll']) {
+for (const ctx of ['aim', 'shop', 'global', 'scroll'] as const) {
   if (!KEYS[ctx]) throw new Error('game.json is missing keys context ' + ctx);
 }
-function pressToken(t) {
+type Mods = { shiftKey?: boolean };
+function pressToken(t: string | undefined): [string, string | undefined, Mods] {
   t = String(t);
-  const mods = /^Shift\+/.test(t) ? { shiftKey: true } : {};
+  const mods: Mods = /^Shift\+/.test(t) ? { shiftKey: true } : {};
   t = t.replace(/^(Ctrl|Shift)\+/, '');
   let m = /^Key([A-Z])$/.exec(t);
-  if (m) return [m[1].toLowerCase(), 'Key' + m[1], mods];
+  if (m) return [must(m[1], 'key letter').toLowerCase(), 'Key' + m[1], mods];
   m = /^Digit([0-9])$/.exec(t);
-  if (m) return [m[1], 'Digit' + m[1], mods];
+  if (m) return [must(m[1], 'digit'), 'Digit' + m[1], mods];
   if (t === 'Space' || t === ' ') return [' ', 'Space', mods];
   if (t === 'ControlLeft' || t === 'ControlRight') return ['Control', t, mods];
   if (t === 'Control') return ['Control', 'ControlLeft', mods];
   return [t, /^[A-Z][A-Za-z]*$/.test(t) ? t : undefined, mods];
 }
-const KB = (ctx, a, i) => pressToken((KEYS[ctx][a] || [])[i || 0]);
-const KBD = (ctx, a, n) => pressToken((KEYS[ctx][a] || [])[n - 1]);
-const KD = (ctx, a, i, extra) => { const [k, c, mods] = KB(ctx, a, i); keyDown(k, c, { ...mods, ...extra }); };
-const KU = (ctx, a, i) => { const [k, c] = KB(ctx, a, i); keyUp(k, c); };
-const TAP = (ctx, a, i, extra) => { KD(ctx, a, i, extra); KU(ctx, a, i); };
-const TAPD = (ctx, a, n, extra) => { const [k, c, mods] = KBD(ctx, a, n); keyDown(k, c, { ...mods, ...extra }); keyUp(k, c); };
-function keyDown(k, code, extra) {
+const KB = (ctx: KeyContext, a: string, i?: number) => pressToken((KEYS[ctx][a] || [])[i || 0]);
+const KBD = (ctx: KeyContext, a: string, n: number) => pressToken((KEYS[ctx][a] || [])[n - 1]);
+const KD = (ctx: KeyContext, a: string, i?: number, extra?: WinEvent) => { const [k, c, mods] = KB(ctx, a, i); keyDown(k, c, { ...mods, ...extra }); };
+const KU = (ctx: KeyContext, a: string, i?: number) => { const [k, c] = KB(ctx, a, i); keyUp(k, c); };
+const TAP = (ctx: KeyContext, a: string, i?: number, extra?: WinEvent) => { KD(ctx, a, i, extra); KU(ctx, a, i); };
+const TAPD = (ctx: KeyContext, a: string, n: number, extra?: WinEvent) => { const [k, c, mods] = KBD(ctx, a, n); keyDown(k, c, { ...mods, ...extra }); keyUp(k, c); };
+function keyDown(k: string, code: string | undefined, extra?: WinEvent) {
   for (const f of listeners['keydown'] || []) f(Object.assign({ key: k, code, preventDefault: () => {}, repeat: false }, extra));
 }
-function keyUp(k, code) {
+function keyUp(k: string, code: string | undefined) {
   for (const f of listeners['keyup'] || []) f({ key: k, code });
 }
 let ts = 0;
-function frames(n) {
-  for (let i = 0; i < n; i++) { ts += 16.7; global.__raf(ts); }
+function frames(n: number) {
+  for (let i = 0; i < n; i++) { ts += 16.7; must(rafCb, 'frame callback')(ts); }
 }
-const logText = () => els['log'].children.map(li => li.textContent).join('\n');
+const logText = () => E('log').children.map(li => li.textContent).join('\n');
 
 // Boot runs a demo battle: no veils, no ambush shop, crew drives every tank.
 for (const id of ['new-game', 'round-banner', 'round-banner-text', 'preview-result']) {
   void document.getElementById(id);
 }
 frames(30);
-check('demo-plays', els['shop-veil'].hidden === true && els['hud-armor'].textContent === '100',
-  els['hud-armor'].textContent);
-const rendered = id => !!els[id] && !!els[id].localName;
-const titleVeil = () => els['title-root'].children[0];
-check('no-ambush-shop', els['shop-veil'].hidden === true);
-check('title-card-over-the-demo', titleVeil().id === 'title-card' && titleVeil().hidden === false && rendered('title-play') && rendered('rooms-open') && rendered('tutorial-open'));
+await test('demo-plays', () => { assert.ok(E('shop-veil').hidden === true && E('hud-armor').textContent === '100', E('hud-armor').textContent); });
+const rendered = (id: string) => { const el = els[id]; return !!el && !!el.localName; };
+const titleVeil = () => childEl(E('title-root'), 0);
+await test('no-ambush-shop', () => { assert.ok(E('shop-veil').hidden === true); });
+await test('title-card-over-the-demo', () => { assert.ok(titleVeil().id === 'title-card' && titleVeil().hidden === false && rendered('title-play') && rendered('rooms-open') && rendered('tutorial-open')); });
 
 // Space must always preventDefault (no page scroll), both binding paths
 let pd = 0;
@@ -159,26 +201,26 @@ for (const f of listeners['keydown'] || []) {
   f({ code: 'Space', key: 'x', preventDefault: () => { pd++; }, repeat: false });
   f({ key: ' ', preventDefault: () => { pd++; }, repeat: false });
 }
-check('keys-no-scroll', pd === 2, `prevented=${pd}/2`);
+await test('keys-no-scroll', () => { assert.ok(pd === 2, `prevented=${pd}/2`); });
 // Fullscreen degrades honestly where the API is absent (as in this stub).
 TAP('global', 'fullscreen'); frames(2);
-check('fullscreen-fallback', /Fullscreen is not supported/.test(logText()));
+await test('fullscreen-fallback', () => { assert.ok(/Fullscreen is not supported/.test(logText())); });
 // Sound and music mute separately, by button or by key, without touching each other.
-const pressed = id => els[id].getAttribute('aria-pressed');
-click(els['btn-sound']);
-check('sound-off', pressed('btn-sound') === 'false', pressed('btn-sound'));
-check('sound-spares-music', pressed('btn-music') === 'true', String(pressed('btn-music')));
+const pressed = (id: string) => E(id).getAttribute('aria-pressed');
+click(E('btn-sound'));
+await test('sound-off', () => { assert.ok(pressed('btn-sound') === 'false', pressed('btn-sound')); });
+await test('sound-spares-music', () => { assert.ok(pressed('btn-music') === 'true', String(pressed('btn-music'))); });
 TAP('global', 'music');
-check('music-off', pressed('btn-music') === 'false', pressed('btn-music'));
-check('music-spares-sound', pressed('btn-sound') === 'false', pressed('btn-sound'));
-click(els['btn-sound']);
-check('sound-on', pressed('btn-sound') === 'true', pressed('btn-sound'));
+await test('music-off', () => { assert.ok(pressed('btn-music') === 'false', pressed('btn-music')); });
+await test('music-spares-sound', () => { assert.ok(pressed('btn-sound') === 'false', pressed('btn-sound')); });
+click(E('btn-sound'));
+await test('sound-on', () => { assert.ok(pressed('btn-sound') === 'true', pressed('btn-sound')); });
 TAP('global', 'sound');
-check('sound-key-off', pressed('btn-sound') === 'false', pressed('btn-sound'));
+await test('sound-key-off', () => { assert.ok(pressed('btn-sound') === 'false', pressed('btn-sound')); });
 TAP('global', 'music');
-check('music-on', pressed('btn-music') === 'true', pressed('btn-music'));
+await test('music-on', () => { assert.ok(pressed('btn-music') === 'true', pressed('btn-music')); });
 TAP('global', 'sound');
-click(els['btn-music']); click(els['btn-music']); // end unmuted with a fresh scheduler
+click(E('btn-music')); click(E('btn-music')); // end unmuted with a fresh scheduler
 // ---- game rooms: lobby + net play against a scripted server ----
 const html = fs.readFileSync(path.join(GAME_DIR, 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(GAME_DIR, 'game.css'), 'utf8');
@@ -189,150 +231,149 @@ const php = Object.values(phpText).join('\n');
 // The lobby and the menu are Preact components (src/ui): their ids exist once
 // the game has drawn them, not in index.html (ui.test.ts checks their shape).
 for (const id of ['lobby-veil', 'round-banner', 'round-banner-text', 'preview-result']) {
-  check('lobby-markup-' + id, html.includes('id="' + id + '"'));
+  await test('lobby-markup-' + id, () => { assert.ok(html.includes('id="' + id + '"')); });
 }
 for (const id of ['rooms-open', 'host-form', 'lobby-initials', 'join-form',
   'join-code', 'lobby-status', 'lobby-room', 'lobby-code',
   'lobby-seats', 'lobby-start', 'lobby-leave', 'lobby-close',
   'lobby-map', 'lobby-hills', 'lobby-count', 'new-game']) {
-  check('lobby-rendered-' + id, rendered(id));
+  await test('lobby-rendered-' + id, () => { assert.ok(rendered(id)); });
 }
 // The field's width is set where a match is dealt and nowhere else (spec 6.6).
 const widthWrites = [...src.matchAll(/\bG\.w\s*=(?!=)/g)].length;
-check('field-width-written-only-at-the-deal', widthWrites === 2 && /G\.w = w;/.test(moduleSrc['solo.ts']) && /G\.w = ROOM_W/.test(moduleSrc['room.ts'])
-  && /soloDeal\(G, tables\.arsenal!, seed, difficulty\.get\(\), field\.deal\(\)\)/.test(moduleSrc['match.ts']), `writes=${widthWrites}`);
-check('no-module-imports-a-fixed-width', !/import\s*\{[^}]*\bW\b[^}]*\}\s*from\s*'\.\/sim\.ts'/.test(src), 'a module still imports W from sim.ts');
-check('no-status-codes', !/server said no/.test(src));
+await test('field-width-written-only-at-the-deal', () => { assert.ok(widthWrites === 2 && /G\.w = w;/.test(moduleOf('solo.ts')) && /G\.w = ROOM_W/.test(moduleOf('room.ts'))
+  && /soloDeal\(G, tables\.arsenal!, seed, difficulty\.get\(\), field\.deal\(\)\)/.test(moduleOf('match.ts')), `writes=${widthWrites}`); });
+await test('no-module-imports-a-fixed-width', () => { assert.ok(!/import\s*\{[^}]*\bW\b[^}]*\}\s*from\s*'\.\/sim\.ts'/.test(src), 'a module still imports W from sim.ts'); });
+await test('no-status-codes', () => { assert.ok(!/server said no/.test(src)); });
 // The page loads the effects bundle, then the game bundle, and nothing else:
 // no import map, and the game bundle carries Preact so it has no bare imports.
-check('page-loads-fx-then-the-game-bundle', /<script src="dist\/fx\.js\?v=[0-9a-f]{10}" defer><\/script>\s*<script type="module" src="dist\/main\.js\?v=[0-9a-f]{10}"><\/script>/.test(html), '');
-check('page-has-no-import-map', !/type="importmap"/.test(html), '');
-check('bundle-has-no-bare-imports', !/\bfrom\s*["'](?!\.)/.test(read('dist/main.js')), '');
-check('fx-bundle-sets-the-global', /TankityFX/.test(read('dist/fx.js')), '');
+await test('page-loads-fx-then-the-game-bundle', () => { assert.ok(/<script src="dist\/fx\.js\?v=[0-9a-f]{10}" defer><\/script>\s*<script type="module" src="dist\/main\.js\?v=[0-9a-f]{10}"><\/script>/.test(html), ''); });
+await test('page-has-no-import-map', () => { assert.ok(!/type="importmap"/.test(html), ''); });
+await test('bundle-has-no-bare-imports', () => { assert.ok(!/\bfrom\s*["'](?!\.)/.test(read('dist/main.js')), ''); });
+await test('fx-bundle-sets-the-global', () => { assert.ok(/TankityFX/.test(read('dist/fx.js')), ''); });
 for (const f of ['dist/main.js', 'game.css', 'dist/fx.js']) {
-  check('page-versions-' + f, new RegExp('(?:src|href)="' + f.replace(/[./]/g, '\\$&') + '\\?v=[0-9a-f]+"').test(html));
+  await test('page-versions-' + f, () => { assert.ok(new RegExp('(?:src|href)="' + f.replace(/[./]/g, '\\$&') + '\\?v=[0-9a-f]+"').test(html)); });
 }
-check('room-cap', /ROOM_MAX_ROOMS/.test(php) && /room_max_rooms/.test(php) && /every room is taken/.test(php));
-check('no-seed-leak', (() => {
-  const proto = phpText['server/protocol.php'];
+await test('room-cap', () => { assert.ok(/ROOM_MAX_ROOMS/.test(php) && /room_max_rooms/.test(php) && /every room is taken/.test(php)); });
+await test('no-seed-leak', () => { assert.ok((() => {
+  const proto = must(phpText['server/protocol.php'], 'server/protocol.php');
   const body = proto.slice(proto.indexOf('function room_snapshot'));
   return !/'seed'/.test(body) && !/'rng'/.test(body) && !/'token'/.test(body);
-})());
-check('lobby-css-acts-right', /\.card \.acts\s*\{[^}]*justify-content:\s*flex-end/.test(css));
-for (const id of ['btn-sound', 'btn-music']) check('audio-rendered-' + id, rendered(id));
-check('css-fit-windowed', /\nbody\s*\{[^}]*height:\s*100dvh/.test(css) && /\n\.field\s*\{[^}]*flex:\s*1/.test(css));
-check('css-breakpoints', ['@container (max-width: 1100px)', '@container (max-width: 860px)', '@container (max-width: 760px)'].every(q => css.includes(q)));
-check('css-fit-fullscreen', /#frame:fullscreen\s*\{[^}]*overflow:\s*hidden/.test(css));
-check('key-hints', html.includes('data-keyhint="global:fire" aria-hidden="true">Space<') && html.includes('data-keyhint="aim:driveLeft" aria-hidden="true">Shift+←<'));
-check('key-style', /\n\.key\s*\{[^}]*background:\s*#14183a/.test(css) && /@media \(hover: hover\) and \(pointer: fine\)/.test(css));
+})()); });
+await test('lobby-css-acts-right', () => { assert.ok(/\.card \.acts\s*\{[^}]*justify-content:\s*flex-end/.test(css)); });
+for (const id of ['btn-sound', 'btn-music']) await test('audio-rendered-' + id, () => { assert.ok(rendered(id)); });
+await test('css-fit-windowed', () => { assert.ok(/\nbody\s*\{[^}]*height:\s*100dvh/.test(css) && /\n\.field\s*\{[^}]*flex:\s*1/.test(css)); });
+await test('css-breakpoints', () => { assert.ok(['@container (max-width: 1100px)', '@container (max-width: 860px)', '@container (max-width: 760px)'].every(q => css.includes(q))); });
+await test('css-fit-fullscreen', () => { assert.ok(/#frame:fullscreen\s*\{[^}]*overflow:\s*hidden/.test(css)); });
+await test('key-hints', () => { assert.ok(html.includes('data-keyhint="global:fire" aria-hidden="true">Space<') && html.includes('data-keyhint="aim:driveLeft" aria-hidden="true">Shift+←<')); });
+await test('key-style', () => { assert.ok(/\n\.key\s*\{[^}]*background:\s*#14183a/.test(css) && /@media \(hover: hover\) and \(pointer: fine\)/.test(css)); });
 // Panels live over the battle, never beside it; L/H/R flip them without pausing.
-check('no-side-panels', !/<aside/.test(html));
+await test('no-side-panels', () => { assert.ok(!/<aside/.test(html)); });
 for (const id of ['log-overlay', 'help-overlay', 'report-overlay', 'btn-log', 'btn-help']) {
-  check('overlay-markup-' + id, html.includes('id="' + id + '"'));
+  await test('overlay-markup-' + id, () => { assert.ok(html.includes('id="' + id + '"')); });
 }
-check('overlay-rendered-scores-open', rendered('scores-open'));
-check('overlays-in-frame', ['log-overlay', 'help-overlay', 'report-overlay']
-  .every(id => html.indexOf('id="' + id + '"') > html.indexOf('id="frame"')));
+await test('overlay-rendered-scores-open', () => { assert.ok(rendered('scores-open')); });
+await test('overlays-in-frame', () => { assert.ok(['log-overlay', 'help-overlay', 'report-overlay']
+  .every(id => html.indexOf('id="' + id + '"') > html.indexOf('id="frame"'))); });
 TAP('global', 'log');
-check('log-toggle', els['log-overlay'].hidden === false);
+await test('log-toggle', () => { assert.ok(E('log-overlay').hidden === false); });
 TAP('global', 'log');
-check('log-untoggle', els['log-overlay'].hidden === true);
+await test('log-untoggle', () => { assert.ok(E('log-overlay').hidden === true); });
 TAP('global', 'help');
-check('help-toggle', els['help-overlay'].hidden === false);
-click(els['help-close']);
-check('help-close', els['help-overlay'].hidden === true);
+await test('help-toggle', () => { assert.ok(E('help-overlay').hidden === false); });
+click(E('help-close'));
+await test('help-close', () => { assert.ok(E('help-overlay').hidden === true); });
 TAP('global', 'help');
 TAP('global', 'back');
-check('help-q', els['help-overlay'].hidden === true);
-check('banner-centered', /\.banner\s*\{[^}]*top:\s*50%/.test(css) && /translateY\(-50%\)/.test(css));
+await test('help-q', () => { assert.ok(E('help-overlay').hidden === true); });
+await test('banner-centered', () => { assert.ok(/\.banner\s*\{[^}]*top:\s*50%/.test(css) && /translateY\(-50%\)/.test(css)); });
 TAP('global', 'report');
-check('report-toggle', els['report-overlay'].hidden === false);
-click(els['report-close']);
-check('report-close', els['report-overlay'].hidden === true);
+await test('report-toggle', () => { assert.ok(E('report-overlay').hidden === false); });
+click(E('report-close'));
+await test('report-close', () => { assert.ok(E('report-overlay').hidden === true); });
 // Seed, sound, music and fullscreen live in the in-frame settings menu.
 for (const id of ['menu-overlay', 'deck', 'hud-bar', 'field']) {
-  check('menu-markup-' + id, html.includes('id="' + id + '"'));
+  await test('menu-markup-' + id, () => { assert.ok(html.includes('id="' + id + '"')); });
 }
-check('menu-button-in-the-status-bar', rendered('btn-menu'));
+await test('menu-button-in-the-status-bar', () => { assert.ok(rendered('btn-menu')); });
 for (const id of ['menu-close', 'seed-form', 'new-game']) {
-  check('menu-rendered-' + id, rendered(id));
+  await test('menu-rendered-' + id, () => { assert.ok(rendered(id)); });
 }
-check('menu-in-frame', html.indexOf('id="menu-overlay"') > html.indexOf('id="frame"'));
-check('menu-grid', els['seed-form'].className === 'menu-grid');
-check('menu-buttons', /#frame button\s*\{[^}]*font-size:\s*0\.75rem/.test(css));
-check('menu-grid-cols', /\.menu-grid\s*\{[^}]*repeat\(3, 1fr\)/.test(css));
+await test('menu-in-frame', () => { assert.ok(html.indexOf('id="menu-overlay"') > html.indexOf('id="frame"')); });
+await test('menu-grid', () => { assert.ok(E('seed-form').className === 'menu-grid'); });
+await test('menu-buttons', () => { assert.ok(/#frame button\s*\{[^}]*font-size:\s*0\.75rem/.test(css)); });
+await test('menu-grid-cols', () => { assert.ok(/\.menu-grid\s*\{[^}]*repeat\(3, 1fr\)/.test(css)); });
 // Secondary is the default (navbar style); gold is opt-in via .btn-primary.
-check('buttons-secondary-default', /\nbutton\s*\{[^}]*background:\s*var\(--panel\)/.test(css) && /\nbutton\s*\{[^}]*border:\s*1px solid var\(--line\)/.test(css));
-check('buttons-primary-gold', /button\.btn-primary[^{]*\{[^}]*background:\s*var\(--accent\)/.test(css));
+await test('buttons-secondary-default', () => { assert.ok(/\nbutton\s*\{[^}]*background:\s*var\(--panel\)/.test(css) && /\nbutton\s*\{[^}]*border:\s*1px solid var\(--line\)/.test(css)); });
+await test('buttons-primary-gold', () => { assert.ok(/button\.btn-primary[^{]*\{[^}]*background:\s*var\(--accent\)/.test(css)); });
 const deckHtml = html.slice(html.indexOf('id="deck"'), html.indexOf('id="log-overlay"'));
-check('deck-groups', ['grp-aim', 'grp-drive', 'grp-more', 'grp-weapon', 'grp-fire'].every(g => deckHtml.includes(g)) && !/btn-primary/.test(deckHtml));
+await test('deck-groups', () => { assert.ok(['grp-aim', 'grp-drive', 'grp-more', 'grp-weapon', 'grp-fire'].every(g => deckHtml.includes(g)) && !/btn-primary/.test(deckHtml)); });
 TAP('global', 'back');
-check('menu-toggle', els['menu-overlay'].hidden === false && els['btn-menu'].getAttribute('aria-expanded') === 'true');
-click(els['menu-close']);
-check('menu-close', els['menu-overlay'].hidden === true);
+await test('menu-toggle', () => { assert.ok(E('menu-overlay').hidden === false && E('btn-menu').getAttribute('aria-expanded') === 'true'); });
+click(E('menu-close'));
+await test('menu-close', () => { assert.ok(E('menu-overlay').hidden === true); });
 // Q toggles the menu: once opens it, again closes it.
 TAP('global', 'back');
-check('menu-reopen', els['menu-overlay'].hidden === false);
+await test('menu-reopen', () => { assert.ok(E('menu-overlay').hidden === false); });
 TAP('global', 'back');
-check('menu-q', els['menu-overlay'].hidden === true);
+await test('menu-q', () => { assert.ok(E('menu-overlay').hidden === true); });
 // Esc does nothing: it neither opens the menu nor closes it.
 const ESC = () => { keyDown('Escape', 'Escape', {}); keyUp('Escape', 'Escape'); };
 ESC();
-check('esc-does-not-open-the-menu', els['menu-overlay'].hidden === true);
+await test('esc-does-not-open-the-menu', () => { assert.ok(E('menu-overlay').hidden === true); });
 TAP('global', 'back');
 ESC();
-check('esc-does-not-close-the-menu', els['menu-overlay'].hidden === false);
+await test('esc-does-not-close-the-menu', () => { assert.ok(E('menu-overlay').hidden === false); });
 TAP('global', 'back');
-check('menu-q-again', els['menu-overlay'].hidden === true);
+await test('menu-q-again', () => { assert.ok(E('menu-overlay').hidden === true); });
   // Tutorial: the title card carries a replay button (pressed for real at the end).
-  check('title-tutorial', !!els['tutorial-open'] && !!els['tutorial-overlay'] && !!els['tutorial-skip']);
+  await test('title-tutorial', () => { assert.ok(!!els['tutorial-open'] && !!els['tutorial-overlay'] && !!els['tutorial-skip']); });
   // Four 32-step songs; the round picks the song.
   const songNames = (audioSrc.match(/name: '[^']+'/g) || []).filter(n => /Rollout|High Ground|Crater Blues|Last Tank/.test(n));
-  check('songs', songNames.length === 4 && /songIdx = \(round - 1\) % SONGS\.length/.test(audioSrc)
-    && /if \(G\.demo\) music\.playTheme\(\); else music\.forRound\(G\.round\)/.test(src), songNames.join(','));
+  await test('songs', () => { assert.ok(songNames.length === 4 && /songIdx = \(round - 1\) % SONGS\.length/.test(audioSrc)
+    && /if \(G\.demo\) music\.playTheme\(\); else music\.forRound\(G\.round\)/.test(src), songNames.join(',')); });
 // Every scrollable panel shows its keys, dimmed while everything fits.
 // (The overlays in src/ui draw theirs: one OverlayHead per navId, and the tutorial's own line.)
-const uiFile = f => fs.readFileSync(path.join(GAME_DIR, 'src', 'ui', f + '.tsx'), 'utf8');
+const uiFile = (f: string) => fs.readFileSync(path.join(GAME_DIR, 'src', 'ui', f + '.tsx'), 'utf8');
 const uiNavs = ['help', 'shop', 'lobby', 'menu', 'guns', 'scores', 'log', 'endveil'].flatMap(f => uiFile(f).match(/navId="/g) || []).length
   + (uiFile('tutorial').match(/class="nav-hint"/g) || []).length;
 const navCount = (html.match(/class="nav-hint[" ]/g) || []).length + uiNavs;
-check('nav-hints', navCount === 10, `hints=${navCount}`);
+await test('nav-hints', () => { assert.ok(navCount === 10, `hints=${navCount}`); });
 TAP('global', 'help');
-check('nav-disabled', els['nav-help'].getAttribute('aria-disabled') === 'true');
-els['help-overlay'].scrollHeight = 500;
+await test('nav-disabled', () => { assert.ok(E('nav-help').getAttribute('aria-disabled') === 'true'); });
+E('help-overlay').scrollHeight = 500;
 KD('scroll', 'lineDown');
-check('scroll-line', els['help-overlay'].scrollTop === 40, `top=${els['help-overlay'].scrollTop}`);
-check('nav-enabled', els['nav-help'].getAttribute('aria-disabled') === 'false');
+await test('scroll-line', () => { assert.ok(E('help-overlay').scrollTop === 40, `top=${E('help-overlay').scrollTop}`); });
+await test('nav-enabled', () => { assert.ok(E('nav-help').getAttribute('aria-disabled') === 'false'); });
 KD('scroll', 'pageDown');
-check('scroll-page', els['help-overlay'].scrollTop === 240, `top=${els['help-overlay'].scrollTop}`);
+await test('scroll-page', () => { assert.ok(E('help-overlay').scrollTop === 240, `top=${E('help-overlay').scrollTop}`); });
 KD('scroll', 'lineUp');
-check('scroll-up', els['help-overlay'].scrollTop === 200, `top=${els['help-overlay'].scrollTop}`);
+await test('scroll-up', () => { assert.ok(E('help-overlay').scrollTop === 200, `top=${E('help-overlay').scrollTop}`); });
 KD('scroll', 'halfDown', 0, { shiftKey: true });
-check('scroll-half-down', els['help-overlay'].scrollTop === 300, `top=${els['help-overlay'].scrollTop}`);
+await test('scroll-half-down', () => { assert.ok(E('help-overlay').scrollTop === 300, `top=${E('help-overlay').scrollTop}`); });
 KD('scroll', 'halfUp', 0, { shiftKey: true });
-check('scroll-half-up', els['help-overlay'].scrollTop === 200, `top=${els['help-overlay'].scrollTop}`);
+await test('scroll-half-up', () => { assert.ok(E('help-overlay').scrollTop === 200, `top=${E('help-overlay').scrollTop}`); });
 TAP('global', 'help');
-const idleTop = els['help-overlay'].scrollTop;
+const idleTop = E('help-overlay').scrollTop;
 KD('scroll', 'lineDown');
-check('scroll-idle', els['help-overlay'].scrollTop === idleTop, `top=${els['help-overlay'].scrollTop}`);
+await test('scroll-idle', () => { assert.ok(E('help-overlay').scrollTop === idleTop, `top=${E('help-overlay').scrollTop}`); });
 // The camera pins the ground to the viewport floor: no void below the world (test/camera.test.mjs checks the numbers).
-check('cam-pins-ground', /const floorY = h \+ FLOOR_SLACK/.test(src) && /bottom - \(h \+ FLOOR_SLACK\)/.test(src));
-check('cam-wide-sky', /fillRect\(rect\.x0 - 20, rect\.y0 - 20, rect\.x1 - rect\.x0 \+ 40/.test(renderSrc)); // the sky covers everything the canvas shows
+await test('cam-pins-ground', () => { assert.ok(/const floorY = h \+ FLOOR_SLACK/.test(src) && /bottom - \(h \+ FLOOR_SLACK\)/.test(src)); });
+await test('cam-wide-sky', () => { assert.ok(/fillRect\(rect\.x0 - 20, rect\.y0 - 20, rect\.x1 - rect\.x0 \+ 40/.test(renderSrc)); }); // the sky covers everything the canvas shows
 // (invite-prefill runs inside the async block below: openLobby unhides late)
 // The clean-initials list must match the server copy exactly (cylon rule).
-function blockedOf(src) {
+function blockedOf(src: string) {
   const start = src.search(/BLOCKED_INITIALS = (Object\.freeze\()?\[/);
   const end = src.indexOf(']', start);
   return [...src.slice(start, end).matchAll(/'([A-Z]{3})'/g)].map(m => m[1]).sort().join(',');
 }
-check('blocked-parity',
-  blockedOf(php) === blockedOf(src),
-  blockedOf(src).split(',').length + ' entries');
-for (const [f, text] of [['src/main.ts', mainSrc], ...moduleFiles.map(m => ['src/' + m, moduleSrc[m]]), ['index.html', html], ['game.css', css], ...phpFiles.map(f => [f, phpText[f]])]) {
-  check('no-dashes-' + f, !/[—–]/.test(text));
+await test('blocked-parity', () => { assert.ok(blockedOf(php) === blockedOf(src), blockedOf(src).split(',').length + ' entries'); });
+const textFiles: [string, string][] = [['src/main.ts', mainSrc], ...moduleFiles.map((m): [string, string] => ['src/' + m, moduleOf(m)]), ['index.html', html], ['game.css', css], ...phpFiles.map((f): [string, string] => [f, must(phpText[f], f)])];
+for (const [f, text] of textFiles) {
+  await test('no-dashes-' + f, () => { assert.ok(!/[—–]/.test(text)); });
 }
-check('net-round-event', /e\.t === 'round'/.test(src) && /'t' => 'round'/.test(php));
-const tick = async (n) => {
+await test('net-round-event', () => { assert.ok(/e\.t === 'round'/.test(src) && /'t' => 'round'/.test(php)); });
+const tick = async (n?: number) => {
   for (let i = 0; i < (n || 6); i++) { await new Promise(r => setImmediate(r)); frames(2); }
 };
 let SEQ = 10;
@@ -343,14 +384,18 @@ const terr720 = () => new Array(720).fill(300);
 // The hand-written snapshots below must keep the shape the server really
 // sends, and a later phase feeds the client the fixtures themselves.
 const FX_DIR = path.join(GAME_DIR, 'protocol');
-const fx = name => JSON.parse(fs.readFileSync(path.join(FX_DIR, name + '.json'), 'utf8'));
-const fxReply = f => ({ ok: f.status < 400, status: f.status, json: async () => f.body });
+/** A fixture as these checks read it: a real reply's status and body. */
+interface Fixture { status: number; body: { room?: RoomSnapshot; code?: string; error?: string } }
+const fx = (name: string): Fixture => JSON.parse(fs.readFileSync(path.join(FX_DIR, name + '.json'), 'utf8'));
+const fxReply = (f: Fixture) => ({ ok: f.status < 400, status: f.status, json: async () => f.body });
 const PFX = { on: false, room: 'lobby-host', actError: '', delta: 0, full: 0 };
+/** A request body the client posts, as the fake server reads it. */
+interface Posted { have?: number; full?: boolean; kind?: string; map?: string; initials?: string; difficulty?: string; seat?: number; mode?: string; ready?: boolean; item?: string; token?: string }
 // The server's delta rule on a fixture: a request that names the hills
 // revision the room is at (`have`, in the query or the body) gets the room
 // without its hills, as rooms.php answers it; `full` or any other revision
 // gets the hills.
-function fxDelta(f, u, body) {
+function fxDelta(f: Fixture, u: string, body: Posted) {
   const room = f.body && f.body.room;
   if (!room || !Array.isArray(room.terrain) || !room.terrain.length) return fxReply(f);
   const q = new URLSearchParams(u.split('?')[1] || '');
@@ -358,14 +403,14 @@ function fxDelta(f, u, body) {
   const full = q.get('full') === '1' || body.full === true;
   if (!full && have === room.terrainRev) {
     PFX.delta++;
-    const lean = JSON.parse(JSON.stringify(f));
-    delete lean.body.room.terrain;
+    const lean: Fixture = JSON.parse(JSON.stringify(f));
+    delete must(lean.body.room, 'room').terrain;
     return fxReply(lean);
   }
   PFX.full++;
   return fxReply(f);
 }
-function fxServe(u, body) {
+function fxServe(u: string, body: Posted) {
   if (u.includes('action=create')) return fxReply(fx('create-reply'));
   if (u.includes('action=state')) return fxDelta(fx(PFX.room), u, body);
   if (u.includes('action=start')) { PFX.room = 'play-my-turn'; return fxReply(fx('play-my-turn')); }
@@ -381,19 +426,31 @@ function fxServe(u, body) {
 // same types; null on either side is open (the server sends null for a
 // drone's body or the turn at the shop). Events may omit keys but never
 // invent them.
-function driftOf(actual, want, p, out, loose) {
+/** A JSON object (not an array, not null), whose fields can be read by name. */
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+/** v[k] as JavaScript reads it: a throw on null or undefined, undefined on any other non-object. */
+function fieldOf(v: unknown, k: string): unknown {
+  if (v === null || v === undefined) throw new TypeError(`Cannot read properties of ${v} (reading '${k}')`);
+  return isRecord(v) ? v[k] : undefined;
+}
+function driftOf(actual: unknown, want: unknown, p: string, out: Set<string>, loose: boolean): void {
   if (want === null || actual === null) return;
   const ta = Array.isArray(actual) ? 'array' : typeof actual;
   const tw = Array.isArray(want) ? 'array' : typeof want;
   if (ta !== tw) { out.add(`${p}: is ${ta}, the server sends ${tw}`); return; }
-  if (ta === 'array') {
+  // ta === tw from here, so an array or an object on one side is one on the other too.
+  if (Array.isArray(actual)) {
+    const items: unknown[] = actual;
+    const refs: unknown[] = Array.isArray(want) ? want : [];
     const evs = /events$/.test(p);
-    for (const item of actual) {
-      const ref = evs ? want.find(w => w.t === item.t) : want[0];
-      if (!ref) { if (evs) out.add(`${p}: event ${item.t} is not one the server sends`); continue; }
+    for (const item of items) {
+      const ref = evs ? refs.find(w => fieldOf(w, 't') === fieldOf(item, 't')) : refs[0];
+      if (!ref) { if (evs) out.add(`${p}: event ${fieldOf(item, 't')} is not one the server sends`); continue; }
       driftOf(item, ref, p + '[]', out, evs);
     }
-  } else if (ta === 'object') {
+  } else if (isRecord(actual) && isRecord(want)) {
     for (const k of Object.keys(want)) if (!(k in actual) && !loose) out.add(`${p}.${k}: missing, the server sends it`);
     for (const k of Object.keys(actual)) {
       if (!(k in want)) out.add(`${p}.${k}: the server does not send it`);
@@ -401,17 +458,17 @@ function driftOf(actual, want, p, out, loose) {
     }
   }
 }
-const FX_DRIFT = new Set();
-function fxConform(room) {
+const FX_DRIFT = new Set<string>();
+function fxConform<T extends { phase: string }>(room: T): T {
   const name = room.phase === 'lobby' ? 'lobby-host' : room.phase === 'shop' ? 'shop-after-win' : 'play-after-fire';
-  const want = JSON.parse(JSON.stringify(fx(name).body.room));
+  const want: RoomSnapshot = JSON.parse(JSON.stringify(fx(name).body.room));
   if (room.phase !== 'lobby') {
-    want.events = fx('play-after-fire').body.room.events.concat(fx('shop-after-win').body.room.events);
+    want.events = must(fx('play-after-fire').body.room, 'play-after-fire room').events.concat(must(fx('shop-after-win').body.room, 'shop-after-win room').events);
   }
   driftOf(room, want, name, FX_DRIFT, false);
   return room;
 }
-function scriptTank(seat, x, name, kind) {
+function scriptTank(seat: number, x: number, name: string, kind: string) {
   return {
     seat, kind, name, x, y: 300, angle: 60, power: 55,
     hp: kind === 'human' ? 100 : 60, maxHp: kind === 'human' ? 100 : 60,
@@ -433,7 +490,7 @@ function scriptYou() {
     seat: 0, shield: false, jammer: 0, bunker: 0, laststand: false, chutes: 0, plate: 0, armor: seatArmor, maxArmor: 100, filed: false, filedRank: null, filedFailed: false, filedLocal: false,
   };
 }
-function playRoom(turn, events) {
+function playRoom(turn: number, events: object[]) {
   return fxConform(Object.assign({
     code: 'TST1', phase: NET_SHOP ? 'shop' : 'play', round: 1, wind: 2, turn, turnSecs: 120, expiresAt: 1800000600, closesIn: 600, turnLeft: NET_SHOP ? null : 120, shopLeft: NET_SHOP ? 90 : null,
     terrain: terr720(), terrainRev: 1, hills: [40, 20, 10, 1, 2, 3, 0.004, 0.008, 0.02],
@@ -441,25 +498,25 @@ function playRoom(turn, events) {
     seats: scriptSeats(), events: events || [], you: scriptYou(), csrf: 'cs0',
   }, mapFields()));
 }
-const okJson = d => ({ ok: true, json: async () => d });
+const okJson = (d: unknown) => ({ ok: true, json: async () => d });
 let createdMap = '';
 let createdInitials = '';
-let createdDifficulty;
+let createdDifficulty: string | undefined;
 let failCreate = '';
 let failMode = '';
 let sawFire = false;
 const mapFields = () => ({
   map: createdMap || null,
   mapName: createdMap ? 'Canyon 3' : 'Random hills',
-  difficulty: ['easy', 'hard'].includes(createdDifficulty) ? createdDifficulty : 'normal',
+  difficulty: createdDifficulty === 'easy' || createdDifficulty === 'hard' ? createdDifficulty : 'normal',
   hostSeat: 0,
   startHumans: 1, matchId: null,
   winner: null,
   winBonus: 0,
 });
-global.fetch = async (url, opts) => {
+Reflect.set(globalThis, 'fetch', async (url: unknown, opts?: { body?: string }) => {
   const u = String(url);
-  const body = opts && opts.body ? JSON.parse(opts.body) : {};
+  const body: Posted = opts && opts.body ? JSON.parse(opts.body) : {};
   if (PFX.on) {
     const served = fxServe(u, body);
     if (served) return served;
@@ -492,7 +549,7 @@ global.fetch = async (url, opts) => {
   }
   if (u.includes('action=seatmode')) {
     seatModeSent = body;
-    seatModes[body.seat] = body.mode;
+    seatModes[String(body.seat)] = String(body.mode);
     return okJson({ ok: true, room: lobbyRoom() });
   }
   if (u.includes('action=state')) stateCalls++;
@@ -532,22 +589,22 @@ global.fetch = async (url, opts) => {
     return okJson({ ok: true, code: 'TST1', seat: 1, token: 'tok1', csrf: 'cs0' });
   }
   return okJson({ ok: true, scores: [] });
-};
+});
 let NET_LOBBY = true;
 let NET_SHOP = false;
 let seatArmor = 100;
-const buysSent = [];
-let mockReady = false;
-const readySent = [];
+const buysSent: (string | undefined)[] = [];
+let mockReady: boolean | undefined = false;
+const readySent: (boolean | undefined)[] = [];
 let extraGuest = false;
 // Lobby seats as the server sends them: all four from the start, each human,
 // AI or open; the host's seatmode requests flip the stored mode.
-const seatModes = { 1: 'ai', 2: 'ai', 3: 'ai' };
-let seatModeSent = null;
+const seatModes: Record<string, string> = { 1: 'ai', 2: 'ai', 3: 'ai' };
+let seatModeSent: Posted | null = null;
 let leaveSent = 0;
 let stateCalls = 0;
 function lobbyRoom() {
-  const aiNames = { 1: 'REAPER', 2: 'WRAITH', 3: 'SPOTTER' };
+  const aiNames: Record<string, string> = { 1: 'REAPER', 2: 'WRAITH', 3: 'SPOTTER' };
   const seats = [0, 1, 2, 3].map(i => {
     if (i === 0) return { seat: 0, human: true, name: 'abc', mode: 'human', bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
     if (i === 1 && extraGuest) return { seat: 1, human: true, name: 'def', mode: 'human', bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
@@ -561,12 +618,11 @@ function lobbyRoom() {
 // Freeze regression: ten minutes in a background tab must not backlog the
 // music scheduler into scheduling thousands of catch-up notes at once.
 await (async () => {
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
   // ?code=zz99 was set before boot: the lobby opens with the code filled in
   openBootGate();
   await tick(10);
-  check('invite-prefill', els['join-code'].value === 'ZZ99' && els['lobby-veil'].hidden === false,
-    `${els['join-code'].value} | hidden=${els['lobby-veil'] && els['lobby-veil'].hidden}`);
+  await test('invite-prefill', () => { assert.ok(els['join-code'].value === 'ZZ99' && els['lobby-veil'].hidden === false, `${els['join-code'].value} | hidden=${els['lobby-veil'] && els['lobby-veil'].hidden}`); });
   els['lobby-veil'].hidden = true;
   // The log trims old lines at its cap, so match only the last few lines and
   // check after every press instead of anchoring on an absolute index.
@@ -601,44 +657,42 @@ await (async () => {
   };
   // Demo battle first: the crew fires on its own, controls stay locked.
   frames(600);
-  check('demo-fires', /fires Shell/.test(logText()));
+  await test('demo-fires', () => { assert.ok(/fires Shell/.test(logText())); });
   TAP('global', 'fire'); frames(3);
-  check('demo-locked', /Demo mode/.test(logText()));
+  await test('demo-locked', () => { assert.ok(/Demo mode/.test(logText())); });
   const feudMark = els['log'].children.length;
   frames(7000);
   const feudNew = els['log'].children.slice(feudMark).map(li => li.textContent).join('\n');
-  check('ai-feuds', /(reaper|wraith|spotter) hits (reaper|wraith|spotter)/.test(feudNew));
+  await test('ai-feuds', () => { assert.ok(/(reaper|wraith|spotter) hits (reaper|wraith|spotter)/.test(feudNew)); });
   // T deals random hills and O opens the lobby, both from the keyboard.
   TAP('global', 'rooms'); await tick(10);
-  check('rooms-hotkey', els['lobby-veil'].hidden === false);
+  await test('rooms-hotkey', () => { assert.ok(els['lobby-veil'].hidden === false); });
   TAP('global', 'back');
-  check('lobby-esc', els['lobby-veil'].hidden === true);
+  await test('lobby-esc', () => { assert.ok(els['lobby-veil'].hidden === true); });
   TAP('global', 'random'); frames(120);
-  check('random-hotkey', els['shop-veil'].hidden === false);
-  check('a-match-closes-the-card', titleVeil().hidden === true);
+  await test('random-hotkey', () => { assert.ok(els['shop-veil'].hidden === false); });
+  await test('a-match-closes-the-card', () => { assert.ok(titleVeil().hidden === true); });
   els['seed-input'].value = 'scorch-01';
   // New Game rolls the fanfare and the Round 1 card, then the pre-match shop.
   // It also takes the whole frame: an open menu shuts instead of sitting
   // over the briefing and the shop that follows it.
   TAP('global', 'back');
-  check('menu-open-before-newgame', els['menu-overlay'].hidden === false);
+  await test('menu-open-before-newgame', () => { assert.ok(els['menu-overlay'].hidden === false); });
   click(els['new-game']);
-  check('new-game-closes-menu', els['menu-overlay'].hidden === true);
-  check('newgame-banner', els['round-banner'].hidden === false && /Round 1/.test(els['round-banner-text'].textContent),
-    els['round-banner-text'].textContent);
+  await test('new-game-closes-menu', () => { assert.ok(els['menu-overlay'].hidden === true); });
+  await test('newgame-banner', () => { assert.ok(els['round-banner'].hidden === false && /Round 1/.test(els['round-banner-text'].textContent), els['round-banner-text'].textContent); });
   // No wall-clock wait: the card runs on sim time, so frames alone finish it.
   // (This is the refocus-freeze regression in miniature.)
   frames(120);
-  check('banner-done', els['round-banner'].hidden === true);
+  await test('banner-done', () => { assert.ok(els['round-banner'].hidden === true); });
   const shopOpen = els['shop-veil'].hidden === false;
   // The pre-match shop has no tank: the aim, power, wind and fuel read '-', not the demo's last values.
-  check('shop-prematch-hud-dashes', ['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel'].every(id => els[id].textContent === '-'),
-    ['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel'].map(id => els[id].textContent).join('|'));
+  await test('shop-prematch-hud-dashes', () => { assert.ok(['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel'].every(id => els[id].textContent === '-'), ['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel'].map(id => els[id].textContent).join('|')); });
   const shopCash0 = els['shop-cash'].textContent;
   // Esc in the shop shuts panels first and, with none open, opens the menu: it never starts the round (N does).
   TAP('global', 'back');
   TAP('shop', 'close'); frames(3);
-  check('shop-esc-closes-menu', els['menu-overlay'].hidden === true && els['shop-veil'].hidden === false);
+  await test('shop-esc-closes-menu', () => { assert.ok(els['menu-overlay'].hidden === true && els['shop-veil'].hidden === false); });
   // Stock up: Buckshot ($80), Mortar ($200), Rail ($140) of the $600 stake.
   // (Each render appends, so read the last nine list items: two category
   // headers, the free Shell row, and six rows to buy. Each row holds an icon
@@ -657,66 +711,60 @@ await (async () => {
   const catNames = shopLis().filter(li => li.className === 'shop-cat').map(li => li.textContent);
   const nukeRow = shopRows().find(li => rowName(li).includes('NUKE'));
   const nukeStats = nukeRow.children[1].children[1].textContent + ' ' + nukeRow.children[1].children[2].textContent;
-  check('shop-cats', catNames.join('|') === 'Shells|Hull and fuel', catNames.join('|'));
+  await test('shop-cats', () => { assert.ok(catNames.join('|') === 'Shells|Hull and fuel', catNames.join('|')); });
   const freeRow = shopLis().find(li => li.className === 'shop-free');
-  check('shop-shell-row', !!freeRow && /^Shell ∞/.test(rowName(freeRow)), freeRow ? rowName(freeRow) : 'missing');
-  check('shop-icons', shopRows().length >= 6 && shopRows().every(li => li.children[0].className === 'shop-icon' && li.children[0].getAttribute('aria-hidden') === 'true'),
-    shopRows().map(li => li.children[0].className).join());
-  check('nuke-stats', /95 damage/.test(nukeStats) && /round 4/.test(nukeStats), nukeStats);
+  await test('shop-shell-row', () => { assert.ok(!!freeRow && /^Shell ∞/.test(rowName(freeRow)), freeRow ? rowName(freeRow) : 'missing'); });
+  await test('shop-icons', () => { assert.ok(shopRows().length >= 6 && shopRows().every(li => li.children[0].className === 'shop-icon' && li.children[0].getAttribute('aria-hidden') === 'true'), shopRows().map(li => li.children[0].className).join()); });
+  await test('nuke-stats', () => { assert.ok(/95 damage/.test(nukeStats) && /round 4/.test(nukeStats), nukeStats); });
   // The arsenal section of game.json is a second source the game reads at
   // boot: it must hold every row and speak only effects and painters the code has.
   const arsenal = GAME.arsenal;
-  check('arsenal-count', arsenal.ammo.length === 41 && arsenal.gear.length === 9,
-    `ammo=${arsenal.ammo.length} gear=${arsenal.gear.length}`);
+  await test('arsenal-count', () => { assert.ok(arsenal.ammo.length === 41 && arsenal.gear.length === 9, `ammo=${arsenal.ammo.length} gear=${arsenal.gear.length}`); });
   const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter', 'beam', 'plasma', 'tracer', 'dirt', 'pour', 'dig', 'riot', 'slump', 'napalm'];
   const PAINT = ['disc', 'beam', 'spark', 'ball', 'dash', 'drill', 'clod', 'flame'];
   const TRICKS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand', 'parachute'];
-  check('arsenal-fx', arsenal.ammo.every(a => FX.includes(a.effect) && a.gfx && PAINT.includes(a.gfx.painter)
+  await test('arsenal-fx', () => { assert.ok(arsenal.ammo.every(a => FX.includes(a.effect) && a.gfx && PAINT.includes(a.gfx.painter)
     && typeof a.dmg === 'number' && typeof a.radius === 'number' && typeof a.price === 'number'
-    && typeof a.pack === 'number' && typeof a.minRound === 'number' && Array.isArray(a.gfx.blast)));
-  check('arsenal-gear', arsenal.gear.every(g => TRICKS.includes(g.effect) && typeof g.price === 'number' && typeof g.n === 'number'));
+    && typeof a.pack === 'number' && typeof a.minRound === 'number' && Array.isArray(a.gfx.blast))); });
+  await test('arsenal-gear', () => { assert.ok(arsenal.gear.every(g => TRICKS.includes(g.effect) && typeof g.price === 'number' && typeof g.n === 'number')); });
   const cats = [];
   for (const r of arsenal.ammo.filter(a => a.pack > 0).concat(arsenal.gear)) {
     if (!cats.includes(r.cat)) cats.push(r.cat);
   }
-  check('arsenal-cats', cats.join('|') === 'Shells|Rollers|Beams|Tracers|Earth|Fire|Hull and fuel|Tricks', cats.join('|'));
+  await test('arsenal-cats', () => { assert.ok(cats.join('|') === 'Shells|Rollers|Beams|Tracers|Earth|Fire|Hull and fuel|Tricks', cats.join('|')); });
   for (const k of ['shell', 'buck', 'mortar', 'rail', 'nuke', 'repair', 'fuel']) {
-    check('arsenal-keeps-' + k, arsenal.ammo.some(a => a.key === k) || arsenal.gear.some(g => g.key === k));
+    await test('arsenal-keeps-' + k, () => { assert.ok(arsenal.ammo.some(a => a.key === k) || arsenal.gear.some(g => g.key === k)); });
   }
   // A full hull has nothing to repair: the Repair row greys out and says so.
   {
     const repairRow = shopRows().find(li => rowName(li).includes('Repair'));
     const acts = actsOf(repairRow);
-    check('shop-repair-greyed-at-full', acts.children[acts.children.length - 1].disabled === true && /Armor full \(100 of 100\)/.test(repairRow.textContent),
-      repairRow.textContent);
+    await test('shop-repair-greyed-at-full', () => { assert.ok(acts.children[acts.children.length - 1].disabled === true && /Armor full \(100 of 100\)/.test(repairRow.textContent), repairRow.textContent); });
   }
   // The keys reach every row: Up from the first priced row (Buckshot) lands
   // on the free Shell, where V previews it and B only says it is free.
   const freeLi = () => shopLis().find(li => String(li.className).split(' ').includes('shop-free'));
-  check('shop-opens-on-first-row', shopRows()[0].className === 'sel', shopRows().map(li => li.className).join(','));
+  await test('shop-opens-on-first-row', () => { assert.ok(shopRows()[0].className === 'sel', shopRows().map(li => li.className).join(',')); });
   TAP('shop', 'selUp'); frames(3);
-  check('shop-up-reaches-shell', freeLi().className === 'shop-free sel' && shopRows().every(li => li.className === ''),
-    freeLi().className);
+  await test('shop-up-reaches-shell', () => { assert.ok(freeLi().className === 'shop-free sel' && shopRows().every(li => li.className === ''), freeLi().className); });
   TAP('shop', 'selUp'); frames(3);
-  check('shop-up-stops-at-shell', freeLi().className === 'shop-free sel');
+  await test('shop-up-stops-at-shell', () => { assert.ok(freeLi().className === 'shop-free sel'); });
   const cashAtShell = els['shop-cash'].textContent;
   TAP('shop', 'buy'); frames(3);
-  check('shop-shell-buy-says-free', /free and always loaded/.test(logTail()) && els['shop-cash'].textContent === cashAtShell, logTail());
+  await test('shop-shell-buy-says-free', () => { assert.ok(/free and always loaded/.test(logTail()) && els['shop-cash'].textContent === cashAtShell, logTail()); });
   TAP('shop', 'preview'); frames(3);
-  check('shop-shell-preview', els['preview-veil'].hidden === false);
+  await test('shop-shell-preview', () => { assert.ok(els['preview-veil'].hidden === false); });
   TAP('shop', 'close'); frames(3);
   TAP('shop', 'selDown'); frames(3);
-  check('shop-down-back-to-first-row', shopRows()[0].className === 'sel' && freeLi().className === 'shop-free');
+  await test('shop-down-back-to-first-row', () => { assert.ok(shopRows()[0].className === 'sel' && freeLi().className === 'shop-free'); });
   // Keyboard alone can shop: arrows highlight, Enter buys, digits buy outright.
   TAP('shop', 'selDown'); frames(3);
-  check('shop-keys', shopRows()[1].className === 'sel', shopRows().map(li => li.className).join(','));
-  check('shop-scroll-follows', (() => { const li = shopRows()[1], list = els['shop-list']; return li.offsetTop >= list.scrollTop && li.offsetTop + li.offsetHeight <= list.scrollTop + list.clientHeight; })());
-  check('keys-file-drives', KEYS.shop.buy[0] === 'b' && KEYS.global.fire[0] === 'Space' && KEYS.aim.barrelLeft[0] === 'ArrowLeft' && KB('shop', 'buy')[0] === 'b',
-    `${KEYS.shop.buy[0]}|${KEYS.global.fire[0]}|${KEYS.aim.barrelLeft[0]}`);
+  await test('shop-keys', () => { assert.ok(shopRows()[1].className === 'sel', shopRows().map(li => li.className).join(',')); });
+  await test('shop-scroll-follows', () => { assert.ok((() => { const li = shopRows()[1], list = els['shop-list']; return li.offsetTop >= list.scrollTop && li.offsetTop + li.offsetHeight <= list.scrollTop + list.clientHeight; })()); });
+  await test('keys-file-drives', () => { assert.ok(KEYS.shop.buy[0] === 'b' && KEYS.global.fire[0] === 'Space' && KEYS.aim.barrelLeft[0] === 'ArrowLeft' && KB('shop', 'buy')[0] === 'b', `${KEYS.shop.buy[0]}|${KEYS.global.fire[0]}|${KEYS.aim.barrelLeft[0]}`); });
   {
     const ammoActs = actsOf(shopRows().find(li => rowName(li).includes('Buckshot'))).children;
-    check('shop-btn-hints', ammoActs[0].children[1].textContent === 'V' && ammoActs[1].children[1].textContent === 'B',
-      `${ammoActs[0].children[1].textContent}|${ammoActs[1].children[1].textContent}`);
+    await test('shop-btn-hints', () => { assert.ok(ammoActs[0].children[1].textContent === 'V' && ammoActs[1].children[1].textContent === 'B', `${ammoActs[0].children[1].textContent}|${ammoActs[1].children[1].textContent}`); });
   }
   TAP('shop', 'buy'); frames(3);
   TAPD('shop', 'buyRow', 3); frames(3);
@@ -727,27 +775,25 @@ await (async () => {
   for (let i = 0; i < 4; i++) { TAP('shop', 'selDown'); frames(3); }
   const fuelRow = () => shopRows().find(li => rowName(li).includes('Fuel'));
   TAP('shop', 'qtyUp'); frames(3);
-  check('shop-qty-2', /×2 = \$120/.test(rowName(fuelRow())), rowName(fuelRow()));
+  await test('shop-qty-2', () => { assert.ok(/×2 = \$120/.test(rowName(fuelRow())), rowName(fuelRow())); });
   TAP('shop', 'qtyUp'); frames(3);
   TAP('shop', 'qtyUp'); frames(3); // $180 left after the three guns: three packs is all the chest covers
-  check('shop-qty-cap', /×3 = \$180/.test(rowName(fuelRow())), rowName(fuelRow()));
+  await test('shop-qty-cap', () => { assert.ok(/×3 = \$180/.test(rowName(fuelRow())), rowName(fuelRow())); });
   TAP('shop', 'buy'); frames(3);
-  check('shop-bulk', /\$0\b/.test(els['shop-cash'].textContent), els['shop-cash'].textContent);
-  check('shop-bulk-said', /Bought 3 × Fuel/.test(logTail()), logTail());
-  check('shop-bulk-reset', !/×[2-9] packs/.test(rowName(fuelRow())), rowName(fuelRow()));
+  await test('shop-bulk', () => { assert.ok(/\$0\b/.test(els['shop-cash'].textContent), els['shop-cash'].textContent); });
+  await test('shop-bulk-said', () => { assert.ok(/Bought 3 × Fuel/.test(logTail()), logTail()); });
+  await test('shop-bulk-reset', () => { assert.ok(!/×[2-9] packs/.test(rowName(fuelRow())), rowName(fuelRow())); });
   const buckRow = () => shopRows().find(li => rowName(li).includes('Buckshot'));
-  check('shop-bulk-disabled', buyBtn(fuelRow()).disabled === true && buyBtn(buckRow()).disabled === true,
-    `fuel=${buyBtn(fuelRow()).disabled} buck=${buyBtn(buckRow()).disabled}`);
+  await test('shop-bulk-disabled', () => { assert.ok(buyBtn(fuelRow()).disabled === true && buyBtn(buckRow()).disabled === true, `fuel=${buyBtn(fuelRow()).disabled} buck=${buyBtn(buckRow()).disabled}`); });
   for (let i = 0; i < 4; i++) { TAP('shop', 'selUp'); frames(3); }
   TAP('shop', 'preview'); frames(3);
-  check('shop-preview-p', els['preview-veil'].hidden === false);
+  await test('shop-preview-p', () => { assert.ok(els['preview-veil'].hidden === false); });
   TAP('shop', 'close'); frames(3);
-  check('shop-preview-esc', els['preview-veil'].hidden === true && els['shop-veil'].hidden === false,
-    `preview=${els['preview-veil'].hidden} shop=${els['shop-veil'].hidden}`);
+  await test('shop-preview-esc', () => { assert.ok(els['preview-veil'].hidden === true && els['shop-veil'].hidden === false, `preview=${els['preview-veil'].hidden} shop=${els['shop-veil'].hidden}`); });
   click(els['preview-close']); frames(3);
-  check('shop-preview-shut', els['preview-veil'].hidden === true);
+  await test('shop-preview-shut', () => { assert.ok(els['preview-veil'].hidden === true); });
   TAPD('shop', 'buyRow', 4); frames(3);
-  check('shop-locked', /round 4/.test(logTail()), logTail());
+  await test('shop-locked', () => { assert.ok(/round 4/.test(logTail()), logTail()); });
   click(els['shop-next']);
   frames(120); // round card runs on sim time before the shooting
   // round 1, player's opening turn
@@ -755,7 +801,7 @@ await (async () => {
   const angle0 = els['hud-angle'].textContent;
   const wind0 = els['hud-wind'].textContent;
   const armor0 = els['hud-armor'].textContent;
-  check('shop-bulk-banked', els['hud-fuel'].textContent === '260', els['hud-fuel'].textContent);
+  await test('shop-bulk-banked', () => { assert.ok(els['hud-fuel'].textContent === '260', els['hud-fuel'].textContent); });
 
   // Every demo lands its verdict with damage, never a clean miss.
   await ensureAim();
@@ -765,14 +811,14 @@ await (async () => {
   KD('aim', 'driveRight'); frames(30); KU('aim', 'driveRight'); frames(2);
   KD('aim', 'driveLeft'); frames(30); KU('aim', 'driveLeft'); frames(2);
   const fuelAfterDrive = Number(els['hud-fuel'].textContent);
-  check('keyboard-drives', fuelAfterDrive < fuelBeforeDrive, `fuel ${fuelBeforeDrive} -> ${fuelAfterDrive}`);
+  await test('keyboard-drives', () => { assert.ok(fuelAfterDrive < fuelBeforeDrive, `fuel ${fuelBeforeDrive} -> ${fuelAfterDrive}`); });
   loadGun('Rail');
   TAP('global', 'battlePreview'); frames(5);
   frames(300);
   TAP('global', 'battlePreview'); frames(5);
   const railVerdict = els['preview-result'].textContent;
   const railSel = els['hud-weapon'].textContent;
-  check('rail-selected', /^Rail /.test(railSel), railSel);
+  await test('rail-selected', () => { assert.ok(/^Rail /.test(railSel), railSel); });
   await ensureAim();
   loadGun('Mortar');
   TAP('global', 'battlePreview'); frames(5);
@@ -781,9 +827,9 @@ await (async () => {
   const mortarVerdict = els['preview-result'].textContent;
   const mortarSel = els['hud-weapon'].textContent;
   loadGun('Buckshot');
-  check('rail-hits', /damage|hits/.test(railVerdict) && !/Clean miss/.test(railVerdict), railVerdict + ' | ' + railSel);
-  check('mortar-selected', /^Mortar /.test(mortarSel), mortarSel);
-  check('mortar-hits', /damage|hits/.test(mortarVerdict) && !/Clean miss/.test(mortarVerdict), mortarVerdict + ' | ' + mortarSel);
+  await test('rail-hits', () => { assert.ok(/damage|hits/.test(railVerdict) && !/Clean miss/.test(railVerdict), railVerdict + ' | ' + railSel); });
+  await test('mortar-selected', () => { assert.ok(/^Mortar /.test(mortarSel), mortarSel); });
+  await test('mortar-hits', () => { assert.ok(/damage|hits/.test(mortarVerdict) && !/Clean miss/.test(mortarVerdict), mortarVerdict + ' | ' + mortarSel); });
 
   // aim: Left/Right swing the barrel, Up/Down work power; hold then release
   KD('aim', 'barrelLeft');
@@ -820,19 +866,19 @@ await (async () => {
     const tiles = () => els['gun-grid'].children;
     const nuke = () => tiles().find(t => /NUKE/.test(t.textContent));
     const all = tiles().length;
-    check('guns-show-all', !!nuke() && nuke().getAttribute('aria-disabled') === 'true'
-      && tiles()[0].getAttribute('aria-disabled') === undefined, `${all} tiles`);
+    await test('guns-show-all', () => { assert.ok(!!nuke() && nuke().getAttribute('aria-disabled') === 'true'
+      && tiles()[0].getAttribute('aria-disabled') === undefined, `${all} tiles`); });
     const n = tiles().indexOf(nuke()) + 1;
     if (n <= 9) { keyDown(String(n), 'Digit' + n); keyUp(String(n), 'Digit' + n); frames(2); }
     else click(nuke());
-    check('guns-empty-pick-says-none', els['gun-overlay'].hidden === false && /None in stock: NUKE/.test(logText()), logTail());
+    await test('guns-empty-pick-says-none', () => { assert.ok(els['gun-overlay'].hidden === false && /None in stock: NUKE/.test(logText()), logTail()); });
     TAP('global', 'gunStock'); frames(2);
-    check('guns-in-stock-only', tiles().length < all && !nuke() && tiles().every(t => t.getAttribute('aria-disabled') === undefined)
-      && /In stock/.test(els['gun-stock'].textContent), `${tiles().length}`);
+    await test('guns-in-stock-only', () => { assert.ok(tiles().length < all && !nuke() && tiles().every(t => t.getAttribute('aria-disabled') === undefined)
+      && /In stock/.test(els['gun-stock'].textContent), `${tiles().length}`); });
     TAP('global', 'gunStock'); frames(2);
-    check('guns-show-all-again', tiles().length === all && /All/.test(els['gun-stock'].textContent));
+    await test('guns-show-all-again', () => { assert.ok(tiles().length === all && /All/.test(els['gun-stock'].textContent)); });
     TAP('global', 'guns'); frames(2);
-    check('guns-closed', els['gun-overlay'].hidden === true);
+    await test('guns-closed', () => { assert.ok(els['gun-overlay'].hidden === true); });
   }
   // Watch the canvas: blast discs must match their weapon radii exactly,
   // and the camera zoom must stay inside its sane range.
@@ -917,10 +963,9 @@ await (async () => {
     const len = seen.map(a => Math.hypot(a.x1 - a.x0, a.y1 - a.y0));
     let maxStep = 0;
     for (let i = 1; i < ang.length; i++) maxStep = Math.max(maxStep, Math.abs(ang[i] - ang[i - 1]));
-    check('drone-aim-arm-shows', seen.length >= 20, `frames=${seen.length}`);
-    check('drone-aim-arm-glides', seen.length >= 20 && maxStep < 6, `max step=${maxStep.toFixed(2)}°`);
-    check('drone-aim-arm-power-length', seen.length > 0 && len.every(l => l >= 13.9 && l <= 50.1),
-      len.length ? `len ${Math.min(...len).toFixed(1)}..${Math.max(...len).toFixed(1)}` : 'none');
+    await test('drone-aim-arm-shows', () => { assert.ok(seen.length >= 20, `frames=${seen.length}`); });
+    await test('drone-aim-arm-glides', () => { assert.ok(seen.length >= 20 && maxStep < 6, `max step=${maxStep.toFixed(2)}°`); });
+    await test('drone-aim-arm-power-length', () => { assert.ok(seen.length > 0 && len.every(l => l >= 13.9 && l <= 50.1), len.length ? `len ${Math.min(...len).toFixed(1)}..${Math.max(...len).toFixed(1)}` : 'none'); });
   }
   // Fresh match, then a single Shell for the battery-exchange checks.
   TAP('global', 'new'); frames(120);
@@ -935,11 +980,10 @@ await (async () => {
   // dialogue must have spoken at least once by now
   const dlg = els['dlg-line'].textContent;
 
-  check('preshop', shopOpen && /\$600/.test(shopCash0), shopCash0);
-  check('shop-buy', /\$180/.test(shopCash1), shopCash1);
-  check('boot-turn', /YOU/.test(turn0), turn0);
-  check('boot-hud', /62°/.test(angle0) && wind0.length > 0 && armor0 === '100',
-    `${angle0} | ${wind0} | ${armor0}`);
+  await test('preshop', () => { assert.ok(shopOpen && /\$600/.test(shopCash0), shopCash0); });
+  await test('shop-buy', () => { assert.ok(/\$180/.test(shopCash1), shopCash1); });
+  await test('boot-turn', () => { assert.ok(/YOU/.test(turn0), turn0); });
+  await test('boot-hud', () => { assert.ok(/62°/.test(angle0) && wind0.length > 0 && armor0 === '100', `${angle0} | ${wind0} | ${armor0}`); });
   // Firing range: V opens the demo with its damage stats, frames render it,
   // V closes it again. Roll into a live aiming phase with a Shell loaded so
   // the demo plays the same shell the rack shows, whatever phase came before.
@@ -956,40 +1000,37 @@ await (async () => {
   }
   frames(240); // ~4s: aim, fly, boom, verdict on the mini hill
   TAP('global', 'battlePreview'); frames(5);
-  check('preview-open', pvOpen && /^Shell \| 34 damage, blast 26\. Direct hits count double\.$/.test(pvTitle),
-    `${pvTitle} | turn=${els['hud-turn'].textContent} | ${els['hud-weapon'].textContent}`);
-  check('preview-runs', pvDraws > 100, `frames=${pvDraws}`);
-  check('preview-close', els['preview-veil'].hidden === true);
+  await test('preview-open', () => { assert.ok(pvOpen && /^Shell \| 34 damage, blast 26\. Direct hits count double\.$/.test(pvTitle), `${pvTitle} | turn=${els['hud-turn'].textContent} | ${els['hud-weapon'].textContent}`); });
+  await test('preview-runs', () => { assert.ok(pvDraws > 100, `frames=${pvDraws}`); });
+  await test('preview-close', () => { assert.ok(els['preview-veil'].hidden === true); });
   // Q shuts the firing range too, and stays in full screen; Esc leaves it open.
   TAP('global', 'battlePreview'); frames(5);
-  check('preview-reopen', els['preview-veil'].hidden === false);
+  await test('preview-reopen', () => { assert.ok(els['preview-veil'].hidden === false); });
   ESC(); frames(3);
-  check('preview-ignores-esc', els['preview-veil'].hidden === false && fsExits.length === 0, `exits=${fsExits.length}`);
+  await test('preview-ignores-esc', () => { assert.ok(els['preview-veil'].hidden === false && fsExits.length === 0, `exits=${fsExits.length}`); });
   TAP('global', 'back'); frames(3);
-  check('preview-q', els['preview-veil'].hidden === true && fsExits.length === 0, `exits=${fsExits.length}`);
+  await test('preview-q', () => { assert.ok(els['preview-veil'].hidden === true && fsExits.length === 0, `exits=${fsExits.length}`); });
   // The Shell demo (26 radius) must paint its disc at exactly warhead size.
   const pvBoomMax = pvBoomR.length ? Math.max(...pvBoomR) : -1;
   const pvBoomOk = pvBoomR.length >= 3 && Math.abs(pvBoomMax - 26) < 1.5;
-  check('preview-boom', pvBoomOk, `n=${pvBoomR.length} max=${pvBoomMax.toFixed(1)}`);
-  check('aim-hold', angle1 !== angle0, `${angle0} -> ${angle1}`);
-  check('power-hold', power1 !== power0, `${power0} -> ${power1}`);
-  check('blur-no-pause', !/Paused\./.test(logText()) && angleB !== angleC, `${angleB} -> ${angleC}`);
-  check('picker-loads-a-tile', /Loaded: Buckshot/.test(qLog));
-  check('nuke-gated', !cycleNames.includes('NUKE') && cycleNames.includes('Buckshot') && cycleNames.includes('Shell'),
-    cycleNames.join(','));
-  check('buckshot-volley', /You fire Buckshot/.test(spreadLog), `${volleyTurn} | ${volleyGun}`);
+  await test('preview-boom', () => { assert.ok(pvBoomOk, `n=${pvBoomR.length} max=${pvBoomMax.toFixed(1)}`); });
+  await test('aim-hold', () => { assert.ok(angle1 !== angle0, `${angle0} -> ${angle1}`); });
+  await test('power-hold', () => { assert.ok(power1 !== power0, `${power0} -> ${power1}`); });
+  await test('blur-no-pause', () => { assert.ok(!/Paused\./.test(logText()) && angleB !== angleC, `${angleB} -> ${angleC}`); });
+  await test('picker-loads-a-tile', () => { assert.ok(/Loaded: Buckshot/.test(qLog)); });
+  await test('nuke-gated', () => { assert.ok(!cycleNames.includes('NUKE') && cycleNames.includes('Buckshot') && cycleNames.includes('Shell'), cycleNames.join(',')); });
+  await test('buckshot-volley', () => { assert.ok(/You fire Buckshot/.test(spreadLog), `${volleyTurn} | ${volleyGun}`); });
   // Discs start tiny and grow to exactly their weapon radius, never beyond.
   // (The battery answers with its own mortars, so 44 is a legal max too.)
   const boomMax = boomR.length ? Math.max(...boomR) : -1;
   const boomOk = boomR.length >= 3 &&
     Math.min(...[17, 26, 44].map(r => Math.abs(boomMax - r))) < 1.5;
-  check('boom-exact', boomOk, `n=${boomR.length} max=${boomMax.toFixed(1)}`);
-  check('camera-sane', zoomZ.length > 0 && zoomZ.every(z => z >= 0.45 && z <= 1),
-    `n=${zoomZ.length}`);
-  check('player-fired', /You fire/.test(firedLog));
-  check('battery-answers', /(is aiming…|fires )/.test(midLog));
-  check('dialogue-shown', dlg.length > 0, dlg);
-  check('log-alive', els['log'].children.length > 5, `lines=${els['log'].children.length}`);
+  await test('boom-exact', () => { assert.ok(boomOk, `n=${boomR.length} max=${boomMax.toFixed(1)}`); });
+  await test('camera-sane', () => { assert.ok(zoomZ.length > 0 && zoomZ.every(z => z >= 0.45 && z <= 1), `n=${zoomZ.length}`); });
+  await test('player-fired', () => { assert.ok(/You fire/.test(firedLog)); });
+  await test('battery-answers', () => { assert.ok(/(is aiming…|fires )/.test(midLog)); });
+  await test('dialogue-shown', () => { assert.ok(dlg.length > 0, dlg); });
+  await test('log-alive', () => { assert.ok(els['log'].children.length > 5, `lines=${els['log'].children.length}`); });
   // Solo: the player lobs shells straight up onto their own tank. A round ends
   // only with one unit standing, so after the wreck the drones fight on (the
   // log keeps showing their shots) until one is left, the round goes to the
@@ -1038,16 +1079,16 @@ await (async () => {
       const left = scrap < 0 ? 0 : 3 - droneKills(log.slice(0, scrap));
       if (scrap >= 0 && left >= 2) verdict = { log, scrap, left, lobs };
     }
-    check('solo-self-lob-wrecks-the-tank-with-drones-standing', verdict !== null);
+    await test('solo-self-lob-wrecks-the-tank-with-drones-standing', () => { assert.ok(verdict !== null); });
     if (verdict) {
       const { log, scrap, left } = verdict;
       const after = log.slice(scrap + 1);
-      check('solo-drones-fight-on', after.some(l => / fires /.test(l)), after.join(' | '));
-      check('solo-drones-fight-to-one', droneKills(after) === left - 1, `left=${left} kills=${droneKills(after)}`);
-      check('solo-round-ends-after-the-last-wreck', /goes to the battery.*2 lives left/.test(after[after.length - 1] || ''), after.slice(-2).join(' | '));
+      await test('solo-drones-fight-on', () => { assert.ok(after.some(l => / fires /.test(l)), after.join(' | ')); });
+      await test('solo-drones-fight-to-one', () => { assert.ok(droneKills(after) === left - 1, `left=${left} kills=${droneKills(after)}`); });
+      await test('solo-round-ends-after-the-last-wreck', () => { assert.ok(/goes to the battery.*2 lives left/.test(after[after.length - 1] || ''), after.slice(-2).join(' | ')); });
       frames(600); // the name card runs on sim time, then the shop opens
-      check('solo-lost-round-opens-the-shop', els['shop-veil'].hidden === false);
-      check('solo-lost-round-costs-a-life', /^♥ 2$/.test(els['hud-lives'].textContent), els['hud-lives'].textContent);
+      await test('solo-lost-round-opens-the-shop', () => { assert.ok(els['shop-veil'].hidden === false); });
+      await test('solo-lost-round-costs-a-life', () => { assert.ok(/^♥ 2$/.test(els['hud-lives'].textContent), els['hud-lives'].textContent); });
     }
   }
   // The stub only knows elements the game asked for; ask for the lobby ones.
@@ -1060,123 +1101,103 @@ await (async () => {
   // The host's Menu Difficulty goes with the create and the lobby shows it.
   const difficultyTile = key => els['difficulty-picker'].children.find(t => t.getAttribute('data-difficulty') === key);
   click(difficultyTile('hard'));
-  check('difficulty-pick-saved', window.localStorage.getItem('tankity-difficulty') === 'hard'
-    && difficultyTile('hard').getAttribute('aria-pressed') === 'true', window.localStorage.getItem('tankity-difficulty'));
+  await test('difficulty-pick-saved', () => { assert.ok(window.localStorage.getItem('tankity-difficulty') === 'hard'
+    && difficultyTile('hard').getAttribute('aria-pressed') === 'true', window.localStorage.getItem('tankity-difficulty')); });
   click(els['rooms-open']); await tick(10);
   const tiles = () => els['lobby-map-picker'].children;
   const tileOn = () => tiles().filter(t => t.getAttribute('aria-pressed') === 'true').map(t => t.getAttribute('data-map'));
-  check('maps-catalog', tiles().length === 3 && tiles().map(t => t.getAttribute('title')).join('|') === 'Random hills|Canyon 3|Twin Hills',
-    tiles().map(t => t.getAttribute('title')).join('|'));
-  check('maps-tiles-are-buttons', tiles().every(t => t.getAttribute('type') === 'button' && t.children.length === 2
-    && t.children[0].getAttribute('aria-hidden') === 'true' && t.children[1].textContent === t.getAttribute('title')));
-  check('maps-random-selected', tileOn().join() === '', tileOn().join());
-  check('room-occupancy', els['lobby-count'].textContent === '3 / 10 rooms occupied',
-    els['lobby-count'].textContent);
-  check('room-dot-green', els['net-dot'].className.includes('on') && els['hud-server'].textContent === 'online',
-    `${els['net-dot'].className} | ${els['hud-server'].textContent}`);
+  await test('maps-catalog', () => { assert.ok(tiles().length === 3 && tiles().map(t => t.getAttribute('title')).join('|') === 'Random hills|Canyon 3|Twin Hills', tiles().map(t => t.getAttribute('title')).join('|')); });
+  await test('maps-tiles-are-buttons', () => { assert.ok(tiles().every(t => t.getAttribute('type') === 'button' && t.children.length === 2
+    && t.children[0].getAttribute('aria-hidden') === 'true' && t.children[1].textContent === t.getAttribute('title'))); });
+  await test('maps-random-selected', () => { assert.ok(tileOn().join() === '', tileOn().join()); });
+  await test('room-occupancy', () => { assert.ok(els['lobby-count'].textContent === '3 / 10 rooms occupied', els['lobby-count'].textContent); });
+  await test('room-dot-green', () => { assert.ok(els['net-dot'].className.includes('on') && els['hud-server'].textContent === 'online', `${els['net-dot'].className} | ${els['hud-server'].textContent}`); });
   // a full shelf says so in plain words, never a status code
   failCreate = 'every room is taken (10 / 10). Try again later.';
   submit(els['host-form']); await tick(10);
-  check('room-full', els['lobby-status'].textContent === failCreate,
-    els['lobby-status'].textContent);
+  await test('room-full', () => { assert.ok(els['lobby-status'].textContent === failCreate, els['lobby-status'].textContent); });
   failCreate = '';
   // transport trouble arrives in human words, never a status code
   for (const [mode, want] of [['down', 'Could not reach'], ['page', 'page instead of game data'], ['stumble', 'stumbled']]) {
     failMode = mode;
     submit(els['host-form']); await tick(10);
-    check('room-err-' + mode, els['lobby-status'].textContent.includes(want), els['lobby-status'].textContent);
+    await test('room-err-' + mode, () => { assert.ok(els['lobby-status'].textContent.includes(want), els['lobby-status'].textContent); });
     if (mode === 'down') {
-      check('room-dot-red', els['net-dot'].className.includes('off') && els['hud-server'].textContent === 'offline',
-        `${els['net-dot'].className} | ${els['hud-server'].textContent}`);
+      await test('room-dot-red', () => { assert.ok(els['net-dot'].className.includes('off') && els['hud-server'].textContent === 'offline', `${els['net-dot'].className} | ${els['hud-server'].textContent}`); });
     }
   }
   failMode = '';
   // The lobby has its own initials boxes, the saved set in them (the title card's too).
   const lobbyBox = n => els[`lobby-initial-${n}`];
   const typeBox = (n, v) => { lobbyBox(n).value = v; fire(lobbyBox(n), 'input'); };
-  check('lobby-no-per-form-initials', !rendered('host-initials') && !rendered('join-initials'));
-  check('lobby-initials-prefilled', [1, 2, 3].map(n => lobbyBox(n).value).join('') === window.localStorage.getItem('tankity-initials'),
-    [1, 2, 3].map(n => lobbyBox(n).value).join(''));
+  await test('lobby-no-per-form-initials', () => { assert.ok(!rendered('host-initials') && !rendered('join-initials')); });
+  await test('lobby-initials-prefilled', () => { assert.ok([1, 2, 3].map(n => lobbyBox(n).value).join('') === window.localStorage.getItem('tankity-initials'), [1, 2, 3].map(n => lobbyBox(n).value).join('')); });
   // Half-typed boxes stop Host with a line and put the player in the empty box; nothing is sent.
   createdInitials = ''; // set again only by a create that reaches the server
   typeBox(1, 'k');
   submit(els['host-form']); await tick(10);
-  check('lobby-half-typed-refused', /all three/.test(els['lobby-initials-note'].textContent) && createdInitials === ''
-    && globalThis.__focused === lobbyBox(2), els['lobby-initials-note'].textContent);
+  await test('lobby-half-typed-refused', () => { assert.ok(/all three/.test(els['lobby-initials-note'].textContent) && createdInitials === ''
+    && globalThis.__focused === lobbyBox(2), els['lobby-initials-note'].textContent); });
   // A blocked set says so at once and stops Host too; the saved set stays.
   const savedBefore = window.localStorage.getItem('tankity-initials');
   typeBox(1, 'a'); typeBox(2, 's'); typeBox(3, 's');
-  check('lobby-blocked-said-at-once', /not allowed/.test(els['lobby-initials-note'].textContent)
-    && window.localStorage.getItem('tankity-initials') === savedBefore, els['lobby-initials-note'].textContent);
+  await test('lobby-blocked-said-at-once', () => { assert.ok(/not allowed/.test(els['lobby-initials-note'].textContent)
+    && window.localStorage.getItem('tankity-initials') === savedBefore, els['lobby-initials-note'].textContent); });
   submit(els['host-form']); await tick(10);
-  check('lobby-blocked-refused', /not allowed/.test(els['lobby-initials-note'].textContent) && createdInitials === ''
-    && globalThis.__focused === lobbyBox(1));
+  await test('lobby-blocked-refused', () => { assert.ok(/not allowed/.test(els['lobby-initials-note'].textContent) && createdInitials === ''
+    && globalThis.__focused === lobbyBox(1)); });
   // An allowed set is saved as it is typed, for the title card too, and the line clears.
   typeBox(1, 'k'); typeBox(2, 'e'); typeBox(3, 'n');
-  check('lobby-initials-saved', window.localStorage.getItem('tankity-initials') === 'KEN' && els['lobby-initials-note'].textContent === '',
-    window.localStorage.getItem('tankity-initials'));
-  check('lobby-initials-on-the-title-card', [1, 2, 3].map(n => els[`title-initial-${n}`].value).join('') === 'KEN',
-    [1, 2, 3].map(n => els[`title-initial-${n}`].value).join(''));
+  await test('lobby-initials-saved', () => { assert.ok(window.localStorage.getItem('tankity-initials') === 'KEN' && els['lobby-initials-note'].textContent === '', window.localStorage.getItem('tankity-initials')); });
+  await test('lobby-initials-on-the-title-card', () => { assert.ok([1, 2, 3].map(n => els[`title-initial-${n}`].value).join('') === 'KEN', [1, 2, 3].map(n => els[`title-initial-${n}`].value).join('')); });
   // host a room on picked hills: code shows, roster opens, hills named
   click(tiles()[1]); // before hosting, a tile only sets the value
   submit(els['host-form']); await tick(10);
-  check('room-hosted', els['lobby-code'].textContent === 'TST1' && els['lobby-room'].hidden === false,
-    els['lobby-code'].textContent);
-  check('room-hosted-with-saved-initials', createdInitials === window.localStorage.getItem('tankity-initials'), createdInitials);
-  check('room-hides-forms', els['lobby-rows'].hidden === true && els['lobby-intro'].hidden === true,
-    `rows=${els['lobby-rows'].hidden} intro=${els['lobby-intro'].hidden}`);
+  await test('room-hosted', () => { assert.ok(els['lobby-code'].textContent === 'TST1' && els['lobby-room'].hidden === false, els['lobby-code'].textContent); });
+  await test('room-hosted-with-saved-initials', () => { assert.ok(createdInitials === window.localStorage.getItem('tankity-initials'), createdInitials); });
+  await test('room-hides-forms', () => { assert.ok(els['lobby-rows'].hidden === true && els['lobby-intro'].hidden === true, `rows=${els['lobby-rows'].hidden} intro=${els['lobby-intro'].hidden}`); });
   const seatTiles = () => els['lobby-seats'].children;
   const tileText = t => t.children.map(c => c.textContent).join(' ');
-  check('room-roster', seatTiles().length === 4 && seatTiles().every(t => t.getAttribute('type') === 'button' && t.className.includes('unit-choice')),
-    `tiles=${seatTiles().length}`);
+  await test('room-roster', () => { assert.ok(seatTiles().length === 4 && seatTiles().every(t => t.getAttribute('type') === 'button' && t.className.includes('unit-choice')), `tiles=${seatTiles().length}`); });
   // The grid shows initials for people, AI for drones; no lives or points.
-  check('seat-grid-labels', seatTiles().map(t => t.children[0].textContent).join('|') === 'ABC|AI|AI|AI'
-    && !seatTiles().some(t => /lives|pts|x3/.test(tileText(t))),
-    seatTiles().map(tileText).join('|'));
-  check('seat-grid-host-flips', seatTiles()[0].getAttribute('aria-disabled') === 'true'
-    && seatTiles().slice(1).every(t => t.getAttribute('aria-disabled') === undefined && ((t._l || {}).click || []).length > 0),
-    seatTiles().map(t => t.getAttribute('aria-disabled')).join());
+  await test('seat-grid-labels', () => { assert.ok(seatTiles().map(t => t.children[0].textContent).join('|') === 'ABC|AI|AI|AI'
+    && !seatTiles().some(t => /lives|pts|x3/.test(tileText(t))), seatTiles().map(tileText).join('|')); });
+  await test('seat-grid-host-flips', () => { assert.ok(seatTiles()[0].getAttribute('aria-disabled') === 'true'
+    && seatTiles().slice(1).every(t => t.getAttribute('aria-disabled') === undefined && ((t._l || {}).click || []).length > 0), seatTiles().map(t => t.getAttribute('aria-disabled')).join()); });
   // The host flips a drone seat to Open and back; the request carries both.
   click(seatTiles()[2]); await tick(10);
-  check('seat-open-sent', seatModeSent && seatModeSent.seat === 2 && seatModeSent.mode === 'open', JSON.stringify(seatModeSent));
-  check('seat-open-shown', seatTiles()[2].children[0].textContent === 'Open' && seatTiles()[2].className.includes('seat-open')
-    && seatTiles()[1].children[0].textContent === 'AI', seatTiles().map(t => t.children[0].textContent).join('|'));
+  await test('seat-open-sent', () => { assert.ok(seatModeSent && seatModeSent.seat === 2 && seatModeSent.mode === 'open', JSON.stringify(seatModeSent)); });
+  await test('seat-open-shown', () => { assert.ok(seatTiles()[2].children[0].textContent === 'Open' && seatTiles()[2].className.includes('seat-open')
+    && seatTiles()[1].children[0].textContent === 'AI', seatTiles().map(t => t.children[0].textContent).join('|')); });
   click(seatTiles()[2]); await tick(10);
-  check('seat-back-to-ai', seatModeSent.mode === 'ai' && seatTiles()[2].children[0].textContent === 'AI');
+  await test('seat-back-to-ai', () => { assert.ok(seatModeSent.mode === 'ai' && seatTiles()[2].children[0].textContent === 'AI'); });
   click(seatTiles()[3]); await tick(10); // leave one open for the guest's view below
-  check('seats-hint-host', /Tap a seat/.test(els['seats-hint'].textContent), els['seats-hint'].textContent);
-  check('room-hills', els['lobby-hills'].textContent === 'Hills: Canyon 3',
-    els['lobby-hills'].textContent);
-  check('room-difficulty-sent', createdDifficulty === 'hard', String(createdDifficulty));
-  check('room-difficulty-shown', els['lobby-drones'].textContent === "Drones: Hard (the host's Difficulty)" && !els['lobby-drones'].hidden,
-    els['lobby-drones'].textContent);
+  await test('seats-hint-host', () => { assert.ok(/Tap a seat/.test(els['seats-hint'].textContent), els['seats-hint'].textContent); });
+  await test('room-hills', () => { assert.ok(els['lobby-hills'].textContent === 'Hills: Canyon 3', els['lobby-hills'].textContent); });
+  await test('room-difficulty-sent', () => { assert.ok(createdDifficulty === 'hard', String(createdDifficulty)); });
+  await test('room-difficulty-shown', () => { assert.ok(els['lobby-drones'].textContent === "Drones: Hard (the host's Difficulty)" && !els['lobby-drones'].hidden, els['lobby-drones'].textContent); });
   click(difficultyTile('normal'));
-  check('map-tile-pressed', tileOn().join() === 'canyon 3', tileOn().join());
+  await test('map-tile-pressed', () => { assert.ok(tileOn().join() === 'canyon 3', tileOn().join()); });
   // the host can swap back to a random draw before starting
   click(tiles()[0]); await tick(10);
-  check('map-change', els['lobby-hills'].textContent === 'Hills: Random hills',
-    els['lobby-hills'].textContent);
+  await test('map-change', () => { assert.ok(els['lobby-hills'].textContent === 'Hills: Random hills', els['lobby-hills'].textContent); });
   // tapping a tile picks that map through the same request
   click(tiles()[2]); await tick(10);
-  check('map-tile-pick', els['lobby-map'].value === 'twin hills' && tileOn().join() === 'twin hills',
-    `${els['lobby-map'].value} | ${tileOn().join()}`);
-  check('map-tile-sent', createdMap === 'twin hills', createdMap);
+  await test('map-tile-pick', () => { assert.ok(els['lobby-map'].value === 'twin hills' && tileOn().join() === 'twin hills', `${els['lobby-map'].value} | ${tileOn().join()}`); });
+  await test('map-tile-sent', () => { assert.ok(createdMap === 'twin hills', createdMap); });
   click(tiles()[0]); await tick(10);
-  check('map-tile-random', els['lobby-map'].value === '' && createdMap === '' && els['lobby-hills'].textContent === 'Hills: Random hills',
-    `${els['lobby-map'].value} | ${els['lobby-hills'].textContent}`);
+  await test('map-tile-random', () => { assert.ok(els['lobby-map'].value === '' && createdMap === '' && els['lobby-hills'].textContent === 'Hills: Random hills', `${els['lobby-map'].value} | ${els['lobby-hills'].textContent}`); });
   // a guest joining shows both initials on the roster, never undefined
   extraGuest = true;
   void document.getElementById('join-code');
   els['join-code'].value = 'TST1';
   submit(els['join-form']); await tick(10);
   const guestNames = seatTiles().map(tileText).join('|');
-  check('guest-seat', /ABC/.test(guestNames) && /DEF/.test(guestNames) && !/undefined/.test(guestNames),
-    guestNames);
+  await test('guest-seat', () => { assert.ok(/ABC/.test(guestNames) && /DEF/.test(guestNames) && !/undefined/.test(guestNames), guestNames); });
   // A guest sees the host's choices but cannot change them.
-  check('guest-sees-open', seatTiles().map(t => t.getAttribute('data-mode')).join() === 'human,human,ai,open',
-    seatTiles().map(t => t.getAttribute('data-mode')).join());
-  check('guest-cannot-flip', seatTiles().every(t => t.getAttribute('aria-disabled') === 'true' && !((t._l || {}).click || []).length)
-    && /host decides/.test(els['seats-hint'].textContent), els['seats-hint'].textContent);
+  await test('guest-sees-open', () => { assert.ok(seatTiles().map(t => t.getAttribute('data-mode')).join() === 'human,human,ai,open', seatTiles().map(t => t.getAttribute('data-mode')).join()); });
+  await test('guest-cannot-flip', () => { assert.ok(seatTiles().every(t => t.getAttribute('aria-disabled') === 'true' && !((t._l || {}).click || []).length)
+    && /host decides/.test(els['seats-hint'].textContent), els['seats-hint'].textContent); });
   seatModes[3] = 'ai';
   // back to hosting so the match can start
   extraGuest = false;
@@ -1184,63 +1205,58 @@ await (async () => {
   // the invite link carries the room code, and copy hands it over
   void document.getElementById('join-link');
   void document.getElementById('copy-link');
-  check('invite-link', els['join-link'].value === 'http://localhost:8000/operation-tankity/index.html?code=TST1',
-    els['join-link'].value);
+  await test('invite-link', () => { assert.ok(els['join-link'].value === 'http://localhost:8000/operation-tankity/index.html?code=TST1', els['join-link'].value); });
   click(els['copy-link']); await tick(10);
-  check('invite-copy', global.__copied === els['join-link'].value, String(global.__copied));
+  await test('invite-copy', () => { assert.ok(copied === els['join-link'].value, String(copied)); });
   // single-use invite: the boot already consumed ?code=zz99 above
   global.location.search = '';
   // start: the hills render from the server snapshot, first turn is ours
   NET_LOBBY = false;
   click(els['lobby-start']); await tick(10);
-  check('net-turn', /YOU/.test(els['hud-turn'].textContent), els['hud-turn'].textContent);
-  check('net-hud', /Shell.*∞/.test(els['hud-weapon'].textContent) && /ROOM/.test(els['hud-score'].textContent),
-    els['hud-weapon'].textContent + ' | ' + els['hud-score'].textContent);
+  await test('net-turn', () => { assert.ok(/YOU/.test(els['hud-turn'].textContent), els['hud-turn'].textContent); });
+  await test('net-hud', () => { assert.ok(/Shell.*∞/.test(els['hud-weapon'].textContent) && /ROOM/.test(els['hud-score'].textContent), els['hud-weapon'].textContent + ' | ' + els['hud-score'].textContent); });
   // fire over the same public key as solo play; the server settles it
   sawFire = false;
   TAP('global', 'fire'); await tick(10);
-  check('net-fire', sawFire, 'intent sent');
+  await test('net-fire', () => { assert.ok(sawFire, 'intent sent'); });
   frames(180); // the turn passes once the replay of the shot has played out
-  check('net-turn-passes', /REAPER aiming/.test(els['hud-turn'].textContent), els['hud-turn'].textContent);
+  await test('net-turn-passes', () => { assert.ok(/REAPER aiming/.test(els['hud-turn'].textContent), els['hud-turn'].textContent); });
   // Between rounds the room shops; V opens the firing range, and it stays
   // open through the polls that keep the shop fresh.
   NET_SHOP = true;
   seatArmor = 60;
   await sleep(1800); await tick(10);
-  check('net-shop', els['shop-veil'].hidden === false, `shop hidden=${els['shop-veil'].hidden}`);
+  await test('net-shop', () => { assert.ok(els['shop-veil'].hidden === false, `shop hidden=${els['shop-veil'].hidden}`); });
   // A damaged seat's Repair reads the room's armor, so it is enabled and asks the server.
   {
     const repairRow = shopRows().find(li => rowName(li).includes('Repair'));
     const buy = actsOf(repairRow).children[actsOf(repairRow).children.length - 1];
-    check('net-shop-repair-enabled-when-damaged', buy.disabled === false && !/Armor full/.test(repairRow.textContent), repairRow.textContent);
+    await test('net-shop-repair-enabled-when-damaged', () => { assert.ok(buy.disabled === false && !/Armor full/.test(repairRow.textContent), repairRow.textContent); });
     // A repair is priced and labelled by the packs the hull needs, however many are dialled in.
     TAP('shop', 'qtyUp'); TAP('shop', 'qtyUp'); frames(3);
     const dialled = shopRows().find(li => rowName(li).includes('Repair'));
-    check('net-shop-repair-priced-by-need', !/×/.test(dialled.textContent), dialled.textContent);
-    check('net-shop-armor-pill', els['hud-armor'].textContent === '60', els['hud-armor'].textContent);
+    await test('net-shop-repair-priced-by-need', () => { assert.ok(!/×/.test(dialled.textContent), dialled.textContent); });
+    await test('net-shop-armor-pill', () => { assert.ok(els['hud-armor'].textContent === '60', els['hud-armor'].textContent); });
     click(buy); await tick(10);
-    check('net-shop-repair-goes-to-server', buysSent.includes('repair'), buysSent.join());
+    await test('net-shop-repair-goes-to-server', () => { assert.ok(buysSent.includes('repair'), buysSent.join()); });
   }
   // The shop button is the Ready toggle: it shows who is ready and the clock,
   // sends the wanted state in click order, and a fast double click ends unready.
-  check('net-ready-idle', /^Ready/.test(els['shop-next'].textContent) && !/✓/.test(els['shop-next'].textContent)
+  await test('net-ready-idle', () => { assert.ok(/^Ready/.test(els['shop-next'].textContent) && !/✓/.test(els['shop-next'].textContent)
     && els['shop-next'].getAttribute('aria-pressed') === 'false'
-    && /^0\/1 ready · shop closes in 1:\d\d/.test(els['shop-ready'].textContent), els['shop-next'].textContent + ' | ' + els['shop-ready'].textContent);
+    && /^0\/1 ready · shop closes in 1:\d\d/.test(els['shop-ready'].textContent), els['shop-next'].textContent + ' | ' + els['shop-ready'].textContent); });
   click(els['shop-next']); await tick(10);
-  check('net-ready-on', readySent.join() === 'true' && /^Ready ✓/.test(els['shop-next'].textContent)
-    && els['shop-next'].getAttribute('aria-pressed') === 'true' && /^1\/1 ready/.test(els['shop-ready'].textContent),
-    readySent.join() + ' | ' + els['shop-next'].textContent + ' | ' + els['shop-ready'].textContent);
+  await test('net-ready-on', () => { assert.ok(readySent.join() === 'true' && /^Ready ✓/.test(els['shop-next'].textContent)
+    && els['shop-next'].getAttribute('aria-pressed') === 'true' && /^1\/1 ready/.test(els['shop-ready'].textContent), readySent.join() + ' | ' + els['shop-next'].textContent + ' | ' + els['shop-ready'].textContent); });
   click(els['shop-next']); click(els['shop-next']); await tick(10);
-  check('net-ready-double-click-ordered', readySent.join() === 'true,false,true' && mockReady === true,
-    readySent.join());
+  await test('net-ready-double-click-ordered', () => { assert.ok(readySent.join() === 'true,false,true' && mockReady === true, readySent.join()); });
   click(els['shop-next']); await tick(10);
-  check('net-ready-off', readySent.join() === 'true,false,true,false' && !/✓/.test(els['shop-next'].textContent)
-    && els['shop-next'].getAttribute('aria-pressed') === 'false', readySent.join() + ' | ' + els['shop-next'].textContent);
+  await test('net-ready-off', () => { assert.ok(readySent.join() === 'true,false,true,false' && !/✓/.test(els['shop-next'].textContent)
+    && els['shop-next'].getAttribute('aria-pressed') === 'false', readySent.join() + ' | ' + els['shop-next'].textContent); });
   TAP('shop', 'preview'); await tick(5);
   const pvOpened = els['preview-veil'].hidden === false;
   await sleep(3400); await tick(10);
-  check('net-preview-stays', pvOpened && els['preview-veil'].hidden === false,
-    `opened=${pvOpened} open-after-polls=${els['preview-veil'].hidden === false}`);
+  await test('net-preview-stays', () => { assert.ok(pvOpened && els['preview-veil'].hidden === false, `opened=${pvOpened} open-after-polls=${els['preview-veil'].hidden === false}`); });
   TAP('global', 'back'); await tick(5);
   NET_SHOP = false;
   seatArmor = 100;
@@ -1252,35 +1268,35 @@ await (async () => {
     f({ key: 'a', code: 'KeyA', target: { tagName: 'INPUT' }, preventDefault: () => {}, repeat: false });
   }
   frames(5);
-  check('input-guard', els['log'].children.length === logLen, `lines=${els['log'].children.length}`);
+  await test('input-guard', () => { assert.ok(els['log'].children.length === logLen, `lines=${els['log'].children.length}`); });
   // A suspended context (fresh refresh, no gesture yet) schedules nothing;
   // the first ticks after resume play instead of sitting silent.
   click(els['btn-music']); click(els['btn-music']); // end unmuted with a fresh scheduler
-  globalThis.__acState = 'suspended';
+  acState = 'suspended';
   const notesCalm = FAKE_STATS.notes;
   AC_TIME.t += 5;
   await new Promise(r => setTimeout(r, 200));
-  check('music-idles-suspended', FAKE_STATS.notes === notesCalm, `scheduled=${FAKE_STATS.notes - notesCalm}`);
-  globalThis.__acState = 'running';
+  await test('music-idles-suspended', () => { assert.ok(FAKE_STATS.notes === notesCalm, `scheduled=${FAKE_STATS.notes - notesCalm}`); });
+  acState = 'running';
   AC_TIME.t += 0.3;
   await new Promise(r => setTimeout(r, 200));
-  check('music-resumes', FAKE_STATS.notes > notesCalm, `scheduled=${FAKE_STATS.notes - notesCalm}`);
+  await test('music-resumes', () => { assert.ok(FAKE_STATS.notes > notesCalm, `scheduled=${FAKE_STATS.notes - notesCalm}`); });
   // The watchdog must never churn the timer: with a stale tick and steady
   // frames, steps still fire the moment the context runs again.
   click(els['btn-music']); click(els['btn-music']); // end unmuted with a fresh scheduler
-  globalThis.__acState = 'suspended';
+  acState = 'suspended';
   const stale0 = Date.now();
   while (Date.now() - stale0 < 1700) { frames(5); AC_TIME.t += 0.08; await new Promise(r => setTimeout(r, 25)); }
-  globalThis.__acState = 'running';
+  acState = 'running';
   AC_TIME.t += 0.3;
   const rec0 = FAKE_STATS.notes;
   const recT = Date.now();
   while (Date.now() - recT < 600) { frames(5); AC_TIME.t += 0.08; await new Promise(r => setTimeout(r, 25)); }
-  check('music-after-watchdog', FAKE_STATS.notes > rec0, `scheduled=${FAKE_STATS.notes - rec0}`);
+  await test('music-after-watchdog', () => { assert.ok(FAKE_STATS.notes > rec0, `scheduled=${FAKE_STATS.notes - rec0}`); });
   const preJump = FAKE_STATS.notes;
   AC_TIME.t += 600;
   await new Promise(r => setTimeout(r, 400));
-  check('no-audio-backlog', FAKE_STATS.notes - preJump < 300, `scheduled=${FAKE_STATS.notes - preJump}`);
+  await test('no-audio-backlog', () => { assert.ok(FAKE_STATS.notes - preJump < 300, `scheduled=${FAKE_STATS.notes - preJump}`); });
   // Tutorial replay from a live battle: leave the room the net tests
   // started, shut the lobby, deal in, walk out of the shop, wait out any
   // banner, then U coaches and Skip hides and remembers.
@@ -1291,57 +1307,50 @@ await (async () => {
   void document.getElementById('leave-stay');
   // (shop-leave is in the shop component, src/ui/shop.tsx; the rest are in the page.)
   const shopSrc = fs.readFileSync(path.join(GAME_DIR, 'src', 'ui', 'shop.tsx'), 'utf8');
-  check('leave-markup', html.includes('id="leave-veil"') && ['leave-go', 'leave-stay', 'again'].every(rendered) && rendered('menu-leave')
-    && shopSrc.includes('id="shop-leave"'));
-  check('leave-buttons-in-room', els['menu-leave'].hidden === false && els['shop-leave'].hidden === false,
-    `${els['menu-leave'].hidden} ${els['shop-leave'].hidden}`);
+  await test('leave-markup', () => { assert.ok(html.includes('id="leave-veil"') && ['leave-go', 'leave-stay', 'again'].every(rendered) && rendered('menu-leave')
+    && shopSrc.includes('id="shop-leave"')); });
+  await test('leave-buttons-in-room', () => { assert.ok(els['menu-leave'].hidden === false && els['shop-leave'].hidden === false, `${els['menu-leave'].hidden} ${els['shop-leave'].hidden}`); });
   TAP('global', 'back'); frames(2);
   click(els['menu-leave']); frames(2);
-  check('leave-asks-first', els['leave-veil'].hidden === false && leaveSent === 0);
+  await test('leave-asks-first', () => { assert.ok(els['leave-veil'].hidden === false && leaveSent === 0); });
   TAP('global', 'back'); frames(2);
-  check('leave-esc-stays', els['leave-veil'].hidden === true && leaveSent === 0 && /YOU|aiming/.test(els['hud-turn'].textContent)
-    && els['menu-overlay'].hidden === false, els['hud-turn'].textContent);
+  await test('leave-esc-stays', () => { assert.ok(els['leave-veil'].hidden === true && leaveSent === 0 && /YOU|aiming/.test(els['hud-turn'].textContent)
+    && els['menu-overlay'].hidden === false, els['hud-turn'].textContent); });
   click(els['menu-leave']); frames(2);
   click(els['leave-stay']); frames(2);
-  check('leave-stay-stays', els['leave-veil'].hidden === true && leaveSent === 0);
+  await test('leave-stay-stays', () => { assert.ok(els['leave-veil'].hidden === true && leaveSent === 0); });
   // Hosting remembered the seat in this browser; Leave forgets it.
   const storedCodes = () => { try { return JSON.parse(window.localStorage.getItem('tankity-seats') || '{}').seats.map(s => s.code); } catch (_) { return []; } };
   const heldBefore = storedCodes();
   click(els['menu-leave']); frames(2);
   click(els['leave-go']); await tick(10); frames(5);
-  check('leave-sent', leaveSent === 1, 'leaves=' + leaveSent);
-  check('seat-remembered-then-forgotten', heldBefore.length > 0 && storedCodes().length === heldBefore.length - 1,
-    heldBefore.join() + ' -> ' + storedCodes().join());
-  check('leave-cleaned-up', els['leave-veil'].hidden === true && els['menu-overlay'].hidden === true
+  await test('leave-sent', () => { assert.ok(leaveSent === 1, 'leaves=' + leaveSent); });
+  await test('seat-remembered-then-forgotten', () => { assert.ok(heldBefore.length > 0 && storedCodes().length === heldBefore.length - 1, heldBefore.join() + ' -> ' + storedCodes().join()); });
+  await test('leave-cleaned-up', () => { assert.ok(els['leave-veil'].hidden === true && els['menu-overlay'].hidden === true
     && els['shop-veil'].hidden === true && els['lobby-veil'].hidden === true
-    && els['menu-leave'].hidden === true && els['shop-leave'].hidden === true,
-    `leave=${els['leave-veil'].hidden} menu=${els['menu-overlay'].hidden} shop=${els['shop-veil'].hidden}`);
-  check('leave-back-to-title', /Back from the room/.test(logText()) && titleVeil().hidden === false, logText().split('\n').slice(-1)[0]);
+    && els['menu-leave'].hidden === true && els['shop-leave'].hidden === true, `leave=${els['leave-veil'].hidden} menu=${els['menu-overlay'].hidden} shop=${els['shop-veil'].hidden}`); });
+  await test('leave-back-to-title', () => { assert.ok(/Back from the room/.test(logText()) && titleVeil().hidden === false, logText().split('\n').slice(-1)[0]); });
   const polls0 = stateCalls;
   await sleep(3600); frames(5); // a stopped poll never drags the old room back
-  check('leave-polling-stopped', stateCalls === polls0, `extra polls=${stateCalls - polls0}`);
+  await test('leave-polling-stopped', () => { assert.ok(stateCalls === polls0, `extra polls=${stateCalls - polls0}`); });
   // The client against the server's real replies (protocol/*.json): a room
   // from create to the shop, and the two errors a player can hit mid-match.
   PFX.on = true; PFX.room = 'lobby-host';
   const fxRoomOf = name => fx(name).body.room;
   TAP('global', 'rooms'); await tick(10);
   submit(els['host-form']); await tick(10);
-  check('fx-lobby-code', els['lobby-code'].textContent === fx('create-reply').body.code && els['lobby-room'].hidden === false,
-    els['lobby-code'].textContent);
-  check('fx-lobby-seats', els['lobby-seats'].children.map(t => t.children[0].textContent).join('|') === 'ABC|DEF|AI|Open',
-    els['lobby-seats'].children.map(t => t.children[0].textContent).join('|'));
+  await test('fx-lobby-code', () => { assert.ok(els['lobby-code'].textContent === fx('create-reply').body.code && els['lobby-room'].hidden === false, els['lobby-code'].textContent); });
+  await test('fx-lobby-seats', () => { assert.ok(els['lobby-seats'].children.map(t => t.children[0].textContent).join('|') === 'ABC|DEF|AI|Open', els['lobby-seats'].children.map(t => t.children[0].textContent).join('|')); });
   click(els['lobby-start']); await tick(10);
-  check('fx-play-turn', /YOU/.test(els['hud-turn'].textContent) && els['lobby-veil'].hidden === true && els['shop-veil'].hidden === true,
-    els['hud-turn'].textContent);
-  check('fx-play-hud', els['hud-armor'].textContent === String(fxRoomOf('play-my-turn').tanks[0].hp) && /ROOM/.test(els['hud-score'].textContent),
-    els['hud-armor'].textContent + ' | ' + els['hud-score'].textContent);
+  await test('fx-play-turn', () => { assert.ok(/YOU/.test(els['hud-turn'].textContent) && els['lobby-veil'].hidden === true && els['shop-veil'].hidden === true, els['hud-turn'].textContent); });
+  await test('fx-play-hud', () => { assert.ok(els['hud-armor'].textContent === String(fxRoomOf('play-my-turn').tanks[0].hp) && /ROOM/.test(els['hud-score'].textContent), els['hud-armor'].textContent + ' | ' + els['hud-score'].textContent); });
   // 429 (retried, then said kindly) and 409 (the server's own words).
   PFX.actError = 'error-too-fast';
   TAP('global', 'fire'); await sleep(900); await tick(5);
-  check('fx-429-kind', /Easy on the trigger/.test(logText()), logText().split('\n').slice(-1)[0]);
+  await test('fx-429-kind', () => { assert.ok(/Easy on the trigger/.test(logText()), logText().split('\n').slice(-1)[0]); });
   PFX.actError = 'error-not-your-turn';
   TAP('global', 'fire'); await tick(10);
-  check('fx-409-said', logText().includes(fx('error-not-your-turn').body.error), logText().split('\n').slice(-1)[0]);
+  await test('fx-409-said', () => { assert.ok(logText().includes(fx('error-not-your-turn').body.error), logText().split('\n').slice(-1)[0]); });
   PFX.actError = '';
   // A real turn: shot and hits replay, then the drone's answer flies (and
   // hits us if the server says it did) and the turn is ours again with the
@@ -1350,26 +1359,23 @@ await (async () => {
   frames(600);
   const after = fxRoomOf('play-after-fire');
   const hitMe = after.events.some(e => e.t === 'hit' && e.seat === 0 && e.by === 1);
-  check('fx-fire-replayed', /ABC hits REAPER for \d+/.test(logText()) && /REAPER fires/.test(logText()) &&
-    /REAPER hits YOU for \d+/.test(logText()) === hitMe,
-    logText().split('\n').slice(-3).join(' | '));
-  check('fx-fire-turn-back', /YOU/.test(els['hud-turn'].textContent) && els['hud-armor'].textContent === String(after.tanks[0].hp),
-    els['hud-turn'].textContent + ' | armor ' + els['hud-armor'].textContent);
+  await test('fx-fire-replayed', () => { assert.ok(/ABC hits REAPER for \d+/.test(logText()) && /REAPER fires/.test(logText()) &&
+    /REAPER hits YOU for \d+/.test(logText()) === hitMe, logText().split('\n').slice(-3).join(' | ')); });
+  await test('fx-fire-turn-back', () => { assert.ok(/YOU/.test(els['hud-turn'].textContent) && els['hud-armor'].textContent === String(after.tanks[0].hp), els['hud-turn'].textContent + ' | armor ' + els['hud-armor'].textContent); });
   // The round is won: the room moves to the shop with the prize paid.
   PFX.room = 'shop-after-win';
   await sleep(2200); await tick(10);
-  check('fx-shop-opens', els['shop-veil'].hidden === false, `shop hidden=${els['shop-veil'].hidden}`);
-  check('fx-shop-cash', els['shop-cash'].textContent.includes(String(fxRoomOf('shop-after-win').you.cash)), els['shop-cash'].textContent);
+  await test('fx-shop-opens', () => { assert.ok(els['shop-veil'].hidden === false, `shop hidden=${els['shop-veil'].hidden}`); });
+  await test('fx-shop-cash', () => { assert.ok(els['shop-cash'].textContent.includes(String(fxRoomOf('shop-after-win').you.cash)), els['shop-cash'].textContent); });
   // The server's own shop with the host readied and a second human waiting.
   PFX.room = 'shop-ready';
   await sleep(2200); await tick(10);
-  check('fx-shop-ready', /^Ready ✓/.test(els['shop-next'].textContent) && /^1\/2 ready · shop closes in 1:/.test(els['shop-ready'].textContent),
-    els['shop-next'].textContent + ' | ' + els['shop-ready'].textContent);
+  await test('fx-shop-ready', () => { assert.ok(/^Ready ✓/.test(els['shop-next'].textContent) && /^1\/2 ready · shop closes in 1:/.test(els['shop-ready'].textContent), els['shop-next'].textContent + ' | ' + els['shop-ready'].textContent); });
   PFX.on = false;
   // The server's delta replies reached the client as complete rooms: polls
   // that held the current hills got them left out, and everything above held.
-  check('fx-delta-polls-omit-the-hills', PFX.delta > 0 && PFX.full > 0, `delta ${PFX.delta}, full ${PFX.full}`);
-  check('fx-hand-snapshots-match', FX_DRIFT.size === 0, [...FX_DRIFT].slice(0, 6).join('; '));
+  await test('fx-delta-polls-omit-the-hills', () => { assert.ok(PFX.delta > 0 && PFX.full > 0, `delta ${PFX.delta}, full ${PFX.full}`); });
+  await test('fx-hand-snapshots-match', () => { assert.ok(FX_DRIFT.size === 0, [...FX_DRIFT].slice(0, 6).join('; ')); });
   click(els['shop-leave']); frames(2);
   click(els['leave-go']); await tick(10); frames(5);
   TAP('global', 'new'); frames(150);
@@ -1378,35 +1384,35 @@ await (async () => {
     frames(60);
   }
   TAP('global', 'tutorial'); frames(5);
-  check('tutorial-opens', els['tutorial-overlay'].hidden === false);
-  check('tutorial-step', /Move 1 of 5/.test(els['tutorial-text'].textContent), els['tutorial-text'].textContent);
+  await test('tutorial-opens', () => { assert.ok(els['tutorial-overlay'].hidden === false); });
+  await test('tutorial-step', () => { assert.ok(/Move 1 of 5/.test(els['tutorial-text'].textContent), els['tutorial-text'].textContent); });
   // The coach sends the player into the gun picker (move 4): Esc there shuts
   // the picker and leaves the tutorial running; a second Esc skips it.
   TAP('global', 'guns'); frames(3);
-  check('esc-picker-open', els['gun-overlay'].hidden === false);
+  await test('esc-picker-open', () => { assert.ok(els['gun-overlay'].hidden === false); });
   TAP('global', 'back'); frames(3);
-  check('esc-closes-picker-first', els['gun-overlay'].hidden === true && els['tutorial-overlay'].hidden === false
-    && window.localStorage.getItem('tankity-tutorial') !== 'done');
+  await test('esc-closes-picker-first', () => { assert.ok(els['gun-overlay'].hidden === true && els['tutorial-overlay'].hidden === false
+    && window.localStorage.getItem('tankity-tutorial') !== 'done'); });
   TAP('global', 'back'); frames(3);
-  check('esc-then-skips-tutorial', els['tutorial-overlay'].hidden === true && window.localStorage.getItem('tankity-tutorial') === 'done');
+  await test('esc-then-skips-tutorial', () => { assert.ok(els['tutorial-overlay'].hidden === true && window.localStorage.getItem('tankity-tutorial') === 'done'); });
   TAP('global', 'tutorial'); frames(5);
-  check('tutorial-reopens', els['tutorial-overlay'].hidden === false);
+  await test('tutorial-reopens', () => { assert.ok(els['tutorial-overlay'].hidden === false); });
   click(els['tutorial-skip']); frames(3);
-  check('tutorial-skips', els['tutorial-overlay'].hidden === true);
-  check('tutorial-remembered', window.localStorage.getItem('tankity-tutorial') === 'done');
+  await test('tutorial-skips', () => { assert.ok(els['tutorial-overlay'].hidden === true); });
+  await test('tutorial-remembered', () => { assert.ok(window.localStorage.getItem('tankity-tutorial') === 'done'); });
   // ---- weapon effects: data, engine caps, reduced motion ----
   {
     const FX = window.TankityFX;
-    check('fx-engine-loaded', !!FX && typeof FX.createSystem === 'function');
+    await test('fx-engine-loaded', () => { assert.ok(!!FX && typeof FX.createSystem === 'function'); });
     const built = JSON.parse(read('game.json'));
     const defs = FX.dress(built.effects);
     const arsenal = built.arsenal;
     const keys = arsenal.ammo.map(a => a.key).concat('laststand');
-    check('fx-file-valid', FX.validate(defs, keys).length === 0, FX.validate(defs, keys).slice(0, 3).join(' | '));
+    await test('fx-file-valid', () => { assert.ok(FX.validate(defs, keys).length === 0, FX.validate(defs, keys).slice(0, 3).join(' | ')); });
     // game.yaml ends with the effects: block, written exactly as the editor exports it.
     const yaml = fs.readFileSync(path.join(GAME_DIR, 'game.yaml'), 'utf8');
     const at = yaml.search(/^effects:$/m);
-    check('fx-yaml-canonical', at >= 0 && yaml.slice(at) === FX.toYaml(defs), 'the effects: block of game.yaml is not what FX.toYaml writes');
+    await test('fx-yaml-canonical', () => { assert.ok(at >= 0 && yaml.slice(at) === FX.toYaml(defs), 'the effects: block of game.yaml is not what FX.toYaml writes'); });
     const missing = [];
     for (const k of keys) {
       const w = defs[k];
@@ -1414,7 +1420,7 @@ await (async () => {
       if (w && !w.trail.emitters.some(e => e.rate > 0)) missing.push(k + '.trail has no rate emitter');
       if (w && !w.impact.emitters.some(e => e.unit === 'r')) missing.push(k + '.impact has nothing sized by the blast radius');
     }
-    check('fx-every-weapon-has-muzzle-trail-impact', missing.length === 0, missing.join(', '));
+    await test('fx-every-weapon-has-muzzle-trail-impact', () => { assert.ok(missing.length === 0, missing.join(', ')); });
     // Blast-sized shapes stay near the damage radius: nothing sized in r runs past 2r.
     const big = [];
     for (const k of keys) {
@@ -1424,15 +1430,15 @@ await (async () => {
         if (reach > 2) big.push(k + ' ' + e.shape + ' ' + reach.toFixed(2) + 'r');
       }
     }
-    check('fx-blast-sized-effects-stay-near-radius', big.length === 0, big.join(', '));
+    await test('fx-blast-sized-effects-stay-near-radius', () => { assert.ok(big.length === 0, big.join(', ')); });
     // Specials the mechanics need exist where the weapon has the mechanic.
     const needs = { cluster: 'split', seeker: 'steer', lance: 'pierce', emp: 'arc' };
-    check('fx-specials', Object.keys(needs).every(k => defs[k].special && defs[k].special[needs[k]]), JSON.stringify(Object.keys(needs).filter(k => !(defs[k].special && defs[k].special[needs[k]]))));
+    await test('fx-specials', () => { assert.ok(Object.keys(needs).every(k => defs[k].special && defs[k].special[needs[k]]), JSON.stringify(Object.keys(needs).filter(k => !(defs[k].special && defs[k].special[needs[k]])))); });
     // The pool is a hard cap, and a full pool recycles instead of growing.
     const sys = FX.createSystem({ max: 60 });
     for (let i = 0; i < 40; i++) sys.emit(defs.nuke.impact, 100, 100, 0, 70);
     sys.step(0.016);
-    check('fx-budget-caps', sys.live <= 60 && sys.stats.peak <= 60 && sys.stats.recycled > 0, `live=${sys.live} peak=${sys.stats.peak} recycled=${sys.stats.recycled}`);
+    await test('fx-budget-caps', () => { assert.ok(sys.live <= 60 && sys.stats.peak <= 60 && sys.stats.recycled > 0, `live=${sys.live} peak=${sys.stats.peak} recycled=${sys.stats.recycled}`); });
     // Reduced motion thins the same blast.
     const count = reduced => {
       const s2 = FX.createSystem({ max: 5000 });
@@ -1442,29 +1448,29 @@ await (async () => {
       return s2.stats.spawned;
     };
     const full = count(false), calm = count(true);
-    check('fx-reduced-motion-thins', calm < full * 0.6 && calm > 0, `reduced ${calm} vs ${full}`);
+    await test('fx-reduced-motion-thins', () => { assert.ok(calm < full * 0.6 && calm > 0, `reduced ${calm} vs ${full}`); });
     // A trail drips along the path travelled, not once per frame.
     const sys2 = FX.createSystem({ max: 400 }), shellFx = { fx: null, fxs: null };
     FX.play.trail(sys2, defs.shell, shellFx, 0.016, 0, 0, 100, 0);
     FX.play.trail(sys2, defs.shell, shellFx, 0.016, 90, 0, 100, 0);
-    check('fx-trail-follows-path', sys2.live >= 1, 'live=' + sys2.live);
+    await test('fx-trail-follows-path', () => { assert.ok(sys2.live >= 1, 'live=' + sys2.live); });
     // A burst in the air leaves out the ground layers (dirt thrown up, burn marks).
     const onGround = defs.mortar.impact.emitters.filter(e => e.ground);
-    check('fx-ground-layers-marked', onGround.length >= 2 && onGround.every(e => e.shape === 'sprite'), onGround.map(e => e.sheet).join(','));
+    await test('fx-ground-layers-marked', () => { assert.ok(onGround.length >= 2 && onGround.every(e => e.shape === 'sprite'), onGround.map(e => e.sheet).join(',')); });
     const spawned = ground => { const s3 = FX.createSystem({ max: 5000 }); s3.emit(defs.mortar.impact, 100, 100, 0, 42, ground); s3.step(0.5); return s3.stats.spawned; };
-    check('fx-air-burst-skips-ground', spawned(false) < spawned(true) && spawned(undefined) === spawned(true), `air ${spawned(false)} ground ${spawned(true)}`);
+    await test('fx-air-burst-skips-ground', () => { assert.ok(spawned(false) < spawned(true) && spawned(undefined) === spawned(true), `air ${spawned(false)} ground ${spawned(true)}`); });
     // Every shell names a rendered body; until its sheet loads the caller draws the plain disc.
     const noBody = arsenal.ammo.filter(a => !(defs[a.key].body && /^p_/.test(defs[a.key].body.sprite || ''))).map(a => a.key);
-    check('fx-every-shell-has-a-body-sprite', noBody.length === 0, noBody.join(','));
+    await test('fx-every-shell-has-a-body-sprite', () => { assert.ok(noBody.length === 0, noBody.join(',')); });
     const ctx = { save() {}, restore() {}, translate() {}, rotate() {}, drawImage() {}, globalCompositeOperation: '', globalAlpha: 1 };
     // The screen flash ramps in over 80 ms and never passes 0.35, whatever an effect asks.
     const flashAt = (sys4, t) => { const seen = []; const c4 = { set globalAlpha(v) { seen.push(v); }, get globalAlpha() { return 1; }, fillRect() {}, fillStyle: '' }; sys4.step(t); sys4.drawFlash(c4, 10, 10); return seen.length ? seen[0] : 0; };
     const fs1 = FX.createSystem({ max: 400 });
     fs1.emit({ emitters: [], screen: { flash: { color: '#ffffff', alpha: 1, dur: 0.6 } } }, 0, 0, 0, 1);
     const a0 = flashAt(fs1, 0.01), a1 = flashAt(fs1, 0.09);
-    check('fx-flash-ramps-in', a0 > 0 && a0 < 0.1, 'at 10 ms ' + a0);
-    check('fx-flash-capped', a1 > 0.2 && a1 <= 0.35, 'at 100 ms ' + a1);
-    check('fx-nuke-flash-warm', defs.nuke.impact.screen.flash.alpha <= 0.35 && defs.nuke.impact.screen.flash.color === '#ffb070', JSON.stringify(defs.nuke.impact.screen.flash));
+    await test('fx-flash-ramps-in', () => { assert.ok(a0 > 0 && a0 < 0.1, 'at 10 ms ' + a0); });
+    await test('fx-flash-capped', () => { assert.ok(a1 > 0.2 && a1 <= 0.35, 'at 100 ms ' + a1); });
+    await test('fx-nuke-flash-warm', () => { assert.ok(defs.nuke.impact.screen.flash.alpha <= 0.35 && defs.nuke.impact.screen.flash.color === '#ffb070', JSON.stringify(defs.nuke.impact.screen.flash)); });
     // Screen flashes off: no flash at all, and the big bright additive layers stay out.
     const fs2 = FX.createSystem({ max: 5000 });
     FX.flashes = false;
@@ -1475,34 +1481,33 @@ await (async () => {
     const fs3 = FX.createSystem({ max: 5000 });
     fs3.emit(defs.nuke.impact, 100, 100, 0, 70, true);
     fs3.step(0.3);
-    check('fx-flashes-off-drops-flash', calmFlash === 0, 'alpha ' + calmFlash);
+    await test('fx-flashes-off-drops-flash', () => { assert.ok(calmFlash === 0, 'alpha ' + calmFlash); });
     const bright = defs.nuke.impact.emitters.filter(e => FX.isBright(e));
-    check('fx-flashes-off-drops-bright-layers', bright.length >= 2 && calmSpawned < fs3.stats.spawned, `bright ${bright.length}, ${calmSpawned} vs ${fs3.stats.spawned}`);
+    await test('fx-flashes-off-drops-bright-layers', () => { assert.ok(bright.length >= 2 && calmSpawned < fs3.stats.spawned, `bright ${bright.length}, ${calmSpawned} vs ${fs3.stats.spawned}`); });
     // Screen flashes off also drops any additive dot or sprite 36 px or more in radius as it plays,
     // however it is sized: a plasma ring at full power (r 90) keeps no large white core.
     for (const key of arsenal.ammo.filter(a => a.effect === 'plasma').map(a => a.key)) {
       const big = defs[key].impact.emitters.filter(e => e.glow && ['dot', 'smoke', 'sprite'].includes(e.shape)
         && e.size[1] * (e.unit === 'r' ? 90 : 1) * (e.shape === 'sprite' ? e.scale : Math.max(1, e.sizeEnd)) >= 36);
-      check(`fx-flashes-off-filters-${key}-by-size`, big.length >= 1 && big.every(e => FX.isBright(e, e.unit === 'r' ? 90 : 1)), String(big.length));
+      await test(`fx-flashes-off-filters-${key}-by-size`, () => { assert.ok(big.length >= 1 && big.every(e => FX.isBright(e, e.unit === 'r' ? 90 : 1)), String(big.length)); });
       // What stays and is sizeable (15 px or more) is coloured: no white dot, no untinted or near-white sprite.
       const kept = defs[key].impact.emitters.filter(e => !FX.isBright(e, e.unit === 'r' ? 90 : 1) && e.glow && ['dot', 'smoke', 'sprite'].includes(e.shape)
         && e.size[1] * (e.unit === 'r' ? 90 : 1) * (e.shape === 'sprite' ? e.scale : 1) >= 15);
-      check(`fx-${key}-keeps-no-white-core`, kept.length >= 1 && kept.every(e => (e.shape === 'sprite'
-        ? /^#/.test(e.tint || '') && !/^#f[0-9a-f]f[0-9a-f]f/i.test(e.tint) : !e.colors.includes('#ffffff'))),
-        JSON.stringify(kept.map(e => [e.colors, e.tint])));
+      await test(`fx-${key}-keeps-no-white-core`, () => { assert.ok(kept.length >= 1 && kept.every(e => (e.shape === 'sprite'
+        ? /^#/.test(e.tint || '') && !/^#f[0-9a-f]f[0-9a-f]f/i.test(e.tint) : !e.colors.includes('#ffffff'))), JSON.stringify(kept.map(e => [e.colors, e.tint]))); });
       const off = FX.createSystem({ max: 5000 }), on = FX.createSystem({ max: 5000 });
       FX.flashes = false;
       off.emit(defs[key].impact, 100, 100, 0, 90, true);
       FX.flashes = true;
       on.emit(defs[key].impact, 100, 100, 0, 90, true);
-      check(`fx-flashes-off-thins-${key}`, off.stats.spawned < on.stats.spawned, `${off.stats.spawned} vs ${on.stats.spawned}`);
+      await test(`fx-flashes-off-thins-${key}`, () => { assert.ok(off.stats.spawned < on.stats.spawned, `${off.stats.spawned} vs ${on.stats.spawned}`); });
     }
     // Preloading: a weapon's every sheet (body, muzzle, trail, impact, specials), and the
     // engine never fetches mushroom any more.
     const nukeSheets = FX.sheetsOf(defs.nuke);
-    check('fx-sheets-of-a-weapon', nukeSheets.includes('nuke') && nukeSheets.includes('p_nuke') && nukeSheets.includes('blast') && nukeSheets.includes('muzzle'), nukeSheets.join(','));
-    check('fx-no-mushroom-sheet', !('mushroom' in JSON.parse(read('fx/sprites/sprites.json'))) && !fs.existsSync(path.join(GAME_DIR, 'fx/sprites/mushroom.png')));
-    check('fx-body-falls-back-before-load', FX.drawBody(ctx, 0, 0, 10, 0, { halo: 0, sprite: 'p_shell', size: 15 }, '#ffffff', 0) === false);
+    await test('fx-sheets-of-a-weapon', () => { assert.ok(nukeSheets.includes('nuke') && nukeSheets.includes('p_nuke') && nukeSheets.includes('blast') && nukeSheets.includes('muzzle'), nukeSheets.join(',')); });
+    await test('fx-no-mushroom-sheet', () => { assert.ok(!('mushroom' in JSON.parse(read('fx/sprites/sprites.json'))) && !fs.existsSync(path.join(GAME_DIR, 'fx/sprites/mushroom.png'))); });
+    await test('fx-body-falls-back-before-load', () => { assert.ok(FX.drawBody(ctx, 0, 0, 10, 0, { halo: 0, sprite: 'p_shell', size: 15 }, '#ffffff', 0) === false); });
   }
   {
     // A shell leaves the muzzle inside its gunner's box: it ignores its
@@ -1511,10 +1516,9 @@ await (async () => {
     const hits = (shell, ...seg) => sweepHit([drone, foe], shell, ...seg);
     const a = 62 * Math.PI / 180, mx = 300 + Math.cos(a) * 20, my = 386 - Math.sin(a) * 20;
     const s = { owner: drone, pierced: false };
-    check('own-shell-passes-out-of-gunner', hits(s, mx, my, 330, 360) === null && s.clear === true);
-    check('own-shell-hits-gunner-coming-back', (hits(s, 330, 360, 300, 370) || {}).t === drone);
+    await test('own-shell-passes-out-of-gunner', () => { assert.ok(hits(s, mx, my, 330, 360) === null && s.clear === true); });
+    await test('own-shell-hits-gunner-coming-back', () => { assert.ok((hits(s, 330, 360, 300, 370) || {}).t === drone); });
   }
-  check('esc-keeps-fullscreen', fsExits.length === 0 && document.fullscreenElement === els['frame'],
-    `exitFullscreen called ${fsExits.length}x: ${fsExits[0] || ''}`);
+  await test('esc-keeps-fullscreen', () => { assert.ok(fsExits.length === 0 && document.fullscreenElement === els['frame'], `exitFullscreen called ${fsExits.length}x: ${fsExits[0] || ''}`); });
   for (const h of liveTimers) { clearTimeout(h); clearInterval(h); }
 })();

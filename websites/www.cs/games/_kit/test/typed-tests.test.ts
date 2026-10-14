@@ -92,7 +92,6 @@ const ALLOW: Allow = {
     'tankity/test/seats.test.mjs',
     'tankity/test/shop.test.mjs',
     'tankity/test/sim-vectors.test.mjs',
-    'tankity/test/smoke.test.mjs',
     'tankity/test/solo.test.mjs',
     'tankity/test/standings-ui.test.mjs',
     'tankity/test/standings.test.mjs',
@@ -120,7 +119,6 @@ const ALLOW: Allow = {
     'cylon/test/rules.test.mjs',
     'cylon/test/scores.test.mjs',
     'cylon/test/state.test.mjs',
-    'tankity/test/smoke.test.mjs',
   ],
   legacy: [
     'games/tankity/test/php-docker/RoomsTest.php',

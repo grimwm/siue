@@ -87,7 +87,7 @@ $tracked = [];
 exec('cd ' . escapeshellarg($site) . ' && git ls-files', $tracked);
 $kept = array_values(array_filter($tracked, fn(string $f): bool => (bool) preg_match(NEVER_SHIPS, $f)));
 $check('the rule matches the authoring files', count($kept) > 80, (string) count($kept));
-foreach (['games/tankity/src/sim.ts', 'games/tankity/test/smoke.test.mjs', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/dist/fx-editor.js',
+foreach (['games/tankity/src/sim.ts', 'games/tankity/test/smoke.test.ts', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/dist/fx-editor.js',
     'games/cylon/src/state.ts', 'games/crete/src/engine.ts', 'src/main.ts', 'tools/ts-build.mjs', 'tsconfig.json'] as $f) {
     $check("the rule covers $f", in_array($f, $kept, true));
 }

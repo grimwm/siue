@@ -570,15 +570,15 @@ function renderGames(): void {
 function openGame(code: string): void {
   unlock();
   closeLeaveVeil();
-  if (net.code !== code) {
-    if (net.code) netStepOut(true);
-    closeOverlays();
-  }
   if (!seats.get(code)) {
-    // Given up in another tab, or found gone since the list was drawn.
+    // Given up in another tab, or found gone since the list was drawn: the room on screen stays.
     say('That seat is no longer held here.', 'info');
     void watch.pollNow();
     return;
+  }
+  if (net.code !== code) {
+    if (net.code) netStepOut(true);
+    closeOverlays();
   }
   void resumeRoom(code).then(() => { void watch.pollNow(); });
 }

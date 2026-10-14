@@ -821,6 +821,19 @@ if ($action === 'buy' && $method === 'POST') {
 /* Play again (same room): anyone seated may press it once the match is over. */
 if ($action === 'again' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true, false);
+    // A finished long room holds no long place; reviving it takes one back.
+    if ($room['phase'] === 'over' && room_turn_secs($room) >= ROOM_LONG_TURN_SECS) {
+        try {
+            $longFull = room_long_count((string) $room['code']) >= room_long_cap(room_max_rooms());
+        } catch (PDOException $e) {
+            room_unlock($fh);
+            room_store_fail($e);
+        }
+        if ($longFull) {
+            room_unlock($fh);
+            room_json_out(409, ['error' => ROOM_LONG_FULL]);
+        }
+    }
     if (!room_again($room)) {
         room_unlock($fh);
         room_json_out(409, ['error' => 'no match to play again: it is still on, or nobody is left']);

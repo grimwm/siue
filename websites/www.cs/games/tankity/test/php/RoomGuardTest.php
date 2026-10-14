@@ -288,6 +288,25 @@ final class RoomGuardTest extends TestCase
         $this->assertSame(1800, $this->stored($host['code'])['turnSecs']);
     }
 
+    public function testAFinishedLongRoomCannotBeRevivedIntoAFullLongShare(): void
+    {
+        for ($n = 1; $n <= 5; $n++) {
+            [$st, $out] = $this->createFrom($n, 28800);
+            $this->assertSame(200, $st);
+            $first ??= $out;
+        }
+        [$room, $lock] = room_load($first['code']);
+        $room['phase'] = 'over';
+        room_save($lock, $first['code'], $room);
+        room_unlock($lock);
+        $this->assertSame(200, $this->createFrom(6, 28800)[0], 'the finished room gave its place away');
+        $this->gap();
+        [$st, $out] = $this->call('again', ['code' => $first['code'], 'token' => $first['token'], 'csrf' => $first['csrf']], ['REMOTE_ADDR' => '203.0.113.1'], self::TEN);
+        $this->assertSame(409, $st, json_encode($out));
+        $this->assertSame('every long-game slot is taken; pick a shorter turn time or try later', $out['error']);
+        $this->assertSame('over', $this->stored($first['code'])['phase'], 'the refused revival left the room finished');
+    }
+
     public function testALongRoomMayChangeBetweenLongStopsAndFreesItsPlace(): void
     {
         for ($n = 1; $n <= 5; $n++) {

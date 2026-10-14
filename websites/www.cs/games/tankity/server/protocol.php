@@ -68,6 +68,8 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
             'body' => $t['kind'] === 'human' ? ($room['seats'][$t['seat']]['body'] ?? 'tank') : null,
             // In a menu right now (shown by their unit on their turn).
             'menu' => $t['kind'] === 'human' && !empty($room['menu'][$t['seat']]),
+            // Its parachute opened in the last volley: clients float it down.
+            'chute' => !empty($t['chute']),
         ];
     }
     $seats = [];
@@ -147,6 +149,7 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
             'jammer' => (int) ($room['jammer'][$seat] ?? 0),
             'bunker' => (int) ($room['bunker'][$seat] ?? 0),
             'laststand' => ($room['laststand'][$seat] ?? false) ? true : false,
+            'chutes' => (int) ($room['chutes'][$seat] ?? 0),
             'plate' => (int) ($room['plate'][$seat] ?? 0),
             'armor' => room_muster_armor($room, $seat),
             'maxArmor' => room_max_armor($room, $seat),

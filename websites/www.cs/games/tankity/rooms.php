@@ -450,7 +450,6 @@ if ($action === 'start' && $method === 'POST') {
     foreach ($events as $e) {
         room_emit($room, $e);
     }
-    room_settle_tanks($room);
     if (!room_save($fh, $path, $room)) {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
@@ -496,7 +495,6 @@ if ($action === 'state') {
         foreach ($events as $e) {
             room_emit($room, $e);
         }
-        room_settle_tanks($room);
         room_save($fh, $path, $room);
     } elseif ($room['phase'] === 'shop') {
         // The shop clock runs out on whoever polls first.
@@ -624,7 +622,6 @@ if ($action === 'act' && $method === 'POST') {
         $events[] = ['t' => 'fire', 'seat' => $seat, 'w' => $wkey,
             'x' => round($me['x'], 1), 'a' => round($me['angle'], 1), 'pw' => round($me['power'], 1)];
         room_fire_shot($room, $events, $myIdx, $wkey);
-        room_settle_tanks($room);
         $rng = $room['rng'];
         $room['wind'] = (int) max(-12, min(12, round($room['wind'] + room_gauss($rng) * 2)));
         $room['rng'] = $rng;
@@ -635,7 +632,6 @@ if ($action === 'act' && $method === 'POST') {
             $n = count($room['tanks']);
             $room['turn'] = ($room['turn'] + 1) % max(1, $n);
             room_advance($room, $events);
-            room_settle_tanks($room);
         }
     } else {
         room_unlock($fh);

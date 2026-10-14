@@ -21,7 +21,7 @@ Options (after the `--`):
     --only A,B        Render just these sheets (names from SHEETS and ATLASES
                       below: fireball, smoke, shock, energy, moon,
                       blast, plume, dirt, debris, scorch, flakburst, electric,
-                      nuke, flare, muzzle, shells, shells_blast). Default: all. sprites.json
+                      nuke, flare, muzzle, shells, shells_blast, parachute). Default: all. sprites.json
                       keeps the entries of sheets that were not re-rendered.
     --engine NAME     eevee (default; falls back to cycles if EEVEE cannot start
                       headless) or cycles.
@@ -52,6 +52,10 @@ conventions: `fireball` is natural colour (fire);
 (multiply) colours them. `moon` is seven phases of
 a procedural moon (maria and craters, lit by one sun lamp swung round it, a
 touch of earthshine on the dark side); the game picks one per match.
+`parachute` is a striped canopy on its lines, lit by a sun lamp: the first 6
+frames bloom it open from a furled streamer, the other 10 are one loop of it
+swaying from where its lines meet, which sits at the middle of the frame's
+bottom edge (the game hangs that point on top of the falling unit).
 
 Per-effect parameters live in the SHEETS table below: `frame` (px), `frames`,
 `cols`, `fps`, and the builder function that animates it. ATLASES holds the
@@ -71,6 +75,7 @@ import random
 import subprocess
 import sys
 
+import bmesh
 import bpy
 import numpy as np
 from mathutils import Vector
@@ -543,6 +548,90 @@ def build_moon(frames, rng):
         sun.keyframe_insert('rotation_euler', frame=f)
 
 
+def build_parachute(frames, rng):
+    """A parachute: a dome of alternating white and orange gores, lines from
+    its rim to a knot at the bottom-middle of the frame. OPEN frames bloom it
+    from a furled streamer; the rest are one sway loop, pivoting on the knot."""
+    OPEN = 6                                     # opening frames; the rest loop
+    KNOT_Z = -1.92                               # frame bottom is -2 (ortho_scale 4)
+    RIM_Z = 0.55                                 # canopy rim height above the frame centre
+    R = 1.45                                     # open canopy radius
+    DOME = 0.85                                  # open canopy height above its rim
+    GORES = 12
+    SWAY = math.radians(8)                       # sway amplitude
+    WHITE, ORANGE, CORD = (0.93, 0.91, 0.86), (1.0, 0.42, 0.12), (0.78, 0.76, 0.7)
+
+    def lit(name, color, glow):
+        m = bpy.data.materials.new(name)
+        m.use_nodes = True
+        b = m.node_tree.nodes.get('Principled BSDF')
+        b.inputs['Base Color'].default_value = (*color, 1)
+        b.inputs['Roughness'].default_value = 0.85
+        for k in ('Emission Color', 'Emission'):
+            if k in b.inputs:
+                b.inputs[k].default_value = (*color, 1)
+                break
+        if 'Emission Strength' in b.inputs:
+            b.inputs['Emission Strength'].default_value = glow   # the night battlefield is dark: a little self-light
+        return m
+
+    pivot = bpy.data.objects.new('Knot', None)
+    link(pivot)
+    pivot.location = (0, 0, KNOT_Z)
+    # The dome: the top half of a UV sphere, each gore (a column of faces) one colour.
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=GORES * 2, ring_count=12, radius=1.0)
+    dome = bpy.context.active_object
+    bm = bmesh.new()
+    bm.from_mesh(dome.data)
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < -1e-4], context='VERTS')
+    bm.to_mesh(dome.data)
+    bm.free()
+    bpy.ops.object.shade_smooth()
+    dome.data.materials.append(lit('gore-white', WHITE, 0.35))
+    dome.data.materials.append(lit('gore-orange', ORANGE, 0.35))
+    for poly in dome.data.polygons:
+        a = math.atan2(poly.center.y, poly.center.x) % math.tau
+        poly.material_index = int(a / (math.tau / GORES)) % 2
+    dome.parent = pivot
+    cord = lit('cord', CORD, 0.6)
+    lines = []
+    for k in range(8):
+        bpy.ops.mesh.primitive_cylinder_add(vertices=6, radius=0.018, depth=1.0)
+        o = bpy.context.active_object
+        o.data.materials.append(cord)
+        o.parent = pivot
+        lines.append((o, k / 8 * math.tau + math.tau / 16))
+    sun = bpy.data.objects.new('Sun', bpy.data.lights.new('Sun', 'SUN'))
+    sun.data.energy = 3.5
+    sun.rotation_euler = (math.radians(35), math.radians(-30), 0)   # from above, in front, a little left
+    link(sun)
+    bpy.context.scene.world.color = (0.08, 0.08, 0.1)
+    rim_local = RIM_Z - KNOT_Z                    # rim height above the knot
+    for f in range(frames):
+        if f < OPEN:
+            t = ease_out((f + 1) / OPEN)
+            rw = R * (0.12 + 0.88 * t)            # furled: narrow and tall
+            dh = DOME * (2.2 - 1.2 * t)
+            ang = 0.0
+        else:
+            u = (f - OPEN) / (frames - OPEN)
+            ang = SWAY * math.sin(u * math.tau)
+            breathe = 1 + 0.03 * math.sin(u * math.tau * 2)
+            rw, dh = R * breathe, DOME / breathe
+        dome.scale = (rw, rw * 0.5, dh)
+        dome.location = (0, 0, rim_local)
+        dome.keyframe_insert('scale', frame=f)
+        dome.keyframe_insert('location', frame=f)
+        pivot.rotation_euler = (0, ang, 0)
+        pivot.keyframe_insert('rotation_euler', frame=f)
+        for o, a in lines:
+            top = Vector((math.cos(a) * rw, math.sin(a) * rw * 0.5, rim_local))
+            o.location = top * 0.5
+            o.rotation_euler = top.normalized().to_track_quat('Z', 'Y').to_euler()
+            o.scale = (1, 1, top.length)
+            o.keyframe_insert('location', frame=f)
+            o.keyframe_insert('rotation_euler', frame=f)
+            o.keyframe_insert('scale', frame=f)
 # --------------------------------------------- volumetric and lit builders
 # The sheets below are rendered with Cycles: real volumes (lit, self-shadowing
 # smoke with fire glowing inside it) and lit meshes (the shells in flight).
@@ -1522,6 +1611,7 @@ SHEETS = {
     'nuke': (build_nuke, 160, 32, 8, 12),
     'flare': (build_flare, 96, 12, 6, 30),
     'muzzle': (build_muzzle, 64, 8, 8, 30),
+    'parachute': (build_parachute, 64, 16, 4, 12),
 }
 
 

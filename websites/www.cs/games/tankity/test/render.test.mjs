@@ -3,7 +3,7 @@
 // to the view (a tank, a boom, the terrain) throws in module code, so a frame that
 // tried to advance or change game state fails here without a browser.
 import { check } from '../../_kit/test/check.ts';
-import { createRenderer, drawChassis } from '../src/render.ts';
+import { CHUTE_OPEN, chuteFrame, createRenderer, drawChassis } from '../src/render.ts';
 import { fitField, visibleWorld } from '../src/field.ts';
 import { sceneryY } from '../src/scenery.ts';
 import { ROOM_W as W, H, facing, isGroundUnit, muzzle, surfY, hashSeed, mulberry32, gauss } from '../src/sim.ts';
@@ -128,3 +128,45 @@ const live = deepFreeze({ ...view, turnUnit: view.tanks[1], aim: { unit: view.ta
   check('sky-builds-once-per-match-key', builds === 2, `builds=${builds}`);
 }
 
+
+{
+  // The parachute sheet: the opening frames once, then the sway frames on a loop.
+  const seq = Array.from({ length: 40 }, (_, i) => chuteFrame(i / 12, 16));
+  check('chute-opens-once-then-sways', seq.slice(0, CHUTE_OPEN).join() === '0,1,2,3,4,5'
+    && seq.slice(CHUTE_OPEN, CHUTE_OPEN + 10).join() === '6,7,8,9,10,11,12,13,14,15'
+    && seq[CHUTE_OPEN + 10] === 6 && seq.every(f => f >= 0 && f < 16), seq.join());
+}
+
+{
+  // A unit under an open parachute: the sheet when it has loaded, the drawn canopy until then.
+  const chuteView = deepFreeze({ ...view, tanks: [tank('wraith', 400, { chuteOpen: true, drawY: 250 }), tank('tank', 100, { isPlayer: true, chuteOpen: true }), tank('spotter', 500, { chute: true, chuteArmed: true })] });
+  const drawn = [];
+  const sheetCtx = () => {
+    const { ctx, calls } = stubContext();
+    return { ctx: new Proxy(ctx, { get: (t, p) => (p === 'drawImage' ? (...a) => { drawn.push(a); } : t[p]) }), calls };
+  };
+  const loaded = { img: { tag: 'parachute' }, fw: 64, fh: 64, cols: 4, frames: 16, ready: true };
+  const a = sheetCtx();
+  createRenderer({ width: 1440, height: 920, getContext: () => a.ctx }, { ...deps, fx: { ...fxApi, sheets: { parachute: loaded } } }).frame(chuteView);
+  check('chute-draws-from-the-sheet', drawn.filter(d => d[0] === loaded.img).length === 2, String(drawn.length));
+  drawn.length = 0;
+  const b = sheetCtx();
+  let threw = '';
+  try {
+    createRenderer({ width: 1440, height: 920, getContext: () => b.ctx }, { ...deps, fx: { ...fxApi, sheets: { parachute: { ...loaded, ready: false } } } }).frame(chuteView);
+  } catch (e) { threw = String(e); }
+  check('chute-falls-back-to-a-drawn-canopy', !threw && drawn.filter(d => d[0] === loaded.img).length === 0 && b.calls.n > a.calls.n, threw || `${b.calls.n} vs ${a.calls.n}`);
+}
+
+{
+  // Units are drawn at their drawn height while they fall, not the rules' height, and
+  // a wreck that is still falling is drawn whole until it lands.
+  const labels = [];
+  const { ctx } = stubContext();
+  const rec = new Proxy(ctx, { get: (t, p) => (p === 'fillText' ? (txt, x, y) => { labels.push([txt, y]); } : t[p]) });
+  const falling = deepFreeze({ ...view, tanks: [tank('tank', 100, { isPlayer: true, drawY: 200 }), tank('wraith', 400, { hp: 0, shownHp: 20, drawY: 150 })] });
+  createRenderer({ width: 1440, height: 920, getContext: () => rec }, deps).frame(falling);
+  const at = name => (labels.find(l => l[0] === name) || [])[1];
+  check('a falling unit is drawn at its drawn height', at('TANK') === 200 - 38, String(at('TANK')));
+  check('a wreck in mid-fall is drawn whole until it lands', at('WRAITH') === 150 - 56, String(at('WRAITH')));
+}

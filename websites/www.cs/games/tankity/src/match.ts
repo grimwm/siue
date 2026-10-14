@@ -21,9 +21,9 @@ import type { FieldWidth } from './field.ts';
 import type { RoomClient } from './net.ts';
 import {
   gauss, H, GRAV, TUNE, clamp, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
-  anyTankFalling as simAnyTankFalling, gfxLinger,
+  anyTankFalling as simAnyTankFalling, armChutes, dueFalls, gfxLinger, settleVolley,
 } from './sim.ts';
-import type { Blast, Difficulty, Shell } from './sim.ts';
+import type { Blast, Difficulty, FallEvent, FallShow, Shell } from './sim.ts';
 import { snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloOneUps, soloSettle } from './solo.ts';
 import { endCardBack, localLine, soloBoard } from './standings.ts';
 import type { LocalRow, Saved } from './local-board.ts';
@@ -102,7 +102,9 @@ export function createMatch(deps: MatchDeps) {
     netNext, netAgain, initials, saveLocal,
   } = deps;
 
+  let fallsDue: FallShow[] = []; // solo landings waiting to be seen to touch down
   function resetMatch(seedStr?: string): void {
+    fallsDue = []; // a fall still playing out in the last match never speaks in this one
     const seed = (seedStr || '').trim() || ('scorched-' + Math.floor(Math.random() * 9000 + 1000));
     // The Menu's Difficulty, read once per match: a change waits for the next one.
     // The width comes from the screen at the deal and holds until the next one (spec 6.6).
@@ -167,6 +169,7 @@ export function createMatch(deps: MatchDeps) {
     newMatch(seedStr);
   }
   function newRound(bannerText?: string, event?: FlowEvent): void {
+    fallsDue = [];
     soloMuster(G, tables.arsenal!);
     G.roundStart = { score: G.score, cash: G.cash };
     G.parts = [];
@@ -248,6 +251,9 @@ export function createMatch(deps: MatchDeps) {
         advance('shellsLanded');
       }
     }
+    // A parachute opens with the first frame of its unit's fall.
+    if (!net.on && tables.arsenal) armChutes(G, tables.arsenal);
+    if (!G.shells.length) settleVolleyFalls();
   }
   /* A blast as the sim reports it: the boom, then what it did to each unit in
      the order it happened. */
@@ -311,10 +317,56 @@ export function createMatch(deps: MatchDeps) {
     render();
     renderHUD();
   }
-  /* Tanks left hanging over a crater fall under gravity every frame until they
-     land; ground that rose (a new round, fresh hills) takes them straight up. */
+  /* The falls' picture, every frame: a unit whose ground goes is seen to fall
+     at once, and on to where its volley's settle (or a room's server) put it.
+     Nothing here decides armor. A settled landing's words, sparks and wreck
+     show when its unit is seen to touch down. */
   function fallTanks(dt: number): void {
+    if (net.on) fallsDue = []; // a room's falls speak through its own events (room.ts)
     if (simFallTanks(G, dt).some(t => t.isPlayer)) sfx.play('thud');
+    if (!fallsDue.length) return;
+    const d = dueFalls(G, fallsDue);
+    fallsDue = d.pending;
+    for (const show of d.due) for (const e of show.events) showFall(e);
+    if (d.due.length) renderHUD();
+  }
+  /* A solo volley's last shell is down: its falls settle once, by the room
+     server's rules (sim.ts settleVolley), and then play out. */
+  function settleVolleyFalls(): void {
+    if (net.on || !tables.arsenal) return;
+    fallsDue = fallsDue.concat(settleVolley(G, tables.arsenal));
+    fallTanks(0);
+  }
+  /* A landing as the sim reports it: the words, and a wreck's sparks. */
+  function showFall(e: FallEvent): void {
+    const t = e.tank;
+    if (e.kind === 'wreck') {
+      sfx.play('boom');
+      burst(t.x, t.y - 12, '#ff5a5a', 26, 7);
+      if (e.lastStand) {
+        say('Last stand! The wreck detonates!', 'good');
+        showBlast(e.lastStand);
+      }
+      if (t.isPlayer) say('The fall wrecks your tank!', 'bad');
+      else if (e.by && e.by.isPlayer) {
+        say(`${t.id} falls to pieces in your crater! (+${TUNE.killBonus})`, 'good');
+        exchange(t.id, FOE_DYING[t.id] || '...', 'tank', pick(TANK_HIT));
+      } else say(`${t.id} falls to pieces.`, 'info');
+      return;
+    }
+    if (e.chute) {
+      say(t.isPlayer ? 'Your parachute opens. You float down unhurt.' : `${t.id}'s parachute opens.`, t.isPlayer ? 'good' : 'info');
+      return;
+    }
+    if (t.isPlayer) {
+      sfx.play('clank');
+      say(e.under ? `A falling unit lands on YOU for ${e.dmg}! (${e.hp} armor left)`
+        : `The fall costs you ${e.dmg}! (${e.hp} armor left)`, 'bad');
+    } else if (e.by && e.by.isPlayer) {
+      say(`${t.id} falls into your crater for ${e.dmg}! (${e.hp} armor left)`, 'good');
+    } else {
+      say(`${t.id} falls for ${e.dmg}.`, 'info');
+    }
   }
   function anyTankFalling(): boolean {
     return simAnyTankFalling(G);
@@ -563,5 +615,7 @@ export function createMatch(deps: MatchDeps) {
   return {
     advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
     stepWar, decayFx, soloShopBoard, endVeilBack, checkOneUps,
+    /** Solo landings still waiting to be seen (tests read it). */
+    fallsPending: () => fallsDue.length,
   };
 }

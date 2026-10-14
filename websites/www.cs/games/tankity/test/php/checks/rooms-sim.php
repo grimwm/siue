@@ -132,6 +132,11 @@ $check('harmless-blast-no-events', $events === [], json_encode($events));
 $check('harmless-blast-keeps-shield-and-armor', $room['shield'][1] === true && $room['tanks'][1]['hp'] === 100 && $room['tanks'][2]['hp'] === 100);
 $check('harmless-blast-credits-nobody', !isset($room['tanks'][1]['lastHitBy']) && !isset($room['tanks'][2]['lastHitBy']) && empty($room['tanks'][0]['dealt']));
 $check('harmless-blast-still-carves', $room['terrain'] !== $before);
+// It still credits the fall of a unit it dug out from under, as any crater does.
+$room = $flatRoom([$tank(0, 'human', 100.0, 100), $tank(1, 'ai', 300.0, 100)]);
+$events = [];
+room_explode($room, $events, $room['tanks'][0], 'shell', 300.0, 400.0, null, ['dmg' => 0, 'radius' => 45]);
+$check('harmless-crater-credits-the-fall', ($room['tanks'][1]['fellBy'] ?? null) === 0 && $events === [], json_encode([$room['tanks'][1]['fellBy'] ?? null, $events]));
 
 // Hit boxes follow the drawn units, and a shell is tested along its whole
 // step: a fast shell crossing a drone's body in one step still hits it, and
@@ -589,14 +594,13 @@ $check('nobody-left-is-roundlost', $types($events) === ['roundlost'] && $room['s
 
 // Every human wrecked: the drones fight on, ONE turn per poll, paced to the
 // last volley, until one is left; then the round is lost and every human loses
-// a life. $poll mimics a poll of a running room (advance, emit, settle).
+// a life. $poll mimics a poll of a running room (advance, then emit; each volley settles its own falls).
 $poll = function (array &$room): array {
     $events = [];
     room_advance($room, $events);
     foreach ($events as $e) {
         room_emit($room, $e);
     }
-    room_settle_tanks($room);
     return $events;
 };
 $room = $battle(2, 2, 3, 777);

@@ -8,4 +8,5 @@ smoke (`blast`, `plume`, `dirt`, `flakburst`, `nuke`) are Cycles volumes shaped
 by noise; the shells in flight are modelled from primitive meshes.
 No external images, textures or models are used. The moon is a procedural
 sphere (noise maria, Voronoi craters); no NASA or other lunar texture is
-included.
+included. The parachute is procedural too (a striped half-sphere canopy and
+cylinder lines).

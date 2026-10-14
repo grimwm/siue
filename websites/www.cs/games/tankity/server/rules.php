@@ -116,7 +116,6 @@ function room_shop_settle(array &$room): bool
     foreach ($events as $e) {
         room_emit($room, $e);
     }
-    room_settle_tanks($room);
     return true;
 }
 /* A random gun from a seat's rack: any shell it still has, the Shell always,
@@ -186,6 +185,9 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
 {
     $room['shots'] = ($room['shots'] ?? 0) + 1; // a fresh turn clock follows each shot
     $firstEvent = count($events) - 1; // the opener of this volley
+    foreach ($room['tanks'] as $i => $t) {
+        unset($room['tanks'][$i]['chute']); // the last volley's parachutes are down
+    }
     $tank = &$room['tanks'][$seatIdx];
     $weapons = room_weapons();
     $w = $weapons[$wkey] ?? $weapons['shell'];
@@ -236,6 +238,14 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
         }
     }
     unset($tank);
+    // The dust settles: whoever lost their ground falls, as the volley ends.
+    $end = 0.0;
+    for ($i = max(0, $firstEvent), $n = count($events); $i < $n; $i++) {
+        $end = max($end, (float) ($events[$i]['t1'] ?? 0.0), (float) ($events[$i]['at'] ?? 0.0));
+    }
+    $mark = count($events);
+    room_settle_tanks($room, $events);
+    room_stamp($events, $mark, $end);
     room_pace_stamp($room, $events, $firstEvent);
 }
 /* A scatter weapon's bomblets, after its burst $res at $t seconds: thrown
@@ -345,6 +355,7 @@ function room_seat_economy(array &$room, int $seat): void
     $room['nextUp'][$seat] = 3000;
     $room['plate'][$seat] = 0;
     $room['armor'][$seat] = ROOM_ARMOR;
+    $room['chutes'][$seat] = 0;
 }
 /* Seats that will field a unit: every human and every drone seat. */
 function room_fielded(array $room): int
@@ -458,6 +469,9 @@ function room_start_round(array &$room): void
                 ? ($room['ammo'][$idx] ?? room_start_ammo())
                 : room_ai_rack($room['round']),
         ];
+        if (!$s['human']) {
+            $room['tanks'][count($room['tanks']) - 1]['chutes'] = room_drone_chutes($room['round']);
+        }
         $seat++;
     }
     foreach ($room['tanks'] as &$t) {
@@ -900,6 +914,9 @@ function room_buy(array &$room, int $seat, string $item, int $qty): ?array
         case 'laststand':
             $room['laststand'][$seat] = true;
             break;
+        case 'parachute':
+            $room['chutes'][$seat] = ($room['chutes'][$seat] ?? 0) + $n;
+            break;
     }
     return null;
 }
@@ -961,7 +978,7 @@ function room_again(array &$room): bool
     if (!room_rehost($room)) {
         return false; // everyone left; nobody is there to start a lobby
     }
-    foreach (['plate', 'armor', 'shield', 'jammer', 'bunker', 'laststand', 'fuelBonus', 'fuelApplied', 'tactic', 'stats', 'filed', 'matchId', 'menu', 'shop', 'pace', 'clock'] as $k) {
+    foreach (['plate', 'armor', 'shield', 'jammer', 'bunker', 'laststand', 'chutes', 'fuelBonus', 'fuelApplied', 'tactic', 'stats', 'filed', 'matchId', 'menu', 'shop', 'pace', 'clock'] as $k) {
         unset($room[$k]);
     }
     foreach ($room['seats'] as $idx => $s) {

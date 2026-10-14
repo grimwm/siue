@@ -8,6 +8,7 @@ import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createReplay, shellAt, shellVel, parsePath, PATH_HZ, FAST_SPEED } from '../src/replay.ts';
+import { anyTankFalling, fallTanks } from '../src/sim.ts';
 
 const fixture = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'protocol', 'play-after-fire.json'), 'utf8')).body.room;
 const EVENTS = fixture.events;
@@ -285,4 +286,38 @@ function frames(rp, n) {
   const scatters = host.log.specials.filter(s => s.name === 'scatter');
   check('a scatter gun\'s bomblets play the scatter special once, straight up from the burst', scatters.length === 1
     && scatters[0].x === 330 && scatters[0].y === 324 && near(scatters[0].ang, -Math.PI / 2), JSON.stringify(scatters));
+}
+
+/* ---- a parachute armed by its volley opens when the unit's ground goes, in real frames ---- */
+{
+  const host = makeHost();
+  const rp = createReplay(host.env);
+  const fire = byT('fire')[0];
+  const terrain = new Array(720).fill(0).map((_, x) => (x < 360 ? 324 : 342));
+  const world = { tanks: host.tanks, terrain };
+  rp.push([fire, { t: 'fall', seat: 1, dmg: 0, by: 0, chute: true, under: false, at: 0.8 }]);
+  rp.step(0);
+  check('a chute fall arms its parachute as the volley starts, and opens nothing', host.tanks[1].chuteArmed === true && !host.tanks[1].chuteOpen && !host.tanks[0].chuteArmed);
+  let atRest = 0;
+  for (let f = 0; f < 60; f++) { rp.step(DT); fallTanks(world, DT); if (host.tanks[1].chuteOpen) atRest++; }
+  check('no canopy over the unit while its ground holds', atRest === 0 && host.tanks[1].drawY === undefined && host.tanks[1].y === 342, `${atRest}`);
+  // The replay carves the pit: the unit floats down under the canopy, and folds it on the floor.
+  for (let x = 395; x <= 435; x++) terrain[x] = 462;
+  let falling = 0, open = 0, last = host.tanks[1].y;
+  for (let f = 0; f < 2000 && anyTankFalling(world); f++) {
+    rp.step(DT);
+    fallTanks(world, DT);
+    const now = host.tanks[1].drawY ?? host.tanks[1].y;
+    if (now > last && now < 461.5) { falling++; if (host.tanks[1].chuteOpen) open++; }
+    last = now;
+  }
+  check('under the canopy every frame it falls', falling > 30 && open === falling, `${open} of ${falling}`);
+  let rested = 0;
+  for (let f = 0; f < 30; f++) { fallTanks(world, DT); if (host.tanks[1].chuteOpen) rested++; }
+  check('no canopy once it rests', rested === 0 && !host.tanks[1].chuteArmed);
+  const plain = makeHost();
+  const rp2 = createReplay(plain.env);
+  rp2.push([fire, { t: 'fall', seat: 1, dmg: 12, by: 0, chute: false, under: false, at: 0.8 }]);
+  rp2.step(0);
+  check('a fall without a parachute arms none', !plain.tanks[1].chuteArmed);
 }

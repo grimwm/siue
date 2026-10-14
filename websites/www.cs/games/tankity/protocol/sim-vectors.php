@@ -64,7 +64,7 @@ function sv_room(array $c, int $w = SV_WIDTH): array
 {
     $room = ['terrain' => sv_terrain($c['terrain'], $w), 'tanks' => [], 'wind' => (float) ($c['wind'] ?? 0),
         'round' => (int) ($c['round'] ?? 1), 'rng' => (int) ($c['seed'] ?? 1),
-        'scores' => [], 'cash' => [], 'shield' => [], 'bunker' => [], 'laststand' => [], 'jammer' => []];
+        'scores' => [], 'cash' => [], 'shield' => [], 'bunker' => [], 'laststand' => [], 'jammer' => [], 'chutes' => [], 'stats' => []];
     if (array_key_exists('difficulty', $c)) {
         $room['difficulty'] = $c['difficulty'];
     }
@@ -73,7 +73,7 @@ function sv_room(array $c, int $w = SV_WIDTH): array
             'x' => (float) $t['x'], 'y' => (float) $t['y'], 'angle' => (float) ($t['angle'] ?? 45), 'power' => (float) ($t['power'] ?? 50),
             'hp' => (int) ($t['hp'] ?? 100), 'maxHp' => 100, 'fuel' => (float) ($t['fuel'] ?? 80), 'dirS' => $t['dirS'] ?? 1,
             'ammo' => $t['ammo'] ?? []];
-        foreach (['s', 'dry', 'dealt', 'lastHitBy', 'kills'] as $k) {
+        foreach (['s', 'dry', 'dealt', 'lastHitBy', 'kills', 'fellBy'] as $k) {
             if (isset($t[$k])) {
                 $room['tanks'][$i][$k] = $t[$k];
             }
@@ -83,6 +83,11 @@ function sv_room(array $c, int $w = SV_WIDTH): array
         $room['bunker'][$i] = (int) ($t['bunker'] ?? 0);
         $room['laststand'][$i] = !empty($t['laststand']);
         $room['jammer'][$i] = (int) ($t['jammer'] ?? 0);
+        if ($t['kind'] === 'human') {
+            $room['chutes'][$i] = (int) ($t['chutes'] ?? 0);
+        } elseif (isset($t['chutes'])) {
+            $room['tanks'][$i]['chutes'] = (int) $t['chutes'];
+        }
     }
     return $room;
 }
@@ -93,7 +98,8 @@ function sv_outcome(array $before, array $room): array
     $tanks = [];
     $human = null;
     foreach ($room['tanks'] as $i => $t) {
-        $tanks[] = ['hp' => $t['hp'], 'fuel' => $t['fuel'], 'lastHitBy' => $t['lastHitBy'] ?? null, 'dealt' => !empty($t['dealt'])];
+        $tanks[] = ['hp' => $t['hp'], 'fuel' => $t['fuel'], 'y' => (float) $t['y'], 'chutes' => $t['kind'] === 'ai' ? (int) ($t['chutes'] ?? 0) : null,
+            'lastHitBy' => $t['lastHitBy'] ?? null, 'dealt' => !empty($t['dealt']), 'fellBy' => $t['fellBy'] ?? null];
         if ($t['kind'] === 'human' && $human === null) {
             $human = $i;
         }
@@ -111,7 +117,8 @@ function sv_outcome(array $before, array $room): array
         'score' => $human === null ? 0 : ($room['scores'][$human] ?? 0),
         'cash' => $human === null ? 0 : ($room['cash'][$human] ?? 0),
         'shield' => $human === null ? false : $room['shield'][$human],
-        'laststand' => $human === null ? false : $room['laststand'][$human]];
+        'laststand' => $human === null ? false : $room['laststand'][$human],
+        'chutes' => $human === null ? 0 : (int) ($room['chutes'][$human] ?? 0)];
 }
 
 /** The aim (angle, power) a shooter would pick to land a shell on x, found with the server's own predictor. */
@@ -428,6 +435,9 @@ $blast('harmless-next-to-a-drone', array_replace($base, ['tanks' => [$human(100)
     'ov' => ['dmg' => 0, 'radius' => 45]]));
 $blast('harmless-drone-on-a-drone', array_replace($base, ['tanks' => [$human(100), $drone(300, 100), $drone(320, 100)], 'x' => 320, 'owner' => 1, 'direct' => 2,
     'ov' => ['dmg' => 0, 'radius' => 30]]));
+// A harmless crater under a standing unit still credits its fall to the shooter, as any crater does.
+$blast('harmless-crater-under-a-drone-credits-its-fall', array_replace($base, ['tanks' => [$human(100), $drone(300, 100)], 'x' => 300, 'y' => 400,
+    'owner' => 0, 'ov' => ['dmg' => 0, 'radius' => 45]]));
 $blast('crater-clipped-at-left-edge', array_replace($base, ['tanks' => [$human(100), $drone(300)], 'x' => 4, 'y' => 400, 'wkey' => 'nuke']));
 $blast('crater-clipped-at-right-edge', array_replace($base, ['tanks' => [$human(100), $drone(300)], 'x' => 716, 'y' => 400, 'wkey' => 'nuke']));
 $blast('crater-floor-clamps-at-456', ['terrain' => ['flat' => 440], 'tanks' => [$human(100), $drone(300)], 'owner' => 0, 'wkey' => 'nuke', 'x' => 200, 'y' => 440]);
@@ -560,6 +570,24 @@ foreach ($weapons as $wkey => $def) {
     $volley("$wkey-direct-hit", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 36, 'power' => 49,
         'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(380, 200), $drone(470, 200)]]);
 }
+
+/* Falls a volley digs: Buckshot pellets digging one pit in several bursts,
+ * and craters in fractional ground, with and without parachutes. The browser
+ * replays these as a solo match plays them (falls animated every frame, one
+ * settle when the last shell is down). */
+foreach ([['flat' => 400], ['flat' => 420.54], ['flat' => 400.37]] as $ground) {
+    $gy = $ground['flat'];
+    $g = str_replace('.', '_', (string) $gy);
+    foreach ([[false, 0], [true, 1]] as [$withChute, $n]) {
+        $chuteTag = $withChute ? '-with-a-parachute' : '';
+        $volley("buck-digs-a-drone-in-bursts-ground-$g$chuteTag", ['terrain' => $ground, 'wkey' => 'buck', 'shooter' => 0, 'angle' => 45, 'power' => 46,
+            'tanks' => [['kind' => 'human', 'x' => 100.0, 'y' => $gy, 'hp' => 100, 'dirS' => 1], ['kind' => 'ai', 'x' => 400.0, 'y' => $gy, 'hp' => 100, 'dirS' => -1, 'chutes' => $n]]]);
+        $volley("shell-digs-short-of-a-pixel-ground-$g$chuteTag", ['terrain' => $ground, 'wkey' => 'shell', 'shooter' => 0, 'angle' => 30, 'power' => 51,
+            'tanks' => [['kind' => 'human', 'x' => 100.0, 'y' => $gy, 'hp' => 100, 'dirS' => 1], ['kind' => 'ai', 'x' => 400.0, 'y' => $gy, 'hp' => 100, 'dirS' => -1, 'chutes' => $n]]]);
+    }
+}
+$volley('mortar-on-its-own-gunner', ['terrain' => ['flat' => 400.37], 'wkey' => 'mortar', 'shooter' => 0, 'angle' => 90, 'power' => 15,
+    'tanks' => [['kind' => 'human', 'x' => 300.0, 'y' => 400.37, 'hp' => 200, 'dirS' => 1, 'chutes' => 1], ['kind' => 'ai', 'x' => 600.0, 'y' => 400.37, 'hp' => 100, 'dirS' => -1]]]);
 
 /* A roller: rolls down into a valley, into a unit, off the edge, stops on a rise. */
 if (isset($weapons['roller'])) {
@@ -810,13 +838,78 @@ $tactic('flip-when-the-spell-is-long', array_replace($scene('bully', ['dry' => 3
 foreach ([['over-a-pit', 300, 300], ['already-down', 300, 400], ['ground-rose-above', 300, 450], ['off-the-left-edge', -3, 380],
     ['off-the-right-edge', 730, 380], ['half-pixel-rounds-up', 10.5, 380], ['hill-slope', 200.4, 300]] as [$label, $x, $y]) {
     $t = sv_terrain(['hills' => [380, 50, 150]]);
-    $room = ['terrain' => $t, 'tanks' => [['hp' => 50, 'x' => (float) $x, 'y' => (float) $y]]];
+    $room = ['terrain' => $t, 'tanks' => [['seat' => 0, 'kind' => 'ai', 'hp' => 50, 'x' => (float) $x, 'y' => (float) $y]]];
     room_settle_tanks($room);
     $add('settle', $label, ['terrain' => ['hills' => [380, 50, 150]], 'x' => $x, 'y' => $y, 'hp' => 50], $room['tanks'][0]['y']);
 }
-$room = ['terrain' => sv_terrain($flat), 'tanks' => [['hp' => 0, 'x' => 300.0, 'y' => 200.0]]];
+$room = ['terrain' => sv_terrain($flat), 'tanks' => [['seat' => 0, 'kind' => 'ai', 'hp' => 0, 'x' => 300.0, 'y' => 200.0]]];
 room_settle_tanks($room);
 $add('settle', 'wreck-stays-put', ['terrain' => $flat, 'x' => 300, 'y' => 200, 'hp' => 0], $room['tanks'][0]['y']);
+
+/* ---- falling: units land, pay by the drop, spend parachutes, credit the digger ----
+ * A case may first fire a blast (x, y, wkey, owner) that digs the pits; then
+ * every hanging unit lands. The output is each unit's height, armor, kills,
+ * last hit and drone parachutes, the human's score, cash and parachutes, and
+ * the falls in order: [seat, dmg, credited seat (the unit itself for
+ * nobody), parachute opened, landed on]. */
+$fall = function (string $name, array $c) use ($add): void {
+    $room = sv_room($c);
+    $events = [];
+    if (isset($c['blast'])) {
+        $b = $c['blast'];
+        room_explode($room, $events, $room['tanks'][$b['owner']], $b['wkey'], (float) $b['x'], (float) $b['y'], null);
+    }
+    $events = [];
+    room_settle_tanks($room, $events);
+    $human = null;
+    $tanks = [];
+    foreach ($room['tanks'] as $i => $t) {
+        $tanks[] = ['y' => $t['y'], 'hp' => $t['hp'], 'kills' => $t['kills'] ?? 0, 'lastHitBy' => $t['lastHitBy'] ?? null,
+            'chutes' => $t['kind'] === 'ai' ? (int) ($t['chutes'] ?? 0) : null];
+        if ($t['kind'] === 'human' && $human === null) {
+            $human = $i;
+        }
+    }
+    $falls = [];
+    foreach ($events as $e) {
+        if ($e['t'] === 'fall') {
+            $falls[] = [$e['seat'], $e['dmg'], $e['by'], $e['chute'], $e['under']];
+        }
+    }
+    $add('fall', $name, $c, ['tanks' => $tanks, 'falls' => $falls,
+        'score' => $human === null ? 0 : $room['scores'][$human], 'cash' => $human === null ? 0 : ($room['cash'][$human] ?? 0),
+        'chutes' => $human === null ? 0 : (int) ($room['chutes'][$human] ?? 0)]);
+};
+$at = fn(string $kind, float $x, float $y, int $hp = 100, array $more = []) => ['kind' => $kind, 'x' => $x, 'y' => $y, 'hp' => $hp] + $more;
+foreach ([0, 5, 10, 10.5, 11, 12, 21, 22, 22.25, 37.7, 100, 166] as $drop) {
+    $fall("drop-$drop", ['terrain' => $flat, 'tanks' => [$at('human', 100, 400 - $drop, 300), $at('ai', 400, 400)]]);
+}
+$fall('ground-rose-is-free', ['terrain' => $flat, 'tanks' => [$at('human', 100, 430), $at('ai', 400, 400)]]);
+$fall('credited-to-the-digger', ['terrain' => $flat, 'tanks' => [$at('human', 100, 400), $at('ai', 400, 330, 60, ['fellBy' => 0])]]);
+$fall('fall-wrecks-pays-the-bonus', ['terrain' => $flat, 'tanks' => [$at('human', 100, 400), $at('ai', 400, 300, 12, ['fellBy' => 0])]]);
+$fall('own-pit-credits-nobody', ['terrain' => $flat, 'tanks' => [$at('human', 100, 300, 100, ['fellBy' => 0]), $at('ai', 400, 400)]]);
+$fall('drone-digs-out-the-human', ['terrain' => $flat, 'tanks' => [$at('human', 100, 300, 30, ['fellBy' => 1]), $at('ai', 400, 400)]]);
+$fall('drone-digs-out-a-drone', ['terrain' => $flat, 'tanks' => [$at('human', 600, 400), $at('ai', 100, 400), $at('ai', 300, 320, 20, ['fellBy' => 1])]]);
+$fall('parachute-opens', ['terrain' => $flat, 'tanks' => [$at('human', 100, 300, 100, ['chutes' => 2]), $at('ai', 400, 400)]]);
+$fall('under-the-threshold-keeps-it', ['terrain' => $flat, 'tanks' => [$at('human', 100, 379, 100, ['chutes' => 1]), $at('ai', 400, 400)]]);
+$fall('just-over-the-threshold-spends-it', ['terrain' => $flat, 'tanks' => [$at('human', 100, 378, 100, ['chutes' => 1]), $at('ai', 400, 400)]]);
+$fall('drone-parachute', ['terrain' => $flat, 'tanks' => [$at('human', 100, 400), $at('ai', 400, 250, 60, ['chutes' => 1, 'fellBy' => 0])]]);
+$fall('bunker-halves-shield-does-not', ['terrain' => $flat, 'tanks' => [$at('human', 100, 290, 100, ['bunker' => 2, 'shield' => true]), $at('ai', 400, 400)]]);
+$fall('lands-on-a-unit', ['terrain' => $flat, 'tanks' => [$at('human', 310, 400), $at('ai', 300, 200, 60, ['fellBy' => 2, 'chutes' => 1]), $at('ai', 600, 400)]]);
+$fall('stack-lands-bottom-up', ['terrain' => $flat, 'tanks' => [$at('ai', 300, 300), $at('human', 300, 350)]]);
+$fall('side-by-side-misses', ['terrain' => $flat, 'tanks' => [$at('human', 100, 400), $at('ai', 144, 300)]]);
+$fall('fall-wrecks-a-last-stand', ['terrain' => $flat, 'tanks' => [$at('human', 300, 250, 20, ['laststand' => true, 'fellBy' => 1]), $at('ai', 330, 400, 100), $at('ai', 600, 400)]]);
+$fall('hillside-pit', ['terrain' => ['hills' => [330, 40, 200], 'set' => [[180, 220, 420]]], 'tanks' => [$at('human', 200.4, 340), $at('ai', 500, 330)]]);
+foreach (['shell', 'mortar', 'heavy', 'nuke', 'roller'] as $wkey) {
+    if (isset($weapons[$wkey])) {
+        $fall("$wkey-digs-beside-a-drone", ['terrain' => $flat, 'tanks' => [$at('human', 100, 400), $at('ai', 330, 400, 60)],
+            'blast' => ['x' => 330 + $weapons[$wkey]['radius'] * 0.5, 'y' => 400, 'wkey' => $wkey, 'owner' => 0]]);
+    }
+}
+$fall('blast-digs-its-own-gunner', ['terrain' => $flat, 'tanks' => [$at('human', 300, 400), $at('ai', 600, 400)],
+    'blast' => ['x' => 300, 'y' => 440, 'wkey' => 'mortar', 'owner' => 0]]);
+$fall('drone-blast-digs-the-human', ['terrain' => $flat, 'tanks' => [$at('human', 300, 400, 100, ['chutes' => 1]), $at('ai', 600, 400)],
+    'blast' => ['x' => 300, 'y' => 470, 'wkey' => 'nuke', 'owner' => 1]]);
 
 /* ---- armor between rounds: carry-over, a capped repair, a plate, a wreck ----
  * Each case is a list of ops on one seat; the output is the seat's armor, its

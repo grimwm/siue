@@ -169,7 +169,9 @@
 #               jammer     rounds drones aim worse at you
 #               bunker     rounds every hit on you is halved
 #               laststand  1
-#   effect    repair, fuel, plate, shield, extralife, jammer, bunker, laststand
+#               parachute  parachutes added (they stack; see fall below)
+#   effect    repair, fuel, plate, shield, extralife, jammer, bunker, laststand,
+#             parachute
 #   minRound  optional, as for ammo
 #   dmg, radius  laststand only: the blast of the wreck when you go down
 arsenal:
@@ -561,6 +563,37 @@ arsenal:
       dmg: 50
       radius: 44
       note: Your wreck detonates when you go down.
+
+    - key: parachute
+      name: Parachutes ×2
+      cat: Tricks
+      price: 100
+      n: 2
+      effect: parachute
+      note: Opens on a fall that would cost more than a scratch; one per fall.
+
+  # A unit whose ground a blast carves away drops straight down (no sliding)
+  # and loses armor by the drop, measured at rest: nothing for the first
+  # freePx pixels, then perPx armor per pixel past them, rounded down. The
+  # shooter whose blast took the ground is credited with the damage and any
+  # wreck; a unit that digs out its own footing credits nobody. A unit that
+  # lands on another hurts the one beneath by the same amount. The bunker
+  # halves a fall like any hit; a shield does not stop one.
+  #
+  # The numbers: a burst digs 0.75 x its radius below where it lands, so a
+  # unit sitting in a fresh crater drops about 20 px (Shell: 4 armor), 32 px
+  # (Mortar: 10), 39 px (Heavy: 14) or 53 px (NUKE: 21). Those sting without
+  # deciding a round. Only a pit dug out over several turns, 210 px or more
+  # (hills sit 190 to 415, bedrock at 456), wrecks a full 100-armor tank.
+  #
+  #   freePx     pixels a unit drops for free (a number, 0 to 460)
+  #   perPx      armor lost per pixel past freePx (a number, 0 to 10)
+  #   chuteOver  a held parachute opens only when the fall would cost more
+  #              than this (a whole number, 0 to 500); at or under it the
+  #              unit keeps its parachute and takes the scratch. Scorched
+  #              Earth's own default is 5.
+  #   aiRound    first round each drone carries one parachute (1 to 99)
+  fall: {freePx: 10, perPx: 0.5, chuteOver: 5, aiRound: 3}
 
 # --------------------------------------------------------------------------
 # keys

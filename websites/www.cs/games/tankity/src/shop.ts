@@ -248,6 +248,10 @@ export function createShop(deps: ShopDeps) {
         return G.bunker > 0 ? `Dug in for ${G.bunker} more ${G.bunker === 1 ? 'round' : 'rounds'}.` : 'No bunker dug.';
       case 'laststand':
         return G.laststand ? 'Wreck is rigged to blow.' : 'Wreck is just a wreck.';
+      case 'parachute': {
+        const n = G.chutes || 0;
+        return n > 0 ? `${n} ${n === 1 ? 'parachute' : 'parachutes'} packed.` : 'No parachute packed.';
+      }
       default:
         return it.label;
     }
@@ -308,6 +312,9 @@ export function createShop(deps: ShopDeps) {
         break;
       case 'laststand':
         say(`Bought ${it.label}. Go down glowing.`, 'good');
+        break;
+      case 'parachute':
+        say(`Bought ${lots}${it.label}: ${G.chutes} packed.`, 'good');
         break;
       default:
         say(`Bought ${lots}${it.label}.`, 'good');

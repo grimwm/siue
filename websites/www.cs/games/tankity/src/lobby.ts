@@ -19,7 +19,7 @@ import type { RoomClient } from './net.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
 import type { SeatStore } from './seats.ts';
-import { TURN_DEFAULT } from './turn-time.ts';
+import { TURN_DEFAULT, TURN_SETTLE_MS, settleAfter } from './turn-time.ts';
 import type { KeyHintFn } from './ui/chrome.tsx';
 import { drawMapIcon } from './ui/icons.ts';
 import { renderLeave as drawLeave } from './ui/leave.tsx';
@@ -73,6 +73,8 @@ export interface LobbyDeps {
   seats: SeatStore;
   /** Your games and the Turn alerts button, as the lobby shows them. */
   games(): GamesView;
+  /** The player stepped out of a room (on their own turn, or not). */
+  steppedOut(code: string, myTurn: boolean): void;
   netEvent(e: RoomEvent): void;
   seatName(seat: number): string;
   closeLobbyVeil(): boolean;
@@ -96,7 +98,7 @@ export interface LobbyDeps {
 
 export function createLobby(deps: LobbyDeps) {
   const {
-    G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, games, netEvent, seatName, closeLobbyVeil,
+    G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, games, steppedOut, netEvent, seatName, closeLobbyVeil,
     closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, initials, initialsSaved, hideShop, paintHud, refreshNavHints, renderMenu,
     renderShop,
   } = deps;
@@ -434,7 +436,7 @@ export function createLobby(deps: LobbyDeps) {
     }
     LOBBY.hills = 'Hills: ' + (net.mapName || 'Random hills');
     // The host's own pick in flight is not undone by a poll that left before it.
-    if (room && typeof room.turnSecs === 'number' && !turnSending) LOBBY.turnSecs = room.turnSecs;
+    if (room && typeof room.turnSecs === 'number' && !turnPending) LOBBY.turnSecs = room.turnSecs;
     if (room && room.difficulty) LOBBY.drones = `Drones: ${DIFFICULTY_NAMES[room.difficulty] || 'Normal'} (the host's Difficulty)`;
     LOBBY.seats = ((room && room.seats) || net.seats || []).map(s => ({ human: !!s.human, name: String(s.name || ''), mode: s.mode }));
     if (room) net.hostSeat = room.hostSeat;
@@ -446,19 +448,31 @@ export function createLobby(deps: LobbyDeps) {
     lobbySay(net.isHost ? 'You host. Start when your crew is in.' : 'Hang tight. The host starts the match.');
   }
   /* The host sets the turn time, in the lobby or mid-match; it counts from
-     the next turn. The slider shows the pick at once; only the newest pick's
-     answer is applied, and a refusal puts the room's setting back. */
+     the next turn. The slider shows the pick at once, and the pick is sent
+     once it has stood TURN_SETTLE_MS (a drag is one change, one log line for
+     everyone). Only the newest answer is applied, and a refusal puts the
+     room's setting back. */
   let turnSeq = 0;
-  let turnSending = 0;
-  async function netTurnTime(secs: number): Promise<void> {
+  let turnPending = false;
+  /* The room's turn time as the server last confirmed it, while a pick waits. */
+  let turnHeld: number | null = null;
+  const sendTurnTime = settleAfter<number>(TURN_SETTLE_MS, secs => { void postTurnTime(secs); }, {
+    setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: id => clearTimeout(id as number),
+  });
+  function netTurnTime(secs: number): void {
     if (!net.code || !net.isHost) return;
-    const seq = ++turnSeq;
-    const was = net.turnSecs;
+    if (turnHeld === null) turnHeld = net.turnSecs;
     LOBBY.turnSecs = secs;
     net.turnSecs = secs;
+    turnPending = true; // a poll that left before the pick is sent must not undo it on the slider
     renderLobby();
     renderMenu();
-    turnSending++;
+    sendTurnTime(secs);
+  }
+  async function postTurnTime(secs: number): Promise<void> {
+    const seq = ++turnSeq;
+    const was = turnHeld ?? net.turnSecs;
+    turnHeld = null;
     try {
       const d = await net.post('turntime', { secs });
       if (seq !== turnSeq) return;
@@ -473,7 +487,7 @@ export function createLobby(deps: LobbyDeps) {
       if (net.on) say(prettyRoomError(err), 'bad');
       else lobbySay(prettyRoomError(err));
     } finally {
-      turnSending--;
+      if (seq === turnSeq && turnHeld === null) turnPending = false;
       renderMenu();
     }
   }
@@ -590,6 +604,7 @@ export function createLobby(deps: LobbyDeps) {
      turn runs out) and stays in Your games; nobody is told. */
   function netStepOut(quiet?: boolean): void {
     const code = net.code;
+    if (code) steppedOut(code, MATCH.myTurn);
     net.detach();
     dropRoom();
     if (!quiet && code) {

@@ -26,6 +26,8 @@ export interface GamesWatchDeps {
   clearInterval(id: unknown): void;
   /** The room on screen (its lobby or match), or ''. */
   viewing(): string;
+  /** Another tab of the game is showing this room (on-screen.ts). */
+  elsewhere?(code: string): boolean;
   onRows(rows: LiveRow[]): void;
   onTurn(row: LiveRow): void;
 }
@@ -35,10 +37,14 @@ export interface GamesWatch {
   stop(): void;
   /** Asks now (the tab came back, the player stepped out); a no-op while an ask is out. */
   pollNow(): Promise<void>;
+  /** The player just left this room on their own turn: the next answer's turn there is
+   * already known to them and raises nothing. Lapses with that answer. */
+  quietNext(code: string): void;
 }
 
 export function createGamesWatch(d: GamesWatchDeps): GamesWatch {
   const told = new Set<string>();
+  const quiet = new Set<string>();
   let id: unknown = 0;
   let busy = false;
   async function poll(): Promise<void> {
@@ -56,7 +62,12 @@ export function createGamesWatch(d: GamesWatchDeps): GamesWatch {
         if (r.code === d.viewing()) continue;
         live.push(r);
         const key = r.code + '#' + r.turnKey;
-        if (r.yourTurn && r.turnKey && !told.has(key)) { told.add(key); d.onTurn(r); }
+        const hush = quiet.delete(r.code) || !!d.elsewhere?.(r.code);
+        if (r.yourTurn && r.turnKey && !told.has(key)) {
+          told.add(key);
+          // Told already: the player just left it on this turn, or another tab shows it.
+          if (!hush) d.onTurn(r);
+        }
       }
       d.onRows(live);
     } catch (_) { /* the next tick asks again */ } finally { busy = false; }
@@ -65,5 +76,6 @@ export function createGamesWatch(d: GamesWatchDeps): GamesWatch {
     start() { if (!id) id = d.setInterval(() => { void poll(); }, GAMES_POLL_MS); void poll(); },
     stop() { if (id) { d.clearInterval(id); id = 0; } },
     pollNow: poll,
+    quietNext(code) { quiet.add(code); },
   };
 }

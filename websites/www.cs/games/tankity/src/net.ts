@@ -315,11 +315,13 @@ export class RoomClient {
    * turn it is there, the clocks, the players, or `gone`. Tokens travel in the
    * body. Throws the server's line on an error reply. */
   async mine(seats: { code: string; token: string }[]): Promise<MineRow[]> {
-    const { res, data } = await this.fetchJson('rooms.php?action=mine', {
+    // Its own path, not fetchJson: the watcher's trouble must not touch the
+    // room on screen (the server dot, a forced full refetch).
+    const res = await this.env.fetch('rooms.php?action=mine', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seats }),
     });
-    if (!res.ok || !data.ok) throw new Error(String(data.error || STUMBLED));
-    this.handlers.onReachable(true);
+    const data = (await res.json().catch(() => null)) as Reply | null;
+    if (!data || !res.ok || !data.ok) throw new Error(String((data && data.error) || STUMBLED));
     return (data as unknown as PostReplies['mine']).rooms;
   }
 

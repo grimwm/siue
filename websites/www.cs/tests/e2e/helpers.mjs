@@ -93,7 +93,7 @@ export async function newPlayer(browser, path = 'games/tankity/', { clock = fals
   // their idle limit.
   const close = ctx.close.bind(ctx);
   ctx.close = async (...args) => {
-    await leaveStoredSeats(ctx).catch(() => { /* a closed context or a stopped server: nothing to give up */ });
+    await leaveStoredSeats(ctx);
     return close(...args);
   };
   await ctx.addInitScript(recorderScript);
@@ -199,11 +199,13 @@ export async function leaveStoredSeats(ctx) {
     let seats = [];
     try { seats = JSON.parse(item.value).seats || []; } catch (_) { continue; }
     for (const s of seats) {
-      await ctx.request.post(`${origin.origin}/games/tankity/rooms.php?action=leave`, {
+      const res = await ctx.request.post(`${origin.origin}/games/tankity/rooms.php?action=leave`, {
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': s.csrf },
         data: { code: s.code, token: s.token, csrf: s.csrf },
         failOnStatusCode: false,
       });
+      // Left, or already gone (no such room, no such seat). Anything else means the cleanup broke.
+      if (![200, 401, 404].includes(res.status())) throw new Error(`leaving room ${s.code} answered ${res.status()}`);
     }
   }
 }

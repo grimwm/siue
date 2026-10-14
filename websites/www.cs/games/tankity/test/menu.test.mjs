@@ -174,3 +174,37 @@ test('in a room the host gets the turn-time slider and everyone else its label; 
   assert.equal(byId(solo.section, 'menu-turn'), undefined);
   assert.equal(byId(solo.section, 'menu-turn-label'), undefined);
 });
+
+test('Quit says the room seat waits when in a room', () => {
+  const room = draw({ inRoom: true, turn: { secs: 120, host: false }, onTurn() {} });
+  assert.match(byId(room.section, 'menu-quit').getAttribute('title'), /your room seat waits/);
+  const solo = draw({ inRoom: false });
+  assert.equal(byId(solo.section, 'menu-quit').getAttribute('title'), 'End this match and leave the game');
+});
+
+test('in a room the menu has the Turn alerts button', () => {
+  let n = 0;
+  const { section } = draw({ inRoom: true, turn: { secs: 120, host: true }, onTurn() {}, alerts: { state: 'off', onClick: () => { n++; } } });
+  const btn = byId(section, 'menu-alerts');
+  assert.equal(btn.textContent, 'Turn alerts: off');
+  click(btn);
+  assert.equal(n, 1);
+  assert.equal(byId(draw({ inRoom: false, alerts: { state: 'off', onClick() {} } }).section, 'menu-alerts'), undefined);
+});
+
+test('Enter in the seed box during a room match asks the leave question, never leaves outright', async () => {
+  const { menuMod } = await importTsx(import.meta.dirname, { menuMod: '../src/menu.ts' });
+  const section = makeEl('menu-overlay');
+  const calls = { leave: 0, ask: 0, fresh: 0 };
+  const m = menuMod.createMenu({
+    G: { body: 'tank', tanks: [] }, $: id => (id === 'menu-overlay' ? section : null),
+    net: { on: true, sendBody() {}, turnSecs: 120, isHost: false },
+    sfx: { play() {} }, difficulty: { get: () => 'normal', set() {} }, unlock() {}, isSoundMuted: () => false, isMusicMuted: () => false,
+    keyHint: () => '', myTank: () => null, netLeave: () => { calls.leave++; }, openLeaveVeil: () => { calls.ask++; },
+    placeLogBelowStatus() {}, freshMatchFromSeedBox: () => { calls.fresh++; }, toggleFullscreen() {}, quit() {}, openStandings() {},
+    turnTime() {}, alerts: () => ({ state: 'off', onClick() {} }), toggleMusic() {}, toggleOverlay() {}, toggleSound() {}, nextSong() {},
+  });
+  m.renderMenu();
+  submit(byId(section, 'seed-form'));
+  assert.deepEqual(calls, { leave: 0, ask: 1, fresh: 0 });
+});

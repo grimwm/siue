@@ -20,7 +20,7 @@ function rig({ codes = [], reply = asks => asks.map(a => row(a.code)) } = {}) {
   const store = createSeatStore(mapStorage(), () => 0);
   for (const c of [...codes].reverse()) store.remember({ code: c, seat: 1, token: 't' + c, csrf: 'c', initials: 'ZED' });
   const r = {
-    store, asks: [], rows: [], turns: [], intervals: new Map(), nextId: 1, here: '', reply, pending: null,
+    store, asks: [], rows: [], turns: [], intervals: new Map(), nextId: 1, here: '', reply, pending: null, elsewhere: [],
   };
   r.watch = createGamesWatch({
     store,
@@ -33,6 +33,7 @@ function rig({ codes = [], reply = asks => asks.map(a => row(a.code)) } = {}) {
     setInterval: (fn, ms) => { const id = r.nextId++; r.intervals.set(id, { fn, ms }); return id; },
     clearInterval: id => { r.intervals.delete(id); },
     viewing: () => r.here,
+    elsewhere: code => r.elsewhere.includes(code),
     onRows: rows => r.rows.push(rows.map(x => x.code)),
     onTurn: x => r.turns.push(x.code + '#' + x.turnKey),
   });
@@ -131,4 +132,38 @@ test('the room on screen is the match, or the lobby while it shows; a lobby clos
   assert.equal(roomOnScreen({ code: 'AAAA', on: false }, true), 'AAAA');
   assert.equal(roomOnScreen({ code: 'AAAA', on: false }, false), '');
   assert.equal(roomOnScreen({ code: '', on: false }, true), '');
+});
+
+test('a room another tab is showing is listed but never raises a turn there', async () => {
+  const r = rig({ codes: ['AAAA'], reply: asks => asks.map(a => row(a.code, { yourTurn: true, turnKey: '1:1:0', turn: 1 })) });
+  r.elsewhere = ['AAAA'];
+  r.watch.start();
+  await flush();
+  assert.deepEqual(r.rows, [['AAAA']]);
+  assert.deepEqual(r.turns, []);
+});
+
+test('after stepping out on your own turn, that turn raises no toast; the next one does', async () => {
+  let key = '1:1:0';
+  const r = rig({ codes: ['AAAA'], reply: asks => asks.map(a => row(a.code, { yourTurn: true, turnKey: key, turn: 1 })) });
+  r.watch.quietNext('AAAA');
+  r.watch.start();
+  await flush();
+  assert.deepEqual(r.turns, []);
+  key = '1:1:2';
+  r.tick();
+  await flush();
+  assert.deepEqual(r.turns, ['AAAA#1:1:2']);
+});
+
+test('quietNext lapses on the next answer when it is not your turn there', async () => {
+  let yours = false;
+  const r = rig({ codes: ['AAAA'], reply: asks => asks.map(a => row(a.code, yours ? { yourTurn: true, turnKey: '2:1:0', turn: 1 } : {})) });
+  r.watch.quietNext('AAAA');
+  r.watch.start();
+  await flush();
+  yours = true;
+  r.tick();
+  await flush();
+  assert.deepEqual(r.turns, ['AAAA#2:1:0']);
 });

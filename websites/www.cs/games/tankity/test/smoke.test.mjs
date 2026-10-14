@@ -34,6 +34,9 @@ for (const name of ['setTimeout', 'setInterval']) {
 
 const listeners = {}; // type -> [fn] on window
 global.document = document;
+// Node has a BroadcastChannel, which would keep the run alive: the page takes
+// the localStorage fallback here, as in a browser without one.
+globalThis.BroadcastChannel = undefined;
 global.window = {
   addEventListener: (t, f) => { (listeners[t] = listeners[t] || []).push(f); },
   matchMedia: () => ({ matches: false }),
@@ -1301,9 +1304,14 @@ await (async () => {
   click(els['menu-leave']); frames(2);
   click(els['leave-stay']); frames(2);
   check('leave-stay-stays', els['leave-veil'].hidden === true && leaveSent === 0);
+  // Hosting remembered the seat in this browser; Leave forgets it.
+  const storedCodes = () => { try { return JSON.parse(window.localStorage.getItem('tankity-seats') || '{}').seats.map(s => s.code); } catch (_) { return []; } };
+  const heldBefore = storedCodes();
   click(els['menu-leave']); frames(2);
   click(els['leave-go']); await tick(10); frames(5);
   check('leave-sent', leaveSent === 1, 'leaves=' + leaveSent);
+  check('seat-remembered-then-forgotten', heldBefore.length > 0 && storedCodes().length === heldBefore.length - 1,
+    heldBefore.join() + ' -> ' + storedCodes().join());
   check('leave-cleaned-up', els['leave-veil'].hidden === true && els['menu-overlay'].hidden === true
     && els['shop-veil'].hidden === true && els['lobby-veil'].hidden === true
     && els['menu-leave'].hidden === true && els['shop-leave'].hidden === true,

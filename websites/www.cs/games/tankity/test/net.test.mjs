@@ -685,7 +685,7 @@ check('invite-url-escapes-the-code', inviteUrl('A&B', {}) === '?code=A%26B');
   const req = host.log[0];
   check('mine-posts-the-seats', req.url === 'rooms.php?action=mine' && req.init.method === 'POST'
     && j(bodyOf(req)) === j({ seats: [{ code: 'FXT1', token: 'tok' }, { code: 'GONE', token: 't2' }] }), req.init.body);
-  check('mine-returns-the-rows', j(rows) === j(reply.rooms) && seen.reachable.includes(true));
+  check('mine-returns-the-rows', j(rows) === j(reply.rooms));
   const bad = makeClient(() => ({ status: 422, body: { ok: false, error: 'too many rooms at once' } }));
   let msg = '';
   try { await bad.net.mine([]); } catch (err) { msg = err.message; }
@@ -722,4 +722,18 @@ check('invite-url-escapes-the-code', inviteUrl('A&B', {}) === '?code=A%26B');
   check('close-left-counts-down', Math.abs(net.closeClockLeft() - 540) < 1e-9, String(net.closeClockLeft()));
   net.apply({ phase: 'play', events: [], seats: [], turnLeft: 86000, shopLeft: null, turnSecs: 86400 });
   check('close-left-missing-is-no-close', net.closeClockLeft() === null);
+}
+
+// ---- the watcher's ask never touches the room on screen: no dot flip, no forced full refetch ----
+{
+  const failing = makeClient(() => new Error('offline'));
+  let threw = false;
+  try { await failing.net.mine([{ code: 'FXT1', token: 'tok' }]); } catch (_) { threw = true; }
+  check('mine-failure-rejects', threw);
+  check('mine-failure-leaves-the-dot', failing.seen.reachable.length === 0, JSON.stringify(failing.seen.reachable));
+  await failing.net.getState().catch(() => {});
+  check('mine-failure-forces-no-full-fetch', !failing.host.log.at(-1).url.includes('full=1'), failing.host.log.at(-1).url);
+  const fine = makeClient(() => ok(fixture('mine-reply')));
+  await fine.net.mine([{ code: 'FXT1', token: 'tok' }]);
+  check('mine-success-leaves-the-dot', fine.seen.reachable.length === 0, JSON.stringify(fine.seen.reachable));
 }

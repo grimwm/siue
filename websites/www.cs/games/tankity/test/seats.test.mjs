@@ -54,8 +54,17 @@ test('malformed or wrongly shaped storage reads as empty and never throws', () =
   const bad = createSeatStore(mapStorage({ [SEATS_KEY]: '{not json' }), () => 0);
   assert.deepEqual(bad.list(), []);
   assert.equal(bad.get('AAAA'), null);
-  const wrong = createSeatStore(mapStorage({ [SEATS_KEY]: JSON.stringify({ v: 1, seats: [{ code: 'lower', seat: 0 }] }) }), () => 0);
+  const wrong = createSeatStore(mapStorage({ [SEATS_KEY]: JSON.stringify({ v: 2, seats: [] }) }), () => 0);
   assert.deepEqual(wrong.list(), []);
+});
+
+test('one bad entry is dropped, never the whole list', () => {
+  const good = { ...seat('GOOD'), at: 1 };
+  const storage = mapStorage({ [SEATS_KEY]: JSON.stringify({ v: 1, seats: [{ code: 'lower', seat: 0 }, good, 'junk'] }) });
+  const store = createSeatStore(storage, () => 2);
+  assert.deepEqual(store.list(), [good]);
+  store.remember(seat('NEWW'));
+  assert.deepEqual(store.list().map(s => s.code), ['NEWW', 'GOOD']);
 });
 
 test('storage that refuses writes, or none at all, keeps the seat for the session', () => {

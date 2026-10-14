@@ -66,7 +66,7 @@ export function YourGames(p: YourGamesProps) {
         {p.rows.map(r => (
           <li key={r.code} class={r.yourTurn ? 'game-row your-turn' : 'game-row'}>
             <span class="game-text">{gameLine(r, p.age)}</span>
-            <button type="button" class="game-open" title={`Open room ${r.code}`} onClick={blurThen(() => p.onOpen(r.code))}>Open</button>
+            <button type="button" class="game-open" title={`Open room ${r.code}`} aria-label={`Open room ${r.code}`} onClick={blurThen(() => p.onOpen(r.code))}>Open</button>
           </li>
         ))}
       </ul>

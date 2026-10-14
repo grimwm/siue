@@ -8,7 +8,7 @@ import path from 'node:path';
 import { document, makeEl, fire } from '../../_kit/test/dom-stub.mjs';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import {
-  TURN_STOPS, TURN_DEFAULT, TURN_LABELS, TURN_LONG_S, turnIndex, turnLabel, clockText, turnNote, shopNote,
+  TURN_STOPS, TURN_DEFAULT, TURN_LABELS, TURN_LONG_S, TURN_SETTLE_MS, turnIndex, turnLabel, clockText, turnNote, shopNote, settleAfter,
 } from '../src/turn-time.ts';
 
 globalThis.document = document;
@@ -101,4 +101,20 @@ test('without the say, the slider is only its label', () => {
   tt.renderTurnTime(box, { id: 'room-turn', secs: 600, disabled: true, onChange: () => {} });
   assert.equal(byId(box, 'room-turn'), undefined);
   assert.equal(byId(box, 'room-turn-label').textContent, 'Turn time: 10 min');
+});
+
+test('a dragged slider sends only the value it settles on', () => {
+  const timers = new Map();
+  let next = 1;
+  const t = { setTimeout: (fn, ms) => { const id = next++; timers.set(id, { fn, ms }); return id; }, clearTimeout: id => { timers.delete(id); } };
+  const sent = [];
+  const send = settleAfter(TURN_SETTLE_MS, v => sent.push(v), t);
+  send(600); send(1800); send(28800);
+  assert.equal(timers.size, 1);
+  assert.equal([...timers.values()][0].ms, 400);
+  for (const [id, x] of [...timers]) { timers.delete(id); x.fn(); }
+  assert.deepEqual(sent, [28800]);
+  send(60);
+  for (const [id, x] of [...timers]) { timers.delete(id); x.fn(); }
+  assert.deepEqual(sent, [28800, 60]);
 });

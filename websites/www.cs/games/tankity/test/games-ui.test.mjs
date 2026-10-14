@@ -51,6 +51,7 @@ test('one row per room, saying where it stands, each with Open', () => {
   assert.match(texts[5], /Your turn · room closes in 9:00 unless someone plays/);
   assert.match(texts[6], /REAPER's turn/);
   const open = byTag(items[0], 'button').find(b => /Open/.test(b.textContent));
+  assert.equal(open.getAttribute('aria-label'), 'Open room 7K2Q');
   click(open);
   assert.deepEqual(calls.open, ['7K2Q']);
 });
@@ -79,8 +80,10 @@ test('toasts: the text, Go and a dismiss button; nothing when empty', () => {
   const root = makeEl('toast-root');
   const calls = { go: 0, close: 0 };
   toast.renderToasts(root, [{ id: 1, text: 'Your turn in 7K2Q · vs ZED', onGo: () => { calls.go++; }, onClose: () => { calls.close++; } }]);
-  const items = walk(root).filter(n => n.getAttribute && n.getAttribute('role') === 'status');
+  // The root is the live region; a toast is not a second one.
+  const items = walk(root).filter(n => String(n.className || '') === 'toast');
   assert.equal(items.length, 1);
+  assert.ok(items[0].getAttribute('role') == null);
   assert.match(items[0].textContent, /^Your turn in 7K2Q · vs ZED/);
   const buttons = byTag(items[0], 'button');
   const go = buttons.find(b => b.textContent === 'Go');
@@ -89,7 +92,7 @@ test('toasts: the text, Go and a dismiss button; nothing when empty', () => {
   click(x);
   assert.deepEqual(calls, { go: 1, close: 1 });
   toast.renderToasts(root, []);
-  assert.equal(walk(root).filter(n => n.getAttribute && n.getAttribute('role') === 'status').length, 0);
+  assert.equal(walk(root).filter(n => String(n.className || '') === 'toast').length, 0);
 });
 
 test('the title card shows Your games only when there are rooms', () => {

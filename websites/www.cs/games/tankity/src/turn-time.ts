@@ -12,6 +12,19 @@ export const TURN_DEFAULT = 120;
 export const TURN_LABELS = ['Lightning · 1 min', '2 min', '10 min', '30 min', '8 h', '24 h', '1 week'] as const;
 /** Turn times this long or longer show the time left on the status bar. */
 export const TURN_LONG_S = 600;
+/** The host's slider sends its value once it has stood this long, so a drag
+ * makes one change (one log line for everyone), not one per stop. */
+export const TURN_SETTLE_MS = 400;
+
+/** Calls `fn` with the last value given, once none has come for `ms`. */
+export function settleAfter<T>(ms: number, fn: (v: T) => void,
+  t: { setTimeout(fn: () => void, ms: number): unknown; clearTimeout(id: unknown): void }): (v: T) => void {
+  let id: unknown = null;
+  return v => {
+    if (id !== null) t.clearTimeout(id);
+    id = t.setTimeout(() => { id = null; fn(v); }, ms);
+  };
+}
 
 export function turnIndex(secs: number): number {
   const i = (TURN_STOPS as readonly number[]).indexOf(secs);

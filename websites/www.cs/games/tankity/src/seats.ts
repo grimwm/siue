@@ -7,7 +7,8 @@
  * this origin's storage with its CSRF token. Newest first, at most SEATS_MAX;
  * storage that is missing, malformed or refuses writes never throws (the
  * kit's pref keeps a session copy instead). */
-import { json, pref } from '../../_kit/prefs.ts';
+import { pref } from '../../_kit/prefs.ts';
+import type { Codec } from '../../_kit/prefs.ts';
 import type { StorageLike } from '../../_kit/ports.ts';
 
 export interface StoredSeat { code: string; seat: number; token: string; csrf: string; initials: string; at: number }
@@ -23,8 +24,16 @@ function isSeat(s: unknown): s is StoredSeat {
     && typeof x.token === 'string' && x.token !== '' && typeof x.csrf === 'string'
     && typeof x.initials === 'string' && typeof x.at === 'number';
 }
-const isSaved = (v: unknown): v is Saved =>
-  !!v && typeof v === 'object' && (v as Saved).v === 1 && Array.isArray((v as Saved).seats) && (v as Saved).seats.every(isSeat);
+/* A list read leniently: a malformed entry (a hand edit, an older shape) is
+   dropped on its own, so it can never wipe the seats beside it. */
+const seatsCodec: Codec<Saved> = {
+  parse(raw) {
+    const v: unknown = JSON.parse(raw);
+    if (!v || typeof v !== 'object' || (v as Saved).v !== 1 || !Array.isArray((v as Saved).seats)) throw new Error('unexpected shape');
+    return { v: 1, seats: (v as { seats: unknown[] }).seats.filter(isSeat) };
+  },
+  stringify: v => JSON.stringify(v),
+};
 
 export interface SeatStore {
   /** Newest first. */
@@ -37,7 +46,7 @@ export interface SeatStore {
 }
 
 export function createSeatStore(storage: StorageLike | null, now: () => number): SeatStore {
-  const p = pref<Saved>(SEATS_KEY, { v: 1, seats: [] }, json(isSaved), storage);
+  const p = pref<Saved>(SEATS_KEY, { v: 1, seats: [] }, seatsCodec, storage);
   const list = (): StoredSeat[] => p.get().seats;
   return {
     list,

@@ -16,6 +16,7 @@ import type { RoomClient } from './net.ts';
 import { drawUnitIcon } from './ui/icons.ts';
 import { renderMenu as drawMenu } from './ui/menu.tsx';
 import type { KeyHintFn } from './ui/chrome.tsx';
+import type { AlertsState } from './ui/games.tsx';
 
 /** The slice of the game's state the menu reads and writes (main.ts's G). */
 export type MenuState = Pick<GameState, 'body' | 'tanks'>;
@@ -32,7 +33,6 @@ export interface MenuDeps {
   isMusicMuted(): boolean;
   keyHint: KeyHintFn;
   myTank(): GameTank | null;
-  netLeave(quiet?: boolean): void;
   openLeaveVeil(): void;
   placeLogBelowStatus(): void;
   freshMatchFromSeedBox(opts?: { tut?: boolean }): void;
@@ -42,6 +42,8 @@ export interface MenuDeps {
   openStandings(): void;
   /** The host set the room's turn time. */
   turnTime(secs: number): void;
+  /** The Turn alerts button's state and click. */
+  alerts(): { state: AlertsState; onClick: () => void };
   toggleMusic(): void;
   toggleOverlay(id: string, btnId?: string): void;
   toggleSound(): void;
@@ -50,8 +52,8 @@ export interface MenuDeps {
 
 export function createMenu(deps: MenuDeps) {
   const {
-    G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
-    freshMatchFromSeedBox, openStandings, turnTime, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong,
+    G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
+    freshMatchFromSeedBox, openStandings, turnTime, alerts, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong,
   } = deps;
 
   /* Ground units: every human (you, and the people in a room) picks a body.
@@ -130,7 +132,8 @@ export function createMenu(deps: MenuDeps) {
       onClose: () => toggleOverlay('menu-overlay', 'btn-menu'),
       onPlaySeed: () => { unlock(); sfx.play('click'); freshMatchFromSeedBox(); },
       onSubmit: () => {
-        if (net.on) { netLeave(); return; }
+        // In a room, Enter asks the leave question like Leave room does.
+        if (net.on) { openLeaveVeil(); return; }
         sfx.play('click');
         freshMatchFromSeedBox();
       },
@@ -156,6 +159,7 @@ export function createMenu(deps: MenuDeps) {
       inRoom: net.on,
       turn: net.on ? { secs: net.turnSecs, host: net.isHost } : null,
       onTurn: turnTime,
+      alerts: net.on ? alerts() : null,
       onLeave: openLeaveVeil,
       onQuit: quit,
       onNextSong: nextSong,

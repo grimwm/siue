@@ -69,6 +69,9 @@ import { difficultySetting } from './difficulty.ts';
 import { initialsPref } from './initials.ts';
 import { createSeatStore } from './seats.ts';
 import { createGamesWatch, roomOnScreen } from './games.ts';
+import { createToastQueue } from './toasts.ts';
+import { createOnScreen, ON_SCREEN_BEAT_MS } from './on-screen.ts';
+import type { ChannelLike } from './on-screen.ts';
 import type { LiveRow } from './games.ts';
 import { alertsPref, askNotify, notifyPermission, showTurnNotification } from './notify.ts';
 import { renderToasts } from './ui/toast.tsx';
@@ -492,7 +495,8 @@ const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
   netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime,
 } = createLobby({
-  G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, games: () => gamesView(), netEvent, seatName, closeLobbyVeil,
+  G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, games: () => gamesView(),
+  steppedOut: (code, myTurn) => { if (myTurn) watch.quietNext(code); }, netEvent, seatName, closeLobbyVeil,
   closeOverlays, closePreview, endTutorial, hideShop, initials: savedInitials, initialsSaved: () => renderTitle(), paintHud, refreshNavHints,
   renderMenu: () => renderMenu(),
   closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
@@ -500,9 +504,9 @@ const {
 });
 /* The game menu's settings (src/menu.ts). */
 const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
-  G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
+  G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
   nextSong: () => { unlock(); music.next(); },
-  openStandings: () => openStandings(), turnTime: secs => { void netTurnTime(secs); }, freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
+  openStandings: () => openStandings(), turnTime: secs => netTurnTime(secs), alerts: () => ({ state: alertsState(), onClick: toggleAlerts }), freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
   quit: () => { void quitGame(); },
 });
 /* The title card over the demo (src/title.ts). */
@@ -567,50 +571,75 @@ function openGame(code: string): void {
     if (net.code) netStepOut(true);
     closeOverlays();
   }
+  if (!seats.get(code)) {
+    // Given up in another tab, or found gone since the list was drawn.
+    say('That seat is no longer held here.', 'info');
+    void watch.pollNow();
+    return;
+  }
   void resumeRoom(code).then(() => { void watch.pollNow(); });
 }
-/* The turn toasts (src/ui/toast.tsx): one per room at most, the newest three,
-   each gone after TOAST_MS. */
-const TOAST_MS = 12_000;
-let toastList: { id: number; code: string; text: string }[] = [];
-let toastSeq = 0;
+/* The turn toasts (src/toasts.ts, drawn by src/ui/toast.tsx): one per room,
+   the newest few, each counting down only once the page is seen. */
+const toasts = createToastQueue({
+  setTimeout: (fn, ms) => setTimeout(fn, ms),
+  clearTimeout: id => clearTimeout(id as number),
+  hidden: () => !!document.hidden,
+  onChange: () => renderToastStack(),
+});
 function renderToastStack(): void {
   const root = $('toast-root');
   if (!root) return;
-  renderToasts(root, toastList.map(t => ({
+  renderToasts(root, toasts.list().map(t => ({
     id: t.id, text: t.text,
-    onGo: () => { closeToast(t.id); openGame(t.code); },
-    onClose: () => closeToast(t.id),
+    onGo: () => { toasts.close(t.id); openGame(t.code); },
+    onClose: () => toasts.close(t.id),
   })));
 }
-function closeToast(id: number): void {
-  toastList = toastList.filter(t => t.id !== id);
-  renderToastStack();
+/* Which room each tab shows (src/on-screen.ts): this tab reports its own,
+   and the watcher never toasts a room another tab is showing. */
+const onScreen = createOnScreen({
+  tab: Math.random().toString(36).slice(2),
+  now: () => Date.now(),
+  channel: (() => {
+    try { return typeof BroadcastChannel === 'function' ? new BroadcastChannel('tankity') as unknown as ChannelLike : null; } catch (_) { return null; }
+  })(),
+  storage: browserStorage(),
+  listen: fn => window.addEventListener('storage', e => fn(e.key)),
+});
+function screenRoom(): string {
+  return roomOnScreen(net, !($('lobby-veil')?.hidden ?? true));
 }
-function pushToast(code: string, text: string): void {
-  const id = ++toastSeq;
-  toastList = [...toastList.filter(t => t.code !== code), { id, code, text }].slice(-3);
-  renderToastStack();
-  setTimeout(() => closeToast(id), TOAST_MS);
+function reportScreen(): void {
+  onScreen.set(document.hidden ? '' : screenRoom());
 }
+let rowsSig = '';
 const watch = createGamesWatch({
   store: seats,
   mine: list => net.mine(list),
   setInterval: (fn, ms) => setInterval(fn, ms),
   clearInterval: id => clearInterval(id as number),
-  viewing: () => roomOnScreen(net, !($('lobby-veil')?.hidden ?? true)),
-  onRows: rows => { gamesRows = rows; gamesAt = performance.now(); renderGames(); },
+  viewing: screenRoom,
+  elsewhere: code => onScreen.elsewhere(code),
+  onRows: rows => {
+    gamesRows = rows;
+    gamesAt = performance.now();
+    // Redraw only when the list changed: the title card and lobby are not redrawn every poll for nothing.
+    const sig = JSON.stringify(rows);
+    if (sig !== rowsSig) { rowsSig = sig; renderGames(); }
+  },
   onTurn: row => {
     // `players` lists humans only, so a seat number is not an index into it: drop this seat's own initials.
     const me = seats.get(row.code)?.initials ?? '';
     const others = row.players.filter(p => p !== me);
-    pushToast(row.code, `Your turn in ${row.code} · vs ${others.join(', ') || 'the drones'}`);
+    toasts.push(row.code, `Your turn in ${row.code} · vs ${others.join(', ') || 'the drones'}`);
     if (document.hidden) showTurnNotification({ code: row.code, others }, alertsState() === 'on', () => openGame(row.code));
   },
 });
 /* A seat given up (Leave) or found gone drops out of the list at once. */
 seats.subscribe(() => {
   gamesRows = gamesRows.filter(r => seats.get(r.code));
+  rowsSig = JSON.stringify(gamesRows);
   renderGames();
 });
 function myTank(): GameTank | null {
@@ -824,7 +853,15 @@ function init(): void {
   maybeApplyInviteCode();
   // Your games: asked now and every GAMES_POLL_MS, and again whenever the tab comes back.
   watch.start();
-  if (document.addEventListener) document.addEventListener('visibilitychange', () => { if (!document.hidden) void watch.pollNow(); });
+  if (document.addEventListener) {
+    document.addEventListener('visibilitychange', () => {
+      reportScreen();
+      if (!document.hidden) { toasts.shown(); void watch.pollNow(); }
+    });
+  }
+  // The room this tab shows, told to the other tabs now and on a beat (they forget a quiet tab).
+  setInterval(reportScreen, ON_SCREEN_BEAT_MS);
+  window.addEventListener('pagehide', () => onScreen.set(''));
 
   document.querySelectorAll<HTMLElement>('[data-aim]').forEach(btn => {
     const act = AIM_COMMANDS[btn.getAttribute('data-aim') ?? ''];
@@ -946,7 +983,7 @@ function closeLobbyVeil(): boolean {
   veil.hidden = true;
   refreshNavHints();
   // A room's lobby closed while seated: the seat waits, and Your games lists the room.
-  if (net.code && !net.on) void watch.pollNow();
+  if (net.code && !net.on) { reportScreen(); void watch.pollNow(); }
   return true;
 }
 function closeOverlays(): boolean {
@@ -989,10 +1026,11 @@ function menuFocus(open: boolean): void {
    demo; an installed app then closes where it may. A room is stepped out of,
    like closing the tab: the seat waits there. */
 async function quitGame(): Promise<void> {
-  if (net.on) netStepOut(true);
+  const room = net.on ? net.code : '';
+  if (room) netStepOut(true);
   endTutorial(tutorialActive());
   backToTitle();
-  say('You left the match.', 'info');
+  say(room ? `You stepped out of room ${room}; your seat waits. Leave room gives it up.` : 'You left the match.', 'info');
   const outcome = await exitApp(browserAppEnv());
   // The card may be gone already: a match started inside the close wait.
   if (outcome === 'title-with-hint') showTitleHint(`${EXIT_HINT}.`);

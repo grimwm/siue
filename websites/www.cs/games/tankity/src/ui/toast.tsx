@@ -1,5 +1,6 @@
 /* The turn toasts: "Your turn in 7K2Q · vs ZED" with Go (to that room) and a
- * dismiss button, stacked in #toast-root (index.html, aria-live polite). The
+ * dismiss button, stacked in #toast-root (index.html, aria-live polite: the
+ * one live region, so a toast is announced once). The
  * game owns the list, closes each after a while, and says what Go does. No
  * key is bound to them.
  * Copyright (C) 2026 William Grim
@@ -18,7 +19,7 @@ export function Toasts({ toasts }: { toasts: Toast[] }) {
   return (
     <>
       {toasts.map(t => (
-        <div key={t.id} class="toast" role="status">
+        <div key={t.id} class="toast">
           <span class="toast-text">{t.text}</span>
           <button type="button" class="toast-go btn-primary" onClick={blurThen(t.onGo)}>Go</button>
           <button type="button" class="toast-x" aria-label="Dismiss" title="Dismiss" onClick={blurThen(t.onClose)}>×</button>

@@ -10,7 +10,7 @@
  * touches no element: the cooldown fields come through `readyAt`/`setReadyAt`,
  * and the visible effects (the blast, the holes, the landscape, the knock-outs,
  * the eye, the raptor's sprite, the buttons) come in as callbacks. DOM-free, so
- * test/abilities.test.mjs runs it on a fake clock with fake timers. */
+ * test/abilities.test.ts runs it on a fake clock with fake timers. */
 
 import { isBackKey } from '../../_kit/keys.ts';
 import type { BackKeyEvent } from '../../_kit/keys.ts';

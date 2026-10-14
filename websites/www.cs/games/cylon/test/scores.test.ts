@@ -7,6 +7,7 @@ import { createScoresClient, highScoreRows, weeklyResetText } from '../src/score
 import type { ScoreEntry } from '../src/scores.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { last, nth } from './nth.ts';
 
 
 interface FakeOptions {
@@ -20,14 +21,6 @@ interface FakeOptions {
 /** The JSON body of a POST the client sent. */
 interface SentBody { op: string; run?: string; initials: string; score: number; hits?: number }
 interface LoggedCall { method: string; url: URL | RequestInfo; csrf: string | null; body: SentBody | null }
-
-/** The element at `i`, asserted present (the index is checked, not assumed). */
-function nth<T>(list: readonly T[], i: number): T {
-  const v = list[i];
-  assert.ok(v !== undefined, `no element at ${i} of ${list.length}`);
-  return v;
-}
-const last = <T>(list: readonly T[]): T => nth(list, list.length - 1);
 
 function fakeServer(opts: FakeOptions = {}) {
   const log: LoggedCall[] = [];

@@ -389,7 +389,8 @@ function tankity_yaml_scalar(string $t): mixed
 
 /* ---------------------------------------------------------------- schema */
 
-const TANKITY_AMMO_EFFECTS = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter'];
+const TANKITY_AMMO_EFFECTS = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter', 'beam', 'plasma',
+    'tracer'];
 /** The fields an ammo row carries for its effect: field => [type, [effect => [lo, hi]]]. A field is
  *  valid only on the effects listed for it, with that effect's range (bool fields have no range). */
 const TANKITY_AMMO_EXTRA = [
@@ -409,6 +410,7 @@ const TANKITY_AMMO_EXTRA = [
     'drain' => ['int', ['emp' => [0, 1000]]],
     'friction' => ['num', ['roller' => [0.01, 5.0]]],
     'rollTime' => ['num', ['roller' => [0.5, 10.0]]],
+    'range' => ['int', ['beam' => [60, 1200]]],
 ];
 /** The fields each effect requires (a cluster with apex: true needs no fuse). */
 const TANKITY_AMMO_NEEDS = [
@@ -420,9 +422,12 @@ const TANKITY_AMMO_NEEDS = [
     'roller' => ['friction', 'rollTime'],
     'hop' => ['hops', 'hopKeep', 'subDmg', 'subRadius'],
     'scatter' => ['split', 'fan', 'kick', 'subDmg', 'subRadius'],
+    'beam' => ['range'],
 ];
 const TANKITY_GEAR_EFFECTS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand', 'parachute'];
-const TANKITY_PAINTERS = ['disc', 'beam', 'spark', 'ball'];
+const TANKITY_PAINTERS = ['disc', 'beam', 'spark', 'ball', 'dash'];
+/** A tracer's mark (gfx.mark): a line its gunner sees, or smoke everyone sees. */
+const TANKITY_MARKS = ['line', 'smoke'];
 const TANKITY_SFX_EVENTS = ['move', 'click', 'launch', 'boom', 'clank', 'thud', 'warn', 'cash', 'bark', 'win', 'lose', 'fanfare'];
 const TANKITY_AUDIO_EXT = ['mp3', 'ogg', 'm4a', 'wav'];
 const TANKITY_FX_SLOTS = ['muzzle', 'trail', 'impact'];
@@ -712,7 +717,8 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         $o['name'] = $c->str($row, 'name', $p, 40);
         $o['cat'] = $c->str($row, 'cat', $p, 30);
         $o['dmg'] = $c->int($row, 'dmg', $p, 0, 500);
-        $o['radius'] = $c->int($row, 'radius', $p, 1, 200);
+        // A tracer has no blast, so only a tracer may have radius 0.
+        $o['radius'] = $c->int($row, 'radius', $p, ($row['effect'] ?? null) === 'tracer' ? 0 : 1, 200);
         $o['price'] = $c->int($row, 'price', $p, 0, 100000);
         $o['pack'] = $c->int($row, 'pack', $p, 0, 99);
         if (array_key_exists('start', $row) && $row['start'] !== null) {
@@ -763,8 +769,11 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
                 $c->err("$p.$k", "is required when effect is $effect");
             }
         }
+        if ($effect === 'tracer' && $o['dmg'] !== null && $o['dmg'] !== 0) {
+            $c->err("$p.dmg", 'a tracer does no damage; must be 0');
+        }
         $o['note'] = $c->str($row, 'note', $p, 120);
-        $o['gfx'] = tankity_build_gfx($c, $row['gfx'] ?? null, "$p.gfx");
+        $o['gfx'] = tankity_build_gfx($c, $row['gfx'] ?? null, "$p.gfx", $effect);
         $res['ammo'][] = tankity_ordered($o, array_merge(['key', 'name', 'cat', 'dmg', 'radius', 'price', 'pack', 'start', 'minRound', 'ai', 'aiRound', 'aiRack',
             'effect'], array_keys(TANKITY_AMMO_EXTRA), ['flat', 'speed', 'note', 'gfx']));
     }
@@ -833,13 +842,13 @@ function tankity_build_fall(TankityCheck $c, mixed $f): ?array
     ];
 }
 
-function tankity_build_gfx(TankityCheck $c, mixed $g, string $p): ?array
+function tankity_build_gfx(TankityCheck $c, mixed $g, string $p, ?string $effect = null): ?array
 {
     $g = $c->map($g, $p);
     if ($g === null) {
         return null;
     }
-    $c->allow($g, ['shell', 'trail', 'blast', 'painter', 'shake', 'linger'], $p);
+    $c->allow($g, ['shell', 'trail', 'blast', 'painter', 'shake', 'linger', 'mark'], $p);
     $o = [];
     foreach (['shell', 'trail'] as $k) {
         $o[$k] = array_key_exists($k, $g) ? $c->color($g[$k], "$p.$k") : null;
@@ -856,7 +865,16 @@ function tankity_build_gfx(TankityCheck $c, mixed $g, string $p): ?array
     $o['painter'] = $c->enum($g, 'painter', $p, TANKITY_PAINTERS);
     $o['shake'] = $c->num($g, 'shake', $p, 0.0, 1.0);
     $o['linger'] = $c->num($g, 'linger', $p, 0.1, 3.0, false);
-    return tankity_ordered($o, ['shell', 'trail', 'blast', 'painter', 'shake', 'linger']);
+    if ($effect === 'tracer') {
+        if (!array_key_exists('mark', $g) || $g['mark'] === null) {
+            $c->err("$p.mark", 'is required when effect is tracer');
+        } else {
+            $o['mark'] = $c->enum($g, 'mark', $p, TANKITY_MARKS);
+        }
+    } elseif (array_key_exists('mark', $g)) {
+        $c->err("$p.mark", 'only the tracer effect uses this');
+    }
+    return tankity_ordered($o, ['shell', 'trail', 'blast', 'painter', 'shake', 'linger', 'mark']);
 }
 
 function tankity_build_keys(TankityCheck $c, mixed $k): array

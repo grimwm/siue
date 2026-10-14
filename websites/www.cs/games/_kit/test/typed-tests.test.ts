@@ -145,11 +145,6 @@ const ALLOW: Allow = {
     'games/tankity/test/php/ConfigTest.php',
     'games/tankity/test/php/GameJsonTest.php',
     'games/tankity/test/php/RoomsSimTest.php',
-    'tests/php/DeploySetTest.php',
-    'tests/php/GamesHubTest.php',
-    'tests/php/HtaccessTest.php',
-    'tests/php/SiteGamePagesTest.php',
-    'tests/php/SiteVersionsTest.php',
   ],
 };
 

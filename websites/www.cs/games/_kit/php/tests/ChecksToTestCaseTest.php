@@ -28,25 +28,7 @@ final class ChecksToTestCaseTest extends TestCase
         $script = "$this->dir/$fixture.checks.php";
         copy(__DIR__ . "/fixture/$fixture.checks.php", $script);
         $class = "$this->dir/OkTest.php";
-        file_put_contents($class, <<<'PHP'
-            <?php
-            declare(strict_types=1);
-
-            final class OkTest extends LegacyCheckCase
-            {
-                private const ROOT = '/x';
-
-                protected static function script(): string
-                {
-                    return __DIR__ . '/ok.checks.php';
-                }
-
-                private static function twice(int $n): int
-                {
-                    return $n * 2;
-                }
-            }
-            PHP);
+        copy(__DIR__ . '/fixture/ok.legacy.php', $class);
         $out = [];
         exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(self::TOOL) . ' ' . escapeshellarg($class) . ' ' . escapeshellarg($script) . ' 2>&1', $out, $code);
         return [$code, implode("\n", $out), $class, $script];

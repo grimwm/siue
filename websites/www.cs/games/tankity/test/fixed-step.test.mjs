@@ -58,7 +58,7 @@ test('a tank over a crater falls through the same heights at any frame rate', ()
     const world = { terrain: Array(720).fill(400), tanks: [{ x: 300, y: 300, hp: 50, vy: 0 }] };
     const ys = [];
     let acc = 0;
-    for (const dt of frames) acc = runFixed(acc, dt, SOLO_STEP, h => { fallTanks(world, h); ys.push(world.tanks[0].y); return true; });
+    for (const dt of frames) acc = runFixed(acc, dt, SOLO_STEP, h => { fallTanks(world, h); ys.push(world.tanks[0].drawY ?? world.tanks[0].y); return true; });
     return ys;
   };
   const steady = fall(Array(120).fill(1 / 60));

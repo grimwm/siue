@@ -175,11 +175,12 @@ const RUN = {
     // one settle when the last shell is down (src/match.ts), which must come out
     // as the room server's volley does (server/rules.php room_fire_shot).
     for (let frame = 0; G.shells.length && frame < 5000; frame++) {
-      sim.fallTanks(G, 1 / 60, true);
+      sim.fallTanks(G, 1 / 60);
       sim.stepShells(G, arsenal, 1 / 60);
-      if (!G.shells.length) sim.settleAndShow(G, arsenal);
+      sim.armChutes(G, arsenal);
+      if (!G.shells.length) sim.settleVolley(G, arsenal);
     }
-    for (let frame = 0; frame < 5000 && sim.anyTankFalling(G); frame++) sim.fallTanks(G, 1 / 60, true);
+    for (let frame = 0; frame < 5000 && sim.anyTankFalling(G); frame++) sim.fallTanks(G, 1 / 60);
     return outcome(before);
   },
   fall(c) {
@@ -260,8 +261,7 @@ const RUN = {
   },
   settle(c) {
     world({ terrain: c.terrain, tanks: [{ kind: 'ai', x: c.x, y: c.y, hp: c.hp }] });
-    for (let i = 0; i < 5000 && sim.anyTankFalling(G); i++) sim.fallTanks(G, 1 / 60);
-    sim.fallTanks(G, 1 / 60);
+    sim.settleFalls(G, arsenal);
     return G.tanks[0].y;
   },
 };

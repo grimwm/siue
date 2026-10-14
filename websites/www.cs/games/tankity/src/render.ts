@@ -613,6 +613,10 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.drawImage(sh.img, (f % sh.cols) * sh.fw, ((f / sh.cols) | 0) * sh.fh, sh.fw, sh.fh, mx - mr, my - mr, mr * 2, mr * 2);
   }
 
+  /* A unit as it is drawn: at its drawn height, with the armor it shows. */
+  function drawn(t: DrawTank): DrawTank {
+    return t.drawY === undefined && t.shownHp === undefined ? t : { ...t, y: t.drawY ?? t.y, hp: t.shownHp ?? t.hp };
+  }
   /* An open parachute over unit t, from the sheet when it has loaded. */
   function drawChute(c: CanvasRenderingContext2D, t: DrawTank, time: number, ground: boolean): void {
     if (!chuteFrom.has(t.id)) chuteFrom.set(t.id, time);
@@ -909,10 +913,12 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.fillRect(sx0, H - 30, sx1 - sx0, 120); // opaque from H + 60, so the polygons' own bottom edge never shows
     c.fillStyle = '#26150a';
     for (let y = H + 60; y < sy1; y += 36) c.fillRect(sx0, y, sx1 - sx0, 6);
-    // Combatants (dead ones leave a smoking wreck marker).
-    for (const t of view.tanks) {
+    // Combatants (dead ones leave a smoking wreck marker), each at its drawn
+    // height while a fall plays out, with the armor it shows until it lands.
+    for (const t0 of view.tanks) {
+      const t = drawn(t0);
       if (t.hp <= 0) {
-        const gy = sim.surfY(view.terrain, t.x);
+        const gy = t0.drawY ?? sim.surfY(view.terrain, t.x);
         c.fillStyle = 'rgba(20,20,20,0.8)';
         c.beginPath();
         c.roundRect(t.x - 12, gy - 8, 24, 8, 3);
@@ -922,10 +928,10 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
         continue;
       }
       const ground = sim.isGroundUnit(t);
-      if (t.chute) drawChute(c, t, time, ground);
+      if (t.chuteOpen) drawChute(c, t, time, ground);
       else chuteFrom.delete(t.id);
-      if (t === view.turnUnit) drawTurnMarker(c, t, time, ground);
-      if (view.online && t.menu && !t.isPlayer && t === view.turnUnit) drawMenuBadge(c, t, time, ground);
+      if (t0 === view.turnUnit) drawTurnMarker(c, t, time, ground);
+      if (view.online && t.menu && !t.isPlayer && t0 === view.turnUnit) drawMenuBadge(c, t, time, ground);
       if (ground) drawGroundUnit(c, t, time, deps.shownAngle(t), sim.facing(t));
       else drawGunDrone(c, t, time, deps.shownAngle(t), sim.facing(t));
       // Health bar + name.
@@ -960,7 +966,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     // a shot line up. No dots, no landing marker: reading the hills, the
     // wind, and the shell's legs is the game.
     if (view.aim) {
-      const t = view.aim.unit;
+      const t = drawn(view.aim.unit);
       const len = view.aim.length;
       let x0: number, y0: number, rad: number, ds: number;
       if (sim.isGroundUnit(t)) {

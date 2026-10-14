@@ -113,17 +113,17 @@ export function soloMuster(G: SoloState, arsenal: Arsenal): void {
   G.shells = [];
 }
 
-/** Standing tanks sit exactly where they rest (where the volley's settle
- *  put them, else the ground or a unit they stand on) once the falls are
- *  over, so a settled round starts from exact heights. The falls' armor was
- *  decided by the settle (sim.ts settleAndShow); this only places units. */
+/** Standing tanks sit exactly where they rest (the ground, or a unit they
+ *  stand on) and are drawn there once the falls are over, so a settled round
+ *  starts from exact heights. The falls' armor was decided by the volley's
+ *  settle (sim.ts settleVolley); this only places units. */
 export function snapTanks(G: Pick<SoloState, 'tanks' | 'terrain'>): void {
   for (const t of G.tanks) {
     if (t.hp <= 0) continue;
-    t.y = t.restAt ?? restY(G.tanks, G.terrain, t);
-    t.restAt = undefined;
+    t.y = restY(G.tanks, G.terrain, t);
+    t.drawY = undefined;
     t.vy = 0;
-    t.chute = false;
+    t.chute = t.chuteArmed = t.chuteOpen = false;
   }
 }
 

@@ -139,7 +139,7 @@ const live = deepFreeze({ ...view, turnUnit: view.tanks[1], aim: { unit: view.ta
 
 {
   // A unit under an open parachute: the sheet when it has loaded, the drawn canopy until then.
-  const chuteView = deepFreeze({ ...view, tanks: [tank('wraith', 400, { chute: true }), tank('tank', 100, { isPlayer: true, chute: true })] });
+  const chuteView = deepFreeze({ ...view, tanks: [tank('wraith', 400, { chuteOpen: true, drawY: 250 }), tank('tank', 100, { isPlayer: true, chuteOpen: true }), tank('spotter', 500, { chute: true, chuteArmed: true })] });
   const drawn = [];
   const sheetCtx = () => {
     const { ctx, calls } = stubContext();
@@ -156,4 +156,17 @@ const live = deepFreeze({ ...view, turnUnit: view.tanks[1], aim: { unit: view.ta
     createRenderer({ width: 1440, height: 920, getContext: () => b.ctx }, { ...deps, fx: { ...fxApi, sheets: { parachute: { ...loaded, ready: false } } } }).frame(chuteView);
   } catch (e) { threw = String(e); }
   check('chute-falls-back-to-a-drawn-canopy', !threw && drawn.filter(d => d[0] === loaded.img).length === 0 && b.calls.n > a.calls.n, threw || `${b.calls.n} vs ${a.calls.n}`);
+}
+
+{
+  // Units are drawn at their drawn height while they fall, not the rules' height, and
+  // a wreck that is still falling is drawn whole until it lands.
+  const labels = [];
+  const { ctx } = stubContext();
+  const rec = new Proxy(ctx, { get: (t, p) => (p === 'fillText' ? (txt, x, y) => { labels.push([txt, y]); } : t[p]) });
+  const falling = deepFreeze({ ...view, tanks: [tank('tank', 100, { isPlayer: true, drawY: 200 }), tank('wraith', 400, { hp: 0, shownHp: 20, drawY: 150 })] });
+  createRenderer({ width: 1440, height: 920, getContext: () => rec }, deps).frame(falling);
+  const at = name => (labels.find(l => l[0] === name) || [])[1];
+  check('a falling unit is drawn at its drawn height', at('TANK') === 200 - 38, String(at('TANK')));
+  check('a wreck in mid-fall is drawn whole until it lands', at('WRAITH') === 150 - 56, String(at('WRAITH')));
 }

@@ -182,8 +182,11 @@ export interface Tank {
   chutes?: number; // a drone's parachutes (the player's are world.chutes)
   fellBy?: number; // index in world.tanks of whoever carved the most ground from under this unit
   fellDepth?: number; // how far that blast lowered the ground under it
-  restAt?: number; // where a settled fall comes to rest: the animation drops the unit there
-  chute?: boolean; // a parachute is open over this unit
+  chute?: boolean; // its parachute opened in the last settle (a room's snapshot says so too)
+  drawY?: number; // the height it is drawn at while that differs from y (a fall playing out); missing: y
+  chuteArmed?: boolean; // its parachute opens as soon as it starts to drop
+  chuteOpen?: boolean; // a parachute is drawn open over it: it is dropping under the canopy
+  shownHp?: number; // the armor drawn until its fall is seen to land; missing: hp
 }
 /* A drone's memory of its last shot, for bracketing a target in. */
 export interface Bracket {
@@ -931,12 +934,15 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
    hills) takes them straight up. A drop costs armor by its height at rest
    (fallDamage), credited to the blast that lowered the ground under it most.
 
-   The rules run once a volley, when its last shell is down: settleFalls lands
-   every hanging unit at once, the same settle the room server runs at the end
-   of each volley (server/sim.php room_settle_tanks), so the same shot costs
-   the same armor in a solo match and in a room. fallTanks only animates: it
-   drops each unit to where the settle put it (restAt), or onto the ground
-   under it, and never decides damage or parachutes. */
+   The rules and the picture are kept apart. The rules run once a volley, when
+   its last shell is down: settleFalls lands every hanging unit at once, the
+   same settle the room server runs at the end of each volley
+   (server/sim.php room_settle_tanks), so the same shot costs the same armor in
+   a solo match and in a room. Until then a unit's rule height (y) stays where
+   it stood, for the volley's later hits. fallTanks only moves the drawn
+   height (drawY): a unit whose ground goes is seen to fall at once, and after
+   the settle it is drawn on to where it rests. It never decides damage,
+   parachutes or credit. */
 export const FALL_GRAVITY = 700;
 /** px/s a unit drifts down under an open parachute. */
 export const CHUTE_SPEED = 60;
@@ -1048,49 +1054,93 @@ export function settleFalls(world: World, arsenal: Arsenal): FallEvent[] {
   }
   return events;
 }
-/* Settles a volley's falls (settleFalls), then hands each unit that moved back
-   to where it fell from, with restAt where it now rests, so fallTanks shows
-   the fall. The armor, parachutes and credit are already decided. */
-export function settleAndShow(world: World, arsenal: Arsenal): FallEvent[] {
-  const from = world.tanks.map(t => t.y);
+/* Arms the parachute of every hanging unit whose fall, as the ground lies
+   now, would open one at the settle: it opens as the unit starts to drop. The
+   settle decides; this only lets a solo match show the canopy from the first
+   frame of the fall. */
+export function armChutes(world: World, arsenal: Arsenal): void {
+  for (const t of world.tanks) {
+    if (t.hp <= 0 || t.chuteArmed) continue;
+    const rest = restY(world.tanks, world.terrain, t);
+    if (rest <= t.y + 0.5) continue;
+    const raw = fallDamage(rest - t.y, arsenal.fall);
+    if (raw > 0 && fallCost(world, t, raw) > arsenal.fall.chuteOver && chutesOf(world, t) > 0) t.chuteArmed = true;
+  }
+}
+/** A volley's falls as the page shows them: what one landing did (the faller's
+ *  fall, a wreck, the unit it landed on), shown when `tank` is seen to land. */
+export interface FallShow { tank: Tank; events: FallEvent[] }
+/* Settles a solo volley's falls (settleFalls) once its last shell is down and
+   returns what they did, a batch per landing. Each unit keeps being drawn
+   where it is (drawY) and falls on to its rest; a parachute the settle opened
+   is armed for the fall; and the armor drawn stays what it was (shownHp)
+   until its batch is shown (dueFalls). */
+export function settleVolley(world: World, arsenal: Arsenal): FallShow[] {
+  const drawn = world.tanks.map(t => t.drawY ?? t.y);
+  const hp = world.tanks.map(t => t.hp);
   const events = settleFalls(world, arsenal);
   world.tanks.forEach((t, i) => {
-    if (t.hp > 0 && t.y > from[i]! + 0.5) { t.restAt = t.y; t.y = from[i]!; }
+    t.drawY = Math.abs(drawn[i]! - t.y) <= 0.5 ? undefined : drawn[i];
+    if (t.chute) t.chuteArmed = true;
   });
-  return events;
+  const shows: FallShow[] = [];
+  for (const e of events) {
+    if (e.kind === 'fall' && !e.under) shows.push({ tank: e.tank, events: [] });
+    const show = shows[shows.length - 1];
+    if (!show) continue;
+    show.events.push(e);
+    const i = world.tanks.indexOf(e.tank);
+    if (i >= 0 && e.tank.shownHp === undefined) e.tank.shownHp = hp[i];
+  }
+  return shows;
 }
-/* Where the animation drops t: where a settle put it, else the ground or unit under it. */
-function fallTarget(world: Pick<World, 'tanks' | 'terrain'>, t: Tank, settledOnly: boolean): number | null {
-  if (t.restAt !== undefined) return t.restAt;
-  return settledOnly ? null : restY(world.tanks, world.terrain, t);
+/* The batches whose unit has been seen to land (or had landed already), and
+   the rest; a shown batch's units show their real armor again. */
+export function dueFalls(world: Pick<World, 'tanks' | 'terrain'>, pending: readonly FallShow[]): { due: FallShow[]; pending: FallShow[] } {
+  const due: FallShow[] = [], rest: FallShow[] = [];
+  for (const show of pending) {
+    const t = show.tank;
+    if ((t.drawY ?? t.y) < drawTarget(world, t) - 0.5) { rest.push(show); continue; }
+    due.push(show);
+    for (const e of show.events) e.tank.shownHp = undefined;
+  }
+  return { due, pending: rest };
 }
-/* One frame of falling, animation only. A unit drops under gravity (at
-   CHUTE_SPEED under an open parachute) to its target and stops there. With
-   settledOnly (a solo match), only units a settle has placed move: the rest
-   hang until their volley's settle, as on the room server; without it (a
-   room, whose server has settled already) units fall onto the ground the
-   client holds. Returns the units that touched down this frame. */
-export function fallTanks(world: Pick<World, 'tanks' | 'terrain'>, dt: number, settledOnly = false): Tank[] {
+/* Where t is drawn falling to: where it rests under the rules, or the ground
+   under it while the rules still hold it hanging (a wreck: the ground). */
+function drawTarget(world: Pick<World, 'tanks' | 'terrain'>, t: Tank): number {
+  return t.hp > 0 ? restY(world.tanks, world.terrain, t) : surfY(world.terrain, t.x);
+}
+/* One frame of the falls' picture. Each unit's drawn height drops under
+   gravity (at CHUTE_SPEED once an armed parachute opens, which it does as
+   the unit starts to drop) to where it is drawn falling to, and stays there;
+   a canopy is never open over a unit on its ground. Ground that rose takes
+   it straight up. Returns the units that touched down this frame. */
+export function fallTanks(world: Pick<World, 'tanks' | 'terrain'>, dt: number): Tank[] {
   const landed: Tank[] = [];
-  for (const t of lowestFirst(world.tanks)) {
-    if (t.hp <= 0) continue;
-    const gy = fallTarget(world, t, settledOnly);
-    if (gy === null) continue;
-    if (t.y < gy - 0.5) {
-      t.vy = t.chute ? CHUTE_SPEED : (t.vy || 0) + FALL_GRAVITY * dt;
-      t.y = Math.min(gy, t.y + t.vy * dt);
-      if (t.y < gy - 0.5) continue;
+  for (const t of lowestFirst(world.tanks).concat(world.tanks.filter(u => u.hp <= 0))) {
+    const gy = drawTarget(world, t);
+    const at = t.drawY ?? t.y;
+    if (at < gy - 0.5) {
+      if (t.chuteArmed) t.chuteOpen = true;
+      t.vy = t.chuteOpen ? CHUTE_SPEED : (t.vy || 0) + FALL_GRAVITY * dt;
+      const y = Math.min(gy, at + t.vy * dt);
+      if (y < gy - 0.5) { t.drawY = y; continue; }
       landed.push(t);
+      t.chuteArmed = false;
+      t.chute = false;
     }
-    t.y = gy;
     t.vy = 0;
-    t.chute = false;
-    t.restAt = undefined;
+    t.chuteOpen = false;
+    t.drawY = Math.abs(gy - t.y) <= 0.5 ? undefined : gy;
   }
   return landed;
 }
+/* True while a fall is still owed or still playing: a live unit the rules
+   hold over a pit, or a unit drawn above where it falls to. */
 export function anyTankFalling(world: Pick<World, 'tanks' | 'terrain'>): boolean {
-  return world.tanks.some(t => t.hp > 0 && (t.restAt !== undefined || t.y < restY(world.tanks, world.terrain, t) - 0.5));
+  return world.tanks.some(t => (t.hp > 0 && t.y < restY(world.tanks, world.terrain, t) - 0.5)
+    || (t.drawY !== undefined && t.drawY < drawTarget(world, t) - 0.5));
 }
 
 /* ---------- drone bracketing memory (the AI proper is in ai.ts) ---------- */

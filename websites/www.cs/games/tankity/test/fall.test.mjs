@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as sim from '../src/sim.ts';
 import {
-  buildArsenal, droneChutes, explode, fallDamage, fallTanks, anyTankFalling, restY, settleAndShow, settleFalls, CHUTE_SPEED, TUNE,
+  buildArsenal, droneChutes, explode, fallDamage, fallTanks, anyTankFalling, armChutes, dueFalls, restY, settleVolley, settleFalls, CHUTE_SPEED, TUNE,
 } from '../src/sim.ts';
 import { soloBuy, soloDeal, soloMuster } from '../src/solo.ts';
 
@@ -184,57 +184,131 @@ test('the lowest units land first, so a stack settles from the bottom up', () =>
   assert.equal(low.hp, 100 - 20 - 33, 'its own fall, then the drone landing on it');
 });
 
-test('fallTanks only animates: it moves units, never armor, parachutes or credit', () => {
+test('fallTanks only animates: the drawn height follows the ground, the rules never move', () => {
   const me = unit('tank', true, 100, 300, 100, { fellBy: 1 });
   const G = world([me, unit('reaper', false, 400, 400)], { chutes: 1 });
-  for (let i = 0; i < 5000 && anyTankFalling(G); i++) fallTanks(G, 1 / 60);
-  assert.equal(me.y, 400);
+  let frames = 0;
+  for (; frames < 5000 && (me.drawY ?? me.y) < 399.5; frames++) fallTanks(G, 1 / 60);
+  assert.ok(frames > 3, 'it falls over several frames');
+  assert.equal(me.drawY, 400, 'drawn on the ground it fell to');
+  assert.equal(me.y, 300, 'its rule height waits for the settle');
   assert.equal(me.hp, 100);
   assert.equal(G.chutes, 1);
   assert.equal(G.score, 0);
-  // In a room the snapshot (or the replay) opens a parachute: the unit floats down at CHUTE_SPEED.
-  const floater = unit('reaper', false, 300, 300, 60, { chute: true });
-  const R = world([unit('tank', true, 100, 400), floater]);
-  fallTanks(R, 1 / 60);
-  assert.equal(floater.y, 300 + CHUTE_SPEED / 60);
-  assert.equal(floater.chute, true);
-  // A solo match's units wait for their volley's settle: unsettled, they hang.
-  const hang = unit('tank', true, 100, 300);
-  const H = world([hang, unit('reaper', false, 400, 400)]);
-  fallTanks(H, 1 / 60, true);
-  assert.equal(hang.y, 300);
+  assert.ok(anyTankFalling(G), 'the settle is still owed');
+  settleFalls(G, arsenal);
+  fallTanks(G, 1 / 60);
+  assert.equal(me.y, 400);
+  assert.equal(me.drawY, undefined, 'drawn where it rests');
+  assert.ok(!anyTankFalling(G));
 });
 
-test('a settled fall plays out from where it started to where the settle put it', () => {
+test('a settled fall plays out from where it was drawn to where the settle put it', () => {
   for (const [y, chutes, hp] of [[300, 0, 55], [300, 1, 100], [379, 1, 95], [200, 0, 5], [379.46, 0, 95]]) {
     const me = unit('tank', true, 100, y);
     const G = world([me, unit('reaper', false, 400, 400)], { chutes });
-    settleAndShow(G, arsenal);
+    const shows = settleVolley(G, arsenal);
     assert.equal(me.hp, hp, `decided at the settle, from ${y}`);
-    assert.equal(me.y, y, 'drawn where it fell from');
-    assert.equal(me.restAt, 400);
-    for (let i = 0; i < 5000 && anyTankFalling(G); i++) fallTanks(G, 1 / 60, true);
     assert.equal(me.y, 400);
+    assert.equal(me.drawY, y, 'drawn where it fell from');
+    assert.equal(shows.length, hp === 100 && chutes === 0 ? 0 : 1);
+    for (let i = 0; i < 5000 && anyTankFalling(G); i++) fallTanks(G, 1 / 60);
+    assert.equal(me.drawY, undefined);
     assert.equal(me.hp, hp, 'the animation changed nothing');
-    assert.equal(me.restAt, undefined);
   }
 });
-test('a parachute opens as the fall starts, slows the descent and folds on landing', () => {
-  const me = unit('tank', true, 100, 200);
-  const G = world([me, unit('reaper', false, 400, 400)], { chutes: 1 });
-  settleAndShow(G, arsenal);
-  assert.equal(me.chute, true);
-  assert.equal(G.chutes, 0);
-  let frames = 0;
-  while (anyTankFalling(G) && frames < 5000) { fallTanks(G, 1 / 60, true); frames++; }
-  assert.equal(me.chute, false, 'folded on landing');
-  const free = unit('tank', true, 100, 200);
+
+test('a parachute armed for a fall opens only when the unit starts to drop, and never at rest', () => {
+  const me = unit('tank', true, 100, 400, 100, { chuteArmed: true });
+  const G = world([me, unit('reaper', false, 400, 400)]);
+  let open = 0;
+  for (let f = 0; f < 120; f++) { fallTanks(G, 1 / 60); if (me.chuteOpen) open++; }
+  assert.equal(open, 0, 'no canopy over a unit on its ground');
+  assert.equal(me.chuteArmed, true, 'still armed');
+  // The pit opens under it: it floats down under the canopy.
+  for (let x = 80; x <= 120; x++) G.terrain[x] = 520;
+  let falling = 0, openFalling = 0, steps = [];
+  let last = me.drawY ?? me.y;
+  for (let f = 0; f < 5000 && anyTankFalling(G); f++) {
+    fallTanks(G, 1 / 60);
+    const now = me.drawY ?? me.y;
+    if (now > last) steps.push(now - last);
+    if (now > last && now < 519.5) { falling++; if (me.chuteOpen) openFalling++; }
+    last = now;
+  }
+  assert.ok(falling > 0 && openFalling === falling, `under the canopy all the way down (${openFalling} of ${falling})`);
+  assert.ok(steps.slice(0, -1).every(d => Math.abs(d - CHUTE_SPEED / 60) < 1e-9), 'at CHUTE_SPEED');
+  assert.equal(me.chuteOpen, false, 'folded on landing');
+  assert.equal(me.chuteArmed, false);
+  // A free fall is quicker.
+  const free = unit('tank', true, 100, 400);
   const F = world([free, unit('reaper', false, 400, 400)]);
-  settleAndShow(F, arsenal);
+  for (let x = 80; x <= 120; x++) F.terrain[x] = 520;
   let freeFrames = 0;
-  while (anyTankFalling(F) && freeFrames < 5000) { fallTanks(F, 1 / 60, true); freeFrames++; }
-  assert.equal(frames, Math.ceil(200 / CHUTE_SPEED * 60));
-  assert.ok(frames > 2 * freeFrames, `a chute floats down (${frames} frames against ${freeFrames})`);
+  for (; freeFrames < 5000 && (free.drawY ?? free.y) < 519.5; freeFrames++) fallTanks(F, 1 / 60);
+  assert.ok(falling > 2 * freeFrames, `a chute floats down (${falling} frames against ${freeFrames})`);
+});
+
+test('a solo volley arms the parachute of a unit it digs out, so the canopy opens as it drops', () => {
+  const me = unit('tank', true, 100, 400, 100, { dirS: 1, angle: 30, power: 51 });
+  const foe = unit('reaper', false, 400, 400, 100, { dirS: -1, chutes: 1 });
+  const G = world([me, foe], { ammo: { shell: Infinity, nuke: 9 } });
+  sim.fireWeapon(G, arsenal, me, 'nuke');
+  let openFrames = 0;
+  for (let f = 0; f < 5000 && G.shells.length; f++) {
+    fallTanks(G, 1 / 60);
+    sim.stepShells(G, arsenal, 1 / 60);
+    armChutes(G, arsenal);
+    if (foe.chuteOpen) openFrames++;
+  }
+  settleVolley(G, arsenal);
+  for (let f = 0; f < 5000 && anyTankFalling(G); f++) { fallTanks(G, 1 / 60); if (foe.chuteOpen) openFrames++; }
+  assert.equal(foe.chutes, 0, 'the settle spent it');
+  assert.ok(openFrames > 0, 'seen under the canopy');
+});
+
+test('a unit dug out by an early pellet is seen to fall at once, before the volley settles', () => {
+  const me = unit('tank', true, 100, 400, 100, { dirS: 1, angle: 45, power: 46 });
+  const foe = unit('reaper', false, 400, 400, 100, { dirS: -1 });
+  const G = world([me, foe], { ammo: { shell: Infinity, buck: 9 } });
+  sim.fireWeapon(G, arsenal, me, 'buck');
+  let fellMidVolley = false;
+  for (let f = 0; f < 5000 && G.shells.length; f++) {
+    fallTanks(G, 1 / 60);
+    sim.stepShells(G, arsenal, 1 / 60);
+    if (G.shells.length && (foe.drawY ?? foe.y) > 400.5) fellMidVolley = true;
+  }
+  assert.ok(fellMidVolley, 'drawn falling while pellets still fly');
+  assert.equal(foe.y, 400, 'the rules hold it where it stood until the settle');
+});
+
+test('a fall that wrecks a unit is seen to fall and land before its words and wreck show', () => {
+  const me = unit('tank', true, 100, 400);
+  const foe = unit('reaper', false, 300, 250, 20, { fellBy: 0 });
+  const G = world([me, foe]);
+  let pending = settleVolley(G, arsenal);
+  assert.equal(foe.hp, 0);
+  assert.equal(foe.shownHp, 20, 'drawn whole until it lands');
+  assert.equal(foe.drawY, 250);
+  let shown = [], frames = 0;
+  while (pending.length && frames < 5000) {
+    fallTanks(G, 1 / 60);
+    frames++;
+    const due = dueFalls(G, pending);
+    pending = due.pending;
+    for (const ch of due.due) shown.push([frames, ch.events.map(e => e.kind)]);
+    if (!shown.length) assert.ok((foe.drawY ?? foe.y) <= 400, 'still in the air');
+  }
+  assert.ok(frames > 5, `it fell first (${frames} frames)`);
+  assert.deepEqual(shown.map(s => s[1]), [['fall', 'wreck']]);
+  assert.equal(foe.drawY, undefined, 'its wreck rests on the crater floor');
+  assert.equal(foe.shownHp, undefined);
+  // A unit that already landed shows its words the moment the settle resolves.
+  const me2 = unit('tank', true, 100, 300);
+  const H = world([me2, unit('reaper', false, 400, 400)]);
+  for (let f = 0; f < 5000 && (me2.drawY ?? me2.y) < 399.5; f++) fallTanks(H, 1 / 60);
+  const p2 = settleVolley(H, arsenal);
+  assert.equal(dueFalls(H, p2).due.length, 1);
 });
 
 /* A solo volley as the page plays it: falls animate every frame and the settle
@@ -243,11 +317,12 @@ test('a parachute opens as the fall starts, slows the descent and folds on landi
 function soloVolley(G, shooter, wkey) {
   sim.fireWeapon(G, arsenal, shooter, wkey);
   for (let f = 0; f < 5000 && G.shells.length; f++) {
-    fallTanks(G, 1 / 60, true);
+    fallTanks(G, 1 / 60);
     sim.stepShells(G, arsenal, 1 / 60);
-    if (!G.shells.length) settleAndShow(G, arsenal);
+    armChutes(G, arsenal);
+    if (!G.shells.length) settleVolley(G, arsenal);
   }
-  for (let f = 0; f < 5000 && anyTankFalling(G); f++) fallTanks(G, 1 / 60, true);
+  for (let f = 0; f < 5000 && anyTankFalling(G); f++) fallTanks(G, 1 / 60);
 }
 function roomVolley(G, shooter, wkey) {
   sim.fireWeapon(G, arsenal, shooter, wkey);

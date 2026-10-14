@@ -210,12 +210,16 @@ export function createRoom(deps: RoomDeps) {
       const seat = net.seats[t.seat];
       const ai = !seat || !seat.human;
       const id = mine ? 'tank' : String(t.name || '?').toLowerCase();
+      // The server sets units straight down where they rest; keep drawing one
+      // where it was so fallTanks() shows the fall, under a parachute already
+      // open (or armed by the replay, or by the snapshot) if it has one.
+      const same = !!was && Math.abs(was.x - t.x) < 1;
+      const drawnAt = same ? was!.drawY ?? was!.y : t.y;
+      const above = drawnAt < t.y - 0.5;
       return {
         id, seat: t.seat, isPlayer: mine,
         color: mine ? '#ffff00' : (ai ? (FOE_PAINT[id] || '#c9c9c9') : SEAT_PAINT[t.seat % SEAT_PAINT.length]!),
-        // The server drops tanks straight onto the ground; keep the drawn
-        // height from the last poll so fallTanks() shows the fall.
-        x: t.x, y: was && Math.abs(was.x - t.x) < 1 ? Math.min(was.y, t.y) : t.y, vy: was ? was.vy || 0 : 0,
+        x: t.x, y: t.y, drawY: above ? drawnAt : undefined, vy: same && above ? was!.vy || 0 : 0,
         angle: mine && was && aiming ? was.angle : t.angle,
         power: mine && was && aiming ? was.power : t.power,
         hp: t.hp, maxHp: t.maxHp || 100, fuel: 0, dirS: t.dirS || 1,
@@ -224,9 +228,8 @@ export function createRoom(deps: RoomDeps) {
         body: t.body || 'tank',
         menu: !!t.menu,
         bot: !!(seat && seat.bot),
-        // Floats down under its parachute (opened by the replay, or by the
-        // snapshot) while it is still drawn above where the server set it down.
-        chute: !!was && was.y < t.y - 0.5 && (!!t.chute || !!was.chute),
+        chuteArmed: same && above && (!!t.chute || !!was!.chuteArmed || !!was!.chuteOpen),
+        chuteOpen: same && above && !!was!.chuteOpen,
         // Keep the drawn aim where it was so the new one glides in.
         showA: was && !mine ? shownAngle(was) : undefined,
         showP: was && !mine ? shownPower(was) : undefined,

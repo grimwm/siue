@@ -21,9 +21,9 @@ import type { FieldWidth } from './field.ts';
 import type { RoomClient } from './net.ts';
 import {
   gauss, H, GRAV, TUNE, clamp, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
-  anyTankFalling as simAnyTankFalling, settleAndShow,
+  anyTankFalling as simAnyTankFalling, armChutes, dueFalls, settleVolley,
 } from './sim.ts';
-import type { Blast, Difficulty, FallEvent, Shell } from './sim.ts';
+import type { Blast, Difficulty, FallEvent, FallShow, Shell } from './sim.ts';
 import { snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloOneUps, soloSettle } from './solo.ts';
 import { endCardBack, localLine, soloBoard } from './standings.ts';
 import type { LocalRow, Saved } from './local-board.ts';
@@ -246,6 +246,8 @@ export function createMatch(deps: MatchDeps) {
         advance('shellsLanded');
       }
     }
+    // A parachute opens with the first frame of its unit's fall.
+    if (!net.on && tables.arsenal) armChutes(G, tables.arsenal);
     if (!G.shells.length) settleVolleyFalls();
   }
   /* A blast as the sim reports it: the boom, then what it did to each unit in
@@ -310,19 +312,25 @@ export function createMatch(deps: MatchDeps) {
     render();
     renderHUD();
   }
-  /* The falls' animation, every frame: units drop to where their volley's
-     settle put them (solo) or onto the ground the room sent (a room, whose
-     server settled the falls). Nothing here decides armor. */
+  /* The falls' picture, every frame: a unit whose ground goes is seen to fall
+     at once, and on to where its volley's settle (or a room's server) put it.
+     Nothing here decides armor. A settled landing's words, sparks and wreck
+     show when its unit is seen to touch down. */
+  let fallsDue: FallShow[] = [];
   function fallTanks(dt: number): void {
-    if (simFallTanks(G, dt, !net.on).some(t => t.isPlayer)) sfx.play('thud');
+    if (simFallTanks(G, dt).some(t => t.isPlayer)) sfx.play('thud');
+    if (!fallsDue.length) return;
+    const d = dueFalls(G, fallsDue);
+    fallsDue = d.pending;
+    for (const show of d.due) for (const e of show.events) showFall(e);
+    if (d.due.length) renderHUD();
   }
   /* A solo volley's last shell is down: its falls settle once, by the room
-     server's rules (sim.ts settleAndShow), and then play out. */
+     server's rules (sim.ts settleVolley), and then play out. */
   function settleVolleyFalls(): void {
     if (net.on || !tables.arsenal) return;
-    const events = settleAndShow(G, tables.arsenal);
-    for (const e of events) showFall(e);
-    if (events.length) renderHUD();
+    fallsDue = fallsDue.concat(settleVolley(G, tables.arsenal));
+    fallTanks(0);
   }
   /* A landing as the sim reports it: the words, and a wreck's sparks. */
   function showFall(e: FallEvent): void {

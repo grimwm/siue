@@ -360,16 +360,21 @@ stop it.
 - One settle, everywhere. The room server lands every unit at the end of each
   volley (`room_settle_tanks`, run by `room_fire_shot`) and emits `fall`
   events (and `kill`) stamped for the replay. A solo match runs the same
-  settle in the browser (`src/sim.ts` `settleFalls`, through `settleAndShow`
-  when the volley's last shell is down in `src/match.ts`); until then its
-  units hang where they stood, as on the server. So the same shot costs the
-  same armor solo and in a room; the `fall` and `volley` groups of the sim
-  vectors check it (the browser replays each volley as a solo match plays it).
-- `fallTanks` only animates: it drops each unit to where the settle put it,
-  under gravity or, beneath an open parachute, at 60 px/s. In a room the
-  replay opens a unit's parachute when its volley starts (the volley's `fall`
-  event says so), and the snapshot keeps it open while the unit is still
-  above where the server set it down.
+  settle in the browser (`src/sim.ts` `settleFalls`, through `settleVolley`
+  when the volley's last shell is down in `src/match.ts`); until then a unit's
+  rule height stays where it stood, for the volley's later hits, as on the
+  server. So the same shot costs the same armor solo and in a room; the `fall`
+  and `volley` groups of the sim vectors check it (the browser replays each
+  volley as a solo match plays it).
+- The picture is separate (`drawY`, `fallTanks`): a unit whose ground goes is
+  seen to fall at once, solo and in a room, and on to where the settle put it.
+  A landing's words, sparks and wreck show when its unit is seen to touch down
+  (or at once, if it already has), and its armor bar holds until then
+  (`settleVolley`, `dueFalls`). A parachute is armed, not opened: by the
+  volley's settle or its prediction (`armChutes`) in a solo match, and by the
+  volley's `fall` event when the replay starts it in a room. It opens as the
+  unit starts to drop, floats it down at 60 px/s and folds on landing; no
+  canopy is ever drawn over a unit on its ground.
 - The parachute drawn over a falling unit is `fx/sprites/parachute.png` (six
   frames opening, ten swaying), with a canopy drawn in code until the sheet
   has loaded.
@@ -801,7 +806,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/field.test.mjs`                          | The width from the landscape box (clamps, columns, portrait equals landscape), that a deal holds through a resize, fitting the field in a box, and the power step and display at 720, 1080 and 1440 |
 | `test/detmath.test.mjs`                        | `src/detmath.ts` is within 1e-15 of `Math` where the sim feeds it, keeps the sign of zero, and is exact at 0, 1 and the right angles |
 | `test/solo.test.mjs`                           | `src/solo.ts` without a page: the deal and its width, a round's muster, settling a volley, the turn order, the drones' difficulty and 1-ups |
-| `test/fall.test.mjs`                           | Falls in `src/sim.ts`: the damage formula, credit to the digger (score, cash, kills, the last hit) and none for your own pit, parachutes over and under the threshold, the drones' own, the bunker and the shield, landing on a unit, a stack landing bottom up, the animation moving units and nothing else, a settled fall playing out from where it started, the parachute's slow descent, the same shot costing the same armor as a solo volley and as a room's (Buckshot bursts, fractional ground, parachutes), the bunker counting toward the parachute, credit to the deepest blast, the drones' parachutes by round and the stacking shop row |
+| `test/fall.test.mjs`                           | Falls in `src/sim.ts`: the damage formula, credit to the digger (score, cash, kills, the last hit) and none for your own pit, parachutes over and under the threshold, the drones' own, the bunker and the shield, landing on a unit, a stack landing bottom up, the drawn height following the ground at once while the rules wait for the settle, a settled fall playing out from where it was drawn, a parachute armed then opened only as its unit drops (never at rest), a solo volley arming one, a unit dug out by an early pellet seen falling mid-volley, a fall wreck seen to land before its words and wreck show, the same shot costing the same armor as a solo volley and as a room's (Buckshot bursts, fractional ground, parachutes), the bunker counting toward the parachute, credit to the deepest blast, the drones' parachutes by round and the stacking shop row |
 | `test/fixed-step.test.mjs` | The solo war runs in fixed steps whatever the frame lengths, tank falls included, so play is the same on a 30 Hz phone and a 144 Hz monitor |
 | `test/determinism.test.mjs` | The rule modules call no clock, no `Math.random` and no libm trigonometry, so the shared sim stays bit-exact across the two languages (see Deterministic math) |
 | `test/wide-field.test.mjs`                     | The sim at any width: the same hills continued, units spread outside each other's blast, reach and wind scaling, flights that last as long as the field, 720 unchanged |
@@ -812,10 +817,10 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/php/DetMathTest.php`                     | `server/detmath.php` is within 1e-15 of libm, rounds halves and keeps the sign of zero like `Math.round`, and the `detmath` vectors cover every function |
 | `test/php/FieldWidthTest.php`                  | The server's width rule, hills, reach and aim, units spread outside each other's blast, and a room dealt at 720 |
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
-| `test/render.test.mjs`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, rebuilds the sky only when the match key or the visible area changes, and draws an open parachute from its sheet (opening once, then swaying) or as a drawn canopy until the sheet loads |
+| `test/render.test.mjs`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, rebuilds the sky only when the match key or the visible area changes, and draws an open parachute from its sheet (opening once, then swaying) or as a drawn canopy until the sheet loads, none over an armed or settled unit at rest, and units at their drawn height (a falling wreck whole) |
 | `test/input.test.mjs`                          | `src/input.ts` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, Q, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
 | `test/net.test.mjs`                            | `src/net.ts` against a fake server and timers: the 429 retry (none for a create or join's 429, one for its 503), Ready's ordering under rapid toggles, polling, the leave beacon, the clocks, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect) |
-| `test/replay.test.mjs`                         | `src/replay.ts` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, a `watch` volley at 3x for that volley only, and a parachute opened by its volley's `fall` event as the volley starts |
+| `test/replay.test.mjs`                         | `src/replay.ts` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, a `watch` volley at 3x for that volley only, and a parachute armed by its volley's `fall` event, closed through real frames on unbroken ground and open every frame its unit falls once the pit is carved |
 | `test/preview.test.mjs`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |
 | `test/flow.test.mjs`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
 | `test/protocol.test.mjs`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |

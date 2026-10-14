@@ -93,11 +93,17 @@ $ageRoom = function (string $c): void {
         if ($room === null) {
             return;
         }
-        $room['touched'] = time() - 3600;
-        $u = $db->prepare('UPDATE rooms SET data = ?, touched = ? WHERE code = ?');
+        // Abandoned long ago: its last touch and last act both far back, and
+        // the stored expiry (what the count and the sweep read) with them.
+        $room['touched'] = time() - 30 * 86400;
+        if (isset($room['actedAt'])) {
+            $room['actedAt'] = $room['touched'];
+        }
+        $u = $db->prepare('UPDATE rooms SET data = ?, touched = ?, expires = ? WHERE code = ?');
         $u->bindValue(1, serialize($room), PDO::PARAM_LOB);
         $u->bindValue(2, $room['touched'], PDO::PARAM_INT);
-        $u->bindValue(3, $c);
+        $u->bindValue(3, room_expires($room), PDO::PARAM_INT);
+        $u->bindValue(4, $c);
         $u->execute();
     });
 };
@@ -155,12 +161,14 @@ $pingNow = $get($base . '/rooms.php?action=ping');
 $need = $cfgMax - (int) ($pingNow['rooms']['used'] ?? 0);
 $fillsOk = true;
 for ($i = 0; $i < $need; $i++) {
-    sleep(2); // respect the creation throttle before the next attempt
+    // Creates are limited by the hourly allowance (lifted on the test stacks),
+    // not by time: a fill to a 50-room cap must finish well inside nginx's 60 s.
+    usleep(50000);
     $f = $post('create', ['initials' => $fillNames[$i % count($fillNames)]]);
     if (($f['ok'] ?? false) !== true) $fillsOk = false;
     else $fillCodes[] = (string) ($f['code'] ?? '');
 }
-sleep(2);
+usleep(50000);
 $refused = $post('create', ['initials' => 'zzz']);
 $check('cap-live', $fillsOk && ($refused['ok'] ?? false) === false,
     'filled=' . count($fillCodes) . '/' . $need . ' refusedErr=' . ($refused['error'] ?? '?'));

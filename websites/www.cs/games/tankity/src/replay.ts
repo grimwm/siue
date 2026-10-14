@@ -18,6 +18,7 @@
  * by hand. */
 import type { TrailState } from './fx/trail.ts';
 import { planCatchUp, isVolleyOpener } from './net.ts';
+import { unitHitBox } from './sim.ts';
 import type { BeamEvent, RingEvent, RoomEvent, RoomSnapshot, ShotEvent, VolleyOpenerEvent } from './protocol.ts';
 
 /** rooms.php records a path point every 5 sim steps at 60/s. */
@@ -31,6 +32,8 @@ export interface ReplayTank {
   x: number; y: number;
   angle: number; power: number;
   hp: number;
+  isPlayer?: boolean; // a ground unit (with human): its body is its hull; a drone's is up in the air
+  human?: boolean;
   showA?: number; // the aim the barrel shows
   showP?: number;
   chuteArmed?: boolean; // its parachute opens as it starts to drop (the host's fall animation reads it)
@@ -225,9 +228,12 @@ export function createReplay(env: ReplayEnv): Replay {
           // Over a fried tank, the EMP's arcs.
           const emp = t && v.shots.find(s => env.effect(s.e.w) === 'emp');
           if (t && emp) env.special(emp.e.w, 'arc', t.x, t.y - 12, 0);
-          // Through a unit a beam struck, the beam passing, along its line.
+          // Through a unit a beam struck, the beam passing, along its line, at its body.
           const beam = t && v.events.find((b): b is BeamEvent => b.t === 'beam' && v.done.has(b));
-          if (t && beam) env.special(beam.w, 'pierce', t.x, t.y - 12, Math.atan2(beam.y1 - beam.y0, beam.x1 - beam.x0));
+          if (t && beam) {
+            const body = unitHitBox({ isPlayer: !!t.isPlayer, human: t.human, x: t.x, y: t.y });
+            env.special(beam.w, 'pierce', t.x, body.cy, Math.atan2(beam.y1 - beam.y0, beam.x1 - beam.x0));
+          }
         } else if (e.t === 'fall') {
           const t = env.tank(e.seat);
           if (t) t.hp = Math.max(0, t.hp - e.dmg);

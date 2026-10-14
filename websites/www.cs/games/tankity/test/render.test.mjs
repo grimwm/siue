@@ -3,7 +3,7 @@
 // to the view (a tank, a boom, the terrain) throws in module code, so a frame that
 // tried to advance or change game state fails here without a browser.
 import { check } from '../../_kit/test/check.ts';
-import { CHUTE_OPEN, chuteFrame, createRenderer, drawChassis } from '../src/render.ts';
+import { CHUTE_OPEN, SMOKE_PUFFS_MAX, chuteFrame, createRenderer, drawChassis } from '../src/render.ts';
 import { fitField, visibleWorld } from '../src/field.ts';
 import { sceneryY } from '../src/scenery.ts';
 import { skyMarks } from '../src/camera.ts';
@@ -101,6 +101,13 @@ const live = deepFreeze({ ...view, turnUnit: view.tanks[1], aim: { unit: view.ta
   createRenderer(lines.canvas, deps).frame(deepFreeze({ ...view, marks }));
   check('marks-draw-a-dashed-line', (lines.calls.by.setLineDash || 0) >= 2 && !none.calls.by.setLineDash, JSON.stringify(lines.calls.by.setLineDash));
   check('marks-draw-smoke-puffs', (lines.calls.by.arc || 0) >= (none.calls.by.arc || 0) + 5, `${lines.calls.by.arc} vs ${none.calls.by.arc}`);
+  // A round crowded with long smoke trails draws at most SMOKE_PUFFS_MAX puffs (two fills each) a frame.
+  const long = []; for (let x = 0; x <= 1400; x += 7) long.push(x, 200 + 60 * Math.sin(x / 90));
+  const crowd = Array.from({ length: 30 }, (_, i) => ({ by: i, wkey: 'smoke', kind: 'smoke', pts: long, landed: true, age: 1 + i }));
+  const busy = stubCanvas();
+  createRenderer(busy.canvas, deps).frame(deepFreeze({ ...view, marks: crowd }));
+  check('marks-smoke-is-capped-per-frame', (busy.calls.by.arc || 0) - (none.calls.by.arc || 0) <= 2 * SMOKE_PUFFS_MAX + 2 && busy.calls.by.arc > none.calls.by.arc + 400,
+    `${busy.calls.by.arc} arcs`);
 }
 
 {

@@ -56,7 +56,7 @@ export function ammoSub(w: Pick<Weapon, 'dmg' | 'radius' | 'effect'> & { note?: 
   const note = w.note ? `, ${w.note.charAt(0).toLowerCase() + w.note.slice(1).replace(/\.$/, '')}` : '';
   const hurt = w.dmg > 0 ? `${w.dmg} damage` : 'No damage';
   if (w.effect === 'beam') return `${hurt} to every unit on its line${note}.`;
-  if (w.effect === 'plasma') return `${hurt}, ring ${w.radius} at full power${note}.`;
+  if (w.effect === 'plasma') return `${w.dmg > 0 ? 'Up to ' + hurt : hurt}, ring ${w.radius} at full power${note}.`;
   if (w.effect === 'tracer') return `${hurt}${note}.`;
   return `${hurt}, blast ${w.radius}${note}.${w.dmg > 0 ? ' Direct hits count double.' : ''}`;
 }

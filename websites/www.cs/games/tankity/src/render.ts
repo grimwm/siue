@@ -510,11 +510,16 @@ function drawTurnMarker(c: CanvasRenderingContext2D, t: DrawTank, time: number, 
 }
 
 /** One explosion: the disc its weapon destroys, growing and fading. */
+/** The most smoke puffs drawn in one frame, over every smoke mark. */
+export const SMOKE_PUFFS_MAX = 600;
 /* A tracer's mark. A line: its path dashed in the trail colour over a faint
    glow, ending in a cross where it came down. Smoke: soft puffs along the
-   path, each drifting with the wind (smokeDrift) and rising a little as it
-   ages, growing and thinning but never quite gone before the round ends. */
-function drawMark(c: CanvasRenderingContext2D, m: Mark, look: Look, wind: number): void {
+   path, spaced by their size, each drifting with the wind (smokeDrift; held
+   still under reduced motion) and rising a little as it ages, growing and
+   thinning but never quite gone before the round ends. `budget.left` is the
+   puffs this frame may still draw: a mark that would need more spreads the
+   ones it has along its whole path. */
+function drawMark(c: CanvasRenderingContext2D, m: Mark, look: Look, wind: number, budget: { left: number }, calm: boolean): void {
   const p = m.pts;
   if (p.length < 4) return;
   const col = look.trail || look.shell || '#ffffff';
@@ -550,14 +555,20 @@ function drawMark(c: CanvasRenderingContext2D, m: Mark, look: Look, wind: number
       c.stroke();
     }
   } else {
-    const drift = smokeDrift(m.age, wind), rise = Math.min(40, m.age * 2.5);
+    const drift = calm ? 0 : smokeDrift(m.age, wind), rise = calm ? 0 : Math.min(40, m.age * 2.5);
     const r = 4 + Math.min(16, m.age * 1.4), fade = Math.max(0.3, 1 - m.age / 45);
+    let len = 0;
+    for (let i = 2; i < p.length; i += 2) len += Math.hypot(p[i]! - p[i - 2]!, p[i + 1]! - p[i - 1]!);
+    const want = len / Math.max(9, 0.8 * r) + 1;
+    if (budget.left < 1) { c.restore(); return; }
+    const gap = want > budget.left ? len / Math.max(1, budget.left - 1) : Math.max(9, 0.8 * r);
+    budget.left -= Math.min(want, budget.left);
     c.fillStyle = col;
     let at = 0;
     for (let i = 2; i < p.length; i += 2) {
       const x0 = p[i - 2]!, y0 = p[i - 1]!, x1 = p[i]!, y1 = p[i + 1]!;
       const seg = Math.hypot(x1 - x0, y1 - y0);
-      for (; at <= seg; at += 9) {
+      for (; at <= seg; at += gap) {
         const f = seg > 0 ? at / seg : 0, k = (i * 7 + Math.round(at)) % 10 / 10; // a fixed scatter per puff
         const x = x0 + (x1 - x0) * f + drift * (0.7 + 0.5 * k), y = y0 + (y1 - y0) * f - rise * (0.6 + 0.4 * k);
         c.globalAlpha = 0.18 * fade;
@@ -888,7 +899,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.fillStyle = '#00aa00';
     c.fillRect(pv.tx - 14, ty - 27, 28 * (pv.foeHp / pv.foeHpMax), 2);
     // Shells + debris.
-    if (pv.trace) drawMark(c, { ...pv.trace, by: 0, wkey: pv.wkey }, deps.look(pv.wkey), pv.wind);
+    if (pv.trace) drawMark(c, { ...pv.trace, by: 0, wkey: pv.wkey }, deps.look(pv.wkey), pv.wind, { left: SMOKE_PUFFS_MAX }, deps.reducedMotion());
     for (const bm of pv.booms) drawBoom(c, bm, deps.look(bm.wkey));
     if (pv.fx) pv.fx.draw(c);
     for (const s of pv.shells) {
@@ -1119,8 +1130,10 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
       c.stroke();
       c.globalAlpha = 1;
     }
-    // Tracer marks, under the blasts and effects.
-    for (const m of view.marks) drawMark(c, m, deps.look(m.wkey), view.wind);
+    // Tracer marks, under the blasts and effects; the newest smoke first, so a
+    // crowded round thins the oldest.
+    const puffs = { left: SMOKE_PUFFS_MAX }, calm = deps.reducedMotion();
+    for (let i = view.marks.length - 1; i >= 0; i--) drawMark(c, view.marks[i]!, deps.look(view.marks[i]!.wkey), view.wind, puffs, calm);
     // Blast discs: each explosion draws exactly the circle its weapon destroys,
     // under the effects (trails, muzzle and blast particles), shells on top.
     for (const bm of view.booms) drawBoom(c, bm, deps.look(bm.wkey));

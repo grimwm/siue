@@ -21,7 +21,7 @@ import type { FieldWidth } from './field.ts';
 import type { RoomClient } from './net.ts';
 import {
   gauss, H, GRAV, TUNE, clamp, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
-  anyTankFalling as simAnyTankFalling, armChutes, dueFalls, gfxLinger, settleVolley,
+  anyTankFalling as simAnyTankFalling, armChutes, dueFalls, gfxLinger, settleVolley, unitHitBox,
 } from './sim.ts';
 import type { Blast, Difficulty, FallEvent, FallShow, Shell, StepEvent } from './sim.ts';
 import { snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloOneUps, soloSettle } from './solo.ts';
@@ -229,7 +229,8 @@ export function createMatch(deps: MatchDeps) {
         const s = e.shot, ang = Math.atan2(s.y1 - s.y0, s.x1 - s.x0);
         fxSpecial(G.fx, e.wkey, 'beam', s.x0, s.y0, ang, Math.hypot(s.x1 - s.x0, s.y1 - s.y0));
         fxImpact(G.fx, e.wkey, s.x1, s.y1, s.hits.r);
-        for (const h of s.hits.events) fxSpecial(G.fx, e.wkey, 'pierce', h.tank.x, (h.tank.drawY ?? h.tank.y) - 12, ang);
+        // Through each unit it struck, at its body (a drone's is up in the air).
+        for (const h of s.hits.events) fxSpecial(G.fx, e.wkey, 'pierce', h.tank.x, (h.tank.drawY ?? h.tank.y) + unitHitBox(h.tank).cy - h.tank.y, ang);
         if (s.hits.events.length) sfx.play('boom');
         G.shake = Math.max(G.shake || 0, s.hits.shake * 0.5);
         showHits(s.hits);

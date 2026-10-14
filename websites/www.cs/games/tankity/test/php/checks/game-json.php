@@ -236,6 +236,22 @@ foreach (['split', 'fan', 'kick', 'subDmg', 'subRadius'] as $k) {
     $e = (string) $errOf(fn() => $render($yaml));
     $check("scatter-needs-$k", str_contains($e, "arsenal.ammo[1].$k: is required when effect is scatter"), $e);
 }
+$beam = $row1($asEffect("      effect: beam\n      range: 520\n"));
+$check('beam-effect-validates', ($beam['effect'] ?? '') === 'beam' && ($beam['range'] ?? null) === 520 && !isset($beam['pellets']), json_encode($beam));
+$dip = $row1($asEffect("      effect: beam\n      range: 520\n      aimMin: -20\n"));
+$check('beam-aimmin-validates', ($dip['aimMin'] ?? null) === -20, json_encode($dip));
+$plasma = $row1($asEffect("      effect: plasma\n"));
+$check('plasma-takes-no-extra-fields', ($plasma['effect'] ?? '') === 'plasma' && !isset($plasma['error']), json_encode($plasma));
+/** Buckshot turned into a harmless tracer: dmg 0, radius 0 and a mark. */
+$tracerOf = fn(string $mark = ', mark: line'): string => str_replace(
+    ["      dmg: 17\n      radius: 20\n", 'painter: spark, shake: 0.3}'],
+    ["      dmg: 0\n      radius: 0\n", "painter: dash, shake: 0.3$mark}"],
+    $asEffect("      effect: tracer\n"),
+);
+$tracer = $row1($tracerOf());
+$check('tracer-validates-harmless-with-radius-0', ($tracer['effect'] ?? '') === 'tracer' && ($tracer['dmg'] ?? null) === 0 && ($tracer['radius'] ?? null) === 0
+    && ($tracer['gfx']['mark'] ?? '') === 'line' && ($tracer['gfx']['painter'] ?? '') === 'dash', json_encode($tracer));
+$check('smoke-mark-validates', ($row1($tracerOf(', mark: smoke'))['gfx']['mark'] ?? '') === 'smoke');
 $apex = $row1($asEffect("      effect: cluster\n      apex: true\n      split: 9\n      fan: 0.16\n      subDmg: 60\n      subRadius: 40\n"));
 $check('apex-cluster-needs-no-fuse', ($apex['apex'] ?? null) === true && !isset($apex['fuse']) && $apex['split'] === 9, json_encode($apex));
 $rack = $row1($mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 1\n"));
@@ -288,6 +304,18 @@ $cases = [
     'hops-on-a-shot' => [$asEffect("      effect: shot\n      hops: 3\n"), 'arsenal.ammo[1].hops: only the hop effect uses this'],
     'kick-on-a-cluster' => [$asEffect("      effect: cluster\n      fuse: 0.9\n      split: 4\n      fan: 0.2\n      kick: 100\n      subDmg: 24\n      subRadius: 18\n"), 'arsenal.ammo[1].kick: only the scatter effect uses this'],
     'subdmg-on-a-shot' => [$asEffect("      effect: shot\n      subDmg: 3\n"), 'arsenal.ammo[1].subDmg: only the cluster, hop and scatter effects use this'],
+    'beam-needs-range' => [$asEffect("      effect: beam\n"), 'arsenal.ammo[1].range: is required when effect is beam'],
+    'beam-range-low' => [$asEffect("      effect: beam\n      range: 40\n"), 'arsenal.ammo[1].range: must be a whole number from 60 to 1200'],
+    'beam-range-high' => [$asEffect("      effect: beam\n      range: 1300\n"), 'arsenal.ammo[1].range: must be a whole number from 60 to 1200'],
+    'range-on-a-shot' => [$asEffect("      effect: shot\n      range: 300\n"), 'arsenal.ammo[1].range: only the beam effect uses this'],
+    'aimmin-on-a-shot' => [$asEffect("      effect: shot\n      aimMin: -10\n"), 'arsenal.ammo[1].aimMin: only the beam effect uses this'],
+    'aimmin-range' => [$asEffect("      effect: beam\n      range: 520\n      aimMin: -40\n"), 'arsenal.ammo[1].aimMin: must be a whole number from -30 to 10'],
+    'range-on-a-plasma' => [$asEffect("      effect: plasma\n      range: 300\n"), 'arsenal.ammo[1].range: only the beam effect uses this'],
+    'tracer-needs-dmg-0' => [str_replace("      dmg: 0\n", "      dmg: 5\n", $tracerOf()), 'arsenal.ammo[1].dmg: a tracer does no damage; must be 0'],
+    'radius-0-only-on-a-tracer' => [$mut("      radius: 26\n", "      radius: 0\n"), 'arsenal.ammo[0].radius: must be a whole number from 1 to 200'],
+    'tracer-needs-a-mark' => [$tracerOf(''), 'arsenal.ammo[1].gfx.mark: is required when effect is tracer'],
+    'bad-mark' => [$tracerOf(', mark: glow'), 'arsenal.ammo[1].gfx.mark: must be one of: line, smoke'],
+    'mark-on-a-shot' => [$mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, mark: line}'), 'arsenal.ammo[0].gfx.mark: only the tracer effect uses this'],
     'pellets-on-a-roller' => [$asEffect("      effect: roller\n      friction: 0.5\n      rollTime: 6\n      pellets: 3\n"), 'arsenal.ammo[1].pellets: only the pellets effect uses this'],
     'airack-range-low' => [$mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 0\n"), 'arsenal.ammo[1].aiRack: must be a whole number from 1 to 9'],
     'airack-range-high' => [$mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 10\n"), 'arsenal.ammo[1].aiRack: must be a whole number from 1 to 9'],
@@ -420,7 +448,7 @@ $check('shipped-json-in-sync', $shipped !== null && $shipped === (string) @file_
     'run: php tools/game-json.php (in games/tankity)');
 $sd = json_decode((string) $shipped, true);
 $check('good-fall', ($out['arsenal']['fall'] ?? null) === ['freePx' => 10, 'perPx' => 0.5, 'chuteOver' => 5, 'aiRound' => 3], json_encode($out['arsenal']['fall'] ?? null));
-$check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 19 && count($sd['arsenal']['gear'] ?? []) === 9
+$check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 23 && count($sd['arsenal']['gear'] ?? []) === 9
     && count($sd['audio']['sfx'] ?? []) >= 1 && count($sd['audio']['music'] ?? []) >= 1);
 $ammoKeys = array_column($sd['arsenal']['ammo'] ?? [], 'key');
 $rollerRow = $sd['arsenal']['ammo'][array_search('roller', $ammoKeys, true)] ?? [];

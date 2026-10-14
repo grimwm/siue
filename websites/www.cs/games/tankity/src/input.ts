@@ -186,13 +186,20 @@ export interface ArmStep {
   adjusting: boolean;
   /** None of the four barrel and power keys is down. */
   idle: boolean;
+  /** The angle was outside the limits (the loaded gun changed) and was brought inside them. */
+  clamped: boolean;
 }
 
-/** One frame of held-key arm movement. `facing` is +1 or -1, the way the tank looks; `w` is the match's field width, which scales the power step. */
-export function stepArm(held: Held, dt: number, arm: { angle: number; power: number }, facing: number, w = ROOM_W): ArmStep {
-  const { angleMin, angleMax, powerMin, powerMax } = ARM_LIMITS;
+/** One frame of held-key arm movement. `facing` is +1 or -1, the way the tank looks; `w` is the match's field width, which scales the power step;
+ *  `lim` the loaded gun's angle limits (sim.ts aimLimits; 10..170 when left out), which the angle is always kept inside. */
+export function stepArm(held: Held, dt: number, arm: { angle: number; power: number }, facing: number, w = ROOM_W,
+  lim: { min: number; max: number } = { min: ARM_LIMITS.angleMin, max: ARM_LIMITS.angleMax }): ArmStep {
+  const { powerMin, powerMax } = ARM_LIMITS;
+  const angleMin = lim.min, angleMax = lim.max;
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
   let { angle, power } = arm;
+  const clamped = angle < angleMin || angle > angleMax;
+  angle = clamp(angle, angleMin, angleMax);
   const powerRate = ARM_RATE.power * powerScale(w);
   const swing = held.axis('barrelRight', 'barrelLeft');
   if (swing) angle = clamp(angle + swing * facing * ARM_RATE.barrelDegrees * dt, angleMin, angleMax);
@@ -202,6 +209,7 @@ export function stepArm(held: Held, dt: number, arm: { angle: number; power: num
     angle, power,
     adjusting: swing !== 0 || held.has('powerUp') || held.has('powerDown'),
     idle: !held.aiming(),
+    clamped,
   };
 }
 

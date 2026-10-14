@@ -24,7 +24,7 @@ function makeEnv() {
     weapon: key => arsenal.weapons[key],
     muzzle: (f, wkey, x, y, ang) => log.muzzle.push({ f, wkey, x, y, ang }),
     impact: (f, wkey, x, y, r) => log.impact.push({ f, wkey, x, y, r }),
-    special: (f, wkey, name, x, y, ang) => log.special.push({ f, wkey, name, x, y, ang }),
+    special: (f, wkey, name, x, y, ang, len) => log.special.push({ f, wkey, name, x, y, ang, len }),
     trail: () => { log.trail++; },
     showResult: text => log.results.push(text),
   };
@@ -86,7 +86,11 @@ function run(pv, env, seconds, done = () => false) {
     run(pv, env, 12, p => p.phase === 'show');
     check(`${key}: the first volley ends with a result`, pv.phase === 'show' && pv.result.length > 0, `phase ${pv.phase}`);
     // The solver aims an unsteered shot; the seeker bends its own way, so only it may miss.
-    if (key !== 'seeker') {
+    // A harmless gun (a tracer) hurts nothing: its mark comes down by the dummy.
+    if (arsenal.weapons[key].dmg === 0) {
+      const end = pv.trace && pv.trace.pts.slice(-2);
+      check(`${key}: the first volley comes down by the dummy`, !!end && Math.abs(end[0] - pv.tx) < 14 && pv.foeHp === PV_FOE_HP, JSON.stringify(end));
+    } else if (key !== 'seeker') {
       check(`${key}: the first volley lands on the dummy`, pv.volleyHits >= 1 && pv.foeHp < PV_FOE_HP, `hits ${pv.volleyHits}, hp ${pv.foeHp}`);
     }
   }
@@ -140,6 +144,48 @@ function run(pv, env, seconds, done = () => false) {
   run(skull, dh.env, 15, p => p.phase === 'show');
   check('Death\'s Head splits at the top of its arc, heading level or down', tops.length === 1 && tops[0] >= 0 && tops[0] < 0.1, JSON.stringify(tops));
   check('into its nine warheads', dh.log.impact.length === arsenal.weapons.deathshead.split, String(dh.log.impact.length));
+}
+
+/* ---- guns with no flight, and tracers ---- */
+{
+  const byEffect = e => GAME.arsenal.ammo.find(a => a.effect === e).key;
+  const bm = makeEnv();
+  const beamKey = byEffect('beam');
+  const beam = createPreview(beamKey, bm.env, bm.fx, null);
+  run(beam, bm.env, 4, p => p.phase === 'show');
+  const lines = bm.log.special.filter(s => s.name === 'beam');
+  check('a beam is one straight line from the barrel through the dummy', lines.length === 1 && lines[0].len > 200 && beam.shells.length === 0,
+    JSON.stringify(lines));
+  check('the beam strikes the dummy once for its flat damage', beam.volleyHits === 1 && beam.foeHp === PV_FOE_HP - arsenal.weapons[beamKey].dmg,
+    `hits ${beam.volleyHits}, hp ${beam.foeHp}`);
+  check('the beam passes through the dummy, and bursts where it stops', bm.log.special.some(s => s.name === 'pierce')
+    && bm.log.impact.length === 1 && bm.log.impact[0].r === arsenal.weapons[beamKey].radius);
+  check('a beam result reads as a beam', /beam/i.test(beam.result), beam.result);
+  const lim = arsenal.weapons[beamKey].aimMin ?? 10;
+  check('the range aims its beam inside the gun\'s own limits, as the war does', beam.angle >= lim && beam.angle <= 180 - lim, String(beam.angle));
+
+  const rg = makeEnv();
+  const ringKey = byEffect('plasma');
+  const ring = createPreview(ringKey, rg.env, rg.fx, null);
+  check('a plasma demo stands the dummy within the ring', ring.tx - ring.sx < arsenal.weapons[ringKey].radius);
+  run(ring, rg.env, 4, p => p.phase === 'show');
+  check('the ring plays around the gunner at its full radius', rg.log.impact.length === 1 && rg.log.impact[0].x === ring.sx
+    && rg.log.impact[0].r === arsenal.weapons[ringKey].radius && ring.shells.length === 0, JSON.stringify(rg.log.impact));
+  check('the ring burns the dummy, with falloff', ring.volleyHits === 1 && ring.foeHp > PV_FOE_HP - arsenal.weapons[ringKey].dmg && ring.foeHp < PV_FOE_HP,
+    `hp ${ring.foeHp}`);
+  check('a ring cuts no crater', ring.terr.every((v, i) => v === makePreviewTerrain()[i]));
+
+  for (const key of GAME.arsenal.ammo.filter(a => a.effect === 'tracer').map(a => a.key)) {
+    const tr = makeEnv();
+    const pv = createPreview(key, tr.env, tr.fx, null);
+    run(pv, tr.env, 12, p => p.phase === 'show');
+    check(`${key}: a tracer leaves its path, not a blast`, tr.log.impact.every(i => i.r < 20) && pv.booms.length === 0
+      && pv.terr.every((v, i) => v === makePreviewTerrain()[i]) && pv.trace.pts.length > 10 && pv.trace.kind === arsenal.weapons[key].gfx.mark,
+      JSON.stringify(tr.log.impact));
+    check(`${key}: the result says where it came down`, /mark/i.test(pv.result), pv.result);
+    run(pv, tr.env, 4, p => p.phase === 'fly');
+    check(`${key}: the next volley starts a new path`, pv.trace.pts.length < 10, String(pv.trace.pts.length));
+  }
 }
 
 /* ---- weapons with their own behaviour ---- */

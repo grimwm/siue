@@ -3,7 +3,7 @@
 // to the view (a tank, a boom, the terrain) throws in module code, so a frame that
 // tried to advance or change game state fails here without a browser.
 import { check } from '../../_kit/test/check.ts';
-import { CHUTE_OPEN, chuteFrame, createRenderer, drawChassis } from '../src/render.ts';
+import { CHUTE_OPEN, SMOKE_PUFFS_MAX, chuteFrame, createRenderer, drawChassis } from '../src/render.ts';
 import { fitField, visibleWorld } from '../src/field.ts';
 import { sceneryY } from '../src/scenery.ts';
 import { skyMarks } from '../src/camera.ts';
@@ -20,12 +20,12 @@ function deepFreeze(o) {
 
 /* A canvas context that accepts every call and every property, and counts the calls. */
 function stubContext() {
-  const calls = { n: 0, fills: 0, texts: [] };
+  const calls = { n: 0, fills: 0, texts: [], by: {} };
   const ctx = new Proxy({}, {
     get(t, p) {
       if (p in t) return t[p];
       if (p === 'measureText') return s => ({ width: String(s).length * 6 });
-      return (...a) => { calls.n++; if (p === 'fill' || p === 'fillRect') calls.fills++; if (p === 'fillText') calls.texts.push(a[0]); return ctx; };
+      return (...a) => { calls.n++; calls.by[p] = (calls.by[p] || 0) + 1; if (p === 'fill' || p === 'fillRect') calls.fills++; if (p === 'fillText') calls.texts.push(a[0]); return ctx; };
     },
     set(t, p, v) { t[p] = v; return true; },
   });
@@ -70,6 +70,7 @@ const view = deepFreeze({
   replay: [{ x: 220, y: 210, vx: 10, vy: 10, wkey: 'nuke' }],
   ghosts: [{ x: 760, y: 200, vx: 200, vy: 20, wkey: 'shell' }],
   sparks: [{ x: 50, y: 50, life: 0.3, color: '#fff' }],
+  marks: [],
   wind: -5, textScale: 1.1,
   turnClock: { left: 2.4, myTurn: true },
   preview: null,
@@ -91,12 +92,32 @@ const live = deepFreeze({ ...view, turnUnit: view.tanks[1], aim: { unit: view.ta
 }
 
 {
+  // Tracer marks: a line is a dashed path ending in its cross; smoke is puffs
+  // along the path, drifting with the wind as it ages.
+  const pts = [100, 300, 160, 250, 220, 230, 280, 250, 340, 300];
+  const marks = [{ by: 0, wkey: 'tracer', kind: 'line', pts, landed: true, age: 1 }, { by: 1, wkey: 'smoke', kind: 'smoke', pts, landed: true, age: 6 }];
+  const none = stubCanvas(), lines = stubCanvas();
+  createRenderer(none.canvas, deps).frame(view);
+  createRenderer(lines.canvas, deps).frame(deepFreeze({ ...view, marks }));
+  check('marks-draw-a-dashed-line', (lines.calls.by.setLineDash || 0) >= 2 && !none.calls.by.setLineDash, JSON.stringify(lines.calls.by.setLineDash));
+  check('marks-draw-smoke-puffs', (lines.calls.by.arc || 0) >= (none.calls.by.arc || 0) + 5, `${lines.calls.by.arc} vs ${none.calls.by.arc}`);
+  // A round crowded with long smoke trails draws at most SMOKE_PUFFS_MAX puffs (two fills each) a frame.
+  const long = []; for (let x = 0; x <= 1400; x += 7) long.push(x, 200 + 60 * Math.sin(x / 90));
+  const crowd = Array.from({ length: 30 }, (_, i) => ({ by: i, wkey: 'smoke', kind: 'smoke', pts: long, landed: true, age: 1 + i }));
+  const busy = stubCanvas();
+  createRenderer(busy.canvas, deps).frame(deepFreeze({ ...view, marks: crowd }));
+  check('marks-smoke-is-capped-per-frame', (busy.calls.by.arc || 0) - (none.calls.by.arc || 0) <= 2 * SMOKE_PUFFS_MAX + 2 && busy.calls.by.arc > none.calls.by.arc + 400,
+    `${busy.calls.by.arc} arcs`);
+}
+
+{
   // The preview paints on its own canvas, from a frozen snapshot too.
   const main = stubCanvas(), small = stubCanvas();
   const pv = deepFreeze({
     canvas: small.canvas, width: 360, height: 200, terr: Array.from({ length: 360 }, () => 150),
     sx: 44, tx: 296, angle: 60, foeHp: 30, foeHpMax: 60, wkey: 'shell', wind: 3,
     booms: [], shells: [{ x: 100, y: 100, vx: 1, vy: 1, wkey: 'shell' }], fx: fxSystem, result: 'Clean miss.', resultT: 1,
+    trace: { kind: 'line', pts: [50, 140, 90, 100, 130, 120], landed: true, age: 0.5 },
   });
   let threw = '';
   try { createRenderer(main.canvas, deps).frame(deepFreeze({ ...view, preview: pv })); } catch (e) { threw = String(e); }

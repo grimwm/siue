@@ -52,15 +52,15 @@ function protocol_play(): array
 
 /** The fire branch of the act handler: the shot, the wind drift, then the
  * crew's answer. */
-function protocol_fire(array $room, float $angle, float $power): array
+function protocol_fire(array $room, float $angle, float $power, string $wkey = 'shell'): array
 {
     $seat = 0;
     $room['tanks'][0]['angle'] = $angle;
     $room['tanks'][0]['power'] = $power;
     $me = $room['tanks'][0];
-    $events = [['t' => 'fire', 'seat' => $seat, 'w' => 'shell',
+    $events = [['t' => 'fire', 'seat' => $seat, 'w' => $wkey,
         'x' => round($me['x'], 1), 'a' => round($me['angle'], 1), 'pw' => round($me['power'], 1)]];
-    room_fire_shot($room, $events, 0, 'shell');
+    room_fire_shot($room, $events, 0, $wkey);
     $rng = $room['rng'];
     $room['wind'] = (int) max(-12, min(12, round($room['wind'] + room_gauss($rng) * 2)));
     $room['rng'] = $rng;
@@ -97,6 +97,17 @@ function protocol_hitting_aim(array $room): array
     throw new RuntimeException('no aim hits the drone from the opening position');
 }
 
+/** The first gun in the arsenal with effect $effect. */
+function protocol_gun(string $effect): string
+{
+    foreach (room_weapons() as $k => $def) {
+        if ($def['effect'] === $effect) {
+            return $k;
+        }
+    }
+    throw new RuntimeException("the arsenal has no $effect gun");
+}
+
 /** Every deterministic fixture: name => [description, status, body]. */
 function protocol_snapshots(): array
 {
@@ -125,6 +136,19 @@ function protocol_snapshots(): array
         200, $ok(room_snapshot($fired, 0, 1, $fired['terrainRev']))];
     $out['play-resync'] = ['A poll whose since is newer than anything the room has recorded (the room was lost or restarted): the snapshot is full again and carries resync: true.',
         200, $ok(room_snapshot($fired, 0, 999, $fired['terrainRev']))];
+
+    // A beam aimed as a drone aims one, from the host's barrel pivot at the drone's body (a little below level).
+    $beam = protocol_gun('beam');
+    [$beamAngle] = room_ai_beam_aim($play['tanks'][0], $play['tanks'][1], room_weapons()[$beam]);
+    $out['play-after-beam'] = ['After the host fires a beam at the drone: fire, the beam event with its unrounded line (no shot: nothing flies), its hit at the same moment, then the drone answers.',
+        200, $ok(room_snapshot(protocol_fire($play, $beamAngle, 100.0, $beam), 0, 0))];
+    // A plasma ring with the drone moved in beside the host, inside the ring.
+    $ring = protocol_gun('plasma');
+    $close = $play;
+    $close['tanks'][1]['x'] = $close['tanks'][0]['x'] + 0.6 * room_weapons()[$ring]['radius'];
+    $close['tanks'][1]['y'] = $close['terrain'][(int) round($close['tanks'][1]['x'])];
+    $out['play-after-ring'] = ['After the host fires a plasma ring with the drone beside it: fire, the ring event (centre and radius, no shot, no crater), its hit at the same moment, then the drone answers.',
+        200, $ok(room_snapshot(protocol_fire($close, 60.0, 100.0, $ring), 0, 0))];
 
     $kill = $play;
     $kill['tanks'][1]['hp'] = 1;

@@ -687,8 +687,9 @@ if ($action === 'act' && $method === 'POST') {
     } else {
     $tank = &$room['tanks'][$myIdx];
     if ($kind === 'aim') {
-        $tank['angle'] = max(10.0, min(170.0, (float) ($body['angle'] ?? $tank['angle'])));
-        $tank['power'] = max(10.0, min(100.0, (float) ($body['power'] ?? $tank['power'])));
+        unset($tank);
+        room_set_aim($room, $myIdx, $seat, $body['angle'] ?? null, $body['power'] ?? null);
+        $tank = &$room['tanks'][$myIdx];
     } elseif ($kind === 'drive') {
         $dx = max(-80.0, min(80.0, (float) ($body['dx'] ?? 0)));
         if (abs($dx) > $tank['fuel'] + 1e-9) {
@@ -730,14 +731,15 @@ if ($action === 'act' && $method === 'POST') {
             room_json_out(409, ['error' => $msg]);
         }
         $room['weapon'][$seat] = $wkey;
+        // The barrel comes back inside the new gun's limits.
+        unset($tank);
+        room_set_aim($room, $myIdx, $seat, null, null);
+        $tank = &$room['tanks'][$myIdx];
     } elseif ($kind === 'fire') {
         // The shot carries its own aim so a fast trigger pull never fires stale barrels.
-        if (isset($body['angle'])) {
-            $tank['angle'] = max(10.0, min(170.0, (float) $body['angle']));
-        }
-        if (isset($body['power'])) {
-            $tank['power'] = max(10.0, min(100.0, (float) $body['power']));
-        }
+        unset($tank);
+        room_set_aim($room, $myIdx, $seat, $body['angle'] ?? null, $body['power'] ?? null);
+        $tank = &$room['tanks'][$myIdx];
         $wkey = (string) ($room['weapon'][$seat] ?? 'shell');
         $weapons = room_weapons();
         if (!isset($weapons[$wkey])) {

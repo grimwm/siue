@@ -37,11 +37,15 @@ export function iconCtx(cv: HTMLCanvasElement | null | undefined): CanvasRenderi
 }
 /* The shell as it flies: a trail in its trail color behind a body in its
    shell color, in front of a faint blast ring sized by its radius. Beam
-   shells fly flat as a bright streak; spark shells throw spokes. */
+   shells fly flat as a bright streak; spark shells throw spokes; a plasma
+   gun is rings around a core; a dash (a tracer) is its dashed path ending in
+   the cross it marks. */
 export function drawShellIcon(cv: HTMLCanvasElement, w: Weapon | undefined): void {
   const c = w && w.gfx && iconCtx(cv);
   if (!c) return;
   const g = w!.gfx as Paint;
+  if (g.painter === 'dash') { drawDashIcon(c, g); return; }
+  if (w!.effect === 'plasma') { drawRingIcon(c, g); return; }
   const flat = g.painter === 'beam';
   const cx = 26, cy = 13;
   const br = 5 + Math.min(1, (w.radius || 0) / 70) * 8;
@@ -140,6 +144,65 @@ export function drawShellIcon(cv: HTMLCanvasElement, w: Weapon | undefined): voi
     c.arc(cx - 1, cy - 1, 1, 0, Math.PI * 2);
     c.fill();
   }
+}
+/* A tracer: a dashed arc in its trail colour, its glowing head, and the
+   cross it leaves where it comes down. */
+function drawDashIcon(c: CanvasRenderingContext2D, g: Paint): void {
+  c.save();
+  c.lineCap = 'round';
+  c.strokeStyle = g.trail;
+  c.lineWidth = 1.6;
+  c.setLineDash([2.5, 2.5]);
+  c.beginPath();
+  c.moveTo(3, 22);
+  c.quadraticCurveTo(16, -2, 31, 19);
+  c.stroke();
+  c.setLineDash([]);
+  c.strokeStyle = g.shell;
+  c.lineWidth = 1.8;
+  c.beginPath();
+  c.moveTo(28, 16);
+  c.lineTo(34, 22);
+  c.moveTo(34, 16);
+  c.lineTo(28, 22);
+  c.stroke();
+  c.shadowColor = g.shell;
+  c.shadowBlur = 5;
+  c.fillStyle = g.shell;
+  c.beginPath();
+  c.arc(17, 8, 2.4, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+}
+/* A plasma gun: a bright core in rings of its blast colours, spreading out. */
+function drawRingIcon(c: CanvasRenderingContext2D, g: Paint): void {
+  const cx = 20, cy = 13;
+  c.save();
+  const halo = c.createRadialGradient(cx, cy, 0, cx, cy, 12);
+  halo.addColorStop(0, g.blast[1]);
+  halo.addColorStop(1, 'rgba(0,0,0,0)');
+  c.globalAlpha = 0.5;
+  c.fillStyle = halo;
+  c.beginPath();
+  c.arc(cx, cy, 12, 0, Math.PI * 2);
+  c.fill();
+  c.globalAlpha = 1;
+  c.shadowColor = g.shell;
+  c.shadowBlur = 4;
+  for (const [r, a, col] of [[11.5, 0.45, g.blast[0]], [8, 0.75, g.trail], [4.8, 1, g.shell]] as [number, number, string][]) {
+    c.globalAlpha = a;
+    c.strokeStyle = col;
+    c.lineWidth = 1.4;
+    c.beginPath();
+    c.arc(cx, cy, r, 0, Math.PI * 2);
+    c.stroke();
+  }
+  c.globalAlpha = 1;
+  c.fillStyle = g.blast[1];
+  c.beginPath();
+  c.arc(cx, cy, 2.2, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
 }
 /* A trick or supply as a simple picture of what it does. */
 export function drawGearIcon(cv: HTMLCanvasElement, g: Gear | undefined): void {

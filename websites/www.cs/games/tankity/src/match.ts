@@ -21,9 +21,9 @@ import type { FieldWidth } from './field.ts';
 import type { RoomClient } from './net.ts';
 import {
   gauss, H, GRAV, TUNE, clamp, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
-  anyTankFalling as simAnyTankFalling, armChutes, dueFalls, gfxLinger, settleVolley,
+  anyTankFalling as simAnyTankFalling, armChutes, dueFalls, gfxLinger, settleVolley, unitHitBox,
 } from './sim.ts';
-import type { Blast, Difficulty, FallEvent, FallShow, Shell } from './sim.ts';
+import type { Blast, Difficulty, FallEvent, FallShow, Shell, StepEvent } from './sim.ts';
 import { snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloOneUps, soloSettle } from './solo.ts';
 import { endCardBack, localLine, soloBoard } from './standings.ts';
 import type { LocalRow, Saved } from './local-board.ts';
@@ -72,7 +72,7 @@ export interface MatchDeps {
   refreshNavHints(): void;
   fxMuzzle(sys: FxSys | null, wkey: string, x: number, y: number, ang: number): void;
   fxImpact(sys: FxSys | null, key: string, x: number, y: number, r: number): number | undefined;
-  fxSpecial(sys: FxSys | null, key: string, name: string, x: number, y: number, ang: number): void;
+  fxSpecial(sys: FxSys | null, key: string, name: string, x: number, y: number, ang: number, len?: number): void;
   fxTrail(sys: FxSys | null, s: Shell, dt: number, x?: number, y?: number, vx?: number, vy?: number, wkey?: string): void;
   closeGuns(): boolean;
   closePreview(): void;
@@ -103,8 +103,10 @@ export function createMatch(deps: MatchDeps) {
   } = deps;
 
   let fallsDue: FallShow[] = []; // solo landings waiting to be seen to touch down
+  let marked = false; // this volley's tracer left its mark
   function resetMatch(seedStr?: string): void {
     fallsDue = []; // a fall still playing out in the last match never speaks in this one
+    G.marks.clear();
     const seed = (seedStr || '').trim() || ('scorched-' + Math.floor(Math.random() * 9000 + 1000));
     // The Menu's Difficulty, read once per match: a change waits for the next one.
     // The width comes from the screen at the deal and holds until the next one (spec 6.6).
@@ -170,6 +172,7 @@ export function createMatch(deps: MatchDeps) {
   }
   function newRound(bannerText?: string, event?: FlowEvent): void {
     fallsDue = [];
+    G.marks.clear();
     soloMuster(G, tables.arsenal!);
     G.roundStart = { score: G.score, cash: G.cash };
     G.parts = [];
@@ -208,11 +211,40 @@ export function createMatch(deps: MatchDeps) {
       return false;
     }
     if (launch.spent) say(`Out of ${w.name}. Back to the Shell.`, 'info');
+    // A gunner's tracer line lasts until its next shot.
+    G.marks.fired(G.tanks.indexOf(t));
+    marked = false;
     // Muzzle effects (the rail's beam among them) fire once per volley, along the barrel.
     fxMuzzle(G.fx, wkey, launch.x, launch.y, launch.ang);
     sfx.play('launch');
     advance('fire');
+    if (launch.now.length) playNow(launch.now);
     return true;
+  }
+  /* A gun with no flight (a beam, a plasma ring) did everything the moment
+     it fired: play it, and the turn goes straight to the settle. */
+  function playNow(now: readonly StepEvent[]): void {
+    for (const e of now) {
+      if (e.kind === 'beam') {
+        const s = e.shot, ang = Math.atan2(s.y1 - s.y0, s.x1 - s.x0);
+        fxSpecial(G.fx, e.wkey, 'beam', s.x0, s.y0, ang, Math.hypot(s.x1 - s.x0, s.y1 - s.y0));
+        fxImpact(G.fx, e.wkey, s.x1, s.y1, s.hits.r);
+        // Through each unit it struck, at its body (a drone's is up in the air).
+        for (const h of s.hits.events) fxSpecial(G.fx, e.wkey, 'pierce', h.tank.x, (h.tank.drawY ?? h.tank.y) + unitHitBox(h.tank).cy - h.tank.y, ang);
+        if (s.hits.events.length) sfx.play('boom');
+        G.shake = Math.max(G.shake || 0, s.hits.shake * 0.5);
+        showHits(s.hits);
+      } else if (e.kind === 'ring') {
+        const s = e.shot;
+        sfx.play('boom');
+        const kick = fxImpact(G.fx, e.wkey, s.x, s.y, s.r);
+        G.shake = Math.max(G.shake || 0, kick !== undefined ? kick : s.hits.shake);
+        showHits(s.hits);
+      }
+    }
+    G.settleT = TUNE.settleTime;
+    advance('shellsLanded');
+    settleVolleyFalls();
   }
   function demoBlock(): boolean {
     if (!G.demo) return false;
@@ -240,7 +272,15 @@ export function createMatch(deps: MatchDeps) {
      this plays it. */
   function stepShells(dt: number): void {
     for (const e of simStepShells(G, tables.arsenal!, dt)) {
-      if (e.kind === 'trail') fxTrail(G.fx, e.shell, dt, e.x, e.y, e.vx, e.vy, e.shell.wkey);
+      if (e.kind === 'trail') {
+        fxTrail(G.fx, e.shell, dt, e.x, e.y, e.vx, e.vy, e.shell.wkey);
+        const mark = tables.weapons[e.shell.wkey]?.gfx?.mark;
+        if (mark === 'line' || mark === 'smoke') G.marks.trail(e.shell, G.tanks.indexOf(e.shell.owner as GameTank), e.shell.wkey, mark, e.x, e.y);
+      } else if (e.kind === 'mark') {
+        G.marks.land(e.shell, e.x, e.y);
+        fxImpact(G.fx, e.shell.wkey, e.x, e.y, MARK_R);
+        marked = true;
+      } else if (e.kind === 'beam' || e.kind === 'ring') playNow([e]);
       else if (e.kind === 'split') fxSpecial(G.fx, e.wkey, 'split', e.x, e.y, e.ang);
       else if (e.kind === 'pierce') fxSpecial(G.fx, e.wkey, 'pierce', e.x, e.y, e.ang);
       else if (e.kind === 'hop') fxSpecial(G.fx, e.wkey, 'hop', e.x, e.y, e.ang);
@@ -258,11 +298,15 @@ export function createMatch(deps: MatchDeps) {
   /* A blast as the sim reports it: the boom, then what it did to each unit in
      the order it happened. */
   function showBlast(b: Blast): void {
-    const owner = b.owner;
     sfx.play('boom');
     const kick = fxImpact(G.fx, b.fx, b.x, b.y, b.r);
     G.shake = Math.max(G.shake || 0, kick !== undefined ? kick : b.shake);
     G.booms.push({ x: b.x, y: b.y, r: b.r, wkey: b.wkey, t: 0, life: gfxLinger(tables.weapons[b.wkey]?.gfx) });
+    showHits(b);
+  }
+  /* What a blast (or a beam, or a plasma ring) did to each unit, in the order it happened. */
+  function showHits(b: Blast): void {
+    const owner = b.owner;
     for (const e of b.events) {
       const t = e.tank;
       if (e.kind === 'shield') {
@@ -496,6 +540,8 @@ export function createMatch(deps: MatchDeps) {
     }
     renderHUD();
   }
+  /** The radius a tracer's landing effect is sized to: it has no blast of its own. */
+  const MARK_R = 10;
   const BANNER_MS = 1500;
   // Banner timing rides the game clock, never wall time: hidden tabs throttle
   // setTimeout, which used to strand the game on its name card after refocus.
@@ -579,6 +625,7 @@ export function createMatch(deps: MatchDeps) {
   function decayFx(dt: number): void {
     if (G.shake > 0) G.shake = Math.max(0, G.shake - dt);
     if (G.fx) { G.fx.wind = G.wind; G.fx.step(dt); }
+    G.marks.step(dt);
     for (const bm of G.booms) bm.t += dt;
     G.booms = G.booms.filter(bm => bm.t < bm.life);
     for (const q of G.parts) {
@@ -600,8 +647,11 @@ export function createMatch(deps: MatchDeps) {
       // stepping continues until every shell has landed or fizzled.
       if (G.shells.length) stepShells(dt);
       if (G.phase === 'fly' && !G.shells.length) {
-        say('Shot fizzles out over the hills.', 'info');
-        talk('tank', pick(TANK_MISS));
+        if (marked) say('The tracer marks its path.', 'info');
+        else {
+          say('Shot fizzles out over the hills.', 'info');
+          talk('tank', pick(TANK_MISS));
+        }
         G.settleT = 0.6;
         advance('shellsLanded');
       } else if (G.phase === 'settle' && !G.shells.length) {

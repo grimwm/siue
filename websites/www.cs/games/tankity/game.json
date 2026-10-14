@@ -515,6 +515,110 @@
                     "painter": "ball",
                     "shake": 0.7
                 }
+            },
+            {
+                "key": "laser",
+                "name": "Laser",
+                "cat": "Beams",
+                "dmg": 45,
+                "radius": 6,
+                "price": 300,
+                "pack": 2,
+                "minRound": 4,
+                "ai": true,
+                "aiRound": 6,
+                "effect": "beam",
+                "range": 520,
+                "aimMin": -20,
+                "speed": 1.0,
+                "note": "Dead straight along the barrel, which dips below level; power sets its reach. Cuts through hills.",
+                "gfx": {
+                    "shell": "#ff4d4d",
+                    "trail": "#ff8a8a",
+                    "blast": [
+                        "#ff3b3b",
+                        "#fff0f0"
+                    ],
+                    "painter": "beam",
+                    "shake": 0.2
+                }
+            },
+            {
+                "key": "plasma",
+                "name": "Plasma Blast",
+                "cat": "Beams",
+                "dmg": 60,
+                "radius": 90,
+                "price": 280,
+                "pack": 2,
+                "minRound": 3,
+                "ai": true,
+                "aiRound": 5,
+                "effect": "plasma",
+                "speed": 1.0,
+                "note": "Spares you; power sets its size.",
+                "gfx": {
+                    "shell": "#c77dff",
+                    "trail": "#9d4edd",
+                    "blast": [
+                        "#b56cff",
+                        "#f6e8ff"
+                    ],
+                    "painter": "spark",
+                    "shake": 0.5
+                }
+            },
+            {
+                "key": "tracer",
+                "name": "Tracer",
+                "cat": "Tracers",
+                "dmg": 0,
+                "radius": 0,
+                "price": 15,
+                "pack": 5,
+                "minRound": 1,
+                "ai": false,
+                "aiRound": 99,
+                "effect": "tracer",
+                "speed": 1.0,
+                "note": "Shows you its whole path and landing until your next shot.",
+                "gfx": {
+                    "shell": "#9ef0ff",
+                    "trail": "#5ad8f0",
+                    "blast": [
+                        "#5ad8f0",
+                        "#e8fbff"
+                    ],
+                    "painter": "dash",
+                    "shake": 0,
+                    "mark": "line"
+                }
+            },
+            {
+                "key": "smoketracer",
+                "name": "Smoke Tracer",
+                "cat": "Tracers",
+                "dmg": 0,
+                "radius": 0,
+                "price": 30,
+                "pack": 5,
+                "minRound": 1,
+                "ai": false,
+                "aiRound": 99,
+                "effect": "tracer",
+                "speed": 1.0,
+                "note": "Leaves a smoke trail that everyone sees for the round, drifting with the wind.",
+                "gfx": {
+                    "shell": "#e8e4dc",
+                    "trail": "#c8c2b8",
+                    "blast": [
+                        "#c8c2b8",
+                        "#ffffff"
+                    ],
+                    "painter": "dash",
+                    "shake": 0,
+                    "mark": "smoke"
+                }
             }
         ],
         "gear": [
@@ -2640,6 +2744,475 @@
                     {"count":16,"life":[0.5,1],"speed":[100,260],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.2,2.4],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
                     {"shape":"streak","count":12,"life":[0.2,0.5],"speed":[140,320],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":10,"alpha":[1,0.9,0],"colors":["#fff3c4","#ffe27a","#d98a41"],"glow":true},
                     {"shape":"sprite","count":3,"sheet":"plume","unit":"r","size":[0.5,0.62],"life":[2,2.8],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#6a5a46","delay":0.25,"offset":0.25}
+                ]
+            }
+        },
+        "laser": {
+            "body": {
+                "halo": 8,
+                "alpha": 0.5,
+                "sprite": "p_rail",
+                "size": 18
+            },
+            "muzzle": {
+                "screen": {
+                    "shake": 0.05
+                },
+                "emitters": [
+                    {"count":1,"size":[10,10],"sizeEnd":0.4,"life":[0.2,0.2],"alpha":[1,0.6,0],"colors":["#ffffff","#ff4d4d"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"flare","size":[14,14],"life":[0.3,0.3],"alpha":[1,1,0],"tint":"#ff6b6b","glow":true,"aim":"forward","spread":0,"align":true},
+                    {"shape":"ring","count":1,"size":[3,3],"sizeEnd":6,"ease":"out","life":[0.25,0.25],"width":2,"alpha":[1,0.6,0],"colors":["#ffffff","#ff4d4d"],"glow":true},
+                    {"shape":"streak","count":10,"life":[0.1,0.25],"speed":[120,280],"drag":1.2,"size":[1,1.4],"length":8,"alpha":[1,0.9,0],"colors":["#ffffff","#ff8a8a"],"glow":true,"aim":"forward","spread":60},
+                    {"shape":"sprite","count":2,"sheet":"plume","aim":"forward","spread":50,"life":[0.6,0.9],"speed":[10,40],"drag":2,"gravity":-20,"wind":1,"size":[3,4.5],"alpha":[0,0.4,0.2,0],"rotJitter":40,"tint":"#a08080","delay":0.05}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"rate":30,"life":[0.15,0.3],"speed":[0,10],"size":[1,1.6],"sizeEnd":0.3,"colors":["#ffffff","#ff4d4d"],"glow":true}
+                ]
+            },
+            "impact": {
+                "emitters": [
+                    {"shape":"sprite","count":1,"sheet":"flare","size":[16,16],"life":[0.32,0.32],"alpha":[1,1,0],"tint":"#ff6b6b","glow":true},
+                    {"count":1,"unit":"r","size":[1.6,1.6],"sizeEnd":0.5,"life":[0.24,0.24],"alpha":[0.8,0.4,0],"colors":["#ffffff","#ff4d4d"],"glow":true},
+                    {"shape":"spark","count":1,"size":[9,9],"sizeEnd":0.3,"life":[0.3,0.3],"alpha":[1,1,0],"colors":["#ffffff","#ff8a8a"],"glow":true,"rotJitter":45,"spin":[-90,90]},
+                    {"shape":"streak","count":12,"life":[0.15,0.35],"speed":[120,280],"gravity":120,"drag":1.2,"size":[1,1.4],"length":8,"alpha":[1,0.9,0],"colors":["#ffffff","#ff8a8a","#ff3b3b"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"dirt","size":[9,9],"life":[0.6,0.6],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true},
+                    {"shape":"sprite","count":2,"sheet":"smoke","life":[0.8,1.2],"speed":[6,18],"angle":90,"spread":80,"gravity":-18,"drag":1,"wind":1,"size":[4,6],"sizeEnd":2,"alpha":[0,0.5,0],"rotJitter":180,"tint":"#6a5a5a","delay":0.1}
+                ]
+            },
+            "special": {
+                "beam": {
+                    "emitters": [
+                        {
+                            "shape": "beam",
+                            "count": 1,
+                            "aim": "forward",
+                            "spread": 0,
+                            "size": [
+                                6,
+                                6
+                            ],
+                            "sizeEnd": 0.3,
+                            "life": [
+                                0.6,
+                                0.6
+                            ],
+                            "alpha": [
+                                0.9,
+                                0.5,
+                                0
+                            ],
+                            "colors": [
+                                "#ff1a1a",
+                                "#ff4d4d"
+                            ],
+                            "glow": true
+                        },
+                        {
+                            "shape": "beam",
+                            "count": 1,
+                            "aim": "forward",
+                            "spread": 0,
+                            "size": [
+                                1.8,
+                                1.8
+                            ],
+                            "sizeEnd": 0.5,
+                            "life": [
+                                0.42,
+                                0.42
+                            ],
+                            "alpha": [
+                                1,
+                                1,
+                                0
+                            ],
+                            "colors": [
+                                "#ff3b3b",
+                                "#ffffff"
+                            ],
+                            "glow": true
+                        },
+                        {
+                            "shape": "sprite",
+                            "count": 14,
+                            "sheet": "beam",
+                            "aim": "forward",
+                            "spread": 0,
+                            "align": true,
+                            "size": [
+                                14,
+                                14
+                            ],
+                            "scale": 2.4,
+                            "life": [
+                                0.45,
+                                0.5
+                            ],
+                            "alpha": [
+                                1,
+                                1,
+                                0
+                            ],
+                            "tint": "#ff5a5a",
+                            "glow": true
+                        },
+                        {
+                            "count": 30,
+                            "life": [
+                                0.2,
+                                0.5
+                            ],
+                            "speed": [
+                                5,
+                                30
+                            ],
+                            "size": [
+                                2.4,
+                                4
+                            ],
+                            "sizeEnd": 0.2,
+                            "alpha": [
+                                0.9,
+                                0
+                            ],
+                            "colors": [
+                                "#ffffff",
+                                "#ff4d4d"
+                            ],
+                            "glow": true
+                        },
+                        {
+                            "shape": "streak",
+                            "count": 26,
+                            "life": [
+                                0.15,
+                                0.4
+                            ],
+                            "speed": [
+                                60,
+                                170
+                            ],
+                            "gravity": 120,
+                            "drag": 1.4,
+                            "size": [
+                                0.9,
+                                1.3
+                            ],
+                            "length": 6,
+                            "alpha": [
+                                1,
+                                0.9,
+                                0
+                            ],
+                            "colors": [
+                                "#ffffff",
+                                "#ff8a8a",
+                                "#ff3b3b"
+                            ],
+                            "glow": true
+                        },
+                        {
+                            "shape": "sprite",
+                            "count": 10,
+                            "sheet": "smoke",
+                            "life": [
+                                0.9,
+                                1.4
+                            ],
+                            "speed": [
+                                4,
+                                14
+                            ],
+                            "angle": 90,
+                            "spread": 90,
+                            "gravity": -16,
+                            "drag": 1,
+                            "wind": 1,
+                            "size": [
+                                3,
+                                4.5
+                            ],
+                            "sizeEnd": 2.2,
+                            "alpha": [
+                                0,
+                                0.4,
+                                0
+                            ],
+                            "rotJitter": 180,
+                            "tint": "#8a7070",
+                            "delay": 0.12
+                        }
+                    ]
+                },
+                "pierce": {
+                    "emitters": [
+                        {
+                            "shape": "sprite",
+                            "count": 1,
+                            "sheet": "flare",
+                            "size": [
+                                18,
+                                18
+                            ],
+                            "life": [
+                                0.32,
+                                0.32
+                            ],
+                            "alpha": [
+                                1,
+                                1,
+                                0
+                            ],
+                            "tint": "#ff6b6b",
+                            "glow": true,
+                            "aim": "forward",
+                            "spread": 0,
+                            "align": true
+                        },
+                        {
+                            "count": 1,
+                            "size": [
+                                11,
+                                11
+                            ],
+                            "sizeEnd": 0.4,
+                            "life": [
+                                0.24,
+                                0.24
+                            ],
+                            "alpha": [
+                                0.9,
+                                0.5,
+                                0
+                            ],
+                            "colors": [
+                                "#ffffff",
+                                "#ff4d4d"
+                            ],
+                            "glow": true
+                        },
+                        {
+                            "shape": "sprite",
+                            "count": 1,
+                            "sheet": "electric",
+                            "size": [
+                                12,
+                                12
+                            ],
+                            "life": [
+                                0.35,
+                                0.35
+                            ],
+                            "alpha": [
+                                1,
+                                1,
+                                0
+                            ],
+                            "rotJitter": 180,
+                            "tint": "#ff8a8a",
+                            "glow": true
+                        },
+                        {
+                            "shape": "streak",
+                            "count": 16,
+                            "life": [
+                                0.15,
+                                0.4
+                            ],
+                            "speed": [
+                                140,
+                                320
+                            ],
+                            "gravity": 160,
+                            "drag": 1.2,
+                            "size": [
+                                1,
+                                1.4
+                            ],
+                            "length": 9,
+                            "alpha": [
+                                1,
+                                0.9,
+                                0
+                            ],
+                            "colors": [
+                                "#ffffff",
+                                "#ffd75e",
+                                "#ff3b3b"
+                            ],
+                            "glow": true,
+                            "aim": "forward",
+                            "spread": 70
+                        },
+                        {
+                            "shape": "sprite",
+                            "count": 3,
+                            "sheet": "debris",
+                            "anim": "random",
+                            "fps": 22,
+                            "life": [
+                                0.6,
+                                1
+                            ],
+                            "speed": [
+                                60,
+                                140
+                            ],
+                            "angle": 90,
+                            "spread": 120,
+                            "gravity": 380,
+                            "drag": 0.3,
+                            "size": [
+                                1.4,
+                                2.4
+                            ],
+                            "alpha": [
+                                1,
+                                1,
+                                0
+                            ],
+                            "rotJitter": 180,
+                            "spin": [
+                                -360,
+                                360
+                            ],
+                            "tint": "#7a7a80"
+                        },
+                        {
+                            "shape": "sprite",
+                            "count": 2,
+                            "sheet": "smoke",
+                            "life": [
+                                0.8,
+                                1.2
+                            ],
+                            "speed": [
+                                6,
+                                18
+                            ],
+                            "angle": 90,
+                            "spread": 80,
+                            "gravity": -18,
+                            "drag": 1,
+                            "wind": 1,
+                            "size": [
+                                4,
+                                6
+                            ],
+                            "sizeEnd": 2,
+                            "alpha": [
+                                0,
+                                0.5,
+                                0
+                            ],
+                            "rotJitter": 180,
+                            "tint": "#6a5a5a",
+                            "delay": 0.1
+                        }
+                    ]
+                }
+            }
+        },
+        "plasma": {
+            "body": {
+                "halo": 10,
+                "alpha": 0.5,
+                "pulse": 8,
+                "sprite": "p_emp",
+                "size": 14,
+                "fps": 20
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[16,16],"sizeEnd":0.4,"life":[0.22,0.22],"alpha":[1,0.6,0],"colors":["#ffffff","#c77dff"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"electric","size":[16,16],"life":[0.3,0.3],"alpha":[1,1,0],"rotJitter":180,"tint":"#c77dff","glow":true},
+                    {"shape":"bolt","count":4,"length":18,"size":[1,1],"life":[0.1,0.2],"alpha":[1,1,0],"colors":["#e0aaff"],"glow":true,"offset":4}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"rate":30,"life":[0.2,0.36],"speed":[0,14],"size":[1.2,2],"sizeEnd":0.3,"colors":["#ffffff","#c77dff","#5a189a"],"glow":true}
+                ]
+            },
+            "impact": {
+                "screen": {
+                    "flash": {
+                        "color": "#b56cff",
+                        "alpha": 0.14,
+                        "dur": 0.3
+                    }
+                },
+                "emitters": [
+                    {"count":1,"unit":"r","size":[0.25,0.25],"sizeEnd":0.5,"life":[0.3,0.3],"alpha":[0.8,0.4,0],"colors":["#e0aaff","#c77dff"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"plasma","unit":"r","size":[1,1],"life":[0.6,0.6],"alpha":[1,1,0.8,0],"rotJitter":180,"tint":"#c77dff","glow":true},
+                    {"shape":"sprite","count":1,"sheet":"plasma","unit":"r","size":[0.9,0.9],"life":[0.7,0.7],"alpha":[0.8,0.6,0],"rotJitter":180,"tint":"#5a189a","glow":true,"delay":0.06},
+                    {"shape":"sprite","count":1,"sheet":"shock","unit":"r","size":[0.9,0.9],"life":[0.5,0.5],"alpha":[1,0.6,0],"rotJitter":10,"tint":"#e0aaff","glow":true},
+                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[0.5,0.5],"life":[0.4,0.4],"alpha":[1,1,0],"rotJitter":180,"tint":"#c77dff","glow":true,"scale":1.2},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.15,0.15],"sizeEnd":6.6,"ease":"out","life":[0.45,0.45],"width":5,"alpha":[1,0.6,0],"colors":["#ffffff","#c77dff"],"glow":true},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.15,0.15],"sizeEnd":6.2,"ease":"out","life":[0.6,0.6],"width":2,"alpha":[0.9,0.5,0],"colors":["#e0aaff","#5a189a"],"glow":true,"delay":0.08},
+                    {"shape":"bolt","count":10,"unit":"r","length":0.9,"size":[1,1],"life":[0.14,0.32],"alpha":[1,1,0],"colors":["#e0aaff"],"glow":true},
+                    {"shape":"sprite","count":6,"sheet":"electric","unit":"r","size":[0.22,0.28],"life":[0.35,0.5],"offset":0.85,"edge":true,"alpha":[1,1,0],"rotJitter":180,"tint":"#c77dff","glow":true,"delay":0.06},
+                    {"shape":"streak","count":24,"unit":"r","life":[0.25,0.5],"speed":[1.6,3.2],"drag":1.4,"size":[0.012,0.018],"length":0.12,"alpha":[1,0.9,0],"colors":["#ffffff","#e0aaff","#9d4edd"],"glow":true},
+                    {"count":18,"unit":"r","offset":0.9,"edge":true,"life":[0.5,0.9],"speed":[-0.2,0.2],"gravity":-30,"drag":1,"size":[0.016,0.026],"colors":["#ffffff","#c77dff","#5a189a"],"glow":true}
+                ]
+            }
+        },
+        "tracer": {
+            "body": {
+                "halo": 6,
+                "alpha": 0.6,
+                "stretch": 12,
+                "sprite": "p_tracer",
+                "size": 12
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[5,5],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.85,0.5,0],"colors":["#ffffff","#9ef0ff"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[6,6],"life":[0.1,0.1],"alpha":[1,1,0]},
+                    {"shape":"streak","count":5,"life":[0.08,0.18],"speed":[80,180],"drag":1.2,"size":[0.9,1.2],"length":6,"alpha":[1,0.9,0],"colors":["#ffffff","#5ad8f0"],"glow":true,"aim":"forward","spread":30}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"rate":60,"life":[0.3,0.5],"speed":[0,6],"size":[1,1.5],"sizeEnd":0.3,"colors":["#ffffff","#9ef0ff","#2a8aa0"],"glow":true},
+                    {"shape":"streak","rate":30,"aim":"forward","speed":[10,30],"spread":6,"length":10,"size":[0.8,1],"life":[0.12,0.2],"colors":["#ffffff","#5ad8f0"],"glow":true}
+                ]
+            },
+            "impact": {
+                "emitters": [
+                    {"shape":"ring","count":1,"unit":"r","size":[0.3,0.3],"sizeEnd":4,"ease":"out","life":[0.5,0.5],"width":2,"alpha":[1,0.6,0],"colors":["#ffffff","#5ad8f0"],"glow":true},
+                    {"count":1,"unit":"r","size":[0.8,0.8],"sizeEnd":0.4,"life":[0.25,0.25],"alpha":[0.9,0.4,0],"colors":["#ffffff","#9ef0ff"],"glow":true},
+                    {"shape":"spark","count":1,"unit":"r","size":[1.4,1.4],"sizeEnd":0.3,"life":[0.35,0.35],"alpha":[1,1,0],"colors":["#ffffff","#9ef0ff"],"glow":true,"rotJitter":45},
+                    {"shape":"sprite","count":1,"sheet":"flare","size":[9,9],"life":[0.3,0.3],"alpha":[1,1,0],"tint":"#9ef0ff","glow":true}
+                ]
+            }
+        },
+        "smoketracer": {
+            "body": {
+                "halo": 5,
+                "alpha": 0.4,
+                "sprite": "p_smoketracer",
+                "size": 14
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[5,5],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.85,0.5,0],"colors":["#ffffff","#e8e4dc"],"glow":true},
+                    {"shape":"sprite","count":3,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[4,6],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#c8c2b8"}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"shape":"sprite","rate":30,"sheet":"smoke","life":[0.9,1.4],"speed":[0,8],"angle":90,"spread":120,"gravity":-8,"drag":1.2,"size":[2.6,3.4],"sizeEnd":2.2,"alpha":[0,0.5,0],"rotJitter":180,"wind":1,"tint":"#d8d2c8"},
+                    {"rate":20,"life":[0.2,0.35],"speed":[0,6],"size":[0.9,1.3],"sizeEnd":0.3,"colors":["#ffffff","#ffd75e"],"glow":true}
+                ]
+            },
+            "impact": {
+                "emitters": [
+                    {"shape":"sprite","count":3,"sheet":"plume","unit":"r","size":[1.4,1.8],"life":[1.6,2.4],"speed":[0.5,1.5],"angle":90,"spread":90,"gravity":-12,"drag":0.8,"wind":1,"alpha":[0,0.7,0.4,0],"rotJitter":30,"tint":"#d8d2c8"},
+                    {"count":1,"unit":"r","size":[0.7,0.7],"sizeEnd":0.4,"life":[0.25,0.25],"alpha":[0.8,0.4,0],"colors":["#ffffff","#ffd75e"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"flare","size":[8,8],"life":[0.25,0.25],"alpha":[1,1,0],"tint":"#ffd75e","glow":true}
                 ]
             }
         },

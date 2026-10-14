@@ -234,13 +234,22 @@ export type AiFireEvent = VolleyOpener<'aifire'>;
 export type AutoEvent = VolleyOpener<'auto'>;
 
 /** One shell's flight: launch and landing time within the volley, blast
- * radius (0 for a fizzle), and the path as "x,y x,y ..." points 1/12 s apart.
+ * radius (0 for a fizzle, and for a tracer, which bursts on nothing), and the
+ * path as "x,y x,y ..." points 1/12 s apart.
  * `split` marks the bloom of a cluster shell. */
 export interface ShotEvent extends EventBase {
   t: 'shot'; by: number; w: string;
   x0: number; y0: number; x1: number; y1: number;
   t0: number; t1: number; r: number; p: string; split?: boolean;
 }
+/** A beam: no flight. It ran straight from the muzzle (x0, y0) to (x1, y1) the
+ * moment it fired, and cut its channel along that line (sim.ts beamCarve
+ * with the weapon's radius); its hits follow as hit events. The numbers are
+ * the server's own, unrounded, so a client's carve matches the server's. */
+export interface BeamEvent extends EventBase { t: 'beam'; by: number; w: string; x0: number; y0: number; x1: number; y1: number }
+/** A plasma ring (a `plasma` gun's shot): no flight, no crater. Centred on its
+ * gunner's body at (x, y), radius r; its hits follow as hit events. */
+export interface RingEvent extends EventBase { t: 'ring'; by: number; w: string; x: number; y: number; r: number }
 /** A blast mid-flight (a lance passing through a unit). */
 export interface BurstEvent extends EventBase { t: 'burst'; x: number; y: number; r: number; w: string }
 export interface HitEvent extends EventBase { t: 'hit'; seat: number; dmg: number; by: number; direct: boolean }
@@ -259,7 +268,7 @@ export interface TacticEvent extends EventBase { t: 'tactic'; seat: number; s: s
 export type RoomEvent =
   | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent | TurnTimeEvent
   | FireEvent | AiFireEvent | AutoEvent
-  | ShotEvent | BurstEvent | HitEvent | FallEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
+  | ShotEvent | BeamEvent | RingEvent | BurstEvent | HitEvent | FallEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
 
 export type RoomEventType = RoomEvent['t'];
 /** The events that open a volley. */

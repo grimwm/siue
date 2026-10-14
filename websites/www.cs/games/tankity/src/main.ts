@@ -38,7 +38,7 @@
  * a deps object, so none of them reaches for a global; the wiring is below.
  * What stays here is the state, the main loop, the keys and the page's own
  * plumbing (overlays, the firing range, the arsenal's loading). */
-import { ROOM_W, TUNE, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './sim.ts';
+import { ROOM_W, TUNE, aimLimits, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './sim.ts';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
 } from './audio.ts';
@@ -48,6 +48,7 @@ import { SOLO_STEP, WAR_REST, runFixed, warSpeed } from './flow.ts';
 import type { HoldCommand } from './input.ts';
 import { createPreview, stepPreview } from './preview.ts';
 import { createReplay } from './replay.ts';
+import { createMarks } from './marks.ts';
 import { createFieldWidth } from './field.ts';
 import { createInput, touchOnly, stepArm } from './input.ts';
 import { renderHelp } from './ui/help.tsx';
@@ -183,7 +184,7 @@ const G: GameState = {
   terrain: NOT_DEALT, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // banner | shop | aim | think | fly | settle | over (src/flow.ts)
   thinkT: 0, settleT: 0,
-  shells: [], parts: [], booms: [], fx: null,
+  shells: [], parts: [], booms: [], fx: null, marks: createMarks(),
   wind: 0, round: 1, firstTurn: 0,
   lives: TUNE.lives, score: 0, cash: 0, nextOneUp: TUNE.oneUpEvery,
   rounds: [], roundStart: { score: 0, cash: 0 },
@@ -341,7 +342,7 @@ function frame(ts: number): void {
   checkOneUps();
   if (G.phase === 'aim' && cur().isPlayer && !G.demo) {
     const t = me();
-    const arm = stepArm(input.held, dt, t, facing(t), G.w);
+    const arm = stepArm(input.held, dt, t, facing(t), G.w, aimLimits(tables.weapons[G.selected]));
     t.angle = arm.angle;
     t.power = arm.power;
     if ((input.held.has('driveLeft') || input.held.has('driveRight')) && t.fuel > 0) {
@@ -413,7 +414,10 @@ const replay = createReplay({
   blast: (x, y, r, wkey) => netBlast(x, y, r, wkey),
   muzzle: (wkey, x, y, ang) => fxMuzzle(G.fx, wkey, x, y, ang),
   special: (wkey, name, x, y, ang) => fxSpecial(G.fx, wkey, name, x, y, ang),
-  trail: (shot, dt, x, y, vx, vy, wkey) => fxTrail(G.fx, shot, dt, x, y, vx, vy, wkey),
+  trail: (shot, dt, x, y, vx, vy, wkey) => { fxTrail(G.fx, shot, dt, x, y, vx, vy, wkey); netTrailMark(shot, x, y); },
+  beam: e => netBeam(e),
+  ring: e => netRing(e),
+  mark: shot => netMark(shot),
 });
 /* ---------- the typed modules, wired in dependency order ---------- */
 /* The status bar's values (src/hud.ts). */
@@ -483,12 +487,12 @@ const {
 });
 /* A running room match on this client (src/room.ts): moves sent, snapshots adopted, events told, the turn alert. */
 const {
-  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netFrame,
+  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netMark, netTrailMark, netFrame,
   roomShopBoard, openStandings,
 } = createRoom({
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
   backToLobby: () => netBackToLobby(),
-  decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
+  decayFx, fallTanks, fxImpact, fxSpecial, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
   renderShopReady, shownAngle, shownPower, startBanner, updateCamera, driftClouds, windText, saveLocal, renderMenu: () => renderMenu(),
   alertsOn: () => alertsState() === 'on',
 });

@@ -271,5 +271,39 @@
     "frames": 8,
     "first": 16,
     "fps": 12
+  },
+  "beam": {
+    "file": "beam.png",
+    "frame": 96,
+    "cols": 4,
+    "rows": 3,
+    "frames": 12,
+    "fps": 24
+  },
+  "plasma": {
+    "file": "plasma.png",
+    "frame": 128,
+    "cols": 5,
+    "rows": 4,
+    "frames": 20,
+    "fps": 30
+  },
+  "p_tracer": {
+    "file": "shells_beams.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 2,
+    "frames": 8,
+    "first": 0,
+    "fps": 12
+  },
+  "p_smoketracer": {
+    "file": "shells_beams.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 2,
+    "frames": 8,
+    "first": 8,
+    "fps": 12
   }
 }

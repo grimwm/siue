@@ -234,6 +234,20 @@ function room_humans_alive(array $room): bool
     }
     return false;
 }
+/* A human's aim, as an act sends it (null leaves that part as it is): the
+// angle kept inside the limits of the gun the seat has loaded
+// (room_aim_limits: 10..170, or a beam's dip), the power 10..100. Called
+// again with nulls after a gun switch, so the barrel comes back inside the
+// new gun's limits. */
+function room_set_aim(array &$room, int $idx, int $seat, $angle, $power): void
+{
+    $weapons = room_weapons();
+    [$lo, $hi] = room_aim_limits($weapons[$room['weapon'][$seat] ?? 'shell'] ?? null);
+    $t = &$room['tanks'][$idx];
+    $t['angle'] = max($lo, min($hi, is_numeric($angle) ? (float) $angle : (float) $t['angle']));
+    $t['power'] = max(10.0, min(100.0, is_numeric($power) ? (float) $power : (float) $t['power']));
+    unset($t);
+}
 function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey): void
 {
     $room['shots'] = ($room['shots'] ?? 0) + 1; // a fresh turn clock follows each shot
@@ -244,11 +258,26 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
     $tank = &$room['tanks'][$seatIdx];
     $weapons = room_weapons();
     $w = $weapons[$wkey] ?? $weapons['shell'];
+    // A gun always leaves inside its own limits (src/sim.ts fireWeapon is the same).
+    [$aimLo, $aimHi] = room_aim_limits($w);
+    $tank['angle'] = max($aimLo, min($aimHi, (float) $tank['angle']));
     $shots = ($w['pellets'] ?? 0) > 0 ? $w['pellets'] : 1;
     $rad = deg2rad($tank['angle']);
     $dirS = $tank['dirS'] ?? -1;
     $radius = (float) $w['radius'];
     $events[count($events) - 1]['at'] = 0.0; // the fire/aifire that opened this volley
+    // A beam or a plasma ring has no flight: it resolves the moment it fires.
+    $effect = $w['effect'] ?? 'shot';
+    if ($effect === 'beam' || $effect === 'plasma') {
+        $mark = count($events);
+        if ($effect === 'beam') {
+            room_fire_beam($room, $events, $seatIdx, $w, $wkey);
+        } else {
+            room_fire_plasma($room, $events, $seatIdx, $w, $wkey);
+        }
+        room_stamp($events, $mark, 0.0);
+        $shots = 0;
+    }
     for ($i = 0; $i < $shots; $i++) {
         $off = $shots === 1 ? 0 : ($i - ($shots - 1) / 2) * ($w['spread'] ?? 0.0);
         $a = $rad + $off;
@@ -257,6 +286,13 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
         $vx = det_cos($a) * $spd * $dirS;
         $vy = -det_sin($a) * $spd;
         $res = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $mx, $my, $vx, $vy, 0.0, (float) ($w['fuse'] ?? 0.9), null, 0.0);
+        if ($effect === 'tracer') {
+            // A tracer bursts on nothing: its flight is all there is, radius 0.
+            $ev = room_shot_event($tank, $wkey, 0.0, $res, 0.0);
+            $ev['at'] = 0.0;
+            $events[] = $ev;
+            continue;
+        }
         if ($res[0] === 'split') {
             // The bloom reads as a burst on every screen; the bomblets do
             // the real damage from here.

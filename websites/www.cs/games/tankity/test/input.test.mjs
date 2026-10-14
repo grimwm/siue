@@ -326,6 +326,17 @@ function rig(extraCtx = {}) {
   held.clear();
   held.press('barrelLeft');
   check('arm-angle-clamps', stepArm(held, 10, { angle: 62, power: 55 }, 1).angle === 170);
+  // A loaded beam's limits let the barrel dip past level on both sides; a
+  // barrel outside the loaded gun's limits (a gun switch) comes back inside them.
+  check('arm-dips-with-beam-limits', stepArm(held, 10, { angle: 62, power: 55 }, 1, 720, { min: -20, max: 200 }).angle === 200);
+  held.clear();
+  held.press('barrelRight');
+  check('arm-dips-below-level', stepArm(held, 10, { angle: 62, power: 55 }, 1, 720, { min: -20, max: 200 }).angle === -20);
+  held.clear();
+  const back = stepArm(held, 1 / 60, { angle: -20, power: 55 }, 1);
+  check('arm-reclamps-to-the-gun-limits', back.angle === 10 && back.clamped && !back.adjusting, JSON.stringify(back));
+  check('arm-inside-limits-is-not-clamped', !stepArm(held, 1 / 60, { angle: 62, power: 55 }, 1).clamped);
+  held.press('barrelLeft');
   held.clear();
   held.press('powerUp');
   const up = stepArm(held, 1, { angle: 62, power: 55 }, 1);

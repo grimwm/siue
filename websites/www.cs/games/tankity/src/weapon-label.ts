@@ -1,5 +1,6 @@
-/* Operation Tankity: how the deck's Weapon button sums up a gun: its damage,
- * and a blast size (S, M, L) from its radius. DOM-free. */
+/* Operation Tankity: how the deck's Weapon button sums up a gun: its damage
+ * (or none), and a blast size (S, M, L) from its radius, or what it does
+ * instead of a blast (a beam; a tracer's path). DOM-free. */
 import type { Weapon } from './sim.ts';
 
 /** Radii below smallBelow are S, from largeFrom up are L, M between. */
@@ -14,12 +15,20 @@ export function blastSize(radius: number): 'S' | 'M' | 'L' {
 /** The same letters, spelled out for screen readers. */
 export const BLAST_WORDS = Object.freeze({ S: 'small', M: 'medium', L: 'large' });
 
-/** "34 dmg · M". */
-export function weaponLine(w: Pick<Weapon, 'dmg' | 'radius'>): string {
-  return `${w.dmg} dmg · ${blastSize(w.radius)}`;
+/** What a gun does, when that is not a blast of some size: a beam, or a
+ *  tracer's path. Null for a blast (and a plasma ring, sized as one). */
+function kindWord(w: Partial<Pick<Weapon, 'effect'>>): 'beam' | 'path' | null {
+  return w.effect === 'beam' ? 'beam' : w.effect === 'tracer' ? 'path' : null;
+}
+
+/** "34 dmg · M"; "45 dmg · beam"; "no damage · path". */
+export function weaponLine(w: Pick<Weapon, 'dmg' | 'radius'> & Partial<Pick<Weapon, 'effect'>>): string {
+  return `${w.dmg > 0 ? `${w.dmg} dmg` : 'no damage'} · ${kindWord(w) ?? blastSize(w.radius)}`;
 }
 
 /** "34 damage, medium blast": what a screen reader hears for the line. */
-export function weaponLineSpoken(w: Pick<Weapon, 'dmg' | 'radius'>): string {
-  return `${w.dmg} damage, ${BLAST_WORDS[blastSize(w.radius)]} blast`;
+export function weaponLineSpoken(w: Pick<Weapon, 'dmg' | 'radius'> & Partial<Pick<Weapon, 'effect'>>): string {
+  const kind = kindWord(w);
+  const what = kind === 'beam' ? 'beam' : kind === 'path' ? 'shows its path' : `${BLAST_WORDS[blastSize(w.radius)]} blast`;
+  return `${w.dmg > 0 ? `${w.dmg} damage` : 'no damage'}, ${what}`;
 }

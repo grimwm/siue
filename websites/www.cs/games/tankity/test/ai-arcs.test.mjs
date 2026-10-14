@@ -103,15 +103,16 @@ test('a gun given its own arc is planned on its own; one with the same flight sh
   assert.deepEqual(arcGuns(withRow('buck', { dmg: 99, radius: 60, effect: 'cluster' }), rack), ['shell']);
 });
 
-/* How often each gun's planning flight is flown on one drone turn. */
+/* How often each gun's planning flight is flown on one drone turn: every
+   flight reads its gun's speed (weighing a gun's harm does not). */
 function flownPerGun(ars) {
   const flown = {};
-  const weapons = new Proxy(ars.weapons, {
-    get(t, k) {
-      if (typeof k === 'string' && k in t) flown[k] = (flown[k] || 0) + 1;
-      return t[k];
+  const weapons = Object.fromEntries(Object.entries(ars.weapons).map(([key, row]) => [key, new Proxy(row, {
+    get(t, f) {
+      if (f === 'speed') flown[key] = (flown[key] || 0) + 1;
+      return t[f];
     },
-  });
+  })]));
   const drone = { id: 'D', isPlayer: false, x: 120, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0,
     ammo: { buck: 2, mortar: 2 }, s: 'hunter' };
   const human = { id: 'P', isPlayer: true, x: 560, y: 400, hp: 100, angle: 45, power: 50, dirS: -1, fuel: 80, vy: 0, ammo: {} };

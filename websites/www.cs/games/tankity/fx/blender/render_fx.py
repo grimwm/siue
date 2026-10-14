@@ -21,7 +21,8 @@ Options (after the `--`):
     --only A,B        Render just these sheets (names from SHEETS and ATLASES
                       below: fireball, smoke, shock, energy, moon,
                       blast, plume, dirt, debris, scorch, flakburst, electric,
-                      nuke, flare, muzzle, shells, shells_blast, parachute). Default: all. sprites.json
+                      nuke, flare, muzzle, shells, shells_blast, shells_beams, parachute,
+                      beam, plasma). Default: all. sprites.json
                       keeps the entries of sheets that were not re-rendered.
     --engine NAME     eevee (default; falls back to cycles if EEVEE cannot start
                       headless) or cycles.
@@ -48,8 +49,11 @@ Sheet layout (all recorded in sprites.json): frames are square, `frame` px on a
 side, row-major from the top-left, `cols` per row, `frames` in all; `fps` is the
 rate the animation was designed for (an emitter may override it). Colour
 conventions: `fireball` is natural colour (fire);
-`smoke`, `shock`, `energy` are neutral white and grey so an emitter's `tint`
-(multiply) colours them. `moon` is seven phases of
+`smoke`, `shock`, `energy`, `beam` and `plasma` are neutral white and grey so
+an emitter's `tint` (multiply) colours them. `beam` lies across the whole
+frame, left to right through its middle, so copies laid end to end (aligned
+to a beam's heading) join into one line; `plasma` is a ring bursting out from
+the frame's centre to its edge. `moon` is seven phases of
 a procedural moon (maria and craters, lit by one sun lamp swung round it, a
 touch of earthshine on the dark side); the game picks one per match.
 `parachute` is a striped canopy on its lines, lit by a sun lamp: the first 6
@@ -1061,6 +1065,92 @@ def build_electric(frames, rng):
         mat_key(cm, 'alpha', f, 1.0 - smooth(0.6, 1.0, t))
 
 
+def build_beam(frames, rng):
+    """A length of beam, lying across the whole frame (left to right through
+    the middle), so copies laid end to end along a line join into one: a
+    white-hot core, a soft halo, and thin filaments crackling round it, new
+    every frame. It flares, then thins and fades. Neutral white, for a tint."""
+    core = sphere(r=1.0, sub=4, scale=(2.6, 0.07, 0.07))
+    cm = ramp_material('bcore', [(0.0, (0.7, 0.7, 0.75)), (1.0, (1.0, 1.0, 1.0))], strength=3.0, alpha_power=0.5)
+    core.data.materials.append(cm)
+    halo = sphere(r=1.0, sub=4, scale=(2.8, 0.26, 0.26))
+    hm = ramp_material('bhalo', [(0.0, (0.25, 0.25, 0.3)), (1.0, (0.85, 0.85, 0.9))], strength=1.2, alpha_power=1.6, noise=0.35, noise_scale=2.5)
+    halo.data.materials.append(hm)
+    arc = flat_material('barc', (1.0, 1.0, 1.0), 1.8)
+    per = []
+    for f in range(frames):
+        t = f / (frames - 1)
+        objs = []
+        for k in range(3 if t < 0.7 else 1):
+            x0 = rng.uniform(-2.2, 0.6)
+            pts = jagged(rng, x0, rng.uniform(-0.06, 0.06), x0 + rng.uniform(0.9, 1.6), rng.uniform(-0.06, 0.06), 6, 0.11)
+            objs.append(bolt_curve(pts, arc, 0.016 * (1 - 0.5 * t)))
+        per.append(objs)
+    flicker(per, frames)
+    for f in range(frames):
+        t = f / (frames - 1)
+        g = ease_out(min(1.0, t * 4.0))
+        w = (0.6 + 0.8 * g) * (1 - 0.55 * smooth(0.3, 1.0, t))
+        core.scale = (2.6, 0.07 * w, 0.07 * w)
+        core.keyframe_insert('scale', frame=f)
+        halo.scale = (2.8, 0.26 * (0.7 + 0.5 * g), 0.26 * (0.7 + 0.5 * g))
+        halo.keyframe_insert('scale', frame=f)
+        mat_key(cm, 'heat', f, 0.0)
+        mat_key(cm, 'alpha', f, 1.0 - smooth(0.55, 1.0, t))
+        mat_key(hm, 'heat', f, 0.0)
+        mat_key(hm, 'alpha', f, 0.8 * (1.0 - smooth(0.25, 1.0, t)))
+
+
+def build_plasma(frames, rng):
+    """A ring of plasma bursting out from its centre: a thick turbulent torus
+    racing out to the frame's edge, a thin bright leading ring, a core flash
+    that fades as the ring leaves it, and filaments lashing between core and
+    ring. Neutral white and grey, for a tint."""
+    R0, R1 = 0.2, 1.75                          # ring radius at start and end
+    bpy.ops.mesh.primitive_torus_add(major_radius=1.0, minor_radius=0.16, major_segments=96, minor_segments=16)
+    thick = bpy.context.active_object
+    thick.rotation_euler = (math.radians(90), 0, 0)
+    bpy.ops.object.shade_smooth()
+    cloud_displace(thick, 0.12, 0.25, moving_empty(rng, frames, 2.0))
+    tm = ramp_material('pthick', [(0.0, (0.35, 0.35, 0.42)), (0.6, (0.8, 0.8, 0.88)), (1.0, (1.0, 1.0, 1.0))], strength=2.2, alpha_power=0.9, noise=0.5, noise_scale=4.0)
+    thick.data.materials.append(tm)
+    bpy.ops.mesh.primitive_torus_add(major_radius=1.0, minor_radius=0.03, major_segments=96, minor_segments=8)
+    lead = bpy.context.active_object
+    lead.rotation_euler = (math.radians(90), 0, 0)
+    lm = flat_material('plead', (1.0, 1.0, 1.0), 3.2)
+    lead.data.materials.append(lm)
+    core = sphere(r=1.0, sub=3)
+    cm = ramp_material('pcore', [(0.0, (0.6, 0.6, 0.66)), (1.0, (1.0, 1.0, 1.0))], strength=3.0, alpha_power=1.2)
+    core.data.materials.append(cm)
+    arc = flat_material('parc', (1.0, 1.0, 1.0), 1.7)
+    per = []
+    for f in range(frames):
+        t = f / (frames - 1)
+        rr = R0 + (R1 - R0) * ease_out(t)
+        objs = []
+        for k in range(7 if t < 0.6 else 3):
+            a = rng.uniform(0, math.tau)
+            r0 = rr * rng.uniform(0.15, 0.45)
+            objs.append(bolt_curve(jagged(rng, math.cos(a) * r0, math.sin(a) * r0, math.cos(a) * rr, math.sin(a) * rr, 6, 0.1), arc, 0.022 * (1 - 0.5 * t)))
+        per.append(objs)
+    flicker(per, frames)
+    for f in range(frames):
+        t = f / (frames - 1)
+        rr = R0 + (R1 - R0) * ease_out(t)
+        thick.scale = (rr, rr, 1.0 - 0.45 * t)
+        thick.keyframe_insert('scale', frame=f)
+        lead.scale = (rr * 1.04, rr * 1.04, 1.0)
+        lead.keyframe_insert('scale', frame=f)
+        cr = 0.45 * (1 - ease_in(smooth(0.0, 0.6, t))) + 0.05
+        core.scale = (cr, cr, cr)
+        core.keyframe_insert('scale', frame=f)
+        mat_key(tm, 'heat', f, 0.25 * t)
+        mat_key(tm, 'alpha', f, smooth(0, 0.05, t) * (1 - smooth(0.45, 1.0, t)))
+        mat_key(lm, 'alpha', f, 1 - smooth(0.35, 0.9, t))
+        mat_key(cm, 'heat', f, 0.0)
+        mat_key(cm, 'alpha', f, 1 - smooth(0.2, 0.7, t))
+
+
 def build_nuke(frames, rng):
     """The nuclear sequence, standing on the bottom edge of its frame: a
     white-hot dome on the ground lifts into a rising fireball, draws a stem of
@@ -1577,6 +1667,39 @@ def build_p_deathshead(frames, rng):
     fins(-1.5, -1.0, 0.45, steel, b, root=0.15, thick=0.05)
 
 
+def build_p_tracer(frames, rng):
+    """A tracer round: a slim brass case and a pointed copper bullet whose
+    base burns a hot cyan trace."""
+    shell_rig(rim=(0.5, 0.9, 1.0))
+    b = spinner(frames, 0.5)
+    brass, copper = pbr('brass', (0.85, 0.62, 0.25), 1.0, 0.3), pbr('copper', (0.78, 0.42, 0.22), 1.0, 0.3)
+    cyl_x(0.24, -1.1, 0.2, brass, b)
+    cyl_x(0.2, 0.2, 0.55, copper, b)
+    nose_x(0.2, 0.55, 0.85, copper, b)
+    cyl_x(0.26, -1.2, -1.1, brass, b)
+    glow = sphere(loc=(-1.35, 0, 0), r=1.0, sub=3, scale=(0.4, 0.22, 0.22))
+    part(glow, ramp_material('trace', [(0.0, (0.1, 0.6, 0.8)), (1.0, (0.85, 1.0, 1.0))], strength=2.4, alpha_power=0.6), b)
+
+
+def build_p_smoketracer(frames, rng):
+    """A smoke tracer: a stubby grey canister with an orange band and a
+    burning vent in its tail that boils out smoke."""
+    shell_rig()
+    b = spinner(frames, 0.5)
+    grey, band, steel = pbr('grey', (0.55, 0.55, 0.52), 0.3, 0.55), pbr('band', (0.95, 0.5, 0.1), 0.1, 0.45), pbr('steel', (0.4, 0.4, 0.44), 0.9, 0.3)
+    cyl_x(0.36, -1.0, 0.6, grey, b)
+    nose_x(0.36, 0.6, 0.55, grey, b)
+    cyl_x(0.375, 0.05, 0.3, band, b)
+    cyl_x(0.3, -1.15, -1.0, steel, b)
+    for ang in (0, 90, 180, 270):
+        decal(-0.55, ang, 0.18, 0.08, steel, b, 0.36)
+    fire = sphere(loc=(-1.3, 0, 0), r=1.0, sub=3, scale=(0.22, 0.2, 0.2))
+    part(fire, ramp_material('vent', [(0.0, (0.9, 0.35, 0.02)), (1.0, (1.0, 0.92, 0.6))], strength=2.2, alpha_power=0.8), b)
+    puff = sphere(loc=(-1.75, 0, 0), r=1.0, sub=3, scale=(0.42, 0.3, 0.3))
+    cloud_displace(puff, 0.12, 0.3, moving_empty(rng, frames, 1.5))
+    part(puff, ramp_material('puff', [(0.0, (0.45, 0.45, 0.45)), (1.0, (0.85, 0.85, 0.83))], strength=0.9, alpha_power=1.4, noise=0.4), b)
+
+
 # atlas name -> (frame px, frames per clip, fps, [(sheet name, builder)]):
 # one PNG, one row per clip; each clip is its own sheet in sprites.json.
 ATLASES = {
@@ -1590,6 +1713,10 @@ ATLASES = {
     # The Blast family's own shells (Baby Nuke and the rollers wear p_nuke and p_roller).
     'shells_blast': (48, 8, 12, [
         ('p_leapfrog', build_p_leapfrog), ('p_funky', build_p_funky), ('p_deathshead', build_p_deathshead),
+    ]),
+    # The tracers (the Laser and the Plasma Blast never fly, so wear p_rail and p_emp).
+    'shells_beams': (48, 8, 12, [
+        ('p_tracer', build_p_tracer), ('p_smoketracer', build_p_smoketracer),
     ]),
 }
 
@@ -1612,6 +1739,8 @@ SHEETS = {
     'flare': (build_flare, 96, 12, 6, 30),
     'muzzle': (build_muzzle, 64, 8, 8, 30),
     'parachute': (build_parachute, 64, 16, 4, 12),
+    'beam': (build_beam, 96, 12, 4, 24),
+    'plasma': (build_plasma, 128, 20, 5, 30),
 }
 
 

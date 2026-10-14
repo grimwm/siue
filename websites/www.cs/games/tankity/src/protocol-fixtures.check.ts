@@ -20,6 +20,8 @@ import lobbyPublic from '../protocol/lobby-public.json' with { type: 'json' };
 import playMyTurn from '../protocol/play-my-turn.json' with { type: 'json' };
 import playAfterFire from '../protocol/play-after-fire.json' with { type: 'json' };
 import playAfterFireDelta from '../protocol/play-after-fire-delta.json' with { type: 'json' };
+import playAfterBeam from '../protocol/play-after-beam.json' with { type: 'json' };
+import playAfterRing from '../protocol/play-after-ring.json' with { type: 'json' };
 import playResync from '../protocol/play-resync.json' with { type: 'json' };
 import playTurntime from '../protocol/play-turntime.json' with { type: 'json' };
 import mineReply from '../protocol/mine-reply.json' with { type: 'json' };
@@ -85,6 +87,8 @@ export const fixturesFit: {
   playMyTurn: Fits<typeof playMyTurn.body, RoomReply>;
   playAfterFire: Fits<typeof playAfterFire.body, RoomReply>;
   playAfterFireDelta: Fits<typeof playAfterFireDelta.body, RoomReply>;
+  playAfterBeam: Fits<typeof playAfterBeam.body, RoomReply>;
+  playAfterRing: Fits<typeof playAfterRing.body, RoomReply>;
   playResync: Fits<typeof playResync.body, RoomReply>;
   playTurntime: Fits<typeof playTurntime.body, RoomReply>;
   mineReply: Fits<typeof mineReply.body, MineReply>;
@@ -100,6 +104,8 @@ export const fixturesFit: {
   playMyTurn: true,
   playAfterFire: true,
   playAfterFireDelta: true,
+  playAfterBeam: true,
+  playAfterRing: true,
   playResync: true,
   playTurntime: true,
   mineReply: true,

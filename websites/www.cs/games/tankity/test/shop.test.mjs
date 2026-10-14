@@ -66,3 +66,18 @@ test('a gun bought, and the rack as the round starts, get their effects fetched 
   assert.ok(rack.includes('shell') && rack.includes('mortar'), rack.join(','));
   assert.ok(rack.every(k => k === 'shell' || G.ammo[k] > 0), 'only guns in the rack');
 });
+
+test('a shop row says what its gun does: a blast doubles on a direct hit, a beam and a ring do not, a tracer does no damage', () => {
+  const { ammoSub } = m.shop;
+  const byEffect = e => GAME.arsenal.ammo.find(a => a.effect === e);
+  assert.match(ammoSub(arsenal.weapons.shell), /^34 damage, blast 26, .*Direct hits count double\.$/);
+  const beam = byEffect('beam'), ring = byEffect('plasma'), tracer = byEffect('tracer');
+  assert.match(ammoSub(beam), new RegExp(`^${beam.dmg} damage to every unit on its line, `));
+  assert.doesNotMatch(ammoSub(beam), /double|blast/);
+  assert.equal(ammoSub(ring), `Up to ${ring.dmg} damage, ring ${ring.radius} at full power, spares you; power sets its size.`);
+  assert.equal(ammoSub(beam), `${beam.dmg} damage to every unit on its line, dead straight along the barrel, which dips below level; power sets its reach. Cuts through hills.`);
+  assert.doesNotMatch(ammoSub(ring), /double/);
+  assert.match(ammoSub(tracer), /^No damage, /);
+  assert.doesNotMatch(ammoSub(tracer), /double|blast/);
+  assert.match(ammoSub({ ...arsenal.weapons.shell, dmg: 0, note: undefined }), /^No damage, blast 26\.$/);
+});

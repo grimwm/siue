@@ -6,7 +6,7 @@ from a $600 stake, solo or in network rooms (max 10 live). No chat; names are
 list (`room_valid_initials` in server/rules.php, through `tankity_initials`).
 Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
-The page opens on a title card over the dimmed demo: Play (solo, random hills), Play with friends (the rooms), Tutorial, Settings, and the player's initials, the one set solo and the rooms both use. The rooms lobby has the same three boxes above Host and Join, so a friend who arrives on an invite link (straight into the lobby) can set theirs there; a set typed in either place shows in both. Host and Join use what the boxes hold, and refuse half-typed boxes or a blocked word with a line by the boxes. The card comes back after a match ends and after leaving a room. Q toggles the settings menu and closes whatever is open. Quit in the menu ends the match (leaving a room first) and returns to the title card over the demo; an installed app closes, or says how to close it (`games/_kit/app.ts`).
+The page opens on a title card over the dimmed demo: Play (solo, random hills), Play with friends (the rooms), Tutorial, Settings, and the player's initials, the one set solo and the rooms both use. The rooms lobby has the same three boxes above Host and Join, so a friend who arrives on an invite link (straight into the lobby) can set theirs there; a set typed in either place shows in both. Host and Join use what the boxes hold, and refuse half-typed boxes or a blocked word with a line by the boxes. The card comes back after a match ends and after leaving a room. Q toggles the settings menu and closes whatever is open; Esc does nothing (Safari and Firefox always leave full screen on it, so the game never asks for it, and `game.yaml` refuses it as a binding). Quit in the menu ends the match (leaving a room first) and returns to the title card over the demo; an installed app closes, or says how to close it (`games/_kit/app.ts`).
 
 ## Files
 
@@ -130,6 +130,7 @@ php -d xdebug.mode=off tools/round-bench.php [--budget=2.0]  # CPU per round of 
   mouse) get no key bindings or labels.
   Driving is Shift plus an arrow; W, A, S, D and C are bound nowhere. Q toggles
   the menu: it closes whatever is open and, with nothing open, opens the menu.
+  Esc is bound to nothing.
 
 ## Architecture rules
 
@@ -723,7 +724,8 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   (`modalOpen`) lets only Q through. An editable text box keeps every key, Q
   included; a read-only field (the invite link) keeps every key but Q, which
   still goes back. Only plain Q is back: Ctrl+Q, Alt+Q and Cmd+Q are the
-  browser's, and a held Q goes back once, not on every auto-repeat. `stepArm(held, dt, arm, facing)` is one frame of held-key
+  browser's, and a held Q goes back once, not on every auto-repeat. Esc is
+  bound to nothing. `stepArm(held, dt, arm, facing)` is one frame of held-key
   arm movement at 42 degrees per second for the barrel and 45 power per second,
   clamped to 10-170 and 10-100, reporting whether a key is
   adjusting and whether none is down (the room client sends the aim when the

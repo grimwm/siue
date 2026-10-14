@@ -1250,7 +1250,8 @@ Screen flashes: the full-screen flash ramps in over 80 ms and is never drawn
 past 0.35, whatever an effect asks. Settings has a Screen flashes toggle
 (`tankity-flashes` in this browser, on by default): off drops the flash and
 the large bright layers (`FX.isBright`: additive dots, blobs and sprites sized
-by the blast radius, three quarters of it or more). Reduced motion drops the
+by the blast radius, three quarters of it or more, and any of them 36 px or
+more in radius as it plays). Reduced motion drops the
 flash too.
 
 Every impact is built in layers, each its own emitter so a weapon can drop or

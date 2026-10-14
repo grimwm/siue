@@ -1478,6 +1478,25 @@ await (async () => {
     check('fx-flashes-off-drops-flash', calmFlash === 0, 'alpha ' + calmFlash);
     const bright = defs.nuke.impact.emitters.filter(e => FX.isBright(e));
     check('fx-flashes-off-drops-bright-layers', bright.length >= 2 && calmSpawned < fs3.stats.spawned, `bright ${bright.length}, ${calmSpawned} vs ${fs3.stats.spawned}`);
+    // Screen flashes off also drops any additive dot or sprite 36 px or more in radius as it plays,
+    // however it is sized: a plasma ring at full power (r 90) keeps no large white core.
+    for (const key of arsenal.ammo.filter(a => a.effect === 'plasma').map(a => a.key)) {
+      const big = defs[key].impact.emitters.filter(e => e.glow && ['dot', 'smoke', 'sprite'].includes(e.shape)
+        && e.size[1] * (e.unit === 'r' ? 90 : 1) * (e.shape === 'sprite' ? e.scale : Math.max(1, e.sizeEnd)) >= 36);
+      check(`fx-flashes-off-filters-${key}-by-size`, big.length >= 1 && big.every(e => FX.isBright(e, e.unit === 'r' ? 90 : 1)), String(big.length));
+      // What stays and is sizeable (15 px or more) is coloured: no white dot, no untinted or near-white sprite.
+      const kept = defs[key].impact.emitters.filter(e => !FX.isBright(e, e.unit === 'r' ? 90 : 1) && e.glow && ['dot', 'smoke', 'sprite'].includes(e.shape)
+        && e.size[1] * (e.unit === 'r' ? 90 : 1) * (e.shape === 'sprite' ? e.scale : 1) >= 15);
+      check(`fx-${key}-keeps-no-white-core`, kept.length >= 1 && kept.every(e => (e.shape === 'sprite'
+        ? /^#/.test(e.tint || '') && !/^#f[0-9a-f]f[0-9a-f]f/i.test(e.tint) : !e.colors.includes('#ffffff'))),
+        JSON.stringify(kept.map(e => [e.colors, e.tint])));
+      const off = FX.createSystem({ max: 5000 }), on = FX.createSystem({ max: 5000 });
+      FX.flashes = false;
+      off.emit(defs[key].impact, 100, 100, 0, 90, true);
+      FX.flashes = true;
+      on.emit(defs[key].impact, 100, 100, 0, 90, true);
+      check(`fx-flashes-off-thins-${key}`, off.stats.spawned < on.stats.spawned, `${off.stats.spawned} vs ${on.stats.spawned}`);
+    }
     // Preloading: a weapon's every sheet (body, muzzle, trail, impact, specials), and the
     // engine never fetches mushroom any more.
     const nukeSheets = FX.sheetsOf(defs.nuke);

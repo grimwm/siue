@@ -251,12 +251,17 @@ function loadSprites(base: string, done?: (any: boolean) => void): Promise<boole
   }).catch(() => { if (done) done(false); return false; });
 }
 
+/** An additive layer this many px across in radius, or more, is large and bright whatever it is sized by. */
+const BRIGHT_PX = 36;
 /* A large bright layer: an additive dot, soft blob or sprite sized by the
    blast radius and reaching three quarters of the radius or more (a
-   white-hot core, a flare, a fireball's glow, a shock flash). Players who turn Screen flashes off get none. */
-function isBright(em: Emitter): boolean {
-  if (!em.glow || em.unit !== 'r' || (em.shape !== 'dot' && em.shape !== 'smoke' && em.shape !== 'sprite')) return false;
-  return em.size[1] * (em.shape === 'sprite' ? em.scale : Math.max(1, em.sizeEnd)) >= 0.75;
+   white-hot core, a flare, a fireball's glow, a shock flash), or, played at
+   scale k (the radius for `unit: r`, else 1), BRIGHT_PX or more in radius
+   however it is sized. Players who turn Screen flashes off get none. */
+function isBright(em: Emitter, k = 0): boolean {
+  if (!em.glow || (em.shape !== 'dot' && em.shape !== 'smoke' && em.shape !== 'sprite')) return false;
+  const reach = em.size[1] * (em.shape === 'sprite' ? em.scale : Math.max(1, em.sizeEnd));
+  return (em.unit === 'r' && reach >= 0.75) || (k > 0 && reach * k >= BRIGHT_PX);
 }
 /* Every sheet a weapon's effect set draws: its body and every emitter of
    every slot and special. */
@@ -443,8 +448,8 @@ function createSystem(opts?: { max?: number }): FxSys {
     for (let i = 0; i < list.length; i++) {
       const em = list[i]!;
       if (em.ground && ground === false) continue;
-      if (!api.flashes && isBright(em)) continue;
       const k = em.unit === 'r' ? (r || 1) : 1;
+      if (!api.flashes && isBright(em, k)) continue;
       if (em.delay > 0 || em.duration > 0) {
         for (let j = 0; j < Q.length; j++) {
           const q = Q[j]!;

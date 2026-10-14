@@ -19,7 +19,7 @@
 import type { TrailState } from './fx/trail.ts';
 import { planCatchUp, isVolleyOpener } from './net.ts';
 import { unitHitBox } from './sim.ts';
-import type { BeamEvent, RingEvent, RoomEvent, RoomSnapshot, ShotEvent, VolleyOpenerEvent } from './protocol.ts';
+import type { BeamEvent, EarthEvent, RingEvent, RoomEvent, RoomSnapshot, ShotEvent, VolleyOpenerEvent } from './protocol.ts';
 
 /** rooms.php records a path point every 5 sim steps at 60/s. */
 export const PATH_HZ = 12;
@@ -61,6 +61,8 @@ export interface ReplayEnv {
   ring(e: RingEvent): void;
   /** A tracer came down at the end of its path: it bursts on nothing and leaves its mark. */
   mark(shot: ReplayShot): void;
+  /** An earth gun moved the ground (dirt, a pour, a dig's trench, a riot scoop, a slump): move the client's the same way (earth.ts applyEarth). */
+  earth(e: EarthEvent): void;
 }
 
 /** One shell of the volley: its event, its recorded path, and whether it has landed.
@@ -213,6 +215,8 @@ export function createReplay(env: ReplayEnv): Replay {
         env.beam(e);
       } else if (e.t === 'ring') {
         env.ring(e);
+      } else if (e.t === 'dirt' || e.t === 'pour' || e.t === 'dig' || e.t === 'riot' || e.t === 'slump') {
+        env.earth(e);
       } else if (e.t === 'burst') {
         env.blast(e.x, e.y, e.r, e.w);
         // A burst from a lance is the bolt passing through a tank.

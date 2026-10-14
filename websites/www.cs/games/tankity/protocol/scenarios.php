@@ -97,11 +97,11 @@ function protocol_hitting_aim(array $room): array
     throw new RuntimeException('no aim hits the drone from the opening position');
 }
 
-/** The first gun in the arsenal with effect $effect. */
-function protocol_gun(string $effect): string
+/** The first gun in the arsenal with effect $effect (and, given $also, that it accepts). */
+function protocol_gun(string $effect, ?callable $also = null): string
 {
     foreach (room_weapons() as $k => $def) {
-        if ($def['effect'] === $effect) {
+        if ($def['effect'] === $effect && ($also === null || $also($def))) {
             return $k;
         }
     }
@@ -149,6 +149,16 @@ function protocol_snapshots(): array
     $close['tanks'][1]['y'] = $close['terrain'][(int) round($close['tanks'][1]['x'])];
     $out['play-after-ring'] = ['After the host fires a plasma ring with the drone beside it: fire, the ring event (centre and radius, no shot, no crater), its hit at the same moment, then the drone answers.',
         200, $ok(room_snapshot(protocol_fire($close, 60.0, 100.0, $ring), 0, 0))];
+
+    // The earth guns, one after another (the drone answering each): a burrow with
+    // warheads, a mound of dirt, a pour, a riot scoop and a slump.
+    $earth = $play;
+    foreach ([[protocol_gun('dig', fn($d) => $d['warheads'] > 0), $angle, $power - 12], [protocol_gun('dirt'), $angle, $power],
+        [protocol_gun('pour'), $angle, $power], [protocol_gun('riot'), $angle, $power], [protocol_gun('slump'), $angle, $power]] as [$gun, $a, $p]) {
+        $earth = protocol_fire($earth, $a, $p, $gun);
+    }
+    $out['play-after-earth'] = ['After the host fires a sandhog, dirt, liquid dirt, a riot charge and a disrupter in turn (the drone answering each): the dig event (start, heading, steps, from at to t1) before its warheads\' bursts, then dirt, pour, riot and slump events with the server\'s own unrounded numbers.',
+        200, $ok(room_snapshot($earth, 0, 0))];
 
     $kill = $play;
     $kill['tanks'][1]['hp'] = 1;

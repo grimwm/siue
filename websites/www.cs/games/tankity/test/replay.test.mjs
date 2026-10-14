@@ -8,7 +8,8 @@ import { check } from '../../_kit/test/check.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createReplay, shellAt, shellVel, parsePath, PATH_HZ, FAST_SPEED } from '../src/replay.ts';
-import { anyTankFalling, beamCarve, buildArsenal, fallTanks, fireBeam } from '../src/sim.ts';
+import { anyTankFalling, beamCarve, buildArsenal, carveCrater, fallTanks, fireBeam, fireWeapon, stepShells } from '../src/sim.ts';
+import { applyEarth, digCarve, digHeading } from '../src/earth.ts';
 
 const fixture = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'protocol', 'play-after-fire.json'), 'utf8')).body.room;
 const EVENTS = fixture.events;
@@ -400,4 +401,69 @@ for (const [file, t] of [['play-after-beam.json', 'beam'], ['play-after-ring.jso
   rp.push(evs.slice(evs.findIndex(e => e.t === 'fire'), evs.findIndex(e => e.t === 'aifire')));
   for (let i = 0; i < 400 && !rp.idle(); i++) rp.step(DT);
   check(`${file}: the replay plays the ${t} once and logs its hit`, seen.length === 1 && seen[0] === t && host.log.events.some(e => e.t === 'hit'));
+}
+
+/* ---- the earth guns: each event moves the client's ground exactly as the war's own shot did ---- */
+{
+  const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+  const arsenal = buildArsenal(GAME.arsenal);
+  const earthGuns = GAME.arsenal.ammo.filter(a => ['dirt', 'pour', 'dig', 'riot', 'slump'].includes(a.effect));
+  const hills = () => Array.from({ length: 720 }, (_, x) => 380 + 50 * Math.sin(x / 30) + (x > 300 && x < 340 ? -40 : 0));
+  for (const w of earthGuns) {
+    const gunner = { id: 'P', isPlayer: true, x: 120, y: 0, angle: 40, power: 62, hp: 500, fuel: 80, dirS: 1 };
+    const war = { tanks: [gunner, { id: 'D', isPlayer: false, x: 600, y: 0, hp: 500, fuel: 80 }], terrain: hills(), wind: 0, round: 1, shells: [],
+      score: 0, cash: 0, ammo: { [w.key]: 3 }, selected: w.key, shield: false, bunker: 0, laststand: false, jammer: 0 };
+    for (const t of war.tanks) t.y = war.terrain[t.x];
+    // The wire events the war's shot makes: earth ops as they are, a dig's warheads as bursts at their exact points.
+    const wire = [];
+    const take = evs => {
+      for (const e of evs) {
+        if (e.kind === 'earth') wire.push({ ...e.op });
+        else if (e.kind === 'dig' && e.step === 0) wire.push({ t: 'dig0', x: e.x, y: e.y, ang: e.ang });
+        else if (e.kind === 'blast' && w.effect === 'dig') wire.push({ t: 'crater', x: e.blast.x, y: e.blast.y, r: e.blast.r });
+      }
+    };
+    const launch = fireWeapon(war, arsenal, gunner, w.key);
+    take(launch.now);
+    let steps = 0;
+    for (let f = 0; war.shells.length && f < 5000; f++) {
+      const before = war.shells.find(s => s.digging);
+      take(stepShells(war, arsenal, 1 / 60));
+      if (before) steps = before.dl;
+    }
+    const terrain = hills();
+    for (const e of wire) {
+      if (e.t === 'dig0') applyEarth(terrain, { t: 'dig', w: w.key, x: e.x, y: e.y, ux: Math.cos(e.ang), uy: Math.sin(e.ang), n: 0, r: w.digR });
+      else if (e.t === 'crater') carveCrater(terrain, e.x, e.y, e.r, 456);
+      else applyEarth(terrain, e);
+    }
+    if (w.effect === 'dig') {
+      const start = wire.find(e => e.t === 'dig0');
+      const shell = { vx: Math.cos(start.ang), vy: Math.sin(start.ang) };
+      const [ux, uy] = digHeading(shell.vx, shell.vy);
+      digCarve(terrain, start.x, start.y, ux, uy, steps, w.digR);
+    }
+    check(`${w.key}: replaying its events moves the client's ground to exactly the war's`, JSON.stringify(terrain) === JSON.stringify(war.terrain)
+      && JSON.stringify(terrain) !== JSON.stringify(hills()), `${wire.map(e => e.t).join()} steps ${steps}`);
+  }
+}
+
+/* ---- the server's own earth volleys (protocol/play-after-earth.json) ---- */
+{
+  const evs = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'protocol', 'play-after-earth.json'), 'utf8')).body.room.events;
+  const host = makeHost();
+  const seen = [];
+  host.env.effect = () => undefined;
+  host.env.beam = () => {};
+  host.env.ring = () => {};
+  host.env.mark = () => {};
+  host.env.earth = e => seen.push(e.t);
+  const rp = createReplay(host.env);
+  rp.push(evs.slice(evs.findIndex(e => e.t === 'fire')));
+  for (let i = 0; i < 4000 && !rp.idle(); i++) rp.step(DT);
+  check('play-after-earth.json: the replay plays each earth event once, in order', seen.join() === 'dig,dirt,pour,riot,slump', seen.join());
+  check('play-after-earth.json: no earth event is logged as a plain event', !host.log.events.some(e => ['dig', 'dirt', 'pour', 'riot', 'slump'].includes(e.t)));
+  const dig = evs.findIndex(e => e.t === 'dig');
+  check('play-after-earth.json: a dig comes before its warheads\' bursts, which follow in time order', evs[dig + 1].t === 'burst' && evs[dig + 1].at >= evs[dig].at
+    && evs[dig + 2].at >= evs[dig + 1].at && evs[dig].t1 >= evs[dig].at);
 }

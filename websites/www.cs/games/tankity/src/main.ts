@@ -426,6 +426,7 @@ const replay = createReplay({
   trail: (shot, dt, x, y, vx, vy, wkey) => { fxTrail(G.fx, shot, dt, x, y, vx, vy, wkey); netTrailMark(shot, x, y); },
   beam: e => netBeam(e),
   ring: e => netRing(e),
+  earth: e => netEarth(e),
   mark: shot => netMark(shot),
 });
 /* ---------- the typed modules, wired in dependency order ---------- */
@@ -496,7 +497,7 @@ const {
 });
 /* A running room match on this client (src/room.ts): moves sent, snapshots adopted, events told, the turn alert. */
 const {
-  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netMark, netTrailMark, netFrame,
+  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netEarth, netMark, netTrailMark, netFrame,
   roomShopBoard, openStandings,
 } = createRoom({
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,

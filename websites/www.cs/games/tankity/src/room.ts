@@ -23,7 +23,10 @@ import { matchOutcome, roomBoard, roomFiledLine, roomLocalSaver } from './standi
 import type { LocalRow, Saved } from './local-board.ts';
 import { focusEndVeil } from './ui/endveil.tsx';
 import type { Board, RoomCard } from './standings.ts';
-import type { BeamEvent, RingEvent, RoomEvent, RoomSnapshot } from './protocol.ts';
+import type { BeamEvent, DigEvent, EarthEvent, RingEvent, RoomEvent, RoomSnapshot } from './protocol.ts';
+import { DIG_STEP, applyEarth, digCarve } from './earth.ts';
+import { playDigStep, playEarthOp } from './earth-fx.ts';
+import type { EarthFxDeps } from './earth-fx.ts';
 import type { Replay, ReplayShot } from './replay.ts';
 import { BURIED_LINE, H, ROOM_W, TUNE, aimLimits, beamCarve, buried, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
 import type { Difficulty, ShopRow } from './sim.ts';
@@ -372,7 +375,7 @@ export function createRoom(deps: RoomDeps) {
   }
   function sayNetEvent(e: RoomEvent): void {
     if (e.t !== 'fall' && e.t !== 'kill') fellLast = null;
-    if (e.t === 'shot' || e.t === 'burst' || e.t === 'beam' || e.t === 'ring') return; // flown by the replay
+    if (e.t === 'shot' || e.t === 'burst' || e.t === 'beam' || e.t === 'ring' || e.t === 'dirt' || e.t === 'pour' || e.t === 'dig' || e.t === 'riot' || e.t === 'slump') return; // flown by the replay
     if (e.t === 'fizzle') { say(`${seatName(e.by)} sends one into the sunset.`, 'info'); return; }
     // A gunner's tracer line lasts until its next shot.
     if (e.t === 'fire' || e.t === 'aifire' || e.t === 'auto') G.marks.fired(e.seat);
@@ -490,6 +493,8 @@ export function createRoom(deps: RoomDeps) {
     if (e.t === 'left') { say(`${e.name || seatName(e.seat)} left; the battery takes that seat.`, 'info'); return; }
     if (e.t === 'round') {
       G.marks.clear();
+      G.earth.clear();
+      digs = [];
       say(`Round ${e.round}. Fresh barrels, same battery. Wind ${windText()}.`, 'info');
       talk('tank', 'Back in! These hills are mine!', true);
       return;
@@ -520,6 +525,48 @@ export function createRoom(deps: RoomDeps) {
     const kick = fxImpact(G.fx, e.w, e.x1, e.y1, r);
     G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : 0.15));
     if (r > 0) beamCarve(G.terrain, e.x0, e.y0, e.x1, e.y1, r);
+  }
+  /* How the earth guns play in a room (earth-fx.ts), as in the solo war. */
+  const earthFx: EarthFxDeps = {
+    fxImpact: (key, x, y, r) => fxImpact(G.fx, key, x, y, r),
+    fxSpecial: (key, name, x, y, ang, len) => fxSpecial(G.fx, key, name, x, y, ang, len),
+    sound: name => sfx.play(name),
+    shake: k => { G.shake = Math.min(1, G.shake + k); },
+    get show() { return G.earth; },
+  };
+  /* Trenches being cut on screen: each dig event's burrow, a step every 1/60 s from when the replay reached it. */
+  let digs: { e: DigEvent; t: number; done: number }[] = [];
+  /* An earth gun the replay reached: the client's ground moves exactly as the
+     server's did (earth.ts applyEarth, the event's own unrounded numbers), and
+     plays as the solo war plays it. A dig cuts its trench step by step
+     (netDigs); its warheads come as burst events. */
+  function netEarth(e: EarthEvent): void {
+    if (e.t === 'dig') {
+      playDigStep(e.w, e.x, e.y, Math.atan2(e.uy, e.ux), e.r, 0, tables.weapons[e.w]?.warheads || 0, earthFx);
+      digs.push({ e, t: 0, done: 0 });
+      return;
+    }
+    const before = G.terrain.slice();
+    const span = applyEarth(G.terrain, e);
+    playEarthOp(e, G.terrain, before, span.x0, span.x1, earthFx);
+  }
+  /* Each trench in progress cuts the steps its time has come to (digCarve
+     from its start: carving a step again changes nothing), its dust at the head. */
+  function netDigs(dt: number): void {
+    for (const d of digs) {
+      d.t += dt;
+      const upTo = Math.min(d.e.n, Math.floor(d.t * 60));
+      if (upTo <= d.done) continue;
+      digCarve(G.terrain, d.e.x, d.e.y, d.e.ux, d.e.uy, upTo, d.e.r);
+      let x = d.e.x, y = d.e.y;
+      for (let i = 1; i <= upTo; i++) {
+        x += d.e.ux * DIG_STEP;
+        y += d.e.uy * DIG_STEP;
+        if (i > d.done) playDigStep(d.e.w, x, y, Math.atan2(d.e.uy, d.e.ux), d.e.r, i, 1, earthFx);
+      }
+      d.done = upTo;
+    }
+    digs = digs.filter(d => d.done < d.e.n);
   }
   /* A plasma ring around its gunner: no crater. */
   function netRing(e: RingEvent): void {
@@ -607,6 +654,7 @@ export function createRoom(deps: RoomDeps) {
      takes over. */
   function netReplay(dt: number): void {
     replay.step(dt);
+    netDigs(dt);
     if (replay.idle() && MATCH.pendingRoom) {
       const room = MATCH.pendingRoom;
       MATCH.pendingRoom = null;
@@ -713,7 +761,7 @@ export function createRoom(deps: RoomDeps) {
   }
 
   return {
-    netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netMark, netTrailMark, netFrame,
+    netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netEarth, netMark, netTrailMark, netFrame,
     roomShopBoard, openStandings,
   };
 }

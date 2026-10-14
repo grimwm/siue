@@ -613,6 +613,39 @@ foreach ([4, 9, 21] as $seed) {
 $aim('no-rivals-left', ['terrain' => $flat, 'wind' => 0, 'round' => 1, 'seed' => 3, 'shooter' => 0,
     'tanks' => [$drone(300, 60) + ['dirS' => -1], $drone(500, 0)]],
     'With nobody left to shoot at the server falls back to a fixed 62/55 Shell and the browser aims at itself. Unreachable: a round with no rival has already ended on both sides.');
+// A mixed rack: the drone fires the most harmful gun on its best arc, or (glory) of any arc.
+$mixed = ['buck' => 2, 'mortar' => 2, 'rail' => 2, 'heavy' => 2, 'needle' => 1, 'roller' => 2];
+foreach ($weapons as $k => $def) {
+    if (!empty($def['ai']) && !isset($mixed[$k]) && $k !== 'shell') {
+        $mixed[$k] = 1;
+    }
+}
+foreach (['hunter', 'glory', 'lobber'] as $s) {
+    foreach ([[3, 330], [17, 420], [40, 250]] as [$seed, $tx]) {
+        $aim("mixed-rack-$s-seed$seed", ['terrain' => $flat, 'wind' => 2, 'round' => 9, 'seed' => $seed, 'shooter' => 1,
+            'tanks' => [$human($tx, 100), $drone(120, 60) + ['dirS' => 1, 's' => $s, 'ammo' => $mixed]]]);
+    }
+}
+// The target 50 px off: every big blast would reach the drone itself, so it fires something smaller.
+$aim('mixed-rack-target-too-close', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1,
+    'tanks' => [$human(170, 100), $drone(120, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['heavy' => 1, 'mortar' => 1, 'nuke' => 1]]]]);
+
+/* ---- the harm a gun would do from a landing: what picks a drone's gun ----
+ * 'self' when its burst could reach the drone's own body (it is never fired). */
+$harm = function (string $name, array $c) use ($add): void {
+    $room = sv_room($c);
+    $h = room_ai_harm($room, $room['tanks'][$c['self']], $room['tanks'][$c['target']], $c['wkey'], $c['land']);
+    $add('ai-harm', $name, $c, ['harm' => is_infinite($h) ? 'self' : $h]);
+};
+foreach ($weapons as $wkey => $def) {
+    $scene = ['terrain' => $flat, 'self' => 0, 'target' => 1, 'wkey' => $wkey, 'tanks' => [$drone(100, 60), $human(420, 100)]];
+    foreach ([['on-target', 420, 400], ['near-miss', 375, 400], ['short', 330, 400], ['far', 200, 400], ['beside-self', 150, 400]] as [$label, $x, $y]) {
+        $harm("$wkey-$label", $scene + ['land' => ['x' => (float) $x, 'y' => (float) $y, 'oob' => false]]);
+    }
+    $harm("$wkey-off-the-board", $scene + ['land' => ['x' => 760.0, 'y' => 300.0, 'oob' => true]]);
+    $harm("$wkey-at-a-drone", ['terrain' => $flat, 'self' => 0, 'target' => 1, 'wkey' => $wkey, 'tanks' => [$human(100, 60), $drone(300, 100)],
+        'land' => ['x' => 310.0, 'y' => 400.0, 'oob' => false]]);
+}
 
 /* ---- bracketing: a drone's shots at one target, one after another ----
  * Each step is what the caller does for a drone turn: choose, move if it

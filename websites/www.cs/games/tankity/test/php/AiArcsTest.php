@@ -150,4 +150,38 @@ final class AiArcsTest extends TestCase
         $same['buck'] = ['dmg' => 99, 'radius' => 60, 'effect' => 'cluster'] + $same['buck'];
         $this->assertSame(['shell'], room_ai_arc_guns($same, $rack));
     }
+
+    /** A drone and a human on flat ground, as the harm vectors place them. */
+    private static function harmRoom(float $selfX, float $targetX): array
+    {
+        $unit = fn(int $seat, string $kind, float $x): array => ['seat' => $seat, 'kind' => $kind, 'x' => $x, 'y' => 400.0, 'hp' => 100, 'dirS' => 1];
+        return ['terrain' => array_fill(0, 720, 400.0), 'tanks' => [$unit(0, 'ai', $selfX), $unit(1, 'human', $targetX)], 'wind' => 0.0];
+    }
+
+    public function testOnOneArcTheMoreHarmfulGunWins(): void
+    {
+        $room = self::harmRoom(100.0, 420.0);
+        $land = ['x' => 410.0, 'y' => 400.0, 'oob' => false];
+        [$self, $target] = $room['tanks'];
+        $this->assertGreaterThan(room_ai_harm($room, $self, $target, 'shell', $land), room_ai_harm($room, $self, $target, 'mortar', $land));
+        $this->assertSame(0.0, room_ai_harm($room, $self, $target, 'shell', ['x' => 760.0, 'y' => 300.0, 'oob' => true]));
+    }
+
+    public function testAGunThatWouldReachItsOwnDroneScoresMinusInfinity(): void
+    {
+        $room = self::harmRoom(100.0, 150.0);
+        [$self, $target] = $room['tanks'];
+        $land = ['x' => 150.0, 'y' => 400.0, 'oob' => false];
+        $this->assertSame(-INF, room_ai_harm($room, $self, $target, 'heavy', $land));
+        $this->assertGreaterThan(0.0, room_ai_harm($room, $self, $target, 'needle', $land));
+    }
+
+    public function testTheFallTermIsZeroUntilCratersDropUnitsIntoHurtingFalls(): void
+    {
+        $room = self::harmRoom(100.0, 420.0);
+        [$self, $target] = $room['tanks'];
+        foreach (array_keys(room_weapons()) as $k) {
+            $this->assertSame(0.0, room_ai_fall_harm($room, $self, $target, $k, ['x' => 420.0, 'y' => 400.0, 'oob' => false]), $k);
+        }
+    }
 }

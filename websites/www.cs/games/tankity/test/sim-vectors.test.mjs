@@ -232,6 +232,11 @@ const RUN = {
     const choice = sim.aiChoose(G, arsenal, t);
     return { wkey: choice.wkey, angle: choice.angle, power: choice.power, moved: t.x - x0 };
   },
+  'ai-harm'(c) {
+    world(c);
+    const h = sim.aiHarm(G, arsenal, G.tanks[c.self], G.tanks[c.target], c.wkey, c.land);
+    return { harm: h === -Infinity ? 'self' : h };
+  },
   'ai-bracket'(c) {
     world(c, c.w || 720);
     G.rng = sim.mulberry32(c.seed);

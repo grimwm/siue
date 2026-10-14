@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildArsenal, mulberry32 } from '../src/sim.ts';
+import { buildArsenal, flightKey, mulberry32 } from '../src/sim.ts';
 import { LOB_ANGLE, aiChoose } from '../src/ai.ts';
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
@@ -60,6 +60,21 @@ test('a fresh aim searches each distinct arc the same way', () => {
   assert.equal(flown.heavy, COARSE + FINE);
   assert.equal(flown.needle, COARSE + FINE);
   assert.equal(flown.buck, undefined, 'buck flies the shell\'s arc');
+});
+
+test('a full round-9 rack flies one search per distinct arc, whatever the strategy', () => {
+  const ammo = Object.fromEntries(GAME.arsenal.ammo.filter(a => a.ai && a.key !== 'shell' && a.aiRound <= 9).map(a => [a.key, a.aiRack ?? 2]));
+  const arcs = new Set(['shell', ...Object.keys(ammo)].map(k => flightKey(arsenal.weapons[k]))).size;
+  for (const s of ['hunter', 'glory', 'sniper']) {
+    const { flown, choice } = turn({ s, ammo });
+    // fine neighbours past the grid's edge are skipped
+    assert.equal(Object.keys(flown).length, arcs, `${s}: ${JSON.stringify(flown)}`);
+    for (const n of Object.values(flown)) assert.ok(n >= COARSE && n <= COARSE + FINE, `${s}: ${JSON.stringify(flown)}`);
+    assert.ok(choice.wkey === 'shell' || ammo[choice.wkey] > 0, choice.wkey);
+  }
+  const t0 = performance.now();
+  for (let i = 0; i < 20; i++) turn({ s: 'glory', ammo });
+  assert.ok((performance.now() - t0) / 20 < 40, 'a full rack\'s turn stays well under the frame budget of a busy room');
 });
 
 test('a lobber searches the high arcs coarse to fine', () => {

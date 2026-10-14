@@ -76,8 +76,8 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `src/ui/*.tsx` | The Preact overlays and panels (see Preact overlays): `chrome.tsx` holds the shared key labels, title bar and scroll keeper; `help.tsx`, `shop.tsx`, `lobby.tsx`, `menu.tsx`, `guns.tsx`, `scores.tsx`, `log.tsx`, `tutorial.tsx`, `hud.tsx`, `endveil.tsx`, `leave.tsx` and `title.tsx` one each, and `initials-picker.tsx` shared by the title card and the lobby |
 | `src/ui/icons.ts` | The small canvas pictures (a shell, a trick, a hills silhouette, a unit thumbnail). Each draws on the canvas and the weapon or trick it is handed and reads nothing else |
 | `dist/main.js`, `dist/fx.js`, `dist/fx-editor.js` (and `.map`s) | The bundles the games kit builds from `src/` (see Source layout and build); checked in and deployed (the host has no Node), except the dev-only `fx-editor.js`. Never edit by hand |
-| `build.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json` | The build setup: the three entries and the three type-check programs. Never deployed, like `src/`, `test/` and `tools/` |
-| `test/*.test.mjs`, `test/dom-stub.mjs` | The Node tests (`node:test`, see Tests); the stub is the small Node DOM that `ui.test.ts` and `smoke.test.mjs` share. Never deployed |
+| `build.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json`, `tsconfig.test.json` | The build setup: the three entries and the four type-check programs. Never deployed, like `src/`, `test/` and `tools/` |
+| `test/*.test.ts`, `test/*.test.mjs` | The Node tests (`node:test`, see Tests); `tsconfig.test.json` type-checks the `.test.ts` ones. The kit's `_kit/test/dom-stub.ts` is the small Node DOM that `ui.test.ts` and `smoke.test.mjs` share. Never deployed |
 | `test/php/`, `test/php-docker/` | The PHPUnit cases (`tankity` and `tankity-docker` suites) and, in `checks/`, the check scripts they run. Never deployed |
 | `rooms.php` | Room server entry point: request parsing, the `$action` handlers, `room_json_out` (gzip), `room_gate`. It requires the files below, and keeps the one helper that resolves against its own location (`room_arsenal` reads `game.json`) |
 | `server/settings.php` | What a room is (`ROOM_*` shape constants) and the host's knobs (`room_max_rooms`, `room_live_secs`) and the turn-time stops |
@@ -831,7 +831,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   `php tools/install-files.php` after a rebuild: it writes the `?v=` hash of
   `dist/main.js`, `dist/fx.js` and `game.css` into `index.html` and precaches
   `dist/` (not the editor) in `sw.js`, versioning the cache by content.
-- Three programs are type-checked (`build.json`). `tsconfig.json` extends the
+- Four programs are type-checked (`build.json`). `tsconfig.json` extends the
   kit's base (strict, `noUncheckedIndexedAccess`, `erasableSyntaxOnly`, imports
   written with their `.ts`/`.tsx` extension) and lists the DOM-free modules (the
   sim, the AI, the room client, the input, the firing range, the replay and the
@@ -840,7 +840,9 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   `fetch`, timers, canvas and the document (`audio.ts`, `render.ts`, the three
   entries, the modules `main.ts` wires, which reach the page through the `$` it
   hands them, and the overlays in `ui/`). `src/tsconfig.check.json` type-checks
-  the protocol fixtures and emits nothing. Each is its own program, so adding
+  the protocol fixtures and emits nothing. `tsconfig.test.json` type-checks the
+  `test/*.test.ts` files, which Node runs from source, so a type error in a test
+  fails `--check`. Each is its own program, so adding
   the DOM lib for the audio never lets the sim see `document`. A module that
   holds only types (`protocol.ts`, `fx/types.ts`) adds nothing to a bundle.
 - **Cache-busting.** Because every module is inside a bundle, only three
@@ -1070,7 +1072,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | Command                                        | Covers                                                                                     |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `node ../_kit/build/build.mjs tankity --check` | `dist/` is exactly what `src/` bundles to, `src/` type-checks, and every `protocol/*.json` fits its type in `protocol.ts` (run `npm ci` in `games/` first) |
-| `node --test 'test/*.test.mjs'`                | Every Node test below, run by `test.sh` (the UI test bundles `src/ui/*.tsx` once with esbuild, Preact left external) |
+| `node --test` over `test/*.test.ts` and `test/*.test.mjs` | Every Node test below, run by `test.sh`, which fails when it finds none (the UI test bundles `src/ui/*.tsx` once with esbuild, Preact left external) |
 | `test/standings.test.mjs`                      | `src/standings.ts`: the match-end rule against the `match-end` vectors, room and solo rows, the winner's bonus line, the filed and saved lines (online, local, a one-human room's), and what Q does on each end card |
 | `test/standings-ui.test.mjs`                   | The scoreboard table (`src/ui/standings.tsx`): a room's rows, you, the crown, the lost-out marks, and a solo run's rounds with the total |
 | `test/scores-ui.test.mjs`                      | The scores overlay (`src/ui/scores.tsx`): both lists, the player's own runs marked, the empty and blocked-storage lines, the switcher, and the data in `src/scores.ts`: the online list latest-load-wins, this browser's rows, a redraw when another tab saves |

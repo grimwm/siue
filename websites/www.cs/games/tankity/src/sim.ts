@@ -290,13 +290,14 @@ export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[] } | null | u
   Object.freeze(shop);
   return { weapons: w, order, shop, gear };
 }
-/* Drone magazine from the data file: shells the battery may load by round. */
+/* Drone magazine from the data file: aiRack (2 when a row names none) of each
+   gun the battery may load by round. server/ai.php room_ai_rack is the same. */
 export function droneRack(arsenal: Arsenal, round: number): Ammo {
   const rack: Ammo = { shell: Infinity };
   for (const k of arsenal.order) {
     if (k === 'shell') continue;
     const a = arsenal.weapons[k];
-    rack[k] = (a && a.ai && round >= (a.aiRound || 99)) ? 2 : 0;
+    rack[k] = (a && a.ai && round >= (a.aiRound || 99)) ? (a.aiRack || 2) : 0;
   }
   return rack;
 }

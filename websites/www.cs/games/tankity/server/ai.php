@@ -383,7 +383,8 @@ function room_ai_choose(array &$room, array $tank): array
     return $out;
 }
 
-/* Drone magazine from the data file: shells the battery may load by round. */
+/* Drone magazine from the data file: aiRack of each gun the battery may load
+ * by round (src/sim.ts droneRack is the same). */
 function room_ai_rack(int $round): array
 {
     $rack = ['shell' => -1];
@@ -391,7 +392,7 @@ function room_ai_rack(int $round): array
         if ($k === 'shell') {
             continue;
         }
-        $rack[$k] = (!empty($def['ai']) && $round >= ($def['aiRound'] ?? 99)) ? 2 : 0;
+        $rack[$k] = (!empty($def['ai']) && $round >= ($def['aiRound'] ?? 99)) ? (int) ($def['aiRack'] ?? 2) : 0;
     }
     return $rack;
 }

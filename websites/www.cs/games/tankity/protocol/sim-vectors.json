@@ -1853,6 +1853,14 @@
       {"name":"deathshead-fired-downhill","in":{"terrain":{"flat":430},"tanks":[{"kind":"human","x":60.0,"y":400.0,"hp":100},{"kind":"ai","x":700.0,"y":400.0,"hp":100}],"wkey":"deathshead","x":100,"y":300,"vx":150,"vy":20},"out":{"status":"split","x":117.5,"y":303.07222,"vx":150.0,"vy":31.08333,"steps":7}},
       {"name":"deathshead-fired-level","in":{"terrain":{"flat":430},"tanks":[{"kind":"human","x":60.0,"y":400.0,"hp":100},{"kind":"ai","x":700.0,"y":400.0,"hp":100}],"wkey":"deathshead","x":100,"y":300,"vx":150,"vy":0},"out":{"status":"split","x":117.5,"y":300.73889,"vx":150.0,"vy":11.08333,"steps":7}}
     ],
+    "rack": [
+      {"name":"round1","in":{"round":1},"out":{"shell":-1,"buck":0,"mortar":0,"rail":0,"cluster":0,"flak":0,"seeker":0,"lance":0,"heavy":0,"needle":0,"emp":0,"roller":0,"nuke":0,"leapfrog":0,"funky":0,"deathshead":0}},
+      {"name":"round3","in":{"round":3},"out":{"shell":-1,"buck":2,"mortar":2,"rail":0,"cluster":0,"flak":0,"seeker":0,"lance":0,"heavy":0,"needle":0,"emp":0,"roller":0,"nuke":0,"leapfrog":0,"funky":0,"deathshead":0}},
+      {"name":"round6","in":{"round":6},"out":{"shell":-1,"buck":2,"mortar":2,"rail":2,"cluster":2,"flak":2,"seeker":2,"lance":2,"heavy":2,"needle":2,"emp":2,"roller":2,"nuke":0,"leapfrog":2,"funky":0,"deathshead":0}},
+      {"name":"round7","in":{"round":7},"out":{"shell":-1,"buck":2,"mortar":2,"rail":2,"cluster":2,"flak":2,"seeker":2,"lance":2,"heavy":2,"needle":2,"emp":2,"roller":2,"nuke":0,"leapfrog":2,"funky":1,"deathshead":0}},
+      {"name":"round9","in":{"round":9},"out":{"shell":-1,"buck":2,"mortar":2,"rail":2,"cluster":2,"flak":2,"seeker":2,"lance":2,"heavy":2,"needle":2,"emp":2,"roller":2,"nuke":0,"leapfrog":2,"funky":1,"deathshead":1}},
+      {"name":"round12","in":{"round":12},"out":{"shell":-1,"buck":2,"mortar":2,"rail":2,"cluster":2,"flak":2,"seeker":2,"lance":2,"heavy":2,"needle":2,"emp":2,"roller":2,"nuke":0,"leapfrog":2,"funky":1,"deathshead":1}}
+    ],
     "blast": [
       {"name":"shell-falloff-half-radius","in":{"terrain":{"flat":400},"tanks":[{"kind":"human","x":100.0,"y":400.0,"hp":100},{"kind":"ai","x":300.0,"y":400.0,"hp":100}],"owner":0,"wkey":"shell","y":380.0,"x":313.0},"out":{"tanks":[{"hp":100,"fuel":80.0,"lastHitBy":null,"dealt":true},{"hp":80,"fuel":80.0,"lastHitBy":0,"dealt":false}],"crater":null,"score":40,"cash":40,"shield":false,"laststand":false}},
       {"name":"shell-direct-hit","in":{"terrain":{"flat":400},"tanks":[{"kind":"human","x":100.0,"y":400.0,"hp":100},{"kind":"ai","x":300.0,"y":400.0,"hp":100}],"owner":0,"wkey":"shell","y":380.0,"x":308.6666666666667,"direct":1},"out":{"tanks":[{"hp":100,"fuel":80.0,"lastHitBy":null,"dealt":true},{"hp":54,"fuel":80.0,"lastHitBy":0,"dealt":false}],"crater":null,"score":92,"cash":92,"shield":false,"laststand":false}},

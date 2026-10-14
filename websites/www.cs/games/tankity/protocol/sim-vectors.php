@@ -376,6 +376,11 @@ foreach ($weapons as $wkey => $def) {
     $clusterSplit("$wkey-fired-level", $wkey, ['x' => 100, 'y' => 300, 'vx' => 150, 'vy' => 0]);
 }
 
+/* ---- the rack a drone brings to a round: aiRack of each gun it may load (the Shell is endless, -1) ---- */
+foreach ([1, 3, 6, 7, 9, 12] as $round) {
+    $add('rack', "round$round", ['round' => $round], room_ai_rack($round));
+}
+
 /* ---- blast damage and the crater ---- */
 $blast = function (string $name, array $c, ?string $known = null) use ($add): void {
     $room = sv_room($c);

@@ -170,39 +170,46 @@ function room_weapons(): array
         if (!isset($am['key'])) {
             continue;
         }
-        $w[(string) $am['key']] = [
-            'dmg' => (int) ($am['dmg'] ?? 30),
-            'radius' => (int) ($am['radius'] ?? 24),
-            'price' => (int) ($am['price'] ?? 0),
-            'pack' => (int) ($am['pack'] ?? 0),
-            'minRound' => (int) ($am['minRound'] ?? 1),
-            'effect' => (string) ($am['effect'] ?? 'shot'),
-            'speed' => (float) ($am['speed'] ?? 1.0),
-            'flat' => !empty($am['flat']),
-            'pellets' => (int) ($am['pellets'] ?? 0),
-            'spread' => (float) ($am['spread'] ?? 0.0),
-            'fuse' => (float) ($am['fuse'] ?? 0.9),
-            'split' => (int) ($am['split'] ?? 4),
-            'fan' => (float) ($am['fan'] ?? 0.22),
-            'subDmg' => (int) ($am['subDmg'] ?? ($am['dmg'] ?? 30)),
-            'subRadius' => (int) ($am['subRadius'] ?? ($am['radius'] ?? 24)),
-            'prox' => (float) ($am['prox'] ?? 34.0),
-            'steer' => (float) ($am['steer'] ?? 70.0),
-            'drain' => (int) ($am['drain'] ?? 0),
-            'friction' => (float) ($am['friction'] ?? 0.3),
-            'rollTime' => (float) ($am['rollTime'] ?? 5.0),
-            'ai' => !empty($am['ai']),
-            'aiRound' => (int) ($am['aiRound'] ?? 99),
-            'hops' => (int) ($am['hops'] ?? 1),
-            'hopKeep' => (float) ($am['hopKeep'] ?? 0.5),
-            'kick' => (float) ($am['kick'] ?? 150.0),
-            'apex' => !empty($am['apex']),
-        ];
+        $w[(string) $am['key']] = room_weapon_row($am);
     }
     if (!isset($w['shell'])) {
-        $w['shell'] = ['dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'minRound' => 1, 'effect' => 'shot', 'speed' => 1.0, 'flat' => false, 'pellets' => 0, 'spread' => 0.0, 'fuse' => 0.9, 'split' => 4, 'fan' => 0.22, 'subDmg' => 34, 'subRadius' => 26, 'prox' => 34.0, 'steer' => 70.0, 'drain' => 0, 'friction' => 0.3, 'rollTime' => 5.0, 'ai' => true, 'aiRound' => 1, 'hops' => 1, 'hopKeep' => 0.5, 'kick' => 150.0, 'apex' => false];
+        $w['shell'] = room_weapon_row(['dmg' => 34, 'radius' => 26, 'ai' => true, 'aiRound' => 1]);
     }
     return $w;
+}
+/* One ammo row of game.json as the sim reads it: every field a row may leave
+// out gets the default src/sim.ts reads for it. */
+function room_weapon_row(array $am): array
+{
+    return [
+        'dmg' => (int) ($am['dmg'] ?? 30),
+        'radius' => (int) ($am['radius'] ?? 24),
+        'price' => (int) ($am['price'] ?? 0),
+        'pack' => (int) ($am['pack'] ?? 0),
+        'minRound' => (int) ($am['minRound'] ?? 1),
+        'effect' => (string) ($am['effect'] ?? 'shot'),
+        'speed' => (float) ($am['speed'] ?? 1.0),
+        'flat' => !empty($am['flat']),
+        'pellets' => (int) ($am['pellets'] ?? 0),
+        'spread' => (float) ($am['spread'] ?? 0.0),
+        'fuse' => (float) ($am['fuse'] ?? 0.9),
+        'split' => (int) ($am['split'] ?? 4),
+        'fan' => (float) ($am['fan'] ?? 0.22),
+        'subDmg' => (int) ($am['subDmg'] ?? ($am['dmg'] ?? 30)),
+        'subRadius' => (int) ($am['subRadius'] ?? ($am['radius'] ?? 24)),
+        'prox' => (float) ($am['prox'] ?? 34.0),
+        'steer' => (float) ($am['steer'] ?? 70.0),
+        'drain' => (int) ($am['drain'] ?? 0),
+        'friction' => (float) ($am['friction'] ?? 0.3),
+        'rollTime' => (float) ($am['rollTime'] ?? 5.0),
+        'ai' => !empty($am['ai']),
+        'aiRound' => (int) ($am['aiRound'] ?? 99),
+        'aiRack' => (int) ($am['aiRack'] ?? 2),
+        'hops' => (int) ($am['hops'] ?? 1),
+        'hopKeep' => (float) ($am['hopKeep'] ?? 0.5),
+        'kick' => (float) ($am['kick'] ?? 150.0),
+        'apex' => !empty($am['apex']),
+    ];
 }
 function room_gear(string $key): ?array
 {

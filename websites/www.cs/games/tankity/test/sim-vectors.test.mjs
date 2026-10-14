@@ -149,6 +149,10 @@ const RUN = {
     }
     return { status: 'none' };
   },
+  rack(c) {
+    const r = sim.droneRack(arsenal, c.round);
+    return Object.fromEntries(Object.entries(r).map(([k, n]) => [k, n === Infinity ? -1 : n]));
+  },
   blast(c) {
     world(c);
     const before = G.terrain.slice();

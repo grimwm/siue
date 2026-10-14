@@ -42,6 +42,17 @@ $end = room_fly_arc($room, $events, $room['tanks'][0], $lance, 'lance', 0, 285.0
 // The arc hands its final impact back to the caller: [status, x, y, vx, vy, directIdx].
 $check('lance-pierces-to-next-tank', $end[0] === 'hit' && $end[5] === 2, json_encode([$end[0], $end[5]]));
 
+// A drone loads aiRack of each gun it carries (2 when the row names none),
+// and every field a row may leave out reads the default src/sim.ts uses.
+$rack = room_ai_rack(9);
+$check('rack-round-9', $rack['shell'] === -1 && ($rack['deathshead'] ?? null) === 1 && ($rack['mortar'] ?? null) === 2, json_encode($rack));
+$check('rack-round-8-has-no-deaths-head', (room_ai_rack(8)['deathshead'] ?? null) === 0);
+$bare = room_weapon_row(['key' => 'x', 'dmg' => 5, 'radius' => 5]);
+$check('weapon-row-defaults', $bare['aiRack'] === 2 && $bare['apex'] === false && $bare['hops'] === 1 && $bare['hopKeep'] === 0.5
+    && $bare['kick'] === 150.0 && $bare['fuse'] === 0.9 && $bare['fan'] === 0.22 && $bare['split'] === 4 && $bare['speed'] === 1.0, json_encode($bare));
+$check('weapon-row-reads-new-fields', room_weapon_row(['key' => 'x', 'aiRack' => 1, 'apex' => true, 'hops' => 3, 'hopKeep' => 0.55, 'kick' => 90])
+    === array_replace($bare, ['aiRack' => 1, 'apex' => true, 'hops' => 3, 'hopKeep' => 0.55, 'kick' => 90.0, 'dmg' => 30, 'radius' => 24, 'subDmg' => 30, 'subRadius' => 24]));
+
 // A harmless burst (dmg 0) carves its crater and touches no unit: no hit, no
 // shield spent, nobody credited or blamed.
 $room = $flatRoom([$tank(0, 'ai', 100.0, 100), $tank(1, 'human', 300.0, 100), $tank(2, 'ai', 330.0, 100)]);

@@ -10,23 +10,35 @@ import path from 'node:path';
 import { buildArsenal, flightKey, mulberry32, simShot } from '../src/sim.ts';
 import { dsin } from '../src/detmath.ts';
 import { aiChoose, arcGuns } from '../src/ai.ts';
+import type { Arsenal, Gear, Tank, Weapon, World } from '../src/sim.ts';
 
-const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+/* A gun's row from game.json, read field by field by name. */
+type Row = Weapon & Record<string, unknown>;
+const GAME: { arsenal: { ammo: Row[]; gear?: Gear[] } } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const AMMO = GAME.arsenal.ammo;
-const arsenal = buildArsenal(GAME.arsenal);
-const withRow = (key, change) => buildArsenal({ ...GAME.arsenal, ammo: AMMO.map(a => a.key === key ? { ...a, ...change } : a) });
+function loaded(ars: Arsenal | null): Arsenal {
+  assert.ok(ars, 'the arsenal loads');
+  return ars;
+}
+function gun(ars: Arsenal, key: string): Readonly<Weapon> {
+  const w = ars.weapons[key];
+  assert.ok(w, `no gun ${key}`);
+  return w;
+}
+const arsenal = loaded(buildArsenal(GAME.arsenal));
+const withRow = (key: string, change: Record<string, unknown>) => loaded(buildArsenal({ ...GAME.arsenal, ammo: AMMO.map(a => a.key === key ? { ...a, ...change } : a) }));
 
 // Hilly ground and a crosswind, so a shot can land, roll, or fly off the board.
 const world = { terrain: Array.from({ length: 720 }, (_, x) => 380 + 40 * dsin(x * 2 * Math.PI / 260)), wind: 3 };
-const SHOTS = [];
+const SHOTS: [number, number, number][] = [];
 for (const a of [30, 52, 75, 104, 140]) for (const p of [34, 61, 92]) for (const dirS of [1, -1]) SHOTS.push([a, p, dirS]);
-const flights = (ars, wkey) => SHOTS.map(([a, p, dirS]) => simShot(world, ars, 360, 380, a, p, wkey, dirS));
+const flights = (ars: Arsenal, wkey: string) => SHOTS.map(([a, p, dirS]) => simShot(world, ars, 360, 380, a, p, wkey, dirS));
 
 test('guns that share a flight key fly the same planning arcs', () => {
   const keys = Object.keys(arsenal.weapons);
   for (const a of keys) {
     for (const b of keys) {
-      if (a < b && flightKey(arsenal.weapons[a]) === flightKey(arsenal.weapons[b])) {
+      if (a < b && flightKey(gun(arsenal, a)) === flightKey(gun(arsenal, b))) {
         assert.deepEqual(flights(arsenal, a), flights(arsenal, b), `${a} and ${b}`);
       }
     }
@@ -40,7 +52,7 @@ test('a change to any field that bends a planning flight changes the flight key'
   for (const row of AMMO) {
     for (const f of fields) {
       const seen = new Set(AMMO.map(a => a[f]).filter(v => v !== undefined && typeof v !== 'object'));
-      const tries = [...seen];
+      const tries: unknown[] = [...seen];
       if (typeof row[f] === 'number') tries.push(row[f] * 1.37 + 0.11, row[f] * 0.2);
       if (typeof row[f] === 'boolean' || row[f] === undefined) tries.push(true, false);
       // A fresh value: a string field the flight reads while every gun holds the same value.
@@ -50,7 +62,7 @@ test('a change to any field that bends a planning flight changes the flight key'
         const ars = withRow(row.key, { [f]: v });
         if (JSON.stringify(flights(ars, row.key)) === JSON.stringify(flights(arsenal, row.key))) continue;
         bending++;
-        assert.notEqual(flightKey(ars.weapons[row.key]), flightKey(arsenal.weapons[row.key]),
+        assert.notEqual(flightKey(gun(ars, row.key)), flightKey(gun(arsenal, row.key)),
           `${row.key}.${f} = ${JSON.stringify(v)} bends the flight but keeps its flight key`);
       }
     }
@@ -60,9 +72,10 @@ test('a change to any field that bends a planning flight changes the flight key'
 
 test('the flight key holds every gun field the planning flight reads', () => {
   // Read-traced, so a field simShot starts reading fails here at the code edit, before any gun in game.yaml sets it.
-  const reads = run => {
-    const seen = new Set();
-    run(w => new Proxy(w, { get(t, k) { if (typeof k === 'string') seen.add(k); return t[k]; } }));
+  type Spy = <T extends object>(w: T) => T;
+  const reads = (run: (spy: Spy) => void) => {
+    const seen = new Set<string>();
+    run(w => new Proxy(w, { get(t, k) { if (typeof k === 'string') seen.add(k); return Reflect.get(t, k); } }));
     return seen;
   };
   let checked = 0;
@@ -84,10 +97,10 @@ test('the flight key holds every gun field the planning flight reads', () => {
 test('a gun plans once per distinct arc, the first gun of each in rack order', () => {
   const rack = AMMO.filter(a => a.ai).map(a => a.key);
   const plan = arcGuns(arsenal, rack);
-  assert.equal(plan.length, new Set(rack.map(k => flightKey(arsenal.weapons[k]))).size);
+  assert.equal(plan.length, new Set(rack.map(k => flightKey(gun(arsenal, k)))).size);
   assert.equal(plan[0], 'shell');
   for (const k of rack) {
-    const first = rack.find(o => flightKey(arsenal.weapons[o]) === flightKey(arsenal.weapons[k]));
+    const first = rack.find(o => flightKey(gun(arsenal, o)) === flightKey(gun(arsenal, k)));
     assert.equal(plan.includes(k), first === k, k);
   }
   assert.deepEqual(plan, [...plan].sort((a, b) => rack.indexOf(a) - rack.indexOf(b)));
@@ -105,28 +118,28 @@ test('a gun given its own arc is planned on its own; one with the same flight sh
 
 /* How often each gun's planning flight is flown on one drone turn: every
    flight reads its gun's speed (weighing a gun's harm does not). */
-function flownPerGun(ars) {
-  const flown = {};
+function flownPerGun(ars: Arsenal): Record<string, number> {
+  const flown: Record<string, number> = {};
   const weapons = Object.fromEntries(Object.entries(ars.weapons).map(([key, row]) => [key, new Proxy(row, {
     get(t, f) {
       if (f === 'speed') flown[key] = (flown[key] || 0) + 1;
-      return t[f];
+      return Reflect.get(t, f);
     },
   })]));
-  const drone = { id: 'D', isPlayer: false, x: 120, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0,
+  const drone: Tank = { id: 'D', isPlayer: false, x: 120, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0,
     ammo: { buck: 2, mortar: 2 }, s: 'hunter' };
-  const human = { id: 'P', isPlayer: true, x: 560, y: 400, hp: 100, angle: 45, power: 50, dirS: -1, fuel: 80, vy: 0, ammo: {} };
+  const human: Tank = { id: 'P', isPlayer: true, x: 560, y: 400, hp: 100, angle: 45, power: 50, dirS: -1, fuel: 80, vy: 0, ammo: {} };
   const G = { tanks: [drone, human], terrain: Array(720).fill(400), wind: 0, round: 1, difficulty: 'normal', score: 0,
-    jammer: 0, rng: mulberry32(7) };
+    jammer: 0, rng: mulberry32(7) } as World; // a drone's turn reads none of the rest
   aiChoose(G, { ...ars, weapons }, drone);
   return flown;
 }
 
 test('a drone flies the planning search for a gun with its own arc, and not for one that shares the shell\'s', () => {
   const same = flownPerGun(arsenal);
-  assert.ok(same.shell > 50, `shell flown ${same.shell}`);
+  assert.ok(Number(same.shell) > 50, `shell flown ${same.shell}`);
   assert.ok((same.buck || 0) < 5, `buck flown ${same.buck}`);
   const own = flownPerGun(withRow('buck', { speed: 1.2 }));
-  assert.ok(own.buck > 50, `buck with its own arc flown ${own.buck}`);
+  assert.ok(Number(own.buck) > 50, `buck with its own arc flown ${own.buck}`);
   assert.ok((own.mortar || 0) < 5, `mortar flown ${own.mortar}`);
 });

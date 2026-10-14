@@ -3,7 +3,7 @@
 // The drones plan one arc per flight, not one per gun (server/ai.php
 // room_ai_arc_guns): which guns share is read from each gun's own flight
 // fields (server/sim.php room_flight_key), so a gun given a different speed,
-// gravity or roll is planned on its own. test/ai-arcs.test.mjs is the same for the browser.
+// gravity or roll is planned on its own. test/ai-arcs.test.ts is the same for the browser.
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;

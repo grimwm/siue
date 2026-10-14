@@ -9,22 +9,36 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { H, aimLimits, beamCarve, buildArsenal, carveCrater, fireBeam, firePlasma, fireWeapon, muzzle, mulberry32, stepShells, unitHitBox, inHitBox } from '../src/sim.ts';
 import { dcos, dsin } from '../src/detmath.ts';
+import type { Ammo, BeamShot, FallRules, Gear, StepEvent, Tank, Weapon, World } from '../src/sim.ts';
 
-const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+function nth<T>(list: readonly T[], i: number): T {
+  return must(list[i], `item ${i}`);
+}
+/* The beam a launch fired at once. */
+function beamOf(e: StepEvent): BeamShot {
+  assert.ok(e.kind === 'beam', `a ${e.kind}, not a beam`);
+  return e.shot;
+}
+
+const GAME: { arsenal: { ammo: Weapon[]; gear?: Gear[]; fall?: Partial<FallRules> } } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const ZAP = { key: 'zap', name: 'Zap', dmg: 45, radius: 6, price: 1, pack: 1, minRound: 1, effect: 'beam', range: 520, aimMin: -20, speed: 1 };
 const RING = { key: 'ring', name: 'Ring', dmg: 60, radius: 90, price: 1, pack: 1, minRound: 1, effect: 'plasma', speed: 1 };
 const MARK = { key: 'mark', name: 'Mark', dmg: 0, radius: 0, price: 1, pack: 1, minRound: 1, effect: 'tracer', speed: 1, gfx: { shell: '#fff', trail: '#fff', painter: 'dash', mark: 'line' } };
-const arsenal = buildArsenal({ ammo: [...GAME.arsenal.ammo.filter(a => a.key === 'shell'), ZAP, RING, MARK], gear: GAME.arsenal.gear, fall: GAME.arsenal.fall });
+const arsenal = must(buildArsenal({ ammo: [...GAME.arsenal.ammo.filter(a => a.key === 'shell'), ZAP, RING, MARK], gear: GAME.arsenal.gear, fall: GAME.arsenal.fall }), 'the arsenal');
 
-const flat = (y = 400, w = 720) => Array(w).fill(y);
-const human = (x, y = 400, more = {}) => ({ id: 'you', isPlayer: true, x, y, angle: 45, power: 100, hp: 100, fuel: 80, dirS: 1, ...more });
-const drone = (x, y = 400, more = {}) => ({ id: 'd' + x, isPlayer: false, x, y, angle: 45, power: 100, hp: 100, fuel: 80, dirS: -1, ...more });
-const world = (tanks, terrain = flat(), extra = {}) => ({ tanks, terrain, wind: 0, round: 1, rng: mulberry32(1), shells: [], score: 0, cash: 0,
+const flat = (y = 400, w = 720): number[] => Array(w).fill(y);
+const human = (x: number, y = 400, more: Partial<Tank> = {}): Tank => ({ id: 'you', isPlayer: true, x, y, angle: 45, power: 100, hp: 100, fuel: 80, dirS: 1, ...more });
+const drone = (x: number, y = 400, more: Partial<Tank> = {}): Tank => ({ id: 'd' + x, isPlayer: false, x, y, angle: 45, power: 100, hp: 100, fuel: 80, dirS: -1, ...more });
+const world = (tanks: Tank[], terrain = flat(), extra: Partial<Omit<World, 'ammo'>> = {}): World & { ammo: Ammo } => ({ tanks, terrain, wind: 0, round: 1, rng: mulberry32(1), shells: [], score: 0, cash: 0,
   ammo: { shell: Infinity, zap: 3, ring: 3, mark: 3 }, selected: 'shell', shield: false, bunker: 0, laststand: false, jammer: 0, ...extra });
 /* Where a beam fired by t is s px along its line. */
-const along = (t, s) => { const m = muzzle(t), a = t.angle / 180 * Math.PI, f = t.dirS || 1; return { x: m.x + dcos(a) * f * s, y: m.y - dsin(a) * s }; };
+const along = (t: Tank, s: number) => { const m = muzzle(t), a = t.angle / 180 * Math.PI, f = t.dirS || 1; return { x: m.x + dcos(a) * f * s, y: m.y - dsin(a) * s }; };
 /* A drone standing so that the beam fired by t crosses its body s px along. */
-const droneOnBeam = (t, s) => { const p = along(t, s); return drone(p.x, p.y + 30); };
+const droneOnBeam = (t: Tank, s: number) => { const p = along(t, s); return drone(p.x, p.y + 30); };
 
 test('a beam hits every unit on its line once, for its flat damage, drones included', () => {
   const me = human(100);
@@ -33,8 +47,8 @@ test('a beam hits every unit on its line once, for its flat damage, drones inclu
   const shot = fireBeam(W, arsenal, me, 'zap');
   assert.equal(a.hp, 55);
   assert.equal(b.hp, 55);
-  assert.deepEqual(shot.hits.events.map(e => [e.kind, e.tank, e.dmg]), [['wound', a, 45], ['wound', b, 45]]);
-  assert.ok(shot.hits.events.every(e => e.direct === false), 'no direct-hit double');
+  assert.deepEqual(shot.hits.events.map(e => [e.kind, e.tank, e.kind === 'wound' ? e.dmg : undefined]), [['wound', a, 45], ['wound', b, 45]]);
+  assert.ok(shot.hits.events.every(e => e.kind === 'wound' && e.direct === false), 'no direct-hit double');
   assert.equal(me.hp, 100, 'its gunner is never hit');
   assert.equal(W.cash, 180, 'the player is paid twice the damage');
 });
@@ -54,7 +68,7 @@ test('a wider field reaches further, as its shells fly further', () => {
   const me = human(100, 400, { angle: 30 });
   const short = fireBeam(world([me], flat(400, 720)), arsenal, me, 'zap');
   const long = fireBeam(world([me], flat(400, 1440)), arsenal, me, 'zap');
-  const len = s => Math.hypot(s.x1 - s.x0, s.y1 - s.y0);
+  const len = (s: BeamShot) => Math.hypot(s.x1 - s.x0, s.y1 - s.y0);
   assert.ok(len(long) > len(short) * 1.35, `${len(long)} vs ${len(short)}`);
 });
 
@@ -73,7 +87,7 @@ test('a beam cuts a channel through a hill and nowhere else', () => {
   const want = terrain.slice();
   beamCarve(want, shot.x0, shot.y0, shot.x1, shot.y1, 6);
   assert.deepEqual(W.terrain, want, 'the sim carves what beamCarve carves');
-  assert.ok(W.terrain.slice(200, 261).some((y, i) => y > terrain[200 + i]), 'the hill is cut');
+  assert.ok(W.terrain.slice(200, 261).some((y, i) => y > nth(terrain, 200 + i)), 'the hill is cut');
   assert.deepEqual(W.terrain.slice(0, 190), terrain.slice(0, 190), 'open ground is untouched');
 });
 
@@ -114,7 +128,7 @@ test('a plasma ring hurts everyone near, with falloff, and spares its gunner', (
   const b = unitHitBox(me);
   assert.deepEqual([ring.x, ring.y, ring.r], [b.cx, b.cy, 90]);
   assert.equal(me.hp, 100);
-  const hurt = d => { const u = unitHitBox(d); return Math.round(60 * Math.max(0.3, 1 - Math.hypot(u.cx - b.cx, u.cy - b.cy) / 104)); };
+  const hurt = (d: Tank) => { const u = unitHitBox(d); return Math.round(60 * Math.max(0.3, 1 - Math.hypot(u.cx - b.cx, u.cy - b.cy) / 104)); };
   assert.equal(near.hp, 100 - hurt(near));
   assert.equal(mid.hp, 100 - hurt(mid));
   assert.ok(near.hp < mid.hp);
@@ -142,16 +156,16 @@ test('firing a beam or a ring resolves at once: no shells, the round spent, the 
   const me = human(100);
   const a = droneOnBeam(me, 150);
   const W = world([me, a]);
-  const launch = fireWeapon(W, arsenal, me, 'zap');
+  const launch = must(fireWeapon(W, arsenal, me, 'zap'), 'the zap launch');
   assert.equal(W.shells.length, 0);
   assert.equal(W.ammo.zap, 2);
   assert.equal(launch.now.length, 1);
-  assert.equal(launch.now[0].kind, 'beam');
-  assert.equal(launch.now[0].shot.hits.events.length, 1);
-  const ring = fireWeapon(W, arsenal, me, 'ring');
+  assert.equal(nth(launch.now, 0).kind, 'beam');
+  assert.equal(beamOf(nth(launch.now, 0)).hits.events.length, 1);
+  const ring = must(fireWeapon(W, arsenal, me, 'ring'), 'the ring launch');
   assert.equal(W.shells.length, 0);
-  assert.equal(ring.now[0].kind, 'ring');
-  const shell = fireWeapon(W, arsenal, me, 'shell');
+  assert.equal(nth(ring.now, 0).kind, 'ring');
+  const shell = must(fireWeapon(W, arsenal, me, 'shell'), 'the shell launch');
   assert.deepEqual(shell.now, []);
   assert.equal(W.shells.length, 1);
 });
@@ -162,7 +176,7 @@ test('a tracer flies like a shell and leaves only its mark: no blast, no crater,
   const W = world([me, d]);
   fireWeapon(W, arsenal, me, 'mark');
   assert.equal(W.shells.length, 1);
-  const kinds = [];
+  const kinds: string[] = [];
   for (let i = 0; i < 1200 && W.shells.length; i++) for (const e of stepShells(W, arsenal, 1 / 60)) kinds.push(e.kind);
   assert.equal(W.shells.length, 0);
   assert.ok(!kinds.includes('blast'));
@@ -176,7 +190,7 @@ test('a tracer that strikes a unit stops there, harmlessly', () => {
   const d = drone(160, 420);
   const W = world([me, d]);
   fireWeapon(W, arsenal, me, 'mark');
-  let mark = null;
+  let mark: Extract<StepEvent, { kind: 'mark' }> | null = null;
   for (let i = 0; i < 600 && W.shells.length; i++) for (const e of stepShells(W, arsenal, 1 / 60)) if (e.kind === 'mark') mark = e;
   assert.ok(mark && Math.abs(mark.x - 160) < 20, JSON.stringify(mark && { x: mark.x, y: mark.y }));
   assert.equal(d.hp, 100);
@@ -191,9 +205,10 @@ test('the barrel reaches 10..170, and a beam row\'s aimMin dips it below level o
 test('a gun fires inside its own limits: a beam at -20, a Shell held at -20 leaves at 10', () => {
   const me = human(100, 400, { angle: -20 });
   const W = world([me]);
-  const b = fireWeapon(W, arsenal, me, 'zap');
+  const b = must(fireWeapon(W, arsenal, me, 'zap'), 'the zap launch');
   assert.equal(me.angle, -20);
-  assert.ok(b.now[0].shot.y1 > b.now[0].shot.y0, 'the beam runs downhill');
+  const beam = beamOf(nth(b.now, 0));
+  assert.ok(beam.y1 > beam.y0, 'the beam runs downhill');
   fireWeapon(W, arsenal, me, 'shell');
   assert.equal(me.angle, 10, 'the Shell is clamped to its own minimum before it leaves');
   me.angle = 205;
@@ -214,7 +229,7 @@ test('the last Laser spent at a dip leaves the drawn barrel at the Shell\'s mini
   const W = world([me]);
   W.ammo.zap = 1;
   W.selected = 'zap';
-  const launch = fireWeapon(W, arsenal, me, 'zap');
+  const launch = must(fireWeapon(W, arsenal, me, 'zap'), 'the zap launch');
   assert.ok(launch.spent);
   assert.equal(W.selected, 'shell');
   assert.equal(me.angle, 10, 'the barrel is clamped to the gun now loaded');

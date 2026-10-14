@@ -4,9 +4,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FLOOR, TOP_Y, addDirt, carveCrater, digCarve, digHeading, fillPour, pourLevel, riotCarve, slumpGround } from '../src/earth.ts';
 
-const flat = (y, w = 720) => Array(w).fill(y);
-const sum = t => t.reduce((a, b) => a + b, 0);
-const vee = (cx, half, top, bottom, w = 720) => Array.from({ length: w }, (_, ix) => top + (bottom - top) * Math.max(0, 1 - Math.abs(ix - cx) / half));
+function nth(t: readonly number[], ix: number): number {
+  const y = t[ix];
+  assert.ok(y !== undefined, `no column ${ix}`);
+  return y;
+}
+const flat = (y: number, w = 720): number[] => Array(w).fill(y);
+const sum = (t: readonly number[]) => t.reduce((a, b) => a + b, 0);
+const vee = (cx: number, half: number, top: number, bottom: number, w = 720) => Array.from({ length: w }, (_, ix) => top + (bottom - top) * Math.max(0, 1 - Math.abs(ix - cx) / half));
 
 test('slumping keeps the volume and spreads a cliff into a slope', () => {
   const t = flat(420);
@@ -15,7 +20,7 @@ test('slumping keeps the volume and spreads a cliff into a slope', () => {
   slumpGround(t, 300, 120, 1, 400);
   assert.ok(Math.abs(sum(t) - before) < 1e-9, `the total moved by ${sum(t) - before}`);
   let steepest = 0;
-  for (let ix = 180; ix < 420; ix++) steepest = Math.max(steepest, Math.abs(t[ix + 1] - t[ix]));
+  for (let ix = 180; ix < 420; ix++) steepest = Math.max(steepest, Math.abs(nth(t, ix + 1) - nth(t, ix)));
   assert.ok(steepest < 5, `a ${steepest} px step is left of the 120 px cliff`);
   assert.equal(t[100], 300, 'outside its radius the ground stays');
 });
@@ -25,10 +30,10 @@ test('a pool holds the volume poured (to a hair), is level, and raises the valle
   const p = pourLevel(t, 300, 4000);
   assert.ok(p.x0 <= 300 && p.x1 >= 300);
   let held = 0;
-  for (let ix = p.x0; ix <= p.x1; ix++) held += Math.max(0, before[ix] - p.level);
+  for (let ix = p.x0; ix <= p.x1; ix++) held += Math.max(0, nth(before, ix) - p.level);
   assert.ok(Math.abs(held - 4000) < 2, `held ${held}`);
   fillPour(t, p);
-  for (let ix = p.x0; ix <= p.x1; ix++) assert.ok(t[ix] <= p.level + 1e-9 && t[ix] <= before[ix]);
+  for (let ix = p.x0; ix <= p.x1; ix++) assert.ok(nth(t, ix) <= p.level + 1e-9 && nth(t, ix) <= nth(before, ix));
   assert.equal(t[300], p.level);
 });
 
@@ -72,7 +77,7 @@ test('a riot charge digs the hull out of the dirt over it', () => {
   for (let ix = 270; ix <= 330; ix++) t[ix] = 350;
   riotCarve(t, 300, 390, -Math.PI / 2, 45, 1.2, 400);
   assert.equal(t[300], 400, 'the dirt over the hull is gone, and the ground under it stays');
-  for (let ix = 285; ix <= 315; ix++) assert.ok(t[ix] >= 390, `cleared at ${ix}: ${t[ix]}`);
+  for (let ix = 285; ix <= 315; ix++) assert.ok(nth(t, ix) >= 390, `cleared at ${ix}: ${t[ix]}`);
 });
 
 test('a trench follows the heading, open to the sky', () => {
@@ -81,7 +86,7 @@ test('a trench follows the heading, open to the sky', () => {
   assert.ok(Math.abs(ux * ux + uy * uy - 1) < 1e-12);
   digCarve(t, 300, 401, ux, uy, 28, 11);
   const end = 300 + ux * 4 * 28;
-  assert.ok(t[Math.round(end)] > 450, 'deep at the end');
-  assert.ok(t[300] > 400 && t[300] < t[Math.round(end)], 'shallow at the start');
+  assert.ok(nth(t, Math.round(end)) > 450, 'deep at the end');
+  assert.ok(nth(t, 300) > 400 && nth(t, 300) < nth(t, Math.round(end)), 'shallow at the start');
   assert.equal(t[200], 400);
 });

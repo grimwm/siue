@@ -359,6 +359,13 @@ function frames(rp, n) {
   check('a unit the beam hits shows it passing through, along the beam', through.length === 1 && through[0].w === BEAM
     && near(through[0].ang, Math.atan2(shot.y1 - shot.y0, shot.x1 - shot.x0)), JSON.stringify(through));
 
+  // A hit another seat owns (a last-stand blast the beam's victim set off) is not the beam passing.
+  const piercedBefore = host.log.specials.filter(s => s.name === 'pierce').length;
+  rp.push([{ t: 'fire', seat: 0, w: BEAM, x: 251, a: 20, pw: 45, at: 0 }, { ...beamEv, at: 0 }, { t: 'hit', seat: 1, dmg: 5, by: 0, direct: true, at: 0 }, { t: 'hit', seat: 0, dmg: 5, by: 1, direct: false, at: 0 }]);
+  for (let i = 0; i < 200 && !rp.idle(); i++) rp.step(DT);
+  check('only the beam owner\'s hits draw a pierce', host.log.specials.filter(s => s.name === 'pierce').length === piercedBefore + 1,
+    JSON.stringify(host.log.specials));
+
   // A ring: played once at its moment; no shot, no blast disc.
   const rings = [];
   host.env.ring = e => rings.push(e);

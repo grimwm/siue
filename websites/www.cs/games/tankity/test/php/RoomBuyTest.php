@@ -15,7 +15,7 @@ final class RoomBuyTest extends TestCase
     private function room(int $round = 1): array
     {
         $room = room_new('SHOP', 'HUM');
-        $room['seats'][0] = room_seat_human('HUM', 't0', []);
+        $room['seats'][0] = room_seat_human('HUM', 't0', [], '');
         room_seat_economy($room, 0);
         $room['round'] = $round;
         return $room;

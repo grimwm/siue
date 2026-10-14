@@ -143,34 +143,46 @@ function room_mine(mixed $seats): ?array
         return null;
     }
     $out = [];
+    $seen = []; // a seat asked twice is looked up once
     foreach ($seats as $ask) {
         $code = strtoupper(trim(is_array($ask) && is_string($ask['code'] ?? null) ? $ask['code'] : ''));
         $token = is_array($ask) && is_string($ask['token'] ?? null) ? $ask['token'] : '';
-        $gone = ['code' => $code, 'gone' => true];
-        if (!preg_match('/^[A-Z0-9]{4}$/', $code) || $token === '') {
-            $out[] = $gone;
-            continue;
-        }
-        $room = room_peek($code);
-        $seat = $room !== null ? room_find_seat($room, $token) : null;
-        if ($seat === null) {
-            $out[] = $gone;
-            continue;
-        }
-        if (room_tick_due($room)) {
-            [$held, $lock] = room_load($code);
-            if (!is_array($held)) {
-                $out[] = $gone;
-                continue;
-            }
-            room_tick($held);
-            room_save($lock, $code, $held);
-            room_unlock($lock);
-            $room = $held;
-        }
-        $out[] = room_mine_row($room, $seat);
+        $key = $code . '|' . $token;
+        $seen[$key] ??= room_mine_one($code, $token);
+        $out[] = $seen[$key];
     }
     return $out;
+}
+/* One seat's row, or the `gone` row. */
+function room_mine_one(string $code, string $token): array
+{
+    $gone = ['code' => $code, 'gone' => true];
+    if (!preg_match('/^[A-Z0-9]{4}$/', $code) || $token === '') {
+        return $gone;
+    }
+    $room = room_peek($code);
+    $seat = $room !== null ? room_find_seat($room, $token) : null;
+    if ($seat === null) {
+        return $gone;
+    }
+    if (room_tick_due($room)) {
+        [$held, $lock] = room_load($code);
+        $seat = is_array($held) ? room_find_seat($held, $token) : null;
+        if ($seat === null) {
+            // Gone, or the player left between the peek and the lock.
+            if ($lock !== null) {
+                room_unlock($lock);
+            }
+            return $gone;
+        }
+        room_tick($held);
+        // A tick that could not be saved is not the room's state: answer from the peek.
+        if (room_save($lock, $code, $held)) {
+            $room = $held;
+        }
+        room_unlock($lock);
+    }
+    return room_mine_row($room, $seat);
 }
 
 /* ---------- router ---------- */

@@ -130,6 +130,9 @@ function room_shop_settle(array &$room): bool
 function room_standin_shot(array &$room, int $cur): string
 {
     $t = $room['tanks'][$cur];
+    // room_ai_choose also leaves aim memory (s, dry, dealt, brk) on the tank; only the
+    // room-level strategy bookkeeping is restored, since nothing reads those for a human and
+    // the next stand-in is better for the bracket.
     $tactic = $room['tactic'] ?? null; // the drone's strategy bookkeeping is not the player's
     $choice = room_ai_choose($room, $t);
     if ($tactic === null) {
@@ -335,7 +338,7 @@ function room_idle_seat(int $slot, string $mode = 'ai'): array
     $name = ROOM_AI_NAMES[(($slot - 1) % $n + $n) % $n]; // one name per seat, so slot 0 and slot 3 never share
     return ['human' => false, 'name' => $name, 'initials' => $name, 'lives' => 0, 'mode' => $mode === 'open' ? 'open' : 'ai'];
 }
-function room_seat_human(string $initials, string $token, array $body, string $addr = ''): array
+function room_seat_human(string $initials, string $token, array $body, string $addr): array
 {
     // addr: the hashed client address that took the seat (room_idle_limit counts distinct ones).
     $seat = ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];

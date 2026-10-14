@@ -1000,7 +1000,7 @@ $legacy = $flatRoom([$tank(0, 'human', 100.0, 100)]);
 room_explode($legacy, $revEvents, $legacy['tanks'][0], 'shell', 200.0, 400.0, null);
 $check('rev-legacy-room-reads-as-1', $legacy['terrainRev'] === 2);
 $round = room_new('REV1', 'ABC');
-$round['seats'][0] = room_seat_human('ABC', 'tok', []);
+$round['seats'][0] = room_seat_human('ABC', 'tok', [], '');
 $round['seats'][1] = room_idle_seat(1, 'ai');
 $round['seats'][2] = room_idle_seat(2, 'open');
 $round['seats'][3] = room_idle_seat(3, 'open');

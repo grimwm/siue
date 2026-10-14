@@ -29,7 +29,7 @@ final class RoomTurnTimeTest extends TestCase
     private function playing(int $turnSecs = 120, int $lives = 3): array
     {
         $room = room_new('TURN', 'HOS');
-        $room['seats'][0] = room_seat_human('HOS', 't0', []);
+        $room['seats'][0] = room_seat_human('HOS', 't0', [], '');
         $room['seats'][0]['lives'] = $lives;
         $room['seats'][1] = room_idle_seat(1, 'ai');
         $room['seats'][2] = room_idle_seat(2, 'open');
@@ -189,6 +189,21 @@ final class RoomTurnTimeTest extends TestCase
 
         $lobby = room_new('LOBB', 'ABC');
         $this->assertFalse(room_tick_due($lobby));
+
+        // A drone up: due only once the pace allows (nobody human is standing).
+        $drone = $this->playing();
+        $drone['tanks'][0]['hp'] = 0;
+        $drone['turn'] = 1;
+        $this->assertSame('ai', $drone['tanks'][1]['kind']);
+        $drone['pace'] = ['at' => microtime(true), 'wait' => 60];
+        $this->assertFalse(room_tick_due($drone), 'a drone waits for its pace');
+        $drone['pace'] = ['at' => microtime(true) - 61, 'wait' => 60];
+        $this->assertTrue(room_tick_due($drone), 'the pace has passed');
+
+        // A dead human holding the turn is the drones' to pass, not a clock.
+        $dead = $this->playing();
+        $dead['tanks'][0]['hp'] = 0;
+        $this->assertTrue(room_tick_due($dead));
     }
 
     public function testTickAppliesTheTimeout(): void

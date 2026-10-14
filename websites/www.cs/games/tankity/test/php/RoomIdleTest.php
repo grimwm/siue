@@ -19,6 +19,7 @@ final class RoomIdleTest extends TestCase
     {
         $this->dir = tankity_test_dir();
         putenv('TANKITY_ROOM_LIVE_SECS=600');
+        putenv('TANKITY_ROOM_HOSTS_PER_ADDRESS'); // the docker stacks lift the cap
     }
 
     protected function tearDown(): void
@@ -33,7 +34,7 @@ final class RoomIdleTest extends TestCase
         $room = room_new($code, 'HOS');
         $room['phase'] = $phase;
         for ($i = 0; $i < ROOM_SEATS; $i++) {
-            $room['seats'][$i] = $i < $humans ? room_seat_human('P' . chr(65 + $i) . 'X', "t$i", []) : room_idle_seat($i, 'ai');
+            $room['seats'][$i] = $i < $humans ? room_seat_human('P' . chr(65 + $i) . 'X', "t$i", [], '') : room_idle_seat($i, 'ai');
         }
         if ($turnSecs !== null) {
             $room['turnSecs'] = $turnSecs;

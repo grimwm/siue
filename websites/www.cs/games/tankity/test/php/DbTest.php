@@ -89,6 +89,8 @@ final class DbTest extends TestCase
         $this->assertSame(7, (int) $db->query('PRAGMA user_version')->fetchColumn());
         $this->assertSame(1600, (int) $db->query("SELECT expires FROM rooms WHERE code = 'OLDR'")->fetchColumn());
         $this->assertContains('rooms_expires', $db->query("SELECT name FROM sqlite_master WHERE type = 'index'")->fetchAll(PDO::FETCH_COLUMN));
+        $this->assertContains('host', $db->query('PRAGMA table_info(rooms)')->fetchAll(PDO::FETCH_COLUMN, 1));
+        $this->assertContains('rooms_host', $db->query("SELECT name FROM sqlite_master WHERE type = 'index'")->fetchAll(PDO::FETCH_COLUMN));
     }
 
     public function testADatabaseNewerThanThisServerIsRefused(): void

@@ -43,8 +43,8 @@ final class RoomMineTest extends TestCase
     private function playing(string $code = 'MINE'): array
     {
         $room = room_new($code, 'ABC');
-        $room['seats'][0] = room_seat_human('ABC', 't0', []);
-        $room['seats'][1] = room_seat_human('ZED', 't1', []);
+        $room['seats'][0] = room_seat_human('ABC', 't0', [], '');
+        $room['seats'][1] = room_seat_human('ZED', 't1', [], '');
         $room['seats'][2] = room_idle_seat(2, 'ai');
         $room['seats'][3] = room_idle_seat(3, 'open');
         room_seat_economy($room, 0);
@@ -108,14 +108,19 @@ final class RoomMineTest extends TestCase
         $after = $this->stored('MINE');
         $this->assertGreaterThan($shots, $after['shots']);
         $this->assertContains('auto', array_column($after['events'], 't'));
-        $this->assertSame($after['tanks'][$after['turn']]['seat'] ?? null, $row['turn']);
-        $this->assertSame(room_turn_key($after) === ($row['turnKey'] ?? null), $row['yourTurn'] && $row['turn'] === 0);
+        $this->assertSame(1, $after['tanks'][$after['turn']]['seat'], 'the stand-in shot passed the turn to ZED');
+        $this->assertSame($after['tanks'][$after['turn']]['seat'], $row['turn']);
+        $this->assertFalse($row['yourTurn']);
+        $this->assertNull($row['turnKey']);
+        [$zed] = room_mine([['code' => 'MINE', 'token' => 't1']]);
+        $this->assertTrue($zed['yourTurn']);
+        $this->assertSame(room_turn_key($this->stored('MINE')), $zed['turnKey']);
     }
 
     public function testMineLeavesALobbyAlone(): void
     {
         $lobby = room_new('LOBY', 'ABC');
-        $lobby['seats'][0] = room_seat_human('ABC', 't0', []);
+        $lobby['seats'][0] = room_seat_human('ABC', 't0', [], '');
         $this->store($lobby);
         tankity_db()->exec("UPDATE rooms SET touched = touched - 300 WHERE code = 'LOBY'");
         $before = (int) tankity_db()->query("SELECT touched FROM rooms WHERE code = 'LOBY'")->fetchColumn();
@@ -130,10 +135,11 @@ final class RoomMineTest extends TestCase
         $room = $this->playing();
         room_turn_left($room);
         $room['clock']['at'] -= 500;
-        $room['actedAt'] = time() - 50;
+        $acted = time() - 50;
+        $room['actedAt'] = $acted;
         $this->store($room);
         room_mine([['code' => 'MINE', 'token' => 't0']]);
-        $this->assertSame(time() - 50, $this->stored('MINE')['actedAt']);
+        $this->assertSame($acted, $this->stored('MINE')['actedAt']);
     }
 
     public function testTooManySeatsIsRefusedAndOddEntriesAreGone(): void
@@ -145,5 +151,27 @@ final class RoomMineTest extends TestCase
         $rows = room_mine([['code' => 'ZZZZ'], 'junk', ['token' => 't']]);
         $this->assertSame([true, true, true], array_column($rows, 'gone'));
         $this->assertSame([], room_mine([]));
+    }
+
+    public function testATickThatCannotBeSavedIsNotReported(): void
+    {
+        $room = $this->playing();
+        room_turn_left($room);
+        $room['clock']['at'] -= 500;
+        $this->store($room);
+        // Past the size limit the save refuses, however the room changes.
+        $before = $this->stored('MINE');
+        $before['pad'] = str_repeat('x', ROOM_MAX_BYTES);
+        tankity_db()->prepare("UPDATE rooms SET data = ? WHERE code = 'MINE'")->execute([serialize($before)]);
+        [$row] = room_mine([['code' => 'MINE', 'token' => 't0']]);
+        $this->assertSame(room_turn_key($before), $row['turnKey'], 'the row is the room as stored, not an unsaved tick');
+    }
+
+    public function testTheSameSeatAskedTwiceGetsTwoEqualRows(): void
+    {
+        $this->store($this->playing());
+        $rows = room_mine([['code' => 'MINE', 'token' => 't0'], ['code' => 'mine', 'token' => 't0']]);
+        $this->assertCount(2, $rows);
+        $this->assertSame($rows[0], $rows[1]);
     }
 }

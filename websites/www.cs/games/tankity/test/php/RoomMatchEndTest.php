@@ -19,7 +19,7 @@ final class RoomMatchEndTest extends TestCase
         $room = room_new('ENDS', 'H00');
         for ($i = 0; $i < 4; $i++) {
             $room['seats'][$i] = $i < $humans
-                ? room_seat_human('H0' . $i, 't' . $i, [])
+                ? room_seat_human('H0' . $i, 't' . $i, [], '')
                 : room_idle_seat($i, 'ai');
             if ($i < $humans) {
                 $room['seats'][$i]['lives'] = $lives;

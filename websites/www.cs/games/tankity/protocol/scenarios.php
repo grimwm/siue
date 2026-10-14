@@ -19,8 +19,8 @@ function protocol_lobby(): array
     $room = room_new(PROTOCOL_CODE, 'ABC');
     $room['created'] = $room['touched'] = PROTOCOL_TOUCHED; // expiresAt must not depend on the clock
     $room['csrf'] = 'fixture-csrf';
-    $room['seats'][0] = room_seat_human('ABC', 'fixture-token-0', []);
-    $room['seats'][1] = room_seat_human('DEF', 'fixture-token-1', ['body' => 'hover']);
+    $room['seats'][0] = room_seat_human('ABC', 'fixture-token-0', [], '');
+    $room['seats'][1] = room_seat_human('DEF', 'fixture-token-1', ['body' => 'hover'], '');
     $room['seats'][2] = room_idle_seat(2, 'ai');
     $room['seats'][3] = room_idle_seat(3, 'open');
     room_seat_economy($room, 0);
@@ -34,7 +34,7 @@ function protocol_play(): array
     $room = room_new(PROTOCOL_CODE, 'ABC');
     $room['created'] = $room['touched'] = PROTOCOL_TOUCHED; // expiresAt must not depend on the clock
     $room['csrf'] = 'fixture-csrf';
-    $room['seats'][0] = room_seat_human('ABC', 'fixture-token-0', []);
+    $room['seats'][0] = room_seat_human('ABC', 'fixture-token-0', [], '');
     $room['seats'][1] = room_idle_seat(1, 'ai');
     $room['seats'][2] = room_idle_seat(2, 'open');
     $room['seats'][3] = room_idle_seat(3, 'open');
@@ -136,7 +136,7 @@ function protocol_snapshots(): array
         200, $ok(room_snapshot($won, 0, 0))];
 
     $shop = $won;
-    $shop['seats'][2] = room_seat_human('DEF', 'fixture-token-2', []);
+    $shop['seats'][2] = room_seat_human('DEF', 'fixture-token-2', [], '');
     room_seat_economy($shop, 2);
     room_shop_set_ready($shop, 0, true);
     $shop['shop']['at'] = microtime(true);

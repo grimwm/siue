@@ -31,8 +31,8 @@ final class RoomFilingTest extends TestCase
     private function duel(): array
     {
         $room = room_new('FILE', 'WIN');
-        $room['seats'][0] = room_seat_human('WIN', 't0', []);
-        $room['seats'][1] = room_seat_human('OUT', 't1', []);
+        $room['seats'][0] = room_seat_human('WIN', 't0', [], '');
+        $room['seats'][1] = room_seat_human('OUT', 't1', [], '');
         $room['seats'][2] = room_idle_seat(2, 'ai');
         $room['seats'][3] = room_idle_seat(3, 'open');
         foreach ([0, 1] as $s) {
@@ -98,7 +98,7 @@ final class RoomFilingTest extends TestCase
     public function testALeaverIsNotFiled(): void
     {
         $room = $this->duel();
-        $room['seats'][2] = room_seat_human('LVR', 't2', []);
+        $room['seats'][2] = room_seat_human('LVR', 't2', [], '');
         room_seat_economy($room, 2);
         $room['startHumans'] = 3;
         $room['scores'][2] = 9000;
@@ -112,7 +112,7 @@ final class RoomFilingTest extends TestCase
     public function testAnEliminationBeforeTheLastRoundIsFiledThenAndNotAgain(): void
     {
         $room = $this->duel();
-        $room['seats'][2] = room_seat_human('THR', 't2', []);
+        $room['seats'][2] = room_seat_human('THR', 't2', [], '');
         room_seat_economy($room, 2);
         $room['startHumans'] = 3;
         room_start_round($room);
@@ -148,7 +148,7 @@ final class RoomFilingTest extends TestCase
     private function alone(): array
     {
         $room = room_new('SOLO', 'ONE');
-        $room['seats'][0] = room_seat_human('ONE', 't0', []);
+        $room['seats'][0] = room_seat_human('ONE', 't0', [], '');
         foreach ([1, 2, 3] as $i) {
             $room['seats'][$i] = room_idle_seat($i, 'ai');
         }

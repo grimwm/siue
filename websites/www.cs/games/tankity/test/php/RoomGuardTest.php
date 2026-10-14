@@ -186,7 +186,8 @@ final class RoomGuardTest extends TestCase
         return room_decode($q->fetchColumn());
     }
 
-    private const FREE = ['TANKITY_ROOM_JOINS_PER_HOUR' => '1000'];
+    /* The docker stacks lift both limits; these tests want the host's. */
+    private const FREE = ['TANKITY_ROOM_JOINS_PER_HOUR' => '1000', 'TANKITY_ROOM_HOSTS_PER_ADDRESS' => '4'];
 
     public function testAnAddressHostsFourRoomsAndNoMore(): void
     {

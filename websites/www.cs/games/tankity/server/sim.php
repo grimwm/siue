@@ -521,23 +521,15 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
             $ownerIdx = $i;
         }
     }
-    // Of the blasts that lowered a standing unit's ground, the one that lowered
-    // it the most owns its fall (the first of equals).
-    foreach ($room['tanks'] as $i => $o) {
-        $now = room_surf_y($room['terrain'], (float) $o['x']);
-        $deeper = $now - $ground[$i];
-        if ($o['hp'] > 0 && $ownerIdx !== null && $deeper > 0 && $now > $o['y'] + 0.5 && $deeper > ($o['fellDepth'] ?? 0.0)) {
-            $room['tanks'][$i]['fellBy'] = $ownerIdx;
-            $room['tanks'][$i]['fellDepth'] = $deeper;
-        }
-    }
+    room_mark_falls($room, $ground, $ownerIdx);
     // A harmless burst (dmg 0) only carves (and owns the falls it digs, as
     // above): it touches no unit, so it spends no shield and credits no hit.
     // src/sim.ts explode() is the same order.
     if ($dmg0 === 0) {
         return;
     }
-    foreach ($room['tanks'] as $idx => &$t) {
+    foreach (array_keys($room['tanks']) as $idx) {
+        $t = $room['tanks'][$idx];
         if ($t['hp'] <= 0) {
             continue;
         }
@@ -547,28 +539,51 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
         if ($d > $r + 14) {
             continue;
         }
-        // A shield absorbs one hit whole, then it is gone.
-        if ($t['kind'] === 'human' && ($room['shield'][$t['seat']] ?? false)) {
-            $room['shield'][$t['seat']] = false;
-            $events[] = ['t' => 'shield', 'seat' => $t['seat'], 'by' => $tank['seat']];
-            continue;
-        }
         $dmg = room_blast_damage($dmg0, $d, $r);
         if ($directIdx !== null && $directIdx === $idx) {
             $dmg *= 2;
         }
-        // A bunker halves everything that gets through.
-        if ($t['kind'] === 'human' && ($room['bunker'][$t['seat']] ?? 0) > 0) {
-            $dmg = max(1, (int) round($dmg / 2));
-        }
-        $t['hp'] = max(0, $t['hp'] - $dmg);
-        if (($w['effect'] ?? 'shot') === 'emp') {
-            $t['fuel'] = max(0.0, ($t['fuel'] ?? 0.0) - (float) ($w['drain'] ?? 0));
-        }
-        $events[] = ['t' => 'hit', 'seat' => $t['seat'], 'dmg' => $dmg, 'by' => $tank['seat'], 'direct' => $directIdx === $idx];
-        room_credit($room, $events, $idx, $dmg, $tank, $ownerIdx);
+        room_hit_unit($room, $events, $idx, $dmg, $tank, $ownerIdx, $w, $directIdx === $idx);
     }
-    unset($t);
+}
+/* Of the blasts that lowered a standing unit's ground ($ground: under each
+// unit before this one), the one that lowered it the most owns its fall (the
+// first of equals). src/sim.ts markFalls() is the same. */
+function room_mark_falls(array &$room, array $ground, ?int $ownerIdx): void
+{
+    foreach ($room['tanks'] as $i => $o) {
+        $now = room_surf_y($room['terrain'], (float) $o['x']);
+        $deeper = $now - $ground[$i];
+        if ($o['hp'] > 0 && $ownerIdx !== null && $deeper > 0 && $now > $o['y'] + 0.5 && $deeper > ($o['fellDepth'] ?? 0.0)) {
+            $room['tanks'][$i]['fellBy'] = $ownerIdx;
+            $room['tanks'][$i]['fellDepth'] = $deeper;
+        }
+    }
+}
+/* The unit at $idx takes $dmg from $tank's shot of weapon $w ($ownerIdx its
+// index, null when it is gone): a shield absorbs it whole (then is gone), a
+// bunker halves it, an EMP drains fuel too; then the hit event and
+// room_credit(). $direct marks a direct hit on it. A blast, a beam and a
+// plasma ring all hurt through this. src/sim.ts hitUnit() is the same. */
+function room_hit_unit(array &$room, array &$events, int $idx, int $dmg, array $tank, ?int $ownerIdx, array $w, bool $direct): void
+{
+    $t = $room['tanks'][$idx];
+    // A shield absorbs one hit whole, then it is gone.
+    if ($t['kind'] === 'human' && ($room['shield'][$t['seat']] ?? false)) {
+        $room['shield'][$t['seat']] = false;
+        $events[] = ['t' => 'shield', 'seat' => $t['seat'], 'by' => $tank['seat']];
+        return;
+    }
+    // A bunker halves everything that gets through.
+    if ($t['kind'] === 'human' && ($room['bunker'][$t['seat']] ?? 0) > 0) {
+        $dmg = max(1, (int) round($dmg / 2));
+    }
+    $room['tanks'][$idx]['hp'] = max(0, $t['hp'] - $dmg);
+    if (($w['effect'] ?? 'shot') === 'emp') {
+        $room['tanks'][$idx]['fuel'] = max(0.0, ($t['fuel'] ?? 0.0) - (float) ($w['drain'] ?? 0));
+    }
+    $events[] = ['t' => 'hit', 'seat' => $t['seat'], 'dmg' => $dmg, 'by' => $tank['seat'], 'direct' => $direct];
+    room_credit($room, $events, $idx, $dmg, $tank, $ownerIdx);
 }
 /* What $dmg the unit at $idx just took from $tank's shot ($ownerIdx its index,
 // null when it is gone) pays: a human's shots at drones score and earn twice

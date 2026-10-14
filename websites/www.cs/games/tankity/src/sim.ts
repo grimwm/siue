@@ -837,27 +837,35 @@ export function explode(world: World, arsenal: Arsenal, x: number, y: number, wk
     const b = unitHitBox(t);
     const d = dist(b.cx - x, b.cy - y);
     if (d > r + 14) continue;
-    // A shield absorbs one hit whole, then it is gone.
-    if (t.isPlayer && world.shield) {
-      world.shield = false;
-      blast.events.push({ kind: 'shield', tank: t });
-      continue;
-    }
     let dmg = blastDamage(dmg0, d, r);
     if (direct === t) dmg *= 2;
-    // A bunker halves everything that gets through.
-    if (t.isPlayer && (world.bunker || 0) > 0) dmg = Math.max(1, Math.round(dmg / 2));
-    t.hp = Math.max(0, t.hp - dmg);
-    // EMP fries fuel as well as armor.
-    if (w.effect === 'emp') {
-      t.fuel = Math.max(0, (t.fuel || 0) - (w.drain || 0));
-      blast.events.push({ kind: 'arc', tank: t });
-    }
-    credit(world, t, owner, dmg);
-    if (t.hp <= 0) blast.events.push(wreck(world, arsenal, t, owner));
-    else blast.events.push({ kind: 'wound', tank: t, dmg, hp: t.hp, direct: !!direct });
+    hitUnit(world, arsenal, t, owner, dmg, w, !!direct, blast.events);
   }
   return blast;
+}
+/* Unit t takes dmg from owner's shot of weapon w, and what it did joins
+   events: a shield absorbs it whole (then is gone), a bunker halves it, an
+   EMP fries fuel too, and the score, cash, credit and wreck are settled.
+   `direct` marks the wound as from a direct hit. A blast, a beam and a plasma
+   ring all hurt through this. server/sim.php room_hit_unit is the same. */
+export function hitUnit(world: World, arsenal: Arsenal, t: Tank, owner: Tank, dmg: number, w: Weapon, direct: boolean, events: BlastEvent[]): void {
+  // A shield absorbs one hit whole, then it is gone.
+  if (t.isPlayer && world.shield) {
+    world.shield = false;
+    events.push({ kind: 'shield', tank: t });
+    return;
+  }
+  // A bunker halves everything that gets through.
+  if (t.isPlayer && (world.bunker || 0) > 0) dmg = Math.max(1, Math.round(dmg / 2));
+  t.hp = Math.max(0, t.hp - dmg);
+  // EMP fries fuel as well as armor.
+  if (w.effect === 'emp') {
+    t.fuel = Math.max(0, (t.fuel || 0) - (w.drain || 0));
+    events.push({ kind: 'arc', tank: t });
+  }
+  credit(world, t, owner, dmg);
+  if (t.hp <= 0) events.push(wreck(world, arsenal, t, owner));
+  else events.push({ kind: 'wound', tank: t, dmg, hp: t.hp, direct });
 }
 /* What damage t took from owner's shot pays: the player's shots at drones
    score and earn twice the damage; any shot at someone else marks the victim's

@@ -3,34 +3,41 @@
 // saying whether the menu is open.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { document, makeEl, click, fire } from '../../_kit/test/dom-stub.mjs';
+import { asElement, byId, click, elementOf, fire, installDocument, makeEl, maybeById, walk } from '../../_kit/test/dom-stub.ts';
+import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
+import type { TitleProps } from '../src/ui/title.tsx';
 
-globalThis.document = document;
-const { title } = await importTsx(import.meta.dirname, { title: '../src/ui/title.tsx' });
-const walk = (el, out = []) => { for (const c of el.children || []) { out.push(c); walk(c, out); } return out; };
-const byId = (el, id) => walk(el).find(n => n.id === id);
-const KEYS = { 'global:new': 'N', 'global:rooms': 'O', 'global:tutorial': 'U', 'global:back': 'Q' };
+installDocument();
+const { title } = await importTsx<{ title: typeof import('../src/ui/title.tsx') }>(import.meta.dirname, { title: '../src/ui/title.tsx' });
+const render = (root: StubElement, props: TitleProps) => title.renderTitle(asElement(root), props);
+const KEYS: Record<string, string> = { 'global:new': 'N', 'global:rooms': 'O', 'global:tutorial': 'U', 'global:back': 'Q' };
 
-function draw(over = {}) {
+function draw(over: Partial<TitleProps> = {}) {
   const root = makeEl('title-root');
-  const calls = { initials: [], play: 0, friends: 0, tutorial: 0, settings: 0 };
-  const props = {
-    keyHint: (c, a) => KEYS[`${c}:${a}`] ?? '', open: true, initials: 'BDJ', problem: '', settingsOpen: false,
-    onInitials: w => calls.initials.push(w), onPlay: () => { calls.play++; }, onFriends: () => { calls.friends++; },
+  const calls = { initials: [] as string[], play: 0, friends: 0, tutorial: 0, settings: 0 };
+  const props: TitleProps = {
+    keyHint: (c, a) => KEYS[`${c}:${a}`] ?? '', open: true, initials: 'BDJ', problem: '', hint: '', settingsOpen: false,
+    onInitials: w => { calls.initials.push(w); }, onPlay: () => { calls.play++; }, onFriends: () => { calls.friends++; },
     onTutorial: () => { calls.tutorial++; }, onSettings: () => { calls.settings++; }, ...over,
   };
-  title.renderTitle(root, props);
+  render(root, props);
   return { root, calls, props };
 }
-const type = (box, value) => { box.value = value; fire(box, 'input'); };
+const type = (box: StubElement, value: string) => { box.value = value; fire(box, 'input'); };
+/** Item `i` of a list the case reads, which must be there. */
+function nth<T>(list: readonly T[], i: number): T {
+  const v = list[i];
+  assert.ok(v !== undefined, `no item ${i} of ${list.length}`);
+  return v;
+}
 
 test('the card is the kit dialog: a veil around a panel labelled and described by its own text', () => {
   const { root } = draw();
   const veil = byId(root, 'title-card');
   assert.equal(veil.className, 'title-veil');
   assert.equal(veil.hidden, false);
-  const card = veil.children[0];
+  const card = elementOf(nth(veil.children, 0));
   assert.equal(card.className, 'title-card');
   assert.equal(card.getAttribute('role'), 'dialog');
   assert.equal(card.getAttribute('aria-modal'), 'true');
@@ -46,6 +53,7 @@ test('Play, Play with friends, Tutorial and Settings, each with its key chip', (
   assert.match(byId(root, 'tutorial-open').textContent, /^Tutorial/);
   assert.match(byId(root, 'title-settings').textContent, /^Settings/);
   const chip = walk(byId(root, 'title-play')).find(n => n.localName === 'kbd');
+  assert.ok(chip, 'a key chip');
   assert.equal(chip.className, 'key');
   assert.equal(chip.getAttribute('data-keyhint'), 'global:new');
   assert.equal(chip.getAttribute('aria-hidden'), 'true');
@@ -56,9 +64,12 @@ test('a closed card stays in the page, hidden; opening it focuses Play', () => {
   const { root, props } = draw({ open: false });
   assert.equal(byId(root, 'title-card').hidden, true);
   globalThis.__focused = null;
-  title.renderTitle(root, { ...props, open: true });
+  const focused = (): StubElement | null | undefined => globalThis.__focused;
+  render(root, { ...props, open: true });
   assert.equal(byId(root, 'title-card').hidden, false);
-  assert.equal(globalThis.__focused?.id, 'title-play');
+  const took = focused();
+  assert.ok(took, 'something took focus');
+  assert.equal(took.id, 'title-play');
 });
 
 test('every button reports to the game', () => {
@@ -75,7 +86,7 @@ test('the boxes show the saved initials, one letter each', () => {
 
 test('typed letters show uppercase and a full set is reported; a non-letter is dropped', () => {
   const { root, calls } = draw({ initials: '' }); // empty boxes: a lone letter is not yet a set
-  const [a, b, c] = [1, 2, 3].map(n => byId(root, `title-initial-${n}`));
+  const [a, b, c] = [1, 2, 3].map(n => byId(root, `title-initial-${n}`)) as [StubElement, StubElement, StubElement];
   type(a, 'z');
   assert.equal(a.value, 'Z');
   type(b, '1');
@@ -104,26 +115,26 @@ test('retyping the last letter of a saved set reports it at once; retyping the f
 
 test('an installed app that could not close says how, on the card, and only when asked', () => {
   const { root } = draw();
-  assert.equal(byId(root, 'title-hint'), undefined);
+  assert.equal(maybeById(root, 'title-hint'), undefined);
   const shown = draw({ hint: 'Swipe the app away to close it.' });
   assert.equal(byId(shown.root, 'title-hint').textContent, 'Swipe the app away to close it.');
   assert.equal(byId(shown.root, 'title-hint').getAttribute('role'), 'status');
 });
 
 test('the hint belongs to the open card: gone when a match starts, not shown on a closed card', async () => {
-  const { title: card } = await importTsx(import.meta.dirname, { title: '../src/title.ts' });
+  const { title: card } = await importTsx<{ title: typeof import('../src/title.ts') }>(import.meta.dirname, { title: '../src/title.ts' });
   const root = makeEl('title-root');
   const t = card.createTitle({
-    $: id => (id === 'title-root' ? root : null), keyHint: () => '', initials: { get: () => 'BDJ', set() {} },
+    $: id => (id === 'title-root' ? asElement(root) as HTMLElement : null), keyHint: () => '', initials: { get: () => 'BDJ', set() {}, subscribe: () => () => {} },
     play() {}, friends() {}, tutorial() {}, settings() {}, settingsOpen: () => false,
     games: () => ({ rows: [], alerts: 'off', age: 0, onOpen() {}, onAlerts() {} }),
   });
   t.showHint('nobody sees this');
-  assert.equal(byId(root, 'title-hint'), undefined, 'a closed card shows nothing');
+  assert.equal(maybeById(root, 'title-hint'), undefined, 'a closed card shows nothing');
   t.openTitle();
   t.showHint('Swipe the app away to close it.');
   assert.equal(byId(root, 'title-hint').textContent, 'Swipe the app away to close it.');
   t.closeTitle();
   t.openTitle();
-  assert.equal(byId(root, 'title-hint'), undefined, 'the next card starts clean');
+  assert.equal(maybeById(root, 'title-hint'), undefined, 'the next card starts clean');
 });

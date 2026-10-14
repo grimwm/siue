@@ -2,7 +2,7 @@
 // deck's Weapon label, rendered into the Node DOM stub.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { asElement, byId, click, installDocument, makeEl, maybeById, walk } from '../../_kit/test/dom-stub.ts';
+import { asElement, byId, click, installDocument, makeEl, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import type { GameTank, Tables } from '../src/game-types.ts';
@@ -27,7 +27,7 @@ function must(el: StubElement | undefined, what: string): StubElement {
   assert.ok(el, `no ${what}`);
   return el;
 }
-// walk, byId and maybeById are the stub's: elements only, which is all an id or class can match.
+// walk and byId are the stub's: elements only, which is all an id or class can match.
 const hasClass = (el: StubElement, name: string) => String(el.className || '').split(' ').includes(name);
 const withClass = (el: StubElement, name: string) => walk(el).filter(n => hasClass(n, name));
 const kbdOf = (el: StubElement) => walk(el).find(n => n.localName === 'kbd');

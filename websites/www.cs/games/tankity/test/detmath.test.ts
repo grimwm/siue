@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PI, dsin, dcos, datan, datan2 } from '../src/detmath.ts';
 
-const grid = [];
+const grid: number[] = [];
 for (let x = -40; x <= 40; x += 0.0137) grid.push(x);
 
 test('sin and cos agree with Math to 1e-15 over the range the sim feeds them', () => {
@@ -17,7 +17,7 @@ test('sin and cos agree with Math to 1e-15 over the range the sim feeds them', (
 
 test('atan and atan2 agree with Math to 1e-15, in every quadrant', () => {
   for (const x of grid) assert.ok(Math.abs(datan(x) - Math.atan(x)) <= 1e-15, `atan ${x}`);
-  for (const [y, x] of [[1, 1], [1, -1], [-1, -1], [-1, 1], [0.3, 2e-9], [-5, 0.01], [7, -1e-6], [0, -3], [0, 3]]) {
+  for (const [y, x] of [[1, 1], [1, -1], [-1, -1], [-1, 1], [0.3, 2e-9], [-5, 0.01], [7, -1e-6], [0, -3], [0, 3]] satisfies [number, number][]) {
     assert.ok(Math.abs(datan2(y, x) - Math.atan2(y, x)) <= 1e-15 * 4, `atan2 ${y} ${x}`);
   }
   assert.equal(datan2(1, 0), PI / 2);

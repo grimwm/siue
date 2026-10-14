@@ -12,10 +12,10 @@ import { DIFFICULTIES, DIFFICULTY, aimSkill } from '../src/ai.ts';
 
 const dir = path.join(import.meta.dirname, '..');
 // Strips /* */ and // comments only: a PHP # comment naming a banned call fails the test (falsely, never silently).
-const read = f => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+const read = (f: string): string => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
 // Files a later task adds are banned from the moment they exist.
-const present = files => files.filter(f => fs.existsSync(path.join(dir, f)));
+const present = (files: string[]): string[] => files.filter(f => fs.existsSync(path.join(dir, f)));
 const TS_RULES = present(['src/sim.ts', 'src/earth.ts', 'src/fire.ts', 'src/ai.ts', 'src/armor.ts', 'src/detmath.ts', 'src/solo.ts']);
 const PHP_RULES = present(['server/sim.php', 'server/earth.php', 'server/fire.php', 'server/ai.php', 'server/detmath.php']);
 const TRANSCENDENTAL_TS = /Math\.(sin|cos|tan|asin|acos|atan|exp|expm1|log|pow|cbrt)\w*\b/;
@@ -86,7 +86,9 @@ test('the difficulty table is the same numbers on both sides, and an unknown wor
   for (const level of DIFFICULTIES) {
     const row = php.match(new RegExp(`'${level}' => \\[([^\\]]*)\\]`));
     assert.ok(row, `ROOM_DIFFICULTY has no ${level} row`);
-    const got = Object.fromEntries([...row[1].matchAll(/'(\w+)' => (-?[\d.]+)/g)].map(m => [m[1], Number(m[2])]));
+    const body = row[1];
+    assert.ok(body !== undefined, `ROOM_DIFFICULTY's ${level} row has no body`);
+    const got = Object.fromEntries([...body.matchAll(/'(\w+)' => (-?[\d.]+)/g)].map(m => [m[1], Number(m[2])]));
     assert.deepEqual(got, { ...DIFFICULTY[level] }, level);
   }
   assert.equal(aimSkill('brutal'), DIFFICULTY.normal);

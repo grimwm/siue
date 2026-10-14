@@ -17,7 +17,7 @@ check('phpunit-config-runs-no-browser-specs', select([`${S}phpunit.xml`]), 'NONE
 check('site-php-tests-run-no-browser-specs', select([`${S}tests/php/SiteVersionsTest.php`]), 'NONE');
 check('kit-php-tests-run-no-browser-specs', select([`${S}games/_kit/php/tests/LegacyCheckCaseTest.php`]), 'NONE');
 check('kit-php-testing-runs-no-browser-specs', select([`${S}games/_kit/php/testing/LegacyCheckCase.php`]), 'NONE');
-check('sim-vectors-run-nothing', select([`${S}games/tankity/test/sim-vectors.test.mjs`, `${S}games/tankity/protocol/sim-vectors.php`, `${S}games/tankity/protocol/sim-vectors.json`]), 'NONE');
+check('sim-vectors-run-nothing', select([`${S}games/tankity/test/sim-vectors.test.ts`, `${S}games/tankity/protocol/sim-vectors.php`, `${S}games/tankity/protocol/sim-vectors.json`]), 'NONE');
 check('music-build-script-runs-nothing', select([`${S}games/tankity/audio/music/build_music.sh`, `${S}games/tankity/audio/sfx/build_sfx.sh`]), 'NONE');
 check('deploy-only-runs-nothing', select([`${S}deploy.sh`, '.github/workflows/deploy.yml']), 'NONE');
 check('outside-the-site-runs-nothing', select(['scripts/deploy-hash']), 'NONE');

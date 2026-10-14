@@ -8,45 +8,125 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import * as simRules from '../src/sim.ts';
+import * as aiRules from '../src/ai.ts';
+import * as armorRules from '../src/armor.ts';
+import * as standings from '../src/standings.ts';
+import * as det from '../src/detmath.ts';
+import * as earth from '../src/earth.ts';
+import * as fire from '../src/fire.ts';
+import type { Ammo, Arsenal, BlastOverride, Shell, Tank, Weapon, World } from '../src/sim.ts';
+
+/* One case as protocol/sim-vectors.php writes it: `in` has the shape its group's runner reads (Inputs). */
+interface VectorCase { name: string; in: unknown; out: unknown; exact?: boolean; known?: string; knownPaths?: string[] }
+interface Vectors { tolerance: number; weapons: string[]; groups: Record<string, VectorCase[]> }
 
 const dir = path.join(import.meta.dirname, '..');
-const VECTORS = JSON.parse(fs.readFileSync(path.join(dir, 'protocol', 'sim-vectors.json'), 'utf8'));
-const GAME = JSON.parse(fs.readFileSync(path.join(dir, 'game.json'), 'utf8'));
+const VECTORS: Vectors = JSON.parse(fs.readFileSync(path.join(dir, 'protocol', 'sim-vectors.json'), 'utf8'));
+const GAME: { arsenal: Parameters<typeof simRules.buildArsenal>[0] } = JSON.parse(fs.readFileSync(path.join(dir, 'game.json'), 'utf8'));
 const TOL = VECTORS.tolerance;
+
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+function nth<T>(list: readonly T[], i: number): T {
+  return must(list[i], `item ${i}`);
+}
 
 /* ---- where the sim comes from ----
    The only place that reaches for it: the modules, which take their
    state as arguments, so the cases below pass a plain state object G. The
    physics is src/sim.ts and the drone AI src/ai.ts; `sim` holds both. */
-const sim = {
-  ...await import(pathToFileURL(path.join(dir, 'src', 'sim.ts')).href),
-  ...await import(pathToFileURL(path.join(dir, 'src', 'ai.ts')).href),
-};
-const arsenal = sim.buildArsenal(GAME.arsenal);
-const armorRules = await import(pathToFileURL(path.join(dir, 'src', 'armor.ts')).href);
+const sim = { ...simRules, ...aiRules };
+const arsenal: Arsenal = must(sim.buildArsenal(GAME.arsenal), 'the arsenal');
 
-const standings = await import(pathToFileURL(path.join(dir, 'src', 'standings.ts')).href);
-const det = await import(pathToFileURL(path.join(dir, 'src', 'detmath.ts')).href);
-const earth = await import(pathToFileURL(path.join(dir, 'src', 'earth.ts')).href);
-const fire = await import(pathToFileURL(path.join(dir, 'src', 'fire.ts')).href);
+/* ---- what the cases say ---- */
+interface TerrainSpec {
+  flat?: number;
+  slope?: [number, number];
+  vee?: [number, number, number, number];
+  hills?: [number, number, number];
+  set?: [number, number, number][];
+}
+interface TankSpec {
+  kind: string; x: number; y: number; hp?: number; angle?: number; power?: number; dirS?: number; fuel?: number; ammo?: Ammo;
+  s?: string; dry?: number; dealt?: boolean; lastHitBy?: number; kills?: number; fellBy?: number; chutes?: number;
+  score?: number; shield?: boolean; bunker?: number; laststand?: boolean; jammer?: number;
+}
+/* difficulty is a string, not a Difficulty: a case feeds an unknown word on purpose. */
+interface WorldIn { terrain?: TerrainSpec; tanks?: TankSpec[]; wind?: number; round?: number; difficulty?: string }
+interface UnitSpot { kind: string; x: number; y: number }
+interface Shot { x: number; y: number; angle: number; power: number; wkey: string; dirS: number }
+type ArmorOp = ['muster'] | ['end'] | ['damage', number] | ['repair', number] | ['plate', number];
+type EarthIn = { terrain: TerrainSpec } & (
+  | { op: 'crater' | 'dirt'; x: number; y: number; r: number }
+  | { op: 'pour'; x: number; v: number; m?: number }
+  | { op: 'slump'; x: number; r: number; slope: number; passes: number }
+  | { op: 'riot'; x: number; y: number; a: number; r: number; fan: number }
+  | { op: 'dig'; x: number; y: number; vx: number; vy: number; n: number; r: number });
+interface Inputs {
+  constants: Record<string, never>;
+  detmath: { fn: string; x: number; y: number };
+  rng: { seed: string };
+  'terrain-gen': { seed: string };
+  'spawn-spots': { n: number; seed: number };
+  'shot-speed': { power: number; flat: boolean; mult: number };
+  muzzle: { x: number; y: number; angle: number; dirS: number };
+  'hit-box': UnitSpot;
+  'in-box': UnitSpot & { px: number; py: number };
+  'sweep-hit': WorldIn & { owner: number; skip: number | null; clear: boolean; seg: [number, number, number, number] };
+  'seek-push': WorldIn & { owner: number; sx: number; sy: number; steer: number; dt: number };
+  'split-fan': { vx: number; vy: number; n: number; fan: number };
+  'hop-vel': { vx: number; vy: number; keep: number };
+  'scatter-vel': { n: number; fan: number; kick: number };
+  'cluster-split': WorldIn & { wkey: string; x: number; y: number; vx: number; vy: number };
+  rack: { round: number };
+  blast: WorldIn & { owner: number; wkey: string; x: number; y: number; direct?: number | null; ov?: BlastOverride };
+  'sim-shot': WorldIn & Shot;
+  'roll-out': { terrain: TerrainSpec; x: number; vx: number; vy: number; wkey: string };
+  armor: { ops: ArmorOp[] };
+  'match-end': { lives: (number | null)[]; startHumans: number; round: number };
+  volley: WorldIn & { shooter: number; wkey: string; angle: number; power: number };
+  beam: WorldIn & { shooter: number; wkey: string; angle: number; power: number };
+  plasma: WorldIn & { shooter: number; wkey: string; power: number };
+  fall: WorldIn & { blast?: { x: number; y: number; wkey: string; owner: number } };
+  field:
+    | { kind: 'terrain'; w: number; seed: string }
+    | { kind: 'placement'; w: number; seed: number }
+    | { kind: 'speed'; w: number }
+    | ({ kind: 'sim-shot'; w: number } & Shot)
+    | (WorldIn & { kind: 'aim'; w: number; seed: number });
+  'ai-aim': WorldIn & { seed: number; shooter: number; tanks: TankSpec[] };
+  'ai-harm': WorldIn & { self: number; target: number; wkey: string; a: number; p: number };
+  'ai-bracket': WorldIn & { w?: number; seed: number; shooter: number; target: number; shots: number; driveAt?: number; driveBy?: number };
+  'ai-tactic': WorldIn & { seed: number; shooter: number; turns: number };
+  earth: EarthIn;
+  fire: { terrain: TerrainSpec; x: number; v: number; flame: number; m?: number; units: UnitSpot[] };
+  'fire-ticks': { burn: number; tick: number } | { burn?: undefined; dmg: number; ticks: number; shield: boolean; bunker: boolean };
+  settle: { terrain: TerrainSpec; x: number; y: number; hp: number; kind?: string };
+}
 
 /* ---- state the cases run over ---- */
-const G = {};
-function buildTerrain(spec, w = 720) {
-  const t = [];
+/* Filled by world(): a case that never sets rng never reads it. */
+const G = {} as World;
+function buildTerrain(spec: TerrainSpec, w = 720): number[] {
+  const t: number[] = [];
   for (let ix = 0; ix < w; ix++) {
-    let y;
+    let y: number;
     if (spec.flat !== undefined) y = spec.flat;
     else if (spec.slope) y = spec.slope[0] + (spec.slope[1] - spec.slope[0]) * ix / (w - 1);
     else if (spec.vee) y = spec.vee[2] + (spec.vee[3] - spec.vee[2]) * Math.max(0, 1 - Math.abs(ix - spec.vee[0]) / spec.vee[1]);
-    else y = spec.hills[0] + spec.hills[1] * det.dsin(ix * 2 * Math.PI / spec.hills[2]);
+    else {
+      const hills = must(spec.hills, 'the terrain spec');
+      y = hills[0] + hills[1] * det.dsin(ix * 2 * Math.PI / hills[2]);
+    }
     for (const [x0, x1, sy] of spec.set || []) if (ix >= x0 && ix <= x1) y = sy;
     t.push(Math.round(y * 1000) / 1000);
   }
   return t;
 }
-const tankOf = (spec, i) => ({
+const tankOf = (spec: TankSpec, i: number): Tank => ({
   id: 'T' + i, isPlayer: spec.kind === 'human', x: spec.x, y: spec.y, hp: spec.hp === undefined ? 100 : spec.hp,
   angle: spec.angle === undefined ? 45 : spec.angle, power: spec.power === undefined ? 50 : spec.power,
   dirS: spec.dirS === undefined ? 1 : spec.dirS, fuel: spec.fuel === undefined ? 80 : spec.fuel, ammo: Object.assign({}, spec.ammo), vy: 0,
@@ -54,9 +134,9 @@ const tankOf = (spec, i) => ({
   chutes: spec.kind === 'human' ? undefined : spec.chutes,
 });
 /* A fresh world for a case: the tanks, the ground, the wind, and the human's tricks (G.shield and friends are the player's). */
-function world(c, w = 720) {
-  for (const k of Object.keys(G)) delete G[k];
-  const human = (c.tanks || []).find(t => t.kind === 'human') || {};
+function world(c: WorldIn, w = 720): World {
+  for (const k of Object.keys(G)) Reflect.deleteProperty(G, k);
+  const human: Partial<TankSpec> = (c.tanks || []).find(t => t.kind === 'human') || {};
   Object.assign(G, {
     tanks: (c.tanks || []).map(tankOf), terrain: buildTerrain(c.terrain || { flat: 400 }, w), wind: c.wind || 0, round: c.round || 1,
     shells: [], booms: [], clouds: [], fx: {}, ammo: {}, selected: 'shell', score: human.score || 0, cash: 0, shake: 0, shopSel: 0,
@@ -65,21 +145,25 @@ function world(c, w = 720) {
   });
   return G;
 }
-function outcome(before) {
-  let first = null, last = null;
+/* A shell with no gunner, as the server's vector builds it: the runners below that use one never read its owner. */
+function ownerless(s: Omit<Shell, 'owner' | 'life' | 'age' | 'pierced' | 'split'> & { owner: null }): Shell {
+  return s as unknown as Shell; // owner is null, which Shell does not allow
+}
+function outcome(before: readonly number[]) {
+  let first: number | null = null, last: number | null = null;
   G.terrain.forEach((y, ix) => {
-    if (Math.abs(y - before[ix]) > 1e-9) { if (first === null) first = ix; last = ix; }
+    if (Math.abs(y - nth(before, ix)) > 1e-9) { if (first === null) first = ix; last = ix; }
   });
   return {
     tanks: G.tanks.map(t => ({ hp: t.hp, fuel: t.fuel, y: t.y, chutes: t.isPlayer ? null : t.chutes || 0,
       lastHitBy: t.lastHitBy ?? null, dealt: !!t.dealt, fellBy: t.fellBy ?? null })),
-    crater: first === null ? null : { x0: first, y: G.terrain.slice(first, last + 1) },
+    crater: first === null ? null : { x0: first, y: G.terrain.slice(first, Number(last) + 1) },
     score: G.score, cash: G.cash, shield: G.shield, laststand: G.laststand, chutes: G.chutes,
   };
 }
 
 /* ---- one runner per group: the case's inputs in, what the sim says out ---- */
-const RUN = {
+const RUN: { [K in keyof Inputs]: (c: Inputs[K]) => unknown } = {
   constants() {
     const st = { x: 0, y: 0, vx: 0, vy: 0 };
     sim.stepBallistic(st, 1, 1, 0);
@@ -110,7 +194,8 @@ const RUN = {
   },
   'shot-speed': c => sim.shotSpeed(c.power, c.flat, c.mult),
   muzzle(c) {
-    const m = sim.muzzle(c);
+    // The case gives no isPlayer: muzzle reads it only when dirS is 0 or missing, and every case sets dirS.
+    const m = sim.muzzle(c as typeof c & Pick<Tank, 'isPlayer'>);
     return [m.x, m.y];
   },
   'hit-box'(c) {
@@ -120,32 +205,32 @@ const RUN = {
   'in-box': c => sim.inHitBox({ isPlayer: c.kind === 'human', x: c.x, y: c.y }, c.px, c.py),
   'sweep-hit'(c) {
     world(c);
-    const s = { owner: G.tanks[c.owner], pierced: c.skip === null ? false : G.tanks[c.skip], clear: c.clear };
+    const s: Pick<Shell, 'owner' | 'pierced' | 'clear'> = { owner: nth(G.tanks, c.owner), pierced: c.skip === null ? false : nth(G.tanks, c.skip), clear: c.clear };
     const hit = sim.sweepHit(G.tanks, s, ...c.seg);
     return { hit: hit ? [G.tanks.indexOf(hit.t), hit.x, hit.y] : null, clear: s.clear };
   },
   'seek-push'(c) {
     world(c);
-    const s = { x: c.sx, y: c.sy, vx: 0, vy: 0, owner: G.tanks[c.owner] };
-    sim.steerShell(G.tanks, s, { steer: c.steer }, c.dt);
+    const s = { x: c.sx, y: c.sy, vx: 0, vy: 0, owner: nth(G.tanks, c.owner) };
+    sim.steerShell(G.tanks, s as Shell, { steer: c.steer } as Weapon, c.dt);
     return s.vx === 0 && s.vy === 0 ? null : [s.vx, s.vy];
   },
   'split-fan'(c) {
-    return sim.splitShell({ x: 0, y: 0, vx: c.vx, vy: c.vy, wkey: 'shell', owner: null }, { split: c.n, fan: c.fan })
+    return sim.splitShell(ownerless({ x: 0, y: 0, vx: c.vx, vy: c.vy, wkey: 'shell', owner: null }), { split: c.n, fan: c.fan } as Weapon)
       .map(s => [s.vx, s.vy]);
   },
   'hop-vel'(c) {
-    const s = { x: 0, y: 0, vx: c.vx, vy: c.vy, wkey: 'shell', owner: null, order: [0] };
-    const next = sim.hopShell(s, { hops: 3, hopKeep: c.keep, subDmg: 1, subRadius: 1 }, 0, 0, 1);
+    const s = ownerless({ x: 0, y: 0, vx: c.vx, vy: c.vy, wkey: 'shell', owner: null, order: [0] });
+    const next = must(sim.hopShell(s, { hops: 3, hopKeep: c.keep, subDmg: 1, subRadius: 1 } as Weapon, 0, 0, 1), 'the next warhead');
     return [next.vx, next.vy];
   },
   'scatter-vel'(c) {
-    const s = { x: 0, y: 0, vx: 0, vy: 0, wkey: 'shell', owner: null, order: [0] };
-    return sim.scatterShells(s, { split: c.n, fan: c.fan, kick: c.kick, subDmg: 1, subRadius: 1 }, 0, 0, 1).map(b => [b.vx, b.vy]);
+    const s = ownerless({ x: 0, y: 0, vx: 0, vy: 0, wkey: 'shell', owner: null, order: [0] });
+    return sim.scatterShells(s, { split: c.n, fan: c.fan, kick: c.kick, subDmg: 1, subRadius: 1 } as Weapon, 0, 0, 1).map(b => [b.vx, b.vy]);
   },
   'cluster-split'(c) {
     world(c);
-    const shell = { x: c.x, y: c.y, vx: c.vx, vy: c.vy, wkey: c.wkey, owner: G.tanks[0], life: 12, age: 0, pierced: false, split: false, order: [0] };
+    const shell: Shell = { x: c.x, y: c.y, vx: c.vx, vy: c.vy, wkey: c.wkey, owner: nth(G.tanks, 0), life: 12, age: 0, pierced: false, split: false, order: [0] };
     G.shells = [shell];
     for (let steps = 1; steps <= 720; steps++) {
       const evs = sim.stepShells(G, arsenal, 1 / 60);
@@ -161,8 +246,8 @@ const RUN = {
   blast(c) {
     world(c);
     const before = G.terrain.slice();
-    const direct = c.direct === undefined || c.direct === null ? null : G.tanks[c.direct];
-    sim.explode(G, arsenal, c.x, c.y, c.wkey, G.tanks[c.owner], direct, c.ov || null);
+    const direct = c.direct === undefined || c.direct === null ? null : nth(G.tanks, c.direct);
+    sim.explode(G, arsenal, c.x, c.y, c.wkey, nth(G.tanks, c.owner), direct, c.ov || null);
     return outcome(before);
   },
   'sim-shot'(c) {
@@ -170,7 +255,7 @@ const RUN = {
     return sim.simShot(G, arsenal, c.x, c.y, c.angle, c.power, c.wkey, c.dirS);
   },
   'roll-out'(c) {
-    const r = sim.rollOut(buildTerrain(c.terrain), c.x, c.vx, c.vy, arsenal.weapons[c.wkey]);
+    const r = sim.rollOut(buildTerrain(c.terrain), c.x, c.vx, c.vy, must(arsenal.weapons[c.wkey], c.wkey));
     return { x: r.x, y: r.y };
   },
   armor(c) {
@@ -194,10 +279,10 @@ const RUN = {
   },
   volley(c) {
     world(c);
-    const before = G.terrain.slice(), shooter = G.tanks[c.shooter];
+    const before = G.terrain.slice(), shooter = nth(G.tanks, c.shooter);
     shooter.angle = c.angle;
     shooter.power = c.power;
-    (shooter.isPlayer ? G.ammo : shooter.ammo)[c.wkey] = 99;
+    must(shooter.isPlayer ? G.ammo : shooter.ammo, 'the shooter\'s ammo')[c.wkey] = 99;
     sim.fireWeapon(G, arsenal, shooter, c.wkey);
     // As a solo match plays it: 1/60 s frames, falls animated every frame, and
     // one settle when the last shell is down (src/match.ts), which must come out
@@ -215,7 +300,7 @@ const RUN = {
   },
   beam(c) {
     world(c);
-    const before = G.terrain.slice(), shooter = G.tanks[c.shooter];
+    const before = G.terrain.slice(), shooter = nth(G.tanks, c.shooter);
     shooter.angle = c.angle;
     shooter.power = c.power;
     const b = sim.fireBeam(G, arsenal, shooter, c.wkey);
@@ -223,16 +308,16 @@ const RUN = {
   },
   plasma(c) {
     world(c);
-    const before = G.terrain.slice(), shooter = G.tanks[c.shooter];
+    const before = G.terrain.slice(), shooter = nth(G.tanks, c.shooter);
     shooter.power = c.power;
     const r = sim.firePlasma(G, arsenal, shooter, c.wkey);
     return { ring: [r.x, r.y, r.r], ...outcome(before) };
   },
   fall(c) {
     world(c);
-    if (c.blast) sim.explode(G, arsenal, c.blast.x, c.blast.y, c.blast.wkey, G.tanks[c.blast.owner], null, null);
+    if (c.blast) sim.explode(G, arsenal, c.blast.x, c.blast.y, c.blast.wkey, nth(G.tanks, c.blast.owner), null, null);
     const events = sim.settleFalls(G, arsenal);
-    const seat = t => G.tanks.indexOf(t);
+    const seat = (t: Tank) => G.tanks.indexOf(t);
     return {
       tanks: G.tanks.map(t => ({ y: t.y, hp: t.hp, kills: t.kills || 0, lastHitBy: t.lastHitBy ?? null, chutes: t.isPlayer ? null : t.chutes || 0 })),
       falls: events.filter(e => e.kind === 'fall').map(e => [seat(e.tank), e.dmg, seat(e.by || e.tank), e.chute, e.under]),
@@ -261,40 +346,40 @@ const RUN = {
     }
     world(c, c.w);
     G.rng = sim.mulberry32(c.seed);
-    const t = G.tanks[0];
+    const t = nth(G.tanks, 0);
     const choice = sim.aiChoose(G, arsenal, t);
     const fa = sim.fieldAim(c.w);
-    return { fa: [fa.aim, fa.floor], target: t.brk.t, wkey: choice.wkey, angle: choice.angle, power: choice.power };
+    return { fa: [fa.aim, fa.floor], target: must(t.brk, 'the bracket').t, wkey: choice.wkey, angle: choice.angle, power: choice.power };
   },
   'ai-aim'(c) {
     world(c);
     G.rng = sim.mulberry32(c.seed);
-    const t = G.tanks[c.shooter], x0 = t.x;
+    const t = nth(G.tanks, c.shooter), x0 = t.x;
     const choice = sim.aiChoose(G, arsenal, t);
     return { wkey: choice.wkey, angle: choice.angle, power: choice.power, moved: t.x - x0 };
   },
   'ai-harm'(c) {
     world(c);
-    const self = G.tanks[c.self];
+    const self = nth(G.tanks, c.self);
     const m = sim.muzzle({ ...self, angle: c.a });
-    const land = { ...sim.simShot(G, arsenal, m.x, m.y, c.a, c.p, c.wkey, self.dirS), a: c.a, p: c.p };
-    const h = sim.aiHarm(G, arsenal, self, G.tanks[c.target], c.wkey, land);
-    return { land: [land.x, land.y], harm: h === -Infinity ? 'self' : h, selfHarm: sim.aiSelfHarm(G, arsenal, self, G.tanks[c.target], c.wkey, land) };
+    const land = { ...sim.simShot(G, arsenal, m.x, m.y, c.a, c.p, c.wkey, must(self.dirS, 'dirS')), a: c.a, p: c.p };
+    const h = sim.aiHarm(G, arsenal, self, nth(G.tanks, c.target), c.wkey, land);
+    return { land: [land.x, land.y], harm: h === -Infinity ? 'self' : h, selfHarm: sim.aiSelfHarm(G, arsenal, self, nth(G.tanks, c.target), c.wkey, land) };
   },
   'ai-bracket'(c) {
     world(c, c.w || 720);
     G.rng = sim.mulberry32(c.seed);
-    const t = G.tanks[c.shooter], steps = [];
+    const t = nth(G.tanks, c.shooter), steps = [];
     for (let k = 0; k < c.shots; k++) {
-      if (c.driveAt === k) G.tanks[c.target].x += c.driveBy;
+      if (c.driveAt === k) nth(G.tanks, c.target).x += Number(c.driveBy);
       const choice = sim.aiChoose(G, arsenal, t);
       t.angle = choice.angle;
       t.power = choice.power;
-      t.ammo.shell = 99;
+      must(t.ammo, 'the drone\'s ammo').shell = 99;
       sim.fireWeapon(G, arsenal, t, choice.wkey);
       for (let frame = 0; sim.volleyOn(G) && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
       sim.settleFalls(G, arsenal);
-      const b = t.brk;
+      const b = must(t.brk, 'the bracket');
       steps.push({ wkey: choice.wkey, angle: choice.angle, power: choice.power, x: t.x, n: b.n, target: b.t, land: b.land });
     }
     return steps;
@@ -302,18 +387,20 @@ const RUN = {
   'ai-tactic'(c) {
     world(c);
     G.rng = sim.mulberry32(c.seed);
-    const t = G.tanks[c.shooter], steps = [];
+    const t = nth(G.tanks, c.shooter), steps = [];
     for (let k = 0; k < c.turns; k++) {
       const choice = sim.aiChoose(G, arsenal, t);
       t.angle = choice.angle;
       t.power = choice.power;
-      steps.push({ target: t.brk.t, s: t.s, dry: t.dry, tactic: choice.tactic === undefined ? null : choice.tactic,
-        wkey: choice.wkey, angle: choice.angle, power: choice.power, x: t.x, n: t.brk.n });
+      const brk = must(t.brk, 'the bracket');
+      steps.push({ target: brk.t, s: t.s, dry: t.dry, tactic: choice.tactic === undefined ? null : choice.tactic,
+        wkey: choice.wkey, angle: choice.angle, power: choice.power, x: t.x, n: brk.n });
     }
     return steps;
   },
   earth(c) {
-    const t = buildTerrain(c.terrain), before = t.slice(), out = {};
+    const t = buildTerrain(c.terrain), before = t.slice();
+    const out: { pool?: number[]; heading?: number[]; cells?: { x0: number; y: number[] } | null } = {};
     if (c.op === 'crater') earth.carveCrater(t, c.x, c.y, c.r, earth.FLOOR);
     else if (c.op === 'dirt') earth.addDirt(t, c.x, c.y, c.r);
     else if (c.op === 'pour') {
@@ -327,9 +414,9 @@ const RUN = {
       out.heading = [ux, uy];
       earth.digCarve(t, c.x, c.y, ux, uy, c.n, c.r);
     }
-    let first = null, last = null;
-    t.forEach((y, ix) => { if (Math.abs(y - before[ix]) > 1e-9) { if (first === null) first = ix; last = ix; } });
-    out.cells = first === null ? null : { x0: first, y: t.slice(first, last + 1) };
+    let first: number | null = null, last: number | null = null;
+    t.forEach((y, ix) => { if (Math.abs(y - nth(before, ix)) > 1e-9) { if (first === null) first = ix; last = ix; } });
+    out.cells = first === null ? null : { x0: first, y: t.slice(first, Number(last) + 1) };
     return out;
   },
   fire(c) {
@@ -342,19 +429,21 @@ const RUN = {
   settle(c) {
     world({ terrain: c.terrain, tanks: [{ kind: c.kind || 'ai', x: c.x, y: c.y, hp: c.hp }] });
     sim.settleFalls(G, arsenal);
-    return G.tanks[0].y;
+    return nth(G.tanks, 0).y;
   },
 };
 /* The server reports where a drone wanted to shuffle; the browser moves it (inside the board, unless another unit is in the way). */
-function expectedFor(group, c, out) {
-  if (group !== 'ai-aim') return out;
-  const x0 = c.tanks[c.shooter].x;
+// The JSON is taken at its word here, as in runCase: an ai-aim case's in and out have these shapes.
+function expectedFor(group: string, input: unknown, expected: unknown): unknown {
+  if (group !== 'ai-aim') return expected;
+  const c = input as Inputs['ai-aim'], out = expected as { dx: number; wkey: string; angle: number; power: number };
+  const x0 = nth(c.tanks, c.shooter).x;
   const moved = out.dx === 0 ? 0 : Math.max(12, Math.min(720 - 12, x0 + out.dx)) - x0;
   return { wkey: out.wkey, angle: out.angle, power: out.power, moved };
 }
 
 /* ---- compare and report ---- */
-function diff(want, got, at, out, exact = false, tol = TOL) {
+function diff(want: unknown, got: unknown, at: string, out: string[], exact = false, tol = TOL): string[] {
   if (typeof want === 'number' && typeof got === 'number') {
     // exact: Object.is, so -0 differs from 0 (detmath pins the sign).
     const same = exact ? Object.is(want, got) : Math.abs(want - got) <= tol;
@@ -362,40 +451,48 @@ function diff(want, got, at, out, exact = false, tol = TOL) {
   } else if (Array.isArray(want) && Array.isArray(got)) {
     if (want.length !== got.length) out.push(`${at}: expected ${want.length} items, got ${got.length}`);
     for (let i = 0; i < Math.min(want.length, got.length); i++) diff(want[i], got[i], `${at}[${i}]`, out, exact, tol);
-  } else if (want && got && typeof want === 'object' && typeof got === 'object' && !Array.isArray(want) && !Array.isArray(got)) {
+  } else if (isRecord(want) && isRecord(got)) {
     for (const k of new Set([...Object.keys(want), ...Object.keys(got)])) diff(want[k], got[k], `${at}.${k}`, out, exact, tol);
   } else if (want !== got) {
     out.push(`${at}: expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
   }
   return out;
 }
-const clip = (v, n) => { const s = JSON.stringify(v) ?? String(v); return s.length > n ? s.slice(0, n) + '...' : s; };
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+const clip = (v: unknown, n: number) => { const s = JSON.stringify(v) ?? String(v); return s.length > n ? s.slice(0, n) + '...' : s; };
 
 let failed = 0, known = 0, total = 0;
-const failures = [];
-const knownLines = [];
+const failures: string[] = [];
+const knownLines: string[] = [];
 const wl = JSON.stringify(VECTORS.weapons), loaded = JSON.stringify(arsenal.order);
 if (wl !== loaded) {
   failures.push(`weapons: the vectors cover ${wl} but the sim loads ${loaded} from game.json; run make sim-vectors`);
 }
+const isGroup = (g: string): g is keyof Inputs => Object.hasOwn(RUN, g);
+/* protocol/sim-vectors.php writes each group's inputs in the shape its runner reads: the one place the JSON is taken at its word. */
+const runCase = <K extends keyof Inputs>(group: K, input: unknown): unknown => RUN[group](input as Inputs[K]);
 for (const [group, cases] of Object.entries(VECTORS.groups)) {
-  if (!RUN[group]) { failures.push(`${group}: no runner for this group in sim-vectors.test.mjs`); continue; }
+  if (!isGroup(group)) { failures.push(`${group}: no runner for this group in sim-vectors.test.ts`); continue; }
   for (const c of cases) {
     total++;
-    let got, bad;
+    let got: unknown, bad: string[];
     try {
-      got = RUN[group](c.in);
+      got = runCase(group, c.in);
       bad = diff(expectedFor(group, c.in, c.out), got, 'out', [], c.exact === true);
     } catch (e) {
-      bad = [`threw ${e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e}`];
+      const stack = e instanceof Error ? e.stack : undefined;
+      bad = [`threw ${stack ? stack.split('\n').slice(0, 3).join(' | ') : e}`];
     }
     if (c.known) {
       // Only the fields the known difference names may disagree.
-      const norm = b => b.split(':')[0].replace(/\[\d+\]/g, '[]');
-      const allowed = b => c.knownPaths.some(p => norm(b) === p || norm(b).startsWith(p + '.') || norm(b).startsWith(p + '['));
+      const knownPaths = must(c.knownPaths, `${group}/${c.name}'s knownPaths`);
+      const norm = (b: string) => String(b.split(':')[0]).replace(/\[\d+\]/g, '[]');
+      const allowed = (b: string) => knownPaths.some(p => norm(b) === p || norm(b).startsWith(p + '.') || norm(b).startsWith(p + '['));
       const other = bad.filter(b => !allowed(b));
       if (other.length) {
-        failures.push(`${group}/${c.name}: known difference (${c.knownPaths.join(', ')}), but other fields disagree too\n  ${other.slice(0, 6).join('\n  ')}`);
+        failures.push(`${group}/${c.name}: known difference (${knownPaths.join(', ')}), but other fields disagree too\n  ${other.slice(0, 6).join('\n  ')}`);
       } else if (bad.length) { known++; knownLines.push(`KNOWN ${group}/${c.name} :: ${c.known}`); }
       else failures.push(`${group}/${c.name}: marked as a known difference but client and server now agree; drop its reason in protocol/sim-vectors.php`);
     } else if (bad.length) {

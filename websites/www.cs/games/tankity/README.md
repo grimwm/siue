@@ -1103,11 +1103,11 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/music-build.test.mjs` | `audio/music/build_music.sh` without ffmpeg: the OpenGameArt License(s) reader (CC0 must be in the field itself; the first title wins), a zip known by its bytes rather than its URL, and the SHA-256 pin, which stops on a mismatch and never trusts a tampered cache |
 | `test/music-catalog.test.mjs` | `game.yaml`, `audio/CREDITS.md`, `audio/music/` and the script's pins agree: sixteen tracks, Battle Theme A first, no volume, no tags, at most four per author; with ffmpeg installed, every file is 80 kbps stereo, 40 to 240 s, and within 1 LU of the loudness target |
 | `test/field.test.mjs`                          | The width from the landscape box (clamps, columns, portrait equals landscape), that a deal holds through a resize, fitting the field in a box, and the power step and display at 720, 1080 and 1440 |
-| `test/detmath.test.mjs`                        | `src/detmath.ts` is within 1e-15 of `Math` where the sim feeds it, keeps the sign of zero, and is exact at 0, 1 and the right angles |
+| `test/detmath.test.ts`                        | `src/detmath.ts` is within 1e-15 of `Math` where the sim feeds it, keeps the sign of zero, and is exact at 0, 1 and the right angles |
 | `test/solo.test.mjs`                           | `src/solo.ts` without a page: the deal and its width, a round's muster, settling a volley, the turn order, the drones' difficulty and 1-ups |
 | `test/fall.test.mjs`                           | Falls in `src/sim.ts`: the damage formula, credit to the digger (score, cash, kills, the last hit) and none for your own pit, parachutes over and under the threshold, the drones' own, the bunker and the shield, landing on a unit, a stack landing bottom up, the drawn height following the ground at once while the rules wait for the settle, a settled fall playing out from where it was drawn, a parachute armed then opened only as its unit drops (never at rest), a solo volley arming one, a unit dug out by an early pellet seen falling mid-volley, a fall wreck seen to land before its words and wreck show, the same shot costing the same armor as a solo volley and as a room's (Buckshot bursts, fractional ground, parachutes), the bunker counting toward the parachute, credit to the deepest blast, the drones' parachutes by round and the stacking shop row |
 | `test/fixed-step.test.mjs` | The solo war runs in fixed steps whatever the frame lengths, tank falls included, so play is the same on a 30 Hz phone and a 144 Hz monitor |
-| `test/determinism.test.mjs` | The rule modules call no clock, no `Math.random` and no libm trigonometry, so the shared sim stays bit-exact across the two languages (see Deterministic math) |
+| `test/determinism.test.ts` | The rule modules call no clock, no `Math.random` and no libm trigonometry, so the shared sim stays bit-exact across the two languages (see Deterministic math) |
 | `test/wide-field.test.mjs`                     | The sim at any width: the same hills continued, units spread outside each other's blast, reach and wind scaling, flights that last as long as the field, 720 unchanged |
 | `test/ghosts.test.mjs`                         | A shell retired past the edge keeps flying (draw only), one that burst inside leaves no ghost, a replay's last point keeps its velocity, ghosts are dropped off the picture |
 | `test/scenery.test.mjs`                        | The scenery continues the hills with no step over 1 px at the seam, cratered or not |
@@ -1135,7 +1135,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/preview.test.ts`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, a beam through the dummy, a ring around it, a tracer's path, and the resets |
 | `test/flow.test.ts`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
 | `test/protocol.test.ts`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
-| `test/sim-vectors.test.mjs`                    | `src/sim.ts`, `src/ai.ts` and `src/armor.ts` agree with `rooms.php` on every shared sim vector; the detmath, field, armor and match-end cases compare exactly (see Sim vectors) |
+| `test/sim-vectors.test.ts`                    | `src/sim.ts`, `src/ai.ts` and `src/armor.ts` agree with `rooms.php` on every shared sim vector; the detmath, field, armor and match-end cases compare exactly (see Sim vectors) |
 | `phpunit --testsuite tankity` (host PHP)       | `ConfigTest` (`.config.yaml` precedence), `DataDirTest`, `DbTest`, `RoomStoreTest` and `HousekeepTest` (storage: the directory and its checks, the database and its journal, the v4 to v5 upgrade that leaves only room rows, rooms as rows, cleanup on a fake clock), `GameJsonTest` (the YAML parser, the `game.yaml` schema including effects, `--check` staleness) and `RoomsSimTest` (server sim units: pierce, a harmless burst, the rack and a row's defaults, bomblets landing in time order, a drone never hurt by its own Funky, point blank no strategy costing itself more than its Shell would, spawns, spacing, replay stamping; drone bracketing and strategies; one unit left standing ends a round, the one-turn-per-poll drone pacing and the event buffer; `room_snapshot` shapes against `protocol/`; the Roller; napalm: a timed-out human's stand-in firing it into a valley, its burn inside its volley with each tick's hits at their tick and the pace covering the last, no fire state left in the room, the ground untouched) |
 | `RoomMatchEndTest` (host PHP) | The match-end rule: one human plays like solo, the last human standing wins twice the round bonus, a leave is a forfeit, two out at once, the watch cap |
 | `RoomStandingsTest` (host PHP) | Each human's rounds won, kills, round gain and out round, in the snapshot with the winner's bonus |
@@ -1209,7 +1209,7 @@ shell flight and the room aim preview) and in `rooms.php` (the authoritative
 room server). `protocol/sim-vectors.json`
 keeps the two honest: `protocol/sim-vectors.php` calls `rooms.php`'s real
 functions over a spread of cases and writes each case's inputs and expected
-outputs; `test/sim-vectors.test.mjs` replays every case through the sim,
+outputs; `test/sim-vectors.test.ts` replays every case through the sim,
 `src/sim.ts`, the drone AI, `src/ai.ts`, and the armor rules, `src/armor.ts`; the sim and AI
 compare within 1e-4; the deterministic math (`detmath`), the field at each
 width (terrain heights included), armor and match-end cases compare exactly,
@@ -1312,7 +1312,7 @@ agree with what the server then plays:
   `detmath` vectors are compared without tolerance. Halves round toward +∞
   (`Math.round`, `det_round`). Rendering keeps `Math.*`.
 
-`test/determinism.test.mjs` keeps the banned calls out; the sim vectors keep
+`test/determinism.test.ts` keeps the banned calls out; the sim vectors keep
 the two sides agreeing.
 
 ## Weapon effects

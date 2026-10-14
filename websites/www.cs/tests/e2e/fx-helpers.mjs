@@ -18,14 +18,17 @@ export async function arsenal(page) {
 }
 
 /* The canvas as drawn `frames` animation frames after the first sprite frame
-   (a blast landing), read inside the page so the photo is of the blast at its
-   peak rather than of whatever a slow screenshot catches. */
+   of the blast, read inside the page so the photo is of the blast at its
+   peak rather than of whatever a slow screenshot catches. On the battlefield
+   the muzzle blast is a sprite too, so there the count waits until the shell
+   has landed (no shell body drawn for two frames). */
 export function grab(page, canvasId, counter, frames) {
   return page.evaluate(({ id, key, n }) => new Promise((resolve, reject) => {
     const cv = document.getElementById(id), r = key === 'pv' ? window.__rec.pv : window.__rec;
     let seen = 0, waited = 0;
     const tick = () => {
-      if (r.sheets > 0) seen++;
+      const sh = window.__rec.shells, landed = key === 'pv' || (sh.length > 0 && sh[sh.length - 1][0] < window.__rec.frame - 2);
+      if (r.sheets > 0 && landed) seen++;
       if (seen > n) return resolve(cv.toDataURL('image/png').split(',')[1]);
       if (++waited > 1500) return reject(new Error('no blast on ' + id));
       requestAnimationFrame(tick);

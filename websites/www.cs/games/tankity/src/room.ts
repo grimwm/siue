@@ -27,7 +27,7 @@ import type { BeamEvent, BurnEvent, DigEvent, EarthEvent, RingEvent, RoomEvent, 
 import { DIG_STEP, applyEarth, digCarve } from './earth.ts';
 import { playDigStep, playEarthOp } from './earth-fx.ts';
 import type { EarthFxDeps } from './earth-fx.ts';
-import { playBurn } from './fire-fx.ts';
+import { burnLine, burnSeconds, playBurn } from './fire-fx.ts';
 import type { FireFxDeps } from './fire-fx.ts';
 import type { Replay, ReplayShot } from './replay.ts';
 import { BURIED_LINE, H, ROOM_W, TUNE, aimLimits, beamCarve, buried, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
@@ -175,6 +175,7 @@ export function createRoom(deps: RoomDeps) {
       // (A resync lands here too: events were lost, so nothing waiting is real.)
       replay.clear(); MATCH.pendingRoom = null;
       digs = []; // a trench from a discarded replay would keep cutting the adopted ground
+      G.fire.clear(); // so would the flames of its pools
       netAdopt(room);
       for (const e of fresh) if (e.t !== 'shot' && e.t !== 'burst') netEvent(e);
       return;
@@ -603,7 +604,9 @@ export function createRoom(deps: RoomDeps) {
   function netBurn(e: BurnEvent): void {
     burning = e.by;
     const col = Math.max(0, Math.min(G.terrain.length - 1, Math.round(e.x)));
-    playBurn(e.w, { x: e.x, ground: G.terrain[col] ?? H, level: e.level, x0: e.x0, x1: e.x1, flame: e.flame }, Math.max(0, e.t1 - (e.at ?? 0)), fireFx);
+    playBurn(e.w, { x: e.x, ground: G.terrain[col] ?? H, level: e.level, x0: e.x0, x1: e.x1, flame: e.flame }, burnSeconds(e, replay.speed()), fireFx);
+    const line = burnLine(e, tables.weapons[e.w]?.name || 'napalm', seatName(e.by));
+    if (line) say(line, 'info');
   }
   /* A plasma ring around its gunner: no crater. */
   function netRing(e: RingEvent): void {
@@ -679,6 +682,7 @@ export function createRoom(deps: RoomDeps) {
     if (!skipped) return;
     G.shells = [];
     digs = []; // the skipped volley's trenches: the room state that follows carries its ground
+    G.fire.clear();
     for (const e of skipped) netEvent(e);
   }
   if (typeof document.addEventListener === 'function') {

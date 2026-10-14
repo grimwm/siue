@@ -426,7 +426,8 @@ function room_earth_burst(array &$room, array &$events, int $seatIdx, array $w, 
 // changes) burns from then until its last tick, its 'burn' event first (the
 // pool, and t1 when it goes out). Every tick (room_tick_steps sim steps
 // apart, room_burn_ticks of them) each living unit, in seat order, whose body
-// reaches into the flames (room_in_flames) takes dmg through room_hit_unit
+// reaches into the flames (room_in_flames) and is not buried under the ground
+// the pool lies on (room_buried) takes dmg through room_hit_unit
 // (a shield eats one tick whole, a bunker halves each), credited to the
 // gunner, its gunner's own burns included (they score nothing). Its hits and
 // kills are stamped at their tick. A pool that spilled away burns nothing.
@@ -444,7 +445,7 @@ function room_fire_burn(array &$room, array &$events, int $seatIdx, array $w, st
     for ($k = 1; $k <= $n; $k++) {
         $mark = count($events);
         foreach (array_keys($room['tanks']) as $i) {
-            if ($room['tanks'][$i]['hp'] > 0 && room_in_flames($pool, room_unit_box($room['tanks'][$i]))) {
+            if ($room['tanks'][$i]['hp'] > 0 && !room_buried($room['tanks'][$i], $room['terrain']) && room_in_flames($pool, room_unit_box($room['tanks'][$i]))) {
                 room_hit_unit($room, $events, $i, (int) $w['dmg'], $room['tanks'][$seatIdx], $seatIdx, $w, false);
             }
         }

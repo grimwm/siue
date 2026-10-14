@@ -406,7 +406,8 @@ there as liquid dirt would (`pourLevel`). It spreads only until it is
 `poolMin` deep: on flat ground or a gentle slope it lies as a puddle that
 deep, about volume / poolMin wide, centred where it landed (`puddle`,
 `room_pour_puddle`), and only what reaches a field edge spills off. Liquid
-Dirt sets the same way. The ground never changes, so a pool
+Dirt sets the same way (its poolMin of 34 makes a flat-ground slab about as
+wide as a Ton of Dirt mound). The ground never changes, so a pool
 causes no falls. The pool is found once, from the ground of that moment.
 
 - It burns `burn` seconds, a tick every `tick` seconds (counted in 1/60 s
@@ -414,7 +415,8 @@ causes no falls. The pool is found once, from the ground of that moment.
   the flames (a pooled column within its hit box's width, and the box's
   bottom at or below the level less `flame`) takes `dmg` through the same
   hit as a blast's: a shield eats one tick whole, a bunker halves each,
-  never below 1. A tank's hull bottom sits 3 px below its ground, a drone's
+  never below 1. A tank buried under the ground the pool lies on is not
+  burned (`buried`, `room_buried`): the dirt over it shields it. A tank's hull bottom sits 3 px below its ground, a drone's
   body 16 px above it, so Napalm's 18 px flames reach a drone only right over
   the pool and Hot Napalm's 26 px reach one hovering by the rim.
 - Credit, score, cash and kills go to the gunner as a blast's do. A gunner

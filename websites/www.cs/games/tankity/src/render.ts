@@ -848,17 +848,20 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
   function shimmer(c: CanvasRenderingContext2D, p: DrawPool, time: number, src: unknown): void {
     const m = c.getTransform();
     if (!m || typeof m.a !== 'number' || !(m.a > 0) || !(m.d > 0)) return;
-    const x0 = m.a * (p.x0 - 6) + m.e, x1 = m.a * (p.x1 + 6) + m.e;
-    const y0 = m.d * (p.level - p.flame * 2.6) + m.f, y1 = m.d * (p.level - p.flame * 0.5) + m.f;
+    // Inside the canvas only (a pool at the field's edge, the camera off it).
+    const cw = (src as { width?: number }).width || Infinity, ch = (src as { height?: number }).height || Infinity;
+    const x0 = Math.max(0, m.a * (p.x0 - 6) + m.e), x1 = Math.min(cw, m.a * (p.x1 + 6) + m.e);
+    const y0 = Math.max(0, m.d * (p.level - p.flame * 2.6) + m.f), y1 = Math.min(ch, m.d * (p.level - p.flame * 0.5) + m.f);
     const w = Math.round(x1 - x0), step = Math.max(2, Math.round(m.d * 2));
     if (w <= 0 || y1 <= y0) return;
     c.save();
     c.setTransform(1, 0, 0, 1, 0, 0);
-    for (let y = Math.round(y0); y < y1; y += step) {
+    for (let y = Math.round(y0); y + step <= y1; y += step) {
       const k = (y - y0) / (y1 - y0); // fades in up from the flames, out at the top
       const off = Math.sin(time * 6 + y * 0.31) * m.a * 1.1 * p.heat * Math.sin(k * Math.PI);
       if (Math.abs(off) < 0.2) continue;
-      c.drawImage(src as CanvasImageSource, Math.round(x0), y, w, step, Math.round(x0 + off), y, w, step);
+      const sx = Math.round(x0), sw = Math.min(w, Math.floor(x1) - sx);
+      if (sw > 0) c.drawImage(src as CanvasImageSource, sx, y, sw, step, Math.round(x0 + off), y, sw, step);
     }
     c.restore();
   }

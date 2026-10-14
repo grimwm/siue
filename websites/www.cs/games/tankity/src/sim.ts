@@ -1240,7 +1240,7 @@ function lightFire(world: World, s: Shell, w: Weapon, events: StepEvent[]): void
 }
 /* One sim step (1/60 s) of every burning pool: a pool burns a tick each
    `every` steps, and each living unit whose body reaches into its flames
-   (fire.ts inFlames), in world.tanks order, takes the gun's dmg through
+   (fire.ts inFlames) and is not buried under the ground the pool lies on, in world.tanks order, takes the gun's dmg through
    hitUnit (a shield eats one tick whole, a bunker halves each), credited to
    its gunner, the gunner's own burns included (they score nothing). It goes
    out with its last tick. stepShells runs it first, every step.
@@ -1255,7 +1255,7 @@ export function stepFires(world: World, arsenal: Arsenal): StepEvent[] {
     const w = arsenal.weapons[f.wkey]!;
     const hits: Blast = { x: f.col, y: f.pool.level, r: 0, wkey: f.wkey, fx: f.wkey, shake: 0, owner: f.owner, events: [] };
     for (const t of world.tanks) {
-      if (t.hp > 0 && inFlames(f.pool, unitHitBox(t))) hitUnit(world, arsenal, t, f.owner, w.dmg, w, false, hits.events);
+      if (t.hp > 0 && !buried(t, world.terrain) && inFlames(f.pool, unitHitBox(t))) hitUnit(world, arsenal, t, f.owner, w.dmg, w, false, hits.events);
     }
     events.push({ kind: 'burn', fire: f, hits });
   }

@@ -5,6 +5,7 @@
  * its flames on screen (fire-show.ts). The rules burn it tick by tick
  * elsewhere (sim.ts stepFires, server/rules.php room_fire_burn). */
 import type { FireShow } from './fire-show.ts';
+import type { BurnEvent } from './protocol.ts';
 
 export interface FireFxDeps {
   fxImpact(key: string, x: number, y: number, r: number): number | undefined;
@@ -28,4 +29,14 @@ export function playBurn(wkey: string, p: { x: number; ground: number; level: nu
   d.fxImpact(wkey, (p.x0 + p.x1) / 2, p.level, Math.max(POOL_SPLASH_MIN, (p.x1 - p.x0) / 2));
   d.fxSpecial(wkey, 'burn', p.x0, p.level, 0, p.x1 - p.x0);
   d.show && d.show.light({ wkey, x0: p.x0, x1: p.x1, level: p.level, flame: p.flame }, dur);
+}
+/* The seconds a room's pool burns on screen: from its burn event to its last
+   tick (t1), at the replay's speed (a caught-up volley plays faster). */
+export function burnSeconds(e: Pick<BurnEvent, 'at' | 't1'>, speed: number): number {
+  return Math.max(0, e.t1 - (e.at ?? 0)) / Math.max(1, speed);
+}
+/* What a room says of a pool: that it ran off (spilled off the field, so it
+   burns nothing), or nothing (a pool's ticks speak as hits). */
+export function burnLine(e: Pick<BurnEvent, 'x0' | 'x1'>, gun: string, by: string): string | null {
+  return e.x0 > e.x1 ? `${by}'s ${gun} runs off and burns out.` : null;
 }

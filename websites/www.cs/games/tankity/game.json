@@ -709,9 +709,9 @@
                 "aiRound": 6,
                 "effect": "pour",
                 "volume": 4000,
-                "poolMin": 20,
+                "poolMin": 34,
                 "speed": 1.0,
-                "note": "Runs down into the valley it lands in and sets flat, burying whatever sits at the bottom.",
+                "note": "Runs down into the valley it lands in and sets flat, burying whatever sits there; on flat ground a 34 px slab.",
                 "gfx": {
                     "shell": "#7a5230",
                     "trail": "#5a3a1e",

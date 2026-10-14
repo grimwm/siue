@@ -1380,3 +1380,17 @@ foreach ($weapons as $k => $def) {
     $check("$k-on-flat-burns-the-tank-in-its-puddle", $room['tanks'][0]['hp'] === 100 - $n * (int) $def['dmg'] && $room['terrain'] === array_fill(0, 720, 400.0),
         json_encode([$room['tanks'][0]['hp'], array_filter($events, fn($e) => $e['t'] === 'burn')]));
 }
+// The flames never reach a tank buried under the dirt the pool lies on.
+foreach ($weapons as $k => $def) {
+    if ($def['effect'] !== 'napalm') {
+        continue;
+    }
+    $room = $flatRoom([$tank(0, 'human', 400.0, 100), $tank(1, 'human', 445.0, 100), ['dirS' => 1] + $tank(2, 'ai', 100.0, 200)]);
+    for ($x = 380; $x <= 420; $x++) {
+        $room['terrain'][$x] = 370.0;
+    }
+    $room += ['round' => 9, 'rng' => 4];
+    $events = [];
+    room_fire_burn($room, $events, 2, $def, $k, ['hit', 400.0, 370.0, 0.0, 80.0, null], 1.0);
+    $check("$k-never-burns-a-buried-tank", $room['tanks'][0]['hp'] === 100 && $room['tanks'][1]['hp'] < 100, json_encode(array_column($room['tanks'], 'hp')));
+}

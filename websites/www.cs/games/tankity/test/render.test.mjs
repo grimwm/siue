@@ -310,3 +310,19 @@ const camAt = z => ({ z, cx: W / 2, cy: H + 8 - H / 2 / z });
   const out = draw();
   check('pools-a-dead-pool-draws-nothing', (() => { const s = poolCanvas(); createRenderer(s.canvas, deps).frame(deepFreeze({ ...view, fires: [{ ...pool, heat: 0, t: 9 }] })); return s.calls.fills <= none.calls.fills + 1; })() && out.calls.n > 0);
 }
+
+{
+  // The shimmer never reads outside the canvas: a pool at the field's left edge, the camera pushed left.
+  const { ctx } = stubContext();
+  const reads = [];
+  const rec = new Proxy(ctx, {
+    get: (t, p) => (p === 'getTransform' ? () => ({ a: 2, b: 0, c: 0, d: 2, e: -60, f: 20 })
+      : p === 'drawImage' ? (...a) => { reads.push(a); return rec; } : t[p]),
+    set: (t, p, v) => { t[p] = v; return true; },
+  });
+  const canvas = { width: 1440, height: 920, getContext: () => rec };
+  createRenderer(canvas, deps).frame(deepFreeze({ ...view, fires: [{ wkey: 'napalm', x0: 0, x1: 60, level: 290, flame: 18, heat: 1, t: 1 }] }));
+  const own = reads.filter(a => a[0] === canvas);
+  check('pools-shimmer-reads-inside-the-canvas', own.length > 0 && own.every(a => a[1] >= 0 && a[1] + a[3] <= canvas.width && a[2] >= 0 && a[2] + a[4] <= canvas.height),
+    JSON.stringify(own.slice(0, 3)));
+}

@@ -64,3 +64,40 @@ test('a poolMin of 0 pours as before: dead flat ground holds no pool', () => {
   const p = pourLevel(flat(), 300, 2200, 0);
   assert.ok(p.x0 > p.x1);
 });
+
+test('liquid dirt on flat ground sets about as wide as the biggest dirt mound, not a slab across the field', () => {
+  const pour = arsenal.order.map(k => arsenal.weapons[k]).find(w => w.effect === 'pour');
+  const mound = Math.max(...arsenal.order.map(k => arsenal.weapons[k]).filter(w => w.effect === 'dirt').map(w => 2 * w.radius));
+  const p = pourLevel(flat(), 300, pour.volume, pour.poolMin);
+  const width = p.x1 - p.x0 + 1;
+  assert.ok(width <= mound * 1.1 && width >= mound * 0.8, `${width} columns against a ${mound} px mound`);
+});
+
+test('the flames never reach a tank buried under the dirt the pool lies on', () => {
+  for (const wkey of NAPALMS) {
+    const w = arsenal.weapons[wkey];
+    const t = flat(400);
+    for (let x = 380; x <= 420; x++) t[x] = 370; // a mound over the tank at 400
+    const buriedTank = { id: 'P', isPlayer: true, x: 400, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo: {} };
+    const open = { id: 'Q', isPlayer: false, human: true, x: 445, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo: {} };
+    const foe = { id: 'D', isPlayer: false, x: 100, y: 400, hp: 200, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo: {} };
+    const G = { tanks: [buriedTank, open, foe], terrain: t, wind: 0, round: 9, rng: mulberry32(1), shells: [], score: 0, cash: 0, ammo: {},
+      selected: 'shell', shield: false, bunker: 0, laststand: false, jammer: 0, chutes: 0 };
+    // Poured on the mound's crest, the puddle lies over the buried tank and runs on beside it.
+    G.shells.push({ x: 400, y: 300, vx: 0, vy: 60, wkey, owner: foe, life: 9, age: 1, pierced: false, split: false, order: [0], clear: true });
+    let pool = null;
+    for (let f = 0; volleyOn(G) && f < 4000; f++) for (const e of stepShells(G, arsenal, 1 / 60)) if (e.kind === 'fire') pool = e.fire.pool;
+    assert.ok(pool && pool.x0 <= 400 && pool.x1 >= 430, `${wkey}: the pool spans both (${pool && pool.x0}..${pool && pool.x1})`);
+    assert.equal(buriedTank.hp, 100, `${wkey}: the buried tank is not burned`);
+    assert.ok(open.hp < 100, `${wkey}: the tank in the open is`);
+  }
+});
+
+test('a room lights a pool for the seconds it burns at the replay\'s speed, and says when one ran off', async () => {
+  const { burnSeconds, burnLine } = await import('../src/fire-fx.ts');
+  const e = { t: 'burn', by: 1, w: 'napalm', x: 300, v: 2200, level: 380, x0: 245, x1: 354, flame: 18, at: 1.5, t1: 4.5 };
+  assert.equal(burnSeconds(e, 1), 3);
+  assert.equal(burnSeconds(e, 3), 1, 'a caught-up volley burns out three times as fast');
+  assert.equal(burnLine({ ...e, x0: 300, x1: 299 }, 'Napalm', 'REAPER'), 'REAPER\'s Napalm runs off and burns out.');
+  assert.equal(burnLine(e, 'Napalm', 'REAPER'), null);
+});

@@ -405,7 +405,7 @@ export function fireHarm(world: World, arsenal: Arsenal, self: Tank, wkey: strin
   const n = burnTicks(w.burn || 0, w.tick || 0.5);
   let harm = 0, mine = 0;
   for (const u of world.tanks) {
-    if (u.hp <= 0 || !inFlames(pool, unitHitBox(u))) continue;
+    if (u.hp <= 0 || buried(u, world.terrain) || !inFlames(pool, unitHitBox(u))) continue;
     const cost = burnTotal(w.dmg, n, u.isPlayer && !!world.shield, u.isPlayer && (world.bunker || 0) > 0);
     if (u === self) mine = cost;
     else harm += Math.min(u.hp, cost);
@@ -420,9 +420,11 @@ export function fireHarm(world: World, arsenal: Arsenal, self: Tank, wkey: strin
   // lose, of the way back toward the drone (steep lobs and soft shots stray most).
   const skill = aimSkill(world.difficulty);
   const wob = Math.max(skill.wobFloor, skill.wobStart - skill.wobStep * world.round) * fieldAim(world.terrain.length).aim;
-  const p = Math.max(10, land.p === undefined ? 50 : land.p), a = land.a === undefined ? 45 : land.a, da = AI_FIRE_SHORT * 9 * wob;
-  const kp = Math.max(0, 1 - AI_FIRE_SHORT * 12 * wob / p), s2 = dsin(rad(2 * a));
-  const ka = s2 > 1e-6 ? Math.max(0, Math.min(dsin(rad(2 * (a - da))), dsin(rad(2 * (a + da)))) / s2) : 0;
+  // The elevation above the horizontal: a backward shot's aim reads 180 - it.
+  const p = Math.max(10, land.p === undefined ? 50 : land.p), aim = land.a === undefined ? 45 : land.a, da = AI_FIRE_SHORT * 9 * wob;
+  const e = aim > 90 ? 180 - aim : aim, lo = clamp(e - da, 0, 90), hi = clamp(e + da, 0, 90);
+  const kp = Math.max(0, 1 - AI_FIRE_SHORT * 12 * wob / p), s2 = dsin(rad(2 * e));
+  const ka = s2 > 1e-6 ? Math.max(0, Math.min(dsin(rad(2 * lo)), dsin(rad(2 * hi))) / s2) : 0;
   const short = 1 - Math.min(1, kp * kp * ka);
   const back = Math.round(clamp(land.x + (self.x - land.x) * short, 0, world.terrain.length - 1));
   near = near || inFlames(firePool(world.terrain, back, w.volume || 0, w.flame || 0, w.poolMin || 0), wide);

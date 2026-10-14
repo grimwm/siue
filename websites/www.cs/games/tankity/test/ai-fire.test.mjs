@@ -61,13 +61,13 @@ test('a drone never burns itself with the napalm it chose, across hills, places,
   for (const [period, amp] of [[200, 40], [150, 30], [300, 50], [120, 25], [720, 0]]) {
     const t = Array.from({ length: 720 }, (_, ix) => 340 + amp * Math.sin(ix * 2 * Math.PI / period));
     for (let sx = 60; sx <= 660; sx += 50) {
-      for (const tx of [sx - 140, sx + 160, sx + 60, sx - 260]) {
+      for (const [tx, away] of [[sx - 140, false], [sx + 160, false], [sx + 60, false], [sx - 260, false], [sx - 200, true], [sx + 220, true]]) {
         if (tx < 20 || tx > 700) continue;
         for (const wind of [-6, 0, 6]) {
           for (const [difficulty, round] of [['hard', 9], ['normal', 6], ['easy', 6]]) {
             for (const seed of [1, 2]) {
               const rack = Object.fromEntries(NAPALMS.map(k => [k, 1]));
-              const self = drone(sx, t[Math.round(sx)], { dirS: tx > sx ? 1 : -1, ammo: rack }), target = human(tx, t[Math.round(tx)]);
+              const self = drone(sx, t[Math.round(sx)], { dirS: (tx > sx) !== away ? 1 : -1, ammo: rack }), target = human(tx, t[Math.round(tx)]);
               const G = world([target, self], t, { wind, difficulty, round, rng: mulberry32(sx * 7 + tx + seed * 1000) });
               const c = aiChoose(G, arsenal, self);
               if (!NAPALMS.includes(c.wkey)) continue;
@@ -82,4 +82,24 @@ test('a drone never burns itself with the napalm it chose, across hills, places,
   }
   t.diagnostic(`${fired} napalm shots fired`);
   assert.ok(fired >= 40, `${fired} napalm shots fired`);
+});
+
+test('a drone facing away from its target still fires napalm when it is safe (the aim\'s elevation is 180 - a)', () => {
+  // Hard drones on flat ground, facing right, the target well behind on the left: every shot is a backward one.
+  let picked = 0, fired = 0;
+  for (const seed of [1, 2, 3, 4]) {
+    for (const [sx, tx] of [[520, 160], [600, 240], [450, 120]]) {
+      const rack = Object.fromEntries(NAPALMS.map(k => [k, 1]));
+      const self = drone(sx, 340, { dirS: 1, ammo: rack }), target = human(tx, 340);
+      const G = world([target, self], Array(720).fill(340), { round: 9, difficulty: 'hard', rng: mulberry32(seed * 13 + sx) });
+      const c = aiChoose(G, arsenal, self);
+      if (!NAPALMS.includes(c.wkey)) continue;
+      picked++;
+      assert.ok(c.angle > 90, `a backward shot (${c.angle})`);
+      fire(G, self, c);
+      fired++;
+      assert.equal(self.hp, 200, `${sx} -> ${tx}: ${c.wkey} burned its own drone`);
+    }
+  }
+  assert.ok(picked >= 6, `${picked} of 12 backward turns fired napalm`);
 });

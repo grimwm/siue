@@ -472,7 +472,7 @@ function room_ai_fire_harm(array $room, array $self, string $wkey, array $land):
     $harm = 0.0;
     $mine = 0;
     foreach ($room['tanks'] as $u) {
-        if ($u['hp'] <= 0 || !room_in_flames($pool, room_unit_box($u))) {
+        if ($u['hp'] <= 0 || room_buried($u, $room['terrain']) || !room_in_flames($pool, room_unit_box($u))) {
             continue;
         }
         $human = $u['kind'] === 'human';
@@ -495,12 +495,16 @@ function room_ai_fire_harm(array $room, array $self, string $wkey, array $land):
     $skill = ROOM_DIFFICULTY[room_difficulty($room)];
     $fw = count($room['terrain']);
     $wob = max($skill['wobFloor'], $skill['wobStart'] - $skill['wobStep'] * ($room['round'] ?? 1)) * room_field_aim($fw)['aim'];
+    // The elevation above the horizontal: a backward shot's aim reads 180 - it.
     $p = max(10.0, (float) ($land['p'] ?? 50.0));
-    $a = (float) ($land['a'] ?? 45.0);
+    $aim = (float) ($land['a'] ?? 45.0);
     $da = ROOM_AI_FIRE_SHORT * 9 * $wob;
+    $e = $aim > 90 ? 180 - $aim : $aim;
+    $lo = max(0.0, min(90.0, $e - $da));
+    $hi = max(0.0, min(90.0, $e + $da));
     $kp = max(0.0, 1 - ROOM_AI_FIRE_SHORT * 12 * $wob / $p);
-    $s2 = det_sin(deg2rad(2 * $a));
-    $ka = $s2 > 1e-6 ? max(0.0, min(det_sin(deg2rad(2 * ($a - $da))), det_sin(deg2rad(2 * ($a + $da)))) / $s2) : 0.0;
+    $s2 = det_sin(deg2rad(2 * $e));
+    $ka = $s2 > 1e-6 ? max(0.0, min(det_sin(deg2rad(2 * $lo)), det_sin(deg2rad(2 * $hi))) / $s2) : 0.0;
     $short = 1 - min(1.0, $kp * $kp * $ka);
     $back = (float) det_round(max(0.0, min((float) ($fw - 1), (float) $land['x'] + ((float) $self['x'] - (float) $land['x']) * $short)));
     $near = $near || room_in_flames(room_fire_pool($room['terrain'], $back, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin']), $wide);

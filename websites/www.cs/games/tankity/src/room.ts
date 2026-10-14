@@ -174,6 +174,7 @@ export function createRoom(deps: RoomDeps) {
       // First sync: earlier events are history. Log them, replay nothing.
       // (A resync lands here too: events were lost, so nothing waiting is real.)
       replay.clear(); MATCH.pendingRoom = null;
+      digs = []; // a trench from a discarded replay would keep cutting the adopted ground
       netAdopt(room);
       for (const e of fresh) if (e.t !== 'shot' && e.t !== 'burst') netEvent(e);
       return;
@@ -677,6 +678,7 @@ export function createRoom(deps: RoomDeps) {
     const skipped = replay.catchUp(MATCH.pendingRoom, net.seat);
     if (!skipped) return;
     G.shells = [];
+    digs = []; // the skipped volley's trenches: the room state that follows carries its ground
     for (const e of skipped) netEvent(e);
   }
   if (typeof document.addEventListener === 'function') {

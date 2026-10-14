@@ -11,7 +11,7 @@
  * PreviewEnv, so it compiles in the DOM-free program and test/preview.test.mjs
  * drives it on a clock the test moves by hand. */
 import {
-  GRAV, FLAT_GRAV, ROLL_LIFT, aimLimits, beamLine, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage, beamCarve, flies, unitHitBox,
+  GRAV, FLAT_GRAV, ROLL_LIFT, aimLimits, beamLine, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage, beamCarve, flies, unitHitBox, inHitBox,
   groundAt, groundSlope, rollStart, rollStep, rollOut, hopShell, scatterShells, fallDamage, FALL_RULES,
 } from './sim.ts';
 import { BURY_EPS, DIG_STEP, addDirt, digHeading, fillPour, pourLevel, riotCarve, slumpGround } from './earth.ts';
@@ -360,6 +360,8 @@ function stepPreviewDig(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: R
   if (i > n || nx < 0 || nx > PV_W - 1 || ny >= PV_H - 4) { finishPreviewDig(pv, env, s, w); return; }
   s.x = nx;
   s.y = ny;
+  // The dummy's body at the next point stops the burrow there, uncut, as the war's stepDigger does.
+  if (pv.foeHp > 0 && inHitBox({ isPlayer: true, x: pv.tx, y: pv.ty }, nx, ny)) { finishPreviewDig(pv, env, s, w); return; }
   s.dl = i;
   carveCrater(pv.terr, nx, ny, w.digR || 0, PV_H - 4);
   if (i % 3 === 0) env.special(pv.fx, pv.wkey, 'dig', nx, ny, Math.atan2(s.duy!, s.dux!));

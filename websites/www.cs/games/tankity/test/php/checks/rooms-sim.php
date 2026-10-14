@@ -498,14 +498,13 @@ $check('nobody-left-is-roundlost', $types($events) === ['roundlost'] && $room['s
 
 // Every human wrecked: the drones fight on, ONE turn per poll, paced to the
 // last volley, until one is left; then the round is lost and every human loses
-// a life. $poll mimics a poll of a running room (advance, emit, settle).
+// a life. $poll mimics a poll of a running room (advance, then emit; each volley settles its own falls).
 $poll = function (array &$room): array {
     $events = [];
     room_advance($room, $events);
     foreach ($events as $e) {
         room_emit($room, $e);
     }
-    room_settle_tanks($room);
     return $events;
 };
 $room = $battle(2, 2, 3, 777);

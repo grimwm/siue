@@ -411,6 +411,10 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
     $width = count($room['terrain']);
     $x0 = max(0, (int) floor($x - $r));
     $x1 = min($width - 1, (int) ceil($x + $r));
+    $ground = []; // under each unit before the crater
+    foreach ($room['tanks'] as $i => $o) {
+        $ground[$i] = room_surf_y($room['terrain'], (float) $o['x']);
+    }
     $carved = false;
     for ($ix = $x0; $ix <= $x1; $ix++) {
         $dx = $ix - $x;
@@ -428,6 +432,13 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
     foreach ($room['tanks'] as $i => $o) {
         if ($o['seat'] === $tank['seat']) {
             $ownerIdx = $i;
+        }
+    }
+    // The blast owns the fall of every standing unit whose ground it lowered.
+    foreach ($room['tanks'] as $i => $o) {
+        $now = room_surf_y($room['terrain'], (float) $o['x']);
+        if ($o['hp'] > 0 && $ownerIdx !== null && $now > $ground[$i] && $now > $o['y'] + 0.5) {
+            $room['tanks'][$i]['fellBy'] = $ownerIdx;
         }
     }
     foreach ($room['tanks'] as $idx => &$t) {
@@ -459,39 +470,50 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
             $t['fuel'] = max(0.0, ($t['fuel'] ?? 0.0) - (float) ($w['drain'] ?? 0));
         }
         $events[] = ['t' => 'hit', 'seat' => $t['seat'], 'dmg' => $dmg, 'by' => $tank['seat'], 'direct' => $directIdx === $idx];
-        if ($ownerIdx !== null && $ownerIdx !== $idx) {
-            $t['lastHitBy'] = $ownerIdx; // a drone's avenger and the shooter's dry spell read these
-            $room['tanks'][$ownerIdx]['dealt'] = true;
-            if ($t['hp'] <= 0) {
-                $room['tanks'][$ownerIdx]['kills'] = ($room['tanks'][$ownerIdx]['kills'] ?? 0) + 1;
-            }
-        }
-        if ($tank['kind'] === 'human' && $t['kind'] === 'ai') {
-            $room['scores'][$tank['seat']] = ($room['scores'][$tank['seat']] ?? 0) + $dmg * 2;
-            $room['cash'][$tank['seat']] = ($room['cash'][$tank['seat']] ?? 0) + $dmg * 2;
-        }
-        if ($t['hp'] <= 0) {
-            $events[] = ['t' => 'kill', 'seat' => $t['seat'], 'by' => $tank['seat']];
-            if ($tank['kind'] === 'human' && $t['seat'] !== $tank['seat'] && isset($room['stats'][$tank['seat']])) {
-                $room['stats'][$tank['seat']]['kills']++;
-            }
-            if ($tank['kind'] === 'human' && $t['kind'] === 'ai') {
-                $room['scores'][$tank['seat']] = ($room['scores'][$tank['seat']] ?? 0) + 300;
-                $room['cash'][$tank['seat']] = ($room['cash'][$tank['seat']] ?? 0) + 300;
-            }
-            // Last stand: the wreck itself detonates, once. The flag is
-            // spent first so chained wrecks terminate.
-            if ($t['kind'] === 'human' && ($room['laststand'][$t['seat']] ?? false)) {
-                $room['laststand'][$t['seat']] = false;
-                $events[] = ['t' => 'laststand', 'seat' => $t['seat']];
-                $gone = $t;
-                $ls = room_gear('laststand') ?? [];
-                $blast = ['dmg' => (int) ($ls['dmg'] ?? 50), 'radius' => (float) ($ls['radius'] ?? 44)];
-                room_explode($room, $events, $gone, 'shell', (float) $t['x'], (float) $t['y'] - 12.0, null, $blast);
-            }
-        }
+        room_credit($room, $events, $idx, $dmg, $tank, $ownerIdx);
     }
     unset($t);
+}
+/* What $dmg the unit at $idx just took from $tank's shot ($ownerIdx its index,
+// null when it is gone) pays: a human's shots at drones score and earn twice
+// the damage, any shot at someone else marks the victim's last hit and the
+// shooter's dealt and kills; a wreck is a kill event, a human's kill bonus
+// and match kill, and a rigged wreck's last stand. src/sim.ts credit() and
+// wreck() are the same. */
+function room_credit(array &$room, array &$events, int $idx, int $dmg, array $tank, ?int $ownerIdx): void
+{
+    $t = $room['tanks'][$idx];
+    if ($ownerIdx !== null && $ownerIdx !== $idx) {
+        $room['tanks'][$idx]['lastHitBy'] = $ownerIdx; // a drone's avenger and the shooter's dry spell read these
+        $room['tanks'][$ownerIdx]['dealt'] = true;
+        if ($t['hp'] <= 0) {
+            $room['tanks'][$ownerIdx]['kills'] = ($room['tanks'][$ownerIdx]['kills'] ?? 0) + 1;
+        }
+    }
+    if ($tank['kind'] === 'human' && $t['kind'] === 'ai') {
+        $room['scores'][$tank['seat']] = ($room['scores'][$tank['seat']] ?? 0) + $dmg * 2;
+        $room['cash'][$tank['seat']] = ($room['cash'][$tank['seat']] ?? 0) + $dmg * 2;
+    }
+    if ($t['hp'] > 0) {
+        return;
+    }
+    $events[] = ['t' => 'kill', 'seat' => $t['seat'], 'by' => $tank['seat']];
+    if ($tank['kind'] === 'human' && $t['seat'] !== $tank['seat'] && isset($room['stats'][$tank['seat']])) {
+        $room['stats'][$tank['seat']]['kills']++;
+    }
+    if ($tank['kind'] === 'human' && $t['kind'] === 'ai') {
+        $room['scores'][$tank['seat']] = ($room['scores'][$tank['seat']] ?? 0) + 300;
+        $room['cash'][$tank['seat']] = ($room['cash'][$tank['seat']] ?? 0) + 300;
+    }
+    // Last stand: the wreck itself detonates, once. The flag is
+    // spent first so chained wrecks terminate.
+    if ($t['kind'] === 'human' && ($room['laststand'][$t['seat']] ?? false)) {
+        $room['laststand'][$t['seat']] = false;
+        $events[] = ['t' => 'laststand', 'seat' => $t['seat']];
+        $ls = room_gear('laststand') ?? [];
+        $blast = ['dmg' => (int) ($ls['dmg'] ?? 50), 'radius' => (float) ($ls['radius'] ?? 44)];
+        room_explode($room, $events, $t, 'shell', (float) $t['x'], (float) $t['y'] - 12.0, null, $blast);
+    }
 }
 /* One ballistic arc: integrate until impact, fizzle, fuse-split, or a
 // proximity burst. Returns [status, x, y, vx, vy, directIdx]; cluster
@@ -708,19 +730,166 @@ function room_roll_arc(array $room, array $w, int $ownerIdx, float $sx, float $v
     $path[] = [$bx, $by];
     return ['hit', $bx, $by, $vx, $vy, $direct, $path, $steps * $dt];
 }
-/* Tanks ride the terrain down after craters (server side, snapped). */
-function room_settle_tanks(array &$room): void
+/* ---------- falling ---------- */
+/* Units left hanging over a crater drop straight down, never sideways, onto
+// the ground or a unit beneath them; ground that rose takes them straight up.
+// A drop costs armor by its height at rest, credited to whoever carved the
+// ground away. src/sim.ts fallDamage() .. settleFalls() are the same rules,
+// pinned by the 'fall' sim vectors. */
+const ROOM_FALL_RULES = ['freePx' => 10, 'perPx' => 0.5, 'chuteOver' => 5, 'aiRound' => 3];
+/* game.yaml arsenal.fall: what a drop costs and when a parachute opens. */
+function room_fall_rules(): array
 {
-    $w = count($room['terrain']);
-    if (!$w) {
-        return;
+    static $r = null;
+    if ($r === null) {
+        $f = room_arsenal()['fall'] ?? null;
+        $r = is_array($f) ? array_replace(ROOM_FALL_RULES, array_intersect_key($f, ROOM_FALL_RULES)) : ROOM_FALL_RULES;
     }
-    foreach ($room['tanks'] as &$t) {
-        if ($t['hp'] <= 0) {
+    return $r;
+}
+/* The armor a drop of $drop px costs: nothing for the first freePx, then
+// perPx a pixel, rounded down. */
+function room_fall_damage(float $drop, array $rules): int
+{
+    return $drop <= $rules['freePx'] ? 0 : (int) floor($rules['perPx'] * ($drop - $rules['freePx']));
+}
+/* Parachutes a drone musters with: one from the rules' round on. */
+function room_drone_chutes(int $round): int
+{
+    return $round >= room_fall_rules()['aiRound'] ? 1 : 0;
+}
+/* The ground under column x (src/sim.ts surfY()). */
+function room_surf_y(array $terrain, float $x): float
+{
+    $w = count($terrain);
+    return (float) $terrain[max(0, min($w - 1, (int) round($x)))];
+}
+/* The top of a unit: what another unit lands on. */
+function room_unit_top(array $t): float
+{
+    [, $cy, , $ry] = room_unit_box($t);
+    return $cy - $ry;
+}
+/* The index of the live unit the unit at $idx would land on, falling
+// straight down from where it is, or null. */
+function room_unit_beneath(array $tanks, array $terrain, int $idx): ?int
+{
+    $t = $tanks[$idx];
+    $best = null;
+    $top = room_surf_y($terrain, (float) $t['x']);
+    foreach ($tanks as $j => $u) {
+        if ($j === $idx || $u['hp'] <= 0) {
             continue;
         }
-        $xi = max(0, min($w - 1, (int) round($t['x'])));
-        $t['y'] = $room['terrain'][$xi];
+        if (abs($u['x'] - $t['x']) >= room_unit_box($u)[2] + room_unit_box($t)[2]) {
+            continue;
+        }
+        $ut = room_unit_top($u);
+        if ($ut >= $t['y'] - 0.5 && $ut < $top) {
+            $top = $ut;
+            $best = $j;
+        }
     }
-    unset($t);
+    return $best;
+}
+/* Where the unit at $idx comes to rest falling straight down. */
+function room_rest_y(array $tanks, array $terrain, int $idx): float
+{
+    $u = room_unit_beneath($tanks, $terrain, $idx);
+    return $u === null ? room_surf_y($terrain, (float) $tanks[$idx]['x']) : room_unit_top($tanks[$u]);
+}
+/* Fall damage $raw lands on the unit at $idx: the bunker halves it as it
+// halves a hit; a shield never stops a fall. Credited to $byIdx (null: the
+// unit itself, so nobody). */
+function room_fall_hurt(array &$room, array &$events, int $idx, int $raw, ?int $byIdx, bool $under): void
+{
+    $t = $room['tanks'][$idx];
+    $dmg = $raw;
+    if ($t['kind'] === 'human' && ($room['bunker'][$t['seat']] ?? 0) > 0) {
+        $dmg = max(1, (int) round($dmg / 2));
+    }
+    $room['tanks'][$idx]['hp'] = max(0, $t['hp'] - $dmg);
+    $owner = $byIdx === null ? $idx : $byIdx;
+    $events[] = ['t' => 'fall', 'seat' => $t['seat'], 'dmg' => $dmg, 'by' => $room['tanks'][$owner]['seat'], 'chute' => false, 'under' => $under];
+    room_credit($room, $events, $idx, $dmg, $room['tanks'][$owner], $owner);
+}
+/* The unit at $idx came to rest after dropping $drop px onto the unit at
+// $onto (null: the ground). Spends a parachute on a fall costing more than
+// chuteOver; the unit beneath takes the full fall either way. True when a
+// parachute opened. */
+function room_land(array &$room, array &$events, int $idx, float $drop, ?int $onto): bool
+{
+    $rules = room_fall_rules();
+    $raw = room_fall_damage($drop, $rules);
+    $digger = $room['tanks'][$idx]['fellBy'] ?? null;
+    unset($room['tanks'][$idx]['fellBy']);
+    if ($raw <= 0) {
+        return false;
+    }
+    $by = $digger === $idx ? null : $digger;
+    $t = $room['tanks'][$idx];
+    $human = $t['kind'] === 'human';
+    $have = $human ? (int) ($room['chutes'][$t['seat']] ?? 0) : (int) ($t['chutes'] ?? 0);
+    $chute = $raw > $rules['chuteOver'] && $have > 0;
+    if ($chute) {
+        if ($human) {
+            $room['chutes'][$t['seat']] = $have - 1;
+        } else {
+            $room['tanks'][$idx]['chutes'] = $have - 1;
+        }
+        $events[] = ['t' => 'fall', 'seat' => $t['seat'], 'dmg' => 0, 'by' => $room['tanks'][$by ?? $idx]['seat'], 'chute' => true, 'under' => false];
+    } else {
+        room_fall_hurt($room, $events, $idx, $raw, $by, false);
+    }
+    if ($onto !== null && $room['tanks'][$onto]['hp'] > 0) {
+        room_fall_hurt($room, $events, $onto, $raw, $digger === $onto ? null : $digger, true);
+    }
+    return $chute;
+}
+/* Lands every hanging unit, lowest first (ties in seat order) so a stack
+// lands from the bottom up, and records what the landings did in $events. A
+// last stand's blast can open more pits, so it settles until nothing moves.
+// A unit that landed keeps 'chute' (its parachute opened) until it lands
+// again, so the snapshot shows it floating down. */
+function room_settle_tanks(array &$room, ?array &$events = null): void
+{
+    if ($events === null) {
+        $events = [];
+    }
+    if (!count($room['terrain'])) {
+        return;
+    }
+    for ($pass = 0; $pass < 8; $pass++) {
+        $order = [];
+        foreach ($room['tanks'] as $i => $t) {
+            if ($t['hp'] > 0) {
+                $order[] = $i;
+            }
+        }
+        usort($order, fn(int $a, int $b): int => ($room['tanks'][$b]['y'] <=> $room['tanks'][$a]['y']) ?: ($a <=> $b));
+        $moved = false;
+        foreach ($order as $i) {
+            if ($room['tanks'][$i]['hp'] <= 0) {
+                continue;
+            }
+            $onto = room_unit_beneath($room['tanks'], $room['terrain'], $i);
+            $rest = $onto === null ? room_surf_y($room['terrain'], (float) $room['tanks'][$i]['x']) : room_unit_top($room['tanks'][$onto]);
+            $y = (float) $room['tanks'][$i]['y'];
+            if (abs($rest - $y) <= 0.5) {
+                $room['tanks'][$i]['y'] = $rest;
+                unset($room['tanks'][$i]['fellBy']);
+                continue;
+            }
+            $room['tanks'][$i]['y'] = $rest;
+            $moved = true;
+            if ($rest > $y) {
+                $room['tanks'][$i]['chute'] = room_land($room, $events, $i, $rest - $y, $onto);
+            } else {
+                unset($room['tanks'][$i]['fellBy']);
+            }
+        }
+        if (!$moved) {
+            break;
+        }
+    }
 }

@@ -6,6 +6,7 @@
  * drawn from. What a solo purchase does is solo.ts's soloBuy; a room buys
  * through the server (the `netBuy` dep), so both share the same rows. The
  * game's state, the arsenal tables and the page arrive as deps. */
+import { burnTicks } from './fire.ts';
 import type { FlowEvent } from './flow.ts';
 import type { GameState, GameTank, Tables } from './game-types.ts';
 import type { Board } from './standings.ts';
@@ -52,7 +53,8 @@ export const SHELL_ROW = -1;
 
 /** A gun's first shop line: its damage and what carries it (a blast, which
  *  doubles on a direct hit; a beam's line; a plasma ring), then its note. */
-export function ammoSub(w: Pick<Weapon, 'dmg' | 'radius' | 'effect'> & Partial<Pick<Weapon, 'volume' | 'digLen' | 'warheads' | 'subDmg'>> & { note?: string }): string {
+export function ammoSub(w: Pick<Weapon, 'dmg' | 'radius' | 'effect'> & Partial<Pick<Weapon, 'volume' | 'digLen' | 'warheads' | 'subDmg' | 'burn' | 'tick' | 'flame'>>
+  & { note?: string }): string {
   const note = w.note ? `, ${w.note.charAt(0).toLowerCase() + w.note.slice(1).replace(/\.$/, '')}` : '';
   const hurt = w.dmg > 0 ? `${w.dmg} damage` : 'No damage';
   if (w.effect === 'dirt') return `${hurt}${w.dmg > 0 ? `, blast ${w.radius}, then` : ','} a mound of dirt ${w.radius} round${note}.`;
@@ -65,6 +67,10 @@ export function ammoSub(w: Pick<Weapon, 'dmg' | 'radius' | 'effect'> & Partial<P
   if (w.effect === 'beam') return `${hurt} to every unit on its line${note}.`;
   if (w.effect === 'plasma') return `${w.dmg > 0 ? 'Up to ' + hurt : hurt}, ring ${w.radius} at full power${note}.`;
   if (w.effect === 'tracer') return `${hurt}${note}.`;
+  if (w.effect === 'napalm') {
+    const ticks = burnTicks(w.burn || 0, w.tick || 0.5);
+    return `${w.dmg} damage a tick, ${ticks} ticks, to all in a burning pool of ${w.volume || 0} px²${note}.`;
+  }
   return `${hurt}, blast ${w.radius}${note}.${w.dmg > 0 ? ' Direct hits count double.' : ''}`;
 }
 export function createShop(deps: ShopDeps) {

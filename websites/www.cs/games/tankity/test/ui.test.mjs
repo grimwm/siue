@@ -393,6 +393,34 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
   check('lobby-redraw-keeps-nodes', veil.children[0] === card && byId(card, 'host-form') === hostForm);
 }
 
+// The turn time: a slider in the host form; in a room the host's slider, everyone else's label.
+{
+  const veil = makeEl('lobby-veil');
+  const turns = { form: [], room: [] };
+  const base = { turnSecs: 600, onTurnForm: s => turns.form.push(s), onTurnRoom: s => turns.room.push(s) };
+  renderLobby(veil, lobbyProps(base).props);
+  const form = byId(veil, 'host-form');
+  const range = byId(form, 'lobby-turn');
+  check('lobby-turn-in-host-form', !!range && attr(range, 'type') === 'range' && !!byId(form, 'host-go'));
+  range.value = '0';
+  fire(range, 'input');
+  check('lobby-turn-reports', turns.form.join() === '60', turns.form.join());
+  check('lobby-intro-turn-copy', /from one minute to a week/.test(text(byId(veil, 'lobby-intro'))) && !/crew fires/.test(text(byId(veil, 'lobby-intro'))));
+
+  const hostRoom = makeEl('lobby-veil');
+  renderLobby(hostRoom, lobbyProps({ ...base, inRoom: true, isHost: true, code: 'AB3D', seats: SEATS }).props);
+  const roomRange = byId(hostRoom, 'room-turn');
+  check('lobby-room-turn-host', !!roomRange && !byId(hostRoom, 'room-turn-label'));
+  roomRange.value = '5';
+  fire(roomRange, 'input');
+  check('lobby-room-turn-reports', turns.room.join() === '86400', turns.room.join());
+  check('lobby-room-close-rule', /single connection/.test(text(byId(hostRoom, 'turn-hint'))), text(byId(hostRoom, 'turn-hint')));
+
+  const guestRoom = makeEl('lobby-veil');
+  renderLobby(guestRoom, lobbyProps({ ...base, inRoom: true, isHost: false, code: 'AB3D', seats: SEATS, mySeat: 3 }).props);
+  check('lobby-room-turn-guest', !byId(guestRoom, 'room-turn') && text(byId(guestRoom, 'room-turn-label')) === 'Turn time: 10 min');
+}
+
 // ---- weapon picker ----
 function gunTiles(n = 10, loaded = 0) {
   return Array.from({ length: n }, (_, i) => ({ key: i === 0 ? 'shell' : `gun${i}`, name: i === 0 ? 'Shell' : `Gun ${i}`, title: `note ${i}`, count: i === 0 ? '∞' : `×${i}`, loaded: i === loaded, empty: false }));

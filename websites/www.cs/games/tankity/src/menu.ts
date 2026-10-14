@@ -1,6 +1,7 @@
 /* Operation Tankity: the game menu's settings.
  *
- * The settings menu: the unit look, the text size and the Difficulty (all remembered in this browser), and the
+ * The settings menu: the unit look, the text size and the Difficulty (all remembered in this browser), a
+ * room's turn time (the host's slider, everyone else's label), and the
  * props the game menu overlay (src/ui/menu.tsx) is drawn from: what is
  * chosen, what is muted, whether a room runs, and what each button does.
  * Sound, music, fullscreen and a match on the seed box's hills arrive as deps. */
@@ -23,7 +24,7 @@ export type MenuState = Pick<GameState, 'body' | 'tanks'>;
 export interface MenuDeps {
   G: MenuState;
   $(id: string): HTMLElement | null;
-  net: Pick<RoomClient, 'on' | 'sendBody'>;
+  net: Pick<RoomClient, 'on' | 'sendBody' | 'turnSecs' | 'isHost'>;
   sfx: Pick<typeof SfxApi, 'play'>;
   difficulty: DifficultySetting;
   unlock(): void;
@@ -39,6 +40,8 @@ export interface MenuDeps {
   quit(): void;
   /** The room match's scoreboard card (room.ts openStandings). */
   openStandings(): void;
+  /** The host set the room's turn time. */
+  turnTime(secs: number): void;
   toggleMusic(): void;
   toggleOverlay(id: string, btnId?: string): void;
   toggleSound(): void;
@@ -48,7 +51,7 @@ export interface MenuDeps {
 export function createMenu(deps: MenuDeps) {
   const {
     G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
-    freshMatchFromSeedBox, openStandings, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong,
+    freshMatchFromSeedBox, openStandings, turnTime, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong,
   } = deps;
 
   /* Ground units: every human (you, and the people in a room) picks a body.
@@ -151,6 +154,8 @@ export function createMenu(deps: MenuDeps) {
       // The card replaces the menu: close it first, so Q then goes back to the battle.
       onStandings: () => { toggleOverlay('menu-overlay', 'btn-menu'); openStandings(); },
       inRoom: net.on,
+      turn: net.on ? { secs: net.turnSecs, host: net.isHost } : null,
+      onTurn: turnTime,
       onLeave: openLeaveVeil,
       onQuit: quit,
       onNextSong: nextSong,

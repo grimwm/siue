@@ -475,12 +475,12 @@ const {
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
   backToLobby: () => netBackToLobby(),
   decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
-  renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText, saveLocal,
+  renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText, saveLocal, renderMenu: () => renderMenu(),
 });
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving. */
 const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-  netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby,
+  netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime,
 } = createLobby({
   G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, netEvent, seatName, closeLobbyVeil,
   closeOverlays, closePreview, endTutorial, hideShop, initials: savedInitials, initialsSaved: () => renderTitle(), paintHud, refreshNavHints,
@@ -492,7 +492,7 @@ const {
 const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({
   G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, netLeave, openLeaveVeil, placeLogBelowStatus,
   nextSong: () => { unlock(); music.next(); },
-  openStandings: () => openStandings(), freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
+  openStandings: () => openStandings(), turnTime: secs => { void netTurnTime(secs); }, freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
   quit: () => { void quitGame(); },
 });
 /* The title card over the demo (src/title.ts). */

@@ -11,6 +11,7 @@ import { render } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import { KeyHints, Key, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.tsx';
 import type { KeyHintFn } from './chrome.tsx';
+import { TurnTime } from './turn-time.tsx';
 
 export interface MenuProps {
   keyHint: KeyHintFn;
@@ -45,6 +46,9 @@ export interface MenuProps {
   onStandings: () => void;
   /** Show the Leave room button (inside a room). */
   inRoom: boolean;
+  /** In a room: its turn time, and whether this player (the host) may change it. */
+  turn?: { secs: number; host: boolean } | null;
+  onTurn?: (secs: number) => void;
   onLeave: () => void;
   /** Quit: end the match and leave the game. */
   onQuit: () => void;
@@ -154,6 +158,11 @@ export function Menu(p: MenuProps) {
             <button type="button" id="menu-help" class="m-help" aria-expanded={p.helpOpen} onClick={blurThen(p.onHelp)}>Help</button>
           </div>
         </div>
+        {p.inRoom && p.turn && (
+          <div class="unit-row" id="menu-turn-row">
+            <TurnTime id="menu-turn" secs={p.turn.secs} disabled={!p.turn.host} onChange={secs => p.onTurn?.(secs)} />
+          </div>
+        )}
         <button type="button" id="scores-open" title="High scores, and file your run" onClick={blurThen(p.onScores)}>
           Scores <Key at="global:report" bare />
         </button>

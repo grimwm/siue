@@ -19,6 +19,7 @@ import type { RoomClient } from './net.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
 import type { SeatStore } from './seats.ts';
+import { TURN_DEFAULT } from './turn-time.ts';
 import type { KeyHintFn } from './ui/chrome.tsx';
 import { drawMapIcon } from './ui/icons.ts';
 import { renderLeave as drawLeave } from './ui/leave.tsx';
@@ -45,6 +46,8 @@ export interface LobbyView {
   /** Bumped to put the saved initials back in the boxes; the line saying why typed ones cannot be used. */
   initialsRev: number;
   initialsProblem: string;
+  /** The turn time: the host form's pick out of a room, the room's in one. */
+  turnSecs: number;
 }
 
 /** The slice of the game's state getting into a room touches (main.ts's G). */
@@ -104,7 +107,7 @@ export function createLobby(deps: LobbyDeps) {
   const LOBBY: LobbyView = {
     status: '', count: '', online: false, inRoom: false, mapId: '', mapsRev: 0, prefill: '',
     code: '', link: '', hills: 'Hills: Random hills', drones: '', seats: [], mySeat: 0, isHost: false, seatsHint: '',
-    initialsRev: 0, initialsProblem: '',
+    initialsRev: 0, initialsProblem: '', turnSecs: TURN_DEFAULT,
   };
   function lobbySay(text: string): void {
     LOBBY.status = text;
@@ -173,6 +176,9 @@ export function createLobby(deps: LobbyDeps) {
       isHost: LOBBY.isHost,
       seatsHint: LOBBY.seatsHint,
       onSeatMode: netSeatMode,
+      turnSecs: LOBBY.turnSecs,
+      onTurnForm: secs => { LOBBY.turnSecs = secs; renderLobby(); },
+      onTurnRoom: secs => { void netTurnTime(secs); },
       onCopy: copyInvite,
       onStart: () => { sfx.play('click'); startRoom(); },
       // Reached through Play again, the match behind the lobby is over: leaving goes to the title card, not back to its frozen field.
@@ -264,7 +270,7 @@ export function createLobby(deps: LobbyDeps) {
     lobbySay('Raising the flag…');
     MATCH.initials = initials;
     try {
-      await net.host(initials, mapId || '', G.body, difficulty.get());
+      await net.host(initials, mapId || '', G.body, difficulty.get(), LOBBY.turnSecs);
       rememberSeat(initials);
       say(`Room ${net.code} hosted. Read the code to your friends.`, 'info');
       await netRefreshRoster();
@@ -423,6 +429,8 @@ export function createLobby(deps: LobbyDeps) {
       net.mapName = room.mapName || 'Random hills';
     }
     LOBBY.hills = 'Hills: ' + (net.mapName || 'Random hills');
+    // The host's own pick in flight is not undone by a poll that left before it.
+    if (room && typeof room.turnSecs === 'number' && !turnSending) LOBBY.turnSecs = room.turnSecs;
     if (room && room.difficulty) LOBBY.drones = `Drones: ${DIFFICULTY_NAMES[room.difficulty] || 'Normal'} (the host's Difficulty)`;
     LOBBY.seats = ((room && room.seats) || net.seats || []).map(s => ({ human: !!s.human, name: String(s.name || ''), mode: s.mode }));
     if (room) net.hostSeat = room.hostSeat;
@@ -432,6 +440,33 @@ export function createLobby(deps: LobbyDeps) {
       ? 'Tap a seat nobody holds to switch it between AI and Open. Open seats field no tank.'
       : 'The host decides which empty seats are AI and which stay open.';
     lobbySay(net.isHost ? 'You host. Start when your crew is in.' : 'Hang tight. The host starts the match.');
+  }
+  /* The host sets the turn time, in the lobby or mid-match; it counts from
+     the next turn. The slider shows the pick at once; only the newest pick's
+     answer is applied. */
+  let turnSeq = 0;
+  let turnSending = 0;
+  async function netTurnTime(secs: number): Promise<void> {
+    if (!net.code || !net.isHost) return;
+    const seq = ++turnSeq;
+    LOBBY.turnSecs = secs;
+    net.turnSecs = secs;
+    renderLobby();
+    renderMenu();
+    turnSending++;
+    try {
+      const d = await net.post('turntime', { secs });
+      if (seq !== turnSeq) return;
+      if (net.on) net.apply(d.room);
+      else netRenderRoster(d.room);
+    } catch (err) {
+      if (seq !== turnSeq) return;
+      if (net.on) say(prettyRoomError(err), 'bad');
+      else lobbySay(prettyRoomError(err));
+    } finally {
+      turnSending--;
+      renderMenu();
+    }
   }
   /* The host flips a seat nobody holds between the drone battery and open. */
   async function netSeatMode(seat: number, mode: 'ai' | 'open'): Promise<void> {
@@ -567,6 +602,6 @@ export function createLobby(deps: LobbyDeps) {
   }
   return {
     renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-    netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby,
+    netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime,
   };
 }

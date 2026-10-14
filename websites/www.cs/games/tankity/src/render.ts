@@ -658,7 +658,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.globalAlpha = 0.9;
     c.font = `bold ${Math.round(12 * s)}px sans-serif`;
     c.fillStyle = '#ffffff';
-    c.fillText(clock.myTurn ? 'Fire now, or the crew fires for you' : 'The crew fires if the clock runs out', W / 2, H * 0.42 + 46 * s);
+    c.fillText(clock.myTurn ? 'Fire now, or a drone fires for you' : 'A drone fires if the clock runs out', W / 2, H * 0.42 + 46 * s);
     c.restore();
   }
 

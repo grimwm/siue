@@ -156,3 +156,21 @@ test('Standings shows only in a room and reports a press', () => {
   click(standings);
   assert.equal(shown, 1);
 });
+
+test('in a room the host gets the turn-time slider and everyone else its label; outside a room neither', () => {
+  const host = draw({ inRoom: true, turn: { secs: 600, host: true }, onTurn: () => {} });
+  const turns = [];
+  const h = draw({ inRoom: true, turn: { secs: 600, host: true }, onTurn: s => turns.push(s) });
+  const range = byId(h.section, 'menu-turn');
+  assert.equal(range.getAttribute('type'), 'range');
+  range.value = '4';
+  fire(range, 'input');
+  assert.deepEqual(turns, [28800]);
+  assert.ok(byId(host.section, 'menu-turn'));
+  const guest = draw({ inRoom: true, turn: { secs: 600, host: false }, onTurn: () => {} });
+  assert.equal(byId(guest.section, 'menu-turn'), undefined);
+  assert.equal(byId(guest.section, 'menu-turn-label').textContent, 'Turn time: 10 min');
+  const solo = draw({ inRoom: false, turn: null, onTurn: () => {} });
+  assert.equal(byId(solo.section, 'menu-turn'), undefined);
+  assert.equal(byId(solo.section, 'menu-turn-label'), undefined);
+});

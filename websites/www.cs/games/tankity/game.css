@@ -815,3 +815,27 @@ body { height: 100dvh; display: flex; flex-direction: column; }
 .scores-levels { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
 .scores-levels button { min-height: 44px; min-width: 44px; padding: 0 14px; }
 .scores-levels button[aria-pressed="true"] { background: var(--gold, #ffc93c); color: #14183a; }
+
+/* The turn-time slider (src/ui/turn-time.tsx): label, range and its value on
+   one line that wraps on a phone. */
+.turn-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.turn-range {
+  flex: 1 1 9rem;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+.turn-range:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.turn-out {
+  min-width: 8.5em;
+  font-weight: bold;
+  color: var(--accent);
+}

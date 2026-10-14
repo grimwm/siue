@@ -12,6 +12,7 @@ import { render } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import { KeyHints, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.tsx';
 import { InitialsPicker, typedLetters } from './initials-picker.tsx';
+import { TurnTime } from './turn-time.tsx';
 import type { KeyHintFn } from './chrome.tsx';
 
 /** One hills tile. The Random tile has the empty id and no profile. */
@@ -77,6 +78,12 @@ export interface LobbyProps {
   isHost: boolean;
   seatsHint: string;
   onSeatMode: (seat: number, mode: 'ai' | 'open') => void;
+  /** The turn time: the host form's pick, or the room's. */
+  turnSecs: number;
+  /** The host form's slider moved (before hosting). */
+  onTurnForm: (secs: number) => void;
+  /** The host moved the room's slider. */
+  onTurnRoom: (secs: number) => void;
   onCopy: () => void;
   onStart: () => void;
   onLeave: () => void;
@@ -136,9 +143,10 @@ export function Lobby(p: LobbyProps) {
         <p class="hint" id="lobby-intro" hidden={p.inRoom}>
           Host a room and read the 4-letter code to your friends, or join theirs.
           Everyone plays under their own three initials, set here or on the title card. There is no chat,
-          only artillery. Empty seats go to the drone battery, and a quiet crew fires
-          on its own after a while so no room ever stalls. The host may also pick named
-          hills, like Canyon 3, so the crew can replay a favorite without ever seeing its seed.
+          only artillery. Empty seats go to the drone battery. The host sets how long a turn lasts, from
+          one minute to a week; when a turn runs out, a drone fires for that player, and closing the tab
+          keeps your seat. The host may also pick named hills, like Canyon 3, so the crew can replay a
+          favorite without ever seeing its seed.
         </p>
         <p class="hint">
           <span id="net-dot" class={`dot ${p.online ? 'on' : 'off'}`}
@@ -159,6 +167,7 @@ export function Lobby(p: LobbyProps) {
                 <MapTile key={m.id} map={m} pressed={p.mapId === m.id} draw={p.drawMapIcon} rev={p.mapsRev} onPick={p.onPickMap} />
               ))}
             </div>
+            <TurnTime id="lobby-turn" secs={p.turnSecs} onChange={p.onTurnForm} />
             <button type="submit" id="host-go" class="btn-primary">Host a room</button>
           </form>
           <form id="join-form" class="lobby-form" action="#"
@@ -186,6 +195,12 @@ export function Lobby(p: LobbyProps) {
           </p>
           <p class="hint" id="lobby-hills">{p.hills}</p>
           <p class="hint" id="lobby-drones" hidden={!p.drones}>{p.drones}</p>
+          <TurnTime id="room-turn" secs={p.turnSecs} disabled={!p.isHost} onChange={p.onTurnRoom} />
+          <p class="hint" id="turn-hint">
+            A change counts from the next turn. With nobody playing, a room stays open one turn time for each
+            player on their own connection, and at least 10 minutes; played from a single connection, it closes
+            after 10 minutes of nobody acting.
+          </p>
           <div class="unit-row" role="group" aria-labelledby="seats-label">
             <span class="unit-label" id="seats-label">Seats</span>
             <div class="unit-picker seat-grid" id="lobby-seats">

@@ -43,6 +43,9 @@ export interface RoomEnv {
   clearInterval(id: unknown): void;
   /** Milliseconds on a monotonic clock (performance.now). */
   now(): number;
+  /** Milliseconds since the epoch (Date.now, the default): a room's closing
+   * time arrives as a unix time. */
+  wall?(): number;
   /** navigator.sendBeacon: true when the browser took the request. */
   beacon(url: string, body: string): boolean;
 }
@@ -208,6 +211,8 @@ export class RoomClient {
   private shopLeft: number | null = null;
   private shopLeftAt = 0;
   private clockWarned = false;
+  private closeLeft: number | null = null;
+  private closeLeftAt = 0;
 
   private readonly env: RoomEnv;
   private readonly handlers: RoomHandlers;
@@ -305,7 +310,7 @@ export class RoomClient {
     this.handlers.onReachable(true);
     this.needFull = false;
     const room = (data as unknown as RoomReply).room;
-    this.noteTurnSecs(room);
+    this.noteRoom(room);
     return room;
   }
 
@@ -321,8 +326,19 @@ export class RoomClient {
     return (data as unknown as PostReplies['mine']).rooms;
   }
 
-  private noteTurnSecs(room: Partial<Pick<RoomSnapshot, 'turnSecs'>> | null | undefined): void {
-    if (room && typeof room.turnSecs === 'number') this.turnSecs = room.turnSecs;
+  /** What every snapshot says about time: the turn time, and when the room
+   * closes if nobody acts (`expiresAt`, unix seconds; absent means no sooner
+   * close is known). */
+  private noteRoom(room: Partial<Pick<RoomSnapshot, 'turnSecs'>> | null | undefined): void {
+    if (!room) return;
+    if (typeof room.turnSecs === 'number') this.turnSecs = room.turnSecs;
+    const at = (room as { expiresAt?: unknown }).expiresAt;
+    if (typeof at === 'number' && Number.isFinite(at)) {
+      this.closeLeft = at - (this.env.wall ? this.env.wall() : Date.now()) / 1000;
+      this.closeLeftAt = this.env.now();
+    } else {
+      this.closeLeft = null;
+    }
   }
 
   /** Fills `maps` for the hills picker; an unreachable server leaves it as is. */
@@ -347,11 +363,11 @@ export class RoomClient {
   /* ---- joining and leaving ---- */
 
   /** Hosts a room: forgets any earlier session, creates, takes the seat. */
-  async host(initials: string, map: string, body: string, difficulty: Difficulty): Promise<void> {
+  async host(initials: string, map: string, body: string, difficulty: Difficulty, turn?: number): Promise<void> {
     this.forget();
     this.map = null;
     this.mapName = 'Random hills';
-    const data = await this.post('create', { initials, map, body, difficulty });
+    const data = await this.post('create', turn === undefined ? { initials, map, body, difficulty } : { initials, map, body, difficulty, turn });
     this.code = data.code; this.seat = data.seat; this.token = data.token; this.csrf = data.csrf;
   }
 
@@ -371,7 +387,7 @@ export class RoomClient {
 
   private forget(): void {
     this.code = ''; this.token = ''; this.csrf = ''; this.seat = -1; this.since = 0;
-    this.seats = []; this.hostSeat = 0; this.turnSecs = 120;
+    this.seats = []; this.hostSeat = 0; this.turnSecs = 120; this.closeLeft = null;
     this.dropTerrain();
   }
 
@@ -407,7 +423,7 @@ export class RoomClient {
   detach(): void {
     this.stopPolling();
     this.stopLobbyWatch();
-    this.on = false; this.code = ''; this.seat = -1; this.token = ''; this.csrf = ''; this.since = 0;
+    this.on = false; this.code = ''; this.seat = -1; this.token = ''; this.csrf = ''; this.since = 0; this.closeLeft = null;
     this.seats = []; this.synced = false; this.matchEpoch++;
     this.dropTerrain();
   }
@@ -511,7 +527,7 @@ export class RoomClient {
       void this.refresh().finally(() => { this.refetching = false; });
       return;
     }
-    this.noteTurnSecs(room);
+    this.noteRoom(room);
     const fresh = (room.events || []).filter(e => (e.seq || 0) > this.since);
     for (const e of fresh) this.since = Math.max(this.since, e.seq || 0);
     const first = !this.synced || room.resync === true;
@@ -634,6 +650,13 @@ export class RoomClient {
   shopClockLeft(): number | null {
     if (!this.on || typeof this.shopLeft !== 'number') return null;
     return Math.max(0, this.shopLeft - (this.env.now() - this.shopLeftAt) / 1000);
+  }
+
+  /** Seconds before the room closes with nobody acting, counted down
+   * locally from the last snapshot's `expiresAt`; null when it did not say. */
+  closeClockLeft(): number | null {
+    if (typeof this.closeLeft !== 'number') return null;
+    return Math.max(0, this.closeLeft - (this.env.now() - this.closeLeftAt) / 1000);
   }
 
   /** True once per turn, when the clock first reads 30 seconds or less. */

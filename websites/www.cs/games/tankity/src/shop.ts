@@ -18,13 +18,14 @@ import type { sfx as SfxApi } from './audio.ts';
 import type { KeyHintFn } from './ui/chrome.tsx';
 import { renderShop as drawShop } from './ui/shop.tsx';
 import type { ShopEntry, ShopFreeRow } from './ui/shop.tsx';
+import { shopNote } from './turn-time.ts';
 
 /** What the shop needs from the page and the rest of the game. */
 export interface ShopDeps {
   G: GameState;
   $(id: string): HTMLElement | null;
   tables: Tables;
-  net: Pick<RoomClient, 'on' | 'seats' | 'readyNow' | 'shopClockLeft'>;
+  net: Pick<RoomClient, 'on' | 'seats' | 'readyNow' | 'shopClockLeft' | 'closeClockLeft'>;
   sfx: Pick<typeof SfxApi, 'play'>;
   me(): GameTank;
   /** A touch screen: no key chips. */
@@ -75,7 +76,8 @@ export function createShop(deps: ShopDeps) {
      builds what it shows from the game's state and wires its clicks back; the
      component keeps no state of its own. In a room the start button is the Ready
      toggle: pressed reads "Ready ✓", and a line under it counts who is ready and
-     the time left before the shop closes on its own (rooms.php ROOM_SHOP_SECS). */
+     the time left before the shop closes on its own (the room's shop clock),
+     or before the room itself closes when that comes first. */
   function shopReadyView(): { next: { label: string; keyAt?: string; pressed?: boolean }; readyLine: string | null; sig: string } {
     const keyAt = touch ? undefined : 'shop:next';
     if (!net.on) {
@@ -85,8 +87,7 @@ export function createShop(deps: ShopDeps) {
     const mine = net.readyNow();
     const voters = net.seats.filter(s => s.human && s.lives > 0);
     const ready = voters.filter(s => s.ready).length;
-    const left = net.shopClockLeft();
-    const clock = left === null ? '' : ` · shop closes in ${Math.floor(Math.ceil(left) / 60)}:${String(Math.ceil(left) % 60).padStart(2, '0')}`;
+    const clock = shopNote(net.shopClockLeft(), net.closeClockLeft());
     const label = mine ? 'Ready ✓' : 'Ready';
     const status = `${ready}/${voters.length} ready${clock}`;
     const marks = voters.map(s => `${String(s.name).toUpperCase()}${s.ready ? ' ✓' : ''}`).join('  ');

@@ -74,6 +74,7 @@ has('build-config-runs-the-games-specs', select([`${S}games/crete/build.json`]),
 has('built-output-runs-the-games-specs', select([`${S}games/crete/dist/main.js`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs']);
 check('game-test-program-runs-no-browser-specs', select([`${S}games/crete/tsconfig.test.json`, `${S}games/tankity/tsconfig.test.json`]), 'NONE');
 check('kit-test-program-and-runner-run-no-browser-specs', select([`${S}games/_kit/tsconfig.test.json`, `${S}games/_kit/test.sh`]), 'NONE');
+check('games-unit-runner-runs-no-browser-specs', select([`${S}games/units.sh`]), 'NONE');
 check('kit-build-and-icon-tests-run-no-browser-specs', select([`${S}games/_kit/build/build.test.ts`, `${S}games/_kit/build/build.test.mjs`, `${S}games/_kit/build/icons.test.ts`]), 'NONE');
 check('kit-build-tool-still-runs-everything', select([`${S}games/_kit/build/build.mjs`]), 'ALL');
 check('a-removed-spec-is-dropped', select([`${S}tests/e2e/gone-away.spec.mjs`]), 'NONE');

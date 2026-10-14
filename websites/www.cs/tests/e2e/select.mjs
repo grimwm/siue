@@ -37,7 +37,7 @@ const RULES = [
   [new RegExp(`^${SITE}tests/php/`), 'NONE'],
   [new RegExp(`^${SITE}games/_kit/php/(testing|tests)/`), 'NONE'],
   [new RegExp(`^${SITE}games/[^/]+/[^/]*-test\\.(php|js)$`), 'NONE'], // unit and smoke tests
-  [new RegExp(`^${SITE}games/[^/]+/test\\.sh$`), 'NONE'], // a game's unit-suite runner
+  [new RegExp(`^${SITE}games/([^/]+/test|units)\\.sh$`), 'NONE'], // the unit-suite runners: each game's static and PHP steps, and every unit test
   [new RegExp(`^${SITE}games/[^/]+/(tools|protocol|fx/blender|audio/sfx/src)/`), 'NONE'], // generators, fixtures, sources
   [new RegExp(`^${SITE}games/[^/]+/(audio/(sfx/build_sfx|music/build_music)\\.sh|game\\.yaml|\\.gitignore)$`), 'NONE'],
   // The kit's own tests and docs, and a game's unit tests: not what a browser runs.

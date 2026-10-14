@@ -5,7 +5,8 @@
 // themselves must be gone.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, posix, relative } from 'node:path';
 
@@ -14,7 +15,7 @@ interface Allow {
   mjs: string[];
   /** Folders (relative to games/) whose tsconfig.test.json is missing, incomplete, or not in build.json. */
   program: string[];
-  /** Test runners (relative to games/) without the zero-files guard. */
+  /** `units.sh`, while it lacks the zero-files guard. */
   runner: string[];
   /** Files (relative to games/) that still import _kit/test/check.ts. */
   check: string[];
@@ -91,13 +92,16 @@ function programGaps(games: string, folder: string): string[] {
   return gaps;
 }
 
-// R2: a runner expands its globs itself and fails on none, so a typo cannot pass with zero tests.
-function runnerGuarded(games: string, runner: string): boolean {
-  const path = join(games, runner);
+// R2: units.sh expands each folder's glob itself and fails on one that matches nothing, so a typo cannot pass with zero tests.
+function unitsGuarded(games: string): boolean {
+  const path = join(games, 'units.sh');
   if (!existsSync(path)) return false;
   const sh = readFileSync(path, 'utf8');
-  return /^\s*set -- .*\.test\.(ts|mjs)/m.test(sh) && sh.includes('[ -e "$1" ] ||') && sh.includes('node --test "$@"');
+  return sh.includes('*/build.json') && sh.includes('[ -e "$f" ] ||') && sh.includes('node --test "$@"');
 }
+
+// The unit tests run once, all together, in units.sh; a folder's test.sh keeps only its static and PHP steps.
+const runsNode = (games: string, runner: string) => existsSync(join(games, runner)) && /^\s*node --test\b/m.test(readFileSync(join(games, runner), 'utf8'));
 
 const BRIDGE = '_kit/test/check.ts';
 
@@ -146,10 +150,10 @@ function problems(site: string, allow: Allow): string[] {
     if (!folders.includes(folder) || !programGaps(games, folder).length) stale('program', folder);
   }
 
-  // (g) Every runner fails when it finds no test files.
-  const runners = folders.map(f => `${f}/test.sh`);
-  for (const r of runners) if (!runnerGuarded(games, r) && !allow.runner.includes(r)) out.push(`${r}: missing, or without the zero-files guard (set -- <globs>; [ -e "$1" ] || exit 1; node --test "$@")`);
-  for (const r of allow.runner) if (!runners.includes(r) || runnerGuarded(games, r)) stale('runner', r);
+  // (g) One runner, units.sh, runs every unit test and fails on a folder with none.
+  if (!unitsGuarded(games) && !allow.runner.includes('units.sh')) out.push('units.sh: missing, or without the zero-files guard ([ -e "$f" ] || exit 1 per folder; node --test "$@")');
+  for (const r of allow.runner) if (r !== 'units.sh' || unitsGuarded(games)) stale('runner', r);
+  for (const f of folders) if (runsNode(games, `${f}/test.sh`)) out.push(`${f}/test.sh: runs node --test; the unit tests run once, in units.sh`);
 
   // (d) Nothing runs through the check() bridge.
   const sources = files.filter(f => /\.(mjs|js|ts|tsx)$/.test(f));
@@ -184,8 +188,9 @@ test('the games tests are typed, and the allowlist holds only what is not conver
 // The rules on a scratch tree, so each is seen to fire.
 const NONE: Allow = { mjs: [], program: [], runner: [], check: [], legacy: [] };
 
-const RUNNER = '#!/bin/sh\nset -e\nset -- test/*.test.ts\n[ -e "$1" ] || { echo "no tests" >&2; exit 1; }\nnode --test "$@"\n';
-const KIT_RUNNER = RUNNER.replace('set -- test/*.test.ts', 'set -- test/*.test.ts build/*.test.ts');
+const RUNNER = '#!/bin/sh\nset -e\nnode ../_kit/build/build.mjs g --check\n';
+const KIT_RUNNER = '#!/bin/sh\nset -e\n../node_modules/.bin/tsc -p tsconfig.test.json\n';
+const UNITS = readFileSync(join(import.meta.dirname, '..', '..', 'units.sh'), 'utf8');
 
 function tree(t: { after: (fn: () => void) => void }, files: Record<string, string>): string {
   const site = mkdtempSync(join(tmpdir(), 'typed-tests-'));
@@ -193,6 +198,7 @@ function tree(t: { after: (fn: () => void) => void }, files: Record<string, stri
   const all: Record<string, string> = {
     'games/_kit/tsconfig.test.json': '{\n  // The kit\'s tests.\n  "compilerOptions": { "types": ["node"] },\n  "include": ["test/**/*.test.ts", "build/*.test.ts"]\n}\n',
     'games/_kit/test.sh': KIT_RUNNER,
+    'games/units.sh': UNITS,
     'games/_kit/test/a.test.ts': "import { test } from 'node:test';\n",
     'games/g/build.json': '{ "programs": ["tsconfig.json", "tsconfig.test.json"] }\n',
     'games/g/tsconfig.test.json': '{ "compilerOptions": { "types": ["node"] }, "include": ["test/**/*.ts"] }\n',
@@ -216,7 +222,8 @@ test('each rule names what breaks it', t => {
   const site = tree(t, {
     'games/g/test/old.test.mjs': '',
     'games/g/build.json': '{ "programs": ["tsconfig.json"] }\n',
-    'games/g/test.sh': "#!/bin/sh\nnode --test 'test/*.test.ts'\n",
+    'games/g/test.sh': "#!/bin/sh\nnode --test test/*.test.ts\n",
+    'games/units.sh': "#!/bin/sh\nnode --test '*/test/*.test.ts'\n",
     'games/g/test/bridged.test.ts': "import { check } from '../../_kit/test/check.ts';\n",
     'games/g/test/effect.test.ts': "import '../../_kit/test/check.ts';\n",
     'games/g/tsconfig.test.json': '{ "compilerOptions": { "types": ["node",], }, "include": ["test/**/*.ts",], }\n',
@@ -227,7 +234,8 @@ test('each rule names what breaks it', t => {
   assert.deepEqual(problems(site, NONE), [
     'g/test/old.test.mjs: rename it to .test.ts',
     'g/build.json: programs must list tsconfig.test.json',
-    'g/test.sh: missing, or without the zero-files guard (set -- <globs>; [ -e "$1" ] || exit 1; node --test "$@")',
+    'units.sh: missing, or without the zero-files guard ([ -e "$f" ] || exit 1 per folder; node --test "$@")',
+    'g/test.sh: runs node --test; the unit tests run once, in units.sh',
     'g/test/bridged.test.ts: imports _kit/test/check.ts; use node:test directly',
     'g/test/effect.test.ts: imports _kit/test/check.ts; use node:test directly',
     'tests/php/OldTest.php: extends LegacyCheckCase; make it a TestCase',
@@ -241,18 +249,18 @@ test('the type patterns skip quoted prose, and the directives are caught in comm
     'games/g/test/named.test.ts': "test('six icons: any, maskable', () => {});\n",
     'games/g/test/hushed.test.ts': '// @ts-' + 'ignore\nconst x = 1;\n',
   });
-  assert.deepEqual(problems(site, { ...NONE, mjs: [], program: ['g'], runner: ['g/test.sh'] }).filter(p => p.includes('is not allowed')), [
+  assert.deepEqual(problems(site, { ...NONE, mjs: [], program: ['g'] }).filter(p => p.includes('is not allowed')), [
     'g/test/hushed.test.ts: @ts-' + 'ignore is not allowed in a test (see games/_kit/README.md)',
   ]);
 });
 
 test('an allowlist entry that is no longer needed is stale', t => {
   const site = tree(t, {});
-  const allow: Allow = { mjs: ['g/test/gone.test.mjs'], program: ['g'], runner: ['g/test.sh'], check: ['g/test/b.test.ts'], legacy: ['tests/php/RealTest.php'] };
+  const allow: Allow = { mjs: ['g/test/gone.test.mjs'], program: ['g'], runner: ['units.sh'], check: ['g/test/b.test.ts'], legacy: ['tests/php/RealTest.php'] };
   assert.deepEqual(problems(site, allow), [
     'stale allowlist entry: remove it (ALLOW.mjs: g/test/gone.test.mjs)',
     'stale allowlist entry: remove it (ALLOW.program: g)',
-    'stale allowlist entry: remove it (ALLOW.runner: g/test.sh)',
+    'stale allowlist entry: remove it (ALLOW.runner: units.sh)',
     'stale allowlist entry: remove it (ALLOW.check: g/test/b.test.ts)',
     'stale allowlist entry: remove it (ALLOW.legacy: tests/php/RealTest.php)',
   ]);
@@ -271,4 +279,32 @@ test('with nothing allowed, the bridges must be gone', t => {
   ]);
   const allowed = problems(site, { ...NONE, mjs: ['g/test/old.test.mjs'] });
   assert.ok(allowed.every(p => !p.includes('delete it')), allowed.join('\n'));
+});
+
+// units.sh itself, on a scratch tree with a stand-in node that prints its arguments.
+function runUnits(t: { after: (fn: () => void) => void }, files: Record<string, string>) {
+  const site = tree(t, {
+    'games/_kit/build/b.test.ts': '',
+    'games/loose/test/x.test.ts': '', // no build.json: not a game, so not run
+    'bin/node': '#!/bin/sh\necho "$@"\n',
+    ...files,
+  });
+  chmodSync(join(site, 'bin', 'node'), 0o755);
+  return spawnSync('sh', [join(site, 'games', 'units.sh')], {
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${join(site, 'bin')}:${process.env.PATH ?? ''}` },
+  });
+}
+
+test('units.sh runs the kit and every game in one node --test', t => {
+  const run = runUnits(t, {});
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout, '--test _kit/test/a.test.ts _kit/build/b.test.ts g/test/b.test.ts\n');
+});
+
+test('units.sh fails, naming the folder, when a folder has no test files', t => {
+  const run = runUnits(t, { 'games/h/build.json': '{ "programs": [] }\n' });
+  assert.equal(run.status, 1);
+  assert.equal(run.stdout, '');
+  assert.match(run.stderr, /no h\/test\/\*\.test\.ts/);
 });

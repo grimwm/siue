@@ -61,6 +61,7 @@ test:
 	vendor/bin/phpunit --testsuite kit
 	cd games && npm ci --silent
 	for t in games/*/test.sh; do echo "== $$t"; $$t || exit 1; done
+	games/units.sh
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html && vendor/bin/phpunit --testsuite tankity-docker'
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php protocol/generate.php --check'
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php protocol/sim-vectors.php --check'

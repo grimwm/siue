@@ -32,14 +32,6 @@
     "frames": 16,
     "fps": 30
   },
-  "mushroom": {
-    "file": "mushroom.png",
-    "frame": 128,
-    "cols": 6,
-    "rows": 4,
-    "frames": 24,
-    "fps": 14
-  },
   "moon": {
     "file": "moon.png",
     "frame": 192,

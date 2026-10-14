@@ -621,8 +621,12 @@ audio:
 #                      gfx.shake from the arsenal.
 #               flash  { color, alpha, dur }: a full-screen flash of that
 #                      "#rrggbb" colour at alpha 0 to 1 that fades over dur
-#                      seconds (0.05 to 1.5). Players who prefer reduced
-#                      motion get no flash.
+#                      seconds (0.05 to 1.5). The engine ramps it in over
+#                      80 ms and never draws it past 0.35. Players who prefer
+#                      reduced motion, or turn Screen flashes off in Settings,
+#                      get no flash; Screen flashes off also leaves out the
+#                      large bright layers (additive dots, blobs and sprites
+#                      sized by the blast radius, three quarters of it or more).
 #
 # emitter fields. Write only what differs from the default in brackets (the
 # editor never writes a default). `count` and `rate` say how much, the rest
@@ -689,7 +693,7 @@ audio:
 #             (a burn mark), flakburst (an airburst), shock, energy,
 #             electric (lightning ball), flare (a hot streak flash), muzzle
 #             (a muzzle blast pointing along its rotation), nuke (the
-#             mushroom sequence; anchor bottom), mushroom
+#             mushroom sequence; anchor bottom)
 #     fps     frames per second; 0 plays the sheet once over the life [0],
 #             0 to 120
 #     anim    once (stop on the last frame), loop, or random (loop from a
@@ -1049,7 +1053,7 @@ effects:
         - { shape: sprite, rate: 20, sheet: smoke, life: [1, 1.5], speed: [0, 8], angle: 90, spread: 120, gravity: -10, drag: 1.2, size: [4.800000000000001, 6], sizeEnd: 2, alpha: [0, 0.45, 0], rotJitter: 180, wind: 1, tint: "#8a5a5a" }
         - { shape: ring, rate: 3, size: [8, 8], sizeEnd: 1.7, ease: out, life: [0.5, 0.5], width: 2, alpha: [0.8, 0.4, 0], colors: ["#ff6b6b"], glow: true }
     impact:
-      screen: { shake: 0.9, flash: { color: "#fff3e0", alpha: 0.85, dur: 0.6 } }
+      screen: { shake: 0.9, flash: { color: "#ffb070", alpha: 0.35, dur: 0.6 } }
       emitters:
         - { shape: sprite, count: 6, sheet: scorch, unit: r, size: [0.24, 0.3], life: [4, 5], offset: 0.62, edge: true, angle: -90, spread: 130, alpha: [0.95, 0.85, 0], rotJitter: 180, ground: true }
         - { count: 1, unit: r, size: [1.28, 1.28], sizeEnd: 0.6, life: [0.3, 0.3], alpha: [0.7, 0.35, 0], colors: ["#ffffff", "#fff3c4", "#ff6b6b"], glow: true }

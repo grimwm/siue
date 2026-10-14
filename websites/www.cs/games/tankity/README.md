@@ -51,7 +51,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `src/ui/standings.tsx` | The scoreboard table, at the top of the shop and on the end cards |
 | `src/scores.ts` | The scores overlay's data: the online board for a difficulty from `scores.php` (the latest load wins; the player's own rows marked), this browser's board for it, `saveLocal` for a finished run (the run just saved is marked), and a redraw when another tab saves. At load it moves the older `tankity-local` rows onto this browser's board. `createScores(deps)` |
 | `src/local-board.ts` | This browser's board, pure on the kit's storage port: the best 20 runs per difficulty under `tankity-scores-local` (`{v: 1, boards}`), ties to the older run, a run saved once by its `ref`, a damaged value read as empty and blocked storage kept nothing and said so, and the move of the `tankity-local` rows an older page saved |
-| `src/menu.ts` | The settings menu (the unit look, the text size and the Difficulty, all remembered in this browser) and the menu overlay's props. `createMenu(deps)` |
+| `src/menu.ts` | The settings menu (the unit look, the text size, the Difficulty and Screen flashes, all remembered in this browser) and the menu overlay's props. `createMenu(deps)` |
 | `src/title.ts` | The title card over the demo: whether it shows, the initials it edits, and its props. `createTitle(deps)` |
 | `src/initials.ts` | A player's three-letter initials: the rule, the blocked words, the one saved set per browser (`tankity-initials`), random until chosen, saving a typed set, and reading the three boxes for Host and Join |
 | `src/ui/initials-picker.tsx` | The three initials boxes the title card and the rooms lobby share, their ids under a prefix (`title-initial-1`, `lobby-initial-1`); typing survives a redraw |
@@ -81,7 +81,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `server/.htaccess` | `Require all denied`: the files in `server/` are libraries, never endpoints. Each also answers 404 if asked for directly (`TANKITY_ROOMS_INCLUDED` is defined only by `rooms.php`) |
 | `scores.php`, `config.php` | Score API: a GET answers a difficulty's online board, every POST answers 410 (solo scores stay in the browser); `.config.yaml` reader |
 | `src/fx/engine.ts`, `src/fx/types.ts`, `src/fx/trail.ts` | The effects engine (particle pool, emitters, screen flash, shell glow), shared by the game and the editor; bundled as the classic script `dist/fx.js`, which sets `window.TankityFX`. `types.ts` is the engine's public shape (`FxEngine`) |
-| `fx/sprites/` | Sprite sheets and `sprites.json`, rendered by `fx/blender/render_fx.py`: blasts and smoke (`blast`, `fireball`, `plume`, `smoke`, `flakburst`, `nuke`, `mushroom`), ground (`dirt`, `debris`, `scorch`), light (`shock`, `energy`, `electric`, `flare`, `muzzle`), the shells in flight (`shells.png`, one `p_*` sheet per shell) and `moon` |
+| `fx/sprites/` | Sprite sheets and `sprites.json`, rendered by `fx/blender/render_fx.py`: blasts and smoke (`blast`, `fireball`, `plume`, `smoke`, `flakburst`, `nuke`), ground (`dirt`, `debris`, `scorch`), light (`shock`, `energy`, `electric`, `flare`, `muzzle`), the shells in flight (`shells.png`, one `p_*` sheet per shell) and `moon` |
 | `fx/blender/render_fx.py` | Headless Blender script that builds and renders the sprite sheets; its header documents the command and every option. Dev only |
 | `fx-editor.html`, `fx-editor.css`, `src/fx/editor.ts` | Dev-only live effects editor (see Weapon effects); `editor.ts` is bundled as the classic script `dist/fx-editor.js`, which sets `window.fxEditor`. Never deployed |
 | `.config.yaml` | Server settings, read-only, never sent to browsers; env vars win (`TANKITY_MAX_ROOMS`, `TANKITY_ROOM_MAX_AGE`, `TANKITY_ROOM_LIVE_SECS`, `TANKITY_DATA_DIR`, `TANKITY_JOURNAL`, `TANKITY_ROOM_JOINS_PER_HOUR`, `TANKITY_ALLOWED_HOSTS`; `CONFIG_FILE` points elsewhere) |
@@ -955,9 +955,20 @@ and the editor both go through it. Reduced motion (`prefers-reduced-motion`)
 cuts counts and rates (x0.35, x0.4), shortens lives and drops the screen
 flash; shake was already off. Sprite sheets load lazily from `fx/sprites/`:
 the moon and the shell bodies at once, the rest one file at a time when the
-page is idle (or as soon as an effect asks for one); until a sheet arrives,
-or if it never does, the other emitters carry the effect. Sheets that share
-a file (the shells atlas) share one image and its tinted copies.
+page is idle (the sheets most blasts use first), and a gun's own sheets as
+soon as it is bought or a round starts with it in the rack (`FX.preload`,
+`fxPreload`), so a nuke's mushroom is ready before it lands. Each file is
+decoded (`img.decode()`) before its sheets count as ready, so the first
+frame drawn costs nothing. Until a sheet arrives, or if it never does, the
+other emitters carry the effect. Sheets that share a file (the shells atlas)
+share one image and its tinted copies.
+
+Screen flashes: the full-screen flash ramps in over 80 ms and is never drawn
+past 0.35, whatever an effect asks. Settings has a Screen flashes toggle
+(`tankity-flashes` in this browser, on by default): off drops the flash and
+the large bright layers (`FX.isBright`: additive dots, blobs and sprites sized
+by the blast radius, three quarters of it or more). Reduced motion drops the
+flash too.
 
 Every impact is built in layers, each its own emitter so a weapon can drop or
 retune any of them: a burn mark on the crater walls (`scorch`, on the edge of

@@ -1447,6 +1447,32 @@ await (async () => {
     const noBody = arsenal.ammo.filter(a => !(defs[a.key].body && /^p_/.test(defs[a.key].body.sprite || ''))).map(a => a.key);
     check('fx-every-shell-has-a-body-sprite', noBody.length === 0, noBody.join(','));
     const ctx = { save() {}, restore() {}, translate() {}, rotate() {}, drawImage() {}, globalCompositeOperation: '', globalAlpha: 1 };
+    // The screen flash ramps in over 80 ms and never passes 0.35, whatever an effect asks.
+    const flashAt = (sys4, t) => { const seen = []; const c4 = { set globalAlpha(v) { seen.push(v); }, get globalAlpha() { return 1; }, fillRect() {}, fillStyle: '' }; sys4.step(t); sys4.drawFlash(c4, 10, 10); return seen.length ? seen[0] : 0; };
+    const fs1 = FX.createSystem({ max: 400 });
+    fs1.emit({ emitters: [], screen: { flash: { color: '#ffffff', alpha: 1, dur: 0.6 } } }, 0, 0, 0, 1);
+    const a0 = flashAt(fs1, 0.01), a1 = flashAt(fs1, 0.09);
+    check('fx-flash-ramps-in', a0 > 0 && a0 < 0.1, 'at 10 ms ' + a0);
+    check('fx-flash-capped', a1 > 0.2 && a1 <= 0.35, 'at 100 ms ' + a1);
+    check('fx-nuke-flash-warm', defs.nuke.impact.screen.flash.alpha <= 0.35 && defs.nuke.impact.screen.flash.color === '#ffb070', JSON.stringify(defs.nuke.impact.screen.flash));
+    // Screen flashes off: no flash at all, and the big bright additive layers stay out.
+    const fs2 = FX.createSystem({ max: 5000 });
+    FX.flashes = false;
+    fs2.emit(defs.nuke.impact, 100, 100, 0, 70, true);
+    fs2.step(0.3);
+    const calmFlash = flashAt(fs2, 0.05), calmSpawned = fs2.stats.spawned;
+    FX.flashes = true;
+    const fs3 = FX.createSystem({ max: 5000 });
+    fs3.emit(defs.nuke.impact, 100, 100, 0, 70, true);
+    fs3.step(0.3);
+    check('fx-flashes-off-drops-flash', calmFlash === 0, 'alpha ' + calmFlash);
+    const bright = defs.nuke.impact.emitters.filter(e => FX.isBright(e));
+    check('fx-flashes-off-drops-bright-layers', bright.length >= 2 && calmSpawned < fs3.stats.spawned, `bright ${bright.length}, ${calmSpawned} vs ${fs3.stats.spawned}`);
+    // Preloading: a weapon's every sheet (body, muzzle, trail, impact, specials), and the
+    // engine never fetches mushroom any more.
+    const nukeSheets = FX.sheetsOf(defs.nuke);
+    check('fx-sheets-of-a-weapon', nukeSheets.includes('nuke') && nukeSheets.includes('p_nuke') && nukeSheets.includes('blast') && nukeSheets.includes('muzzle'), nukeSheets.join(','));
+    check('fx-no-mushroom-sheet', !('mushroom' in JSON.parse(read('fx/sprites/sprites.json'))) && !fs.existsSync(path.join(GAME_DIR, 'fx/sprites/mushroom.png')));
     check('fx-body-falls-back-before-load', FX.drawBody(ctx, 0, 0, 10, 0, { halo: 0, sprite: 'p_shell', size: 15 }, '#ffffff', 0) === false);
   }
   {

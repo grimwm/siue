@@ -20,16 +20,16 @@ function shopFor(on, seed = 'shop') {
   const G = { body: 'tank' };
   soloDeal(G, arsenal, seed, 'normal', 720);
   Object.assign(G, { phase: 'shop', shopSel: 0, shopQty: 1, selected: 'shell' });
-  const lines = [], netBuys = [];
+  const lines = [], netBuys = [], preloads = [];
   const tables = { arsenal, weapons: arsenal.weapons, shop: arsenal.shop, gear: arsenal.gear, order: arsenal.order };
   const shop = createShop({
     G, $: () => null, tables, net: { on, seats: () => [], readyNow: () => false, shopClockLeft: () => 0 },
     sfx: { play() {} }, me: () => G.tanks[0], touch: false, keyHint: () => '',
     say: (t) => lines.push(t), advance() {}, render() {}, renderHUD() {}, refreshNavHints() {},
     drawShellIcon() {}, drawGearIcon() {}, openPreview() {}, nextRound() {}, openLeaveVeil() {},
-    netBuy: (it, q) => netBuys.push([it.g, q]), board: () => null,
+    netBuy: (it, q) => netBuys.push([it.g, q]), board: () => null, preloadFx: keys => preloads.push([...keys]),
   });
-  return { G, shop, lines, netBuys };
+  return { G, shop, lines, netBuys, preloads };
 }
 const rowOf = (k) => arsenal.shop.find(r => (r.kind === 'ammo' ? r.w : r.g) === k);
 
@@ -52,4 +52,17 @@ test('a room\'s Repair asks netBuy for what the hull takes, not the dial', () =>
   shop.buyItem(rowOf('repair'), 9);
   assert.equal(netBuys.length, 1, 'a full hull never reaches the server');
   assert.equal(lines.at(-1), 'Armor is full already.');
+});
+
+test('a gun bought, and the rack as the round starts, get their effects fetched ahead of the first shot', () => {
+  const { G, shop, preloads } = shopFor(false);
+  G.cash = 1e6;
+  shop.buyItem(rowOf('mortar'), 1);
+  assert.deepEqual(preloads.at(-1), ['mortar']);
+  shop.buyItem(rowOf('repair'), 1);
+  assert.equal(preloads.length, 1, 'gear has no effects to fetch');
+  shop.hideShop();
+  const rack = preloads.at(-1);
+  assert.ok(rack.includes('shell') && rack.includes('mortar'), rack.join(','));
+  assert.ok(rack.every(k => k === 'shell' || G.ammo[k] > 0), 'only guns in the rack');
 });

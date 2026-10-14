@@ -618,5 +618,6 @@ window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); 
 window.fxEditor = { sys, get defs() { return defs; }, cur, fire, get phase() { return phase; } };
 
 makeTerrain();
-FX.loadSprites('fx/sprites/', () => { buildParams(); });
+// The editor wants every sheet now, not when the page is idle.
+FX.loadSprites('fx/sprites/', () => { buildParams(); }).then(() => FX.preload(Object.keys(FX.sheets)));
 reloadFile(true).then(() => requestAnimationFrame(frame)).catch((err: Error) => say('Could not load the effects from game.json: ' + err.message, 'bad'));

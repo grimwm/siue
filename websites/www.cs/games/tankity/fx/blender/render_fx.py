@@ -19,7 +19,7 @@ Options (after the `--`):
     --out DIR         Where sheets and sprites.json go. Default ../sprites next
                       to this script.
     --only A,B        Render just these sheets (names from SHEETS and ATLASES
-                      below: fireball, smoke, shock, energy, mushroom, moon,
+                      below: fireball, smoke, shock, energy, moon,
                       blast, plume, dirt, debris, scorch, flakburst, electric,
                       nuke, flare, muzzle, shells). Default: all. sprites.json
                       keeps the entries of sheets that were not re-rendered.
@@ -47,9 +47,9 @@ Options (after the `--`):
 Sheet layout (all recorded in sprites.json): frames are square, `frame` px on a
 side, row-major from the top-left, `cols` per row, `frames` in all; `fps` is the
 rate the animation was designed for (an emitter may override it). Colour
-conventions: `fireball` and `mushroom` are natural colour (fire and smoke);
+conventions: `fireball` is natural colour (fire);
 `smoke`, `shock`, `energy` are neutral white and grey so an emitter's `tint`
-(multiply) colours them. The mushroom stands on the bottom edge of its frame. `moon` is seven phases of
+(multiply) colours them. `moon` is seven phases of
 a procedural moon (maria and craters, lit by one sun lamp swung round it, a
 touch of earthshine on the dark side); the game picks one per match.
 
@@ -476,62 +476,6 @@ def build_energy(frames, rng):
             d = sp * ease_out(t)
             o.location = (math.cos(a) * d, 0, math.sin(a) * d)
             o.keyframe_insert('location', frame=f)
-
-
-def build_mushroom(frames, rng):
-    """A nuclear mushroom cloud rising off the ground, standing on the bottom
-    edge of the frame: glowing base, boiling stem, rolling cap, ground dust."""
-    GROUND = -2.0                                # frame bottom (ortho half-height 2.2 below)
-    STEM_H, STEM_R = 2.9, 0.34
-    CAP_RX, CAP_RZ = 1.55, 0.85
-    HOT = [(0.0, (0.05, 0.03, 0.025)), (0.4, (0.35, 0.1, 0.03)), (0.7, (0.95, 0.4, 0.06)), (1.0, (1.0, 0.8, 0.35))]
-    COLD = [(0.0, (0.03, 0.025, 0.022)), (0.5, (0.1, 0.08, 0.07)), (1.0, (0.3, 0.24, 0.2))]
-
-    def part(r, scale, stops, strength, strength_noise, disp, size):
-        o = sphere(r=r, sub=4, scale=scale)
-        emp = moving_empty(rng, frames, 0.9)
-        cloud_displace(o, disp, size, emp)
-        m = ramp_material('mush', stops, strength=strength, alpha_power=0.6, noise=strength_noise, noise_scale=2.2)
-        o.data.materials.append(m)
-        return o, m
-    stem, sm_ = part(1.0, (1, 1, 1), HOT, 2.0, 0.35, 0.3, 0.8)
-    cap, cm_ = part(1.0, (1, 1, 1), HOT, 2.2, 0.3, 0.35, 0.9)
-    skirt, km_ = part(1.0, (1, 1, 1), HOT, 2.0, 0.3, 0.25, 0.8)
-    base, bm_ = part(1.0, (1, 1, 1), HOT, 3.0, 0.1, 0.25, 1.0)
-    dust, dm_ = part(1.0, (1, 1, 1), COLD, 1.0, 0.45, 0.3, 0.9)
-    for f in range(frames):
-        t = f / (frames - 1)
-        rise = ease_out(t)
-        h = STEM_H * rise
-        sr = STEM_R * (0.7 + 0.5 * t)
-        stem.scale = (sr, sr, max(0.05, h * 0.5))
-        stem.location = (0, 0, GROUND + h * 0.5)
-        cz = GROUND + h + CAP_RZ * 0.1 * t
-        cx, cz_r = CAP_RX * (0.15 + 0.85 * ease_out(min(1, t * 1.25))), CAP_RZ * (0.2 + 0.8 * ease_out(min(1, t * 1.1)))
-        cap.scale = (cx, cx * 0.7, cz_r)
-        cap.location = (0, 0, cz + cz_r * 0.2)
-        skirt.scale = (cx * 0.95, cx * 0.6, cz_r * 0.38)
-        skirt.location = (0, 0, cz - cz_r * 0.55)
-        bw = 0.55 + 0.7 * ease_out(t)
-        base.scale = (bw, bw * 0.7, 0.34 + 0.15 * t)
-        base.location = (0, 0, GROUND + 0.28)
-        dw = 0.4 + 1.55 * ease_out(t)
-        dust.scale = (dw, dw * 0.6, 0.3 + 0.16 * t)
-        dust.location = (0, 0, GROUND + 0.18)
-        for o in (stem, cap, skirt, base, dust):
-            o.keyframe_insert('scale', frame=f)
-            o.keyframe_insert('location', frame=f)
-        cool = smooth(0.15, 0.85, t)
-        mat_key(sm_, 'heat', f, 0.05 + 0.8 * cool)
-        mat_key(cm_, 'heat', f, 0.15 + 0.75 * cool)
-        mat_key(km_, 'heat', f, 0.25 + 0.7 * cool)
-        mat_key(bm_, 'heat', f, 0.0 + 0.7 * cool)
-        mat_key(dm_, 'heat', f, 0.0)
-        mat_key(sm_, 'alpha', f, smooth(0, 0.05, t) * (1 - smooth(0.82, 1.0, t)))
-        mat_key(cm_, 'alpha', f, smooth(0, 0.08, t) * (1 - smooth(0.85, 1.0, t)))
-        mat_key(km_, 'alpha', f, smooth(0.05, 0.2, t) * (1 - smooth(0.85, 1.0, t)))
-        mat_key(bm_, 'alpha', f, smooth(0, 0.04, t) * (1 - smooth(0.4, 0.8, t)))
-        mat_key(dm_, 'alpha', f, 0.8 * smooth(0, 0.1, t) * (1 - smooth(0.6, 1.0, t)))
 
 
 def build_moon(frames, rng):
@@ -1504,7 +1448,6 @@ SHEETS = {
     'smoke': (build_smoke, 64, 16, 4, 14),
     'shock': (build_shock, 96, 12, 4, 24),
     'energy': (build_energy, 96, 16, 4, 30),
-    'mushroom': (build_mushroom, 128, 24, 6, 14),
     'moon': (build_moon, 192, 7, 4, 0),
     'blast': (build_blast, 128, 24, 6, 30),
     'plume': (build_plume, 96, 20, 5, 12),

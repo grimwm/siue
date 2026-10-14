@@ -111,6 +111,11 @@ export interface FxEngine extends FxApi {
   BODY_DEFAULTS: Readonly<Required<Pick<FxBody, 'halo' | 'alpha' | 'pulse' | 'stretch'>>>;
   createSystem(opts: { max: number }): FxSys;
   loadSprites(base: string, done?: (any: boolean) => void): Promise<boolean>;
+  /** Players' Screen flashes setting: false drops the screen flash and the large bright layers. */
+  flashes: boolean;
+  isBright(em: Emitter): boolean;
+  sheetsOf(set: FxSet | undefined): string[];
+  preload(names: string[]): void;
   adopt(em: Partial<Emitter>): Emitter;
   dress(defs: Record<string, FxSetData>): Record<string, FxSet>;
   dressEffect(ef: FxEffectData): FxEffect;

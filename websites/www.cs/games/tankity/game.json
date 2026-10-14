@@ -1634,8 +1634,8 @@
                 "screen": {
                     "shake": 0.9,
                     "flash": {
-                        "color": "#fff3e0",
-                        "alpha": 0.85,
+                        "color": "#ffb070",
+                        "alpha": 0.35,
                         "dur": 0.6
                     }
                 },

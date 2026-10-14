@@ -21,6 +21,8 @@ import type { Emitter, FxBody, FxEffect, FxEffectData, FxEngine, FxSet, FxSetDat
 import type { Weapon } from '../sim.ts';
 
 const TAU = Math.PI * 2, DEG = Math.PI / 180, LUT_N = 12;
+/* The full-screen flash: at most this opaque, reached after this many seconds. */
+const FLASH_MAX = 0.35, FLASH_RAMP = 0.08;
 const SHAPES = ['dot', 'streak', 'ring', 'spark', 'smoke', 'sprite', 'bolt', 'beam'] as const;
 const SLOTS = ['muzzle', 'trail', 'impact'] as const;
 const SPECIALS = ['split', 'steer', 'pierce', 'arc'];
@@ -137,7 +139,7 @@ interface SpriteIndex { [name: string]: { file?: string; frame: number; cols: nu
 /* Sprite sheets: name -> { img, fw, fh, cols, frames, first, ready, tints }. */
 const sheets: Record<string, SpriteSheetData> = {};
 /* One image per file, shared by the sheets cut from it. */
-interface SheetFile { img: HTMLImageElement; url: string; asked: boolean; users: SpriteSheetData[]; settle: (ok: boolean) => void }
+interface SheetFile { img: HTMLImageElement; url: string; asked: boolean; settled: boolean; users: SpriteSheetData[]; settle: (ok: boolean) => void }
 const files: Record<string, SheetFile> = {};
 function tintedSheet(sh: SpriteSheetData, color: string): CanvasImageSource {
   let t = sh.tints[color];
@@ -164,20 +166,40 @@ function tintedSheet(sh: SpriteSheetData, color: string): CanvasImageSource {
   for (const u of f ? f.users : [sh]) u.tints[color] = t;
   return t;
 }
-/* Start fetching a sheet's image now (a sprite asked for it before its turn). */
+/* Start fetching a sheet's file now (preloaded, or a sprite asked for it
+   before its turn). */
 function want(sh: SpriteSheetData): void {
   const f = sh.file ? files[sh.file] : undefined;
-  if (f && !f.asked) { f.asked = true; f.img.src = f.url; }
+  if (f) ask(f);
 }
+/* Fetch a file once, and decode it before its sheets count as ready, so the
+   first frame drawn costs nothing and the effect starts on its first frame. */
+function ask(f: SheetFile): void {
+  if (f.asked) return;
+  f.asked = true;
+  const img = f.img;
+  if (typeof img.decode === 'function') {
+    img.src = f.url;
+    img.decode().then(() => f.settle(true), () => f.settle(!!(img.complete && img.naturalWidth)));
+  } else {
+    img.onload = () => f.settle(true);
+    img.onerror = () => f.settle(false);
+    img.src = f.url;
+  }
+}
+/* The idle loader's order after the eager files: the sheets nearly every
+   blast uses first, then the rest as sprites.json lists them. */
+const IDLE_FIRST = ['blast', 'fireball', 'dirt', 'debris', 'plume', 'smoke', 'scorch', 'muzzle', 'shock'];
 /* Read sprites.json (written by fx/blender/render_fx.py) and fetch the
    sheets lazily: the moon and the shell bodies at once, the rest one file at
-   a time when the page is idle, or sooner when an effect first asks for
-   one. Missing sheets or no Image support just leave sprite emitters
-   silent; every effect also carries non-sprite emitters. */
+   a time when the page is idle (or sooner, when preload() or an effect asks
+   for one). Missing sheets or no Image support just leave sprite emitters
+   silent; every effect also carries non-sprite emitters. `done` runs once
+   every file has settled. */
 function loadSprites(base: string, done?: (any: boolean) => void): Promise<boolean> {
   if (typeof fetch !== 'function' || typeof Image !== 'function') { if (done) done(false); return Promise.resolve(false); }
   return fetch(base + 'sprites.json').then((r): Promise<SpriteIndex | null> => r.json()).then(idx => {
-    let pending = 0, any = false;
+    let pending = 0, any = false, running = false;
     const finish = () => { if (--pending <= 0 && done) done(any); };
     const order: SheetFile[] = [];
     for (const name of Object.keys(idx || {})) {
@@ -185,24 +207,21 @@ function loadSprites(base: string, done?: (any: boolean) => void): Promise<boole
       if (!d || !d.file || name[0] === '_') continue;
       let f = files[d.file];
       if (!f) {
-        const img = new Image();
-        const nf: SheetFile = f = files[d.file] = { img, url: base + d.file, asked: false, users: [], settle: () => {} };
+        const nf: SheetFile = f = files[d.file] = { img: new Image(), url: base + d.file, asked: false, settled: false, users: [], settle: () => {} };
         pending++;
-        let settled = false;
         nf.settle = ok => {
-          if (settled) return;
-          settled = true;
+          if (nf.settled) return;
+          nf.settled = true;
           if (ok) { any = true; for (const u of nf.users) u.ready = true; }
           finish();
-          next();
         };
-        img.onload = () => nf.settle(true);
-        img.onerror = () => nf.settle(false);
         order.push(nf);
       }
       const sh: SpriteSheetData = sheets[name] = { name, file: d.file, img: f.img, fw: d.frame, fh: d.frame, cols: d.cols, frames: d.frames, first: d.first || 0, fps: d.fps || 24, ready: false, tints: {} };
       f.users.push(sh);
     }
+    const rank = (f: SheetFile): number => Math.min(...f.users.map(u => { const k = IDLE_FIRST.indexOf(u.name); return k < 0 ? IDLE_FIRST.length : k; }));
+    order.sort((x, y) => rank(x) - rank(y));
     // The moon and the shell bodies show at once; the blasts can wait for an idle moment.
     const eager = (f: SheetFile): boolean => f.users.some(u => u.name === 'moon' || /^p_/.test(u.name));
     const idle = (fn: () => void): void => {
@@ -210,18 +229,47 @@ function loadSprites(base: string, done?: (any: boolean) => void): Promise<boole
       if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(fn, { timeout: 1200 });
       else setTimeout(fn, 60);
     };
-    let at = 0;
+    // One chain: each idle moment asks for the next file nobody has asked for yet.
     function next(): void {
-      while (at < order.length && order[at]!.asked) at++;
-      if (at >= order.length) return;
-      const f = order[at++]!;
-      idle(() => { if (!f.asked) { f.asked = true; f.img.src = f.url; } else next(); });
+      if (running) return;
+      const f = order.find(o => !o.asked);
+      if (!f) return;
+      running = true;
+      idle(() => {
+        ask(f);
+        if (f.settled) { running = false; next(); return; }
+        const settle = f.settle;
+        f.settle = ok => { settle(ok); running = false; next(); };
+      });
     }
-    for (const f of order) if (eager(f)) { f.asked = true; f.img.src = f.url; }
+    for (const f of order) if (eager(f)) ask(f);
     next();
     if (!pending && done) done(false);
     return true;
   }).catch(() => { if (done) done(false); return false; });
+}
+
+/* A large bright layer: an additive dot, soft blob or sprite sized by the
+   blast radius and reaching three quarters of the radius or more (a
+   white-hot core, a flare, a fireball's glow, a shock flash). Players who turn Screen flashes off get none. */
+function isBright(em: Emitter): boolean {
+  if (!em.glow || em.unit !== 'r' || (em.shape !== 'dot' && em.shape !== 'smoke' && em.shape !== 'sprite')) return false;
+  return em.size[1] * (em.shape === 'sprite' ? em.scale : Math.max(1, em.sizeEnd)) >= 0.75;
+}
+/* Every sheet a weapon's effect set draws: its body and every emitter of
+   every slot and special. */
+function sheetsOf(set: FxSet | undefined): string[] {
+  const out = new Set<string>();
+  if (!set) return [];
+  if (set.body && set.body.sprite) out.add(set.body.sprite);
+  const effects: (FxEffect | undefined)[] = [set.muzzle, set.trail, set.impact, ...Object.values(set.special || {})];
+  for (const ef of effects) for (const em of (ef && ef.emitters) || []) if (em.shape === 'sprite' && em.sheet) out.add(em.sheet);
+  return [...out];
+}
+/* Fetch and decode these sheets now (a gun was bought, or a round starts with
+   it in the rack), so their first frame is ready when the shot lands. */
+function preload(names: string[]): void {
+  for (const n of names) { const sh = sheets[n]; if (sh) want(sh); }
 }
 
 /* ---------- effect data helpers ---------- */
@@ -389,6 +437,7 @@ function createSystem(opts?: { max?: number }): FxSys {
     for (let i = 0; i < list.length; i++) {
       const em = list[i]!;
       if (em.ground && ground === false) continue;
+      if (!api.flashes && isBright(em)) continue;
       const k = em.unit === 'r' ? (r || 1) : 1;
       if (em.delay > 0 || em.duration > 0) {
         for (let j = 0; j < Q.length; j++) {
@@ -401,7 +450,7 @@ function createSystem(opts?: { max?: number }): FxSys {
     }
     const sc = ef.screen;
     if (sc) {
-      if (sc.flash && !isReduced()) {
+      if (sc.flash && !isReduced() && api.flashes) {
         const f = sys.flash;
         if (sc.flash.alpha >= f.a * (1 - f.t / f.dur)) {
           f.a = sc.flash.alpha; f.dur = Math.max(0.05, sc.flash.dur || 0.3); f.t = 0; f.color = sc.flash.color || '#ffffff';
@@ -611,8 +660,9 @@ function createSystem(opts?: { max?: number }): FxSys {
   /* The full-screen flash, in canvas pixels (call outside the world transform). */
   function drawFlash(c: CanvasRenderingContext2D, w: number, h: number): void {
     const f = sys.flash;
-    if (!(f.a > 0)) return;
-    c.globalAlpha = Math.max(0, f.a * (1 - f.t / f.dur));
+    if (!(f.a > 0) || !api.flashes) return;
+    // Never a hard white frame: ramp in over FLASH_RAMP, never past FLASH_MAX.
+    c.globalAlpha = Math.max(0, Math.min(FLASH_MAX, f.a) * Math.min(1, f.t / FLASH_RAMP) * (1 - f.t / f.dur));
     c.fillStyle = f.color;
     c.fillRect(0, 0, w, h);
     c.globalAlpha = 1;
@@ -753,7 +803,8 @@ const api: FxEngine = {
   DEFAULTS, SHAPES, SLOTS, SPECIALS, EASES, AIMS, ANIMS, SCHEMA,
   reduced: false,
   sheets,
-  createSystem, loadSprites, glow, drawBody, BODY_DEFAULTS,
+  flashes: true,
+  createSystem, loadSprites, glow, drawBody, BODY_DEFAULTS, isBright, sheetsOf, preload,
   adopt, dress, dressEffect, newEmitter, cloneEmitter, validate, derive, toYaml, play,
   parseColor, lutFor,
 };

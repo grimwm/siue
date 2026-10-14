@@ -107,6 +107,14 @@ export function createEffects(deps: FxDeps) {
     }
     return FX!.play.impact(sys, fxSet(key), x, y, r, ground);
   }
+  /* Fetch and decode every sheet these weapons draw, ahead of their first
+     shot: called when a gun is bought and for the rack as a round starts. */
+  function fxPreload(keys: readonly string[]): void {
+    if (!FX) return;
+    const names = new Set<string>();
+    for (const k of keys) for (const n of FX.sheetsOf(fxSet(k))) names.add(n);
+    FX.preload([...names]);
+  }
   function fxSpecial(sys: FxSys | null, key: string, name: string, x: number, y: number, ang: number): void {
     if (sys) FX!.play.special(sys, fxSet(key), name, x, y, ang);
   }
@@ -118,5 +126,5 @@ export function createEffects(deps: FxDeps) {
     FX!.play.trail(sys, fxSet(wkey!), s, dt, x!, y!, vx!, vy!);
   }
 
-  return { fxSet, installEffects, fxMuzzle, fxImpact, fxSpecial, fxTrail };
+  return { fxSet, installEffects, fxMuzzle, fxImpact, fxSpecial, fxTrail, fxPreload };
 }

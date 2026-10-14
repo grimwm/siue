@@ -160,6 +160,35 @@ function protocol_snapshots(): array
     $out['play-after-earth'] = ['After the host fires a sandhog, dirt, liquid dirt, a riot charge and a disrupter in turn (the drone answering each): the dig event (start, heading, steps, from at to t1) before its warheads\' bursts, then dirt, pour, riot and slump events with the server\'s own unrounded numbers.',
         200, $ok(room_snapshot($earth, 0, 0))];
 
+    // Napalm: the hills dug into a valley under the drone, and the first aim
+    // whose pool burns it (the drone answering): the burn event (the pool and
+    // t1, its last tick), then each tick's hit, stamped at its tick.
+    $napalm = protocol_gun('napalm');
+    $vale = $play;
+    $dx = (int) round($vale['tanks'][1]['x']);
+    foreach ($vale['terrain'] as $ix => $y) {
+        $vale['terrain'][$ix] = 330.0 + 90.0 * max(0.0, 1.0 - abs($ix - $dx) / 150.0);
+    }
+    foreach ($vale['tanks'] as $i => $t) {
+        $vale['tanks'][$i]['y'] = room_surf_y($vale['terrain'], (float) $t['x']);
+    }
+    $burnt = null;
+    $dir = $vale['tanks'][0]['x'] < $vale['tanks'][1]['x'] ? 1 : -1;
+    for ($a = 20; $a <= 80 && $burnt === null; $a += 2) {
+        for ($p = 100; $p >= 30 && $burnt === null; $p -= 5) {
+            $after = protocol_fire($vale, (float) ($dir > 0 ? $a : 180 - $a), (float) $p, $napalm);
+            $hits = array_filter($after['events'], fn($e) => ($e['t'] ?? '') === 'hit' && $e['seat'] === 1 && ($e['by'] ?? -1) === 0);
+            if (count($hits) > 1 && $after['phase'] === 'play' && in_array('aifire', array_column($after['events'], 't'), true)) {
+                $burnt = $after;
+            }
+        }
+    }
+    if ($burnt === null) {
+        throw new RuntimeException('no aim burns the drone in its valley');
+    }
+    $out['play-after-burn'] = ['After the host fires napalm into the valley the drone sits in: the shot (r 0: no blast), the burn event (the pool poured at column x, its level over x0..x1, its flames, and t1, when its last tick burns), each tick\'s hit stamped at its tick, then the drone answers. The ground does not change.',
+        200, $ok(room_snapshot($burnt, 0, 0))];
+
     $kill = $play;
     $kill['tanks'][1]['hp'] = 1;
     $won = protocol_fire($kill, $angle, $power);

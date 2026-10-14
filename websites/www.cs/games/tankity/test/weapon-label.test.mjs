@@ -17,7 +17,7 @@ test('the shipped guns read the way the deck shows them', () => {
   assert.equal(blastSize(gun('rail').radius), 'S');
   assert.equal(blastSize(gun('mortar').radius), 'L');
   assert.equal(blastSize(gun('nuke').radius), 'L');
-  for (const w of GAME.arsenal.ammo) assert.match(weaponLine(w), /^(\d+ dmg|no damage) · (S|M|L|beam|path|earth)$/, w.key);
+  for (const w of GAME.arsenal.ammo) assert.match(weaponLine(w), /^(\d+ dmg(\/tick)?|no damage) · (S|M|L|beam|path|earth|fire)$/, w.key);
 });
 
 test('readers hear the words, not the letters', () => {
@@ -47,4 +47,11 @@ test('an earth gun reads earth; one that bursts as it lands (Dirt Charge) reads 
   assert.equal(weaponLine(hog), `${hog.subDmg} dmg · earth`);
   assert.equal(weaponLine(find(a => a.effect === 'riot')), 'no damage · earth');
   assert.equal(weaponLineSpoken(find(a => a.effect === 'slump')), 'no damage, moves earth');
+});
+
+test('a napalm gun reads its damage a tick, and fire', () => {
+  for (const w of GAME.arsenal.ammo.filter(a => a.effect === 'napalm')) {
+    assert.equal(weaponLine(w), `${w.dmg} dmg/tick · fire`, w.key);
+    assert.equal(weaponLineSpoken(w), `${w.dmg} damage a tick, burns`, w.key);
+  }
 });

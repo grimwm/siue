@@ -25,7 +25,7 @@ import type { Weapon } from './sim.ts';
 
 /** The slice of the game's state the view reads and steps (main.ts's G). */
 export type ViewState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'cam' | 'terrain' | 'clouds' | 'time' | 'shake'
-  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'preview' | 'w' | 'hills' | 'marks' | 'earth'>;
+  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'preview' | 'w' | 'hills' | 'marks' | 'earth' | 'fire'>;
 
 /** What the view needs from the page and the rest of the game. */
 export interface ViewDeps {
@@ -136,6 +136,7 @@ export function createView(deps: ViewDeps) {
       booms: G.booms, fx: G.fx, shells: G.shells, replay: flying, ghosts: flyOn, sparks: G.parts,
       // A line mark is its gunner's alone: the seat in a room, the player's unit in solo.
       marks: G.marks.shown(net.on ? net.seat : G.tanks.findIndex(u => u.isPlayer)),
+      fires: G.fire.pools().map(p => ({ ...p, heat: G.fire.heat(p) })),
       wind: G.wind,
       textScale: textScale(),
       turnClock: left !== null && left <= CLOCK_SHOW_S && left > 0 ? { left, myTurn: MATCH.myTurn } : null,
@@ -143,6 +144,7 @@ export function createView(deps: ViewDeps) {
         canvas: pv.cv as HTMLCanvasElement, width: PV_W, height: PV_H, terr: previewGround(pv), sx: pv.sx, tx: pv.tx, sy: pv.sy, ty: pv.ty,
         angle: pv.angle, foeHp: pv.foeHp, foeHpMax: PV_FOE_HP, wkey: pv.wkey, wind: pv.wind,
         booms: pv.booms, shells: pv.shells, fx: pv.fx, result: pv.result, resultT: pv.resultT, trace: pv.trace,
+        fires: pv.fire.pools().map(p => ({ ...p, heat: pv.fire.heat(p) })),
       } : null,
     };
   }

@@ -63,3 +63,14 @@ test('a dirt gun\'s icon is a clod: a lumpy ball of several lumps and crumbs', (
     assert.ok(calls.filter(c => c[0] === 'arc').length >= 6, `${w.key} draws lumps and crumbs`);
   }
 });
+
+test('a napalm gun\'s icon is a flame: a burning drop with tongues of flame licking up off it', () => {
+  const ws = GAME.arsenal.ammo.filter(a => a.gfx.painter === 'flame');
+  assert.ok(ws.length >= 2, 'the napalm guns paint flames');
+  for (const w of ws) {
+    const { cv, calls } = canvas();
+    icons.drawShellIcon(cv, w);
+    assert.ok(calls.filter(c => c[0] === 'quadraticCurveTo').length >= 6, `${w.key} draws its tongues of flame`);
+    assert.ok(calls.some(c => c[0] === 'arc'), `${w.key} draws its burning drop`);
+  }
+});

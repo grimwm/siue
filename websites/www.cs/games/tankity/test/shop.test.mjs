@@ -98,3 +98,12 @@ test('an earth gun\'s row says how it moves the ground, never that hits double',
   assert.equal(ammoSub(slump), `No damage, slopes slump within ${slump.radius}.`);
   for (const w of GAME.arsenal.ammo.filter(a => ['dirt', 'pour', 'dig', 'riot', 'slump'].includes(a.effect))) assert.doesNotMatch(ammoSub(w), /double/, w.key);
 });
+
+test('a napalm gun\'s row says what it burns a tick and how many ticks, never that hits double', () => {
+  const { ammoSub } = m.shop;
+  for (const w of GAME.arsenal.ammo.filter(a => a.effect === 'napalm')) {
+    const ticks = Math.floor(w.burn / w.tick + 1e-9);
+    assert.equal(ammoSub({ ...w, note: undefined }), `${w.dmg} damage a tick, ${ticks} ticks, to all in a burning pool of ${w.volume} px².`);
+    assert.doesNotMatch(ammoSub(w), /double/, w.key);
+  }
+});

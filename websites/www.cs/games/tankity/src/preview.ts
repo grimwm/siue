@@ -19,6 +19,10 @@ import { createEarthShow } from './earth-show.ts';
 import type { EarthShow } from './earth-show.ts';
 import type { Shell, Tank, Weapon } from './sim.ts';
 import { MARK_EVERY } from './marks.ts';
+import { burnTicks, firePool, inFlames, tickSteps } from './fire.ts';
+import type { FirePool } from './fire.ts';
+import { createFireShow } from './fire-show.ts';
+import type { FireShow } from './fire-show.ts';
 import type { MarkKind } from './marks.ts';
 
 export const PV_W = 360, PV_H = 200, PV_WIND = 3, PV_FOE_HP = 60;
@@ -77,6 +81,11 @@ export interface PreviewState<C = unknown> {
   dropped: number; buriedBy: number;
   /** The range's ground as drawn while earth settles (a mound rising, liquid dirt flowing), as the war's. */
   show: EarthShow;
+  /** A napalm pool on the range: the last one lit (null before one), how it is burning by the war's
+   *  ticks (null once out: steps burned, the step fraction carried, ticks burnt), and its flames on screen. */
+  pool: FirePool | null;
+  burn: { step: number; acc: number; done: number; every: number; ticks: number } | null;
+  fire: FireShow;
   wind: number;
   angle: number; power: number;
   phase: PreviewPhase;
@@ -104,13 +113,13 @@ export function previewGround(pv: PreviewState): readonly number[] {
   return pv.show.shown(pv.terr);
 }
 /* The range for gun w: its usual hills, with what shows an earth gun off. A
-   slump gets a steep ridge for the dummy to stand on, a pour a dip for it to
-   fill; a riot charge's shooter stands buried under a mound it digs itself
+   slump gets a steep ridge for the dummy to stand on, a pour (and napalm) a
+   dip for it to fill; a riot charge's shooter stands buried under a mound it digs itself
    out of (the shooter stands on the range's own hills, makePreviewTerrain). */
 function makeRange(w: Readonly<Weapon>, sx: number, tx: number): number[] {
   const terr = makePreviewTerrain();
   if (w.effect === 'slump') for (let x = 0; x < PV_W; x++) terr[x] = terr[x]! - Math.max(0, RIDGE - Math.abs(x - tx) * RIDGE_SLOPE);
-  if (w.effect === 'pour') for (let x = 0; x < PV_W; x++) terr[x] = terr[x]! + Math.max(0, 30 - Math.abs(x - tx) * 0.8);
+  if (w.effect === 'pour' || w.effect === 'napalm') for (let x = 0; x < PV_W; x++) terr[x] = terr[x]! + Math.max(0, 30 - Math.abs(x - tx) * 0.8);
   if (w.effect === 'riot') addDirt(terr, sx, terr[sx]! - 4, 30);
   return terr;
 }
@@ -131,7 +140,8 @@ export function createPreview<C, F extends PreviewFx>(wkey: string, env: Preview
   const terr = makeRange(w, sx, tx);
   return {
     wkey, terr,
-    sx, tx, sy: makePreviewTerrain()[sx]!, ty: terr[tx]!, dropped: 0, buriedBy: 0, show: createEarthShow(), wind: PV_WIND,
+    sx, tx, sy: makePreviewTerrain()[sx]!, ty: terr[tx]!, dropped: 0, buriedBy: 0, show: createEarthShow(),
+    pool: null, burn: null, fire: createFireShow(), wind: PV_WIND,
     angle: 60, power: 50, phase: 'aim', t: 0.6,
     shells: [], booms: [], volleys: 0, foeHp: PV_FOE_HP,
     fx,
@@ -294,7 +304,7 @@ function previewEarth(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: Rea
     env.impact(pv.fx, pv.wkey, s.x, s.y, w.radius);
     pv.show.begin(before, Math.max(0, Math.floor(s.x - w.radius)), Math.min(PV_W - 1, Math.ceil(s.x + w.radius)), 'dirt', x);
   } else if (w.effect === 'pour') {
-    const p = pourLevel(pv.terr, x, w.volume || 0);
+    const p = pourLevel(pv.terr, x, w.volume || 0, w.poolMin || 0);
     fillPour(pv.terr, p);
     env.impact(pv.fx, pv.wkey, s.x, s.y, Math.max(12, (p.x1 - p.x0) / 2));
     if (p.x1 >= p.x0) env.special(pv.fx, pv.wkey, 'pour', p.x0, p.level, 0, p.x1 - p.x0);
@@ -304,6 +314,44 @@ function previewEarth(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: Rea
     env.impact(pv.fx, pv.wkey, s.x, s.y, w.radius);
     pv.show.begin(before, Math.max(0, Math.floor(s.x - w.radius)), Math.min(PV_W - 1, Math.ceil(s.x + w.radius)), 'slump', x);
   }
+}
+/* A napalm shell bursts on the range: its pool, poured as the war pours it
+   (fire.ts firePool) on the range's ground, which it never changes, burns by
+   the war's ticks (previewBurn). One that spilled away lights nothing. */
+function previewNapalm(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: Readonly<Weapon>): void {
+  s.dead = true;
+  const x = Math.round(clamp(s.x, 0, PV_W - 1));
+  const p = firePool(pv.terr, x, w.volume || 0, w.flame || 0, w.poolMin || 0);
+  pv.pool = p;
+  if (p.x0 > p.x1) {
+    env.impact(pv.fx, pv.wkey, s.x, pv.terr[x]!, 12);
+    return;
+  }
+  const every = tickSteps(w.tick || 0.5), ticks = burnTicks(w.burn || 0, w.tick || 0.5);
+  pv.burn = { step: 0, acc: 0, done: 0, every, ticks };
+  env.impact(pv.fx, pv.wkey, (p.x0 + p.x1) / 2, p.level, Math.max(12, (p.x1 - p.x0) / 2));
+  env.special(pv.fx, pv.wkey, 'burn', p.x0, p.level, 0, p.x1 - p.x0);
+  pv.fire.light({ wkey: pv.wkey, ...p }, ticks * every / 60);
+}
+/* The range's pool burns on, a 1/60 s step at a time as the war's does: each
+   tick burns the dummy when its body (a ground unit's hit box) reaches into
+   the flames; it goes out with its last tick. */
+function previewBurn(pv: PreviewState, dt: number, w: Readonly<Weapon>): void {
+  const b = pv.burn, p = pv.pool;
+  if (!b || !p) return;
+  b.acc += dt * 60;
+  while (b.acc >= 1 - 1e-9 && b.done < b.ticks) {
+    b.acc -= 1;
+    b.step++;
+    if (b.step % b.every !== 0) continue;
+    b.done++;
+    if (inFlames(p, { cx: pv.tx, cy: pv.ty - 10, rx: 20, ry: 13 })) {
+      pv.foeHp = Math.max(0, pv.foeHp - w.dmg);
+      pv.volleyDmg += w.dmg;
+      pv.volleyHits += 1;
+    }
+  }
+  if (b.done >= b.ticks) pv.burn = null;
 }
 /* One step of a digger's burrow on the range: its trench, and each warhead as it falls due. */
 function stepPreviewDig(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: Readonly<Weapon>): void {
@@ -442,6 +490,7 @@ function stepPreviewRoller(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w
 export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void {
   if (pv.fx) { pv.fx.wind = pv.wind; pv.fx.step(dt); }
   pv.show.step(dt);
+  pv.fire.step(dt);
   for (const bm of pv.booms) bm.t += dt;
   pv.booms = pv.booms.filter(bm => bm.t < bm.life);
   if (pv.resultT > 0) pv.resultT -= dt;
@@ -510,6 +559,7 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
           continue;
         }
         if (EARTH_BURSTS.includes(w.effect)) { previewEarth(pv, env, s, w, touch); continue; }
+        if (w.effect === 'napalm') { previewNapalm(pv, env, s, w); continue; }
         s.dead = true;
         previewBoom(pv, env, s.x, s.y, shellBoom(s));
         previewAfterBurst(pv, env, s, w, touch);
@@ -526,13 +576,16 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
       }
       const gone = s.x < 0 || s.x >= PV_W || s.y >= PV_H;
       if (landed && !gone && EARTH_BURSTS.includes(w.effect)) { previewEarth(pv, env, s, w, false); continue; }
+      if (landed && !gone && w.effect === 'napalm') { previewNapalm(pv, env, s, w); continue; }
       s.dead = gone || landed;
       if (s.dead) previewBoom(pv, env, s.x, s.y, shellBoom(s));
       if (landed && !gone) previewAfterBurst(pv, env, s, w, false);
     }
     pv.shells = pv.shells.filter(s => !s.dead);
+    previewBurn(pv, dt, w);
   }
-  if (pv.phase === 'fly' && !pv.shells.length) {
+  // The volley is down once its last shell is, and its pool has burned out.
+  if (pv.phase === 'fly' && !pv.shells.length && !pv.burn) {
     const w = weaponOf(env, pv.wkey);
     {
       settlePreview(pv);
@@ -540,7 +593,9 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
       pv.t = 1.6;
       const end = pv.trace && pv.trace.landed ? pv.trace.pts.slice(-2) : null;
       const off = end ? Math.round(Math.abs(end[0]! - pv.tx)) : 0;
-      pv.result = w.effect === 'tracer'
+      pv.result = w.effect === 'napalm'
+        ? (pv.volleyDmg > 0 ? `Burned the dummy: ${pv.volleyDmg} damage` : pv.pool && pv.pool.x0 <= pv.pool.x1 ? 'The pool burns clear of the dummy.' : 'It runs off and burns out.')
+        : w.effect === 'tracer'
         ? (end ? (off < 10 ? 'Marked: right on the dummy' : `Marked: ${off} px from the dummy`) : 'Marked: off the range')
         : EARTH_EFFECTS.includes(w.effect) || w.dmg === 0 || (pv.dropped > 0 && !pv.volleyHits)
           ? earthResult(pv, w)

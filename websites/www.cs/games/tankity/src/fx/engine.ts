@@ -15,7 +15,9 @@
  *            tank it fries), hop (a hop gun's leap), scatter (a scatter gun's
  *            bomblets thrown up), beam (a beam's whole line: played along it),
  *            dig (a digger's burrow, at its head as it cuts; a riot charge's
- *            cut, along the barrel), pour (liquid dirt, along its pool)
+ *            cut, along the barrel), pour (liquid dirt, along its pool),
+ *            burn (napalm, along its pool as it lights; rate emitters with a
+ *            duration stream over it while it burns)
  *   body     the shell itself: halo radius/alpha/pulse, stretch (streak behind)
  * Every emitter field and its default lives in DEFAULTS below; game.yaml
  * carries only what differs. The particle pool is preallocated and capped, so
@@ -29,7 +31,7 @@ const TAU = Math.PI * 2, DEG = Math.PI / 180, LUT_N = 12;
 const FLASH_MAX = 0.35, FLASH_RAMP = 0.08;
 const SHAPES = ['dot', 'streak', 'ring', 'spark', 'smoke', 'sprite', 'bolt', 'beam'] as const;
 const SLOTS = ['muzzle', 'trail', 'impact'] as const;
-const SPECIALS = ['split', 'steer', 'pierce', 'arc', 'hop', 'scatter', 'beam', 'dig', 'pour'];
+const SPECIALS = ['split', 'steer', 'pierce', 'arc', 'hop', 'scatter', 'beam', 'dig', 'pour', 'burn'];
 const EASES = ['linear', 'out', 'in'] as const;
 const AIMS = ['fixed', 'forward', 'back', 'normal'] as const;
 const ANIMS = ['once', 'loop', 'random'] as const;

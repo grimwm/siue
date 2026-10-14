@@ -1312,3 +1312,85 @@ foreach ($weapons as $k => $def) {
     room_fire_shot($room, $events, 0, 'shell');
     $check('shell-at-the-dip-fires-at-10', $room['tanks'][0]['angle'] === 10.0, json_encode($room['tanks'][0]['angle']));
 }
+// Napalm in a room: a V valley (rim 330, floor 420 at x 360) with two drones
+// in it and a human up on the flat rim.
+$vale = [];
+for ($ix = 0; $ix < 720; $ix++) {
+    $vale[] = 330.0 + 90.0 * max(0.0, 1.0 - abs($ix - 360) / 150.0);
+}
+foreach ($weapons as $k => $def) {
+    if ($def['effect'] !== 'napalm') {
+        continue;
+    }
+    $valeRoom = function () use ($flatRoom, $tank, $vale, $k): array {
+        $room = $flatRoom([['dirS' => 1, 'angle' => 45.0, 'ammo' => ['shell' => -1, $k => 2]] + $tank(0, 'human', 110.0, 100),
+            $tank(1, 'ai', 340.0, 100), $tank(2, 'ai', 385.0, 100)]);
+        $room['terrain'] = $vale;
+        foreach ($room['tanks'] as $i => $t) {
+            $room['tanks'][$i]['y'] = $vale[(int) $t['x']];
+        }
+        return $room + ['round' => 9, 'rng' => 4, 'difficulty' => 'hard', 'jammer' => [], 'ammo' => [0 => ['shell' => -1, $k => 2]]];
+    };
+    // A human's turn ran out: the stand-in fires their napalm into the valley, burning both drones and never the human.
+    $room = $valeRoom();
+    $wkey = room_standin_shot($room, 0);
+    $events = [['t' => 'auto', 'seat' => 0, 'w' => $wkey]];
+    room_fire_shot($room, $events, 0, $wkey);
+    $check("standin-fires-$k", $wkey === $k && $room['tanks'][1]['hp'] < 100 && $room['tanks'][2]['hp'] < 100 && $room['tanks'][0]['hp'] === 100,
+        json_encode([$wkey, array_column($room['tanks'], 'hp')]));
+    // The burn is all inside its volley: a burn event, then each tick's hits stamped at landing + k x tick, and the pace (when the
+    // next drone may fire) covers its last tick. Nothing burns on in the room, so a later poll has nothing to do for it.
+    $burn = array_values(array_filter($events, fn($e) => $e['t'] === 'burn'))[0] ?? null;
+    $n = room_burn_ticks($def['burn'], $def['tick']);
+    $hitAts = array_values(array_unique(array_map(fn($e) => $e['at'], array_filter($events, fn($e) => $e['t'] === 'hit'))));
+    $want = [];
+    for ($i = 1; $i <= $n; $i++) {
+        $want[] = round($burn['at'] + $i * room_tick_steps($def['tick']) / 60, 3);
+    }
+    $check("$k-burns-inside-its-volley", $burn !== null && $burn['t1'] === round($burn['at'] + $n * room_tick_steps($def['tick']) / 60, 3)
+        && $hitAts === $want && $room['pace']['wait'] >= $burn['t1'] + ROOM_AIM_MAX, json_encode([$burn, $hitAts, $want, $room['pace']]));
+    // The same volley with a Shell: the room keys a napalm volley leaves are among those any volley leaves.
+    $shellRoom = $valeRoom();
+    $shellEvents = [['t' => 'fire', 'seat' => 0, 'w' => 'shell']];
+    room_fire_shot($shellRoom, $shellEvents, 0, 'shell');
+    $tankKeys = array_merge(...array_map('array_keys', $room['tanks']));
+    $check("$k-leaves-no-fire-in-the-room", array_diff(array_keys($room), array_keys($shellRoom)) === [] && preg_grep('/fire|burn|pool/i', $tankKeys) === [],
+        json_encode([array_keys($room), array_keys($shellRoom), $tankKeys]));
+    $check("$k-never-changes-the-ground", $room['terrain'] === $vale && !isset($room['terrainRev']));
+}
+// Napalm on flat ground: a puddle about volume / poolMin wide, poolMin deep,
+// centred where it lands, burning the tank standing in it; by a field edge
+// the puddle stays and its overflow spills off.
+foreach ($weapons as $k => $def) {
+    if ($def['effect'] !== 'napalm') {
+        continue;
+    }
+    $pool = room_fire_pool(array_fill(0, 720, 400.0), 300.0, $def['volume'], $def['flame'], $def['poolMin']);
+    $width = $pool['x1'] - $pool['x0'] + 1;
+    $check("$k-puddle-on-flat", abs($width - $def['volume'] / $def['poolMin']) <= 2 && abs(($pool['x0'] + $pool['x1']) / 2 - 300) <= 1
+        && $pool['level'] === 400.0 - $def['poolMin'], json_encode($pool));
+    $edge = room_fire_pool(array_fill(0, 720, 400.0), 5.0, $def['volume'], $def['flame'], $def['poolMin']);
+    $check("$k-puddle-at-the-edge-spills-its-overflow", $edge['x0'] === 0 && $edge['x1'] > 5 && $edge['x1'] - $edge['x0'] + 1 < $def['volume'] / $def['poolMin'], json_encode($edge));
+    // A drone's napalm comes down on a human on flat ground: every tick burns it.
+    $room = $flatRoom([$tank(0, 'human', 400.0, 100), ['dirS' => -1] + $tank(1, 'ai', 600.0, 200)]);
+    $room += ['round' => 9, 'rng' => 4];
+    $events = [];
+    room_fire_burn($room, $events, 1, $def, $k, ['hit', 400.0, 400.0, 0.0, 80.0, null], 1.0);
+    $n = room_burn_ticks($def['burn'], $def['tick']);
+    $check("$k-on-flat-burns-the-tank-in-its-puddle", $room['tanks'][0]['hp'] === 100 - $n * (int) $def['dmg'] && $room['terrain'] === array_fill(0, 720, 400.0),
+        json_encode([$room['tanks'][0]['hp'], array_filter($events, fn($e) => $e['t'] === 'burn')]));
+}
+// The flames never reach a tank buried under the dirt the pool lies on.
+foreach ($weapons as $k => $def) {
+    if ($def['effect'] !== 'napalm') {
+        continue;
+    }
+    $room = $flatRoom([$tank(0, 'human', 400.0, 100), $tank(1, 'human', 445.0, 100), ['dirS' => 1] + $tank(2, 'ai', 100.0, 200)]);
+    for ($x = 380; $x <= 420; $x++) {
+        $room['terrain'][$x] = 370.0;
+    }
+    $room += ['round' => 9, 'rng' => 4];
+    $events = [];
+    room_fire_burn($room, $events, 2, $def, $k, ['hit', 400.0, 370.0, 0.0, 80.0, null], 1.0);
+    $check("$k-never-burns-a-buried-tank", $room['tanks'][0]['hp'] === 100 && $room['tanks'][1]['hp'] < 100, json_encode(array_column($room['tanks'], 'hp')));
+}

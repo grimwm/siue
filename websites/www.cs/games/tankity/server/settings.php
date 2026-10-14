@@ -19,7 +19,7 @@ const ROOM_AI_NAMES = ['REAPER', 'WRAITH', 'SPOTTER', 'HUNTER'];
 const ROOM_MAX_ROOMS = 50; // built-in default; .config.yaml and env can change it
 /* The turn times the host can pick, in seconds: Lightning 1 min, 2 min (the
    default), 10 min, 30 min, 8 h, 24 h, 1 week. src/turn-time.ts holds the same
-   list with its labels; test/turn-time.test.mjs keeps them equal. */
+   list with its labels; test/turn-time.test.ts keeps them equal. */
 const ROOM_TURN_STOPS = [60, 120, 600, 1800, 28800, 86400, 604800];
 const ROOM_TURN_DEFAULT = 120;
 function room_max_rooms(): int

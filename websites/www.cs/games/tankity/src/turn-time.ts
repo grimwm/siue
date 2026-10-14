@@ -1,7 +1,7 @@
 /* Operation Tankity: a room's turn time.
  *
  * The host's seven stops (server/settings.php ROOM_TURN_STOPS is the
- * authority; test/turn-time.test.mjs keeps this list equal to it), their
+ * authority; test/turn-time.test.ts keeps this list equal to it), their
  * labels, how a clock reads at any length, and the notes the status bar and
  * the shop add to a room's clocks. A room can close before its clock runs
  * out (nobody acting for its idle limit: 10 minutes when it is played from

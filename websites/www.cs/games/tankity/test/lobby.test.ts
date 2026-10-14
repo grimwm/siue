@@ -5,57 +5,73 @@
 // lobby with a line saying so.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { document, click } from '../../_kit/test/dom-stub.mjs';
+import { asElement, click, document, installDocument } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
+import type { StorageLike } from '../../_kit/ports.ts';
+import type { MatchState } from '../src/game-types.ts';
+import type { EndState } from '../src/match.ts';
+import type { LobbyDeps } from '../src/lobby.ts';
+import type { RoomEnv } from '../src/net.ts';
+import type { Replay } from '../src/replay.ts';
 
-globalThis.document = document;
-const m = await importTsx(import.meta.dirname, { lobby: '../src/lobby.ts', net: '../src/net.ts', seats: '../src/seats.ts' });
+installDocument();
+const m = await importTsx<{
+  lobby: typeof import('../src/lobby.ts');
+  net: typeof import('../src/net.ts');
+  seats: typeof import('../src/seats.ts');
+}>(import.meta.dirname, { lobby: '../src/lobby.ts', net: '../src/net.ts', seats: '../src/seats.ts' });
 
-const lobbyRoom = (over = {}) => ({
+/** What the fake server answers: a status and the JSON body. */
+interface Answer { status: number; body: unknown }
+
+const lobbyRoom = (over: Record<string, unknown> = {}) => ({
   code: 'AB3D', phase: 'lobby', seats: [{ seat: 0, human: true, name: 'ABC', mode: 'human' }, { seat: 1, human: false, name: 'REAPER', mode: 'ai' }],
   hostSeat: 0, events: [], turnSecs: 120, closesIn: 600, you: { seat: 0 }, map: null, mapName: 'Random hills', difficulty: 'normal', ...over,
 });
 
-function rig(respond) {
-  const intervals = new Map();
+function rig(respond: (url: string, init?: { method?: string; body?: string }) => Answer | Promise<Answer>) {
+  const intervals = new Map<number, { fn: () => void; ms: number }>();
   let next = 1;
-  const env = {
+  const env: RoomEnv = {
     fetch: async (url, init) => {
       const r = await respond(url, init);
       return { ok: r.status >= 200 && r.status < 300, status: r.status, json: async () => r.body };
     },
     setTimeout: (fn) => { queueMicrotask(fn); return 0; },
     setInterval: (fn, ms) => { const id = next++; intervals.set(id, { fn, ms }); return id; },
-    clearInterval: id => { intervals.delete(id); },
+    clearInterval: id => { intervals.delete(Number(id)); },
     now: () => 0,
     beacon: () => true,
   };
-  const storage = new Map();
-  const seats = m.seats.createSeatStore({ getItem: k => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) }, () => 0);
-  const said = [];
+  const storage = new Map<string, string>();
+  const store: StorageLike = { getItem: k => storage.get(k) ?? null, setItem: (k, v) => { storage.set(k, v); }, removeItem: k => { storage.delete(k); } };
+  const seats = m.seats.createSeatStore(store, () => 0);
+  const said: string[] = [];
   const G = { body: 'tank', demo: true, over: false };
-  const titled = [];
-  let lobby;
+  const titled: number[] = [];
   const net = new m.net.RoomClient(env, {
     onReachable() {}, onSnapshot() {}, onReadyChange() {}, onError() {},
     onGone: (code, why) => lobby.netGone(code, why),
   });
-  const $ = id => document.getElementById(id);
-  lobby = m.lobby.createLobby({
-    G, $, net,
-    MATCH: { myTurn: false, initials: '' }, HUD: { online: false }, END: {}, replay: { clear() {} }, sfx: { play() {} },
-    difficulty: { get: () => 'normal' }, unlock() {}, say: (t) => said.push(t), keyHint: () => '', seats,
+  const $ = (id: string) => document.getElementById(id);
+  // The cases read these elements' own fields; the lobby is handed them as the DOM's.
+  const el = (id: string) => asElement($(id)) as HTMLElement;
+  const lobby = m.lobby.createLobby({
+    G, $: el, net,
+    // The lobby reads only the fields given for these three, so each partial literal stands for the whole object.
+    MATCH: { myTurn: false, initials: '' } as MatchState, HUD: { online: false }, END: {} as EndState, replay: { clear() {} } as Replay, sfx: { play() {} },
+    difficulty: { get: () => 'normal' }, unlock() {}, say: (t) => { said.push(t); }, keyHint: () => '', seats,
     games: () => ({ rows: [], alerts: 'unsupported', age: 0, onOpen() {}, onAlerts() {} }), steppedOut() {},
     netEvent() {}, seatName: () => 'ABC', closeLobbyVeil: () => { $('lobby-veil').hidden = true; return true; },
     closeOverlays: () => false, closePreview() {}, endTutorial() {}, closeTitle() {}, backToTitle() { titled.push(1); G.demo = true; },
     initials: { get: () => 'ABC', set() {}, subscribe: () => () => {} }, initialsSaved() {},
     hideShop() {}, paintHud() {}, refreshNavHints() {}, renderMenu() {}, renderShop() {},
-  });
+  } satisfies LobbyDeps);
   seats.remember({ code: 'AB3D', seat: 0, token: 'tok', csrf: 'c', initials: 'ABC' });
   const tick = async () => { for (const { fn } of [...intervals.values()]) fn(); for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r)); };
   return { net, lobby, seats, said, G, titled, intervals, tick, $ };
 }
-const ok = body => ({ status: 200, body });
+const ok = (body: unknown): Answer => ({ status: 200, body });
 
 test('a refusal stays on the status line while the lobby polls; the roster line lives apart', async () => {
   const r = rig(url => {

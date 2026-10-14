@@ -1051,6 +1051,65 @@
                     "painter": "spark",
                     "shake": 0.6
                 }
+            },
+            {
+                "key": "napalm",
+                "name": "Napalm",
+                "cat": "Fire",
+                "dmg": 6,
+                "radius": 1,
+                "price": 300,
+                "pack": 2,
+                "minRound": 4,
+                "ai": true,
+                "aiRound": 6,
+                "effect": "napalm",
+                "volume": 2200,
+                "burn": 3.0,
+                "tick": 0.5,
+                "flame": 18,
+                "speed": 1.0,
+                "note": "Pools in the low ground where it lands and burns for 3 s. Up to 36 damage to a tank sitting in it.",
+                "gfx": {
+                    "shell": "#ff8a3c",
+                    "trail": "#c8501e",
+                    "blast": [
+                        "#ff9a3c",
+                        "#ffe27a"
+                    ],
+                    "painter": "disc",
+                    "shake": 0.3
+                }
+            },
+            {
+                "key": "hotnapalm",
+                "name": "Hot Napalm",
+                "cat": "Fire",
+                "dmg": 10,
+                "radius": 1,
+                "price": 550,
+                "pack": 1,
+                "minRound": 6,
+                "ai": true,
+                "aiRound": 9,
+                "aiRack": 1,
+                "effect": "napalm",
+                "volume": 3200,
+                "burn": 4.0,
+                "tick": 0.5,
+                "flame": 26,
+                "speed": 1.0,
+                "note": "A bigger, taller pool that burns for 4 s, up to 80. Its flames reach drones hovering by the rim.",
+                "gfx": {
+                    "shell": "#ffd04a",
+                    "trail": "#e8641e",
+                    "blast": [
+                        "#ffc04a",
+                        "#fff4c0"
+                    ],
+                    "painter": "disc",
+                    "shake": 0.4
+                }
             }
         ],
         "gear": [
@@ -5367,6 +5426,68 @@
                     {"shape":"sprite","count":10,"sheet":"plume","unit":"r","size":[0.16,0.22],"life":[1.2,2],"speed":[0.1,0.4],"angle":90,"spread":160,"gravity":-6,"drag":1,"wind":1,"alpha":[0,0.6,0.3,0],"rotJitter":30,"tint":"#9a7a52","offset":0.9,"delay":0.2},
                     {"count":40,"unit":"r","offset":1,"life":[0.4,0.9],"speed":[0.3,1],"angle":90,"spread":60,"gravity":300,"drag":0.4,"size":[0.008,0.016],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"],"delay":0.1},
                     {"shape":"bolt","count":6,"unit":"r","length":0.4,"size":[0.8,0.8],"life":[0.12,0.25],"alpha":[1,1,0],"colors":["#c8fff0"],"glow":true}
+                ]
+            }
+        },
+        "napalm": {
+            "body": {
+                "halo": 0,
+                "alpha": 0,
+                "sprite": "p_mud",
+                "size": 14,
+                "fps": 16
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[7,7],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.8,0.45,0],"colors":["#ffffff","#e8d4a0"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[9,9],"life":[0.12,0.12],"alpha":[1,1,0]},
+                    {"shape":"sprite","count":4,"sheet":"plume","aim":"forward","spread":60,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[5,7.5],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#a88a62"},
+                    {"count":8,"life":[0.3,0.6],"speed":[60,150],"gravity":320,"drag":0.5,"size":[0.9,1.6],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"],"aim":"forward","spread":50}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"rate":40,"life":[0.3,0.6],"speed":[5,30],"angle":-90,"spread":50,"gravity":340,"size":[1,2],"alpha":[1,1,0],"colors":["#8a5a2a","#5a3a1a"]},
+                    {"shape":"sprite","rate":8,"sheet":"smoke","life":[0.6,1],"speed":[0,8],"angle":90,"spread":120,"gravity":-8,"drag":1.2,"size":[2.4,3.2],"sizeEnd":2,"alpha":[0,0.35,0],"rotJitter":180,"wind":1,"tint":"#8a6a4a"}
+                ]
+            },
+            "impact": {
+                "emitters": [
+                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.6,0.6],"life":[0.8,0.8],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.2,"tint":"#8a6a4a"},
+                    {"count":22,"life":[0.5,1],"speed":[60,190],"angle":90,"spread":140,"gravity":380,"drag":0.4,"size":[1.4,2.8],"alpha":[1,1,0],"colors":["#8a5a2a","#6a4220","#4a2a10"]},
+                    {"shape":"streak","count":12,"life":[0.3,0.6],"speed":[80,200],"angle":90,"spread":130,"gravity":420,"drag":0.3,"size":[1.4,2],"length":7,"alpha":[1,1,0],"colors":["#9a6a3a","#5a3a1a"]},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.1,0.1],"sizeEnd":9,"ease":"out","life":[0.5,0.5],"width":3,"alpha":[0.8,0.4,0],"colors":["#b88a5a","#5a3a1a"]}
+                ]
+            }
+        },
+        "hotnapalm": {
+            "body": {
+                "halo": 0,
+                "alpha": 0,
+                "sprite": "p_mud",
+                "size": 14,
+                "fps": 16
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[7,7],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.8,0.45,0],"colors":["#ffffff","#e8d4a0"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[9,9],"life":[0.12,0.12],"alpha":[1,1,0]},
+                    {"shape":"sprite","count":4,"sheet":"plume","aim":"forward","spread":60,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[5,7.5],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#a88a62"},
+                    {"count":8,"life":[0.3,0.6],"speed":[60,150],"gravity":320,"drag":0.5,"size":[0.9,1.6],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"],"aim":"forward","spread":50}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"rate":40,"life":[0.3,0.6],"speed":[5,30],"angle":-90,"spread":50,"gravity":340,"size":[1,2],"alpha":[1,1,0],"colors":["#8a5a2a","#5a3a1a"]},
+                    {"shape":"sprite","rate":8,"sheet":"smoke","life":[0.6,1],"speed":[0,8],"angle":90,"spread":120,"gravity":-8,"drag":1.2,"size":[2.4,3.2],"sizeEnd":2,"alpha":[0,0.35,0],"rotJitter":180,"wind":1,"tint":"#8a6a4a"}
+                ]
+            },
+            "impact": {
+                "emitters": [
+                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.6,0.6],"life":[0.8,0.8],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.2,"tint":"#8a6a4a"},
+                    {"count":22,"life":[0.5,1],"speed":[60,190],"angle":90,"spread":140,"gravity":380,"drag":0.4,"size":[1.4,2.8],"alpha":[1,1,0],"colors":["#8a5a2a","#6a4220","#4a2a10"]},
+                    {"shape":"streak","count":12,"life":[0.3,0.6],"speed":[80,200],"angle":90,"spread":130,"gravity":420,"drag":0.3,"size":[1.4,2],"length":7,"alpha":[1,1,0],"colors":["#9a6a3a","#5a3a1a"]},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.1,0.1],"sizeEnd":9,"ease":"out","life":[0.5,0.5],"width":3,"alpha":[0.8,0.4,0],"colors":["#b88a5a","#5a3a1a"]}
                 ]
             }
         },

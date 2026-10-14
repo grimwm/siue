@@ -219,6 +219,9 @@ function room_weapon_row(array $am): array
         'warheads' => (int) ($am['warheads'] ?? 0),
         'slope' => (float) ($am['slope'] ?? 1.0),
         'passes' => (int) ($am['passes'] ?? 1),
+        'burn' => (float) ($am['burn'] ?? 0),
+        'tick' => (float) ($am['tick'] ?? 0.5),
+        'flame' => (float) ($am['flame'] ?? 0),
     ];
 }
 function room_gear(string $key): ?array

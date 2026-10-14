@@ -50,6 +50,7 @@ import { createPreview, stepPreview } from './preview.ts';
 import { createReplay } from './replay.ts';
 import { createMarks } from './marks.ts';
 import { createEarthShow } from './earth-show.ts';
+import { createFireShow } from './fire-show.ts';
 import { createFieldWidth } from './field.ts';
 import { createInput, touchOnly, stepArm } from './input.ts';
 import { renderHelp } from './ui/help.tsx';
@@ -185,7 +186,7 @@ const G: GameState = {
   terrain: NOT_DEALT, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // banner | shop | aim | think | fly | settle | over (src/flow.ts)
   thinkT: 0, settleT: 0,
-  shells: [], parts: [], booms: [], fx: null, marks: createMarks(), earth: createEarthShow(),
+  shells: [], parts: [], booms: [], fx: null, marks: createMarks(), earth: createEarthShow(), fire: createFireShow(),
   wind: 0, round: 1, firstTurn: 0,
   lives: TUNE.lives, score: 0, cash: 0, nextOneUp: TUNE.oneUpEvery,
   rounds: [], roundStart: { score: 0, cash: 0 },

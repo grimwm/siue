@@ -265,6 +265,13 @@ export interface RiotEvent extends EventBase { t: 'riot'; by: number; w: string;
 export interface SlumpEvent extends EventBase { t: 'slump'; w: string; x: number; r: number; slope: number; passes: number }
 /** The events that move the earth. */
 export type EarthEvent = DirtEvent | PourEvent | DigEvent | RiotEvent | SlumpEvent;
+/** A napalm shell's pool, lit where it burst (src/fire.ts firePool, with the
+ * server's own numbers): poured at column x, v px^2 of it, its level over
+ * columns x0..x1 (x0 > x1: it spilled away and burns nothing), its flames
+ * `flame` px tall. It burns from `at` until its last tick at t1; each tick's
+ * hits and kills follow as their own events, stamped at the tick. The ground
+ * does not change. */
+export interface BurnEvent extends EventBase { t: 'burn'; by: number; w: string; x: number; v: number; level: number; x0: number; x1: number; flame: number; t1: number }
 /** A blast mid-flight (a lance passing through a unit, a digger's warhead). */
 export interface BurstEvent extends EventBase { t: 'burst'; x: number; y: number; r: number; w: string }
 export interface HitEvent extends EventBase { t: 'hit'; seat: number; dmg: number; by: number; direct: boolean }
@@ -283,7 +290,7 @@ export interface TacticEvent extends EventBase { t: 'tactic'; seat: number; s: s
 export type RoomEvent =
   | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent | TurnTimeEvent
   | FireEvent | AiFireEvent | AutoEvent
-  | ShotEvent | BeamEvent | RingEvent | BurstEvent | DirtEvent | PourEvent | DigEvent | RiotEvent | SlumpEvent | HitEvent | FallEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
+  | ShotEvent | BeamEvent | RingEvent | BurnEvent | BurstEvent | DirtEvent | PourEvent | DigEvent | RiotEvent | SlumpEvent | HitEvent | FallEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
 
 export type RoomEventType = RoomEvent['t'];
 /** The events that open a volley. */

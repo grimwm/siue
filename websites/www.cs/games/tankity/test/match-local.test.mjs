@@ -9,6 +9,7 @@ import { document, makeEl } from '../../_kit/test/dom-stub.mjs';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import { createMarks } from '../src/marks.ts';
 import { createEarthShow } from '../src/earth-show.ts';
+import { createFireShow } from '../src/fire-show.ts';
 
 globalThis.document = document;
 
@@ -22,7 +23,7 @@ const arsenal = buildArsenal(GAME.arsenal);
 function harness(over = {}) {
   const G = {
     seed: '', difficulty: 'normal', rng: null, body: 'tank', terrain: null, clouds: [], tanks: [], turn: 0, phase: 'aim',
-    thinkT: 0, settleT: 0, shells: [], parts: [], booms: [], fx: null, marks: createMarks(), earth: createEarthShow(), wind: 0, round: 1, firstTurn: 0, lives: TUNE.lives, score: 0,
+    thinkT: 0, settleT: 0, shells: [], parts: [], booms: [], fx: null, marks: createMarks(), earth: createEarthShow(), fire: createFireShow(), wind: 0, round: 1, firstTurn: 0, lives: TUNE.lives, score: 0,
     cash: 0, nextOneUp: TUNE.oneUpEvery, rounds: [], roundStart: { score: 0, cash: 0 }, roundsWon: 0, ammo: null, selected: 'shell',
     shopSel: 0, shopQty: 1, fuelBank: 0, armor: TUNE.playerArmor, plate: 0, shield: false, jammer: 0, bunker: 0, laststand: false,
     time: 0, shake: 0, dlgQ: [], dlgT: 0, lastTalk: -99, banterT: 30, bannerT: 0, bannerDone: null, w: ROOM_W, hills: null,
@@ -127,4 +128,40 @@ test('a fall still playing out when a match is left never speaks in the next one
   toFirstTurn();
   for (let i = 0; i < 600; i++) match.fallTanks(1 / 60);
   assert.ok(!said.some(t => /falls|crater/.test(t)), said.join(' | '));
+});
+
+test('the turn does not pass while a napalm pool burns, and its ticks land on the drone in it', () => {
+  const said = [];
+  const { G, match } = harness({ say: t => said.push(t), difficulty: { get: () => 'normal' } });
+  match.startSolo('napalm');
+  for (let i = 0; i < 10_000 && G.phase !== 'aim'; i++) {
+    if (G.phase === 'banner') match.tickBanner(10);
+    else if (G.phase === 'shop') match.nextRound();
+    else { match.fallTanks(1 / 60); match.stepWar(1 / 60); }
+  }
+  assert.equal(G.phase, 'aim');
+  // A narrow valley under the first drone; everyone else on the flat around it.
+  const foe = G.tanks[1], cx = Math.round(foe.x);
+  G.terrain = G.terrain.map((_, ix) => 330 + 90 * Math.max(0, 1 - Math.abs(ix - cx) / 60));
+  for (const t of G.tanks) t.y = surfY(G.terrain, t.x);
+  const hp = foe.hp, turn = G.turn;
+  // The player's napalm comes straight down into the valley.
+  G.shells = [{ x: cx, y: 380, vx: 0, vy: 80, wkey: 'napalm', owner: G.tanks[0], life: 5, age: 1, pierced: false, split: false, order: [0], clear: true }];
+  G.phase = 'fly';
+  let burning = 0;
+  for (let i = 0; i < 2000 && (G.shells.length || (G.fires || []).length); i++) {
+    match.fallTanks(1 / 60);
+    match.stepWar(1 / 60);
+    if ((G.fires || []).length) {
+      burning++;
+      assert.equal(G.phase, 'settle', 'a burning pool holds the volley open');
+      assert.equal(G.turn, turn, 'the turn waits for the fire');
+    }
+  }
+  const w = arsenal.weapons.napalm;
+  assert.ok(Math.abs(burning - w.burn * 60) <= 2, `it burned ${burning} steps`);
+  assert.equal(hp - foe.hp, w.dmg * Math.floor(w.burn / w.tick), 'every tick burned the drone in the pool');
+  assert.ok(said.some(t => /burn/i.test(t)), said.join(' | '));
+  for (let i = 0; i < 600 && G.phase === 'settle'; i++) { match.fallTanks(1 / 60); match.stepWar(1 / 60); }
+  assert.notEqual(G.phase, 'settle', 'once it is out, the turn passes');
 });

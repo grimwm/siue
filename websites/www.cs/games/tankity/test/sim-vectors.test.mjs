@@ -203,12 +203,12 @@ const RUN = {
     // one settle when the last shell is down (src/match.ts), which must come out
     // as the room server's volley does (server/rules.php room_fire_shot). A
     // gun with no flight settles the moment it fires.
-    if (!G.shells.length) sim.settleVolley(G, arsenal);
-    for (let frame = 0; G.shells.length && frame < 5000; frame++) {
+    if (!sim.volleyOn(G)) sim.settleVolley(G, arsenal);
+    for (let frame = 0; sim.volleyOn(G) && frame < 5000; frame++) {
       sim.fallTanks(G, 1 / 60);
       sim.stepShells(G, arsenal, 1 / 60);
       sim.armChutes(G, arsenal);
-      if (!G.shells.length) sim.settleVolley(G, arsenal);
+      if (!sim.volleyOn(G)) sim.settleVolley(G, arsenal);
     }
     for (let frame = 0; frame < 5000 && sim.anyTankFalling(G); frame++) sim.fallTanks(G, 1 / 60);
     return outcome(before);
@@ -292,7 +292,7 @@ const RUN = {
       t.power = choice.power;
       t.ammo.shell = 99;
       sim.fireWeapon(G, arsenal, t, choice.wkey);
-      for (let frame = 0; G.shells.length && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
+      for (let frame = 0; sim.volleyOn(G) && frame < 5000; frame++) sim.stepShells(G, arsenal, 1 / 60);
       sim.settleFalls(G, arsenal);
       const b = t.brk;
       steps.push({ wkey: choice.wkey, angle: choice.angle, power: choice.power, x: t.x, n: b.n, target: b.t, land: b.land });

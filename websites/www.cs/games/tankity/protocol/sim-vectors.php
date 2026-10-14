@@ -711,6 +711,39 @@ if (isset($weapons['dirtball'], $weapons['dirtcharge'], $weapons['liquiddirt'], 
         'tanks' => [array_replace($human(300, 100), ['y' => 300.0, 'dirS' => 1]), array_replace($drone(600, 100), ['y' => 420.0])]]);
 }
 
+/* The fire guns: a pool burns where the napalm lands, tick by tick, credited to its gunner. */
+foreach ($weapons as $wkey => $def) {
+    if (($def['effect'] ?? '') !== 'napalm') {
+        continue;
+    }
+    $vale = ['vee' => [360, 150, 330, 420]];
+    $onVale = sv_terrain($vale);
+    $sat = fn(array $u, int $x) => array_replace($u, ['x' => (float) $x, 'y' => $onVale[$x]]);
+    $earthVolley("$wkey-in-a-valley-burns-two", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 0,
+        'tanks' => [$sat($human(100, 100) + ['dirS' => 1], 100), $sat($drone(340, 100), 340), $sat($drone(385, 100), 385), $sat($drone(600, 100), 600)]], 360.0);
+    $earthVolley("$wkey-shield-eats-first-tick", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 1,
+        'tanks' => [$sat($human(360, 100) + ['shield' => true], 360), $sat($drone(620, 100) + ['dirS' => -1], 620)]], 360.0);
+    $earthVolley("$wkey-bunker-halves", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 1,
+        'tanks' => [$sat($human(360, 100) + ['bunker' => 2], 360), $sat($drone(620, 100) + ['dirS' => -1], 620)]], 360.0);
+    $earthVolley("$wkey-kills-credit-shooter", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 0,
+        'tanks' => [$sat($human(100, 100) + ['dirS' => 1], 100), $sat($drone(360, 14), 360), $sat($drone(600, 100), 600)]], 360.0);
+    $earthVolley("$wkey-kill-sets-off-a-last-stand", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 1,
+        'tanks' => [$sat($human(360, 9) + ['laststand' => true], 360), $sat($drone(600, 100) + ['dirS' => -1], 600), $sat($drone(390, 100), 390)]], 360.0);
+    // Lobbed straight up from the valley floor: it comes down on its own gunner's pool.
+    $volley("$wkey-burns-own-gunner-no-score", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 88, 'power' => 30,
+        'tanks' => [$sat($human(360, 100) + ['dirS' => 1], 360), $sat($drone(600, 100), 600)]]);
+    $earthVolley("$wkey-on-dead-flat-burns-nothing", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0,
+        'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(400, 100)]], 400.0);
+    // A drone on the valley side, its ground a few px over the pool: napalm's flames fall short of its body, hot napalm's reach it.
+    $pool = room_fire_pool($onVale, 360.0, (float) $def['volume'], (float) $def['flame']);
+    $rim = 360;
+    while ($rim > 0 && $onVale[$rim - 1] > $pool['level'] - 7) {
+        $rim--;
+    }
+    $earthVolley("$wkey-flames-and-the-rim-drone", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 0,
+        'tanks' => [$sat($human(620, 100) + ['dirS' => -1], 620), $sat($drone($rim, 100), $rim - 1)]], 360.0);
+}
+
 /* Falls a volley digs: Buckshot pellets digging one pit in several bursts,
  * and craters in fractional ground, with and without parachutes. The browser
  * replays these as a solo match plays them (falls animated every frame, one

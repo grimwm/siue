@@ -22,7 +22,9 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 # One loudness for the whole soundtrack, so Next song never jumps in level.
-TARGET_LUFS=-16
+# Played at volume 0.6 the four first tracks measured -15.1, -12.0, -17.7 and
+# -12.1 LUFS; their median, rounded, keeps the music as loud against the effects.
+TARGET_LUFS=-14
 TARGET_TP=-1.5
 TARGET_LRA=11
 UA='Mozilla/5.0 (tankity-music-build)'
@@ -161,6 +163,71 @@ vet() {
   vet_html "$WORK/page.html"
 }
 
+# ---- encoding ---------------------------------------------------------------
+json_field() { awk -F'"' -v k="$1" '$2 == k { print $4 }' <<<"$2"; }
+
+# encode SLUG INPUT OUTFILE: two-pass loudnorm to the target, then 80 kbps stereo mp3.
+# The first pass measures; the second applies a linear gain, so the music is not
+# compressed. -nostdin because the caller reads the source table on stdin.
+encode() {
+  local slug=$1 in=$2 out=$3 stats i tp lra thr off v norm
+  norm="I=$TARGET_LUFS:TP=$TARGET_TP:LRA=$TARGET_LRA"
+  if ! stats=$(ffmpeg -nostdin -hide_banner -nostats -i "$in" -vn -af "loudnorm=$norm:print_format=json" -f null - 2>&1); then
+    echo "$stats" >&2
+    echo "ffmpeg failed measuring $slug" >&2
+    exit 1
+  fi
+  i=$(json_field input_i "$stats"); tp=$(json_field input_tp "$stats"); lra=$(json_field input_lra "$stats")
+  thr=$(json_field input_thresh "$stats"); off=$(json_field target_offset "$stats")
+  for v in "$i" "$tp" "$lra" "$thr" "$off"; do
+    [[ $v =~ ^-?[0-9]+(\.[0-9]+)?$ ]] || { echo "cannot measure the loudness of $slug (got '$v')" >&2; exit 1; }
+  done
+  ffmpeg -nostdin -y -v error -i "$in" -vn \
+    -af "loudnorm=$norm:measured_I=$i:measured_TP=$tp:measured_LRA=$lra:measured_thresh=$thr:offset=$off:linear=true" \
+    -ac 2 -ar 44100 -c:a libmp3lame -b:a 80k -map_metadata -1 -id3v2_version 0 \
+    -fflags +bitexact -flags:a +bitexact "$out"
+}
+
+build_one() {
+  local src
+  src=$(source_audio "$2" "$3" "$4") || exit 1
+  encode "$1" "$src" "$WORK/out/$1.mp3"
+  echo "built $1"
+}
+# build OUTDIR: every track is built in a scratch folder and copied over only when all succeeded.
+build() {
+  preflight build
+  mkdir -p "$WORK/out"
+  each_source build_one
+  mkdir -p "$1"
+  cp "$WORK/out/"*.mp3 "$1/"
+  echo "built into $1:"
+  ls -l "$1"/*.mp3
+}
+
+# probe FILE: what a candidate source is like, before it is pinned.
+probe() {
+  local stats dur
+  preflight build
+  dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$1") || exit 1
+  if ! stats=$(ffmpeg -nostdin -hide_banner -nostats -i "$1" -vn -af "loudnorm=I=$TARGET_LUFS:TP=$TARGET_TP:LRA=$TARGET_LRA:print_format=json" -f null - 2>&1); then
+    echo "$stats" >&2; exit 1
+  fi
+  printf 'duration: %.1f\nloudness: %s\nrange: %s\n' "$dur" "$(json_field input_i "$stats")" "$(json_field input_lra "$stats")"
+}
+
+# measure DIR: each mp3's integrated loudness, the number the target is held to.
+measure() {
+  local dir=${1:-$HERE} f out lufs
+  preflight build
+  for f in "$dir"/*.mp3; do
+    out=$(ffmpeg -nostdin -hide_banner -nostats -i "$f" -af ebur128=framelog=quiet -f null - 2>&1) || { echo "$out" >&2; exit 1; }
+    lufs=$(awk '/Integrated loudness:/ { x = 1; next } x && $1 == "I:" { print $2; x = 0 }' <<<"$out")
+    [ -n "$lufs" ] || { echo "no loudness for $f" >&2; exit 1; }
+    printf '%s %s\n' "$lufs" "$(basename "$f")"
+  done
+}
+
 # ---- modes ------------------------------------------------------------------
 case "${1:-}" in
   --check-tools) preflight build; echo "all tools present"; exit 0 ;;
@@ -175,5 +242,8 @@ case "${1:-}" in
     exit 0
     ;;
   --verify) preflight fetch; each_source verify_one; exit 0 ;;
-  *) echo "usage: build_music.sh [--check-tools|--verify|--sha URL|--vet PAGE_URL|--vet-html FILE]" >&2; exit 2 ;;
+  --probe) probe "${2:?usage: --probe FILE}"; exit 0 ;;
+  --measure) measure "${2:-$HERE}"; exit 0 ;;
+  -*) echo "usage: build_music.sh [output-dir | --check-tools | --verify | --measure [dir] | --probe FILE | --sha URL | --vet PAGE_URL]" >&2; exit 2 ;;
+  *) build "${1:-$HERE}"; exit 0 ;;
 esac

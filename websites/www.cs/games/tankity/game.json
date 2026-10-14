@@ -635,25 +635,25 @@
             {
                 "file": "audio/music/battle-theme-a.mp3",
                 "title": "Battle Theme A",
-                "volume": 0.6,
+                "volume": 1.0,
                 "credit": "cynicmusic, CC0"
             },
             {
                 "file": "audio/music/chiptune-level-1.mp3",
                 "title": "Action Chiptune 1",
-                "volume": 0.6,
+                "volume": 1.0,
                 "credit": "Juhani Junkala, CC0"
             },
             {
                 "file": "audio/music/awake-megawall-10.mp3",
                 "title": "Awake! (Megawall-10)",
-                "volume": 0.6,
+                "volume": 1.0,
                 "credit": "cynicmusic, CC0"
             },
             {
                 "file": "audio/music/chiptune-level-3.mp3",
                 "title": "Action Chiptune 3",
-                "volume": 0.6,
+                "volume": 1.0,
                 "credit": "Juhani Junkala, CC0"
             }
         ]

@@ -23,9 +23,12 @@ import { matchOutcome, roomBoard, roomFiledLine, roomLocalSaver } from './standi
 import type { LocalRow, Saved } from './local-board.ts';
 import { focusEndVeil } from './ui/endveil.tsx';
 import type { Board, RoomCard } from './standings.ts';
-import type { BeamEvent, RingEvent, RoomEvent, RoomSnapshot } from './protocol.ts';
+import type { BeamEvent, DigEvent, EarthEvent, RingEvent, RoomEvent, RoomSnapshot } from './protocol.ts';
+import { DIG_STEP, applyEarth, digCarve } from './earth.ts';
+import { playDigStep, playEarthOp } from './earth-fx.ts';
+import type { EarthFxDeps } from './earth-fx.ts';
 import type { Replay, ReplayShot } from './replay.ts';
-import { H, ROOM_W, TUNE, aimLimits, beamCarve, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
+import { BURIED_LINE, H, ROOM_W, TUNE, aimLimits, beamCarve, buried, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
 import type { Difficulty, ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
 import { turnLabel } from './turn-time.ts';
@@ -86,6 +89,8 @@ export function createRoom(deps: RoomDeps) {
   } = deps;
   /* A match only one human played goes on this browser's board, never the server's, once per match. */
   const keeper = roomLocalSaver(saveLocal, () => new Date().toISOString());
+  /* A buried tank's drive was refused while the drive key is still held: it is said once. */
+  let driveRefused = false;
 
   const KNOWN_FOES = ['reaper', 'wraith', 'spotter'];
   const FOE_PAINT: Record<string, string> = { reaper: '#ff0000', wraith: '#00ffff', spotter: '#ff00ff' };
@@ -167,6 +172,7 @@ export function createRoom(deps: RoomDeps) {
       // First sync: earlier events are history. Log them, replay nothing.
       // (A resync lands here too: events were lost, so nothing waiting is real.)
       replay.clear(); MATCH.pendingRoom = null;
+      digs = []; // a trench from a discarded replay would keep cutting the adopted ground
       netAdopt(room);
       for (const e of fresh) if (e.t !== 'shot' && e.t !== 'burst') netEvent(e);
       return;
@@ -370,7 +376,7 @@ export function createRoom(deps: RoomDeps) {
   }
   function sayNetEvent(e: RoomEvent): void {
     if (e.t !== 'fall' && e.t !== 'kill') fellLast = null;
-    if (e.t === 'shot' || e.t === 'burst' || e.t === 'beam' || e.t === 'ring') return; // flown by the replay
+    if (e.t === 'shot' || e.t === 'burst' || e.t === 'beam' || e.t === 'ring' || e.t === 'dirt' || e.t === 'pour' || e.t === 'dig' || e.t === 'riot' || e.t === 'slump') return; // flown by the replay
     if (e.t === 'fizzle') { say(`${seatName(e.by)} sends one into the sunset.`, 'info'); return; }
     // A gunner's tracer line lasts until its next shot.
     if (e.t === 'fire' || e.t === 'aifire' || e.t === 'auto') G.marks.fired(e.seat);
@@ -488,6 +494,8 @@ export function createRoom(deps: RoomDeps) {
     if (e.t === 'left') { say(`${e.name || seatName(e.seat)} left; the battery takes that seat.`, 'info'); return; }
     if (e.t === 'round') {
       G.marks.clear();
+      G.earth.clear();
+      digs = [];
       say(`Round ${e.round}. Fresh barrels, same battery. Wind ${windText()}.`, 'info');
       talk('tank', 'Back in! These hills are mine!', true);
       return;
@@ -502,12 +510,16 @@ export function createRoom(deps: RoomDeps) {
   }
   /* ---------- room replay ---------- */
   function netBlast(x: number, y: number, r: number, wkey: string): void {
+    blastShow(x, y, r, wkey);
+    carveCrater(G.terrain, x, y, r, H - 4);
+  }
+  /* How a blast looks and sounds in a room: the boom, its impact, a shake by its size, the blast disc. */
+  function blastShow(x: number, y: number, r: number, wkey: string): void {
     sfx.play('boom');
     const kick = fxImpact(G.fx, wkey, x, y, r);
     // Rooms shake by blast size when the effect sets no shake.
     G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : r >= 70 ? 0.9 : r > 40 ? 0.5 : 0.3));
     G.booms.push({ x, y, r, wkey, t: 0, life: gfxLinger(tables.weapons[wkey]?.gfx) });
-    carveCrater(G.terrain, x, y, r, H - 4);
   }
   /* A beam the replay reached: drawn along its line and its channel carved
      with the server's own numbers (sim.ts beamCarve), so the hills match. */
@@ -518,6 +530,52 @@ export function createRoom(deps: RoomDeps) {
     const kick = fxImpact(G.fx, e.w, e.x1, e.y1, r);
     G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : 0.15));
     if (r > 0) beamCarve(G.terrain, e.x0, e.y0, e.x1, e.y1, r);
+  }
+  /* How the earth guns play in a room (earth-fx.ts), as in the solo war. */
+  const earthFx: EarthFxDeps = {
+    fxImpact: (key, x, y, r) => fxImpact(G.fx, key, x, y, r),
+    fxSpecial: (key, name, x, y, ang, len) => fxSpecial(G.fx, key, name, x, y, ang, len),
+    sound: name => sfx.play(name),
+    shake: k => { G.shake = Math.min(1, G.shake + k); },
+    get show() { return G.earth; },
+    say: text => say(text, 'info'),
+  };
+  /* Trenches being cut on screen: each dig event's burrow, a step every 1/60 s from when the replay reached it. */
+  let digs: { e: DigEvent; t: number; done: number }[] = [];
+  /* An earth gun the replay reached: the client's ground moves exactly as the
+     server's did (earth.ts applyEarth, the event's own unrounded numbers), and
+     plays as the solo war plays it. A dig cuts its trench step by step
+     (netDigs); its warheads come as burst events. */
+  function netEarth(e: EarthEvent): void {
+    if (e.t === 'dig') {
+      playDigStep(e.w, e.x, e.y, Math.atan2(e.uy, e.ux), e.r, 0, tables.weapons[e.w]?.warheads || 0, earthFx);
+      digs.push({ e, t: 0, done: 0 });
+      return;
+    }
+    // A dirt gun whose burst does damage (Dirt Charge) bursts as a blast first, with no crater: the boom, its impact and the blast disc.
+    const hurt = e.t === 'dirt' && (tables.weapons[e.w]?.dmg || 0) > 0;
+    if (hurt) blastShow(e.x, e.y, e.r, e.w);
+    const before = G.terrain.slice();
+    const span = applyEarth(G.terrain, e);
+    playEarthOp(e, G.terrain, before, span.x0, span.x1, earthFx, hurt);
+  }
+  /* Each trench in progress cuts the steps its time has come to (digCarve
+     from its start: carving a step again changes nothing), its dust at the head. */
+  function netDigs(dt: number): void {
+    for (const d of digs) {
+      d.t += dt;
+      const upTo = Math.min(d.e.n, Math.floor(d.t * 60));
+      if (upTo <= d.done) continue;
+      digCarve(G.terrain, d.e.x, d.e.y, d.e.ux, d.e.uy, upTo, d.e.r);
+      let x = d.e.x, y = d.e.y;
+      for (let i = 1; i <= upTo; i++) {
+        x += d.e.ux * DIG_STEP;
+        y += d.e.uy * DIG_STEP;
+        if (i > d.done) playDigStep(d.e.w, x, y, Math.atan2(d.e.uy, d.e.ux), d.e.r, i, 1, earthFx);
+      }
+      d.done = upTo;
+    }
+    digs = digs.filter(d => d.done < d.e.n);
   }
   /* A plasma ring around its gunner: no crater. */
   function netRing(e: RingEvent): void {
@@ -592,6 +650,7 @@ export function createRoom(deps: RoomDeps) {
     const skipped = replay.catchUp(MATCH.pendingRoom, net.seat);
     if (!skipped) return;
     G.shells = [];
+    digs = []; // the skipped volley's trenches: the room state that follows carries its ground
     for (const e of skipped) netEvent(e);
   }
   if (typeof document.addEventListener === 'function') {
@@ -604,6 +663,8 @@ export function createRoom(deps: RoomDeps) {
   /* Drive the replay; once nothing is left to play, the waiting room state
      takes over. */
   function netReplay(dt: number): void {
+    // A trench is cut at the replay's own pace, so a caught-up volley's warheads never burst ahead of it.
+    netDigs(dt * replay.speed());
     replay.step(dt);
     if (replay.idle() && MATCH.pendingRoom) {
       const room = MATCH.pendingRoom;
@@ -652,7 +713,14 @@ export function createRoom(deps: RoomDeps) {
       t.power = arm.power;
       if (arm.adjusting || arm.clamped) MATCH.aimDirty = true;
       if (arm.idle && MATCH.aimDirty) netSendAim();
-      if ((input.held.has('driveLeft') || input.held.has('driveRight')) && t.fuel > 0) {
+      const driving = input.held.has('driveLeft') || input.held.has('driveRight');
+      // A buried tank cannot drive (the server refuses it too): it says so once per press.
+      if (driving && buried(t, G.terrain)) {
+        if (!driveRefused) say(BURIED_LINE, 'bad');
+        driveRefused = true;
+        MATCH.driveAcc = 0;
+        MATCH.driveT = 0;
+      } else if (driving && t.fuel > 0) {
         const dir = input.held.axis('driveLeft', 'driveRight');
         MATCH.driveAcc += dir * TUNE.driveSpeed * dt;
         MATCH.driveT += dt;
@@ -666,6 +734,7 @@ export function createRoom(deps: RoomDeps) {
         MATCH.driveAcc = 0;
         MATCH.driveT = 0;
       }
+      if (!driving) driveRefused = false;
     }
   }
   /* The scoreboard card for a room: match over, you're out, or a look from the menu. */
@@ -703,7 +772,7 @@ export function createRoom(deps: RoomDeps) {
   }
 
   return {
-    netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netMark, netTrailMark, netFrame,
+    netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netEarth, netMark, netTrailMark, netFrame,
     roomShopBoard, openStandings,
   };
 }

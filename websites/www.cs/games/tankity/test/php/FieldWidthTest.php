@@ -51,7 +51,8 @@ final class FieldWidthTest extends TestCase
 
     public function testUnitsSpreadOverTheWholeFieldAndNeverStartInABlast(): void
     {
-        $biggest = max(array_map(fn($w) => (float) $w['radius'], room_weapons()));
+        // The blasts that hurt: a harmless row's radius (a riot scoop, a slump's reach, a mound of dirt) touches no unit.
+        $biggest = max(array_map(fn($w) => (float) $w['radius'], array_filter(room_weapons(), fn($w) => $w['dmg'] > 0)));
         $this->assertGreaterThanOrEqual($biggest + 20, ROOM_SPAWN_GAP);
         for ($seed = 1; $seed <= 200; $seed++) {
             $r = $seed;

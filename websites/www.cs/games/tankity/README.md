@@ -14,16 +14,19 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `index.html`, `game.css`                                        | The page and its styles. The page loads `dist/fx.js` (deferred), then `dist/main.js` (an ES module) |
 | `src/main.ts`                                                   | The entry module: the game's state, the main loop, the keys, the page's plumbing (overlays, the firing range, loading `game.json`) and the wiring that hands each typed module below the pieces of the game it needs. It is bundled into `dist/main.js` |
-| `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (32 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
+| `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (48 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `src/main.ts`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml` (sixteen music tracks built by `audio/music/build_music.sh`), and where each came from                                                                                                                     |
 | `src/detmath.ts` | `dsin`, `dcos`, `datan`, `datan2`: the sim's trigonometry from `+ − × ÷` and `floor` only, the same bits as `server/detmath.php` |
-| `src/sim.ts` | The game math in TypeScript: RNG, terrain, flight, hit tests, blasts, and the guns with no flight (`fireBeam`, `firePlasma`, `beamCarve`). Pure: state in, what happened out; no page, sound or particles |
+| `src/sim.ts` | The game math in TypeScript: RNG, terrain, flight, hit tests, blasts, the guns with no flight (`fireBeam`, `firePlasma`, `beamCarve`, `fireRiot`), the earth guns' bursts (`burstShell`) and a digger's burrow (`stepDigger`), burial (`buried`). Pure: state in, what happened out; no page, sound or particles |
+| `src/earth.ts` | The earth ops, pure functions of the height map: `carveCrater`, `addDirt`, `pourLevel` and `fillPour` (liquid runs to the bottom of its dip; what would reach an edge spills off), `slumpGround`, `riotCarve`, `digHeading` and `digCarve`, and `applyEarth`, which replays an earth event exactly. `server/earth.php` is the same ops |
+| `src/earth-show.ts` | The ground as it is drawn while the earth settles: a mound rising, liquid dirt flowing out from where it landed, slopes sliding. Pure; `view.ts` draws its `shown()` ground |
+| `src/earth-fx.ts` | How an earth gun plays (its impact, the `dig` and `pour` specials, shake, sound, the settling picture), shared by the solo war, the room replay and the range |
 | `src/marks.ts` | Tracer marks: a tracer's path and landing, a `line` its gunner's alone until that gunner fires again, `smoke` everyone's, drifting with the wind until the round ends. Pure; `render.ts` draws them |
 | `src/field.ts` | How wide a solo field is dealt (from the landscape battlefield box, whichever way the device is held), where the field sits in the box, and the power step and its display per width. DOM-free |
 | `src/ghosts.ts` | The draw-only flight of a shell the sim retired past the field's edge, until it is off the picture: no collision, blast or effect on the game |
 | `src/scenery.ts` | The hills past the field's edges, for drawing only: the round's hills continued, eased from the field's edge |
-| `src/camera.ts` | Where the battlefield camera looks: always centred across, the view's bottom edge on the field's floor (so no valley, crater or scenery ever drops out of view), every live unit framed above it, and while a volley flies the top of its arc too (a rising shell counts its apex), pulled back down to `ZOOM_FLOOR` (0.35); a tall canvas spends its own sky first. The hold lasts while a shell is up: a roller on the ground, or a shell past the field's edge that is falling or beyond the floor's view, lets the camera come home. The view's top and bottom edges glide to the target (quicker out than home, gentler under reduced motion), so a unit never leaves the frame mid-ease; a shell above even the floor's view gets a yellow arrow on the top edge with how far above it flies (`skyMarks`). Pure |
+| `src/camera.ts` | Where the battlefield camera looks: always centred across, the view's bottom edge on the field's floor (so no valley, crater or scenery ever drops out of view), every live unit framed above it, and while a volley flies the top of its arc too (a rising shell counts its apex), pulled back down to `ZOOM_FLOOR` (0.35); a tall canvas spends its own sky first. The hold lasts while a shell is up: a roller on the ground, a digger burrowing, or a shell past the field's edge that is falling or beyond the floor's view, lets the camera come home. Earth settling after a shell lands (a pour flowing, a slope slumping) needs no hold: the view always frames the whole field's width and every unit, and the turn waits for the earth to settle on screen before it passes. The view's top and bottom edges glide to the target (quicker out than home, gentler under reduced motion), so a unit never leaves the frame mid-ease; a shell above even the floor's view gets a yellow arrow on the top edge with how far above it flies (`skyMarks`). Pure |
 | `src/rotate-hint.ts`, `src/ui/rotate-hint.tsx` | When the "turn sideways" chip shows (portrait, in a match, until dismissed) and the chip itself |
 | `src/ai.ts` | The drone AI: ballistic aim, bracketing, the six strategies (`aiChoose`, `pickTactic`), the gun choice by predicted harm (`aiHarm`, with beams aimed by `beamAim`) and the difficulty table (`DIFFICULTY`). Pure; imports the sim, never the reverse (the sim keeps `brkLand`, which a blast calls) |
 | `src/ai-measure.ts` | `measureHitRates`: a drone bracketing a stationary player on seeded hills with the real sim, counting the shots that take armor off, per shot of the bracket. The difficulty table is tuned against it. Pure, never bundled |
@@ -84,14 +87,15 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `server/housekeep.php` | Cleanup on requests, at most once a minute (`tankity_housekeep`, `tankity_jobs`) |
 | `data/` | Runtime only, when PHP may write here: `tankity.sqlite` and the deny `.htaccess` PHP writes. Never in git, never deployed |
 | `server/detmath.php` | `det_sin`, `det_cos`, `det_atan`, `det_atan2` and `det_round` (`Math.round`): the same bits as `src/detmath.ts` |
-| `server/sim.php` | The deterministic sim that `src/sim.ts` mirrors: RNG, terrain, the curated hills, weapons (`room_weapon_row`), ballistics, the Roller (`room_roll_*`), a hop warhead's leap and a scatter gun's fan (`room_hop_vel`, `room_scatter_vel`), hit boxes and sweeps, explosions (a `dmg` 0 burst only carves), one unit's share of a hit (`room_hit_unit`), beams and plasma rings (`room_fire_beam`, `room_fire_plasma`), settling |
+| `server/earth.php` | The earth ops that `src/earth.ts` mirrors (`room_carve_crater`, `room_add_dirt`, `room_pour_level`, `room_fill_pour`, `room_slump_ground`, `room_riot_carve`, `room_dig_heading`, `room_dig_carve`) and `room_buried` |
+| `server/sim.php` | The deterministic sim that `src/sim.ts` mirrors: RNG, terrain, the curated hills, weapons (`room_weapon_row`), ballistics, the Roller (`room_roll_*`), a hop warhead's leap and a scatter gun's fan (`room_hop_vel`, `room_scatter_vel`), hit boxes and sweeps, explosions (a `dmg` 0 burst only carves), one unit's share of a hit (`room_hit_unit`), beams, plasma rings and riot charges (`room_fire_beam`, `room_fire_plasma`, `room_fire_riot`), settling (a buried ground unit stays where it is, `room_held_y`) |
 | `server/ai.php` | Drone aim, bracketing, the strategies and their flips, the gun choice by predicted harm (`room_ai_harm`, `room_ai_pick_gun`, a beam aimed by `room_ai_beam_aim`), `room_ai_rack` (`aiRack` of each gun) |
 | `server/rules.php` | Seats and economy, rounds (`room_start_round`, `room_advance`, `room_end_round`), the turn clock, drone pacing and watch turns, the shop, firing a volley (with a hop gun's leaps, `room_fire_hops`, a scatter gun's bomblets, `room_fire_scatter`, a beam or ring at once, and a tracer's flight with nothing after it), lives and winnings, scores |
 | `server/protocol.php` | The event log, `room_want`, snapshots and deltas (`terrainRev`, resync) |
 | `server/.htaccess` | `Require all denied`: the files in `server/` are libraries, never endpoints. Each also answers 404 if asked for directly (`TANKITY_ROOMS_INCLUDED` is defined only by `rooms.php`) |
 | `scores.php`, `config.php` | Score API: a GET answers a difficulty's online board, every POST answers 410 (solo scores stay in the browser); `.config.yaml` reader |
 | `src/fx/engine.ts`, `src/fx/types.ts`, `src/fx/trail.ts` | The effects engine (particle pool, emitters, screen flash, shell glow), shared by the game and the editor; bundled as the classic script `dist/fx.js`, which sets `window.TankityFX`. `types.ts` is the engine's public shape (`FxEngine`) |
-| `fx/sprites/` | Sprite sheets and `sprites.json`, rendered by `fx/blender/render_fx.py`: blasts and smoke (`blast`, `fireball`, `plume`, `smoke`, `flakburst`, `nuke`), ground (`dirt`, `debris`, `scorch`), light (`shock`, `energy`, `electric`, `flare`, `muzzle`), the shells in flight (`shells.png` and the Blast family's `shells_blast.png`, one `p_*` sheet per shell), `moon` and `parachute` |
+| `fx/sprites/` | Sprite sheets and `sprites.json`, rendered by `fx/blender/render_fx.py`: blasts and smoke (`blast`, `fireball`, `plume`, `smoke`, `flakburst`, `nuke`), ground (`dirt`, `debris`, `scorch`), light (`shock`, `energy`, `electric`, `flare`, `muzzle`), the shells in flight (`shells.png`, the Blast family's `shells_blast.png`, the tracers' `shells_beams.png` and the Earth family's `shells_earth.png`: `p_clod`, `p_mud`, `p_drill`, `p_sandhog`, `p_riot`, `p_disrupter`; one `p_*` sheet per shell), `moon` and `parachute` |
 | `fx/blender/render_fx.py` | Headless Blender script that builds and renders the sprite sheets; its header documents the command and every option. Dev only |
 | `fx-editor.html`, `fx-editor.css`, `src/fx/editor.ts` | Dev-only live effects editor (see Weapon effects); `editor.ts` is bundled as the classic script `dist/fx-editor.js`, which sets `window.fxEditor`. Never deployed |
 | `.config.yaml` | Server settings, read-only, never sent to browsers; env vars win (`TANKITY_MAX_ROOMS`, `TANKITY_ROOM_LIVE_SECS`, `TANKITY_DATA_DIR`, `TANKITY_JOURNAL`, `TANKITY_ROOM_JOINS_PER_HOUR`, `TANKITY_ROOM_HOSTS_PER_ADDRESS`, `TANKITY_ROOM_LONG_SHARE`, `TANKITY_ALLOWED_HOSTS`; `CONFIG_FILE` points elsewhere) |
@@ -401,6 +405,16 @@ pixel past them costs `perPx` armor, rounded down (`arsenal.fall` in
 any other: it comes off armor, the bunker halves it, and a shield does not
 stop it.
 
+- Burial. Risen ground (dirt, a pour) never lifts a ground unit mid-round: one
+  whose column's surface is more than 2 px above it is buried (`buried`,
+  `room_buried`) and stays where it is through the settle, the snap and the
+  falls' picture. It cannot drive (the server refuses, and the page says so
+  once per press), and its shells start in the dirt, so after their 0.1 s
+  grace they burst there, hurting it by the usual blast rules. A riot charge
+  (whose scoop over the hull never cuts below where the unit stands) or a
+  digger digs it out. Drones hover: risen ground carries them up. A new round
+  places every unit on its fresh hills. A buried unit is drawn faint in a
+  dashed outline.
 - Credit goes to the blast that lowered the ground under the unit the most
   (the first of equals; a last stand going off under a unit another shot
   dug out does not take its fall): the damage scores and pays as a hit of theirs would (the player's twice the
@@ -611,11 +625,28 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
   leaps one after another from the landing velocity, a scatter gun's bomblets
   from its burst, a cluster's from where its shot splits, `splitPoint`; each
   flown with no wind down to the landing's height by one shared closed form,
-  `dropTime` / `room_drop_time`), and a fall term that is 0 while craters drop
-  no unit into a hurting fall, all capped at the target's armor. A gun whose
+  `dropTime` / `room_drop_time`), and the ground the gun moves (`earthHarm`,
+  `room_ai_earth_harm`): its crater and its munitions' craters, dirt, a pour,
+  a slump, or a dig's trench (stopped at a unit's body as the real one is)
+  and its warheads, on a copy of the terrain; the target's fall as the settle
+  would charge it (bunker, parachute), and a dig's warhead blasts, capped at
+  the target's armor; and a new burial deeper than 12 px (dirt and pour;
+  ground units only, so dirt is never aimed at a drone), worth `AI_BURY` = 30
+  plus a point a px deep, up to `AI_BURY_MAX` = 70, but never enough to pass
+  for a kill (`withBurial`: at most the target's armor less one), so a gun
+  that finishes the target beats one that only buries it. A gun whose
   burst or munitions could reach the drone's own body, at the landing or on
   the target's near side, with `AI_SAFE_MARGIN` = 1.25 for wobble, wind and
-  hills, scores -Infinity and is never fired. The most harmful gun of the
+  hills, or whose ground would drop the drone into a fall that hurts, bury it
+  or burst a warhead within its reach, scores -Infinity and is never fired.
+  A digger does its harm away from where it lands, so it is weighed at every
+  aim its arc searched that lands within its burrow's length of the target,
+  and fires the most harmful. The ground a gun moves is worked out at the
+  target's and the drone's columns alone (a pour or a slump on a copy), and
+  a turn makes at most 240 such predictions (`earthOps`, `room_ai_earth_ops`)
+  beside its 440 flights. A riot charge scores the
+  falls its scoop gives rivals; a buried human fired for by the battery (a
+  turn that timed out) fires its first riot gun in rack order. The most harmful gun of the
   best-landing arc fires (glory: of any arc), the cheaper on a tie, then rack
   order, so a weak target gets the cheapest gun that finishes it; when no gun
   would hurt anyone, the arc's first gun (glory: its strongest) fires, or, if
@@ -1002,7 +1033,11 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/ai-hitrate.test.mjs`                     | The drones' measured hit rates per difficulty against the targets (see Difficulty), the table's shape, hard being the sharpest aim (its exact constants), unknown levels aiming at normal, and the saved setting's default and form. The harness is seeded, so it never flakes, but one cell runs close: at 1440 wide, round 10, easy's ranging shot (17.2%) is 0.33 points inside its band (half of normal's ±5). A later aim or weapon change can fail this test on that easy cell rather than on what it changed; read the failure for that before blaming the change |
 | `test/ai-arcs.test.mjs`                        | Guns share a drone's aim search only when their flight key matches: every field of every gun is changed (a string field to a value no gun holds), and any change that bends a planning flight must change the key; every gun field `simShot` reads, traced as it reads it, must be one `flightKey` reads; a gun given its own speed, flat flight or roll is searched on its own (`test/php/AiArcsTest.php` is the same for the server) |
 | `test/ai-search.test.mjs`                      | The planning flights one drone turn costs, counted as `simShot` flies them (not as `aiChoose` looks guns up): a coarse grid and the fine neighbours of its best per distinct arc (a full round-9 rack too, for every strategy, inside a time budget), a lobber's high arcs, and a bracket correction's three grids |
-| `test/ai-harm.test.mjs`                        | The gun a drone fires (`aiHarm`), checked by firing it: predicted harm ranks Shell, Baby Nuke, Funky and Death's Head as their real bursts do; no self-damage from Funky with the target 160-220 px off or from any carried gun at 80-300 px; pressed against its target it spares itself; point blank (20-80 px), every strategy with a full round-9 rack costs itself no more than its Shell alone would; Mortar over Shell on one arc; a weak target gets the cheapest gun; picks over rounds 5-12 vary (no gun above 60%); the fall term at 0 |
+| `test/ai-harm.test.mjs`                        | The gun a drone fires (`aiHarm`), checked by firing it: predicted harm ranks Shell, Baby Nuke, Funky and Death's Head as their real bursts do; no self-damage from Funky with the target 160-220 px off or from any carried gun at 80-300 px; pressed against its target it spares itself; point blank (20-80 px), every strategy with a full round-9 rack costs itself no more than its Shell alone would; Mortar over Shell on one arc; a weak target gets the cheapest gun; picks over rounds 5-12 vary (no gun above 60%); the earth term counts a harmless crater's fall on the target and refuses one under the drone |
+| `test/ai-earth.test.mjs`                       | Drones and the earth guns, checked by firing the choice: Dirt Ball buries a full-armor human in a dip, dirt is never aimed at a drone, the digger drops a tank on a ridge, the disrupter is refused on the drone's own slope, a buried human's stand-in fires its Riot Charge and is dug out |
+| `test/earth.test.mjs`                          | `src/earth.ts`: a slump keeps the volume and spreads a cliff, a pool holds its volume level and runs downhill first, a slope to an edge and a pour of nothing make no pool, dirt never lowers ground nor piles above the sky line, a crater stops at the floor, a riot charge clears a hull, a trench follows its heading |
+| `test/burial.test.mjs`                         | Burial: fresh dirt leaves a tank under it through the settle, the falls and the snap; a drone rides up; a few pixels is no burial; dug out, a buried tank pays its fall; a new round places units on the hills |
+| `test/earth-show.test.mjs`                     | `src/earth-show.ts`: a mound rises over its time, liquid dirt fills its middle before its rims, nothing moving is the ground itself |
 | `test/beams.test.mjs`                          | Beams, plasma rings and tracers in `src/sim.ts`: a beam hits every unit on its line once for flat damage, stops short at low power and at the field's side, reaches further on a wide field, carves what `beamCarve` carves, spends a shield; a ring burns with falloff, spares its gunner, shrinks with power to no less than 20, cuts nothing; firing either resolves at once; a tracer leaves only its mark |
 | `test/ai-beams.test.mjs`                       | Drones with a beam or a ring, checked by firing the choice: a beam aimed at the target's body hits a rival in line, scores every rival on its line, does nothing at a ground target below the barrel; a ring fires at a rival 40 px off and spares its drone, stays in the rack with rivals 300 px off; neither starts a bracket |
 | `test/marks.test.mjs`                          | `src/marks.ts`: a mark is the path flown ending where it came down, a line its gunner's alone until it fires again, smoke everyone's until the round ends, drifting with the wind |
@@ -1027,7 +1062,8 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/scenery.test.mjs`                        | The scenery continues the hills with no step over 1 px at the seam, cratered or not |
 | `test/camera.test.mjs`                         | `src/camera.ts`: the bottom edge on the floor with units high or low, a high arc pulled into view down to the floor with every unit on screen, the hold until the volley lands (rollers and shells past the edge let go), the ease keeping every unit framed on every frame, the sky marks |
 | `test/rotate-hint.test.mjs`                    | The rotate hint's rule and its chip |
-| `test/php/AiArcsTest.php`                      | `server/ai.php` `room_ai_arc_guns` and `server/sim.php` `room_flight_key`: a flight by definition is the shot by key, guns with one key fly the same arcs, any field change that bends a flight changes the key, the key is exact whatever `serialize_precision` says and refuses a speed, friction or roll time that is not finite, and a gun given its own arc is searched on its own; `room_ai_harm` prefers the bigger blast on one arc, refuses a blast that reaches its own drone, and its fall term is 0; a round-9 drone turn flies at most 440 planning flights |
+| `test/php/AiArcsTest.php`                      | `server/ai.php` `room_ai_arc_guns` and `server/sim.php` `room_flight_key`: a flight by definition is the shot by key, guns with one key fly the same arcs, any field change that bends a flight changes the key, the key is exact whatever `serialize_precision` says and refuses a speed, friction or roll time that is not finite, and a gun given its own arc is searched on its own; `room_ai_harm` prefers the bigger blast on one arc, refuses a blast that reaches its own drone, and its earth term counts a harmless crater's fall and a burial on a ground unit only; a round-9 drone turn flies at most 440 planning flights |
+| `test/php/RoomEarthTest.php`                   | Burial in a room: fresh dirt leaves a human under it through `room_settle_tanks`, a drone rides it up, a buried tank's drive is refused (`room_drive`), a new round places units on the hills |
 | `test/php/DetMathTest.php`                     | `server/detmath.php` is within 1e-15 of libm, rounds halves and keeps the sign of zero like `Math.round`, and the `detmath` vectors cover every function |
 | `test/php/FieldWidthTest.php`                  | The server's width rule, hills, reach and aim, units spread outside each other's blast, and a room dealt at 720 |
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
@@ -1074,7 +1110,9 @@ skip `test/`, `README.md` files, `protocol/`, the effects editor and the Blender
 `lobby-host`, `lobby-public`, `play-my-turn`, `play-after-fire` (fire, shot and
 hit events, then the drone's answer), `play-after-fire-delta` (the same moment
 for a poll that holds the current hills: no `terrain`), `play-resync` (a stale
-`since`: full, `resync: true`), `shop-after-win`, `shop-ready` (the shop
+`since`: full, `resync: true`), `play-after-beam`, `play-after-ring`,
+`play-after-earth` (a sandhog, dirt, a pour, a riot charge and a disrupter in
+turn: each earth event with the server's own unrounded numbers), `shop-after-win`, `shop-ready` (the shop
 with one of two humans readied), `create-reply`, `join-reply`, `error-too-fast` (429) and `error-not-your-turn` (409). Each file
 is `{about, status, body}`.
 `sim-vectors.json` in the same folder is not one of them (see Sim vectors).
@@ -1147,7 +1185,18 @@ with -0 equal to 0 only where a case says so.
   low power, a channel through a hill whose fall is the gunner's, a shield,
   the field's edge), plasma rings (falloff, the gunner spared, a small ring
   at low power, the 20 px floor, a bunker, no crater), tracer volleys, and a
-  drone aiming a beam or a ring (or leaving it in the rack). Volleys and brackets end with the falls settled; the
+  drone aiming a beam or a ring (or leaving it in the rack); the earth ops
+  (craters, dirt at the edges and under the surface, pours into a valley, at
+  an edge and overflowing a pit, slumps, riot scoops, trenches), burial in the
+  settle (a ground unit stays under dirt, a drone rides it up), a buried
+  gunner's shell, the earth guns' volleys (dirt burying, Dirt Charge hurting
+  then burying, liquid dirt burying two, a digger dropping a tank for the
+  shooter's credit, a sandhog's warheads along its burrow and at a hull in
+  its way, a riot charge digging a tank out, a harmless crater dropping a
+  tank, a disrupter slumping a ridge, and its own fall crediting nobody), and
+  a drone's earth choices (a digger at a ridge, Dirt Ball at a human in a
+  dip, never dirt at a drone, no disrupter on its own slope, a buried human's
+  Riot Charge). Volleys and brackets end with the falls settled; the
   browser plays each volley as a solo match does (falls animated every frame,
   one settle once the last shell is down), including Buckshot pits dug in
   bursts and craters in fractional ground.
@@ -1217,7 +1266,10 @@ weapon. Each entry has `body` (the shell: its glow `halo`, `alpha`,
 it spins or rolls, and the plain disc stands in until it loads) and three effects: `muzzle` (once, at the barrel), `trail` (every
 frame in flight, emitters need a `rate`), `impact` (on detonation). `special`
 holds named extras: `split` (cluster bloom), `steer` (seeker pulse), `pierce`
-(lance through a tank), `arc` (EMP, over each tank it fries). An effect is
+(lance or beam through a tank), `arc` (EMP, over each tank it fries), `hop`
+and `scatter` (a leap, bomblets thrown up), `beam` (along a beam's line),
+`dig` (at a digger's head as it burrows, every few steps; along a riot
+charge's cut) and `pour` (along liquid dirt's pool as it fills). An effect is
 `emitters` (one `- { ... }` line each) and an optional `screen: { shake,
 flash: { color, alpha, dur } }`. An emitter's fields and defaults are
 `DEFAULTS` in `src/fx/engine.ts` (shape `dot | streak | ring | spark | smoke | sprite |

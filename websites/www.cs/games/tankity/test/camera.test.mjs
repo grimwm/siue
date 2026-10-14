@@ -129,6 +129,8 @@ test('volleyTop: a shell past the edge holds only while it climbs within the flo
   assert.equal(volleyTop(top, [[], [{ x: W / 2 + reach + 1, y: 200, vy: -50, wkey: 'shell' }]], g, { w: W, reach }), null);
   // A roller on the ground lets the camera come home.
   assert.equal(volleyTop(top, [[{ x: 400, y: 330, vy: -2, wkey: 'roller', rolling: true }], []], g, { w: W, reach }), null);
+  // So does a digger burrowing under it: the ground it cuts is in view already.
+  assert.equal(volleyTop(top, [[{ x: 400, y: 420, vy: 200, wkey: 'digger', digging: true }], []], g, { w: W, reach }), null);
   // A live shell still in the air holds as before.
   assert.notEqual(volleyTop(top, [[{ x: 400, y: 330, vy: 20, wkey: 'shell' }], []], g, { w: W, reach }), null);
 });

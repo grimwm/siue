@@ -81,3 +81,20 @@ test('a shop row says what its gun does: a blast doubles on a direct hit, a beam
   assert.doesNotMatch(ammoSub(tracer), /double|blast/);
   assert.match(ammoSub({ ...arsenal.weapons.shell, dmg: 0, note: undefined }), /^No damage, blast 26\.$/);
 });
+
+test('an earth gun\'s row says how it moves the ground, never that hits double', () => {
+  const { ammoSub } = m.shop;
+  const plain = pred => ({ ...GAME.arsenal.ammo.find(pred), note: undefined });
+  assert.equal(ammoSub(plain(a => a.effect === 'dirt' && a.dmg === 0)), `No damage, a mound of dirt ${plain(a => a.effect === 'dirt' && a.dmg === 0).radius} round.`);
+  const charge = plain(a => a.effect === 'dirt' && a.dmg > 0);
+  assert.equal(ammoSub(charge), `${charge.dmg} damage, blast ${charge.radius}, then a mound of dirt ${charge.radius} round.`);
+  const pour = plain(a => a.effect === 'pour');
+  assert.equal(ammoSub(pour), `No damage, ${pour.volume} px² of liquid dirt.`);
+  const digger = plain(a => a.effect === 'dig' && !a.warheads), hog = plain(a => a.effect === 'dig' && a.warheads > 0);
+  assert.equal(ammoSub(digger), `No damage, burrows ${digger.digLen} on.`);
+  assert.equal(ammoSub(hog), `${hog.warheads} warheads of ${hog.subDmg} damage along a ${hog.digLen} burrow.`);
+  const riot = plain(a => a.effect === 'riot'), slump = plain(a => a.effect === 'slump');
+  assert.equal(ammoSub(riot), `No damage, clears the earth ${riot.radius} along the barrel.`);
+  assert.equal(ammoSub(slump), `No damage, slopes slump within ${slump.radius}.`);
+  for (const w of GAME.arsenal.ammo.filter(a => ['dirt', 'pour', 'dig', 'riot', 'slump'].includes(a.effect))) assert.doesNotMatch(ammoSub(w), /double/, w.key);
+});

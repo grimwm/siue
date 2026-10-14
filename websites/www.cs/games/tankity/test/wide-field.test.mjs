@@ -29,7 +29,8 @@ test('a wider field is the same hills, continued', () => {
 });
 
 test('the units spread over the whole width, never inside each other\'s blast', () => {
-  const biggest = Math.max(...arsenal.order.map(k => arsenal.weapons[k].radius));
+  // The blasts that hurt: a harmless row's radius (a riot scoop, a slump's reach, a mound of dirt) touches no unit.
+  const biggest = Math.max(...arsenal.order.filter(k => arsenal.weapons[k].dmg > 0).map(k => arsenal.weapons[k].radius));
   assert.ok(sim.SPAWN_GAP > biggest + 14, `SPAWN_GAP ${sim.SPAWN_GAP} clears the blast's real reach (radius + 14 from a hull's centre)`);
   assert.ok(sim.SPAWN_GAP >= biggest + 20, `SPAWN_GAP ${sim.SPAWN_GAP} vs blast ${biggest} + a hull's half-width`);
   const span = w => {

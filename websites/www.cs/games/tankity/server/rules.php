@@ -248,6 +248,36 @@ function room_set_aim(array &$room, int $idx, int $seat, $angle, $power): void
     $t['power'] = max(10.0, min(100.0, is_numeric($power) ? (float) $power : (float) $t['power']));
     unset($t);
 }
+/* A human's drive of $dx px (at most 80 either way) for the tank at $idx:
+// toward the goal a pixel at a time, stopping short of any other unit; fuel
+// pays only for the ground covered, and the tank sits on the ground where it
+// stops. Null when it went, else [HTTP status, the player's line]: a buried
+// tank cannot drive, nor one short of fuel. */
+function room_drive(array &$room, int $idx, float $dx): ?array
+{
+    $tank = $room['tanks'][$idx];
+    $dx = max(-80.0, min(80.0, $dx));
+    if (room_buried($tank, $room['terrain'])) {
+        return [409, 'You are buried: dig out first (a Riot Charge or a digger).'];
+    }
+    if (abs($dx) > $tank['fuel'] + 1e-9) {
+        return [422, 'not enough fuel'];
+    }
+    $w = count($room['terrain']);
+    $goal = max(12.0, min($w - 12.0, $tank['x'] + $dx));
+    $step = $goal > $tank['x'] ? 1.0 : -1.0;
+    $nx = (float) $tank['x'];
+    while (abs($goal - $nx) >= 1.0 && !room_spot_taken($room, $idx, $nx + $step)) {
+        $nx += $step;
+    }
+    if (abs($goal - $nx) < 1.0) {
+        $nx = $goal;
+    }
+    $room['tanks'][$idx]['fuel'] = max(0.0, $tank['fuel'] - abs($nx - $tank['x']));
+    $room['tanks'][$idx]['x'] = $nx;
+    $room['tanks'][$idx]['y'] = room_surf_y($room['terrain'], $nx);
+    return null;
+}
 function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey): void
 {
     $room['shots'] = ($room['shots'] ?? 0) + 1; // a fresh turn clock follows each shot
@@ -266,14 +296,17 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
     $dirS = $tank['dirS'] ?? -1;
     $radius = (float) $w['radius'];
     $events[count($events) - 1]['at'] = 0.0; // the fire/aifire that opened this volley
-    // A beam or a plasma ring has no flight: it resolves the moment it fires.
+    // A beam, a plasma ring or a riot charge has no flight: it resolves the moment it fires.
     $effect = $w['effect'] ?? 'shot';
-    if ($effect === 'beam' || $effect === 'plasma') {
+    if (!room_flies($w)) {
         $mark = count($events);
         if ($effect === 'beam') {
             room_fire_beam($room, $events, $seatIdx, $w, $wkey);
-        } else {
+        } elseif ($effect === 'plasma') {
             room_fire_plasma($room, $events, $seatIdx, $w, $wkey);
+        } else {
+            // The barrel's heading as src/sim.ts fireWeapon reads it.
+            room_fire_riot($room, $events, $seatIdx, $w, $wkey, det_atan2(-det_sin($rad), det_cos($rad) * $dirS));
         }
         room_stamp($events, $mark, 0.0);
         $shots = 0;
@@ -308,11 +341,18 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
             room_fly_siblings($room, $events, $seatIdx, $w, $wkey, $res[1], $res[2], $fanned, 99.0, $sub, $tSplit, null);
             continue;
         }
-        $ev = room_shot_event($tank, $wkey, 0.0, $res, $res[0] === 'hit' ? $radius : 0.0);
+        // An earth gun's burst is its own event (room_earth_burst), not a blast.
+        $earth = in_array($effect, ['dirt', 'pour', 'slump', 'dig'], true);
+        $ev = room_shot_event($tank, $wkey, 0.0, $res, $res[0] === 'hit' && !$earth ? $radius : 0.0);
         $ev['at'] = 0.0;
         $events[] = $ev;
         $mark = count($events);
-        if ($res[0] === 'hit') {
+        if ($res[0] === 'hit' && $earth) {
+            room_brk_land($tank, $res[1]);
+            unset($tank);
+            room_earth_burst($room, $events, $seatIdx, $w, $wkey, $res, $res[7]);
+            $tank = &$room['tanks'][$seatIdx];
+        } elseif ($res[0] === 'hit') {
             room_brk_land($tank, $res[1]);
             room_explode($room, $events, $tank, $wkey, $res[1], $res[2], $res[5], null);
         } else {
@@ -336,6 +376,116 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
     room_settle_tanks($room, $events);
     room_stamp($events, $mark, $end);
     room_pace_stamp($room, $events, $firstEvent);
+}
+/* An earth gun bursts ($res, at $t seconds): dirt (a blast with no crater
+// when it does damage, then a disc of dirt), pour (liquid dirt at its column),
+// slump (the slopes round it slump; it owns the falls) or dig (it burrows on,
+// room_fire_dig). Each moves the ground and says so in its own event.
+// src/sim.ts burstShell is the same. */
+function room_earth_burst(array &$room, array &$events, int $seatIdx, array $w, string $wkey, array $res, float $t): void
+{
+    $tank = $room['tanks'][$seatIdx];
+    [, $x, $y] = $res;
+    $effect = $w['effect'];
+    if ($effect === 'dig') {
+        room_fire_dig($room, $events, $seatIdx, $w, $wkey, $res, $t);
+        return;
+    }
+    if ($effect === 'dirt' && (int) $w['dmg'] > 0) {
+        room_explode($room, $events, $tank, $wkey, $x, $y, $res[5], ['carve' => false]);
+    }
+    $ground = [];
+    foreach ($room['tanks'] as $i => $o) {
+        $ground[$i] = room_surf_y($room['terrain'], (float) $o['x']);
+    }
+    $before = $room['terrain'];
+    if ($effect === 'dirt') {
+        $events[] = ['t' => 'dirt', 'w' => $wkey, 'x' => $x, 'y' => $y, 'r' => (float) $w['radius']];
+        room_add_dirt($room['terrain'], $x, $y, (float) $w['radius']);
+    } elseif ($effect === 'pour') {
+        $col = (int) det_round(max(0.0, min((float) (count($room['terrain']) - 1), $x)));
+        $events[] = ['t' => 'pour', 'w' => $wkey, 'x' => $col, 'v' => (float) $w['volume']];
+        room_fill_pour($room['terrain'], room_pour_level($room['terrain'], (float) $col, (float) $w['volume']));
+    } else {
+        $events[] = ['t' => 'slump', 'w' => $wkey, 'x' => $x, 'r' => (float) $w['radius'], 'slope' => (float) $w['slope'], 'passes' => (int) $w['passes']];
+        room_slump_ground($room['terrain'], $x, (float) $w['radius'], (float) $w['slope'], (int) $w['passes']);
+    }
+    if ($room['terrain'] !== $before) {
+        room_terrain_changed($room);
+    }
+    room_mark_falls($room, $ground, $seatIdx);
+}
+/* A digger touched down ($res, at $t seconds; struck a unit in flight, it
+// stops at once): it burrows on along its heading ROOM_DIG_STEP px a step,
+// for ceil(digLen / ROOM_DIG_STEP) steps, cutting a crater of digR at each
+// (owning the falls it digs) and bursting each warhead as it falls due
+// (warhead k at step ceil(k n / warheads)). A unit's body at the next point
+// (its gunner's only once the shell has left it) stops it there; so does the
+// field's side or its floor, at the last point cut. Any warheads left burst
+// where it stopped. Its 'dig' event (where it started, its heading, the steps
+// cut, from $t to t1) comes before the bursts. src/sim.ts stepDigger is the same. */
+function room_fire_dig(array &$room, array &$events, int $seatIdx, array $w, string $wkey, array $res, float $t): void
+{
+    $width = count($room['terrain']);
+    [, $x, $y] = $res;
+    [$x0, $y0] = [$x, $y];
+    [$ux, $uy] = room_dig_heading($res[3], $res[4]);
+    $n = (int) ceil($w['digLen'] / ROOM_DIG_STEP);
+    $heads = (int) $w['warheads'];
+    $sub = ['dmg' => (int) $w['subDmg'], 'radius' => (int) $w['subRadius']];
+    $clear = $res[8] ?? true;
+    $at = count($events);
+    $done = 0;
+    $k = 0;
+    $stopAt = $t;
+    $burst = function (float $when) use (&$room, &$events, &$k, $seatIdx, $wkey, $sub, &$x, &$y): void {
+        $k++;
+        $mark = count($events);
+        room_explode($room, $events, $room['tanks'][$seatIdx], $wkey, $x, $y, null, $sub);
+        $events[] = ['t' => 'burst', 'x' => round($x, 1), 'y' => round($y, 1), 'r' => (float) $sub['radius'], 'w' => $wkey];
+        room_stamp($events, $mark, $when);
+    };
+    for ($i = 1; $res[5] === null && $i <= $n; $i++) {
+        $nx = $x + $ux * ROOM_DIG_STEP;
+        $ny = $y + $uy * ROOM_DIG_STEP;
+        if ($nx < 0 || $nx > $width - 1 || $ny >= ROOM_EARTH_FLOOR) {
+            break;
+        }
+        if (!$clear && !room_in_box($room['tanks'][$seatIdx], $nx, $ny)) {
+            $clear = true;
+        }
+        $hit = false;
+        foreach ($room['tanks'] as $j => $u) {
+            if ($u['hp'] > 0 && !($j === $seatIdx && !$clear) && room_in_box($u, $nx, $ny)) {
+                $hit = true;
+                break;
+            }
+        }
+        [$x, $y] = [$nx, $ny];
+        $stopAt = $t + $i / 60;
+        if ($hit) {
+            break;
+        }
+        $done = $i;
+        $ground = [];
+        foreach ($room['tanks'] as $j => $o) {
+            $ground[$j] = room_surf_y($room['terrain'], (float) $o['x']);
+        }
+        $before = $room['terrain'];
+        room_carve_crater($room['terrain'], $x, $y, (float) $w['digR']);
+        if ($room['terrain'] !== $before) {
+            room_terrain_changed($room);
+        }
+        room_mark_falls($room, $ground, $seatIdx);
+        while ($k < $heads && $i >= intdiv(($k + 1) * $n + $heads - 1, $heads)) {
+            $burst($stopAt);
+        }
+    }
+    while ($k < $heads) {
+        $burst($stopAt);
+    }
+    array_splice($events, $at, 0, [['t' => 'dig', 'by' => $room['tanks'][$seatIdx]['seat'], 'w' => $wkey, 'x' => $x0, 'y' => $y0, 'ux' => $ux, 'uy' => $uy,
+        'n' => $done, 'r' => (float) $w['digR'], 'at' => round($t, 3), 't1' => round($t + $done / 60, 3)]]);
 }
 /* A scatter weapon's bomblets, after its burst $res at $t seconds: thrown
 // from two pixels above the burst (room_scatter_vel), each bursts on the

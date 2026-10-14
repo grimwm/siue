@@ -250,7 +250,22 @@ export interface BeamEvent extends EventBase { t: 'beam'; by: number; w: string;
 /** A plasma ring (a `plasma` gun's shot): no flight, no crater. Centred on its
  * gunner's body at (x, y), radius r; its hits follow as hit events. */
 export interface RingEvent extends EventBase { t: 'ring'; by: number; w: string; x: number; y: number; r: number }
-/** A blast mid-flight (a lance passing through a unit). */
+/** The earth guns move the ground (src/earth.ts applyEarth replays each,
+ * with the server's own unrounded numbers, so a client's ground matches the
+ * server's). dirt: a disc of dirt of radius r where it burst; pour: liquid
+ * dirt poured at column x, v px^2 of it; dig: a digger's trench from where it
+ * touched down, n steps along (ux, uy), half width r, cut from `at` to t1 (its
+ * warheads follow as burst events); riot: a riot charge's scoop from its
+ * gunner's hull at (x, y), standing at b, barrel heading a; slump: the slopes
+ * within r of x slump. Hits and falls follow as their own events. */
+export interface DirtEvent extends EventBase { t: 'dirt'; w: string; x: number; y: number; r: number }
+export interface PourEvent extends EventBase { t: 'pour'; w: string; x: number; v: number }
+export interface DigEvent extends EventBase { t: 'dig'; by: number; w: string; x: number; y: number; ux: number; uy: number; n: number; r: number; t1: number }
+export interface RiotEvent extends EventBase { t: 'riot'; by: number; w: string; x: number; y: number; a: number; r: number; fan: number; b: number }
+export interface SlumpEvent extends EventBase { t: 'slump'; w: string; x: number; r: number; slope: number; passes: number }
+/** The events that move the earth. */
+export type EarthEvent = DirtEvent | PourEvent | DigEvent | RiotEvent | SlumpEvent;
+/** A blast mid-flight (a lance passing through a unit, a digger's warhead). */
 export interface BurstEvent extends EventBase { t: 'burst'; x: number; y: number; r: number; w: string }
 export interface HitEvent extends EventBase { t: 'hit'; seat: number; dmg: number; by: number; direct: boolean }
 export interface KillEvent extends EventBase { t: 'kill'; seat: number; by: number }
@@ -268,7 +283,7 @@ export interface TacticEvent extends EventBase { t: 'tactic'; seat: number; s: s
 export type RoomEvent =
   | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent | TurnTimeEvent
   | FireEvent | AiFireEvent | AutoEvent
-  | ShotEvent | BeamEvent | RingEvent | BurstEvent | HitEvent | FallEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
+  | ShotEvent | BeamEvent | RingEvent | BurstEvent | DirtEvent | PourEvent | DigEvent | RiotEvent | SlumpEvent | HitEvent | FallEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
 
 export type RoomEventType = RoomEvent['t'];
 /** The events that open a volley. */

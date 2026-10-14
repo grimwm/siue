@@ -8,6 +8,7 @@ import type { DialogueLine } from './chatter.ts';
 import type { FxSys } from './fx/types.ts';
 import type { Phase } from './flow.ts';
 import type { Marks } from './marks.ts';
+import type { EarthShow } from './earth-show.ts';
 import type { PreviewState } from './preview.ts';
 import type { RoomSnapshot } from './protocol.ts';
 import type { Boom, DrawTank, Spark } from './render.ts';
@@ -72,6 +73,8 @@ export interface GameState extends World {
   fx: FxSys | null;
   /** Tracer marks this round (src/marks.ts). */
   marks: Marks;
+  /** The ground's picture while earth settles (src/earth-show.ts). */
+  earth: EarthShow;
   firstTurn: number;
   lives: number;
   nextOneUp: number;

@@ -56,11 +56,13 @@
 #   dmg       damage dealt at the centre of the blast, in armor points. It
 #             falls off with distance (never below 30%); a direct hit doubles
 #             it. Whole number, 0 to 500. A row with dmg 0 is harmless: its
-#             burst carves its crater and touches no unit (no damage, no
-#             shield spent, nobody credited). A tracer must have dmg 0.
+#             burst carves its crater (or moves the earth its effect moves)
+#             and touches no unit (no damage, no shield spent, nobody
+#             credited). A tracer must have dmg 0.
 #   radius    blast radius in pixels: the crater size, and damage reaches
 #             radius + 14 px. Whole number, 1 to 200 (0 to 200 for a
-#             tracer, which has no blast).
+#             tracer, which has no blast). The earth effects read it as
+#             they say below; pour and dig take 1 (they never use it).
 #   price     dollars for one pack. 0 to 100000.
 #   pack      shells per purchase; 0 means the shop does not sell it (only
 #             the free `shell` uses 0). 0 to 99.
@@ -129,6 +131,42 @@
 #               tracer     flies like a shell and shows the path it flew and
 #                          where it came down (gfx.mark); no blast, no crater,
 #                          no damage.
+#               dirt       flies like a shell; where it bursts it first deals
+#                          dmg as a blast with no crater (when dmg is above
+#                          0), then drops a disc of dirt `radius` px round
+#                          the burst on the ground: each column rises to the
+#                          top of the disc over it. A ground unit left more
+#                          than 2 px under the surface is buried: it stays
+#                          where it is (risen ground never lifts it mid-
+#                          round), cannot drive, and its shells start in the
+#                          dirt. Drones hover, so risen ground carries them up.
+#               pour       flies like a shell; where it bursts it pours
+#                          `volume` px^2 of liquid dirt, which runs down to
+#                          the bottom of the dip it landed in and sets there
+#                          as a flat pool. Liquid that would reach either
+#                          edge of the field spills off it and is lost.
+#               dig        flies like a shell; touching the ground it burrows
+#                          on along its heading at 240 px/s for `digLen` px,
+#                          cutting a trench `digR` px wide on either side (the
+#                          ground is a height map, so a tunnel is a trench
+#                          open to the sky). With `warheads`, that many blasts
+#                          of subDmg and subRadius burst evenly along the
+#                          burrow, the last at its end. A unit's body in the
+#                          way stops it there, and any warheads left burst
+#                          at that point; a shell that strikes a unit in
+#                          flight stops at once. Ground a dig takes away
+#                          drops the units on it, for fall damage.
+#               riot       no flight: clears earth around its gunner and does
+#                          no damage. A crater of radius / 2 over the hull,
+#                          then one every 4 px along the barrel out to
+#                          `radius` px, growing from radius / 4 to radius x
+#                          `fan`. It digs a buried tank out.
+#               slump      flies like a shell; where it bursts the ground
+#                          within `radius` px slumps: `passes` passes, left to
+#                          right, each moving earth from the higher of two
+#                          neighbouring columns to the lower wherever they
+#                          differ by more than `slope` px. No damage; units on
+#                          the slopes drop with the ground, for fall damage.
 #   speed     launch speed multiplier (1.0 is normal; 0.55 slow, 1.3 fast).
 #   flat      true flies on low gravity, so the arc is nearly a straight line.
 #             Optional; leave it out for normal arcs.
@@ -155,7 +193,14 @@
 #           angle while it is loaded, and 180 - aimMin its highest, so -20
 #           lets the barrel dip 20 degrees below level on either side. Any
 #           other gun aims 10 to 170, and fires inside its own limits
-#     plasma and tracer: none
+#     pour: volume (px^2 of liquid dirt, 200 to 20000)
+#     dig: digLen (px it burrows, 20 to 400), digR (the trench's half width,
+#          3 to 30), warheads (0 to 8); subDmg and subRadius with warheads
+#          above 0 (and refused with none)
+#     riot: fan (the scoop's widest crater as a share of radius, 0.1 to 1.5)
+#     slump: slope (px a column may stand above its neighbour, 0.5 to 6),
+#            passes (1 to 60)
+#     plasma, tracer and dirt: none
 #
 # gfx fields (all colours are quoted "#rgb" or "#rrggbb")
 #   shell     the shell's body colour in flight, in the replayed volleys and
@@ -176,6 +221,8 @@
 #               ball   a ball with a stripe across it (the battlefield ball
 #                      spins as it travels)
 #               dash   a dashed path ending in a mark, for tracers
+#               drill  a body with a pointed, fluted bit, for diggers
+#               clod   a lumpy ball shedding crumbs, for dirt
 #             (pellets and cluster shells draw their own multi-dot icons.)
 #   shake     screen shake on an explosion in solo play and the range
 #             demos, 0 (none) to 1 (violent). Rooms shake by blast size.
@@ -588,6 +635,278 @@ arsenal:
       speed: 1.0
       note: Leaves a smoke trail that everyone sees for the round, drifting with the wind.
       gfx: {shell: "#e8e4dc", trail: "#c8c2b8", blast: ["#c8c2b8", "#ffffff"], painter: dash, shake: 0, mark: smoke}
+
+    - key: dirtclod
+      name: Dirt Clod
+      cat: Earth
+      dmg: 0
+      radius: 20
+      price: 40
+      pack: 5
+      minRound: 1
+      ai: true
+      aiRound: 4
+      effect: dirt
+      speed: 1.0
+      note: A small mound of dirt, enough to cover a hull sitting in a dip.
+      gfx: {shell: "#a8774a", trail: "#7a5a3a", blast: ["#b8854a", "#e8d4a0"], painter: clod, shake: 0.2}
+
+    - key: dirtball
+      name: Dirt Ball
+      cat: Earth
+      dmg: 0
+      radius: 35
+      price: 90
+      pack: 3
+      minRound: 2
+      ai: true
+      aiRound: 5
+      effect: dirt
+      speed: 1.0
+      note: Buries a tank on flat ground. It cannot drive until it digs out.
+      gfx: {shell: "#9a6a3a", trail: "#7a5a3a", blast: ["#b8854a", "#e8d4a0"], painter: clod, shake: 0.3}
+
+    - key: tondirt
+      name: Ton of Dirt
+      cat: Earth
+      dmg: 0
+      radius: 60
+      price: 200
+      pack: 2
+      minRound: 4
+      ai: true
+      aiRound: 7
+      aiRack: 1
+      effect: dirt
+      speed: 1.0
+      note: A hill where the target stood.
+      gfx: {shell: "#8a5a2a", trail: "#6a4a2a", blast: ["#b8854a", "#e8d4a0"], painter: clod, shake: 0.45}
+
+    - key: liquiddirt
+      name: Liquid Dirt
+      cat: Earth
+      dmg: 0
+      radius: 1
+      price: 160
+      pack: 2
+      minRound: 3
+      ai: true
+      aiRound: 6
+      effect: pour
+      volume: 4000
+      speed: 1.0
+      note: Runs down into the valley it lands in and sets flat, burying whatever sits at the bottom.
+      gfx: {shell: "#7a5230", trail: "#5a3a1e", blast: ["#8a5a2a", "#d8b888"], painter: clod, shake: 0.2}
+
+    - key: dirtcharge
+      name: Dirt Charge
+      cat: Earth
+      dmg: 20
+      radius: 45
+      price: 180
+      pack: 2
+      minRound: 4
+      ai: true
+      aiRound: 6
+      effect: dirt
+      speed: 1.0
+      note: A real blast that buries what it hurt under a mound.
+      gfx: {shell: "#b8854a", trail: "#ff9f43", blast: ["#ff7b39", "#fff3c4"], painter: clod, shake: 0.5}
+
+    - key: babydigger
+      name: Baby Digger
+      cat: Earth
+      dmg: 0
+      radius: 1
+      price: 50
+      pack: 3
+      minRound: 1
+      ai: true
+      aiRound: 4
+      effect: dig
+      digLen: 60
+      digR: 8
+      warheads: 0
+      speed: 1.0
+      note: Burrows on along its heading where it lands, cutting a short trench.
+      gfx: {shell: "#c0c4cc", trail: "#8a8a92", blast: ["#b8854a", "#e8d4a0"], painter: drill, shake: 0.15}
+
+    - key: digger
+      name: Digger
+      cat: Earth
+      dmg: 0
+      radius: 1
+      price: 110
+      pack: 2
+      minRound: 3
+      ai: true
+      aiRound: 6
+      effect: dig
+      digLen: 110
+      digR: 11
+      warheads: 0
+      speed: 1.0
+      note: Undermines a tank so it drops and pays for the fall.
+      gfx: {shell: "#d8b040", trail: "#a08a50", blast: ["#b8854a", "#e8d4a0"], painter: drill, shake: 0.2}
+
+    - key: heavydigger
+      name: Heavy Digger
+      cat: Earth
+      dmg: 0
+      radius: 1
+      price: 200
+      pack: 2
+      minRound: 5
+      ai: true
+      aiRound: 8
+      effect: dig
+      digLen: 180
+      digR: 15
+      warheads: 0
+      speed: 1.0
+      note: A deep, wide trench.
+      gfx: {shell: "#e07a2a", trail: "#a06a40", blast: ["#b8854a", "#e8d4a0"], painter: drill, shake: 0.3}
+
+    - key: babysandhog
+      name: Baby Sandhog
+      cat: Earth
+      dmg: 0
+      radius: 1
+      price: 160
+      pack: 2
+      minRound: 2
+      ai: true
+      aiRound: 5
+      effect: dig
+      digLen: 70
+      digR: 7
+      warheads: 2
+      subDmg: 26
+      subRadius: 18
+      speed: 1.0
+      note: Burrows a short way; two warheads burst along the burrow.
+      gfx: {shell: "#c8a080", trail: "#8a6a50", blast: ["#ff7b39", "#fff3c4"], painter: drill, shake: 0.35}
+
+    - key: sandhog
+      name: Sandhog
+      cat: Earth
+      dmg: 0
+      radius: 1
+      price: 280
+      pack: 2
+      minRound: 4
+      ai: true
+      aiRound: 7
+      effect: dig
+      digLen: 120
+      digR: 9
+      warheads: 3
+      subDmg: 34
+      subRadius: 22
+      speed: 1.0
+      note: Burrows on; three warheads burst along the burrow, or all at once at a hull in the way.
+      gfx: {shell: "#b06a3a", trail: "#8a5a3a", blast: ["#ff7b39", "#fff3c4"], painter: drill, shake: 0.45}
+
+    - key: heavysandhog
+      name: Heavy Sandhog
+      cat: Earth
+      dmg: 0
+      radius: 1
+      price: 450
+      pack: 1
+      minRound: 6
+      ai: true
+      aiRound: 9
+      aiRack: 1
+      effect: dig
+      digLen: 180
+      digR: 12
+      warheads: 5
+      subDmg: 44
+      subRadius: 28
+      speed: 1.0
+      note: A long burrow with five big warheads along it.
+      gfx: {shell: "#8a3a2a", trail: "#6a3a2a", blast: ["#ff5a3a", "#fff3c4"], painter: drill, shake: 0.6}
+
+    - key: riotcharge
+      name: Riot Charge
+      cat: Earth
+      dmg: 0
+      radius: 45
+      price: 60
+      pack: 3
+      minRound: 1
+      ai: true
+      aiRound: 2
+      effect: riot
+      fan: 1.2
+      speed: 1.0
+      note: Digs you out with a wide, short scoop over the hull and in front of the barrel.
+      gfx: {shell: "#e8d4a0", trail: "#b8986a", blast: ["#d8c090", "#ffffff"], painter: spark, shake: 0.3}
+
+    - key: riotblast
+      name: Riot Blast
+      cat: Earth
+      dmg: 0
+      radius: 90
+      price: 120
+      pack: 2
+      minRound: 3
+      ai: true
+      aiRound: 4
+      effect: riot
+      fan: 0.6
+      speed: 1.0
+      note: A long, narrow cut along the barrel, a firing lane through a hill.
+      gfx: {shell: "#f0e0b0", trail: "#c8a87a", blast: ["#d8c090", "#ffffff"], painter: spark, shake: 0.4}
+
+    - key: riotbomb
+      name: Riot Bomb
+      cat: Earth
+      dmg: 0
+      radius: 45
+      price: 100
+      pack: 3
+      minRound: 2
+      ai: true
+      aiRound: 5
+      effect: shot
+      speed: 1.0
+      note: A harmless crater where it lands. Tanks on the rim drop and pay for the fall.
+      gfx: {shell: "#e8e0c8", trail: "#b8b0a0", blast: ["#d8c090", "#ffffff"], painter: disc, shake: 0.35}
+
+    - key: heavyriot
+      name: Heavy Riot Bomb
+      cat: Earth
+      dmg: 0
+      radius: 75
+      price: 220
+      pack: 2
+      minRound: 4
+      ai: true
+      aiRound: 7
+      effect: shot
+      speed: 1.0
+      note: A huge harmless crater.
+      gfx: {shell: "#d8d0b8", trail: "#a8a090", blast: ["#d8c090", "#ffffff"], painter: disc, shake: 0.55}
+
+    - key: disrupter
+      name: Earth Disrupter
+      cat: Earth
+      dmg: 0
+      radius: 120
+      price: 260
+      pack: 1
+      minRound: 5
+      ai: true
+      aiRound: 8
+      aiRack: 1
+      effect: slump
+      slope: 1.0
+      passes: 24
+      speed: 1.0
+      note: Shakes the ground loose. Steep slopes within its reach slump, so tanks on ridges and cliff edges drop.
+      gfx: {shell: "#9ad0c0", trail: "#5a9a8a", blast: ["#8ad0c0", "#f0fff8"], painter: spark, shake: 0.6}
   gear:
     - key: repair
       name: Repair +40 armor
@@ -915,7 +1234,10 @@ audio:
 #   impact    an effect, fired on detonation, centred on the blast. A beam
 #             fires it where the beam stops (sized by its radius); a plasma
 #             ring centred on its gunner, sized by the ring's radius; a
-#             tracer where it came down, sized as a 10 px blast
+#             tracer where it came down, sized as a 10 px blast. A dig fires
+#             it at each warhead's burst (sized by subRadius), or, with no
+#             warheads, where it touched down (sized by digR); a riot
+#             charge over its gunner's hull, sized by its radius
 #   special   optional named extras, each an effect:
 #               split    cluster: where the shell blooms into bomblets
 #               steer    seeker: while it bends toward a tank (rate emitters)
@@ -930,6 +1252,12 @@ audio:
 #                        muzzle to where it stopped. Every particle starts
 #                        at a point spread along the line, and a `beam`
 #                        shape spans the whole line (its length is ignored)
+#               dig      a digger: at the head of its burrow as it cuts
+#                        (every few steps, aimed along the burrow); a riot
+#                        charge: along its cut, from the hull out along the
+#                        barrel (spread along that line, as beam)
+#               pour     liquid dirt: along the top of its pool as it fills
+#                        (spread along that line, as beam)
 #
 # effect fields
 #   emitters  list of emitters, one per line: `- { shape: ring, ... }`. A
@@ -1671,6 +1999,412 @@ effects:
         - { shape: sprite, count: 3, sheet: plume, unit: r, size: [1.4, 1.8], life: [1.6, 2.4], speed: [0.5, 1.5], angle: 90, spread: 90, gravity: -12, drag: 0.8, wind: 1, alpha: [0, 0.7, 0.4, 0], rotJitter: 30, tint: "#d8d2c8" }
         - { count: 1, unit: r, size: [0.7, 0.7], sizeEnd: 0.4, life: [0.25, 0.25], alpha: [0.8, 0.4, 0], colors: ["#ffffff", "#ffd75e"], glow: true }
         - { shape: sprite, count: 1, sheet: flare, size: [8, 8], life: [0.25, 0.25], alpha: [1, 1, 0], tint: "#ffd75e", glow: true }
+  dirtclod:
+    body: { halo: 0, alpha: 0, sprite: "p_clod", size: 10, spin: 260 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.8, 0.45, 0], colors: ["#ffffff", "#e8d4a0"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [9, 9], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: sprite, count: 4, sheet: plume, aim: forward, spread: 60, life: [0.7, 1.1], speed: [20, 60], drag: 2, gravity: -20, wind: 1, size: [5, 7.5], alpha: [0, 0.6, 0.3, 0], rotJitter: 40, tint: "#a88a62" }
+        - { count: 8, life: [0.3, 0.6], speed: [60, 150], gravity: 320, drag: 0.5, size: [0.9, 1.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"], aim: forward, spread: 50 }
+    trail:
+      emitters:
+        - { rate: 26, life: [0.3, 0.6], speed: [5, 30], angle: -90, spread: 70, gravity: 300, size: [0.8, 1.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: sprite, rate: 10, sheet: smoke, life: [0.6, 1], speed: [0, 8], angle: 90, spread: 120, gravity: -8, drag: 1.2, size: [2.6, 3.4], sizeEnd: 2, alpha: [0, 0.4, 0], rotJitter: 180, wind: 1, tint: "#a88a62" }
+    impact:
+      emitters:
+        - { shape: sprite, count: 1, sheet: dirt, unit: r, size: [0.9, 0.9], life: [0.9, 0.9], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.25 }
+        - { shape: sprite, count: 2, sheet: dirt, unit: r, size: [0.55, 0.65], life: [0.8, 1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.1, offset: 0.6, edge: true, angle: -90, spread: 120, delay: 0.08 }
+        - { shape: sprite, count: 8, sheet: debris, anim: random, fps: 22, life: [0.6, 1.2], speed: [60, 180], angle: 90, spread: 150, gravity: 380, drag: 0.3, size: [1.8, 3.6], alpha: [1, 1, 0], rotJitter: 180, spin: [-360, 360], tint: "#8a5a30" }
+        - { count: 18, life: [0.5, 1], speed: [50, 170], angle: 90, spread: 160, gravity: 340, drag: 0.4, size: [1.2, 2.4], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: ring, count: 1, unit: r, size: [0.3, 0.3], sizeEnd: 3.4, ease: out, life: [0.5, 0.5], width: 4, alpha: [0.8, 0.4, 0], colors: ["#d8c090", "#7a5a30"] }
+        - { shape: sprite, count: 3, sheet: plume, unit: r, size: [0.5, 0.65], life: [1.4, 2], speed: [0.3, 0.8], angle: 90, spread: 160, gravity: -6, drag: 1, wind: 1, alpha: [0, 0.7, 0.4, 0], rotJitter: 30, tint: "#9a7a52", offset: 0.4 }
+  dirtball:
+    body: { halo: 0, alpha: 0, sprite: "p_clod", size: 14, spin: 220 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.8, 0.45, 0], colors: ["#ffffff", "#e8d4a0"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [9, 9], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: sprite, count: 4, sheet: plume, aim: forward, spread: 60, life: [0.7, 1.1], speed: [20, 60], drag: 2, gravity: -20, wind: 1, size: [5, 7.5], alpha: [0, 0.6, 0.3, 0], rotJitter: 40, tint: "#a88a62" }
+        - { count: 8, life: [0.3, 0.6], speed: [60, 150], gravity: 320, drag: 0.5, size: [0.9, 1.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"], aim: forward, spread: 50 }
+    trail:
+      emitters:
+        - { rate: 26, life: [0.3, 0.6], speed: [5, 30], angle: -90, spread: 70, gravity: 300, size: [0.8, 1.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: sprite, rate: 10, sheet: smoke, life: [0.6, 1], speed: [0, 8], angle: 90, spread: 120, gravity: -8, drag: 1.2, size: [2.6, 3.4], sizeEnd: 2, alpha: [0, 0.4, 0], rotJitter: 180, wind: 1, tint: "#a88a62" }
+    impact:
+      emitters:
+        - { shape: sprite, count: 1, sheet: dirt, unit: r, size: [0.9, 0.9], life: [0.9, 0.9], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.25 }
+        - { shape: sprite, count: 2, sheet: dirt, unit: r, size: [0.55, 0.65], life: [0.8, 1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.1, offset: 0.6, edge: true, angle: -90, spread: 120, delay: 0.08 }
+        - { shape: sprite, count: 12, sheet: debris, anim: random, fps: 22, life: [0.6, 1.2], speed: [60, 180], angle: 90, spread: 150, gravity: 380, drag: 0.3, size: [1.8, 3.6], alpha: [1, 1, 0], rotJitter: 180, spin: [-360, 360], tint: "#8a5a30" }
+        - { count: 18, life: [0.5, 1], speed: [50, 170], angle: 90, spread: 160, gravity: 340, drag: 0.4, size: [1.2, 2.4], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: ring, count: 1, unit: r, size: [0.3, 0.3], sizeEnd: 3.4, ease: out, life: [0.5, 0.5], width: 4, alpha: [0.8, 0.4, 0], colors: ["#d8c090", "#7a5a30"] }
+        - { shape: sprite, count: 3, sheet: plume, unit: r, size: [0.5, 0.65], life: [1.4, 2], speed: [0.3, 0.8], angle: 90, spread: 160, gravity: -6, drag: 1, wind: 1, alpha: [0, 0.7, 0.4, 0], rotJitter: 30, tint: "#9a7a52", offset: 0.4 }
+  tondirt:
+    body: { halo: 0, alpha: 0, sprite: "p_clod", size: 22, spin: 160 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.8, 0.45, 0], colors: ["#ffffff", "#e8d4a0"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [9, 9], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: sprite, count: 4, sheet: plume, aim: forward, spread: 60, life: [0.7, 1.1], speed: [20, 60], drag: 2, gravity: -20, wind: 1, size: [5, 7.5], alpha: [0, 0.6, 0.3, 0], rotJitter: 40, tint: "#a88a62" }
+        - { count: 8, life: [0.3, 0.6], speed: [60, 150], gravity: 320, drag: 0.5, size: [0.9, 1.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"], aim: forward, spread: 50 }
+    trail:
+      emitters:
+        - { rate: 26, life: [0.3, 0.6], speed: [5, 30], angle: -90, spread: 70, gravity: 300, size: [0.8, 1.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: sprite, rate: 10, sheet: smoke, life: [0.6, 1], speed: [0, 8], angle: 90, spread: 120, gravity: -8, drag: 1.2, size: [2.6, 3.4], sizeEnd: 2, alpha: [0, 0.4, 0], rotJitter: 180, wind: 1, tint: "#a88a62" }
+    impact:
+      screen: { shake: 0.45 }
+      emitters:
+        - { shape: sprite, count: 1, sheet: dirt, unit: r, size: [0.9, 0.9], life: [0.9, 0.9], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.25 }
+        - { shape: sprite, count: 2, sheet: dirt, unit: r, size: [0.55, 0.65], life: [0.8, 1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.1, offset: 0.6, edge: true, angle: -90, spread: 120, delay: 0.08 }
+        - { shape: sprite, count: 18, sheet: debris, anim: random, fps: 22, life: [0.6, 1.2], speed: [60, 180], angle: 90, spread: 150, gravity: 380, drag: 0.3, size: [1.8, 3.6], alpha: [1, 1, 0], rotJitter: 180, spin: [-360, 360], tint: "#8a5a30" }
+        - { count: 18, life: [0.5, 1], speed: [50, 170], angle: 90, spread: 160, gravity: 340, drag: 0.4, size: [1.2, 2.4], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: ring, count: 1, unit: r, size: [0.3, 0.3], sizeEnd: 3.4, ease: out, life: [0.5, 0.5], width: 4, alpha: [0.8, 0.4, 0], colors: ["#d8c090", "#7a5a30"] }
+        - { shape: sprite, count: 3, sheet: plume, unit: r, size: [0.5, 0.65], life: [1.4, 2], speed: [0.3, 0.8], angle: 90, spread: 160, gravity: -6, drag: 1, wind: 1, alpha: [0, 0.7, 0.4, 0], rotJitter: 30, tint: "#9a7a52", offset: 0.4 }
+  liquiddirt:
+    body: { halo: 0, alpha: 0, sprite: "p_mud", size: 14, fps: 16 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.8, 0.45, 0], colors: ["#ffffff", "#e8d4a0"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [9, 9], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: sprite, count: 4, sheet: plume, aim: forward, spread: 60, life: [0.7, 1.1], speed: [20, 60], drag: 2, gravity: -20, wind: 1, size: [5, 7.5], alpha: [0, 0.6, 0.3, 0], rotJitter: 40, tint: "#a88a62" }
+        - { count: 8, life: [0.3, 0.6], speed: [60, 150], gravity: 320, drag: 0.5, size: [0.9, 1.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"], aim: forward, spread: 50 }
+    trail:
+      emitters:
+        - { rate: 40, life: [0.3, 0.6], speed: [5, 30], angle: -90, spread: 50, gravity: 340, size: [1, 2], alpha: [1, 1, 0], colors: ["#8a5a2a", "#5a3a1a"] }
+        - { shape: sprite, rate: 8, sheet: smoke, life: [0.6, 1], speed: [0, 8], angle: 90, spread: 120, gravity: -8, drag: 1.2, size: [2.4, 3.2], sizeEnd: 2, alpha: [0, 0.35, 0], rotJitter: 180, wind: 1, tint: "#8a6a4a" }
+    impact:
+      emitters:
+        - { shape: sprite, count: 1, sheet: dirt, unit: r, size: [0.6, 0.6], life: [0.8, 0.8], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.2, tint: "#8a6a4a" }
+        - { count: 22, life: [0.5, 1], speed: [60, 190], angle: 90, spread: 140, gravity: 380, drag: 0.4, size: [1.4, 2.8], alpha: [1, 1, 0], colors: ["#8a5a2a", "#6a4220", "#4a2a10"] }
+        - { shape: streak, count: 12, life: [0.3, 0.6], speed: [80, 200], angle: 90, spread: 130, gravity: 420, drag: 0.3, size: [1.4, 2], length: 7, alpha: [1, 1, 0], colors: ["#9a6a3a", "#5a3a1a"] }
+        - { shape: ring, count: 1, unit: r, size: [0.1, 0.1], sizeEnd: 9, ease: out, life: [0.5, 0.5], width: 3, alpha: [0.8, 0.4, 0], colors: ["#b88a5a", "#5a3a1a"] }
+    special:
+      pour:
+        emitters:
+          - { count: 60, life: [0.6, 1.3], speed: [10, 50], angle: 90, spread: 70, gravity: 160, drag: 0.6, size: [1.4, 3], alpha: [1, 1, 0], colors: ["#9a6a3a", "#6a4220", "#4a2a10"] }
+          - { shape: streak, count: 24, life: [0.4, 0.8], speed: [40, 110], angle: 90, spread: 60, gravity: 260, drag: 0.4, size: [1.2, 1.8], length: 6, alpha: [1, 1, 0], colors: ["#a87a4a", "#5a3a1a"] }
+          - { count: 30, life: [0.8, 1.6], speed: [2, 10], angle: 90, spread: 40, gravity: -6, size: [1.2, 2.4], sizeEnd: 1.6, alpha: [0, 0.9, 0], colors: ["#c8a070", "#7a5230"], delay: 0.15 }
+          - { shape: ring, count: 10, life: [0.6, 1], size: [2, 3], sizeEnd: 4, ease: out, width: 1.5, alpha: [0.8, 0.4, 0], colors: ["#c8a070", "#6a4220"], delay: 0.2 }
+          - { shape: sprite, count: 8, sheet: smoke, life: [1, 1.6], speed: [4, 14], angle: 90, spread: 80, gravity: -10, drag: 1, wind: 1, size: [4, 6], sizeEnd: 2, alpha: [0, 0.45, 0], rotJitter: 180, tint: "#8a6a4a", delay: 0.1 }
+  dirtcharge:
+    body: { halo: 6, alpha: 0.3, pulse: 6, sprite: "p_clod", size: 16, spin: 200 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.8, 0.45, 0], colors: ["#ffffff", "#e8d4a0"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [9, 9], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: sprite, count: 4, sheet: plume, aim: forward, spread: 60, life: [0.7, 1.1], speed: [20, 60], drag: 2, gravity: -20, wind: 1, size: [5, 7.5], alpha: [0, 0.6, 0.3, 0], rotJitter: 40, tint: "#a88a62" }
+        - { count: 8, life: [0.3, 0.6], speed: [60, 150], gravity: 320, drag: 0.5, size: [0.9, 1.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"], aim: forward, spread: 50 }
+    trail:
+      emitters:
+        - { rate: 26, life: [0.3, 0.6], speed: [5, 30], angle: -90, spread: 70, gravity: 300, size: [0.8, 1.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: sprite, rate: 10, sheet: smoke, life: [0.6, 1], speed: [0, 8], angle: 90, spread: 120, gravity: -8, drag: 1.2, size: [2.6, 3.4], sizeEnd: 2, alpha: [0, 0.4, 0], rotJitter: 180, wind: 1, tint: "#a88a62" }
+        - { rate: 20, life: [0.15, 0.3], speed: [0, 10], size: [1, 1.6], sizeEnd: 0.3, colors: ["#fff3c4", "#ff9f43"], glow: true }
+    impact:
+      emitters:
+        - { count: 1, unit: r, size: [0.6, 0.6], sizeEnd: 0.6, life: [0.2, 0.2], alpha: [0.7, 0.35, 0], colors: ["#ffffff", "#ffb13c"], glow: true }
+        - { shape: sprite, count: 1, sheet: blast, unit: r, size: [0.8, 0.8], life: [0.75, 0.75], alpha: [1, 1, 0.9, 0], rotJitter: 20, scale: 1.2 }
+        - { shape: sprite, count: 1, sheet: fireball, unit: r, size: [0.6, 0.6], life: [0.34, 0.34], alpha: [1, 0.8, 0], rotJitter: 14, scale: 1.1, glow: true }
+        - { shape: sprite, count: 1, sheet: dirt, unit: r, size: [0.9, 0.9], life: [0.9, 0.9], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.25 }
+        - { shape: sprite, count: 2, sheet: dirt, unit: r, size: [0.55, 0.65], life: [0.8, 1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.1, offset: 0.6, edge: true, angle: -90, spread: 120, delay: 0.08 }
+        - { shape: sprite, count: 14, sheet: debris, anim: random, fps: 22, life: [0.6, 1.2], speed: [60, 180], angle: 90, spread: 150, gravity: 380, drag: 0.3, size: [1.8, 3.6], alpha: [1, 1, 0], rotJitter: 180, spin: [-360, 360], tint: "#8a5a30" }
+        - { count: 18, life: [0.5, 1], speed: [50, 170], angle: 90, spread: 160, gravity: 340, drag: 0.4, size: [1.2, 2.4], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: ring, count: 1, unit: r, size: [0.3, 0.3], sizeEnd: 3.4, ease: out, life: [0.5, 0.5], width: 4, alpha: [0.8, 0.4, 0], colors: ["#d8c090", "#7a5a30"] }
+        - { shape: sprite, count: 3, sheet: plume, unit: r, size: [0.5, 0.65], life: [1.4, 2], speed: [0.3, 0.8], angle: 90, spread: 160, gravity: -6, drag: 1, wind: 1, alpha: [0, 0.7, 0.4, 0], rotJitter: 30, tint: "#9a7a52", offset: 0.4 }
+  babydigger:
+    body: { halo: 4, alpha: 0.2, sprite: "p_drill", size: 12, fps: 24 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.85, 0.5, 0], colors: ["#ffffff", "#ffd166"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [9, 9], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: streak, count: 6, life: [0.1, 0.22], speed: [90, 200], gravity: 200, drag: 1.2, size: [1.1, 1.6], length: 7, alpha: [1, 0.9, 0], colors: ["#fff3c4", "#ffb13c"], glow: true, aim: forward, spread: 35 }
+        - { shape: sprite, count: 3, sheet: plume, aim: forward, spread: 50, life: [0.7, 1.1], speed: [20, 60], drag: 2, gravity: -20, wind: 1, size: [4.2, 6], alpha: [0, 0.6, 0.3, 0], rotJitter: 40, tint: "#a0a0a0" }
+    trail:
+      emitters:
+        - { rate: 36, life: [0.2, 0.36], speed: [0, 14], size: [1.1, 1.8], sizeEnd: 0.3, colors: ["#fff3c4", "#ffd166", "#c88a3a"], glow: true }
+        - { shape: spark, rate: 5, life: [0.15, 0.25], speed: [0, 16], size: [2, 2.8], sizeEnd: 0.4, colors: ["#ffffff", "#ffd166"], glow: true, rotJitter: 90, spin: [-300, 300] }
+        - { shape: sprite, rate: 10, sheet: smoke, life: [0.6, 0.9], speed: [0, 8], angle: 90, spread: 120, gravity: -10, drag: 1.2, size: [2.6, 3.3], sizeEnd: 2, alpha: [0, 0.4, 0], rotJitter: 180, wind: 1, tint: "#8a8a8a" }
+    impact:
+      emitters:
+        - { shape: sprite, count: 1, sheet: dirt, unit: r, size: [0.9, 0.9], life: [0.7, 0.7], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.2 }
+        - { shape: sprite, count: 2, sheet: smoke, unit: r, size: [0.4, 0.6], life: [0.8, 1.2], speed: [8, 24], angle: 90, spread: 90, gravity: -14, drag: 1, wind: 1, sizeEnd: 2, alpha: [0, 0.5, 0], rotJitter: 180, tint: "#9a7a52" }
+        - { count: 10, life: [0.4, 0.8], speed: [50, 140], angle: 90, spread: 120, gravity: 340, drag: 0.4, size: [1, 2], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: streak, count: 6, life: [0.1, 0.22], speed: [80, 180], angle: 90, spread: 140, gravity: 200, drag: 1.2, size: [1, 1.4], length: 6, alpha: [1, 0.9, 0], colors: ["#fff3c4", "#ffb13c"], glow: true }
+    special:
+      dig:
+        emitters:
+          - { shape: sprite, count: 1, sheet: smoke, life: [0.6, 0.9], speed: [8, 24], angle: 90, spread: 80, gravity: -14, drag: 1, wind: 1, size: [2.4, 3.6], sizeEnd: 2, alpha: [0, 0.55, 0], rotJitter: 180, tint: "#9a7a52" }
+          - { count: 3, life: [0.3, 0.6], speed: [40, 120], angle: 90, spread: 100, gravity: 360, drag: 0.4, size: [0.9, 1.8], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+          - { shape: sprite, count: 1, sheet: debris, anim: random, fps: 22, life: [0.4, 0.7], speed: [40, 110], angle: 90, spread: 90, gravity: 380, size: [1.2, 2.2], alpha: [1, 1, 0], rotJitter: 180, spin: [-400, 400], tint: "#8a5a30" }
+          - { shape: streak, count: 1, life: [0.08, 0.16], speed: [60, 140], gravity: 200, drag: 1.2, size: [0.8, 1.1], length: 5, alpha: [1, 0.8, 0], colors: ["#fff3c4", "#ffb13c"], glow: true }
+  digger:
+    body: { halo: 4, alpha: 0.2, sprite: "p_drill", size: 15, fps: 24 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.85, 0.5, 0], colors: ["#ffffff", "#ffd166"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [9, 9], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: streak, count: 6, life: [0.1, 0.22], speed: [90, 200], gravity: 200, drag: 1.2, size: [1.1, 1.6], length: 7, alpha: [1, 0.9, 0], colors: ["#fff3c4", "#ffb13c"], glow: true, aim: forward, spread: 35 }
+        - { shape: sprite, count: 3, sheet: plume, aim: forward, spread: 50, life: [0.7, 1.1], speed: [20, 60], drag: 2, gravity: -20, wind: 1, size: [4.2, 6], alpha: [0, 0.6, 0.3, 0], rotJitter: 40, tint: "#a0a0a0" }
+    trail:
+      emitters:
+        - { rate: 36, life: [0.2, 0.36], speed: [0, 14], size: [1.1, 1.8], sizeEnd: 0.3, colors: ["#fff3c4", "#ffd166", "#c88a3a"], glow: true }
+        - { shape: spark, rate: 5, life: [0.15, 0.25], speed: [0, 16], size: [2, 2.8], sizeEnd: 0.4, colors: ["#ffffff", "#ffd166"], glow: true, rotJitter: 90, spin: [-300, 300] }
+        - { shape: sprite, rate: 10, sheet: smoke, life: [0.6, 0.9], speed: [0, 8], angle: 90, spread: 120, gravity: -10, drag: 1.2, size: [2.6, 3.3], sizeEnd: 2, alpha: [0, 0.4, 0], rotJitter: 180, wind: 1, tint: "#8a8a8a" }
+    impact:
+      emitters:
+        - { shape: sprite, count: 1, sheet: dirt, unit: r, size: [0.9, 0.9], life: [0.7, 0.7], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.2 }
+        - { shape: sprite, count: 2, sheet: smoke, unit: r, size: [0.4, 0.6], life: [0.8, 1.2], speed: [8, 24], angle: 90, spread: 90, gravity: -14, drag: 1, wind: 1, sizeEnd: 2, alpha: [0, 0.5, 0], rotJitter: 180, tint: "#9a7a52" }
+        - { count: 10, life: [0.4, 0.8], speed: [50, 140], angle: 90, spread: 120, gravity: 340, drag: 0.4, size: [1, 2], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: streak, count: 6, life: [0.1, 0.22], speed: [80, 180], angle: 90, spread: 140, gravity: 200, drag: 1.2, size: [1, 1.4], length: 6, alpha: [1, 0.9, 0], colors: ["#fff3c4", "#ffb13c"], glow: true }
+    special:
+      dig:
+        emitters:
+          - { shape: sprite, count: 1, sheet: smoke, life: [0.6, 0.9], speed: [8, 24], angle: 90, spread: 80, gravity: -14, drag: 1, wind: 1, size: [3, 4.5], sizeEnd: 2, alpha: [0, 0.55, 0], rotJitter: 180, tint: "#9a7a52" }
+          - { count: 3, life: [0.3, 0.6], speed: [40, 120], angle: 90, spread: 100, gravity: 360, drag: 0.4, size: [0.9, 1.8], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+          - { shape: sprite, count: 1, sheet: debris, anim: random, fps: 22, life: [0.4, 0.7], speed: [40, 110], angle: 90, spread: 90, gravity: 380, size: [1.2, 2.2], alpha: [1, 1, 0], rotJitter: 180, spin: [-400, 400], tint: "#8a5a30" }
+          - { shape: streak, count: 1, life: [0.08, 0.16], speed: [60, 140], gravity: 200, drag: 1.2, size: [0.8, 1.1], length: 5, alpha: [1, 0.8, 0], colors: ["#fff3c4", "#ffb13c"], glow: true }
+  heavydigger:
+    body: { halo: 4, alpha: 0.2, sprite: "p_drill", size: 19, fps: 24 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.85, 0.5, 0], colors: ["#ffffff", "#ffd166"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [9, 9], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: streak, count: 6, life: [0.1, 0.22], speed: [90, 200], gravity: 200, drag: 1.2, size: [1.1, 1.6], length: 7, alpha: [1, 0.9, 0], colors: ["#fff3c4", "#ffb13c"], glow: true, aim: forward, spread: 35 }
+        - { shape: sprite, count: 3, sheet: plume, aim: forward, spread: 50, life: [0.7, 1.1], speed: [20, 60], drag: 2, gravity: -20, wind: 1, size: [4.2, 6], alpha: [0, 0.6, 0.3, 0], rotJitter: 40, tint: "#a0a0a0" }
+    trail:
+      emitters:
+        - { rate: 36, life: [0.2, 0.36], speed: [0, 14], size: [1.1, 1.8], sizeEnd: 0.3, colors: ["#fff3c4", "#ffd166", "#c88a3a"], glow: true }
+        - { shape: spark, rate: 5, life: [0.15, 0.25], speed: [0, 16], size: [2, 2.8], sizeEnd: 0.4, colors: ["#ffffff", "#ffd166"], glow: true, rotJitter: 90, spin: [-300, 300] }
+        - { shape: sprite, rate: 10, sheet: smoke, life: [0.6, 0.9], speed: [0, 8], angle: 90, spread: 120, gravity: -10, drag: 1.2, size: [2.6, 3.3], sizeEnd: 2, alpha: [0, 0.4, 0], rotJitter: 180, wind: 1, tint: "#8a8a8a" }
+    impact:
+      emitters:
+        - { shape: sprite, count: 1, sheet: dirt, unit: r, size: [0.9, 0.9], life: [0.7, 0.7], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.2 }
+        - { shape: sprite, count: 2, sheet: smoke, unit: r, size: [0.4, 0.6], life: [0.8, 1.2], speed: [8, 24], angle: 90, spread: 90, gravity: -14, drag: 1, wind: 1, sizeEnd: 2, alpha: [0, 0.5, 0], rotJitter: 180, tint: "#9a7a52" }
+        - { count: 10, life: [0.4, 0.8], speed: [50, 140], angle: 90, spread: 120, gravity: 340, drag: 0.4, size: [1, 2], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: streak, count: 6, life: [0.1, 0.22], speed: [80, 180], angle: 90, spread: 140, gravity: 200, drag: 1.2, size: [1, 1.4], length: 6, alpha: [1, 0.9, 0], colors: ["#fff3c4", "#ffb13c"], glow: true }
+    special:
+      dig:
+        emitters:
+          - { shape: sprite, count: 1, sheet: smoke, life: [0.6, 0.9], speed: [8, 24], angle: 90, spread: 80, gravity: -14, drag: 1, wind: 1, size: [3.8, 5.7], sizeEnd: 2, alpha: [0, 0.55, 0], rotJitter: 180, tint: "#9a7a52" }
+          - { count: 3, life: [0.3, 0.6], speed: [40, 120], angle: 90, spread: 100, gravity: 360, drag: 0.4, size: [0.9, 1.8], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+          - { shape: sprite, count: 1, sheet: debris, anim: random, fps: 22, life: [0.4, 0.7], speed: [40, 110], angle: 90, spread: 90, gravity: 380, size: [1.2, 2.2], alpha: [1, 1, 0], rotJitter: 180, spin: [-400, 400], tint: "#8a5a30" }
+          - { shape: streak, count: 1, life: [0.08, 0.16], speed: [60, 140], gravity: 200, drag: 1.2, size: [0.8, 1.1], length: 5, alpha: [1, 0.8, 0], colors: ["#fff3c4", "#ffb13c"], glow: true }
+  babysandhog:
+    body: { halo: 4, alpha: 0.2, sprite: "p_sandhog", size: 13, fps: 24 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.85, 0.5, 0], colors: ["#ffffff", "#ffd166"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [9, 9], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: streak, count: 6, life: [0.1, 0.22], speed: [90, 200], gravity: 200, drag: 1.2, size: [1.1, 1.6], length: 7, alpha: [1, 0.9, 0], colors: ["#fff3c4", "#ffb13c"], glow: true, aim: forward, spread: 35 }
+        - { shape: sprite, count: 3, sheet: plume, aim: forward, spread: 50, life: [0.7, 1.1], speed: [20, 60], drag: 2, gravity: -20, wind: 1, size: [4.2, 6], alpha: [0, 0.6, 0.3, 0], rotJitter: 40, tint: "#a0a0a0" }
+    trail:
+      emitters:
+        - { rate: 36, life: [0.2, 0.36], speed: [0, 14], size: [1.1, 1.8], sizeEnd: 0.3, colors: ["#fff3c4", "#ffd166", "#c88a3a"], glow: true }
+        - { shape: spark, rate: 5, life: [0.15, 0.25], speed: [0, 16], size: [2, 2.8], sizeEnd: 0.4, colors: ["#ffffff", "#ffd166"], glow: true, rotJitter: 90, spin: [-300, 300] }
+        - { shape: sprite, rate: 10, sheet: smoke, life: [0.6, 0.9], speed: [0, 8], angle: 90, spread: 120, gravity: -10, drag: 1.2, size: [2.6, 3.3], sizeEnd: 2, alpha: [0, 0.4, 0], rotJitter: 180, wind: 1, tint: "#8a8a8a" }
+    impact:
+      emitters:
+        - { shape: sprite, count: 3, sheet: scorch, unit: r, size: [0.25, 0.3], life: [3, 4.2], offset: 0.62, edge: true, angle: -90, spread: 130, alpha: [0.9, 0.8, 0], rotJitter: 180, ground: true, tint: "#c8b090" }
+        - { count: 1, unit: r, size: [0.6, 0.6], sizeEnd: 0.6, life: [0.2, 0.2], alpha: [0.7, 0.35, 0], colors: ["#ffffff", "#ffb13c"], glow: true }
+        - { shape: sprite, count: 1, sheet: blast, unit: r, size: [0.85, 0.85], life: [0.75, 0.75], alpha: [1, 1, 0.9, 0], rotJitter: 20, scale: 1.25 }
+        - { shape: sprite, count: 1, sheet: fireball, unit: r, size: [0.62, 0.62], life: [0.34, 0.34], alpha: [1, 0.8, 0], rotJitter: 14, scale: 1.1, glow: true }
+        - { shape: sprite, count: 1, sheet: dirt, unit: r, size: [0.85, 0.85], life: [1, 1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.2, ground: true, offset: 0.55, edge: true, angle: -90, spread: 0 }
+        - { shape: sprite, count: 2, sheet: dirt, unit: r, size: [0.55, 0.6], life: [0.9, 1.1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.1, ground: true, offset: 0.7, edge: true, angle: -90, spread: 110, delay: 0.06 }
+        - { shape: ring, count: 1, unit: r, size: [0.2, 0.2], sizeEnd: 4.4, ease: out, life: [0.55, 0.55], width: 4, alpha: [0.9, 0.5, 0], colors: ["#e8d4a0", "#8a6a3a"] }
+        - { shape: sprite, count: 14, sheet: debris, anim: random, fps: 22, life: [0.7, 1.3], speed: [100, 250], angle: 90, spread: 140, gravity: 380, drag: 0.3, size: [2, 4], alpha: [1, 1, 0], rotJitter: 180, spin: [-360, 360], tint: "#8a5a30" }
+        - { count: 16, life: [0.5, 1], speed: [80, 230], angle: 90, spread: 150, gravity: 340, drag: 0.4, size: [1.2, 2.4], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: sprite, count: 3, sheet: plume, unit: r, size: [0.48, 0.6], life: [1.8, 2.6], speed: [0.2, 0.6], angle: 90, spread: 70, gravity: -14, drag: 0.8, wind: 1, alpha: [0, 0.85, 0.6, 0], rotJitter: 25, scale: 1.25, tint: "#8a7256", delay: 0.2, offset: 0.25 }
+    special:
+      dig:
+        emitters:
+          - { shape: sprite, count: 1, sheet: smoke, life: [0.6, 0.9], speed: [8, 24], angle: 90, spread: 80, gravity: -14, drag: 1, wind: 1, size: [2.6, 3.9], sizeEnd: 2, alpha: [0, 0.55, 0], rotJitter: 180, tint: "#9a7a52" }
+          - { count: 3, life: [0.3, 0.6], speed: [40, 120], angle: 90, spread: 100, gravity: 360, drag: 0.4, size: [0.9, 1.8], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+          - { shape: sprite, count: 1, sheet: debris, anim: random, fps: 22, life: [0.4, 0.7], speed: [40, 110], angle: 90, spread: 90, gravity: 380, size: [1.2, 2.2], alpha: [1, 1, 0], rotJitter: 180, spin: [-400, 400], tint: "#8a5a30" }
+          - { shape: streak, count: 1, life: [0.08, 0.16], speed: [60, 140], gravity: 200, drag: 1.2, size: [0.8, 1.1], length: 5, alpha: [1, 0.8, 0], colors: ["#fff3c4", "#ffb13c"], glow: true }
+  sandhog:
+    body: { halo: 4, alpha: 0.2, sprite: "p_sandhog", size: 16, fps: 24 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.85, 0.5, 0], colors: ["#ffffff", "#ffd166"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [9, 9], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: streak, count: 6, life: [0.1, 0.22], speed: [90, 200], gravity: 200, drag: 1.2, size: [1.1, 1.6], length: 7, alpha: [1, 0.9, 0], colors: ["#fff3c4", "#ffb13c"], glow: true, aim: forward, spread: 35 }
+        - { shape: sprite, count: 3, sheet: plume, aim: forward, spread: 50, life: [0.7, 1.1], speed: [20, 60], drag: 2, gravity: -20, wind: 1, size: [4.2, 6], alpha: [0, 0.6, 0.3, 0], rotJitter: 40, tint: "#a0a0a0" }
+    trail:
+      emitters:
+        - { rate: 36, life: [0.2, 0.36], speed: [0, 14], size: [1.1, 1.8], sizeEnd: 0.3, colors: ["#fff3c4", "#ffd166", "#c88a3a"], glow: true }
+        - { shape: spark, rate: 5, life: [0.15, 0.25], speed: [0, 16], size: [2, 2.8], sizeEnd: 0.4, colors: ["#ffffff", "#ffd166"], glow: true, rotJitter: 90, spin: [-300, 300] }
+        - { shape: sprite, rate: 10, sheet: smoke, life: [0.6, 0.9], speed: [0, 8], angle: 90, spread: 120, gravity: -10, drag: 1.2, size: [2.6, 3.3], sizeEnd: 2, alpha: [0, 0.4, 0], rotJitter: 180, wind: 1, tint: "#8a8a8a" }
+    impact:
+      emitters:
+        - { shape: sprite, count: 3, sheet: scorch, unit: r, size: [0.25, 0.3], life: [3, 4.2], offset: 0.62, edge: true, angle: -90, spread: 130, alpha: [0.9, 0.8, 0], rotJitter: 180, ground: true, tint: "#c8b090" }
+        - { count: 1, unit: r, size: [0.6, 0.6], sizeEnd: 0.6, life: [0.2, 0.2], alpha: [0.7, 0.35, 0], colors: ["#ffffff", "#ffb13c"], glow: true }
+        - { shape: sprite, count: 1, sheet: blast, unit: r, size: [0.85, 0.85], life: [0.75, 0.75], alpha: [1, 1, 0.9, 0], rotJitter: 20, scale: 1.25 }
+        - { shape: sprite, count: 1, sheet: fireball, unit: r, size: [0.62, 0.62], life: [0.34, 0.34], alpha: [1, 0.8, 0], rotJitter: 14, scale: 1.1, glow: true }
+        - { shape: sprite, count: 1, sheet: dirt, unit: r, size: [0.85, 0.85], life: [1, 1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.2, ground: true, offset: 0.55, edge: true, angle: -90, spread: 0 }
+        - { shape: sprite, count: 2, sheet: dirt, unit: r, size: [0.55, 0.6], life: [0.9, 1.1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.1, ground: true, offset: 0.7, edge: true, angle: -90, spread: 110, delay: 0.06 }
+        - { shape: ring, count: 1, unit: r, size: [0.2, 0.2], sizeEnd: 4.4, ease: out, life: [0.55, 0.55], width: 4, alpha: [0.9, 0.5, 0], colors: ["#e8d4a0", "#8a6a3a"] }
+        - { shape: sprite, count: 14, sheet: debris, anim: random, fps: 22, life: [0.7, 1.3], speed: [100, 250], angle: 90, spread: 140, gravity: 380, drag: 0.3, size: [2, 4], alpha: [1, 1, 0], rotJitter: 180, spin: [-360, 360], tint: "#8a5a30" }
+        - { count: 16, life: [0.5, 1], speed: [80, 230], angle: 90, spread: 150, gravity: 340, drag: 0.4, size: [1.2, 2.4], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: sprite, count: 3, sheet: plume, unit: r, size: [0.48, 0.6], life: [1.8, 2.6], speed: [0.2, 0.6], angle: 90, spread: 70, gravity: -14, drag: 0.8, wind: 1, alpha: [0, 0.85, 0.6, 0], rotJitter: 25, scale: 1.25, tint: "#8a7256", delay: 0.2, offset: 0.25 }
+    special:
+      dig:
+        emitters:
+          - { shape: sprite, count: 1, sheet: smoke, life: [0.6, 0.9], speed: [8, 24], angle: 90, spread: 80, gravity: -14, drag: 1, wind: 1, size: [3.2, 4.8], sizeEnd: 2, alpha: [0, 0.55, 0], rotJitter: 180, tint: "#9a7a52" }
+          - { count: 3, life: [0.3, 0.6], speed: [40, 120], angle: 90, spread: 100, gravity: 360, drag: 0.4, size: [0.9, 1.8], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+          - { shape: sprite, count: 1, sheet: debris, anim: random, fps: 22, life: [0.4, 0.7], speed: [40, 110], angle: 90, spread: 90, gravity: 380, size: [1.2, 2.2], alpha: [1, 1, 0], rotJitter: 180, spin: [-400, 400], tint: "#8a5a30" }
+          - { shape: streak, count: 1, life: [0.08, 0.16], speed: [60, 140], gravity: 200, drag: 1.2, size: [0.8, 1.1], length: 5, alpha: [1, 0.8, 0], colors: ["#fff3c4", "#ffb13c"], glow: true }
+  heavysandhog:
+    body: { halo: 4, alpha: 0.2, sprite: "p_sandhog", size: 20, fps: 24 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.85, 0.5, 0], colors: ["#ffffff", "#ffd166"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [9, 9], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: streak, count: 6, life: [0.1, 0.22], speed: [90, 200], gravity: 200, drag: 1.2, size: [1.1, 1.6], length: 7, alpha: [1, 0.9, 0], colors: ["#fff3c4", "#ffb13c"], glow: true, aim: forward, spread: 35 }
+        - { shape: sprite, count: 3, sheet: plume, aim: forward, spread: 50, life: [0.7, 1.1], speed: [20, 60], drag: 2, gravity: -20, wind: 1, size: [4.2, 6], alpha: [0, 0.6, 0.3, 0], rotJitter: 40, tint: "#a0a0a0" }
+    trail:
+      emitters:
+        - { rate: 36, life: [0.2, 0.36], speed: [0, 14], size: [1.1, 1.8], sizeEnd: 0.3, colors: ["#fff3c4", "#ffd166", "#c88a3a"], glow: true }
+        - { shape: spark, rate: 5, life: [0.15, 0.25], speed: [0, 16], size: [2, 2.8], sizeEnd: 0.4, colors: ["#ffffff", "#ffd166"], glow: true, rotJitter: 90, spin: [-300, 300] }
+        - { shape: sprite, rate: 10, sheet: smoke, life: [0.6, 0.9], speed: [0, 8], angle: 90, spread: 120, gravity: -10, drag: 1.2, size: [2.6, 3.3], sizeEnd: 2, alpha: [0, 0.4, 0], rotJitter: 180, wind: 1, tint: "#8a8a8a" }
+    impact:
+      emitters:
+        - { shape: sprite, count: 3, sheet: scorch, unit: r, size: [0.25, 0.3], life: [3, 4.2], offset: 0.62, edge: true, angle: -90, spread: 130, alpha: [0.9, 0.8, 0], rotJitter: 180, ground: true, tint: "#c8b090" }
+        - { count: 1, unit: r, size: [0.6, 0.6], sizeEnd: 0.6, life: [0.2, 0.2], alpha: [0.7, 0.35, 0], colors: ["#ffffff", "#ffb13c"], glow: true }
+        - { shape: sprite, count: 1, sheet: blast, unit: r, size: [0.85, 0.85], life: [0.75, 0.75], alpha: [1, 1, 0.9, 0], rotJitter: 20, scale: 1.25 }
+        - { shape: sprite, count: 1, sheet: fireball, unit: r, size: [0.62, 0.62], life: [0.34, 0.34], alpha: [1, 0.8, 0], rotJitter: 14, scale: 1.1, glow: true }
+        - { shape: sprite, count: 1, sheet: dirt, unit: r, size: [0.85, 0.85], life: [1, 1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.2, ground: true, offset: 0.55, edge: true, angle: -90, spread: 0 }
+        - { shape: sprite, count: 2, sheet: dirt, unit: r, size: [0.55, 0.6], life: [0.9, 1.1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.1, ground: true, offset: 0.7, edge: true, angle: -90, spread: 110, delay: 0.06 }
+        - { shape: ring, count: 1, unit: r, size: [0.2, 0.2], sizeEnd: 4.4, ease: out, life: [0.55, 0.55], width: 4, alpha: [0.9, 0.5, 0], colors: ["#e8d4a0", "#8a6a3a"] }
+        - { shape: sprite, count: 14, sheet: debris, anim: random, fps: 22, life: [0.7, 1.3], speed: [100, 250], angle: 90, spread: 140, gravity: 380, drag: 0.3, size: [2, 4], alpha: [1, 1, 0], rotJitter: 180, spin: [-360, 360], tint: "#8a5a30" }
+        - { count: 16, life: [0.5, 1], speed: [80, 230], angle: 90, spread: 150, gravity: 340, drag: 0.4, size: [1.2, 2.4], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: sprite, count: 3, sheet: plume, unit: r, size: [0.48, 0.6], life: [1.8, 2.6], speed: [0.2, 0.6], angle: 90, spread: 70, gravity: -14, drag: 0.8, wind: 1, alpha: [0, 0.85, 0.6, 0], rotJitter: 25, scale: 1.25, tint: "#8a7256", delay: 0.2, offset: 0.25 }
+    special:
+      dig:
+        emitters:
+          - { shape: sprite, count: 1, sheet: smoke, life: [0.6, 0.9], speed: [8, 24], angle: 90, spread: 80, gravity: -14, drag: 1, wind: 1, size: [4, 6], sizeEnd: 2, alpha: [0, 0.55, 0], rotJitter: 180, tint: "#9a7a52" }
+          - { count: 3, life: [0.3, 0.6], speed: [40, 120], angle: 90, spread: 100, gravity: 360, drag: 0.4, size: [0.9, 1.8], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+          - { shape: sprite, count: 1, sheet: debris, anim: random, fps: 22, life: [0.4, 0.7], speed: [40, 110], angle: 90, spread: 90, gravity: 380, size: [1.2, 2.2], alpha: [1, 1, 0], rotJitter: 180, spin: [-400, 400], tint: "#8a5a30" }
+          - { shape: streak, count: 1, life: [0.08, 0.16], speed: [60, 140], gravity: 200, drag: 1.2, size: [0.8, 1.1], length: 5, alpha: [1, 0.8, 0], colors: ["#fff3c4", "#ffb13c"], glow: true }
+  riotcharge:
+    body: { halo: 6, alpha: 0.3, sprite: "p_riot", size: 12 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [10, 10], sizeEnd: 0.5, life: [0.14, 0.14], alpha: [0.9, 0.5, 0], colors: ["#ffffff", "#f0e0b0"], glow: true }
+        - { shape: sprite, count: 1, sheet: flare, size: [14, 14], life: [0.25, 0.25], alpha: [1, 1, 0], tint: "#f0e0b0", glow: true, aim: forward, spread: 0, align: true }
+        - { shape: streak, count: 14, life: [0.12, 0.3], speed: [150, 320], drag: 1.2, size: [1.2, 1.8], length: 9, alpha: [1, 0.9, 0], colors: ["#ffffff", "#e8d4a0"], glow: true, aim: forward, spread: 50 }
+    trail:
+      emitters:
+        - { rate: 20, life: [0.2, 0.3], speed: [0, 10], size: [1, 1.6], sizeEnd: 0.3, colors: ["#ffffff", "#e8d4a0"], glow: true }
+    impact:
+      emitters:
+        - { count: 1, unit: r, size: [0.5, 0.5], sizeEnd: 0.6, life: [0.18, 0.18], alpha: [0.6, 0.3, 0], colors: ["#ffffff", "#e8d4a0"], glow: true }
+        - { shape: sprite, count: 1, sheet: shock, unit: r, size: [0.7, 0.7], life: [0.5, 0.5], alpha: [0.9, 0.5, 0], rotJitter: 10, tint: "#f0e0b0", glow: true }
+        - { shape: ring, count: 1, unit: r, size: [0.15, 0.15], sizeEnd: 7, ease: out, life: [0.45, 0.45], width: 4, alpha: [1, 0.5, 0], colors: ["#ffffff", "#e8d4a0", "#8a6a3a"] }
+        - { shape: ring, count: 1, unit: r, size: [0.15, 0.15], sizeEnd: 5, ease: out, life: [0.6, 0.6], width: 2, alpha: [0.8, 0.4, 0], colors: ["#e8d4a0", "#6a4a2a"], delay: 0.08 }
+        - { shape: sprite, count: 12, sheet: debris, anim: random, fps: 22, life: [0.7, 1.3], speed: [120, 280], angle: 90, spread: 170, gravity: 380, drag: 0.3, size: [1.8, 3.6], alpha: [1, 1, 0], rotJitter: 180, spin: [-400, 400], tint: "#8a5a30" }
+        - { count: 22, life: [0.5, 1], speed: [90, 240], angle: 90, spread: 170, gravity: 340, drag: 0.4, size: [1.2, 2.4], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: sprite, count: 4, sheet: plume, unit: r, size: [0.35, 0.45], life: [1.4, 2.2], speed: [0.4, 1], angle: 90, spread: 170, gravity: -8, drag: 1, wind: 1, alpha: [0, 0.75, 0.4, 0], rotJitter: 30, tint: "#a88a62", offset: 0.3 }
+    special:
+      dig:
+        emitters:
+          - { shape: sprite, count: 10, sheet: dirt, size: [9, 12], life: [0.7, 0.9], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.1, delay: 0.03 }
+          - { count: 50, life: [0.4, 0.9], speed: [60, 200], aim: forward, angle: 90, spread: 120, gravity: 360, drag: 0.4, size: [1, 2.2], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+          - { shape: sprite, count: 10, sheet: debris, anim: random, fps: 22, life: [0.5, 1], speed: [80, 200], aim: forward, angle: 90, spread: 120, gravity: 380, drag: 0.3, size: [1.6, 3], alpha: [1, 1, 0], rotJitter: 180, spin: [-400, 400], tint: "#8a5a30" }
+          - { shape: sprite, count: 8, sheet: smoke, life: [0.9, 1.4], speed: [6, 20], angle: 90, spread: 90, gravity: -12, drag: 1, wind: 1, size: [4, 6], sizeEnd: 2, alpha: [0, 0.5, 0], rotJitter: 180, tint: "#a88a62", delay: 0.1 }
+  riotblast:
+    body: { halo: 6, alpha: 0.3, sprite: "p_riot", size: 14 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [10, 10], sizeEnd: 0.5, life: [0.14, 0.14], alpha: [0.9, 0.5, 0], colors: ["#ffffff", "#f0e0b0"], glow: true }
+        - { shape: sprite, count: 1, sheet: flare, size: [14, 14], life: [0.25, 0.25], alpha: [1, 1, 0], tint: "#f0e0b0", glow: true, aim: forward, spread: 0, align: true }
+        - { shape: streak, count: 14, life: [0.12, 0.3], speed: [150, 320], drag: 1.2, size: [1.2, 1.8], length: 9, alpha: [1, 0.9, 0], colors: ["#ffffff", "#e8d4a0"], glow: true, aim: forward, spread: 50 }
+    trail:
+      emitters:
+        - { rate: 20, life: [0.2, 0.3], speed: [0, 10], size: [1, 1.6], sizeEnd: 0.3, colors: ["#ffffff", "#e8d4a0"], glow: true }
+    impact:
+      emitters:
+        - { count: 1, unit: r, size: [0.5, 0.5], sizeEnd: 0.6, life: [0.18, 0.18], alpha: [0.6, 0.3, 0], colors: ["#ffffff", "#e8d4a0"], glow: true }
+        - { shape: sprite, count: 1, sheet: shock, unit: r, size: [0.7, 0.7], life: [0.5, 0.5], alpha: [0.9, 0.5, 0], rotJitter: 10, tint: "#f0e0b0", glow: true }
+        - { shape: ring, count: 1, unit: r, size: [0.15, 0.15], sizeEnd: 7, ease: out, life: [0.45, 0.45], width: 4, alpha: [1, 0.5, 0], colors: ["#ffffff", "#e8d4a0", "#8a6a3a"] }
+        - { shape: ring, count: 1, unit: r, size: [0.15, 0.15], sizeEnd: 5, ease: out, life: [0.6, 0.6], width: 2, alpha: [0.8, 0.4, 0], colors: ["#e8d4a0", "#6a4a2a"], delay: 0.08 }
+        - { shape: sprite, count: 18, sheet: debris, anim: random, fps: 22, life: [0.7, 1.3], speed: [120, 280], angle: 90, spread: 170, gravity: 380, drag: 0.3, size: [1.8, 3.6], alpha: [1, 1, 0], rotJitter: 180, spin: [-400, 400], tint: "#8a5a30" }
+        - { count: 22, life: [0.5, 1], speed: [90, 240], angle: 90, spread: 170, gravity: 340, drag: 0.4, size: [1.2, 2.4], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: sprite, count: 4, sheet: plume, unit: r, size: [0.35, 0.45], life: [1.4, 2.2], speed: [0.4, 1], angle: 90, spread: 170, gravity: -8, drag: 1, wind: 1, alpha: [0, 0.75, 0.4, 0], rotJitter: 30, tint: "#a88a62", offset: 0.3 }
+    special:
+      dig:
+        emitters:
+          - { shape: sprite, count: 10, sheet: dirt, size: [9, 12], life: [0.7, 0.9], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.1, delay: 0.03 }
+          - { count: 50, life: [0.4, 0.9], speed: [60, 200], aim: forward, angle: 90, spread: 120, gravity: 360, drag: 0.4, size: [1, 2.2], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+          - { shape: sprite, count: 10, sheet: debris, anim: random, fps: 22, life: [0.5, 1], speed: [80, 200], aim: forward, angle: 90, spread: 120, gravity: 380, drag: 0.3, size: [1.6, 3], alpha: [1, 1, 0], rotJitter: 180, spin: [-400, 400], tint: "#8a5a30" }
+          - { shape: sprite, count: 8, sheet: smoke, life: [0.9, 1.4], speed: [6, 20], angle: 90, spread: 90, gravity: -12, drag: 1, wind: 1, size: [4, 6], sizeEnd: 2, alpha: [0, 0.5, 0], rotJitter: 180, tint: "#a88a62", delay: 0.1 }
+  riotbomb:
+    body: { halo: 6, alpha: 0.3, sprite: "p_riot", size: 14 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.85, 0.5, 0], colors: ["#ffffff", "#ffd166"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [9, 9], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: streak, count: 6, life: [0.1, 0.22], speed: [90, 200], gravity: 200, drag: 1.2, size: [1.1, 1.6], length: 7, alpha: [1, 0.9, 0], colors: ["#fff3c4", "#ffb13c"], glow: true, aim: forward, spread: 35 }
+        - { shape: sprite, count: 3, sheet: plume, aim: forward, spread: 50, life: [0.7, 1.1], speed: [20, 60], drag: 2, gravity: -20, wind: 1, size: [4.2, 6], alpha: [0, 0.6, 0.3, 0], rotJitter: 40, tint: "#a0a0a0" }
+    trail:
+      emitters:
+        - { rate: 34, life: [0.2, 0.36], speed: [0, 14], size: [1.2, 2], sizeEnd: 0.3, colors: ["#ffffff", "#e8d4a0", "#a8906a"], glow: true }
+        - { shape: sprite, rate: 10, sheet: smoke, life: [0.6, 1], speed: [0, 8], angle: 90, spread: 120, gravity: -10, drag: 1.2, size: [2.8, 3.5], sizeEnd: 2, alpha: [0, 0.4, 0], rotJitter: 180, wind: 1, tint: "#b0a890" }
+    impact:
+      emitters:
+        - { shape: sprite, count: 3, sheet: scorch, unit: r, size: [0.25, 0.3], life: [3, 4.2], offset: 0.62, edge: true, angle: -90, spread: 130, alpha: [0.9, 0.8, 0], rotJitter: 180, ground: true, tint: "#c8b090" }
+        - { count: 1, unit: r, size: [0.5, 0.5], sizeEnd: 0.6, life: [0.16, 0.16], alpha: [0.6, 0.3, 0], colors: ["#ffffff", "#e8d4a0"], glow: true }
+        - { shape: sprite, count: 1, sheet: shock, unit: r, size: [0.9, 0.9], life: [0.45, 0.45], alpha: [0.8, 0.5, 0], rotJitter: 10, tint: "#e8d4a0" }
+        - { shape: sprite, count: 1, sheet: dirt, unit: r, size: [0.85, 0.85], life: [1, 1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.2, ground: true, offset: 0.55, edge: true, angle: -90, spread: 0 }
+        - { shape: sprite, count: 2, sheet: dirt, unit: r, size: [0.55, 0.6], life: [0.9, 1.1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.1, ground: true, offset: 0.7, edge: true, angle: -90, spread: 110, delay: 0.06 }
+        - { shape: ring, count: 1, unit: r, size: [0.2, 0.2], sizeEnd: 4.4, ease: out, life: [0.55, 0.55], width: 4, alpha: [0.9, 0.5, 0], colors: ["#e8d4a0", "#8a6a3a"] }
+        - { shape: sprite, count: 14, sheet: debris, anim: random, fps: 22, life: [0.7, 1.3], speed: [100, 250], angle: 90, spread: 140, gravity: 380, drag: 0.3, size: [2, 4], alpha: [1, 1, 0], rotJitter: 180, spin: [-360, 360], tint: "#8a5a30" }
+        - { count: 16, life: [0.5, 1], speed: [80, 230], angle: 90, spread: 150, gravity: 340, drag: 0.4, size: [1.2, 2.4], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: sprite, count: 3, sheet: plume, unit: r, size: [0.48, 0.6], life: [1.8, 2.6], speed: [0.2, 0.6], angle: 90, spread: 70, gravity: -14, drag: 0.8, wind: 1, alpha: [0, 0.85, 0.6, 0], rotJitter: 25, scale: 1.25, tint: "#8a7256", delay: 0.2, offset: 0.25 }
+  heavyriot:
+    body: { halo: 7, alpha: 0.35, sprite: "p_riot", size: 19 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [7, 7], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.85, 0.5, 0], colors: ["#ffffff", "#ffd166"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [9, 9], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: streak, count: 6, life: [0.1, 0.22], speed: [90, 200], gravity: 200, drag: 1.2, size: [1.1, 1.6], length: 7, alpha: [1, 0.9, 0], colors: ["#fff3c4", "#ffb13c"], glow: true, aim: forward, spread: 35 }
+        - { shape: sprite, count: 3, sheet: plume, aim: forward, spread: 50, life: [0.7, 1.1], speed: [20, 60], drag: 2, gravity: -20, wind: 1, size: [4.2, 6], alpha: [0, 0.6, 0.3, 0], rotJitter: 40, tint: "#a0a0a0" }
+    trail:
+      emitters:
+        - { rate: 34, life: [0.2, 0.36], speed: [0, 14], size: [1.2, 2], sizeEnd: 0.3, colors: ["#ffffff", "#e8d4a0", "#a8906a"], glow: true }
+        - { shape: sprite, rate: 10, sheet: smoke, life: [0.6, 1], speed: [0, 8], angle: 90, spread: 120, gravity: -10, drag: 1.2, size: [2.8, 3.5], sizeEnd: 2, alpha: [0, 0.4, 0], rotJitter: 180, wind: 1, tint: "#b0a890" }
+    impact:
+      screen: { shake: 0.55 }
+      emitters:
+        - { shape: sprite, count: 3, sheet: scorch, unit: r, size: [0.25, 0.3], life: [3, 4.2], offset: 0.62, edge: true, angle: -90, spread: 130, alpha: [0.9, 0.8, 0], rotJitter: 180, ground: true, tint: "#c8b090" }
+        - { count: 1, unit: r, size: [0.5, 0.5], sizeEnd: 0.6, life: [0.16, 0.16], alpha: [0.6, 0.3, 0], colors: ["#ffffff", "#e8d4a0"], glow: true }
+        - { shape: sprite, count: 1, sheet: shock, unit: r, size: [0.9, 0.9], life: [0.45, 0.45], alpha: [0.8, 0.5, 0], rotJitter: 10, tint: "#e8d4a0" }
+        - { shape: sprite, count: 1, sheet: dirt, unit: r, size: [0.85, 0.85], life: [1, 1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.2, ground: true, offset: 0.55, edge: true, angle: -90, spread: 0 }
+        - { shape: sprite, count: 2, sheet: dirt, unit: r, size: [0.55, 0.6], life: [0.9, 1.1], alpha: [1, 1, 0.8, 0], anchor: bottom, scale: 1.1, ground: true, offset: 0.7, edge: true, angle: -90, spread: 110, delay: 0.06 }
+        - { shape: ring, count: 1, unit: r, size: [0.2, 0.2], sizeEnd: 4.4, ease: out, life: [0.55, 0.55], width: 4, alpha: [0.9, 0.5, 0], colors: ["#e8d4a0", "#8a6a3a"] }
+        - { shape: sprite, count: 14, sheet: debris, anim: random, fps: 22, life: [0.7, 1.3], speed: [100, 250], angle: 90, spread: 140, gravity: 380, drag: 0.3, size: [2, 4], alpha: [1, 1, 0], rotJitter: 180, spin: [-360, 360], tint: "#8a5a30" }
+        - { count: 16, life: [0.5, 1], speed: [80, 230], angle: 90, spread: 150, gravity: 340, drag: 0.4, size: [1.2, 2.4], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: sprite, count: 3, sheet: plume, unit: r, size: [0.48, 0.6], life: [1.8, 2.6], speed: [0.2, 0.6], angle: 90, spread: 70, gravity: -14, drag: 0.8, wind: 1, alpha: [0, 0.85, 0.6, 0], rotJitter: 25, scale: 1.25, tint: "#8a7256", delay: 0.2, offset: 0.25 }
+  disrupter:
+    body: { halo: 9, alpha: 0.45, pulse: 9, sprite: "p_disrupter", size: 16, fps: 20 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [9, 9], sizeEnd: 0.4, life: [0.12, 0.12], alpha: [0.9, 0.5, 0], colors: ["#ffffff", "#8ad0c0"], glow: true }
+        - { shape: sprite, count: 1, sheet: muzzle, aim: forward, spread: 0, align: true, size: [10, 10], life: [0.12, 0.12], alpha: [1, 1, 0] }
+        - { shape: ring, count: 1, size: [3, 3], sizeEnd: 5, ease: out, life: [0.3, 0.3], width: 2, alpha: [1, 0.6, 0], colors: ["#f0fff8", "#5a9a8a"], glow: true }
+    trail:
+      emitters:
+        - { rate: 36, life: [0.2, 0.36], speed: [0, 14], size: [1.2, 2], sizeEnd: 0.3, colors: ["#f0fff8", "#8ad0c0", "#2a6a5a"], glow: true }
+        - { shape: ring, rate: 6, life: [0.3, 0.4], size: [2, 2], sizeEnd: 4, ease: out, width: 1, alpha: [0.8, 0], colors: ["#8ad0c0"], glow: true }
+    impact:
+      screen: { shake: 0.6 }
+      emitters:
+        - { count: 1, unit: r, size: [0.3, 0.3], sizeEnd: 0.6, life: [0.2, 0.2], alpha: [0.6, 0.3, 0], colors: ["#ffffff", "#8ad0c0"], glow: true }
+        - { shape: sprite, count: 1, sheet: shock, unit: r, size: [0.5, 0.5], life: [0.6, 0.6], alpha: [0.9, 0.5, 0], rotJitter: 10, tint: "#8ad0c0", glow: true }
+        - { shape: ring, count: 1, unit: r, size: [0.05, 0.05], sizeEnd: 20, ease: out, life: [0.7, 0.7], width: 3, alpha: [0.9, 0.5, 0], colors: ["#f0fff8", "#5a9a8a"], glow: true }
+        - { shape: ring, count: 1, unit: r, size: [0.05, 0.05], sizeEnd: 18, ease: out, life: [0.9, 0.9], width: 2, alpha: [0.7, 0.3, 0], colors: ["#d8c090", "#6a4a2a"], delay: 0.15 }
+        - { shape: ring, count: 1, unit: r, size: [0.05, 0.05], sizeEnd: 16, ease: out, life: [1, 1], width: 1.5, alpha: [0.6, 0.2, 0], colors: ["#d8c090", "#6a4a2a"], delay: 0.3 }
+        - { shape: sprite, count: 10, sheet: plume, unit: r, size: [0.16, 0.22], life: [1.2, 2], speed: [0.1, 0.4], angle: 90, spread: 160, gravity: -6, drag: 1, wind: 1, alpha: [0, 0.6, 0.3, 0], rotJitter: 30, tint: "#9a7a52", offset: 0.9, delay: 0.2 }
+        - { count: 40, unit: r, offset: 1, life: [0.4, 0.9], speed: [0.3, 1], angle: 90, spread: 60, gravity: 300, drag: 0.4, size: [0.008, 0.016], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"], delay: 0.1 }
+        - { shape: bolt, count: 6, unit: r, length: 0.4, size: [0.8, 0.8], life: [0.12, 0.25], alpha: [1, 1, 0], colors: ["#c8fff0"], glow: true }
   laststand:
     body: { halo: 9, alpha: 0.45 }
     muzzle:

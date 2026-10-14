@@ -213,6 +213,12 @@ function room_weapon_row(array $am): array
         'apex' => !empty($am['apex']),
         'range' => (float) ($am['range'] ?? 0),
         'aimMin' => (float) ($am['aimMin'] ?? ROOM_AIM_MIN),
+        'volume' => (float) ($am['volume'] ?? 0),
+        'digLen' => (float) ($am['digLen'] ?? 0),
+        'digR' => (float) ($am['digR'] ?? 0),
+        'warheads' => (int) ($am['warheads'] ?? 0),
+        'slope' => (float) ($am['slope'] ?? 1.0),
+        'passes' => (int) ($am['passes'] ?? 1),
     ];
 }
 function room_gear(string $key): ?array
@@ -500,30 +506,33 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
     $width = count($room['terrain']);
     $x0 = max(0, (int) floor($x - $r));
     $x1 = min($width - 1, (int) ceil($x + $r));
-    $ground = []; // under each unit before the crater
-    foreach ($room['tanks'] as $i => $o) {
-        $ground[$i] = room_surf_y($room['terrain'], (float) $o['x']);
-    }
-    $carved = false;
-    for ($ix = $x0; $ix <= $x1; $ix++) {
-        $dx = $ix - $x;
-        $cut = sqrt(max(0.0, $r * $r - $dx * $dx)) * 0.75;
-        $was = $room['terrain'][$ix];
-        $room['terrain'][$ix] = min(456.0, max($was, $y + $cut));
-        if ($room['terrain'][$ix] !== $was) {
-            $carved = true;
-        }
-    }
-    if ($carved) {
-        room_terrain_changed($room);
-    }
     $ownerIdx = null;
     foreach ($room['tanks'] as $i => $o) {
         if ($o['seat'] === $tank['seat']) {
             $ownerIdx = $i;
         }
     }
-    room_mark_falls($room, $ground, $ownerIdx);
+    // A dirt gun's blast ($ov carve false) cuts no crater.
+    if (($ov['carve'] ?? true) !== false) {
+        $ground = []; // under each unit before the crater
+        foreach ($room['tanks'] as $i => $o) {
+            $ground[$i] = room_surf_y($room['terrain'], (float) $o['x']);
+        }
+        $carved = false;
+        for ($ix = $x0; $ix <= $x1; $ix++) {
+            $dx = $ix - $x;
+            $cut = sqrt(max(0.0, $r * $r - $dx * $dx)) * 0.75;
+            $was = $room['terrain'][$ix];
+            $room['terrain'][$ix] = min(456.0, max($was, $y + $cut));
+            if ($room['terrain'][$ix] !== $was) {
+                $carved = true;
+            }
+        }
+        if ($carved) {
+            room_terrain_changed($room);
+        }
+        room_mark_falls($room, $ground, $ownerIdx);
+    }
     // A harmless burst (dmg 0) only carves (and owns the falls it digs, as
     // above): it touches no unit, so it spends no shield and credits no hit.
     // src/sim.ts explode() is the same order.
@@ -563,7 +572,7 @@ function room_aim_limits(?array $def): array
 // room_fire_plasma). src/sim.ts flies() is the same. */
 function room_flies(array $def): bool
 {
-    return !in_array($def['effect'] ?? 'shot', ['beam', 'plasma'], true);
+    return !in_array($def['effect'] ?? 'shot', ['beam', 'plasma', 'riot'], true);
 }
 /* A beam is marched this many px at a time (src/sim.ts BEAM_STEP). */
 const ROOM_BEAM_STEP = 3;
@@ -689,6 +698,29 @@ function room_fire_plasma(array &$room, array &$events, int $idx, array $w, stri
             room_hit_unit($room, $events, $i, $dmg, $tank, $idx, $w, false);
         }
     }
+}
+/* The tank at $idx fires riot charge $w: no flight, no damage. Its 'riot'
+// event, then the scoop from its hull's centre out along the barrel
+// (room_riot_carve, heading $a in radians, screen frame), which owns the
+// falls it digs, its gunner's own included (credited to nobody).
+// src/sim.ts fireRiot() is the same. */
+function room_fire_riot(array &$room, array &$events, int $idx, array $w, string $wkey, float $a): void
+{
+    $tank = $room['tanks'][$idx];
+    [$cx, $cy] = room_unit_box($tank);
+    $fan = (float) (($w['fan'] ?? 1.0) ?: 1.0);
+    $base = (float) $tank['y'];
+    $events[] = ['t' => 'riot', 'by' => $tank['seat'], 'w' => $wkey, 'x' => $cx, 'y' => $cy, 'a' => $a, 'r' => (float) $w['radius'], 'fan' => $fan, 'b' => $base];
+    $ground = [];
+    foreach ($room['tanks'] as $i => $o) {
+        $ground[$i] = room_surf_y($room['terrain'], (float) $o['x']);
+    }
+    $before = $room['terrain'];
+    room_riot_carve($room['terrain'], $cx, $cy, $a, (float) $w['radius'], $fan, $base);
+    if ($room['terrain'] !== $before) {
+        room_terrain_changed($room);
+    }
+    room_mark_falls($room, $ground, $idx);
 }
 /* Of the blasts that lowered a standing unit's ground ($ground: under each
 // unit before this one), the one that lowered it the most owns its fall (the
@@ -889,7 +921,8 @@ function room_arc_timeout(array $a, int $steps): array
     return ['oob', $a['x'], $a['y'], $a['vx'], $a['vy'], null, $a['path'], $steps * (1 / 60)];
 }
 /* One 1/60 s step of an arc: null while it flies on, else how it ended:
-// [status, x, y, vx, vy, directIdx, path, seconds flown], status 'hit' (a
+// [status, x, y, vx, vy, directIdx, path, seconds flown] (a burst adds
+// whether the shell had left its gunner's box), status 'hit' (a
 // burst; a roller's after its roll), 'oob' or 'split' (a cluster parent at
 // its bloom). Mirrors the stepShells effect hooks in src/sim.ts. */
 function room_arc_step(array &$room, array &$events, array $tank, array $w, string $wkey, int $ownerIdx, array &$a, $ov, float $t0): ?array
@@ -960,7 +993,7 @@ function room_arc_step(array &$room, array &$events, array $tank, array $w, stri
             return null;
         }
         $a['path'][] = [$a['x'], $a['y']];
-        return ['hit', $a['x'], $a['y'], $a['vx'], $a['vy'], $direct, $a['path'], $flown];
+        return ['hit', $a['x'], $a['y'], $a['vx'], $a['vy'], $direct, $a['path'], $flown, $a['clear']];
     }
     $xi = max(0, min($width - 1, (int) round($a['x'])));
     if ($a['age'] >= 0.1 && $a['y'] >= $room['terrain'][$xi]) {
@@ -968,7 +1001,7 @@ function room_arc_step(array &$room, array &$events, array $tank, array $w, stri
             return room_roll_arc($room, $w, $ownerIdx, $a['x'], $a['vx'], $a['vy'], $a['clear'], $a['path'], $step);
         }
         $a['path'][] = [$a['x'], $a['y']];
-        return ['hit', $a['x'], $a['y'], $a['vx'], $a['vy'], null, $a['path'], $flown];
+        return ['hit', $a['x'], $a['y'], $a['vx'], $a['vy'], null, $a['path'], $flown, $a['clear']];
     }
     return null;
 }
@@ -1058,7 +1091,8 @@ function room_roll_arc(array $room, array $w, int $ownerIdx, float $sx, float $v
 }
 /* ---------- falling ---------- */
 /* Units left hanging over a crater drop straight down, never sideways, onto
-// the ground or a unit beneath them; ground that rose takes them straight up.
+// the ground or a unit beneath them; ground that rose takes a drone straight
+// up, and leaves a ground unit buried where it is (room_held_y).
 // A drop costs armor by its height at rest, credited to the blast that
 // lowered the ground under it the most. src/sim.ts fallDamage() .. settleFalls() are the same rules,
 // pinned by the 'fall' sim vectors. */
@@ -1118,11 +1152,19 @@ function room_unit_beneath(array $tanks, array $terrain, int $idx): ?int
     }
     return $best;
 }
-/* Where the unit at $idx comes to rest falling straight down. */
+/* Where the unit at $idx comes to rest falling straight down. Risen ground
+// never lifts a ground unit mid-round: one more than half a pixel under it
+// stays where it is, buried (a drone rides the ground up). */
 function room_rest_y(array $tanks, array $terrain, int $idx): float
 {
     $u = room_unit_beneath($tanks, $terrain, $idx);
-    return $u === null ? room_surf_y($terrain, (float) $tanks[$idx]['x']) : room_unit_top($tanks[$u]);
+    return room_held_y($tanks[$idx], $u === null ? room_surf_y($terrain, (float) $tanks[$idx]['x']) : room_unit_top($tanks[$u]));
+}
+/* Where unit $t rests given what is under it ($rest): there, unless that is
+// risen ground over a ground unit, which stays where it is. src/sim.ts heldY() is the same. */
+function room_held_y(array $t, float $rest): float
+{
+    return $t['kind'] === 'human' && $rest < (float) $t['y'] - 0.5 ? (float) $t['y'] : $rest;
 }
 /* What a fall of $raw would really cost the unit at $idx: the bunker halves
 // it as it halves a hit; a shield never stops a fall. */
@@ -1202,7 +1244,7 @@ function room_settle_tanks(array &$room, ?array &$events = null): void
                 continue;
             }
             $onto = room_unit_beneath($room['tanks'], $room['terrain'], $i);
-            $rest = $onto === null ? room_surf_y($room['terrain'], (float) $room['tanks'][$i]['x']) : room_unit_top($room['tanks'][$onto]);
+            $rest = room_held_y($room['tanks'][$i], $onto === null ? room_surf_y($room['terrain'], (float) $room['tanks'][$i]['x']) : room_unit_top($room['tanks'][$onto]));
             $y = (float) $room['tanks'][$i]['y'];
             if (abs($rest - $y) <= 0.5) {
                 $room['tanks'][$i]['y'] = $rest;

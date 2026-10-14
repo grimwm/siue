@@ -38,7 +38,7 @@
  * a deps object, so none of them reaches for a global; the wiring is below.
  * What stays here is the state, the main loop, the keys and the page's own
  * plumbing (overlays, the firing range, the arsenal's loading). */
-import { ROOM_W, TUNE, aimLimits, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './sim.ts';
+import { BURIED_LINE, ROOM_W, TUNE, aimLimits, buried, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './sim.ts';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
 } from './audio.ts';
@@ -49,13 +49,14 @@ import type { HoldCommand } from './input.ts';
 import { createPreview, stepPreview } from './preview.ts';
 import { createReplay } from './replay.ts';
 import { createMarks } from './marks.ts';
+import { createEarthShow } from './earth-show.ts';
 import { createFieldWidth } from './field.ts';
 import { createInput, touchOnly, stepArm } from './input.ts';
 import { renderHelp } from './ui/help.tsx';
 import { drawShellIcon as paintShellIcon, drawGearIcon as paintGearIcon } from './ui/icons.ts';
 import { createChatter, pick, TANK_IDLE, FOE_IDLE } from './chatter.ts';
 import { createEffects, FX, FX_BUDGET } from './effects.ts';
-import { SHELL_ROW, createShop } from './shop.ts';
+import { SHELL_ROW, ammoSub, createShop } from './shop.ts';
 import { createHud } from './hud.ts';
 import { createView } from './view.ts';
 import { createTutorial } from './tutorial.ts';
@@ -184,7 +185,7 @@ const G: GameState = {
   terrain: NOT_DEALT, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // banner | shop | aim | think | fly | settle | over (src/flow.ts)
   thinkT: 0, settleT: 0,
-  shells: [], parts: [], booms: [], fx: null, marks: createMarks(),
+  shells: [], parts: [], booms: [], fx: null, marks: createMarks(), earth: createEarthShow(),
   wind: 0, round: 1, firstTurn: 0,
   lives: TUNE.lives, score: 0, cash: 0, nextOneUp: TUNE.oneUpEvery,
   rounds: [], roundStart: { score: 0, cash: 0 },
@@ -262,10 +263,11 @@ function openPreview(wkey: string): void {
   const pr = $('preview-result');
   if (pr) pr.textContent = '';
   const title = $('preview-title');
-  const dmg = (w.effect === 'pellets' && w.pellets) ? `${w.dmg}×${w.pellets}` : `${w.dmg}`;
   if (title) title.textContent = w.name;
+  // What the gun does, as its shop row says it (a blast doubles on a direct hit; a beam, a ring, a tracer and the earth guns say what they do instead).
   const stats = $('preview-stats');
-  if (stats) stats.textContent = `${dmg} damage · blast ${w.radius} · direct hits count double`;
+  if (stats) stats.textContent = w.effect === 'pellets' && w.pellets
+    ? `${w.dmg}×${w.pellets} damage, blast ${w.radius}. Direct hits count double.` : ammoSub({ ...w, note: undefined });
   const veil = $('preview-veil');
   if (veil) veil.hidden = false;
   refreshNavHints();
@@ -286,6 +288,8 @@ function togglePreview(): void {
 /* ---------- main loop ---------- */
 let lastT = 0;
 let warAcc = WAR_REST;
+/* A buried tank's drive was refused while the drive key is still held: it is said once. */
+let driveRefused = false;
 function frame(ts: number): void {
   requestAnimationFrame(frame);
   // The music watchdog re-pins a wedged scheduler to the live clock; it never
@@ -345,7 +349,12 @@ function frame(ts: number): void {
     const arm = stepArm(input.held, dt, t, facing(t), G.w, aimLimits(tables.weapons[G.selected]));
     t.angle = arm.angle;
     t.power = arm.power;
-    if ((input.held.has('driveLeft') || input.held.has('driveRight')) && t.fuel > 0) {
+    const driving = input.held.has('driveLeft') || input.held.has('driveRight');
+    // A buried tank cannot drive: it says so once per press.
+    if (driving && buried(t, G.terrain)) {
+      if (!driveRefused) say(BURIED_LINE, 'bad');
+      driveRefused = true;
+    } else if (driving && t.fuel > 0) {
       const dx = input.held.axis('driveLeft', 'driveRight');
       const step = dx * TUNE.driveSpeed * dt;
       if (Math.abs(step) > 0 && Math.abs(t.fuel) >= Math.abs(step)) {
@@ -357,6 +366,7 @@ function frame(ts: number): void {
         }
       }
     }
+    if (!driving) driveRefused = false;
   } else if (war) {
     // Fixed SOLO_STEP steps whatever the frame rate, each dropping the tanks
     // and then moving the war on, so the war plays the same at any frame rate;
@@ -417,6 +427,7 @@ const replay = createReplay({
   trail: (shot, dt, x, y, vx, vy, wkey) => { fxTrail(G.fx, shot, dt, x, y, vx, vy, wkey); netTrailMark(shot, x, y); },
   beam: e => netBeam(e),
   ring: e => netRing(e),
+  earth: e => netEarth(e),
   mark: shot => netMark(shot),
 });
 /* ---------- the typed modules, wired in dependency order ---------- */
@@ -487,7 +498,7 @@ const {
 });
 /* A running room match on this client (src/room.ts): moves sent, snapshots adopted, events told, the turn alert. */
 const {
-  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netMark, netTrailMark, netFrame,
+  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netEarth, netMark, netTrailMark, netFrame,
   roomShopBoard, openStandings,
 } = createRoom({
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,

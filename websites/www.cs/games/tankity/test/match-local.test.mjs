@@ -8,6 +8,7 @@ import path from 'node:path';
 import { document, makeEl } from '../../_kit/test/dom-stub.mjs';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import { createMarks } from '../src/marks.ts';
+import { createEarthShow } from '../src/earth-show.ts';
 
 globalThis.document = document;
 
@@ -21,7 +22,7 @@ const arsenal = buildArsenal(GAME.arsenal);
 function harness(over = {}) {
   const G = {
     seed: '', difficulty: 'normal', rng: null, body: 'tank', terrain: null, clouds: [], tanks: [], turn: 0, phase: 'aim',
-    thinkT: 0, settleT: 0, shells: [], parts: [], booms: [], fx: null, marks: createMarks(), wind: 0, round: 1, firstTurn: 0, lives: TUNE.lives, score: 0,
+    thinkT: 0, settleT: 0, shells: [], parts: [], booms: [], fx: null, marks: createMarks(), earth: createEarthShow(), wind: 0, round: 1, firstTurn: 0, lives: TUNE.lives, score: 0,
     cash: 0, nextOneUp: TUNE.oneUpEvery, rounds: [], roundStart: { score: 0, cash: 0 }, roundsWon: 0, ammo: null, selected: 'shell',
     shopSel: 0, shopQty: 1, fuelBank: 0, armor: TUNE.playerArmor, plate: 0, shield: false, jammer: 0, bunker: 0, laststand: false,
     time: 0, shake: 0, dlgQ: [], dlgT: 0, lastTalk: -99, banterT: 30, bannerT: 0, bannerDone: null, w: ROOM_W, hills: null,

@@ -17,7 +17,7 @@ test('the shipped guns read the way the deck shows them', () => {
   assert.equal(blastSize(gun('rail').radius), 'S');
   assert.equal(blastSize(gun('mortar').radius), 'L');
   assert.equal(blastSize(gun('nuke').radius), 'L');
-  for (const w of GAME.arsenal.ammo) assert.match(weaponLine(w), /^(\d+ dmg|no damage) · (S|M|L|beam|path)$/, w.key);
+  for (const w of GAME.arsenal.ammo) assert.match(weaponLine(w), /^(\d+ dmg|no damage) · (S|M|L|beam|path|earth)$/, w.key);
 });
 
 test('readers hear the words, not the letters', () => {
@@ -36,4 +36,15 @@ test('a harmless gun reads no damage and what it does; a beam reads its damage a
   assert.equal(weaponLineSpoken({ dmg: 45, radius: 6, effect: 'beam' }), '45 damage, beam');
   assert.equal(weaponLine({ dmg: 60, radius: 90, effect: 'plasma' }), '60 dmg · L', 'a ring reads its size as a blast does');
   assert.equal(weaponLine({ dmg: 0, radius: 45, effect: 'shot' }), 'no damage · L', 'a harmless blast keeps its size');
+});
+
+test('an earth gun reads earth; one that bursts as it lands (Dirt Charge) reads its blast; a sandhog its warheads\' damage', () => {
+  const find = pred => GAME.arsenal.ammo.find(pred);
+  assert.equal(weaponLine(find(a => a.effect === 'dirt' && a.dmg === 0)), 'no damage · earth');
+  const charge = find(a => a.effect === 'dirt' && a.dmg > 0);
+  assert.equal(weaponLine(charge), `${charge.dmg} dmg · L`);
+  const hog = find(a => a.effect === 'dig' && a.warheads > 0);
+  assert.equal(weaponLine(hog), `${hog.subDmg} dmg · earth`);
+  assert.equal(weaponLine(find(a => a.effect === 'riot')), 'no damage · earth');
+  assert.equal(weaponLineSpoken(find(a => a.effect === 'slump')), 'no damage, moves earth');
 });

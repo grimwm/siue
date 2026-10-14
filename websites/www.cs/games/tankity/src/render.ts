@@ -83,6 +83,8 @@ export interface PreviewView {
   terr: readonly number[];
   sx: number; // shooter and target columns
   tx: number;
+  sy: number; // where the shooter and the dummy stand
+  ty: number;
   angle: number;
   foeHp: number;
   foeHpMax: number;
@@ -616,6 +618,8 @@ function drawBoom(c: CanvasRenderingContext2D, bm: Boom, look: Look): void {
    a few clusters; a quiet twinkle on some (none under reduced motion); and a
    moon phase from the rendered sheet (fx/sprites/moon.png). */
 /** World rows the high cloud layer sits above the low one. */
+/** A ground unit this far under the surface is drawn buried (sim.ts BURY_EPS). */
+const BURIED_DRAW_PX = 2;
 const HIGH_CLOUDS = -260;
 const SKY_TINTS = ['#ffe2b0', '#b8d0ff'];
 const SKY_PHASES = [0, 0, 1, 6, 2, 5, 3, 4]; // frames of moon.png, full and gibbous favoured
@@ -698,6 +702,18 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
   }
 
   /* A unit as it is drawn: at its drawn height, with the armor it shows. */
+  /* The outline of a hull buried under dirt: dashed, in a dirt-gold, so the player sees where it is. */
+  function drawBuried(c: CanvasRenderingContext2D, x: number, y: number): void {
+    c.save();
+    c.strokeStyle = '#e8c060';
+    c.lineWidth = 1.5;
+    c.setLineDash([3, 3]);
+    c.beginPath();
+    c.roundRect(x - 20, y - 23, 40, 23, 5);
+    c.stroke();
+    c.setLineDash([]);
+    c.restore();
+  }
   function drawn(t: DrawTank): DrawTank {
     return t.drawY === undefined && t.shownHp === undefined ? t : { ...t, y: t.drawY ?? t.y, hp: t.shownHp ?? t.hp };
   }
@@ -868,8 +884,9 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
       else c.lineTo(x, terr(x));
     }
     c.stroke();
-    // Demo shooter + barrel at the solved angle.
-    const sy = terr(pv.sx);
+    // Demo shooter + barrel at the solved angle, where it stands (under a mound, for a riot charge's demo).
+    const sy = pv.sy;
+    if (terr(pv.sx) < sy - BURIED_DRAW_PX) drawBuried(c, pv.sx, sy);
     c.fillStyle = '#d7a800';
     c.fillRect(pv.sx - 10, sy - 8, 20, 8);
     const rad = pv.angle * Math.PI / 180;
@@ -879,8 +896,9 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.moveTo(pv.sx, sy - 10);
     c.lineTo(pv.sx + Math.cos(rad) * 16, sy - 10 - Math.sin(rad) * 16);
     c.stroke();
-    // Demo target with hp bar.
-    const ty = terr(pv.tx);
+    // Demo target with hp bar, where it stands (buried, or dropped into the ground an earth gun moved).
+    const ty = pv.ty;
+    if (terr(pv.tx) < ty - BURIED_DRAW_PX) drawBuried(c, pv.tx, ty);
     c.fillStyle = '#24242e';
     c.beginPath();
     c.arc(pv.tx, ty - 12, 7, 0, Math.PI * 2);
@@ -1075,8 +1093,15 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
       else chuteFrom.delete(t.id);
       if (t0 === view.turnUnit) drawTurnMarker(c, t, time, ground);
       if (view.online && t.menu && !t.isPlayer && t0 === view.turnUnit) drawMenuBadge(c, t, time, ground);
+      // A buried ground unit shows through the dirt over it, faint, in a dashed outline.
+      const underDirt = ground && sim.surfY(view.terrain, t.x) < t.y - BURIED_DRAW_PX;
+      if (underDirt) { c.save(); c.globalAlpha = 0.35; }
       if (ground) drawGroundUnit(c, t, time, deps.shownAngle(t), sim.facing(t));
       else drawGunDrone(c, t, time, deps.shownAngle(t), sim.facing(t));
+      if (underDirt) {
+        c.restore();
+        drawBuried(c, t.x, t.y);
+      }
       // Health bar + name.
       const w = 40;
       const barY = t.y - (ground ? 34 : 52);

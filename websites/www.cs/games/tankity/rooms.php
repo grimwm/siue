@@ -40,6 +40,7 @@ require_once __DIR__ . '/config.php';
 //   server/store.php     rooms as rows: the room lock, room lifecycle, the sweep
 //   server/detmath.php   sin, cos, atan2 and Math.round, the same bits as src/detmath.ts
 //   server/sim.php       the deterministic sim (mirrors src/sim.ts)
+//   server/earth.php     the earth ops: craters, dirt, pools, slumps, trenches (mirrors src/earth.ts)
 //   server/ai.php        drone aim, bracketing and strategies
 //   server/rules.php     seats, rounds, turn clock, pacing, the shop, scores
 //   server/protocol.php  events, snapshots and deltas
@@ -54,6 +55,7 @@ require_once __DIR__ . '/server/settings.php';
 require_once __DIR__ . '/server/store.php';
 require_once __DIR__ . '/server/detmath.php';
 require_once __DIR__ . '/server/sim.php';
+require_once __DIR__ . '/server/earth.php';
 require_once __DIR__ . '/server/ai.php';
 require_once __DIR__ . '/server/rules.php';
 require_once __DIR__ . '/server/protocol.php';
@@ -691,27 +693,13 @@ if ($action === 'act' && $method === 'POST') {
         room_set_aim($room, $myIdx, $seat, $body['angle'] ?? null, $body['power'] ?? null);
         $tank = &$room['tanks'][$myIdx];
     } elseif ($kind === 'drive') {
-        $dx = max(-80.0, min(80.0, (float) ($body['dx'] ?? 0)));
-        if (abs($dx) > $tank['fuel'] + 1e-9) {
+        unset($tank);
+        $refused = room_drive($room, $myIdx, (float) ($body['dx'] ?? 0));
+        if ($refused !== null) {
             room_unlock($fh);
-            room_json_out(422, ['error' => 'not enough fuel']);
+            room_json_out($refused[0], ['error' => $refused[1]]);
         }
-        $w = count($room['terrain']);
-        // Roll toward the target a pixel at a time and stop short of any
-        // other unit; fuel pays only for the ground actually covered.
-        $goal = max(12.0, min($w - 12.0, $tank['x'] + $dx));
-        $step = $goal > $tank['x'] ? 1.0 : -1.0;
-        $nx = $tank['x'];
-        while (abs($goal - $nx) >= 1.0 && !room_spot_taken($room, $myIdx, $nx + $step)) {
-            $nx += $step;
-        }
-        if (abs($goal - $nx) < 1.0) {
-            $nx = $goal;
-        }
-        $tank['fuel'] = max(0.0, $tank['fuel'] - abs($nx - $tank['x']));
-        $tank['x'] = $nx;
-        $xi = max(0, min($w - 1, (int) round($tank['x'])));
-        $tank['y'] = $room['terrain'][$xi];
+        $tank = &$room['tanks'][$myIdx];
     } elseif ($kind === 'weapon') {
         $wkey = (string) ($body['weapon'] ?? 'shell');
         $weapons = room_weapons();

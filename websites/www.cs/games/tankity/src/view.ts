@@ -9,7 +9,7 @@ import type { GameState, GameTank, MatchState, Tables } from './game-types.ts';
 import type { FxEngine } from './fx/types.ts';
 import { CLOCK_SHOW_S } from './net.ts';
 import type { RoomClient } from './net.ts';
-import { PV_W, PV_H, PV_FOE_HP } from './preview.ts';
+import { PV_W, PV_H, PV_FOE_HP, previewGround } from './preview.ts';
 import { fitField, visibleWorld } from './field.ts';
 import { createGhosts } from './ghosts.ts';
 import { createRenderer } from './render.ts';
@@ -25,7 +25,7 @@ import type { Weapon } from './sim.ts';
 
 /** The slice of the game's state the view reads and steps (main.ts's G). */
 export type ViewState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'cam' | 'terrain' | 'clouds' | 'time' | 'shake'
-  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'preview' | 'w' | 'hills' | 'marks'>;
+  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'preview' | 'w' | 'hills' | 'marks' | 'earth'>;
 
 /** What the view needs from the page and the rest of the game. */
 export interface ViewDeps {
@@ -129,7 +129,8 @@ export function createView(deps: ViewDeps) {
     return {
       time: G.time, shake: G.shake, cam: G.cam,
       skyKey: net.on ? 'room:' + net.code : String(G.seed || ''),
-      terrain: G.terrain, field: { w: G.w, h: H }, hills: G.hills, clouds: G.clouds, tanks: G.tanks,
+      // The ground as it is drawn: earth still settling (a pour flowing, a mound rising) eases in.
+      terrain: G.earth.shown(G.terrain), field: { w: G.w, h: H }, hills: G.hills, clouds: G.clouds, tanks: G.tanks,
       turnUnit: turnTank(), online: net.on,
       aim: aiming ? { unit: t, length: aimArmLength(shownPower(t)) } : null,
       booms: G.booms, fx: G.fx, shells: G.shells, replay: flying, ghosts: flyOn, sparks: G.parts,
@@ -139,7 +140,7 @@ export function createView(deps: ViewDeps) {
       textScale: textScale(),
       turnClock: left !== null && left <= CLOCK_SHOW_S && left > 0 ? { left, myTurn: MATCH.myTurn } : null,
       preview: pv && pv.cv ? {
-        canvas: pv.cv as HTMLCanvasElement, width: PV_W, height: PV_H, terr: pv.terr, sx: pv.sx, tx: pv.tx,
+        canvas: pv.cv as HTMLCanvasElement, width: PV_W, height: PV_H, terr: previewGround(pv), sx: pv.sx, tx: pv.tx, sy: pv.sy, ty: pv.ty,
         angle: pv.angle, foeHp: pv.foeHp, foeHpMax: PV_FOE_HP, wkey: pv.wkey, wind: pv.wind,
         booms: pv.booms, shells: pv.shells, fx: pv.fx, result: pv.result, resultT: pv.resultT, trace: pv.trace,
       } : null,

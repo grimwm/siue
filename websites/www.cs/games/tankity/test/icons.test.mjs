@@ -1,5 +1,6 @@
-// The shell icons (src/ui/icons.ts) for the guns that do not burst: a
-// tracer's dashed path ending in its mark, and a plasma ring's rings.
+// The shell icons (src/ui/icons.ts) with a picture of their own: a tracer's
+// dashed path ending in its mark, a plasma ring's rings, a digger's drill and
+// a dirt gun's clod.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -40,4 +41,25 @@ test('a plasma gun\'s icon is rings around a core', () => {
   const { cv, calls } = canvas();
   icons.drawShellIcon(cv, w);
   assert.ok(calls.filter(c => c[0] === 'arc').length >= 4, 'rings and a core');
+});
+
+test('a digger\'s icon is a drill: a body and a pointed bit with a spiral flute', () => {
+  const ws = GAME.arsenal.ammo.filter(a => a.gfx.painter === 'drill');
+  assert.ok(ws.length >= 6, 'the diggers and sandhogs paint drills');
+  for (const w of ws) {
+    const { cv, calls } = canvas();
+    icons.drawShellIcon(cv, w);
+    assert.ok(calls.some(c => c[0] === 'closePath'), `${w.key} draws the bit's point`);
+    assert.ok(calls.filter(c => c[0] === 'lineTo').length >= 6, `${w.key} draws the bit and its flute`);
+  }
+});
+
+test('a dirt gun\'s icon is a clod: a lumpy ball of several lumps and crumbs', () => {
+  const ws = GAME.arsenal.ammo.filter(a => a.gfx.painter === 'clod');
+  assert.ok(ws.length >= 5, 'the dirt guns paint clods');
+  for (const w of ws) {
+    const { cv, calls } = canvas();
+    icons.drawShellIcon(cv, w);
+    assert.ok(calls.filter(c => c[0] === 'arc').length >= 6, `${w.key} draws lumps and crumbs`);
+  }
 });

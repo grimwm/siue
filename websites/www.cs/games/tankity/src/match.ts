@@ -24,6 +24,8 @@ import {
   anyTankFalling as simAnyTankFalling, armChutes, dueFalls, gfxLinger, settleVolley, unitHitBox,
 } from './sim.ts';
 import type { Blast, Difficulty, FallEvent, FallShow, Shell, StepEvent } from './sim.ts';
+import { playDigStep, playEarthOp } from './earth-fx.ts';
+import type { EarthFxDeps } from './earth-fx.ts';
 import { snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloOneUps, soloSettle } from './solo.ts';
 import { endCardBack, localLine, soloBoard } from './standings.ts';
 import type { LocalRow, Saved } from './local-board.ts';
@@ -107,6 +109,7 @@ export function createMatch(deps: MatchDeps) {
   function resetMatch(seedStr?: string): void {
     fallsDue = []; // a fall still playing out in the last match never speaks in this one
     G.marks.clear();
+    G.earth.clear();
     const seed = (seedStr || '').trim() || ('scorched-' + Math.floor(Math.random() * 9000 + 1000));
     // The Menu's Difficulty, read once per match: a change waits for the next one.
     // The width comes from the screen at the deal and holds until the next one (spec 6.6).
@@ -173,6 +176,7 @@ export function createMatch(deps: MatchDeps) {
   function newRound(bannerText?: string, event?: FlowEvent): void {
     fallsDue = [];
     G.marks.clear();
+    G.earth.clear();
     soloMuster(G, tables.arsenal!);
     G.roundStart = { score: G.score, cash: G.cash };
     G.parts = [];
@@ -203,6 +207,15 @@ export function createMatch(deps: MatchDeps) {
       }
     });
   }
+  /* How the earth guns play on the battlefield (earth-fx.ts). */
+  const earthFx: EarthFxDeps = {
+    fxImpact: (key, x, y, r) => fxImpact(G.fx, key, x, y, r),
+    fxSpecial: (key, name, x, y, ang, len) => fxSpecial(G.fx, key, name, x, y, ang, len),
+    sound: name => sfx.play(name),
+    shake: k => { G.shake = Math.max(G.shake || 0, k); },
+    get show() { return G.earth; },
+    say: text => say(text, 'info'),
+  };
   function fireWeapon(t: GameTank, wkey: string): boolean {
     const w = tables.weapons[wkey]!;
     const launch = simFireWeapon(G, tables.arsenal!, t, wkey);
@@ -240,7 +253,7 @@ export function createMatch(deps: MatchDeps) {
         const kick = fxImpact(G.fx, e.wkey, s.x, s.y, s.r);
         G.shake = Math.max(G.shake || 0, kick !== undefined ? kick : s.hits.shake);
         showHits(s.hits);
-      }
+      } else if (e.kind === 'earth') playEarthOp(e.op, G.terrain, e.before, e.x0, e.x1, earthFx, (tables.weapons[e.op.w]?.dmg || 0) > 0);
     }
     G.settleT = TUNE.settleTime;
     advance('shellsLanded');
@@ -285,7 +298,17 @@ export function createMatch(deps: MatchDeps) {
       else if (e.kind === 'pierce') fxSpecial(G.fx, e.wkey, 'pierce', e.x, e.y, e.ang);
       else if (e.kind === 'hop') fxSpecial(G.fx, e.wkey, 'hop', e.x, e.y, e.ang);
       else if (e.kind === 'scatter') fxSpecial(G.fx, e.wkey, 'scatter', e.x, e.y, e.ang);
-      else {
+      else if (e.kind === 'dig') {
+        playDigStep(e.wkey, e.x, e.y, e.ang, e.r, e.step, tables.weapons[e.wkey]?.warheads || 0, earthFx);
+        if (e.step === 0) {
+          G.settleT = TUNE.settleTime;
+          advance('shellsLanded');
+        }
+      } else if (e.kind === 'earth') {
+        playEarthOp(e.op, G.terrain, e.before, e.x0, e.x1, earthFx, (tables.weapons[e.op.w]?.dmg || 0) > 0);
+        G.settleT = TUNE.settleTime;
+        advance('shellsLanded');
+      } else {
         showBlast(e.blast);
         G.settleT = TUNE.settleTime;
         advance('shellsLanded');
@@ -625,6 +648,7 @@ export function createMatch(deps: MatchDeps) {
   function decayFx(dt: number): void {
     if (G.shake > 0) G.shake = Math.max(0, G.shake - dt);
     if (G.fx) { G.fx.wind = G.wind; G.fx.step(dt); }
+    G.earth.step(dt);
     G.marks.step(dt);
     for (const bm of G.booms) bm.t += dt;
     G.booms = G.booms.filter(bm => bm.t < bm.life);
@@ -656,8 +680,8 @@ export function createMatch(deps: MatchDeps) {
         advance('shellsLanded');
       } else if (G.phase === 'settle' && !G.shells.length) {
         G.settleT -= dt;
-        // The turn waits for every tank to finish falling into its crater.
-        if (G.settleT <= 0 && !anyTankFalling()) settle();
+        // The turn waits for every tank to finish falling into its crater, and the earth to settle on screen.
+        if (G.settleT <= 0 && !anyTankFalling() && !G.earth.busy()) settle();
       }
     }
   }

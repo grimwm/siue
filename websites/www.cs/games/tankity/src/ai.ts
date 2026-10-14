@@ -7,7 +7,8 @@
  * algorithm, kept in step by the shared vectors in protocol/sim-vectors.json.
  * brkLand stays in sim.ts: explode calls it, and sim.ts must not import this
  * file. */
-import { FLIGHT_STEPS, GRAV, aimLimits, beamLine, blastDamage, clamp, dist, dropTime, facing, fieldReach, flies, flightKey, gauss, muzzle, powi, rad, ringDamage, ringOf, scatterVel, shotSpeed, simShot, splitPoint, splitVel, spotTaken, surfY, unitHitBox } from './sim.ts';
+import { FLIGHT_STEPS, GRAV, aimLimits, beamLine, blastDamage, buried, clamp, dist, dropTime, facing, fallDamage, fieldReach, flies, flightKey, gauss, inHitBox, isGroundUnit, muzzle, powi, rad, ringDamage, ringOf, scatterVel, shotSpeed, simShot, splitPoint, splitVel, spotTaken, surfY, unitHitBox } from './sim.ts';
+import { BURY_EPS, DIG_STEP, FLOOR, TOP_Y, digHeading, fillPour, pourLevel, riotCarve, slumpGround } from './earth.ts';
 import { datan2, dcos, dsin } from './detmath.ts';
 import type { Arsenal, Difficulty, Rng, Tank, Weapon, World } from './sim.ts';
 export type { Difficulty } from './sim.ts';
@@ -295,22 +296,32 @@ function bursts(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: 
   return { harm, self: mine, own, reach };
 }
 /* The harm gun wkey would do to target if it landed at land, fired by self:
-   bursts' harm plus fallHarm, never more than the target's armor. -Infinity
-   when any of it could reach self's own body (with AI_SAFE_MARGIN): that gun
+   bursts' harm plus earthHarm's, never more than the target's armor.
+   -Infinity when any of it could reach self's own body (with
+   AI_SAFE_MARGIN), or the ground it moves would drop or bury self: that gun
    is not chosen while a safe one is. server/ai.php room_ai_harm is the same. */
 export function aiHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string, land: Landing): number {
   if (!flies(arsenal.weapons[wkey]!)) return noFlightHarm(world, arsenal, self, wkey, land);
   if (land.oob) return 0;
   const b = bursts(world, arsenal, self, target, wkey, land);
   if (b.own <= b.reach * AI_SAFE_MARGIN) return -Infinity;
-  return Math.min(target.hp, b.harm + fallHarm(world, arsenal, self, target, wkey, land));
+  const e = earthHarm(world, arsenal, self, target, wkey, land);
+  if (e.self > 0 || e.near) return -Infinity;
+  return withBurial(target, b.harm + e.harm, e.bury);
+}
+/* Harm capped at the target's armor, plus what burying it is worth: never
+   enough to pass for a kill, so a gun that finishes the target beats one that
+   only buries it. server/ai.php room_ai_with_burial is the same. */
+function withBurial(target: Tank, hit: number, bury: number): number {
+  const h = Math.min(target.hp, hit);
+  return h >= target.hp || bury <= 0 ? h : Math.min(target.hp - 1, h + bury);
 }
 /* The damage gun wkey landing at land would do to self, its own gunner, with
    no margin: what decides the gun when every one would reach it.
    server/ai.php room_ai_self_harm is the same. */
 export function aiSelfHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string, land: Landing): number {
-  if (!flies(arsenal.weapons[wkey]!)) return 0; // a beam never crosses its gunner; a ring spares it
-  return land.oob ? 0 : bursts(world, arsenal, self, target, wkey, land).self;
+  if (!flies(arsenal.weapons[wkey]!)) return 0; // a beam never crosses its gunner; a ring spares it; a riot charge never drops it
+  return land.oob ? 0 : bursts(world, arsenal, self, target, wkey, land).self + earthHarm(world, arsenal, self, target, wkey, land).self;
 }
 /* The harm a gun with no flight would do fired by self at the aim land.a,
    land.p (where it lands means nothing to it): a beam's flat damage on every
@@ -321,6 +332,14 @@ function noFlightHarm(world: World, arsenal: Arsenal, self: Tank, wkey: string, 
   const w = arsenal.weapons[wkey]!;
   const a = land.a === undefined ? self.angle : land.a, p = land.p === undefined ? 100 : land.p;
   let sum = 0;
+  if (w.effect === 'riot') {
+    // Its scoop, on a copy of the ground: the falls it would give every rival, never one of its own.
+    const t = world.terrain.slice(), b = unitHitBox(self), r = rad(a);
+    riotCarve(t, b.cx, b.cy, datan2(-dsin(r), dcos(r) * facing(self)), w.radius, w.fan || 1, self.y);
+    if (dropCost(world, arsenal, self, surfY(t, self.x)) > 0) return -Infinity;
+    for (const u of world.tanks) if (u !== self && u.hp > 0) sum += Math.min(u.hp, dropCost(world, arsenal, u, surfY(t, u.x)));
+    return sum;
+  }
   if (w.effect === 'beam') {
     for (const u of beamLine(world, self, w, a, p).struck) sum += Math.min(u.hp, w.dmg);
     return sum;
@@ -350,13 +369,112 @@ export function beamAim(_world: World, arsenal: Arsenal, self: Tank, target: Tan
 function targetHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string, land: Landing): number {
   if (!flies(arsenal.weapons[wkey]!)) return noFlightHarm(world, arsenal, self, wkey, land);
   if (land.oob) return 0;
-  return Math.min(target.hp, bursts(world, arsenal, self, target, wkey, land).harm + fallHarm(world, arsenal, self, target, wkey, land));
+  const e = earthHarm(world, arsenal, self, target, wkey, land);
+  return withBurial(target, bursts(world, arsenal, self, target, wkey, land).harm + e.harm, e.bury);
 }
-/* The harm of the fall a gun's crater would give the target, less the drone's
-   own. Craters do not drop units into falls that hurt yet, so it is 0.
-   server/ai.php room_ai_fall_harm is the same. */
-export function fallHarm(_world: World, _arsenal: Arsenal, _self: Tank, _target: Tank, _wkey: string, _land: Landing): number {
-  return 0;
+/* Ground predictions made so far (earthHarm calls): a drone turn's cost beside
+   its flights, which test/ai-search.test.mjs holds to a budget.
+   server/ai.php room_ai_earth_ops is the same count. */
+let groundOps = 0;
+export function earthOps(): number {
+  return groundOps;
+}
+/** What burying a ground unit is worth, in armor: it cannot drive, and its
+ *  shells start in the dirt, so it spends a turn digging out or shoots itself.
+ *  AI_BURY, plus a point for every px deeper than the surface, up to
+ *  AI_BURY_MAX: about a Shell's hit for a shallow burial, a Mortar's or more
+ *  for a deep one. */
+export const AI_BURY = 30;
+export const AI_BURY_MAX = 70;
+/** How deep under the surface a target must end up for the burial to count. */
+export const AI_BURY_DEPTH = 12;
+/* What a fall of unit u onto ground at y `ground` would cost it, as the
+   settle would charge it: nothing for a rise, the bunker halving a player's,
+   nothing when its parachute would open. server/ai.php room_ai_drop_cost is the same. */
+function dropCost(world: World, arsenal: Arsenal, u: Tank, ground: number): number {
+  if (ground - u.y <= 0.5) return 0;
+  const raw = fallDamage(ground - u.y, arsenal.fall);
+  if (raw <= 0) return 0;
+  const cost = u.isPlayer && (world.bunker || 0) > 0 ? Math.max(1, Math.round(raw / 2)) : raw;
+  const chutes = (u.isPlayer ? world.chutes : u.chutes) || 0;
+  return cost > arsenal.fall.chuteOver && chutes > 0 ? 0 : cost;
+}
+/* What the ground gun wkey moves, landing at land, would do: the gun's
+   ground op on a copy of the terrain (a crater, and its munitions' craters;
+   dirt; a pour; a slump; a dig's trench, stopped at a unit's body as the real
+   one is, and its warheads' craters), then `harm` to the target: the fall it
+   would take, AI_BURY when it would end up buried more than AI_BURY_DEPTH
+   under the surface that it was not before (dirt and pour), and a dig's
+   warheads; `self` the same falls, burial and warheads on the gunner (any of
+   it is a gun not to fire), and `near` when a warhead may burst within reach
+   of the gunner's body (with AI_SAFE_MARGIN). server/ai.php room_ai_earth_harm
+   is the same. */
+export function earthHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string, land: Landing):
+  { harm: number; bury: number; self: number; near: boolean } {
+  groundOps++;
+  const w = arsenal.weapons[wkey]!;
+  const fw = world.terrain.length;
+  const tb = unitHitBox(target), sb = unitHitBox(self);
+  let harm = 0, mine = 0, near = false;
+  // Only the ground under the target and the drone matters: a crater, dirt or
+  // a trench is worked out at those two columns alone (the same arithmetic as
+  // carveCrater and addDirt there); a pour or a slump moves the whole ground,
+  // so it runs on a copy.
+  const ct = clamp(Math.round(target.x), 0, fw - 1), cs = clamp(Math.round(self.x), 0, fw - 1);
+  const at = [world.terrain[ct]!, world.terrain[cs]!];
+  const carve = (x: number, y: number, r: number): void => {
+    [ct, cs].forEach((ix, i) => {
+      if (ix < Math.max(0, Math.floor(x - r)) || ix > Math.min(fw - 1, Math.ceil(x + r))) return;
+      const dx = ix - x;
+      at[i] = Math.min(FLOOR, Math.max(at[i]!, y + Math.sqrt(Math.max(0, r * r - dx * dx)) * 0.75));
+    });
+  };
+  if (w.effect === 'dirt') {
+    [ct, cs].forEach((ix, i) => {
+      if (ix < Math.max(0, Math.floor(land.x - w.radius)) || ix > Math.min(fw - 1, Math.ceil(land.x + w.radius))) return;
+      const dx = ix - land.x;
+      at[i] = Math.max(TOP_Y, Math.min(at[i]!, land.y - Math.sqrt(Math.max(0, w.radius * w.radius - dx * dx))));
+    });
+  } else if (w.effect === 'pour' || w.effect === 'slump') {
+    const t = world.terrain.slice();
+    if (w.effect === 'pour') fillPour(t, pourLevel(t, Math.round(clamp(land.x, 0, fw - 1)), w.volume || 0));
+    else slumpGround(t, land.x, w.radius, w.slope || 1, w.passes || 1);
+    at[0] = t[ct]!;
+    at[1] = t[cs]!;
+  } else if (w.effect === 'dig') {
+    let x = land.x, y = land.y;
+    const [ux, uy] = digHeading(land.vx || 0, land.vy || 0);
+    const n = Math.ceil((w.digLen || 0) / DIG_STEP), W = w.warheads || 0, pts: [number, number][] = [];
+    for (let i = 1; i <= n; i++) {
+      const nx = x + ux * DIG_STEP, ny = y + uy * DIG_STEP;
+      if (nx < 0 || nx > fw - 1 || ny >= FLOOR) break;
+      x = nx;
+      y = ny;
+      if (world.tanks.some(u => u.hp > 0 && u !== self && inHitBox(u, nx, ny))) break;
+      carve(x, y, w.digR || 0);
+      while (pts.length < W && i >= Math.floor(((pts.length + 1) * n + W - 1) / W)) pts.push([x, y]);
+    }
+    while (pts.length < W) pts.push([x, y]);
+    const sd = w.subDmg || w.dmg, sr = w.subRadius || w.radius;
+    for (const [px, py] of pts) {
+      carve(px, py, sr);
+      harm += reachDamage(sd, dist(tb.cx - px, tb.cy - py), sr);
+      const own = dist(sb.cx - px, sb.cy - py);
+      mine += reachDamage(sd, own, sr);
+      if (own <= (sr + 14) * AI_SAFE_MARGIN) near = true;
+    }
+  } else {
+    const subs = munitions(world, arsenal, self, wkey, land);
+    if (subs.burst) carve(land.x, land.y, w.radius);
+    for (const x of subs.xs) carve(x, land.y, subs.r);
+  }
+  harm += dropCost(world, arsenal, target, at[0]!);
+  mine += dropCost(world, arsenal, self, at[1]!);
+  let bury = 0;
+  if ((w.effect === 'dirt' || w.effect === 'pour') && isGroundUnit(target)
+    && !(world.terrain[ct]! < target.y - AI_BURY_DEPTH) && at[0]! < target.y - AI_BURY_DEPTH) bury = Math.min(AI_BURY_MAX, AI_BURY + (target.y - at[0]!));
+  if (isGroundUnit(self) && !buried(self, world.terrain) && at[1]! < self.y - BURY_EPS) mine += AI_BURY_MAX;
+  return { harm, bury, self: mine, near };
 }
 /* A planning arc's best aim from the search, and where it lands. */
 interface ArcAim {
@@ -374,12 +492,28 @@ interface ArcAim {
    gun of the best-landing arc that would not (rack order on a tie); and if
    every gun would, the one that would hurt the drone least. */
 function pickGun(world: World, arsenal: Arsenal, t: Tank, target: Tank, glory: boolean, guns: readonly string[],
-  arcOf: ReadonlyMap<string, string>, byArc: ReadonlyMap<string, ArcAim>, bestGun: string): string {
+  arcOf: ReadonlyMap<string, string>, byArc: ReadonlyMap<string, ArcAim>, bestGun: string,
+  landsOf: ReadonlyMap<string, readonly ArcAim[]>, aims: Map<string, ArcAim>): string {
   const harms = new Map<string, number>();
   const harmOf = (k: string): number => {
     let h = harms.get(k);
     if (h === undefined) {
       h = aiHarm(world, arsenal, t, target, k, byArc.get(arcOf.get(k)!)!.land);
+      // A digger does its harm away from where it lands: it is weighed at
+      // every aim its arc searched that lands within its burrow's length of
+      // the target (no other can reach it), and fires the most harmful (the
+      // first of equals).
+      const w = arsenal.weapons[k]!;
+      if (w.effect === 'dig') {
+        for (const aim of landsOf.get(arcOf.get(k)!) || []) {
+          if (aim.land.oob || Math.abs(aim.land.x - target.x) > (w.digLen || 0)) continue;
+          const g = aiHarm(world, arsenal, t, target, k, aim.land);
+          if (g > h) {
+            h = g;
+            aims.set(k, aim);
+          }
+        }
+      }
       harms.set(k, h);
     }
     return h;
@@ -445,6 +579,15 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
     if (k === 'shell' || keys.includes(k)) continue;
     if ((rack[k] || 0) > 0) keys.push(k);
   }
+  // A buried ground unit fired for by the battery digs itself out first: its
+  // first riot gun in rack order, at its own aim (no random numbers drawn).
+  if (isGroundUnit(t) && buried(t, world.terrain)) {
+    const riot = keys.find(k => arsenal.weapons[k]!.effect === 'riot');
+    if (riot) {
+      const lim = aimLimits(arsenal.weapons[riot]);
+      return { wkey: riot, angle: clamp(t.angle, lim.min, lim.max), power: t.power };
+    }
+  }
   // A drone that cannot hurt anyone for a while tries something else.
   let s = t.s || 'hunter';
   const mem = t.brk;
@@ -505,12 +648,17 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
     // Every planning arc's best aim, and the best of all.
     const arcOf = new Map(guns.map(k => [k, flightKey(arsenal.weapons[k]!)]));
     const byArc = new Map<string, ArcAim>();
+    // Every aim each arc searched, in search order (a digger is weighed at each).
+    const landsOf = new Map<string, ArcAim[]>();
     let best: { err: number; a: number; p: number; wkey: string } | null = null;
     const consider = (wkey: string, a: number, p: number): number => {
       const land = simShot(world, arsenal, m.x, m.y, a, p, wkey, dirS, high);
       const err = land.oob ? 400 + Math.abs(land.x - target.x) * 0.2 : Math.abs(land.x - target.x);
-      const f = arcOf.get(wkey)!, b = byArc.get(f);
-      if (!b || err < b.err) byArc.set(f, { err, a, p, land: { ...land, a, p } });
+      const f = arcOf.get(wkey)!, b = byArc.get(f), aim = { err, a, p, land: { ...land, a, p } };
+      if (!b || err < b.err) byArc.set(f, aim);
+      const all = landsOf.get(f);
+      if (all) all.push(aim);
+      else landsOf.set(f, [aim]);
       if (!best || err < best.err) best = { err, a, p, wkey };
       return err;
     };
@@ -556,6 +704,7 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
         guns = fliers;
         for (const k of guns) if (!arcOf.has(k)) arcOf.set(k, flightKey(arsenal.weapons[k]!));
         byArc.clear();
+        landsOf.clear();
         best = null;
         plan = planOf(guns);
         for (const wkey of plan) search(wkey, 25, 155);
@@ -564,8 +713,9 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
         for (const wkey of plan) search(wkey, 25, highFrom - 1);
       }
     }
-    w = pickGun(world, arsenal, t, target, s === 'glory', guns, arcOf, byArc, best!.wkey);
-    const aim = byArc.get(arcOf.get(w)!)!;
+    const aims = new Map<string, ArcAim>();
+    w = pickGun(world, arsenal, t, target, s === 'glory', guns, arcOf, byArc, best!.wkey, landsOf, aims);
+    const aim = aims.get(w) || byArc.get(arcOf.get(w)!)!;
     [ba, bp, n] = [aim.a, aim.p, 0];
     // A gun with no flight, aimed as it aims (a beam at the target's body, a
     // ring wherever the barrel points, both at full power), fires instead
@@ -584,10 +734,11 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
   // Drones shuffle for a better firing spot instead of camping one rut,
   // unless they are walking a bracket in, or fire a gun with no flight
   // (aimed from where they stand).
+  // Only a drone shuffles (riding the ground): a ground unit fired for by the battery never drives.
   if (!cont && flies(arsenal.weapons[w]!) && world.rng() < 0.35) {
     const dx = (world.rng() < 0.5 ? -1 : 1) * (8 + world.rng() * 27);
     const nx = clamp(t.x + dx, 12, world.terrain.length - 12);
-    if (!spotTaken(world.tanks, t, nx)) {
+    if (!isGroundUnit(t) && !spotTaken(world.tanks, t, nx)) {
       t.x = nx;
       t.y = surfY(world.terrain, t.x);
     }

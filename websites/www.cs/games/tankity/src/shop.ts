@@ -52,9 +52,16 @@ export const SHELL_ROW = -1;
 
 /** A gun's first shop line: its damage and what carries it (a blast, which
  *  doubles on a direct hit; a beam's line; a plasma ring), then its note. */
-export function ammoSub(w: Pick<Weapon, 'dmg' | 'radius' | 'effect'> & { note?: string }): string {
+export function ammoSub(w: Pick<Weapon, 'dmg' | 'radius' | 'effect'> & Partial<Pick<Weapon, 'volume' | 'digLen' | 'warheads' | 'subDmg'>> & { note?: string }): string {
   const note = w.note ? `, ${w.note.charAt(0).toLowerCase() + w.note.slice(1).replace(/\.$/, '')}` : '';
   const hurt = w.dmg > 0 ? `${w.dmg} damage` : 'No damage';
+  if (w.effect === 'dirt') return `${hurt}${w.dmg > 0 ? `, blast ${w.radius}, then` : ','} a mound of dirt ${w.radius} round${note}.`;
+  if (w.effect === 'pour') return `${hurt}, ${w.volume || 0} px² of liquid dirt${note}.`;
+  if (w.effect === 'dig') {
+    return (w.warheads || 0) > 0 ? `${w.warheads} warheads of ${w.subDmg} damage along a ${w.digLen} burrow${note}.` : `${hurt}, burrows ${w.digLen} on${note}.`;
+  }
+  if (w.effect === 'riot') return `${hurt}, clears the earth ${w.radius} along the barrel${note}.`;
+  if (w.effect === 'slump') return `${hurt}, slopes slump within ${w.radius}${note}.`;
   if (w.effect === 'beam') return `${hurt} to every unit on its line${note}.`;
   if (w.effect === 'plasma') return `${w.dmg > 0 ? 'Up to ' + hurt : hurt}, ring ${w.radius} at full power${note}.`;
   if (w.effect === 'tracer') return `${hurt}${note}.`;

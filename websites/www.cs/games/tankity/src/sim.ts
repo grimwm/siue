@@ -8,6 +8,8 @@
  * caller to show. */
 
 import { datan2, dcos, dsin } from './detmath.ts';
+import { BURY_EPS, DIG_STEP, FLOOR, applyEarth, carveCrater, digHeading } from './earth.ts';
+import type { EarthOp } from './earth.ts';
 
 /* ---------- seeded RNG (mulberry32 + string hash) ---------- */
 export type Rng = () => number;
@@ -127,6 +129,12 @@ export interface Weapon {
   rollTime?: number;
   range?: number; // beam: its length at full power on a room's field, px
   aimMin?: number; // beam: the barrel's lowest angle (below 0 dips under level), on either side
+  volume?: number; // pour: px^2 of liquid dirt
+  digLen?: number; // dig: px it burrows
+  digR?: number; // dig: the trench's half width
+  warheads?: number; // dig: blasts along the burrow
+  slope?: number; // slump: px a column may stand above its neighbour
+  passes?: number; // slump: passes over the ground
   note?: string;
   gfx?: Gfx;
 }
@@ -239,6 +247,13 @@ export interface Shell extends Motion {
   rt?: number;
   /** A hop weapon's warhead: 1 for the first, counting up with each leap. */
   hop?: number;
+  /** A dig weapon burrowing: its heading (dux, duy), the steps it digs in all (dn), has dug (dl), the warheads burst (dk). */
+  digging?: boolean;
+  dux?: number;
+  duy?: number;
+  dn?: number;
+  dl?: number;
+  dk?: number;
 }
 export interface Cloud {
   x: number;
@@ -400,17 +415,8 @@ export function surfY(terrain: readonly number[], x: number): number {
   const xi = clamp(Math.round(x), 0, terrain.length - 1);
   return terrain[xi]!;
 }
-/* Cuts a crater: the ground under the blast drops to a 3:4 ellipse around
-   (x, y), never below floor. The war, the room replay and the firing range
-   all carve with this. */
-export function carveCrater(terrain: number[], x: number, y: number, r: number, floor: number): void {
-  const x0 = Math.max(0, Math.floor(x - r)), x1 = Math.min(terrain.length - 1, Math.ceil(x + r));
-  for (let ix = x0; ix <= x1; ix++) {
-    const dx = ix - x;
-    const cut = Math.sqrt(Math.max(0, r * r - dx * dx)) * 0.75;
-    terrain[ix] = Math.min(floor, Math.max(terrain[ix]!, y + cut));
-  }
-}
+/* The crater and the other earth ops live in earth.ts; the sim's callers reach the crater here too. */
+export { carveCrater } from './earth.ts';
 
 /* ---------- units ---------- */
 /* Which way a tank faces: +1 right, -1 left. Angles count from that side. */
@@ -420,6 +426,15 @@ export function facing(t: Pick<Tank, 'dirS' | 'isPlayer'>): number {
 export function isGroundUnit(t: Pick<Tank, 'isPlayer' | 'human'>): boolean {
   return t.isPlayer || !!t.human;
 }
+/* A ground unit under the surface: its column's ground is more than
+   BURY_EPS above it. It cannot drive, and its shells start in the dirt.
+   Drones hover and ride the ground, so are never buried. server/earth.php
+   room_buried is the same. */
+export function buried(t: Pick<Tank, 'isPlayer' | 'human' | 'x' | 'y'>, terrain: readonly number[]): boolean {
+  return isGroundUnit(t) && terrain.length > 0 && surfY(terrain, t.x) < t.y - BURY_EPS;
+}
+/** What a buried tank's refused drive says (server/rules.php room_drive says the same). */
+export const BURIED_LINE = 'You are buried: dig out first (a Riot Charge or a digger).';
 /* Units keep at least this far apart, centre to centre, so hulls and rotors
    never overlap; fresh rounds spread them wider still. */
 export const UNIT_GAP = 44;
@@ -498,9 +513,9 @@ export function aimLimits(w: Pick<Weapon, 'aimMin'> | null | undefined): { min: 
   const m = w && w.aimMin !== undefined ? w.aimMin : AIM_MIN;
   return { min: m, max: 180 - m };
 }
-/* Guns with no flight: they resolve the moment they fire (fireBeam, firePlasma). */
+/* Guns with no flight: they resolve the moment they fire (fireBeam, firePlasma, fireRiot). */
 export function flies(w: Pick<Weapon, 'effect'>): boolean {
-  return w.effect !== 'beam' && w.effect !== 'plasma';
+  return w.effect !== 'beam' && w.effect !== 'plasma' && w.effect !== 'riot';
 }
 /* Fires wkey from tank t: spends the round and launches the volley's shells
    into world.shells, or, for a gun with no flight, resolves it at once (Launch.now).
@@ -534,6 +549,7 @@ function fireGun(world: World, arsenal: Arsenal, t: Tank, wkey: string): Launch 
   const ang = datan2(-dsin(r0), dcos(r0) * s);
   if (w.effect === 'beam') return { x: m.x, y: m.y, ang, spent, now: [{ kind: 'beam', wkey, shot: fireBeam(world, arsenal, t, wkey) }] };
   if (w.effect === 'plasma') return { x: m.x, y: m.y, ang, spent, now: [{ kind: 'ring', wkey, shot: firePlasma(world, arsenal, t, wkey) }] };
+  if (w.effect === 'riot') return { x: m.x, y: m.y, ang, spent, now: [fireRiot(world, arsenal, t, wkey, ang)] };
   const shots = w.pellets || 1;
   for (let i = 0; i < shots; i++) {
     const off = shots === 1 ? 0 : (i - (shots - 1) / 2) * (w.spread || 0);
@@ -638,6 +654,22 @@ export function ringDamage(ring: { x: number; y: number; r: number }, w: Pick<We
   const b = unitHitBox(u);
   const d = dist(b.cx - ring.x, b.cy - ring.y);
   return d > ring.r + 14 ? null : blastDamage(w.dmg, d, ring.r);
+}
+/* Fires a riot charge from t: no flight, no damage. It scoops the earth from
+   its hull's centre out along the barrel (earth.ts riotCarve, heading a, the
+   radius long, its widest crater radius x fan; the hull's own crater never
+   cuts below where t stands), and owns the falls it digs,
+   its gunner's own included (credited to nobody). Returns what it did, as
+   the earth event the page plays. server/sim.php room_fire_riot is the same. */
+export function fireRiot(world: World, arsenal: Arsenal, t: Tank, wkey: string, a: number): StepEvent {
+  const w = arsenal.weapons[wkey]!;
+  const b = unitHitBox(t);
+  const op: EarthOp = { t: 'riot', w: wkey, x: b.cx, y: b.cy, a, r: w.radius, fan: w.fan || 1, b: t.y };
+  const was = world.tanks.map(u => surfY(world.terrain, u.x));
+  const before = world.terrain.slice();
+  const span = applyEarth(world.terrain, op);
+  markFalls(world, t, was);
+  return { kind: 'earth', op, owner: t, before, ...span };
 }
 /* One ballistic step. Shared by the real shells, the AI predictor, the aim
  * guide, and the firing-range preview, so the demo flies exactly like war. */
@@ -939,6 +971,7 @@ export interface BlastOverride {
   radius?: number;
   gfx?: Gfx;
   fx?: string;
+  carve?: boolean; // false: a blast with no crater (a dirt gun's)
 }
 /* A shell bursts at (x, y): carves the crater, then docks armor by distance
    (direct hits pay double) and settles shields, bunkers, EMP fuel drain,
@@ -951,9 +984,11 @@ export function explode(world: World, arsenal: Arsenal, x: number, y: number, wk
   const r = ov && ov.radius !== undefined ? ov.radius : w.radius;
   const gfx = (ov && ov.gfx) || w.gfx || {};
   brkLand(owner, x);
-  const was = world.tanks.map(t => surfY(world.terrain, t.x));
-  carveCrater(world.terrain, x, y, r, H - 4);
-  markFalls(world, owner, was);
+  if (!ov || ov.carve !== false) {
+    const was = world.tanks.map(t => surfY(world.terrain, t.x));
+    carveCrater(world.terrain, x, y, r, H - 4);
+    markFalls(world, owner, was);
+  }
   const blast: Blast = { x, y, r, wkey, fx: (ov && ov.fx) || wkey, shake: gfx.shake || 0.5, owner, events: [] };
   // A harmless burst (dmg 0) only carves (and owns the falls it digs, as
   // above): it touches no unit, so it spends no shield and credits no hit.
@@ -1011,7 +1046,7 @@ function credit(world: World, t: Tank, owner: Tank, dmg: number): void {
 /* Of the blasts that lowered the ground under a standing unit, the one that
    lowered it the most owns its fall (the first of equals): `was` is the
    ground under each unit before this crater. */
-function markFalls(world: World, owner: Tank, was: readonly number[]): void {
+export function markFalls(world: World, owner: Tank, was: readonly number[]): void {
   world.tanks.forEach((t, i) => {
     if (t.hp <= 0) return;
     const now = surfY(world.terrain, t.x);
@@ -1058,6 +1093,11 @@ export type StepEvent =
   | { kind: 'beam'; wkey: string; shot: BeamShot }
   /** A plasma ring fired: no flight, its hits already made (fireWeapon's Launch.now). */
   | { kind: 'ring'; wkey: string; shot: PlasmaShot }
+  /** An earth gun moved the ground (op, as the room wire carries it): dirt, a
+   *  pour or a slump where it burst, a riot charge the moment it fired. */
+  | { kind: 'earth'; op: EarthOp; owner: Tank; before: number[]; x0: number; x1: number }
+  /** A digger touched down (step 0) or cut step `step` of its trench at (x, y), heading ang; r is the trench's half width. */
+  | { kind: 'dig'; wkey: string; x: number; y: number; ang: number; r: number; step: number; owner: Tank }
   | { kind: 'blast'; blast: Blast };
 /* Bomblets of one burst (both split, the same order but the last index):
    they burst as they land, never waiting for each other. */
@@ -1112,6 +1152,90 @@ function stepRoller(world: World, arsenal: Arsenal, s: Shell, w: Weapon, dt: num
   events.push({ kind: 'blast', blast: explode(world, arsenal, bx, groundAt(t, bx), s.wkey, s.owner, direct, null) });
   s.dead = true;
 }
+/* A shell bursts where it is (on direct, the unit it struck): a blast, or
+   what its earth effect does instead. dirt: a blast with no crater when it
+   does damage, then a disc of dirt; pour: liquid dirt at its column; slump:
+   the slopes round it slump (it owns the falls); dig: it starts to burrow
+   (stepDigger), or, having struck a unit in flight, stops at once. */
+function burstShell(world: World, arsenal: Arsenal, s: Shell, w: Weapon, direct: Tank | null, ov: BlastOverride | null, events: StepEvent[]): void {
+  const fw = world.terrain.length;
+  let op: EarthOp | null = null;
+  if (w.effect === 'dirt') {
+    if (w.dmg > 0) events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, direct, { carve: false }) });
+    else brkLand(s.owner, s.x);
+    op = { t: 'dirt', w: s.wkey, x: s.x, y: s.y, r: w.radius };
+  } else if (w.effect === 'pour') {
+    brkLand(s.owner, s.x);
+    op = { t: 'pour', w: s.wkey, x: Math.round(clamp(s.x, 0, fw - 1)), v: w.volume || 0 };
+  } else if (w.effect === 'slump') {
+    brkLand(s.owner, s.x);
+    op = { t: 'slump', w: s.wkey, x: s.x, r: w.radius, slope: w.slope || 1, passes: w.passes || 1 };
+  } else if (w.effect === 'dig') {
+    brkLand(s.owner, s.x);
+    [s.dux, s.duy] = digHeading(s.vx, s.vy);
+    s.dn = Math.ceil((w.digLen || 0) / DIG_STEP);
+    s.dl = 0;
+    s.dk = 0;
+    events.push({ kind: 'dig', wkey: s.wkey, x: s.x, y: s.y, ang: datan2(s.duy, s.dux), r: w.digR || 0, step: 0, owner: s.owner });
+    if (direct) finishDig(world, arsenal, s, w, events);
+    else s.digging = true;
+    return;
+  }
+  if (op) {
+    const was = world.tanks.map(t => surfY(world.terrain, t.x));
+    const before = world.terrain.slice();
+    const span = applyEarth(world.terrain, op);
+    markFalls(world, s.owner, was);
+    events.push({ kind: 'earth', op, owner: s.owner, before, ...span });
+    s.dead = true;
+    return;
+  }
+  events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, direct, ov) });
+  afterBurst(world, s, w, direct, events);
+  s.dead = true;
+}
+/* One step of a digger's burrow: DIG_STEP px on along its heading, cutting
+   its trench (a crater of digR there, owning the falls it digs), and
+   bursting each warhead that falls due (`warheads` spaced evenly along the dn
+   steps, the last at the end). A unit's body at the next point (its gunner's
+   only once the shell has left it) stops it there; so does the field's side
+   or its floor, at the last point cut. Stopped or done, any warheads left
+   burst where it stopped. server/rules.php room_fire_dig is the same. */
+function stepDigger(world: World, arsenal: Arsenal, s: Shell, w: Weapon, events: StepEvent[]): void {
+  const fw = world.terrain.length, n = s.dn || 0, W = w.warheads || 0;
+  const i = (s.dl || 0) + 1;
+  const nx = s.x + s.dux! * DIG_STEP, ny = s.y + s.duy! * DIG_STEP;
+  let stop = i > n || nx < 0 || nx > fw - 1 || ny >= FLOOR;
+  if (!stop) {
+    if (!s.clear && !inHitBox(s.owner, nx, ny)) s.clear = true;
+    const hit = world.tanks.find(u => u.hp > 0 && !(u === s.owner && !s.clear) && inHitBox(u, nx, ny));
+    s.x = nx;
+    s.y = ny;
+    if (hit) stop = true;
+    else {
+      s.dl = i;
+      const was = world.tanks.map(t => surfY(world.terrain, t.x));
+      carveCrater(world.terrain, nx, ny, w.digR || 0, FLOOR);
+      markFalls(world, s.owner, was);
+      events.push({ kind: 'dig', wkey: s.wkey, x: nx, y: ny, ang: datan2(s.duy!, s.dux!), r: w.digR || 0, step: i, owner: s.owner });
+      // Warhead k is due at step ceil(k n / W), in whole numbers.
+      while ((s.dk || 0) < W && i >= Math.floor((((s.dk || 0) + 1) * n + W - 1) / W)) digWarhead(world, arsenal, s, w, events);
+      stop = i >= n;
+    }
+  }
+  if (stop) finishDig(world, arsenal, s, w, events);
+}
+/* A digger's burrow ends: every warhead not yet burst bursts where it stopped. */
+function finishDig(world: World, arsenal: Arsenal, s: Shell, w: Weapon, events: StepEvent[]): void {
+  while ((s.dk || 0) < (w.warheads || 0)) digWarhead(world, arsenal, s, w, events);
+  s.digging = false;
+  s.dead = true;
+}
+/* A digger's next warhead bursts where the burrow is: subDmg and subRadius, never a direct hit. */
+function digWarhead(world: World, arsenal: Arsenal, s: Shell, w: Weapon, events: StepEvent[]): void {
+  s.dk = (s.dk || 0) + 1;
+  events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, null, { dmg: w.subDmg || w.dmg, radius: w.subRadius || w.radius }) });
+}
 /* What a burst throws on: a hop weapon's next warhead, or a scatter weapon's
    bomblets (its own burst only, not theirs). They join the volley this frame,
    so they fly this frame too. */
@@ -1140,6 +1264,10 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
     const w = arsenal.weapons[s.wkey]!;
     if (s.rolling) {
       stepRoller(world, arsenal, s, w, dt, events);
+      continue;
+    }
+    if (s.digging) {
+      stepDigger(world, arsenal, s, w, events);
       continue;
     }
     s.age = (s.age || 0) + dt;
@@ -1208,9 +1336,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
         events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, direct, ov) });
         continue;
       }
-      events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, direct, ov) });
-      afterBurst(world, s, w, direct, events);
-      s.dead = true;
+      burstShell(world, arsenal, s, w, direct, ov, events);
       continue;
     }
     if (grounded && w.effect === 'roller') {
@@ -1222,11 +1348,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
       s.y = groundAt(world.terrain, s.x) - ROLL_LIFT;
       continue;
     }
-    if (grounded) {
-      events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, null, ov) });
-      afterBurst(world, s, w, null, events);
-      s.dead = true;
-    }
+    if (grounded) burstShell(world, arsenal, s, w, null, ov, events);
   }
   world.shells = world.shells.filter(s => !s.dead);
   // No clearing here: every pellet of a volley resolves on its own, so a
@@ -1237,8 +1359,9 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
 
 /* ---------- tanks falling ---------- */
 /* Units left hanging over a crater drop straight down, never sideways, onto
-   the ground or a unit beneath them; ground that rose (a new round, fresh
-   hills) takes them straight up. A drop costs armor by its height at rest
+   the ground or a unit beneath them; ground that rose takes a drone straight
+   up, and leaves a ground unit buried where it is (a new round places every
+   unit on its fresh hills). A drop costs armor by its height at rest
    (fallDamage), credited to the blast that lowered the ground under it most.
 
    The rules and the picture are kept apart. The rules run once a volley, when
@@ -1275,10 +1398,17 @@ function unitBeneath(tanks: readonly Tank[], terrain: readonly number[], t: Tank
   return best;
 }
 /** Where t comes to rest falling straight down: the ground, or the top of a
- *  live unit beneath it, whichever is higher. */
+ *  live unit beneath it, whichever is higher. Risen ground never lifts a
+ *  ground unit mid-round: one more than half a pixel under it stays where it
+ *  is, buried (heldY); a drone rides the ground up. */
 export function restY(tanks: readonly Tank[], terrain: readonly number[], t: Tank): number {
   const u = unitBeneath(tanks, terrain, t);
-  return u ? unitTop(u) : surfY(terrain, t.x);
+  return heldY(t, u ? unitTop(u) : surfY(terrain, t.x));
+}
+/** Where t rests given what is under it (`rest`): there, unless that is risen
+ *  ground over a ground unit, which stays where it is. server/sim.php room_held_y is the same. */
+function heldY(t: Tank, rest: number): number {
+  return isGroundUnit(t) && rest < t.y - 0.5 ? t.y : rest;
 }
 /* What a landing did, in order. */
 export type FallEvent =
@@ -1347,7 +1477,7 @@ export function settleFalls(world: World, arsenal: Arsenal): FallEvent[] {
     for (const t of lowestFirst(world.tanks)) {
       if (t.hp <= 0) continue;
       const onto = unitBeneath(world.tanks, world.terrain, t);
-      const rest = onto ? unitTop(onto) : surfY(world.terrain, t.x);
+      const rest = heldY(t, onto ? unitTop(onto) : surfY(world.terrain, t.x));
       t.vy = 0;
       if (Math.abs(rest - t.y) <= 0.5) { t.y = rest; t.fellBy = undefined; t.fellDepth = undefined; continue; }
       const drop = rest - t.y;

@@ -305,5 +305,59 @@
     "frames": 8,
     "first": 8,
     "fps": 12
+  },
+  "p_clod": {
+    "file": "shells_earth.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 6,
+    "frames": 8,
+    "first": 0,
+    "fps": 12
+  },
+  "p_mud": {
+    "file": "shells_earth.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 6,
+    "frames": 8,
+    "first": 8,
+    "fps": 12
+  },
+  "p_drill": {
+    "file": "shells_earth.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 6,
+    "frames": 8,
+    "first": 16,
+    "fps": 12
+  },
+  "p_sandhog": {
+    "file": "shells_earth.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 6,
+    "frames": 8,
+    "first": 24,
+    "fps": 12
+  },
+  "p_riot": {
+    "file": "shells_earth.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 6,
+    "frames": 8,
+    "first": 32,
+    "fps": 12
+  },
+  "p_disrupter": {
+    "file": "shells_earth.png",
+    "frame": 48,
+    "cols": 8,
+    "rows": 6,
+    "frames": 8,
+    "first": 40,
+    "fps": 12
   }
 }

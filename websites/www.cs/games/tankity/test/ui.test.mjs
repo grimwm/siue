@@ -41,7 +41,9 @@ const keyHint = (ctx, action, idx) => (idx ? KEYS[`${ctx}:${action}:${idx}`] : u
 
 // ---- shop ----
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
-const ammo = GAME.arsenal.ammo.filter(a => a.pack > 0);
+// The shop groups each category under one heading, in first-appearance order (src/sim.ts buildArsenal).
+const byCat = rows => { const cats = [...new Set(rows.map(r => r.cat))]; return cats.flatMap(c => rows.filter(r => r.cat === c)); };
+const ammo = byCat(GAME.arsenal.ammo.filter(a => a.pack > 0));
 const gear = GAME.arsenal.gear;
 /** Shop rows that are not headings: the free Shell, every priced ammo pack and every trick. */
 const ITEMS = 1 + ammo.length + gear.length;
@@ -98,7 +100,7 @@ function shopProps(over = {}) {
   check('shop-list', list.localName === 'ul' && hasClass(list, 'scores'));
   const rows = list.children.filter(li => !hasClass(li, 'shop-cat'));
   check('shop-all-items', rows.length === ITEMS, String(rows.length));
-  check('shop-categories', list.children.filter(li => hasClass(li, 'shop-cat')).map(text).join('|') === 'Shells|Hull and fuel|Tricks',
+  check('shop-categories', list.children.filter(li => hasClass(li, 'shop-cat')).map(text).join('|') === 'Shells|Rollers|Hull and fuel|Tricks',
     list.children.filter(li => hasClass(li, 'shop-cat')).map(text).join('|'));
   const free = list.children.find(li => hasClass(li, 'shop-free'));
   check('shop-shell-row-heads-the-shells', list.children.indexOf(free) === 1 && text(byClass(free, 'shop-name')[0]) === 'Shell ∞ (free)'

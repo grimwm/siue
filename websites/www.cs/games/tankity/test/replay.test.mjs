@@ -253,3 +253,36 @@ function frames(rp, n) {
   check('the volley after a watch volley plays at normal speed', Math.abs((n - firstDone) - normal.n) <= 3, `${n - firstDone} vs ${normal.n}`);
 }
 
+
+/* ---- a hop gun's leaps and a scatter gun's bomblets play their special once per burst ---- */
+{
+  const host = makeHost();
+  host.env.effect = wkey => ({ leapfrog: 'hop', funky: 'scatter' })[wkey];
+  const rp = createReplay(host.env);
+  const shot = (w, t0, t1, p, r) => {
+    const pts = parsePath(p), [x0, y0] = pts[0], [x1, y1] = pts[pts.length - 1];
+    return { t: 'shot', by: 0, w, x0, y0, x1, y1, t0, t1, r, p, at: t0 };
+  };
+  rp.push([
+    { t: 'fire', seat: 0, w: 'leapfrog', x: 251, a: 20, pw: 45, at: 0 },
+    shot('leapfrog', 0, 0.5, '270,324 300,320 330,326', 26),
+    shot('leapfrog', 0.5, 1, '330,325 345,318 360,326', 22),
+    shot('leapfrog', 1, 1.5, '360,325 368,320 376,326', 22),
+  ]);
+  for (let i = 0; i < 200 && !rp.idle(); i++) rp.step(DT);
+  const hops = host.log.specials.filter(s => s.name === 'hop');
+  check('each leap of a hop gun plays its hop special at the leap', hops.length === 2 && hops[0].x === 330 && hops[0].y === 325
+    && hops[1].x === 360 && hops.every(s => s.w === 'leapfrog' && s.ang < 0), JSON.stringify(hops));
+  check('a hop gun\'s first shot leaves the barrel with a muzzle flash, its leaps do not', host.log.muzzles.length === 1);
+
+  host.log.specials.length = 0;
+  rp.push([
+    { t: 'fire', seat: 0, w: 'funky', x: 251, a: 20, pw: 45, at: 0 },
+    shot('funky', 0, 0.5, '270,324 300,320 330,326', 24),
+    ...[-30, -10, 10, 30].map(dx => shot('funky', 0.5, 1, `330,324 ${330 + dx / 2},300 ${330 + dx},326`, 18)),
+  ]);
+  for (let i = 0; i < 200 && !rp.idle(); i++) rp.step(DT);
+  const scatters = host.log.specials.filter(s => s.name === 'scatter');
+  check('a scatter gun\'s bomblets play the scatter special once, straight up from the burst', scatters.length === 1
+    && scatters[0].x === 330 && scatters[0].y === 324 && near(scatters[0].ang, -Math.PI / 2), JSON.stringify(scatters));
+}

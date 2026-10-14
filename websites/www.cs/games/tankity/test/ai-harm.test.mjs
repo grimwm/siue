@@ -38,6 +38,7 @@ test('a gun whose burst would reach the drone itself is never chosen', () => {
   const land = { x: 150, y: 400, oob: false };
   assert.equal(aiHarm(G, arsenal, self, target, 'heavy', land), -Infinity, 'radius 52 reaches 50 px back');
   assert.equal(aiHarm(G, arsenal, self, target, 'nuke', land), -Infinity);
+  assert.equal(aiHarm(G, arsenal, self, target, 'babynuke', land), -Infinity, 'Baby Nuke is refused within its reach of the landing');
   assert.ok(aiHarm(G, arsenal, self, target, 'needle', land) > 0, 'a tiny blast is safe at 50 px');
 });
 

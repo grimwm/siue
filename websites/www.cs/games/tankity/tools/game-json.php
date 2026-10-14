@@ -426,7 +426,7 @@ const TANKITY_PAINTERS = ['disc', 'beam', 'spark', 'ball'];
 const TANKITY_SFX_EVENTS = ['move', 'click', 'launch', 'boom', 'clank', 'thud', 'warn', 'cash', 'bark', 'win', 'lose', 'fanfare'];
 const TANKITY_AUDIO_EXT = ['mp3', 'ogg', 'm4a', 'wav'];
 const TANKITY_FX_SLOTS = ['muzzle', 'trail', 'impact'];
-const TANKITY_FX_SPECIALS = ['split', 'steer', 'pierce', 'arc'];
+const TANKITY_FX_SPECIALS = ['split', 'steer', 'pierce', 'arc', 'hop', 'scatter'];
 /** Emitter enums; src/fx/engine.ts SHAPES, AIMS, EASES and SCHEMA are the same lists. */
 const TANKITY_FX_ENUMS = [
     'shape' => ['dot', 'streak', 'ring', 'spark', 'smoke', 'sprite', 'bolt', 'beam'],

@@ -661,7 +661,7 @@ await (async () => {
   // The arsenal section of game.json is a second source the game reads at
   // boot: it must hold every row and speak only effects and painters the code has.
   const arsenal = GAME.arsenal;
-  check('arsenal-count', arsenal.ammo.length === 16 && arsenal.gear.length === 8,
+  check('arsenal-count', arsenal.ammo.length === 19 && arsenal.gear.length === 8,
     `ammo=${arsenal.ammo.length} gear=${arsenal.gear.length}`);
   const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter'];
   const PAINT = ['disc', 'beam', 'spark', 'ball'];
@@ -674,7 +674,7 @@ await (async () => {
   for (const r of arsenal.ammo.filter(a => a.pack > 0).concat(arsenal.gear)) {
     if (!cats.includes(r.cat)) cats.push(r.cat);
   }
-  check('arsenal-cats', cats.join('|') === 'Shells|Hull and fuel|Tricks', cats.join('|'));
+  check('arsenal-cats', cats.join('|') === 'Shells|Rollers|Hull and fuel|Tricks', cats.join('|'));
   for (const k of ['shell', 'buck', 'mortar', 'rail', 'nuke', 'repair', 'fuel']) {
     check('arsenal-keeps-' + k, arsenal.ammo.some(a => a.key === k) || arsenal.gear.some(g => g.key === k));
   }

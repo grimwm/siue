@@ -273,6 +273,11 @@ export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[] } | null | u
     shop.push({ kind: 'gear', g: g.key, n: g.n || 0, label: g.name, cat: g.cat || 'Tricks', minRound: openFrom, price: g.price || 0, effect: g.effect });
   }
   if (!order.length) return null;
+  // The shop shows each category under one heading, in the order the
+  // categories first appear; rows keep their order within one.
+  const catAt = new Map<string, number>();
+  for (const row of shop) if (!catAt.has(row.cat)) catAt.set(row.cat, catAt.size);
+  shop.sort((a, b) => catAt.get(a.cat)! - catAt.get(b.cat)!);
   // The arsenal is read-only after the build: every shell, row, and paint
   // job freezes, so a stray write fails loudly instead of bending ballistics
   // mid-match. Hot per-frame state (shells, particles, tanks) stays mutable

@@ -11,7 +11,8 @@
  *   trail    every frame while the shell flies (emitters use `rate`)
  *   impact   once, on detonation; `unit: "r"` sizes it by the blast radius
  *   special  named extras: split (cluster), steer (seeker), pierce (lance),
- *            arc (EMP, over each tank it fries)
+ *            arc (EMP, over each tank it fries), hop (a hop gun's leap),
+ *            scatter (a scatter gun's bomblets thrown up)
  *   body     the shell itself: halo radius/alpha/pulse, stretch (streak behind)
  * Every emitter field and its default lives in DEFAULTS below; game.yaml
  * carries only what differs. The particle pool is preallocated and capped, so
@@ -23,7 +24,7 @@ import type { Weapon } from '../sim.ts';
 const TAU = Math.PI * 2, DEG = Math.PI / 180, LUT_N = 12;
 const SHAPES = ['dot', 'streak', 'ring', 'spark', 'smoke', 'sprite', 'bolt', 'beam'] as const;
 const SLOTS = ['muzzle', 'trail', 'impact'] as const;
-const SPECIALS = ['split', 'steer', 'pierce', 'arc'];
+const SPECIALS = ['split', 'steer', 'pierce', 'arc', 'hop', 'scatter'];
 const EASES = ['linear', 'out', 'in'] as const;
 const AIMS = ['fixed', 'forward', 'back', 'normal'] as const;
 

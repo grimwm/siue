@@ -48,11 +48,15 @@ export function createView(deps: ViewDeps) {
   const calm = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   const gravity = (wkey: string): number => (tables.weapons[wkey]?.flat ? FLAT_GRAV : GRAV);
   let sky: number | null = null; // the volley's top row, held until it lands
+  let flyingOn: readonly { x: number; y: number; vx: number; vy: number; wkey: string }[] = []; // last frame's shells past the field's edge
+  const aloft: (readonly { y: number; vy: number; wkey: string }[])[] = [[], []];
   let tallSky = 0; // rows of sky the canvas shows above the field at full size (fitCanvas)
   function updateCamera(dt: number): void {
     units.length = 0;
     for (const t of G.tanks) if (t.hp > 0) units.push(t);
-    sky = volleyTop(sky, net.on ? replay.flying() : G.shells, gravity);
+    aloft[0] = net.on ? replay.flying() : G.shells;
+    aloft[1] = flyingOn; // a shell past the edge flies on over the scenery: the camera keeps its arc
+    sky = volleyTop(sky, aloft, gravity);
     easeCamera(G.cam, cameraTarget(G.w, H, units, sky, tallSky), dt, !!(calm && calm.matches), H);
   }
   /* Aim as drawn. Solo drones animate their real angle and power; in rooms the
@@ -104,6 +108,7 @@ export function createView(deps: ViewDeps) {
     const flyOn = ghosts.frame([...G.shells, ...flying], G.w, Math.min(0.1, Math.max(0, G.time - ghostTime)), G.wind,
       wkey => (tables.weapons[wkey]?.flat ? FLAT_GRAV : GRAV));
     ghostTime = G.time;
+    flyingOn = flyOn;
     return {
       time: G.time, shake: G.shake, cam: G.cam,
       skyKey: net.on ? 'room:' + net.code : String(G.seed || ''),

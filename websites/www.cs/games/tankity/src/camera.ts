@@ -35,14 +35,16 @@ export function shellTop(s: Rising, g: number): number {
   return s.vy < 0 && g > 0 ? s.y - (s.vy * s.vy) / (2 * g) : s.y;
 }
 
-/** The top of the volley in flight: the highest arc any of its shells has
- *  reached or will reach, held until the volley has landed (no shells), then null. */
-export function volleyTop(prev: number | null, shells: Iterable<Rising & { wkey: string }>, gravity: (wkey: string) => number): number | null {
+/** The top of the volley in flight: the highest arc any of its shells (in any
+ *  of the lists) has reached or will reach, held until none is left in the air, then null. */
+export function volleyTop(prev: number | null, lists: readonly Iterable<Rising & { wkey: string }>[], gravity: (wkey: string) => number): number | null {
   let top = prev, any = false;
-  for (const s of shells) {
-    any = true;
-    const y = shellTop(s, gravity(s.wkey));
-    top = top === null ? y : Math.min(top, y);
+  for (const shells of lists) {
+    for (const s of shells) {
+      any = true;
+      const y = shellTop(s, gravity(s.wkey));
+      top = top === null ? y : Math.min(top, y);
+    }
   }
   return any ? top : null;
 }

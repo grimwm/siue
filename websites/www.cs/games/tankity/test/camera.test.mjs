@@ -87,20 +87,21 @@ test('shellTop: a rising shell counts its apex, a falling one where it is', () =
 
 test('volleyTop ratchets up while shells fly and clears once the volley has landed', () => {
   const g = () => 95;
-  let top = volleyTop(null, [], g);
+  let top = volleyTop(null, [[]], g);
   assert.equal(top, null);
-  top = volleyTop(top, [{ y: 300, vy: -100, wkey: 'shell' }], g);
+  top = volleyTop(top, [[{ y: 300, vy: -100, wkey: 'shell' }]], g);
   assert.ok(near(top, 300 - 100 * 100 / 190));
   const peak = top;
-  top = volleyTop(top, [{ y: 260, vy: 30, wkey: 'shell' }], g); // past the apex, falling
+  top = volleyTop(top, [[{ y: 260, vy: 30, wkey: 'shell' }]], g); // past the apex, falling
   assert.equal(top, peak, 'the framing holds while the volley flies');
-  top = volleyTop(top, [{ y: 400, vy: -300, wkey: 'shell' }, { y: 100, vy: 0, wkey: 'shell' }], g);
+  top = volleyTop(top, [[{ y: 400, vy: -300, wkey: 'shell' }, { y: 100, vy: 0, wkey: 'shell' }]], g);
   assert.ok(near(top, 400 - 300 * 300 / 190));
-  assert.equal(volleyTop(top, [], g), null, 'landed: back to the units');
+  assert.equal(volleyTop(top, [[], []], g), null, 'landed: back to the units');
+  assert.equal(volleyTop(top, [[], [{ y: 500, vy: 0, wkey: 'shell' }]], g), top, 'a shell flying on past the edge holds it');
 });
 
 test('volleyTop reads each weapon\'s own gravity', () => {
-  const top = volleyTop(null, [{ y: 300, vy: -90, wkey: 'rail' }], k => (k === 'rail' ? 90 : 95));
+  const top = volleyTop(null, [[{ y: 300, vy: -90, wkey: 'rail' }]], k => (k === 'rail' ? 90 : 95));
   assert.ok(near(top, 300 - 90 * 90 / 180));
 });
 

@@ -509,12 +509,16 @@ export function createRoom(deps: RoomDeps) {
   }
   /* ---------- room replay ---------- */
   function netBlast(x: number, y: number, r: number, wkey: string): void {
+    blastShow(x, y, r, wkey);
+    carveCrater(G.terrain, x, y, r, H - 4);
+  }
+  /* How a blast looks and sounds in a room: the boom, its impact, a shake by its size, the blast disc. */
+  function blastShow(x: number, y: number, r: number, wkey: string): void {
     sfx.play('boom');
     const kick = fxImpact(G.fx, wkey, x, y, r);
     // Rooms shake by blast size when the effect sets no shake.
     G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : r >= 70 ? 0.9 : r > 40 ? 0.5 : 0.3));
     G.booms.push({ x, y, r, wkey, t: 0, life: gfxLinger(tables.weapons[wkey]?.gfx) });
-    carveCrater(G.terrain, x, y, r, H - 4);
   }
   /* A beam the replay reached: drawn along its line and its channel carved
      with the server's own numbers (sim.ts beamCarve), so the hills match. */
@@ -533,6 +537,7 @@ export function createRoom(deps: RoomDeps) {
     sound: name => sfx.play(name),
     shake: k => { G.shake = Math.min(1, G.shake + k); },
     get show() { return G.earth; },
+    say: text => say(text, 'info'),
   };
   /* Trenches being cut on screen: each dig event's burrow, a step every 1/60 s from when the replay reached it. */
   let digs: { e: DigEvent; t: number; done: number }[] = [];
@@ -546,9 +551,12 @@ export function createRoom(deps: RoomDeps) {
       digs.push({ e, t: 0, done: 0 });
       return;
     }
+    // A dirt gun whose burst does damage (Dirt Charge) bursts as a blast first, with no crater: the boom, its impact and the blast disc.
+    const hurt = e.t === 'dirt' && (tables.weapons[e.w]?.dmg || 0) > 0;
+    if (hurt) blastShow(e.x, e.y, e.r, e.w);
     const before = G.terrain.slice();
     const span = applyEarth(G.terrain, e);
-    playEarthOp(e, G.terrain, before, span.x0, span.x1, earthFx);
+    playEarthOp(e, G.terrain, before, span.x0, span.x1, earthFx, hurt);
   }
   /* Each trench in progress cuts the steps its time has come to (digCarve
      from its start: carving a step again changes nothing), its dust at the head. */

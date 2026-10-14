@@ -317,7 +317,7 @@ const RUN = {
     if (c.op === 'crater') earth.carveCrater(t, c.x, c.y, c.r, earth.FLOOR);
     else if (c.op === 'dirt') earth.addDirt(t, c.x, c.y, c.r);
     else if (c.op === 'pour') {
-      const pool = earth.pourLevel(t, c.x, c.v);
+      const pool = earth.pourLevel(t, c.x, c.v, c.m || 0);
       out.pool = [pool.level, pool.x0, pool.x1];
       earth.fillPour(t, pool);
     } else if (c.op === 'slump') earth.slumpGround(t, c.x, c.r, c.slope, c.passes);
@@ -333,7 +333,7 @@ const RUN = {
     return out;
   },
   fire(c) {
-    const pool = fire.firePool(buildTerrain(c.terrain), c.x, c.v, c.flame);
+    const pool = fire.firePool(buildTerrain(c.terrain), c.x, c.v, c.flame, c.m || 0);
     return { pool: [pool.level, pool.x0, pool.x1, pool.flame], in: c.units.map(u => fire.inFlames(pool, sim.unitHitBox({ isPlayer: u.kind === 'human', x: u.x, y: u.y }))) };
   },
   'fire-ticks'(c) {

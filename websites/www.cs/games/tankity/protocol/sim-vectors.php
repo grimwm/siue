@@ -732,8 +732,10 @@ foreach ($weapons as $wkey => $def) {
     // Lobbed straight up from the valley floor: it comes down on its own gunner's pool.
     $volley("$wkey-burns-own-gunner-no-score", ['terrain' => $vale, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 88, 'power' => 30,
         'tanks' => [$sat($human(360, 100) + ['dirS' => 1], 360), $sat($drone(600, 100), 600)]]);
-    $earthVolley("$wkey-on-dead-flat-burns-nothing", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0,
-        'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(400, 100)]], 400.0);
+    $earthVolley("$wkey-on-flat-burns-a-puddle", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 1,
+        'tanks' => [$human(400, 100), $drone(100, 100) + ['dirS' => 1], $drone(470, 100)]], 400.0);
+    $earthVolley("$wkey-by-the-edge-spills-the-rest", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 1,
+        'tanks' => [$human(30, 100), $drone(300, 100) + ['dirS' => -1]]], 10.0);
     // A drone on the valley side, its ground a few px over the pool: napalm's flames fall short of its body, hot napalm's reach it.
     $pool = room_fire_pool($onVale, 360.0, (float) $def['volume'], (float) $def['flame']);
     $rim = 360;
@@ -1116,7 +1118,7 @@ $earth = function (string $name, array $c) use ($add): void {
             room_add_dirt($t, (float) $c['x'], (float) $c['y'], (float) $c['r']);
             break;
         case 'pour':
-            $pool = room_pour_level($t, (float) $c['x'], (float) $c['v']);
+            $pool = room_pour_level($t, (float) $c['x'], (float) $c['v'], (float) ($c['m'] ?? 0));
             $out['pool'] = [$pool['level'], $pool['x0'], $pool['x1']];
             room_fill_pour($t, $pool);
             break;
@@ -1156,6 +1158,15 @@ $vee = ['vee' => [300, 120, 330, 420]];
 foreach ([[300, 4000], [287.5, 4000], [250, 1500], [300, 20000], [300, 200]] as [$x, $v]) {
     $earth("pour-into-a-vee-x$x-v$v", ['op' => 'pour', 'terrain' => $vee, 'x' => $x, 'v' => $v]);
 }
+// A liquid that spreads no thinner than m px: a puddle on flat ground, at the
+// edge a puddle that spills the rest, a shallow dish, a deep vee as before.
+$earth('puddle-on-flat', ['op' => 'pour', 'terrain' => $flat, 'x' => 300, 'v' => 2200, 'm' => 20]);
+$earth('puddle-at-the-left-edge-spills-the-rest', ['op' => 'pour', 'terrain' => $flat, 'x' => 5, 'v' => 2200, 'm' => 20]);
+$earth('puddle-at-the-right-edge-spills-the-rest', ['op' => 'pour', 'terrain' => $flat, 'x' => 712, 'v' => 4000, 'm' => 20]);
+$earth('puddle-on-a-slope-runs-to-the-edge', ['op' => 'pour', 'terrain' => ['slope' => [300, 420]], 'x' => 500, 'v' => 4000, 'm' => 20]);
+$earth('puddle-over-a-shallow-dish', ['op' => 'pour', 'terrain' => ['flat' => 400, 'set' => [[250, 350, 404]]], 'x' => 300, 'v' => 2200, 'm' => 20]);
+$earth('puddle-on-hills-odd-depth', ['op' => 'pour', 'terrain' => ['hills' => [330, 40, 200]], 'x' => 140, 'v' => 600, 'm' => 13.5]);
+$earth('deep-vee-ignores-the-minimum', ['op' => 'pour', 'terrain' => $vee, 'x' => 300, 'v' => 4000, 'm' => 20]);
 $earth('pour-of-zero-volume', ['op' => 'pour', 'terrain' => $vee, 'x' => 300, 'v' => 0]);
 $earth('pour-on-a-slope-spills-off-the-edge', ['op' => 'pour', 'terrain' => ['slope' => [300, 420]], 'x' => 500, 'v' => 4000]);
 $earth('pour-at-the-edge-spills', ['op' => 'pour', 'terrain' => $flat, 'x' => 0, 'v' => 4000]);
@@ -1183,7 +1194,7 @@ $earth('dig-standing-still-goes-down', ['op' => 'dig', 'terrain' => $flat, 'x' =
  * into the flames. */
 $fire = function (string $name, array $c) use ($add): void {
     $t = sv_terrain($c['terrain']);
-    $pool = room_fire_pool($t, (float) $c['x'], (float) $c['v'], (float) $c['flame']);
+    $pool = room_fire_pool($t, (float) $c['x'], (float) $c['v'], (float) $c['flame'], (float) ($c['m'] ?? 0));
     $in = [];
     foreach ($c['units'] as $u) {
         $in[] = room_in_flames($pool, room_unit_box(['kind' => $u['kind'], 'x' => (float) $u['x'], 'y' => (float) $u['y']]));
@@ -1210,6 +1221,13 @@ $dish = ['flat' => 400, 'set' => [[250, 350, 404]]];
 $fire('thin-wide-pool-in-a-dish', ['terrain' => $dish, 'x' => 300, 'v' => 2200, 'flame' => 18,
     'units' => [['kind' => 'human', 'x' => 300, 'y' => 404], ['kind' => 'human', 'x' => 365, 'y' => 400], ['kind' => 'human', 'x' => 380, 'y' => 400],
         ['kind' => 'ai', 'x' => 300, 'y' => 404], ['kind' => 'ai', 'x' => 340, 'y' => 404]]]);
+$fire('flat-ground-holds-a-puddle', ['terrain' => $flat, 'x' => 300, 'v' => 2200, 'flame' => 18, 'm' => 20,
+    'units' => [['kind' => 'human', 'x' => 300, 'y' => 400], ['kind' => 'human', 'x' => 370, 'y' => 400], ['kind' => 'human', 'x' => 375, 'y' => 400],
+        ['kind' => 'ai', 'x' => 320, 'y' => 400]]]);
+$fire('hot-puddle-reaches-a-drone-over-it', ['terrain' => $flat, 'x' => 300, 'v' => 3200, 'flame' => 26, 'm' => 24,
+    'units' => [['kind' => 'ai', 'x' => 320, 'y' => 400], ['kind' => 'ai', 'x' => 420, 'y' => 400]]]);
+$fire('puddle-by-the-edge', ['terrain' => $flat, 'x' => 5, 'v' => 2200, 'flame' => 18, 'm' => 20,
+    'units' => [['kind' => 'human', 'x' => 12, 'y' => 400], ['kind' => 'human', 'x' => 60, 'y' => 400]]]);
 $fire('dead-flat-ground-holds-no-pool', ['terrain' => $flat, 'x' => 300, 'v' => 2200, 'flame' => 18,
     'units' => [['kind' => 'human', 'x' => 300, 'y' => 400], ['kind' => 'ai', 'x' => 320, 'y' => 400]]]);
 $fire('slope-to-the-edge-spills-it-all', ['terrain' => ['slope' => [300, 420]], 'x' => 500, 'v' => 2200, 'flame' => 18,

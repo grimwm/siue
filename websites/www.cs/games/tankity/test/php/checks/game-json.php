@@ -255,8 +255,8 @@ $check('smoke-mark-validates', ($row1($tracerOf(', mark: smoke'))['gfx']['mark']
 // The earth guns: each effect's own fields, each refused elsewhere.
 $dirt = $row1($asEffect("      effect: dirt\n"));
 $check('dirt-takes-no-extra-fields', ($dirt['effect'] ?? '') === 'dirt' && !isset($dirt['error']), json_encode($dirt));
-$pour = $row1($asEffect("      effect: pour\n      volume: 4000\n"));
-$check('pour-validates', ($pour['volume'] ?? null) === 4000, json_encode($pour));
+$pour = $row1($asEffect("      effect: pour\n      volume: 4000\n      poolMin: 20\n"));
+$check('pour-validates', ($pour['volume'] ?? null) === 4000 && ($pour['poolMin'] ?? null) === 20, json_encode($pour));
 $dig = $row1($asEffect("      effect: dig\n      digLen: 110\n      digR: 11\n      warheads: 0\n"));
 $check('dig-validates', ($dig['digLen'] ?? null) === 110 && $dig['digR'] === 11 && $dig['warheads'] === 0 && !isset($dig['subDmg']), json_encode($dig));
 $hog = $row1($asEffect("      effect: dig\n      digLen: 120\n      digR: 9\n      warheads: 3\n      subDmg: 34\n      subRadius: 22\n"));
@@ -266,9 +266,9 @@ $check('riot-validates', ($riot['fan'] ?? null) === 1.2, json_encode($riot));
 $slump = $row1($asEffect("      effect: slump\n      slope: 1.0\n      passes: 24\n"));
 $check('slump-validates', ($slump['slope'] ?? null) === 1.0 && $slump['passes'] === 24, json_encode($slump));
 // The fire guns: a pool of burning liquid, its own fields refused elsewhere.
-$napalmOf = fn(string $more = ''): string => $asEffect("      effect: napalm\n      volume: 2200\n      burn: 3.0\n      tick: 0.5\n      flame: 18\n$more");
+$napalmOf = fn(string $more = ''): string => $asEffect("      effect: napalm\n      volume: 2200\n      poolMin: 20\n      burn: 3.0\n      tick: 0.5\n      flame: 18\n$more");
 $napalm = $row1($napalmOf());
-$check('napalm-validates', ($napalm['volume'] ?? null) === 2200 && $napalm['burn'] === 3.0 && $napalm['tick'] === 0.5 && $napalm['flame'] === 18
+$check('napalm-validates', ($napalm['volume'] ?? null) === 2200 && ($napalm['poolMin'] ?? null) === 20 && $napalm['burn'] === 3.0 && $napalm['tick'] === 0.5 && $napalm['flame'] === 18
     && !isset($napalm['error']), json_encode($napalm));
 foreach (['drill', 'clod', 'flame'] as $painter) {
     $check("$painter-painter-validates", (json_decode($render($mut('painter: spark', "painter: $painter")), true)['arsenal']['ammo'][1]['gfx']['painter'] ?? '') === $painter);
@@ -332,8 +332,12 @@ $cases = [
     'aimmin-on-a-shot' => [$asEffect("      effect: shot\n      aimMin: -10\n"), 'arsenal.ammo[1].aimMin: only the beam effect uses this'],
     'aimmin-range' => [$asEffect("      effect: beam\n      range: 520\n      aimMin: -40\n"), 'arsenal.ammo[1].aimMin: must be a whole number from -30 to 10'],
     'range-on-a-plasma' => [$asEffect("      effect: plasma\n      range: 300\n"), 'arsenal.ammo[1].range: only the beam effect uses this'],
-    'pour-needs-volume' => [$asEffect("      effect: pour\n"), 'arsenal.ammo[1].volume: is required when effect is pour'],
-    'pour-volume-range' => [$asEffect("      effect: pour\n      volume: 100\n"), 'arsenal.ammo[1].volume: must be a whole number from 200 to 20000'],
+    'pour-needs-volume' => [$asEffect("      effect: pour\n      poolMin: 20\n"), 'arsenal.ammo[1].volume: is required when effect is pour'],
+    'pour-needs-poolmin' => [$asEffect("      effect: pour\n      volume: 4000\n"), 'arsenal.ammo[1].poolMin: is required when effect is pour'],
+    'napalm-needs-poolmin' => [str_replace("      poolMin: 20\n", '', $napalmOf()), 'arsenal.ammo[1].poolMin: is required when effect is napalm'],
+    'poolmin-range' => [str_replace('poolMin: 20', 'poolMin: 61', $napalmOf()), 'arsenal.ammo[1].poolMin: must be a whole number from 1 to 60'],
+    'poolmin-on-a-dirt' => [$asEffect("      effect: dirt\n      poolMin: 20\n"), 'arsenal.ammo[1].poolMin: only the pour and napalm effects use this'],
+    'pour-volume-range' => [$asEffect("      effect: pour\n      volume: 100\n      poolMin: 20\n"), 'arsenal.ammo[1].volume: must be a whole number from 200 to 20000'],
     'volume-on-a-dirt' => [$asEffect("      effect: dirt\n      volume: 4000\n"), 'arsenal.ammo[1].volume: only the pour and napalm effects use this'],
     'napalm-needs-volume' => [str_replace("      volume: 2200\n", '', $napalmOf()), 'arsenal.ammo[1].volume: is required when effect is napalm'],
     'napalm-needs-burn' => [str_replace("      burn: 3.0\n", '', $napalmOf()), 'arsenal.ammo[1].burn: is required when effect is napalm'],
@@ -344,7 +348,7 @@ $cases = [
     'flame-range' => [str_replace('flame: 18', 'flame: 61', $napalmOf()), 'arsenal.ammo[1].flame: must be a whole number from 4 to 60'],
     'napalm-tick-past-its-burn' => [str_replace('burn: 3.0', 'burn: 0.5', str_replace('tick: 0.5', 'tick: 1.0', $napalmOf())), 'arsenal.ammo[1].tick: must not be longer than burn (the pool would never burn)'],
     'napalm-needs-damage' => [str_replace("      dmg: 17\n", "      dmg: 0\n", $napalmOf()), 'arsenal.ammo[1].dmg: napalm burns for dmg each tick; must be 1 or more'],
-    'burn-on-a-pour' => [$asEffect("      effect: pour\n      volume: 4000\n      burn: 3.0\n"), 'arsenal.ammo[1].burn: only the napalm effect uses this'],
+    'burn-on-a-pour' => [$asEffect("      effect: pour\n      volume: 4000\n      poolMin: 20\n      burn: 3.0\n"), 'arsenal.ammo[1].burn: only the napalm effect uses this'],
     'flame-on-a-shot' => [$asEffect("      effect: shot\n      flame: 18\n"), 'arsenal.ammo[1].flame: only the napalm effect uses this'],
     'dig-needs-diglen' => [$asEffect("      effect: dig\n      digR: 8\n      warheads: 0\n"), 'arsenal.ammo[1].digLen: is required when effect is dig'],
     'dig-needs-digr' => [$asEffect("      effect: dig\n      digLen: 60\n      warheads: 0\n"), 'arsenal.ammo[1].digR: is required when effect is dig'],
@@ -362,7 +366,7 @@ $cases = [
     'slope-range' => [$asEffect("      effect: slump\n      slope: 9\n      passes: 24\n"), 'arsenal.ammo[1].slope: must be a number from 0.5 to 6'],
     'passes-range' => [$asEffect("      effect: slump\n      slope: 1.0\n      passes: 61\n"), 'arsenal.ammo[1].passes: must be a whole number from 1 to 60'],
     'diglen-on-a-shot' => [$asEffect("      effect: shot\n      digLen: 60\n"), 'arsenal.ammo[1].digLen: only the dig effect uses this'],
-    'passes-on-a-pour' => [$asEffect("      effect: pour\n      volume: 4000\n      passes: 3\n"), 'arsenal.ammo[1].passes: only the slump effect uses this'],
+    'passes-on-a-pour' => [$asEffect("      effect: pour\n      volume: 4000\n      poolMin: 20\n      passes: 3\n"), 'arsenal.ammo[1].passes: only the slump effect uses this'],
     'tracer-needs-dmg-0' => [str_replace("      dmg: 0\n", "      dmg: 5\n", $tracerOf()), 'arsenal.ammo[1].dmg: a tracer does no damage; must be 0'],
     'radius-0-only-on-a-tracer' => [$mut("      radius: 26\n", "      radius: 0\n"), 'arsenal.ammo[0].radius: must be a whole number from 1 to 200'],
     'tracer-needs-a-mark' => [$tracerOf(''), 'arsenal.ammo[1].gfx.mark: is required when effect is tracer'],

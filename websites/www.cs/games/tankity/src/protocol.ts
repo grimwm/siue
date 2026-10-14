@@ -253,13 +253,13 @@ export interface RingEvent extends EventBase { t: 'ring'; by: number; w: string;
 /** The earth guns move the ground (src/earth.ts applyEarth replays each,
  * with the server's own unrounded numbers, so a client's ground matches the
  * server's). dirt: a disc of dirt of radius r where it burst; pour: liquid
- * dirt poured at column x, v px^2 of it; dig: a digger's trench from where it
+ * dirt poured at column x, v px^2 of it, spreading no thinner than m px; dig: a digger's trench from where it
  * touched down, n steps along (ux, uy), half width r, cut from `at` to t1 (its
  * warheads follow as burst events); riot: a riot charge's scoop from its
  * gunner's hull at (x, y), standing at b, barrel heading a; slump: the slopes
  * within r of x slump. Hits and falls follow as their own events. */
 export interface DirtEvent extends EventBase { t: 'dirt'; w: string; x: number; y: number; r: number }
-export interface PourEvent extends EventBase { t: 'pour'; w: string; x: number; v: number }
+export interface PourEvent extends EventBase { t: 'pour'; w: string; x: number; v: number; m: number }
 export interface DigEvent extends EventBase { t: 'dig'; by: number; w: string; x: number; y: number; ux: number; uy: number; n: number; r: number; t1: number }
 export interface RiotEvent extends EventBase { t: 'riot'; by: number; w: string; x: number; y: number; a: number; r: number; fan: number; b: number }
 export interface SlumpEvent extends EventBase { t: 'slump'; w: string; x: number; r: number; slope: number; passes: number }

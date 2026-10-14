@@ -709,6 +709,7 @@
                 "aiRound": 6,
                 "effect": "pour",
                 "volume": 4000,
+                "poolMin": 20,
                 "speed": 1.0,
                 "note": "Runs down into the valley it lands in and sets flat, burying whatever sits at the bottom.",
                 "gfx": {
@@ -1065,6 +1066,7 @@
                 "aiRound": 6,
                 "effect": "napalm",
                 "volume": 2200,
+                "poolMin": 20,
                 "burn": 3.0,
                 "tick": 0.5,
                 "flame": 18,
@@ -1095,6 +1097,7 @@
                 "aiRack": 1,
                 "effect": "napalm",
                 "volume": 3200,
+                "poolMin": 24,
                 "burn": 4.0,
                 "tick": 0.5,
                 "flame": 26,

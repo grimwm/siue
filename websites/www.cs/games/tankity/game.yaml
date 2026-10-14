@@ -143,8 +143,14 @@
 #               pour       flies like a shell; where it bursts it pours
 #                          `volume` px^2 of liquid dirt, which runs down to
 #                          the bottom of the dip it landed in and sets there
-#                          as a flat pool. Liquid that would reach either
-#                          edge of the field spills off it and is lost.
+#                          as a flat pool. It spreads only until it is
+#                          `poolMin` px deep: where a pool would be shallower
+#                          (on flat ground, a gentle slope) it sets as a
+#                          puddle poolMin deep and about volume / poolMin
+#                          wide, centred where it landed. Liquid that would
+#                          reach either edge of the field spills off it and
+#                          is lost (a puddle keeps what it holds short of
+#                          the edge).
 #               dig        flies like a shell; touching the ground it burrows
 #                          on along its heading at 240 px/s for `digLen` px,
 #                          cutting a trench `digR` px wide on either side (the
@@ -170,9 +176,11 @@
 #               napalm     flies like a shell; where it bursts it pours
 #                          `volume` px^2 of burning liquid, which runs down
 #                          to the bottom of the dip it landed in and pools
-#                          there as liquid dirt would (what would reach an
-#                          edge of the field spills off: on dead flat ground
-#                          nothing pools). The ground itself never changes.
+#                          there as liquid dirt would, no thinner than
+#                          `poolMin` px (on flat ground, a burning puddle
+#                          about volume / poolMin wide; what would reach an
+#                          edge of the field spills off it). The ground
+#                          itself never changes.
 #                          The pool burns `burn` seconds: every `tick`
 #                          seconds each unit whose body reaches into its
 #                          flames (`flame` px tall over the pool) takes dmg
@@ -207,14 +215,16 @@
 #           angle while it is loaded, and 180 - aimMin its highest, so -20
 #           lets the barrel dip 20 degrees below level on either side. Any
 #           other gun aims 10 to 170, and fires inside its own limits
-#     pour: volume (px^2 of liquid dirt, 200 to 20000)
+#     pour: volume (px^2 of liquid dirt, 200 to 20000), poolMin (px, the
+#           thinnest it spreads, 1 to 60)
 #     dig: digLen (px it burrows, 20 to 400), digR (the trench's half width,
 #          3 to 30), warheads (0 to 8); subDmg and subRadius with warheads
 #          above 0 (and refused with none)
 #     riot: fan (the scoop's widest crater as a share of radius, 0.1 to 1.5)
 #     slump: slope (px a column may stand above its neighbour, 0.5 to 6),
 #            passes (1 to 60)
-#     napalm: volume (px^2 of burning liquid, 200 to 20000), burn (seconds
+#     napalm: volume (px^2 of burning liquid, 200 to 20000), poolMin (px,
+#             the thinnest it spreads, 1 to 60), burn (seconds
 #             it burns, 0.5 to 10), tick (seconds between burns, 0.1 to 2,
 #             no longer than burn), flame (px its flames stand over the
 #             pool, 4 to 60: a tank's hull bottom sits 3 px below its
@@ -714,6 +724,7 @@ arsenal:
       aiRound: 6
       effect: pour
       volume: 4000
+      poolMin: 20
       speed: 1.0
       note: Runs down into the valley it lands in and sets flat, burying whatever sits at the bottom.
       gfx: {shell: "#7a5230", trail: "#5a3a1e", blast: ["#8a5a2a", "#d8b888"], painter: clod, shake: 0.2}
@@ -940,6 +951,7 @@ arsenal:
       aiRound: 6
       effect: napalm
       volume: 2200
+      poolMin: 20
       burn: 3.0
       tick: 0.5
       flame: 18
@@ -960,6 +972,7 @@ arsenal:
       aiRack: 1
       effect: napalm
       volume: 3200
+      poolMin: 24
       burn: 4.0
       tick: 0.5
       flame: 26

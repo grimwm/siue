@@ -384,6 +384,8 @@ function targetHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wk
  *  much bigger the drone's body is taken to be, px, when it asks whether a pool could burn it. */
 export const AI_FIRE_WOBBLE = 24;
 export const AI_FIRE_PAD = 8;
+/** How many of the aim's power wobbles (its standard deviation) a napalm shot is taken to fall short by. */
+export const AI_FIRE_SHORT = 2.5;
 /* What napalm wkey landing at land would burn: its pool poured at the
    landing's column on the ground as it is (fire.ts firePool), and every tick
    on every living unit in its flames (burnTotal: the player's shield eats
@@ -399,7 +401,7 @@ export function fireHarm(world: World, arsenal: Arsenal, self: Tank, wkey: strin
   groundOps++;
   const w = arsenal.weapons[wkey]!;
   const col = Math.round(clamp(land.x, 0, world.terrain.length - 1));
-  const pool = firePool(world.terrain, col, w.volume || 0, w.flame || 0);
+  const pool = firePool(world.terrain, col, w.volume || 0, w.flame || 0, w.poolMin || 0);
   const n = burnTicks(w.burn || 0, w.tick || 0.5);
   let harm = 0, mine = 0;
   for (const u of world.tanks) {
@@ -409,8 +411,21 @@ export function fireHarm(world: World, arsenal: Arsenal, self: Tank, wkey: strin
     else harm += Math.min(u.hp, cost);
   }
   const b = unitHitBox(self), wide = { cx: b.cx, cy: b.cy, rx: b.rx + AI_FIRE_PAD, ry: b.ry + AI_FIRE_PAD };
+  // Its own dip: where liquid would collect under it (a dip's pool, no puddle: on flat ground nothing collects there).
   let near = inFlames(pool, wide) || inFlames(firePool(world.terrain, self.x, w.volume || 0, w.flame || 0), wide);
-  for (const k of [-1, 1]) near = near || inFlames(firePool(world.terrain, col + k * AI_FIRE_WOBBLE, w.volume || 0, w.flame || 0), wide);
+  for (const k of [-1, 1]) near = near || inFlames(firePool(world.terrain, col + k * AI_FIRE_WOBBLE, w.volume || 0, w.flame || 0, w.poolMin || 0), wide);
+  // A shot that falls short: the aim's power and angle each off by
+  // AI_FIRE_SHORT times the ranging wobble (12 x wob points, 9 x wob
+  // degrees), the reach going as p^2 sin 2a: the share of the reach it may
+  // lose, of the way back toward the drone (steep lobs and soft shots stray most).
+  const skill = aimSkill(world.difficulty);
+  const wob = Math.max(skill.wobFloor, skill.wobStart - skill.wobStep * world.round) * fieldAim(world.terrain.length).aim;
+  const p = Math.max(10, land.p === undefined ? 50 : land.p), a = land.a === undefined ? 45 : land.a, da = AI_FIRE_SHORT * 9 * wob;
+  const kp = Math.max(0, 1 - AI_FIRE_SHORT * 12 * wob / p), s2 = dsin(rad(2 * a));
+  const ka = s2 > 1e-6 ? Math.max(0, Math.min(dsin(rad(2 * (a - da))), dsin(rad(2 * (a + da)))) / s2) : 0;
+  const short = 1 - Math.min(1, kp * kp * ka);
+  const back = Math.round(clamp(land.x + (self.x - land.x) * short, 0, world.terrain.length - 1));
+  near = near || inFlames(firePool(world.terrain, back, w.volume || 0, w.flame || 0, w.poolMin || 0), wide);
   return { harm, self: mine, near };
 }
 /* Ground predictions made so far (earthHarm and fireHarm calls): a drone turn's cost beside
@@ -478,7 +493,7 @@ export function earthHarm(world: World, arsenal: Arsenal, self: Tank, target: Ta
     });
   } else if (w.effect === 'pour' || w.effect === 'slump') {
     const t = world.terrain.slice();
-    if (w.effect === 'pour') fillPour(t, pourLevel(t, Math.round(clamp(land.x, 0, fw - 1)), w.volume || 0));
+    if (w.effect === 'pour') fillPour(t, pourLevel(t, Math.round(clamp(land.x, 0, fw - 1)), w.volume || 0, w.poolMin || 0));
     else slumpGround(t, land.x, w.radius, w.slope || 1, w.passes || 1);
     at[0] = t[ct]!;
     at[1] = t[cs]!;

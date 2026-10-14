@@ -58,7 +58,7 @@ for (const wkey of NAPALMS) {
 
 test('a drone never burns itself with the napalm it chose, across hills, places, winds, skills and seeds', t => {
   let fired = 0;
-  for (const [period, amp] of [[200, 40], [150, 30], [300, 50], [120, 25]]) {
+  for (const [period, amp] of [[200, 40], [150, 30], [300, 50], [120, 25], [720, 0]]) {
     const t = Array.from({ length: 720 }, (_, ix) => 340 + amp * Math.sin(ix * 2 * Math.PI / period));
     for (let sx = 60; sx <= 660; sx += 50) {
       for (const tx of [sx - 140, sx + 160, sx + 60, sx - 260]) {

@@ -304,7 +304,7 @@ function previewEarth(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: Rea
     env.impact(pv.fx, pv.wkey, s.x, s.y, w.radius);
     pv.show.begin(before, Math.max(0, Math.floor(s.x - w.radius)), Math.min(PV_W - 1, Math.ceil(s.x + w.radius)), 'dirt', x);
   } else if (w.effect === 'pour') {
-    const p = pourLevel(pv.terr, x, w.volume || 0);
+    const p = pourLevel(pv.terr, x, w.volume || 0, w.poolMin || 0);
     fillPour(pv.terr, p);
     env.impact(pv.fx, pv.wkey, s.x, s.y, Math.max(12, (p.x1 - p.x0) / 2));
     if (p.x1 >= p.x0) env.special(pv.fx, pv.wkey, 'pour', p.x0, p.level, 0, p.x1 - p.x0);
@@ -321,7 +321,7 @@ function previewEarth(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: Rea
 function previewNapalm(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: Readonly<Weapon>): void {
   s.dead = true;
   const x = Math.round(clamp(s.x, 0, PV_W - 1));
-  const p = firePool(pv.terr, x, w.volume || 0, w.flame || 0);
+  const p = firePool(pv.terr, x, w.volume || 0, w.flame || 0, w.poolMin || 0);
   pv.pool = p;
   if (p.x0 > p.x1) {
     env.impact(pv.fx, pv.wkey, s.x, pv.terr[x]!, 12);

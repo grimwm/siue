@@ -410,8 +410,8 @@ function room_earth_burst(array &$room, array &$events, int $seatIdx, array $w, 
         room_add_dirt($room['terrain'], $x, $y, (float) $w['radius']);
     } elseif ($effect === 'pour') {
         $col = (int) det_round(max(0.0, min((float) (count($room['terrain']) - 1), $x)));
-        $events[] = ['t' => 'pour', 'w' => $wkey, 'x' => $col, 'v' => (float) $w['volume']];
-        room_fill_pour($room['terrain'], room_pour_level($room['terrain'], (float) $col, (float) $w['volume']));
+        $events[] = ['t' => 'pour', 'w' => $wkey, 'x' => $col, 'v' => (float) $w['volume'], 'm' => (float) $w['poolMin']];
+        room_fill_pour($room['terrain'], room_pour_level($room['terrain'], (float) $col, (float) $w['volume'], (float) $w['poolMin']));
     } else {
         $events[] = ['t' => 'slump', 'w' => $wkey, 'x' => $x, 'r' => (float) $w['radius'], 'slope' => (float) $w['slope'], 'passes' => (int) $w['passes']];
         room_slump_ground($room['terrain'], $x, (float) $w['radius'], (float) $w['slope'], (int) $w['passes']);
@@ -435,7 +435,7 @@ function room_earth_burst(array &$room, array &$events, int $seatIdx, array $w, 
 function room_fire_burn(array &$room, array &$events, int $seatIdx, array $w, string $wkey, array $res, float $t): void
 {
     $col = (int) det_round(max(0.0, min((float) (count($room['terrain']) - 1), $res[1])));
-    $pool = room_fire_pool($room['terrain'], (float) $col, (float) $w['volume'], (float) $w['flame']);
+    $pool = room_fire_pool($room['terrain'], (float) $col, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin']);
     $n = $pool['x0'] <= $pool['x1'] ? room_burn_ticks((float) $w['burn'], (float) $w['tick']) : 0;
     $every = room_tick_steps((float) $w['tick']);
     $events[] = ['t' => 'burn', 'by' => $room['tanks'][$seatIdx]['seat'], 'w' => $wkey, 'x' => $col, 'v' => (float) $w['volume'],

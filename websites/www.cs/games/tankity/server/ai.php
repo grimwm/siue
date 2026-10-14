@@ -451,6 +451,8 @@ function room_ai_target_harm(array $room, array $self, array $target, string $wk
  * could burn it (src/ai.ts AI_FIRE_WOBBLE, AI_FIRE_PAD). */
 const ROOM_AI_FIRE_WOBBLE = 24.0;
 const ROOM_AI_FIRE_PAD = 8.0;
+/* How many of the aim's power wobbles a napalm shot is taken to fall short by (src/ai.ts AI_FIRE_SHORT). */
+const ROOM_AI_FIRE_SHORT = 2.5;
 /* What napalm $wkey landing at $land would burn (src/ai.ts fireHarm): its
  * pool poured at the landing's column on the ground as it is, and every tick
  * on every living unit in its flames (room_burn_total: a human's shield eats
@@ -465,7 +467,7 @@ function room_ai_fire_harm(array $room, array $self, string $wkey, array $land):
     room_ai_earth_ops(1);
     $w = room_weapons()[$wkey];
     $col = (float) det_round(max(0.0, min((float) (count($room['terrain']) - 1), (float) $land['x'])));
-    $pool = room_fire_pool($room['terrain'], $col, (float) $w['volume'], (float) $w['flame']);
+    $pool = room_fire_pool($room['terrain'], $col, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin']);
     $n = room_burn_ticks((float) $w['burn'], (float) $w['tick']);
     $harm = 0.0;
     $mine = 0;
@@ -484,10 +486,24 @@ function room_ai_fire_harm(array $room, array $self, string $wkey, array $land):
     [$cx, $cy, $rx, $ry] = room_unit_box($self);
     $wide = [$cx, $cy, $rx + ROOM_AI_FIRE_PAD, $ry + ROOM_AI_FIRE_PAD];
     $near = room_in_flames($pool, $wide)
+        // Its own dip: where liquid would collect under it (a dip's pool, no puddle: on flat ground nothing collects there).
         || room_in_flames(room_fire_pool($room['terrain'], (float) $self['x'], (float) $w['volume'], (float) $w['flame']), $wide);
     foreach ([-1.0, 1.0] as $k) {
-        $near = $near || room_in_flames(room_fire_pool($room['terrain'], $col + $k * ROOM_AI_FIRE_WOBBLE, (float) $w['volume'], (float) $w['flame']), $wide);
+        $near = $near || room_in_flames(room_fire_pool($room['terrain'], $col + $k * ROOM_AI_FIRE_WOBBLE, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin']), $wide);
     }
+    // A shot that falls short, as src/ai.ts fireHarm takes it.
+    $skill = ROOM_DIFFICULTY[room_difficulty($room)];
+    $fw = count($room['terrain']);
+    $wob = max($skill['wobFloor'], $skill['wobStart'] - $skill['wobStep'] * ($room['round'] ?? 1)) * room_field_aim($fw)['aim'];
+    $p = max(10.0, (float) ($land['p'] ?? 50.0));
+    $a = (float) ($land['a'] ?? 45.0);
+    $da = ROOM_AI_FIRE_SHORT * 9 * $wob;
+    $kp = max(0.0, 1 - ROOM_AI_FIRE_SHORT * 12 * $wob / $p);
+    $s2 = det_sin(deg2rad(2 * $a));
+    $ka = $s2 > 1e-6 ? max(0.0, min(det_sin(deg2rad(2 * ($a - $da))), det_sin(deg2rad(2 * ($a + $da)))) / $s2) : 0.0;
+    $short = 1 - min(1.0, $kp * $kp * $ka);
+    $back = (float) det_round(max(0.0, min((float) ($fw - 1), (float) $land['x'] + ((float) $self['x'] - (float) $land['x']) * $short)));
+    $near = $near || room_in_flames(room_fire_pool($room['terrain'], $back, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin']), $wide);
     return ['harm' => $harm, 'self' => $mine, 'near' => $near];
 }
 /* Ground predictions made so far ($add counts more): a drone turn's cost
@@ -561,7 +577,7 @@ function room_ai_earth_harm(array $room, array $self, array $target, string $wke
     } elseif ($effect === 'pour' || $effect === 'slump') {
         $t = $room['terrain'];
         if ($effect === 'pour') {
-            room_fill_pour($t, room_pour_level($t, det_round(max(0.0, min((float) ($fw - 1), (float) $land['x']))), (float) $w['volume']));
+            room_fill_pour($t, room_pour_level($t, det_round(max(0.0, min((float) ($fw - 1), (float) $land['x']))), (float) $w['volume'], (float) $w['poolMin']));
         } else {
             room_slump_ground($t, (float) $land['x'], (float) $w['radius'], (float) $w['slope'], (int) $w['passes']);
         }

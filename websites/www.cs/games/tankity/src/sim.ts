@@ -131,7 +131,8 @@ export interface Weapon {
   rollTime?: number;
   range?: number; // beam: its length at full power on a room's field, px
   aimMin?: number; // beam: the barrel's lowest angle (below 0 dips under level), on either side
-  volume?: number; // pour: px^2 of liquid dirt
+  volume?: number; // pour, napalm: px^2 of liquid
+  poolMin?: number; // pour, napalm: px deep a liquid spreads to, no thinner (a puddle on flat ground)
   digLen?: number; // dig: px it burrows
   digR?: number; // dig: the trench's half width
   warheads?: number; // dig: blasts along the burrow
@@ -1193,7 +1194,7 @@ function burstShell(world: World, arsenal: Arsenal, s: Shell, w: Weapon, direct:
     op = { t: 'dirt', w: s.wkey, x: s.x, y: s.y, r: w.radius };
   } else if (w.effect === 'pour') {
     brkLand(s.owner, s.x);
-    op = { t: 'pour', w: s.wkey, x: Math.round(clamp(s.x, 0, fw - 1)), v: w.volume || 0 };
+    op = { t: 'pour', w: s.wkey, x: Math.round(clamp(s.x, 0, fw - 1)), v: w.volume || 0, m: w.poolMin || 0 };
   } else if (w.effect === 'slump') {
     brkLand(s.owner, s.x);
     op = { t: 'slump', w: s.wkey, x: s.x, r: w.radius, slope: w.slope || 1, passes: w.passes || 1 };
@@ -1231,7 +1232,7 @@ function burstShell(world: World, arsenal: Arsenal, s: Shell, w: Weapon, direct:
    spilled away lights nothing. server/rules.php room_fire_burn is the same. */
 function lightFire(world: World, s: Shell, w: Weapon, events: StepEvent[]): void {
   const col = Math.round(clamp(s.x, 0, world.terrain.length - 1));
-  const pool = firePool(world.terrain, col, w.volume || 0, w.flame || 0);
+  const pool = firePool(world.terrain, col, w.volume || 0, w.flame || 0, w.poolMin || 0);
   const fire: Fire = { wkey: s.wkey, owner: s.owner, pool, col, every: tickSteps(w.tick || 0.5),
     ticks: pool.x0 <= pool.x1 ? burnTicks(w.burn || 0, w.tick || 0.5) : 0, step: 0, done: 0 };
   events.push({ kind: 'fire', fire });

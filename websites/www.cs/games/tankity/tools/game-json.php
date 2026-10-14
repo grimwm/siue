@@ -413,6 +413,7 @@ const TANKITY_AMMO_EXTRA = [
     'range' => ['int', ['beam' => [60, 1200]]],
     'aimMin' => ['int', ['beam' => [-30, 10]]],
     'volume' => ['int', ['pour' => [200, 20000], 'napalm' => [200, 20000]]],
+    'poolMin' => ['int', ['pour' => [1, 60], 'napalm' => [1, 60]]],
     'digLen' => ['int', ['dig' => [20, 400]]],
     'digR' => ['int', ['dig' => [3, 30]]],
     'warheads' => ['int', ['dig' => [0, 8]]],
@@ -433,11 +434,11 @@ const TANKITY_AMMO_NEEDS = [
     'hop' => ['hops', 'hopKeep', 'subDmg', 'subRadius'],
     'scatter' => ['split', 'fan', 'kick', 'subDmg', 'subRadius'],
     'beam' => ['range'],
-    'pour' => ['volume'],
+    'pour' => ['volume', 'poolMin'],
     'dig' => ['digLen', 'digR', 'warheads'],
     'riot' => ['fan'],
     'slump' => ['slope', 'passes'],
-    'napalm' => ['volume', 'burn', 'tick', 'flame'],
+    'napalm' => ['volume', 'poolMin', 'burn', 'tick', 'flame'],
 ];
 const TANKITY_GEAR_EFFECTS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand', 'parachute'];
 const TANKITY_PAINTERS = ['disc', 'beam', 'spark', 'ball', 'dash', 'drill', 'clod', 'flame'];

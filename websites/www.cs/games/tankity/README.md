@@ -19,7 +19,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml` (sixteen music tracks built by `audio/music/build_music.sh`), and where each came from                                                                                                                     |
 | `src/detmath.ts` | `dsin`, `dcos`, `datan`, `datan2`: the sim's trigonometry from `+ − × ÷` and `floor` only, the same bits as `server/detmath.php` |
 | `src/sim.ts` | The game math in TypeScript: RNG, terrain, flight, hit tests, blasts, the guns with no flight (`fireBeam`, `firePlasma`, `beamCarve`, `fireRiot`), the earth guns' bursts (`burstShell`) and a digger's burrow (`stepDigger`), burial (`buried`). Pure: state in, what happened out; no page, sound or particles |
-| `src/earth.ts` | The earth ops, pure functions of the height map: `carveCrater`, `addDirt`, `pourLevel` and `fillPour` (liquid runs to the bottom of its dip; what would reach an edge spills off), `slumpGround`, `riotCarve`, `digHeading` and `digCarve`, and `applyEarth`, which replays an earth event exactly. `server/earth.php` is the same ops |
+| `src/earth.ts` | The earth ops, pure functions of the height map: `carveCrater`, `addDirt`, `pourLevel` and `fillPour` (liquid runs to the bottom of its dip, no thinner than poolMin, so flat ground holds a puddle; what reaches an edge spills off), `slumpGround`, `riotCarve`, `digHeading` and `digCarve`, and `applyEarth`, which replays an earth event exactly. `server/earth.php` is the same ops |
 | `src/earth-show.ts` | The ground as it is drawn while the earth settles: a mound rising, liquid dirt flowing out from where it landed, slopes sliding. Pure; `view.ts` draws its `shown()` ground |
 | `src/earth-fx.ts` | How an earth gun plays (its impact, the `dig` and `pour` specials, shake, sound, the settling picture), shared by the solo war, the room replay and the range |
 | `src/fire.ts` | Napalm's burning pools, pure: `firePool` (the earth's `pourLevel` on the ground as it is, which it never changes), `inFlames` (a unit's body reaching into the flames), `burnTicks`, `tickSteps` and `burnTotal` (what the ticks cost a unit, shield and bunker counted, for the drones). `server/fire.php` is the same |
@@ -402,8 +402,11 @@ The rules live in `src/armor.ts` and `server/rules.php` (`room_max_armor` ..
 
 Napalm and Hot Napalm fly like shells. Where one bursts it pours `volume` px²
 of burning liquid, which runs to the bottom of the dip it landed in and pools
-there as liquid dirt would (`pourLevel`; what would reach a field edge spills
-off, so dead flat ground holds no pool). The ground never changes, so a pool
+there as liquid dirt would (`pourLevel`). It spreads only until it is
+`poolMin` deep: on flat ground or a gentle slope it lies as a puddle that
+deep, about volume / poolMin wide, centred where it landed (`puddle`,
+`room_pour_puddle`), and only what reaches a field edge spills off. Liquid
+Dirt sets the same way. The ground never changes, so a pool
 causes no falls. The pool is found once, from the ground of that moment.
 
 - It burns `burn` seconds, a tick every `tick` seconds (counted in 1/60 s
@@ -685,7 +688,10 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
   (`AI_FIRE_WOBBLE`), or of the pool its own dip would hold, since a stray
   shot runs downhill into it; nor as the least-bad gun when every gun would
   reach the drone. A drone that fires napalm does not shuffle (it judged its
-  dip from where it stands), and no bracket continues from one. A riot charge scores the
+  dip from where it stands), and no bracket continues from one. Nor is it
+  fired when a shot falling short could burn the drone: the aim's power and
+  angle each off by 2.5 ranging wobbles (`AI_FIRE_SHORT`), the reach lost as
+  p² sin 2a, puddled that far back toward the drone. A riot charge scores the
   falls its scoop gives rivals; a buried human fired for by the battery (a
   turn that timed out) fires its first riot gun in rack order. The most harmful gun of the
   best-landing arc fires (glory: of any arc), the cheaper on a tie, then rack
@@ -1104,7 +1110,8 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/camera.test.mjs`                         | `src/camera.ts`: the bottom edge on the floor with units high or low, a high arc pulled into view down to the floor with every unit on screen, the hold until the volley lands (rollers and shells past the edge let go), the ease keeping every unit framed on every frame, the sky marks |
 | `test/rotate-hint.test.mjs`                    | The rotate hint's rule and its chip |
 | `test/php/AiArcsTest.php`                      | `server/ai.php` `room_ai_arc_guns` and `server/sim.php` `room_flight_key`: a flight by definition is the shot by key, guns with one key fly the same arcs, any field change that bends a flight changes the key, the key is exact whatever `serialize_precision` says and refuses a speed, friction or roll time that is not finite, and a gun given its own arc is searched on its own; `room_ai_harm` prefers the bigger blast on one arc, refuses a blast that reaches its own drone, and its earth term counts a harmless crater's fall and a burial on a ground unit only; a round-9 drone turn flies at most 440 planning flights |
-| `test/ai-fire.test.mjs`                        | Drones and napalm, checked by firing the choice: each napalm gun is chosen against two rivals sharing a valley and burns both, and is refused when the drone's own column is in the predicted pool; hundreds of drone napalm shots over four hill shapes, positions, winds, every difficulty and two seeds never burn their gunner |
+| `test/ai-fire.test.mjs`                        | Drones and napalm, checked by firing the choice: each napalm gun is chosen against two rivals sharing a valley and burns both, and is refused when the drone's own column is in the predicted pool; hundreds of drone napalm shots over four hill shapes and flat ground, positions, winds, every difficulty and two seeds never burn their gunner |
+| `test/fire.test.mjs`                            | Napalm's pools: on flat ground a puddle about volume / poolMin wide, centred where it landed, poolMin deep, burning the tank standing in it every tick and leaving the ground as it was; by a field edge a puddle that spills the rest; in a dip the same pool as with no poolMin |
 | `test/php/RoomEarthTest.php`                   | Burial in a room: fresh dirt leaves a human under it through `room_settle_tanks`, a drone rides it up, a buried tank's drive is refused (`room_drive`), a new round places units on the hills |
 | `test/php/DetMathTest.php`                     | `server/detmath.php` is within 1e-15 of libm, rounds halves and keeps the sign of zero like `Math.round`, and the `detmath` vectors cover every function |
 | `test/php/FieldWidthTest.php`                  | The server's width rule, hills, reach and aim, units spread outside each other's blast, and a room dealt at 720 |
@@ -1242,8 +1249,10 @@ with -0 equal to 0 only where a case says so.
   dip, never dirt at a drone, no disrupter on its own slope, a buried human's
   Riot Charge); napalm's pools (`fire`: a valley, a landing on its side, the
   rim tank just outside, the rim drone outside 18 px flames and inside 26, a
-  thin wide pool in a dish, dead flat ground and a slope to an edge holding
-  none, hills, a pit by the edge; `fire-ticks`: ticks, steps a tick, and
+  thin wide pool in a dish, a puddle on flat ground and by an edge, dead flat
+  ground and a slope to an edge holding none with no poolMin, hills, a pit by
+  the edge; the earth group's puddles (flat, both edges, a slope, a shallow
+  dish, a deep vee unchanged); `fire-ticks`: ticks, steps a tick, and
   shield and bunker totals), napalm volleys (two burned in a valley, a shield
   eating the first tick, a bunker halving, a kill credited to the shooter, a
   burn wreck's last stand, the gunner's own pool scoring nothing, flat ground

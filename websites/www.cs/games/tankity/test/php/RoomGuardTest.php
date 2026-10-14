@@ -384,6 +384,13 @@ final class RoomGuardTest extends TestCase
         $this->assertSame(429, $this->call('turntime', $set(1800), [], self::FREE)[0]);
     }
 
+    public function testTheAddressKeyIsReadBeforeItIsEverWritten(): void
+    {
+        $key = tankity_addr_key();
+        tankity_db()->exec("CREATE TRIGGER no_key_write BEFORE INSERT ON meta WHEN NEW.k = 'addr_key' BEGIN SELECT RAISE(ABORT, 'addr_key written again'); END");
+        $this->assertSame($key, tankity_addr_key(), 'an existing key is read, never inserted over');
+    }
+
     public function testAddressHashesAreKeyedPerInstall(): void
     {
         $_SERVER['REMOTE_ADDR'] = '203.0.113.77';

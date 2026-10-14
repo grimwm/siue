@@ -523,10 +523,15 @@ export function createLobby(deps: LobbyDeps) {
   /* The room this client sat in is gone (the server swept it) or its seat was
      given up elsewhere: the seat is forgotten here too, and the player lands
      in the lobby with a line saying so, to host or join again. */
+  let netMatch = false; // a net match is running on this page (set by startNetMatch, cleared by dropRoom)
   function netGone(code: string, why: 'closed' | 'seat'): void {
     seats.forget(code);
+    /* A running match's tanks must not fall to the solo engine behind the veil:
+       end it the way leaving does. */
+    const wasMatch = netMatch;
     dropRoom();
     LOBBY.inRoom = false;
+    if (wasMatch) backToTitle();
     void openLobby().then(() => {
       lobbySay(why === 'closed' ? `Room ${code} has closed.` : `Your seat in room ${code} was given up.`);
     });
@@ -543,6 +548,7 @@ export function createLobby(deps: LobbyDeps) {
     endTutorial(false);
     closeTitle();
     G.demo = false;
+    netMatch = true;
     // On, the event cursor past what the lobby already told, the lobby poll off and the match poll on.
     net.beginMatch(lobbyTold.code === net.code ? lobbyTold.seq : 0);
     MATCH.lastPhase = '';
@@ -611,6 +617,7 @@ export function createLobby(deps: LobbyDeps) {
      seats, and the host's Start begins the next match. */
   function netBackToLobby(): void {
     net.toLobby();
+    netMatch = false;
     MATCH.out = false; MATCH.outShown = false; MATCH.lastPhase = 'lobby'; MATCH.roundTo = '';
     replay.clear(); MATCH.pendingRoom = null; MATCH.myTurn = false;
     // G.over stays up under the lobby: the last match's tanks must not run the solo turn loop; startNetMatch clears it.
@@ -644,6 +651,7 @@ export function createLobby(deps: LobbyDeps) {
   }
   /* What leaving and stepping out both clear on this page. */
   function dropRoom(): void {
+    netMatch = false;
     replay.clear(); MATCH.pendingRoom = null; MATCH.myTurn = false; MATCH.lastPhase = ''; MATCH.lastTurn = -1; MATCH.lastRound = -1;
     MATCH.out = false; MATCH.outShown = false; MATCH.lastRoom = null;
     END.buttons = 'solo'; END.board = null; END.filed = null;

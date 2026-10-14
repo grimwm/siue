@@ -67,8 +67,13 @@ function tankity_addr_key(): string
         return $set;
     }
     $db = tankity_db();
-    $db->prepare('INSERT OR IGNORE INTO meta (k, v) VALUES (?, ?)')->execute(['addr_key', bin2hex(random_bytes(32))]);
     $q = $db->prepare('SELECT v FROM meta WHERE k = ?');
+    $q->execute(['addr_key']);
+    $have = $q->fetchColumn();
+    if ($have !== false && $have !== '') {
+        return (string) $have;
+    }
+    $db->prepare('INSERT OR IGNORE INTO meta (k, v) VALUES (?, ?)')->execute(['addr_key', bin2hex(random_bytes(32))]);
     $q->execute(['addr_key']);
     return (string) $q->fetchColumn();
 }

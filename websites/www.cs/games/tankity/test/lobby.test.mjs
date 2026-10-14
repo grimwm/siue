@@ -33,6 +33,8 @@ function rig(respond) {
   const storage = new Map();
   const seats = m.seats.createSeatStore({ getItem: k => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) }, () => 0);
   const said = [];
+  const G = { body: 'tank', demo: true, over: false };
+  const titled = [];
   let lobby;
   const net = new m.net.RoomClient(env, {
     onReachable() {}, onSnapshot() {}, onReadyChange() {}, onError() {},
@@ -40,18 +42,18 @@ function rig(respond) {
   });
   const $ = id => document.getElementById(id);
   lobby = m.lobby.createLobby({
-    G: { body: 'tank', demo: true, over: false }, $, net,
+    G, $, net,
     MATCH: { myTurn: false, initials: '' }, HUD: { online: false }, END: {}, replay: { clear() {} }, sfx: { play() {} },
     difficulty: { get: () => 'normal' }, unlock() {}, say: (t) => said.push(t), keyHint: () => '', seats,
     games: () => ({ rows: [], alerts: 'unsupported', age: 0, onOpen() {}, onAlerts() {} }), steppedOut() {},
     netEvent() {}, seatName: () => 'ABC', closeLobbyVeil: () => { $('lobby-veil').hidden = true; return true; },
-    closeOverlays: () => false, closePreview() {}, endTutorial() {}, closeTitle() {}, backToTitle() {},
+    closeOverlays: () => false, closePreview() {}, endTutorial() {}, closeTitle() {}, backToTitle() { titled.push(1); G.demo = true; },
     initials: { get: () => 'ABC', set() {}, subscribe: () => () => {} }, initialsSaved() {},
     hideShop() {}, paintHud() {}, refreshNavHints() {}, renderMenu() {}, renderShop() {},
   });
   seats.remember({ code: 'AB3D', seat: 0, token: 'tok', csrf: 'c', initials: 'ABC' });
   const tick = async () => { for (const { fn } of [...intervals.values()]) fn(); for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r)); };
-  return { net, lobby, seats, said, intervals, tick, $ };
+  return { net, lobby, seats, said, G, titled, intervals, tick, $ };
 }
 const ok = body => ({ status: 200, body });
 
@@ -102,4 +104,28 @@ test('a room swept while its lobby shows: the seat is dropped and the lobby says
   assert.equal(r.intervals.size, 0, 'nothing polls the dead room');
   assert.match(r.$('lobby-status').textContent, /Room AB3D has closed/);
   assert.equal(r.$('lobby-veil').hidden, false, 'back in the lobby, out of the room');
+});
+
+test('a room swept under a running match ends the match before the lobby opens: no ghost field', async () => {
+  let gone = false;
+  const playing = lobbyRoom({ phase: 'play' });
+  const r = rig(url => {
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
+    if (gone && url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room' } };
+    if (url.includes('action=start')) return ok({ ok: true, room: playing });
+    return ok({ ok: true, room: lobbyRoom() });
+  });
+  await r.lobby.resumeRoom('AB3D');
+  click(r.$('lobby-start'));
+  await r.tick();
+  assert.equal(r.G.demo, false, 'the net match is running');
+  assert.equal(r.net.on, true);
+  gone = true;
+  await r.tick();
+  assert.equal(r.net.on, false);
+  assert.equal(r.titled.length, 1, 'the match is torn down (title/demo) so the solo engine has no room tanks');
+  assert.equal(r.G.demo, true);
+  assert.match(r.$('lobby-status').textContent, /Room AB3D has closed/);
+  assert.equal(r.$('lobby-veil').hidden, false);
 });

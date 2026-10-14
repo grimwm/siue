@@ -444,7 +444,7 @@ $check('shipped-json-in-sync', $shipped !== null && $shipped === (string) @file_
     'run: php tools/game-json.php (in games/tankity)');
 $sd = json_decode((string) $shipped, true);
 $check('good-fall', ($out['arsenal']['fall'] ?? null) === ['freePx' => 10, 'perPx' => 0.5, 'chuteOver' => 5, 'aiRound' => 3], json_encode($out['arsenal']['fall'] ?? null));
-$check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 19 && count($sd['arsenal']['gear'] ?? []) === 9
+$check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 23 && count($sd['arsenal']['gear'] ?? []) === 9
     && count($sd['audio']['sfx'] ?? []) >= 1 && count($sd['audio']['music'] ?? []) >= 1);
 $ammoKeys = array_column($sd['arsenal']['ammo'] ?? [], 'key');
 $rollerRow = $sd['arsenal']['ammo'][array_search('roller', $ammoKeys, true)] ?? [];

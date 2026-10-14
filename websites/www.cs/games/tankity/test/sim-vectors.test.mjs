@@ -198,7 +198,9 @@ const RUN = {
     sim.fireWeapon(G, arsenal, shooter, c.wkey);
     // As a solo match plays it: 1/60 s frames, falls animated every frame, and
     // one settle when the last shell is down (src/match.ts), which must come out
-    // as the room server's volley does (server/rules.php room_fire_shot).
+    // as the room server's volley does (server/rules.php room_fire_shot). A
+    // gun with no flight settles the moment it fires.
+    if (!G.shells.length) sim.settleVolley(G, arsenal);
     for (let frame = 0; G.shells.length && frame < 5000; frame++) {
       sim.fallTanks(G, 1 / 60);
       sim.stepShells(G, arsenal, 1 / 60);
@@ -207,6 +209,21 @@ const RUN = {
     }
     for (let frame = 0; frame < 5000 && sim.anyTankFalling(G); frame++) sim.fallTanks(G, 1 / 60);
     return outcome(before);
+  },
+  beam(c) {
+    world(c);
+    const before = G.terrain.slice(), shooter = G.tanks[c.shooter];
+    shooter.angle = c.angle;
+    shooter.power = c.power;
+    const b = sim.fireBeam(G, arsenal, shooter, c.wkey);
+    return { line: [b.x0, b.y0, b.x1, b.y1], ...outcome(before) };
+  },
+  plasma(c) {
+    world(c);
+    const before = G.terrain.slice(), shooter = G.tanks[c.shooter];
+    shooter.power = c.power;
+    const r = sim.firePlasma(G, arsenal, shooter, c.wkey);
+    return { ring: [r.x, r.y, r.r], ...outcome(before) };
   },
   fall(c) {
     world(c);

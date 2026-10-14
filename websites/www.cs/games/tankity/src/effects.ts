@@ -115,8 +115,9 @@ export function createEffects(deps: FxDeps) {
     for (const k of keys) for (const n of FX.sheetsOf(fxSet(k))) names.add(n);
     FX.preload([...names]);
   }
-  function fxSpecial(sys: FxSys | null, key: string, name: string, x: number, y: number, ang: number): void {
-    if (sys) FX!.play.special(sys, fxSet(key), name, x, y, ang);
+  /* A named special; `len` plays a line special (the beam) along len px at heading ang. */
+  function fxSpecial(sys: FxSys | null, key: string, name: string, x: number, y: number, ang: number, len?: number): void {
+    if (sys) FX!.play.special(sys, fxSet(key), name, x, y, ang, len);
   }
   /* A shell in flight (any object with x, y, vx, vy, wkey, or pass them
      explicitly for a replayed one): drip its trail along the path it flew. */

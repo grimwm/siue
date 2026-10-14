@@ -77,7 +77,8 @@ export interface FxSys extends FxSystem, PreviewFx {
   readonly stats: { spawned: number; recycled: number; peak: number };
   readonly flash: { a: number; dur: number; t: number; color: string };
   readonly live: number;
-  emit(ef: FxEffect | undefined, x: number, y: number, ang: number | undefined, r: number | undefined, ground?: boolean): number | undefined;
+  /** `len` above 0 plays the effect along a line `len` px long from (x, y) at heading `ang` (a beam): every particle starts somewhere along it, and a beam-shaped one spans it. */
+  emit(ef: FxEffect | undefined, x: number, y: number, ang: number | undefined, r: number | undefined, ground?: boolean, len?: number): number | undefined;
   newTrail(ef: FxEffect): TrailState;
   trail(ef: FxEffect | undefined, tr: TrailState, x: number, y: number, ang: number, dt: number, r: number): void;
 }
@@ -129,7 +130,8 @@ export interface FxEngine extends FxApi {
   play: {
     muzzle(sys: FxSys, set: FxSet, x: number, y: number, ang: number): number | undefined;
     impact(sys: FxSys, set: FxSet, x: number, y: number, r: number, ground?: boolean): number | undefined;
-    special(sys: FxSys, set: FxSet, name: string, x: number, y: number, ang: number): void;
+    /** `len`: a line special (the `beam`), played along `len` px from (x, y) at heading `ang`. */
+    special(sys: FxSys, set: FxSet, name: string, x: number, y: number, ang: number, len?: number): void;
     trail(sys: FxSys, set: FxSet, s: TrailCarrier, dt: number, x: number, y: number, vx: number, vy: number): void;
   };
 }

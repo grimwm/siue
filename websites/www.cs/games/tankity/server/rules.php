@@ -196,6 +196,18 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
     $dirS = $tank['dirS'] ?? -1;
     $radius = (float) $w['radius'];
     $events[count($events) - 1]['at'] = 0.0; // the fire/aifire that opened this volley
+    // A beam or a plasma ring has no flight: it resolves the moment it fires.
+    $effect = $w['effect'] ?? 'shot';
+    if ($effect === 'beam' || $effect === 'plasma') {
+        $mark = count($events);
+        if ($effect === 'beam') {
+            room_fire_beam($room, $events, $seatIdx, $w, $wkey);
+        } else {
+            room_fire_plasma($room, $events, $seatIdx, $w, $wkey);
+        }
+        room_stamp($events, $mark, 0.0);
+        $shots = 0;
+    }
     for ($i = 0; $i < $shots; $i++) {
         $off = $shots === 1 ? 0 : ($i - ($shots - 1) / 2) * ($w['spread'] ?? 0.0);
         $a = $rad + $off;
@@ -204,6 +216,13 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
         $vx = det_cos($a) * $spd * $dirS;
         $vy = -det_sin($a) * $spd;
         $res = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $mx, $my, $vx, $vy, 0.0, (float) ($w['fuse'] ?? 0.9), null, 0.0);
+        if ($effect === 'tracer') {
+            // A tracer bursts on nothing: its flight is all there is, radius 0.
+            $ev = room_shot_event($tank, $wkey, 0.0, $res, 0.0);
+            $ev['at'] = 0.0;
+            $events[] = $ev;
+            continue;
+        }
         if ($res[0] === 'split') {
             // The bloom reads as a burst on every screen; the bomblets do
             // the real damage from here.

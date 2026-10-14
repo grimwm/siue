@@ -1166,3 +1166,100 @@ foreach (['settings', 'store', 'sim', 'ai', 'rules', 'protocol'] as $lib) {
         . escapeshellarg(TANKITY_GAME_DIR . '/server/' . $lib . '.php') . ' 2>&1', $outLib, $codeLib);
     $check("server-$lib-guarded", $codeLib === 0 && $outLib === [], $codeLib . ' ' . implode('|', array_slice($outLib, 0, 2)));
 }
+
+// ---- beams and plasma rings: no flight, resolved the moment they fire ----
+$zap = room_weapon_row(['key' => 'zap', 'dmg' => 45, 'radius' => 6, 'effect' => 'beam', 'range' => 520]);
+$ring = room_weapon_row(['key' => 'ring', 'dmg' => 60, 'radius' => 90, 'effect' => 'plasma']);
+$check('weapon-row-reads-range', $zap['range'] === 520.0 && room_weapon_row(['key' => 'x'])['range'] === 0.0, json_encode($zap['range']));
+/** Where a beam fired by $t is $s px along its line. */
+$along = function (array $t, float $s): array {
+    [$mx, $my] = room_muzzle($t);
+    $a = deg2rad($t['angle']);
+    return [$mx + det_cos($a) * $t['dirS'] * $s, $my - det_sin($a) * $s];
+};
+$gunner = ['angle' => 45.0, 'power' => 100.0, 'dirS' => 1] + $tank(0, 'human', 100.0, 100);
+[$ax, $ay] = $along($gunner, 120.0);
+[$bx, $by] = $along($gunner, 220.0);
+$room = $flatRoom([$gunner, ['y' => $ay + 30] + $tank(1, 'ai', $ax, 100), ['y' => $by + 30] + $tank(2, 'ai', $bx, 100)]);
+$events = [];
+room_fire_beam($room, $events, 0, $zap, 'zap');
+$beam = array_values(array_filter($events, fn($e) => $e['t'] === 'beam'))[0] ?? null;
+[$mx, $my] = room_muzzle($gunner);
+$check('beam-event', $beam !== null && $beam['by'] === 0 && $beam['w'] === 'zap' && $beam['x0'] === $mx && $beam['y0'] === $my
+    && abs(room_dist($beam['x1'] - $mx, $beam['y1'] - $my) - 519.0) < 1e-9, json_encode($beam));
+$check('beam-through-two-drones-once-each', array_map(fn($e) => [$e['seat'], $e['dmg'], $e['direct']], array_values(array_filter($events, fn($e) => $e['t'] === 'hit')))
+    === [[1, 45, false], [2, 45, false]] && $room['tanks'][1]['hp'] === 55 && $room['tanks'][2]['hp'] === 55 && $room['tanks'][0]['hp'] === 100, json_encode($events));
+$check('beam-pays-the-human', ($room['cash'][0] ?? 0) === 180 && ($room['tanks'][1]['lastHitBy'] ?? null) === 0 && !empty($room['tanks'][0]['dealt']));
+// Low power: a short beam stops short.
+$room = $flatRoom([['power' => 20.0] + $gunner, ['y' => $by + 30] + $tank(1, 'ai', $bx, 100)]);
+$events = [];
+room_fire_beam($room, $events, 0, $zap, 'zap');
+$check('beam-short-power-stops-short', $room['tanks'][1]['hp'] === 100 && count($events) === 1, json_encode($events));
+// Through a hill: the channel is carved, the ground's revision moves on, nothing else changes.
+$room = $flatRoom([['angle' => 30.0] + $gunner]);
+for ($x = 200; $x <= 260; $x++) {
+    $room['terrain'][$x] = 300.0;
+}
+$hill = $room['terrain'];
+$events = [];
+room_fire_beam($room, $events, 0, $zap, 'zap');
+$want = $hill;
+room_beam_carve($want, $events[0]['x0'], $events[0]['y0'], $events[0]['x1'], $events[0]['y1'], 6.0);
+$check('beam-through-a-hill', $room['terrain'] === $want && $room['terrain'] !== $hill && array_slice($room['terrain'], 0, 190) === array_slice($hill, 0, 190)
+    && ($room['terrainRev'] ?? 1) === 2, json_encode(array_slice($room['terrain'], 200, 8)));
+// Into a shield: the shield is spent, nothing else.
+$d = ['angle' => 20.0, 'power' => 100.0, 'dirS' => 1] + $tank(0, 'ai', 100.0, 100);
+[$px, $py] = $along($d, 150.0);
+$room = $flatRoom([$d, ['y' => $py + 10, 'dirS' => -1] + $tank(1, 'human', $px, 100)]);
+$room['shield'][1] = true;
+$events = [];
+room_fire_beam($room, $events, 0, $zap, 'zap');
+$check('beam-into-a-shield', $room['shield'][1] === false && $room['tanks'][1]['hp'] === 100 && array_column($events, 't') === ['beam', 'shield'], json_encode($events));
+// Plasma: a ring around its gunner, falloff, the gunner spared, no crater.
+$room = $flatRoom([['power' => 100.0] + $tank(0, 'human', 300.0, 100), $tank(1, 'ai', 330.0, 100), $tank(2, 'ai', 380.0, 100), $tank(3, 'ai', 420.0, 100)]);
+$flatGround = $room['terrain'];
+$events = [];
+room_fire_plasma($room, $events, 0, $ring, 'ring');
+$hurt = fn(float $x) => room_blast_damage(60, room_dist($x - 300.0, 370.0 - 390.0), 90.0);
+$check('plasma-spares-firer', $room['tanks'][0]['hp'] === 100 && $room['tanks'][1]['hp'] === 100 - $hurt(330.0) && $room['tanks'][2]['hp'] === 100 - $hurt(380.0)
+    && $room['tanks'][3]['hp'] === 100, json_encode(array_column($room['tanks'], 'hp')));
+$check('plasma-event', ($events[0] ?? null) === ['t' => 'ring', 'by' => 0, 'w' => 'ring', 'x' => 300.0, 'y' => 390.0, 'r' => 90.0], json_encode($events[0] ?? null));
+$check('plasma-no-crater', $room['terrain'] === $flatGround && !isset($room['terrainRev']));
+$room = $flatRoom([['power' => 30.0] + $tank(0, 'human', 300.0, 100), $tank(1, 'ai', 345.0, 100)]);
+$events = [];
+room_fire_plasma($room, $events, 0, $ring, 'ring');
+$check('plasma-power-30-small-ring', $events[0]['r'] === 27.0 && $room['tanks'][1]['hp'] === 100, json_encode($events));
+$room = $flatRoom([['power' => 10.0] + $tank(0, 'human', 300.0, 100)]);
+$events = [];
+room_fire_plasma($room, $events, 0, $ring, 'ring');
+$check('plasma-min-radius-20', $events[0]['r'] === 20.0, json_encode($events));
+// A tracer's volley is its shot event and nothing else: radius 0, no burst,
+// fizzle or hit, the ground and every unit as they were.
+foreach ($weapons as $k => $def) {
+    if ($def['effect'] !== 'tracer') {
+        continue;
+    }
+    foreach ([[52.0, 63.0, 'lands'], [10.0, 40.0, 'strikes-a-drone'], [40.0, 100.0, 'leaves-the-field']] as [$a, $p, $how]) {
+        $room = $flatRoom([['angle' => $a, 'power' => $p] + $tank(0, 'human', 100.0, 100), ['y' => 420.0] + $tank(1, 'ai', 160.0, 100)]);
+        $ground = $room['terrain'];
+        $events = [['t' => 'fire', 'seat' => 0]];
+        room_fire_shot($room, $events, 0, $k);
+        $kinds = array_column($events, 't');
+        $shot = array_values(array_filter($events, fn($e) => $e['t'] === 'shot'));
+        $check("tracer-$k-$how-only-its-shot", $kinds === ['fire', 'shot'] && $shot[0]['r'] === 0.0 && $room['terrain'] === $ground
+            && $room['tanks'][1]['hp'] === 100 && $room['tanks'][0]['hp'] === 100, json_encode($events));
+    }
+}
+// A beam or a ring fired through room_fire_shot: its event at the volley's
+// start, its hits after it, and no shot event (nothing flies).
+foreach ($weapons as $k => $def) {
+    if (!in_array($def['effect'], ['beam', 'plasma'], true)) {
+        continue;
+    }
+    $room = $flatRoom([['angle' => 30.0, 'power' => 100.0] + $tank(0, 'human', 300.0, 100), $tank(1, 'ai', 340.0, 100)]);
+    $events = [['t' => 'fire', 'seat' => 0]];
+    room_fire_shot($room, $events, 0, $k);
+    $own = array_values(array_filter($events, fn($e) => $e['t'] === ($def['effect'] === 'beam' ? 'beam' : 'ring')));
+    $check("no-flight-$k-resolves-at-once", count($own) === 1 && $own[0]['at'] === 0.0 && !in_array('shot', array_column($events, 't'), true)
+        && $events[0]['at'] === 0.0, json_encode($events));
+}

@@ -211,6 +211,7 @@ function room_weapon_row(array $am): array
         'hopKeep' => (float) ($am['hopKeep'] ?? 0.5),
         'kick' => (float) ($am['kick'] ?? 150.0),
         'apex' => !empty($am['apex']),
+        'range' => (float) ($am['range'] ?? 0),
     ];
 }
 function room_gear(string $key): ?array
@@ -544,6 +545,109 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
             $dmg *= 2;
         }
         room_hit_unit($room, $events, $idx, $dmg, $tank, $ownerIdx, $w, $directIdx === $idx);
+    }
+}
+/* ---------- beams and plasma: guns with no flight ---------- */
+/* A beam is marched this many px at a time (src/sim.ts BEAM_STEP). */
+const ROOM_BEAM_STEP = 3;
+/* Cuts a beam's channel from ($x0, $y0) to ($x1, $y1): a crater of radius $r
+// every $r px along it, from $r px out. src/sim.ts beamCarve() is the same. */
+function room_beam_carve(array &$terrain, float $x0, float $y0, float $x1, float $y1, float $r): void
+{
+    $len = room_dist($x1 - $x0, $y1 - $y0);
+    $width = count($terrain);
+    for ($j = 1; $j * $r <= $len; $j++) {
+        $f = $j * $r / $len;
+        $x = $x0 + ($x1 - $x0) * $f;
+        $y = $y0 + ($y1 - $y0) * $f;
+        $lo = max(0, (int) floor($x - $r));
+        $hi = min($width - 1, (int) ceil($x + $r));
+        for ($ix = $lo; $ix <= $hi; $ix++) {
+            $dx = $ix - $x;
+            $cut = sqrt(max(0.0, $r * $r - $dx * $dx)) * 0.75;
+            $terrain[$ix] = min(456.0, max($terrain[$ix], $y + $cut));
+        }
+    }
+}
+/* The tank at $idx fires beam $w: a straight ray from the muzzle along the
+// barrel, range x power / 100 px long (times room_field_reach on a wider
+// field), marched in ROOM_BEAM_STEP px steps and cut short where it would leave
+// the field's sides or pass its floor. Its 'beam' event, then its channel
+// (room_beam_carve, which owns the falls it digs as a crater does), then each
+// unit whose body it crossed takes the flat dmg once, in order along it: no
+// falloff, no direct-hit double, never its gunner. src/sim.ts fireBeam() is the same. */
+function room_fire_beam(array &$room, array &$events, int $idx, array $w, string $wkey): void
+{
+    $tank = $room['tanks'][$idx];
+    $width = count($room['terrain']);
+    [$mx, $my] = room_muzzle($tank);
+    $rad = deg2rad($tank['angle']);
+    $ux = det_cos($rad) * ($tank['dirS'] ?? -1);
+    $uy = -det_sin($rad);
+    $len = (float) ($w['range'] ?? 0) * $tank['power'] / 100 * room_field_reach($width);
+    [$x1, $y1] = [$mx, $my];
+    $struck = [];
+    for ($k = 1; $k * ROOM_BEAM_STEP <= $len; $k++) {
+        $px = $mx + $ux * ($k * ROOM_BEAM_STEP);
+        $py = $my + $uy * ($k * ROOM_BEAM_STEP);
+        if ($px < 0 || $px >= $width || $py >= 460) {
+            break;
+        }
+        [$x1, $y1] = [$px, $py];
+        foreach ($room['tanks'] as $i => $u) {
+            if ($u['hp'] <= 0 || $i === $idx || in_array($i, $struck, true)) {
+                continue;
+            }
+            if (room_in_box($u, $px, $py)) {
+                $struck[] = $i;
+            }
+        }
+    }
+    $events[] = ['t' => 'beam', 'by' => $tank['seat'], 'w' => $wkey, 'x0' => $mx, 'y0' => $my, 'x1' => $x1, 'y1' => $y1];
+    $ground = [];
+    foreach ($room['tanks'] as $i => $o) {
+        $ground[$i] = room_surf_y($room['terrain'], (float) $o['x']);
+    }
+    $before = $room['terrain'];
+    room_beam_carve($room['terrain'], $mx, $my, $x1, $y1, (float) $w['radius']);
+    if ($room['terrain'] !== $before) {
+        room_terrain_changed($room);
+    }
+    room_mark_falls($room, $ground, $idx);
+    if ((int) $w['dmg'] <= 0) {
+        return;
+    }
+    foreach ($struck as $i) {
+        if ($room['tanks'][$i]['hp'] > 0) {
+            room_hit_unit($room, $events, $i, (int) $w['dmg'], $tank, $idx, $w, false);
+        }
+    }
+}
+/* The tank at $idx fires plasma ring $w: centred on its own body, radius x
+// power / 100 px (never under 20). Its 'ring' event, then every other live
+// unit within the radius + 14 takes dmg with room_blast_damage's falloff, no
+// direct-hit double; the gunner is spared, and it cuts no crater.
+// src/sim.ts firePlasma() is the same. */
+function room_fire_plasma(array &$room, array &$events, int $idx, array $w, string $wkey): void
+{
+    $tank = $room['tanks'][$idx];
+    [$cx, $cy] = room_unit_box($tank);
+    $r = max(20.0, $w['radius'] * $tank['power'] / 100);
+    $events[] = ['t' => 'ring', 'by' => $tank['seat'], 'w' => $wkey, 'x' => $cx, 'y' => $cy, 'r' => (float) $r];
+    if ((int) $w['dmg'] <= 0) {
+        return;
+    }
+    foreach (array_keys($room['tanks']) as $i) {
+        $u = $room['tanks'][$i];
+        if ($u['hp'] <= 0 || $i === $idx) {
+            continue;
+        }
+        [$ux, $uy] = room_unit_box($u);
+        $d = room_dist($ux - $cx, $uy - $cy);
+        if ($d > $r + 14) {
+            continue;
+        }
+        room_hit_unit($room, $events, $i, room_blast_damage((int) $w['dmg'], $d, $r), $tank, $idx, $w, false);
     }
 }
 /* Of the blasts that lowered a standing unit's ground ($ground: under each

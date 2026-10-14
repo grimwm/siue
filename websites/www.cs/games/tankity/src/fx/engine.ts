@@ -10,9 +10,10 @@
  *   muzzle   once, as the shell leaves the barrel
  *   trail    every frame while the shell flies (emitters use `rate`)
  *   impact   once, on detonation; `unit: "r"` sizes it by the blast radius
- *   special  named extras: split (cluster), steer (seeker), pierce (lance),
- *            arc (EMP, over each tank it fries), hop (a hop gun's leap),
- *            scatter (a scatter gun's bomblets thrown up)
+ *   special  named extras: split (cluster), steer (seeker), pierce (lance,
+ *            or a beam, at each unit it passes through), arc (EMP, over each
+ *            tank it fries), hop (a hop gun's leap), scatter (a scatter gun's
+ *            bomblets thrown up), beam (a beam's whole line: played along it)
  *   body     the shell itself: halo radius/alpha/pulse, stretch (streak behind)
  * Every emitter field and its default lives in DEFAULTS below; game.yaml
  * carries only what differs. The particle pool is preallocated and capped, so
@@ -26,7 +27,7 @@ const TAU = Math.PI * 2, DEG = Math.PI / 180, LUT_N = 12;
 const FLASH_MAX = 0.35, FLASH_RAMP = 0.08;
 const SHAPES = ['dot', 'streak', 'ring', 'spark', 'smoke', 'sprite', 'bolt', 'beam'] as const;
 const SLOTS = ['muzzle', 'trail', 'impact'] as const;
-const SPECIALS = ['split', 'steer', 'pierce', 'arc', 'hop', 'scatter'];
+const SPECIALS = ['split', 'steer', 'pierce', 'arc', 'hop', 'scatter', 'beam'];
 const EASES = ['linear', 'out', 'in'] as const;
 const AIMS = ['fixed', 'forward', 'back', 'normal'] as const;
 const ANIMS = ['once', 'loop', 'random'] as const;
@@ -351,7 +352,7 @@ interface Particle {
   em: Emitter; lut: string[]; pts: Float32Array | null;
 }
 /* A delayed or timed emitter waiting its turn. */
-interface Queued { on: boolean; em: Emitter; x: number; y: number; ang: number; k: number; t: number; acc: number }
+interface Queued { on: boolean; em: Emitter; x: number; y: number; ang: number; k: number; t: number; acc: number; len: number }
 type SysData = Pick<FxSys, 'max' | 'wind' | 'reduced' | 'stats' | 'flash' | 'live'>;
 
 function createSystem(opts?: { max?: number }): FxSys {
@@ -361,7 +362,7 @@ function createSystem(opts?: { max?: number }): FxSys {
     P.push({ x: 0, y: 0, vx: 0, vy: 0, age: 0, life: 1, s0: 1, rot: 0, vr: 0, g: 0, d: 0, wk: 0, len: 0, ez: 0, f0: 0, em: DEFAULTS, lut: [], pts: null });
   }
   const Q: Queued[] = [];
-  for (let i = 0; i < 48; i++) Q.push({ on: false, em: DEFAULTS, x: 0, y: 0, ang: 0, k: 1, t: 0, acc: 0 });
+  for (let i = 0; i < 48; i++) Q.push({ on: false, em: DEFAULTS, x: 0, y: 0, ang: 0, k: 1, t: 0, acc: 0, len: 0 });
   let n = 0, cursor = 0;
   const sys: SysData = {
     max, wind: 0, reduced: null,
@@ -379,7 +380,10 @@ function createSystem(opts?: { max?: number }): FxSys {
     cursor = (cursor + 1) % max;
     return P[cursor]!;
   }
-  function spawn(em: Emitter, x: number, y: number, ang: number, k: number, lifeK: number): void {
+  /* `len` above 0 spawns along a line from (x, y) at heading `ang`: at share
+     `u` of it, and a beam-shaped particle spans the whole line. */
+  function spawn(em: Emitter, x: number, y: number, ang: number, k: number, lifeK: number, len = 0, u = 0): void {
+    if (len > 0 && em.shape !== 'beam') { x += Math.cos(ang) * len * u; y += Math.sin(ang) * len * u; }
     const p = alloc();
     p.em = em;
     p.lut = lutFor(em.colors);
@@ -388,7 +392,7 @@ function createSystem(opts?: { max?: number }): FxSys {
     p.s0 = rnd(em.size) * k;
     p.g = em.gravity; p.d = em.drag; p.wk = em.wind;
     p.ez = em.ease === 'out' ? 1 : em.ease === 'in' ? 2 : 0;
-    p.len = em.length * k;
+    p.len = len > 0 && em.shape === 'beam' ? len : em.length * k;
     p.vr = (em.spin[0] + (em.spin[1] - em.spin[0]) * Math.random()) * DEG;
     p.rot = (Math.random() * 2 - 1) * em.rotJitter * DEG;
     const base = em.aim === 'forward' ? ang : em.aim === 'back' ? ang + Math.PI : em.aim === 'normal' ? ang - Math.PI / 2 : 0;
@@ -420,19 +424,20 @@ function createSystem(opts?: { max?: number }): FxSys {
       }
     }
   }
-  function burst(em: Emitter, x: number, y: number, ang: number, k: number): void {
+  function burst(em: Emitter, x: number, y: number, ang: number, k: number, len = 0): void {
     const red = isReduced();
     let c = em.count * (red ? 0.35 : 1);
     c = c > 0 && c < 1 ? 1 : Math.round(c);
     const lifeK = red ? 0.7 : 1;
-    for (let i = 0; i < c; i++) spawn(em, x, y, ang, k, lifeK);
+    // Along a line, the particles share it out evenly, each at a random spot in its share.
+    for (let i = 0; i < c; i++) spawn(em, x, y, ang, k, lifeK, len, (i + Math.random()) / c);
   }
   /* Fire an effect. x,y world point; ang the shell's heading (radians,
      canvas axes); r the blast radius for `unit: "r"` emitters. Returns the
      effect's own screen-shake if it sets one, else undefined. `ground`
      false (a burst in the air) skips the emitters marked `ground`; left
      out, every emitter plays. */
-  function emit(ef: FxEffect | undefined, x: number, y: number, ang: number | undefined, r: number | undefined, ground?: boolean): number | undefined {
+  function emit(ef: FxEffect | undefined, x: number, y: number, ang: number | undefined, r: number | undefined, ground?: boolean, len = 0): number | undefined {
     if (!ef) return undefined;
     const list = ef.emitters;
     for (let i = 0; i < list.length; i++) {
@@ -444,10 +449,10 @@ function createSystem(opts?: { max?: number }): FxSys {
         for (let j = 0; j < Q.length; j++) {
           const q = Q[j]!;
           if (q.on) continue;
-          q.on = true; q.em = em; q.x = x; q.y = y; q.ang = ang || 0; q.k = k; q.t = 0; q.acc = 0;
+          q.on = true; q.em = em; q.x = x; q.y = y; q.ang = ang || 0; q.k = k; q.t = 0; q.acc = 0; q.len = len;
           break;
         }
-      } else burst(em, x, y, ang || 0, k);
+      } else burst(em, x, y, ang || 0, k, len);
     }
     const sc = ef.screen;
     if (sc) {
@@ -506,10 +511,10 @@ function createSystem(opts?: { max?: number }): FxSys {
       if (em.duration > 0 && em.rate > 0) {
         q.acc += em.rate * (red ? 0.4 : 1) * dt;
         if (q.acc > 6) q.acc = 6;
-        while (q.acc >= 1) { q.acc -= 1; spawn(em, q.x, q.y, q.ang, q.k, red ? 0.7 : 1); }
+        while (q.acc >= 1) { q.acc -= 1; spawn(em, q.x, q.y, q.ang, q.k, red ? 0.7 : 1, q.len, Math.random()); }
         if (q.t - em.delay >= em.duration) q.on = false;
       } else {
-        burst(em, q.x, q.y, q.ang, q.k);
+        burst(em, q.x, q.y, q.ang, q.k, q.len);
         q.on = false;
       }
     }
@@ -740,9 +745,9 @@ function drawBodySprite(c: CanvasRenderingContext2D, x: number, y: number, vx: n
 const play: FxEngine['play'] = {
   muzzle(sys, set, x, y, ang) { return sys.emit(set.muzzle, x, y, ang, 0); },
   impact(sys, set, x, y, r, ground) { return sys.emit(set.impact, x, y, 0, r, ground); },
-  special(sys, set, name, x, y, ang) {
+  special(sys, set, name, x, y, ang, len) {
     const ef = set.special && set.special[name];
-    if (ef) sys.emit(ef, x, y, ang, 0);
+    if (ef) sys.emit(ef, x, y, ang, 0, undefined, len || 0);
   },
   /* A shell in flight, any object that can carry the trail state (s.fx,
      s.fxs): drip its trail (and a seeker's steer pulse) along the path flown. */

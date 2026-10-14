@@ -24,16 +24,6 @@ interface Allow {
 
 const ALLOW: Allow = {
   mjs: [
-    'cylon/test/abilities.test.mjs',
-    'cylon/test/audio.test.mjs',
-    'cylon/test/chrome-settings.test.mjs',
-    'cylon/test/field.test.mjs',
-    'cylon/test/playfield.test.mjs',
-    'cylon/test/rules.test.mjs',
-    'cylon/test/scores.test.mjs',
-    'cylon/test/smoke.test.mjs',
-    'cylon/test/state.test.mjs',
-    'cylon/test/ui.test.mjs',
     'tankity/test/ai-arcs.test.mjs',
     'tankity/test/ai-beams.test.mjs',
     'tankity/test/ai-earth.test.mjs',
@@ -106,20 +96,12 @@ const ALLOW: Allow = {
     'tankity/test/wide-field.test.mjs',
   ],
   program: [
-    'cylon',
     'tankity',
   ],
   runner: [
-    'cylon/test.sh',
     'tankity/test.sh',
   ],
   check: [
-    'cylon/test/abilities.test.mjs',
-    'cylon/test/field.test.mjs',
-    'cylon/test/playfield.test.mjs',
-    'cylon/test/rules.test.mjs',
-    'cylon/test/scores.test.mjs',
-    'cylon/test/state.test.mjs',
     'tankity/test/flow.test.mjs',
     'tankity/test/input.test.mjs',
     'tankity/test/net.test.mjs',

@@ -6,8 +6,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const GAME = join(import.meta.dirname, '..');
-const read = (...p) => readFileSync(join(GAME, ...p), 'utf8');
-const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const read = (...p: string[]) => readFileSync(join(GAME, ...p), 'utf8');
+const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const main = read('src/main.ts');
 
 test('the entry exports initializeCylonEffects with an options object', () => {
@@ -77,7 +77,9 @@ test('the site page keeps an empty settings panel for the game to draw into', ()
 });
 
 test('opening How to Play focuses its button first, so closing can return focus on Safari', () => {
-  const open = strip(main).match(/function openHelp\(\) \{[\s\S]*?\n    \}\n/)[0];
+  const found = strip(main).match(/function openHelp\(\) \{[\s\S]*?\n    \}\n/);
+  assert.ok(found);
+  const open = found[0];
   const focusAt = open.indexOf('helpBtn?.focus()');
   assert.ok(focusAt > 0 && focusAt < open.indexOf('helpOpen = true'));
 });

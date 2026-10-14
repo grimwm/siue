@@ -1,5 +1,6 @@
 /* The title card over the dimmed demo, on the kit's Dialog: Play, Play with
- * friends, Tutorial, a Settings link, and the three-letter initials. The game
+ * friends, Tutorial, a Settings link, the three-letter initials, and Your
+ * games when this browser holds a seat in a room. The game
  * owns whether it shows, the initials and what each button does; this draws
  * them and reports. Its mount point (#title-root) stays in index.html.
  * Copyright (C) 2026 William Grim
@@ -9,6 +10,8 @@ import { Dialog } from '../../../_kit/ui/dialog.tsx';
 import { KeyHints, Key, blurThen } from './chrome.tsx';
 import { InitialsPicker } from './initials-picker.tsx';
 import type { KeyHintFn } from './chrome.tsx';
+import { YourGames } from './games.tsx';
+import type { GamesView } from './games.tsx';
 
 export interface TitleProps {
   keyHint: KeyHintFn;
@@ -30,6 +33,8 @@ export interface TitleProps {
   onFriends: () => void;
   onTutorial: () => void;
   onSettings: () => void;
+  /** The rooms this browser sits in; the list shows only when there are some. */
+  games?: GamesView;
 }
 
 export function Title(p: TitleProps) {
@@ -49,6 +54,7 @@ export function Title(p: TitleProps) {
         <InitialsPicker idPrefix="title" initials={p.initials} rev={p.initialsRev} onInitials={p.onInitials}
           problem={p.problem} noteId="title-initials-note" />
         <p class="title-note" id="title-initials-note" role="status">{p.problem}</p>
+        {p.games && p.games.rows.length > 0 && <YourGames id="your-games" {...p.games} />}
         {p.hint && <p class="title-hint" id="title-hint" role="status">{p.hint}</p>}
         <button type="button" id="title-settings" class="title-link" aria-haspopup="dialog" aria-expanded={p.settingsOpen}
           onClick={blurThen(p.onSettings)}>Settings <Key at="global:back" bare /></button>

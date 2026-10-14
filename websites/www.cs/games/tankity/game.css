@@ -839,3 +839,63 @@ body { height: 100dvh; display: flex; flex-direction: column; }
   font-weight: bold;
   color: var(--accent);
 }
+
+/* Your games (src/ui/games.tsx): one row per room, its words and Open. */
+.your-games {
+  margin: 0.75rem 0;
+  text-align: left;
+}
+.your-games h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+.games-list {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.game-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.game-row.your-turn .game-text { color: var(--accent); }
+.game-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.game-open { flex: 0 0 auto; }
+
+/* The turn toasts (src/ui/toast.tsx), stacked at the bottom, above the veils. */
+.toasts {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  width: min(28rem, calc(100% - 2rem));
+  display: grid;
+  gap: 0.5rem;
+  z-index: 20;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--wash-card);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--ink);
+  pointer-events: auto;
+}
+.toast-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.toast-go, .toast-x { flex: 0 0 auto; }

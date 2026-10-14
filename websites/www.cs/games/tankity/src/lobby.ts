@@ -24,6 +24,7 @@ import type { KeyHintFn } from './ui/chrome.tsx';
 import { drawMapIcon } from './ui/icons.ts';
 import { renderLeave as drawLeave } from './ui/leave.tsx';
 import { renderLobby as drawLobby } from './ui/lobby.tsx';
+import type { GamesView } from './ui/games.tsx';
 import type { LobbySeat } from './ui/lobby.tsx';
 
 /** What the lobby shows that the game decides (see LOBBY). */
@@ -70,6 +71,8 @@ export interface LobbyDeps {
   keyHint: KeyHintFn;
   /** The seats this browser holds. */
   seats: SeatStore;
+  /** Your games and the Turn alerts button, as the lobby shows them. */
+  games(): GamesView;
   netEvent(e: RoomEvent): void;
   seatName(seat: number): string;
   closeLobbyVeil(): boolean;
@@ -93,7 +96,7 @@ export interface LobbyDeps {
 
 export function createLobby(deps: LobbyDeps) {
   const {
-    G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, netEvent, seatName, closeLobbyVeil,
+    G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, games, netEvent, seatName, closeLobbyVeil,
     closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, initials, initialsSaved, hideShop, paintHud, refreshNavHints, renderMenu,
     renderShop,
   } = deps;
@@ -179,6 +182,7 @@ export function createLobby(deps: LobbyDeps) {
       turnSecs: LOBBY.turnSecs,
       onTurnForm: secs => { LOBBY.turnSecs = secs; renderLobby(); },
       onTurnRoom: secs => { void netTurnTime(secs); },
+      games: games(),
       onCopy: copyInvite,
       onStart: () => { sfx.play('click'); startRoom(); },
       // Reached through Play again, the match behind the lobby is over: leaving goes to the title card, not back to its frozen field.

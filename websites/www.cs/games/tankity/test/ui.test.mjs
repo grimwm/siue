@@ -421,6 +421,29 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
   check('lobby-room-turn-guest', !byId(guestRoom, 'room-turn') && text(byId(guestRoom, 'room-turn-label')) === 'Turn time: 10 min');
 }
 
+// Your games in the lobby when not in a room; the Turn alerts button in one.
+{
+  const row = { code: 'AB3D', gone: false, seat: 1, phase: 'lobby', round: 0, turnSecs: 120, turn: null, yourTurn: false, turnKey: null,
+    turnLeft: null, shopLeft: null, players: ['ABC', 'ZED'], hostSeat: 0, expiresAt: 2e9 };
+  let opened = '', alerted = 0;
+  const g = { rows: [row], alerts: 'off', now: 1e9, onOpen: c => { opened = c; }, onAlerts: () => { alerted++; } };
+  const out = makeEl('lobby-veil');
+  renderLobby(out, lobbyProps({ turnSecs: 120, onTurnForm() {}, onTurnRoom() {}, games: g }).props);
+  const list = byId(out, 'lobby-games');
+  check('lobby-your-games-out-of-room', !!list && /AB3D/.test(text(list)));
+  click(walk(list).find(n => n.localName === 'button' && /Open/.test(text(n))));
+  check('lobby-your-games-open', opened === 'AB3D');
+  const none = makeEl('lobby-veil');
+  renderLobby(none, lobbyProps({ turnSecs: 120, onTurnForm() {}, onTurnRoom() {}, games: { ...g, rows: [] } }).props);
+  check('lobby-your-games-hidden-when-empty', !byId(none, 'lobby-games'));
+  const inRoom = makeEl('lobby-veil');
+  renderLobby(inRoom, lobbyProps({ turnSecs: 120, onTurnForm() {}, onTurnRoom() {}, games: g, inRoom: true, seats: SEATS }).props);
+  const btn = byId(inRoom, 'room-alerts');
+  check('lobby-room-alerts-button', !!btn && text(btn) === 'Turn alerts: off' && !byId(inRoom, 'lobby-games'));
+  click(btn);
+  check('lobby-room-alerts-click', alerted === 1);
+}
+
 // ---- weapon picker ----
 function gunTiles(n = 10, loaded = 0) {
   return Array.from({ length: n }, (_, i) => ({ key: i === 0 ? 'shell' : `gun${i}`, name: i === 0 ? 'Shell' : `Gun ${i}`, title: `note ${i}`, count: i === 0 ? '∞' : `×${i}`, loaded: i === loaded, empty: false }));

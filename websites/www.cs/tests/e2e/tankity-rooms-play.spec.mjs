@@ -88,6 +88,8 @@ test('a turn that arrives in a hidden tab changes its title and sends a notifica
   await guest.page.evaluate(() => {
     window.__notes = [];
     window.Notification = class { constructor(title, opts) { window.__notes.push({ title, body: opts && opts.body }); } close() {} static get permission() { return 'granted'; } };
+    // Turn alerts are opt-in: this player turned them on.
+    localStorage.setItem('tankity-turn-alerts', 'on');
     window.__hide = true;
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => window.__hide });
     document.dispatchEvent(new Event('visibilitychange'));
@@ -121,7 +123,7 @@ test('the turn clock warns its player at 30 seconds and counts the last 10 down 
       await route.fulfill({ response: res, body });
     });
   }
-  await expect.poll(() => host.page.locator('#log').textContent(), { timeout: 15_000 }).toMatch(/seconds left\. Fire, or the crew picks a gun/);
+  await expect.poll(() => host.page.locator('#log').textContent(), { timeout: 15_000 }).toMatch(/seconds left\. Fire, or a drone fires for you/);
   expect(await guest.page.locator('#log').textContent()).not.toMatch(/seconds left\. Fire/);
   left = 9;
   // Both screens paint the countdown: a big digit over the battlefield.

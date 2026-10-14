@@ -21,6 +21,10 @@
  *   match.ts     the solo match: rounds, turns, blasts, the drone's shot
  *   room.ts      a running room match on this client
  *   lobby.ts     getting into and out of a room
+ *   seats.ts     the room seats this browser holds
+ *   games.ts     Your games: those rooms, watched for your turn
+ *   notify.ts    opt-in turn alerts as browser notifications
+ *   turn-time.ts a room's turn time and its clocks
  *   shop.ts      the field shop
  *   guns.ts      the weapon picker
  *   hud.ts       the status bar's values
@@ -64,6 +68,11 @@ import { createTitle } from './title.ts';
 import { difficultySetting } from './difficulty.ts';
 import { initialsPref } from './initials.ts';
 import { createSeatStore } from './seats.ts';
+import { createGamesWatch } from './games.ts';
+import type { LiveRow } from './games.ts';
+import { alertsPref, askNotify, notifyPermission, showTurnNotification } from './notify.ts';
+import { renderToasts } from './ui/toast.tsx';
+import type { AlertsState, GamesView } from './ui/games.tsx';
 import { browserStorage } from '../../_kit/ports.browser.ts';
 import { exitApp, enterFullscreen, browserAppEnv, EXIT_HINT, holdEscape, topKeyLock } from '../../_kit/app.ts';
 import { pref, text } from '../../_kit/prefs.ts';
@@ -469,20 +478,21 @@ const {
 });
 /* A running room match on this client (src/room.ts): moves sent, snapshots adopted, events told, the turn alert. */
 const {
-  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, askNotifications, netFrame,
+  netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netFrame,
   roomShopBoard, openStandings,
 } = createRoom({
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
   backToLobby: () => netBackToLobby(),
   decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
   renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText, saveLocal, renderMenu: () => renderMenu(),
+  alertsOn: () => alertsState() === 'on',
 });
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving. */
 const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
   netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime,
 } = createLobby({
-  G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, netEvent, seatName, closeLobbyVeil,
+  G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, games: () => gamesView(), netEvent, seatName, closeLobbyVeil,
   closeOverlays, closePreview, endTutorial, hideShop, initials: savedInitials, initialsSaved: () => renderTitle(), paintHud, refreshNavHints,
   renderMenu: () => renderMenu(),
   closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
@@ -503,13 +513,104 @@ const { titleOpen, openTitle, closeTitle, showHint: showTitleHint, renderTitle }
   tutorial: () => { sfx.play('click'); tutorialOpen(); },
   settings: () => { const mv = $('menu-overlay'); if (mv && mv.hidden) toggleOverlay('menu-overlay', 'btn-menu'); },
   settingsOpen: () => { const mv = $('menu-overlay'); return !!mv && !mv.hidden; },
+  games: () => gamesView(),
 });
-/* After a match or a room: the demo again, under the card. */
+/* After a match or a room: the demo again, under the card, and Your games
+   asked at once (a room just stepped out of joins the list). */
 function backToTitle(): void {
   closeOverlays();
   startDemo();
   openTitle();
+  void watch.pollNow();
 }
+
+/* ---------- Your games, turn toasts and turn alerts ---------- */
+/* Turn alerts (src/notify.ts): off until the player turns them on with the
+   button, which asks the browser from its own click. */
+const alerts = alertsPref(browserStorage());
+function alertsState(): AlertsState {
+  const p = notifyPermission();
+  if (p === 'unsupported') return 'unsupported';
+  if (p === 'denied') return 'blocked';
+  return alerts.get() === 'on' && p === 'granted' ? 'on' : 'off';
+}
+function toggleAlerts(): void {
+  if (alertsState() === 'on') { alerts.set('off'); renderGames(); return; }
+  void askNotify().then(p => {
+    if (p === 'granted') {
+      alerts.set('on');
+      say('Turn alerts on: a notification says when it is your turn in a room, while the game is open in a tab.', 'info');
+    } else if (p === 'denied') {
+      say('This browser blocks notifications for the game. The toasts and the tab title still say when it is your turn.', 'info');
+    }
+    renderGames();
+  });
+}
+/* The rooms this browser sits in, but the one on screen, as the watcher last
+   heard them (src/games.ts). */
+let gamesRows: LiveRow[] = [];
+function gamesView(): GamesView {
+  return { rows: gamesRows, alerts: alertsState(), now: Date.now() / 1000, onOpen: openGame, onAlerts: toggleAlerts };
+}
+function renderGames(): void {
+  renderTitle();
+  renderLobby();
+}
+/* Open a room from Your games, a toast or a notification: out of the room on
+   screen (its seat kept), into that one. */
+function openGame(code: string): void {
+  unlock();
+  closeLeaveVeil();
+  if (net.code !== code) {
+    if (net.code) netStepOut(true);
+    closeOverlays();
+  }
+  void resumeRoom(code).then(() => { void watch.pollNow(); });
+}
+/* The turn toasts (src/ui/toast.tsx): one per room at most, the newest three,
+   each gone after TOAST_MS. */
+const TOAST_MS = 12_000;
+let toastList: { id: number; code: string; text: string }[] = [];
+let toastSeq = 0;
+function renderToastStack(): void {
+  const root = $('toast-root');
+  if (!root) return;
+  renderToasts(root, toastList.map(t => ({
+    id: t.id, text: t.text,
+    onGo: () => { closeToast(t.id); openGame(t.code); },
+    onClose: () => closeToast(t.id),
+  })));
+}
+function closeToast(id: number): void {
+  toastList = toastList.filter(t => t.id !== id);
+  renderToastStack();
+}
+function pushToast(code: string, text: string): void {
+  const id = ++toastSeq;
+  toastList = [...toastList.filter(t => t.code !== code), { id, code, text }].slice(-3);
+  renderToastStack();
+  setTimeout(() => closeToast(id), TOAST_MS);
+}
+const watch = createGamesWatch({
+  store: seats,
+  mine: list => net.mine(list),
+  setInterval: (fn, ms) => setInterval(fn, ms),
+  clearInterval: id => clearInterval(id as number),
+  viewing: () => net.code,
+  onRows: rows => { gamesRows = rows; renderGames(); },
+  onTurn: row => {
+    // `players` lists humans only, so a seat number is not an index into it: drop this seat's own initials.
+    const me = seats.get(row.code)?.initials ?? '';
+    const others = row.players.filter(p => p !== me);
+    pushToast(row.code, `Your turn in ${row.code} · vs ${others.join(', ') || 'the drones'}`);
+    if (document.hidden) showTurnNotification({ code: row.code, others }, alertsState() === 'on', () => openGame(row.code));
+  },
+});
+/* A seat given up (Leave) or found gone drops out of the list at once. */
+seats.subscribe(() => {
+  gamesRows = gamesRows.filter(r => seats.get(r.code));
+  renderGames();
+});
 function myTank(): GameTank | null {
   for (const t of G.tanks) if (t.isPlayer) return t;
   return null;
@@ -719,6 +820,9 @@ function init(): void {
   // Light the connection dot from the start, not only when the lobby opens.
   loadOccupancy();
   maybeApplyInviteCode();
+  // Your games: asked now and every GAMES_POLL_MS, and again whenever the tab comes back.
+  watch.start();
+  if (document.addEventListener) document.addEventListener('visibilitychange', () => { if (!document.hidden) void watch.pollNow(); });
 
   document.querySelectorAll<HTMLElement>('[data-aim]').forEach(btn => {
     const act = AIM_COMMANDS[btn.getAttribute('data-aim') ?? ''];

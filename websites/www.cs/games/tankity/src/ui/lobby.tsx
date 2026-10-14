@@ -13,6 +13,8 @@ import { useLayoutEffect, useRef } from 'preact/hooks';
 import { KeyHints, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.tsx';
 import { InitialsPicker, typedLetters } from './initials-picker.tsx';
 import { TurnTime } from './turn-time.tsx';
+import { AlertsButton, YourGames } from './games.tsx';
+import type { GamesView } from './games.tsx';
 import type { KeyHintFn } from './chrome.tsx';
 
 /** One hills tile. The Random tile has the empty id and no profile. */
@@ -84,6 +86,8 @@ export interface LobbyProps {
   onTurnForm: (secs: number) => void;
   /** The host moved the room's slider. */
   onTurnRoom: (secs: number) => void;
+  /** The rooms this browser sits in (out of a room) and the Turn alerts button (in one). */
+  games?: GamesView;
   onCopy: () => void;
   onStart: () => void;
   onLeave: () => void;
@@ -179,6 +183,7 @@ export function Lobby(p: LobbyProps) {
           </form>
         </div>
         <p id="lobby-status" class="hint" aria-live="polite">{p.status}</p>
+        {!p.inRoom && p.games && p.games.rows.length > 0 && <YourGames id="lobby-games" {...p.games} />}
         <div id="lobby-room" hidden={!p.inRoom}>
           <p class="room-code" id="lobby-code">{p.code || '····'}</p>
           <p class="hint">Read this code to your friends, or send them the invite link. First seat hosts and starts the match.</p>
@@ -210,6 +215,7 @@ export function Lobby(p: LobbyProps) {
             </div>
           </div>
           <p class="hint" id="seats-hint">{p.seatsHint}</p>
+          {p.games && <AlertsButton id="room-alerts" state={p.games.alerts} onClick={p.games.onAlerts} />}
           <div class="acts">
             <button type="button" id="lobby-start" class="btn-primary" style={p.isHost ? undefined : { display: 'none' }}
               onClick={blurThen(p.onStart)}>Start match</button>

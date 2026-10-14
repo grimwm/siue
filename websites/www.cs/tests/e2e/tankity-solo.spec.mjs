@@ -46,12 +46,12 @@ test('the shop list keeps its scroll when it redraws', async ({ browser }) => {
   expect(errors).toEqual([]);
 });
 
-test('the shop shows the whole 21-item arsenal, numbers in their own colour', async ({ browser }) => {
+test('the shop shows the whole 22-item arsenal, numbers in their own colour', async ({ browser }) => {
   const { page } = await newPlayer(browser);
   await page.keyboard.press('n');
   await page.waitForSelector('#shop-veil:not([hidden])');
   const rows = page.locator('#shop-list li:not(.shop-cat)');
-  await expect(rows).toHaveCount(21);
+  await expect(rows).toHaveCount(22);
   await expect(page.locator('#shop-list li.shop-free .shop-name')).toHaveText(/^Shell ∞ \(free\)$/);
   await page.keyboard.press('ArrowRight'); // two of each
   const name = page.locator('#shop-list li.sel .shop-name');
@@ -164,7 +164,7 @@ test('clicking Buy drops focus, and the guns toggle switches between every gun a
   expect(errors).toEqual([]);
 });
 
-test('a tank falls smoothly into the crater under it', async ({ browser }) => {
+test('a tank falls smoothly into the crater under it, and the drop is free up to 10 px', async ({ browser }) => {
   const { page } = await newPlayer(browser);
   // A Mortar's wide blast digs under our own hull even when the wind drifts
   // the shell: buy one in the pre-match shop and load it.
@@ -174,6 +174,7 @@ test('a tank falls smoothly into the crater under it', async ({ browser }) => {
   await page.click('#shop-next');
   await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU|Aim/);
   let best = { drop: 0, moving: 0, maxStep: 0 };
+  const falls = []; // [drop, what the log said the fall cost]
   for (let attempt = 0; attempt < 5 && best.drop <= 1; attempt++) {
     await expect.poll(() => hud(page, 'hud-turn'), { timeout: 60_000 }).toMatch(/YOU|Aim/);
     // Load the Mortar from the weapon picker.
@@ -199,6 +200,16 @@ test('a tank falls smoothly into the crater under it', async ({ browser }) => {
     }
     const drop = ys.length ? ys[ys.length - 1] - ys[0] : 0;
     if (drop > best.drop) best = { drop, moving, maxStep };
+    const cost = said.match(/The fall costs you (\d+)!/);
+    falls.push([drop, cost ? Number(cost[1]) : 0]);
+  }
+  // Our own pit credits nobody but still hurts: half a point a pixel past 10
+  // (game.yaml arsenal.fall), said in the log when it costs anything. The
+  // drones' turns in the same window may drop the tank again, in falls of
+  // their own, so the drop seen only bounds what the falls cost.
+  for (const [drop, cost] of falls) {
+    if (drop <= 10) expect(cost, `a ${drop.toFixed(1)} px drop is free`).toBe(0);
+    expect(cost, `a ${drop.toFixed(1)} px drop costs ${cost}`).toBeLessThanOrEqual(Math.max(0, Math.floor(0.5 * (drop - 10))) + 1);
   }
   // The old bug moved a tank one small step per turn; what matters is that
   // the fall is spread over frames, however deep the crater.

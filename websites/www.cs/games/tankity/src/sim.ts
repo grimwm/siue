@@ -532,14 +532,14 @@ export interface BeamShot { x0: number; y0: number; x1: number; y1: number; hits
 /** What a plasma ring did: its centre (the gunner's body), radius and hits. */
 export interface PlasmaShot { x: number; y: number; r: number; hits: Blast }
 /* Cuts a beam's channel from (x0, y0) to (x1, y1): a crater of radius r every
-   r px along it, from r px out (none at the muzzle). The war, the room replay
-   (from a beam event) and the server (server/sim.php room_beam_carve) all
-   carve with this. */
-export function beamCarve(terrain: number[], x0: number, y0: number, x1: number, y1: number, r: number): void {
+   r px along it, from r px out (none at the muzzle), never below floor. The
+   war, the room replay (from a beam event), the firing range and the server
+   (server/sim.php room_beam_carve) all carve with this. */
+export function beamCarve(terrain: number[], x0: number, y0: number, x1: number, y1: number, r: number, floor = H - 4): void {
   const len = dist(x1 - x0, y1 - y0);
   for (let j = 1; j * r <= len; j++) {
     const f = j * r / len;
-    carveCrater(terrain, x0 + (x1 - x0) * f, y0 + (y1 - y0) * f, r, H - 4);
+    carveCrater(terrain, x0 + (x1 - x0) * f, y0 + (y1 - y0) * f, r, floor);
   }
 }
 /* Fires a beam from t: a straight ray from the muzzle along the barrel, range

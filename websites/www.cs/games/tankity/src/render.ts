@@ -93,6 +93,7 @@ export interface PreviewView {
   fx: FxSystem | null;
   result: string;
   resultT: number;
+  trace: Readonly<Pick<Mark, 'kind' | 'pts' | 'landed' | 'age'>> | null; // a tracer's path this volley
 }
 
 /** Everything a frame shows. Read-only: render.ts never writes to it. */
@@ -887,6 +888,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.fillStyle = '#00aa00';
     c.fillRect(pv.tx - 14, ty - 27, 28 * (pv.foeHp / pv.foeHpMax), 2);
     // Shells + debris.
+    if (pv.trace) drawMark(c, { ...pv.trace, by: 0, wkey: pv.wkey }, deps.look(pv.wkey), pv.wind);
     for (const bm of pv.booms) drawBoom(c, bm, deps.look(bm.wkey));
     if (pv.fx) pv.fx.draw(c);
     for (const s of pv.shells) {

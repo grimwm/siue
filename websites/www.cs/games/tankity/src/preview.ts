@@ -11,12 +11,16 @@
  * PreviewEnv, so it compiles in the DOM-free program and test/preview.test.mjs
  * drives it on a clock the test moves by hand. */
 import {
-  GRAV, FLAT_GRAV, ROLL_LIFT, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage,
+  GRAV, FLAT_GRAV, ROLL_LIFT, BEAM_STEP, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage, beamCarve, flies,
   groundAt, groundSlope, rollStart, rollStep, rollOut, hopShell, scatterShells,
 } from './sim.ts';
 import type { Shell, Tank, Weapon } from './sim.ts';
+import { MARK_EVERY } from './marks.ts';
+import type { MarkKind } from './marks.ts';
 
 export const PV_W = 360, PV_H = 200, PV_WIND = 3, PV_FOE_HP = 60;
+/** The radius a tracer's landing effect is sized to: it has no blast of its own. */
+const PV_MARK_R = 10;
 
 /** The slice of an effects system (fx/engine.ts createSystem) the preview drives. */
 export interface PreviewFx { wind: number; step(dt: number): void; clear(): void }
@@ -28,7 +32,8 @@ export interface PreviewEnv<F extends PreviewFx = PreviewFx> {
   weapon(key: string): Readonly<Weapon> | undefined;
   muzzle(fx: F | null, wkey: string, x: number, y: number, ang: number): void;
   impact(fx: F | null, wkey: string, x: number, y: number, r: number): void;
-  special(fx: F | null, wkey: string, name: string, x: number, y: number, ang: number): void;
+  /** `len`: a line special (the beam) played along len px at heading ang. */
+  special(fx: F | null, wkey: string, name: string, x: number, y: number, ang: number, len?: number): void;
   /** A shell in flight: drip its trail from its own position and velocity. */
   trail(fx: F | null, shell: PreviewShell, dt: number): void;
   /** The result line under the stage, once a volley has landed. */
@@ -71,6 +76,8 @@ export interface PreviewState<C = unknown> {
   resultT: number;
   volleyDmg: number;
   volleyHits: number;
+  /** A tracer's path this volley (x, y pairs), as the battlefield marks it; null for other guns. */
+  trace: { kind: MarkKind; pts: number[]; landed: boolean; age: number } | null;
   cv: C;
 }
 
@@ -84,14 +91,16 @@ export function makePreviewTerrain(): number[] {
 
 /** A fresh demo of weapon `wkey`, or null for a weapon the arsenal lacks. */
 export function createPreview<C, F extends PreviewFx>(wkey: string, env: PreviewEnv<F>, fx: F | null, cv: C): (PreviewState<C> & { fx: F | null }) | null {
-  if (!env.weapon(wkey)) return null;
+  const w = env.weapon(wkey);
+  if (!w) return null;
   return {
     wkey, terr: makePreviewTerrain(),
-    sx: 44, tx: 296, wind: PV_WIND,
+    // A plasma ring reaches only so far: its dummy stands within it.
+    sx: 44, tx: w.effect === 'plasma' ? 44 + Math.round(w.radius * 0.6) : 296, wind: PV_WIND,
     angle: 60, power: 50, phase: 'aim', t: 0.6,
     shells: [], booms: [], volleys: 0, foeHp: PV_FOE_HP,
     fx,
-    result: '', resultT: 0, volleyDmg: 0, volleyHits: 0,
+    result: '', resultT: 0, volleyDmg: 0, volleyHits: 0, trace: null,
     cv,
   };
 }
@@ -156,6 +165,12 @@ export function solvePreview(pv: PreviewState, env: PreviewEnv): void {
 
 function previewFire(pv: PreviewState, env: PreviewEnv): void {
   const w = weaponOf(env, pv.wkey);
+  pv.volleyDmg = 0;
+  pv.volleyHits = 0;
+  const mark = w.gfx && w.gfx.mark;
+  pv.trace = mark === 'line' || mark === 'smoke' ? { kind: mark, pts: [], landed: false, age: 0 } : null;
+  if (w.effect === 'beam') { previewBeam(pv, env, w); return; }
+  if (w.effect === 'plasma') { previewRing(pv, env, w); return; }
   const rad = pv.angle * Math.PI / 180;
   const shots = w.pellets || 1;
   const y0 = (pv.terr[pv.sx] ?? 0) - 12;
@@ -165,9 +180,59 @@ function previewFire(pv: PreviewState, env: PreviewEnv): void {
     const spd = shotSpeed(pv.power, w.flat, w.speed);
     pv.shells.push({ x: pv.sx, y: y0, vx: Math.cos(a) * spd, vy: -Math.sin(a) * spd, wkey: pv.wkey, age: 0, pierced: false, split: false });
   }
-  pv.volleyDmg = 0;
-  pv.volleyHits = 0;
   env.muzzle(pv.fx, pv.wkey, pv.sx, y0, Math.atan2(-Math.sin(rad), Math.cos(rad)));
+}
+/* A beam on the range: aimed straight at the dummy at full power, marched in
+   the war's BEAM_STEP steps to the stage's edge, carving its channel with the
+   war's beamCarve and striking the dummy once for its flat damage. */
+function previewBeam(pv: PreviewState, env: PreviewEnv, w: Readonly<Weapon>): void {
+  const y0 = (pv.terr[pv.sx] ?? 0) - 12, fy = (pv.terr[pv.tx] ?? 0) - 12;
+  const ang = Math.atan2(fy - y0, pv.tx - pv.sx);
+  pv.angle = -ang * 180 / Math.PI;
+  pv.power = 100;
+  const ux = Math.cos(ang), uy = Math.sin(ang), len = (w.range || 0);
+  let x1 = pv.sx, y1 = y0, hit = false;
+  for (let k = 1; k * BEAM_STEP <= len; k++) {
+    const px = pv.sx + ux * k * BEAM_STEP, py = y0 + uy * k * BEAM_STEP;
+    if (px < 0 || px >= PV_W || py >= PV_H || py < 0) break;
+    x1 = px;
+    y1 = py;
+    if (!hit && Math.hypot(px - pv.tx, py - fy) < 10) hit = true;
+  }
+  env.muzzle(pv.fx, pv.wkey, pv.sx, y0, ang);
+  env.special(pv.fx, pv.wkey, 'beam', pv.sx, y0, ang, Math.hypot(x1 - pv.sx, y1 - y0));
+  beamCarve(pv.terr, pv.sx, y0, x1, y1, w.radius, PV_H - 4);
+  env.impact(pv.fx, pv.wkey, x1, y1, w.radius);
+  if (hit) {
+    env.special(pv.fx, pv.wkey, 'pierce', pv.tx, fy, ang);
+    pv.foeHp = Math.max(0, pv.foeHp - w.dmg);
+    pv.volleyDmg = w.dmg;
+    pv.volleyHits = 1;
+  }
+}
+/* A plasma ring on the range: around the gunner at full power, burning the
+   dummy (which stands inside it) with the war's falloff; no crater. */
+function previewRing(pv: PreviewState, env: PreviewEnv, w: Readonly<Weapon>): void {
+  const y0 = (pv.terr[pv.sx] ?? 0) - 12, fy = (pv.terr[pv.tx] ?? 0) - 12;
+  pv.power = 100;
+  const r = Math.max(20, w.radius);
+  env.muzzle(pv.fx, pv.wkey, pv.sx, y0, -Math.PI / 2);
+  env.impact(pv.fx, pv.wkey, pv.sx, y0, r);
+  const d = Math.hypot(pv.tx - pv.sx, fy - y0);
+  if (d <= r + 14) {
+    const dmg = blastDamage(w.dmg, d, r);
+    pv.foeHp = Math.max(0, pv.foeHp - dmg);
+    pv.volleyDmg = dmg;
+    pv.volleyHits = 1;
+  }
+}
+/* A tracer's path grows as it flies, a point every MARK_EVERY px. */
+function traceTo(pv: PreviewState, x: number, y: number, last: boolean): void {
+  const tr = pv.trace;
+  if (!tr || tr.landed) return;
+  const n = tr.pts.length;
+  if (last || n < 2 || Math.hypot(x - tr.pts[n - 2]!, y - tr.pts[n - 1]!) >= MARK_EVERY) tr.pts.push(x, y);
+  if (last) tr.landed = true;
 }
 
 function previewBoom(pv: PreviewState, env: PreviewEnv, x: number, y: number, ov: { dmg: number; radius: number } | null): void {
@@ -239,10 +304,12 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
   for (const bm of pv.booms) bm.t += dt;
   pv.booms = pv.booms.filter(bm => bm.t < bm.life);
   if (pv.resultT > 0) pv.resultT -= dt;
+  if (pv.trace) pv.trace.age += dt;
   if (pv.phase === 'aim') {
     pv.t -= dt;
     if (pv.t <= 0) {
-      solvePreview(pv, env);
+      // A gun with no flight aims itself as it fires.
+      if (flies(weaponOf(env, pv.wkey))) solvePreview(pv, env);
       previewFire(pv, env);
       pv.phase = 'fly';
     }
@@ -267,6 +334,7 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
       stepBallistic(s, dt, pv.wind, grav);
       if (s.dead) continue;
       env.trail(pv.fx, s, dt);
+      traceTo(pv, s.x, s.y, false);
       if (w.effect === 'cluster' && !s.split && (w.apex ? s.age >= 0.1 && s.vy >= 0 : s.age >= (w.fuse || 0.9))) {
         s.split = true;
         env.special(pv.fx, pv.wkey, 'split', s.x, s.y, Math.atan2(s.vy, s.vx));
@@ -281,6 +349,14 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
       }
       const touch = !s.pierced && !s.spared && Math.hypot(s.x - pv.tx, s.y - fy) < 10;
       const near = w.effect === 'proximity' && Math.hypot(s.x - pv.tx, s.y - fy) < (w.prox || 34);
+      // A tracer bursts on nothing: where it comes down (or strikes), it leaves its mark.
+      const down = touch || ((s.split || s.age >= 0.1) && s.y >= (pv.terr[clamp(Math.round(s.x), 0, PV_W - 1)] ?? 0));
+      if (w.effect === 'tracer' && (down || s.x < 0 || s.x >= PV_W || s.y >= PV_H)) {
+        s.dead = true;
+        traceTo(pv, s.x, s.y, true);
+        if (down) env.impact(pv.fx, pv.wkey, s.x, s.y, PV_MARK_R);
+        continue;
+      }
       if (touch || near) {
         if (w.effect === 'pierce' && !s.pierced && touch) {
           s.pierced = true;
@@ -311,7 +387,15 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
     if (!pv.shells.length) {
       pv.phase = 'show';
       pv.t = 1.6;
-      pv.result = pv.volleyHits > 1
+      const end = pv.trace && pv.trace.landed ? pv.trace.pts.slice(-2) : null;
+      const off = end ? Math.round(Math.abs(end[0]! - pv.tx)) : 0;
+      pv.result = w.effect === 'tracer'
+        ? (end ? (off < 10 ? 'Marked: right on the dummy' : `Marked: ${off} px from the dummy`) : 'Marked: off the range')
+        : w.effect === 'beam'
+          ? (pv.volleyHits ? `Beam hit: ${pv.volleyDmg} damage, straight through` : 'The beam misses.')
+          : w.effect === 'plasma'
+            ? (pv.volleyHits ? `Plasma ring: ${pv.volleyDmg} damage, its gunner spared` : 'The ring falls short.')
+            : pv.volleyHits > 1
         ? `${pv.volleyHits} hits · ${pv.volleyDmg} total damage`
         : pv.volleyHits === 1
           ? (pv.volleyDmg >= w.dmg ? `Direct hit! ${pv.volleyDmg} damage (×2 bonus)` : `Splash: ${pv.volleyDmg} damage`)

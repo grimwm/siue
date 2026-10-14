@@ -110,6 +110,7 @@ const live = deepFreeze({ ...view, turnUnit: view.tanks[1], aim: { unit: view.ta
     canvas: small.canvas, width: 360, height: 200, terr: Array.from({ length: 360 }, () => 150),
     sx: 44, tx: 296, angle: 60, foeHp: 30, foeHpMax: 60, wkey: 'shell', wind: 3,
     booms: [], shells: [{ x: 100, y: 100, vx: 1, vy: 1, wkey: 'shell' }], fx: fxSystem, result: 'Clean miss.', resultT: 1,
+    trace: { kind: 'line', pts: [50, 140, 90, 100, 130, 120], landed: true, age: 0.5 },
   });
   let threw = '';
   try { createRenderer(main.canvas, deps).frame(deepFreeze({ ...view, preview: pv })); } catch (e) { threw = String(e); }

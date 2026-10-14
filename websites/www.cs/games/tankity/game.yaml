@@ -441,7 +441,7 @@ arsenal:
       apex: true
       split: 9
       fan: 0.16
-      subDmg: 60
+      subDmg: 40
       subRadius: 40
       speed: 1.0
       note: Splits at the top of its arc into nine heavy warheads in a tight fan.

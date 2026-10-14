@@ -394,9 +394,17 @@ function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $a
 {
     return room_sim_flight($terrain, $wind, $x, $y, $angle, $power, room_weapons()[$wkey] ?? [], $dirS, $w, $top);
 }
+/* Planning flights flown so far ($add counts more): a drone turn's cost, which test/php/AiArcsTest.php holds to a budget. */
+function room_sim_flights(int $add = 0): int
+{
+    static $n = 0;
+    $n += $add;
+    return $n;
+}
 /* room_sim_shot for a gun's definition rather than its key. */
 function room_sim_flight(array $terrain, float $wind, float $x, float $y, float $angle, float $power, array $def, int $dirS, int $w, float $top = -INF): array
 {
+    room_sim_flights(1);
     $flat = !empty($def['flat']);
     $rad = deg2rad($angle);
     $vx = det_cos($rad) * room_shot_speed($power, $flat, (float) ($def['speed'] ?? 1.0), room_field_reach($w)) * $dirS;
@@ -414,7 +422,7 @@ function room_sim_flight(array $terrain, float $wind, float $x, float $y, float 
         $x += $vx * $dt;
         $y += $vy * $dt;
         if ($x < 0 || $x >= $w || $y >= 500) {
-            return ['x' => $x, 'y' => $y, 'oob' => true];
+            return ['x' => $x, 'y' => $y, 'oob' => true, 'vx' => $vx, 'vy' => $vy];
         }
         if ($i < 6 || $y < $top) { // the real flight ignores ground for its first 0.1 s
             continue;
@@ -423,12 +431,50 @@ function room_sim_flight(array $terrain, float $wind, float $x, float $y, float 
         if ($y >= $terrain[$xi]) {
             if ($roller) {
                 [$rx, $ry] = room_roll_out($terrain, $x, $vx, $vy, $def);
-                return ['x' => $rx, 'y' => $ry, 'oob' => false];
+                return ['x' => $rx, 'y' => $ry, 'oob' => false, 'vx' => 0.0, 'vy' => 0.0];
             }
-            return ['x' => $x, 'y' => $y, 'oob' => false];
+            return ['x' => $x, 'y' => $y, 'oob' => false, 'vx' => $vx, 'vy' => $vy];
         }
     }
-    return ['x' => $x, 'y' => $y, 'oob' => true];
+    return ['x' => $x, 'y' => $y, 'oob' => true, 'vx' => $vx, 'vy' => $vy];
+}
+/* Where a cluster shot at (angle, power) splits, flown as the war flies it
+// (its fuse, or the top of its arc with apex): [x, y, vx, vy], or null when it
+// comes down or leaves the field first. src/sim.ts splitPoint() is the same. */
+function room_split_point(array $terrain, float $wind, float $x, float $y, float $angle, float $power, string $wkey, int $dirS, int $w): ?array
+{
+    room_sim_flights(1);
+    $def = room_weapons()[$wkey];
+    $flat = !empty($def['flat']);
+    $rad = deg2rad($angle);
+    $vx = det_cos($rad) * room_shot_speed($power, $flat, (float) $def['speed'], room_field_reach($w)) * $dirS;
+    $vy = -det_sin($rad) * room_shot_speed($power, $flat, (float) $def['speed'], room_field_reach($w));
+    $grav = $flat ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
+    $dt = 1 / 60;
+    $age = 0.0;
+    for ($i = 0, $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($w)); $i < $steps; $i++) {
+        $age += $dt;
+        $vx += $wind * ROOM_TURN_WIND * $dt;
+        $vy += $grav * $dt;
+        $x += $vx * $dt;
+        $y += $vy * $dt;
+        if ($x < 0 || $x >= $w || $y >= 500) {
+            return null;
+        }
+        if (!empty($def['apex']) ? $age >= 0.1 && $vy >= 0 : $age >= $def['fuse']) {
+            return [$x, $y, $vx, $vy];
+        }
+        if ($i >= 6 && $y >= $terrain[$x < 0.5 ? 0 : ($x >= $w - 0.5 ? $w - 1 : (int) round($x))]) {
+            return null;
+        }
+    }
+    return null;
+}
+/* How long a munition leaving height $y0 at vertical speed $vy takes to come
+// down to $groundY, with no wind (src/sim.ts dropTime()). */
+function room_drop_time(float $y0, float $vy, float $groundY): float
+{
+    return (-$vy + sqrt(max(0.0, $vy * $vy + 2 * ROOM_GRAV * ($groundY - $y0)))) / ROOM_GRAV;
 }
 /* The ground changed (a crater, a new round): clients holding an older
    terrainRev must be sent the hills again. Rooms stored before the counter
@@ -436,6 +482,12 @@ function room_sim_flight(array $terrain, float $wind, float $x, float $y, float 
 function room_terrain_changed(array &$room): void
 {
     $room['terrainRev'] = ($room['terrainRev'] ?? 1) + 1;
+}
+/* Damage by distance $d from a unit's body: full at the centre, falling to
+// 30% at the edge of the reach (radius plus 14). src/sim.ts blastDamage(). */
+function room_blast_damage(int $dmg, float $d, float $r): int
+{
+    return (int) round($dmg * max(0.3, 1 - $d / ($r + 14)));
 }
 function room_explode(array &$room, array &$events, array $tank, string $wkey, float $x, float $y, ?int $directIdx, $ov = null): void
 {
@@ -486,7 +538,7 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
             $events[] = ['t' => 'shield', 'seat' => $t['seat'], 'by' => $tank['seat']];
             continue;
         }
-        $dmg = (int) round($dmg0 * max(0.3, 1 - $d / ($r + 14)));
+        $dmg = room_blast_damage($dmg0, $d, $r);
         if ($directIdx !== null && $directIdx === $idx) {
             $dmg *= 2;
         }

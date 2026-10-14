@@ -630,22 +630,35 @@ foreach (['hunter', 'glory', 'lobber'] as $s) {
 $aim('mixed-rack-target-too-close', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1,
     'tanks' => [$human(170, 100), $drone(120, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['heavy' => 1, 'mortar' => 1, 'nuke' => 1]]]]);
 
-/* ---- the harm a gun would do from a landing: what picks a drone's gun ----
- * 'self' when its burst could reach the drone's own body (it is never fired). */
+/* ---- the harm a gun would do from an aim: what picks a drone's gun ----
+ * The landing is the drone's own planning flight for the aim; 'self' when the
+ * burst or its munitions could reach the drone's own body (it is never fired). */
 $harm = function (string $name, array $c) use ($add): void {
     $room = sv_room($c);
-    $h = room_ai_harm($room, $room['tanks'][$c['self']], $room['tanks'][$c['target']], $c['wkey'], $c['land']);
-    $add('ai-harm', $name, $c, ['harm' => is_infinite($h) ? 'self' : $h]);
+    $self = $room['tanks'][$c['self']];
+    $self['angle'] = (float) $c['a'];
+    [$mx, $my] = room_muzzle($self);
+    $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $c['a'], (float) $c['p'], $c['wkey'], $self['dirS'], SV_WIDTH);
+    $land += ['a' => $c['a'], 'p' => $c['p']];
+    $h = room_ai_harm($room, $room['tanks'][$c['self']], $room['tanks'][$c['target']], $c['wkey'], $land);
+    $add('ai-harm', $name, $c, ['land' => [$land['x'], $land['y']], 'harm' => is_infinite($h) ? 'self' : $h]);
 };
 foreach ($weapons as $wkey => $def) {
-    $scene = ['terrain' => $flat, 'self' => 0, 'target' => 1, 'wkey' => $wkey, 'tanks' => [$drone(100, 60), $human(420, 100)]];
-    foreach ([['on-target', 420, 400], ['near-miss', 375, 400], ['short', 330, 400], ['far', 200, 400], ['beside-self', 150, 400]] as [$label, $x, $y]) {
-        $harm("$wkey-$label", $scene + ['land' => ['x' => (float) $x, 'y' => (float) $y, 'oob' => false]]);
+    $scene = ['terrain' => $flat, 'wind' => 2, 'self' => 0, 'target' => 1, 'wkey' => $wkey, 'tanks' => [$drone(100, 60) + ['dirS' => 1], $human(420, 100)]];
+    foreach ([[45, 70], [60, 64], [35, 58], [70, 40], [80, 30], [40, 100]] as [$a, $p]) {
+        $harm("$wkey-a$a-p$p", $scene + ['a' => $a, 'p' => $p]);
     }
-    $harm("$wkey-off-the-board", $scene + ['land' => ['x' => 760.0, 'y' => 300.0, 'oob' => true]]);
-    $harm("$wkey-at-a-drone", ['terrain' => $flat, 'self' => 0, 'target' => 1, 'wkey' => $wkey, 'tanks' => [$human(100, 60), $drone(300, 100)],
-        'land' => ['x' => 310.0, 'y' => 400.0, 'oob' => false]]);
+    $harm("$wkey-weak-target", ['terrain' => $hills, 'wind' => -3, 'self' => 0, 'target' => 1, 'wkey' => $wkey,
+        'tanks' => [$drone(560, 60) + ['dirS' => -1], $human(330, 12)], 'a' => 50, 'p' => 62]);
+    $harm("$wkey-at-a-drone", ['terrain' => $flat, 'wind' => 0, 'self' => 0, 'target' => 1, 'wkey' => $wkey,
+        'tanks' => [$human(100, 60) + ['dirS' => 1], $drone(330, 100)], 'a' => 55, 'p' => 60]);
 }
+// Pressed against its target with big guns and a Needle: it fires something that spares it.
+$aim('pressed-against-its-target', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1, 'difficulty' => 'hard',
+    'tanks' => [$human(350, 100), $drone(300, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['heavy' => 1, 'babynuke' => 1, 'needle' => 1]]]]);
+// A weak target gets the cheapest gun that finishes it.
+$aim('weak-target-cheapest-gun', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1, 'difficulty' => 'hard',
+    'tanks' => [$human(400, 10), $drone(120, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['mortar' => 2, 'babynuke' => 1]]]]);
 
 /* ---- bracketing: a drone's shots at one target, one after another ----
  * Each step is what the caller does for a drone turn: choose, move if it

@@ -575,7 +575,7 @@ export function flightKey(w: Weapon): string {
    terrain y): above it a shell cannot touch down, so the search skips the
    ground lookup there. */
 export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal, x: number, y: number, angle: number,
-  power: number, wkey: string, dirS: number, top = -Infinity): { x: number; y: number; oob: boolean } {
+  power: number, wkey: string, dirS: number, top = -Infinity): { x: number; y: number; oob: boolean; vx: number; vy: number } {
   const w = arsenal.weapons[wkey]!;
   const fw = world.terrain.length, reach = fieldReach(fw);
   const r = rad(angle);
@@ -588,14 +588,38 @@ export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal
   const grav = w.flat ? FLAT_GRAV : GRAV;
   for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * reach); i < steps; i++) {
     stepBallistic(st, dt, world.wind, grav);
-    if (st.x < 0 || st.x >= fw) return { x: st.x, y: st.y, oob: true };
-    if (st.y >= H + 40) return { x: st.x, y: st.y, oob: true };
+    if (st.x < 0 || st.x >= fw) return { x: st.x, y: st.y, oob: true, vx: st.vx, vy: st.vy };
+    if (st.y >= H + 40) return { x: st.x, y: st.y, oob: true, vx: st.vx, vy: st.vy };
     if (i >= 6 && st.y >= top && st.y >= world.terrain[clamp(Math.round(st.x), 0, fw - 1)]!) {
-      if (w.effect === 'roller') return { ...rollOut(world.terrain, st.x, st.vx, st.vy, w), oob: false };
-      return { x: st.x, y: st.y, oob: false };
+      if (w.effect === 'roller') return { ...rollOut(world.terrain, st.x, st.vx, st.vy, w), oob: false, vx: 0, vy: 0 };
+      return { x: st.x, y: st.y, oob: false, vx: st.vx, vy: st.vy };
     }
   }
-  return { x: st.x, y: st.y, oob: true };
+  return { x: st.x, y: st.y, oob: true, vx: st.vx, vy: st.vy };
+}
+/* Where a cluster shot at (angle, power) splits, flown as the war flies it
+   (its fuse, or the top of its arc with apex), or null when it comes down or
+   leaves the field first. server/sim.php room_split_point is the same. */
+export function splitPoint(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal, x: number, y: number, angle: number,
+  power: number, wkey: string, dirS: number): Motion | null {
+  const w = arsenal.weapons[wkey]!;
+  const fw = world.terrain.length, reach = fieldReach(fw);
+  const r = rad(angle);
+  const st: Motion = {
+    x, y,
+    vx: dcos(r) * shotSpeed(power, w.flat, w.speed, reach) * dirS,
+    vy: -dsin(r) * shotSpeed(power, w.flat, w.speed, reach),
+  };
+  const dt = 1 / 60;
+  let age = 0;
+  for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * reach); i < steps; i++) {
+    age += dt;
+    stepBallistic(st, dt, world.wind, w.flat ? FLAT_GRAV : GRAV);
+    if (st.x < 0 || st.x >= fw || st.y >= H + 40) return null;
+    if (w.apex ? age >= 0.1 && st.vy >= 0 : age >= (w.fuse || 0.9)) return st;
+    if (i >= 6 && st.y >= world.terrain[clamp(Math.round(st.x), 0, fw - 1)]!) return null;
+  }
+  return null;
 }
 /* Seekers bend toward the nearest live rival before the ballistic step. */
 export function steerShell(tanks: readonly Tank[], s: Shell, w: Weapon, dt: number): void {
@@ -615,22 +639,48 @@ export function steerShell(tanks: readonly Tank[], s: Shell, w: Weapon, dt: numb
 // random numbers, so the room server replays the exact same bloom. Returns
 // the bomblets. */
 export function splitShell(s: Shell, w: Weapon, reach = 1): Shell[] {
-  const n = Math.max(2, w.split || 4);
-  const fan = w.fan || 0.22;
-  const sp = dist(s.vx, s.vy) * 0.85;
-  const base = datan2(s.vy, s.vx);
+  const vels = splitVel(s.vx, s.vy, Math.max(2, w.split || 4), w.fan || 0.22);
   const bomblets: Shell[] = [];
-  for (let i = 0; i < n; i++) {
-    const a = base + (i - (n - 1) / 2) * fan;
+  for (let i = 0; i < vels.length; i++) {
+    const [vx, vy] = vels[i]!;
     bomblets.push({
-      x: s.x, y: s.y,
-      vx: dcos(a) * sp, vy: dsin(a) * sp,
+      x: s.x, y: s.y, vx, vy,
       wkey: s.wkey, owner: s.owner, life: 12 * reach,
       age: 0, pierced: false, split: true, order: [...(s.order || []), i],
       dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius,
     });
   }
   return bomblets;
+}
+/* A cluster's bomblet velocities: n fanned `fan` radians apart around the
+   parent's heading, at 85% of its speed. server/sim.php room_split_vel. */
+export function splitVel(vx: number, vy: number, n: number, fan: number): [number, number][] {
+  const sp = dist(vx, vy) * 0.85;
+  const base = datan2(vy, vx);
+  const out: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const a = base + (i - (n - 1) / 2) * fan;
+    out.push([dcos(a) * sp, dsin(a) * sp]);
+  }
+  return out;
+}
+/* A scatter gun's bomblet velocities: n in a fixed fan `fan` radians wide,
+   centred straight up, bomblet i at kick x (0.6 + 0.4 x ((5i mod n) / (n - 1)))
+   px/s. server/sim.php room_scatter_vel. */
+export function scatterVel(n: number, fan: number, kick: number): [number, number][] {
+  const out: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + (i - (n - 1) / 2) * fan / (n - 1);
+    const sp = kick * (0.6 + 0.4 * ((i * 5) % n) / (n - 1));
+    out.push([dcos(a) * sp, dsin(a) * sp]);
+  }
+  return out;
+}
+/* How long a munition leaving height y0 at vertical speed vy takes to come
+   down to groundY, with no wind (y grows downward). The drones predict where
+   bomblets and leaps land with it. server/sim.php room_drop_time. */
+export function dropTime(y0: number, vy: number, groundY: number): number {
+  return (-vy + Math.sqrt(Math.max(0, vy * vy + 2 * GRAV * (groundY - y0)))) / GRAV;
 }
 /* A hop weapon's next warhead from the burst at (x, y), or null once `hops`
    warheads have burst. It leaps on one pixel up, forward as the last one flew
@@ -658,15 +708,12 @@ export function hopShell(s: Shell, w: Weapon, x: number, y: number, reach: numbe
    direct hit on `skip`, the unit the burst struck. server/sim.php
    room_scatter_vel and server/rules.php room_fire_scatter are the same. */
 export function scatterShells(s: Shell, w: Weapon, x: number, y: number, reach: number, skip: Tank | false = false): Shell[] {
-  const n = Math.max(2, w.split || 4);
-  const fan = w.fan || 0.22, kick = w.kick || 150;
+  const vels = scatterVel(Math.max(2, w.split || 4), w.fan || 0.22, w.kick || 150);
   const bomblets: Shell[] = [];
-  for (let i = 0; i < n; i++) {
-    const a = -Math.PI / 2 + (i - (n - 1) / 2) * fan / (n - 1);
-    const sp = kick * (0.6 + 0.4 * ((i * 5) % n) / (n - 1));
+  for (let i = 0; i < vels.length; i++) {
+    const [vx, vy] = vels[i]!;
     bomblets.push({
-      x, y: y - 2,
-      vx: dcos(a) * sp, vy: dsin(a) * sp,
+      x, y: y - 2, vx, vy,
       wkey: s.wkey, owner: s.owner, life: 12 * reach,
       age: 0, pierced: skip, split: true, order: [...(s.order || []), i],
       dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius,

@@ -184,4 +184,29 @@ final class AiArcsTest extends TestCase
             $this->assertSame(0.0, room_ai_fall_harm($room, $self, $target, $k, ['x' => 420.0, 'y' => 400.0, 'oob' => false]), $k);
         }
     }
+
+    /** The planning flights one drone turn costs with a full round-9 rack (three
+     *  roller arcs among them), over hills, for every strategy: room_advance runs
+     *  up to three drone turns under the room lock, so a turn stays inside a
+     *  fixed budget. */
+    public function testADroneTurnWithAFullRackStaysInsideItsFlightBudget(): void
+    {
+        $terrain = [];
+        for ($x = 0; $x < 720; $x++) {
+            $terrain[] = 330 + 40 * det_sin($x * 2 * M_PI / 260);
+        }
+        foreach (['hunter', 'bully', 'sniper', 'avenger', 'glory', 'lobber'] as $s) {
+            foreach ([1, 2, 3, 4] as $seed) {
+                $room = ['terrain' => $terrain, 'wind' => 2.0, 'round' => 9, 'rng' => $seed, 'jammer' => [], 'scores' => [],
+                    'tanks' => [
+                        ['seat' => 0, 'kind' => 'human', 'x' => 150.0, 'y' => $terrain[150], 'hp' => 100, 'dirS' => 1, 'angle' => 45.0, 'power' => 50.0],
+                        ['seat' => 1, 'kind' => 'ai', 'x' => 560.0, 'y' => $terrain[560], 'hp' => 60, 'dirS' => -1, 'angle' => 45.0, 'power' => 50.0,
+                            's' => $s, 'ammo' => room_ai_rack(9)],
+                    ]];
+                $before = room_sim_flights();
+                room_ai_choose($room, $room['tanks'][1]);
+                $this->assertLessThanOrEqual(440, room_sim_flights() - $before, "$s seed $seed");
+            }
+        }
+    }
 }

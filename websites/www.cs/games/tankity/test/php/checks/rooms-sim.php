@@ -72,6 +72,26 @@ foreach ($weapons as $k => $def) {
     }
 }
 
+// A drone never hurts itself with its own Funky Bomb, its target 160 to 220
+// px away: it chooses, it fires what it chose, and its armor is unchanged.
+foreach ([160, 170, 180, 190, 200, 210, 220] as $gap) {
+    foreach ([1, -1] as $dir) {
+        foreach ([1, 2, 3] as $seed) {
+            $room = $flatRoom([$tank(0, 'ai', 360.0, 1000), $tank(1, 'human', 360.0 + $dir * $gap, 100)]);
+            $room += ['round' => 9, 'rng' => $seed, 'difficulty' => 'hard', 'jammer' => []];
+            $room['tanks'][0]['dirS'] = $dir;
+            $room['tanks'][0]['ammo'] = ['shell' => -1, 'funky' => 1];
+            $room['tanks'][0]['s'] = 'hunter';
+            $c = room_ai_choose($room, $room['tanks'][0]);
+            $room['tanks'][0]['angle'] = $c['angle'];
+            $room['tanks'][0]['power'] = $c['power'];
+            $events = [['t' => 'aifire', 'seat' => 0]];
+            room_fire_shot($room, $events, 0, $c['wkey']);
+            $check("funky-never-hurts-its-drone-$gap-$dir-$seed", $room['tanks'][0]['hp'] === 1000, "{$c['wkey']}: hp {$room['tanks'][0]['hp']}");
+        }
+    }
+}
+
 // A harmless burst (dmg 0) carves its crater and touches no unit: no hit, no
 // shield spent, nobody credited or blamed.
 $room = $flatRoom([$tank(0, 'ai', 100.0, 100), $tank(1, 'human', 300.0, 100), $tank(2, 'ai', 330.0, 100)]);
@@ -831,7 +851,7 @@ $check('tactic-hunter-keeps-its-target', $room['tanks'][1]['brk']['t'] === 3);
 $room['tanks'][3]['hp'] = 0;
 room_ai_choose($room, $room['tanks'][1]);
 $check('tactic-hunter-moves-on-when-its-target-dies', $room['tanks'][1]['brk']['t'] === 2);
-// A lobber lobs: high arcs and area guns; a glory-hunter takes its strongest gun.
+// A lobber lobs: high arcs and area guns; a glory-hunter takes its most harmful gun.
 $lobAngles = [];
 for ($seed = 1; $seed <= 12; $seed++) {
     $room = $scene('lobber');
@@ -842,8 +862,9 @@ for ($seed = 1; $seed <= 12; $seed++) {
 $check('tactic-lobber-lobs', $median($lobAngles) >= 60, implode(',', $lobAngles));
 $room = $scene('lobber', ['ammo' => ['rail' => 2, 'buck' => 2]]);
 $check('tactic-lobber-prefers-area-guns', room_ai_choose($room, $room['tanks'][1])['wkey'] === 'buck');
+// Glory goes for the drone with 4 kills, 70 px off: every big blast would reach the gunner itself, so it fires the Shell.
 $room = $scene('glory', ['ammo' => ['mortar' => 2, 'heavy' => 2, 'buck' => 2]]);
-$check('tactic-glory-takes-its-strongest-gun', room_ai_choose($room, $room['tanks'][1])['wkey'] === 'heavy');
+$check('tactic-glory-spares-itself', room_ai_choose($room, $room['tanks'][1])['wkey'] === 'shell');
 // A sniper's hands are steadier: a smaller spread of aims than a bully's.
 $spread = function (string $strategy) use ($scene): float {
     $v = [];

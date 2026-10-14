@@ -176,63 +176,103 @@ function room_area_gun(array $def): bool
 }
 
 /* ---------- which gun: the harm each would do ---------- */
-/* The share of a hop or scatter gun's later munitions a drone counts on, and
- * the share of a cluster's flight left after it splits (src/ai.ts
- * AI_SUB_SHARE and AI_SPLIT_LEFT). */
-const ROOM_AI_SUB_SHARE = 0.35;
-const ROOM_AI_SPLIT_LEFT = 0.5;
+/* How much wider than predicted a gun's reach is taken to be near the drone
+ * itself (src/ai.ts AI_SAFE_MARGIN). */
+const ROOM_AI_SAFE_MARGIN = 1.25;
 /* A blast's damage to a unit $d px from it, or 0 past its reach. */
 function room_ai_reach_damage(int $dmg, float $d, float $r): int
 {
-    return $d <= $r + 14 ? (int) round($dmg * max(0.3, 1 - $d / ($r + 14))) : 0;
+    return $d <= $r + 14 ? room_blast_damage($dmg, $d, $r) : 0;
+}
+/* Where a gun's later munitions land, as x on the landing's ground (a hop
+ * gun's leaps, a scatter gun's bomblets, a cluster's bomblets from where its
+ * shot splits), and whether the shot itself bursts. src/ai.ts munitions is the
+ * same. ['burst' => bool, 'xs' => [x, ...]]. */
+function room_ai_munitions(array $room, array $self, string $wkey, array $land): array
+{
+    $w = room_weapons()[$wkey];
+    $xs = [];
+    if ($w['effect'] === 'hop') {
+        $x = $land['x'];
+        $vx = $land['vx'] ?? 0.0;
+        $vy = $land['vy'] ?? 0.0;
+        $keep = $w['hopKeep'] ?: 0.5;
+        for ($i = 1; $i < ($w['hops'] ?: 1); $i++) {
+            $hvx = $vx * $keep;
+            $hvy = -abs($vy) * $keep;
+            $t = room_drop_time($land['y'] - 1, $hvy, $land['y']);
+            $x += $hvx * $t;
+            $xs[] = $x;
+            $vx = $hvx;
+            $vy = $hvy + ROOM_GRAV * $t;
+        }
+    } elseif ($w['effect'] === 'scatter') {
+        foreach (room_scatter_vel(max(2, $w['split'] ?: 4), $w['fan'] ?: 0.22, $w['kick'] ?: 150.0) as [$vx, $vy]) {
+            $xs[] = $land['x'] + $vx * room_drop_time($land['y'] - 2, $vy, $land['y']);
+        }
+    } elseif ($w['effect'] === 'cluster' && isset($land['a'], $land['p'])) {
+        $aimed = ['angle' => (float) $land['a']] + $self;
+        [$mx, $my] = room_muzzle($aimed);
+        $at = room_split_point($room['terrain'], $room['wind'], $mx, $my, (float) $land['a'], (float) $land['p'], $wkey, $self['dirS'] ?? -1, count($room['terrain']));
+        if ($at === null) {
+            return ['burst' => true, 'xs' => $xs];
+        }
+        foreach (room_split_vel($at[2], $at[3], max(2, $w['split'] ?: 4), $w['fan'] ?: 0.22) as [$vx, $vy]) {
+            $xs[] = $at[0] + $vx * room_drop_time($at[1], $vy, $land['y']);
+        }
+        return ['burst' => false, 'xs' => $xs];
+    }
+    return ['burst' => true, 'xs' => $xs];
 }
 /* The harm gun $wkey would do to $target landing at $land (room_sim_shot's
- * x, y, oob), fired by $self: its blast on the target's body, plus what its
- * pellets or bomblets add, plus room_ai_fall_harm; -INF when any of it could
- * reach $self's own body. src/ai.ts aiHarm is the same. */
+ * x, y, oob, vx, vy, plus the aim a, p), fired by $self: its blast on the
+ * target's body, plus each later munition's at its own landing, plus
+ * room_ai_fall_harm, never more than the target's armor; -INF when any of it
+ * could reach $self's own body. src/ai.ts aiHarm is the same. */
 function room_ai_harm(array $room, array $self, array $target, string $wkey, array $land): float
 {
     $w = room_weapons()[$wkey];
     if ($land['oob']) {
         return 0.0;
     }
-    [$tx, $ty] = room_unit_box($target);
+    [$tx, $ty, $trx, $try] = room_unit_box($target);
     [$sx, $sy] = room_unit_box($self);
     $d = room_dist($tx - $land['x'], $ty - $land['y']);
-    $own = room_dist($sx - $land['x'], $sy - $land['y']);
-    $subDmg = $w['subDmg'] ?: $w['dmg'];
-    $subR = $w['subRadius'] ?: $w['radius'];
+    // How near the drone's own body a burst may come: at the landing, or on the
+    // target's near side, where a shot that strikes the target's body bursts.
+    $own = min(room_dist($sx - $land['x'], $sy - $land['y']), room_dist($sx - $tx, $sy - $ty) - max($trx, $try));
     $harm = 0.0;
-    $reach = $w['radius'] + 14;
-    if ($w['effect'] === 'pellets' || $w['effect'] === 'cluster') {
-        $pel = $w['effect'] === 'pellets';
-        $n = $pel ? ($w['pellets'] ?: 1) : max(2, $w['split'] ?: 4);
-        $step = $pel ? $w['spread'] : ($w['fan'] ?: 0.22);
-        $dmg = $pel ? $w['dmg'] : $subDmg;
-        $r = $pel ? $w['radius'] : $subR;
-        // How far the fan has to spread: the whole flight for pellets, what is left after the split for bomblets.
-        $len = room_dist($land['x'] - $self['x'], $land['y'] - ($self['y'] - 14)) * ($pel ? 1 : ROOM_AI_SPLIT_LEFT);
-        $reach = 0;
+    $reach = 0.0;
+    if ($w['effect'] === 'pellets') {
+        $n = $w['pellets'] ?: 1;
+        // How far the fan has spread over the flight.
+        $len = room_dist($land['x'] - $self['x'], $land['y'] - ($self['y'] - 14));
         for ($i = 0; $i < $n; $i++) {
-            $off = abs($i - ($n - 1) / 2) * $step * $len;
-            $harm += room_ai_reach_damage($dmg, $d + $off, (float) $r);
-            $reach = max($reach, $r + 14 + $off);
+            $off = abs($i - ($n - 1) / 2) * $w['spread'] * $len;
+            $harm += room_ai_reach_damage($w['dmg'], $d + $off, (float) $w['radius']);
+            $reach = max($reach, $w['radius'] + 14 + $off);
         }
     } else {
-        $harm = (float) room_ai_reach_damage($w['dmg'], $d, (float) $w['radius']);
-        if ($w['effect'] === 'hop' || $w['effect'] === 'scatter') {
-            $hop = $w['effect'] === 'hop';
-            $n = $hop ? $w['hops'] - 1 : max(2, $w['split'] ?: 4);
-            // How far a scatter gun's bomblets may land: half the range of its fastest thrown at 45 degrees.
-            $spread = $hop ? 0.0 : $w['kick'] * $w['kick'] / (2 * ROOM_GRAV);
-            $harm += ROOM_AI_SUB_SHARE * $n * room_ai_reach_damage($subDmg, max(0.0, $d - $spread), (float) $subR);
-            $reach = max($reach, $subR + 14 + $spread);
+        $subs = room_ai_munitions($room, $self, $wkey, $land);
+        if ($subs['burst']) {
+            $harm = (float) room_ai_reach_damage($w['dmg'], $d, (float) $w['radius']);
+            $reach = (float) ($w['radius'] + 14);
+        }
+        $subDmg = $w['subDmg'] ?: $w['dmg'];
+        $subR = $w['subRadius'] ?: $w['radius'];
+        $far = 0.0;
+        foreach ($subs['xs'] as $x) {
+            $harm += room_ai_reach_damage($subDmg, room_dist($tx - $x, $ty - $land['y']), (float) $subR);
+            $far = max($far, abs($x - $land['x']));
+        }
+        if (count($subs['xs'])) {
+            $reach = max($reach, $far + $subR + 14);
         }
     }
-    if ($own <= $reach) {
+    if ($own <= $reach * ROOM_AI_SAFE_MARGIN) {
         return -INF;
     }
-    return $harm + room_ai_fall_harm($room, $self, $target, $wkey, $land);
+    return min((float) $target['hp'], $harm + room_ai_fall_harm($room, $self, $target, $wkey, $land));
 }
 /* The harm of the fall a gun's crater would give the target, less the
  * drone's own. Craters do not drop units into falls that hurt yet, so it is
@@ -243,7 +283,7 @@ function room_ai_fall_harm(array $room, array $self, array $target, string $wkey
 }
 /* The gun to fire once the search has found each arc's best aim ($byArc:
  * flight key => [err, a, p, land]). src/ai.ts pickGun is the same: the most
- * harmful candidate wins, ties to rack order; glory weighs every gun it
+ * harmful candidate wins, the cheaper on a tie, then rack order; glory weighs every gun it
  * carries, any other strategy the guns of the best-landing arc; when no gun
  * would hurt anyone, that arc's first gun (glory: its strongest), or if that
  * would reach the drone itself, the gun of the best-landing arc that would
@@ -263,7 +303,8 @@ function room_ai_pick_gun(array $room, array $self, array $target, bool $glory, 
     $topHarm = 0.0;
     foreach ($pool as $k) {
         $h = $harmOf($k);
-        if ($h > $topHarm) {
+        // The cheaper gun on a tie: harm is capped at the target's armor, so it is the one that finishes the job for less.
+        if ($h > $topHarm || ($top !== null && $h === $topHarm && $weapons[$k]['price'] < $weapons[$top]['price'])) {
             [$top, $topHarm] = [$k, $h];
         }
     }
@@ -435,7 +476,7 @@ function room_ai_choose(array &$room, array $tank): array
             $err = $land['oob'] ? 400 + abs($land['x'] - $me['x']) * 0.2 : abs($land['x'] - $me['x']);
             $f = $arcOf[$wkey];
             if (!isset($byArc[$f]) || $err < $byArc[$f]['err']) {
-                $byArc[$f] = ['err' => $err, 'a' => $a, 'p' => $p, 'land' => $land];
+                $byArc[$f] = ['err' => $err, 'a' => $a, 'p' => $p, 'land' => $land + ['a' => $a, 'p' => $p]];
             }
             if ($best === null || $err < $best['err']) {
                 $best = ['err' => $err, 'a' => $a, 'p' => $p, 'wkey' => $wkey];
@@ -444,20 +485,35 @@ function room_ai_choose(array &$room, array $tank): array
         };
         // One gun over angles lo..hi of the grid (25, 31, ...) and powers 20,
         // 26, ... 98: every other point of it, then the eight neighbours of the best.
-        $search = function (string $wkey, int $lo, int $hi) use ($consider): void {
+        // A roller's planning flight rolls on after it lands, several times the
+        // cost of a shell's: its arcs are searched after the others, start on a
+        // grid twice as coarse, and narrow (12, then 6) only when that coarse
+        // best already beats the best landing so far.
+        $search = function (string $wkey, int $lo, int $hi) use ($consider, $weapons, &$best): void {
+            $roll = $weapons[$wkey]['effect'] === 'roller';
+            $coarse = $roll ? 24 : 12;
             [$ca, $cp, $ce] = [$lo, 20, INF];
-            for ($a = $lo; $a <= $hi; $a += 12) {
-                for ($p = 20; $p <= 100; $p += 12) {
+            for ($a = $lo; $a <= $hi; $a += $coarse) {
+                for ($p = 20; $p <= 100; $p += $coarse) {
                     $err = $consider($wkey, $a, $p);
                     if ($err < $ce) {
                         [$ca, $cp, $ce] = [$a, $p, $err];
                     }
                 }
             }
-            for ($a = $ca - 6; $a <= $ca + 6; $a += 6) {
-                for ($p = $cp - 6; $p <= $cp + 6; $p += 6) {
-                    if (($a !== $ca || $p !== $cp) && $a >= $lo && $a <= $hi && $p >= 20 && $p <= 100) {
-                        $consider($wkey, $a, $p);
+            if ($roll && $ce > $best['err']) {
+                return;
+            }
+            foreach ($roll ? [12, 6] : [6] as $step) {
+                [$ba, $bp] = [$ca, $cp];
+                for ($a = $ba - $step; $a <= $ba + $step; $a += $step) {
+                    for ($p = $bp - $step; $p <= $bp + $step; $p += $step) {
+                        if (($a !== $ba || $p !== $bp) && $a >= $lo && $a <= $hi && $p >= 20 && $p <= 100) {
+                            $err = $consider($wkey, $a, $p);
+                            if ($err < $ce) {
+                                [$ca, $cp, $ce] = [$a, $p, $err];
+                            }
+                        }
                     }
                 }
             }
@@ -465,6 +521,7 @@ function room_ai_choose(array &$room, array $tank): array
         // The first angle on the grid above ROOM_LOB_ANGLE.
         $highFrom = 25 + 6 * (int) ceil((ROOM_LOB_ANGLE + 1 - 25) / 6);
         $plan = room_ai_arc_guns($weapons, $guns);
+        usort($plan, fn($a, $b) => (int) ($weapons[$a]['effect'] === 'roller') <=> (int) ($weapons[$b]['effect'] === 'roller'));
         foreach ($plan as $wkey) {
             $search($wkey, $s === 'lobber' ? $highFrom : 25, 155);
         }

@@ -12,6 +12,7 @@
             "hostSeat": 0,
             "round": 1,
             "startHumans": 1,
+            "matchId": "fixturematch",
             "winner": null,
             "winBonus": 0,
             "wind": -5,
@@ -919,7 +920,8 @@
                 "maxArmor": 100,
                 "filed": false,
                 "filedRank": null,
-                "filedFailed": false
+                "filedFailed": false,
+                "filedLocal": false
             },
             "csrf": "fixture-csrf"
         }

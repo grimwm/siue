@@ -541,9 +541,12 @@ function room_round_settled(array $room): bool
 }
 /* ---------- this match ---------- */
 /* Called by the start handler: how many humans started (last-human-standing
-   needs two), and each human's match stats from zero. */
+   and the online board need two), each human's match stats from zero, and a
+   fresh match id, so a browser tells one match from the next in a room whose
+   code Play again keeps. */
 function room_match_begin(array &$room): void
 {
+    $room['matchId'] = bin2hex(random_bytes(6));
     $room['startHumans'] = 0;
     $room['stats'] = [];
     $room['filed'] = [];
@@ -687,10 +690,18 @@ function room_file_eliminated(array &$room, array $wrecked): void
 }
 /* Files a human seat's match score on the board of the room's difficulty,
    once per match. Inside the room's transaction: it commits with the room. A
-   failure is logged, never allowed to break the round. */
+   failure is logged, never allowed to break the round. A match fewer than two
+   humans started never reaches the online board: the seat is marked 'local',
+   and the snapshot tells its browser to keep the score itself. A leaver's
+   seat turns into a drone but startHumans stays, so a two-human match one
+   player forfeits still files online. */
 function room_file_seat(array &$room, int $seat): void
 {
     if (array_key_exists($seat, $room['filed'] ?? [])) {
+        return;
+    }
+    if (($room['startHumans'] ?? 1) < 2) {
+        $room['filed'][$seat] = 'local';
         return;
     }
     $s = $room['seats'][$seat] ?? [];
@@ -903,7 +914,7 @@ function room_again(array &$room): bool
     if (!room_rehost($room)) {
         return false; // everyone left; nobody is there to start a lobby
     }
-    foreach (['plate', 'armor', 'shield', 'jammer', 'bunker', 'laststand', 'fuelBonus', 'fuelApplied', 'tactic', 'stats', 'filed', 'menu', 'shop', 'pace', 'clock'] as $k) {
+    foreach (['plate', 'armor', 'shield', 'jammer', 'bunker', 'laststand', 'fuelBonus', 'fuelApplied', 'tactic', 'stats', 'filed', 'matchId', 'menu', 'shop', 'pace', 'clock'] as $k) {
         unset($room[$k]);
     }
     foreach ($room['seats'] as $idx => $s) {

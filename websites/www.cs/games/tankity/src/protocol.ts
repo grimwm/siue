@@ -95,12 +95,14 @@ export interface RoomYou {
   /** The armor the next round musters with (what the last one ended with). */
   armor: number;
   maxArmor: number;
-  /** This seat's match score was filed on the all-time board (false: not yet, or the filing failed); filedRank is its place when filed
-   * (null: outside the board). */
+  /** This seat's match score was filed on the online board (false: not yet, the filing failed, or it is kept locally); filedRank
+   * is its place when filed (null: outside the board). */
   filed: boolean;
   filedRank: number | null;
   /** The server tried to file this seat's score and could not. */
   filedFailed: boolean;
+  /** The match had fewer than two humans: nothing went online, and this browser keeps the score on its own board. */
+  filedLocal: boolean;
 }
 
 export interface RoomSnapshot {
@@ -116,6 +118,8 @@ export interface RoomSnapshot {
   round: number;
   /** Humans seated when the match started; two or more makes it last-human-standing. */
   startHumans: number;
+  /** This match's id, new at every start (null before the first): with the code, it names one match. */
+  matchId: string | null;
   /** The seat that won the match; null until then, and when nobody did. */
   winner: number | null;
   /** The winner's match bonus (0 until there is a winner); the matchwin event carries it too. */

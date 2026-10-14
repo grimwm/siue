@@ -127,23 +127,25 @@ final class RoomAgainTest extends TestCase
     {
         $room = room_new('AGN2', 'WIN');
         $room['seats'][0] = room_seat_human('WIN', 't0', []);
-        $room['seats'][1] = room_idle_seat(1, 'ai');
-        $room['seats'][2] = room_idle_seat(2, 'open');
+        $room['seats'][1] = room_seat_human('TWO', 't1', []);
+        $room['seats'][2] = room_idle_seat(2, 'ai');
         $room['seats'][3] = room_idle_seat(3, 'open');
         room_seat_economy($room, 0);
+        room_seat_economy($room, 1);
         for ($match = 1; $match <= 2; $match++) {
             $room['seats'][0]['lives'] = 1;
+            $room['seats'][1]['lives'] = 1;
             room_match_begin($room);
             room_start_round($room);
             foreach ($room['tanks'] as &$t) {
-                if ($t['seat'] === 0) {
+                if ($t['seat'] <= 1) {
                     $t['hp'] = 0;
                 }
             }
             unset($t);
             $events = [];
             room_end_round($room, $events);
-            $this->assertCount($match, board_top('normal', 10), "match $match filed its human");
+            $this->assertCount(2 * $match, board_top('normal', 10), "match $match filed its two humans");
             $room['phase'] = 'over';
             $this->assertTrue(room_again($room));
         }

@@ -6,7 +6,9 @@ use PHPUnit\Framework\TestCase;
 
 /* The server files every room score itself, on the board of the room's
    difficulty: an eliminated human when the last life goes, the winner with the
-   bonus when the match ends, each once. */
+   bonus when the match ends, each once. Only a match two or more humans
+   started reaches the online board; a one-human match is marked 'local', for
+   the player's browser to keep. */
 final class RoomFilingTest extends TestCase
 {
     private string $dir;
@@ -140,5 +142,85 @@ final class RoomFilingTest extends TestCase
         $this->assertNull($snap['you']['filedRank']);
         $this->assertTrue($snap['you']['filedFailed'], 'the card can say it failed');
         $this->assertFalse(room_snapshot($this->duel(), 0, 0)['you']['filedFailed'], 'a score not filed yet has not failed');
+    }
+
+    /** One human and drones: the human is wrecked on the last life. */
+    private function alone(): array
+    {
+        $room = room_new('SOLO', 'ONE');
+        $room['seats'][0] = room_seat_human('ONE', 't0', []);
+        foreach ([1, 2, 3] as $i) {
+            $room['seats'][$i] = room_idle_seat($i, 'ai');
+        }
+        room_seat_economy($room, 0);
+        $room['seats'][0]['lives'] = 1;
+        room_match_begin($room);
+        room_start_round($room);
+        $room['scores'][0] = 4200;
+        foreach ($room['tanks'] as &$t) {
+            if ($t['seat'] === 0) {
+                $t['hp'] = 0;
+            }
+        }
+        unset($t);
+        return $room;
+    }
+
+    public function testAOneHumanMatchFilesNothingAndIsMarkedLocal(): void
+    {
+        $room = $this->alone();
+        $this->assertSame(1, $room['startHumans']);
+        $events = [];
+        room_end_round($room, $events);
+        $this->assertSame('over', $room['phase']);
+        foreach (BOARD_LEVELS as $level) {
+            $this->assertSame([], board_top($level, 10), "nothing on the $level board");
+        }
+        $this->assertSame('local', $room['filed'][0]);
+        $you = room_snapshot($room, 0, 0)['you'];
+        $this->assertTrue($you['filedLocal'], 'the browser is told to keep it');
+        $this->assertFalse($you['filed'], 'not filed online');
+        $this->assertNull($you['filedRank']);
+        $this->assertFalse($you['filedFailed']);
+        $this->assertSame(4200, $you['score']);
+        room_file_seat($room, 0);
+        $this->assertSame('local', $room['filed'][0], 'still once per match');
+    }
+
+    public function testATwoHumanMatchFilesBothOnlineAndNeitherLocally(): void
+    {
+        $room = $this->duel();
+        $events = [];
+        room_end_round($room, $events);
+        $this->assertCount(2, board_top('normal', 10));
+        foreach ([0, 1] as $seat) {
+            $this->assertFalse(room_snapshot($room, $seat, 0)['you']['filedLocal']);
+        }
+    }
+
+    public function testATwoHumanMatchOneLeavesStillFilesTheWinnerOnline(): void
+    {
+        $room = $this->duel();
+        foreach ($room['tanks'] as &$t) {
+            $t['hp'] = 100; // nobody wrecked: the other human forfeits by leaving
+        }
+        unset($t);
+        $this->assertTrue(room_leave($room, 1));
+        $events = [];
+        room_end_round($room, $events);
+        $this->assertSame(0, $room['winner']);
+        $this->assertSame(['WIN'], array_column(board_top('normal', 10), 'initials'), 'started with two humans: it counts');
+        $this->assertFalse(room_snapshot($room, 0, 0)['you']['filedLocal']);
+    }
+
+    public function testEachMatchHasItsOwnId(): void
+    {
+        $room = room_new('IDEE', 'ONE');
+        $this->assertNull(room_snapshot($room, 0, 0)['matchId'], 'no match yet');
+        room_match_begin($room);
+        $first = room_snapshot($room, 0, 0)['matchId'];
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{12}$/', $first);
+        room_match_begin($room);
+        $this->assertNotSame($first, $room['matchId'], 'Play again keeps the code but not the match');
     }
 }

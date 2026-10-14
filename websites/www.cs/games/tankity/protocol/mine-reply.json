@@ -19,7 +19,8 @@
                 "players": [
                     "ABC"
                 ],
-                "hostSeat": 0
+                "hostSeat": 0,
+                "expiresAt": 1800000600
             },
             {
                 "code": "FXT1",
@@ -37,7 +38,8 @@
                     "ABC",
                     "DEF"
                 ],
-                "hostSeat": 0
+                "hostSeat": 0,
+                "expiresAt": 1800000600
             },
             {
                 "code": "GONE",

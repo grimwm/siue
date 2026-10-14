@@ -10,11 +10,14 @@ if (!defined('TANKITY_ROOMS_LIB')) {
 require_once __DIR__ . '/../rooms.php';
 
 const PROTOCOL_CODE = 'FXT1';
+/** The stored touch time every fixture room carries: a fixed second, so expiresAt is stable. */
+const PROTOCOL_TOUCHED = 1_800_000_000;
 
 /** A lobby: the host ABC, a guest DEF, one drone seat, one open seat. */
 function protocol_lobby(): array
 {
     $room = room_new(PROTOCOL_CODE, 'ABC');
+    $room['created'] = $room['touched'] = PROTOCOL_TOUCHED; // expiresAt must not depend on the clock
     $room['csrf'] = 'fixture-csrf';
     $room['seats'][0] = room_seat_human('ABC', 'fixture-token-0', []);
     $room['seats'][1] = room_seat_human('DEF', 'fixture-token-1', ['body' => 'hover']);
@@ -29,6 +32,7 @@ function protocol_lobby(): array
 function protocol_play(): array
 {
     $room = room_new(PROTOCOL_CODE, 'ABC');
+    $room['created'] = $room['touched'] = PROTOCOL_TOUCHED; // expiresAt must not depend on the clock
     $room['csrf'] = 'fixture-csrf';
     $room['seats'][0] = room_seat_human('ABC', 'fixture-token-0', []);
     $room['seats'][1] = room_idle_seat(1, 'ai');

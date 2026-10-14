@@ -18,6 +18,7 @@
             "wind": -5,
             "turn": 0,
             "turnSecs": 120,
+            "expiresAt": 1800000600,
             "turnLeft": 120,
             "shopLeft": null,
             "terrainRev": 3,

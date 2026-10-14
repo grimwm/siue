@@ -185,4 +185,19 @@ final class RoomIdleTest extends TestCase
         room_test_age('H2XX', 700);
         $this->assertSame(3, room_hosted('aaaa'));
     }
+
+    public function testTheSnapshotAndTheMineRowCarryWhenTheRoomCloses(): void
+    {
+        $lobby = $this->started('EXPA', 'lobby', 1, null, null);
+        $lobby['touched'] = 1_800_000_000;
+        $this->assertSame(1_800_000_600, room_snapshot($lobby, 0, 0)['expiresAt']);
+
+        $play = $this->started('EXPB', 'play', 2, 600, 1_800_000_000);
+        $play['seats'][1]['addr'] = 'other';
+        $play['seats'][0]['addr'] = 'one';
+        $expected = 1_800_000_000 + 2 * 600;
+        $this->assertSame($expected, room_expires($play));
+        $this->assertSame($expected, room_snapshot($play, null, 0)['expiresAt'], 'a watcher gets it too');
+        $this->assertSame($expected, room_mine_row($play, 0)['expiresAt']);
+    }
 }

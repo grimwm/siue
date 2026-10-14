@@ -53,7 +53,9 @@
 #   cat       shop section heading; rows sharing a cat sit under one heading.
 #   dmg       damage dealt at the centre of the blast, in armor points. It
 #             falls off with distance (never below 30%); a direct hit doubles
-#             it. Whole number, 1 to 500.
+#             it. Whole number, 0 to 500. A row with dmg 0 is harmless: its
+#             burst carves its crater and touches no unit (no damage, no
+#             shield spent, nobody credited).
 #   radius    blast radius in pixels: the crater size, and damage reaches
 #             radius + 14 px. Whole number, 1 to 200.
 #   price     dollars for one pack. 0 to 100000.
@@ -62,16 +64,22 @@
 #   minRound  first round the shop sells it. 1 means from the pre-match shop;
 #             a later round locks the row ("Unlocks in round N") until then.
 #   ai        true lets the drone battery carry it. false keeps it player only.
-#   aiRound   first round drones carry it (they get a rack of 2 from then on).
-#             minRound is when the PLAYER can buy it; aiRound is when DRONES
-#             start firing it, so a shell can reach players before drones, or
-#             the other way round. 99 means never (use with ai: false).
+#   aiRound   first round drones carry it (they get a rack of aiRack from
+#             then on). minRound is when the PLAYER can buy it; aiRound is
+#             when DRONES start firing it, so a shell can reach players before
+#             drones, or the other way round. 99 means never (use with
+#             ai: false).
+#   aiRack    shells of it each drone loads per round, 1 to 9. Optional
+#             (2 when left out); only a row with ai: true takes it.
 #   effect    what the shell does in flight:
 #               shot       a plain shell, bursts where it lands
 #               pellets    fires `pellets` shells at once, fanned by `spread`
 #               cluster    flies `fuse` seconds, then splits into `split`
 #                          bomblets fanned by `fan`; each deals subDmg with
-#                          blast subRadius
+#                          blast subRadius. With `apex: true` it splits at
+#                          the top of its arc instead (the first moment it
+#                          stops rising, never before 0.1 s), and takes no
+#                          fuse
 #               proximity  bursts when within `prox` px of any tank
 #               seeker     bends toward the nearest tank, `steer` pixels per
 #                          second of sideways push
@@ -86,17 +94,37 @@
 #                          still airborne, it bursts as a direct hit, as a
 #                          shell does. A drone hovers above the ground, so a
 #                          rolling ball touches it when it passes under it.
+#               hop        flies like a shell; each burst (on the ground or
+#                          a unit) throws the next warhead on from the burst
+#                          point, keeping `hopKeep` of its speed and turned
+#                          upward, until `hops` warheads have burst or one
+#                          leaves the field. The first bursts with dmg and
+#                          radius, each later one with subDmg and subRadius.
+#                          A warhead never takes a direct hit on the unit
+#                          the burst before it struck.
+#               scatter    flies like a shell; its burst throws `split`
+#                          bomblets upward in a fixed fan `fan` radians wide
+#                          at up to `kick` px/s. Each flies with the wind
+#                          and bursts where it lands with subDmg and
+#                          subRadius (never as a direct hit on the unit the
+#                          parent struck).
 #   speed     launch speed multiplier (1.0 is normal; 0.55 slow, 1.3 fast).
 #   flat      true flies on low gravity, so the arc is nearly a straight line.
 #             Optional; leave it out for normal arcs.
 #   note      one sentence for the shop and picker (max 120 characters; no
 #             en or em dashes).
 #   gfx       paint job, see below.
-#   Extra fields by effect (required for that effect; other effects ignore
-#   them):
+#   Extra fields by effect (required for that effect; any other effect
+#   refuses them):
 #     pellets: pellets (1 to 12), spread (radians between pellets, 0 to 1)
 #     cluster: fuse (seconds, 0.1 to 10), split (2 to 12), fan (radians,
-#              0 to 1), subDmg, subRadius
+#              0 to 1), subDmg, subRadius; apex (true or false, optional:
+#              true splits at the top of the arc and leaves fuse out)
+#     hop: hops (warheads, 2 to 6), hopKeep (the share of its speed each
+#          leap keeps, 0.2 to 0.9), subDmg, subRadius
+#     scatter: split (bomblets, 2 to 12), fan (total spread in radians,
+#              0.2 to 3), kick (fastest bomblet's speed, px/s, 40 to 400),
+#              subDmg, subRadius
 #     proximity: prox (pixels)   seeker: steer   emp: drain (fuel)
 #     roller: friction (the share of its speed it loses per second, 0.01 to
 #             5; 0.6 rolls a fair way), rollTime (most seconds it rolls, 0.5

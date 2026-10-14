@@ -389,7 +389,38 @@ function tankity_yaml_scalar(string $t): mixed
 
 /* ---------------------------------------------------------------- schema */
 
-const TANKITY_AMMO_EFFECTS = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller'];
+const TANKITY_AMMO_EFFECTS = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter'];
+/** The fields an ammo row carries for its effect: field => [type, [effect => [lo, hi]]]. A field is
+ *  valid only on the effects listed for it, with that effect's range (bool fields have no range). */
+const TANKITY_AMMO_EXTRA = [
+    'pellets' => ['int', ['pellets' => [1, 12]]],
+    'spread' => ['num', ['pellets' => [0.0, 1.0]]],
+    'fuse' => ['num', ['cluster' => [0.1, 10.0]]],
+    'apex' => ['bool', ['cluster' => null]],
+    'split' => ['int', ['cluster' => [2, 12], 'scatter' => [2, 12]]],
+    'fan' => ['num', ['cluster' => [0.0, 1.0], 'scatter' => [0.2, 3.0]]],
+    'kick' => ['num', ['scatter' => [40.0, 400.0]]],
+    'hops' => ['int', ['hop' => [2, 6]]],
+    'hopKeep' => ['num', ['hop' => [0.2, 0.9]]],
+    'subDmg' => ['int', ['cluster' => [1, 500], 'hop' => [1, 500], 'scatter' => [1, 500]]],
+    'subRadius' => ['int', ['cluster' => [1, 200], 'hop' => [1, 200], 'scatter' => [1, 200]]],
+    'prox' => ['num', ['proximity' => [1.0, 200.0]]],
+    'steer' => ['num', ['seeker' => [0.0, 500.0]]],
+    'drain' => ['int', ['emp' => [0, 1000]]],
+    'friction' => ['num', ['roller' => [0.01, 5.0]]],
+    'rollTime' => ['num', ['roller' => [0.5, 10.0]]],
+];
+/** The fields each effect requires (a cluster with apex: true needs no fuse). */
+const TANKITY_AMMO_NEEDS = [
+    'pellets' => ['pellets', 'spread'],
+    'cluster' => ['fuse', 'split', 'fan', 'subDmg', 'subRadius'],
+    'proximity' => ['prox'],
+    'seeker' => ['steer'],
+    'emp' => ['drain'],
+    'roller' => ['friction', 'rollTime'],
+    'hop' => ['hops', 'hopKeep', 'subDmg', 'subRadius'],
+    'scatter' => ['split', 'fan', 'kick', 'subDmg', 'subRadius'],
+];
 const TANKITY_GEAR_EFFECTS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand'];
 const TANKITY_PAINTERS = ['disc', 'beam', 'spark', 'ball'];
 const TANKITY_SFX_EVENTS = ['move', 'click', 'launch', 'boom', 'clank', 'thud', 'warn', 'cash', 'bark', 'win', 'lose', 'fanfare'];
@@ -663,9 +694,8 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         if ($row === null) {
             continue;
         }
-        $c->allow($row, ['key', 'name', 'cat', 'dmg', 'radius', 'price', 'pack', 'minRound', 'ai', 'aiRound', 'effect',
-            'speed', 'flat', 'pellets', 'spread', 'fuse', 'split', 'fan', 'subDmg', 'subRadius', 'prox', 'steer',
-            'drain', 'friction', 'rollTime', 'note', 'gfx'], $p);
+        $c->allow($row, array_merge(['key', 'name', 'cat', 'dmg', 'radius', 'price', 'pack', 'minRound', 'ai', 'aiRound', 'aiRack',
+            'effect', 'speed', 'flat'], array_keys(TANKITY_AMMO_EXTRA), ['note', 'gfx']), $p);
         $o = [];
         $o['key'] = $c->str($row, 'key', $p, 24, true, '/^[a-z][a-z0-9]*$/');
         if ($o['key'] !== null) {
@@ -676,41 +706,59 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         }
         $o['name'] = $c->str($row, 'name', $p, 40);
         $o['cat'] = $c->str($row, 'cat', $p, 30);
-        $o['dmg'] = $c->int($row, 'dmg', $p, 1, 500);
+        $o['dmg'] = $c->int($row, 'dmg', $p, 0, 500);
         $o['radius'] = $c->int($row, 'radius', $p, 1, 200);
         $o['price'] = $c->int($row, 'price', $p, 0, 100000);
         $o['pack'] = $c->int($row, 'pack', $p, 0, 99);
         $o['minRound'] = $c->int($row, 'minRound', $p, 1, 99);
         $o['ai'] = $c->bool($row, 'ai', $p);
         $o['aiRound'] = $c->int($row, 'aiRound', $p, 1, 99);
+        if (array_key_exists('aiRack', $row) && $row['aiRack'] !== null) {
+            $o['aiRack'] = $c->int($row, 'aiRack', $p, 1, 9);
+            if ($o['ai'] === false) {
+                $c->err("$p.aiRack", 'only a row with ai: true uses this');
+            }
+        }
         $o['effect'] = $c->enum($row, 'effect', $p, TANKITY_AMMO_EFFECTS);
         $o['speed'] = $c->num($row, 'speed', $p, 0.1, 5.0);
         if (($f = $c->bool($row, 'flat', $p, false)) !== null) {
             $o['flat'] = $f;
         }
-        $extra = [
-            'pellets' => ['int', 1, 12], 'spread' => ['num', 0.0, 1.0], 'fuse' => ['num', 0.1, 10.0],
-            'split' => ['int', 2, 12], 'fan' => ['num', 0.0, 1.0], 'subDmg' => ['int', 1, 500],
-            'subRadius' => ['int', 1, 200], 'prox' => ['num', 1.0, 200.0], 'steer' => ['num', 0.0, 500.0],
-            'drain' => ['int', 0, 1000], 'friction' => ['num', 0.01, 5.0], 'rollTime' => ['num', 0.5, 10.0],
-        ];
-        foreach ($extra as $k => [$type, $lo, $hi]) {
-            if (array_key_exists($k, $row) && $row[$k] !== null) {
-                $o[$k] = $type === 'int' ? $c->int($row, $k, $p, $lo, $hi) : $c->num($row, $k, $p, (float) $lo, (float) $hi);
+        $effect = $o['effect'];
+        foreach (TANKITY_AMMO_EXTRA as $k => [$type, $byEffect]) {
+            if (!array_key_exists($k, $row) || $row[$k] === null || $effect === null) {
+                continue;
             }
+            if (!array_key_exists($effect, $byEffect)) {
+                $users = array_keys($byEffect);
+                $last = array_pop($users);
+                $names = $users ? implode(', ', $users) . " and $last effects use" : "$last effect uses";
+                $c->err("$p.$k", "only the $names this");
+                continue;
+            }
+            [$lo, $hi] = $byEffect[$effect] ?? [0, 0];
+            $o[$k] = match ($type) {
+                'int' => $c->int($row, $k, $p, $lo, $hi),
+                'num' => $c->num($row, $k, $p, (float) $lo, (float) $hi),
+                'bool' => $c->bool($row, $k, $p),
+            };
         }
-        $needs = ['pellets' => ['pellets', 'spread'], 'cluster' => ['fuse', 'split', 'fan', 'subDmg', 'subRadius'],
-            'proximity' => ['prox'], 'seeker' => ['steer'], 'emp' => ['drain'],
-            'roller' => ['friction', 'rollTime']];
-        foreach ($needs[$o['effect'] ?? ''] ?? [] as $k) {
+        $apex = $effect === 'cluster' && ($row['apex'] ?? null) === true;
+        if ($apex && array_key_exists('fuse', $row) && $row['fuse'] !== null) {
+            $c->err("$p.fuse", 'an apex cluster splits at the top of its arc; leave fuse out');
+        }
+        foreach (TANKITY_AMMO_NEEDS[$effect ?? ''] ?? [] as $k) {
+            if ($apex && $k === 'fuse') {
+                continue;
+            }
             if (!array_key_exists($k, $row) || $row[$k] === null) {
-                $c->err("$p.$k", "is required when effect is {$o['effect']}");
+                $c->err("$p.$k", "is required when effect is $effect");
             }
         }
         $o['note'] = $c->str($row, 'note', $p, 120);
         $o['gfx'] = tankity_build_gfx($c, $row['gfx'] ?? null, "$p.gfx");
-        $res['ammo'][] = tankity_ordered($o, ['key', 'name', 'cat', 'dmg', 'radius', 'price', 'pack', 'minRound', 'ai', 'aiRound',
-            'effect', 'pellets', 'spread', 'fuse', 'split', 'fan', 'subDmg', 'subRadius', 'prox', 'steer', 'drain', 'friction', 'rollTime', 'flat', 'speed', 'note', 'gfx']);
+        $res['ammo'][] = tankity_ordered($o, array_merge(['key', 'name', 'cat', 'dmg', 'radius', 'price', 'pack', 'minRound', 'ai', 'aiRound', 'aiRack',
+            'effect'], array_keys(TANKITY_AMMO_EXTRA), ['flat', 'speed', 'note', 'gfx']));
     }
     if (!in_array('shell', array_column($res['ammo'], 'key'), true)) {
         $c->err('arsenal.ammo', 'needs a free `shell` (price 0): the game starts every player with it');

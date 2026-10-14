@@ -351,6 +351,11 @@ foreach ([[180.0, 140.0], [-220.5, 95.25], [120.0, -40.0], [0.0, 0.0], [-0.0, -3
     }
 }
 
+/* ---- a scatter weapon's bomblets: the fixed fan ---- */
+foreach ([[2, 0.2, 40.0], [2, 3.0, 400.0], [8, 2.4, 150.0], [8, 1.0, 222.5], [12, 2.4, 150.0], [12, 3.0, 61.0]] as [$n, $fan, $kick]) {
+    $add('scatter-vel', "n$n-fan$fan-kick$kick", ['n' => $n, 'fan' => $fan, 'kick' => $kick], room_scatter_vel($n, $fan, $kick));
+}
+
 /* ---- blast damage and the crater ---- */
 $blast = function (string $name, array $c, ?string $known = null) use ($add): void {
     $room = sv_room($c);
@@ -503,6 +508,25 @@ foreach ($weapons as $wkey => $def) {
         'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(380, 200), $drone(470, 200)]]);
     $volley("$wkey-second-hop-leaves-the-field", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 35, 'power' => 30,
         'tanks' => [$human(560, 100) + ['dirS' => 1], $drone(100, 100)]]);
+}
+
+/* Scatter weapons: the burst throws its bomblets up; each bursts where it lands, in order. */
+foreach ($weapons as $wkey => $def) {
+    if (($def['effect'] ?? '') !== 'scatter') {
+        continue;
+    }
+    $c = ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0,
+        'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(330, 100), $drone(250, 100)]];
+    [$c['angle'], $c['power']] = sv_aim_at(sv_room($c), 0, $wkey, 300.0);
+    $volley("$wkey-on-flat", $c);
+    // Bursting at the bottom of a narrow pit, the bomblets thrown sideways strike its walls at once.
+    $pit = ['flat' => 400, 'set' => [[290, 310, 440]]];
+    $c = ['terrain' => $pit, 'wkey' => $wkey, 'shooter' => 0, 'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(420, 100)]];
+    [$c['angle'], $c['power']] = sv_aim_at(sv_room($c), 0, $wkey, 300.0);
+    $volley("$wkey-in-a-pit", $c);
+    // The burst strikes the drone's body; no bomblet takes a direct hit on it.
+    $volley("$wkey-direct-hit", ['terrain' => $flat, 'wkey' => $wkey, 'shooter' => 0, 'angle' => 36, 'power' => 49,
+        'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(380, 200), $drone(470, 200)]]);
 }
 
 /* A roller: rolls down into a valley, into a unit, off the edge, stops on a rise. */

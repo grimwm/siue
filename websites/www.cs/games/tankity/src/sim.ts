@@ -621,6 +621,30 @@ export function hopShell(s: Shell, w: Weapon, x: number, y: number, reach: numbe
     dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius, hop: hop + 1,
   };
 }
+/* A scatter weapon's bomblets from its burst at (x, y): `split` of them
+   thrown from two pixels up in a fixed fan `fan` radians wide, centred
+   straight up. Bomblet i leaves at kick x (0.6 + 0.4 x ((5i mod n) / (n - 1)))
+   px/s, so neighbours fly to different heights with no random numbers. Each
+   bursts on the ground at once, with subDmg/subRadius, and never takes a
+   direct hit on `skip`, the unit the burst struck. server/sim.php
+   room_scatter_vel and server/rules.php room_fire_scatter are the same. */
+export function scatterShells(s: Shell, w: Weapon, x: number, y: number, reach: number, skip: Tank | false = false): Shell[] {
+  const n = Math.max(2, w.split || 4);
+  const fan = w.fan || 0.22, kick = w.kick || 150;
+  const bomblets: Shell[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + (i - (n - 1) / 2) * fan / (n - 1);
+    const sp = kick * (0.6 + 0.4 * ((i * 5) % n) / (n - 1));
+    bomblets.push({
+      x, y: y - 2,
+      vx: dcos(a) * sp, vy: dsin(a) * sp,
+      wkey: s.wkey, owner: s.owner, life: 12 * reach,
+      age: 0, pierced: skip, split: true, order: [...(s.order || []), i],
+      dw: w.subDmg || w.dmg, dr: w.subRadius || w.radius,
+    });
+  }
+  return bomblets;
+}
 /* The first unit shell s touches anywhere along its step, sampled every
    3 px so a fast shell (or a slow frame) cannot skip through one. The
    muzzle sits inside its gunner's box, so a shell ignores its owner until
@@ -772,6 +796,8 @@ export type StepEvent =
   | { kind: 'pierce'; wkey: string; x: number; y: number; ang: number }
   /** A hop weapon's next warhead leapt on from a burst; ang is its heading. */
   | { kind: 'hop'; wkey: string; x: number; y: number; ang: number }
+  /** A scatter weapon's burst threw its bomblets up (ang is straight up). */
+  | { kind: 'scatter'; wkey: string; x: number; y: number; ang: number }
   | { kind: 'blast'; blast: Blast };
 /* True when a shell launched earlier in the same volley is still in the air. */
 function waitsOnEarlier(world: World, s: Shell): boolean {
@@ -817,14 +843,20 @@ function stepRoller(world: World, arsenal: Arsenal, s: Shell, w: Weapon, dt: num
   events.push({ kind: 'blast', blast: explode(world, arsenal, bx, groundAt(t, bx), s.wkey, s.owner, direct, null) });
   s.dead = true;
 }
-/* What a burst throws on: a hop weapon's next warhead. It joins the volley
-   this frame, so it flies this frame too. */
+/* What a burst throws on: a hop weapon's next warhead, or a scatter weapon's
+   bomblets (its own burst only, not theirs). They join the volley this frame,
+   so they fly this frame too. */
 function afterBurst(world: World, s: Shell, w: Weapon, direct: Tank | null, events: StepEvent[]): void {
-  if (w.effect !== 'hop') return;
-  const next = hopShell(s, w, s.x, s.y, fieldReach(world.terrain.length), direct || false);
-  if (!next) return;
-  world.shells.push(next);
-  events.push({ kind: 'hop', wkey: s.wkey, x: next.x, y: next.y, ang: datan2(next.vy, next.vx) });
+  const reach = fieldReach(world.terrain.length);
+  if (w.effect === 'hop') {
+    const next = hopShell(s, w, s.x, s.y, reach, direct || false);
+    if (!next) return;
+    world.shells.push(next);
+    events.push({ kind: 'hop', wkey: s.wkey, x: next.x, y: next.y, ang: datan2(next.vy, next.vx) });
+  } else if (w.effect === 'scatter' && !s.split) {
+    world.shells.push(...scatterShells(s, w, s.x, s.y, reach, direct || false));
+    events.push({ kind: 'scatter', wkey: s.wkey, x: s.x, y: s.y, ang: -Math.PI / 2 });
+  }
 }
 /* Advances every shell dt seconds: flight, fuses, hits and bursts. Bomblets
    born this frame fly this frame too. A volley's shells fly together, but they

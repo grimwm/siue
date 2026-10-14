@@ -134,6 +134,10 @@ const RUN = {
     const next = sim.hopShell(s, { hops: 3, hopKeep: c.keep, subDmg: 1, subRadius: 1 }, 0, 0, 1);
     return [next.vx, next.vy];
   },
+  'scatter-vel'(c) {
+    const s = { x: 0, y: 0, vx: 0, vy: 0, wkey: 'shell', owner: null, order: [0] };
+    return sim.scatterShells(s, { split: c.n, fan: c.fan, kick: c.kick, subDmg: 1, subRadius: 1 }, 0, 0, 1).map(b => [b.vx, b.vy]);
+  },
   blast(c) {
     world(c);
     const before = G.terrain.slice();

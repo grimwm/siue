@@ -195,10 +195,11 @@ function room_weapons(): array
             'aiRound' => (int) ($am['aiRound'] ?? 99),
             'hops' => (int) ($am['hops'] ?? 1),
             'hopKeep' => (float) ($am['hopKeep'] ?? 0.5),
+            'kick' => (float) ($am['kick'] ?? 150.0),
         ];
     }
     if (!isset($w['shell'])) {
-        $w['shell'] = ['dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'minRound' => 1, 'effect' => 'shot', 'speed' => 1.0, 'flat' => false, 'pellets' => 0, 'spread' => 0.0, 'fuse' => 0.9, 'split' => 4, 'fan' => 0.22, 'subDmg' => 34, 'subRadius' => 26, 'prox' => 34.0, 'steer' => 70.0, 'drain' => 0, 'friction' => 0.3, 'rollTime' => 5.0, 'ai' => true, 'aiRound' => 1, 'hops' => 1, 'hopKeep' => 0.5];
+        $w['shell'] = ['dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'minRound' => 1, 'effect' => 'shot', 'speed' => 1.0, 'flat' => false, 'pellets' => 0, 'spread' => 0.0, 'fuse' => 0.9, 'split' => 4, 'fan' => 0.22, 'subDmg' => 34, 'subRadius' => 26, 'prox' => 34.0, 'steer' => 70.0, 'drain' => 0, 'friction' => 0.3, 'rollTime' => 5.0, 'ai' => true, 'aiRound' => 1, 'hops' => 1, 'hopKeep' => 0.5, 'kick' => 150.0];
     }
     return $w;
 }
@@ -272,6 +273,21 @@ function room_split_vel(float $vx, float $vy, int $n, float $fan): array
 function room_hop_vel(float $vx, float $vy, float $keep): array
 {
     return [$vx * $keep, -abs($vy) * $keep];
+}
+/* The bomblets a scatter weapon throws from its burst: $n velocities in a
+// fixed fan $fan radians wide, centred straight up, bomblet $k leaving at
+// $kick x (0.6 + 0.4 x ((5k mod n) / (n - 1))) px/s, so neighbours fly to
+// different heights with no random numbers. src/sim.ts scatterShells() is the
+// same. [[vx, vy], ...]. */
+function room_scatter_vel(int $n, float $fan, float $kick): array
+{
+    $out = [];
+    for ($k = 0; $k < $n; $k++) {
+        $a = -M_PI / 2 + ($k - ($n - 1) / 2) * $fan / ($n - 1);
+        $sp = $kick * (0.6 + 0.4 * (($k * 5) % $n) / ($n - 1));
+        $out[] = [det_cos($a) * $sp, det_sin($a) * $sp];
+    }
+    return $out;
 }
 /* Rollers. A roller that touches down does not burst: it rolls along the
 // ground, a ball ROOM_ROLL_LIFT px above the surface, until it reaches a unit,

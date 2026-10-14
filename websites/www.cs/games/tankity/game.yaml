@@ -395,6 +395,27 @@ arsenal:
       speed: 1.0
       note: Bursts, then leaps on and bursts twice more, each leap shorter.
       gfx: {shell: "#b5e86b", trail: "#8fd14f", blast: ["#8fd14f", "#f2ffd8"], painter: spark, shake: 0.35}
+
+    - key: funky
+      name: Funky Bomb
+      cat: Shells
+      dmg: 30
+      radius: 24
+      price: 380
+      pack: 1
+      minRound: 5
+      ai: true
+      aiRound: 7
+      aiRack: 1
+      effect: scatter
+      split: 8
+      fan: 2.4
+      kick: 150
+      subDmg: 24
+      subRadius: 18
+      speed: 1.0
+      note: Bursts and flings eight bomblets up in a wild fan; a near miss still pays.
+      gfx: {shell: "#ff7eb6", trail: "#c77dff", blast: ["#ff7eb6", "#fff0fa"], painter: spark, shake: 0.4}
   gear:
     - key: repair
       name: Repair +40 armor
@@ -1057,6 +1078,26 @@ effects:
         - { count: 14, life: [0.5, 1], speed: [70, 180], angle: 90, spread: 150, gravity: 340, drag: 0.4, size: [1.3, 2.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
         - { shape: streak, count: 10, life: [0.2, 0.45], speed: [120, 250], gravity: 200, drag: 1.2, size: [1.2, 1.8], length: 8, alpha: [1, 0.9, 0], colors: ["#f2ffd8", "#8fd14f"], glow: true }
         - { shape: smoke, count: 3, life: [0.7, 1], speed: [8, 30], angle: 90, spread: 120, gravity: -25, drag: 1.2, size: [7, 12], sizeEnd: 1.8, alpha: [0, 0.5, 0.3, 0], colors: ["#9a9a9a", "#555555", "#2a2a2a"], wind: 1 }
+  funky:
+    body: { halo: 10, alpha: 0.55, pulse: 8 }
+    muzzle:
+      emitters:
+        - { count: 1, size: [8, 8], sizeEnd: 0.4, life: [0.1, 0.1], alpha: [0.85, 0.5, 0], colors: ["#ffffff", "#ff7eb6"], glow: true }
+        - { shape: ring, count: 1, size: [3, 3], sizeEnd: 5, ease: out, life: [0.22, 0.22], width: 2, alpha: [1, 0.6, 0], colors: ["#ff7eb6", "#7ee8ff"], glow: true }
+        - { shape: streak, count: 8, life: [0.1, 0.22], speed: [90, 200], gravity: 200, drag: 1.2, size: [1.2, 1.8], length: 7, alpha: [1, 0.9, 0], colors: ["#ffffff", "#ff7eb6", "#c77dff"], glow: true, aim: forward, spread: 45 }
+        - { shape: smoke, count: 2, life: [0.42, 0.6], speed: [5, 30], angle: 90, spread: 60, gravity: -15, drag: 1.2, size: [3.6, 6], sizeEnd: 1.8, alpha: [0, 0.5, 0.3, 0], colors: ["#c8a0b8", "#664455", "#2a1a22"], wind: 1, aim: forward }
+    trail:
+      emitters:
+        - { rate: 44, life: [0.22, 0.4], speed: [0, 14], size: [1.4, 2.2], sizeEnd: 0.3, colors: ["#ffffff", "#ff7eb6", "#7ee8ff", "#ffe27a"], glow: true }
+        - { shape: spark, rate: 10, life: [0.2, 0.32], speed: [0, 22], size: [2.2, 3.4], sizeEnd: 0.4, colors: ["#ffffff", "#7ee8ff", "#ff7eb6"], glow: true, rotJitter: 90, spin: [-260, 260] }
+    impact:
+      emitters:
+        - { shape: sprite, count: 1, sheet: energy, unit: r, size: [1.1, 1.1], life: [0.42, 0.42], alpha: [1, 1, 0], rotJitter: 14, tint: "#ff7eb6", scale: 1 }
+        - { count: 1, unit: r, size: [0.64, 0.64], sizeEnd: 0.6, life: [0.2, 0.2], alpha: [0.6, 0.35, 0], colors: ["#ffffff", "#ff7eb6"], glow: true }
+        - { shape: ring, count: 1, unit: r, size: [0.25, 0.25], sizeEnd: 4, ease: out, life: [0.36, 0.36], width: 2, alpha: [1, 0.6, 0], colors: ["#7ee8ff", "#ff7eb6"], glow: true }
+        - { count: 14, life: [0.4, 0.9], speed: [80, 210], gravity: 220, drag: 0.8, size: [1.4, 2.4], colors: ["#ffffff", "#ff7eb6", "#7ee8ff", "#ffe27a", "#b5e86b"], glow: true }
+        - { count: 8, life: [0.5, 1], speed: [50, 140], angle: 90, spread: 150, gravity: 340, drag: 0.4, size: [1.3, 2.6], round: false, alpha: [1, 1, 0], colors: ["#b8854a", "#7a4a1e", "#3a2610"] }
+        - { shape: smoke, count: 2, life: [0.63, 0.9], speed: [5, 30], angle: 90, spread: 120, gravity: -20, drag: 1.2, size: [6, 10], sizeEnd: 1.8, alpha: [0, 0.5, 0.3, 0], colors: ["#c8a0b8", "#664455", "#2a1a22"], wind: 1 }
   laststand:
     body: { halo: 9, alpha: 0.45 }
     muzzle:

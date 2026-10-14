@@ -241,6 +241,7 @@ export function createMatch(deps: MatchDeps) {
       else if (e.kind === 'split') fxSpecial(G.fx, e.wkey, 'split', e.x, e.y, e.ang);
       else if (e.kind === 'pierce') fxSpecial(G.fx, e.wkey, 'pierce', e.x, e.y, e.ang);
       else if (e.kind === 'hop') fxSpecial(G.fx, e.wkey, 'hop', e.x, e.y, e.ang);
+      else if (e.kind === 'scatter') fxSpecial(G.fx, e.wkey, 'scatter', e.x, e.y, e.ang);
       else {
         showBlast(e.blast);
         G.settleT = TUNE.settleTime;

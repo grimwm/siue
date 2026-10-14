@@ -238,7 +238,7 @@ const RUN = {
     const m = sim.muzzle({ ...self, angle: c.a });
     const land = { ...sim.simShot(G, arsenal, m.x, m.y, c.a, c.p, c.wkey, self.dirS), a: c.a, p: c.p };
     const h = sim.aiHarm(G, arsenal, self, G.tanks[c.target], c.wkey, land);
-    return { land: [land.x, land.y], harm: h === -Infinity ? 'self' : h };
+    return { land: [land.x, land.y], harm: h === -Infinity ? 'self' : h, selfHarm: sim.aiSelfHarm(G, arsenal, self, G.tanks[c.target], c.wkey, land) };
   },
   'ai-bracket'(c) {
     world(c, c.w || 720);

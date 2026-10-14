@@ -92,6 +92,35 @@ foreach ([160, 170, 180, 190, 200, 210, 220] as $gap) {
     }
 }
 
+// Point blank, every strategy fires what hurts itself least: it chooses from a
+// full round-9 rack, fires it from where it aimed, and loses no more than it
+// would firing a Shell alone (within 3 hp: the predicted landing is not quite
+// where the shell bursts).
+$selfLoss = function (array $ammo, string $s, int $gap, int $dir, int $seed) use ($tank, $flatRoom): array {
+    $room = $flatRoom([$tank(0, 'ai', 300.0, 1000), $tank(1, 'human', 300.0 + $dir * $gap, 100)]);
+    $room += ['round' => 9, 'rng' => $seed, 'difficulty' => 'hard', 'jammer' => []];
+    $room['tanks'][0] = ['dirS' => $dir, 'ammo' => ['shell' => -1] + $ammo, 's' => $s] + $room['tanks'][0];
+    $c = room_ai_choose($room, $room['tanks'][0]);
+    $room['tanks'][0]['angle'] = $c['angle'];
+    $room['tanks'][0]['power'] = $c['power'];
+    $events = [['t' => 'aifire', 'seat' => 0]];
+    room_fire_shot($room, $events, 0, $c['wkey']);
+    return [$c['wkey'], 1000 - $room['tanks'][0]['hp']];
+};
+$fullRack = room_ai_rack(9);
+unset($fullRack['shell']);
+foreach (['hunter', 'bully', 'sniper', 'avenger', 'glory', 'lobber'] as $s) {
+    for ($gap = 20; $gap <= 80; $gap += 10) {
+        foreach ([1, -1] as $dir) {
+            foreach ([1, 2] as $seed) {
+                [$k, $lost] = $selfLoss($fullRack, $s, $gap, $dir, $seed);
+                [, $alone] = $selfLoss([], $s, $gap, $dir, $seed);
+                $check("point-blank-least-self-harm-$s-$gap-$dir-$seed", $lost <= $alone + 3, "$k cost $lost, Shell alone $alone");
+            }
+        }
+    }
+}
+
 // A harmless burst (dmg 0) carves its crater and touches no unit: no hit, no
 // shield spent, nobody credited or blamed.
 $room = $flatRoom([$tank(0, 'ai', 100.0, 100), $tank(1, 'human', 300.0, 100), $tank(2, 'ai', 330.0, 100)]);
@@ -860,8 +889,12 @@ for ($seed = 1; $seed <= 12; $seed++) {
     $lobAngles[] = $c['angle'];
 }
 $check('tactic-lobber-lobs', $median($lobAngles) >= 60, implode(',', $lobAngles));
-$room = $scene('lobber', ['ammo' => ['rail' => 2, 'buck' => 2]]);
+$room = $scene('lobber', ['ammo' => ['rail' => 2, 'buck' => 2]], [], ['x' => 250.0]);
 $check('tactic-lobber-prefers-area-guns', room_ai_choose($room, $room['tanks'][1])['wkey'] === 'buck');
+// Its target 70 px off, every high arc of Buckshot would reach the lobber itself: it fires a gun that spares it.
+$room = $scene('lobber', ['ammo' => ['rail' => 2, 'buck' => 2]]);
+$c = room_ai_choose($room, $room['tanks'][1]);
+$check('tactic-lobber-spares-itself-point-blank', $room['tanks'][1]['brk']['t'] === 3 && $c['wkey'] !== 'buck', json_encode($c));
 // Glory goes for the drone with 4 kills, 70 px off: every big blast would reach the gunner itself, so it fires the Shell.
 $room = $scene('glory', ['ammo' => ['mortar' => 2, 'heavy' => 2, 'buck' => 2]]);
 $check('tactic-glory-spares-itself', room_ai_choose($room, $room['tanks'][1])['wkey'] === 'shell');

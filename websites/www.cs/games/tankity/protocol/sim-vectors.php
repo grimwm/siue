@@ -641,7 +641,8 @@ $harm = function (string $name, array $c) use ($add): void {
     $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $c['a'], (float) $c['p'], $c['wkey'], $self['dirS'], SV_WIDTH);
     $land += ['a' => $c['a'], 'p' => $c['p']];
     $h = room_ai_harm($room, $room['tanks'][$c['self']], $room['tanks'][$c['target']], $c['wkey'], $land);
-    $add('ai-harm', $name, $c, ['land' => [$land['x'], $land['y']], 'harm' => is_infinite($h) ? 'self' : $h]);
+    $add('ai-harm', $name, $c, ['land' => [$land['x'], $land['y']], 'harm' => is_infinite($h) ? 'self' : $h,
+        'selfHarm' => room_ai_self_harm($room, $room['tanks'][$c['self']], $room['tanks'][$c['target']], $c['wkey'], $land)]);
 };
 foreach ($weapons as $wkey => $def) {
     $scene = ['terrain' => $flat, 'wind' => 2, 'self' => 0, 'target' => 1, 'wkey' => $wkey, 'tanks' => [$drone(100, 60) + ['dirS' => 1], $human(420, 100)]];
@@ -650,12 +651,24 @@ foreach ($weapons as $wkey => $def) {
     }
     $harm("$wkey-weak-target", ['terrain' => $hills, 'wind' => -3, 'self' => 0, 'target' => 1, 'wkey' => $wkey,
         'tanks' => [$drone(560, 60) + ['dirS' => -1], $human(330, 12)], 'a' => 50, 'p' => 62]);
+    foreach ([20, 45, 70] as $gap) {
+        $harm("$wkey-point-blank-$gap", ['terrain' => $flat, 'wind' => 0, 'self' => 0, 'target' => 1, 'wkey' => $wkey,
+            'tanks' => [$drone(300, 60) + ['dirS' => 1], $human(300 + $gap, 100)], 'a' => 80, 'p' => 25]);
+    }
     $harm("$wkey-at-a-drone", ['terrain' => $flat, 'wind' => 0, 'self' => 0, 'target' => 1, 'wkey' => $wkey,
         'tanks' => [$human(100, 60) + ['dirS' => 1], $drone(330, 100)], 'a' => 55, 'p' => 60]);
 }
 // Pressed against its target with big guns and a Needle: it fires something that spares it.
 $aim('pressed-against-its-target', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1, 'difficulty' => 'hard',
     'tanks' => [$human(350, 100), $drone(300, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['heavy' => 1, 'babynuke' => 1, 'needle' => 1]]]]);
+// Point blank with a full round-9 rack, every strategy fires what would hurt it least.
+$rack9 = room_ai_rack(9);
+foreach (['hunter', 'glory', 'lobber', 'sniper'] as $s) {
+    foreach ([20, 40, 70] as $gap) {
+        $aim("point-blank-least-self-harm-$s-$gap", ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 2, 'shooter' => 1, 'difficulty' => 'hard',
+            'tanks' => [$human(300 + $gap, 100), $drone(300, 60) + ['dirS' => 1, 's' => $s, 'ammo' => $rack9]]]);
+    }
+}
 // A weak target gets the cheapest gun that finishes it.
 $aim('weak-target-cheapest-gun', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1, 'difficulty' => 'hard',
     'tanks' => [$human(400, 10), $drone(120, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['mortar' => 2, 'babynuke' => 1]]]]);

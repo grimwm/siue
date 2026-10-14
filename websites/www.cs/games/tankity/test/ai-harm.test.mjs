@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildArsenal, droneRack, fireWeapon, muzzle, mulberry32, simShot, stepShells } from '../src/sim.ts';
-import { aiChoose, aiHarm, fallHarm } from '../src/ai.ts';
+import { aiChoose, aiHarm, aiSelfHarm, fallHarm } from '../src/ai.ts';
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const arsenal = buildArsenal(GAME.arsenal);
@@ -75,16 +75,47 @@ test('a drone never hurts itself with its own Funky Bomb, its target 160 to 220 
   }
 });
 
-test('a drone never hurts itself with any gun it carries, its target 80 to 300 px away', () => {
-  for (const k of AI_GUNS) {
-    for (let gap = 80; gap <= 300; gap += 40) {
-      const self = drone(360, { ammo: { [k]: 1 } }), target = human(360 + gap, 100);
-      const G = world([self, target]);
-      const c = aiChoose(G, arsenal, self);
-      const hurt = fly(G, self, c.wkey, c.angle, c.power)[0];
-      assert.equal(hurt, 0, `${k} at ${gap}: fired ${c.wkey}, the drone lost ${hurt}`);
+const STRATEGIES = ['hunter', 'bully', 'sniper', 'avenger', 'glory', 'lobber'];
+/** The drone's own hp loss when it chooses from `ammo` at a target `gap` px off and fires it from where it aimed. */
+function selfLoss(ammo, s, gap, dir, seed) {
+  const self = drone(300, { ammo: { ...ammo }, s, dirS: dir }), target = human(300 + dir * gap, 100);
+  const G = world([self, target], { rng: mulberry32(seed) });
+  const c = aiChoose(G, arsenal, self);
+  self.x = 300; // the choice is judged from where it aimed (a drone may shuffle after choosing)
+  return { wkey: c.wkey, lost: fly(G, self, c.wkey, c.angle, c.power)[0] };
+}
+
+test('point blank, every strategy fires what hurts itself least: never more than a Shell alone would', () => {
+  const rack = droneRack(arsenal, 9);
+  for (const s of STRATEGIES) {
+    for (let gap = 20; gap <= 80; gap += 10) {
+      for (const dir of [1, -1]) {
+        for (const seed of [1, 2]) {
+          const full = selfLoss(rack, s, gap, dir, seed), shell = selfLoss({}, s, gap, dir, seed);
+          // Within 3 hp: the landing the drone predicts is not quite where its shell bursts.
+          assert.ok(full.lost <= shell.lost + 3, `${s} at ${gap} dir ${dir} seed ${seed}: ${full.wkey} cost ${full.lost}, Shell alone ${shell.lost}`);
+        }
+      }
     }
   }
+});
+
+test('every strategy never hurts itself with any gun it carries, its target 80 to 300 px away', () => {
+  for (const s of STRATEGIES) {
+    for (const k of AI_GUNS) {
+      for (let gap = 80; gap <= 300; gap += 55) {
+        const { wkey, lost } = selfLoss({ [k]: 1 }, s, gap, 1, 3);
+        assert.equal(lost, 0, `${s} with ${k} at ${gap}: fired ${wkey}, the drone lost ${lost}`);
+      }
+    }
+  }
+});
+
+test('the self-harm score ranks a point-blank Heavy above a Shell above a Needle', () => {
+  const self = drone(300), target = human(340, 100), G = world([self, target]);
+  const land = { x: 340, y: 400, oob: false, vx: 0, vy: 0 };
+  const h = k => aiSelfHarm(G, arsenal, self, target, k, land);
+  assert.ok(h('heavy') > h('shell') && h('shell') > h('needle'), JSON.stringify(['heavy', 'shell', 'needle'].map(h)));
 });
 
 test('pressed against its target with big guns and a Needle, a drone fires something that spares it', () => {

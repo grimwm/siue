@@ -205,7 +205,9 @@ function tankity_journal_mode(string $dir, ?string $mounts = null): string
    after N, each in its own transaction. Step 2 is the boards; step 3 remembers the old score files already
    imported; step 4 tells a row the server filed from a match from a browser's
    own claim; step 5 counts each address's requests (server/rate.php), keeps
-   only the rows rooms filed, and drops the old callsign tables. */
+   only the rows rooms filed, and drops the old callsign tables; step 6 stores
+   each room's expiry (room_expires in server/store.php) so the cap count and
+   the sweep stay plain SQL. */
 function tankity_schema_steps(): array
 {
     return [
@@ -239,6 +241,12 @@ function tankity_schema_steps(): array
             // The per-callsign runs from before the boards were solo claims too, and the old files are no longer read.
             'DROP TABLE callsigns',
             'DROP TABLE legacy_imported',
+        ],
+        6 => [
+            // A room's expiry, computed from its state at every save (room_expires in server/store.php).
+            'ALTER TABLE rooms ADD COLUMN expires INTEGER NOT NULL DEFAULT 0',
+            'UPDATE rooms SET expires = touched + 600',
+            'CREATE INDEX rooms_expires ON rooms (expires)',
         ],
     ];
 }

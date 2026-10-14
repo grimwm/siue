@@ -129,22 +129,46 @@ function room_decode(mixed $raw): ?array
     return is_array($v) ? $v : null;
 }
 
-/* The idle rules: nobody has touched it inside the live window, or it is
-   older than the day limit. */
-function room_idle(array $r, ?int $now = null): bool
+/* How long a started room (play, shop, over) lasts with no human acting:
+   every human gets one turn's worth, never less than the live window. */
+function room_idle_limit(array $r): int
 {
-    $now = $now ?? time();
-    $t = $r['touched'] ?? $r['created'] ?? 0;
-    return $now - $t > room_live_secs() || $now - ($r['created'] ?? $t) > room_max_age();
+    $humans = 0;
+    foreach ($r['seats'] ?? [] as $s) {
+        if ($s['human'] ?? false) {
+            $humans++;
+        }
+    }
+    return max(room_live_secs(), max(1, $humans) * room_turn_secs($r));
 }
 
-/* Live rooms: touched inside the live window and younger than the day limit.
-   A read, so the lobby's occupancy never waits for a writer. */
+/* When a room closes: a lobby a live window after its last touch (seated
+   polls heartbeat it); a started room its idle limit after the last human
+   act. There is no total-age cap. A room saved before acts were stamped reads
+   its last touch as the act. */
+function room_expires(array $r): int
+{
+    $touched = (int) ($r['touched'] ?? $r['created'] ?? 0);
+    if (($r['phase'] ?? 'lobby') === 'lobby') {
+        return $touched + room_live_secs();
+    }
+    return (int) ($r['actedAt'] ?? $touched) + room_idle_limit($r);
+}
+
+/* Past its expiry. The stored column (rooms.expires) is room_expires at the
+   last save, so the count, the cap and the sweep agree with this. */
+function room_idle(array $r, ?int $now = null): bool
+{
+    return ($now ?? time()) > room_expires($r);
+}
+
+/* Live rooms: not yet expired. A read, so the lobby's occupancy never waits
+   for a writer. */
 function room_count(?int $now = null): int
 {
     $now ??= time();
-    $q = tankity_db()->prepare('SELECT COUNT(*) FROM rooms WHERE touched >= ? AND created >= ?');
-    $q->execute([$now - room_live_secs(), $now - room_max_age()]);
+    $q = tankity_db()->prepare('SELECT COUNT(*) FROM rooms WHERE expires >= ?');
+    $q->execute([$now]);
     return (int) $q->fetchColumn();
 }
 
@@ -154,11 +178,11 @@ function room_alloc(?callable $nextCode = null): RoomLock
 {
     $nextCode = $nextCode ?? fn() => room_new_code(fn($c) => false);
     $db = room_begin();
-    $ins = $db->prepare('INSERT OR IGNORE INTO rooms (code, data, created, touched) VALUES (?, ?, ?, ?)');
+    $ins = $db->prepare('INSERT OR IGNORE INTO rooms (code, data, created, touched, expires) VALUES (?, ?, ?, ?, ?)');
     for ($try = 0; $try < 50; $try++) {
         $code = $nextCode();
         $now = time();
-        $ins->execute([$code, '', $now, $now]);
+        $ins->execute([$code, '', $now, $now, $now + room_live_secs()]);
         if ($ins->rowCount() === 1) {
             return room_hold(new RoomLock($db, $code));
         }
@@ -179,8 +203,8 @@ function room_register(string $code, int $max): ?bool
     }
     $now = time();
     try {
-        $q = $lock->db->prepare('SELECT COUNT(*) FROM rooms WHERE code <> ? AND touched >= ? AND created >= ?');
-        $q->execute([$code, $now - room_live_secs(), $now - room_max_age()]);
+        $q = $lock->db->prepare('SELECT COUNT(*) FROM rooms WHERE code <> ? AND expires >= ?');
+        $q->execute([$code, $now]);
         return (int) $q->fetchColumn() < $max;
     } catch (PDOException $e) {
         room_store_fail($e);
@@ -228,10 +252,11 @@ function room_save($lock, string $code, array $room): bool
         return false;
     }
     try {
-        $q = $lock->db->prepare('UPDATE rooms SET data = ?, touched = ? WHERE code = ?');
+        $q = $lock->db->prepare('UPDATE rooms SET data = ?, touched = ?, expires = ? WHERE code = ?');
         $q->bindValue(1, $raw, PDO::PARAM_LOB);
         $q->bindValue(2, $room['touched'], PDO::PARAM_INT);
-        $q->bindValue(3, $code);
+        $q->bindValue(3, room_expires($room), PDO::PARAM_INT);
+        $q->bindValue(4, $code);
         $q->execute();
     } catch (PDOException $e) {
         room_store_fail($e);
@@ -261,8 +286,8 @@ function room_sweep(?int $now = null, int $limit = 100): int
     $now ??= time();
     try {
         return tankity_tx(tankity_db(), function (PDO $db) use ($now, $limit): int {
-            $q = $db->prepare('DELETE FROM rooms WHERE code IN (SELECT code FROM rooms WHERE touched < ? OR created < ? LIMIT ?)');
-            $q->execute([$now - room_live_secs(), $now - room_max_age(), $limit]);
+            $q = $db->prepare('DELETE FROM rooms WHERE code IN (SELECT code FROM rooms WHERE expires < ? LIMIT ?)');
+            $q->execute([$now, $limit]);
             return $q->rowCount();
         });
     } catch (Throwable $e) {

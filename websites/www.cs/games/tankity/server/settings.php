@@ -30,14 +30,6 @@ function room_max_rooms(): int
     }
     return ROOM_MAX_ROOMS;
 }
-function room_max_age(): int
-{
-    $raw = (string) tankity_setting('TANKITY_ROOM_MAX_AGE', 'room_max_age', '');
-    if (preg_match('/^\d+$/', trim($raw))) {
-        return max(60, (int) trim($raw));
-    }
-    return 86400;
-}
 function room_live_secs(): int
 {
     $raw = (string) tankity_setting('TANKITY_ROOM_LIVE_SECS', 'room_live_secs', '');

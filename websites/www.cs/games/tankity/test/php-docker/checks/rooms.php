@@ -10,7 +10,7 @@ if (!defined('TANKITY_GAME_DIR')) {
 
 $tmp = sys_get_temp_dir() . '/tankity-rooms-test-' . getmypid();
 @mkdir($tmp, 0700);
-file_put_contents($tmp . '/test.yaml', "max_rooms: 2\nroom_max_age: 3600\nroom_live_secs: 60\n");
+file_put_contents($tmp . '/test.yaml', "max_rooms: 2\nroom_live_secs: 60\n");
 $env = array_merge(getenv(), ['CONFIG_FILE' => $tmp . '/test.yaml', 'TANKITY_DATA_DIR' => $tmp . '/data']);
 // The room functions, in this process, for aging records and holding the lock.
 putenv('CONFIG_FILE=' . $tmp . '/test.yaml');

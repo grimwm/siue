@@ -19,14 +19,12 @@ final class RoomStoreTest extends TestCase
     {
         $this->dir = tankity_test_dir();
         putenv('TANKITY_ROOM_LIVE_SECS=60');
-        putenv('TANKITY_ROOM_MAX_AGE=3600');
     }
 
     protected function tearDown(): void
     {
         room_release_all();
         putenv('TANKITY_ROOM_LIVE_SECS');
-        putenv('TANKITY_ROOM_MAX_AGE');
         tankity_test_rm($this->dir);
     }
 

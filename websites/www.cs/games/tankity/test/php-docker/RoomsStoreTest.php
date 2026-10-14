@@ -19,7 +19,7 @@ final class RoomsStoreTest extends TestCase
     {
         self::$tmp = sys_get_temp_dir() . '/tankity-store-http-' . getmypid() . '-' . bin2hex(random_bytes(3));
         mkdir(self::$tmp, 0700);
-        file_put_contents(self::$tmp . '/test.yaml', 'max_rooms: ' . self::CAP . "\nroom_max_age: 3600\nroom_live_secs: 60\n");
+        file_put_contents(self::$tmp . '/test.yaml', 'max_rooms: ' . self::CAP . "\nroom_live_secs: 60\n");
         putenv('CONFIG_FILE=' . self::$tmp . '/test.yaml');
         putenv('TANKITY_DATA_DIR=' . self::$tmp . '/data');
         require_once dirname(__DIR__) . '/php/rooms-lib.php';

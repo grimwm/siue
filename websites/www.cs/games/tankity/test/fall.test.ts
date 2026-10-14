@@ -11,14 +11,25 @@ import {
   buildArsenal, droneChutes, explode, fallDamage, fallTanks, anyTankFalling, armChutes, dueFalls, restY, settleVolley, settleFalls, CHUTE_SPEED, TUNE,
 } from '../src/sim.ts';
 import { soloBuy, soloDeal, soloMuster } from '../src/solo.ts';
+import type { Tank, World } from '../src/sim.ts';
+import type { SoloState } from '../src/solo.ts';
 
-const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+function nth<T>(list: readonly T[], i: number): T {
+  return must(list[i], `item ${i}`);
+}
+
+const GAME: { arsenal: NonNullable<Parameters<typeof buildArsenal>[0]> } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
 const RULES = { freePx: 10, perPx: 0.5, chuteOver: 5, aiRound: 3 };
-const arsenal = buildArsenal({ ...GAME.arsenal, fall: RULES });
+const arsenal = must(buildArsenal({ ...GAME.arsenal, fall: RULES }), 'the arsenal');
 
-const unit = (id, isPlayer, x, y, hp = 100, extra = {}) => ({ id, isPlayer, x, y, hp, angle: 45, power: 50, fuel: 80, ...extra });
+const unit = (id: string, isPlayer: boolean, x: number, y: number, hp = 100, extra: Partial<Tank> = {}): Tank =>
+  ({ id, isPlayer, x, y, hp, angle: 45, power: 50, fuel: 80, ...extra });
 /* A flat field at 400 with the given units; the player's tricks on the world. */
-function world(tanks, extra = {}) {
+function world(tanks: Tank[], extra: Partial<World> = {}): World {
   return {
     tanks, terrain: new Array(720).fill(400), wind: 0, round: 1, rng: () => 0.5, shells: [],
     score: 0, cash: 0, ammo: { shell: Infinity }, selected: 'shell', shield: false, bunker: 0, laststand: false, jammer: 0,
@@ -37,7 +48,7 @@ test('the damage is linear past a free drop, rounded down', () => {
 });
 
 test('the game.yaml rules are the documented defaults', () => {
-  const live = buildArsenal(GAME.arsenal);
+  const live = must(buildArsenal(GAME.arsenal), 'the arsenal');
   assert.deepEqual({ ...live.fall }, RULES);
   assert.ok(live.gear.parachute, 'the shop sells a parachute');
   assert.equal(live.gear.parachute.effect, 'parachute');
@@ -49,7 +60,7 @@ test('a unit over a pit lands on the ground and pays the drop', () => {
   const ev = settleFalls(G, arsenal);
   assert.equal(me.y, 400);
   assert.equal(me.hp, 55);
-  assert.deepEqual(ev.map(e => [e.kind, e.tank.id, e.dmg, e.chute, e.by && e.by.id]), [['fall', 'tank', 45, false, null]]);
+  assert.deepEqual(ev.map(e => [e.kind, e.tank.id, e.kind === 'fall' ? e.dmg : undefined, e.kind === 'fall' ? e.chute : undefined, e.by && e.by.id]), [['fall', 'tank', 45, false, null]]);
 });
 
 test('the shooter whose blast dug the pit is credited: score, cash, kills, the last hit', () => {
@@ -93,7 +104,7 @@ test('digging out your own footing hurts you and credits nobody', () => {
   assert.equal(G.score, 0);
   assert.equal(me.kills, undefined);
   assert.equal(me.lastHitBy, undefined);
-  assert.equal(ev[0].by, null);
+  assert.equal(nth(ev, 0).by, null);
 });
 
 test('a drone that digs out a drone gets the kill but pays no score', () => {
@@ -101,9 +112,9 @@ test('a drone that digs out a drone gets the kill but pays no score', () => {
   const b = unit('wraith', false, 300, 300, 5, { fellBy: 0 });
   const G = world([unit('tank', true, 600, 400), a, b].map((t, i) => (i === 2 ? { ...t, fellBy: 1 } : t)));
   settleFalls(G, arsenal);
-  assert.equal(G.tanks[2].hp, 0);
-  assert.equal(G.tanks[1].kills, 1);
-  assert.equal(G.tanks[2].lastHitBy, 1);
+  assert.equal(nth(G.tanks, 2).hp, 0);
+  assert.equal(nth(G.tanks, 1).kills, 1);
+  assert.equal(nth(G.tanks, 2).lastHitBy, 1);
   assert.equal(G.score, 0);
 });
 
@@ -113,7 +124,7 @@ test('a parachute saves a fall over the threshold and is spent', () => {
   const ev = settleFalls(G, arsenal);
   assert.equal(me.hp, 100);
   assert.equal(G.chutes, 1);
-  assert.deepEqual(ev.map(e => [e.kind, e.dmg, e.chute]), [['fall', 0, true]]);
+  assert.deepEqual(ev.map(e => [e.kind, e.kind === 'fall' ? e.dmg : undefined, e.kind === 'fall' ? e.chute : undefined]), [['fall', 0, true]]);
 });
 
 test('a fall at or under the threshold keeps the parachute and takes the damage', () => {
@@ -161,7 +172,7 @@ test('landing on a unit hurts it the same, credited to the digger; the parachute
   assert.equal(under.hp, 100 - dmg);
   assert.equal(under.lastHitBy, 2);
   const hit = ev.find(e => e.kind === 'fall' && e.tank === under);
-  assert.ok(hit && hit.under && hit.by === digger);
+  assert.ok(hit && hit.kind === 'fall' && hit.under && hit.by === digger);
 });
 
 test('units side by side do not land on each other, and a wreck is not a floor', () => {
@@ -204,7 +215,7 @@ test('fallTanks only animates: the drawn height follows the ground, the rules ne
 });
 
 test('a settled fall plays out from where it was drawn to where the settle put it', () => {
-  for (const [y, chutes, hp] of [[300, 0, 55], [300, 1, 100], [379, 1, 95], [200, 0, 5], [379.46, 0, 95]]) {
+  for (const [y, chutes, hp] of [[300, 0, 55], [300, 1, 100], [379, 1, 95], [200, 0, 5], [379.46, 0, 95]] satisfies [number, number, number][]) {
     const me = unit('tank', true, 100, y);
     const G = world([me, unit('reaper', false, 400, 400)], { chutes });
     const shows = settleVolley(G, arsenal);
@@ -227,7 +238,8 @@ test('a parachute armed for a fall opens only when the unit starts to drop, and 
   assert.equal(me.chuteArmed, true, 'still armed');
   // The pit opens under it: it floats down under the canopy.
   for (let x = 80; x <= 120; x++) G.terrain[x] = 520;
-  let falling = 0, openFalling = 0, steps = [];
+  let falling = 0, openFalling = 0;
+  const steps: number[] = [];
   let last = me.drawY ?? me.y;
   for (let f = 0; f < 5000 && anyTankFalling(G); f++) {
     fallTanks(G, 1 / 60);
@@ -290,7 +302,8 @@ test('a fall that wrecks a unit is seen to fall and land before its words and wr
   assert.equal(foe.hp, 0);
   assert.equal(foe.shownHp, 20, 'drawn whole until it lands');
   assert.equal(foe.drawY, 250);
-  let shown = [], frames = 0;
+  const shown: [number, string[]][] = [];
+  let frames = 0;
   while (pending.length && frames < 5000) {
     fallTanks(G, 1 / 60);
     frames++;
@@ -314,7 +327,7 @@ test('a fall that wrecks a unit is seen to fall and land before its words and wr
 /* A solo volley as the page plays it: falls animate every frame and the settle
    runs once the last shell is down; and the same volley as the room server
    resolves it: every shell, then one settle. */
-function soloVolley(G, shooter, wkey) {
+function soloVolley(G: World, shooter: Tank, wkey: string) {
   sim.fireWeapon(G, arsenal, shooter, wkey);
   for (let f = 0; f < 5000 && G.shells.length; f++) {
     fallTanks(G, 1 / 60);
@@ -324,12 +337,12 @@ function soloVolley(G, shooter, wkey) {
   }
   for (let f = 0; f < 5000 && anyTankFalling(G); f++) fallTanks(G, 1 / 60);
 }
-function roomVolley(G, shooter, wkey) {
+function roomVolley(G: World, shooter: Tank, wkey: string) {
   sim.fireWeapon(G, arsenal, shooter, wkey);
   for (let f = 0; f < 5000 && G.shells.length; f++) sim.stepShells(G, arsenal, 1 / 60);
   settleFalls(G, arsenal);
 }
-const outcome = G => ({ hp: G.tanks.map(t => t.hp), y: G.tanks.map(t => t.y), chutes: [G.chutes, ...G.tanks.map(t => t.chutes || 0)], score: G.score });
+const outcome = (G: World) => ({ hp: G.tanks.map(t => t.hp), y: G.tanks.map(t => t.y), chutes: [G.chutes, ...G.tanks.map(t => t.chutes || 0)], score: G.score });
 
 test('the same shot costs the same armor in a solo match and in a room', () => {
   const cases = [
@@ -346,14 +359,14 @@ test('the same shot costs the same armor in a solo match and in a room', () => {
     const make = () => {
       const G = world([unit('tank', true, 100, c.ground, 100, { dirS: 1 }), unit('reaper', false, 400, c.ground, 100, { dirS: -1, ...c.drone })],
         { terrain: new Array(720).fill(c.ground), ammo: { shell: Infinity, buck: 9, mortar: 9 } });
-      Object.assign(G.tanks[0], { angle: c.angle, power: c.power });
+      Object.assign(nth(G.tanks, 0), { angle: c.angle, power: c.power });
       return G;
     };
     const solo = make(), room = make();
-    soloVolley(solo, solo.tanks[0], c.wkey);
-    roomVolley(room, room.tanks[0], c.wkey);
+    soloVolley(solo, nth(solo.tanks, 0), c.wkey);
+    roomVolley(room, nth(room.tanks, 0), c.wkey);
     assert.deepEqual(outcome(solo), outcome(room), JSON.stringify(c));
-    if (room.tanks[1].y > c.ground + 10) fell++;
+    if (nth(room.tanks, 1).y > c.ground + 10) fell++;
   }
   assert.ok(fell >= 3, `the cases dig real pits (${fell})`);
 });
@@ -376,14 +389,14 @@ test('of several blasts under one unit, the one that lowered its ground the most
   explode(G, arsenal, 330, 445, 'shell', other, null, null); // shallower, later
   assert.equal(foe.fellBy, 0);
   const ev = settleFalls(G, arsenal);
-  assert.equal(ev.find(e => e.tank === foe).by, me);
+  assert.equal(must(ev.find(e => e.tank === foe), 'its fall').by, me);
 });
 test('drones carry a parachute from the rules\' round', () => {
   assert.equal(droneChutes(arsenal, 1), 0);
   assert.equal(droneChutes(arsenal, 2), 0);
   assert.equal(droneChutes(arsenal, 3), 1);
   assert.equal(droneChutes(arsenal, 9), 1);
-  const G = { body: 'tank' };
+  const G = { body: 'tank' } as SoloState; // soloDeal fills in the rest
   soloDeal(G, arsenal, 'chutes', 'normal', 720);
   G.round = 3;
   soloMuster(G, arsenal);
@@ -391,10 +404,10 @@ test('drones carry a parachute from the rules\' round', () => {
 });
 
 test('the shop sells parachutes that stack', () => {
-  const G = { body: 'tank' };
+  const G = { body: 'tank' } as SoloState; // soloDeal fills in the rest
   soloDeal(G, arsenal, 'chutes', 'normal', 720);
   assert.equal(G.chutes, 0);
-  const row = arsenal.shop.find(r => r.g === 'parachute');
+  const row = must(arsenal.shop.find(r => r.g === 'parachute'), 'the parachute row');
   G.cash = 10000;
   assert.deepEqual(soloBuy(G, row, 3), { ok: true, qty: 3, total: row.price * 3 });
   assert.equal(G.chutes, 3 * row.n);

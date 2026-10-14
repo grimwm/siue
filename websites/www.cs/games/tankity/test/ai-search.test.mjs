@@ -3,7 +3,7 @@
 // best), and a bracket correction does the same around the last aim (6, then
 // 3, then 1). Room drones aim on the server, so these are counts of planning
 // flights, the whole of a turn's cost.
-// test/ai-hitrate.test.mjs holds the aim's quality; protocol/sim-vectors.json
+// test/ai-hitrate.test.ts holds the aim's quality; protocol/sim-vectors.json
 // holds server/ai.php to the same search.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

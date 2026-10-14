@@ -1,4 +1,4 @@
-// games/tankity/test/field.test.mjs
+// games/tankity/test/field.test.ts
 // How wide a solo field is dealt, and how the field sits in the battlefield
 // box (src/field.ts). The width comes from the box the device gives in
 // landscape and never from portrait.
@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FIELD_COL, FIELD_W_MAX, FIELD_W_MIN, H, ROOM_W, fieldWidthOk } from '../src/sim.ts';
 import { stepArm } from '../src/input.ts';
+import type { Held } from '../src/input.ts';
 import { createFieldWidth, powerScale, angleText, powerText, fieldWidth, fieldWidthFor, fitField, landscapeBox, visibleWorld } from '../src/field.ts';
 
 test('the width is 460 × the landscape aspect, on a whole column', () => {
@@ -24,6 +25,7 @@ test('the width clamps to 720–1440', () => {
 
 test('a viewport with no size deals the room field', () => {
   assert.equal(fieldWidth({ w: NaN, h: NaN }), ROOM_W);
+  // @ts-expect-error: a viewport that reports no size at all, which Box does not allow
   assert.equal(fieldWidth({ w: undefined, h: undefined }), ROOM_W);
 });
 
@@ -37,11 +39,11 @@ test('the box is the one the device gives in landscape, whichever way it is held
   assert.deepEqual(landscapeBox(1180, 820), { w: 1118, h: 526 });
   assert.deepEqual(landscapeBox(852, 393), { w: 842, h: 318 });
   assert.deepEqual(landscapeBox(740, 360), { w: 730, h: 285 });
-  for (const [w, h] of [[393, 852], [360, 740], [820, 1180]]) assert.deepEqual(landscapeBox(w, h), landscapeBox(h, w));
+  for (const [w, h] of [[393, 852], [360, 740], [820, 1180]] satisfies [number, number][]) assert.deepEqual(landscapeBox(w, h), landscapeBox(h, w));
 });
 
 test('portrait and landscape on one device deal the same width', () => {
-  const pairs = [[[1180, 820], [820, 1180], 984], [[852, 393], [393, 852], 1224], [[740, 360], [360, 740], 1176]];
+  const pairs = [[[1180, 820], [820, 1180], 984], [[852, 393], [393, 852], 1224], [[740, 360], [360, 740], 1176]] satisfies [[number, number], [number, number], number][];
   for (const [land, port, want] of pairs) {
     assert.equal(fieldWidthFor(...land), want, `${land} in landscape`);
     assert.equal(fieldWidthFor(...port), want, `${port} in portrait`);
@@ -81,8 +83,9 @@ test('a wider box centres the field; a taller one spans it and puts 60 % of the 
 });
 
 test('a press of power is 720/W of a step, so a shot moves as far on any field', () => {
-  const held = { has: k => k === 'powerUp', axis: () => 0, aiming: () => true };
-  const step = w => stepArm(held, 1, { angle: 45, power: 50 }, 1, w).power - 50;
+  // Held keeps its keys in a private set, so a stand-in needs the double cast; stepArm calls only has, axis and aiming.
+  const held = { has: (k: string) => k === 'powerUp', axis: () => 0, aiming: () => true } as unknown as Held;
+  const step = (w?: number) => stepArm(held, 1, { angle: 45, power: 50 }, 1, w).power - 50;
   assert.equal(step(720), 45);
   assert.equal(step(), 45, 'a room is the default');
   assert.ok(Math.abs(step(1080) - 30) < 1e-12);

@@ -186,7 +186,7 @@ function walk(dir: string, base: string): string[] {
   return out;
 }
 
-/** JSON with comments, as tsconfig files are written; a glob like test/**\/*.ts inside a string is not a comment. */
+/** JSON with comments and trailing commas, as tsconfig files are written; a glob like test/**\/*.ts inside a string is not a comment. */
 function readJsonc(path: string): unknown {
   const src = readFileSync(path, 'utf8');
   let out = '';
@@ -203,6 +203,8 @@ function readJsonc(path: string): unknown {
     } else if (c === '/' && src[i + 1] === '*') {
       i = src.indexOf('*/', i + 2) + 1;
       if (i === 0) throw new Error(`${path}: unterminated comment`);
+    } else if (c === ',' && /^(?:\s|\/\/[^\n]*|\/\*[\s\S]*?\*\/)*[}\]]/.test(src.slice(i + 1))) {
+      // A trailing comma, which tsconfig allows and JSON does not.
     } else out += c;
   }
   return JSON.parse(out);
@@ -241,8 +243,8 @@ const BRIDGE = '_kit/test/check.ts';
 function importsBridge(games: string, file: string): boolean {
   const text = readFileSync(join(games, file), 'utf8');
   // Static imports start a line; a string that merely holds one (a fixture in a test) does not count.
-  for (const m of text.matchAll(/^\s*(?:import|export)\b[^;'"]*?\bfrom\s*['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/gm)) {
-    const spec = m[1] ?? m[2] ?? '';
+  for (const m of text.matchAll(/^\s*(?:import|export)\b[^;'"]*?\bfrom\s*['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)|^\s*import\s*['"]([^'"]+)['"]/gm)) {
+    const spec = m[1] ?? m[2] ?? m[3] ?? '';
     if (spec.startsWith('.') && posix.join(posix.dirname(file), spec) === BRIDGE) return true;
   }
   return false;
@@ -251,7 +253,7 @@ function importsBridge(games: string, file: string): boolean {
 const LEGACY_CLASS = /^\s*(?:(?:final|abstract|readonly)\s+)*class\s+\w+\s+extends\s+LegacyCheckCase\b/m;
 
 // Spelled in pieces so this file does not trip its own check.
-const ESCAPES = new RegExp([':\\s*' + 'any\\b', '\\bas\\s+' + 'any\\b', '<' + 'any>', '@ts-' + 'ignore', '@ts-' + 'nocheck'].join('|'));
+const ESCAPES = new RegExp([':\\s*' + 'any\\b', '\\bas\\s+' + 'any\\b', '[<,]\\s*' + 'any\\s*[,>]', '@ts-' + 'ignore', '@ts-' + 'nocheck'].join('|'));
 
 /** Every rule the typed tests keep, as messages; [] when the tree keeps them all. */
 function problems(site: string, allow: Allow): string[] {
@@ -351,7 +353,10 @@ test('each rule names what breaks it', t => {
     'games/g/build.json': '{ "programs": ["tsconfig.json"] }\n',
     'games/g/test.sh': "#!/bin/sh\nnode --test 'test/*.test.ts'\n",
     'games/g/test/bridged.test.ts': "import { check } from '../../_kit/test/check.ts';\n",
+    'games/g/test/effect.test.ts': "import '../../_kit/test/check.ts';\n",
+    'games/g/tsconfig.test.json': '{ "compilerOptions": { "types": ["node",], }, "include": ["test/**/*.ts",], }\n',
     'games/g/test/loose.test.ts': 'const x = y as ' + 'any;\n',
+    'games/g/test/generic.test.ts': 'type P = Record<string, ' + 'any>;\n',
     'tests/php/OldTest.php': '<?php\nfinal class OldTest extends LegacyCheckCase {}\n',
   });
   assert.deepEqual(problems(site, NONE), [
@@ -359,7 +364,9 @@ test('each rule names what breaks it', t => {
     'g/build.json: programs must list tsconfig.test.json',
     'g/test.sh: missing, or without the zero-files guard (set -- <globs>; [ -e "$1" ] || exit 1; node --test "$@")',
     'g/test/bridged.test.ts: imports _kit/test/check.ts; use node:test directly',
+    'g/test/effect.test.ts: imports _kit/test/check.ts; use node:test directly',
     'tests/php/OldTest.php: extends LegacyCheckCase; make it a TestCase',
+    'g/test/generic.test.ts: , ' + 'any> is not allowed in a test (see games/_kit/README.md)',
     'g/test/loose.test.ts: as ' + 'any is not allowed in a test (see games/_kit/README.md)',
   ]);
 });

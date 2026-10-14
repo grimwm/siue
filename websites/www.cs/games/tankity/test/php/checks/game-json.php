@@ -265,7 +265,12 @@ $riot = $row1($asEffect("      effect: riot\n      fan: 1.2\n"));
 $check('riot-validates', ($riot['fan'] ?? null) === 1.2, json_encode($riot));
 $slump = $row1($asEffect("      effect: slump\n      slope: 1.0\n      passes: 24\n"));
 $check('slump-validates', ($slump['slope'] ?? null) === 1.0 && $slump['passes'] === 24, json_encode($slump));
-foreach (['drill', 'clod'] as $painter) {
+// The fire guns: a pool of burning liquid, its own fields refused elsewhere.
+$napalmOf = fn(string $more = ''): string => $asEffect("      effect: napalm\n      volume: 2200\n      burn: 3.0\n      tick: 0.5\n      flame: 18\n$more");
+$napalm = $row1($napalmOf());
+$check('napalm-validates', ($napalm['volume'] ?? null) === 2200 && $napalm['burn'] === 3.0 && $napalm['tick'] === 0.5 && $napalm['flame'] === 18
+    && !isset($napalm['error']), json_encode($napalm));
+foreach (['drill', 'clod', 'flame'] as $painter) {
     $check("$painter-painter-validates", (json_decode($render($mut('painter: spark', "painter: $painter")), true)['arsenal']['ammo'][1]['gfx']['painter'] ?? '') === $painter);
 }
 $apex = $row1($asEffect("      effect: cluster\n      apex: true\n      split: 9\n      fan: 0.16\n      subDmg: 60\n      subRadius: 40\n"));
@@ -329,7 +334,18 @@ $cases = [
     'range-on-a-plasma' => [$asEffect("      effect: plasma\n      range: 300\n"), 'arsenal.ammo[1].range: only the beam effect uses this'],
     'pour-needs-volume' => [$asEffect("      effect: pour\n"), 'arsenal.ammo[1].volume: is required when effect is pour'],
     'pour-volume-range' => [$asEffect("      effect: pour\n      volume: 100\n"), 'arsenal.ammo[1].volume: must be a whole number from 200 to 20000'],
-    'volume-on-a-dirt' => [$asEffect("      effect: dirt\n      volume: 4000\n"), 'arsenal.ammo[1].volume: only the pour effect uses this'],
+    'volume-on-a-dirt' => [$asEffect("      effect: dirt\n      volume: 4000\n"), 'arsenal.ammo[1].volume: only the pour and napalm effects use this'],
+    'napalm-needs-volume' => [str_replace("      volume: 2200\n", '', $napalmOf()), 'arsenal.ammo[1].volume: is required when effect is napalm'],
+    'napalm-needs-burn' => [str_replace("      burn: 3.0\n", '', $napalmOf()), 'arsenal.ammo[1].burn: is required when effect is napalm'],
+    'napalm-needs-tick' => [str_replace("      tick: 0.5\n", '', $napalmOf()), 'arsenal.ammo[1].tick: is required when effect is napalm'],
+    'napalm-needs-flame' => [str_replace("      flame: 18\n", '', $napalmOf()), 'arsenal.ammo[1].flame: is required when effect is napalm'],
+    'burn-range' => [str_replace('burn: 3.0', 'burn: 11', $napalmOf()), 'arsenal.ammo[1].burn: must be a number from 0.5 to 10'],
+    'tick-range' => [str_replace('tick: 0.5', 'tick: 0.05', $napalmOf()), 'arsenal.ammo[1].tick: must be a number from 0.1 to 2'],
+    'flame-range' => [str_replace('flame: 18', 'flame: 61', $napalmOf()), 'arsenal.ammo[1].flame: must be a whole number from 4 to 60'],
+    'napalm-tick-past-its-burn' => [str_replace('burn: 3.0', 'burn: 0.5', str_replace('tick: 0.5', 'tick: 1.0', $napalmOf())), 'arsenal.ammo[1].tick: must not be longer than burn (the pool would never burn)'],
+    'napalm-needs-damage' => [str_replace("      dmg: 17\n", "      dmg: 0\n", $napalmOf()), 'arsenal.ammo[1].dmg: napalm burns for dmg each tick; must be 1 or more'],
+    'burn-on-a-pour' => [$asEffect("      effect: pour\n      volume: 4000\n      burn: 3.0\n"), 'arsenal.ammo[1].burn: only the napalm effect uses this'],
+    'flame-on-a-shot' => [$asEffect("      effect: shot\n      flame: 18\n"), 'arsenal.ammo[1].flame: only the napalm effect uses this'],
     'dig-needs-diglen' => [$asEffect("      effect: dig\n      digR: 8\n      warheads: 0\n"), 'arsenal.ammo[1].digLen: is required when effect is dig'],
     'dig-needs-digr' => [$asEffect("      effect: dig\n      digLen: 60\n      warheads: 0\n"), 'arsenal.ammo[1].digR: is required when effect is dig'],
     'dig-needs-warheads' => [$asEffect("      effect: dig\n      digLen: 60\n      digR: 8\n"), 'arsenal.ammo[1].warheads: is required when effect is dig'],

@@ -16,8 +16,8 @@ const read = f => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]
 
 // Files a later task adds are banned from the moment they exist.
 const present = files => files.filter(f => fs.existsSync(path.join(dir, f)));
-const TS_RULES = present(['src/sim.ts', 'src/earth.ts', 'src/ai.ts', 'src/armor.ts', 'src/detmath.ts', 'src/solo.ts']);
-const PHP_RULES = present(['server/sim.php', 'server/earth.php', 'server/ai.php', 'server/detmath.php']);
+const TS_RULES = present(['src/sim.ts', 'src/earth.ts', 'src/fire.ts', 'src/ai.ts', 'src/armor.ts', 'src/detmath.ts', 'src/solo.ts']);
+const PHP_RULES = present(['server/sim.php', 'server/earth.php', 'server/fire.php', 'server/ai.php', 'server/detmath.php']);
 const TRANSCENDENTAL_TS = /Math\.(sin|cos|tan|asin|acos|atan|exp|expm1|log|pow|cbrt)\w*\b/;
 const TRANSCENDENTAL_PHP = /(?<![\w>$])(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|exp|expm1|log|log2|log10|log1p|pow|hypot)\(/;
 
@@ -42,6 +42,11 @@ for (const file of PHP_RULES) {
 test('the earth rules (terrain ops) are scanned in both languages', () => {
   assert.ok(TS_RULES.includes('src/earth.ts'), 'src/earth.ts is missing');
   assert.ok(PHP_RULES.includes('server/earth.php'), 'server/earth.php is missing');
+});
+
+test('the fire rules (burning pools) are scanned in both languages', () => {
+  assert.ok(TS_RULES.includes('src/fire.ts'), 'src/fire.ts is missing');
+  assert.ok(PHP_RULES.includes('server/fire.php'), 'server/fire.php is missing');
 });
 
 // rules.php also runs the live rooms, whose pacing reads the clock and whose

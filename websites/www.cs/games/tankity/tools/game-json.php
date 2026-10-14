@@ -390,7 +390,7 @@ function tankity_yaml_scalar(string $t): mixed
 /* ---------------------------------------------------------------- schema */
 
 const TANKITY_AMMO_EFFECTS = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter', 'beam', 'plasma',
-    'tracer', 'dirt', 'pour', 'dig', 'riot', 'slump'];
+    'tracer', 'dirt', 'pour', 'dig', 'riot', 'slump', 'napalm'];
 /** The fields an ammo row carries for its effect: field => [type, [effect => [lo, hi]]]. A field is
  *  valid only on the effects listed for it, with that effect's range (bool fields have no range). */
 const TANKITY_AMMO_EXTRA = [
@@ -412,12 +412,15 @@ const TANKITY_AMMO_EXTRA = [
     'rollTime' => ['num', ['roller' => [0.5, 10.0]]],
     'range' => ['int', ['beam' => [60, 1200]]],
     'aimMin' => ['int', ['beam' => [-30, 10]]],
-    'volume' => ['int', ['pour' => [200, 20000]]],
+    'volume' => ['int', ['pour' => [200, 20000], 'napalm' => [200, 20000]]],
     'digLen' => ['int', ['dig' => [20, 400]]],
     'digR' => ['int', ['dig' => [3, 30]]],
     'warheads' => ['int', ['dig' => [0, 8]]],
     'slope' => ['num', ['slump' => [0.5, 6.0]]],
     'passes' => ['int', ['slump' => [1, 60]]],
+    'burn' => ['num', ['napalm' => [0.5, 10.0]]],
+    'tick' => ['num', ['napalm' => [0.1, 2.0]]],
+    'flame' => ['int', ['napalm' => [4, 60]]],
 ];
 /** The fields each effect requires (a cluster with apex: true needs no fuse). */
 const TANKITY_AMMO_NEEDS = [
@@ -434,9 +437,10 @@ const TANKITY_AMMO_NEEDS = [
     'dig' => ['digLen', 'digR', 'warheads'],
     'riot' => ['fan'],
     'slump' => ['slope', 'passes'],
+    'napalm' => ['volume', 'burn', 'tick', 'flame'],
 ];
 const TANKITY_GEAR_EFFECTS = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand', 'parachute'];
-const TANKITY_PAINTERS = ['disc', 'beam', 'spark', 'ball', 'dash', 'drill', 'clod'];
+const TANKITY_PAINTERS = ['disc', 'beam', 'spark', 'ball', 'dash', 'drill', 'clod', 'flame'];
 /** A tracer's mark (gfx.mark): a line its gunner sees, or smoke everyone sees. */
 const TANKITY_MARKS = ['line', 'smoke'];
 const TANKITY_SFX_EVENTS = ['move', 'click', 'launch', 'boom', 'clank', 'thud', 'warn', 'cash', 'bark', 'win', 'lose', 'fanfare'];
@@ -790,6 +794,13 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
                     $c->err("$p.$k", 'only a dig with warheads uses this');
                 }
             }
+        }
+        // A napalm pool burns for dmg each tick, burn seconds long: at least one tick of some damage.
+        if ($effect === 'napalm' && is_int($o['dmg'] ?? null) && $o['dmg'] < 1) {
+            $c->err("$p.dmg", 'napalm burns for dmg each tick; must be 1 or more');
+        }
+        if ($effect === 'napalm' && is_numeric($o['burn'] ?? null) && is_numeric($o['tick'] ?? null) && $o['tick'] > $o['burn']) {
+            $c->err("$p.tick", 'must not be longer than burn (the pool would never burn)');
         }
         if ($effect === 'tracer' && $o['dmg'] !== null && $o['dmg'] !== 0) {
             $c->err("$p.dmg", 'a tracer does no damage; must be 0');

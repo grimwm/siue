@@ -7,8 +7,9 @@
 import { test, expect } from '@playwright/test';
 import { recorderScript, startSolo, aimTo, setPower } from './helpers.mjs';
 
-/* Injected after the recorder: while __sky.on, every shell core (the 1.5 px
-   white dot) and unit name tag drawn on the battlefield, in canvas pixels,
+/* Injected after the recorder: while __sky.on, every shell drawn on the
+   battlefield (its rendered body from TankityFX.drawBody, or the 1.5 px white
+   core the plain disc draws before the sprites load) and unit name tag, in canvas pixels,
    how many sky marks (the yellow arrow's height on the top edge) were drawn,
    and the TANK tag's scale (canvas pixels per world unit: the fit times the zoom). */
 function skyCamScript() {
@@ -17,6 +18,23 @@ function skyCamScript() {
   window.__sky = cap;
   const arc = P.arc, fillText = P.fillText;
   const px = (c, x, y) => { const m = c.getTransform(); return [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]; };
+  // The recorder already watches window.TankityFX: chain onto its setter so both see drawBody.
+  const prior = Object.getOwnPropertyDescriptor(window, 'TankityFX');
+  let fxApi;
+  Object.defineProperty(window, 'TankityFX', {
+    configurable: true,
+    get() { return prior && prior.get ? prior.get() : fxApi; },
+    set(api) {
+      const drawBody = api.drawBody;
+      api.drawBody = function (c, x, y, ...rest) {
+        const drew = drawBody.call(this, c, x, y, ...rest);
+        if (drew && cap.on && c.canvas && c.canvas.id === 'stage') cap.shells.push([x, y, ...px(c, x, y)]);
+        return drew;
+      };
+      fxApi = api;
+      if (prior && prior.set) prior.set(api);
+    },
+  });
   P.arc = function (x, y, r, ...rest) {
     if (cap.on && this.canvas.id === 'stage' && r === 1.5 && this.fillStyle === '#ffffff') cap.shells.push([x, y, ...px(this, x, y)]);
     return arc.call(this, x, y, r, ...rest);
@@ -138,7 +156,8 @@ async function pastTheFloor(browser, viewport, opts) {
   expect(cv.z, 'at the zoom floor').toBeGreaterThan(0.34);
   const g = await groundScan(page);
   expect(g.skyCount, `sky at the bottom edge at x ${g.skyAt.join(',')}`).toBe(0);
-  for (const [x, share] of g.columns) expect(share, `column ${x}: ground from the bottom up`).toBeGreaterThan(0.03);
+  // The whole-row scan above is the guard; each column only has to start in the ground (a deep crater may leave just the dirt).
+  for (const [x, share] of g.columns) expect(share * cv.h, `column ${x}: ground from the bottom up`).toBeGreaterThanOrEqual(4);
   const cap = await page.evaluate(() => window.__sky);
   unitsOnScreen(cap.labels.slice(-20), cv);
   if (viewport === WIDE) {

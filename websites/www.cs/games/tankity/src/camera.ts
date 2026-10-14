@@ -36,9 +36,14 @@ export function shellTop(s: Rising, g: number): number {
 }
 
 export interface Aloft extends Rising { x: number; wkey: string; rolling?: boolean }
-/** Where shells can still hold the camera: the field's width, and how far either
- *  side of its middle the view at ZOOM_FLOOR reaches. */
-export interface Reach { w: number; reach: number }
+/** Where shells can still hold the camera: the field's width, how far either
+ *  side of its middle the view at ZOOM_FLOOR reaches, and (optional) the ground's
+ *  row at x, under which a shell lies on the ground (a room replay's roller). */
+export interface Reach { w: number; reach: number; ground?: (x: number) => number }
+/** Rows above the ground within which a shell counts as lying on it (a roller rides ROLL_LIFT above). */
+const ON_GROUND = 6;
+/** Empty frames before a hold lets go: a shell the sim retires past the edge shows as a ghost a frame later. */
+const HOLD_GRACE = 2;
 
 /** The top of the volley in flight: the highest arc any of its shells has
  *  reached or will reach, held while a shell is still up, then null. lists[0]
@@ -51,6 +56,7 @@ export function volleyTop(prev: number | null, lists: readonly Iterable<Aloft>[]
     for (const s of lists[i]!) {
       if (s.rolling || (i > 0 && s.vy >= 0)) continue;
       if (at && Math.abs(s.x - at.w / 2) > at.reach) continue;
+      if (at && at.ground && s.vy > -30 && s.y >= at.ground(s.x) - ON_GROUND) continue;
       any = true;
       const y = shellTop(s, gravity(s.wkey));
       top = top === null ? y : Math.min(top, y);
@@ -59,13 +65,28 @@ export function volleyTop(prev: number | null, lists: readonly Iterable<Aloft>[]
   return any ? top : null;
 }
 
+/** The volley's hold, stepped once a frame: its top row (null: none) and how many frames in a row had no shell up. */
+export interface Hold { top: number | null; empty: number }
+/** One frame of the hold: volleyTop over these lists, let go only after HOLD_GRACE empty frames in a row. */
+export function stepHold(hold: Hold, lists: readonly Iterable<Aloft>[], gravity: (wkey: string) => number, at?: Reach): void {
+  const top = volleyTop(hold.top, lists, gravity, at);
+  if (top !== null) { hold.top = top; hold.empty = 0; return; }
+  if (++hold.empty >= HOLD_GRACE) hold.top = null;
+}
+
+/** How far either side of the field's middle clouds drifting with the wind wrap: past what
+ *  the view at ZOOM_FLOOR shows (reach: its half-width; 0 before the canvas is measured). */
+export function cloudWrap(w: number, reach: number): number {
+  return Math.max(reach, w / 2 / ZOOM_FLOOR) + 80;
+}
+
 /** Where the camera wants to be on a field w × h: the bottom edge on the
  *  field's floor (no valley, crater or scenery dips out of view), every live
  *  unit framed above it, and with a volley in the air (sky: its top row) the
  *  arc too, down to ZOOM_FLOOR. extra: rows of sky a tall canvas shows above
  *  the field at full size (a portrait screen); the arc and the units may use
  *  them before the camera pulls back at all. */
-export function cameraTarget(w: number, h: number, units: readonly { y: number }[], sky: number | null, extra = 0): CamPose {
+export function cameraTarget(w: number, h: number, units: readonly { y: number }[], sky: number | null, extra = 0, out?: CamPose): CamPose {
   const floorY = h + FLOOR_SLACK;
   let need = Infinity; // the highest row that must show
   for (const u of units) need = Math.min(need, u.y - UNIT_TOP - PAD);
@@ -75,7 +96,9 @@ export function cameraTarget(w: number, h: number, units: readonly { y: number }
     lo = ZOOM_FLOOR;
   }
   const z = need === Infinity ? 1 : Math.max(lo, Math.min(1, (h + extra) / Math.max(1, floorY - need)));
-  return { z, cx: w / 2, cy: floorY - h / 2 / z };
+  const pose = out || { z: 0, cx: 0, cy: 0 };
+  pose.z = z; pose.cx = w / 2; pose.cy = floorY - h / 2 / z;
+  return pose;
 }
 
 /** One frame of easing toward the target, in place. The view's top and bottom

@@ -64,6 +64,8 @@ export interface RoomDeps {
   shownPower(t: GameTank): number;
   startBanner(text: string, done?: (() => void) | null): void;
   updateCamera(dt: number): void;
+  /** The clouds drift with the wind, wrapping out of the floor view's sight. */
+  driftClouds(dt: number): void;
   windText(): string;
   /** Keeps a room match only one human played on this browser's board. */
   saveLocal(level: Difficulty, row: LocalRow): Saved;
@@ -73,7 +75,7 @@ export function createRoom(deps: RoomDeps) {
   const {
     G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
     backToLobby, decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
-    renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText, saveLocal,
+    renderShopReady, shownAngle, shownPower, startBanner, updateCamera, driftClouds, windText, saveLocal,
   } = deps;
   /* A match only one human played goes on this browser's board, never the server's, once per match. */
   const keeper = roomLocalSaver(saveLocal, () => new Date().toISOString());
@@ -529,10 +531,7 @@ export function createRoom(deps: RoomDeps) {
     updateCamera(dt);
     decayFx(dt);
     fallTanks(dt);
-    for (const cl of G.clouds) {
-      cl.x += cl.v * dt;
-      if (cl.x - 40 > G.w) cl.x = -40;
-    }
+    driftClouds(dt);
     netReplay(dt);
     pumpDialogue(dt);
     G.banterT -= dt;

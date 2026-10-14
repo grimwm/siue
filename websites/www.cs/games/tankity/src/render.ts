@@ -625,11 +625,13 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
      edge at its x, with how far above the view it flies, so it is never lost. */
   const marks: SkyMark[] = [];
   const inFlight: (readonly Flying[])[] = [[], [], []];
+  const markFont = { scale: 0, css: '' };
   function drawSkyMarks(c: CanvasRenderingContext2D, view: BattleView, top: number, x0: number, x1: number): void {
     if (!view.shells.length && !view.replay.length && !view.ghosts.length) return;
     inFlight[0] = view.shells; inFlight[1] = view.replay; inFlight[2] = view.ghosts;
     sim.skyMarks(inFlight, top, marks);
     const z = view.cam.z, s = view.textScale;
+    if (markFont.scale !== s) { markFont.scale = s; markFont.css = `bold ${Math.round(10 * s)}px sans-serif`; }
     for (const m of marks) {
       const x = Math.max(x0 + 24 / z, Math.min(x1 - 24 / z, m.x));
       c.save();
@@ -643,7 +645,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
       c.lineTo(-7, 17);
       c.closePath();
       c.fill();
-      c.font = `bold ${Math.round(10 * s)}px sans-serif`;
+      c.font = markFont.css;
       c.textAlign = 'center';
       c.textBaseline = 'top';
       c.fillText(String(Math.round(m.above)), 0, 20);
@@ -783,6 +785,45 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     }
   }
 
+  /* ---------- the scenery ---------- */
+  /* The hills past one edge of the field (side 0 left, 1 right), from column a
+     to b. The scenery dims away from the field: full colour at the seam, so the
+     edge never reads as a cut. Its gradients are kept per field width and its
+     heights in one growing buffer, so a frame allocates nothing here. */
+  let shades: { w: number; body: CanvasGradient[]; rim: CanvasGradient[] } | null = null;
+  let heights = new Float64Array(0);
+  function drawScenery(c: CanvasRenderingContext2D, hills: Hills, terrain: readonly number[], a: number, b: number, side: 0 | 1): void {
+    if (b <= a) return;
+    if (!shades || shades.w !== W) {
+      const shade2 = (edge: number, away: number, from: string, to: string): CanvasGradient => {
+        const g = c.createLinearGradient(edge, 0, away, 0);
+        g.addColorStop(0, from);
+        g.addColorStop(1, to);
+        return g;
+      };
+      shades = {
+        w: W,
+        body: [shade2(0, -160, '#7a4a1e', '#4a2e14'), shade2(W - 1, W + 159, '#7a4a1e', '#4a2e14')],
+        rim: [shade2(0, -160, '#00aa00', '#2f6a2f'), shade2(W - 1, W + 159, '#00aa00', '#2f6a2f')],
+      };
+    }
+    const n = Math.ceil((b - a) / 4) + 1;
+    if (heights.length < n) heights = new Float64Array(n * 2);
+    for (let i = 0; i < n; i++) heights[i] = sceneryY(hills, terrain, Math.min(b, a + i * 4));
+    c.fillStyle = shades.body[side]!;
+    c.beginPath();
+    c.moveTo(a, H + 70);
+    for (let i = 0; i < n; i++) c.lineTo(Math.min(b, a + i * 4), heights[i]!);
+    c.lineTo(b, H + 70);
+    c.fill();
+    c.strokeStyle = shades.rim[side]!;
+    c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(a, heights[0]!);
+    for (let i = 1; i < n; i++) c.lineTo(Math.min(b, a + i * 4), heights[i]!);
+    c.stroke();
+  }
+
   /* ---------- the frame ---------- */
   function frame(view: BattleView): void {
     const c = cv.getContext('2d');
@@ -841,33 +882,10 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.fillStyle = '#2e1a08';
     c.fillRect(sx0, H - 2, sx1 - sx0, Math.max(0, sy1 - H + 2));
     // Scenery: the round's hills past both edges, dimmed; drawn, never hit.
+    // Two columns under the field's edges, so no hairline shows between the two.
     if (view.hills) {
-      const hills = view.hills;
-      for (const [a, b] of [[sx0, 2], [W - 3, sx1]] as const) { // 2 columns under the field's edges: no hairline between the two
-        if (b <= a) continue;
-        // The scenery dims away from the field: full colour at the seam, so the edge never reads as a cut.
-        const edge = a < 0 ? 0 : W - 1, away = a < 0 ? edge - 160 : edge + 160;
-        const body = c.createLinearGradient(edge, 0, away, 0);
-        body.addColorStop(0, '#7a4a1e');
-        body.addColorStop(1, '#4a2e14');
-        const rim = c.createLinearGradient(edge, 0, away, 0);
-        rim.addColorStop(0, '#00aa00');
-        rim.addColorStop(1, '#2f6a2f');
-        const xs: number[] = [], ys: number[] = [];
-        for (let x = a; x < b; x += 4) { xs.push(x); ys.push(sceneryY(hills, view.terrain, x)); }
-        xs.push(b); ys.push(sceneryY(hills, view.terrain, b));
-        c.fillStyle = body;
-        c.beginPath();
-        c.moveTo(a, H + 70);
-        xs.forEach((x, i) => c.lineTo(x, ys[i]!));
-        c.lineTo(b, H + 70);
-        c.fill();
-        c.strokeStyle = rim;
-        c.lineWidth = 3;
-        c.beginPath();
-        xs.forEach((x, i) => (i ? c.lineTo(x, ys[i]!) : c.moveTo(x, ys[i]!)));
-        c.stroke();
-      }
+      drawScenery(c, view.hills, view.terrain, sx0, 2, 0);
+      drawScenery(c, view.hills, view.terrain, W - 3, sx1, 1);
     }
     // The field's ground with its flat green rim, edge to edge (no cliff at either edge).
     c.fillStyle = '#7a4a1e';

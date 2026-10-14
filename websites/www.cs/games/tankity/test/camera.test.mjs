@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { H } from '../src/sim.ts';
 import {
-  UNIT_FLOOR, ZOOM_FLOOR, SKY_PAD, cameraTarget, easeCamera, shellTop, skyMarks, viewEdges, volleyTop,
+  UNIT_FLOOR, ZOOM_FLOOR, SKY_PAD, cameraTarget, cloudWrap, easeCamera, shellTop, skyMarks, stepHold, viewEdges, volleyTop,
 } from '../src/camera.ts';
 
 const W = 1080;
@@ -208,4 +208,42 @@ test('skyMarks: a shell above the view gets a mark at its x on the top edge, els
   assert.ok(near(marks[0].above, 200, 1e-9));
   skyMarks([[], []], top, marks);
   assert.equal(marks.length, 0, 'the list is reused, not reallocated');
+});
+
+test('stepHold rides out the one frame a climbing shell hands over to its ghost, then lets go', () => {
+  const g = () => 95, at = { w: W, reach: 2000 };
+  const hold = { top: null, empty: 0 };
+  stepHold(hold, [[{ x: W - 5, y: 100, vy: -200, wkey: 'shell' }], []], g, at);
+  const top = hold.top;
+  assert.notEqual(top, null);
+  stepHold(hold, [[], []], g, at); // retired by the sim; its ghost shows up next frame
+  assert.equal(hold.top, top, 'held through the hand-off');
+  stepHold(hold, [[], [{ x: W + 25, y: 90, vy: -195, wkey: 'shell' }]], g, at);
+  assert.equal(hold.top, top);
+  stepHold(hold, [[], []], g, at);
+  stepHold(hold, [[], []], g, at);
+  assert.equal(hold.top, null, 'two empty frames: the volley is over');
+});
+
+test('a shell lying on the ground (a room replay\'s roller) holds nothing', () => {
+  const g = () => 95;
+  const ground = x => 330 + x * 0;
+  const at = { w: W, reach: 2000, ground };
+  assert.equal(volleyTop(-200, [[{ x: 400, y: 327, vy: -1, wkey: 'roller' }]], g, at), null);
+  assert.notEqual(volleyTop(-200, [[{ x: 400, y: 300, vy: 40, wkey: 'shell' }]], g, at), null, 'still in the air: held');
+});
+
+test('cameraTarget can write into a pose it is handed (no allocation per frame)', () => {
+  const out = { z: 0, cx: 0, cy: 0 };
+  const r = cameraTarget(W, H, flat, -500, 0, out);
+  assert.equal(r, out);
+  assert.deepEqual({ ...out }, cameraTarget(W, H, flat, -500));
+});
+
+test('clouds wrap beyond what the floor view shows', () => {
+  const reach = 1500;
+  const r = cloudWrap(W, reach), lo = W / 2 - r, hi = W / 2 + r;
+  assert.ok(lo < W / 2 - reach && hi > W / 2 + reach);
+  const r0 = cloudWrap(W, 0), lo0 = W / 2 - r0, hi0 = W / 2 + r0;
+  assert.ok(lo0 < W / 2 - W / 2 / ZOOM_FLOOR && hi0 > W / 2 + W / 2 / ZOOM_FLOOR, 'before the canvas is measured: the field at the floor');
 });

@@ -16,8 +16,8 @@ import { createRenderer } from './render.ts';
 import type { BattleView, DrawTank, Renderer } from './render.ts';
 import type { Replay } from './replay.ts';
 import { sceneryY } from './scenery.ts';
-import { ZOOM_FLOOR, cameraTarget, easeCamera, skyMarks, volleyTop } from './camera.ts';
-import type { Aloft, Reach } from './camera.ts';
+import { ZOOM_FLOOR, cameraTarget, cloudWrap, easeCamera, skyMarks, stepHold } from './camera.ts';
+import type { Aloft, CamPose, Hold, Reach } from './camera.ts';
 import {
   hashSeed, mulberry32, gauss, GRAV, FLAT_GRAV, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
 } from './sim.ts';
@@ -48,20 +48,32 @@ export function createView(deps: ViewDeps) {
   const units: GameTank[] = [];
   const calm = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   const gravity = (wkey: string): number => (tables.weapons[wkey]?.flat ? FLAT_GRAV : GRAV);
-  let sky: number | null = null; // the volley's top row, held until it lands
+  const hold: Hold = { top: null, empty: 0 }; // the volley's top row, held until it lands
+  const target: CamPose = { z: 1, cx: 0, cy: 0 };
   // Last frame's shells: a room replay's (read once a frame, in battleView) and those flying on past the field's edge.
   let replayed: readonly Aloft[] = [], flyingOn: readonly Aloft[] = [];
   const aloft: (readonly Aloft[])[] = [[], []];
   let tallSky = 0; // rows of sky the canvas shows above the field at full size (fitCanvas)
   const reach: Reach = { w: 0, reach: 0 }; // how far across the floor's view reaches (fitCanvas)
+  // A room replay's path does not say when its roller is down: a point on the ground counts as landed.
+  const groundAt = (x: number): number => simSurfY(G.terrain, x);
   function updateCamera(dt: number): void {
     units.length = 0;
     for (const t of G.tanks) if (t.hp > 0) units.push(t);
     aloft[0] = net.on ? replayed : G.shells;
     aloft[1] = flyingOn; // past the edge: held only while it climbs within the floor's reach
     reach.w = G.w;
-    sky = volleyTop(sky, aloft, gravity, reach);
-    easeCamera(G.cam, cameraTarget(G.w, H, units, sky, tallSky), dt, !!(calm && calm.matches), H);
+    reach.ground = net.on ? groundAt : undefined;
+    stepHold(hold, aloft, gravity, reach);
+    easeCamera(G.cam, cameraTarget(G.w, H, units, hold.top, tallSky, target), dt, !!(calm && calm.matches), H);
+  }
+  /* The clouds drift with the wind and wrap where the camera, even at the floor, cannot see. */
+  function driftClouds(dt: number): void {
+    const r = cloudWrap(G.w, reach.reach);
+    for (const cl of G.clouds) {
+      cl.x += cl.v * dt;
+      if (cl.x > G.w / 2 + r) cl.x = G.w / 2 - r;
+    }
   }
   /* Aim as drawn. Solo drones animate their real angle and power; in rooms the
      server only reports where a rival ended up, so the drawing glides there
@@ -173,5 +185,5 @@ export function createView(deps: ViewDeps) {
     trackMotion();
     renderer.frame(battleView());
   }
-  return { updateCamera, shownAngle, shownPower, render };
+  return { updateCamera, driftClouds, shownAngle, shownPower, render };
 }

@@ -127,13 +127,16 @@ export function createMatch(deps: MatchDeps) {
   }
   /** The run the end card reports on; only that run's outcome may change the card. */
   let cardRun: string | null = null;
-  function resetMatch(seedStr?: string): void {
-    // A match left before its end (Quit, a new match, the tutorial) will never finish: let its run go.
-    if (G.runId) soloDrop(G.runId);
-    G.runId = null;
-    // The last card is gone: its run, if it is still on its way, reports in the radio log.
+  /* The solo card and match are left (a new deal, a room match): a run in play is let go, and a
+     finished run still on its way reports in the radio log from now on. */
+  function leaveSolo(): void {
+    stopFiling();
     if (cardRun) soloForget(cardRun);
     cardRun = null;
+  }
+  function resetMatch(seedStr?: string): void {
+    // A match left before its end (Quit, a new match, the tutorial) will never finish, and the last card is gone.
+    leaveSolo();
     const seed = (seedStr || '').trim() || ('scorched-' + Math.floor(Math.random() * 9000 + 1000));
     // The Menu's Difficulty, read once per match: a change waits for the next one.
     // The width comes from the screen at the deal and holds until the next one (spec 6.6).
@@ -618,6 +621,6 @@ export function createMatch(deps: MatchDeps) {
 
   return {
     advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-    stepWar, decayFx, soloShopBoard, endVeilEscape, checkOneUps, stopFiling,
+    stepWar, decayFx, soloShopBoard, endVeilEscape, checkOneUps, stopFiling, leaveSolo,
   };
 }

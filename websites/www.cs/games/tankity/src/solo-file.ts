@@ -7,7 +7,7 @@
  *   - taken: the next step goes on;
  *   - wait: offline, rate-limited (429) or busy (503). No try is spent,
  *     however long it lasts: a class behind one address must not lose its runs;
- *   - fail: any other 5xx, an unreadable reply, a stale CSRF token. A try is
+ *   - fail: any other 5xx, an unreadable reply, a CSRF token not given or stale. A try is
  *     spent, and the run is dropped after MAX_TRIES in a row;
  *   - gone: the server expired or forgot the run (410/404). Every round is kept,
  *     so the run starts again and replays them, at most MAX_RESTARTS times;
@@ -101,12 +101,17 @@ function parseQueue(raw: string, now: number): Queue | null {
   };
 }
 
-/** `fetch` with a deadline on every request, where the browser has AbortSignal.timeout; a request
-    past it is aborted, which the filer reads as no answer (offline). */
-export function timedFetch(fetch: FilerEnv['fetch'], ms = FETCH_TIMEOUT,
-  timeout: ((ms: number) => unknown) | null = typeof (globalThis as any).AbortSignal?.timeout === 'function' ? t => (globalThis as any).AbortSignal.timeout(t) : null): FilerEnv['fetch'] {
-  if (!timeout) return fetch;
-  return (url, init) => fetch(url, { ...init, signal: timeout(ms) });
+/** `fetch` with a deadline on every request: AbortSignal.timeout, or an AbortController and a timer where
+    that is missing (older Safari). A request past it is aborted, which the filer reads as no answer (offline). */
+export function timedFetch(fetch: FilerEnv['fetch'], ms = FETCH_TIMEOUT): FilerEnv['fetch'] {
+  const g = globalThis as any;
+  if (typeof g.AbortSignal?.timeout === 'function') return (url, init) => fetch(url, { ...init, signal: g.AbortSignal.timeout(ms) });
+  if (typeof g.AbortController !== 'function') return fetch;
+  return (url, init) => {
+    const ctl = new g.AbortController();
+    const timer = g.setTimeout(() => ctl.abort(), ms);
+    return fetch(url, { ...init, signal: ctl.signal }).finally(() => g.clearTimeout(timer));
+  };
 }
 
 /** Why the server dropped a run, in the end card's words; null when it did not. */
@@ -361,7 +366,7 @@ export function createFiler(env: FilerEnv) {
     }
   }
 
-  /* The CSRF token for this pass; throws Wait when the server cannot give one. */
+  /* The CSRF token for this pass: Wait when there is no answer or the server says wait (429/503), Fail otherwise. */
   async function token(): Promise<string> {
     let res: Awaited<ReturnType<FilerEnv['fetch']>>;
     try {
@@ -370,7 +375,8 @@ export function createFiler(env: FilerEnv) {
       throw new Wait('offline', true);
     }
     const data = (await res.json().catch(() => null)) as { csrf?: unknown } | null;
-    if (!res.ok || !data || typeof data.csrf !== 'string') throw new Wait(String(res.status));
+    if (res.status === 429 || res.status === 503) throw new Wait(String(res.status));
+    if (!res.ok || !data || typeof data.csrf !== 'string') throw new Fail(`csrf ${res.status}`);
     return data.csrf;
   }
 
@@ -390,11 +396,14 @@ export function createFiler(env: FilerEnv) {
     let told = false; // a wait the server asked for, not just no answer
     let failed = false;
     let csrf = '';
+    let noToken = false; // the GET failed: every run's try fails with it
     try {
       csrf = await token();
     } catch (e) {
-      waited = true;
-      told = !(e instanceof Wait && e.net);
+      if (e instanceof Wait) {
+        waited = true;
+        told = !e.net;
+      } else noToken = true;
     }
     for (const id of ids) {
       let o: FileOutcome | null;
@@ -403,6 +412,7 @@ export function createFiler(env: FilerEnv) {
         o = pending(id);
       } else {
         try {
+          if (noToken) throw new Fail('csrf');
           o = await sendOne(id, csrf);
         } catch (e) {
           if (e instanceof Refused) {

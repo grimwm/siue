@@ -450,7 +450,7 @@ const getInitials = (): string => savedInitials.get();
 const field = createFieldWidth(() => ({ w: window.innerWidth, h: window.innerHeight }));
 const {
   advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-  stepWar, decayFx, soloShopBoard, endVeilEscape, checkOneUps, stopFiling,
+  stepWar, decayFx, soloShopBoard, endVeilEscape, checkOneUps, stopFiling, leaveSolo,
 } = createMatch({
   field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
@@ -495,7 +495,7 @@ const {
   closeOverlays, closePreview, endTutorial, hideShop, savedInitials: getInitials, paintHud, refreshNavHints,
   renderMenu: () => renderMenu(),
   closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
-  renderShop, stopSolo: () => stopFiling(),
+  renderShop, stopSolo: () => leaveSolo(),
 });
 /* The game menu's settings (src/menu.ts). */
 const { loadBody, loadTextSize, textScale, renderMenu } = createMenu({

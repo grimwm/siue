@@ -258,3 +258,49 @@ test('M3: a run stopped without words (a room starting mid-match) is dropped and
   assert.deepEqual(f.calls.filter(c => c[0] === 'drop'), [['drop', id]]);
   assert.equal(f.said.length, before);
 });
+
+test('N1: a solo card left for a room match never takes its run\'s later outcome; the radio log does', async () => {
+  const said = [];
+  const queue = { outcomes: [], held: new Set() };
+  const filer = {
+    begin: id => { queue.held.add(id); return true; },
+    round() {}, finish() {}, drop() { return true; }, abandoned: () => [], wake() {}, stored: () => true,
+    flush: async () => queue.outcomes, nextTry: () => null, outcome: () => null, holds: id => queue.held.has(id),
+  };
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ scores: [] }) });
+  const sc = m.scores.createScores({ $: () => null, keyHint: () => '', say: t => said.push(t), toggleOverlay() {}, initials: () => 'WGR',
+    difficulty: () => 'normal', filer, timers: { setTimeout: () => 1, clearTimeout() {} } });
+  const { G, match } = harness({
+    say: t => said.push(t), initials: () => 'WGR',
+    soloBegin: sc.soloBegin, soloRound: sc.soloRound, soloDrop: sc.soloDrop, soloForget: sc.soloForget,
+    soloFinish: (id, who, done) => { void sc.soloFinish(id, who, done); },
+  });
+  match.startSolo('to-rooms');
+  const id = G.runId;
+  queue.outcomes = [{ id, kind: 'waiting' }];
+  playOut(G, match);
+  await new Promise(r => setTimeout(r, 0));
+  assert.match(match.END.filed, /^Saved in this browser/);
+  match.leaveSolo(); // `o` from the solo card, then a room match starts
+  match.END.filed = 'Filed · #1 all-time on Normal (the room\'s own line)';
+  queue.outcomes = [{ id, kind: 'filed', score: 8000, rank: 4, difficulty: 'normal' }];
+  await sc.flushPending();
+  assert.equal(match.END.filed, 'Filed · #1 all-time on Normal (the room\'s own line)');
+  assert.ok(said.includes('An earlier run: Filed · #4 · 8,000 pts on Normal'));
+});
+
+test('N3: a line that arrives after the card was left (Continue, a new deal) does not land on the next card', () => {
+  const f = filing();
+  let late = null;
+  f.soloFinish = (id, who, done) => { late ??= done; }; // the first card's line, held back
+  const { G, match } = harness(f);
+  match.startSolo('guard-1');
+  playOut(G, match);
+  assert.equal(match.END.filed, 'Filing…');
+  match.startDemo();
+  match.startSolo('guard-2');
+  playOut(G, match);
+  match.END.filed = 'the second card';
+  late('Filed · #9 all-time on Normal');
+  assert.equal(match.END.filed, 'the second card');
+});

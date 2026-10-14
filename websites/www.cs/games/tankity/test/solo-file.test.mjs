@@ -854,6 +854,18 @@ test('M6: a dueAt stored far ahead (a clock that jumped back, a stray value) wai
   assert.equal(BACKOFF_LONGEST, BACKOFF_MAX * 1.25);
 });
 
+test('N5: once the longest pause has passed, a far stored dueAt no longer holds the queue back', async () => {
+  const storage = memoryStorage();
+  const clock = { t: 1_000_000, now: () => clock.t };
+  storage.setItem(PENDING_KEY, JSON.stringify({ runs: [], dueAt: clock.t + 40 * 24 * 3600 * 1000, lag: 3, cause: 'busy' }));
+  const s = server();
+  const f = make(s.fetch, storage, { clock });
+  played(f, 'far');
+  clock.t += BACKOFF_LONGEST;
+  assert.equal((await f.flush())[0].kind, 'filed');
+  assert.deepEqual(ops(s), ['start', 'round1', 'round2', 'file']);
+});
+
 test('M5: timedFetch gives every request a deadline, and an abort waits as offline (no try spent)', async () => {
   const seen = [];
   const hang = (url, init) => { seen.push(init); return new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason))); };
@@ -862,6 +874,40 @@ test('M5: timedFetch gives every request a deadline, and an abort waits as offli
   assert.deepEqual(await f.flush(), [{ id: 't', kind: 'waiting' }]);
   assert.ok(seen.every(i => i.signal), 'every request carries a signal');
   assert.ok(FETCH_TIMEOUT >= 10_000 && FETCH_TIMEOUT <= 60_000);
-  const passthrough = timedFetch(async (u, i) => ({ ok: true, status: 200, json: async () => i }), 50, null);
-  assert.deepEqual(await (await passthrough('x', { method: 'GET' })).json(), { method: 'GET' }, 'without AbortSignal.timeout the request goes as it was');
+});
+
+test('N2: a 500 on the CSRF GET is a failure (a try is spent), not a wait the server asked for', async () => {
+  const s = server(op => (op === 'csrf' ? [500, { error: 'boom' }] : null));
+  const storage = memoryStorage();
+  const f = make(s.fetch, storage);
+  played(f, 'c5');
+  assert.deepEqual(await f.flush(), [{ id: 'c5', kind: 'waiting' }]);
+  const [r] = JSON.parse(storage.data.get(PENDING_KEY)).runs;
+  assert.equal(r.tries, 1);
+  assert.notEqual(r.waited, true, 'a failing server does not earn free restarts');
+  for (const status of [429, 503]) {
+    const busy = server(op => (op === 'csrf' ? [status, {}] : null));
+    const st = memoryStorage();
+    const g = make(busy.fetch, st);
+    played(g, 'b');
+    await g.flush();
+    const [b] = JSON.parse(st.data.get(PENDING_KEY)).runs;
+    assert.equal(b.tries, 0, `${status}`);
+    assert.equal(b.waited, true, `${status}`);
+  }
+});
+
+test('N7: without AbortSignal.timeout the deadline comes from an AbortController and a timer', async () => {
+  const realTimeout = AbortSignal.timeout;
+  try {
+    AbortSignal.timeout = undefined;
+    const hang = (url, init) => new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(new Error('aborted'))));
+    const t0 = Date.now();
+    await assert.rejects(timedFetch(hang, 20)('x', {}));
+    assert.ok(Date.now() - t0 < 1000);
+    const quick = timedFetch(async (u, i) => ({ ok: true, status: 200, json: async () => !!i.signal }), 20);
+    assert.equal(await (await quick('x', {})).json(), true);
+  } finally {
+    AbortSignal.timeout = realTimeout;
+  }
 });

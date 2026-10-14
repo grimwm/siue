@@ -18,7 +18,7 @@ import type { KeyHintFn } from './ui/chrome.tsx';
 
 /** The slice of the game's state the status bar reads (main.ts's G). */
 export type HudState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'ammo' | 'selected' | 'lives' | 'cash' | 'round'
-  | 'score' | 'nextOneUp' | 'wind' | 'shield' | 'bunker' | 'jammer' | 'laststand' | 'plate' | 'armor' | 'w'>;
+  | 'score' | 'nextOneUp' | 'wind' | 'shield' | 'bunker' | 'jammer' | 'laststand' | 'chutes' | 'plate' | 'armor' | 'w'>;
 
 /** The bar's values: HudProps without what the page supplies each draw. */
 export type HudValues = Omit<HudProps, 'menuOpen' | 'menuKey' | 'onMenu'>;
@@ -60,6 +60,7 @@ export function createHud(deps: HudDeps) {
     if ((G.bunker || 0) > 0) chips.push(`bunker(${G.bunker})`);
     if ((G.jammer || 0) > 0) chips.push(`jammer(${G.jammer})`);
     if (G.laststand) chips.push('last stand');
+    if ((G.chutes || 0) > 0) chips.push(`parachute(${G.chutes})`);
     if ((G.plate || 0) > 0) chips.push(`plate(+${25 * G.plate})`);
     return chips;
   }

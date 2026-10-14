@@ -47,7 +47,8 @@
                     "maxHp": 100,
                     "dirS": 1,
                     "body": "tank",
-                    "menu": false
+                    "menu": false,
+                    "chute": false
                 },
                 {
                     "seat": 1,
@@ -61,7 +62,8 @@
                     "maxHp": 60,
                     "dirS": -1,
                     "body": null,
-                    "menu": false
+                    "menu": false,
+                    "chute": false
                 }
             ],
             "seats": [
@@ -930,6 +932,7 @@
                 "jammer": 0,
                 "bunker": 0,
                 "laststand": false,
+                "chutes": 0,
                 "plate": 0,
                 "armor": 100,
                 "maxArmor": 100,

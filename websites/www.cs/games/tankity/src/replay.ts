@@ -33,6 +33,7 @@ export interface ReplayTank {
   hp: number;
   showA?: number; // the aim the barrel shows
   showP?: number;
+  chuteArmed?: boolean; // its parachute opens as it starts to drop (the host's fall animation reads it)
 }
 
 /** What the replay needs from its host. */
@@ -145,6 +146,14 @@ export function createReplay(env: ReplayEnv): Replay {
       aimDur: swing < 1 ? 0.15 : clamp(0.45 + swing / 110, 0.5, 1.4),
       shots: [], end: Math.max(0, ...events.map(e => ('t1' in e ? e.t1 : undefined) ?? e.at ?? 0)) + 0.6,
     };
+    // A parachute this volley opens is armed from the start: it opens as its
+    // unit starts to drop, when the replay carves the pit (sim.ts fallTanks),
+    // not after the unit has fallen, and never over a unit on its ground.
+    for (const e of events) {
+      if (e.t !== 'fall' || !e.chute) continue;
+      const t = env.tank(e.seat);
+      if (t) t.chuteArmed = true;
+    }
     env.event(opener);
   }
 
@@ -192,6 +201,9 @@ export function createReplay(env: ReplayEnv): Replay {
           // Over a fried tank, the EMP's arcs.
           const emp = t && v.shots.find(s => env.effect(s.e.w) === 'emp');
           if (t && emp) env.special(emp.e.w, 'arc', t.x, t.y - 12, 0);
+        } else if (e.t === 'fall') {
+          const t = env.tank(e.seat);
+          if (t) t.hp = Math.max(0, t.hp - e.dmg);
         } else if (e.t === 'kill') {
           const t = env.tank(e.seat);
           if (t) t.hp = 0;

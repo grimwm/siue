@@ -184,7 +184,7 @@ const G: GameState = {
   roundsWon: 0, ammo: null, selected: 'shell',
   shopSel: 0, shopQty: 1,
   fuelBank: 0, armor: TUNE.playerArmor,
-  plate: 0, shield: false, jammer: 0, bunker: 0, laststand: false,
+  plate: 0, shield: false, jammer: 0, bunker: 0, laststand: false, chutes: 0,
   time: 0, shake: 0,
   dlgQ: [], dlgT: 0, lastTalk: -99, banterT: 30, bannerT: 0, bannerDone: null,
   w: ROOM_W, hills: null, cam: { z: 1, cx: ROOM_W / 2, cy: 230 },

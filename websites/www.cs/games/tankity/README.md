@@ -88,7 +88,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `server/.htaccess` | `Require all denied`: the files in `server/` are libraries, never endpoints. Each also answers 404 if asked for directly (`TANKITY_ROOMS_INCLUDED` is defined only by `rooms.php`) |
 | `scores.php`, `config.php` | Score API: a GET answers a difficulty's online board, every POST answers 410 (solo scores stay in the browser); `.config.yaml` reader |
 | `src/fx/engine.ts`, `src/fx/types.ts`, `src/fx/trail.ts` | The effects engine (particle pool, emitters, screen flash, shell glow), shared by the game and the editor; bundled as the classic script `dist/fx.js`, which sets `window.TankityFX`. `types.ts` is the engine's public shape (`FxEngine`) |
-| `fx/sprites/` | Sprite sheets and `sprites.json`, rendered by `fx/blender/render_fx.py`: blasts and smoke (`blast`, `fireball`, `plume`, `smoke`, `flakburst`, `nuke`), ground (`dirt`, `debris`, `scorch`), light (`shock`, `energy`, `electric`, `flare`, `muzzle`), the shells in flight (`shells.png`, one `p_*` sheet per shell) and `moon` |
+| `fx/sprites/` | Sprite sheets and `sprites.json`, rendered by `fx/blender/render_fx.py`: blasts and smoke (`blast`, `fireball`, `plume`, `smoke`, `flakburst`, `nuke`), ground (`dirt`, `debris`, `scorch`), light (`shock`, `energy`, `electric`, `flare`, `muzzle`), the shells in flight (`shells.png`, one `p_*` sheet per shell), `moon` and `parachute` |
 | `fx/blender/render_fx.py` | Headless Blender script that builds and renders the sprite sheets; its header documents the command and every option. Dev only |
 | `fx-editor.html`, `fx-editor.css`, `src/fx/editor.ts` | Dev-only live effects editor (see Weapon effects); `editor.ts` is bundled as the classic script `dist/fx-editor.js`, which sets `window.fxEditor`. Never deployed |
 | `.config.yaml` | Server settings, read-only, never sent to browsers; env vars win (`TANKITY_MAX_ROOMS`, `TANKITY_ROOM_LIVE_SECS`, `TANKITY_DATA_DIR`, `TANKITY_JOURNAL`, `TANKITY_ROOM_JOINS_PER_HOUR`, `TANKITY_ROOM_HOSTS_PER_ADDRESS`, `TANKITY_ROOM_LONG_SHARE`, `TANKITY_ALLOWED_HOSTS`; `CONFIG_FILE` points elsewhere) |
@@ -360,6 +360,53 @@ round they muster with 60 + 6 × (round − 1) armor.
 The rules live in `src/armor.ts` and `server/rules.php` (`room_max_armor` ..
 `room_carry_armor`, used by `room_buy` and the round start and end); the
 `armor` group of the sim vectors keeps them identical.
+
+## Falling and parachutes
+
+A unit whose ground a blast carves away drops straight down, never sideways,
+and comes to rest on the ground or on a unit beneath it. Falls settle once a
+volley, when its last shell is down, so a pit dug by several bursts (a
+Buckshot's pellets) is one fall. The drop is measured at rest: the first `freePx` pixels are free, and every
+pixel past them costs `perPx` armor, rounded down (`arsenal.fall` in
+`game.yaml`, which also explains the chosen numbers). Fall damage is a hit like
+any other: it comes off armor, the bunker halves it, and a shield does not
+stop it.
+
+- Credit goes to the blast that lowered the ground under the unit the most
+  (the first of equals; a last stand going off under a unit another shot
+  dug out does not take its fall): the damage scores and pays as a hit of theirs would (the player's twice the
+  damage against drones), and a wreck is their kill, with the kill bonus, the
+  match kill and the drone's last hit. A unit that digs out its own footing
+  takes the damage and credits nobody.
+- A unit that lands on another hurts the one beneath by the same amount,
+  credited to the same digger.
+- Parachutes are a shop row (`parachute`, two a pack, they stack; the status
+  bar and the shop count them). One opens when a fall would cost the unit more
+  than `chuteOver` (5, as in Scorched Earth), counting its bunker: the unit floats down and takes
+  nothing. At or under it the parachute stays packed and the small damage
+  applies. A parachute never protects the unit underneath. Drones carry one
+  each from round `aiRound` and spend it by the same rule.
+- One settle, everywhere. The room server lands every unit at the end of each
+  volley (`room_settle_tanks`, run by `room_fire_shot`) and emits `fall`
+  events (and `kill`) stamped for the replay. A solo match runs the same
+  settle in the browser (`src/sim.ts` `settleFalls`, through `settleVolley`
+  when the volley's last shell is down in `src/match.ts`); until then a unit's
+  rule height stays where it stood, for the volley's later hits, as on the
+  server. So the same shot costs the same armor solo and in a room; the `fall`
+  and `volley` groups of the sim vectors check it (the browser replays each
+  volley as a solo match plays it).
+- The picture is separate (`drawY`, `fallTanks`): a unit whose ground goes is
+  seen to fall at once, solo and in a room, and on to where the settle put it.
+  A landing's words, sparks and wreck show when its unit is seen to touch down
+  (or at once, if it already has), and its armor bar holds until then
+  (`settleVolley`, `dueFalls`). A parachute is armed, not opened: by the
+  volley's settle or its prediction (`armChutes`) in a solo match, and by the
+  volley's `fall` event when the replay starts it in a room. It opens as the
+  unit starts to drop, floats it down at 60 px/s and folds on landing; no
+  canopy is ever drawn over a unit on its ground.
+- The parachute drawn over a falling unit is `fx/sprites/parachute.png` (six
+  frames opening, ten swaying), with a canopy drawn in code until the sheet
+  has loaded.
 
 ## Match end and scoreboards
 
@@ -854,6 +901,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/field.test.mjs`                          | The width from the landscape box (clamps, columns, portrait equals landscape), that a deal holds through a resize, fitting the field in a box, and the power step and display at 720, 1080 and 1440 |
 | `test/detmath.test.mjs`                        | `src/detmath.ts` is within 1e-15 of `Math` where the sim feeds it, keeps the sign of zero, and is exact at 0, 1 and the right angles |
 | `test/solo.test.mjs`                           | `src/solo.ts` without a page: the deal and its width, a round's muster, settling a volley, the turn order, the drones' difficulty and 1-ups |
+| `test/fall.test.mjs`                           | Falls in `src/sim.ts`: the damage formula, credit to the digger (score, cash, kills, the last hit) and none for your own pit, parachutes over and under the threshold, the drones' own, the bunker and the shield, landing on a unit, a stack landing bottom up, the drawn height following the ground at once while the rules wait for the settle, a settled fall playing out from where it was drawn, a parachute armed then opened only as its unit drops (never at rest), a solo volley arming one, a unit dug out by an early pellet seen falling mid-volley, a fall wreck seen to land before its words and wreck show, the same shot costing the same armor as a solo volley and as a room's (Buckshot bursts, fractional ground, parachutes), the bunker counting toward the parachute, credit to the deepest blast, the drones' parachutes by round and the stacking shop row |
 | `test/fixed-step.test.mjs` | The solo war runs in fixed steps whatever the frame lengths, tank falls included, so play is the same on a 30 Hz phone and a 144 Hz monitor |
 | `test/determinism.test.mjs` | The rule modules call no clock, no `Math.random` and no libm trigonometry, so the shared sim stays bit-exact across the two languages (see Deterministic math) |
 | `test/wide-field.test.mjs`                     | The sim at any width: the same hills continued, units spread outside each other's blast, reach and wind scaling, flights that last as long as the field, 720 unchanged |
@@ -864,7 +912,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/php/DetMathTest.php`                     | `server/detmath.php` is within 1e-15 of libm, rounds halves and keeps the sign of zero like `Math.round`, and the `detmath` vectors cover every function |
 | `test/php/FieldWidthTest.php`                  | The server's width rule, hills, reach and aim, units spread outside each other's blast, and a room dealt at 720 |
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
-| `test/render.test.mjs`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, and rebuilds the sky only when the match key or the visible area changes |
+| `test/render.test.mjs`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, rebuilds the sky only when the match key or the visible area changes, and draws an open parachute from its sheet (opening once, then swaying) or as a drawn canopy until the sheet loads, none over an armed or settled unit at rest, and units at their drawn height (a falling wreck whole) |
 | `test/input.test.mjs`                          | `src/input.ts` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, Q, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
 | `test/net.test.mjs`                            | `src/net.ts` against a fake server and timers: the 429 retry (none for a create or join's 429, one for its 503), Ready's ordering under rapid toggles, polling, the leave beacon (Leave only), resume, detach and `mine`, the clocks and `closesIn`, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect) |
 | `test/seats.test.mjs`                          | `src/seats.ts`: round trip, newest first, the 12-seat cap, a malformed entry dropped alone, storage that refuses writes |
@@ -875,7 +923,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/turn-time.test.mjs`                      | `src/turn-time.ts` and the slider: the stops equal `server/settings.php`'s, labels, clock text, the status bar and shop notes, the settle delay |
 | `test/games-ui.test.mjs`                       | Your games, the toasts and the title card's list |
 | `test/lobby.test.mjs`                          | `src/lobby.ts` on a real room client over a fake server: a refusal stays on the status line through polls, a lobby closed with Q keeps polling, a swept room lands back in the lobby with its line |
-| `test/replay.test.mjs`                         | `src/replay.ts` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, and a `watch` volley at 3x for that volley only |
+| `test/replay.test.mjs`                         | `src/replay.ts` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, a `watch` volley at 3x for that volley only, and a parachute armed by its volley's `fall` event, closed through real frames on unbroken ground and open every frame its unit falls once the pit is carved |
 | `test/preview.test.mjs`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |
 | `test/flow.test.mjs`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
 | `test/protocol.test.mjs`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
@@ -888,6 +936,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `BoardTest`, `ScoresEndpointTest` (host PHP) | The boards (one per difficulty, room rows only, ties, the trim, a required source), and `scores.php` as a request (the board in the page's shape, no seeds, every POST answered 410 and nothing written, other methods 405) |
 | `RoomGuardTest` (host PHP) | Initials stored uppercase and the blocked set refused, origins and referers against the allow list, and the hourly allowance on creating and joining: a setting, exact in every sliding hour, per address, in the `rate` table, swept by housekeeping, a spent one refused without the write lock, a 429 from `rooms.php` itself, and a create refused for a full server not charged |
 | `RoomArmorTest`, `RoomBuyTest` (host PHP) | Armor carry-over and re-muster, the capped repair, plates, and every shop purchase rule |
+| `RoomFallTest` (host PHP) | The room's falls: the formula, the digger's credit and kill, your own pit, parachutes (spent, kept, a drone's), the bunker and the shield, landing on a unit, a volley ending with its falls settled and stamped, drones' parachutes by round, the stacking shop row in the snapshot, the bunker counting toward the parachute, credit to the deepest blast, and a rise folding a parachute |
 | `phpunit --testsuite tankity-docker`           | `RoomsTest` (the room shelf over its own `php -S`), `RoomsStoreTest` (the store under real concurrency: exact cap under a race, close, sweep, a held writer and the 503, a killed holder), `RoomsRefusedStoreTest` (a store PHP refuses answers JSON 503 on every endpoint, with one log line per request), `RoomsStoreFailureTest` (a database error partway through a save answers JSON 503 and leaves nothing behind) and `RoomsLoadTest` (8 playing rooms, each with 3 seated players and a watcher, polling at the client's pace against the docker site: no 503, p95 under 300 ms). Runs inside the PHP container, which matches the host's PHP (`make test` does) |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (run inside the PHP container)                 |
 | `tests/tankity-data-deny.sh` | `games/tankity/data/` is refused over HTTP (`make test` runs it) |
@@ -965,7 +1014,14 @@ with -0 equal to 0 only where a case says so.
   re-range when it drives off, keep a lance's first burst, and shrink to the
   wobble floor of a wide field), the aim and a bracket at each
   difficulty (and an unknown word aiming at normal), each drone strategy's choice of
-  target, gun and arc and a flip after a dry spell, and tank settling.
+  target, gun and arc and a flip after a dry spell, tank settling, and falls
+  (the damage at and past the free drop, credit to the digger and none for
+  your own pit, parachutes and their threshold, the bunker, landing on a
+  unit, a stack, a wreck's last stand, and craters each weapon digs beside a
+  drone). Volleys and brackets end with the falls settled; the browser plays
+  each volley as a solo match does (falls animated every frame, one settle
+  once the last shell is down), including Buckshot pits dug in bursts and
+  craters in fractional ground.
 - Shared rules the cases pin: only a kill the player's own shot made pays the
   300 bonus, and a volley's projectiles (buckshot pellets, cluster bomblets)
   burst in launch order, each against the ground the earlier ones left. The
@@ -1088,6 +1144,9 @@ Regenerate the sheets (Blender 4.2+, `brew install --cask blender`), from
 lists every option):
 
     /Applications/Blender.app/Contents/MacOS/Blender -b -P render_fx.py -- --out ../sprites
+
+`--only parachute` (any sheet names, comma separated) renders just those and
+keeps the other entries of `sprites.json`.
 
 The editor, `fx-editor.html` (open it from the local site: `make url`, then
 `games/tankity/fx-editor.html`), edits the effects live: pick a weapon and

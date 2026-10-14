@@ -103,6 +103,8 @@ export interface RoomTank {
   body: string | null;
   /** In a menu right now. */
   menu: boolean;
+  /** Its parachute opened in the last volley: the client floats it down. */
+  chute: boolean;
 }
 
 /** The asker's private block: present only for a seated human. `ammo` maps
@@ -120,6 +122,8 @@ export interface RoomYou {
   jammer: number;
   bunker: number;
   laststand: boolean;
+  /** Parachutes held: one opens on a fall costing more than game.yaml's arsenal.fall.chuteOver. */
+  chutes: number;
   plate: number;
   /** The armor the next round musters with (what the last one ended with). */
   armor: number;
@@ -241,6 +245,10 @@ export interface ShotEvent extends EventBase {
 export interface BurstEvent extends EventBase { t: 'burst'; x: number; y: number; r: number; w: string }
 export interface HitEvent extends EventBase { t: 'hit'; seat: number; dmg: number; by: number; direct: boolean }
 export interface KillEvent extends EventBase { t: 'kill'; seat: number; by: number }
+/** A unit landed after its ground was carved away: dmg armor lost (0 when its
+ * parachute opened), credited to `by` (its own seat: nobody). `under`: another
+ * unit landed on it. */
+export interface FallEvent extends EventBase { t: 'fall'; seat: number; dmg: number; by: number; chute: boolean; under: boolean }
 export interface ShieldEvent extends EventBase { t: 'shield'; seat: number; by: number }
 export interface LastStandEvent extends EventBase { t: 'laststand'; seat: number }
 export interface FizzleEvent extends EventBase { t: 'fizzle'; by: number; w: string }
@@ -251,7 +259,7 @@ export interface TacticEvent extends EventBase { t: 'tactic'; seat: number; s: s
 export type RoomEvent =
   | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent | TurnTimeEvent
   | FireEvent | AiFireEvent | AutoEvent
-  | ShotEvent | BurstEvent | HitEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
+  | ShotEvent | BurstEvent | HitEvent | FallEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
 
 export type RoomEventType = RoomEvent['t'];
 /** The events that open a volley. */

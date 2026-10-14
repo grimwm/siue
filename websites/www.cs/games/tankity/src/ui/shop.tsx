@@ -118,6 +118,14 @@ function showSelected(el: HTMLElement): void {
   const top = row.offsetTop - el.offsetTop;
   if (top < el.scrollTop) el.scrollTop = top;
   else if (top + row.offsetHeight > el.scrollTop + el.clientHeight) el.scrollTop = top + row.offsetHeight - el.clientHeight;
+  // Fractional layout (zoom, rem-based sizes) puts row edges between whole
+  // pixels while offsetTop and scrollTop are integers, so the row can end a
+  // pixel short of inside: close the gap with real rects, rounding outward.
+  if (typeof row.getBoundingClientRect !== 'function') return;
+  const r = row.getBoundingClientRect();
+  const v = el.getBoundingClientRect();
+  if (r.top < v.top) el.scrollTop -= Math.ceil(v.top - r.top);
+  else if (r.bottom > v.bottom) el.scrollTop += Math.ceil(r.bottom - v.bottom);
 }
 
 /** Whether the highlighted row sits wholly inside the list's view. */
@@ -125,7 +133,7 @@ function selectedInView(el: HTMLElement): boolean {
   const row = el.querySelector<HTMLElement>('.sel');
   if (!row) return false;
   const top = row.offsetTop - el.offsetTop;
-  return top >= el.scrollTop && top + row.offsetHeight <= el.scrollTop + el.clientHeight;
+  return top >= el.scrollTop - 1 && top + row.offsetHeight <= el.scrollTop + el.clientHeight + 1;
 }
 
 export function Shop(p: ShopProps) {

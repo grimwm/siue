@@ -149,6 +149,7 @@ arsenal:
       dmg: 50
       radius: 44
       note: Your wreck detonates.
+  fall: {freePx: 10, perPx: 0.5, chuteOver: 5, aiRound: 3}
 keys:
 $keysYaml
 
@@ -256,6 +257,10 @@ $cases = [
     'roller-friction-range' => [$mut("      effect: pellets\n      pellets: 3\n      spread: 0.1\n", "      effect: roller\n      friction: 9\n      rollTime: 6\n"), 'arsenal.ammo[1].friction: must be a number from 0.01 to 5'],
     'roller-rolltime-range' => [$mut("      effect: pellets\n      pellets: 3\n      spread: 0.1\n", "      effect: roller\n      friction: 0.5\n      rollTime: 60\n"), 'arsenal.ammo[1].rollTime: must be a number from 0.5 to 10'],
     'pellets-need-fields' => [$mut("      pellets: 3\n", ''), 'arsenal.ammo[1].pellets: is required when effect is pellets'],
+    'fall-missing' => [$mut("  fall: {freePx: 10, perPx: 0.5, chuteOver: 5, aiRound: 3}\n", ''), 'arsenal.fall: must be a mapping'],
+    'fall-unknown-field' => [$mut('aiRound: 3}', 'aiRound: 3, slide: 1}'), 'arsenal.fall.slide: unknown key'],
+    'fall-per-px-range' => [$mut('perPx: 0.5', 'perPx: 11'), 'arsenal.fall.perPx: must be a number from 0 to 10'],
+    'fall-chute-over-whole' => [$mut('chuteOver: 5', 'chuteOver: 5.5'), 'arsenal.fall.chuteOver: must be a whole number'],
     'dmg-on-wrong-gear' => [$mut("      n: 40\n", "      n: 40\n      dmg: 5\n"), 'arsenal.gear[0].dmg: only the laststand'],
     'laststand-needs-dmg' => [$mut("      dmg: 50\n", ''), 'arsenal.gear[1].dmg: is required'],
     'em-dash' => [$mut('Free and honest.', "Free \u{2014} honest."), 'must not contain en or em dashes'],
@@ -356,7 +361,8 @@ $check('shipped-yaml-valid', $e === null, (string) $e);
 $check('shipped-json-in-sync', $shipped !== null && $shipped === (string) @file_get_contents("$repoDir/game.json"),
     'run: php tools/game-json.php (in games/tankity)');
 $sd = json_decode((string) $shipped, true);
-$check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 13 && count($sd['arsenal']['gear'] ?? []) === 8
+$check('good-fall', ($out['arsenal']['fall'] ?? null) === ['freePx' => 10, 'perPx' => 0.5, 'chuteOver' => 5, 'aiRound' => 3], json_encode($out['arsenal']['fall'] ?? null));
+$check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 13 && count($sd['arsenal']['gear'] ?? []) === 9
     && count($sd['audio']['sfx'] ?? []) >= 1 && count($sd['audio']['music'] ?? []) >= 1);
 $ammoKeys = array_column($sd['arsenal']['ammo'] ?? [], 'key');
 $rollerRow = $sd['arsenal']['ammo'][array_search('roller', $ammoKeys, true)] ?? [];

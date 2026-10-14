@@ -7,8 +7,8 @@
  * algorithm, kept in step by the shared vectors in protocol/sim-vectors.json.
  * brkLand stays in sim.ts: explode calls it, and sim.ts must not import this
  * file. */
-import { FLIGHT_STEPS, GRAV, blastDamage, clamp, dist, dropTime, facing, fieldReach, flightKey, gauss, muzzle, powi, rad, scatterVel, shotSpeed, simShot, splitPoint, splitVel, spotTaken, surfY, unitHitBox } from './sim.ts';
-import { dcos, dsin } from './detmath.ts';
+import { FLIGHT_STEPS, GRAV, beamLine, blastDamage, clamp, dist, dropTime, facing, fieldReach, flies, flightKey, gauss, muzzle, powi, rad, ringDamage, ringOf, scatterVel, shotSpeed, simShot, splitPoint, splitVel, spotTaken, surfY, unitHitBox } from './sim.ts';
+import { datan2, dcos, dsin } from './detmath.ts';
 import type { Arsenal, Difficulty, Rng, Tank, Weapon, World } from './sim.ts';
 export type { Difficulty } from './sim.ts';
 
@@ -299,6 +299,7 @@ function bursts(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: 
    when any of it could reach self's own body (with AI_SAFE_MARGIN): that gun
    is not chosen while a safe one is. server/ai.php room_ai_harm is the same. */
 export function aiHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string, land: Landing): number {
+  if (!flies(arsenal.weapons[wkey]!)) return noFlightHarm(world, arsenal, self, wkey, land);
   if (land.oob) return 0;
   const b = bursts(world, arsenal, self, target, wkey, land);
   if (b.own <= b.reach * AI_SAFE_MARGIN) return -Infinity;
@@ -308,11 +309,44 @@ export function aiHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank,
    no margin: what decides the gun when every one would reach it.
    server/ai.php room_ai_self_harm is the same. */
 export function aiSelfHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string, land: Landing): number {
+  if (!flies(arsenal.weapons[wkey]!)) return 0; // a beam never crosses its gunner; a ring spares it
   return land.oob ? 0 : bursts(world, arsenal, self, target, wkey, land).self;
+}
+/* The harm a gun with no flight would do fired by self at the aim land.a,
+   land.p (where it lands means nothing to it): a beam's flat damage on every
+   rival whose body its line crosses, a plasma ring's burns on every rival
+   inside it, each no more than that rival's armor. Neither ever touches self,
+   so nothing is taken off. server/ai.php room_ai_no_flight_harm is the same. */
+function noFlightHarm(world: World, arsenal: Arsenal, self: Tank, wkey: string, land: Landing): number {
+  const w = arsenal.weapons[wkey]!;
+  const a = land.a === undefined ? self.angle : land.a, p = land.p === undefined ? 100 : land.p;
+  let sum = 0;
+  if (w.effect === 'beam') {
+    for (const u of beamLine(world, self, w, a, p).struck) sum += Math.min(u.hp, w.dmg);
+    return sum;
+  }
+  const ring = ringOf(self, w, p);
+  for (const u of world.tanks) {
+    if (u === self || u.hp <= 0) continue;
+    const d = ringDamage(ring, w, u);
+    if (d !== null) sum += Math.min(u.hp, d);
+  }
+  return sum;
+}
+/* A beam's aim at target: the beam runs from the muzzle along the barrel, a
+   line through the barrel's pivot (14 px above the hull), so it is aimed from
+   the pivot straight at the target's body, to the nearest whole degree and
+   within the barrel's 10..170, at full power. server/ai.php
+   room_ai_beam_aim is the same. */
+export function beamAim(_world: World, _arsenal: Arsenal, self: Tank, target: Tank, _wkey: string): { a: number; p: number } {
+  const b = unitHitBox(target);
+  const r = datan2(-(b.cy - (self.y - 14)), (b.cx - self.x) * facing(self));
+  return { a: clamp(Math.round(r / Math.PI * 180), 10, 170), p: 100 };
 }
 /* The harm to the target with no regard for the gunner (aiHarm without its
    guard), for choosing among guns that would all reach the gunner. */
 function targetHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string, land: Landing): number {
+  if (!flies(arsenal.weapons[wkey]!)) return noFlightHarm(world, arsenal, self, wkey, land);
   if (land.oob) return 0;
   return Math.min(target.hp, bursts(world, arsenal, self, target, wkey, land).harm + fallHarm(world, arsenal, self, target, wkey, land));
 }
@@ -429,7 +463,8 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
   let cont: Tank | null = null;
   const skill = aimSkill(world.difficulty);
   const fa = fieldAim(world.terrain.length);
-  if (mem && mem.n < skill.brkMax && Math.abs(t.x - mem.ox) <= 1 && keys.includes(mem.w)) {
+  // A beam or a ring has no landing to walk in: after one, the drone aims afresh.
+  if (mem && mem.n < skill.brkMax && Math.abs(t.x - mem.ox) <= 1 && keys.includes(mem.w) && flies(arsenal.weapons[mem.w]!)) {
     const c = world.tanks[mem.t];
     if (c && c !== t && c.hp > 0 && Math.abs(c.x - mem.tx) <= BRK_DRIFT && (want === null || want === c)) cont = c;
   }
@@ -456,9 +491,13 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
     [ba, bp] = aiCorrect(world, arsenal, m.x, m.y, w, dirS, mem!.a, mem!.p, sim.x + miss * skill.correct, high);
     wob = Math.max(skill.brkFloor * fa.floor, wob * powi(skill.brkShrink, n));
   } else {
-    let guns = keys;
+    // The aim search flies planning arcs: it weighs only guns that fly. The
+    // others are weighed after it.
+    const fliers: string[] = [], grounded: string[] = [];
+    for (const k of keys) (flies(arsenal.weapons[k]!) ? fliers : grounded).push(k);
+    let guns = fliers;
     if (s === 'lobber') {
-      const area = keys.filter(k => areaGun(arsenal.weapons[k]!));
+      const area = fliers.filter(k => areaGun(arsenal.weapons[k]!));
       if (area.length) guns = area;
     }
     // Every planning arc's best aim, and the best of all.
@@ -512,7 +551,7 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
       if (guns.every(k => aiHarm(world, arsenal, t, target, k, byArc.get(arcOf.get(k)!)!.land) === -Infinity)) {
         // Every high arc of its area guns would reach the lobber itself: it
         // searches as any drone does, every gun it carries on every arc.
-        guns = keys;
+        guns = fliers;
         for (const k of guns) if (!arcOf.has(k)) arcOf.set(k, flightKey(arsenal.weapons[k]!));
         byArc.clear();
         best = null;
@@ -526,13 +565,23 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
     w = pickGun(world, arsenal, t, target, s === 'glory', guns, arcOf, byArc, best!.wkey);
     const aim = byArc.get(arcOf.get(w)!)!;
     [ba, bp, n] = [aim.a, aim.p, 0];
+    // A gun with no flight, aimed as it aims (a beam at the target's body, a
+    // ring wherever the barrel points, both at full power), fires instead
+    // when it would do more harm than that pick (and any harm at all).
+    let top = Math.max(0, aiHarm(world, arsenal, t, target, w, aim.land));
+    for (const k of grounded) {
+      const at = arsenal.weapons[k]!.effect === 'beam' ? beamAim(world, arsenal, t, target, k) : { a: t.angle, p: 100 };
+      const h = aiHarm(world, arsenal, t, target, k, { x: t.x, y: t.y, oob: false, a: at.a, p: at.p });
+      if (h > top) [w, ba, bp, top] = [k, at.a, at.p, h];
+    }
   }
   if (target.isPlayer && (world.jammer || 0) > 0) wob *= 2;
   const angle = clamp(Math.round(ba + gauss(world.rng) * 9 * wob), 10, 170);
   const power = clamp(Math.round(bp + gauss(world.rng) * 12 * wob), 10, 100);
   // Drones shuffle for a better firing spot instead of camping one rut,
-  // unless they are walking a bracket in.
-  if (!cont && world.rng() < 0.35) {
+  // unless they are walking a bracket in, or fire a gun with no flight
+  // (aimed from where they stand).
+  if (!cont && flies(arsenal.weapons[w]!) && world.rng() < 0.35) {
     const dx = (world.rng() < 0.5 ? -1 : 1) * (8 + world.rng() * 27);
     const nx = clamp(t.x + dx, 12, world.terrain.length - 12);
     if (!spotTaken(world.tanks, t, nx)) {

@@ -552,11 +552,24 @@ export function beamCarve(terrain: number[], x0: number, y0: number, x1: number,
    same. */
 export function fireBeam(world: World, arsenal: Arsenal, t: Tank, wkey: string): BeamShot {
   const w = arsenal.weapons[wkey]!;
+  const line = beamLine(world, t, w, t.angle, t.power);
+  const was = world.tanks.map(u => surfY(world.terrain, u.x));
+  beamCarve(world.terrain, line.x0, line.y0, line.x1, line.y1, w.radius);
+  markFalls(world, t, was);
+  const hits: Blast = { x: line.x1, y: line.y1, r: w.radius, wkey, fx: wkey, shake: (w.gfx && w.gfx.shake) || 0.5, owner: t, events: [] };
+  if (w.dmg > 0) for (const u of line.struck) if (u.hp > 0) hitUnit(world, arsenal, u, t, w.dmg, w, false, hits.events);
+  return { x0: line.x0, y0: line.y0, x1: line.x1, y1: line.y1, hits };
+}
+/* Where beam w fired by t at (angle, power) would run, and the live units
+   whose bodies it would cross, in order along it (never t): fireBeam's line,
+   and what the drones weigh a beam by. server/sim.php room_beam_line is the same. */
+export function beamLine(world: Pick<World, 'tanks' | 'terrain'>, t: Tank, w: Pick<Weapon, 'range'>, angle: number, power: number):
+  { x0: number; y0: number; x1: number; y1: number; struck: Tank[] } {
   const fw = world.terrain.length;
-  const m = muzzle(t);
-  const a = rad(t.angle);
+  const m = muzzle({ ...t, angle });
+  const a = rad(angle);
   const ux = dcos(a) * facing(t), uy = -dsin(a);
-  const len = (w.range || 0) * t.power / 100 * fieldReach(fw);
+  const len = (w.range || 0) * power / 100 * fieldReach(fw);
   let x1 = m.x, y1 = m.y;
   const struck: Tank[] = [];
   for (let k = 1; k * BEAM_STEP <= len; k++) {
@@ -569,12 +582,7 @@ export function fireBeam(world: World, arsenal: Arsenal, t: Tank, wkey: string):
       if (inHitBox(u, px, py)) struck.push(u);
     }
   }
-  const was = world.tanks.map(u => surfY(world.terrain, u.x));
-  beamCarve(world.terrain, m.x, m.y, x1, y1, w.radius);
-  markFalls(world, t, was);
-  const hits: Blast = { x: x1, y: y1, r: w.radius, wkey, fx: wkey, shake: (w.gfx && w.gfx.shake) || 0.5, owner: t, events: [] };
-  if (w.dmg > 0) for (const u of struck) if (u.hp > 0) hitUnit(world, arsenal, u, t, w.dmg, w, false, hits.events);
-  return { x0: m.x, y0: m.y, x1, y1, hits };
+  return { x0: m.x, y0: m.y, x1, y1, struck };
 }
 /* Fires a plasma ring from t: centred on its own body, radius x power / 100
    px (never under 20). Every other live unit within the radius + 14 takes dmg
@@ -582,19 +590,30 @@ export function fireBeam(world: World, arsenal: Arsenal, t: Tank, wkey: string):
    it cuts no crater. server/sim.php room_fire_plasma is the same. */
 export function firePlasma(world: World, arsenal: Arsenal, t: Tank, wkey: string): PlasmaShot {
   const w = arsenal.weapons[wkey]!;
-  const c = unitHitBox(t);
-  const r = Math.max(20, w.radius * t.power / 100);
-  const hits: Blast = { x: c.cx, y: c.cy, r, wkey, fx: wkey, shake: (w.gfx && w.gfx.shake) || 0.5, owner: t, events: [] };
+  const ring = ringOf(t, w, t.power);
+  const hits: Blast = { x: ring.x, y: ring.y, r: ring.r, wkey, fx: wkey, shake: (w.gfx && w.gfx.shake) || 0.5, owner: t, events: [] };
   if (w.dmg > 0) {
     for (const u of world.tanks) {
       if (u.hp <= 0 || u === t) continue;
-      const b = unitHitBox(u);
-      const d = dist(b.cx - c.cx, b.cy - c.cy);
-      if (d > r + 14) continue;
-      hitUnit(world, arsenal, u, t, blastDamage(w.dmg, d, r), w, false, hits.events);
+      const dmg = ringDamage(ring, w, u);
+      if (dmg !== null) hitUnit(world, arsenal, u, t, dmg, w, false, hits.events);
     }
   }
-  return { x: c.cx, y: c.cy, r, hits };
+  return { x: ring.x, y: ring.y, r: ring.r, hits };
+}
+/* The plasma ring w fired by t at `power`: centred on t's body, radius x
+   power / 100, never under 20. server/sim.php room_ring_of is the same. */
+export function ringOf(t: Pick<Tank, 'isPlayer' | 'human' | 'x' | 'y'>, w: Pick<Weapon, 'radius'>, power: number): { x: number; y: number; r: number } {
+  const c = unitHitBox(t);
+  return { x: c.cx, y: c.cy, r: Math.max(20, w.radius * power / 100) };
+}
+/* What a ring does to unit u: blastDamage by the distance from the ring's
+   centre to u's body; null past the radius + 14, where it does not reach.
+   server/sim.php room_ring_damage is the same. */
+export function ringDamage(ring: { x: number; y: number; r: number }, w: Pick<Weapon, 'dmg'>, u: Pick<Tank, 'isPlayer' | 'human' | 'x' | 'y'>): number | null {
+  const b = unitHitBox(u);
+  const d = dist(b.cx - ring.x, b.cy - ring.y);
+  return d > ring.r + 14 ? null : blastDamage(w.dmg, d, ring.r);
 }
 /* One ballistic step. Shared by the real shells, the AI predictor, the aim
  * guide, and the firing-range preview, so the demo flies exactly like war. */

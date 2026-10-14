@@ -781,6 +781,27 @@ foreach (['hunter', 'glory', 'lobber', 'sniper'] as $s) {
             'tanks' => [$human(300 + $gap, 100), $drone(300, 60) + ['dirS' => 1, 's' => $s, 'ammo' => $rack9]]]);
     }
 }
+// Guns with no flight: a beam aimed at a rival in line on a ridge, a ring
+// around a rival 40 px off, and a ring left in the rack with rivals far off.
+foreach ($weapons as $wkey => $def) {
+    if (($def['effect'] ?? '') === 'beam') {
+        foreach ([[1, 120, 320], [2, 600, 380], [3, 120, 320]] as [$seed, $sx, $tx]) {
+            $aim("$wkey-rival-in-line-seed$seed", ['terrain' => ['flat' => 400, 'set' => [[min($sx, $tx) + 180, max($sx, $tx) + 20, 330]]], 'wind' => 1, 'round' => 9,
+                'seed' => $seed, 'shooter' => 1, 'difficulty' => 'hard', 'tanks' => [array_replace($drone($tx, 100), ['y' => 330.0]),
+                $drone($sx, 60) + ['dirS' => $tx > $sx ? 1 : -1, 's' => 'hunter', 'ammo' => [$wkey => 2, 'mortar' => 1]]]]);
+        }
+        $aim("$wkey-ground-target-below-the-barrel", ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 4, 'shooter' => 1, 'difficulty' => 'hard',
+            'tanks' => [$human(420, 100), $drone(120, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => [$wkey => 2]]]]);
+    }
+    if (($def['effect'] ?? '') === 'plasma') {
+        foreach ([[1, 1], [-1, 2]] as [$dir, $seed]) {
+            $aim("$wkey-rival-40-px-off-$dir", ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => $seed, 'shooter' => 1, 'difficulty' => 'hard',
+                'tanks' => [$human(300 + 40 * $dir, 100), $drone(300, 60) + ['dirS' => $dir, 's' => 'hunter', 'ammo' => [$wkey => 2, 'mortar' => 2]]]]);
+        }
+        $aim("$wkey-rivals-300-px-off", ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1, 'difficulty' => 'hard',
+            'tanks' => [$human(500, 100), $drone(200, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => [$wkey => 2]], $drone(520, 60)]]);
+    }
+}
 // A weak target gets the cheapest gun that finishes it.
 $aim('weak-target-cheapest-gun', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1, 'difficulty' => 'hard',
     'tanks' => [$human(400, 10), $drone(120, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['mortar' => 2, 'babynuke' => 1]]]]);

@@ -548,6 +548,12 @@ function room_explode(array &$room, array &$events, array $tank, string $wkey, f
     }
 }
 /* ---------- beams and plasma: guns with no flight ---------- */
+/* Guns with no flight resolve the moment they fire (room_fire_beam,
+// room_fire_plasma). src/sim.ts flies() is the same. */
+function room_flies(array $def): bool
+{
+    return !in_array($def['effect'] ?? 'shot', ['beam', 'plasma'], true);
+}
 /* A beam is marched this many px at a time (src/sim.ts BEAM_STEP). */
 const ROOM_BEAM_STEP = 3;
 /* Cuts a beam's channel from ($x0, $y0) to ($x1, $y1): a crater of radius $r
@@ -579,30 +585,7 @@ function room_beam_carve(array &$terrain, float $x0, float $y0, float $x1, float
 function room_fire_beam(array &$room, array &$events, int $idx, array $w, string $wkey): void
 {
     $tank = $room['tanks'][$idx];
-    $width = count($room['terrain']);
-    [$mx, $my] = room_muzzle($tank);
-    $rad = deg2rad($tank['angle']);
-    $ux = det_cos($rad) * ($tank['dirS'] ?? -1);
-    $uy = -det_sin($rad);
-    $len = (float) ($w['range'] ?? 0) * $tank['power'] / 100 * room_field_reach($width);
-    [$x1, $y1] = [$mx, $my];
-    $struck = [];
-    for ($k = 1; $k * ROOM_BEAM_STEP <= $len; $k++) {
-        $px = $mx + $ux * ($k * ROOM_BEAM_STEP);
-        $py = $my + $uy * ($k * ROOM_BEAM_STEP);
-        if ($px < 0 || $px >= $width || $py >= 460) {
-            break;
-        }
-        [$x1, $y1] = [$px, $py];
-        foreach ($room['tanks'] as $i => $u) {
-            if ($u['hp'] <= 0 || $i === $idx || in_array($i, $struck, true)) {
-                continue;
-            }
-            if (room_in_box($u, $px, $py)) {
-                $struck[] = $i;
-            }
-        }
-    }
+    [$mx, $my, $x1, $y1, $struck] = room_beam_line($room, $idx, $w, (float) $tank['angle'], (float) $tank['power']);
     $events[] = ['t' => 'beam', 'by' => $tank['seat'], 'w' => $wkey, 'x0' => $mx, 'y0' => $my, 'x1' => $x1, 'y1' => $y1];
     $ground = [];
     foreach ($room['tanks'] as $i => $o) {
@@ -623,6 +606,55 @@ function room_fire_beam(array &$room, array &$events, int $idx, array $w, string
         }
     }
 }
+/* Where beam $w fired by the tank at $idx at ($angle, $power) would run, and
+// the live units whose bodies it would cross, in order along it (never the
+// gunner): [x0, y0, x1, y1, [index, ...]]. room_fire_beam's line, and what the
+// drones weigh a beam by. src/sim.ts beamLine() is the same. */
+function room_beam_line(array $room, int $idx, array $w, float $angle, float $power): array
+{
+    $tank = ['angle' => $angle] + $room['tanks'][$idx];
+    $width = count($room['terrain']);
+    [$mx, $my] = room_muzzle($tank);
+    $rad = deg2rad($angle);
+    $ux = det_cos($rad) * ($tank['dirS'] ?? -1);
+    $uy = -det_sin($rad);
+    $len = (float) ($w['range'] ?? 0) * $power / 100 * room_field_reach($width);
+    [$x1, $y1] = [$mx, $my];
+    $struck = [];
+    for ($k = 1; $k * ROOM_BEAM_STEP <= $len; $k++) {
+        $px = $mx + $ux * ($k * ROOM_BEAM_STEP);
+        $py = $my + $uy * ($k * ROOM_BEAM_STEP);
+        if ($px < 0 || $px >= $width || $py >= 460) {
+            break;
+        }
+        [$x1, $y1] = [$px, $py];
+        foreach ($room['tanks'] as $i => $u) {
+            if ($u['hp'] <= 0 || $i === $idx || in_array($i, $struck, true)) {
+                continue;
+            }
+            if (room_in_box($u, $px, $py)) {
+                $struck[] = $i;
+            }
+        }
+    }
+    return [$mx, $my, $x1, $y1, $struck];
+}
+/* The plasma ring $w fired by $tank at $power: centred on its body, radius x
+// power / 100, never under 20. [x, y, r]. src/sim.ts ringOf() is the same. */
+function room_ring_of(array $tank, array $w, float $power): array
+{
+    [$cx, $cy] = room_unit_box($tank);
+    return [$cx, $cy, max(20.0, $w['radius'] * $power / 100)];
+}
+/* What ring [x, y, r] of $w does to unit $u: room_blast_damage by the distance
+// from its centre to the unit's body; null past the radius + 14.
+// src/sim.ts ringDamage() is the same. */
+function room_ring_damage(array $ring, array $w, array $u): ?int
+{
+    [$ux, $uy] = room_unit_box($u);
+    $d = room_dist($ux - $ring[0], $uy - $ring[1]);
+    return $d > $ring[2] + 14 ? null : room_blast_damage((int) $w['dmg'], $d, $ring[2]);
+}
 /* The tank at $idx fires plasma ring $w: centred on its own body, radius x
 // power / 100 px (never under 20). Its 'ring' event, then every other live
 // unit within the radius + 14 takes dmg with room_blast_damage's falloff, no
@@ -631,9 +663,8 @@ function room_fire_beam(array &$room, array &$events, int $idx, array $w, string
 function room_fire_plasma(array &$room, array &$events, int $idx, array $w, string $wkey): void
 {
     $tank = $room['tanks'][$idx];
-    [$cx, $cy] = room_unit_box($tank);
-    $r = max(20.0, $w['radius'] * $tank['power'] / 100);
-    $events[] = ['t' => 'ring', 'by' => $tank['seat'], 'w' => $wkey, 'x' => $cx, 'y' => $cy, 'r' => (float) $r];
+    $ring = room_ring_of($tank, $w, (float) $tank['power']);
+    $events[] = ['t' => 'ring', 'by' => $tank['seat'], 'w' => $wkey, 'x' => $ring[0], 'y' => $ring[1], 'r' => (float) $ring[2]];
     if ((int) $w['dmg'] <= 0) {
         return;
     }
@@ -642,12 +673,10 @@ function room_fire_plasma(array &$room, array &$events, int $idx, array $w, stri
         if ($u['hp'] <= 0 || $i === $idx) {
             continue;
         }
-        [$ux, $uy] = room_unit_box($u);
-        $d = room_dist($ux - $cx, $uy - $cy);
-        if ($d > $r + 14) {
-            continue;
+        $dmg = room_ring_damage($ring, $w, $u);
+        if ($dmg !== null) {
+            room_hit_unit($room, $events, $i, $dmg, $tank, $idx, $w, false);
         }
-        room_hit_unit($room, $events, $i, room_blast_damage((int) $w['dmg'], $d, $r), $tank, $idx, $w, false);
     }
 }
 /* Of the blasts that lowered a standing unit's ground ($ground: under each

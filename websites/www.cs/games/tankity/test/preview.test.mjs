@@ -287,3 +287,17 @@ function run(pv, env, seconds, done = () => false) {
   run(pv, env, 1.6);
   check('then the drawn ground is the ground', previewGround(pv) === pv.terr);
 }
+
+/* ---- a digger stops at the dummy, as the war's does ---- */
+{
+  const { env, fx } = makeEnv();
+  const hogKey = Object.keys(arsenal.weapons).find(k => arsenal.weapons[k].effect === 'dig' && arsenal.weapons[k].digLen >= 100) || 'heavydigger';
+  const w = arsenal.weapons[hogKey];
+  const pv = createPreview(hogKey, env, fx, null);
+  pv.phase = 'fly';
+  const s = { x: pv.tx - 60, y: pv.ty - 10, vx: 1, vy: 0, wkey: hogKey, age: 0, pierced: false, split: false, digging: true, dux: 1, duy: 0, dl: 0, dk: 0, dn: Math.ceil(w.digLen / 4) };
+  pv.shells = [s];
+  const startX = s.x;
+  for (let i = 0; i < 400 && !s.dead; i++) stepPreview(pv, DT, env);
+  check('a preview digger stops at the dummy and bursts its warheads there', s.dead && s.x < pv.tx && s.x > startX && s.dk === (w.warheads || 0), `x ${s.x} dk ${s.dk}`);
+}

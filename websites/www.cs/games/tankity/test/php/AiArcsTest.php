@@ -260,9 +260,13 @@ final class AiArcsTest extends TestCase
             }
             return array_sum($ms);
         };
-        $total($full); // warm up
-        $base = min($total($plain), $total($plain));
-        $earth = min($total($full), $total($full));
+        $total($plain); // warm up
+        $total($full);
+        [$base, $earth] = [INF, INF];
+        for ($i = 0; $i < 5; $i++) { // interleaved, so drift hits both alike
+            $base = min($base, $total($plain));
+            $earth = min($earth, $total($full));
+        }
         $this->assertLessThan(1.25 * $base, $earth, sprintf('a full rack\'s turns take %.1f ms, the rack without the earth guns %.1f ms', $earth, $base));
     }
 }

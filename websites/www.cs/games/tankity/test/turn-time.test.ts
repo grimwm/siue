@@ -5,17 +5,22 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { document, makeEl, fire } from '../../_kit/test/dom-stub.mjs';
+import { asElement, byId, fire, installDocument, makeEl, maybeById, walk } from '../../_kit/test/dom-stub.ts';
+import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import {
   TURN_STOPS, TURN_DEFAULT, TURN_LABELS, TURN_LONG_S, TURN_SETTLE_MS, turnIndex, turnLabel, clockText, turnNote, shopNote, settleAfter,
 } from '../src/turn-time.ts';
 
-globalThis.document = document;
-const { tt } = await importTsx(import.meta.dirname, { tt: '../src/ui/turn-time.tsx' });
-const walk = (el, out = []) => { for (const c of el.children || []) { out.push(c); walk(c, out); } return out; };
-const byId = (el, id) => walk(el).find(n => n.id === id);
-const byTag = (el, tag) => walk(el).filter(n => n.localName === tag);
+installDocument();
+const { tt } = await importTsx<{ tt: typeof import('../src/ui/turn-time.tsx') }>(import.meta.dirname, { tt: '../src/ui/turn-time.tsx' });
+const byTag = (el: StubElement, tag: string) => walk(el).filter(n => n.localName === tag);
+/** Item `i` of a list the case reads, which must be there. */
+function nth<T>(list: readonly T[], i: number): T {
+  const v = list[i];
+  assert.ok(v !== undefined, `no item ${i} of ${list.length}`);
+  return v;
+}
 
 const settings = fs.readFileSync(path.join(import.meta.dirname, '..', 'server', 'settings.php'), 'utf8');
 
@@ -23,8 +28,8 @@ test('the stops and the default match server/settings.php', () => {
   const stops = /const ROOM_TURN_STOPS = \[([^\]]+)\]/.exec(settings);
   const def = /const ROOM_TURN_DEFAULT = (\d+)/.exec(settings);
   assert.ok(stops && def);
-  assert.deepEqual([...TURN_STOPS], stops[1].split(',').map(n => Number(n.trim())));
-  assert.equal(TURN_DEFAULT, Number(def[1]));
+  assert.deepEqual([...TURN_STOPS], nth(stops, 1).split(',').map(n => Number(n.trim())));
+  assert.equal(TURN_DEFAULT, Number(nth(def, 1)));
   assert.equal(TURN_LABELS.length, TURN_STOPS.length);
 });
 
@@ -76,8 +81,8 @@ test('the shop line counts its own close, or the room\'s when that comes first',
 
 test('the slider: seven stops, its label in an output and for readers, input reports seconds', () => {
   const box = makeEl('box');
-  const got = [];
-  tt.renderTurnTime(box, { id: 'lobby-turn', secs: 600, onChange: s => got.push(s) });
+  const got: number[] = [];
+  tt.renderTurnTime(asElement(box), { id: 'lobby-turn', secs: 600, onChange: s => got.push(s) });
   const range = byId(box, 'lobby-turn');
   assert.equal(range.localName, 'input');
   assert.equal(range.getAttribute('type'), 'range');
@@ -86,10 +91,10 @@ test('the slider: seven stops, its label in an output and for readers, input rep
   assert.equal(String(range.getAttribute('step')), '1');
   assert.equal(String(range.value), '2');
   assert.equal(range.getAttribute('aria-valuetext'), '10 min');
-  const label = byTag(box, 'label')[0];
+  const label = nth(byTag(box, 'label'), 0);
   assert.equal(label.getAttribute('for'), 'lobby-turn');
   assert.equal(label.textContent, 'Turn time');
-  const out = byTag(box, 'output')[0];
+  const out = nth(byTag(box, 'output'), 0);
   assert.equal(out.textContent, '10 min');
   range.value = '4';
   fire(range, 'input');
@@ -98,20 +103,20 @@ test('the slider: seven stops, its label in an output and for readers, input rep
 
 test('without the say, the slider is only its label', () => {
   const box = makeEl('box');
-  tt.renderTurnTime(box, { id: 'room-turn', secs: 600, disabled: true, onChange: () => {} });
-  assert.equal(byId(box, 'room-turn'), undefined);
+  tt.renderTurnTime(asElement(box), { id: 'room-turn', secs: 600, disabled: true, onChange: () => {} });
+  assert.equal(maybeById(box, 'room-turn'), undefined);
   assert.equal(byId(box, 'room-turn-label').textContent, 'Turn time: 10 min');
 });
 
 test('a dragged slider sends only the value it settles on', () => {
-  const timers = new Map();
+  const timers = new Map<number, { fn: () => void; ms: number }>();
   let next = 1;
-  const t = { setTimeout: (fn, ms) => { const id = next++; timers.set(id, { fn, ms }); return id; }, clearTimeout: id => { timers.delete(id); } };
-  const sent = [];
-  const send = settleAfter(TURN_SETTLE_MS, v => sent.push(v), t);
+  const t = { setTimeout: (fn: () => void, ms: number) => { const id = next++; timers.set(id, { fn, ms }); return id; }, clearTimeout: (id: unknown) => { timers.delete(Number(id)); } };
+  const sent: number[] = [];
+  const send = settleAfter(TURN_SETTLE_MS, (v: number) => { sent.push(v); }, t);
   send(600); send(1800); send(28800);
   assert.equal(timers.size, 1);
-  assert.equal([...timers.values()][0].ms, 400);
+  assert.equal(nth([...timers.values()], 0).ms, 400);
   for (const [id, x] of [...timers]) { timers.delete(id); x.fn(); }
   assert.deepEqual(sent, [28800]);
   send(60);

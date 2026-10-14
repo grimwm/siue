@@ -128,7 +128,7 @@ says when Q is a letter instead (a box that takes text). A held Q acts once:
 callers ignore `ev.repeat`. Crete is the exception: with nothing open, Q is Quit
 there, and Q is back only for the install steps and the Share field. No game listens for
 Escape and no hint names it: Safari and Firefox always leave full screen on
-Esc, and no page can stop them (`tankity/test/fullscreen.test.mjs` fails on a
+Esc, and no page can stop them (`tankity/test/fullscreen.test.ts` fails on a
 binding, listener or visible hint that asks for it).
 
 Esc in full screen: the browser takes it to leave. Where it can, a game holds it with
@@ -138,7 +138,7 @@ Esc in full screen: the browser takes it to leave. Where it can, a game holds it
 `lock()` inside a frame and the `/play/` pages run each game in one; a refusal
 goes to `warn`. Keyboard Lock is Chromium's only: in Safari and Firefox Esc
 always leaves full screen. Only the Fullscreen toggle and Quit may call
-`exitFullscreen` (`tankity/test/fullscreen.test.mjs`).
+`exitFullscreen` (`tankity/test/fullscreen.test.ts`).
 
 ## Install and Share (`install.ts`, `ui/install-bar.tsx`)
 

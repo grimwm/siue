@@ -3,26 +3,39 @@
 // and the notification a turn raises.
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import type { StorageLike } from '../../_kit/ports.ts';
 import { notifyPermission, askNotify, showTurnNotification, alertsPref, ALERTS_KEY } from '../src/notify.ts';
 
-const real = globalThis.Notification;
-afterEach(() => { if (real === undefined) delete globalThis.Notification; else globalThis.Notification = real; });
+/** The scope's Notification, which the cases replace with a stub class; the lib types it as always there. */
+const scope = globalThis as { Notification?: unknown };
+const real = scope.Notification;
+afterEach(() => { if (real === undefined) delete scope.Notification; else scope.Notification = real; });
 
-function stub(permission, request) {
-  const made = [];
+/** What the stub raises: a title, its options, a close, and the click handler the code sets. */
+interface Made { title: string; opts: { tag?: string; body?: string }; closed: boolean; onclick?: () => void; close(): void }
+type Answer = 'default' | 'granted' | 'denied';
+/** The stub class: its `state` is the permission, and a test sets it to move the permission. */
+interface StubCtor { state: Answer }
+
+function stub(permission: Answer, request: (cb: (answer: string) => void, N: StubCtor) => Promise<string> | undefined): { made: Made[]; N: StubCtor } {
+  const made: Made[] = [];
   class N {
-    constructor(title, opts) { this.title = title; this.opts = opts; this.closed = false; made.push(this); }
+    static state: Answer = permission;
+    title: string;
+    opts: { tag?: string; body?: string };
+    closed = false;
+    onclick?: () => void;
+    constructor(title: string, opts: { tag?: string; body?: string }) { this.title = title; this.opts = opts; made.push(this); }
     close() { this.closed = true; }
     static get permission() { return N.state; }
-    static requestPermission(cb) { return request(cb, N); }
+    static requestPermission(cb: (answer: string) => void) { return request(cb, N); }
   }
-  N.state = permission;
-  globalThis.Notification = N;
-  return made;
+  scope.Notification = N;
+  return { made, N };
 }
 
 test('no Notification: unsupported, and asking resolves unsupported', async () => {
-  delete globalThis.Notification;
+  delete scope.Notification;
   assert.equal(notifyPermission(), 'unsupported');
   assert.equal(await askNotify(), 'unsupported');
   assert.equal(showTurnNotification({ code: '7K2Q', others: ['ZED'] }, true, () => {}), false);
@@ -46,27 +59,30 @@ test('a request that throws reads as the current permission', async () => {
 });
 
 test('a turn notification needs alerts on and permission granted', () => {
-  const made = stub('granted', () => Promise.resolve('granted'));
+  const { made, N } = stub('granted', () => Promise.resolve('granted'));
   assert.equal(showTurnNotification({ code: '7K2Q', others: ['ZED'] }, false, () => {}), false);
   assert.equal(made.length, 0);
-  globalThis.Notification.state = 'default';
+  N.state = 'default';
   assert.equal(showTurnNotification({ code: '7K2Q', others: ['ZED'] }, true, () => {}), false);
   assert.equal(made.length, 0);
-  globalThis.Notification.state = 'granted';
+  N.state = 'granted';
   let clicked = 0;
   assert.equal(showTurnNotification({ code: '7K2Q', others: ['ZED', 'QRS'] }, true, () => { clicked++; }), true);
   assert.equal(made.length, 1);
-  assert.equal(made[0].title, 'Your turn in Operation Tankity');
-  assert.equal(made[0].opts.tag, 'tankity-turn-7K2Q');
-  assert.equal(made[0].opts.body, 'Room 7K2Q · vs ZED, QRS');
-  made[0].onclick();
+  const note = made[0];
+  assert.ok(note, 'a notification was raised');
+  assert.equal(note.title, 'Your turn in Operation Tankity');
+  assert.equal(note.opts.tag, 'tankity-turn-7K2Q');
+  assert.equal(note.opts.body, 'Room 7K2Q · vs ZED, QRS');
+  assert.ok(note.onclick, 'the notification handles a click');
+  note.onclick();
   assert.equal(clicked, 1);
-  assert.equal(made[0].closed, true);
+  assert.equal(note.closed, true);
 });
 
 test('the alerts pref is off by default and remembers on', () => {
-  const m = new Map();
-  const storage = { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, v), removeItem: k => m.delete(k) };
+  const m = new Map<string, string>();
+  const storage: StorageLike = { getItem: k => m.get(k) ?? null, setItem: (k, v) => { m.set(k, v); }, removeItem: k => { m.delete(k); } };
   const p = alertsPref(storage);
   assert.equal(p.get(), 'off');
   p.set('on');

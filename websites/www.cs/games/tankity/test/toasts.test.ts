@@ -4,23 +4,32 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createToastQueue, TOAST_MS, TOAST_MAX } from '../src/toasts.ts';
 
+/** Item `i` of a list the case reads, which must be there. */
+function nth<T>(list: readonly T[], i: number): T {
+  const v = list[i];
+  assert.ok(v !== undefined, `no item ${i} of ${list.length}`);
+  return v;
+}
+
 function rig() {
-  const r = { hidden: false, timers: new Map(), next: 1, lists: [] };
-  r.q = createToastQueue({
-    setTimeout: (fn, ms) => { const id = r.next++; r.timers.set(id, { fn, ms }); return id; },
-    clearTimeout: id => { r.timers.delete(id); },
+  const timers = new Map<number, { fn: () => void; ms: number }>();
+  const lists: string[][] = [];
+  const r = { hidden: false, timers, next: 1, lists };
+  const q = createToastQueue({
+    setTimeout: (fn, ms) => { const id = r.next++; timers.set(id, { fn, ms }); return id; },
+    clearTimeout: id => { timers.delete(Number(id)); },
     hidden: () => r.hidden,
-    onChange: list => r.lists.push(list.map(t => t.code)),
+    onChange: list => lists.push(list.map(t => t.code)),
   });
-  r.fire = () => { for (const [id, t] of [...r.timers]) { r.timers.delete(id); t.fn(); } };
-  return r;
+  const fire = () => { for (const [id, t] of [...timers]) { timers.delete(id); t.fn(); } };
+  return Object.assign(r, { q, fire });
 }
 
 test('a toast on a visible page closes itself after TOAST_MS', () => {
   const r = rig();
   r.q.push('AAAA', 'Your turn in AAAA');
   assert.deepEqual(r.q.list().map(t => t.text), ['Your turn in AAAA']);
-  assert.equal([...r.timers.values()][0].ms, TOAST_MS);
+  assert.equal(nth([...r.timers.values()], 0).ms, TOAST_MS);
   r.fire();
   assert.deepEqual(r.q.list(), []);
 });
@@ -45,7 +54,7 @@ test('one toast per room, newest last, at most TOAST_MAX; close drops it and its
   r.q.push('BBBB', 'again');
   assert.equal(TOAST_MAX, 3);
   assert.deepEqual(r.q.list().map(t => t.code), ['CCCC', 'DDDD', 'BBBB']);
-  const id = r.q.list()[0].id;
+  const id = nth(r.q.list(), 0).id;
   r.q.close(id);
   assert.deepEqual(r.q.list().map(t => t.code), ['DDDD', 'BBBB']);
   assert.equal(r.timers.size, 2);

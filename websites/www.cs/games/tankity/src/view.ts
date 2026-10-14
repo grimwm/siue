@@ -16,6 +16,8 @@ import { createRenderer } from './render.ts';
 import type { BattleView, DrawTank, Renderer } from './render.ts';
 import type { Replay } from './replay.ts';
 import { sceneryY } from './scenery.ts';
+import { ZOOM_FLOOR, cameraTarget, cloudWrap, easeCamera, skyMarks, stepHold } from './camera.ts';
+import type { Aloft, CamPose, Hold, Reach } from './camera.ts';
 import {
   hashSeed, mulberry32, gauss, GRAV, FLAT_GRAV, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
 } from './sim.ts';
@@ -41,33 +43,37 @@ export interface ViewDeps {
 export function createView(deps: ViewDeps) {
   const { G, tables, net, MATCH, replay, FX, fxSet, cur, textScale } = deps;
 
-  /* The camera only ever pulls back, slowly, to keep every live tank framed. */
+  /* The camera (src/camera.ts): every live unit framed, and while a volley
+     flies, the top of its arc too, pulled back down to ZOOM_FLOOR. */
+  const units: GameTank[] = [];
+  const calm = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  const gravity = (wkey: string): number => (tables.weapons[wkey]?.flat ? FLAT_GRAV : GRAV);
+  const hold: Hold = { top: null, empty: 0 }; // the volley's top row, held until it lands
+  const target: CamPose = { z: 1, cx: 0, cy: 0 };
+  // Last frame's shells: a room replay's (read once a frame, in battleView) and those flying on past the field's edge.
+  let replayed: readonly Aloft[] = [], flyingOn: readonly Aloft[] = [];
+  const aloft: (readonly Aloft[])[] = [[], []];
+  let tallSky = 0; // rows of sky the canvas shows above the field at full size (fitCanvas)
+  const reach: Reach = { w: 0, reach: 0 }; // how far across the floor's view reaches (fitCanvas)
+  // A room replay's path does not say when its roller is down: a point on the ground counts as landed.
+  const groundAt = (x: number): number => simSurfY(G.terrain, x);
   function updateCamera(dt: number): void {
-    // Always centred: the view is never narrower than the field (fitField), so panning would only
-    // cut one edge of the field off and show scenery at the other.
-    let tz = 1;
-    const tx = G.w / 2;
-    let ty = H / 2;
-    const live = G.tanks.filter(t => t.hp > 0);
-    if (live.length) {
-      let y0 = Infinity, y1 = -Infinity;
-      for (const t of live) {
-        y0 = Math.min(y0, t.y - 56); y1 = Math.max(y1, t.y);
-      }
-      const pad = 70;
-      const spanY = Math.max(1, (y1 - y0) + pad * 2);
-      tz = clamp(Math.min(H / spanY, 1), 0.45, 1); // the field is always in view across, so only height pulls back
-      ty = (y0 + y1) / 2;
+    units.length = 0;
+    for (const t of G.tanks) if (t.hp > 0) units.push(t);
+    aloft[0] = net.on ? replayed : G.shells;
+    aloft[1] = flyingOn; // past the edge: held only while it climbs within the floor's reach
+    reach.w = G.w;
+    reach.ground = net.on ? groundAt : undefined;
+    stepHold(hold, aloft, gravity, reach);
+    easeCamera(G.cam, cameraTarget(G.w, H, units, hold.top, tallSky, target), dt, !!(calm && calm.matches), H);
+  }
+  /* The clouds drift with the wind and wrap where the camera, even at the floor, cannot see. */
+  function driftClouds(dt: number): void {
+    const r = cloudWrap(G.w, reach.reach);
+    for (const cl of G.clouds) {
+      cl.x += cl.v * dt;
+      if (cl.x > G.w / 2 + r) cl.x = G.w / 2 - r;
     }
-    const k = Math.min(1, dt * 1.5);
-    G.cam.z += (tz - G.cam.z) * k;
-    G.cam.cx += (tx - G.cam.cx) * k;
-    G.cam.cy += (ty - G.cam.cy) * k;
-    // Pin the ground to the viewport floor: the visible bottom edge never drops
-    // below the world base, so no void opens up under the terrain. Tanks live
-    // on the ground, so they stay framed while the sky takes the slack above.
-    const halfView = (H / 2) / Math.max(0.2, G.cam.z);
-    G.cam.cy = Math.min(G.cam.cy, H + 8 - halfView);
   }
   /* Aim as drawn. Solo drones animate their real angle and power; in rooms the
      server only reports where a rival ended up, so the drawing glides there
@@ -114,10 +120,12 @@ export function createView(deps: ViewDeps) {
     const pv = G.preview;
     // Shells the sim retires past the field's edge fly on, drawn only, over the scenery.
     const flying = replay.flying();
+    replayed = flying;
     if (G.time < ghostTime) ghosts.clear(); // a new match restarted the clock
     const flyOn = ghosts.frame([...G.shells, ...flying], G.w, Math.min(0.1, Math.max(0, G.time - ghostTime)), G.wind,
       wkey => (tables.weapons[wkey]?.flat ? FLAT_GRAV : GRAV));
     ghostTime = G.time;
+    flyingOn = flyOn;
     return {
       time: G.time, shake: G.shake, cam: G.cam,
       skyKey: net.on ? 'room:' + net.code : String(G.seed || ''),
@@ -146,7 +154,11 @@ export function createView(deps: ViewDeps) {
       cv.width = bw;
       cv.height = bh;
     }
-    const fit = fitField({ w: cv.clientWidth || 1, h: cv.clientHeight || 1 }, { w: G.w, h: H });
+    const box = { w: cv.clientWidth || 1, h: cv.clientHeight || 1 };
+    const fit = fitField(box, { w: G.w, h: H });
+    const seen = visibleWorld(fit, box);
+    tallSky = Math.max(0, -seen.y0);
+    reach.reach = (seen.x1 - seen.x0) / 2 / ZOOM_FLOOR;
     const field = [fit.ox, fit.oy, G.w * fit.s, H * fit.s].map(v => Math.round(v)).join(',');
     if (published !== `${G.w}|${field}`) {
       published = `${G.w}|${field}`;
@@ -162,7 +174,7 @@ export function createView(deps: ViewDeps) {
     if (!renderer) {
       renderer = createRenderer(cv, {
         fx: FX,
-        sim: { facing, isGroundUnit, muzzle, surfY: simSurfY, hashSeed, mulberry32, gauss, fitField, visibleWorld, sceneryY },
+        sim: { facing, isGroundUnit, muzzle, surfY: simSurfY, hashSeed, mulberry32, gauss, fitField, visibleWorld, sceneryY, skyMarks },
         shownAngle,
         look: wkey => (tables.weapons[wkey] || {}).gfx || {},
         fxBody: wkey => fxSet(wkey).body,
@@ -173,5 +185,5 @@ export function createView(deps: ViewDeps) {
     trackMotion();
     renderer.frame(battleView());
   }
-  return { updateCamera, shownAngle, shownPower, render };
+  return { updateCamera, driftClouds, shownAngle, shownPower, render };
 }

@@ -46,12 +46,14 @@ test('the shop list keeps its scroll when it redraws', async ({ browser }) => {
   expect(errors).toEqual([]);
 });
 
-test('the shop shows the whole 22-item arsenal, numbers in their own colour', async ({ browser }) => {
+test('the shop shows the whole arsenal, numbers in their own colour', async ({ browser }) => {
   const { page } = await newPlayer(browser);
   await page.keyboard.press('n');
   await page.waitForSelector('#shop-veil:not([hidden])');
   const rows = page.locator('#shop-list li:not(.shop-cat)');
-  await expect(rows).toHaveCount(22);
+  // The free Shell, every priced gun and every trick in game.json.
+  const data = await page.evaluate(() => fetch('game.json').then(r => r.json()));
+  await expect(rows).toHaveCount(1 + data.arsenal.ammo.filter(a => a.pack > 0).length + data.arsenal.gear.length);
   await expect(page.locator('#shop-list li.shop-free .shop-name')).toHaveText(/^Shell ∞ \(free\)$/);
   await page.keyboard.press('ArrowRight'); // two of each
   const name = page.locator('#shop-list li.sel .shop-name');

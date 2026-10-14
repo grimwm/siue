@@ -445,7 +445,7 @@ $buy = function (string $item) use ($base, $bought, $bcode): array {
 };
 foreach ([
     'unknown-item' => ['nope', 422, 'not for sale'],
-    'locked-item' => ['nuke', 409, 'nukes unlock in round 4'],
+    'locked-item' => ['nuke', 409, 'NUKE unlocks in round 4'],
     'short-on-cash' => ['repair', 409, 'short on cash'],
 ] as $name => [$item, $want, $line]) {
     usleep(300000);

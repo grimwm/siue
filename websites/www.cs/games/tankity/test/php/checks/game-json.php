@@ -212,6 +212,39 @@ $roller = json_decode($render($mut("      effect: pellets\n      pellets: 3\n   
 $check('roller-effect-validates', ($roller['arsenal']['ammo'][1]['effect'] ?? '') === 'roller'
     && ($roller['arsenal']['ammo'][1]['friction'] ?? null) === 0.5 && ($roller['arsenal']['ammo'][1]['rollTime'] ?? null) === 6
     && !isset($roller['arsenal']['ammo'][1]['pellets']), json_encode($roller['arsenal']['ammo'][1] ?? null));
+/** The good document with buck's pellets fields swapped for another effect's. */
+$asEffect = fn(string $fields): string => $mut("      effect: pellets\n      pellets: 3\n      spread: 0.1\n", $fields);
+/** Row $i of a rendered document, or the error it throws (as ['error' => message]). */
+$rowOf = function (string $yaml, int $i = 1) use ($render): array {
+    try {
+        return json_decode($render($yaml), true)['arsenal']['ammo'][$i] ?? [];
+    } catch (TankityConfigError $e) {
+        return ['error' => $e->getMessage()];
+    }
+};
+$row1 = fn(string $yaml): array => $rowOf($yaml);
+$zero = $rowOf($mut("      dmg: 34\n", "      dmg: 0\n"), 0);
+$check('dmg-zero-is-harmless-and-valid', ($zero['dmg'] ?? null) === 0, json_encode($zero));
+$hop = $row1($asEffect("      effect: hop\n      hops: 3\n      hopKeep: 0.55\n      subDmg: 34\n      subRadius: 22\n"));
+$check('hop-effect-validates', ($hop['effect'] ?? '') === 'hop' && $hop['hops'] === 3 && $hop['hopKeep'] === 0.55
+    && $hop['subDmg'] === 34 && $hop['subRadius'] === 22 && !isset($hop['pellets']), json_encode($hop));
+$scatter = $row1($asEffect("      effect: scatter\n      split: 8\n      fan: 2.4\n      kick: 150\n      subDmg: 24\n      subRadius: 18\n"));
+$check('scatter-effect-validates', ($scatter['effect'] ?? '') === 'scatter' && $scatter['split'] === 8 && $scatter['fan'] === 2.4
+    && $scatter['kick'] === 150 && $scatter['subDmg'] === 24 && $scatter['subRadius'] === 18, json_encode($scatter));
+foreach (['split', 'fan', 'kick', 'subDmg', 'subRadius'] as $k) {
+    $yaml = preg_replace("/      $k: [0-9.]+\n/", '', $asEffect("      effect: scatter\n      split: 8\n      fan: 2.4\n      kick: 150\n      subDmg: 24\n      subRadius: 18\n"));
+    $e = (string) $errOf(fn() => $render($yaml));
+    $check("scatter-needs-$k", str_contains($e, "arsenal.ammo[1].$k: is required when effect is scatter"), $e);
+}
+$apex = $row1($asEffect("      effect: cluster\n      apex: true\n      split: 9\n      fan: 0.16\n      subDmg: 60\n      subRadius: 40\n"));
+$check('apex-cluster-needs-no-fuse', ($apex['apex'] ?? null) === true && !isset($apex['fuse']) && $apex['split'] === 9, json_encode($apex));
+$rack = $row1($mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 1\n"));
+$check('airack-validates', ($rack['aiRack'] ?? null) === 1 && array_search('aiRack', array_keys($rack), true) === array_search('aiRound', array_keys($rack), true) + 1,
+    json_encode($rack));
+$look = $rowOf($mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, linger: 0.8}'), 0);
+$check('gfx-linger-validates', ($look['gfx']['linger'] ?? null) === 0.8, json_encode($look['gfx'] ?? $look));
+$start = $row1($mut("      aiRound: 2\n", "      aiRound: 2\n      start: 1\n"));
+$check('start-validates', ($start['start'] ?? null) === 1, json_encode($start));
 $check('ball-painter-validates', (json_decode($render($mut('painter: spark', 'painter: ball')), true)['arsenal']['ammo'][1]['gfx']['painter'] ?? '') === 'ball');
 $check('volume-defaults-to-1', ($out['audio']['music'][0]['volume'] ?? 0) === 0.7
     && (json_decode($render($mut("      volume: 0.7\n", '')), true)['audio']['music'][0]['volume'] ?? 0) === 1.0);
@@ -236,7 +269,32 @@ $cases = [
     'missing-section' => [preg_replace('/\naudio:.*/s', "\n", $good), 'section `audio` is required'],
     'unknown-ammo-field' => [$mut("      dmg: 34\n", "      dmg: 34\n      dmgg: 3\n"), 'arsenal.ammo[0].dmgg: unknown key'],
     'missing-required' => [$mut("      radius: 26\n", ''), 'arsenal.ammo[0].radius: is required'],
-    'dmg-range' => [$mut("      dmg: 34\n", "      dmg: 9000\n"), 'arsenal.ammo[0].dmg: must be a whole number from 1 to 500'],
+    'dmg-range' => [$mut("      dmg: 34\n", "      dmg: 9000\n"), 'arsenal.ammo[0].dmg: must be a whole number from 0 to 500'],
+    'dmg-below-zero' => [$mut("      dmg: 34\n", "      dmg: -1\n"), 'arsenal.ammo[0].dmg: must be a whole number from 0 to 500'],
+    'dmg-above-500' => [$mut("      dmg: 34\n", "      dmg: 501\n"), 'arsenal.ammo[0].dmg: must be a whole number from 0 to 500'],
+    'hop-needs-hops' => [$asEffect("      effect: hop\n      hopKeep: 0.5\n      subDmg: 30\n      subRadius: 20\n"), 'arsenal.ammo[1].hops: is required when effect is hop'],
+    'hop-needs-hopkeep' => [$asEffect("      effect: hop\n      hops: 3\n      subDmg: 30\n      subRadius: 20\n"), 'arsenal.ammo[1].hopKeep: is required when effect is hop'],
+    'hop-needs-subdmg' => [$asEffect("      effect: hop\n      hops: 3\n      hopKeep: 0.5\n      subRadius: 20\n"), 'arsenal.ammo[1].subDmg: is required when effect is hop'],
+    'hops-range' => [$asEffect("      effect: hop\n      hops: 7\n      hopKeep: 0.5\n      subDmg: 30\n      subRadius: 20\n"), 'arsenal.ammo[1].hops: must be a whole number from 2 to 6'],
+    'hopkeep-range' => [$asEffect("      effect: hop\n      hops: 3\n      hopKeep: 0.95\n      subDmg: 30\n      subRadius: 20\n"), 'arsenal.ammo[1].hopKeep: must be a number from 0.2 to 0.9'],
+    'scatter-fan-range' => [$asEffect("      effect: scatter\n      split: 8\n      fan: 3.5\n      kick: 150\n      subDmg: 24\n      subRadius: 18\n"), 'arsenal.ammo[1].fan: must be a number from 0.2 to 3'],
+    'scatter-kick-range' => [$asEffect("      effect: scatter\n      split: 8\n      fan: 2.4\n      kick: 500\n      subDmg: 24\n      subRadius: 18\n"), 'arsenal.ammo[1].kick: must be a number from 40 to 400'],
+    'cluster-fan-range' => [$asEffect("      effect: cluster\n      fuse: 0.9\n      split: 4\n      fan: 2.4\n      subDmg: 24\n      subRadius: 18\n"), 'arsenal.ammo[1].fan: must be a number from 0 to 1'],
+    'cluster-needs-fuse' => [$asEffect("      effect: cluster\n      split: 4\n      fan: 0.2\n      subDmg: 24\n      subRadius: 18\n"), 'arsenal.ammo[1].fuse: is required when effect is cluster'],
+    'cluster-apex-false-needs-fuse' => [$asEffect("      effect: cluster\n      apex: false\n      split: 4\n      fan: 0.2\n      subDmg: 24\n      subRadius: 18\n"), 'arsenal.ammo[1].fuse: is required when effect is cluster'],
+    'apex-refuses-fuse' => [$asEffect("      effect: cluster\n      apex: true\n      fuse: 0.9\n      split: 4\n      fan: 0.2\n      subDmg: 24\n      subRadius: 18\n"), 'arsenal.ammo[1].fuse: an apex cluster splits at the top of its arc'],
+    'apex-not-bool' => [$asEffect("      effect: cluster\n      apex: yes\n      split: 4\n      fan: 0.2\n      subDmg: 24\n      subRadius: 18\n"), 'arsenal.ammo[1].apex: must be true or false'],
+    'apex-on-a-shot' => [$asEffect("      effect: shot\n      apex: true\n"), 'arsenal.ammo[1].apex: only the cluster effect uses this'],
+    'hops-on-a-shot' => [$asEffect("      effect: shot\n      hops: 3\n"), 'arsenal.ammo[1].hops: only the hop effect uses this'],
+    'kick-on-a-cluster' => [$asEffect("      effect: cluster\n      fuse: 0.9\n      split: 4\n      fan: 0.2\n      kick: 100\n      subDmg: 24\n      subRadius: 18\n"), 'arsenal.ammo[1].kick: only the scatter effect uses this'],
+    'subdmg-on-a-shot' => [$asEffect("      effect: shot\n      subDmg: 3\n"), 'arsenal.ammo[1].subDmg: only the cluster, hop and scatter effects use this'],
+    'pellets-on-a-roller' => [$asEffect("      effect: roller\n      friction: 0.5\n      rollTime: 6\n      pellets: 3\n"), 'arsenal.ammo[1].pellets: only the pellets effect uses this'],
+    'airack-range-low' => [$mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 0\n"), 'arsenal.ammo[1].aiRack: must be a whole number from 1 to 9'],
+    'airack-range-high' => [$mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 10\n"), 'arsenal.ammo[1].aiRack: must be a whole number from 1 to 9'],
+    'linger-range' => [$mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, linger: 9}'), 'arsenal.ammo[0].gfx.linger: must be a number from 0.1 to 3'],
+    'size-is-the-body' => [$mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, size: 4}'), 'arsenal.ammo[0].gfx.size: unknown key'],
+    'start-range' => [$mut("      aiRound: 2\n", "      aiRound: 2\n      start: 10\n"), 'arsenal.ammo[1].start: must be a whole number from 0 to 9'],
+    'airack-needs-ai' => [$mut("      ai: true\n      aiRound: 2\n", "      ai: false\n      aiRound: 2\n      aiRack: 1\n"), 'arsenal.ammo[1].aiRack: only a row with ai: true uses this'],
     'dmg-float' => [$mut("      dmg: 34\n", "      dmg: 34.5\n"), 'arsenal.ammo[0].dmg'],
     'dmg-string' => [$mut("      dmg: 34\n", "      dmg: lots\n"), 'arsenal.ammo[0].dmg'],
     'bad-effect' => [$mut('effect: shot', 'effect: laser'), 'arsenal.ammo[0].effect: must be one of'],
@@ -362,7 +420,7 @@ $check('shipped-json-in-sync', $shipped !== null && $shipped === (string) @file_
     'run: php tools/game-json.php (in games/tankity)');
 $sd = json_decode((string) $shipped, true);
 $check('good-fall', ($out['arsenal']['fall'] ?? null) === ['freePx' => 10, 'perPx' => 0.5, 'chuteOver' => 5, 'aiRound' => 3], json_encode($out['arsenal']['fall'] ?? null));
-$check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 13 && count($sd['arsenal']['gear'] ?? []) === 9
+$check('shipped-counts', count($sd['arsenal']['ammo'] ?? []) === 19 && count($sd['arsenal']['gear'] ?? []) === 9
     && count($sd['audio']['sfx'] ?? []) >= 1 && count($sd['audio']['music'] ?? []) >= 1);
 $ammoKeys = array_column($sd['arsenal']['ammo'] ?? [], 'key');
 $rollerRow = $sd['arsenal']['ammo'][array_search('roller', $ammoKeys, true)] ?? [];

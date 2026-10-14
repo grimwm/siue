@@ -72,8 +72,8 @@ final class RoomBuyTest extends TestCase
     public function testLaterGoodsWaitForTheirRound(): void
     {
         $room = $this->room(1);
-        $this->assertSame([409, 'unlocks in round 2'], room_buy($room, 0, 'cluster', 1));
-        $this->assertSame([409, 'nukes unlock in round 4'], room_buy($room, 0, 'nuke', 1));
+        $this->assertSame([409, 'Cluster unlocks in round 2'], room_buy($room, 0, 'cluster', 1));
+        $this->assertSame([409, 'NUKE unlocks in round 4'], room_buy($room, 0, 'nuke', 1));
     }
 
     public function testShortOnCashAndNotForSale(): void

@@ -2,7 +2,7 @@
  *
  * Everything that paints the 2D canvas: the night sky and its moon, clouds,
  * hills, the scenery past the field's edges and the dirt below it, the units (tank bodies, drones, name tags, turn marker, menu badge),
- * the aim arm, blast discs, shells, particles, wind streaks, the
+ * the aim arm, blast discs, shells (with a mark on the top edge for one above the view), particles, wind streaks, the
  * turn clock, and the firing-range preview. main.ts builds a BattleView each
  * frame and calls `frame(view)`; this module reads it and paints, and never
  * changes game state. Anything that advances (a boom's age, the shake decay,
@@ -14,6 +14,7 @@
  * random numbers. Like the other modules it imports nothing at run time, so
  * the sim helpers arrive as dependencies. */
 import type { TrailCarrier } from './fx/trail.ts';
+import type { SkyMark } from './camera.ts';
 import type { Box, Fit, WorldRect } from './field.ts';
 import type { Cloud, Hills, Rng, Tank } from './sim.ts';
 
@@ -130,6 +131,7 @@ export interface RenderSim {
   fitField(box: Box, field: Box): Fit;
   visibleWorld(fit: Fit, box: Box): WorldRect;
   sceneryY(h: Hills, terrain: readonly number[], x: number): number;
+  skyMarks(lists: readonly (readonly { x: number; y: number }[])[], top: number, out: SkyMark[]): SkyMark[];
 }
 
 /** What createRenderer needs from its host. */
@@ -534,6 +536,8 @@ function drawBoom(c: CanvasRenderingContext2D, bm: Boom, look: Look): void {
    pixel stars in sizes, brightnesses and a few tints; a faint milky band and
    a few clusters; a quiet twinkle on some (none under reduced motion); and a
    moon phase from the rendered sheet (fx/sprites/moon.png). */
+/** World rows the high cloud layer sits above the low one. */
+const HIGH_CLOUDS = -260;
 const SKY_TINTS = ['#ffe2b0', '#b8d0ff'];
 const SKY_PHASES = [0, 0, 1, 6, 2, 5, 3, 4]; // frames of moon.png, full and gibbous favoured
 interface Star { x: number; y: number; s: number; a: number; c: string; tw: number; ph: number }
@@ -669,12 +673,46 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     }
     c.fillStyle = deps.look(s.wkey).shell || '#ffe27a';
     c.beginPath();
-    c.arc(s.x, s.y, s.wkey === 'nuke' ? 7 : s.wkey === 'mortar' ? 4.5 : 3.5, 0, Math.PI * 2);
+    // Until its sprite loads, a shell is a disc a quarter of its sprite's size.
+    const body = deps.fxBody(s.wkey) as { size?: number } | null | undefined;
+    c.arc(s.x, s.y, body && body.size ? body.size / 4 : 3.5, 0, Math.PI * 2);
     c.fill();
     c.fillStyle = '#fff';
     c.beginPath();
     c.arc(s.x, s.y, 1.5, 0, Math.PI * 2);
     c.fill();
+  }
+
+  /* A shell higher than the camera can pull back to: a small arrow on the top
+     edge at its x, with how far above the view it flies, so it is never lost. */
+  const marks: SkyMark[] = [];
+  const inFlight: (readonly Flying[])[] = [[], [], []];
+  const markFont = { scale: 0, css: '' };
+  function drawSkyMarks(c: CanvasRenderingContext2D, view: BattleView, top: number, x0: number, x1: number): void {
+    if (!view.shells.length && !view.replay.length && !view.ghosts.length) return;
+    inFlight[0] = view.shells; inFlight[1] = view.replay; inFlight[2] = view.ghosts;
+    sim.skyMarks(inFlight, top, marks);
+    const z = view.cam.z, s = view.textScale;
+    if (markFont.scale !== s) { markFont.scale = s; markFont.css = `bold ${Math.round(10 * s)}px sans-serif`; }
+    for (const m of marks) {
+      const x = Math.max(x0 + 24 / z, Math.min(x1 - 24 / z, m.x));
+      c.save();
+      c.translate(x, top);
+      c.scale(1 / z, 1 / z); // a fixed size on screen, whatever the zoom
+      c.globalAlpha = 0.9;
+      c.fillStyle = '#ffe27a';
+      c.beginPath();
+      c.moveTo(0, 6);
+      c.lineTo(7, 17);
+      c.lineTo(-7, 17);
+      c.closePath();
+      c.fill();
+      c.font = markFont.css;
+      c.textAlign = 'center';
+      c.textBaseline = 'top';
+      c.fillText(String(Math.round(m.above)), 0, 20);
+      c.restore();
+    }
   }
 
   /* ---------- wind ---------- */
@@ -809,6 +847,45 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     }
   }
 
+  /* ---------- the scenery ---------- */
+  /* The hills past one edge of the field (side 0 left, 1 right), from column a
+     to b. The scenery dims away from the field: full colour at the seam, so the
+     edge never reads as a cut. Its gradients are kept per field width and its
+     heights in one growing buffer, so a frame allocates nothing here. */
+  let shades: { w: number; body: CanvasGradient[]; rim: CanvasGradient[] } | null = null;
+  let heights = new Float64Array(0);
+  function drawScenery(c: CanvasRenderingContext2D, hills: Hills, terrain: readonly number[], a: number, b: number, side: 0 | 1): void {
+    if (b <= a) return;
+    if (!shades || shades.w !== W) {
+      const shade2 = (edge: number, away: number, from: string, to: string): CanvasGradient => {
+        const g = c.createLinearGradient(edge, 0, away, 0);
+        g.addColorStop(0, from);
+        g.addColorStop(1, to);
+        return g;
+      };
+      shades = {
+        w: W,
+        body: [shade2(0, -160, '#7a4a1e', '#4a2e14'), shade2(W - 1, W + 159, '#7a4a1e', '#4a2e14')],
+        rim: [shade2(0, -160, '#00aa00', '#2f6a2f'), shade2(W - 1, W + 159, '#00aa00', '#2f6a2f')],
+      };
+    }
+    const n = Math.ceil((b - a) / 4) + 1;
+    if (heights.length < n) heights = new Float64Array(n * 2);
+    for (let i = 0; i < n; i++) heights[i] = sceneryY(hills, terrain, Math.min(b, a + i * 4));
+    c.fillStyle = shades.body[side]!;
+    c.beginPath();
+    c.moveTo(a, H + 70);
+    for (let i = 0; i < n; i++) c.lineTo(Math.min(b, a + i * 4), heights[i]!);
+    c.lineTo(b, H + 70);
+    c.fill();
+    c.strokeStyle = shades.rim[side]!;
+    c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(a, heights[0]!);
+    for (let i = 1; i < n; i++) c.lineTo(Math.min(b, a + i * 4), heights[i]!);
+    c.stroke();
+  }
+
   /* ---------- the frame ---------- */
   function frame(view: BattleView): void {
     const c = cv.getContext('2d');
@@ -836,15 +913,22 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.translate(-view.cam.cx, -view.cam.cy);
     // What the canvas shows through the camera: the scenery and the dirt fill all of it.
     const z = view.cam.z;
-    const sx0 = Math.floor(view.cam.cx + (rect.x0 - W / 2) / z) - 8, sx1 = Math.ceil(view.cam.cx + (rect.x1 - W / 2) / z) + 8;
-    const sy0 = view.cam.cy + (rect.y0 - H / 2) / z, sy1 = view.cam.cy + (rect.y1 - H / 2) / z + 8;
+    // A margin past the view's edges in world units, wide enough for the screen shake (up to 4 field units) at this zoom.
+    const m = Math.ceil((8 + 4 * view.shake) / z);
+    const sx0 = Math.floor(view.cam.cx + (rect.x0 - W / 2) / z) - m, sx1 = Math.ceil(view.cam.cx + (rect.x1 - W / 2) / z) + m;
+    const sy0 = view.cam.cy + (rect.y0 - H / 2) / z, sy1 = view.cam.cy + (rect.y1 - H / 2) / z + m;
     c.fillStyle = '#23233f';
+    // A tall sky (a portrait screen, or the camera pulled back) gets a high layer too: the same
+    // clouds mirrored across the field and set HIGH_CLOUDS higher, part of the world like the
+    // low ones, fading in as more of the sky comes into view.
+    const high = Math.max(0, Math.min(1, (-sy0 - 120) / 200)) * 0.6;
     for (const cl of view.clouds) {
-      for (const lift of sy0 < -120 ? [0, sy0 * 0.45] : [0]) { // a tall sky gets a high layer too
-        c.globalAlpha = lift ? 0.6 : 1;
+      for (let layer = 0; layer < (high > 0 ? 2 : 1); layer++) {
+        const x = layer ? W - cl.x - 22 * cl.s : cl.x, y = layer ? cl.y + HIGH_CLOUDS : cl.y, s = layer ? cl.s * 0.8 : cl.s;
+        c.globalAlpha = layer ? high : 1;
         c.beginPath();
-        c.ellipse(cl.x, cl.y + lift, 30 * cl.s, 10 * cl.s, 0, 0, Math.PI * 2);
-        c.ellipse(cl.x + 22 * cl.s, cl.y + 3 + lift, 20 * cl.s, 8 * cl.s, 0, 0, Math.PI * 2);
+        c.ellipse(x, y, 30 * s, 10 * s, 0, 0, Math.PI * 2);
+        c.ellipse(x + 22 * s, y + 3, 20 * s, 8 * s, 0, 0, Math.PI * 2);
         c.fill();
       }
     }
@@ -860,33 +944,10 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.fillStyle = '#2e1a08';
     c.fillRect(sx0, H - 2, sx1 - sx0, Math.max(0, sy1 - H + 2));
     // Scenery: the round's hills past both edges, dimmed; drawn, never hit.
+    // Two columns under the field's edges, so no hairline shows between the two.
     if (view.hills) {
-      const hills = view.hills;
-      for (const [a, b] of [[sx0, 0], [W - 1, sx1]] as const) {
-        if (b <= a) continue;
-        // The scenery dims away from the field: full colour at the seam, so the edge never reads as a cut.
-        const edge = a < 0 ? 0 : W - 1, away = a < 0 ? edge - 160 : edge + 160;
-        const body = c.createLinearGradient(edge, 0, away, 0);
-        body.addColorStop(0, '#7a4a1e');
-        body.addColorStop(1, '#4a2e14');
-        const rim = c.createLinearGradient(edge, 0, away, 0);
-        rim.addColorStop(0, '#00aa00');
-        rim.addColorStop(1, '#2f6a2f');
-        const xs: number[] = [], ys: number[] = [];
-        for (let x = a; x < b; x += 4) { xs.push(x); ys.push(sceneryY(hills, view.terrain, x)); }
-        xs.push(b); ys.push(sceneryY(hills, view.terrain, b));
-        c.fillStyle = body;
-        c.beginPath();
-        c.moveTo(a, H + 70);
-        xs.forEach((x, i) => c.lineTo(x, ys[i]!));
-        c.lineTo(b, H + 70);
-        c.fill();
-        c.strokeStyle = rim;
-        c.lineWidth = 3;
-        c.beginPath();
-        xs.forEach((x, i) => (i ? c.lineTo(x, ys[i]!) : c.moveTo(x, ys[i]!)));
-        c.stroke();
-      }
+      drawScenery(c, view.hills, view.terrain, sx0, 2, 0);
+      drawScenery(c, view.hills, view.terrain, W - 3, sx1, 1);
     }
     // The field's ground with its flat green rim, edge to edge (no cliff at either edge).
     c.fillStyle = '#7a4a1e';
@@ -999,6 +1060,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     for (const s of view.replay) drawShell(c, s, time);
     for (const s of view.ghosts) drawShell(c, s, time);
     c.globalAlpha = 1;
+    drawSkyMarks(c, view, sy0, sx0, sx1);
     drawWindStreaks(c, view);
     if (view.preview) drawPreview(view.preview, time);
     // Particles.

@@ -25,7 +25,7 @@ import { focusEndVeil } from './ui/endveil.tsx';
 import type { Board, RoomCard } from './standings.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
-import { H, ROOM_W, TUNE, carveCrater, clamp, facing, fallSeen, genTerrain, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
+import { H, ROOM_W, TUNE, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
 import type { Difficulty, ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
 import { turnLabel } from './turn-time.ts';
@@ -70,6 +70,8 @@ export interface RoomDeps {
   shownPower(t: GameTank): number;
   startBanner(text: string, done?: (() => void) | null): void;
   updateCamera(dt: number): void;
+  /** The clouds drift with the wind, wrapping out of the floor view's sight. */
+  driftClouds(dt: number): void;
   windText(): string;
   /** Keeps a room match only one human played on this browser's board. */
   saveLocal(level: Difficulty, row: LocalRow): Saved;
@@ -79,7 +81,7 @@ export function createRoom(deps: RoomDeps) {
   const {
     G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
     backToLobby, decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
-    renderShopReady, renderMenu, alertsOn, shownAngle, shownPower, startBanner, updateCamera, windText, saveLocal,
+    renderShopReady, renderMenu, alertsOn, shownAngle, shownPower, startBanner, updateCamera, driftClouds, windText, saveLocal,
   } = deps;
   /* A match only one human played goes on this browser's board, never the server's, once per match. */
   const keeper = roomLocalSaver(saveLocal, () => new Date().toISOString());
@@ -253,7 +255,7 @@ export function createRoom(deps: RoomDeps) {
     const wasMyTurn = MATCH.myTurn;
     MATCH.myTurn = room.phase === 'play' && !!mine && mine.hp > 0 && room.turn === net.seat;
     if (MATCH.myTurn && !wasMyTurn) turnAlert();
-    if (!G.ammo) G.ammo = { shell: Infinity, buck: 0, mortar: 0, rail: 0, nuke: 0 };
+    if (!G.ammo) G.ammo = { shell: Infinity };
     if (room.you) {
       const a: Record<string, number> = {};
       for (const w of tables.order) {
@@ -498,8 +500,9 @@ export function createRoom(deps: RoomDeps) {
   function netBlast(x: number, y: number, r: number, wkey: string): void {
     sfx.play('boom');
     const kick = fxImpact(G.fx, wkey, x, y, r);
-    G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : wkey === 'nuke' ? 0.9 : r > 40 ? 0.5 : 0.3));
-    G.booms.push({ x, y, r, wkey, t: 0, life: wkey === 'nuke' ? 0.8 : 0.5 });
+    // Rooms shake by blast size when the effect sets no shake.
+    G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : r >= 70 ? 0.9 : r > 40 ? 0.5 : 0.3));
+    G.booms.push({ x, y, r, wkey, t: 0, life: gfxLinger(tables.weapons[wkey]?.gfx) });
     carveCrater(G.terrain, x, y, r, H - 4);
   }
   /* Your turn while the tab is out of sight: the tab title says so, a soft
@@ -592,10 +595,7 @@ export function createRoom(deps: RoomDeps) {
     decayFx(dt);
     fallTanks(dt);
     releaseFalls();
-    for (const cl of G.clouds) {
-      cl.x += cl.v * dt;
-      if (cl.x - 40 > G.w) cl.x = -40;
-    }
+    driftClouds(dt);
     netReplay(dt);
     pumpDialogue(dt);
     G.banterT -= dt;

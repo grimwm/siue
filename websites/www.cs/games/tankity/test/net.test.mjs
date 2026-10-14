@@ -106,6 +106,37 @@ const bodyOf = entry => JSON.parse(entry.init.body);
   check('no-retry-on-other-errors', other.host.log.length === 1 && m2 === 'not your turn', `${other.host.log.length}, "${m2}"`);
 }
 
+// ---- hosting and joining spend the address's hourly allowance: a 429 is never retried, a 503 once ----
+{
+  const capped = { status: 429, body: { ok: false, error: 'too many rooms from here; try again later' } };
+  const busy = { status: 503, body: { ok: false, error: 'the room server is busy; try again' } };
+  const created = ok({ ok: true, code: 'NEW1', seat: 0, token: 't', csrf: 'c' });
+  for (const [what, go] of [['host', c => c.net.host('ABC', '', 'tank', 'normal')], ['join', c => c.net.join('FXT1', 'DEF', 'tank')]]) {
+    const spent = makeClient(() => capped);
+    let msg = '';
+    try { await go(spent); } catch (err) { msg = err.message; }
+    check(`${what}-429-not-retried`, spent.host.log.length === 1 && msg === 'too many rooms from here; try again later',
+      `${spent.host.log.length} requests, "${msg}"`);
+    check(`${what}-429-reads-as-the-server-says`, prettyRoomError(new Error(msg)) === msg, prettyRoomError(new Error(msg)));
+
+    let n = 0;
+    const once = makeClient(() => (++n === 1 ? busy : created));
+    await go(once);
+    check(`${what}-503-retried-once`, once.host.log.length === 2 && once.net.code === 'NEW1', `${once.host.log.length} requests`);
+
+    const down = makeClient(() => busy);
+    let m2 = '';
+    try { await go(down); } catch (err) { m2 = err.message; }
+    check(`${what}-503-gives-up-after-one-retry`, down.host.log.length === 2 && m2 === 'the room server is busy; try again',
+      `${down.host.log.length} requests, "${m2}"`);
+
+    let k = 0;
+    const thenCapped = makeClient(() => (++k === 1 ? busy : capped));
+    try { await go(thenCapped); } catch (_) { /* refused */ }
+    check(`${what}-503-then-429-stops`, thenCapped.host.log.length === 2, `${thenCapped.host.log.length} requests`);
+  }
+}
+
 // ---- transport trouble arrives in human words ----
 {
   const gone = makeClient(() => new Error('connection refused'));

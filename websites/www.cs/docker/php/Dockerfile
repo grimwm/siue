@@ -26,5 +26,8 @@ RUN sed -i \
     && grep -q '^listen = 9000$' /etc/php-fpm.d/www.conf \
     && ! grep -q '^listen.allowed_clients' /etc/php-fpm.d/www.conf
 
+# FPM clears its workers' environment; pass the settings compose.yaml sets.
+RUN echo 'env[TANKITY_ROOM_JOINS_PER_HOUR] = $TANKITY_ROOM_JOINS_PER_HOUR' >> /etc/php-fpm.d/www.conf
+
 EXPOSE 9000
 CMD ["php-fpm", "--nodaemonize"]

@@ -155,11 +155,17 @@ function solo_rate_take(PDO $db, string $client, string $kind, int $perHour, int
 }
 
 /* Takes one of an address's room_joins_per_hour() creates and joins, in its
-   own write transaction; false, and nothing taken, when they are spent. */
+   own write transaction; false, and nothing taken, when they are spent. A
+   spent allowance is answered from a plain read, so a flood past it never
+   waits on the write lock; under it, the take checks again as the writer. */
 function room_rate_take(string $client, int $now): bool
 {
     $perHour = room_joins_per_hour();
-    return tankity_tx(tankity_db(), fn(PDO $db): bool => solo_rate_take($db, $client, 'room', $perHour, $now));
+    $db = tankity_db();
+    if (solo_rate_used($db, $client, 'room', $now) >= $perHour) {
+        return false;
+    }
+    return tankity_tx($db, fn(PDO $db): bool => solo_rate_take($db, $client, 'room', $perHour, $now));
 }
 
 /* Deletes counts too old to matter, at most $limit; answers how many. */

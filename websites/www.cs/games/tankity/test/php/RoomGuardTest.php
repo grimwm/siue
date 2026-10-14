@@ -96,8 +96,33 @@ final class RoomGuardTest extends TestCase
         $this->assertSame(1, solo_rate_used($db, $client, 'room', $now + 3600 + SOLO_RATE_SLOT * 7));
     }
 
+    public function testASpentAllowanceIsRefusedWithoutTheWriteLock(): void
+    {
+        // A flood past the allowance must never queue on the writer: another
+        // request holds the write lock, and the refusal still comes at once.
+        putenv('TANKITY_ROOM_JOINS_PER_HOUR=1');
+        $now = 1_800_000_000;
+        $this->assertTrue(room_rate_take('flood', $now));
+        $other = new PDO('sqlite:' . tankity_data_dir() . '/' . TANKITY_DB_FILE, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $other->exec('BEGIN IMMEDIATE');
+        try {
+            $t = microtime(true);
+            $this->assertFalse(room_rate_take('flood', $now + 1));
+            $this->assertLessThan(0.5, microtime(true) - $t, 'refused from a read, not after waiting on the lock');
+        } finally {
+            $other->exec('ROLLBACK');
+        }
+        $this->assertTrue(room_rate_take('someone-else', $now + 1), 'under the allowance it is still charged');
+    }
+
+    /** The room allowance spent so far, across every address. */
+    private function roomCharges(): int
+    {
+        return (int) tankity_db()->query("SELECT COALESCE(SUM(n), 0) FROM solo_rate WHERE kind = 'room'")->fetchColumn();
+    }
+
     /** @return array{int, array} the status and the JSON answer of rooms.php as a request */
-    private function call(string $action, array $body, array $server = []): array
+    private function call(string $action, array $body, array $server = [], array $env = []): array
     {
         $script = 'register_shutdown_function(static function () { while (ob_get_level()) { ob_end_flush(); } echo "\n", http_response_code(); });'
             . 'require ' . var_export(__DIR__ . '/scores-stdin.php', true) . ';'
@@ -107,7 +132,7 @@ final class RoomGuardTest extends TestCase
             . 'require ' . var_export(dirname(__DIR__, 2) . '/rooms.php', true) . ';';
         $proc = proc_open([PHP_BINARY, '-d', 'zlib.output_compression=0', '-r', $script],
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null,
-            ['TANKITY_DATA_DIR' => $this->dir, 'TANKITY_ROOM_JOINS_PER_HOUR' => '2'] + getenv());
+            $env + ['TANKITY_DATA_DIR' => $this->dir, 'TANKITY_ROOM_JOINS_PER_HOUR' => '2'] + getenv());
         fwrite($pipes[0], json_encode($body));
         fclose($pipes[0]);
         $out = stream_get_contents($pipes[1]);
@@ -136,5 +161,22 @@ final class RoomGuardTest extends TestCase
         $room = room_decode($q->fetchColumn());
         $this->assertSame(['HST', 'GST', 'OTH'], array_values(array_filter(array_map(
             static fn(array $s): ?string => ($s['human'] ?? false) ? $s['initials'] : null, $room['seats']))));
+    }
+
+    public function testACreateRefusedForAFullServerIsNotCharged(): void
+    {
+        // A lab clicking Host while every room is taken keeps its allowance for the moment one frees.
+        $env = ['TANKITY_MAX_ROOMS' => '1'];
+        [$st, $host] = $this->call('create', ['initials' => 'hst'], [], $env);
+        $this->assertSame(200, $st, json_encode($host));
+        for ($i = 0; $i < 3; $i++) {
+            [$st, $out] = $this->call('create', ['initials' => 'two'], [], $env);
+            $this->assertSame(409, $st, json_encode($out));
+            $this->assertStringContainsString('every room is taken', $out['error']);
+        }
+        $this->assertSame(1, $this->roomCharges(), 'only the create that made a room was charged');
+        // Everything else is still charged: a join refused for a bad code costs one.
+        $this->assertSame(422, $this->call('join', ['code' => '??', 'initials' => 'gst'], [], $env)[0]);
+        $this->assertSame(2, $this->roomCharges());
     }
 }

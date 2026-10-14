@@ -64,6 +64,11 @@ export const MATCH_POLL_MS = 1600;
 export const LOBBY_POLL_MS = 2000;
 export const RETRY_429_MS = 180;
 export const RETRY_429_TRIES = 3;
+/** Hosting and joining each spend one of the address's hourly allowance on the
+ * server, which a whole campus NAT shares: their 429 is that allowance spent
+ * and is never retried, and a busy 503 is retried once. */
+const CHARGED_ACTIONS: ReadonlySet<string> = new Set(['create', 'join']);
+const CHARGED_RETRIES_503 = 1;
 
 /** The turn clock (rooms.php ROOM_TURN_SECS): its owner is alerted with 30
  * seconds left and everyone sees the last 10 counted down. */
@@ -236,8 +241,9 @@ export class RoomClient {
 
   /** POST one action, typed by protocol.ts. The seat's code, token and csrf
    * ride on every call. The server spaces one seat's acts 150 ms apart, so a
-   * 429 waits a beat and goes again, up to three times. Throws the server's
-   * line on an error reply. */
+   * 429 waits a beat and goes again, up to three times (never for create or
+   * join, which spend the hourly allowance: a 503 once, a 429 not at all).
+   * Throws the server's line on an error reply. */
   async post<A extends PostAction>(action: A, payload: PostBodies[A]): Promise<PostReplies[A]> {
     const asksRoom = ROOM_ANSWERS.has(action);
     const send = () => this.fetchJson('rooms.php?action=' + encodeURIComponent(action), {
@@ -249,7 +255,11 @@ export class RoomClient {
     });
     let { res, data } = await send();
     // 503 is a room busy past the server's lock wait: worth the same retry.
-    for (let tries = 0; (res.status === 429 || res.status === 503) && tries < RETRY_429_TRIES; tries++) {
+    const charged = CHARGED_ACTIONS.has(action);
+    const retries = (status: number): number => charged
+      ? (status === 503 ? CHARGED_RETRIES_503 : 0)
+      : (status === 429 || status === 503 ? RETRY_429_TRIES : 0);
+    for (let tries = 0; tries < retries(res.status); tries++) {
       await new Promise<void>(r => this.env.setTimeout(r, RETRY_429_MS));
       ({ res, data } = await send());
     }

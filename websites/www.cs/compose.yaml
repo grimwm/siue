@@ -9,6 +9,11 @@
 services:
   www-cs-php:
     build: docker/php
+    # Local and CI stacks only (the host has no compose): every make test and
+    # e2e run creates and joins rooms from the same two addresses, so the
+    # per-address hourly allowance (300 on the host) is lifted here.
+    environment:
+      TANKITY_ROOM_JOINS_PER_HOUR: "100000"
     volumes:
       - ./:/var/www/html
       # Outside the docroot: the probe and lists docker/check-parity.sh uses.

@@ -237,13 +237,9 @@ if ($action === 'create' && $method === 'POST') {
     if (!room_origin_ok()) {
         room_json_out(403, ['error' => 'bad origin']);
     }
-    room_rate_gate();
-    $initials = room_valid_initials($body['initials'] ?? null);
-    if ($initials === null) {
-        room_json_out(422, ['error' => 'initials must be 3 letters, kept clean']);
-    }
+    // A full server is answered from a plain read before anything is charged:
+    // a lab clicking Host while every room is taken keeps its allowance.
     try {
-        room_sweep();
         $max = room_max_rooms();
         $full = room_count() >= $max;
     } catch (Throwable $e) {
@@ -251,6 +247,18 @@ if ($action === 'create' && $method === 'POST') {
     }
     if ($full) {
         room_json_out(409, ['error' => "every room is taken ($max / $max). Try again later."]);
+    }
+    room_rate_gate();
+    $initials = room_valid_initials($body['initials'] ?? null);
+    if ($initials === null) {
+        room_json_out(422, ['error' => 'initials must be 3 letters, kept clean']);
+    }
+    // Idle rooms never counted toward the cap; the sweep only drops their rows.
+    // Two creates racing for the last place are settled by room_register below.
+    try {
+        room_sweep();
+    } catch (Throwable $e) {
+        room_store_fail($e);
     }
     $map = null;
     if (isset($body['map']) && trim((string) $body['map']) !== '') {

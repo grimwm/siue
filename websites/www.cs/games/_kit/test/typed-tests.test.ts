@@ -26,11 +26,6 @@ const ALLOW: Allow = {
   mjs: [
     'crete/test/audio.test.mjs',
     'crete/test/bots.test.mjs',
-    'crete/test/engine.test.mjs',
-    'crete/test/maze-rule.test.mjs',
-    'crete/test/maze-sweep.test.mjs',
-    'crete/test/rules.test.mjs',
-    'crete/test/smoke.test.mjs',
     'crete/test/ui.test.mjs',
     'cylon/test/abilities.test.mjs',
     'cylon/test/audio.test.mjs',
@@ -112,17 +107,15 @@ const ALLOW: Allow = {
     'tankity/test/wide-field.test.mjs',
   ],
   program: [
-    'crete',
     'cylon',
     'tankity',
   ],
   runner: [
-    'crete/test.sh',
     'cylon/test.sh',
     'tankity/test.sh',
   ],
   check: [
-    'crete/test/engine.test.mjs',
+    'crete/test/engine.test.ts',
     'cylon/test/abilities.test.mjs',
     'cylon/test/field.test.mjs',
     'cylon/test/playfield.test.mjs',

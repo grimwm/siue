@@ -6,19 +6,20 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as E from '../src/engine.ts';
+import type { Judge } from '../src/engine.ts';
 import { dasher, strategist } from '../src/bots.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 
 /** A judge that plays nothing: each attempt's verdict comes from `table(attempt)`. */
-function judge(table) {
-  return (seed, attempt, bot) => {
+function judge(table: (attempt: number) => { met: boolean; closest: number; won: boolean }): Judge {
+  return (_seed, attempt, bot) => {
     const row = table(attempt);
     return bot === dasher ? { won: false, met: row.met, closest: row.closest } : { won: row.won, met: false, closest: 99 };
   };
 }
 
 function harness() {
-  const log = [];
+  const log: string[] = [];
   const { timers, advance, pending } = manualClock();
   const game = E.createGame({ say: text => log.push(text), sfx() {}, render() {}, showEnd() {}, timers });
   return { game, G: game.G, log, advance, pending };
@@ -30,7 +31,7 @@ test('the first attempt the dasher meets and the strategist wins is the maze', (
 });
 
 test('with no passing attempt, it falls back to the winnable one whose dasher came closest, earliest on a tie', () => {
-  const closest = { 4: 3, 9: 2, 12: 2, 30: 5 };
+  const closest: Record<number, number> = { 4: 3, 9: 2, 12: 2, 30: 5 };
   const pick = E.generateRun('s', judge(a => ({ met: false, closest: closest[a] ?? 1, won: a in closest })));
   assert.deepEqual([pick.attempt, pick.fallback], [9, true]);
 });
@@ -86,7 +87,7 @@ test('T stops when there is no route, instead of spinning', () => {
   h.G.pickups = new Map();
   h.G.player = { r: 5, c: 5 };
   h.G.foe = { r: 12, c: 2 };
-  h.G.walls[E.EXIT.r][E.EXIT.c] = true;
+  h.G.walls[E.EXIT.r]![E.EXIT.c] = true;
   h.game.toggleAuto();
   h.advance(350);
   assert.equal(h.G.auto, false);
@@ -95,7 +96,7 @@ test('T stops when there is no route, instead of spinning', () => {
 });
 
 /** Border walls only, exit at (5, 13): the board the bot tests use. */
-function openBoard(h, player, foe) {
+function openBoard(h: ReturnType<typeof harness>, player: E.Cell, foe: E.Cell) {
   const G = h.G;
   G.walls = Array.from({ length: E.ROWS }, (_, r) => Array.from({ length: E.COLS }, (_, c) => r === 0 || c === 0 || r === E.ROWS - 1 || c === E.COLS - 1));
   G.safe = new Set();
@@ -115,7 +116,7 @@ test('T started mid-run, with the way shut, stops as stuck and leaves no timer',
   h.game.tryMove(1, 0);
   assert.ok(h.G.turns > 0);
   openBoard(h, { r: 5, c: 5 }, { r: 12, c: 2 });
-  h.G.walls[5][13] = true;
+  h.G.walls[5]![13] = true;
   h.game.toggleAuto();
   h.advance(350 * 3);
   assert.equal(h.G.auto, false);

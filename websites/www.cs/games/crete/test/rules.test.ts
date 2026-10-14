@@ -6,14 +6,14 @@ import * as E from '../src/engine.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 
 function harness() {
-  const log = [];
+  const log: string[] = [];
   const { timers } = manualClock();
   const game = E.createGame({ say: text => log.push(text), sfx() {}, render() {}, showEnd() {}, timers });
   game.newRun('rules');
   return { game, G: game.G, log };
 }
 /** Border walls only: no safe zones, barriers or loot. */
-function arena(G, player, foe) {
+function arena(G: E.State, player: E.Cell, foe: E.Cell) {
   G.walls = Array.from({ length: E.ROWS }, (_, r) => Array.from({ length: E.COLS }, (_, c) => r === 0 || c === 0 || r === E.ROWS - 1 || c === E.COLS - 1));
   G.safe = new Set();
   G.barriers = new Set();
@@ -22,7 +22,7 @@ function arena(G, player, foe) {
   G.foe = { ...foe };
   G.fuses = 0;
 }
-const wallAcross = (G, c) => { for (let r = 1; r < E.ROWS - 1; r++) G.walls[r][c] = true; };
+const wallAcross = (G: E.State, c: number) => { for (let r = 1; r < E.ROWS - 1; r++) G.walls[r]![c] = true; };
 
 test('waiting spends a turn in place, the creature moves, and the run counts it', () => {
   const h = harness();
@@ -71,7 +71,7 @@ test('a route crosses a barrier the player holds a fuse for', () => {
   const h = harness();
   arena(h.G, { r: 7, c: 3 }, { r: 1, c: 1 });
   wallAcross(h.G, 7);
-  h.G.walls[7][7] = true;
+  h.G.walls[7]![7] = true;
   h.G.barriers.add(E.key(7, 7));
   h.G.exit = { r: 7, c: 11 };
   assert.deepEqual(h.game.goalPath(), [], 'no fuse held and none to fetch: no route');
@@ -82,13 +82,13 @@ test('a route crosses a barrier the player holds a fuse for', () => {
   assert.ok(route.some(p => p.r === 7 && p.c === 7), 'through the barrier');
 });
 
-const at = (route, r, c) => route.findIndex(p => p.r === r && p.c === c);
+const at = (route: E.Cell[], r: number, c: number) => route.findIndex(p => p.r === r && p.c === c);
 
 test('without a fuse the route is one trip: the fuse first, then through the barrier to the exit', () => {
   const h = harness();
   arena(h.G, { r: 7, c: 3 }, { r: 1, c: 1 });
   wallAcross(h.G, 7);
-  h.G.walls[7][7] = true;
+  h.G.walls[7]![7] = true;
   h.G.barriers.add(E.key(7, 7));
   h.G.exit = { r: 7, c: 11 };
   h.G.pickups.set(E.key(2, 2), 'fuse');
@@ -100,7 +100,7 @@ test('without a fuse the route is one trip: the fuse first, then through the bar
 test('an open way to the exit is preferred to one through a barrier', () => {
   const h = harness();
   arena(h.G, { r: 7, c: 3 }, { r: 1, c: 1 });
-  h.G.walls[7][7] = true;
+  h.G.walls[7]![7] = true;
   h.G.barriers.add(E.key(7, 7));
   h.G.exit = { r: 7, c: 11 };
   h.G.fuses = 1;
@@ -136,7 +136,7 @@ test('starting a run on an attempt plays that maze from that run stream', () => 
 });
 
 /** Two walls across the arena, each shut by one barrier on row 7; the exit is behind both. */
-function twoBarriers(h) {
+function twoBarriers(h: ReturnType<typeof harness>) {
   arena(h.G, { r: 7, c: 3 }, { r: 1, c: 1 });
   wallAcross(h.G, 5);
   wallAcross(h.G, 7);
@@ -147,7 +147,7 @@ function twoBarriers(h) {
 test('holding one fuse, a longer way round that crosses one barrier beats going through two', () => {
   const h = harness();
   twoBarriers(h);
-  h.G.walls[1][7] = false;
+  h.G.walls[1]![7] = false;
   h.G.pickups.set(E.key(2, 2), 'fuse');
   h.G.fuses = 1;
   const route = h.game.goalPath();
@@ -178,7 +178,7 @@ test('a spare fuse a few steps off the way beats a long way round that crosses o
   wallAcross(h.G, 5);
   wallAcross(h.G, 7);
   for (const c of [5, 7]) h.G.barriers.add(E.key(7, c));
-  h.G.walls[13][7] = false; // the gap is a long walk away
+  h.G.walls[13]![7] = false; // the gap is a long walk away
   h.G.exit = { r: 7, c: 11 };
   h.G.pickups.set(E.key(8, 4), 'fuse'); // two steps from the first barrier
   h.G.fuses = 1;

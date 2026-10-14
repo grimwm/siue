@@ -46,7 +46,7 @@ function shopFor(on: boolean, seed = 'shop') {
   const first = (): GameTank => { const t = G.tanks[0]; assert.ok(t, 'the deal has no tank yet'); return t; };
   const shop = createShop({
     G, $: () => null, tables, net: { on, seats: [], readyNow: () => false, shopClockLeft: () => 0, closeClockLeft: () => null },
-    sfx: { play() {} }, me: first, touch: false, keyHint: () => '',
+    sfx: { play() {} }, me: first, touch: () => false, keyHint: () => '',
     say: (t) => { lines.push(t); }, advance() {}, render() {}, renderHUD() {}, refreshNavHints() {},
     drawShellIcon() {}, drawGearIcon() {}, openPreview() {}, nextRound() {}, openLeaveVeil() {},
     netBuy: (it, q) => { netBuys.push([it.g, q]); }, board: () => null, preloadFx: keys => { preloads.push([...keys]); },

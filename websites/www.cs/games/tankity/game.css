@@ -462,8 +462,6 @@ button.btn-leave[hidden] { display: none; }
 .touch-only { display: none; }
 .touch .touch-only { display: revert; }
 .touch .key, .touch .keys-only, .touch .nav-hint { display: none; }
-/* Key hints, like the key chips, are for a fine pointer: a phone has no keys. */
-@media (pointer: coarse) { .nav-hint { display: none; } }
 
 /* Overlay title bars: title and close on top, the panel's keys in a grid
    below. They stay pinned while the panel scrolls. Each container sets its

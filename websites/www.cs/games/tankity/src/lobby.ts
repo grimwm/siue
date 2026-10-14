@@ -69,6 +69,8 @@ export interface LobbyDeps {
   /** The Menu's Difficulty: a hosted room takes it for good. */
   difficulty: Pick<DifficultySetting, 'get'>;
   unlock(): void;
+  /** Full screen on a touch device, asked inside the tap that hosts or joins (optional: tests omit it). */
+  playFullscreen?(): void;
   say(text: string, tone?: string): void;
   keyHint: KeyHintFn;
   /** The seats this browser holds. */
@@ -100,7 +102,7 @@ export interface LobbyDeps {
 
 export function createLobby(deps: LobbyDeps) {
   const {
-    G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, games, steppedOut, netEvent, seatName, closeLobbyVeil,
+    G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, playFullscreen, say, keyHint, seats, games, steppedOut, netEvent, seatName, closeLobbyVeil,
     closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, initials, initialsSaved, hideShop, paintHud, refreshNavHints, renderMenu,
     renderShop,
   } = deps;
@@ -163,6 +165,7 @@ export function createLobby(deps: LobbyDeps) {
       onHost: letters => {
         const who = lobbyInitials(letters);
         if (who === null) return;
+        playFullscreen?.();
         unlock(); sfx.play('click');
         hostRoom(who, LOBBY.mapId);
       },
@@ -171,6 +174,7 @@ export function createLobby(deps: LobbyDeps) {
         if (who === null) return;
         const code = rawCode.trim().toUpperCase();
         if (!/^[A-Z0-9]{4}$/.test(code)) { lobbySay('Room codes are 4 letters or digits. Read it back and retry.'); return; }
+        playFullscreen?.();
         unlock(); sfx.play('click');
         joinRoom(code, who);
       },

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
-  FALLBACK_KEYS, buildKeymap, lookupKey, keycap, createInput, stepArm, Held, ARM_RATE, touchOnly, gridCommand,
+  FALLBACK_KEYS, buildKeymap, lookupKey, keycap, createInput, stepArm, Held, ARM_RATE, touchOnly, physicalKey, gridCommand,
 } from '../src/input.ts';
 import type { ArmStep, HoldButton, KeyContext, KeyDefs, KeyLike } from '../src/input.ts';
 
@@ -41,7 +41,8 @@ await test('fallback-matches-game-json', () => { assert.ok(sorted(FALLBACK_KEYS)
 // ---- touch detection: coarse pointer and no fine one ----
 const mq = (coarse: boolean, fine: boolean) => (q: string) => ({ matches: q === '(pointer: coarse)' ? coarse : fine });
 await test('touch-phone', () => { assert.ok(touchOnly(mq(true, false)) === true); });
-await test('touch-laptop-with-touchscreen-is-not', () => { assert.ok(touchOnly(mq(true, true)) === false); });
+// A stylus (the S Pen) makes any-pointer: fine match on a phone whose primary pointer is coarse.
+await test('touch-phone-with-a-stylus-is-touch', () => { assert.ok(touchOnly(mq(true, true)) === true); });
 await test('touch-desktop', () => { assert.ok(touchOnly(mq(false, true)) === false); });
 await test('touch-no-matchmedia', () => { assert.ok(touchOnly(undefined) === false); });
 
@@ -269,11 +270,11 @@ function rig(extraCtx = {}) {
   await test('hint-nth-token', () => { assert.ok(r.input.hint('global', 'fire', 0) === 'Space' && r.input.hint('global', 'fire', 2) === 'Ctrl' && r.input.hint('global', 'nope') === ''); });
 }
 {
-  // Touch screens bind no keys, but still drop held buttons on blur.
+  // Touch screens route no keys (the listener waits for a real one), and still drop held buttons on blur.
   const input = createInput({ touch: true });
   const types: string[] = [];
   input.bind({ addEventListener: (type: string) => types.push(type) });
-  await test('touch-binds-no-keys', () => { assert.ok(types.join() === 'blur', types.join()); });
+  await test('touch-routes-no-keys-until-a-real-one', () => { assert.ok(types.includes('keydown') && types.includes('blur'), types.join()); });
 }
 {
   // Hold buttons: down holds (and wakes audio), up and leave release.
@@ -369,3 +370,41 @@ function rig(extraCtx = {}) {
   await test('drive-keys-do-not-move-the-arm', () => { assert.ok((() => { const s = stepArm(held, 1, { angle: 62, power: 55 }, 1); return s.angle === 62 && s.power === 55 && s.idle; })()); });
 }
 
+
+// ---- a real keyboard key brings the keys back on a touch device ----
+await test('physical-key-is-trusted', () => { assert.ok(physicalKey({ key: 'j', isTrusted: true }) === true); });
+await test('physical-key-not-synthetic', () => { assert.ok(physicalKey({ key: 'j', isTrusted: false }) === false); });
+await test('physical-key-not-on-screen-keyboard', () => {
+  assert.ok(physicalKey({ key: 'Unidentified', isTrusted: true }) === false);
+  assert.ok(physicalKey({ key: 'Process', isTrusted: true }) === false);
+});
+await test('physical-key-not-typed-into-a-field', () => {
+  assert.ok(physicalKey({ key: 'a', isTrusted: true, target: { tagName: 'INPUT' } }) === false);
+  assert.ok(physicalKey({ key: 'a', isTrusted: true, target: { tagName: 'BODY' } }) === true);
+});
+await test('physical-key-not-composing', () => { assert.ok(physicalKey({ key: 'a', isTrusted: true, isComposing: true }) === false); });
+
+function boundTouch() {
+  const log: string[] = [];
+  const on: Record<string, (e: KeyLike) => void> = {};
+  const input = createInput({ touch: true, onKeyboard: () => log.push('keyboard') });
+  input.register({ music: () => { log.push('music'); } });
+  input.bind({ addEventListener: (type: string, fn: (e: KeyLike) => void) => { on[type] = fn; } });
+  const press = (e: KeyLike) => { const fn = on['keydown']; assert.ok(fn); fn(e); };
+  return { log, press };
+}
+await test('touch-ignores-on-screen-keyboard-keys', () => {
+  const { log, press } = boundTouch();
+  press({ key: 'Unidentified', code: '', isTrusted: true, preventDefault() {} });
+  press({ key: 'm', code: 'KeyM', isTrusted: false, preventDefault() {} });
+  assert.deepEqual(log, []);
+});
+await test('touch-real-keydown-turns-keys-on-for-good', () => {
+  const { log, press } = boundTouch();
+  press({ key: 'x', code: 'KeyX', isTrusted: true, preventDefault() {} });
+  assert.deepEqual(log, ['keyboard']);
+  press({ key: 'm', code: 'KeyM', isTrusted: true, preventDefault() {} });
+  press({ key: 'x', code: 'KeyX', isTrusted: true, preventDefault() {} });
+  assert.deepEqual(log, ['keyboard', 'music']);
+});
+await test('desktop-mouse-is-keys', () => { assert.ok(touchOnly(mq(false, true)) === false); });

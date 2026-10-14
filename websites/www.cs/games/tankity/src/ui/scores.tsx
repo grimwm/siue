@@ -1,7 +1,8 @@
-/* The scores overlay: one difficulty's all-time board, best first, with this
- * player's runs marked, a switcher to the other difficulties, and where the list
- * came from. The game loads the list and hands in finished lines; this draws
- * them. The section element (#report-overlay) stays in index.html.
+/* The scores overlay: a switcher between the difficulties and two lists for
+ * the one on screen, best first: the online board of room matches two or more
+ * humans played, with this player's runs marked, and this browser's own board
+ * (solo matches and one-human rooms), the run just saved marked. The game
+ * loads the lists and hands in finished lines; this draws them. The section element (#report-overlay) stays in index.html.
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
@@ -18,11 +19,13 @@ export interface ScoresProps {
   level: Difficulty;
   /** The player picked another board. */
   onLevel: (level: Difficulty) => void;
-  /** One line per run, best first, `mine` when it is this player's; an empty
+  /** The online board: one line per run, best first, `mine` when it is this player's; an empty
    *  list says nobody has filed; null is a list not loaded yet and shows nothing. */
   rows: { text: string; mine: boolean }[] | null;
-  /** Where the list came from, or empty. */
+  /** Where the online list came from, or empty. */
   note: string;
+  /** This browser's board for the level, best first, `mine` on the run just saved; null when storage is blocked. */
+  local: { text: string; mine: boolean }[] | null;
 }
 
 export function Scores(p: ScoresProps) {
@@ -38,12 +41,21 @@ export function Scores(p: ScoresProps) {
             onClick={() => { if (p.level !== lv) p.onLevel(lv); }}>{DIFFICULTY_NAMES[lv]}</button>
         ))}
       </div>
-      <ol id="scores" class="scores">
+      <h3 id="scores-online-h" class="scores-h">Online · room matches with 2+ players</h3>
+      <ol id="scores" class="scores" aria-labelledby="scores-online-h">
         {p.rows !== null && (p.rows.length === 0
           ? <li>No after-action reports filed yet. Be the first legend.</li>
           : p.rows.map((r, i) => <li key={i} class={r.mine ? 'mine' : undefined}>{r.text}{r.mine && <span class="sr-only"> (yours)</span>}</li>))}
       </ol>
       <p id="scores-note" class="hint">{p.note}</p>
+      <h3 id="scores-local-h" class="scores-h">This browser</h3>
+      <ol id="scores-local" class="scores" aria-labelledby="scores-local-h">
+        {p.local === null
+          ? <li>This browser can't keep scores (storage is blocked).</li>
+          : p.local.length === 0
+            ? <li>No runs saved in this browser on {DIFFICULTY_NAMES[p.level]} yet.</li>
+            : p.local.map((r, i) => <li key={i} class={r.mine ? 'mine' : undefined}>{r.text}{r.mine && <span class="sr-only"> (just saved)</span>}</li>)}
+      </ol>
     </KeyHints.Provider>
   );
 }

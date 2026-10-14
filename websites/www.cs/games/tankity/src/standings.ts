@@ -3,6 +3,8 @@
  * The room's match-end rule (server/rules.php room_match_outcome() is the
  * same, pinned by the 'match-end' sim vectors) and the rows the scoreboards show. Pure: seats and rounds in, rows out. */
 import { DIFFICULTY_NAMES } from './difficulty.ts';
+import { LOCAL_KEEP, coerceInitials } from './local-board.ts';
+import type { LocalRow, Saved } from './local-board.ts';
 import type { RoomSeat, RoomSnapshot } from './protocol.ts';
 import type { Difficulty } from './sim.ts';
 
@@ -29,11 +31,52 @@ export function filedLine(rank: number | null, score: number, difficulty: Diffic
   return rank !== null ? `Filed · #${rank} all-time on ${on}` : `Filed · ${fmt(score)} pts, outside the best ${BOARD_KEEP} on ${on}`;
 }
 
-/** The filed line of a room card: where the score went, why it did not, or nothing while the server has not tried. */
-export function roomFiledLine(you: { filed: boolean; filedFailed: boolean; filedRank: number | null; score: number } | undefined, difficulty: Difficulty): string | null {
+/** Where a run kept in this browser went: its place on this browser's board, or why it was not kept. */
+export function localLine(saved: Saved, score: number, difficulty: Difficulty): string {
+  const on = DIFFICULTY_NAMES[difficulty];
+  if (!saved.kept) return "This browser can't keep scores (storage is blocked).";
+  return saved.place !== null ? `Saved on this browser's board · #${saved.place} on ${on}`
+    : `Saved in this browser · ${fmt(score)} pts, outside its best ${LOCAL_KEEP} on ${on}`;
+}
+
+/** The filed line of a room card: where the score went, why it did not, or nothing while the server has not tried.
+ *  A match only one human played is kept in this browser (`filedLocal`); `local` is how that save went, null before it. */
+export function roomFiledLine(
+  you: { filed: boolean; filedFailed: boolean; filedRank: number | null; filedLocal?: boolean; score: number } | undefined,
+  difficulty: Difficulty, local: Saved | null = null,
+): string | null {
   if (!you) return null;
+  if (you.filedLocal) return local ? localLine(local, you.score || 0, difficulty) : null;
   if (you.filed) return filedLine(you.filedRank, you.score || 0, difficulty);
   return you.filedFailed ? "Couldn't file your score: the score server had a problem. It is not kept in this browser." : null;
+}
+
+/** What a room snapshot tells a one-human match's save. */
+type RoomForLocal = Pick<RoomSnapshot, 'code' | 'difficulty'> & {
+  matchId?: string | null;
+  seats: readonly Pick<RoomSeat, 'seat' | 'name' | 'roundsWon'>[];
+  you?: { filedLocal?: boolean; score: number };
+};
+
+/** Saves a room match only one human played on this browser's board, once per match: the first
+ *  snapshot whose `you.filedLocal` is set saves it, by `room:<code>:<matchId>`, so a rejoin, a reload or
+ *  another poll never saves it twice. `keep` answers how the save went for this snapshot's match, null
+ *  when it is not one this browser keeps. */
+export function roomLocalSaver(save: (level: Difficulty, row: LocalRow) => Saved, now: () => string) {
+  let last: { ref: string; saved: Saved } | null = null;
+  return {
+    keep(room: RoomForLocal, seat: number): Saved | null {
+      if (!room.you?.filedLocal || !room.matchId) return null;
+      const ref = `room:${room.code}:${room.matchId}`;
+      if (last?.ref === ref) return last.saved;
+      const me = room.seats.find(s => s.seat === seat);
+      const saved = save(room.difficulty, {
+        initials: coerceInitials(me?.name ?? ''), score: room.you.score || 0, rounds: me?.roundsWon ?? 0, seed: '', at: now(), kind: 'room', ref,
+      });
+      last = { ref, saved };
+      return saved;
+    },
+  };
 }
 
 /** One finished solo round. */

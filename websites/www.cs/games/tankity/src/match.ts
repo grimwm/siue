@@ -23,9 +23,10 @@ import {
   gauss, H, GRAV, TUNE, clamp, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
   anyTankFalling as simAnyTankFalling,
 } from './sim.ts';
-import type { Blast, Shell } from './sim.ts';
+import type { Blast, Difficulty, Shell } from './sim.ts';
 import { snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloOneUps, soloSettle } from './solo.ts';
-import { endCardBack, soloBoard } from './standings.ts';
+import { endCardBack, localLine, soloBoard } from './standings.ts';
+import type { LocalRow, Saved } from './local-board.ts';
 import type { Board } from './standings.ts';
 import { renderEndVeil as drawEndVeil, focusEndVeil } from './ui/endveil.tsx';
 import type { EndVeilProps } from './ui/endveil.tsx';
@@ -87,6 +88,10 @@ export interface MatchDeps {
   netNext(want?: boolean): void;
   /** Play again: the room goes back to its lobby with its seats. */
   netAgain(): void;
+  /** The player's initials, which a finished solo match is saved under. */
+  initials(): string;
+  /** Keeps a finished match on this browser's board. */
+  saveLocal(level: Difficulty, row: LocalRow): Saved;
 }
 
 export function createMatch(deps: MatchDeps) {
@@ -94,7 +99,7 @@ export function createMatch(deps: MatchDeps) {
     field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
     render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closeGuns, closePreview, hideShop, openShop,
     endTutorial, maybeStartTutorial, tutorialFired, backToTitle, netFire, netLeave,
-    netNext, netAgain,
+    netNext, netAgain, initials, saveLocal,
   } = deps;
 
   function resetMatch(seedStr?: string): void {
@@ -416,7 +421,12 @@ export function createMatch(deps: MatchDeps) {
     refreshNavHints();
     if (won) sfx.play('win'); else sfx.play('lose');
     say(text, won ? 'good' : 'bad');
-    END.filed = null;
+    // A finished match is saved on this browser's board: no form, no button, no server.
+    const at = new Date().toISOString();
+    const saved = saveLocal(G.difficulty, {
+      initials: initials(), score: G.score, rounds: G.roundsWon, seed: G.seed, at, kind: 'solo', ref: `solo:${G.seed}:${at}`,
+    });
+    END.filed = localLine(saved, G.score, G.difficulty);
     const veil = $('end-veil');
     if (veil) {
       END.kicker = won ? 'Match over' : 'Match lost';

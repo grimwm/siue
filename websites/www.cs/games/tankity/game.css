@@ -810,7 +810,8 @@ body { height: 100dvh; display: flex; flex-direction: column; }
 }
 
 /* The Scores overlay: the player's own rows in gold, and a board switcher with full-size touch targets. */
-#scores li.mine { color: var(--gold, #ffc93c); font-weight: 700; }
+.scores li.mine { color: var(--gold, #ffc93c); font-weight: 700; }
+.scores-h { margin: 0.8rem 0 0.2rem; font-size: 0.95rem; }
 .scores-levels { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
 .scores-levels button { min-height: 44px; min-width: 44px; padding: 0 14px; }
 .scores-levels button[aria-pressed="true"] { background: var(--gold, #ffc93c); color: #14183a; }

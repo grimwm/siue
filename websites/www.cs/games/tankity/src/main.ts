@@ -412,9 +412,11 @@ const { HUD, paintHud, windText, renderHUD } = createHud({
 const { updateCamera, shownAngle, shownPower, render } = createView({
   G, tables, net, MATCH, replay, FX, fxSet, cur, textScale: () => textScale(),
 });
-/* The high scores (src/scores.ts). */
-const { renderScoresOverlay, openScores } = createScores({
-  $, keyHint, toggleOverlay, initials: () => getInitials(), difficulty: () => difficulty.get(),
+/* The high scores (src/scores.ts): the online board and this browser's, on this browser's storage
+   (null where reading it throws); another tab's save redraws an open overlay. */
+const { renderScoresOverlay, openScores, saveLocal } = createScores({
+  $, keyHint, toggleOverlay, initials: () => getInitials(), difficulty: () => difficulty.get(), storage: browserStorage(),
+  onStorage: fn => window.addEventListener('storage', e => fn(e.key)),
 });
 /* The coach (src/tutorial.ts). */
 const {
@@ -443,7 +445,7 @@ const {
   tutorialFired, backToTitle: () => backToTitle(),
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
   netFire: () => netFire(), netLeave: quiet => netLeave(quiet), netNext: want => netNext(want),
-  netAgain: () => netAgain(),
+  netAgain: () => netAgain(), initials: getInitials, saveLocal,
 });
 /* The field shop (src/shop.ts): prices, rows, buying, the Ready line. */
 const {
@@ -469,7 +471,7 @@ const {
   G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
   backToLobby: () => netBackToLobby(),
   decayFx, fallTanks, fxImpact, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
-  renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText,
+  renderShopReady, shownAngle, shownPower, startBanner, updateCamera, windText, saveLocal,
 });
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving. */
 const {

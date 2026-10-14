@@ -1006,7 +1006,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   weapon), `stepPreview(pv, dt, env)` and the solver. The state it returns is a
   plain `PreviewState` that `main.ts` keeps as `G.preview` and the renderer
   draws; `PreviewEnv` supplies the weapon table, the effect hooks and the result
-  line. `test/preview.test.mjs` steps it on frames the test counts.
+  line. `test/preview.test.ts` steps it on frames the test counts.
 - `flow.ts` exports `transition(phase, event)`, the `FLOW` table behind it and the `Phase` and
   `FlowEvent` types. `match.ts` wraps it in `advance(event)`, which stores the next phase in
   `G.phase` (the same strings the e2e specs read) or, for a move the table rejects, leaves the
@@ -1130,7 +1130,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/games-ui.test.mjs`                       | Your games, the toasts and the title card's list |
 | `test/lobby.test.mjs`                          | `src/lobby.ts` on a real room client over a fake server: a refusal stays on the status line through polls, a lobby closed with Q keeps polling, a swept room lands back in the lobby with its line |
 | `test/replay.test.ts`                         | `src/replay.ts` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, a `watch` volley at 3x for that volley only, and a parachute armed by its volley's `fall` event, closed through real frames on unbroken ground and open every frame its unit falls once the pit is carved; a beam event carving the client's hills exactly as `fireBeam` did and passing through each unit it hit, a ring event, and a tracer landing with its mark and no blast |
-| `test/preview.test.mjs`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, a beam through the dummy, a ring around it, a tracer's path, and the resets |
+| `test/preview.test.ts`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, a beam through the dummy, a ring around it, a tracer's path, and the resets |
 | `test/flow.test.ts`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
 | `test/protocol.test.ts`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
 | `test/sim-vectors.test.mjs`                    | `src/sim.ts`, `src/ai.ts` and `src/armor.ts` agree with `rooms.php` on every shared sim vector; the detmath, field, armor and match-end cases compare exactly (see Sim vectors) |

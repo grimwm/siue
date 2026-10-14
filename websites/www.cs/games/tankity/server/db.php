@@ -203,10 +203,9 @@ function tankity_journal_mode(string $dir, ?string $mounts = null): string
 
 /* The schema, one step per version. A database at version N runs the steps
    after N, each in its own transaction. Step 2 is the boards; step 3 remembers the old score files already
-   imported, so a file that outlives its import is never filed twice; step 4 tells
-   a row the server filed from a match from a browser's own claim; step 5 counts
-   each address's requests (server/rate.php) and keeps only the rows rooms
-   filed. */
+   imported; step 4 tells a row the server filed from a match from a browser's
+   own claim; step 5 counts each address's requests (server/rate.php), keeps
+   only the rows rooms filed, and drops the old callsign tables. */
 function tankity_schema_steps(): array
 {
     return [
@@ -237,6 +236,9 @@ function tankity_schema_steps(): array
             'CREATE INDEX rate_slot ON rate (slot)',
             // Only room matches with two or more humans are on the boards; solo scores live in the browser.
             "DELETE FROM board WHERE source <> 'room'",
+            // The per-callsign runs from before the boards were solo claims too, and the old files are no longer read.
+            'DROP TABLE callsigns',
+            'DROP TABLE legacy_imported',
         ],
     ];
 }

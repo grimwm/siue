@@ -39,8 +39,9 @@ final class DbTest extends TestCase
             $this->assertContains($t, $tables);
         }
         $this->assertSame(5, max(array_keys(tankity_schema_steps())));
-        $this->assertNotContains('solo_runs', $tables);
-        $this->assertNotContains('solo_rate', $tables);
+        foreach (['solo_runs', 'solo_rate', 'callsigns', 'legacy_imported'] as $t) {
+            $this->assertNotContains($t, $tables);
+        }
     }
 
     public function testStepFiveKeepsOnlyTheRoomRowsAndAddsTheRateTable(): void
@@ -53,6 +54,9 @@ final class DbTest extends TestCase
             }
         }
         $db->exec('PRAGMA user_version = 4');
+        // Old callsign rows still waiting to convert, and the record of imported files.
+        $db->exec("INSERT INTO callsigns (slug, data) VALUES ('wmg', '{}')");
+        $db->exec("INSERT INTO legacy_imported (name, hash, at) VALUES ('wmg-operation-tankity.json', 'h', 'x')");
         $ins = $db->prepare("INSERT INTO board (difficulty, initials, score, rounds, seed, at, source) VALUES (?, ?, ?, 1, ?, 'x', ?)");
         foreach ([['normal', 'WMG', 900, 's', 'client'], ['normal', 'RUM', 500, 'room:ABCD', 'room'], ['hard', 'AAA', 800, 's', 'client'],
             ['easy', 'TWO', 100, 'room:WXYZ', 'room']] as $r) {
@@ -65,6 +69,9 @@ final class DbTest extends TestCase
         $this->assertSame(0, (int) $db->query('SELECT COUNT(*) FROM rate')->fetchColumn());
         $this->assertSame(['client', 'kind', 'slot', 'n'], $db->query('PRAGMA table_info(rate)')->fetchAll(PDO::FETCH_COLUMN, 1));
         $this->assertNotContains('standin', $db->query('PRAGMA table_info(board)')->fetchAll(PDO::FETCH_COLUMN, 1));
+        $tables = $db->query("SELECT name FROM sqlite_master WHERE type = 'table'")->fetchAll(PDO::FETCH_COLUMN);
+        $this->assertNotContains('callsigns', $tables, 'the old callsigns were solo claims too');
+        $this->assertNotContains('legacy_imported', $tables);
     }
 
     public function testADatabaseNewerThanThisServerIsRefused(): void

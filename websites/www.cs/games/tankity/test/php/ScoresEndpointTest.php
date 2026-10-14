@@ -5,9 +5,8 @@ declare(strict_types=1);
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-/* scores.php as a request reaches it: the boards in the shape the page reads,
-   the first request converting the old per-callsign rows so /scores never
-   reads empty, and every POST answered 410 (solo scores stay in the browser)
+/* scores.php as a request reaches it: the online boards (room matches) in the
+   shape the page reads, and every POST answered 410 (solo scores stay in the browser)
    before the body, the database or any rate store is touched. */
 final class ScoresEndpointTest extends TestCase
 {
@@ -52,10 +51,10 @@ final class ScoresEndpointTest extends TestCase
         return [$status, json_decode($json, true) ?? ['raw' => $out]];
     }
 
-    public function testTheConvertedLegacyCallsignsAppearOnTheNormalBoard(): void
+    public function testTheNormalBoardInThePagesShape(): void
     {
-        foreach ([['wmg', 900], ['bob', 700], ['test', 300], ['test2', 200]] as $i => [$slug, $score]) {
-            legacy_write(tankity_db(), $slug, ['runs' => [['score' => $score, 'banked' => $i, 'won' => false, 'seed' => 's', 'ts' => '2026-01-0' . ($i + 1) . 'T00:00:00+00:00']]]);
+        foreach ([['WMG', 900], ['BOB', 700], ['TES', 300], ['TES', 200]] as $i => [$who, $score]) {
+            board_file(['difficulty' => 'normal', 'initials' => $who, 'score' => $score, 'rounds' => $i, 'seed' => 'room:ABCD', 'source' => 'room']);
         }
         [$status, $out] = $this->call('GET');
         $this->assertSame(200, $status);

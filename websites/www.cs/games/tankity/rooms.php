@@ -36,7 +36,6 @@ require_once __DIR__ . '/config.php';
 //   server/guard.php     the score guard's settings and the blocked initials
 //   server/score-guard.php  the kit's score guard (a generated copy; never edit it)
 //   server/board.php     the boards, one per difficulty
-//   server/legacy.php    the per-callsign score runs and the import of the old score files
 //   server/housekeep.php throttled cleanup on requests
 //   server/store.php     rooms as rows: the room lock, room lifecycle, the sweep
 //   server/detmath.php   sin, cos, atan2 and Math.round, the same bits as src/detmath.ts
@@ -48,7 +47,6 @@ require_once __DIR__ . '/config.php';
 // Those files do nothing unless this one requires them.
 define('TANKITY_ROOMS_INCLUDED', true);
 require_once __DIR__ . '/server/db.php';
-require_once __DIR__ . '/server/legacy.php';
 require_once __DIR__ . '/server/housekeep.php';
 require_once __DIR__ . '/server/guard.php';
 require_once __DIR__ . '/server/board.php';

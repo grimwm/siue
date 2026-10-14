@@ -338,9 +338,9 @@ function c2t_convert(string $classFile, string $scriptFile): string
     $markers = [];
     $depth = 0;
     foreach ($t as $i => $tok) {
-        if (c2t_is_open($tok) && !$str[$i]) {
+        if (c2t_is_open($tok)) {
             $depth++;
-        } elseif (c2t_is_close($tok) && !$str[$i]) {
+        } elseif (c2t_is_close($tok)) {
             $depth--;
         }
         if ($tok->id === T_COMMENT && preg_match('~^(?://|#)\s*@test\b~', $tok->text)) {

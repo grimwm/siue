@@ -10,7 +10,7 @@ if (!defined('FIXTURE_Y')) {
 // @test arithmetic: sums, with and without a detail string
 $a = 1 + 1;
 $check('two', $a === 2);
-$check('three', $a + 1 === 3, "a=$a");
+$check('three', $a + 1 === 3, "a={$a}");
 
 // @test multiline: nested parentheses, a string naming the call, a loose detail
 $list = ['x', 'y'];

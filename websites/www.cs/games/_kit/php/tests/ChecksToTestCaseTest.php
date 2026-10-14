@@ -74,7 +74,7 @@ final class ChecksToTestCaseTest extends TestCase
         $text = (string) file_get_contents($class);
         self::assertSame(5, substr_count($text, 'self::assertTrue('));
         self::assertStringNotContainsString('$check(', str_replace("'text with \$check( inside, '", '', $text));
-        self::assertStringContainsString("self::assertTrue(\$a + 1 === 3, 'three' . ' :: ' . \"a=\$a\")", $text);
+        self::assertStringContainsString("self::assertTrue(\$a + 1 === 3, 'three' . ' :: ' . \"a={\$a}\")", $text);
         self::assertStringContainsString("'wrapped' . ' :: ' . (\$a === 2 ? 'yes' : 'no')", $text);
     }
 

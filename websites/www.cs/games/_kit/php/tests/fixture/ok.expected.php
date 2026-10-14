@@ -23,7 +23,7 @@ final class OkTest extends TestCase
     {
         $a = 1 + 1;
         self::assertTrue($a === 2, 'two');
-        self::assertTrue($a + 1 === 3, 'three' . ' :: ' . "a=$a");
+        self::assertTrue($a + 1 === 3, 'three' . ' :: ' . "a={$a}");
     }
 
     /** nested parentheses, a string naming the call, a loose detail */

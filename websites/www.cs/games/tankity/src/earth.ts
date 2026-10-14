@@ -115,13 +115,14 @@ export function slumpGround(terrain: number[], x: number, r: number, slope: numb
     }
   }
 }
-/* A riot charge's scoop from a hull centred on (hx, hy), its barrel heading
-   a (radians, screen frame: x along cos, y along sin, y down): a crater of
-   radius r / 2 over the hull, then one every 4 px along the barrel out to r,
-   their radius growing from r / 4 to r x fan. server/earth.php
-   room_riot_carve is the same. */
-export function riotCarve(terrain: number[], hx: number, hy: number, a: number, r: number, fan: number): void {
-  carveCrater(terrain, hx, hy, r / 2, FLOOR);
+/* A riot charge's scoop from a hull centred on (hx, hy) whose unit stands at
+   `base`, its barrel heading a (radians, screen frame: x along cos, y along
+   sin, y down): a crater of radius r / 2 over the hull, never cutting below
+   `base` (it clears the hull, it does not drop it), then one every 4 px along
+   the barrel out to r, their radius growing from r / 4 to r x fan.
+   server/earth.php room_riot_carve is the same. */
+export function riotCarve(terrain: number[], hx: number, hy: number, a: number, r: number, fan: number, base: number): void {
+  carveCrater(terrain, hx, hy, r / 2, Math.min(FLOOR, base));
   const ux = dcos(a), uy = dsin(a);
   for (let k = 1; 4 * k <= r; k++) {
     const d = 4 * k;
@@ -144,5 +145,45 @@ export function digCarve(terrain: number[], x: number, y: number, ux: number, uy
     x += ux * DIG_STEP;
     y += uy * DIG_STEP;
     carveCrater(terrain, x, y, r, FLOOR);
+  }
+}
+/** What an earth gun did to the ground, as the room wire carries it (src/protocol.ts):
+ *  each is replayed with applyEarth, which moves the ground exactly as the sim did.
+ *  dirt: a disc of dirt; pour: liquid dirt at column x; dig: a trench of n steps
+ *  from (x, y) along (ux, uy); riot: a scoop from a hull at (x, y), barrel heading
+ *  a; slump: the slopes within r of x. `w` is the gun. */
+export type EarthOp =
+  | { t: 'dirt'; w: string; x: number; y: number; r: number }
+  | { t: 'pour'; w: string; x: number; v: number }
+  | { t: 'dig'; w: string; x: number; y: number; ux: number; uy: number; n: number; r: number }
+  | { t: 'riot'; w: string; x: number; y: number; a: number; r: number; fan: number; b: number }
+  | { t: 'slump'; w: string; x: number; r: number; slope: number; passes: number };
+/* Moves the ground as op did, and says which columns it touched (the pool, for
+   a pour; x0 > x1 when nothing moved). The room replay mirrors the server's
+   ground with it; server/earth.php is each op's twin. */
+export function applyEarth(terrain: number[], op: EarthOp): { x0: number; x1: number } {
+  const n = terrain.length;
+  const span = (x: number, r: number) => ({ x0: Math.max(0, Math.floor(x - r)), x1: Math.min(n - 1, Math.ceil(x + r)) });
+  switch (op.t) {
+    case 'dirt':
+      addDirt(terrain, op.x, op.y, op.r);
+      return span(op.x, op.r);
+    case 'pour': {
+      const p = pourLevel(terrain, op.x, op.v);
+      fillPour(terrain, p);
+      return { x0: p.x0, x1: p.x1 };
+    }
+    case 'dig': {
+      digCarve(terrain, op.x, op.y, op.ux, op.uy, op.n, op.r);
+      const ex = op.x + op.ux * DIG_STEP * op.n;
+      return { x0: Math.max(0, Math.floor(Math.min(op.x, ex) - op.r)), x1: Math.min(n - 1, Math.ceil(Math.max(op.x, ex) + op.r)) };
+    }
+    case 'riot': {
+      riotCarve(terrain, op.x, op.y, op.a, op.r, op.fan, op.b);
+      return span(op.x, op.r + op.r * op.fan);
+    }
+    case 'slump':
+      slumpGround(terrain, op.x, op.r, op.slope, op.passes);
+      return span(op.x, op.r);
   }
 }

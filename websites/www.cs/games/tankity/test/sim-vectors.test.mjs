@@ -320,7 +320,7 @@ const RUN = {
       out.pool = [pool.level, pool.x0, pool.x1];
       earth.fillPour(t, pool);
     } else if (c.op === 'slump') earth.slumpGround(t, c.x, c.r, c.slope, c.passes);
-    else if (c.op === 'riot') earth.riotCarve(t, c.x, c.y, c.a, c.r, c.fan);
+    else if (c.op === 'riot') earth.riotCarve(t, c.x, c.y, c.a, c.r, c.fan, c.y + 10);
     else if (c.op === 'dig') {
       const [ux, uy] = earth.digHeading(c.vx, c.vy);
       out.heading = [ux, uy];

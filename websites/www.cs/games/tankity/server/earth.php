@@ -152,14 +152,15 @@ function room_slump_ground(array &$terrain, float $x, float $r, float $slope, in
         }
     }
 }
-/* A riot charge's scoop from a hull centred on (hx, hy), its barrel heading
-// $a (radians, screen frame: x along cos, y along sin, y down): a crater of
-// radius $r / 2 over the hull, then one every 4 px along the barrel out to
+/* A riot charge's scoop from a hull centred on (hx, hy) whose unit stands at
+// $base, its barrel heading $a (radians, screen frame: x along cos, y along
+// sin, y down): a crater of radius $r / 2 over the hull, never cutting below
+// $base (it clears the hull, it does not drop it), then one every 4 px along the barrel out to
 // $r, their radius growing from $r / 4 to $r x $fan. src/earth.ts riotCarve()
 // is the same. */
-function room_riot_carve(array &$terrain, float $hx, float $hy, float $a, float $r, float $fan): void
+function room_riot_carve(array &$terrain, float $hx, float $hy, float $a, float $r, float $fan, float $base): void
 {
-    room_carve_crater($terrain, $hx, $hy, $r / 2);
+    room_carve_crater($terrain, $hx, $hy, $r / 2, min(ROOM_EARTH_FLOOR, $base));
     $ux = det_cos($a);
     $uy = det_sin($a);
     for ($k = 1; 4 * $k <= $r; $k++) {

@@ -126,11 +126,11 @@ function sv_outcome(array $before, array $room): array
 }
 
 /** The aim (angle, power) a shooter would pick to land a shell on x, found with the server's own predictor. */
-function sv_aim_at(array $room, int $seat, string $wkey, float $targetX): array
+function sv_aim_at(array $room, int $seat, string $wkey, float $targetX, int $lo = 15, int $hi = 85): array
 {
     $tank = $room['tanks'][$seat];
     $best = [INF, 45, 50];
-    for ($a = 15; $a <= 85; $a++) {
+    for ($a = $lo; $a <= $hi; $a++) {
         for ($p = 20; $p <= 100; $p++) {
             $t = $tank;
             $t['angle'] = (float) $a;
@@ -673,6 +673,44 @@ foreach ($weapons as $wkey => $def) {
         'tanks' => [$human(100, 100) + ['dirS' => 1], array_replace($drone(160, 100), ['y' => 420.0])]]);
 }
 
+/* The earth guns: dirt, a pour, digs, riot charges and bombs, a disrupter.
+ * Aimed with the server's own predictor at a spot, so each lands where it means to. */
+$earthVolley = function (string $name, array $c, float $at, int $lo = 15, int $hi = 85) use ($volley): void {
+    [$c['angle'], $c['power']] = sv_aim_at(sv_room($c), $c['shooter'], $c['wkey'], $at, $lo, $hi);
+    $volley($name, $c);
+};
+if (isset($weapons['dirtball'], $weapons['dirtcharge'], $weapons['liquiddirt'], $weapons['digger'], $weapons['sandhog'], $weapons['riotcharge'], $weapons['riotbomb'], $weapons['disrupter'])) {
+    $earthVolley('dirtball-buries-human', ['terrain' => $flat, 'wkey' => 'dirtball', 'shooter' => 1,
+        'tanks' => [$human(400, 100), $drone(120, 100) + ['dirS' => 1]]], 405.0);
+    $earthVolley('dirtcharge-hurts-then-buries', ['terrain' => $flat, 'wkey' => 'dirtcharge', 'shooter' => 1,
+        'tanks' => [$human(400, 100), $drone(120, 100) + ['dirS' => 1]]], 410.0);
+    $vale = ['vee' => [360, 150, 330, 420]];
+    $onVale = sv_terrain($vale);
+    $earthVolley('liquiddirt-fills-valley-buries-two', ['terrain' => $vale, 'wkey' => 'liquiddirt', 'shooter' => 2,
+        'tanks' => [array_replace($human(330, 100), ['y' => $onVale[330]]), array_replace($human(390, 100), ['y' => $onVale[390]]),
+            array_replace($drone(100, 100), ['y' => $onVale[100], 'dirS' => 1])]], 360.0);
+    // A flat shot comes down at a shallow slant, so the burrow runs on under the tank (deep under its hull, never touching it).
+    $earthVolley('digger-under-tank-drops-it', ['terrain' => $flat, 'wkey' => 'digger', 'shooter' => 1,
+        'tanks' => [$human(300, 100), $drone(60, 100) + ['dirS' => 1]]], 218.0, 15, 25);
+    $earthVolley('sandhog-three-warheads', ['terrain' => $flat, 'wkey' => 'sandhog', 'shooter' => 0,
+        'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(420, 100), $drone(600, 100)]], 330.0);
+    $pit = ['flat' => 400, 'set' => [[380, 420, 440]]];
+    $earthVolley('sandhog-stops-at-tank', ['terrain' => $pit, 'wkey' => 'sandhog', 'shooter' => 1,
+        'tanks' => [array_replace($human(400, 100), ['y' => 440.0]), $drone(150, 100) + ['dirS' => 1]]], 352.0);
+    $volley('riotcharge-digs-out-buried-tank', ['terrain' => ['flat' => 400, 'set' => [[260, 340, 350]]], 'wkey' => 'riotcharge', 'shooter' => 0, 'angle' => 90, 'power' => 50,
+        'tanks' => [$human(300, 100) + ['dirS' => 1], $drone(600, 100)]]);
+    $volley('riotblast-cuts-a-lane-beside-its-gunner', ['terrain' => ['flat' => 400, 'set' => [[320, 420, 320]]], 'wkey' => 'riotblast', 'shooter' => 0, 'angle' => 10, 'power' => 50,
+        'tanks' => [$human(300, 100) + ['dirS' => 1], $drone(600, 100)]]);
+    $earthVolley('riotbomb-harmless-crater-drops-tank', ['terrain' => $flat, 'wkey' => 'riotbomb', 'shooter' => 1,
+        'tanks' => [$human(400, 100), $drone(120, 100) + ['dirS' => 1]]], 400.0);
+    // A sharp peak, 120 px over 20 px either side: steeper than the slope everywhere.
+    $peak = ['vee' => [300, 20, 420, 300]];
+    $earthVolley('disrupter-slumps-ridge-tank-falls', ['terrain' => $peak, 'wkey' => 'disrupter', 'shooter' => 1,
+        'tanks' => [array_replace($human(300, 100), ['y' => 300.0]), array_replace($drone(100, 100), ['y' => 420.0, 'dirS' => 1])]], 300.0);
+    $volley('disrupter-self-fall-credits-nobody', ['terrain' => $peak, 'wkey' => 'disrupter', 'shooter' => 0, 'angle' => 88, 'power' => 22,
+        'tanks' => [array_replace($human(300, 100), ['y' => 300.0, 'dirS' => 1]), array_replace($drone(600, 100), ['y' => 420.0])]]);
+}
+
 /* Falls a volley digs: Buckshot pellets digging one pit in several bursts,
  * and craters in fractional ground, with and without parachutes. The browser
  * replays these as a solo match plays them (falls animated every frame, one
@@ -1000,7 +1038,7 @@ $earth = function (string $name, array $c) use ($add): void {
             room_slump_ground($t, (float) $c['x'], (float) $c['r'], (float) $c['slope'], (int) $c['passes']);
             break;
         case 'riot':
-            room_riot_carve($t, (float) $c['x'], (float) $c['y'], (float) $c['a'], (float) $c['r'], (float) $c['fan']);
+            room_riot_carve($t, (float) $c['x'], (float) $c['y'], (float) $c['a'], (float) $c['r'], (float) $c['fan'], (float) $c['y'] + 10);
             break;
         case 'dig':
             [$ux, $uy] = room_dig_heading((float) $c['vx'], (float) $c['vy']);

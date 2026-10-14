@@ -70,8 +70,9 @@ test('a crater never cuts below the floor', () => {
 test('a riot charge digs the hull out of the dirt over it', () => {
   const t = flat(400);
   for (let ix = 270; ix <= 330; ix++) t[ix] = 350;
-  riotCarve(t, 300, 390, -Math.PI / 2, 45, 1.2);
-  assert.ok(t[300] > 400, `ground under the hull at ${t[300]}`);
+  riotCarve(t, 300, 390, -Math.PI / 2, 45, 1.2, 400);
+  assert.equal(t[300], 400, 'the dirt over the hull is gone, and the ground under it stays');
+  for (let ix = 285; ix <= 315; ix++) assert.ok(t[ix] >= 390, `cleared at ${ix}: ${t[ix]}`);
 });
 
 test('a trench follows the heading, open to the sky', () => {

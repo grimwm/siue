@@ -214,7 +214,7 @@ test('in a room the menu has the Turn alerts button', () => {
 test('Enter in the seed box during a room match asks the leave question, never leaves outright', async () => {
   const { menuMod } = await importTsx<{ menuMod: typeof import('../src/menu.ts') }>(import.meta.dirname, { menuMod: '../src/menu.ts' });
   const section = makeEl('menu-overlay');
-  const calls = { leave: 0, ask: 0, fresh: 0 };
+  const calls = { ask: 0, fresh: 0 };
   const m = menuMod.createMenu({
     G: { body: 'tank', tanks: [] }, $: id => (id === 'menu-overlay' ? asElement(section) as HTMLElement : null),
     net: { on: true, sendBody() {}, turnSecs: 120, isHost: false },
@@ -225,7 +225,7 @@ test('Enter in the seed box during a room match asks the leave question, never l
   });
   m.renderMenu();
   submit(byId(section, 'seed-form'));
-  assert.deepEqual(calls, { leave: 0, ask: 1, fresh: 0 });
+  assert.deepEqual(calls, { ask: 1, fresh: 0 });
 });
 
 test('Screen flashes is an Options toggle: on by default, pressed follows the prop, a click reports', () => {

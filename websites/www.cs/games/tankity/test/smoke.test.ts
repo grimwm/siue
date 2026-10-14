@@ -10,10 +10,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { sweepHit } from '../src/sim.ts';
-import type { Gear, Weapon } from '../src/sim.ts';
+import type { Gear, Tank, Weapon } from '../src/sim.ts';
 import type { KeyContext, KeyDefs } from '../src/input.ts';
 import type { RoomSnapshot } from '../src/protocol.ts';
-import type { Emitter, FxSetData } from '../src/fx/types.ts';
+import type { Emitter, FxSetData, FxSys } from '../src/fx/types.ts';
 import { els, click, submit, fire, document, installDocument, childEl, elementOf } from '../../_kit/test/dom-stub.ts';
 import type { Callable, StubElement, StubNode } from '../../_kit/test/dom-stub.ts';
 
@@ -31,6 +31,10 @@ function nth<T>(list: readonly T[], i: number): T {
 /** The element the game made with that id, which the check expects to be there. */
 function E(id: string): StubElement {
   return must(els[id], '#' + id);
+}
+/** A fake 2D context as the engine's draw calls take it: the fake holds only the members those calls use. */
+function asContext(c: object): CanvasRenderingContext2D {
+  return c as unknown as CanvasRenderingContext2D;
 }
 /** Every child of a list the check knows holds only elements (rows, tiles). */
 function kids(el: StubElement): StubElement[] {
@@ -555,7 +559,7 @@ Reflect.set(globalThis, 'fetch', async (url: unknown, opts?: { body?: string }) 
   }
   if (u.includes('action=seatmode')) {
     seatModeSent = body;
-    seatModes[String(body.seat)] = String(body.mode);
+    seatModes[String(body.seat)] = body.mode;
     return okJson({ ok: true, room: lobbyRoom() });
   }
   if (u.includes('action=state')) stateCalls++;
@@ -605,7 +609,7 @@ const readySent: (boolean | undefined)[] = [];
 let extraGuest = false;
 // Lobby seats as the server sends them: all four from the start, each human,
 // AI or open; the host's seatmode requests flip the stored mode.
-const seatModes: Record<string, string> = { 1: 'ai', 2: 'ai', 3: 'ai' };
+const seatModes: Record<string, string | undefined> = { 1: 'ai', 2: 'ai', 3: 'ai' };
 let seatModeSent: Posted | null = null;
 let leaveSent = 0;
 let stateCalls = 0;
@@ -1108,12 +1112,12 @@ await (async () => {
     void document.getElementById(id);
   }
   // The host's Menu Difficulty goes with the create and the lobby shows it.
-  const difficultyTile = key => E('difficulty-picker').children.find(t => t.getAttribute('data-difficulty') === key);
+  const difficultyTile = (key: string) => must(kids(E('difficulty-picker')).find(t => t.getAttribute('data-difficulty') === key), key + ' tile');
   click(difficultyTile('hard'));
   await test('difficulty-pick-saved', () => { assert.ok(window.localStorage.getItem('tankity-difficulty') === 'hard'
-    && difficultyTile('hard').getAttribute('aria-pressed') === 'true', window.localStorage.getItem('tankity-difficulty')); });
+    && difficultyTile('hard').getAttribute('aria-pressed') === 'true', window.localStorage.getItem('tankity-difficulty') ?? undefined); });
   click(E('rooms-open')); await tick(10);
-  const tiles = () => E('lobby-map-picker').children;
+  const tiles = () => kids(E('lobby-map-picker'));
   const tileOn = () => tiles().filter(t => t.getAttribute('aria-pressed') === 'true').map(t => t.getAttribute('data-map'));
   await test('maps-catalog', () => { assert.ok(tiles().length === 3 && tiles().map(t => t.getAttribute('title')).join('|') === 'Random hills|Canyon 3|Twin Hills', tiles().map(t => t.getAttribute('title')).join('|')); });
   await test('maps-tiles-are-buttons', () => { assert.ok(tiles().every(t => t.getAttribute('type') === 'button' && t.children.length === 2
@@ -1127,7 +1131,7 @@ await (async () => {
   await test('room-full', () => { assert.ok(E('lobby-status').textContent === failCreate, E('lobby-status').textContent); });
   failCreate = '';
   // transport trouble arrives in human words, never a status code
-  for (const [mode, want] of [['down', 'Could not reach'], ['page', 'page instead of game data'], ['stumble', 'stumbled']]) {
+  for (const [mode, want] of [['down', 'Could not reach'], ['page', 'page instead of game data'], ['stumble', 'stumbled']] as const) {
     failMode = mode;
     submit(E('host-form')); await tick(10);
     await test('room-err-' + mode, () => { assert.ok(E('lobby-status').textContent.includes(want), E('lobby-status').textContent); });
@@ -1137,8 +1141,8 @@ await (async () => {
   }
   failMode = '';
   // The lobby has its own initials boxes, the saved set in them (the title card's too).
-  const lobbyBox = n => E(`lobby-initial-${n}`);
-  const typeBox = (n, v) => { lobbyBox(n).value = v; fire(lobbyBox(n), 'input'); };
+  const lobbyBox = (n: number) => E(`lobby-initial-${n}`);
+  const typeBox = (n: number, v: string) => { lobbyBox(n).value = v; fire(lobbyBox(n), 'input'); };
   await test('lobby-no-per-form-initials', () => { assert.ok(!rendered('host-initials') && !rendered('join-initials')); });
   await test('lobby-initials-prefilled', () => { assert.ok([1, 2, 3].map(n => lobbyBox(n).value).join('') === window.localStorage.getItem('tankity-initials'), [1, 2, 3].map(n => lobbyBox(n).value).join('')); });
   // Half-typed boxes stop Host with a line and put the player in the empty box; nothing is sent.
@@ -1157,30 +1161,32 @@ await (async () => {
     && globalThis.__focused === lobbyBox(1)); });
   // An allowed set is saved as it is typed, for the title card too, and the line clears.
   typeBox(1, 'k'); typeBox(2, 'e'); typeBox(3, 'n');
-  await test('lobby-initials-saved', () => { assert.ok(window.localStorage.getItem('tankity-initials') === 'KEN' && E('lobby-initials-note').textContent === '', window.localStorage.getItem('tankity-initials')); });
+  await test('lobby-initials-saved', () => { assert.ok(window.localStorage.getItem('tankity-initials') === 'KEN' && E('lobby-initials-note').textContent === '', window.localStorage.getItem('tankity-initials') ?? undefined); });
   await test('lobby-initials-on-the-title-card', () => { assert.ok([1, 2, 3].map(n => E(`title-initial-${n}`).value).join('') === 'KEN', [1, 2, 3].map(n => E(`title-initial-${n}`).value).join('')); });
   // host a room on picked hills: code shows, roster opens, hills named
-  click(tiles()[1]); // before hosting, a tile only sets the value
+  click(nth(tiles(), 1)); // before hosting, a tile only sets the value
   submit(E('host-form')); await tick(10);
   await test('room-hosted', () => { assert.ok(E('lobby-code').textContent === 'TST1' && E('lobby-room').hidden === false, E('lobby-code').textContent); });
   await test('room-hosted-with-saved-initials', () => { assert.ok(createdInitials === window.localStorage.getItem('tankity-initials'), createdInitials); });
   await test('room-hides-forms', () => { assert.ok(E('lobby-rows').hidden === true && E('lobby-intro').hidden === true, `rows=${E('lobby-rows').hidden} intro=${E('lobby-intro').hidden}`); });
-  const seatTiles = () => E('lobby-seats').children;
-  const tileText = t => t.children.map(c => c.textContent).join(' ');
+  const seatTiles = () => kids(E('lobby-seats'));
+  const tileText = (t: StubElement) => t.children.map(c => c.textContent).join(' ');
+  /** The listeners an element holds for an event type (none: an empty list). */
+  const handlersOf = (t: StubElement, type: string) => { const l: Record<string, unknown[]> = t._l || {}; return l[type] || []; };
   await test('room-roster', () => { assert.ok(seatTiles().length === 4 && seatTiles().every(t => t.getAttribute('type') === 'button' && t.className.includes('unit-choice')), `tiles=${seatTiles().length}`); });
   // The grid shows initials for people, AI for drones; no lives or points.
   await test('seat-grid-labels', () => { assert.ok(seatTiles().map(t => nodeAt(t, 0).textContent).join('|') === 'ABC|AI|AI|AI'
     && !seatTiles().some(t => /lives|pts|x3/.test(tileText(t))), seatTiles().map(tileText).join('|')); });
-  await test('seat-grid-host-flips', () => { assert.ok(seatTiles()[0].getAttribute('aria-disabled') === 'true'
-    && seatTiles().slice(1).every(t => t.getAttribute('aria-disabled') === undefined && ((t._l || {}).click || []).length > 0), seatTiles().map(t => t.getAttribute('aria-disabled')).join()); });
+  await test('seat-grid-host-flips', () => { assert.ok(nth(seatTiles(), 0).getAttribute('aria-disabled') === 'true'
+    && seatTiles().slice(1).every(t => t.getAttribute('aria-disabled') === undefined && handlersOf(t, 'click').length > 0), seatTiles().map(t => t.getAttribute('aria-disabled')).join()); });
   // The host flips a drone seat to Open and back; the request carries both.
-  click(seatTiles()[2]); await tick(10);
+  click(nth(seatTiles(), 2)); await tick(10);
   await test('seat-open-sent', () => { assert.ok(seatModeSent && seatModeSent.seat === 2 && seatModeSent.mode === 'open', JSON.stringify(seatModeSent)); });
-  await test('seat-open-shown', () => { assert.ok(seatTiles()[2].children[0].textContent === 'Open' && seatTiles()[2].className.includes('seat-open')
-    && seatTiles()[1].children[0].textContent === 'AI', seatTiles().map(t => nodeAt(t, 0).textContent).join('|')); });
-  click(seatTiles()[2]); await tick(10);
-  await test('seat-back-to-ai', () => { assert.ok(seatModeSent.mode === 'ai' && seatTiles()[2].children[0].textContent === 'AI'); });
-  click(seatTiles()[3]); await tick(10); // leave one open for the guest's view below
+  await test('seat-open-shown', () => { assert.ok(nodeAt(nth(seatTiles(), 2), 0).textContent === 'Open' && nth(seatTiles(), 2).className.includes('seat-open')
+    && nodeAt(nth(seatTiles(), 1), 0).textContent === 'AI', seatTiles().map(t => nodeAt(t, 0).textContent).join('|')); });
+  click(nth(seatTiles(), 2)); await tick(10);
+  await test('seat-back-to-ai', () => { assert.ok(must(seatModeSent, 'seatmode request').mode === 'ai' && nodeAt(nth(seatTiles(), 2), 0).textContent === 'AI'); });
+  click(nth(seatTiles(), 3)); await tick(10); // leave one open for the guest's view below
   await test('seats-hint-host', () => { assert.ok(/Tap a seat/.test(E('seats-hint').textContent), E('seats-hint').textContent); });
   await test('room-hills', () => { assert.ok(E('lobby-hills').textContent === 'Hills: Canyon 3', E('lobby-hills').textContent); });
   await test('room-difficulty-sent', () => { assert.ok(createdDifficulty === 'hard', String(createdDifficulty)); });
@@ -1188,13 +1194,13 @@ await (async () => {
   click(difficultyTile('normal'));
   await test('map-tile-pressed', () => { assert.ok(tileOn().join() === 'canyon 3', tileOn().join()); });
   // the host can swap back to a random draw before starting
-  click(tiles()[0]); await tick(10);
+  click(nth(tiles(), 0)); await tick(10);
   await test('map-change', () => { assert.ok(E('lobby-hills').textContent === 'Hills: Random hills', E('lobby-hills').textContent); });
   // tapping a tile picks that map through the same request
-  click(tiles()[2]); await tick(10);
+  click(nth(tiles(), 2)); await tick(10);
   await test('map-tile-pick', () => { assert.ok(E('lobby-map').value === 'twin hills' && tileOn().join() === 'twin hills', `${E('lobby-map').value} | ${tileOn().join()}`); });
   await test('map-tile-sent', () => { assert.ok(createdMap === 'twin hills', createdMap); });
-  click(tiles()[0]); await tick(10);
+  click(nth(tiles(), 0)); await tick(10);
   await test('map-tile-random', () => { assert.ok(E('lobby-map').value === '' && createdMap === '' && E('lobby-hills').textContent === 'Hills: Random hills', `${E('lobby-map').value} | ${E('lobby-hills').textContent}`); });
   // a guest joining shows both initials on the roster, never undefined
   extraGuest = true;
@@ -1205,7 +1211,7 @@ await (async () => {
   await test('guest-seat', () => { assert.ok(/ABC/.test(guestNames) && /DEF/.test(guestNames) && !/undefined/.test(guestNames), guestNames); });
   // A guest sees the host's choices but cannot change them.
   await test('guest-sees-open', () => { assert.ok(seatTiles().map(t => t.getAttribute('data-mode')).join() === 'human,human,ai,open', seatTiles().map(t => t.getAttribute('data-mode')).join()); });
-  await test('guest-cannot-flip', () => { assert.ok(seatTiles().every(t => t.getAttribute('aria-disabled') === 'true' && !((t._l || {}).click || []).length)
+  await test('guest-cannot-flip', () => { assert.ok(seatTiles().every(t => t.getAttribute('aria-disabled') === 'true' && !handlersOf(t, 'click').length)
     && /host decides/.test(E('seats-hint').textContent), E('seats-hint').textContent); });
   seatModes[3] = 'ai';
   // back to hosting so the match can start
@@ -1238,12 +1244,12 @@ await (async () => {
   await test('net-shop', () => { assert.ok(E('shop-veil').hidden === false, `shop hidden=${E('shop-veil').hidden}`); });
   // A damaged seat's Repair reads the room's armor, so it is enabled and asks the server.
   {
-    const repairRow = shopRows().find(li => rowName(li).includes('Repair'));
-    const buy = actsOf(repairRow).children[actsOf(repairRow).children.length - 1];
+    const repairRow = must(shopRows().find(li => rowName(li).includes('Repair')), 'Repair row');
+    const buy = childEl(actsOf(repairRow), actsOf(repairRow).children.length - 1);
     await test('net-shop-repair-enabled-when-damaged', () => { assert.ok(buy.disabled === false && !/Armor full/.test(repairRow.textContent), repairRow.textContent); });
     // A repair is priced and labelled by the packs the hull needs, however many are dialled in.
     TAP('shop', 'qtyUp'); TAP('shop', 'qtyUp'); frames(3);
-    const dialled = shopRows().find(li => rowName(li).includes('Repair'));
+    const dialled = must(shopRows().find(li => rowName(li).includes('Repair')), 'Repair row');
     await test('net-shop-repair-priced-by-need', () => { assert.ok(!/×/.test(dialled.textContent), dialled.textContent); });
     await test('net-shop-armor-pill', () => { assert.ok(E('hud-armor').textContent === '60', E('hud-armor').textContent); });
     click(buy); await tick(10);
@@ -1329,7 +1335,7 @@ await (async () => {
   click(E('leave-stay')); frames(2);
   await test('leave-stay-stays', () => { assert.ok(E('leave-veil').hidden === true && leaveSent === 0); });
   // Hosting remembered the seat in this browser; Leave forgets it.
-  const storedCodes = () => { try { return JSON.parse(window.localStorage.getItem('tankity-seats') || '{}').seats.map(s => s.code); } catch (_) { return []; } };
+  const storedCodes = (): string[] => { try { const held: { seats: { code: string }[] } = JSON.parse(window.localStorage.getItem('tankity-seats') || '{}'); return held.seats.map(s => s.code); } catch (_) { return []; } };
   const heldBefore = storedCodes();
   click(E('menu-leave')); frames(2);
   click(E('leave-go')); await tick(10); frames(5);
@@ -1345,21 +1351,21 @@ await (async () => {
   // The client against the server's real replies (protocol/*.json): a room
   // from create to the shop, and the two errors a player can hit mid-match.
   PFX.on = true; PFX.room = 'lobby-host';
-  const fxRoomOf = name => fx(name).body.room;
+  const fxRoomOf = (name: string) => must(fx(name).body.room, name + ' room');
   TAP('global', 'rooms'); await tick(10);
   submit(E('host-form')); await tick(10);
   await test('fx-lobby-code', () => { assert.ok(E('lobby-code').textContent === fx('create-reply').body.code && E('lobby-room').hidden === false, E('lobby-code').textContent); });
   await test('fx-lobby-seats', () => { assert.ok(E('lobby-seats').children.map(t => nodeAt(t, 0).textContent).join('|') === 'ABC|DEF|AI|Open', E('lobby-seats').children.map(t => nodeAt(t, 0).textContent).join('|')); });
   click(E('lobby-start')); await tick(10);
   await test('fx-play-turn', () => { assert.ok(/YOU/.test(E('hud-turn').textContent) && E('lobby-veil').hidden === true && E('shop-veil').hidden === true, E('hud-turn').textContent); });
-  await test('fx-play-hud', () => { assert.ok(E('hud-armor').textContent === String(fxRoomOf('play-my-turn').tanks[0].hp) && /ROOM/.test(E('hud-score').textContent), E('hud-armor').textContent + ' | ' + E('hud-score').textContent); });
+  await test('fx-play-hud', () => { assert.ok(E('hud-armor').textContent === String(nth(fxRoomOf('play-my-turn').tanks, 0).hp) && /ROOM/.test(E('hud-score').textContent), E('hud-armor').textContent + ' | ' + E('hud-score').textContent); });
   // 429 (retried, then said kindly) and 409 (the server's own words).
   PFX.actError = 'error-too-fast';
   TAP('global', 'fire'); await sleep(900); await tick(5);
   await test('fx-429-kind', () => { assert.ok(/Easy on the trigger/.test(logText()), logText().split('\n').slice(-1)[0]); });
   PFX.actError = 'error-not-your-turn';
   TAP('global', 'fire'); await tick(10);
-  await test('fx-409-said', () => { assert.ok(logText().includes(fx('error-not-your-turn').body.error), logText().split('\n').slice(-1)[0]); });
+  await test('fx-409-said', () => { assert.ok(logText().includes(must(fx('error-not-your-turn').body.error, 'error text')), logText().split('\n').slice(-1)[0]); });
   PFX.actError = '';
   // A real turn: shot and hits replay, then the drone's answer flies (and
   // hits us if the server says it did) and the turn is ours again with the
@@ -1370,12 +1376,12 @@ await (async () => {
   const hitMe = after.events.some(e => e.t === 'hit' && e.seat === 0 && e.by === 1);
   await test('fx-fire-replayed', () => { assert.ok(/ABC hits REAPER for \d+/.test(logText()) && /REAPER fires/.test(logText()) &&
     /REAPER hits YOU for \d+/.test(logText()) === hitMe, logText().split('\n').slice(-3).join(' | ')); });
-  await test('fx-fire-turn-back', () => { assert.ok(/YOU/.test(E('hud-turn').textContent) && E('hud-armor').textContent === String(after.tanks[0].hp), E('hud-turn').textContent + ' | armor ' + E('hud-armor').textContent); });
+  await test('fx-fire-turn-back', () => { assert.ok(/YOU/.test(E('hud-turn').textContent) && E('hud-armor').textContent === String(nth(after.tanks, 0).hp), E('hud-turn').textContent + ' | armor ' + E('hud-armor').textContent); });
   // The round is won: the room moves to the shop with the prize paid.
   PFX.room = 'shop-after-win';
   await sleep(2200); await tick(10);
   await test('fx-shop-opens', () => { assert.ok(E('shop-veil').hidden === false, `shop hidden=${E('shop-veil').hidden}`); });
-  await test('fx-shop-cash', () => { assert.ok(E('shop-cash').textContent.includes(String(fxRoomOf('shop-after-win').you.cash)), E('shop-cash').textContent); });
+  await test('fx-shop-cash', () => { assert.ok(E('shop-cash').textContent.includes(String(must(fxRoomOf('shop-after-win').you, 'you').cash)), E('shop-cash').textContent); });
   // The server's own shop with the host readied and a second human waiting.
   PFX.room = 'shop-ready';
   await sleep(2200); await tick(10);
@@ -1413,8 +1419,13 @@ await (async () => {
   {
     const FX = window.TankityFX;
     await test('fx-engine-loaded', () => { assert.ok(!!FX && typeof FX.createSystem === 'function'); });
-    const built = JSON.parse(read('game.json'));
+    assert.ok(FX, 'no window.TankityFX');
+    // The engine's isBright also takes the blast radius to size by (engine.ts); FxEngine's type leaves it out.
+    const isBrightAt: (em: Emitter, k?: number) => boolean = FX.isBright;
+    const built: GameJson = JSON.parse(read('game.json'));
     const defs = FX.dress(built.effects);
+    const setOf = (k: string) => must(defs[k], 'effects for ' + k);
+    const impactOf = (k: string) => must(setOf(k).impact, k + '.impact');
     const arsenal = built.arsenal;
     const keys = arsenal.ammo.map(a => a.key).concat('laststand');
     await test('fx-file-valid', () => { assert.ok(FX.validate(defs, keys).length === 0, FX.validate(defs, keys).slice(0, 3).join(' | ')); });
@@ -1422,18 +1433,18 @@ await (async () => {
     const yaml = fs.readFileSync(path.join(GAME_DIR, 'game.yaml'), 'utf8');
     const at = yaml.search(/^effects:$/m);
     await test('fx-yaml-canonical', () => { assert.ok(at >= 0 && yaml.slice(at) === FX.toYaml(defs), 'the effects: block of game.yaml is not what FX.toYaml writes'); });
-    const missing = [];
+    const missing: string[] = [];
     for (const k of keys) {
       const w = defs[k];
-      for (const slot of ['muzzle', 'trail', 'impact']) if (!w || !w[slot] || !w[slot].emitters.length) missing.push(k + '.' + slot);
-      if (w && !w.trail.emitters.some(e => e.rate > 0)) missing.push(k + '.trail has no rate emitter');
-      if (w && !w.impact.emitters.some(e => e.unit === 'r')) missing.push(k + '.impact has nothing sized by the blast radius');
+      for (const slot of ['muzzle', 'trail', 'impact'] as const) if (!w || !w[slot] || !w[slot].emitters.length) missing.push(k + '.' + slot);
+      if (w && !must(w.trail, k + '.trail').emitters.some(e => e.rate > 0)) missing.push(k + '.trail has no rate emitter');
+      if (w && !must(w.impact, k + '.impact').emitters.some(e => e.unit === 'r')) missing.push(k + '.impact has nothing sized by the blast radius');
     }
     await test('fx-every-weapon-has-muzzle-trail-impact', () => { assert.ok(missing.length === 0, missing.join(', ')); });
     // Blast-sized shapes stay near the damage radius: nothing sized in r runs past 2r.
-    const big = [];
+    const big: string[] = [];
     for (const k of keys) {
-      for (const e of defs[k].impact.emitters) {
+      for (const e of impactOf(k).emitters) {
         if (e.unit !== 'r' || !['ring', 'sprite', 'dot', 'smoke', 'spark'].includes(e.shape)) continue;
         const reach = e.size[1] * (e.shape === 'sprite' ? e.scale : Math.max(1, e.sizeEnd));
         if (reach > 2) big.push(k + ' ' + e.shape + ' ' + reach.toFixed(2) + 'r');
@@ -1441,18 +1452,19 @@ await (async () => {
     }
     await test('fx-blast-sized-effects-stay-near-radius', () => { assert.ok(big.length === 0, big.join(', ')); });
     // Specials the mechanics need exist where the weapon has the mechanic.
-    const needs = { cluster: 'split', seeker: 'steer', lance: 'pierce', emp: 'arc' };
-    await test('fx-specials', () => { assert.ok(Object.keys(needs).every(k => defs[k].special && defs[k].special[needs[k]]), JSON.stringify(Object.keys(needs).filter(k => !(defs[k].special && defs[k].special[needs[k]])))); });
+    const needs: Record<string, string> = { cluster: 'split', seeker: 'steer', lance: 'pierce', emp: 'arc' };
+    const hasSpecial = (k: string) => { const sp = setOf(k).special; return sp && sp[must(needs[k], 'the special ' + k + ' needs')]; };
+    await test('fx-specials', () => { assert.ok(Object.keys(needs).every(k => hasSpecial(k)), JSON.stringify(Object.keys(needs).filter(k => !hasSpecial(k)))); });
     // The pool is a hard cap, and a full pool recycles instead of growing.
     const sys = FX.createSystem({ max: 60 });
-    for (let i = 0; i < 40; i++) sys.emit(defs.nuke.impact, 100, 100, 0, 70);
+    for (let i = 0; i < 40; i++) sys.emit(setOf('nuke').impact, 100, 100, 0, 70);
     sys.step(0.016);
     await test('fx-budget-caps', () => { assert.ok(sys.live <= 60 && sys.stats.peak <= 60 && sys.stats.recycled > 0, `live=${sys.live} peak=${sys.stats.peak} recycled=${sys.stats.recycled}`); });
     // Reduced motion thins the same blast.
-    const count = reduced => {
+    const count = (reduced: boolean) => {
       const s2 = FX.createSystem({ max: 5000 });
       s2.reduced = reduced;
-      s2.emit(defs.mortar.impact, 100, 100, 0, 42);
+      s2.emit(setOf('mortar').impact, 100, 100, 0, 42);
       s2.step(0.2);
       return s2.stats.spawned;
     };
@@ -1460,55 +1472,57 @@ await (async () => {
     await test('fx-reduced-motion-thins', () => { assert.ok(calm < full * 0.6 && calm > 0, `reduced ${calm} vs ${full}`); });
     // A trail drips along the path travelled, not once per frame.
     const sys2 = FX.createSystem({ max: 400 }), shellFx = { fx: null, fxs: null };
-    FX.play.trail(sys2, defs.shell, shellFx, 0.016, 0, 0, 100, 0);
-    FX.play.trail(sys2, defs.shell, shellFx, 0.016, 90, 0, 100, 0);
+    FX.play.trail(sys2, setOf('shell'), shellFx, 0.016, 0, 0, 100, 0);
+    FX.play.trail(sys2, setOf('shell'), shellFx, 0.016, 90, 0, 100, 0);
     await test('fx-trail-follows-path', () => { assert.ok(sys2.live >= 1, 'live=' + sys2.live); });
     // A burst in the air leaves out the ground layers (dirt thrown up, burn marks).
-    const onGround = defs.mortar.impact.emitters.filter(e => e.ground);
+    const onGround = impactOf('mortar').emitters.filter(e => e.ground);
     await test('fx-ground-layers-marked', () => { assert.ok(onGround.length >= 2 && onGround.every(e => e.shape === 'sprite'), onGround.map(e => e.sheet).join(',')); });
-    const spawned = ground => { const s3 = FX.createSystem({ max: 5000 }); s3.emit(defs.mortar.impact, 100, 100, 0, 42, ground); s3.step(0.5); return s3.stats.spawned; };
+    const spawned = (ground: boolean | undefined) => { const s3 = FX.createSystem({ max: 5000 }); s3.emit(setOf('mortar').impact, 100, 100, 0, 42, ground); s3.step(0.5); return s3.stats.spawned; };
     await test('fx-air-burst-skips-ground', () => { assert.ok(spawned(false) < spawned(true) && spawned(undefined) === spawned(true), `air ${spawned(false)} ground ${spawned(true)}`); });
     // Every shell names a rendered body; until its sheet loads the caller draws the plain disc.
-    const noBody = arsenal.ammo.filter(a => !(defs[a.key].body && /^p_/.test(defs[a.key].body.sprite || ''))).map(a => a.key);
+    const spriteBody = (k: string) => { const body = setOf(k).body; return body && /^p_/.test(body.sprite || ''); };
+    const noBody = arsenal.ammo.filter(a => !spriteBody(a.key)).map(a => a.key);
     await test('fx-every-shell-has-a-body-sprite', () => { assert.ok(noBody.length === 0, noBody.join(',')); });
     const ctx = { save() {}, restore() {}, translate() {}, rotate() {}, drawImage() {}, globalCompositeOperation: '', globalAlpha: 1 };
     // The screen flash ramps in over 80 ms and never passes 0.35, whatever an effect asks.
-    const flashAt = (sys4, t) => { const seen = []; const c4 = { set globalAlpha(v) { seen.push(v); }, get globalAlpha() { return 1; }, fillRect() {}, fillStyle: '' }; sys4.step(t); sys4.drawFlash(c4, 10, 10); return seen.length ? seen[0] : 0; };
+    const flashAt = (sys4: FxSys, t: number) => { const seen: number[] = []; const c4 = { set globalAlpha(v: number) { seen.push(v); }, get globalAlpha() { return 1; }, fillRect() {}, fillStyle: '' }; sys4.step(t); sys4.drawFlash(asContext(c4), 10, 10); return seen.length ? nth(seen, 0) : 0; };
     const fs1 = FX.createSystem({ max: 400 });
     fs1.emit({ emitters: [], screen: { flash: { color: '#ffffff', alpha: 1, dur: 0.6 } } }, 0, 0, 0, 1);
     const a0 = flashAt(fs1, 0.01), a1 = flashAt(fs1, 0.09);
     await test('fx-flash-ramps-in', () => { assert.ok(a0 > 0 && a0 < 0.1, 'at 10 ms ' + a0); });
     await test('fx-flash-capped', () => { assert.ok(a1 > 0.2 && a1 <= 0.35, 'at 100 ms ' + a1); });
-    await test('fx-nuke-flash-warm', () => { assert.ok(defs.nuke.impact.screen.flash.alpha <= 0.35 && defs.nuke.impact.screen.flash.color === '#ffb070', JSON.stringify(defs.nuke.impact.screen.flash)); });
+    const nukeFlash = () => must(must(impactOf('nuke').screen, 'nuke.impact.screen').flash, 'nuke.impact.screen.flash');
+    await test('fx-nuke-flash-warm', () => { assert.ok(nukeFlash().alpha <= 0.35 && nukeFlash().color === '#ffb070', JSON.stringify(nukeFlash())); });
     // Screen flashes off: no flash at all, and the big bright additive layers stay out.
     const fs2 = FX.createSystem({ max: 5000 });
     FX.flashes = false;
-    fs2.emit(defs.nuke.impact, 100, 100, 0, 70, true);
+    fs2.emit(setOf('nuke').impact, 100, 100, 0, 70, true);
     fs2.step(0.3);
     const calmFlash = flashAt(fs2, 0.05), calmSpawned = fs2.stats.spawned;
     FX.flashes = true;
     const fs3 = FX.createSystem({ max: 5000 });
-    fs3.emit(defs.nuke.impact, 100, 100, 0, 70, true);
+    fs3.emit(setOf('nuke').impact, 100, 100, 0, 70, true);
     fs3.step(0.3);
     await test('fx-flashes-off-drops-flash', () => { assert.ok(calmFlash === 0, 'alpha ' + calmFlash); });
-    const bright = defs.nuke.impact.emitters.filter(e => FX.isBright(e));
+    const bright = impactOf('nuke').emitters.filter(e => FX.isBright(e));
     await test('fx-flashes-off-drops-bright-layers', () => { assert.ok(bright.length >= 2 && calmSpawned < fs3.stats.spawned, `bright ${bright.length}, ${calmSpawned} vs ${fs3.stats.spawned}`); });
     // Screen flashes off also drops any additive dot or sprite 36 px or more in radius as it plays,
     // however it is sized: a plasma ring at full power (r 90) keeps no large white core.
     for (const key of arsenal.ammo.filter(a => a.effect === 'plasma').map(a => a.key)) {
-      const big = defs[key].impact.emitters.filter(e => e.glow && ['dot', 'smoke', 'sprite'].includes(e.shape)
+      const big = impactOf(key).emitters.filter(e => e.glow && ['dot', 'smoke', 'sprite'].includes(e.shape)
         && e.size[1] * (e.unit === 'r' ? 90 : 1) * (e.shape === 'sprite' ? e.scale : Math.max(1, e.sizeEnd)) >= 36);
-      await test(`fx-flashes-off-filters-${key}-by-size`, () => { assert.ok(big.length >= 1 && big.every(e => FX.isBright(e, e.unit === 'r' ? 90 : 1)), String(big.length)); });
+      await test(`fx-flashes-off-filters-${key}-by-size`, () => { assert.ok(big.length >= 1 && big.every(e => isBrightAt(e, e.unit === 'r' ? 90 : 1)), String(big.length)); });
       // What stays and is sizeable (15 px or more) is coloured: no white dot, no untinted or near-white sprite.
-      const kept = defs[key].impact.emitters.filter(e => !FX.isBright(e, e.unit === 'r' ? 90 : 1) && e.glow && ['dot', 'smoke', 'sprite'].includes(e.shape)
+      const kept = impactOf(key).emitters.filter(e => !isBrightAt(e, e.unit === 'r' ? 90 : 1) && e.glow && ['dot', 'smoke', 'sprite'].includes(e.shape)
         && e.size[1] * (e.unit === 'r' ? 90 : 1) * (e.shape === 'sprite' ? e.scale : 1) >= 15);
       await test(`fx-${key}-keeps-no-white-core`, () => { assert.ok(kept.length >= 1 && kept.every(e => (e.shape === 'sprite'
         ? /^#/.test(e.tint || '') && !/^#f[0-9a-f]f[0-9a-f]f/i.test(e.tint) : !e.colors.includes('#ffffff'))), JSON.stringify(kept.map(e => [e.colors, e.tint]))); });
       const off = FX.createSystem({ max: 5000 }), on = FX.createSystem({ max: 5000 });
       FX.flashes = false;
-      off.emit(defs[key].impact, 100, 100, 0, 90, true);
+      off.emit(setOf(key).impact, 100, 100, 0, 90, true);
       FX.flashes = true;
-      on.emit(defs[key].impact, 100, 100, 0, 90, true);
+      on.emit(setOf(key).impact, 100, 100, 0, 90, true);
       await test(`fx-flashes-off-thins-${key}`, () => { assert.ok(off.stats.spawned < on.stats.spawned, `${off.stats.spawned} vs ${on.stats.spawned}`); });
     }
     // Preloading: a weapon's every sheet (body, muzzle, trail, impact, specials), and the
@@ -1516,15 +1530,17 @@ await (async () => {
     const nukeSheets = FX.sheetsOf(defs.nuke);
     await test('fx-sheets-of-a-weapon', () => { assert.ok(nukeSheets.includes('nuke') && nukeSheets.includes('p_nuke') && nukeSheets.includes('blast') && nukeSheets.includes('muzzle'), nukeSheets.join(',')); });
     await test('fx-no-mushroom-sheet', () => { assert.ok(!('mushroom' in JSON.parse(read('fx/sprites/sprites.json'))) && !fs.existsSync(path.join(GAME_DIR, 'fx/sprites/mushroom.png'))); });
-    await test('fx-body-falls-back-before-load', () => { assert.ok(FX.drawBody(ctx, 0, 0, 10, 0, { halo: 0, sprite: 'p_shell', size: 15 }, '#ffffff', 0) === false); });
+    await test('fx-body-falls-back-before-load', () => { assert.ok(FX.drawBody(asContext(ctx), 0, 0, 10, 0, { halo: 0, sprite: 'p_shell', size: 15 }, '#ffffff', 0) === false); });
   }
   {
     // A shell leaves the muzzle inside its gunner's box: it ignores its
     // gunner until it is clear of that box, then hits it if it comes back.
-    const drone = { x: 300, y: 400, hp: 50 }, foe = { x: 600, y: 400, hp: 50, isPlayer: true };
-    const hits = (shell, ...seg) => sweepHit([drone, foe], shell, ...seg);
+    // Deliberately partial tanks: sweepHit reads only the position and armor.
+    const drone = { x: 300, y: 400, hp: 50 } as Tank, foe = { x: 600, y: 400, hp: 50, isPlayer: true } as Tank;
+    type Sweep = Parameters<typeof sweepHit>[1];
+    const hits = (shell: Sweep, ...seg: [number, number, number, number]) => sweepHit([drone, foe], shell, ...seg);
     const a = 62 * Math.PI / 180, mx = 300 + Math.cos(a) * 20, my = 386 - Math.sin(a) * 20;
-    const s = { owner: drone, pierced: false };
+    const s: Sweep = { owner: drone, pierced: false };
     await test('own-shell-passes-out-of-gunner', () => { assert.ok(hits(s, mx, my, 330, 360) === null && s.clear === true); });
     await test('own-shell-hits-gunner-coming-back', () => { assert.ok((hits(s, 330, 360, 300, 370) || {}).t === drone); });
   }

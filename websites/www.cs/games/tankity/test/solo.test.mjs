@@ -1,4 +1,4 @@
-// The solo referee (src/solo.ts) without a page: the deal, a round's muster,
+// The solo rules (src/solo.ts) without a page: the deal, a round's muster,
 // settling a volley, the turn order and 1-ups.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

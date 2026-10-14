@@ -24,20 +24,6 @@ interface Allow {
 
 const ALLOW: Allow = {
   mjs: [
-    '_kit/build/build.test.mjs',
-    '_kit/build/icons.test.mjs',
-    '_kit/test/app.test.mjs',
-    '_kit/test/audio.test.mjs',
-    '_kit/test/check.test.mjs',
-    '_kit/test/clock.test.mjs',
-    '_kit/test/install-bar.test.mjs',
-    '_kit/test/install.test.mjs',
-    '_kit/test/keys.test.mjs',
-    '_kit/test/prefs.test.mjs',
-    '_kit/test/record.test.mjs',
-    '_kit/test/rng.test.mjs',
-    '_kit/test/tsx.test.mjs',
-    '_kit/test/ui.test.mjs',
     'crete/test/audio.test.mjs',
     'crete/test/bots.test.mjs',
     'crete/test/engine.test.mjs',
@@ -126,13 +112,11 @@ const ALLOW: Allow = {
     'tankity/test/wide-field.test.mjs',
   ],
   program: [
-    '_kit',
     'crete',
     'cylon',
     'tankity',
   ],
   runner: [
-    '_kit/test.sh',
     'crete/test.sh',
     'cylon/test.sh',
     'tankity/test.sh',
@@ -251,7 +235,11 @@ function importsBridge(games: string, file: string): boolean {
 const LEGACY_CLASS = /^\s*(?:(?:final|abstract|readonly)\s+)*class\s+\w+\s+extends\s+LegacyCheckCase\b/m;
 
 // Spelled in pieces so this file does not trip its own check.
-const ESCAPES = new RegExp([':\\s*' + 'any\\b', '\\bas\\s+' + 'any\\b', '<' + 'any>', '@ts-' + 'ignore', '@ts-' + 'nocheck'].join('|'));
+const ANY_TYPE = new RegExp([':\\s*' + 'any\\b', '\\bas\\s+' + 'any\\b', '<' + 'any>'].join('|'));
+const DIRECTIVES = new RegExp(['@ts-' + 'ignore', '@ts-' + 'nocheck'].join('|'));
+// A test's name is prose ("six icons: any, maskable"), so the type patterns look outside quoted strings.
+const QUOTED = /'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/g;
+const escapeIn = (text: string) => ANY_TYPE.exec(text.replace(QUOTED, "''")) ?? DIRECTIVES.exec(text);
 
 /** Every rule the typed tests keep, as messages; [] when the tree keeps them all. */
 function problems(site: string, allow: Allow): string[] {
@@ -297,7 +285,7 @@ function problems(site: string, allow: Allow): string[] {
 
   // (f) No escape hatches in a typed test.
   for (const f of files.filter(f => f.endsWith('.test.ts'))) {
-    const m = ESCAPES.exec(readFileSync(join(games, f), 'utf8'));
+    const m = escapeIn(readFileSync(join(games, f), 'utf8'));
     if (m) out.push(`${f}: ${m[0]} is not allowed in a test (see games/_kit/README.md)`);
   }
 
@@ -361,6 +349,16 @@ test('each rule names what breaks it', t => {
     'g/test/bridged.test.ts: imports _kit/test/check.ts; use node:test directly',
     'tests/php/OldTest.php: extends LegacyCheckCase; make it a TestCase',
     'g/test/loose.test.ts: as ' + 'any is not allowed in a test (see games/_kit/README.md)',
+  ]);
+});
+
+test('the type patterns skip quoted prose, and the directives are caught in comments', t => {
+  const site = tree(t, {
+    'games/g/test/named.test.ts': "test('six icons: any, maskable', () => {});\n",
+    'games/g/test/hushed.test.ts': '// @ts-' + 'ignore\nconst x = 1;\n',
+  });
+  assert.deepEqual(problems(site, { ...NONE, mjs: [], program: ['g'], runner: ['g/test.sh'] }).filter(p => p.includes('is not allowed')), [
+    'g/test/hushed.test.ts: @ts-' + 'ignore is not allowed in a test (see games/_kit/README.md)',
   ]);
 });
 

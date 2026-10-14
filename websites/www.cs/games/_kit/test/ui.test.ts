@@ -4,7 +4,7 @@ import { test, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { h, render } from 'preact';
 import { importTsx } from './tsx.ts';
-import { document, makeEl, click, fire, fireDocument } from './dom-stub.mjs';
+import { document, makeEl, click, fire, fireDocument } from './dom-stub.ts';
 
 globalThis.document = document;
 const ui = await importTsx(import.meta.dirname, {

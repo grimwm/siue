@@ -1,4 +1,4 @@
-// websites/www.cs/games/_kit/build/icons.test.mjs
+// websites/www.cs/games/_kit/build/icons.test.ts
 // The icon renderer: the variant drawings, what each looks like in pixels,
 // and the six files a game gets.
 import { test } from 'node:test';

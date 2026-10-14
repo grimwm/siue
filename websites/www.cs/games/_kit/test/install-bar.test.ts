@@ -1,4 +1,4 @@
-// websites/www.cs/games/_kit/test/install-bar.test.mjs
+// websites/www.cs/games/_kit/test/install-bar.test.ts
 // The Install and Share bar in the DOM stub: what each view draws, the iOS
 // steps dialog's focus and Q, and the address field.
 import { test, afterEach } from 'node:test';
@@ -7,7 +7,7 @@ import { h, render } from 'preact';
 import { importTsx } from './tsx.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { document, makeEl, click, fire, fireDocument } from './dom-stub.mjs';
+import { document, makeEl, click, fire, fireDocument } from './dom-stub.ts';
 
 globalThis.document = document;
 const { bar } = await importTsx(import.meta.dirname, { bar: '../ui/install-bar.tsx' });

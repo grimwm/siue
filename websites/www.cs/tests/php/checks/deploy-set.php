@@ -108,7 +108,7 @@ $check('kit-php-stays-home', !array_filter($out, fn($f) => str_starts_with($f, '
 $check('tankity-data-stays-home', !array_filter($out, fn($f) => str_starts_with($f, 'games/tankity/data/')), '');
 
 // games/node_modules is gitignored, so it can never be listed; assert absence.
-foreach (['games/_kit/ports.ts', 'games/_kit/test/prefs.test.mjs', 'games/node_modules/x/index.js', 'games/package.json', 'games/package-lock.json', 'games/.gitignore', 'games/zz-probe/nested/build.json', 'games/zz-probe/test/engine.test.mjs'] as $f) {
+foreach (['games/_kit/ports.ts', 'games/_kit/test/prefs.test.ts', 'games/node_modules/x/index.js', 'games/package.json', 'games/package-lock.json', 'games/.gitignore', 'games/zz-probe/nested/build.json', 'games/zz-probe/test/engine.test.mjs'] as $f) {
     $check("never-ships-$f", !in_array($f, $out, true), '');
 }
 foreach (['games/zz-probe/dist/main.js', 'games/zz-probe/dist/main.js.map'] as $f) {

@@ -1,4 +1,4 @@
-// websites/www.cs/games/_kit/test/install.test.mjs
+// websites/www.cs/games/_kit/test/install.test.ts
 // Install and Share on every platform: Chromium's held-back prompt, iOS's
 // steps, a browser that cannot install, an installed app, ?install, and the
 // three ways a link is shared.

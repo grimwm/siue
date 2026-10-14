@@ -106,7 +106,7 @@ export type EscapeHold = 'locked' | 'released' | 'unsupported' | 'refused';
  * Keyboard Lock exists, claim Esc while full screen: a tap then does nothing
  * and only holding Esc leaves. Called on every fullscreenchange. A
  * refused lock is reported through warn: without the lock, a tap of Esc leaves
- * full screen. Guarded by _kit/test/app.test.mjs and
+ * full screen. Guarded by _kit/test/app.test.ts and
  * tests/e2e/tankity-fullscreen-esc.spec.mjs.
  */
 export async function holdEscape(full: boolean, kb: KeyLock | null, warn: (msg: string) => void): Promise<EscapeHold> {

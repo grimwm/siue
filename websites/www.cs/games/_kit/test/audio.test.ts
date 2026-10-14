@@ -1,4 +1,4 @@
-// websites/www.cs/games/_kit/test/audio.test.mjs
+// websites/www.cs/games/_kit/test/audio.test.ts
 // The audio core against the recording fake context: lazy creation, the two
 // buses, mute and gain, the gesture unlock, and the tone and noise envelopes.
 import { test } from 'node:test';

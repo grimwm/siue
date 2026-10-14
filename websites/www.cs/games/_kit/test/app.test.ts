@@ -1,4 +1,4 @@
-// websites/www.cs/games/_kit/test/app.test.mjs
+// websites/www.cs/games/_kit/test/app.test.ts
 // Installed-app detection, full screen, and the three ways a game is left:
 // an installed app that can close, one that cannot, and a browser tab.
 import { test } from 'node:test';

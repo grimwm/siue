@@ -95,11 +95,11 @@ export function soloBoard(rounds: readonly SoloRound[], card: 'shop' | 'over'): 
   };
 }
 
-/** What Esc does on an end card: a look from the menu ('peek') goes back to
+/** What Q does on an end card: a look from the menu ('peek') goes back to
  *  the battle and the you're-out card ('out') watches the finish, both as their
  *  button does; a finished room match ('over') keeps its card until a button is
- *  pressed; a solo card ('solo') leaves Esc to its usual job. */
-export function endCardEscape(buttons: 'solo' | 'over' | 'out' | 'peek'): 'watch' | 'stay' | 'pass' {
+ *  pressed; a solo card ('solo') leaves Q to its usual job. */
+export function endCardBack(buttons: 'solo' | 'over' | 'out' | 'peek'): 'watch' | 'stay' | 'pass' {
   if (buttons === 'out' || buttons === 'peek') return 'watch';
   return buttons === 'over' ? 'stay' : 'pass';
 }

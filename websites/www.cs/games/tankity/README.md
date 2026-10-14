@@ -6,7 +6,7 @@ from a $600 stake, solo or in network rooms (max 10 live). No chat; names are
 list (`room_valid_initials` in server/rules.php, through `tankity_initials`).
 Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
-The page opens on a title card over the dimmed demo: Play (solo, random hills), Play with friends (the rooms), Tutorial, Settings, and the player's initials, the one set solo and the rooms both use. The card comes back after a match ends and after leaving a room. Esc toggles the settings menu. Quit in the menu ends the match (leaving a room first) and returns to the title card over the demo; an installed app closes, or says how to close it (`games/_kit/app.ts`).
+The page opens on a title card over the dimmed demo: Play (solo, random hills), Play with friends (the rooms), Tutorial, Settings, and the player's initials, the one set solo and the rooms both use. The rooms lobby has the same three boxes above Host and Join, so a friend who arrives on an invite link (straight into the lobby) can set theirs there; a set typed in either place shows in both. Host and Join use what the boxes hold, and refuse half-typed boxes or a blocked word with a line by the boxes. The card comes back after a match ends and after leaving a room. Q toggles the settings menu and closes whatever is open; Esc does nothing (Safari and Firefox always leave full screen on it, so the game never asks for it, and `game.yaml` refuses it as a binding). Quit in the menu ends the match (leaving a room first) and returns to the title card over the demo; an installed app closes, or says how to close it (`games/_kit/app.ts`).
 
 ## Files
 
@@ -36,7 +36,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `src/match.ts` | The solo match as the page plays it: announcing whose turn it is, firing and what a blast does to each unit, a drone's shot, the end of a round and of the match, the 1-ups (`checkOneUps`: each frame, and before and after a round settles, in the server's order), each round's log sent as it ends and the run filed at game over (a match left early drops its run), the name cards, the end veil's props and the cosmetics decay. `createMatch(deps)` |
 | `src/solo.ts` | The solo referee, without a page: dealing a match, mustering a round, the turn order, settling a volley, 1-ups and a drone's aim. Reads no clock and no `Math.random` |
 | `src/room.ts` | A running room match on this client: the moves it sends (fire, aim, drive, load a gun, buy, Ready), adopting the room snapshot once the replay before it has played, turning events into log lines, talk and sounds, a room frame, the turn alert for a hidden tab, and the final standings. `createRoom(deps)` |
-| `src/lobby.ts` | Getting into and out of a room: the lobby overlay's props, the server dot, the hills picker, hosting and joining under the saved initials, the roster, the invite link, starting the match, the leave question, leaving, and back to the lobby for Play again. `createLobby(deps)` |
+| `src/lobby.ts` | Getting into and out of a room: the lobby overlay's props, the server dot, the hills picker, the initials boxes' line, hosting and joining under the initials the boxes hold, the roster, the invite link, starting the match, the leave question, leaving, and back to the lobby for Play again. `createLobby(deps)` |
 | `src/armor.ts` | Armor between rounds: max armor (100 plus 25 per plate), what a repair restores and how many packs fill the hull, a plate's armor, what the next round musters with, and the armor words the shop and the ARMOR pill use. The room server's armor rules (`rooms.php`) agree with it |
 | `src/shop.ts` | The field shop: what a pack costs and how many the chest covers, each row's stat lines, the Ready line in a room, what a purchase does to the stock and the gear, and the shop overlay's props. `createShop(deps)` |
 | `src/guns.ts` | The weapon picker: the rack's tiles, the cursor and its keys, loading a gun and cycling through the rack. `createGuns(deps)` |
@@ -53,10 +53,11 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `src/solo-file.ts` | Sending a solo run to `scores.php`: start, each round as it ends, file; the runs wait in this browser's storage (merged by id, so two tabs keep each other's; a run evicted or dropped by a tab not playing it comes back from the tab that is) until the server takes them. 429, 503 and offline wait without spending a try; other failures back off and drop a run only after `MAX_TRIES` backed-off tries; an expired run (410/404) starts again and replays every round, never once its filing was asked; at most twice, not counting a restart after the server told the run to wait (429/503). `begin` refuses when every slot holds a finished run, `drop` lets go of one that will never finish, `nextTry()` is the one retry signal, and the pause it gives is stored with the queue, so reloads and tabs share it. `wake()` ends a wait that came from being offline, never one a 429 or 503 asked for. With Web Locks (`env.locks`) one tab sends at a time. The queue keeps the latest outcomes by id (`outcome(id)`), so the tab whose card a run belongs to hears how it went when another tab sent it; a stored next try is never further off than `BACKOFF_LONGEST`. `timedFetch` gives each request a 30 s deadline, and an abort counts as offline. `createFiler(env)` |
 | `src/menu.ts` | The settings menu (the unit look, the text size and the Difficulty, all remembered in this browser) and the menu overlay's props. `createMenu(deps)` |
 | `src/title.ts` | The title card over the demo: whether it shows, the initials it edits, and its props. `createTitle(deps)` |
-| `src/initials.ts` | A player's three-letter initials: the rule, the blocked words, and the one saved set per browser (`tankity-initials`), random until chosen |
+| `src/initials.ts` | A player's three-letter initials: the rule, the blocked words, the one saved set per browser (`tankity-initials`), random until chosen, saving a typed set, and reading the three boxes for Host and Join |
+| `src/ui/initials-picker.tsx` | The three initials boxes the title card and the rooms lobby share, their ids under a prefix (`title-initial-1`, `lobby-initial-1`); typing survives a redraw |
 | `src/protocol.ts` | The room wire protocol as types: replies, the room snapshot, the discriminated union of events, and each action's request body. Types only |
 | `src/protocol-fixtures.check.ts`, `src/tsconfig.check.json` | Type-check only, never emitted: assigns every `protocol/*.json` to its type (see Protocol fixtures) |
-| `src/ui/*.tsx` | The Preact overlays and panels (see Preact overlays): `chrome.tsx` holds the shared key labels, title bar and scroll keeper; `help.tsx`, `shop.tsx`, `lobby.tsx`, `menu.tsx`, `guns.tsx`, `scores.tsx`, `log.tsx`, `tutorial.tsx`, `hud.tsx`, `endveil.tsx`, `leave.tsx` and `title.tsx` one each |
+| `src/ui/*.tsx` | The Preact overlays and panels (see Preact overlays): `chrome.tsx` holds the shared key labels, title bar and scroll keeper; `help.tsx`, `shop.tsx`, `lobby.tsx`, `menu.tsx`, `guns.tsx`, `scores.tsx`, `log.tsx`, `tutorial.tsx`, `hud.tsx`, `endveil.tsx`, `leave.tsx` and `title.tsx` one each, and `initials-picker.tsx` shared by the title card and the lobby |
 | `src/ui/icons.ts` | The small canvas pictures (a shell, a trick, a hills silhouette, a unit thumbnail). Each draws on the canvas and the weapon or trick it is handed and reads nothing else |
 | `dist/main.js`, `dist/fx.js`, `dist/fx-editor.js` (and `.map`s) | The bundles the games kit builds from `src/` (see Source layout and build); checked in and deployed (the host has no Node), except the dev-only `fx-editor.js`. Never edit by hand |
 | `build.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json` | The build setup: the three entries and the three type-check programs. Never deployed, like `src/`, `test/` and `tools/` |
@@ -130,8 +131,9 @@ php -d xdebug.mode=off tools/round-bench.php [--budget=2.0]  # CPU per round of 
 - Key tokens match `event.code` first, then `event.key`; the first token of an
   action names the key on buttons. Touch-only screens (coarse pointer, no
   mouse) get no key bindings or labels.
-  Driving is Shift plus an arrow; W, A, S, D, Q and C are bound nowhere. Esc
-  toggles the menu: it closes whatever is open and, with nothing open, opens the menu.
+  Driving is Shift plus an arrow; W, A, S, D and C are bound nowhere. Q toggles
+  the menu: it closes whatever is open and, with nothing open, opens the menu.
+  Esc is bound to nothing.
 
 ## Architecture rules
 
@@ -733,7 +735,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   `game.json`'s `keys` section (`barrelLeft`, `fire`, `guns`, `lineDown`, ...),
   so rebinding a key in `game.yaml` changes nothing in either file. `createInput({ touch })`
   returns the input: `register(commands, context)` takes a `CommandTable` (a
-  handler per command) and an `InputContext` (`shopLive`, `modalOpen`/`modalEscape`,
+  handler per command) and an `InputContext` (`shopLive`, `modalOpen`/`modalBack`,
   `onHold`); `bind(window)` listens (no key listeners on a touch-only screen, but
   blur still drops the held keys); `bindHold(button, command)` makes an
   on-screen pad button hold a command while the pointer is down; `held` is the
@@ -746,12 +748,16 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   scroll commands (`lineDown/Up`, `pageDown/Up`, `halfDown/Up`), the gun
   grid's fixed keys (`gridLeft/Right/Up/Down`, `confirm`, `digit`: arrows,
   Enter or Space, 1-9, never rebound), the shop commands (only while
-  `shopLive`), the global `escape`, the held aim keys (always suppressed, so
+  `shopLive`), the global `back` (Q), the held aim keys (always suppressed, so
   the arrows never scroll the page), `fire` (suppressed, once per press), then
   the other global commands (once per press). A question that holds the keys
-  (`modalOpen`) lets only ESC through. `stepArm(held, dt, arm, facing)` is one
-  frame of held-key arm movement at 42 degrees per second for the barrel and 45
-  power per second, clamped to 10-170 and 10-100, reporting whether a key is
+  (`modalOpen`) lets only Q through. An editable text box keeps every key, Q
+  included; a read-only field (the invite link) keeps every key but Q, which
+  still goes back. Only plain Q is back: Ctrl+Q, Alt+Q and Cmd+Q are the
+  browser's, and a held Q goes back once, not on every auto-repeat. Esc is
+  bound to nothing. `stepArm(held, dt, arm, facing)` is one frame of held-key
+  arm movement at 42 degrees per second for the barrel and 45 power per second,
+  clamped to 10-170 and 10-100, reporting whether a key is
   adjusting and whether none is down (the room client sends the aim when the
   keys are released). Driving stays in `main.ts` because it depends on terrain
   and fuel. `touchOnly(matchMedia)` is the one test for a touch-only screen;
@@ -768,7 +774,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `node ../_kit/build/build.mjs tankity --check` | `dist/` is exactly what `src/` bundles to, `src/` type-checks, and every `protocol/*.json` fits its type in `protocol.ts` (run `npm ci` in `games/` first) |
 | `node --test 'test/*.test.mjs'`                | Every Node test below, run by `test.sh` (the UI test bundles `src/ui/*.tsx` once with esbuild, Preact left external) |
-| `test/standings.test.mjs`                      | `src/standings.ts`: the match-end rule against the `match-end` vectors, room and solo rows, the winner's bonus line, the filed line, and what Esc does on each end card |
+| `test/standings.test.mjs`                      | `src/standings.ts`: the match-end rule against the `match-end` vectors, room and solo rows, the winner's bonus line, the filed line, and what Q does on each end card |
 | `test/standings-ui.test.mjs`                   | The scoreboard table (`src/ui/standings.tsx`): a room's rows, you, the crown, the lost-out marks, and a solo run's rounds with the total |
 | `test/scores-ui.test.mjs`                      | The scores overlay (`src/ui/scores.tsx`): one board, the player's own runs marked by the server's `standin` flag, the switcher; and the filing in `src/scores.ts`: a line for every outcome, the one retry timer, the load-time drop and flush |
 | `test/ui.test.mjs`                             | The Preact overlays (`src/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
@@ -793,7 +799,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/php/SoloRoundTest.php`                   | `server/solo.php` `solo_round`: every recorded run in `protocol/solo-runs.json` plays round by round to the browser's claims (runs marked `slow` are the `slow` group, which `make test` skips and CI's units job runs), a tampered round, an over run, the CPU and step budgets are refused, and every case of `test/solo-refusals.json` gets the reason `soloRound` gives (`test/solo-play.test.mjs` plays the same table) |
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
 | `test/render.test.mjs`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, and rebuilds the sky only when the match key or the visible area changes |
-| `test/input.test.mjs`                          | `src/input.ts` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, ESC, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
+| `test/input.test.mjs`                          | `src/input.ts` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, Q, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
 | `test/net.test.mjs`                            | `src/net.ts` against a fake server and timers: the 429 retry (none for a create or join's 429, one for its 503), Ready's ordering under rapid toggles, polling, the leave beacon, the clocks, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect) |
 | `test/replay.test.mjs`                         | `src/replay.ts` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, and a `watch` volley at 3x for that volley only |
 | `test/preview.test.mjs`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, and the resets |

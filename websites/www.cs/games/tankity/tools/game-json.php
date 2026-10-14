@@ -433,7 +433,7 @@ const TANKITY_KEY_ACTIONS = [
     'aim' => ['barrelLeft', 'barrelRight', 'powerUp', 'powerDown', 'driveLeft', 'driveRight'],
     'shop' => ['selUp', 'selDown', 'qtyUp', 'qtyDown', 'buyRow', 'buy', 'preview', 'close', 'next'],
     'global' => ['music', 'nextTrack', 'sound', 'log', 'help', 'report', 'random', 'rooms', 'new', 'guns',
-        'gunStock', 'tutorial', 'battlePreview', 'fullscreen', 'fire', 'escape'],
+        'gunStock', 'tutorial', 'battlePreview', 'fullscreen', 'fire', 'back'],
     'scroll' => ['lineDown', 'lineUp', 'pageDown', 'pageUp', 'halfDown', 'halfUp'],
 ];
 
@@ -816,6 +816,10 @@ function tankity_build_keys(TankityCheck $c, mixed $k): array
                 $tp = "$p.$a" . "[$i]";
                 if (!is_string($t) || $t === '' || !preg_match('/^( |(Ctrl\+|Shift\+)?[^\s]+)$/', $t)) {
                     $c->err($tp, 'must be a quoted key token such as ArrowLeft, KeyA, "a", "1", Ctrl+F, Shift+KeyJ or " " (a lone space)');
+                    continue;
+                }
+                if (preg_match('/^((Ctrl|Shift)\+)?(Escape|Esc)$/i', $t)) {
+                    $c->err($tp, 'Esc cannot be bound: Safari and Firefox always leave full screen on it (Q is the back key)');
                     continue;
                 }
                 if (isset($used[$t])) {

@@ -148,7 +148,7 @@ export function createMenu(deps: MenuDeps) {
       onMusic: toggleMusic,
       onFullscreen: toggleFullscreen,
       onScores: () => toggleOverlay('report-overlay', 'scores-open'),
-      // The card replaces the menu: close it first, so Esc then goes back to the battle.
+      // The card replaces the menu: close it first, so Q then goes back to the battle.
       onStandings: () => { toggleOverlay('menu-overlay', 'btn-menu'); openStandings(); },
       inRoom: net.on,
       onLeave: openLeaveVeil,

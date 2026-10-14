@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { sweepHit } from '../src/sim.ts';
-import { els, makeEl, click, submit, document } from '../../_kit/test/dom-stub.mjs';
+import { els, makeEl, click, submit, fire, document } from '../../_kit/test/dom-stub.mjs';
 
 const GAME_DIR = path.join(import.meta.dirname, '..');
 const read = file => fs.readFileSync(path.join(GAME_DIR, file), 'utf8');
@@ -89,8 +89,9 @@ globalThis.AudioContext = class {
 };
 
 // ---- boot the exact shipped module ----
-// The whole run plays in full screen: Esc on previews, the shop, the gun
-// picker and the menu must never leave it (checked at the end, 'esc-keeps-fullscreen').
+// The whole run plays in full screen: Q on previews, the shop, the gun
+// picker and the menu, and Esc anywhere, must never leave it (checked at the
+// end, 'esc-keeps-fullscreen').
 const fsExits = [];
 document.fullscreenElement = document.getElementById('frame');
 document.exitFullscreen = async () => { fsExits.push(new Error('exitFullscreen').stack); };
@@ -236,8 +237,8 @@ check('help-toggle', els['help-overlay'].hidden === false);
 click(els['help-close']);
 check('help-close', els['help-overlay'].hidden === true);
 TAP('global', 'help');
-TAP('global', 'escape');
-check('help-esc', els['help-overlay'].hidden === true);
+TAP('global', 'back');
+check('help-q', els['help-overlay'].hidden === true);
 check('banner-centered', /\.banner\s*\{[^}]*top:\s*50%/.test(css) && /translateY\(-50%\)/.test(css));
 TAP('global', 'report');
 check('report-toggle', els['report-overlay'].hidden === false);
@@ -260,15 +261,24 @@ check('buttons-secondary-default', /\nbutton\s*\{[^}]*background:\s*var\(--panel
 check('buttons-primary-gold', /button\.btn-primary[^{]*\{[^}]*background:\s*var\(--accent\)/.test(css));
 const deckHtml = html.slice(html.indexOf('id="deck"'), html.indexOf('id="log-overlay"'));
 check('deck-groups', ['grp-aim', 'grp-drive', 'grp-more', 'grp-weapon', 'grp-fire'].every(g => deckHtml.includes(g)) && !/btn-primary/.test(deckHtml));
-TAP('global', 'escape');
+TAP('global', 'back');
 check('menu-toggle', els['menu-overlay'].hidden === false && els['btn-menu'].getAttribute('aria-expanded') === 'true');
 click(els['menu-close']);
 check('menu-close', els['menu-overlay'].hidden === true);
-// Esc toggles the menu: once opens it, again closes it.
-TAP('global', 'escape');
+// Q toggles the menu: once opens it, again closes it.
+TAP('global', 'back');
 check('menu-reopen', els['menu-overlay'].hidden === false);
-TAP('global', 'escape');
-check('menu-esc', els['menu-overlay'].hidden === true);
+TAP('global', 'back');
+check('menu-q', els['menu-overlay'].hidden === true);
+// Esc does nothing: it neither opens the menu nor closes it.
+const ESC = () => { keyDown('Escape', 'Escape', {}); keyUp('Escape', 'Escape'); };
+ESC();
+check('esc-does-not-open-the-menu', els['menu-overlay'].hidden === true);
+TAP('global', 'back');
+ESC();
+check('esc-does-not-close-the-menu', els['menu-overlay'].hidden === false);
+TAP('global', 'back');
+check('menu-q-again', els['menu-overlay'].hidden === true);
   // Tutorial: the title card carries a replay button (pressed for real at the end).
   check('title-tutorial', !!els['tutorial-open'] && !!els['tutorial-overlay'] && !!els['tutorial-skip']);
   // Four 32-step songs; the round picks the song.
@@ -596,7 +606,7 @@ await (async () => {
   // T deals random hills and O opens the lobby, both from the keyboard.
   TAP('global', 'rooms'); await tick(10);
   check('rooms-hotkey', els['lobby-veil'].hidden === false);
-  TAP('global', 'escape');
+  TAP('global', 'back');
   check('lobby-esc', els['lobby-veil'].hidden === true);
   TAP('global', 'random'); frames(120);
   check('random-hotkey', els['shop-veil'].hidden === false);
@@ -605,7 +615,7 @@ await (async () => {
   // New Game rolls the fanfare and the Round 1 card, then the pre-match shop.
   // It also takes the whole frame: an open menu shuts instead of sitting
   // over the briefing and the shop that follows it.
-  TAP('global', 'escape');
+  TAP('global', 'back');
   check('menu-open-before-newgame', els['menu-overlay'].hidden === false);
   click(els['new-game']);
   check('new-game-closes-menu', els['menu-overlay'].hidden === true);
@@ -621,7 +631,7 @@ await (async () => {
     ['hud-angle', 'hud-power', 'hud-wind', 'hud-fuel'].map(id => els[id].textContent).join('|'));
   const shopCash0 = els['shop-cash'].textContent;
   // Esc in the shop shuts panels first and, with none open, opens the menu: it never starts the round (N does).
-  TAP('global', 'escape');
+  TAP('global', 'back');
   TAP('shop', 'close'); frames(3);
   check('shop-esc-closes-menu', els['menu-overlay'].hidden === true && els['shop-veil'].hidden === false);
   // Stock up: Buckshot ($80), Mortar ($200), Rail ($140) of the $600 stake.
@@ -945,11 +955,13 @@ await (async () => {
     `${pvTitle} | turn=${els['hud-turn'].textContent} | ${els['hud-weapon'].textContent}`);
   check('preview-runs', pvDraws > 100, `frames=${pvDraws}`);
   check('preview-close', els['preview-veil'].hidden === true);
-  // Esc shuts the firing range too, and stays in full screen.
+  // Q shuts the firing range too, and stays in full screen; Esc leaves it open.
   TAP('global', 'battlePreview'); frames(5);
   check('preview-reopen', els['preview-veil'].hidden === false);
-  TAP('global', 'escape'); frames(3);
-  check('preview-esc', els['preview-veil'].hidden === true && fsExits.length === 0, `exits=${fsExits.length}`);
+  ESC(); frames(3);
+  check('preview-ignores-esc', els['preview-veil'].hidden === false && fsExits.length === 0, `exits=${fsExits.length}`);
+  TAP('global', 'back'); frames(3);
+  check('preview-q', els['preview-veil'].hidden === true && fsExits.length === 0, `exits=${fsExits.length}`);
   // The Shell demo (26 radius) must paint its disc at exactly warhead size.
   const pvBoomMax = pvBoomR.length ? Math.max(...pvBoomR) : -1;
   const pvBoomOk = pvBoomR.length >= 3 && Math.abs(pvBoomMax - 26) < 1.5;
@@ -1074,10 +1086,32 @@ await (async () => {
     }
   }
   failMode = '';
-  // The rooms use the initials saved on the title card; the lobby only names them.
-  check('lobby-no-initials-boxes', !rendered('host-initials') && !rendered('join-initials'));
-  check('lobby-names-saved-initials', els['lobby-initials'].textContent.includes(window.localStorage.getItem('tankity-initials')),
-    els['lobby-initials'].textContent);
+  // The lobby has its own initials boxes, the saved set in them (the title card's too).
+  const lobbyBox = n => els[`lobby-initial-${n}`];
+  const typeBox = (n, v) => { lobbyBox(n).value = v; fire(lobbyBox(n), 'input'); };
+  check('lobby-no-per-form-initials', !rendered('host-initials') && !rendered('join-initials'));
+  check('lobby-initials-prefilled', [1, 2, 3].map(n => lobbyBox(n).value).join('') === window.localStorage.getItem('tankity-initials'),
+    [1, 2, 3].map(n => lobbyBox(n).value).join(''));
+  // Half-typed boxes stop Host with a line and put the player in the empty box; nothing is sent.
+  createdInitials = ''; // set again only by a create that reaches the server
+  typeBox(1, 'k');
+  submit(els['host-form']); await tick(10);
+  check('lobby-half-typed-refused', /all three/.test(els['lobby-initials-note'].textContent) && createdInitials === ''
+    && globalThis.__focused === lobbyBox(2), els['lobby-initials-note'].textContent);
+  // A blocked set says so at once and stops Host too; the saved set stays.
+  const savedBefore = window.localStorage.getItem('tankity-initials');
+  typeBox(1, 'a'); typeBox(2, 's'); typeBox(3, 's');
+  check('lobby-blocked-said-at-once', /not allowed/.test(els['lobby-initials-note'].textContent)
+    && window.localStorage.getItem('tankity-initials') === savedBefore, els['lobby-initials-note'].textContent);
+  submit(els['host-form']); await tick(10);
+  check('lobby-blocked-refused', /not allowed/.test(els['lobby-initials-note'].textContent) && createdInitials === ''
+    && globalThis.__focused === lobbyBox(1));
+  // An allowed set is saved as it is typed, for the title card too, and the line clears.
+  typeBox(1, 'k'); typeBox(2, 'e'); typeBox(3, 'n');
+  check('lobby-initials-saved', window.localStorage.getItem('tankity-initials') === 'KEN' && els['lobby-initials-note'].textContent === '',
+    window.localStorage.getItem('tankity-initials'));
+  check('lobby-initials-on-the-title-card', [1, 2, 3].map(n => els[`title-initial-${n}`].value).join('') === 'KEN',
+    [1, 2, 3].map(n => els[`title-initial-${n}`].value).join(''));
   // host a room on picked hills: code shows, roster opens, hills named
   click(tiles()[1]); // before hosting, a tile only sets the value
   submit(els['host-form']); await tick(10);
@@ -1202,7 +1236,7 @@ await (async () => {
   await sleep(3400); await tick(10);
   check('net-preview-stays', pvOpened && els['preview-veil'].hidden === false,
     `opened=${pvOpened} open-after-polls=${els['preview-veil'].hidden === false}`);
-  TAP('global', 'escape'); await tick(5);
+  TAP('global', 'back'); await tick(5);
   NET_SHOP = false;
   seatArmor = 100;
   await sleep(1800); await tick(10);
@@ -1256,10 +1290,10 @@ await (async () => {
     && shopSrc.includes('id="shop-leave"'));
   check('leave-buttons-in-room', els['menu-leave'].hidden === false && els['shop-leave'].hidden === false,
     `${els['menu-leave'].hidden} ${els['shop-leave'].hidden}`);
-  TAP('global', 'escape'); frames(2);
+  TAP('global', 'back'); frames(2);
   click(els['menu-leave']); frames(2);
   check('leave-asks-first', els['leave-veil'].hidden === false && leaveSent === 0);
-  TAP('global', 'escape'); frames(2);
+  TAP('global', 'back'); frames(2);
   check('leave-esc-stays', els['leave-veil'].hidden === true && leaveSent === 0 && /YOU|aiming/.test(els['hud-turn'].textContent)
     && els['menu-overlay'].hidden === false, els['hud-turn'].textContent);
   click(els['menu-leave']); frames(2);
@@ -1340,10 +1374,10 @@ await (async () => {
   // the picker and leaves the tutorial running; a second Esc skips it.
   TAP('global', 'guns'); frames(3);
   check('esc-picker-open', els['gun-overlay'].hidden === false);
-  TAP('global', 'escape'); frames(3);
+  TAP('global', 'back'); frames(3);
   check('esc-closes-picker-first', els['gun-overlay'].hidden === true && els['tutorial-overlay'].hidden === false
     && window.localStorage.getItem('tankity-tutorial') !== 'done');
-  TAP('global', 'escape'); frames(3);
+  TAP('global', 'back'); frames(3);
   check('esc-then-skips-tutorial', els['tutorial-overlay'].hidden === true && window.localStorage.getItem('tankity-tutorial') === 'done');
   TAP('global', 'tutorial'); frames(5);
   check('tutorial-reopens', els['tutorial-overlay'].hidden === false);

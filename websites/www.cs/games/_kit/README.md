@@ -92,9 +92,11 @@ view of its state and callbacks, and redraws when the state changes.
 
 - `Dialog`: a modal panel in its veil. `open` shows it; on opening it focuses
   `focusId` (or its first visible, enabled button, else the panel itself),
-  on closing it gives focus back; Escape and
+  on closing it gives focus back; Q (the back key) and
   a click on the veil (one that also began there) call `onDismiss`; a game
-  whose own key router already handles Escape should not pass `onDismiss`.
+  whose own key router already handles Q should not pass `onDismiss`. Q
+  typed into a box is a letter, and an open dialog stops Q there, so the game
+  under it never also acts on it. Escape does nothing.
   Focus returns to what had it, or to the kit `Button` that opened the
   dialog. The game passes its own ids and classes, so its CSS and browser
   specs keep working.
@@ -118,9 +120,20 @@ for an installed app, `'title-with-hint'`: the game then shows its title card
 and, with the hint, `EXIT_HINT`. Pages pass `browserAppEnv()`; tests pass a
 fake environment and a manual clock.
 
-Esc in full screen: the browser takes it to leave, so a game holds it with
+## The back key (`keys.ts`)
+
+Q closes whatever is open in every game but one: `isBackKey(ev)` is Q in either
+case with no Ctrl, Cmd or Alt and nothing being composed, and `typesText(target)`
+says when Q is a letter instead (a box that takes text). A held Q acts once:
+callers ignore `ev.repeat`. Crete is the exception: with nothing open, Q is Quit
+there, and Q is back only for the install steps and the Share field. No game listens for
+Escape and no hint names it: Safari and Firefox always leave full screen on
+Esc, and no page can stop them (`tankity/test/fullscreen.test.mjs` fails on a
+binding, listener or visible hint that asks for it).
+
+Esc in full screen: the browser takes it to leave. Where it can, a game holds it with
 `holdEscape(!!document.fullscreenElement, topKeyLock(window), warn)` on every
-`fullscreenchange`. A tap then reaches the game and only holding Esc leaves.
+`fullscreenchange`, so a habitual tap does nothing and only holding Esc leaves.
 `topKeyLock` is the top-level page's Keyboard Lock, because Chrome refuses
 `lock()` inside a frame and the `/play/` pages run each game in one; a refusal
 goes to `warn`. Keyboard Lock is Chromium's only: in Safari and Firefox Esc
@@ -150,7 +163,7 @@ cancelled share sheet is no error.
 `ui/install-bar.tsx` draws it: `#install-btn` (`kit-install-asked` when
 highlighted), `#share-btn`, `#share-status` ("Link copied"), `#share-url` (the
 address to copy by hand) and the steps dialog `#install-steps` on the kit's
-`Dialog` (focus moves in and back; Escape closes it). `mountInstallBar(root,
+`Dialog` (focus moves in and back; Q closes it). `mountInstallBar(root,
 setup, env)` wires it to the browser and adds its stylesheet once, first in
 `<head>`; a page restyles it through `--kit-install-accent` or its own rules.
 Each page game builds `install-page.ts` as `dist/install.js` (an entry in its

@@ -269,7 +269,7 @@ export function createRoom(deps: RoomDeps) {
       if ($('lobby-veil')) $('lobby-veil')!.hidden = true;
       if (MATCH.lastPhase !== 'play' || room.round !== MATCH.lastRound) {
         // A started match takes the whole frame, same as solo: shut the menu
-        // the host came through so nobody has to ESC it away mid-battle.
+        // the host came through so nobody has to close it with Q mid-battle.
         if (MATCH.lastPhase !== 'play') closeOverlays();
         music.forRound(room.round);
         startBanner(`Round ${room.round}. ${room.mapName || 'Random hills'}.`);

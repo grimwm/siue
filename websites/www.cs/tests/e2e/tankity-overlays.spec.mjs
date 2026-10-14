@@ -5,18 +5,20 @@ import { newPlayer } from './helpers.mjs';
 const CLOSABLE = [
   ['h', 'help-overlay', 'help-close'],
   ['r', 'report-overlay', 'report-close'],
-  ['Escape', 'menu-overlay', 'menu-close'],
+  ['q', 'menu-overlay', 'menu-close'],
   ['l', 'log-overlay', 'log-close'],
 ];
 
-test('each panel has a title bar whose × closes it and shows Esc', async ({ browser }) => {
+test('each panel has a title bar whose × closes it and shows Q, never Esc', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
   for (const [key, ov, x] of CLOSABLE) {
     await page.keyboard.press(key);
     await expect(page.locator('#' + ov)).toBeVisible();
     const close = page.locator(`#${ov} .ov-head #${x}`);
     await expect(close).toBeVisible();
-    await expect(close).toContainText('Esc');
+    await expect(close).toContainText('Q');
+    await expect(close).not.toContainText('Esc');
+    await expect(close).toHaveAttribute('title', 'Close (Q)');
     await close.click();
     await expect(page.locator('#' + ov)).toBeHidden();
   }
@@ -68,7 +70,7 @@ test('text size is a menu setting that this browser remembers', async ({ browser
   const { page, ctx } = await newPlayer(browser);
   const rootPx = p => p.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
   expect(await rootPx(page)).toBe(16);
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await page.click('#text-picker button[title="Huge text"]');
   await expect(page.locator('#text-picker button[title="Huge text"]')).toHaveAttribute('aria-pressed', 'true');
   expect(await rootPx(page)).toBeCloseTo(20.8, 1);
@@ -100,11 +102,13 @@ test('the lobby shows the hills first, hosts under the saved initials, then show
   const [hills, host] = [await box('#lobby-map-picker'), await box('#host-go')];
   expect(hills.y + hills.height).toBeLessThanOrEqual(host.y);
   const saved = await page.evaluate(() => localStorage.getItem('tankity-initials'));
-  await expect(page.locator('#lobby-initials')).toContainText(saved);
+  const boxes = [1, 2, 3].map(n => page.locator(`#lobby-initial-${n}`));
+  for (const [i, b] of boxes.entries()) await expect(b).toHaveValue(saved[i]);
   await expect(page.locator('#host-initials')).toHaveCount(0);
   await page.click('#host-go');
   await expect(page.locator('#lobby-room')).toBeVisible();
   await expect(page.locator('#lobby-rows')).toBeHidden();
+  await expect(page.locator('#lobby-initials')).toBeHidden();
   await expect(page.locator('#lobby-intro')).toBeHidden();
   await page.locator('#lobby-veil .card').screenshot({ path: 'test-results/tankity-lobby-hosted.png' });
   // Leaving brings the forms back.
@@ -117,7 +121,7 @@ test('scrolled panels stay where the player left them when they redraw', async (
   await page.setViewportSize({ width: 1000, height: 500 });
   const top = sel => page.locator(sel).evaluate(el => el.scrollTop);
   // The menu: scroll it, then flip a toggle and the text size (each redraws it).
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await page.locator('#menu-overlay').hover();
   // Short of the end: the text size below shrinks the menu, which would clamp a scroll taken to the end.
   await page.mouse.wheel(0, 120);
@@ -127,14 +131,14 @@ test('scrolled panels stay where the player left them when they redraw', async (
   await page.click('#text-picker button:nth-child(2)');
   expect(await top('#menu-overlay')).toBe(menuAt);
   await page.click('#btn-sound');
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   // Closed and reopened it starts at the top, and a redraw keeps it there.
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await expect(page.locator('#menu-overlay')).toBeVisible();
   await page.click('#btn-sound');
   expect(await top('#menu-overlay')).toBe(0);
   await page.click('#btn-sound');
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   // The lobby: the veil scrolls; the status line changing redraws it.
   await page.setViewportSize({ width: 420, height: 700 });
   await page.keyboard.press('o');

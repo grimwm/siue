@@ -9,6 +9,8 @@ import type { sfx as SfxApi } from './audio.ts';
 import type { GameState, MatchState } from './game-types.ts';
 import { DIFFICULTY_NAMES } from './difficulty.ts';
 import type { DifficultySetting } from './difficulty.ts';
+import { readInitials, saveInitials } from './initials.ts';
+import type { Pref } from '../../_kit/prefs.ts';
 import type { HudValues } from './hud.ts';
 import type { EndState } from './match.ts';
 import { inviteUrl, prettyRoomError } from './net.ts';
@@ -38,6 +40,9 @@ export interface LobbyView {
   mySeat: number;
   isHost: boolean;
   seatsHint: string;
+  /** Bumped to put the saved initials back in the boxes; the line saying why typed ones cannot be used. */
+  initialsRev: number;
+  initialsProblem: string;
 }
 
 /** The slice of the game's state getting into a room touches (main.ts's G). */
@@ -69,8 +74,10 @@ export interface LobbyDeps {
   closeTitle(): void;
   /** Back to the title card over a fresh demo. */
   backToTitle(): void;
-  /** The player's saved initials (the title card's); rooms host and join with them. */
-  savedInitials(): string;
+  /** The player's saved initials (main.ts's savedInitials), shared with the title card; rooms host and join with them. */
+  initials: Pref<string>;
+  /** A set typed here was saved: the title card redraws to show it. */
+  initialsSaved(): void;
   hideShop(): void;
   paintHud(): void;
   refreshNavHints(): void;
@@ -84,7 +91,7 @@ export interface LobbyDeps {
 export function createLobby(deps: LobbyDeps) {
   const {
     G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, askNotifications, netEvent, seatName, closeLobbyVeil,
-    closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, savedInitials, hideShop, paintHud, refreshNavHints, renderMenu,
+    closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, initials, initialsSaved, hideShop, paintHud, refreshNavHints, renderMenu,
     renderShop, stopSolo,
   } = deps;
 
@@ -92,14 +99,36 @@ export function createLobby(deps: LobbyDeps) {
   /* The lobby is a Preact component (src/ui/lobby.tsx). This is everything it
      shows that the game decides: the status line, the occupancy count, the
      server dot, the picked hills, an invite's code, and the room as last drawn
-     (code, link, hills, seats). The code box stays the page's own. */
+     (code, link, hills, seats), and the initials line. The code and initials
+     boxes stay the page's own. */
   const LOBBY: LobbyView = {
     status: '', count: '', online: false, inRoom: false, mapId: '', mapsRev: 0, prefill: '',
     code: '', link: '', hills: 'Hills: Random hills', drones: '', seats: [], mySeat: 0, isHost: false, seatsHint: '',
+    initialsRev: 0, initialsProblem: '',
   };
   function lobbySay(text: string): void {
     LOBBY.status = text;
     renderLobby();
+  }
+  /* Host and Join use what the initials boxes hold. Boxes not all filled, or
+     a set the blocked list refuses, stop them with a line by the boxes, and
+     the player lands in the box to fix; the saved set is never used instead. */
+  function lobbyInitials(letters: string): string | null {
+    const read = readInitials(letters);
+    if ('problem' in read) {
+      LOBBY.initialsProblem = read.problem;
+      renderLobby();
+      $(`lobby-initial-${read.box + 1}`)?.focus?.();
+      return null;
+    }
+    if (read.initials !== initials.get()) chooseInitials(read.initials);
+    LOBBY.initialsProblem = '';
+    return read.initials;
+  }
+  /* A full set typed in the boxes: saved for the title card too, or the line says why not. */
+  function chooseInitials(word: string): void {
+    LOBBY.initialsProblem = saveInitials(initials, word);
+    if (!LOBBY.initialsProblem) initialsSaved();
   }
   function renderLobby(): void {
     const veil = $('lobby-veil');
@@ -117,16 +146,23 @@ export function createLobby(deps: LobbyDeps) {
       mapsRev: LOBBY.mapsRev,
       prefillCode: LOBBY.prefill,
       onPickMap: id => { LOBBY.mapId = id; mapChosen(); },
-      initials: savedInitials(),
-      onHost: () => {
+      initials: initials.get(),
+      initialsRev: LOBBY.initialsRev,
+      initialsProblem: LOBBY.initialsProblem,
+      onInitials: word => { chooseInitials(word); renderLobby(); },
+      onHost: letters => {
+        const who = lobbyInitials(letters);
+        if (who === null) return;
         unlock(); sfx.play('click');
-        hostRoom(savedInitials(), LOBBY.mapId);
+        hostRoom(who, LOBBY.mapId);
       },
-      onJoin: rawCode => {
+      onJoin: (rawCode, letters) => {
+        const who = lobbyInitials(letters);
+        if (who === null) return;
         const code = rawCode.trim().toUpperCase();
         if (!/^[A-Z0-9]{4}$/.test(code)) { lobbySay('Room codes are 4 letters or digits. Read it back and retry.'); return; }
         unlock(); sfx.play('click');
-        joinRoom(code, savedInitials());
+        joinRoom(code, who);
       },
       code: LOBBY.code,
       link: LOBBY.link,
@@ -198,6 +234,8 @@ export function createLobby(deps: LobbyDeps) {
   }
   async function openLobby(): Promise<void> {
     closePreview();
+    // Out of a room the boxes start from the saved set, whatever was left typed in them.
+    if (!net.code) { LOBBY.initialsRev++; LOBBY.initialsProblem = ''; }
     lobbySay('');
     loadMaps();
     const alive = await loadOccupancy();

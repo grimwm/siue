@@ -483,7 +483,7 @@
                 "p"
             ],
             "close": [
-                "Escape"
+                "q"
             ],
             "next": [
                 "n"
@@ -540,8 +540,8 @@
                 "ControlRight",
                 "Control"
             ],
-            "escape": [
-                "Escape"
+            "back": [
+                "q"
             ]
         },
         "scroll": {

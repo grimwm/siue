@@ -14,7 +14,7 @@
 <script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__installPrompt = e; });</script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
-<link rel="stylesheet" href="game.css?v=54ff9d4bce">
+<link rel="stylesheet" href="game.css?v=c5b559a670">
 </head>
 <body>
 <header class="topbar">
@@ -90,7 +90,7 @@
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="preview-title">
         <header class="ov-head">
           <div class="ov-title"><p class="kicker">Firing range</p><h2 id="preview-title">Preview</h2></div>
-          <button type="button" class="ov-x" id="preview-close" aria-label="Close" title="Close"><span class="key esc-cap" data-keyhint="global:escape">Esc</span><span class="x-glyph" aria-hidden="true">×</span></button>
+          <button type="button" class="ov-x" id="preview-close" aria-label="Close" title="Close"><span class="key" data-keyhint="global:back">Q</span><span class="x-glyph" aria-hidden="true">×</span></button>
           <div class="nav-hint ov-keys" id="nav-preview" data-scroll-only><span class="scroll-keys"><span data-keyhint="scroll:lineDown">J</span>/<span data-keyhint="scroll:lineUp">K</span> line</span><span class="scroll-keys"><span data-keyhint="scroll:pageUp">PgUp</span>/<span data-keyhint="scroll:pageDown">PgDn</span> page</span><span class="scroll-keys"><span data-keyhint="scroll:halfUp">Shift+K</span>/<span data-keyhint="scroll:halfDown">Shift+J</span> half page</span></div>
         </header>
         <p id="preview-stats" class="runstats"></p>
@@ -103,7 +103,7 @@
 </main>
 
 <script src="dist/fx.js?v=7e1e68411c" defer></script>
-<script type="module" src="dist/main.js?v=2a244da479"></script>
-<script src="dist/install.js?v=c1518f5e54" defer></script>
+<script type="module" src="dist/main.js?v=b36d71c515"></script>
+<script src="dist/install.js?v=6eb4810890" defer></script>
 </body>
 </html>

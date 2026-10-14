@@ -80,7 +80,7 @@ export function createTutorial(deps: TutorialDeps) {
       text: TUT ? `Move ${TUT.step + 1} of ${TUT_STEPS.length}: ${fmtKeys(TUT_STEPS[TUT.step]!.text)}` : '',
       progress: TUT ? 'Follow along in the hills behind this card.' : '',
       skip: 'Skip tutorial',
-      skipKey: TOUCH ? undefined : 'global:escape',
+      skipKey: TOUCH ? undefined : 'global:back',
       onSkip: skipTutorial,
     });
     refreshNavHints();

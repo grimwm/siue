@@ -291,7 +291,7 @@ export function createUi(deps: UiDeps): Ui {
       }
       if (k === "q" && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
         ev.preventDefault();
-        quit();
+        if (!ev.repeat) quit();
         return;
       }
       if (G.over || G.auto) return;

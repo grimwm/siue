@@ -1,6 +1,6 @@
 // websites/www.cs/games/_kit/test/install-bar.test.mjs
 // The Install and Share bar in the DOM stub: what each view draws, the iOS
-// steps dialog's focus and Escape, and the address field.
+// steps dialog's focus and Q, and the address field.
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { h, render } from 'preact';
@@ -64,16 +64,22 @@ test('"Link copied" is said in a status line', () => {
   assert.equal(byId(root, 'share-status').textContent, 'Link copied');
 });
 
-test('a blocked clipboard shows the address in a focused field; Escape closes it', () => {
+test('a blocked clipboard shows the address in a focused field; Q closes it, Escape does nothing', () => {
   const root = draw({ share: 'field' });
   const field = byId(root, 'share-url');
   assert.equal(field.value, 'https://site.test/play/crete/');
   assert.equal(globalThis.__focused, field);
   fire(field, 'keydown', { type: 'keydown', key: 'Escape' });
+  assert.deepEqual(calls, []);
+  fire(field, 'keydown', { type: 'keydown', key: 'q', ctrlKey: true });
+  assert.deepEqual(calls, []);
+  fire(field, 'keydown', { type: 'keydown', key: 'q', repeat: true });
+  assert.deepEqual(calls, []);
+  fire(field, 'keydown', { type: 'keydown', key: 'Q' });
   assert.deepEqual(calls, ['close-share']);
 });
 
-test('iOS steps: a dialog with the Share glyph; Done is focused; Escape and Done close it', () => {
+test('iOS steps: a dialog with the Share glyph; Done is focused; Q and Done close it, Escape does nothing', () => {
   const root = draw({ install: true });
   assert.equal(byId(root, 'install-steps').hidden, true);
   draw({ install: true, steps: true }, root);
@@ -85,6 +91,8 @@ test('iOS steps: a dialog with the Share glyph; Done is focused; Escape and Done
   assert.equal(walk(byId(root, 'install-steps-text')).some(n => n.localName === 'svg'), true);
   assert.equal(globalThis.__focused?.id, 'install-steps-done');
   fireDocument('keydown', { key: 'Escape' });
+  assert.deepEqual(calls, []);
+  fireDocument('keydown', { key: 'q' });
   click(byId(root, 'install-steps-done'));
   assert.deepEqual(calls, ['close-steps', 'close-steps']);
 });

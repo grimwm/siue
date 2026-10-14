@@ -3,13 +3,15 @@
  * game owns the state (the room, the status line, the picked hills) and hands
  * in a finished view of it; this draws it and reports what the player did. The
  * veil element (#lobby-veil) stays in index.html and the game shows and hides it.
- * The room-code box is the one thing the page keeps: what the player typed
- * lives in the input, and is handed over on submit. Initials come from the title card.
+ * The room-code box and the initials boxes (src/ui/initials-picker.tsx, the
+ * title card's too) keep what the player typed in the inputs; Host and Join
+ * hand it over on submit.
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import { KeyHints, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.tsx';
+import { InitialsPicker, typedLetters } from './initials-picker.tsx';
 import type { KeyHintFn } from './chrome.tsx';
 
 /** One hills tile. The Random tile has the empty id and no profile. */
@@ -50,10 +52,17 @@ export interface LobbyProps {
   /** An invite link's code, put in the Room code box when it arrives. */
   prefillCode: string;
   onPickMap: (id: string) => void;
-  /** The player's saved initials, set on the title card. */
+  /** The player's saved initials, the same set the title card edits. */
   initials: string;
-  onHost: () => void;
-  onJoin: (code: string) => void;
+  /** A change puts the saved set back in the initials boxes (the lobby reopening). */
+  initialsRev: number;
+  /** Why the typed initials cannot be used, or empty. */
+  initialsProblem: string;
+  /** All three initials boxes hold a letter: the set, uppercase. The game checks it. */
+  onInitials: (word: string) => void;
+  /** Host and Join hand over what the initials boxes hold, a space for an empty box. */
+  onHost: (letters: string) => void;
+  onJoin: (code: string, letters: string) => void;
   /** The room, once in one. */
   code: string;
   link: string;
@@ -114,6 +123,7 @@ function SeatTile({ seat, index, mySeat, isHost, onMode }: {
 export function Lobby(p: LobbyProps) {
   const card = useRef<HTMLDivElement>(null);
   const joinCode = useRef<HTMLInputElement>(null);
+  const initialsField = useRef<HTMLFieldSetElement>(null);
   // An invite link fills the code once; the player may then retype it.
   useLayoutEffect(() => { if (p.prefillCode && joinCode.current) joinCode.current.value = p.prefillCode; }, [p.prefillCode]);
   // The veil scrolls; keep it where the player left it across redraws.
@@ -125,7 +135,7 @@ export function Lobby(p: LobbyProps) {
           onClose={p.onClose} navId="nav-lobby" scrollOnly nav={<ScrollKeys line />} />
         <p class="hint" id="lobby-intro" hidden={p.inRoom}>
           Host a room and read the 4-letter code to your friends, or join theirs.
-          Everyone plays under the initials on their title card. There is no chat,
+          Everyone plays under their own three initials, set here or on the title card. There is no chat,
           only artillery. Empty seats go to the drone battery, and a quiet crew fires
           on its own after a while so no room ever stalls. The host may also pick named
           hills, like Canyon 3, so the crew can replay a favorite without ever seeing its seed.
@@ -135,11 +145,13 @@ export function Lobby(p: LobbyProps) {
             title={p.online ? 'room server: connected' : 'room server: not connected'} />{' '}
           <span id="lobby-count" aria-live="polite">{p.count}</span>
         </p>
-        <p class="hint" id="lobby-initials" hidden={p.inRoom}>
-          You play as <strong>{p.initials}</strong>. Change your initials on the title card.
-        </p>
+        <div class="lobby-initials" id="lobby-initials" hidden={p.inRoom}>
+          <InitialsPicker idPrefix="lobby" initials={p.initials} rev={p.initialsRev} onInitials={p.onInitials} fieldRef={initialsField}
+            problem={p.initialsProblem} noteId="lobby-initials-note" />
+          <p class="hint" id="lobby-initials-note" role="status">{p.initialsProblem}</p>
+        </div>
         <div class="lobby-rows" id="lobby-rows" hidden={p.inRoom}>
-          <form id="host-form" class="lobby-form" action="#" onSubmit={ev => { ev.preventDefault(); p.onHost(); }}>
+          <form id="host-form" class="lobby-form" action="#" onSubmit={ev => { ev.preventDefault(); p.onHost(typedLetters(initialsField.current)); }}>
             <span class="map-label" id="lobby-map-label">Hills</span>
             <input type="hidden" id="lobby-map" name="map" value={p.mapId} />
             <div class="unit-picker map-picker" id="lobby-map-picker" role="group" aria-labelledby="lobby-map-label">
@@ -150,7 +162,7 @@ export function Lobby(p: LobbyProps) {
             <button type="submit" id="host-go" class="btn-primary">Host a room</button>
           </form>
           <form id="join-form" class="lobby-form" action="#"
-            onSubmit={ev => { ev.preventDefault(); p.onJoin(joinCode.current?.value ?? ''); }}>
+            onSubmit={ev => { ev.preventDefault(); p.onJoin(joinCode.current?.value ?? '', typedLetters(initialsField.current)); }}>
             <label for="join-code">Room code</label>
             <input id="join-code" name="code" type="text" autocomplete="off" spellcheck={false}
               maxLength={4} minLength={4} placeholder="7K2Q" ref={joinCode} />

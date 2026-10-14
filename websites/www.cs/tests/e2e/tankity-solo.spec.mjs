@@ -103,7 +103,7 @@ test('the arrows reach every shop row on a short screen, and V previews any shel
   expect(await selInView()).toBe(true);
   await page.keyboard.press('v');
   await expect(page.locator('#preview-veil')).toBeVisible();
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await expect(page.locator('#preview-veil')).toBeHidden();
   // Down walks every row in turn, locked and unaffordable ones included.
   const total = await rows.count();
@@ -235,7 +235,7 @@ test('drones show an aim arm that swings smoothly before firing', async ({ brows
 
 test('the menu is a compact card, and gold marks only Menu and the aim keys', async ({ browser }) => {
   const { page } = await newPlayer(browser);
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   const card = page.locator('#menu-overlay');
   await expect(card).toBeVisible();
   const frame = await page.locator('#frame').boundingBox();
@@ -264,25 +264,25 @@ test('the menu is a compact card, and gold marks only Menu and the aim keys', as
 
 test('the unit picker changes the body and remembers it', async ({ browser }) => {
   const { page, ctx } = await newPlayer(browser);
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await page.click('#unit-picker button[title=Buggy]');
   await expect(page.locator('#unit-picker button[title=Buggy]')).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => localStorage.getItem('tankity-body'))).toBe('buggy');
   const again = await ctx.newPage();
   await again.goto('games/tankity/');
-  await again.keyboard.press('Escape');
+  await again.keyboard.press('q');
   await expect(again.locator('#unit-picker button[title=Buggy]')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('the Difficulty picker starts on Normal and keeps a choice across a reload', async ({ browser }) => {
   const { page } = await newPlayer(browser);
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   const tile = name => page.locator('#difficulty-picker button', { hasText: name });
   await expect(tile('Normal')).toHaveAttribute('aria-pressed', 'true');
   await tile('Hard').click();
   await expect(tile('Hard')).toHaveAttribute('aria-pressed', 'true');
   await page.reload();
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await expect(tile('Hard')).toHaveAttribute('aria-pressed', 'true');
   await expect(tile('Normal')).toHaveAttribute('aria-pressed', 'false');
 });

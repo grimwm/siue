@@ -29,7 +29,7 @@ const text = el => el.textContent;
 
 // The keys a game.json with the default bindings shows.
 const KEYS = {
-  'global:escape': 'ESC', 'scroll:lineDown': 'J', 'scroll:lineUp': 'K', 'scroll:pageUp': 'PgUp',
+  'global:back': 'Q', 'scroll:lineDown': 'J', 'scroll:lineUp': 'K', 'scroll:pageUp': 'PgUp',
   'scroll:pageDown': 'PgDn', 'scroll:halfUp': 'Shift+K', 'scroll:halfDown': 'Shift+J',
   'shop:selUp': '▲', 'shop:selDown': '▼', 'shop:qtyDown': '◀', 'shop:qtyUp': '▶',
   'shop:buy': 'B', 'shop:preview': 'V', 'global:fire': 'Ctrl',
@@ -243,11 +243,12 @@ const SEATS = [
   { human: false, name: 'WRAITH', mode: 'open' }, { human: true, name: 'def', mode: 'human' },
 ];
 function lobbyProps(over = {}) {
-  const calls = { close: 0, pick: [], host: [], join: [], seat: [], copy: 0, start: 0, leave: 0, icons: [] };
+  const calls = { close: 0, pick: [], host: [], join: [], seat: [], copy: 0, start: 0, leave: 0, icons: [], initials: [] };
   const props = {
     keyHint, onClose: () => { calls.close++; }, online: true, count: '3 / 10 rooms occupied', status: '', inRoom: false,
     maps: MAPS, mapId: '', drawMapIcon: (cv, profile) => { calls.icons.push(profile); }, mapsRev: 1, prefillCode: '',
-    onPickMap: id => calls.pick.push(id), initials: 'ZED', onHost: () => calls.host.push('host'), onJoin: c => calls.join.push(c),
+    onPickMap: id => calls.pick.push(id), initials: 'ZED', initialsRev: 0, initialsProblem: '', onInitials: w => calls.initials.push(w),
+    onHost: l => calls.host.push(l), onJoin: (c, l) => calls.join.push([c, l]),
     code: '', link: '', hills: 'Hills: Random hills', seats: [], mySeat: 0, isHost: false, seatsHint: '',
     onSeatMode: (i, m) => calls.seat.push([i, m]), onCopy: () => { calls.copy++; }, onStart: () => { calls.start++; }, onLeave: () => { calls.leave++; },
     ...over,
@@ -267,7 +268,7 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
   const head = card.children[0];
   check('lobby-head', text(byClass(head, 'kicker')[0]) === 'Squad up, no chatter' && text(byId(head, 'lobby-title')) === 'Game rooms');
   const x = byId(head, 'lobby-close');
-  check('lobby-close-button', hasClass(x, 'ov-x') && attr(x, 'title') === 'Close (ESC)' && text(byClass(x, 'esc-cap')[0]) === 'ESC');
+  check('lobby-close-button', hasClass(x, 'ov-x') && attr(x, 'title') === 'Close (Q)' && text(byClass(x, 'key')[0]) === 'Q');
   const nav = byId(head, 'nav-lobby');
   check('lobby-nav', attr(nav, 'data-scroll-only') === '' && text(nav) === 'J/K linePgUp/PgDn pageShift+K/Shift+J half page', text(nav));
   click(x);
@@ -302,16 +303,33 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
   check('lobby-map-hidden-value-follows-pick', byId(card, 'lobby-map').value === 'canyon');
   click(picker.children[2]);
   check('lobby-map-click-reports-id', calls.pick.join() === 'twin');
-  // The forms carry no initials: the rooms use the set saved on the title card.
+  // One set of initials boxes above both forms, the saved set in them; hosting
+  // and joining hand over what the boxes hold.
+  const initialBoxes = () => [1, 2, 3].map(n => byId(card, `lobby-initial-${n}`));
+  check('lobby-initials-boxes', initialBoxes().every(b => b && hasClass(b, 'initial')) && initialBoxes().map(b => b.value).join('') === 'ZED'
+    && !byId(card, 'host-initials') && !byId(card, 'join-initials') && attr(byId(card, 'join-code'), 'maxLength') === '4');
+  check('lobby-initials-before-forms', card.children.indexOf(byId(card, 'lobby-initials')) < card.children.indexOf(rows));
+  check('lobby-intro-initials-set-here', /set here or on the title card/.test(text(intro)), text(intro));
   const hostForm = byId(card, 'host-form');
   submit(hostForm);
-  check('lobby-host-submit', calls.host.length === 1 && hasClass(byId(card, 'host-go'), 'btn-primary') && text(byId(card, 'host-go')) === 'Host a room');
-  check('lobby-no-initials-boxes', !byId(card, 'host-initials') && !byId(card, 'join-initials') && attr(byId(card, 'join-code'), 'maxLength') === '4');
-  check('lobby-says-whose-initials', /ZED/.test(text(byId(card, 'lobby-initials'))) && /title card/.test(text(byId(card, 'lobby-initials'))),
-    text(byId(card, 'lobby-initials')));
+  check('lobby-host-submit', JSON.stringify(calls.host) === '["ZED"]' && hasClass(byId(card, 'host-go'), 'btn-primary') && text(byId(card, 'host-go')) === 'Host a room',
+    JSON.stringify(calls.host));
   byId(card, 'join-code').value = 'tst1';
   submit(byId(card, 'join-form'));
-  check('lobby-join-submit', JSON.stringify(calls.join) === '["tst1"]', JSON.stringify(calls.join));
+  check('lobby-join-submit', JSON.stringify(calls.join) === '[["tst1","ZED"]]', JSON.stringify(calls.join));
+  initialBoxes()[0].value = 'q';
+  fire(initialBoxes()[0], 'input');
+  renderLobby(veil, { ...props, status: 'Raising the flag…' });
+  submit(hostForm);
+  check('lobby-host-hands-over-half-typed', calls.host[1] === 'Q  ', JSON.stringify(calls.host));
+  initialBoxes()[1].value = 'x'; fire(initialBoxes()[1], 'input');
+  initialBoxes()[2].value = 'y'; fire(initialBoxes()[2], 'input');
+  check('lobby-initials-report-a-full-set', JSON.stringify(calls.initials) === '["QXY"]', JSON.stringify(calls.initials));
+  renderLobby(veil, { ...props, initialsProblem: 'Those initials are not allowed. Pick others.' });
+  check('lobby-initials-note', text(byId(card, 'lobby-initials-note')) === 'Those initials are not allowed. Pick others.'
+    && attr(byId(card, 'lobby-initials-note'), 'role') === 'status');
+  renderLobby(veil, { ...props, initialsRev: 1 });
+  check('lobby-initials-rev-puts-saved-back', initialBoxes().map(b => b.value).join('') === 'ZED');
   // The typed code survives every redraw; an invite's code fills the code box once.
   renderLobby(veil, { ...props, status: 'Raising the flag…' });
   check('lobby-redraw-keeps-typing', byId(card, 'join-code').value === 'tst1');
@@ -336,7 +354,7 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
   // In a room: the forms go, the code, link, hills and seats show.
   const inRoom = { inRoom: true, code: 'TST1', link: 'http://x/play/?code=TST1', hills: 'Hills: Canyon 3', seats: SEATS, mySeat: 0, isHost: true, seatsHint: 'Tap a seat nobody holds.' };
   renderLobby(veil, { ...props, ...inRoom });
-  check('lobby-in-room', intro.hidden === true && rows.hidden === true && room.hidden === false);
+  check('lobby-in-room', intro.hidden === true && rows.hidden === true && room.hidden === false && byId(card, 'lobby-initials').hidden === true);
   check('lobby-room-code-and-link', text(byId(card, 'lobby-code')) === 'TST1' && hasClass(byId(card, 'lobby-code'), 'room-code')
     && byId(card, 'join-link').value === 'http://x/play/?code=TST1' && attr(byId(card, 'join-link'), 'aria-label') === 'Invite link'
     && text(byId(card, 'lobby-hills')) === 'Hills: Canyon 3' && text(byId(card, 'seats-hint')) === 'Tap a seat nobody holds.');
@@ -371,7 +389,7 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
   check('lobby-host-again-sees-start', !start.style.display && seats.map(t => listeners(t, 'click')).join() === '0,1,1,0');
   // Back out of the room: the forms return.
   renderLobby(veil, props);
-  check('lobby-back-out', rows.hidden === false && intro.hidden === false && room.hidden === true);
+  check('lobby-back-out', rows.hidden === false && intro.hidden === false && room.hidden === true && byId(card, 'lobby-initials').hidden === false);
   check('lobby-redraw-keeps-nodes', veil.children[0] === card && byId(card, 'host-form') === hostForm);
 }
 
@@ -471,7 +489,7 @@ function gunTiles(n = 10, loaded = 0) {
   const stay = byId(card, 'leave-stay');
   const go = byId(card, 'leave-go');
   check('leave-buttons', hasClass(stay, 'btn-primary') && hasClass(go, 'btn-leave') && text(go) === 'Leave room'
-    && text(stay) === 'Stay in the match ESC' && hasClass(byClass(stay, 'key')[0], 'esc-cap'), text(stay));
+    && text(stay) === 'Stay in the match Q' && byClass(stay, 'key').length === 1, text(stay));
   click(stay);
   check('leave-stay-calls-back', calls.stay === 1 && calls.leave === 0);
   click(go);
@@ -511,7 +529,7 @@ function gunTiles(n = 10, loaded = 0) {
 {
   const section = makeEl('tutorial-overlay');
   let skipped = 0;
-  const tp = (over = {}) => ({ keyHint: (c, a) => (c === 'global' && a === 'tutorial' ? 'U' : c === 'global' && a === 'escape' ? 'Esc' : ''), text: '', progress: '', skip: 'Skip tutorial', skipKey: 'global:escape', onSkip: () => { skipped++; }, ...over });
+  const tp = (over = {}) => ({ keyHint: (c, a) => (c === 'global' && a === 'tutorial' ? 'U' : c === 'global' && a === 'back' ? 'Q' : ''), text: '', progress: '', skip: 'Skip tutorial', skipKey: 'global:back', onSkip: () => { skipped++; }, ...over });
   renderTutorial(section, tp());
   const [h, p1, p2, btn, nav] = section.children;
   check('tutorial-shape', h.localName === 'h2' && h.id === 'tutorial-h' && text(h) === 'Tutorial' && p1.id === 'tutorial-text' && p2.id === 'tutorial-progress' && hasClass(p2, 'hint')
@@ -519,7 +537,7 @@ function gunTiles(n = 10, loaded = 0) {
   check('tutorial-idle-is-blank', text(p1) === '' && text(p2) === '');
   renderTutorial(section, tp({ text: 'Move 2 of 5: Hold ▲ or ▼ to change power.', progress: 'Follow along in the hills behind this card.' }));
   check('tutorial-move', text(p1) === 'Move 2 of 5: Hold ▲ or ▼ to change power.' && text(p2) === 'Follow along in the hills behind this card.' && section.children[1] === p1);
-  check('tutorial-skip-label-has-the-esc-chip', text(btn) === 'Skip tutorial Esc' && byClass(btn, 'key').length === 1);
+  check('tutorial-skip-label-has-the-q-chip', text(btn) === 'Skip tutorial Q' && byClass(btn, 'key').length === 1);
   renderTutorial(section, tp({ skipKey: undefined }));
   check('tutorial-skip-label-without-key-on-touch', text(btn) === 'Skip tutorial');
   click(btn);

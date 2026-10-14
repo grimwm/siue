@@ -135,7 +135,12 @@ export const document = {
   addEventListener(t, f) { (docListeners[t] = docListeners[t] || []).push(f); },
   removeEventListener(t, f) { docListeners[t] = (docListeners[t] || []).filter(g => g !== f); },
 };
-/** Calls the document's listeners for an event type, as a key press would. */
+/** Calls the document's listeners for an event type, as a key press would,
+ *  and returns the event so a test can read what the listeners did to it. */
 export function fireDocument(type, extra = {}) {
-  for (const f of docListeners[type] || []) f({ type, preventDefault: () => {}, ...extra });
+  const ev = { type, prevented: false, stopped: false, ...extra };
+  ev.preventDefault = () => { ev.prevented = true; };
+  ev.stopPropagation = () => { ev.stopped = true; };
+  for (const f of docListeners[type] || []) f(ev);
+  return ev;
 }

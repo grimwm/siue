@@ -12,6 +12,9 @@
  * the eye, the raptor's sprite, the buttons) come in as callbacks. DOM-free, so
  * test/abilities.test.mjs runs it on a fake clock with fake timers. */
 
+import { isBackKey } from '../../_kit/keys.ts';
+import type { BackKeyEvent } from '../../_kit/keys.ts';
+
 export const GRENADE_COOLDOWN_MS = 10000;
 export const RAPTOR_COOLDOWN_MS = 60000;
 /** From the call to the strike band's blast. */
@@ -20,6 +23,17 @@ export const RAPTOR_STRIKE_AT_MS = 700;
 export const RAPTOR_LANDS_AT_MS = 1900;
 
 export type Ability = 'grenade' | 'raptor';
+
+/** What a key press asks of the abilities: R calls the raptor, G arms the
+ *  grenade, Q (the kit's back key) disarms it. Esc does nothing: Safari and
+ *  Firefox always leave full screen on it. Ctrl, Cmd and Alt chords stay the
+ *  browser's (Ctrl+R reloads). */
+export function abilityKey(e: BackKeyEvent): Ability | 'disarm' | null {
+  if (e.ctrlKey || e.metaKey || e.altKey) return null;
+  if (isBackKey(e)) return e.repeat ? null : 'disarm';
+  const k = (e.key ?? '').toLowerCase();
+  return k === 'r' ? 'raptor' : k === 'g' ? 'grenade' : null;
+}
 
 /** Milliseconds from `now` until `readyAt`, never negative. */
 export function cooldownRemaining(readyAt: number, now: number): number {

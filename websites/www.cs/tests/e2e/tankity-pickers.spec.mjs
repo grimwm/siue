@@ -108,7 +108,7 @@ test('the lobby offers Random plus every server map as a silhouette tile, and pi
 
 test('menu toggles are icon tiles that flip aria-pressed and keep their keys', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('q');
   await expect(page.locator('#menu-overlay')).toBeVisible();
   const sound = page.locator('#btn-sound');
   const music = page.locator('#btn-music');

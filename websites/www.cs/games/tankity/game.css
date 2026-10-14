@@ -500,7 +500,6 @@ button.btn-leave[hidden] { display: none; }
   line-height: 1;
   pointer-events: auto;
 }
-.ov-x .esc-cap { font-size: 0.7rem; letter-spacing: 0.04em; }
 .ov-x .x-glyph { font-size: 1.35rem; line-height: 0.8; font-weight: 400; }
 .log-overlay .ov-x .x-glyph { font-size: 1.1rem; }
 .ov-keys {

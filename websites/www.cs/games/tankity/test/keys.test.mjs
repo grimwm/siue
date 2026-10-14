@@ -3,11 +3,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { FALLBACK_KEYS, buildKeymap, lookupKey, keycap, createInput } from '../src/input.ts';
+import { FALLBACK_KEYS, buildKeymap, lookupKey, keycap, createInput, gridCommand } from '../src/input.ts';
 
 const GAME = JSON.parse(fs.readFileSync(new URL('../game.json', import.meta.url), 'utf8'));
 const map = buildKeymap(GAME.keys);
-const ev = o => ({ key: '', code: '', repeat: false, preventDefault() {}, ...o });
+const ev = o => {
+  const e = { key: '', code: '', repeat: false, prevented: 0, ...o };
+  e.preventDefault = () => { e.prevented++; };
+  return e;
+};
 const arrowLeft = (o = {}) => ev({ code: 'ArrowLeft', key: 'ArrowLeft', ...o });
 const shift = (o = {}) => ev({ code: 'ShiftLeft', key: 'Shift', ...o });
 function rig() {
@@ -25,21 +29,27 @@ test('arrows aim; Shift+arrows drive', () => {
   assert.equal(lookupKey(map, 'aim', { code: 'ArrowRight', key: 'ArrowRight', shiftKey: true }), 'driveRight');
 });
 
-test('Space or Ctrl fires, and G, Esc, L, ], H, M, E, F each do their one job', () => {
+test('Space or Ctrl fires, and G, Q, L, ], H, M, E, F each do their one job', () => {
   for (const [code, key] of [['Space', ' '], ['ControlLeft', 'Control'], ['ControlRight', 'Control']]) {
     assert.equal(lookupKey(map, 'global', { code, key }), 'fire', code);
   }
-  const want = [['KeyG', 'g', 'guns'], ['Escape', 'Escape', 'escape'], ['KeyL', 'l', 'log'], ['BracketRight', ']', 'nextTrack'],
+  const want = [['KeyG', 'g', 'guns'], ['KeyQ', 'q', 'back'], ['KeyL', 'l', 'log'], ['BracketRight', ']', 'nextTrack'],
     ['KeyH', 'h', 'help'], ['KeyM', 'm', 'music'], ['KeyE', 'e', 'sound'], ['KeyF', 'f', 'fullscreen']];
   for (const [code, key, action] of want) assert.equal(lookupKey(map, 'global', { code, key }), action, code);
 });
 
-test('W, A, S, D, Q and C are bound in no context, and nothing cycles weapons', () => {
+test('W, A, S, D and C are bound in no context, Q only goes back, and nothing cycles weapons', () => {
+  const q = [];
   for (const [ctx, actions] of Object.entries(GAME.keys)) {
     for (const [action, tokens] of Object.entries(actions)) {
-      for (const t of tokens) assert.doesNotMatch(t, /^(Key[WASDQC]|[wasdqc])$/i, `${ctx}.${action} binds ${t}`);
+      for (const t of tokens) assert.doesNotMatch(t, /^(Key[WASDC]|[wasdc])$/i, `${ctx}.${action} binds ${t}`);
+      if (tokens.some(t => /^(KeyQ|q)$/i.test(t))) q.push(`${ctx}.${action}`);
     }
   }
+  // Q is free in every other context: the held aim keys, the shop, the scroll keys and the gun grid.
+  assert.deepEqual(q.sort(), ['global.back', 'shop.close']);
+  for (const ctx of ['aim', 'scroll']) assert.equal(lookupKey(map, ctx, { code: 'KeyQ', key: 'q' }), null, ctx);
+  assert.equal(gridCommand('q'), null);
   assert.equal(GAME.keys.global.cycle, undefined);
   assert.equal(GAME.keys.global.menu, undefined);
 });
@@ -53,18 +63,19 @@ test('chips print keys the way a keyboard does', () => {
   assert.equal(keycap('Shift+ArrowLeft'), 'Shift+←');
   assert.equal(keycap('Space'), 'Space');
   assert.equal(keycap(' '), 'Space');
-  assert.equal(keycap('Escape'), 'Esc');
+  assert.equal(keycap('KeyQ'), 'Q');
   assert.equal(keycap('BracketRight'), ']');
   assert.equal(keycap('KeyG'), 'G');
   assert.equal(keycap('g'), 'G');
 });
 
-test('the first token is the one shown: Space for fire, Shift+← for driving, Esc for the menu', () => {
+test('the first token is the one shown: Space for fire, Shift+← for driving, Q for the menu', () => {
   const input = rig();
   assert.equal(input.hint('global', 'fire'), 'Space');
   assert.equal(input.hint('global', 'fire', 2), 'Ctrl');
   assert.equal(input.hint('aim', 'driveLeft'), 'Shift+←');
-  assert.equal(input.hint('global', 'escape'), 'Esc');
+  assert.equal(input.hint('global', 'back'), 'Q');
+  assert.equal(input.hint('shop', 'close'), 'Q');
 });
 
 test('chord: Shift then ← drives; letting Shift go first stops the drive', () => {
@@ -134,11 +145,11 @@ test('card: the aim keys hold nothing, and the letter keys still reach their com
   const input = rig();
   const calls = [];
   const log = name => () => { calls.push(name); };
-  input.register({ new: log('new'), rooms: log('rooms'), escape: log('escape') }, { cardOpen: () => true });
+  input.register({ new: log('new'), rooms: log('rooms'), back: log('back') }, { cardOpen: () => true });
   input.keydown(arrowLeft());
   assert.ok(!input.held.has('barrelLeft'));
-  for (const [code, key] of [['KeyN', 'n'], ['KeyO', 'o'], ['Escape', 'Escape']]) input.keydown(ev({ code, key }));
-  assert.deepEqual(calls, ['new', 'rooms', 'escape']);
+  for (const [code, key] of [['KeyN', 'n'], ['KeyO', 'o'], ['Escape', 'Escape'], ['KeyQ', 'q']]) input.keydown(ev({ code, key }));
+  assert.deepEqual(calls, ['new', 'rooms', 'back']);
 });
 
 test('card: with no button focused, the fire key reaches the game (which explains the demo)', () => {
@@ -203,14 +214,51 @@ test('battlefield: with no overlay up, Space on a focused button fires', () => {
   assert.deepEqual(calls, ['fire']);
 });
 
-test('Esc still works while a text box has focus; other keys stay the box\'s', () => {
+test('a text box keeps every key: Q types a letter there, and Esc does nothing', () => {
   const input = rig();
   const calls = [];
-  input.register({ escape: () => { calls.push('escape'); }, new: () => { calls.push('new'); } });
-  const inBox = o => ({ ...ev(o), target: { tagName: 'INPUT' } });
-  input.keydown(inBox({ code: 'Escape', key: 'Escape' }));
-  input.keydown(inBox({ code: 'KeyN', key: 'n' }));
-  assert.deepEqual(calls, ['escape']);
+  input.register({ back: () => { calls.push('back'); }, close: () => { calls.push('close'); return true; }, new: () => { calls.push('new'); } },
+    { shopLive: () => true });
+  const inBox = o => ev({ ...o, target: { tagName: 'INPUT' } });
+  const keys = [inBox({ code: 'KeyQ', key: 'q' }), inBox({ code: 'Escape', key: 'Escape' }), inBox({ code: 'KeyN', key: 'n' })];
+  for (const k of keys) input.keydown(k);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(keys.map(k => k.prevented), [0, 0, 0]);
+});
+
+test('Esc maps to no action in any context, in game.json and in the fallback', () => {
+  for (const table of [GAME.keys, FALLBACK_KEYS]) {
+    const m = buildKeymap(table);
+    for (const ctx of Object.keys(table)) {
+      for (const mods of [{}, { shiftKey: true }, { ctrlKey: true }]) {
+        assert.equal(lookupKey(m, ctx, { code: 'Escape', key: 'Escape', ...mods }), null, `${ctx} ${JSON.stringify(mods)}`);
+      }
+    }
+  }
+  assert.equal(gridCommand('Escape'), null);
+});
+
+test('Esc reaches no command in any state: shop, aim, gun grid, card, overlay or question', () => {
+  const input = rig();
+  const calls = [];
+  const table = {};
+  for (const name of ['back', 'close', 'fire', 'new', 'guns', 'lineDown', 'pageDown', 'gridLeft', 'confirm', 'digit', 'selUp', 'buy', 'preview', 'next']) {
+    table[name] = () => { calls.push(name); return true; };
+  }
+  let modal = false;
+  input.register(table, {
+    shopLive: () => true, cardOpen: () => true, overlayOpen: () => true,
+    modalOpen: () => modal, modalBack: () => { calls.push('modalBack'); },
+  });
+  for (const m of [false, true]) {
+    modal = m;
+    for (const target of [null, { tagName: 'BUTTON', click: () => { calls.push('click'); } }]) {
+      const esc = ev({ code: 'Escape', key: 'Escape', target });
+      input.keydown(esc);
+      assert.equal(esc.prevented, 0);
+    }
+  }
+  assert.deepEqual(calls, []);
 });
 
 test('overlay: a focused button outside the open overlay (the HUD under the radio log) still fires on Space', () => {

@@ -78,7 +78,7 @@ The page opens on a title card over the dimmed demo: Play (solo, random hills), 
 | `dist/main.js`, `dist/fx.js`, `dist/fx-editor.js` (and `.map`s) | The bundles the games kit builds from `src/` (see Source layout and build); checked in and deployed (the host has no Node), except the dev-only `fx-editor.js`. Never edit by hand |
 | `build.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.check.json` | The build setup: the three entries and the three type-check programs. Never deployed, like `src/`, `test/` and `tools/` |
 | `test/*.test.mjs`, `test/dom-stub.mjs` | The Node tests (`node:test`, see Tests); the stub is the small Node DOM that `ui.test.mjs` and `smoke.test.mjs` share. Never deployed |
-| `test/php/`, `test/php-docker/` | The PHPUnit cases (`tankity` and `tankity-docker` suites) and, in `checks/`, the check scripts they run. Never deployed |
+| `test/php/`, `test/php-docker/` | The PHPUnit cases (`tankity` and `tankity-docker` suites). Never deployed |
 | `rooms.php` | Room server entry point: request parsing, the `$action` handlers, `room_json_out` (gzip), `room_gate`. It requires the files below, and keeps the one helper that resolves against its own location (`room_arsenal` reads `game.json`) |
 | `server/settings.php` | What a room is (`ROOM_*` shape constants) and the host's knobs (`room_max_rooms`, `room_live_secs`) and the turn-time stops |
 | `server/store.php` | Rooms as rows: the room lock (`RoomLock`, one write transaction from `room_load` to `room_unlock`), create/register/close/discard, `room_save`, `room_count`, the sweep, room codes |
@@ -1191,7 +1191,7 @@ is `{about, status, body}`.
   `t`). Add a fixture to the `fixturesFit` list when `generate.php` gains one.
   `rooms.php` stores a `join` event without a `seq`, which no snapshot ever
   carries; it has no member in the union.
-- `test/php/checks/rooms-sim.php` compares the keys and types of today's `room_snapshot`
+- `test/php/RoomsSimTest.php` compares the keys and types of today's `room_snapshot`
   output with each fixture, on any PHP.
 - `test/smoke.test.mjs` checks that every hand-written snapshot its fake server
   sends has the fixtures' keys and types, then serves the fixtures themselves

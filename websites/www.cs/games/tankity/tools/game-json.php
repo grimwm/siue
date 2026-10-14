@@ -434,9 +434,13 @@ const TANKITY_FX_ENUMS = [
     'ease' => ['linear', 'out', 'in'],
     'unit' => ['px', 'r'],
     'anchor' => ['center', 'bottom'],
+    'anim' => ['once', 'loop', 'random'],
 ];
-/** Shell body glow: field => [min, max]. */
-const TANKITY_FX_BODY = ['halo' => [0.0, 100.0], 'alpha' => [0.0, 1.0], 'pulse' => [0.0, 30.0], 'stretch' => [0.0, 200.0]];
+/** Shell body (glow, and the rendered sprite's size and motion): field => [min, max]. `sprite` names a sheet. */
+const TANKITY_FX_BODY = [
+    'halo' => [0.0, 100.0], 'alpha' => [0.0, 1.0], 'pulse' => [0.0, 30.0], 'stretch' => [0.0, 200.0],
+    'size' => [1.0, 100.0], 'fps' => [0.0, 60.0], 'spin' => [-3600.0, 3600.0], 'roll' => [0.0, 50.0],
+];
 /** Numeric emitter fields: name => [type, min, max, min with unit r, max with unit r]. */
 const TANKITY_FX_FIELDS = [
     'count' => ['int', 0, 200, null, null],
@@ -817,7 +821,7 @@ function tankity_build_gfx(TankityCheck $c, mixed $g, string $p): ?array
     if ($g === null) {
         return null;
     }
-    $c->allow($g, ['shell', 'trail', 'blast', 'painter', 'shake', 'linger', 'size'], $p);
+    $c->allow($g, ['shell', 'trail', 'blast', 'painter', 'shake', 'linger'], $p);
     $o = [];
     foreach (['shell', 'trail'] as $k) {
         $o[$k] = array_key_exists($k, $g) ? $c->color($g[$k], "$p.$k") : null;
@@ -834,8 +838,7 @@ function tankity_build_gfx(TankityCheck $c, mixed $g, string $p): ?array
     $o['painter'] = $c->enum($g, 'painter', $p, TANKITY_PAINTERS);
     $o['shake'] = $c->num($g, 'shake', $p, 0.0, 1.0);
     $o['linger'] = $c->num($g, 'linger', $p, 0.1, 3.0, false);
-    $o['size'] = $c->num($g, 'size', $p, 1.0, 20.0, false);
-    return tankity_ordered($o, ['shell', 'trail', 'blast', 'painter', 'shake', 'linger', 'size']);
+    return tankity_ordered($o, ['shell', 'trail', 'blast', 'painter', 'shake', 'linger']);
 }
 
 function tankity_build_keys(TankityCheck $c, mixed $k): array
@@ -977,7 +980,7 @@ function tankity_build_effects(TankityCheck $c, mixed $e, array $ammoKeys, strin
         $o = [];
         foreach ($w as $part => $v) {
             if ($part === 'body') {
-                $o['body'] = tankity_build_fx_body($c, $v, "$p.body");
+                $o['body'] = tankity_build_fx_body($c, $v, "$p.body", $sheets);
             } elseif ($part === 'special') {
                 $o['special'] = [];
                 foreach ($c->map($v, "$p.special") ?? [] as $name => $ef) {
@@ -1009,17 +1012,28 @@ function tankity_fx_sheets(string $dir): array
     return $names;
 }
 
-function tankity_build_fx_body(TankityCheck $c, mixed $b, string $p): array
+/** @param list<string> $sheets */
+function tankity_build_fx_body(TankityCheck $c, mixed $b, string $p, array $sheets): array
 {
     $b = $c->map($b, $p);
     if ($b === null) {
         return [];
     }
-    $c->allow($b, array_keys(TANKITY_FX_BODY), $p);
+    $c->allow($b, array_merge(array_keys(TANKITY_FX_BODY), ['sprite']), $p);
     $o = [];
-    foreach (TANKITY_FX_BODY as $k => [$lo, $hi]) {
-        if (array_key_exists($k, $b)) {
+    foreach ($b as $k => $v) {
+        if ($k === 'sprite') {
+            $o[$k] = $c->enum($b, 'sprite', $p, $sheets);
+        } elseif (isset(TANKITY_FX_BODY[$k])) {
+            [$lo, $hi] = TANKITY_FX_BODY[$k];
             $o[$k] = $c->num($b, $k, $p, $lo, $hi);
+        }
+    }
+    if (!isset($b['sprite'])) {
+        foreach (['size', 'fps', 'spin', 'roll'] as $k) {
+            if (array_key_exists($k, $b)) {
+                $c->err("$p.$k", 'only a body with a sprite uses this');
+            }
         }
     }
     return $o;
@@ -1090,7 +1104,7 @@ function tankity_build_fx_emitter(TankityCheck $c, mixed $em, string $p, bool $d
     if ($em === null) {
         return [];
     }
-    $c->allow($em, array_merge(array_keys(TANKITY_FX_FIELDS), array_keys(TANKITY_FX_ENUMS), ['edge', 'glow', 'round', 'alpha', 'colors', 'sheet', 'tint']), $p);
+    $c->allow($em, array_merge(array_keys(TANKITY_FX_FIELDS), array_keys(TANKITY_FX_ENUMS), ['edge', 'glow', 'round', 'align', 'ground', 'alpha', 'colors', 'sheet', 'tint']), $p);
     $r = ($em['unit'] ?? 'px') === 'r';
     $o = [];
     foreach ($em as $k => $v) {
@@ -1106,7 +1120,7 @@ function tankity_build_fx_emitter(TankityCheck $c, mixed $em, string $p, bool $d
             };
         } elseif (isset(TANKITY_FX_ENUMS[$k])) {
             $o[$k] = $c->enum($em, $k, $p, TANKITY_FX_ENUMS[$k]);
-        } elseif ($k === 'edge' || $k === 'glow' || $k === 'round') {
+        } elseif ($k === 'edge' || $k === 'glow' || $k === 'round' || $k === 'align' || $k === 'ground') {
             $o[$k] = $c->bool($em, $k, $p);
         } elseif ($k === 'alpha') {
             $o[$k] = tankity_fx_ramp($c, $v, "$p.alpha", 'opacity keyframes, each 0 to 1', fn($x) => is_int($x) || is_float($x) ? ($x >= 0 && $x <= 1 ? $x : null) : null);
@@ -1123,7 +1137,7 @@ function tankity_build_fx_emitter(TankityCheck $c, mixed $em, string $p, bool $d
         $c->err("$p.sheet", 'is required for a sprite emitter (' . implode(', ', $sheets) . ')');
     }
     if ($shape !== 'sprite') {
-        foreach (['sheet', 'fps', 'scale', 'anchor', 'tint'] as $k) {
+        foreach (['sheet', 'fps', 'scale', 'anchor', 'tint', 'align', 'anim'] as $k) {
             if (array_key_exists($k, $em)) {
                 $c->err("$p.$k", 'only a sprite emitter uses this');
             }

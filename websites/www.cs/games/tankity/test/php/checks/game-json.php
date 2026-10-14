@@ -240,8 +240,8 @@ $check('apex-cluster-needs-no-fuse', ($apex['apex'] ?? null) === true && !isset(
 $rack = $row1($mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 1\n"));
 $check('airack-validates', ($rack['aiRack'] ?? null) === 1 && array_search('aiRack', array_keys($rack), true) === array_search('aiRound', array_keys($rack), true) + 1,
     json_encode($rack));
-$look = $rowOf($mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, linger: 0.8, size: 7}'), 0);
-$check('gfx-linger-and-size-validate', ($look['gfx']['linger'] ?? null) === 0.8 && ($look['gfx']['size'] ?? null) === 7, json_encode($look['gfx'] ?? $look));
+$look = $rowOf($mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, linger: 0.8}'), 0);
+$check('gfx-linger-validates', ($look['gfx']['linger'] ?? null) === 0.8, json_encode($look['gfx'] ?? $look));
 $start = $row1($mut("      aiRound: 2\n", "      aiRound: 2\n      start: 1\n"));
 $check('start-validates', ($start['start'] ?? null) === 1, json_encode($start));
 $check('ball-painter-validates', (json_decode($render($mut('painter: spark', 'painter: ball')), true)['arsenal']['ammo'][1]['gfx']['painter'] ?? '') === 'ball');
@@ -291,7 +291,7 @@ $cases = [
     'airack-range-low' => [$mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 0\n"), 'arsenal.ammo[1].aiRack: must be a whole number from 1 to 9'],
     'airack-range-high' => [$mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 10\n"), 'arsenal.ammo[1].aiRack: must be a whole number from 1 to 9'],
     'linger-range' => [$mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, linger: 9}'), 'arsenal.ammo[0].gfx.linger: must be a number from 0.1 to 3'],
-    'size-range' => [$mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, size: 40}'), 'arsenal.ammo[0].gfx.size: must be a number from 1 to 20'],
+    'size-is-the-body' => [$mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, size: 4}'), 'arsenal.ammo[0].gfx.size: unknown key'],
     'start-range' => [$mut("      aiRound: 2\n", "      aiRound: 2\n      start: 10\n"), 'arsenal.ammo[1].start: must be a whole number from 0 to 9'],
     'airack-needs-ai' => [$mut("      ai: true\n      aiRound: 2\n", "      ai: false\n      aiRound: 2\n      aiRack: 1\n"), 'arsenal.ammo[1].aiRack: only a row with ai: true uses this'],
     'dmg-float' => [$mut("      dmg: 34\n", "      dmg: 34.5\n"), 'arsenal.ammo[0].dmg'],
@@ -372,6 +372,12 @@ $cases = [
     'effects-bad-bool' => [$mut('glow: true }', 'glow: maybe }'), 'emitters[0].glow: must be true or false'],
     'effects-body-unknown' => [$mut('pulse: 6 }', 'pulse: 6, glowy: 1 }'), 'effects.shell.body.glowy: unknown key'],
     'effects-body-range' => [$mut('halo: 9', 'halo: 900'), 'effects.shell.body.halo: must be a number from 0 to 100'],
+    'effects-body-sprite-unknown' => [$mut('pulse: 6 }', 'pulse: 6, sprite: nope }'), 'effects.shell.body.sprite: must be one of: fireball'],
+    'effects-body-size-needs-sprite' => [$mut('pulse: 6 }', 'pulse: 6, size: 14 }'), 'effects.shell.body.size: only a body with a sprite'],
+    'effects-body-roll-range' => [$mut('pulse: 6 }', 'pulse: 6, sprite: fireball, roll: 90 }'), 'effects.shell.body.roll: must be a number from 0 to 50'],
+    'effects-bad-anim' => [$mut('glow: true }', 'glow: true, anim: spin }'), 'emitters[0].anim: must be one of: once, loop, random'],
+    'effects-align-on-dot' => [$mut('glow: true }', 'glow: true, align: true }'), 'emitters[0].align: only a sprite emitter'],
+    'effects-bad-ground' => [$mut('glow: true }', 'glow: true, ground: maybe }'), 'emitters[0].ground: must be true or false'],
     'music-needs-title' => [$mut("      title: Theme\n", ''), 'audio.music[0].title: is required'],
     'music-needs-file' => [$mut("    - file: audio/music/a.mp3\n      title: Theme\n", "    - title: Theme\n"), 'audio.music[0].file'],
     'music-extra-field' => [$mut("      credit: Someone, CC0\n", "      credit: Someone, CC0\n      loop: true\n"), 'audio.music[0].loop: unknown key'],

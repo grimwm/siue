@@ -45,15 +45,15 @@ test.describe('effects editor', () => {
     const { page, errors } = await openEditor(browser);
     await page.selectOption('#weapon', 'mortar');
     await page.click('#slots button[data-slot="impact"]');
-    await page.click('#emitters li[data-i="4"] .label');
+    await page.click('#emitters li[data-i="7"] .label');
     await page.locator('[data-field="count"] input[type="number"]').fill('3');
     await page.reload();
     await expect(page.locator('#weapon option')).toHaveCount(Object.keys(GAME.effects).length);
     await expect(page.locator('#status')).toContainText('Restored your unsaved edits');
-    expect(await page.evaluate(() => window.fxEditor.defs.mortar.impact.emitters[4].count)).toBe(3);
+    expect(await page.evaluate(() => window.fxEditor.defs.mortar.impact.emitters[7].count)).toBe(3);
     await page.click('#reload');
     await expect(page.locator('#status')).toContainText('Loaded the effects from game.json');
-    expect(await page.evaluate(() => window.fxEditor.defs.mortar.impact.emitters[4].count)).toBe(26);
+    expect(await page.evaluate(() => window.fxEditor.defs.mortar.impact.emitters[7].count)).toBe(14);
     await page.reload();
     await expect(page.locator('#status')).toContainText('Loaded the effects from game.json');
     expect(errors).toEqual([]);
@@ -64,20 +64,20 @@ test.describe('effects editor', () => {
     const { page, errors } = await openEditor(browser);
     await page.selectOption('#weapon', 'mortar');
     await page.click('#slots button[data-slot="impact"]');
-    await expect(page.locator('#emitters li')).toHaveCount(8);
+    await expect(page.locator('#emitters li')).toHaveCount(12);
     await page.screenshot({ path: 'test-results/tankity-fx-editor.png' });
     const before = await spawned(page);
-    // Emitter 5 is the dirt shower: zero it and the blast throws less.
-    await page.click('#emitters li[data-i="4"] .label');
-    await expect(page.locator('#param-title')).toContainText('Emitter #5');
-    const own = await page.evaluate(() => window.fxEditor.defs.mortar.impact.emitters[4].count);
-    expect(own).toBe(26);
+    // Emitter 8 is the debris burst: zero it and the blast throws less.
+    await page.click('#emitters li[data-i="7"] .label');
+    await expect(page.locator('#param-title')).toContainText('Emitter #8');
+    const own = await page.evaluate(() => window.fxEditor.defs.mortar.impact.emitters[7].count);
+    expect(own).toBe(14);
     await resetStats(page);
     await page.locator('[data-field="count"] input[type="number"]').fill('0');
     await page.waitForTimeout(400); // the preview restarts itself after an edit
     await settle(page);
     const after = await page.evaluate(() => window.fxEditor.sys.stats.spawned);
-    expect(after, `a smaller blast spawns fewer particles (${after} < ${before})`).toBeLessThan(before - 15);
+    expect(after, `a smaller blast spawns fewer particles (${after} < ${before})`).toBeLessThan(before - 10);
     await page.locator('#stage').screenshot({ path: 'test-results/tankity-fx-editor-edited.png' });
     // The export carries the edit; untouched weapons are byte for byte as loaded.
     await page.click('#copy');
@@ -88,17 +88,17 @@ test.describe('effects editor', () => {
     expect(copied.length).toBe(committed.length);
     const changed = committed.map((line, i) => [line, copied[i]]).filter(([a, b]) => a !== b);
     expect(changed.length, 'only the edited emitter line differs').toBe(1);
-    expect(changed[0][0]).toContain('count: 26');
+    expect(changed[0][0]).toContain('count: 14');
     expect(changed[0][1]).not.toContain('count:');
     // Add, duplicate, remove, mute.
     await page.selectOption('#new-shape', 'ring');
     await page.click('#em-add');
-    await expect(page.locator('#emitters li')).toHaveCount(9);
+    await expect(page.locator('#emitters li')).toHaveCount(13);
     await page.locator('#emitters li[aria-current="true"] button[aria-label^="Duplicate "]').click();
-    await expect(page.locator('#emitters li')).toHaveCount(10);
+    await expect(page.locator('#emitters li')).toHaveCount(14);
     await page.locator('#emitters li[aria-current="true"] button[aria-label^="Remove "]').click();
     await page.locator('#emitters li[aria-current="true"] button[aria-label^="Remove "]').click();
-    await expect(page.locator('#emitters li')).toHaveCount(8);
+    await expect(page.locator('#emitters li')).toHaveCount(12);
     await page.locator('#emitters li[data-i="0"] button[aria-label^="Mute "]').click();
     await expect(page.locator('#emitters li[data-i="0"]')).toHaveClass(/muted/);
     // Download saves the same block as a file.

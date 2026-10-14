@@ -87,12 +87,10 @@ export interface Gfx {
   blast?: readonly [string, string];
   painter?: string;
   linger?: number; // seconds the blast disc stays on screen
-  size?: number; // the battlefield shell's radius, px
   [key: string]: unknown;
 }
-/* Seconds a weapon's blast disc lingers, and its shell's radius in flight. */
+/* Seconds a weapon's blast disc lingers. */
 export const gfxLinger = (g: { linger?: number } | undefined): number => (g && g.linger) || 0.5;
-export const gfxSize = (g: { size?: number } | undefined): number => (g && g.size) || 3.5;
 /* One ammo row of the arsenal (game.yaml, served as game.json). */
 export interface Weapon {
   key: string;

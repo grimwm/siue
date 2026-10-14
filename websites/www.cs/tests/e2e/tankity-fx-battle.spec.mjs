@@ -66,3 +66,23 @@ test('reduced motion thins the effects and drops the screen flash', async ({ bro
   expect(full, 'normal motion draws effects').toBeGreaterThan(0.2);
   expect(calm, `reduced motion draws fewer (${calm.toFixed(2)} vs ${full.toFixed(2)} per frame)`).toBeLessThan(full * 0.8);
 });
+
+test('Screen flashes is a Settings toggle, on by default, and stays off across a reload', async ({ browser }) => {
+  test.setTimeout(60_000);
+  const { page, ctx, errors } = await newPlayer(browser);
+  const flashes = () => page.evaluate(() => window.TankityFX.flashes);
+  expect(await flashes(), 'on by default').toBe(true);
+  await page.keyboard.press('q');
+  const toggle = page.locator('#btn-flashes');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  expect(await flashes(), 'the engine follows the toggle').toBe(false);
+  await page.reload();
+  await page.waitForTimeout(600);
+  expect(await flashes(), 'still off after a reload').toBe(false);
+  await page.keyboard.press('q');
+  await expect(page.locator('#btn-flashes')).toHaveAttribute('aria-pressed', 'false');
+  expect(errors).toEqual([]);
+  await ctx.close();
+});

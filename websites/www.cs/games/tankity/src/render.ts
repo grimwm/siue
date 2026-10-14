@@ -15,7 +15,6 @@
  * the sim helpers arrive as dependencies. */
 import type { TrailCarrier } from './fx/trail.ts';
 import type { Box, Fit, WorldRect } from './field.ts';
-import { gfxSize } from './sim.ts';
 import type { Cloud, Hills, Rng, Tank } from './sim.ts';
 
 /* ---------- what main.ts hands over ---------- */
@@ -62,12 +61,13 @@ export interface FxApi {
   reduced: boolean;
   sheets: { moon?: SpriteSheet };
   glow(c: CanvasRenderingContext2D, x: number, y: number, radius: number, color: string, alpha: number): void;
+  /** The shell's glow, and its rendered sprite when it has one (then true). */
   drawBody(c: CanvasRenderingContext2D, x: number, y: number, vx: number, vy: number,
-    body: unknown, color: string, time: number): void;
+    body: unknown, color: string, time: number): boolean | void;
 }
 
 /** A weapon's paint job as the battlefield reads it. */
-export interface Look { shell?: string; blast?: readonly string[]; painter?: string; size?: number }
+export interface Look { shell?: string; blast?: readonly string[]; painter?: string }
 
 /** The aim arm to draw: the unit whose turn it is, and the arm's length in world units. */
 export interface AimArm { unit: DrawTank; length: number }
@@ -571,9 +571,10 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
   }
 
   /* ---------- shells ---------- */
-  function drawShellBody(c: CanvasRenderingContext2D, wkey: string, x: number, y: number, vx: number, vy: number, time: number): void {
-    if (!FX) return;
-    FX.drawBody(c, x, y, vx, vy, deps.fxBody(wkey), deps.look(wkey).shell || '#ffe27a', time);
+  /** The shell's glow and, when its sheet has loaded, its rendered sprite (then true). */
+  function drawShellBody(c: CanvasRenderingContext2D, wkey: string, x: number, y: number, vx: number, vy: number, time: number): boolean {
+    if (!FX) return false;
+    return !!FX.drawBody(c, x, y, vx, vy, deps.fxBody(wkey), deps.look(wkey).shell || '#ffe27a', time);
   }
 
   /** A ball-painted shell (the roller): a coloured ball with a stripe across it that turns as the ball travels, a full turn per 2 pi radii of ground. */
@@ -599,16 +600,18 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.restore();
   }
 
-  /** A shell in flight: its glow body, a coloured ball (bigger for the big ones) and a white core. */
+  /** A shell in flight: its glow body and rendered sprite, or (no sprite yet) a coloured ball (bigger for the big ones) and a white core. */
   function drawShell(c: CanvasRenderingContext2D, s: Flying, time: number): void {
-    drawShellBody(c, s.wkey, s.x, s.y, s.vx, s.vy, time);
+    if (drawShellBody(c, s.wkey, s.x, s.y, s.vx, s.vy, time)) return;
     if (deps.look(s.wkey).painter === 'ball') {
       drawBall(c, s.x, s.y, deps.look(s.wkey).shell || '#c9a66b');
       return;
     }
     c.fillStyle = deps.look(s.wkey).shell || '#ffe27a';
     c.beginPath();
-    c.arc(s.x, s.y, gfxSize(deps.look(s.wkey)), 0, Math.PI * 2);
+    // Until its sprite loads, a shell is a disc a quarter of its sprite's size.
+    const body = deps.fxBody(s.wkey) as { size?: number } | null | undefined;
+    c.arc(s.x, s.y, body && body.size ? body.size / 4 : 3.5, 0, Math.PI * 2);
     c.fill();
     c.fillStyle = '#fff';
     c.beginPath();
@@ -724,7 +727,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     for (const bm of pv.booms) drawBoom(c, bm, deps.look(bm.wkey));
     if (pv.fx) pv.fx.draw(c);
     for (const s of pv.shells) {
-      drawShellBody(c, pv.wkey, s.x, s.y, s.vx, s.vy, time);
+      if (drawShellBody(c, pv.wkey, s.x, s.y, s.vx, s.vy, time)) continue;
       if (deps.look(pv.wkey).painter === 'ball') {
         drawBall(c, s.x, s.y, deps.look(pv.wkey).shell || '#c9a66b');
         continue;

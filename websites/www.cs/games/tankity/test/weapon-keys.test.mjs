@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildArsenal, gfxLinger, gfxSize, startAmmo } from '../src/sim.ts';
+import { buildArsenal, gfxLinger, startAmmo } from '../src/sim.ts';
 
 const dir = path.join(import.meta.dirname, '..');
 const GAME = JSON.parse(fs.readFileSync(path.join(dir, 'game.json'), 'utf8'));
@@ -27,6 +27,7 @@ test('no logic compares a weapon to a key or lists weapon keys', () => {
     new RegExp(`['"](${keys})['"]\\s*[=!]==?`), // 'nuke' === w
     new RegExp(`['"](${keys})['"]\\s*=>\\s*-?\\d`), // ['buck' => 1]
     new RegExp(`[{,]\\s*(${keys}):\\s*-?\\d`), // { buck: 1 }
+    new RegExp(`['"](${keys})['"]\\s*,\\s*['"](${keys})['"]`), // ['nuke', 'babynuke'].includes(w)
   ];
   // Some effects share a name with a gun (`effect === 'roller'`): a compare that reads an effect is not about a key.
   const aboutEffect = (line, at) => /effect/.test(line.slice(Math.max(0, at - 40), at + 40));
@@ -42,15 +43,13 @@ test('no logic compares a weapon to a key or lists weapon keys', () => {
   }
 });
 
-test('how long a blast lingers and how big a shell flies come from its gfx', () => {
+test('how long a blast lingers comes from its gfx, and how big a shell flies from its body', () => {
   const w = arsenal.weapons;
   assert.equal(gfxLinger(w.nuke.gfx), 0.8);
   assert.equal(gfxLinger(w.babynuke.gfx), 0.7);
   assert.equal(gfxLinger(w.shell.gfx), 0.5, 'the default');
-  assert.equal(gfxSize(w.nuke.gfx), 7);
-  assert.equal(gfxSize(w.mortar.gfx), 4.5);
-  assert.ok(gfxSize(w.babynuke.gfx) > gfxSize(w.mortar.gfx) && gfxSize(w.babynuke.gfx) < gfxSize(w.nuke.gfx));
-  assert.equal(gfxSize(w.shell.gfx), 3.5, 'the default');
+  for (const k of arsenal.order) assert.ok(GAME.effects[k].body.size > 0 && /^p_/.test(GAME.effects[k].body.sprite), `${k} flies a rendered body`);
+  assert.ok(GAME.effects.babynuke.body.size < GAME.effects.nuke.body.size && GAME.effects.babynuke.body.size > GAME.effects.mortar.body.size);
 });
 
 test('every player starts a match with the rows\' start shells and an endless Shell', () => {

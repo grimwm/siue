@@ -7,7 +7,7 @@
  * algorithm, kept in step by the shared vectors in protocol/sim-vectors.json.
  * brkLand stays in sim.ts: explode calls it, and sim.ts must not import this
  * file. */
-import { FLIGHT_STEPS, GRAV, aimLimits, beamLine, blastDamage, clamp, dist, dropTime, facing, fieldReach, flies, flightKey, gauss, muzzle, powi, rad, ringDamage, ringOf, scatterVel, shotSpeed, simShot, splitPoint, splitVel, spotTaken, surfY, unitHitBox } from './sim.ts';
+import { FLIGHT_STEPS, GRAV, aimLimits, beamLine, blastDamage, clamp, dist, dropTime, facing, fieldReach, flies, flightKey, gauss, isGroundUnit, muzzle, powi, rad, ringDamage, ringOf, scatterVel, shotSpeed, simShot, splitPoint, splitVel, spotTaken, surfY, unitHitBox } from './sim.ts';
 import { datan2, dcos, dsin } from './detmath.ts';
 import type { Arsenal, Difficulty, Rng, Tank, Weapon, World } from './sim.ts';
 export type { Difficulty } from './sim.ts';
@@ -584,10 +584,11 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
   // Drones shuffle for a better firing spot instead of camping one rut,
   // unless they are walking a bracket in, or fire a gun with no flight
   // (aimed from where they stand).
+  // Only a drone shuffles (riding the ground): a ground unit fired for by the battery never drives.
   if (!cont && flies(arsenal.weapons[w]!) && world.rng() < 0.35) {
     const dx = (world.rng() < 0.5 ? -1 : 1) * (8 + world.rng() * 27);
     const nx = clamp(t.x + dx, 12, world.terrain.length - 12);
-    if (!spotTaken(world.tanks, t, nx)) {
+    if (!isGroundUnit(t) && !spotTaken(world.tanks, t, nx)) {
       t.x = nx;
       t.y = surfY(world.terrain, t.x);
     }

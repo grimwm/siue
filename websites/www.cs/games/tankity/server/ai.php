@@ -738,9 +738,13 @@ function room_ai_choose(array &$room, array $tank): array
     // Drones shuffle for a better firing spot instead of camping one rut,
     // unless they are walking a bracket in, or fire a gun with no flight
     // (aimed from where they stand).
+    // Only a drone shuffles: a ground unit fired for by the battery never drives.
     $dx = 0.0;
     if ($cont === null && room_flies($weapons[$w]) && room_rng_next($rng) < 0.35) {
         $dx = (room_rng_next($rng) < 0.5 ? -1.0 : 1.0) * (8 + room_rng_next($rng) * 27);
+        if ($tank['kind'] === 'human') {
+            $dx = 0.0;
+        }
     }
     $room['rng'] = $rng;
     $room['tanks'][$selfIdx]['s'] = $s;

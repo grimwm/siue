@@ -233,9 +233,10 @@ final class RoomFallTest extends TestCase
 
     public function testARiseFoldsAnOpenParachute(): void
     {
-        $room = $this->room([$this->human(100, 430, ['chute' => true]), $this->drone(400, 400)]);
+        // A drone rides risen ground up (a ground unit would stay buried).
+        $room = $this->room([$this->human(100, 400), $this->drone(400, 430, ['chute' => true])]);
         room_settle_tanks($room);
-        $this->assertSame(400.0, $room['tanks'][0]['y']);
-        $this->assertArrayNotHasKey('chute', $room['tanks'][0]);
+        $this->assertSame(400.0, $room['tanks'][1]['y']);
+        $this->assertArrayNotHasKey('chute', $room['tanks'][1]);
     }
 }

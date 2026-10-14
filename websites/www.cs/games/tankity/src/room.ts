@@ -25,7 +25,7 @@ import { focusEndVeil } from './ui/endveil.tsx';
 import type { Board, RoomCard } from './standings.ts';
 import type { BeamEvent, RingEvent, RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay, ReplayShot } from './replay.ts';
-import { H, ROOM_W, TUNE, aimLimits, beamCarve, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
+import { BURIED_LINE, H, ROOM_W, TUNE, aimLimits, beamCarve, buried, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
 import type { Difficulty, ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
 import { turnLabel } from './turn-time.ts';
@@ -86,6 +86,8 @@ export function createRoom(deps: RoomDeps) {
   } = deps;
   /* A match only one human played goes on this browser's board, never the server's, once per match. */
   const keeper = roomLocalSaver(saveLocal, () => new Date().toISOString());
+  /* A buried tank's drive was refused while the drive key is still held: it is said once. */
+  let driveRefused = false;
 
   const KNOWN_FOES = ['reaper', 'wraith', 'spotter'];
   const FOE_PAINT: Record<string, string> = { reaper: '#ff0000', wraith: '#00ffff', spotter: '#ff00ff' };
@@ -652,7 +654,14 @@ export function createRoom(deps: RoomDeps) {
       t.power = arm.power;
       if (arm.adjusting || arm.clamped) MATCH.aimDirty = true;
       if (arm.idle && MATCH.aimDirty) netSendAim();
-      if ((input.held.has('driveLeft') || input.held.has('driveRight')) && t.fuel > 0) {
+      const driving = input.held.has('driveLeft') || input.held.has('driveRight');
+      // A buried tank cannot drive (the server refuses it too): it says so once per press.
+      if (driving && buried(t, G.terrain)) {
+        if (!driveRefused) say(BURIED_LINE, 'bad');
+        driveRefused = true;
+        MATCH.driveAcc = 0;
+        MATCH.driveT = 0;
+      } else if (driving && t.fuel > 0) {
         const dir = input.held.axis('driveLeft', 'driveRight');
         MATCH.driveAcc += dir * TUNE.driveSpeed * dt;
         MATCH.driveT += dt;
@@ -666,6 +675,7 @@ export function createRoom(deps: RoomDeps) {
         MATCH.driveAcc = 0;
         MATCH.driveT = 0;
       }
+      if (!driving) driveRefused = false;
     }
   }
   /* The scoreboard card for a room: match over, you're out, or a look from the menu. */

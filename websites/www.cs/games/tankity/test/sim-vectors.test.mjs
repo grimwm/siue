@@ -332,7 +332,7 @@ const RUN = {
     return out;
   },
   settle(c) {
-    world({ terrain: c.terrain, tanks: [{ kind: 'ai', x: c.x, y: c.y, hp: c.hp }] });
+    world({ terrain: c.terrain, tanks: [{ kind: c.kind || 'ai', x: c.x, y: c.y, hp: c.hp }] });
     sim.settleFalls(G, arsenal);
     return G.tanks[0].y;
   },

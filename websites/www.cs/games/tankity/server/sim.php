@@ -1058,7 +1058,8 @@ function room_roll_arc(array $room, array $w, int $ownerIdx, float $sx, float $v
 }
 /* ---------- falling ---------- */
 /* Units left hanging over a crater drop straight down, never sideways, onto
-// the ground or a unit beneath them; ground that rose takes them straight up.
+// the ground or a unit beneath them; ground that rose takes a drone straight
+// up, and leaves a ground unit buried where it is (room_held_y).
 // A drop costs armor by its height at rest, credited to the blast that
 // lowered the ground under it the most. src/sim.ts fallDamage() .. settleFalls() are the same rules,
 // pinned by the 'fall' sim vectors. */
@@ -1118,11 +1119,19 @@ function room_unit_beneath(array $tanks, array $terrain, int $idx): ?int
     }
     return $best;
 }
-/* Where the unit at $idx comes to rest falling straight down. */
+/* Where the unit at $idx comes to rest falling straight down. Risen ground
+// never lifts a ground unit mid-round: one more than half a pixel under it
+// stays where it is, buried (a drone rides the ground up). */
 function room_rest_y(array $tanks, array $terrain, int $idx): float
 {
     $u = room_unit_beneath($tanks, $terrain, $idx);
-    return $u === null ? room_surf_y($terrain, (float) $tanks[$idx]['x']) : room_unit_top($tanks[$u]);
+    return room_held_y($tanks[$idx], $u === null ? room_surf_y($terrain, (float) $tanks[$idx]['x']) : room_unit_top($tanks[$u]));
+}
+/* Where unit $t rests given what is under it ($rest): there, unless that is
+// risen ground over a ground unit, which stays where it is. src/sim.ts heldY() is the same. */
+function room_held_y(array $t, float $rest): float
+{
+    return $t['kind'] === 'human' && $rest < (float) $t['y'] - 0.5 ? (float) $t['y'] : $rest;
 }
 /* What a fall of $raw would really cost the unit at $idx: the bunker halves
 // it as it halves a hit; a shield never stops a fall. */
@@ -1202,7 +1211,7 @@ function room_settle_tanks(array &$room, ?array &$events = null): void
                 continue;
             }
             $onto = room_unit_beneath($room['tanks'], $room['terrain'], $i);
-            $rest = $onto === null ? room_surf_y($room['terrain'], (float) $room['tanks'][$i]['x']) : room_unit_top($room['tanks'][$onto]);
+            $rest = room_held_y($room['tanks'][$i], $onto === null ? room_surf_y($room['terrain'], (float) $room['tanks'][$i]['x']) : room_unit_top($room['tanks'][$onto]));
             $y = (float) $room['tanks'][$i]['y'];
             if (abs($rest - $y) <= 0.5) {
                 $room['tanks'][$i]['y'] = $rest;

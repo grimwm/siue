@@ -38,7 +38,7 @@
  * a deps object, so none of them reaches for a global; the wiring is below.
  * What stays here is the state, the main loop, the keys and the page's own
  * plumbing (overlays, the firing range, the arsenal's loading). */
-import { ROOM_W, TUNE, aimLimits, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './sim.ts';
+import { BURIED_LINE, ROOM_W, TUNE, aimLimits, buried, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './sim.ts';
 import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
 } from './audio.ts';
@@ -286,6 +286,8 @@ function togglePreview(): void {
 /* ---------- main loop ---------- */
 let lastT = 0;
 let warAcc = WAR_REST;
+/* A buried tank's drive was refused while the drive key is still held: it is said once. */
+let driveRefused = false;
 function frame(ts: number): void {
   requestAnimationFrame(frame);
   // The music watchdog re-pins a wedged scheduler to the live clock; it never
@@ -345,7 +347,12 @@ function frame(ts: number): void {
     const arm = stepArm(input.held, dt, t, facing(t), G.w, aimLimits(tables.weapons[G.selected]));
     t.angle = arm.angle;
     t.power = arm.power;
-    if ((input.held.has('driveLeft') || input.held.has('driveRight')) && t.fuel > 0) {
+    const driving = input.held.has('driveLeft') || input.held.has('driveRight');
+    // A buried tank cannot drive: it says so once per press.
+    if (driving && buried(t, G.terrain)) {
+      if (!driveRefused) say(BURIED_LINE, 'bad');
+      driveRefused = true;
+    } else if (driving && t.fuel > 0) {
       const dx = input.held.axis('driveLeft', 'driveRight');
       const step = dx * TUNE.driveSpeed * dt;
       if (Math.abs(step) > 0 && Math.abs(t.fuel) >= Math.abs(step)) {
@@ -357,6 +364,7 @@ function frame(ts: number): void {
         }
       }
     }
+    if (!driving) driveRefused = false;
   } else if (war) {
     // Fixed SOLO_STEP steps whatever the frame rate, each dropping the tanks
     // and then moving the war on, so the war plays the same at any frame rate;

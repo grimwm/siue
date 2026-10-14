@@ -248,6 +248,36 @@ function room_set_aim(array &$room, int $idx, int $seat, $angle, $power): void
     $t['power'] = max(10.0, min(100.0, is_numeric($power) ? (float) $power : (float) $t['power']));
     unset($t);
 }
+/* A human's drive of $dx px (at most 80 either way) for the tank at $idx:
+// toward the goal a pixel at a time, stopping short of any other unit; fuel
+// pays only for the ground covered, and the tank sits on the ground where it
+// stops. Null when it went, else [HTTP status, the player's line]: a buried
+// tank cannot drive, nor one short of fuel. */
+function room_drive(array &$room, int $idx, float $dx): ?array
+{
+    $tank = $room['tanks'][$idx];
+    $dx = max(-80.0, min(80.0, $dx));
+    if (room_buried($tank, $room['terrain'])) {
+        return [409, 'You are buried: dig out first (a Riot Charge or a digger).'];
+    }
+    if (abs($dx) > $tank['fuel'] + 1e-9) {
+        return [422, 'not enough fuel'];
+    }
+    $w = count($room['terrain']);
+    $goal = max(12.0, min($w - 12.0, $tank['x'] + $dx));
+    $step = $goal > $tank['x'] ? 1.0 : -1.0;
+    $nx = (float) $tank['x'];
+    while (abs($goal - $nx) >= 1.0 && !room_spot_taken($room, $idx, $nx + $step)) {
+        $nx += $step;
+    }
+    if (abs($goal - $nx) < 1.0) {
+        $nx = $goal;
+    }
+    $room['tanks'][$idx]['fuel'] = max(0.0, $tank['fuel'] - abs($nx - $tank['x']));
+    $room['tanks'][$idx]['x'] = $nx;
+    $room['tanks'][$idx]['y'] = room_surf_y($room['terrain'], $nx);
+    return null;
+}
 function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey): void
 {
     $room['shots'] = ($room['shots'] ?? 0) + 1; // a fresh turn clock follows each shot

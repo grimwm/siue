@@ -8,7 +8,7 @@
  * caller to show. */
 
 import { datan2, dcos, dsin } from './detmath.ts';
-import { carveCrater } from './earth.ts';
+import { BURY_EPS, carveCrater } from './earth.ts';
 
 /* ---------- seeded RNG (mulberry32 + string hash) ---------- */
 export type Rng = () => number;
@@ -412,6 +412,15 @@ export function facing(t: Pick<Tank, 'dirS' | 'isPlayer'>): number {
 export function isGroundUnit(t: Pick<Tank, 'isPlayer' | 'human'>): boolean {
   return t.isPlayer || !!t.human;
 }
+/* A ground unit under the surface: its column's ground is more than
+   BURY_EPS above it. It cannot drive, and its shells start in the dirt.
+   Drones hover and ride the ground, so are never buried. server/earth.php
+   room_buried is the same. */
+export function buried(t: Pick<Tank, 'isPlayer' | 'human' | 'x' | 'y'>, terrain: readonly number[]): boolean {
+  return isGroundUnit(t) && terrain.length > 0 && surfY(terrain, t.x) < t.y - BURY_EPS;
+}
+/** What a buried tank's refused drive says (server/rules.php room_drive says the same). */
+export const BURIED_LINE = 'You are buried: dig out first (a Riot Charge or a digger).';
 /* Units keep at least this far apart, centre to centre, so hulls and rotors
    never overlap; fresh rounds spread them wider still. */
 export const UNIT_GAP = 44;
@@ -1220,8 +1229,9 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
 
 /* ---------- tanks falling ---------- */
 /* Units left hanging over a crater drop straight down, never sideways, onto
-   the ground or a unit beneath them; ground that rose (a new round, fresh
-   hills) takes them straight up. A drop costs armor by its height at rest
+   the ground or a unit beneath them; ground that rose takes a drone straight
+   up, and leaves a ground unit buried where it is (a new round places every
+   unit on its fresh hills). A drop costs armor by its height at rest
    (fallDamage), credited to the blast that lowered the ground under it most.
 
    The rules and the picture are kept apart. The rules run once a volley, when
@@ -1258,10 +1268,17 @@ function unitBeneath(tanks: readonly Tank[], terrain: readonly number[], t: Tank
   return best;
 }
 /** Where t comes to rest falling straight down: the ground, or the top of a
- *  live unit beneath it, whichever is higher. */
+ *  live unit beneath it, whichever is higher. Risen ground never lifts a
+ *  ground unit mid-round: one more than half a pixel under it stays where it
+ *  is, buried (heldY); a drone rides the ground up. */
 export function restY(tanks: readonly Tank[], terrain: readonly number[], t: Tank): number {
   const u = unitBeneath(tanks, terrain, t);
-  return u ? unitTop(u) : surfY(terrain, t.x);
+  return heldY(t, u ? unitTop(u) : surfY(terrain, t.x));
+}
+/** Where t rests given what is under it (`rest`): there, unless that is risen
+ *  ground over a ground unit, which stays where it is. server/sim.php room_held_y is the same. */
+function heldY(t: Tank, rest: number): number {
+  return isGroundUnit(t) && rest < t.y - 0.5 ? t.y : rest;
 }
 /* What a landing did, in order. */
 export type FallEvent =
@@ -1330,7 +1347,7 @@ export function settleFalls(world: World, arsenal: Arsenal): FallEvent[] {
     for (const t of lowestFirst(world.tanks)) {
       if (t.hp <= 0) continue;
       const onto = unitBeneath(world.tanks, world.terrain, t);
-      const rest = onto ? unitTop(onto) : surfY(world.terrain, t.x);
+      const rest = heldY(t, onto ? unitTop(onto) : surfY(world.terrain, t.x));
       t.vy = 0;
       if (Math.abs(rest - t.y) <= 0.5) { t.y = rest; t.fellBy = undefined; t.fellDepth = undefined; continue; }
       const drop = rest - t.y;

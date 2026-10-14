@@ -535,6 +535,9 @@ foreach ($weapons as $wkey => $def) {
             'tanks' => [$human(100, 100) + ['dirS' => 1], $drone(440, 100), $drone(480, 100)], 'angle' => 62, 'power' => 62]);
     }
 }
+// Buried under 70 px of dirt: the shell starts in the ground and, after its 0.1 s grace, bursts in the dirt above the gunner.
+$volley('buried-fires-shell', ['terrain' => ['flat' => 400, 'set' => [[270, 330, 330]]], 'wkey' => 'shell', 'shooter' => 0, 'angle' => 85, 'power' => 20,
+    'tanks' => [$human(300, 100) + ['dirS' => 1], $drone(600, 100)]]);
 $volley('fired-into-the-hillside', ['terrain' => ['slope' => [420, 260]], 'wkey' => 'shell', 'shooter' => 0, 'tanks' => [$human(100, 100), $drone(500, 100)], 'angle' => 5, 'power' => 50]);
 $volley('shielded-human-eats-a-drone-shell', array_replace($shell, ['shooter' => 1, 'tanks' => [$human(380, 100) + ['shield' => true], $drone(100, 100) + ['dirS' => 1]],
     'angle' => sv_aim_at(sv_room(array_replace($shell, ['tanks' => [$human(380, 100), $drone(100, 100) + ['dirS' => 1]]])), 1, 'shell', 380.0)[0],
@@ -965,6 +968,14 @@ foreach ([['over-a-pit', 300, 300], ['already-down', 300, 400], ['ground-rose-ab
 $room = ['terrain' => sv_terrain($flat), 'tanks' => [['seat' => 0, 'kind' => 'ai', 'hp' => 0, 'x' => 300.0, 'y' => 200.0]]];
 room_settle_tanks($room);
 $add('settle', 'wreck-stays-put', ['terrain' => $flat, 'x' => 300, 'y' => 200, 'hp' => 0], $room['tanks'][0]['y']);
+// Burial: risen ground never lifts a ground unit mid-round; a drone rides it up.
+$mound = ['flat' => 400, 'set' => [[270, 330, 370]]];
+foreach ([['human-under-dirt-stays-buried', 'human', 400.0], ['drone-under-dirt-rides-up', 'ai', 400.0],
+    ['human-a-hair-under-snaps-up', 'human', 370.4], ['human-over-a-pit-still-falls', 'human', 360.0]] as [$label, $kind, $y]) {
+    $room = ['terrain' => sv_terrain($mound), 'tanks' => [['seat' => 0, 'kind' => $kind, 'hp' => 50, 'x' => 300.0, 'y' => $y]]];
+    room_settle_tanks($room);
+    $add('settle', $label, ['terrain' => $mound, 'kind' => $kind, 'x' => 300, 'y' => $y, 'hp' => 50], $room['tanks'][0]['y']);
+}
 
 /* ---- the earth ops: the ground a shell moves (src/earth.ts) ----
  * Each case is an op on a terrain from its recipe; the output is the cells

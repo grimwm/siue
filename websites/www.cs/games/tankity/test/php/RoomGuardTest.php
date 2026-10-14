@@ -6,8 +6,8 @@ use PHPUnit\Framework\TestCase;
 
 /* Rooms use the score guard's rules: initials typed in either case are stored
    uppercase, and only allowed origins may post. Creating and joining a room
-   share one hourly allowance per address, counted in the database the solo
-   runs' caps use. */
+   share one hourly allowance per address, counted in the database's rate
+   table (server/rate.php). */
 final class RoomGuardTest extends TestCase
 {
     private string $dir;
@@ -76,7 +76,7 @@ final class RoomGuardTest extends TestCase
         }
     }
 
-    public function testTheAllowanceHoldsInEverySlidingHourAndSparesTheSoloCaps(): void
+    public function testTheAllowanceHoldsInEverySlidingHour(): void
     {
         putenv('TANKITY_ROOM_JOINS_PER_HOUR=2');
         $client = tankity_guard()->clientKey();
@@ -86,14 +86,12 @@ final class RoomGuardTest extends TestCase
         $this->assertFalse(room_rate_take($client, $now + 20));
         $this->assertTrue(room_rate_take('someone-else', $now + 20), 'another address has its own allowance');
         $this->assertFalse(room_rate_take($client, $now + 3600), 'still inside the hour');
-        $this->assertTrue(room_rate_take($client, $now + 3600 + SOLO_RATE_SLOT), 'back once the hour has moved on');
+        $this->assertTrue(room_rate_take($client, $now + 3600 + RATE_SLOT), 'back once the hour has moved on');
         $db = tankity_db();
-        foreach (['start', 'round', 'score'] as $kind) {
-            $this->assertSame(0, solo_rate_used($db, $client, $kind, $now + 20), "$kind is untouched");
-        }
+        $this->assertSame(0, rate_used($db, $client, 'other', $now + 20), 'another kind counts on its own');
         // The sweep drops the rooms' counts once they are too old to matter, and keeps the rest.
-        $this->assertSame(2, solo_rate_expire($now + 3600 + SOLO_RATE_SLOT * 7));
-        $this->assertSame(1, solo_rate_used($db, $client, 'room', $now + 3600 + SOLO_RATE_SLOT * 7));
+        $this->assertSame(2, rate_expire($now + 3600 + RATE_SLOT * 7));
+        $this->assertSame(1, rate_used($db, $client, 'room', $now + 3600 + RATE_SLOT * 7));
     }
 
     public function testASpentAllowanceIsRefusedWithoutTheWriteLock(): void
@@ -118,7 +116,7 @@ final class RoomGuardTest extends TestCase
     /** The room allowance spent so far, across every address. */
     private function roomCharges(): int
     {
-        return (int) tankity_db()->query("SELECT COALESCE(SUM(n), 0) FROM solo_rate WHERE kind = 'room'")->fetchColumn();
+        return (int) tankity_db()->query("SELECT COALESCE(SUM(n), 0) FROM rate WHERE kind = 'room'")->fetchColumn();
     }
 
     /** @return array{int, array} the status and the JSON answer of rooms.php as a request */

@@ -34,9 +34,9 @@ const BLOCKED_INITIALS = [
 const TANKITY_GUARD_RUNS = 'guard-runs.json';
 
 /* The guard's config keys for Tankity, validated. Tankity uses the guard for
-   its origin, CSRF, address and initials checks only: the score endpoint keeps
-   its runs and per-address counts in the database (server/scores-api.php), so
-   the run and rate keys here serve no request. */
+   its origin, address and initials checks only: rooms count each address's
+   creates and joins in the database (server/rate.php), and scores.php takes
+   no score, so the run and rate keys here serve no request. */
 function tankity_guard_config(array $override = []): array
 {
     $hosts = array_values(array_filter(array_map('trim',

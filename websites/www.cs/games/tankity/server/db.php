@@ -204,10 +204,9 @@ function tankity_journal_mode(string $dir, ?string $mounts = null): string
 /* The schema, one step per version. A database at version N runs the steps
    after N, each in its own transaction. Step 2 is the boards; step 3 remembers the old score files already
    imported, so a file that outlives its import is never filed twice; step 4 tells
-   a row the server filed from a match from a browser's own claim; step 5 is the
-   solo runs the server plays, and marks a board row whose initials stand in for
-   a converted name the blocklist refused, and counts each address's solo
-   requests. */
+   a row the server filed from a match from a browser's own claim; step 5 counts
+   each address's requests (server/rate.php) and keeps only the rows rooms
+   filed. */
 function tankity_schema_steps(): array
 {
     return [
@@ -232,28 +231,12 @@ function tankity_schema_steps(): array
             "UPDATE board SET source = 'client' WHERE seed NOT LIKE 'room:%'",
         ],
         5 => [
-            // A run is dealt at width w on its first round, so a start stores no state. state is the run's
-            // JSON; reply answers a repeated round, filed a repeated filing; client is the guard's key for
-            // the address that started it; playing is when a round being played gives up its lease, and
-            // lessee is the address whose request holds it.
-            "CREATE TABLE solo_runs (id TEXT PRIMARY KEY, difficulty TEXT NOT NULL, seed TEXT NOT NULL, w INTEGER NOT NULL,
-                created INTEGER NOT NULL, touched INTEGER NOT NULL, round INTEGER NOT NULL, status TEXT NOT NULL,
-                state TEXT NOT NULL, reply TEXT NOT NULL, filed TEXT NOT NULL, client TEXT NOT NULL DEFAULT '',
-                playing INTEGER NOT NULL DEFAULT 0, lessee TEXT NOT NULL DEFAULT '')",
-            'CREATE INDEX solo_runs_client ON solo_runs (client)',
-            'CREATE INDEX solo_runs_touched ON solo_runs (touched)',
-            // Held places are counted on every start and first round, under the write lock: these cover
-            // those counts, across the server and per address, so no table row is read.
-            'CREATE INDEX solo_runs_held ON solo_runs (touched, created, status, round) WHERE round > 0',
-            'CREATE INDEX solo_runs_held_by ON solo_runs (client, touched, created, status, round) WHERE round > 0',
-            'CREATE INDEX solo_runs_playing ON solo_runs (playing)',
-            // An address's starts, rounds and filings, one row per kind and SOLO_RATE_SLOT seconds.
-            'CREATE TABLE solo_rate (client TEXT NOT NULL, kind TEXT NOT NULL, slot INTEGER NOT NULL, n INTEGER NOT NULL,
+            // Per-address counts, one row per kind and RATE_SLOT seconds (rooms: kind 'room').
+            'CREATE TABLE rate (client TEXT NOT NULL, kind TEXT NOT NULL, slot INTEGER NOT NULL, n INTEGER NOT NULL,
                 PRIMARY KEY (client, kind, slot))',
-            'CREATE INDEX solo_rate_slot ON solo_rate (slot)',
-            'ALTER TABLE board ADD COLUMN standin INTEGER NOT NULL DEFAULT 0',
-            // The converted rows no longer say which names were refused; every client AAA is taken for a stand-in.
-            "UPDATE board SET standin = 1 WHERE source = 'client' AND initials = 'AAA'",
+            'CREATE INDEX rate_slot ON rate (slot)',
+            // Only room matches with two or more humans are on the boards; solo scores live in the browser.
+            "DELETE FROM board WHERE source <> 'room'",
         ],
     ];
 }

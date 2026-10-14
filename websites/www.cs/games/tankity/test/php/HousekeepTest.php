@@ -59,6 +59,19 @@ final class HousekeepTest extends TestCase
         }
     }
 
+    public function testTheJobsAreTheRoomsAndTheRateCounts(): void
+    {
+        $this->assertSame(['legacy', 'callsigns', 'rooms', 'rate'], array_keys(tankity_jobs()));
+    }
+
+    public function testOldRateCountsGo(): void
+    {
+        $now = 1_800_000_000;
+        $this->assertTrue(room_rate_take('lab', $now));
+        $this->assertSame(0, tankity_jobs()['rate']($now + 3600));
+        $this->assertSame(1, tankity_jobs()['rate']($now + 3600 + 2 * RATE_SLOT));
+    }
+
     public function testIdleRoomsAndOldFilesGo(): void
     {
         $lock = room_alloc();

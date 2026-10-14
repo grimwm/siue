@@ -62,13 +62,15 @@ final class RoomsRefusedStoreTest extends TestCase
             ['/rooms.php?action=create', ['initials' => 'abc']],
             ['/rooms.php?action=join', ['code' => 'ABCD', 'initials' => 'abc']],
             ['/scores.php', null],
-            ['/scores.php', ['name' => 'abc', 'score' => 1, 'banked' => 0]],
         ] as [$path, $body]) {
             [$st, $out] = self::call($path, $body);
             $this->assertSame(503, $st, $path);
             $this->assertIsArray($out, "$path answers JSON");
             $this->assertSame('store unavailable', $out['error'], $path);
         }
+        // A score POST never reaches the store: it is gone whatever the store's state.
+        $this->assertSame([410, ['error' => 'solo scores now stay in this browser']],
+            self::call('/scores.php', ['name' => 'abc', 'score' => 1, 'banked' => 0]));
     }
 
     public function testARefusedStoreLogsOneLinePerRequest(): void

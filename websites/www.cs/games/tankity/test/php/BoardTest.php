@@ -34,7 +34,7 @@ final class BoardTest extends TestCase
 
     public function testARunMustSayWhoFiledIt(): void
     {
-        foreach ([null, 'browser', ''] as $source) {
+        foreach ([null, 'browser', '', 'solo'] as $source) {
             try {
                 board_file(['source' => $source] + $this->entry('SRC', 1));
                 $this->fail('filed with source ' . var_export($source, true));
@@ -126,39 +126,8 @@ final class BoardTest extends TestCase
         $this->assertSame(0, (int) tankity_db()->query('SELECT COUNT(*) FROM callsigns')->fetchColumn());
         $this->assertSame(0, board_convert_callsigns(), 'nothing is converted twice');
         $this->assertSame(['client', 'client'], tankity_db()->query('SELECT source FROM board ORDER BY id')->fetchAll(PDO::FETCH_COLUMN), 'a legacy callsign was a browser claim');
-        $this->assertSame([false, false], array_column($top, 'standin'));
+        $this->assertArrayNotHasKey('standin', $top[0]);
         $this->assertSame([], board_top('easy', 10));
-    }
-
-    public function testAConvertedNameTheBlocklistRefusedIsMarkedAsAStandIn(): void
-    {
-        foreach (['ass' => 30, 'aaa' => 20, '123' => 10] as $name => $score) {
-            legacy_write(tankity_db(), (string) $name, ['runs' => [['score' => $score, 'banked' => 0, 'won' => false, 'seed' => 's', 'ts' => '2026-01-01T00:00:00+00:00']]]);
-        }
-        board_convert_callsigns();
-        $top = board_top('normal', 10);
-        $this->assertSame(['AAA', 'AAA', 'AAA'], array_column($top, 'initials'));
-        $this->assertSame([true, false, true], array_column($top, 'standin'), 'a callsign that was "aaa" is a real player');
-    }
-
-    public function testStepFiveMarksTheOldStandInsAndAddsTheSoloRuns(): void
-    {
-        $db = new PDO('sqlite::memory:');
-        $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        foreach ([1, 2, 3, 4] as $v) {
-            foreach (tankity_schema_steps()[$v] as $q) {
-                $db->exec($q);
-            }
-        }
-        $db->exec('PRAGMA user_version = 4');
-        $ins = $db->prepare("INSERT INTO board (difficulty, initials, score, rounds, seed, at, source) VALUES ('normal', ?, 1, 1, 's', 'x', ?)");
-        foreach ([['AAA', 'client'], ['AAA', 'room'], ['BOB', 'client']] as $r) {
-            $ins->execute($r);
-        }
-        tankity_schema($db);
-        $this->assertSame([1, 0, 0], array_map('intval', $db->query('SELECT standin FROM board ORDER BY id')->fetchAll(PDO::FETCH_COLUMN)));
-        $this->assertSame(0, (int) $db->query('SELECT COUNT(*) FROM solo_runs')->fetchColumn());
-        $this->assertSame(max(array_keys(tankity_schema_steps())), (int) $db->query('PRAGMA user_version')->fetchColumn());
     }
 
     public function testEqualScoresKeepTheOlderRunAhead(): void
@@ -190,7 +159,9 @@ final class BoardTest extends TestCase
         $ins = $db->prepare("INSERT INTO board (difficulty, initials, score, rounds, seed, at) VALUES ('normal', ?, 1, 1, ?, 'x')");
         $ins->execute(['OLD', 's']);
         $ins->execute(['RUM', 'room:ABCD']);
-        tankity_schema($db);
+        foreach (tankity_schema_steps()[4] as $q) {
+            $db->exec($q);
+        }
         $this->assertSame(['OLD' => 'client', 'RUM' => 'room'], $db->query('SELECT initials, source FROM board')->fetchAll(PDO::FETCH_KEY_PAIR));
     }
 
@@ -236,12 +207,6 @@ final class BoardTest extends TestCase
         $top = board_top('normal', 10);
         $this->assertSame(['WMG', 'BOB', 'TES', 'TES'], array_column($top, 'initials'));
         $this->assertSame([400, 300, 200, 100], array_column($top, 'score'), 'two callsigns that share initials both keep their row');
-    }
-
-    public function testTheGuardKeepsItsRunsInTheStorageDirectory(): void
-    {
-        $this->assertNotNull(tankity_guard([], ['HTTP_HOST' => 'localhost', 'REMOTE_ADDR' => '192.0.2.1'], [], fn(): int => 1_000_000, function (): void {})->startRun());
-        $this->assertFileExists($this->dir . '/' . TANKITY_GUARD_RUNS);
     }
 
     public function testASavepointKeepsAFailedFilingOutOfTheOuterTransaction(): void

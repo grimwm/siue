@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** One SQLite database that holds everything Tankity keeps (rooms off shared memory, the boards, solo runs) in one private directory, cleaned up by the server itself; armor that carries between rounds; a room match that ends on the last human standing; per-match scoreboards; scores that file themselves on one all-time board per difficulty; and solo scores the server earns by playing each round itself, from the run's stored state, as the round ends.
+**Goal:** One SQLite database that holds everything Tankity keeps (rooms off shared memory, the online boards, per-address rate counts) in one private directory, cleaned up by the server itself; armor that carries between rounds; a room match that ends on the last human standing; per-match scoreboards; and scores that file themselves: room matches that two or more humans started go on one online board per difficulty, and solo matches and one-human rooms save on a board in the player's own browser.
 
-**Architecture:** `server/db.php` opens `tankity.sqlite` in the storage directory (`games/tankity/data/` when PHP can write there, else `/var/tmp/<username>-tankity/`), picks the journal mode from the directory's filesystem, and serializes writers with `BEGIN IMMEDIATE` and a busy timeout; rooms, the old per-callsign scores and, later, the boards and solo runs are tables in it, and opportunistic housekeeping on requests deletes what has expired. The armor rules live once per language (`src/armor.ts`, `room_*_armor` in `server/rules.php`) and are pinned together by a sim-vector group. Rooms keep per-seat match stats on the server, end on the last human standing, and file each human's score on the board of the room's difficulty (`server/board.php`). Solo play moves its deterministic rules out of `match.ts` into a pure referee (`src/solo.ts`, mirrored by `server/solo.php`), flies shells and drops tanks in fixed 1/60 s steps (`server/flight.php` is the same steps in PHP), and sends each round's purchases and shots when the round ends; the server plays that round from the run's stored state, stores the new state and the running score, and at game over files the score it already holds. A determinism audit precedes the server's solo play.
+**Architecture:** `server/db.php` opens `tankity.sqlite` in the storage directory (`games/tankity/data/` when PHP can write there, else `/var/tmp/<username>-tankity/`), picks the journal mode from the directory's filesystem, and serializes writers with `BEGIN IMMEDIATE` and a busy timeout; rooms, the online boards and the per-address `rate` counts are tables in it, and opportunistic housekeeping on requests deletes what has expired. The armor rules live once per language (`src/armor.ts`, `room_*_armor` in `server/rules.php`) and are pinned together by a sim-vector group. Rooms keep per-seat match stats on the server, end on the last human standing, and file each human's score on the board of the room's difficulty (`server/board.php`) only when two or more humans started the match; a one-human room marks the seat `local` and the browser saves the score on its own board. Solo play keeps its deterministic rules in a pure module (`src/solo.ts`), flies shells and drops tanks in fixed 1/60 s steps so play is the same at any frame rate, and saves its score on the local board (`src/local-board.ts`, best 20 per difficulty); no solo score reaches the server, and `scores.php` answers every POST with 410. The browser's sim and the room server's share one deterministic `sin`, `cos` and `atan2` (`detmath`), so a room's aim preview and its shot agree bit for bit.
 
 **Tech Stack:** TypeScript 7 (native type stripping for `node --test`), Preact 11, esbuild via `games/_kit/build/build.mjs`, PHP 8.4 with `pdo_sqlite`, PHPUnit 12, Playwright.
 
-**Spec:** `docs/superpowers/specs/2026-10-12-games-kit-design.md`, sections 7.1, 7.2, 7.3, 7.4 (where solo scoring meets the field width), 8 and 12, PR rows 20, 14, 15 and 16 of section 10.
+**Spec:** `docs/superpowers/specs/2026-10-12-games-kit-design.md`, sections 7.1, 7.2, 7.3, 7.4 (the field width as a parameter), 8 and 12, PR rows 20, 14, 15 and 16 of section 10.
 
 **PRs in this plan:** four. PR 20 (Tankity storage, spec row 20) lands first; then PR 14, PR 15 and PR 16, numbered as before. No D PR was renumbered; PR 20 is new and goes in front of them.
 
@@ -42,14 +42,14 @@ Plan D runs after Plan C. These are the names this plan uses from Plan C's work.
 
 William's answers (2026-10-12); every task below is written to them.
 
-1. **One all-time board per difficulty.** Easy, Normal and Hard each keep their own best 100 runs. A run files on the board of the difficulty it was played at (a room's is its host's). Menu → Scores opens on the player's current difficulty's board, with a switcher to the other two. Rows filed before boards had a difficulty go on the Normal board.
-2. **Tanks fall mid-volley.** The browser keeps today's behaviour: a tank left over a crater falls while shells are still flying, and a later shell of the same volley meets it where it has fallen to. The war (aim, flight and falls) runs in fixed 1/60 s steps, and the server's solo simulation (`server/flight.php`) takes the same steps in the same order, pinned by the `volley-fall` sim vectors.
-3. **The server keeps a solo run as it is played; nothing is replayed at the end.** The run starts with a single-use guard run token. As each round ends the browser sends that round's purchases and shots and how it saw the round end; the server plays the round from the run's stored state, stores the new state and the running score in SQLite, and answers. At game over the server already holds the score, and filing reads it. There is no round limit: CPU is bounded per round (2 s, and at most 200 player shots), not per run. A round whose outcome differs from the client's claim voids the run (the server's simulation is the authority; once the two disagree nothing later could match). A run expires two hours after the last round the server accepted, and 24 hours after it started at the latest; an expired run cannot advance or file and housekeeping deletes it.
+1. **One online board per difficulty, for rooms with two or more humans.** Easy, Normal and Hard each keep their own best 100 room matches. A match files on the board of the difficulty it was played at (a room's is its host's). Menu → Scores opens on the player's current difficulty with a switcher to the other two, and shows two lists for it: the online board and this browser's. Solo matches and one-human rooms are not on the online board.
+2. **Tanks fall mid-volley.** The browser keeps today's behaviour: a tank left over a crater falls while shells are still flying, and a later shell of the same volley meets it where it has fallen to. The war (aim, flight and falls) runs in fixed 1/60 s steps, so play is the same on a 30 Hz phone, a 144 Hz monitor and a throttled tab.
+3. **Solo scores stay in the browser; only 2+ human rooms are online.** A solo match and a room with one human plus drones save on the browser's local board (`tankity-scores-local`, best 20 per difficulty, `src/local-board.ts`). The room server decides at the start of a match, from the humans seated then (`startHumans`), whether it files online; a human who leaves mid-match does not change that. Schema step 5 deletes the existing solo and old-callsign rows. There is no server referee, round-by-round filing, filer or recorder, and `scores.php` answers every POST with 410.
 4. **Rooms move into SQLite**, replacing SysV shared memory. One writer at a time, through `BEGIN IMMEDIATE` and a 2 s busy timeout. A room's write transaction covers only the step that changes it (read, simulate, write); replies are built after the lock is released, nothing sleeps or long-polls while holding it, and a poll that changes nothing (a lobby or a finished match, the ping) reads without it. A request that waits past the timeout answers 503 and the client retries (`src/net.ts` treats 503 like 429). A load test (8 rooms × 4 players polling at the client's pace) asserts no 503 and a p95 under 300 ms. The shared-memory code and the ping's `store: "memory"` report are removed.
 5. **Storage location: one setting, then a fixed order.** `data_dir` / `TANKITY_DATA_DIR` (read through `tankity_setting()`: the environment, then `.config.yaml`) names the one directory for everything Tankity keeps; when set it is used exactly, created 0700 when missing, and an unwritable one is an error (logged, "store unavailable"), never a silent move elsewhere. It replaces `scores_dir` / `TANKITY_SCORES_DIR`, which is retired: an existing `scores_dir` is read only as the place to import old score files from. `shm_key` / `TANKITY_SHM_KEY` are retired with shared memory. When `data_dir` is unset, in this order: `games/tankity/data/` when PHP can write there (it then also writes `data/.htaccess` denying HTTP), else `/var/tmp/<username>-tankity/`, where `<username>` is `get_current_user()`: the owner of the running script, which is the account the site is deployed as (`wgrim` on the host), the same for every PHP-FPM worker and pool, and needing no extension; `uid<N>` (from `getmyuid()`) when the name cannot be resolved. Modes come from Plan C's `Kit\StoreModes`, the one helper Cylon and Tankity share: a directory PHP creates is 0700 and its files 0600 whichever user PHP runs as (their owner is PHP's user, which is all PHP needs). If PHP runs as the deploying account, only that account can reach them. If it runs as a web user every site on the host shares (Cylon's 0666/0777 suggest so; Task S1 confirms), any other site's PHP runs as that same user and can read and write Tankity's data, the same exposure Cylon's scores have today; no mode prevents it. A `/var/tmp` directory that is a symlink, not PHP's own, or open to group or others is refused. Every Tankity file lives there: `tankity.sqlite` (rooms, the boards, solo runs, and the old per-callsign scores until they are converted) and the guard's run store `guard-runs.json`. The old `/var/tmp/<callsign>-operation-tankity.json` files are imported once, idempotently, without losing a run, and each is deleted only after its import committed and only if it did not change since it was read. The journal mode is WAL on a local filesystem and DELETE otherwise (including when the filesystem cannot be read), chosen at run time.
-6. **Deterministic math.** Every transcendental on the solo simulation path (`sin`, `cos`, `atan2` in the sim, the AI's predictor and the flight) comes from `src/detmath.ts` and its PHP twin `server/detmath.php`: fdlibm's polynomials built only from `+ − × ÷` and `floor`, so the browser and the host compute the same bits; halves round toward +∞ on both sides. Shared `detmath` vectors are checked bit for bit (Task 21a). An honest run is never voided by a libm difference. Rendering keeps `Math.*`.
-7. **The server cleans up after itself**: idle rooms, expired solo runs, converted per-callsign rows, the old files once imported, and leftover temp files. The host has no cron, so housekeeping runs on requests, at most once every five minutes, each job bounded, and every function takes the clock as an argument so tests use a fake one.
-8. **The field's width** (spec 6.6, 7.4; Plan C PR 13b). A solo match is dealt at a width W (720–1440, a multiple of 24) taken from the landscape battlefield box, and keeps it for the match; rooms are 720. The solo referee deals and musters at the match's W (`soloDeal(…, w)`, `G.w`): units spread over the whole width, shells fly √(W/720) faster, and the drones aim with that width's `fieldAim`, in the browser and in the server's play alike; a run records its W when it starts (`{op:'start', seed, difficulty, w}`), and the server refuses any other width (422), stores W in the run's state and plays every round of it at that W (`solo_deal($seed, $difficulty, $w)`). Recorded runs (`solo-runs.json`) carry their `w`, and one is recorded at 1440.
+6. **Deterministic math.** Every transcendental on the shared simulation path (`sin`, `cos`, `atan2` in the sim and the AI's predictor) comes from `src/detmath.ts` and its PHP twin `server/detmath.php`: fdlibm's polynomials built only from `+ − × ÷` and `floor`, so the browser and the room server compute the same bits; halves round toward +∞ on both sides. Shared `detmath` vectors are checked bit for bit (Task 21a), so the sim vectors need no tolerance and do not depend on the host's libm. Rendering keeps `Math.*`.
+7. **The server cleans up after itself**: idle rooms, old rate counts, and leftover temp files. The host has no cron, so housekeeping runs on requests, at most once a minute, each job bounded, and every function takes the clock as an argument so tests use a fake one.
+8. **The field's width** (spec 6.6, 7.4; Plan C PR 13b). A solo match is dealt at a width W (720–1440, a multiple of 24) taken from the landscape battlefield box, and keeps it for the match; rooms are 720. W is a browser-only solo deal (`soloDeal(…, w)`, `G.w`): units spread over the whole width, shells fly √(W/720) faster, and the drones aim with that width's `fieldAim`. The server's sim keeps W as a parameter (rooms pass 720; the vectors check 720, 1080 and 1440).
 
 ## Global Constraints
 
@@ -58,17 +58,17 @@ William's answers (2026-10-12); every task below is written to them.
 - A built game folder needs nothing outside itself at run time: Tankity's PHP may require only files inside `games/tankity/` (the guard is the generated copy `server/score-guard.php`, never `../_kit/`).
 - Pinned versions: `typescript` 7.0.2, `esbuild` 0.28.2, `preact` 11.0.1; `phpunit/phpunit` ^12.
 - Never bind a port someone may be using (3000, 5173, 8000, 8080); the docker site publishes an ephemeral port and specs get it from `make url`; PHP tests that serve take a free 127.0.0.1 port from the kernel.
-- SQL stays within SQLite 3.8: no `UPSERT`, `RETURNING` or window functions (the host's version is confirmed by Task S1).
+- SQL may use `UPSERT` (`INSERT … ON CONFLICT DO UPDATE`; `server/rate.php` does): the host has SQLite 3.50 (Task S1). No `RETURNING` or window functions.
 - Every PHP test that touches storage points `TANKITY_DATA_DIR` at its own temporary directory (made with `tankity_test_dir()` from `test/php/rooms-lib.php`) and never at `games/tankity/data/` or `/var/tmp/<username>-tankity/`.
 - Browser specs run only through `make e2e` / `tests/e2e/run.sh` (the e2e lock). Agents run `make test` plus at most the 1–2 specs each task names; CI runs the selected specs in four shards.
 - New browser specs target ≤ 15 s each (Playwright `page.clock` where timers matter) and are registered in `tests/e2e/shard.mjs` `WEIGHTS` (`select.mjs` already maps every `tankity-*` spec to Tankity changes).
-- `make test` budgets: static ≤ 15 s, unit ≤ 45 s. Slow sweeps (long recorded runs) run in the nightly job only (PHPUnit group `slow`).
+- `make test` budgets: static ≤ 15 s, unit ≤ 45 s.
 - Tests: new node tests are `test/*.test.mjs` on `node:test` + `node:assert/strict` (no `check()` bridge); spec row 18 turns them into `.test.ts`. New UI tests never extend the `check()`-style `test/ui.test.mjs`: they go in new node:test files (`test/standings-ui.test.mjs`, `test/endveil.test.mjs`, `test/scores-ui.test.mjs`) or in Plan C's (`test/hud.test.mjs`, `test/menu.test.mjs`), loading `.tsx` with the kit's `importTsx`; a `ui.test.mjs` block those files replace is deleted. New PHP tests are real `PHPUnit\Framework\TestCase` classes in `games/tankity/test/php/` (or `test/php-docker/` when they serve HTTP) that load the room library in `setUpBeforeClass()` through `test/php/rooms-lib.php`.
 - Comments say why, not what; no history ("kept from", "moved in #NN"); file headers 1–5 lines. Docs (`games/tankity/README.md`) describe the current state.
-- One PR per spec row: PR 20 (Tasks S1–S8), PR 14 (Tasks 1–7), PR 15 (Tasks 8–20), PR 16 (Tasks 21–35). Each PR: branch in its own worktree off `main`, CI, the pr-fix loop on review comments, merge on green CI after pr-fix (William authorized merging on green; CodeRabbit rate-limit notices never block), deploy, a light live check, and a report ending with a cache-busted `/play/tankity/?v=<sha>` link.
-- Generated files are never hand-merged. Every Tankity PR rewrites `dist/`, `sw.js`, `index.html`'s `?v=` values and `game.json`, and this plan's PRs also `protocol/*.json`, `protocol/sim-vectors.json` and `protocol/solo-runs.json`; after rebasing onto `main`, take either side of a conflict in them and rebuild: `cd websites/www.cs/games && npm run build && php tankity/tools/game-json.php && php tankity/tools/install-files.php`, then `cd websites/www.cs && php tools/site-versions.php && make protocol && (cd games/tankity && php protocol/sim-vectors.php && node tools/solo-runs.mjs)` (each generator that exists by then), and commit what they wrote.
+- One PR per spec row: PR 20 (Tasks S1–S8), PR 14 (Tasks 1–7), PR 15 (Tasks 8–20), PR 16 (Tasks 21–24, 34, R1–R7). Each PR: branch in its own worktree off `main`, CI, the pr-fix loop on review comments, merge on green CI after pr-fix (William authorized merging on green; CodeRabbit rate-limit notices never block), deploy, a light live check, and a report ending with a cache-busted `/play/tankity/?v=<sha>` link.
+- Generated files are never hand-merged. Every Tankity PR rewrites `dist/`, `sw.js`, `index.html`'s `?v=` values and `game.json`, and this plan's PRs also `protocol/*.json` and `protocol/sim-vectors.json`; after rebasing onto `main`, take either side of a conflict in them and rebuild: `cd websites/www.cs/games && npm run build && php tankity/tools/game-json.php && php tankity/tools/install-files.php`, then `cd websites/www.cs && php tools/site-versions.php && make protocol && (cd games/tankity && php protocol/sim-vectors.php)` (each generator that exists by then), and commit what they wrote.
 - Browser specs run as `make e2e E2E_ARGS="<spec> [<spec>]"` (the Makefile has no `SPECS` variable).
-- Spec constants, verbatim: max armor = 100 + 25 × hull plates; Repair +40 restores up to max; winner's bonus = the round bonus × 2 (round bonus = 750 + round × 150); `WATCH_TURNS` = 40 stays; initials `[A-Za-z]{3}` in, `[A-Z]{3}` stored; one board per difficulty, best 100 each; a solo round: at most 2 s of CPU and 200 player shots; a solo run expires 2 h after its last accepted round and 24 h after its start; housekeeping at most every 300 s; a solo field is 720–1440 wide on 24-unit columns, a room's 720.
+- Spec constants, verbatim: max armor = 100 + 25 × hull plates; Repair +40 restores up to max; winner's bonus = the round bonus × 2 (round bonus = 750 + round × 150); `WATCH_TURNS` = 40 stays; initials `[A-Za-z]{3}` in, `[A-Z]{3}` stored; one online board per difficulty, best 100 each; the local board keeps the best 20 per difficulty; housekeeping at most every 60 s; a solo field is 720–1440 wide on 24-unit columns, a room's 720.
 - Every commit message ends with:
   ```
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -77,12 +77,12 @@ William's answers (2026-10-12); every task below is written to them.
 
 ## Review Focus
 
-1. **A solo run on a 30 Hz phone, a 144 Hz monitor, or a tab throttled in the background, with tanks falling into craters mid-volley, on a host whose libm rounds `sin` differently from V8.** The server's per-round play must still land every shell and drop every tank where the browser did, to the bit. Pinned by `test/fixed-step.test.mjs` "every step is exactly SOLO_STEP whatever the frame lengths" (Task 23), the `detmath` vectors compared without tolerance (Task 21a), the jittered-frame test in `test/solo-play.test.mjs` (Task 26), and `FlightTest::testTheVolleyFallVectorsReallyFall` with the `volley-fall` vectors (Task 29).
-2. **A client that lies about a round** (a shot it never fired, a claim of a won round the server sees lost, a forged score field, a round sent twice or out of order). Expected: the server's own play decides; a mismatched claim voids the run and nothing files; a repeated round answers the stored reply without playing it again. Pinned by `ScoresApiTest::testALyingClaimVoidsTheRun`, `testAForgedScoreFieldIsIgnored`, `testARoundSentTwiceIsPlayedOnce`, `testARoundOutOfOrderIsRefused` (Task 31).
+1. **A solo match on a 30 Hz phone, a 144 Hz monitor, or a tab throttled in the background, with tanks falling into craters mid-volley.** The browser's war must play the same at any frame rate. Pinned by `test/fixed-step.test.mjs` "every step is exactly SOLO_STEP whatever the frame lengths" (Task 23). On a host whose libm rounds `sin` differently from V8, the room server's sim and the browser's still agree to the bit: the `detmath` vectors compared without tolerance (Task 21a).
+2. **A one-human room, or a stale page, reaching the online board.** Expected: a room that started with one human files nothing online and marks the seat `local`, so the browser saves the score on its own board once (by `ref`); a two-human match one player leaves still files its winner online; a page from before this design that POSTs a solo score gets 410, saves it in its own browser, and the new page moves it onto the local board. Pinned by `RoomFilingTest`, `ScoresEndpointTest` and `test/local-board.test.mjs` (Tasks R3, R1, R5a).
 3. **The host's storage**: `games/tankity/data/` not writable, `/var/tmp/<username>-tankity` pre-created by another account or as a symlink, `/proc/self/mounts` unreadable, the directory on NFS. Expected: the fallback is taken, a foreign or open directory is refused (503, nothing written), unknown or network filesystems get the DELETE journal. Pinned by `DataDirTest` (Task S2) and confirmed on the real host by Task S1's probe.
 4. **The one-time import of the old score files**, interrupted halfway, run twice, or racing a file that changes while it is read. Expected: every run in every old file ends up in the database exactly once, and a file is deleted only after its import committed and only if it is unchanged. Pinned by `LegacyImportTest::testAnInterruptedImportResumesWithoutDuplicates`, `testAFileThatChangedIsKeptForTheNextPass` (Task S5).
 5. **Every room sharing one writer.** Expected: two creates racing for the last room leave the cap exact (one wins, one gets 409); 8 playing rooms × 4 players polling never see a 503 and stay under 300 ms at p95; a lobby poll never waits for a writer; a request that does wait past the 2 s busy timeout answers 503 (retried by the client) rather than hanging a PHP worker. Pinned by `RoomsStoreTest::testTwoCreatesRaceForTheLastPlace`, `testALobbyPollAnswersWhileARoomIsHeld`, `testAHeldWriterMakesOthersWaitThenAnswerBusy` and `RoomsLoadTest` (Task S4).
-6. **Old free-text callsigns on the Normal board** (`""`, `"123"`, `"r2-d2"`, `"bo"`, `"ass"`, `"tankity ace"`). Expected: three letters, never a blocked set, every old callsign's best run still listed. Pinned by `BoardTest::testOddCallsignsConvert` and `testConvertsCallsignRowsOnceOntoTheNormalBoard` (Task 10).
+6. **Old solo rows on the live board.** Expected: schema step 5 deletes every row whose source is not `room` and every per-callsign row on the first request after deploy; a v4 database upgrades to v5 holding only room rows and an empty `rate` table. Pinned by `DbTest` (Task R1).
 7. **Two humans losing their last lives in the same round.** In a 3-human room with one left, that one wins; in a 2-human room nobody is left, so the match ends with no winner and no bonus. Pinned by `RoomMatchEndTest::testTwoOutAtOnceLeaveOneWinner` and `testLastTwoFallTogetherNobodyWins` (Task 8).
 8. **Buying Repair at full armor, or more packs than the hull needs, in a room or solo.** Expected: refused at full, otherwise only the packs that fill the hull are charged. Pinned by `RoomBuyTest::testRepairAtFullArmorIsRefusedAndCostsNothing` / `testRepairBuysOnlyThePacksThatFillTheHull` (Task 3) and `test/armor.test.mjs` "packs wanted" (Task 1).
 
@@ -95,35 +95,27 @@ games/tankity/
   data/                    runtime only (gitignored, never deployed): tankity.sqlite, guard-runs.json, .htaccess
   server/db.php            create (S2)   the storage directory, the database, its schema steps, transactions
   server/store.php         rewrite (S3)  rooms as rows: load/lock, save, alloc, register, close, sweep, count
-  server/legacy.php        create (S5)   the one-time import of the old per-callsign files; the callsigns table
   server/housekeep.php     create (S6)   throttled, bounded cleanup jobs on requests
   src/armor.ts             create (T1)   max armor, repair, plates, carry-over, the shop's two notes
   src/standings.ts         create (T13–14, T18) match-end rule, winner bonus, scoreboard rows, the filed line, what Esc does on an end card
   src/ui/standings.tsx     create (T15)  the scoreboard table (room or solo)
-  src/solo.ts              create (T22, T24) the solo referee: deal, muster, settle, turns, 1-ups, buy, drone aim
-  src/solo-log.ts          create (T25)  a round's inputs and claim, and their validators
-  src/solo-play.ts         create (T26)  headless solo runs, a bot, and soloRound (the server's round in TypeScript)
-  src/solo-file.ts         create (T32)  sending a run's rounds and filing it, with the offline queue
+  src/solo.ts              create (T22, T24) the solo rules: deal, muster, settle, turns, 1-ups, buy, drone aim (pure)
+  src/local-board.ts       create (R5a)  this browser's board: best 20 per difficulty, in localStorage
   src/flow.ts              modify (T23)  runFixed replaces runWar
   src/match.ts, shop.ts, room.ts, lobby.ts, scores.ts, hud.ts, main.ts, net.ts, protocol.ts, game-types.ts  modify
   src/ui/endveil.tsx, shop.tsx, scores.tsx, hud.tsx  modify
-  src/sim.ts               modify (T21, T26) rad(), dist(), squares, seek and bomblet alignment; flyVolley()
+  src/sim.ts               modify (T21) rad(), dist(), squares, seek and bomblet alignment
   server/rules.php         modify        armor, room_buy, match end, stats, filing, again
-  server/sim.php           modify (T21, T30) room_dist, squares, lance bracket, hot-loop constants
+  server/sim.php           modify (T21) room_dist, squares, lance bracket
   server/protocol.php      modify        snapshot fields
   server/guard.php         create (T10)  BLOCKED_INITIALS, tankity_guard() (a Kit\ScoreGuard from Tankity's settings), tankity_initials()
-  server/board.php         create (T10)  the boards (one per difficulty) and the callsign conversion
-  server/solo.php          create (T28, T30) the solo referee in PHP and solo_round()
-  server/flight.php        create (T29)  a volley in fixed steps with tanks falling, as the browser flies it
-  server/scores-api.php    create (T31)  the score endpoint's handler: start, round, file
+  server/rate.php          create (R1)   per-address counts on the SQLite `rate` table: room joins
+  server/board.php         create (T10, R1) the online boards: one per difficulty, room rows only
   rooms.php                modify        requires, store, buy, start, again, origin and rate gates
-  scores.php               modify (S5, T19, T31) thin endpoint over the database / board / scores-api
+  scores.php               modify (R1)   a read of the online board; every POST answers 410
   rooms-web-test.php       modify (S4)   the live check without shared memory
   protocol/generate.php    modify (S4)   a private data directory instead of a private memory key
-  protocol/sim-vectors.php modify        groups armor, match-end, solo-deal, volley-fall; known cases dropped
-  protocol/solo-runs.json  create (T27)  recorded bot runs, round by round, the PHP play must match
-  tools/solo-runs.mjs      create (T27)  writes / checks solo-runs.json
-  tools/round-bench.php    create (T30)  CPU per recorded round
+  protocol/sim-vectors.php modify        groups armor, match-end, detmath; known cases dropped
   test/*.test.mjs          create/modify as named per task (UI: standings-ui, endveil, scores-ui; Plan C's hud and menu)
   test/php/rooms-lib.php   create (S2)
   test/php/*Test.php       create as named per task
@@ -133,14 +125,13 @@ games/tankity/
 .gitignore                  modify (S7)   games/tankity/data/
 deploy.sh                   modify (S7)   never stages games/tankity/data/
 docker/nginx/default.conf   modify (S7)   deny /games/tankity/data/
-Makefile                    modify (S7, T27) the data-deny check; solo-runs target
+Makefile                    modify (S7)   the data-deny check
 tests/php/checks/deploy-set.php   modify (S7)
 tests/e2e/helpers.mjs             modify (T7)   dealSolo(page)
 tests/e2e/tankity-armor.spec.mjs  create (T7)
-tests/e2e/tankity-end.spec.mjs    modify (T20, T35)
+tests/e2e/tankity-end.spec.mjs    modify (T20, R6)
 tests/e2e/tankity-hud.spec.mjs    modify (T6)
 tests/e2e/shard.mjs               modify (T7)
-.github/workflows/ci.yml          modify (T30)  nightly runs the slow PHPUnit group and the round bench
 ```
 
 ---
@@ -255,7 +246,7 @@ Expected: the last `curl` prints `404` (the probe is gone), and `probe.json` is 
 
 - [ ] **Step 3: Record it**
 
-Keep `probe.json`; it goes into PR 20's description (Task S8) under "Host probe". Note `legacy_files.count`: Task S8's live check expects every one of those callsigns on the board after the deploy.
+Keep `probe.json`; it goes into PR 20's description (Task S8) under "Host probe".
 
 - [ ] **Step 4: Go or stop**
 
@@ -1909,407 +1900,9 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
 MSG
 ```
 
-### Task S5: Scores in the database, and the one-time import of the old files
+### Task S5: Scores in the database
 
-**Files:**
-- Create: `games/tankity/server/legacy.php`
-- Modify: `games/tankity/scores.php` (on the database)
-- Modify: `games/tankity/server/rules.php` (`room_save_score`)
-- Modify: `games/tankity/server/settings.php` (delete `room_scores_dir`; header)
-- Modify: `games/tankity/rooms.php` (require `server/legacy.php`; file map)
-- Create: `games/tankity/test/php/LegacyImportTest.php`
-
-**Interfaces:**
-- Consumes: Task S2's `tankity_db`, `tankity_tx`.
-- Produces (`server/legacy.php`): (`scores_dir` / `TANKITY_SCORES_DIR` is retired: nothing stores there; it only says where the old files are) `LEGACY_SLUG = 'operation-tankity'`, `LEGACY_RUNS_KEPT = 50`, `LEGACY_IMPORT_BATCH = 200`, `LEGACY_TMP_AGE = 3600`; `legacy_dir(): string` (setting `TANKITY_SCORES_DIR` / `scores_dir`, default `/var/tmp`); `legacy_slug(string $name): string`; `legacy_read(PDO $db, string $slug): array`; `legacy_write(PDO $db, string $slug, array $data): void`; `legacy_add_run(string $slug, array $run): int` (the callsign's new best); `legacy_top(int $n): array` (rows `name, best, banked, won, ts`); `legacy_run_key(array $run): string`; `legacy_import(?string $dir = null, int $limit = LEGACY_IMPORT_BATCH, ?int $now = null): array{int, int}` (files imported, files deleted). `scores.php` keeps its wire: GET `{ scores: [{ name, best, banked, won, ts }] }`, POST `{ name, score, banked, won, seed }` → `{ ok, name, best }`, 503 `'store busy'`, 500 `'store unavailable'`.
-
-- [ ] **Step 1: Write the failing test**
-
-```php
-<?php
-// games/tankity/test/php/LegacyImportTest.php
-declare(strict_types=1);
-
-use PHPUnit\Framework\TestCase;
-
-/* The per-callsign runs live in the database; the old files are imported
-   once, losing nothing, and deleted only once their import has committed. */
-final class LegacyImportTest extends TestCase
-{
-    private string $dir;
-    private string $old;
-
-    public static function setUpBeforeClass(): void
-    {
-        require_once __DIR__ . '/rooms-lib.php';
-    }
-
-    protected function setUp(): void
-    {
-        $this->dir = tankity_test_dir();
-        $this->old = $this->dir . '/old';
-        mkdir($this->old, 0700);
-        putenv('TANKITY_SCORES_DIR=' . $this->old);
-    }
-
-    protected function tearDown(): void
-    {
-        putenv('TANKITY_SCORES_DIR');
-        tankity_test_rm($this->dir);
-    }
-
-    private function file(string $slug, array $runs): string
-    {
-        $path = $this->old . "/$slug-operation-tankity.json";
-        file_put_contents($path, json_encode(['name' => $slug, 'runs' => $runs, 'best' => max(array_column($runs, 'score'))]));
-        return $path;
-    }
-
-    private function run(int $score, string $ts): array
-    {
-        return ['score' => $score, 'banked' => 2, 'won' => false, 'seed' => 's' . $score, 'ts' => $ts];
-    }
-
-    private function runs(string $slug): array
-    {
-        return legacy_read(tankity_db(), $slug)['runs'];
-    }
-
-    public function testEveryRunOfEveryFileArrivesAndTheFilesGo(): void
-    {
-        $runs = [];
-        for ($i = 0; $i < 60; $i++) {
-            $runs[] = $this->run(10 + $i, sprintf('2026-01-01T00:%02d:00+00:00', $i));
-        }
-        $a = $this->file('wg', $runs);
-        $b = $this->file('r2-d2', [$this->run(450, '2026-03-01T00:00:00+00:00')]);
-        $this->assertSame([2, 2], legacy_import());
-        $this->assertCount(60, $this->runs('wg'), 'the import keeps every run, past the 50 a new file keeps');
-        $this->assertSame(69, legacy_read(tankity_db(), 'wg')['best']);
-        $this->assertSame([450], array_column($this->runs('r2-d2'), 'score'));
-        $this->assertFileDoesNotExist($a);
-        $this->assertFileDoesNotExist($b);
-        $this->assertSame(['r2-d2', 'wg'], array_column(legacy_top(10), 'name'), 'best first: 450 beats 69');
-    }
-
-    public function testAnInterruptedImportResumesWithoutDuplicates(): void
-    {
-        $path = $this->file('wg', [$this->run(100, '2026-01-01T00:00:00+00:00'), $this->run(200, '2026-01-02T00:00:00+00:00')]);
-        $copy = (string) file_get_contents($path);
-        legacy_import();
-        file_put_contents($path, $copy); // as if the request died between the commit and the delete
-        $this->assertSame([1, 1], legacy_import());
-        $this->assertSame([100, 200], array_column($this->runs('wg'), 'score'));
-    }
-
-    public function testRunsAlreadyInTheDatabaseMergeWithTheFile(): void
-    {
-        legacy_add_run('wg', $this->run(300, '2026-05-01T00:00:00+00:00'));
-        $this->file('wg', [$this->run(100, '2026-01-01T00:00:00+00:00')]);
-        legacy_import();
-        $this->assertSame([100, 300], array_column($this->runs('wg'), 'score'), 'merged, oldest first');
-    }
-
-    public function testAFileThatChangedIsKeptForTheNextPass(): void
-    {
-        $path = $this->file('wg', [$this->run(100, '2026-01-01T00:00:00+00:00')]);
-        legacy_import(null, LEGACY_IMPORT_BATCH, null, function () use ($path): void {
-            $this->file('wg', [$this->run(100, '2026-01-01T00:00:00+00:00'), $this->run(150, '2026-01-03T00:00:00+00:00')]);
-        });
-        $this->assertFileExists($path);
-        legacy_import();
-        $this->assertFileDoesNotExist($path);
-        $this->assertSame([100, 150], array_column($this->runs('wg'), 'score'));
-    }
-
-    public function testAnUnreadableFileIsLeftAlone(): void
-    {
-        file_put_contents($this->old . '/bad-operation-tankity.json', '{not json');
-        $this->assertSame([0, 0], legacy_import());
-        $this->assertFileExists($this->old . '/bad-operation-tankity.json');
-    }
-
-    public function testOldTempFilesGoAndFreshOnesStay(): void
-    {
-        $stale = $this->old . '/wg-operation-tankity.json.tmp.123';
-        $fresh = $this->old . '/wg-operation-tankity.json.tmp.456';
-        file_put_contents($stale, 'x');
-        file_put_contents($fresh, 'x');
-        touch($stale, time() - 7200);
-        legacy_import();
-        $this->assertFileDoesNotExist($stale);
-        $this->assertFileExists($fresh);
-    }
-
-    public function testABatchIsBounded(): void
-    {
-        foreach (['a', 'b', 'c'] as $s) {
-            $this->file($s, [$this->run(1, '2026-01-01T00:00:00+00:00')]);
-        }
-        $this->assertSame([2, 2], legacy_import(null, 2));
-        $this->assertSame([1, 1], legacy_import(null, 2));
-    }
-
-    public function testANewRunKeepsTheLastFiftyAndAnswersTheBest(): void
-    {
-        for ($i = 1; $i <= 55; $i++) {
-            $best = legacy_add_run('ace', $this->run($i * 10, sprintf('2026-02-01T00:%02d:00+00:00', $i)));
-        }
-        $this->assertSame(550, $best);
-        $this->assertCount(LEGACY_RUNS_KEPT, $this->runs('ace'));
-    }
-
-    public function testARoomScoreGoesToTheSameCallsign(): void
-    {
-        room_save_score('WGR', 640, ['code' => 'ABCD']);
-        $this->assertSame([['score' => 640, 'banked' => 0, 'won' => false, 'seed' => 'room:ABCD']],
-            array_map(fn(array $r): array => array_diff_key($r, ['ts' => 1]), $this->runs('wgr')));
-    }
-}
-```
-
-Run (in `websites/www.cs`): `vendor/bin/phpunit --testsuite tankity --filter LegacyImportTest`
-Expected: FAIL, `Call to undefined function legacy_import()`.
-
-- [ ] **Step 2: The module**
-
-```php
-<?php
-// games/tankity/server/legacy.php
-// The per-callsign score runs: the callsigns table (one row per callsign, in
-// the shape the old files had), what scores.php and the rooms file into it,
-// and the one-time import of the old <scores_dir>/<callsign>-operation-tankity.json
-// files. Loaded by rooms.php and scores.php; it serves nothing.
-declare(strict_types=1);
-if (count(get_included_files()) === 1) {
-    http_response_code(404);
-    exit;
-}
-require_once __DIR__ . '/db.php';
-
-const LEGACY_SLUG = 'operation-tankity';
-const LEGACY_RUNS_KEPT = 50;
-const LEGACY_IMPORT_BATCH = 200; // old files per housekeeping pass
-const LEGACY_TMP_AGE = 3600; // a temp file this old was left by a writer that died
-
-/* Where the old files are: a scores_dir setting left from before data_dir
-   (it is retired, and read only to find them), else /var/tmp. */
-function legacy_dir(): string
-{
-    $d = trim((string) tankity_setting('TANKITY_SCORES_DIR', 'scores_dir', ''));
-    return $d !== '' ? rtrim($d, '/') : '/var/tmp';
-}
-
-function legacy_slug(string $name): string
-{
-    $s = strtolower(trim($name));
-    $s = (string) preg_replace('/[^a-z0-9_-]+/', '-', $s);
-    $s = trim($s, '-');
-    return substr($s === '' ? 'anonymous' : $s, 0, 32);
-}
-
-/* A callsign's record: name, runs (oldest first) and best. */
-function legacy_read(PDO $db, string $slug): array
-{
-    $q = $db->prepare('SELECT data FROM callsigns WHERE slug = ?');
-    $q->execute([$slug]);
-    $d = json_decode((string) $q->fetchColumn(), true);
-    return is_array($d) && is_array($d['runs'] ?? null) ? $d : ['name' => $slug, 'runs' => [], 'best' => 0];
-}
-
-function legacy_write(PDO $db, string $slug, array $data): void
-{
-    $best = 0;
-    foreach ($data['runs'] as $r) {
-        $best = max($best, (int) ($r['score'] ?? 0));
-    }
-    $row = ['name' => $slug, 'runs' => array_values($data['runs']), 'best' => $best];
-    $db->prepare('INSERT OR REPLACE INTO callsigns (slug, data) VALUES (?, ?)')->execute([$slug, json_encode($row, JSON_UNESCAPED_SLASHES)]);
-}
-
-/* Appends one run to a callsign, keeping its last LEGACY_RUNS_KEPT; answers the new best. */
-function legacy_add_run(string $slug, array $run): int
-{
-    return tankity_tx(tankity_db(), function (PDO $db) use ($slug, $run): int {
-        $d = legacy_read($db, $slug);
-        $d['runs'][] = $run;
-        $d['runs'] = array_slice($d['runs'], -LEGACY_RUNS_KEPT);
-        legacy_write($db, $slug, $d);
-        return legacy_read($db, $slug)['best'];
-    });
-}
-
-/* Each callsign's best and its latest run, best first. */
-function legacy_top(int $n): array
-{
-    $rows = [];
-    foreach (tankity_db()->query('SELECT slug, data FROM callsigns') as $r) {
-        $d = json_decode((string) $r['data'], true);
-        if (!is_array($d) || empty($d['runs'])) {
-            continue;
-        }
-        $last = end($d['runs']);
-        $rows[] = ['name' => (string) $r['slug'], 'best' => (int) ($d['best'] ?? 0), 'banked' => (int) ($last['banked'] ?? 0),
-            'won' => (bool) ($last['won'] ?? false), 'ts' => (string) ($last['ts'] ?? '')];
-    }
-    usort($rows, fn($a, $b) => $b['best'] <=> $a['best']);
-    return array_slice($rows, 0, $n);
-}
-
-/* What makes two runs the same run, so an import that runs twice adds nothing twice. */
-function legacy_run_key(array $r): string
-{
-    return (string) json_encode([(int) ($r['score'] ?? 0), (int) ($r['banked'] ?? 0), (bool) ($r['won'] ?? false),
-        (string) ($r['seed'] ?? ''), (string) ($r['ts'] ?? '')]);
-}
-
-/* Imports up to $limit old files: each file's runs merge into its callsign's
-   row (every run kept, none twice), and the file is deleted only after that
-   commit, and only if it is byte for byte what was read. An unreadable file
-   is left for a person. Temp files a dead writer left go too. $afterCommit is
-   the tests' seam between the commit and the delete. Answers [imported, deleted]. */
-function legacy_import(?string $dir = null, int $limit = LEGACY_IMPORT_BATCH, ?int $now = null, ?Closure $afterCommit = null): array
-{
-    $dir ??= legacy_dir();
-    $now ??= time();
-    $imported = 0;
-    $deleted = 0;
-    $paths = glob($dir . '/*-' . LEGACY_SLUG . '.json') ?: [];
-    sort($paths);
-    foreach (array_slice($paths, 0, $limit) as $path) {
-        $raw = @file_get_contents($path);
-        $data = is_string($raw) ? json_decode($raw, true) : null;
-        if (!is_array($data) || !is_array($data['runs'] ?? null)) {
-            continue;
-        }
-        $slug = legacy_slug(basename($path, '-' . LEGACY_SLUG . '.json'));
-        $runs = $data['runs'];
-        tankity_tx(tankity_db(), function (PDO $db) use ($slug, $runs): void {
-            $d = legacy_read($db, $slug);
-            $have = array_flip(array_map('legacy_run_key', $d['runs']));
-            foreach ($runs as $r) {
-                if (is_array($r) && isset($r['score']) && !isset($have[legacy_run_key($r)])) {
-                    $d['runs'][] = $r;
-                    $have[legacy_run_key($r)] = true;
-                }
-            }
-            usort($d['runs'], fn($a, $b) => strcmp((string) ($a['ts'] ?? ''), (string) ($b['ts'] ?? '')));
-            legacy_write($db, $slug, $d);
-        });
-        $imported++;
-        if ($afterCommit !== null) {
-            $afterCommit();
-        }
-        clearstatcache(true, $path);
-        if (@file_get_contents($path) === $raw && @unlink($path)) {
-            $deleted++;
-        }
-    }
-    foreach (array_slice(glob($dir . '/*-' . LEGACY_SLUG . '.json.tmp.*') ?: [], 0, $limit) as $tmp) {
-        if ($now - (int) @filemtime($tmp) > LEGACY_TMP_AGE && @unlink($tmp)) {
-            $deleted++;
-        }
-    }
-    return [$imported, $deleted];
-}
-```
-
-`testOldTempFilesGoAndFreshOnesStay` counts the temp file in `deleted`; the `[2, 2]` and `[1, 1]` expectations in the other tests hold because they make no temp files.
-
-- [ ] **Step 3: scores.php and the rooms on it**
-
-Replace `games/tankity/scores.php` with:
-
-```php
-<?php
-// Operation Tankity: after-action report store.
-// Runs per callsign in Tankity's database (server/legacy.php): GET answers
-// each callsign's best, POST appends a validated run. Every write is one
-// SQLite transaction, so a reader never sees half a record.
-declare(strict_types=1);
-
-// Same promise as rooms.php: diagnostics belong in the server log, never in
-// a JSON response body.
-ini_set('display_errors', '0');
-
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/server/db.php';
-require_once __DIR__ . '/server/legacy.php';
-
-function json_out(int $code, array $payload): void
-{
-    http_response_code($code);
-    header('Content-Type: application/json');
-    echo json_encode($payload, JSON_UNESCAPED_SLASHES);
-    exit;
-}
-
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-try {
-    if ($method === 'GET') {
-        json_out(200, ['scores' => legacy_top(10)]);
-    }
-    if ($method === 'POST') {
-        $body = file_get_contents('php://input');
-        $in = json_decode(is_string($body) ? $body : '', true);
-        if (!is_array($in)) {
-            json_out(400, ['error' => 'body must be JSON']);
-        }
-        $name = isset($in['name']) ? (string) $in['name'] : '';
-        $score = isset($in['score']) ? (int) $in['score'] : -1;
-        $banked = isset($in['banked']) ? (int) $in['banked'] : -1;
-        if ($name === '' || strlen($name) > 24 || $score < 0 || $score > 999999 || $banked < 0 || $banked > 999) {
-            json_out(422, ['error' => 'invalid run (name 1-24 chars, score 0-999999, banked 0-999)']);
-        }
-        $slug = legacy_slug($name);
-        $best = legacy_add_run($slug, ['score' => $score, 'banked' => $banked, 'won' => !empty($in['won']),
-            'seed' => isset($in['seed']) ? substr((string) $in['seed'], 0, 64) : '', 'ts' => gmdate('c')]);
-        json_out(200, ['ok' => true, 'name' => $slug, 'best' => $best]);
-    }
-    json_out(405, ['error' => 'method not allowed']);
-} catch (Throwable $e) {
-    error_log('tankity scores.php: ' . $e->getMessage());
-    json_out(tankity_busy($e) ? 503 : 500, ['error' => tankity_busy($e) ? 'store busy' : 'store unavailable']);
-}
-```
-
-In `server/rules.php` replace `room_save_score()` (the whole function and its comment) with:
-
-```php
-/* Files a room score with the per-callsign runs, as local play does. Inside a
-   room's transaction: it commits with the room. A failure is logged, never
-   allowed to break the round. */
-function room_save_score(string $initials, int $score, array $room): void
-{
-    try {
-        legacy_add_run(legacy_slug($initials), ['score' => $score, 'banked' => 0, 'won' => false,
-            'seed' => 'room:' . $room['code'], 'ts' => gmdate('c')]);
-    } catch (Throwable $e) {
-        error_log('tankity rooms: score not filed: ' . $e->getMessage());
-    }
-}
-```
-
-`server/settings.php`: delete `room_scores_dir()` and its comment (`/* Room score files still live on disk ... */`), and in the header change `(room cap, room age, live window, scores directory)` to `(room cap, room age, live window)`.
-
-`rooms.php`: after `require_once __DIR__ . '/server/db.php';` add `require_once __DIR__ . '/server/legacy.php';`, and add `//   server/legacy.php    the per-callsign score runs and the import of the old score files` to the file map.
-
-- [ ] **Step 4: Run**
-
-Run (in `websites/www.cs`): `vendor/bin/phpunit --testsuite tankity`
-Expected: PASS, 9 `LegacyImportTest` cases; `RoomsSimTest`'s room endings now file into the test process's own database.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add games/tankity/server games/tankity/scores.php games/tankity/rooms.php games/tankity/test/php/LegacyImportTest.php
-git commit -F- <<'MSG'
-Tankity scores: per-callsign runs in the database; the old files import once
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
-MSG
-```
+Replaced by Task R1 (the `board` table and schema step 5) and Task R2 (no per-callsign table, no import of the old score files: step 5 deletes the old rows, and the old files are left where they are).
 
 ### Task S6: The server cleans up after itself
 
@@ -2321,7 +1914,7 @@ MSG
 
 **Interfaces:**
 - Consumes: `room_sweep` (S3), `legacy_import` (S5), `tankity_tx`, `tankity_busy`.
-- Produces: `HOUSEKEEP_EVERY = 300`; `tankity_housekeep(int $now, array $jobs): ?array` (`$jobs` is `name => fn(int $now): int`, what each removed; null when it was not time or the database was busy; a job that throws reports -1 and the rest still run); `tankity_jobs(): array` (`legacy`, and `rooms` where `room_sweep` is loaded; PR 15 adds `callsigns`, PR 16 `solo`).
+- Produces: `HOUSEKEEP_EVERY = 60`; `tankity_housekeep(int $now, array $jobs): ?array` (`$jobs` is `name => fn(int $now): int`, what each removed; null when it was not time or the database was busy; a job that throws reports -1 and the rest still run); `tankity_jobs(): array` (`rooms` where `room_sweep` is loaded; Task R1 adds `rate`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2423,7 +2016,7 @@ if (count(get_included_files()) === 1) {
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/legacy.php';
 
-const HOUSEKEEP_EVERY = 300;
+const HOUSEKEEP_EVERY = 60;
 
 /* Runs $jobs (name => fn(int $now): int, what it removed) when the last run
    is HOUSEKEEP_EVERY seconds old. A plain read decides that, so a request
@@ -2645,8 +2238,7 @@ Files table: the `rooms.php` row's tail becomes `… It requires the files below
 
 ```markdown
 | `server/db.php` | Where Tankity keeps its files (`tankity_data_dir`), the database (`tankity_db`), the journal mode for its filesystem, the schema steps, `tankity_tx` |
-| `server/legacy.php` | The per-callsign score runs (`legacy_add_run`, `legacy_top`) and the one-time import of the old score files (`legacy_import`) |
-| `server/housekeep.php` | Cleanup on requests, at most every five minutes (`tankity_housekeep`, `tankity_jobs`) |
+| `server/housekeep.php` | Cleanup on requests, at most once a minute (`tankity_housekeep`, `tankity_jobs`) |
 | `data/` | Runtime only, when PHP may write here: `tankity.sqlite` and the deny `.htaccess` PHP writes. Never in git, never deployed |
 ```
 
@@ -2704,26 +2296,21 @@ cannot prevent that.
 ignores it), so a deploy never uploads into it, changes its modes or prunes
 it.
 
-The directory holds `tankity.sqlite` (rooms; the per-callsign runs) and its
+The directory holds `tankity.sqlite` (rooms, the boards, per-address rate counts) and its
 journal. The journal mode is WAL when the directory is on a local filesystem
 (`/proc/self/mounts`) and DELETE on anything else, including when the mount
 table cannot be read; `journal_mode` overrides. `PRAGMA user_version` is the
 schema version (`tankity_schema_steps()`); a newer server runs the missing
 steps on its first request.
 
-Score files from before the database, `<scores_dir>/<callsign>-operation-tankity.json`
-(`/var/tmp` unless a `scores_dir` from before `data_dir` says otherwise; the
-setting is retired and read only for this), are imported by housekeeping:
-every run of every file goes into its callsign's row, none twice, and the file
-is deleted only after that commit and only if it did not change meanwhile.
-An unreadable file is left alone.
+Score files from before the database are left where they are: schema step 5 (Task R1) deletes the old rows and nothing imports the files.
 
 Housekeeping has no cron: any request to `rooms.php` or `scores.php` runs it,
-at most every five minutes, each job bounded (idle rooms, 100 at a time; old
-files, 200 at a time; leftover temp files over an hour old).
+at most once a minute, each job bounded (idle rooms, 100 at a time; old rate
+counts; leftover temp files over an hour old).
 ```
 
-Tests table: the `phpunit --testsuite tankity` row gains `DataDirTest`, `DbTest`, `RoomStoreTest`, `LegacyImportTest`, `HousekeepTest` with "storage: the directory and its checks, the database and its journal, rooms as rows, the old files' import, cleanup on a fake clock"; the `tankity-docker` row becomes `` `RoomsTest` (the room shelf over its own `php -S`) and `RoomsStoreTest` (the store under real concurrency: exact cap under a race, close, sweep, a held writer and the 503, a killed holder). Runs inside the PHP container, which matches the host's PHP (`make test` does) ``; the `protocol/generate.php --check` row drops "(needs SysV; …)" for "(run inside the PHP container)"; add a row `` `tests/tankity-data-deny.sh` `` | `games/tankity/data/` is refused over HTTP (`make test` runs it). In "Protocol fixtures", `a private shared-memory key` becomes `a private data directory`.
+Tests table: the `phpunit --testsuite tankity` row gains `DataDirTest`, `DbTest`, `RoomStoreTest`, `HousekeepTest` with "storage: the directory and its checks, the database and its journal, rooms as rows, cleanup on a fake clock"; the `tankity-docker` row becomes `` `RoomsTest` (the room shelf over its own `php -S`) and `RoomsStoreTest` (the store under real concurrency: exact cap under a race, close, sweep, a held writer and the 503, a killed holder). Runs inside the PHP container, which matches the host's PHP (`make test` does) ``; the `protocol/generate.php --check` row drops "(needs SysV; …)" for "(run inside the PHP container)"; add a row `` `tests/tankity-data-deny.sh` `` | `games/tankity/data/` is refused over HTTP (`make test` runs it). In "Protocol fixtures", `a private shared-memory key` becomes `a private data directory`.
 
 - [ ] **Step 3: Full gate, PR**
 
@@ -2739,7 +2326,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
 MSG
 git push -u origin games/tankity-storage
-gh pr create --title "Tankity storage: one SQLite database, rooms off shared memory, cleanup on requests" --body "Spec row 20 (section 12). Rooms and the per-callsign scores move into games/tankity/data/ or /var/tmp/<username>-tankity/tankity.sqlite; the old score files import once; housekeeping runs on requests; data/ is never served or deployed.
+gh pr create --title "Tankity storage: one SQLite database, rooms off shared memory, cleanup on requests" --body "Spec row 20 (section 12). Rooms move into games/tankity/data/ or /var/tmp/<username>-tankity/tankity.sqlite; housekeeping runs on requests; data/ is never served or deployed.
 
 Host probe (Task S1):
 <probe.json>
@@ -2754,7 +2341,7 @@ https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 Run the pr-fix loop, gate on required checks (`gh pr checks --required`; if none are listed and `gh api "repos/:owner/:repo/branches/main/protection"` answers 404, wait for the CI run's own conclusion instead), merge on green. Before `make deploy`, save today's board: `curl -s https://www.cs.siue.edu/~wgrim/games/tankity/scores.php > /tmp/tankity-before.json`. Then `make deploy`, and check live:
 
 1. `curl -s 'https://www.cs.siue.edu/~wgrim/games/tankity/rooms.php?action=ping'` answers `{"ok":true,…,"rooms":{"used":N,"max":10}}` with no `store`.
-2. `curl -s https://www.cs.siue.edu/~wgrim/games/tankity/scores.php` lists the same names with the same `best` as `/tmp/tankity-before.json` (the first request imported the old files). With more than 200 old files (the probe's `legacy_files.count`), the rest arrive on the following housekeeping passes, five minutes apart.
+2. `curl -s https://www.cs.siue.edu/~wgrim/games/tankity/scores.php` answers 200 with the online board for the difficulty (room matches with two or more humans only; empty until one finishes).
 3. `curl -s -o /dev/null -w '%{http_code}\n' https://www.cs.siue.edu/~wgrim/games/tankity/data/tankity.sqlite` prints 403 or 404.
 4. Open `/play/tankity/?v=<sha>`, host a room, and leave it.
 
@@ -4408,387 +3995,9 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
 MSG
 ```
 
-### Task 10: The boards, one per difficulty, with the callsign conversion
+### Task 10: The boards, one per difficulty
 
-**Files:**
-- Create: `games/tankity/server/guard.php`
-- Create: `games/tankity/server/board.php`
-- Modify: `games/tankity/server/db.php` (schema step 2: the `board` table)
-- Modify: `games/tankity/server/housekeep.php` (`tankity_jobs`: the `callsigns` job)
-- Modify: `games/tankity/server/rules.php` (delete `BLOCKED_INITIALS` const, current lines 14–30)
-- Modify: `games/tankity/rooms.php` (require `server/guard.php` and `server/board.php` before `server/rules.php`)
-- Modify: `games/tankity/test/smoke.test.mjs` (`phpFiles` reads `server/guard.php` and `server/board.php`)
-- Create: `games/tankity/test/php/BoardTest.php`
-
-**Interfaces:**
-- Consumes: Plan C's `Kit\ScoreGuard` (`validateConfig`, `initials`, `coerceInitials`, `isBlocked`, the constructor), through the `server/score-guard.php` copy; PR 20's `tankity_db`, `tankity_tx`, `tankity_data_dir`, `tankity_schema_steps`, `tankity_jobs`, `legacy_read`.
-- Produces: `BLOCKED_INITIALS` (now in `guard.php`); `TANKITY_GUARD_RUNS = 'guard-runs.json'`; `tankity_guard_config(array $override = []): array` (Tankity's `CONFIG_KEYS`, validated; `runTtlSec` 86400, since a solo run's token is spent when the run files, which can be hours after it started); `tankity_guard(array $override = [], ?array $server = null, ?array $cookies = null, ?Closure $clock = null, ?Closure $setCookie = null): Kit\ScoreGuard` (header `X-Tankity-Csrf`, rate salt `tankity-score-rate-v1`, run store `<storage directory>/guard-runs.json`; the request's `$_SERVER`/`$_COOKIE` unless given); `tankity_initials(Kit\ScoreGuard $guard, mixed $raw): ?string` (`ScoreGuard::initials()` on the trimmed value, and null for a blocked set); `BOARD_LEVELS = ['easy', 'normal', 'hard']`, `BOARD_KEEP = 100` (per difficulty), `BOARD_SHOW = 20`, `BOARD_STANDIN = 'AAA'`; `board_level(mixed $raw): ?string`; `board_convert_name(string $name, Kit\ScoreGuard $guard): string`; `board_file(array $run): ?int` (run keys `difficulty`, `initials`, `score`, `rounds`, `seed`, optional `at`; the 1-based place on that difficulty's board, null when it did not place); `board_top(string $difficulty, int $n): array` (rows `initials, score, rounds, seed, at, place`); `board_convert_callsigns(int $limit = 200): int` (callsign rows moved onto the Normal board, each its best run, the row then deleted). Schema step 2: `board (id INTEGER PRIMARY KEY AUTOINCREMENT, difficulty, initials, score, rounds, seed, at)`, index `board_rank (difficulty, score DESC, id)`.
-
-- [ ] **Step 1: Write the failing test**
-
-```php
-<?php
-// games/tankity/test/php/BoardTest.php
-declare(strict_types=1);
-
-use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\TestCase;
-
-/* The boards: one per difficulty, best runs first, ties keep the older run
-   ahead, the best BOARD_KEEP kept per board, and the per-callsign rows from
-   before the boards converted once onto the Normal board. */
-final class BoardTest extends TestCase
-{
-    private string $dir;
-
-    public static function setUpBeforeClass(): void
-    {
-        require_once __DIR__ . '/rooms-lib.php';
-    }
-
-    protected function setUp(): void
-    {
-        $this->dir = tankity_test_dir();
-    }
-
-    protected function tearDown(): void
-    {
-        tankity_test_rm($this->dir);
-    }
-
-    private function run(string $who, int $score, string $level = 'normal'): array
-    {
-        return ['difficulty' => $level, 'initials' => $who, 'score' => $score, 'rounds' => 1, 'seed' => 's'];
-    }
-
-    public function testFilesAndRanksBestFirst(): void
-    {
-        $this->assertSame(1, board_file($this->run('AAA', 300)));
-        $this->assertSame(1, board_file($this->run('BBB', 500)));
-        $this->assertSame(3, board_file($this->run('CCC', 100)));
-        $this->assertSame(['BBB', 'AAA', 'CCC'], array_column(board_top('normal', 10), 'initials'));
-        $this->assertSame([1, 2, 3], array_column(board_top('normal', 10), 'place'));
-    }
-
-    public function testEachDifficultyHasItsOwnBoard(): void
-    {
-        $this->assertSame(1, board_file($this->run('EZE', 100, 'easy')));
-        $this->assertSame(1, board_file($this->run('HRD', 50, 'hard')));
-        $this->assertSame(1, board_file($this->run('NRM', 10)));
-        $this->assertSame(['EZE'], array_column(board_top('easy', 10), 'initials'));
-        $this->assertSame(['HRD'], array_column(board_top('hard', 10), 'initials'));
-        $this->assertSame(['NRM'], array_column(board_top('normal', 10), 'initials'));
-        $this->assertSame(BOARD_LEVELS, array_keys(ROOM_DIFFICULTY), 'the boards are the drones\' levels');
-    }
-
-    public function testAnUnknownDifficultyIsNotABoard(): void
-    {
-        $this->assertNull(board_level('brutal'));
-        $this->assertNull(board_level(null));
-        $this->assertSame('hard', board_level('hard'));
-        $this->expectException(InvalidArgumentException::class);
-        board_file($this->run('BAD', 1, 'brutal'));
-    }
-
-    public function testTiesKeepTheOlderRunAhead(): void
-    {
-        board_file($this->run('OLD', 200));
-        $this->assertSame(2, board_file($this->run('NEW', 200)));
-        $this->assertSame(['OLD', 'NEW'], array_column(board_top('normal', 2), 'initials'));
-    }
-
-    public function testKeepsTheBestAndARunBelowThemDoesNotPlace(): void
-    {
-        for ($i = 0; $i < BOARD_KEEP; $i++) {
-            board_file($this->run('TOP', 1000 + $i));
-        }
-        $this->assertNull(board_file($this->run('LOW', 1)));
-        $this->assertCount(BOARD_KEEP, board_top('normal', BOARD_KEEP + 5));
-        $this->assertSame(1, board_file($this->run('LOW', 1, 'easy')), 'another board is not full');
-    }
-
-    /** @return iterable<string, array{string, string}> */
-    public static function callsigns(): iterable
-    {
-        yield 'two letters pad with X' => ['bo', 'BOX'];
-        yield 'digits and dashes drop' => ['r2-d2', 'RDX'];
-        yield 'long names cut' => ['tankity-ace', 'TAN'];
-        yield 'no letters is XXX, which is blocked' => ['123', 'AAA'];
-        yield 'empty' => ['', 'AAA'];
-        yield 'a blocked set' => ['ass', 'AAA'];
-        yield 'already three' => ['wgr', 'WGR'];
-    }
-
-    #[DataProvider('callsigns')]
-    public function testOddCallsignsConvert(string $name, string $want): void
-    {
-        $this->assertSame($want, board_convert_name($name, tankity_guard()));
-    }
-
-    public function testConvertsCallsignRowsOnceOntoTheNormalBoard(): void
-    {
-        legacy_write(tankity_db(), 'wg', ['runs' => [
-            ['score' => 10, 'banked' => 0, 'won' => false, 'seed' => 'a', 'ts' => '2026-01-01T00:00:00+00:00'],
-            ['score' => 900, 'banked' => 4, 'won' => false, 'seed' => 'b', 'ts' => '2026-02-01T00:00:00+00:00'],
-        ]]);
-        legacy_write(tankity_db(), 'r2-d2', ['runs' => [['score' => 450, 'banked' => 2, 'won' => false, 'seed' => 'c', 'ts' => '2026-03-01T00:00:00+00:00']]]);
-        $this->assertSame(2, board_convert_callsigns());
-        $top = board_top('normal', 10);
-        $this->assertSame(['WGX', 'RDX'], array_column($top, 'initials'));
-        $this->assertSame([900, 450], array_column($top, 'score'));
-        $this->assertSame([4, 'b', '2026-02-01T00:00:00+00:00'], [$top[0]['rounds'], $top[0]['seed'], $top[0]['at']]);
-        $this->assertSame(0, (int) tankity_db()->query('SELECT COUNT(*) FROM callsigns')->fetchColumn());
-        $this->assertSame(0, board_convert_callsigns(), 'nothing is converted twice');
-        $this->assertSame([], board_top('easy', 10));
-    }
-
-    public function testTheGuardKeepsItsRunsInTheStorageDirectory(): void
-    {
-        $this->assertNotNull(tankity_guard([], ['HTTP_HOST' => 'localhost', 'REMOTE_ADDR' => '192.0.2.1'], [], fn(): int => 1_000_000, function (): void {})->startRun());
-        $this->assertFileExists($this->dir . '/' . TANKITY_GUARD_RUNS);
-    }
-}
-```
-
-Run (in `websites/www.cs`): `vendor/bin/phpunit --testsuite tankity --filter BoardTest`
-Expected: FAIL, `Call to undefined function board_file()`.
-
-- [ ] **Step 2: The guard settings**
-
-The guard's copy `server/score-guard.php` is already in place (PR 20, Task S2, `kit_php`).
-
-`server/guard.php` is a thin wrapper: Tankity's settings for the kit's `Kit\ScoreGuard`, nothing else.
-
-```php
-<?php
-// games/tankity/server/guard.php
-// Tankity's settings for the kit's score guard (server/score-guard.php is the
-// generated copy of games/_kit/php/score-guard.php) and the initials nobody may
-// file or sit down with. Loaded by rooms.php, scores.php and server/board.php.
-declare(strict_types=1);
-if (count(get_included_files()) === 1) {
-    http_response_code(404);
-    exit;
-}
-require_once __DIR__ . '/../config.php';
-require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/score-guard.php';
-
-use Kit\ScoreGuard;
-
-// Matched on the uppercase form. src/initials.ts BLOCKED_INITIALS is the same list.
-const BLOCKED_INITIALS = [
-    'ASS',
-    'FUK', 'FUC', 'FCK', 'FUX', 'FUQ',
-    'SHT', 'SHI',
-    'DIK', 'DIC', 'DCK',
-    'COK', 'COC', 'COQ',
-    'CUM', 'JIZ',
-    'CNT', 'PUS', 'VAG', 'CLT',
-    'SEX', 'XXX', 'TIT',
-    'FAG', 'FGT',
-    'NIG', 'NGR',
-    'WTF', 'FFS',
-    'POO', 'PEE',
-    'KKK',
-];
-// The guard's run tokens and rate stamps, beside the database.
-const TANKITY_GUARD_RUNS = 'guard-runs.json';
-
-/* The guard's config keys for Tankity, validated. A solo run's token is spent
-   when the run files, hours after it may have started; the run's own expiry
-   (solo_runs) is the tighter limit. Tests pass $override (a low limit). */
-function tankity_guard_config(array $override = []): array
-{
-    $hosts = array_values(array_filter(array_map('trim',
-        explode(',', (string) tankity_setting('TANKITY_ALLOWED_HOSTS', 'allowed_hosts', 'www.cs.siue.edu,cs.siue.edu')))));
-    return ScoreGuard::validateConfig($override + [
-        'runTtlSec' => 86400,
-        'startsPerHour' => 120,
-        'scoresPerHour' => 60,
-        'csrfCookie' => 'tankity_csrf',
-        'storageKey' => 'operation-tankity',
-        'blockedInitials' => BLOCKED_INITIALS,
-        'allowedHosts' => $hosts,
-    ]);
-}
-
-/* The kit's score guard for this request, set up for Tankity: its cookie and
-   header, its rate salt and its run store in the storage directory. Tests pass
-   the request, a clock and a cookie setter; a page request uses $_SERVER,
-   $_COOKIE and the real ones. */
-function tankity_guard(array $override = [], ?array $server = null, ?array $cookies = null, ?Closure $clock = null, ?Closure $setCookie = null): ScoreGuard
-{
-    return new ScoreGuard(
-        tankity_guard_config($override),
-        'X-Tankity-Csrf',
-        'tankity-score-rate-v1',
-        $server ?? $_SERVER,
-        $cookies ?? $_COOKIE,
-        tankity_data_dir() . '/' . TANKITY_GUARD_RUNS,
-        $clock,
-        $setCookie,
-    );
-}
-
-/* Initials as filed and seated: three letters typed in either case (spaces
-   around them dropped), stored uppercase; null for anything else or a blocked set. */
-function tankity_initials(ScoreGuard $guard, mixed $raw): ?string
-{
-    $initials = ScoreGuard::initials(is_string($raw) ? trim($raw) : $raw);
-    return $initials !== null && !$guard->isBlocked($initials) ? $initials : null;
-}
-```
-
-(The guard sets its store to `Kit\StoreModes`' private file mode, 0600, after each write.)
-
-Delete the `// Mirrors cylon: ...` comment and the `const BLOCKED_INITIALS = [...]` block from `server/rules.php` (current lines 14–30). In `rooms.php`, before `require_once __DIR__ . '/server/settings.php';` add:
-
-```php
-require_once __DIR__ . '/server/guard.php';
-require_once __DIR__ . '/server/board.php';
-```
-
-and add three lines to its file map comment: `//   server/guard.php     the score guard's settings and the blocked initials`, `//   server/score-guard.php  the kit's score guard (a generated copy; never edit it)` and `//   server/board.php     the boards, one per difficulty`.
-
-In `test/smoke.test.mjs`, replace `const phpFiles = ['rooms.php', ...['settings', 'store', 'sim', 'ai', 'rules', 'protocol'].map(f => `server/${f}.php`)];` with `const phpFiles = ['rooms.php', ...['settings', 'store', 'sim', 'ai', 'rules', 'protocol', 'guard', 'board'].map(f => `server/${f}.php`)];`: the `blocked-parity` check reads the server's list, which now lives in `server/guard.php`.
-
-- [ ] **Step 3: The board table and the boards**
-
-In `server/db.php` add step 2 to `tankity_schema_steps()` after step 1:
-
-```php
-        2 => [
-            'CREATE TABLE board (id INTEGER PRIMARY KEY AUTOINCREMENT, difficulty TEXT NOT NULL, initials TEXT NOT NULL,
-                score INTEGER NOT NULL, rounds INTEGER NOT NULL, seed TEXT NOT NULL, at TEXT NOT NULL)',
-            'CREATE INDEX board_rank ON board (difficulty, score DESC, id)',
-        ],
-```
-
-and change its comment's last sentence to `… each in its own transaction. Step 2 is the boards.`
-
-```php
-<?php
-// games/tankity/server/board.php
-// Operation Tankity's all-time boards, one per difficulty: rows in the board
-// table, best first, ties to the older run, the best BOARD_KEEP kept per
-// board. Also moves the per-callsign rows from before the boards onto the
-// Normal board. Loaded by rooms.php and scores.php; it serves nothing.
-declare(strict_types=1);
-if (count(get_included_files()) === 1) {
-    http_response_code(404);
-    exit;
-}
-require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/guard.php';
-require_once __DIR__ . '/legacy.php';
-
-use Kit\ScoreGuard;
-
-const BOARD_LEVELS = ['easy', 'normal', 'hard']; // server/ai.php ROOM_DIFFICULTY's levels
-const BOARD_KEEP = 100;
-const BOARD_SHOW = 20;
-const BOARD_STANDIN = 'AAA'; // what a converted name the blocklist refuses becomes
-
-function board_level(mixed $raw): ?string
-{
-    return is_string($raw) && in_array($raw, BOARD_LEVELS, true) ? $raw : null;
-}
-
-/* An old free-text callsign as board initials: the kit guard's coercion
-   (letters uppercased, the rest dropped, cut or padded with X to three), and
-   the stand-in for a set the guard blocks. */
-function board_convert_name(string $name, ScoreGuard $guard): string
-{
-    $three = ScoreGuard::coerceInitials($name, 'X');
-    return $guard->isBlocked($three) ? BOARD_STANDIN : $three;
-}
-
-/* Files a run on its difficulty's board: its 1-based place, or null when it
-   did not make the best BOARD_KEEP. A board never holds more than that. */
-function board_file(array $run): ?int
-{
-    $level = board_level($run['difficulty'] ?? null);
-    if ($level === null) {
-        throw new InvalidArgumentException('no such board: ' . var_export($run['difficulty'] ?? null, true));
-    }
-    return tankity_tx(tankity_db(), function (PDO $db) use ($run, $level): ?int {
-        $db->prepare('INSERT INTO board (difficulty, initials, score, rounds, seed, at) VALUES (?, ?, ?, ?, ?, ?)')->execute([
-            $level, (string) $run['initials'], (int) $run['score'], (int) $run['rounds'],
-            substr((string) $run['seed'], 0, 64), (string) ($run['at'] ?? gmdate('c')),
-        ]);
-        $id = (int) $db->lastInsertId();
-        $q = $db->prepare('SELECT COUNT(*) FROM board WHERE difficulty = ? AND (score > ? OR (score = ? AND id < ?))');
-        $q->execute([$level, (int) $run['score'], (int) $run['score'], $id]);
-        $place = (int) $q->fetchColumn() + 1;
-        $db->prepare('DELETE FROM board WHERE difficulty = ? AND id NOT IN
-            (SELECT id FROM board WHERE difficulty = ? ORDER BY score DESC, id LIMIT ?)')->execute([$level, $level, BOARD_KEEP]);
-        return $place <= BOARD_KEEP ? $place : null;
-    });
-}
-
-/* A board's best $n runs with their places. */
-function board_top(string $difficulty, int $n): array
-{
-    $q = tankity_db()->prepare('SELECT initials, score, rounds, seed, at FROM board WHERE difficulty = ? ORDER BY score DESC, id LIMIT ?');
-    $q->execute([$difficulty, $n]);
-    $out = [];
-    foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $i => $r) {
-        $out[] = ['initials' => (string) $r['initials'], 'score' => (int) $r['score'], 'rounds' => (int) $r['rounds'],
-            'seed' => (string) $r['seed'], 'at' => (string) $r['at'], 'place' => $i + 1];
-    }
-    return $out;
-}
-
-/* Moves up to $limit per-callsign rows onto the Normal board (the only level
-   there was): each callsign's best run, its name converted, the row deleted in
-   the same transaction, so nothing is converted twice. Answers the rows moved. */
-function board_convert_callsigns(int $limit = 200): int
-{
-    $guard = tankity_guard();
-    $q = tankity_db()->prepare('SELECT slug FROM callsigns ORDER BY slug LIMIT ?');
-    $q->execute([$limit]);
-    $moved = 0;
-    foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $slug) {
-        tankity_tx(tankity_db(), function (PDO $db) use ($slug, $guard, &$moved): void {
-            $d = legacy_read($db, (string) $slug);
-            $best = null;
-            foreach ($d['runs'] as $r) {
-                if (is_array($r) && isset($r['score']) && ($best === null || (int) $r['score'] > (int) $best['score'])) {
-                    $best = $r;
-                }
-            }
-            if ($best !== null) {
-                board_file(['difficulty' => 'normal', 'initials' => board_convert_name((string) $slug, $guard),
-                    'score' => max(0, (int) $best['score']), 'rounds' => max(0, (int) ($best['banked'] ?? 0)),
-                    'seed' => (string) ($best['seed'] ?? ''), 'at' => (string) ($best['ts'] ?? '')]);
-            }
-            $db->prepare('DELETE FROM callsigns WHERE slug = ?')->execute([$slug]);
-            $moved++;
-        });
-    }
-    return $moved;
-}
-```
-
-In `server/housekeep.php` `tankity_jobs()`, after the `legacy` job add `$jobs['callsigns'] = fn(int $now): int => board_convert_callsigns();` (guarded by `if (function_exists('board_convert_callsigns'))`, since housekeeping is loaded before the board in some requests), and change its comment to `/* Every cleanup job this request can run, in order: old files into callsign rows, callsign rows onto the Normal board, then the room sweep where the room library is loaded. */`.
-
-- [ ] **Step 4: Run the suites**
-
-Run (in `websites/www.cs`): `(cd games/tankity && php tools/install-files.php --check && node --test test/smoke.test.mjs) && vendor/bin/phpunit --testsuite tankity`
-Expected: PASS, 14 `BoardTest` cases; the smoke test's `blocked-parity` finds the same list in `src/initials.ts` and `server/guard.php`; `DbTest` sees schema version 2.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add games/tankity/server games/tankity/rooms.php games/tankity/test/php/BoardTest.php games/tankity/test/smoke.test.mjs
-git commit -F- <<'MSG'
-Tankity: a board per difficulty in the database; callsign rows move to Normal
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
-MSG
-```
+Replaced by Task R1 (the online board: `server/board.php` holds room rows only, one board per difficulty, best 100 each) and Task R2 (the callsign conversion is retired; schema step 5 deletes the old rows). `server/guard.php` (`tankity_guard()`, `tankity_initials()`, `BLOCKED_INITIALS`) stands as Plan C's `Kit\ScoreGuard` wrapper.
 
 ### Task 11: Rooms file every human's score on the board
 
@@ -4944,7 +4153,7 @@ In `room_end_round()` replace `                room_save_score($s['initials'], $
 
 and in Task 8's winner branch, after `$events[] = ['t' => 'matchwin', ...];` add `room_file_seat($room, $w);`.
 
-Rooms no longer file per-callsign runs: delete `LegacyImportTest::testARoomScoreGoesToTheSameCallsign` (PR 20's), whose job `RoomFilingTest` now does.
+Rooms no longer file per-callsign runs: `RoomFilingTest` covers a room's filing.
 
 `server/protocol.php` `you` block, after `'maxArmor' => ...`:
 
@@ -6219,277 +5428,9 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
 MSG
 ```
 
-### Task 19: Solo runs file themselves; Scores shows your difficulty's board, yours marked, with a switcher
+### Task 19: Scores shows the online board and this browser's board
 
-**Files:**
-- Modify: `games/tankity/scores.php` (rewrite: a board per difficulty, initials-checked POST)
-- Modify: `games/tankity/src/scores.ts` (rewrite)
-- Modify: `games/tankity/src/ui/scores.tsx` (rows marked, the level switcher, no form)
-- Modify: `games/tankity/src/lobby.ts` (drop `SCORES`/`renderScoresOverlay` deps)
-- Modify: `games/tankity/src/main.ts` (`createScores`, `createMatch`, `createLobby` wiring)
-- Create: `games/tankity/test/scores-ui.test.mjs`
-- Modify: `games/tankity/test/ui.test.mjs` (delete the scores block), `games/tankity/test/smoke.test.mjs` (form checks)
-
-**Interfaces:**
-- Consumes: Task 10's boards, `tankity_guard()` and `tankity_initials()`; PR 20's `tankity_housekeep`/`tankity_jobs`; Task 14's `filedLine`; the difficulty PR's `difficultySetting` (main.ts's `difficulty`), `DIFFICULTY_NAMES` and `isDifficulty` (`src/difficulty.ts`); Plan C Task 13's `getInitials` (in `main.ts`).
-- Produces: `scores.php` GET `?difficulty=<level>` (default `normal`; 422 for an unknown word) → `{ difficulty, scores: { place, initials, score, rounds, seed, at }[], keep }`; POST `{ initials, difficulty, score, banked, seed }` → `{ ok, score, rank, difficulty }`. `createScores({ $, keyHint, say, toggleOverlay, initials, difficulty })` → `{ SCORES, renderScoresOverlay, loadScores, fileSolo }` with `loadScores(level?: Difficulty): Promise<void>` (no argument: the player's current difficulty) and `fileSolo(run: SoloRun, done)`, `SoloRun = { initials; score; banked; seed; difficulty: Difficulty }`. `ScoresProps = { keyHint; onClose; level: Difficulty; onLevel(level: Difficulty): void; rows: { text: string; mine: boolean }[] | null; note: string }`; the switcher's buttons are `#scores-level-easy`, `#scores-level-normal`, `#scores-level-hard`, the shown one `aria-pressed="true"`.
-
-- [ ] **Step 1: The endpoint**
-
-Replace `games/tankity/scores.php` with:
-
-```php
-<?php
-// Operation Tankity: the all-time boards over HTTP, one per difficulty. GET
-// ?difficulty= answers that board's best runs; POST {initials, difficulty,
-// score, banked, seed} files a finished solo run. Rooms file their own scores
-// on the server. The boards are server/board.php.
-declare(strict_types=1);
-
-// A JSON API must never leak diagnostics into its output.
-ini_set('display_errors', '0');
-
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/server/db.php';
-require_once __DIR__ . '/server/guard.php';
-require_once __DIR__ . '/server/board.php';
-require_once __DIR__ . '/server/housekeep.php';
-
-function json_out(int $code, array $payload): void
-{
-    http_response_code($code);
-    header('Content-Type: application/json');
-    header('Cache-Control: no-store');
-    echo json_encode($payload, JSON_UNESCAPED_SLASHES);
-    exit;
-}
-
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-try {
-    tankity_housekeep(time(), tankity_jobs());
-    if ($method === 'GET') {
-        $level = board_level($_GET['difficulty'] ?? 'normal');
-        if ($level === null) {
-            json_out(422, ['error' => 'no such board']);
-        }
-        json_out(200, ['difficulty' => $level, 'scores' => board_top($level, BOARD_SHOW), 'keep' => BOARD_KEEP]);
-    }
-    if ($method === 'POST') {
-        $guard = tankity_guard();
-        if (!$guard->originAllowed()) {
-            json_out(403, ['error' => 'forbidden']);
-        }
-        $in = json_decode((string) file_get_contents('php://input'), true);
-        if (!is_array($in)) {
-            json_out(400, ['error' => 'body must be JSON']);
-        }
-        $initials = tankity_initials($guard, $in['initials'] ?? null);
-        if ($initials === null) {
-            json_out(422, ['error' => 'initials must be 3 letters, kept clean']);
-        }
-        $level = board_level($in['difficulty'] ?? null);
-        $score = $in['score'] ?? null;
-        $banked = $in['banked'] ?? null;
-        if ($level === null || !is_int($score) || $score < 0 || $score > 999999 || !is_int($banked) || $banked < 0 || $banked > 999) {
-            json_out(422, ['error' => 'invalid run (difficulty easy/normal/hard, score 0-999999, banked 0-999)']);
-        }
-        $rank = board_file(['difficulty' => $level, 'initials' => $initials, 'score' => $score, 'rounds' => $banked, 'seed' => (string) ($in['seed'] ?? '')]);
-        json_out(200, ['ok' => true, 'score' => $score, 'rank' => $rank, 'difficulty' => $level]);
-    }
-    json_out(405, ['error' => 'method not allowed']);
-} catch (Throwable $e) {
-    error_log('tankity scores.php: ' . $e->getMessage());
-    json_out(tankity_busy($e) ? 503 : 500, ['error' => tankity_busy($e) ? 'store busy' : 'store unavailable']);
-}
-```
-
-(`server/legacy.php` stays: housekeeping still imports any old file and moves its rows onto the Normal board. `legacy_add_run` and `legacy_top` lose their last callers here and in Task 11; delete both and their tests (`testANewRunKeepsTheLastFiftyAndAnswersTheBest`, and the `legacy_top` assertion in `testEveryRunOfEveryFileArrivesAndTheFilesGo`) in this step, and `LEGACY_RUNS_KEPT` with them.)
-
-- [ ] **Step 2: The client**
-
-Replace `src/scores.ts` with:
-
-```ts
-/* Operation Tankity: the high scores.
- *
- * One all-time board per difficulty from scores.php, this player's rows marked,
- * opening on the player's own difficulty with a switcher to the others; and a
- * finished solo run filed the moment it ends, on its difficulty's board. When
- * the server is out of reach the board falls back to this browser's own rows.
- * The page arrives as deps. */
-import { browserStorage } from '../../_kit/ports.browser.ts';
-import { json, pref } from '../../_kit/prefs.ts';
-import { DIFFICULTY_NAMES } from './difficulty.ts';
-import { isScoreRows, type ScoreEntry } from './score-rows.ts';
-import type { Difficulty } from './sim.ts';
-import { filedLine, fmt } from './standings.ts';
-import type { KeyHintFn } from './ui/chrome.tsx';
-import { renderScores as drawScores } from './ui/scores.tsx';
-
-/** A board row as scores.php sends it. */
-interface BoardRow { place: number; initials: string; score: number; rounds: number }
-
-export interface ScoresDeps {
-  $(id: string): HTMLElement | null;
-  keyHint: KeyHintFn;
-  say(text: string, tone?: string): void;
-  toggleOverlay(id: string, btnId?: string): void;
-  initials(): string;
-  /** The Menu's Difficulty: the board Scores opens on. */
-  difficulty(): Difficulty;
-}
-
-export interface SoloRun { initials: string; score: number; banked: number; seed: string; difficulty: Difficulty }
-
-export function createScores(deps: ScoresDeps) {
-  const { $, keyHint, say, toggleOverlay, initials, difficulty } = deps;
-  const localRows = pref<ScoreEntry[]>('tankity-local', [], json(isScoreRows), browserStorage());
-
-  const SCORES: { level: Difficulty; rows: { text: string; mine: boolean }[] | null; note: string } = { level: 'normal', rows: null, note: '' };
-  function renderScoresOverlay(): void {
-    const section = $('report-overlay');
-    if (!section) return;
-    drawScores(section, {
-      keyHint, onClose: () => toggleOverlay('report-overlay', 'scores-open'),
-      level: SCORES.level, onLevel: lv => { void loadScores(lv); }, rows: SCORES.rows, note: SCORES.note,
-    });
-  }
-  async function loadScores(level: Difficulty = difficulty()): Promise<void> {
-    const me = initials();
-    SCORES.level = level;
-    try {
-      const res = await fetch(`scores.php?difficulty=${level}`, { headers: { Accept: 'application/json' } });
-      if (!res.ok) throw new Error('http ' + res.status);
-      const data = (await res.json()) as { scores?: BoardRow[] };
-      SCORES.rows = (data.scores || []).map(r => ({
-        text: `#${r.place} ${r.initials} · ${fmt(r.score)} pts · ${r.rounds} rounds won`, mine: r.initials === me,
-      }));
-      SCORES.note = `The all-time board on ${DIFFICULTY_NAMES[level]}. Your runs are marked.`;
-    } catch (_) {
-      SCORES.rows = localRows.get().map((r, i) => ({ text: `#${i + 1} ${r.name} · ${fmt(r.score)} pts · ${r.banked} rounds won`, mine: r.name === me }));
-      SCORES.note = 'The score server is out of reach: these are this browser\'s runs only.';
-    }
-    renderScoresOverlay();
-  }
-  function saveLocal(entry: ScoreEntry): void {
-    localRows.set([...localRows.get(), entry].sort((a, b) => b.score - a.score).slice(0, 10));
-  }
-  /* Files a finished solo run on its difficulty's board; `done` gets the line the end card shows. */
-  async function fileSolo(run: SoloRun, done: (line: string) => void): Promise<void> {
-    try {
-      const res = await fetch('scores.php', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(run),
-      });
-      const data = (await res.json().catch(() => null)) as { ok?: boolean; score?: number; rank?: number | null; error?: string } | null;
-      if (!res.ok || !data || !data.ok) throw new Error((data && data.error) || 'http ' + res.status);
-      done(filedLine(data.rank ?? null, data.score ?? run.score, run.difficulty));
-    } catch (_) {
-      saveLocal({ name: run.initials, score: run.score, banked: run.banked, won: false, seed: run.seed });
-      say('The score server is out of reach; the run stays in this browser.', 'info');
-      done('Not filed: the score server is out of reach. Kept in this browser.');
-    }
-    void loadScores();
-  }
-
-  return { SCORES, renderScoresOverlay, loadScores, fileSolo };
-}
-```
-
-`src/ui/scores.tsx`: delete the form, `formHidden`, `onFile`, the `useRef` for the form/name and their imports; `ScoresProps` becomes `{ keyHint: KeyHintFn; onClose(): void; level: Difficulty; onLevel(level: Difficulty): void; rows: { text: string; mine: boolean }[] | null; note: string }` (import `type Difficulty` from `../sim.ts`, `DIFFICULTIES` from `../ai.ts` and `DIFFICULTY_NAMES` from `../difficulty.ts`). Above the list render the switcher:
-
-```tsx
-      <div class="scores-levels" role="group" aria-label="Board">
-        {DIFFICULTIES.map(lv => (
-          <button key={lv} id={`scores-level-${lv}`} type="button" aria-pressed={p.level === lv ? 'true' : 'false'}
-            onClick={() => { if (p.level !== lv) p.onLevel(lv); }}>{DIFFICULTY_NAMES[lv]}</button>
-        ))}
-      </div>
-```
-
-and the list renders `p.rows.map((r, i) => <li key={i} class={r.mine ? 'mine' : undefined}>{r.text}{r.mine && <span class="sr-only"> (yours)</span>}</li>)`; `useScrollKeep(() => document.getElementById('scores')?.parentElement)`. Header comment: "The scores overlay: one difficulty's all-time board, best first, with this player's runs marked, a switcher to the other difficulties, and where the list came from." Add to `game.css`:
-
-```css
-#scores li.mine { color: var(--gold, #ffc93c); font-weight: 700; }
-.scores-levels { display: flex; gap: 6px; margin: 0 0 8px; }
-.scores-levels button { min-height: 44px; padding: 0 14px; }
-.scores-levels button[aria-pressed="true"] { background: var(--gold, #ffc93c); color: #14183a; }
-```
-
-`src/lobby.ts`: delete `SCORES.formHidden = false;` + `renderScoresOverlay();` in `netLeave()` and `SCORES.formHidden = true;` + `renderScoresOverlay();` in `startNetMatch()`; remove `SCORES` and `renderScoresOverlay` from `LobbyDeps` and the destructuring.
-
-`src/main.ts`: `const { SCORES, renderScoresOverlay, loadScores, fileSolo } = createScores({ $, keyHint, say, toggleOverlay, initials: getInitials, difficulty: () => difficulty.get() });` (`getInitials` is main.ts's own, from Plan C Task 13; `difficulty` is main.ts's `difficultySetting(browserStorage())`); in the `createMatch` call replace Task 17's `fileSolo: (_r, done) => done('')` with `fileSolo: (run, done) => { void fileSolo(run, done); }` (`initials: getInitials` stays); `createLobby` loses `SCORES, renderScoresOverlay`. Opening the Scores overlay calls `loadScores()` (it already does), so it opens on the Menu's current difficulty.
-
-- [ ] **Step 3: Tests that read the old form**
-
-The scores overlay's tests move to their own node:test file. `test/scores-ui.test.mjs`:
-
-```js
-// games/tankity/test/scores-ui.test.mjs
-// The scores overlay (src/ui/scores.tsx): one difficulty's board with the
-// player's own runs marked, a switcher to the others, and no form.
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { document, makeEl } from '../../_kit/test/dom-stub.mjs';
-import { importTsx } from '../../_kit/test/tsx.ts';
-
-globalThis.document = document;
-const { scores } = await importTsx(import.meta.dirname, { scores: '../src/ui/scores.tsx' });
-const walk = (el, out = []) => { for (const c of el.children || []) { if (c.nodeType === 1) { out.push(c); walk(c, out); } } return out; };
-const byId = (el, id) => walk(el).find(n => n.id === id);
-const hasClass = (el, name) => String(el.className || '').split(' ').includes(name);
-const props = over => ({ keyHint: () => '', onClose() {}, onLevel() {}, level: 'normal', note: 'The all-time board on Normal.',
-  rows: [{ text: '#1 WGR · 9,000 pts · 4 rounds won', mine: false }, { text: '#2 ABC · 8,000 pts · 3 rounds won', mine: true }], ...over });
-
-test('the board lists every row, marks the player\'s own, and has no form', () => {
-  const section = makeEl('report-overlay');
-  scores.renderScores(section, props({}));
-  assert.equal(byId(section, 'score-form'), undefined);
-  const items = walk(byId(section, 'scores')).filter(n => n.localName === 'li');
-  assert.equal(items.length, 2);
-  assert.ok(!hasClass(items[0], 'mine'));
-  assert.ok(hasClass(items[1], 'mine'));
-  assert.match(items[1].textContent, /\(yours\)$/);
-});
-
-test('the switcher shows the board on screen and asks for another', () => {
-  const asked = [];
-  const section = makeEl('report-overlay');
-  scores.renderScores(section, props({ level: 'hard', onLevel: lv => asked.push(lv) }));
-  assert.equal(byId(section, 'scores-level-hard').getAttribute('aria-pressed'), 'true');
-  assert.equal(byId(section, 'scores-level-easy').getAttribute('aria-pressed'), 'false');
-  assert.equal(byId(section, 'scores-level-normal').textContent, 'Normal');
-  byId(section, 'scores-level-easy').click();
-  byId(section, 'scores-level-hard').click();
-  assert.deepEqual(asked, ['easy'], 'the board already shown is not asked for again');
-});
-```
-
-In `test/ui.test.mjs` delete the block from `// ---- scores ----` through its closing `}` (the line before `// ---- leave question ----`: Task 17 already removed the end-veil block that sat between them), `const { renderScores } = ui.scores;`, and `'scores', ` from the `UI` list.
-
-In `test/smoke.test.mjs`, delete every check that types into `#end-name` / `#name-input` or submits `#end-score-form` / `#score-form`, and replace them with one check after the match-over veil opens:
-
-```js
-  check('end-files-itself', !els['end-score-form'] && /Filed|Not filed|Filing/.test(els['end-filed'].textContent), els['end-filed'] && els['end-filed'].textContent);
-```
-
-(The smoke test's `fetch` stub answers `{ scores: [] }` with `ok: true`, which reads as a failed file — no `ok` — and shows "Not filed…".)
-
-- [ ] **Step 4: Run**
-
-Run (in `games/tankity`): `node ../_kit/build/build.mjs tankity && node --test 'test/*.test.mjs'` then (in `websites/www.cs`) `vendor/bin/phpunit --testsuite tankity`
-Expected: PASS, `scores-ui.test.mjs` (2) included.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add -A games/tankity/scores.php games/tankity/server games/tankity/src games/tankity/game.css games/tankity/test games/tankity/dist
-git commit -F- <<'MSG'
-Tankity: solo runs file themselves on their difficulty's board; Scores opens on yours
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
-MSG
-```
+Replaced by Tasks R5a (`src/local-board.ts`) and R5b (the scores overlay with its two lists per difficulty, the end card's line, the local save for solo and one-human rooms) and Task R1 (`scores.php` as a read).
 
 ### Task 20: Browser spec, docs, PR 15
 
@@ -6540,7 +5481,7 @@ Add to the README Files table:
 | `src/ui/standings.tsx` | The scoreboard table, at the top of the shop and on the end cards |
 | `server/guard.php` | Tankity's settings for the kit's `Kit\ScoreGuard` (`tankity_guard()`, `tankity_initials()`; its run store is `guard-runs.json` in the storage directory), and `BLOCKED_INITIALS` (the same list as `src/initials.ts`) |
 | `server/score-guard.php` | The kit's score guard, a generated copy written by `tools/install-files.php` (`kit_php`); never edit it |
-| `server/board.php` | The all-time boards, one per difficulty, best 100 each, rows in the database (`board_file`, `board_top`), and the move of the per-callsign rows onto the Normal board (`board_convert_callsigns`) |
+| `server/board.php` | The all-time boards, one per difficulty, best 100 each, rows in the database (`board_file`, `board_top`) |
 ```
 
 and a section before `## Drone aim`:
@@ -6573,7 +5514,7 @@ switcher to the other two, shows the top 20 with the player's own runs
 marked, and an end card says "Filed · #12 all-time on Normal" when a run places.
 ```
 
-In the Storage section (PR 20), `tankity.sqlite` now also holds the boards, the directory also holds `guard-runs.json` (the score guard's run tokens and rate stamps), and housekeeping also moves per-callsign rows onto the Normal board.
+In the Storage section (PR 20), `tankity.sqlite` now also holds the boards, the directory also holds `guard-runs.json` (the score guard's run tokens and rate stamps).
 
 In the Tests table add `RoomMatchEndTest`, `RoomStandingsTest`, `RoomFilingTest`, `RoomAgainTest`, `BoardTest` with a one-line description each, and `test/standings.test.mjs` and `test/scores-ui.test.mjs`.
 
@@ -6591,22 +5532,22 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
 MSG
 git push -u origin games/tankity-match-end
-gh pr create --title "Tankity: last human standing, scoreboards, Play again, auto-filed scores" --body "Spec row 15 (sections 7.2, 7.3; auto-filing and a board per difficulty from 8). The per-callsign rows PR 20 imported move onto the Normal board on the first request after the deploy.
+gh pr create --title "Tankity: last human standing, scoreboards, Play again, auto-filed scores" --body "Spec row 15 (sections 7.2, 7.3; auto-filing and a board per difficulty from 8). 
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
 https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ```
 
-This PR needs Plan C's PR 10 (the score guard and `kit_php`) and PR 12 (initials, the title card) on `main`; if `main` moved, rebase and rebuild the generated files (Global Constraints). Run the pr-fix loop, gate on required checks as in PR 14, merge on green, `make deploy`, and check live: open Menu → Scores on `/play/tankity/?v=<sha>`, see the converted callsigns on the Normal board, and switch to Easy and Hard (empty until runs file there). Report the cache-busted link.
+This PR needs Plan C's PR 10 (the score guard and `kit_php`) and PR 12 (initials, the title card) on `main`; if `main` moved, rebase and rebuild the generated files (Global Constraints). Run the pr-fix loop, gate on required checks as in PR 14, merge on green, `make deploy`, and check live: open Menu → Scores on `/play/tankity/?v=<sha>`, see the online board for the difficulty, and switch to Easy and Hard. Report the cache-busted link.
 
 ---
 
-# PR 16: score integrity — guard, the server plays each solo round, initials
+# PR 16: multiplayer-only board, solo scores in the browser, deterministic shared sim, faster drone aim, room guard
 
 Branch `games/tankity-score-integrity`, worktree `.claude/worktrees/tankity-score-integrity`, off `main` after PR 15 merged.
 
-### Task 21: Determinism audit: every number the server's solo play depends on
+### Task 21: Determinism audit: every number the browser's sim and the room server's sim share
 
 **Files:**
 - Modify: `games/tankity/src/sim.ts` (`rad`, `dist`, `powi`; `muzzle`, `fireWeapon`, `simShot`, `inHitBox`, `steerShell`, `splitShell`, `sweepHit`, `rollHit`, `explode`, `stepShells`)
@@ -6615,19 +5556,17 @@ Branch `games/tankity-score-integrity`, worktree `.claude/worktrees/tankity-scor
 - Modify: `games/tankity/server/ai.php` (`room_ai_choose`'s bracket shrink)
 - Modify: `games/tankity/protocol/sim-vectors.php` (drop two known cases; add a lance bracket case)
 - Create: `games/tankity/test/determinism.test.mjs`
-- Modify: `games/tankity/README.md` (new section "Solo determinism")
+- Modify: `games/tankity/README.md` (new section "Deterministic sim")
 
 **Interfaces:**
 - Consumes: the difficulty PR's `DIFFICULTY`, `DIFFICULTIES` and `aimSkill()` (`src/ai.ts`) and `ROOM_DIFFICULTY` / `room_difficulty()` (`server/ai.php`).
 - Produces: `rad(deg: number): number` (`(deg / 180) * Math.PI`, PHP `deg2rad`'s order); `dist(dx: number, dy: number): number` (`Math.sqrt(dx*dx + dy*dy)`); `powi(b: number, n: number): number` (b multiplied n times); PHP `room_dist(float $dx, float $dy): float`, `room_powi(float $b, int $n): float`.
 
-The audit, done before this task's code (the executor re-verifies each line against the source):
+The audit, done before this task's code (the executor re-verifies each line against the source). It lists what the browser's sim and the room server's sim must compute alike, so the browser's aim preview agrees with the server's shot:
 
-| Where | What the server's play depends on | Same on both sides? | Action |
+| Where | What the two sims depend on | Same on both sides? | Action |
 |---|---|---|---|
 | `hashSeed` / `room_hash_seed`, `mulberry32` / `room_rng_next` | integer hashing and the stream | bit-identical (`imul32`), pinned by `rng` vectors | none |
-| `genTerrain` | 9 draws + `sin` ×3 per column, clamp; **plus 20 cloud draws** | PHP `room_gen_terrain` draws 9 | solo PHP draws the 20 (`solo_gen_terrain`, Task 28) |
-| solo wind `Math.round((rng*2-1)*8)`, shift `Math.round(wind + gauss*2)` | half-way values go up in JS, away from zero in PHP | differs on negative halves | solo PHP uses `det_round()` (Task 21a) |
 | `spawnSpots`, damage `Math.round`, AI angle/power `Math.round` | positive (or clamped) values only | same | none |
 | degrees→radians | `angle * PI / 180` vs `deg2rad` = `(deg / 180) * PI` | may differ in the last bit | TS adopts PHP's order (`rad`) |
 | `Math.hypot` vs `hypot()` | sweep sample counts, blast distances, flak, seek, cluster speed | engines may differ in the last bit | both sides use `sqrt` of the squares |
@@ -6635,16 +5574,14 @@ The audit, done before this task's code (the executor re-verifies each line agai
 | seeker within 1 px | TS clamps the distance to 1 and steers; PHP skips | differs (a known vector case) | TS skips, like PHP |
 | cluster bomblets | TS ignores ground for a bomblet's first 0.1 s; PHP's bomblets start at age 99 | differs when a cluster splits near the ground | TS bomblets may burst on the ground at once (`s.split ||`) |
 | lance bracket | TS `explode()` marks a drone's bracket landing at the first pierce burst; PHP only at the final hit | differs for drones with lances (round 5 on) | PHP marks it at the pierce burst too |
-| `sin`/`cos`/`atan2` (terrain, launch, cluster fan, the AI's predictor) | V8 vs the host's libm | may differ by one ulp, which would void an honest run | both sides use `src/detmath.ts` / `server/detmath.php` (Task 21a): the same bits by construction, pinned by the `detmath` vectors without tolerance |
+| `sin`/`cos`/`atan2` (terrain, launch, cluster fan, the AI's predictor) | V8 vs the host's libm | may differ by one ulp | both sides use `src/detmath.ts` / `server/detmath.php` (Task 21a): the same bits by construction, pinned by the `detmath` vectors without tolerance |
 | shells flying a full 12 s | TS `life -= dt` (float) vs PHP 720 steps | can differ on the very last step | accepted: no weapon stays airborne 12 s on any field up to 1440×460 (the longest flight, straight up at full power, lasts under 6 s at 720 and under 9 s at 1440, where shells fly √2 faster; `fieldReach`'s `sqrt` and `/` are correctly rounded in both languages) |
-| volley order | TS flies all pellets/bomblets together, holding a later burst until earlier ones land; the room server resolves them one by one | same outcome without falls, pinned by every `volley` vector | the solo server flies them together like the browser (`server/flight.php`, Task 29) |
-| tank falls | TS drops tanks over craters between frames, including mid-volley; the room server snaps them after the volley | differs mid-volley | the browser keeps its falls and takes them inside the war's fixed steps (Task 23); the solo server takes the same steps, falls first, then shells (`server/flight.php`, Task 29, pinned by the `volley-fall` vectors); rooms keep snapping (they are refereed on the server and animated on the client) |
-| frame `dt` | TS flies shells and drops tanks by the frame's `dt` | the server cannot know it | fixed 1/60 s steps for the whole war, falls included (Task 23) |
+| volley order | TS flies all pellets/bomblets together, holding a later burst until earlier ones land; the room server resolves them one by one | same outcome without falls, pinned by every `volley` vector | none |
+| tank falls | TS drops tanks over craters between frames, including mid-volley; the room server snaps them after the volley | differs mid-volley | the browser keeps its falls and takes them inside the war's fixed steps (Task 23); rooms keep snapping (they are refereed on the server and animated on the client) |
+| frame `dt` | TS flies shells and drops tanks by the frame's `dt` | frame lengths differ by device | fixed 1/60 s steps for the whole war, falls included (Task 23), so play is the same at any frame rate |
 | `Math.random` | banter, sparks, the default seed | cosmetic or sent in the log | none (and `test/determinism.test.mjs` forbids it in the rule modules) |
-| drone aim by difficulty | `DIFFICULTY` / `aimSkill(world.difficulty)` in `ai.ts` vs `ROOM_DIFFICULTY` / `room_difficulty($room)` in `ai.php`: the ranging wobble `max(wobFloor, wobStart - wobStep × round)`, the correction share, the bracket's shrink, floor and cap | the same seven numbers per level, and an unknown word is `normal` on both; pinned by the difficulty PR's per-level aim and bracket vectors | the run's start carries the match's difficulty (Task 33) and the server deals with it (Tasks 28, 31); `determinism.test.mjs` compares the two tables number by number |
+| drone aim by difficulty | `DIFFICULTY` / `aimSkill(world.difficulty)` in `ai.ts` vs `ROOM_DIFFICULTY` / `room_difficulty($room)` in `ai.php`: the ranging wobble `max(wobFloor, wobStart - wobStep × round)`, the correction share, the bracket's shrink, floor and cap | the same seven numbers per level, and an unknown word is `normal` on both; pinned by the difficulty PR's per-level aim and bracket vectors | `determinism.test.mjs` compares the two tables number by number |
 | bracket shrink `brkShrink ** n` | `Math.pow` vs PHP's `**` (C `pow`) with an integer exponent | may differ in the last bit | both sides multiply n times (`powi()` / `room_powi()`) |
-| arsenal | the browser plays `game.json`'s, or the baked fallback if it failed to load | the server reads `game.json` | a run on the fallback is not sent (Task 25) |
-| seeds | `charCodeAt` (UTF-16) vs `ord` (bytes) | differ beyond ASCII | only printable-ASCII seeds are sent (Task 25) and started (Task 31) |
 
 - [ ] **Step 1: Write the failing guard test**
 
@@ -6845,34 +5782,24 @@ Expected: PASS; `SIM-VECTORS-OK ... (1 known differences)` (only `ai-aim/no-riva
 Add a README section after `## Sim vectors`:
 
 ```markdown
-## Solo determinism
+## Deterministic sim
 
-A solo score is earned by the server playing every round with the PHP sim
-(`server/solo.php` and `server/flight.php` over `server/sim.php`, `ai.php`,
-`rules.php`), so every number the outcome depends on must come out the same in
-the browser and on the server:
+The browser's sim and the room server's sim compute the same numbers, so a
+room's aim preview and its shot agree:
 
 - the drones aim from one table per difficulty (`DIFFICULTY` in `src/ai.ts`,
-  `ROOM_DIFFICULTY` in `server/ai.php`, the same numbers); a run starts with
-  the match's difficulty, so the server's drones aim as the browser's did;
+  `ROOM_DIFFICULTY` in `server/ai.php`, the same numbers);
 - one random stream per match (`hashSeed(seed)` → `mulberry32`), drawn in the
-  same order: the deal's hills and clouds, then per round hills and clouds,
-  wind, spawn spots and new drones' strategies, every drone choice, and the
-  wind shift after every settled volley;
-- the war runs in fixed 1/60 s steps whatever the frame rate: each step drops
-  any tank left over a crater, then moves every shell, so a tank falls while
-  shells are still in the air on both sides alike;
+  same order;
 - no `Math.hypot`/`hypot()`, powers or other last-bit-sensitive helpers in the
   rule modules: distances are `dist()`/`room_dist()`, whole powers are
-  `powi()`/`room_powi()`, degrees go through
-  `rad()` in PHP `deg2rad`'s order, and JavaScript's `Math.round` is
-  `det_round()` in PHP where a value can be a negative half;
-- `sin`, `cos` and `atan2` remain; a last-bit difference there changes an
-  outcome only at an exact boundary, and the nightly long-run sweep measures it.
+  `powi()`/`room_powi()`, degrees go through `rad()` in PHP `deg2rad`'s order,
+  and JavaScript's `Math.round` is `det_round()` in PHP where a value can be a
+  negative half;
+- `sin`, `cos` and `atan2` come from `detmath` (Task 21a).
 
-`test/determinism.test.mjs` keeps the banned calls out; the sim vectors
-(`volley-fall` among them) and `protocol/solo-runs.json` keep the two sides
-agreeing.
+`test/determinism.test.mjs` keeps the banned calls out; the sim vectors keep
+the two sides agreeing.
 ```
 
 - [ ] **Step 7: Commit**
@@ -6891,7 +5818,7 @@ MSG
 
 > **Also binding (from PR 13b):** terrain generation (`sim.ts`'s hills and `server/sim.php`'s twin) uses this module too, and the `field` terrain vectors, compared at 1e-9 since PR 13b because PHP's and V8's `sin` differ by an ulp in a few columns, become exact (bit for bit) in this task.
 
-An honest run must never be voided because V8's `Math.sin` and the host's libm `sin()` differ in the last bit. Every transcendental the solo simulation path uses (the browser's `src/sim.ts` and the server's `server/sim.php`, `server/rules.php`, and from Task 29 `server/flight.php`) goes through one module per language built only from `+ − × ÷`, `Math.floor`/`floor`, and decimal constants that both languages parse to the same double (both round decimal literals correctly). IEEE 754 makes each of those operations exact-to-the-same-bit on both sides; neither V8 nor PHP's VM fuses a multiply and an add. Rendering-only code (`render.ts`, `preview.ts`, `replay.ts`, particles in `match.ts`, `room.ts`) keeps `Math.*`.
+The room server's sim and the browser's must not drift because V8's `Math.sin` and the host's libm `sin()` differ in the last bit. Every transcendental the shared simulation path uses (the browser's `src/sim.ts` and the server's `server/sim.php`, `server/rules.php`) goes through one module per language built only from `+ − × ÷`, `Math.floor`/`floor`, and decimal constants that both languages parse to the same double (both round decimal literals correctly). IEEE 754 makes each of those operations exact-to-the-same-bit on both sides; neither V8 nor PHP's VM fuses a multiply and an add. Rendering-only code (`render.ts`, `preview.ts`, `replay.ts`, particles in `match.ts`, `room.ts`) keeps `Math.*`.
 
 The approximations are fdlibm's (`__kernel_sin`, `__kernel_cos`, `atan`), with a two-constant Cody–Waite reduction by π/2. Accuracy is about 1 ulp on the ranges the game feeds them (`|x| < 1e5`); the point is that both sides compute the same bits.
 
@@ -7279,7 +6206,7 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
 MSG
 ```
 
-### Task 22: The solo referee, out of match.ts
+### Task 22: The solo rules, out of match.ts
 
 **Files:**
 - Create: `games/tankity/src/solo.ts`
@@ -7296,7 +6223,7 @@ MSG
 
 ```js
 // games/tankity/test/solo.test.mjs
-// The solo referee (src/solo.ts) without a page: the deal, a round's muster,
+// The solo rules (src/solo.ts) without a page: the deal, a round's muster,
 // settling a volley, the turn order and 1-ups.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7407,17 +6334,16 @@ test('1-ups: a life per 3000, or 500 points at five lives', () => {
 Run (in `games/tankity`): `node --test test/solo.test.mjs`
 Expected: FAIL, module not found.
 
-- [ ] **Step 2: Write the referee**
+- [ ] **Step 2: Write the rules module**
 
 ```ts
 // games/tankity/src/solo.ts
-/* Operation Tankity: the solo referee.
+/* Operation Tankity: the solo rules.
  *
  * The rules of a match against the drone battery, without a page: dealing,
  * mustering a round, the turn order, settling a volley, 1-ups, a drone's aim
- * and the shop. match.ts plays them with words and sound; solo-play.ts runs
- * them headless; server/solo.php is the same rules for the server's play of
- * each round. Nothing here reads a clock or Math.random. */
+ * and the shop. match.ts plays them with words and sound. Nothing here reads
+ * a clock or Math.random. */
 import { aiChoose, pickTactic } from './ai.ts';
 import type { AimChoice } from './ai.ts';
 import { carryArmor, maxArmor } from './armor.ts';
@@ -7425,7 +6351,7 @@ import { WATCH_TURNS } from './flow.ts';
 import { TUNE, clamp, droneRack, fieldWidthOk, gauss, genTerrain, hashSeed, mulberry32, spawnSpots, surfY } from './sim.ts';
 import type { Arsenal, Cloud, Difficulty, Hills, Tank, World } from './sim.ts';
 
-/** Every war step is this long, in the browser and in the server's play. */
+/** Every war step is this long, whatever the frame rate. */
 export const SOLO_STEP = 1 / 60;
 export const FOES = [
   { id: 'reaper', color: '#ff0000' },
@@ -7438,7 +6364,7 @@ export interface SoloState extends World {
   seed: string;
   /** How well the drones aim this match (ai.ts DIFFICULTY); set at the deal, never during play. */
   difficulty: Difficulty;
-  /** The field's width, dealt once per match from the screen (spec 6.6); the server plays the run at it. */
+  /** The field's width, dealt once per match from the screen (spec 6.6). */
   w: number;
   hills: Hills | null;
   body: string;
@@ -7525,7 +6451,7 @@ export function soloMuster(G: SoloState, arsenal: Arsenal): void {
 }
 
 /** Standing tanks sit exactly on the ground once the falls are over (fallTanks
- *  stops within half a pixel); server/solo.php solo_settle() does the same. */
+ *  stops within half a pixel); */
 export function snapTanks(G: Pick<SoloState, 'tanks' | 'terrain'>): void {
   for (const t of G.tanks) {
     if (t.hp <= 0) continue;
@@ -7600,7 +6526,7 @@ export function soloAim(G: SoloState, arsenal: Arsenal, t: SoloTank): AimChoice 
 
 Add `"src/solo.ts"` to `tsconfig.json` `files`.
 
-- [ ] **Step 3: match.ts plays the referee**
+- [ ] **Step 3: match.ts plays the solo rules**
 
 In `src/match.ts` import `{ FOES, SOLO_STEP, snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloSettle } from './solo.ts'` and drop now-unused imports (`hashSeed`, `mulberry32`, `simDroneRack`, `simGenTerrain`, `spawnSpots`, `pickTactic`, `simAiChoose`). Delete `genTerrain()`, `FOE_DEFS`, `droneRack()` and the `aiChoose(t)` wrapper (`simAiChoose(G, tables.arsenal!, t)`). The difficulty pass-through stays: the `difficulty` dep (`MatchDeps.difficulty: Pick<DifficultySetting, 'get'>` and its `import type { DifficultySetting }`) stays, `resetMatch()` hands `difficulty.get()` to `soloDeal`, which sets `G.difficulty`, and `soloAim` → `aiChoose(G, …)` reads it, as the wrapper did.
 
@@ -7759,7 +6685,7 @@ Expected: PASS, including `solo.test.mjs` (8) and the smoke test's whole match; 
 ```bash
 git add games/tankity/src games/tankity/test/solo.test.mjs games/tankity/tsconfig.json games/tankity/dist
 git commit -F- <<'MSG'
-Tankity: the solo referee in its own pure module
+Tankity: the solo rules in their own pure module
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
@@ -7768,7 +6694,7 @@ MSG
 
 ### Task 23: Fixed-step war; tanks still fall mid-volley, inside the steps
 
-Decision 2: tanks keep falling while shells fly. What changes is only that the war (a drone's aim, the flight, and every tank's fall) advances in fixed 1/60 s steps, each step dropping the tanks first and moving the shells second, so a server that knows only the moves can take the very same steps (Task 29).
+Decision 2: tanks keep falling while shells fly. What changes is only that the war (a drone's aim, the flight, and every tank's fall) advances in fixed 1/60 s steps, each step dropping the tanks first and moving the shells second, so play is the same at any frame rate.
 
 **Files:**
 - Modify: `games/tankity/src/flow.ts` (`runWar` → `runFixed`, `MAX_STEPS`)
@@ -7785,8 +6711,8 @@ Decision 2: tanks keep falling while shells fly. What changes is only that the w
 ```js
 // games/tankity/test/fixed-step.test.mjs
 // The solo war runs in fixed SOLO_STEP steps whatever the frame lengths, tank
-// falls included, so the server's play of a round lands every shell and drops
-// every tank exactly as the browser did.
+// falls included, so a volley lands every shell and drops every tank the same
+// way at any frame rate.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runFixed, MAX_STEPS } from '../src/flow.ts';
@@ -7854,8 +6780,7 @@ In `src/flow.ts` replace the `warSpeed`-following `runWar` doc comment and funct
 export const MAX_STEPS = 30;
 /** Runs `step` in fixed `h`-second steps for `dt` more seconds of war plus the
  * remainder `acc` carried from the last frame; returns the new remainder. The
- * step size never varies, so the server, which knows only the moves, takes
- * the same steps and lands every shell and every falling tank where the
+ * step size never varies, so the war takes the same steps on every device and lands every shell and every falling tank where the
  * browser did. A step answering false (the phase left think/fly/settle) drops
  * the rest of the frame. */
 export function runFixed(acc: number, dt: number, h: number, step: (h: number) => boolean): number {
@@ -7898,7 +6823,7 @@ with:
 ```ts
   } else if (war) {
     // Fixed SOLO_STEP steps whatever the frame rate, each dropping the tanks
-    // and then moving the war on (server/flight.php takes the same steps);
+    // and then moving the war on;
     // with the player's tank wrecked the drones play on at triple speed.
     warAcc = runFixed(warAcc, dt * warSpeed(me().hp > 0, G.demo), SOLO_STEP, h => {
       fallTanks(h);
@@ -7934,7 +6859,7 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
 MSG
 ```
 
-### Task 24: The shop's rules in the referee
+### Task 24: The shop's rules in the solo rules
 
 **Files:**
 - Modify: `games/tankity/src/solo.ts` (`soloBuy`, `ONE_SHOT`)
@@ -8096,7 +7021,7 @@ Expected: PASS (the smoke test's bulk-fuel buy still says "Bought 3 × Fuel").
 ```bash
 git add games/tankity/src games/tankity/test/solo.test.mjs games/tankity/dist
 git commit -F- <<'MSG'
-Tankity solo: the shop's rules move into the referee, one-shot tricks never stack
+Tankity solo: the shop's rules move into the solo rules, one-shot tricks never stack
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
@@ -8105,2783 +7030,39 @@ MSG
 
 ### Task 25: A round's inputs and claim, recorded as the player plays
 
-**Files:**
-- Create: `games/tankity/src/solo-log.ts`
-- Create: `games/tankity/test/solo-log.test.mjs`
-- Modify: `games/tankity/src/game-types.ts` (`GameState.rec`, `Tables.fromFile`)
-- Modify: `games/tankity/src/main.ts` (`G.rec`, `tables.fromFile`, `applyArsenal`)
-- Modify: `games/tankity/src/match.ts` (`newMatch`, `startDemo`, `playerFire`)
-- Modify: `games/tankity/src/shop.ts` (`buyItem`)
-- Modify: `games/tankity/tsconfig.json`
-
-**Interfaces:**
-- Produces: `interface SoloBuy { i: string; q: number }`; `interface SoloShot { w: string; a: number; p: number; x: number }`; `type RoundEnd = 'roundWon' | 'tankLost' | 'matchLost'`; `interface RoundClaim { end: RoundEnd; score: number; cash: number; lives: number; roundsWon: number }`; `interface SoloRoundLog { n: number; buys: SoloBuy[]; shots: SoloShot[]; claim: RoundClaim }`; `ROUND_MAX_SHOTS = 200`, `ROUND_MAX_BUYS = 60`; `interface RoundRecorder { buys: SoloBuy[]; shots: SoloShot[] }`; `newRecorder(): RoundRecorder`; `recordBuy(r: RoundRecorder, row: Pick<ShopRow, 'kind' | 'w' | 'g'>, qty: number): void`; `recordShot(r: RoundRecorder, t: Pick<Tank, 'x' | 'angle' | 'power'>, w: string): void`; `closeRound(r: RoundRecorder, n: number, claim: RoundClaim): SoloRoundLog` (the round as sent; the recorder starts empty for the next); `isRoundLog(v: unknown): v is SoloRoundLog`; `replayableSeed(seed: string): boolean`. `GameState.rec: RoundRecorder | null` (null in the demo, rooms, and runs the server could not play); `Tables.fromFile: boolean`.
-
-- [ ] **Step 1: Failing test**
-
-```js
-// games/tankity/test/solo-log.test.mjs
-// A round's inputs and claim (src/solo-log.ts): what the browser sends the
-// server as each round ends.
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { newRecorder, recordBuy, recordShot, closeRound, isRoundLog, replayableSeed } from '../src/solo-log.ts';
-
-const claim = { end: 'roundWon', score: 1450, cash: 1210, lives: 3, roundsWon: 1 };
-
-test('a round is its buys and shots with exact numbers, and survives JSON', () => {
-  const rec = newRecorder();
-  recordBuy(rec, { kind: 'ammo', w: 'mortar' }, 3);
-  recordBuy(rec, { kind: 'gear', g: 'repair' }, 1);
-  recordShot(rec, { x: 211.38333333333335, angle: 47.016666666666666, power: 63.5 }, 'mortar');
-  const round = closeRound(rec, 1, claim);
-  const back = JSON.parse(JSON.stringify(round));
-  assert.deepEqual(back, {
-    n: 1, buys: [{ i: 'mortar', q: 3 }, { i: 'repair', q: 1 }],
-    shots: [{ w: 'mortar', a: 47.016666666666666, p: 63.5, x: 211.38333333333335 }], claim,
-  });
-  assert.ok(isRoundLog(back));
-  assert.deepEqual([rec.buys, rec.shots], [[], []], 'the recorder starts the next round empty');
-});
-
-test('the validator refuses anything else', () => {
-  const ok = { n: 1, buys: [], shots: [], claim };
-  assert.ok(isRoundLog(ok));
-  assert.ok(!isRoundLog(null));
-  assert.ok(!isRoundLog({ ...ok, n: 0 }));
-  assert.ok(!isRoundLog({ ...ok, shots: [{ w: 'shell', a: '1', p: 1, x: 1 }] }));
-  assert.ok(!isRoundLog({ ...ok, buys: [{ i: 'mortar', q: 1.5 }] }));
-  assert.ok(!isRoundLog({ ...ok, claim: { ...claim, end: 'won' } }));
-  assert.ok(!isRoundLog({ ...ok, shots: Array(201).fill({ w: 'shell', a: 45, p: 50, x: 100 }) }), 'past ROUND_MAX_SHOTS');
-});
-
-test('only printable-ASCII seeds play the same in PHP', () => {
-  assert.ok(replayableSeed('scorched-1234'));
-  assert.ok(!replayableSeed('héllo'));
-  assert.ok(!replayableSeed(''));
-  assert.ok(!replayableSeed('x'.repeat(65)));
-});
-```
-
-Run (in `games/tankity`): `node --test test/solo-log.test.mjs`
-Expected: FAIL, module not found.
-
-- [ ] **Step 2: The module**
-
-```ts
-// games/tankity/src/solo-log.ts
-/* Operation Tankity: a solo round as the server plays it.
- *
- * What the browser sends as each round ends: the purchases made before it,
- * each shot (gun, angle, power, and where the tank had driven to), and how the
- * browser saw it end (the claim). The server plays the round from the run's
- * stored state; a claim it does not reach voids the run. Numbers are the
- * browser's own: JSON carries a double exactly. */
-import type { ShopRow, Tank } from './sim.ts';
-
-export interface SoloBuy { i: string; q: number }
-export interface SoloShot { w: string; a: number; p: number; x: number }
-export type RoundEnd = 'roundWon' | 'tankLost' | 'matchLost';
-export interface RoundClaim { end: RoundEnd; score: number; cash: number; lives: number; roundsWon: number }
-export interface SoloRoundLog { n: number; buys: SoloBuy[]; shots: SoloShot[]; claim: RoundClaim }
-
-/** server/solo.php SOLO_MAX_SHOTS and SOLO_MAX_BUYS: a round past them is refused. */
-export const ROUND_MAX_SHOTS = 200;
-export const ROUND_MAX_BUYS = 60;
-
-export interface RoundRecorder { buys: SoloBuy[]; shots: SoloShot[] }
-
-export function newRecorder(): RoundRecorder {
-  return { buys: [], shots: [] };
-}
-export function recordBuy(r: RoundRecorder, row: Pick<ShopRow, 'kind' | 'w' | 'g'>, qty: number): void {
-  r.buys.push({ i: (row.kind === 'ammo' ? row.w : row.g)!, q: qty });
-}
-export function recordShot(r: RoundRecorder, t: Pick<Tank, 'x' | 'angle' | 'power'>, w: string): void {
-  r.shots.push({ w, a: t.angle, p: t.power, x: t.x });
-}
-/** The round as sent; the recorder is emptied for the next one. */
-export function closeRound(r: RoundRecorder, n: number, claim: RoundClaim): SoloRoundLog {
-  const round = { n, buys: r.buys, shots: r.shots, claim };
-  r.buys = [];
-  r.shots = [];
-  return round;
-}
-
-const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-const int = (v: unknown): v is number => Number.isInteger(v);
-const ENDS: readonly string[] = ['roundWon', 'tankLost', 'matchLost'];
-function isBuy(v: unknown): v is SoloBuy {
-  const o = v as Record<string, unknown> | null;
-  return !!o && typeof o === 'object' && typeof o['i'] === 'string' && int(o['q']);
-}
-function isShot(v: unknown): v is SoloShot {
-  const o = v as Record<string, unknown> | null;
-  return !!o && typeof o === 'object' && typeof o['w'] === 'string' && num(o['a']) && num(o['p']) && num(o['x']);
-}
-function isClaim(v: unknown): v is RoundClaim {
-  const o = v as Record<string, unknown> | null;
-  return !!o && typeof o === 'object' && ENDS.includes(o['end'] as string)
-    && int(o['score']) && int(o['cash']) && int(o['lives']) && int(o['roundsWon']);
-}
-export function isRoundLog(v: unknown): v is SoloRoundLog {
-  if (!v || typeof v !== 'object') return false;
-  const o = v as Record<string, unknown>;
-  return int(o['n']) && (o['n'] as number) >= 1
-    && Array.isArray(o['buys']) && o['buys'].length <= ROUND_MAX_BUYS && o['buys'].every(isBuy)
-    && Array.isArray(o['shots']) && o['shots'].length <= ROUND_MAX_SHOTS && o['shots'].every(isShot)
-    && isClaim(o['claim']);
-}
-
-/** PHP hashes a seed's bytes and the browser its UTF-16 units: only printable
- * ASCII hashes the same on both. */
-export function replayableSeed(seed: string): boolean {
-  return /^[\x20-\x7e]{1,64}$/.test(seed);
-}
-```
-
-Add `"src/solo-log.ts"` to `tsconfig.json` `files`.
-
-- [ ] **Step 3: Record as the player plays**
-
-`src/game-types.ts`: `GameState` gains `rec: RoundRecorder | null; // this solo match's round being recorded; null in the demo, rooms, and runs the server could not play` (import the type); `Tables` gains `/** The arsenal came from game.json (the server's), not the baked fallback. */ readonly fromFile: boolean;`.
-
-`src/main.ts`: `G` init adds `rec: null,`; add `let ARSENAL_FROM_FILE = false;` beside `ARSENAL_REV`; in `applyArsenal()` inside the success branch add `ARSENAL_FROM_FILE = true; G.rec = null; // a mid-match change of arsenal cannot be played on the server`; `tables` gains `get fromFile() { return ARSENAL_FROM_FILE; },`.
-
-`src/match.ts` (import `{ newRecorder, recordShot, replayableSeed }`): in `newMatch()` after `resetMatch(seedStr);`:
-
-```ts
-    // The server plays every round of this run as it ends; one it could not play is not recorded.
-    G.rec = tables.fromFile && replayableSeed(G.seed) ? newRecorder() : null;
-    if (!G.rec) say(replayableSeed(G.seed)
-      ? 'The game data did not load, so this run cannot be filed.'
-      : 'This seed has characters the score server cannot play, so this run will not be filed.', 'info');
-```
-
-In `startDemo()` after `resetMatch('scorched-demo');` add `G.rec = null;`. In `playerFire()` change `if (fireWeapon(me(), G.selected)) {` to:
-
-```ts
-    const wkey = G.selected;
-    if (fireWeapon(me(), wkey)) {
-      if (G.rec) recordShot(G.rec, me(), wkey);
-```
-
-(the `say` line then uses `wkey`).
-
-`src/shop.ts` (`import { recordBuy } from './solo-log.ts';`): in `buyItem()` after `sfx.play('cash');` add `if (G.rec) recordBuy(G.rec, it, r.qty);`.
-
-Closing a round and sending it is Task 33's (`settle()` builds the claim).
-
-- [ ] **Step 4: Run**
-
-Run (in `games/tankity`): `node ../_kit/build/build.mjs tankity && node --test 'test/*.test.mjs'`
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add games/tankity/src games/tankity/test/solo-log.test.mjs games/tankity/tsconfig.json games/tankity/dist
-git commit -F- <<'MSG'
-Tankity solo: record each round's buys and shots for the server to play
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
-MSG
-```
+Removed: no round is recorded or sent. Task R4 deletes `src/solo-log.ts` and the recorder in `match.ts` and `shop.ts`.
 
 ### Task 26: Headless solo runs, and the server's round in TypeScript
 
-**Files:**
-- Create: `games/tankity/src/solo-play.ts`
-- Create: `games/tankity/test/solo-play.test.mjs`
-- Modify: `games/tankity/tsconfig.json`
-
-**Interfaces:**
-- Consumes: Tasks 22–25; `fallTanks`, `anyTankFalling`, `stepShells` (`src/sim.ts`).
-- Produces: `FLIGHT_MAX_STEPS = 20000`; `flyVolley(G: World, arsenal: Arsenal, onStep?: (G: World) => void): number` (steps taken: each drops the tanks, then moves the shells, until no shell is left; then drops the tanks until none is falling; `server/flight.php flight_volley()` is the same); `interface Bot { shop(G: SoloState, arsenal: Arsenal): SoloBuy[]; aim(G: SoloState, arsenal: Arsenal): SoloShot }`; `interface Played { seed: string; difficulty: Difficulty; w: number; rounds: SoloRoundLog[]; score: number; roundsWon: number }`; `blankSolo(): SoloState`; `type RoundResult = { ok: true; claim: RoundClaim } | { ok: false; error: string }`; `soloRound(G: SoloState, arsenal: Arsenal, buys: readonly SoloBuy[], shots: readonly SoloShot[]): RoundResult` (`server/solo.php solo_round()` in TypeScript: the same steps, the same refusals); `playSolo(seed: string, arsenal: Arsenal, bot: Bot, difficulty: Difficulty, w?: number, maxRounds?: number): Played` (`w` defaults to `ROOM_W`); `replaySolo(p: Pick<Played, 'seed' | 'difficulty' | 'w' | 'rounds'>, arsenal: Arsenal): { ok: true; score: number; roundsWon: number; rounds: number } | { ok: false; round: number; error: string }`; `makeBot(seed: string, skill: number, untilRound: number): Bot`.
-
-- [ ] **Step 1: Failing test**
-
-```js
-// games/tankity/test/solo-play.test.mjs
-// Solo runs without a page: a bot plays the browser's rules round by round,
-// every round's claim is what soloRound (the server's round) reaches, and a
-// tampered round does not.
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import { buildArsenal, fireWeapon, fallTanks, stepShells, anyTankFalling } from '../src/sim.ts';
-import { playSolo, replaySolo, makeBot, blankSolo, flyVolley } from '../src/solo-play.ts';
-import { soloDeal, soloMuster, SOLO_STEP } from '../src/solo.ts';
-import { runFixed } from '../src/flow.ts';
-
-const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
-const arsenal = buildArsenal(GAME.arsenal);
-
-test('every round of a played run replays to its claim, at every difficulty', () => {
-  for (const [seed, skill, until, level] of [['t-1', 0, 99, 'easy'], ['t-2', 0.6, 99, 'normal'], ['t-3', 1, 4, 'hard']]) {
-    const run = playSolo(seed, arsenal, makeBot(seed, skill, until), level);
-    assert.equal(run.rounds.at(-1).claim.end, 'matchLost');
-    const back = replaySolo(JSON.parse(JSON.stringify(run)), arsenal);
-    assert.deepEqual(back, { ok: true, score: run.score, roundsWon: run.roundsWon, rounds: run.rounds.length }, seed);
-  }
-});
-
-test('the same seed and bot play the same run', () => {
-  const a = playSolo('same', arsenal, makeBot('same', 0.5, 99), 'normal');
-  const b = playSolo('same', arsenal, makeBot('same', 0.5, 99), 'normal');
-  assert.deepEqual(a, b);
-});
-
-test('a run replayed at another difficulty does not reach its claims', () => {
-  const run = playSolo('level', arsenal, makeBot('level', 0.6, 99), 'easy');
-  assert.equal(replaySolo({ ...run, difficulty: 'hard' }, arsenal).ok, false);
-});
-
-test('a run plays and replays at its width, and at no other', () => {
-  const run = playSolo('wide', arsenal, makeBot('wide', 0.6, 99), 'normal', 1440);
-  assert.equal(run.w, 1440);
-  assert.equal(replaySolo(JSON.parse(JSON.stringify(run)), arsenal).ok, true);
-  assert.equal(replaySolo({ ...run, w: 720 }, arsenal).ok, false);
-});
-
-test('a volley flown in jittered frames lands, and drops its tanks, where fixed steps do', () => {
-  const fly = frames => {
-    const G = blankSolo();
-    soloDeal(G, arsenal, 'jitter', 'normal', 720);
-    G.round = 1;
-    soloMuster(G, arsenal);
-    const me = G.tanks[0];
-    me.angle = 52.3; me.power = 71.9;
-    fireWeapon(G, arsenal, me, 'buck');
-    let acc = 0;
-    for (const dt of frames) {
-      if (!G.shells.length && !anyTankFalling(G)) break;
-      acc = runFixed(acc, dt, SOLO_STEP, h => { fallTanks(G, h); if (G.shells.length) stepShells(G, arsenal, h); return true; });
-    }
-    return { hp: G.tanks.map(t => t.hp), y: G.tanks.map(t => t.y), terrain: G.terrain.slice(0) };
-  };
-  const steady = fly(Array(3000).fill(1 / 60));
-  const r = [0.004, 0.05, 0.017, 0.033, 0.009];
-  const jitter = fly(Array.from({ length: 6000 }, (_, i) => r[i % r.length]));
-  assert.deepEqual(jitter, steady);
-});
-
-test('flyVolley drops tanks between shell steps, not after the volley', () => {
-  const G = blankSolo();
-  soloDeal(G, arsenal, 'pit', 'normal', 720);
-  G.round = 1;
-  soloMuster(G, arsenal);
-  G.terrain = Array(720).fill(400);
-  G.tanks.forEach((t, i) => { t.x = 120 + i * 160; t.y = 400; });
-  G.tanks[1].y = 330; // hanging over a pit already: it must fall while the shell flies
-  const ys = [];
-  fireWeapon(G, arsenal, G.tanks[0], 'shell');
-  flyVolley(G, arsenal, w => { if (w.shells.length) ys.push(w.tanks[1].y); });
-  assert.ok(ys.length > 3 && ys[0] < ys[2], 'the tank moved while the shell was in the air');
-  assert.equal(G.tanks[1].y, 400);
-});
-
-test('a tampered round does not reach its claim', () => {
-  const run = playSolo('tamper', arsenal, makeBot('tamper', 0.3, 99), 'normal');
-  const short = structuredClone(run);
-  short.rounds[0].shots.pop();
-  assert.equal(replaySolo(short, arsenal).ok, false);
-  const wild = structuredClone(run);
-  wild.rounds[0].shots[0].a = 200;
-  assert.deepEqual(replaySolo(wild, arsenal), { ok: false, round: 1, error: 'out of range' });
-  const lying = structuredClone(run);
-  lying.rounds[0].claim.score += 100;
-  assert.deepEqual(replaySolo(lying, arsenal), { ok: false, round: 1, error: 'mismatch' });
-  const extra = structuredClone(run);
-  extra.rounds.at(-1).shots.push({ w: 'shell', a: 45, p: 50, x: extra.rounds.at(-1).shots.at(-1)?.x ?? 100 });
-  assert.equal(replaySolo(extra, arsenal).ok, false);
-});
-```
-
-Run (in `games/tankity`): `node --test test/solo-play.test.mjs`
-Expected: FAIL, module not found.
-
-- [ ] **Step 2: The module**
-
-```ts
-// games/tankity/src/solo-play.ts
-/* Operation Tankity: solo matches without a page.
- *
- * flyVolley() takes the war's fixed steps (tanks fall, then shells move);
- * soloRound() plays one round from the shop the way server/solo.php does;
- * playSolo() drives the rules with a bot and records each round as the page
- * would send it; replaySolo() checks every claim. tools/solo-runs.mjs records
- * bot runs for the PHP side to match. Not part of the page bundle. */
-import { ROOM_W, anyTankFalling, clamp, facing, fallTanks, fieldWidthOk, fireWeapon, hashSeed, muzzle, mulberry32, simShot, spotTaken, stepShells, surfY } from './sim.ts';
-import type { Arsenal, Difficulty, World } from './sim.ts';
-import { SOLO_STEP, soloAim, soloBuy, soloDeal, soloMuster, soloOneUps, soloSettle } from './solo.ts';
-import type { Settled, SoloState, SoloTank } from './solo.ts';
-import { closeRound, newRecorder, recordBuy, recordShot, ROUND_MAX_BUYS, ROUND_MAX_SHOTS } from './solo-log.ts';
-import type { RoundClaim, SoloBuy, SoloRoundLog, SoloShot } from './solo-log.ts';
-
-export const FLIGHT_MAX_STEPS = 20000;
-
-export interface Bot {
-  shop(G: SoloState, arsenal: Arsenal): SoloBuy[];
-  aim(G: SoloState, arsenal: Arsenal): SoloShot;
-}
-export interface Played { seed: string; difficulty: Difficulty; w: number; rounds: SoloRoundLog[]; score: number; roundsWon: number }
-export type RoundResult = { ok: true; claim: RoundClaim } | { ok: false; error: string };
-
-/** An empty state for soloDeal to fill. */
-export function blankSolo(): SoloState {
-  return { body: 'tank' } as SoloState;
-}
-
-/** The war's fixed steps for one volley, as the page's frame takes them:
- *  each drops the tanks, then moves the shells; once the last shell is gone,
- *  steps drop the tanks until none is falling. server/flight.php flight_volley()
- *  is the same. Answers the steps taken. */
-export function flyVolley(G: World, arsenal: Arsenal, onStep?: (G: World) => void): number {
-  let steps = 0;
-  for (; G.shells.length && steps < FLIGHT_MAX_STEPS; steps++) {
-    fallTanks(G, SOLO_STEP);
-    stepShells(G, arsenal, SOLO_STEP);
-    if (onStep) onStep(G);
-  }
-  for (; anyTankFalling(G) && steps < FLIGHT_MAX_STEPS; steps++) {
-    fallTanks(G, SOLO_STEP);
-    if (onStep) onStep(G);
-  }
-  return steps;
-}
-
-function droneTurn(G: SoloState, arsenal: Arsenal, t: SoloTank): void {
-  const plan = soloAim(G, arsenal, t);
-  t.angle = plan.angle;
-  t.power = plan.power;
-  fireWeapon(G, arsenal, t, plan.wkey);
-}
-
-/** Drives the player's tank to x (paying fuel) and fires; an error when the move is not legal. */
-function playerFire(G: SoloState, arsenal: Arsenal, m: SoloShot): string | null {
-  const me = G.tanks[0]!;
-  if (!arsenal.weapons[m.w]) return 'no such weapon';
-  if (!(m.a >= 10 && m.a <= 170 && m.p >= 10 && m.p <= 100 && m.x >= 12 && m.x <= G.w - 12)) return 'out of range';
-  const dx = Math.abs(m.x - me.x);
-  if (dx > 0) {
-    if (dx > me.fuel + 1e-6) return 'not enough fuel';
-    if (spotTaken(G.tanks, me, m.x)) return 'blocked';
-    me.fuel = Math.max(0, me.fuel - dx);
-    me.x = m.x;
-    me.y = surfY(G.terrain, me.x);
-  }
-  me.angle = m.a;
-  me.power = m.p;
-  return fireWeapon(G, arsenal, me, m.w) ? null : 'none left';
-}
-
-function claimOf(G: SoloState, end: Exclude<Settled['kind'], 'next'>): RoundClaim {
-  return { end, score: G.score, cash: G.cash, lives: G.lives, roundsWon: G.roundsWon };
-}
-
-/** One round from the shop: its purchases, the muster, then turns until the
- *  round ends, the player's turns taking `shots` in order. server/solo.php
- *  solo_round() is the same, refusal for refusal. */
-export function soloRound(G: SoloState, arsenal: Arsenal, buys: readonly SoloBuy[], shots: readonly SoloShot[]): RoundResult {
-  if (buys.length > ROUND_MAX_BUYS) return { ok: false, error: 'bad buys' };
-  if (shots.length > ROUND_MAX_SHOTS) return { ok: false, error: 'too many shots' };
-  for (const b of buys) {
-    const row = arsenal.shop.find(r => (r.kind === 'ammo' ? r.w : r.g) === b.i);
-    if (!row || !soloBuy(G, row, b.q).ok) return { ok: false, error: 'bad buy' };
-    soloOneUps(G);
-  }
-  G.round += 1;
-  soloMuster(G, arsenal);
-  let i = 0;
-  for (;;) {
-    const t = G.tanks[G.turn]!;
-    if (t.isPlayer) {
-      const m = shots[i++];
-      if (!m) return { ok: false, error: 'unfinished' };
-      const err = playerFire(G, arsenal, m);
-      if (err) return { ok: false, error: err };
-    } else droneTurn(G, arsenal, t);
-    flyVolley(G, arsenal);
-    soloOneUps(G);
-    const end = soloSettle(G);
-    if (end.kind === 'next') continue;
-    if (end.kind !== 'matchLost') soloOneUps(G);
-    if (i !== shots.length) return { ok: false, error: 'shots after the end' };
-    return { ok: true, claim: claimOf(G, end.kind) };
-  }
-}
-
-export function playSolo(seed: string, arsenal: Arsenal, bot: Bot, difficulty: Difficulty, w = ROOM_W, maxRounds = 200): Played {
-  const G = blankSolo();
-  soloDeal(G, arsenal, seed, difficulty, w);
-  const rec = newRecorder();
-  const rounds: SoloRoundLog[] = [];
-  for (;;) {
-    for (const want of bot.shop(G, arsenal)) {
-      const row = arsenal.shop.find(r => (r.kind === 'ammo' ? r.w : r.g) === want.i);
-      if (!row) continue;
-      const r = soloBuy(G, row, want.q);
-      if (r.ok) { recordBuy(rec, row, r.qty); soloOneUps(G); }
-    }
-    if (G.round >= maxRounds) throw new Error(`${seed}: still alive after ${maxRounds} rounds`);
-    const claim = playTurns(G, arsenal, bot, rec);
-    rounds.push(closeRound(rec, G.round, claim));
-    if (claim.end === 'matchLost') return { seed, difficulty, w, rounds, score: G.score, roundsWon: G.roundsWon };
-  }
-}
-
-/* The muster and the turns of one round, the bot choosing each shot as its
-   turn comes and the recorder keeping what it fired: soloRound's loop with a
-   bot in place of the recorded shots. */
-function playTurns(G: SoloState, arsenal: Arsenal, bot: Bot, rec: ReturnType<typeof newRecorder>): RoundClaim {
-  G.round += 1;
-  soloMuster(G, arsenal);
-  for (;;) {
-    const t = G.tanks[G.turn]!;
-    if (t.isPlayer) {
-      const m = bot.aim(G, arsenal);
-      const err = playerFire(G, arsenal, m);
-      if (err) throw new Error(`${G.seed}: the bot made an illegal move (${err})`);
-      recordShot(rec, G.tanks[0]!, m.w);
-    } else droneTurn(G, arsenal, t);
-    flyVolley(G, arsenal);
-    soloOneUps(G);
-    const end = soloSettle(G);
-    if (end.kind === 'next') continue;
-    if (end.kind !== 'matchLost') soloOneUps(G);
-    return claimOf(G, end.kind);
-  }
-}
-
-/** Plays a recorded run round by round and checks every claim. */
-export function replaySolo(p: Pick<Played, 'seed' | 'difficulty' | 'w' | 'rounds'>, arsenal: Arsenal):
-  { ok: true; score: number; roundsWon: number; rounds: number } | { ok: false; round: number; error: string } {
-  const G = blankSolo();
-  if (!fieldWidthOk(p.w)) return { ok: false, round: 1, error: 'bad width' };
-  soloDeal(G, arsenal, p.seed, p.difficulty, p.w);
-  for (const [k, r] of p.rounds.entries()) {
-    if (r.n !== k + 1) return { ok: false, round: r.n, error: 'out of order' };
-    const got = soloRound(G, arsenal, r.buys, r.shots);
-    if (!got.ok) return { ok: false, round: r.n, error: got.error };
-    if (JSON.stringify(got.claim) !== JSON.stringify(r.claim)) return { ok: false, round: r.n, error: 'mismatch' };
-    if (got.claim.end === 'matchLost' && k !== p.rounds.length - 1) return { ok: false, round: r.n + 1, error: 'the run is over' };
-  }
-  const last = p.rounds.at(-1);
-  if (!last || last.claim.end !== 'matchLost') return { ok: false, round: p.rounds.length, error: 'unfinished' };
-  return { ok: true, score: G.score, roundsWon: G.roundsWon, rounds: G.round };
-}
-
-/** A bot with its own random stream (never the match's): it shops at random,
- * drives a little, and with probability `skill` aims with the sim's own
- * predictor at the nearest drone, until round `untilRound`; after that it
- * fires wild, so every run ends. */
-export function makeBot(seed: string, skill: number, untilRound: number): Bot {
-  const r = mulberry32(hashSeed('bot:' + seed));
-  return {
-    shop(G, arsenal) {
-      const rows = arsenal.shop.filter(row => (row.minRound || 0) <= G.round && (row.price || 0) > 0);
-      const out: SoloBuy[] = [];
-      for (let k = 0; k < 3 && rows.length; k++) {
-        const row = rows[Math.floor(r() * rows.length)]!;
-        if (r() < 0.6) out.push({ i: (row.kind === 'ammo' ? row.w : row.g)!, q: 1 + Math.floor(r() * 2) });
-      }
-      return out;
-    },
-    aim(G, arsenal) {
-      const me = G.tanks[0]!;
-      const guns = arsenal.order.filter(k => k === 'shell' || (G.ammo![k] || 0) > 0);
-      const w = guns[Math.floor(r() * guns.length)]!;
-      let x = me.x;
-      if (r() < 0.3 && me.fuel > 1) {
-        const nx = clamp(me.x + (r() * 2 - 1) * Math.min(me.fuel, 30), 12, G.w - 12);
-        if (!spotTaken(G.tanks, me, nx)) x = nx;
-      }
-      if (G.round <= untilRound && r() < skill) {
-        const foes = G.tanks.filter(t => !t.isPlayer && t.hp > 0).sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x));
-        const target = foes[0];
-        if (target) {
-          const m = muzzle({ ...me, x, y: surfY(G.terrain, x) });
-          let best = { err: Infinity, a: 45, p: 50 };
-          for (let a = 15; a <= 165; a += 2) {
-            for (let p = 20; p <= 100; p += 4) {
-              const land = simShot(G, arsenal, m.x, m.y, a, p, w, facing(me));
-              const err = land.oob ? Infinity : Math.abs(land.x - target.x);
-              if (err < best.err) best = { err, a, p };
-            }
-          }
-          return { w, a: clamp(best.a + (r() - 0.5) * 2, 10, 170), p: best.p, x };
-        }
-      }
-      return { w, a: 15 + r() * 150, p: 20 + r() * 80, x };
-    },
-  };
-}
-```
-
-`playSolo` records a purchase only when `soloBuy` took it, so a recorded round never carries a refused buy; the shot recorded is the tank's angle, power and x after `playerFire` (what the page records).
-
-Add `"src/solo-play.ts"` to `tsconfig.json` `files`.
-
-- [ ] **Step 3: Run**
-
-Run (in `games/tankity`): `node --test test/solo-play.test.mjs && node ../_kit/build/build.mjs tankity`
-Expected: PASS (6 tests). If the jitter test fails, a war path still reads the frame's `dt`: fix the path, never the test.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add games/tankity/src/solo-play.ts games/tankity/test/solo-play.test.mjs games/tankity/tsconfig.json
-git commit -F- <<'MSG'
-Tankity solo: headless runs, a bot, and the server's round in TypeScript
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
-MSG
-```
+Removed: no server round to mirror. Task R4 deletes `src/solo-play.ts` and its tests.
 
 ### Task 27: Recorded runs the PHP rounds must match
 
-**Files:**
-- Create: `games/tankity/tools/solo-runs.mjs`
-- Create: `games/tankity/protocol/solo-runs.json` (generated)
-- Modify: `games/tankity/test.sh` (check), `websites/www.cs/Makefile` (`solo-runs` target and help line)
+Removed: there are no PHP rounds. Task R4 deletes `protocol/solo-runs.json`, `tools/solo-runs.mjs`, the `solo-runs` Makefile target and the CI steps.
 
-**Interfaces:**
-- Consumes: Task 26 `playSolo`, `makeBot`.
-- Produces: `protocol/solo-runs.json` = `{ about, runs: [{ name, skill, until, seed, difficulty, w, rounds: SoloRoundLog[], score, roundsWon }] }`, with runs at each of `easy`, `normal` and `hard`, one past 60 rounds (solo has no round limit), and one on a 1440 field; `node tools/solo-runs.mjs [--check]`.
+### Task 28: The PHP referee, part 1: deal and muster
 
-- [ ] **Step 1: The tool**
+Removed: the browser deals and musters alone. Task R1 deletes `server/solo.php` and the `solo-deal` and `solo-turn` vector groups; `src/solo.ts` keeps its own unit tests.
 
-```js
-// games/tankity/tools/solo-runs.mjs
-// Writes (or checks) protocol/solo-runs.json: solo runs a bot plays with the
-// browser's rules, each round as the page sends it (buys, shots, the claim).
-// test/php/SoloRoundTest.php plays every round in PHP from the stored state
-// and must reach every claim.
-//   node tools/solo-runs.mjs          rewrite solo-runs.json
-//   node tools/solo-runs.mjs --check  exit 1 if it is stale
-import fs from 'node:fs';
-import path from 'node:path';
-import { buildArsenal } from '../src/sim.ts';
-import { makeBot, playSolo } from '../src/solo-play.ts';
+### Task 29: The volley in PHP
 
-const dir = path.join(import.meta.dirname, '..');
-const arsenal = buildArsenal(JSON.parse(fs.readFileSync(path.join(dir, 'game.json'), 'utf8')).arsenal);
-// name, bot skill, the round the bot stops aiming, the drones' difficulty, the field's width.
-// Every difficulty is played, so the PHP drones are checked at each level's
-// aim. The long runs are for the per-round CPU bench (tools/round-bench.php)
-// and the nightly; long-70 shows a run past 60 rounds plays and files.
-const PLAN = [
-  ['wild-1', 0, 0, 'easy'], ['wild-2', 0, 0, 'hard'], ['middling-1', 0.5, 99, 'easy'], ['middling-2', 0.5, 99, 'normal'],
-  ['sharp-5', 1, 5, 'hard'], ['long-15', 1, 15, 'normal'], ['long-70', 1, 70, 'easy'], ['wide-1440', 0.5, 99, 'normal', 1440],
-];
-const runs = PLAN.map(([name, skill, until, difficulty, w = 720]) => {
-  const seed = `runs-${name}`;
-  const run = playSolo(seed, arsenal, makeBot(seed, skill, until), difficulty, w);
-  return { name, skill, until, ...run };
-});
-const text = JSON.stringify({
-  about: 'Solo runs played by node tools/solo-runs.mjs with the browser rules, round by round; SoloRoundTest plays each round in PHP. Do not edit by hand.',
-  runs,
-}, null, 1) + '\n';
-const file = path.join(dir, 'protocol', 'solo-runs.json');
-if (process.argv.includes('--check')) {
-  if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== text) {
-    console.error('solo-runs: protocol/solo-runs.json is stale; run make solo-runs and commit the result');
-    process.exit(1);
-  }
-  console.log(`solo-runs: ${runs.length} runs current`);
-} else {
-  fs.writeFileSync(file, text);
-  for (const r of runs) {
-    const shots = r.rounds.reduce((n, x) => n + x.shots.length, 0);
-    console.log(`  ${r.name.padEnd(12)} ${r.difficulty.padEnd(6)} ${String(r.rounds.length).padStart(3)} rounds  ${r.score} pts  ${shots} shots`);
-  }
-}
-```
-
-- [ ] **Step 2: Generate and wire**
-
-Run (in `games/tankity`): `node tools/solo-runs.mjs`
-Expected: seven lines, covering `easy`, `normal` and `hard`; `long-70` plays more than 60 rounds (if it ends earlier, raise its `until` in `PLAN`, so the bot aims well for longer against the easy drones, and regenerate until it passes 60).
-
-`test.sh`: after `php tools/install-files.php --check` add `node tools/solo-runs.mjs --check`.
-`Makefile`: `.PHONY` gains `solo-runs`; add a help line `@echo "  solo-runs - Rewrite the Tankity recorded solo runs (node; no docker)"` and:
-
-```make
-solo-runs:
-	cd games/tankity && node tools/solo-runs.mjs
-```
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add games/tankity/tools/solo-runs.mjs games/tankity/protocol/solo-runs.json games/tankity/test.sh Makefile
-git commit -F- <<'MSG'
-Tankity: recorded solo runs, round by round, for the PHP rounds to match
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
-MSG
-```
-
-### Task 28: The PHP referee, part 1: deal and muster, pinned by vectors
-
-**Files:**
-- Create: `games/tankity/server/solo.php`
-- Modify: `games/tankity/rooms.php` (require it after `server/rules.php`; file map comment)
-- Modify: `games/tankity/protocol/sim-vectors.php` (group `solo-deal`), `games/tankity/test/sim-vectors.test.mjs` (`RUN['solo-deal']`)
-
-**Interfaces:**
-- Consumes: `room_hash_seed`, `room_rng_next`, `room_gen_terrain`, `room_spawn_spots`, PR 13b's `room_field_width`, `room_spawn_spots(&$rng, $n, $w)`, `room_pick_tactic`, `room_ai_rack`, `room_max_armor`, `room_muster_armor`, `room_weapons`.
-- Produces: `SOLO_FOES`; `det_round(float $x): float`; `solo_gen_terrain(int &$rng, int $w): array`; `solo_deal(string $seed, string $difficulty, int $w): array` (throws `InvalidArgumentException` for a width `room_field_width` refuses; a room-shaped state: one human at seat 0, keys `seed, w, difficulty (a ROOM_DIFFICULTY word, read by room_ai_choose through room_difficulty()), rng, phase ('shop'), round, wind, terrain, tanks, shells (the volley in the air, `server/flight.php`'s), turn, firstTurn, watchTurns, seats[0].lives, scores[0], cash[0], ammo[0], nextUp[0], roundsWon, tactics, plate[0], armor[0], fuelBonus[0], shield[0], jammer[0], bunker[0], laststand[0]`); `solo_muster(array &$s): void` (round must already be incremented). Vector group `solo-deal`: input `{ seed, rounds, w }`, output per round `{ samples, wind, xs, ys, tactics, turn, hp, next }`.
-
-- [ ] **Step 1: Generator group (the PHP side does not exist yet, so this fails)**
-
-In `protocol/sim-vectors.php` after the match-end group:
-
-```php
-/* ---- a solo match's deal and musters: the random stream in the browser's order ----
- * Per round: terrain samples, wind, every unit's x and y, the drones'
- * strategies, who opens, each unit's armor, and the next number on the stream. */
-$soloDeal = function (string $seed, int $rounds, int $w) use ($add): void {
-    $s = solo_deal($seed, 'normal', $w); // a deal and its musters draw nothing that depends on the difficulty
-    $out = [];
-    for ($r = 1; $r <= $rounds; $r++) {
-        $s['round'] = $r;
-        solo_muster($s);
-        $samples = [];
-        for ($x = 0; $x < $w; $x += 60) {
-            $samples[] = $s['terrain'][$x];
-        }
-        $peek = $s['rng'];
-        $out[] = ['samples' => $samples, 'wind' => $s['wind'], 'xs' => array_column($s['tanks'], 'x'), 'ys' => array_column($s['tanks'], 'y'),
-            'tactics' => array_values(array_filter(array_column($s['tanks'], 's'))), 'turn' => $s['turn'], 'hp' => array_column($s['tanks'], 'hp'),
-            'next' => room_rng_next($peek)];
-    }
-    $add('solo-deal', "$seed@$w", ['seed' => $seed, 'rounds' => $rounds, 'w' => $w], $out);
-};
-foreach (['scorched-1000', 'scorched-4242', 'alpha', 'runs-long-70', 'a b c'] as $seed) {
-    $soloDeal($seed, 3, 720);
-}
-$soloDeal('alpha', 3, 1440); // a wide field: the same draws, spread over 1440
-$soloDeal('scorched-4242', 2, 1080);
-```
-
-Run (in `games/tankity`): `php protocol/sim-vectors.php`
-Expected: FAIL, `Call to undefined function solo_deal()`.
-
-- [ ] **Step 2: The PHP deal and muster**
-
-```php
-<?php
-// games/tankity/server/solo.php
-// Operation Tankity: the solo referee in PHP, for the server's play of each
-// round of a solo run. The rules of src/solo.ts over the room sim: a solo
-// match is a room with one human at seat 0 and three drones, and draws its
-// random stream in the browser's order. protocol/solo-runs.json pins it to
-// the browser. Loaded by rooms.php.
-declare(strict_types=1);
-
-// Not an endpoint: rooms.php defines this constant, then requires the file.
-if (!defined('TANKITY_ROOMS_INCLUDED')) {
-    http_response_code(404);
-    exit;
-}
-
-const SOLO_FOES = ['reaper', 'wraith', 'spotter'];
-
-/* src/sim.ts genTerrain(): the hills over the field's width, then five clouds
-   of four numbers each, which the server must draw too to stay on the
-   browser's stream. */
-function solo_gen_terrain(int &$rng, int $w): array
-{
-    $t = room_gen_terrain($rng, $w);
-    for ($i = 0; $i < 20; $i++) {
-        room_rng_next($rng);
-    }
-    return $t;
-}
-
-/* src/solo.ts soloDeal(): the stake, three lives, full armor, the drones'
-   difficulty (room_ai_choose reads it, as the room's), the field's width the
-   run was started at, and the pre-match hills (drawn, never fought on). The
-   match opens in the shop. */
-function solo_deal(string $seed, string $difficulty, int $w): array
-{
-    if (room_field_width($w) === null) {
-        throw new InvalidArgumentException("field width $w");
-    }
-    $ammo = ['shell' => -1];
-    foreach (room_weapons() as $k => $_) {
-        if ($k !== 'shell') {
-            $ammo[$k] = $k === 'buck' ? 1 : 0;
-        }
-    }
-    $s = [
-        'code' => 'SOLO', 'seed' => $seed, 'w' => $w, 'difficulty' => room_parse_difficulty($difficulty), 'rng' => room_hash_seed($seed), 'phase' => 'shop',
-        'round' => 0, 'wind' => 0, 'terrain' => [], 'tanks' => [], 'shells' => [], 'turn' => 0, 'firstTurn' => 0, 'watchTurns' => 0,
-        'seats' => [0 => ['human' => true, 'initials' => 'YOU', 'lives' => 3]],
-        'scores' => [0 => 0], 'cash' => [0 => 600], 'ammo' => [0 => $ammo], 'nextUp' => [0 => 3000],
-        'roundsWon' => 0, 'tactics' => [],
-        'plate' => [0 => 0], 'armor' => [0 => 100], 'fuelBonus' => [0 => 0],
-        'shield' => [0 => false], 'jammer' => [0 => 0], 'bunker' => [0 => 0], 'laststand' => [0 => false],
-    ];
-    $s['terrain'] = solo_gen_terrain($s['rng'], $w);
-    return $s;
-}
-
-/* src/solo.ts soloMuster(): hills, wind, four spawn spots, the player's tank and
-   the three drones (a new drone is dealt a strategy), the opener rotating. */
-function solo_muster(array &$s): void
-{
-    $s['terrain'] = solo_gen_terrain($s['rng'], $s['w']);
-    $s['watchTurns'] = 0;
-    $s['wind'] = (int) det_round((room_rng_next($s['rng']) * 2 - 1) * 8);
-    $xs = room_spawn_spots($s['rng'], 1 + count(SOLO_FOES), $s['w']);
-    $fuel = 80.0 + (float) ($s['fuelBonus'][0] ?? 0);
-    $s['fuelBonus'][0] = 0;
-    $s['tanks'] = [[
-        'seat' => 0, 'kind' => 'human', 'name' => 'tank', 'x' => (float) $xs[0], 'y' => 0.0, 'angle' => 62.0, 'power' => 55.0,
-        'hp' => room_muster_armor($s, 0), 'maxHp' => room_max_armor($s, 0), 'fuel' => $fuel, 'dirS' => 1, 'ammo' => $s['ammo'][0],
-    ]];
-    foreach (SOLO_FOES as $i => $id) {
-        $armor = 60 + 6 * ($s['round'] - 1);
-        $s['tactics'][$id] ??= room_pick_tactic($s['rng']);
-        $s['tanks'][] = [
-            'seat' => $i + 1, 'kind' => 'ai', 'name' => $id, 'x' => (float) $xs[$i + 1], 'y' => 0.0, 'angle' => 62.0, 'power' => 55.0,
-            'hp' => $armor, 'maxHp' => $armor, 'fuel' => 0.0, 'dirS' => -1, 'ammo' => room_ai_rack((int) $s['round']), 's' => $s['tactics'][$id],
-        ];
-    }
-    foreach ($s['tanks'] as &$t) {
-        $t['y'] = $s['terrain'][max(0, min($s['w'] - 1, (int) round($t['x'])))];
-        $t['dirS'] = $t['x'] < $s['w'] / 2 ? 1 : -1;
-    }
-    unset($t);
-    $s['turn'] = $s['firstTurn'] % count($s['tanks']);
-    $s['firstTurn']++;
-    $s['shells'] = [];
-    $s['phase'] = 'play';
-}
-```
-
-`rooms.php`: after `require_once __DIR__ . '/server/rules.php';` add `require_once __DIR__ . '/server/solo.php';` and the map line `//   server/solo.php      the solo referee, for the server's play of solo rounds`.
-
-- [ ] **Step 3: The TS runner**
-
-In `test/sim-vectors.test.mjs` add `const solo = await import(pathToFileURL(path.join(dir, 'src', 'solo.ts')).href);` and the runner below. The browser's stream cannot be peeked the way PHP copies its integer state, so for round r the runner deals afresh, musters rounds 1..r, and reads `next` off that fresh stream:
-
-```js
-  'solo-deal'(c) {
-    const out = [];
-    for (let r = 1; r <= c.rounds; r++) {
-      const S = { body: 'tank' };
-      solo.soloDeal(S, arsenal, c.seed, 'normal', c.w);
-      for (let k = 1; k <= r; k++) { S.round = k; solo.soloMuster(S, arsenal); }
-      const samples = [];
-      for (let x = 0; x < c.w; x += 60) samples.push(S.terrain[x]);
-      out.push({ samples, wind: S.wind, xs: S.tanks.map(t => t.x), ys: S.tanks.map(t => t.y),
-        tactics: S.tanks.filter(t => t.s).map(t => t.s), turn: S.turn, hp: S.tanks.map(t => t.hp), next: S.rng() });
-    }
-    return out;
-  },
-```
-
-- [ ] **Step 4: Run both sides**
-
-Run (in `games/tankity`): `php protocol/sim-vectors.php && node --test test/sim-vectors.test.mjs` then (in `websites/www.cs`) `vendor/bin/phpunit --testsuite tankity`
-Expected: PASS. A mismatch in `next` means a draw is missing or extra on one side: compare the draw order with the README's determinism list.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add games/tankity/server/solo.php games/tankity/rooms.php games/tankity/protocol/sim-vectors.php games/tankity/protocol/sim-vectors.json games/tankity/test/sim-vectors.test.mjs
-git commit -F- <<'MSG'
-Tankity: the solo deal and muster in PHP, on the browser's random stream
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
-MSG
-```
-
-### Task 29: The volley in PHP, step by step, with tanks falling mid-volley
-
-The room server resolves a volley shell by shell and settles tanks after it; the browser's solo war flies a volley's shells together and drops tanks between steps (Decision 2). The server's solo play must take the browser's steps, so it gets its own flight: `server/flight.php`, a step-for-step PHP port of `stepShells`, `stepRoller`, `waitsOnEarlier`, `fallTanks` and `fireWeapon`'s launch, built on the room sim's pinned helpers (`room_seek_push`, `room_split_vel`, `room_sweep_hit`, `room_roll_hit`, `room_roll_*`, `room_explode`, `room_brk_land`). The `volley-fall` vectors pin it to `flyVolley`.
-
-**Files:**
-- Create: `games/tankity/server/flight.php`
-- Modify: `games/tankity/rooms.php` (require it after `server/sim.php`; file map)
-- Modify: `games/tankity/protocol/sim-vectors.php` (group `volley-fall`), `games/tankity/test/sim-vectors.test.mjs` (`RUN['volley-fall']`)
-- Create: `games/tankity/test/php/FlightTest.php`
-
-**Interfaces:**
-- Consumes: Task 21's aligned helpers (`room_dist`, the lance bracket, the seek clamp) and Task 21a's `det_sin`/`det_cos` (`room_muzzle` and `room_split_vel` already use them); `ROOM_GRAV`, `ROOM_FLAT_GRAV`, `ROOM_TURN_WIND`, `ROOM_ROLL_LIFT`; Task 26's `flyVolley`.
-- Produces: `FLIGHT_STEP = 1 / 60`, `FLIGHT_FALL_GRAVITY = 700.0` (`src/sim.ts FALL_GRAVITY`), `FLIGHT_MAX_STEPS = 20000`; `flight_surf(array $terrain, float $x): float`; `flight_launch(array &$s, int $idx, string $wkey): void` (shells into `$s['shells']`; ammo is the caller's); `flight_fall(array &$s, float $h): void`; `flight_falling(array $s): bool`; `flight_waits(array $s, int $k): bool`; `flight_burst(array &$s, array $shell, float $x, float $y, ?int $direct, ?array $ov): void`; `flight_step_shells(array &$s, float $h): void`; `flight_volley(array &$s, ?Closure $onStep = null): int`. A shell is `['x','y','vx','vy','w','owner','life','age','pierced','split','order','dead','clear','dw','dr','rolling','ru','rt']`. Vector group `volley-fall`: a `volley` case's inputs; output `sv_outcome` plus `ys` (each tank's y), `steps` and `midFall` (a tank moved while a shell was in the air).
-
-- [ ] **Step 1: The generator group and the failing test**
-
-In `protocol/sim-vectors.php`, after the `volley` group:
-
-```php
-/* ---- volleys as the solo war flies them: fixed steps, tanks falling between ----
- * Each step drops the tanks, then moves every shell (server/flight.php);
- * the browser's flyVolley() takes the same steps. midFall says a tank moved
- * while a shell was still in the air, so the cases really cover the falls. */
-$volleyFall = function (string $name, array $c) use ($add): void {
-    $room = sv_room($c);
-    $room['shells'] = [];
-    $before = $room;
-    $seat = $c['shooter'];
-    $room['tanks'][$seat]['angle'] = (float) $c['angle'];
-    $room['tanks'][$seat]['power'] = (float) $c['power'];
-    flight_launch($room, $seat, $c['wkey']);
-    $ys = array_column($room['tanks'], 'y');
-    $midFall = false;
-    $steps = flight_volley($room, function (array $s) use (&$ys, &$midFall): void {
-        $now = array_column($s['tanks'], 'y');
-        if ($s['shells'] && $now !== $ys) {
-            $midFall = true;
-        }
-        $ys = $now;
-    });
-    $add('volley-fall', $name, $c, sv_outcome($before, $room) + ['ys' => array_column($room['tanks'], 'y'), 'steps' => $steps, 'midFall' => $midFall]);
-};
-$drone = fn(float $x, int $hp = 200, array $more = []): array => ['kind' => 'ai', 'x' => $x, 'y' => 400, 'hp' => $hp, 'dirS' => -1] + $more;
-$human = fn(float $x, int $hp = 200, array $more = []): array => ['kind' => 'human', 'x' => $x, 'y' => 400, 'hp' => $hp, 'dirS' => 1] + $more;
-$flat = ['flat' => 400];
-// A pellet craters under a drone; the next pellet meets it on its way down.
-$volleyFall('buck-meets-a-sinking-drone', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'buck', 'angle' => 47, 'power' => 62,
-    'tanks' => [$human(120), $drone(330), $drone(560)]]);
-$volleyFall('mortar-digs-out-a-tank', ['terrain' => $flat, 'wind' => 2, 'shooter' => 1, 'wkey' => 'mortar', 'angle' => 50, 'power' => 58,
-    'tanks' => [$human(260), $drone(560), $drone(660)]]);
-$volleyFall('cluster-over-a-pit', ['terrain' => ['flat' => 400, 'set' => [[300, 360, 420]]], 'wind' => -3, 'shooter' => 0, 'wkey' => 'cluster', 'angle' => 55, 'power' => 66,
-    'tanks' => [$human(100), $drone(330, 300, ['y' => 380]), $drone(600)]]);
-$volleyFall('roller-into-the-crater-it-follows', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'roller', 'angle' => 30, 'power' => 50,
-    'tanks' => [$human(100), $drone(400), $drone(640)]]);
-$volleyFall('lance-through-and-down', ['terrain' => $flat, 'wind' => 0, 'shooter' => 0, 'wkey' => 'lance', 'angle' => 12, 'power' => 80,
-    'tanks' => [$human(100), $drone(300, 500), $drone(420, 500)]]);
-$volleyFall('already-hanging-over-a-pit', ['terrain' => ['flat' => 400, 'set' => [[420, 470, 440]]], 'wind' => 0, 'shooter' => 0, 'wkey' => 'shell', 'angle' => 60, 'power' => 60,
-    'tanks' => [$human(120), $drone(445), $drone(640)]]);
-```
-
-(`sv_room` places each tank at its spec's `y`, 400 unless given; weapons a game does not have are skipped the way the `volley` group skips them: wrap each call in `if (isset(room_weapons()[$wkey]))` when the case's gun is one of `cluster`, `roller` or `lance`.)
-
-In `test/sim-vectors.test.mjs` import the flight and add the runner:
-
-```js
-const soloPlay = await import(pathToFileURL(path.join(dir, 'src', 'solo-play.ts')).href);
-```
-
-```js
-  'volley-fall'(c) {
-    world(c);
-    const before = G.terrain.slice(), shooter = G.tanks[c.shooter];
-    shooter.angle = c.angle;
-    shooter.power = c.power;
-    (shooter.isPlayer ? G.ammo : shooter.ammo)[c.wkey] = 99;
-    sim.fireWeapon(G, arsenal, shooter, c.wkey);
-    let ys = G.tanks.map(t => t.y), midFall = false;
-    const steps = soloPlay.flyVolley(G, arsenal, w => {
-      const now = w.tanks.map(t => t.y);
-      if (w.shells.length && now.some((y, i) => y !== ys[i])) midFall = true;
-      ys = now;
-    });
-    return { ...outcome(before), ys: G.tanks.map(t => t.y), steps, midFall };
-  },
-```
-
-```php
-<?php
-// games/tankity/test/php/FlightTest.php
-declare(strict_types=1);
-
-use PHPUnit\Framework\TestCase;
-
-/* The solo flight: fixed steps, tanks dropping between them, pinned to the
-   browser's flyVolley by the volley-fall vectors. */
-final class FlightTest extends TestCase
-{
-    public static function setUpBeforeClass(): void
-    {
-        require_once __DIR__ . '/rooms-lib.php';
-    }
-
-    /* make test's `php protocol/sim-vectors.php --check` keeps the file current; this checks the cases cover what they are for. */
-    public function testTheVolleyFallVectorsReallyFall(): void
-    {
-        $dir = dirname(__DIR__, 2);
-        $cases = json_decode((string) file_get_contents($dir . '/protocol/sim-vectors.json'), true)['groups']['volley-fall'];
-        $this->assertGreaterThanOrEqual(4, count($cases));
-        $this->assertNotEmpty(array_filter($cases, fn(array $c): bool => $c['out']['midFall']), 'some case drops a tank mid-volley');
-    }
-
-    public function testATankOverAPitFallsAndLands(): void
-    {
-        $s = ['terrain' => array_fill(0, 720, 400.0), 'shells' => [], 'tanks' => [['hp' => 50, 'x' => 300.0, 'y' => 300.0]]];
-        $this->assertTrue(flight_falling($s));
-        $y = [];
-        for ($i = 0; $i < 3; $i++) {
-            flight_fall($s, FLIGHT_STEP);
-            $y[] = $s['tanks'][0]['y'];
-        }
-        $this->assertGreaterThan($y[0], $y[2]);
-        $this->assertEqualsWithDelta(FLIGHT_FALL_GRAVITY * FLIGHT_STEP * 3, $s['tanks'][0]['vy'], 1e-9);
-        $this->assertGreaterThan(0, flight_volley($s), 'a fall left over is stepped to its end');
-        $this->assertSame(400.0, $s['tanks'][0]['y']);
-        $this->assertFalse(flight_falling($s));
-    }
-
-    public function testLaterPelletsWaitForEarlierOnes(): void
-    {
-        $s = ['shells' => [
-            ['owner' => 0, 'order' => [0], 'dead' => false], ['owner' => 0, 'order' => [1], 'dead' => false],
-            ['owner' => 0, 'order' => [0, 2], 'dead' => false], ['owner' => 1, 'order' => [0], 'dead' => false],
-        ]];
-        $this->assertFalse(flight_waits($s, 0));
-        $this->assertTrue(flight_waits($s, 1), 'pellet 1 waits on pellet 0');
-        $this->assertTrue(flight_waits($s, 2), 'a bomblet of pellet 0 waits on the pellet itself');
-        $this->assertFalse(flight_waits($s, 3), 'another gunner\'s shell never waits on this one');
-    }
-}
-```
-
-Run (in `games/tankity`): `php protocol/sim-vectors.php`
-Expected: FAIL, `Call to undefined function flight_launch()`.
-
-- [ ] **Step 2: The flight**
-
-```php
-<?php
-// games/tankity/server/flight.php
-// Operation Tankity: a volley as the browser's solo war flies it, for the
-// server's play of a solo round. Fixed steps; each drops the tanks, then moves
-// every shell, the shells of one volley flying together and bursting in
-// launch order. src/sim.ts stepShells/fallTanks and src/solo-play.ts
-// flyVolley are the same, pinned by the volley-fall vectors. Loaded by rooms.php.
-declare(strict_types=1);
-
-// Not an endpoint: rooms.php defines this constant, then requires the file.
-if (!defined('TANKITY_ROOMS_INCLUDED')) {
-    http_response_code(404);
-    exit;
-}
-
-const FLIGHT_STEP = 1 / 60; // src/solo.ts SOLO_STEP
-const FLIGHT_FALL_GRAVITY = 700.0; // src/sim.ts FALL_GRAVITY
-const FLIGHT_MAX_STEPS = 20000; // src/solo-play.ts FLIGHT_MAX_STEPS
-
-/* The ground under x: src/sim.ts surfY (Math.round, which is floor(x + 0.5)). */
-function flight_surf(array $terrain, float $x): float
-{
-    $xi = max(0, min(count($terrain) - 1, (int) floor($x + 0.5)));
-    return (float) $terrain[$xi];
-}
-
-/* src/sim.ts fireWeapon's launch: one shell per pellet, fanned by the spread. */
-function flight_launch(array &$s, int $idx, string $wkey): void
-{
-    $t = $s['tanks'][$idx];
-    $w = room_weapons()[$wkey];
-    [$mx, $my] = room_muzzle($t);
-    $r0 = deg2rad((float) $t['angle']);
-    $dirS = $t['dirS'] ?? -1;
-    $shots = (int) (($w['pellets'] ?? 0) ?: 1);
-    $spd = room_shot_speed((float) $t['power'], !empty($w['flat']), (float) (($w['speed'] ?? 0) ?: 1.0), room_field_reach(count($s['terrain'])));
-    for ($i = 0; $i < $shots; $i++) {
-        $off = $shots === 1 ? 0.0 : ($i - ($shots - 1) / 2) * (float) ($w['spread'] ?? 0.0);
-        $a = $r0 + $off;
-        $s['shells'][] = ['x' => $mx, 'y' => $my, 'vx' => det_cos($a) * $spd * $dirS, 'vy' => -det_sin($a) * $spd, 'w' => $wkey, 'owner' => $idx,
-            'life' => 12.0, 'age' => 0.0, 'pierced' => null, 'split' => false, 'order' => [$i], 'dead' => false, 'clear' => false,
-            'dw' => null, 'dr' => null, 'rolling' => false, 'ru' => 0.0, 'rt' => 0];
-    }
-}
-
-/* src/sim.ts fallTanks: a tank above the ground falls under gravity until it lands. */
-function flight_fall(array &$s, float $h): void
-{
-    foreach ($s['tanks'] as &$t) {
-        if ($t['hp'] <= 0) {
-            continue;
-        }
-        $gy = flight_surf($s['terrain'], (float) $t['x']);
-        if ($t['y'] < $gy - 0.5) {
-            $t['vy'] = ($t['vy'] ?? 0.0) + FLIGHT_FALL_GRAVITY * $h;
-            $t['y'] = min($gy, $t['y'] + $t['vy'] * $h);
-            if ($t['y'] >= $gy) {
-                $t['vy'] = 0.0;
-            }
-        } else {
-            $t['y'] = $gy;
-            $t['vy'] = 0.0;
-        }
-    }
-    unset($t);
-}
-
-function flight_falling(array $s): bool
-{
-    foreach ($s['tanks'] as $t) {
-        if ($t['hp'] > 0 && $t['y'] < flight_surf($s['terrain'], (float) $t['x']) - 0.5) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/* src/sim.ts waitsOnEarlier: a shell launched earlier in the same volley is still in the air. */
-function flight_waits(array $s, int $k): bool
-{
-    $me = $s['shells'][$k];
-    foreach ($s['shells'] as $j => $o) {
-        if ($j === $k || $o['dead'] || $o['owner'] !== $me['owner']) {
-            continue;
-        }
-        $n = min(count($me['order']), count($o['order']));
-        for ($i = 0; $i < $n; $i++) {
-            if ($o['order'][$i] !== $me['order'][$i]) {
-                if ($o['order'][$i] < $me['order'][$i]) {
-                    return true;
-                }
-                continue 2;
-            }
-        }
-        if (count($o['order']) < count($me['order'])) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/* src/sim.ts explode: the gunner's bracket learns where it burst, then the room blast. */
-function flight_burst(array &$s, array $shell, float $x, float $y, ?int $direct, ?array $ov): void
-{
-    room_brk_land($s['tanks'][$shell['owner']], $x);
-    $events = [];
-    room_explode($s, $events, $s['tanks'][$shell['owner']], $shell['w'], $x, $y, $direct, $ov);
-}
-
-/* src/sim.ts stepRoller: one step of a ball on the ground. */
-function flight_step_roller(array &$s, int $k, array $w, float $h): void
-{
-    $sh = $s['shells'][$k];
-    $t = $s['terrain'];
-    $n = count($t);
-    $x0 = $sh['x'];
-    $y0 = $sh['y'];
-    $x = $sh['x'];
-    $u = $sh['ru'];
-    $done = $sh['rt'] >= (int) floor((($w['rollTime'] ?? 0) ?: 5.0) * 60 + 0.5) || $x <= 0 || $x >= $n - 1;
-    $direct = null;
-    if (!$done) {
-        $moving = room_roll_step($t, $x, $u, (float) (($w['friction'] ?? 0) ?: 0.3), $h);
-        $sh['rt']++;
-        $sh['x'] = $x;
-        $sh['ru'] = $u;
-        $sh['y'] = room_ground_at($t, $x) - ROOM_ROLL_LIFT;
-        $m = room_ground_slope($t, $x);
-        $sh['vx'] = $u / sqrt(1 + $m * $m);
-        $sh['vy'] = $sh['vx'] * $m;
-        $done = !$moving;
-        $clear = $sh['clear'];
-        $hit = room_roll_hit($s, $x0, $y0, $sh['x'], $sh['y'], $sh['owner'], $clear);
-        $sh['clear'] = $clear;
-        if ($hit !== null) {
-            $direct = $hit[0];
-            $sh['x'] = $hit[1];
-            $done = true;
-        }
-    }
-    if (!$done) {
-        $s['shells'][$k] = $sh;
-        return;
-    }
-    $sh['dead'] = true;
-    $s['shells'][$k] = $sh;
-    $bx = max(0.0, min((float) ($n - 1), $sh['x']));
-    flight_burst($s, $sh, $bx, room_ground_at($s['terrain'], $bx), $direct, null);
-}
-
-/* src/sim.ts stepShells: every shell one step. Bomblets born this step fly
-   this step too; a shell that would burst while an earlier one of its volley
-   is in the air holds where it was. */
-function flight_step_shells(array &$s, float $h): void
-{
-    $weapons = room_weapons();
-    $width = count($s['terrain']);
-    for ($k = 0; $k < count($s['shells']); $k++) {
-        $sh = $s['shells'][$k];
-        $w = $weapons[$sh['w']];
-        $effect = $w['effect'] ?? 'shot';
-        if ($sh['rolling']) {
-            flight_step_roller($s, $k, $w, $h);
-            continue;
-        }
-        $sh['age'] += $h;
-        if ($effect === 'seeker') {
-            $dv = room_seek_push($s['tanks'], $sh['owner'], $sh['x'], $sh['y'], (float) (($w['steer'] ?? 0) ?: 70.0), $h);
-            if ($dv !== null) {
-                $sh['vx'] += $dv[0];
-                $sh['vy'] += $dv[1];
-            }
-        }
-        $x0 = $sh['x'];
-        $y0 = $sh['y'];
-        $held = [$sh['vx'], $sh['vy'], $sh['age'] - $h, $sh['life'], $sh['clear']];
-        $grav = !empty($w['flat']) ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
-        $sh['vx'] += $s['wind'] * ROOM_TURN_WIND * $h;
-        $sh['vy'] += $grav * $h;
-        $sh['x'] += $sh['vx'] * $h;
-        $sh['y'] += $sh['vy'] * $h;
-        $sh['life'] -= $h;
-        if ($sh['life'] <= 0 || $sh['x'] < -20 || $sh['x'] > $width + 20 || $sh['y'] > 500) {
-            $sh['dead'] = true;
-            $s['shells'][$k] = $sh;
-            continue;
-        }
-        if ($effect === 'cluster' && !$sh['split'] && $sh['age'] >= (float) (($w['fuse'] ?? 0) ?: 0.9)) {
-            $sh['split'] = true;
-            $sh['dead'] = true;
-            $s['shells'][$k] = $sh;
-            $n = max(2, (int) (($w['split'] ?? 0) ?: 4));
-            foreach (room_split_vel($sh['vx'], $sh['vy'], $n, (float) (($w['fan'] ?? 0) ?: 0.22)) as $i => [$vx, $vy]) {
-                $s['shells'][] = ['x' => $sh['x'], 'y' => $sh['y'], 'vx' => $vx, 'vy' => $vy, 'w' => $sh['w'], 'owner' => $sh['owner'],
-                    'life' => 12.0, 'age' => 0.0, 'pierced' => null, 'split' => true, 'order' => [...$sh['order'], $i], 'dead' => false, 'clear' => false,
-                    'dw' => (int) (($w['subDmg'] ?? 0) ?: $w['dmg']), 'dr' => (float) (($w['subRadius'] ?? 0) ?: $w['radius']),
-                    'rolling' => false, 'ru' => 0.0, 'rt' => 0];
-            }
-            continue;
-        }
-        $direct = null;
-        $clear = $sh['clear'];
-        $hit = room_sweep_hit($s, $x0, $y0, $sh['x'], $sh['y'], $sh['pierced'], $sh['owner'], $clear);
-        $sh['clear'] = $clear;
-        if ($hit !== null) {
-            [$direct, $sh['x'], $sh['y']] = $hit;
-        }
-        if ($direct === null && $effect === 'proximity') {
-            $bd = (float) (($w['prox'] ?? 0) ?: 34.0);
-            foreach ($s['tanks'] as $i => $t) {
-                if ($t['hp'] <= 0 || $i === $sh['owner']) {
-                    continue;
-                }
-                $d = room_dist($sh['x'] - $t['x'], $sh['y'] - ($t['y'] - 12));
-                if ($d < $bd) {
-                    $bd = $d;
-                    $direct = $i;
-                }
-            }
-        }
-        $grounded = ($sh['split'] || $sh['age'] >= 0.1) && $sh['y'] >= flight_surf($s['terrain'], $sh['x']);
-        if (($direct !== null || ($grounded && $effect !== 'roller')) && flight_waits($s, $k)) {
-            $sh['x'] = $x0;
-            $sh['y'] = $y0;
-            [$sh['vx'], $sh['vy'], $sh['age'], $sh['life'], $sh['clear']] = $held;
-            $s['shells'][$k] = $sh;
-            continue;
-        }
-        $ov = $sh['dw'] !== null ? ['dmg' => $sh['dw'], 'radius' => $sh['dr']] : null;
-        if ($direct !== null) {
-            // A lance punches through its first victim and keeps flying.
-            if ($effect === 'pierce' && $sh['pierced'] === null) {
-                $sh['pierced'] = $direct;
-            } else {
-                $sh['dead'] = true;
-            }
-            $s['shells'][$k] = $sh;
-            flight_burst($s, $sh, $sh['x'], $sh['y'], $direct, $ov);
-            continue;
-        }
-        if ($grounded && $effect === 'roller') {
-            $sh['rolling'] = true;
-            $sh['rt'] = 0;
-            $sh['x'] = max(0.0, min((float) ($width - 1), $sh['x']));
-            $sh['ru'] = room_roll_start($s['terrain'], $sh['x'], $sh['vx'], $sh['vy']);
-            $sh['y'] = room_ground_at($s['terrain'], $sh['x']) - ROOM_ROLL_LIFT;
-            $s['shells'][$k] = $sh;
-            continue;
-        }
-        if ($grounded) {
-            $sh['dead'] = true;
-            $s['shells'][$k] = $sh;
-            flight_burst($s, $sh, $sh['x'], $sh['y'], null, $ov);
-            continue;
-        }
-        $s['shells'][$k] = $sh;
-    }
-    $s['shells'] = array_values(array_filter($s['shells'], fn(array $x): bool => !$x['dead']));
-}
-
-/* The war's steps for one volley: each drops the tanks, then moves the shells;
-   once the last shell is gone, steps drop the tanks until none is falling.
-   $onStep sees the state after each step. Answers the steps taken. */
-function flight_volley(array &$s, ?Closure $onStep = null): int
-{
-    $steps = 0;
-    for (; ($s['shells'] ?? []) && $steps < FLIGHT_MAX_STEPS; $steps++) {
-        flight_fall($s, FLIGHT_STEP);
-        flight_step_shells($s, FLIGHT_STEP);
-        if ($onStep !== null) {
-            $onStep($s);
-        }
-    }
-    for (; flight_falling($s) && $steps < FLIGHT_MAX_STEPS; $steps++) {
-        flight_fall($s, FLIGHT_STEP);
-        if ($onStep !== null) {
-            $onStep($s);
-        }
-    }
-    return $steps;
-}
-```
-
-Each line mirrors one in `src/sim.ts`, with JavaScript's `||` defaults written as `?:` (a zero falls back as it does there). `rooms.php`: after `require_once __DIR__ . '/server/sim.php';` add `require_once __DIR__ . '/server/flight.php';` and the map line `//   server/flight.php    a solo volley in fixed steps, tanks falling between`.
-
-- [ ] **Step 3: Run both sides**
-
-Run (in `games/tankity`): `php protocol/sim-vectors.php && node --test test/sim-vectors.test.mjs` then (in `websites/www.cs`) `vendor/bin/phpunit --testsuite tankity --filter FlightTest`
-Expected: PASS; `volley-fall` lists six cases and at least one with `"midFall": true`. A mismatch names the case: step both sides with `onStep` dumping every shell and tank, find the first step that differs, and fix the side that departs from `src/sim.ts` (never the vector).
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add games/tankity/server/flight.php games/tankity/rooms.php games/tankity/protocol/sim-vectors.php games/tankity/protocol/sim-vectors.json games/tankity/test/sim-vectors.test.mjs games/tankity/test/php/FlightTest.php
-git commit -F- <<'MSG'
-Tankity: the solo volley in PHP, step for step with the browser, tanks falling mid-volley
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
-MSG
-```
+Removed: rooms fly shells with `room_fly_arc` in `server/sim.php`. Task R1 deletes `server/flight.php` and the `volley-fall` vector group; the fixed-step war stays in the browser (Task 23).
 
 ### Task 30: The PHP round, and its CPU per round
 
-**Files:**
-- Modify: `games/tankity/server/solo.php` (turns, settle, 1-ups, fire, `solo_round`, `solo_claim`)
-- Create: `games/tankity/test/php/SoloRoundTest.php`
-- Create: `games/tankity/tools/round-bench.php`
-- Modify: `games/tankity/server/sim.php` (`room_sim_shot`, `room_fly_arc`: loop constants hoisted, bit-identical)
-- Modify: `games/tankity/test.sh` (exclude the `slow` group)
-- Modify: `.github/workflows/ci.yml` (the nightly job also runs `phpunit --testsuite tankity --group slow` and the bench)
+Removed: no round, no CPU cap, no `slow` test group. Task R1 deletes `tools/round-bench.php` and its CI step.
 
-**Interfaces:**
-- Consumes: Task 28 (`solo_deal`, `solo_muster`); Task 29 (`flight_launch`, `flight_volley`); `room_ai_choose` (its aim comes from `ROOM_DIFFICULTY[room_difficulty($s)]`, the run's difficulty), `room_spot_taken`, `room_gauss`, `room_buy`, `room_carry_armor`; `ROOM_DIFFICULTY`.
-- Produces: `SOLO_ROUND_CPU = 2.0`, `SOLO_MAX_SHOTS = 200`, `SOLO_MAX_BUYS = 60` (`src/solo-log.ts` `ROUND_MAX_SHOTS`, `ROUND_MAX_BUYS`); `solo_next_turn(array &$s): void`; `solo_settle(array &$s): string` (`'next' | 'roundWon' | 'tankLost' | 'matchLost'`); `solo_oneups(array &$s): void`; `solo_drone_turn(array &$s): void`; `solo_player_fire(array &$s, array $m): ?string`; `solo_cpu_now(): float`; `solo_claim(array $s, string $end): array` (`end, score, cash, lives, roundsWon`, the shape of `RoundClaim`); `solo_round(array $s, mixed $buys, mixed $shots, float $cpuBudget = SOLO_ROUND_CPU): array` → `['ok' => true, 's' => array, 'claim' => array]` or `['ok' => false, 'error' => string]`. `php tools/round-bench.php` prints the worst round's CPU per recorded run and exits 1 when any round needs more than `SOLO_ROUND_CPU`.
+### Task 31: The score endpoint on the guard
 
-- [ ] **Step 1: Failing test**
-
-```php
-<?php
-// games/tankity/test/php/SoloRoundTest.php
-declare(strict_types=1);
-
-use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\Attributes\Group;
-use PHPUnit\Framework\TestCase;
-
-/* Every round of the browser's recorded solo runs (protocol/solo-runs.json),
-   played in PHP from the stored state, reaches the browser's claim; a
-   tampered round does not. */
-final class SoloRoundTest extends TestCase
-{
-    public static function setUpBeforeClass(): void
-    {
-        require_once __DIR__ . '/rooms-lib.php';
-    }
-
-    /** @return array<string, array{array}> */
-    private static function runs(callable $keep): array
-    {
-        $all = json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/protocol/solo-runs.json'), true);
-        $out = [];
-        foreach ($all['runs'] as $r) {
-            if ($keep($r)) {
-                $out[$r['name']] = [$r];
-            }
-        }
-        return $out;
-    }
-
-    public static function shortRuns(): array
-    {
-        return self::runs(fn($r) => count($r['rounds']) <= 8);
-    }
-
-    public static function longRuns(): array
-    {
-        return self::runs(fn($r) => count($r['rounds']) > 8);
-    }
-
-    /** Plays $run round by round, carrying the state between rounds as the database does. */
-    private function play(array $run, ?callable $tamper = null): array
-    {
-        $s = solo_deal($run['seed'], $run['difficulty'], $run['w']);
-        foreach ($run['rounds'] as $k => $r) {
-            if ($tamper !== null) {
-                $r = $tamper($k, $r);
-            }
-            $got = solo_round(unserialize(serialize($s)), $r['buys'], $r['shots'], 30.0);
-            if (!$got['ok']) {
-                return ['round' => $r['n'], 'error' => $got['error']];
-            }
-            if ($got['claim'] !== $r['claim']) {
-                return ['round' => $r['n'], 'error' => 'mismatch', 'server' => $got['claim'], 'browser' => $r['claim']];
-            }
-            $s = $got['s'];
-        }
-        return ['score' => (int) $s['scores'][0], 'roundsWon' => (int) $s['roundsWon'], 'rounds' => (int) $s['round'], 'phase' => $s['phase']];
-    }
-
-    private function assertPlays(array $run): void
-    {
-        $this->assertSame(['score' => $run['score'], 'roundsWon' => $run['roundsWon'], 'rounds' => count($run['rounds']), 'phase' => 'over'],
-            $this->play($run), $run['name']);
-    }
-
-    #[DataProvider('shortRuns')]
-    public function testEveryRoundReachesTheBrowsersClaim(array $run): void
-    {
-        $this->assertPlays($run);
-    }
-
-    #[DataProvider('longRuns')]
-    #[Group('slow')]
-    public function testALongRunPlaysToo(array $run): void
-    {
-        $this->assertPlays($run);
-    }
-
-    public function testTheRecordedRunsCoverEveryDifficultyAndPassSixtyRounds(): void
-    {
-        $all = array_column(array_merge(self::shortRuns(), self::longRuns()), 0);
-        $levels = array_unique(array_column($all, 'difficulty'));
-        sort($levels);
-        $this->assertSame(['easy', 'hard', 'normal'], array_values($levels));
-        $this->assertGreaterThan(60, max(array_map(fn($r) => count($r['rounds']), $all)), 'solo has no round limit');
-    }
-
-    private function sample(): array
-    {
-        return array_values(self::shortRuns())[0][0];
-    }
-
-    public function testTheRunsDifficultyAimsTheDrones(): void
-    {
-        $run = $this->sample();
-        $run['difficulty'] = $run['difficulty'] === 'hard' ? 'easy' : 'hard';
-        $this->assertArrayHasKey('error', $this->play($run));
-    }
-
-    public function testAMissingShotLeavesTheRoundUnfinished(): void
-    {
-        $got = $this->play($this->sample(), function (int $k, array $r): array {
-            if ($k === 0) {
-                array_pop($r['shots']);
-            }
-            return $r;
-        });
-        $this->assertSame(1, $got['round']);
-        $this->assertContains($got['error'], ['unfinished', 'mismatch']);
-    }
-
-    public function testShotsAfterTheEndAreRefused(): void
-    {
-        $got = $this->play($this->sample(), function (int $k, array $r): array {
-            if ($k === 0) {
-                $r['shots'][] = end($r['shots']) ?: ['w' => 'shell', 'a' => 45, 'p' => 50, 'x' => 100];
-            }
-            return $r;
-        });
-        $this->assertSame(['round' => 1, 'error' => 'shots after the end'], array_intersect_key($got, ['round' => 1, 'error' => 1]));
-    }
-
-    public function testAShotOutOfRangeIsRefused(): void
-    {
-        $got = $this->play($this->sample(), function (int $k, array $r): array {
-            if ($k === 0) {
-                $r['shots'][0]['a'] = 200;
-            }
-            return $r;
-        });
-        $this->assertSame(['round' => 1, 'error' => 'out of range'], $got);
-    }
-
-    public function testATeleportIsRefused(): void
-    {
-        $got = $this->play($this->sample(), function (int $k, array $r): array {
-            if ($k === 0) {
-                $x = $r['shots'][0]['x'];
-                $r['shots'][0]['x'] = $x < 360 ? $x + 300 : $x - 300;
-            }
-            return $r;
-        });
-        $this->assertArrayHasKey('error', $got);
-    }
-
-    public function testBuyingWithoutCashIsRefused(): void
-    {
-        $got = $this->play($this->sample(), function (int $k, array $r): array {
-            if ($k === 0) {
-                array_unshift($r['buys'], ['i' => 'extralife', 'q' => 1]);
-            }
-            return $r;
-        });
-        $this->assertSame(['round' => 1, 'error' => 'bad buy'], $got);
-    }
-
-    public function testTooManyShotsAreRefusedBeforeAnyPlay(): void
-    {
-        $s = solo_deal('x', 'normal', ROOM_W);
-        $this->assertSame(['ok' => false, 'error' => 'too many shots'],
-            solo_round($s, [], array_fill(0, SOLO_MAX_SHOTS + 1, ['w' => 'shell', 'a' => 45, 'p' => 50, 'x' => 100])));
-        $this->assertSame(['ok' => false, 'error' => 'bad buys'], solo_round($s, ['i' => 'mortar'], []));
-    }
-
-    public function testAnOverRunPlaysNoMore(): void
-    {
-        $s = solo_deal('x', 'normal', ROOM_W);
-        $s['phase'] = 'over';
-        $this->assertSame(['ok' => false, 'error' => 'the run is over'], solo_round($s, [], []));
-    }
-
-    public function testTheCpuBudgetIsEnforced(): void
-    {
-        $r = $this->sample()['rounds'][0];
-        $this->assertSame(['ok' => false, 'error' => 'too slow'], solo_round(solo_deal($this->sample()['seed'], $this->sample()['difficulty'], $this->sample()['w']), $r['buys'], $r['shots'], 0.0));
-    }
-}
-```
-
-In `test.sh` change the PHPUnit line to `../../vendor/bin/phpunit -c ../../phpunit.xml --testsuite tankity --exclude-group slow`.
-
-Run (in `websites/www.cs`): `vendor/bin/phpunit --testsuite tankity --filter SoloRoundTest --exclude-group slow`
-Expected: FAIL, `Call to undefined function solo_round()`.
-
-- [ ] **Step 2: Implement**
-
-Append to `server/solo.php`:
-
-```php
-const SOLO_ROUND_CPU = 2.0;
-const SOLO_MAX_SHOTS = 200; // src/solo-log.ts ROUND_MAX_SHOTS
-const SOLO_MAX_BUYS = 60; // src/solo-log.ts ROUND_MAX_BUYS
-
-function solo_next_turn(array &$s): void
-{
-    $n = count($s['tanks']);
-    for ($k = 1; $k <= $n; $k++) {
-        $i = ($s['turn'] + $k) % $n;
-        if ($s['tanks'][$i]['hp'] > 0) {
-            $s['turn'] = $i;
-            return;
-        }
-    }
-}
-
-/* src/solo.ts soloSettle(): play on (the wind shifts, the next unit is up), or
-   the round ends: won, a life lost, or the match lost. */
-function solo_settle(array &$s): string
-{
-    // The falls are over (flight_volley stepped them out); this settles the last half pixel, as snapTanks does.
-    foreach ($s['tanks'] as &$t) {
-        if ($t['hp'] > 0) {
-            $t['y'] = flight_surf($s['terrain'], (float) $t['x']);
-            $t['vy'] = 0.0;
-        }
-    }
-    unset($t);
-    $me = $s['tanks'][0];
-    $alive = 0;
-    foreach ($s['tanks'] as $t) {
-        if ($t['hp'] > 0) {
-            $alive++;
-        }
-    }
-    if ($alive > 1 && !($me['hp'] <= 0 && ++$s['watchTurns'] >= ROOM_WATCH_TURNS)) {
-        $s['wind'] = (int) max(-12, min(12, det_round($s['wind'] + room_gauss($s['rng']) * 2)));
-        solo_next_turn($s);
-        return 'next';
-    }
-    if ($me['hp'] <= 0) {
-        $s['seats'][0]['lives']--;
-        room_carry_armor($s, 0, 0, true);
-        if ($s['seats'][0]['lives'] <= 0) {
-            $s['seats'][0]['lives'] = 0;
-            $s['phase'] = 'over';
-            return 'matchLost';
-        }
-        $s['phase'] = 'shop';
-        return 'tankLost';
-    }
-    $s['roundsWon']++;
-    $s['scores'][0] += 750 + $s['round'] * 150;
-    $s['cash'][0] += 500 + $s['round'] * 100;
-    if ($s['jammer'][0] > 0) {
-        $s['jammer'][0]--;
-    }
-    if ($s['bunker'][0] > 0) {
-        $s['bunker'][0]--;
-    }
-    room_carry_armor($s, 0, (int) $me['hp'], false);
-    $s['phase'] = 'shop';
-    return 'roundWon';
-}
-
-/* src/solo.ts soloOneUps(): a life per 3000 points up to five; past five, 500 points. */
-function solo_oneups(array &$s): void
-{
-    while ($s['scores'][0] >= $s['nextUp'][0]) {
-        $s['nextUp'][0] += 3000;
-        if ($s['seats'][0]['lives'] < 5) {
-            $s['seats'][0]['lives']++;
-        } else {
-            $s['scores'][0] += 500;
-        }
-    }
-}
-
-/* A drone's turn, as src/solo-play.ts plays one: choose, shuffle, launch. */
-function solo_drone_turn(array &$s): void
-{
-    $cur = $s['turn'];
-    $choice = room_ai_choose($s, $s['tanks'][$cur]);
-    if (isset($choice['tactic'])) {
-        $s['tactics'][$s['tanks'][$cur]['name']] = $choice['tactic'];
-    }
-    $s['tanks'][$cur]['angle'] = $choice['angle'];
-    $s['tanks'][$cur]['power'] = $choice['power'];
-    $nx = max(12.0, min($s['w'] - 12.0, $s['tanks'][$cur]['x'] + $choice['dx']));
-    if (abs($choice['dx']) > 0.5 && !room_spot_taken($s, $cur, $nx)) {
-        $s['tanks'][$cur]['x'] = $nx;
-        $s['tanks'][$cur]['y'] = flight_surf($s['terrain'], $nx);
-    }
-    $s['tanks'][$cur]['brk']['ox'] = $s['tanks'][$cur]['x'];
-    if ($choice['wkey'] !== 'shell') {
-        $s['tanks'][$cur]['ammo'][$choice['wkey']] = max(0, ($s['tanks'][$cur]['ammo'][$choice['wkey']] ?? 0) - 1);
-    }
-    flight_launch($s, $cur, $choice['wkey']);
-}
-
-/* The player's shot: drive to x (fuel pays for the distance; the spot must be
-   free), aim, launch. An error line when the move is not legal. */
-function solo_player_fire(array &$s, array $m): ?string
-{
-    $w = $m['w'] ?? null;
-    foreach (['a', 'p', 'x'] as $k) {
-        if (!isset($m[$k]) || !(is_int($m[$k]) || is_float($m[$k])) || !is_finite((float) $m[$k])) {
-            return 'bad move';
-        }
-    }
-    if (!is_string($w) || !isset(room_weapons()[$w])) {
-        return 'no such weapon';
-    }
-    $a = (float) $m['a'];
-    $p = (float) $m['p'];
-    $x = (float) $m['x'];
-    if ($a < 10 || $a > 170 || $p < 10 || $p > 100 || $x < 12 || $x > $s['w'] - 12) {
-        return 'out of range';
-    }
-    $dx = abs($x - $s['tanks'][0]['x']);
-    if ($dx > 0) {
-        if ($dx > $s['tanks'][0]['fuel'] + 1e-6) {
-            return 'not enough fuel';
-        }
-        if (room_spot_taken($s, 0, $x)) {
-            return 'blocked';
-        }
-        $s['tanks'][0]['fuel'] = max(0.0, $s['tanks'][0]['fuel'] - $dx);
-        $s['tanks'][0]['x'] = $x;
-        $s['tanks'][0]['y'] = flight_surf($s['terrain'], $x);
-    }
-    $have = $s['ammo'][0][$w] ?? 0;
-    if ($w !== 'shell') {
-        if ($have <= 0) {
-            return 'none left';
-        }
-        $s['ammo'][0][$w] = $have - 1;
-    }
-    $s['tanks'][0]['angle'] = $a;
-    $s['tanks'][0]['power'] = $p;
-    flight_launch($s, 0, $w);
-    return null;
-}
-
-function solo_cpu_now(): float
-{
-    $u = getrusage();
-    return $u['ru_utime.tv_sec'] + $u['ru_utime.tv_usec'] / 1e6 + $u['ru_stime.tv_sec'] + $u['ru_stime.tv_usec'] / 1e6;
-}
-
-/* How a round ended, in src/solo-log.ts RoundClaim's shape. */
-function solo_claim(array $s, string $end): array
-{
-    return ['end' => $end, 'score' => (int) $s['scores'][0], 'cash' => (int) $s['cash'][0],
-        'lives' => (int) $s['seats'][0]['lives'], 'roundsWon' => (int) $s['roundsWon']];
-}
-
-/* Plays one round of a run from its stored state (the shop before it): the
-   round's purchases, the muster, then turns until the round ends, the
-   player's turns taking the round's shots in order. src/solo-play.ts
-   soloRound() is the same, refusal for refusal. At most $cpuBudget seconds of
-   CPU, SOLO_MAX_SHOTS shots and SOLO_MAX_BUYS purchases. */
-function solo_round(array $s, mixed $buys, mixed $shots, float $cpuBudget = SOLO_ROUND_CPU): array
-{
-    $no = fn(string $why): array => ['ok' => false, 'error' => $why];
-    if (($s['phase'] ?? '') !== 'shop') {
-        return $no('the run is over');
-    }
-    if (!is_array($buys) || !array_is_list($buys) || count($buys) > SOLO_MAX_BUYS) {
-        return $no('bad buys');
-    }
-    if (!is_array($shots) || !array_is_list($shots) || count($shots) > SOLO_MAX_SHOTS) {
-        return $no('too many shots');
-    }
-    $t0 = solo_cpu_now();
-    foreach ($buys as $b) {
-        $q = is_array($b) ? ($b['q'] ?? null) : null;
-        if (!is_array($b) || !is_string($b['i'] ?? null) || !is_int($q) || room_buy($s, 0, $b['i'], $q) !== null) {
-            return $no('bad buy');
-        }
-        solo_oneups($s);
-    }
-    $s['round']++;
-    solo_muster($s);
-    $i = 0;
-    $n = count($shots);
-    for (;;) {
-        if (solo_cpu_now() - $t0 > $cpuBudget) {
-            return $no('too slow');
-        }
-        if ($s['turn'] === 0) {
-            if ($i >= $n) {
-                return $no('unfinished');
-            }
-            $m = $shots[$i++];
-            $err = is_array($m) ? solo_player_fire($s, $m) : 'bad move';
-            if ($err !== null) {
-                return $no($err);
-            }
-        } else {
-            solo_drone_turn($s);
-        }
-        flight_volley($s);
-        solo_oneups($s);
-        $end = solo_settle($s);
-        if ($end === 'next') {
-            continue;
-        }
-        if ($end !== 'matchLost') {
-            solo_oneups($s);
-        }
-        if ($i !== $n) {
-            return $no('shots after the end');
-        }
-        return ['ok' => true, 's' => $s, 'claim' => solo_claim($s, $end)];
-    }
-}
-```
-
-- [ ] **Step 3: Run**
-
-Run (in `websites/www.cs`): `vendor/bin/phpunit --testsuite tankity --exclude-group slow`
-Expected: PASS. A run that disagrees names its round and both claims: play that round in node with `soloRound` and in PHP with `solo_round` from the same state, dump the state after each volley, and fix the side that departs from `src/solo.ts`; add the case that found it to the sim vectors.
-
-- [ ] **Step 4: The bench, and the hot loop trimmed bit for bit**
-
-```php
-<?php
-// games/tankity/tools/round-bench.php
-// CPU per round of every recorded solo run (protocol/solo-runs.json), with no
-// budget cap. Exit 1 when any round needs more than SOLO_ROUND_CPU: an honest
-// round must always play.
-//   php -d xdebug.mode=off tools/round-bench.php
-declare(strict_types=1);
-define('TANKITY_ROOMS_LIB', true);
-require __DIR__ . '/../rooms.php';
-
-$runs = json_decode((string) file_get_contents(__DIR__ . '/../protocol/solo-runs.json'), true)['runs'];
-$over = 0;
-foreach ($runs as $r) {
-    $s = solo_deal($r['seed'], $r['difficulty'], $r['w']);
-    $worst = 0.0;
-    $total = 0.0;
-    foreach ($r['rounds'] as $round) {
-        $t0 = solo_cpu_now();
-        $got = solo_round($s, $round['buys'], $round['shots'], 1e9);
-        $cpu = solo_cpu_now() - $t0;
-        $worst = max($worst, $cpu);
-        $total += $cpu;
-        if (!$got['ok']) {
-            printf("%-14s round %d REFUSED %s\n", $r['name'], $round['n'], $got['error']);
-            $over++;
-            break;
-        }
-        $s = $got['s'];
-    }
-    printf("%-14s %3d rounds  worst %5.3f s  total %6.2f s\n", $r['name'], count($r['rounds']), $worst, $total);
-    if ($worst > SOLO_ROUND_CPU) {
-        $over++;
-    }
-}
-exit($over ? 1 : 0);
-```
-
-Run (in `games/tankity`): `php -d xdebug.mode=off tools/round-bench.php`
-Expected: every run's worst round well under a second; record the numbers in the PR description.
-
-The drones' aim search calls `room_sim_shot` some 300 times per gun per turn. In `room_sim_shot()` hoist the per-step constants (the products are formed in the same order, so every value is identical):
-
-```php
-    $windStep = $wind * ROOM_TURN_WIND * $dt;
-    $gravStep = $grav * $dt;
-    $roller = ($weapons[$wkey]['effect'] ?? 'shot') === 'roller';
-    for ($i = 0; $i < 720; $i++) {
-        $vx += $windStep;
-        $vy += $gravStep;
-        $x += $vx * $dt;
-        $y += $vy * $dt;
-        if ($x < 0 || $x >= $w || $y >= 500) {
-            return ['x' => $x, 'y' => $y, 'oob' => true];
-        }
-        $xi = $x < 0.5 ? 0 : ($x >= $w - 0.5 ? $w - 1 : (int) round($x));
-        if ($i >= 6 && $y >= $terrain[$xi]) { // the real flight ignores ground for its first 0.1 s
-            if ($roller) {
-                [$rx, $ry] = room_roll_out($terrain, $x, $vx, $vy, $weapons[$wkey]);
-                return ['x' => $rx, 'y' => $ry, 'oob' => false];
-            }
-            return ['x' => $x, 'y' => $y, 'oob' => false];
-        }
-    }
-```
-
-and in `room_fly_arc()` likewise `$windStep = $room['wind'] * ROOM_TURN_WIND * $dt; $gravStep = $grav * $dt;` before the loop, using them in `$vx += $windStep; $vy += $gravStep;` (the seeker push stays inside the loop, before them, as now).
-
-Run (in `games/tankity`): `php protocol/sim-vectors.php --check && php -d xdebug.mode=off tools/round-bench.php` and (in `websites/www.cs`) `vendor/bin/phpunit --testsuite tankity --group slow`
-Expected: vectors current (bit-identical), every recorded round still plays, and lower CPU numbers.
-
-If a round still needs more than `SOLO_ROUND_CPU` on this machine, stop before Task 31 and report the numbers: the budget or the shot cap is wrong for honest play, and William decides which moves.
-
-- [ ] **Step 5: Nightly**
-
-In `.github/workflows/ci.yml`'s scheduled job, after the full e2e run, add:
-
-```yaml
-      - name: Tankity long solo runs and the per-round CPU bench (slow)
-        working-directory: websites/www.cs
-        run: |
-          vendor/bin/phpunit --testsuite tankity --group slow
-          (cd games/tankity && php -d xdebug.mode=off tools/round-bench.php)
-```
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add games/tankity/server/solo.php games/tankity/server/sim.php games/tankity/test/php/SoloRoundTest.php games/tankity/tools/round-bench.php games/tankity/test.sh .github/workflows/ci.yml
-git commit -F- <<'MSG'
-Tankity: the server plays a solo round from its stored state; CPU bounded per round
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
-MSG
-```
-
-### Task 31: The score endpoint on the guard: start a run, play its rounds, file it
-
-**Files:**
-- Create: `games/tankity/server/scores-api.php`
-- Modify: `games/tankity/server/db.php` (schema step 3: `solo_runs`)
-- Modify: `games/tankity/server/housekeep.php` (`tankity_jobs`: the `solo` job)
-- Modify: `games/tankity/scores.php` (thin bootstrap)
-- Create: `games/tankity/test/php/ScoresApiTest.php`
-
-**Interfaces:**
-- Consumes: Plan C's `Kit\ScoreGuard` (`csrfToken`, `originAllowed`, `csrfOk`, `startRun`, `consumeRun`, `rateTake`), Task 10's `tankity_guard()`, `tankity_initials()`, `board_level`, `board_file`, `board_top`; Task 28's `solo_deal`; Task 30's `solo_round`; PR 20's `tankity_db`, `tankity_tx`, `tankity_housekeep`.
-- Produces: `SCORES_MAX_BODY = 262144`; `SOLO_RUN_IDLE = 7200`, `SOLO_RUN_MAX_AGE = 86400`, `SOLO_RUN_FILED_KEEP = 3600`, `SOLO_MAX_LIVE_RUNS = 1000`, `SOLO_ROUNDS_PER_HOUR = 240`; schema step 3 `solo_runs (id TEXT PRIMARY KEY, difficulty, seed, created, touched, round, status ('live' | 'over' | 'void' | 'filed'), state BLOB, reply TEXT)`; `solo_runs_expire(int $now, int $limit = 100): int`; `tankity_scores_handle(string $method, array $query, string $raw, Kit\ScoreGuard $guard, int $now): array` → `[int status, array payload]`. Wire:
-  - GET `?difficulty=` → `{ difficulty, scores, keep, csrf }`.
-  - POST (JSON, allowed origin, CSRF header) `{op:'start', seed, difficulty, w}` → `{ ok, run }`; 422 seed, difficulty or width (`w` must be an integer `room_field_width` accepts; the run's state records it and every round is played at it); 429 `'rate'`; 503 `'busy'` at `SOLO_MAX_LIVE_RUNS`.
-  - `{op:'round', run, n, buys, shots, claim}` → `{ ok, n, end, score, cash, lives, roundsWon }` (the server's claim); a round already played answers its stored reply again; 409 `{ error: 'out of order', round }`; 422 `{ error: 'void', why }` and the run is void from then on (a refused round, or a claim that is not the server's: `why: 'mismatch'`, with `server` holding the server's claim); 409 `'void'` for a void run; 410 `'expired'`; 404 `'no such run'`; 429 `'rate'`.
-  - `{op:'file', run, initials}` → `{ ok, score, roundsWon, rank, difficulty }`; 409 `'the run is not over'` / `'void'`; 400 `'invalid run'` (a token spent or expired); 422 initials; 410; 404; 429.
-  - 403 `'forbidden'`, 413 `'too large'`, 400 `'invalid json'`.
-
-- [ ] **Step 1: Failing test**
-
-```php
-<?php
-// games/tankity/test/php/ScoresApiTest.php
-declare(strict_types=1);
-
-use Kit\ScoreGuard;
-use PHPUnit\Framework\TestCase;
-
-/* scores.php's handler: every guard rule, the server playing each round from
-   the stored state, and filing what the server already holds. */
-final class ScoresApiTest extends TestCase
-{
-    private string $dir;
-    private array $override;
-    private int $now;
-    private const TOKEN = '0123456789abcdef0123456789abcdef';
-
-    public static function setUpBeforeClass(): void
-    {
-        require_once __DIR__ . '/rooms-lib.php';
-        require_once dirname(__DIR__, 2) . '/server/scores-api.php';
-    }
-
-    protected function setUp(): void
-    {
-        $this->dir = tankity_test_dir();
-        $this->override = ['startsPerHour' => 3];
-        $this->now = 1_800_000_000;
-        $_SERVER = ['HTTP_HOST' => 'localhost', 'HTTP_ORIGIN' => 'http://localhost', 'CONTENT_TYPE' => 'application/json',
-            'REMOTE_ADDR' => '203.0.113.' . random_int(1, 254), 'HTTP_X_TANKITY_CSRF' => self::TOKEN, 'SCRIPT_NAME' => '/games/tankity/scores.php'];
-        $_COOKIE = ['tankity_csrf' => self::TOKEN];
-    }
-
-    protected function tearDown(): void
-    {
-        tankity_test_rm($this->dir);
-    }
-
-    /** The guard for this test's request, on the test's clock; it sets no real cookie. */
-    private function guard(): ScoreGuard
-    {
-        return tankity_guard($this->override, $_SERVER, $_COOKIE, fn(): int => $this->now, function (): void {});
-    }
-
-    private function post(array $body): array
-    {
-        return tankity_scores_handle('POST', [], (string) json_encode($body), $this->guard(), $this->now);
-    }
-
-    private function recorded(): array
-    {
-        $all = json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/protocol/solo-runs.json'), true)['runs'];
-        foreach ($all as $r) {
-            if (count($r['rounds']) <= 8) {
-                return $r;
-            }
-        }
-        $this->fail('no short recorded run');
-    }
-
-    private function start(array $run): string
-    {
-        [$status, $out] = $this->post(['op' => 'start', 'seed' => $run['seed'], 'difficulty' => $run['difficulty'], 'w' => $run['w']]);
-        $this->assertSame(200, $status, json_encode($out));
-        return $out['run'];
-    }
-
-    private function round(string $id, array $r): array
-    {
-        return $this->post(['op' => 'round', 'run' => $id] + $r);
-    }
-
-    /** Starts the run and sends every round; answers its id. */
-    private function playAll(array $run): string
-    {
-        $id = $this->start($run);
-        foreach ($run['rounds'] as $r) {
-            $this->now += 30;
-            [$status, $out] = $this->round($id, $r);
-            $this->assertSame(200, $status, json_encode($out));
-            $this->assertSame($r['claim'], array_intersect_key($out, $r['claim']));
-        }
-        return $id;
-    }
-
-    public function testGetGivesTheBoardOfTheAskedDifficultyAndTheToken(): void
-    {
-        board_file(['difficulty' => 'hard', 'initials' => 'HRD', 'score' => 5, 'rounds' => 1, 'seed' => 's']);
-        [$status, $out] = tankity_scores_handle('GET', ['difficulty' => 'hard'], '', $this->guard(), $this->now);
-        $this->assertSame(200, $status);
-        $this->assertSame(self::TOKEN, $out['csrf']);
-        $this->assertSame(['hard', ['HRD']], [$out['difficulty'], array_column($out['scores'], 'initials')]);
-        $this->assertSame([], tankity_scores_handle('GET', [], '', $this->guard(), $this->now)[1]['scores'], 'Normal by default');
-        $this->assertSame(422, tankity_scores_handle('GET', ['difficulty' => 'brutal'], '', $this->guard(), $this->now)[0]);
-    }
-
-    public function testABadOriginIsForbidden(): void
-    {
-        $_SERVER['HTTP_ORIGIN'] = 'https://evil.example';
-        $this->assertSame(403, $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720])[0]);
-    }
-
-    public function testAMissingCsrfHeaderIsForbidden(): void
-    {
-        unset($_SERVER['HTTP_X_TANKITY_CSRF']);
-        $this->assertSame(403, $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720])[0]);
-    }
-
-    public function testAMismatchedCsrfIsForbidden(): void
-    {
-        $_SERVER['HTTP_X_TANKITY_CSRF'] = 'ffffffffffffffffffffffffffffffff';
-        $this->assertSame(403, $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720])[0]);
-    }
-
-    public function testStartsAreRateLimitedAndChecked(): void
-    {
-        $this->assertSame(422, $this->post(['op' => 'start', 'seed' => "h\u{e9}llo", 'difficulty' => 'normal', 'w' => 720])[0]);
-        $this->assertSame(422, $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'brutal', 'w' => 720])[0]);
-        foreach ([null, 700, 1464, 1201, 1200.0, '1200'] as $w) {
-            $this->assertSame(422, $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => $w])[0], var_export($w, true));
-        }
-        for ($i = 0; $i < 3; $i++) {
-            $this->assertSame(200, $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => [720, 1200, 1440][$i]])[0]);
-        }
-        $this->assertSame([429, ['error' => 'rate']], $this->post(['op' => 'start', 'seed' => 's', 'difficulty' => 'normal', 'w' => 720]));
-    }
-
-    public function testAnHonestRunFilesAtExactlyTheScoreTheBrowserShowed(): void
-    {
-        $run = $this->recorded();
-        $id = $this->playAll($run);
-        [$status, $out] = $this->post(['op' => 'file', 'run' => $id, 'initials' => 'abc']);
-        $this->assertSame(200, $status, json_encode($out));
-        $this->assertSame([$run['score'], $run['roundsWon'], 1, $run['difficulty']], [$out['score'], $out['roundsWon'], $out['rank'], $out['difficulty']]);
-        $top = board_top($run['difficulty'], 1)[0];
-        $this->assertSame(['ABC', $run['score'], $run['roundsWon'], $run['seed']], [$top['initials'], $top['score'], $top['rounds'], $top['seed']]);
-    }
-
-    public function testAForgedScoreFieldIsIgnored(): void
-    {
-        $run = $this->recorded();
-        $id = $this->playAll($run);
-        [, $out] = $this->post(['op' => 'file', 'run' => $id, 'initials' => 'ABC', 'score' => 999999]);
-        $this->assertSame($run['score'], $out['score']);
-        $this->assertSame($run['score'], board_top($run['difficulty'], 1)[0]['score']);
-    }
-
-    public function testALyingClaimVoidsTheRun(): void
-    {
-        $run = $this->recorded();
-        $id = $this->start($run);
-        $r = $run['rounds'][0];
-        $r['claim']['score'] += 500;
-        [$status, $out] = $this->round($id, $r);
-        $this->assertSame(422, $status);
-        $this->assertSame(['void', 'mismatch'], [$out['error'], $out['why']]);
-        $this->assertSame($run['rounds'][0]['claim'], $out['server']);
-        $this->assertSame([409, ['error' => 'void']], $this->round($id, $run['rounds'][0]), 'nothing later can match');
-        $this->assertSame(409, $this->post(['op' => 'file', 'run' => $id, 'initials' => 'ABC'])[0]);
-        $this->assertSame([], board_top($run['difficulty'], 5));
-    }
-
-    public function testATamperedRoundVoidsTheRun(): void
-    {
-        $run = $this->recorded();
-        $id = $this->start($run);
-        $r = $run['rounds'][0];
-        $r['shots'][0]['a'] = 200;
-        $this->assertSame([422, ['error' => 'void', 'why' => 'out of range']], $this->round($id, $r));
-    }
-
-    public function testARoundSentTwiceIsPlayedOnce(): void
-    {
-        $run = $this->recorded();
-        $id = $this->start($run);
-        $first = $this->round($id, $run['rounds'][0]);
-        $this->assertSame($first, $this->round($id, $run['rounds'][0]));
-        $row = tankity_db()->query('SELECT round FROM solo_runs')->fetchColumn();
-        $this->assertSame(1, (int) $row);
-    }
-
-    public function testARoundOutOfOrderIsRefused(): void
-    {
-        $run = $this->recorded();
-        if (count($run['rounds']) < 2) {
-            $this->markTestSkipped('the short run has one round');
-        }
-        $id = $this->start($run);
-        $this->assertSame([409, ['error' => 'out of order', 'round' => 0]], $this->round($id, $run['rounds'][1]));
-    }
-
-    public function testARunFilesOnceAndOnlyWhenOver(): void
-    {
-        $run = $this->recorded();
-        $id = $this->start($run);
-        $this->assertSame([409, ['error' => 'the run is not over']], $this->post(['op' => 'file', 'run' => $id, 'initials' => 'ABC']));
-        foreach ($run['rounds'] as $r) {
-            $this->round($id, $r);
-        }
-        $this->assertSame(200, $this->post(['op' => 'file', 'run' => $id, 'initials' => 'ABC'])[0]);
-        $this->assertSame(400, $this->post(['op' => 'file', 'run' => $id, 'initials' => 'ABC'])[0]);
-        $this->assertCount(1, board_top($run['difficulty'], 5));
-    }
-
-    public function testARunGoneQuietExpires(): void
-    {
-        $run = $this->recorded();
-        $id = $this->start($run);
-        $this->now += SOLO_RUN_IDLE + 1;
-        $this->assertSame([410, ['error' => 'expired']], $this->round($id, $run['rounds'][0]));
-        $this->assertSame(1, solo_runs_expire($this->now));
-        $this->assertSame([404, ['error' => 'no such run']], $this->round($id, $run['rounds'][0]));
-    }
-
-    public function testRoundsAreRateLimited(): void
-    {
-        $run = $this->recorded();
-        $id = $this->start($run);
-        $guard = $this->guard();
-        for ($i = 0; $i < SOLO_ROUNDS_PER_HOUR; $i++) {
-            $guard->rateTake('round', SOLO_ROUNDS_PER_HOUR);
-        }
-        $this->assertSame([429, ['error' => 'rate']], $this->round($id, $run['rounds'][0]));
-    }
-
-    public function testBadInitialsAreRefused(): void
-    {
-        $run = $this->recorded();
-        $id = $this->playAll($run);
-        foreach (['AB', 'A1C', 'ass', ''] as $bad) {
-            $this->assertSame(422, $this->post(['op' => 'file', 'run' => $id, 'initials' => $bad])[0], $bad);
-        }
-    }
-}
-```
-
-Run (in `websites/www.cs`): `vendor/bin/phpunit --testsuite tankity --filter ScoresApiTest`
-Expected: FAIL, `scores-api.php` missing.
-
-- [ ] **Step 2: The runs table, and the handler**
-
-`server/db.php`, step 3 in `tankity_schema_steps()`:
-
-```php
-        3 => [
-            'CREATE TABLE solo_runs (id TEXT PRIMARY KEY, difficulty TEXT NOT NULL, seed TEXT NOT NULL, created INTEGER NOT NULL,
-                touched INTEGER NOT NULL, round INTEGER NOT NULL, status TEXT NOT NULL, state BLOB NOT NULL, reply TEXT NOT NULL)',
-            'CREATE INDEX solo_runs_touched ON solo_runs (touched)',
-        ],
-```
-
-(its comment's last sentence becomes `… Step 2 is the boards, step 3 the solo runs.`)
-
-```php
-<?php
-// games/tankity/server/scores-api.php
-// Operation Tankity's score endpoint. GET answers a difficulty's board and a
-// CSRF token. POST {op: start} opens a solo run on a single-use guard token;
-// {op: round} has the server play the round from the run's stored state and
-// keep the result; {op: file} files the score the server already holds. The
-// client never sends a score that counts. Loaded by scores.php; serves nothing.
-declare(strict_types=1);
-if (count(get_included_files()) === 1) {
-    http_response_code(404);
-    exit;
-}
-
-use Kit\ScoreGuard;
-
-const SCORES_MAX_BODY = 262144;
-const SOLO_RUN_IDLE = 7200; // a run expires two hours after its last accepted round
-const SOLO_RUN_MAX_AGE = 86400; // and a day after it started, at the latest
-const SOLO_RUN_FILED_KEEP = 3600; // a filed run's row answers a repeated request this long
-const SOLO_MAX_LIVE_RUNS = 1000;
-const SOLO_ROUNDS_PER_HOUR = 240; // per client; an honest round takes far longer than 15 s
-
-function solo_run_row(PDO $db, string $id): ?array
-{
-    $q = $db->prepare('SELECT * FROM solo_runs WHERE id = ?');
-    $q->execute([$id]);
-    $row = $q->fetch(PDO::FETCH_ASSOC);
-    return is_array($row) ? $row : null;
-}
-
-function solo_run_expired(array $row, int $now): bool
-{
-    return $row['status'] !== 'filed' && ($now - (int) $row['touched'] > SOLO_RUN_IDLE || $now - (int) $row['created'] > SOLO_RUN_MAX_AGE);
-}
-
-/* Deletes expired runs and filed runs past their keep, at most $limit. */
-function solo_runs_expire(int $now, int $limit = 100): int
-{
-    return tankity_tx(tankity_db(), function (PDO $db) use ($now, $limit): int {
-        $q = $db->prepare("DELETE FROM solo_runs WHERE id IN (SELECT id FROM solo_runs WHERE
-            (status <> 'filed' AND (touched < ? OR created < ?)) OR (status = 'filed' AND touched < ?) LIMIT ?)");
-        $q->execute([$now - SOLO_RUN_IDLE, $now - SOLO_RUN_MAX_AGE, $now - SOLO_RUN_FILED_KEEP, $limit]);
-        return $q->rowCount();
-    });
-}
-
-function solo_run_void(string $id, int $now): void
-{
-    tankity_tx(tankity_db(), fn(PDO $db) => $db->prepare("UPDATE solo_runs SET status = 'void', touched = ? WHERE id = ?")->execute([$now, $id]));
-}
-
-function solo_is_claim(mixed $c): bool
-{
-    return is_array($c) && in_array($c['end'] ?? null, ['roundWon', 'tankLost', 'matchLost'], true)
-        && is_int($c['score'] ?? null) && is_int($c['cash'] ?? null) && is_int($c['lives'] ?? null) && is_int($c['roundsWon'] ?? null);
-}
-
-function tankity_scores_start(array $in, ScoreGuard $guard, int $now): array
-{
-    $seed = $in['seed'] ?? null;
-    $level = board_level($in['difficulty'] ?? null);
-    $w = room_field_width($in['w'] ?? null);
-    if (!is_string($seed) || !preg_match('/^[\x20-\x7e]{1,64}$/', $seed) || $level === null || $w === null) {
-        return [422, ['error' => 'a printable seed, a difficulty (easy, normal, hard) and a field width (720 to 1440, a multiple of 24)']];
-    }
-    $live = (int) tankity_db()->query("SELECT COUNT(*) FROM solo_runs WHERE status IN ('live', 'over')")->fetchColumn();
-    if ($live >= SOLO_MAX_LIVE_RUNS) {
-        return [503, ['error' => 'busy']];
-    }
-    $id = $guard->startRun();
-    if ($id === null) {
-        return [429, ['error' => 'rate']];
-    }
-    $q = tankity_db()->prepare("INSERT INTO solo_runs (id, difficulty, seed, created, touched, round, status, state, reply) VALUES (?, ?, ?, ?, ?, 0, 'live', ?, '')");
-    $q->bindValue(1, $id);
-    $q->bindValue(2, $level);
-    $q->bindValue(3, $seed);
-    $q->bindValue(4, $now, PDO::PARAM_INT);
-    $q->bindValue(5, $now, PDO::PARAM_INT);
-    $q->bindValue(6, serialize(solo_deal($seed, $level, $w)), PDO::PARAM_LOB); // the state records the width
-    $q->execute();
-    return [200, ['ok' => true, 'run' => $id]];
-}
-
-/* One round: the server plays it from the stored state (outside the write
-   lock: it can take up to SOLO_ROUND_CPU), then stores the result unless
-   another request stored this round first. The client's claim must be the
-   server's own, or the run is void. */
-function tankity_scores_round(array $in, ScoreGuard $guard, int $now): array
-{
-    $id = (string) ($in['run'] ?? '');
-    $n = $in['n'] ?? null;
-    if (!is_int($n) || $n < 1 || !solo_is_claim($in['claim'] ?? null)) {
-        return [400, ['error' => 'invalid json']];
-    }
-    if (!$guard->rateTake('round', SOLO_ROUNDS_PER_HOUR)) {
-        return [429, ['error' => 'rate']];
-    }
-    $row = solo_run_row(tankity_db(), $id);
-    if ($row === null) {
-        return [404, ['error' => 'no such run']];
-    }
-    if (solo_run_expired($row, $now)) {
-        return [410, ['error' => 'expired']];
-    }
-    if ($row['status'] === 'void') {
-        return [409, ['error' => 'void']];
-    }
-    if ((int) $row['round'] === $n && $row['reply'] !== '') {
-        return [200, json_decode($row['reply'], true)];
-    }
-    if ($row['status'] !== 'live' || (int) $row['round'] !== $n - 1) {
-        return [409, ['error' => 'out of order', 'round' => (int) $row['round']]];
-    }
-    $state = unserialize((string) $row['state'], ['allowed_classes' => false]);
-    $got = solo_round(is_array($state) ? $state : [], $in['buys'] ?? null, $in['shots'] ?? null);
-    if (!$got['ok']) {
-        solo_run_void($id, $now);
-        return [422, ['error' => 'void', 'why' => $got['error']]];
-    }
-    if ($got['claim'] !== $in['claim']) {
-        solo_run_void($id, $now);
-        return [422, ['error' => 'void', 'why' => 'mismatch', 'server' => $got['claim']]];
-    }
-    $reply = ['ok' => true, 'n' => $n] + $got['claim'];
-    return tankity_tx(tankity_db(), function (PDO $db) use ($id, $n, $got, $reply, $now): array {
-        $row = solo_run_row($db, $id);
-        if ($row === null || $row['status'] !== 'live' || (int) $row['round'] !== $n - 1) {
-            // Another request stored this round (or the run moved on) while this one played it.
-            return $row !== null && (int) $row['round'] === $n && $row['reply'] !== ''
-                ? [200, json_decode($row['reply'], true)] : [409, ['error' => 'out of order', 'round' => (int) ($row['round'] ?? 0)]];
-        }
-        $q = $db->prepare('UPDATE solo_runs SET state = ?, round = ?, status = ?, touched = ?, reply = ? WHERE id = ?');
-        $q->bindValue(1, serialize($got['s']), PDO::PARAM_LOB);
-        $q->bindValue(2, $n, PDO::PARAM_INT);
-        $q->bindValue(3, $got['claim']['end'] === 'matchLost' ? 'over' : 'live');
-        $q->bindValue(4, $now, PDO::PARAM_INT);
-        $q->bindValue(5, (string) json_encode($reply, JSON_UNESCAPED_SLASHES));
-        $q->bindValue(6, $id);
-        $q->execute();
-        return [200, $reply];
-    });
-}
-
-function tankity_scores_file(array $in, ScoreGuard $guard, int $now): array
-{
-    $id = (string) ($in['run'] ?? '');
-    $initials = tankity_initials($guard, $in['initials'] ?? null);
-    if ($initials === null) {
-        return [422, ['error' => 'initials must be 3 letters, kept clean']];
-    }
-    $row = solo_run_row(tankity_db(), $id);
-    if ($row === null) {
-        return [404, ['error' => 'no such run']];
-    }
-    if (solo_run_expired($row, $now)) {
-        return [410, ['error' => 'expired']];
-    }
-    if ($row['status'] === 'void') {
-        return [409, ['error' => 'void']];
-    }
-    if ($row['status'] === 'live') {
-        return [409, ['error' => 'the run is not over']];
-    }
-    $problem = $guard->consumeRun($id);
-    if ($problem === 'rate') {
-        return [429, ['error' => 'rate']];
-    }
-    if ($problem !== null) {
-        return [400, ['error' => $problem]];
-    }
-    return tankity_tx(tankity_db(), function (PDO $db) use ($id, $initials, $now): array {
-        $row = solo_run_row($db, $id);
-        if ($row === null || $row['status'] !== 'over') {
-            return [409, ['error' => 'the run is not over']];
-        }
-        $s = unserialize((string) $row['state'], ['allowed_classes' => false]);
-        $score = (int) $s['scores'][0];
-        $won = (int) $s['roundsWon'];
-        $rank = board_file(['difficulty' => $row['difficulty'], 'initials' => $initials, 'score' => $score, 'rounds' => $won, 'seed' => $row['seed']]);
-        $db->prepare("UPDATE solo_runs SET status = 'filed', touched = ? WHERE id = ?")->execute([$now, $id]);
-        return [200, ['ok' => true, 'score' => $score, 'roundsWon' => $won, 'rank' => $rank, 'difficulty' => $row['difficulty']]];
-    });
-}
-
-function tankity_scores_handle(string $method, array $query, string $raw, ScoreGuard $guard, int $now): array
-{
-    if ($method === 'GET') {
-        $level = board_level($query['difficulty'] ?? 'normal');
-        if ($level === null) {
-            return [422, ['error' => 'no such board']];
-        }
-        return [200, ['difficulty' => $level, 'scores' => board_top($level, BOARD_SHOW), 'keep' => BOARD_KEEP, 'csrf' => $guard->csrfToken()]];
-    }
-    if ($method !== 'POST') {
-        return [405, ['error' => 'method not allowed']];
-    }
-    $type = (string) ($_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '');
-    if (stripos($type, 'application/json') === false || !$guard->originAllowed() || !$guard->csrfOk()) {
-        return [403, ['error' => 'forbidden']];
-    }
-    if (strlen($raw) > SCORES_MAX_BODY) {
-        return [413, ['error' => 'too large']];
-    }
-    $in = json_decode($raw, true);
-    if (!is_array($in)) {
-        return [400, ['error' => 'invalid json']];
-    }
-    return match ($in['op'] ?? '') {
-        'start' => tankity_scores_start($in, $guard, $now),
-        'round' => tankity_scores_round($in, $guard, $now),
-        'file' => tankity_scores_file($in, $guard, $now),
-        default => [400, ['error' => 'invalid json']],
-    };
-}
-```
-
-A forged `score` field in a `file` request is never read: the score comes from the stored state.
-
-`server/housekeep.php` `tankity_jobs()`: add `if (function_exists('solo_runs_expire')) { $jobs['solo'] = fn(int $now): int => solo_runs_expire($now); }` and name it in the comment (`…, expired solo runs where the score endpoint is loaded`).
-
-Replace `scores.php`'s body after `require_once __DIR__ . '/config.php';` with:
-
-```php
-// The sim, the guard, the boards and housekeeping come with the room library; no room is served.
-define('TANKITY_ROOMS_LIB', true);
-require_once __DIR__ . '/rooms.php';
-require_once __DIR__ . '/server/scores-api.php';
-
-try {
-    tankity_housekeep(time(), tankity_jobs());
-    [$status, $payload] = tankity_scores_handle($_SERVER['REQUEST_METHOD'] ?? 'GET', $_GET,
-        (string) file_get_contents('php://input'), tankity_guard(), time());
-} catch (Throwable $e) {
-    error_log('tankity scores.php: ' . $e->getMessage());
-    [$status, $payload] = tankity_busy($e) ? [503, ['error' => 'busy']] : [500, ['error' => 'store unavailable']];
-}
-http_response_code($status);
-header('Content-Type: application/json');
-header('Cache-Control: no-store');
-echo json_encode($payload, JSON_UNESCAPED_SLASHES);
-```
-
-(and its header comment: "Operation Tankity: the score endpoint. The work is server/scores-api.php; this answers the request."; the `json_out` function and the Task 19 body go).
-
-- [ ] **Step 3: Run**
-
-Run (in `websites/www.cs`): `vendor/bin/phpunit --testsuite tankity --exclude-group slow`
-Expected: PASS, 15 `ScoresApiTest` cases (one may skip when the short recorded run has a single round); `DbTest` sees schema version 3.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add games/tankity/server games/tankity/scores.php games/tankity/test/php/ScoresApiTest.php
-git commit -F- <<'MSG'
-Tankity scores: the guard first; the server plays each round and files what it holds
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
-MSG
-```
+Replaced by Task R1: `scores.php` is a read of the online board and answers every POST with 410.
 
 ### Task 32: Sending a run's rounds and filing it, with the offline queue
 
-**Files:**
-- Create: `games/tankity/src/solo-file.ts`
-- Create: `games/tankity/test/solo-file.test.mjs`
-- Modify: `games/tankity/tsconfig.json`
+Removed: nothing is sent, so there is no queue. Task R4 deletes `src/solo-file.ts`; Task R5b saves on the local board.
 
-**Interfaces:**
-- Consumes: kit `prefs.ts` (`pref`, `json`), `StorageLike`; Task 25 `isRoundLog`, `SoloRoundLog`; the difficulty PR's `isDifficulty`.
-- Produces: `interface PendingRun { id: string; seed: string; difficulty: Difficulty; w: number; run: string | null; rounds: SoloRoundLog[]; initials: string | null; tries: number }` (`rounds` holds only those not yet taken; `initials` is set when the match ends); `type FileOutcome = { id: string; kind: 'filed'; score: number; rank: number | null; difficulty: Difficulty } | { id: string; kind: 'refused'; why: string } | { id: string; kind: 'waiting' }`; `interface FilerEnv { fetch(url: string, init?: FetchLike): Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>; storage: StorageLike | null }`; `PENDING_KEY = 'tankity-pending-runs'`, `PENDING_MAX = 3`, `MAX_TRIES = 5`; `createFiler(env: FilerEnv): { begin(id: string, seed: string, difficulty: Difficulty, w: number): void; round(id: string, log: SoloRoundLog): void; finish(id: string, initials: string): void; flush(): Promise<FileOutcome[]>; waiting(): number }`. `flush` answers an outcome for every run it reached a verdict on (a run still being played whose rounds all went through answers nothing).
+### Task 33: The page sends each round as it ends
 
-- [ ] **Step 1: Failing test**
-
-```js
-// games/tankity/test/solo-file.test.mjs
-// Sending a solo run (src/solo-file.ts): GET for the CSRF token, start, every
-// round in order, then file; offline runs wait in storage and go on later; a
-// voided or expired run is dropped.
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { memoryStorage } from '../../_kit/test/record.ts';
-import { createFiler, PENDING_KEY, MAX_TRIES } from '../src/solo-file.ts';
-
-const claim = end => ({ end, score: 100, cash: 700, lives: end === 'matchLost' ? 0 : 3, roundsWon: 0 });
-const round = (n, end = 'tankLost') => ({ n, buys: [], shots: [{ w: 'shell', a: 45, p: 50, x: 100 }], claim: claim(end) });
-const reply = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
-
-/** A score server; `answer(op, body)` may override a reply. */
-function server(answer = () => null) {
-  const calls = [];
-  const fetch = async (url, init = {}) => {
-    const body = init.body ? JSON.parse(init.body) : null;
-    calls.push({ method: init.method || 'GET', op: body && body.op, n: body && body.n, w: body && body.w, csrf: init.headers && init.headers['X-Tankity-Csrf'] });
-    if (!init.method) return reply(200, { scores: [], csrf: 'tok' });
-    const over = answer(body.op, body);
-    if (over) return reply(over[0], over[1]);
-    if (body.op === 'start') return reply(200, { ok: true, run: 'r'.repeat(32) });
-    if (body.op === 'round') return reply(200, { ok: true, n: body.n, ...body.claim });
-    return reply(200, { ok: true, score: 100, roundsWon: 0, rank: 7, difficulty: 'hard' });
-  };
-  return { fetch, calls };
-}
-
-function played(f, id = 'a') {
-  f.begin(id, 'seed-1', 'hard', 1200);
-  f.round(id, round(1));
-  f.round(id, round(2, 'matchLost'));
-  f.finish(id, 'ABC');
-}
-
-test('a run goes start, rounds in order, file, with the CSRF header', async () => {
-  const s = server();
-  const f = createFiler({ fetch: s.fetch, storage: memoryStorage() });
-  played(f);
-  assert.deepEqual(await f.flush(), [{ id: 'a', kind: 'filed', score: 100, rank: 7, difficulty: 'hard' }]);
-  assert.deepEqual(s.calls.map(c => [c.method, c.op, c.n]), [['GET', null, null], ['POST', 'start', null], ['POST', 'round', 1], ['POST', 'round', 2], ['POST', 'file', null]]);
-  assert.equal(s.calls.find(c => c.op === 'start').w, 1200, 'the run starts at the width it was dealt');
-  assert.ok(s.calls.slice(1).every(c => c.csrf === 'tok'));
-  assert.equal(f.waiting(), 0);
-});
-
-test('rounds go as they end; a run still being played answers nothing', async () => {
-  const s = server();
-  const f = createFiler({ fetch: s.fetch, storage: memoryStorage() });
-  f.begin('p', 'seed-1', 'normal', 720);
-  f.round('p', round(1));
-  assert.deepEqual(await f.flush(), []);
-  assert.deepEqual(s.calls.filter(c => c.op).map(c => c.op), ['start', 'round']);
-  f.round('p', round(2));
-  await f.flush();
-  assert.deepEqual(s.calls.filter(c => c.op).map(c => c.op), ['start', 'round', 'round'], 'the run is started once');
-});
-
-test('offline: the run waits in storage and goes on with the next try', async () => {
-  const storage = memoryStorage();
-  const down = createFiler({ fetch: async () => { throw new Error('offline'); }, storage });
-  played(down, 'b');
-  assert.deepEqual(await down.flush(), [{ id: 'b', kind: 'waiting' }]);
-  assert.match(storage.data.get(PENDING_KEY), /"id":"b"/);
-  const later = createFiler({ fetch: server().fetch, storage });
-  assert.equal((await later.flush())[0].kind, 'filed');
-  assert.equal(later.waiting(), 0);
-});
-
-test('a void run is dropped at once, mid-game too', async () => {
-  const s = server(op => op === 'round' ? [422, { error: 'void', why: 'mismatch' }] : null);
-  const f = createFiler({ fetch: s.fetch, storage: memoryStorage() });
-  f.begin('c', 'seed-1', 'normal', 720);
-  f.round('c', round(1));
-  assert.deepEqual(await f.flush(), [{ id: 'c', kind: 'refused', why: 'the server played that round differently' }]);
-  assert.equal(f.waiting(), 0);
-  f.round('c', round(2));
-  assert.equal(f.waiting(), 0, 'rounds of a dropped run are not kept');
-});
-
-test('an expired run is dropped', async () => {
-  const s = server(op => op === 'round' ? [410, { error: 'expired' }] : null);
-  const f = createFiler({ fetch: s.fetch, storage: memoryStorage() });
-  played(f, 'd');
-  assert.deepEqual(await f.flush(), [{ id: 'd', kind: 'refused', why: 'it waited too long to reach the score server' }]);
-});
-
-test('a round the server already has is skipped, not resent', async () => {
-  const s = server((op, body) => op === 'round' && body.n === 1 ? [409, { error: 'out of order', round: 1 }] : null);
-  const f = createFiler({ fetch: s.fetch, storage: memoryStorage() });
-  played(f, 'e');
-  assert.equal((await f.flush())[0].kind, 'filed');
-  assert.deepEqual(s.calls.filter(c => c.op === 'round').map(c => c.n), [1, 2]);
-});
-
-test('a run the server keeps failing is dropped after MAX_TRIES tries', async () => {
-  const s = server(op => op === 'file' ? [500, { error: 'store unavailable' }] : null);
-  const f = createFiler({ fetch: s.fetch, storage: memoryStorage() });
-  played(f, 'g');
-  for (let i = 1; i < MAX_TRIES; i++) assert.equal((await f.flush())[0].kind, 'waiting');
-  assert.equal((await f.flush())[0].kind, 'refused');
-  assert.equal(f.waiting(), 0);
-});
-
-test('two flushes at once send each round once', async () => {
-  const s = server();
-  const f = createFiler({ fetch: s.fetch, storage: memoryStorage() });
-  played(f, 'h');
-  await Promise.all([f.flush(), f.flush()]);
-  assert.equal(s.calls.filter(c => c.op === 'round').length, 2);
-  assert.equal(s.calls.filter(c => c.op === 'file').length, 1);
-});
-
-test('blocked storage still files the run in hand', async () => {
-  const f = createFiler({ fetch: server().fetch, storage: null });
-  played(f, 'i');
-  assert.equal((await f.flush())[0].kind, 'filed');
-});
-```
-
-Run (in `games/tankity`): `node --test test/solo-file.test.mjs`
-Expected: FAIL, module not found.
-
-- [ ] **Step 2: The filer**
-
-```ts
-// games/tankity/src/solo-file.ts
-/* Operation Tankity: sending a solo run to the score server.
- *
- * A run is started on the server when it is dealt, each round goes as it ends
- * (the server plays it and keeps the result), and the run files when the match
- * is over. Everything waits in this browser's storage until scores.php takes
- * it, in order: offline or busy, it waits for the next try; voided or expired,
- * it is dropped. Fetch and storage arrive as arguments. */
-import type { StorageLike } from '../../_kit/ports.ts';
-import { json, pref } from '../../_kit/prefs.ts';
-import { isDifficulty } from './difficulty.ts';
-import { fieldWidthOk } from './sim.ts';
-import type { Difficulty } from './sim.ts';
-import { isRoundLog } from './solo-log.ts';
-import type { SoloRoundLog } from './solo-log.ts';
-
-export interface PendingRun {
-  id: string; seed: string; difficulty: Difficulty; w: number; run: string | null;
-  rounds: SoloRoundLog[]; initials: string | null; tries: number;
-}
-export type FileOutcome =
-  | { id: string; kind: 'filed'; score: number; rank: number | null; difficulty: Difficulty }
-  | { id: string; kind: 'refused'; why: string }
-  | { id: string; kind: 'waiting' };
-interface FetchLike { method?: string; headers?: Record<string, string>; body?: string; credentials?: 'same-origin' }
-export interface FilerEnv {
-  fetch(url: string, init?: FetchLike): Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
-  storage: StorageLike | null;
-}
-
-export const PENDING_KEY = 'tankity-pending-runs';
-export const PENDING_MAX = 3;
-export const MAX_TRIES = 5;
-const URL = 'scores.php';
-
-function isPendingRuns(v: unknown): v is PendingRun[] {
-  return Array.isArray(v) && v.every(r => r && typeof r === 'object' && typeof r.id === 'string' && typeof r.seed === 'string'
-    && isDifficulty(r.difficulty) && fieldWidthOk(r.w) && (r.run === null || typeof r.run === 'string') && Array.isArray(r.rounds) && r.rounds.every(isRoundLog)
-    && (r.initials === null || typeof r.initials === 'string') && typeof r.tries === 'number');
-}
-
-/** Why the server dropped a run, in the end card's words. */
-function why(status: number, data: Record<string, unknown>): string | null {
-  if (status === 422 && data['error'] === 'void') return 'the server played that round differently';
-  if (status === 409 && data['error'] === 'void') return 'the server played a round differently';
-  if (status === 410) return 'it waited too long to reach the score server';
-  if (status === 404) return 'the score server no longer has it';
-  if (status === 400 || status === 422) return String(data['error'] || 'refused');
-  return null;
-}
-
-export function createFiler(env: FilerEnv) {
-  const stored = pref<PendingRun[]>(PENDING_KEY, [], json(isPendingRuns), env.storage);
-  // Runs in hand stay here too, so blocked storage still sends this session's run.
-  let held: PendingRun[] = stored.get();
-  let busy: Promise<FileOutcome[]> | null = null;
-  const save = (runs: PendingRun[]): void => { held = runs; stored.set(runs); };
-  const update = (id: string, fn: (r: PendingRun) => PendingRun): void => save(held.map(r => (r.id === id ? fn(r) : r)));
-
-  function begin(id: string, seed: string, difficulty: Difficulty, w: number): void {
-    save([...held.filter(r => r.id !== id), { id, seed, difficulty, w, run: null, rounds: [], initials: null, tries: 0 }].slice(-PENDING_MAX));
-  }
-  function round(id: string, log: SoloRoundLog): void {
-    update(id, r => ({ ...r, rounds: [...r.rounds, log] }));
-  }
-  function finish(id: string, initials: string): void {
-    update(id, r => ({ ...r, initials }));
-  }
-
-  async function post(csrf: string, body: unknown): Promise<{ status: number; data: Record<string, unknown> }> {
-    const res = await env.fetch(URL, {
-      method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', 'X-Tankity-Csrf': csrf }, body: JSON.stringify(body),
-    });
-    return { status: res.status, data: ((await res.json().catch(() => null)) || {}) as Record<string, unknown> };
-  }
-
-  /* Takes one run as far as the server allows: null when it should wait (or,
-     still being played, has nothing to report), else its verdict. */
-  async function sendOne(id: string, csrf: string): Promise<FileOutcome | null> {
-    let r = held.find(x => x.id === id);
-    if (!r) return null;
-    if (!r.run) {
-      const st = await post(csrf, { op: 'start', seed: r.seed, difficulty: r.difficulty, w: r.w });
-      if (st.status !== 200 || typeof st.data['run'] !== 'string') return failed(id, st.status, st.data);
-      update(id, x => ({ ...x, run: st.data['run'] as string }));
-      r = held.find(x => x.id === id)!;
-    }
-    while (r.rounds.length) {
-      const next = r.rounds[0]!;
-      const sent = await post(csrf, { op: 'round', run: r.run, ...next });
-      const skip = sent.status === 409 && sent.data['error'] === 'out of order' && Number(sent.data['round']) >= next.n;
-      if (sent.status !== 200 && !skip) return failed(id, sent.status, sent.data);
-      update(id, x => ({ ...x, rounds: x.rounds.slice(1), tries: 0 }));
-      r = held.find(x => x.id === id)!;
-    }
-    if (!r.initials) return null;
-    const filed = await post(csrf, { op: 'file', run: r.run, initials: r.initials });
-    if (filed.status !== 200 || !filed.data['ok']) return failed(id, filed.status, filed.data);
-    save(held.filter(x => x.id !== id));
-    return {
-      id, kind: 'filed', score: Number(filed.data['score']),
-      rank: typeof filed.data['rank'] === 'number' ? filed.data['rank'] : null,
-      difficulty: isDifficulty(filed.data['difficulty']) ? filed.data['difficulty'] : r.difficulty,
-    };
-  }
-
-  /* A refusal drops the run; anything else waits, and a run the server keeps
-     failing is dropped after MAX_TRIES tries. */
-  function failed(id: string, status: number, data: Record<string, unknown>): FileOutcome {
-    const refused = why(status, data);
-    const r = held.find(x => x.id === id);
-    if (refused || !r || r.tries + 1 >= MAX_TRIES) {
-      save(held.filter(x => x.id !== id));
-      return { id, kind: 'refused', why: refused || 'the score server kept failing' };
-    }
-    update(id, x => ({ ...x, tries: x.tries + 1 }));
-    return { id, kind: 'waiting' };
-  }
-
-  async function flushNow(): Promise<FileOutcome[]> {
-    if (!held.length) return [];
-    let csrf = '';
-    try {
-      const res = await env.fetch(URL, { credentials: 'same-origin' });
-      const data = (await res.json().catch(() => null)) as { csrf?: unknown } | null;
-      csrf = res.ok && data && typeof data.csrf === 'string' ? data.csrf : '';
-    } catch (_) { /* offline: everything waits */ }
-    const out: FileOutcome[] = [];
-    for (const { id, initials } of [...held]) {
-      let o: FileOutcome | null = initials ? { id, kind: 'waiting' } : null;
-      if (csrf) {
-        try { o = await sendOne(id, csrf); } catch (_) { o = held.some(r => r.id === id && r.initials) ? { id, kind: 'waiting' } : null; }
-      }
-      if (o) out.push(o);
-    }
-    return out;
-  }
-
-  /** Sends everything waiting; concurrent calls share one attempt. */
-  function flush(): Promise<FileOutcome[]> {
-    if (!busy) busy = flushNow().finally(() => { busy = null; });
-    return busy;
-  }
-
-  return { begin, round, finish, flush, waiting: () => held.length };
-}
-```
-
-A round added to a run the filer already dropped is ignored (`update` finds no run), which is what `a void run is dropped at once, mid-game too` checks.
-
-Add `"src/solo-file.ts"` to `tsconfig.json` `files`.
-
-- [ ] **Step 3: Run**
-
-Run (in `games/tankity`): `node --test test/solo-file.test.mjs && node ../_kit/build/build.mjs tankity`
-Expected: PASS (9).
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add games/tankity/src/solo-file.ts games/tankity/test/solo-file.test.mjs games/tankity/tsconfig.json
-git commit -F- <<'MSG'
-Tankity: send a run's rounds as they end and file it, with an offline queue
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
-MSG
-```
-
-### Task 33: The page sends each round as it ends, and files the run at game over
-
-**Files:**
-- Modify: `games/tankity/src/scores.ts` (the filer instead of the trusting POST and local rows; `soloBegin`, `soloRound`, `soloFinish`, `flushPending`)
-- Modify: `games/tankity/src/match.ts` (`MatchDeps`, `newMatch`, `settle`, `endMatch`, `checkOneUps`)
-- Modify: `games/tankity/src/main.ts` (wiring, the 1-up loop moves into `checkOneUps`, boot flush, `online` listener)
-- Delete: `games/tankity/src/score-rows.ts`
-- Modify: `games/tankity/test/prefs-legacy.test.mjs` (drop the `tankity-local` checks and the `score-rows` import)
-
-**Interfaces:**
-- Consumes: Task 32's `createFiler`; Task 25's `closeRound`, `RoundClaim`; Task 14's `filedLine(rank, score, difficulty)`.
-- Produces: `createScores(...)` returns `{ SCORES, renderScoresOverlay, loadScores, soloBegin, soloRound, soloFinish, flushPending }` with `soloBegin(id: string, seed: string, difficulty: Difficulty, w: number): void`, `soloRound(id: string, log: SoloRoundLog): void`, `soloFinish(id: string, initials: string, done: (line: string) => void): Promise<void>`, `flushPending(): Promise<void>`. `MatchDeps` loses `fileSolo` and gains `soloBegin`, `soloRound`, `soloFinish` (those three signatures). `GameState.runId: string | null` (this solo run's id in the filer). The match API gains `checkOneUps(): void` (1-ups for a solo match: life or +500, with their words), which the frame calls and `settle()` calls before it closes a round.
-
-- [ ] **Step 1: scores.ts on the filer**
-
-In `src/scores.ts`: drop the `score-rows` import, `localRows`, `saveLocal`, `SoloRun` and `fileSolo`; import `createFiler` and `type FileOutcome` from `./solo-file.ts` and `type SoloRoundLog` from `./solo-log.ts`. After `const { $, keyHint, say, toggleOverlay, initials, difficulty } = deps;` add:
-
-```ts
-  const filer = createFiler({ fetch: (url, init) => fetch(url, init), storage: browserStorage() });
-  /** The end card's line for a run that is still waiting, by id, so a later flush can update it. */
-  const waitingLines = new Map<string, (line: string) => void>();
-  function lineFor(o: FileOutcome): string {
-    if (o.kind === 'filed') return filedLine(o.rank, o.score, o.difficulty);
-    if (o.kind === 'refused') return `Not filed: ${o.why}.`;
-    return 'Saved in this browser; it files itself when the score server answers (within two hours).';
-  }
-  /* Sends everything waiting; called at boot, when the browser comes back
-     online, after each round and at game over. */
-  async function flushPending(): Promise<void> {
-    const outcomes = await filer.flush();
-    for (const o of outcomes) {
-      const done = waitingLines.get(o.id);
-      if (done) done(lineFor(o));
-      else if (o.kind === 'refused') say(`This run can no longer be filed: ${o.why}.`, 'info');
-      if (o.kind !== 'waiting') waitingLines.delete(o.id);
-      if (o.kind === 'filed' && !done) say(`Run filed: ${lineFor(o)}.`, 'good');
-    }
-    if (outcomes.some(o => o.kind === 'filed')) void loadScores();
-  }
-  /* A dealt run: the server opens it now, or when it is next reachable. */
-  function soloBegin(id: string, seed: string, level: Difficulty, w: number): void {
-    filer.begin(id, seed, level, w);
-    void flushPending();
-  }
-  /* A finished round: the server plays it from the run's state. */
-  function soloRound(id: string, log: SoloRoundLog): void {
-    filer.round(id, log);
-    void flushPending();
-  }
-  /* Game over: the run files under these initials. `done` gets the end card's
-     line now and again if it files later. */
-  async function soloFinish(id: string, who: string, done: (line: string) => void): Promise<void> {
-    filer.finish(id, who);
-    waitingLines.set(id, done);
-    await flushPending();
-  }
-```
-
-In `loadScores()`'s `catch` branch replace the local-rows fallback with `SCORES.rows = []; SCORES.note = 'The score server is out of reach right now.';`. Return `{ SCORES, renderScoresOverlay, loadScores, soloBegin, soloRound, soloFinish, flushPending }`. Delete `src/score-rows.ts`; in `test/prefs-legacy.test.mjs` remove the `isScoreRows` import, the `ROWS` constant, the `tankity-local` seed entry and every check naming `tankity-local` or "score rows".
-
-- [ ] **Step 2: The match sends its rounds**
-
-`src/game-types.ts`: `GameState` gains `runId: string | null; // this solo run in the filer; null when it is not sent`.
-
-`src/match.ts`:
-
-1. `MatchDeps`: replace `fileSolo(run: { initials: string; score: number; banked: number; seed: string; difficulty: Difficulty }, done: (line: string) => void): void;` with
-
-```ts
-  soloBegin(id: string, seed: string, difficulty: Difficulty, w: number): void;
-  soloRound(id: string, log: SoloRoundLog): void;
-  soloFinish(id: string, initials: string, done: (line: string) => void): void;
-```
-
-(import `closeRound` and `type SoloRoundLog`, `type RoundClaim` from `./solo-log.ts`), and update the destructuring.
-
-2. In `newMatch()`, after Task 25's `G.rec = …` lines:
-
-```ts
-    G.runId = G.rec ? `${G.seed}:${Date.now()}` : null;
-    if (G.runId) soloBegin(G.runId, G.seed, G.difficulty ?? 'normal', G.w);
-```
-
-and in `startDemo()` add `G.runId = null;` beside `G.rec = null;`.
-
-3. Move the 1-up loop Task 22 put in `main.ts` into `match.ts`:
-
-```ts
-  /* Solo 1-ups (a life per 3000 points, +500 past five lives), with their words. */
-  function checkOneUps(): void {
-    for (const up of soloOneUps(G)) {
-      if (up === 'life') {
-        sfx.play('win');
-        say(`1-UP! Extra life! (${G.lives}/${TUNE.maxLives} lives)`, 'good');
-        talk('tank', 'Another life! I am basically immortal!', true);
-      } else say('Max lives already, so take +500 points instead!', 'good');
-    }
-  }
-  /* A round is over: it goes to the server with how this page saw it end
-     (the server plays it and must reach the same). */
-  function sendRound(end: RoundClaim['end']): void {
-    if (!G.rec || !G.runId) return;
-    if (end !== 'matchLost') checkOneUps();
-    soloRound(G.runId, closeRound(G.rec, G.round, { end, score: G.score, cash: G.cash, lives: G.lives, roundsWon: G.roundsWon }));
-  }
-```
-
-and return `checkOneUps` from `createMatch`. In `src/main.ts`'s frame replace the `if (!net.on) { for (const up of soloOneUps(G)) { … } }` block with `if (!net.on && !G.demo) checkOneUps();` (destructure it from `createMatch`; drop the now-unused `soloOneUps` import).
-
-4. In `settle()` (Task 22's), right after `const end = soloSettle(G);` / `if (end.kind === 'next') { announceTurn(); return; }` add `sendRound(end.kind);`.
-
-5. In `endMatch()` the filing call becomes:
-
-```ts
-      if (G.runId) {
-        soloFinish(G.runId, initials(), line => {
-          END.filed = line;
-          renderEndVeil();
-        });
-      } else END.filed = 'This run cannot be filed (see the radio log).';
-```
-
-(the `END.filed = 'Filing…';` line before it stays).
-
-`src/main.ts`: `const { SCORES, renderScoresOverlay, loadScores, soloBegin, soloRound, soloFinish, flushPending } = createScores({ … });`; in the `createMatch` call replace `fileSolo: (run, done) => { void fileSolo(run, done); },` with `soloBegin, soloRound, soloFinish: (id, who, done) => { void soloFinish(id, who, done); },`; `G` init adds `runId: null,`; in `init()` after `loadScores();` add:
-
-```ts
-  // Runs that could not reach the server go on when it is back.
-  void flushPending();
-  window.addEventListener('online', () => { void flushPending(); });
-```
-
-- [ ] **Step 3: Run**
-
-Run (in `games/tankity`): `node ../_kit/build/build.mjs tankity && node --test 'test/*.test.mjs'`
-Expected: PASS. (The smoke test's `fetch` stub answers GET without `csrf`, so the run waits and the end card reads "Saved in this browser…"; its `end-files-itself` check from Task 19 accepts that once you add `|Saved` to its regex.)
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add -A games/tankity/src games/tankity/test games/tankity/dist
-git commit -F- <<'MSG'
-Tankity solo: each round goes to the server as it ends; the run files at game over
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
-MSG
-```
+Replaced by Task R5b: `endMatch` saves the score on the local board and the end card says where.
 
 ### Task 34: Rooms on the guard: uppercase initials, allowed origins, a rate on rooms
 
@@ -10889,9 +7070,10 @@ MSG
 - Modify: `games/tankity/server/rules.php` (`room_valid_initials`)
 - Modify: `games/tankity/rooms.php` (`room_origin_ok`; `create`/`join` rate)
 - Create: `games/tankity/test/php/RoomGuardTest.php`
+- Create: `games/tankity/server/rate.php` (Task R1 builds it: the per-address counts on the SQLite `rate` table, `kind = 'room'`)
 
 **Interfaces:**
-- Consumes: Task 10's `tankity_guard()` (a `Kit\ScoreGuard`: `originAllowed()`, and Plan C Task 4's `rateTake($kind, $perHour)`) and `tankity_initials()`.
+- Consumes: Task 10's `tankity_guard()` (a `Kit\ScoreGuard`: `originAllowed()`) and `tankity_initials()`; Task R1's `server/rate.php` (`room_rate_take()`, the SQLite `rate` table).
 - Produces: `room_valid_initials($raw): ?string` returns uppercase; `ROOM_JOINS_PER_HOUR` setting (`TANKITY_ROOM_JOINS_PER_HOUR` / `room_joins_per_hour`, default 300); 429 `'too many rooms from here; try again later'`.
 
 - [ ] **Step 1: Failing test**
@@ -10974,7 +7156,7 @@ In the `create` and `join` handlers, right after their `room_origin_ok()` checks
 
 ```php
     $perHour = max(1, (int) tankity_setting('TANKITY_ROOM_JOINS_PER_HOUR', 'room_joins_per_hour', 300));
-    if (!tankity_guard()->rateTake('room', $perHour)) {
+    if (!room_rate_take($perHour)) {
         room_json_out(429, ['error' => 'too many rooms from here; try again later']);
     }
 ```
@@ -10983,7 +7165,7 @@ In the `create` and `join` handlers, right after their `room_origin_ok()` checks
 
 - [ ] **Step 3: Run**
 
-Run (in `websites/www.cs`): `vendor/bin/phpunit --testsuite tankity --exclude-group slow && make up && vendor/bin/phpunit --testsuite tankity-docker` (inside the container: `docker compose -f ../../compose.yaml exec -T www-cs-php sh -c 'cd /var/www/html && vendor/bin/phpunit --testsuite tankity-docker'`) and `make e2e E2E_ARGS="tankity-rooms.spec.mjs"`
+Run (in `websites/www.cs`): `vendor/bin/phpunit --testsuite tankity && make up && vendor/bin/phpunit --testsuite tankity-docker` (inside the container: `docker compose -f ../../compose.yaml exec -T www-cs-php sh -c 'cd /var/www/html && vendor/bin/phpunit --testsuite tankity-docker'`) and `make e2e E2E_ARGS="tankity-rooms.spec.mjs"`
 Expected: PASS; two browsers still create and join (their Origin is the page's own host).
 
 - [ ] **Step 4: Commit**
@@ -10998,125 +7180,76 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
 MSG
 ```
 
-### Task 35: The browser proves it, docs, PR 16
+### Task R1: Server: the online board takes rooms only, POSTs answer 410, a rate table, schema step 5
 
 **Files:**
-- Modify: `tests/e2e/tankity-end.spec.mjs` (the filed score equals the shown score)
-- Modify: `games/tankity/README.md` (Files table: `solo.ts`, `solo-log.ts`, `solo-play.ts`, `solo-file.ts`, `server/solo.php`, `server/flight.php`, `server/scores-api.php`, `tools/solo-runs.mjs`, `tools/round-bench.php`, `protocol/solo-runs.json`; the Storage section's tables; section "Scores and the server's solo play"; Tests table)
+- Delete: `server/solo.php`, `server/flight.php`, `server/scores-api.php`, `tools/round-bench.php`, `test/php/{ScoresApi,SoloRound,SoloDeal,Flight}Test.php`
+- Create: `server/rate.php` (required by `rooms.php`)
+- Modify: `scores.php`, `rooms.php` (requires, header), `server/board.php`, `server/db.php` (step 5), `server/housekeep.php`, `server/guard.php` (comments), `.config.yaml`, `tests/php/checks/deploy-set.php`, `protocol/sim-vectors.php` and `.json` (drop `volley-fall`, `solo-deal`, `solo-turn`; regenerate in the container), `test/sim-vectors.test.mjs` (drop the solo runners)
 
-**Interfaces:**
-- Consumes: everything in PR 16.
+**Behaviour:**
+- `BOARD_SOURCES = ['room']`; `board_file()` throws on any other source; one pool per difficulty, trimmed to `BOARD_KEEP` by score. `board_top` has no `standin`.
+- `scores.php` GET answers `{difficulty, scores: [{name, best, banked, won: false, place, at}], keep}`. Every POST answers `410 {"error": "solo scores now stay in this browser"}` before reading the body or touching the database, the guard or any rate store; PUT answers 405.
+- `server/rate.php` holds the room rate limit: `RATE_SLOT = 600`, `ROOM_JOINS_PER_HOUR = 300`, `tankity_int_setting()`, `room_joins_per_hour()`, `rate_used()`, `rate_take()`, `room_rate_take()`, `rate_expire()`, on `rate (client, kind, slot, n, PRIMARY KEY (client, kind, slot))` with `rate_slot` index (rooms use `kind = 'room'`). The housekeeping job `rate` expires old slots.
+- Schema step 5: create `rate` and `rate_slot`; `DELETE FROM board WHERE source <> 'room'`; `DELETE FROM callsigns`. Existing solo and old-callsign rows are gone after the first request following the deploy.
+- `.config.yaml` drops the solo endpoint caps (`round_cpu`, `starts_per_hour`, `rounds_per_hour`, `scores_per_hour`, `runs_per_client`, `max_held`, `held_per_client`, `max_playing`, `playing_per_client`); `room_joins_per_hour` stays.
 
-- [ ] **Step 1: The spec checks the server's score against the card**
+**Tests:** `ScoresEndpointTest` (GET shape; a main-shaped POST, an `op: start` POST, an empty body and a cross-site POST all answer 410 and leave `board` unchanged), `DbTest` (a v4 database with `client` and `room` rows upgrades to v5 holding only the `room` rows and an empty `rate` table; a fresh one is at 5), `BoardTest` (room only), `RoomGuardTest` (the rate counts on the `rate` table), `HousekeepTest` (job names), the sim-vectors node test.
 
-In `tests/e2e/tankity-end.spec.mjs`, before `await loseMatch(page);` add:
+### Task R2: Retire the old callsign conversion
 
-```js
-  const filed = page.waitForResponse(r => r.url().includes('scores.php') && r.request().method() === 'POST'
-    && (r.request().postData() || '').includes('"op":"file"'), { timeout: 120_000 }).catch(() => null);
-```
+**Files:** `server/legacy.php` (the import and conversion jobs), `server/board.php` (`board_convert_*`, `board_has_run`, `board_best_run`), `server/housekeep.php` (the legacy and callsign jobs), `test/php/LegacyImportTest.php` and the conversion cases in `BoardTest` and `ScoresEndpointTest`.
 
-and after the `#end-filed` expectation:
+The old per-callsign files are no longer imported and the `callsigns` table is empty after step 5; the files are left where they are. Tests: `HousekeepTest` without the legacy job; `DbTest` asserts `callsigns` is empty after the upgrade to v5. Runs after R1 (same files).
 
-```js
-  // The server played every round as it ended and filed exactly the score this page showed.
-  if (local(baseURL)) {
-    const res = await filed;
-    expect(res, 'the run was sent for filing').toBeTruthy();
-    expect(res.status(), `scores.php refused the run: ${await res.text()}`).toBe(200);
-    const shown = Number((await veil.locator('#end-score').textContent()).match(/^Score (\d+)/)[1]);
-    expect((await res.json()).score).toBe(shown);
-  }
-```
+### Task R3: Rooms: two or more humans file online, one human files locally
 
-Run (in `websites/www.cs`): `make e2e E2E_ARGS="tankity-end.spec.mjs"`
-Expected: 1 passed, with the server's score equal to the card's.
+**Files:** `server/rules.php`, `server/protocol.php`, `src/protocol.ts`, `protocol/*.json` via `make protocol`.
 
-- [ ] **Step 2: Docs**
+**Behaviour:**
+- `room_match_begin()` counts `$room['startHumans']` and sets `$room['matchId']` (12 hex digits), so a browser can tell one match from the next in a room whose code is reused.
+- `room_file_seat()` returns early when `startHumans < 2`, marking `$room['filed'][$seat] = 'local'`, before `board_file()`. A leaver's seat turns into a drone but `startHumans` stays, so a two-human match one player forfeits still files its winner online.
+- `server/protocol.php` gives `you` a `filedLocal` boolean (`filed === 'local'`; the `filed` test reads `'local'` as not filed online) and the room snapshot a `matchId`. `src/protocol.ts` mirrors both.
 
-README Files table rows:
+**Tests:** `RoomFilingTest`: a one-human room's match files nothing on any board and marks `filed[seat] = 'local'`; a two-human match files both; a two-human match one player leaves still files the winner online; a failed filing still reads `filedFailed`. `RoomSnapshotLeakTest` is unchanged. Known limit: one person with two browsers can seat two humans and file online; the score is still the server's own computation of a real match.
 
-```markdown
-| `src/solo.ts` | The solo referee: deal, muster, settle, turns, 1-ups, the shop's rules, a drone's aim (pure; `server/solo.php` is the same) |
-| `src/solo-log.ts` | A solo round as the server plays it: the purchases before it, each shot (gun, angle, power, where the tank drove), and the claim of how it ended |
-| `src/solo-play.ts` | Solo matches without a page: `flyVolley` (the war's fixed steps), `soloRound` (the server's round), `playSolo` with a bot, `replaySolo` (not in the bundle) |
-| `src/solo-file.ts` | Sending a run: start, each round as it ends, file; an offline queue that keeps them in order |
-| `server/solo.php` | The solo referee in PHP and `solo_round()` (2 s of CPU and 200 shots per round) |
-| `server/flight.php` | A solo volley in fixed steps, tanks falling between them, as the browser flies it |
-| `server/scores-api.php` | The score endpoint: guard checks, run tokens, the server's play of each round (`solo_runs`), filing, and the runs' expiry |
-| `tools/solo-runs.mjs`, `protocol/solo-runs.json` | Bot runs recorded round by round with the browser's rules; the PHP rounds must reach every claim |
-| `tools/round-bench.php` | CPU per round of every recorded run; the nightly fails when a round needs more than the cap |
-```
+### Task R4: Client: remove the filer and recorder; tooling and CI
 
-In the Storage section (PR 20), the list of what the directory holds becomes `tankity.sqlite` (rooms; the boards; solo runs; per-callsign rows only until housekeeping moves them onto the Normal board) and `guard-runs.json` (the score guard's run tokens and rate stamps); the housekeeping list gains "solo runs two hours after their last round (a day after their start at the latest), filed runs an hour after filing".
+**Files:**
+- Delete: `src/solo-log.ts`, `src/solo-play.ts`, `src/solo-file.ts`, `protocol/solo-runs.json`, `tools/solo-runs.mjs`, `test/{solo-log,solo-play,solo-file,shop-record,match-record,lobby-solo}.test.mjs`, `test/solo-refusals.json`
+- Modify: `src/match.ts`, `src/shop.ts`, `src/main.ts`, `src/game-types.ts`, `src/lobby.ts`, `src/scores.ts`, `tsconfig.json`, `test.sh`, `protocol/generate.php`, `websites/www.cs/Makefile`, `.github/workflows/ci.yml`, `test/determinism.test.mjs` (module list: sim, ai, armor, detmath, solo), and the headers of `src/solo.ts`, `test/fixed-step.test.mjs` and `test/ai-search.test.mjs`
 
-Section before `## Drone aim`:
+`match.ts` loses `stopFiling`, `newRunId`, `leaveSolo`, `sendRound`, the recorder, the 200-shot stop and the `solo*` deps; `shop.ts` loses the per-visit buy cap and `recordBuy`; `main.ts` loses the filer, `ARSENAL_FROM_FILE`, `rec`/`runId` and the `online`/`visibilitychange` wake listeners. The room-Repair `netBuy` case from `shop-record.test.mjs` moves into an existing shop test. What stays: `src/solo.ts` as the game's rules module, the fixed-step war (`runFixed`, `SOLO_STEP`, `WAR_REST`), the aim speed-up, `detmath`, and the shop fixes. `test.sh` runs `phpunit --testsuite tankity` with no `--exclude-group slow`; CI drops the two recorded-run steps. Verify with `make test`, `tsc` clean, and the smoke test's `G.w = w;` check.
 
-```markdown
-## Scores and the server's solo play
+### Task R5a: `src/local-board.ts` (pure)
 
-Runs file themselves the moment they end, on the board of their difficulty
-(one per difficulty, the best 100 each). A room's server files its humans'
-scores itself. A solo run is played by the server as it goes:
+On the kit's `StorageLike` port. Key `tankity-scores-local`, value `{ v: 1, boards: { easy: Row[], normal: Row[], hard: Row[] } }` through the kit's `json(guard)` codec, so a damaged value reads back as empty boards. Row: `{ initials, score, rounds, seed, at, kind: 'solo' | 'room', ref }`, where `ref` is the dedupe key (`solo:<seed>:<at>`, `room:<code>:<matchId>`, `legacy:<seed>:<score>:<name>`). `LOCAL_KEEP = 20` per difficulty, sorted by score descending with ties to the older run; `add(level, row)` answers its 1-based place or `null` when it fell outside the 20, and does nothing for a `ref` already held.
 
-- When a match is dealt the page asks scores.php for a CSRF token and starts a
-  run (`op: start`, the seed and the difficulty): a single-use guard run token
-  becomes the run's id, and the server deals the same match and stores it
-  (`solo_runs`).
-- As each round ends the page sends that round (`op: round`): the purchases
-  before it, each shot, and its claim (how the round ended, the score, cash,
-  lives and rounds won). The server plays the round from the stored state
-  with the same rules and the same fixed-step flight, tanks falling mid-volley
-  (`server/solo.php`, `server/flight.php`), stores the new state, and answers
-  its own claim. A round it cannot play (a shot out of range, a purchase the
-  chest cannot pay, shots after the round ended, more than 200 shots or 2 s of
-  CPU), or a claim that differs from its own, voids the run: the server's
-  play is the authority, and once the two disagree no later round could match.
-  A round sent twice answers the stored reply; one out of order is refused.
-- At game over the page files the run (`op: file`, the initials): the guard
-  spends the run token, and the server files the score it already holds; any
-  score the client sends is ignored. There is no round limit.
-- A run expires two hours after the last round the server accepted, and a day
-  after it started at the latest. Rounds that could not be sent wait in the
-  browser (`tankity-pending-runs`) and go, in order, when the server answers.
+On every `createScores()` (every page load) a `tankity-local` value left by a page from before this design (`ScoreEntry[]`, parsed through the old `isScoreRows` guard) moves onto the local board (difficulty-less rows go to Normal, names coerced to three letters), and the old key is removed only after the write succeeds; an unparseable value is left alone. Two tabs saving in the same millisecond can lose one row; that is accepted and stated in a comment.
 
-Initials are three letters, typed in either case and stored uppercase, one
-set per player shared by solo and rooms; the guard refuses a blocked set.
-Origins come from the guard's allow-list; run tokens, starts, rounds and
-filings are rate-limited per IP, and so are new rooms.
-```
+**Tests** (`test/local-board.test.mjs`): the best 20 per difficulty, order and ties, place or `null`, `ref` dedupe, a damaged value reads empty, blocked storage reports not kept, and the migration (difficulty-less rows to Normal, names coerced, old key removed only after the write, unparseable left alone, a second run a no-op).
 
+### Task R5b: Wire the local board: the end card, the one-human room card, the two-list overlay
 
-Tests table: add `SoloRoundTest`, `FlightTest`, `ScoresApiTest`, `RoomGuardTest`, `test/solo*.test.mjs`, `test/fixed-step.test.mjs`, `test/determinism.test.mjs`, and the nightly's `--group slow` and round bench.
+**Files:** `src/scores.ts` (`loadScores(level)`, `localRows(level)`, `openScores()`, `saveLocal(row)`, a `storage` listener that redraws an open overlay), `src/ui/scores.tsx`, `src/match.ts` (`endMatch` saves once), `src/room.ts` (the first snapshot with `you.filedLocal` saves `{initials, score, rounds, difficulty, kind: 'room', ref: 'room:' + code + ':' + matchId}`), `src/standings.ts` (`roomFiledLine()` gains the local branch), `src/main.ts`.
 
-- [ ] **Step 3: Full gate, PR**
+The scores overlay keeps one difficulty switcher (opening on the Menu's difficulty) and two lists under it: **Online · room matches with 2+ players** (the top 20, your initials marked; "The online board is out of reach right now." when it cannot load, the last list kept while loading) and **This browser** (the local rows, each tagged "solo" or "room", the run just saved highlighted; "No runs saved in this browser on Normal yet."; "This browser can't keep scores (storage is blocked)."). The end card reads "Saved on this browser's board · #3 on Normal", "Saved in this browser · 8,240 pts, outside its best 20 on Normal", or the blocked-storage line; never blank, never "Filing…". `filedLine()` stays for online room rows.
 
-Run (in `websites/www.cs`): `make test` then `make e2e E2E_ARGS="tankity-solo.spec.mjs"`
-Expected: green within budgets.
+**Tests:** `test/scores-ui.test.mjs` (both lists; the online list out of reach with the local one still shown; the per-difficulty switch; a `storage` event redraws), a standings test for the local room line, a match test that `endMatch` saves once with the right difficulty and line, a room test that a repeated snapshot saves once. Runs after R3, R4 and R5a.
 
-```bash
-git add tests/e2e/tankity-end.spec.mjs games/tankity/README.md
-git commit -F- <<'MSG'
-Tankity score integrity: the end spec checks the server's score; docs
+### Task R6: Browser specs
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
-MSG
-git push -u origin games/tankity-score-integrity
-gh pr create --title "Tankity score integrity: guard, the server plays each solo round, uppercase initials" --body "Spec row 16 (section 8). Determinism audit first (README 'Solo determinism'); the server keeps each solo run in SQLite, plays every round from its stored state with a step-for-step flight (tanks fall mid-volley), voids a run whose claim differs, and files the score it holds. Per-round CPU measured in Task 30: <numbers>.
+`tests/e2e/tankity-end.spec.mjs`: the card reads "Saved on this browser's board · #1 on Normal" and Scores shows it under "This browser". `tests/e2e/tankity-end-forfeit.spec.mjs`: the room winner's line still reads "Filed · #N all-time" and the solo match after it saves locally. Run `make e2e E2E_ARGS="tankity-end tankity-end-forfeit"`.
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+### Task R7: Docs, dist, PR text
 
-https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
-```
-
-If `main` moved, rebase and rebuild the generated files (Global Constraints). Run the pr-fix loop, gate on required checks as before, merge on green, `make deploy`, and check live: lose a short solo match on `/play/tankity/?v=<sha>` and see "Filed · #N all-time on <difficulty>" (the live board takes a real entry; use initials that read as a test, such as `TST`, and say so in the report). Report the cache-busted link.
+README: "Scores: the online board and this browser's board" (what files where, the 410, `tankity-scores-local`), "Deterministic math" for the shared sim, the Files table (`solo.ts` as the solo rules, `local-board.ts`, `rate.php`; no solo-log, solo-play, solo-file, `server/solo.php`, `flight.php`, `scores-api.php`), the Tests table and the Storage settings. Rebuild `dist/`, `sw.js` and the `?v=` values (`build --check`, `make test`). PR text: the live boards show only room matches and may be empty until a two-human room finishes; after the deploy, GET answers 200, `curl -X POST` answers 410, a solo loss reads "Saved on this browser's board", and a two-human room files online.
 
 ---
 
 ## Self-Review
 
-1. **Spec coverage.** 7.1: max armor and plates (T1–3, T5), carry-over (T2, T5), Repair capped/greyed/says what it restores (T1, T3, T5, T7), no banking (T2, T3, T5), re-muster at full max with plates (T2, T5), drones unchanged (T2 test), ARMOR pill "160 of 175" (T6), client and server together with vectors (T4). 7.2: solo endless with no round limit (T22, T27's run past 60 rounds, T30), tanks falling mid-volley on both sides (T23, T29), last human standing with ×2 bonus (T8, T13), one-human room like solo (T8), `WATCH_TURNS` stays (T8 test, T22), vectors (T13, T29). 7.3: top-of-shop board (T14–16), match over with ♛, Play again (same room), Leave room, "Filed · #12 all-time on Normal" (T12, T14, T17–18), you're out with Watch the finish and Menu → Standings (T18), solo rounds table heading the end card (T16–17). 8: auto-filing, no form (T11, T17, T19, T33), a board per difficulty with yours highlighted and a switcher (T10, T19), initials in either case, uppercase stored (T19 and T31 via `tankity_initials`, T34), one-time conversion onto Normal (T10), guard on score and room endpoints (T31, T34), rooms filed server-side (T11), the server playing each round from stored state with the per-round limits and voiding on a mismatch (T29–31), filing what the server holds (T31), expiry (T31), offline queue (T32–33), PHPUnit for every guard rule and round case (T30, T31), determinism audit before the endpoint (T21–23). determinism to the bit for sin/cos/atan2 (T21a). 12: one SQLite database for rooms, boards and runs (S2–S5, T10, T31), short room transactions and lock-free polls with a load test (S3, S4), modes from `Kit\StoreModes` with the exposure stated per probe outcome (S1, S2, Plan C Task 4), the `data_dir` setting used exactly or the location order with the username source and the private-directory checks (S2), journal mode by filesystem (S2, confirmed by S1), the one-time lossless import of the old files with `scores_dir` read only as their location (S5), `shm_key` and shared memory gone (S3, S4), cleanup on requests with a fake clock (S6, T10, T31), never served or deployed (S7), the host probe before any code (S1).
-2. **Placeholders.** None remain. The plan has no open questions; the decisions it is written to are in **Decisions** (header). Two gates stop for William on measured facts: Task S1's "stop" rows (the host's storage) and Task 30's per-round CPU.
-3. **Type consistency.** Plan C's names are used as Plan C defines them: `Kit\ScoreGuard` and its methods through `tankity_guard()`/`tankity_initials()` (T10, T19, T31, T34; `rateTake` is Plan C Task 4's and paces rounds in T31), `kit_php` (T10), `initialsPref` and main.ts's `getInitials` (T17, T19), `backToTitle` (T17, T18), `HudProps` in `ui/hud.tsx` with `test/hud.test.mjs` (T6), `test/menu.test.mjs` (T18), and the e2e `dealSolo` is this plan's (T7). PR 20's `tankity_db`/`tankity_tx`/`tankity_depth` are what the store (S3), the callsign rows (S5), housekeeping (S6), the boards (T10) and the runs (T31) use, and a filing inside a held room joins the room's transaction (S2's `tankity_depth`). `tankity_jobs()` grows by `callsigns` (T10) and `solo` (T31). `difficulty` runs from the Menu through `soloDeal` (T22) into the run's start (T33, T31), the board a run files on (T10, T19, T31), `filedLine` (T14, T18, T19, T33), `playSolo`/`replaySolo` (T26), `solo-runs.json` (T27) and `solo_deal` (T28). The field's width `w` (Plan C PR 13b) runs the same road: `MatchDeps.field.deal()` into `soloDeal` (T22), `Played.w` (T26), `solo-runs.json` (T27), `solo_deal`'s `$w` and the state's `w` (T28, T30), the `start` op (T31), `PendingRun.w` and `begin` (T32) and `soloBegin` (T33). `SoloRoundLog`/`RoundClaim` (T25) are what `soloRound` (T26), `solo-runs.json` (T27), `solo_claim`/`solo_round` (T30), the `round` op (T31) and the filer (T32) carry; `FLIGHT_STEP`/`SOLO_STEP` and `FLIGHT_MAX_STEPS` match (T23, T26, T29). `SoloState`/`SoloTank` (T22) are what `soloBuy` (T24) and `soloRound` (T26) use; `EndState.buttons` matches `EndVeilProps.buttons` (T17) and `RoomCard` minus `'shop'` (T14, T18); `MatchDeps.fileSolo` (T17, T19) gives way to `soloBegin`/`soloRound`/`soloFinish` once, in T33, with its caller.
-4. **Review Focus.** Each of the eight lines has its test in the owning task (T21a/T23/T26/T29, T31, S2/S1, S5, S4, T10, T8, T3/T1).
+1. **Spec coverage.** 7.1: armor (T1–7). 7.2: solo is endless (T22), the fixed-step war with tanks falling mid-volley (T23), last human standing with the ×2 bonus (T8, T13), a one-human room plays like solo (T8, R3), `WATCH_TURNS` stays, the shared `detmath` (T21, T21a). 7.3: top-of-shop board (T14–16), match over, Play again, "Filed · #12 all-time on Normal" for two or more humans and the local line otherwise (T12, T14, T17, T18, R5b). 7.4: W as a parameter of the server's sim (Plan C PR 13b). 8: scores file themselves, the online board for rooms of two or more humans (T11, R3), the local board (R5a, R5b), initials (T34 and `tankity_initials`), the guard on the room endpoint with its rate on the `rate` table (T34, R1), `scores.php` as a read with 410 on POST (R1), old rows deleted by step 5 (R1, R2). 12: one SQLite database for rooms, boards and rate counts (S2–S4, R1), short room transactions (S3, S4), modes from `Kit\StoreModes` (S2), `data_dir` (S2), journal mode (S2), cleanup on requests with a fake clock (S6), never served or deployed (S7), the host probe first (S1).
+2. **Placeholders.** None remain. The decisions the plan is written to are in **Decisions**.
+3. **Type consistency.** `difficulty` runs from the Menu through `soloDeal` (T22) into the local board's row (R5a, R5b) and the online board a room files on (T11, R3). `w` runs `MatchDeps.field.deal()` into `soloDeal`. `matchId` and `filedLocal` (R3) are what `room.ts` saves by (R5b). `rate.php` (R1) is what Task 34 calls. `tankity_jobs()` grows by `rate` (R1). `EndState.buttons` matches `EndVeilProps.buttons` (T17).
+4. **Review Focus.** Each line has its test in the owning task (T23 and T21a, R3/R1/R5a, S2/S1, S4, T8, T3/T1, R1).

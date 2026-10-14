@@ -92,3 +92,22 @@ test('a buried human fired for by the battery fires its Riot Charge, and is dug 
   assert.ok(!buried(me, G.terrain), 'dug out');
   assert.equal(me.hp, 100);
 });
+
+test('burying a sturdy human beats a Mortar\'s splash; finishing a weak one beats burying it', () => {
+  const MORTAR = keyOf(w => w.effect === 'shot' && w.dmg > 50 && w.dmg < 60 && w.radius >= 40);
+  let buriedIt = 0;
+  for (const seed of [1, 2, 3, 4]) {
+    const self = drone(120, 400, { ammo: { [DIRTBALL]: 1, [MORTAR]: 2 } }), target = human(420, 400, 100);
+    const G = world([self, target], Array(720).fill(400), { rng: mulberry32(seed) });
+    const c = aiChoose(G, arsenal, self);
+    assert.equal(c.wkey, DIRTBALL, `seed ${seed}: full armor`);
+    fire(G, self, c);
+    if (buried(target, G.terrain)) buriedIt++;
+  }
+  assert.ok(buriedIt >= 2, `${buriedIt} of 4 buried`);
+  for (const seed of [1, 2, 3]) {
+    const self = drone(120, 400, { ammo: { [DIRTBALL]: 1, [MORTAR]: 2 } }), target = human(420, 400, 25);
+    const G = world([self, target], Array(720).fill(400), { rng: mulberry32(seed) });
+    assert.notEqual(aiChoose(G, arsenal, self).wkey, DIRTBALL, `seed ${seed}: 25 armor left, a kill`);
+  }
+});

@@ -193,9 +193,14 @@ final class AiArcsTest extends TestCase
         $room = self::harmRoom(100.0, 420.0);
         [$self, $target] = $room['tanks'];
         $land = ['x' => 420.0, 'y' => 400.0, 'oob' => false];
-        $this->assertSame((float) ROOM_AI_BURY, room_ai_earth_harm($room, $self, $target, 'dirtball', $land)['harm']);
+        // Dirt Ball's disc tops out 35 px over the hull: a burial worth ROOM_AI_BURY + 35, capped.
+        $this->assertSame(min((float) ROOM_AI_BURY_MAX, ROOM_AI_BURY + 35.0), room_ai_earth_harm($room, $self, $target, 'dirtball', $land)['bury']);
         $room['tanks'][1]['kind'] = 'ai';
-        $this->assertSame(0.0, room_ai_earth_harm($room, $self, $room['tanks'][1], 'dirtball', $land)['harm']);
+        $this->assertSame(0.0, room_ai_earth_harm($room, $self, $room['tanks'][1], 'dirtball', $land)['bury']);
+        // Never enough to pass for a kill: a 20-armor target scores 19 at most.
+        $room['tanks'][1]['kind'] = 'human';
+        $room['tanks'][1]['hp'] = 20;
+        $this->assertSame(19.0, room_ai_with_burial($room['tanks'][1], 0.0, 65.0));
     }
 
     /** The planning flights one drone turn costs with a full round-9 rack (three

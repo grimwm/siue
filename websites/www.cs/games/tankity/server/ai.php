@@ -340,7 +340,15 @@ function room_ai_harm(array $room, array $self, array $target, string $wkey, arr
     if ($e['self'] > 0 || $e['near']) {
         return -INF;
     }
-    return min((float) $target['hp'], $b['harm'] + $e['harm']);
+    return room_ai_with_burial($target, $b['harm'] + $e['harm'], $e['bury']);
+}
+/* Harm capped at the target's armor, plus what burying it is worth, never
+ * enough to pass for a kill (src/ai.ts withBurial). */
+function room_ai_with_burial(array $target, float $hit, float $bury): float
+{
+    $hp = (float) $target['hp'];
+    $h = min($hp, $hit);
+    return $h >= $hp || $bury <= 0 ? $h : min($hp - 1, $h + $bury);
 }
 /* The damage gun $wkey landing at $land would do to $self, its own gunner,
  * with no margin (src/ai.ts aiSelfHarm). */
@@ -422,7 +430,8 @@ function room_ai_target_harm(array $room, array $self, array $target, string $wk
     if ($land['oob']) {
         return 0.0;
     }
-    return min((float) $target['hp'], room_ai_bursts($room, $self, $target, $wkey, $land)['harm'] + room_ai_earth_harm($room, $self, $target, $wkey, $land)['harm']);
+    $e = room_ai_earth_harm($room, $self, $target, $wkey, $land);
+    return room_ai_with_burial($target, room_ai_bursts($room, $self, $target, $wkey, $land)['harm'] + $e['harm'], $e['bury']);
 }
 /* Ground predictions made so far ($add counts more): a drone turn's cost
  * beside its flights, which test/php/AiArcsTest.php holds to a budget
@@ -433,8 +442,10 @@ function room_ai_earth_ops(int $add = 0): int
     $n += $add;
     return $n;
 }
-/* What burying a ground unit is worth, in armor (src/ai.ts AI_BURY). */
+/* What burying a ground unit is worth, in armor: ROOM_AI_BURY plus a point a
+ * px deeper, up to ROOM_AI_BURY_MAX (src/ai.ts AI_BURY). */
 const ROOM_AI_BURY = 30;
+const ROOM_AI_BURY_MAX = 70;
 /* How deep under the surface a target must end up for the burial to count. */
 const ROOM_AI_BURY_DEPTH = 12.0;
 /* What a fall of unit $u onto ground at y $ground would cost it, as the
@@ -552,14 +563,15 @@ function room_ai_earth_harm(array $room, array $self, array $target, string $wke
     }
     $harm += room_ai_drop_cost($room, $target, $at[0]);
     $mine += room_ai_drop_cost($room, $self, $at[1]);
+    $bury = 0.0;
     if (($effect === 'dirt' || $effect === 'pour') && $target['kind'] === 'human'
         && !($room['terrain'][$cols[0]] < $target['y'] - ROOM_AI_BURY_DEPTH) && $at[0] < $target['y'] - ROOM_AI_BURY_DEPTH) {
-        $harm += ROOM_AI_BURY;
+        $bury = min((float) ROOM_AI_BURY_MAX, ROOM_AI_BURY + ($target['y'] - $at[0]));
     }
     if ($self['kind'] === 'human' && !room_buried($self, $room['terrain']) && $at[1] < $self['y'] - ROOM_BURY_EPS) {
-        $mine += ROOM_AI_BURY;
+        $mine += ROOM_AI_BURY_MAX;
     }
-    return ['harm' => (float) $harm, 'self' => $mine, 'near' => $near];
+    return ['harm' => (float) $harm, 'bury' => $bury, 'self' => $mine, 'near' => $near];
 }
 /* The gun to fire once the search has found each arc's best aim ($byArc:
  * flight key => [err, a, p, land]). src/ai.ts pickGun is the same: the most

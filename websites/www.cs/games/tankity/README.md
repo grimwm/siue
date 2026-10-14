@@ -629,15 +629,22 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
   `room_ai_earth_harm`): its crater and its munitions' craters, dirt, a pour,
   a slump, or a dig's trench (stopped at a unit's body as the real one is)
   and its warheads, on a copy of the terrain; the target's fall as the settle
-  would charge it (bunker, parachute), `AI_BURY` = 30 for a new burial deeper
-  than 12 px (dirt and pour; ground units only, so dirt is never aimed at a
-  drone), and a dig's warhead blasts; all capped at the target's armor. A gun whose
+  would charge it (bunker, parachute), and a dig's warhead blasts, capped at
+  the target's armor; and a new burial deeper than 12 px (dirt and pour;
+  ground units only, so dirt is never aimed at a drone), worth `AI_BURY` = 30
+  plus a point a px deep, up to `AI_BURY_MAX` = 70, but never enough to pass
+  for a kill (`withBurial`: at most the target's armor less one), so a gun
+  that finishes the target beats one that only buries it. A gun whose
   burst or munitions could reach the drone's own body, at the landing or on
   the target's near side, with `AI_SAFE_MARGIN` = 1.25 for wobble, wind and
   hills, or whose ground would drop the drone into a fall that hurts, bury it
   or burst a warhead within its reach, scores -Infinity and is never fired.
   A digger does its harm away from where it lands, so it is weighed at every
-  aim its arc searched and fires the most harmful. A riot charge scores the
+  aim its arc searched that lands within its burrow's length of the target,
+  and fires the most harmful. The ground a gun moves is worked out at the
+  target's and the drone's columns alone (a pour or a slump on a copy), and
+  a turn makes at most 240 such predictions (`earthOps`, `room_ai_earth_ops`)
+  beside its 440 flights. A riot charge scores the
   falls its scoop gives rivals; a buried human fired for by the battery (a
   turn that timed out) fires its first riot gun in rack order. The most harmful gun of the
   best-landing arc fires (glory: of any arc), the cheaper on a tie, then rack

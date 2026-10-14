@@ -307,7 +307,14 @@ export function aiHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank,
   if (b.own <= b.reach * AI_SAFE_MARGIN) return -Infinity;
   const e = earthHarm(world, arsenal, self, target, wkey, land);
   if (e.self > 0 || e.near) return -Infinity;
-  return Math.min(target.hp, b.harm + e.harm);
+  return withBurial(target, b.harm + e.harm, e.bury);
+}
+/* Harm capped at the target's armor, plus what burying it is worth: never
+   enough to pass for a kill, so a gun that finishes the target beats one that
+   only buries it. server/ai.php room_ai_with_burial is the same. */
+function withBurial(target: Tank, hit: number, bury: number): number {
+  const h = Math.min(target.hp, hit);
+  return h >= target.hp || bury <= 0 ? h : Math.min(target.hp - 1, h + bury);
 }
 /* The damage gun wkey landing at land would do to self, its own gunner, with
    no margin: what decides the gun when every one would reach it.
@@ -362,7 +369,8 @@ export function beamAim(_world: World, arsenal: Arsenal, self: Tank, target: Tan
 function targetHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string, land: Landing): number {
   if (!flies(arsenal.weapons[wkey]!)) return noFlightHarm(world, arsenal, self, wkey, land);
   if (land.oob) return 0;
-  return Math.min(target.hp, bursts(world, arsenal, self, target, wkey, land).harm + earthHarm(world, arsenal, self, target, wkey, land).harm);
+  const e = earthHarm(world, arsenal, self, target, wkey, land);
+  return withBurial(target, bursts(world, arsenal, self, target, wkey, land).harm + e.harm, e.bury);
 }
 /* Ground predictions made so far (earthHarm calls): a drone turn's cost beside
    its flights, which test/ai-search.test.mjs holds to a budget.
@@ -371,8 +379,13 @@ let groundOps = 0;
 export function earthOps(): number {
   return groundOps;
 }
-/** What burying a ground unit is worth, in armor: it cannot drive, and its shells start in the dirt. */
+/** What burying a ground unit is worth, in armor: it cannot drive, and its
+ *  shells start in the dirt, so it spends a turn digging out or shoots itself.
+ *  AI_BURY, plus a point for every px deeper than the surface, up to
+ *  AI_BURY_MAX: about a Shell's hit for a shallow burial, a Mortar's or more
+ *  for a deep one. */
 export const AI_BURY = 30;
+export const AI_BURY_MAX = 70;
 /** How deep under the surface a target must end up for the burial to count. */
 export const AI_BURY_DEPTH = 12;
 /* What a fall of unit u onto ground at y `ground` would cost it, as the
@@ -397,7 +410,7 @@ function dropCost(world: World, arsenal: Arsenal, u: Tank, ground: number): numb
    of the gunner's body (with AI_SAFE_MARGIN). server/ai.php room_ai_earth_harm
    is the same. */
 export function earthHarm(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: string, land: Landing):
-  { harm: number; self: number; near: boolean } {
+  { harm: number; bury: number; self: number; near: boolean } {
   groundOps++;
   const w = arsenal.weapons[wkey]!;
   const fw = world.terrain.length;
@@ -457,10 +470,11 @@ export function earthHarm(world: World, arsenal: Arsenal, self: Tank, target: Ta
   }
   harm += dropCost(world, arsenal, target, at[0]!);
   mine += dropCost(world, arsenal, self, at[1]!);
+  let bury = 0;
   if ((w.effect === 'dirt' || w.effect === 'pour') && isGroundUnit(target)
-    && !(world.terrain[ct]! < target.y - AI_BURY_DEPTH) && at[0]! < target.y - AI_BURY_DEPTH) harm += AI_BURY;
-  if (isGroundUnit(self) && !buried(self, world.terrain) && at[1]! < self.y - BURY_EPS) mine += AI_BURY;
-  return { harm, self: mine, near };
+    && !(world.terrain[ct]! < target.y - AI_BURY_DEPTH) && at[0]! < target.y - AI_BURY_DEPTH) bury = Math.min(AI_BURY_MAX, AI_BURY + (target.y - at[0]!));
+  if (isGroundUnit(self) && !buried(self, world.terrain) && at[1]! < self.y - BURY_EPS) mine += AI_BURY_MAX;
+  return { harm, bury, self: mine, near };
 }
 /* A planning arc's best aim from the search, and where it lands. */
 interface ArcAim {

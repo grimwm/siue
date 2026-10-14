@@ -105,7 +105,7 @@ Every field below is validated by `tools/game-json.php`: it is required for its 
 | `babynuke` | Baby Nuke | A smaller nuke. | A hill-levelling blast at normal speed, a step under NUKE. | shot | 72 | 50 | 320 | 1 | 3 | 7, aiRack 1 | speed 1.0 |
 | `leapfrog` | Leapfrog | Bursts, then leaps on and bursts again, three times. | Three warheads, each hop losing 45% of its speed. Good for walking craters down a slope. | hop | 40 | 26 | 240 | 2 | 3 | 6 | hops 3, hopKeep 0.55, subDmg 34, subRadius 22 |
 | `funky` | Funky Bomb | Bursts and flings colourful bomblets every which way. | Eight bomblets thrown up in a fixed "funky" fan, landing all around the burst. Rewards a near miss. | scatter | 30 | 24 | 380 | 1 | 5 | 7, aiRack 1 | split 8, fan 2.4, kick 150, subDmg 24, subRadius 18 |
-| `deathshead` | Death's Head | A heavy MIRV whose warheads split at the top of the arc. | Nine heavy warheads splitting at the apex in a tight fan. The most expensive gun in the shop. | cluster | 30 | 20 | 900 | 1 | 7 | 9, aiRack 1 | apex true, split 9, fan 0.16, subDmg 60, subRadius 40 |
+| `deathshead` | Death's Head | A heavy MIRV whose warheads split at the top of the arc. | Nine heavy warheads splitting at the apex in a tight fan. The most expensive gun in the shop. | cluster | 30 | 20 | 900 | 1 | 7 | 9, aiRack 1 | apex true, split 9, fan 0.16, subDmg 40, subRadius 40 |
 | `babyroller` | Baby Roller | A small roller. | A cheap roller that stops sooner. | roller | 28 | 22 | 90 | 3 | 1 | 3 | friction 0.8, rollTime 6, speed 1.0 |
 | `heavyroller` | Heavy Roller | A big roller. | A heavy, slower ball that rolls far. | roller | 70 | 50 | 380 | 1 | 5 | 8, aiRack 1 | friction 0.45, rollTime 9, speed 0.85 |
 

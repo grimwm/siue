@@ -776,15 +776,22 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.moveTo(p.x0, p.level + lap(p.x0));
     for (let x = p.x0 + 2; x <= p.x1; x += 2) c.lineTo(x, p.level + lap(x));
     c.stroke();
-    // The light over it, flickering (steady under reduced motion).
-    const top = p.level - p.flame * 2.4, flick = calm ? 1 : 0.85 + 0.15 * Math.sin(time * 13 + p.x0);
-    const glow = c.createLinearGradient(0, top, 0, p.level + 4);
-    glow.addColorStop(0, 'rgba(255, 120, 30, 0)');
-    glow.addColorStop(1, `rgba(255, 120, 30, ${(bright ? 0.32 : 0.14) * p.heat * flick})`);
+    // The light over it, a soft dome fading out from the pool, flickering (steady under reduced motion).
+    const flick = calm ? 1 : 0.85 + 0.15 * Math.sin(time * 13 + p.x0);
+    const rx = (p.x1 - p.x0) / 2 + p.flame, ry = p.flame * 2.6;
+    c.translate((p.x0 + p.x1) / 2, p.level + 2);
+    c.scale(rx, ry);
+    const glow = c.createRadialGradient(0, 0, 0, 0, 0, 1);
+    const a = (bright ? 0.34 : 0.14) * p.heat * flick;
+    glow.addColorStop(0, `rgba(255, 140, 40, ${a})`);
+    glow.addColorStop(0.45, `rgba(255, 90, 20, ${a * 0.45})`);
+    glow.addColorStop(1, 'rgba(255, 60, 10, 0)');
     if (bright) c.globalCompositeOperation = 'lighter';
     c.globalAlpha = 1;
     c.fillStyle = glow;
-    c.fillRect(p.x0 - p.flame, top, p.x1 - p.x0 + 2 * p.flame, p.level + 4 - top);
+    c.beginPath();
+    c.arc(0, 0, 1, Math.PI, 2 * Math.PI);
+    c.fill();
     c.restore();
   }
   /* The air over a pool shimmers (strips of what is already drawn there,

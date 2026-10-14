@@ -38,6 +38,10 @@ trap cleanup EXIT
 # slug|download url|sha256 of the download|file name inside the zip (empty: the download is the track)
 read -r -d '' DEFAULT_SOURCES <<'EOF' || true
 # BEGIN SOURCES
+battle-theme-a|https://opengameart.org/sites/default/files/battleThemeA.mp3|6042399782e581d753d616bc703e66483d5eccb5fb687a20c9a552d68c49e620|
+chiptune-level-1|https://opengameart.org/sites/default/files/5%20Action%20Chiptunes%20By%20Juhani%20Junkala.zip|ea189990c0fb9a700187ccc740eda72400341a082305a163867467d96346460d|Juhani Junkala [Retro Game Music Pack] Level 1.wav
+awake-megawall-10|https://opengameart.org/sites/default/files/awake10_megaWall.mp3|462c85304df0ea5369cb98aaae158108c92227fa5f442fb63a2da6febbe82ded|
+chiptune-level-3|https://opengameart.org/sites/default/files/5%20Action%20Chiptunes%20By%20Juhani%20Junkala.zip|ea189990c0fb9a700187ccc740eda72400341a082305a163867467d96346460d|Juhani Junkala [Retro Game Music Pack] Level 3.wav
 # END SOURCES
 EOF
 SOURCES=${MUSIC_SOURCES:-$DEFAULT_SOURCES}

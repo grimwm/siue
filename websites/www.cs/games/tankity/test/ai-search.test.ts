@@ -11,9 +11,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildArsenal, mulberry32 } from '../src/sim.ts';
 import { LOB_ANGLE, aiChoose, arcGuns, earthOps } from '../src/ai.ts';
+import type { Ammo, Bracket, FallRules, Gear, Tank, Weapon, World } from '../src/sim.ts';
 
-const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
-const arsenal = buildArsenal(GAME.arsenal);
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+function nth<T>(list: readonly T[], i: number): T {
+  return must(list[i], `item ${i}`);
+}
+
+const GAME: { arsenal: { ammo: Weapon[]; gear?: Gear[]; fall?: Partial<FallRules> } } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+const arsenal = must(buildArsenal(GAME.arsenal), 'the arsenal');
+const row = (k: string): Readonly<Weapon> => must(arsenal.weapons[k], `the ${k} row`);
 
 // The grids: coarse angles 25, 37, ... 145 and powers 20, 32, ... 92; then the
 // eight 6-step neighbours of the coarse best.
@@ -26,25 +36,25 @@ const BRACKET = 1 + 5 * 7 + 8 + 8; // the last shot measured, then 6-, 3- and 1-
 /* One drone turn on flat ground; how many planning flights each gun flew.
    A flight is simShot reading the wind (aiChoose never does) after looking
    its gun up, so how often aiChoose itself looks a gun up does not count. */
-function turn({ s = 'hunter', ammo = {}, brk, targetX = 560, wind = 0 } = {}) {
-  const flown = {};
-  let gun = null;
+function turn({ s = 'hunter', ammo = {}, brk, targetX = 560, wind = 0 }: { s?: string; ammo?: Ammo; brk?: Bracket; targetX?: number; wind?: number } = {}) {
+  const flown: Record<string, number> = {};
+  let gun: string | null = null;
   const weapons = new Proxy(arsenal.weapons, {
     get(t, k) {
       if (typeof k === 'string' && k in t) gun = k;
-      return t[k];
+      return Reflect.get(t, k);
     },
   });
-  const drone = { id: 'D', isPlayer: false, x: 120, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo, s, brk };
-  const human = { id: 'P', isPlayer: true, x: targetX, y: 400, hp: 100, angle: 45, power: 50, dirS: -1, fuel: 80, vy: 0, ammo: {} };
+  const drone: Tank = { id: 'D', isPlayer: false, x: 120, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo, s, brk };
+  const human: Tank = { id: 'P', isPlayer: true, x: targetX, y: 400, hp: 100, angle: 45, power: 50, dirS: -1, fuel: 80, vy: 0, ammo: {} };
   const G = new Proxy({ tanks: [drone, human], terrain: Array(720).fill(400), wind, round: 1, difficulty: 'normal', score: 0, jammer: 0,
-    rng: mulberry32(7) }, {
+    rng: mulberry32(7) } as World, { // a drone's turn reads none of the rest
     get(t, k) {
       if (k === 'wind' && gun !== null) {
         flown[gun] = (flown[gun] || 0) + 1;
         gun = null;
       }
-      return t[k];
+      return Reflect.get(t, k);
     },
   });
   const choice = aiChoose(G, { ...arsenal, weapons }, drone);
@@ -65,9 +75,9 @@ test('a fresh aim searches each distinct arc the same way', () => {
 });
 
 test('a full round-9 rack searches every arc, rollers on a coarser grid, inside a fixed budget', () => {
-  const ammo = Object.fromEntries(GAME.arsenal.ammo.filter(a => a.ai && a.key !== 'shell' && a.aiRound <= 9).map(a => [a.key, a.aiRack ?? 2]));
+  const ammo = Object.fromEntries(GAME.arsenal.ammo.filter(a => a.ai && a.key !== 'shell' && Number(a.aiRound) <= 9).map(a => [a.key, a.aiRack ?? 2]));
   const plan = arcGuns(arsenal, ['shell', ...Object.keys(ammo)]);
-  const rollers = plan.filter(k => arsenal.weapons[k].effect === 'roller');
+  const rollers = plan.filter(k => row(k).effect === 'roller');
   assert.ok(rollers.length >= 3, plan.join());
   for (const s of ['hunter', 'glory', 'sniper']) {
     const { flown, choice } = turn({ s, ammo });
@@ -79,7 +89,7 @@ test('a full round-9 rack searches every arc, rollers on a coarser grid, inside 
     }
     const total = Object.values(flown).reduce((a, b) => a + b, 0);
     assert.ok(total <= 440, `${s}: ${total} flights, ${JSON.stringify(flown)} (test/php/AiArcsTest.php holds the server to the same 440)`);
-    assert.ok(choice.wkey === 'shell' || ammo[choice.wkey] > 0, choice.wkey);
+    assert.ok(choice.wkey === 'shell' || Number(ammo[choice.wkey]) > 0, choice.wkey);
   }
   // Ground predictions (earthHarm) beside the flights: a digger is weighed only at aims within its burrow of the target.
   for (const s of ['hunter', 'glory', 'lobber', 'sniper']) {
@@ -98,13 +108,13 @@ test('a lobber searches the high arcs coarse to fine', () => {
   const { flown } = turn({ s: 'lobber', ammo: { cluster: 2 } });
   const high = Math.ceil((156 - (25 + 6 * Math.ceil((LOB_ANGLE + 1 - 25) / 6))) / 12);
   // area guns only (cluster); flat arcs only when no high one lands near
-  assert.ok(flown.cluster <= high * 7 + FINE + 3 * 7 + FINE, `cluster flown ${flown.cluster}`);
-  assert.ok(flown.cluster >= high * 7 + FINE - 3, `cluster flown ${flown.cluster}`); // fine neighbours past the grid's edge are skipped
+  assert.ok(Number(flown.cluster) <= high * 7 + FINE + 3 * 7 + FINE, `cluster flown ${flown.cluster}`);
+  assert.ok(Number(flown.cluster) >= high * 7 + FINE - 3, `cluster flown ${flown.cluster}`); // fine neighbours past the grid's edge are skipped
   assert.deepEqual(Object.keys(flown), ['cluster']);
 });
 
 test('a bracket correction searches coarse to fine around the last aim', () => {
-  const brk = { t: 1, a: 50, p: 60, w: 'shell', n: 1, tx: 560, ox: 120, land: 540 };
+  const brk: Bracket = { t: 1, a: 50, p: 60, w: 'shell', n: 1, tx: 560, ox: 120, land: 540 };
   const { flown, choice } = turn({ brk, s: 'bully' });
   assert.equal(flown.shell, BRACKET);
   assert.equal(choice.wkey, 'shell');

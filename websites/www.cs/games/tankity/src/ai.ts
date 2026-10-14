@@ -431,7 +431,7 @@ export function fireHarm(world: World, arsenal: Arsenal, self: Tank, wkey: strin
   return { harm, self: mine, near };
 }
 /* Ground predictions made so far (earthHarm and fireHarm calls): a drone turn's cost beside
-   its flights, which test/ai-search.test.mjs holds to a budget.
+   its flights, which test/ai-search.test.ts holds to a budget.
    server/ai.php room_ai_earth_ops is the same count. */
 let groundOps = 0;
 export function earthOps(): number {

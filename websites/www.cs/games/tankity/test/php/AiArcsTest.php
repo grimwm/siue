@@ -225,7 +225,7 @@ final class AiArcsTest extends TestCase
                 $ops = room_ai_earth_ops();
                 room_ai_choose($room, $room['tanks'][1]);
                 $this->assertLessThanOrEqual(440, room_sim_flights() - $before, "$s seed $seed");
-                // Ground predictions beside the flights (test/ai-search.test.mjs holds the browser to the same 240).
+                // Ground predictions beside the flights (test/ai-search.test.ts holds the browser to the same 240).
                 $this->assertLessThanOrEqual(240, room_ai_earth_ops() - $ops, "$s seed $seed: ground predictions");
             }
         }

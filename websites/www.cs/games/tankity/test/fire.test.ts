@@ -10,22 +10,40 @@ import path from 'node:path';
 import { buildArsenal, fireWeapon, mulberry32, stepShells, volleyOn, settleVolley } from '../src/sim.ts';
 import { firePool, inFlames } from '../src/fire.ts';
 import { pourLevel } from '../src/earth.ts';
+import type { FallRules, Gear, Tank, Weapon, World } from '../src/sim.ts';
+import type { FirePool } from '../src/fire.ts';
 
-const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
-const arsenal = buildArsenal(GAME.arsenal);
-const NAPALMS = arsenal.order.filter(k => arsenal.weapons[k].effect === 'napalm');
-const flat = (y = 400, n = 720) => Array(n).fill(y);
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+function nth<T>(list: readonly T[], i: number): T {
+  return must(list[i], `item ${i}`);
+}
+
+const GAME: { arsenal: { ammo: Weapon[]; gear?: Gear[]; fall?: Partial<FallRules> } } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+const arsenal = must(buildArsenal(GAME.arsenal), 'the arsenal');
+const gun = (k: string): Readonly<Weapon> => must(arsenal.weapons[k], `the ${k} row`);
+/* A napalm row, with the fields a pool reads asserted present. */
+function napalm(k: string) {
+  const w = gun(k);
+  const { volume, flame, poolMin, burn, tick } = w;
+  assert.ok(volume !== undefined && flame !== undefined && poolMin !== undefined && burn !== undefined && tick !== undefined, `${k} is not a napalm row`);
+  return { ...w, volume, flame, poolMin, burn, tick };
+}
+const NAPALMS = arsenal.order.filter(k => gun(k).effect === 'napalm');
+const flat = (y = 400, n = 720): number[] => Array(n).fill(y);
 
 test('every napalm row and the liquid dirt carry a poolMin', () => {
   for (const k of arsenal.order) {
-    const w = arsenal.weapons[k];
-    if (w.effect === 'napalm' || w.effect === 'pour') assert.ok(w.poolMin > 0, k);
+    const w = gun(k);
+    if (w.effect === 'napalm' || w.effect === 'pour') assert.ok(Number(w.poolMin) > 0, k);
   }
 });
 
 for (const wkey of NAPALMS) {
-  const w = arsenal.weapons[wkey];
   test(`${wkey} on flat ground lies as a puddle about volume / poolMin wide, centred where it landed, poolMin deep`, () => {
+    const w = napalm(wkey);
     const p = firePool(flat(), 300, w.volume, w.flame, w.poolMin);
     const width = p.x1 - p.x0 + 1, want = w.volume / w.poolMin;
     assert.ok(Math.abs(width - want) <= 2, `${width} columns, want about ${want}`);
@@ -34,9 +52,10 @@ for (const wkey of NAPALMS) {
   });
 
   test(`${wkey} fired at a tank on flat ground burns it every tick`, () => {
-    const me = { id: 'P', isPlayer: true, x: 400, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo: {} };
-    const foe = { id: 'D', isPlayer: false, x: 100, y: 400, hp: 200, angle: 45, power: 50, dirS: -1, fuel: 80, vy: 0, ammo: { [wkey]: 1 } };
-    const G = { tanks: [me, foe], terrain: flat(), wind: 0, round: 9, rng: mulberry32(1), shells: [], score: 0, cash: 0, ammo: {},
+    const w = napalm(wkey);
+    const me: Tank = { id: 'P', isPlayer: true, x: 400, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo: {} };
+    const foe: Tank = { id: 'D', isPlayer: false, x: 100, y: 400, hp: 200, angle: 45, power: 50, dirS: -1, fuel: 80, vy: 0, ammo: { [wkey]: 1 } };
+    const G: World = { tanks: [me, foe], terrain: flat(), wind: 0, round: 9, rng: mulberry32(1), shells: [], score: 0, cash: 0, ammo: {},
       selected: 'shell', shield: false, bunker: 0, laststand: false, jammer: 0, chutes: 0 };
     // The drone's shot comes straight down beside the tank.
     G.shells.push({ x: 400, y: 300, vx: 0, vy: 60, wkey, owner: foe, life: 9, age: 1, pierced: false, split: false, order: [0], clear: true });
@@ -48,6 +67,7 @@ for (const wkey of NAPALMS) {
   });
 
   test(`${wkey} landing by the field's edge keeps a puddle there and spills the overflow off it`, () => {
+    const w = napalm(wkey);
     const p = firePool(flat(), 5, w.volume, w.flame, w.poolMin);
     assert.equal(p.x0, 0);
     assert.ok(p.x1 > 5 && p.x1 - p.x0 + 1 < w.volume / w.poolMin, `${p.x0}..${p.x1}`);
@@ -55,6 +75,7 @@ for (const wkey of NAPALMS) {
   });
 
   test(`${wkey} in a dip still collects at the bottom, as before`, () => {
+    const w = napalm(wkey);
     const t = Array.from({ length: 720 }, (_, ix) => 330 + 90 * Math.max(0, 1 - Math.abs(ix - 360) / 150));
     assert.deepEqual(firePool(t, 330, w.volume, w.flame, w.poolMin), firePool(t, 330, w.volume, w.flame, 0));
   });
@@ -66,9 +87,9 @@ test('a poolMin of 0 pours as before: dead flat ground holds no pool', () => {
 });
 
 test('liquid dirt on flat ground sets about as wide as the biggest dirt mound, not a slab across the field', () => {
-  const pour = arsenal.order.map(k => arsenal.weapons[k]).find(w => w.effect === 'pour');
-  const mound = Math.max(...arsenal.order.map(k => arsenal.weapons[k]).filter(w => w.effect === 'dirt').map(w => 2 * w.radius));
-  const p = pourLevel(flat(), 300, pour.volume, pour.poolMin);
+  const pour = must(arsenal.order.map(gun).find(w => w.effect === 'pour'), 'a pour gun');
+  const mound = Math.max(...arsenal.order.map(gun).filter(w => w.effect === 'dirt').map(w => 2 * w.radius));
+  const p = pourLevel(flat(), 300, must(pour.volume, 'its volume'), pour.poolMin);
   const width = p.x1 - p.x0 + 1;
   assert.ok(width <= mound * 1.1 && width >= mound * 0.8, `${width} columns against a ${mound} px mound`);
 });
@@ -78,14 +99,14 @@ test('the flames never reach a tank buried under the dirt the pool lies on', () 
     const w = arsenal.weapons[wkey];
     const t = flat(400);
     for (let x = 380; x <= 420; x++) t[x] = 370; // a mound over the tank at 400
-    const buriedTank = { id: 'P', isPlayer: true, x: 400, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo: {} };
-    const open = { id: 'Q', isPlayer: false, human: true, x: 445, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo: {} };
-    const foe = { id: 'D', isPlayer: false, x: 100, y: 400, hp: 200, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo: {} };
-    const G = { tanks: [buriedTank, open, foe], terrain: t, wind: 0, round: 9, rng: mulberry32(1), shells: [], score: 0, cash: 0, ammo: {},
+    const buriedTank: Tank = { id: 'P', isPlayer: true, x: 400, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo: {} };
+    const open: Tank = { id: 'Q', isPlayer: false, human: true, x: 445, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo: {} };
+    const foe: Tank = { id: 'D', isPlayer: false, x: 100, y: 400, hp: 200, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0, ammo: {} };
+    const G: World = { tanks: [buriedTank, open, foe], terrain: t, wind: 0, round: 9, rng: mulberry32(1), shells: [], score: 0, cash: 0, ammo: {},
       selected: 'shell', shield: false, bunker: 0, laststand: false, jammer: 0, chutes: 0 };
     // Poured on the mound's crest, the puddle lies over the buried tank and runs on beside it.
     G.shells.push({ x: 400, y: 300, vx: 0, vy: 60, wkey, owner: foe, life: 9, age: 1, pierced: false, split: false, order: [0], clear: true });
-    let pool = null;
+    let pool: FirePool | null = null;
     for (let f = 0; volleyOn(G) && f < 4000; f++) for (const e of stepShells(G, arsenal, 1 / 60)) if (e.kind === 'fire') pool = e.fire.pool;
     assert.ok(pool && pool.x0 <= 400 && pool.x1 >= 430, `${wkey}: the pool spans both (${pool && pool.x0}..${pool && pool.x1})`);
     assert.equal(buriedTank.hp, 100, `${wkey}: the buried tank is not burned`);

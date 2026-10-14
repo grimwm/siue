@@ -5,13 +5,22 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStorage, throwingStorage } from '../../_kit/test/record.ts';
 import { LEGACY_KEY, LOCAL_KEEP, LOCAL_KEY, coerceInitials, localBoard } from '../src/local-board.ts';
+import type { LocalBoard, LocalRow } from '../src/local-board.ts';
+import type { Difficulty } from '../src/ai.ts';
 
-const row = (score, o = {}) => ({ initials: 'ABC', score, rounds: 1, seed: 's' + score, at: '2026-10-13T10:00:00.000Z', kind: 'solo', ref: `solo:s${score}:${o.at ?? ''}`, ...o });
-const stored = s => JSON.parse(s.data.get(LOCAL_KEY));
+function must<T>(v: T | null | undefined, what: string): T {
+  assert.ok(v !== null && v !== undefined, `${what} is missing`);
+  return v;
+}
+/* One difficulty's rows, where storage is known to work. */
+const rowsOf = (b: LocalBoard, lv: Difficulty): LocalRow[] => must(b.rows(lv), `the ${lv} rows`);
+
+const row = (score: number, o: Partial<LocalRow> = {}): LocalRow => ({ initials: 'ABC', score, rounds: 1, seed: 's' + score, at: '2026-10-13T10:00:00.000Z', kind: 'solo', ref: `solo:s${score}:${o.at ?? ''}`, ...o });
+const stored = (s: { data: Map<string, string> }): { v: number; boards: Record<Difficulty, LocalRow[]> } => JSON.parse(must(s.data.get(LOCAL_KEY), 'the saved board'));
 
 test('a fresh browser has an empty board on every difficulty', () => {
   const b = localBoard(memoryStorage());
-  for (const lv of ['easy', 'normal', 'hard']) assert.deepEqual(b.rows(lv), []);
+  for (const lv of ['easy', 'normal', 'hard'] satisfies Difficulty[]) assert.deepEqual(b.rows(lv), []);
 });
 
 test('rows come back best first, each difficulty on its own', () => {
@@ -21,8 +30,8 @@ test('rows come back best first, each difficulty on its own', () => {
   assert.deepEqual(b.add('normal', row(900, { ref: 'b' })), { place: 1, kept: true });
   assert.deepEqual(b.add('normal', row(700, { ref: 'c' })), { place: 2, kept: true });
   assert.deepEqual(b.add('hard', row(100, { ref: 'd' })), { place: 1, kept: true });
-  assert.deepEqual(localBoard(s).rows('normal').map(r => r.score), [900, 700, 500]);
-  assert.deepEqual(localBoard(s).rows('hard').map(r => r.ref), ['d']);
+  assert.deepEqual(rowsOf(localBoard(s), 'normal').map(r => r.score), [900, 700, 500]);
+  assert.deepEqual(rowsOf(localBoard(s), 'hard').map(r => r.ref), ['d']);
   assert.deepEqual(localBoard(s).rows('easy'), []);
   assert.equal(stored(s).v, 1);
 });
@@ -33,7 +42,7 @@ test('a tie goes to the older run, and a run with no date counts as oldest', () 
   assert.equal(b.add('normal', row(500, { ref: 'old', at: '2026-10-12T12:00:00.000Z' })).place, 1);
   assert.equal(b.add('normal', row(500, { ref: 'legacy', at: '' })).place, 1);
   assert.equal(b.add('normal', row(500, { ref: 'same-time', at: '2026-10-13T12:00:00.000Z' })).place, 4, 'a later run on the same date and score goes below');
-  assert.deepEqual(b.rows('normal').map(r => r.ref), ['legacy', 'old', 'new', 'same-time']);
+  assert.deepEqual(rowsOf(b, 'normal').map(r => r.ref), ['legacy', 'old', 'new', 'same-time']);
 });
 
 test('the best 20 per difficulty are kept; a run outside them answers null', () => {
@@ -42,11 +51,11 @@ test('the best 20 per difficulty are kept; a run outside them answers null', () 
   for (let i = 1; i <= LOCAL_KEEP; i++) b.add('easy', row(i * 100, { ref: 'r' + i }));
   assert.equal(LOCAL_KEEP, 20);
   assert.deepEqual(b.add('easy', row(50, { ref: 'low' })), { place: null, kept: true });
-  assert.equal(b.rows('easy').length, 20);
-  assert.ok(!b.rows('easy').some(r => r.ref === 'low'));
+  assert.equal(rowsOf(b, 'easy').length, 20);
+  assert.ok(!rowsOf(b, 'easy').some(r => r.ref === 'low'));
   assert.deepEqual(b.add('easy', row(150, { ref: 'mid' })), { place: 20, kept: true });
-  assert.equal(b.rows('easy').length, 20);
-  assert.ok(!b.rows('easy').some(r => r.ref === 'r1'), 'the lowest fell off');
+  assert.equal(rowsOf(b, 'easy').length, 20);
+  assert.ok(!rowsOf(b, 'easy').some(r => r.ref === 'r1'), 'the lowest fell off');
   assert.equal(stored(s).boards.easy.length, 20);
 });
 
@@ -55,7 +64,7 @@ test('a run already held is not added again, and answers its place', () => {
   b.add('normal', row(900, { ref: 'x' }));
   b.add('normal', row(500, { ref: 'room:ABCD:m1' }));
   assert.deepEqual(b.add('normal', row(500, { ref: 'room:ABCD:m1' })), { place: 2, kept: true });
-  assert.equal(b.rows('normal').length, 2);
+  assert.equal(rowsOf(b, 'normal').length, 2);
 });
 
 test('a damaged value reads back as empty boards, and the next save replaces it', () => {
@@ -93,8 +102,8 @@ test('initials are coerced the way the score guard does it', () => {
   assert.equal(coerceInitials('7'), 'XXX');
 });
 
-const legacy = rows => memoryStorage({ [LEGACY_KEY]: JSON.stringify(rows) });
-const old = (name, score, o = {}) => ({ name, score, banked: 2, won: false, seed: 'seed' + score, ...o });
+const legacy = (rows: unknown[]) => memoryStorage({ [LEGACY_KEY]: JSON.stringify(rows) });
+const old = (name: string, score: number, o: Record<string, unknown> = {}) => ({ name, score, banked: 2, won: false, seed: 'seed' + score, ...o });
 
 test('main\'s tankity-local rows move onto the board, then the old key goes', () => {
   const s = legacy([old('wgr', 900), old('Bo', 400, { difficulty: 'hard' }), old('ABC', 300, { difficulty: 'easy' })]);
@@ -102,8 +111,8 @@ test('main\'s tankity-local rows move onto the board, then the old key goes', ()
   assert.equal(b.migrate(), 3);
   assert.equal(s.data.has(LEGACY_KEY), false);
   assert.deepEqual(b.rows('normal'), [{ initials: 'WGR', score: 900, rounds: 2, seed: 'seed900', at: '', kind: 'solo', ref: 'legacy:seed900:900:wgr' }]);
-  assert.deepEqual(b.rows('hard').map(r => r.initials), ['BOX']);
-  assert.deepEqual(b.rows('easy').map(r => r.score), [300]);
+  assert.deepEqual(rowsOf(b, 'hard').map(r => r.initials), ['BOX']);
+  assert.deepEqual(rowsOf(b, 'easy').map(r => r.score), [300]);
 });
 
 test('migrating joins rows already on the board, and a second run is a no-op', () => {
@@ -112,13 +121,13 @@ test('migrating joins rows already on the board, and a second run is a no-op', (
   const b = localBoard(s);
   b.add('normal', row(1000, { ref: 'mine' }));
   assert.equal(b.migrate(), 1);
-  assert.deepEqual(b.rows('normal').map(r => r.score), [1000, 900]);
+  assert.deepEqual(rowsOf(b, 'normal').map(r => r.score), [1000, 900]);
   assert.equal(b.migrate(), 0);
   // A stale page writes the old key again with the same run: still once.
   s.setItem(LEGACY_KEY, JSON.stringify([old('WGR', 900)]));
   assert.equal(b.migrate(), 0);
   assert.equal(s.data.has(LEGACY_KEY), false);
-  assert.equal(b.rows('normal').length, 2);
+  assert.equal(rowsOf(b, 'normal').length, 2);
 });
 
 test('the old key stays when the board cannot be written', () => {

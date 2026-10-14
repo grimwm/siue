@@ -4,16 +4,19 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { FALLBACK_KEYS, buildKeymap, lookupKey, keycap, createInput, gridCommand } from '../src/input.ts';
+import type { Command, CommandTable, KeyDefs, KeyLike } from '../src/input.ts';
 
-const GAME = JSON.parse(fs.readFileSync(new URL('../game.json', import.meta.url), 'utf8'));
+const GAME: { keys: KeyDefs } = JSON.parse(fs.readFileSync(new URL('../game.json', import.meta.url), 'utf8'));
 const map = buildKeymap(GAME.keys);
-const ev = o => {
-  const e = { key: '', code: '', repeat: false, prevented: 0, ...o };
-  e.preventDefault = () => { e.prevented++; };
+/** A key event that counts its preventDefault calls. */
+type Ev = KeyLike & { prevented: number };
+type EvInit = Omit<KeyLike, 'preventDefault'>;
+const ev = (o: EvInit): Ev => {
+  const e: Ev = { key: '', code: '', repeat: false, prevented: 0, ...o, preventDefault: () => { e.prevented++; } };
   return e;
 };
-const arrowLeft = (o = {}) => ev({ code: 'ArrowLeft', key: 'ArrowLeft', ...o });
-const shift = (o = {}) => ev({ code: 'ShiftLeft', key: 'Shift', ...o });
+const arrowLeft = (o: EvInit = {}) => ev({ code: 'ArrowLeft', key: 'ArrowLeft', ...o });
+const shift = (o: EvInit = {}) => ev({ code: 'ShiftLeft', key: 'Shift', ...o });
 function rig() {
   const input = createInput({ touch: false });
   input.setKeys(GAME.keys);
@@ -30,16 +33,16 @@ test('arrows aim; Shift+arrows drive', () => {
 });
 
 test('Space or Ctrl fires, and G, Q, L, ], H, M, E, F each do their one job', () => {
-  for (const [code, key] of [['Space', ' '], ['ControlLeft', 'Control'], ['ControlRight', 'Control']]) {
+  for (const [code, key] of [['Space', ' '], ['ControlLeft', 'Control'], ['ControlRight', 'Control']] satisfies [string, string][]) {
     assert.equal(lookupKey(map, 'global', { code, key }), 'fire', code);
   }
   const want = [['KeyG', 'g', 'guns'], ['KeyQ', 'q', 'back'], ['KeyL', 'l', 'log'], ['BracketRight', ']', 'nextTrack'],
-    ['KeyH', 'h', 'help'], ['KeyM', 'm', 'music'], ['KeyE', 'e', 'sound'], ['KeyF', 'f', 'fullscreen']];
+    ['KeyH', 'h', 'help'], ['KeyM', 'm', 'music'], ['KeyE', 'e', 'sound'], ['KeyF', 'f', 'fullscreen']] satisfies [string, string, string][];
   for (const [code, key, action] of want) assert.equal(lookupKey(map, 'global', { code, key }), action, code);
 });
 
 test('W, A, S, D and C are bound in no context, Q only goes back, and nothing cycles weapons', () => {
-  const q = [];
+  const q: string[] = [];
   for (const [ctx, actions] of Object.entries(GAME.keys)) {
     for (const [action, tokens] of Object.entries(actions)) {
       for (const t of tokens) assert.doesNotMatch(t, /^(Key[WASDC]|[wasdc])$/i, `${ctx}.${action} binds ${t}`);
@@ -132,7 +135,7 @@ test('letting go of Shift with an arrow still down goes back to aiming at once',
 
 test('card: Space presses the focused card button, never fires, never scrolls', () => {
   const input = rig();
-  const calls = [];
+  const calls: string[] = [];
   input.register({ fire: () => { calls.push('fire'); } }, { cardOpen: () => true });
   let clicked = 0, prevented = 0;
   input.keydown({ ...ev({ code: 'Space', key: ' ' }), target: { tagName: 'BUTTON', click: () => { clicked++; } }, preventDefault: () => { prevented++; } });
@@ -143,18 +146,18 @@ test('card: Space presses the focused card button, never fires, never scrolls', 
 
 test('card: the aim keys hold nothing, and the letter keys still reach their commands', () => {
   const input = rig();
-  const calls = [];
-  const log = name => () => { calls.push(name); };
+  const calls: string[] = [];
+  const log = (name: string) => () => { calls.push(name); };
   input.register({ new: log('new'), rooms: log('rooms'), back: log('back') }, { cardOpen: () => true });
   input.keydown(arrowLeft());
   assert.ok(!input.held.has('barrelLeft'));
-  for (const [code, key] of [['KeyN', 'n'], ['KeyO', 'o'], ['Escape', 'Escape'], ['KeyQ', 'q']]) input.keydown(ev({ code, key }));
+  for (const [code, key] of [['KeyN', 'n'], ['KeyO', 'o'], ['Escape', 'Escape'], ['KeyQ', 'q']] satisfies [string, string][]) input.keydown(ev({ code, key }));
   assert.deepEqual(calls, ['new', 'rooms', 'back']);
 });
 
 test('card: with no button focused, the fire key reaches the game (which explains the demo)', () => {
   const input = rig();
-  const calls = [];
+  const calls: string[] = [];
   input.register({ fire: () => { calls.push('fire'); } }, { cardOpen: () => true });
   input.keydown(ev({ code: 'Space', key: ' ' }));
   assert.deepEqual(calls, ['fire']);
@@ -162,7 +165,7 @@ test('card: with no button focused, the fire key reaches the game (which explain
 
 test('card: Ctrl alone never presses the focused card button; it only reaches fire', () => {
   const input = rig();
-  const calls = [];
+  const calls: string[] = [];
   input.register({ fire: () => { calls.push('fire'); } }, { cardOpen: () => true });
   let clicked = 0;
   input.keydown({ ...ev({ code: 'ControlLeft', key: 'Control', ctrlKey: true }), target: { tagName: 'BUTTON', click: () => { clicked++; } } });
@@ -172,10 +175,10 @@ test('card: Ctrl alone never presses the focused card button; it only reaches fi
 
 test('overlay: Space and Enter press the focused button (the end card\'s Play again), never fire', () => {
   const input = rig();
-  const calls = [];
+  const calls: string[] = [];
   input.register({ fire: () => { calls.push('fire'); }, buy: () => { calls.push('buy'); return true; } }, { overlayOpen: () => true, shopLive: () => true });
   let clicked = 0, prevented = 0;
-  const onButton = o => ({ ...ev(o), target: { tagName: 'BUTTON', click: () => { clicked++; } }, preventDefault: () => { prevented++; } });
+  const onButton = (o: EvInit) => ({ ...ev(o), target: { tagName: 'BUTTON', click: () => { clicked++; } }, preventDefault: () => { prevented++; } });
   input.keydown(onButton({ code: 'Space', key: ' ' }));
   input.keydown(onButton({ code: 'Enter', key: 'Enter' }));
   input.keydown(onButton({ code: 'Space', key: ' ', repeat: true }));
@@ -186,11 +189,11 @@ test('overlay: Space and Enter press the focused button (the end card\'s Play ag
 
 test('shop: after a Buy click drops its focus, Enter buys the selected row, not the row last clicked', () => {
   const input = rig();
-  const bought = [];
+  const bought: number[] = [];
   let selected = 0;
-  input.register({ buy: () => { bought.push(selected); return true; }, selDown: () => { selected++; return true; } }, { overlayOpen: t => t.tagName === 'BUTTON', shopLive: () => true });
+  input.register({ buy: () => { bought.push(selected); return true; }, selDown: () => { selected++; return true; } }, { overlayOpen: (t: { tagName?: string }) => t.tagName === 'BUTTON', shopLive: () => true });
   // The click on row 0's Buy blurred it (shop.tsx), so the focus is on the page; the arrow moves the selection.
-  const onPage = o => ({ ...ev(o), target: { tagName: 'BODY' }, preventDefault: () => {} });
+  const onPage = (o: EvInit) => ({ ...ev(o), target: { tagName: 'BODY' }, preventDefault: () => {} });
   input.keydown(onPage({ code: 'ArrowDown', key: 'ArrowDown' }));
   input.keydown(onPage({ code: 'Enter', key: 'Enter' }));
   assert.deepEqual(bought, [1]);
@@ -206,7 +209,7 @@ test('overlay: Ctrl never presses the focused button', () => {
 
 test('battlefield: with no overlay up, Space on a focused button fires', () => {
   const input = rig();
-  const calls = [];
+  const calls: string[] = [];
   input.register({ fire: () => { calls.push('fire'); } }, { overlayOpen: () => false });
   let clicked = 0;
   input.keydown({ ...ev({ code: 'Space', key: ' ' }), target: { tagName: 'BUTTON', click: () => { clicked++; } } });
@@ -216,10 +219,10 @@ test('battlefield: with no overlay up, Space on a focused button fires', () => {
 
 test('a text box keeps every key: Q types a letter there, and Esc does nothing', () => {
   const input = rig();
-  const calls = [];
+  const calls: string[] = [];
   input.register({ back: () => { calls.push('back'); }, close: () => { calls.push('close'); return true; }, new: () => { calls.push('new'); } },
     { shopLive: () => true });
-  const inBox = o => ev({ ...o, target: { tagName: 'INPUT' } });
+  const inBox = (o: EvInit) => ev({ ...o, target: { tagName: 'INPUT' } });
   const keys = [inBox({ code: 'KeyQ', key: 'q' }), inBox({ code: 'Escape', key: 'Escape' }), inBox({ code: 'KeyN', key: 'n' })];
   for (const k of keys) input.keydown(k);
   assert.deepEqual(calls, []);
@@ -240,9 +243,9 @@ test('Esc maps to no action in any context, in game.json and in the fallback', (
 
 test('Esc reaches no command in any state: shop, aim, gun grid, card, overlay or question', () => {
   const input = rig();
-  const calls = [];
-  const table = {};
-  for (const name of ['back', 'close', 'fire', 'new', 'guns', 'lineDown', 'pageDown', 'gridLeft', 'confirm', 'digit', 'selUp', 'buy', 'preview', 'next']) {
+  const calls: string[] = [];
+  const table: CommandTable = {};
+  for (const name of ['back', 'close', 'fire', 'new', 'guns', 'lineDown', 'pageDown', 'gridLeft', 'confirm', 'digit', 'selUp', 'buy', 'preview', 'next'] satisfies Command[]) {
     table[name] = () => { calls.push(name); return true; };
   }
   let modal = false;
@@ -263,7 +266,7 @@ test('Esc reaches no command in any state: shop, aim, gun grid, card, overlay or
 
 test('overlay: a focused button outside the open overlay (the HUD under the radio log) still fires on Space', () => {
   const input = rig();
-  const calls = [];
+  const calls: string[] = [];
   const inside = { tagName: 'BUTTON', click: () => { calls.push('inside'); } };
   const outside = { tagName: 'BUTTON', click: () => { calls.push('outside'); } };
   input.register({ fire: () => { calls.push('fire'); } }, { overlayOpen: t => t === inside });

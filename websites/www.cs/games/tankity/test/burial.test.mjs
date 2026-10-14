@@ -58,7 +58,7 @@ test('a few pixels of dirt is not burial; dug out, a buried tank drops and pays 
 });
 
 test('a new round places every unit on the fresh hills', () => {
-  const G = soloDeal ? {} : null;
+  const G = {};
   soloDeal(G, arsenal, 'burial', 'normal', 720);
   soloMuster(G, arsenal);
   for (const t of G.tanks) t.y += 30;

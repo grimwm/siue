@@ -3,19 +3,29 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { importTsx } from '../../_kit/test/tsx.ts';
-import { document, makeEl, click, fire } from '../../_kit/test/dom-stub.mjs';
+import { asElement, byId, childEl, click, document, fire, installDocument, makeEl, maybeById, walk } from '../../_kit/test/dom-stub.ts';
+import type { StubElement } from '../../_kit/test/dom-stub.ts';
+import type { GameOverProps } from '../src/ui/gameover.tsx';
+import type { HelpProps } from '../src/ui/help.tsx';
+import type { SettingsProps } from '../src/ui/settings.tsx';
+import type { HsRow } from '../src/scores.ts';
+import { nth } from './nth.ts';
 
-globalThis.document = document;
-const ui = await importTsx(import.meta.dirname, { board: '../src/ui/board.tsx', help: '../src/ui/help.tsx', gameover: '../src/ui/gameover.tsx', settings: '../src/ui/settings.tsx' });
-const { renderHsRows } = ui.board;
-const { renderHelp } = ui.help;
-const { renderGameOver } = ui.gameover;
-const { renderSettings } = ui.settings;
+installDocument();
+const ui = await importTsx<{
+  board: typeof import('../src/ui/board.tsx');
+  help: typeof import('../src/ui/help.tsx');
+  gameover: typeof import('../src/ui/gameover.tsx');
+  settings: typeof import('../src/ui/settings.tsx');
+}>(import.meta.dirname, { board: '../src/ui/board.tsx', help: '../src/ui/help.tsx', gameover: '../src/ui/gameover.tsx', settings: '../src/ui/settings.tsx' });
+// The renderers take real elements; each stub crosses once, here.
+const renderHsRows = (list: StubElement, rows: readonly HsRow[]) => ui.board.renderHsRows(asElement(list), rows);
+const renderHelp = (root: StubElement, props: HelpProps) => ui.help.renderHelp(asElement(root), props);
+const renderGameOver = (root: StubElement, props: GameOverProps) => ui.gameover.renderGameOver(asElement(root), props);
+const renderSettings = (panel: StubElement, props: SettingsProps) => ui.settings.renderSettings(asElement(panel), props);
 
-const walk = (el, out = []) => { for (const c of el.children) if (c.nodeType === 1) { out.push(c); walk(c, out); } return out; };
-const byId = (el, id) => walk(el).find(n => n.id === id);
-const byClass = (el, name) => walk(el).filter(n => String(n.className).split(' ').includes(name));
-const ROWS = [
+const byClass = (el: StubElement, name: string) => walk(el).filter(n => String(n.className).split(' ').includes(name));
+const ROWS: HsRow[] = [
   { rank: 1, initials: 'WMG', date: 'Oct 5, 2026', score: 12 },
   { rank: 2, initials: 'AAA', date: '', score: 3 },
 ];
@@ -34,14 +44,14 @@ test('an empty board says so', () => {
   const list = makeEl('cylon-high-scores');
   renderHsRows(list, []);
   assert.equal(list.children.length, 1);
-  assert.equal(list.children[0].className, 'cylon-hs-empty');
-  assert.equal(list.children[0].textContent, 'No scores yet');
+  assert.equal(childEl(list, 0).className, 'cylon-hs-empty');
+  assert.equal(childEl(list, 0).textContent, 'No scores yet');
 });
 
 test('rows show initials as text, never as markup', () => {
   const list = makeEl('cylon-high-scores');
   renderHsRows(list, [{ rank: 1, initials: '<B>', date: '', score: 1 }]);
-  const cell = byClass(list, 'cylon-hs-initials')[0];
+  const cell = nth(byClass(list, 'cylon-hs-initials'), 0);
   assert.equal(cell.textContent, '<B>');
   assert.equal(walk(cell).length, 0);
 });
@@ -52,11 +62,11 @@ test('How to Play shows the mouse steps on a desktop', () => {
   const veil = byId(root, 'cylon-help');
   assert.equal(veil.hidden, false);
   assert.equal(veil.className, 'cylon-help');
-  assert.equal(veil.children[0].className, 'cylon-help-panel');
+  assert.equal(childEl(veil, 0).className, 'cylon-help-panel');
   assert.equal(byId(root, 'cylon-help-title').textContent, 'How to Play');
   assert.equal(byId(root, 'cylon-help-platform').textContent, 'Desktop controls');
   assert.ok(byId(root, 'cylon-help-desktop'));
-  assert.equal(byId(root, 'cylon-help-mobile'), undefined);
+  assert.equal(maybeById(root, 'cylon-help-mobile'), undefined);
   assert.equal(walk(byId(root, 'cylon-help-desktop')).filter(n => n.localName === 'li').length, 10);
   assert.equal(document.activeElement?.id, 'cylon-help-close');
 });
@@ -94,9 +104,9 @@ test('a closed How to Play is hidden', () => {
   assert.equal(byId(root, 'cylon-help').hidden, true);
 });
 
-function gameOver(over = {}) {
-  const calls = [];
-  const props = {
+function gameOver(over: Partial<GameOverProps> = {}) {
+  const calls: unknown[][] = [];
+  const props: GameOverProps = {
     open: true, reason: 'A nuke landed on you. Frak.', kos: 7, hp: 12, mode: 'entry',
     initials: ['W', 'A', 'A'], active: 0, error: '', submitting: false,
     board: 'week', rows: ROWS, allTimeRank: null, resetText: 'Play often — scores reset every Sunday at midnight Central.', quit: false,
@@ -126,9 +136,9 @@ test('a qualifying run opens on the initials, with its reason and stats', () => 
 test('the initials answer the spinners, the wheel and the keys', () => {
   const { root, calls } = gameOver();
   const spins = byClass(root, 'cylon-initial-spin');
-  click(spins[0]);
-  click(spins[3]);
-  fire(byClass(root, 'cylon-initial-slot')[2], 'wheel', { deltaY: 40 });
+  click(nth(spins, 0));
+  click(nth(spins, 3));
+  fire(nth(byClass(root, 'cylon-initial-slot'), 2), 'wheel', { deltaY: 40 });
   const letter = byId(root, 'cylon-initial-1');
   for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter']) fire(letter, 'keydown', { key });
   click(byId(root, 'cylon-initial-2'));
@@ -180,24 +190,26 @@ test('the settings panel shows each setting, the weekly board and its reset note
   });
   const inputs = walk(panel).filter(n => n.localName === 'input');
   assert.deepEqual(inputs.map(i => i.getAttribute('data-setting')), ['soundEnabled', 'soundVolume', 'musicEnabled', 'musicVolume', 'eyeEnabled']);
-  assert.deepEqual([inputs[0].checked, inputs[2].checked, inputs[4].checked], [true, false, true]);
-  assert.deepEqual([inputs[1].value, inputs[3].value], [70, 20]);
-  assert.equal(inputs[1].getAttribute('aria-label'), 'Sound effects volume');
+  assert.deepEqual([nth(inputs, 0).checked, nth(inputs, 2).checked, nth(inputs, 4).checked], [true, false, true]);
+  assert.deepEqual([nth(inputs, 1).value, nth(inputs, 3).value], [70, 20]);
+  assert.equal(nth(inputs, 1).getAttribute('aria-label'), 'Sound effects volume');
   assert.equal(byId(panel, 'cylon-weekly-reset').textContent, 'Play often — scores reset every Sunday at midnight Central.');
   assert.equal(byId(panel, 'cylon-high-scores').children.length, 2);
 });
 
 test('changing a setting reports its key and new value', () => {
   const panel = makeEl('cylon-settings-panel');
-  const seen = [];
+  const seen: unknown[][] = [];
   renderSettings(panel, {
     soundEnabled: true, soundVolume: 50, musicEnabled: true, musicVolume: 50, eyeEnabled: true,
     rows: [], resetText: '', onSetting: (k, v) => seen.push([k, v]),
   });
   const inputs = walk(panel).filter(n => n.localName === 'input');
-  inputs[0].checked = false;
-  fire(inputs[0], 'change');
-  inputs[3].value = '30';
-  fire(inputs[3], 'input');
+  const toggle = nth(inputs, 0);
+  const volume = nth(inputs, 3);
+  toggle.checked = false;
+  fire(toggle, 'change');
+  volume.value = '30';
+  fire(volume, 'input');
   assert.deepEqual(seen, [['soundEnabled', false], ['musicVolume', 30]]);
 });

@@ -1,5 +1,5 @@
 {
-  "programs": ["tsconfig.json", "src/tsconfig.dom.json"],
+  "programs": ["tsconfig.json", "src/tsconfig.dom.json", "tsconfig.test.json"],
   "entries": [{ "in": "src/main.ts", "out": "main", "format": "esm" }],
   "versions": { "MOUNT_HTML_V": "mount.html" }
 }

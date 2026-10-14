@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { pref, json } from '../../_kit/prefs.ts';
+import type { StorageLike } from '../../_kit/ports.ts';
 import { memoryStorage, throwingStorage } from '../../_kit/test/record.ts';
 import { DEFAULT_SETTINGS, SETTINGS_KEY, isSettings } from '../src/types.ts';
 
@@ -9,7 +10,7 @@ import { DEFAULT_SETTINGS, SETTINGS_KEY, isSettings } from '../src/types.ts';
 // settings, with the sound volume moved and the music turned off.
 const WRITTEN = '{"gameEnabled":false,"soundEnabled":true,"musicEnabled":false,"soundVolume":70,"musicVolume":50,"eyeEnabled":true}';
 
-const open = storage => pref(SETTINGS_KEY, DEFAULT_SETTINGS, json(isSettings), storage);
+const open = (storage: StorageLike) => pref(SETTINGS_KEY, DEFAULT_SETTINGS, json(isSettings), storage);
 
 test('the storage key is the one players already have', () => {
   assert.equal(SETTINGS_KEY, 'cylon-settings');

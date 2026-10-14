@@ -141,7 +141,7 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
   `make deploy`). See `games/tankity/README.md`.
 - Deploys skip `README.md` files, every game's `tools/` folder, tests,
   `games/tankity/game.yaml`, and the TypeScript setup (`src/`, `build.json`,
-  `package*.json`, `tsconfig.json`, `node_modules/`); nothing at runtime reads them. The
+  `package*.json`, `tsconfig.json`, `tsconfig.test.json`, `node_modules/`); nothing at runtime reads them. The
   built `dist/` ships. Every game is built by the shared kit in `_kit/`;
   `make test` and `make deploy` run each game's `--check`.
 - Every card opens, and **Copy link** copies, the game's site page
@@ -155,7 +155,7 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
 - The page imports a mounted game's entry module and hands it what it needs as
   options. The CIC takes `onTheme(combat)`, which `index.html` wires to
   `main.js`'s `applyCombatTheme`; the game defines nothing the site's scripts
-  define and calls nothing they define (`games/cylon/test/smoke.test.mjs` checks).
+  define and calls nothing they define (`games/cylon/test/smoke.test.ts` checks).
   The games list loads after the game has been given the chance to define its
   `start` function.
 

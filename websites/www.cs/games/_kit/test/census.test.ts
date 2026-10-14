@@ -75,6 +75,19 @@ test('verify fails on a lost leaf, naming the file and the leaf', t => {
   assert.match(r.out, /flat\.case: 4 leaves before, 3 after; missing: d/);
 });
 
+test('record notes skipped leaves, and verify rejects a leaf that is newly skipped but keeps one skipped from the start', t => {
+  const dir = tmpDir(t);
+  const out = join(dir, 'before.json');
+  assert.equal(census(['record', '--out', out, 'skip.case.ts']).status, 0);
+  const record = JSON.parse(readFileSync(out, 'utf8'));
+  assert.deepEqual(record.files['skip.case'], { leaves: 2, names: ['parked', 'ran'], skipped: ['parked'] });
+  assert.equal(census(['verify', '--before', out, 'skip.case.ts']).status, 0);
+  const before = writeRecord(dir, { 'skip.case': { leaves: 2, names: ['parked', 'ran'] } });
+  const r = census(['verify', '--before', before, 'skip.case.ts']);
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /skip\.case: newly skipped: parked/);
+});
+
 test('verify fails on a renamed leaf, naming both names', t => {
   const before = writeRecord(tmpDir(t), { 'flat.case': { leaves: 3, names: ['a', 'b', 'x'] } });
   const r = census(['verify', '--before', before, 'flat.case.ts']);

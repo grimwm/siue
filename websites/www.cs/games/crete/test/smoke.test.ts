@@ -6,8 +6,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const GAME = join(import.meta.dirname, '..');
-const read = (...p) => readFileSync(join(GAME, ...p), 'utf8');
-const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const read = (...p: string[]) => readFileSync(join(GAME, ...p), 'utf8');
+const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 test('the page loads the bundle as a versioned module', () => {
   assert.match(read('index.html'), /<script type="module" src="dist\/main\.js\?v=[0-9a-f]{10}"><\/script>/);

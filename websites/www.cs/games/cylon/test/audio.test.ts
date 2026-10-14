@@ -2,23 +2,25 @@
 // through the sfx bus, the buses follow the settings, the music bed follows
 // the session, and a gesture primes the context once.
 import { test } from 'node:test';
+import { setInterval as nodeSetInterval } from 'node:timers';
 import assert from 'node:assert/strict';
 import { createAudio } from '../src/audio.ts';
+import type { AudioSettings, SfxName } from '../src/audio.ts';
 import { volumeToGain } from '../src/rules.ts';
-import { fakeAudioContext } from '../../_kit/test/audio.ts';
+import { asAudioContext, fakeAudioContext, nodeOf } from '../../_kit/test/audio.ts';
+import type { FakeContext } from '../../_kit/test/audio.ts';
 
 // The music bed's scheduler is a real interval; unref it so a finished file does not wait on it.
-const realSetInterval = globalThis.setInterval;
-globalThis.setInterval = (...args) => realSetInterval(...args).unref();
+Reflect.set(globalThis, 'setInterval', (handler: () => void, ms?: number) => nodeSetInterval(handler, ms).unref());
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-const SFX = ['projectile', 'hit', 'heal', 'ko', 'nuke', 'raptor', 'grenadeArm', 'grenade', 'missile', 'trackerMissile', 'introLaunch', 'nukeLaunch'];
-const oscs = ctx => ctx.nodes.filter(n => n.kind === 'osc').length;
+const SFX: SfxName[] = ['projectile', 'hit', 'heal', 'ko', 'nuke', 'raptor', 'grenadeArm', 'grenade', 'missile', 'trackerMissile', 'introLaunch', 'nukeLaunch'];
+const oscs = (ctx: FakeContext) => ctx.nodes.filter(n => n.kind === 'osc').length;
 // The core makes the sfx bus, then the music bus, as the context's first two gains.
-const sfxBus = ctx => ctx.nodes.filter(n => n.kind === 'gain')[0];
-const musicBus = ctx => ctx.nodes.filter(n => n.kind === 'gain')[1];
+const sfxBus = (ctx: FakeContext) => nodeOf(ctx, 'gain', 0);
+const musicBus = (ctx: FakeContext) => nodeOf(ctx, 'gain', 1);
 
-function rig({ ctx = fakeAudioContext(), settings = {}, session = true, noWebAudio = false } = {}) {
+function rig({ ctx = fakeAudioContext(), settings = {}, session = true, noWebAudio = false }: { ctx?: FakeContext; settings?: Partial<AudioSettings>; session?: boolean; noWebAudio?: boolean } = {}) {
   const state = {
     settings: { soundEnabled: true, soundVolume: 50, musicEnabled: true, musicVolume: 50, ...settings },
     session,
@@ -27,7 +29,7 @@ function rig({ ctx = fakeAudioContext(), settings = {}, session = true, noWebAud
     settings: () => state.settings,
     sessionActive: () => state.session,
     volumeToGain,
-    createContext: noWebAudio ? () => null : () => ctx,
+    createContext: noWebAudio ? () => null : () => asAudioContext(ctx),
   });
   return { audio, ctx, state };
 }
@@ -64,7 +66,8 @@ test('every effect is built behind the sfx bus; only the two buses reach the spe
   assert.ok(ctx.nodes.filter(n => n.to.includes(sfxBus(ctx))).length > SFX.length);
 });
 
-for (const [name, settings] of [['sound off', { soundEnabled: false }], ['volume 0', { soundVolume: 0 }]]) {
+const silent: [string, Partial<AudioSettings>][] = [['sound off', { soundEnabled: false }], ['volume 0', { soundVolume: 0 }]];
+for (const [name, settings] of silent) {
   test(`${name} makes no effect and no context`, () => {
     const { audio, ctx } = rig({ settings, session: false });
     SFX.forEach(n => audio.sfx(n));
@@ -158,7 +161,7 @@ test('a gesture with sound and music both off opens nothing', () => {
 test('the settings are read live, even when the object is replaced', () => {
   const ctx = fakeAudioContext();
   let current = { soundEnabled: true, soundVolume: 50, musicEnabled: false, musicVolume: 50 };
-  const audio = createAudio({ settings: () => current, sessionActive: () => true, volumeToGain, createContext: () => ctx });
+  const audio = createAudio({ settings: () => current, sessionActive: () => true, volumeToGain, createContext: () => asAudioContext(ctx) });
   audio.prime();
   current = { ...current, soundVolume: 100 };
   audio.settingChanged('soundVolume');

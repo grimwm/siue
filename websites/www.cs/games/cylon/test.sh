@@ -6,5 +6,7 @@ cd "$(dirname "$0")"
 node ../_kit/build/build.mjs cylon --check
 php tools/install-files.php --check
 node ../_kit/build/icons.mjs cylon --check
-node --test 'test/*.test.mjs'
+set -- test/*.test.ts
+[ -e "$1" ] || { echo "test.sh: no test/*.test.ts" >&2; exit 1; }
+node --test "$@"
 ../../vendor/bin/phpunit -c ../../phpunit.xml --testsuite cylon

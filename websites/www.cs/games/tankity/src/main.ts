@@ -56,7 +56,7 @@ import { renderHelp } from './ui/help.tsx';
 import { drawShellIcon as paintShellIcon, drawGearIcon as paintGearIcon } from './ui/icons.ts';
 import { createChatter, pick, TANK_IDLE, FOE_IDLE } from './chatter.ts';
 import { createEffects, FX, FX_BUDGET } from './effects.ts';
-import { SHELL_ROW, createShop } from './shop.ts';
+import { SHELL_ROW, ammoSub, createShop } from './shop.ts';
 import { createHud } from './hud.ts';
 import { createView } from './view.ts';
 import { createTutorial } from './tutorial.ts';
@@ -263,10 +263,11 @@ function openPreview(wkey: string): void {
   const pr = $('preview-result');
   if (pr) pr.textContent = '';
   const title = $('preview-title');
-  const dmg = (w.effect === 'pellets' && w.pellets) ? `${w.dmg}×${w.pellets}` : `${w.dmg}`;
   if (title) title.textContent = w.name;
+  // What the gun does, as its shop row says it (a blast doubles on a direct hit; a beam, a ring, a tracer and the earth guns say what they do instead).
   const stats = $('preview-stats');
-  if (stats) stats.textContent = `${dmg} damage · blast ${w.radius} · direct hits count double`;
+  if (stats) stats.textContent = w.effect === 'pellets' && w.pellets
+    ? `${w.dmg}×${w.pellets} damage, blast ${w.radius}. Direct hits count double.` : ammoSub({ ...w, note: undefined });
   const veil = $('preview-veil');
   if (veil) veil.hidden = false;
   refreshNavHints();

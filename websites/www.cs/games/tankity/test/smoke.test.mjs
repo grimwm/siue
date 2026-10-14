@@ -956,7 +956,7 @@ await (async () => {
   }
   frames(240); // ~4s: aim, fly, boom, verdict on the mini hill
   TAP('global', 'battlePreview'); frames(5);
-  check('preview-open', pvOpen && /^Shell \| 34 damage · blast 26/.test(pvTitle),
+  check('preview-open', pvOpen && /^Shell \| 34 damage, blast 26\. Direct hits count double\.$/.test(pvTitle),
     `${pvTitle} | turn=${els['hud-turn'].textContent} | ${els['hud-weapon'].textContent}`);
   check('preview-runs', pvDraws > 100, `frames=${pvDraws}`);
   check('preview-close', els['preview-veil'].hidden === true);

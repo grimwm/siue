@@ -62,7 +62,9 @@ export interface SpriteSheet {
 /** The slice of window.TankityFX this module calls. */
 export interface FxApi {
   reduced: boolean;
-  sheets: { moon?: SpriteSheet; parachute?: SpriteSheet };
+  /** Screen flashes (Settings): off leaves out the large bright additive layers. Missing: on. */
+  flashes?: boolean;
+  sheets: { moon?: SpriteSheet; parachute?: SpriteSheet; flame?: SpriteSheet };
   glow(c: CanvasRenderingContext2D, x: number, y: number, radius: number, color: string, alpha: number): void;
   /** The shell's glow, and its rendered sprite when it has one (then true). */
   drawBody(c: CanvasRenderingContext2D, x: number, y: number, vx: number, vy: number,
@@ -71,6 +73,11 @@ export interface FxApi {
 
 /** A weapon's paint job as the battlefield reads it. */
 export interface Look { shell?: string; trail?: string; blast?: readonly string[]; painter?: string }
+
+/** A napalm pool burning on the field (src/fire-show.ts): its level over
+ *  columns x0..x1, its flames' height, how high they stand now (heat, 0 to 1)
+ *  and seconds since it lit. */
+export interface DrawPool { wkey: string; x0: number; x1: number; level: number; flame: number; heat: number; t: number }
 
 /** The aim arm to draw: the unit whose turn it is, and the arm's length in world units. */
 export interface AimArm { unit: DrawTank; length: number }
@@ -96,6 +103,7 @@ export interface PreviewView {
   result: string;
   resultT: number;
   trace: Readonly<Pick<Mark, 'kind' | 'pts' | 'landed' | 'age'>> | null; // a tracer's path this volley
+  fires?: readonly DrawPool[]; // a napalm pool burning on the range
 }
 
 /** Everything a frame shows. Read-only: render.ts never writes to it. */
@@ -119,6 +127,7 @@ export interface BattleView {
   ghosts: readonly Flying[]; // shells the sim retired past the field's edge, flying on over the scenery (draw only)
   sparks: readonly Spark[];
   marks: readonly Mark[]; // tracer marks the viewer sees (src/marks.ts shown)
+  fires?: readonly DrawPool[]; // napalm pools burning (src/fire-show.ts)
   wind: number;
   textScale: number;
   turnClock: { left: number; myTurn: boolean } | null; // the on-canvas count-down, when it shows
@@ -157,6 +166,11 @@ export interface Renderer {
 }
 
 /* ---------- painters with no environment ---------- */
+/** A steady pseudo-random 0..1 from a number: a flame tongue's own height and frame. */
+export function hash01(v: number): number {
+  const x = Math.sin(v * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
 
 /** A #rrggbb colour with every channel scaled by k. */
 export function shade(hex: string, k: number): string {
@@ -729,6 +743,119 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.drawImage(sh.img, (f % sh.cols) * sh.fw, ((f / sh.cols) | 0) * sh.fh, sh.fw, sh.fh, x - size / 2, y - size, size, size);
   }
 
+  /* ---------- burning pools ---------- */
+  /** Px between flame tongues along a pool. */
+  const TONGUE_GAP = 7;
+  /* A pool's liquid (glowing at its top, darker down to the ground under it)
+     and the light it throws up: additive, unless Screen flashes are off. */
+  function drawPoolBack(c: CanvasRenderingContext2D, p: DrawPool, terrain: readonly number[], time: number): void {
+    const calm = deps.reducedMotion(), bright = !FX || FX.flashes !== false;
+    const ground = (x: number): number => terrain[Math.max(0, Math.min(terrain.length - 1, x))] ?? p.level;
+    let deep = p.level;
+    for (let x = p.x0; x <= p.x1; x++) deep = Math.max(deep, ground(x));
+    const lap = (x: number): number => (calm ? 0 : Math.sin(time * 3.1 + x * 0.21) * 0.6);
+    c.save();
+    c.globalAlpha = 0.4 + 0.6 * p.heat;
+    const g = c.createLinearGradient(0, p.level - 1, 0, deep + 1);
+    g.addColorStop(0, '#ffd25a');
+    g.addColorStop(0.12, '#ff6a1a');
+    g.addColorStop(0.5, '#a8200a');
+    g.addColorStop(1, '#3a0804');
+    c.fillStyle = g;
+    c.beginPath();
+    c.moveTo(p.x0, p.level + lap(p.x0));
+    for (let x = p.x0 + 2; x < p.x1; x += 2) c.lineTo(x, p.level + lap(x));
+    c.lineTo(p.x1, p.level + lap(p.x1));
+    for (let x = p.x1; x >= p.x0; x -= 2) c.lineTo(x, Math.max(p.level, ground(x)) + 0.5);
+    c.closePath();
+    c.fill();
+    c.globalAlpha = p.heat;
+    c.strokeStyle = '#fff0a8';
+    c.lineWidth = 1.2;
+    c.beginPath();
+    c.moveTo(p.x0, p.level + lap(p.x0));
+    for (let x = p.x0 + 2; x <= p.x1; x += 2) c.lineTo(x, p.level + lap(x));
+    c.stroke();
+    // The light over it, flickering (steady under reduced motion).
+    const top = p.level - p.flame * 2.4, flick = calm ? 1 : 0.85 + 0.15 * Math.sin(time * 13 + p.x0);
+    const glow = c.createLinearGradient(0, top, 0, p.level + 4);
+    glow.addColorStop(0, 'rgba(255, 120, 30, 0)');
+    glow.addColorStop(1, `rgba(255, 120, 30, ${(bright ? 0.32 : 0.14) * p.heat * flick})`);
+    if (bright) c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = 1;
+    c.fillStyle = glow;
+    c.fillRect(p.x0 - p.flame, top, p.x1 - p.x0 + 2 * p.flame, p.level + 4 - top);
+    c.restore();
+  }
+  /* The air over a pool shimmers (strips of what is already drawn there,
+     each nudged sideways; none under reduced motion), then its flames: a
+     row of tongues from the flame sheet (or drawn, until it loads), each its
+     own height and frame, standing heat x flame px tall, flickering (held
+     still under reduced motion), brightened additively unless Screen
+     flashes are off. */
+  function drawPoolFront(c: CanvasRenderingContext2D, p: DrawPool, time: number, src: unknown): void {
+    const calm = deps.reducedMotion(), bright = !FX || FX.flashes !== false;
+    const h0 = p.flame * p.heat;
+    if (!calm && p.heat > 0.2 && typeof c.getTransform === 'function') shimmer(c, p, time, src);
+    const sh = FX && FX.sheets.flame;
+    c.save();
+    for (let x = p.x0 + 3; x <= Math.max(p.x0 + 3, p.x1 - 3); x += TONGUE_GAP) {
+      const n1 = hash01(x * 7.31 + p.x0), n2 = hash01(x * 3.17 + 11);
+      const h = h0 * (0.7 + 0.55 * n1) * (calm ? 1 : 0.88 + 0.12 * Math.sin(time * 9 + n2 * 6.28));
+      if (h < 1) continue;
+      if (sh && sh.ready) {
+        const f = (calm ? Math.floor(n2 * sh.frames) : Math.floor(time * 16 + n2 * sh.frames)) % sh.frames;
+        const S = h * 1.1, sx = (f % sh.cols) * sh.fw, sy = ((f / sh.cols) | 0) * sh.fh;
+        c.globalAlpha = 0.95;
+        c.drawImage(sh.img, sx, sy, sh.fw, sh.fh, x - S / 2, p.level + 2 - S, S, S);
+        if (bright) {
+          c.globalCompositeOperation = 'lighter';
+          c.globalAlpha = 0.35 * p.heat;
+          c.drawImage(sh.img, sx, sy, sh.fw, sh.fh, x - S / 2, p.level + 2 - S, S, S);
+          c.globalCompositeOperation = 'source-over';
+        }
+      } else drawTongue(c, x, p.level + 1, h, n1, calm ? 0 : Math.sin(time * 7 + n2 * 6.28));
+    }
+    c.restore();
+  }
+  /* A tongue of flame drawn by hand (the sheet not loaded yet): red at its
+     edge, orange, a yellow core, its tip leaning with `sway`. */
+  function drawTongue(c: CanvasRenderingContext2D, x: number, y: number, h: number, n: number, sway: number): void {
+    const w = h * (0.32 + 0.12 * n), tip = x + sway * h * 0.18;
+    const fill = (k: number, color: string): void => {
+      c.fillStyle = color;
+      c.beginPath();
+      c.moveTo(x - w * k, y);
+      c.quadraticCurveTo(x - w * k * 1.1, y - h * k * 0.55, tip, y - h * k);
+      c.quadraticCurveTo(x + w * k * 1.1, y - h * k * 0.55, x + w * k, y);
+      c.closePath();
+      c.fill();
+    };
+    c.globalAlpha = 0.85;
+    fill(1, '#d8361a');
+    fill(0.72, '#ff8a2c');
+    fill(0.42, '#ffe08a');
+  }
+  /* Heat haze over a pool: strips of the canvas already drawn above its
+     flames, each copied back a little sideways, waving with time. */
+  function shimmer(c: CanvasRenderingContext2D, p: DrawPool, time: number, src: unknown): void {
+    const m = c.getTransform();
+    if (!m || typeof m.a !== 'number' || !(m.a > 0) || !(m.d > 0)) return;
+    const x0 = m.a * (p.x0 - 6) + m.e, x1 = m.a * (p.x1 + 6) + m.e;
+    const y0 = m.d * (p.level - p.flame * 2.6) + m.f, y1 = m.d * (p.level - p.flame * 0.5) + m.f;
+    const w = Math.round(x1 - x0), step = Math.max(2, Math.round(m.d * 2));
+    if (w <= 0 || y1 <= y0) return;
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    for (let y = Math.round(y0); y < y1; y += step) {
+      const k = (y - y0) / (y1 - y0); // fades in up from the flames, out at the top
+      const off = Math.sin(time * 6 + y * 0.31) * m.a * 1.1 * p.heat * Math.sin(k * Math.PI);
+      if (Math.abs(off) < 0.2) continue;
+      c.drawImage(src as CanvasImageSource, Math.round(x0), y, w, step, Math.round(x0 + off), y, w, step);
+    }
+    c.restore();
+  }
+
   /* ---------- shells ---------- */
   /** The shell's glow and, when its sheet has loaded, its rendered sprite (then true). */
   function drawShellBody(c: CanvasRenderingContext2D, wkey: string, x: number, y: number, vx: number, vy: number, time: number): boolean {
@@ -884,6 +1011,8 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
       else c.lineTo(x, terr(x));
     }
     c.stroke();
+    const pools = (pv.fires || []).filter(p => p.heat > 0.01 && p.x1 >= p.x0);
+    for (const p of pools) drawPoolBack(c, p, pv.terr, time);
     // Demo shooter + barrel at the solved angle, where it stands (under a mound, for a riot charge's demo).
     const sy = pv.sy;
     if (terr(pv.sx) < sy - BURIED_DRAW_PX) drawBuried(c, pv.sx, sy);
@@ -916,6 +1045,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.fillRect(pv.tx - 15, ty - 28, 30, 4);
     c.fillStyle = '#00aa00';
     c.fillRect(pv.tx - 14, ty - 27, 28 * (pv.foeHp / pv.foeHpMax), 2);
+    for (const p of pools) drawPoolFront(c, p, time, pv.canvas);
     // Shells + debris.
     if (pv.trace) drawMark(c, { ...pv.trace, by: 0, wkey: pv.wkey }, deps.look(pv.wkey), pv.wind, { left: SMOKE_PUFFS_MAX }, deps.reducedMotion());
     for (const bm of pv.booms) drawBoom(c, bm, deps.look(bm.wkey));
@@ -1074,6 +1204,9 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.fillRect(sx0, H - 30, sx1 - sx0, 120); // opaque from H + 60, so the polygons' own bottom edge never shows
     c.fillStyle = '#26150a';
     for (let y = H + 60; y < sy1; y += 36) c.fillRect(sx0, y, sx1 - sx0, 6);
+    // Burning pools: the liquid and its glow, under the units.
+    const pools = (view.fires || []).filter(p => p.heat > 0.01 && p.x1 >= p.x0);
+    for (const p of pools) drawPoolBack(c, p, view.terrain, time);
     // Combatants (dead ones leave a smoking wreck marker), each at its drawn
     // height while a fall plays out, with the armor it shows until it lands.
     for (const t0 of view.tanks) {
@@ -1155,6 +1288,8 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
       c.stroke();
       c.globalAlpha = 1;
     }
+    // Over the units: the air shimmering over each pool, then its flames.
+    for (const p of pools) drawPoolFront(c, p, time, cv);
     // Tracer marks, under the blasts and effects; the newest smoke first, so a
     // crowded round thins the oldest.
     const puffs = { left: SMOKE_PUFFS_MAX }, calm = deps.reducedMotion();

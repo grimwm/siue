@@ -273,3 +273,40 @@ const camAt = z => ({ z, cx: W / 2, cy: H + 8 - H / 2 / z });
   check('a buried unit is drawn in a dashed outline', (buried.calls.by.roundRect || 0) > (plain.calls.by.roundRect || 0)
     && (buried.calls.by.setLineDash || 0) > (plain.calls.by.setLineDash || 0), JSON.stringify([plain.calls.by.setLineDash, buried.calls.by.setLineDash]));
 }
+
+{
+  // Burning pools: the liquid and its glow under the units, then the heat
+  // shimmer and the flames over them. Reduced motion holds the flames still
+  // and leaves the shimmer out; Screen flashes off leaves out the additive glow.
+  const pool = { wkey: 'napalm', x0: 300, x1: 380, level: 290, flame: 18, heat: 1, t: 1 };
+  function poolCanvas() {
+    const { ctx, calls } = stubContext();
+    const sets = [];
+    const rec = new Proxy(ctx, {
+      get: (t, p) => (p === 'getTransform' ? () => ({ a: 2, b: 0, c: 0, d: 2, e: 10, f: 20 }) : t[p]),
+      set: (t, p, v) => { sets.push([p, v]); t[p] = v; return true; },
+    });
+    return { canvas: { width: 1440, height: 920, getContext: () => rec }, calls, sets };
+  }
+  const draw = (over = {}, fx = fxApi) => {
+    const s = poolCanvas();
+    createRenderer(s.canvas, { ...deps, fx, ...over }).frame(deepFreeze({ ...view, fires: [pool] }));
+    return s;
+  };
+  const none = stubCanvas();
+  createRenderer(none.canvas, deps).frame(deepFreeze({ ...view, fires: [] }));
+  const lit = draw();
+  check('pools-draw-liquid-and-flames', (lit.calls.by.quadraticCurveTo || 0) >= 20 && lit.calls.fills > none.calls.fills + 10, JSON.stringify(lit.calls.by.quadraticCurveTo));
+  check('pools-shimmer-the-air-over-them', (lit.calls.by.drawImage || 0) >= 8, String(lit.calls.by.drawImage));
+  check('pools-glow-additively', lit.sets.some(([p, v]) => p === 'globalCompositeOperation' && v === 'lighter'));
+  const calm = draw({ reducedMotion: () => true });
+  check('pools-hold-still-under-reduced-motion', !(calm.calls.by.drawImage > 0), String(calm.calls.by.drawImage));
+  const t2 = poolCanvas(), t3 = poolCanvas();
+  createRenderer(t2.canvas, { ...deps, reducedMotion: () => true }).frame(deepFreeze({ ...view, time: 1, fires: [pool] }));
+  createRenderer(t3.canvas, { ...deps, reducedMotion: () => true }).frame(deepFreeze({ ...view, time: 2.37, fires: [pool] }));
+  check('pools-flames-do-not-flicker-under-reduced-motion', JSON.stringify(t2.calls.by) === JSON.stringify(t3.calls.by));
+  const dim = draw({}, { ...fxApi, flashes: false });
+  check('pools-no-additive-glow-with-flashes-off', !dim.sets.some(([p, v]) => p === 'globalCompositeOperation' && v === 'lighter'));
+  const out = draw();
+  check('pools-a-dead-pool-draws-nothing', (() => { const s = poolCanvas(); createRenderer(s.canvas, deps).frame(deepFreeze({ ...view, fires: [{ ...pool, heat: 0, t: 9 }] })); return s.calls.fills <= none.calls.fills + 1; })() && out.calls.n > 0);
+}

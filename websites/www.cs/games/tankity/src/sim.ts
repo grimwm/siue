@@ -768,7 +768,7 @@ export function rollOut(terrain: readonly number[], x: number, vx: number, vy: n
 /* Everything simShot reads from a gun, as one string: guns with the same key
    fly the same planning arc from the same muzzle, so the drones search one of
    them (ai.ts arcGuns). A field simShot starts to read belongs here too;
-   test/ai-arcs.test.mjs changes every field of every gun to catch one that
+   test/ai-arcs.test.ts changes every field of every gun to catch one that
    is missing. server/sim.php room_flight_key is the same. */
 export function flightKey(w: Weapon): string {
   const roll = w.effect === 'roller';

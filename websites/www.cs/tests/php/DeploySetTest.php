@@ -171,7 +171,7 @@ final class DeploySetTest extends TestCase
         $tracked = self::tracked();
         $kept = array_values(array_filter($tracked, fn(string $f): bool => (bool) preg_match(self::NEVER_SHIPS, $f)));
         self::assertTrue(count($kept) > 80, 'the rule matches the authoring files' . ' :: ' . (string) count($kept));
-        foreach (['games/tankity/src/sim.ts', 'games/tankity/test/smoke.test.mjs', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/dist/fx-editor.js',
+        foreach (['games/tankity/src/sim.ts', 'games/tankity/test/smoke.test.ts', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/dist/fx-editor.js',
             'games/cylon/src/state.ts', 'games/crete/src/engine.ts', 'src/main.ts', 'tools/ts-build.mjs', 'tsconfig.json'] as $f) {
             self::assertTrue(in_array($f, $kept, true), "the rule covers $f");
         }

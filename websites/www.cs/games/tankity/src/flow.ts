@@ -13,7 +13,7 @@
  * Room matches are driven by the server's snapshots (net.ts, replay.ts) and
  * set their phase from those; they do not pass through this table.
  * Nothing here touches the page, so it compiles in the DOM-free program and
- * test/flow.test.mjs walks a whole match through it. */
+ * test/flow.test.ts walks a whole match through it. */
 
 /** Where a match is. */
 export type Phase = 'banner' | 'shop' | 'aim' | 'think' | 'fly' | 'settle' | 'over';

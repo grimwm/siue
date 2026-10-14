@@ -30,7 +30,7 @@ const core = createAudioCore();
 let musicMuted = false;
 let musicOn = false;
 let lastMusicTick = 0;
-let musicTimer = 0;
+let musicTimer: ReturnType<typeof setInterval> | 0 = 0;
 let nextNoteT = 0;
 let stepIdx = 0;
 
@@ -248,7 +248,7 @@ interface TrackEntry { buf: AudioBuffer; start: number; end: number }
 /* One track's playback. While it is still loading it holds `heard`, the play
    the listener can hear, so switching, failing over or stopping can always
    fade that one out. */
-interface Play { idx: number; voices: { src: AudioBufferSourceNode; gain: GainNode }[]; timer: number; heard: Play | null }
+interface Play { idx: number; voices: { src: AudioBufferSourceNode; gain: GainNode }[]; timer: ReturnType<typeof setTimeout> | 0; heard: Play | null }
 const TRACK_CACHE: Record<string, Promise<TrackEntry | null>> = {}; // file -> decoded track
 let trackPlay: Play | null = null;
 function trackMode(): boolean {

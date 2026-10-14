@@ -36,7 +36,7 @@ export const BRK_ON = 22;
 /* How well the drones aim, by difficulty. The ranging shot's wobble is
    wobStart - wobStep x round, never below wobFloor; angle and power stray by
    9 and 12 times it. The numbers are tuned against measured hit rates
-   (src/ai-measure.ts, test/ai-hitrate.test.mjs): hard is the sharpest
+   (src/ai-measure.ts, test/ai-hitrate.test.ts): hard is the sharpest
    (full correction, fastest-shrinking wobble), normal lands a ranging shot 10-25% of the time from round 1
    to round 10, easy about half as often as normal. server/ai.php
    ROOM_DIFFICULTY is the same table. */
@@ -57,7 +57,7 @@ export const DIFFICULTY: Readonly<Record<Difficulty, Readonly<AimSkill>>> = {
 };
 /* Wider fields fly faster shells (sim.ts fieldReach), so a degree or a power
    point moves the burst further: the drones' wobble tightens with the width so
-   each difficulty keeps its hit rates (test/ai-hitrate.test.mjs, every width).
+   each difficulty keeps its hit rates (test/ai-hitrate.test.ts, every width).
    `aim` scales the ranging wobble, `floor` the bracket's floor. Measured with
    src/ai-measure.ts; between points the knobs are interpolated straight.
    Rooms are always ROOM_W wide, where both are exactly 1. */
@@ -431,7 +431,7 @@ export function fireHarm(world: World, arsenal: Arsenal, self: Tank, wkey: strin
   return { harm, self: mine, near };
 }
 /* Ground predictions made so far (earthHarm and fireHarm calls): a drone turn's cost beside
-   its flights, which test/ai-search.test.mjs holds to a budget.
+   its flights, which test/ai-search.test.ts holds to a budget.
    server/ai.php room_ai_earth_ops is the same count. */
 let groundOps = 0;
 export function earthOps(): number {

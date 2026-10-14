@@ -190,7 +190,7 @@ function room_mine_one(string $code, string $token): array
 }
 
 /* ---------- router ---------- */
-// test/php/checks/rooms-sim.php includes this file for its functions only.
+// test/php/RoomsSimTest.php includes this file for its functions only.
 if (defined('TANKITY_ROOMS_LIB')) {
     return;
 }

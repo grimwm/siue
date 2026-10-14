@@ -55,7 +55,7 @@ test('Play again from the end card brings both players to the same lobby, and th
   // 4. Only the host can start: the guest sees "Hang tight", and its start is refused.
   await expect(host.page.locator('#lobby-start')).toBeVisible();
   await expect(guest.page.locator('#lobby-start')).toBeHidden();
-  await expect(guest.page.locator('#lobby-status')).toContainText('Hang tight');
+  await expect(guest.page.locator('#room-hint')).toContainText('Hang tight');
   const refused = await guest.page.evaluate(async ({ code, token, csrf }) => {
     const res = await fetch('rooms.php?action=start', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: JSON.stringify({ code, token, csrf }) });
     return res.status;

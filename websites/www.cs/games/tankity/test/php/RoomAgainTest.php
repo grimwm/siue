@@ -28,8 +28,8 @@ final class RoomAgainTest extends TestCase
     private function over(): array
     {
         $room = room_new('AGIN', 'HOS');
-        $room['seats'][0] = room_seat_human('HOS', 't0', []);
-        $room['seats'][1] = room_seat_human('GST', 't1', []);
+        $room['seats'][0] = room_seat_human('HOS', 't0', [], '');
+        $room['seats'][1] = room_seat_human('GST', 't1', [], '');
         $room['seats'][2] = ['human' => false, 'name' => 'LFT', 'initials' => 'LFT', 'mode' => 'ai', 'bot' => true, 'lives' => 2];
         $room['seats'][3] = room_idle_seat(3, 'open');
         room_seat_economy($room, 0);
@@ -126,8 +126,8 @@ final class RoomAgainTest extends TestCase
     public function testTheNextMatchFilesItsHumansAgain(): void
     {
         $room = room_new('AGN2', 'WIN');
-        $room['seats'][0] = room_seat_human('WIN', 't0', []);
-        $room['seats'][1] = room_seat_human('TWO', 't1', []);
+        $room['seats'][0] = room_seat_human('WIN', 't0', [], '');
+        $room['seats'][1] = room_seat_human('TWO', 't1', [], '');
         $room['seats'][2] = room_idle_seat(2, 'ai');
         $room['seats'][3] = room_idle_seat(3, 'open');
         room_seat_economy($room, 0);

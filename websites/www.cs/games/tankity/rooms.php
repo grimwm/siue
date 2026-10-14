@@ -130,6 +130,61 @@ function room_arsenal(): array
     return $a;
 }
 
+/* A browser's seats, one row each in the order asked; null when it asked for
+   too many or not for a list. A room with something due (a turn or shop that
+   ran out, a drone up) is ticked under the write lock and saved; the rest are
+   plain reads, and a lobby is never saved here, so asking keeps nothing
+   alive. A code that names no room, an expired room and a token that holds no
+   seat there are all `gone`. */
+const ROOM_MINE_MAX = 12;
+function room_mine(mixed $seats): ?array
+{
+    if (!is_array($seats) || !array_is_list($seats) || count($seats) > ROOM_MINE_MAX) {
+        return null;
+    }
+    $out = [];
+    $seen = []; // a seat asked twice is looked up once
+    foreach ($seats as $ask) {
+        $code = strtoupper(trim(is_array($ask) && is_string($ask['code'] ?? null) ? $ask['code'] : ''));
+        $token = is_array($ask) && is_string($ask['token'] ?? null) ? $ask['token'] : '';
+        $key = $code . '|' . $token;
+        $seen[$key] ??= room_mine_one($code, $token);
+        $out[] = $seen[$key];
+    }
+    return $out;
+}
+/* One seat's row, or the `gone` row. */
+function room_mine_one(string $code, string $token): array
+{
+    $gone = ['code' => $code, 'gone' => true];
+    if (!preg_match('/^[A-Z0-9]{4}$/', $code) || $token === '') {
+        return $gone;
+    }
+    $room = room_peek($code);
+    $seat = $room !== null ? room_find_seat($room, $token) : null;
+    if ($seat === null) {
+        return $gone;
+    }
+    if (room_tick_due($room)) {
+        [$held, $lock] = room_load($code);
+        $seat = is_array($held) ? room_find_seat($held, $token) : null;
+        if ($seat === null) {
+            // Gone, or the player left between the peek and the lock.
+            if ($lock !== null) {
+                room_unlock($lock);
+            }
+            return $gone;
+        }
+        room_tick($held);
+        // A tick that could not be saved is not the room's state: answer from the peek.
+        if (room_save($lock, $code, $held)) {
+            $room = $held;
+        }
+        room_unlock($lock);
+    }
+    return room_mine_row($room, $seat);
+}
+
 /* ---------- router ---------- */
 // test/php/checks/rooms-sim.php includes this file for its functions only.
 if (defined('TANKITY_ROOMS_LIB')) {
@@ -164,6 +219,23 @@ if ($action === 'maps') {
         $list[] = ['id' => $id, 'name' => $m['name'], 'profile' => room_map_profile($id)];
     }
     room_json_out(200, ['ok' => true, 'maps' => $list]);
+}
+
+if ($action === 'mine' && $method === 'POST') {
+    // Reads, and ticks what is due; it changes nothing a GET state poll cannot,
+    // so it takes no CSRF token and no rate charge. Tokens travel in the body.
+    if (!room_origin_ok()) {
+        room_json_out(403, ['error' => 'bad origin']);
+    }
+    try {
+        $rows = room_mine($body['seats'] ?? null);
+    } catch (Throwable $e) {
+        room_store_fail($e);
+    }
+    if ($rows === null) {
+        room_json_out(422, ['error' => 'too many rooms at once']);
+    }
+    room_json_out(200, ['ok' => true, 'rooms' => $rows]);
 }
 
 if ($action === 'map' && $method === 'POST') {
@@ -241,11 +313,24 @@ if ($action === 'create' && $method === 'POST') {
     if ($full) {
         room_json_out(409, ['error' => "every room is taken ($max / $max). Try again later."]);
     }
+    $hostKey = room_client_hash();
+    // Like the cap, answered from a read before anything is charged; the exact
+    // count is taken under the write lock below.
+    try {
+        $hosting = room_hosted($hostKey) >= room_hosts_per_address();
+    } catch (Throwable $e) {
+        room_store_fail($e);
+    }
+    if ($hosting) {
+        room_json_out(429, ['error' => 'too many rooms hosted from here; finish or leave one first']);
+    }
     room_rate_gate();
     $initials = room_valid_initials($body['initials'] ?? null);
     if ($initials === null) {
         room_json_out(422, ['error' => 'initials must be 3 letters, kept clean']);
     }
+    $turn = $body['turn'] ?? null;
+    $turn = is_int($turn) && in_array($turn, ROOM_TURN_STOPS, true) ? $turn : ROOM_TURN_DEFAULT;
     // Idle rooms never counted toward the cap; the sweep only drops their rows.
     // Two creates racing for the last place are settled by room_register below.
     try {
@@ -266,10 +351,13 @@ if ($action === 'create' && $method === 'POST') {
     $room['map'] = $map;
     // The host's setting for the whole room; nobody changes it after this.
     $room['difficulty'] = room_parse_difficulty($body['difficulty'] ?? null);
+    $room['turnSecs'] = $turn;
+    $room['actedAt'] = time();
     $token = room_rand_token();
-    // A fresh seat is present, not idle: the 90-second auto-fire rule must
-    // not mistake a guest who just sat down for one who walked away.
-    $room['seats'][0] = room_seat_human($initials, $token, $body);
+    // A fresh seat is present, not idle: the turn clock must not mistake a
+    // guest who just sat down for one who walked away.
+    $room['seats'][0] = room_seat_human($initials, $token, $body, $hostKey);
+    $room['hostKey'] = $hostKey;
     for ($i = 1; $i < ROOM_SEATS; $i++) {
         $room['seats'][$i] = room_idle_seat($i);
     }
@@ -281,6 +369,21 @@ if ($action === 'create' && $method === 'POST') {
     // The exact cap check: two creates racing for the last place cannot both win.
     // Every failure frees the segment just allocated before answering.
     $registered = room_register($code, $max);
+    if ($registered === true) {
+        try {
+            if (room_hosted($hostKey, $code) >= room_hosts_per_address()) {
+                room_discard($lock);
+                room_json_out(429, ['error' => 'too many rooms hosted from here; finish or leave one first']);
+            }
+            if ($turn >= ROOM_LONG_TURN_SECS && room_long_count($code) >= room_long_cap($max)) {
+                room_discard($lock);
+                room_json_out(409, ['error' => ROOM_LONG_FULL]);
+            }
+        } catch (PDOException $e) {
+            room_discard($lock);
+            room_store_fail($e);
+        }
+    }
     if ($registered !== true) {
         room_discard($lock);
         if ($registered === null) {
@@ -332,9 +435,10 @@ if ($action === 'join' && $method === 'POST') {
     }
     $token = room_rand_token();
     // Same as create: joining means present, so the seat starts clocked in.
-    $room['seats'][$seat] = room_seat_human($initials, $token, $body);
+    $room['seats'][$seat] = room_seat_human($initials, $token, $body, room_client_hash());
     room_seat_economy($room, $seat);
     room_emit($room, ['t' => 'join', 'seat' => $seat, 'name' => $initials]);
+    $room['actedAt'] = time();
     if (!room_save($fh, $path, $room)) {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
@@ -385,6 +489,7 @@ function room_gate(array $body, bool $needCsrf, bool $throttle = true): array
             $room['seats'][$seat]['lastAct'] = $now;
         }
     }
+    $room['actedAt'] = time(); // a human acted; polls and timeouts never come through here
     return [$room, $fh, $path, $seat];
 }
 
@@ -410,6 +515,46 @@ if ($action === 'seatmode' && $method === 'POST') {
         room_json_out(409, ['error' => 'a player is sitting there']);
     }
     $room['seats'][$target]['mode'] = $mode;
+    if (!room_save($fh, $path, $room)) {
+        room_unlock($fh);
+        room_json_out(500, ['error' => 'store write failed']);
+    }
+    room_unlock($fh);
+    $out = room_reply_snapshot($room, $seat, $body);
+    room_json_out(200, ['ok' => true, 'room' => $out]);
+}
+
+/* The host sets the turn time in any phase; it applies from the next turn
+   (the running clock and an open shop keep theirs). */
+if ($action === 'turntime' && $method === 'POST') {
+    // Spaced like every other act (the slider sends a settled value).
+    [$room, $fh, $path, $seat] = room_gate($body, true);
+    if ($seat !== room_host($room)) {
+        room_unlock($fh);
+        room_json_out(403, ['error' => 'only the host sets the turn time']);
+    }
+    $secs = $body['secs'] ?? null;
+    if (!is_int($secs) || !in_array($secs, ROOM_TURN_STOPS, true)) {
+        room_unlock($fh);
+        room_json_out(422, ['error' => 'pick one of the turn times']);
+    }
+    if ($secs !== room_turn_secs($room)) {
+        // A room moving up to a long stop takes one of the long share's places.
+        if ($secs >= ROOM_LONG_TURN_SECS && room_turn_secs($room) < ROOM_LONG_TURN_SECS) {
+            try {
+                $longFull = room_long_count((string) $room['code']) >= room_long_cap(room_max_rooms());
+            } catch (PDOException $e) {
+                room_unlock($fh);
+                room_store_fail($e);
+            }
+            if ($longFull) {
+                room_unlock($fh);
+                room_json_out(409, ['error' => ROOM_LONG_FULL]);
+            }
+        }
+        $room['turnSecs'] = $secs;
+        room_emit($room, ['t' => 'turntime', 'seat' => $seat, 'secs' => $secs]);
+    }
     if (!room_save($fh, $path, $room)) {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
@@ -481,6 +626,12 @@ if ($action === 'state') {
         && ($peekSeat === null || time() - (int) ($peek['touched'] ?? 0) < ROOM_HEARTBEAT_SECS)) {
         room_json_out(200, ['ok' => true, 'room' => room_reply_snapshot($peek, $peekSeat, $body)]);
     }
+    // A running match changes on its own only when a clock runs out or a
+    // drone is up: until then a poll is a read, so a week-long room open in
+    // a tab costs no writes. room_tick_due answers from the read (as mine).
+    if (in_array($peek['phase'], ['play', 'shop'], true) && !room_tick_due($peek)) {
+        room_json_out(200, ['ok' => true, 'room' => room_reply_snapshot($peek, $peekSeat, $body)]);
+    }
     $loaded = room_load($code);
     [$room, $fh, $path] = $loaded;
     if (!is_array($room)) {
@@ -489,16 +640,9 @@ if ($action === 'state') {
     }
     $token = (string) ($body['token'] ?? $_GET['token'] ?? '');
     $seat = $token !== '' ? room_find_seat($room, $token) : null;
-    if ($room['phase'] === 'play') {
-        $events = [];
-        room_advance($room, $events);
-        foreach ($events as $e) {
-            room_emit($room, $e);
-        }
-        room_save($fh, $path, $room);
-    } elseif ($room['phase'] === 'shop') {
-        // The shop clock runs out on whoever polls first.
-        room_shop_settle($room);
+    if ($room['phase'] === 'play' || $room['phase'] === 'shop') {
+        // A turn or shop clock that ran out, or a drone's turn, is applied by whoever polls first.
+        room_tick($room);
         room_save($fh, $path, $room);
     } elseif ($seat !== null) {
         // Heartbeat: a seated browser polls state every couple of seconds, so
@@ -677,6 +821,19 @@ if ($action === 'buy' && $method === 'POST') {
 /* Play again (same room): anyone seated may press it once the match is over. */
 if ($action === 'again' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true, false);
+    // A finished long room holds no long place; reviving it takes one back.
+    if ($room['phase'] === 'over' && room_turn_secs($room) >= ROOM_LONG_TURN_SECS) {
+        try {
+            $longFull = room_long_count((string) $room['code']) >= room_long_cap(room_max_rooms());
+        } catch (PDOException $e) {
+            room_unlock($fh);
+            room_store_fail($e);
+        }
+        if ($longFull) {
+            room_unlock($fh);
+            room_json_out(409, ['error' => ROOM_LONG_FULL]);
+        }
+    }
     if (!room_again($room)) {
         room_unlock($fh);
         room_json_out(409, ['error' => 'no match to play again: it is still on, or nobody is left']);

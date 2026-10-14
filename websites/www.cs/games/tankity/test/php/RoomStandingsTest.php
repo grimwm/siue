@@ -16,8 +16,8 @@ final class RoomStandingsTest extends TestCase
     private function room(): array
     {
         $room = room_new('STAT', 'AAA');
-        $room['seats'][0] = room_seat_human('AAA', 't0', []);
-        $room['seats'][1] = room_seat_human('BBB', 't1', []);
+        $room['seats'][0] = room_seat_human('AAA', 't0', [], '');
+        $room['seats'][1] = room_seat_human('BBB', 't1', [], '');
         $room['seats'][2] = room_idle_seat(2, 'ai');
         $room['seats'][3] = room_idle_seat(3, 'open');
         room_seat_economy($room, 0);

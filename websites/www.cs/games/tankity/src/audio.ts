@@ -83,7 +83,12 @@ const SFX_FILES: Record<string, SfxFile> = {}; // event -> the file that voices 
 let MUSIC_LIST: Track[] = [];
 let trackIdx = 0;
 let trackFails = 0;
-let onTrackStart: ((track: Track) => void) | null = null;
+/** Why a track began: a round, the theme or a failover chose it ('auto'), or the player stepped to it ('next'). */
+export type TrackCause = 'auto' | 'next';
+let onTrackStart: ((track: Track, cause: TrackCause) => void) | null = null;
+/* Set by Next song until the track it asked for starts, so the announcement
+   is about the player's choice and never about a round's. */
+let nextPending = false;
 
 /** Decodes audio file bytes (decodeAudioData has a callback and a promise form). */
 function decode(ac: AudioContext, bytes: ArrayBuffer): Promise<AudioBuffer> {
@@ -263,6 +268,16 @@ export function trimSilence(buf: Pick<AudioBuffer, 'getChannelData' | 'sampleRat
 export function trackForLevel(level: number, count: number): number {
   return level <= 0 || count === 1 ? 0 : 1 + ((level - 1) % (count - 1));
 }
+/* A decoded track is about 35 MiB a minute, so only the theme (the demo and
+   intro come back to it) and the track now playing stay decoded; the fading
+   track keeps its own buffer until its voices stop. A dropped track is fetched
+   again when it comes round, from the service worker's cache. */
+function dropDecoded(playing: string): void {
+  const theme = MUSIC_LIST[0]?.file;
+  for (const file of Object.keys(TRACK_CACHE)) {
+    if (file !== playing && file !== theme) delete TRACK_CACHE[file];
+  }
+}
 function loadTrack(t: Track): Promise<TrackEntry | null> {
   const ac = audioCtx();
   if (!ac) return Promise.resolve(null);
@@ -329,12 +344,15 @@ function playTrack(): void {
     if (trackPlay !== play) return;
     if (!entry) { trackFailed(); return; }
     trackFails = 0;
+    const cause: TrackCause = nextPending ? 'next' : 'auto';
+    nextPending = false;
     const ac = audioCtx()!;
     const old = play.heard;
     play.heard = null;
     fadeOutPlay(old, old ? SWITCH_S : 0);
     playPass(play, entry, typeof t.volume === 'number' ? t.volume : 1, ac.currentTime + 0.05, old ? SWITCH_S : 0.4);
-    if (onTrackStart) onTrackStart(t);
+    dropDecoded(t.file);
+    if (onTrackStart) onTrackStart(t, cause);
   });
 }
 /* The play the listener hears now: the current one once it has started,
@@ -347,16 +365,20 @@ function musicForLevel(level: number): void {
   const n = MUSIC_LIST.length;
   if (!n) return;
   trackIdx = trackForLevel(level, n);
+  nextPending = false; // the round's choice replaces the player's
   if (musicOn && trackMode()) playTrack();
 }
 function nextTrack(): void {
   if (!MUSIC_LIST.length) { songIdx = (songIdx + 1) % SONGS.length; return; }
   trackIdx = ((trackPlay ? trackPlay.idx : trackIdx) + 1) % MUSIC_LIST.length;
+  // With one track, or the music muted, nothing new starts to announce.
+  if (MUSIC_LIST.length > 1 && !musicMuted) nextPending = true;
   if (!musicOn && !musicMuted) startMusic();
   else playTrack();
 }
 function trackFailed(): void {
   trackFails++;
+  nextPending = false; // the stand-in is the player's choice failing over, not their choice
   const heard = heardPlay();
   if (trackMode()) { trackIdx = (trackIdx + 1) % MUSIC_LIST.length; trackPlay = heard; playTrack(); return; }
   // Every track failed: the built-in songs take over.
@@ -384,6 +406,7 @@ function startMusic(): void {
 }
 function stopMusic(): void {
   musicOn = false;
+  nextPending = false;
   stopSynth();
   const heard = heardPlay();
   fadeOutPlay(heard, 0.3);
@@ -415,8 +438,10 @@ export const music = {
       }
     }
   },
-  /** Called once a track begins to play, with its game.json entry. */
-  onTrackStart(callback: ((track: Track) => void) | null): void { onTrackStart = callback; },
+  /** The files held decoded in memory (the theme and the track playing). */
+  decodedTracks(): string[] { return Object.keys(TRACK_CACHE); },
+  /** Called once a track begins to play, with its game.json entry and why it began. */
+  onTrackStart(callback: ((track: Track, cause: TrackCause) => void) | null): void { onTrackStart = callback; },
 };
 
 /* ---------- gestures and mutes ---------- */

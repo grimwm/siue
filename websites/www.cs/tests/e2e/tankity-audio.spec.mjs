@@ -191,6 +191,7 @@ test('the demo plays the theme, loops it without a seam, and a round picks the n
   await page.keyboard.press('n');
   await expect.poll(() => music.includes(tracks[1]), { timeout: 15_000 }).toBe(true);
   await expect.poll(() => logText(page), { timeout: 15_000 }).toContain(`Now playing: ${config.audio.music[1].title}`);
+  await expect(page.locator('#track-toast')).toBeHidden(); // a round change is not Next song
   expect(errors).toEqual([]);
 });
 
@@ -198,10 +199,14 @@ test('Next track steps through the soundtrack from the deck or the ] key', async
   const { page, errors, music, config, tracks } = await openWithTones(browser);
   await page.keyboard.press('l');
   await expect.poll(() => music[0], { timeout: 15_000 }).toBe(tracks[0]);
+  await expect(page.locator('#track-toast')).toBeHidden(); // the theme starting is not an announcement
   await page.click('#btn-track');
   await expect.poll(() => logText(page), { timeout: 15_000 }).toContain(`Now playing: ${config.audio.music[1].title}`);
+  const song = n => `♫ ${config.audio.music[n].title} · ${config.audio.music[n].credit}`;
+  await expect(page.locator('#track-toast')).toHaveText(song(1));
   await page.keyboard.press(']');
   await expect.poll(() => logText(page), { timeout: 15_000 }).toContain(`Now playing: ${config.audio.music[2].title}`);
+  await expect(page.locator('#track-toast')).toHaveText(song(2));
   expect(errors).toEqual([]);
 });
 

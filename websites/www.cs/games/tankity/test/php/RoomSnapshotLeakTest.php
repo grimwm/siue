@@ -23,7 +23,7 @@ final class RoomSnapshotLeakTest extends TestCase
     {
         $room = room_new('TEST', 'hos');
         $room['map'] = $map;
-        $room['seats'][0] = room_seat_human('HOS', self::TOKEN, []);
+        $room['seats'][0] = room_seat_human('HOS', self::TOKEN, [], '');
         $room['seats'][1] = room_idle_seat(1);
         room_seat_economy($room, 0);
         room_start_round($room);

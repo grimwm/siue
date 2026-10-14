@@ -14,7 +14,7 @@
 <script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__installPrompt = e; });</script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
-<link rel="stylesheet" href="game.css?v=9fd6b38490">
+<link rel="stylesheet" href="game.css?v=e0ea63abcc">
 </head>
 <body>
 <header class="topbar">
@@ -38,6 +38,7 @@
           <canvas id="portrait" width="36" height="36" aria-hidden="true"></canvas>
           <div class="dlg-text"><span id="dlg-name"></span><span id="dlg-line" aria-live="polite"></span></div>
         </div>
+        <div id="track-toast" class="track-toast" role="status" aria-live="polite" hidden></div>
       </div>
       <div class="deck" id="deck" role="group" aria-label="Controls">
         <div class="grp grp-aim" role="group" aria-labelledby="deck-aim-h">
@@ -99,11 +100,12 @@
         <p class="hint">Live demo on a small hill. Same shells, same wind math, same damage numbers.</p>
       </div>
     </div>
+    <div id="toast-root" class="toasts" aria-live="polite" data-ui></div>
   </section>
 </main>
 
 <script src="dist/fx.js?v=dc385f6706" defer></script>
-<script type="module" src="dist/main.js?v=0e236c00e1"></script>
+<script type="module" src="dist/main.js?v=61e789f62c"></script>
 <script src="dist/install.js?v=6eb4810890" defer></script>
 </body>
 </html>

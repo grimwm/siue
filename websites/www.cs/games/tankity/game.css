@@ -723,6 +723,21 @@ body { height: 100dvh; display: flex; flex-direction: column; }
 #dialogue span + span { overflow: hidden; text-overflow: ellipsis; }
 #dialogue span:first-child { font-weight: 800; letter-spacing: 0.04em; }
 
+/* The Next song announcement: one line inside the battlefield, under the
+   chatter toast (#dialogue sits at top: 8px and is under 32 px tall), clipped
+   with an ellipsis rather than wrapped. It shows over the title card (5) and
+   the menu (6), since a phone's Next song is a menu row that leaves the menu
+   open; it never takes a tap. */
+.track-toast {
+  position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 7;
+  max-width: calc(100% - 16px); padding: 3px 10px;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  background: rgba(12, 15, 46, 0.88); border: 1px solid var(--accent); border-radius: 999px;
+  color: #fff; font-weight: 700; font-size: 0.72rem; line-height: 1.3;
+  pointer-events: none;
+}
+.track-toast[hidden] { display: none; }
+
 /* "Turn sideways": a small chip at the bottom of the battlefield, in portrait only. */
 #rotate-hint-root { display: contents; }
 .rotate-hint {
@@ -815,3 +830,87 @@ body { height: 100dvh; display: flex; flex-direction: column; }
 .scores-levels { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
 .scores-levels button { min-height: 44px; min-width: 44px; padding: 0 14px; }
 .scores-levels button[aria-pressed="true"] { background: var(--gold, #ffc93c); color: #14183a; }
+
+/* The turn-time slider (src/ui/turn-time.tsx): label, range and its value on
+   one line that wraps on a phone. */
+.turn-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.turn-range {
+  flex: 1 1 9rem;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+.turn-range:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.turn-out {
+  min-width: 8.5em;
+  font-weight: bold;
+  color: var(--accent);
+}
+
+/* Your games (src/ui/games.tsx): one row per room, its words and Open. */
+.your-games {
+  margin: 0.75rem 0;
+  text-align: left;
+}
+.your-games h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+.games-list {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.game-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.game-row.your-turn .game-text { color: var(--accent); }
+.game-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.game-open { flex: 0 0 auto; }
+
+/* The turn toasts (src/ui/toast.tsx), stacked at the bottom, above the veils. */
+.toasts {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  width: min(28rem, calc(100% - 2rem));
+  display: grid;
+  gap: 0.5rem;
+  z-index: 20;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--wash-card);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--ink);
+  pointer-events: auto;
+}
+.toast-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.toast-go, .toast-x { flex: 0 0 auto; }

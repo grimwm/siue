@@ -17,7 +17,7 @@ final class RoomArmorTest extends TestCase
     private function room(): array
     {
         $room = room_new('ARMR', 'HUM');
-        $room['seats'][0] = room_seat_human('HUM', 't0', []);
+        $room['seats'][0] = room_seat_human('HUM', 't0', [], '');
         $room['seats'][1] = room_idle_seat(1, 'ai');
         $room['seats'][2] = room_idle_seat(2, 'open');
         $room['seats'][3] = room_idle_seat(3, 'open');

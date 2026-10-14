@@ -130,3 +130,29 @@ test('armor is named with its maximum and the rivals in words; before a match th
   assert.equal(byId(bar, 'hud-lives').textContent, '-');
   assert.equal(byId(bar, 'hud-score').textContent, '-');
 });
+
+test('in a room the turn line carries the time left on a long turn, or the room close that comes first', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const m = await importTsx(import.meta.dirname, { sim: '../src/sim.ts', hudMod: '../src/hud.ts' });
+  const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+  const arsenal = m.sim.buildArsenal(GAME.arsenal);
+  const tables = { arsenal, weapons: arsenal.weapons, shop: arsenal.shop, gear: arsenal.gear, order: arsenal.order };
+  const tank = { seat: 0, isPlayer: true, angle: 45, power: 50, hp: 100, maxHp: 100, fuel: 100, id: 'you' };
+  const G = { tanks: [tank], turn: 0, phase: 'aim', over: false, ammo: { shell: -1 }, selected: 'shell', lives: 3, cash: 0, round: 1,
+    score: 0, nextOneUp: 3000, wind: 0, shield: false, bunker: 0, jammer: 0, laststand: false, plate: 0, armor: 100, w: 720 };
+  const net = { on: true, code: 'AB3D', seat: 0, turnSecs: 28800, turnClockLeft: () => 3600, closeClockLeft: () => null };
+  const h = m.hudMod.createHud({
+    G, $: () => null, tables, net, MATCH: { myTurn: true }, me: () => tank, cur: () => tank, myTank: () => tank,
+    seatName: () => 'ABC', drawShellIcon() {}, keyHint: () => '', touch: false, menuOpen: () => false, onMenu() {},
+  });
+  h.renderHUD();
+  assert.equal(h.HUD.turn, 'YOU. Aim! · 1h 0m left');
+  net.turnSecs = 120;
+  h.renderHUD();
+  assert.equal(h.HUD.turn, 'YOU. Aim!');
+  net.turnSecs = 86400;
+  net.closeClockLeft = () => 540;
+  h.renderHUD();
+  assert.equal(h.HUD.turn, 'YOU. Aim! · Room closes in 9:00 unless someone plays');
+});

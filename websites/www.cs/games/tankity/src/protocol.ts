@@ -24,6 +24,35 @@ export interface RoomReply { ok: true; room: RoomSnapshot }
 /** leave answers with just this. */
 export interface OkReply { ok: true }
 
+/** One of a browser's seats, as action=mine reports it. `gone` covers no such
+ * room, an expired room and a token that holds no seat there: the browser
+ * forgets all three. */
+export type MineRow =
+  | { code: string; gone: true }
+  | {
+    code: string; gone: false; seat: number; phase: 'lobby' | 'play' | 'shop' | 'over';
+    round: number; turnSecs: number;
+    /** The seat whose turn it is (play only). */
+    turn: number | null;
+    yourTurn: boolean;
+    /** Identifies this turn ("round:turn:shots"); null unless yourTurn. One toast per key. */
+    turnKey: string | null;
+    turnLeft: number | null; shopLeft: number | null;
+    /** Every human's initials, this seat's included, in seat order. */
+    players: string[];
+    hostSeat: number;
+    /** Whose turn it is by name (a human's initials or the drone's name); null outside play. */
+    turnName: string | null;
+    /** When the room closes for want of play, unix seconds. The game counts from closesIn instead
+     * (its own clock may be off); this stays for anything else that reads the row. */
+    expiresAt: number;
+    /** The same as seconds from this reply: what a client counts down from. */
+    closesIn: number;
+  };
+
+/** action=mine answers one row per seat asked, in the order asked. */
+export interface MineReply { ok: true; rooms: MineRow[] }
+
 /** action=maps: the hills picker's catalog. `profile` is round one's terrain
  * sampled to 0..1 (0 the lowest ground the generator allows). */
 export interface MapsReply { ok: true; maps: MapInfo[] }
@@ -131,7 +160,14 @@ export interface RoomSnapshot {
   wind: number;
   /** The seat whose turn it is; null outside play. */
   turn: number | null;
-  /** Seconds before the crew fires for the human on turn; null otherwise. */
+  /** The room's turn time in seconds, one of the host's stops. */
+  turnSecs: number;
+  /** When the room closes for want of play, unix seconds; it can come before turnLeft runs out.
+   * The game counts from closesIn (its own clock may be off); this stays for other readers. */
+  expiresAt: number;
+  /** Seconds from this reply until the room closes for want of play: what a client counts down from. */
+  closesIn: number;
+  /** Seconds before a drone fires for the human on turn; null otherwise. */
   turnLeft: number | null;
   /** Seconds before the shop closes; null outside the shop. */
   shopLeft: number | null;
@@ -181,8 +217,10 @@ export interface JoinEvent extends EventBase { t: 'join'; seat: number; name: st
 export interface LeftEvent extends EventBase { t: 'left'; seat: number; name: string }
 /** Someone pressed Play again: the room is back in its lobby. */
 export interface AgainEvent extends EventBase { t: 'again'; seat: number }
+/** The host changed the turn time (seconds); it applies from the next turn. */
+export interface TurnTimeEvent extends EventBase { t: 'turntime'; seat: number; secs: number }
 
-/** What opens a volley: a human fires, the drone fires, or the crew fires for
+/** What opens a volley: a human fires, the drone fires, or a drone fires for
  * a human who ran the turn clock out. `x`, `a` and `pw` are where the barrel
  * stood at the shot, for the replay to ease to. */
 interface VolleyOpener<T extends string> extends EventBase {
@@ -228,7 +266,7 @@ export interface TacticEvent extends EventBase { t: 'tactic'; seat: number; s: s
 
 /** The events a snapshot carries, discriminated by `t`. */
 export type RoomEvent =
-  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent
+  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent | TurnTimeEvent
   | FireEvent | AiFireEvent | AutoEvent
   | ShotEvent | BeamEvent | RingEvent | BurstEvent | HitEvent | FallEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
 
@@ -257,7 +295,7 @@ export type BodyKind = 'tank' | 'hover' | 'walker' | 'buggy';
  * for the whole world, `full: true`; action=state takes the same three as
  * query parameters. */
 export interface PostBodies {
-  create: { initials: string; map: string; body: string; difficulty: Difficulty };
+  create: { initials: string; map: string; body: string; difficulty: Difficulty; turn?: number };
   join: { code: string; initials: string; body: string };
   start: Record<string, never>;
   act: ActBody;
@@ -267,6 +305,11 @@ export interface PostBodies {
   body: { body: string };
   map: { map: string };
   seatmode: { seat: number; mode: 'ai' | 'open'; since?: number };
+  /** Host only, any phase; `secs` is one of the host's stops. */
+  turntime: { secs: number };
+  /** The seats this browser holds (at most 12), asked about together; the
+   * reply is not a room, so no delta fields ride along. */
+  mine: { seats: { code: string; token: string }[] };
   leave: Record<string, never>;
 }
 
@@ -282,6 +325,8 @@ export interface PostReplies {
   body: RoomReply;
   map: RoomReply;
   seatmode: RoomReply;
+  turntime: RoomReply;
+  mine: MineReply;
   leave: OkReply;
 }
 

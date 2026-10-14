@@ -10,7 +10,7 @@
  * A JSON import types every string as plain `string`, so the literal unions
  * (phase, event `t`, seat mode) cannot be checked here; test/protocol.test.mjs
  * checks those values against protocol.ts. */
-import type { ErrorReply, RoomReply, SeatReply } from './protocol.ts';
+import type { ErrorReply, MineReply, RoomReply, SeatReply } from './protocol.ts';
 import createReply from '../protocol/create-reply.json' with { type: 'json' };
 import joinReply from '../protocol/join-reply.json' with { type: 'json' };
 import errorNotYourTurn from '../protocol/error-not-your-turn.json' with { type: 'json' };
@@ -22,6 +22,8 @@ import playAfterFire from '../protocol/play-after-fire.json' with { type: 'json'
 import playAfterFireDelta from '../protocol/play-after-fire-delta.json' with { type: 'json' };
 import playAfterBeam from '../protocol/play-after-beam.json' with { type: 'json' };
 import playResync from '../protocol/play-resync.json' with { type: 'json' };
+import playTurntime from '../protocol/play-turntime.json' with { type: 'json' };
+import mineReply from '../protocol/mine-reply.json' with { type: 'json' };
 import shopAfterWin from '../protocol/shop-after-win.json' with { type: 'json' };
 import shopReady from '../protocol/shop-ready.json' with { type: 'json' };
 
@@ -86,6 +88,8 @@ export const fixturesFit: {
   playAfterFireDelta: Fits<typeof playAfterFireDelta.body, RoomReply>;
   playAfterBeam: Fits<typeof playAfterBeam.body, RoomReply>;
   playResync: Fits<typeof playResync.body, RoomReply>;
+  playTurntime: Fits<typeof playTurntime.body, RoomReply>;
+  mineReply: Fits<typeof mineReply.body, MineReply>;
   shopAfterWin: Fits<typeof shopAfterWin.body, RoomReply>;
   shopReady: Fits<typeof shopReady.body, RoomReply>;
 } = {
@@ -100,6 +104,8 @@ export const fixturesFit: {
   playAfterFireDelta: true,
   playAfterBeam: true,
   playResync: true,
+  playTurntime: true,
+  mineReply: true,
   shopAfterWin: true,
   shopReady: true,
 };

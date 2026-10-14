@@ -23,7 +23,7 @@ function shopFor(on, seed = 'shop') {
   const lines = [], netBuys = [], preloads = [];
   const tables = { arsenal, weapons: arsenal.weapons, shop: arsenal.shop, gear: arsenal.gear, order: arsenal.order };
   const shop = createShop({
-    G, $: () => null, tables, net: { on, seats: () => [], readyNow: () => false, shopClockLeft: () => 0 },
+    G, $: () => null, tables, net: { on, seats: () => [], readyNow: () => false, shopClockLeft: () => 0, closeClockLeft: () => null },
     sfx: { play() {} }, me: () => G.tanks[0], touch: false, keyHint: () => '',
     say: (t) => lines.push(t), advance() {}, render() {}, renderHUD() {}, refreshNavHints() {},
     drawShellIcon() {}, drawGearIcon() {}, openPreview() {}, nextRound() {}, openLeaveVeil() {},

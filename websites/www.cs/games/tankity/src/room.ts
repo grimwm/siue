@@ -28,6 +28,8 @@ import type { Replay, ReplayShot } from './replay.ts';
 import { H, ROOM_W, TUNE, beamCarve, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
 import type { Difficulty, ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
+import { turnLabel } from './turn-time.ts';
+import { showTurnNotification } from './notify.ts';
 
 /** What a room match needs from the page and the rest of the game. */
 export interface RoomDeps {
@@ -60,6 +62,10 @@ export interface RoomDeps {
   renderEndVeil(): void;
   renderHUD(): void;
   renderShop(): void;
+  /** The menu shows the room's turn time. */
+  renderMenu(): void;
+  /** Turn alerts are on in this browser (src/notify.ts). */
+  alertsOn(): boolean;
   renderShopReady(): void;
   shownAngle(t: GameTank): number;
   shownPower(t: GameTank): number;
@@ -76,7 +82,7 @@ export function createRoom(deps: RoomDeps) {
   const {
     G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
     backToLobby, decayFx, fallTanks, fxImpact, fxSpecial, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
-    renderShopReady, shownAngle, shownPower, startBanner, updateCamera, driftClouds, windText, saveLocal,
+    renderShopReady, renderMenu, alertsOn, shownAngle, shownPower, startBanner, updateCamera, driftClouds, windText, saveLocal,
   } = deps;
   /* A match only one human played goes on this browser's board, never the server's, once per match. */
   const keeper = roomLocalSaver(saveLocal, () => new Date().toISOString());
@@ -487,7 +493,12 @@ export function createRoom(deps: RoomDeps) {
       return;
     }
     if (e.t === 'tactic') { say(`${seatName(e.seat).toUpperCase()} switches to ${e.s} tactics.`, 'info'); return; }
-    if (e.t === 'auto') { say(`${seatName(e.seat)} sat quiet, so the crew fired for them.`, 'info'); return; }
+    if (e.t === 'auto') { say(`${seatName(e.seat)} was away, so a drone fired for them.`, 'info'); return; }
+    if (e.t === 'turntime') {
+      say(`${seatName(e.seat)} set the turn time to ${turnLabel(e.secs)}, from the next turn.`, 'info');
+      renderMenu();
+      return;
+    }
   }
   /* ---------- room replay ---------- */
   function netBlast(x: number, y: number, r: number, wkey: string): void {
@@ -529,7 +540,7 @@ export function createRoom(deps: RoomDeps) {
   const MARK_R = 10;
   /* Your turn while the tab is out of sight: the tab title says so, a soft
      ping plays (unless Sound is off), and a notification pops up when the
-     player allowed them. Inside a page on this host that frames the game (a
+     player turned Turn alerts on and the browser allows them. Inside a page on this host that frames the game (a
      site's page around it), that page's title is the tab's, so it changes too.
      Everything resets the moment the tab is seen again. */
   let alertTitles: [Document, string][] | null = null;
@@ -538,11 +549,6 @@ export function createRoom(deps: RoomDeps) {
     try { if (window.top !== window && window.top!.document) docs.push(window.top!.document); } catch (_) { /* another host */ }
     return docs;
   }
-  function askNotifications(): void {
-    try {
-      if (typeof Notification === 'function' && Notification.permission === 'default') Notification.requestPermission();
-    } catch (_) { /* unsupported */ }
-  }
   function turnAlert(): void {
     if (!document.hidden) return;
     if (!alertTitles) {
@@ -550,26 +556,22 @@ export function createRoom(deps: RoomDeps) {
       for (const [d, t] of alertTitles) d.title = `\u25cf Your turn \u00b7 ${t}`;
     }
     sfx.turnPing();
-    try {
-      if (typeof Notification === 'function' && Notification.permission === 'granted') {
-        const n = new Notification('Your turn in Operation Tankity', { body: `Room ${net.code}: the hills are waiting.`, tag: 'tankity-turn' });
-        n.onclick = () => { try { window.top!.focus(); } catch (_) { window.focus(); } n.close(); };
-      }
-    } catch (_) { /* notifications unavailable */ }
+    const others = net.seats.filter(s => s.human && s.seat !== net.seat).map(s => String(s.name || '').toUpperCase());
+    showTurnNotification({ code: net.code, others }, alertsOn(), () => {});
   }
   function clearTurnAlert(): void {
     if (!alertTitles) return;
     for (const [d, t] of alertTitles) d.title = t;
     alertTitles = null;
   }
-  /* The room's turn clock (rooms.php ROOM_TURN_SECS): when a human's turn runs
-     out the crew fires a random gun from their rack. Its owner hears an alert
-     with 30 seconds left; everyone sees the last 10 counted down. */
+  /* The room's turn clock (the room's turnSecs): when a human's turn runs out
+     a drone fires for them from their rack. Its owner hears an alert with 30
+     seconds left; everyone sees the last 10 counted down. */
   function tickTurnClock(): void {
     if (G.phase === 'shop') renderShopReady();
     if (!net.clockWarnDue()) return;
     if (!MATCH.myTurn) return;
-    say(`${Math.ceil(net.turnClockLeft()!)} seconds left. Fire, or the crew picks a gun and fires for you.`, 'bad');
+    say(`${Math.ceil(net.turnClockLeft()!)} seconds left. Fire, or a drone fires for you.`, 'bad');
     sfx.clockWarn();
   }
   /* Tell the room when this player is in a menu (game menu, help, scores, the
@@ -701,7 +703,7 @@ export function createRoom(deps: RoomDeps) {
   }
 
   return {
-    netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netMark, netTrailMark, askNotifications, netFrame,
+    netFire, netPick, netBuy, netNext, netOnSnapshot, netEvent, netBlast, netBeam, netRing, netMark, netTrailMark, netFrame,
     roomShopBoard, openStandings,
   };
 }

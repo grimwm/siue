@@ -122,3 +122,51 @@ test('a real keyboard key brings the key hints back on a touch device', async ({
   await expect(page.locator('#nav-shop')).toBeVisible();
   await ctx.close();
 });
+
+// A phone or tablet goes full screen when the player taps Play: in landscape
+// the browser's own bars would otherwise take the bottom of the screen. The
+// request is made inside the tap; leaving full screen is not undone mid-match,
+// and the next Play tap asks again. A desktop is left as it is.
+const fullId = page => page.evaluate(() => (document.fullscreenElement ? document.fullscreenElement.id : null));
+
+test('tapping Play on a phone goes full screen, and leaving it sticks until the next Play tap', async ({ page }) => {
+  await page.addInitScript(recorderScript);
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto('games/tankity/');
+  expect(await fullId(page)).toBe(null);
+  await page.locator('#title-play').tap();
+  await expect.poll(() => fullId(page)).toBe('frame');
+  await page.waitForSelector('#shop-veil:not([hidden])');
+
+  // The player leaves full screen: the match does not pull them back.
+  await page.evaluate(() => document.exitFullscreen());
+  await expect.poll(() => fullId(page)).toBe(null);
+  await page.locator('#shop-next').tap();
+  await page.waitForTimeout(600);
+  expect(await fullId(page)).toBe(null);
+
+  // The next Play tap (from the menu's Play this seed) asks again.
+  await page.locator('#btn-menu').tap();
+  await page.locator('#new-game').tap();
+  await expect.poll(() => fullId(page)).toBe('frame');
+  expect(errors).toEqual([]);
+});
+
+test('tapping Play with friends on a phone goes full screen', async ({ page }) => {
+  await page.addInitScript(recorderScript);
+  await page.goto('games/tankity/');
+  await page.locator('#rooms-open').tap();
+  await expect.poll(() => fullId(page)).toBe('frame');
+});
+
+test('clicking Play on a desktop does not ask for full screen', async ({ browser, baseURL }) => {
+  const { ctx, page } = await pageOn(browser, baseURL, { viewport: { width: 1280, height: 860 }, hasTouch: false, isMobile: false, deviceScaleFactor: 1 });
+  await page.addInitScript(recorderScript);
+  await page.goto('games/tankity/');
+  await page.locator('#title-play').click();
+  await page.waitForSelector('#shop-veil:not([hidden])');
+  await page.waitForTimeout(400);
+  expect(await fullId(page)).toBe(null);
+  await ctx.close();
+});

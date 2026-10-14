@@ -29,6 +29,8 @@ export interface MenuDeps {
   sfx: Pick<typeof SfxApi, 'play'>;
   difficulty: DifficultySetting;
   unlock(): void;
+  /** Full screen on a touch device, asked inside the Play this seed tap (optional: tests omit it). */
+  playFullscreen?(): void;
   isSoundMuted(): boolean;
   isMusicMuted(): boolean;
   keyHint: KeyHintFn;
@@ -54,7 +56,7 @@ export interface MenuDeps {
 
 export function createMenu(deps: MenuDeps) {
   const {
-    G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
+    G, $, net, sfx, difficulty, unlock, playFullscreen, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
     freshMatchFromSeedBox, openStandings, turnTime, alerts, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong, setFlashes,
   } = deps;
 
@@ -144,7 +146,7 @@ export function createMenu(deps: MenuDeps) {
     drawMenu(section, {
       keyHint,
       onClose: () => toggleOverlay('menu-overlay', 'btn-menu'),
-      onPlaySeed: () => { unlock(); sfx.play('click'); freshMatchFromSeedBox(); },
+      onPlaySeed: () => { playFullscreen?.(); unlock(); sfx.play('click'); freshMatchFromSeedBox(); },
       onSubmit: () => {
         // In a room, Enter asks the leave question like Leave room does.
         if (net.on) { openLeaveVeil(); return; }

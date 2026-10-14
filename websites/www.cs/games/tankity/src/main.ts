@@ -81,6 +81,8 @@ import { renderToasts } from './ui/toast.tsx';
 import type { AlertsState, GamesView } from './ui/games.tsx';
 import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
 import { createTrackToast, trackToastText } from './track-toast.ts';
+import { fullscreenForPlay, withWebkitFullscreen } from './play-fullscreen.ts';
+import type { WebkitDocument } from './play-fullscreen.ts';
 import { exitApp, enterFullscreen, browserAppEnv, EXIT_HINT, holdEscape, topKeyLock } from '../../_kit/app.ts';
 import { pref, text } from '../../_kit/prefs.ts';
 import { ROTATE_HINT_KEY, rotateHintShows } from './rotate-hint.ts';
@@ -530,7 +532,7 @@ const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
   netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime, netGone,
 } = createLobby({
-  G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, say, keyHint, seats, games: () => gamesView(),
+  G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, playFullscreen, say, keyHint, seats, games: () => gamesView(),
   steppedOut: (code, myTurn) => { if (myTurn) watch.quietNext(code); }, netEvent, seatName, closeLobbyVeil,
   closeOverlays, closePreview, endTutorial, hideShop, initials: savedInitials, initialsSaved: () => renderTitle(), paintHud, refreshNavHints,
   renderMenu: () => renderMenu(),
@@ -539,7 +541,7 @@ const {
 });
 /* The game menu's settings (src/menu.ts). */
 const { loadBody, loadTextSize, loadFlashes, textScale, renderMenu } = createMenu({
-  G, $, net, sfx, difficulty, unlock, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
+  G, $, net, sfx, difficulty, unlock, playFullscreen, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
   nextSong: () => { unlock(); music.next(); },
   openStandings: () => openStandings(), turnTime: secs => netTurnTime(secs), alerts: () => ({ state: alertsState(), onClick: toggleAlerts }), freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
   quit: () => { void quitGame(); },
@@ -548,9 +550,9 @@ const { loadBody, loadTextSize, loadFlashes, textScale, renderMenu } = createMen
 /* The title card over the demo (src/title.ts). */
 const { titleOpen, openTitle, closeTitle, showHint: showTitleHint, renderTitle } = createTitle({
   $, keyHint, initials: savedInitials,
-  play: () => { unlock(); sfx.play('click'); randomRun(); },
-  friends: () => openRooms(),
-  tutorial: () => { sfx.play('click'); tutorialOpen(); },
+  play: () => { playFullscreen(); unlock(); sfx.play('click'); randomRun(); },
+  friends: () => { playFullscreen(); openRooms(); },
+  tutorial: () => { playFullscreen(); sfx.play('click'); tutorialOpen(); },
   settings: () => { const mv = $('menu-overlay'); if (mv && mv.hidden) toggleOverlay('menu-overlay', 'btn-menu'); },
   settingsOpen: () => { const mv = $('menu-overlay'); return !!mv && !mv.hidden; },
   games: () => gamesView(),
@@ -1071,6 +1073,10 @@ async function quitGame(): Promise<void> {
   const outcome = await exitApp(browserAppEnv());
   // The card may be gone already: a match started inside the close wait.
   if (outcome === 'title-with-hint') showTitleHint(`${EXIT_HINT}.`);
+}
+/* A tap that starts a match on a phone or tablet goes full screen (src/play-fullscreen.ts). */
+function playFullscreen(): void {
+  fullscreenForPlay(() => touchNow, withWebkitFullscreen(browserAppEnv(), document as WebkitDocument), $('frame'));
 }
 function toggleFullscreen(): void {
   // The frame carries the canvas plus its HUD and pads, so the whole battle goes fullscreen together.

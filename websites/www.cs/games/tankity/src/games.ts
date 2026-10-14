@@ -12,6 +12,13 @@ import type { SeatStore } from './seats.ts';
 export const GAMES_POLL_MS = 10_000;
 export type LiveRow = Extract<MineRow, { gone: false }>;
 
+/** The room on screen, which the watcher leaves to its own poll: a running
+ * match, or a room's lobby while the lobby shows. A lobby closed with Q keeps
+ * the seat and the session, and the room is listed in Your games. */
+export function roomOnScreen(net: { code: string; on: boolean }, lobbyOpen: boolean): string {
+  return net.code && (net.on || lobbyOpen) ? net.code : '';
+}
+
 export interface GamesWatchDeps {
   store: SeatStore;
   mine(seats: { code: string; token: string }[]): Promise<MineRow[]>;

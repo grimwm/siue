@@ -424,9 +424,9 @@ const listeners = (el, type) => ((el._l || {})[type] || []).length;
 // Your games in the lobby when not in a room; the Turn alerts button in one.
 {
   const row = { code: 'AB3D', gone: false, seat: 1, phase: 'lobby', round: 0, turnSecs: 120, turn: null, yourTurn: false, turnKey: null,
-    turnLeft: null, shopLeft: null, players: ['ABC', 'ZED'], hostSeat: 0, expiresAt: 2e9 };
+    turnLeft: null, shopLeft: null, players: ['ABC', 'ZED'], hostSeat: 0, turnName: null, expiresAt: 2e9, closesIn: 600 };
   let opened = '', alerted = 0;
-  const g = { rows: [row], alerts: 'off', now: 1e9, onOpen: c => { opened = c; }, onAlerts: () => { alerted++; } };
+  const g = { rows: [row], alerts: 'off', age: 0, onOpen: c => { opened = c; }, onAlerts: () => { alerted++; } };
   const out = makeEl('lobby-veil');
   renderLobby(out, lobbyProps({ turnSecs: 120, onTurnForm() {}, onTurnRoom() {}, games: g }).props);
   const list = byId(out, 'lobby-games');

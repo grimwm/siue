@@ -68,7 +68,7 @@ import { createTitle } from './title.ts';
 import { difficultySetting } from './difficulty.ts';
 import { initialsPref } from './initials.ts';
 import { createSeatStore } from './seats.ts';
-import { createGamesWatch } from './games.ts';
+import { createGamesWatch, roomOnScreen } from './games.ts';
 import type { LiveRow } from './games.ts';
 import { alertsPref, askNotify, notifyPermission, showTurnNotification } from './notify.ts';
 import { renderToasts } from './ui/toast.tsx';
@@ -549,8 +549,10 @@ function toggleAlerts(): void {
 /* The rooms this browser sits in, but the one on screen, as the watcher last
    heard them (src/games.ts). */
 let gamesRows: LiveRow[] = [];
+let gamesAt = 0;
 function gamesView(): GamesView {
-  return { rows: gamesRows, alerts: alertsState(), now: Date.now() / 1000, onOpen: openGame, onAlerts: toggleAlerts };
+  const age = gamesRows.length ? (performance.now() - gamesAt) / 1000 : 0;
+  return { rows: gamesRows, alerts: alertsState(), age, onOpen: openGame, onAlerts: toggleAlerts };
 }
 function renderGames(): void {
   renderTitle();
@@ -596,8 +598,8 @@ const watch = createGamesWatch({
   mine: list => net.mine(list),
   setInterval: (fn, ms) => setInterval(fn, ms),
   clearInterval: id => clearInterval(id as number),
-  viewing: () => net.code,
-  onRows: rows => { gamesRows = rows; renderGames(); },
+  viewing: () => roomOnScreen(net, !($('lobby-veil')?.hidden ?? true)),
+  onRows: rows => { gamesRows = rows; gamesAt = performance.now(); renderGames(); },
   onTurn: row => {
     // `players` lists humans only, so a seat number is not an index into it: drop this seat's own initials.
     const me = seats.get(row.code)?.initials ?? '';
@@ -943,6 +945,8 @@ function closeLobbyVeil(): boolean {
   if (!veil || veil.hidden) return false;
   veil.hidden = true;
   refreshNavHints();
+  // A room's lobby closed while seated: the seat waits, and Your games lists the room.
+  if (net.code && !net.on) void watch.pollNow();
   return true;
 }
 function closeOverlays(): boolean {

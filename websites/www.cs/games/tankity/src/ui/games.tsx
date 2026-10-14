@@ -16,8 +16,8 @@ export type AlertsState = 'on' | 'off' | 'blocked' | 'unsupported';
 export interface GamesView {
   rows: LiveRow[];
   alerts: AlertsState;
-  /** Unix seconds now, to read each room's closing time against. */
-  now: number;
+  /** Seconds since the rows arrived: their clocks count down from then. */
+  age: number;
   onOpen: (code: string) => void;
   onAlerts: () => void;
 }
@@ -26,23 +26,24 @@ export interface YourGamesProps extends GamesView {
   id: string;
 }
 
-/** Where a room stands, for its row. */
-export function gameStatus(r: LiveRow, now: number): string {
+/** Where a room stands, for its row; `age` is how long ago the row arrived. */
+export function gameStatus(r: LiveRow, age: number): string {
   if (r.phase === 'lobby') return 'Waiting in the lobby';
   if (r.phase === 'over') return 'Match over';
   if (r.phase === 'shop') return 'Shop open';
-  if (!r.yourTurn) return 'Waiting on another tank';
-  const closeLeft = typeof r.expiresAt === 'number' ? r.expiresAt - now : null;
-  if (r.turnLeft !== null && closeLeft !== null && closeLeft < r.turnLeft) {
+  if (!r.yourTurn) return r.turnName ? `${r.turnName}'s turn` : 'Waiting on another tank';
+  const closeLeft = typeof r.closesIn === 'number' ? r.closesIn - age : null;
+  const turnLeft = r.turnLeft === null ? null : r.turnLeft - age;
+  if (turnLeft !== null && closeLeft !== null && closeLeft < turnLeft) {
     return `Your turn · room closes in ${clockText(closeLeft)} unless someone plays`;
   }
-  return r.turnLeft === null ? 'Your turn' : `Your turn, ${clockText(r.turnLeft)} left`;
+  return turnLeft === null ? 'Your turn' : `Your turn, ${clockText(turnLeft)} left`;
 }
 
-export function gameLine(r: LiveRow, now: number): string {
+export function gameLine(r: LiveRow, age: number): string {
   const who = r.players.join(', ');
   const round = r.phase === 'lobby' ? '' : ` · Round ${r.round}`;
-  return `${r.code} · ${who}${round} · ${gameStatus(r, now)}`;
+  return `${r.code} · ${who}${round} · ${gameStatus(r, age)}`;
 }
 
 const ALERTS_TEXT: Record<Exclude<AlertsState, 'unsupported'>, string> = {
@@ -64,7 +65,7 @@ export function YourGames(p: YourGamesProps) {
       <ul class="games-list">
         {p.rows.map(r => (
           <li key={r.code} class={r.yourTurn ? 'game-row your-turn' : 'game-row'}>
-            <span class="game-text">{gameLine(r, p.now)}</span>
+            <span class="game-text">{gameLine(r, p.age)}</span>
             <button type="button" class="game-open" title={`Open room ${r.code}`} onClick={blurThen(() => p.onOpen(r.code))}>Open</button>
           </li>
         ))}

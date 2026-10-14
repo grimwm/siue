@@ -3,7 +3,7 @@
 // turn is reported once and never for the room on screen.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGamesWatch, GAMES_POLL_MS } from '../src/games.ts';
+import { createGamesWatch, GAMES_POLL_MS, roomOnScreen } from '../src/games.ts';
 import { createSeatStore } from '../src/seats.ts';
 
 function mapStorage() {
@@ -12,7 +12,7 @@ function mapStorage() {
 }
 const row = (code, over = {}) => ({
   code, gone: false, seat: 1, phase: 'play', round: 2, turnSecs: 600, turn: 0, yourTurn: false, turnKey: null,
-  turnLeft: null, shopLeft: null, players: ['ABC', 'ZED'], hostSeat: 0, expiresAt: 2e9, ...over,
+  turnLeft: null, shopLeft: null, players: ['ABC', 'ZED'], hostSeat: 0, turnName: 'ABC', expiresAt: 2e9, closesIn: 600, ...over,
 });
 const flush = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setImmediate(r)); };
 
@@ -124,4 +124,11 @@ test('it polls every 10 s, pollNow asks at once without doubling up, and stop cl
   assert.equal(r.intervals.size, 1);
   r.watch.stop();
   assert.equal(r.intervals.size, 0);
+});
+
+test('the room on screen is the match, or the lobby while it shows; a lobby closed with Q is listed', () => {
+  assert.equal(roomOnScreen({ code: 'AAAA', on: true }, false), 'AAAA');
+  assert.equal(roomOnScreen({ code: 'AAAA', on: false }, true), 'AAAA');
+  assert.equal(roomOnScreen({ code: 'AAAA', on: false }, false), '');
+  assert.equal(roomOnScreen({ code: '', on: false }, true), '');
 });

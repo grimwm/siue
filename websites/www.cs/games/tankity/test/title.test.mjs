@@ -116,7 +116,7 @@ test('the hint belongs to the open card: gone when a match starts, not shown on 
   const t = card.createTitle({
     $: id => (id === 'title-root' ? root : null), keyHint: () => '', initials: { get: () => 'BDJ', set() {} },
     play() {}, friends() {}, tutorial() {}, settings() {}, settingsOpen: () => false,
-    games: () => ({ rows: [], alerts: 'off', now: 0, onOpen() {}, onAlerts() {} }),
+    games: () => ({ rows: [], alerts: 'off', age: 0, onOpen() {}, onAlerts() {} }),
   });
   t.showHint('nobody sees this');
   assert.equal(byId(root, 'title-hint'), undefined, 'a closed card shows nothing');

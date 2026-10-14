@@ -43,9 +43,6 @@ export interface RoomEnv {
   clearInterval(id: unknown): void;
   /** Milliseconds on a monotonic clock (performance.now). */
   now(): number;
-  /** Milliseconds since the epoch (Date.now, the default): a room's closing
-   * time arrives as a unix time. */
-  wall?(): number;
   /** navigator.sendBeacon: true when the browser took the request. */
   beacon(url: string, body: string): boolean;
 }
@@ -326,15 +323,15 @@ export class RoomClient {
     return (data as unknown as PostReplies['mine']).rooms;
   }
 
-  /** What every snapshot says about time: the turn time, and when the room
-   * closes if nobody acts (`expiresAt`, unix seconds; absent means no sooner
-   * close is known). */
-  private noteRoom(room: Partial<Pick<RoomSnapshot, 'turnSecs'>> | null | undefined): void {
+  /** What every snapshot says about time: the turn time, and how long until
+   * the room closes if nobody acts (`closesIn`, seconds from the reply,
+   * counted down from when it arrived, so the client's own clock never
+   * matters; absent means no sooner close is known). */
+  private noteRoom(room: Partial<Pick<RoomSnapshot, 'turnSecs' | 'closesIn'>> | null | undefined): void {
     if (!room) return;
     if (typeof room.turnSecs === 'number') this.turnSecs = room.turnSecs;
-    const at = (room as { expiresAt?: unknown }).expiresAt;
-    if (typeof at === 'number' && Number.isFinite(at)) {
-      this.closeLeft = at - (this.env.wall ? this.env.wall() : Date.now()) / 1000;
+    if (typeof room.closesIn === 'number' && Number.isFinite(room.closesIn)) {
+      this.closeLeft = room.closesIn;
       this.closeLeftAt = this.env.now();
     } else {
       this.closeLeft = null;
@@ -653,7 +650,7 @@ export class RoomClient {
   }
 
   /** Seconds before the room closes with nobody acting, counted down
-   * locally from the last snapshot's `expiresAt`; null when it did not say. */
+   * locally from the last snapshot's `closesIn`; null when it did not say. */
   closeClockLeft(): number | null {
     if (typeof this.closeLeft !== 'number') return null;
     return Math.max(0, this.closeLeft - (this.env.now() - this.closeLeftAt) / 1000);

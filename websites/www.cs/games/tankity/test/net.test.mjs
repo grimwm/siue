@@ -711,13 +711,13 @@ check('invite-url-escapes-the-code', inviteUrl('A&B', {}) === '?code=A%26B');
   check('host-cap-429-shown-as-sent', prettyRoomError(new Error(msg)) === line);
 }
 
-// ---- the room's closing time (expiresAt, unix seconds) ----
+// ---- the room's closing time: closesIn, seconds from the reply, counted on the client's monotonic clock ----
 {
   const { net, host } = makeClient(() => roomReply());
-  host.env.wall = () => 1_000_000_000_000;
   net.on = true;
-  net.apply({ phase: 'play', events: [], seats: [], turnLeft: 86000, shopLeft: null, turnSecs: 86400, expiresAt: 1_000_000_600 });
-  check('close-left-from-expires-at', Math.abs(net.closeClockLeft() - 600) < 1e-9, String(net.closeClockLeft()));
+  // expiresAt says nothing useful against a wrong client clock; closesIn is what counts.
+  net.apply({ phase: 'play', events: [], seats: [], turnLeft: 86000, shopLeft: null, turnSecs: 86400, expiresAt: 5, closesIn: 600 });
+  check('close-left-from-closes-in', Math.abs(net.closeClockLeft() - 600) < 1e-9, String(net.closeClockLeft()));
   host.clock += 60_000;
   check('close-left-counts-down', Math.abs(net.closeClockLeft() - 540) < 1e-9, String(net.closeClockLeft()));
   net.apply({ phase: 'play', events: [], seats: [], turnLeft: 86000, shopLeft: null, turnSecs: 86400 });

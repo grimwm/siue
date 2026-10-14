@@ -24,9 +24,9 @@ interface Allow {
 
 const ALLOW: Allow = {
   mjs: [
-    'crete/test/audio.test.mjs',
-    'crete/test/bots.test.mjs',
-    'crete/test/ui.test.mjs',
+    'crete/test/audio.test.ts',
+    'crete/test/bots.test.ts',
+    'crete/test/ui.test.ts',
     'cylon/test/abilities.test.mjs',
     'cylon/test/audio.test.mjs',
     'cylon/test/chrome-settings.test.mjs',

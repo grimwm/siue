@@ -6,7 +6,6 @@ cd "$(dirname "$0")"
 node ../_kit/build/build.mjs crete --check
 php tools/install-files.php --check
 node ../_kit/build/icons.mjs crete --check
-set -- test/*.test.mjs test/*.test.ts
-for f do [ -e "$f" ] && set -- "$@" "$f"; shift; done
-[ -e "$1" ] || { echo "test.sh: no test/*.test.mjs or test/*.test.ts" >&2; exit 1; }
+set -- test/*.test.ts
+[ -e "$1" ] || { echo "test.sh: no test/*.test.ts" >&2; exit 1; }
 node --test "$@"

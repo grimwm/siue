@@ -11,7 +11,7 @@ It is a `play` game: the folder is a complete page (`index.html`) with its own P
 - `src/engine.ts`, `src/audio.ts`, `src/ui.ts`: the typed modules (below).
 - `dist/`: the esbuild bundle (`main.js`, `main.js.map`), checked in and served as it is: the host has no Node.
 - `build.json`, `tsconfig.json`, `src/tsconfig.dom.json`: the build and its two type programs.
-- `test/`: the unit and static suites on `node:test`; `test.sh` runs them with the build checks.
+- `test/`: the unit and static suites, TypeScript on `node:test`; `tsconfig.test.json` type-checks them, so `build.mjs crete --check` fails on a type error in a test. `test.sh` runs them with the build checks.
 - `tools/install-files.php`: Crete's config for `../_kit/php/install-core.php` (manifest, service worker, install block, `?v=` versions).
 - `metadata.yaml`: the Games-page card and install colours.
 
@@ -65,4 +65,4 @@ the fallback on at most 1% of seeds, and at most 6 candidates per seed on averag
 
 ## Tests
 
-From this folder: `./test.sh` (the build check, `install-files.php --check`, then `node --test 'test/*.test.mjs'`). Run `npm ci` in `games/` first. Browser specs: `crete-play`, `games-hub` and `games-pwa` in `../../tests/e2e`.
+From this folder: `./test.sh` (the build check, `install-files.php --check`, then `node --test` over `test/*.test.ts`, which fails when it finds none). Run `npm ci` in `games/` first. Browser specs: `crete-play`, `games-hub` and `games-pwa` in `../../tests/e2e`.

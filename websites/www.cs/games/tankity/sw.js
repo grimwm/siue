@@ -3,7 +3,7 @@
 // Network first, so an online player always gets the current files; the
 // precached copies answer only when the network does not.
 const PREFIX = 'game-tankity-';
-const CACHE = PREFIX + '97afbd39c638';
+const CACHE = PREFIX + '23a91783b94b';
 const PRECACHE = ["./","dist/fx.js","dist/install.js","dist/main.js","fx/sprites/energy.png","fx/sprites/fireball.png","fx/sprites/moon.png","fx/sprites/mushroom.png","fx/sprites/shock.png","fx/sprites/smoke.png","fx/sprites/sprites.json","game.css","game.json","icon-192.png","icon-512.png","icon-apple-180.png","icon-maskable-192.png","icon-maskable-512.png","icon-monochrome-512.png","index.html","manifest.webmanifest"];
 const SCOPE_PATH = new URL('./', self.location).pathname;
 

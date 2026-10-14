@@ -12,9 +12,9 @@
  * drives it on a clock the test moves by hand. */
 import {
   GRAV, FLAT_GRAV, ROLL_LIFT, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage,
-  groundAt, groundSlope, rollStart, rollStep, rollOut,
+  groundAt, groundSlope, rollStart, rollStep, rollOut, hopShell, scatterShells,
 } from './sim.ts';
-import type { Weapon } from './sim.ts';
+import type { Shell, Tank, Weapon } from './sim.ts';
 
 export const PV_W = 360, PV_H = 200, PV_WIND = 3, PV_FOE_HP = 60;
 
@@ -44,6 +44,8 @@ export interface PreviewShell {
   rolling?: boolean; // a roller on the ground: ru is its speed along it, rt the 1/60 s steps rolled
   ru?: number;
   rt?: number;
+  hop?: number; // a hop gun's warhead: 1 for the first, counting up with each leap
+  spared?: boolean; // thrown from a burst on the dummy, so it never strikes the dummy directly
 }
 export interface PreviewBoom { x: number; y: number; r: number; wkey: string; t: number; life: number }
 
@@ -191,6 +193,22 @@ function previewBoom(pv: PreviewState, env: PreviewEnv, x: number, y: number, ov
 const shellBoom = (s: PreviewShell): { dmg: number; radius: number } | null =>
   s.dw ? { dmg: s.dw, radius: s.dr as number } : null;
 
+/* The demo has no units, so the war's sub-munition makers get a stand-in gunner. */
+const RANGE_GUNNER: Tank = { id: 'range', isPlayer: true, x: 0, y: 0, angle: 60, power: 50, hp: 1, fuel: 0 };
+/* What a burst throws on, from the war's own hopShell and scatterShells: a hop
+ * gun's next warhead, or a scatter gun's bomblets (its own burst only). */
+function previewAfterBurst(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: Readonly<Weapon>, onDummy: boolean): void {
+  const src: Shell = { x: s.x, y: s.y, vx: s.vx, vy: s.vy, wkey: s.wkey, owner: RANGE_GUNNER, life: 12, age: s.age, pierced: false, split: s.split, order: [0], hop: s.hop };
+  const thrown = w.effect === 'hop' ? [hopShell(src, w, s.x, s.y, 1)].filter(n => n !== null)
+    : w.effect === 'scatter' && !s.split ? scatterShells(src, w, s.x, s.y, 1) : [];
+  for (const n of thrown) {
+    pv.shells.push({ x: n.x, y: n.y, vx: n.vx, vy: n.vy, wkey: pv.wkey, age: 0, pierced: false, split: n.split, dw: n.dw, dr: n.dr, hop: n.hop, spared: onDummy });
+  }
+  const first = thrown[0];
+  if (w.effect === 'hop' && first) env.special(pv.fx, pv.wkey, 'hop', first.x, first.y, Math.atan2(first.vy, first.vx));
+  if (w.effect === 'scatter' && first) env.special(pv.fx, pv.wkey, 'scatter', s.x, s.y, -Math.PI / 2);
+}
+
 /* A roller on the demo's ground: it rolls on until it reaches the dummy, the
  * field's edge, rest, or its roll time, and bursts there. */
 function stepPreviewRoller(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: Readonly<Weapon>, dt: number): void {
@@ -249,7 +267,7 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
       stepBallistic(s, dt, pv.wind, grav);
       if (s.dead) continue;
       env.trail(pv.fx, s, dt);
-      if (w.effect === 'cluster' && !s.split && s.age >= (w.fuse || 0.9)) {
+      if (w.effect === 'cluster' && !s.split && (w.apex ? s.age >= 0.1 && s.vy >= 0 : s.age >= (w.fuse || 0.9))) {
         s.split = true;
         env.special(pv.fx, pv.wkey, 'split', s.x, s.y, Math.atan2(s.vy, s.vx));
         const n = Math.max(2, w.split || 4), fan = w.fan || 0.22;
@@ -261,7 +279,7 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
         s.dead = true;
         continue;
       }
-      const touch = !s.pierced && Math.hypot(s.x - pv.tx, s.y - fy) < 10;
+      const touch = !s.pierced && !s.spared && Math.hypot(s.x - pv.tx, s.y - fy) < 10;
       const near = w.effect === 'proximity' && Math.hypot(s.x - pv.tx, s.y - fy) < (w.prox || 34);
       if (touch || near) {
         if (w.effect === 'pierce' && !s.pierced && touch) {
@@ -272,9 +290,11 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
         }
         s.dead = true;
         previewBoom(pv, env, s.x, s.y, shellBoom(s));
+        previewAfterBurst(pv, env, s, w, touch);
         continue;
       }
-      const landed = s.age >= 0.1 && s.y >= (pv.terr[clamp(Math.round(s.x), 0, PV_W - 1)] ?? 0);
+      // A bomblet may burst on the ground at once, as in the war.
+      const landed = (s.split || s.age >= 0.1) && s.y >= (pv.terr[clamp(Math.round(s.x), 0, PV_W - 1)] ?? 0);
       if (landed && w.effect === 'roller' && s.x >= 0 && s.x < PV_W) {
         s.rolling = true;
         s.rt = 0;
@@ -282,8 +302,10 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
         s.y = groundAt(pv.terr, s.x) - ROLL_LIFT;
         continue;
       }
-      s.dead = s.x < 0 || s.x >= PV_W || s.y >= PV_H || landed;
+      const gone = s.x < 0 || s.x >= PV_W || s.y >= PV_H;
+      s.dead = gone || landed;
       if (s.dead) previewBoom(pv, env, s.x, s.y, shellBoom(s));
+      if (landed && !gone) previewAfterBurst(pv, env, s, w, false);
     }
     pv.shells = pv.shells.filter(s => !s.dead);
     if (!pv.shells.length) {

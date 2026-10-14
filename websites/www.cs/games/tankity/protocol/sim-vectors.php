@@ -45,6 +45,10 @@ function sv_terrain(array $spec, int $w = SV_WIDTH): array
             $y = (float) $spec['flat'];
         } elseif (isset($spec['slope'])) {
             $y = $spec['slope'][0] + ($spec['slope'][1] - $spec['slope'][0]) * $ix / ($w - 1);
+        } elseif (isset($spec['vee'])) {
+            // A V valley: [centre, half width, rim y, bottom y].
+            [$cx, $half, $top, $bottom] = $spec['vee'];
+            $y = $top + ($bottom - $top) * max(0, 1 - abs($ix - $cx) / $half);
         } else {
             [$base, $amp, $period] = $spec['hills'];
             $y = $base + $amp * det_sin($ix * 2 * M_PI / $period);
@@ -961,6 +965,81 @@ foreach ([['over-a-pit', 300, 300], ['already-down', 300, 400], ['ground-rose-ab
 $room = ['terrain' => sv_terrain($flat), 'tanks' => [['seat' => 0, 'kind' => 'ai', 'hp' => 0, 'x' => 300.0, 'y' => 200.0]]];
 room_settle_tanks($room);
 $add('settle', 'wreck-stays-put', ['terrain' => $flat, 'x' => 300, 'y' => 200, 'hp' => 0], $room['tanks'][0]['y']);
+
+/* ---- the earth ops: the ground a shell moves (src/earth.ts) ----
+ * Each case is an op on a terrain from its recipe; the output is the cells
+ * it changed (x0 and their heights, null for none) and, for a pour, the pool. */
+$earth = function (string $name, array $c) use ($add): void {
+    $t = sv_terrain($c['terrain']);
+    $before = $t;
+    $out = [];
+    switch ($c['op']) {
+        case 'crater':
+            room_carve_crater($t, (float) $c['x'], (float) $c['y'], (float) $c['r']);
+            break;
+        case 'dirt':
+            room_add_dirt($t, (float) $c['x'], (float) $c['y'], (float) $c['r']);
+            break;
+        case 'pour':
+            $pool = room_pour_level($t, (float) $c['x'], (float) $c['v']);
+            $out['pool'] = [$pool['level'], $pool['x0'], $pool['x1']];
+            room_fill_pour($t, $pool);
+            break;
+        case 'slump':
+            room_slump_ground($t, (float) $c['x'], (float) $c['r'], (float) $c['slope'], (int) $c['passes']);
+            break;
+        case 'riot':
+            room_riot_carve($t, (float) $c['x'], (float) $c['y'], (float) $c['a'], (float) $c['r'], (float) $c['fan']);
+            break;
+        case 'dig':
+            [$ux, $uy] = room_dig_heading((float) $c['vx'], (float) $c['vy']);
+            $out['heading'] = [$ux, $uy];
+            room_dig_carve($t, (float) $c['x'], (float) $c['y'], $ux, $uy, (int) $c['n'], (float) $c['r']);
+            break;
+    }
+    $first = null;
+    $last = null;
+    foreach ($t as $ix => $y) {
+        if (abs($y - $before[$ix]) > 1e-9) {
+            $first ??= $ix;
+            $last = $ix;
+        }
+    }
+    $out['cells'] = $first === null ? null : ['x0' => $first, 'y' => array_slice($t, $first, $last - $first + 1)];
+    $add('earth', $name, $c, $out);
+};
+$earth('crater-on-flat', ['op' => 'crater', 'terrain' => $flat, 'x' => 300.4, 'y' => 400, 'r' => 26]);
+$earth('crater-at-the-floor', ['op' => 'crater', 'terrain' => ['flat' => 440], 'x' => 300, 'y' => 450, 'r' => 30]);
+$earth('dirt-on-flat', ['op' => 'dirt', 'terrain' => $flat, 'x' => 300.25, 'y' => 400, 'r' => 35]);
+$earth('dirt-in-the-air-builds-a-column', ['op' => 'dirt', 'terrain' => $flat, 'x' => 300, 'y' => 330, 'r' => 20]);
+$earth('dirt-at-the-left-edge', ['op' => 'dirt', 'terrain' => $flat, 'x' => 4, 'y' => 400, 'r' => 35]);
+$earth('dirt-at-the-right-edge', ['op' => 'dirt', 'terrain' => $flat, 'x' => 717.5, 'y' => 400, 'r' => 60]);
+$earth('dirt-below-the-surface-changes-nothing', ['op' => 'dirt', 'terrain' => $flat, 'x' => 300, 'y' => 450, 'r' => 20]);
+$earth('dirt-never-above-the-sky-line', ['op' => 'dirt', 'terrain' => ['flat' => 120], 'x' => 300, 'y' => 90, 'r' => 60]);
+$earth('dirt-on-a-hillside', ['op' => 'dirt', 'terrain' => ['hills' => [330, 40, 200]], 'x' => 140, 'y' => 345, 'r' => 45]);
+$vee = ['vee' => [300, 120, 330, 420]];
+foreach ([[300, 4000], [287.5, 4000], [250, 1500], [300, 20000], [300, 200]] as [$x, $v]) {
+    $earth("pour-into-a-vee-x$x-v$v", ['op' => 'pour', 'terrain' => $vee, 'x' => $x, 'v' => $v]);
+}
+$earth('pour-of-zero-volume', ['op' => 'pour', 'terrain' => $vee, 'x' => 300, 'v' => 0]);
+$earth('pour-on-a-slope-spills-off-the-edge', ['op' => 'pour', 'terrain' => ['slope' => [300, 420]], 'x' => 500, 'v' => 4000]);
+$earth('pour-at-the-edge-spills', ['op' => 'pour', 'terrain' => $flat, 'x' => 0, 'v' => 4000]);
+$earth('pour-in-a-pit-near-the-edge', ['op' => 'pour', 'terrain' => ['flat' => 400, 'set' => [[8, 40, 430]]], 'x' => 20, 'v' => 4000]);
+$earth('pour-overflows-a-pit-onto-the-flat', ['op' => 'pour', 'terrain' => ['flat' => 400, 'set' => [[290, 310, 430]]], 'x' => 300, 'v' => 4000]);
+$earth('pour-on-hills', ['op' => 'pour', 'terrain' => ['hills' => [330, 40, 200]], 'x' => 140, 'v' => 4000]);
+$earth('slump-a-cliff', ['op' => 'slump', 'terrain' => ['flat' => 420, 'set' => [[0, 300, 300]]], 'x' => 300, 'r' => 120, 'slope' => 1.0, 'passes' => 24]);
+$earth('slump-a-ridge', ['op' => 'slump', 'terrain' => ['flat' => 400, 'set' => [[280, 320, 330]]], 'x' => 310, 'r' => 120, 'slope' => 1.0, 'passes' => 24]);
+$earth('slump-gentle-hills-stays', ['op' => 'slump', 'terrain' => ['hills' => [330, 10, 400]], 'x' => 300, 'r' => 120, 'slope' => 1.0, 'passes' => 24]);
+$earth('slump-steep-hills', ['op' => 'slump', 'terrain' => ['hills' => [330, 40, 120]], 'x' => 200, 'r' => 120, 'slope' => 1.5, 'passes' => 5]);
+$earth('slump-at-the-edge', ['op' => 'slump', 'terrain' => ['flat' => 420, 'set' => [[0, 20, 300]]], 'x' => 5, 'r' => 120, 'slope' => 1.0, 'passes' => 3]);
+$earth('riot-charge-on-flat', ['op' => 'riot', 'terrain' => $flat, 'x' => 300, 'y' => 390, 'a' => -0.9, 'r' => 45, 'fan' => 1.2]);
+$earth('riot-blast-into-a-hill', ['op' => 'riot', 'terrain' => ['flat' => 400, 'set' => [[320, 420, 320]]], 'x' => 300, 'y' => 390, 'a' => -0.17, 'r' => 90, 'fan' => 0.6]);
+$earth('riot-at-the-left-edge-facing-left', ['op' => 'riot', 'terrain' => $flat, 'x' => 12, 'y' => 390, 'a' => M_PI + 0.3, 'r' => 45, 'fan' => 1.2]);
+$earth('riot-digs-out-a-buried-hull', ['op' => 'riot', 'terrain' => ['flat' => 400, 'set' => [[270, 330, 350]]], 'x' => 300, 'y' => 390, 'a' => -M_PI / 2, 'r' => 45, 'fan' => 1.2]);
+$earth('dig-into-a-hill-and-out', ['op' => 'dig', 'terrain' => ['flat' => 400, 'set' => [[200, 260, 360]]], 'x' => 190, 'y' => 398, 'vx' => 160, 'vy' => 40, 'n' => 28, 'r' => 11]);
+$earth('dig-down-at-a-slant', ['op' => 'dig', 'terrain' => $flat, 'x' => 300, 'y' => 401, 'vx' => -120, 'vy' => 200, 'n' => 45, 'r' => 15]);
+$earth('dig-to-the-floor', ['op' => 'dig', 'terrain' => ['flat' => 430], 'x' => 300, 'y' => 431, 'vx' => 0, 'vy' => 300, 'n' => 15, 'r' => 8]);
+$earth('dig-standing-still-goes-down', ['op' => 'dig', 'terrain' => $flat, 'x' => 300, 'y' => 401, 'vx' => 0, 'vy' => 0, 'n' => 3, 'r' => 8]);
 
 /* ---- falling: units land, pay by the drop, spend parachutes, credit the digger ----
  * A case may first fire a blast (x, y, wkey, owner) that digs the pits; then

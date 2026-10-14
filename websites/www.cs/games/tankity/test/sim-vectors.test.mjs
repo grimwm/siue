@@ -28,6 +28,7 @@ const armorRules = await import(pathToFileURL(path.join(dir, 'src', 'armor.ts'))
 
 const standings = await import(pathToFileURL(path.join(dir, 'src', 'standings.ts')).href);
 const det = await import(pathToFileURL(path.join(dir, 'src', 'detmath.ts')).href);
+const earth = await import(pathToFileURL(path.join(dir, 'src', 'earth.ts')).href);
 
 /* ---- state the cases run over ---- */
 const G = {};
@@ -37,6 +38,7 @@ function buildTerrain(spec, w = 720) {
     let y;
     if (spec.flat !== undefined) y = spec.flat;
     else if (spec.slope) y = spec.slope[0] + (spec.slope[1] - spec.slope[0]) * ix / (w - 1);
+    else if (spec.vee) y = spec.vee[2] + (spec.vee[3] - spec.vee[2]) * Math.max(0, 1 - Math.abs(ix - spec.vee[0]) / spec.vee[1]);
     else y = spec.hills[0] + spec.hills[1] * det.dsin(ix * 2 * Math.PI / spec.hills[2]);
     for (const [x0, x1, sy] of spec.set || []) if (ix >= x0 && ix <= x1) y = sy;
     t.push(Math.round(y * 1000) / 1000);
@@ -308,6 +310,26 @@ const RUN = {
         wkey: choice.wkey, angle: choice.angle, power: choice.power, x: t.x, n: t.brk.n });
     }
     return steps;
+  },
+  earth(c) {
+    const t = buildTerrain(c.terrain), before = t.slice(), out = {};
+    if (c.op === 'crater') earth.carveCrater(t, c.x, c.y, c.r, earth.FLOOR);
+    else if (c.op === 'dirt') earth.addDirt(t, c.x, c.y, c.r);
+    else if (c.op === 'pour') {
+      const pool = earth.pourLevel(t, c.x, c.v);
+      out.pool = [pool.level, pool.x0, pool.x1];
+      earth.fillPour(t, pool);
+    } else if (c.op === 'slump') earth.slumpGround(t, c.x, c.r, c.slope, c.passes);
+    else if (c.op === 'riot') earth.riotCarve(t, c.x, c.y, c.a, c.r, c.fan);
+    else if (c.op === 'dig') {
+      const [ux, uy] = earth.digHeading(c.vx, c.vy);
+      out.heading = [ux, uy];
+      earth.digCarve(t, c.x, c.y, ux, uy, c.n, c.r);
+    }
+    let first = null, last = null;
+    t.forEach((y, ix) => { if (Math.abs(y - before[ix]) > 1e-9) { if (first === null) first = ix; last = ix; } });
+    out.cells = first === null ? null : { x0: first, y: t.slice(first, last + 1) };
+    return out;
   },
   settle(c) {
     world({ terrain: c.terrain, tanks: [{ kind: 'ai', x: c.x, y: c.y, hp: c.hp }] });

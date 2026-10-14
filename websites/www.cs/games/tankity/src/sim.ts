@@ -8,6 +8,7 @@
  * caller to show. */
 
 import { datan2, dcos, dsin } from './detmath.ts';
+import { carveCrater } from './earth.ts';
 
 /* ---------- seeded RNG (mulberry32 + string hash) ---------- */
 export type Rng = () => number;
@@ -400,17 +401,8 @@ export function surfY(terrain: readonly number[], x: number): number {
   const xi = clamp(Math.round(x), 0, terrain.length - 1);
   return terrain[xi]!;
 }
-/* Cuts a crater: the ground under the blast drops to a 3:4 ellipse around
-   (x, y), never below floor. The war, the room replay and the firing range
-   all carve with this. */
-export function carveCrater(terrain: number[], x: number, y: number, r: number, floor: number): void {
-  const x0 = Math.max(0, Math.floor(x - r)), x1 = Math.min(terrain.length - 1, Math.ceil(x + r));
-  for (let ix = x0; ix <= x1; ix++) {
-    const dx = ix - x;
-    const cut = Math.sqrt(Math.max(0, r * r - dx * dx)) * 0.75;
-    terrain[ix] = Math.min(floor, Math.max(terrain[ix]!, y + cut));
-  }
-}
+/* The crater and the other earth ops live in earth.ts; the sim's callers reach the crater here too. */
+export { carveCrater } from './earth.ts';
 
 /* ---------- units ---------- */
 /* Which way a tank faces: +1 right, -1 left. Angles count from that side. */

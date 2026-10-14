@@ -42,6 +42,102 @@ $end = room_fly_arc($room, $events, $room['tanks'][0], $lance, 'lance', 0, 285.0
 // The arc hands its final impact back to the caller: [status, x, y, vx, vy, directIdx].
 $check('lance-pierces-to-next-tank', $end[0] === 'hit' && $end[5] === 2, json_encode([$end[0], $end[5]]));
 
+// A drone loads aiRack of each gun it carries (2 when the row names none),
+// and every field a row may leave out reads the default src/sim.ts uses.
+$rack = room_ai_rack(9);
+$check('rack-round-9', $rack['shell'] === -1 && ($rack['deathshead'] ?? null) === 1 && ($rack['mortar'] ?? null) === 2, json_encode($rack));
+$check('rack-round-8-has-no-deaths-head', (room_ai_rack(8)['deathshead'] ?? null) === 0);
+$bare = room_weapon_row(['key' => 'x', 'dmg' => 5, 'radius' => 5]);
+$check('weapon-row-defaults', $bare['start'] === 0 && $bare['aiRack'] === 2 && $bare['apex'] === false && $bare['hops'] === 1 && $bare['hopKeep'] === 0.5
+    && $bare['kick'] === 150.0 && $bare['fuse'] === 0.9 && $bare['fan'] === 0.22 && $bare['split'] === 4 && $bare['speed'] === 1.0, json_encode($bare));
+$check('weapon-row-reads-new-fields', room_weapon_row(['key' => 'x', 'aiRack' => 1, 'apex' => true, 'hops' => 3, 'hopKeep' => 0.55, 'kick' => 90])
+    === array_replace($bare, ['name' => 'x', 'aiRack' => 1, 'apex' => true, 'hops' => 3, 'hopKeep' => 0.55, 'kick' => 90.0, 'dmg' => 30, 'radius' => 24, 'subDmg' => 30, 'subRadius' => 24]));
+
+// Bomblets of one burst burst as they land: every cluster and scatter gun's
+// shots after the first land in time order, fired either way.
+foreach ($weapons as $k => $def) {
+    if (!in_array($def['effect'], ['cluster', 'scatter'], true)) {
+        continue;
+    }
+    foreach ([[1, 120.0], [-1, 600.0]] as [$dirS, $x]) {
+        $room = $flatRoom([$tank(0, 'human', $x, 1000), $tank(1, 'ai', 360.0, 1000)]);
+        $room['tanks'][0] = ['dirS' => $dirS, 'angle' => 45.0, 'power' => 60.0] + $room['tanks'][0];
+        $room['tanks'][1]['y'] = 200.0;
+        $events = [['t' => 'fire', 'seat' => 0]];
+        room_fire_shot($room, $events, 0, $k);
+        $landings = array_map(fn($e) => $e['t1'], array_values(array_filter($events, fn($e) => ($e['t'] ?? '') === 'shot' && $e['t0'] > 0)));
+        $sorted = $landings;
+        sort($sorted);
+        $check("bomblets-land-in-order-$k-$dirS", count($landings) > 1 && $landings === $sorted, json_encode($landings));
+    }
+}
+
+// A drone never hurts itself with its own Funky Bomb, its target 160 to 220
+// px away: it chooses, it fires what it chose, and its armor is unchanged.
+foreach ([160, 170, 180, 190, 200, 210, 220] as $gap) {
+    foreach ([1, -1] as $dir) {
+        foreach ([1, 2, 3] as $seed) {
+            $room = $flatRoom([$tank(0, 'ai', 360.0, 1000), $tank(1, 'human', 360.0 + $dir * $gap, 100)]);
+            $room += ['round' => 9, 'rng' => $seed, 'difficulty' => 'hard', 'jammer' => []];
+            $room['tanks'][0]['dirS'] = $dir;
+            $room['tanks'][0]['ammo'] = ['shell' => -1, 'funky' => 1];
+            $room['tanks'][0]['s'] = 'hunter';
+            $c = room_ai_choose($room, $room['tanks'][0]);
+            $room['tanks'][0]['angle'] = $c['angle'];
+            $room['tanks'][0]['power'] = $c['power'];
+            $events = [['t' => 'aifire', 'seat' => 0]];
+            room_fire_shot($room, $events, 0, $c['wkey']);
+            $check("funky-never-hurts-its-drone-$gap-$dir-$seed", $room['tanks'][0]['hp'] === 1000, "{$c['wkey']}: hp {$room['tanks'][0]['hp']}");
+        }
+    }
+}
+
+// Point blank, every strategy fires what hurts itself least: it chooses from a
+// full round-9 rack, fires it from where it aimed, and loses no more than it
+// would firing a Shell alone (within 3 hp: the predicted landing is not quite
+// where the shell bursts).
+$selfLoss = function (array $ammo, string $s, int $gap, int $dir, int $seed) use ($tank, $flatRoom): array {
+    $room = $flatRoom([$tank(0, 'ai', 300.0, 1000), $tank(1, 'human', 300.0 + $dir * $gap, 100)]);
+    $room += ['round' => 9, 'rng' => $seed, 'difficulty' => 'hard', 'jammer' => []];
+    $room['tanks'][0] = ['dirS' => $dir, 'ammo' => ['shell' => -1] + $ammo, 's' => $s] + $room['tanks'][0];
+    $c = room_ai_choose($room, $room['tanks'][0]);
+    $room['tanks'][0]['angle'] = $c['angle'];
+    $room['tanks'][0]['power'] = $c['power'];
+    $events = [['t' => 'aifire', 'seat' => 0]];
+    room_fire_shot($room, $events, 0, $c['wkey']);
+    return [$c['wkey'], 1000 - $room['tanks'][0]['hp']];
+};
+$fullRack = room_ai_rack(9);
+unset($fullRack['shell']);
+foreach (['hunter', 'bully', 'sniper', 'avenger', 'glory', 'lobber'] as $s) {
+    for ($gap = 20; $gap <= 80; $gap += 10) {
+        foreach ([1, -1] as $dir) {
+            foreach ([1, 2] as $seed) {
+                [$k, $lost] = $selfLoss($fullRack, $s, $gap, $dir, $seed);
+                [, $alone] = $selfLoss([], $s, $gap, $dir, $seed);
+                $check("point-blank-least-self-harm-$s-$gap-$dir-$seed", $lost <= $alone + 3, "$k cost $lost, Shell alone $alone");
+            }
+        }
+    }
+}
+
+// A harmless burst (dmg 0) carves its crater and touches no unit: no hit, no
+// shield spent, nobody credited or blamed.
+$room = $flatRoom([$tank(0, 'ai', 100.0, 100), $tank(1, 'human', 300.0, 100), $tank(2, 'ai', 330.0, 100)]);
+$room['shield'][1] = true;
+$before = $room['terrain'];
+$events = [];
+room_explode($room, $events, $room['tanks'][0], 'shell', 310.0, 395.0, 1, ['dmg' => 0, 'radius' => 40]);
+$check('harmless-blast-no-events', $events === [], json_encode($events));
+$check('harmless-blast-keeps-shield-and-armor', $room['shield'][1] === true && $room['tanks'][1]['hp'] === 100 && $room['tanks'][2]['hp'] === 100);
+$check('harmless-blast-credits-nobody', !isset($room['tanks'][1]['lastHitBy']) && !isset($room['tanks'][2]['lastHitBy']) && empty($room['tanks'][0]['dealt']));
+$check('harmless-blast-still-carves', $room['terrain'] !== $before);
+// It still credits the fall of a unit it dug out from under, as any crater does.
+$room = $flatRoom([$tank(0, 'human', 100.0, 100), $tank(1, 'ai', 300.0, 100)]);
+$events = [];
+room_explode($room, $events, $room['tanks'][0], 'shell', 300.0, 400.0, null, ['dmg' => 0, 'radius' => 45]);
+$check('harmless-crater-credits-the-fall', ($room['tanks'][1]['fellBy'] ?? null) === 0 && $events === [], json_encode([$room['tanks'][1]['fellBy'] ?? null, $events]));
+
 // Hit boxes follow the drawn units, and a shell is tested along its whole
 // step: a fast shell crossing a drone's body in one step still hits it, and
 // one passing under a drone (where the old ground-level circle sat) does not.
@@ -788,7 +884,7 @@ $check('tactic-hunter-keeps-its-target', $room['tanks'][1]['brk']['t'] === 3);
 $room['tanks'][3]['hp'] = 0;
 room_ai_choose($room, $room['tanks'][1]);
 $check('tactic-hunter-moves-on-when-its-target-dies', $room['tanks'][1]['brk']['t'] === 2);
-// A lobber lobs: high arcs and area guns; a glory-hunter takes its strongest gun.
+// A lobber lobs: high arcs and area guns; a glory-hunter takes its most harmful gun.
 $lobAngles = [];
 for ($seed = 1; $seed <= 12; $seed++) {
     $room = $scene('lobber');
@@ -797,10 +893,15 @@ for ($seed = 1; $seed <= 12; $seed++) {
     $lobAngles[] = $c['angle'];
 }
 $check('tactic-lobber-lobs', $median($lobAngles) >= 60, implode(',', $lobAngles));
-$room = $scene('lobber', ['ammo' => ['rail' => 2, 'buck' => 2]]);
+$room = $scene('lobber', ['ammo' => ['rail' => 2, 'buck' => 2]], [], ['x' => 250.0]);
 $check('tactic-lobber-prefers-area-guns', room_ai_choose($room, $room['tanks'][1])['wkey'] === 'buck');
+// Its target 70 px off, every high arc of Buckshot would reach the lobber itself: it fires a gun that spares it.
+$room = $scene('lobber', ['ammo' => ['rail' => 2, 'buck' => 2]]);
+$c = room_ai_choose($room, $room['tanks'][1]);
+$check('tactic-lobber-spares-itself-point-blank', $room['tanks'][1]['brk']['t'] === 3 && $c['wkey'] !== 'buck', json_encode($c));
+// Glory goes for the drone with 4 kills, 70 px off: every big blast would reach the gunner itself, so it fires the Shell.
 $room = $scene('glory', ['ammo' => ['mortar' => 2, 'heavy' => 2, 'buck' => 2]]);
-$check('tactic-glory-takes-its-strongest-gun', room_ai_choose($room, $room['tanks'][1])['wkey'] === 'heavy');
+$check('tactic-glory-spares-itself', room_ai_choose($room, $room['tanks'][1])['wkey'] === 'shell');
 // A sniper's hands are steadier: a smaller spread of aims than a bully's.
 $spread = function (string $strategy) use ($scene): float {
     $v = [];

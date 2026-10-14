@@ -21,7 +21,7 @@ import type { FieldWidth } from './field.ts';
 import type { RoomClient } from './net.ts';
 import {
   gauss, H, GRAV, TUNE, clamp, fireWeapon as simFireWeapon, stepShells as simStepShells, fallTanks as simFallTanks,
-  anyTankFalling as simAnyTankFalling, armChutes, dueFalls, settleVolley,
+  anyTankFalling as simAnyTankFalling, armChutes, dueFalls, gfxLinger, settleVolley,
 } from './sim.ts';
 import type { Blast, Difficulty, FallEvent, FallShow, Shell } from './sim.ts';
 import { snapTanks, soloAim, soloDeal, soloMuster, soloNextTurn, soloOneUps, soloSettle } from './solo.ts';
@@ -243,6 +243,8 @@ export function createMatch(deps: MatchDeps) {
       if (e.kind === 'trail') fxTrail(G.fx, e.shell, dt, e.x, e.y, e.vx, e.vy, e.shell.wkey);
       else if (e.kind === 'split') fxSpecial(G.fx, e.wkey, 'split', e.x, e.y, e.ang);
       else if (e.kind === 'pierce') fxSpecial(G.fx, e.wkey, 'pierce', e.x, e.y, e.ang);
+      else if (e.kind === 'hop') fxSpecial(G.fx, e.wkey, 'hop', e.x, e.y, e.ang);
+      else if (e.kind === 'scatter') fxSpecial(G.fx, e.wkey, 'scatter', e.x, e.y, e.ang);
       else {
         showBlast(e.blast);
         G.settleT = TUNE.settleTime;
@@ -260,7 +262,7 @@ export function createMatch(deps: MatchDeps) {
     sfx.play('boom');
     const kick = fxImpact(G.fx, b.fx, b.x, b.y, b.r);
     G.shake = Math.max(G.shake || 0, kick !== undefined ? kick : b.shake);
-    G.booms.push({ x: b.x, y: b.y, r: b.r, wkey: b.wkey, t: 0, life: b.wkey === 'nuke' ? 0.8 : 0.5 });
+    G.booms.push({ x: b.x, y: b.y, r: b.r, wkey: b.wkey, t: 0, life: gfxLinger(tables.weapons[b.wkey]?.gfx) });
     for (const e of b.events) {
       const t = e.tank;
       if (e.kind === 'shield') {

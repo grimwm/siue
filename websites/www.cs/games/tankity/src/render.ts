@@ -673,7 +673,9 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     }
     c.fillStyle = deps.look(s.wkey).shell || '#ffe27a';
     c.beginPath();
-    c.arc(s.x, s.y, s.wkey === 'nuke' ? 7 : s.wkey === 'mortar' ? 4.5 : 3.5, 0, Math.PI * 2);
+    // Until its sprite loads, a shell is a disc a quarter of its sprite's size.
+    const body = deps.fxBody(s.wkey) as { size?: number } | null | undefined;
+    c.arc(s.x, s.y, body && body.size ? body.size / 4 : 3.5, 0, Math.PI * 2);
     c.fill();
     c.fillStyle = '#fff';
     c.beginPath();

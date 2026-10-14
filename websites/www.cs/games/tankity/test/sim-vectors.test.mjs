@@ -68,7 +68,8 @@ function outcome(before) {
     if (Math.abs(y - before[ix]) > 1e-9) { if (first === null) first = ix; last = ix; }
   });
   return {
-    tanks: G.tanks.map(t => ({ hp: t.hp, fuel: t.fuel, y: t.y, chutes: t.isPlayer ? null : t.chutes || 0 })),
+    tanks: G.tanks.map(t => ({ hp: t.hp, fuel: t.fuel, y: t.y, chutes: t.isPlayer ? null : t.chutes || 0,
+      lastHitBy: t.lastHitBy ?? null, dealt: !!t.dealt, fellBy: t.fellBy ?? null })),
     crater: first === null ? null : { x0: first, y: G.terrain.slice(first, last + 1) },
     score: G.score, cash: G.cash, shield: G.shield, laststand: G.laststand, chutes: G.chutes,
   };
@@ -129,6 +130,30 @@ const RUN = {
   'split-fan'(c) {
     return sim.splitShell({ x: 0, y: 0, vx: c.vx, vy: c.vy, wkey: 'shell', owner: null }, { split: c.n, fan: c.fan })
       .map(s => [s.vx, s.vy]);
+  },
+  'hop-vel'(c) {
+    const s = { x: 0, y: 0, vx: c.vx, vy: c.vy, wkey: 'shell', owner: null, order: [0] };
+    const next = sim.hopShell(s, { hops: 3, hopKeep: c.keep, subDmg: 1, subRadius: 1 }, 0, 0, 1);
+    return [next.vx, next.vy];
+  },
+  'scatter-vel'(c) {
+    const s = { x: 0, y: 0, vx: 0, vy: 0, wkey: 'shell', owner: null, order: [0] };
+    return sim.scatterShells(s, { split: c.n, fan: c.fan, kick: c.kick, subDmg: 1, subRadius: 1 }, 0, 0, 1).map(b => [b.vx, b.vy]);
+  },
+  'cluster-split'(c) {
+    world(c);
+    const shell = { x: c.x, y: c.y, vx: c.vx, vy: c.vy, wkey: c.wkey, owner: G.tanks[0], life: 12, age: 0, pierced: false, split: false, order: [0] };
+    G.shells = [shell];
+    for (let steps = 1; steps <= 720; steps++) {
+      const evs = sim.stepShells(G, arsenal, 1 / 60);
+      if (evs.some(e => e.kind === 'split')) return { status: 'split', x: shell.x, y: shell.y, vx: shell.vx, vy: shell.vy, steps };
+      if (shell.dead) return { status: 'landed', steps };
+    }
+    return { status: 'none' };
+  },
+  rack(c) {
+    const r = sim.droneRack(arsenal, c.round);
+    return Object.fromEntries(Object.entries(r).map(([k, n]) => [k, n === Infinity ? -1 : n]));
   },
   blast(c) {
     world(c);
@@ -228,6 +253,14 @@ const RUN = {
     const choice = sim.aiChoose(G, arsenal, t);
     return { wkey: choice.wkey, angle: choice.angle, power: choice.power, moved: t.x - x0 };
   },
+  'ai-harm'(c) {
+    world(c);
+    const self = G.tanks[c.self];
+    const m = sim.muzzle({ ...self, angle: c.a });
+    const land = { ...sim.simShot(G, arsenal, m.x, m.y, c.a, c.p, c.wkey, self.dirS), a: c.a, p: c.p };
+    const h = sim.aiHarm(G, arsenal, self, G.tanks[c.target], c.wkey, land);
+    return { land: [land.x, land.y], harm: h === -Infinity ? 'self' : h, selfHarm: sim.aiSelfHarm(G, arsenal, self, G.tanks[c.target], c.wkey, land) };
+  },
   'ai-bracket'(c) {
     world(c, c.w || 720);
     G.rng = sim.mulberry32(c.seed);
@@ -289,7 +322,7 @@ function diff(want, got, at, out, exact = false, tol = TOL) {
   }
   return out;
 }
-const clip = (v, n) => { const s = JSON.stringify(v); return s.length > n ? s.slice(0, n) + '...' : s; };
+const clip = (v, n) => { const s = JSON.stringify(v) ?? String(v); return s.length > n ? s.slice(0, n) + '...' : s; };
 
 let failed = 0, known = 0, total = 0;
 const failures = [];

@@ -72,6 +72,8 @@ interface Volley {
   a0: number; p0: number; x0: number; a1: number; p1: number; x1: number;
   aimDur: number;
   shots: ReplayShot[];
+  /** Bursts whose hop or scatter special has played. */
+  thrown: Set<string>;
   end: number;
 }
 
@@ -144,7 +146,7 @@ export function createReplay(env: ReplayEnv): Replay {
       opener, events, done: new Set(), shooter, tau: 0, ft: 0,
       a0: shooter ? shooter.angle : a1, p0: shooter ? shooter.power : p1, x0: shooter ? shooter.x : x1, a1, p1, x1,
       aimDur: swing < 1 ? 0.15 : clamp(0.45 + swing / 110, 0.5, 1.4),
-      shots: [], end: Math.max(0, ...events.map(e => ('t1' in e ? e.t1 : undefined) ?? e.at ?? 0)) + 0.6,
+      shots: [], thrown: new Set(), end: Math.max(0, ...events.map(e => ('t1' in e ? e.t1 : undefined) ?? e.at ?? 0)) + 0.6,
     };
     // A parachute this volley opens is armed from the start: it opens as its
     // unit starts to drop, when the replay carves the pit (sim.ts fallTanks),
@@ -185,6 +187,18 @@ export function createReplay(env: ReplayEnv): Replay {
         if (e.t0 < 0.01 && shot.pts.length > 1 && first) {
           const hv = shellVel(shot, 0);
           env.muzzle(e.w, first[0], first[1], Math.atan2(hv[1], hv[0]));
+        }
+        // A later shot of a hop gun leaps from a burst (its special along the
+        // leap); a scatter gun's bomblets leave theirs together (its special
+        // once, straight up).
+        const kind = env.effect(e.w);
+        if (e.t0 >= 0.01 && first && (kind === 'hop' || kind === 'scatter')) {
+          const at = `${kind} ${e.t0} ${first[0]} ${first[1]}`;
+          if (!v.thrown.has(at)) {
+            v.thrown.add(at);
+            const hv = shellVel(shot, 0);
+            env.special(e.w, kind, first[0], first[1], kind === 'hop' ? Math.atan2(hv[1], hv[0]) : -Math.PI / 2);
+          }
         }
       } else if (e.t === 'burst') {
         env.blast(e.x, e.y, e.r, e.w);

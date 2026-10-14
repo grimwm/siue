@@ -25,7 +25,7 @@ import { focusEndVeil } from './ui/endveil.tsx';
 import type { Board, RoomCard } from './standings.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
-import { H, ROOM_W, TUNE, carveCrater, clamp, facing, fallSeen, genTerrain, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
+import { H, ROOM_W, TUNE, carveCrater, clamp, facing, fallSeen, genTerrain, gfxLinger, hashSeed, hillsFrom, mulberry32 } from './sim.ts';
 import type { Difficulty, ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
 
@@ -249,7 +249,7 @@ export function createRoom(deps: RoomDeps) {
     const wasMyTurn = MATCH.myTurn;
     MATCH.myTurn = room.phase === 'play' && !!mine && mine.hp > 0 && room.turn === net.seat;
     if (MATCH.myTurn && !wasMyTurn) turnAlert();
-    if (!G.ammo) G.ammo = { shell: Infinity, buck: 0, mortar: 0, rail: 0, nuke: 0 };
+    if (!G.ammo) G.ammo = { shell: Infinity };
     if (room.you) {
       const a: Record<string, number> = {};
       for (const w of tables.order) {
@@ -489,8 +489,9 @@ export function createRoom(deps: RoomDeps) {
   function netBlast(x: number, y: number, r: number, wkey: string): void {
     sfx.play('boom');
     const kick = fxImpact(G.fx, wkey, x, y, r);
-    G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : wkey === 'nuke' ? 0.9 : r > 40 ? 0.5 : 0.3));
-    G.booms.push({ x, y, r, wkey, t: 0, life: wkey === 'nuke' ? 0.8 : 0.5 });
+    // Rooms shake by blast size when the effect sets no shake.
+    G.shake = Math.min(1, G.shake + (kick !== undefined ? kick : r >= 70 ? 0.9 : r > 40 ? 0.5 : 0.3));
+    G.booms.push({ x, y, r, wkey, t: 0, life: gfxLinger(tables.weapons[wkey]?.gfx) });
     carveCrater(G.terrain, x, y, r, H - 4);
   }
   /* Your turn while the tab is out of sight: the tab title says so, a soft

@@ -21,7 +21,7 @@ Options (after the `--`):
     --only A,B        Render just these sheets (names from SHEETS and ATLASES
                       below: fireball, smoke, shock, energy, moon,
                       blast, plume, dirt, debris, scorch, flakburst, electric,
-                      nuke, flare, muzzle, shells, parachute). Default: all. sprites.json
+                      nuke, flare, muzzle, shells, shells_blast, parachute). Default: all. sprites.json
                       keeps the entries of sheets that were not re-rendered.
     --engine NAME     eevee (default; falls back to cycles if EEVEE cannot start
                       headless) or cycles.
@@ -1518,6 +1518,65 @@ def build_p_nuke(frames, rng):
     part(ring, steel, b)
 
 
+def build_p_leapfrog(frames, rng):
+    """The Leapfrog: a squat frog-green bomb with a brass nose, a pale belly
+    band and a coiled spring for a tail (it leaps on from each burst)."""
+    shell_rig()
+    b = spinner(frames, 0.5)
+    green, belly, brass, steel = pbr('green', (0.18, 0.5, 0.12), 0.25, 0.45), pbr('belly', (0.78, 0.86, 0.45), 0.1, 0.5), pbr('brass', (0.85, 0.62, 0.25), 1.0, 0.3), pbr('steel', (0.55, 0.56, 0.6), 0.9, 0.3)
+    o = sphere(loc=(0.1, 0, 0), r=1.0, sub=4, scale=(0.95, 0.62, 0.62))
+    part(o, green, b)
+    cyl_x(0.635, -0.2, 0.1, belly, b)
+    nose_x(0.2, 0.95, 0.3, brass, b)
+    for i in range(5):
+        bpy.ops.mesh.primitive_torus_add(major_radius=0.26, minor_radius=0.05, major_segments=24, minor_segments=8,
+                                         location=(-0.85 - i * 0.14, 0, 0), rotation=(0, math.pi / 2, 0))
+        part(bpy.context.active_object, steel, b)
+    for ang in (60, 300):
+        eye = sphere(loc=(0.55, -math.cos(math.radians(ang)) * 0.45, math.sin(math.radians(ang)) * 0.45), r=0.11, sub=2)
+        part(eye, pbr('eye', (0.95, 0.85, 0.2), 0.0, 0.3, (0.9, 0.7, 0.1), 1.5), b)
+
+
+def build_p_funky(frames, rng):
+    """The Funky Bomb: a glossy ball in candy stripes (pink, cyan, yellow,
+    lime) with a stubby fuse, tumbling."""
+    shell_rig()
+    b = spinner(frames, 1.0, axis=1)
+    cols = [(0.95, 0.3, 0.6), (0.2, 0.85, 0.95), (0.98, 0.85, 0.15), (0.55, 0.9, 0.25)]
+    mats = [pbr('stripe%d' % i, c, 0.1, 0.25) for i, c in enumerate(cols)]
+    o = sphere(r=0.9, sub=4)
+    part(o, mats[0], b)
+    for i, x in enumerate((-0.6, -0.2, 0.2, 0.6)):
+        r = math.sqrt(max(0.0, 0.9 * 0.9 - x * x)) + 0.015
+        cyl_x(r, x - 0.09, x + 0.09, mats[(i + 1) % 4], b)
+    cyl_x(0.12, 0.85, 1.15, pbr('cap', (0.2, 0.2, 0.22), 0.8, 0.4), b)
+    spark = sphere(loc=(1.22, 0, 0), r=0.12, sub=2)
+    part(spark, pbr('spark', (1.0, 0.85, 0.4), 0.0, 0.3, (1.0, 0.7, 0.2), 6.0), b)
+
+
+def build_p_deathshead(frames, rng):
+    """Death's Head: a long gunmetal MIRV bus with a bone-white skull nose
+    (two dark eye sockets), a blood-red band and four fins."""
+    shell_rig()
+    b = spinner(frames, 0.25)
+    gun, bone, red, socket, steel = pbr('gun', (0.14, 0.14, 0.16), 0.8, 0.35), pbr('bone', (0.86, 0.83, 0.74), 0.05, 0.55), pbr('red', (0.6, 0.04, 0.04), 0.2, 0.4), pbr('socket', (0.02, 0.02, 0.02), 0.0, 0.8), pbr('steel', (0.45, 0.46, 0.5), 0.9, 0.3)
+    cyl_x(0.5, -1.4, 0.25, gun, b)
+    o = sphere(loc=(0.3, 0, 0), r=1.0, sub=4, scale=(0.9, 0.56, 0.56))
+    part(o, bone, b)
+    cyl_x(0.515, -0.45, -0.2, red, b)
+    # the face looks out to the side the camera sees as the bus turns: two
+    # sockets along the skull and a row of teeth below them
+    for ang in (0, 180):
+        a = math.radians(ang)
+        for x in (0.45, 0.8):
+            surf = 0.56 * math.sqrt(1 - ((x - 0.3) / 0.9) ** 2)   # the skull's radius at x
+            eye = sphere(loc=(x, -math.cos(a) * surf, math.sin(a) * surf + 0.08), r=0.15, sub=2)
+            part(eye, socket, b)
+        for k in range(4):
+            decal(0.3 + k * 0.12, ang - 30, 0.06, 0.12, socket, b, 0.55)
+    fins(-1.5, -1.0, 0.45, steel, b, root=0.15, thick=0.05)
+
+
 # atlas name -> (frame px, frames per clip, fps, [(sheet name, builder)]):
 # one PNG, one row per clip; each clip is its own sheet in sprites.json.
 ATLASES = {
@@ -1527,6 +1586,10 @@ ATLASES = {
         ('p_seeker', build_p_seeker), ('p_lance', build_p_lance), ('p_heavy', build_p_heavy),
         ('p_needle', build_p_needle), ('p_emp', build_p_emp), ('p_roller', build_p_roller),
         ('p_nuke', build_p_nuke),
+    ]),
+    # The Blast family's own shells (Baby Nuke and the rollers wear p_nuke and p_roller).
+    'shells_blast': (48, 8, 12, [
+        ('p_leapfrog', build_p_leapfrog), ('p_funky', build_p_funky), ('p_deathshead', build_p_deathshead),
     ]),
 }
 

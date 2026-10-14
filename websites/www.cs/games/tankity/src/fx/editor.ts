@@ -431,7 +431,7 @@ function stepShells(dt: number, set: FxSet): void {
     s.x += s.vx * d; s.y += s.vy * d;
     FX.play.trail(sys, set, s, dt, s.x, s.y, s.vx, s.vy);
     const hit = Math.hypot(s.x - TX, s.y - ty) < 13;
-    if (w.effect === 'cluster' && !s.split && s.age >= (w.fuse || 0.9)) {
+    if (w.effect === 'cluster' && !s.split && (w.apex ? s.age >= 0.1 && s.vy >= 0 : s.age >= (w.fuse || 0.9))) {
       s.split = true; s.dead = true;
       FX.play.special(sys, set, 'split', s.x, s.y, Math.atan2(s.vy, s.vx));
       const n = w.split || 4, base = Math.atan2(s.vy, s.vx), spd = Math.hypot(s.vx, s.vy) * 0.85;

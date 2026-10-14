@@ -216,20 +216,7 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
             $fan = (float) ($w['fan'] ?? 0.22);
             $fanned = room_split_vel($res[3], $res[4], $n, $fan);
             $sub = ['dmg' => (int) ($w['subDmg'] ?? $w['dmg']), 'radius' => (int) ($w['subRadius'] ?? $w['radius'])];
-            for ($k = 0; $k < $n; $k++) {
-                $cr = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $res[1], $res[2], $fanned[$k][0], $fanned[$k][1], 99.0, false, $sub, $tSplit);
-                $ev = room_shot_event($tank, $wkey, $tSplit, $cr, $cr[0] === 'hit' ? (float) $sub['radius'] : 0.0);
-                $ev['at'] = round($tSplit, 3);
-                $events[] = $ev;
-                $mark = count($events);
-                if ($cr[0] === 'hit') {
-                    room_brk_land($tank, $cr[1]);
-                    room_explode($room, $events, $tank, $wkey, $cr[1], $cr[2], $cr[5], $sub);
-                } else {
-                    $events[] = ['t' => 'fizzle', 'by' => $tank['seat'], 'w' => $wkey];
-                }
-                room_stamp($events, $mark, $tSplit + $cr[7]);
-            }
+            room_fly_siblings($room, $events, $seatIdx, $w, $wkey, $res[1], $res[2], $fanned, 99.0, $sub, $tSplit, null);
             continue;
         }
         $ev = room_shot_event($tank, $wkey, 0.0, $res, $res[0] === 'hit' ? $radius : 0.0);
@@ -243,6 +230,12 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
             $events[] = ['t' => 'fizzle', 'by' => $tank['seat'], 'w' => $wkey];
         }
         room_stamp($events, $mark, $res[7]);
+        if ($res[0] === 'hit' && ($w['effect'] ?? 'shot') === 'hop') {
+            room_fire_hops($room, $events, $seatIdx, $w, $wkey, $res, $res[7]);
+        }
+        if ($res[0] === 'hit' && ($w['effect'] ?? 'shot') === 'scatter') {
+            room_fire_scatter($room, $events, $seatIdx, $w, $wkey, $res, $res[7]);
+        }
     }
     unset($tank);
     // The dust settles: whoever lost their ground falls, as the volley ends.
@@ -254,6 +247,43 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
     room_settle_tanks($room, $events);
     room_stamp($events, $mark, $end);
     room_pace_stamp($room, $events, $firstEvent);
+}
+/* A scatter weapon's bomblets, after its burst $res at $t seconds: thrown
+// from two pixels above the burst (room_scatter_vel), each bursts on the
+// ground at once (age 99, as a cluster bomblet does) and as it lands
+// (room_fly_siblings), with subDmg/subRadius, never directly on the unit the
+// burst struck. */
+function room_fire_scatter(array &$room, array &$events, int $seatIdx, array $w, string $wkey, array $res, float $t): void
+{
+    $sub = ['dmg' => (int) ($w['subDmg'] ?? $w['dmg']), 'radius' => (int) ($w['subRadius'] ?? $w['radius'])];
+    $n = max(2, (int) ($w['split'] ?? 4));
+    $vels = room_scatter_vel($n, (float) ($w['fan'] ?? 0.22), (float) ($w['kick'] ?? 150.0));
+    room_fly_siblings($room, $events, $seatIdx, $w, $wkey, $res[1], $res[2] - 2.0, $vels, 99.0, $sub, $t, $res[5]);
+}
+/* A hop weapon's later warheads, after its first burst $res at $t seconds:
+// each leaps on from the last burst (room_hop_vel), one pixel up, and bursts
+// with subDmg/subRadius, until `hops` warheads have burst or one leaves the
+// field. Each is a 'shot' event of its own from the moment the last burst. */
+function room_fire_hops(array &$room, array &$events, int $seatIdx, array $w, string $wkey, array $res, float $t): void
+{
+    $sub = ['dmg' => (int) ($w['subDmg'] ?? $w['dmg']), 'radius' => (int) ($w['subRadius'] ?? $w['radius'])];
+    for ($hop = 1; $hop < (int) ($w['hops'] ?? 1) && $res[0] === 'hit'; $hop++) {
+        $tank = $room['tanks'][$seatIdx];
+        [$vx, $vy] = room_hop_vel($res[3], $res[4], (float) ($w['hopKeep'] ?? 0.5));
+        $res = room_fly_arc($room, $events, $tank, $w, $wkey, $seatIdx, $res[1], $res[2] - 1.0, $vx, $vy, 0.0, false, $sub, $t, $res[5]);
+        $ev = room_shot_event($tank, $wkey, $t, $res, $res[0] === 'hit' ? (float) $sub['radius'] : 0.0);
+        $ev['at'] = round($t, 3);
+        $events[] = $ev;
+        $mark = count($events);
+        if ($res[0] === 'hit') {
+            room_brk_land($room['tanks'][$seatIdx], $res[1]);
+            room_explode($room, $events, $tank, $wkey, $res[1], $res[2], $res[5], $sub);
+        } else {
+            $events[] = ['t' => 'fizzle', 'by' => $tank['seat'], 'w' => $wkey];
+        }
+        $t += $res[7];
+        room_stamp($events, $mark, $t);
+    }
 }
 /* ---------- room state machine ---------- */
 function room_new(string $code, string $initials): array
@@ -298,12 +328,29 @@ function room_seat_human(string $initials, string $token, array $body): array
 {
     return ['human' => true, 'initials' => $initials, 'token' => $token, 'lives' => 3, 'lastAct' => microtime(true), 'body' => room_body($body)];
 }
+/* A seat's ammo at the start of a match: the endless Shell (-1), plus each
+// row's start shells. src/sim.ts startAmmo is the same. */
+function room_start_ammo(): array
+{
+    $ammo = ['shell' => -1];
+    foreach (room_weapons() as $k => $def) {
+        if ($k !== 'shell' && $def['start'] > 0) {
+            $ammo[$k] = $def['start'];
+        }
+    }
+    return $ammo;
+}
+/* What a buy or a pick of a locked row says: its name and its round. */
+function room_unlock_msg(string $name, int $minRound): string
+{
+    return "$name unlocks in round $minRound";
+}
 /* Every economy slot a new human seat needs, keyed by seat. */
 function room_seat_economy(array &$room, int $seat): void
 {
     $room['scores'][$seat] = 0;
     $room['cash'][$seat] = 600;
-    $room['ammo'][$seat] = ['shell' => -1, 'buck' => 1, 'mortar' => 0, 'rail' => 0, 'nuke' => 0];
+    $room['ammo'][$seat] = room_start_ammo();
     $room['weapon'][$seat] = 'shell';
     $room['nextUp'][$seat] = 3000;
     $room['plate'][$seat] = 0;
@@ -419,7 +466,7 @@ function room_start_round(array &$room): void
             'fuel' => $s['human'] ? 80 : 0,
             'dirS' => $slots[$seat % count($slots)] < $w / 2 ? 1 : -1, // face the middle
             'ammo' => $s['human']
-                ? ($room['ammo'][$idx] ?? ['shell' => -1, 'buck' => 1])
+                ? ($room['ammo'][$idx] ?? room_start_ammo())
                 : room_ai_rack($room['round']),
         ];
         if (!$s['human']) {
@@ -814,7 +861,7 @@ function room_buy(array &$room, int $seat, string $item, int $qty): ?array
         return [422, 'not for sale'];
     }
     if ((int) $room['round'] < ($minRound <= 1 ? 0 : $minRound)) {
-        return [409, $item === 'nuke' ? 'nukes unlock in round 4' : 'unlocks in round ' . $minRound];
+        return [409, room_unlock_msg((string) (isset($weapons[$item]) ? $weapons[$item]['name'] : ($gear['name'] ?? $item)), $minRound)];
     }
     $effect = (string) ($gear['effect'] ?? '');
     if (in_array($effect, ['shield', 'extralife', 'laststand'], true)) {

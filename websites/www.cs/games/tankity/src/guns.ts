@@ -69,7 +69,9 @@ export function createGuns(deps: GunsDeps) {
     return w === 'shell' || (G.ammo![w] || 0) > 0;
   }
   function rackGuns(): string[] {
-    return inStockOnly() ? tables.order.filter(inStock) : tables.order.slice();
+    // Each category together, as in the shop; the rack keeps game.yaml order.
+    const shelf = tables.arsenal ? tables.arsenal.shelf : tables.order;
+    return inStockOnly() ? shelf.filter(inStock) : shelf.slice();
   }
   function toggleStock(): void {
     const at = rackGuns()[gunCursor];

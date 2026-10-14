@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="phpunit.xml" tests="4" assertions="8" errors="0" failures="0" skipped="0" time="0.01">
+    <testsuite name="s" tests="4" assertions="8" errors="0" failures="0" skipped="0" time="0.01">
+      <testsuite name="LegacyThingTest" file="/app/tests/php/LegacyThingTest.php" tests="2" assertions="3" errors="0" failures="0" skipped="0" time="0.001">
+        <testcase name="testOpening" file="/app/tests/php/LegacyThingTest.php" line="9" class="LegacyThingTest" classname="LegacyThingTest" assertions="2" time="0.0001"/>
+        <testcase name="testClosing" file="/app/tests/php/LegacyThingTest.php" line="16" class="LegacyThingTest" classname="LegacyThingTest" assertions="1" time="0.0001"/>
+      </testsuite>
+      <testsuite name="RealThingTest" file="/app/tests/php/RealThingTest.php" tests="2" assertions="5" errors="0" failures="0" skipped="0" time="0.001">
+        <testcase name="testFirst" file="/app/tests/php/RealThingTest.php" line="9" class="RealThingTest" classname="RealThingTest" assertions="2" time="0.0001"/>
+        <testcase name="testSecond" file="/app/tests/php/RealThingTest.php" line="15" class="RealThingTest" classname="RealThingTest" assertions="3" time="0.0001"/>
+      </testsuite>
+    </testsuite>
+  </testsuite>
+</testsuites>

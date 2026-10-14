@@ -216,13 +216,12 @@ function rig(extraCtx = {}) {
 {
   // A slider (the turn time) types nothing: Q goes back from it, and its arrows stay its own.
   const r = rig();
-  // @ts-expect-error: barrelLeft is a held key, not a command, so this handler is never called
-  r.input.register({ back: r.log('back'), barrelLeft: r.log('aim') });
+  r.input.register({ back: r.log('back') });
   r.input.keydown(ev({ key: 'q', code: 'KeyQ', target: { tagName: 'INPUT', type: 'range' } }));
   await test('q-goes-back-from-a-slider', () => { assert.ok(r.calls.join() === 'back', r.calls.join()); });
   r.calls.length = 0;
   r.input.keydown(ev({ key: 'ArrowLeft', code: 'ArrowLeft', target: { tagName: 'INPUT', type: 'range' } }));
-  await test('a-slider-keeps-its-arrows', () => { assert.ok(r.calls.length === 0, r.calls.join()); });
+  await test('a-slider-keeps-its-arrows', () => { assert.ok(r.calls.length === 0 && !r.input.held.has('barrelLeft'), r.calls.join()); });
 }
 {
   // The gun grid's fixed keys.

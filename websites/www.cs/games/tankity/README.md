@@ -629,7 +629,8 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
   gun on every arc. The search flies only guns that fly. A gun with no flight
   is weighed after it: a beam aimed from the barrel's pivot straight at the
   target's body (`beamAim`, `room_ai_beam_aim`: `datan2`, whole degrees,
-  10..170, full power) scores its flat damage on every rival its line
+  inside the beam's limits, past 180 for a target behind and below, full
+  power) scores its flat damage on every rival its line
   crosses; a plasma ring (full power) scores its burns on every rival inside
   it; each capped at that rival's armor, and neither ever touches the drone.
   Either fires when it beats the ballistic pick's harm (and does any harm).
@@ -868,7 +869,13 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   reach), marched in 3 px steps (`BEAM_STEP`) and cut short at the field's
   sides or floor. It cuts its channel (`beamCarve`: a crater of `radius`
   every `radius` px, owning the falls it digs) and hits each unit its line
-  crosses once for flat `dmg`, never its gunner. A plasma ring (`effect:
+  crosses once for flat `dmg`, never its gunner. While a beam row with
+  `aimMin` (the Laser: -20) is loaded, the barrel turns from `aimMin` to 180 -
+  `aimMin`, so it dips below level on either side; every other gun turns 10
+  to 170 (`aimLimits`, `room_aim_limits`). Every shot leaves inside its own
+  gun's limits (`fireWeapon`, `room_fire_shot`), the server clamps aim and
+  fire to the loaded gun and re-clamps on a switch (`room_set_aim`), and
+  `stepArm` keeps the barrel inside them. A plasma ring (`effect:
   plasma`, the Plasma Blast) is centred on its gunner's body, `radius` x power
   / 100 px (never under 20), hurts every other unit inside it with the usual
   falloff, spares the gunner and cuts nothing. Both go through `hitUnit` /

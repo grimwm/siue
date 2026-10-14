@@ -43,7 +43,8 @@ export type MineRow =
     hostSeat: number;
     /** Whose turn it is by name (a human's initials or the drone's name); null outside play. */
     turnName: string | null;
-    /** When the room closes for want of play, unix seconds. */
+    /** When the room closes for want of play, unix seconds. The game counts from closesIn instead
+     * (its own clock may be off); this stays for anything else that reads the row. */
     expiresAt: number;
     /** The same as seconds from this reply: what a client counts down from. */
     closesIn: number;
@@ -157,7 +158,8 @@ export interface RoomSnapshot {
   turn: number | null;
   /** The room's turn time in seconds, one of the host's stops. */
   turnSecs: number;
-  /** When the room closes for want of play, unix seconds; it can come before turnLeft runs out. */
+  /** When the room closes for want of play, unix seconds; it can come before turnLeft runs out.
+   * The game counts from closesIn (its own clock may be off); this stays for other readers. */
   expiresAt: number;
   /** Seconds from this reply until the room closes for want of play: what a client counts down from. */
   closesIn: number;

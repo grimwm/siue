@@ -51,11 +51,26 @@ function room_joins_per_hour(): int
 // Unexpired rooms one address can host at once: a room can outlive its host's
 // attention (long turn times), so the cap on rooms is shared out by address.
 const ROOM_HOSTS_PER_ADDRESS = 4;
-/* The address a room remembers for a seat: a hash of the guard's client key,
-   so the stored room never holds an address itself. */
+/* The address a room remembers for a seat: a keyed hash of the guard's
+   client key, so the stored room never holds an address itself, and the
+   hash cannot be rebuilt from an address without this install's key. */
 function room_client_hash(): string
 {
-    return substr(hash('sha256', 'tankity-addr|' . tankity_guard()->clientKey()), 0, 16);
+    return substr(hash_hmac('sha256', tankity_guard()->clientKey(), tankity_addr_key()), 0, 16);
+}
+/* This install's key for address hashes: the `addr_key` setting when one is
+   set, else a random key made once and kept in the database's meta table. */
+function tankity_addr_key(): string
+{
+    $set = (string) tankity_setting('TANKITY_ADDR_KEY', 'addr_key', '');
+    if ($set !== '') {
+        return $set;
+    }
+    $db = tankity_db();
+    $db->prepare('INSERT OR IGNORE INTO meta (k, v) VALUES (?, ?)')->execute(['addr_key', bin2hex(random_bytes(32))]);
+    $q = $db->prepare('SELECT v FROM meta WHERE k = ?');
+    $q->execute(['addr_key']);
+    return (string) $q->fetchColumn();
 }
 function room_hosts_per_address(): int
 {

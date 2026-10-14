@@ -154,10 +154,14 @@ function room_idle_limit(array $r): int
 function room_expires(array $r): int
 {
     $touched = (int) ($r['touched'] ?? $r['created'] ?? 0);
-    if (($r['phase'] ?? 'lobby') === 'lobby') {
+    $phase = $r['phase'] ?? 'lobby';
+    if ($phase === 'lobby') {
         return $touched + room_live_secs();
     }
-    return (int) ($r['actedAt'] ?? $touched) + room_idle_limit($r);
+    // A finished match keeps its final standings up for the live window only,
+    // so it soon gives back its place, its host's place and any long place.
+    $limit = $phase === 'over' ? room_live_secs() : room_idle_limit($r);
+    return (int) ($r['actedAt'] ?? $touched) + $limit;
 }
 
 /* Seconds from now until the room closes for want of play, never negative.
@@ -246,7 +250,7 @@ function room_long_count(string $except = '', ?int $now = null): int
     $n = 0;
     foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $raw) {
         $r = room_decode($raw);
-        if ($r !== null && room_turn_secs($r) >= ROOM_LONG_TURN_SECS) {
+        if ($r !== null && ($r['phase'] ?? '') !== 'over' && room_turn_secs($r) >= ROOM_LONG_TURN_SECS) {
             $n++;
         }
     }
@@ -284,6 +288,19 @@ function room_load(string $code): array
     $db->exec('COMMIT');
     return [null, null, $code];
 }
+/* The address that hosts the room now: the host seat's, so the hosting cap
+   follows the host when the role passes to another player (and a room with
+   no human left counts against nobody). A host seat from before addresses
+   were stored reads the address recorded at create. */
+function room_host_key(array $room): string
+{
+    $seat = $room['seats'][room_host($room)] ?? null;
+    if (!is_array($seat) || !($seat['human'] ?? false)) {
+        return '';
+    }
+    $addr = (string) ($seat['addr'] ?? '');
+    return $addr !== '' ? $addr : (string) ($room['hostKey'] ?? '');
+}
 function room_save($lock, string $code, array $room): bool
 {
     if (!$lock instanceof RoomLock || !$lock->open) {
@@ -299,7 +316,7 @@ function room_save($lock, string $code, array $room): bool
         $q->bindValue(1, $raw, PDO::PARAM_LOB);
         $q->bindValue(2, $room['touched'], PDO::PARAM_INT);
         $q->bindValue(3, room_expires($room), PDO::PARAM_INT);
-        $q->bindValue(4, (string) ($room['hostKey'] ?? ''));
+        $q->bindValue(4, room_host_key($room));
         $q->bindValue(5, $code);
         $q->execute();
     } catch (PDOException $e) {

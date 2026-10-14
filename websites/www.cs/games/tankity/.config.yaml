@@ -20,6 +20,9 @@
 #   room_long_share <- TANKITY_ROOM_LONG_SHARE (the fraction of max_rooms that
 #                     rooms with a turn time of 8 h or more may hold, at least
 #                     one room; above 0 up to 1; default 0.5)
+#   addr_key       <- TANKITY_ADDR_KEY (the key for the hash a room stores in
+#                     place of an address; unset: a random key made once and
+#                     kept in the database)
 # Point CONFIG_FILE at another file to load settings from elsewhere.
 max_rooms: 50
 room_live_secs: 600

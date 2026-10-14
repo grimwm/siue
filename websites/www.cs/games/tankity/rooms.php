@@ -527,7 +527,8 @@ if ($action === 'seatmode' && $method === 'POST') {
 /* The host sets the turn time in any phase; it applies from the next turn
    (the running clock and an open shop keep theirs). */
 if ($action === 'turntime' && $method === 'POST') {
-    [$room, $fh, $path, $seat] = room_gate($body, true, false);
+    // Spaced like every other act (the slider sends a settled value).
+    [$room, $fh, $path, $seat] = room_gate($body, true);
     if ($seat !== room_host($room)) {
         room_unlock($fh);
         room_json_out(403, ['error' => 'only the host sets the turn time']);
@@ -626,6 +627,12 @@ if ($action === 'state') {
         && ($peekSeat === null || time() - (int) ($peek['touched'] ?? 0) < ROOM_HEARTBEAT_SECS)) {
         room_json_out(200, ['ok' => true, 'room' => room_reply_snapshot($peek, $peekSeat, $body)]);
     }
+    // A running match changes on its own only when a clock runs out or a
+    // drone is up: until then a poll is a read, so a week-long room open in
+    // a tab costs no writes. room_tick_due answers from the read (as mine).
+    if (in_array($peek['phase'], ['play', 'shop'], true) && !room_tick_due($peek)) {
+        room_json_out(200, ['ok' => true, 'room' => room_reply_snapshot($peek, $peekSeat, $body)]);
+    }
     $loaded = room_load($code);
     [$room, $fh, $path] = $loaded;
     if (!is_array($room)) {
@@ -635,7 +642,7 @@ if ($action === 'state') {
     $token = (string) ($body['token'] ?? $_GET['token'] ?? '');
     $seat = $token !== '' ? room_find_seat($room, $token) : null;
     if ($room['phase'] === 'play' || $room['phase'] === 'shop') {
-        // A turn or shop clock that ran out is applied by whoever polls first.
+        // A turn or shop clock that ran out, or a drone's turn, is applied by whoever polls first.
         room_tick($room);
         room_save($fh, $path, $room);
     } elseif ($seat !== null) {

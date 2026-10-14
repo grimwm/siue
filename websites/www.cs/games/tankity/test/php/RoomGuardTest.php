@@ -188,6 +188,12 @@ final class RoomGuardTest extends TestCase
         return room_decode($q->fetchColumn());
     }
 
+    /* One seat's acts are spaced 150 ms apart (create counts as one): wait past it. */
+    private function gap(): void
+    {
+        usleep(200_000);
+    }
+
     /* The docker stacks lift both limits; these tests want the host's. */
     private const FREE = ['TANKITY_ROOM_JOINS_PER_HOUR' => '1000', 'TANKITY_ROOM_HOSTS_PER_ADDRESS' => '4'];
 
@@ -272,10 +278,12 @@ final class RoomGuardTest extends TestCase
         [$st, $host] = $this->createFrom(6, 600);
         $this->assertSame(200, $st, json_encode($host));
         $set = static fn(int $secs): array => ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf'], 'secs' => $secs];
+        $this->gap();
         [$st, $out] = $this->call('turntime', $set(28800), ['REMOTE_ADDR' => '203.0.113.6'], self::TEN);
         $this->assertSame(409, $st, json_encode($out));
         $this->assertSame('every long-game slot is taken; pick a shorter turn time or try later', $out['error']);
         $this->assertSame(600, $this->stored($host['code'])['turnSecs'], 'the refused change left the turn time alone');
+        $this->gap();
         $this->assertSame(200, $this->call('turntime', $set(1800), ['REMOTE_ADDR' => '203.0.113.6'], self::TEN)[0], 'a shorter setting still works');
         $this->assertSame(1800, $this->stored($host['code'])['turnSecs']);
     }
@@ -288,7 +296,9 @@ final class RoomGuardTest extends TestCase
             $first ??= $out;
         }
         $set = static fn(int $secs): array => ['code' => $first['code'], 'token' => $first['token'], 'csrf' => $first['csrf'], 'secs' => $secs];
+        $this->gap();
         $this->assertSame(200, $this->call('turntime', $set(86400), ['REMOTE_ADDR' => '203.0.113.1'], self::TEN)[0], 'long to long needs no new place');
+        $this->gap();
         $this->assertSame(200, $this->call('turntime', $set(120), ['REMOTE_ADDR' => '203.0.113.1'], self::TEN)[0]);
         $this->assertSame(200, $this->createFrom(6, 604800)[0], 'the place it left is free');
     }
@@ -307,6 +317,87 @@ final class RoomGuardTest extends TestCase
         foreach (['0', '1.5', '-1', 'half'] as $bad) {
             putenv("TANKITY_ROOM_LONG_SHARE=$bad");
             $this->assertSame(0.5, room_long_share(), $bad);
+        }
+    }
+
+    public function testTheHostingPlaceFollowsTheHostWhenTheHostLeaves(): void
+    {
+        [$st, $host] = $this->call('create', ['initials' => 'hst'], ['REMOTE_ADDR' => '203.0.113.1'], self::FREE);
+        $this->assertSame(200, $st, json_encode($host));
+        [$st, $guest] = $this->call('join', ['code' => $host['code'], 'initials' => 'gst'], ['REMOTE_ADDR' => '203.0.113.2'], self::FREE);
+        $this->assertSame(200, $st, json_encode($guest));
+        $room = $this->stored($host['code']);
+        $hostAddr = (string) $room['seats'][0]['addr'];
+        $guestAddr = (string) $room['seats'][1]['addr'];
+        $this->assertSame(1, room_hosted($hostAddr));
+        // In a running match the host leaving passes the role on (in a lobby it closes the room).
+        $this->gap();
+        $this->assertSame(200, $this->call('start', ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']],
+            ['REMOTE_ADDR' => '203.0.113.1'], self::FREE)[0]);
+        $this->gap();
+        $this->assertSame(200, $this->call('leave', ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']],
+            ['REMOTE_ADDR' => '203.0.113.1'], self::FREE)[0]);
+        $this->assertSame(0, room_hosted($hostAddr), 'the leaver hosts nothing now');
+        $this->assertSame(1, room_hosted($guestAddr), 'the new host carries the room');
+    }
+
+    public function testAPlayPollThatHasNothingDueDoesNotSave(): void
+    {
+        [$st, $host] = $this->call('create', ['initials' => 'hst'], [], self::FREE);
+        $this->assertSame(200, $st);
+        $start = ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']];
+        $this->gap();
+        $this->assertSame(200, $this->call('start', $start, [], self::FREE)[0]);
+        $touched = fn(): int => (int) tankity_db()->query('SELECT touched FROM rooms WHERE code = ' . tankity_db()->quote($host['code']))->fetchColumn();
+        // Push the stored touch back so any save shows as a change.
+        tankity_db()->exec('UPDATE rooms SET touched = touched - 100 WHERE code = ' . tankity_db()->quote($host['code']));
+        $before = $touched();
+        [$st, $out] = $this->call('state', ['code' => $host['code'], 'token' => $host['token']], [], self::FREE);
+        $this->assertSame(200, $st, json_encode($out));
+        $this->assertSame('play', $out['room']['phase']);
+        $this->assertSame($before, $touched(), 'a plain play poll is a read');
+        // A turn that ran out is due: the next poll applies it under the lock and saves.
+        [$room, $lock] = room_load($host['code']);
+        $room['clock']['at'] -= 10_000;
+        room_save($lock, $host['code'], $room);
+        room_unlock($lock);
+        tankity_db()->exec('UPDATE rooms SET touched = touched - 100 WHERE code = ' . tankity_db()->quote($host['code']));
+        $before = $touched();
+        [$st, $out] = $this->call('state', ['code' => $host['code'], 'token' => $host['token'], 'since' => 0], [], self::FREE);
+        $this->assertSame(200, $st);
+        $this->assertNotSame($before, $touched(), 'a due timeout is applied and saved');
+        $this->assertContains('auto', array_column($out['room']['events'], 't'));
+    }
+
+    public function testTurnTimeIsThrottledLikeOtherActs(): void
+    {
+        [$st, $host] = $this->call('create', ['initials' => 'hst'], [], self::FREE);
+        $this->assertSame(200, $st);
+        $set = static fn(int $secs): array => ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf'], 'secs' => $secs];
+        $this->gap();
+        $this->assertSame(200, $this->call('turntime', $set(600), [], self::FREE)[0]);
+        // Mark the last act as now, then ask again at once.
+        [$room, $lock] = room_load($host['code']);
+        $room['seats'][0]['lastAct'] = microtime(true);
+        room_save($lock, $host['code'], $room);
+        room_unlock($lock);
+        $this->assertSame(429, $this->call('turntime', $set(1800), [], self::FREE)[0]);
+    }
+
+    public function testAddressHashesAreKeyedPerInstall(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.77';
+        $a = room_client_hash();
+        $this->assertSame($a, room_client_hash(), 'stable within an install');
+        $this->assertNotSame(substr(hash('sha256', 'tankity-addr|' . tankity_guard()->clientKey()), 0, 16), $a,
+            'not the unkeyed hash anyone could rebuild from the address');
+        $other = tankity_test_dir();
+        putenv('TANKITY_DATA_DIR=' . $other);
+        try {
+            $this->assertNotSame($a, room_client_hash(), 'another install keys it differently');
+        } finally {
+            putenv('TANKITY_DATA_DIR=' . $this->dir);
+            tankity_test_rm($other);
         }
     }
 }

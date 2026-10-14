@@ -71,12 +71,25 @@ final class RoomIdleTest extends TestCase
         $this->assertSame(1600, room_expires($room));
     }
 
-    public function testAnOverRoomUsesTheSameRule(): void
+    public function testAFinishedMatchLivesTheLiveWindowOnly(): void
     {
-        $room = $this->started('OVER', 'over', 3, 600, 1000);
-        $this->assertSame(1000 + 1800, room_expires($room));
-        $room['turnSecs'] = 60;
+        // The final standings stay up one live window, never a week-long idle limit.
+        $room = $this->started('OVER', 'over', 3, 604800, 1000);
+        $room['seats'][0]['addr'] = 'a';
+        $room['seats'][1]['addr'] = 'b';
+        $room['seats'][2]['addr'] = 'c';
         $this->assertSame(1000 + 600, room_expires($room));
+    }
+
+    public function testAFinishedLongMatchTakesNoLongPlace(): void
+    {
+        foreach (['LNGP' => 'play', 'LNGO' => 'over'] as $code => $phase) {
+            $room = $this->started($code, $phase, 2, 604800, time());
+            $room['seats'][0]['addr'] = 'a';
+            $room['seats'][1]['addr'] = 'b';
+            $this->save($room);
+        }
+        $this->assertSame(1, room_long_count());
     }
 
     public function testAnOldRoomReadsActedAtAsTouched(): void

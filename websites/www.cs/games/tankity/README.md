@@ -181,11 +181,18 @@ php tools/install-files.php      # after the last edit to any served file
 - Live occupancy only: a room's expiry (`room_expires`, stored in
   `rooms.expires` at every save) is the one rule the cap count, the sweep (on
   create and ping) and the load check share. A lobby expires `room_live_secs`
-  after its last touch (seated polls heartbeat it). A started room (play, shop,
-  over) expires `max(room_live_secs, humans x turn time)` after the last human
-  act: any request through `room_gate`, plus create and join; polls, `mine`
-  and timeouts never count, and the end of a match does, so the final
-  standings stay up for one idle limit. There is no total-age cap.
+  after its last touch (seated polls heartbeat it). A running room (play,
+  shop) expires `max(room_live_secs, distinct addresses x turn time)` after
+  the last human act (one live window with fewer than two addresses): any
+  request through `room_gate`, plus create and join; polls, `mine` and
+  timeouts never count. The end of a match counts as an act, and a finished
+  room (over) lasts one live window after it, so its places (the cap, its
+  host's, a long place) come back soon. There is no total-age cap.
+- A `state` poll of a running room is a read: it takes the write lock and
+  saves only when `room_tick_due` says a clock ran out or a drone is up.
+- The hosting cap counts a room against its current host's address
+  (`room_host_key`), so when the host leaves a running match the place moves
+  to the new host. Addresses are stored as a keyed hash (`addr_key`).
 - Seats: a room always has four (`ROOM_SEATS`), seat 0 the host. Each seat is
   a human or a non-human with `mode` `ai` (the drone battery, the default) or
   `open` (no unit). The lobby shows them as a tile grid (initials, `AI`,
@@ -431,6 +438,7 @@ The server settings that remain are in `.config.yaml` or as upper-case
 | `room_joins_per_hour` | 300 | Rooms one address creates or joins in an hour |
 | `room_long_share` | 0.5 | Fraction of `max_rooms` that rooms with a turn time of 8 h or more may hold, at least one room; the create or turn-time change that would pass it gets 409 "every long-game slot is taken" |
 | `allowed_hosts` | `www.cs.siue.edu,cs.siue.edu` | Hosts a request's Origin may name |
+| `addr_key` | made once, kept in the database | The key for the hash a room stores in place of an address |
 
 Rooms are shared out by address, not by player. A room that has fewer than two
 distinct addresses among its humans closes `room_live_secs` after the last human
@@ -481,7 +489,7 @@ A room plays over minutes, hours or a week.
   the Turn alerts button asks the browser for notifications from its click and
   then a hidden tab also shows a notification. Both need a tab of the game open
   somewhere; there is no Web Push. Browsers throttle timers in background tabs
-  (Chrome to about one poll a minute after a while, and Safari may suspend them
+  (Chrome to about one poll a minute once a tab has been hidden five minutes, and Safari may suspend them
   entirely), so a hidden Safari tab can be late or silent. Tabs tell each other
   which room each shows, and no tab toasts a room another tab is showing.
 

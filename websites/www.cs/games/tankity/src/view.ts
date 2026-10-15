@@ -19,9 +19,9 @@ import { sceneryY } from './scenery.ts';
 import { ZOOM_FLOOR, cameraTarget, cloudWrap, easeCamera, skyMarks, stepHold } from './camera.ts';
 import type { Aloft, CamPose, Hold, Reach } from './camera.ts';
 import {
-  hashSeed, mulberry32, gauss, GRAV, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
+  hashSeed, mulberry32, gauss, H, airOf, clamp, flightTop, surfY as simSurfY, facing, isGroundUnit, muzzle,
 } from './sim.ts';
-import type { Weapon } from './sim.ts';
+import type { Air, Weapon } from './sim.ts';
 
 /** The slice of the game's state the view reads and steps (main.ts's G). */
 export type ViewState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'cam' | 'terrain' | 'clouds' | 'time' | 'shake'
@@ -47,7 +47,9 @@ export function createView(deps: ViewDeps) {
      flies, the top of its arc too, pulled back down to ZOOM_FLOOR. */
   const units: GameTank[] = [];
   const calm = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
-  const gravity = (): number => GRAV;
+  // The air each gun flies through this round: the camera flies a climbing shell's arc to its top with it.
+  const airFor = (wkey: string): Air => airOf(G.w, G.wind, tables.weapons[wkey]);
+  const apex = (s: Aloft): number => flightTop({ x: s.x, y: s.y, vx: s.vx || 0, vy: s.vy }, airFor(s.wkey));
   const hold: Hold = { top: null, empty: 0 }; // the volley's top row, held until it lands
   const target: CamPose = { z: 1, cx: 0, cy: 0 };
   // Last frame's shells: a room replay's (read once a frame, in battleView) and those flying on past the field's edge.
@@ -64,7 +66,7 @@ export function createView(deps: ViewDeps) {
     aloft[1] = flyingOn; // past the edge: held only while it climbs within the floor's reach
     reach.w = G.w;
     reach.ground = net.on ? groundAt : undefined;
-    stepHold(hold, aloft, gravity, reach);
+    stepHold(hold, aloft, apex, reach);
     easeCamera(G.cam, cameraTarget(G.w, H, units, hold.top, tallSky, target), dt, !!(calm && calm.matches), H);
   }
   /* The clouds drift with the wind and wrap where the camera, even at the floor, cannot see. */
@@ -122,8 +124,7 @@ export function createView(deps: ViewDeps) {
     const flying = replay.flying();
     replayed = flying;
     if (G.time < ghostTime) ghosts.clear(); // a new match restarted the clock
-    const flyOn = ghosts.frame([...G.shells, ...flying], G.w, Math.min(0.1, Math.max(0, G.time - ghostTime)), G.wind,
-      () => GRAV);
+    const flyOn = ghosts.frame([...G.shells, ...flying], G.w, Math.min(0.1, Math.max(0, G.time - ghostTime)), airFor);
     ghostTime = G.time;
     flyingOn = flyOn;
     return {

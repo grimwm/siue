@@ -4,8 +4,6 @@ import { lastRoom } from './helpers.mjs';
 
 export const shopOpen = page => page.evaluate(() => !document.getElementById('shop-veil').hidden);
 
-/* Where a shell lands: rooms.php's room_sim_shot, ported (gravity 95, wind
-   push 2.2, speed 40 + 2.4 * power, fired from 20 px out along the barrel). */
 /* The newest room a page saw, with the hills from the newest snapshot that
    carried them: polls leave the hills out while they have not changed. */
 export function withHills(list) {
@@ -15,6 +13,12 @@ export function withHills(list) {
   return held ? { ...room, terrain: held.terrain } : null;
 }
 
+/* Where a Shell lands: rooms.php's room_sim_shot, ported (server/flight.php's
+   air: gravity 95, drag 0.0012 per px against the speed through the air, the
+   wind 10 px/s a unit at 40 px over the field's floor and growing as the
+   3/16 power of the height; speed 40 + 2.4 * power, fired from 20 px out
+   along the barrel). */
+const shear = h => { const r = Math.sqrt(Math.sqrt(Math.sqrt(Math.sqrt(Math.max(h, 1) / 40)))); return r * r * r; };
 export function landing(room, tank, angle, power) {
   const rad = angle * Math.PI / 180;
   const speed = 40 + power * 2.4;
@@ -22,7 +26,8 @@ export function landing(room, tank, angle, power) {
   let vx = Math.cos(rad) * speed * tank.dirS, vy = -Math.sin(rad) * speed;
   const dt = 1 / 60;
   for (let i = 0; i < 720; i++) {
-    vx += room.wind * 2.2 * dt; vy += 95 * dt;
+    const rx = room.wind ? vx - room.wind * 10 * shear(460 - y) : vx, d = 0.0012 * Math.sqrt(rx * rx + vy * vy);
+    vx -= d * rx * dt; vy += (95 - d * vy) * dt;
     x += vx * dt; y += vy * dt;
     if (x < -20 || x > 740 || y > 500) return null;
     if (i >= 6 && y >= room.terrain[Math.max(0, Math.min(719, Math.round(x)))]) return x;

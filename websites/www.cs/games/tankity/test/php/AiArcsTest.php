@@ -159,16 +159,20 @@ final class AiArcsTest extends TestCase
     public function testAGunGivenItsOwnArcIsPlannedOnItsOwnOneWithTheSameFlightShares(): void
     {
         $weapons = room_weapons();
-        $rack = ['shell', 'buck', 'mortar'];
+        // Two guns that fly the shell's arc today (the same speed and drag), found by their flight keys.
+        $twins = array_values(array_filter(array_keys($weapons), fn($k) => $k !== 'shell' && room_flight_key($weapons[$k]) === room_flight_key($weapons['shell'])));
+        $this->assertGreaterThanOrEqual(2, count($twins));
+        [$twin, $twin2] = $twins;
+        $rack = ['shell', $twin, $twin2];
         $this->assertSame(['shell'], room_ai_arc_guns($weapons, $rack));
-        foreach ([['speed' => 1.2], ['effect' => 'roller', 'friction' => 0.6, 'rollTime' => 8.0]] as $change) {
+        foreach ([['speed' => 1.2], ['drag' => 0.5], ['effect' => 'roller', 'friction' => 0.6, 'rollTime' => 8.0]] as $change) {
             $own = $weapons;
-            $own['buck'] = $change + $own['buck'];
-            $this->assertSame(['shell', 'buck'], room_ai_arc_guns($own, $rack), json_encode($change));
+            $own[$twin] = $change + $own[$twin];
+            $this->assertSame(['shell', $twin], room_ai_arc_guns($own, $rack), json_encode($change));
         }
         // A gun that hurts differently but flies the same is still one plan.
         $same = $weapons;
-        $same['buck'] = ['dmg' => 99, 'radius' => 60, 'effect' => 'cluster'] + $same['buck'];
+        $same[$twin] = ['dmg' => 99, 'radius' => 60, 'effect' => 'cluster'] + $same[$twin];
         $this->assertSame(['shell'], room_ai_arc_guns($same, $rack));
     }
 

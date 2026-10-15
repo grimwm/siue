@@ -335,7 +335,7 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
     for ($i = 0; $i < $shots; $i++) {
         $off = $shots === 1 ? 0 : ($i - ($shots - 1) / 2) * ($w['spread'] ?? 0.0);
         $a = $rad + $off;
-        $spd = room_shot_speed($tank['power'], (float) ($w['speed'] ?? 1.0), room_field_reach(count($room['terrain'])));
+        $spd = room_launch_speed($w, (float) $tank['power'], room_field_reach(count($room['terrain'])));
         [$mx, $my] = room_muzzle($tank);
         $vx = det_cos($a) * $spd * $dirS;
         $vy = -det_sin($a) * $spd;

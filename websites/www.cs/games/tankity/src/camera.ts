@@ -8,7 +8,6 @@
  * eases the camera toward cameraTarget each frame with easeCamera. */
 
 export interface CamPose { z: number; cx: number; cy: number }
-interface Rising { y: number; vy: number }
 
 /** The furthest back the units' height spread alone pulls the camera. */
 export const UNIT_FLOOR = 0.45;
@@ -30,12 +29,11 @@ export function viewEdges(cam: CamPose, h: number): { top: number; bottom: numbe
   return { top: cam.cy - half, bottom: cam.cy + half };
 }
 
-/** The highest row a shell reaches: the apex of its arc while it rises, else where it is. */
-export function shellTop(s: Rising, g: number): number {
-  return s.vy < 0 && g > 0 ? s.y - (s.vy * s.vy) / (2 * g) : s.y;
-}
-
-export interface Aloft extends Rising { x: number; wkey: string; rolling?: boolean; digging?: boolean }
+/** A shell the camera may frame. Its arc's top (`Apex`) is the caller's to fly: view.ts flies it
+ *  with the sim's own air (sim.ts flightTop), drag and wind and all. */
+export interface Aloft { x: number; y: number; vx?: number; vy: number; wkey: string; rolling?: boolean; digging?: boolean }
+/** The highest row shell s reaches: the top of its arc while it rises, else where it is. */
+export type Apex = (s: Aloft) => number;
 /** Where shells can still hold the camera: the field's width, how far either
  *  side of its middle the view at ZOOM_FLOOR reaches, and (optional) the ground's
  *  row at x, under which a shell lies on the ground (a room replay's roller). */
@@ -50,7 +48,7 @@ const HOLD_GRACE = 2;
  *  is the shells in play; the rest fly on past the field's edge (draw only)
  *  and hold only while they climb. A roller on the ground, a digger burrowing, or a shell the
  *  floor's view cannot reach sideways, holds nothing. */
-export function volleyTop(prev: number | null, lists: readonly Iterable<Aloft>[], gravity: (wkey: string) => number, at?: Reach): number | null {
+export function volleyTop(prev: number | null, lists: readonly Iterable<Aloft>[], apex: Apex, at?: Reach): number | null {
   let top = prev, any = false;
   for (let i = 0; i < lists.length; i++) {
     for (const s of lists[i]!) {
@@ -58,7 +56,7 @@ export function volleyTop(prev: number | null, lists: readonly Iterable<Aloft>[]
       if (at && Math.abs(s.x - at.w / 2) > at.reach) continue;
       if (at && at.ground && s.vy > -30 && s.y >= at.ground(s.x) - ON_GROUND) continue;
       any = true;
-      const y = shellTop(s, gravity(s.wkey));
+      const y = apex(s);
       top = top === null ? y : Math.min(top, y);
     }
   }
@@ -68,8 +66,8 @@ export function volleyTop(prev: number | null, lists: readonly Iterable<Aloft>[]
 /** The volley's hold, stepped once a frame: its top row (null: none) and how many frames in a row had no shell up. */
 export interface Hold { top: number | null; empty: number }
 /** One frame of the hold: volleyTop over these lists, let go only after HOLD_GRACE empty frames in a row. */
-export function stepHold(hold: Hold, lists: readonly Iterable<Aloft>[], gravity: (wkey: string) => number, at?: Reach): void {
-  const top = volleyTop(hold.top, lists, gravity, at);
+export function stepHold(hold: Hold, lists: readonly Iterable<Aloft>[], apex: Apex, at?: Reach): void {
+  const top = volleyTop(hold.top, lists, apex, at);
   if (top !== null) { hold.top = top; hold.empty = 0; return; }
   if (++hold.empty >= HOLD_GRACE) hold.top = null;
 }

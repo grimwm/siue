@@ -39,6 +39,7 @@ require_once __DIR__ . '/config.php';
 //   server/housekeep.php throttled cleanup on requests
 //   server/store.php     rooms as rows: the room lock, room lifecycle, the sweep
 //   server/detmath.php   sin, cos, atan2 and Math.round, the same bits as src/detmath.ts
+//   server/flight.php    the air a shell flies through, and a missile's launch speeds (mirrors src/sim.ts)
 //   server/sim.php       the deterministic sim (mirrors src/sim.ts)
 //   server/earth.php     the earth ops: craters, dirt, pools, slumps, trenches (mirrors src/earth.ts)
 //   server/fire.php      napalm's burning pools and who their flames reach (mirrors src/fire.ts)
@@ -55,6 +56,7 @@ require_once __DIR__ . '/server/board.php';
 require_once __DIR__ . '/server/settings.php';
 require_once __DIR__ . '/server/store.php';
 require_once __DIR__ . '/server/detmath.php';
+require_once __DIR__ . '/server/flight.php';
 require_once __DIR__ . '/server/sim.php';
 require_once __DIR__ . '/server/earth.php';
 require_once __DIR__ . '/server/fire.php';

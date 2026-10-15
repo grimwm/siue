@@ -1,7 +1,7 @@
 /* Operation Tankity: the firing-range preview.
  *
  * A live mini demo of one weapon, run on its own small field with the war's
- * own ballistics (stepBallistic, shotSpeed, blastDamage and carveCrater from
+ * own ballistics (stepBallistic, launchSpeed, blastDamage and carveCrater from
  * sim.ts), so the demo flies exactly like a real shot. It aims, fires at a
  * fixed dummy, shows how the volley went, then resets and goes again.
  *
@@ -11,13 +11,13 @@
  * PreviewEnv, so it compiles in the DOM-free program and test/preview.test.ts
  * drives it on a clock the test moves by hand. */
 import {
-  GRAV, ROLL_LIFT, aimLimits, beamLine, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage, beamCarve, flies, unitHitBox, inHitBox,
+  ROLL_LIFT, ROOM_W, aimLimits, airOf, beamLine, clamp, launchSpeed, stepBallistic, carveCrater, blastDamage, beamCarve, flies, unitHitBox, inHitBox,
   groundAt, groundSlope, rollStart, rollStep, rollOut, hopShell, scatterShells, fallDamage, FALL_RULES,
 } from './sim.ts';
 import { BURY_EPS, DIG_STEP, addDirt, digHeading, fillPour, pourLevel, riotCarve, slumpGround } from './earth.ts';
 import { createEarthShow } from './earth-show.ts';
 import type { EarthShow } from './earth-show.ts';
-import type { Shell, Tank, Weapon } from './sim.ts';
+import type { Air, Shell, Tank, Weapon } from './sim.ts';
 import { MARK_EVERY } from './marks.ts';
 import { burnTicks, firePool, inFlames, tickSteps } from './fire.ts';
 import type { FirePool } from './fire.ts';
@@ -211,17 +211,22 @@ function weaponOf(env: PreviewEnv, key: string): Readonly<Weapon> {
   return w;
 }
 
+/** The air on the range: its wind over its ground, at a room's scale (the range is a room's field, cut short). */
+export function previewAir(pv: Pick<PreviewState, 'terr' | 'wind'>, w: Readonly<Weapon>): Air {
+  return airOf(ROOM_W, pv.wind, w);
+}
 /** Where a shot at (angle, power) comes down, in columns. */
 export function previewShot(pv: PreviewState, env: PreviewEnv, angle: number, power: number): number {
   const w = weaponOf(env, pv.wkey);
   const rad = angle * Math.PI / 180;
   const st = {
     x: pv.sx, y: (pv.terr[pv.sx] ?? 0) - 12,
-    vx: Math.cos(rad) * shotSpeed(power, w.speed),
-    vy: -Math.sin(rad) * shotSpeed(power, w.speed),
+    vx: Math.cos(rad) * launchSpeed(w, power),
+    vy: -Math.sin(rad) * launchSpeed(w, power),
   };
+  const air = previewAir(pv, w);
   for (let i = 0; i < 720; i++) {
-    stepBallistic(st, 1 / 60, pv.wind, GRAV);
+    stepBallistic(st, 1 / 60, air);
     // An arc over the top of the frame flies out of sight: no landing the demo may use.
     if (st.y < 0) return NaN;
     if (st.x < 0 || st.x >= PV_W || st.y >= PV_H) return st.x;
@@ -275,7 +280,7 @@ function previewFire(pv: PreviewState, env: PreviewEnv): void {
   for (let i = 0; i < shots; i++) {
     const off = shots === 1 ? 0 : (i - (shots - 1) / 2) * (w.spread || 0);
     const a = rad + off;
-    const spd = shotSpeed(pv.power, w.speed);
+    const spd = launchSpeed(w, pv.power);
     pv.shells.push({ x: pv.sx, y: y0, vx: Math.cos(a) * spd, vy: -Math.sin(a) * spd, wkey: pv.wkey, age: 0, pierced: false, split: false });
   }
   env.muzzle(pv.fx, pv.wkey, pv.sx, y0, Math.atan2(-Math.sin(rad), Math.cos(rad)));
@@ -572,7 +577,7 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
     }
   } else if (pv.phase === 'fly') {
     const w = weaponOf(env, pv.wkey);
-    const grav = GRAV;
+    const air = previewAir(pv, w);
     const fy = pv.ty - 12;
     // Bomblets join pv.shells mid-loop and get their first step this frame.
     for (const s of pv.shells) {
@@ -586,13 +591,21 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
       }
       s.age = (s.age || 0) + dt;
       if (w.effect === 'seeker') {
+        // As the war steers one (sim.ts steerShell): across its flight only.
         const dx = pv.tx - s.x, dy = fy - s.y;
         const d = Math.max(1, Math.hypot(dx, dy));
         const push = (w.steer || 70) * dt;
-        s.vx += (dx / d) * push;
-        s.vy += (dy / d) * push;
+        let px = (dx / d) * push, py = (dy / d) * push;
+        const sp = Math.hypot(s.vx, s.vy);
+        if (sp > 0) {
+          const along = (px * s.vx + py * s.vy) / sp;
+          px -= along * s.vx / sp;
+          py -= along * s.vy / sp;
+        }
+        s.vx += px;
+        s.vy += py;
       }
-      stepBallistic(s, dt, pv.wind, grav);
+      stepBallistic(s, dt, air);
       if (s.dead) continue;
       if (s.x < 0 || s.x >= PV_W || s.y < 0 || s.y >= PV_H) pv.seen.escaped = true;
       env.trail(pv.fx, s, dt);

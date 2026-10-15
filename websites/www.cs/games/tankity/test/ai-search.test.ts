@@ -1,7 +1,9 @@
-// What a drone's aim costs: a fresh aim searches each planning arc coarse to
-// fine (a 12-step grid of angle and power, then the 6-step neighbours of its
-// best), and a bracket correction does the same around the last aim (6, then
-// 3, then 1). Room drones aim on the server, so these are counts of planning
+// What a drone's aim costs: a fresh aim searches its lead planning arc coarse
+// to fine (a 12-step grid of angle and power, then the 6-step neighbours of its
+// best), every other arc but a roller's follows the lead's best angle and seeks
+// only the power (12, 6, 3, 1 either side, then FOLLOW_ANGLE the same way when
+// that is short), and a bracket correction searches coarse to fine around the
+// last aim (6, then 3, then 1). Room drones aim on the server, so these are counts of planning
 // flights, the whole of a turn's cost.
 // test/ai-hitrate.test.ts holds the aim's quality; protocol/sim-vectors.json
 // holds server/ai.php to the same search.
@@ -9,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildArsenal, mulberry32 } from '../src/sim.ts';
+import { buildArsenal, flightKey, mulberry32 } from '../src/sim.ts';
 import { LOB_ANGLE, aiChoose, arcGuns, earthOps } from '../src/ai.ts';
 import type { Ammo, Bracket, FallRules, Gear, Tank, Weapon, World } from '../src/sim.ts';
 
@@ -29,6 +31,8 @@ const row = (k: string): Readonly<Weapon> => must(arsenal.weapons[k], `the ${k} 
 // eight 6-step neighbours of the coarse best.
 const COARSE = 11 * 7;
 const FINE = 8;
+/** A follower arc's most flights: its start and two either side per step, at two angles. */
+const FOLLOW = 2 * (1 + 2 * 4);
 /** The most ground predictions one drone turn may make (server/ai.php room_ai_earth_ops, test/php/AiArcsTest.php: the same). */
 const GROUND_BUDGET = 240;
 const BRACKET = 1 + 5 * 7 + 8 + 8; // the last shot measured, then 6-, 3- and 1-step grids
@@ -61,17 +65,20 @@ function turn({ s = 'hunter', ammo = {}, brk, targetX = 560, wind = 0 }: { s?: s
   return { flown, choice };
 }
 
-test('a fresh aim flies a coarse grid and the fine neighbours of its best, per arc', () => {
+test('a fresh aim flies a coarse grid and the fine neighbours of its best on its lead arc', () => {
   const { flown } = turn();
-  assert.equal(flown.shell, COARSE + FINE);
+  assert.ok(Number(flown.shell) > COARSE && Number(flown.shell) <= COARSE + FINE, `shell ${flown.shell}`);
 });
 
-test('a fresh aim searches each distinct arc the same way', () => {
-  const { flown } = turn({ ammo: { buck: 2, heavy: 2, needle: 2 } });
-  assert.equal(flown.shell, COARSE + FINE);
-  assert.equal(flown.heavy, COARSE + FINE);
-  assert.equal(flown.needle, COARSE + FINE);
-  assert.equal(flown.buck, undefined, 'buck flies the shell\'s arc');
+test('every other arc follows the lead\'s best angle, seeking only the power', () => {
+  // Guns whose drag or speed gives them arcs of their own, and one that shares the shell's.
+  const own = ['buck', 'heavy', 'needle', 'nuke'].filter(k => flightKey(row(k)) !== flightKey(row('shell')));
+  const twin = GAME.arsenal.ammo.find(a => a.key !== 'shell' && flightKey(row(a.key)) === flightKey(row('shell')));
+  assert.ok(own.length >= 3 && twin, 'the arsenal has guns with arcs of their own, and one that shares the shell\'s');
+  const { flown } = turn({ ammo: Object.fromEntries([...own, twin.key].map(k => [k, 2])) });
+  assert.ok(Number(flown.shell) > COARSE && Number(flown.shell) <= COARSE + FINE, `shell ${flown.shell}`);
+  for (const k of own) assert.ok(Number(flown[k]) >= 5 && Number(flown[k]) <= FOLLOW, `${k} ${flown[k]}`);
+  assert.equal(flown[twin.key], undefined, `${twin.key} flies the shell's arc`);
 });
 
 test('a full round-9 rack searches every arc, rollers on a coarser grid, inside a fixed budget', () => {
@@ -85,7 +92,8 @@ test('a full round-9 rack searches every arc, rollers on a coarser grid, inside 
       const n = flown[k] || 0;
       // A roller arc: a 24-step grid (6 x 4), then two narrowing passes only when it beats the best so far.
       if (rollers.includes(k)) assert.ok(n >= 24 && n <= 24 + 2 * FINE, `${s} ${k}: ${n}`);
-      else assert.ok(n >= COARSE && n <= COARSE + FINE, `${s} ${k}: ${n}`);
+      else if (k === plan[0]) assert.ok(n >= COARSE && n <= COARSE + FINE, `${s} ${k}: ${n}`);
+      else assert.ok(n >= 5 && n <= FOLLOW, `${s} ${k}: ${n}`);
     }
     const total = Object.values(flown).reduce((a, b) => a + b, 0);
     assert.ok(total <= 440, `${s}: ${total} flights, ${JSON.stringify(flown)} (test/php/AiArcsTest.php holds the server to the same 440)`);

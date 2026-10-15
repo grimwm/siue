@@ -6,9 +6,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildArsenal, stepBallistic, shotSpeed, GRAV } from '../src/sim.ts';
+import { buildArsenal, stepBallistic, launchSpeed } from '../src/sim.ts';
 import {
-  PV_W, PV_H, PV_FOE_HP, PV_WIND, createPreview, stepPreview, solvePreview, previewShot, makePreviewTerrain, previewGround,
+  PV_W, PV_H, PV_FOE_HP, PV_WIND, createPreview, stepPreview, solvePreview, previewShot, previewAir, makePreviewTerrain, previewGround,
 } from '../src/preview.ts';
 import type { PreviewEnv, PreviewFx, PreviewShell, PreviewState } from '../src/preview.ts';
 import type { Gear, Weapon } from '../src/sim.ts';
@@ -140,10 +140,10 @@ function run(pv: PreviewState, env: PreviewEnv<FakeFx>, seconds: number, done: (
   solvePreview(pv, env);
   const w = weapon('mortar');
   const rad = pv.angle * Math.PI / 180;
-  const st = { x: pv.sx, y: nth(pv.terr, pv.sx) - 12, vx: Math.cos(rad) * shotSpeed(pv.power, w.speed), vy: -Math.sin(rad) * shotSpeed(pv.power, w.speed) };
+  const st = { x: pv.sx, y: nth(pv.terr, pv.sx) - 12, vx: Math.cos(rad) * launchSpeed(w, pv.power), vy: -Math.sin(rad) * launchSpeed(w, pv.power) };
   let landed: number | null = null;
   for (let i = 0; i < 720 && !landed; i++) {
-    stepBallistic(st, 1 / 60, pv.wind, GRAV);
+    stepBallistic(st, 1 / 60, previewAir(pv, w));
     if (st.x < 0 || st.x >= PV_W || st.y >= PV_H || (i >= 6 && st.y >= Number(pv.terr[Math.max(0, Math.min(PV_W - 1, Math.round(st.x)))]))) landed = st.x;
   }
   await test('the solved mortar lob comes down on the target column', () => { assert.ok(landed !== null && Math.abs(landed - pv.tx) < 8, `landed ${landed}`); });

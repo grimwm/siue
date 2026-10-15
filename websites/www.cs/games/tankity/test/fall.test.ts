@@ -262,7 +262,7 @@ test('a parachute armed for a fall opens only when the unit starts to drop, and 
 });
 
 test('a solo volley arms the parachute of a unit it digs out, so the canopy opens as it drops', () => {
-  const me = unit('tank', true, 100, 400, 100, { dirS: 1, angle: 30, power: 51 });
+  const me = unit('tank', true, 100, 400, 100, { dirS: 1, angle: 30, power: 41 });
   const foe = unit('reaper', false, 400, 400, 100, { dirS: -1, chutes: 1 });
   const G = world([me, foe], { ammo: { shell: Infinity, nuke: 9 } });
   sim.fireWeapon(G, arsenal, me, 'nuke');
@@ -280,7 +280,7 @@ test('a solo volley arms the parachute of a unit it digs out, so the canopy open
 });
 
 test('a unit dug out by an early pellet is seen to fall at once, before the volley settles', () => {
-  const me = unit('tank', true, 100, 400, 100, { dirS: 1, angle: 45, power: 46 });
+  const me = unit('tank', true, 100, 400, 100, { dirS: 1, angle: 35, power: 80 });
   const foe = unit('reaper', false, 400, 400, 100, { dirS: -1 });
   const G = world([me, foe], { ammo: { shell: Infinity, buck: 9 } });
   sim.fireWeapon(G, arsenal, me, 'buck');
@@ -347,12 +347,12 @@ const outcome = (G: World) => ({ hp: G.tanks.map(t => t.hp), y: G.tanks.map(t =>
 test('the same shot costs the same armor in a solo match and in a room', () => {
   const cases = [
     // Buckshot's pellets dig the drone's pit in several bursts: one fall, not one per pellet.
-    { wkey: 'buck', angle: 45, power: 46, ground: 400, drone: {} },
-    { wkey: 'buck', angle: 45, power: 46, ground: 400, drone: { chutes: 1 } },
+    { wkey: 'buck', angle: 45, power: 81, ground: 400, drone: {} },
+    { wkey: 'buck', angle: 45, power: 81, ground: 400, drone: { chutes: 1 } },
     // Fractional ground and a fall that stops just short of a whole pixel.
-    { wkey: 'shell', angle: 30, power: 51, ground: 400, drone: {} },
-    { wkey: 'shell', angle: 30, power: 51, ground: 420.54, drone: {} },
-    { wkey: 'mortar', angle: 33, power: 50, ground: 400.37, drone: { chutes: 1 } },
+    { wkey: 'shell', angle: 30, power: 62, ground: 400, drone: {} },
+    { wkey: 'shell', angle: 30, power: 62, ground: 420.54, drone: {} },
+    { wkey: 'mortar', angle: 33, power: 58, ground: 400.37, drone: { chutes: 1 } },
   ];
   let fell = 0;
   for (const c of cases) {

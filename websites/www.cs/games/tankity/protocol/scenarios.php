@@ -28,10 +28,11 @@ function protocol_lobby(): array
     return $room;
 }
 
-/** Host ABC against one drone, as the start handler leaves it: seat 0 up. */
+/** Host ABC against one hard drone (a ranging shot that comes down on the field), as the start handler leaves it: seat 0 up. */
 function protocol_play(): array
 {
     $room = room_new(PROTOCOL_CODE, 'ABC');
+    $room['difficulty'] = 'hard';
     $room['created'] = $room['touched'] = PROTOCOL_TOUCHED; // expiresAt must not depend on the clock
     $room['csrf'] = 'fixture-csrf';
     $room['seats'][0] = room_seat_human('ABC', 'fixture-token-0', [], '');
@@ -78,7 +79,8 @@ function protocol_fire(array $room, float $angle, float $power, string $wkey = '
 }
 
 /** The first aim (angle ascending, power descending) whose shell wounds the
- * drone from the opening position and draws its answer; fixed, so the fixtures never move. */
+ * drone from the opening position and draws its answer, a shot that comes
+ * down on the field; fixed, so the fixtures never move. */
 function protocol_hitting_aim(array $room): array
 {
     $dir = $room['tanks'][0]['x'] < $room['tanks'][1]['x'] ? 1 : -1;
@@ -89,7 +91,8 @@ function protocol_hitting_aim(array $room): array
             $types = array_column($after['events'], 't');
             $hit = array_filter($after['events'], fn($e) => ($e['t'] ?? '') === 'hit' && $e['seat'] === 1 && ($e['by'] ?? -1) === 0);
             // A wounding hit, not a kill, and the drone answers: the whole turn.
-            if ($hit && $after['phase'] === 'play' && in_array('aifire', $types, true) && !in_array('kill', $types, true)) {
+            if ($hit && $after['phase'] === 'play' && in_array('aifire', $types, true) && !in_array('kill', $types, true)
+                && !in_array('fizzle', $types, true)) {
                 return [(float) $a, (float) $power];
             }
         }
@@ -153,7 +156,7 @@ function protocol_snapshots(): array
     // The earth guns, one after another (the drone answering each): a burrow with
     // warheads, a mound of dirt, a pour, a riot scoop and a slump.
     $earth = $play;
-    foreach ([[protocol_gun('dig', fn($d) => $d['warheads'] > 0), $angle, $power - 12], [protocol_gun('dirt'), $angle, $power],
+    foreach ([[protocol_gun('dig', fn($d) => $d['warheads'] > 0), $angle, $power - 20], [protocol_gun('dirt'), $angle, $power],
         [protocol_gun('pour'), $angle, $power], [protocol_gun('riot'), $angle, $power], [protocol_gun('slump'), $angle, $power]] as [$gun, $a, $p]) {
         $earth = protocol_fire($earth, $a, $p, $gun);
     }

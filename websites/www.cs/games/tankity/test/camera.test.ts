@@ -4,9 +4,9 @@
 // kept on screen, and an ease that never drops a unit out of frame.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { H } from '../src/sim.ts';
+import { H, airOf, flightTop } from '../src/sim.ts';
 import {
-  UNIT_FLOOR, ZOOM_FLOOR, SKY_PAD, cameraTarget, cloudWrap, easeCamera, shellTop, skyMarks, stepHold, viewEdges, volleyTop,
+  UNIT_FLOOR, ZOOM_FLOOR, SKY_PAD, cameraTarget, cloudWrap, easeCamera, skyMarks, stepHold, viewEdges, volleyTop,
 } from '../src/camera.ts';
 import type { Aloft, CamPose, SkyMark } from '../src/camera.ts';
 
@@ -16,6 +16,8 @@ const flat = [{ y: 330 }, { y: 340 }, { y: 320 }];
 const near = (a: number | null, b: number, eps = 1e-6) => Math.abs(Number(a) - b) <= eps;
 /* A shell with no x: volleyTop reads x only when it is handed a Reach. */
 const aloft = (s: Omit<Aloft, 'x'>) => s as Aloft;
+/* The top of an arc in airless flight under g = 95: the caller's apex in most of these tests, so their numbers read plainly. */
+const vacuum = (s: Aloft): number => (s.vy < 0 ? s.y - s.vy * s.vy / 190 : s.y);
 
 test('with no volley the units are framed as before: level ground stays at full size', () => {
   const t = cameraTarget(W, H, flat, null);
@@ -100,14 +102,19 @@ test('a tall canvas spends its own sky first: less pull-back, and the arc still 
   assert.equal(cameraTarget(W, H, flat, -100, 600).z, 1, 'a short lob needs no zoom on a portrait screen');
 });
 
-test('shellTop: a rising shell counts its apex, a falling one where it is', () => {
-  assert.equal(shellTop({ y: 300, vy: -190 }, 95), 300 - 190 * 190 / (2 * 95));
-  assert.equal(shellTop({ y: 120, vy: 40 }, 95), 120);
-  assert.equal(shellTop({ y: 120, vy: 0 }, 95), 120);
+test('flightTop flies a rising shell to the top of its arc through the air; a falling one is where it is', () => {
+  const ground = new Array<number>(720).fill(330);
+  const calm = airOf(720, 0, { drag: 1 });
+  const top = flightTop({ x: 100, y: 300, vx: 0, vy: -190 }, calm);
+  assert.ok(top > 300 - 190 * 190 / 190, `drag holds the climb under the airless apex: ${top}`);
+  assert.ok(top < 300 - 100, `but it still climbs: ${top}`);
+  assert.ok(flightTop({ x: 100, y: 300, vx: 0, vy: -190 }, airOf(720, 0, { drag: 0.4 })) < top, 'a slicker gun climbs higher');
+  assert.equal(flightTop({ x: 100, y: 120, vx: 50, vy: 40 }, calm), 120);
+  assert.equal(flightTop({ x: 100, y: 120, vx: 50, vy: 0 }, calm), 120);
 });
 
 test('volleyTop ratchets up while shells fly and clears once the volley has landed', () => {
-  const g = () => 95;
+  const g = vacuum;
   let top = volleyTop(null, [[]], g);
   assert.equal(top, null);
   top = volleyTop(top, [[aloft({ y: 300, vy: -100, wkey: 'shell' })]], g);
@@ -122,7 +129,7 @@ test('volleyTop ratchets up while shells fly and clears once the volley has land
 });
 
 test('volleyTop: a shell past the edge holds only while it climbs within the floor\'s reach; a roller on the ground never', () => {
-  const g = () => 95, reach = 2000;
+  const g = vacuum, reach = 2000;
   const top = volleyTop(null, [[{ x: 500, y: 300, vy: -100, wkey: 'shell' }]], g, { w: W, reach });
   assert.notEqual(top, null);
   // Live shells landed; a ghost falls on past the edge: the hold ends.
@@ -139,9 +146,9 @@ test('volleyTop: a shell past the edge holds only while it climbs within the flo
   assert.notEqual(volleyTop(top, [[{ x: 400, y: 330, vy: 20, wkey: 'shell' }], []], g, { w: W, reach }), null);
 });
 
-test('volleyTop reads each weapon\'s own gravity', () => {
-  const top = volleyTop(null, [[aloft({ y: 300, vy: -90, wkey: 'slow' })]], k => (k === 'slow' ? 90 : 95));
-  assert.ok(near(top, 300 - 90 * 90 / 180));
+test('volleyTop asks the caller for each shell\'s top (each gun flies its own air)', () => {
+  const top = volleyTop(null, [[aloft({ y: 300, vy: -90, wkey: 'slow' })]], s => (s.wkey === 'slow' ? 200 : 0));
+  assert.equal(top, 200);
 });
 
 test('easeCamera reaches the target and stays there', () => {
@@ -219,7 +226,7 @@ test('skyMarks: a shell above the view gets a mark at its x on the top edge, els
 });
 
 test('stepHold rides out the one frame a climbing shell hands over to its ghost, then lets go', () => {
-  const g = () => 95, at = { w: W, reach: 2000 };
+  const g = vacuum, at = { w: W, reach: 2000 };
   const hold = { top: null, empty: 0 };
   stepHold(hold, [[{ x: W - 5, y: 100, vy: -200, wkey: 'shell' }], []], g, at);
   const top = hold.top;
@@ -234,7 +241,7 @@ test('stepHold rides out the one frame a climbing shell hands over to its ghost,
 });
 
 test('a shell lying on the ground (a room replay\'s roller) holds nothing', () => {
-  const g = () => 95;
+  const g = vacuum;
   const ground = (x: number) => 330 + x * 0;
   const at = { w: W, reach: 2000, ground };
   assert.equal(volleyTop(-200, [[{ x: 400, y: 327, vy: -1, wkey: 'roller' }]], g, at), null);

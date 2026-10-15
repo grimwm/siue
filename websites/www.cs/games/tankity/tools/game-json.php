@@ -23,6 +23,14 @@
  */
 declare(strict_types=1);
 
+// A missile's launch speeds are flown with the server's own air (server/flight.php), so the
+// browser and the server read one table: it is written into the missile's row as missileSpeed.
+if (!defined('TANKITY_FLIGHT_TOOL')) {
+    define('TANKITY_FLIGHT_TOOL', true);
+}
+require_once __DIR__ . '/../server/detmath.php';
+require_once __DIR__ . '/../server/flight.php';
+
 /** A YAML or schema problem; the message already carries the line number. */
 final class TankityConfigError extends RuntimeException
 {
@@ -751,7 +759,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
             continue;
         }
         $c->allow($row, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'minRound', 'ai', 'aiRound', 'aiRack',
-            'effect', 'speed', 'shortRange'], array_keys(TANKITY_AMMO_EXTRA), ['preview', 'note', 'gfx']), $p);
+            'effect', 'speed', 'drag', 'missile', 'shortRange'], array_keys(TANKITY_AMMO_EXTRA), ['preview', 'note', 'gfx']), $p);
         $o = [];
         $o['key'] = $c->str($row, 'key', $p, 24, true, '/^[a-z][a-z0-9]*$/');
         if ($o['key'] !== null) {
@@ -784,6 +792,26 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         }
         $o['effect'] = $c->enum($row, 'effect', $p, TANKITY_AMMO_EFFECTS);
         $o['speed'] = $c->num($row, 'speed', $p, 0.1, 5.0);
+        // A gun that flies may name its drag factor (1, a Shell's, when it names none); a beam,
+        // a plasma ring or a riot charge does not fly.
+        $flies = !in_array($o['effect'], ['beam', 'plasma', 'riot'], true);
+        if (array_key_exists('drag', $row) && $row['drag'] !== null) {
+            if ($flies) {
+                $o['drag'] = $c->num($row, 'drag', $p, 0.1, 5.0);
+            } else {
+                $c->err("$p.drag", 'only a gun that flies uses this');
+            }
+        }
+        if (array_key_exists('missile', $row) && $row['missile'] !== null) {
+            $o['missile'] = $c->bool($row, 'missile', $p);
+            if (!$flies) {
+                $c->err("$p.missile", 'only a gun that flies uses this');
+            } elseif ($o['missile'] === true && is_numeric($o['speed']) && (float) $o['speed'] !== 1.0) {
+                $c->err("$p.speed", 'a missile\'s power picks how far it flies; speed must be 1.0');
+            } elseif ($o['missile'] === true && (!array_key_exists('drag', $row) || is_numeric($o['drag'] ?? null))) {
+                $o['missileSpeed'] = room_missile_table((float) ($o['drag'] ?? 1.0));
+            }
+        }
         if (array_key_exists('shortRange', $row) && $row['shortRange'] !== null) {
             $o['shortRange'] = $c->bool($row, 'shortRange', $p);
         }
@@ -845,7 +873,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         $o['note'] = $c->str($row, 'note', $p, 120);
         $o['gfx'] = tankity_build_gfx($c, $row['gfx'] ?? null, "$p.gfx", $effect);
         $res['ammo'][] = tankity_ordered($o, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'minRound', 'ai', 'aiRound', 'aiRack',
-            'effect'], array_keys(TANKITY_AMMO_EXTRA), ['speed', 'shortRange', 'preview', 'note', 'gfx']));
+            'effect'], array_keys(TANKITY_AMMO_EXTRA), ['speed', 'drag', 'missile', 'missileSpeed', 'shortRange', 'preview', 'note', 'gfx']));
     }
     // The shop and the picker show each cat under one heading in file order: its rows sit together.
     $cats = array_column($res['ammo'], 'cat');
@@ -1346,6 +1374,14 @@ function tankity_config_render(string $yaml, string $gameDir): string
     // downloads (the host serves it uncompressed).
     $flags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION;
     $flat = [];
+    // A missile's speed table sits on one line too.
+    foreach ($data['arsenal']['ammo'] ?? [] as $i => $row) {
+        if (isset($row['missileSpeed'])) {
+            $token = "\u{1}" . count($flat) . "\u{1}";
+            $flat[json_encode($token, $flags)] = json_encode($row['missileSpeed'], $flags);
+            $data['arsenal']['ammo'][$i]['missileSpeed'] = $token;
+        }
+    }
     foreach ($data['effects'] ?? [] as $wk => $slots) {
         foreach ($slots as $slot => $def) {
             foreach ($def['emitters'] ?? [] as $i => $em) {

@@ -25,11 +25,14 @@
    index.html ships the default there and swaps in the saved choice before the
    first paint, and Settings changes it (src/theme.ts). --accent-ink is the text
    on an accent fill, --accent-rgb the accent for translucent tints, --focus the
-   focus ring. test/theme.test.ts holds every pair to WCAG AA. */
-:root, [data-theme="yellow"] { --accent: #ffc93c; --accent-hover: #ffd96e; --accent-ink: #111111; --accent-rgb: 255, 201, 60; --focus: #ffe08a; }
+   focus ring. test/theme.test.ts holds every pair to WCAG AA. Custom has no block
+   here: it sets the same five as inline properties on <html>, derived from the
+   player's one colour (src/theme.ts). Orange, the default, comes first so any
+   other theme's block, equal in specificity to :root, wins by coming after it. */
+:root, [data-theme="orange"] { --accent: #ff9f43; --accent-hover: #ffb873; --accent-ink: #111111; --accent-rgb: 255, 159, 67; --focus: #ffd0a1; }
+[data-theme="yellow"] { --accent: #ffc93c; --accent-hover: #ffd96e; --accent-ink: #111111; --accent-rgb: 255, 201, 60; --focus: #ffe08a; }
 [data-theme="lime"] { --accent: #a3e635; --accent-hover: #bef264; --accent-ink: #111111; --accent-rgb: 163, 230, 53; --focus: #d9f99d; }
 [data-theme="cyan"] { --accent: #22d3ee; --accent-hover: #67e8f9; --accent-ink: #111111; --accent-rgb: 34, 211, 238; --focus: #a5f3fc; }
-[data-theme="orange"] { --accent: #ff9f43; --accent-hover: #ffb873; --accent-ink: #111111; --accent-rgb: 255, 159, 67; --focus: #ffd0a1; }
 [data-theme="magenta"] { --accent: #f472d0; --accent-hover: #f9a8e4; --accent-ink: #111111; --accent-rgb: 244, 114, 208; --focus: #fbcfe8; }
 
 * { box-sizing: border-box; }
@@ -225,6 +228,13 @@ button:disabled { opacity: 0.45; cursor: default; }
 .theme-choice { align-content: center; min-height: 3.2rem; }
 .theme-swatch { display: block; width: 1.3rem; height: 1.3rem; border-radius: 50%; background: var(--accent); border: 2px solid rgba(255, 255, 255, 0.3); }
 .theme-choice[aria-pressed="true"] .theme-swatch { border-color: var(--ink); }
+/* Custom: its tile and the colour picker share one line under the five. */
+.theme-custom { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.5rem; }
+.theme-custom > .theme-choice { flex: 0 0 5.2rem; }
+.theme-custom-pick { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--dim); font-size: 0.8rem; white-space: nowrap; }
+.theme-custom-pick > span { overflow: hidden; text-overflow: ellipsis; }
+.theme-custom-pick input[type="color"] { flex: 0 0 auto; width: 2.6rem; height: 2.2rem; padding: 0; border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 8px; background: none; cursor: pointer; }
+.theme-custom-pick input[type="color"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
 .hint { color: var(--dim); font-size: 0.9rem; }
 /* Room-server connection dot: red until a ping answers, green while live. */

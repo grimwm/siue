@@ -3,7 +3,8 @@
 // small bubble beside it stays on screen and takes focus, and doing the thing
 // moves on, through the shop (a gun row, a pack, Buy, Preview, Start) and the
 // battle (barrel, power, drive, a gun, FIRE, the wind). Also the colour
-// theme: Settings switches the accent, and a reload keeps it.
+// theme: Orange by default, Settings switches the accent (a preset or a
+// colour of the player's own), and a reload keeps it.
 import { test, expect } from '@playwright/test';
 import { recorderScript } from './helpers.mjs';
 
@@ -177,10 +178,10 @@ for (const [name, screen] of SCREENS) {
     const { ctx, page, errors } = await player(browser, screen);
     const press = async loc => (screen.touch ? loc.tap() : loc.click());
     const accent = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
-    expect(await accent()).toBe('#ffc93c');
+    expect(await accent()).toBe('#ff9f43');
     await press(page.locator('#title-settings'));
     await expect(page.locator('#theme-picker')).toBeVisible();
-    await expect(page.locator('[data-pick-theme="yellow"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-pick-theme="orange"]')).toHaveAttribute('aria-pressed', 'true');
     await press(page.locator('[data-pick-theme="lime"]'));
     expect(await accent()).toBe('#a3e635');
     await expect(page.locator('[data-pick-theme="lime"]')).toHaveAttribute('aria-pressed', 'true');
@@ -193,6 +194,68 @@ for (const [name, screen] of SCREENS) {
     expect(await page.evaluate(() => localStorage.getItem('tankity-theme'))).toBe('lime');
     // The in-world palette stays: the deck's FIRE keeps its red.
     expect(await page.locator('#btn-cannon').evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(196, 34, 34)');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
+}
+
+/** WCAG 2 contrast of two "rgb(r, g, b)" strings. */
+function contrastOf(a, b) {
+  const lum = c => {
+    const [r, g, bl] = c.match(/\d+/g).slice(0, 3).map(v => { const x = Number(v) / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+for (const [name, screen] of SCREENS) {
+  test(`theme on a ${name}: a fresh profile gets Orange, with nothing stored`, async ({ browser }) => {
+    const { ctx, page, errors } = await player(browser, screen);
+    expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('orange');
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim())).toBe('#ff9f43');
+    expect(await page.evaluate(() => localStorage.getItem('tankity-theme'))).toBeNull();
+    expect(await page.locator('#title-play').evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 159, 67)');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
+
+  test(`theme on a ${name}: Custom with #3366ff changes the accent, keeps readable button text, and survives a reload`, async ({ browser }) => {
+    const { ctx, page, errors } = await player(browser, screen);
+    const press = async loc => (screen.touch ? loc.tap() : loc.click());
+    const accent = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
+    await press(page.locator('#title-settings'));
+    await expect(page.locator('#theme-picker')).toBeVisible();
+    await expect(page.locator('[data-pick-theme="custom"]')).toHaveText('Custom');
+    await expect(page.locator('.theme-custom-pick')).toContainText('Pick a colour');
+    await page.locator('#theme-custom-input').fill('#3366ff');
+    await expect(page.locator('[data-pick-theme="custom"]')).toHaveAttribute('aria-pressed', 'true');
+    const custom = await accent();
+    expect(custom).toMatch(/^#[0-9a-f]{6}$/);
+    expect(custom).not.toBe('#ff9f43');
+    expect(await page.evaluate(() => localStorage.getItem('tankity-theme'))).toBe('custom');
+    expect(await page.evaluate(() => localStorage.getItem('tankity-theme-custom'))).toBe('#3366ff');
+    // The label of every Settings button still fits its control.
+    const clipped = await page.evaluate(() => [...document.querySelectorAll('#menu-overlay button')]
+      .filter(b => b.getBoundingClientRect().width > 0)
+      .filter(b => [b, ...b.querySelectorAll('span')].some(e => e.scrollWidth > e.clientWidth))
+      .map(b => b.id || b.textContent));
+    expect(clipped).toEqual([]);
+    // The picker takes keyboard focus, and Q closes the menu from it.
+    if (!screen.touch) {
+      await page.locator('#theme-custom-input').focus();
+      await expect(page.locator('#theme-custom-input')).toBeFocused();
+      await page.keyboard.press('q');
+    } else {
+      await page.locator('#menu-close').tap();
+    }
+    await expect(page.locator('#menu-overlay')).toBeHidden();
+    const play = await page.locator('#title-play').evaluate(el => { const c = getComputedStyle(el); return [c.color, c.backgroundColor]; });
+    expect(contrastOf(play[0], play[1])).toBeGreaterThanOrEqual(4.5);
+    await page.reload();
+    await expect(page.locator('#title-card')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('custom');
+    expect(await accent()).toBe(custom);
     expect(errors).toEqual([]);
     await ctx.close();
   });

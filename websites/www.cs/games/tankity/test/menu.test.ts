@@ -35,13 +35,13 @@ type Extras = 'flashes' | 'onFlashes' | 'onStandings' | 'onQuit' | 'onNextSong' 
 function draw(over: Partial<MenuProps> = {}) {
   const section = makeEl('menu-overlay');
   section.hidden = false;
-  const calls = { close: 0, playSeed: 0, submit: 0, unit: [] as string[], size: [] as string[], theme: [] as string[], difficulty: [] as string[], sound: 0, music: 0, soundLevel: [] as number[], musicLevel: [] as number[], fs: 0, scores: 0, leave: 0 };
+  const calls = { close: 0, playSeed: 0, submit: 0, unit: [] as string[], size: [] as string[], theme: [] as string[], custom: [] as string[], difficulty: [] as string[], sound: 0, music: 0, soundLevel: [] as number[], musicLevel: [] as number[], fs: 0, scores: 0, leave: 0 };
   const base: Omit<MenuProps, Extras> = {
     keyHint: (c, a) => KEYS[`${c}:${a}`] ?? '', onClose: () => { calls.close++; },
     onPlaySeed: () => { calls.playSeed++; }, onSubmit: () => { calls.submit++; },
     units: UNITS, unit: 'tank', drawUnit() {}, onPickUnit: k => { calls.unit.push(k); },
     sizes: SIZES, size: 'm', onPickSize: k => { calls.size.push(k); },
-    themes: THEMES, theme: 'yellow', onPickTheme: k => { calls.theme.push(k); },
+    themes: THEMES, theme: 'yellow', onPickTheme: k => { calls.theme.push(k); }, customColour: '#3366ff', onPickCustom: h => { calls.custom.push(h); },
     difficulties: LEVELS, difficulty: 'normal', onPickDifficulty: k => { calls.difficulty.push(k); },
     sound: true, music: true, soundLevel: 80, musicLevel: 60, onSoundLevel: l => { calls.soundLevel.push(l); }, onMusicLevel: l => { calls.musicLevel.push(l); }, fullscreen: false,
     onSound: () => { calls.sound++; }, onMusic: () => { calls.music++; }, onFullscreen: () => { calls.fs++; },
@@ -247,7 +247,7 @@ test('Flashes is an Options toggle: on by default, pressed follows the prop, a c
 
 test('Theme: one tile per theme, its swatch wearing that theme, the saved one pressed', () => {
   const { section, calls } = draw({ theme: 'lime' });
-  const tiles = kids(byId(section, 'theme-picker'));
+  const tiles = kids(byId(section, 'theme-picker')).slice(0, 5);
   assert.deepEqual(tiles.map(t => t.getAttribute('data-pick-theme')), ['yellow', 'lime', 'cyan', 'orange', 'magenta']);
   assert.deepEqual(tiles.map(t => t.getAttribute('aria-pressed')), ['false', 'true', 'false', 'false', 'false']);
   assert.deepEqual(tiles.map(t => t.textContent), ['Yellow', 'Lime', 'Cyan', 'Orange', 'Magenta']);
@@ -255,6 +255,21 @@ test('Theme: one tile per theme, its swatch wearing that theme, the saved one pr
   assert.deepEqual(swatches.map(sw => sw?.getAttribute('data-theme')), ['yellow', 'lime', 'cyan', 'orange', 'magenta']);
   click(nth(tiles, 4));
   assert.deepEqual(calls.theme, ['magenta']);
+});
+
+test('Theme: Custom shows its colour as a swatch, a Pick a colour label and a colour input', () => {
+  const { section, calls } = draw({ theme: 'custom', customColour: '#3366ff' });
+  const custom = nth(kids(byId(section, 'theme-picker')), 5);
+  const tile = nth(walk(custom).filter(n => n.getAttribute('data-pick-theme') === 'custom'), 0);
+  assert.equal(tile.getAttribute('aria-pressed'), 'true');
+  assert.equal(tile.textContent, 'Custom');
+  assert.match(custom.textContent, /Pick a colour/);
+  const input = byId(section, 'theme-custom-input');
+  assert.equal(input.getAttribute('type'), 'color');
+  assert.equal(input.getAttribute('value') ?? (input as unknown as { value: string }).value, '#3366ff');
+  click(tile);
+  assert.deepEqual(calls.custom, ['#3366ff']);
+  assert.doesNotMatch(custom.textContent, /esc/i);
 });
 
 test('Sound and Music are slider rows: a small toggle, a 0-100 slider with the percent, and a spoken value', () => {

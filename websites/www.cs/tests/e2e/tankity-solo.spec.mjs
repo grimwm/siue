@@ -274,7 +274,7 @@ test('the menu is a compact card, and gold marks only Menu and the aim keys', as
   }
   // Gold marks the primary control and the aim keys, nothing else on the bars.
   const gold = await page.locator('#hud-bar button, #deck button').evaluateAll(bs => bs
-    .filter(b => getComputedStyle(b).backgroundColor === 'rgb(255, 201, 60)').map(b => b.id || b.getAttribute('data-aim')));
+    .filter(b => getComputedStyle(b).backgroundColor === 'rgb(255, 159, 67)').map(b => b.id || b.getAttribute('data-aim')));
   expect(gold.sort()).toEqual(['btn-menu', 'down', 'left', 'right', 'up']);
   await expect(page.locator('#btn-pause')).toHaveCount(0);
   await page.screenshot({ path: 'test-results/tankity-menu.png' });

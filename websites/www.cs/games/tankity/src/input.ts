@@ -343,7 +343,7 @@ export function createInput(opts: { touch: boolean; onKeyboard?: () => void }): 
     // so it never reaches a command below.
     if (isTyping(e.target)) {
       const t = e.target;
-      const readOnly = !!t && t.tagName === 'INPUT' && (!!t.readOnly || t.type === 'range');
+      const readOnly = !!t && t.tagName === 'INPUT' && (!!t.readOnly || t.type === 'range' || t.type === 'color');
       const g = lookup('global', e);
       // A slider keeps the arrows but still answers Q, and M and E (mute) like the buttons beside it.
       const slider = !!t && t.tagName === 'INPUT' && t.type === 'range';

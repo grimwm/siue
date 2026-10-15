@@ -62,9 +62,9 @@ export interface RoomHandlers {
   /** A background send failed and the player should hear it. */
   onError(err: unknown): void;
   /** The room this client sat in is gone ('closed': the server has no such
-   * room) or holds no seat for it any more ('seat': given up, in another tab
-   * say). The polls have stopped and the session is cleared. */
-  onGone?(code: string, why: 'closed' | 'seat'): void;
+   * room; 'space': closed to make space for another match) or holds no seat
+   * for it any more ('seat': given up, in another tab say). The polls have stopped and the session is cleared. */
+  onGone?(code: string, why: 'closed' | 'seat' | 'space'): void;
 }
 
 /* ---------- timing ---------- */
@@ -102,9 +102,24 @@ export function standingsRows(
     .sort((a, b) => b.score - a.score);
 }
 
-/** The server says the room is gone: swept, closed, never there. */
-export function isGoneError(err: unknown): boolean {
-  return /no such room/.test(String((err && (err as { message?: unknown }).message) || err || ''));
+/** The server says the room is gone: 'space' when it was closed to make space
+ * for another match (the 404 told this seat why), 'closed' when it was swept,
+ * closed or never there; null for any other error. */
+export function isGoneError(err: unknown): 'closed' | 'space' | null {
+  if (!/no such room/.test(String((err && (err as { message?: unknown }).message) || err || ''))) return null;
+  return (err as { closed?: unknown }).closed === 'space' ? 'space' : 'closed';
+}
+
+/** What the player hears when a room they sat in is gone. */
+export function goneLine(code: string, why: 'closed' | 'space'): string {
+  return why === 'space' ? `Room ${code} was closed to make space.` : `Room ${code} has closed.`;
+}
+
+/** The error a failed reply throws: the server's line, and why a room is gone when it says. */
+function replyError(data: Record<string, unknown>): Error {
+  const e: Error & { closed?: 'space' } = new Error(String(data.error || STUMBLED));
+  if (data.closed === 'space') e.closed = 'space';
+  return e;
 }
 
 export function prettyRoomError(err: unknown): string {
@@ -286,7 +301,7 @@ export class RoomClient {
       await new Promise<void>(r => this.env.setTimeout(r, RETRY_429_MS));
       ({ res, data } = await send());
     }
-    if (!res.ok || !data.ok) throw new Error(String(data.error || STUMBLED));
+    if (!res.ok || !data.ok) throw replyError(data);
     this.handlers.onReachable(true);
     if (asksRoom) this.needFull = false;
     return data as unknown as PostReplies[A];
@@ -317,7 +332,7 @@ export class RoomClient {
       '&token=' + encodeURIComponent(this.token) + '&since=' + h.since +
       (h.have !== undefined ? '&have=' + h.have : '') + (h.full ? '&full=1' : '');
     const { res, data } = await this.fetchJson('rooms.php?' + q, { headers: { Accept: 'application/json' } });
-    if (!res.ok || !data.ok) throw new Error(String(data.error || STUMBLED));
+    if (!res.ok || !data.ok) throw replyError(data);
     this.handlers.onReachable(true);
     this.needFull = false;
     const room = (data as unknown as RoomReply).room;
@@ -482,7 +497,8 @@ export class RoomClient {
       if (this.seatLost(room)) { this.gone('seat'); return; }
       this.apply(room);
     } catch (err) {
-      if (this.on && epoch === this.matchEpoch && isGoneError(err)) this.gone('closed');
+      const why = isGoneError(err);
+      if (this.on && epoch === this.matchEpoch && why) this.gone(why);
       /* otherwise the next poll retries; the hills wait */
     }
   }
@@ -494,7 +510,7 @@ export class RoomClient {
     return !room.you && !!mine && !mine.human;
   }
 
-  private gone(why: 'closed' | 'seat'): void {
+  private gone(why: 'closed' | 'seat' | 'space'): void {
     const code = this.code;
     this.detach();
     this.handlers.onGone?.(code, why);
@@ -513,7 +529,8 @@ export class RoomClient {
           if (this.seatLost(room)) { this.gone('seat'); return; }
           onRoom(room);
         } catch (err) {
-          if (isGoneError(err) && this.code) this.gone('closed');
+          const why = isGoneError(err);
+          if (why && this.code) this.gone(why);
           /* otherwise keep listening */
         }
       })();

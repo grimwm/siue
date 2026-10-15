@@ -75,11 +75,11 @@ import { createTitle } from './title.ts';
 import { difficultySetting } from './difficulty.ts';
 import { initialsPref } from './initials.ts';
 import { createSeatStore } from './seats.ts';
-import { createGamesWatch, roomOnScreen } from './games.ts';
+import { createGamesWatch, isClosedRow, roomOnScreen } from './games.ts';
 import { createToastQueue } from './toasts.ts';
 import { createOnScreen, ON_SCREEN_BEAT_MS } from './on-screen.ts';
 import type { ChannelLike } from './on-screen.ts';
-import type { LiveRow } from './games.ts';
+import type { GameRow } from './games.ts';
 import { alertsPref, askNotify, notifyPermission, showTurnNotification } from './notify.ts';
 import { renderToasts } from './ui/toast.tsx';
 import type { AlertsState, GamesView } from './ui/games.tsx';
@@ -665,11 +665,11 @@ function toggleAlerts(): void {
 }
 /* The rooms this browser sits in, but the one on screen, as the watcher last
    heard them (src/games.ts). */
-let gamesRows: LiveRow[] = [];
+let gamesRows: GameRow[] = [];
 let gamesAt = 0;
 function gamesView(): GamesView {
   const age = gamesRows.length ? (performance.now() - gamesAt) / 1000 : 0;
-  return { rows: gamesRows, alerts: alertsState(), age, onOpen: openGame, onAlerts: toggleAlerts };
+  return { rows: gamesRows, alerts: alertsState(), age, onOpen: openGame, onAlerts: toggleAlerts, onDismiss: code => seats.forget(code) };
 }
 function renderGames(): void {
   renderTitle();
@@ -749,9 +749,12 @@ const watch = createGamesWatch({
     if (document.hidden) showTurnNotification({ code: row.code, others }, alertsState() === 'on', () => openGame(row.code));
   },
 });
-/* A seat given up (Leave) or found gone drops out of the list at once. */
+/* A seat given up (Leave), found gone or dismissed drops out of the list at
+   once; one closed to make space shows as closed at once. */
 seats.subscribe(() => {
-  gamesRows = gamesRows.filter(r => seats.get(r.code));
+  const here = screenRoom();
+  const closed: GameRow[] = seats.list().filter(s => s.closed === 'space' && s.code !== here).map(s => ({ code: s.code, closed: 'space' }));
+  gamesRows = [...gamesRows.filter(r => !isClosedRow(r) && seats.get(r.code) && !seats.get(r.code)?.closed), ...closed];
   rowsSig = JSON.stringify(gamesRows);
   renderGames();
 });

@@ -39,7 +39,7 @@ export interface LobbyProps {
   onClose: () => void;
   /** The room server answers: the dot beside the occupancy line. */
   online: boolean;
-  /** "n / m rooms occupied", or empty. */
+  /** "n / m matches running · k lobbies open", or empty. */
   count: string;
   /** The status line under the forms. */
   status: string;
@@ -204,9 +204,9 @@ export function Lobby(p: LobbyProps) {
           <p class="hint" id="lobby-drones" hidden={!p.drones}>{p.drones}</p>
           <TurnTime id="room-turn" secs={p.turnSecs} disabled={!p.isHost} onChange={p.onTurnRoom} />
           <p class="hint" id="turn-hint">
-            A change counts from the next turn. With nobody playing, a room stays open one turn time for each
-            player on their own connection, and at least 10 minutes; played from a single connection, it closes
-            after 10 minutes of nobody acting.
+            A change counts from the next turn. With nobody taking a turn, a room stays open one turn time for
+            each player, and at least 10 minutes. When every match slot is taken, a room nobody has played in for
+            an hour (or twice its turn time, if less) may be closed to make space for a new match.
           </p>
           <div class="unit-row" role="group" aria-labelledby="seats-label">
             <span class="unit-label" id="seats-label">Seats</span>

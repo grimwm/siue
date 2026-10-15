@@ -101,6 +101,7 @@ export interface Weapon {
   key: string;
   name: string;
   cat?: string;
+  line?: string; // the weapon line within its cat whose rows are tiers, small to big (missing: the cat itself)
   dmg: number;
   radius: number;
   price: number;
@@ -141,9 +142,17 @@ export interface Weapon {
   burn?: number; // napalm: seconds its pool burns
   tick?: number; // napalm: seconds between burns
   flame?: number; // napalm: px its flames stand over the pool
+  /** The firing range's scenario for it (src/preview.ts): what shows its power off. */
+  preview?: PreviewScenario;
   note?: string;
   gfx?: Gfx;
 }
+/** The grounds a firing-range scenario stands on (src/preview.ts makeRange). */
+export type PreviewGroundKind = 'hills' | 'dip' | 'bowl' | 'ridge' | 'slope' | 'perch' | 'buried';
+/** A gun's firing-range scenario: `aim` px past the dummy (negative: short of it) is where the
+ *  demo lands its shell; `ground` the range it stands on; `angle` a launch angle the demo keeps;
+ *  `dummy` how far from the shooter the dummy stands, px. */
+export interface PreviewScenario { aim?: number; ground?: PreviewGroundKind; angle?: number; dummy?: number }
 /* A trick from the shop. */
 export interface Gear {
   key: string;

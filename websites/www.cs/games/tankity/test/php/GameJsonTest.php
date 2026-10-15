@@ -370,6 +370,37 @@ YAML;
         self::assertTrue((json_decode($this->render(self::mut('painter: spark', 'painter: ball')), true)['arsenal']['ammo'][1]['gfx']['painter'] ?? '') === 'ball', 'ball-painter-validates');
     }
 
+    /** an ammo row's weapon line and firing-range scenario, and a cat's rows sitting together */
+    public function testLineAndPreview(): void
+    {
+        $row = $this->row1(self::mut("      note: Three pellets.\n", "      line: trick\n      preview: {aim: -40, ground: slope, angle: 70, dummy: 200}\n      note: Three pellets.\n"));
+        self::assertSame('trick', $row['line'] ?? null, 'line-validates :: ' . json_encode($row));
+        self::assertSame(['aim' => -40, 'ground' => 'slope', 'angle' => 70, 'dummy' => 200], $row['preview'] ?? null, 'preview-validates :: ' . json_encode($row));
+        self::assertSame(array_search('cat', array_keys($row), true) + 1, array_search('line', array_keys($row), true), 'line-follows-cat');
+        foreach (['hills', 'dip', 'bowl', 'ridge', 'slope', 'perch', 'buried'] as $g) {
+            $ok = $this->row1(self::mut("      note: Three pellets.\n", "      preview: {ground: $g}\n      note: Three pellets.\n"));
+            self::assertSame($g, $ok['preview']['ground'] ?? null, "ground-$g :: " . json_encode($ok));
+        }
+        $bad = [
+            'line-pattern' => ["      line: Trick Shots\n", 'arsenal.ammo[1].line'],
+            'preview-unknown' => ["      preview: {aim: 10, spin: 2}\n", 'arsenal.ammo[1].preview.spin: unknown key'],
+            'preview-empty' => ["      preview: {}\n", 'arsenal.ammo[1].preview: needs at least one of aim, ground, angle or dummy'],
+            'preview-aim' => ["      preview: {aim: 300}\n", 'arsenal.ammo[1].preview.aim: must be a whole number from -200 to 200'],
+            'preview-angle' => ["      preview: {angle: 90}\n", 'arsenal.ammo[1].preview.angle: must be a whole number from 5 to 85'],
+            'preview-dummy' => ["      preview: {dummy: 20}\n", 'arsenal.ammo[1].preview.dummy: must be a whole number from 40 to 300'],
+            'preview-ground' => ["      preview: {ground: moon}\n", 'arsenal.ammo[1].preview.ground'],
+        ];
+        foreach ($bad as $name => [$add, $want]) {
+            $e = (string) self::errOf(fn () => $this->render(self::mut("      note: Three pellets.\n", $add . "      note: Three pellets.\n")));
+            self::assertStringContainsString($want, $e, $name);
+        }
+        // A third row back under Shells after buck moved to another cat: the Shells rows are apart.
+        $third = "    - key: mortar\n      name: Mortar\n      cat: Shells\n      dmg: 56\n      radius: 42\n      price: 200\n      pack: 2\n      minRound: 1\n"
+            . "      ai: true\n      aiRound: 3\n      effect: shot\n      speed: 1.0\n      note: Big.\n      gfx: {shell: \"#ff9f43\", trail: \"#ff7b39\", blast: [\"#ff7b39\", \"#ffe27a\"], painter: disc, shake: 0.5}\n";
+        $apart = str_replace(["      cat: Shells\n      dmg: 17\n", "  gear:\n"], ["      cat: Odd\n      dmg: 17\n", $third . "  gear:\n"], self::good());
+        self::assertStringContainsString('arsenal.ammo[2].cat: `Shells` rows must sit together', (string) self::errOf(fn () => $this->render($apart)), 'cat-rows-together');
+    }
+
     /** audio volume defaults, rendering is deterministic, empty audio is fine */
     public function testAudioDefaultsAndDeterminism(): void
     {

@@ -26,6 +26,8 @@ import type { FireShow } from './fire-show.ts';
 import type { MarkKind } from './marks.ts';
 
 export const PV_W = 360, PV_H = 200, PV_WIND = 3, PV_FOE_HP = 60;
+/** The shooter's column, and how far from it the dummy stands unless a gun's scenario says otherwise. */
+export const PV_SX = 44, PV_DUMMY = 252;
 /** The radius a tracer's landing effect is sized to: it has no blast of its own. */
 const PV_MARK_R = 10;
 
@@ -101,26 +103,79 @@ export interface PreviewState<C = unknown> {
   volleyHits: number;
   /** A tracer's path this volley (x, y pairs), as the battlefield marks it; null for other guns. */
   trace: { kind: MarkKind; pts: number[]; landed: boolean; age: number } | null;
+  /** What this volley showed of its gun's mechanic (previewSeen). */
+  seen: PreviewSeen;
   cv: C;
 }
+/** What a volley on the range showed: each a measure of one mechanic, 0 when the volley had none of it. */
+export interface PreviewSeen {
+  /** A shell, bomblet or warhead left the frame (off a side, the top or the bottom) before it resolved. */
+  escaped: boolean;
+  /** Hop warheads thrown on; bomblets thrown by a split or a scatter. */
+  hops: number;
+  split: number;
+  /** Units a piercing shell passed through. */
+  pierced: number;
+  /** px a roller rolled along the ground. */
+  rolled: number;
+  /** px a digger burrowed. */
+  dug: number;
+  /** px the liquid ran from where it landed to the dummy (0 when the pool missed the dummy). */
+  flowed: number;
+  /** px a seeker's burst lies from where its arc alone would have come down. */
+  bend: number;
+  /** px above the ground a proximity shell burst. */
+  air: number;
+  /** Degrees a beam ran below level. */
+  dip: number;
+  /** px a tracer's path rose above its higher end. */
+  rise: number;
+  /** px^2 of earth a riot charge cleared. */
+  cleared: number;
+}
+export function previewSeen(): PreviewSeen {
+  return { escaped: false, hops: 0, split: 0, pierced: 0, rolled: 0, dug: 0, flowed: 0, bend: 0, air: 0, dip: 0, rise: 0, cleared: 0 };
+}
 
-/** How far short of the dummy a digger is aimed, as a share of its burrow: its trench runs on under the dummy. */
-const DIG_LEAD = 0.3;
-/** A slump's ridge under the dummy: px high, and px it falls away per column either side. */
+/** A ridge under the dummy: px high, and px it falls away per column either side. */
 const RIDGE = 60, RIDGE_SLOPE = 6;
+/** A dip round the dummy: px deep, and px it rises per column away from it. */
+const DIP = 30, DIP_SLOPE = 0.8;
+/** A slope down to the dummy from the shooter's side: px high, and px it falls per column. */
+const SLOPE = 70, SLOPE_FALL = 0.55;
+/** A bowl round the dummy: its floor's half width, px its walls rise per column, and the most they rise. */
+const BOWL_FLOOR = 20, BOWL_WALL = 2, BOWL = 90;
+/** A perch the shooter stands on: px high, and the columns either side of it that it spans. */
+const PERCH = 80, PERCH_HALF = 70;
+/** The mound over a buried shooter: px of dirt round its hull. */
+const MOUND = 30;
 /** The range's ground to draw: earth still settling eases in, as on the battlefield. */
 export function previewGround(pv: PreviewState): readonly number[] {
   return pv.show.shown(pv.terr);
 }
-/* The range for gun w: its usual hills, with what shows an earth gun off. A
-   slump gets a steep ridge for the dummy to stand on, a pour (and napalm) a
-   dip for it to fill; a riot charge's shooter stands buried under a mound it digs itself
-   out of (the shooter stands on the range's own hills, makePreviewTerrain). */
+/* The range's ground for gun w, by its scenario's `ground` (game.yaml
+   preview): the hills; a dip round the dummy; a deep bowl round it; a steep
+   ridge under it; a slope down to it from the shooter's side; a perch high
+   over it for the shooter;
+   or the hills with the shooter buried under a mound (where the shooter
+   stands is the ground before the mound, rangeFloor). */
 function makeRange(w: Readonly<Weapon>, sx: number, tx: number): number[] {
-  const terr = makePreviewTerrain();
-  if (w.effect === 'slump') for (let x = 0; x < PV_W; x++) terr[x] = terr[x]! - Math.max(0, RIDGE - Math.abs(x - tx) * RIDGE_SLOPE);
-  if (w.effect === 'pour' || w.effect === 'napalm') for (let x = 0; x < PV_W; x++) terr[x] = terr[x]! + Math.max(0, 30 - Math.abs(x - tx) * 0.8);
-  if (w.effect === 'riot') addDirt(terr, sx, terr[sx]! - 4, 30);
+  const terr = rangeFloor(w, sx, tx);
+  if (groundOf(w) === 'buried') addDirt(terr, sx, terr[sx]! - 4, MOUND);
+  return terr;
+}
+function groundOf(w: Readonly<Weapon>): string {
+  return (w.preview && w.preview.ground) || 'hills';
+}
+function rangeFloor(w: Readonly<Weapon>, sx: number, tx: number): number[] {
+  const terr = makePreviewTerrain(), g = groundOf(w);
+  for (let x = 0; x < PV_W; x++) {
+    if (g === 'ridge') terr[x] = terr[x]! - Math.max(0, RIDGE - Math.abs(x - tx) * RIDGE_SLOPE);
+    if (g === 'dip') terr[x] = terr[x]! + Math.max(0, DIP - Math.abs(x - tx) * DIP_SLOPE);
+    if (g === 'slope') terr[x] = terr[x]! - clamp((tx - x) * SLOPE_FALL, 0, SLOPE);
+    if (g === 'bowl') terr[x] = terr[x]! - clamp((Math.abs(x - tx) - BOWL_FLOOR) * BOWL_WALL, 0, BOWL);
+    if (g === 'perch') terr[x] = terr[x]! - PERCH * clamp((PERCH_HALF - Math.abs(x - sx)) / (PERCH_HALF / 2), 0, 1);
+  }
   return terr;
 }
 export function makePreviewTerrain(): number[] {
@@ -135,17 +190,19 @@ export function makePreviewTerrain(): number[] {
 export function createPreview<C, F extends PreviewFx>(wkey: string, env: PreviewEnv<F>, fx: F | null, cv: C): (PreviewState<C> & { fx: F | null }) | null {
   const w = env.weapon(wkey);
   if (!w) return null;
-  // A plasma ring reaches only so far: its dummy stands within it.
-  const sx = 44, tx = w.effect === 'plasma' ? 44 + Math.round(w.radius * 0.6) : 296;
+  // The dummy stands where the gun's scenario puts it (game.yaml preview `dummy`, px from the
+  // shooter); a plasma ring reaches only so far, so its dummy stands within it.
+  const sx = PV_SX, sc = w.preview || {};
+  const tx = sx + (sc.dummy || (w.effect === 'plasma' ? Math.round(w.radius * 0.6) : PV_DUMMY));
   const terr = makeRange(w, sx, tx);
   return {
     wkey, terr,
-    sx, tx, sy: makePreviewTerrain()[sx]!, ty: terr[tx]!, dropped: 0, buriedBy: 0, show: createEarthShow(),
+    sx, tx, sy: rangeFloor(w, sx, tx)[sx]!, ty: terr[tx]!, dropped: 0, buriedBy: 0, show: createEarthShow(),
     pool: null, burn: null, fire: createFireShow(), wind: PV_WIND,
     angle: 60, power: 50, phase: 'aim', t: 0.6,
     shells: [], booms: [], volleys: 0, foeHp: PV_FOE_HP,
     fx,
-    result: '', resultT: 0, volleyDmg: 0, volleyHits: 0, trace: null,
+    result: '', resultT: 0, volleyDmg: 0, volleyHits: 0, trace: null, seen: previewSeen(),
     cv,
   };
 }
@@ -168,6 +225,8 @@ export function previewShot(pv: PreviewState, env: PreviewEnv, angle: number, po
   const grav = w.flat ? FLAT_GRAV : GRAV;
   for (let i = 0; i < 720; i++) {
     stepBallistic(st, 1 / 60, pv.wind, grav);
+    // An arc over the top of the frame flies out of sight: no landing the demo may use.
+    if (st.y < 0) return NaN;
     if (st.x < 0 || st.x >= PV_W || st.y >= PV_H) return st.x;
     if (i >= 6 && st.y >= (pv.terr[clamp(Math.round(st.x), 0, PV_W - 1)] ?? 0)) {
       // A roller rolls on, and stops at the dummy.
@@ -177,18 +236,20 @@ export function previewShot(pv: PreviewState, env: PreviewEnv, angle: number, po
   return st.x;
 }
 
-/* Aim the demo at the target with the same integrator the war uses. A coarse
- * sweep plus a fine pass lands every demo on the target: demos never miss.
- * The fine passes read the best candidate live, so their bounds follow it as
- * it improves mid-sweep. */
+/* Aim the demo with the same integrator the war uses, at the dummy or where
+ * the gun's scenario says (game.yaml preview: `aim` px past the dummy, at
+ * its `angle`). A coarse sweep plus a fine pass lands every demo there, on an
+ * arc that stays inside the frame: demos never miss. The fine passes read the
+ * best candidate live, so their bounds follow it as it improves mid-sweep. */
 export function solvePreview(pv: PreviewState, env: PreviewEnv): void {
   const w = weaponOf(env, pv.wkey);
   const best = { have: false, err: 0, a: 0, p: 0 };
-  // A digger is aimed short of the dummy, so its burrow runs on under it.
-  const goal = w.effect === 'dig' ? pv.tx - Math.round((w.digLen || 0) * DIG_LEAD) : pv.tx;
+  const sc = w.preview || {};
+  const goal = pv.tx + (sc.aim || 0);
   const consider = (a: number, p: number): void => {
-    const ca = clamp(a, 5, 85), cp = clamp(p, 10, 100);
+    const ca = sc.angle || clamp(a, 5, 85), cp = clamp(p, 10, 100);
     const err = Math.abs(previewShot(pv, env, ca, cp) - goal);
+    if (!Number.isFinite(err)) return;
     if (!best.have || err < best.err) { best.have = true; best.err = err; best.a = ca; best.p = cp; }
   };
   if (w.flat) {
@@ -218,6 +279,7 @@ function previewFire(pv: PreviewState, env: PreviewEnv): void {
   pv.trace = mark === 'line' || mark === 'smoke' ? { kind: mark, pts: [], landed: false, age: 0 } : null;
   pv.dropped = 0;
   pv.buriedBy = 0;
+  pv.seen = previewSeen();
   if (w.effect === 'beam') { previewBeam(pv, env, w); return; }
   if (w.effect === 'plasma') { previewRing(pv, env, w); return; }
   if (w.effect === 'riot') { previewRiot(pv, env, w); return; }
@@ -243,8 +305,10 @@ function previewBeam(pv: PreviewState, env: PreviewEnv, w: Readonly<Weapon>): vo
   const deg = Math.round(Math.atan2(-(box.cy - (gunner.y - 14)), box.cx - gunner.x) * 180 / Math.PI);
   pv.angle = clamp(deg, lim.min, lim.max);
   pv.power = 100;
+  pv.seen.dip = Math.max(0, -pv.angle);
   const line = beamLine({ tanks: [gunner, dummy], terrain: pv.terr }, gunner, w, pv.angle, 100);
   const ang = Math.atan2(line.y1 - line.y0, line.x1 - line.x0);
+  if (line.y1 < 0 || line.x1 < 0 || line.x1 >= PV_W) pv.seen.escaped = true;
   env.muzzle(pv.fx, pv.wkey, line.x0, line.y0, ang);
   env.special(pv.fx, pv.wkey, 'beam', line.x0, line.y0, ang, Math.hypot(line.x1 - line.x0, line.y1 - line.y0));
   beamCarve(pv.terr, line.x0, line.y0, line.x1, line.y1, w.radius, PV_H - 4);
@@ -279,7 +343,9 @@ function previewRiot(pv: PreviewState, env: PreviewEnv, w: Readonly<Weapon>): vo
   pv.power = 100;
   const a = Math.atan2(-Math.sin(pv.angle * Math.PI / 180), Math.cos(pv.angle * Math.PI / 180)), hy = pv.sy - 10;
   env.muzzle(pv.fx, pv.wkey, pv.sx, hy, a);
+  const before = pv.terr.slice();
   riotCarve(pv.terr, pv.sx, hy, a, w.radius, w.fan || 1, pv.sy);
+  pv.seen.cleared = pv.terr.reduce((sum, y, x) => sum + Math.max(0, y - before[x]!), 0);
   env.impact(pv.fx, pv.wkey, pv.sx, hy, w.radius);
   env.special(pv.fx, pv.wkey, 'dig', pv.sx, hy, a, w.radius);
 }
@@ -306,6 +372,7 @@ function previewEarth(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: Rea
   } else if (w.effect === 'pour') {
     const p = pourLevel(pv.terr, x, w.volume || 0, w.poolMin || 0);
     fillPour(pv.terr, p);
+    pv.seen.flowed = flowedTo(pv, x, p);
     env.impact(pv.fx, pv.wkey, s.x, s.y, Math.max(12, (p.x1 - p.x0) / 2));
     if (p.x1 >= p.x0) env.special(pv.fx, pv.wkey, 'pour', p.x0, p.level, 0, p.x1 - p.x0);
     pv.show.begin(before, p.x0, p.x1, 'pour', x);
@@ -323,6 +390,7 @@ function previewNapalm(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: Re
   const x = Math.round(clamp(s.x, 0, PV_W - 1));
   const p = firePool(pv.terr, x, w.volume || 0, w.flame || 0, w.poolMin || 0);
   pv.pool = p;
+  pv.seen.flowed = flowedTo(pv, x, p);
   if (p.x0 > p.x1) {
     env.impact(pv.fx, pv.wkey, s.x, pv.terr[x]!, 12);
     return;
@@ -332,6 +400,10 @@ function previewNapalm(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: Re
   env.impact(pv.fx, pv.wkey, (p.x0 + p.x1) / 2, p.level, Math.max(12, (p.x1 - p.x0) / 2));
   env.special(pv.fx, pv.wkey, 'burn', p.x0, p.level, 0, p.x1 - p.x0);
   pv.fire.light({ wkey: pv.wkey, ...p }, ticks * every / 60);
+}
+/* How far a liquid that landed at column x ran to reach the dummy: 0 when its pool lies clear of it. */
+function flowedTo(pv: PreviewState, x: number, p: { x0: number; x1: number }): number {
+  return p.x0 <= pv.tx && pv.tx <= p.x1 ? Math.abs(pv.tx - x) : 0;
 }
 /* The range's pool burns on, a 1/60 s step at a time as the war's does: each
    tick burns the dummy when its body (a ground unit's hit box) reaches into
@@ -363,6 +435,7 @@ function stepPreviewDig(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w: R
   // The dummy's body at the next point stops the burrow there, uncut, as the war's stepDigger does.
   if (pv.foeHp > 0 && inHitBox({ isPlayer: true, x: pv.tx, y: pv.ty }, nx, ny)) { finishPreviewDig(pv, env, s, w); return; }
   s.dl = i;
+  pv.seen.dug += DIG_STEP;
   carveCrater(pv.terr, nx, ny, w.digR || 0, PV_H - 4);
   if (i % 3 === 0) env.special(pv.fx, pv.wkey, 'dig', nx, ny, Math.atan2(s.duy!, s.dux!));
   while ((s.dk || 0) < W && i >= Math.floor((((s.dk || 0) + 1) * n + W - 1) / W)) {
@@ -409,7 +482,12 @@ function traceTo(pv: PreviewState, x: number, y: number, last: boolean): void {
   if (!tr || tr.landed) return;
   const n = tr.pts.length;
   if (last || n < 2 || Math.hypot(x - tr.pts[n - 2]!, y - tr.pts[n - 1]!) >= MARK_EVERY) tr.pts.push(x, y);
-  if (last) tr.landed = true;
+  if (last) {
+    tr.landed = true;
+    let top = Infinity;
+    for (let i = 1; i < tr.pts.length; i += 2) top = Math.min(top, tr.pts[i]!);
+    pv.seen.rise = Math.max(0, Math.min(tr.pts[1]!, y) - top);
+  }
 }
 
 function previewBoom(pv: PreviewState, env: PreviewEnv, x: number, y: number, ov: { dmg: number; radius: number } | null): void {
@@ -454,6 +532,8 @@ function previewAfterBurst(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w
   const src: Shell = { x: s.x, y: s.y, vx: s.vx, vy: s.vy, wkey: s.wkey, owner: RANGE_GUNNER, life: 12, age: s.age, pierced: false, split: s.split, order: [0], hop: s.hop };
   const thrown = w.effect === 'hop' ? [hopShell(src, w, s.x, s.y, 1)].filter(n => n !== null)
     : w.effect === 'scatter' && !s.split ? scatterShells(src, w, s.x, s.y, 1) : [];
+  if (w.effect === 'hop') pv.seen.hops += thrown.length;
+  else pv.seen.split += thrown.length;
   for (const n of thrown) {
     pv.shells.push({ x: n.x, y: n.y, vx: n.vx, vy: n.vy, wkey: pv.wkey, age: 0, pierced: false, split: n.split, dw: n.dw, dr: n.dr, hop: n.hop, spared: onDummy });
   }
@@ -470,6 +550,7 @@ function stepPreviewRoller(pv: PreviewState, env: PreviewEnv, s: PreviewShell, w
   const moving = !spent && rollStep(pv.terr, r, w.friction || 0.3, dt);
   if (moving) {
     s.rt = (s.rt || 0) + 1;
+    pv.seen.rolled += Math.abs(r.x - s.x);
     s.x = r.x;
     s.ru = r.u;
     s.y = groundAt(pv.terr, r.x) - ROLL_LIFT;
@@ -527,12 +608,14 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
       }
       stepBallistic(s, dt, pv.wind, grav);
       if (s.dead) continue;
+      if (s.x < 0 || s.x >= PV_W || s.y < 0 || s.y >= PV_H) pv.seen.escaped = true;
       env.trail(pv.fx, s, dt);
       traceTo(pv, s.x, s.y, false);
       if (w.effect === 'cluster' && !s.split && (w.apex ? s.age >= 0.1 && s.vy >= 0 : s.age >= (w.fuse || 0.9))) {
         s.split = true;
         env.special(pv.fx, pv.wkey, 'split', s.x, s.y, Math.atan2(s.vy, s.vx));
         const n = Math.max(2, w.split || 4), fan = w.fan || 0.22;
+        pv.seen.split += n;
         const sp = Math.hypot(s.vx, s.vy) * 0.85, base = Math.atan2(s.vy, s.vx);
         for (let i = 0; i < n; i++) {
           const a = base + (i - (n - 1) / 2) * fan;
@@ -551,9 +634,12 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
         if (down) env.impact(pv.fx, pv.wkey, s.x, s.y, PV_MARK_R);
         continue;
       }
+      if ((touch || near) && w.effect === 'proximity') pv.seen.air = Math.max(pv.seen.air, (pv.terr[clamp(Math.round(s.x), 0, PV_W - 1)] ?? 0) - s.y);
+      if ((touch || near) && w.effect === 'seeker' && !pv.seen.bend) pv.seen.bend = Math.abs(s.x - previewShot(pv, env, pv.angle, pv.power)) || 0;
       if (touch || near) {
         if (w.effect === 'pierce' && !s.pierced && touch) {
           s.pierced = true;
+          pv.seen.pierced += 1;
           env.special(pv.fx, pv.wkey, 'pierce', s.x, s.y, Math.atan2(s.vy, s.vx));
           previewBoom(pv, env, s.x, s.y, shellBoom(s));
           continue;
@@ -578,6 +664,7 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
       if (landed && !gone && EARTH_BURSTS.includes(w.effect)) { previewEarth(pv, env, s, w, false); continue; }
       if (landed && !gone && w.effect === 'napalm') { previewNapalm(pv, env, s, w); continue; }
       s.dead = gone || landed;
+      if (landed && !gone && w.effect === 'seeker' && !pv.seen.bend) pv.seen.bend = Math.abs(s.x - previewShot(pv, env, pv.angle, pv.power)) || 0;
       if (s.dead) previewBoom(pv, env, s.x, s.y, shellBoom(s));
       if (landed && !gone) previewAfterBurst(pv, env, s, w, false);
     }
@@ -618,7 +705,7 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
       if (pv.foeHp <= 0 || pv.volleys % 4 === 3 || pv.buriedBy > 0 || pv.dropped > 0 || weaponOf(env, pv.wkey).effect === 'riot') {
         pv.terr = makeRange(weaponOf(env, pv.wkey), pv.sx, pv.tx);
         pv.show.clear();
-        pv.sy = makePreviewTerrain()[pv.sx]!;
+        pv.sy = rangeFloor(weaponOf(env, pv.wkey), pv.sx, pv.tx)[pv.sx]!;
         pv.ty = pv.terr[pv.tx]!;
         pv.foeHp = PV_FOE_HP;
       }

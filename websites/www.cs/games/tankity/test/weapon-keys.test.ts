@@ -69,7 +69,7 @@ test('every player starts a match with the rows\' start shells and an endless Sh
   assert.deepEqual(startAmmo(arsenal), { shell: Infinity, buck: 1 });
 });
 
-test('the weapon picker shows each category together, the Rollers side by side', () => {
+test('the weapon picker shows each category together, in game.yaml order', () => {
   const shelf = arsenal.shelf;
   assert.equal(shelf.length, arsenal.order.length);
   assert.equal(shelf[0], 'shell');
@@ -77,7 +77,6 @@ test('the weapon picker shows each category together, the Rollers side by side',
   for (let i = 1; i < cats.length; i++) {
     if (cats[i] !== cats[i - 1]) assert.ok(!cats.slice(0, i).includes(must(cats[i], `category ${i}`)), `${cats[i]} comes back after another category`);
   }
-  const at = (k: string) => shelf.indexOf(k);
-  assert.deepEqual([at('babyroller') - at('roller'), at('heavyroller') - at('babyroller')], [1, 1]);
+  assert.deepEqual(shelf, arsenal.order, 'each cat\'s rows sit together in game.yaml, so the shelf is its order');
   assert.deepEqual(arsenal.order, GAME.arsenal.ammo.map(a => a.key), 'the rack keeps game.yaml order');
 });

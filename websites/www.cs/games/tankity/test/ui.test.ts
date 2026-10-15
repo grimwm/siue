@@ -138,7 +138,8 @@ function shopProps(over: Partial<ShopProps> = {}) {
   await test('shop-list', () => { assert.ok(list.localName === 'ul' && hasClass(list, 'scores')); });
   const rows = list.children.filter(li => !hasClass(li, 'shop-cat'));
   await test('shop-all-items', () => { assert.ok(rows.length === ITEMS, String(rows.length)); });
-  await test('shop-categories', () => { assert.ok(list.children.filter(li => hasClass(li, 'shop-cat')).map(text).join('|') === 'Shells|Rollers|Beams|Tracers|Earth|Fire|Hull and fuel|Tricks', list.children.filter(li => hasClass(li, 'shop-cat')).map(text).join('|')); });
+  const cats = [...new Set([...ammo, ...gear].map(r => String(r.cat)))].join('|'); // game.json's order
+  await test('shop-categories', () => { assert.ok(list.children.filter(li => hasClass(li, 'shop-cat')).map(text).join('|') === cats, list.children.filter(li => hasClass(li, 'shop-cat')).map(text).join('|')); });
   const free = elementOf(list.children.find(li => hasClass(li, 'shop-free')));
   await test('shop-shell-row-heads-the-shells', () => { assert.ok(list.children.indexOf(free) === 1 && text(nth(byClass(free, 'shop-name'), 0)) === 'Shell ∞ (free)'
     && free.children.length === 2, text(nth(byClass(free, 'shop-name'), 0))); });
@@ -162,8 +163,9 @@ function shopProps(over: Partial<ShopProps> = {}) {
   const gearRow = items[items.length - 1];
   await test('shop-gear-row-has-no-preview', () => { assert.ok(actsOf(gearRow).children.length === 1 && /^Buy /.test(text(kid(actsOf(gearRow), 0)))); });
   const locked = items.find(li => /^\d+\. NUKE/.test(text(nth(byClass(li, 'shop-name'), 0))));
+  const nukeRound = GAME.arsenal.ammo.find(a => a.name === 'NUKE')?.minRound;
   const lockedBtn = kid(actsOf(locked), 1);
-  await test('shop-locked-row', () => { assert.ok(text(lockedBtn) === 'Locked' && lockedBtn.disabled === true && /Unlocks in round 4/.test(text(kid(kid(locked, 1), 2))), text(lockedBtn)); });
+  await test('shop-locked-row', () => { assert.ok(text(lockedBtn) === 'Locked' && lockedBtn.disabled === true && new RegExp(`Unlocks in round ${nukeRound}`).test(text(kid(kid(locked, 1), 2))), text(lockedBtn)); });
   await test('shop-icons-drawn-once-per-row', () => { assert.ok(calls.icons.length === ITEMS && calls.icons.every(([cls]) => cls === 'shop-icon')
     && calls.icons.filter(([, i]) => i.kind === 'gear').length === gear.length, String(calls.icons.length)); });
   // Icons are painted when a row first appears and when the arsenal changes, not on every redraw.

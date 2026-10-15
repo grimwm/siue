@@ -741,7 +741,9 @@ await (async () => {
   for (const r of [...arsenal.ammo.filter(a => a.pack > 0), ...arsenal.gear]) {
     if (!cats.includes(r.cat)) cats.push(r.cat);
   }
-  await test('arsenal-cats', () => { assert.ok(cats.join('|') === 'Shells|Rollers|Beams|Tracers|Earth|Fire|Hull and fuel|Tricks', cats.join('|')); });
+  // Each cat's rows sit together in game.json, so the shop's headings follow the file.
+  const runs = [...arsenal.ammo.filter(a => a.pack > 0), ...arsenal.gear].map(r => r.cat).filter((c, i, all) => i === 0 || c !== all[i - 1]);
+  await test('arsenal-cats', () => { assert.ok(cats.length >= 8 && runs.join('|') === cats.join('|'), runs.join('|')); });
   for (const k of ['shell', 'buck', 'mortar', 'rail', 'nuke', 'repair', 'fuel']) {
     await test('arsenal-keeps-' + k, () => { assert.ok(arsenal.ammo.some(a => a.key === k) || arsenal.gear.some(g => g.key === k)); });
   }

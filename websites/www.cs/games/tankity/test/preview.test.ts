@@ -163,6 +163,8 @@ function run(pv: PreviewState, env: PreviewEnv<FakeFx>, seconds: number, done: (
   await test('each leap plays the hop special', () => { assert.ok(lf.log.special.filter(s => s.name === 'hop').length === Number(w.hops) - 1); });
   await test('the leaps walk on the way it flew', () => { assert.ok(nth(lf.log.impact, 1).x > nth(lf.log.impact, 0).x && nth(lf.log.impact, 2).x > nth(lf.log.impact, 1).x); });
   const edge = makeEnv();
+  // Aimed straight at the dummy (no scenario), its leaps run on past the stage's edge.
+  edge.env.weapon = key => key === 'leapfrog' ? { ...weapon(key), preview: undefined } : arsenal.weapons[key];
   const far = open('leapfrog', edge.env, edge.fx, null);
   run(far, edge.env, 15, p => p.phase === 'show');
   await test('a leap off the stage ends the chain, as in the war', () => { assert.ok(edge.log.impact.length < Number(w.hops) && nth(edge.log.impact, edge.log.impact.length - 1).x >= 360, JSON.stringify(edge.log.impact.map(i => i.x))); });

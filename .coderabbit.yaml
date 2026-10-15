@@ -1,0 +1,117 @@
+# yaml-language-server: $schema=https://storage.googleapis.com/coderabbit_public_assets/schema.v2.json
+#
+# Foundry-managed CodeRabbit config. Dropped into a repo as `.coderabbit.yaml` by
+# the foundry `pr-review-local` skill, which ALSO tailors the `path_instructions`
+# block to whatever stack it detects in the repo. The blocks below are the
+# always-on baseline; the skill appends stack-specific entries.
+#
+# Profile is `assertive` on purpose: we want the strict, opinionated reviewer for
+# a local pre-PR gate, not the gentle default.
+language: en-US
+early_access: false
+
+reviews:
+  profile: assertive
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+
+  # Strict, cross-cutting adversarial security pass on EVERY file. This is the
+  # baseline that always applies regardless of stack — the skill layers
+  # stack-specific instructions on top.
+  path_instructions:
+    - path: "**"
+      instructions: >
+        Act as a strict adversarial security reviewer. Hunt for cross-cutting
+        vulnerabilities across web, networking, OS, and data layers, not just
+        local style. Specifically flag: injection of any kind (SQL, NoSQL,
+        command, LDAP, template, header), authentication and authorization gaps
+        (missing checks, IDOR, privilege escalation, broken object-level
+        authorization), SSRF and unsafe outbound requests, path traversal and
+        unsafe filesystem or OS calls, insecure deserialization, secrets or
+        credentials committed in code or config, weak or missing input
+        validation at trust boundaries, unsafe handling of untrusted input from
+        the network, race conditions and TOCTOU windows, missing rate limiting
+        on sensitive endpoints, CORS and CSRF misconfiguration, insecure cookie
+        and session handling, and information disclosure through errors or logs.
+        Map findings to OWASP Top 10 / CWE where possible and state the concrete
+        exploit path, not just the smell. Prefer false positives over silence on
+        anything security-relevant.
+
+    - path: "websites/www.cs/**/*.php"
+      instructions: >
+        Plain PHP 8.4 on a shared, sftp-only host (no framework). Check every
+        endpoint for origin/CSRF checks, seat-token and host-only authorization,
+        rate limits and caps; SQLite queries must be parameterized; no
+        user-controlled paths reach the filesystem; errors never leak internals;
+        races between concurrent requests on the same room (TOCTOU) are handled
+        inside transactions.
+    - path: "websites/www.cs/games/**/src/**"
+      instructions: >
+        Preact + TypeScript games. The simulation is deterministic fixed-step
+        and must stay bit-identical with its PHP twin (detmath): flag any
+        Math.* float call, Date/random use, or iteration-order dependence in sim
+        code. No raw-HTML sinks on untrusted data (room names, player names).
+        Accessibility: labels tied to inputs, keyboard and touch parity, focus
+        management in overlays. Esc must never exit fullscreen. Weapons must not
+        be grouped by hardcoded keys in logic -- only by their data.
+    - path: "**/*.test.*"
+      instructions: >
+        Tests must fail for the right reason: flag assertions that cannot fail,
+        timing-dependent waits (fixed sleeps, wall-clock races), and tests that
+        depend on run order or shared state.
+    - path: "tests/e2e/**"
+      instructions: >
+        Playwright specs: flag fixed timeouts instead of web-first assertions,
+        hardcoded ports (3000/5173/8000/8080 are forbidden), and leaked browsers
+        or contexts.
+    - path: ".github/workflows/**"
+      instructions: >
+        Pin actions to SHAs, least-privilege permissions, no
+        pull_request_target with untrusted checkout, secrets never echoed. The
+        deploy workflow must deploy only after CI passes on main and must never
+        retry SSH (the host runs fail2ban).
+    - path: "**/*.sh"
+      instructions: >
+        set -euo pipefail, quoted expansions, no retry loops against SSH hosts,
+        cleanup traps for temp files and docker compose projects.
+  path_filters:
+    - "!**/dist/**"
+    - "!**/*.map"
+    - "!**/vendor/**"
+    - "!**/node_modules/**"
+    - "!**/*.png"
+    - "!**/*.ogg"
+    - "!**/*.mp3"
+    - "!**/package-lock.json"
+    - "!**/composer.lock"
+
+  auto_review:
+    enabled: true
+    drafts: false
+
+  tools:
+    # Secret scanning — block credentials/keys from ever reaching a PR.
+    gitleaks:
+      enabled: true
+    # Multi-language static security analysis (taint, injection, authz).
+    semgrep:
+      enabled: true
+    # Shell script correctness/safety.
+    shellcheck:
+      enabled: true
+    # YAML / GitHub Actions / config hygiene.
+    yamllint:
+      enabled: true
+    actionlint:
+      enabled: true
+    checkov:
+      enabled: true
+    # Markdown docs.
+    markdownlint:
+      enabled: true
+
+chat:
+  auto_reply: true

@@ -223,6 +223,13 @@ const bodyOf = (entry: Sent): Record<string, unknown> => JSON.parse(String(entry
   await test('join-uppercases-the-code', () => { assert.ok(bodyOf(at(host.log, 1)).code === 'FXT1' && net.seat === 1, at(host.log, 1).init.body); });
 }
 
+// ---- a join that fails leaves no half-made session behind ----
+{
+  const refused = makeClient(() => ({ status: 429, body: { ok: false, error: 'too many rooms from here; try again later' } }));
+  try { await refused.net.join('FXT1', 'DEF', 'tank'); } catch (_) { /* refused */ }
+  await test('failed-join-keeps-no-code', () => { assert.ok(refused.net.code === '' && refused.net.seat === -1, j({ c: refused.net.code, s: refused.net.seat })); });
+}
+
 // ---- the room protocol: create, join and start say which one they speak ----
 {
   const { net, host } = makeClient((url) => (/create/.test(url) ? ok(fixture('create-reply')) : ok(fixture('join-reply'))));

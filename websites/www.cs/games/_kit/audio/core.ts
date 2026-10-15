@@ -111,8 +111,9 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     if (!ctx) {
       // Asked again on every call: a page can gain Web Audio later (a test, a polyfill).
       // Built whole or not at all: a half-made context would play with no buses.
+      let made: AudioContext | null = null;
       try {
-        const made = make();
+        made = make();
         if (!made) return null;
         const built: Partial<Record<BusName, GainNode>> = {};
         for (const name of BUSES) {
@@ -125,6 +126,9 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
         for (const name of BUSES) applyGain(name);
       } catch {
         ctx = null;
+        // Made but not built: give the context back rather than leak it.
+        const leaked = made;
+        if (leaked) settle(() => leaked.close()).catch(() => {});
         return null;
       }
     }

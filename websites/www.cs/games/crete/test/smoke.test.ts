@@ -30,11 +30,14 @@ test('the entry hands the browser specs their test hook, and the bundle ships it
 
 // Games do not know the site: nothing the site's script defines may appear in
 // the game. Skipped when the game is copied out of the site.
+// Every .ts and .tsx file under src/, in its folders too.
+const sources = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
+  .flatMap(e => e.isDirectory() ? sources(join(dir, e.name)) : /\.tsx?$/.test(e.name) ? [join(dir, e.name)] : []);
 const siteMain = join(GAME, '..', '..', 'main.js');
 test('the game reaches no function the site script defines', { skip: !existsSync(siteMain) }, () => {
   const names = [...readFileSync(siteMain, 'utf8').matchAll(/^(?:async )?function (\w+)\(/gm)].map(m => m[1]);
   assert.ok(names.length > 5, String(names));
-  const code = strip(readdirSync(join(GAME, 'src')).filter(f => f.endsWith('.ts')).map(f => read('src', f)).join('\n'));
+  const code = strip(sources(join(GAME, 'src')).map(f => readFileSync(f, 'utf8')).join('\n'));
   const reached = names.filter(n => new RegExp(`\\b${n}\\b`).test(code));
   assert.deepEqual(reached, []);
 });

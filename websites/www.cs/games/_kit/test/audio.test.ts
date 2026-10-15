@@ -189,6 +189,14 @@ test('a context whose buses cannot be built is silent and throws nothing', () =>
   assert.equal(core.bus('sfx'), null);
 });
 
+test('a context whose bus setup throws is closed, not leaked', () => {
+  const ctx = fakeAudioContext();
+  ctx.createGain = () => { throw new Error('no gain nodes'); };
+  const core = createAudioCore({ createContext: () => asAudioContext(ctx) });
+  core.tone({ freq: 440, dur: 0.1 });
+  assert.equal(ctx.closes, 1);
+});
+
 test('unlock primes and reports ready only once resume resolves, for every caller waiting', async () => {
   const ctx = fakeAudioContext('suspended', { holdResume: true });
   const core = createAudioCore({ createContext: () => asAudioContext(ctx) });

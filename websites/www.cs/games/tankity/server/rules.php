@@ -1374,6 +1374,9 @@ function room_again(array &$room): bool
             room_seat_economy($room, $idx);
         } elseif (!empty($s['bot'])) {
             $room['seats'][$idx] = room_idle_seat($idx);
+            foreach (['scores', 'cash', 'ammo', 'weapon', 'nextUp', 'plate', 'armor', 'chutes'] as $k) {
+                unset($room[$k][$idx]); // the drone that took a leaver's chair starts clean
+            }
         }
     }
     $room['winner'] = null;

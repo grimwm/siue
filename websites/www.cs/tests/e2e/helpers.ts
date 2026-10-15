@@ -153,8 +153,11 @@ export async function newPlayer(browser: Browser, path = 'games/tankity/', { clo
   // their idle limit.
   const close = ctx.close.bind(ctx);
   ctx.close = async (...args: Parameters<BrowserContext['close']>) => {
-    await leaveStoredSeats(ctx);
-    return close(...args);
+    try {
+      await leaveStoredSeats(ctx);
+    } finally {
+      await close(...args);
+    }
   };
   await ctx.addInitScript(recorderScript);
   const page = await ctx.newPage();

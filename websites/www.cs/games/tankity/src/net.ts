@@ -485,8 +485,7 @@ export class RoomClient {
   /** Joins a room by its code, typed in any case, with spaces or hyphens. */
   async join(code: string, initials: string, body: string, signal?: PowSignal): Promise<void> {
     this.forget();
-    this.code = cleanCode(code);
-    const data = await this.admitted('join', { proto: PROTO, code: this.code, initials, body }, signal);
+    const data = await this.admitted('join', { proto: PROTO, code: cleanCode(code), initials, body }, signal);
     this.code = data.code; this.seat = data.seat; this.token = data.token; this.csrf = data.csrf;
   }
 

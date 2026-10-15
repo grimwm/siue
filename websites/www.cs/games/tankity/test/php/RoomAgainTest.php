@@ -47,6 +47,21 @@ final class RoomAgainTest extends TestCase
         return $room;
     }
 
+    public function testAReplacedBotSeatCarriesNoEconomyIntoTheLobby(): void
+    {
+        $room = $this->over();
+        $room['scores'][2] = 900;
+        $room['cash'][2] = 700;
+        $room['ammo'][2] = ['shell' => -1, 'nuke' => 2];
+        $room['weapon'][2] = 'nuke';
+        $room['nextUp'][2] = 9000;
+        $this->assertTrue(room_again($room));
+        foreach (['scores', 'cash', 'ammo', 'weapon', 'nextUp'] as $k) {
+            $this->assertArrayNotHasKey(2, $room[$k], $k);
+        }
+        $this->assertSame(0, room_snapshot($room, 0, 0)['seats'][2]['score']);
+    }
+
     public function testNoTwoIdleSeatsShareADroneName(): void
     {
         $names = array_map(fn(int $i): string => room_idle_seat($i)['name'], [0, 1, 2, 3]);

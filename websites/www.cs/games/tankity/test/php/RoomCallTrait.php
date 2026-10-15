@@ -10,6 +10,12 @@ trait RoomCallTrait
     /** @return array{int, array} the status and the JSON answer of rooms.php as a request */
     private function call(string $action, array $body, array $server = [], array $env = []): array
     {
+        return $this->collect($this->launch($action, $body, $server, $env));
+    }
+
+    /** @return array{resource, array} a request started and still running, for collect() */
+    private function launch(string $action, array $body, array $server = [], array $env = []): array
+    {
         $script = 'register_shutdown_function(static function () { while (ob_get_level()) { ob_end_flush(); } echo "\n", http_response_code(); });'
             . 'require ' . var_export(__DIR__ . '/scores-stdin.php', true) . ';'
             . '$_SERVER = ' . var_export($server + ['CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => '203.0.113.9',
@@ -21,6 +27,13 @@ trait RoomCallTrait
             $env + ['TANKITY_DATA_DIR' => $this->dir, 'TANKITY_ROOM_JOINS_PER_HOUR' => '2'] + getenv());
         fwrite($pipes[0], json_encode($body));
         fclose($pipes[0]);
+        return [$proc, $pipes];
+    }
+
+    /** @return array{int, array} the status and the JSON answer of a launched request */
+    private function collect(array $running): array
+    {
+        [$proc, $pipes] = $running;
         $out = stream_get_contents($pipes[1]);
         fclose($pipes[1]);
         fclose($pipes[2]);

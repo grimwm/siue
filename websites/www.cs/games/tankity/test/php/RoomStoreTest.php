@@ -32,7 +32,6 @@ final class RoomStoreTest extends TestCase
     {
         $lock = room_alloc();
         $this->assertTrue(room_save($lock, $lock->code, room_new($lock->code, $initials)));
-        $this->assertTrue(room_register($lock->code, 10));
         room_unlock($lock);
         return $lock->code;
     }
@@ -72,19 +71,6 @@ final class RoomStoreTest extends TestCase
         $this->assertSame(['WXYZ', 3], [$lock->code, $tries]);
         room_discard($lock);
         $this->assertSame(1, $this->rows());
-    }
-
-    public function testTheCapIsCheckedUnderTheSameLock(): void
-    {
-        for ($i = 0; $i < 3; $i++) {
-            $this->make();
-        }
-        $lock = room_alloc();
-        room_save($lock, $lock->code, room_new($lock->code, 'CAP'));
-        $this->assertFalse(room_register($lock->code, 3));
-        $this->assertTrue(room_register($lock->code, 4));
-        room_discard($lock);
-        $this->assertSame(3, room_lobbies_used());
     }
 
     public function testAHeldRoomKeepsOtherWritersOut(): void

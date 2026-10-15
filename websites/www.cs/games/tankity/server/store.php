@@ -2,7 +2,8 @@
 // Operation Tankity rooms. Room storage: one row per room in Tankity's
 // database (server/db.php), a room held as one write transaction from load to
 // unlock, and the room lifecycle (allocate, register, load, save, close,
-// discard, sweep). Loaded by rooms.php; it runs nothing on its own.
+// discard, sweep), the match slots, the lobby pool and the tombstones of
+// rooms closed to make space. Loaded by rooms.php; it runs nothing on its own.
 declare(strict_types=1);
 
 // Not an endpoint: rooms.php defines this constant, then requires the file.
@@ -228,10 +229,64 @@ function room_lobby_evict_pick(string $except, int $now): ?string
         ORDER BY CASE WHEN touched < :dead THEN 0 WHEN acted <= :idle THEN 1 ELSE 2 END,
                  CASE WHEN touched < :dead THEN touched WHEN acted <= :idle THEN acted ELSE created END, code
         LIMIT 1");
-    $q->execute([':x' => $except, ':now' => $now, ':dead' => $now - 2 * ROOM_HEARTBEAT_SECS,
-        ':idle' => $now - room_live_secs(), ':old' => $now - ROOM_LOBBY_OLD_SECS]);
+    $q->bindValue(':x', $except);
+    foreach ([':now' => $now, ':dead' => $now - 2 * ROOM_HEARTBEAT_SECS, ':idle' => $now - room_live_secs(),
+        ':old' => $now - ROOM_LOBBY_OLD_SECS] as $k => $v) {
+        $q->bindValue($k, $v, PDO::PARAM_INT);
+    }
+    $q->execute();
     $c = $q->fetchColumn();
     return $c === false ? null : (string) $c;
+}
+
+/* How long a started room must go without a turn before a full server may
+   reclaim it: twice its turn time, at least the live window, at most
+   ROOM_DORMANT_SECS. */
+function room_reclaim_floor(int $turnSecs): int
+{
+    return max(room_live_secs(), min(2 * $turnSecs, ROOM_DORMANT_SECS));
+}
+
+/* The room a new match may replace on a full server: finished first, then
+   stale (idle twice its turn time), then dormant (a long room idle past its
+   floor), the longest idle first within each, then by code. Null when none
+   is eligible: a room played within its floor never goes. One SELECT over
+   the indexed columns of at most max_rooms live rows. */
+function room_reclaim_pick(string $except, int $now): ?string
+{
+    $q = tankity_db()->prepare("SELECT code FROM rooms
+        WHERE phase IN ('play', 'shop', 'over') AND code <> :x AND expires >= :now
+          AND (phase = 'over' OR :now - acted >= MAX(:L, MIN(2 * turn_secs, :D)))
+        ORDER BY CASE WHEN phase = 'over' THEN 0
+                      WHEN :now - acted >= MAX(:L, 2 * turn_secs) THEN 1 ELSE 2 END,
+                 acted, code
+        LIMIT 1");
+    // Bound as integers: SQLite compares a text parameter as greater than any
+    // number, which would make MAX(:L, ...) a string and nothing eligible.
+    $q->bindValue(':x', $except);
+    $q->bindValue(':now', $now, PDO::PARAM_INT);
+    $q->bindValue(':L', room_live_secs(), PDO::PARAM_INT);
+    $q->bindValue(':D', ROOM_DORMANT_SECS, PDO::PARAM_INT);
+    $q->execute();
+    $c = $q->fetchColumn();
+    return $c === false ? null : (string) $c;
+}
+
+/* Under the caller's write lock: true when $code may become a started match
+   now, because a slot is free or the stalest eligible room was closed (with
+   a tombstone) to make one. The one gate every path into a started phase
+   passes. */
+function room_take_slot(RoomLock $lock, string $code, int $now): bool
+{
+    if (room_slots_used($code, $now) < room_max_rooms()) {
+        return true;
+    }
+    $victim = room_reclaim_pick($code, $now);
+    if ($victim === null) {
+        return false;
+    }
+    room_tombstone($lock->db, $victim, 'space', $now);
+    return true;
 }
 
 /* A full lobby pool makes room for one more, under the caller's write lock:
@@ -313,7 +368,8 @@ function room_tombstone_expire(int $now, int $limit = 5000): int
 }
 
 /* Holds a new room: a free code taken under the write lock, its row inserted
-   empty. The caller saves it, registers it, then unlocks (or discards). */
+   empty. The caller checks the lobby pool, saves it, then unlocks (or
+   discards). */
 function room_alloc(?callable $nextCode = null): RoomLock
 {
     $nextCode = $nextCode ?? fn() => room_new_code(fn($c) => false);
@@ -334,54 +390,18 @@ function room_alloc(?callable $nextCode = null): RoomLock
     room_json_out(500, ['error' => 'no free room code; try again']);
 }
 
-/* Registers a freshly saved room unless that would pass the cap. The write
-   lock has been held since room_alloc, so the count is exact. True when
-   registered, false at the cap, null when $code is not held here. */
-function room_register(string $code, int $max): ?bool
-{
-    $lock = $GLOBALS['ROOM_HELD'][$code] ?? null;
-    if (!$lock instanceof RoomLock || !$lock->open) {
-        return null;
-    }
-    $now = time();
-    try {
-        $q = $lock->db->prepare('SELECT COUNT(*) FROM rooms WHERE code <> ? AND expires >= ?');
-        $q->execute([$code, $now]);
-        return (int) $q->fetchColumn() < $max;
-    } catch (PDOException $e) {
-        room_store_fail($e);
-    }
-}
-
-/* Unexpired rooms an address hosts, not counting $except (the room being
-   made). Under the write lock room_alloc takes, the count is exact. */
+/* Live started matches an address hosts, not counting $except (the room
+   being started): what room_hosts_per_address bounds. Under the write lock
+   the count is exact. */
 function room_hosted(string $hostKey, string $except = '', ?int $now = null): int
 {
     if ($hostKey === '') {
         return 0;
     }
-    $q = tankity_db()->prepare('SELECT COUNT(*) FROM rooms WHERE host = ? AND code <> ? AND expires >= ?');
+    $q = tankity_db()->prepare("SELECT COUNT(*) FROM rooms WHERE host = ? AND phase IN ('play', 'shop', 'over') AND code <> ? AND expires >= ?");
     $q->execute([$hostKey, $except, $now ?? time()]);
     return (int) $q->fetchColumn();
 }
-
-/* Unexpired long games (turn time of 8 h or more), not counting $except (the
-   room being made or changed). Reads each live room, at most the room cap's
-   worth; under the write lock the count is exact. */
-function room_long_count(string $except = '', ?int $now = null): int
-{
-    $q = tankity_db()->prepare('SELECT data FROM rooms WHERE code <> ? AND expires >= ?');
-    $q->execute([$except, $now ?? time()]);
-    $n = 0;
-    foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $raw) {
-        $r = room_decode($raw);
-        if ($r !== null && ($r['phase'] ?? '') !== 'over' && room_turn_secs($r) >= ROOM_LONG_TURN_SECS) {
-            $n++;
-        }
-    }
-    return $n;
-}
-const ROOM_LONG_FULL = 'every long-game slot is taken; pick a shorter turn time or try later';
 
 /* A room as stored, read without the write lock, for a poll that changes
    nothing; null when there is none or it is idle. */

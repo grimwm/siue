@@ -1,6 +1,6 @@
 <?php
 // Operation Tankity rooms. Room server settings: what a room is (code shape, seats, AI names) and the knobs the
-// host can turn (room cap, live window) through
+// host can turn (match slots, lobby pool, live window) through
 // .config.yaml or the environment. Loaded by rooms.php; it runs nothing on its own.
 declare(strict_types=1);
 
@@ -30,30 +30,9 @@ function room_max_rooms(): int
     }
     return ROOM_MAX_ROOMS;
 }
-/* A room with this turn time or longer is a long game (the 8 h stop and up). */
-const ROOM_LONG_TURN_SECS = 28800;
-const ROOM_LONG_SHARE = 0.5;
-/* The share of the room cap that long games may hold, so rooms left waiting
-   on a slow turn cannot fill every place. A fraction above 0 up to 1;
-   anything else is refused with a log line and the default stands. */
-function room_long_share(): float
-{
-    $raw = trim((string) tankity_setting('TANKITY_ROOM_LONG_SHARE', 'room_long_share', ''));
-    if ($raw === '') {
-        return ROOM_LONG_SHARE;
-    }
-    if (is_numeric($raw) && (float) $raw > 0 && (float) $raw <= 1) {
-        return (float) $raw;
-    }
-    error_log("tankity setting room_long_share (TANKITY_ROOM_LONG_SHARE): refused '$raw', not a fraction above 0 up to 1; using " . ROOM_LONG_SHARE);
-    return ROOM_LONG_SHARE;
-}
-/* How many long games may exist at once under a room cap of $max: the share
-   of it, rounded down, and never fewer than one. */
-function room_long_cap(int $max): int
-{
-    return max(1, (int) floor($max * room_long_share()));
-}
+/* A full server may reclaim a long room (turn time over half an hour) once
+   nobody has taken a turn in it for this long (room_reclaim_floor). */
+const ROOM_DORMANT_SECS = 3600;
 const ROOM_MAX_LOBBIES = 100;
 const ROOM_LOBBIES_PER_ADDRESS = 4;
 /* A full lobby pool may close a lobby this old even when it is attended. */

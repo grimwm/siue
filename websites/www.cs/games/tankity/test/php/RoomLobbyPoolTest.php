@@ -200,6 +200,31 @@ final class RoomLobbyPoolTest extends TestCase
         $this->assertSame('over', $this->stored($host['code'])['phase'], 'the refused Play again left the match finished');
     }
 
+    /* Play again revives a finished match as a lobby: the lobby its host's
+       address then holds counts against lobbies_per_address like a create. */
+    public function testPlayAgainCountsAgainstTheHostsLobbies(): void
+    {
+        [$st, $host] = $this->createFrom(5);
+        $this->assertSame(200, $st);
+        $this->assertSame(200, $this->call('join', ['code' => $host['code'], 'initials' => 'gst'], ['REMOTE_ADDR' => '203.0.113.6'], self::ENV)[0]);
+        $this->gap();
+        $seat = ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']];
+        $this->assertSame(200, $this->call('start', $seat, ['REMOTE_ADDR' => '203.0.113.5'], self::ENV)[0]);
+        [$room, $lock] = room_load($host['code']);
+        $room['phase'] = 'over';
+        $room['acted'] = time();
+        room_save($lock, $host['code'], $room);
+        room_unlock($lock);
+        for ($i = 0; $i < 4; $i++) {
+            $this->assertSame(200, $this->createFrom(5)[0]);
+        }
+        $this->gap();
+        $this->assertSame([429, ['error' => 'too many lobbies open from here; start or leave one first']],
+            $this->call('again', $seat, ['REMOTE_ADDR' => '203.0.113.5'], self::ENV));
+        $this->assertSame('over', $this->stored($host['code'])['phase']);
+        $this->assertSame(4, room_lobbies_used());
+    }
+
     public function testTombstonesBlockTheCodeAndExpire(): void
     {
         $lock = room_alloc(fn() => 'TOMB');

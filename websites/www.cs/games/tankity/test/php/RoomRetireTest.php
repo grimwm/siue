@@ -97,7 +97,6 @@ final class RoomRetireTest extends TestCase
         $lock = room_alloc();
         $room['code'] = $lock->code;
         $this->assertTrue(room_save($lock, $lock->code, $room));
-        $this->assertTrue(room_register($lock->code, 10));
         room_unlock($lock);
         $peek = room_peek($lock->code);
         $this->assertSame($cash, $peek['cash'][0]);

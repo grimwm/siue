@@ -81,17 +81,6 @@ final class RoomIdleTest extends TestCase
         $this->assertSame(1000 + 600, room_expires($room));
     }
 
-    public function testAFinishedLongMatchTakesNoLongPlace(): void
-    {
-        foreach (['LNGP' => 'play', 'LNGO' => 'over'] as $code => $phase) {
-            $room = $this->started($code, $phase, 2, 604800, time());
-            $room['seats'][0]['addr'] = 'a';
-            $room['seats'][1]['addr'] = 'b';
-            $this->save($room);
-        }
-        $this->assertSame(1, room_long_count());
-    }
-
     public function testAnOldRoomReadsActedAtAsTouched(): void
     {
         $room = $this->started('OLDR', 'play', 1, null, null);
@@ -132,12 +121,11 @@ final class RoomIdleTest extends TestCase
     {
         $this->save($this->started('LIVE', 'play', 1, 600, time()));
         $this->save($this->started('DEAD', 'play', 1, 60, time() - 5000));
-        $this->assertSame(1, room_slots_used());
-        $lock = room_alloc(fn() => 'NEWR');
-        room_save($lock, $lock->code, room_new('NEWR', 'ABC'));
-        $this->assertTrue(room_register('NEWR', 2));
-        $this->assertFalse(room_register('NEWR', 1));
-        room_discard($lock);
+        $this->save($this->started('OVRL', 'over', 2, 600, time()));
+        $this->save($this->started('LOBB', 'lobby', 1, 600, time()));
+        $this->assertSame(2, room_slots_used(), 'started and finished matches hold slots; a lobby does not');
+        $this->assertSame(1, room_slots_used('OVRL'));
+        $this->assertSame(1, room_lobbies_used());
     }
 
     public function testTheKnobsAreTheLiveWindowAndTheCap(): void
@@ -182,7 +170,8 @@ final class RoomIdleTest extends TestCase
         $this->assertSame(4, room_hosts_per_address());
         $this->assertSame(5, room_hosted('aaaa'));
         $this->assertSame(4, room_hosted('aaaa', 'H1XX'));
-        $this->assertSame(1, room_hosted('bbbb'));
+        $this->assertSame(0, room_hosted('bbbb'), 'a lobby is no hosted match');
+        $this->assertSame(1, room_lobbies_hosted('bbbb'));
         $this->assertSame(0, room_hosted(''));
         // Expired rooms stop counting: a one-human week room expires a week after its last turn.
         room_test_age('H1XX', 604801);

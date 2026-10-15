@@ -282,11 +282,12 @@ final class RoomGuardTest extends TestCase
         $room = $this->stored($host['code']);
         $hostAddr = (string) $room['seats'][0]['addr'];
         $guestAddr = (string) $room['seats'][1]['addr'];
-        $this->assertSame(1, room_hosted($hostAddr));
+        $this->assertSame(1, room_lobbies_hosted($hostAddr));
         // In a running match the host leaving passes the role on (in a lobby it closes the room).
         $this->gap();
         $this->assertSame(200, $this->call('start', ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']],
             ['REMOTE_ADDR' => '203.0.113.1'], self::FREE)[0]);
+        $this->assertSame(1, room_hosted($hostAddr));
         $this->gap();
         $this->assertSame(200, $this->call('leave', ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']],
             ['REMOTE_ADDR' => '203.0.113.1'], self::FREE)[0]);

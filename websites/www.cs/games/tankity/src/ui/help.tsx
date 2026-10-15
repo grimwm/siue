@@ -86,7 +86,9 @@ export function Help({ keyHint, onClose }: HelpProps) {
           <strong>Menu</strong> holds the settings.
         </li>
         <li>
-          <strong>Wind</strong> pushes every shell, so check it before you fire. <strong>Weapon</strong> opens
+          <strong>Wind</strong> pushes every shell, so check it before you fire. The field's sides may be{' '}
+          <strong>walls</strong> (Settings): concrete stops a shell, rubber and springs bounce it back, and
+          wraparound sends it in at the other side. <strong>Weapon</strong> opens
           every gun on your rack as tiles: Shell, Buckshot, Mortar, the late-unlocking <strong>NUKE</strong>, and
           more from the shop. Shells are free; the good stuff is bought with winnings, starting with a $600 stake
           you spend in the shop before round 1.

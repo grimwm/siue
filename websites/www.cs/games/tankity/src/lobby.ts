@@ -341,9 +341,9 @@ export function createLobby(deps: LobbyDeps) {
       room => {
         net.seats = room.seats || [];
         net.hostSeat = room.hostSeat;
-        // Arrivals (not our own) and departures, each told once.
+        // Arrivals (not our own), departures and the host's Walls pick (to the others), each told once.
         for (const e of room.events || []) {
-          if ((e.seq || 0) <= lobbyTold.seq || (e.t !== 'join' && e.t !== 'left')) continue;
+          if ((e.seq || 0) <= lobbyTold.seq || (e.t !== 'join' && e.t !== 'left' && e.t !== 'walls')) continue;
           lobbyTold.seq = e.seq || 0;
           if (e.t === 'left' || e.seat !== net.seat) netEvent(e);
         }

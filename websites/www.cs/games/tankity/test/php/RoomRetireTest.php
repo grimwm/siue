@@ -112,7 +112,8 @@ final class RoomRetireTest extends TestCase
         [$room] = self::stale();
         room_retire_guns($room);
         // The refund buys like any other cash.
-        $this->assertNull(room_buy($room, 0, 'mortar', 1));
-        $this->assertSame(2, $room['ammo'][0]['mortar']);
+        $had = $room['ammo'][0]['buck'] ?? 0;
+        $this->assertNull(room_buy($room, 0, 'buck', 1));
+        $this->assertSame($had + 2, $room['ammo'][0]['buck']);
     }
 }

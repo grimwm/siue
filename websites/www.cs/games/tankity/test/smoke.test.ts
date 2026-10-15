@@ -670,9 +670,10 @@ await (async () => {
   TAP('global', 'fire'); frames(3);
   await test('demo-locked', () => { assert.ok(/Demo mode/.test(logText())); });
   const feudMark = E('log').children.length;
-  frames(7000);
+  // Long enough for a drone to hit a drone: with drag, a ranging shot across the field lands near less often.
+  frames(14000);
   const feudNew = E('log').children.slice(feudMark).map(li => li.textContent).join('\n');
-  await test('ai-feuds', () => { assert.ok(/(reaper|wraith|spotter) hits (reaper|wraith|spotter)/.test(feudNew)); });
+  await test('ai-feuds', () => { assert.ok(/(reaper|wraith|spotter) hits (reaper|wraith|spotter)/.test(feudNew), feudNew); });
   // T deals random hills and O opens the lobby, both from the keyboard.
   TAP('global', 'rooms'); await tick(10);
   await test('rooms-hotkey', () => { assert.ok(E('lobby-veil').hidden === false); });

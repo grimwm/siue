@@ -113,6 +113,9 @@ export interface Weapon {
   effect: string;
   speed: number;
   shortRange?: boolean; // short-range on purpose: spared the balance test's reach rule
+  drag?: number; // its ballistic coefficient: DRAG_K times this is its drag (1 when left out)
+  missile?: boolean; // flies under its own power: power picks the distance (launchSpeed)
+  missileSpeed?: readonly number[]; // a missile's launch speed at each whole power 0..100 (game-json.php writes it)
   pellets?: number;
   spread?: number;
   steer?: number;
@@ -523,6 +526,63 @@ export function shotSpeed(power: number, mult: number | undefined, reach = 1): n
   const m = mult || 1;
   return (40 + power * 2.4) * m * reach;
 }
+/* ---------- missiles ---------- */
+/* A missile (a row with missile: true) flies under its own power: its power
+   picks how far it goes, not how hard a cannon throws it. At 45 degrees in
+   calm air, from launch height back down to it, power p lands
+   max(MISSILE_LOW, p / 100) x MISSILE_FULL of the field away, whatever the
+   gun's drag; drag and wind still shape its arc and its drift. Its launch
+   speed at each whole power is found by bisection against this very flight
+   (missileTable), and tools/game-json.php writes that table into the row as
+   missileSpeed, so the browser and the server read the same numbers; a power
+   between two whole ones is interpolated straight. server/sim.php
+   room_missile_table() is the same bisection. */
+export const MISSILE_LOW = 0.1;
+export const MISSILE_FULL = 0.9;
+/** The share of the wind's push a missile feels: its guidance holds its heading against the rest,
+ *  so a gale drifts it a little but cannot carry it off the field (MISSILE_WIND_MARGIN). */
+export const MISSILE_WIND = 0.125;
+/** How far past the field's edge, as a share of its width, a full-power missile may land in a wind
+ *  of 10 at 45 degrees from a unit 30 px from the edge (test/missile.test.ts). */
+export const MISSILE_WIND_MARGIN = 0.05;
+/** Bisection rounds per power, and the launch speeds (px/s) the search spans. */
+const MISSILE_ROUNDS = 40, MISSILE_SLOW = 10, MISSILE_FAST = 4000;
+/** How far a 45-degree shot at speed v flies on a room's field in calm air with drag k, from
+ *  launch height back down to it, px: the crossing interpolated between the two steps around it. */
+export function calmRange45(v: number, k: number): number {
+  const a = rad(45);
+  const st: Motion = { x: 0, y: 0, vx: dcos(a) * v, vy: -dsin(a) * v };
+  const air: Air = { wind: 0, k, s: 1 };
+  for (let i = 0; i < 6000; i++) {
+    const px = st.x, py = st.y;
+    stepBallistic(st, 1 / 60, air);
+    if (st.y >= 0 && st.vy > 0) return px + (st.x - px) * -py / (st.y - py);
+  }
+  return st.x;
+}
+/** A missile's launch speed (px/s on a room's field) at each whole power 0..100, for drag factor `drag`. */
+export function missileTable(drag: number): number[] {
+  const k = DRAG_K * drag, out: number[] = [];
+  for (let p = 0; p <= 100; p++) {
+    const goal = Math.max(MISSILE_LOW, p / 100) * MISSILE_FULL * ROOM_W;
+    let lo = MISSILE_SLOW, hi = MISSILE_FAST;
+    for (let i = 0; i < MISSILE_ROUNDS; i++) {
+      const mid = (lo + hi) / 2;
+      if (calmRange45(mid, k) < goal) lo = mid; else hi = mid;
+    }
+    out.push((lo + hi) / 2);
+  }
+  return out;
+}
+/** Gun w's launch speed at this power on a field of this reach (fieldReach): a missile's from its
+ *  table, any other gun's from shotSpeed. */
+export function launchSpeed(w: Pick<Weapon, 'speed' | 'missile' | 'missileSpeed'>, power: number, reach = 1): number {
+  const tab = w.missile ? w.missileSpeed : undefined;
+  if (!tab || tab.length < 101) return shotSpeed(power, w.speed, reach);
+  const p = clamp(power, 0, 100), i = Math.floor(p);
+  if (i >= 100) return tab[100]! * reach;
+  return (tab[i]! + (tab[i + 1]! - tab[i]!) * (p - i)) * reach;
+}
 /* What a successful shot leaves for the caller to show: where the barrel
    pointed (for the muzzle effect) and whether it spent the player's last
    round of the selected gun. */
@@ -587,7 +647,7 @@ function fireGun(world: World, arsenal: Arsenal, t: Tank, wkey: string): Launch 
   for (let i = 0; i < shots; i++) {
     const off = shots === 1 ? 0 : (i - (shots - 1) / 2) * (w.spread || 0);
     const a = r0 + off;
-    const spd = shotSpeed(t.power, w.speed, fieldReach(world.terrain.length));
+    const spd = launchSpeed(w, t.power, fieldReach(world.terrain.length));
     world.shells.push({
       x: m.x, y: m.y,
       vx: dcos(a) * spd * s, vy: -dsin(a) * spd,
@@ -704,11 +764,58 @@ export function fireRiot(world: World, arsenal: Arsenal, t: Tank, wkey: string, 
   markFalls(world, t, was);
   return { kind: 'earth', op, owner: t, before, ...span };
 }
+/* ---------- the air ---------- */
+/* A shell flies through moving air: gravity pulls it down, and drag pushes
+   against its speed relative to the air, a = g - k |v - w| (v - w), so a shell
+   climbs long, peaks past the middle of its flight and comes down steeply, and
+   cannot fall faster than its terminal speed sqrt(g / k). The air moves at the
+   wind's speed, which grows with the height h above the field's floor (y = H,
+   the deepest any crater reaches): w(h) = wind x AIR_SPEED x (max(h, 1) /
+   SHEAR_H)^(3/16). The floor, not the ground under the shell: the ground
+   changes mid-volley (a crater, a mound), and the room server flies a volley's
+   shells one after another where the browser flies them side by side, so air
+   read off the ground would differ between the two; the floor never moves, a
+   cliff edge does not jolt the air, and a step needs no ground lookup. k is
+   DRAG_K times the gun's drag (its ballistic coefficient: below 1 cuts the
+   air, above 1 slows fast). On a field wider than a room's, by s = w /
+   ROOM_W, shells fly fieldReach(w) = sqrt(s) times faster, and k / s, the
+   air's speed x sqrt(s) and the height / s keep every flight a scaled copy of
+   the room's.
+   server/sim.php room_air() .. room_step_ballistic() are the same. */
+/** Drag per px of a Shell (drag 1). */
+export const DRAG_K = 0.0012;
+/** The air's speed per unit of wind at SHEAR_H px above the field's floor, px/s. */
+export const AIR_SPEED = 10;
+/** The height over the field's floor the wind is quoted at, px. */
+export const SHEAR_H = 40;
+/** The air a flight crosses: the wind's speed at SHEAR_H (wind x AIR_SPEED x sqrt(s), px/s), the gun's
+ *  drag scaled to the field (k) and the field's scale s. */
+export interface Air { wind: number; k: number; s: number }
+/** A gun's drag factor: 1 when its row names none. */
+export function dragOf(w: Pick<Weapon, 'drag'> | null | undefined): number {
+  return w && w.drag !== undefined ? w.drag : 1;
+}
+/** The air gun w flies through in this wind on a field fw wide (the firing range flies at a room's width).
+ *  A missile steers against the wind: it feels MISSILE_WIND of it. */
+export function airOf(fw: number, wind: number, w: Pick<Weapon, 'drag' | 'missile'> | null | undefined): Air {
+  const s = fw / ROOM_W;
+  return { wind: wind * AIR_SPEED * Math.sqrt(s) * (w && w.missile ? MISSILE_WIND : 1), k: DRAG_K * dragOf(w) / s, s };
+}
+/** (h / SHEAR_H)^(3/16) for h at least 1, by square roots alone: every engine rounds a square root
+ *  the same, so the browser and the server agree to the last bit. */
+export function shear(h: number): number {
+  const r = Math.sqrt(Math.sqrt(Math.sqrt(Math.sqrt(Math.max(h, 1) / SHEAR_H))));
+  return r * r * r;
+}
 /* One ballistic step. Shared by the real shells, the AI predictor, the aim
  * guide, and the firing-range preview, so the demo flies exactly like war. */
-export function stepBallistic(st: Motion, dt: number, wind: number, grav: number): void {
-  st.vx += wind * 2.2 * dt;
-  st.vy += grav * dt;
+export function stepBallistic(st: Motion, dt: number, air: Air): void {
+  let rx = st.vx;
+  if (air.wind !== 0) rx -= air.wind * shear((H - st.y) / air.s);
+  const ry = st.vy;
+  const d = air.k * Math.sqrt(rx * rx + ry * ry);
+  st.vx -= d * rx * dt;
+  st.vy += (GRAV - d * ry) * dt;
   st.x += st.vx * dt;
   st.y += st.vy * dt;
 }
@@ -781,7 +888,8 @@ export function rollOut(terrain: readonly number[], x: number, vx: number, vy: n
    is missing. server/sim.php room_flight_key is the same. */
 export function flightKey(w: Weapon): string {
   const roll = w.effect === 'roller';
-  return JSON.stringify([w.speed, roll, roll ? w.friction || 0.3 : 0, roll ? w.rollTime || 5 : 0]);
+  // A missile flies its speed table, and feels less of the wind (airOf).
+  return JSON.stringify([w.speed, !!w.missile, w.missile ? w.missileSpeed || null : null, dragOf(w), roll, roll ? w.friction || 0.3 : 0, roll ? w.rollTime || 5 : 0]);
 }
 /* Predict where a shot lands (used by the AI and the aim guide); a roller's
    landing is where its roll ends. `top` is the highest ground (the least
@@ -794,13 +902,13 @@ export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal
   const r = rad(angle);
   const st: Motion = {
     x, y,
-    vx: dcos(r) * shotSpeed(power, w.speed, reach) * dirS,
-    vy: -dsin(r) * shotSpeed(power, w.speed, reach),
+    vx: dcos(r) * launchSpeed(w, power, reach) * dirS,
+    vy: -dsin(r) * launchSpeed(w, power, reach),
   };
   const dt = 1 / 60;
-  const grav = GRAV;
+  const air = airOf(world.terrain.length, world.wind, w);
   for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * reach); i < steps; i++) {
-    stepBallistic(st, dt, world.wind, grav);
+    stepBallistic(st, dt, air);
     if (st.x < 0 || st.x >= fw) return { x: st.x, y: st.y, oob: true, vx: st.vx, vy: st.vy };
     if (st.y >= H + 40) return { x: st.x, y: st.y, oob: true, vx: st.vx, vy: st.vy };
     if (i >= 6 && st.y >= top && st.y >= world.terrain[clamp(Math.round(st.x), 0, fw - 1)]!) {
@@ -820,21 +928,26 @@ export function splitPoint(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arse
   const r = rad(angle);
   const st: Motion = {
     x, y,
-    vx: dcos(r) * shotSpeed(power, w.speed, reach) * dirS,
-    vy: -dsin(r) * shotSpeed(power, w.speed, reach),
+    vx: dcos(r) * launchSpeed(w, power, reach) * dirS,
+    vy: -dsin(r) * launchSpeed(w, power, reach),
   };
   const dt = 1 / 60;
+  const air = airOf(world.terrain.length, world.wind, w);
   let age = 0;
   for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * reach); i < steps; i++) {
     age += dt;
-    stepBallistic(st, dt, world.wind, GRAV);
+    stepBallistic(st, dt, air);
     if (st.x < 0 || st.x >= fw || st.y >= H + 40) return null;
     if (w.apex ? age >= 0.1 && st.vy >= 0 : age >= (w.fuse || 0.9)) return st;
     if (i >= 6 && st.y >= world.terrain[clamp(Math.round(st.x), 0, fw - 1)]!) return null;
   }
   return null;
 }
-/* Seekers bend toward the nearest live rival before the ballistic step. */
+/* Seekers bend toward the nearest live rival before the ballistic step: the
+   push (steer px/s^2 toward it) acts across the seeker's flight only, never
+   along it, so homing turns a seeker but never speeds it up or slows it down
+   (it cannot carry one past where its power sends it, off the field).
+   server/sim.php room_seek_push is the same. */
 export function steerShell(tanks: readonly Tank[], s: Shell, w: Weapon, dt: number): void {
   let best: Tank | null = null, bd = Infinity;
   for (const t of tanks) {
@@ -845,8 +958,15 @@ export function steerShell(tanks: readonly Tank[], s: Shell, w: Weapon, dt: numb
   // On top of its target a seeker has nowhere to bend (server/sim.php room_seek_push).
   if (!best || bd <= 1) return;
   const push = (w.steer || 70) * dt;
-  s.vx += ((best.x - s.x) / bd) * push;
-  s.vy += (((best.y - 12) - s.y) / bd) * push;
+  let px = ((best.x - s.x) / bd) * push, py = (((best.y - 12) - s.y) / bd) * push;
+  const sp = dist(s.vx, s.vy);
+  if (sp > 0) {
+    const along = (px * s.vx + py * s.vy) / sp;
+    px -= along * s.vx / sp;
+    py -= along * s.vy / sp;
+  }
+  s.vx += px;
+  s.vy += py;
 }
 /* Cluster shells split on fuse into a deterministic fan: fixed offsets, no
 // random numbers, so the room server replays the exact same bloom. Returns
@@ -889,11 +1009,35 @@ export function scatterVel(n: number, fan: number, kick: number): [number, numbe
   }
   return out;
 }
-/* How long a munition leaving height y0 at vertical speed vy takes to come
-   down to groundY, with no wind (y grows downward). The drones predict where
-   bomblets and leaps land with it. server/sim.php room_drop_time. */
-export function dropTime(y0: number, vy: number, groundY: number): number {
-  return (-vy + Math.sqrt(Math.max(0, vy * vy + 2 * GRAV * (groundY - y0)))) / GRAV;
+/* A munition flying free from (x, y) at (vx, vy) through `air`, flown as the
+   war flies it down to groundY (y grows downward): where it is, and its
+   velocity, at the first step it falls to groundY or below, or after a
+   flight's longest time, and the steps it flew (n). `hit` sees each step's
+   position; true stops the flight there (`stopped`). The drones predict where pellets, bomblets and
+   leaps land with it. server/sim.php room_fall_to is the same. */
+export function fallTo(x: number, y: number, vx: number, vy: number, groundY: number, air: Air,
+  hit?: (x: number, y: number) => boolean): { x: number; y: number; vx: number; vy: number; stopped: boolean; n: number } {
+  const st: Motion = { x, y, vx, vy };
+  let n = 0;
+  for (const steps = Math.ceil(FLIGHT_STEPS * Math.sqrt(air.s)); n < steps;) {
+    stepBallistic(st, 1 / 60, air);
+    n++;
+    if (hit && hit(st.x, st.y)) return { ...st, stopped: true, n };
+    if (st.vy > 0 && st.y >= groundY) break;
+  }
+  return { ...st, stopped: false, n };
+}
+/** The highest row a shell at m reaches through `air`: the top of its arc, flown step by step as the
+ *  war flies it while it climbs, else where it is. The camera frames a volley's arc with it. */
+export function flightTop(m: Motion, air: Air): number {
+  if (m.vy >= 0) return m.y;
+  const st: Motion = { x: m.x, y: m.y, vx: m.vx, vy: m.vy };
+  let top = st.y;
+  for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * Math.sqrt(air.s)); i < steps && st.vy < 0; i++) {
+    stepBallistic(st, 1 / 60, air);
+    top = Math.min(top, st.y);
+  }
+  return top;
 }
 /* A hop weapon's next warhead from the burst at (x, y), or null once `hops`
    warheads have burst. It leaps on one pixel up, forward as the last one flew
@@ -1355,7 +1499,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
     if (w.effect === 'seeker') steerShell(world.tanks, s, w, dt);
     const x0 = s.x, y0 = s.y;
     const held = { vx: s.vx, vy: s.vy, age: (s.age || 0) - dt, life: s.life, clear: s.clear };
-    stepBallistic(s, dt, world.wind, GRAV);
+    stepBallistic(s, dt, airOf(world.terrain.length, world.wind, w));
     s.life -= dt;
     events.push({ kind: 'trail', shell: s, x: s.x, y: s.y, vx: s.vx, vy: s.vy });
     if (s.life <= 0 || s.x < -20 || s.x > world.terrain.length + 20 || s.y > H + 40) {

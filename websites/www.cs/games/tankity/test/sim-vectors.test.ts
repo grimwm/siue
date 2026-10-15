@@ -72,11 +72,13 @@ interface Inputs {
   'terrain-gen': { seed: string };
   'spawn-spots': { n: number; seed: number };
   'shot-speed': { power: number; mult: number };
+  air: { kind: 'shear'; h: number } | { kind: 'flight'; w?: number; wind: number; drag: number; x: number; y: number; vx: number; vy: number; steps: number };
+  'missile-speed': { kind: 'table'; drag: number } | { kind: 'speed'; wkey: string; power: number; w: number };
   muzzle: { x: number; y: number; angle: number; dirS: number };
   'hit-box': UnitSpot;
   'in-box': UnitSpot & { px: number; py: number };
   'sweep-hit': WorldIn & { owner: number; skip: number | null; clear: boolean; seg: [number, number, number, number] };
-  'seek-push': WorldIn & { owner: number; sx: number; sy: number; steer: number; dt: number };
+  'seek-push': WorldIn & { owner: number; sx: number; sy: number; steer: number; dt: number; vx: number; vy: number };
   'split-fan': { vx: number; vy: number; n: number; fan: number };
   'hop-vel': { vx: number; vy: number; keep: number };
   'scatter-vel': { n: number; fan: number; kick: number };
@@ -165,9 +167,24 @@ function outcome(before: readonly number[]) {
 /* ---- one runner per group: the case's inputs in, what the sim says out ---- */
 const RUN: { [K in keyof Inputs]: (c: Inputs[K]) => unknown } = {
   constants() {
-    const st = { x: 0, y: 0, vx: 0, vy: 0 };
-    sim.stepBallistic(st, 1, 1, 0);
-    return { grav: sim.GRAV, windK: st.vx, unitGap: sim.UNIT_GAP, spawnGap: sim.SPAWN_GAP };
+    return { grav: sim.GRAV, dragK: sim.DRAG_K, airSpeed: sim.AIR_SPEED, shearH: sim.SHEAR_H, missileLow: sim.MISSILE_LOW,
+      missileFull: sim.MISSILE_FULL, unitGap: sim.UNIT_GAP, spawnGap: sim.SPAWN_GAP };
+  },
+  air(c) {
+    if (c.kind === 'shear') return sim.shear(c.h);
+    const w = c.w || 720;
+    const air = sim.airOf(w, c.wind, { drag: c.drag });
+    const st = { x: c.x, y: c.y, vx: c.vx, vy: c.vy };
+    const out: number[][] = [];
+    for (let i = 1; i <= c.steps; i++) {
+      sim.stepBallistic(st, 1 / 60, air);
+      if (i % Math.max(1, Math.floor(c.steps / 10)) === 0) out.push([st.x, st.y, st.vx, st.vy]);
+    }
+    return out;
+  },
+  'missile-speed'(c) {
+    if (c.kind === 'table') return sim.missileTable(c.drag);
+    return sim.launchSpeed(must(arsenal.weapons[c.wkey], c.wkey), c.power, sim.fieldReach(c.w));
   },
   detmath(c) {
     switch (c.fn) {
@@ -211,9 +228,9 @@ const RUN: { [K in keyof Inputs]: (c: Inputs[K]) => unknown } = {
   },
   'seek-push'(c) {
     world(c);
-    const s = { x: c.sx, y: c.sy, vx: 0, vy: 0, owner: nth(G.tanks, c.owner) };
+    const s = { x: c.sx, y: c.sy, vx: c.vx, vy: c.vy, owner: nth(G.tanks, c.owner) };
     sim.steerShell(G.tanks, s as Shell, { steer: c.steer } as Weapon, c.dt);
-    return s.vx === 0 && s.vy === 0 ? null : [s.vx, s.vy];
+    return s.vx === c.vx && s.vy === c.vy ? null : [s.vx - c.vx, s.vy - c.vy];
   },
   'split-fan'(c) {
     return sim.splitShell(ownerless({ x: 0, y: 0, vx: c.vx, vy: c.vy, wkey: 'shell', owner: null }), { split: c.n, fan: c.fan } as Weapon)

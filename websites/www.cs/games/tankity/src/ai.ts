@@ -7,11 +7,11 @@
  * algorithm, kept in step by the shared vectors in protocol/sim-vectors.json.
  * brkLand stays in sim.ts: explode calls it, and sim.ts must not import this
  * file. */
-import { FLIGHT_STEPS, GRAV, aimLimits, beamLine, blastDamage, buried, clamp, dist, dropTime, facing, fallDamage, fieldReach, flies, flightKey, gauss, inHitBox, isGroundUnit, muzzle, powi, rad, ringDamage, ringOf, scatterVel, shotSpeed, simShot, splitPoint, splitVel, spotTaken, surfY, unitHitBox } from './sim.ts';
+import { H, aimLimits, airOf, beamLine, blastDamage, buried, clamp, dist, facing, fallDamage, fallTo, fieldReach, flies, flightKey, gauss, inHitBox, isGroundUnit, launchSpeed, muzzle, powi, rad, ringDamage, ringOf, scatterVel, simShot, splitPoint, splitVel, spotTaken, surfY, unitHitBox } from './sim.ts';
 import { BURY_EPS, DIG_STEP, FLOOR, TOP_Y, digHeading, fillPour, pourLevel, riotCarve, slumpGround } from './earth.ts';
 import { burnTicks, burnTotal, firePool, inFlames } from './fire.ts';
 import { datan2, dcos, dsin } from './detmath.ts';
-import type { Arsenal, Difficulty, Rng, Tank, Weapon, World } from './sim.ts';
+import type { Air, Arsenal, Difficulty, Rng, Tank, Weapon, World } from './sim.ts';
 export type { Difficulty } from './sim.ts';
 
 /* ---------- drone AI: real ballistic solutions, plus round-scaled error ---------- */
@@ -51,8 +51,8 @@ export interface AimSkill {
 }
 export const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal', 'hard'];
 export const DIFFICULTY: Readonly<Record<Difficulty, Readonly<AimSkill>>> = {
-  easy: { wobStart: 5, wobStep: 0.3, wobFloor: 2, correct: 0.5, brkShrink: 0.6, brkFloor: 0.8, brkMax: 5 },
-  normal: { wobStart: 3.7, wobStep: 0.33, wobFloor: 1.15, correct: 0.6, brkShrink: 0.5, brkFloor: 0.4, brkMax: 5 },
+  easy: { wobStart: 8, wobStep: 0.5, wobFloor: 3.2, correct: 0.5, brkShrink: 0.5, brkFloor: 1.2, brkMax: 5 },
+  normal: { wobStart: 5, wobStep: 0.45, wobFloor: 1.5, correct: 0.6, brkShrink: 0.45, brkFloor: 0.55, brkMax: 5 },
   hard: { wobStart: 0.85, wobStep: 0.12, wobFloor: 0.25, correct: 1, brkShrink: 0.65, brkFloor: 0.2, brkMax: 5 },
 };
 /* Wider fields fly faster shells (sim.ts fieldReach), so a degree or a power
@@ -63,7 +63,7 @@ export const DIFFICULTY: Readonly<Record<Difficulty, Readonly<AimSkill>>> = {
    Rooms are always ROOM_W wide, where both are exactly 1. */
 export const FIELD_AIM: readonly { w: number; aim: number; floor: number }[] = [
   { w: 720, aim: 1, floor: 1 },
-  { w: 1080, aim: 0.7, floor: 0.5 },
+  { w: 1080, aim: 0.75, floor: 0.55 },
   { w: 1440, aim: 0.55, floor: 0.4 },
 ];
 export function fieldAim(w: number): { aim: number; floor: number } {
@@ -142,6 +142,8 @@ export const SNIPER_WOB = 0.8;
 export const LOB_ANGLE = 60;
 export const LOB_OK = 40; // a high arc this close is good enough; otherwise flat shots may compete
 export const KILL_GLORY = 300;
+/** The angle a follower arc tries when the lead's best angle leaves it short (see aiChoose). */
+export const FOLLOW_ANGLE = 45;
 export function pickTactic(rng: Rng): string {
   return TACTICS[Math.floor(rng() * TACTICS.length)]!;
 }
@@ -182,71 +184,95 @@ function reachDamage(dmg: number, d: number, r: number): number {
    one's; no path, they leave the barrel), a hop gun's leaps one after
    another, a scatter gun's bomblets from its burst (or from `from`, another
    burst point), a cluster's bomblets from where its shot splits. Each flies
-   with no wind down to the landing's height (dropTime). `burst` is false when
-   the shot itself is not one blast (pellets, a cluster that splits). Other
-   guns have none. server/ai.php room_ai_munitions is the same. */
+   through the round's air down to the landing's height (fallTo), and `ys` is
+   the row each bursts at (sinkInto: a bomblet that comes down in an earlier
+   one's crater bursts deeper in it). `burst` is false when the shot itself is
+   not one blast (pellets, a cluster that splits). Other guns have none.
+   server/ai.php room_ai_munitions is the same. */
 export function munitions(world: World, arsenal: Arsenal, self: Tank, wkey: string, land: Landing, from?: { x: number; y: number }):
-  { burst: boolean; xs: number[]; paths: (number[] | null)[]; dmg: number; r: number } {
+  { burst: boolean; xs: number[]; ys: number[]; paths: (number[] | null)[]; dmg: number; r: number } {
   const w = arsenal.weapons[wkey]!;
-  const xs: number[] = [], paths: (number[] | null)[] = [];
+  const xs: number[] = [], paths: (number[] | null)[] = [], ns: number[] = [];
+  const done = (burst: boolean, dmg: number, r: number) => ({ burst, xs, ys: sinkInto(xs, ns, land.y, r), paths, dmg, r });
   const sub = { dmg: w.subDmg || w.dmg, r: w.subRadius || w.radius };
+  // Read only by the guns whose munitions fly free: a plain shell's harm never reads the wind.
+  const air = (): Air => airOf(world.terrain.length, world.wind, w);
   if (w.effect === 'pellets') {
     const n = w.pellets || 1;
-    if (land.a === undefined || land.p === undefined) return { burst: true, xs, paths, ...sub };
+    if (land.a === undefined || land.p === undefined) return done(true, sub.dmg, sub.r);
     const m = muzzle({ ...self, angle: land.a });
-    const spd = shotSpeed(land.p, w.speed, fieldReach(world.terrain.length)), dirS = facing(self);
-    const drop = (a: number): number => {
-      const vx = dcos(a) * spd * dirS, vy = -dsin(a) * spd;
-      return m.x + vx * dropTime(m.y, vy, land.y);
-    };
+    const spd = launchSpeed(w, land.p, fieldReach(world.terrain.length)), dirS = facing(self);
+    const drop = (a: number): number => fallTo(m.x, m.y, dcos(a) * spd * dirS, -dsin(a) * spd, land.y, air()).x;
     const mid = drop(rad(land.a));
     for (let i = 0; i < n; i++) {
       xs.push(land.x + drop(rad(land.a) + (i - (n - 1) / 2) * (w.spread || 0)) - mid);
       paths.push(null);
+      ns.push(0);
     }
-    return { burst: false, xs, paths, dmg: w.dmg, r: w.radius };
+    return done(false, w.dmg, w.radius);
   }
   if (w.effect === 'hop') {
     let x = land.x, vx = land.vx || 0, vy = land.vy || 0;
     const keep = w.hopKeep || 0.5;
     for (let i = 1; i < (w.hops || 1); i++) {
       const hvx = vx * keep, hvy = -Math.abs(vy) * keep;
-      const t = dropTime(land.y - 1, hvy, land.y);
+      const down = fallTo(x, land.y - 1, hvx, hvy, land.y, air());
       paths.push([x, land.y - 1, hvx, hvy]);
-      x += hvx * t;
+      x = down.x;
       xs.push(x);
-      vx = hvx;
-      vy = hvy + GRAV * t;
+      ns.push(i);
+      vx = down.vx;
+      vy = down.vy;
     }
   } else if (w.effect === 'scatter') {
     const x0 = from ? from.x : land.x, y0 = from ? from.y : land.y - 2;
     for (const [vx, vy] of scatterVel(Math.max(2, w.split || 4), w.fan || 0.22, w.kick || 150)) {
-      xs.push(x0 + vx * dropTime(y0, vy, land.y));
+      const down = fallTo(x0, y0, vx, vy, land.y, air());
+      xs.push(down.x);
+      ns.push(down.n);
       paths.push([x0, y0, vx, vy]);
     }
   } else if (w.effect === 'cluster' && land.a !== undefined && land.p !== undefined) {
     const m = muzzle({ ...self, angle: land.a });
     const at = splitPoint(world, arsenal, m.x, m.y, land.a, land.p, wkey, facing(self));
-    if (!at) return { burst: true, xs, paths, ...sub };
+    if (!at) return done(true, sub.dmg, sub.r);
     for (const [vx, vy] of splitVel(at.vx, at.vy, Math.max(2, w.split || 4), w.fan || 0.22)) {
-      xs.push(at.x + vx * dropTime(at.y, vy, land.y));
+      const down = fallTo(at.x, at.y, vx, vy, land.y, air());
+      xs.push(down.x);
+      ns.push(down.n);
       paths.push([at.x, at.y, vx, vy]);
     }
-    return { burst: false, xs, paths, ...sub };
+    return done(false, sub.dmg, sub.r);
   }
-  return { burst: true, xs, paths, ...sub };
+  return done(true, sub.dmg, sub.r);
 }
-/* True when a munition flying free from (x0, y0) at (vx, vy), with no wind,
-   passes through the unit's hit box before it comes down to groundY. */
-function crosses(b: { cx: number; cy: number; rx: number; ry: number }, path: number[], groundY: number): boolean {
-  const [x0, y0, vx, vy] = path as [number, number, number, number];
-  const steps = Math.min(FLIGHT_STEPS, Math.ceil(dropTime(y0, vy, groundY) * 60));
-  for (let k = 1; k <= steps; k++) {
-    const t = k / 60;
-    const u = (x0 + vx * t - b.cx) / b.rx, v = (y0 + vy * t + GRAV * t * t / 2 - b.cy) / b.ry;
-    if (u * u + v * v <= 1) return true;
+/* The row each of a volley's munitions bursts at, landing at xs on ground at
+   row y0, taken in the order they come down (ns: the steps each flew; list
+   order on a tie): on the ground, or deeper in the craters the earlier ones
+   dug (carveCrater's: 0.75 of the chord of radius r under the burst), never
+   below the crater floor. server/ai.php room_ai_sink_into is the same. */
+export function sinkInto(xs: readonly number[], ns: readonly number[], y0: number, r: number): number[] {
+  const order = xs.map((_, i) => i).sort((a, b) => ns[a]! - ns[b]! || a - b);
+  const ys = xs.map(() => y0);
+  for (let k = 0; k < order.length; k++) {
+    const i = order[k]!;
+    let y = y0;
+    for (let q = 0; q < k; q++) {
+      const j = order[q]!, dx = xs[i]! - xs[j]!;
+      y = Math.max(y, ys[j]! + Math.sqrt(Math.max(0, r * r - dx * dx)) * 0.75);
+    }
+    ys[i] = Math.min(H - 4, y);
   }
-  return false;
+  return ys;
+}
+/* True when a munition flying free from (x0, y0) at (vx, vy) through `air`
+   passes through the unit's hit box before it comes down to groundY. */
+function crosses(b: { cx: number; cy: number; rx: number; ry: number }, path: number[], groundY: number, air: Air): boolean {
+  const [x0, y0, vx, vy] = path as [number, number, number, number];
+  return fallTo(x0, y0, vx, vy, groundY, air, (x, y) => {
+    const u = (x - b.cx) / b.rx, v = (y - b.cy) / b.ry;
+    return u * u + v * v <= 1;
+  }).stopped;
 }
 /* What gun wkey landing at land would do, fired by self at target: `harm`
    to the target (its blast on the target's body plus each munition's at its
@@ -269,9 +295,9 @@ function bursts(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: 
   const selfFrom = (subs: ReturnType<typeof munitions>): number => {
     let sum = 0;
     for (let i = 0; i < subs.xs.length; i++) {
-      const x = subs.xs[i]!, path = subs.paths[i];
-      sum += path && crosses(sb, path, land.y) ? 2 * subs.dmg
-        : onSelf(subs.dmg, Math.min(dist(sb.cx - x, sb.cy - land.y), own + Math.abs(x - land.x)), subs.r, x);
+      const x = subs.xs[i]!, y = subs.ys[i]!, path = subs.paths[i];
+      sum += path && crosses(sb, path, land.y, airOf(world.terrain.length, world.wind, w)) ? 2 * subs.dmg
+        : onSelf(subs.dmg, Math.min(dist(sb.cx - x, sb.cy - y), own + Math.abs(x - land.x)), subs.r, x);
     }
     return sum;
   };
@@ -283,8 +309,14 @@ function bursts(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: 
     reach = w.radius + 14;
   }
   let far = 0;
-  for (const x of subs.xs) {
-    harm += reachDamage(subs.dmg, dist(tb.cx - x, tb.cy - land.y), subs.r);
+  for (let i = 0; i < subs.xs.length; i++) {
+    // A munition that flies into the target's body from outside it bursts on it: its whole
+    // damage. One thrown from inside it (a burst that struck it) never strikes it directly.
+    const x = subs.xs[i]!, path = subs.paths[i];
+    const ou = path ? (path[0]! - tb.cx) / tb.rx : 0, ov = path ? (path[1]! - tb.cy) / tb.ry : 0;
+    const outside = path && ou * ou + ov * ov > 1;
+    harm += path && outside && crosses(tb, path, land.y, airOf(world.terrain.length, world.wind, w)) ? subs.dmg
+      : reachDamage(subs.dmg, dist(tb.cx - x, tb.cy - subs.ys[i]!), subs.r);
     far = Math.max(far, Math.abs(x - land.x));
   }
   let fromSubs = selfFrom(subs);
@@ -576,7 +608,10 @@ function pickGun(world: World, arsenal: Arsenal, t: Tank, target: Tank, glory: b
     }
     return h;
   };
-  const pool = glory ? guns : guns.filter(k => arcOf.get(k) === arcOf.get(bestGun));
+  // The guns whose arcs land as near the target as the best one does, or on its hull (within
+  // BRK_ON): each gun's drag gives it an arc of its own, and they all come down there.
+  const near = Math.max(byArc.get(arcOf.get(bestGun)!)!.err, BRK_ON);
+  const pool = glory ? guns : guns.filter(k => byArc.get(arcOf.get(k)!)!.err <= near);
   let top: string | null = null, topHarm = 0;
   for (const k of pool) {
     const h = harmOf(k);
@@ -584,8 +619,11 @@ function pickGun(world: World, arsenal: Arsenal, t: Tank, target: Tank, glory: b
     if (h > topHarm || (top !== null && h === topHarm && arsenal.weapons[k]!.price < arsenal.weapons[top]!.price)) [top, topHarm] = [k, h];
   }
   if (top !== null) return top;
+  // Nothing hurts: glory fires its biggest gun; any other drone its cheapest of the pool.
   let fallback = bestGun;
-  if (glory) for (const k of pool) if (arsenal.weapons[k]!.dmg > arsenal.weapons[fallback]!.dmg) fallback = k;
+  for (const k of pool) {
+    if (glory ? arsenal.weapons[k]!.dmg > arsenal.weapons[fallback]!.dmg : arsenal.weapons[k]!.price < arsenal.weapons[fallback]!.price) fallback = k;
+  }
   if (harmOf(fallback) !== -Infinity) return fallback;
   let safe: string | null = null;
   for (const k of guns) {
@@ -753,12 +791,44 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
         }
       }
     };
+    // Each gun's drag gives it an arc of its own, more arcs than a turn can
+    // grid-search: only the plan's first arc (the lead) is, and every other
+    // arc but a roller's follows it. A follower keeps the lead's best angle
+    // and seeks only the power, coarse to fine (12, 6, 3, 1 either side of the
+    // lead's best power); one that still lands more than BRK_ON from the
+    // target tries FOLLOW_ANGLE the same way.
+    const follow = (wkey: string, lo: number, hi: number, a0: number, p0: number): void => {
+      let ce = Infinity;
+      for (const a of [a0, FOLLOW_ANGLE]) {
+        if (ce <= BRK_ON) break;
+        const ca = clamp(a, lo, hi);
+        let cp = clamp(p0, 20, 100);
+        let ae = consider(wkey, ca, cp);
+        for (const step of [12, 6, 3, 1]) {
+          const bp = cp;
+          for (const p of [bp - step, bp + step]) {
+            if (p < 20 || p > 100) continue;
+            const err = consider(wkey, ca, p);
+            if (err < ae) [cp, ae] = [p, err];
+          }
+        }
+        ce = Math.min(ce, ae);
+      }
+    };
+    const searchPlan = (plan: readonly string[], lo: number, hi: number): void => {
+      for (let i = 0; i < plan.length; i++) {
+        const wkey = plan[i]!;
+        const lead = i > 0 && arsenal.weapons[wkey]!.effect !== 'roller' ? byArc.get(arcOf.get(plan[0]!)!) : undefined;
+        if (lead) follow(wkey, lo, hi, lead.a, lead.p);
+        else search(wkey, lo, hi);
+      }
+    };
     // The first angle on the grid above LOB_ANGLE.
     const highFrom = 25 + 6 * Math.ceil((LOB_ANGLE + 1 - 25) / 6);
     const planOf = (from: readonly string[]): string[] => arcGuns(arsenal, from)
       .sort((a, b) => Number(arsenal.weapons[a]!.effect === 'roller') - Number(arsenal.weapons[b]!.effect === 'roller'));
     let plan = planOf(guns);
-    for (const wkey of plan) search(wkey, s === 'lobber' ? highFrom : 25, 155);
+    searchPlan(plan, s === 'lobber' ? highFrom : 25, 155);
     if (s === 'lobber') {
       if (guns.every(k => aiHarm(world, arsenal, t, target, k, byArc.get(arcOf.get(k)!)!.land) === -Infinity)) {
         // Every high arc of its area guns would reach the lobber itself: it
@@ -769,10 +839,10 @@ export function aiChoose(world: World, arsenal: Arsenal, t: Tank): AimChoice {
         landsOf.clear();
         best = null;
         plan = planOf(guns);
-        for (const wkey of plan) search(wkey, 25, 155);
+        searchPlan(plan, 25, 155);
       } else if (best!.err > LOB_OK) {
         // A lobber falls back to flat shots when no high arc lands near.
-        for (const wkey of plan) search(wkey, 25, highFrom - 1);
+        searchPlan(plan, 25, highFrom - 1);
       }
     }
     const aims = new Map<string, ArcAim>();

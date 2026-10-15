@@ -45,8 +45,8 @@ final class FieldWidthTest extends TestCase
         $this->assertSame(['aim' => 1.0, 'floor' => 1.0], room_field_aim(ROOM_W));
         $this->assertSame(sqrt(2.0), room_field_reach(1440));
         $mid = room_field_aim(900);
-        $this->assertEqualsWithDelta(0.85, $mid['aim'], 1e-12);
-        $this->assertEqualsWithDelta(0.75, $mid['floor'], 1e-12);
+        $this->assertEqualsWithDelta(0.875, $mid['aim'], 1e-12);
+        $this->assertEqualsWithDelta(0.775, $mid['floor'], 1e-12);
     }
 
     public function testUnitsSpreadOverTheWholeFieldAndNeverStartInABlast(): void

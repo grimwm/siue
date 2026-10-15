@@ -53,6 +53,7 @@ const fixture: RoomSnapshot = JSON.parse(fs.readFileSync(path.join(import.meta.d
 const EVENTS = fixture.events;
 const byT = <K extends EventType>(t: K) => EVENTS.filter((e): e is Extract<RoomEvent, { t: K }> => e.t === t);
 const shotA = nth(byT('shot'), 0), shotB = nth(byT('shot'), 1);
+const fireA = nth(byT('fire'), 0);
 
 const near = (a: number, b: number, eps = 1e-9) => Math.abs(a - b) < eps;
 
@@ -75,7 +76,7 @@ interface HostLog {
 /** A host that records everything the replay asks of it. Tanks stand as the opening events say, so each aim is a still one. */
 function makeHost() {
   const tanks: HostTank[] = [
-    unit({ seat: 0, x: 251, y: 324, angle: 20, power: 45, hp: 100 }),
+    unit({ seat: 0, x: fireA.x, y: 324, angle: fireA.a, power: fireA.pw, hp: 100 }),
     unit({ seat: 1, x: 415.1, y: 342, angle: nth(byT('aifire'), 0).a, power: nth(byT('aifire'), 0).pw, hp: 100 }),
   ];
   const log: HostLog = { events: [], launches: 0, blasts: [], muzzles: [], specials: [], trails: [] };
@@ -145,7 +146,7 @@ function frames(rp: Replay, n: number) {
   await test('the trail dripped along the path with the frame time', () => { assert.ok(host.log.trails.length > 0 && host.log.trails.every(t => t.dt === DT && t.w === 'shell') && nth(host.log.trails, 0).shot.e === shotA); });
   await test('nothing has landed yet', () => { assert.ok(host.log.blasts.length === 0 && host.tanks[1]!.hp === 100); });
 
-  // Landing at t1 = 1.15: the blast, then the hit's damage and log line.
+  // Landing at shotA.t1: the blast, then the hit's damage and log line.
   while (rp.flying().length) rp.step(DT);
   await test('the shell lands where the server said, with its radius', () => { assert.ok(host.log.blasts.length === 1
     && nth(host.log.blasts, 0).x === shotA.x1 && nth(host.log.blasts, 0).y === shotA.y1 && nth(host.log.blasts, 0).r === shotA.r && nth(host.log.blasts, 0).w === 'shell'); });
@@ -168,26 +169,27 @@ function frames(rp: Replay, n: number) {
   await test('both volleys play out', () => { assert.ok(rp.idle() && host.log.blasts.length === 2 && host.log.launches === 2, `${host.log.blasts.length} blasts`); });
   await test('their log lines come in the server order', () => { assert.ok(host.log.events.map(e => e.t).join() === 'round,fire,hit,aifire'); });
   await test('the second blast is the drone shell\'s landing', () => { assert.ok(nth(host.log.blasts, 1).x === shotB.x1 && nth(host.log.blasts, 1).y === shotB.y1); });
-  // 0.15 s aim + the later of the shot landings (1.983) + 0.6 s tail, per volley; the second volley starts the frame the first one ends.
-  await test('the two volleys take their recorded time', () => { assert.ok(t > (0.15 + 1.15 + 0.6) + (0.15 + 1.983 + 0.6) - 0.1 && t < 5.5, `${t}`); });
+  // 0.15 s aim + the shot's landing + 0.6 s tail, per volley; the second volley starts the frame the first one ends.
+  const recorded = (0.15 + shotA.t1 + 0.6) + (0.15 + shotB.t1 + 0.6);
+  await test('the two volleys take their recorded time', () => { assert.ok(t > recorded - 0.1 && t < recorded + 0.5, `${t} vs ${recorded}`); });
 }
 
 /* ---- aim easing: a tank that must swing waits for its barrel ---- */
 {
   const host = makeHost();
-  host.tanks[0]!.angle = 62; host.tanks[0]!.power = 55; host.tanks[0]!.x = 200; // opener: 20 degrees, 45 power, x 251
+  host.tanks[0]!.angle = 62; host.tanks[0]!.power = fireA.pw + 10; host.tanks[0]!.x = 200; // the opener's aim is fireA's
   const rp = createReplay(fullEnv(host.env));
   rp.push(EVENTS.slice(1, 3));
   rp.step(0);
-  const swing = Math.max(42, 10, 51);
+  const swing = Math.max(Math.abs(62 - fireA.a), 10, Math.abs(200 - fireA.x));
   const aimDur = Math.min(1.4, Math.max(0.5, 0.45 + swing / 110));
   const half = Math.floor((aimDur / 2) / DT);
   frames(rp, half);
   const u = half * DT / aimDur, e = u * u * (3 - 2 * u);
-  await test('the barrel eases (smoothstep) toward the shot\'s aim', () => { assert.ok(near(host.tanks[0]!.angle, 62 + (20 - 62) * e, 0.05) && host.tanks[0]!.showA === host.tanks[0]!.angle); });
+  await test('the barrel eases (smoothstep) toward the shot\'s aim', () => { assert.ok(near(host.tanks[0]!.angle, 62 + (fireA.a - 62) * e, 0.05) && host.tanks[0]!.showA === host.tanks[0]!.angle); });
   await test('no shell leaves until the barrel is there', () => { assert.ok(host.log.launches === 0); });
   frames(rp, Math.ceil(aimDur / DT));
-  await test('then the barrel rests at the recorded aim and the shell is off', () => { assert.ok(near(host.tanks[0]!.angle, 20) && near(host.tanks[0]!.power, 45) && near(host.tanks[0]!.x, 251) && host.log.launches === 1); });
+  await test('then the barrel rests at the recorded aim and the shell is off', () => { assert.ok(near(host.tanks[0]!.angle, fireA.a) && near(host.tanks[0]!.power, fireA.pw) && near(host.tanks[0]!.x, fireA.x) && host.log.launches === 1); });
 }
 
 /* ---- catch-up ---- */

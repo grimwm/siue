@@ -2,11 +2,12 @@
 // Operation Tankity rooms. sin, cos, atan2 and Math.round for the simulation, the
 // same to the last bit as src/detmath.ts: only + - * / and floor on decimal
 // constants both languages parse alike (fdlibm's kernels after a Cody-Waite
-// reduction by pi/2). Loaded by rooms.php; it runs nothing on its own.
+// reduction by pi/2). Loaded by rooms.php (and by tools/game-json.php, for
+// server/flight.php's missile tables); it runs nothing on its own.
 declare(strict_types=1);
 
-// Not an endpoint: rooms.php defines this constant, then requires the file.
-if (!defined('TANKITY_ROOMS_INCLUDED')) {
+// Not an endpoint: rooms.php (or tools/game-json.php) defines its constant, then requires the file.
+if (!defined('TANKITY_ROOMS_INCLUDED') && !defined('TANKITY_FLIGHT_TOOL')) {
     http_response_code(404);
     exit;
 }

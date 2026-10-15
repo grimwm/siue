@@ -8,7 +8,7 @@
             "phase": "play",
             "map": null,
             "mapName": "Random hills",
-            "difficulty": "normal",
+            "difficulty": "hard",
             "hostSeat": 0,
             "round": 1,
             "startHumans": 1,
@@ -21,7 +21,7 @@
             "speed": 4,
             "expiresAt": 1800000600,
             "closesIn": 600,
-            "turnLeft": 120,
+            "turnLeft": 119.9,
             "shopLeft": null,
             "terrainRev": 2,
             "hills": [

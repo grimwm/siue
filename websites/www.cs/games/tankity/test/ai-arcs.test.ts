@@ -106,14 +106,19 @@ test('a gun plans once per distinct arc, the first gun of each in rack order', (
   assert.deepEqual(plan, [...plan].sort((a, b) => rack.indexOf(a) - rack.indexOf(b)));
 });
 
+/* Two guns that fly the shell's arc today (the same speed and drag), found by their flight keys. */
+const TWINS = AMMO.filter(a => a.key !== 'shell' && flightKey(gun(arsenal, a.key)) === flightKey(gun(arsenal, 'shell'))).map(a => a.key);
+assert.ok(TWINS.length >= 2, 'two guns share the shell\'s arc');
+const TWIN: string = TWINS[0]!, TWIN2: string = TWINS[1]!;
+
 test('a gun given its own arc is planned on its own; one with the same flight shares', () => {
-  const rack = ['shell', 'buck', 'mortar'];
+  const rack = ['shell', TWIN, TWIN2];
   assert.deepEqual(arcGuns(arsenal, rack), ['shell']);
-  for (const change of [{ speed: 1.2 }, { effect: 'roller', friction: 0.6, rollTime: 8 }]) {
-    assert.deepEqual(arcGuns(withRow('buck', change), rack), ['shell', 'buck'], JSON.stringify(change));
+  for (const change of [{ speed: 1.2 }, { drag: 0.5 }, { effect: 'roller', friction: 0.6, rollTime: 8 }]) {
+    assert.deepEqual(arcGuns(withRow(TWIN, change), rack), ['shell', TWIN], JSON.stringify(change));
   }
   // A gun that hurts differently but flies the same is still one plan.
-  assert.deepEqual(arcGuns(withRow('buck', { dmg: 99, radius: 60, effect: 'cluster' }), rack), ['shell']);
+  assert.deepEqual(arcGuns(withRow(TWIN, { dmg: 99, radius: 60, effect: 'cluster' }), rack), ['shell']);
 });
 
 /* How often each gun's planning flight is flown on one drone turn: every
@@ -127,7 +132,7 @@ function flownPerGun(ars: Arsenal): Record<string, number> {
     },
   })]));
   const drone: Tank = { id: 'D', isPlayer: false, x: 120, y: 400, hp: 100, angle: 45, power: 50, dirS: 1, fuel: 80, vy: 0,
-    ammo: { buck: 2, mortar: 2 }, s: 'hunter' };
+    ammo: { [TWIN]: 2, [TWIN2]: 2 }, s: 'hunter' };
   const human: Tank = { id: 'P', isPlayer: true, x: 560, y: 400, hp: 100, angle: 45, power: 50, dirS: -1, fuel: 80, vy: 0, ammo: {} };
   const G = { tanks: [drone, human], terrain: Array(720).fill(400), wind: 0, round: 1, difficulty: 'normal', score: 0,
     jammer: 0, rng: mulberry32(7) } as World; // a drone's turn reads none of the rest
@@ -138,8 +143,9 @@ function flownPerGun(ars: Arsenal): Record<string, number> {
 test('a drone flies the planning search for a gun with its own arc, and not for one that shares the shell\'s', () => {
   const same = flownPerGun(arsenal);
   assert.ok(Number(same.shell) > 50, `shell flown ${same.shell}`);
-  assert.ok((same.buck || 0) < 5, `buck flown ${same.buck}`);
-  const own = flownPerGun(withRow('buck', { speed: 1.2 }));
-  assert.ok(Number(own.buck) > 50, `buck with its own arc flown ${own.buck}`);
-  assert.ok((own.mortar || 0) < 5, `mortar flown ${own.mortar}`);
+  assert.ok((same[TWIN] || 0) < 5, `${TWIN} flown ${same[TWIN]}`);
+  // A gun with its own arc follows the shell's (the lead's) best angle: a power search of its own.
+  const own = flownPerGun(withRow(TWIN, { speed: 1.2 }));
+  assert.ok(Number(own[TWIN]) >= 5, `${TWIN} with its own arc flown ${own[TWIN]}`);
+  assert.ok((own[TWIN2] || 0) < 5, `${TWIN2} flown ${own[TWIN2]}`);
 });

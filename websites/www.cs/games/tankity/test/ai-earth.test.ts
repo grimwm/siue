@@ -105,7 +105,7 @@ test('a buried human fired for by the battery fires its Riot Charge, and is dug 
 });
 
 test('burying a sturdy human beats a Mortar\'s splash; finishing a weak one beats burying it', () => {
-  const MORTAR = keyOf(w => w.effect === 'shot' && w.dmg > 50 && w.dmg < 60 && w.radius >= 40);
+  const MORTAR = keyOf(w => w.effect === 'shot' && w.dmg > 40 && w.dmg < 60 && w.radius >= 40);
   let buriedIt = 0;
   for (const seed of [1, 2, 3, 4]) {
     const self = drone(120, 400, { ammo: { [String(DIRTBALL)]: 1, [String(MORTAR)]: 2 } }), target = human(420, 400, 100);

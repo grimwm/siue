@@ -1,6 +1,6 @@
 /* Operation Tankity: the game menu's settings.
  *
- * The settings menu: the unit look, the text size, the Difficulty and Screen flashes (all remembered in this browser), a
+ * The settings menu: the unit look, the text size, the colour theme, the Difficulty and Screen flashes (all remembered in this browser), a
  * room's turn time (the host's slider, everyone else's label), and the
  * props the game menu overlay (src/ui/menu.tsx) is drawn from: what is
  * chosen, what is muted, whether a room runs, and what each button does.
@@ -13,6 +13,7 @@ import { DIFFICULTY_NAMES, isDifficulty } from './difficulty.ts';
 import type { DifficultySetting } from './difficulty.ts';
 import type { GameState, GameTank } from './game-types.ts';
 import type { RoomClient } from './net.ts';
+import { THEMES, isTheme, themeSetting } from './theme.ts';
 import { drawUnitIcon } from './ui/icons.ts';
 import { renderMenu as drawMenu } from './ui/menu.tsx';
 import type { KeyHintFn } from './ui/chrome.tsx';
@@ -116,6 +117,16 @@ export function createMenu(deps: MenuDeps) {
     applyTextSize(key);
     sfx.play('click');
   }
+  /* Theme: the accent colours of every panel and button (src/theme.ts), kept
+     in this browser. index.html put the saved one on <html> before the first
+     paint; a pick here saves it and repaints at once. */
+  const theme = themeSetting(browserStorage(), typeof document === 'undefined' ? null : document.documentElement);
+  function chooseTheme(key: string): void {
+    if (!isTheme(key)) return;
+    theme.set(key);
+    sfx.play('click');
+    renderMenu();
+  }
   /* Difficulty: how well the drones aim (ai.ts DIFFICULTY). Kept in this
      browser; the match in progress keeps the aim it was dealt. */
   const DIFFICULTY_CHOICES = DIFFICULTIES.map(key => ({ key, name: DIFFICULTY_NAMES[key] }));
@@ -160,6 +171,9 @@ export function createMenu(deps: MenuDeps) {
       sizes: TEXT_SIZES,
       size: TEXT_SIZE,
       onPickSize: chooseTextSize,
+      themes: THEMES,
+      theme: theme.get(),
+      onPickTheme: chooseTheme,
       difficulties: DIFFICULTY_CHOICES,
       difficulty: difficulty.get(),
       onPickDifficulty: chooseDifficulty,

@@ -137,7 +137,7 @@ const TITLE_SCREENS = [
 ];
 
 for (const [name, width, height, touch] of TITLE_SCREENS) {
-  test(`title card on a ${name}: Settings is styled like its siblings, Scores opens above Settings, Q goes back, labels fit`, async ({ browser }) => {
+  test(`title card on a ${name}: Settings is styled like Play with friends, Tutorial stands apart, Scores opens above Settings, Q goes back, labels fit`, async ({ browser }) => {
     const ctx = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
     const page = await ctx.newPage();
     const errors = [];
@@ -148,7 +148,14 @@ for (const [name, width, height, touch] of TITLE_SCREENS) {
       const c = getComputedStyle(el);
       return { bg: c.backgroundColor, border: c.borderTopColor, width: c.borderTopWidth, radius: c.borderTopLeftRadius, deco: c.textDecorationLine, font: c.fontFamily };
     });
-    expect(await look('#title-settings')).toEqual(await look('#tutorial-open'));
+    expect(await look('#title-settings')).toEqual(await look('#rooms-open'));
+    // Tutorial is secondary but its own: the accent outline, not Play's fill
+    // and not the plain buttons beside it.
+    const [tut, play, friends] = [await look('#tutorial-open'), await look('#title-play'), await look('#rooms-open')];
+    expect(tut.bg).not.toBe(play.bg);
+    expect(tut.border).toBe(play.bg); // the accent, as an outline
+    expect(tut.border).not.toBe(friends.border);
+    expect(tut.bg).not.toBe(friends.bg);
     // The topmost thing at an overlay's centre is inside it.
     const topmostIn = id => page.evaluate(sel => {
       const r = document.querySelector(sel).getBoundingClientRect();

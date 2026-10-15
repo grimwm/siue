@@ -336,19 +336,18 @@ ESC();
 await test('esc-does-not-close-the-menu', () => { assert.ok(E('menu-overlay').hidden === false); });
 TAP('global', 'back');
 await test('menu-q-again', () => { assert.ok(E('menu-overlay').hidden === true); });
-  // Tutorial: the title card carries a replay button (pressed for real at the end).
-  await test('title-tutorial', () => { assert.ok(!!els['tutorial-open'] && !!els['tutorial-overlay'] && !!els['tutorial-skip']); });
+  // Tutorial: the title card carries a replay button (pressed for real at the end); the coach marks draw only while a lesson runs.
+  await test('title-tutorial', () => { assert.ok(!!els['tutorial-open'] && !!els['tutorial-overlay'] && E('tutorial-overlay').hidden === true); });
   // Four 32-step songs; the round picks the song.
   const songNames = (audioSrc.match(/name: '[^']+'/g) || []).filter(n => /Rollout|High Ground|Crater Blues|Last Tank/.test(n));
   await test('songs', () => { assert.ok(songNames.length === 4 && /songIdx = \(round - 1\) % SONGS\.length/.test(audioSrc)
     && /if \(G\.demo\) music\.playTheme\(\); else music\.forRound\(G\.round\)/.test(src), songNames.join(',')); });
 // Every scrollable panel shows its keys, dimmed while everything fits.
-// (The overlays in src/ui draw theirs: one OverlayHead per navId, and the tutorial's own line.)
+// (The overlays in src/ui draw theirs: one OverlayHead per navId.)
 const uiFile = (f: string) => fs.readFileSync(path.join(GAME_DIR, 'src', 'ui', f + '.tsx'), 'utf8');
-const uiNavs = ['help', 'shop', 'lobby', 'menu', 'guns', 'scores', 'log', 'endveil'].flatMap(f => uiFile(f).match(/navId="/g) || []).length
-  + (uiFile('tutorial').match(/class="nav-hint"/g) || []).length;
+const uiNavs = ['help', 'shop', 'lobby', 'menu', 'guns', 'scores', 'log', 'endveil'].flatMap(f => uiFile(f).match(/navId="/g) || []).length;
 const navCount = (html.match(/class="nav-hint[" ]/g) || []).length + uiNavs;
-await test('nav-hints', () => { assert.ok(navCount === 10, `hints=${navCount}`); });
+await test('nav-hints', () => { assert.ok(navCount === 9, `hints=${navCount}`); });
 TAP('global', 'help');
 await test('nav-disabled', () => { assert.ok(E('nav-help').getAttribute('aria-disabled') === 'true'); });
 E('help-overlay').scrollHeight = 500;
@@ -1400,9 +1399,10 @@ await (async () => {
   }
   TAP('global', 'tutorial'); frames(5);
   await test('tutorial-opens', () => { assert.ok(E('tutorial-overlay').hidden === false); });
-  await test('tutorial-step', () => { assert.ok(/Move 1 of 5/.test(E('tutorial-text').textContent), E('tutorial-text').textContent); });
-  // The coach sends the player into the gun picker (move 4): Esc there shuts
-  // the picker and leaves the tutorial running; a second Esc skips it.
+  // Mid-battle the lesson starts at the battle's first step, the barrel.
+  await test('tutorial-step', () => { assert.ok(/6 of 11$/.test(E('tutorial-count').textContent) && /barrel/.test(E('tutorial-text').textContent), E('tutorial-count').textContent); });
+  // The coach sends the player into the gun picker: Q there shuts the picker
+  // and leaves the tutorial running; a second Q skips it.
   TAP('global', 'guns'); frames(3);
   await test('esc-picker-open', () => { assert.ok(E('gun-overlay').hidden === false); });
   TAP('global', 'back'); frames(3);

@@ -4,22 +4,33 @@
   --ink: #eef3d8;
   --dim: #a8b08a;
   --line: #3a4226;
-  --accent: #ffc93c;
   --good: #7ddf64;
   --bad: #ff5a5a;
   --safe: #6fc3ff;
   --player: #ffd75e;
   /* In-frame overlays sit on the battlefield, so they take its colours: the
      night sky (#00000b) nudged toward EGA blue, edged in EGA blue, with EGA
-     light grey text and EGA yellow key caps. */
+     light grey text, and key caps in the theme's light accent. */
   --wash: rgba(0, 0, 24, 0.72);
   --wash-solid: rgba(0, 0, 24, 0.88);
   --wash-card: rgba(4, 4, 32, 0.95);
   --wash-edge: rgba(85, 85, 255, 0.55);
   --wash-ink: #aaaaaa;
-  --wash-key: #ffff55;
+  --wash-key: var(--accent-hover);
   --wash-head: #0e0e40;
 }
+
+/* Themes: the accent palette every panel, button and status-bar highlight
+   wears (the battlefield keeps its own colours). <html data-theme> picks one;
+   index.html ships the default there and swaps in the saved choice before the
+   first paint, and Settings changes it (src/theme.ts). --accent-ink is the text
+   on an accent fill, --accent-rgb the accent for translucent tints, --focus the
+   focus ring. test/theme.test.ts holds every pair to WCAG AA. */
+:root, [data-theme="yellow"] { --accent: #ffc93c; --accent-hover: #ffd96e; --accent-ink: #1a1a1a; --accent-rgb: 255, 201, 60; --focus: #ffe08a; }
+[data-theme="lime"] { --accent: #a3e635; --accent-hover: #bef264; --accent-ink: #1a1a1a; --accent-rgb: 163, 230, 53; --focus: #d9f99d; }
+[data-theme="cyan"] { --accent: #22d3ee; --accent-hover: #67e8f9; --accent-ink: #0b1a1f; --accent-rgb: 34, 211, 238; --focus: #a5f3fc; }
+[data-theme="orange"] { --accent: #ff9f43; --accent-hover: #ffb873; --accent-ink: #1a1a1a; --accent-rgb: 255, 159, 67; --focus: #ffd0a1; }
+[data-theme="magenta"] { --accent: #f472d0; --accent-hover: #f9a8e4; --accent-ink: #1a1a1a; --accent-rgb: 244, 114, 208; --focus: #fbcfe8; }
 
 * { box-sizing: border-box; }
 
@@ -79,13 +90,13 @@ button {
 button:hover { border-color: var(--accent); }
 button.btn-primary {
   background: var(--accent);
-  color: #1a1a1a;
+  color: var(--accent-ink);
   border-color: var(--accent);
 }
-button.btn-primary:hover { filter: brightness(1.08); }
+button.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 /* Ready, once pressed, reads as held down until it is pressed again. */
 button.btn-primary[aria-pressed="true"] { background: var(--panel); color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
-button:focus-visible, input:focus-visible { outline: 3px solid var(--safe); outline-offset: 2px; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 button:disabled { opacity: 0.45; cursor: default; }
 
 /* Key chips: one dark keycap on every button, its label centred in a fixed
@@ -187,7 +198,13 @@ button:disabled { opacity: 0.45; cursor: default; }
   .tile-toggle > span { font-size: 0.62rem; }
   .unit-picker .tile-toggle { padding-inline: 0.1rem; }
 }
-.unit-picker button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
+.unit-picker button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }
+/* Theme tiles: five across, each swatch in its own theme's accent (its
+   data-theme scopes the palette to the swatch). */
+.unit-picker.theme-picker { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.theme-choice { align-content: center; min-height: 3.2rem; }
+.theme-swatch { display: block; width: 1.3rem; height: 1.3rem; border-radius: 50%; background: var(--accent); border: 2px solid rgba(255, 255, 255, 0.3); }
+.theme-choice[aria-pressed="true"] .theme-swatch { border-color: var(--ink); }
 
 .hint { color: var(--dim); font-size: 0.9rem; }
 /* Room-server connection dot: red until a ping answers, green while live. */
@@ -279,7 +296,7 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 /* This match's scoreboard (src/ui/standings.tsx). */
 .board { margin: 0 0 10px; }
 .board .kicker { font-size: 0.7rem; letter-spacing: 0.14em; color: var(--dim); text-transform: uppercase; }
-.board-title { margin: 2px 0 8px; font-size: 1.1rem; color: var(--gold, #ffc93c); }
+.board-title { margin: 2px 0 8px; font-size: 1.1rem; color: var(--accent); }
 .board-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
 .board-table th { text-align: left; font-size: 0.62rem; letter-spacing: 0.1em; color: var(--dim); font-weight: 600; padding: 3px 4px; border-bottom: 1px solid #3a3fb0; }
 .board-table td { padding: 5px 4px; border-bottom: 1px solid #1b2050; white-space: nowrap; }
@@ -287,9 +304,9 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 .board-table tr.me td { background: #141a46; }
 .board-table tr.out td { color: #7d84a8; }
 .board-table .pl { font-weight: 800; }
-.board-table .you { font-size: 0.6rem; color: #111; background: var(--gold, #ffc93c); border-radius: 4px; padding: 1px 4px; margin-left: 4px; }
+.board-table .you { font-size: 0.6rem; color: var(--accent-ink); background: var(--accent); border-radius: 4px; padding: 1px 4px; margin-left: 4px; }
 .board-table .delta { color: #7f7; font-size: 0.66rem; margin-left: 3px; }
-.board-table .crown { color: var(--gold, #ffc93c); }
+.board-table .crown { color: var(--accent); }
 .board-table tfoot td { font-weight: 800; border-bottom: 0; }
 /* In the shop the scoreboard must not squeeze the list or push the page sideways:
  * it keeps to its own band and the longest cell (a room's last column) wraps. */
@@ -317,7 +334,7 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 #shop-list li { display: grid; grid-template-columns: 72px minmax(0, 1fr); column-gap: 0.75rem; align-items: start; padding: 0.35rem 0.4rem; }
 .shop-item { min-width: 0; display: grid; gap: 0.1rem; }
 .shop-name { font-weight: 700; }
-.shop-vals { color: var(--wash-key); font-weight: 600; }
+.shop-vals { display: inline-block; color: var(--wash-key); font-weight: 600; }
 .shop-sub { color: var(--dim); font-size: 0.85rem; }
 .shop-cat { font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem; color: var(--dim); margin-top: 0.4rem; }
 #shop-list li.shop-cat { display: block; }
@@ -432,7 +449,7 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
 .seat-tile { display: grid; justify-items: center; align-content: center; gap: 0.15rem; min-height: 3.6rem; }
 .seat-tile .seat-name { font-size: 1.15rem; font-weight: 800; letter-spacing: 0.08em; line-height: 1.1; }
 .seat-tile .seat-cap { font-size: 0.68rem; color: var(--dim); }
-.seat-tile[data-mode="human"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
+.seat-tile[data-mode="human"] { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }
 .seat-tile.seat-open { color: var(--dim); border-style: dashed; }
 .seat-tile.seat-fixed { cursor: default; }
 .seat-tile.seat-fixed:hover { border-color: var(--line); }
@@ -528,7 +545,7 @@ button.btn-leave[hidden] { display: none; }
 .card-overlay .gun-choice { margin-top: 0; }
 .gun-choice canvas { width: 48px; height: 31px; }
 .gun-choice .gun-count { color: var(--wash-ink); font-size: 0.75rem; }
-.gun-choice[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
+.gun-choice[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }
 .gun-choice.cursor { outline: 2px solid var(--wash-key); outline-offset: 1px; }
 /* None in stock: greyed, but still a button the cursor and pointer reach. */
 .gun-choice[aria-disabled="true"] { color: var(--wash-ink); border-style: dashed; }
@@ -585,6 +602,11 @@ button.btn-leave[hidden] { display: none; }
 .title-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
 #frame .title-row button, #frame .title-settings { flex: 1; padding: 0.45rem; background: #11163a; border-color: #3a3fb0; border-radius: 9px; }
 #frame .title-settings { display: block; width: 100%; margin-top: 0.1rem; }
+/* Tutorial: secondary to Play, but the one that says "start here": an accent
+   outline and tint with a cap, never Play's solid fill. */
+#frame .title-row .title-tutorial { background: rgba(var(--accent-rgb), 0.12); border: 1.5px solid var(--accent); color: var(--accent); }
+#frame .title-row .title-tutorial:hover { background: rgba(var(--accent-rgb), 0.22); }
+.title-tutorial-icon { margin-right: 0.3rem; }
 .initials { display: flex; justify-content: center; align-items: center; gap: 0.3rem; border: 0; margin: 0 0 0.2rem; padding: 0; }
 .initials legend { float: left; margin-right: 0.4rem; font-size: 0.75rem; color: #9aa3c7; }
 input.initial { width: 2rem; height: 2rem; max-width: none; padding: 0; text-align: center; font-size: 1rem; font-weight: 800; text-transform: uppercase; }
@@ -655,7 +677,7 @@ body { height: 100dvh; display: flex; flex-direction: column; }
 .hud .short { display: none; }
 #frame .menu-btn {
   display: inline-flex; align-items: center; gap: 6px; flex: none; height: 26px; padding: 0 9px;
-  font: 800 13px/1 system-ui, sans-serif; color: #111; background: var(--accent); border: 1px solid var(--accent); border-radius: 6px;
+  font: 800 13px/1 system-ui, sans-serif; color: var(--accent-ink); background: var(--accent); border: 1px solid var(--accent); border-radius: 6px;
 }
 .menu-icon { width: 14px; height: 14px; }
 .pill { display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 2px 9px; background: #11163a; border: 1px solid #5a63e0; border-radius: 999px; }
@@ -667,7 +689,7 @@ body { height: 100dvh; display: flex; flex-direction: column; }
 .seg { display: inline-flex; align-items: stretch; flex: none; margin-left: auto; border: 1px solid #3a3fb0; border-radius: 8px; overflow: hidden; }
 .seg > span { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; }
 .seg > span + span { border-left: 1px solid #3a3fb0; }
-.seg .cash .v { color: #ffd75e; }
+.seg .cash .v { color: var(--accent); }
 .seg .dot { margin-left: 4px; }
 
 /* Control deck: Aim, Drive, More, Weapon and a big FIRE, each labelled. Chips
@@ -689,8 +711,8 @@ body { height: 100dvh; display: flex; flex-direction: column; }
   background: #0a0d26; color: #eef; font: 700 11px/1.15 system-ui, sans-serif; white-space: nowrap;
 }
 #deck .btn .ic { font-size: 14px; line-height: 1; color: var(--c); }
-#frame #deck .btn.gold { background: var(--accent); border-color: var(--accent); color: #111; }
-#deck .btn.gold .ic { color: #111; }
+#frame #deck .btn.gold { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+#deck .btn.gold .ic { color: var(--accent-ink); }
 #frame .aim-pad .btn { height: 54px; }
 #deck .w-narrow { display: none; }
 #deck .key { position: absolute; left: 50%; bottom: 3px; transform: translateX(-50%); }
@@ -820,7 +842,7 @@ body { height: 100dvh; display: flex; flex-direction: column; }
   .grp-fire { grid-area: fire; }
   #frame #deck .weap { width: 96px; height: 44px; }
   #frame #deck .fire { width: 96px; height: 46px; }
-  #frame #deck .btn.gold { background: rgba(255, 201, 60, 0.55); border-color: rgba(255, 201, 60, 0.9); color: #fff; text-shadow: 0 0 2px #000, 0 1px 2px #000; }
+  #frame #deck .btn.gold { background: rgba(var(--accent-rgb), 0.55); border-color: rgba(var(--accent-rgb), 0.9); color: #fff; text-shadow: 0 0 2px #000, 0 1px 2px #000; }
   #deck .btn.gold .ic { color: #fff; }
   #deck .w-wide { display: none; }
   #deck .w-narrow { display: inline; }
@@ -828,11 +850,11 @@ body { height: 100dvh; display: flex; flex-direction: column; }
 }
 
 /* The Scores overlay: the player's own rows in gold, and a board switcher with full-size touch targets. */
-.scores li.mine { color: var(--gold, #ffc93c); font-weight: 700; }
+.scores li.mine { color: var(--accent); font-weight: 700; }
 .scores-h { margin: 0.8rem 0 0.2rem; font-size: 0.95rem; }
 .scores-levels { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
 .scores-levels button { min-height: 44px; min-width: 44px; padding: 0 14px; }
-.scores-levels button[aria-pressed="true"] { background: var(--gold, #ffc93c); color: #14183a; }
+.scores-levels button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
 /* The turn-time slider (src/ui/turn-time.tsx): label, range and its value on
    one line that wraps on a phone. */
@@ -917,3 +939,42 @@ body { height: 100dvh; display: flex; flex-direction: column; }
   overflow-wrap: anywhere;
 }
 .toast-go, .toast-x { flex: 0 0 auto; }
+
+/* The tutorial's coach marks (src/ui/tutorial.tsx): a layer over the whole
+   frame, veils included, that never takes a tap itself. The spotlight's
+   shadow dims everything but the target; the bubble beside it is the one
+   thing that takes taps. While the target is off screen the marks wait,
+   hidden, and the game shows undimmed. */
+.coach { position: fixed; inset: 0; z-index: 15; pointer-events: none; overflow: hidden; }
+.coach[hidden] { display: none; }
+.coach-spot {
+  position: absolute; border-radius: 10px; pointer-events: none;
+  box-shadow: 0 0 0 200vmax rgba(0, 0, 8, 0.55);
+}
+[data-coach-target] { outline: 3px solid var(--focus) !important; outline-offset: 2px; }
+.coach-bubble {
+  position: absolute; left: 8px; top: 8px; width: min(17rem, calc(100% - 16px)); pointer-events: auto;
+  padding: 0.55rem 0.7rem 0.6rem; background: var(--wash-card); color: var(--ink);
+  border: 2px solid var(--accent); border-radius: 10px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  font-size: 0.85rem; line-height: 1.35; text-align: left;
+}
+.coach-bubble[data-waiting] { visibility: hidden; }
+.coach-bubble:focus { outline: none; }
+.coach-bubble:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+/* The arrow: a rotated square on the edge that faces the target. */
+.coach-bubble::before {
+  content: ''; position: absolute; width: 12px; height: 12px; background: var(--wash-card);
+  border: 2px solid var(--accent); border-width: 2px 0 0 2px;
+}
+.coach-bubble[data-side="below"]::before { top: -8px; left: calc(var(--arrow, 50%) - 7px); transform: rotate(45deg); }
+.coach-bubble[data-side="above"]::before { bottom: -8px; left: calc(var(--arrow, 50%) - 7px); transform: rotate(225deg); }
+.coach-bubble[data-side="right"]::before { left: -8px; top: calc(var(--arrow, 50%) - 7px); transform: rotate(-45deg); }
+.coach-bubble[data-side="left"]::before { right: -8px; top: calc(var(--arrow, 50%) - 7px); transform: rotate(135deg); }
+.coach-bubble[data-side="none"]::before { display: none; }
+.coach-count { margin: 0 0 0.2rem; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+.coach-text { margin: 0; font-weight: 600; }
+.coach-keys { margin: 0.3rem 0 0; font-size: 0.78rem; color: var(--dim); }
+.coach-keys .hk { margin: 0 0.1rem; }
+.coach-acts { display: flex; justify-content: flex-end; gap: 0.4rem; margin-top: 0.5rem; }
+#frame .coach-acts button { margin: 0; min-height: 36px; padding: 0.3rem 0.8rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.35rem; }
+.touch #frame .coach-acts button { min-height: 44px; }

@@ -1,5 +1,5 @@
-/* The settings menu: the seed box and Play this seed, the unit, text-size and
- * Difficulty pickers, the sound, music, fullscreen and screen-flash toggles, the scores, and
+/* The settings menu: the seed box and Play this seed, the unit, text-size,
+ * theme and Difficulty pickers, the sound, music, fullscreen and screen-flash toggles, the scores, and
  * Leave room in a room. The game owns the state (the unit, the text size,
  * what is muted, whether a room is running) and hands in a finished view of it;
  * this draws it and reports clicks. The section element (#menu-overlay) stays
@@ -32,6 +32,10 @@ export interface MenuProps {
   sizes: { key: string; name: string; scale: number }[];
   size: string;
   onPickSize: (key: string) => void;
+  /** Colour themes: each tile's swatch wears its own theme's accent (game.css). */
+  themes: readonly { key: string; name: string }[];
+  theme: string;
+  onPickTheme: (key: string) => void;
   /** How well the drones aim: the choices, the saved one. */
   difficulties: { key: string; name: string }[];
   difficulty: string;
@@ -108,6 +112,18 @@ export function Menu(p: MenuProps) {
               <button type="button" class="text-choice" key={t.key} aria-pressed={p.size === t.key} title={`${t.name} text`}
                 onClick={blurThen(() => p.onPickSize(t.key))}>
                 <span class="text-glyph" style={{ fontSize: `${0.75 + (t.scale - 0.9) * 2.5}rem` }}>Aa</span>
+                <span>{t.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div class="unit-row" role="group" aria-labelledby="theme-label">
+          <span class="unit-label" id="theme-label">Theme</span>
+          <div class="unit-picker theme-picker" id="theme-picker">
+            {p.themes.map(t => (
+              <button type="button" class="unit-choice theme-choice" key={t.key} data-pick-theme={t.key} aria-pressed={p.theme === t.key}
+                title={`${t.name} theme`} onClick={blurThen(() => p.onPickTheme(t.key))}>
+                <span class="theme-swatch" data-theme={t.key} aria-hidden="true" />
                 <span>{t.name}</span>
               </button>
             ))}

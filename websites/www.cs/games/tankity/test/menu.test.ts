@@ -25,6 +25,7 @@ const render = (section: StubElement, props: MenuProps) => menu.renderMenu(asEle
 const KEYS: Record<string, string> = { 'global:new': 'N', 'global:sound': 'E', 'global:music': 'M', 'global:fullscreen': 'F', 'global:report': 'R' };
 const UNITS = [{ key: 'tank', name: 'Tank' }, { key: 'hover', name: 'Hover' }, { key: 'walker', name: 'Walker' }, { key: 'buggy', name: 'Buggy' }];
 const SIZES = [{ key: 's', name: 'Small', scale: 0.9 }, { key: 'm', name: 'Normal', scale: 1 }, { key: 'l', name: 'Large', scale: 1.15 }, { key: 'xl', name: 'Huge', scale: 1.3 }];
+const THEMES = [{ key: 'yellow', name: 'Yellow' }, { key: 'lime', name: 'Lime' }, { key: 'cyan', name: 'Cyan' }, { key: 'orange', name: 'Orange' }, { key: 'magenta', name: 'Magenta' }];
 const LEVELS = [{ key: 'easy', name: 'Easy' }, { key: 'normal', name: 'Normal' }, { key: 'hard', name: 'Hard' }];
 
 /** The props every case starts from. The extras (flashes, standings, quit and the phone row) are left out on
@@ -34,12 +35,13 @@ type Extras = 'flashes' | 'onFlashes' | 'onStandings' | 'onQuit' | 'onNextSong' 
 function draw(over: Partial<MenuProps> = {}) {
   const section = makeEl('menu-overlay');
   section.hidden = false;
-  const calls = { close: 0, playSeed: 0, submit: 0, unit: [] as string[], size: [] as string[], difficulty: [] as string[], sound: 0, music: 0, fs: 0, scores: 0, leave: 0 };
+  const calls = { close: 0, playSeed: 0, submit: 0, unit: [] as string[], size: [] as string[], theme: [] as string[], difficulty: [] as string[], sound: 0, music: 0, fs: 0, scores: 0, leave: 0 };
   const base: Omit<MenuProps, Extras> = {
     keyHint: (c, a) => KEYS[`${c}:${a}`] ?? '', onClose: () => { calls.close++; },
     onPlaySeed: () => { calls.playSeed++; }, onSubmit: () => { calls.submit++; },
     units: UNITS, unit: 'tank', drawUnit() {}, onPickUnit: k => { calls.unit.push(k); },
     sizes: SIZES, size: 'm', onPickSize: k => { calls.size.push(k); },
+    themes: THEMES, theme: 'yellow', onPickTheme: k => { calls.theme.push(k); },
     difficulties: LEVELS, difficulty: 'normal', onPickDifficulty: k => { calls.difficulty.push(k); },
     sound: true, music: true, fullscreen: false,
     onSound: () => { calls.sound++; }, onMusic: () => { calls.music++; }, onFullscreen: () => { calls.fs++; },
@@ -240,4 +242,16 @@ test('Flashes is an Options toggle: on by default, pressed follows the prop, a c
   assert.equal(flips, 1);
   render(section, { ...props, flashes: false });
   assert.equal(byId(section, 'btn-flashes').getAttribute('aria-pressed'), 'false');
+});
+
+test('Theme: one tile per theme, its swatch wearing that theme, the saved one pressed', () => {
+  const { section, calls } = draw({ theme: 'lime' });
+  const tiles = kids(byId(section, 'theme-picker'));
+  assert.deepEqual(tiles.map(t => t.getAttribute('data-pick-theme')), ['yellow', 'lime', 'cyan', 'orange', 'magenta']);
+  assert.deepEqual(tiles.map(t => t.getAttribute('aria-pressed')), ['false', 'true', 'false', 'false', 'false']);
+  assert.deepEqual(tiles.map(t => t.textContent), ['Yellow', 'Lime', 'Cyan', 'Orange', 'Magenta']);
+  const swatches = tiles.map(t => walk(t).find(n => n.getAttribute('class') === 'theme-swatch'));
+  assert.deepEqual(swatches.map(sw => sw?.getAttribute('data-theme')), ['yellow', 'lime', 'cyan', 'orange', 'magenta']);
+  click(nth(tiles, 4));
+  assert.deepEqual(calls.theme, ['magenta']);
 });

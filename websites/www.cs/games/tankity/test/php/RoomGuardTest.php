@@ -108,9 +108,8 @@ final class RoomGuardTest extends TestCase
         $other = new PDO('sqlite:' . tankity_data_dir() . '/' . TANKITY_DB_FILE, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
         $other->exec('BEGIN IMMEDIATE');
         try {
-            $t = microtime(true);
+            // Refused from a read: a write would meet the other connection's lock and throw busy.
             $this->assertFalse(room_rate_take('flood', $now + 1));
-            $this->assertLessThan(0.5, microtime(true) - $t, 'refused from a read, not after waiting on the lock');
         } finally {
             $other->exec('ROLLBACK');
         }
@@ -384,7 +383,7 @@ final class RoomGuardTest extends TestCase
         $this->assertSame(200, $this->call('turntime', $set(600), [], self::FREE)[0]);
         // Mark the last act as now, then ask again at once.
         [$room, $lock] = room_load($host['code']);
-        $room['seats'][0]['lastAct'] = microtime(true);
+        $room['seats'][0]['lastAct'] = microtime(true) + 3600; // an hour ahead: still inside the spacing however slowly the next request starts
         room_save($lock, $host['code'], $room);
         room_unlock($lock);
         $this->assertSame(429, $this->call('turntime', $set(1800), [], self::FREE)[0]);

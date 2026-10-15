@@ -632,6 +632,14 @@ function lobbyRoom() {
 // music scheduler into scheduling thousands of catch-up notes at once.
 await (async () => {
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  // Waits for what a real poll timer delivers, however slowly the machine runs
+  // it: returns the moment `cond` holds, and fails only after a generous bound.
+  const until = async (what: string, cond: () => boolean, ms = 30_000) => {
+    for (const end = Date.now() + ms; !cond(); await sleep(25)) {
+      if (Date.now() > end) assert.fail(`timed out waiting for ${what}`);
+    }
+    await tick(10);
+  };
   // ?code=zz99 was set before boot: the lobby opens with the code filled in
   openBootGate();
   await tick(10);
@@ -1247,7 +1255,7 @@ await (async () => {
   // open through the polls that keep the shop fresh.
   NET_SHOP = true;
   seatArmor = 60;
-  await sleep(1800); await tick(10);
+  await until('the shop', () => E('shop-veil').hidden === false);
   await test('net-shop', () => { assert.ok(E('shop-veil').hidden === false, `shop hidden=${E('shop-veil').hidden}`); });
   // A damaged seat's Repair reads the room's armor, so it is enabled and asks the server.
   {
@@ -1368,7 +1376,7 @@ await (async () => {
   await test('fx-play-hud', () => { assert.ok(E('hud-armor').textContent === String(nth(fxRoomOf('play-my-turn').tanks, 0).hp) && /ROOM/.test(E('hud-score').textContent), E('hud-armor').textContent + ' | ' + E('hud-score').textContent); });
   // 429 (retried, then said kindly) and 409 (the server's own words).
   PFX.actError = 'error-too-fast';
-  TAP('global', 'fire'); await sleep(900); await tick(5);
+  TAP('global', 'fire'); await until('the kind 429 line', () => /Easy on the trigger/.test(logText()));
   await test('fx-429-kind', () => { assert.ok(/Easy on the trigger/.test(logText()), logText().split('\n').slice(-1)[0]); });
   PFX.actError = 'error-not-your-turn';
   TAP('global', 'fire'); await tick(10);
@@ -1386,12 +1394,12 @@ await (async () => {
   await test('fx-fire-turn-back', () => { assert.ok(/YOU/.test(E('hud-turn').textContent) && E('hud-armor').textContent === String(nth(after.tanks, 0).hp), E('hud-turn').textContent + ' | armor ' + E('hud-armor').textContent); });
   // The round is won: the room moves to the shop with the prize paid.
   PFX.room = 'shop-after-win';
-  await sleep(2200); await tick(10);
+  await until('the shop after the win', () => E('shop-veil').hidden === false);
   await test('fx-shop-opens', () => { assert.ok(E('shop-veil').hidden === false, `shop hidden=${E('shop-veil').hidden}`); });
   await test('fx-shop-cash', () => { assert.ok(E('shop-cash').textContent.includes(String(must(fxRoomOf('shop-after-win').you, 'you').cash)), E('shop-cash').textContent); });
   // The server's own shop with the host readied and a second human waiting.
   PFX.room = 'shop-ready';
-  await sleep(2200); await tick(10);
+  await until('the shop with the host ready', () => /^Ready ✓/.test(E('shop-next').textContent) && /^1\/2 ready/.test(E('shop-ready').textContent));
   await test('fx-shop-ready', () => { assert.ok(/^Ready ✓/.test(E('shop-next').textContent) && /^1\/2 ready · shop closes in 1:/.test(E('shop-ready').textContent), E('shop-next').textContent + ' | ' + E('shop-ready').textContent); });
   PFX.on = false;
   // The server's delta replies reached the client as complete rooms: polls

@@ -300,11 +300,19 @@ function puzzleRig(gate: { open?: () => void }) {
   return { ...r, sent };
 }
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(res => setImmediate(res)); };
-/** Waits (up to 10 s) for what WebCrypto's thread pool finishes in its own time. */
+/** Waits (up to 60 s, far past a loaded runner) for what WebCrypto's thread pool finishes in its own time. */
 async function until(what: string, cond: () => boolean): Promise<void> {
-  for (const end = Date.now() + 10_000; !cond(); await new Promise(res => setTimeout(res, 5))) {
+  for (const end = Date.now() + 60_000; !cond(); await new Promise(res => setTimeout(res, 5))) {
     if (Date.now() > end) assert.fail(`timed out waiting for ${what}`);
   }
+}
+
+/** Waits until the rig has been asked for a puzzle, then answers it; the gate is re-armed, so the next puzzle is waited for too. */
+async function release(gate: { open?: () => void }): Promise<void> {
+  await until('a puzzle asked for', () => gate.open !== undefined);
+  const open = gate.open;
+  gate.open = undefined;
+  open?.();
 }
 
 test('hosting says Setting up the room…, keeps Host and Join off, and a second Host does nothing', async () => {
@@ -320,9 +328,10 @@ test('hosting says Setting up the room…, keeps Host and Join off, and a second
   assert.equal(r.$('lobby-cancel').hidden, false);
   submit(r.$('host-form'));
   submit(r.$('join-form'));
+  await until('the puzzle asked for', () => r.sent.includes('challenge'));
   await settle();
   assert.deepEqual(r.sent.filter(a => a === 'challenge'), ['challenge'], 'one puzzle asked for');
-  gate.open?.();
+  await release(gate);
   await until('the room', () => r.net.code === 'K7Q2MX' && r.$('lobby-cancel').hidden === true);
   assert.equal(r.seats.get('K7Q2MX')?.token, 'tk');
   assert.equal(r.$('lobby-status').textContent, '');
@@ -335,21 +344,20 @@ test('Cancel stops setting up the room: nothing is created and Host works again'
   const r = puzzleRig(gate);
   await r.lobby.openLobby();
   submit(r.$('host-form'));
-  await settle();
+  await until('the puzzle asked for', () => gate.open !== undefined);
   click(r.$('lobby-cancel'));
-  await settle();
+  await until('the stop', () => r.$('lobby-status').textContent === 'Stopped. Nothing was set up.');
   assert.equal(r.$('lobby-status').textContent, 'Stopped. Nothing was set up.');
   assert.equal(r.$('lobby-cancel').hidden, true);
   assert.equal(r.$('host-go').getAttribute('aria-disabled'), undefined);
-  gate.open?.();
+  await release(gate); // the cancelled puzzle is answered late, as a slow server would
   await settle();
-  assert.ok(!r.sent.includes('create'), r.sent.join());
+  assert.ok(r.sent.includes('challenge') && !r.sent.includes('create'), r.sent.join());
   assert.equal(r.net.code, '');
   assert.equal(r.seats.list().length, 0);
   // Host again: a new puzzle, and this time the room.
   submit(r.$('host-form'));
-  await settle();
-  gate.open?.();
+  await release(gate);
   await until('the room', () => r.net.code === 'K7Q2MX' && r.$('lobby-cancel').hidden === true);
 });
 
@@ -359,9 +367,9 @@ test('joining says Setting up your seat…, and takes the code as read back', as
   await r.lobby.openLobby();
   (r.$('join-code') as unknown as { value: string }).value = ' k7q-2mx ';
   submit(r.$('join-form'));
-  await settle();
+  await until('the puzzle asked for', () => gate.open !== undefined);
   assert.equal(r.$('lobby-status').textContent, 'Setting up your seat…');
-  gate.open?.();
+  await release(gate);
   await until('the seat', () => r.net.code === 'K7Q2MX' && r.$('lobby-cancel').hidden === true);
 });
 

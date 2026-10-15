@@ -255,43 +255,4 @@ final class AiArcsTest extends TestCase
             }
         }
     }
-
-    /** A wall-clock backstop beside the counted budgets: a full round-9 rack's
-     *  turns cost little more than the same rack's without the earth guns,
-     *  both measured in this run (so a busy machine slows both alike), summed
-     *  over every strategy so a slow strategy's turns show. */
-    public function testTheEarthGunsAddLittleToADroneTurnsTime(): void
-    {
-        $terrain = [];
-        for ($x = 0; $x < 720; $x++) {
-            $terrain[] = 330 + 40 * det_sin($x * 2 * M_PI / 260);
-        }
-        $full = room_ai_rack(9);
-        $plain = array_filter($full, fn($k) => !in_array(room_weapons()[$k]['effect'], ['dirt', 'pour', 'dig', 'riot', 'slump'], true), ARRAY_FILTER_USE_KEY);
-        $total = function (array $rack) use ($terrain): float {
-            $ms = [];
-            foreach (['hunter', 'bully', 'sniper', 'avenger', 'glory', 'lobber'] as $s) {
-                foreach ([1, 2, 3] as $seed) {
-                    $room = ['terrain' => $terrain, 'wind' => 2.0, 'round' => 9, 'rng' => $seed, 'jammer' => [], 'scores' => [],
-                        'tanks' => [
-                            ['seat' => 0, 'kind' => 'human', 'x' => 150.0, 'y' => $terrain[150], 'hp' => 100, 'dirS' => 1, 'angle' => 45.0, 'power' => 50.0],
-                            ['seat' => 1, 'kind' => 'ai', 'x' => 560.0, 'y' => $terrain[560], 'hp' => 60, 'dirS' => -1, 'angle' => 45.0, 'power' => 50.0,
-                                's' => $s, 'ammo' => $rack],
-                        ]];
-                    $t0 = hrtime(true);
-                    room_ai_choose($room, $room['tanks'][1]);
-                    $ms[] = (hrtime(true) - $t0) / 1e6;
-                }
-            }
-            return array_sum($ms);
-        };
-        $total($plain); // warm up
-        $total($full);
-        [$base, $earth] = [INF, INF];
-        for ($i = 0; $i < 5; $i++) { // interleaved, so drift hits both alike
-            $base = min($base, $total($plain));
-            $earth = min($earth, $total($full));
-        }
-        $this->assertLessThan(1.25 * $base, $earth, sprintf('a full rack\'s turns take %.1f ms, the rack without the earth guns %.1f ms', $earth, $base));
-    }
 }

@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 // The committed arsenal: counts follow it, so a new weapon needs no edit here.
 const GAME = JSON.parse(readFileSync(new URL('../../games/tankity/game.json', import.meta.url), 'utf8'));
 import { test, expect } from '@playwright/test';
-import type { Browser, Page } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { newPlayer, hud, rec, resetRec, aimTo, setPower, recorderScript } from './helpers.ts';
 import { committedEffects, local, arsenal, grab, fireAndWatch } from './fx-helpers.ts';
 
@@ -13,8 +13,15 @@ import { committedEffects, local, arsenal, grab, fireAndWatch } from './fx-helpe
 test.describe('effects editor', () => {
   test.skip(({ baseURL }) => !local(baseURL), 'the editor is dev-only and not deployed');
 
+  // Every context a test opens, closed when the test ends, pass or fail.
+  const opened: BrowserContext[] = [];
+  test.afterEach(async () => {
+    await Promise.all(opened.splice(0).map(c => c.close()));
+  });
+
   async function openEditor(browser: Browser) {
     const ctx = await browser.newContext({ viewport: { width: 1500, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
+    opened.push(ctx);
     const page = await ctx.newPage();
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 // The committed arsenal: counts follow it, so a new weapon needs no edit here.
 const GAME = JSON.parse(readFileSync(new URL('../../games/tankity/game.json', import.meta.url), 'utf8'));
 import { test, expect } from '@playwright/test';
-import type { Browser, Page } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { recorderScript, hud } from './helpers.ts';
 
 interface GameConfig {
@@ -37,10 +37,17 @@ function audioProbe() {
   };
 }
 
+// Every context a test opens, closed when the test ends, pass or fail.
+const opened: BrowserContext[] = [];
+test.afterEach(async () => {
+  await Promise.all(opened.splice(0).map(c => c.close()));
+});
+
 /* A fresh player whose audio-file requests are recorded from the first byte.
    `block` makes every audio file answer 404. */
 async function open(browser: Browser, { block = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, serviceWorkers: 'block' });
+  opened.push(ctx);
   await ctx.addInitScript(recorderScript);
   await ctx.addInitScript(audioProbe);
   const page = await ctx.newPage();
@@ -166,6 +173,7 @@ function passProbe() {
 
 async function openWithTones(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, serviceWorkers: 'block' });
+  opened.push(ctx);
   await ctx.addInitScript(recorderScript);
   await ctx.addInitScript(passProbe);
   const page = await ctx.newPage();

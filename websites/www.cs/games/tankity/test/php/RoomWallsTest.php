@@ -354,7 +354,7 @@ final class RoomWallsTest extends TestCase
         $this->gap();
         $this->assertSame(200, $this->call('walls', $ask)[0]);
         [$room, $lock] = room_load($host['code']);
-        $room['seats'][0]['lastAct'] = microtime(true);
+        $room['seats'][0]['lastAct'] = microtime(true) + 3600; // an hour ahead: still inside the spacing however slowly the next request starts
         room_save($lock, $host['code'], $room);
         room_unlock($lock);
         $this->assertSame(429, $this->call('walls', ['walls' => 'spring'] + $ask)[0], 'rate');

@@ -190,6 +190,48 @@ function toastProblems() {
   return probs;
 }
 
+/* The FF button (the game speed), shown as a match shows it, with a long
+   chatter line and a long Next song toast up: it sits in the battlefield's
+   top right corner just under the status bar, over no bar, deck button,
+   chatter or toast, and is thumb-sized on a touch screen. */
+function ffProblems(touch) {
+  const ff = document.getElementById('btn-speed');
+  ff.hidden = false;
+  document.getElementById('speed-val').textContent = '4×';
+  const dlg = document.getElementById('dialogue');
+  dlg.hidden = false;
+  document.getElementById('dlg-name').textContent = 'REAPER';
+  document.getElementById('dlg-line').textContent = 'Wind check: hold that barrel steady and wait for it, wait for it, wait for it.';
+  const toast = document.getElementById('track-toast');
+  toast.textContent = '♫ Battle Theme A (Extended Mix) · A Composer With A Very Long Name Indeed';
+  toast.hidden = false;
+  const r = ff.getBoundingClientRect();
+  const over = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+  const probs = [];
+  const field = document.getElementById('field').getBoundingClientRect();
+  const bar = document.getElementById('hud-bar').getBoundingClientRect();
+  if (r.width < 1) probs.push('FF does not show');
+  if (r.top < bar.bottom - 0.5 || r.top > bar.bottom + 16) probs.push(`FF is ${Math.round(r.top - bar.bottom)}px under the status bar`);
+  if (field.right - r.right > 16 || r.right > field.right + 0.5) probs.push(`FF is ${Math.round(field.right - r.right)}px from the right edge`);
+  if (r.left < field.left || r.bottom > field.bottom) probs.push('FF leaves the battlefield');
+  if (over(r, bar)) probs.push('FF over the status bar');
+  for (const b of document.querySelectorAll('#deck button')) {
+    if (b.getClientRects().length && over(r, b.getBoundingClientRect())) probs.push(`FF over ${b.id || b.dataset.aim}`);
+  }
+  if (over(r, dlg.getBoundingClientRect())) probs.push('FF over the chatter');
+  if (over(r, toast.getBoundingClientRect())) probs.push('FF over the Next song toast');
+  // In a match: the title card (which shows over the demo here) is gone.
+  const card = document.getElementById('title-root');
+  card.style.display = 'none';
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  if (!hit || hit.closest('#btn-speed') !== ff) probs.push(`FF is covered by ${hit ? hit.id || hit.className || hit.tagName : 'nothing'}`);
+  card.style.display = '';
+  if (touch && (r.width < 43.5 || r.height < 43.5)) probs.push(`FF ${Math.round(r.width)}×${Math.round(r.height)}`);
+  toast.hidden = true;
+  dlg.hidden = true;
+  return probs;
+}
+
 for (const dev of DEVICES) {
   test(`${dev[0]} ${dev[1]}×${dev[2]}: solo and room bars fit, the deck fits, the page fits`, async ({ browser }) => {
     const { ctx, page } = await open(browser, dev);
@@ -199,6 +241,17 @@ for (const dev of DEVICES) {
       await page.screenshot({ path: `test-results/tankity-layout-${dev[1]}x${dev[2]}-${room ? 'room' : 'solo'}.png` });
     }
     expect(await page.evaluate(toastProblems), 'track toast').toEqual([]);
+    expect(await page.evaluate(ffProblems, dev[3]), 'FF button').toEqual([]);
+    // The sky marks (a shell above the view) keep clear of it: the renderer
+    // holds back at least the button's corner of the canvas's top edge.
+    await page.clock.runFor(100);
+    const sky = await page.evaluate(() => {
+      const cv = document.getElementById('stage'), ff = document.getElementById('btn-speed');
+      const need = cv.getBoundingClientRect().right - ff.getBoundingClientRect().left;
+      return { held: Number(cv.dataset.skyInset || 0), need };
+    });
+    expect(sky.held, 'sky marks stop short of FF').toBeGreaterThanOrEqual(sky.need);
+    await page.evaluate(() => { document.getElementById('btn-speed').hidden = true; });
     // The battlefield fills the screen between the bars, the ground meets both
     // edges, and the field's width is the one this device deals either way up.
     const bf = await page.evaluate(battlefield);

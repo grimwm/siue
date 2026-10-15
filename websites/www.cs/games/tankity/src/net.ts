@@ -24,6 +24,8 @@ import type {
 } from './protocol.ts';
 import type { Difficulty } from './sim.ts';
 import type { StoredSeat } from './seats.ts';
+import { parseSpeed } from './speed.ts';
+import type { Speed } from './speed.ts';
 
 /* ---------- what the client needs from its host ---------- */
 
@@ -160,7 +162,7 @@ export function planCatchUp(
 
 /** The POST actions whose reply is a room, which therefore take the delta
  * fields (since, have, full). */
-const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready', 'again', 'body', 'map', 'seatmode', 'turntime']);
+const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready', 'again', 'body', 'map', 'seatmode', 'turntime', 'speed']);
 
 /* ---------- the client ---------- */
 
@@ -198,6 +200,9 @@ export class RoomClient {
   maps: MapInfo[] = [];
   /** The room's turn time in seconds, as the last snapshot said. */
   turnSecs = 120;
+  /** The room's game speed, as the last snapshot said (a server from before
+   * the setting sends none: 1×). */
+  speed: Speed = 1;
 
   /** The Ready state the player last asked for while a request is out. */
   private readyWant: boolean | null = null;
@@ -334,13 +339,14 @@ export class RoomClient {
     return (data as unknown as PostReplies['mine']).rooms;
   }
 
-  /** What every snapshot says about time: the turn time, and how long until
+  /** What every snapshot says about time: the turn time, the game speed, and how long until
    * the room closes if nobody acts (`closesIn`, seconds from the reply,
    * counted down from when it arrived, so the client's own clock never
    * matters; absent means no sooner close is known). */
-  private noteRoom(room: Partial<Pick<RoomSnapshot, 'turnSecs' | 'closesIn'>> | null | undefined): void {
+  private noteRoom(room: Partial<Pick<RoomSnapshot, 'turnSecs' | 'closesIn' | 'speed'>> | null | undefined): void {
     if (!room) return;
     if (typeof room.turnSecs === 'number') this.turnSecs = room.turnSecs;
+    this.speed = parseSpeed(room.speed);
     if (typeof room.closesIn === 'number' && Number.isFinite(room.closesIn)) {
       this.closeLeft = room.closesIn;
       this.closeLeftAt = this.env.now();
@@ -395,7 +401,7 @@ export class RoomClient {
 
   private forget(): void {
     this.code = ''; this.token = ''; this.csrf = ''; this.seat = -1; this.since = 0;
-    this.seats = []; this.hostSeat = 0; this.turnSecs = 120; this.closeLeft = null;
+    this.seats = []; this.hostSeat = 0; this.turnSecs = 120; this.speed = 1; this.closeLeft = null;
     this.dropTerrain();
   }
 

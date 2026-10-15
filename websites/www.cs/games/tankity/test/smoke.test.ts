@@ -715,11 +715,23 @@ await (async () => {
   TAP('global', 'back');
   TAP('shop', 'close'); frames(3);
   await test('shop-esc-closes-menu', () => { assert.ok(E('menu-overlay').hidden === true && E('shop-veil').hidden === false); });
-  // Stock up: Buckshot ($80), Mortar ($200), Needle ($120) of the $600 stake.
-  // (Each render appends, so read the last nine list items: two category
-  // headers, the free Shell row, and six rows to buy. Each row holds an icon
+  // Stock up: Buckshot, Mortar and Needle of the $600 stake, at game.json's prices.
+  // The page shops from its baked fallback arsenal here (the stub withholds game.json's
+  // arsenal), whose rows test/fallback-arsenal.test.ts keeps equal to game.json's.
+  const arsenal = GAME.arsenal;
+  const STAKE = 600;
+  const rowData = (key: string): Weapon | Gear => must([...arsenal.ammo, ...arsenal.gear].find(r => r.key === key), 'game.json row ' + key);
+  const shelfKeys = ['shell', 'buck', 'mortar', 'needle', 'nuke', 'repair', 'fuel'];
+  const shelfCats = shelfKeys.map(k => rowData(k).cat).filter((c, i, all) => all.indexOf(c) === i);
+  const nukeRec = rowData('nuke') as Weapon;
+  const gunsCost = ['buck', 'mortar', 'needle'].reduce((sum, k) => sum + rowData(k).price, 0);
+  const cashAfterGuns = STAKE - gunsCost;
+  const fuelRec = rowData('fuel') as Gear;
+  const fuelPacks = Math.floor(cashAfterGuns / fuelRec.price);
+  // (Each render appends, so read the last list items: a header per category, the free
+  // Shell row, and a row to buy for each other shelf entry. Each row holds an icon
   // canvas and a text div whose last child is the acts row.)
-  const shopLis = () => kids(E('shop-list')).slice(-9);
+  const shopLis = () => kids(E('shop-list')).slice(-(shelfCats.length + shelfKeys.length));
   const shopRows = () => shopLis().filter(li => li.children.length === 2 && !String(li.className).split(' ').includes('shop-free'));
   const rowName = (li: StubElement) => nodeAt(nodeAt(li, 1), 0).textContent;
   const actsOf = (li: StubElement) => childEl(childEl(li, 1), 3); // the text column's fourth child, under the description
@@ -733,14 +745,13 @@ await (async () => {
   const catNames = shopLis().filter(li => li.className === 'shop-cat').map(li => li.textContent);
   const nukeRow = must(shopRows().find(li => rowName(li).includes('NUKE')), 'NUKE row');
   const nukeStats = nodeAt(nodeAt(nukeRow, 1), 1).textContent + ' ' + nodeAt(nodeAt(nukeRow, 1), 2).textContent;
-  await test('shop-cats', () => { assert.ok(catNames.join('|') === 'Shells|Hull and fuel', catNames.join('|')); });
+  await test('shop-cats', () => { assert.ok(catNames.join('|') === shelfCats.join('|'), catNames.join('|')); });
   const freeRow = shopLis().find(li => li.className === 'shop-free');
   await test('shop-shell-row', () => { assert.ok(!!freeRow && /^Shell ∞/.test(rowName(freeRow)), freeRow ? rowName(freeRow) : 'missing'); });
-  await test('shop-icons', () => { assert.ok(shopRows().length >= 6 && shopRows().every(li => childEl(li, 0).className === 'shop-icon' && childEl(li, 0).getAttribute('aria-hidden') === 'true'), shopRows().map(li => childEl(li, 0).className).join()); });
-  await test('nuke-stats', () => { assert.ok(/95 damage/.test(nukeStats) && /round 4/.test(nukeStats), nukeStats); });
+  await test('shop-icons', () => { assert.ok(shopRows().length === shelfKeys.length - 1 && shopRows().every(li => childEl(li, 0).className === 'shop-icon' && childEl(li, 0).getAttribute('aria-hidden') === 'true'), shopRows().map(li => childEl(li, 0).className).join()); });
+  await test('nuke-stats', () => { assert.ok(nukeStats.includes(`${nukeRec.dmg} damage`) && nukeStats.includes(`round ${nukeRec.minRound}`), nukeStats); });
   // The arsenal section of game.json is a second source the game reads at
   // boot: it must hold every row and speak only effects and painters the code has.
-  const arsenal = GAME.arsenal;
   // Every ammo row has its effects (plus the wreck's, laststand): the count comes from game.json itself.
   await test('arsenal-count', () => { assert.ok(arsenal.ammo.length >= 30 && arsenal.ammo.length === Object.keys(GAME.effects || {}).length - 1 && arsenal.gear.length === 9, `ammo=${arsenal.ammo.length} gear=${arsenal.gear.length}`); });
   const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter', 'beam', 'plasma', 'tracer', 'dirt', 'pour', 'dig', 'riot', 'slump', 'napalm'];
@@ -800,13 +811,12 @@ await (async () => {
   for (let i = 0; i < 4; i++) { TAP('shop', 'selDown'); frames(3); }
   const fuelRow = () => must(shopRows().find(li => rowName(li).includes('Fuel')), 'Fuel row');
   TAP('shop', 'qtyUp'); frames(3);
-  await test('shop-qty-2', () => { assert.ok(/×2 = \$120/.test(rowName(fuelRow())), rowName(fuelRow())); });
-  TAP('shop', 'qtyUp'); frames(3);
-  TAP('shop', 'qtyUp'); frames(3); // $200 left after the three guns: three packs is all the chest covers
-  await test('shop-qty-cap', () => { assert.ok(/×3 = \$180/.test(rowName(fuelRow())), rowName(fuelRow())); });
+  await test('shop-qty-2', () => { assert.ok(fuelPacks >= 2 && rowName(fuelRow()).includes(`×2 = $${2 * fuelRec.price}`), rowName(fuelRow())); });
+  for (let i = 0; i < fuelPacks; i++) { TAP('shop', 'qtyUp'); frames(3); } // one press past the cap: what is left after the three guns is all the chest covers
+  await test('shop-qty-cap', () => { assert.ok(rowName(fuelRow()).includes(`×${fuelPacks} = $${fuelPacks * fuelRec.price}`), rowName(fuelRow())); });
   TAP('shop', 'buy'); frames(3);
-  await test('shop-bulk', () => { assert.ok(/\$20\b/.test(E('shop-cash').textContent), E('shop-cash').textContent); });
-  await test('shop-bulk-said', () => { assert.ok(/Bought 3 × Fuel/.test(logTail()), logTail()); });
+  await test('shop-bulk', () => { assert.ok(E('shop-cash').textContent.includes(`$${cashAfterGuns - fuelPacks * fuelRec.price}`), E('shop-cash').textContent); });
+  await test('shop-bulk-said', () => { assert.ok(logTail().includes(`Bought ${fuelPacks} × Fuel`), logTail()); });
   await test('shop-bulk-reset', () => { assert.ok(!/×[2-9] packs/.test(rowName(fuelRow())), rowName(fuelRow())); });
   const buckRow = () => must(shopRows().find(li => rowName(li).includes('Buckshot')), 'Buckshot row');
   await test('shop-bulk-disabled', () => { assert.ok(buyBtn(fuelRow()).disabled === true && buyBtn(buckRow()).disabled === true, `fuel=${buyBtn(fuelRow()).disabled} buck=${buyBtn(buckRow()).disabled}`); });
@@ -818,7 +828,7 @@ await (async () => {
   click(E('preview-close')); frames(3);
   await test('shop-preview-shut', () => { assert.ok(E('preview-veil').hidden === true); });
   TAPD('shop', 'buyRow', 4); frames(3);
-  await test('shop-locked', () => { assert.ok(/round 4/.test(logTail()), logTail()); });
+  await test('shop-locked', () => { assert.ok(logTail().includes(`round ${nukeRec.minRound}`), logTail()); });
   click(E('shop-next'));
   frames(120); // round card runs on sim time before the shooting
   // round 1, player's opening turn
@@ -826,7 +836,7 @@ await (async () => {
   const angle0 = E('hud-angle').textContent;
   const wind0 = E('hud-wind').textContent;
   const armor0 = E('hud-armor').textContent;
-  await test('shop-bulk-banked', () => { assert.ok(E('hud-fuel').textContent === '260', E('hud-fuel').textContent); });
+  await test('shop-bulk-banked', () => { assert.ok(E('hud-fuel').textContent === String(80 + fuelPacks * must(fuelRec.n, "fuel n")), E('hud-fuel').textContent); });
 
   // Every demo lands its verdict with damage, never a clean miss.
   await ensureAim();
@@ -1009,7 +1019,7 @@ await (async () => {
   const dlg = E('dlg-line').textContent;
 
   await test('preshop', () => { assert.ok(shopOpen && /\$600/.test(shopCash0), shopCash0); });
-  await test('shop-buy', () => { assert.ok(/\$200/.test(shopCash1), shopCash1); });
+  await test('shop-buy', () => { assert.ok(shopCash1.includes(`$${cashAfterGuns}`), shopCash1); });
   await test('boot-turn', () => { assert.ok(/YOU/.test(turn0), turn0); });
   await test('boot-hud', () => { assert.ok(/62°/.test(angle0) && wind0.length > 0 && armor0 === '100', `${angle0} | ${wind0} | ${armor0}`); });
   // Firing range: V opens the demo with its damage stats, frames render it,
@@ -1559,5 +1569,12 @@ await (async () => {
     await test('own-shell-hits-gunner-coming-back', () => { assert.ok((hits(s, 330, 360, 300, 370) || {}).t === drone); });
   }
   await test('esc-keeps-fullscreen', () => { assert.ok(fsExits.length === 0 && document.fullscreenElement === els['frame'], `exitFullscreen called ${fsExits.length}x: ${fsExits[0] || ''}`); });
+})().catch((err: unknown) => {
+  // A throw outside a subtest (a failed must(), a guard that tripped) would otherwise only
+  // reject this top-level await: node:test absorbs the rejection, the game's own timers keep
+  // the event loop alive, and the run hangs until CI's timeout. Fail now instead.
+  console.error(err);
+  process.exit(1);
+}).finally(() => {
   for (const h of liveTimers) { clearTimeout(h); clearInterval(h); }
-})();
+});

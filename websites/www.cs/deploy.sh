@@ -84,19 +84,21 @@ if [ "${LIST:-0}" != 1 ] && [ -e games/zz-probe ]; then
 fi
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/www-cs-deploy.XXXXXX")
-# The control socket lives in its own short directory: a unix socket path is
-# limited to about 104 bytes on macOS, and $TMPDIR there (/var/folders/...)
-# plus ssh's temporary suffix overflows it.
-ctl=$(mktemp -d /tmp/dpl.XXXX)
-sock=$ctl/m
+ctl=
+sock=
 master=0
 cleanup() {
   if [ "$master" = 1 ]; then
     ssh -o "ControlPath=$sock" -O exit "$HOST" >/dev/null 2>&1 || true
   fi
-  rm -rf "$work" "$ctl"
+  rm -rf "$work" ${ctl:+"$ctl"}
 }
 trap cleanup EXIT
+# The control socket lives in its own short directory: a unix socket path is
+# limited to about 104 bytes on macOS, and $TMPDIR there (/var/folders/...)
+# plus ssh's temporary suffix overflows it.
+ctl=$(mktemp -d /tmp/dpl.XXXX)
+sock=$ctl/m
 stage=$work/stage
 mkdir "$stage"
 

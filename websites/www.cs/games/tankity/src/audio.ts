@@ -27,6 +27,13 @@ export interface AudioConfig {
 
 /* ---------- audio context and voices: the kit's core ---------- */
 const core = createAudioCore();
+
+/** The music bus's gain. The soundtrack is normalised to -14 LUFS, streaming-loud
+ *  and far above the effects, so the bus sits 8 dB down (x0.4): at the same
+ *  setting the music lies about 8 dB under the loud effects. It covers the track
+ *  player and the synthesized songs alike; test/audio-levels.test.ts measures it. */
+export const MUSIC_HEADROOM = 0.4;
+core.setGain('music', MUSIC_HEADROOM);
 let musicMuted = false;
 let musicOn = false;
 let lastMusicTick = 0;

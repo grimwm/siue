@@ -41,7 +41,7 @@ final class FieldWidthTest extends TestCase
     public function testReachAndAimAreExactlyOneOnARoomsField(): void
     {
         $this->assertSame(1.0, room_field_reach(ROOM_W));
-        $this->assertSame(room_shot_speed(55.0, false), room_shot_speed(55.0, false, 1.0, room_field_reach(ROOM_W)));
+        $this->assertSame(room_shot_speed(55.0), room_shot_speed(55.0, 1.0, room_field_reach(ROOM_W)));
         $this->assertSame(['aim' => 1.0, 'floor' => 1.0], room_field_aim(ROOM_W));
         $this->assertSame(sqrt(2.0), room_field_reach(1440));
         $mid = room_field_aim(900);

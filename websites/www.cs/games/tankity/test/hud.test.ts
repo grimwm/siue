@@ -134,9 +134,9 @@ test('the Weapon label: the icon painted once per gun, the name, the line, and t
   assert.ok(walk(slot).some(n => hasClass(n, 'sr-only') && n.textContent === '17 damage, medium blast'));
   assert.equal(must(withClass(slot, 'gun-icon')[0], 'gun icon').getAttribute('aria-hidden'), 'true');
   drawGun(slot, gp());
-  drawGun(slot, gp({ gun: 'rail', name: 'Rail' }));
-  drawGun(slot, gp({ gun: 'rail', name: 'Rail', arsenalRev: 2 }));
-  assert.deepEqual(painted, ['buck', 'rail', 'rail']);
+  drawGun(slot, gp({ gun: 'needle', name: 'Needle' }));
+  drawGun(slot, gp({ gun: 'needle', name: 'Needle', arsenalRev: 2 }));
+  assert.deepEqual(painted, ['buck', 'needle', 'needle']);
 });
 
 test('armor is named with its maximum and the rivals in words; before a match the pill and lives still read', () => {

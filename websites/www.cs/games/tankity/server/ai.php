@@ -204,7 +204,7 @@ function room_ai_munitions(array $room, array $self, string $wkey, array $land, 
         }
         $n = $w['pellets'] ?: 1;
         [$mx, $my] = room_muzzle(['angle' => (float) $land['a']] + $self);
-        $spd = room_shot_speed((float) $land['p'], !empty($w['flat']), (float) $w['speed'], room_field_reach(count($room['terrain'])));
+        $spd = room_shot_speed((float) $land['p'], (float) $w['speed'], room_field_reach(count($room['terrain'])));
         $drop = function (float $a) use ($mx, $my, $spd, $dirS, $land): float {
             $vx = det_cos($a) * $spd * $dirS;
             $vy = -det_sin($a) * $spd;

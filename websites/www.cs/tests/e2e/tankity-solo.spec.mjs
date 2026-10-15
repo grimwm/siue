@@ -57,7 +57,8 @@ test('the shop shows the whole arsenal, numbers in their own colour', async ({ b
   await expect(page.locator('#shop-list li.shop-free .shop-name')).toHaveText(/^Shell ∞ \(free\)$/);
   await page.keyboard.press('ArrowRight'); // two of each
   const name = page.locator('#shop-list li.sel .shop-name');
-  await expect(name).toHaveText(/^1\. Buckshot ×2 \(\$80\).* ×2 = \$160$/);
+  const first = data.arsenal.ammo.find(a => a.pack > 0); // the first priced row, from game.json
+  await expect(name).toHaveText(new RegExp(`^1\\. ${first.name} ×${first.pack} \\(\\$${first.price}\\).* ×2 = \\$${2 * first.price}$`));
   await expect(name).not.toContainText('packs');
   const colours = await name.evaluate(el => [getComputedStyle(el).color, getComputedStyle(el.querySelector('.shop-vals')).color]);
   expect(colours[0]).not.toBe(colours[1]);
@@ -116,10 +117,13 @@ test('the arrows reach every shop row on a short screen, and V previews any shel
     expect(await selInView()).toBe(true);
   }
   expect(new Set(seen).size).toBe(total);
-  // A locked shell still previews.
+  // A locked shell still previews: the first priced row game.json locks before round 1.
+  const data = await page.evaluate(() => fetch('game.json').then(r => r.json()));
+  const priced = data.arsenal.ammo.filter(a => a.pack > 0);
+  const at = priced.findIndex(a => a.minRound > 1) + 1;
   for (let i = 0; i < total; i++) await page.keyboard.press('ArrowUp');
-  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowDown');
-  await expect.poll(selName).toMatch(/^5\. Flak/);
+  for (let i = 0; i < at; i++) await page.keyboard.press('ArrowDown');
+  await expect.poll(selName).toMatch(new RegExp(`^${at}\\. ${priced[at - 1].name}`));
   await expect(page.locator('#shop-list li.sel button', { hasText: 'Locked' })).toBeDisabled();
   await page.keyboard.press('v');
   await expect(page.locator('#preview-veil')).toBeVisible();

@@ -59,13 +59,20 @@ const rowOf = (k: string): ShopRow => {
   return r;
 };
 
+/** A gun the pre-match shop sells (round 1), from game.json. */
+const roundOne = (() => {
+  const k = arsenal.order.find(key => key !== 'shell' && arsenal.weapons[key]!.pack > 0 && arsenal.weapons[key]!.minRound <= 1);
+  assert.ok(k, 'game.json sells a gun from round 1');
+  return k;
+})();
+
 test('a solo visit has no cap on how many buys it makes', () => {
   const { G, shop, lines } = shopFor(false);
   G.cash = 1e6;
   const ammo = () => { assert.ok(G.ammo, 'the deal sets the ammo'); return G.ammo; };
-  const before = ammo().mortar ?? 0;
-  for (let k = 0; k < 80; k++) shop.buyItem(rowOf('mortar'), 1);
-  assert.ok(Number(ammo().mortar) > before, 'the buys landed');
+  const before = ammo()[roundOne] ?? 0;
+  for (let k = 0; k < 80; k++) shop.buyItem(rowOf(roundOne), 1);
+  assert.ok(Number(ammo()[roundOne]) > before, 'the buys landed');
   assert.ok(!lines.some(l => /most you can buy/.test(l)), lines.at(-1));
   assert.ok(G.cash < 1e6);
 });
@@ -84,15 +91,15 @@ test('a room\'s Repair asks netBuy for what the hull takes, not the dial', () =>
 test('a gun bought, and the rack as the round starts, get their effects fetched ahead of the first shot', () => {
   const { G, shop, preloads } = shopFor(false);
   G.cash = 1e6;
-  shop.buyItem(rowOf('mortar'), 1);
-  assert.deepEqual(last(preloads), ['mortar']);
+  shop.buyItem(rowOf(roundOne), 1);
+  assert.deepEqual(last(preloads), [roundOne]);
   shop.buyItem(rowOf('repair'), 1);
   assert.equal(preloads.length, 1, 'gear has no effects to fetch');
   shop.hideShop();
   const rack = last(preloads);
   const ammo = G.ammo;
   assert.ok(ammo, 'the deal sets the ammo');
-  assert.ok(rack.includes('shell') && rack.includes('mortar'), rack.join(','));
+  assert.ok(rack.includes('shell') && rack.includes(roundOne), rack.join(','));
   assert.ok(rack.every(k => k === 'shell' || Number(ammo[k]) > 0), 'only guns in the rack');
 });
 

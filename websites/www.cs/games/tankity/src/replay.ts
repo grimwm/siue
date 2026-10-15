@@ -43,7 +43,7 @@ export interface ReplayTank {
 export interface ReplayEnv {
   /** The tank in `seat`, if any. */
   tank(seat: number): ReplayTank | undefined;
-  /** The effect kind of weapon `wkey` ('pierce', 'emp', ...), if it has one. */
+  /** The effect kind of weapon `wkey` ('emp', 'tracer', ...), if it has one. */
   effect(wkey: string): string | undefined;
   /** An event to log (and react to) that the replay itself does not fly. */
   event(e: RoomEvent): void;
@@ -225,12 +225,6 @@ export function createReplay(env: ReplayEnv): Replay {
         env.earth(e);
       } else if (e.t === 'burst') {
         env.blast(e.x, e.y, e.r, e.w);
-        // A burst from a lance is the bolt passing through a tank.
-        const pass = env.effect(e.w) === 'pierce' && v.shots.find(s => s.e.w === e.w);
-        if (pass) {
-          const hv = shellVel(pass, shellAt(pass, ft)[2]);
-          env.special(e.w, 'pierce', e.x, e.y, Math.atan2(hv[1], hv[0]));
-        }
       } else {
         if (e.t === 'hit') {
           const t = env.tank(e.seat);

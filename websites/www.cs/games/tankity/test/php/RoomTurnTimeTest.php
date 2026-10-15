@@ -136,7 +136,7 @@ final class RoomTurnTimeTest extends TestCase
 
     public function testTheStandInFiresAStockedUnlockedGunAndSpendsIt(): void
     {
-        $room = $this->nukeRoom(4, 2, 2);
+        $room = $this->nukeRoom(room_weapons()['nuke']['minRound'], 2, 2);
         $this->assertSame('nuke', room_ai_choose($room, $room['tanks'][0])['wkey'], 'the scenario makes the drone pick the Nuke');
         $auto = $this->timeOut($room);
         $this->assertSame('nuke', $auto['w']);
@@ -147,7 +147,7 @@ final class RoomTurnTimeTest extends TestCase
 
     public function testTheLastRoundSpentFallsTheSelectionBackToShell(): void
     {
-        $room = $this->nukeRoom(4, 1, 1);
+        $room = $this->nukeRoom(room_weapons()['nuke']['minRound'], 1, 1);
         $this->assertSame('nuke', $this->timeOut($room)['w']);
         $this->assertSame(0, $room['ammo'][0]['nuke']);
         $this->assertSame('shell', $room['weapon'][0]);
@@ -164,7 +164,7 @@ final class RoomTurnTimeTest extends TestCase
 
     public function testTheStandInFiresTheShellWhenTheRackIsEmpty(): void
     {
-        $room = $this->nukeRoom(4, 0, 1);
+        $room = $this->nukeRoom(room_weapons()['nuke']['minRound'], 0, 1);
         $this->assertSame('nuke', room_ai_choose($room, $room['tanks'][0])['wkey']);
         $this->assertSame('shell', $this->timeOut($room)['w']);
         $this->assertSame(0, $room['ammo'][0]['nuke']);

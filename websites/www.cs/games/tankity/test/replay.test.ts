@@ -81,7 +81,7 @@ function makeHost() {
   const log: HostLog = { events: [], launches: 0, blasts: [], muzzles: [], specials: [], trails: [] };
   const env: HostEnv = {
     tank: seat => tanks.find(t => t.seat === seat),
-    effect: table({ emp: 'emp', lance: 'pierce' }),
+    effect: table({ emp: 'emp' }),
     event: e => log.events.push(e),
     launch: () => { log.launches++; },
     blast: (x, y, r, w) => log.blasts.push({ x, y, r, w }),

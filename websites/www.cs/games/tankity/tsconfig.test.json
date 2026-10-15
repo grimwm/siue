@@ -1,6 +1,6 @@
 {
-  // The unit tests: Node runs them from source; this program type-checks them. See games/_kit/README.md.
+  // The unit tests and the report tools: Node runs them from source; this program type-checks them. See games/_kit/README.md.
   "extends": "../_kit/build/tsconfig.base.json",
   "compilerOptions": { "lib": ["ES2022", "DOM"], "types": ["node"] },
-  "include": ["test/**/*.ts"]
+  "include": ["test/**/*.ts", "tools/**/*.ts"]
 }

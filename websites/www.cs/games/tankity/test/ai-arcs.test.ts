@@ -109,7 +109,7 @@ test('a gun plans once per distinct arc, the first gun of each in rack order', (
 test('a gun given its own arc is planned on its own; one with the same flight shares', () => {
   const rack = ['shell', 'buck', 'mortar'];
   assert.deepEqual(arcGuns(arsenal, rack), ['shell']);
-  for (const change of [{ speed: 1.2 }, { flat: true }, { effect: 'roller', friction: 0.6, rollTime: 8 }]) {
+  for (const change of [{ speed: 1.2 }, { effect: 'roller', friction: 0.6, rollTime: 8 }]) {
     assert.deepEqual(arcGuns(withRow('buck', change), rack), ['shell', 'buck'], JSON.stringify(change));
   }
   // A gun that hurts differently but flies the same is still one plan.

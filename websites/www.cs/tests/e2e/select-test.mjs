@@ -15,8 +15,7 @@ check('game-test-runner-runs-nothing', select([`${S}games/tankity/test.sh`, `${S
 check('unit-tests-run-nothing', select([`${S}games/tankity/test/php/RoomsSimTest.php`, `${S}games/tankity/test/smoke.test.ts`, `${S}tests/games-hub-test.php`]), 'NONE');
 check('phpunit-config-runs-no-browser-specs', select([`${S}phpunit.xml`]), 'NONE');
 check('site-php-tests-run-no-browser-specs', select([`${S}tests/php/SiteVersionsTest.php`]), 'NONE');
-check('kit-php-tests-run-no-browser-specs', select([`${S}games/_kit/php/tests/ChecksToTestCaseTest.php`]), 'NONE');
-check('kit-php-testing-runs-no-browser-specs', select([`${S}games/_kit/php/testing/checks-to-testcase.php`]), 'NONE');
+check('kit-php-tests-run-no-browser-specs', select([`${S}games/_kit/php/tests/InstallCoreTest.php`]), 'NONE');
 check('sim-vectors-run-nothing', select([`${S}games/tankity/test/sim-vectors.test.ts`, `${S}games/tankity/protocol/sim-vectors.php`, `${S}games/tankity/protocol/sim-vectors.json`]), 'NONE');
 check('music-build-script-runs-nothing', select([`${S}games/tankity/audio/music/build_music.sh`, `${S}games/tankity/audio/sfx/build_sfx.sh`]), 'NONE');
 check('deploy-only-runs-nothing', select([`${S}deploy.sh`, '.github/workflows/deploy.yml']), 'NONE');
@@ -74,6 +73,7 @@ has('build-config-runs-the-games-specs', select([`${S}games/crete/build.json`]),
 has('built-output-runs-the-games-specs', select([`${S}games/crete/dist/main.js`]), ['games-hub.spec.mjs', 'games-pwa.spec.mjs']);
 check('game-test-program-runs-no-browser-specs', select([`${S}games/crete/tsconfig.test.json`, `${S}games/tankity/tsconfig.test.json`]), 'NONE');
 check('kit-test-program-and-runner-run-no-browser-specs', select([`${S}games/_kit/tsconfig.test.json`, `${S}games/_kit/test.sh`]), 'NONE');
+check('games-unit-runner-runs-no-browser-specs', select([`${S}games/units.sh`]), 'NONE');
 check('kit-build-and-icon-tests-run-no-browser-specs', select([`${S}games/_kit/build/build.test.ts`, `${S}games/_kit/build/build.test.mjs`, `${S}games/_kit/build/icons.test.ts`]), 'NONE');
 check('kit-build-tool-still-runs-everything', select([`${S}games/_kit/build/build.mjs`]), 'ALL');
 check('a-removed-spec-is-dropped', select([`${S}tests/e2e/gone-away.spec.mjs`]), 'NONE');

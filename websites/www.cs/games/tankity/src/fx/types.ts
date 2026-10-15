@@ -114,7 +114,8 @@ export interface FxEngine extends FxApi {
   loadSprites(base: string, done?: (any: boolean) => void): Promise<boolean>;
   /** Players' Screen flashes setting: false drops the screen flash and the large bright layers. */
   flashes: boolean;
-  isBright(em: Emitter): boolean;
+  /** A large bright layer, which Screen flashes off drops; played at scale k (the radius for `unit: r`, else 1), also any layer reaching 36 px or more in radius. */
+  isBright(em: Emitter, k?: number): boolean;
   sheetsOf(set: FxSet | undefined): string[];
   preload(names: string[]): void;
   adopt(em: Partial<Emitter>): Emitter;

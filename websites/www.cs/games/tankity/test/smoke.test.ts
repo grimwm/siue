@@ -13,7 +13,7 @@ import { sweepHit } from '../src/sim.ts';
 import type { Gear, Tank, Weapon } from '../src/sim.ts';
 import type { KeyContext, KeyDefs } from '../src/input.ts';
 import type { RoomSnapshot } from '../src/protocol.ts';
-import type { Emitter, FxSetData, FxSys } from '../src/fx/types.ts';
+import type { FxSetData, FxSys } from '../src/fx/types.ts';
 import { els, click, submit, fire, document, installDocument, childEl, elementOf } from '../../_kit/test/dom-stub.ts';
 import type { Callable, StubElement, StubNode } from '../../_kit/test/dom-stub.ts';
 
@@ -1420,8 +1420,6 @@ await (async () => {
     const FX = window.TankityFX;
     await test('fx-engine-loaded', () => { assert.ok(!!FX && typeof FX.createSystem === 'function'); });
     assert.ok(FX, 'no window.TankityFX');
-    // The engine's isBright also takes the blast radius to size by (engine.ts); FxEngine's type leaves it out.
-    const isBrightAt: (em: Emitter, k?: number) => boolean = FX.isBright;
     const built: GameJson = JSON.parse(read('game.json'));
     const defs = FX.dress(built.effects);
     const setOf = (k: string) => must(defs[k], 'effects for ' + k);
@@ -1512,9 +1510,9 @@ await (async () => {
     for (const key of arsenal.ammo.filter(a => a.effect === 'plasma').map(a => a.key)) {
       const big = impactOf(key).emitters.filter(e => e.glow && ['dot', 'smoke', 'sprite'].includes(e.shape)
         && e.size[1] * (e.unit === 'r' ? 90 : 1) * (e.shape === 'sprite' ? e.scale : Math.max(1, e.sizeEnd)) >= 36);
-      await test(`fx-flashes-off-filters-${key}-by-size`, () => { assert.ok(big.length >= 1 && big.every(e => isBrightAt(e, e.unit === 'r' ? 90 : 1)), String(big.length)); });
+      await test(`fx-flashes-off-filters-${key}-by-size`, () => { assert.ok(big.length >= 1 && big.every(e => FX.isBright(e, e.unit === 'r' ? 90 : 1)), String(big.length)); });
       // What stays and is sizeable (15 px or more) is coloured: no white dot, no untinted or near-white sprite.
-      const kept = impactOf(key).emitters.filter(e => !isBrightAt(e, e.unit === 'r' ? 90 : 1) && e.glow && ['dot', 'smoke', 'sprite'].includes(e.shape)
+      const kept = impactOf(key).emitters.filter(e => !FX.isBright(e, e.unit === 'r' ? 90 : 1) && e.glow && ['dot', 'smoke', 'sprite'].includes(e.shape)
         && e.size[1] * (e.unit === 'r' ? 90 : 1) * (e.shape === 'sprite' ? e.scale : 1) >= 15);
       await test(`fx-${key}-keeps-no-white-core`, () => { assert.ok(kept.length >= 1 && kept.every(e => (e.shape === 'sprite'
         ? /^#/.test(e.tint || '') && !/^#f[0-9a-f]f[0-9a-f]f/i.test(e.tint) : !e.colors.includes('#ffffff'))), JSON.stringify(kept.map(e => [e.colors, e.tint]))); });

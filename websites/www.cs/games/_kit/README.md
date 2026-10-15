@@ -173,14 +173,21 @@ and the game's own page loads it to show a corner bar when the address has
 
 ## Tests (`test/`)
 
-Unit tests are `*.test.ts` files run with `node --test` (`_kit/test.sh`
-expands the list and fails when it finds none). They import sources directly
-(`../src/engine.ts`): Node strips the types, and nothing is compiled.
-`tsconfig.test.json` is the test program: `_kit/test.sh` type-checks it at
-full strictness, with `@types/node`, and a type error fails `make test`.
-Tests use no `any`, `@ts-ignore` or `@ts-nocheck` (`test/typed-tests.test.ts`
-enforces it); a deliberately partial fixture is built by a typed helper or
-`satisfies`, and `as unknown as` needs a one-line reason. Doubles:
+Unit tests are `*.test.ts` files on `node:test`. `games/units.sh` runs the
+kit's (`test/`, `build/`) and every game's (`<game>/test/`, for each folder
+with a `build.json`) in one `node --test`, which runs the files in parallel;
+it expands each folder's glob itself and fails on one that matches no file.
+`make test` runs it after every `games/*/test.sh`. Tests import sources
+directly (`../src/engine.ts`): Node strips the types, and nothing is compiled.
+Each folder's `tsconfig.test.json` is its test program, checked at full
+strictness with `@types/node`: the kit's by `_kit/test.sh`, a game's as one of
+the `build.json` programs, so `build.mjs <game> --check` fails on a type error
+in a test. Tests use no `any`, `@ts-ignore` or `@ts-nocheck`; a deliberately
+partial fixture is built by a typed helper or `satisfies`, and `as unknown as`
+needs a one-line reason. `test/typed-tests.test.ts` is the guard: it fails on
+a `*.test.mjs`, a test program missing or left out of `build.json`, an escape
+hatch in a test, a `test.sh` that runs `node --test`, or a `units.sh` without
+its zero-files check. Doubles:
 `manualClock()` (timers that fire only on `advance`), `mulberry32(seed)`,
 `recorder()`, `memoryStorage()`, `throwingStorage()`. Tests use `test()`
 and `assert` directly; PHP tests are plain PHPUnit `TestCase`s.

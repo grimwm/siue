@@ -56,11 +56,32 @@ final class AiArcsTest extends TestCase
         }
     }
 
+    /** The guns the field sweep below changes: every gun on the nightly run
+     *  (GITHUB_EVENT_NAME schedule or workflow_dispatch), else the first gun
+     *  of each distinct flight key, which tries every field on every arc in a
+     *  sixth of the time. TANKITY_ARCS_SWEEP=all or sample overrides. */
+    private static function sweptGuns(array $weapons): array
+    {
+        $mode = (string) getenv('TANKITY_ARCS_SWEEP');
+        if ($mode === '') {
+            $mode = in_array(getenv('GITHUB_EVENT_NAME'), ['schedule', 'workflow_dispatch'], true) ? 'all' : 'sample';
+        }
+        if ($mode === 'all') {
+            return $weapons;
+        }
+        $first = [];
+        foreach ($weapons as $k => $def) {
+            $first[room_flight_key($def)] ??= $k;
+        }
+        return array_intersect_key($weapons, array_flip($first));
+    }
+
     public function testAChangeToAnyFieldThatBendsAFlightChangesTheFlightKey(): void
     {
         $weapons = room_weapons();
         $bending = 0;
-        foreach ($weapons as $k => $def) {
+        foreach (self::sweptGuns($weapons) as $k => $def) {
+            $flights = self::flights($def);
             foreach ($def as $f => $v) {
                 $tries = array_unique(array_column($weapons, $f), SORT_REGULAR);
                 if (is_int($v) || is_float($v)) {
@@ -76,7 +97,7 @@ final class AiArcsTest extends TestCase
                         continue;
                     }
                     $changed = [$f => $t] + $def;
-                    if (self::flights($changed) === self::flights($def)) {
+                    if (self::flights($changed) === $flights) {
                         continue;
                     }
                     $bending++;

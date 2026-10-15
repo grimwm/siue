@@ -451,8 +451,9 @@ export class RoomClient {
         throw err;
       }
       if (signal?.aborted) {
-        this.code = data.code; this.token = data.token; this.csrf = data.csrf;
-        this.leave();
+        // Cancelled while the request was out: the seat it took is given up,
+        // without touching whatever session this client holds by now.
+        this.sendLeaveFor(data.code, data.token, data.csrf);
         throw new PowCancelled();
       }
       return data;
@@ -507,8 +508,12 @@ export class RoomClient {
    * emptied room frees its slot at once instead of after its idle limit. Best
    * effort: sendBeacon, else a keepalive fetch. Closing the tab sends nothing. */
   sendLeave(): void {
-    if (!this.code || !this.token) return;
-    const body = JSON.stringify({ code: this.code, token: this.token, csrf: this.csrf });
+    this.sendLeaveFor(this.code, this.token, this.csrf);
+  }
+
+  private sendLeaveFor(code: string, token: string, csrf: string): void {
+    if (!code || !token) return;
+    const body = JSON.stringify({ code, token, csrf });
     const url = 'rooms.php?action=leave';
     try {
       if (this.env.beacon(url, body)) return;

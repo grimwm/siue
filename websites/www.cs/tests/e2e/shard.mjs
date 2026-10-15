@@ -32,6 +32,7 @@ export const WEIGHTS = {
   'tankity-rooms-leave.spec.mjs': 80,
   'tankity-rooms-long.spec.mjs': 90,
   'tankity-rooms-cap.spec.mjs': 25,
+  'tankity-pow.spec.mjs': 20,
   'tankity-hud.spec.mjs': 27,
   'tankity-armor.spec.mjs': 15,
   'tankity-overlays.spec.mjs': 21,

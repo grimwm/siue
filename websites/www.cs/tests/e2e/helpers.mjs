@@ -96,9 +96,11 @@ export function recorderScript() {
 
 /* A fresh player on the game page. { clock: true } installs Playwright's
    clock before the page loads, as it requires, so a spec can fast-forward
-   the game with page.clock.runFor() (time still flows on its own). */
-export async function newPlayer(browser, path = 'games/tankity/', { clock = false } = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+   the game with page.clock.runFor() (time still flows on its own).
+   { serviceWorkers: 'block' } keeps the game's service worker out, so
+   page.route sees every request (a request the worker fetches bypasses it). */
+export async function newPlayer(browser, path = 'games/tankity/', { clock = false, serviceWorkers = 'allow' } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, serviceWorkers });
   // Closing a tab keeps its room seats, so a player's context gives them up
   // (Leave, as the game's own button does) when a spec closes it: the suite
   // creates far more rooms than the cap, and they would otherwise sit until
@@ -244,7 +246,7 @@ export async function roomPair(browser, { beforeStart } = {}) {
   await host.page.click('#rooms-open');
   await host.page.click('#host-go');
   await host.page.waitForSelector('#lobby-room:not([hidden])');
-  await expect.poll(() => hud(host.page, 'lobby-code')).toMatch(/^[A-Z0-9]{4}$/);
+  await expect.poll(() => hud(host.page, 'lobby-code')).toMatch(/^[A-Z0-9]{6}$/);
   const code = (await hud(host.page, 'lobby-code')).trim();
   await setInitials(guest.page, 'zed');
   await guest.page.click('#rooms-open');

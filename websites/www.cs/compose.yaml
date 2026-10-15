@@ -12,11 +12,13 @@ services:
     # Local and CI stacks only (the host has no compose): every make test and
     # e2e run creates and joins rooms from the same two addresses, so the
     # per-address hourly allowance (300 on the host), match hosting cap (4)
-    # and lobby cap (4) are lifted here.
+    # and lobby cap (4) are lifted here. The room puzzle runs at 4 bits, a
+    # few milliseconds, so the suites spend their time on the game.
     environment:
       TANKITY_ROOM_JOINS_PER_HOUR: "100000"
       TANKITY_ROOM_HOSTS_PER_ADDRESS: "100000"
       TANKITY_LOBBIES_PER_ADDRESS: "100000"
+      TANKITY_POW_BITS: "4"
     volumes:
       - ./:/var/www/html
       # Outside the docroot: the probe and lists docker/check-parity.sh uses.

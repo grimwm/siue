@@ -15,7 +15,7 @@ async function hostedRoom(browser) {
   await host.page.click('#rooms-open');
   await host.page.click('#host-go');
   await host.page.waitForSelector('#lobby-room:not([hidden])');
-  await expect.poll(() => hud(host.page, 'lobby-code')).toMatch(/^[A-Z0-9]{4}$/);
+  await expect.poll(() => hud(host.page, 'lobby-code')).toMatch(/^[A-Z0-9]{6}$/);
   return { host, code: (await hud(host.page, 'lobby-code')).trim() };
 }
 

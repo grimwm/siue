@@ -147,9 +147,9 @@ test('scrolled panels stay where the player left them when they redraw', async (
   await page.mouse.wheel(0, 400);
   await expect.poll(() => top('#lobby-veil')).toBeGreaterThan(20);
   const lobbyAt = await top('#lobby-veil');
-  await page.fill('#join-code', '!!!!'); // four characters (the browser checks the length), but not a room code
+  await page.fill('#join-code', '!!!!!!'); // six characters, but not a room code
   await page.keyboard.press('Enter'); // the status line says so: a redraw
-  await expect(page.locator('#lobby-status')).toContainText('4 letters or digits');
+  await expect(page.locator('#lobby-status')).toContainText('6 letters or digits');
   expect(await top('#lobby-veil')).toBe(lobbyAt);
   expect(errors).toEqual([]);
 });

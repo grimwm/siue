@@ -471,9 +471,11 @@ never pause it. The log is a transparent whisper, emoji plus text only. */
   padding: 0.4rem 0.6rem;
   max-width: 10rem;
 }
-#join-code { max-width: 5rem; text-transform: uppercase; }
+#join-code { max-width: 7rem; text-transform: uppercase; }
 .room-code { font-size: 2rem; font-weight: 800; letter-spacing: 0.4em; margin: 0.4rem 0 0;
   color: var(--accent); }
+/* A six-character code in two halves, K7Q 2MX: the gap is drawn, so the text stays one code. */
+.room-code .code-half + .code-half { margin-left: 0.5em; }
 /* Lobby seats: the unit-picker tile look, initials large, one line under. */
 .seat-grid { margin: 0.5rem 0; }
 .seat-tile { display: grid; justify-items: center; align-content: center; gap: 0.15rem; min-height: 3.6rem; }

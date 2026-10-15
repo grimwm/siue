@@ -132,6 +132,7 @@ export interface BattleView {
   textScale: number;
   turnClock: { left: number; myTurn: boolean } | null; // the on-canvas count-down, when it shows
   preview: PreviewView | null;
+  skyInset?: number; // canvas px at the top right the sky marks keep clear of (the FF button), 0 or absent for none
 }
 
 /** The sim helpers the battlefield shares with main.ts. */
@@ -166,6 +167,13 @@ export interface Renderer {
 }
 
 /* ---------- painters with no environment ---------- */
+/** Where a sky mark sits across: at its shell's x, kept 24 units inside the
+ * view's edges x0..x1 at zoom z, and left of `inset` units held at the right
+ * (the FF button's corner), so it never hides under the button. */
+export function skyMarkX(x: number, x0: number, x1: number, z: number, inset: number): number {
+  return Math.max(x0 + 24 / z, Math.min(x1 - (24 + inset) / z, x));
+}
+
 /** A steady pseudo-random 0..1 from a number: a flame tongue's own height and frame. */
 export function hash01(v: number): number {
   const x = Math.sin(v * 12.9898) * 43758.5453;
@@ -920,14 +928,14 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
   const marks: SkyMark[] = [];
   const inFlight: (readonly Flying[])[] = [[], [], []];
   const markFont = { scale: 0, css: '' };
-  function drawSkyMarks(c: CanvasRenderingContext2D, view: BattleView, top: number, x0: number, x1: number): void {
+  function drawSkyMarks(c: CanvasRenderingContext2D, view: BattleView, top: number, x0: number, x1: number, inset: number): void {
     if (!view.shells.length && !view.replay.length && !view.ghosts.length) return;
     inFlight[0] = view.shells; inFlight[1] = view.replay; inFlight[2] = view.ghosts;
     sim.skyMarks(inFlight, top, marks);
     const z = view.cam.z, s = view.textScale;
     if (markFont.scale !== s) { markFont.scale = s; markFont.css = `bold ${Math.round(10 * s)}px sans-serif`; }
     for (const m of marks) {
-      const x = Math.max(x0 + 24 / z, Math.min(x1 - 24 / z, m.x));
+      const x = skyMarkX(m.x, x0, x1, z, inset);
       c.save();
       c.translate(x, top);
       c.scale(1 / z, 1 / z); // a fixed size on screen, whatever the zoom
@@ -1314,7 +1322,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     for (const s of view.replay) drawShell(c, s, time);
     for (const s of view.ghosts) drawShell(c, s, time);
     c.globalAlpha = 1;
-    drawSkyMarks(c, view, sy0, sx0, sx1);
+    drawSkyMarks(c, view, sy0, sx0, sx1, (view.skyInset || 0) / fit.s);
     drawWindStreaks(c, view);
     if (view.preview) drawPreview(view.preview, time);
     // Particles.

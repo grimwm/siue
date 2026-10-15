@@ -210,6 +210,14 @@ function protocol_snapshots(): array
     $out['play-turntime'] = ['The host moved the turn time to 10 minutes: turnSecs reads 600 and one turntime event rides along (since = 1 skips the round event).',
         200, $ok(room_snapshot($timed, 0, 1))];
 
+    // The host sets the game speed mid-play: one event, and the snapshot's speed.
+    $fast = $play;
+    if (room_set_speed($fast, 0, 4) !== null) {
+        throw new RuntimeException('the fixture host could not set the speed');
+    }
+    $out['play-speed'] = ['The host set the game speed to 4×: speed reads 4 and one speed event rides along (since = 1 skips the round event).',
+        200, $ok(room_snapshot($fast, 0, 1))];
+
     // A browser's "Your games": a match with this seat up, a lobby it waits in, a room that is gone.
     $out['mine-reply'] = ['action=mine for three stored seats, in the order asked: a running match where it is this seat\'s turn (turnKey names the turn), a lobby, and a room that is gone.',
         200, ['ok' => true, 'rooms' => [

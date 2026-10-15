@@ -69,6 +69,18 @@ function room_turn_secs(array $room): int
     $s = $room['turnSecs'] ?? null;
     return is_int($s) && in_array($s, ROOM_TURN_STOPS, true) ? $s : ROOM_TURN_DEFAULT;
 }
+/* The game speeds the host can pick (the FF button): every client replays
+   the war this many times as fast, and the drones' paced turns wait that
+   fraction (room_pace_ready). src/speed.ts SPEEDS holds the same list;
+   test/speed.test.ts keeps them equal. */
+const ROOM_SPEEDS = [1, 2, 4];
+/* The room's game speed; anything that is not one of the speeds (a room
+   from before the setting) is 1. */
+function room_speed(array $room): int
+{
+    $s = $room['speed'] ?? null;
+    return is_int($s) && in_array($s, ROOM_SPEEDS, true) ? $s : 1;
+}
 /* The shop stays open 90 s in quick rooms (never longer than a turn) and a
    whole turn time in long ones. */
 function room_shop_secs(int $turnSecs): int

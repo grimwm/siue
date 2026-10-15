@@ -4,7 +4,7 @@
 // tried to advance or change game state fails here without a browser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHUTE_OPEN, SMOKE_PUFFS_MAX, chuteFrame, createRenderer, drawChassis } from '../src/render.ts';
+import { CHUTE_OPEN, SMOKE_PUFFS_MAX, chuteFrame, createRenderer, drawChassis, skyMarkX } from '../src/render.ts';
 import { fitField, visibleWorld } from '../src/field.ts';
 import { sceneryY } from '../src/scenery.ts';
 import { skyMarks } from '../src/camera.ts';
@@ -343,3 +343,12 @@ const camAt = (z: number) => ({ z, cx: W / 2, cy: H + 8 - H / 2 / z });
   const own = reads.filter(a => a[0] === canvas);
   await test('pools-shimmer-reads-inside-the-canvas', () => { assert.ok(own.length > 0 && own.every(a => Number(a[1]) >= 0 && Number(a[1]) + Number(a[3]) <= canvas.width && Number(a[2]) >= 0 && Number(a[2]) + Number(a[4]) <= canvas.height), JSON.stringify(own.slice(0, 3))); });
 }
+
+// A sky mark keeps inside the view's edges and left of the FF button's corner.
+test('sky-mark-clear-of-the-ff-button', () => {
+  // A view 0..1000 at zoom 0.5 with 60 units held at the right: a mark at most 1000 - (24 + 60) / 0.5.
+  assert.equal(skyMarkX(990, 0, 1000, 0.5, 60), 1000 - 84 / 0.5);
+  assert.equal(skyMarkX(500, 0, 1000, 0.5, 60), 500, 'away from the corner it sits at its shell');
+  assert.equal(skyMarkX(-50, 0, 1000, 0.5, 60), 48, 'and inside the left edge');
+  assert.equal(skyMarkX(990, 0, 1000, 1, 0), 976, 'no button: 24 inside the edge');
+});

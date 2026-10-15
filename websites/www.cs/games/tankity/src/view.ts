@@ -140,6 +140,7 @@ export function createView(deps: ViewDeps) {
       wind: G.wind,
       textScale: textScale(),
       turnClock: left !== null && left <= CLOCK_SHOW_S && left > 0 ? { left, myTurn: MATCH.myTurn } : null,
+      skyInset,
       preview: pv && pv.cv ? {
         canvas: pv.cv as HTMLCanvasElement, width: PV_W, height: PV_H, terr: previewGround(pv), sx: pv.sx, tx: pv.tx, sy: pv.sy, ty: pv.ty,
         angle: pv.angle, foeHp: pv.foeHp, foeHpMax: PV_FOE_HP, wkey: pv.wkey, wind: pv.wind,
@@ -171,11 +172,26 @@ export function createView(deps: ViewDeps) {
       cv.dataset.field = field;
     }
   }
+  /* The canvas px at the top right the sky marks keep clear of: the FF
+     button's corner while it shows, with a little room; #stage tells the
+     layout spec (data-sky-inset, in CSS px). */
+  let skyInset = 0;
+  function measureSkyInset(cv: HTMLCanvasElement): void {
+    const ff = document.getElementById('btn-speed');
+    let css = 0;
+    if (ff && !ff.hidden) {
+      const b = ff.getBoundingClientRect(), r = cv.getBoundingClientRect();
+      if (b.width > 0 && r.width > 0) css = Math.max(0, Math.ceil(r.right - b.left + 4));
+    }
+    skyInset = css * (cv.width / (cv.clientWidth || 1));
+    if (cv.dataset.skyInset !== String(css)) cv.dataset.skyInset = String(css);
+  }
   let renderer: Renderer | null = null;
   function render(): void {
     const cv = document.getElementById('stage') as HTMLCanvasElement | null;
     if (!cv || !G.terrain) return;
     fitCanvas(cv);
+    measureSkyInset(cv);
     if (!renderer) {
       renderer = createRenderer(cv, {
         fx: FX,

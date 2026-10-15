@@ -108,6 +108,8 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
         'turn' => $room['phase'] === 'play' && count($room['tanks']) ? $room['tanks'][$room['turn']]['seat'] ?? null : null,
         // The room's turn time in seconds, one of the host's stops.
         'turnSecs' => room_turn_secs($room),
+        // The room's game speed (1, 2 or 4): clients replay the war this many times as fast.
+        'speed' => room_speed($room),
         // When the room closes for want of play, unix seconds (room_expires as stored),
         // and the same as seconds from this reply, for clients whose clock is off.
         'expiresAt' => room_expires($room),

@@ -738,6 +738,19 @@ await test('invite-url-escapes-the-code', () => { assert.ok(inviteUrl('A&B', {})
   await lobby.net.getState();
   await test('turn-secs-from-a-lobby-poll', () => { assert.ok(lobby.net.turnSecs === 28800, String(lobby.net.turnSecs)); });
 }
+// ---- the room's game speed: from every snapshot; a server or room from before it sends none (1×) ----
+{
+  const { net } = makeClient(() => roomReply());
+  await test('speed-defaults-to-1x', () => { assert.equal(net.speed, 1); });
+  net.apply(snap({ phase: 'play', events: [], seats: [], turnLeft: 500, shopLeft: null, speed: 4 }));
+  await test('speed-from-the-snapshot', () => { assert.equal(net.speed, 4); });
+  const old = snap({ phase: 'play', events: [], seats: [], turnLeft: 500, shopLeft: null }) as Partial<RoomSnapshot>;
+  delete old.speed;
+  net.apply(old as RoomSnapshot);
+  await test('speed-missing-reads-1x', () => { assert.equal(net.speed, 1); });
+  net.apply(snap({ phase: 'play', events: [], seats: [], turnLeft: 500, shopLeft: null, speed: 3 }));
+  await test('speed-unknown-reads-1x', () => { assert.equal(net.speed, 1); });
+}
 
 // ---- the per-address hosting cap: its 429 is never retried and reads as the server says ----
 {

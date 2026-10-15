@@ -194,7 +194,10 @@ function room_tick_due(array $room): bool
 // Running the whole battle inline would blow past room_advance's guard and
 // past the event buffer before a client polled. room_pace_stamp records when a
 // volley fired and how long it plays (the latest shot landing or event offset
-// in it, plus a beat), never less than ROOM_DRONE_PACE_MIN. */
+// in it, plus a beat), never less than ROOM_DRONE_PACE_MIN. The wait is kept
+// at 1× and divided by the room's game speed when it is read, so a speed the
+// host changes mid-wait counts at once, as it does on the clients. Event
+// stamps ('at', 't1') stay in the war's own seconds at every speed. */
 const ROOM_DRONE_PACE_MIN = 2.0;
 const ROOM_VOLLEY_LINGER = 1.0;
 /* The longest barrel swing a client plays before a volley flies (src/replay.ts
@@ -223,7 +226,25 @@ function room_pace_stamp(array &$room, array $events, int $from): void
 function room_pace_ready(array $room): bool
 {
     $p = $room['pace'] ?? null;
-    return !$p || microtime(true) - (float) $p['at'] >= (float) $p['wait'];
+    return !$p || microtime(true) - (float) $p['at'] >= (float) $p['wait'] / room_speed($room);
+}
+/* The host sets the game speed (rooms.php action=speed), in any phase; it
+// applies at once. Answers null when it is taken (one 'speed' event for
+// everyone, none when the speed is unchanged), else [status, error] for the
+// refusal. */
+function room_set_speed(array &$room, int $seat, $speed): ?array
+{
+    if ($seat !== room_host($room)) {
+        return [403, 'only the host sets the game speed'];
+    }
+    if (!is_int($speed) || !in_array($speed, ROOM_SPEEDS, true)) {
+        return [422, 'pick 1×, 2× or 4×'];
+    }
+    if ($speed !== room_speed($room)) {
+        $room['speed'] = $speed;
+        room_emit($room, ['t' => 'speed', 'seat' => $seat, 'speed' => $speed]);
+    }
+    return null;
 }
 function room_humans_alive(array $room): bool
 {

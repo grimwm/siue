@@ -57,11 +57,12 @@ async function player(browser, viewport, { speed } = {}) {
   await ctx.addInitScript(recorderScript);
   await ctx.addInitScript(skyCamScript);
   const page = await ctx.newPage();
-  // A faster Shell climbs past what the zoom floor can show (test-only arsenal).
+  // A faster Shell, flying airless (drag 0), climbs past what the zoom floor can show (test-only
+  // arsenal): through the air no launch speed carries a shell that high.
   if (speed) {
     await page.route(/\/game\.json/, async route => {
       const body = await (await route.fetch()).json();
-      for (const w of body.arsenal.ammo) if (w.key === 'shell') w.speed = speed;
+      for (const w of body.arsenal.ammo) if (w.key === 'shell') Object.assign(w, { speed, drag: 0 });
       await route.fulfill({ json: body });
     });
   }

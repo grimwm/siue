@@ -12,7 +12,9 @@ early_access: false
 
 reviews:
   profile: assertive
-  request_changes_workflow: true
+  # Advisory only: a rate-limited CodeRabbit never comes back to approve, so
+  # its review must not block a merge; the required checks gate it.
+  request_changes_workflow: false
   high_level_summary: true
   poem: false
   review_status: true

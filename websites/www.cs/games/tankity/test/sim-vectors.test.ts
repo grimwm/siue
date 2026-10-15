@@ -71,7 +71,7 @@ interface Inputs {
   rng: { seed: string };
   'terrain-gen': { seed: string };
   'spawn-spots': { n: number; seed: number };
-  'shot-speed': { power: number; flat: boolean; mult: number };
+  'shot-speed': { power: number; mult: number };
   muzzle: { x: number; y: number; angle: number; dirS: number };
   'hit-box': UnitSpot;
   'in-box': UnitSpot & { px: number; py: number };
@@ -167,7 +167,7 @@ const RUN: { [K in keyof Inputs]: (c: Inputs[K]) => unknown } = {
   constants() {
     const st = { x: 0, y: 0, vx: 0, vy: 0 };
     sim.stepBallistic(st, 1, 1, 0);
-    return { grav: sim.GRAV, flatGrav: sim.FLAT_GRAV, windK: st.vx, unitGap: sim.UNIT_GAP, spawnGap: sim.SPAWN_GAP };
+    return { grav: sim.GRAV, windK: st.vx, unitGap: sim.UNIT_GAP, spawnGap: sim.SPAWN_GAP };
   },
   detmath(c) {
     switch (c.fn) {
@@ -192,7 +192,7 @@ const RUN: { [K in keyof Inputs]: (c: Inputs[K]) => unknown } = {
     const r = sim.mulberry32(c.seed);
     return { spots: sim.spawnSpots(c.n, r, 720), next: r() };
   },
-  'shot-speed': c => sim.shotSpeed(c.power, c.flat, c.mult),
+  'shot-speed': c => sim.shotSpeed(c.power, c.mult),
   muzzle(c) {
     // The case gives no isPlayer: muzzle reads it only when dirS is 0 or missing, and every case sets dirS.
     const m = sim.muzzle(c as typeof c & Pick<Tank, 'isPlayer'>);
@@ -339,7 +339,7 @@ const RUN: { [K in keyof Inputs]: (c: Inputs[K]) => unknown } = {
     }
     if (c.kind === 'speed') {
       const reach = sim.fieldReach(c.w);
-      return { reach, speeds: [0, 37, 100].flatMap(p => [sim.shotSpeed(p, false, 1, reach), sim.shotSpeed(p, true, 1, reach), sim.shotSpeed(p, false, 0.55, reach)]) };
+      return { reach, speeds: [0, 37, 100].flatMap(p => [sim.shotSpeed(p, 1, reach), sim.shotSpeed(p, 0.55, reach)]) };
     }
     if (c.kind === 'sim-shot') {
       return sim.simShot({ terrain: Array(c.w).fill(400), wind: 0 }, arsenal, c.x, c.y, c.angle, c.power, c.wkey, c.dirS);

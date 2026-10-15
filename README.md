@@ -104,7 +104,7 @@ Pass the same `COMPOSE` to every target that talks to the containers (`up`, `dow
 
 `make -C websites/www.cs protocol` and `make -C websites/www.cs sim-vectors` rewrite Tankity's generated fixtures when they change on purpose.
 
-**Browser suite.** `make -C websites/www.cs e2e` runs the Playwright specs in `tests/e2e/` against the local site (or any site root in `E2E_BASE_URL`). The specs include play-throughs of Crete and Cylon (`crete-play.spec.mjs`, `cylon-play.spec.mjs`) beside Tankity's and the Games page's; CI runs every spec nightly. `E2E_ARGS` goes to `playwright test`:
+**Browser suite.** `make -C websites/www.cs e2e` runs the Playwright specs in `tests/e2e/` against the local site (or any site root in `E2E_BASE_URL`). The specs include play-throughs of Crete and Cylon (`crete-play.spec.mjs`, `cylon-play.spec.mjs`) beside Tankity's and the Games page's; CI runs every spec nightly. Test browsers are silent and never outlive their run: Chrome starts with `--mute-audio` and `--autoplay-policy=user-gesture-required`, WebKit pages get `muteScript` (a zero-gain node before every `AudioContext` destination, media elements muted), and `run.sh` gives each run its own `TMPDIR` (so its browser profiles have a unique path), kills Playwright's process group on exit, INT, TERM and HUP, then reaps any process whose command line holds that path (`reap.sh`, tested by `scripts/test_e2e_reap.py`). `E2E_ARGS` goes to `playwright test`:
 
 ```sh
 make -C websites/www.cs e2e E2E_ARGS="games-hub.spec.mjs"

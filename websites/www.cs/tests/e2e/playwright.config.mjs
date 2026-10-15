@@ -22,7 +22,11 @@ export default defineConfig({
   // Chrome runs everything. E2E_WEBKIT=1 adds WebKit for the specs that judge
   // drawing across engines (needs `npx playwright install webkit`; CI installs Chrome only).
   projects: [
-    { name: 'chrome', use: { channel: 'chrome' } },
+    {
+      name: 'chrome',
+      // Never audible, never autoplaying: an orphaned browser must not play music.
+      use: { channel: 'chrome', launchOptions: { args: ['--mute-audio', '--autoplay-policy=user-gesture-required'] } },
+    },
     ...(process.env.E2E_WEBKIT ? [{ name: 'webkit', use: { browserName: 'webkit' }, testMatch: ['tankity-sky-camera.spec.mjs'] }] : []),
   ],
 });

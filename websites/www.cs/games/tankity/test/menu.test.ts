@@ -35,7 +35,7 @@ type Extras = 'flashes' | 'onFlashes' | 'onStandings' | 'onQuit' | 'onNextSong' 
 function draw(over: Partial<MenuProps> = {}) {
   const section = makeEl('menu-overlay');
   section.hidden = false;
-  const calls = { close: 0, playSeed: 0, submit: 0, unit: [] as string[], size: [] as string[], theme: [] as string[], difficulty: [] as string[], sound: 0, music: 0, fs: 0, scores: 0, leave: 0 };
+  const calls = { close: 0, playSeed: 0, submit: 0, unit: [] as string[], size: [] as string[], theme: [] as string[], difficulty: [] as string[], sound: 0, music: 0, soundLevel: [] as number[], musicLevel: [] as number[], fs: 0, scores: 0, leave: 0 };
   const base: Omit<MenuProps, Extras> = {
     keyHint: (c, a) => KEYS[`${c}:${a}`] ?? '', onClose: () => { calls.close++; },
     onPlaySeed: () => { calls.playSeed++; }, onSubmit: () => { calls.submit++; },
@@ -43,7 +43,7 @@ function draw(over: Partial<MenuProps> = {}) {
     sizes: SIZES, size: 'm', onPickSize: k => { calls.size.push(k); },
     themes: THEMES, theme: 'yellow', onPickTheme: k => { calls.theme.push(k); },
     difficulties: LEVELS, difficulty: 'normal', onPickDifficulty: k => { calls.difficulty.push(k); },
-    sound: true, music: true, fullscreen: false,
+    sound: true, music: true, soundLevel: 80, musicLevel: 60, onSoundLevel: l => { calls.soundLevel.push(l); }, onMusicLevel: l => { calls.musicLevel.push(l); }, fullscreen: false,
     onSound: () => { calls.sound++; }, onMusic: () => { calls.music++; }, onFullscreen: () => { calls.fs++; },
     onScores: () => { calls.scores++; }, inRoom: false, onLeave: () => { calls.leave++; },
   };
@@ -114,7 +114,7 @@ test('the close button reports, and the toggles and thumbnails follow the props'
   assert.deepEqual(drawn, ['tank', 'hover', 'walker', 'buggy']);
   const toggles = ['btn-sound', 'btn-music', 'fullscreen'].map(id => byId(section, id));
   assert.deepEqual(toggles.map(t => t.getAttribute('aria-pressed')), ['true', 'true', 'false']);
-  assert.deepEqual(toggles.map(t => t.textContent), ['Sound E', 'Music M', 'Fullscreen F']);
+  assert.deepEqual(toggles.map(t => t.textContent), ['E', 'M', 'Fullscreen F']);
   render(section, { ...props, sound: false, fullscreen: true });
   assert.deepEqual(toggles.map(t => t.getAttribute('aria-pressed')), ['false', 'true', 'true']);
   assert.deepEqual(drawn, ['tank', 'hover', 'walker', 'buggy']); // thumbnails are drawn once
@@ -224,6 +224,7 @@ test('Enter in the seed box during a room match asks the leave question, never l
     keyHint: () => '', myTank: () => null, openLeaveVeil: () => { calls.ask++; },
     placeLogBelowStatus() {}, freshMatchFromSeedBox: () => { calls.fresh++; }, toggleFullscreen() {}, quit() {}, openStandings() {},
     turnTime() {}, alerts: () => ({ state: 'off', onClick() {} }), setFlashes() {}, toggleMusic() {}, toggleOverlay() {}, toggleSound() {}, nextSong() {},
+    volume: { level: () => 80, setLevel() {} },
   });
   m.renderMenu();
   submit(byId(section, 'seed-form'));
@@ -254,4 +255,23 @@ test('Theme: one tile per theme, its swatch wearing that theme, the saved one pr
   assert.deepEqual(swatches.map(sw => sw?.getAttribute('data-theme')), ['yellow', 'lime', 'cyan', 'orange', 'magenta']);
   click(nth(tiles, 4));
   assert.deepEqual(calls.theme, ['magenta']);
+});
+
+test('Sound and Music are slider rows: a small toggle, a 0-100 slider with the percent, and a spoken value', () => {
+  const { section, calls } = draw({ music: false });
+  for (const [name, toggle, range, on] of [['Sound', 'btn-sound', 'vol-sound', 80], ['Music', 'btn-music', 'vol-music', 60]] as const) {
+    const t = byId(section, toggle);
+    const r = byId(section, range);
+    assert.equal(r.getAttribute('type'), 'range');
+    assert.deepEqual([r.getAttribute('min'), r.getAttribute('max')], ['0', '100']);
+    assert.equal(r.getAttribute('aria-label'), `${name} volume`);
+    assert.equal(t.getAttribute('aria-label'), name);
+    const out = walk(section).find(e => e.localName === 'output' && e.getAttribute('for') === range);
+    assert.equal(out?.textContent, `${on}%`);
+  }
+  assert.equal(byId(section, 'vol-sound').getAttribute('aria-valuetext'), 'Sound 80%');
+  assert.equal(byId(section, 'vol-music').getAttribute('aria-valuetext'), 'Music 60%, muted');
+  assert.equal(byId(section, 'btn-music').getAttribute('aria-pressed'), 'false');
+  fire(byId(section, 'vol-music'), 'input', { currentTarget: { value: '30' } });
+  assert.deepEqual(calls.musicLevel, [30]);
 });

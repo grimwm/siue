@@ -194,7 +194,7 @@ export function munitions(world: World, arsenal: Arsenal, self: Tank, wkey: stri
     const n = w.pellets || 1;
     if (land.a === undefined || land.p === undefined) return { burst: true, xs, paths, ...sub };
     const m = muzzle({ ...self, angle: land.a });
-    const spd = shotSpeed(land.p, w.flat, w.speed, fieldReach(world.terrain.length)), dirS = facing(self);
+    const spd = shotSpeed(land.p, w.speed, fieldReach(world.terrain.length)), dirS = facing(self);
     const drop = (a: number): number => {
       const vx = dcos(a) * spd * dirS, vy = -dsin(a) * spd;
       return m.x + vx * dropTime(m.y, vy, land.y);

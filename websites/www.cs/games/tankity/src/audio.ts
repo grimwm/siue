@@ -8,6 +8,7 @@
 
 import { createAudioCore } from '../../_kit/audio/core.ts';
 import type { BusName } from '../../_kit/audio/core.ts';
+import { DEFAULT_LEVEL, gainFor } from './volume.ts';
 
 /* ---------- the public interface ---------- */
 
@@ -33,7 +34,10 @@ const core = createAudioCore();
  *  setting the music lies about 8 dB under the loud effects. It covers the track
  *  player and the synthesized songs alike; test/audio-levels.test.ts measures it. */
 export const MUSIC_HEADROOM = 0.4;
-core.setGain('music', MUSIC_HEADROOM);
+/* The sliders' levels (volume.ts): each bus's gain is the level's curve, the
+   music's under its headroom. A mute is the bus's own, so the level survives it. */
+core.setGain('sfx', gainFor(DEFAULT_LEVEL.sound));
+core.setGain('music', gainFor(DEFAULT_LEVEL.music) * MUSIC_HEADROOM);
 let musicMuted = false;
 let musicOn = false;
 let lastMusicTick = 0;
@@ -530,9 +534,22 @@ export function setSoundMuted(muted: boolean): void {
   core.setMuted('sfx', muted);
   if (!muted) ctx();
 }
+/** The sound slider: 0 to 100 percent, through the volume curve. */
+export function setSoundLevel(level: number): void { core.setGain('sfx', gainFor(level)); }
+/** The music slider: 0 to 100 percent, through the curve and under the headroom. */
+export function setMusicLevel(level: number): void { core.setGain('music', gainFor(level) * MUSIC_HEADROOM); }
 export function isMusicMuted(): boolean { return musicMuted; }
+let musicBusTimer: ReturnType<typeof setTimeout> | 0 = 0;
+const MUSIC_FADE_MS = 350;
 export function setMusicMuted(muted: boolean): void {
   musicMuted = muted;
-  if (musicMuted) stopMusic();
-  else startMusic();
+  clearTimeout(musicBusTimer);
+  musicBusTimer = 0;
+  if (muted) {
+    stopMusic(); // the tracks fade out over 0.3 s, then the bus itself goes silent
+    musicBusTimer = setTimeout(() => { musicBusTimer = 0; if (musicMuted) core.setMuted('music', true); }, MUSIC_FADE_MS);
+  } else {
+    core.setMuted('music', false);
+    startMusic();
+  }
 }

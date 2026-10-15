@@ -33,7 +33,7 @@
                 "cat": "Shells",
                 "dmg": 17,
                 "radius": 20,
-                "price": 80,
+                "price": 140,
                 "pack": 2,
                 "start": 1,
                 "minRound": 1,
@@ -81,198 +81,15 @@
                 }
             },
             {
-                "key": "rail",
-                "name": "Rail",
-                "cat": "Shells",
-                "dmg": 56,
-                "radius": 15,
-                "price": 140,
-                "pack": 2,
-                "minRound": 1,
-                "ai": true,
-                "aiRound": 5,
-                "effect": "shot",
-                "flat": true,
-                "speed": 1.0,
-                "note": "Flies fast and nearly flat.",
-                "gfx": {
-                    "shell": "#9fd8ff",
-                    "trail": "#9fd8ff",
-                    "blast": [
-                        "#9fd8ff",
-                        "#ffffff"
-                    ],
-                    "painter": "beam",
-                    "shake": 0.3
-                }
-            },
-            {
-                "key": "cluster",
-                "name": "Cluster",
-                "cat": "Shells",
-                "dmg": 20,
-                "radius": 18,
-                "price": 220,
-                "pack": 2,
-                "minRound": 2,
-                "ai": true,
-                "aiRound": 4,
-                "effect": "cluster",
-                "fuse": 0.9,
-                "split": 4,
-                "fan": 0.22,
-                "subDmg": 28,
-                "subRadius": 22,
-                "speed": 1.0,
-                "note": "Splits into 4 bomblets mid-flight.",
-                "gfx": {
-                    "shell": "#e0aaff",
-                    "trail": "#c77dff",
-                    "blast": [
-                        "#c77dff",
-                        "#fff3c4"
-                    ],
-                    "painter": "spark",
-                    "shake": 0.4
-                }
-            },
-            {
-                "key": "flak",
-                "name": "Flak",
-                "cat": "Shells",
-                "dmg": 44,
-                "radius": 30,
-                "price": 180,
-                "pack": 2,
-                "minRound": 3,
-                "ai": true,
-                "aiRound": 4,
-                "effect": "proximity",
-                "prox": 34,
-                "speed": 1.0,
-                "note": "Bursts next to anything it passes.",
-                "gfx": {
-                    "shell": "#ff5964",
-                    "trail": "#ff5964",
-                    "blast": [
-                        "#ff5964",
-                        "#ffe27a"
-                    ],
-                    "painter": "spark",
-                    "shake": 0.4
-                }
-            },
-            {
-                "key": "seeker",
-                "name": "Seeker",
-                "cat": "Shells",
-                "dmg": 40,
-                "radius": 24,
-                "price": 260,
-                "pack": 2,
-                "minRound": 4,
-                "ai": true,
-                "aiRound": 6,
-                "effect": "seeker",
-                "steer": 70,
-                "speed": 1.0,
-                "note": "Bends toward the nearest tank.",
-                "gfx": {
-                    "shell": "#80ffdb",
-                    "trail": "#80ffdb",
-                    "blast": [
-                        "#80ffdb",
-                        "#ffffff"
-                    ],
-                    "painter": "disc",
-                    "shake": 0.3
-                }
-            },
-            {
-                "key": "lance",
-                "name": "Lance",
-                "cat": "Shells",
-                "dmg": 52,
-                "radius": 14,
-                "price": 250,
-                "pack": 2,
-                "minRound": 4,
-                "ai": true,
-                "aiRound": 5,
-                "effect": "pierce",
-                "flat": true,
-                "speed": 1.0,
-                "note": "Flat bolt that punches through one tank.",
-                "gfx": {
-                    "shell": "#f9f871",
-                    "trail": "#f9f871",
-                    "blast": [
-                        "#f9f871",
-                        "#ffffff"
-                    ],
-                    "painter": "beam",
-                    "shake": 0.3
-                }
-            },
-            {
-                "key": "heavy",
-                "name": "Heavy",
-                "cat": "Shells",
-                "dmg": 85,
-                "radius": 52,
-                "price": 350,
-                "pack": 2,
-                "minRound": 4,
-                "ai": true,
-                "aiRound": 6,
-                "effect": "shot",
-                "speed": 0.55,
-                "note": "Slow, huge, deletes hillsides.",
-                "gfx": {
-                    "shell": "#ff8c42",
-                    "trail": "#e8483f",
-                    "blast": [
-                        "#e8483f",
-                        "#ffd75e"
-                    ],
-                    "painter": "disc",
-                    "shake": 0.7
-                }
-            },
-            {
-                "key": "needle",
-                "name": "Needle",
-                "cat": "Shells",
-                "dmg": 85,
-                "radius": 8,
-                "price": 120,
-                "pack": 1,
-                "minRound": 5,
-                "ai": true,
-                "aiRound": 6,
-                "effect": "shot",
-                "speed": 1.3,
-                "note": "Tiny blast, brutal direct hit.",
-                "gfx": {
-                    "shell": "#ffffff",
-                    "trail": "#caf0f8",
-                    "blast": [
-                        "#ffffff",
-                        "#9fd8ff"
-                    ],
-                    "painter": "beam",
-                    "shake": 0.3
-                }
-            },
-            {
                 "key": "emp",
                 "name": "EMP",
                 "cat": "Shells",
-                "dmg": 30,
+                "line": "trick",
+                "dmg": 36,
                 "radius": 30,
                 "price": 120,
                 "pack": 2,
-                "minRound": 3,
+                "minRound": 1,
                 "ai": true,
                 "aiRound": 5,
                 "effect": "emp",
@@ -291,6 +108,283 @@
                 }
             },
             {
+                "key": "flak",
+                "name": "Flak",
+                "cat": "Shells",
+                "line": "trick",
+                "dmg": 50,
+                "radius": 30,
+                "price": 180,
+                "pack": 2,
+                "minRound": 1,
+                "ai": true,
+                "aiRound": 4,
+                "effect": "proximity",
+                "prox": 34,
+                "speed": 1.0,
+                "preview": {
+                    "aim": 40
+                },
+                "note": "Bursts next to anything it passes.",
+                "gfx": {
+                    "shell": "#ff5964",
+                    "trail": "#ff5964",
+                    "blast": [
+                        "#ff5964",
+                        "#ffe27a"
+                    ],
+                    "painter": "spark",
+                    "shake": 0.4
+                }
+            },
+            {
+                "key": "needle",
+                "name": "Needle",
+                "cat": "Shells",
+                "line": "trick",
+                "dmg": 110,
+                "radius": 8,
+                "price": 120,
+                "pack": 1,
+                "minRound": 1,
+                "ai": true,
+                "aiRound": 6,
+                "effect": "shot",
+                "speed": 1.3,
+                "note": "Tiny blast, brutal direct hit.",
+                "gfx": {
+                    "shell": "#ffffff",
+                    "trail": "#caf0f8",
+                    "blast": [
+                        "#ffffff",
+                        "#9fd8ff"
+                    ],
+                    "painter": "beam",
+                    "shake": 0.3
+                }
+            },
+            {
+                "key": "seeker",
+                "name": "Seeker",
+                "cat": "Shells",
+                "line": "trick",
+                "dmg": 54,
+                "radius": 24,
+                "price": 260,
+                "pack": 2,
+                "minRound": 2,
+                "ai": true,
+                "aiRound": 6,
+                "effect": "seeker",
+                "steer": 70,
+                "speed": 1.0,
+                "preview": {
+                    "aim": -100
+                },
+                "note": "Bends toward the nearest tank.",
+                "gfx": {
+                    "shell": "#80ffdb",
+                    "trail": "#80ffdb",
+                    "blast": [
+                        "#80ffdb",
+                        "#ffffff"
+                    ],
+                    "painter": "disc",
+                    "shake": 0.3
+                }
+            },
+            {
+                "key": "heavy",
+                "name": "Heavy",
+                "cat": "Shells",
+                "dmg": 85,
+                "radius": 52,
+                "price": 350,
+                "pack": 2,
+                "minRound": 4,
+                "ai": true,
+                "aiRound": 6,
+                "effect": "shot",
+                "speed": 0.95,
+                "note": "A huge, heavy shell that deletes hillsides.",
+                "gfx": {
+                    "shell": "#ff8c42",
+                    "trail": "#e8483f",
+                    "blast": [
+                        "#e8483f",
+                        "#ffd75e"
+                    ],
+                    "painter": "disc",
+                    "shake": 0.7
+                }
+            },
+            {
+                "key": "funky",
+                "name": "Funky Bomb",
+                "cat": "Splitters",
+                "dmg": 24,
+                "radius": 24,
+                "price": 180,
+                "pack": 2,
+                "minRound": 2,
+                "ai": true,
+                "aiRound": 7,
+                "aiRack": 1,
+                "effect": "scatter",
+                "split": 8,
+                "fan": 2.4,
+                "kick": 150,
+                "subDmg": 13,
+                "subRadius": 18,
+                "speed": 1.0,
+                "preview": {
+                    "aim": -20,
+                    "ground": "bowl",
+                    "dummy": 200
+                },
+                "note": "Bursts and flings eight bomblets up in a wild fan; a near miss still pays.",
+                "gfx": {
+                    "shell": "#ff7eb6",
+                    "trail": "#c77dff",
+                    "blast": [
+                        "#ff7eb6",
+                        "#fff0fa"
+                    ],
+                    "painter": "spark",
+                    "shake": 0.4
+                }
+            },
+            {
+                "key": "leapfrog",
+                "name": "Leapfrog",
+                "cat": "Splitters",
+                "dmg": 40,
+                "radius": 26,
+                "price": 200,
+                "pack": 2,
+                "minRound": 2,
+                "ai": true,
+                "aiRound": 6,
+                "effect": "hop",
+                "hops": 3,
+                "hopKeep": 0.55,
+                "subDmg": 34,
+                "subRadius": 22,
+                "speed": 1.0,
+                "preview": {
+                    "aim": -60
+                },
+                "note": "Bursts, then leaps on and bursts twice more, each leap shorter.",
+                "gfx": {
+                    "shell": "#b5e86b",
+                    "trail": "#8fd14f",
+                    "blast": [
+                        "#8fd14f",
+                        "#f2ffd8"
+                    ],
+                    "painter": "spark",
+                    "shake": 0.35
+                }
+            },
+            {
+                "key": "cluster",
+                "name": "Cluster",
+                "cat": "Splitters",
+                "dmg": 20,
+                "radius": 18,
+                "price": 280,
+                "pack": 2,
+                "minRound": 3,
+                "ai": true,
+                "aiRound": 4,
+                "effect": "cluster",
+                "fuse": 0.9,
+                "split": 4,
+                "fan": 0.22,
+                "subDmg": 24,
+                "subRadius": 22,
+                "speed": 1.0,
+                "preview": {
+                    "aim": 30
+                },
+                "note": "Splits into 4 bomblets mid-flight.",
+                "gfx": {
+                    "shell": "#e0aaff",
+                    "trail": "#c77dff",
+                    "blast": [
+                        "#c77dff",
+                        "#fff3c4"
+                    ],
+                    "painter": "spark",
+                    "shake": 0.4
+                }
+            },
+            {
+                "key": "deathshead",
+                "name": "Death's Head",
+                "cat": "Splitters",
+                "dmg": 30,
+                "radius": 20,
+                "price": 400,
+                "pack": 1,
+                "minRound": 5,
+                "ai": true,
+                "aiRound": 9,
+                "aiRack": 1,
+                "effect": "cluster",
+                "apex": true,
+                "split": 6,
+                "fan": 0.16,
+                "subDmg": 17,
+                "subRadius": 30,
+                "speed": 1.0,
+                "preview": {
+                    "aim": 40
+                },
+                "note": "Splits at the top of its arc into six heavy warheads.",
+                "gfx": {
+                    "shell": "#e8e8e8",
+                    "trail": "#9a9aa8",
+                    "blast": [
+                        "#ff4d4d",
+                        "#fff3c4"
+                    ],
+                    "painter": "spark",
+                    "shake": 0.7
+                }
+            },
+            {
+                "key": "babyroller",
+                "name": "Baby Roller",
+                "cat": "Rollers",
+                "dmg": 28,
+                "radius": 22,
+                "price": 120,
+                "pack": 3,
+                "minRound": 1,
+                "ai": true,
+                "aiRound": 3,
+                "effect": "roller",
+                "friction": 0.8,
+                "rollTime": 6,
+                "speed": 1.0,
+                "preview": {
+                    "aim": -60,
+                    "ground": "slope"
+                },
+                "note": "A cheap little roller that stops sooner.",
+                "gfx": {
+                    "shell": "#d8bf8a",
+                    "trail": "#b8986a",
+                    "blast": [
+                        "#e0b860",
+                        "#fff3c4"
+                    ],
+                    "painter": "ball",
+                    "shake": 0.35
+                }
+            },
+            {
                 "key": "roller",
                 "name": "Roller",
                 "cat": "Rollers",
@@ -305,6 +399,10 @@
                 "friction": 0.6,
                 "rollTime": 8,
                 "speed": 1.0,
+                "preview": {
+                    "aim": -60,
+                    "ground": "slope"
+                },
                 "note": "Rolls downhill after landing; bursts on a tank or in a dip.",
                 "gfx": {
                     "shell": "#c9a66b",
@@ -318,126 +416,41 @@
                 }
             },
             {
-                "key": "nuke",
-                "name": "NUKE",
-                "cat": "Shells",
-                "dmg": 95,
-                "radius": 70,
-                "price": 500,
-                "pack": 1,
-                "minRound": 4,
-                "ai": false,
-                "aiRound": 99,
-                "effect": "shot",
-                "speed": 1.0,
-                "note": "Levels whole hillsides.",
-                "gfx": {
-                    "shell": "#ff6b6b",
-                    "trail": "#ff6b6b",
-                    "blast": [
-                        "#ff6b6b",
-                        "#fff3c4"
-                    ],
-                    "painter": "disc",
-                    "shake": 0.9,
-                    "linger": 0.8
-                }
-            },
-            {
-                "key": "leapfrog",
-                "name": "Leapfrog",
-                "cat": "Shells",
-                "dmg": 40,
-                "radius": 26,
-                "price": 240,
-                "pack": 2,
-                "minRound": 3,
-                "ai": true,
-                "aiRound": 6,
-                "effect": "hop",
-                "hops": 3,
-                "hopKeep": 0.55,
-                "subDmg": 34,
-                "subRadius": 22,
-                "speed": 1.0,
-                "note": "Bursts, then leaps on and bursts twice more, each leap shorter.",
-                "gfx": {
-                    "shell": "#b5e86b",
-                    "trail": "#8fd14f",
-                    "blast": [
-                        "#8fd14f",
-                        "#f2ffd8"
-                    ],
-                    "painter": "spark",
-                    "shake": 0.35
-                }
-            },
-            {
-                "key": "funky",
-                "name": "Funky Bomb",
-                "cat": "Shells",
-                "dmg": 30,
-                "radius": 24,
+                "key": "heavyroller",
+                "name": "Heavy Roller",
+                "cat": "Rollers",
+                "dmg": 70,
+                "radius": 50,
                 "price": 380,
                 "pack": 1,
-                "minRound": 5,
+                "minRound": 4,
                 "ai": true,
-                "aiRound": 7,
+                "aiRound": 8,
                 "aiRack": 1,
-                "effect": "scatter",
-                "split": 8,
-                "fan": 2.4,
-                "kick": 150,
-                "subDmg": 24,
-                "subRadius": 18,
-                "speed": 1.0,
-                "note": "Bursts and flings eight bomblets up in a wild fan; a near miss still pays.",
+                "effect": "roller",
+                "friction": 0.45,
+                "rollTime": 9,
+                "speed": 0.9,
+                "preview": {
+                    "aim": -60,
+                    "ground": "slope"
+                },
+                "note": "A heavy, slower ball that rolls far and bursts big.",
                 "gfx": {
-                    "shell": "#ff7eb6",
-                    "trail": "#c77dff",
+                    "shell": "#8a7a5a",
+                    "trail": "#6a5a40",
                     "blast": [
-                        "#ff7eb6",
-                        "#fff0fa"
-                    ],
-                    "painter": "spark",
-                    "shake": 0.4
-                }
-            },
-            {
-                "key": "deathshead",
-                "name": "Death's Head",
-                "cat": "Shells",
-                "dmg": 30,
-                "radius": 20,
-                "price": 900,
-                "pack": 1,
-                "minRound": 7,
-                "ai": true,
-                "aiRound": 9,
-                "aiRack": 1,
-                "effect": "cluster",
-                "apex": true,
-                "split": 9,
-                "fan": 0.16,
-                "subDmg": 40,
-                "subRadius": 40,
-                "speed": 1.0,
-                "note": "Splits at the top of its arc into nine heavy warheads.",
-                "gfx": {
-                    "shell": "#e8e8e8",
-                    "trail": "#9a9aa8",
-                    "blast": [
-                        "#ff4d4d",
+                        "#d98a41",
                         "#fff3c4"
                     ],
-                    "painter": "spark",
+                    "painter": "ball",
                     "shake": 0.7
                 }
             },
             {
                 "key": "babynuke",
                 "name": "Baby Nuke",
-                "cat": "Shells",
+                "cat": "Nukes",
                 "dmg": 72,
                 "radius": 50,
                 "price": 320,
@@ -462,96 +475,40 @@
                 }
             },
             {
-                "key": "babyroller",
-                "name": "Baby Roller",
-                "cat": "Rollers",
-                "dmg": 28,
-                "radius": 22,
-                "price": 90,
-                "pack": 3,
-                "minRound": 1,
-                "ai": true,
-                "aiRound": 3,
-                "effect": "roller",
-                "friction": 0.8,
-                "rollTime": 6,
-                "speed": 1.0,
-                "note": "A cheap little roller that stops sooner.",
-                "gfx": {
-                    "shell": "#d8bf8a",
-                    "trail": "#b8986a",
-                    "blast": [
-                        "#e0b860",
-                        "#fff3c4"
-                    ],
-                    "painter": "ball",
-                    "shake": 0.35
-                }
-            },
-            {
-                "key": "heavyroller",
-                "name": "Heavy Roller",
-                "cat": "Rollers",
-                "dmg": 70,
-                "radius": 50,
-                "price": 380,
+                "key": "nuke",
+                "name": "NUKE",
+                "cat": "Nukes",
+                "dmg": 120,
+                "radius": 70,
+                "price": 500,
                 "pack": 1,
                 "minRound": 5,
-                "ai": true,
-                "aiRound": 8,
-                "aiRack": 1,
-                "effect": "roller",
-                "friction": 0.45,
-                "rollTime": 9,
-                "speed": 0.85,
-                "note": "A heavy, slower ball that rolls far and bursts big.",
+                "ai": false,
+                "aiRound": 99,
+                "effect": "shot",
+                "speed": 1.0,
+                "note": "Levels whole hillsides.",
                 "gfx": {
-                    "shell": "#8a7a5a",
-                    "trail": "#6a5a40",
+                    "shell": "#ff6b6b",
+                    "trail": "#ff6b6b",
                     "blast": [
-                        "#d98a41",
+                        "#ff6b6b",
                         "#fff3c4"
                     ],
-                    "painter": "ball",
-                    "shake": 0.7
-                }
-            },
-            {
-                "key": "laser",
-                "name": "Laser",
-                "cat": "Beams",
-                "dmg": 45,
-                "radius": 6,
-                "price": 300,
-                "pack": 2,
-                "minRound": 4,
-                "ai": true,
-                "aiRound": 6,
-                "effect": "beam",
-                "range": 520,
-                "aimMin": -20,
-                "speed": 1.0,
-                "note": "Dead straight along the barrel, which dips below level; power sets its reach. Cuts through hills.",
-                "gfx": {
-                    "shell": "#ff4d4d",
-                    "trail": "#ff8a8a",
-                    "blast": [
-                        "#ff3b3b",
-                        "#fff0f0"
-                    ],
-                    "painter": "beam",
-                    "shake": 0.2
+                    "painter": "disc",
+                    "shake": 0.9,
+                    "linger": 0.8
                 }
             },
             {
                 "key": "plasma",
                 "name": "Plasma Blast",
                 "cat": "Beams",
-                "dmg": 60,
+                "dmg": 85,
                 "radius": 90,
-                "price": 280,
+                "price": 200,
                 "pack": 2,
-                "minRound": 3,
+                "minRound": 1,
                 "ai": true,
                 "aiRound": 5,
                 "effect": "plasma",
@@ -569,6 +526,36 @@
                 }
             },
             {
+                "key": "laser",
+                "name": "Laser",
+                "cat": "Beams",
+                "dmg": 45,
+                "radius": 6,
+                "price": 300,
+                "pack": 2,
+                "minRound": 2,
+                "ai": true,
+                "aiRound": 6,
+                "effect": "beam",
+                "range": 520,
+                "aimMin": -20,
+                "speed": 1.0,
+                "preview": {
+                    "ground": "perch"
+                },
+                "note": "Dead straight along the barrel, which dips below level; power sets its reach. Cuts through hills.",
+                "gfx": {
+                    "shell": "#ff4d4d",
+                    "trail": "#ff8a8a",
+                    "blast": [
+                        "#ff3b3b",
+                        "#fff0f0"
+                    ],
+                    "painter": "beam",
+                    "shake": 0.2
+                }
+            },
+            {
                 "key": "tracer",
                 "name": "Tracer",
                 "cat": "Tracers",
@@ -581,6 +568,9 @@
                 "aiRound": 99,
                 "effect": "tracer",
                 "speed": 1.0,
+                "preview": {
+                    "angle": 70
+                },
                 "note": "Shows you its whole path and landing until your next shot.",
                 "gfx": {
                     "shell": "#9ef0ff",
@@ -607,6 +597,9 @@
                 "aiRound": 99,
                 "effect": "tracer",
                 "speed": 1.0,
+                "preview": {
+                    "angle": 70
+                },
                 "note": "Leaves a smoke trail that everyone sees for the round, drifting with the wind.",
                 "gfx": {
                     "shell": "#e8e4dc",
@@ -624,6 +617,7 @@
                 "key": "dirtclod",
                 "name": "Dirt Clod",
                 "cat": "Earth",
+                "line": "dirt",
                 "dmg": 0,
                 "radius": 20,
                 "price": 40,
@@ -649,6 +643,7 @@
                 "key": "dirtball",
                 "name": "Dirt Ball",
                 "cat": "Earth",
+                "line": "dirt",
                 "dmg": 0,
                 "radius": 35,
                 "price": 90,
@@ -674,6 +669,7 @@
                 "key": "tondirt",
                 "name": "Ton of Dirt",
                 "cat": "Earth",
+                "line": "dirt",
                 "dmg": 0,
                 "radius": 60,
                 "price": 200,
@@ -700,6 +696,7 @@
                 "key": "liquiddirt",
                 "name": "Liquid Dirt",
                 "cat": "Earth",
+                "line": "pour",
                 "dmg": 0,
                 "radius": 1,
                 "price": 160,
@@ -711,6 +708,10 @@
                 "volume": 4000,
                 "poolMin": 34,
                 "speed": 1.0,
+                "preview": {
+                    "aim": -25,
+                    "ground": "dip"
+                },
                 "note": "Runs down into the valley it lands in and sets flat, burying whatever sits there; on flat ground a 34 px slab.",
                 "gfx": {
                     "shell": "#7a5230",
@@ -727,6 +728,7 @@
                 "key": "dirtcharge",
                 "name": "Dirt Charge",
                 "cat": "Earth",
+                "line": "charge",
                 "dmg": 20,
                 "radius": 45,
                 "price": 180,
@@ -752,6 +754,7 @@
                 "key": "babydigger",
                 "name": "Baby Digger",
                 "cat": "Earth",
+                "line": "digger",
                 "dmg": 0,
                 "radius": 1,
                 "price": 50,
@@ -764,6 +767,9 @@
                 "digR": 8,
                 "warheads": 0,
                 "speed": 1.0,
+                "preview": {
+                    "aim": -18
+                },
                 "note": "Burrows on along its heading where it lands, cutting a short trench.",
                 "gfx": {
                     "shell": "#c0c4cc",
@@ -780,6 +786,7 @@
                 "key": "digger",
                 "name": "Digger",
                 "cat": "Earth",
+                "line": "digger",
                 "dmg": 0,
                 "radius": 1,
                 "price": 110,
@@ -792,6 +799,9 @@
                 "digR": 11,
                 "warheads": 0,
                 "speed": 1.0,
+                "preview": {
+                    "aim": -33
+                },
                 "note": "Undermines a tank so it drops and pays for the fall.",
                 "gfx": {
                     "shell": "#d8b040",
@@ -808,6 +818,7 @@
                 "key": "heavydigger",
                 "name": "Heavy Digger",
                 "cat": "Earth",
+                "line": "digger",
                 "dmg": 0,
                 "radius": 1,
                 "price": 200,
@@ -820,6 +831,9 @@
                 "digR": 15,
                 "warheads": 0,
                 "speed": 1.0,
+                "preview": {
+                    "aim": -54
+                },
                 "note": "A deep, wide trench.",
                 "gfx": {
                     "shell": "#e07a2a",
@@ -836,11 +850,12 @@
                 "key": "babysandhog",
                 "name": "Baby Sandhog",
                 "cat": "Earth",
+                "line": "sandhog",
                 "dmg": 0,
                 "radius": 1,
                 "price": 160,
                 "pack": 2,
-                "minRound": 2,
+                "minRound": 1,
                 "ai": true,
                 "aiRound": 5,
                 "effect": "dig",
@@ -850,6 +865,9 @@
                 "digR": 7,
                 "warheads": 2,
                 "speed": 1.0,
+                "preview": {
+                    "aim": -21
+                },
                 "note": "Burrows a short way; two warheads burst along the burrow.",
                 "gfx": {
                     "shell": "#c8a080",
@@ -866,11 +884,12 @@
                 "key": "sandhog",
                 "name": "Sandhog",
                 "cat": "Earth",
+                "line": "sandhog",
                 "dmg": 0,
                 "radius": 1,
                 "price": 280,
                 "pack": 2,
-                "minRound": 4,
+                "minRound": 2,
                 "ai": true,
                 "aiRound": 7,
                 "effect": "dig",
@@ -880,6 +899,9 @@
                 "digR": 9,
                 "warheads": 3,
                 "speed": 1.0,
+                "preview": {
+                    "aim": -36
+                },
                 "note": "Burrows on; three warheads burst along the burrow, or all at once at a hull in the way.",
                 "gfx": {
                     "shell": "#b06a3a",
@@ -896,22 +918,26 @@
                 "key": "heavysandhog",
                 "name": "Heavy Sandhog",
                 "cat": "Earth",
+                "line": "sandhog",
                 "dmg": 0,
                 "radius": 1,
-                "price": 450,
+                "price": 200,
                 "pack": 1,
-                "minRound": 6,
+                "minRound": 3,
                 "ai": true,
                 "aiRound": 9,
                 "aiRack": 1,
                 "effect": "dig",
-                "subDmg": 44,
+                "subDmg": 22,
                 "subRadius": 28,
                 "digLen": 180,
                 "digR": 12,
                 "warheads": 5,
                 "speed": 1.0,
-                "note": "A long burrow with five big warheads along it.",
+                "preview": {
+                    "aim": -54
+                },
+                "note": "A long burrow with five warheads along it, or all five at once at a hull in the way.",
                 "gfx": {
                     "shell": "#8a3a2a",
                     "trail": "#6a3a2a",
@@ -927,6 +953,7 @@
                 "key": "riotcharge",
                 "name": "Riot Charge",
                 "cat": "Earth",
+                "line": "riot",
                 "dmg": 0,
                 "radius": 45,
                 "price": 60,
@@ -937,6 +964,9 @@
                 "effect": "riot",
                 "fan": 1.2,
                 "speed": 1.0,
+                "preview": {
+                    "ground": "buried"
+                },
                 "note": "Digs you out with a wide, short scoop over the hull and in front of the barrel.",
                 "gfx": {
                     "shell": "#e8d4a0",
@@ -953,6 +983,7 @@
                 "key": "riotblast",
                 "name": "Riot Blast",
                 "cat": "Earth",
+                "line": "riot",
                 "dmg": 0,
                 "radius": 90,
                 "price": 120,
@@ -963,6 +994,9 @@
                 "effect": "riot",
                 "fan": 0.6,
                 "speed": 1.0,
+                "preview": {
+                    "ground": "buried"
+                },
                 "note": "A long, narrow cut along the barrel, a firing lane through a hill.",
                 "gfx": {
                     "shell": "#f0e0b0",
@@ -979,6 +1013,7 @@
                 "key": "riotbomb",
                 "name": "Riot Bomb",
                 "cat": "Earth",
+                "line": "crater",
                 "dmg": 0,
                 "radius": 45,
                 "price": 100,
@@ -1004,6 +1039,7 @@
                 "key": "heavyriot",
                 "name": "Heavy Riot Bomb",
                 "cat": "Earth",
+                "line": "crater",
                 "dmg": 0,
                 "radius": 75,
                 "price": 220,
@@ -1029,6 +1065,7 @@
                 "key": "disrupter",
                 "name": "Earth Disrupter",
                 "cat": "Earth",
+                "line": "slump",
                 "dmg": 0,
                 "radius": 120,
                 "price": 260,
@@ -1041,6 +1078,9 @@
                 "slope": 1.0,
                 "passes": 24,
                 "speed": 1.0,
+                "preview": {
+                    "ground": "ridge"
+                },
                 "note": "Shakes the ground loose. Steep slopes within its reach slump, so tanks on ridges and cliff edges drop.",
                 "gfx": {
                     "shell": "#9ad0c0",
@@ -1071,6 +1111,10 @@
                 "tick": 0.5,
                 "flame": 18,
                 "speed": 1.0,
+                "preview": {
+                    "aim": -25,
+                    "ground": "dip"
+                },
                 "note": "Pools in the low ground where it lands and burns for 3 s. Up to 36 damage to a tank sitting in it.",
                 "gfx": {
                     "shell": "#ff8a3c",
@@ -1102,6 +1146,10 @@
                 "tick": 0.5,
                 "flame": 26,
                 "speed": 1.0,
+                "preview": {
+                    "aim": -25,
+                    "ground": "dip"
+                },
                 "note": "A bigger, taller pool that burns for 4 s, up to 80. Its flames reach drones hovering by the rim.",
                 "gfx": {
                     "shell": "#ffd04a",
@@ -1198,6 +1246,20 @@
                 "n": 2,
                 "effect": "parachute",
                 "note": "Opens on a fall that would cost more than a scratch; one per fall."
+            }
+        ],
+        "retired": [
+            {
+                "key": "rail",
+                "name": "Rail",
+                "price": 140,
+                "pack": 2
+            },
+            {
+                "key": "lance",
+                "name": "Lance",
+                "price": 250,
+                "pack": 2
             }
         ],
         "fall": {
@@ -1627,52 +1689,724 @@
                 ]
             }
         },
-        "rail": {
+        "emp": {
             "body": {
-                "halo": 8,
+                "halo": 10,
                 "alpha": 0.5,
-                "stretch": 26,
-                "sprite": "p_rail",
-                "size": 22,
-                "fps": 16
+                "pulse": 9,
+                "sprite": "p_emp",
+                "size": 14,
+                "fps": 20
             },
             "muzzle": {
-                "screen": {
-                    "shake": 0.06
-                },
                 "emitters": [
-                    {"shape":"beam","count":1,"aim":"forward","length":300,"size":[2.4,2.4],"life":[0.3,0.3],"alpha":[1,0.6,0],"colors":["#9fd8ff","#ffffff"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"flare","size":[10,10],"life":[0.22,0.22],"alpha":[1,1,0],"tint":"#9fd8ff","glow":true,"aim":"forward","spread":0,"align":true},
-                    {"shape":"ring","count":1,"size":[3,3],"sizeEnd":6,"ease":"out","life":[0.2,0.2],"width":2,"alpha":[1,0.6,0],"colors":["#ffffff","#9fd8ff"],"glow":true},
-                    {"shape":"streak","count":10,"life":[0.1,0.25],"speed":[200,420],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":10,"alpha":[1,0.9,0],"colors":["#ffffff","#9fd8ff"],"glow":true,"aim":"forward","spread":25}
+                    {"shape":"sprite","count":1,"sheet":"flare","size":[9,9],"life":[0.18,0.18],"alpha":[1,1,0],"tint":"#72efdd","glow":true},
+                    {"shape":"ring","count":1,"size":[3,3],"sizeEnd":6,"ease":"out","life":[0.25,0.25],"width":2,"alpha":[1,0.6,0],"colors":["#72efdd","#1f9a8a"],"glow":true},
+                    {"shape":"bolt","count":3,"length":22,"size":[1,1],"life":[0.1,0.22],"alpha":[1,1,0],"colors":["#72efdd"],"glow":true,"offset":4,"aim":"forward","spread":80}
                 ]
             },
             "trail": {
                 "emitters": [
-                    {"shape":"streak","rate":90,"aim":"forward","speed":[20,50],"spread":6,"length":18,"size":[1,1.4],"life":[0.15,0.3],"colors":["#ffffff","#9fd8ff","#3a6ea5"],"glow":true},
-                    {"rate":40,"life":[0.25,0.5],"speed":[0,12],"size":[1.6,2.6],"sizeEnd":0.2,"alpha":[0.7,0],"colors":["#ffffff","#ffcf8a","#ff7b39","#3a1a10"],"glow":true},
-                    {"shape":"bolt","rate":6,"length":14,"size":[1,1],"life":[0.1,0.22],"alpha":[1,1,0],"colors":["#9fd8ff"],"glow":true,"offset":3}
+                    {"shape":"bolt","rate":9,"length":15,"size":[1,1],"life":[0.1,0.22],"alpha":[1,1,0],"colors":["#72efdd"],"glow":true,"offset":6},
+                    {"rate":26,"life":[0.2,0.36],"speed":[0,14],"size":[1.2,2],"sizeEnd":0.3,"colors":["#ffffff","#72efdd","#1f9a8a"],"glow":true},
+                    {"shape":"sprite","rate":5,"sheet":"electric","anim":"random","fps":24,"life":[0.2,0.3],"size":[5,7],"alpha":[0.7,0],"rotJitter":180,"tint":"#72efdd","glow":true}
                 ]
             },
             "impact": {
                 "screen": {
                     "flash": {
-                        "color": "#9fd8ff",
-                        "alpha": 0.1,
+                        "color": "#72efdd",
+                        "alpha": 0.15,
+                        "dur": 0.25
+                    }
+                },
+                "emitters": [
+                    {"shape":"sprite","count":1,"sheet":"electric","unit":"r","size":[1.2,1.2],"life":[0.6,0.6],"alpha":[1,1,0],"rotJitter":180,"tint":"#72efdd","glow":true,"scale":1.2},
+                    {"shape":"sprite","count":1,"sheet":"electric","unit":"r","size":[0.9,0.9],"life":[0.5,0.5],"alpha":[1,1,0],"rotJitter":180,"tint":"#b8fff4","glow":true,"delay":0.15},
+                    {"count":1,"unit":"r","size":[0.7,0.7],"sizeEnd":0.6,"life":[0.24,0.24],"alpha":[0.7,0.35,0],"colors":["#ffffff","#72efdd"],"glow":true},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.15,0.15],"sizeEnd":6.6,"ease":"out","life":[0.4,0.4],"width":3,"alpha":[0.9,0.5,0],"colors":["#ffffff","#72efdd"],"glow":true},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.15,0.15],"sizeEnd":6.6,"ease":"out","life":[0.55,0.55],"width":2,"alpha":[0.9,0.5,0],"colors":["#72efdd","#1f9a8a"],"glow":true,"delay":0.1},
+                    {"shape":"bolt","count":6,"unit":"r","length":0.9,"size":[1,1],"life":[0.14,0.3],"alpha":[1,1,0],"colors":["#72efdd"],"glow":true},
+                    {"shape":"bolt","count":4,"unit":"r","length":0.7,"size":[1,1],"life":[0.14,0.3],"alpha":[1,1,0],"colors":["#72efdd"],"glow":true,"delay":0.12},
+                    {"shape":"streak","count":12,"life":[0.2,0.5],"speed":[120,280],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":8,"alpha":[1,0.9,0],"colors":["#ffffff","#72efdd","#1f9a8a"],"glow":true},
+                    {"count":12,"offset":21,"life":[0.7,1.2],"speed":[3,24],"gravity":-25,"drag":1,"size":[1.2,2],"colors":["#ffffff","#72efdd","#1f9a8a"],"glow":true},
+                    {"shape":"sprite","count":4,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[50,130],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.4,2.6],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"}
+                ]
+            },
+            "special": {
+                "arc": {
+                    "emitters": [
+                        {
+                            "shape": "sprite",
+                            "count": 1,
+                            "sheet": "electric",
+                            "size": [
+                                16,
+                                16
+                            ],
+                            "life": [
+                                0.45,
+                                0.45
+                            ],
+                            "alpha": [
+                                1,
+                                1,
+                                0
+                            ],
+                            "rotJitter": 180,
+                            "tint": "#72efdd",
+                            "glow": true
+                        },
+                        {
+                            "shape": "bolt",
+                            "count": 5,
+                            "length": 24,
+                            "size": [
+                                1,
+                                1
+                            ],
+                            "life": [
+                                0.2,
+                                0.45
+                            ],
+                            "alpha": [
+                                1,
+                                1,
+                                0
+                            ],
+                            "colors": [
+                                "#72efdd"
+                            ],
+                            "glow": true,
+                            "offset": 8
+                        },
+                        {
+                            "shape": "spark",
+                            "count": 4,
+                            "life": [
+                                0.2,
+                                0.4
+                            ],
+                            "speed": [
+                                20,
+                                70
+                            ],
+                            "size": [
+                                3,
+                                5
+                            ],
+                            "sizeEnd": 0.3,
+                            "colors": [
+                                "#ffffff",
+                                "#72efdd"
+                            ],
+                            "glow": true,
+                            "rotJitter": 90,
+                            "spin": [
+                                -300,
+                                300
+                            ]
+                        },
+                        {
+                            "count": 8,
+                            "life": [
+                                0.5,
+                                0.9
+                            ],
+                            "speed": [
+                                10,
+                                50
+                            ],
+                            "gravity": -30,
+                            "drag": 1,
+                            "size": [
+                                1,
+                                1.8
+                            ],
+                            "colors": [
+                                "#ffffff",
+                                "#72efdd",
+                                "#1f9a8a"
+                            ],
+                            "glow": true
+                        }
+                    ]
+                }
+            }
+        },
+        "flak": {
+            "body": {
+                "halo": 8,
+                "alpha": 0.35,
+                "pulse": 4,
+                "sprite": "p_flak",
+                "size": 15,
+                "fps": 8
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[7,7],"sizeEnd":0.4,"life":[0.09,0.09],"alpha":[0.85,0.5,0],"colors":["#ffffff","#ff5964"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[9,9],"life":[0.12,0.12],"alpha":[1,1,0]},
+                    {"shape":"streak","count":6,"life":[0.1,0.22],"speed":[90,200],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":7,"alpha":[1,0.9,0],"colors":["#ffe27a","#ff5964"],"glow":true,"aim":"forward","spread":35},
+                    {"shape":"sprite","count":3,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[4.199999999999999,6],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#7a6a6a"}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"rate":36,"life":[0.2,0.36],"speed":[0,14],"size":[1.2,2],"sizeEnd":0.3,"colors":["#ffe27a","#ff5964","#7a2030"],"glow":true},
+                    {"shape":"spark","rate":5,"life":[0.2,0.3],"speed":[0,20],"size":[2.4,3.4],"sizeEnd":0.3,"colors":["#ffffff","#ff5964"],"glow":true,"rotJitter":90},
+                    {"shape":"sprite","rate":10,"sheet":"smoke","life":[0.5,0.8],"speed":[0,8],"angle":90,"spread":120,"gravity":-10,"drag":1.2,"size":[2.4000000000000004,3],"sizeEnd":2,"alpha":[0,0.45,0],"rotJitter":180,"wind":1,"tint":"#6a5a5a"}
+                ]
+            },
+            "impact": {
+                "screen": {
+                    "flash": {
+                        "color": "#ffd0a0",
+                        "alpha": 0.08,
                         "dur": 0.12
                     }
                 },
                 "emitters": [
-                    {"shape":"sprite","count":1,"sheet":"scorch","unit":"r","size":[0.36000000000000004,0.45],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
-                    {"shape":"sprite","count":1,"sheet":"flare","size":[1.3,1.3],"life":[0.35,0.35],"alpha":[1,1,0],"tint":"#9fd8ff","glow":true,"unit":"r"},
-                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[1.1,1.1],"life":[0.35,0.35],"alpha":[1,1,0],"rotJitter":14,"tint":"#9fd8ff","glow":true},
-                    {"count":1,"unit":"r","size":[0.9,0.9],"sizeEnd":0.6,"life":[0.18,0.18],"alpha":[0.7,0.35,0],"colors":["#ffffff","#9fd8ff"],"glow":true},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":5,"ease":"out","life":[0.3,0.3],"width":2,"alpha":[0.9,0.5,0],"colors":["#ffffff","#9fd8ff"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.9,0.9],"life":[0.7,0.7],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
-                    {"shape":"streak","count":18,"life":[0.2,0.5],"speed":[200,440],"gravity":120,"drag":1.2,"size":[1.2,1.8],"length":12,"alpha":[1,0.9,0],"colors":["#ffffff","#9fd8ff","#ff9f43"],"glow":true},
-                    {"shape":"sprite","count":5,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[70,160],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.6,3],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
-                    {"count":6,"life":[0.8,1.6],"speed":[40,160],"angle":90,"spread":150,"gravity":150,"drag":0.7,"size":[0.8,1.5],"colors":["#ffffff","#9fd8ff","#ff7b39","#3a1a10"],"glow":true}
+                    {"count":1,"unit":"r","size":[0.6,0.6],"sizeEnd":0.6,"life":[0.15,0.15],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ffe27a","#ff5964"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"flakburst","unit":"r","size":[0.95,0.95],"life":[1.6,1.6],"alpha":[1,1,0.9,0],"rotJitter":30,"scale":1.3,"wind":1},
+                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.45,0.45],"life":[0.22,0.22],"alpha":[1,1,0],"rotJitter":14,"scale":1,"glow":true},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":5,"ease":"out","life":[0.28,0.28],"width":3,"alpha":[0.9,0.5,0],"colors":["#fff3c4","#ff5964"],"glow":true},
+                    {"shape":"streak","count":26,"life":[0.2,0.45],"speed":[240,500],"gravity":120,"drag":1.5,"size":[1.2,1.8],"length":12,"alpha":[1,0.9,0],"colors":["#ffffff","#ffe27a","#ff5964"],"glow":true},
+                    {"shape":"sprite","count":8,"sheet":"debris","anim":"random","fps":26,"life":[0.6,1.1],"speed":[120,260],"gravity":320,"drag":0.6,"size":[1.2,2.2],"alpha":[1,1,0],"rotJitter":180,"spin":[-600,600],"tint":"#7a7e88"},
+                    {"shape":"sprite","count":3,"sheet":"plume","unit":"r","size":[0.4,0.55],"life":[1.6,2.4],"speed":[0.1,0.4],"drag":1,"gravity":-6,"wind":1,"alpha":[0,0.7,0.5,0],"rotJitter":40,"scale":1.2,"tint":"#3a3434","delay":0.15,"offset":0.35}
                 ]
+            }
+        },
+        "needle": {
+            "body": {
+                "halo": 4,
+                "alpha": 0.4,
+                "stretch": 30,
+                "sprite": "p_needle",
+                "size": 17
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[5,5],"sizeEnd":0.4,"life":[0.08,0.08],"alpha":[0.85,0.5,0],"colors":["#ffffff","#9fd8ff"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[6,6],"life":[0.08,0.08],"alpha":[1,1,0]},
+                    {"shape":"streak","count":6,"life":[0.08,0.18],"speed":[300,500],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":14,"alpha":[1,0.9,0],"colors":["#ffffff","#caf0f8","#4a8fc0"],"glow":true,"aim":"forward","spread":12}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"shape":"streak","rate":100,"aim":"forward","speed":[10,40],"spread":4,"length":20,"size":[0.8,1.1],"life":[0.1,0.2],"colors":["#ffffff","#caf0f8","#4a8fc0"],"glow":true},
+                    {"rate":16,"life":[0.2,0.3],"speed":[0,14],"size":[0.8,1.2],"sizeEnd":0.2,"colors":["#ffffff","#caf0f8"],"glow":true}
+                ]
+            },
+            "impact": {
+                "emitters": [
+                    {"shape":"sprite","count":1,"sheet":"flare","size":[1.4,1.4],"life":[0.3,0.3],"alpha":[1,1,0],"tint":"#caf0f8","glow":true,"unit":"r"},
+                    {"count":1,"unit":"r","size":[1,1],"sizeEnd":0.6,"life":[0.16,0.16],"alpha":[0.7,0.35,0],"colors":["#ffffff","#9fd8ff"],"glow":true},
+                    {"shape":"spark","count":1,"unit":"r","size":[1.8,1.8],"sizeEnd":0.3,"life":[0.26,0.26],"alpha":[1,1,0],"colors":["#ffffff","#caf0f8","#4a8fc0"],"glow":true,"rotJitter":90,"spin":[-60,60]},
+                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[1.3,1.3],"life":[0.6,0.6],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
+                    {"shape":"streak","count":10,"life":[0.2,0.5],"speed":[260,520],"gravity":60,"drag":1.2,"size":[0.8,1.1],"length":14,"alpha":[1,0.9,0],"colors":["#ffffff","#caf0f8","#4a8fc0"],"glow":true},
+                    {"shape":"sprite","count":4,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[50,130],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.4,2.6],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"}
+                ]
+            }
+        },
+        "seeker": {
+            "body": {
+                "halo": 10,
+                "alpha": 0.45,
+                "pulse": 5,
+                "sprite": "p_seeker",
+                "size": 19,
+                "fps": 18
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[7,7],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.85,0.5,0],"colors":["#ffffff","#80ffdb"],"glow":true},
+                    {"shape":"ring","count":1,"size":[3,3],"sizeEnd":6,"ease":"out","life":[0.25,0.25],"width":2,"alpha":[1,0.6,0],"colors":["#80ffdb","#2a9d8f"],"glow":true},
+                    {"shape":"sprite","count":4,"sheet":"plume","aim":"forward","spread":90,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[4.8999999999999995,7],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#c8c8c8"},
+                    {"shape":"streak","count":6,"life":[0.1,0.22],"speed":[90,200],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":7,"alpha":[1,0.9,0],"colors":["#ffffff","#80ffdb"],"glow":true,"aim":"forward","spread":40}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"rate":46,"life":[0.15,0.3],"aim":"back","speed":[30,70],"spread":20,"size":[1.4,2.4],"sizeEnd":0.3,"colors":["#ffffff","#ffd27a","#ff7b39"],"glow":true},
+                    {"shape":"sprite","rate":22,"sheet":"smoke","life":[0.9,1.4],"speed":[0,8],"angle":90,"spread":120,"gravity":-4,"drag":1.2,"size":[2.8000000000000003,3.5],"sizeEnd":2,"alpha":[0,0.45,0],"rotJitter":180,"wind":1,"tint":"#d0d0d0"},
+                    {"rate":16,"life":[0.25,0.4],"size":[1.2,1.8],"sizeEnd":0.3,"colors":["#ffffff","#80ffdb"],"glow":true}
+                ]
+            },
+            "impact": {
+                "screen": {
+                    "flash": {
+                        "color": "#80ffdb",
+                        "alpha": 0.08,
+                        "dur": 0.15
+                    }
+                },
+                "emitters": [
+                    {"count":16,"offset":24,"edge":true,"speed":[-135,-135],"life":[0.14,0.2],"size":[1.4,2],"colors":["#ffffff","#80ffdb"],"glow":true,"alpha":[0,1,1]},
+                    {"shape":"sprite","count":2,"sheet":"scorch","unit":"r","size":[0.256,0.32],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true,"delay":0.12},
+                    {"count":1,"unit":"r","size":[0.7,0.7],"sizeEnd":0.6,"life":[0.2,0.2],"alpha":[0.7,0.35,0],"colors":["#ffffff","#80ffdb"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.8,0.8],"life":[0.7,0.7],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.25,"delay":0.12},
+                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.6,0.6],"life":[0.315,0.315],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true,"delay":0.12},
+                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[1,1],"life":[0.4,0.4],"alpha":[0.8,0.6,0],"rotJitter":14,"tint":"#80ffdb","glow":true,"delay":0.12},
+                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.75,0.75],"life":[0.85,0.85],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0,"delay":0.12},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":5,"ease":"out","life":[0.35,0.35],"width":2,"alpha":[0.9,0.5,0],"colors":["#ffffff","#80ffdb"],"glow":true,"delay":0.12},
+                    {"shape":"streak","count":12,"life":[0.2,0.5],"speed":[140,300],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":9,"alpha":[1,0.9,0],"colors":["#ffffff","#80ffdb"],"glow":true,"delay":0.12},
+                    {"shape":"sprite","count":7,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[80,200],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.8,3.4],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a","delay":0.12},
+                    {"shape":"sprite","count":2,"sheet":"plume","unit":"r","size":[0.4,0.5],"life":[1.5,2.2],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#6e7a76","delay":0.4,"offset":0.25}
+                ]
+            },
+            "special": {
+                "steer": {
+                    "emitters": [
+                        {
+                            "shape": "ring",
+                            "rate": 6,
+                            "size": [
+                                3,
+                                3
+                            ],
+                            "sizeEnd": 4,
+                            "ease": "out",
+                            "life": [
+                                0.3,
+                                0.3
+                            ],
+                            "width": 1.5,
+                            "alpha": [
+                                0.9,
+                                0.5,
+                                0
+                            ],
+                            "colors": [
+                                "#ffffff",
+                                "#80ffdb"
+                            ],
+                            "glow": true
+                        }
+                    ]
+                }
+            }
+        },
+        "heavy": {
+            "body": {
+                "halo": 12,
+                "alpha": 0.35,
+                "pulse": 2,
+                "sprite": "p_heavy",
+                "size": 21
+            },
+            "muzzle": {
+                "screen": {
+                    "shake": 0.15
+                },
+                "emitters": [
+                    {"count":1,"size":[15,15],"sizeEnd":0.4,"life":[0.14,0.14],"alpha":[0.85,0.5,0],"colors":["#ffffff","#ffd75e","#e8483f"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[15,15],"life":[0.16,0.16],"alpha":[1,1,0]},
+                    {"shape":"ring","count":1,"size":[5,5],"sizeEnd":7,"ease":"out","life":[0.3,0.3],"width":4,"alpha":[1,0.6,0],"colors":["#ffd75e","#e8483f"],"glow":true},
+                    {"shape":"sprite","count":6,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[8.399999999999999,12],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#a0a0a0"},
+                    {"shape":"streak","count":14,"life":[0.3,0.6],"speed":[70,190],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":8,"alpha":[1,0.9,0],"colors":["#fff3c4","#ff8c42"],"glow":true,"aim":"forward","spread":90}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"shape":"sprite","rate":20,"sheet":"smoke","life":[1,1.4],"speed":[0,8],"angle":90,"spread":120,"gravity":-10,"drag":1.2,"size":[4.4,5.5],"sizeEnd":2,"alpha":[0,0.45,0],"rotJitter":180,"wind":1,"tint":"#7a6a60"},
+                    {"rate":34,"life":[0.4,0.8],"speed":[0,25],"gravity":150,"size":[1.4,2.6],"sizeEnd":0.3,"colors":["#fff3c4","#ff8c42","#e8483f"],"glow":true}
+                ]
+            },
+            "impact": {
+                "screen": {
+                    "flash": {
+                        "color": "#ff8c42",
+                        "alpha": 0.18,
+                        "dur": 0.25
+                    }
+                },
+                "emitters": [
+                    {"shape":"sprite","count":5,"sheet":"scorch","unit":"r","size":[0.256,0.32],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
+                    {"count":1,"unit":"r","size":[0.8,0.8],"sizeEnd":0.6,"life":[0.28,0.28],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ffd75e","#e8483f"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.95,0.95],"life":[1,1],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.35},
+                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.712,0.712],"life":[0.4,0.4],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.55,0.55],"life":[0.8,0.8],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.3,"delay":0.1,"offset":0.45},
+                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.413,0.413],"life":[0.36,0.36],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true,"delay":0.1,"offset":0.45},
+                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.95,0.95],"life":[1.1,1.1],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.2,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
+                    {"shape":"sprite","count":1,"sheet":"shock","unit":"r","size":[1.3,1.3],"life":[0.5,0.5],"alpha":[0.8,0.5,0],"rotJitter":10,"glow":true},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":4.8,"ease":"out","life":[0.7,0.7],"width":4,"alpha":[0.9,0.5,0],"colors":["#d8c090","#8a6a3a"]},
+                    {"shape":"sprite","count":18,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[130,320],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[2.4,5],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
+                    {"count":16,"life":[0.5,1],"speed":[100,260],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.2,2.4],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
+                    {"shape":"streak","count":16,"life":[0.2,0.5],"speed":[160,340],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":11,"alpha":[1,0.9,0],"colors":["#fff3c4","#ff8c42","#e8483f"],"glow":true},
+                    {"count":12,"life":[0.8,1.6],"speed":[40,160],"angle":90,"spread":150,"gravity":150,"drag":0.7,"size":[0.8,1.5],"colors":["#ffffff","#ffd75e","#ff7b39","#5a2a1a"],"glow":true},
+                    {"shape":"sprite","count":4,"sheet":"plume","unit":"r","size":[0.48,0.6],"life":[2.4,3.2],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#5a4c44","delay":0.25,"offset":0.25}
+                ]
+            }
+        },
+        "funky": {
+            "body": {
+                "halo": 9,
+                "alpha": 0.45,
+                "pulse": 8,
+                "sprite": "p_funky",
+                "size": 14
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[8,8],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.85,0.5,0],"colors":["#ffffff","#ff7eb6"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[10,10],"life":[0.12,0.12],"alpha":[1,1,0]},
+                    {"shape":"ring","count":1,"size":[3,3],"sizeEnd":5,"ease":"out","life":[0.22,0.22],"width":2,"alpha":[1,0.6,0],"colors":["#ff7eb6","#7ee8ff"],"glow":true},
+                    {"shape":"spark","count":6,"life":[0.15,0.3],"speed":[60,160],"aim":"forward","spread":60,"size":[2,3],"sizeEnd":0.3,"colors":["#ffffff","#ff7eb6","#7ee8ff","#ffe27a"],"glow":true,"rotJitter":90},
+                    {"shape":"sprite","count":2,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[4.2,6],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#c8a0b8"}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"rate":40,"life":[0.2,0.36],"speed":[0,14],"size":[1.2,2],"sizeEnd":0.3,"colors":["#ffffff","#ff7eb6","#7ee8ff","#ffe27a"],"glow":true},
+                    {"shape":"spark","rate":10,"life":[0.2,0.32],"speed":[0,22],"size":[2.2,3.4],"sizeEnd":0.4,"colors":["#ffffff","#7ee8ff","#ff7eb6","#b5e86b"],"glow":true,"rotJitter":90,"spin":[-260,260]},
+                    {"shape":"sprite","rate":6,"sheet":"smoke","life":[0.5,0.8],"speed":[0,8],"angle":90,"spread":120,"gravity":-10,"drag":1.2,"size":[2.4,3],"sizeEnd":2,"alpha":[0,0.4,0],"rotJitter":180,"wind":1,"tint":"#c8a0b8"}
+                ]
+            },
+            "impact": {
+                "emitters": [
+                    {"shape":"sprite","count":2,"sheet":"scorch","unit":"r","size":[0.26,0.32],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
+                    {"count":1,"unit":"r","size":[0.64,0.64],"sizeEnd":0.6,"life":[0.18,0.18],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ff7eb6"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.75,0.75],"life":[0.55,0.55],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.15},
+                    {"shape":"sprite","count":1,"sheet":"flakburst","unit":"r","size":[0.9,0.9],"life":[0.6,0.6],"alpha":[1,1,0.8,0],"rotJitter":30,"scale":1.1},
+                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[1,1],"life":[0.4,0.4],"alpha":[0.8,0.6,0],"rotJitter":14,"tint":"#ff7eb6","glow":true},
+                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.65,0.65],"life":[0.75,0.75],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
+                    {"count":16,"life":[0.4,0.9],"speed":[80,210],"gravity":220,"drag":0.8,"size":[1.4,2.4],"colors":["#ffffff","#ff7eb6","#7ee8ff","#ffe27a","#b5e86b"],"glow":true},
+                    {"shape":"sprite","count":6,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[60,160],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.6,3],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
+                    {"shape":"sprite","count":1,"sheet":"plume","unit":"r","size":[0.4,0.5],"life":[1.4,2],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#8a7898","delay":0.25,"offset":0.25}
+                ]
+            },
+            "special": {
+                "scatter": {
+                    "emitters": [
+                        {
+                            "shape": "sprite",
+                            "count": 1,
+                            "sheet": "flare",
+                            "size": [
+                                16,
+                                16
+                            ],
+                            "life": [
+                                0.28,
+                                0.28
+                            ],
+                            "alpha": [
+                                1,
+                                1,
+                                0
+                            ],
+                            "tint": "#ff7eb6",
+                            "glow": true
+                        },
+                        {
+                            "shape": "ring",
+                            "count": 1,
+                            "size": [
+                                4,
+                                4
+                            ],
+                            "sizeEnd": 6,
+                            "ease": "out",
+                            "life": [
+                                0.3,
+                                0.3
+                            ],
+                            "width": 3,
+                            "alpha": [
+                                1,
+                                0.6,
+                                0
+                            ],
+                            "colors": [
+                                "#7ee8ff",
+                                "#ff7eb6"
+                            ],
+                            "glow": true
+                        },
+                        {
+                            "shape": "spark",
+                            "count": 12,
+                            "life": [
+                                0.3,
+                                0.6
+                            ],
+                            "speed": [
+                                80,
+                                200
+                            ],
+                            "aim": "forward",
+                            "spread": 140,
+                            "gravity": 120,
+                            "drag": 0.6,
+                            "size": [
+                                2.4,
+                                3.8
+                            ],
+                            "sizeEnd": 0.3,
+                            "colors": [
+                                "#ffffff",
+                                "#ff7eb6",
+                                "#7ee8ff",
+                                "#ffe27a",
+                                "#b5e86b"
+                            ],
+                            "glow": true,
+                            "rotJitter": 90,
+                            "spin": [
+                                -300,
+                                300
+                            ]
+                        },
+                        {
+                            "shape": "streak",
+                            "count": 12,
+                            "life": [
+                                0.2,
+                                0.4
+                            ],
+                            "speed": [
+                                120,
+                                260
+                            ],
+                            "gravity": 200,
+                            "drag": 1.2,
+                            "size": [
+                                1.2,
+                                1.8
+                            ],
+                            "length": 8,
+                            "alpha": [
+                                1,
+                                0.9,
+                                0
+                            ],
+                            "colors": [
+                                "#ffffff",
+                                "#ff7eb6",
+                                "#7ee8ff"
+                            ],
+                            "glow": true,
+                            "aim": "forward",
+                            "spread": 140
+                        },
+                        {
+                            "shape": "sprite",
+                            "count": 2,
+                            "sheet": "smoke",
+                            "life": [
+                                0.6,
+                                0.9
+                            ],
+                            "speed": [
+                                5,
+                                25
+                            ],
+                            "angle": 90,
+                            "spread": 120,
+                            "gravity": -15,
+                            "drag": 1.2,
+                            "size": [
+                                5,
+                                8
+                            ],
+                            "sizeEnd": 1.8,
+                            "alpha": [
+                                0,
+                                0.6,
+                                0
+                            ],
+                            "rotJitter": 180,
+                            "wind": 1,
+                            "tint": "#c8a0b8"
+                        }
+                    ]
+                }
+            }
+        },
+        "leapfrog": {
+            "body": {
+                "halo": 8,
+                "alpha": 0.35,
+                "pulse": 5,
+                "sprite": "p_leapfrog",
+                "size": 16
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[8,8],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.85,0.5,0],"colors":["#ffffff","#b5e86b"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[10,10],"life":[0.12,0.12],"alpha":[1,1,0]},
+                    {"shape":"streak","count":8,"life":[0.1,0.22],"speed":[90,200],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":7,"alpha":[1,0.9,0],"colors":["#f2ffd8","#8fd14f"],"glow":true,"aim":"forward","spread":40},
+                    {"shape":"sprite","count":3,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[4.5,6.5],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#a0a8a0"}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"rate":38,"life":[0.2,0.36],"speed":[0,14],"size":[1.2,2],"sizeEnd":0.3,"colors":["#f2ffd8","#b5e86b","#4a8a2a"],"glow":true},
+                    {"shape":"spark","rate":6,"life":[0.2,0.3],"speed":[0,16],"size":[2.2,3.2],"sizeEnd":0.4,"colors":["#ffffff","#b5e86b"],"glow":true,"rotJitter":90,"spin":[-200,200]},
+                    {"shape":"sprite","rate":10,"sheet":"smoke","life":[0.6,0.9],"speed":[0,8],"angle":90,"spread":120,"gravity":-10,"drag":1.2,"size":[2.8,3.5],"sizeEnd":2,"alpha":[0,0.45,0],"rotJitter":180,"wind":1,"tint":"#8a9a80"}
+                ]
+            },
+            "impact": {
+                "emitters": [
+                    {"shape":"sprite","count":3,"sheet":"scorch","unit":"r","size":[0.256,0.32],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
+                    {"count":1,"unit":"r","size":[0.62,0.62],"sizeEnd":0.6,"life":[0.18,0.18],"alpha":[0.7,0.35,0],"colors":["#ffffff","#b5e86b"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.85,0.85],"life":[0.7,0.7],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.25},
+                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.62,0.62],"life":[0.33,0.33],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[0.8,0.8],"life":[0.3,0.3],"alpha":[0.7,0.5,0],"rotJitter":14,"tint":"#8fd14f","glow":true},
+                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.8,0.8],"life":[0.9,0.9],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":4,"ease":"out","life":[0.42,0.42],"width":3,"alpha":[0.9,0.5,0],"colors":["#e8d4a0","#a0703a"]},
+                    {"shape":"sprite","count":9,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[90,220],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[2,3.6],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
+                    {"count":8,"life":[0.5,1],"speed":[70,180],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.2,2.4],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
+                    {"shape":"streak","count":10,"life":[0.2,0.45],"speed":[120,250],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":8,"alpha":[1,0.9,0],"colors":["#f2ffd8","#8fd14f"],"glow":true},
+                    {"shape":"sprite","count":2,"sheet":"plume","unit":"r","size":[0.44,0.55],"life":[1.6,2.4],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#6e7a66","delay":0.25,"offset":0.25}
+                ]
+            },
+            "special": {
+                "hop": {
+                    "emitters": [
+                        {
+                            "shape": "sprite",
+                            "count": 1,
+                            "sheet": "flare",
+                            "size": [
+                                12,
+                                12
+                            ],
+                            "life": [
+                                0.22,
+                                0.22
+                            ],
+                            "alpha": [
+                                1,
+                                1,
+                                0
+                            ],
+                            "tint": "#b5e86b",
+                            "glow": true
+                        },
+                        {
+                            "shape": "ring",
+                            "count": 1,
+                            "size": [
+                                3,
+                                3
+                            ],
+                            "sizeEnd": 5,
+                            "ease": "out",
+                            "life": [
+                                0.25,
+                                0.25
+                            ],
+                            "width": 2,
+                            "alpha": [
+                                1,
+                                0.6,
+                                0
+                            ],
+                            "colors": [
+                                "#f2ffd8",
+                                "#8fd14f"
+                            ],
+                            "glow": true
+                        },
+                        {
+                            "shape": "streak",
+                            "count": 8,
+                            "life": [
+                                0.12,
+                                0.26
+                            ],
+                            "speed": [
+                                90,
+                                200
+                            ],
+                            "gravity": 200,
+                            "drag": 1.2,
+                            "size": [
+                                1.2,
+                                1.8
+                            ],
+                            "length": 7,
+                            "alpha": [
+                                1,
+                                0.9,
+                                0
+                            ],
+                            "colors": [
+                                "#f2ffd8",
+                                "#8fd14f"
+                            ],
+                            "glow": true,
+                            "aim": "forward",
+                            "spread": 40
+                        },
+                        {
+                            "shape": "sprite",
+                            "count": 4,
+                            "sheet": "debris",
+                            "anim": "random",
+                            "fps": 22,
+                            "life": [
+                                0.5,
+                                0.9
+                            ],
+                            "speed": [
+                                50,
+                                120
+                            ],
+                            "angle": 90,
+                            "spread": 120,
+                            "gravity": 340,
+                            "drag": 0.3,
+                            "size": [
+                                1.6,
+                                2.6
+                            ],
+                            "alpha": [
+                                1,
+                                1,
+                                0
+                            ],
+                            "rotJitter": 180,
+                            "spin": [
+                                -360,
+                                360
+                            ],
+                            "tint": "#a8774a"
+                        },
+                        {
+                            "shape": "sprite",
+                            "count": 2,
+                            "sheet": "plume",
+                            "aim": "back",
+                            "spread": 60,
+                            "life": [
+                                0.6,
+                                0.9
+                            ],
+                            "speed": [
+                                10,
+                                30
+                            ],
+                            "drag": 2,
+                            "gravity": -20,
+                            "wind": 1,
+                            "size": [
+                                4,
+                                6
+                            ],
+                            "alpha": [
+                                0,
+                                0.6,
+                                0.3,
+                                0
+                            ],
+                            "rotJitter": 40,
+                            "tint": "#8a7a6a"
+                        }
+                    ]
+                }
             }
         },
         "cluster": {
@@ -1874,1017 +2608,6 @@
                             "rotJitter": 180,
                             "wind": 1,
                             "tint": "#b8a0c8"
-                        }
-                    ]
-                }
-            }
-        },
-        "flak": {
-            "body": {
-                "halo": 8,
-                "alpha": 0.35,
-                "pulse": 4,
-                "sprite": "p_flak",
-                "size": 15,
-                "fps": 8
-            },
-            "muzzle": {
-                "emitters": [
-                    {"count":1,"size":[7,7],"sizeEnd":0.4,"life":[0.09,0.09],"alpha":[0.85,0.5,0],"colors":["#ffffff","#ff5964"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[9,9],"life":[0.12,0.12],"alpha":[1,1,0]},
-                    {"shape":"streak","count":6,"life":[0.1,0.22],"speed":[90,200],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":7,"alpha":[1,0.9,0],"colors":["#ffe27a","#ff5964"],"glow":true,"aim":"forward","spread":35},
-                    {"shape":"sprite","count":3,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[4.199999999999999,6],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#7a6a6a"}
-                ]
-            },
-            "trail": {
-                "emitters": [
-                    {"rate":36,"life":[0.2,0.36],"speed":[0,14],"size":[1.2,2],"sizeEnd":0.3,"colors":["#ffe27a","#ff5964","#7a2030"],"glow":true},
-                    {"shape":"spark","rate":5,"life":[0.2,0.3],"speed":[0,20],"size":[2.4,3.4],"sizeEnd":0.3,"colors":["#ffffff","#ff5964"],"glow":true,"rotJitter":90},
-                    {"shape":"sprite","rate":10,"sheet":"smoke","life":[0.5,0.8],"speed":[0,8],"angle":90,"spread":120,"gravity":-10,"drag":1.2,"size":[2.4000000000000004,3],"sizeEnd":2,"alpha":[0,0.45,0],"rotJitter":180,"wind":1,"tint":"#6a5a5a"}
-                ]
-            },
-            "impact": {
-                "screen": {
-                    "flash": {
-                        "color": "#ffd0a0",
-                        "alpha": 0.08,
-                        "dur": 0.12
-                    }
-                },
-                "emitters": [
-                    {"count":1,"unit":"r","size":[0.6,0.6],"sizeEnd":0.6,"life":[0.15,0.15],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ffe27a","#ff5964"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"flakburst","unit":"r","size":[0.95,0.95],"life":[1.6,1.6],"alpha":[1,1,0.9,0],"rotJitter":30,"scale":1.3,"wind":1},
-                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.45,0.45],"life":[0.22,0.22],"alpha":[1,1,0],"rotJitter":14,"scale":1,"glow":true},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":5,"ease":"out","life":[0.28,0.28],"width":3,"alpha":[0.9,0.5,0],"colors":["#fff3c4","#ff5964"],"glow":true},
-                    {"shape":"streak","count":26,"life":[0.2,0.45],"speed":[240,500],"gravity":120,"drag":1.5,"size":[1.2,1.8],"length":12,"alpha":[1,0.9,0],"colors":["#ffffff","#ffe27a","#ff5964"],"glow":true},
-                    {"shape":"sprite","count":8,"sheet":"debris","anim":"random","fps":26,"life":[0.6,1.1],"speed":[120,260],"gravity":320,"drag":0.6,"size":[1.2,2.2],"alpha":[1,1,0],"rotJitter":180,"spin":[-600,600],"tint":"#7a7e88"},
-                    {"shape":"sprite","count":3,"sheet":"plume","unit":"r","size":[0.4,0.55],"life":[1.6,2.4],"speed":[0.1,0.4],"drag":1,"gravity":-6,"wind":1,"alpha":[0,0.7,0.5,0],"rotJitter":40,"scale":1.2,"tint":"#3a3434","delay":0.15,"offset":0.35}
-                ]
-            }
-        },
-        "seeker": {
-            "body": {
-                "halo": 10,
-                "alpha": 0.45,
-                "pulse": 5,
-                "sprite": "p_seeker",
-                "size": 19,
-                "fps": 18
-            },
-            "muzzle": {
-                "emitters": [
-                    {"count":1,"size":[7,7],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.85,0.5,0],"colors":["#ffffff","#80ffdb"],"glow":true},
-                    {"shape":"ring","count":1,"size":[3,3],"sizeEnd":6,"ease":"out","life":[0.25,0.25],"width":2,"alpha":[1,0.6,0],"colors":["#80ffdb","#2a9d8f"],"glow":true},
-                    {"shape":"sprite","count":4,"sheet":"plume","aim":"forward","spread":90,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[4.8999999999999995,7],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#c8c8c8"},
-                    {"shape":"streak","count":6,"life":[0.1,0.22],"speed":[90,200],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":7,"alpha":[1,0.9,0],"colors":["#ffffff","#80ffdb"],"glow":true,"aim":"forward","spread":40}
-                ]
-            },
-            "trail": {
-                "emitters": [
-                    {"rate":46,"life":[0.15,0.3],"aim":"back","speed":[30,70],"spread":20,"size":[1.4,2.4],"sizeEnd":0.3,"colors":["#ffffff","#ffd27a","#ff7b39"],"glow":true},
-                    {"shape":"sprite","rate":22,"sheet":"smoke","life":[0.9,1.4],"speed":[0,8],"angle":90,"spread":120,"gravity":-4,"drag":1.2,"size":[2.8000000000000003,3.5],"sizeEnd":2,"alpha":[0,0.45,0],"rotJitter":180,"wind":1,"tint":"#d0d0d0"},
-                    {"rate":16,"life":[0.25,0.4],"size":[1.2,1.8],"sizeEnd":0.3,"colors":["#ffffff","#80ffdb"],"glow":true}
-                ]
-            },
-            "impact": {
-                "screen": {
-                    "flash": {
-                        "color": "#80ffdb",
-                        "alpha": 0.08,
-                        "dur": 0.15
-                    }
-                },
-                "emitters": [
-                    {"count":16,"offset":24,"edge":true,"speed":[-135,-135],"life":[0.14,0.2],"size":[1.4,2],"colors":["#ffffff","#80ffdb"],"glow":true,"alpha":[0,1,1]},
-                    {"shape":"sprite","count":2,"sheet":"scorch","unit":"r","size":[0.256,0.32],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true,"delay":0.12},
-                    {"count":1,"unit":"r","size":[0.7,0.7],"sizeEnd":0.6,"life":[0.2,0.2],"alpha":[0.7,0.35,0],"colors":["#ffffff","#80ffdb"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.8,0.8],"life":[0.7,0.7],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.25,"delay":0.12},
-                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.6,0.6],"life":[0.315,0.315],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true,"delay":0.12},
-                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[1,1],"life":[0.4,0.4],"alpha":[0.8,0.6,0],"rotJitter":14,"tint":"#80ffdb","glow":true,"delay":0.12},
-                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.75,0.75],"life":[0.85,0.85],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0,"delay":0.12},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":5,"ease":"out","life":[0.35,0.35],"width":2,"alpha":[0.9,0.5,0],"colors":["#ffffff","#80ffdb"],"glow":true,"delay":0.12},
-                    {"shape":"streak","count":12,"life":[0.2,0.5],"speed":[140,300],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":9,"alpha":[1,0.9,0],"colors":["#ffffff","#80ffdb"],"glow":true,"delay":0.12},
-                    {"shape":"sprite","count":7,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[80,200],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.8,3.4],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a","delay":0.12},
-                    {"shape":"sprite","count":2,"sheet":"plume","unit":"r","size":[0.4,0.5],"life":[1.5,2.2],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#6e7a76","delay":0.4,"offset":0.25}
-                ]
-            },
-            "special": {
-                "steer": {
-                    "emitters": [
-                        {
-                            "shape": "ring",
-                            "rate": 6,
-                            "size": [
-                                3,
-                                3
-                            ],
-                            "sizeEnd": 4,
-                            "ease": "out",
-                            "life": [
-                                0.3,
-                                0.3
-                            ],
-                            "width": 1.5,
-                            "alpha": [
-                                0.9,
-                                0.5,
-                                0
-                            ],
-                            "colors": [
-                                "#ffffff",
-                                "#80ffdb"
-                            ],
-                            "glow": true
-                        }
-                    ]
-                }
-            }
-        },
-        "lance": {
-            "body": {
-                "halo": 9,
-                "alpha": 0.5,
-                "stretch": 24,
-                "sprite": "p_lance",
-                "size": 26,
-                "fps": 20
-            },
-            "muzzle": {
-                "emitters": [
-                    {"shape":"sprite","count":1,"sheet":"flare","size":[12,12],"life":[0.2,0.2],"alpha":[1,1,0],"tint":"#f9f871","glow":true,"aim":"forward","spread":0,"align":true},
-                    {"count":1,"size":[8,8],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.85,0.5,0],"colors":["#ffffff","#f9f871"],"glow":true},
-                    {"shape":"streak","count":8,"life":[0.1,0.25],"speed":[200,420],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":10,"alpha":[1,0.9,0],"colors":["#ffffff","#f9f871","#c8a200"],"glow":true,"aim":"forward","spread":18},
-                    {"shape":"bolt","count":3,"length":18,"size":[1,1],"life":[0.08,0.18],"alpha":[1,1,0],"colors":["#f9f871"],"glow":true,"aim":"forward","spread":60}
-                ]
-            },
-            "trail": {
-                "emitters": [
-                    {"shape":"streak","rate":70,"aim":"forward","speed":[10,30],"spread":6,"length":22,"size":[1,1.5],"life":[0.12,0.25],"colors":["#ffffff","#f9f871","#c8a200"],"glow":true},
-                    {"shape":"bolt","rate":10,"length":16,"size":[1,1],"life":[0.08,0.18],"alpha":[1,1,0],"colors":["#f9f871"],"glow":true,"offset":4},
-                    {"shape":"spark","rate":10,"life":[0.15,0.25],"speed":[0,10],"size":[2.4,3.6],"sizeEnd":0.3,"colors":["#ffffff","#f9f871"],"glow":true,"rotJitter":90}
-                ]
-            },
-            "impact": {
-                "screen": {
-                    "flash": {
-                        "color": "#f9f871",
-                        "alpha": 0.1,
-                        "dur": 0.12
-                    }
-                },
-                "emitters": [
-                    {"shape":"sprite","count":1,"sheet":"scorch","unit":"r","size":[0.36000000000000004,0.45],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
-                    {"shape":"sprite","count":1,"sheet":"flare","size":[1.4,1.4],"life":[0.32,0.32],"alpha":[1,1,0],"tint":"#f9f871","glow":true,"unit":"r"},
-                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[1.1,1.1],"life":[0.3,0.3],"alpha":[1,1,0],"rotJitter":14,"tint":"#f9f871","glow":true},
-                    {"count":1,"unit":"r","size":[1,1],"sizeEnd":0.6,"life":[0.18,0.18],"alpha":[0.7,0.35,0],"colors":["#ffffff","#f9f871"],"glow":true},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":5,"ease":"out","life":[0.3,0.3],"width":2,"alpha":[0.9,0.5,0],"colors":["#ffffff","#f9f871"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.9,0.9],"life":[0.7,0.7],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
-                    {"shape":"streak","count":14,"life":[0.2,0.5],"speed":[240,520],"gravity":100,"drag":1.2,"size":[1.2,1.8],"length":14,"alpha":[1,0.9,0],"colors":["#ffffff","#f9f871","#c8a200"],"glow":true},
-                    {"shape":"bolt","count":5,"unit":"r","length":0.9,"size":[1,1],"life":[0.1,0.22],"alpha":[1,1,0],"colors":["#f9f871"],"glow":true},
-                    {"shape":"sprite","count":4,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[60,150],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.6,3],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"}
-                ]
-            },
-            "special": {
-                "pierce": {
-                    "emitters": [
-                        {
-                            "shape": "sprite",
-                            "count": 1,
-                            "sheet": "flare",
-                            "size": [
-                                16,
-                                16
-                            ],
-                            "life": [
-                                0.25,
-                                0.25
-                            ],
-                            "alpha": [
-                                1,
-                                1,
-                                0
-                            ],
-                            "tint": "#f9f871",
-                            "glow": true,
-                            "aim": "forward",
-                            "spread": 0,
-                            "align": true
-                        },
-                        {
-                            "count": 1,
-                            "size": [
-                                12,
-                                12
-                            ],
-                            "sizeEnd": 0.4,
-                            "life": [
-                                0.16,
-                                0.16
-                            ],
-                            "alpha": [
-                                0.85,
-                                0.5,
-                                0
-                            ],
-                            "colors": [
-                                "#ffffff",
-                                "#f9f871"
-                            ],
-                            "glow": true
-                        },
-                        {
-                            "shape": "streak",
-                            "count": 12,
-                            "life": [
-                                0.12,
-                                0.3
-                            ],
-                            "speed": [
-                                300,
-                                600
-                            ],
-                            "gravity": 200,
-                            "drag": 1.2,
-                            "size": [
-                                1.2,
-                                1.8
-                            ],
-                            "length": 16,
-                            "alpha": [
-                                1,
-                                0.9,
-                                0
-                            ],
-                            "colors": [
-                                "#ffffff",
-                                "#f9f871",
-                                "#c8a200"
-                            ],
-                            "glow": true,
-                            "aim": "forward",
-                            "spread": 30
-                        },
-                        {
-                            "shape": "streak",
-                            "count": 8,
-                            "life": [
-                                0.15,
-                                0.3
-                            ],
-                            "speed": [
-                                120,
-                                260
-                            ],
-                            "gravity": 200,
-                            "drag": 1.2,
-                            "size": [
-                                1.2,
-                                1.8
-                            ],
-                            "length": 9,
-                            "alpha": [
-                                1,
-                                0.9,
-                                0
-                            ],
-                            "colors": [
-                                "#ffffff",
-                                "#f9f871",
-                                "#c8a200"
-                            ],
-                            "glow": true,
-                            "aim": "normal",
-                            "spread": 180
-                        },
-                        {
-                            "shape": "sprite",
-                            "count": 4,
-                            "sheet": "debris",
-                            "anim": "random",
-                            "fps": 26,
-                            "life": [
-                                0.5,
-                                0.9
-                            ],
-                            "speed": [
-                                80,
-                                200
-                            ],
-                            "aim": "forward",
-                            "spread": 70,
-                            "gravity": 320,
-                            "size": [
-                                1.4,
-                                2.4
-                            ],
-                            "alpha": [
-                                1,
-                                1,
-                                0
-                            ],
-                            "spin": [
-                                -600,
-                                600
-                            ],
-                            "tint": "#6a6e78"
-                        }
-                    ]
-                }
-            }
-        },
-        "heavy": {
-            "body": {
-                "halo": 12,
-                "alpha": 0.35,
-                "pulse": 2,
-                "sprite": "p_heavy",
-                "size": 21
-            },
-            "muzzle": {
-                "screen": {
-                    "shake": 0.15
-                },
-                "emitters": [
-                    {"count":1,"size":[15,15],"sizeEnd":0.4,"life":[0.14,0.14],"alpha":[0.85,0.5,0],"colors":["#ffffff","#ffd75e","#e8483f"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[15,15],"life":[0.16,0.16],"alpha":[1,1,0]},
-                    {"shape":"ring","count":1,"size":[5,5],"sizeEnd":7,"ease":"out","life":[0.3,0.3],"width":4,"alpha":[1,0.6,0],"colors":["#ffd75e","#e8483f"],"glow":true},
-                    {"shape":"sprite","count":6,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[8.399999999999999,12],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#a0a0a0"},
-                    {"shape":"streak","count":14,"life":[0.3,0.6],"speed":[70,190],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":8,"alpha":[1,0.9,0],"colors":["#fff3c4","#ff8c42"],"glow":true,"aim":"forward","spread":90}
-                ]
-            },
-            "trail": {
-                "emitters": [
-                    {"shape":"sprite","rate":20,"sheet":"smoke","life":[1,1.4],"speed":[0,8],"angle":90,"spread":120,"gravity":-10,"drag":1.2,"size":[4.4,5.5],"sizeEnd":2,"alpha":[0,0.45,0],"rotJitter":180,"wind":1,"tint":"#7a6a60"},
-                    {"rate":34,"life":[0.4,0.8],"speed":[0,25],"gravity":150,"size":[1.4,2.6],"sizeEnd":0.3,"colors":["#fff3c4","#ff8c42","#e8483f"],"glow":true}
-                ]
-            },
-            "impact": {
-                "screen": {
-                    "flash": {
-                        "color": "#ff8c42",
-                        "alpha": 0.18,
-                        "dur": 0.25
-                    }
-                },
-                "emitters": [
-                    {"shape":"sprite","count":5,"sheet":"scorch","unit":"r","size":[0.256,0.32],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
-                    {"count":1,"unit":"r","size":[0.8,0.8],"sizeEnd":0.6,"life":[0.28,0.28],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ffd75e","#e8483f"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.95,0.95],"life":[1,1],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.35},
-                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.712,0.712],"life":[0.4,0.4],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.55,0.55],"life":[0.8,0.8],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.3,"delay":0.1,"offset":0.45},
-                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.413,0.413],"life":[0.36,0.36],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true,"delay":0.1,"offset":0.45},
-                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.95,0.95],"life":[1.1,1.1],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.2,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
-                    {"shape":"sprite","count":1,"sheet":"shock","unit":"r","size":[1.3,1.3],"life":[0.5,0.5],"alpha":[0.8,0.5,0],"rotJitter":10,"glow":true},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":4.8,"ease":"out","life":[0.7,0.7],"width":4,"alpha":[0.9,0.5,0],"colors":["#d8c090","#8a6a3a"]},
-                    {"shape":"sprite","count":18,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[130,320],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[2.4,5],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
-                    {"count":16,"life":[0.5,1],"speed":[100,260],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.2,2.4],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
-                    {"shape":"streak","count":16,"life":[0.2,0.5],"speed":[160,340],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":11,"alpha":[1,0.9,0],"colors":["#fff3c4","#ff8c42","#e8483f"],"glow":true},
-                    {"count":12,"life":[0.8,1.6],"speed":[40,160],"angle":90,"spread":150,"gravity":150,"drag":0.7,"size":[0.8,1.5],"colors":["#ffffff","#ffd75e","#ff7b39","#5a2a1a"],"glow":true},
-                    {"shape":"sprite","count":4,"sheet":"plume","unit":"r","size":[0.48,0.6],"life":[2.4,3.2],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#5a4c44","delay":0.25,"offset":0.25}
-                ]
-            }
-        },
-        "needle": {
-            "body": {
-                "halo": 4,
-                "alpha": 0.4,
-                "stretch": 30,
-                "sprite": "p_needle",
-                "size": 17
-            },
-            "muzzle": {
-                "emitters": [
-                    {"count":1,"size":[5,5],"sizeEnd":0.4,"life":[0.08,0.08],"alpha":[0.85,0.5,0],"colors":["#ffffff","#9fd8ff"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[6,6],"life":[0.08,0.08],"alpha":[1,1,0]},
-                    {"shape":"streak","count":6,"life":[0.08,0.18],"speed":[300,500],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":14,"alpha":[1,0.9,0],"colors":["#ffffff","#caf0f8","#4a8fc0"],"glow":true,"aim":"forward","spread":12}
-                ]
-            },
-            "trail": {
-                "emitters": [
-                    {"shape":"streak","rate":100,"aim":"forward","speed":[10,40],"spread":4,"length":20,"size":[0.8,1.1],"life":[0.1,0.2],"colors":["#ffffff","#caf0f8","#4a8fc0"],"glow":true},
-                    {"rate":16,"life":[0.2,0.3],"speed":[0,14],"size":[0.8,1.2],"sizeEnd":0.2,"colors":["#ffffff","#caf0f8"],"glow":true}
-                ]
-            },
-            "impact": {
-                "emitters": [
-                    {"shape":"sprite","count":1,"sheet":"flare","size":[1.4,1.4],"life":[0.3,0.3],"alpha":[1,1,0],"tint":"#caf0f8","glow":true,"unit":"r"},
-                    {"count":1,"unit":"r","size":[1,1],"sizeEnd":0.6,"life":[0.16,0.16],"alpha":[0.7,0.35,0],"colors":["#ffffff","#9fd8ff"],"glow":true},
-                    {"shape":"spark","count":1,"unit":"r","size":[1.8,1.8],"sizeEnd":0.3,"life":[0.26,0.26],"alpha":[1,1,0],"colors":["#ffffff","#caf0f8","#4a8fc0"],"glow":true,"rotJitter":90,"spin":[-60,60]},
-                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[1.3,1.3],"life":[0.6,0.6],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
-                    {"shape":"streak","count":10,"life":[0.2,0.5],"speed":[260,520],"gravity":60,"drag":1.2,"size":[0.8,1.1],"length":14,"alpha":[1,0.9,0],"colors":["#ffffff","#caf0f8","#4a8fc0"],"glow":true},
-                    {"shape":"sprite","count":4,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[50,130],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.4,2.6],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"}
-                ]
-            }
-        },
-        "emp": {
-            "body": {
-                "halo": 10,
-                "alpha": 0.5,
-                "pulse": 9,
-                "sprite": "p_emp",
-                "size": 14,
-                "fps": 20
-            },
-            "muzzle": {
-                "emitters": [
-                    {"shape":"sprite","count":1,"sheet":"flare","size":[9,9],"life":[0.18,0.18],"alpha":[1,1,0],"tint":"#72efdd","glow":true},
-                    {"shape":"ring","count":1,"size":[3,3],"sizeEnd":6,"ease":"out","life":[0.25,0.25],"width":2,"alpha":[1,0.6,0],"colors":["#72efdd","#1f9a8a"],"glow":true},
-                    {"shape":"bolt","count":3,"length":22,"size":[1,1],"life":[0.1,0.22],"alpha":[1,1,0],"colors":["#72efdd"],"glow":true,"offset":4,"aim":"forward","spread":80}
-                ]
-            },
-            "trail": {
-                "emitters": [
-                    {"shape":"bolt","rate":9,"length":15,"size":[1,1],"life":[0.1,0.22],"alpha":[1,1,0],"colors":["#72efdd"],"glow":true,"offset":6},
-                    {"rate":26,"life":[0.2,0.36],"speed":[0,14],"size":[1.2,2],"sizeEnd":0.3,"colors":["#ffffff","#72efdd","#1f9a8a"],"glow":true},
-                    {"shape":"sprite","rate":5,"sheet":"electric","anim":"random","fps":24,"life":[0.2,0.3],"size":[5,7],"alpha":[0.7,0],"rotJitter":180,"tint":"#72efdd","glow":true}
-                ]
-            },
-            "impact": {
-                "screen": {
-                    "flash": {
-                        "color": "#72efdd",
-                        "alpha": 0.15,
-                        "dur": 0.25
-                    }
-                },
-                "emitters": [
-                    {"shape":"sprite","count":1,"sheet":"electric","unit":"r","size":[1.2,1.2],"life":[0.6,0.6],"alpha":[1,1,0],"rotJitter":180,"tint":"#72efdd","glow":true,"scale":1.2},
-                    {"shape":"sprite","count":1,"sheet":"electric","unit":"r","size":[0.9,0.9],"life":[0.5,0.5],"alpha":[1,1,0],"rotJitter":180,"tint":"#b8fff4","glow":true,"delay":0.15},
-                    {"count":1,"unit":"r","size":[0.7,0.7],"sizeEnd":0.6,"life":[0.24,0.24],"alpha":[0.7,0.35,0],"colors":["#ffffff","#72efdd"],"glow":true},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.15,0.15],"sizeEnd":6.6,"ease":"out","life":[0.4,0.4],"width":3,"alpha":[0.9,0.5,0],"colors":["#ffffff","#72efdd"],"glow":true},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.15,0.15],"sizeEnd":6.6,"ease":"out","life":[0.55,0.55],"width":2,"alpha":[0.9,0.5,0],"colors":["#72efdd","#1f9a8a"],"glow":true,"delay":0.1},
-                    {"shape":"bolt","count":6,"unit":"r","length":0.9,"size":[1,1],"life":[0.14,0.3],"alpha":[1,1,0],"colors":["#72efdd"],"glow":true},
-                    {"shape":"bolt","count":4,"unit":"r","length":0.7,"size":[1,1],"life":[0.14,0.3],"alpha":[1,1,0],"colors":["#72efdd"],"glow":true,"delay":0.12},
-                    {"shape":"streak","count":12,"life":[0.2,0.5],"speed":[120,280],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":8,"alpha":[1,0.9,0],"colors":["#ffffff","#72efdd","#1f9a8a"],"glow":true},
-                    {"count":12,"offset":21,"life":[0.7,1.2],"speed":[3,24],"gravity":-25,"drag":1,"size":[1.2,2],"colors":["#ffffff","#72efdd","#1f9a8a"],"glow":true},
-                    {"shape":"sprite","count":4,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[50,130],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.4,2.6],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"}
-                ]
-            },
-            "special": {
-                "arc": {
-                    "emitters": [
-                        {
-                            "shape": "sprite",
-                            "count": 1,
-                            "sheet": "electric",
-                            "size": [
-                                16,
-                                16
-                            ],
-                            "life": [
-                                0.45,
-                                0.45
-                            ],
-                            "alpha": [
-                                1,
-                                1,
-                                0
-                            ],
-                            "rotJitter": 180,
-                            "tint": "#72efdd",
-                            "glow": true
-                        },
-                        {
-                            "shape": "bolt",
-                            "count": 5,
-                            "length": 24,
-                            "size": [
-                                1,
-                                1
-                            ],
-                            "life": [
-                                0.2,
-                                0.45
-                            ],
-                            "alpha": [
-                                1,
-                                1,
-                                0
-                            ],
-                            "colors": [
-                                "#72efdd"
-                            ],
-                            "glow": true,
-                            "offset": 8
-                        },
-                        {
-                            "shape": "spark",
-                            "count": 4,
-                            "life": [
-                                0.2,
-                                0.4
-                            ],
-                            "speed": [
-                                20,
-                                70
-                            ],
-                            "size": [
-                                3,
-                                5
-                            ],
-                            "sizeEnd": 0.3,
-                            "colors": [
-                                "#ffffff",
-                                "#72efdd"
-                            ],
-                            "glow": true,
-                            "rotJitter": 90,
-                            "spin": [
-                                -300,
-                                300
-                            ]
-                        },
-                        {
-                            "count": 8,
-                            "life": [
-                                0.5,
-                                0.9
-                            ],
-                            "speed": [
-                                10,
-                                50
-                            ],
-                            "gravity": -30,
-                            "drag": 1,
-                            "size": [
-                                1,
-                                1.8
-                            ],
-                            "colors": [
-                                "#ffffff",
-                                "#72efdd",
-                                "#1f9a8a"
-                            ],
-                            "glow": true
-                        }
-                    ]
-                }
-            }
-        },
-        "roller": {
-            "body": {
-                "halo": 5,
-                "alpha": 0.2,
-                "sprite": "p_roller",
-                "size": 12,
-                "roll": 4.5
-            },
-            "muzzle": {
-                "emitters": [
-                    {"count":1,"size":[8,8],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.8,0.45,0],"colors":["#ffffff","#ffe27a","#d9a441"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[10,10],"life":[0.12,0.12],"alpha":[1,1,0]},
-                    {"shape":"sprite","count":4,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[5.6,8],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#b9a27a"},
-                    {"shape":"streak","count":8,"life":[0.15,0.35],"speed":[60,150],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":7,"alpha":[1,0.9,0],"colors":["#fff3c4","#d9a441"],"glow":true,"aim":"forward","spread":60}
-                ]
-            },
-            "trail": {
-                "emitters": [
-                    {"shape":"sprite","rate":26,"sheet":"smoke","life":[0.6,1],"speed":[0,18],"angle":90,"spread":140,"gravity":-14,"drag":1.2,"size":[3.2,4],"sizeEnd":2,"alpha":[0,0.45,0],"rotJitter":180,"wind":1,"tint":"#c9b48a","offset":2},
-                    {"rate":22,"life":[0.3,0.6],"speed":[10,50],"angle":90,"spread":120,"gravity":260,"drag":0.6,"size":[0.9,1.6],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
-                    {"shape":"sprite","rate":4,"sheet":"debris","anim":"random","fps":20,"life":[0.4,0.7],"speed":[30,70],"angle":90,"spread":100,"gravity":300,"size":[1.2,2],"alpha":[1,1,0],"spin":[-400,400],"tint":"#a8774a"}
-                ]
-            },
-            "impact": {
-                "screen": {
-                    "flash": {
-                        "color": "#d9a441",
-                        "alpha": 0.1,
-                        "dur": 0.2
-                    }
-                },
-                "emitters": [
-                    {"shape":"sprite","count":3,"sheet":"scorch","unit":"r","size":[0.272,0.34],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
-                    {"count":1,"unit":"r","size":[0.68,0.68],"sizeEnd":0.6,"life":[0.24,0.24],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ffe27a","#d9a441"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.85,0.85],"life":[0.8,0.8],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.3},
-                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.637,0.637],"life":[0.36,0.36],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.85,0.85],"life":[1,1],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":4.2,"ease":"out","life":[0.55,0.55],"width":3,"alpha":[0.9,0.5,0],"colors":["#d8c090","#8a6a3a"]},
-                    {"shape":"sprite","count":12,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[100,240],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[2,4],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
-                    {"count":12,"life":[0.5,1],"speed":[80,220],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.2,2.4],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
-                    {"shape":"streak","count":8,"life":[0.2,0.5],"speed":[100,220],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":8,"alpha":[1,0.9,0],"colors":["#fff3c4","#d9a441"],"glow":true},
-                    {"shape":"sprite","count":3,"sheet":"plume","unit":"r","size":[0.48,0.6],"life":[1.8,2.6],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#7a6a56","delay":0.25,"offset":0.25}
-                ]
-            }
-        },
-        "nuke": {
-            "body": {
-                "halo": 18,
-                "alpha": 0.45,
-                "pulse": 3,
-                "sprite": "p_nuke",
-                "size": 26
-            },
-            "muzzle": {
-                "screen": {
-                    "shake": 0.3
-                },
-                "emitters": [
-                    {"count":1,"size":[18,18],"sizeEnd":0.4,"life":[0.16,0.16],"alpha":[0.85,0.5,0],"colors":["#ffffff","#ff6b6b","#7a1a1a"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[18,18],"life":[0.18,0.18],"alpha":[1,1,0]},
-                    {"shape":"ring","count":1,"size":[6,6],"sizeEnd":8,"ease":"out","life":[0.35,0.35],"width":4,"alpha":[1,0.6,0],"colors":["#ffffff","#ff6b6b"],"glow":true},
-                    {"shape":"sprite","count":7,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[9.1,13],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#a0a0a0"},
-                    {"shape":"streak","count":16,"life":[0.3,0.6],"speed":[80,220],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":8,"alpha":[1,0.9,0],"colors":["#fff3c4","#ff6b6b"],"glow":true,"aim":"forward","spread":100}
-                ]
-            },
-            "trail": {
-                "emitters": [
-                    {"rate":50,"life":[0.35,0.7],"speed":[0,26],"gravity":80,"size":[1.8,3.2],"sizeEnd":0.3,"colors":["#ffffff","#ff9f43","#ff6b6b","#7a1a1a"],"glow":true},
-                    {"shape":"sprite","rate":20,"sheet":"smoke","life":[1,1.5],"speed":[0,8],"angle":90,"spread":120,"gravity":-10,"drag":1.2,"size":[4.800000000000001,6],"sizeEnd":2,"alpha":[0,0.45,0],"rotJitter":180,"wind":1,"tint":"#8a5a5a"},
-                    {"shape":"ring","rate":3,"size":[8,8],"sizeEnd":1.7,"ease":"out","life":[0.5,0.5],"width":2,"alpha":[0.8,0.4,0],"colors":["#ff6b6b"],"glow":true}
-                ]
-            },
-            "impact": {
-                "screen": {
-                    "shake": 0.9,
-                    "flash": {
-                        "color": "#ffb070",
-                        "alpha": 0.35,
-                        "dur": 0.6
-                    }
-                },
-                "emitters": [
-                    {"shape":"sprite","count":6,"sheet":"scorch","unit":"r","size":[0.24,0.3],"life":[4,5],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
-                    {"count":1,"unit":"r","size":[1.28,1.28],"sizeEnd":0.6,"life":[0.3,0.3],"alpha":[0.7,0.35,0],"colors":["#ffffff","#fff3c4","#ff6b6b"],"glow":true},
-                    {"count":1,"unit":"r","size":[0.8,0.8],"sizeEnd":0.6,"life":[0.6,0.6],"alpha":[0.6,0.35,0],"colors":["#ffffff","#ffb13c"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[1,1],"life":[0.9,0.9],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.4},
-                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.75,0.75],"life":[0.4,0.4],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"shock","unit":"r","size":[1.6,1.6],"life":[0.8,0.8],"alpha":[0.8,0.5,0],"rotJitter":10,"glow":true,"delay":0.04},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":8.5,"ease":"out","life":[0.9,0.9],"width":5,"alpha":[0.9,0.5,0],"colors":["#e8d4a0","#a0703a"],"delay":0.05},
-                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[1,1],"life":[1.4,1.4],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.3,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0,"delay":0.05},
-                    {"shape":"sprite","count":1,"sheet":"nuke","unit":"r","size":[1,1],"life":[3.6,3.6],"alpha":[1,1,1,0.85,0],"delay":0.1,"anchor":"bottom","scale":2,"wind":0.3},
-                    {"shape":"sprite","count":24,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[160,400],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[2.6,5.5],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
-                    {"count":20,"life":[0.5,1],"speed":[120,320],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.2,2.4],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
-                    {"count":30,"life":[0.8,1.6],"speed":[40,160],"angle":90,"spread":150,"gravity":150,"drag":0.7,"size":[0.8,1.5],"colors":["#ffffff","#ffb13c","#ff6b6b","#5a2a2a"],"glow":true},
-                    {"shape":"streak","count":20,"life":[0.2,0.5],"speed":[200,460],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":13,"alpha":[1,0.9,0],"colors":["#ffffff","#fff3c4","#ff6b6b"],"glow":true},
-                    {"shape":"sprite","count":4,"sheet":"plume","unit":"r","size":[0.5599999999999999,0.7],"life":[2.6,3.6],"speed":[0.1,0.3],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#5a4a40","delay":1.6,"offset":0.6}
-                ]
-            }
-        },
-        "leapfrog": {
-            "body": {
-                "halo": 8,
-                "alpha": 0.35,
-                "pulse": 5,
-                "sprite": "p_leapfrog",
-                "size": 16
-            },
-            "muzzle": {
-                "emitters": [
-                    {"count":1,"size":[8,8],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.85,0.5,0],"colors":["#ffffff","#b5e86b"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[10,10],"life":[0.12,0.12],"alpha":[1,1,0]},
-                    {"shape":"streak","count":8,"life":[0.1,0.22],"speed":[90,200],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":7,"alpha":[1,0.9,0],"colors":["#f2ffd8","#8fd14f"],"glow":true,"aim":"forward","spread":40},
-                    {"shape":"sprite","count":3,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[4.5,6.5],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#a0a8a0"}
-                ]
-            },
-            "trail": {
-                "emitters": [
-                    {"rate":38,"life":[0.2,0.36],"speed":[0,14],"size":[1.2,2],"sizeEnd":0.3,"colors":["#f2ffd8","#b5e86b","#4a8a2a"],"glow":true},
-                    {"shape":"spark","rate":6,"life":[0.2,0.3],"speed":[0,16],"size":[2.2,3.2],"sizeEnd":0.4,"colors":["#ffffff","#b5e86b"],"glow":true,"rotJitter":90,"spin":[-200,200]},
-                    {"shape":"sprite","rate":10,"sheet":"smoke","life":[0.6,0.9],"speed":[0,8],"angle":90,"spread":120,"gravity":-10,"drag":1.2,"size":[2.8,3.5],"sizeEnd":2,"alpha":[0,0.45,0],"rotJitter":180,"wind":1,"tint":"#8a9a80"}
-                ]
-            },
-            "impact": {
-                "emitters": [
-                    {"shape":"sprite","count":3,"sheet":"scorch","unit":"r","size":[0.256,0.32],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
-                    {"count":1,"unit":"r","size":[0.62,0.62],"sizeEnd":0.6,"life":[0.18,0.18],"alpha":[0.7,0.35,0],"colors":["#ffffff","#b5e86b"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.85,0.85],"life":[0.7,0.7],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.25},
-                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.62,0.62],"life":[0.33,0.33],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[0.8,0.8],"life":[0.3,0.3],"alpha":[0.7,0.5,0],"rotJitter":14,"tint":"#8fd14f","glow":true},
-                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.8,0.8],"life":[0.9,0.9],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":4,"ease":"out","life":[0.42,0.42],"width":3,"alpha":[0.9,0.5,0],"colors":["#e8d4a0","#a0703a"]},
-                    {"shape":"sprite","count":9,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[90,220],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[2,3.6],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
-                    {"count":8,"life":[0.5,1],"speed":[70,180],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.2,2.4],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
-                    {"shape":"streak","count":10,"life":[0.2,0.45],"speed":[120,250],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":8,"alpha":[1,0.9,0],"colors":["#f2ffd8","#8fd14f"],"glow":true},
-                    {"shape":"sprite","count":2,"sheet":"plume","unit":"r","size":[0.44,0.55],"life":[1.6,2.4],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#6e7a66","delay":0.25,"offset":0.25}
-                ]
-            },
-            "special": {
-                "hop": {
-                    "emitters": [
-                        {
-                            "shape": "sprite",
-                            "count": 1,
-                            "sheet": "flare",
-                            "size": [
-                                12,
-                                12
-                            ],
-                            "life": [
-                                0.22,
-                                0.22
-                            ],
-                            "alpha": [
-                                1,
-                                1,
-                                0
-                            ],
-                            "tint": "#b5e86b",
-                            "glow": true
-                        },
-                        {
-                            "shape": "ring",
-                            "count": 1,
-                            "size": [
-                                3,
-                                3
-                            ],
-                            "sizeEnd": 5,
-                            "ease": "out",
-                            "life": [
-                                0.25,
-                                0.25
-                            ],
-                            "width": 2,
-                            "alpha": [
-                                1,
-                                0.6,
-                                0
-                            ],
-                            "colors": [
-                                "#f2ffd8",
-                                "#8fd14f"
-                            ],
-                            "glow": true
-                        },
-                        {
-                            "shape": "streak",
-                            "count": 8,
-                            "life": [
-                                0.12,
-                                0.26
-                            ],
-                            "speed": [
-                                90,
-                                200
-                            ],
-                            "gravity": 200,
-                            "drag": 1.2,
-                            "size": [
-                                1.2,
-                                1.8
-                            ],
-                            "length": 7,
-                            "alpha": [
-                                1,
-                                0.9,
-                                0
-                            ],
-                            "colors": [
-                                "#f2ffd8",
-                                "#8fd14f"
-                            ],
-                            "glow": true,
-                            "aim": "forward",
-                            "spread": 40
-                        },
-                        {
-                            "shape": "sprite",
-                            "count": 4,
-                            "sheet": "debris",
-                            "anim": "random",
-                            "fps": 22,
-                            "life": [
-                                0.5,
-                                0.9
-                            ],
-                            "speed": [
-                                50,
-                                120
-                            ],
-                            "angle": 90,
-                            "spread": 120,
-                            "gravity": 340,
-                            "drag": 0.3,
-                            "size": [
-                                1.6,
-                                2.6
-                            ],
-                            "alpha": [
-                                1,
-                                1,
-                                0
-                            ],
-                            "rotJitter": 180,
-                            "spin": [
-                                -360,
-                                360
-                            ],
-                            "tint": "#a8774a"
-                        },
-                        {
-                            "shape": "sprite",
-                            "count": 2,
-                            "sheet": "plume",
-                            "aim": "back",
-                            "spread": 60,
-                            "life": [
-                                0.6,
-                                0.9
-                            ],
-                            "speed": [
-                                10,
-                                30
-                            ],
-                            "drag": 2,
-                            "gravity": -20,
-                            "wind": 1,
-                            "size": [
-                                4,
-                                6
-                            ],
-                            "alpha": [
-                                0,
-                                0.6,
-                                0.3,
-                                0
-                            ],
-                            "rotJitter": 40,
-                            "tint": "#8a7a6a"
-                        }
-                    ]
-                }
-            }
-        },
-        "funky": {
-            "body": {
-                "halo": 9,
-                "alpha": 0.45,
-                "pulse": 8,
-                "sprite": "p_funky",
-                "size": 14
-            },
-            "muzzle": {
-                "emitters": [
-                    {"count":1,"size":[8,8],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.85,0.5,0],"colors":["#ffffff","#ff7eb6"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[10,10],"life":[0.12,0.12],"alpha":[1,1,0]},
-                    {"shape":"ring","count":1,"size":[3,3],"sizeEnd":5,"ease":"out","life":[0.22,0.22],"width":2,"alpha":[1,0.6,0],"colors":["#ff7eb6","#7ee8ff"],"glow":true},
-                    {"shape":"spark","count":6,"life":[0.15,0.3],"speed":[60,160],"aim":"forward","spread":60,"size":[2,3],"sizeEnd":0.3,"colors":["#ffffff","#ff7eb6","#7ee8ff","#ffe27a"],"glow":true,"rotJitter":90},
-                    {"shape":"sprite","count":2,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[4.2,6],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#c8a0b8"}
-                ]
-            },
-            "trail": {
-                "emitters": [
-                    {"rate":40,"life":[0.2,0.36],"speed":[0,14],"size":[1.2,2],"sizeEnd":0.3,"colors":["#ffffff","#ff7eb6","#7ee8ff","#ffe27a"],"glow":true},
-                    {"shape":"spark","rate":10,"life":[0.2,0.32],"speed":[0,22],"size":[2.2,3.4],"sizeEnd":0.4,"colors":["#ffffff","#7ee8ff","#ff7eb6","#b5e86b"],"glow":true,"rotJitter":90,"spin":[-260,260]},
-                    {"shape":"sprite","rate":6,"sheet":"smoke","life":[0.5,0.8],"speed":[0,8],"angle":90,"spread":120,"gravity":-10,"drag":1.2,"size":[2.4,3],"sizeEnd":2,"alpha":[0,0.4,0],"rotJitter":180,"wind":1,"tint":"#c8a0b8"}
-                ]
-            },
-            "impact": {
-                "emitters": [
-                    {"shape":"sprite","count":2,"sheet":"scorch","unit":"r","size":[0.26,0.32],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
-                    {"count":1,"unit":"r","size":[0.64,0.64],"sizeEnd":0.6,"life":[0.18,0.18],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ff7eb6"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.75,0.75],"life":[0.55,0.55],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.15},
-                    {"shape":"sprite","count":1,"sheet":"flakburst","unit":"r","size":[0.9,0.9],"life":[0.6,0.6],"alpha":[1,1,0.8,0],"rotJitter":30,"scale":1.1},
-                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[1,1],"life":[0.4,0.4],"alpha":[0.8,0.6,0],"rotJitter":14,"tint":"#ff7eb6","glow":true},
-                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.65,0.65],"life":[0.75,0.75],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
-                    {"count":16,"life":[0.4,0.9],"speed":[80,210],"gravity":220,"drag":0.8,"size":[1.4,2.4],"colors":["#ffffff","#ff7eb6","#7ee8ff","#ffe27a","#b5e86b"],"glow":true},
-                    {"shape":"sprite","count":6,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[60,160],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.6,3],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
-                    {"shape":"sprite","count":1,"sheet":"plume","unit":"r","size":[0.4,0.5],"life":[1.4,2],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#8a7898","delay":0.25,"offset":0.25}
-                ]
-            },
-            "special": {
-                "scatter": {
-                    "emitters": [
-                        {
-                            "shape": "sprite",
-                            "count": 1,
-                            "sheet": "flare",
-                            "size": [
-                                16,
-                                16
-                            ],
-                            "life": [
-                                0.28,
-                                0.28
-                            ],
-                            "alpha": [
-                                1,
-                                1,
-                                0
-                            ],
-                            "tint": "#ff7eb6",
-                            "glow": true
-                        },
-                        {
-                            "shape": "ring",
-                            "count": 1,
-                            "size": [
-                                4,
-                                4
-                            ],
-                            "sizeEnd": 6,
-                            "ease": "out",
-                            "life": [
-                                0.3,
-                                0.3
-                            ],
-                            "width": 3,
-                            "alpha": [
-                                1,
-                                0.6,
-                                0
-                            ],
-                            "colors": [
-                                "#7ee8ff",
-                                "#ff7eb6"
-                            ],
-                            "glow": true
-                        },
-                        {
-                            "shape": "spark",
-                            "count": 12,
-                            "life": [
-                                0.3,
-                                0.6
-                            ],
-                            "speed": [
-                                80,
-                                200
-                            ],
-                            "aim": "forward",
-                            "spread": 140,
-                            "gravity": 120,
-                            "drag": 0.6,
-                            "size": [
-                                2.4,
-                                3.8
-                            ],
-                            "sizeEnd": 0.3,
-                            "colors": [
-                                "#ffffff",
-                                "#ff7eb6",
-                                "#7ee8ff",
-                                "#ffe27a",
-                                "#b5e86b"
-                            ],
-                            "glow": true,
-                            "rotJitter": 90,
-                            "spin": [
-                                -300,
-                                300
-                            ]
-                        },
-                        {
-                            "shape": "streak",
-                            "count": 12,
-                            "life": [
-                                0.2,
-                                0.4
-                            ],
-                            "speed": [
-                                120,
-                                260
-                            ],
-                            "gravity": 200,
-                            "drag": 1.2,
-                            "size": [
-                                1.2,
-                                1.8
-                            ],
-                            "length": 8,
-                            "alpha": [
-                                1,
-                                0.9,
-                                0
-                            ],
-                            "colors": [
-                                "#ffffff",
-                                "#ff7eb6",
-                                "#7ee8ff"
-                            ],
-                            "glow": true,
-                            "aim": "forward",
-                            "spread": 140
-                        },
-                        {
-                            "shape": "sprite",
-                            "count": 2,
-                            "sheet": "smoke",
-                            "life": [
-                                0.6,
-                                0.9
-                            ],
-                            "speed": [
-                                5,
-                                25
-                            ],
-                            "angle": 90,
-                            "spread": 120,
-                            "gravity": -15,
-                            "drag": 1.2,
-                            "size": [
-                                5,
-                                8
-                            ],
-                            "sizeEnd": 1.8,
-                            "alpha": [
-                                0,
-                                0.6,
-                                0
-                            ],
-                            "rotJitter": 180,
-                            "wind": 1,
-                            "tint": "#c8a0b8"
                         }
                     ]
                 }
@@ -3104,6 +2827,138 @@
                 }
             }
         },
+        "babyroller": {
+            "body": {
+                "halo": 4,
+                "alpha": 0.2,
+                "sprite": "p_roller",
+                "size": 9,
+                "roll": 3.4
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[6,6],"sizeEnd":0.4,"life":[0.08,0.08],"alpha":[0.8,0.45,0],"colors":["#ffffff","#ffe27a","#e0b860"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[8,8],"life":[0.1,0.1],"alpha":[1,1,0]},
+                    {"shape":"sprite","count":3,"sheet":"plume","aim":"forward","spread":50,"life":[0.6,1],"speed":[20,50],"drag":2,"gravity":-20,"wind":1,"size":[4,6],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#b9a27a"},
+                    {"shape":"streak","count":6,"life":[0.12,0.28],"speed":[60,140],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":6,"alpha":[1,0.9,0],"colors":["#fff3c4","#e0b860"],"glow":true,"aim":"forward","spread":60}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"shape":"sprite","rate":18,"sheet":"smoke","life":[0.5,0.8],"speed":[0,14],"angle":90,"spread":140,"gravity":-14,"drag":1.2,"size":[2.4,3],"sizeEnd":2,"alpha":[0,0.4,0],"rotJitter":180,"wind":1,"tint":"#c9b48a","offset":2},
+                    {"rate":16,"life":[0.3,0.5],"speed":[10,40],"angle":90,"spread":120,"gravity":260,"drag":0.6,"size":[0.8,1.4],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
+                    {"shape":"sprite","rate":3,"sheet":"debris","anim":"random","fps":20,"life":[0.4,0.6],"speed":[20,50],"angle":90,"spread":100,"gravity":300,"size":[1,1.6],"alpha":[1,1,0],"spin":[-400,400],"tint":"#a8774a"}
+                ]
+            },
+            "impact": {
+                "emitters": [
+                    {"shape":"sprite","count":2,"sheet":"scorch","unit":"r","size":[0.26,0.32],"life":[3,4],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
+                    {"count":1,"unit":"r","size":[0.6,0.6],"sizeEnd":0.6,"life":[0.2,0.2],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ffe27a","#e0b860"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.8,0.8],"life":[0.65,0.65],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.2},
+                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.6,0.6],"life":[0.3,0.3],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.75,0.75],"life":[0.85,0.85],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":4,"ease":"out","life":[0.45,0.45],"width":2,"alpha":[0.9,0.5,0],"colors":["#d8c090","#8a6a3a"]},
+                    {"shape":"sprite","count":7,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.2],"speed":[80,190],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.6,3],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
+                    {"count":8,"life":[0.5,1],"speed":[60,170],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.2,2.2],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
+                    {"shape":"sprite","count":2,"sheet":"plume","unit":"r","size":[0.42,0.52],"life":[1.4,2.1],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.2,"tint":"#7a6a56","delay":0.2,"offset":0.25}
+                ]
+            }
+        },
+        "roller": {
+            "body": {
+                "halo": 5,
+                "alpha": 0.2,
+                "sprite": "p_roller",
+                "size": 12,
+                "roll": 4.5
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[8,8],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.8,0.45,0],"colors":["#ffffff","#ffe27a","#d9a441"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[10,10],"life":[0.12,0.12],"alpha":[1,1,0]},
+                    {"shape":"sprite","count":4,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[5.6,8],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#b9a27a"},
+                    {"shape":"streak","count":8,"life":[0.15,0.35],"speed":[60,150],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":7,"alpha":[1,0.9,0],"colors":["#fff3c4","#d9a441"],"glow":true,"aim":"forward","spread":60}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"shape":"sprite","rate":26,"sheet":"smoke","life":[0.6,1],"speed":[0,18],"angle":90,"spread":140,"gravity":-14,"drag":1.2,"size":[3.2,4],"sizeEnd":2,"alpha":[0,0.45,0],"rotJitter":180,"wind":1,"tint":"#c9b48a","offset":2},
+                    {"rate":22,"life":[0.3,0.6],"speed":[10,50],"angle":90,"spread":120,"gravity":260,"drag":0.6,"size":[0.9,1.6],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
+                    {"shape":"sprite","rate":4,"sheet":"debris","anim":"random","fps":20,"life":[0.4,0.7],"speed":[30,70],"angle":90,"spread":100,"gravity":300,"size":[1.2,2],"alpha":[1,1,0],"spin":[-400,400],"tint":"#a8774a"}
+                ]
+            },
+            "impact": {
+                "screen": {
+                    "flash": {
+                        "color": "#d9a441",
+                        "alpha": 0.1,
+                        "dur": 0.2
+                    }
+                },
+                "emitters": [
+                    {"shape":"sprite","count":3,"sheet":"scorch","unit":"r","size":[0.272,0.34],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
+                    {"count":1,"unit":"r","size":[0.68,0.68],"sizeEnd":0.6,"life":[0.24,0.24],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ffe27a","#d9a441"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.85,0.85],"life":[0.8,0.8],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.3},
+                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.637,0.637],"life":[0.36,0.36],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.85,0.85],"life":[1,1],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":4.2,"ease":"out","life":[0.55,0.55],"width":3,"alpha":[0.9,0.5,0],"colors":["#d8c090","#8a6a3a"]},
+                    {"shape":"sprite","count":12,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[100,240],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[2,4],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
+                    {"count":12,"life":[0.5,1],"speed":[80,220],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.2,2.4],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
+                    {"shape":"streak","count":8,"life":[0.2,0.5],"speed":[100,220],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":8,"alpha":[1,0.9,0],"colors":["#fff3c4","#d9a441"],"glow":true},
+                    {"shape":"sprite","count":3,"sheet":"plume","unit":"r","size":[0.48,0.6],"life":[1.8,2.6],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#7a6a56","delay":0.25,"offset":0.25}
+                ]
+            }
+        },
+        "heavyroller": {
+            "body": {
+                "halo": 7,
+                "alpha": 0.25,
+                "sprite": "p_roller",
+                "size": 18,
+                "roll": 6.75
+            },
+            "muzzle": {
+                "screen": {
+                    "shake": 0.12
+                },
+                "emitters": [
+                    {"count":1,"size":[12,12],"sizeEnd":0.4,"life":[0.13,0.13],"alpha":[0.8,0.45,0],"colors":["#ffffff","#ffe27a","#d98a41"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[14,14],"life":[0.15,0.15],"alpha":[1,1,0]},
+                    {"shape":"ring","count":1,"size":[4,4],"sizeEnd":6,"ease":"out","life":[0.28,0.28],"width":3,"alpha":[1,0.6,0],"colors":["#ffe27a","#d98a41"],"glow":true},
+                    {"shape":"sprite","count":6,"sheet":"plume","aim":"forward","spread":50,"life":[0.8,1.2],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[7,10],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#b9a27a"},
+                    {"shape":"streak","count":10,"life":[0.2,0.45],"speed":[60,160],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":8,"alpha":[1,0.9,0],"colors":["#fff3c4","#d98a41"],"glow":true,"aim":"forward","spread":70}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"shape":"sprite","rate":34,"sheet":"smoke","life":[0.7,1.1],"speed":[0,20],"angle":90,"spread":140,"gravity":-14,"drag":1.2,"size":[4,5],"sizeEnd":2.2,"alpha":[0,0.5,0],"rotJitter":180,"wind":1,"tint":"#c9b48a","offset":3},
+                    {"rate":30,"life":[0.3,0.7],"speed":[15,60],"angle":90,"spread":120,"gravity":260,"drag":0.6,"size":[1.1,2],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
+                    {"shape":"sprite","rate":7,"sheet":"debris","anim":"random","fps":20,"life":[0.4,0.8],"speed":[30,90],"angle":90,"spread":100,"gravity":300,"size":[1.4,2.6],"alpha":[1,1,0],"spin":[-400,400],"tint":"#a8774a"}
+                ]
+            },
+            "impact": {
+                "screen": {
+                    "flash": {
+                        "color": "#d98a41",
+                        "alpha": 0.15,
+                        "dur": 0.25
+                    }
+                },
+                "emitters": [
+                    {"shape":"sprite","count":5,"sheet":"scorch","unit":"r","size":[0.26,0.33],"life":[3.5,4.6],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
+                    {"count":1,"unit":"r","size":[0.8,0.8],"sizeEnd":0.6,"life":[0.28,0.28],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ffe27a","#d98a41"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.95,0.95],"life":[0.9,0.9],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.35},
+                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.7,0.7],"life":[0.4,0.4],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"shock","unit":"r","size":[1.3,1.3],"life":[0.55,0.55],"alpha":[0.8,0.5,0],"rotJitter":10,"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.95,0.95],"life":[1.1,1.1],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.2,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":4.8,"ease":"out","life":[0.7,0.7],"width":4,"alpha":[0.9,0.5,0],"colors":["#d8c090","#8a6a3a"]},
+                    {"shape":"sprite","count":18,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[120,300],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[2.4,4.8],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
+                    {"count":16,"life":[0.5,1],"speed":[100,260],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.2,2.4],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
+                    {"shape":"streak","count":12,"life":[0.2,0.5],"speed":[140,320],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":10,"alpha":[1,0.9,0],"colors":["#fff3c4","#ffe27a","#d98a41"],"glow":true},
+                    {"shape":"sprite","count":3,"sheet":"plume","unit":"r","size":[0.5,0.62],"life":[2,2.8],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#6a5a46","delay":0.25,"offset":0.25}
+                ]
+            }
+        },
         "babynuke": {
             "body": {
                 "halo": 14,
@@ -3157,90 +3012,101 @@
                 ]
             }
         },
-        "babyroller": {
+        "nuke": {
             "body": {
-                "halo": 4,
-                "alpha": 0.2,
-                "sprite": "p_roller",
-                "size": 9,
-                "roll": 3.4
-            },
-            "muzzle": {
-                "emitters": [
-                    {"count":1,"size":[6,6],"sizeEnd":0.4,"life":[0.08,0.08],"alpha":[0.8,0.45,0],"colors":["#ffffff","#ffe27a","#e0b860"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[8,8],"life":[0.1,0.1],"alpha":[1,1,0]},
-                    {"shape":"sprite","count":3,"sheet":"plume","aim":"forward","spread":50,"life":[0.6,1],"speed":[20,50],"drag":2,"gravity":-20,"wind":1,"size":[4,6],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#b9a27a"},
-                    {"shape":"streak","count":6,"life":[0.12,0.28],"speed":[60,140],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":6,"alpha":[1,0.9,0],"colors":["#fff3c4","#e0b860"],"glow":true,"aim":"forward","spread":60}
-                ]
-            },
-            "trail": {
-                "emitters": [
-                    {"shape":"sprite","rate":18,"sheet":"smoke","life":[0.5,0.8],"speed":[0,14],"angle":90,"spread":140,"gravity":-14,"drag":1.2,"size":[2.4,3],"sizeEnd":2,"alpha":[0,0.4,0],"rotJitter":180,"wind":1,"tint":"#c9b48a","offset":2},
-                    {"rate":16,"life":[0.3,0.5],"speed":[10,40],"angle":90,"spread":120,"gravity":260,"drag":0.6,"size":[0.8,1.4],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
-                    {"shape":"sprite","rate":3,"sheet":"debris","anim":"random","fps":20,"life":[0.4,0.6],"speed":[20,50],"angle":90,"spread":100,"gravity":300,"size":[1,1.6],"alpha":[1,1,0],"spin":[-400,400],"tint":"#a8774a"}
-                ]
-            },
-            "impact": {
-                "emitters": [
-                    {"shape":"sprite","count":2,"sheet":"scorch","unit":"r","size":[0.26,0.32],"life":[3,4],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
-                    {"count":1,"unit":"r","size":[0.6,0.6],"sizeEnd":0.6,"life":[0.2,0.2],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ffe27a","#e0b860"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.8,0.8],"life":[0.65,0.65],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.2},
-                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.6,0.6],"life":[0.3,0.3],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.75,0.75],"life":[0.85,0.85],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":4,"ease":"out","life":[0.45,0.45],"width":2,"alpha":[0.9,0.5,0],"colors":["#d8c090","#8a6a3a"]},
-                    {"shape":"sprite","count":7,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.2],"speed":[80,190],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.6,3],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
-                    {"count":8,"life":[0.5,1],"speed":[60,170],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.2,2.2],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
-                    {"shape":"sprite","count":2,"sheet":"plume","unit":"r","size":[0.42,0.52],"life":[1.4,2.1],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.2,"tint":"#7a6a56","delay":0.2,"offset":0.25}
-                ]
-            }
-        },
-        "heavyroller": {
-            "body": {
-                "halo": 7,
-                "alpha": 0.25,
-                "sprite": "p_roller",
-                "size": 18,
-                "roll": 6.75
+                "halo": 18,
+                "alpha": 0.45,
+                "pulse": 3,
+                "sprite": "p_nuke",
+                "size": 26
             },
             "muzzle": {
                 "screen": {
-                    "shake": 0.12
+                    "shake": 0.3
                 },
                 "emitters": [
-                    {"count":1,"size":[12,12],"sizeEnd":0.4,"life":[0.13,0.13],"alpha":[0.8,0.45,0],"colors":["#ffffff","#ffe27a","#d98a41"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[14,14],"life":[0.15,0.15],"alpha":[1,1,0]},
-                    {"shape":"ring","count":1,"size":[4,4],"sizeEnd":6,"ease":"out","life":[0.28,0.28],"width":3,"alpha":[1,0.6,0],"colors":["#ffe27a","#d98a41"],"glow":true},
-                    {"shape":"sprite","count":6,"sheet":"plume","aim":"forward","spread":50,"life":[0.8,1.2],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[7,10],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#b9a27a"},
-                    {"shape":"streak","count":10,"life":[0.2,0.45],"speed":[60,160],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":8,"alpha":[1,0.9,0],"colors":["#fff3c4","#d98a41"],"glow":true,"aim":"forward","spread":70}
+                    {"count":1,"size":[18,18],"sizeEnd":0.4,"life":[0.16,0.16],"alpha":[0.85,0.5,0],"colors":["#ffffff","#ff6b6b","#7a1a1a"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[18,18],"life":[0.18,0.18],"alpha":[1,1,0]},
+                    {"shape":"ring","count":1,"size":[6,6],"sizeEnd":8,"ease":"out","life":[0.35,0.35],"width":4,"alpha":[1,0.6,0],"colors":["#ffffff","#ff6b6b"],"glow":true},
+                    {"shape":"sprite","count":7,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[9.1,13],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#a0a0a0"},
+                    {"shape":"streak","count":16,"life":[0.3,0.6],"speed":[80,220],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":8,"alpha":[1,0.9,0],"colors":["#fff3c4","#ff6b6b"],"glow":true,"aim":"forward","spread":100}
                 ]
             },
             "trail": {
                 "emitters": [
-                    {"shape":"sprite","rate":34,"sheet":"smoke","life":[0.7,1.1],"speed":[0,20],"angle":90,"spread":140,"gravity":-14,"drag":1.2,"size":[4,5],"sizeEnd":2.2,"alpha":[0,0.5,0],"rotJitter":180,"wind":1,"tint":"#c9b48a","offset":3},
-                    {"rate":30,"life":[0.3,0.7],"speed":[15,60],"angle":90,"spread":120,"gravity":260,"drag":0.6,"size":[1.1,2],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
-                    {"shape":"sprite","rate":7,"sheet":"debris","anim":"random","fps":20,"life":[0.4,0.8],"speed":[30,90],"angle":90,"spread":100,"gravity":300,"size":[1.4,2.6],"alpha":[1,1,0],"spin":[-400,400],"tint":"#a8774a"}
+                    {"rate":50,"life":[0.35,0.7],"speed":[0,26],"gravity":80,"size":[1.8,3.2],"sizeEnd":0.3,"colors":["#ffffff","#ff9f43","#ff6b6b","#7a1a1a"],"glow":true},
+                    {"shape":"sprite","rate":20,"sheet":"smoke","life":[1,1.5],"speed":[0,8],"angle":90,"spread":120,"gravity":-10,"drag":1.2,"size":[4.800000000000001,6],"sizeEnd":2,"alpha":[0,0.45,0],"rotJitter":180,"wind":1,"tint":"#8a5a5a"},
+                    {"shape":"ring","rate":3,"size":[8,8],"sizeEnd":1.7,"ease":"out","life":[0.5,0.5],"width":2,"alpha":[0.8,0.4,0],"colors":["#ff6b6b"],"glow":true}
+                ]
+            },
+            "impact": {
+                "screen": {
+                    "shake": 0.9,
+                    "flash": {
+                        "color": "#ffb070",
+                        "alpha": 0.35,
+                        "dur": 0.6
+                    }
+                },
+                "emitters": [
+                    {"shape":"sprite","count":6,"sheet":"scorch","unit":"r","size":[0.24,0.3],"life":[4,5],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
+                    {"count":1,"unit":"r","size":[1.28,1.28],"sizeEnd":0.6,"life":[0.3,0.3],"alpha":[0.7,0.35,0],"colors":["#ffffff","#fff3c4","#ff6b6b"],"glow":true},
+                    {"count":1,"unit":"r","size":[0.8,0.8],"sizeEnd":0.6,"life":[0.6,0.6],"alpha":[0.6,0.35,0],"colors":["#ffffff","#ffb13c"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[1,1],"life":[0.9,0.9],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.4},
+                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.75,0.75],"life":[0.4,0.4],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"shock","unit":"r","size":[1.6,1.6],"life":[0.8,0.8],"alpha":[0.8,0.5,0],"rotJitter":10,"glow":true,"delay":0.04},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":8.5,"ease":"out","life":[0.9,0.9],"width":5,"alpha":[0.9,0.5,0],"colors":["#e8d4a0","#a0703a"],"delay":0.05},
+                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[1,1],"life":[1.4,1.4],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.3,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0,"delay":0.05},
+                    {"shape":"sprite","count":1,"sheet":"nuke","unit":"r","size":[1,1],"life":[3.6,3.6],"alpha":[1,1,1,0.85,0],"delay":0.1,"anchor":"bottom","scale":2,"wind":0.3},
+                    {"shape":"sprite","count":24,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[160,400],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[2.6,5.5],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
+                    {"count":20,"life":[0.5,1],"speed":[120,320],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.2,2.4],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
+                    {"count":30,"life":[0.8,1.6],"speed":[40,160],"angle":90,"spread":150,"gravity":150,"drag":0.7,"size":[0.8,1.5],"colors":["#ffffff","#ffb13c","#ff6b6b","#5a2a2a"],"glow":true},
+                    {"shape":"streak","count":20,"life":[0.2,0.5],"speed":[200,460],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":13,"alpha":[1,0.9,0],"colors":["#ffffff","#fff3c4","#ff6b6b"],"glow":true},
+                    {"shape":"sprite","count":4,"sheet":"plume","unit":"r","size":[0.5599999999999999,0.7],"life":[2.6,3.6],"speed":[0.1,0.3],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#5a4a40","delay":1.6,"offset":0.6}
+                ]
+            }
+        },
+        "plasma": {
+            "body": {
+                "halo": 10,
+                "alpha": 0.5,
+                "pulse": 8,
+                "sprite": "p_emp",
+                "size": 14,
+                "fps": 20
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[16,16],"sizeEnd":0.4,"life":[0.22,0.22],"alpha":[1,0.6,0],"colors":["#ffffff","#c77dff"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"electric","size":[16,16],"life":[0.3,0.3],"alpha":[1,1,0],"rotJitter":180,"tint":"#c77dff","glow":true},
+                    {"shape":"bolt","count":4,"length":18,"size":[1,1],"life":[0.1,0.2],"alpha":[1,1,0],"colors":["#e0aaff"],"glow":true,"offset":4}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"rate":30,"life":[0.2,0.36],"speed":[0,14],"size":[1.2,2],"sizeEnd":0.3,"colors":["#ffffff","#c77dff","#5a189a"],"glow":true}
                 ]
             },
             "impact": {
                 "screen": {
                     "flash": {
-                        "color": "#d98a41",
-                        "alpha": 0.15,
-                        "dur": 0.25
+                        "color": "#b56cff",
+                        "alpha": 0.14,
+                        "dur": 0.3
                     }
                 },
                 "emitters": [
-                    {"shape":"sprite","count":5,"sheet":"scorch","unit":"r","size":[0.26,0.33],"life":[3.5,4.6],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
-                    {"count":1,"unit":"r","size":[0.8,0.8],"sizeEnd":0.6,"life":[0.28,0.28],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ffe27a","#d98a41"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.95,0.95],"life":[0.9,0.9],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.35},
-                    {"shape":"sprite","count":1,"sheet":"fireball","unit":"r","size":[0.7,0.7],"life":[0.4,0.4],"alpha":[1,0.8,0],"rotJitter":14,"scale":1.1,"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"shock","unit":"r","size":[1.3,1.3],"life":[0.55,0.55],"alpha":[0.8,0.5,0],"rotJitter":10,"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.95,0.95],"life":[1.1,1.1],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.2,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.2,0.2],"sizeEnd":4.8,"ease":"out","life":[0.7,0.7],"width":4,"alpha":[0.9,0.5,0],"colors":["#d8c090","#8a6a3a"]},
-                    {"shape":"sprite","count":18,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[120,300],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[2.4,4.8],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
-                    {"count":16,"life":[0.5,1],"speed":[100,260],"angle":90,"spread":150,"gravity":340,"drag":0.4,"size":[1.2,2.4],"round":false,"alpha":[1,1,0],"colors":["#b8854a","#7a4a1e","#3a2610"]},
-                    {"shape":"streak","count":12,"life":[0.2,0.5],"speed":[140,320],"gravity":200,"drag":1.2,"size":[1.2,1.8],"length":10,"alpha":[1,0.9,0],"colors":["#fff3c4","#ffe27a","#d98a41"],"glow":true},
-                    {"shape":"sprite","count":3,"sheet":"plume","unit":"r","size":[0.5,0.62],"life":[2,2.8],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#6a5a46","delay":0.25,"offset":0.25}
+                    {"count":1,"unit":"r","size":[0.25,0.25],"sizeEnd":0.5,"life":[0.3,0.3],"alpha":[0.8,0.4,0],"colors":["#e0aaff","#c77dff"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"plasma","unit":"r","size":[1,1],"life":[0.6,0.6],"alpha":[1,1,0.8,0],"rotJitter":180,"tint":"#c77dff","glow":true},
+                    {"shape":"sprite","count":1,"sheet":"plasma","unit":"r","size":[0.9,0.9],"life":[0.7,0.7],"alpha":[0.8,0.6,0],"rotJitter":180,"tint":"#5a189a","glow":true,"delay":0.06},
+                    {"shape":"sprite","count":1,"sheet":"shock","unit":"r","size":[0.9,0.9],"life":[0.5,0.5],"alpha":[1,0.6,0],"rotJitter":10,"tint":"#e0aaff","glow":true},
+                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[0.5,0.5],"life":[0.4,0.4],"alpha":[1,1,0],"rotJitter":180,"tint":"#c77dff","glow":true,"scale":1.2},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.15,0.15],"sizeEnd":6.6,"ease":"out","life":[0.45,0.45],"width":5,"alpha":[1,0.6,0],"colors":["#ffffff","#c77dff"],"glow":true},
+                    {"shape":"ring","count":1,"unit":"r","size":[0.15,0.15],"sizeEnd":6.2,"ease":"out","life":[0.6,0.6],"width":2,"alpha":[0.9,0.5,0],"colors":["#e0aaff","#5a189a"],"glow":true,"delay":0.08},
+                    {"shape":"bolt","count":10,"unit":"r","length":0.9,"size":[1,1],"life":[0.14,0.32],"alpha":[1,1,0],"colors":["#e0aaff"],"glow":true},
+                    {"shape":"sprite","count":6,"sheet":"electric","unit":"r","size":[0.22,0.28],"life":[0.35,0.5],"offset":0.85,"edge":true,"alpha":[1,1,0],"rotJitter":180,"tint":"#c77dff","glow":true,"delay":0.06},
+                    {"shape":"streak","count":24,"unit":"r","life":[0.25,0.5],"speed":[1.6,3.2],"drag":1.4,"size":[0.012,0.018],"length":0.12,"alpha":[1,0.9,0],"colors":["#ffffff","#e0aaff","#9d4edd"],"glow":true},
+                    {"count":18,"unit":"r","offset":0.9,"edge":true,"life":[0.5,0.9],"speed":[-0.2,0.2],"gravity":-30,"drag":1,"size":[0.016,0.026],"colors":["#ffffff","#c77dff","#5a189a"],"glow":true}
                 ]
             }
         },
@@ -3610,50 +3476,6 @@
                         }
                     ]
                 }
-            }
-        },
-        "plasma": {
-            "body": {
-                "halo": 10,
-                "alpha": 0.5,
-                "pulse": 8,
-                "sprite": "p_emp",
-                "size": 14,
-                "fps": 20
-            },
-            "muzzle": {
-                "emitters": [
-                    {"count":1,"size":[16,16],"sizeEnd":0.4,"life":[0.22,0.22],"alpha":[1,0.6,0],"colors":["#ffffff","#c77dff"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"electric","size":[16,16],"life":[0.3,0.3],"alpha":[1,1,0],"rotJitter":180,"tint":"#c77dff","glow":true},
-                    {"shape":"bolt","count":4,"length":18,"size":[1,1],"life":[0.1,0.2],"alpha":[1,1,0],"colors":["#e0aaff"],"glow":true,"offset":4}
-                ]
-            },
-            "trail": {
-                "emitters": [
-                    {"rate":30,"life":[0.2,0.36],"speed":[0,14],"size":[1.2,2],"sizeEnd":0.3,"colors":["#ffffff","#c77dff","#5a189a"],"glow":true}
-                ]
-            },
-            "impact": {
-                "screen": {
-                    "flash": {
-                        "color": "#b56cff",
-                        "alpha": 0.14,
-                        "dur": 0.3
-                    }
-                },
-                "emitters": [
-                    {"count":1,"unit":"r","size":[0.25,0.25],"sizeEnd":0.5,"life":[0.3,0.3],"alpha":[0.8,0.4,0],"colors":["#e0aaff","#c77dff"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"plasma","unit":"r","size":[1,1],"life":[0.6,0.6],"alpha":[1,1,0.8,0],"rotJitter":180,"tint":"#c77dff","glow":true},
-                    {"shape":"sprite","count":1,"sheet":"plasma","unit":"r","size":[0.9,0.9],"life":[0.7,0.7],"alpha":[0.8,0.6,0],"rotJitter":180,"tint":"#5a189a","glow":true,"delay":0.06},
-                    {"shape":"sprite","count":1,"sheet":"shock","unit":"r","size":[0.9,0.9],"life":[0.5,0.5],"alpha":[1,0.6,0],"rotJitter":10,"tint":"#e0aaff","glow":true},
-                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[0.5,0.5],"life":[0.4,0.4],"alpha":[1,1,0],"rotJitter":180,"tint":"#c77dff","glow":true,"scale":1.2},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.15,0.15],"sizeEnd":6.6,"ease":"out","life":[0.45,0.45],"width":5,"alpha":[1,0.6,0],"colors":["#ffffff","#c77dff"],"glow":true},
-                    {"shape":"ring","count":1,"unit":"r","size":[0.15,0.15],"sizeEnd":6.2,"ease":"out","life":[0.6,0.6],"width":2,"alpha":[0.9,0.5,0],"colors":["#e0aaff","#5a189a"],"glow":true,"delay":0.08},
-                    {"shape":"bolt","count":10,"unit":"r","length":0.9,"size":[1,1],"life":[0.14,0.32],"alpha":[1,1,0],"colors":["#e0aaff"],"glow":true},
-                    {"shape":"sprite","count":6,"sheet":"electric","unit":"r","size":[0.22,0.28],"life":[0.35,0.5],"offset":0.85,"edge":true,"alpha":[1,1,0],"rotJitter":180,"tint":"#c77dff","glow":true,"delay":0.06},
-                    {"shape":"streak","count":24,"unit":"r","life":[0.25,0.5],"speed":[1.6,3.2],"drag":1.4,"size":[0.012,0.018],"length":0.12,"alpha":[1,0.9,0],"colors":["#ffffff","#e0aaff","#9d4edd"],"glow":true},
-                    {"count":18,"unit":"r","offset":0.9,"edge":true,"life":[0.5,0.9],"speed":[-0.2,0.2],"gravity":-30,"drag":1,"size":[0.016,0.026],"colors":["#ffffff","#c77dff","#5a189a"],"glow":true}
-                ]
             }
         },
         "tracer": {

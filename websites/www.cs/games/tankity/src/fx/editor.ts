@@ -398,7 +398,7 @@ function fire(): void {
 }
 function launch(): void {
   const w = weapon(), set = (playing = playSet());
-  const flat = !!w.flat, ang = (flat ? 11 : 55) * Math.PI / 180, g = flat ? 70 : 170;
+  const ang = 55 * Math.PI / 180, g = 170;
   const sx = SX, sy = groundAt(SX) - 14, tx = TX, ty = groundAt(TX) - 12;
   const v = Math.sqrt(g * (tx - sx) ** 2 / (2 * Math.cos(ang) ** 2 * (ty - sy + (tx - sx) * Math.tan(ang))));
   const n = w.effect === 'pellets' ? (w.pellets || 3) : 1;
@@ -439,12 +439,6 @@ function stepShells(dt: number, set: FxSet): void {
         const a = base + (i - (n - 1) / 2) * (w.fan || 0.22);
         shells.push({ x: s.x, y: s.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, g: s.g, age: 0, r: w.subRadius || w.radius, split: true, fx: null, fxs: null });
       }
-      continue;
-    }
-    if (w.effect === 'pierce' && hit && !s.pierced) {
-      s.pierced = true;
-      FX.play.special(sys, set, 'pierce', s.x, s.y, Math.atan2(s.vy, s.vx));
-      explode(s, set);
       continue;
     }
     const prox = w.effect === 'proximity' && Math.hypot(s.x - TX, s.y - ty) < (w.prox || 34);
@@ -580,7 +574,14 @@ async function reloadFile(useDraft: boolean): Promise<void> {
   for (const a of (arm.arsenal && arm.arsenal.ammo) || []) arsenal[a.key] = a;
   let data: Record<string, FxSetData> = eff, fromDraft = false;
   const draft = useDraft ? store.get() : null;
-  if (draft) { try { data = JSON.parse(draft); fromDraft = true; } catch (_) { data = eff; } } else store.del();
+  // A draft keeps only the weapons game.json still has: a retired gun's edits are dropped.
+  if (draft) {
+    try {
+      const kept = Object.entries(JSON.parse(draft) as Record<string, FxSetData>).filter(([k]) => k in eff);
+      data = Object.fromEntries(kept);
+      fromDraft = true;
+    } catch (_) { data = eff; }
+  } else store.del();
   load(data, fromDraft);
   say(fromDraft ? 'Restored your unsaved edits. "Reload file" drops them.' : 'Loaded the effects from game.json.', fromDraft ? '' : 'good');
 }

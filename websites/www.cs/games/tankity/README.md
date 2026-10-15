@@ -78,7 +78,7 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `index.html`, `game.css`                                        | The page and its styles. The page loads `dist/fx.js` (deferred), then `dist/main.js` (an ES module) |
 | `src/main.ts`                                                   | The entry module: the game's state, the main loop, the keys, the page's plumbing (overlays, the firing range, loading `game.json`) and the wiring that hands each typed module below the pieces of the game it needs. It is bundled into `dist/main.js` |
-| `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (50 shells and tricks), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
+| `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (every shell and trick, and the retired guns), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `src/main.ts`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml` (sixteen music tracks built by `audio/music/build_music.sh`), and where each came from                                                                                                                     |
 | `src/detmath.ts` | `dsin`, `dcos`, `datan`, `datan2`: the sim's trigonometry from `+ − × ÷` and `floor` only, the same bits as `server/detmath.php` |
@@ -97,12 +97,13 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `src/rotate-hint.ts`, `src/ui/rotate-hint.tsx` | When the "turn sideways" chip shows (portrait, in a match, until dismissed) and the chip itself |
 | `src/ai.ts` | The drone AI: ballistic aim, bracketing, the six strategies (`aiChoose`, `pickTactic`), the gun choice by predicted harm (`aiHarm`, with beams aimed by `beamAim`) and the difficulty table (`DIFFICULTY`). Pure; imports the sim, never the reverse (the sim keeps `brkLand`, which a blast calls) |
 | `src/ai-measure.ts` | `measureHitRates`: a drone bracketing a stationary player on seeded hills with the real sim, counting the shots that take armor off, per shot of the bracket. The difficulty table is tuned against it. Pure, never bundled |
+| `src/balance.ts` | What each gun is worth, on the real sim: every gun fired from a ground tank at the standard scenarios (flat ground and seeded hills with a target near, mid and far, a target on a slope, a target in a dip), at one target and at three, at a drone and at a tank; a skilled gunner's best aim and the mean over small aim errors around it give its expected damage per shot, and with price ÷ pack its damage per dollar (`measureArsenal`, `balanceRole`, `lineOf`). `test/balance.test.ts` holds the arsenal to its rules (see `game.yaml`); `tools/balance-report.ts` prints the table. Pure, never bundled |
 | `src/difficulty.ts` | The Difficulty setting as the player keeps it (`tankity-difficulty`, missing or unknown reads as normal) and the levels' names |
 | `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes, keeps only the theme and the playing track decoded, and tells `main.ts` why a track started (the Next song toast). It never touches the page |
 | `src/track-toast.ts` | The Next song toast's text ("♫ Title · Author") and its timer. DOM-free: it is handed the element and the timers |
 | `src/net.ts` | The room client: transport (one fetcher, the 429 retry; create and join never retry a 429), the session (host, join, or resume a stored seat; `detach` drops it telling nobody, `leave` gives it up), polling, the act/buy/ready/leave senders, `mine` (its own fetch path), the turn, shop and room-close clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers and the clock are passed in |
 | `src/replay.ts` | The room volley replay: the queue of events waiting to play and the volley on screen. Eases the shooter's barrel, flies each shell along the path the server recorded (positions and velocities for the renderer), lands blasts and hits when the events say, hands a beam or plasma ring event and a tracer's landing to its host, plays a volley kept back by a catch-up, or fired by a drone with no human standing (`watch`), at triple speed (`FAST_SPEED`). Sound, particles, craters, armor and log lines happen through callbacks; it never touches the page |
-| `src/preview.ts` | The firing-range preview simulation: a fixed dummy, the solver that aims at it with the war's own ballistics, the shell loop (seeker, cluster and apex cluster, pierce, proximity, roller, and hop and scatter through the war's own `hopShell` and `scatterShells`), a beam aimed straight at the dummy (carving with `beamCarve`), a plasma ring with its dummy inside it, a tracer's path, the damage tally and the result timing, on its own small field. Weapons, effects and the result line are passed in; it never touches the page |
+| `src/preview.ts` | The firing-range preview simulation: a dummy, the range and the aim from each gun's scenario (`game.yaml` `preview`: where it lands, on which ground, at what angle, the dummy how far off; plain guns aim at the dummy on the hills), the solver that lands it there with the war's own ballistics on an arc inside the frame, the shell loop (seeker, cluster and apex cluster, proximity, roller, and hop and scatter through the war's own `hopShell` and `scatterShells`), a beam aimed straight at the dummy (carving with `beamCarve`), a plasma ring with its dummy inside it, a tracer's path, the damage tally, what each volley showed of its gun's mechanic (`PreviewSeen`: hops, bomblets, roll, burrow, flow, bend, air burst, dip, arc, dirt cleared, and any shell leaving the frame) and the result timing, on its own small field. Weapons, effects and the result line are passed in; it never touches the page |
 | `src/speed.ts` | The game speed (the FF button): the speeds 1, 2 and 4 (kept equal to `server/settings.php`'s `ROOM_SPEEDS`), the tap order, the button's words, the solo setting in this browser (`tankity-speed`), and the host's pick in a room (shown at once, sent once it has stood `SPEED_SETTLE_MS`, held over polls until answered). Pure |
 | `src/flow.ts` | The solo match flow: the `Phase` union (`banner`, `shop`, `aim`, `think`, `fly`, `settle`, `over`), the events that move between them and one table, `FLOW`, with `transition(phase, event)` returning the next phase or `null` for an illegal move. `match.ts` stores the result in `G.phase`; room matches take their phase from the server and skip it. It also holds the solo watch speed (`WATCH_SPEED`, `warSpeed`) and the fixed-step runner `runFixed` (`MAX_STEPS` per frame at 1×, that many times more at a faster game speed; `match.ts` `warFrame` runs the war through it). Pure; it never touches the page |
 | `src/render.ts` | The battlefield on the canvas: sky and moon, clouds, hills, the scenery past the field's edges and the dirt below it (melting into the ground), the units and their bodies, aim arm, tracer marks, blasts, shells (and, draw-only, the ones the sim retired past the edge), sparks, the wind streaks, the on-canvas turn clock and the firing-range preview. Reads a `BattleView` that `view.ts` builds each frame and paints it; it never changes game state |
@@ -191,7 +192,19 @@ only PHP (and Node for the TypeScript, see Source layout) and this folder. Run f
 php tools/game-json.php          # validate game.yaml, rewrite game.json
 php tools/game-json.php --check  # fail if invalid or game.json is stale
 php tools/install-files.php      # after the last edit to any served file
+node tools/balance-report.ts     # each gun's expected damage, $ per shot and damage per $
 ```
+
+- A change to a gun's numbers (dmg, radius, price, pack, minRound, speed and
+  the rest) is held to the balance rules in `game.yaml`'s arsenal header by
+  `test/balance.test.ts`; the report prints the same table to tune against.
+- To drop a gun, delete its ammo row and its `effects` entry and list it under
+  `arsenal.retired` with its last price and pack: a room saved while a seat
+  held some refunds each shell at that price per shell in room cash, a seat
+  that had it loaded loads the Shell, and drones drop theirs
+  (`room_retire_guns`, run by `room_load` and `room_peek`). A solo match keeps
+  no stock between page loads, so it has nothing to refund. Rail and Lance
+  are retired.
 
 - The generator carries its own small YAML-subset parser (the host has no YAML
   extension); the subset is listed at the top of `game.yaml`. It rejects
@@ -730,7 +743,7 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
   `test/ai-search.test.ts` to the same). Guns that fly the same planning arc
   share one search: their flight key (`flightKey` in `src/sim.ts`,
   `room_flight_key` in `server/sim.php`) holds every field the planning flight
-  reads (flat, speed, and a roller's friction and roll time), so a gun given
+  reads (speed, and a roller's friction and roll time), so a gun given
   its own arc is searched on its own, and the first gun of an arc in rack
   order keeps it. Then Gaussian wobble: wob = max(`wobFloor`, `wobStart` - `wobStep` x
   round), angle +-9 x wob, power +-12 x wob, doubled against a jammer's owner.
@@ -1052,7 +1065,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 - The sim takes its state as arguments (`World`, `Arsenal`) and reports what
   happened as data: `explode` returns the blast (each unit's shield, wound or
   wreck, a last stand's nested blast), `stepShells` returns the frame's trails,
-  splits, pierces, hops, scatters and blasts. `match.ts` plays them as sound, particles and chat.
+  splits, hops, scatters and blasts. `match.ts` plays them as sound, particles and chat.
 - `audio.ts` is a handful of exports and keeps its state to itself: `initAudio`
   installs game.json's audio section, `sfx.play(name)` (plus `sfx.turnPing()` and
   `sfx.clockWarn()`) voices an event, `music.start/stop/next/playTheme/forRound/
@@ -1161,7 +1174,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/speed.test.ts` | `src/speed.ts`: the speeds equal `server/settings.php`'s, the tap order, the button's words, the solo setting in storage (blocked storage keeps it for the session), and the host's pick: settled, refused, newest answer only |
 | `test/speed-war.test.ts` | The same seed and shots end the same at 1×, 2× and 4× (and at 4× on a 30 Hz screen), in a quarter of the frames; drives `match.ts` `warFrame` through main.ts's solo frame (`test/match-harness.ts` is the stubbed match the solo tests share) |
 | `test/match-local.test.ts` | A solo match played to its end saves once on this browser's board under the difficulty it was dealt, and the end card says where it went; the turn does not pass while a napalm pool burns, and every tick lands on the drone in it |
-| `test/shop.test.ts` | `src/shop.ts`: a solo visit buys as often as the chest allows, and a room's Repair asks `netBuy` for what the hull takes |
+| `test/shop.test.ts` | `src/shop.ts`: a solo visit buys as often as the chest allows (a round-1 gun from `game.json`), and a room's Repair asks `netBuy` for what the hull takes |
 | `test/ui.test.ts`                             | The Preact overlays (`src/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
 | `test/smoke.test.ts`                          | The shipped bundles (`dist/fx.js`, then `dist/main.js`) in a stub DOM, driven by the `game.json` key table and the `protocol/` fixtures; also checks the page loads exactly those two scripts with no import map and that the bundle has no bare imports, every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps; a solo player who wrecks their own tank sees the drones fight on to one and the lost round open the shop |
 | `test/ai-hitrate.test.ts`                     | The drones' measured hit rates per difficulty against the targets (see Difficulty), the table's shape, hard being the sharpest aim (its exact constants), unknown levels aiming at normal, and the saved setting's default and form. The harness is seeded, so it never flakes, but one cell runs close: at 1440 wide, round 10, easy's ranging shot (17.2%) is 0.33 points inside its band (half of normal's ±5). A later aim or weapon change can fail this test on that easy cell rather than on what it changed; read the failure for that before blaming the change |
@@ -1177,7 +1190,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/marks.test.ts`                          | `src/marks.ts`: a mark is the path flown ending where it came down, a line its gunner's alone until it fires again, smoke everyone's until the round ends, drifting with the wind |
 | `test/icons.test.ts`                          | The tracer icon (a dashed path ending in a cross) and the plasma icon (rings round a core) |
 | `test/bomblets.test.ts`                       | Every cluster and scatter gun's bomblets burst as they land, fired either way on flat ground and hills: no frame holds a shell |
-| `test/weapon-keys.test.ts`                    | No logic in `src/` or `server/` compares a weapon to a key or lists keys, bare lists included (the Shell aside); how long a blast lingers (`gfx.linger`), that every gun flies a rendered body (`body.sprite`), a match's starting ammo (`start`) and the picker's grouped shelf come from `game.yaml` |
+| `test/weapon-keys.test.ts`                    | No logic in `src/` or `server/` compares a weapon to a key or lists keys, bare lists included (the Shell aside); how long a blast lingers (`gfx.linger`), that every gun flies a rendered body (`body.sprite`), a match's starting ammo (`start`) and the picker's shelf (`game.yaml` order, each cat together) come from `game.yaml` |
 | `test/coach.test.ts`                          | The tutorial's steps (`src/coach.ts`): their order and shape, short words, keys only in the keys line and all in the key table, no weapon named, each completion test before and after its move, where a lesson starts and how it moves on, and the bubble on screen and off its target's centre at phone, tablet and desktop sizes |
 | `test/theme.test.ts`                          | The themes: one `game.css` palette per name, every accent pair's computed WCAG contrast, no accent hard-coded outside the palettes, the head script that applies the saved theme before the stylesheet, and the saved choice's default, write and blocked storage |
 | `test/prefs-legacy.test.ts`                   | The saved settings (`tankity-body`, `tankity-text`, `tankity-tutorial`) read back through the kit's prefs exactly as the code before it wrote them, and the `tankity-local` and `tankity-scores-local` values |
@@ -1218,7 +1231,10 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/games-ui.test.ts`                       | Your games, the toasts and the title card's list |
 | `test/lobby.test.ts`                          | `src/lobby.ts` on a real room client over a fake server: a refusal stays on the status line through polls, a lobby closed with Q keeps polling, a swept room lands back in the lobby with its line |
 | `test/replay.test.ts`                         | `src/replay.ts` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, a `watch` volley at 3x for that volley only, and a parachute armed by its volley's `fall` event, closed through real frames on unbroken ground and open every frame its unit falls once the pit is carved; a beam event carving the client's hills exactly as `fireBeam` did and passing through each unit it hit, a ring event, and a tracer landing with its mark and no blast |
-| `test/preview.test.ts`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster, pierce and pellet behaviour, a beam through the dummy, a ring around it, a tracer's path, and the resets |
+| `test/preview.test.ts`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster and pellet behaviour, a beam through the dummy, a ring around it, a tracer's path, and the resets |
+| `test/preview-scenarios.test.ts`              | Every gun's preview for three volleys: no shell, bomblet or beam leaves the frame, it does what it advertises (damage, a burial, a drop, a mark on the dummy, a gunner dug out), the range's wind is pinned and nothing is random, and a gun whose power is indirect declares a scenario whose demo shows it: a hop, a roll, a burrow under the dummy, liquid flowing to it, bomblets, a seeker's bend, an air burst, a beam's dip, a tracer's arc, dirt cleared, a ridge slumping |
+| `test/retired.test.ts`                        | Retired guns (`arsenal.retired`) are in no ammo, gear, shelf or shop row and keep a price for the refund; a rack holding a key the arsenal lacks fires nothing and spends nothing |
+| `test/balance.test.ts`                        | The arsenal's balance on the real sim (`src/balance.ts`): NUKE does the most expected damage at one target and at three, and no gun outside the Nukes lands a best single-target hit above 70% of NUKE's; along each line, tiers cost more per shot, do more damage, unlock no sooner and sit in order on the shelf; damage per dollar within 0.5x to 2x the median; unlocks follow power |
 | `test/flow.test.ts`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
 | `test/protocol.test.ts`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
 | `test/sim-vectors.test.ts`                    | `src/sim.ts`, `src/ai.ts` and `src/armor.ts` agree with `rooms.php` on every shared sim vector; the detmath, field, armor and match-end cases compare exactly (see Sim vectors) |
@@ -1230,6 +1246,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `BoardTest`, `ScoresEndpointTest` (host PHP) | The boards (one per difficulty, room rows only, ties, the trim, a required source), and `scores.php` as a request (the board in the page's shape, no seeds, every POST answered 410 and nothing written, other methods 405) |
 | `RoomGuardTest` (host PHP) | Initials stored uppercase and the blocked set refused, origins and referers against the allow list, and the hourly allowance on creating and joining: a setting, exact in every sliding hour, per address, in the `rate` table, swept by housekeeping, a spent one refused without the write lock, a 429 from `rooms.php` itself, and a create refused for a full server not charged |
 | `RoomArmorTest`, `RoomBuyTest` (host PHP) | Armor carry-over and re-muster, the capped repair, plates, and every shop purchase rule |
+| `RoomRetireTest` (host PHP) | A room saved holding a retired gun: refunded at its old price per shell, unknown keys dropped, a loaded one back to the Shell, drones' racks cleaned, once only, through `room_load` and `room_peek`, and malformed stock never crashing |
 | `RoomFallTest` (host PHP) | The room's falls: the formula, the digger's credit and kill, your own pit, parachutes (spent, kept, a drone's), the bunker and the shield, landing on a unit, a volley ending with its falls settled and stamped, drones' parachutes by round, the stacking shop row in the snapshot, the bunker counting toward the parachute, credit to the deepest blast, and a rise folding a parachute |
 | `phpunit --testsuite tankity-docker`           | `RoomsTest` (the room shelf over its own `php -S`), `RoomsStoreTest` (the store under real concurrency: exact cap under a race, close, sweep, a held writer and the 503, a killed holder), `RoomsRefusedStoreTest` (a store PHP refuses answers JSON 503 on every endpoint, with one log line per request), `RoomsStoreFailureTest` (a database error partway through a save answers JSON 503 and leaves nothing behind) and `RoomsLoadTest` (8 playing rooms, each with 3 seated players and a watcher, polling at the client's pace against the docker site: no 503, p95 under 300 ms). Runs inside the PHP container, which matches the host's PHP (`make test` does) |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (run inside the PHP container)                 |
@@ -1303,14 +1320,14 @@ width (terrain heights included), armor and match-end cases compare exactly,
 with -0 equal to 0 only where a case says so.
 
 - Covered: the RNG and terrain generator, spawn spots, shot speed, muzzle,
-  gravity and wind, hit boxes, the swept hit test (owner-clear rule, lance
-  skip), seeker steering, the cluster fan, blast damage and craters (shield,
+  gravity and wind, hit boxes, the swept hit test (owner-clear rule, the
+  skip of the unit a burst struck), seeker steering, the cluster fan, blast damage and craters (shield,
   bunker, EMP, last stand, kill bonus), landing prediction, where a roller's
   roll ends, whole volleys for every weapon in `game.json` (and a roller down
   into a valley, into a unit, back onto its gunner, off either edge and
   stopping on a rise, and cluster bomblets bursting at once in a ledge), the
   drone's aim, sequences of drone shots that bracket a target in (and
-  re-range when it drives off, keep a lance's first burst, and shrink to the
+  re-range when it drives off, and shrink to the
   wobble floor of a wide field), the aim and a bracket at each
   difficulty (and an unknown word aiming at normal), each drone strategy's choice of
   target, gun and arc and a flip after a dry spell, tank settling, and falls
@@ -1390,9 +1407,8 @@ agree with what the server then plays:
   rule modules: distances are `dist()`/`room_dist()`, whole powers are
   `powi()`/`room_powi()`, hit boxes multiply, and degrees go through `rad()`
   in PHP `deg2rad`'s order;
-- a seeker within 1 px of its target does not steer, a cluster's bomblets may
-  burst on the ground at once, and a drone's bracket learns where a lance
-  first burst, on both sides;
+- a seeker within 1 px of its target does not steer, and a cluster's
+  bomblets may burst on the ground at once, on both sides;
 - `sin`, `cos` and `atan2` come from `src/detmath.ts` / `server/detmath.php`:
   fdlibm's polynomials built only from `+ − × ÷` and `floor`, so both sides
   compute the same bits whatever the browser's or the host's libm does; the
@@ -1419,7 +1435,7 @@ weapon. Each entry has `body` (the shell: its glow `halo`, `alpha`,
 it spins or rolls, and the plain disc stands in until it loads) and three effects: `muzzle` (once, at the barrel), `trail` (every
 frame in flight, emitters need a `rate`), `impact` (on detonation). `special`
 holds named extras: `split` (cluster bloom), `steer` (seeker pulse), `pierce`
-(lance or beam through a tank), `arc` (EMP, over each tank it fries), `hop`
+(a beam through a tank), `arc` (EMP, over each tank it fries), `hop`
 and `scatter` (a leap, bomblets thrown up), `beam` (along a beam's line),
 `dig` (at a digger's head as it burrows, every few steps; along a riot
 charge's cut), `pour` (along liquid dirt's pool as it fills) and `burn` (along

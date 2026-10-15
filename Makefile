@@ -48,6 +48,7 @@ deploy:
 test:
 	python3 -I scripts/test_deploy_hash.py
 	python3 -I scripts/test_deploy_connection.py
+	python3 -I scripts/test_e2e_reap.py
 	@for s in $(SITES); do $(MAKE) --no-print-directory -C $$s test || exit 1; done
 
 parity:

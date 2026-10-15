@@ -150,7 +150,7 @@ test.describe('effects editor', () => {
   test('screenshots of the nuke and the lightning in the editor', async ({ browser }) => {
     test.setTimeout(120_000);
     const { page, errors } = await openEditor(browser);
-    for (const w of ['nuke', 'emp', 'rail']) {
+    for (const w of ['nuke', 'emp', 'needle']) {
       await page.selectOption('#weapon', w);
       await page.click('#slots button[data-slot="impact"]');
       if (w !== 'nuke') await page.check('#slow');

@@ -162,10 +162,17 @@ const whyOf = (r: BuyResult) => (r.ok ? undefined : r.why);
 const qtyOf = (r: BuyResult) => (r.ok ? r.qty : undefined);
 
 test('the shop: round-one goods before round one, later goods wait', () => {
-  const G = fresh('shop');
-  assert.deepEqual(soloBuy(G, row('mortar'), 1), { ok: true, qty: 1, total: 200 });
-  assert.equal(ammoOf(G).mortar, 2);
-  assert.equal(whyOf(soloBuy(G, row('cluster'), 1)), 'locked');
+  // From game.json: every round-1 gun the stake buys sells before round one, every later one waits.
+  const sold = GAME.arsenal.ammo.filter(a => a.pack > 0 && a.minRound <= 1 && a.price <= 600);
+  const later = GAME.arsenal.ammo.filter(a => a.pack > 0 && a.minRound > 1);
+  assert.ok(sold.length > 3 && later.length > 3);
+  for (const a of sold) {
+    const G = fresh('shop');
+    const had = ammoOf(G)[a.key] || 0;
+    assert.deepEqual(soloBuy(G, row(a.key), 1), { ok: true, qty: 1, total: a.price }, a.key);
+    assert.equal(ammoOf(G)[a.key], had + a.pack, a.key);
+  }
+  for (const a of later) assert.equal(whyOf(soloBuy(fresh('shop'), row(a.key), 1)), 'locked', a.key);
 });
 
 test('one-shot tricks never stack; Repair buys only what fills the hull', () => {

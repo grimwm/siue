@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildArsenal, stepBallistic, shotSpeed, GRAV, FLAT_GRAV } from '../src/sim.ts';
+import { buildArsenal, stepBallistic, shotSpeed, GRAV } from '../src/sim.ts';
 import {
   PV_W, PV_H, PV_FOE_HP, PV_WIND, createPreview, stepPreview, solvePreview, previewShot, makePreviewTerrain, previewGround,
 } from '../src/preview.ts';
@@ -140,10 +140,10 @@ function run(pv: PreviewState, env: PreviewEnv<FakeFx>, seconds: number, done: (
   solvePreview(pv, env);
   const w = weapon('mortar');
   const rad = pv.angle * Math.PI / 180;
-  const st = { x: pv.sx, y: nth(pv.terr, pv.sx) - 12, vx: Math.cos(rad) * shotSpeed(pv.power, w.flat, w.speed), vy: -Math.sin(rad) * shotSpeed(pv.power, w.flat, w.speed) };
+  const st = { x: pv.sx, y: nth(pv.terr, pv.sx) - 12, vx: Math.cos(rad) * shotSpeed(pv.power, w.speed), vy: -Math.sin(rad) * shotSpeed(pv.power, w.speed) };
   let landed: number | null = null;
   for (let i = 0; i < 720 && !landed; i++) {
-    stepBallistic(st, 1 / 60, pv.wind, w.flat ? FLAT_GRAV : GRAV);
+    stepBallistic(st, 1 / 60, pv.wind, GRAV);
     if (st.x < 0 || st.x >= PV_W || st.y >= PV_H || (i >= 6 && st.y >= Number(pv.terr[Math.max(0, Math.min(PV_W - 1, Math.round(st.x)))]))) landed = st.x;
   }
   await test('the solved mortar lob comes down on the target column', () => { assert.ok(landed !== null && Math.abs(landed - pv.tx) < 8, `landed ${landed}`); });
@@ -163,6 +163,8 @@ function run(pv: PreviewState, env: PreviewEnv<FakeFx>, seconds: number, done: (
   await test('each leap plays the hop special', () => { assert.ok(lf.log.special.filter(s => s.name === 'hop').length === Number(w.hops) - 1); });
   await test('the leaps walk on the way it flew', () => { assert.ok(nth(lf.log.impact, 1).x > nth(lf.log.impact, 0).x && nth(lf.log.impact, 2).x > nth(lf.log.impact, 1).x); });
   const edge = makeEnv();
+  // Aimed straight at the dummy (no scenario), its leaps run on past the stage's edge.
+  edge.env.weapon = key => key === 'leapfrog' ? { ...weapon(key), preview: undefined } : arsenal.weapons[key];
   const far = open('leapfrog', edge.env, edge.fx, null);
   run(far, edge.env, 15, p => p.phase === 'show');
   await test('a leap off the stage ends the chain, as in the war', () => { assert.ok(edge.log.impact.length < Number(w.hops) && nth(edge.log.impact, edge.log.impact.length - 1).x >= 360, JSON.stringify(edge.log.impact.map(i => i.x))); });
@@ -238,12 +240,7 @@ function run(pv: PreviewState, env: PreviewEnv<FakeFx>, seconds: number, done: (
   await test('a cluster shell blooms into bomblets', () => { assert.ok(cl.log.special.some(s => s.name === 'split')); });
   await test('the bomblets blast with their own damage and radius', () => { assert.ok(cl.log.impact.some(i => i.r === (weapon('cluster').subRadius || weapon('cluster').radius))); });
 
-  const lance = makeEnv();
-  const l = open('lance', lance.env, lance.fx, null);
-  run(l, lance.env, 0.7);
-  run(l, lance.env, 10, p => p.phase === 'show');
-  await test('a lance pierces the dummy and keeps flying', () => { assert.ok(lance.log.special.some(s => s.name === 'pierce') && l.volleyHits >= 1); });
-  await test('trails drip while shells fly', () => { assert.ok(buck.phase === 'fly' && lance.log.trail > 0); });
+  await test('trails drip while shells fly', () => { assert.ok(buck.phase === 'fly' && cl.log.trail > 0); });
 
   // A roller touches down, rolls on along the hills, and bursts at the dummy.
   const rl = makeEnv();

@@ -298,33 +298,6 @@ final class RoomsSimTest extends TestCase
         return $round;
     }
 
-    /** Lance: one direct hit on the tank it punches through, never a second one on the next frame while the bolt is still inside that hull. The targets are drones, so the bolt flies at their bodies, 30 px up. */
-    public function testLanceHitsOnce(): void
-    {
-        $weapons = room_weapons();
-        $lance = $weapons['lance'];
-        $room = self::flatRoom([self::tank(0, 'human', 100.0, 100), self::tank(1, 'ai', 300.0, 500)]);
-        $events = [];
-        room_fly_arc($room, $events, $room['tanks'][0], $lance, 'lance', 0, 285.0, 370.0, 400.0, 0.0, 0.5, false, null);
-        $hits = self::hitsOn($events, 1);
-        self::assertTrue(count($hits) === 1, 'lance-hits-once' . ' :: ' . 'hits=' . count($hits));
-        // Direct hits double, after falloff from where the bolt burst on the hull.
-        $dmg = (int) $lance['dmg'];
-        self::assertTrue(count($hits) === 1 && $hits[0]['direct'] && $hits[0]['dmg'] > $dmg && $hits[0]['dmg'] <= 2 * $dmg, 'lance-direct-damage' . ' :: ' . 'dmg=' . ($hits[0]['dmg'] ?? '?') . " range=($dmg, " . (2 * $dmg) . ']');
-    }
-
-    /** The bolt keeps flying after the first hull and can still strike another. */
-    public function testLancePiercesToNextTank(): void
-    {
-        $weapons = room_weapons();
-        $lance = $weapons['lance'];
-        $room = self::flatRoom([self::tank(0, 'human', 100.0, 100), self::tank(1, 'ai', 300.0, 500), self::tank(2, 'ai', 330.0, 500)]);
-        $events = [];
-        $end = room_fly_arc($room, $events, $room['tanks'][0], $lance, 'lance', 0, 285.0, 370.0, 400.0, 0.0, 0.5, false, null);
-        // The arc hands its final impact back to the caller: [status, x, y, vx, vy, directIdx].
-        self::assertTrue($end[0] === 'hit' && $end[5] === 2, 'lance-pierces-to-next-tank' . ' :: ' . json_encode([$end[0], $end[5]]));
-    }
-
     /** A drone loads aiRack of each gun it carries (2 when the row names none), and every field a row may leave out reads the default src/sim.ts uses. */
     public function testWeaponRowDefaults(): void
     {
@@ -1097,10 +1070,10 @@ final class RoomsSimTest extends TestCase
             $lobAngles[] = $c['angle'];
         }
         self::assertTrue(self::median($lobAngles) >= 60, 'tactic-lobber-lobs' . ' :: ' . implode(',', $lobAngles));
-        $room = self::scene('lobber', ['ammo' => ['rail' => 2, 'buck' => 2]], [], ['x' => 250.0]);
+        $room = self::scene('lobber', ['ammo' => ['needle' => 1, 'buck' => 2]], [], ['x' => 250.0]);
         self::assertTrue(room_ai_choose($room, $room['tanks'][1])['wkey'] === 'buck', 'tactic-lobber-prefers-area-guns');
         // Its target 70 px off, every high arc of Buckshot would reach the lobber itself: it fires a gun that spares it.
-        $room = self::scene('lobber', ['ammo' => ['rail' => 2, 'buck' => 2]]);
+        $room = self::scene('lobber', ['ammo' => ['needle' => 1, 'buck' => 2]]);
         $c = room_ai_choose($room, $room['tanks'][1]);
         self::assertTrue($room['tanks'][1]['brk']['t'] === 3 && $c['wkey'] !== 'buck', 'tactic-lobber-spares-itself-point-blank' . ' :: ' . json_encode($c));
         // Glory goes for the drone with 4 kills, 70 px off: every big blast would reach the gunner itself, so it fires the Shell.

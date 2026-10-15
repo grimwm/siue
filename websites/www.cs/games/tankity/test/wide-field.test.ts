@@ -59,7 +59,7 @@ test('the units spread over the whole width, never inside each other\'s blast', 
 
 test('a 720 deal and a 720 shot are exactly what they always were', () => {
   assert.equal(sim.fieldReach(720), 1);
-  for (const p of [0, 37, 100]) assert.ok(Object.is(sim.shotSpeed(p, false, 1, sim.fieldReach(720)), sim.shotSpeed(p, false, 1)));
+  for (const p of [0, 37, 100]) assert.ok(Object.is(sim.shotSpeed(p, 1, sim.fieldReach(720)), sim.shotSpeed(p, 1)));
   assert.deepEqual(fieldAim(720), { aim: 1, floor: 1 });
 });
 
@@ -105,17 +105,17 @@ test('out of bounds is the field edge, and the scenery is not the sim', () => {
   assert.ok(!/world\.hills|G\.hills/.test(src), 'the sim never reads the scenery\'s hills');
 });
 
-test('a steep rail shot at full power bursts on a wide field and does not expire in the air', () => {
+test('a steep needle shot (the fastest gun) at full power bursts on a wide field and does not expire in the air', () => {
   for (const w of WIDTHS) {
-    const world: World = { tanks: [], terrain: Array(w).fill(400), wind: 0, round: 1, rng: sim.mulberry32(1), shells: [], score: 0, cash: 0, ammo: { rail: 9 },
-      selected: 'rail', shield: false, bunker: 0, laststand: false, jammer: 0 };
-    const t: Tank = { id: 'T', isPlayer: true, x: 200, y: 400, angle: 85, power: 100, hp: 100, fuel: 0, dirS: 1, ammo: { rail: 9 } };
+    const world: World = { tanks: [], terrain: Array(w).fill(400), wind: 0, round: 1, rng: sim.mulberry32(1), shells: [], score: 0, cash: 0, ammo: { needle: 9 },
+      selected: 'needle', shield: false, bunker: 0, laststand: false, jammer: 0 };
+    const t: Tank = { id: 'T', isPlayer: true, x: 200, y: 400, angle: 85, power: 100, hp: 100, fuel: 0, dirS: 1, ammo: { needle: 9 } };
     world.tanks.push(t);
-    sim.fireWeapon(world, arsenal, t, 'rail');
+    sim.fireWeapon(world, arsenal, t, 'needle');
     const blasts: StepEvent[] = [];
     for (let f = 0; world.shells.length && f < 5000; f++) blasts.push(...sim.stepShells(world, arsenal, 1 / 60).filter(e => e.kind === 'blast'));
-    assert.ok(blasts.length > 0, `${w}: the rail shot burst`);
-    const r = sim.simShot(world, arsenal, 200, 400, 85, 100, 'rail', 1);
+    assert.ok(blasts.length > 0, `${w}: the needle shot burst`);
+    const r = sim.simShot(world, arsenal, 200, 400, 85, 100, 'needle', 1);
     assert.ok(!r.oob, `${w}: the aim guide sees it land on the field`);
   }
 });

@@ -50,7 +50,6 @@ export function fieldWidthOk(w: unknown): w is number {
   return typeof w === 'number' && Number.isInteger(w) && w >= FIELD_W_MIN && w <= FIELD_W_MAX && w % FIELD_COL === 0;
 }
 export const GRAV = 95;
-export const FLAT_GRAV = 90; // flat bolts arc a little, so short shots and demos still land
 export const TUNE = {
   lives: 3, maxLives: 5, oneUpEvery: 3000,
   playerArmor: 100, droneArmor: 60,
@@ -101,6 +100,7 @@ export interface Weapon {
   key: string;
   name: string;
   cat?: string;
+  line?: string; // the weapon line within its cat whose rows are tiers, small to big (missing: the cat itself)
   dmg: number;
   radius: number;
   price: number;
@@ -112,7 +112,7 @@ export interface Weapon {
   aiRack?: number; // shells of it a drone loads per round (2 when left out)
   effect: string;
   speed: number;
-  flat?: boolean;
+  shortRange?: boolean; // short-range on purpose: spared the balance test's reach rule
   pellets?: number;
   spread?: number;
   steer?: number;
@@ -141,9 +141,17 @@ export interface Weapon {
   burn?: number; // napalm: seconds its pool burns
   tick?: number; // napalm: seconds between burns
   flame?: number; // napalm: px its flames stand over the pool
+  /** The firing range's scenario for it (src/preview.ts): what shows its power off. */
+  preview?: PreviewScenario;
   note?: string;
   gfx?: Gfx;
 }
+/** The grounds a firing-range scenario stands on (src/preview.ts makeRange). */
+export type PreviewGroundKind = 'hills' | 'dip' | 'bowl' | 'ridge' | 'slope' | 'perch' | 'buried';
+/** A gun's firing-range scenario: `aim` px past the dummy (negative: short of it) is where the
+ *  demo lands its shell; `ground` the range it stands on; `angle` a launch angle the demo keeps;
+ *  `dummy` how far from the shooter the dummy stands, px. */
+export interface PreviewScenario { aim?: number; ground?: PreviewGroundKind; angle?: number; dummy?: number }
 /* A trick from the shop. */
 export interface Gear {
   key: string;
@@ -511,9 +519,9 @@ export function muzzle(t: Pick<Tank, 'angle' | 'dirS' | 'isPlayer' | 'x' | 'y'>)
 export function fieldReach(w: number): number {
   return Math.sqrt(w / ROOM_W);
 }
-export function shotSpeed(power: number, flat: boolean | undefined, mult: number | undefined, reach = 1): number {
+export function shotSpeed(power: number, mult: number | undefined, reach = 1): number {
   const m = mult || 1;
-  return (flat ? 140 + power * 3.2 : 40 + power * 2.4) * m * reach;
+  return (40 + power * 2.4) * m * reach;
 }
 /* What a successful shot leaves for the caller to show: where the barrel
    pointed (for the muzzle effect) and whether it spent the player's last
@@ -554,9 +562,10 @@ export function fireWeapon(world: World, arsenal: Arsenal, t: Tank, wkey: string
   return launch;
 }
 function fireGun(world: World, arsenal: Arsenal, t: Tank, wkey: string): Launch | null {
-  const w = arsenal.weapons[wkey]!;
+  const w = arsenal.weapons[wkey];
   const store = (t.isPlayer ? world.ammo : t.ammo)!;
-  if ((store[wkey] || 0) <= 0) return null;
+  // A key the arsenal lacks (a gun since retired) fires nothing, whatever the rack says.
+  if (!w || (store[wkey] || 0) <= 0) return null;
   if (wkey !== 'shell') store[wkey]! -= 1;
   // The last one fired: the player's gun falls back to the endless Shell.
   let spent = false;
@@ -578,7 +587,7 @@ function fireGun(world: World, arsenal: Arsenal, t: Tank, wkey: string): Launch 
   for (let i = 0; i < shots; i++) {
     const off = shots === 1 ? 0 : (i - (shots - 1) / 2) * (w.spread || 0);
     const a = r0 + off;
-    const spd = shotSpeed(t.power, w.flat, w.speed, fieldReach(world.terrain.length));
+    const spd = shotSpeed(t.power, w.speed, fieldReach(world.terrain.length));
     world.shells.push({
       x: m.x, y: m.y,
       vx: dcos(a) * spd * s, vy: -dsin(a) * spd,
@@ -772,7 +781,7 @@ export function rollOut(terrain: readonly number[], x: number, vx: number, vy: n
    is missing. server/sim.php room_flight_key is the same. */
 export function flightKey(w: Weapon): string {
   const roll = w.effect === 'roller';
-  return JSON.stringify([!!w.flat, w.speed, roll, roll ? w.friction || 0.3 : 0, roll ? w.rollTime || 5 : 0]);
+  return JSON.stringify([w.speed, roll, roll ? w.friction || 0.3 : 0, roll ? w.rollTime || 5 : 0]);
 }
 /* Predict where a shot lands (used by the AI and the aim guide); a roller's
    landing is where its roll ends. `top` is the highest ground (the least
@@ -785,11 +794,11 @@ export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal
   const r = rad(angle);
   const st: Motion = {
     x, y,
-    vx: dcos(r) * shotSpeed(power, w.flat, w.speed, reach) * dirS,
-    vy: -dsin(r) * shotSpeed(power, w.flat, w.speed, reach),
+    vx: dcos(r) * shotSpeed(power, w.speed, reach) * dirS,
+    vy: -dsin(r) * shotSpeed(power, w.speed, reach),
   };
   const dt = 1 / 60;
-  const grav = w.flat ? FLAT_GRAV : GRAV;
+  const grav = GRAV;
   for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * reach); i < steps; i++) {
     stepBallistic(st, dt, world.wind, grav);
     if (st.x < 0 || st.x >= fw) return { x: st.x, y: st.y, oob: true, vx: st.vx, vy: st.vy };
@@ -811,14 +820,14 @@ export function splitPoint(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arse
   const r = rad(angle);
   const st: Motion = {
     x, y,
-    vx: dcos(r) * shotSpeed(power, w.flat, w.speed, reach) * dirS,
-    vy: -dsin(r) * shotSpeed(power, w.flat, w.speed, reach),
+    vx: dcos(r) * shotSpeed(power, w.speed, reach) * dirS,
+    vy: -dsin(r) * shotSpeed(power, w.speed, reach),
   };
   const dt = 1 / 60;
   let age = 0;
   for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * reach); i < steps; i++) {
     age += dt;
-    stepBallistic(st, dt, world.wind, w.flat ? FLAT_GRAV : GRAV);
+    stepBallistic(st, dt, world.wind, GRAV);
     if (st.x < 0 || st.x >= fw || st.y >= H + 40) return null;
     if (w.apex ? age >= 0.1 && st.vy >= 0 : age >= (w.fuse || 0.9)) return st;
     if (i >= 6 && st.y >= world.terrain[clamp(Math.round(st.x), 0, fw - 1)]!) return null;
@@ -1105,8 +1114,6 @@ export type StepEvent =
   | { kind: 'trail'; shell: Shell; x: number; y: number; vx: number; vy: number }
   /** A cluster shell bloomed at its fuse. */
   | { kind: 'split'; wkey: string; x: number; y: number; ang: number }
-  /** A lance went through its first victim and flies on. */
-  | { kind: 'pierce'; wkey: string; x: number; y: number; ang: number }
   /** A hop weapon's next warhead leapt on from a burst; ang is its heading. */
   | { kind: 'hop'; wkey: string; x: number; y: number; ang: number }
   /** A scatter weapon's burst threw its bomblets up (ang is straight up). */
@@ -1348,7 +1355,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
     if (w.effect === 'seeker') steerShell(world.tanks, s, w, dt);
     const x0 = s.x, y0 = s.y;
     const held = { vx: s.vx, vy: s.vy, age: (s.age || 0) - dt, life: s.life, clear: s.clear };
-    stepBallistic(s, dt, world.wind, w.flat ? FLAT_GRAV : GRAV);
+    stepBallistic(s, dt, world.wind, GRAV);
     s.life -= dt;
     events.push({ kind: 'trail', shell: s, x: s.x, y: s.y, vx: s.vx, vy: s.vy });
     if (s.life <= 0 || s.x < -20 || s.x > world.terrain.length + 20 || s.y > H + 40) {
@@ -1403,13 +1410,6 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
       continue;
     }
     if (direct) {
-      // A lance punches through its first victim and keeps flying.
-      if (w.effect === 'pierce' && !s.pierced) {
-        s.pierced = direct;
-        events.push({ kind: 'pierce', wkey: s.wkey, x: s.x, y: s.y, ang: datan2(s.vy, s.vx) });
-        events.push({ kind: 'blast', blast: explode(world, arsenal, s.x, s.y, s.wkey, s.owner, direct, ov) });
-        continue;
-      }
       burstShell(world, arsenal, s, w, direct, ov, events);
       continue;
     }

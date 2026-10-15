@@ -40,7 +40,7 @@
  * plumbing (overlays, the firing range, the arsenal's loading). */
 import { BURIED_LINE, ROOM_W, TUNE, aimLimits, buried, clamp, buildArsenal as simBuildArsenal, surfY as simSurfY, facing, spotTaken as simSpotTaken } from './sim.ts';
 import {
-  initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
+  initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted, setSoundLevel, setMusicLevel,
 } from './audio.ts';
 import type { AudioConfig } from './audio.ts';
 import { installAudioPage } from './audio-page.ts';
@@ -70,6 +70,7 @@ import { createMatch } from './match.ts';
 import { createRoom } from './room.ts';
 import { createLobby } from './lobby.ts';
 import { createMenu } from './menu.ts';
+import { createVolume } from './volume.ts';
 import { createTitle } from './title.ts';
 import { difficultySetting } from './difficulty.ts';
 import { initialsPref } from './initials.ts';
@@ -150,7 +151,7 @@ const FALLBACK_ARSENAL: ArsenalData = {
     { key: 'shell', name: 'Shell', cat: 'Shells', dmg: 34, radius: 26, price: 0, pack: 0, minRound: 1, ai: true, aiRound: 1, effect: 'shot', speed: 1.0, note: 'Free, straight, honest.', gfx: { shell: '#ffe27a', trail: '#ffd75e', blast: ['#ffb13c', '#fff3c4'], painter: 'disc', shake: 0.3 } },
     { key: 'buck', name: 'Buckshot', cat: 'Shells', dmg: 17, radius: 20, price: 80, pack: 2, minRound: 1, ai: true, aiRound: 2, effect: 'pellets', pellets: 3, spread: 0.10, speed: 1.0, note: 'Three pellets, forgiving aim.', gfx: { shell: '#ffd166', trail: '#ffb13c', blast: ['#ffb13c', '#fff3c4'], painter: 'disc', shake: 0.3 } },
     { key: 'mortar', name: 'Mortar', cat: 'Shells', dmg: 56, radius: 42, price: 200, pack: 2, minRound: 1, ai: true, aiRound: 3, effect: 'shot', speed: 1.0, note: 'Big crater, slow shell.', gfx: { shell: '#ff9f43', trail: '#ff7b39', blast: ['#ff7b39', '#ffe27a'], painter: 'disc', shake: 0.5 } },
-    { key: 'rail', name: 'Rail', cat: 'Shells', dmg: 56, radius: 15, price: 140, pack: 2, minRound: 1, ai: true, aiRound: 5, effect: 'shot', flat: true, speed: 1.0, note: 'Flies fast and nearly flat.', gfx: { shell: '#9fd8ff', trail: '#9fd8ff', blast: ['#9fd8ff', '#ffffff'], painter: 'beam', shake: 0.3 } },
+    { key: 'needle', name: 'Needle', cat: 'Shells', dmg: 110, radius: 8, price: 120, pack: 1, minRound: 1, ai: true, aiRound: 6, effect: 'shot', speed: 1.3, note: 'Tiny blast, brutal direct hit.', gfx: { shell: '#ffffff', trail: '#caf0f8', blast: ['#ffffff', '#9fd8ff'], painter: 'beam', shake: 0.3 } },
     { key: 'nuke', name: 'NUKE', cat: 'Shells', dmg: 95, radius: 70, price: 500, pack: 1, minRound: 4, ai: false, aiRound: 99, effect: 'shot', speed: 1.0, note: 'Levels whole hillsides.', gfx: { shell: '#ff6b6b', trail: '#ff6b6b', blast: ['#ff6b6b', '#fff3c4'], painter: 'disc', shake: 0.9 } },
   ],
   gear: [
@@ -608,6 +609,8 @@ const {
   closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
   renderShop,
 });
+/* The Sound and Music sliders and mutes: loaded from this browser, applied to the audio. */
+const volume = createVolume(browserStorage(), { setSoundLevel, setMusicLevel, setSoundMuted, setMusicMuted, isSoundMuted, isMusicMuted });
 /* The game menu's settings (src/menu.ts). */
 const { loadBody, loadTextSize, loadFlashes, textScale, renderMenu } = createMenu({
   G, $, net, sfx, difficulty, unlock, playFullscreen, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
@@ -615,6 +618,7 @@ const { loadBody, loadTextSize, loadFlashes, textScale, renderMenu } = createMen
   openStandings: () => openStandings(), turnTime: secs => netTurnTime(secs), alerts: () => ({ state: alertsState(), onClick: toggleAlerts }), freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
   quit: () => { void quitGame(); },
   setFlashes: on => { if (FX) FX.flashes = on; },
+  volume,
 });
 /* The title card over the demo (src/title.ts). */
 const { titleOpen, openTitle, closeTitle, showHint: showTitleHint, renderTitle } = createTitle({
@@ -1024,11 +1028,11 @@ function placeLogBelowStatus(): void {
   log.style.top = `${bar.offsetTop + bar.offsetHeight + 6}px`;
 }
 function toggleSound(): void {
-  setSoundMuted(!isSoundMuted());
+  volume.toggleMute('sound');
   renderMenu();
 }
 function toggleMusic(): void {
-  setMusicMuted(!isMusicMuted());
+  volume.toggleMute('music');
   renderMenu();
 }
 /* Keyboard scrolling for panels: the topmost open veil or overlay takes

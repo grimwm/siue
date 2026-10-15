@@ -64,16 +64,30 @@ final class RoomBuyTest extends TestCase
 
     public function testRoundOneGoodsSellBeforeRoundOne(): void
     {
-        $room = $this->room(0);
-        $this->assertNull(room_buy($room, 0, 'mortar', 1));
-        $this->assertSame(2, $room['ammo'][0]['mortar']);
+        // Every round-1 gun the stake can buy sells in the pre-match shop (round 0).
+        $sold = 0;
+        foreach (room_weapons() as $k => $w) {
+            if ($w['pack'] <= 0 || $w['minRound'] > 1 || $w['price'] > 600) {
+                continue;
+            }
+            $room = $this->room(0);
+            $had = $room['ammo'][0][$k] ?? 0; // a row's start shells
+            $this->assertNull(room_buy($room, 0, $k, 1), $k);
+            $this->assertSame($had + $w['pack'], $room['ammo'][0][$k], $k);
+            $sold++;
+        }
+        $this->assertGreaterThan(3, $sold);
     }
 
     public function testLaterGoodsWaitForTheirRound(): void
     {
-        $room = $this->room(1);
-        $this->assertSame([409, 'Cluster unlocks in round 2'], room_buy($room, 0, 'cluster', 1));
-        $this->assertSame([409, 'NUKE unlocks in round 4'], room_buy($room, 0, 'nuke', 1));
+        // Each gun that unlocks after round 1 is refused, by name and round, until its round.
+        $later = array_filter(room_weapons(), fn($w) => $w['pack'] > 0 && $w['minRound'] > 1);
+        $this->assertGreaterThan(3, count($later));
+        foreach ($later as $k => $w) {
+            $room = $this->room($w['minRound'] - 1);
+            $this->assertSame([409, "{$w['name']} unlocks in round {$w['minRound']}"], room_buy($room, 0, $k, 1), $k);
+        }
     }
 
     public function testShortOnCashAndNotForSale(): void

@@ -389,7 +389,7 @@ function tankity_yaml_scalar(string $t): mixed
 
 /* ---------------------------------------------------------------- schema */
 
-const TANKITY_AMMO_EFFECTS = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter', 'beam', 'plasma',
+const TANKITY_AMMO_EFFECTS = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'emp', 'roller', 'hop', 'scatter', 'beam', 'plasma',
     'tracer', 'dirt', 'pour', 'dig', 'riot', 'slump', 'napalm'];
 /** The fields an ammo row carries for its effect: field => [type, [effect => [lo, hi]]]. A field is
  *  valid only on the effects listed for it, with that effect's range (bool fields have no range). */
@@ -703,14 +703,44 @@ function tankity_config_build(mixed $doc, array $lines, string $gameDir): array
     return [$c->errors ? null : $out, $c->errors];
 }
 
+/** The ground a firing-range preview may stand on (src/preview.ts makeRange). */
+const TANKITY_PREVIEW_GROUNDS = ['hills', 'dip', 'bowl', 'ridge', 'slope', 'perch', 'buried'];
+
+/** An ammo row's firing-range scenario: where the demo aims, on what ground, at what angle, the dummy how far off. */
+function tankity_build_preview(TankityCheck $c, mixed $v, string $p): ?array
+{
+    $m = $c->map($v, $p);
+    if ($m === null) {
+        return null;
+    }
+    $c->allow($m, ['aim', 'ground', 'angle', 'dummy'], $p);
+    $o = [];
+    if (array_key_exists('aim', $m) && $m['aim'] !== null) {
+        $o['aim'] = $c->int($m, 'aim', $p, -200, 200);
+    }
+    if (array_key_exists('ground', $m) && $m['ground'] !== null) {
+        $o['ground'] = $c->enum($m, 'ground', $p, TANKITY_PREVIEW_GROUNDS);
+    }
+    if (array_key_exists('angle', $m) && $m['angle'] !== null) {
+        $o['angle'] = $c->int($m, 'angle', $p, 5, 85);
+    }
+    if (array_key_exists('dummy', $m) && $m['dummy'] !== null) {
+        $o['dummy'] = $c->int($m, 'dummy', $p, 40, 300);
+    }
+    if (!$o) {
+        $c->err($p, 'needs at least one of aim, ground, angle or dummy');
+    }
+    return tankity_ordered($o, ['aim', 'ground', 'angle', 'dummy']);
+}
+
 function tankity_build_arsenal(TankityCheck $c, mixed $a): array
 {
-    $res = ['ammo' => [], 'gear' => [], 'fall' => null];
+    $res = ['ammo' => [], 'gear' => [], 'retired' => [], 'fall' => null];
     $a = $c->map($a, 'arsenal');
     if ($a === null) {
         return $res;
     }
-    $c->allow($a, ['ammo', 'gear', 'fall'], 'arsenal');
+    $c->allow($a, ['ammo', 'gear', 'retired', 'fall'], 'arsenal');
     $res['fall'] = tankity_build_fall($c, $a['fall'] ?? null);
     $seen = [];
     $ammo = $c->lst($a['ammo'] ?? null, 'arsenal.ammo') ?? [];
@@ -720,8 +750,8 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         if ($row === null) {
             continue;
         }
-        $c->allow($row, array_merge(['key', 'name', 'cat', 'dmg', 'radius', 'price', 'pack', 'start', 'minRound', 'ai', 'aiRound', 'aiRack',
-            'effect', 'speed', 'flat'], array_keys(TANKITY_AMMO_EXTRA), ['note', 'gfx']), $p);
+        $c->allow($row, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'minRound', 'ai', 'aiRound', 'aiRack',
+            'effect', 'speed', 'shortRange'], array_keys(TANKITY_AMMO_EXTRA), ['preview', 'note', 'gfx']), $p);
         $o = [];
         $o['key'] = $c->str($row, 'key', $p, 24, true, '/^[a-z][a-z0-9]*$/');
         if ($o['key'] !== null) {
@@ -732,6 +762,9 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         }
         $o['name'] = $c->str($row, 'name', $p, 40);
         $o['cat'] = $c->str($row, 'cat', $p, 30);
+        if (array_key_exists('line', $row) && $row['line'] !== null) {
+            $o['line'] = $c->str($row, 'line', $p, 24, true, '/^[a-z][a-z0-9]*$/');
+        }
         $o['dmg'] = $c->int($row, 'dmg', $p, 0, 500);
         // A tracer has no blast, so only a tracer may have radius 0.
         $o['radius'] = $c->int($row, 'radius', $p, ($row['effect'] ?? null) === 'tracer' ? 0 : 1, 200);
@@ -751,8 +784,8 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         }
         $o['effect'] = $c->enum($row, 'effect', $p, TANKITY_AMMO_EFFECTS);
         $o['speed'] = $c->num($row, 'speed', $p, 0.1, 5.0);
-        if (($f = $c->bool($row, 'flat', $p, false)) !== null) {
-            $o['flat'] = $f;
+        if (array_key_exists('shortRange', $row) && $row['shortRange'] !== null) {
+            $o['shortRange'] = $c->bool($row, 'shortRange', $p);
         }
         $effect = $o['effect'];
         foreach (TANKITY_AMMO_EXTRA as $k => [$type, $byEffect]) {
@@ -806,10 +839,20 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         if ($effect === 'tracer' && $o['dmg'] !== null && $o['dmg'] !== 0) {
             $c->err("$p.dmg", 'a tracer does no damage; must be 0');
         }
+        if (array_key_exists('preview', $row) && $row['preview'] !== null) {
+            $o['preview'] = tankity_build_preview($c, $row['preview'], "$p.preview");
+        }
         $o['note'] = $c->str($row, 'note', $p, 120);
         $o['gfx'] = tankity_build_gfx($c, $row['gfx'] ?? null, "$p.gfx", $effect);
-        $res['ammo'][] = tankity_ordered($o, array_merge(['key', 'name', 'cat', 'dmg', 'radius', 'price', 'pack', 'start', 'minRound', 'ai', 'aiRound', 'aiRack',
-            'effect'], array_keys(TANKITY_AMMO_EXTRA), ['flat', 'speed', 'note', 'gfx']));
+        $res['ammo'][] = tankity_ordered($o, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'minRound', 'ai', 'aiRound', 'aiRack',
+            'effect'], array_keys(TANKITY_AMMO_EXTRA), ['speed', 'shortRange', 'preview', 'note', 'gfx']));
+    }
+    // The shop and the picker show each cat under one heading in file order: its rows sit together.
+    $cats = array_column($res['ammo'], 'cat');
+    foreach ($cats as $i => $cat) {
+        if ($i > 0 && $cat !== $cats[$i - 1] && in_array($cat, array_slice($cats, 0, $i), true)) {
+            $c->err("arsenal.ammo[$i].cat", "`$cat` rows must sit together (it already appeared above)");
+        }
     }
     if (!in_array('shell', array_column($res['ammo'], 'key'), true)) {
         $c->err('arsenal.ammo', 'needs a free `shell` (price 0): the game starts every player with it');
@@ -855,6 +898,26 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         }
         $o['note'] = $c->str($row, 'note', $p, 120);
         $res['gear'][] = tankity_ordered($o, ['key', 'name', 'cat', 'price', 'n', 'effect', 'minRound', 'dmg', 'radius', 'note']);
+    }
+    // Guns the game no longer has: their keys stay reserved, and a saved room still holding some refunds them.
+    foreach ($c->lst($a['retired'] ?? [], 'arsenal.retired') ?? [] as $i => $row) {
+        $p = "arsenal.retired[$i]";
+        $row = $c->map($row, $p);
+        if ($row === null) {
+            continue;
+        }
+        $c->allow($row, ['key', 'name', 'price', 'pack'], $p);
+        $o = ['key' => $c->str($row, 'key', $p, 24, true, '/^[a-z][a-z0-9]*$/')];
+        if ($o['key'] !== null) {
+            if (isset($seen[$o['key']])) {
+                $c->err("$p.key", "`{$o['key']}` is retired: no ammo, gear or other retired row may use it");
+            }
+            $seen[$o['key']] = true;
+        }
+        $o['name'] = $c->str($row, 'name', $p, 40);
+        $o['price'] = $c->int($row, 'price', $p, 0, 100000);
+        $o['pack'] = $c->int($row, 'pack', $p, 1, 99);
+        $res['retired'][] = $o;
     }
     return $res;
 }

@@ -5,7 +5,7 @@
 // call's transform. Chrome always; with E2E_WEBKIT=1 playwright.config.mjs adds a
 // WebKit project for this spec (CI installs Chrome only).
 import { test, expect } from '@playwright/test';
-import { recorderScript, startSolo, aimTo, setPower } from './helpers.mjs';
+import { recorderScript, muteScript, startSolo, aimTo, setPower } from './helpers.mjs';
 
 /* Injected after the recorder: while __sky.on, every shell drawn on the
    battlefield (its rendered body from TankityFX.drawBody, or the 1.5 px white
@@ -53,6 +53,7 @@ const WIDE = { width: 1280, height: 860 }, PORTRAIT = { width: 393, height: 852 
 
 async function player(browser, viewport, { speed } = {}) {
   const ctx = await browser.newContext({ viewport });
+  await ctx.addInitScript(muteScript);
   await ctx.addInitScript(recorderScript);
   await ctx.addInitScript(skyCamScript);
   const page = await ctx.newPage();

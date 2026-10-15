@@ -26,13 +26,13 @@ test('the weapon picker shows the whole rack and loads with keys or clicks', asy
   await page.keyboard.press('n');
   await page.waitForSelector('#shop-veil:not([hidden])');
   await page.keyboard.press('2'); // Mortar
-  await page.keyboard.press('3'); // Rail
+  await page.keyboard.press('3'); // EMP
   await page.click('#shop-next');
   await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU|Aim/);
   await page.keyboard.press('g');
   const tiles = page.locator('#gun-grid .gun-choice');
   await expect(page.locator('#gun-overlay')).toBeVisible();
-  // Every gun shows; past Shell, Buckshot, Mortar and Rail none are in stock.
+  // Every gun shows; past Shell, Buckshot, Mortar and EMP none are in stock.
   expect(await tiles.count()).toBeGreaterThan(4);
   expect(await page.locator('#gun-grid .gun-choice:not([aria-disabled="true"])').count()).toBe(4);
   await expect(tiles.first()).toHaveAttribute('aria-pressed', 'true');
@@ -46,7 +46,7 @@ test('the weapon picker shows the whole rack and loads with keys or clicks', asy
   await expect(page.locator('#gun-overlay')).toBeVisible();
   await page.locator('#gun-overlay').screenshot({ path: 'test-results/tankity-guns.png' });
   await page.keyboard.press('4');
-  expect(await hud(page, 'hud-weapon')).toMatch(/^Rail /);
+  expect(await hud(page, 'hud-weapon')).toMatch(/^EMP /);
   // And a click on a tile.
   await page.click('#hud-weapon');
   await page.click('#gun-grid .gun-choice >> nth=0');

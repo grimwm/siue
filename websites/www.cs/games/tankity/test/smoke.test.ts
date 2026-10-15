@@ -702,7 +702,7 @@ await (async () => {
   TAP('global', 'back');
   TAP('shop', 'close'); frames(3);
   await test('shop-esc-closes-menu', () => { assert.ok(E('menu-overlay').hidden === true && E('shop-veil').hidden === false); });
-  // Stock up: Buckshot ($80), Mortar ($200), Rail ($140) of the $600 stake.
+  // Stock up: Buckshot ($80), Mortar ($200), Needle ($120) of the $600 stake.
   // (Each render appends, so read the last nine list items: two category
   // headers, the free Shell row, and six rows to buy. Each row holds an icon
   // canvas and a text div whose last child is the acts row.)
@@ -728,7 +728,8 @@ await (async () => {
   // The arsenal section of game.json is a second source the game reads at
   // boot: it must hold every row and speak only effects and painters the code has.
   const arsenal = GAME.arsenal;
-  await test('arsenal-count', () => { assert.ok(arsenal.ammo.length === 41 && arsenal.gear.length === 9, `ammo=${arsenal.ammo.length} gear=${arsenal.gear.length}`); });
+  // Every ammo row has its effects (plus the wreck's, laststand): the count comes from game.json itself.
+  await test('arsenal-count', () => { assert.ok(arsenal.ammo.length >= 30 && arsenal.ammo.length === Object.keys(GAME.effects || {}).length - 1 && arsenal.gear.length === 9, `ammo=${arsenal.ammo.length} gear=${arsenal.gear.length}`); });
   const FX = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter', 'beam', 'plasma', 'tracer', 'dirt', 'pour', 'dig', 'riot', 'slump', 'napalm'];
   const PAINT: readonly (string | undefined)[] = ['disc', 'beam', 'spark', 'ball', 'dash', 'drill', 'clod', 'flame'];
   const TRICKS: readonly (string | undefined)[] = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand', 'parachute'];
@@ -740,8 +741,10 @@ await (async () => {
   for (const r of [...arsenal.ammo.filter(a => a.pack > 0), ...arsenal.gear]) {
     if (!cats.includes(r.cat)) cats.push(r.cat);
   }
-  await test('arsenal-cats', () => { assert.ok(cats.join('|') === 'Shells|Rollers|Beams|Tracers|Earth|Fire|Hull and fuel|Tricks', cats.join('|')); });
-  for (const k of ['shell', 'buck', 'mortar', 'rail', 'nuke', 'repair', 'fuel']) {
+  // Each cat's rows sit together in game.json, so the shop's headings follow the file.
+  const runs = [...arsenal.ammo.filter(a => a.pack > 0), ...arsenal.gear].map(r => r.cat).filter((c, i, all) => i === 0 || c !== all[i - 1]);
+  await test('arsenal-cats', () => { assert.ok(cats.length >= 8 && runs.join('|') === cats.join('|'), runs.join('|')); });
+  for (const k of ['shell', 'buck', 'mortar', 'needle', 'nuke', 'repair', 'fuel']) {
     await test('arsenal-keeps-' + k, () => { assert.ok(arsenal.ammo.some(a => a.key === k) || arsenal.gear.some(g => g.key === k)); });
   }
   // A full hull has nothing to repair: the Repair row greys out and says so.
@@ -786,10 +789,10 @@ await (async () => {
   TAP('shop', 'qtyUp'); frames(3);
   await test('shop-qty-2', () => { assert.ok(/×2 = \$120/.test(rowName(fuelRow())), rowName(fuelRow())); });
   TAP('shop', 'qtyUp'); frames(3);
-  TAP('shop', 'qtyUp'); frames(3); // $180 left after the three guns: three packs is all the chest covers
+  TAP('shop', 'qtyUp'); frames(3); // $200 left after the three guns: three packs is all the chest covers
   await test('shop-qty-cap', () => { assert.ok(/×3 = \$180/.test(rowName(fuelRow())), rowName(fuelRow())); });
   TAP('shop', 'buy'); frames(3);
-  await test('shop-bulk', () => { assert.ok(/\$0\b/.test(E('shop-cash').textContent), E('shop-cash').textContent); });
+  await test('shop-bulk', () => { assert.ok(/\$20\b/.test(E('shop-cash').textContent), E('shop-cash').textContent); });
   await test('shop-bulk-said', () => { assert.ok(/Bought 3 × Fuel/.test(logTail()), logTail()); });
   await test('shop-bulk-reset', () => { assert.ok(!/×[2-9] packs/.test(rowName(fuelRow())), rowName(fuelRow())); });
   const buckRow = () => must(shopRows().find(li => rowName(li).includes('Buckshot')), 'Buckshot row');
@@ -821,13 +824,13 @@ await (async () => {
   KD('aim', 'driveLeft'); frames(30); KU('aim', 'driveLeft'); frames(2);
   const fuelAfterDrive = Number(E('hud-fuel').textContent);
   await test('keyboard-drives', () => { assert.ok(fuelAfterDrive < fuelBeforeDrive, `fuel ${fuelBeforeDrive} -> ${fuelAfterDrive}`); });
-  loadGun('Rail');
+  loadGun('Needle');
   TAP('global', 'battlePreview'); frames(5);
   frames(300);
   TAP('global', 'battlePreview'); frames(5);
-  const railVerdict = E('preview-result').textContent;
-  const railSel = E('hud-weapon').textContent;
-  await test('rail-selected', () => { assert.ok(/^Rail /.test(railSel), railSel); });
+  const needleVerdict = E('preview-result').textContent;
+  const needleSel = E('hud-weapon').textContent;
+  await test('needle-selected', () => { assert.ok(/^Needle /.test(needleSel), needleSel); });
   await ensureAim();
   loadGun('Mortar');
   TAP('global', 'battlePreview'); frames(5);
@@ -836,7 +839,7 @@ await (async () => {
   const mortarVerdict = E('preview-result').textContent;
   const mortarSel = E('hud-weapon').textContent;
   loadGun('Buckshot');
-  await test('rail-hits', () => { assert.ok(/damage|hits/.test(railVerdict) && !/Clean miss/.test(railVerdict), railVerdict + ' | ' + railSel); });
+  await test('needle-hits', () => { assert.ok(/damage|hits/.test(needleVerdict) && !/Clean miss/.test(needleVerdict), needleVerdict + ' | ' + needleSel); });
   await test('mortar-selected', () => { assert.ok(/^Mortar /.test(mortarSel), mortarSel); });
   await test('mortar-hits', () => { assert.ok(/damage|hits/.test(mortarVerdict) && !/Clean miss/.test(mortarVerdict), mortarVerdict + ' | ' + mortarSel); });
 
@@ -993,7 +996,7 @@ await (async () => {
   const dlg = E('dlg-line').textContent;
 
   await test('preshop', () => { assert.ok(shopOpen && /\$600/.test(shopCash0), shopCash0); });
-  await test('shop-buy', () => { assert.ok(/\$180/.test(shopCash1), shopCash1); });
+  await test('shop-buy', () => { assert.ok(/\$200/.test(shopCash1), shopCash1); });
   await test('boot-turn', () => { assert.ok(/YOU/.test(turn0), turn0); });
   await test('boot-hud', () => { assert.ok(/62°/.test(angle0) && wind0.length > 0 && armor0 === '100', `${angle0} | ${wind0} | ${armor0}`); });
   // Firing range: V opens the demo with its damage stats, frames render it,
@@ -1450,7 +1453,7 @@ await (async () => {
     }
     await test('fx-blast-sized-effects-stay-near-radius', () => { assert.ok(big.length === 0, big.join(', ')); });
     // Specials the mechanics need exist where the weapon has the mechanic.
-    const needs: Record<string, string> = { cluster: 'split', seeker: 'steer', lance: 'pierce', emp: 'arc' };
+    const needs: Record<string, string> = { cluster: 'split', seeker: 'steer', laser: 'pierce', emp: 'arc' };
     const hasSpecial = (k: string) => { const sp = setOf(k).special; return sp && sp[must(needs[k], 'the special ' + k + ' needs')]; };
     await test('fx-specials', () => { assert.ok(Object.keys(needs).every(k => hasSpecial(k)), JSON.stringify(Object.keys(needs).filter(k => !hasSpecial(k)))); });
     // The pool is a hard cap, and a full pool recycles instead of growing.

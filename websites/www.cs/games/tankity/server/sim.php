@@ -55,7 +55,6 @@ function room_map_profile(string $id): array
 }
 const ROOM_TURN_WIND = 2.2;
 const ROOM_GRAV = 95;
-const ROOM_FLAT_GRAV = 90; // flat bolts arc a little (src/sim.ts FLAT_GRAV)
 const ROOM_W = 720; // a room's field; a solo run's is dealt (src/field.ts) and checked here
 const FIELD_W_MIN = 720;
 const FIELD_W_MAX = 1440;
@@ -191,7 +190,6 @@ function room_weapon_row(array $am): array
         'minRound' => (int) ($am['minRound'] ?? 1),
         'effect' => (string) ($am['effect'] ?? 'shot'),
         'speed' => (float) ($am['speed'] ?? 1.0),
-        'flat' => !empty($am['flat']),
         'pellets' => (int) ($am['pellets'] ?? 0),
         'spread' => (float) ($am['spread'] ?? 0.0),
         'fuse' => (float) ($am['fuse'] ?? 0.9),
@@ -235,9 +233,9 @@ function room_gear(string $key): ?array
     return null;
 }
 /* src/sim.ts shotSpeed(): $reach is room_field_reach() of the field, exactly 1.0 on a room's. */
-function room_shot_speed(float $power, bool $flat, float $mult = 1.0, float $reach = 1.0): float
+function room_shot_speed(float $power, float $mult = 1.0, float $reach = 1.0): float
 {
-    return ($flat ? 140.0 + $power * 3.2 : 40.0 + $power * 2.4) * $mult * $reach;
+    return (40.0 + $power * 2.4) * $mult * $reach;
 }
 /* src/sim.ts fieldReach(): range and height grow by w / ROOM_W. */
 function room_field_reach(int $w): float
@@ -396,7 +394,7 @@ function room_flight_key(array $def): string
     }
     $nums = array_map(fn(float $v): float => $v == 0.0 ? 0.0 : $v, $nums); // -0 flies as 0, and JSON.stringify writes it 0
     // %.17g writes every double exactly whatever serialize_precision says, so two guns that differ never share a key.
-    return (!empty($def['flat']) ? 'flat' : 'arc') . ($roll ? ' roll ' : ' fly ') . implode(' ', array_map(fn(float $v): string => sprintf('%.17g', $v), $nums));
+    return ($roll ? 'roll ' : 'fly ') . implode(' ', array_map(fn(float $v): string => sprintf('%.17g', $v), $nums));
 }
 /* Full trajectory; returns landing info. Mirrors src/sim.ts simShot. A
 // roller's landing is where its roll ends. $top is the highest ground (the
@@ -417,11 +415,10 @@ function room_sim_flights(int $add = 0): int
 function room_sim_flight(array $terrain, float $wind, float $x, float $y, float $angle, float $power, array $def, int $dirS, int $w, float $top = -INF): array
 {
     room_sim_flights(1);
-    $flat = !empty($def['flat']);
     $rad = deg2rad($angle);
-    $vx = det_cos($rad) * room_shot_speed($power, $flat, (float) ($def['speed'] ?? 1.0), room_field_reach($w)) * $dirS;
-    $vy = -det_sin($rad) * room_shot_speed($power, $flat, (float) ($def['speed'] ?? 1.0), room_field_reach($w));
-    $grav = $flat ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
+    $vx = det_cos($rad) * room_shot_speed($power, (float) ($def['speed'] ?? 1.0), room_field_reach($w)) * $dirS;
+    $vy = -det_sin($rad) * room_shot_speed($power, (float) ($def['speed'] ?? 1.0), room_field_reach($w));
+    $grav = (float) ROOM_GRAV;
     $dt = 1 / 60;
     // The drones' aim search runs this hundreds of times a turn: the per-step
     // products are formed once, in the same order, so every value is the same.
@@ -457,11 +454,10 @@ function room_split_point(array $terrain, float $wind, float $x, float $y, float
 {
     room_sim_flights(1);
     $def = room_weapons()[$wkey];
-    $flat = !empty($def['flat']);
     $rad = deg2rad($angle);
-    $vx = det_cos($rad) * room_shot_speed($power, $flat, (float) $def['speed'], room_field_reach($w)) * $dirS;
-    $vy = -det_sin($rad) * room_shot_speed($power, $flat, (float) $def['speed'], room_field_reach($w));
-    $grav = $flat ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
+    $vx = det_cos($rad) * room_shot_speed($power, (float) $def['speed'], room_field_reach($w)) * $dirS;
+    $vy = -det_sin($rad) * room_shot_speed($power, (float) $def['speed'], room_field_reach($w));
+    $grav = (float) ROOM_GRAV;
     $dt = 1 / 60;
     $age = 0.0;
     for ($i = 0, $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($w)); $i < $steps; $i++) {
@@ -941,7 +937,7 @@ function room_arc_step(array &$room, array &$events, array $tank, array $w, stri
             $a['vy'] += $dv[1];
         }
     }
-    $grav = !empty($w['flat']) ? (float) ROOM_FLAT_GRAV : (float) ROOM_GRAV;
+    $grav = (float) ROOM_GRAV;
     $a['vx'] += $room['wind'] * ROOM_TURN_WIND * $dt;
     $a['vy'] += $grav * $dt;
     $px = $a['x'];
@@ -986,16 +982,6 @@ function room_arc_step(array &$room, array &$events, array $tank, array $w, stri
         }
     }
     if ($direct !== null) {
-        if ($effect === 'pierce' && $a['pierced'] === null) {
-            $a['pierced'] = $direct;
-            // The bracket learns where the volley first burst, as src/sim.ts explode() does.
-            room_brk_land($room['tanks'][$ownerIdx], $a['x']);
-            $mark = count($events);
-            room_explode($room, $events, $tank, $wkey, $a['x'], $a['y'], $direct, $ov);
-            $events[] = ['t' => 'burst', 'x' => round($a['x'], 1), 'y' => round($a['y'], 1), 'r' => (float) (($ov['radius'] ?? null) ?? $w['radius']), 'w' => $wkey];
-            room_stamp($events, $mark, $t0 + $flown);
-            return null;
-        }
         $a['path'][] = [$a['x'], $a['y']];
         return ['hit', $a['x'], $a['y'], $a['vx'], $a['vy'], $direct, $a['path'], $flown, $a['clear']];
     }

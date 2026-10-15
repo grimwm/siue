@@ -265,7 +265,11 @@ function room_peek(string $code): ?array
     $q = tankity_db()->prepare('SELECT data FROM rooms WHERE code = ?');
     $q->execute([$code]);
     $room = room_decode($q->fetchColumn());
-    return $room !== null && ($room['code'] ?? null) === $code && !room_idle($room) ? $room : null;
+    if ($room === null || ($room['code'] ?? null) !== $code || room_idle($room)) {
+        return null;
+    }
+    room_retire_guns($room); // what room_load shows for a room still holding a retired gun
+    return $room;
 }
 
 /* Holds a room for this request: [room, lock, code]. With no room (never
@@ -278,6 +282,8 @@ function room_load(string $code): array
     $q->execute([$code]);
     $room = room_decode($q->fetchColumn());
     if ($room !== null && ($room['code'] ?? null) === $code) {
+        // A room saved before a gun left the arsenal refunds it (server/rules.php).
+        room_retire_guns($room);
         if (!room_idle($room)) {
             return [$room, room_hold(new RoomLock($db, $code)), $code];
         }

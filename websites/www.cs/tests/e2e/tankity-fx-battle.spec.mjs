@@ -5,18 +5,18 @@ import { test, expect } from '@playwright/test';
 import { newPlayer, hud, rec, resetRec, aimTo, setPower, recorderScript } from './helpers.mjs';
 import { committedEffects, local, arsenal, grab, fireAndWatch } from './fx-helpers.mjs';
 
-test('shell, mortar and rail light up the battlefield and the blast disc keeps its radius', async ({ browser }) => {
+test('shell, mortar and EMP light up the battlefield and the blast disc keeps its radius', async ({ browser }) => {
   test.setTimeout(240_000);
   const { page, errors } = await newPlayer(browser);
   const W = await arsenal(page);
   await page.keyboard.press('n');
   await page.waitForSelector('#shop-veil:not([hidden])');
   await page.keyboard.press('2'); // mortar
-  await page.keyboard.press('3'); // rail
+  await page.keyboard.press('3'); // EMP
   await page.click('#shop-next');
   await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU|Aim/);
-  // Near, steep lobs so every shot lands on the hills (the rail's speed is 140 + 3.2 per power point, so only the lowest power stays close).
-  for (const [key, angle, power] of [['shell', 80, 40], ['mortar', 80, 40], ['rail', 80, 10]]) {
+  // Near, steep lobs so every shot lands on the hills.
+  for (const [key, angle, power] of [['shell', 80, 40], ['mortar', 80, 40], ['emp', 80, 40]]) {
     // A shot can fly off the map or be lost to a busy turn: a pack holds two, so allow one retry.
     let r, radii = [];
     for (let attempt = 0; attempt < 2 && !radii.length; attempt++) {
@@ -36,7 +36,7 @@ test('shell, mortar and rail light up the battlefield and the blast disc keeps i
     const rr = W[key].radius;
     expect(radii.length, `${key}: blast disc drawn (rings seen: ${JSON.stringify([...new Set(r.rings.map(p => p[2] + '@' + Math.round(p[1])))].slice(0, 12))}, sheets ${r.sheets})`).toBeGreaterThan(0);
     expect(Math.max(...radii), `${key}: disc never beyond the blast radius`).toBeLessThanOrEqual(rr + 0.01);
-    if (key !== 'rail') expect(Math.max(...radii), `${key}: disc reaches the blast radius`).toBeGreaterThan(rr * 0.9);
+    expect(Math.max(...radii), `${key}: disc reaches the blast radius`).toBeGreaterThan(rr * 0.9);
   }
   expect(errors).toEqual([]);
 });

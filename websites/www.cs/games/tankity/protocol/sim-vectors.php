@@ -212,7 +212,7 @@ foreach ([2.5, -2.5, 0.49999999999999994, -0.5, -0.4, -0.0, 0.0, 7.5, -7.5, 1e15
 }
 
 /* ---- constants and the integer core ---- */
-$add('constants', 'physics', [], ['grav' => ROOM_GRAV, 'flatGrav' => ROOM_FLAT_GRAV, 'windK' => ROOM_TURN_WIND,
+$add('constants', 'physics', [], ['grav' => ROOM_GRAV, 'windK' => ROOM_TURN_WIND,
     'unitGap' => ROOM_UNIT_GAP, 'spawnGap' => ROOM_SPAWN_GAP]);
 
 foreach (['tankity-canyon-three', 'scorch-01', '', 'a'] as $seed) {
@@ -256,7 +256,7 @@ foreach ([720, 1080, 1440] as $w) {
     $reach = room_field_reach($w);
     $speeds = [];
     foreach ([0.0, 37.0, 100.0] as $p) {
-        array_push($speeds, room_shot_speed($p, false, 1.0, $reach), room_shot_speed($p, true, 1.0, $reach), room_shot_speed($p, false, 0.55, $reach));
+        array_push($speeds, room_shot_speed($p, 1.0, $reach), room_shot_speed($p, 0.55, $reach));
     }
     $exact('field', "speed-$w", ['kind' => 'speed', 'w' => $w], ['reach' => $reach, 'speeds' => $speeds]);
     $shot = ['kind' => 'sim-shot', 'w' => $w, 'x' => $w - 100.0, 'y' => 386.0, 'angle' => 40.0, 'power' => 100.0, 'wkey' => 'shell', 'dirS' => 1];
@@ -274,12 +274,9 @@ foreach ([720, 1080, 1440] as $w) {
 }
 
 /* ---- shot speed and muzzle ---- */
-foreach ([false, true] as $isFlat) {
-    foreach ([0, 10, 55, 100] as $power) {
-        foreach ([1.0, 1.5] as $mult) {
-            $add('shot-speed', ($isFlat ? 'flat' : 'lob') . "-p$power-x$mult", ['power' => $power, 'flat' => $isFlat, 'mult' => $mult],
-                room_shot_speed((float) $power, $isFlat, $mult));
-        }
+foreach ([0, 10, 55, 100] as $power) {
+    foreach ([1.0, 1.5] as $mult) {
+        $add('shot-speed', "lob-p$power-x$mult", ['power' => $power, 'mult' => $mult], room_shot_speed((float) $power, $mult));
     }
 }
 foreach ([1, -1] as $dirS) {
@@ -456,7 +453,7 @@ $sim = function (string $name, array $c) use ($add): void {
         $c['wkey'], $c['dirS'], SV_WIDTH);
     $add('sim-shot', $name, $c, $land);
 };
-foreach (['shell', 'mortar', 'rail', 'buck', 'roller'] as $wkey) {
+foreach (['shell', 'mortar', 'heavy', 'buck', 'roller'] as $wkey) {
     if (!isset($weapons[$wkey])) {
         continue;
     }
@@ -795,7 +792,7 @@ $aim = function (string $name, array $c, ?string $known = null) use ($add): void
     $choice = room_ai_choose($room, $room['tanks'][$c['shooter']]);
     $add('ai-aim', $name, $c, ['wkey' => $choice['wkey'], 'angle' => $choice['angle'], 'power' => $choice['power'], 'dx' => $choice['dx']], $known);
 };
-$rack = ['mortar' => 2, 'rail' => 2, 'buck' => 2, 'nuke' => 1];
+$rack = ['mortar' => 2, 'needle' => 1, 'buck' => 2, 'nuke' => 1];
 $hills = ['hills' => [330, 40, 260]];
 foreach ([1, 2, 3, 7, 11, 42, 777, 2026] as $seed) {
     $aim("one-rival-seed$seed", ['terrain' => $hills, 'wind' => 3, 'round' => 1 + $seed % 5, 'seed' => $seed, 'shooter' => 1,
@@ -817,7 +814,7 @@ $aim('no-rivals-left', ['terrain' => $flat, 'wind' => 0, 'round' => 1, 'seed' =>
     'tanks' => [$drone(300, 60) + ['dirS' => -1], $drone(500, 0)]],
     'With nobody left to shoot at the server falls back to a fixed 62/55 Shell and the browser aims at itself. Unreachable: a round with no rival has already ended on both sides.');
 // A mixed rack: the drone fires the most harmful gun on its best arc, or (glory) of any arc.
-$mixed = ['buck' => 2, 'mortar' => 2, 'rail' => 2, 'heavy' => 2, 'needle' => 1, 'roller' => 2];
+$mixed = ['buck' => 2, 'mortar' => 2, 'heavy' => 2, 'needle' => 1, 'roller' => 2];
 foreach ($weapons as $k => $def) {
     if (!empty($def['ai']) && !isset($mixed[$k]) && $k !== 'shell') {
         $mixed[$k] = 1;
@@ -1001,10 +998,6 @@ $bracket('jammed-target-wobbles-double', ['terrain' => $flat, 'wind' => 0, 'roun
     'tanks' => [$human(200, 9999) + ['jammer' => 2], $drone(500, 9999) + ['dirS' => -1]]]);
 $bracket('drone-with-a-rack', ['terrain' => $flat, 'wind' => 2, 'round' => 4, 'seed' => 11, 'shooter' => 1, 'target' => 0, 'shots' => 6,
     'tanks' => [$human(210, 9999), $drone(510, 9999) + ['dirS' => -1, 'ammo' => ['mortar' => 2]]]]);
-// A unit on a ledge stands in the lance's line, so the lance pierces it before it lands: the bracket keeps that first burst.
-$bracket('lance-marks-its-first-burst', ['terrain' => ['flat' => 400, 'set' => [[465, 485, 330]]], 'wind' => 0, 'round' => 6, 'seed' => 23,
-    'shooter' => 2, 'target' => 0, 'shots' => 4,
-    'tanks' => [$human(150, 9999), $drone(475, 9999) + ['y' => 330.0], $drone(560, 9999) + ['dirS' => -1, 's' => 'glory', 'ammo' => ['lance' => 9]]]]);
 
 /* ---- difficulty: the same scenes under each level's aim ----
  * A word neither side knows aims at normal on both. */
@@ -1070,7 +1063,7 @@ $tactic('glory-human-leads', $scene('glory', [], ['kills' => 1]));
 $tactic('glory-takes-its-strongest-gun', $scene('glory', ['ammo' => ['mortar' => 2, 'heavy' => 2, 'buck' => 2]]));
 $tactic('sniper-ties-go-to-the-nearest', ['terrain' => $flat, 'wind' => 0, 'round' => 2, 'seed' => 5, 'shooter' => 1, 'turns' => 2,
     'tanks' => [$human(100, 50), $drone(520, 100) + ['dirS' => -1, 's' => 'sniper'], $drone(330, 50), $drone(260, 50)]]);
-$tactic('lobber-with-area-guns', array_replace($scene('lobber', ['ammo' => ['rail' => 2, 'buck' => 2, 'mortar' => 2]]), ['turns' => 2]));
+$tactic('lobber-with-area-guns', array_replace($scene('lobber', ['ammo' => ['needle' => 1, 'buck' => 2, 'mortar' => 2]]), ['turns' => 2]));
 foreach ([2, 9, 31] as $seed) {
     $tactic("lobber-plain-shells-seed$seed", array_replace($scene('lobber'), ['seed' => $seed, 'turns' => 2]));
 }

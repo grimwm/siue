@@ -21,7 +21,7 @@ test('the cut-offs: below 20 is S, 20 up to 40 is M, 40 and up is L', () => {
 
 test('the shipped guns read the way the deck shows them', () => {
   assert.equal(weaponLine(gun('shell')), '34 dmg · M');
-  assert.equal(blastSize(gun('rail').radius), 'S');
+  assert.equal(blastSize(gun('needle').radius), 'S');
   assert.equal(blastSize(gun('mortar').radius), 'L');
   assert.equal(blastSize(gun('nuke').radius), 'L');
   for (const w of GAME.arsenal.ammo) assert.match(weaponLine(w), /^(\d+ dmg(\/tick)?|no damage) · (S|M|L|beam|path|earth|fire)$/, w.key);

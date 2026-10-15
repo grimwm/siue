@@ -16,6 +16,8 @@ function audioProbe() {
     window.__audios.push(el);
     return el;
   };
+  const gain = AudioContext.prototype.createGain;
+  AudioContext.prototype.createGain = function (...a) { window.__ctx = this; return gain.apply(this, a); };
   window.__samples = 0;
   const start = AudioBufferSourceNode.prototype.start;
   AudioBufferSourceNode.prototype.start = function (...a) {
@@ -220,5 +222,23 @@ test('the Music toggle stops the soundtrack and brings it back', async ({ browse
   expect(await page.evaluate(() => window.__passes.length)).toBe(muted);
   await page.keyboard.press('m');
   await expect.poll(() => page.evaluate(() => window.__passes.length), { timeout: 15_000 }).toBeGreaterThan(muted);
+  expect(errors).toEqual([]);
+});
+
+test('a hidden tab goes silent and the music comes back when it is visible again', async ({ browser }) => {
+  const { page, errors } = await open(browser);
+  await page.keyboard.press('Control'); // a gesture: music starts
+  await expect.poll(() => page.evaluate(() => window.__ctx && window.__ctx.state)).toBe('running');
+  const visibility = state => page.evaluate(s => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => s });
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => s === 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, state);
+  await visibility('hidden');
+  await expect.poll(() => page.evaluate(() => window.__ctx.state)).toBe('suspended');
+  expect(await page.evaluate(() => [...document.querySelectorAll('audio,video')].filter(e => !e.paused).length)).toBe(0);
+  expect(await page.evaluate(() => window.__audios.filter(e => !e.paused).length)).toBe(0);
+  await visibility('visible');
+  await expect.poll(() => page.evaluate(() => window.__ctx.state)).toBe('running');
   expect(errors).toEqual([]);
 });

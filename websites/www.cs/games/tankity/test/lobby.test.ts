@@ -269,6 +269,12 @@ function puzzleRig(gate: { open?: () => void }) {
   return { ...r, sent };
 }
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(res => setImmediate(res)); };
+/** Waits (up to 10 s) for what WebCrypto's thread pool finishes in its own time. */
+async function until(what: string, cond: () => boolean): Promise<void> {
+  for (const end = Date.now() + 10_000; !cond(); await new Promise(res => setTimeout(res, 5))) {
+    if (Date.now() > end) assert.fail(`timed out waiting for ${what}`);
+  }
+}
 
 test('hosting says Setting up the room…, keeps Host and Join off, and a second Host does nothing', async () => {
   const gate: { open?: () => void } = {};
@@ -286,8 +292,7 @@ test('hosting says Setting up the room…, keeps Host and Join off, and a second
   await settle();
   assert.deepEqual(r.sent.filter(a => a === 'challenge'), ['challenge'], 'one puzzle asked for');
   gate.open?.();
-  await settle();
-  assert.equal(r.net.code, 'K7Q2MX');
+  await until('the room', () => r.net.code === 'K7Q2MX' && r.$('lobby-cancel').hidden === true);
   assert.equal(r.seats.get('K7Q2MX')?.token, 'tk');
   assert.equal(r.$('lobby-status').textContent, '');
   assert.equal(r.$('lobby-cancel').hidden, true);
@@ -314,8 +319,7 @@ test('Cancel stops setting up the room: nothing is created and Host works again'
   submit(r.$('host-form'));
   await settle();
   gate.open?.();
-  await settle();
-  assert.equal(r.net.code, 'K7Q2MX');
+  await until('the room', () => r.net.code === 'K7Q2MX' && r.$('lobby-cancel').hidden === true);
 });
 
 test('joining says Setting up your seat…, and takes the code as read back', async () => {
@@ -327,8 +331,7 @@ test('joining says Setting up your seat…, and takes the code as read back', as
   await settle();
   assert.equal(r.$('lobby-status').textContent, 'Setting up your seat…');
   gate.open?.();
-  await settle();
-  assert.equal(r.net.code, 'K7Q2MX');
+  await until('the seat', () => r.net.code === 'K7Q2MX' && r.$('lobby-cancel').hidden === true);
 });
 
 test('a code of the wrong length is refused before anything is sent', async () => {

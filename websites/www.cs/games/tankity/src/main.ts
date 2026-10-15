@@ -96,6 +96,7 @@ import { ROTATE_HINT_KEY, rotateHintShows } from './rotate-hint.ts';
 import { renderRotateHint } from './ui/rotate-hint.tsx';
 import type { Arsenal, Difficulty, Weapon, Gear } from './sim.ts';
 import type { GameState, GameTank, MatchState } from './game-types.ts';
+import { FALLBACK_ARSENAL } from './fallback-arsenal.ts';
 import type { PreviewEnv } from './preview.ts';
 import type { RoomEnv } from './net.ts';
 import type { FxSetData, FxSys } from './fx/types.ts';
@@ -144,25 +145,11 @@ music.onTrackStart((t, cause) => {
 /* The arsenal lives in game.yaml (served as game.json), not here: ballistics,
 // prices, packs, unlock rounds, AI access, blurbs, and paint jobs all come
 // from that file so adding a shell never touches this code. Until it arrives
-// (or when it cannot, e.g. file:// play), this baked fallback, shaped like
-// game.json's arsenal section, keeps the war rolling. */
+// (or when it cannot, e.g. file:// play), src/fallback-arsenal.ts keeps the war rolling. */
 /* game.json's arsenal section. */
 interface ArsenalData { ammo?: Weapon[]; gear?: Gear[] }
 /* game.json as the page reads it; each part may be missing. */
 interface GameConfig { effects?: Record<string, FxSetData>; arsenal?: ArsenalData; keys?: unknown; audio?: AudioConfig }
-const FALLBACK_ARSENAL: ArsenalData = {
-  ammo: [
-    { key: 'shell', name: 'Shell', cat: 'Shells', dmg: 34, radius: 26, price: 0, pack: 0, minRound: 1, ai: true, aiRound: 1, effect: 'shot', speed: 1.0, note: 'Free, straight, honest.', gfx: { shell: '#ffe27a', trail: '#ffd75e', blast: ['#ffb13c', '#fff3c4'], painter: 'disc', shake: 0.3 } },
-    { key: 'buck', name: 'Buckshot', cat: 'Shells', dmg: 17, radius: 20, price: 80, pack: 2, minRound: 1, ai: true, aiRound: 2, effect: 'pellets', pellets: 3, spread: 0.10, speed: 1.0, note: 'Three pellets, forgiving aim.', gfx: { shell: '#ffd166', trail: '#ffb13c', blast: ['#ffb13c', '#fff3c4'], painter: 'disc', shake: 0.3 } },
-    { key: 'mortar', name: 'Mortar', cat: 'Shells', dmg: 56, radius: 42, price: 200, pack: 2, minRound: 1, ai: true, aiRound: 3, effect: 'shot', speed: 1.0, note: 'Big crater, slow shell.', gfx: { shell: '#ff9f43', trail: '#ff7b39', blast: ['#ff7b39', '#ffe27a'], painter: 'disc', shake: 0.5 } },
-    { key: 'needle', name: 'Needle', cat: 'Shells', dmg: 110, radius: 8, price: 120, pack: 1, minRound: 1, ai: true, aiRound: 6, effect: 'shot', speed: 1.3, note: 'Tiny blast, brutal direct hit.', gfx: { shell: '#ffffff', trail: '#caf0f8', blast: ['#ffffff', '#9fd8ff'], painter: 'beam', shake: 0.3 } },
-    { key: 'nuke', name: 'NUKE', cat: 'Shells', dmg: 95, radius: 70, price: 500, pack: 1, minRound: 4, ai: false, aiRound: 99, effect: 'shot', speed: 1.0, note: 'Levels whole hillsides.', gfx: { shell: '#ff6b6b', trail: '#ff6b6b', blast: ['#ff6b6b', '#fff3c4'], painter: 'disc', shake: 0.9 } },
-  ],
-  gear: [
-    { key: 'repair', name: 'Repair +40 armor', cat: 'Hull and fuel', price: 120, n: 40, effect: 'repair', note: 'Restores up to 40 armor, never past max.' },
-    { key: 'fuel', name: 'Fuel +60', cat: 'Hull and fuel', price: 60, n: 60, effect: 'fuel', note: 'Adds 60 driving fuel.' },
-  ],
-};
 let ARSENAL: Arsenal | null = null; // the same tables, as the sim takes them
 let WEAPONS: Arsenal['weapons'] = {};
 let WORDER: Arsenal['order'] = [];

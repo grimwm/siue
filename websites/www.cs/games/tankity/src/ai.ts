@@ -227,7 +227,7 @@ export function munitions(world: World, arsenal: Arsenal, self: Tank, wkey: stri
     }
   } else if (w.effect === 'scatter') {
     const x0 = from ? from.x : land.x, y0 = from ? from.y : land.y - 2;
-    for (const [vx, vy] of scatterVel(Math.max(2, w.split || 4), w.fan || 0.22, w.kick || 150)) {
+    for (const [vx, vy] of scatterVel(Math.max(2, w.split || 4), w.fan ?? 0.22, w.kick || 150)) {
       const down = fallTo(x0, y0, vx, vy, land.y, air());
       xs.push(down.x);
       ns.push(down.n);
@@ -237,7 +237,7 @@ export function munitions(world: World, arsenal: Arsenal, self: Tank, wkey: stri
     const m = muzzle({ ...self, angle: land.a });
     const at = splitPoint(world, arsenal, m.x, m.y, land.a, land.p, wkey, facing(self));
     if (!at) return done(true, sub.dmg, sub.r);
-    for (const [vx, vy] of splitVel(at.vx, at.vy, Math.max(2, w.split || 4), w.fan || 0.22)) {
+    for (const [vx, vy] of splitVel(at.vx, at.vy, Math.max(2, w.split || 4), w.fan ?? 0.22)) {
       const down = fallTo(at.x, at.y, vx, vy, land.y, air());
       xs.push(down.x);
       ns.push(down.n);

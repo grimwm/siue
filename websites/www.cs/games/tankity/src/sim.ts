@@ -983,7 +983,7 @@ export function steerShell(tanks: readonly Tank[], s: Shell, w: Weapon, dt: numb
   }
   // On top of its target a seeker has nowhere to bend (server/sim.php room_seek_push).
   if (!best || bd <= 1) return;
-  const push = (w.steer || 70) * dt;
+  const push = (w.steer ?? 70) * dt;
   let px = ((best.x - s.x) / bd) * push, py = (((best.y - 12) - s.y) / bd) * push;
   const sp = dist(s.vx, s.vy);
   if (sp > 0) {
@@ -998,7 +998,7 @@ export function steerShell(tanks: readonly Tank[], s: Shell, w: Weapon, dt: numb
 // random numbers, so the room server replays the exact same bloom. Returns
 // the bomblets. */
 export function splitShell(s: Shell, w: Weapon, reach = 1): Shell[] {
-  const vels = splitVel(s.vx, s.vy, Math.max(2, w.split || 4), w.fan || 0.22);
+  const vels = splitVel(s.vx, s.vy, Math.max(2, w.split || 4), w.fan ?? 0.22);
   const bomblets: Shell[] = [];
   for (let i = 0; i < vels.length; i++) {
     const [vx, vy] = vels[i]!;
@@ -1093,7 +1093,7 @@ export function hopShell(s: Shell, w: Weapon, x: number, y: number, reach: numbe
    direct hit on `skip`, the unit the burst struck. server/sim.php
    room_scatter_vel and server/rules.php room_fire_scatter are the same. */
 export function scatterShells(s: Shell, w: Weapon, x: number, y: number, reach: number, skip: Tank | false = false): Shell[] {
-  const vels = scatterVel(Math.max(2, w.split || 4), w.fan || 0.22, w.kick || 150);
+  const vels = scatterVel(Math.max(2, w.split || 4), w.fan ?? 0.22, w.kick || 150);
   const bomblets: Shell[] = [];
   for (let i = 0; i < vels.length; i++) {
     const [vx, vy] = vels[i]!;

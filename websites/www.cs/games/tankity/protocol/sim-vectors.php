@@ -398,6 +398,7 @@ $seek('no-rival', [$human(100)], 0, 150, 300, 70, 1 / 60);
 $seek('only-dead-rivals', [$human(100), $drone(200, 0)], 0, 150, 300, 70, 1 / 60);
 $seek('strong-steer-short-step', [$human(100), $drone(400)], 0, 150, 200, 250, 0.01);
 $seek('straight-down-at-it', [$human(100), $drone(150)], 0, 150, 100, 70, 1 / 60);
+$seek('zero-steer-is-no-push', [$human(100), $drone(400)], 0, 150, 200, 0.0, 1 / 60);
 $seek('half-a-pixel-away', [$human(100), $drone(150)], 0, 150.5, 388, 70, 1 / 60);
 $seek('exactly-one-pixel-away', [$human(100), $drone(150)], 0, 150, 389, 70, 1 / 60);
 foreach ([[0.0, 0.0], [300.0, 0.0], [0.0, -250.0], [-140.0, 90.0]] as [$vx, $vy]) {
@@ -405,6 +406,10 @@ foreach ([[0.0, 0.0], [300.0, 0.0], [0.0, -250.0], [-140.0, 90.0]] as [$vx, $vy]
         $fan = $n === 5 ? 0.1 : 0.22;
         $add('split-fan', "v$vx,$vy-n$n", ['vx' => $vx, 'vy' => $vy, 'n' => $n, 'fan' => $fan], room_split_vel($vx, $vy, $n, $fan));
     }
+}
+// A zero fan is a real value (a cluster that does not spread), not "missing": both sides fan by exactly what they are given.
+foreach ([[300.0, 0.0], [-140.0, 90.0]] as [$vx, $vy]) {
+    $add('split-fan', "v$vx,$vy-n4-zero-fan", ['vx' => $vx, 'vy' => $vy, 'n' => 4, 'fan' => 0.0], room_split_vel($vx, $vy, 4, 0.0));
 }
 
 /* ---- a hop warhead's leap from its burst ---- */
@@ -546,7 +551,7 @@ if (isset($weapons['roller'])) {
 
 /* ---- whole volleys: fire, fly, burst, split, damage ---- */
 $volley = function (string $name, array $c, ?string $known = null) use ($add): void {
-    $room = sv_room($c);
+    $room = sv_room($c, $c['w'] ?? SV_WIDTH);
     $before = $room;
     $seat = $c['shooter'];
     $room['tanks'][$seat]['angle'] = (float) $c['angle'];
@@ -1527,6 +1532,61 @@ foreach (ROOM_WALLS as $walls) {
         'tanks' => [$human(620, 100) + ['dirS' => 1], $drone(700, 100), $drone(100, 100)]]);
     $wallVolley('pellets-at-the-wall', $walls, ['terrain' => $fl, 'wind' => 0, 'wkey' => $wPellets, 'shooter' => 0, 'angle' => 45, 'power' => 90,
         'tanks' => [$human(640, 100) + ['dirS' => 1], $drone(520, 100), $drone(80, 100)]]);
+}
+// The rest of the flying and grounded effects at each wall, some with wind and some on a wider field. Guns are picked by effect and by what
+// the row says (the heaviest missile is the one with the widest blast), never by key.
+$gunsOf = function (string $effect) use ($weapons): array {
+    return array_keys(array_filter($weapons, fn($d) => ($d['effect'] ?? 'shot') === $effect));
+};
+$wNuke = null;
+foreach ($weapons as $k => $d) {
+    if (($d['effect'] ?? 'shot') === 'shot' && !empty($d['missile']) && ($wNuke === null || $d['radius'] > $weapons[$wNuke]['radius'])) {
+        $wNuke = $k;
+    }
+}
+$digs = $gunsOf('dig');
+$wDigLight = $digs[0];
+$wDigHeavy = $digs[count($digs) - 1];
+$wSeeker = $gunsOf('seeker')[0];
+$wFlak = $gunsOf('proximity')[0];
+$wTracer = $gunsOf('tracer')[0];
+$wDirt = $gunsOf('dirt')[0];
+$wSlump = $gunsOf('slump')[0];
+$wBeam = $gunsOf('beam')[0];
+$wPlasma = $gunsOf('plasma')[0];
+$wRiot = $gunsOf('riot')[0];
+$right = fn(float $x) => $human($x, 100) + ['dirS' => 1];
+foreach (ROOM_WALLS as $walls) {
+    $wallVolley('seeker-homes-across-the-edge', $walls, ['terrain' => $fl, 'wind' => 5, 'wkey' => $wSeeker, 'shooter' => 0, 'angle' => 40, 'power' => 90,
+        'tanks' => [$right(600), $drone(660, 100), $drone(60, 100)]]);
+    $wallVolley('flak-passes-a-rival-at-the-edge', $walls, ['terrain' => $fl, 'wind' => -4, 'wkey' => $wFlak, 'shooter' => 0, 'angle' => 35, 'power' => 100,
+        'tanks' => [$right(580), $drone(700, 100), $drone(40, 100)]]);
+    $wallVolley('tracer-at-the-wall', $walls, ['terrain' => $fl, 'wind' => 3, 'wkey' => $wTracer, 'shooter' => 0, 'angle' => 40, 'power' => 100,
+        'tanks' => [$right(600), $drone(690, 100), $drone(80, 100)]]);
+    $wallVolley('light-digger-at-the-wall', $walls, ['terrain' => $fl, 'wind' => 0, 'wkey' => $wDigLight, 'shooter' => 0, 'angle' => 30, 'power' => 100,
+        'tanks' => [$right(640), $drone(700, 100), $drone(50, 100)]]);
+    $wallVolley('heavy-digger-at-the-wall', $walls, ['terrain' => $slopeR, 'wind' => -6, 'wkey' => $wDigHeavy, 'shooter' => 0, 'angle' => 45, 'power' => 100,
+        'tanks' => [['kind' => 'human', 'x' => 560.0, 'y' => sv_terrain($slopeR)[560], 'hp' => 100, 'dirS' => 1],
+            ['kind' => 'ai', 'x' => 690.0, 'y' => sv_terrain($slopeR)[690], 'hp' => 100, 'dirS' => -1]]]);
+    $wallVolley('dirt-at-the-wall', $walls, ['terrain' => $fl, 'wind' => 4, 'wkey' => $wDirt, 'shooter' => 0, 'angle' => 40, 'power' => 100,
+        'tanks' => [$right(620), $drone(700, 100), $drone(70, 100)]]);
+    $wallVolley('slump-at-the-wall', $walls, ['terrain' => ['flat' => 400, 'set' => [[690, 719, 330]]], 'wind' => 0, 'wkey' => $wSlump, 'shooter' => 0, 'angle' => 40, 'power' => 100,
+        'tanks' => [$right(600), $drone(705, 100)]]);
+    $wallVolley('full-missile-in-a-gale', $walls, ['terrain' => $fl, 'wind' => -8, 'wkey' => $wNuke, 'shooter' => 0, 'angle' => 40, 'power' => 100,
+        'tanks' => [$right(300), $drone(690, 100), $drone(40, 100)]]);
+    $wallVolley('beam-at-the-wall', $walls, ['terrain' => $fl, 'wind' => 0, 'wkey' => $wBeam, 'shooter' => 0, 'angle' => 8, 'power' => 100,
+        'tanks' => [$right(560), $drone(690, 100), $drone(60, 100)]]);
+    $wallVolley('plasma-at-the-wall', $walls, ['terrain' => $fl, 'wind' => 0, 'wkey' => $wPlasma, 'shooter' => 0, 'angle' => 45, 'power' => 100,
+        'tanks' => [$right(690), $drone(600, 100), $drone(30, 100)]]);
+    $wallVolley('riot-at-the-wall', $walls, ['terrain' => $fl, 'wind' => 0, 'wkey' => $wRiot, 'shooter' => 0, 'angle' => 10, 'power' => 80,
+        'tanks' => [$right(690), $drone(600, 100), $drone(30, 100)]]);
+    // A wider field: the same walls, further apart.
+    if ($walls !== 'none') {
+        foreach ([[$wShell, 'shell'], [$wSeeker, 'seeker'], [$wCluster, 'cluster']] as [$gun, $label]) {
+            $wallVolley("$label-on-a-1080-field", $walls, ['w' => 1080, 'terrain' => $fl, 'wind' => 4, 'wkey' => $gun, 'shooter' => 0, 'angle' => 40, 'power' => 100,
+                'tanks' => [$right(900), $drone(1040, 100), $drone(60, 100)]]);
+        }
+    }
 }
 // The drones fly the walls when they aim: through Wraparound past a mountain, off a Spring past their reach.
 $mountain = ['flat' => 400, 'set' => [[200, 520, 40]]];

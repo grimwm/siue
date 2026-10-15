@@ -240,7 +240,7 @@ function room_ai_munitions(array $room, array $self, string $wkey, array $land, 
     } elseif ($w['effect'] === 'scatter') {
         $x0 = $from !== null ? $from[0] : $land['x'];
         $y0 = $from !== null ? $from[1] : $land['y'] - 2;
-        foreach (room_scatter_vel(max(2, $w['split'] ?: 4), $w['fan'] ?: 0.22, $w['kick'] ?: 150.0) as [$vx, $vy]) {
+        foreach (room_scatter_vel(max(2, $w['split'] ?: 4), $w['fan'] ?? 0.22, $w['kick'] ?: 150.0) as [$vx, $vy]) {
             $down = room_fall_to($x0, $y0, $vx, $vy, (float) $land['y'], $air);
             $xs[] = $down[0];
             $ns[] = $down[5];
@@ -252,7 +252,7 @@ function room_ai_munitions(array $room, array $self, string $wkey, array $land, 
         if ($at === null) {
             return $done(true, $dmg, $r);
         }
-        foreach (room_split_vel($at[2], $at[3], max(2, $w['split'] ?: 4), $w['fan'] ?: 0.22) as [$vx, $vy]) {
+        foreach (room_split_vel($at[2], $at[3], max(2, $w['split'] ?: 4), $w['fan'] ?? 0.22) as [$vx, $vy]) {
             $down = room_fall_to($at[0], $at[1], $vx, $vy, (float) $land['y'], $air);
             $xs[] = $down[0];
             $ns[] = $down[5];

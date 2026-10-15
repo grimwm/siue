@@ -22,7 +22,7 @@ interface Saved { v: 1; seats: StoredSeat[] }
 function isSeat(s: unknown): s is StoredSeat {
   if (!s || typeof s !== 'object') return false;
   const x = s as Record<string, unknown>;
-  return typeof x.code === 'string' && /^[A-Z0-9]{4}$/.test(x.code)
+  return typeof x.code === 'string' && /^[A-Z0-9]{4}$|^[A-Z0-9]{6}$/.test(x.code)
     && typeof x.seat === 'number' && Number.isInteger(x.seat) && x.seat >= 0
     && typeof x.token === 'string' && x.token !== '' && typeof x.csrf === 'string'
     && typeof x.initials === 'string' && typeof x.at === 'number'

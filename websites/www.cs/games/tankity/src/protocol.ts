@@ -14,7 +14,16 @@ import type { Difficulty } from './sim.ts';
 /** Every failure: a status other than 200 and a short human-readable line.
  * Note there is no `ok` key; the client tests `!data.ok`. `reload` comes with
  * 426, a request this bundle is too old for: the line asks for a reload. */
-export interface ErrorReply { ok?: undefined; error: string; reload?: true }
+export interface ErrorReply { ok?: undefined; error: string; reload?: true; puzzle?: PuzzleRefusal }
+
+/** Which puzzle check refused a create or a join. */
+export type PuzzleRefusal = 'puzzle-bad' | 'puzzle-expired' | 'puzzle-short' | 'puzzle-wrong' | 'puzzle-spent';
+
+/** GET action=challenge&for=create|join: a room puzzle (server/pow.php). */
+export interface ChallengeReply { ok: true; challenge: string; bits: number; count: number; iter: number; expiresIn: number }
+
+/** A solved puzzle, sent with a create or a join: the challenge and its nonces. */
+export interface PowSolution { c: string; n: number[] }
 
 /** The room protocol this bundle speaks, sent on create, join and start. */
 export type Proto = 2;
@@ -340,8 +349,8 @@ export type BodyKind = 'tank' | 'hover' | 'walker' | 'buggy';
  * for the whole world, `full: true`; action=state takes the same three as
  * query parameters. */
 export interface PostBodies {
-  create: { proto: Proto; initials: string; map: string; body: string; difficulty: Difficulty; turn?: number };
-  join: { proto: Proto; code: string; initials: string; body: string };
+  create: { proto: Proto; pow: PowSolution; initials: string; map: string; body: string; difficulty: Difficulty; turn?: number };
+  join: { proto: Proto; pow: PowSolution; code: string; initials: string; body: string };
   start: { proto: Proto };
   act: ActBody;
   buy: { item: string; qty: number };

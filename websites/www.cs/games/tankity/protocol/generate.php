@@ -22,7 +22,7 @@ $proc = proc_open(
     [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
     $pipes,
     null,
-    array_merge(getenv(), ['TANKITY_DATA_DIR' => $data, 'TANKITY_MAX_ROOMS' => '2'])
+    array_merge(getenv(), ['TANKITY_DATA_DIR' => $data, 'TANKITY_MAX_ROOMS' => '2', 'TANKITY_POW_BITS' => '4'])
 );
 $cleanup = function () use ($proc, $data): void {
     if (is_resource($proc)) {
@@ -38,8 +38,34 @@ $cleanup = function () use ($proc, $data): void {
 };
 register_shutdown_function($cleanup);
 
+/** A GET; returns [status, decoded body]. */
+$get = function (string $query) use ($base): array {
+    $raw = @file_get_contents($base . '/rooms.php?' . $query, false, stream_context_create(['http' => ['timeout' => 10, 'ignore_errors' => true]]));
+    $status = 0;
+    foreach ($http_response_header ?? [] as $h) {
+        if (preg_match('#^HTTP/\S+ (\d+)#', $h, $m)) {
+            $status = (int) $m[1];
+        }
+    }
+    return [$status, $raw === false ? null : json_decode($raw, true)];
+};
+/* A create or join pays the room puzzle, solved here; a body that says
+   `proto` or `pow` is sent as given. */
+$solve = function (string $action) use ($get): array {
+    [, $ch] = $get('action=challenge&for=' . $action);
+    $found = [];
+    for ($n = 0; count($found) < (int) $ch['count']; $n++) {
+        if (room_pow_lead($ch['challenge'], $n) >= (int) $ch['bits']) {
+            $found[] = $n;
+        }
+    }
+    return ['c' => $ch['challenge'], 'n' => $found];
+};
 /** One request; returns [status, decoded body]. */
-$call = function (string $action, array $body) use ($base): array {
+$call = function (string $action, array $body) use ($base, $solve): array {
+    if (in_array($action, ['create', 'join'], true) && !array_key_exists('proto', $body) && !array_key_exists('pow', $body)) {
+        $body += ['proto' => ROOM_PROTO, 'pow' => $solve($action)];
+    }
     $ctx = stream_context_create(['http' => [
         'method' => 'POST', 'timeout' => 10, 'ignore_errors' => true,
         'header' => "Content-Type: application/json\r\n",
@@ -129,6 +155,22 @@ if ($fixtures['error-reload'][1] !== 426 || $fixtures['start-local-reply'][1] !=
     exit(1);
 }
 
+// The room puzzle: what action=challenge answers (the challenge itself is
+// random and signed, so a placeholder stands in), and a create without it.
+[$st, $ch] = $get('action=challenge&for=join');
+if ($st !== 200 || !is_string($ch['challenge'] ?? null) || !preg_match('/^v1\.\d+\.j\.4\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{22}$/', $ch['challenge'])) {
+    fwrite(STDERR, "protocol: the challenge failed ($st)\n");
+    exit(1);
+}
+$fixtures['challenge-reply'] = ['A room puzzle for a join, at 4 bits (the challenge string here is a placeholder: the real one is signed and bound to the asker\'s address).',
+    200, ['challenge' => 'v1.1800000000.j.4.fixture-random-bytes00.fixture-signature-000000'] + $ch];
+[$st, $body] = $call('create', ['initials' => 'jkl', 'proto' => ROOM_PROTO]);
+$fixtures['error-puzzle'] = ['A create without its puzzle: HTTP 422, and which check refused it.', $st, $body];
+if ($st !== 422 || ($body['puzzle'] ?? '') !== 'puzzle-short') {
+    fwrite(STDERR, "protocol: expected 422 puzzle-short for a create without a puzzle, got $st\n");
+    exit(1);
+}
+
 /* ---- write or compare ---- */
 $stale = [];
 foreach ($fixtures as $name => [$about, $status, $body]) {
@@ -146,7 +188,8 @@ foreach ($fixtures as $name => [$about, $status, $body]) {
 }
 if ($check) {
     foreach (glob(__DIR__ . '/*.json') ?: [] as $f) {
-        if (basename($f) !== 'sim-vectors.json' && !isset($fixtures[basename($f, '.json')])) { // sim-vectors.php owns that one
+        // sim-vectors.php and pow-vectors.php own those two.
+        if (!in_array(basename($f), ['sim-vectors.json', 'pow-vectors.json'], true) && !isset($fixtures[basename($f, '.json')])) {
             $stale[] = basename($f) . ' (no scenario makes it)';
         }
     }

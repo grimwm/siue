@@ -125,10 +125,11 @@ while IFS= read -r -d '' f; do
     # YAML), the sound-effect build script (the .mp3 files it builds do ship;
     # its sources are in games/*/src/ below), the effects editor and the
     # Blender script behind the effect sprites (the rendered sheets do ship),
+    # Tankity's puzzle bench bundle (tools/pow-bench.html loads it),
     # and the TypeScript build setup (package*.json, tsconfig.json, tsconfig.test.json,
     # node_modules; the built dist/ ships, the TypeScript sources in src/ do
     # not).
-    games/*-test.* | games/*/test.sh | games/README.md | games/*/README.md | games/*/tools/* | games/*/test/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/tankity/audio/music/build_music.sh | games/*/fx-editor.* | games/*/fx/blender/*) continue ;;
+    games/*-test.* | games/*/test.sh | games/README.md | games/*/README.md | games/*/tools/* | games/*/test/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/tankity/audio/music/build_music.sh | games/*/fx-editor.* | games/*/fx/blender/* | games/*/dist/pow-bench.*) continue ;;
     games/*/package.json | games/*/package-lock.json | games/*/tsconfig.json | games/*/tsconfig.test.json | games/*/node_modules/* | games/*/.gitignore) continue ;;
     # Authoring sources (Git LFS audio and Blender scenes, see .gitattributes;
     # TypeScript in games/*/src/): never served.

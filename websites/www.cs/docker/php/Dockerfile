@@ -29,7 +29,8 @@ RUN sed -i \
 # FPM clears its workers' environment; pass the settings compose.yaml sets.
 RUN echo 'env[TANKITY_ROOM_JOINS_PER_HOUR] = $TANKITY_ROOM_JOINS_PER_HOUR' >> /etc/php-fpm.d/www.conf \
     && echo 'env[TANKITY_ROOM_HOSTS_PER_ADDRESS] = $TANKITY_ROOM_HOSTS_PER_ADDRESS' >> /etc/php-fpm.d/www.conf \
-    && echo 'env[TANKITY_LOBBIES_PER_ADDRESS] = $TANKITY_LOBBIES_PER_ADDRESS' >> /etc/php-fpm.d/www.conf
+    && echo 'env[TANKITY_LOBBIES_PER_ADDRESS] = $TANKITY_LOBBIES_PER_ADDRESS' >> /etc/php-fpm.d/www.conf \
+    && echo 'env[TANKITY_POW_BITS] = $TANKITY_POW_BITS' >> /etc/php-fpm.d/www.conf
 
 EXPOSE 9000
 CMD ["php-fpm", "--nodaemonize"]

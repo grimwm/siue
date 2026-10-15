@@ -1,0 +1,193 @@
+{
+    "iter": 100,
+    "count": 4,
+    "bits": 6,
+    "challenges": [
+        {
+            "challenge": "v1.1800000000.c.6.AAAAAAAAAAAAAAAAAAAAAA.vectors-zero-mac-xxxxx",
+            "solution": [
+                30,
+                244,
+                362,
+                398
+            ],
+            "probes": [
+                {
+                    "nonce": 30,
+                    "lead": 6
+                },
+                {
+                    "nonce": 244,
+                    "lead": 14
+                },
+                {
+                    "nonce": 362,
+                    "lead": 6
+                },
+                {
+                    "nonce": 398,
+                    "lead": 7
+                },
+                {
+                    "nonce": 0,
+                    "lead": 3
+                }
+            ]
+        },
+        {
+            "challenge": "v1.1800000001.j.6.ZmFrZS1yYW5kb20tYnl0ZXM.vectors-one-mac-xxxxxx",
+            "solution": [
+                22,
+                118,
+                154,
+                204
+            ],
+            "probes": [
+                {
+                    "nonce": 22,
+                    "lead": 8
+                },
+                {
+                    "nonce": 118,
+                    "lead": 6
+                },
+                {
+                    "nonce": 154,
+                    "lead": 8
+                },
+                {
+                    "nonce": 204,
+                    "lead": 7
+                },
+                {
+                    "nonce": 0,
+                    "lead": 3
+                }
+            ]
+        },
+        {
+            "challenge": "v1.1800000002.c.6.dGFua2l0eS1wb3ctdmVjdG8.vectors-two-mac-xxxxxx",
+            "solution": [
+                23,
+                30,
+                40,
+                97
+            ],
+            "probes": [
+                {
+                    "nonce": 23,
+                    "lead": 8
+                },
+                {
+                    "nonce": 30,
+                    "lead": 7
+                },
+                {
+                    "nonce": 40,
+                    "lead": 8
+                },
+                {
+                    "nonce": 97,
+                    "lead": 10
+                },
+                {
+                    "nonce": 0,
+                    "lead": 0
+                }
+            ]
+        },
+        {
+            "challenge": "v1.1800000003.j.6.cHV6emxlLXRocmVlLWNhc2U.vectors-three-mac-xxxx",
+            "solution": [
+                163,
+                167,
+                338,
+                373
+            ],
+            "probes": [
+                {
+                    "nonce": 163,
+                    "lead": 7
+                },
+                {
+                    "nonce": 167,
+                    "lead": 7
+                },
+                {
+                    "nonce": 338,
+                    "lead": 7
+                },
+                {
+                    "nonce": 373,
+                    "lead": 8
+                },
+                {
+                    "nonce": 0,
+                    "lead": 0
+                }
+            ]
+        },
+        {
+            "challenge": "v1.1800000004.c.6.Zm91ci1mb3VyLWZvdXItZm8.vectors-four-mac-xxxxx",
+            "solution": [
+                53,
+                105,
+                129,
+                145
+            ],
+            "probes": [
+                {
+                    "nonce": 53,
+                    "lead": 6
+                },
+                {
+                    "nonce": 105,
+                    "lead": 7
+                },
+                {
+                    "nonce": 129,
+                    "lead": 6
+                },
+                {
+                    "nonce": 145,
+                    "lead": 6
+                },
+                {
+                    "nonce": 0,
+                    "lead": 3
+                }
+            ]
+        },
+        {
+            "challenge": "v1.1800000005.j.6.ZmlmdGgtYW5kLWxhc3Qtb24.vectors-five-mac-xxxxx",
+            "solution": [
+                106,
+                117,
+                183,
+                244
+            ],
+            "probes": [
+                {
+                    "nonce": 106,
+                    "lead": 11
+                },
+                {
+                    "nonce": 117,
+                    "lead": 6
+                },
+                {
+                    "nonce": 183,
+                    "lead": 6
+                },
+                {
+                    "nonce": 244,
+                    "lead": 8
+                },
+                {
+                    "nonce": 0,
+                    "lead": 0
+                }
+            ]
+        }
+    ]
+}

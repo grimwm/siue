@@ -66,6 +66,9 @@ export interface LobbyProps {
   /** Host and Join hand over what the initials boxes hold, a space for an empty box. */
   onHost: (letters: string) => void;
   onJoin: (code: string, letters: string) => void;
+  /** Setting up a room or a seat (the room puzzle): Host and Join are off and Cancel shows. */
+  working?: boolean;
+  onCancel: () => void;
   /** The room, once in one. */
   code: string;
   link: string;
@@ -93,6 +96,13 @@ export interface LobbyProps {
   onCopy: () => void;
   onStart: () => void;
   onLeave: () => void;
+}
+
+/** A room code as the lobby shows it: six characters in two halves (K7Q 2MX),
+ * a gap between them drawn by CSS so the text is still the one code. */
+function RoomCode({ code }: { code: string }) {
+  if (code.length !== 6) return <>{code || '······'}</>;
+  return <><span class="code-half">{code.slice(0, 3)}</span><span class="code-half">{code.slice(3)}</span></>;
 }
 
 function MapTile({ map, pressed, draw, rev, onPick }: {
@@ -147,7 +157,7 @@ export function Lobby(p: LobbyProps) {
         <OverlayHead kicker="Squad up, no chatter" titleId="lobby-title" title="Game rooms" closeId="lobby-close"
           onClose={p.onClose} navId="nav-lobby" scrollOnly nav={<ScrollKeys line />} />
         <p class="hint" id="lobby-intro" hidden={p.inRoom}>
-          Host a room and read the 4-letter code to your friends, or join theirs.
+          Host a room and read the 6-character code to your friends, or join theirs.
           Everyone plays under their own three initials, set here or on the title card. There is no chat,
           only artillery. Empty seats go to the drone battery. The host sets how long a turn lasts, from
           one minute to a week; when a turn runs out, a drone fires for that player, and closing the tab
@@ -165,7 +175,7 @@ export function Lobby(p: LobbyProps) {
           <p class="hint" id="lobby-initials-note" role="status">{p.initialsProblem}</p>
         </div>
         <div class="lobby-rows" id="lobby-rows" hidden={p.inRoom}>
-          <form id="host-form" class="lobby-form" action="#" onSubmit={ev => { ev.preventDefault(); p.onHost(typedLetters(initialsField.current)); }}>
+          <form id="host-form" class="lobby-form" action="#" onSubmit={ev => { ev.preventDefault(); if (!p.working) p.onHost(typedLetters(initialsField.current)); }}>
             <span class="map-label" id="lobby-map-label">Hills</span>
             <input type="hidden" id="lobby-map" name="map" value={p.mapId} />
             <div class="unit-picker map-picker" id="lobby-map-picker" role="group" aria-labelledby="lobby-map-label">
@@ -174,20 +184,23 @@ export function Lobby(p: LobbyProps) {
               ))}
             </div>
             <TurnTime id="lobby-turn" secs={p.turnSecs} onChange={p.onTurnForm} />
-            <button type="submit" id="host-go" class="btn-primary">Host a room</button>
+            <button type="submit" id="host-go" class="btn-primary" aria-disabled={p.working ? 'true' : undefined}>Host a room</button>
           </form>
           <form id="join-form" class="lobby-form" action="#"
-            onSubmit={ev => { ev.preventDefault(); p.onJoin(joinCode.current?.value ?? '', typedLetters(initialsField.current)); }}>
+            onSubmit={ev => { ev.preventDefault(); if (!p.working) p.onJoin(joinCode.current?.value ?? '', typedLetters(initialsField.current)); }}>
             <label for="join-code">Room code</label>
-            <input id="join-code" name="code" type="text" autocomplete="off" spellcheck={false}
-              maxLength={4} minLength={4} placeholder="7K2Q" ref={joinCode} />
-            <button type="submit" id="join-go" class="btn-primary">Join room</button>
+            <input id="join-code" name="code" type="text" autocomplete="off" spellcheck={false} autocapitalize="characters"
+              maxLength={7} placeholder="K7Q 2MX" ref={joinCode} />
+            <button type="submit" id="join-go" class="btn-primary" aria-disabled={p.working ? 'true' : undefined}>Join room</button>
           </form>
         </div>
         <p id="lobby-status" class="hint" aria-live="polite">{p.status}</p>
+        <p class="acts" hidden={!p.working}>
+          <button type="button" id="lobby-cancel" hidden={!p.working} onClick={blurThen(p.onCancel)}>Cancel</button>
+        </p>
         {!p.inRoom && p.games && p.games.rows.length > 0 && <YourGames id="lobby-games" {...p.games} />}
         <div id="lobby-room" hidden={!p.inRoom}>
-          <p class="room-code" id="lobby-code">{p.code || '····'}</p>
+          <p class="room-code" id="lobby-code"><RoomCode code={p.code} /></p>
           <p class="hint">Read this code to your friends, or send them the invite link. First seat hosts and starts the match.</p>
           <p class="invite-row">
             <input id="join-link" type="text" readOnly aria-label="Invite link" value={p.link} />

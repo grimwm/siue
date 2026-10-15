@@ -70,7 +70,7 @@ test('a lobby closed with Q while seated is listed in Your games', async ({ brow
       await expect(g.page.locator('#lobby-code')).toHaveText(c);
     },
   });
-  expect(code).toMatch(/^[A-Z0-9]{4}$/);
+  expect(code).toMatch(/^[A-Z0-9]{6}$/);
   await host.ctx.close(); await guest.ctx.close();
 });
 

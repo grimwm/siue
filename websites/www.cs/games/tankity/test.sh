@@ -8,5 +8,6 @@ cd "$(dirname "$0")"
 node ../_kit/build/build.mjs tankity --check
 php tools/game-json.php --check
 php tools/install-files.php --check
+php protocol/pow-vectors.php --check
 node ../_kit/build/icons.mjs tankity --check
 ../../vendor/bin/phpunit -c ../../phpunit.xml --testsuite tankity

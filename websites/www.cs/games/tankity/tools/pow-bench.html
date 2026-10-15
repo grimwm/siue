@@ -1,0 +1,26 @@
+<!doctype html>
+<!-- The room puzzle's bench (src/pow-bench.ts): solves 20 puzzles at the bits
+     in ?bits= (default 9) and prints the mean and 95th percentile. Opened by
+     tests/e2e/tankity-pow.spec.mjs, which calls window.powBench itself. Needs
+     a secure context (https, or 127.0.0.1) for WebCrypto. Never deployed. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tankity puzzle bench</title>
+</head>
+<body>
+<pre id="out">Solving…</pre>
+<script type="module">
+import { bench } from '../dist/pow-bench.js';
+window.powBench = bench;
+const bits = Number(new URLSearchParams(location.search).get('bits') || 9);
+if (!new URLSearchParams(location.search).has('manual')) {
+  bench(bits).then(r => {
+    document.getElementById('out').textContent =
+      `bits ${r.bits}, ${r.runs} runs: mean ${r.mean.toFixed(0)} ms, p95 ${r.p95.toFixed(0)} ms, longest stall ${r.maxLagMs.toFixed(0)} ms`;
+  });
+}
+</script>
+</body>
+</html>

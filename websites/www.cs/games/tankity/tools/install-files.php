@@ -8,6 +8,6 @@ exit(install_run(dirname(__DIR__), [
     'kind' => 'play',
     'versioned' => ['dist/main.js', 'dist/fx.js', 'dist/install.js', 'game.css'],
     'precache_dirs' => ['dist', 'fx/sprites'],
-    'precache_exclude' => ['fx-editor.*'],
+    'precache_exclude' => ['fx-editor.*', 'pow-bench.*'],
     'kit_php' => ['score-guard.php'],
 ], $argv));

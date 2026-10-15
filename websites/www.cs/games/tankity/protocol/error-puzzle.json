@@ -1,0 +1,8 @@
+{
+    "about": "A create without its puzzle: HTTP 422, and which check refused it.",
+    "status": 422,
+    "body": {
+        "error": "That puzzle is not finished.",
+        "puzzle": "puzzle-short"
+    }
+}

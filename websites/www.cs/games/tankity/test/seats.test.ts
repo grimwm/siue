@@ -109,3 +109,10 @@ test('a seat closed to make space is kept, marked closed, and a reload reads the
   store.forget('ABCD');
   assert.equal(store.get('ABCD'), null);
 });
+
+test('six-character codes are kept, four-character ones still read, other lengths are dropped', () => {
+  const six = { ...seat('K7Q2MX'), at: 1 };
+  const four = { ...seat('AB3D'), at: 1 };
+  const storage = mapStorage({ [SEATS_KEY]: JSON.stringify({ v: 1, seats: [six, four, { ...seat('K7Q2M'), at: 1 }, { ...seat('K7Q2MXY'), at: 1 }] }) });
+  assert.deepEqual(createSeatStore(storage, () => 2).list().map(s => s.code), ['K7Q2MX', 'AB3D']);
+});

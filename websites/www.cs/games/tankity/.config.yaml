@@ -26,9 +26,15 @@
 #   room_hosts_per_address <- TANKITY_ROOM_HOSTS_PER_ADDRESS (started matches
 #                     one address can host at once, expired ones not
 #                     counted; default 4)
+#   pow_bits       <- TANKITY_POW_BITS (the room puzzle's difficulty at rest,
+#                     in leading zero bits: a join needs this, a create one
+#                     more, load adds up to two; 0 turns it off; default 11,
+#                     README "Room slots")
+#   pow_surge      <- TANKITY_POW_SURGE (creates from every address in ten
+#                     minutes that make the puzzle one bit harder; default 60)
 #   addr_key       <- TANKITY_ADDR_KEY (the key for the hash a room stores in
-#                     place of an address; unset: a random key made once and
-#                     kept in the database)
+#                     place of an address and signs room puzzles with; unset:
+#                     a random key made once and kept in the database)
 # Point CONFIG_FILE at another file to load settings from elsewhere.
 max_rooms: 50
 room_live_secs: 600

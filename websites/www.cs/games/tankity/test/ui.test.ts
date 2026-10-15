@@ -285,17 +285,17 @@ const SEATS: LobbySeat[] = [
 ];
 interface LobbyCalls {
   close: number; pick: string[]; host: string[]; join: [string, string][]; seat: [number, string][];
-  copy: number; start: number; leave: number; icons: (number[] | null)[]; initials: string[];
+  copy: number; start: number; leave: number; icons: (number[] | null)[]; initials: string[]; cancel: number;
 }
 /** The lobby's props as these cases give them: no drones line, and the turn time only in the cases about it. */
 type LobbyCase = Omit<LobbyProps, 'drones' | 'turnSecs' | 'onTurnForm' | 'onTurnRoom'> & Partial<LobbyProps>;
 function lobbyProps(over: Partial<LobbyProps> = {}) {
-  const calls: LobbyCalls = { close: 0, pick: [], host: [], join: [], seat: [], copy: 0, start: 0, leave: 0, icons: [], initials: [] };
+  const calls: LobbyCalls = { close: 0, pick: [], host: [], join: [], seat: [], copy: 0, start: 0, leave: 0, icons: [], initials: [], cancel: 0 };
   const given: LobbyCase = {
     keyHint, onClose: () => { calls.close++; }, online: true, count: '3 / 10 matches running · 4 lobbies open', status: '', inRoom: false,
     maps: MAPS, mapId: '', drawMapIcon: (cv, profile) => { calls.icons.push(profile); }, mapsRev: 1, prefillCode: '',
     onPickMap: id => calls.pick.push(id), initials: 'ZED', initialsRev: 0, initialsProblem: '', onInitials: w => calls.initials.push(w),
-    onHost: l => calls.host.push(l), onJoin: (c, l) => calls.join.push([c, l]),
+    onHost: l => calls.host.push(l), onJoin: (c, l) => calls.join.push([c, l]), onCancel: () => { calls.cancel++; },
     code: '', link: '', hills: 'Hills: Random hills', seats: [], mySeat: 0, isHost: false, seatsHint: '',
     onSeatMode: (i, m) => calls.seat.push([i, m]), onCopy: () => { calls.copy++; }, onStart: () => { calls.start++; }, onLeave: () => { calls.leave++; },
     ...over,
@@ -308,7 +308,7 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
 {
   const veil = makeEl('lobby-veil');
   veil.hidden = false;
-  const { props, calls } = lobbyProps({ status: 'Knocking…' });
+  const { props, calls } = lobbyProps({ status: 'Setting up your seat…' });
   renderLobby(veil, props);
   const card = kid(veil, 0);
   await test('lobby-card', () => { assert.ok(veil.children.length === 1 && hasClass(card, 'card') && attr(card, 'role') === 'dialog'
@@ -321,11 +321,22 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
   await test('lobby-nav', () => { assert.ok(attr(nav, 'data-scroll-only') === '' && text(nav) === 'J/K linePgUp/PgDn pageShift+K/Shift+J half page', text(nav)); });
   click(x);
   await test('lobby-close-calls-back', () => { assert.ok(calls.close === 1); });
+  // Setting up a room: Host and Join are off, and Cancel is there to stop it.
+  await test('lobby-not-working', () => { assert.ok(byId(card, 'lobby-cancel').hidden === true && attr(byId(card, 'host-go'), 'aria-disabled') === undefined
+    && attr(byId(card, 'join-go'), 'aria-disabled') === undefined); });
+  renderLobby(veil, { ...props, working: true, status: 'Setting up the room…' });
+  submit(byId(card, 'host-form'));
+  submit(byId(card, 'join-form'));
+  click(byId(card, 'lobby-cancel'));
+  await test('lobby-working', () => { assert.ok(attr(byId(card, 'host-go'), 'aria-disabled') === 'true' && attr(byId(card, 'join-go'), 'aria-disabled') === 'true'
+    && byId(card, 'lobby-cancel').hidden === false && text(byId(card, 'lobby-cancel')) === 'Cancel'
+    && calls.host.length === 0 && calls.join.length === 0 && calls.cancel === 1, JSON.stringify(calls)); });
+  renderLobby(veil, props);
   // Out of a room: the intro, the forms and the hills; the room part is hidden.
   const intro = byId(card, 'lobby-intro'), rows = byId(card, 'lobby-rows'), room = byId(card, 'lobby-room');
   await test('lobby-out-of-room', () => { assert.ok(intro.hidden === false && rows.hidden === false && room.hidden === true
     && hasClass(intro, 'hint') && hasClass(rows, 'lobby-rows'), `${intro.hidden}|${rows.hidden}|${room.hidden}`); });
-  await test('lobby-status-and-count', () => { assert.ok(text(byId(card, 'lobby-status')) === 'Knocking…' && attr(byId(card, 'lobby-status'), 'aria-live') === 'polite'
+  await test('lobby-status-and-count', () => { assert.ok(text(byId(card, 'lobby-status')) === 'Setting up your seat…' && attr(byId(card, 'lobby-status'), 'aria-live') === 'polite'
     && text(byId(card, 'lobby-count')) === '3 / 10 matches running · 4 lobbies open' && attr(byId(card, 'lobby-count'), 'aria-live') === 'polite'); });
   const dot = byId(card, 'net-dot');
   await test('lobby-dot', () => { assert.ok(dot.className === 'dot on' && attr(dot, 'title') === 'room server: connected'); });
@@ -355,7 +366,11 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
   // and joining hand over what the boxes hold.
   const initialBoxes = () => [1, 2, 3].map(n => byId(card, `lobby-initial-${n}`));
   await test('lobby-initials-boxes', () => { assert.ok(initialBoxes().every(b => b && hasClass(b, 'initial')) && initialBoxes().map(b => b.value).join('') === 'ZED'
-    && !maybeById(card, 'host-initials') && !maybeById(card, 'join-initials') && attr(byId(card, 'join-code'), 'maxLength') === '4'); });
+    && !maybeById(card, 'host-initials') && !maybeById(card, 'join-initials')); });
+  // Six characters, which a player may read back as K7Q 2MX (seven with the space).
+  await test('lobby-join-code-box', () => { const box = byId(card, 'join-code'); assert.ok(attr(box, 'maxLength') === '7' && attr(box, 'placeholder') === 'K7Q 2MX'
+    && attr(box, 'autocapitalize') === 'characters', `${attr(box, 'maxLength')}|${attr(box, 'placeholder')}`); });
+  await test('lobby-intro-six-characters', () => { assert.ok(/6-character code/.test(text(intro)), text(intro)); });
   await test('lobby-initials-before-forms', () => { assert.ok(card.children.indexOf(byId(card, 'lobby-initials')) < card.children.indexOf(rows)); });
   await test('lobby-intro-initials-set-here', () => { assert.ok(/set here or on the title card/.test(text(intro)), text(intro)); });
   const hostForm = byId(card, 'host-form');
@@ -366,7 +381,7 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
   await test('lobby-join-submit', () => { assert.ok(JSON.stringify(calls.join) === '[["tst1","ZED"]]', JSON.stringify(calls.join)); });
   nth(initialBoxes(), 0).value = 'q';
   fire(initialBoxes()[0], 'input');
-  renderLobby(veil, { ...props, status: 'Raising the flag…' });
+  renderLobby(veil, { ...props, status: 'Setting up the room…' });
   submit(hostForm);
   await test('lobby-host-hands-over-half-typed', () => { assert.ok(calls.host[1] === 'Q  ', JSON.stringify(calls.host)); });
   nth(initialBoxes(), 1).value = 'x'; fire(initialBoxes()[1], 'input');
@@ -378,7 +393,7 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
   renderLobby(veil, { ...props, initialsRev: 1 });
   await test('lobby-initials-rev-puts-saved-back', () => { assert.ok(initialBoxes().map(b => b.value).join('') === 'ZED'); });
   // The typed code survives every redraw; an invite's code fills the code box once.
-  renderLobby(veil, { ...props, status: 'Raising the flag…' });
+  renderLobby(veil, { ...props, status: 'Setting up the room…' });
   await test('lobby-redraw-keeps-typing', () => { assert.ok(byId(card, 'join-code').value === 'tst1'); });
   renderLobby(veil, { ...props, prefillCode: 'ZZ99' });
   await test('lobby-invite-code-prefills', () => { assert.ok(byId(card, 'join-code').value === 'ZZ99'); });
@@ -406,7 +421,12 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
     && byId(card, 'join-link').value === 'http://x/play/?code=TST1' && attr(byId(card, 'join-link'), 'aria-label') === 'Invite link'
     && text(byId(card, 'lobby-hills')) === 'Hills: Canyon 3' && text(byId(card, 'seats-hint')) === 'Tap a seat nobody holds.'); });
   renderLobby(veil, { ...props, ...inRoom, code: '' });
-  await test('lobby-no-code-yet', () => { assert.ok(text(byId(card, 'lobby-code')) === '····'); });
+  await test('lobby-no-code-yet', () => { assert.ok(text(byId(card, 'lobby-code')) === '······'); });
+  // A six-character code shows in two halves (K7Q 2MX), read as one code.
+  renderLobby(veil, { ...props, ...inRoom, code: 'K7Q2MX' });
+  await test('lobby-code-in-halves', () => { const c = byId(card, 'lobby-code');
+    assert.ok(c.children.length === 2 && text(c.children[0]) === 'K7Q' && text(c.children[1]) === '2MX' && text(c) === 'K7Q2MX'
+      && c.children.every(h => hasClass(h, 'code-half')), c.children.map(text).join('|')); });
   renderLobby(veil, { ...props, ...inRoom });
   const seats = byId(card, 'lobby-seats').children;
   await test('lobby-seat-tiles', () => { assert.ok(seats.length === 4 && seats.every(t => hasClass(t, 'unit-choice') && hasClass(t, 'seat-tile'))

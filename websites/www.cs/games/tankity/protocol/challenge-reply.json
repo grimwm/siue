@@ -1,0 +1,12 @@
+{
+    "about": "A room puzzle for a join, at 4 bits (the challenge string here is a placeholder: the real one is signed and bound to the asker's address).",
+    "status": 200,
+    "body": {
+        "challenge": "v1.1800000000.j.4.fixture-random-bytes00.fixture-signature-000000",
+        "ok": true,
+        "bits": 4,
+        "count": 4,
+        "iter": 100,
+        "expiresIn": 120
+    }
+}

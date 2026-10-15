@@ -412,12 +412,13 @@ final class RoomsTest extends TestCase
         self::post('leave', $g2a);
         $seen = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $h2['token'] . '&since=0');
         self::assertTrue(self::modeOf($seen, 1) === 'ai' && (self::seatsOf($seen)[1]['name'] ?? '') !== 'SMB', 'lobby-leave-chair-resets' . ' :: ' . json_encode(self::seatsOf($seen)[1] ?? null));
-        // All three other seats open: one tank is no match.
+        // All three other seats open and the host alone: a bundle without the
+        // room protocol cannot play that here, so it is told to reload.
         usleep(300000);
         self::post('seatmode', $h2 + ['seat' => 1, 'mode' => 'open']);
         usleep(300000);
         $lone = self::post('start', $h2);
-        self::assertTrue(isset($lone['error']) && strpos($lone['error'] ?? '', 'AI') !== false, 'start-refuses-lone-tank' . ' :: ' . ($lone['error'] ?? ''));
+        self::assertTrue(($lone['reload'] ?? false) === true && strpos($lone['error'] ?? '', 'Reload the page') !== false, 'start-alone-old-bundle-reloads' . ' :: ' . json_encode($lone));
         $still = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $h2['token'] . '&since=0');
         self::assertTrue(($still['room']['phase'] ?? '') === 'lobby', 'refused-start-stays-lobby');
         // A guest joins the open chair; humans alone have nobody to fight.

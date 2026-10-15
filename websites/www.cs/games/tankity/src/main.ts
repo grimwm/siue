@@ -92,7 +92,7 @@ import { pref, text } from '../../_kit/prefs.ts';
 import { browserShareEnv } from '../../_kit/install.ts';
 import { ROTATE_HINT_KEY, rotateHintShows } from './rotate-hint.ts';
 import { renderRotateHint } from './ui/rotate-hint.tsx';
-import type { Arsenal, Weapon, Gear } from './sim.ts';
+import type { Arsenal, Difficulty, Weapon, Gear } from './sim.ts';
 import type { GameState, GameTank, MatchState } from './game-types.ts';
 import type { PreviewEnv } from './preview.ts';
 import type { RoomEnv } from './net.ts';
@@ -608,7 +608,7 @@ const {
   closeOverlays, closePreview, endTutorial, hideShop, initials: savedInitials, initialsSaved: () => renderTitle(), paintHud, refreshNavHints,
   renderMenu: () => renderMenu(),
   closeTitle: () => closeTitle(), backToTitle: () => backToTitle(),
-  renderShop,
+  renderShop, startLocal: local => startLocal(local),
 });
 /* The Sound and Music sliders and mutes: loaded from this browser, applied to the audio. */
 const volume = createVolume(browserStorage(), { setSoundLevel, setMusicLevel, setSoundMuted, setMusicMuted, isSoundMuted, isMusicMuted });
@@ -801,7 +801,7 @@ function renderKeyHints(): void {
     el.textContent = kctx !== undefined && kact !== undefined ? keyHint(kctx, kact, +(kidx || 0)) : '';
   });
 }
-function freshMatchFromSeedBox(opts?: { tut?: boolean }): void {
+function freshMatchFromSeedBox(opts?: { tut?: boolean; difficulty?: Difficulty }): void {
   // A new match takes the whole frame: shut any panels so the menu never
   // sits over the briefing and the shop never opens underneath it.
   closeOverlays();
@@ -811,13 +811,21 @@ function freshMatchFromSeedBox(opts?: { tut?: boolean }): void {
   endTutorial(tutorialActive());
   if (opts && opts.tut) armTutorial();
   const seedInput = $<HTMLInputElement>('seed-input');
-  startSolo(seedInput ? seedInput.value : '');
+  startSolo(seedInput ? seedInput.value : '', opts?.difficulty);
   render(); renderHUD();
 }
-function randomRun(): void {
+function randomRun(opts?: { difficulty?: Difficulty }): void {
   const seedBox = $<HTMLInputElement>('seed-input');
   if (seedBox) seedBox.value = 'scorched-' + Math.floor(Math.random() * 90000 + 10000);
-  freshMatchFromSeedBox();
+  freshMatchFromSeedBox(opts);
+}
+/* The host started a room nobody else joined: the server closed it, and the
+   match plays here as solo, on random hills, at the room's Difficulty (this
+   match only; the Menu's comes back for the next) and its game speed (the FF
+   button's solo speed from here on, as a tap on it would set). */
+function startLocal(local: { difficulty: Difficulty; speed: Speed }): void {
+  soloSpeed.set(local.speed);
+  randomRun({ difficulty: local.difficulty });
 }
 function openRooms(): void {
   unlock();

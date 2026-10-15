@@ -17,6 +17,8 @@ import type { EndState } from './match.ts';
 import { goneLine, inviteUrl, isGoneError, prettyRoomError } from './net.ts';
 import type { RoomClient } from './net.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
+import type { Difficulty } from './sim.ts';
+import type { Speed } from './speed.ts';
 import type { Replay } from './replay.ts';
 import type { SeatStore } from './seats.ts';
 import { TURN_DEFAULT, TURN_SETTLE_MS, settleAfter } from './turn-time.ts';
@@ -94,6 +96,9 @@ export interface LobbyDeps {
   /** A set typed here was saved: the title card redraws to show it. */
   initialsSaved(): void;
   hideShop(): void;
+  /** Play a match here, like solo, at a room's Difficulty and speed: the host
+   * started a room nobody else had joined. */
+  startLocal(local: { difficulty: Difficulty; speed: Speed }): void;
   paintHud(): void;
   refreshNavHints(): void;
   renderMenu(): void;
@@ -103,8 +108,8 @@ export interface LobbyDeps {
 export function createLobby(deps: LobbyDeps) {
   const {
     G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, playFullscreen, say, keyHint, seats, games, steppedOut, netEvent, seatName, closeLobbyVeil,
-    closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, initials, initialsSaved, hideShop, paintHud, refreshNavHints, renderMenu,
-    renderShop,
+    closeOverlays, closePreview, endTutorial, closeTitle, backToTitle, initials, initialsSaved, hideShop, startLocal, paintHud, refreshNavHints,
+    renderMenu, renderShop,
   } = deps;
 
   /* ---------- game rooms: server-hosted multiplayer ---------- */
@@ -471,7 +476,10 @@ export function createLobby(deps: LobbyDeps) {
       ? 'Tap a seat nobody holds to switch it between AI and Open. Open seats field no tank.'
       : 'The host decides which empty seats are AI and which stay open.';
     // The status line is left alone: a refusal there stays until the player acts again.
-    LOBBY.roomHint = net.isHost ? 'You host. Start when your crew is in.' : 'Hang tight. The host starts the match.';
+    // The host alone: Start plays the match here, like solo (the server keeps no match for one player).
+    const alone = LOBBY.seats.filter(s => s.human).length < 2;
+    LOBBY.roomHint = !net.isHost ? 'Hang tight. The host starts the match.'
+      : alone ? 'With only you seated, Start plays here on your device.' : 'You host. Start when your crew is in.';
     renderLobby();
   }
   /* The host sets the turn time, in the lobby or mid-match; it counts from
@@ -553,9 +561,23 @@ export function createLobby(deps: LobbyDeps) {
     if (!net.isHost) return;
     lobbySay('Rolling out…');
     try {
-      const data = await net.post('start', {});
-      startNetMatch(data.room);
+      const started = await net.start();
+      if ('local' in started) playHere(started.local);
+      else startNetMatch(started.room);
     } catch (err) { lobbySay(prettyRoomError(err)); }
+  }
+  /* Nobody joined: the server closed the lobby, so the seat is forgotten (it
+     is not in Your games) and the match plays on this device as solo, at the
+     room's Difficulty and speed. The turn-time slider keeps its pick. */
+  function playHere(local: { difficulty: Difficulty; speed: Speed }): void {
+    const code = net.code;
+    net.detach();
+    seats.forget(code);
+    dropRoom();
+    LOBBY.inRoom = false;
+    lobbySay('');
+    startLocal(local);
+    say('Nobody else joined, so this match plays here on your device.', 'info');
   }
   function startNetMatch(room: RoomSnapshot): void {
     endTutorial(false);

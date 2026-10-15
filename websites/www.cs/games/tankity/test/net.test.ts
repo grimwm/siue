@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   RoomClient, isGoneError, prettyRoomError, inviteUrl, standingsRows, shouldCatchUp, planCatchUp, isVolleyOpener,
-  MATCH_POLL_MS, LOBBY_POLL_MS, RETRY_429_MS, RETRY_429_TRIES,
+  MATCH_POLL_MS, LOBBY_POLL_MS, RETRY_429_MS, RETRY_429_TRIES, PROTO,
 } from '../src/net.ts';
 import type { FetchInit, RoomEnv } from '../src/net.ts';
 import type { StoredSeat } from '../src/seats.ts';
@@ -206,6 +206,36 @@ const bodyOf = (entry: Sent): Record<string, unknown> => JSON.parse(String(entry
   await test('host-sent-no-old-session', () => { assert.ok(bodyOf(at(host.log, 0)).code === '' && bodyOf(at(host.log, 0)).token === '', at(host.log, 0).init.body); });
   await net.join(' fxt1 ', 'DEF', 'hover');
   await test('join-uppercases-the-code', () => { assert.ok(bodyOf(at(host.log, 1)).code === 'FXT1' && net.seat === 1, at(host.log, 1).init.body); });
+}
+
+// ---- the room protocol: create, join and start say which one they speak ----
+{
+  const { net, host } = makeClient((url) => (/create/.test(url) ? ok(fixture('create-reply')) : ok(fixture('join-reply'))));
+  await net.host('ABC', '', 'tank', 'normal');
+  await net.join('FXT1', 'DEF', 'tank');
+  await test('create-and-join-send-the-protocol', () => {
+    assert.ok(PROTO === 2 && bodyOf(at(host.log, 0)).proto === 2 && bodyOf(at(host.log, 1)).proto === 2, j(host.log.map(bodyOf)));
+  });
+}
+{
+  // The host alone: the server closes the lobby and the browser plays the match.
+  const { net, host } = makeClient(() => ({ status: 200, body: fixture('start-local-reply') }));
+  const got = await net.start();
+  await test('start-sends-the-protocol', () => { assert.ok(/action=start/.test(at(host.log, 0).url) && bodyOf(at(host.log, 0)).proto === 2, at(host.log, 0).init.body); });
+  await test('start-local-resolves-the-match-to-play-here', () => { assert.deepEqual(got, { local: { difficulty: 'hard', speed: 1 } }); });
+
+  const room = makeClient(() => roomReply({ phase: 'play' }));
+  const started = await room.net.start();
+  await test('start-with-company-resolves-the-room', () => { assert.ok('room' in started && started.room.phase === 'play', j(started)); });
+
+  // An odd speed on the wire plays at 1×, as everywhere else.
+  const odd = makeClient(() => ok({ ok: true, local: { difficulty: 'easy', speed: 3 } }));
+  await test('start-local-speed-is-parsed', async () => { assert.deepEqual(await odd.net.start(), { local: { difficulty: 'easy', speed: 1 } }); });
+
+  const old = makeClient(() => ({ status: 426, body: fixture('error-reload') }));
+  let msg = '';
+  await old.net.start().catch(err => { msg = prettyRoomError(err); });
+  await test('start-426-says-reload', () => { assert.ok(msg === 'Tankity was updated. Reload the page to keep playing.' && old.host.log.length === 1, `${old.host.log.length} requests, "${msg}"`); });
 }
 
 // ---- acts ----
@@ -441,7 +471,7 @@ const bodyOf = (entry: Sent): Record<string, unknown> => JSON.parse(String(entry
   await test('delta-buy-sends-have', () => { assert.ok(bodyOf(at(host.log, 3)).have === fullRev, at(host.log, 3).init.body); });
   await net.post('ready', { ready: true });
   await test('delta-ready-sends-have', () => { assert.ok(bodyOf(at(host.log, 4)).have === fullRev, at(host.log, 4).init.body); });
-  await net.post('create', { initials: 'ABC', map: '', body: 'tank', difficulty: 'normal' }).catch(() => {});
+  await net.post('create', { proto: PROTO, initials: 'ABC', map: '', body: 'tank', difficulty: 'normal' }).catch(() => {});
   await test('delta-create-sends-no-holdings', () => { assert.ok(bodyOf(at(host.log, 5)).have === undefined && bodyOf(at(host.log, 5)).since === undefined, at(host.log, 5).init.body); });
 }
 {

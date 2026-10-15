@@ -19,13 +19,21 @@
  * main.ts builds the real RoomEnv from the page's globals. The wire types are
  * in protocol.ts. */
 import type {
-  ActBody, ErrorReply, MapInfo, MapsReply, MineRow, PingReply, PostAction, PostBodies, PostReplies,
+  ActBody, ErrorReply, MapInfo, MapsReply, MineRow, PingReply, PostAction, PostBodies, PostReplies, Proto,
   RoomEvent, RoomReply, RoomSeat, RoomSnapshot, VolleyOpenerEvent,
 } from './protocol.ts';
 import type { Difficulty } from './sim.ts';
 import type { StoredSeat } from './seats.ts';
 import { parseSpeed } from './speed.ts';
 import type { Speed } from './speed.ts';
+
+/** The room protocol this bundle speaks. Create, join and start send it; a
+ * server that has moved past it answers 426 with a line asking for a reload. */
+export const PROTO: Proto = 2;
+
+/** What a Start begins: the room's match on the server, or, with the host
+ * the only human, a match this browser plays itself, like solo. */
+export type Started = { room: RoomSnapshot } | { local: { difficulty: Difficulty; speed: Speed } };
 
 /* ---------- what the client needs from its host ---------- */
 
@@ -396,7 +404,9 @@ export class RoomClient {
     this.forget();
     this.map = null;
     this.mapName = 'Random hills';
-    const data = await this.post('create', turn === undefined ? { initials, map, body, difficulty } : { initials, map, body, difficulty, turn });
+    const data = await this.post('create', turn === undefined
+      ? { proto: PROTO, initials, map, body, difficulty }
+      : { proto: PROTO, initials, map, body, difficulty, turn });
     this.code = data.code; this.seat = data.seat; this.token = data.token; this.csrf = data.csrf;
   }
 
@@ -404,8 +414,17 @@ export class RoomClient {
   async join(code: string, initials: string, body: string): Promise<void> {
     this.forget();
     this.code = String(code || '').trim().toUpperCase();
-    const data = await this.post('join', { code: this.code, initials, body });
+    const data = await this.post('join', { proto: PROTO, code: this.code, initials, body });
     this.code = data.code; this.seat = data.seat; this.token = data.token; this.csrf = data.csrf;
+  }
+
+  /** The host starts the room. With company it is a server match (the room);
+   * with the host alone the server has closed the lobby and the match is
+   * this browser's to play (local). */
+  async start(): Promise<Started> {
+    const data = await this.post('start', { proto: PROTO });
+    if ('local' in data) return { local: { difficulty: data.local.difficulty, speed: parseSpeed(data.local.speed) } };
+    return { room: data.room };
   }
 
   /** Adopts a seat this browser stored: the next poll asks as that seat. */

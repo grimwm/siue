@@ -108,7 +108,7 @@ export function createMatch(deps: MatchDeps) {
 
   let fallsDue: FallShow[] = []; // solo landings waiting to be seen to touch down
   let marked = false; // this volley's tracer left its mark
-  function resetMatch(seedStr?: string): void {
+  function resetMatch(seedStr?: string, level?: Difficulty): void {
     fallsDue = []; // a fall still playing out in the last match never speaks in this one
     G.marks.clear();
     G.earth.clear();
@@ -116,8 +116,9 @@ export function createMatch(deps: MatchDeps) {
     G.fires = [];
     const seed = (seedStr || '').trim() || ('scorched-' + Math.floor(Math.random() * 9000 + 1000));
     // The Menu's Difficulty, read once per match: a change waits for the next one.
+    // A room the host started alone plays at the room's instead, for that match only.
     // The width comes from the screen at the deal and holds until the next one (spec 6.6).
-    soloDeal(G, tables.arsenal!, seed, difficulty.get(), field.deal());
+    soloDeal(G, tables.arsenal!, seed, level ?? difficulty.get(), field.deal());
     G.shopSel = 0;
     G.shopQty = 1;
     G.rounds = [];
@@ -160,8 +161,8 @@ export function createMatch(deps: MatchDeps) {
     render();
     renderHUD();
   }
-  function newMatch(seedStr?: string): void {
-    resetMatch(seedStr);
+  function newMatch(seedStr?: string, level?: Difficulty): void {
+    resetMatch(seedStr, level);
     // No round yet: spend the starting stake in the shop first.
     advance('matchStart');
     refreshNavHints(); // the rotate hint shows from the first name card
@@ -171,11 +172,11 @@ export function createMatch(deps: MatchDeps) {
     talk('tank', 'tankity tank! Shopping, then shooting!', true);
   }
   // A fanfare plus a name card, then the game continues. Nothing starts without you.
-  function startSolo(seedStr?: string): void {
+  function startSolo(seedStr?: string, level?: Difficulty): void {
     closePreview();
     unlock();
     music.start();
-    newMatch(seedStr);
+    newMatch(seedStr, level);
   }
   function newRound(bannerText?: string, event?: FlowEvent): void {
     fallsDue = [];

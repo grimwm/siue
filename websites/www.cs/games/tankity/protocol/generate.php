@@ -110,6 +110,25 @@ if ($fixtures['error-too-fast'][1] !== 429 || $fixtures['error-not-your-turn'][1
     exit(1);
 }
 
+// A host alone: Start answers `local` (the browser plays the match), and a
+// bundle that sends no `proto` is told to reload instead.
+[$st, $alone] = $call('create', ['initials' => 'ghi', 'difficulty' => 'hard']);
+if ($st !== 200 || empty($alone['ok'])) {
+    fwrite(STDERR, "protocol: the lone host's create failed ($st)\n");
+    exit(1);
+}
+usleep(300000);
+$lone = ['code' => $alone['code'], 'token' => $alone['token'], 'csrf' => $alone['csrf']];
+[$st, $body] = $call('start', $lone);
+$fixtures['error-reload'] = ['A bundle older than the server, where it cannot play the answer (a lone host\'s Start without `proto`): HTTP 426, reload.', $st, $body];
+usleep(300000);
+[$st, $body] = $call('start', $lone + ['proto' => 2]);
+$fixtures['start-local-reply'] = ['Start with the host alone: the lobby closes and the browser plays the match with the room\'s Difficulty and speed.', $st, $body];
+if ($fixtures['error-reload'][1] !== 426 || $fixtures['start-local-reply'][1] !== 200) {
+    fwrite(STDERR, 'protocol: expected 426 then 200 for a lone Start, got ' . $fixtures['error-reload'][1] . ' then ' . $fixtures['start-local-reply'][1] . "\n");
+    exit(1);
+}
+
 /* ---- write or compare ---- */
 $stale = [];
 foreach ($fixtures as $name => [$about, $status, $body]) {

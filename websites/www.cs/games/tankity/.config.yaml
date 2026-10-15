@@ -4,8 +4,10 @@
 # can write there, else in /var/tmp/<username>-tankity/ (README "Storage").
 # For each setting, the matching environment variable wins when set and non-empty:
 #   max_rooms      <- TANKITY_MAX_ROOMS (match slots: how many started matches
-#                     can exist at once; a full server reclaims the stalest
-#                     eligible room, README "Room slots")
+#                     can exist at once; only a Start with two or more humans
+#                     takes one, the host alone plays in the browser; a full
+#                     server reclaims the stalest eligible room, README
+#                     "Room slots")
 #   max_lobbies    <- TANKITY_MAX_LOBBIES (lobbies waiting at once, in a pool
 #                     of their own; default 100)
 #   lobbies_per_address <- TANKITY_LOBBIES_PER_ADDRESS (lobbies one address

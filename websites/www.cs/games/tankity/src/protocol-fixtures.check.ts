@@ -10,11 +10,13 @@
  * A JSON import types every string as plain `string`, so the literal unions
  * (phase, event `t`, seat mode) cannot be checked here; test/protocol.test.ts
  * checks those values against protocol.ts. */
-import type { ErrorReply, MineReply, RoomReply, SeatReply } from './protocol.ts';
+import type { ErrorReply, LocalReply, MineReply, RoomReply, SeatReply } from './protocol.ts';
 import createReply from '../protocol/create-reply.json' with { type: 'json' };
 import joinReply from '../protocol/join-reply.json' with { type: 'json' };
 import errorNotYourTurn from '../protocol/error-not-your-turn.json' with { type: 'json' };
 import errorTooFast from '../protocol/error-too-fast.json' with { type: 'json' };
+import errorReload from '../protocol/error-reload.json' with { type: 'json' };
+import startLocalReply from '../protocol/start-local-reply.json' with { type: 'json' };
 import lobbyHost from '../protocol/lobby-host.json' with { type: 'json' };
 import lobbyPublic from '../protocol/lobby-public.json' with { type: 'json' };
 import playMyTurn from '../protocol/play-my-turn.json' with { type: 'json' };
@@ -85,6 +87,8 @@ export const fixturesFit: {
   joinReply: Fits<typeof joinReply.body, SeatReply>;
   errorNotYourTurn: Fits<typeof errorNotYourTurn.body, ErrorReply>;
   errorTooFast: Fits<typeof errorTooFast.body, ErrorReply>;
+  errorReload: Fits<typeof errorReload.body, ErrorReply>;
+  startLocalReply: Fits<typeof startLocalReply.body, LocalReply>;
   lobbyHost: Fits<typeof lobbyHost.body, RoomReply>;
   lobbyPublic: Fits<typeof lobbyPublic.body, RoomReply>;
   playMyTurn: Fits<typeof playMyTurn.body, RoomReply>;
@@ -105,6 +109,8 @@ export const fixturesFit: {
   joinReply: true,
   errorNotYourTurn: true,
   errorTooFast: true,
+  errorReload: true,
+  startLocalReply: true,
   lobbyHost: true,
   lobbyPublic: true,
   playMyTurn: true,

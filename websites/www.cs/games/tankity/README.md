@@ -401,8 +401,9 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   `open` (no unit). The lobby shows them as a tile grid (initials, `AI`,
   `Open`); only the host flips a non-human tile (`action=seatmode`, lobby only,
   CSRF and the 150 ms act throttle apply). A joiner takes the first seat no
-  human holds, open or drone. Start refuses unless at least one seat is on AI
-  (host plus a drone is the two-tank minimum). Spawn slots count fielded seats
+  human holds, open or drone. With two or more humans seated, Start refuses
+  unless at least one seat is on AI (host plus a drone is the two-tank
+  minimum); the host alone plays the match in the browser (Room slots). Spawn slots count fielded seats
   only, so spacing and AI turns work with two or three tanks.
 - Leaving: any human may leave at any time (`action=leave`, never throttled so
   it lands right behind an aim tap). In the lobby the chair resets to a drone
@@ -666,7 +667,9 @@ stop it.
 
 ## Match end and scoreboards
 
-Solo is endless and ends at ♥ 0. A room with one human plays the same way, and its score goes on this browser's board like a solo one (see Scores). A
+Solo is endless and ends at ♥ 0. A room its host starts alone plays here as a
+solo match (Room slots), and its score goes on this browser's board. A server
+match whose humans drop to one keeps its rule until it ends. A
 room that started with two or more humans ends when only one human has lives
 left: that human wins, with a winner's bonus of twice the round bonus
 (`room_match_outcome`, `room_winner_bonus`; `src/standings.ts` is the same
@@ -698,9 +701,10 @@ room server files each human when the last life goes and the winner when the
 match ends, on the room's difficulty (the host's), with `rooms.php` computing
 the score; a browser never sends one. A match counts as two-human by the
 number of humans seated when it began (`startHumans`), so a match one player
-forfeits still files its winner, while a room with one human and drones files
-nothing online: the snapshot marks that player's `you.filedLocal` and the
-client saves the score locally. Each board keeps the best 100 runs. One person
+forfeits still files its winner. A room its host starts alone never becomes a
+server match: it plays in the browser as solo and saves locally. A server match
+that began with one human files nothing online: the snapshot marks that
+player's `you.filedLocal` and the client saves the score locally. Each board keeps the best 100 runs. One person
 with two browsers can seat two humans and file online; the score is still the
 server's own computation of a real match.
 
@@ -756,6 +760,22 @@ people play together, and waiting costs little.
   host `room_hosts_per_address` started matches (429 at Start past it).
   Players behind one shared address (a lab or campus NAT) share this cap and
   the lobby cap below; for such a host, raise both.
+- **A host alone.** Hosting always opens a lobby, so friends can join by code.
+  Start with two or more humans seated (two behind one address count as two)
+  makes a server match and takes a slot. Start with only the host seated
+  closes the lobby (no tombstone: its host closed it) and answers
+  `{ok: true, local: {difficulty, speed}}`, and no slot or lobby place is
+  held. The browser forgets the seat, says "Nobody else joined, so this match
+  plays here on your device." and plays a solo match: the room's Difficulty
+  (for that match; the Menu's comes back for the next) and its speed, solo's
+  three drones on random hills, no turn clock, this browser's board, not in
+  Your games; Q and Quit leave it as they leave solo. The room hint says so
+  before Start: "With only you seated, Start plays here on your device." The
+  turn-time slider keeps its pick for the next room. Create, join and Start
+  carry `proto: 2`; a lone host's Start without it (a tab loaded before the
+  server learned local starts) gets 426 `{"error": "Tankity was updated.
+  Reload the page to keep playing.", "reload": true}` and the lobby stays as
+  it was.
 - **The lobby pool.** Create (and Play again, which returns a finished match
   to its lobby) takes one of `max_lobbies` places, and its address may hold
   `lobbies_per_address` lobbies. A full pool closes one lobby to make room:
@@ -820,6 +840,8 @@ A room plays over minutes, hours or a week.
   question offers Step out (back to the title card, seat kept) and Leave room
   (the seat goes to the drone battery for good); Menu → Quit steps out. Only
   Leave gives a seat up.
+- **A room its host starts alone** is a solo match on that device (Room
+  slots): it has no turn clock, and it is not in Your games.
 - **A room's lobby closed with Q** keeps its seat and its heartbeat: this tab
   keeps polling the lobby, so it stays open and listed in Your games. If the
   host starts the match meanwhile, the match waits in Your games (and its turn
@@ -1356,7 +1378,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
 | `test/render.test.ts`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, rebuilds the sky only when the match key or the visible area changes, and draws an open parachute from its sheet (opening once, then swaying) or as a drawn canopy until the sheet loads, none over an armed or settled unit at rest, and units at their drawn height (a falling wreck whole) |
 | `test/input.test.ts`                          | `src/input.ts` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, Q, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
-| `test/net.test.ts`                            | `src/net.ts` against a fake server and timers: the 429 retry (none for a create or join's 429, one for its 503), Ready's ordering under rapid toggles, polling, the leave beacon (Leave only), resume, detach and `mine`, the clocks and `closesIn`, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect) |
+| `test/net.test.ts`                            | `src/net.ts` against a fake server and timers: the 429 retry (none for a create or join's 429, one for its 503), Ready's ordering under rapid toggles, polling, the leave beacon (Leave only), resume, detach and `mine`, the clocks and `closesIn`, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect), `proto: 2` on create, join and Start, Start resolving `room` or `local`, and a 426 giving the reload line |
 | `test/seats.test.ts`                          | `src/seats.ts`: round trip, newest first, the 12-seat cap, a malformed entry dropped alone, storage that refuses writes, a seat marked closed to make space |
 | `test/games.test.ts`                          | `src/games.ts` with fake timers: what it asks, gone rooms forgotten, rooms closed to make space kept, listed and never asked again, one report per turn key, never the room on screen or one another tab shows, the step-out hush |
 | `test/notify.test.ts`                         | `src/notify.ts` against a stubbed Notification: missing, promise and callback permission, the opt-in setting, the notification's tag and click |
@@ -1364,7 +1386,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/on-screen.test.ts`                      | `src/on-screen.ts` over a fake BroadcastChannel and over shared storage with storage events; stale tabs forgotten |
 | `test/turn-time.test.ts`                      | `src/turn-time.ts` and the slider: the stops equal `server/settings.php`'s, labels, clock text, the status bar and shop notes, the settle delay |
 | `test/games-ui.test.ts`                       | Your games (a closed row with Dismiss), the toasts and the title card's list |
-| `test/lobby.test.ts`                          | `src/lobby.ts` on a real room client over a fake server: a refusal stays on the status line through polls, a lobby closed with Q keeps polling, a swept room lands back in the lobby with its line, a room closed to make space says so and stays listed, the occupancy line |
+| `test/lobby.test.ts`                          | `src/lobby.ts` on a real room client over a fake server: a refusal stays on the status line through polls, a lobby closed with Q keeps polling, a swept room lands back in the lobby with its line, a room closed to make space says so and stays listed, the occupancy line, the lone host's room hint, a lone host's Start playing here (seat forgotten, nothing polled) and a 426 on Start keeping the lobby |
 | `test/replay.test.ts`                         | `src/replay.ts` on the recorded `protocol/` volleys with a recording host: shell positions against the path points at fixed times, blasts and hits on time, aim easing, the catch-up plan with the kept volley at 3x, a `watch` volley at 3x for that volley only, and a parachute armed by its volley's `fall` event, closed through real frames on unbroken ground and open every frame its unit falls once the pit is carved; a beam event carving the client's hills exactly as `fireBeam` did and passing through each unit it hit, a ring event, and a tracer landing with its mark and no blast |
 | `test/preview.test.ts`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster and pellet behaviour, a beam through the dummy, a ring around it, a tracer's path, and the resets |
 | `test/preview-scenarios.test.ts`              | Every gun's preview for three volleys: no shell, bomblet or beam leaves the frame, it does what it advertises (damage, a burial, a drop, a mark on the dummy, a gunner dug out), the range's wind is pinned and nothing is random, and a gun whose power is indirect declares a scenario whose demo shows it: a hop, a roll, a burrow under the dummy, liquid flowing to it, bomblets, a seeker's bend, an air burst, a beam's dip, a tracer's arc, dirt cleared, a ridge slumping |
@@ -1379,6 +1401,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `RoomFilingTest` (host PHP) | A match two or more humans started files each human once on its Difficulty's board, the winner before the eliminated, a leaver not at all but the winner of a forfeit still; a match one human started files nothing and marks `filedLocal`; a failed filing logged and read as not filed |
 | `RoomSchemaTest` (host PHP) | Schema step 8: the `phase`, `acted` and `turn_secs` columns, backfilled from live rows and written by every save, `closed` and `pow_used`, and `room_acted` reading the older key |
 | `RoomLobbyPoolTest` (host PHP) | The lobby pool through `rooms.php`: lobbies hold no slot, four per address, a flood never closes a fresh attended lobby (uncharged 409), dead then idle then old, Play again takes a place and counts against its host's lobbies, tombstones answer only their seats (state, acts, `mine`), block the code and expire |
+| `RoomLocalStartTest` (host PHP) | Start with the host alone: `local` with the room's Difficulty and speed, the lobby closed with no tombstone and no slot or lobby place held, open seats no bar; without `proto: 2` a 426 with the reload line and the lobby kept; origin, CSRF, seat token and host-only before anything closes; two humans from one address take a slot; two humans without `proto` start as before |
 | `RoomReclaimTest` (host PHP) | Match slots and reclaim: the floor, the tier order on a fixed clock, an active long game outliving a stale short one, ties by code, thirteen addresses unable to hold every slot, a played hold as the residual, no Start evicting a room within its floor, Start's gates before any slot, the hosting cap at Start, Play again giving the slot back, and two racing Starts never both winning or reclaiming one room twice |
 | `RoomAgainTest` (host PHP) | Play again keeps code and seats and resets lives, score and cash; a second press is harmless; the lowest human hosts when the host left |
 | `BoardTest`, `ScoresEndpointTest` (host PHP) | The boards (one per difficulty, room rows only, ties, the trim, a required source), and `scores.php` as a request (the board in the page's shape, no seeds, every POST answered 410 and nothing written, other methods 405) |
@@ -1410,13 +1433,16 @@ turn: each earth event with the server's own unrounded numbers),
 `play-after-burn` (napalm into a valley the drone sits in: the burn event,
 then each tick's hit at its tick), `play-turntime` and `play-speed` (the host's
 settings mid-play: the snapshot's field and one event), `shop-after-win`, `shop-ready` (the shop
-with one of two humans readied), `create-reply`, `join-reply`, `error-too-fast` (429) and `error-not-your-turn` (409). Each file
+with one of two humans readied), `create-reply`, `join-reply`, `start-local-reply` (the host alone starts: the
+match plays in the browser), `error-too-fast` (429), `error-not-your-turn` (409)
+and `error-reload` (426, a lone host's Start without `proto`). Each file
 is `{about, status, body}`.
 `sim-vectors.json` in the same folder is not one of them (see Sim vectors).
 
 - `protocol/generate.php` writes them. Snapshots are built in process with
   `rooms.php`'s own functions on a fixed room code and seeds
   (`protocol/scenarios.php`); the create and join replies and the two errors
+  (and the lone host's Start and its 426)
   come from `rooms.php` served by a throwaway `php -S` with a private
   data directory, with codes and tokens replaced by fixed placeholders.
 - Regenerate from the site folder (`websites/www.cs`) with the site running:

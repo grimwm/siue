@@ -1,6 +1,6 @@
 /* Operation Tankity: the game menu's settings.
  *
- * The settings menu: the unit look, the text size, the colour theme, the Difficulty and Screen flashes (all remembered in this browser), a
+ * The settings menu: the unit look, the text size, the colour theme, the Difficulty, the Walls and Screen flashes (all remembered in this browser), a
  * room's turn time (the host's slider, everyone else's label), and the
  * props the game menu overlay (src/ui/menu.tsx) is drawn from: what is
  * chosen, what is muted, whether a room runs, and what each button does.
@@ -19,6 +19,7 @@ import { drawUnitIcon } from './ui/icons.ts';
 import { renderMenu as drawMenu } from './ui/menu.tsx';
 import type { KeyHintFn } from './ui/chrome.tsx';
 import type { AlertsState } from './ui/games.tsx';
+import type { WallsSetting } from './walls.ts';
 
 /** The slice of the game's state the menu reads and writes (main.ts's G). */
 export type MenuState = Pick<GameState, 'body' | 'tanks'>;
@@ -30,6 +31,10 @@ export interface MenuDeps {
   net: Pick<RoomClient, 'on' | 'sendBody' | 'turnSecs' | 'isHost'>;
   sfx: Pick<typeof SfxApi, 'play'>;
   difficulty: DifficultySetting;
+  /** The Walls row: solo's own pick (kept in this browser), or in a room the room's, locked
+   *  (with why) for a guest or while a round is played; and what a pick does. */
+  walls(): { pick: WallsSetting; locked: string | null };
+  pickWalls(w: WallsSetting): void;
   unlock(): void;
   /** Full screen on a touch device, asked inside the Play this seed tap (optional: tests omit it). */
   playFullscreen?(): void;
@@ -60,7 +65,7 @@ export interface MenuDeps {
 
 export function createMenu(deps: MenuDeps) {
   const {
-    G, $, net, sfx, difficulty, unlock, playFullscreen, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
+    G, $, net, sfx, difficulty, walls, pickWalls, unlock, playFullscreen, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
     freshMatchFromSeedBox, openStandings, turnTime, alerts, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong, setFlashes, volume,
   } = deps;
 
@@ -187,6 +192,8 @@ export function createMenu(deps: MenuDeps) {
       difficulties: DIFFICULTY_CHOICES,
       difficulty: difficulty.get(),
       onPickDifficulty: chooseDifficulty,
+      walls: walls(),
+      onPickWalls: w => { pickWalls(w); sfx.play('click'); renderMenu(); },
       sound: !isSoundMuted(),
       music: !isMusicMuted(),
       soundLevel: volume.level('sound'),

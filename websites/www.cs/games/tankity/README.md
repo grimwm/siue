@@ -51,9 +51,10 @@ takes focus as each step first shows, and its text is a polite live region.
 Settings (Q, Menu, or the title card's Settings) holds the seed box with Play
 this seed, then the pickers and toggles, each remembered in this browser:
 Unit (`tankity-body`), Text size (`tankity-text`), Theme (`tankity-theme`),
-Difficulty (`tankity-difficulty`), Sound, Music, Fullscreen and Flashes
-(`tankity-flashes`); then Scores, and in a room the turn time, Turn alerts,
-Standings and Leave room; and Quit.
+Difficulty (`tankity-difficulty`), Walls (`tankity-walls`; in a room the
+room's, which only the host changes, between rounds: see The walls), Sound,
+Music, Fullscreen and Flashes (`tankity-flashes`); then Scores, and in a room
+the turn time, Turn alerts, Standings and Leave room; and Quit.
 
 Theme picks the page's accent palette: Orange (the default for a player who has
 not chosen), Yellow, Lime, Cyan or Magenta, or Custom. It colours the primary
@@ -114,6 +115,7 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `src/ai-measure.ts` | `measureHitRates`: a drone bracketing a stationary player on seeded hills with the real sim, counting the shots that take armor off, per shot of the bracket. The difficulty table is tuned against it. Pure, never bundled |
 | `src/balance.ts` | What each gun is worth, on the real sim: every gun fired from a ground tank at the standard scenarios (flat ground and seeded hills with a target near, mid and far, a target on a slope, a target in a dip), at one target and at three, at a drone and at a tank; a skilled gunner's best aim and the mean over small aim errors around it give its expected damage per shot, and with price ÷ pack its damage per dollar (`measureArsenal`, `balanceRole`, `lineOf`). `test/balance.test.ts` holds the arsenal to its rules (see `game.yaml`); `tools/balance-report.ts` prints the table. Pure, never bundled |
 | `src/difficulty.ts` | The Difficulty setting as the player keeps it (`tankity-difficulty`, missing or unknown reads as normal) and the levels' names |
+| `src/walls.ts`, `src/ui/walls.tsx` | The arena's walls: the picks and their names, a flight's step against them (`wallStep`), a roller's (`wallRoll`), Random's draw (`wallsFor`), which walls dam liquid, the flashes where shells meet them, and the solo setting (`tankity-walls`); and the picker the Menu and the lobby draw |
 | `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes, keeps only the theme and the playing track decoded, and tells `main.ts` why a track started (the Next song toast). It never touches the page |
 | `src/track-toast.ts` | The Next song toast's text ("♫ Title · Author") and its timer. DOM-free: it is handed the element and the timers |
 | `src/net.ts` | The room client: transport (one fetcher, the 429 retry; create and join never retry a 429), the session (host, join, or resume a stored seat; `detach` drops it telling nobody, `leave` gives it up), the room puzzle before a create or join (asked for, solved, asked for once more when refused as stale, rebound or spent; cancellable), polling, the act/buy/ready/leave senders, `mine` (its own fetch path), the turn, shop and room-close clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers, the clock and WebCrypto are passed in |
@@ -178,6 +180,7 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `server/detmath.php` | `det_sin`, `det_cos`, `det_atan`, `det_atan2` and `det_round` (`Math.round`): the same bits as `src/detmath.ts` |
 | `server/earth.php` | The earth ops that `src/earth.ts` mirrors (`room_carve_crater`, `room_add_dirt`, `room_pour_level`, `room_fill_pour`, `room_slump_ground`, `room_riot_carve`, `room_dig_heading`, `room_dig_carve`) and `room_buried` |
 | `server/fire.php` | Napalm's pools as `src/fire.ts` has them (`room_fire_pool`, `room_in_flames`, `room_burn_ticks`, `room_tick_steps`, `room_burn_total`); `server/rules.php` `room_fire_burn` burns one inside its volley |
+| `server/walls.php` | The arena's walls, as `src/walls.ts` has them: the picks (`ROOM_WALL_SETTINGS`), a flight's and a roller's step against them (`room_wall_step`, `room_wall_roll`), Random's draw (`room_walls_for`), which walls dam liquid, and the room's pick and the round's wall (`room_walls_setting`, `room_walls_now`); `tools/game-json.php` loads it with `server/flight.php` |
 | `server/flight.php` | The air a shell flies through, as `src/sim.ts` steps it: gravity, drag and the wind's growth with height (`room_air`, `room_shear`, `room_step_ballistic`), and a missile's launch speed at each power (`room_missile_table`), which `tools/game-json.php` also loads to write each missile's table into `game.json` |
 | `server/sim.php` | The deterministic sim that `src/sim.ts` mirrors: RNG, terrain, the curated hills, weapons (`room_weapon_row`), ballistics, the Roller (`room_roll_*`), a hop warhead's leap and a scatter gun's fan (`room_hop_vel`, `room_scatter_vel`), hit boxes and sweeps, explosions (a `dmg` 0 burst only carves), one unit's share of a hit (`room_hit_unit`), beams, plasma rings and riot charges (`room_fire_beam`, `room_fire_plasma`, `room_fire_riot`), settling (a buried ground unit stays where it is, `room_held_y`) |
 | `server/ai.php` | Drone aim, bracketing, the strategies and their flips, the gun choice by predicted harm (`room_ai_harm`, `room_ai_pick_gun`, a beam aimed by `room_ai_beam_aim`), `room_ai_rack` (`aiRack` of each gun) |
@@ -257,6 +260,76 @@ A shell flies through moving air (`stepBallistic` in `src/sim.ts`,
 - The camera frames a climbing volley by flying each shell to the top of its
   arc through the same air (`flightTop`), and the draw-only flight past the
   field's edge (`ghosts.ts`) flies on through it too.
+
+## The walls
+
+The field's left and right edges can be walls, as in Scorched Earth
+(`src/walls.ts`, `server/walls.php`, the same to the last bit):
+
+- **None** (the default): the sides are open; a shell flies off and is gone.
+- **Concrete**: a shell bursts against the wall, at the height it crossed it,
+  whatever its age or gun (a roller in the air too; a digger stops there).
+- **Rubber**: it bounces back, its speed across the wall turned round and cut
+  to `RUBBER_KEEP` (70%); its climb or fall is untouched.
+- **Spring**: it bounces back with `SPRING_KICK` (130%) of that speed.
+- **Wraparound**: it leaves one side and comes in at the other at the same
+  height and velocity.
+- **Random**: a setting, not a wall. Each round plays one of the four real
+  walls, drawn last from the round's own random stream (`wallsFor`,
+  `room_walls_for`), so no other pick moves the stream.
+
+The top is open in every mode: Scorched Earth has no ceiling over its field,
+and neither does this one. Concrete and the bouncing walls stand at x = 0 and
+at the last column; Wraparound joins x = 0 to x = W. One function meets them
+(`wallStep`, `room_wall_step`): `stepBallistic` calls it after every step when
+the air carries walls (`airOf(..., walls)`), so the war, the room server, the
+drones' planning flights, the aim guide, the camera's arc and the firing range
+all fly the same walls. A wrapped shell sweeps for hits along its real path,
+from the far side, never across the field.
+
+- Bomblets, pellets, leaps, seekers and missiles meet them like any shell. A
+  missile's power still maps to its distance on an open field (the table is
+  flown without walls); the walls take over only where it reaches an edge.
+- Rollers on the ground roll back off Rubber and Spring and come out at the
+  other edge through Wraparound (`wallRoll`, `room_wall_roll`); with None or
+  Concrete they burst at the edge, as they always have.
+- Beams are light, not shells: every wall stops one at the side, as the open
+  field does. Plasma rings and riot charges have no flight.
+- Liquid (Liquid Dirt, a napalm pool) pools against Concrete, Rubber and
+  Spring instead of spilling off the field (`wallsDam`, the `dam` of
+  `pourLevel` and `firePool`); with None and Wraparound it spills off. A room's
+  pour event carries `d: 1` when it was dammed, so the replay pours the same.
+- Wind and drag are unchanged.
+- The drones search their shots through the same sim, angles behind them
+  included, so they bank off Rubber and Spring and shoot through Wraparound
+  when that lands nearer.
+
+Solo, Settings has a Walls picker (`tankity-walls` in this browser; a missing
+or unknown word reads as None). A match reads it at the start of every round,
+so a change applies from the next one; the demo always plays None, and the
+firing range flies the picked walls on its own edges (Random shows the round's
+wall in a solo match, else None). In a room the host picks in the lobby or
+between rounds (`action=walls`, `room_set_walls`: origin, CSRF, seat token,
+host only, the act throttle; 409 while a round is played, so the round in play
+keeps the wall every shot and every drone's plan flew against). Snapshots carry
+`walls` (the pick) and `wallsNow` (the wall this round plays); a room from
+before the setting, and any word that is not a wall, reads as None; a client
+that does not know the fields plays None. Play again keeps the pick. One
+`walls` event tells everyone, in the lobby too, and the room's round line, like
+solo's round banner, says "Walls: Rubber". A host who starts alone plays the
+match here with the room's walls (Start's `local` carries them); a Walls pick
+in the Menu takes over from the next round.
+
+The battlefield draws each wall as a thin edge in its own style, from the top
+of the view down to the ground (`drawWalls` in `src/render.ts`): Concrete a
+grey edge with mortar ticks, Rubber a dark band, Spring a slim post with a
+coil, Wraparound a faint portal shimmer at both sides. Where a shell meets one
+it flashes (both sides for a wrap; a bounce clanks), only with Flashes on and
+motion allowed. The camera is always centred across the field and never
+narrower than it, so both walls stay in view, and it frames a bounced shell's
+arc as any other. A room's replay finds the bounces and wraps in each shot's
+path (`wallTouches` in `src/replay.ts`), never slides a wrapped shell across
+the field (`shellAt`), and a tracer's mark and a trail break at the wrap.
 
 ## Editing game data
 
@@ -390,7 +463,7 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   after its last touch (seated polls heartbeat it). A running room (play,
   shop) expires `max(room_live_secs, humans x turn time)` after the last
   turn-moving act (`acted`): create, join, start, play again, the host's
-  lobby settings (hills, seats, turn time, speed), buying, Ready, and an aim,
+  lobby settings (hills, seats, turn time, speed, walls), buying, Ready, and an aim,
   drive, fire or gun loaded on one's own turn. The menu flag, a new look,
   leaving, a gun loaded while someone else is up, polls, `mine` and timeouts
   never count. The end of a match counts as an act, and a finished room (over)
@@ -441,6 +514,11 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   (`room_pace_ready`) by it when it reads it, so a change mid-wait counts at
   once. Turn clocks and the shop clock keep wall time. A client that does not
   know the field ignores it and plays at 1×.
+- Walls: the room's `walls` (one of `ROOM_WALL_SETTINGS`) and the round's
+  `wallsNow`, in every snapshot (a room from before the setting reads None).
+  The host picks with `action=walls` in the lobby or between rounds, never
+  while a round is played (409); a pick applies from the next round, and one
+  `walls` event tells everyone. See The walls.
 - Shop clock: between rounds the shop is open for `room_shop_secs` (a turn
   time of 2 min or less gives `min(turn, 90)` s; a longer turn time gives the
   turn time itself, stamped when the shop opens), or until every human still
@@ -589,7 +667,8 @@ of burning liquid, which runs to the bottom of the dip it landed in and pools
 there as liquid dirt would (`pourLevel`). It spreads only until it is
 `poolMin` deep: on flat ground or a gentle slope it lies as a puddle that
 deep, about volume / poolMin wide, centred where it landed (`puddle`,
-`room_pour_puddle`), and only what reaches a field edge spills off. Liquid
+`room_pour_puddle`), and only what reaches a field edge spills off (against a
+Concrete, Rubber or Spring wall it pools instead: The walls). Liquid
 Dirt sets the same way (its poolMin of 34 makes a flat-ground slab about as
 wide as a Ton of Dirt mound). The ground never changes, so a pool
 causes no falls. The pool is found once, from the ground of that moment.
@@ -956,6 +1035,9 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
 
 - Target: whoever the drone's strategy picks (next section), except that a
   bracket in progress on a target the strategy still wants is kept.
+- Every planning flight flies the round's walls (The walls), so a landing off
+  a bounce or through Wraparound counts like any other: the drones bank and
+  wrap with no search of their own.
 - Ranging shot: a search (which a strategy can narrow) for the landing nearest
   the target, over the shell and any loaded gun, on the grid of angles 25-155
   and powers 20-98 in steps of 6: every other point of it (steps of 12), then
@@ -1453,6 +1535,8 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/php/RoomEarthTest.php`                   | Burial in a room: fresh dirt leaves a human under it through `room_settle_tanks`, a drone rides it up, a buried tank's drive is refused (`room_drive`), a new round places units on the hills |
 | `test/php/DetMathTest.php`                     | `server/detmath.php` is within 1e-15 of libm, rounds halves and keeps the sign of zero like `Math.round`, and the `detmath` vectors cover every function |
 | `test/php/FieldWidthTest.php`                  | The server's width rule, hills, reach and aim, units spread outside each other's blast, and a room dealt at 720 |
+| `test/walls.test.ts`                          | The walls: each wall's step (a bounce's angle and speed off Rubber and Spring, a wrap's position, a Concrete burst on the wall, None open), a roller's, Random's draw, the setting; a full-power Shell and a missile against each wall (the missile's open-field landing unchanged), the war flying what the aim guide predicts, a bounce bursting on a unit, a wrap never sweeping across the field, rollers rolling back or through, napalm and liquid dirt pooling against a solid wall, the camera keeping both walls in view and framing a bounce, and drones shooting through Wraparound past a mountain and banking off a Spring and off Rubber |
+| `test/php/RoomWallsTest.php`                   | The walls on the server: each wall's step, a full-power Shell and a missile, a roller, a napalm pool, Random's draw; the host's pick (`room_set_walls`): host only, a wall only, never during a round, one event, both snapshot fields, Random a real wall each round, Play again keeping it; and `action=walls` as a request: origin, CSRF, seat token, host only, a wall, the act throttle, 409 mid-round, the guest seeing it |
 | `test/php/RoomSpeedTest.php`                   | The game speed at handler level (`room_set_speed`, what `action=speed` runs): only the host, only 1, 2 or 4, one event and the snapshot's field; a room from before the setting reads 1; the drones' paced wait divided by the speed; the same volley at every speed |
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
 | `test/render.test.ts`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, rebuilds the sky only when the match key or the visible area changes, and draws an open parachute from its sheet (opening once, then swaying) or as a drawn canopy until the sheet loads, none over an armed or settled unit at rest, and units at their drawn height (a falling wreck whole) |
@@ -1481,7 +1565,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `RoomFilingTest` (host PHP) | A match two or more humans started files each human once on its Difficulty's board, the winner before the eliminated, a leaver not at all but the winner of a forfeit still; a match one human started files nothing and marks `filedLocal`; a failed filing logged and read as not filed |
 | `RoomSchemaTest` (host PHP) | Schema step 8: the `phase`, `acted` and `turn_secs` columns, backfilled from live rows and written by every save, `closed` and `pow_used`, and `room_acted` reading the older key |
 | `RoomLobbyPoolTest` (host PHP) | The lobby pool through `rooms.php`: lobbies hold no slot, four per address, a flood never closes a fresh attended lobby (uncharged 409), dead then idle then old, Play again takes a place and counts against its host's lobbies, tombstones answer only their seats (state, acts, `mine`), block the code and expire |
-| `RoomLocalStartTest` (host PHP) | Start with the host alone: `local` with the room's Difficulty and speed, the lobby closed with no tombstone and no slot or lobby place held, open seats no bar; without `proto: 2` a 426 with the reload line and the lobby kept; origin, CSRF, seat token and host-only before anything closes; two humans from one address take a slot; two humans without `proto` start as before |
+| `RoomLocalStartTest` (host PHP) | Start with the host alone: `local` with the room's Difficulty, speed and Walls, the lobby closed with no tombstone and no slot or lobby place held, open seats no bar; without `proto: 2` a 426 with the reload line and the lobby kept; origin, CSRF, seat token and host-only before anything closes; two humans from one address take a slot; two humans without `proto` start as before |
 | `RoomReclaimTest` (host PHP) | Match slots and reclaim: the floor, the tier order on a fixed clock, an active long game outliving a stale short one, ties by code, thirteen addresses unable to hold every slot, a played hold as the residual, no Start evicting a room within its floor, Start's gates before any slot, the hosting cap at Start, Play again giving the slot back, and two racing Starts never both winning or reclaiming one room twice |
 | `RoomPowTest` (host PHP) | The room puzzle on a fixed clock: a challenge signed and bound to its purpose and address (an edited difficulty, purpose or time, or another address, is `puzzle-bad`), solutions checked (short, repeated, wrong), an old or future-dated challenge refused by the server's clock alone, a replay refused and housekept, the difficulty rising under load by at most two bits, 0 turning it off, and `protocol/pow-vectors.json` |
 | `RoomPowGateTest` (host PHP) | Create and join through `rooms.php`: an old bundle told to reload, a create needing a solved puzzle of its own purpose, a replay refused and uncharged (a join puzzle spent on a missed guess too), a puzzle past its life refused, a puzzle from another address refused, a guess without work answered the same for a live and a made-up code and the hourly allowance still counting solved guesses, 6-character codes with 4-character rooms still joinable and codes read back with spaces, and the challenge uncharged and rising with the lobby count |
@@ -1497,7 +1581,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `php protocol/pow-vectors.php --check`         | `protocol/pow-vectors.json` is current (`test.sh` runs it)                                  |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
-| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only), and the end of a match (`tankity-end`: a lost solo match is saved on this browser's board, shows under "This browser" in Scores and sends nothing to the score server; `tankity-end-again`: Play again in a room; `tankity-end-forfeit`: a leave, the winner filed online, and the solo card after it saved locally; `tankity-end-out`: the you're-out card and Menu → Standings), the tutorial and the themes (`tankity-tutorial`: on a phone and a desktop, each step's bubble shows on screen with focus, the marked control is on top at its centre and ringed, doing the step moves on through the shop and the battle to the end, Skip and Q end it; a fresh profile is Orange; Settings switches the theme's accent, Custom with the colour picker derives a readable palette, and a reload keeps it), a room closed to make space (`tankity-rooms-cap`: the line, Your games' closed row and Dismiss), the room puzzle (`tankity-pow`: "Setting up the room…" with Host and Join off, Cancel creating nothing, a 6-character code shown in halves and joined typed with a space, an old tab told to reload, and the solver's timings, which also run on WebKit and Firefox with `E2E_WEBKIT=1` and `E2E_FIREFOX=1`), and long games (`tankity-rooms-long`: the room link brings a closed tab back, Step out and Your games, the turn toast and Go, a lobby closed with Q listed, the turn time reaching everyone), and the game speed (`tankity-speed`: FF cycles 1×, 2×, 4× and the same seeded volley takes a half and a quarter of the wall time, kept across a reload; in a room the host's pick reaches the guest, who cannot change it). Each player context gives up its stored seats when a spec closes it (`tests/e2e/helpers.mjs`); `E2E_BASE_URL` points it at the live site |
+| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only), and the end of a match (`tankity-end`: a lost solo match is saved on this browser's board, shows under "This browser" in Scores and sends nothing to the score server; `tankity-end-again`: Play again in a room; `tankity-end-forfeit`: a leave, the winner filed online, and the solo card after it saved locally; `tankity-end-out`: the you're-out card and Menu → Standings), the tutorial and the themes (`tankity-tutorial`: on a phone and a desktop, each step's bubble shows on screen with focus, the marked control is on top at its centre and ringed, doing the step moves on through the shop and the battle to the end, Skip and Q end it; a fresh profile is Orange; Settings switches the theme's accent, Custom with the colour picker derives a readable palette, and a reload keeps it), a room closed to make space (`tankity-rooms-cap`: the line, Your games' closed row and Dismiss), the room puzzle (`tankity-pow`: "Setting up the room…" with Host and Join off, Cancel creating nothing, a 6-character code shown in halves and joined typed with a space, an old tab told to reload, and the solver's timings, which also run on WebKit and Firefox with `E2E_WEBKIT=1` and `E2E_FIREFOX=1`), and long games (`tankity-rooms-long`: the room link brings a closed tab back, Step out and Your games, the turn toast and Go, a lobby closed with Q listed, the turn time reaching everyone), and the game speed (`tankity-speed`: FF cycles 1×, 2×, 4× and the same seeded volley takes a half and a quarter of the wall time, kept across a reload; in a room the host's pick reaches the guest, who cannot change it), and the walls (`tankity-walls`: Settings keeps Rubber, the round line says so, and a full-power shot at the wall behind the tank turns round there and comes back onto the field; in a room the host sets Wraparound in the lobby, the guest sees the pick and the log line, the round plays it, and mid-round both Menus show it as a label). Each player context gives up its stored seats when a spec closes it (`tests/e2e/helpers.mjs`); `E2E_BASE_URL` points it at the live site |
 | `make e2e-changed` (site root) | Only the browser specs your changes need (`tests/e2e/select.mjs` maps touched files to specs; CI uses the same map) |
 
 `make test` from the site root runs every suite above except e2e. CI runs
@@ -1516,7 +1600,8 @@ turn: each earth event with the server's own unrounded numbers),
 `play-after-burn` (napalm into a valley the drone sits in: the burn event,
 then each tick's hit at its tick), `play-turntime` and `play-speed` (the host's
 settings mid-play: the snapshot's field and one event), `shop-after-win`, `shop-ready` (the shop
-with one of two humans readied), `create-reply`, `join-reply`, `start-local-reply` (the host alone starts: the
+with one of two humans readied), `shop-walls` (the host's Walls pick in the shop: `walls`, the
+round just played's `wallsNow`, and one event), `create-reply`, `join-reply`, `start-local-reply` (the host alone starts: the
 match plays in the browser), `error-too-fast` (429), `error-not-your-turn` (409)
 `error-reload` (426, a lone host's Start without `proto`), `challenge-reply`
 (a room puzzle; the signed challenge string is a placeholder) and
@@ -1621,7 +1706,16 @@ with -0 equal to 0 only where a case says so.
   burn wreck's last stand, the gunner's own pool scoring nothing, flat ground
   burning nothing, the rim drone), and a drone's napalm choices (two rivals in
   a valley, refused in its own valley, the harm with armor caps, a shield and
-  a bunker, and on the valley side safe and not safe). Volleys and brackets end with the falls settled; the
+  a bunker, and on the valley side safe and not safe), and the walls (`walls`,
+  exact: each wall's step at either side, inside and from a muzzle past the
+  edge, a roller's step, planning flights against each wall (a Shell at the
+  wall, a missile across, a lob out the left, a roller, a flat fast shot), a
+  cluster's split point, rolls toward either edge, a fall through the air,
+  liquid dirt and napalm pools open and dammed by either edge, and Random's
+  draws; then, through the `volley` and `ai-aim` groups, a Shell, a missile, a
+  wrap past a bystander, a roller, napalm, liquid dirt, a cluster, a hop gun, a
+  scatter gun and pellets at each wall, and a drone aiming past a mountain and
+  past its reach at each). Volleys and brackets end with the falls settled; the
   browser plays each volley as a solo match does (falls animated every frame,
   one settle once the last shell is down), including Buckshot pits dug in
   bursts and craters in fractional ground.

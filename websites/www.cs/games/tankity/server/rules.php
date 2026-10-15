@@ -246,6 +246,28 @@ function room_set_speed(array &$room, int $seat, $speed): ?array
     }
     return null;
 }
+/* The host sets the walls (rooms.php action=walls) in the lobby or between
+// rounds, never while a round is played: the round in play keeps the wall
+// every shot and every drone's plan was flown against, and a pick applies
+// from the next round. Answers null when it is taken (one 'walls' event for
+// everyone, none when the pick is unchanged), else [status, error]. */
+function room_set_walls(array &$room, int $seat, $walls): ?array
+{
+    if ($seat !== room_host($room)) {
+        return [403, 'only the host picks the walls'];
+    }
+    if (!is_string($walls) || !in_array($walls, ROOM_WALL_SETTINGS, true)) {
+        return [422, 'pick None, Concrete, Rubber, Spring, Wraparound or Random'];
+    }
+    if ($room['phase'] === 'play') {
+        return [409, 'the walls change between rounds'];
+    }
+    if ($walls !== room_walls_setting($room)) {
+        $room['walls'] = $walls;
+        room_emit($room, ['t' => 'walls', 'seat' => $seat, 'walls' => $walls]);
+    }
+    return null;
+}
 function room_humans_alive(array $room): bool
 {
     foreach ($room['tanks'] as $t) {
@@ -431,8 +453,10 @@ function room_earth_burst(array &$room, array &$events, int $seatIdx, array $w, 
         room_add_dirt($room['terrain'], $x, $y, (float) $w['radius']);
     } elseif ($effect === 'pour') {
         $col = (int) det_round(max(0.0, min((float) (count($room['terrain']) - 1), $x)));
-        $events[] = ['t' => 'pour', 'w' => $wkey, 'x' => $col, 'v' => (float) $w['volume'], 'm' => (float) $w['poolMin']];
-        room_fill_pour($room['terrain'], room_pour_level($room['terrain'], (float) $col, (float) $w['volume'], (float) $w['poolMin']));
+        // A solid wall dams the edges: the event says so, so the replay pours as the server did.
+        $dam = room_walls_dam(room_walls_now($room));
+        $events[] = ['t' => 'pour', 'w' => $wkey, 'x' => $col, 'v' => (float) $w['volume'], 'm' => (float) $w['poolMin']] + ($dam ? ['d' => 1] : []);
+        room_fill_pour($room['terrain'], room_pour_level($room['terrain'], (float) $col, (float) $w['volume'], (float) $w['poolMin'], $dam));
     } else {
         $events[] = ['t' => 'slump', 'w' => $wkey, 'x' => $x, 'r' => (float) $w['radius'], 'slope' => (float) $w['slope'], 'passes' => (int) $w['passes']];
         room_slump_ground($room['terrain'], $x, (float) $w['radius'], (float) $w['slope'], (int) $w['passes']);
@@ -444,7 +468,8 @@ function room_earth_burst(array &$room, array &$events, int $seatIdx, array $w, 
 }
 /* A napalm shell bursts ($res, at $t seconds): its pool (room_fire_pool,
 // poured at the burst's column on the ground of this moment, which it never
-// changes) burns from then until its last tick, its 'burn' event first (the
+// changes, and held in by a solid wall)
+// burns from then until its last tick, its 'burn' event first (the
 // pool, and t1 when it goes out). Every tick (room_tick_steps sim steps
 // apart, room_burn_ticks of them) each living unit, in seat order, whose body
 // reaches into the flames (room_in_flames) and is not buried under the ground
@@ -457,7 +482,7 @@ function room_earth_burst(array &$room, array &$events, int $seatIdx, array $w, 
 function room_fire_burn(array &$room, array &$events, int $seatIdx, array $w, string $wkey, array $res, float $t): void
 {
     $col = (int) det_round(max(0.0, min((float) (count($room['terrain']) - 1), $res[1])));
-    $pool = room_fire_pool($room['terrain'], (float) $col, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin']);
+    $pool = room_fire_pool($room['terrain'], (float) $col, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin'], room_walls_dam(room_walls_now($room)));
     $n = $pool['x0'] <= $pool['x1'] ? room_burn_ticks((float) $w['burn'], (float) $w['tick']) : 0;
     $every = room_tick_steps((float) $w['tick']);
     $events[] = ['t' => 'burn', 'by' => $room['tanks'][$seatIdx]['seat'], 'w' => $wkey, 'x' => $col, 'v' => (float) $w['volume'],
@@ -595,6 +620,8 @@ function room_new(string $code, string $initials): array
         'rng' => $rng,
         'phase' => 'lobby', // lobby | shop | play | over
         'map' => null, // a ROOM_MAPS id, or null for a random draw
+        'walls' => 'none', // the host's pick (server/walls.php ROOM_WALL_SETTINGS), kept by Play again
+        'wallsNow' => 'none', // the wall this round plays: the pick, or Random's draw (room_start_round)
         'difficulty' => 'normal', // the drones' aim: a ROOM_DIFFICULTY word, set by the host at create
         'host' => 0, // the seat that starts the match; the lowest human takes it if the host leaves
         'round' => 0,
@@ -839,6 +866,9 @@ function room_start_round(array &$room): void
         }
     }
     unset($t);
+    // The round's wall: the host's pick, or for Random one real wall drawn
+    // last from the round's stream, so no other setting moves the stream.
+    $room['wallsNow'] = room_walls_for(room_walls_setting($room), $room['rng']);
     $room['turn'] = 0;
     $room['phase'] = count($room['tanks']) ? 'play' : 'over';
     // Callers announce the new round through the sequenced event batch.
@@ -1335,7 +1365,7 @@ function room_again(array &$room): bool
     if (!room_rehost($room)) {
         return false; // everyone left; nobody is there to start a lobby
     }
-    foreach (['plate', 'armor', 'shield', 'jammer', 'bunker', 'laststand', 'chutes', 'fuelBonus', 'fuelApplied', 'tactic', 'stats', 'filed', 'matchId', 'menu', 'shop', 'pace', 'clock', 'startedBy'] as $k) {
+    foreach (['plate', 'armor', 'shield', 'jammer', 'bunker', 'laststand', 'chutes', 'fuelBonus', 'fuelApplied', 'tactic', 'stats', 'filed', 'matchId', 'menu', 'shop', 'pace', 'clock', 'startedBy', 'wallsNow'] as $k) {
         unset($room[$k]);
     }
     foreach ($room['seats'] as $idx => $s) {

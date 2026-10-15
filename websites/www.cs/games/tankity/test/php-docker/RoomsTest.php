@@ -476,6 +476,17 @@ final class RoomsTest extends TestCase
         $sSeen = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $g3a['token'] . '&since=0');
         self::assertTrue(($sSeen['room']['speed'] ?? 0) === 4, 'speed-guest-sees-it' . ' :: ' . json_encode($sSeen['room']['speed'] ?? $sSeen));
 
+        // The walls: only the host picks them, never while a round is played; the
+        // snapshot carries the pick and the round's wall.
+        usleep(300000);
+        $wGuest = self::post('walls', $g3a + ['walls' => 'rubber']);
+        self::assertTrue(isset($wGuest['error']) && strpos($wGuest['error'] ?? '', 'host') !== false, 'walls-host-only' . ' :: ' . json_encode($wGuest));
+        usleep(300000);
+        $wMid = self::post('walls', $h2 + ['walls' => 'rubber']);
+        self::assertTrue(isset($wMid['error']) && strpos($wMid['error'] ?? '', 'between rounds') !== false, 'walls-not-mid-round' . ' :: ' . json_encode($wMid));
+        self::assertTrue(($sSeen['room']['walls'] ?? '') === 'none' && ($sSeen['room']['wallsNow'] ?? '') === 'none', 'walls-default-none'
+            . ' :: ' . json_encode([$sSeen['room']['walls'] ?? null, $sSeen['room']['wallsNow'] ?? null]));
+
         // The host walks out mid-match: the match goes on for the guest (the host's
         // tank turns drone), the room stays on the shelf, and only the last human
         // out takes it down.

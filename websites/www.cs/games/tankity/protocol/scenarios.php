@@ -221,6 +221,15 @@ function protocol_snapshots(): array
     $out['play-speed'] = ['The host set the game speed to 4×: speed reads 4 and one speed event rides along (since = 1 skips the round event).',
         200, $ok(room_snapshot($fast, 0, 1))];
 
+    // The host picks the walls between rounds (in the shop): one event, the snapshot's walls; the round just played keeps its own.
+    $walled = $won;
+    $since = (int) ($walled['seq'] ?? 0);
+    if (room_set_walls($walled, 0, 'wrap') !== null) {
+        throw new RuntimeException('the fixture host could not pick the walls');
+    }
+    $out['shop-walls'] = ['The host picked Wraparound in the shop: walls reads wrap, wallsNow still names the round just played (none), and one walls event rides along; the next round plays it.',
+        200, $ok(room_snapshot($walled, 0, $since))];
+
     // A browser's "Your games": a match with this seat up, a lobby it waits in, a room that is gone.
     $out['mine-reply'] = ['action=mine for three stored seats, in the order asked: a running match where it is this seat\'s turn (turnKey names the turn), a lobby, and a room that is gone.',
         200, ['ok' => true, 'rooms' => [

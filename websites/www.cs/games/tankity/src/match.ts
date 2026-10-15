@@ -35,6 +35,8 @@ import type { Board } from './standings.ts';
 import { renderEndVeil as drawEndVeil, focusEndVeil } from './ui/endveil.tsx';
 import type { EndVeilProps } from './ui/endveil.tsx';
 import type { KeyHintFn } from './ui/chrome.tsx';
+import { WALL_BOUNCE, ageWallHits, wallsLine } from './walls.ts';
+import type { WallsPref, WallsSetting } from './walls.ts';
 
 /** What the end card says and which buttons it offers (src/ui/endveil.tsx). */
 export interface EndState {
@@ -60,6 +62,8 @@ export interface MatchDeps {
   music: Pick<typeof MusicApi, 'leaveTheme' | 'start' | 'stop' | 'playTheme' | 'forRound'>;
   /** The Menu's Difficulty; a match reads it once, when it is dealt. */
   difficulty: Pick<DifficultySetting, 'get'>;
+  /** The Menu's Walls; a match reads it at each round's start. */
+  walls: Pick<WallsPref, 'get'>;
   unlock(): void;
   alive(): GameTank[];
   foesAlive(): GameTank[];
@@ -100,7 +104,7 @@ export interface MatchDeps {
 
 export function createMatch(deps: MatchDeps) {
   const {
-    field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
+    field, G, $, TOUCH, tables, net, sfx, music, difficulty, walls, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
     render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closeGuns, closePreview, hideShop, openShop,
     endTutorial, maybeStartTutorial, tutorialFired, backToTitle, netFire, netLeave,
     netNext, netAgain, initials, saveLocal,
@@ -108,7 +112,7 @@ export function createMatch(deps: MatchDeps) {
 
   let fallsDue: FallShow[] = []; // solo landings waiting to be seen to touch down
   let marked = false; // this volley's tracer left its mark
-  function resetMatch(seedStr?: string, level?: Difficulty): void {
+  function resetMatch(seedStr?: string, level?: Difficulty, fixedWalls?: WallsSetting): void {
     fallsDue = []; // a fall still playing out in the last match never speaks in this one
     G.marks.clear();
     G.earth.clear();
@@ -119,6 +123,9 @@ export function createMatch(deps: MatchDeps) {
     // A room the host started alone plays at the room's instead, for that match only.
     // The width comes from the screen at the deal and holds until the next one (spec 6.6).
     soloDeal(G, tables.arsenal!, seed, level ?? difficulty.get(), field.deal());
+    // The Menu's Walls are read at every round; a room the host started alone keeps the room's.
+    G.wallsFixed = fixedWalls ?? null;
+    G.walls = 'none';
     G.shopSel = 0;
     G.shopQty = 1;
     G.rounds = [];
@@ -161,8 +168,8 @@ export function createMatch(deps: MatchDeps) {
     render();
     renderHUD();
   }
-  function newMatch(seedStr?: string, level?: Difficulty): void {
-    resetMatch(seedStr, level);
+  function newMatch(seedStr?: string, level?: Difficulty, fixedWalls?: WallsSetting): void {
+    resetMatch(seedStr, level, fixedWalls);
     // No round yet: spend the starting stake in the shop first.
     advance('matchStart');
     refreshNavHints(); // the rotate hint shows from the first name card
@@ -172,11 +179,11 @@ export function createMatch(deps: MatchDeps) {
     talk('tank', 'tankity tank! Shopping, then shooting!', true);
   }
   // A fanfare plus a name card, then the game continues. Nothing starts without you.
-  function startSolo(seedStr?: string, level?: Difficulty): void {
+  function startSolo(seedStr?: string, level?: Difficulty, fixedWalls?: WallsSetting): void {
     closePreview();
     unlock();
     music.start();
-    newMatch(seedStr, level);
+    newMatch(seedStr, level, fixedWalls);
   }
   function newRound(bannerText?: string, event?: FlowEvent): void {
     fallsDue = [];
@@ -184,7 +191,8 @@ export function createMatch(deps: MatchDeps) {
     G.earth.clear();
     G.fire.clear();
     G.fires = [];
-    soloMuster(G, tables.arsenal!);
+    // The demo always plays open sides; a match plays the Menu's Walls (or its room's), from this round on.
+    soloMuster(G, tables.arsenal!, G.demo ? 'none' : G.wallsFixed ?? walls.get());
     G.roundStart = { score: G.score, cash: G.cash };
     G.parts = [];
     G.booms = [];
@@ -197,20 +205,21 @@ export function createMatch(deps: MatchDeps) {
     hideShop();
     if ($('end-veil')) $('end-veil')!.hidden = true;
     const opener = cur();
+    const sides = wallsLine(G.walls);
     const card = typeof bannerText === 'string' && bannerText
       ? bannerText
-      : `Round ${G.round}. The battery rebuilds meaner.`;
+      : `Round ${G.round}. The battery rebuilds meaner.${sides ? ` ${sides}.` : ''}`;
     startBanner(card, () => {
       // Open on the scheduled tank: advancing here would skip seat 0 every round.
       if (opener.isPlayer && !G.demo) {
         advance('playerUp');
-        say(`Round ${G.round}. Wind ${windText()}. Your move. Aim!`, 'info');
+        say(`Round ${G.round}. Wind ${windText()}.${sides ? ` ${sides}.` : ''} Your move. Aim!`, 'info');
         maybeStartTutorial();
       } else {
         advance('foeUp');
         G.thinkT = TUNE.thinkTime;
         const who = opener.isPlayer ? 'Tankity tank' : opener.id;
-        say(`Round ${G.round}. Wind ${windText()}. ${who} moves first.`, 'info');
+        say(`Round ${G.round}. Wind ${windText()}.${sides ? ` ${sides}.` : ''} ${who} moves first.`, 'info');
       }
     });
   }
@@ -307,6 +316,9 @@ export function createMatch(deps: MatchDeps) {
         G.marks.land(e.shell, e.x, e.y);
         fxImpact(G.fx, e.shell.wkey, e.x, e.y, MARK_R);
         marked = true;
+      } else if (e.kind === 'wall') {
+        G.wallHits.push({ x: e.x, y: e.y, hit: e.hit, t: 0 });
+        if (e.hit === WALL_BOUNCE) sfx.play('clank');
       } else if (e.kind === 'beam' || e.kind === 'ring') playNow([e]);
       else if (e.kind === 'split') fxSpecial(G.fx, e.wkey, 'split', e.x, e.y, e.ang);
       else if (e.kind === 'hop') fxSpecial(G.fx, e.wkey, 'hop', e.x, e.y, e.ang);
@@ -691,6 +703,7 @@ export function createMatch(deps: MatchDeps) {
     G.earth.step(dt);
     G.fire.step(dt);
     G.marks.step(dt);
+    ageWallHits(G.wallHits, dt);
     for (const bm of G.booms) bm.t += dt;
     G.booms = G.booms.filter(bm => bm.t < bm.life);
     for (const q of G.parts) {

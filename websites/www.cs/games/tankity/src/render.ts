@@ -2,7 +2,7 @@
  *
  * Everything that paints the 2D canvas: the night sky and its moon, clouds,
  * hills, the scenery past the field's edges and the dirt below it, the units (tank bodies, drones, name tags, turn marker, menu badge),
- * the aim arm, blast discs, shells (with a mark on the top edge for one above the view), particles, wind streaks, the
+ * the field's side walls, the aim arm, blast discs, shells (with a mark on the top edge for one above the view), particles, wind streaks, the
  * turn clock, and the firing-range preview. main.ts builds a BattleView each
  * frame and calls `frame(view)`; this module reads it and paints, and never
  * changes game state. Anything that advances (a boom's age, the shake decay,
@@ -19,6 +19,8 @@ import type { Box, Fit, WorldRect } from './field.ts';
 import type { Cloud, Hills, Rng, Tank } from './sim.ts';
 import { smokeDrift } from './marks.ts';
 import type { Mark } from './marks.ts';
+import { WALL_FLASH_S, WALL_WRAP } from './walls.ts';
+import type { WallHit, Walls } from './walls.ts';
 
 /* ---------- what main.ts hands over ---------- */
 
@@ -104,6 +106,7 @@ export interface PreviewView {
   resultT: number;
   trace: Readonly<Pick<Mark, 'kind' | 'pts' | 'landed' | 'age'>> | null; // a tracer's path this volley
   fires?: readonly DrawPool[]; // a napalm pool burning on the range
+  walls?: Walls; // the range's side walls (the player's solo Walls)
 }
 
 /** Everything a frame shows. Read-only: render.ts never writes to it. */
@@ -129,6 +132,8 @@ export interface BattleView {
   marks: readonly Mark[]; // tracer marks the viewer sees (src/marks.ts shown)
   fires?: readonly DrawPool[]; // napalm pools burning (src/fire-show.ts)
   wind: number;
+  /** The field's side walls this round, and where shells met them lately (null or None: open sides, nothing drawn). */
+  walls?: { kind: Walls; hits: readonly WallHit[] } | null;
   textScale: number;
   turnClock: { left: number; myTurn: boolean } | null; // the on-canvas count-down, when it shows
   preview: PreviewView | null;
@@ -543,6 +548,82 @@ export const SMOKE_PUFFS_MAX = 600;
    thinning but never quite gone before the round ends. `budget.left` is the
    puffs this frame may still draw: a mark that would need more spreads the
    ones it has along its whole path. */
+/** How each wall is drawn: its colour, and the colour it flashes where a shell meets it. */
+const WALL_LOOK: Readonly<Record<Exclude<Walls, 'none'>, { line: string; flash: string }>> = {
+  concrete: { line: '#9a9a9a', flash: '#ffcf70' },
+  rubber: { line: '#2a2a34', flash: '#ffffff' },
+  spring: { line: '#8fa2b4', flash: '#a8ecff' },
+  wrap: { line: '#a98bff', flash: '#c9b4ff' },
+};
+/* The field's side walls, thin and in their own style, from `top` down to the
+   ground at each edge: Concrete a grey edge with mortar ticks, Rubber a dark
+   band, Spring a slim post with a coil beside it, Wraparound a faint portal
+   shimmer (still under reduced motion). Where a shell met one lately (hits) the
+   wall flashes, only with screen flashes on and motion allowed; a wrap
+   flashes at both sides. Nothing for None. */
+export function drawWalls(c: CanvasRenderingContext2D, kind: Walls, hits: readonly WallHit[], terrain: (x: number) => number, w: number,
+  top: number, time: number, calm: boolean, flashes: boolean): void {
+  if (kind === 'none') return;
+  const look = WALL_LOOK[kind];
+  c.save();
+  for (const side of [0, 1] as const) {
+    const x = side ? w - 1 : 0, foot = terrain(side ? w - 1 : 0), inward = side ? -1 : 1;
+    if (!(foot > top)) continue;
+    if (kind === 'wrap') {
+      const band = 10, g = c.createLinearGradient(x, 0, x + inward * band, 0);
+      const a = calm ? 0.16 : 0.12 + 0.06 * Math.sin(time * 2.2 + side * Math.PI);
+      g.addColorStop(0, `rgba(169,139,255,${a.toFixed(3)})`);
+      g.addColorStop(1, 'rgba(169,139,255,0)');
+      c.fillStyle = g;
+      c.fillRect(side ? x - band : x, top, band, foot - top);
+    } else {
+      c.strokeStyle = look.line;
+      c.globalAlpha = kind === 'rubber' ? 0.95 : 0.8;
+      c.lineWidth = kind === 'rubber' ? 4 : kind === 'spring' ? 1.5 : 3;
+      c.beginPath();
+      c.moveTo(x, top);
+      c.lineTo(x, foot);
+      c.stroke();
+      if (kind === 'concrete') {
+        // Mortar ticks, alternating like brick courses.
+        c.strokeStyle = '#5c5c5c';
+        c.lineWidth = 1;
+        c.beginPath();
+        for (let y = foot - 12, k = 0; y > top; y -= 12, k++) {
+          c.moveTo(x, y);
+          c.lineTo(x + inward * (k % 2 ? 2 : 4), y);
+        }
+        c.stroke();
+      } else if (kind === 'spring') {
+        // A coil beside the post: a zigzag down the wall.
+        c.lineWidth = 1.2;
+        c.beginPath();
+        for (let y = top, k = 0; y <= foot; y += 5, k++) {
+          const cx = x + inward * (k % 2 ? 2 : 5);
+          if (k === 0) c.moveTo(cx, y);
+          else c.lineTo(cx, y);
+        }
+        c.stroke();
+      }
+    }
+  }
+  if (flashes && !calm) {
+    c.fillStyle = look.flash;
+    for (const h of hits) {
+      const k = 1 - h.t / WALL_FLASH_S;
+      if (k <= 0) continue;
+      for (const x of h.hit === WALL_WRAP ? [0, w - 1] : [h.x <= w / 2 ? 0 : w - 1]) {
+        c.globalAlpha = 0.55 * k;
+        c.beginPath();
+        c.ellipse(x, h.y, 3 + 3 * k, 10 + 8 * (1 - k), 0, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+  }
+  c.restore();
+}
+/** Two mark points this far apart across were joined by a Wraparound wall, not a flight. */
+const MARK_JUMP = 200;
 function drawMark(c: CanvasRenderingContext2D, m: Mark, look: Look, wind: number, budget: { left: number }, calm: boolean): void {
   const p = m.pts;
   if (p.length < 4) return;
@@ -556,7 +637,11 @@ function drawMark(c: CanvasRenderingContext2D, m: Mark, look: Look, wind: number
     c.lineWidth = 5;
     c.beginPath();
     c.moveTo(p[0]!, p[1]!);
-    for (let i = 2; i < p.length; i += 2) c.lineTo(p[i]!, p[i + 1]!);
+    // Through Wraparound the path jumps a field across: the line breaks there instead of crossing the field.
+    for (let i = 2; i < p.length; i += 2) {
+      if (Math.abs(p[i]! - p[i - 2]!) > MARK_JUMP) c.moveTo(p[i]!, p[i + 1]!);
+      else c.lineTo(p[i]!, p[i + 1]!);
+    }
     c.stroke();
     c.globalAlpha = 0.9;
     c.lineWidth = 1.8;
@@ -582,7 +667,8 @@ function drawMark(c: CanvasRenderingContext2D, m: Mark, look: Look, wind: number
     const drift = calm ? 0 : smokeDrift(m.age, wind), rise = calm ? 0 : Math.min(40, m.age * 2.5);
     const r = 4 + Math.min(16, m.age * 1.4), fade = Math.max(0.3, 1 - m.age / 45);
     let len = 0;
-    for (let i = 2; i < p.length; i += 2) len += Math.hypot(p[i]! - p[i - 2]!, p[i + 1]! - p[i - 1]!);
+    const jump = (i: number): boolean => Math.abs(p[i]! - p[i - 2]!) > MARK_JUMP;
+    for (let i = 2; i < p.length; i += 2) if (!jump(i)) len += Math.hypot(p[i]! - p[i - 2]!, p[i + 1]! - p[i - 1]!);
     const want = len / Math.max(9, 0.8 * r) + 1;
     if (budget.left < 1) { c.restore(); return; }
     const gap = want > budget.left ? len / Math.max(1, budget.left - 1) : Math.max(9, 0.8 * r);
@@ -590,6 +676,7 @@ function drawMark(c: CanvasRenderingContext2D, m: Mark, look: Look, wind: number
     c.fillStyle = col;
     let at = 0;
     for (let i = 2; i < p.length; i += 2) {
+      if (jump(i)) continue;
       const x0 = p[i - 2]!, y0 = p[i - 1]!, x1 = p[i]!, y1 = p[i + 1]!;
       const seg = Math.hypot(x1 - x0, y1 - y0);
       for (; at <= seg; at += gap) {
@@ -1029,6 +1116,7 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
       else c.lineTo(x, terr(x));
     }
     c.stroke();
+    drawWalls(c, pv.walls || 'none', [], terr, PV_W, 0, time, deps.reducedMotion(), !FX || FX.flashes !== false);
     const pools = (pv.fires || []).filter(p => p.heat > 0.01 && p.x1 >= p.x0);
     for (const p of pools) drawPoolBack(c, p, pv.terr, time);
     // Demo shooter + barrel at the solved angle, where it stands (under a mound, for a riot charge's demo).
@@ -1222,6 +1310,8 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
     c.fillRect(sx0, H - 30, sx1 - sx0, 120); // opaque from H + 60, so the polygons' own bottom edge never shows
     c.fillStyle = '#26150a';
     for (let y = H + 60; y < sy1; y += 36) c.fillRect(sx0, y, sx1 - sx0, 6);
+    // The side walls (none with open sides), under the units and the pools' flames.
+    if (view.walls) drawWalls(c, view.walls.kind, view.walls.hits, terrain, W, sy0, time, deps.reducedMotion(), !FX || FX.flashes !== false);
     // Burning pools: the liquid and its glow, under the units.
     const pools = (view.fires || []).filter(p => p.heat > 0.01 && p.x1 >= p.x0);
     for (const p of pools) drawPoolBack(c, p, view.terrain, time);

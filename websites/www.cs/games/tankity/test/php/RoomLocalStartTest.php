@@ -91,7 +91,10 @@ final class RoomLocalStartTest extends TestCase
         [$st, $out] = $this->call('speed', $this->seated($host) + ['speed' => 2], [], self::ENV);
         $this->assertSame(200, $st, json_encode($out));
         $this->gap();
-        $this->assertSame([200, ['ok' => true, 'local' => ['difficulty' => 'hard', 'speed' => 2]]], $this->start($host, ['proto' => 2]));
+        [$st, $out] = $this->call('walls', $this->seated($host) + ['walls' => 'rubber'], [], self::ENV);
+        $this->assertSame(200, $st, json_encode($out));
+        $this->gap();
+        $this->assertSame([200, ['ok' => true, 'local' => ['difficulty' => 'hard', 'speed' => 2, 'walls' => 'rubber']]], $this->start($host, ['proto' => 2]));
         $this->assertFalse($this->exists($host['code']), 'the lobby is closed');
         $this->assertSame(0, $this->tombstones(), 'the host closed it: nobody is told it was closed to make space');
         $this->assertSame([0, 0], $this->used());
@@ -110,7 +113,7 @@ final class RoomLocalStartTest extends TestCase
             $this->assertSame(200, $st, json_encode($out));
         }
         $this->gap();
-        $this->assertSame([200, ['ok' => true, 'local' => ['difficulty' => 'normal', 'speed' => 1]]], $this->start($host, ['proto' => 2]));
+        $this->assertSame([200, ['ok' => true, 'local' => ['difficulty' => 'normal', 'speed' => 1, 'walls' => 'none']]], $this->start($host, ['proto' => 2]));
         $this->assertFalse($this->exists($host['code']));
     }
 

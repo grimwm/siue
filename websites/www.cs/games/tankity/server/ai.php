@@ -85,7 +85,7 @@ function room_ai_correct(array $room, float $mx, float $my, string $wkey, int $d
         if ($a < 10 || $a > 170 || $p < 10 || $p > 100) {
             return;
         }
-        $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $a, (float) $p, $wkey, $dirS, $width, $high);
+        $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $a, (float) $p, $wkey, $dirS, $width, $high, room_walls_now($room));
         $err = ($land['oob'] ? 400 + abs($land['x'] - $goalX) * 0.2 : abs($land['x'] - $goalX)) + 0.02 * (abs($a - $a0) + abs($p - $p0));
         if ($best === null || $err < $best['err']) {
             $best = ['err' => $err, 'a' => $a, 'p' => $p];
@@ -204,7 +204,7 @@ function room_ai_munitions(array $room, array $self, string $wkey, array $land, 
     $dmg = $w['subDmg'] ?: $w['dmg'];
     $r = $w['subRadius'] ?: $w['radius'];
     $dirS = $self['dirS'] ?? -1;
-    $air = room_air(count($room['terrain']), (float) $room['wind'], $w);
+    $air = room_air(count($room['terrain']), (float) $room['wind'], $w, room_walls_now($room));
     if ($w['effect'] === 'pellets') {
         if (!isset($land['a'], $land['p'])) {
             return $done(true, $dmg, $r);
@@ -248,7 +248,7 @@ function room_ai_munitions(array $room, array $self, string $wkey, array $land, 
         }
     } elseif ($w['effect'] === 'cluster' && isset($land['a'], $land['p'])) {
         [$mx, $my] = room_muzzle(['angle' => (float) $land['a']] + $self);
-        $at = room_split_point($room['terrain'], $room['wind'], $mx, $my, (float) $land['a'], (float) $land['p'], $wkey, $dirS, count($room['terrain']));
+        $at = room_split_point($room['terrain'], $room['wind'], $mx, $my, (float) $land['a'], (float) $land['p'], $wkey, $dirS, count($room['terrain']), room_walls_now($room));
         if ($at === null) {
             return $done(true, $dmg, $r);
         }
@@ -308,7 +308,7 @@ function room_ai_bursts(array $room, array $self, array $target, string $wkey, a
     [$tx, $ty, $trx, $try] = room_unit_box($target);
     $sb = room_unit_box($self);
     [$sx, $sy, $srx] = $sb;
-    $air = room_air(count($room['terrain']), (float) $room['wind'], $w);
+    $air = room_air(count($room['terrain']), (float) $room['wind'], $w, room_walls_now($room));
     $d = room_dist($tx - $land['x'], $ty - $land['y']);
     $own = min(room_dist($sx - $land['x'], $sy - $land['y']), room_dist($sx - $tx, $sy - $ty) - max($trx, $try));
     $onSelf = fn(int $dmg, float $near, float $r, float $x): int => abs($x - $sx) <= $srx ? 2 * $dmg : room_ai_reach_damage($dmg, $near, $r);
@@ -501,7 +501,8 @@ function room_ai_fire_harm(array $room, array $self, string $wkey, array $land):
     room_ai_earth_ops(1);
     $w = room_weapons()[$wkey];
     $col = (float) det_round(max(0.0, min((float) (count($room['terrain']) - 1), (float) $land['x'])));
-    $pool = room_fire_pool($room['terrain'], $col, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin']);
+    $dam = room_walls_dam(room_walls_now($room));
+    $pool = room_fire_pool($room['terrain'], $col, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin'], $dam);
     $n = room_burn_ticks((float) $w['burn'], (float) $w['tick']);
     $harm = 0.0;
     $mine = 0;
@@ -521,9 +522,9 @@ function room_ai_fire_harm(array $room, array $self, string $wkey, array $land):
     $wide = [$cx, $cy, $rx + ROOM_AI_FIRE_PAD, $ry + ROOM_AI_FIRE_PAD];
     $near = room_in_flames($pool, $wide)
         // Its own dip: where liquid would collect under it (a dip's pool, no puddle: on flat ground nothing collects there).
-        || room_in_flames(room_fire_pool($room['terrain'], (float) $self['x'], (float) $w['volume'], (float) $w['flame']), $wide);
+        || room_in_flames(room_fire_pool($room['terrain'], (float) $self['x'], (float) $w['volume'], (float) $w['flame'], 0.0, $dam), $wide);
     foreach ([-1.0, 1.0] as $k) {
-        $near = $near || room_in_flames(room_fire_pool($room['terrain'], $col + $k * ROOM_AI_FIRE_WOBBLE, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin']), $wide);
+        $near = $near || room_in_flames(room_fire_pool($room['terrain'], $col + $k * ROOM_AI_FIRE_WOBBLE, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin'], $dam), $wide);
     }
     // A shot that falls short, as src/ai.ts fireHarm takes it.
     $skill = ROOM_DIFFICULTY[room_difficulty($room)];
@@ -541,7 +542,7 @@ function room_ai_fire_harm(array $room, array $self, string $wkey, array $land):
     $ka = $s2 > 1e-6 ? max(0.0, min(det_sin(deg2rad(2 * $lo)), det_sin(deg2rad(2 * $hi))) / $s2) : 0.0;
     $short = 1 - min(1.0, $kp * $kp * $ka);
     $back = (float) det_round(max(0.0, min((float) ($fw - 1), (float) $land['x'] + ((float) $self['x'] - (float) $land['x']) * $short)));
-    $near = $near || room_in_flames(room_fire_pool($room['terrain'], $back, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin']), $wide);
+    $near = $near || room_in_flames(room_fire_pool($room['terrain'], $back, (float) $w['volume'], (float) $w['flame'], (float) $w['poolMin'], $dam), $wide);
     return ['harm' => $harm, 'self' => $mine, 'near' => $near];
 }
 /* Ground predictions made so far ($add counts more): a drone turn's cost
@@ -615,7 +616,7 @@ function room_ai_earth_harm(array $room, array $self, array $target, string $wke
     } elseif ($effect === 'pour' || $effect === 'slump') {
         $t = $room['terrain'];
         if ($effect === 'pour') {
-            room_fill_pour($t, room_pour_level($t, det_round(max(0.0, min((float) ($fw - 1), (float) $land['x']))), (float) $w['volume'], (float) $w['poolMin']));
+            room_fill_pour($t, room_pour_level($t, det_round(max(0.0, min((float) ($fw - 1), (float) $land['x']))), (float) $w['volume'], (float) $w['poolMin'], room_walls_dam(room_walls_now($room))));
         } else {
             room_slump_ground($t, (float) $land['x'], (float) $w['radius'], (float) $w['slope'], (int) $w['passes']);
         }
@@ -903,7 +904,7 @@ function room_ai_choose(array &$room, array $tank): array
     if ($cont !== null) {
         $w = $mem['w'];
         $n = $mem['n'] + 1;
-        $sim = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $mem['a'], (float) $mem['p'], $w, $dirS, $width, $high);
+        $sim = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $mem['a'], (float) $mem['p'], $w, $dirS, $width, $high, room_walls_now($room));
         $landed = $mem['land'] ?? $sim['x'];
         $miss = $me['x'] - $landed;
         if (abs($miss) <= ROOM_BRK_ON) {
@@ -941,7 +942,7 @@ function room_ai_choose(array &$room, array $tank): array
         $lands = [];
         $best = null;
         $consider = function (string $wkey, int $a, int $p) use (&$best, &$byArc, &$lands, &$arcOf, $room, $mx, $my, $dirS, $me, $width, $high): float {
-            $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $a, (float) $p, $wkey, $dirS, $width, $high);
+            $land = room_sim_shot($room['terrain'], $room['wind'], $mx, $my, (float) $a, (float) $p, $wkey, $dirS, $width, $high, room_walls_now($room));
             $err = $land['oob'] ? 400 + abs($land['x'] - $me['x']) * 0.2 : abs($land['x'] - $me['x']);
             $f = $arcOf[$wkey];
             $aim = ['err' => $err, 'a' => $a, 'p' => $p, 'land' => $land + ['a' => $a, 'p' => $p]];

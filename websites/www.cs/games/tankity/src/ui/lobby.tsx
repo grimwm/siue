@@ -13,6 +13,8 @@ import { useLayoutEffect, useRef } from 'preact/hooks';
 import { KeyHints, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.tsx';
 import { InitialsPicker, typedLetters } from './initials-picker.tsx';
 import { TurnTime } from './turn-time.tsx';
+import { WallsPicker } from './walls.tsx';
+import type { WallsSetting } from '../walls.ts';
 import { AlertsButton, YourGames } from './games.tsx';
 import type { GamesView } from './games.tsx';
 import type { KeyHintFn } from './chrome.tsx';
@@ -91,6 +93,9 @@ export interface LobbyProps {
   onTurnForm: (secs: number) => void;
   /** The host moved the room's slider. */
   onTurnRoom: (secs: number) => void;
+  /** The room's Walls pick; the host picks. */
+  walls: WallsSetting;
+  onWallsRoom: (w: WallsSetting) => void;
   /** The rooms this browser sits in (out of a room) and the Turn alerts button (in one). */
   games?: GamesView;
   onCopy: () => void;
@@ -216,6 +221,7 @@ export function Lobby(p: LobbyProps) {
           <p class="hint" id="lobby-hills">{p.hills}</p>
           <p class="hint" id="lobby-drones" hidden={!p.drones}>{p.drones}</p>
           <TurnTime id="room-turn" secs={p.turnSecs} disabled={!p.isHost} onChange={p.onTurnRoom} />
+          <WallsPicker id="room-walls" pick={p.walls} disabled={!p.isHost} why="the host picks" onPick={p.onWallsRoom} />
           <p class="hint" id="turn-hint">
             A change counts from the next turn. With nobody taking a turn, a room stays open one turn time for
             each player, and at least 10 minutes. When every match slot is taken, a room nobody has played in for

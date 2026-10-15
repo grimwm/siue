@@ -10,6 +10,7 @@
 import { H, aimLimits, airOf, beamLine, blastDamage, buried, clamp, dist, facing, fallDamage, fallTo, fieldReach, flies, flightKey, gauss, inHitBox, isGroundUnit, launchSpeed, muzzle, powi, rad, ringDamage, ringOf, scatterVel, simShot, splitPoint, splitVel, spotTaken, surfY, unitHitBox } from './sim.ts';
 import { BURY_EPS, DIG_STEP, FLOOR, TOP_Y, digHeading, fillPour, pourLevel, riotCarve, slumpGround } from './earth.ts';
 import { burnTicks, burnTotal, firePool, inFlames } from './fire.ts';
+import { wallsDam } from './walls.ts';
 import { datan2, dcos, dsin } from './detmath.ts';
 import type { Air, Arsenal, Difficulty, Rng, Tank, Weapon, World } from './sim.ts';
 export type { Difficulty } from './sim.ts';
@@ -196,7 +197,7 @@ export function munitions(world: World, arsenal: Arsenal, self: Tank, wkey: stri
   const done = (burst: boolean, dmg: number, r: number) => ({ burst, xs, ys: sinkInto(xs, ns, land.y, r), paths, dmg, r });
   const sub = { dmg: w.subDmg || w.dmg, r: w.subRadius || w.radius };
   // Read only by the guns whose munitions fly free: a plain shell's harm never reads the wind.
-  const air = (): Air => airOf(world.terrain.length, world.wind, w);
+  const air = (): Air => airOf(world.terrain.length, world.wind, w, world.walls || 'none');
   if (w.effect === 'pellets') {
     const n = w.pellets || 1;
     if (land.a === undefined || land.p === undefined) return done(true, sub.dmg, sub.r);
@@ -296,7 +297,7 @@ function bursts(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: 
     let sum = 0;
     for (let i = 0; i < subs.xs.length; i++) {
       const x = subs.xs[i]!, y = subs.ys[i]!, path = subs.paths[i];
-      sum += path && crosses(sb, path, land.y, airOf(world.terrain.length, world.wind, w)) ? 2 * subs.dmg
+      sum += path && crosses(sb, path, land.y, airOf(world.terrain.length, world.wind, w, world.walls || 'none')) ? 2 * subs.dmg
         : onSelf(subs.dmg, Math.min(dist(sb.cx - x, sb.cy - y), own + Math.abs(x - land.x)), subs.r, x);
     }
     return sum;
@@ -315,7 +316,7 @@ function bursts(world: World, arsenal: Arsenal, self: Tank, target: Tank, wkey: 
     const x = subs.xs[i]!, path = subs.paths[i];
     const ou = path ? (path[0]! - tb.cx) / tb.rx : 0, ov = path ? (path[1]! - tb.cy) / tb.ry : 0;
     const outside = path && ou * ou + ov * ov > 1;
-    harm += path && outside && crosses(tb, path, land.y, airOf(world.terrain.length, world.wind, w)) ? subs.dmg
+    harm += path && outside && crosses(tb, path, land.y, airOf(world.terrain.length, world.wind, w, world.walls || 'none')) ? subs.dmg
       : reachDamage(subs.dmg, dist(tb.cx - x, tb.cy - subs.ys[i]!), subs.r);
     far = Math.max(far, Math.abs(x - land.x));
   }
@@ -419,7 +420,7 @@ export const AI_FIRE_PAD = 8;
 /** How many of the aim's power wobbles (its standard deviation) a napalm shot is taken to fall short by. */
 export const AI_FIRE_SHORT = 2.5;
 /* What napalm wkey landing at land would burn: its pool poured at the
-   landing's column on the ground as it is (fire.ts firePool), and every tick
+   landing's column on the ground as it is (fire.ts firePool, held in by a solid wall), and every tick
    on every living unit in its flames (burnTotal: the player's shield eats
    one, its bunker halves each). `harm` sums the rivals' burns, each no more
    than that rival's armor; `self` is the drone's own; `near` when its body,
@@ -433,7 +434,8 @@ export function fireHarm(world: World, arsenal: Arsenal, self: Tank, wkey: strin
   groundOps++;
   const w = arsenal.weapons[wkey]!;
   const col = Math.round(clamp(land.x, 0, world.terrain.length - 1));
-  const pool = firePool(world.terrain, col, w.volume || 0, w.flame || 0, w.poolMin || 0);
+  const dam = wallsDam(world.walls);
+  const pool = firePool(world.terrain, col, w.volume || 0, w.flame || 0, w.poolMin || 0, dam);
   const n = burnTicks(w.burn || 0, w.tick || 0.5);
   let harm = 0, mine = 0;
   for (const u of world.tanks) {
@@ -444,8 +446,8 @@ export function fireHarm(world: World, arsenal: Arsenal, self: Tank, wkey: strin
   }
   const b = unitHitBox(self), wide = { cx: b.cx, cy: b.cy, rx: b.rx + AI_FIRE_PAD, ry: b.ry + AI_FIRE_PAD };
   // Its own dip: where liquid would collect under it (a dip's pool, no puddle: on flat ground nothing collects there).
-  let near = inFlames(pool, wide) || inFlames(firePool(world.terrain, self.x, w.volume || 0, w.flame || 0), wide);
-  for (const k of [-1, 1]) near = near || inFlames(firePool(world.terrain, col + k * AI_FIRE_WOBBLE, w.volume || 0, w.flame || 0, w.poolMin || 0), wide);
+  let near = inFlames(pool, wide) || inFlames(firePool(world.terrain, self.x, w.volume || 0, w.flame || 0, 0, dam), wide);
+  for (const k of [-1, 1]) near = near || inFlames(firePool(world.terrain, col + k * AI_FIRE_WOBBLE, w.volume || 0, w.flame || 0, w.poolMin || 0, dam), wide);
   // A shot that falls short: the aim's power and angle each off by
   // AI_FIRE_SHORT times the ranging wobble (12 x wob points, 9 x wob
   // degrees), the reach going as p^2 sin 2a: the share of the reach it may
@@ -459,7 +461,7 @@ export function fireHarm(world: World, arsenal: Arsenal, self: Tank, wkey: strin
   const ka = s2 > 1e-6 ? Math.max(0, Math.min(dsin(rad(2 * lo)), dsin(rad(2 * hi))) / s2) : 0;
   const short = 1 - Math.min(1, kp * kp * ka);
   const back = Math.round(clamp(land.x + (self.x - land.x) * short, 0, world.terrain.length - 1));
-  near = near || inFlames(firePool(world.terrain, back, w.volume || 0, w.flame || 0, w.poolMin || 0), wide);
+  near = near || inFlames(firePool(world.terrain, back, w.volume || 0, w.flame || 0, w.poolMin || 0, dam), wide);
   return { harm, self: mine, near };
 }
 /* Ground predictions made so far (earthHarm and fireHarm calls): a drone turn's cost beside
@@ -527,7 +529,7 @@ export function earthHarm(world: World, arsenal: Arsenal, self: Tank, target: Ta
     });
   } else if (w.effect === 'pour' || w.effect === 'slump') {
     const t = world.terrain.slice();
-    if (w.effect === 'pour') fillPour(t, pourLevel(t, Math.round(clamp(land.x, 0, fw - 1)), w.volume || 0, w.poolMin || 0));
+    if (w.effect === 'pour') fillPour(t, pourLevel(t, Math.round(clamp(land.x, 0, fw - 1)), w.volume || 0, w.poolMin || 0, wallsDam(world.walls)));
     else slumpGround(t, land.x, w.radius, w.slope || 1, w.passes || 1);
     at[0] = t[ct]!;
     at[1] = t[cs]!;

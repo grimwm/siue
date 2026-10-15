@@ -16,6 +16,7 @@ import type { Boom, DrawTank, Spark } from './render.ts';
 import type { AimChoice } from './ai.ts';
 import type { SoloRound } from './standings.ts';
 import type { Arsenal, Cloud, Difficulty, Hills, World } from './sim.ts';
+import type { WallHit, WallsSetting } from './walls.ts';
 
 /** The arsenal tables as main.ts holds them now. They are replaced when
  * game.json arrives, so a module reads them through this view each time
@@ -58,6 +59,8 @@ export interface GameState extends World {
   seed: string;
   /** How well the drones aim this match; set at each solo deal; a room match leaves it alone. */
   difficulty: Difficulty;
+  /** A match the room's host started alone plays the room's Walls (null: the Menu's, read each round). */
+  wallsFixed: WallsSetting | null;
   body: string; // the unit look the player chose
   clouds: Cloud[];
   /** This match's field width: dealt at the start of a solo match (field.ts), ROOM_W in a room; fixed for the match. */
@@ -74,6 +77,8 @@ export interface GameState extends World {
   fx: FxSys | null;
   /** Tracer marks this round (src/marks.ts). */
   marks: Marks;
+  /** Where shells met the walls lately, flashing (src/walls.ts). */
+  wallHits: WallHit[];
   /** The ground's picture while earth settles (src/earth-show.ts). */
   earth: EarthShow;
   /** Napalm pools burning on screen (src/fire-show.ts). */

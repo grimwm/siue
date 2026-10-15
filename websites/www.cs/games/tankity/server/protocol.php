@@ -110,6 +110,9 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
         'turnSecs' => room_turn_secs($room),
         // The room's game speed (1, 2 or 4): clients replay the war this many times as fast.
         'speed' => room_speed($room),
+        // The host's Walls pick (src/walls.ts; random included), and the wall this round plays.
+        'walls' => room_walls_setting($room),
+        'wallsNow' => room_walls_now($room),
         // When the room closes for want of play, unix seconds (room_expires as stored),
         // and the same as seconds from this reply, for clients whose clock is off.
         'expiresAt' => room_expires($room),

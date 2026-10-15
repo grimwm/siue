@@ -35,6 +35,7 @@ import type { Difficulty, ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
 import { turnLabel } from './turn-time.ts';
 import { parseSpeed, speedLabel } from './speed.ts';
+import { WALL_NAMES, isWallsSetting, parseWalls, wallsLine } from './walls.ts';
 import { showTurnNotification } from './notify.ts';
 
 /** What a room match needs from the page and the rest of the game. */
@@ -219,6 +220,8 @@ export function createRoom(deps: RoomDeps) {
       }
     }
     G.wind = room.wind || 0;
+    // The round's walls: the browser's own flights (the aim guide, the camera) fly what the server flies.
+    G.walls = parseWalls(room.wallsNow);
     const sameRound = G.round === (room.round || 1);
     // Held fall words belong to this room's round: a new round, or another room, drops them.
     if (!sameRound || heldCode !== net.code) { fallsHeld = []; heldCode = net.code; }
@@ -512,7 +515,9 @@ export function createRoom(deps: RoomDeps) {
       G.earth.clear();
       G.fire.clear();
       digs = [];
-      say(`Round ${e.round}. Fresh barrels, same battery. Wind ${windText()}.`, 'info');
+      // The snapshot that carried this event names the new round's walls before the replay adopts it.
+      const sides = wallsLine(net.wallsNow);
+      say(`Round ${e.round}. Fresh barrels, same battery. Wind ${windText()}.${sides ? ` ${sides}.` : ''}`, 'info');
       talk('tank', 'Back in! These hills are mine!', true);
       return;
     }
@@ -520,6 +525,11 @@ export function createRoom(deps: RoomDeps) {
     if (e.t === 'auto') { say(`${seatName(e.seat)} was away, so a drone fired for them.`, 'info'); return; }
     if (e.t === 'turntime') {
       say(`${seatName(e.seat)} set the turn time to ${turnLabel(e.secs)}, from the next turn.`, 'info');
+      renderMenu();
+      return;
+    }
+    if (e.t === 'walls') {
+      say(`${seatName(e.seat)} set the walls to ${WALL_NAMES[isWallsSetting(e.walls) ? e.walls : 'none']}, from the next round.`, 'info');
       renderMenu();
       return;
     }

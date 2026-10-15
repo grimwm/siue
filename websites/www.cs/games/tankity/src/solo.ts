@@ -10,6 +10,8 @@ import { carryArmor, fitPlates, maxArmor, repairPacksWanted, repairRestores } fr
 import { SOLO_STEP, WATCH_TURNS } from './flow.ts';
 import { TUNE, clamp, droneChutes, droneRack, fieldWidthOk, gauss, genTerrain, hashSeed, mulberry32, restY, spawnSpots, startAmmo, surfY } from './sim.ts';
 import type { Arsenal, Cloud, Difficulty, Hills, ShopRow, Tank, World } from './sim.ts';
+import { wallsFor } from './walls.ts';
+import type { WallsSetting } from './walls.ts';
 
 export { SOLO_STEP };
 export const FOES = [
@@ -78,8 +80,9 @@ export function soloDeal(G: SoloState, arsenal: Arsenal, seed: string, difficult
   G.shells = [];
 }
 
-/** A round's hills, wind and four units, spread anywhere; the opener rotates round by round. */
-export function soloMuster(G: SoloState, arsenal: Arsenal): void {
+/** A round's hills, wind and four units, spread anywhere; the opener rotates round by round; and its
+ *  walls, the pick or Random's draw (made last, so no other pick moves the match's stream). */
+export function soloMuster(G: SoloState, arsenal: Arsenal, walls: WallsSetting = 'none'): void {
   const g = genTerrain(G.rng, G.w);
   G.terrain = g.terrain;
   G.clouds = g.clouds;
@@ -111,6 +114,7 @@ export function soloMuster(G: SoloState, arsenal: Arsenal): void {
   G.turn = G.firstTurn % G.tanks.length;
   G.firstTurn++;
   G.shells = [];
+  G.walls = wallsFor(walls, G.rng);
 }
 
 /** Standing tanks sit exactly where they rest (the ground, or a unit they

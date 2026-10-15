@@ -28,6 +28,8 @@ import type { Difficulty } from './sim.ts';
 import type { StoredSeat } from './seats.ts';
 import { parseSpeed } from './speed.ts';
 import type { Speed } from './speed.ts';
+import { isWallsSetting, parseWalls } from './walls.ts';
+import type { Walls, WallsSetting } from './walls.ts';
 
 /** The room protocol this bundle speaks. Create, join and start send it; a
  * server that has moved past it answers 426 with a line asking for a reload. */
@@ -35,7 +37,7 @@ export const PROTO: Proto = 2;
 
 /** What a Start begins: the room's match on the server, or, with the host
  * the only human, a match this browser plays itself, like solo. */
-export type Started = { room: RoomSnapshot } | { local: { difficulty: Difficulty; speed: Speed } };
+export type Started = { room: RoomSnapshot } | { local: { difficulty: Difficulty; speed: Speed; walls: WallsSetting } };
 
 /* ---------- what the client needs from its host ---------- */
 
@@ -208,7 +210,7 @@ export function planCatchUp(
 
 /** The POST actions whose reply is a room, which therefore take the delta
  * fields (since, have, full). */
-const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready', 'again', 'body', 'map', 'seatmode', 'turntime', 'speed']);
+const ROOM_ANSWERS: ReadonlySet<string> = new Set(['start', 'act', 'buy', 'ready', 'again', 'body', 'map', 'seatmode', 'turntime', 'speed', 'walls']);
 
 /* ---------- the client ---------- */
 
@@ -249,6 +251,12 @@ export class RoomClient {
   /** The room's game speed, as the last snapshot said (a server from before
    * the setting sends none: 1×). */
   speed: Speed = 1;
+  /** The room's Walls: the host's pick and the wall this round plays, as the last snapshot said
+   * (a server from before the setting sends neither: None). */
+  walls: WallsSetting = 'none';
+  wallsNow: Walls = 'none';
+  /** The room's phase, as the last snapshot said: the host picks the walls only outside a round. */
+  phase = '';
 
   /** The Ready state the player last asked for while a request is out. */
   private readyWant: boolean | null = null;
@@ -389,10 +397,13 @@ export class RoomClient {
    * the room closes if nobody acts (`closesIn`, seconds from the reply,
    * counted down from when it arrived, so the client's own clock never
    * matters; absent means no sooner close is known). */
-  private noteRoom(room: Partial<Pick<RoomSnapshot, 'turnSecs' | 'closesIn' | 'speed'>> | null | undefined): void {
+  private noteRoom(room: Partial<Pick<RoomSnapshot, 'turnSecs' | 'closesIn' | 'speed' | 'walls' | 'wallsNow' | 'phase'>> | null | undefined): void {
     if (!room) return;
     if (typeof room.turnSecs === 'number') this.turnSecs = room.turnSecs;
     this.speed = parseSpeed(room.speed);
+    this.walls = isWallsSetting(room.walls) ? room.walls : 'none';
+    this.wallsNow = parseWalls(room.wallsNow);
+    if (typeof room.phase === 'string') this.phase = room.phase;
     if (typeof room.closesIn === 'number' && Number.isFinite(room.closesIn)) {
       this.closeLeft = room.closesIn;
       this.closeLeftAt = this.env.now();
@@ -484,7 +495,10 @@ export class RoomClient {
    * this browser's to play (local). */
   async start(): Promise<Started> {
     const data = await this.post('start', { proto: PROTO });
-    if ('local' in data) return { local: { difficulty: data.local.difficulty, speed: parseSpeed(data.local.speed) } };
+    if ('local' in data) {
+      const walls = data.local.walls;
+      return { local: { difficulty: data.local.difficulty, speed: parseSpeed(data.local.speed), walls: isWallsSetting(walls) ? walls : 'none' } };
+    }
     return { room: data.room };
   }
 
@@ -497,6 +511,7 @@ export class RoomClient {
   private forget(): void {
     this.code = ''; this.token = ''; this.csrf = ''; this.seat = -1; this.since = 0;
     this.seats = []; this.hostSeat = 0; this.turnSecs = 120; this.speed = 1; this.closeLeft = null;
+    this.walls = 'none'; this.wallsNow = 'none'; this.phase = '';
     this.dropTerrain();
   }
 

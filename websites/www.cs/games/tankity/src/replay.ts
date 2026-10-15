@@ -18,13 +18,18 @@
  * by hand. */
 import type { TrailState } from './fx/trail.ts';
 import { planCatchUp, isVolleyOpener } from './net.ts';
-import { unitHitBox } from './sim.ts';
+import { ROOM_W, unitHitBox } from './sim.ts';
+import { WALL_BOUNCE, WALL_BURST, WALL_WRAP } from './walls.ts';
 import type { BeamEvent, BurnEvent, EarthEvent, RingEvent, RoomEvent, RoomSnapshot, ShotEvent, VolleyOpenerEvent } from './protocol.ts';
 
 /** rooms.php records a path point every 5 sim steps at 60/s. */
 export const PATH_HZ = 12;
 /** A volley kept back by a catch-up plays this much faster. */
 export const FAST_SPEED = 3;
+/** Two path points this far apart across were joined by Wraparound: no shell flies so far in 1/PATH_HZ s. */
+export const WRAP_JUMP = 240;
+/** A path that turns back this near a side met a bouncing wall there. */
+const WALL_NEAR = 60;
 
 /** The tank fields the replay reads and writes (main.ts's own tank objects). */
 export interface ReplayTank {
@@ -65,11 +70,16 @@ export interface ReplayEnv {
   earth(e: EarthEvent): void;
   /** A napalm pool lit: draw its flames until t1 (its ticks' hits come as hit events). */
   burn(e: BurnEvent): void;
+  /** A shell met a wall at (x, y) (walls.ts WALL_BOUNCE, WALL_WRAP or WALL_BURST): the battlefield flashes it there. */
+  wall?(x: number, y: number, hit: number): void;
 }
 
 /** One shell of the volley: its event, its recorded path, and whether it has landed.
- * `fx` is the trail's own bookkeeping, filled in by the host. */
-export interface ReplayShot { e: ShotEvent; pts: [number, number][]; landed: boolean; fx: TrailState | null }
+ * `fx` is the trail's own bookkeeping, filled in by the host. `walls` is where
+ * its path met a wall (wallTouches) and `told` how many of them have played. */
+export interface ReplayShot { e: ShotEvent; pts: [number, number][]; landed: boolean; fx: TrailState | null; walls?: WallTouch[]; told?: number }
+/** Where a replayed path met a wall: after path point i, at (x, y), how (walls.ts WALL_*). */
+export interface WallTouch { i: number; x: number; y: number; hit: number }
 
 /** Where a replayed shell is on screen. */
 export interface ReplayFlying { x: number; y: number; vx: number; vy: number; wkey: string }
@@ -117,7 +127,8 @@ export function parsePath(str: string | undefined): [number, number][] {
 }
 
 /** Where a replayed shell is at flight time ft: path points are 1/PATH_HZ s
- * apart. The last element is the path index the position is on. */
+ * apart. The last element is the path index the position is on. Across a
+ * Wraparound jump (WRAP_JUMP) it is at one point or the other, never between. */
 export function shellAt(s: Pick<ReplayShot, 'e' | 'pts'>, ft: number): [number, number, number] {
   const k = (ft - s.e.t0) * PATH_HZ;
   const pts = s.pts;
@@ -126,14 +137,43 @@ export function shellAt(s: Pick<ReplayShot, 'e' | 'pts'>, ft: number): [number, 
   const j = Math.min(pts.length - 1, i + 1);
   const f = Math.max(0, Math.min(1, k - i));
   const a = pts[i] as [number, number], b = pts[j] as [number, number];
+  if (Math.abs(b[0] - a[0]) > WRAP_JUMP) return f < 0.5 ? [a[0], a[1], i] : [b[0], b[1], i];
   return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, i];
 }
 
-/** A replayed shell's velocity at path index i (points are 1/PATH_HZ s apart). */
+/** A replayed shell's velocity at path index i (points are 1/PATH_HZ s apart); across a
+ * Wraparound jump, the step before it (or after it, at the start). */
 export function shellVel(s: Pick<ReplayShot, 'pts'>, i: number): [number, number] {
-  const pts = s.pts, a = pts[Math.min(i, pts.length - 1)], b = pts[Math.min(i + 1, pts.length - 1)];
-  if (!a || !b) return [0, 0];
-  return [(b[0] - a[0]) * PATH_HZ, (b[1] - a[1]) * PATH_HZ];
+  const pts = s.pts, at = (k: number) => pts[Math.max(0, Math.min(k, pts.length - 1))];
+  const step = (k: number): [number, number] | null => {
+    const a = at(k), b = at(k + 1);
+    if (!a || !b || Math.abs(b[0] - a[0]) > WRAP_JUMP) return null;
+    return [(b[0] - a[0]) * PATH_HZ, (b[1] - a[1]) * PATH_HZ];
+  };
+  return step(i) || step(i - 1) || step(i + 1) || [0, 0];
+}
+
+/** Where a shot's recorded path met a wall on a field fw wide, in path order:
+ * a jump across of more than WRAP_JUMP is Wraparound (it came in at the side it
+ * jumped to); a turn back within WALL_NEAR of a side is a bounce; a burst on a
+ * side column is Concrete. The server's own flight decided each; this only
+ * finds them in the points it sent, for the battlefield to flash. */
+export function wallTouches(pts: readonly [number, number][], e: Pick<ShotEvent, 'x1' | 'r'>, fw: number): WallTouch[] {
+  const out: WallTouch[] = [];
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const a = pts[i]!, b = pts[i + 1]!, dx = b[0] - a[0];
+    if (Math.abs(dx) > WRAP_JUMP) {
+      out.push({ i, x: dx < 0 ? 0 : fw - 1, y: (a[1] + b[1]) / 2, hit: WALL_WRAP });
+      continue;
+    }
+    const c = pts[i + 2];
+    if (!c || Math.abs(c[0] - b[0]) > WRAP_JUMP || dx * (c[0] - b[0]) >= 0) continue;
+    const side = b[0] < fw / 2 ? 0 : fw - 1;
+    if (Math.abs(b[0] - side) <= WALL_NEAR) out.push({ i: i + 1, x: side, y: b[1], hit: WALL_BOUNCE });
+  }
+  const last = pts[pts.length - 1];
+  if (last && e.r > 0 && (e.x1 <= 0 || e.x1 >= fw - 1)) out.push({ i: pts.length - 1, x: e.x1, y: last[1], hit: WALL_BURST });
+  return out;
 }
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
@@ -174,6 +214,15 @@ export function createReplay(env: ReplayEnv): Replay {
     env.event(opener);
   }
 
+  /* The walls a shot's path has met by path index i, each told once. */
+  function tellWalls(s: ReplayShot, i: number): void {
+    const touches = s.walls || [];
+    while ((s.told || 0) < touches.length && touches[s.told || 0]!.i <= i) {
+      const w = touches[s.told || 0]!;
+      s.told = (s.told || 0) + 1;
+      env.wall?.(w.x, w.y, w.hit);
+    }
+  }
   function stepVolley(v: Volley, dt: number): void {
     // A volley kept back from a catch-up plays at triple speed.
     v.tau += dt * (v.fast ? FAST_SPEED : 1);
@@ -194,7 +243,8 @@ export function createReplay(env: ReplayEnv): Replay {
       if (v.done.has(e) || e.at === undefined || ft < e.at) continue;
       v.done.add(e);
       if (e.t === 'shot') {
-        const shot: ReplayShot = { e, pts: parsePath(e.p), landed: false, fx: null };
+        const pts = parsePath(e.p);
+        const shot: ReplayShot = { e, pts, landed: false, fx: null, walls: wallTouches(pts, e, ROOM_W), told: 0 };
         v.shots.push(shot);
         env.launch();
         // Bomblets leave the bloom point; every other shot leaves the barrel.
@@ -253,9 +303,11 @@ export function createReplay(env: ReplayEnv): Replay {
       if (ft < s.e.t1) {
         // In flight: the trail drips along the path the server flew.
         const at = shellAt(s, ft), hv = shellVel(s, at[2]);
+        tellWalls(s, at[2]);
         env.trail(s, dt, at[0], at[1], hv[0], hv[1], s.e.w);
         continue;
       }
+      tellWalls(s, Infinity);
       s.landed = true;
       if (s.e.r > 0) env.blast(s.e.x1, s.e.y1, s.e.r, s.e.w);
       else if (s.e.split) {

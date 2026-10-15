@@ -41,6 +41,7 @@ export function harness(over: Partial<MatchDeps> = {}) {
     shopSel: 0, shopQty: 1, fuelBank: 0, armor: TUNE.playerArmor, plate: 0, shield: false, jammer: 0, bunker: 0, laststand: false,
     time: 0, shake: 0, dlgQ: [], dlgT: 0, lastTalk: -99, banterT: 30, bannerT: 0, bannerDone: null, w: ROOM_W, hills: null,
     cam: { z: 1, cx: ROOM_W / 2, cy: 230 }, over: false, won: false, tactics: {}, demo: false, demoHint: false, watchTurns: 0, preview: null,
+    wallsFixed: null, walls: 'none', wallHits: [],
   } as unknown as GameState;
   // The page's me() and cur() read their unit after the deal (main.ts), so neither checks it is there.
   const unit = (i: number) => G.tanks[i] as GameTank;
@@ -51,7 +52,7 @@ export function harness(over: Partial<MatchDeps> = {}) {
     alive: () => G.tanks.filter(t => t.hp > 0), foesAlive: () => G.tanks.filter(t => !t.isPlayer && t.hp > 0),
     me: () => unit(0), cur: () => unit(G.turn), surfY: x => surfY(G.terrain, x),
     keyHint: () => '', windText: () => '', closeGuns: () => false, fxImpact: () => 0, openShop: () => match.advance('shopOpen'),
-    music: { leaveTheme() {}, start() {}, stop() {}, playTheme() {}, forRound() {} }, sfx: { play() {} }, ...over,
+    music: { leaveTheme() {}, start() {}, stop() {}, playTheme() {}, forRound() {} }, sfx: { play() {} }, walls: { get: () => 'none' }, ...over,
   };
   // Every other dependency is a no-op; values the match reads must be in base.
   const deps = new Proxy(base, { get: (t, k) => (k in t ? Reflect.get(t, k) : () => undefined) }) as MatchDeps;

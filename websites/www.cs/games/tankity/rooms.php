@@ -39,6 +39,7 @@ require_once __DIR__ . '/config.php';
 //   server/housekeep.php throttled cleanup on requests
 //   server/store.php     rooms as rows: the room lock, room lifecycle, the sweep
 //   server/detmath.php   sin, cos, atan2 and Math.round, the same bits as src/detmath.ts
+//   server/walls.php     the arena's side walls: bounces, wraps, bursts (mirrors src/walls.ts)
 //   server/flight.php    the air a shell flies through, and a missile's launch speeds (mirrors src/sim.ts)
 //   server/sim.php       the deterministic sim (mirrors src/sim.ts)
 //   server/earth.php     the earth ops: craters, dirt, pools, slumps, trenches (mirrors src/earth.ts)
@@ -57,6 +58,7 @@ require_once __DIR__ . '/server/board.php';
 require_once __DIR__ . '/server/settings.php';
 require_once __DIR__ . '/server/store.php';
 require_once __DIR__ . '/server/detmath.php';
+require_once __DIR__ . '/server/walls.php';
 require_once __DIR__ . '/server/flight.php';
 require_once __DIR__ . '/server/sim.php';
 require_once __DIR__ . '/server/earth.php';
@@ -660,6 +662,24 @@ if ($action === 'speed' && $method === 'POST') {
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
+/* The host picks the walls in the lobby or between rounds; the pick applies
+   from the next round (room_set_walls). */
+if ($action === 'walls' && $method === 'POST') {
+    [$room, $fh, $path, $seat] = room_gate($body, true);
+    $refused = room_set_walls($room, $seat, $body['walls'] ?? null);
+    if ($refused !== null) {
+        room_unlock($fh);
+        room_json_out($refused[0], ['error' => $refused[1]]);
+    }
+    if (!room_save($fh, $path, $room)) {
+        room_unlock($fh);
+        room_json_out(500, ['error' => 'store write failed']);
+    }
+    room_unlock($fh);
+    $out = room_reply_snapshot($room, $seat, $body);
+    room_json_out(200, ['ok' => true, 'room' => $out]);
+}
+
 if ($action === 'start' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true);
     if ($seat !== room_host($room)) {
@@ -680,7 +700,7 @@ if ($action === 'start' && $method === 'POST') {
             room_unlock($fh);
             room_reload_out();
         }
-        $local = ['difficulty' => room_difficulty($room), 'speed' => room_speed($room)];
+        $local = ['difficulty' => room_difficulty($room), 'speed' => room_speed($room), 'walls' => room_walls_setting($room)];
         room_close($fh);
         room_json_out(200, ['ok' => true, 'local' => $local]);
     }

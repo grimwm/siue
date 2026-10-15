@@ -12,6 +12,8 @@ import { BURY_EPS, DIG_STEP, FLOOR, applyEarth, carveCrater, digHeading } from '
 import type { EarthOp } from './earth.ts';
 import { burnTicks, firePool, inFlames, tickSteps } from './fire.ts';
 import type { FirePool } from './fire.ts';
+import { WALL_BURST, WALL_NONE, WALL_WRAP, wallRoll, wallStep, wallsBounce, wallsDam } from './walls.ts';
+import type { Walls } from './walls.ts';
 
 /* ---------- seeded RNG (mulberry32 + string hash) ---------- */
 export type Rng = () => number;
@@ -316,6 +318,7 @@ export interface World {
   jammer: number;
   chutes?: number; // the player's parachutes
   difficulty?: Difficulty; // the drones' aim this match; missing means normal
+  walls?: Walls; // the field's side walls this round (src/walls.ts); missing means none
 }
 export interface HitBox {
   cx: number;
@@ -678,7 +681,8 @@ export function beamCarve(terrain: number[], x0: number, y0: number, x1: number,
 /* Fires a beam from t: a straight ray from the muzzle along the barrel, range
    x power / 100 px long (times fieldReach on a wider field), marched in
    BEAM_STEP px steps and cut short where it would leave the field's sides or
-   pass its floor. It carves its channel (beamCarve, the radius wide), which
+   pass its floor. A beam is light, not a shell: every wall (walls.ts) stops it
+   at the side, as None does; none bounces or wraps it. It carves its channel (beamCarve, the radius wide), which
    owns the falls it digs as a crater does, then hits each unit whose body it
    crossed once, in order along it, for the flat dmg: no falloff, no
    direct-hit double, never its gunner. server/sim.php room_fire_beam is the
@@ -789,17 +793,21 @@ export const AIR_SPEED = 10;
 /** The height over the field's floor the wind is quoted at, px. */
 export const SHEAR_H = 40;
 /** The air a flight crosses: the wind's speed at SHEAR_H (wind x AIR_SPEED x sqrt(s), px/s), the gun's
- *  drag scaled to the field (k) and the field's scale s. */
-export interface Air { wind: number; k: number; s: number }
+ *  drag scaled to the field (k) and the field's scale s; and the side walls it meets (src/walls.ts) on a
+ *  field fw wide, when they are not None. */
+export interface Air { wind: number; k: number; s: number; walls?: Walls; fw?: number }
 /** A gun's drag factor: 1 when its row names none. */
 export function dragOf(w: Pick<Weapon, 'drag'> | null | undefined): number {
   return w && w.drag !== undefined ? w.drag : 1;
 }
-/** The air gun w flies through in this wind on a field fw wide (the firing range flies at a room's width).
+/** The air gun w flies through in this wind on a field fw wide (the firing range flies at a room's width),
+ *  between `walls` wallW apart (the field's own width unless a stage says otherwise).
  *  A missile steers against the wind: it feels MISSILE_WIND of it. */
-export function airOf(fw: number, wind: number, w: Pick<Weapon, 'drag' | 'missile'> | null | undefined): Air {
+export function airOf(fw: number, wind: number, w: Pick<Weapon, 'drag' | 'missile'> | null | undefined, walls: Walls = 'none', wallW = fw): Air {
   const s = fw / ROOM_W;
-  return { wind: wind * AIR_SPEED * Math.sqrt(s) * (w && w.missile ? MISSILE_WIND : 1), k: DRAG_K * dragOf(w) / s, s };
+  const air: Air = { wind: wind * AIR_SPEED * Math.sqrt(s) * (w && w.missile ? MISSILE_WIND : 1), k: DRAG_K * dragOf(w) / s, s };
+  if (walls !== 'none') { air.walls = walls; air.fw = wallW; }
+  return air;
 }
 /** (h / SHEAR_H)^(3/16) for h at least 1, by square roots alone: every engine rounds a square root
  *  the same, so the browser and the server agree to the last bit. */
@@ -808,8 +816,11 @@ export function shear(h: number): number {
   return r * r * r;
 }
 /* One ballistic step. Shared by the real shells, the AI predictor, the aim
- * guide, and the firing-range preview, so the demo flies exactly like war. */
-export function stepBallistic(st: Motion, dt: number, air: Air): void {
+ * guide, and the firing-range preview, so the demo flies exactly like war.
+ * Then the walls the air carries (walls.ts wallStep): returns what the step
+ * did at one (WALL_NONE when it met none). */
+export function stepBallistic(st: Motion, dt: number, air: Air): number {
+  const px = st.x, py = st.y;
   let rx = st.vx;
   if (air.wind !== 0) rx -= air.wind * shear((H - st.y) / air.s);
   const ry = st.vy;
@@ -818,13 +829,16 @@ export function stepBallistic(st: Motion, dt: number, air: Air): void {
   st.vy += (GRAV - d * ry) * dt;
   st.x += st.vx * dt;
   st.y += st.vy * dt;
+  return air.walls ? wallStep(st, air.walls, air.fw!, px, py) : 0;
 }
 /* ---------- rollers ---------- */
 /* A roller that touches down does not burst: it rolls along the ground, a
    ball resting ROLL_LIFT px above the surface, until it reaches a unit, runs
-   off the board, comes to rest, or has rolled the weapon's rollTime. Wind
-   does not touch it. rooms.php room_ground_at() .. room_roll_out() are the
-   same. */
+   to the board's edge, comes to rest, or has rolled the weapon's rollTime.
+   Rubber and Spring walls roll it back from the edge and Wraparound carries
+   it on from the other one (walls.ts wallRoll); with None or Concrete it
+   bursts there. Wind does not touch it. rooms.php room_ground_at() ..
+   room_roll_out() are the same. */
 export const ROLL_LIFT = 3; // px the ball's centre rides above the ground
 export const ROLL_KEEP = 0.7; // share of its speed along the ground that survives touching down
 export const ROLL_DRAG = 10; // px/s^2: the ground's constant drag on a rolling ball, besides the weapon's friction
@@ -865,18 +879,25 @@ export function rollStep(terrain: readonly number[], r: { x: number; u: number }
   r.x += r.u / n * dt;
   return true;
 }
+/* Whether a roller at x stops at the board's edge: with no wall to roll it
+   back or on (None, Concrete), at either end column. */
+export function rollEdge(terrain: readonly number[], x: number, walls: Walls): boolean {
+  return !wallsBounce(walls) && walls !== 'wrap' && (x <= 0 || x >= terrain.length - 1);
+}
 /* Where a shell touching down at x with velocity (vx, vy) ends its roll with
-   no unit in the way: at rest, off the board edge, or when its time is up.
-   `touch` stops it early at the first column it returns true for. */
+   no unit in the way: at rest, at the board's edge (rollEdge), or when its
+   time is up, rolling off `walls` on the way. `touch` stops it early at the
+   first column it returns true for. */
 export function rollOut(terrain: readonly number[], x: number, vx: number, vy: number, w: Pick<Weapon, 'friction' | 'rollTime'>,
-  touch?: (x: number) => boolean): { x: number; y: number } {
+  touch?: (x: number) => boolean, walls: Walls = 'none'): { x: number; y: number } {
   const r = { x: clamp(x, 0, terrain.length - 1), u: 0 };
   r.u = rollStart(terrain, r.x, vx, vy);
   const steps = Math.round((w.rollTime || 5) * 60);
   for (let i = 0; i < steps; i++) {
     if (touch && touch(r.x)) break;
-    if (r.x <= 0 || r.x >= terrain.length - 1) break;
+    if (rollEdge(terrain, r.x, walls)) break;
     if (!rollStep(terrain, r, w.friction || 0.3, 1 / 60)) break;
+    wallRoll(r, walls, terrain.length);
   }
   r.x = clamp(r.x, 0, terrain.length - 1);
   return { x: r.x, y: groundAt(terrain, r.x) };
@@ -894,8 +915,9 @@ export function flightKey(w: Weapon): string {
 /* Predict where a shot lands (used by the AI and the aim guide); a roller's
    landing is where its roll ends. `top` is the highest ground (the least
    terrain y): above it a shell cannot touch down, so the search skips the
-   ground lookup there. */
-export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal, x: number, y: number, angle: number,
+   ground lookup there. It flies the world's walls: a bounce or a wrap flies
+   on, Concrete is a landing on the wall (a roller bursts there too). */
+export function simShot(world: Pick<World, 'terrain' | 'wind' | 'walls'>, arsenal: Arsenal, x: number, y: number, angle: number,
   power: number, wkey: string, dirS: number, top = -Infinity): { x: number; y: number; oob: boolean; vx: number; vy: number } {
   const w = arsenal.weapons[wkey]!;
   const fw = world.terrain.length, reach = fieldReach(fw);
@@ -906,22 +928,24 @@ export function simShot(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal
     vy: -dsin(r) * launchSpeed(w, power, reach),
   };
   const dt = 1 / 60;
-  const air = airOf(world.terrain.length, world.wind, w);
+  const walls = world.walls || 'none';
+  const air = airOf(world.terrain.length, world.wind, w, walls);
   for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * reach); i < steps; i++) {
-    stepBallistic(st, dt, air);
+    if (stepBallistic(st, dt, air) === WALL_BURST) return { x: st.x, y: st.y, oob: false, vx: st.vx, vy: st.vy };
     if (st.x < 0 || st.x >= fw) return { x: st.x, y: st.y, oob: true, vx: st.vx, vy: st.vy };
     if (st.y >= H + 40) return { x: st.x, y: st.y, oob: true, vx: st.vx, vy: st.vy };
     if (i >= 6 && st.y >= top && st.y >= world.terrain[clamp(Math.round(st.x), 0, fw - 1)]!) {
-      if (w.effect === 'roller') return { ...rollOut(world.terrain, st.x, st.vx, st.vy, w), oob: false, vx: 0, vy: 0 };
+      if (w.effect === 'roller') return { ...rollOut(world.terrain, st.x, st.vx, st.vy, w, undefined, walls), oob: false, vx: 0, vy: 0 };
       return { x: st.x, y: st.y, oob: false, vx: st.vx, vy: st.vy };
     }
   }
   return { x: st.x, y: st.y, oob: true, vx: st.vx, vy: st.vy };
 }
 /* Where a cluster shot at (angle, power) splits, flown as the war flies it
-   (its fuse, or the top of its arc with apex), or null when it comes down or
-   leaves the field first. server/sim.php room_split_point is the same. */
-export function splitPoint(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arsenal, x: number, y: number, angle: number,
+   (its fuse, or the top of its arc with apex), or null when it comes down,
+   bursts on a Concrete wall or leaves the field first. server/sim.php
+   room_split_point is the same. */
+export function splitPoint(world: Pick<World, 'terrain' | 'wind' | 'walls'>, arsenal: Arsenal, x: number, y: number, angle: number,
   power: number, wkey: string, dirS: number): Motion | null {
   const w = arsenal.weapons[wkey]!;
   const fw = world.terrain.length, reach = fieldReach(fw);
@@ -932,13 +956,15 @@ export function splitPoint(world: Pick<World, 'terrain' | 'wind'>, arsenal: Arse
     vy: -dsin(r) * launchSpeed(w, power, reach),
   };
   const dt = 1 / 60;
-  const air = airOf(world.terrain.length, world.wind, w);
+  const air = airOf(world.terrain.length, world.wind, w, world.walls || 'none');
   let age = 0;
   for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * reach); i < steps; i++) {
     age += dt;
-    stepBallistic(st, dt, air);
+    const wall = stepBallistic(st, dt, air);
     if (st.x < 0 || st.x >= fw || st.y >= H + 40) return null;
+    // The war checks the fuse before the wall: a bloom on the very step it meets Concrete still blooms.
     if (w.apex ? age >= 0.1 && st.vy >= 0 : age >= (w.fuse || 0.9)) return st;
+    if (wall === WALL_BURST) return null;
     if (i >= 6 && st.y >= world.terrain[clamp(Math.round(st.x), 0, fw - 1)]!) return null;
   }
   return null;
@@ -1011,8 +1037,9 @@ export function scatterVel(n: number, fan: number, kick: number): [number, numbe
 }
 /* A munition flying free from (x, y) at (vx, vy) through `air`, flown as the
    war flies it down to groundY (y grows downward): where it is, and its
-   velocity, at the first step it falls to groundY or below, or after a
-   flight's longest time, and the steps it flew (n). `hit` sees each step's
+   velocity, at the first step it falls to groundY or below (or bursts on a
+   Concrete wall the air carries), or after a flight's longest time, and the
+   steps it flew (n). `hit` sees each step's
    position; true stops the flight there (`stopped`). The drones predict where pellets, bomblets and
    leaps land with it. server/sim.php room_fall_to is the same. */
 export function fallTo(x: number, y: number, vx: number, vy: number, groundY: number, air: Air,
@@ -1020,10 +1047,10 @@ export function fallTo(x: number, y: number, vx: number, vy: number, groundY: nu
   const st: Motion = { x, y, vx, vy };
   let n = 0;
   for (const steps = Math.ceil(FLIGHT_STEPS * Math.sqrt(air.s)); n < steps;) {
-    stepBallistic(st, 1 / 60, air);
+    const wall = stepBallistic(st, 1 / 60, air);
     n++;
     if (hit && hit(st.x, st.y)) return { ...st, stopped: true, n };
-    if (st.vy > 0 && st.y >= groundY) break;
+    if (wall === WALL_BURST || (st.vy > 0 && st.y >= groundY)) break;
   }
   return { ...st, stopped: false, n };
 }
@@ -1034,8 +1061,9 @@ export function flightTop(m: Motion, air: Air): number {
   const st: Motion = { x: m.x, y: m.y, vx: m.vx, vy: m.vy };
   let top = st.y;
   for (let i = 0, steps = Math.ceil(FLIGHT_STEPS * Math.sqrt(air.s)); i < steps && st.vy < 0; i++) {
-    stepBallistic(st, 1 / 60, air);
+    const wall = stepBallistic(st, 1 / 60, air);
     top = Math.min(top, st.y);
+    if (wall === WALL_BURST) break; // it bursts on a Concrete wall: no higher
   }
   return top;
 }
@@ -1275,6 +1303,9 @@ export type StepEvent =
   | { kind: 'fire'; fire: Fire }
   /** A burning pool's tick: what it did to each unit in its flames. */
   | { kind: 'burn'; fire: Fire; hits: Blast }
+  /** A shell (or a roller) met a wall at (x, y): `hit` is walls.ts's WALL_BOUNCE, WALL_WRAP or WALL_BURST. A wrap
+   *  meets both walls: (x, y) is where it came in. The battlefield flashes the wall there. */
+  | { kind: 'wall'; x: number; y: number; hit: number }
   /** A digger touched down (step 0) or cut step `step` of its trench at (x, y), heading ang; r is the trench's half width. */
   | { kind: 'dig'; wkey: string; x: number; y: number; ang: number; r: number; step: number; owner: Tank }
   | { kind: 'blast'; blast: Blast };
@@ -1299,17 +1330,22 @@ function waitsOnEarlier(world: World, s: Shell): boolean {
     return theirs.length < mine.length;
   });
 }
-/* One step of a roller on the ground: it rolls, then bursts on a unit it
-   touches, at rest, at the board's edge, or when its roll time is up. Pushes
-   the trail, and the blast when it bursts. */
+/* One step of a roller on the ground: it rolls (off the walls, wallRoll),
+   then bursts on a unit it touches, at rest, at the board's edge (rollEdge),
+   or when its roll time is up. Pushes the trail, and the blast when it bursts. */
 function stepRoller(world: World, arsenal: Arsenal, s: Shell, w: Weapon, dt: number, events: StepEvent[]): void {
-  const t = world.terrain;
-  const x0 = s.x, y0 = s.y;
+  const t = world.terrain, walls = world.walls || 'none';
+  let x0 = s.x;
+  const y0 = s.y;
   const r = { x: s.x, u: s.ru || 0 };
-  let done = (s.rt || 0) >= Math.round((w.rollTime || 5) * 60) || r.x <= 0 || r.x >= t.length - 1;
+  let done = (s.rt || 0) >= Math.round((w.rollTime || 5) * 60) || rollEdge(t, r.x, walls);
   let direct: Tank | null = null;
   if (!done) {
     const moving = rollStep(t, r, w.friction || 0.3, dt);
+    // Through Wraparound it touches only what it rolled over: the sweep starts from the far edge.
+    const rolled = wallRoll(r, walls, t.length);
+    if (rolled === WALL_WRAP) x0 += x0 > r.x ? -(t.length - 1) : t.length - 1;
+    if (rolled !== WALL_NONE) events.push({ kind: 'wall', x: r.x, y: groundAt(t, r.x) - ROLL_LIFT, hit: rolled });
     s.rt = (s.rt || 0) + 1;
     s.x = r.x;
     s.ru = r.u;
@@ -1346,6 +1382,7 @@ function burstShell(world: World, arsenal: Arsenal, s: Shell, w: Weapon, direct:
   } else if (w.effect === 'pour') {
     brkLand(s.owner, s.x);
     op = { t: 'pour', w: s.wkey, x: Math.round(clamp(s.x, 0, fw - 1)), v: w.volume || 0, m: w.poolMin || 0 };
+    if (wallsDam(world.walls)) op.d = 1;
   } else if (w.effect === 'slump') {
     brkLand(s.owner, s.x);
     op = { t: 'slump', w: s.wkey, x: s.x, r: w.radius, slope: w.slope || 1, passes: w.passes || 1 };
@@ -1379,11 +1416,11 @@ function burstShell(world: World, arsenal: Arsenal, s: Shell, w: Weapon, direct:
   s.dead = true;
 }
 /* A napalm shell's pool, lit where it burst (fire.ts firePool, at its
-   column, on the ground of this moment, which it never changes). A pool that
-   spilled away lights nothing. server/rules.php room_fire_burn is the same. */
+   column, on the ground of this moment, which it never changes; a solid wall
+   holds it in, walls.ts wallsDam). A pool that spilled away lights nothing. server/rules.php room_fire_burn is the same. */
 function lightFire(world: World, s: Shell, w: Weapon, events: StepEvent[]): void {
   const col = Math.round(clamp(s.x, 0, world.terrain.length - 1));
-  const pool = firePool(world.terrain, col, w.volume || 0, w.flame || 0, w.poolMin || 0);
+  const pool = firePool(world.terrain, col, w.volume || 0, w.flame || 0, w.poolMin || 0, wallsDam(world.walls));
   const fire: Fire = { wkey: s.wkey, owner: s.owner, pool, col, every: tickSteps(w.tick || 0.5),
     ticks: pool.x0 <= pool.x1 ? burnTicks(w.burn || 0, w.tick || 0.5) : 0, step: 0, done: 0 };
   events.push({ kind: 'fire', fire });
@@ -1499,7 +1536,11 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
     if (w.effect === 'seeker') steerShell(world.tanks, s, w, dt);
     const x0 = s.x, y0 = s.y;
     const held = { vx: s.vx, vy: s.vy, age: (s.age || 0) - dt, life: s.life, clear: s.clear };
-    stepBallistic(s, dt, airOf(world.terrain.length, world.wind, w));
+    const told = events.length;
+    const wall = stepBallistic(s, dt, airOf(world.terrain.length, world.wind, w, world.walls || 'none'));
+    // A shell through Wraparound sweeps for hits along its real path, from the far side.
+    const sx0 = wall === WALL_WRAP ? x0 + (x0 > s.x ? -world.terrain.length : world.terrain.length) : x0;
+    if (wall !== WALL_NONE) events.push({ kind: 'wall', x: s.x, y: s.y, hit: wall });
     s.life -= dt;
     events.push({ kind: 'trail', shell: s, x: s.x, y: s.y, vx: s.vx, vy: s.vy });
     if (s.life <= 0 || s.x < -20 || s.x > world.terrain.length + 20 || s.y > H + 40) {
@@ -1518,7 +1559,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
     // Direct hit on a living tank?
     // A lance that already went through a tank cannot hit that tank again.
     let direct: Tank | null = null;
-    const hit = sweepHit(world.tanks, s, x0, y0, s.x, s.y);
+    const hit = sweepHit(world.tanks, s, sx0, y0, s.x, s.y);
     if (hit) {
       // Burst where the shell touched the unit, not past it.
       direct = hit.t;
@@ -1537,14 +1578,16 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
     }
     const ov = s.dw ? { dmg: s.dw, radius: s.dr } : null;
     // A bomblet may burst on the ground at once; a fresh shell ignores it for
-    // 0.1 s (server/sim.php room_fly_arc starts bomblets at age 99).
+    // 0.1 s (server/sim.php room_fly_arc starts bomblets at age 99). A shell
+    // that met a Concrete wall bursts on it, whatever its age (a roller too).
+    const walled = !direct && wall === WALL_BURST;
     const grounded = (s.split || s.age >= 0.1) && s.y >= surfY(world.terrain, s.x);
-    const bursts = !!direct || (grounded && w.effect !== 'roller');
+    const bursts = !!direct || walled || (grounded && w.effect !== 'roller');
     if (bursts && waitsOnEarlier(world, s)) {
       s.x = x0; s.y = y0;
       s.vx = held.vx; s.vy = held.vy;
       s.age = held.age; s.life = held.life; s.clear = held.clear;
-      events.pop(); // no trail for a shell standing still
+      events.length = told; // no trail (and no wall) for a shell standing still
       continue;
     }
     // A tracer bursts on nothing: where it came down (or struck), it leaves its mark.
@@ -1553,7 +1596,7 @@ export function stepShells(world: World, arsenal: Arsenal, dt: number): StepEven
       s.dead = true;
       continue;
     }
-    if (direct) {
+    if (direct || walled) {
       burstShell(world, arsenal, s, w, direct, ov, events);
       continue;
     }

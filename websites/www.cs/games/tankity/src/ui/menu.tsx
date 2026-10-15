@@ -1,5 +1,5 @@
 /* The settings menu: the seed box and Play this seed, the unit, text-size,
- * theme and Difficulty pickers, the sound, music, fullscreen and screen-flash toggles, the scores, and
+ * theme, Difficulty and Walls pickers, the sound, music, fullscreen and screen-flash toggles, the scores, and
  * Leave room in a room. The game owns the state (the unit, the text size,
  * what is muted, whether a room is running) and hands in a finished view of it;
  * this draws it and reports clicks. The section element (#menu-overlay) stays
@@ -13,6 +13,8 @@ import { useLayoutEffect, useRef } from 'preact/hooks';
 import { KeyHints, Key, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.tsx';
 import type { KeyHintFn } from './chrome.tsx';
 import { TurnTime } from './turn-time.tsx';
+import { WallsPicker } from './walls.tsx';
+import type { WallsSetting } from '../walls.ts';
 import { AlertsButton } from './games.tsx';
 import type { AlertsState } from './games.tsx';
 
@@ -44,6 +46,9 @@ export interface MenuProps {
   difficulties: { key: string; name: string }[];
   difficulty: string;
   onPickDifficulty: (key: string) => void;
+  /** The Walls: solo's own pick, or the room's; locked (the label alone, and why) for a guest or mid-round. */
+  walls: { pick: WallsSetting; locked: string | null };
+  onPickWalls: (w: WallsSetting) => void;
   /** Toggle states (pressed means on). */
   sound: boolean;
   music: boolean;
@@ -186,6 +191,8 @@ export function Menu(p: MenuProps) {
           </div>
         </div>
         <p class="hint" id="difficulty-hint">How well the drones aim. A change starts with your next match; in a room, the host's setting counts.</p>
+        <WallsPicker id="walls-picker" pick={p.walls.pick} disabled={p.walls.locked !== null} why={p.walls.locked || ''} onPick={p.onPickWalls} />
+        <p class="hint" id="walls-hint">The field's sides. A change starts with the next round; in a room, the host picks between rounds.</p>
         <VolumeRow channel="Sound" on={p.sound} level={p.soundLevel} toggleId="btn-sound" rangeId="vol-sound" keyAt="global:sound"
           title="Toggle sound effects" onToggle={p.onSound} onLevel={p.onSoundLevel}
           icon={<>

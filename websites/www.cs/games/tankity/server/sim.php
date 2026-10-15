@@ -383,21 +383,22 @@ function room_roll_step(array $terrain, float &$x, float &$u, float $friction, f
     return true;
 }
 /* Where a shell touching down at $x with velocity ($vx, $vy) ends its roll
-// with no unit in the way: [x, y] at rest, off the board edge, or when its
-// time is up. */
-function room_roll_out(array $terrain, float $x, float $vx, float $vy, array $w): array
+// with no unit in the way: [x, y] at rest, at the board's edge
+// (room_roll_edge), or when its time is up, rolling off $walls on the way. */
+function room_roll_out(array $terrain, float $x, float $vx, float $vy, array $w, string $walls = 'none'): array
 {
     $n = count($terrain);
     $x = max(0.0, min((float) ($n - 1), $x));
     $u = room_roll_start($terrain, $x, $vx, $vy);
     $steps = (int) round(($w['rollTime'] ?: 5.0) * 60);
     for ($i = 0; $i < $steps; $i++) {
-        if ($x <= 0 || $x >= $n - 1) {
+        if (room_roll_edge($n, $x, $walls)) {
             break;
         }
         if (!room_roll_step($terrain, $x, $u, (float) ($w['friction'] ?: 0.3), 1 / 60)) {
             break;
         }
+        room_wall_roll($x, $u, $walls, $n);
     }
     $x = max(0.0, min((float) ($n - 1), $x));
     return [$x, room_ground_at($terrain, $x)];
@@ -427,10 +428,11 @@ function room_flight_key(array $def): string
 /* Full trajectory; returns landing info. Mirrors src/sim.ts simShot. A
 // roller's landing is where its roll ends. $top is the highest ground (the
 // least terrain y): above it a shell cannot touch down, so the search skips
-// the ground lookup there. */
-function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $angle, float $power, string $wkey, int $dirS, int $w, float $top = -INF): array
+// the ground lookup there. It flies $walls: a bounce or a wrap flies on,
+// Concrete is a landing on the wall. */
+function room_sim_shot(array $terrain, float $wind, float $x, float $y, float $angle, float $power, string $wkey, int $dirS, int $w, float $top = -INF, string $walls = 'none'): array
 {
-    return room_sim_flight($terrain, $wind, $x, $y, $angle, $power, room_weapons()[$wkey] ?? [], $dirS, $w, $top);
+    return room_sim_flight($terrain, $wind, $x, $y, $angle, $power, room_weapons()[$wkey] ?? [], $dirS, $w, $top, $walls);
 }
 /* Planning flights flown so far ($add counts more): a drone turn's cost, which test/php/AiArcsTest.php holds to a budget. */
 function room_sim_flights(int $add = 0): int
@@ -440,17 +442,19 @@ function room_sim_flights(int $add = 0): int
     return $n;
 }
 /* room_sim_shot for a gun's definition rather than its key. */
-function room_sim_flight(array $terrain, float $wind, float $x, float $y, float $angle, float $power, array $def, int $dirS, int $w, float $top = -INF): array
+function room_sim_flight(array $terrain, float $wind, float $x, float $y, float $angle, float $power, array $def, int $dirS, int $w, float $top = -INF, string $walls = 'none'): array
 {
     room_sim_flights(1);
     $rad = deg2rad($angle);
     $vx = det_cos($rad) * room_launch_speed($def, $power, room_field_reach($w)) * $dirS;
     $vy = -det_sin($rad) * room_launch_speed($def, $power, room_field_reach($w));
     $dt = 1 / 60;
-    $air = room_air($w, $wind, $def);
+    $air = room_air($w, $wind, $def, $walls);
     $roller = ($def['effect'] ?? 'shot') === 'roller';
     for ($i = 0, $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($w)); $i < $steps; $i++) {
-        room_step_ballistic($x, $y, $vx, $vy, $dt, $air);
+        if (room_step_ballistic($x, $y, $vx, $vy, $dt, $air) === ROOM_WALL_BURST) {
+            return ['x' => $x, 'y' => $y, 'oob' => false, 'vx' => $vx, 'vy' => $vy];
+        }
         if ($x < 0 || $x >= $w || $y >= 500) {
             return ['x' => $x, 'y' => $y, 'oob' => true, 'vx' => $vx, 'vy' => $vy];
         }
@@ -460,7 +464,7 @@ function room_sim_flight(array $terrain, float $wind, float $x, float $y, float 
         $xi = $x < 0.5 ? 0 : ($x >= $w - 0.5 ? $w - 1 : (int) round($x));
         if ($y >= $terrain[$xi]) {
             if ($roller) {
-                [$rx, $ry] = room_roll_out($terrain, $x, $vx, $vy, $def);
+                [$rx, $ry] = room_roll_out($terrain, $x, $vx, $vy, $def, $walls);
                 return ['x' => $rx, 'y' => $ry, 'oob' => false, 'vx' => 0.0, 'vy' => 0.0];
             }
             return ['x' => $x, 'y' => $y, 'oob' => false, 'vx' => $vx, 'vy' => $vy];
@@ -470,8 +474,9 @@ function room_sim_flight(array $terrain, float $wind, float $x, float $y, float 
 }
 /* Where a cluster shot at (angle, power) splits, flown as the war flies it
 // (its fuse, or the top of its arc with apex): [x, y, vx, vy], or null when it
-// comes down or leaves the field first. src/sim.ts splitPoint() is the same. */
-function room_split_point(array $terrain, float $wind, float $x, float $y, float $angle, float $power, string $wkey, int $dirS, int $w): ?array
+// comes down, bursts on a Concrete wall or leaves the field first.
+// src/sim.ts splitPoint() is the same. */
+function room_split_point(array $terrain, float $wind, float $x, float $y, float $angle, float $power, string $wkey, int $dirS, int $w, string $walls = 'none'): ?array
 {
     room_sim_flights(1);
     $def = room_weapons()[$wkey];
@@ -479,16 +484,20 @@ function room_split_point(array $terrain, float $wind, float $x, float $y, float
     $vx = det_cos($rad) * room_launch_speed($def, $power, room_field_reach($w)) * $dirS;
     $vy = -det_sin($rad) * room_launch_speed($def, $power, room_field_reach($w));
     $dt = 1 / 60;
-    $air = room_air($w, $wind, $def);
+    $air = room_air($w, $wind, $def, $walls);
     $age = 0.0;
     for ($i = 0, $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($w)); $i < $steps; $i++) {
         $age += $dt;
-        room_step_ballistic($x, $y, $vx, $vy, $dt, $air);
+        $wall = room_step_ballistic($x, $y, $vx, $vy, $dt, $air);
         if ($x < 0 || $x >= $w || $y >= 500) {
             return null;
         }
+        // The war checks the fuse before the wall: a bloom on the very step it meets Concrete still blooms.
         if (!empty($def['apex']) ? $age >= 0.1 && $vy >= 0 : $age >= $def['fuse']) {
             return [$x, $y, $vx, $vy];
+        }
+        if ($wall === ROOM_WALL_BURST) {
+            return null;
         }
         if ($i >= 6 && $y >= $terrain[$x < 0.5 ? 0 : ($x >= $w - 0.5 ? $w - 1 : (int) round($x))]) {
             return null;
@@ -498,18 +507,19 @@ function room_split_point(array $terrain, float $wind, float $x, float $y, float
 }
 /* src/sim.ts fallTo(): a munition flying free from ($x, $y) at ($vx, $vy)
 // through $air, flown down to $groundY: [x, y, vx, vy, stopped, steps flown]
-// at the first step it falls to $groundY or below (or after a flight's longest
-// time). $hit sees each step's position; true stops the flight there. */
+// at the first step it falls to $groundY or below (or bursts on a Concrete
+// wall the air carries, or after a flight's longest time). $hit sees each
+// step's position; true stops the flight there. */
 function room_fall_to(float $x, float $y, float $vx, float $vy, float $groundY, array $air, ?callable $hit = null): array
 {
     $n = 0;
     for ($steps = (int) ceil(ROOM_FLIGHT_STEPS * sqrt($air['s'])); $n < $steps;) {
-        room_step_ballistic($x, $y, $vx, $vy, 1 / 60, $air);
+        $wall = room_step_ballistic($x, $y, $vx, $vy, 1 / 60, $air);
         $n++;
         if ($hit !== null && $hit($x, $y)) {
             return [$x, $y, $vx, $vy, true, $n];
         }
-        if ($vy > 0 && $y >= $groundY) {
+        if ($wall === ROOM_WALL_BURST || ($vy > 0 && $y >= $groundY)) {
             break;
         }
     }
@@ -970,7 +980,11 @@ function room_arc_step(array &$room, array &$events, array $tank, array $w, stri
     }
     $px = $a['x'];
     $py = $a['y'];
-    room_step_ballistic($a['x'], $a['y'], $a['vx'], $a['vy'], $dt, room_air(count($room['terrain']), (float) $room['wind'], $w));
+    $wall = room_step_ballistic($a['x'], $a['y'], $a['vx'], $a['vy'], $dt, room_air(count($room['terrain']), (float) $room['wind'], $w, room_walls_now($room)));
+    if ($wall === ROOM_WALL_WRAP) {
+        // Through Wraparound it sweeps for hits along its real path, from the far side.
+        $px += $px > $a['x'] ? -$width : $width;
+    }
     $a['age'] += $dt;
     $a['step']++;
     $step = $a['step'];
@@ -1011,6 +1025,11 @@ function room_arc_step(array &$room, array &$events, array $tank, array $w, stri
     if ($direct !== null) {
         $a['path'][] = [$a['x'], $a['y']];
         return ['hit', $a['x'], $a['y'], $a['vx'], $a['vy'], $direct, $a['path'], $flown, $a['clear']];
+    }
+    // A Concrete wall: it bursts on the wall, whatever its age (a roller too).
+    if ($wall === ROOM_WALL_BURST) {
+        $a['path'][] = [$a['x'], $a['y']];
+        return ['hit', $a['x'], $a['y'], $a['vx'], $a['vy'], null, $a['path'], $flown, $a['clear']];
     }
     $xi = max(0, min($width - 1, (int) round($a['x'])));
     if ($a['age'] >= 0.1 && $a['y'] >= $room['terrain'][$xi]) {
@@ -1080,11 +1099,16 @@ function room_roll_arc(array $room, array $w, int $ownerIdx, float $sx, float $v
     $path[] = [$sx, $sy];
     $limit = (int) round(($w['rollTime'] ?: 5.0) * 60);
     $friction = (float) ($w['friction'] ?: 0.3);
+    $walls = room_walls_now($room);
     $direct = null;
-    for ($rt = 0; $rt < $limit && $sx > 0 && $sx < $width - 1; $rt++) {
+    for ($rt = 0; $rt < $limit && !room_roll_edge($width, $sx, $walls); $rt++) {
         $px = $sx;
         $py = $sy;
         $moving = room_roll_step($terrain, $sx, $u, $friction, $dt);
+        if (room_wall_roll($sx, $u, $walls, $width) === ROOM_WALL_WRAP) {
+            // Through Wraparound it touches only what it rolled over: the sweep starts from the far edge.
+            $px += $px > $sx ? -($width - 1) : $width - 1;
+        }
         $steps++;
         $sy = room_ground_at($terrain, $sx) - ROOM_ROLL_LIFT;
         $m = room_ground_slope($terrain, $sx);

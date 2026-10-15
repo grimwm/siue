@@ -352,3 +352,33 @@ test('sky-mark-clear-of-the-ff-button', () => {
   assert.equal(skyMarkX(-50, 0, 1000, 0.5, 60), 48, 'and inside the left edge');
   assert.equal(skyMarkX(990, 0, 1000, 1, 0), 976, 'no button: 24 inside the edge');
 });
+
+/* ---- the side walls ---- */
+{
+  const { drawWalls } = await import('../src/render.ts');
+  const ground = () => 400;
+  const paint = (kind: Parameters<typeof drawWalls>[1], hits: Parameters<typeof drawWalls>[2], calm: boolean, flashes: boolean) => {
+    const { ctx, calls } = stubContext();
+    drawWalls(ctx, kind, deepFreeze(hits), ground, W, -200, 3, calm, flashes);
+    return calls;
+  };
+  test('open sides draw nothing; every wall draws at both edges in its own way', () => {
+    assert.equal(paint('none', [], false, true).n, 0);
+    for (const kind of ['concrete', 'rubber', 'spring'] as const) {
+      const calls = paint(kind, [], false, true);
+      assert.equal(calls.by.moveTo !== undefined && (calls.by.stroke || 0) >= 2, true, `${kind} strokes both edges`);
+    }
+    const wrap = paint('wrap', [], false, true);
+    assert.equal(wrap.by.fillRect, 2, 'a portal shimmer at each edge');
+    assert.equal(wrap.by.stroke, undefined);
+  });
+  test('a wall flashes where a shell met it, only with flashes on and motion allowed; a wrap at both edges', () => {
+    const hit = [{ x: 719, y: 200, hit: 1, t: 0.1 }];
+    const quiet = paint('rubber', [], false, true).by.ellipse || 0;
+    assert.equal((paint('rubber', hit, false, true).by.ellipse || 0) - quiet, 1);
+    assert.equal(paint('rubber', hit, false, false).by.ellipse || 0, quiet, 'Flashes off: no flash');
+    assert.equal(paint('rubber', hit, true, true).by.ellipse || 0, quiet, 'reduced motion: no flash');
+    assert.equal(paint('wrap', [{ x: 0, y: 200, hit: 2, t: 0 }], false, true).by.ellipse, 2);
+    assert.equal(paint('rubber', [{ x: 719, y: 200, hit: 1, t: 0.5 }], false, true).by.ellipse || 0, quiet, 'a spent flash is gone');
+  });
+}

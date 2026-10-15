@@ -25,7 +25,7 @@ import type { Air, Weapon } from './sim.ts';
 
 /** The slice of the game's state the view reads and steps (main.ts's G). */
 export type ViewState = Pick<GameState, 'tanks' | 'turn' | 'phase' | 'over' | 'cam' | 'terrain' | 'clouds' | 'time' | 'shake'
-  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'preview' | 'w' | 'hills' | 'marks' | 'earth' | 'fire'>;
+  | 'seed' | 'booms' | 'fx' | 'shells' | 'parts' | 'wind' | 'preview' | 'w' | 'hills' | 'marks' | 'earth' | 'fire' | 'walls' | 'wallHits'>;
 
 /** What the view needs from the page and the rest of the game. */
 export interface ViewDeps {
@@ -48,7 +48,7 @@ export function createView(deps: ViewDeps) {
   const units: GameTank[] = [];
   const calm = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   // The air each gun flies through this round: the camera flies a climbing shell's arc to its top with it.
-  const airFor = (wkey: string): Air => airOf(G.w, G.wind, tables.weapons[wkey]);
+  const airFor = (wkey: string): Air => airOf(G.w, G.wind, tables.weapons[wkey], G.walls || 'none');
   const apex = (s: Aloft): number => flightTop({ x: s.x, y: s.y, vx: s.vx || 0, vy: s.vy }, airFor(s.wkey));
   const hold: Hold = { top: null, empty: 0 }; // the volley's top row, held until it lands
   const target: CamPose = { z: 1, cx: 0, cy: 0 };
@@ -138,6 +138,7 @@ export function createView(deps: ViewDeps) {
       // A line mark is its gunner's alone: the seat in a room, the player's unit in solo.
       marks: G.marks.shown(net.on ? net.seat : G.tanks.findIndex(u => u.isPlayer)),
       fires: G.fire.pools().map(p => ({ ...p, heat: G.fire.heat(p) })),
+      walls: G.walls && G.walls !== 'none' ? { kind: G.walls, hits: G.wallHits } : null,
       wind: G.wind,
       textScale: textScale(),
       turnClock: left !== null && left <= CLOCK_SHOW_S && left > 0 ? { left, myTurn: MATCH.myTurn } : null,
@@ -147,6 +148,7 @@ export function createView(deps: ViewDeps) {
         angle: pv.angle, foeHp: pv.foeHp, foeHpMax: PV_FOE_HP, wkey: pv.wkey, wind: pv.wind,
         booms: pv.booms, shells: pv.shells, fx: pv.fx, result: pv.result, resultT: pv.resultT, trace: pv.trace,
         fires: pv.fire.pools().map(p => ({ ...p, heat: pv.fire.heat(p) })),
+        walls: pv.walls || 'none',
       } : null,
     };
   }

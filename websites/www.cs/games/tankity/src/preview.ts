@@ -24,6 +24,8 @@ import type { FirePool } from './fire.ts';
 import { createFireShow } from './fire-show.ts';
 import type { FireShow } from './fire-show.ts';
 import type { MarkKind } from './marks.ts';
+import { WALL_BURST } from './walls.ts';
+import type { Walls } from './walls.ts';
 
 export const PV_W = 360, PV_H = 200, PV_WIND = 3, PV_FOE_HP = 60;
 /** The shooter's column, and how far from it the dummy stands unless a gun's scenario says otherwise. */
@@ -89,6 +91,8 @@ export interface PreviewState<C = unknown> {
   burn: { step: number; acc: number; done: number; every: number; ticks: number } | null;
   fire: FireShow;
   wind: number;
+  /** The range's side walls: the player's solo Walls (main.ts sets them as the range opens). */
+  walls?: Walls;
   angle: number; power: number;
   phase: PreviewPhase;
   t: number; // seconds left in the phase
@@ -211,9 +215,10 @@ function weaponOf(env: PreviewEnv, key: string): Readonly<Weapon> {
   return w;
 }
 
-/** The air on the range: its wind over its ground, at a room's scale (the range is a room's field, cut short). */
-export function previewAir(pv: Pick<PreviewState, 'terr' | 'wind'>, w: Readonly<Weapon>): Air {
-  return airOf(ROOM_W, pv.wind, w);
+/** The air on the range: its wind over its ground, at a room's scale (the range is a room's field, cut short),
+ *  between its own walls at its own edges. */
+export function previewAir(pv: Pick<PreviewState, 'terr' | 'wind' | 'walls'>, w: Readonly<Weapon>): Air {
+  return airOf(ROOM_W, pv.wind, w, pv.walls || 'none', PV_W);
 }
 /** Where a shot at (angle, power) comes down, in columns. */
 export function previewShot(pv: PreviewState, env: PreviewEnv, angle: number, power: number): number {
@@ -226,7 +231,8 @@ export function previewShot(pv: PreviewState, env: PreviewEnv, angle: number, po
   };
   const air = previewAir(pv, w);
   for (let i = 0; i < 720; i++) {
-    stepBallistic(st, 1 / 60, air);
+    // A Concrete wall: it bursts there.
+    if (stepBallistic(st, 1 / 60, air) === WALL_BURST) return st.x;
     // An arc over the top of the frame flies out of sight: no landing the demo may use.
     if (st.y < 0) return NaN;
     if (st.x < 0 || st.x >= PV_W || st.y >= PV_H) return st.x;
@@ -605,7 +611,7 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
         s.vx += px;
         s.vy += py;
       }
-      stepBallistic(s, dt, air);
+      const walled = stepBallistic(s, dt, air) === WALL_BURST;
       if (s.dead) continue;
       if (s.x < 0 || s.x >= PV_W || s.y < 0 || s.y >= PV_H) pv.seen.escaped = true;
       env.trail(pv.fx, s, dt);
@@ -626,7 +632,7 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
       const touch = !s.pierced && !s.spared && Math.hypot(s.x - pv.tx, s.y - fy) < 10;
       const near = w.effect === 'proximity' && Math.hypot(s.x - pv.tx, s.y - fy) < (w.prox || 34);
       // A tracer bursts on nothing: where it comes down (or strikes), it leaves its mark.
-      const down = touch || ((s.split || s.age >= 0.1) && s.y >= (pv.terr[clamp(Math.round(s.x), 0, PV_W - 1)] ?? 0));
+      const down = touch || walled || ((s.split || s.age >= 0.1) && s.y >= (pv.terr[clamp(Math.round(s.x), 0, PV_W - 1)] ?? 0));
       if (w.effect === 'tracer' && (down || s.x < 0 || s.x >= PV_W || s.y >= PV_H)) {
         s.dead = true;
         traceTo(pv, s.x, s.y, true);
@@ -644,8 +650,8 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
         continue;
       }
       // A bomblet may burst on the ground at once, as in the war.
-      const landed = (s.split || s.age >= 0.1) && s.y >= (pv.terr[clamp(Math.round(s.x), 0, PV_W - 1)] ?? 0);
-      if (landed && w.effect === 'roller' && s.x >= 0 && s.x < PV_W) {
+      const landed = walled || ((s.split || s.age >= 0.1) && s.y >= (pv.terr[clamp(Math.round(s.x), 0, PV_W - 1)] ?? 0));
+      if (landed && !walled && w.effect === 'roller' && s.x >= 0 && s.x < PV_W) {
         s.rolling = true;
         s.rt = 0;
         s.ru = rollStart(pv.terr, s.x, s.vx, s.vy);

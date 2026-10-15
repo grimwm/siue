@@ -76,8 +76,8 @@ jobs:
           key: composer-${{ hashFiles('websites/www.cs/composer.lock') }}
 
       # Node runs the Tankity smoke and sim-vector suites, the Cylon and Crete unit
-      # suites and the games kit's tests and type check, and checks the site's
-      # TypeScript build, inside make test.
+      # suites and the games kit's tests and type check, checks the site's
+      # TypeScript build, and type-checks the browser specs, inside make test.
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         if: steps.scope.outputs.run == '1'
         with:
@@ -86,6 +86,7 @@ jobs:
           cache-dependency-path: |
             websites/www.cs/package-lock.json
             websites/www.cs/games/package-lock.json
+            websites/www.cs/tests/e2e/package-lock.json
 
       - name: Start the local sites
         if: steps.scope.outputs.run == '1'
@@ -110,7 +111,7 @@ jobs:
   # broke twice in ways only these catch. Runs the whole Playwright suite
   # against the docker site (ephemeral host port) on the runner's own Chrome.
   # Four runners, each with its own local sites, split the selected specs
-  # between them by how long each takes (tests/e2e/shard.mjs), so they finish
+  # between them by how long each takes (tests/e2e/shard.ts), so they finish
   # together. Within a runner the specs stay serial (one room server).
   e2e:
     if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -127,8 +128,16 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Node 24 runs the selector and shard scripts (.ts) directly, so it comes
+      # before the selection step.
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: websites/www.cs/tests/e2e/package-lock.json
+
       # Only the specs this change can affect: websites/www.cs/tests/e2e/
-      # select.mjs maps touched files to specs (NONE, ALL, or a list) and
+      # select.ts maps touched files to specs (NONE, ALL, or a list) and
       # runs everything for any site file it does not know.
       - name: Pick the specs
         id: scope
@@ -142,20 +151,13 @@ jobs:
           fi
           changed=$(git diff --name-only "$BASE"...HEAD)
           printf '%s\n' "$changed"
-          specs=$(printf '%s\n' "$changed" | node websites/www.cs/tests/e2e/select.mjs)
+          specs=$(printf '%s\n' "$changed" | node websites/www.cs/tests/e2e/select.ts)
           echo "selected: $specs"
           case "$specs" in
             NONE) ;;
             ALL) echo "run=1" >>"$GITHUB_OUTPUT" ;;
             *) echo "run=1" >>"$GITHUB_OUTPUT"; echo "specs=$specs" >>"$GITHUB_OUTPUT" ;;
           esac
-
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        if: steps.scope.outputs.run == '1'
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: websites/www.cs/tests/e2e/package-lock.json
 
       - name: Start the local sites
         if: steps.scope.outputs.run == '1'
@@ -194,7 +196,7 @@ jobs:
         # A short selection can leave a runner with no spec at all.
         run: |
           set -euo pipefail
-          mine=$(node websites/www.cs/tests/e2e/shard.mjs "$SHARD" 4 $SPECS)
+          mine=$(node websites/www.cs/tests/e2e/shard.ts "$SHARD" 4 $SPECS)
           echo "this runner: ${mine:-nothing}"
           if [ -n "$mine" ]; then make -C websites/www.cs e2e E2E_ARGS="$mine"; fi
 

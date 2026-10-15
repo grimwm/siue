@@ -4,7 +4,7 @@
  * (src/pow.ts) on this browser's WebCrypto, one after another, and answers
  * the times in milliseconds with their mean and 95th percentile, plus the
  * longest the page's thread was held up meanwhile (a 10 ms timer's worst
- * lateness): what tests/e2e/tankity-pow.spec.mjs reads to set the
+ * lateness): what tests/e2e/tankity-pow.spec.ts reads to set the
  * difficulty (README "Room slots"). Never shipped: deploy.sh skips it. */
 import { POW_IN_FLIGHT, solvePow } from './pow.ts';
 import type { Subtle } from './pow.ts';

@@ -1222,7 +1222,7 @@ function toggleFullscreen(): void {
    because the /play/ pages run the game in a frame and Chromium refuses a
    frame's lock. Safari and Firefox have no Keyboard Lock: there Esc always
    leaves fullscreen, by the browser, which is why nothing asks for it.
-   Guarded by test/fullscreen.test.ts and tests/e2e/tankity-fullscreen-esc.spec.mjs. */
+   Guarded by test/fullscreen.test.ts and tests/e2e/tankity-fullscreen-esc.spec.ts. */
 function lockEscapeInFullscreen(): void {
   void holdEscape(!!document.fullscreenElement, topKeyLock(window), msg => console.warn(msg));
 }

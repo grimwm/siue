@@ -50,9 +50,10 @@ parity:
 	./docker/check-parity.sh
 
 test:
-	node tests/e2e/select-test.mjs
-	node tests/e2e/shard-test.mjs
-	node tests/e2e/select.mjs --check
+	cd tests/e2e && npm ci --silent && node_modules/.bin/tsc -p tsconfig.json
+	node tests/e2e/select-test.ts
+	node tests/e2e/shard-test.ts
+	node tests/e2e/select.ts --check
 	npm ci --silent && node tools/ts-build.mjs --check
 	php tools/site-game-pages.php --check
 	php tools/site-versions.php --check
@@ -83,11 +84,11 @@ e2e:
 
 screenshots:
 	@url=$${E2E_BASE_URL:-$$($(MAKE) --no-print-directory -s url)} && \
-	cd tests/e2e && npm ci --silent && E2E_BASE_URL=$$url node screenshots.mjs $(GAMES)
+	cd tests/e2e && npm ci --silent && E2E_BASE_URL=$$url node screenshots.ts $(GAMES)
 
 # The specs this branch's changes need (committed, uncommitted and new files
-# against origin/main), picked by tests/e2e/select.mjs; nothing when none.
+# against origin/main), picked by tests/e2e/select.ts; nothing when none.
 e2e-changed:
-	@specs=$$( { git diff --name-only origin/main...HEAD; git diff --name-only HEAD; git ls-files --others --exclude-standard | sed 's|^|websites/www.cs/|'; } | sort -u | node tests/e2e/select.mjs ) && \
+	@specs=$$( { git diff --name-only origin/main...HEAD; git diff --name-only HEAD; git ls-files --others --exclude-standard | sed 's|^|websites/www.cs/|'; } | sort -u | node tests/e2e/select.ts ) && \
 	echo "e2e: $$specs" && \
 	case "$$specs" in NONE) ;; ALL) $(MAKE) --no-print-directory e2e ;; *) $(MAKE) --no-print-directory e2e E2E_ARGS="$$specs" ;; esac

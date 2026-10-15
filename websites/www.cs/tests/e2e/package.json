@@ -1,12 +1,16 @@
 {
   "name": "www-cs-e2e",
   "private": true,
+  "type": "module",
   "description": "Real-browser checks for the www.cs games, against local docker or the live site.",
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "check": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
-    "@playwright/test": "^1.56.0"
+    "@playwright/test": "^1.56.0",
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
   }
 }

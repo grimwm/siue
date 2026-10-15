@@ -1,0 +1,191 @@
+// Operation Tankity rooms: what players do between and around their turns.
+import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { roomPair, hud, leaveStoredSeats } from './helpers.ts';
+import { roomView } from './rooms-shop-helpers.ts';
+
+declare global {
+  interface Window {
+    __held: FrameRequestCallback[];
+    __hide: boolean;
+    __notes: { title: string; body?: string }[];
+    __digits: number[];
+  }
+}
+
+const myTurn = (page: Page) => hud(page, 'hud-turn').then(t => /YOU\. Aim!/.test(t));
+
+test("a player loads a weapon during other players' turns", async ({ browser }) => {
+  const { host, guest, roomState } = await roomPair(browser);
+  await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);
+  await host.page.keyboard.press('Control');
+  await expect.poll(() => myTurn(host.page), { timeout: 10_000 }).toBe(false);
+  await host.page.keyboard.press('g');
+  await host.page.locator('#gun-grid .gun-choice', { hasText: 'Buckshot' }).click();
+  await expect.poll(() => hud(host.page, 'hud-weapon')).toMatch(/^Buckshot/);
+  await expect.poll(() => roomView(roomState.host).you.weapon, { timeout: 10_000 }).toBe('buck');
+  expect(await host.page.locator('#log').textContent()).not.toContain('not your turn');
+  await host.ctx.close(); await guest.ctx.close();
+});
+
+test('a tab that was hidden catches up at once and hands over the controls', async ({ browser }) => {
+  const { host, guest } = await roomPair(browser);
+  await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);
+  // Hide the guest's tab the way a browser does: no frames, document.hidden.
+  await guest.page.evaluate(() => {
+    window.__held = [];
+    window.__hide = true;
+    const raf = window.requestAnimationFrame;
+    window.requestAnimationFrame = (cb: FrameRequestCallback) => (window.__hide ? window.__held.push(cb) : raf(cb));
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => window.__hide });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await host.page.keyboard.press('Control');
+  // While hidden, the host's shot and the drones' volleys pile up for the guest.
+  await expect.poll(() => host.page.evaluate(() => document.getElementById('hud-turn')!.textContent), { timeout: 60_000 }).toMatch(/ZED aiming/);
+  await guest.page.waitForTimeout(2500); // a poll or two lands while hidden
+  const shown = Date.now();
+  await guest.page.evaluate(() => {
+    window.__hide = false;
+    document.dispatchEvent(new Event('visibilitychange'));
+    const held = window.__held; window.__held = [];
+    held.forEach(cb => requestAnimationFrame(cb));
+  });
+  await expect.poll(() => myTurn(guest.page), { timeout: 15_000 }).toBe(true);
+  expect(Date.now() - shown, 'the guest is not made to sit through every replay').toBeLessThan(8000);
+  const a0 = await hud(guest.page, 'hud-angle');
+  await guest.page.keyboard.down('ArrowLeft'); await guest.page.waitForTimeout(500); await guest.page.keyboard.up('ArrowLeft');
+  expect(await hud(guest.page, 'hud-angle')).not.toBe(a0);
+  expect(guest.errors).toEqual([]);
+  await host.ctx.close(); await guest.ctx.close();
+});
+
+test('everyone sees when the player whose turn it is sits in a menu', async ({ browser }) => {
+  const { host, guest, roomState } = await roomPair(browser);
+  await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);
+  await host.page.keyboard.press('q');
+  const hostMenu = () => { const r = roomView(roomState.guest); const t = r && r.tanks.find(x => x.seat === 0); return t && t.menu; };
+  await expect.poll(hostMenu, { timeout: 10_000 }).toBe(true);
+  await guest.page.locator('#stage').screenshot({ path: 'test-results/tankity-menu-badge.png' });
+  await host.page.keyboard.press('q');
+  await expect.poll(hostMenu, { timeout: 10_000 }).toBe(false);
+  // The menu never holds up the match: the host can still fire after it.
+  await host.page.keyboard.press('Control');
+  await expect.poll(() => myTurn(host.page), { timeout: 10_000 }).toBe(false);
+  await host.ctx.close(); await guest.ctx.close();
+});
+
+test('a room invite made on the site page points back to the site page', async ({ page, browser }) => {
+  await page.goto('play/tankity/');
+  const game = page.frameLocator('#play-frame');
+  await game.locator('#stage').waitFor();
+  await page.waitForTimeout(500);
+  await page.keyboard.press('o');
+  await game.locator('#host-go').click();
+  await expect(game.locator('#join-link')).toHaveValue(/\/play\/tankity\/\?code=[A-Z0-9]{6}$/);
+  // Opening it in a friend's browser lands in the site page with the code handed to the game.
+  const link = await game.locator('#join-link').inputValue();
+  const code = new URL(link).searchParams.get('code');
+  const friend = await browser.newContext();
+  const guest = await friend.newPage();
+  await guest.goto(link);
+  await expect(guest.locator('.play-nav')).toBeVisible();
+  await expect(guest.frameLocator('#play-frame').locator('#join-code')).toHaveValue(code!);
+  await friend.close();
+  // The host's own browser holds the seat: the same link takes it back into the room.
+  const again = await page.context().newPage();
+  await again.goto(link);
+  await expect(again.frameLocator('#play-frame').locator('#lobby-code')).toHaveText(code!);
+  await leaveStoredSeats(page.context());
+});
+
+test('a turn that arrives in a hidden tab changes its title and sends a notification', async ({ browser }) => {
+  const { host, guest } = await roomPair(browser);
+  await guest.ctx.grantPermissions(['notifications']);
+  await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);
+  // Hide the guest's tab and record notifications instead of showing them.
+  await guest.page.evaluate(() => {
+    window.__notes = [];
+    // The stub class is not a full Notification (no requestPermission): assign it through an untyped window.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).Notification = class { constructor(title: string, opts?: { body?: string }) { window.__notes.push({ title, body: opts && opts.body }); } close() {} static get permission() { return 'granted'; } };
+    // Turn alerts are opt-in: this player turned them on.
+    localStorage.setItem('tankity-turn-alerts', 'on');
+    window.__hide = true;
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => window.__hide });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const title = await guest.page.title();
+  await host.page.keyboard.press('Control');
+  await expect.poll(() => guest.page.title(), { timeout: 60_000 }).toBe(`● Your turn · ${title}`);
+  const notes = await guest.page.evaluate(() => window.__notes);
+  expect(notes.length).toBe(1);
+  expect(notes[0]!.title).toBe('Your turn in Operation Tankity');
+  // Seen again: the title goes back.
+  await guest.page.evaluate(() => { window.__hide = false; document.dispatchEvent(new Event('visibilitychange')); });
+  await expect.poll(() => guest.page.title()).toBe(title);
+  await host.ctx.close(); await guest.ctx.close();
+});
+
+test('the turn clock warns its player at 30 seconds and counts the last 10 down for everyone', async ({ browser }) => {
+  const { host, guest } = await roomPair(browser);
+  await expect.poll(() => myTurn(host.page), { timeout: 30_000 }).toBe(true);
+  // The real clock is two minutes: rewrite the server's "seconds left" so the
+  // test sees the alert and the countdown now.
+  let left = 31;
+  for (const p of [host.page, guest.page]) {
+    await p.route(/rooms\.php/, async route => {
+      const res = await route.fetch();
+      let body = await res.text();
+      try {
+        const j = JSON.parse(body);
+        if (j.room && typeof j.room.turnLeft === 'number') { j.room.turnLeft = left; body = JSON.stringify(j); }
+      } catch (_) { /* not JSON */ }
+      await route.fulfill({ response: res, body });
+    });
+  }
+  await expect.poll(() => host.page.locator('#log').textContent(), { timeout: 15_000 }).toMatch(/seconds left\. Fire, or a drone fires for you/);
+  expect(await guest.page.locator('#log').textContent()).not.toMatch(/seconds left\. Fire/);
+  left = 9;
+  // Both screens paint the countdown: a big digit over the battlefield.
+  for (const p of [host.page, guest.page]) {
+    await p.evaluate(() => {
+      window.__digits = [];
+      const P = CanvasRenderingContext2D.prototype, f = P.fillText;
+      P.fillText = function (t: string, ...a: [number, number, number?]) { if (/^\d{1,2}$/.test(String(t)) && /bold (7\d|[89]\d)px/.test(this.font)) window.__digits.push(+t); return f.call(this, t, ...a); };
+    });
+  }
+  await expect.poll(() => host.page.evaluate(() => window.__digits.length), { timeout: 15_000 }).toBeGreaterThan(5);
+  await expect.poll(() => guest.page.evaluate(() => window.__digits.length), { timeout: 15_000 }).toBeGreaterThan(5);
+  const shown = await host.page.evaluate(() => Math.max(...window.__digits));
+  expect(shown).toBeLessThanOrEqual(10);
+  await host.page.locator('#stage').screenshot({ path: 'test-results/tankity-turn-clock.png' });
+  await host.ctx.close(); await guest.ctx.close();
+});
+
+// A human's shot and every drone's answer arrive in one reply: a visible tab
+// must play every volley, the player's own included, and hand the turn round.
+test('every shot in a turn plays, and the turn keeps coming round', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const { host, guest, roomState } = await roomPair(browser);
+  const guestTank = () => roomView(roomState.guest).tanks.find(k => k.seat === 1)!;
+  // Did a shell leave the guest's barrel since the recorder was reset?
+  const shotFrom = (page: Page, x: number, y: number) => page.evaluate(([x, y]: [number, number]) =>
+    window.__rec.shells.some(([, sx, sy]) => Math.abs(sx - x) < 30 && Math.abs(sy - (y - 14)) < 30), [x, y] as [number, number]);
+  const hostAlive = () => { const t = roomView(roomState.guest).tanks.find(k => k.seat === 0); return !!t && t.hp > 0; };
+  for (let cycle = 0; cycle < 2; cycle++) {
+    // The host plays its turn while it still has a tank (drones may knock it out).
+    await expect.poll(async () => (await myTurn(guest.page)) || (hostAlive() && await myTurn(host.page)), { timeout: 60_000 }).toBe(true);
+    if (!(await myTurn(guest.page))) {
+      await host.page.keyboard.press('Control');
+      await expect.poll(() => myTurn(guest.page), { timeout: 60_000 }).toBe(true);
+    }
+    const { x, y } = guestTank();
+    await guest.page.evaluate(() => { window.__rec.shells.length = 0; });
+    await guest.page.keyboard.press('Control');
+    await expect.poll(() => shotFrom(guest.page, x, y), { timeout: 20_000, message: 'the guest never saw its own shell fly' }).toBe(true);
+  }
+  expect(host.errors).toEqual([]);
+  expect(guest.errors).toEqual([]);
+  await host.ctx.close(); await guest.ctx.close();
+});

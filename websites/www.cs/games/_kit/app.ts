@@ -107,7 +107,7 @@ export type EscapeHold = 'locked' | 'released' | 'unsupported' | 'refused';
  * and only holding Esc leaves. Called on every fullscreenchange. A
  * refused lock is reported through warn: without the lock, a tap of Esc leaves
  * full screen. Guarded by _kit/test/app.test.ts and
- * tests/e2e/tankity-fullscreen-esc.spec.mjs.
+ * tests/e2e/tankity-fullscreen-esc.spec.ts.
  */
 export async function holdEscape(full: boolean, kb: KeyLock | null, warn: (msg: string) => void): Promise<EscapeHold> {
   if (!kb) return 'unsupported';

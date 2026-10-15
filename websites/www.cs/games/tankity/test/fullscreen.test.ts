@@ -8,7 +8,7 @@
 // that reaches the toggle or Quit, or a key binding or visible hint that names
 // Esc fails here before it ships. Behaviour: smoke.test.ts
 // 'esc-keeps-fullscreen' (the whole run in full screen), _kit/test/app.test.ts
-// (the Esc lock) and tests/e2e/tankity-fullscreen-esc.spec.mjs (a real
+// (the Esc lock) and tests/e2e/tankity-fullscreen-esc.spec.ts (a real
 // browser, on /play/).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

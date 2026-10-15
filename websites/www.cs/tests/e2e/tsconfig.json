@@ -1,0 +1,21 @@
+{
+  // The browser suite and its tooling: Playwright and Node run the .ts files
+  // from source; this program only type-checks them (make test, CI units).
+  // Same strictness as the games' programs (games/_kit/build/tsconfig.base.json).
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["*.ts"]
+}

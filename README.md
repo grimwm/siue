@@ -93,7 +93,7 @@ Pass the same `COMPOSE` to every target that talks to the containers (`up`, `dow
 
 **Unit suites.** `make test` at the root runs `scripts/test_deploy_hash.py` and `scripts/test_deploy_connection.py` (the real `deploy.sh` against fake `ssh`, `scp`, `sftp` and `sshpass`; it never touches a host), then `make test` in each site. The site's `make test` needs `make up` first and runs:
 
-- the selector and shard tests for the browser suite (`tests/e2e/select-test.mjs`, `shard-test.mjs`, `select.mjs --check`);
+- `npm ci` in `tests/e2e/` and `tsc -p tests/e2e/tsconfig.json`, which type-checks every spec, helper and tool there (strict, the same settings as the games' programs), then the selector and shard tests for the browser suite (`tests/e2e/select-test.ts`, `shard-test.ts`, `select.ts --check`);
 - `npm ci` and the site's TypeScript build check (`tools/ts-build.mjs --check`);
 - `composer install`, then PHPUnit's `site` suite (the games hub, the site's game pages, the home-page versions and the deploy set) and `kit` suite, plus the `--check` runs of the site's generators;
 - `npm ci` in `games/`, then every `games/*/test.sh`: the kit's type checks, and each game's build check (its tests' type check included), install-file check and icon check, plus Cylon's `cylon` PHPUnit suite and Tankity's `tankity` suite;
@@ -104,20 +104,22 @@ Pass the same `COMPOSE` to every target that talks to the containers (`up`, `dow
 
 `make -C websites/www.cs protocol` and `make -C websites/www.cs sim-vectors` rewrite Tankity's generated fixtures when they change on purpose.
 
-**Browser suite.** `make -C websites/www.cs e2e` runs the Playwright specs in `tests/e2e/` against the local site (or any site root in `E2E_BASE_URL`). The specs include play-throughs of Crete and Cylon (`crete-play.spec.mjs`, `cylon-play.spec.mjs`) beside Tankity's and the Games page's; CI runs every spec nightly. Test browsers are silent and never outlive their run: Chrome starts with `--mute-audio` and `--autoplay-policy=user-gesture-required`, WebKit pages get `muteScript` (a zero-gain node before every `AudioContext` destination, media elements muted), and `run.sh` gives each run its own `TMPDIR` (so its browser profiles have a unique path), kills Playwright's process group on exit, INT, TERM and HUP, then reaps any process whose command line holds that path (`reap.sh`, tested by `scripts/test_e2e_reap.py`). `E2E_ARGS` goes to `playwright test`:
+**Browser suite.** `make -C websites/www.cs e2e` runs the Playwright specs in `tests/e2e/` against the local site (or any site root in `E2E_BASE_URL`). The specs include play-throughs of Crete and Cylon (`crete-play.spec.ts`, `cylon-play.spec.ts`) beside Tankity's and the Games page's; CI runs every spec nightly. Test browsers are silent and never outlive their run: Chrome starts with `--mute-audio` and `--autoplay-policy=user-gesture-required`, WebKit pages get `muteScript` (a zero-gain node before every `AudioContext` destination, media elements muted), and `run.sh` gives each run its own `TMPDIR` (so its browser profiles have a unique path), kills Playwright's process group on exit, INT, TERM and HUP, then reaps any process whose command line holds that path (`reap.sh`, tested by `scripts/test_e2e_reap.py`). `E2E_ARGS` goes to `playwright test`:
 
 ```sh
-make -C websites/www.cs e2e E2E_ARGS="games-hub.spec.mjs"
-make -C websites/www.cs e2e E2E_ARGS="tankity-solo.spec.mjs -g 'some title'"
+make -C websites/www.cs e2e E2E_ARGS="games-hub.spec.ts"
+make -C websites/www.cs e2e E2E_ARGS="tankity-solo.spec.ts -g 'some title'"
 ```
 
-`make -C websites/www.cs e2e-changed` runs only the specs your changes against `origin/main` need (committed, uncommitted and new files), as picked by `tests/e2e/select.mjs`.
+The specs, their helpers and the selector and shard tools are TypeScript, run from source (Playwright for the specs, Node 24 for the tools); `tests/e2e/tsconfig.json` only type-checks them, and `make test` (so CI `units`) fails on a type error. Browser-side code (`page.evaluate` callbacks and init scripts) is typed against the DOM, with page globals declared beside the code that reads them.
+
+`make -C websites/www.cs e2e-changed` runs only the specs your changes against `origin/main` need (committed, uncommitted and new files), as picked by `tests/e2e/select.ts`.
 
 `tests/e2e/run.sh` allows one browser run per machine at a time. The lock is the directory `/tmp/siue-e2e.lock` (override with `E2E_LOCK`), shared by every worktree and session; a second run waits for the first, and a lock whose process is gone is cleared.
 
 **Screenshots and parity.** `make -C websites/www.cs screenshots` replays each game in a browser and rewrites its `screenshot.jpg` for the Games page (pass `GAMES=` to pick games; needs macOS `sips`). `make parity` (root, or per site) checks that the docker PHP has the same version, modules and ini values as www.cs.siue.edu, using the lists in `websites/www.cs/docker/`.
 
-**How CI picks specs.** `tests/e2e/select.mjs` reads changed file paths on stdin and prints `NONE`, `ALL`, or a list of specs. The first matching rule wins for each file and the results are unioned. Files that no browser sees (Markdown, `docs/`, `scripts/`, unit tests, generators) select nothing; a game's folder selects that game's specs plus the Games-page specs; a file under `websites/www.cs/` that no rule knows selects everything. `tests/e2e/shard.mjs <n> <of> [spec ...]` splits the selected specs across runners by each spec's recorded run time, the same way on every runner.
+**How CI picks specs.** `tests/e2e/select.ts` reads changed file paths on stdin and prints `NONE`, `ALL`, or a list of specs. The first matching rule wins for each file and the results are unioned. Files that no browser sees (Markdown, `docs/`, `scripts/`, unit tests, generators) select nothing; a game's folder selects that game's specs plus the Games-page specs; a file under `websites/www.cs/` that no rule knows selects everything. `tests/e2e/shard.ts <n> <of> [spec ...]` splits the selected specs across runners by each spec's recorded run time, the same way on every runner.
 
 ## CI and deploys
 
@@ -126,7 +128,7 @@ make -C websites/www.cs e2e E2E_ARGS="tankity-solo.spec.mjs -g 'some title'"
 | Job | Runs | What |
 | --- | --- | --- |
 | `units` | on a pull request whose diff touches `websites/`, `scripts/`, `compose.yaml`, `Makefile` or `ci.yml`; on a push to main (same paths); on every scheduled or manual run | PHP 8.4, Composer and Node 24, `make up`, `make test`, `make down` |
-| `e2e (1/4)` to `e2e (4/4)` | on pull requests, the nightly schedule and manual runs | `select.mjs` picks specs for a pull request (every spec otherwise); `shard.mjs` gives each of four runners its share; each starts its own site and runs its share through `make e2e` on the runner's Chrome |
+| `e2e (1/4)` to `e2e (4/4)` | on pull requests, the nightly schedule and manual runs | `select.ts` picks specs for a pull request (every spec otherwise); `shard.ts` gives each of four runners its share; each starts its own site and runs its share through `make e2e` on the runner's Chrome |
 
 Triggers: pull requests; pushes to `main` that change `websites/**`, `scripts/**`, `compose.yaml`, `Makefile` or `ci.yml`; a daily schedule (08:17 UTC); and `workflow_dispatch`. A pull request that touches nothing a job covers passes that job without starting the sites. A failed e2e shard uploads its `test-results` as an artifact.
 

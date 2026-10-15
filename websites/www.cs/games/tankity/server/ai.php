@@ -40,7 +40,7 @@ const ROOM_BRK_ON = 22.0;
  * says how it was tuned). */
 const ROOM_DIFFICULTY = [
     'easy' => ['wobStart' => 8.0, 'wobStep' => 0.5, 'wobFloor' => 3.2, 'correct' => 0.5, 'brkShrink' => 0.5, 'brkFloor' => 1.2, 'brkMax' => 5],
-    'normal' => ['wobStart' => 5.0, 'wobStep' => 0.45, 'wobFloor' => 1.5, 'correct' => 0.6, 'brkShrink' => 0.5, 'brkFloor' => 0.55, 'brkMax' => 5],
+    'normal' => ['wobStart' => 5.0, 'wobStep' => 0.45, 'wobFloor' => 1.5, 'correct' => 0.6, 'brkShrink' => 0.45, 'brkFloor' => 0.55, 'brkMax' => 5],
     'hard' => ['wobStart' => 0.85, 'wobStep' => 0.12, 'wobFloor' => 0.25, 'correct' => 1.0, 'brkShrink' => 0.65, 'brkFloor' => 0.2, 'brkMax' => 5],
 ];
 /* The difficulty a create request asks for: exactly one of the three words,

@@ -213,11 +213,27 @@
 #                          dmg is per tick, 1 or more; radius takes 1 (it
 #                          has no blast).
 #   speed     launch speed multiplier (1.0 is normal, 1.3 fast). Every
-#             gun that flies must reach 85% of a room's 720 px field at full
-#             power and its best angle, so no gun is useful only at maximum
-#             power (test/balance.test.ts), unless its row says shortRange.
+#             gun that flies must reach 65% of a room's 720 px field at full
+#             power and its best angle in calm air, so no gun is useful only
+#             at maximum power (test/balance.test.ts), unless its row says
+#             shortRange. A missile's must be 1.0: its power picks its reach.
+#   drag      a gun that flies: its ballistic coefficient, 0.1 to 5 (1 when
+#             left out). The air pushes back on a shell with DRAG_K (0.0012)
+#             times this, times its speed through the air squared: below 1
+#             is dense or slick and keeps its speed (a longer reach), above 1
+#             is light or draggy and slows fast (a shorter one). Its pellets,
+#             bomblets and leaps fly with it. A beam, a plasma ring or a riot
+#             charge does not fly and refuses it.
+#   missile   optional, a gun that flies: true marks a self-propelled gun.
+#             Its power picks how far it flies: at 45 degrees in calm air,
+#             power p lands about p% of the field away (never under 10%), and
+#             100 at the far edge, never past it; it steers against the wind
+#             (it feels an eighth of it). The build writes its launch speed
+#             at every whole power into game.json (missileSpeed); never write
+#             that by hand.
 #   shortRange optional: true marks a gun short-range on purpose, which
-#             spares it the reach rule; say why in a comment beside it.
+#             spares it the reach rule; say why in a comment beside it. Keep
+#             it rare: lower a gun's drag until it reaches first.
 #   preview   optional: the firing-range scenario that shows off what the gun
 #             does (the shop's V preview and the weapon picker's). A map of:
 #               aim     px past the dummy the demo lands its shell (-200 to

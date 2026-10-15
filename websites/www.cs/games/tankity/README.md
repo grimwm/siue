@@ -160,6 +160,7 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `server/detmath.php` | `det_sin`, `det_cos`, `det_atan`, `det_atan2` and `det_round` (`Math.round`): the same bits as `src/detmath.ts` |
 | `server/earth.php` | The earth ops that `src/earth.ts` mirrors (`room_carve_crater`, `room_add_dirt`, `room_pour_level`, `room_fill_pour`, `room_slump_ground`, `room_riot_carve`, `room_dig_heading`, `room_dig_carve`) and `room_buried` |
 | `server/fire.php` | Napalm's pools as `src/fire.ts` has them (`room_fire_pool`, `room_in_flames`, `room_burn_ticks`, `room_tick_steps`, `room_burn_total`); `server/rules.php` `room_fire_burn` burns one inside its volley |
+| `server/flight.php` | The air a shell flies through, as `src/sim.ts` steps it: gravity, drag and the wind's growth with height (`room_air`, `room_shear`, `room_step_ballistic`), and a missile's launch speed at each power (`room_missile_table`), which `tools/game-json.php` also loads to write each missile's table into `game.json` |
 | `server/sim.php` | The deterministic sim that `src/sim.ts` mirrors: RNG, terrain, the curated hills, weapons (`room_weapon_row`), ballistics, the Roller (`room_roll_*`), a hop warhead's leap and a scatter gun's fan (`room_hop_vel`, `room_scatter_vel`), hit boxes and sweeps, explosions (a `dmg` 0 burst only carves), one unit's share of a hit (`room_hit_unit`), beams, plasma rings and riot charges (`room_fire_beam`, `room_fire_plasma`, `room_fire_riot`), settling (a buried ground unit stays where it is, `room_held_y`) |
 | `server/ai.php` | Drone aim, bracketing, the strategies and their flips, the gun choice by predicted harm (`room_ai_harm`, `room_ai_pick_gun`, a beam aimed by `room_ai_beam_aim`), `room_ai_rack` (`aiRack` of each gun) |
 | `server/rules.php` | Seats and economy, rounds (`room_start_round`, `room_advance`, `room_end_round`), the turn clock, drone pacing and watch turns, the shop, firing a volley (with a hop gun's leaps, `room_fire_hops`, a scatter gun's bomblets, `room_fire_scatter`, a beam or ring at once, and a tracer's flight with nothing after it), lives and winnings, scores |
@@ -180,7 +181,64 @@ The frame stacks the status bar (`#hud-bar`, Preact), the battlefield (`#field`:
 
 ## The battlefield
 
-The field is 460 world units tall. A room's is 720 wide; a solo match's is dealt at the start of each match, 460 × the battlefield box's landscape aspect, between 720 and 1440 on a whole number of 24-unit columns, and kept for the match: a resize or a turn only rescales. In portrait the width is the one the same device gives in landscape. The canvas fills the box: a wider box shows the round's hills continuing past both edges as dimmed scenery (`#stage`'s `data-w` and `data-field` give the width and the field's place); a taller box spans the field across and fills the rest with sky above and dirt below. The units spawn spread over the whole width, at least 110 apart (more than any blast plus a hull). Shells fly √(W/720) faster and last that much longer, so full power still crosses the field and the wind bends a shot by the same share of its length; a press of power changes it by 720/W and the status bar shows one decimal above 720. The drones' wobble tightens per width (`FIELD_AIM` in `ai.ts`), so each difficulty keeps its hit rates at every width. The server's sim takes the width; rooms pass 720, and `protocol/sim-vectors.json`'s `field` group pins 720, 1080 and 1440 (terrain heights included, bit for bit).
+The field is 460 world units tall. A room's is 720 wide; a solo match's is dealt at the start of each match, 460 × the battlefield box's landscape aspect, between 720 and 1440 on a whole number of 24-unit columns, and kept for the match: a resize or a turn only rescales. In portrait the width is the one the same device gives in landscape. The canvas fills the box: a wider box shows the round's hills continuing past both edges as dimmed scenery (`#stage`'s `data-w` and `data-field` give the width and the field's place); a taller box spans the field across and fills the rest with sky above and dirt below. The units spawn spread over the whole width, at least 110 apart (more than any blast plus a hull). Shells fly √(W/720) faster and last that much longer, and the air scales with them (next section), so a shot carries the same share of the field and the wind bends it by about the same share of its length at any width; a press of power changes it by 720/W and the status bar shows one decimal above 720. The drones' wobble tightens per width (`FIELD_AIM` in `ai.ts`), so each difficulty keeps its hit rates at every width. The server's sim takes the width; rooms pass 720, and `protocol/sim-vectors.json`'s `field` group pins 720, 1080 and 1440 (terrain heights included, bit for bit).
+
+## The air
+
+A shell flies through moving air (`stepBallistic` in `src/sim.ts`,
+`room_step_ballistic` in `server/flight.php`, one 1/60 s step at a time):
+
+- Gravity and quadratic drag on its speed relative to the air:
+  a = g − k·|v − w|·(v − w), with g = 95 px/s² and k = `DRAG_K` (0.0012 per
+  px) times the gun's `drag` factor. A shell climbs long, peaks past the
+  middle of its flight and comes down steeply, and never falls faster than
+  its terminal speed √(g/k), 281 px/s for a Shell. A Shell at full power
+  reaches 68% of a room's field at its best angle; the drag cuts more off a
+  fast shot than a slow one.
+- Each gun's `drag` (game.yaml) is its ballistic coefficient: 1 is a Shell's,
+  dense and slick guns sit below it (Needle 0.4, Heavy 0.45, NUKE 0.55, Heavy
+  Roller 0.6), light or draggy ones above (Buckshot 2.4, Dirt Clod 2.2, the
+  tracers 1.4 and 1.8; Funky Bomb, Leapfrog, Flak, the napalms, Liquid Dirt
+  and Dirt Charge 1.1). Bomblets, pellets and leaps fly with their gun's.
+- The wind moves the air, faster the higher it is: w(h) = wind ×
+  `AIR_SPEED` × (max(h, 1) / `SHEAR_H`)^(3/16), where h is the height over
+  the field's floor (y = 460, the deepest a crater reaches), `AIR_SPEED` = 10
+  px/s per unit of wind and `SHEAR_H` = 40 px. Calibrated so a Shell's drift
+  at wind 5 is about what it was under the old flat push (90-107% of it for
+  mid-field shots). The height counts from the floor, not the ground under
+  the shell: the ground changes mid-volley (a crater, a mound) and the room
+  server flies a volley's shells one after another where the browser flies
+  them side by side, so air read off the ground would differ between the
+  two; the floor never moves, a cliff edge does not jolt the air, and a step
+  needs no ground lookup. A high lob, up in faster air, drifts more than a
+  flat shot to the same spot, by more than its longer flight explains.
+- The exponent 3/16 (about 0.19) is computed as the cube of four nested
+  square roots: every engine rounds a square root the same, so the browser
+  and the server agree to the last bit (`shear`, `room_shear`).
+- On a wider field (s = W/720) shells fly √s faster, k is k/s, the air √s
+  faster and the height h/s, so a flight is the room's, scaled; rooms (s = 1)
+  are untouched.
+- Missiles (`missile: true`: Seeker, Cluster, Death's Head, Baby Nuke and
+  NUKE, the guns that fly under their own power) map power to distance: at 45
+  degrees in calm air, launch height back to launch height, power p flies
+  max(0.1, p/100) × 0.9 of the field (`MISSILE_LOW`, `MISSILE_FULL`), so 100%
+  lands at the far edge from a unit 30 px in from the other, never past it.
+  Its launch speed at each whole power is found by a 40-round bisection
+  against that very flight (`missileTable`, `room_missile_table`);
+  `tools/game-json.php` writes the table into the row as `missileSpeed`, so
+  the browser and the server read the same numbers (and
+  `test/missile.test.ts` holds the table to the browser's own bisection, bit
+  for bit). A power between whole ones is interpolated straight. A missile
+  steers against the wind and feels `MISSILE_WIND` = 1/8 of it: a gale of 10
+  drifts it, but a full-power shot lands within `MISSILE_WIND_MARGIN` = 5% of
+  the field's width past the edge (33 px on a room's), and into the wind it
+  still crosses 85% of it.
+- A seeker's homing (`steerShell`, `room_seek_push`) pushes across its flight
+  only, never along it: it turns a seeker but never speeds it up, so it
+  cannot carry one past where its power sends it.
+- The camera frames a climbing volley by flying each shell to the top of its
+  arc through the same air (`flightTop`), and the draw-only flight past the
+  field's edge (`ghosts.ts`) flies on through it too.
 
 ## Editing game data
 
@@ -743,9 +801,15 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
   `test/ai-search.test.ts` to the same). Guns that fly the same planning arc
   share one search: their flight key (`flightKey` in `src/sim.ts`,
   `room_flight_key` in `server/sim.php`) holds every field the planning flight
-  reads (speed, and a roller's friction and roll time), so a gun given
-  its own arc is searched on its own, and the first gun of an arc in rack
-  order keeps it. Then Gaussian wobble: wob = max(`wobFloor`, `wobStart` - `wobStep` x
+  reads (speed, drag, a missile's flag and speed table, and a roller's
+  friction and roll time), and the first gun of an arc in rack order keeps
+  it. Each gun's drag gives it an arc of its own, more than a turn can
+  grid-search, so only the plan's first arc (the lead, the Shell's unless a
+  lobber's area guns lead) is searched on the grid; every other arc but a
+  roller's follows it: it keeps the lead's best angle and seeks only the
+  power, 12, 6, 3 and 1 either side of the lead's best power, and one that
+  still lands more than `BRK_ON` from the target tries 45 degrees
+  (`FOLLOW_ANGLE`) the same way. Then Gaussian wobble: wob = max(`wobFloor`, `wobStart` - `wobStep` x
   round), angle +-9 x wob, power +-12 x wob, doubled against a jammer's owner.
   Then a 35% chance to shuffle 8-35 px.
 - Gun: the search keeps the best aim of each planning arc, and each loaded
@@ -755,8 +819,11 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
   munition at its own landing (`munitions`, `room_ai_munitions`: a hop gun's
   leaps one after another from the landing velocity, a scatter gun's bomblets
   from its burst, a cluster's from where its shot splits, `splitPoint`; each
-  flown with no wind down to the landing's height by one shared closed form,
-  `dropTime` / `room_drop_time`), and the ground the gun moves (`earthHarm`,
+  flown through the round's air down to the landing's height, `fallTo` /
+  `room_fall_to`, bursting deeper in the craters the earlier ones dug, in the
+  order they come down, `sinkInto` / `room_ai_sink_into`; one that flies into
+  the target's body from outside it counts its whole damage), and the ground
+  the gun moves (`earthHarm`,
   `room_ai_earth_harm`): its crater and its munitions' craters, dirt, a pour,
   a slump, or a dig's trench (stopped at a unit's body as the real one is)
   and its warheads, on a copy of the terrain; the target's fall as the settle
@@ -790,9 +857,10 @@ Two copies of one algorithm, `room_ai_choose` in `server/ai.php` and `aiChoose` 
   p² sin 2a, puddled that far back toward the drone. A riot charge scores the
   falls its scoop gives rivals; a buried human fired for by the battery (a
   turn that timed out) fires its first riot gun in rack order. The most harmful gun of the
-  best-landing arc fires (glory: of any arc), the cheaper on a tie, then rack
+  arcs that land as near as the best one, or on the hull (within `BRK_ON`),
+  fires (glory: of any arc), the cheaper on a tie, then rack
   order, so a weak target gets the cheapest gun that finishes it; when no gun
-  would hurt anyone, the arc's first gun (glory: its strongest) fires, or, if
+  would hurt anyone, the cheapest of them (glory: the strongest) fires, or, if
   that would reach the drone, the best-landing gun that would not. When every
   gun would, the drone fires the one that would hurt it least (`aiSelfHarm`,
   `room_ai_self_harm`: the same blasts on its own body, with no margin; a
@@ -834,8 +902,8 @@ hold both to the same aim at every level):
 
 | Level | `wobStart` | `wobStep` | `wobFloor` | `correct` | `brkShrink` | `brkFloor` | `brkMax` |
 |---|---|---|---|---|---|---|---|
-| `easy` | 5 | 0.3 | 2 | 0.5 | 0.6 | 0.8 | 5 |
-| `normal` | 3.7 | 0.33 | 1.15 | 0.6 | 0.5 | 0.4 | 5 |
+| `easy` | 8 | 0.5 | 3.2 | 0.5 | 0.5 | 1.2 | 5 |
+| `normal` | 5 | 0.45 | 1.5 | 0.6 | 0.45 | 0.55 | 5 |
 | `hard` | 0.85 | 0.12 | 0.25 | 1 | 0.65 | 0.2 | 5 |
 
 - Solo: the Menu's Difficulty picker (Easy, Normal, Hard; Normal by default),
@@ -852,9 +920,9 @@ hold both to the same aim at every level):
 
   | Level | Round 1 | Round 5 | Round 10 |
   |---|---|---|---|
-  | `easy` | 9 / 11 / 16 | 10 / 14 / 19 | 17 / 22 / 28 |
-  | `normal` | 10 / 17 / 26 | 15 / 27 / 42 | 27 / 40 / 54 |
-  | `hard` | 34 / 51 / 65 | 74 / 81 / 81 | 74 / 84 / 82 |
+  | `easy` | 9 / 10 / 14 | 10 / 15 / 20 | 16 / 19 / 27 |
+  | `normal` | 11 / 15 / 28 | 16 / 26 / 44 | 28 / 41 / 51 |
+  | `hard` | 46 / 63 / 73 | 76 / 83 / 82 | 76 / 83 / 82 |
 
   A shell landing anywhere on the field reaches the hull about one time in
   ten (the blast reaches 40 px each side), so normal's first round of
@@ -1002,7 +1070,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   the scroll event itself, because a script's `scrollTop` change is reported
   only on the next frame.
 - The Roller (`effect: roller`) is a shell that does not burst where it lands:
-  it flies like a Shell, and touching down it rolls the ground (wind no longer
+  it flies like a shell (through the air, with its own drag), and touching down it rolls the ground (wind no longer
   touches it) and bursts when it reaches a unit, comes to rest in a dip, runs
   off the board, or has rolled `rollTime` seconds. A roller that meets a unit
   while still airborne bursts as a direct hit, as a shell does. Rolling is 1D
@@ -1177,7 +1245,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/shop.test.ts` | `src/shop.ts`: a solo visit buys as often as the chest allows (a round-1 gun from `game.json`), and a room's Repair asks `netBuy` for what the hull takes |
 | `test/ui.test.ts`                             | The Preact overlays (`src/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
 | `test/smoke.test.ts`                          | The shipped bundles (`dist/fx.js`, then `dist/main.js`) in a stub DOM, driven by the `game.json` key table and the `protocol/` fixtures; also checks the page loads exactly those two scripts with no import map and that the bundle has no bare imports, every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps; a solo player who wrecks their own tank sees the drones fight on to one and the lost round open the shop |
-| `test/ai-hitrate.test.ts`                     | The drones' measured hit rates per difficulty against the targets (see Difficulty), the table's shape, hard being the sharpest aim (its exact constants), unknown levels aiming at normal, and the saved setting's default and form. The harness is seeded, so it never flakes, but one cell runs close: at 1440 wide, round 10, easy's ranging shot (17.2%) is 0.33 points inside its band (half of normal's ±5). A later aim or weapon change can fail this test on that easy cell rather than on what it changed; read the failure for that before blaming the change |
+| `test/ai-hitrate.test.ts`                     | The drones' measured hit rates per difficulty against the targets (see Difficulty), the table's shape, hard being the sharpest aim (its exact constants), unknown levels aiming at normal, and the saved setting's default and form. The harness is seeded, so it never flakes, but one cell runs close: at 1080 wide, round 10, normal's ranging shot (29.2%) is 0.8 points inside its band (25 ± 5). A later aim or weapon change can fail this test on that easy cell rather than on what it changed; read the failure for that before blaming the change |
 | `test/ai-arcs.test.ts`                        | Guns share a drone's aim search only when their flight key matches: every field of every gun is changed (a string field to a value no gun holds), and any change that bends a planning flight must change the key; every gun field `simShot` reads, traced as it reads it, must be one `flightKey` reads; a gun given its own speed, flat flight or roll is searched on its own (`test/php/AiArcsTest.php` is the same for the server) |
 | `test/ai-search.test.ts`                      | The planning flights one drone turn costs, counted as `simShot` flies them (not as `aiChoose` looks guns up): a coarse grid and the fine neighbours of its best per distinct arc (a full round-9 rack too, for every strategy, inside a time budget), a lobber's high arcs, and a bracket correction's three grids |
 | `test/ai-harm.test.ts`                        | The gun a drone fires (`aiHarm`), checked by firing it: predicted harm ranks Shell, Baby Nuke, Funky and Death's Head as their real bursts do; no self-damage from Funky with the target 160-220 px off or from any carried gun at 80-300 px; pressed against its target it spares itself; point blank (20-80 px), every strategy with a full round-9 rack costs itself no more than its Shell alone would; Mortar over Shell on one arc; a weak target gets the cheapest gun; picks over rounds 5-12 vary (no gun above 60%); the earth term counts a harmless crater's fall on the target and refuses one under the drone |
@@ -1207,6 +1275,8 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/fixed-step.test.ts` | The solo war runs in fixed steps whatever the frame lengths, tank falls included, so play is the same on a 30 Hz phone and a 144 Hz monitor |
 | `test/determinism.test.ts` | The rule modules call no clock, no `Math.random` and no libm trigonometry, so the shared sim stays bit-exact across the two languages (see Deterministic math) |
 | `test/wide-field.test.ts`                     | The sim at any width: the same hills continued, units spread outside each other's blast, reach and wind scaling, flights that last as long as the field, 720 unchanged |
+| `test/air.test.ts`                            | The air (`stepBallistic`): a falling shell held to its terminal speed, the artillery arc (the top past the middle, a steeper fall, drag shortening it), the wind's growth with height from the floor (and its 1 px floor), a high lob drifting more than a flat shot to the same spot by more than a wind of one speed would, negative wind the exact mirror, every gun that flies naming its drag, slick guns outranging the Shell and draggy ones falling short, short range rare (at most five guns, all draggy), and the air scaled on a wider field |
+| `test/missile.test.ts`                        | Missiles: flagged in the data with a speed table that is the browser's own bisection bit for bit, speeds interpolated between whole powers; at every power 10 to 100, at 45 degrees in calm air from either edge, landing on the field and further with each step, about p% of it; full power at least 95% of a room's field; a wind of 10 either way leaving a full-power shot within `MISSILE_WIND_MARGIN` of the edge; a seeker's homing never carrying it off the field; drones aiming each missile onto its target |
 | `test/ghosts.test.ts`                         | A shell retired past the edge keeps flying (draw only), one that burst inside leaves no ghost, a replay's last point keeps its velocity, ghosts are dropped off the picture |
 | `test/scenery.test.ts`                        | The scenery continues the hills with no step over 1 px at the seam, cratered or not |
 | `test/camera.test.ts`                         | `src/camera.ts`: the bottom edge on the floor with units high or low, a high arc pulled into view down to the floor with every unit on screen, the hold until the volley lands (rollers and shells past the edge let go), the ease keeping every unit framed on every frame, the sky marks |
@@ -1320,7 +1390,11 @@ width (terrain heights included), armor and match-end cases compare exactly,
 with -0 equal to 0 only where a case says so.
 
 - Covered: the RNG and terrain generator, spawn spots, shot speed, muzzle,
-  gravity and wind, hit boxes, the swept hit test (owner-clear rule, the
+  the air (`air`: the wind's growth with height at the edge heights, and
+  flights with drag and shear for slick, plain, draggy and airless guns in
+  winds of -10 to 12, grazing and under the floor, over the top of the
+  field and on wide fields, compared exactly), a missile's speed table and
+  its speed at any power (`missile-speed`, exactly), hit boxes, the swept hit test (owner-clear rule, the
   skip of the unit a burst struck), seeker steering, the cluster fan, blast damage and craters (shield,
   bunker, EMP, last stand, kill bonus), landing prediction, where a roller's
   roll ends, whole volleys for every weapon in `game.json` (and a roller down
@@ -1409,6 +1483,9 @@ agree with what the server then plays:
   in PHP `deg2rad`'s order;
 - a seeker within 1 px of its target does not steer, and a cluster's
   bomblets may burst on the ground at once, on both sides;
+- the air's fractional power, (h / 40)^(3/16), is the cube of four nested
+  square roots, and a missile's launch speeds are one table in `game.json`
+  that `tools/game-json.php` flies with the server's own air;
 - `sin`, `cos` and `atan2` come from `src/detmath.ts` / `server/detmath.php`:
   fdlibm's polynomials built only from `+ − × ÷` and `floor`, so both sides
   compute the same bits whatever the browser's or the host's libm does; the

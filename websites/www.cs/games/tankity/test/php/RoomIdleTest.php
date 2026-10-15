@@ -40,7 +40,7 @@ final class RoomIdleTest extends TestCase
             $room['turnSecs'] = $turnSecs;
         }
         if ($actedAt !== null) {
-            $room['actedAt'] = $actedAt;
+            $room['acted'] = $actedAt;
         }
         return $room;
     }
@@ -81,17 +81,6 @@ final class RoomIdleTest extends TestCase
         $this->assertSame(1000 + 600, room_expires($room));
     }
 
-    public function testAFinishedLongMatchTakesNoLongPlace(): void
-    {
-        foreach (['LNGP' => 'play', 'LNGO' => 'over'] as $code => $phase) {
-            $room = $this->started($code, $phase, 2, 604800, time());
-            $room['seats'][0]['addr'] = 'a';
-            $room['seats'][1]['addr'] = 'b';
-            $this->save($room);
-        }
-        $this->assertSame(1, room_long_count());
-    }
-
     public function testAnOldRoomReadsActedAtAsTouched(): void
     {
         $room = $this->started('OLDR', 'play', 1, null, null);
@@ -112,7 +101,7 @@ final class RoomIdleTest extends TestCase
         $room = $this->started('POLL', 'play', 1, 60, time() - 700);
         $this->save($room); // room_save touches the room now, as a poll does
         $this->assertTrue(room_idle(room_decode(tankity_db()->query("SELECT data FROM rooms WHERE code = 'POLL'")->fetchColumn())));
-        $this->assertSame(0, room_count());
+        $this->assertSame(0, room_slots_used());
     }
 
     public function testTheColumnFollowsTheRoom(): void
@@ -132,12 +121,11 @@ final class RoomIdleTest extends TestCase
     {
         $this->save($this->started('LIVE', 'play', 1, 600, time()));
         $this->save($this->started('DEAD', 'play', 1, 60, time() - 5000));
-        $this->assertSame(1, room_count());
-        $lock = room_alloc(fn() => 'NEWR');
-        room_save($lock, $lock->code, room_new('NEWR', 'ABC'));
-        $this->assertTrue(room_register('NEWR', 2));
-        $this->assertFalse(room_register('NEWR', 1));
-        room_discard($lock);
+        $this->save($this->started('OVRL', 'over', 2, 600, time()));
+        $this->save($this->started('LOBB', 'lobby', 1, 600, time()));
+        $this->assertSame(2, room_slots_used(), 'started and finished matches hold slots; a lobby does not');
+        $this->assertSame(1, room_slots_used('OVRL'));
+        $this->assertSame(1, room_lobbies_used());
     }
 
     public function testTheKnobsAreTheLiveWindowAndTheCap(): void
@@ -156,27 +144,17 @@ final class RoomIdleTest extends TestCase
         return $room;
     }
 
-    /* One address makes a one-human room, picks the week, and tries to hold a
-       slot of the cap for it. */
-    public function testALoneHumanOnTheWeekSettingExpiresAfterTheLiveWindow(): void
+    /* Two seats behind one address (friends on one campus network) earn a
+       turn each: a started room has its humans by construction, and a full
+       server reclaims an idle one sooner whatever this says. */
+    public function testIdleLimitIsHumansTimesTurnTime(): void
     {
-        $room = $this->seatsFrom($this->started('SOLO', 'play', 0, 604800, 1000), ['aaaa']);
-        $this->assertSame(1600, room_expires($room));
-    }
-
-    public function testTwoSeatsFromOneAddressExpireAfterTheLiveWindow(): void
-    {
-        $room = $this->seatsFrom($this->started('TWOS', 'play', 0, 604800, 1000), ['aaaa', 'aaaa']);
-        $this->assertSame(1600, room_expires($room));
-        $this->assertSame(1600, room_expires(array_merge($room, ['phase' => 'over'])));
-    }
-
-    public function testDistinctAddressesEarnTheirTurnsButNeverLessThanTheWindow(): void
-    {
-        $room = $this->seatsFrom($this->started('DIST', 'play', 0, 28800, 1000), ['aaaa', 'bbbb', 'aaaa']);
-        $this->assertSame(1000 + 2 * 28800, room_expires($room));
-        $room['turnSecs'] = 60;
-        $this->assertSame(1600, room_expires($room));
+        $two = $this->seatsFrom($this->started('TWOS', 'play', 0, 86400, 1000), ['aaaa', 'aaaa']);
+        $this->assertSame(172800, room_idle_limit($two));
+        $one = $this->seatsFrom($this->started('ONES', 'play', 0, 86400, 1000), ['aaaa']);
+        $this->assertSame(86400, room_idle_limit($one));
+        $lightning = $this->seatsFrom($this->started('LITE', 'play', 0, 60, 1000), ['aaaa']);
+        $this->assertSame(600, room_idle_limit($lightning));
     }
 
     public function testOneAddressCannotHostMoreThanItsShare(): void
@@ -192,11 +170,12 @@ final class RoomIdleTest extends TestCase
         $this->assertSame(4, room_hosts_per_address());
         $this->assertSame(5, room_hosted('aaaa'));
         $this->assertSame(4, room_hosted('aaaa', 'H1XX'));
-        $this->assertSame(1, room_hosted('bbbb'));
+        $this->assertSame(0, room_hosted('bbbb'), 'a lobby is no hosted match');
+        $this->assertSame(1, room_lobbies_hosted('bbbb'));
         $this->assertSame(0, room_hosted(''));
-        // Expired rooms stop counting: the week-long hold is gone after the window.
-        room_test_age('H1XX', 700);
-        room_test_age('H2XX', 700);
+        // Expired rooms stop counting: a one-human week room expires a week after its last turn.
+        room_test_age('H1XX', 604801);
+        room_test_age('H2XX', 604801);
         $this->assertSame(3, room_hosted('aaaa'));
     }
 

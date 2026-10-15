@@ -96,14 +96,13 @@ $ageRoom = function (string $c): void {
         // Abandoned long ago: its last touch and last act both far back, and
         // the stored expiry (what the count and the sweep read) with them.
         $room['touched'] = time() - 30 * 86400;
-        if (isset($room['actedAt'])) {
-            $room['actedAt'] = $room['touched'];
-        }
-        $u = $db->prepare('UPDATE rooms SET data = ?, touched = ?, expires = ? WHERE code = ?');
+        $room['acted'] = $room['touched'];
+        $u = $db->prepare('UPDATE rooms SET data = ?, touched = ?, expires = ?, acted = ? WHERE code = ?');
         $u->bindValue(1, serialize($room), PDO::PARAM_LOB);
         $u->bindValue(2, $room['touched'], PDO::PARAM_INT);
         $u->bindValue(3, room_expires($room), PDO::PARAM_INT);
-        $u->bindValue(4, $c);
+        $u->bindValue(4, $room['acted'], PDO::PARAM_INT);
+        $u->bindValue(5, $c);
         $u->execute();
     });
 };
@@ -113,9 +112,11 @@ $check('server-up', $ping !== null);
 $check('cap-from-file', ($ping['rooms']['max'] ?? 0) === $cfgMax, 'max=' . ($ping['rooms']['max'] ?? '?'));
 // Baseline, not emptiness: strangers may share the shelf, so every count
 // below is relative to what was already live. Our own rooms are the only
-// ones this suite ever ages out.
-$baseUsed = (int) ($ping['rooms']['used'] ?? 0);
-$check('empty-shelf', ($ping['rooms']['used'] ?? -1) === $baseUsed, 'used=' . ($ping['rooms']['used'] ?? '?'));
+// ones this suite ever ages out. A lobby counts in the lobby pool; only a
+// started match takes one of the max_rooms slots.
+$baseUsed = (int) ($ping['lobbies']['used'] ?? 0);
+$baseSlots = (int) ($ping['rooms']['used'] ?? 0);
+$check('empty-shelf', ($ping['lobbies']['used'] ?? -1) === $baseUsed, 'used=' . ($ping['lobbies']['used'] ?? '?'));
 
 $room = $post('create', ['initials' => 'tst']);
 $check('create-ok', ($room['ok'] ?? false) === true, 'code=' . ($room['code'] ?? '?'));
@@ -123,13 +124,13 @@ $code = (string) ($room['code'] ?? '');
 $token = (string) ($room['token'] ?? '');
 $csrf = (string) ($room['csrf'] ?? '');
 $ping = $get($base . '/rooms.php?action=ping');
-$check('counts-live', ($ping['rooms']['used'] ?? -1) === $baseUsed + 1, 'used=' . ($ping['rooms']['used'] ?? '?'));
+$check('counts-live', ($ping['lobbies']['used'] ?? -1) === $baseUsed + 1, 'used=' . ($ping['lobbies']['used'] ?? '?'));
 
 // Age a record the way an abandoned room ages.
 $ageRoom($code);
 // An untouched record is truly gone: the sweep drops it, freeing the slot.
 $ping = $get($base . '/rooms.php?action=ping');
-$check('stale-not-counted', ($ping['rooms']['used'] ?? -1) === $baseUsed, 'used=' . ($ping['rooms']['used'] ?? '?'));
+$check('stale-not-counted', ($ping['lobbies']['used'] ?? -1) === $baseUsed, 'used=' . ($ping['lobbies']['used'] ?? '?'));
 $gone = $get($base . '/rooms.php?action=state&code=' . $code . '&token=' . $token . '&since=0');
 $check('stale-unreachable', ($gone['error'] ?? '') === 'no such room', $gone['error'] ?? '');
 
@@ -141,7 +142,7 @@ $csrf = (string) ($room['csrf'] ?? '');
 $state = $get($base . '/rooms.php?action=state&code=' . $code . '&token=' . $token . '&since=0');
 $check('heartbeat-ok', ($state['ok'] ?? false) === true);
 $ping = $get($base . '/rooms.php?action=ping');
-$check('heartbeat-counts', ($ping['rooms']['used'] ?? -1) === $baseUsed + 1, 'used=' . ($ping['rooms']['used'] ?? '?'));
+$check('heartbeat-counts', ($ping['lobbies']['used'] ?? -1) === $baseUsed + 1, 'used=' . ($ping['lobbies']['used'] ?? '?'));
 
 // A request holding the write lock never stalls the shelf's count: ping only reads.
 $held = tankity_db();
@@ -150,36 +151,52 @@ $lockT = microtime(true);
 $pingHeld = $get($base . '/rooms.php?action=ping');
 $lockDt = microtime(true) - $lockT;
 $held->exec('ROLLBACK');
-$check('ping-ignores-room-lock', $pingHeld !== null && ($pingHeld['rooms']['used'] ?? -1) >= 1
+$check('ping-ignores-room-lock', $pingHeld !== null && ($pingHeld['lobbies']['used'] ?? -1) >= 1
     && $lockDt < 1.0, sprintf('wait=%.2fs', $lockDt));
 
-// The ceiling uses the live count, and refusals stay human: fill the shelf
-// to the configured max, then prove one more guest is refused kindly.
+// The match slots use the live count of started matches, and refusals stay
+// human: fill the slots to the configured max with started two-seat matches,
+// then prove one more Start is refused kindly. A Start on a full server
+// reclaims a stranger's finished or idle room, so the check runs only when
+// none is eligible, and says it skipped otherwise.
 $fillNames = ['fax', 'fay', 'faz', 'fbx', 'fby', 'fbz', 'fcx', 'fcy', 'fcz', 'fdx'];
 $fillCodes = [];
-$pingNow = $get($base . '/rooms.php?action=ping');
-$need = $cfgMax - (int) ($pingNow['rooms']['used'] ?? 0);
 $fillsOk = true;
-for ($i = 0; $i < $need; $i++) {
-    // Creates are limited by the hourly allowance (lifted on the test stacks),
-    // not by time: a fill to a 50-room cap must finish well inside nginx's 60 s.
-    usleep(50000);
-    $f = $post('create', ['initials' => $fillNames[$i % count($fillNames)]]);
-    if (($f['ok'] ?? false) !== true) $fillsOk = false;
-    else $fillCodes[] = (string) ($f['code'] ?? '');
+if (room_reclaim_pick('', time()) !== null) {
+    $check('cap-live-skipped', true, 'a stranger\'s room is eligible for reclaim; not filling the slots');
+} else {
+    $pingNow = $get($base . '/rooms.php?action=ping');
+    $need = $cfgMax - (int) ($pingNow['rooms']['used'] ?? 0);
+    $fills = [];
+    // Creates and joins are limited by the hourly allowance (lifted on the
+    // test stacks), not by time: a fill to a 50-match cap must finish well
+    // inside nginx's 60 s.
+    for ($i = 0; $i <= $need; $i++) {
+        $f = $post('create', ['initials' => $fillNames[$i % count($fillNames)]]);
+        $g = ($f['ok'] ?? false) === true ? $post('join', ['code' => (string) $f['code'], 'initials' => 'gst']) : null;
+        if (($g['ok'] ?? false) !== true) $fillsOk = false;
+        else $fills[] = $f;
+        $fillCodes[] = (string) ($f['code'] ?? '');
+    }
+    usleep(200000); // past each host seat's 150 ms act spacing
+    $refused = null;
+    foreach ($fills as $i => $f) {
+        [$st, $out] = $postStatus('start', ['code' => $f['code'], 'token' => $f['token'], 'csrf' => $f['csrf']]);
+        if ($i < $need && $st !== 200) $fillsOk = false;
+        if ($i === $need) $refused = [$st, $out];
+    }
+    $check('cap-live', $fillsOk && $refused !== null && $refused[0] === 409,
+        'filled=' . min(count($fills), $need) . '/' . $need . ' refused=' . json_encode($refused));
+    $check('cap-human', ($refused[1]['error'] ?? '') === 'Every match slot is in play. Try again in a few minutes.', json_encode($refused));
 }
-usleep(50000);
-$refused = $post('create', ['initials' => 'zzz']);
-$check('cap-live', $fillsOk && ($refused['ok'] ?? false) === false,
-    'filled=' . count($fillCodes) . '/' . $need . ' refusedErr=' . ($refused['error'] ?? '?'));
-$check('cap-human', isset($refused['error']) && strpos($refused['error'], 'taken') !== false, $refused['error'] ?? '');
 
 // Empty the shelf back down for the match below, then prove the sweep took.
 foreach (array_merge($fillCodes, [$code]) as $old) {
-    $ageRoom($old);
+    if ($old !== '') $ageRoom($old);
 }
 $ping = $get($base . '/rooms.php?action=ping');
-$check('shelf-emptied', ($ping['rooms']['used'] ?? -1) === $baseUsed, 'used=' . ($ping['rooms']['used'] ?? '?'));
+$check('shelf-emptied', ($ping['lobbies']['used'] ?? -1) === $baseUsed && ($ping['rooms']['used'] ?? -1) === $baseSlots,
+    'lobbies=' . ($ping['lobbies']['used'] ?? '?') . ' matches=' . ($ping['rooms']['used'] ?? '?'));
 
 // Turns must cycle host -> guest -> battery. A guest who just sat down is
 // present, not idle (no instant auto-fire), and one drone shot passes the

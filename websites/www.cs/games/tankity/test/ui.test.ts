@@ -292,7 +292,7 @@ type LobbyCase = Omit<LobbyProps, 'drones' | 'turnSecs' | 'onTurnForm' | 'onTurn
 function lobbyProps(over: Partial<LobbyProps> = {}) {
   const calls: LobbyCalls = { close: 0, pick: [], host: [], join: [], seat: [], copy: 0, start: 0, leave: 0, icons: [], initials: [] };
   const given: LobbyCase = {
-    keyHint, onClose: () => { calls.close++; }, online: true, count: '3 / 10 rooms occupied', status: '', inRoom: false,
+    keyHint, onClose: () => { calls.close++; }, online: true, count: '3 / 10 matches running · 4 lobbies open', status: '', inRoom: false,
     maps: MAPS, mapId: '', drawMapIcon: (cv, profile) => { calls.icons.push(profile); }, mapsRev: 1, prefillCode: '',
     onPickMap: id => calls.pick.push(id), initials: 'ZED', initialsRev: 0, initialsProblem: '', onInitials: w => calls.initials.push(w),
     onHost: l => calls.host.push(l), onJoin: (c, l) => calls.join.push([c, l]),
@@ -326,7 +326,7 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
   await test('lobby-out-of-room', () => { assert.ok(intro.hidden === false && rows.hidden === false && room.hidden === true
     && hasClass(intro, 'hint') && hasClass(rows, 'lobby-rows'), `${intro.hidden}|${rows.hidden}|${room.hidden}`); });
   await test('lobby-status-and-count', () => { assert.ok(text(byId(card, 'lobby-status')) === 'Knocking…' && attr(byId(card, 'lobby-status'), 'aria-live') === 'polite'
-    && text(byId(card, 'lobby-count')) === '3 / 10 rooms occupied' && attr(byId(card, 'lobby-count'), 'aria-live') === 'polite'); });
+    && text(byId(card, 'lobby-count')) === '3 / 10 matches running · 4 lobbies open' && attr(byId(card, 'lobby-count'), 'aria-live') === 'polite'); });
   const dot = byId(card, 'net-dot');
   await test('lobby-dot', () => { assert.ok(dot.className === 'dot on' && attr(dot, 'title') === 'room server: connected'); });
   renderLobby(veil, { ...props, online: false });
@@ -459,7 +459,7 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
   roomRange.value = '5';
   fire(roomRange, 'input');
   await test('lobby-room-turn-reports', () => { assert.ok(turns.room.join() === '86400', turns.room.join()); });
-  await test('lobby-room-close-rule', () => { assert.ok(/single connection/.test(text(byId(hostRoom, 'turn-hint'))), text(byId(hostRoom, 'turn-hint'))); });
+  await test('lobby-room-close-rule', () => { assert.ok(/closed to make space/.test(text(byId(hostRoom, 'turn-hint'))), text(byId(hostRoom, 'turn-hint'))); });
 
   const guestRoom = makeEl('lobby-veil');
   renderLobby(guestRoom, lobbyProps({ ...base, inRoom: true, isHost: false, code: 'AB3D', seats: SEATS, mySeat: 3 }).props);

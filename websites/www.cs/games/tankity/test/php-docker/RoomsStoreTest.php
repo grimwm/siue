@@ -5,7 +5,7 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /* The room store under real concurrency: its own php -S (four workers) on a
-   free 127.0.0.1 port, a four-room cap, a private data directory, and
+   free 127.0.0.1 port, a four-lobby pool, a private data directory, and
    holders in other processes. */
 final class RoomsStoreTest extends TestCase
 {
@@ -19,7 +19,7 @@ final class RoomsStoreTest extends TestCase
     {
         self::$tmp = sys_get_temp_dir() . '/tankity-store-http-' . getmypid() . '-' . bin2hex(random_bytes(3));
         mkdir(self::$tmp, 0700);
-        file_put_contents(self::$tmp . '/test.yaml', 'max_rooms: ' . self::CAP . "\nroom_live_secs: 60\n");
+        file_put_contents(self::$tmp . '/test.yaml', 'max_lobbies: ' . self::CAP . "\nroom_live_secs: 60\n");
         putenv('CONFIG_FILE=' . self::$tmp . '/test.yaml');
         putenv('TANKITY_DATA_DIR=' . self::$tmp . '/data');
         require_once dirname(__DIR__) . '/php/rooms-lib.php';
@@ -84,7 +84,7 @@ final class RoomsStoreTest extends TestCase
         return [$p, $pipes];
     }
 
-    public function testCreatesTakeDistinctCodesUpToTheCap(): void
+    public function testCreatesTakeDistinctCodesUpToTheLobbyPool(): void
     {
         $codes = [];
         for ($i = 0; $i < self::CAP; $i++) {
@@ -93,10 +93,9 @@ final class RoomsStoreTest extends TestCase
             $codes[] = $r['code'];
         }
         $this->assertCount(self::CAP, array_unique($codes));
-        $this->assertSame(self::CAP, self::get('ping')['rooms']['used']);
+        $this->assertSame(self::CAP, self::get('ping')['lobbies']['used']);
         [$st, $r] = self::post('create', ['initials' => 'zzz']);
-        $this->assertSame(409, $st);
-        $this->assertStringContainsString('taken', $r['error']);
+        $this->assertSame([409, ['error' => 'Every lobby is busy. Try again in a minute.']], [$st, $r]);
         $this->assertSame(self::CAP, $this->rows(), 'a refused create leaves no row');
     }
 
@@ -202,7 +201,7 @@ final class RoomsStoreTest extends TestCase
         $ping = self::get('ping');
         $dt = microtime(true) - $t;
         proc_close($p);
-        $this->assertSame(1, $ping['rooms']['used']);
+        $this->assertSame(1, $ping['lobbies']['used']);
         $this->assertLessThan(1.0, $dt);
         $this->assertArrayNotHasKey('store', $ping['rooms']);
     }

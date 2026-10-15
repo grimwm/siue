@@ -14,7 +14,7 @@ import { readInitials, saveInitials } from './initials.ts';
 import type { Pref } from '../../_kit/prefs.ts';
 import type { HudValues } from './hud.ts';
 import type { EndState } from './match.ts';
-import { inviteUrl, prettyRoomError } from './net.ts';
+import { goneLine, inviteUrl, isGoneError, prettyRoomError } from './net.ts';
 import type { RoomClient } from './net.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Replay } from './replay.ts';
@@ -247,7 +247,11 @@ export function createLobby(deps: LobbyDeps) {
       renderLobby();
       return false;
     }
-    if (data.ok && data.rooms) LOBBY.count = `${data.rooms.used} / ${data.rooms.max} rooms occupied`;
+    if (data.ok && data.rooms) {
+      // A server from before the lobby pool answers rooms alone.
+      const lobbies = 'lobbies' in data && data.lobbies ? ` · ${data.lobbies.used} lobbies open` : '';
+      LOBBY.count = `${data.rooms.used} / ${data.rooms.max} matches running${lobbies}`;
+    }
     renderLobby();
     return !!(data.ok && data.rooms);
   }
@@ -410,10 +414,12 @@ export function createLobby(deps: LobbyDeps) {
       room = await net.getState();
     } catch (err) {
       net.detach();
-      if (/no such room/.test(String((err as Error)?.message || err))) {
-        seats.forget(code);
+      const why = isGoneError(err);
+      if (why) {
+        if (why === 'space') seats.markClosed(code);
+        else seats.forget(code);
         await openLobby();
-        lobbySay(`Room ${code} has closed.`);
+        lobbySay(goneLine(code, why));
       } else {
         await openLobby();
         lobbySay(prettyRoomError(err));
@@ -524,12 +530,15 @@ export function createLobby(deps: LobbyDeps) {
       netRenderRoster(d.room);
     } catch (err) { lobbySay(prettyRoomError(err)); }
   }
-  /* The room this client sat in is gone (the server swept it) or its seat was
-     given up elsewhere: the seat is forgotten here too, and the player lands
-     in the lobby with a line saying so, to host or join again. */
+  /* The room this client sat in is gone (the server swept it, or closed it to
+     make space for another match) or its seat was given up elsewhere: the
+     seat is forgotten here too (one closed to make space stays in Your games,
+     marked, until dismissed), and the player lands in the lobby with a line
+     saying so, to host or join again. */
   let netMatch = false; // a net match is running on this page (set by startNetMatch, cleared by dropRoom)
-  function netGone(code: string, why: 'closed' | 'seat'): void {
-    seats.forget(code);
+  function netGone(code: string, why: 'closed' | 'seat' | 'space'): void {
+    if (why === 'space') seats.markClosed(code);
+    else seats.forget(code);
     /* A running match's tanks must not fall to the solo engine behind the veil:
        end it the way leaving does. */
     const wasMatch = netMatch;
@@ -537,7 +546,7 @@ export function createLobby(deps: LobbyDeps) {
     LOBBY.inRoom = false;
     if (wasMatch) backToTitle();
     void openLobby().then(() => {
-      lobbySay(why === 'closed' ? `Room ${code} has closed.` : `Your seat in room ${code} was given up.`);
+      lobbySay(why === 'seat' ? `Your seat in room ${code} was given up.` : goneLine(code, why));
     });
   }
   async function startRoom(): Promise<void> {

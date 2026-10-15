@@ -243,12 +243,12 @@ final class RoomTurnTimeTest extends TestCase
     public function testMatchEndStampsActedAt(): void
     {
         $room = $this->playing(120, 1);
-        $room['actedAt'] = time() - 5000;
+        $room['acted'] = time() - 5000;
         $room['tanks'][0]['hp'] = 0;
         $events = [];
         room_end_round($room, $events);
         $this->assertSame('over', $room['phase']);
-        $this->assertGreaterThanOrEqual(time() - 1, $room['actedAt']);
+        $this->assertGreaterThanOrEqual(time() - 1, $room['acted']);
     }
 
     public function testPlayAgainKeepsTheTurnTime(): void

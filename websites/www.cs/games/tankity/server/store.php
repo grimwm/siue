@@ -2,7 +2,8 @@
 // Operation Tankity rooms. Room storage: one row per room in Tankity's
 // database (server/db.php), a room held as one write transaction from load to
 // unlock, and the room lifecycle (allocate, register, load, save, close,
-// discard, sweep). Loaded by rooms.php; it runs nothing on its own.
+// discard, sweep), the match slots, the lobby pool and the tombstones of
+// rooms closed to make space. Loaded by rooms.php; it runs nothing on its own.
 declare(strict_types=1);
 
 // Not an endpoint: rooms.php defines this constant, then requires the file.
@@ -18,6 +19,11 @@ const ROOM_MAX_BYTES = 131072;
 /* A seated poll of a room that is not playing refreshes its touch this often;
    in between it is a read that never waits for the writer. */
 const ROOM_HEARTBEAT_SECS = 20;
+const ROOM_LOBBIES_HOSTED = 'too many lobbies open from here; start or leave one first';
+const ROOM_LOBBIES_BUSY = 'Every lobby is busy. Try again in a minute.';
+/* A room closed to make space keeps its tombstone (who may hear why, and its
+   code withheld from new rooms) this long: 14 days. */
+const ROOM_TOMBSTONE_SECS = 1209600;
 
 /* A held room: its write transaction is open until room_unlock (commit),
    room_close (delete, commit) or room_discard (roll back). */
@@ -129,22 +135,17 @@ function room_decode(mixed $raw): ?array
     return is_array($v) ? $v : null;
 }
 
-/* How long a started room (play, shop, over) lasts with no human acting:
-   every distinct address among its humans gets one turn's worth, never less
-   than the live window. One address, however many seats it holds, cannot buy
-   itself a long hold on the room cap, so a room with fewer than two distinct
-   addresses lasts the live window whatever its turn time. A seat with no
-   recorded address (an older room) counts as its own. */
+/* How long a started room (play, shop) lasts with no human taking a turn:
+   one turn time per human seated, never less than the live window. A full
+   server reclaims idle rooms sooner (room_reclaim_pick), so this bounds disk,
+   not slots. */
 function room_idle_limit(array $r): int
 {
-    $addrs = [];
-    foreach ($r['seats'] ?? [] as $i => $s) {
-        if ($s['human'] ?? false) {
-            $addrs[(string) ($s['addr'] ?? '') !== '' ? 'a' . $s['addr'] : 's' . $i] = true;
-        }
+    $humans = 0;
+    foreach ($r['seats'] ?? [] as $s) {
+        $humans += ($s['human'] ?? false) ? 1 : 0;
     }
-    $distinct = count($addrs);
-    return $distinct < 2 ? room_live_secs() : max(room_live_secs(), $distinct * room_turn_secs($r));
+    return max(room_live_secs(), max(1, $humans) * room_turn_secs($r));
 }
 
 /* When a room closes: a lobby a live window after its last touch (seated
@@ -161,7 +162,14 @@ function room_expires(array $r): int
     // A finished match keeps its final standings up for the live window only,
     // so it soon gives back its place, its host's place and any long place.
     $limit = $phase === 'over' ? room_live_secs() : room_idle_limit($r);
-    return (int) ($r['actedAt'] ?? $touched) + $limit;
+    return room_acted($r) + $limit;
+}
+
+/* The last turn-moving act (rooms.php stamps it); a room saved before the
+   key was renamed reads actedAt, then its last touch. */
+function room_acted(array $r): int
+{
+    return (int) ($r['acted'] ?? $r['actedAt'] ?? $r['touched'] ?? $r['created'] ?? 0);
 }
 
 /* Seconds from now until the room closes for want of play, never negative.
@@ -179,27 +187,200 @@ function room_idle(array $r, ?int $now = null): bool
     return ($now ?? time()) > room_expires($r);
 }
 
-/* Live rooms: not yet expired. A read, so the lobby's occupancy never waits
-   for a writer. */
-function room_count(?int $now = null): int
+/* Live started matches (play, shop, over), not counting $except: what
+   max_rooms bounds. Reads the indexed phase and expiry columns, so the
+   occupancy never waits for a writer; under the write lock it is exact. */
+function room_slots_used(string $except = '', ?int $now = null): int
 {
-    $now ??= time();
-    $q = tankity_db()->prepare('SELECT COUNT(*) FROM rooms WHERE expires >= ?');
-    $q->execute([$now]);
+    $q = tankity_db()->prepare("SELECT COUNT(*) FROM rooms WHERE phase IN ('play', 'shop', 'over') AND code <> ? AND expires >= ?");
+    $q->execute([$except, $now ?? time()]);
     return (int) $q->fetchColumn();
 }
 
+/* Live lobbies, not counting $except: what max_lobbies bounds. */
+function room_lobbies_used(string $except = '', ?int $now = null): int
+{
+    $q = tankity_db()->prepare("SELECT COUNT(*) FROM rooms WHERE phase = 'lobby' AND code <> ? AND expires >= ?");
+    $q->execute([$except, $now ?? time()]);
+    return (int) $q->fetchColumn();
+}
+
+/* Live lobbies an address hosts, not counting $except: what
+   lobbies_per_address bounds. */
+function room_lobbies_hosted(string $hostKey, string $except = '', ?int $now = null): int
+{
+    if ($hostKey === '') {
+        return 0;
+    }
+    $q = tankity_db()->prepare("SELECT COUNT(*) FROM rooms WHERE host = ? AND phase = 'lobby' AND code <> ? AND expires >= ?");
+    $q->execute([$hostKey, $except, $now ?? time()]);
+    return (int) $q->fetchColumn();
+}
+
+/* The lobby a new one may replace when the pool is full: one no tab polls
+   (no heartbeat for two beats), then one nobody acted in for the live
+   window, then one older than ROOM_LOBBY_OLD_SECS, the oldest first within
+   each. Null when every lobby is fresh and attended. One SELECT over the
+   columns, at most max_lobbies rows. */
+function room_lobby_evict_pick(string $except, int $now): ?string
+{
+    $q = tankity_db()->prepare("SELECT code FROM rooms WHERE phase = 'lobby' AND code <> :x AND expires >= :now
+        AND (touched < :dead OR acted <= :idle OR created <= :old)
+        ORDER BY CASE WHEN touched < :dead THEN 0 WHEN acted <= :idle THEN 1 ELSE 2 END,
+                 CASE WHEN touched < :dead THEN touched WHEN acted <= :idle THEN acted ELSE created END, code
+        LIMIT 1");
+    $q->bindValue(':x', $except);
+    foreach ([':now' => $now, ':dead' => $now - 2 * ROOM_HEARTBEAT_SECS, ':idle' => $now - room_live_secs(),
+        ':old' => $now - ROOM_LOBBY_OLD_SECS] as $k => $v) {
+        $q->bindValue($k, $v, PDO::PARAM_INT);
+    }
+    $q->execute();
+    $c = $q->fetchColumn();
+    return $c === false ? null : (string) $c;
+}
+
+/* How long a started room must go without a turn before a full server may
+   reclaim it: twice its turn time, at least the live window, at most
+   ROOM_DORMANT_SECS. */
+function room_reclaim_floor(int $turnSecs): int
+{
+    return max(room_live_secs(), min(2 * $turnSecs, ROOM_DORMANT_SECS));
+}
+
+/* The room a new match may replace on a full server: finished first, then
+   stale (idle twice its turn time), then dormant (a long room idle past its
+   floor), the longest idle first within each, then by code. Null when none
+   is eligible: a room played within its floor never goes. One SELECT over
+   the indexed columns of at most max_rooms live rows. */
+function room_reclaim_pick(string $except, int $now): ?string
+{
+    $q = tankity_db()->prepare("SELECT code FROM rooms
+        WHERE phase IN ('play', 'shop', 'over') AND code <> :x AND expires >= :now
+          AND (phase = 'over' OR :now - acted >= MAX(:L, MIN(2 * turn_secs, :D)))
+        ORDER BY CASE WHEN phase = 'over' THEN 0
+                      WHEN :now - acted >= MAX(:L, 2 * turn_secs) THEN 1 ELSE 2 END,
+                 acted, code
+        LIMIT 1");
+    // Bound as integers: SQLite compares a text parameter as greater than any
+    // number, which would make MAX(:L, ...) a string and nothing eligible.
+    $q->bindValue(':x', $except);
+    $q->bindValue(':now', $now, PDO::PARAM_INT);
+    $q->bindValue(':L', room_live_secs(), PDO::PARAM_INT);
+    $q->bindValue(':D', ROOM_DORMANT_SECS, PDO::PARAM_INT);
+    $q->execute();
+    $c = $q->fetchColumn();
+    return $c === false ? null : (string) $c;
+}
+
+/* Under the caller's write lock: true when $code may become a started match
+   now, because a slot is free or the stalest eligible room was closed (with
+   a tombstone) to make one. The one gate every path into a started phase
+   passes. */
+function room_take_slot(RoomLock $lock, string $code, int $now): bool
+{
+    if (room_slots_used($code, $now) < room_max_rooms()) {
+        return true;
+    }
+    $victim = room_reclaim_pick($code, $now);
+    if ($victim === null) {
+        return false;
+    }
+    room_tombstone($lock->db, $victim, 'space', $now);
+    return true;
+}
+
+/* A full lobby pool makes room for one more, under the caller's write lock:
+   true when there is room, or the lobby room_lobby_evict_pick names was
+   closed to make it. */
+function room_lobby_take(PDO $db, string $code, int $now): bool
+{
+    if (room_lobbies_used($code, $now) < room_max_lobbies()) {
+        return true;
+    }
+    $victim = room_lobby_evict_pick($code, $now);
+    if ($victim === null) {
+        return false;
+    }
+    room_tombstone($db, $victim, 'space', $now);
+    return true;
+}
+
+/* Closes a room to make space, inside the caller's write transaction: its
+   row goes, and a tombstone keeps the hashes of its human seats' tokens for
+   ROOM_TOMBSTONE_SECS, so those players (and nobody else) hear why. */
+function room_tombstone(PDO $db, string $code, string $reason, int $now): void
+{
+    $q = $db->prepare('SELECT data FROM rooms WHERE code = ?');
+    $q->execute([$code]);
+    $room = room_decode($q->fetchColumn());
+    $seats = [];
+    foreach ($room['seats'] ?? [] as $s) {
+        if (($s['human'] ?? false) && is_string($s['token'] ?? null) && $s['token'] !== '') {
+            $seats[] = room_token_hash($s['token']);
+        }
+    }
+    $db->prepare('DELETE FROM rooms WHERE code = ?')->execute([$code]);
+    $db->prepare('INSERT OR REPLACE INTO closed (code, reason, at, seats) VALUES (?, ?, ?, ?)')
+        ->execute([$code, $reason, $now, json_encode($seats)]);
+}
+function room_token_hash(string $token): string
+{
+    return substr(hash('sha256', $token), 0, 32);
+}
+
+/* Why a seat's room is gone ('space'), or null: only a token whose hash the
+   tombstone holds hears it. A read. */
+function room_closed_for(string $code, string $token): ?string
+{
+    if ($token === '') {
+        return null;
+    }
+    $q = tankity_db()->prepare('SELECT reason, seats FROM closed WHERE code = ?');
+    $q->execute([$code]);
+    $row = $q->fetch(PDO::FETCH_NUM);
+    if ($row === false) {
+        return null;
+    }
+    $seats = json_decode((string) $row[1], true);
+    return is_array($seats) && in_array(room_token_hash($token), $seats, true) ? (string) $row[0] : null;
+}
+
+/* Deletes spent puzzles whose challenge has expired anyway, at most $limit
+   (housekeeping). */
+function room_pow_expire(int $now, int $limit = 5000): int
+{
+    return tankity_tx(tankity_db(), function (PDO $db) use ($now, $limit): int {
+        $q = $db->prepare('DELETE FROM pow_used WHERE id IN (SELECT id FROM pow_used WHERE exp < ? LIMIT ?)');
+        $q->execute([$now, $limit]);
+        return $q->rowCount();
+    });
+}
+
+/* Deletes tombstones older than ROOM_TOMBSTONE_SECS, at most $limit
+   (housekeeping). */
+function room_tombstone_expire(int $now, int $limit = 5000): int
+{
+    return tankity_tx(tankity_db(), function (PDO $db) use ($now, $limit): int {
+        $q = $db->prepare('DELETE FROM closed WHERE code IN (SELECT code FROM closed WHERE at < ? LIMIT ?)');
+        $q->execute([$now - ROOM_TOMBSTONE_SECS, $limit]);
+        return $q->rowCount();
+    });
+}
+
 /* Holds a new room: a free code taken under the write lock, its row inserted
-   empty. The caller saves it, registers it, then unlocks (or discards). */
+   empty. The caller checks the lobby pool, saves it, then unlocks (or
+   discards). */
 function room_alloc(?callable $nextCode = null): RoomLock
 {
     $nextCode = $nextCode ?? fn() => room_new_code(fn($c) => false);
     $db = room_begin();
-    $ins = $db->prepare('INSERT OR IGNORE INTO rooms (code, data, created, touched, expires) VALUES (?, ?, ?, ?, ?)');
+    // A code with a tombstone is never drawn again while the tombstone lasts.
+    $ins = $db->prepare("INSERT OR IGNORE INTO rooms (code, data, created, touched, expires, phase, acted)
+        SELECT ?, '', ?, ?, ?, 'lobby', ? WHERE NOT EXISTS (SELECT 1 FROM closed WHERE code = ?)");
     for ($try = 0; $try < 50; $try++) {
         $code = $nextCode();
         $now = time();
-        $ins->execute([$code, '', $now, $now, $now + room_live_secs()]);
+        $ins->execute([$code, $now, $now, $now + room_live_secs(), $now, $code]);
         if ($ins->rowCount() === 1) {
             return room_hold(new RoomLock($db, $code));
         }
@@ -209,54 +390,18 @@ function room_alloc(?callable $nextCode = null): RoomLock
     room_json_out(500, ['error' => 'no free room code; try again']);
 }
 
-/* Registers a freshly saved room unless that would pass the cap. The write
-   lock has been held since room_alloc, so the count is exact. True when
-   registered, false at the cap, null when $code is not held here. */
-function room_register(string $code, int $max): ?bool
-{
-    $lock = $GLOBALS['ROOM_HELD'][$code] ?? null;
-    if (!$lock instanceof RoomLock || !$lock->open) {
-        return null;
-    }
-    $now = time();
-    try {
-        $q = $lock->db->prepare('SELECT COUNT(*) FROM rooms WHERE code <> ? AND expires >= ?');
-        $q->execute([$code, $now]);
-        return (int) $q->fetchColumn() < $max;
-    } catch (PDOException $e) {
-        room_store_fail($e);
-    }
-}
-
-/* Unexpired rooms an address hosts, not counting $except (the room being
-   made). Under the write lock room_alloc takes, the count is exact. */
+/* Live started matches an address hosts, not counting $except (the room
+   being started): what room_hosts_per_address bounds. Under the write lock
+   the count is exact. */
 function room_hosted(string $hostKey, string $except = '', ?int $now = null): int
 {
     if ($hostKey === '') {
         return 0;
     }
-    $q = tankity_db()->prepare('SELECT COUNT(*) FROM rooms WHERE host = ? AND code <> ? AND expires >= ?');
+    $q = tankity_db()->prepare("SELECT COUNT(*) FROM rooms WHERE host = ? AND phase IN ('play', 'shop', 'over') AND code <> ? AND expires >= ?");
     $q->execute([$hostKey, $except, $now ?? time()]);
     return (int) $q->fetchColumn();
 }
-
-/* Unexpired long games (turn time of 8 h or more), not counting $except (the
-   room being made or changed). Reads each live room, at most the room cap's
-   worth; under the write lock the count is exact. */
-function room_long_count(string $except = '', ?int $now = null): int
-{
-    $q = tankity_db()->prepare('SELECT data FROM rooms WHERE code <> ? AND expires >= ?');
-    $q->execute([$except, $now ?? time()]);
-    $n = 0;
-    foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $raw) {
-        $r = room_decode($raw);
-        if ($r !== null && ($r['phase'] ?? '') !== 'over' && room_turn_secs($r) >= ROOM_LONG_TURN_SECS) {
-            $n++;
-        }
-    }
-    return $n;
-}
-const ROOM_LONG_FULL = 'every long-game slot is taken; pick a shorter turn time or try later';
 
 /* A room as stored, read without the write lock, for a poll that changes
    nothing; null when there is none or it is idle. */
@@ -307,6 +452,17 @@ function room_host_key(array $room): string
     $addr = (string) ($seat['addr'] ?? '');
     return $addr !== '' ? $addr : (string) ($room['hostKey'] ?? '');
 }
+/* The address a room counts against (the host column): a lobby's current
+   host, for the lobby cap; a started match's starter, for the match cap, so
+   a host who leaves a running match (the role passes on) still has it
+   counted until it ends. */
+function room_cap_key(array $room): string
+{
+    if (in_array($room['phase'] ?? 'lobby', ['play', 'shop', 'over'], true) && is_string($room['startedBy'] ?? null) && $room['startedBy'] !== '') {
+        return $room['startedBy'];
+    }
+    return room_host_key($room);
+}
 function room_save($lock, string $code, array $room): bool
 {
     if (!$lock instanceof RoomLock || !$lock->open) {
@@ -318,12 +474,16 @@ function room_save($lock, string $code, array $room): bool
         return false;
     }
     try {
-        $q = $lock->db->prepare('UPDATE rooms SET data = ?, touched = ?, expires = ?, host = ? WHERE code = ?');
+        $q = $lock->db->prepare('UPDATE rooms SET data = ?, touched = ?, expires = ?, host = ?, phase = ?, acted = ?, turn_secs = ?
+            WHERE code = ?');
         $q->bindValue(1, $raw, PDO::PARAM_LOB);
         $q->bindValue(2, $room['touched'], PDO::PARAM_INT);
         $q->bindValue(3, room_expires($room), PDO::PARAM_INT);
-        $q->bindValue(4, room_host_key($room));
-        $q->bindValue(5, $code);
+        $q->bindValue(4, room_cap_key($room));
+        $q->bindValue(5, (string) ($room['phase'] ?? 'lobby'));
+        $q->bindValue(6, room_acted($room), PDO::PARAM_INT);
+        $q->bindValue(7, room_turn_secs($room), PDO::PARAM_INT);
+        $q->bindValue(8, $code);
         $q->execute();
     } catch (PDOException $e) {
         room_store_fail($e);

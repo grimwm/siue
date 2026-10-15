@@ -155,10 +155,10 @@ final class RoomMineTest extends TestCase
         room_turn_left($room);
         $room['clock']['at'] -= 500;
         $acted = time() - 50;
-        $room['actedAt'] = $acted;
+        $room['acted'] = $acted;
         $this->store($room);
         room_mine([['code' => 'MINE', 'token' => 't0']]);
-        $this->assertSame($acted, $this->stored('MINE')['actedAt']);
+        $this->assertSame($acted, $this->stored('MINE')['acted']);
     }
 
     public function testTooManySeatsIsRefusedAndOddEntriesAreGone(): void

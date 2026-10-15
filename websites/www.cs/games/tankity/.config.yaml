@@ -3,10 +3,16 @@
 # Tankity keeps its database (rooms, scores) in games/tankity/data/ when PHP
 # can write there, else in /var/tmp/<username>-tankity/ (README "Storage").
 # For each setting, the matching environment variable wins when set and non-empty:
-#   max_rooms      <- TANKITY_MAX_ROOMS (how many rooms can exist at once)
+#   max_rooms      <- TANKITY_MAX_ROOMS (match slots: how many started matches
+#                     can exist at once; a full server reclaims the stalest
+#                     eligible room, README "Room slots")
+#   max_lobbies    <- TANKITY_MAX_LOBBIES (lobbies waiting at once, in a pool
+#                     of their own; default 100)
+#   lobbies_per_address <- TANKITY_LOBBIES_PER_ADDRESS (lobbies one address
+#                     hosts at once; default 4)
 #   room_live_secs <- TANKITY_ROOM_LIVE_SECS (seconds since the last touch
 #                     before a lobby closes; also the shortest idle limit of
-#                     a started room)
+#                     a started room and the reclaim floor's minimum)
 #   data_dir       <- TANKITY_DATA_DIR (the one directory for everything
 #                     Tankity keeps: used exactly as given, created 0700 when
 #                     missing, an error when not writable, never a fallback.
@@ -15,11 +21,9 @@
 #                     the storage directory's filesystem)
 #   room_joins_per_hour <- TANKITY_ROOM_JOINS_PER_HOUR (rooms created and
 #                     joined, together, per address an hour; default 300)
-#   room_hosts_per_address <- TANKITY_ROOM_HOSTS_PER_ADDRESS (rooms one address
-#                     can host at once, expired ones not counted; default 4)
-#   room_long_share <- TANKITY_ROOM_LONG_SHARE (the fraction of max_rooms that
-#                     rooms with a turn time of 8 h or more may hold, at least
-#                     one room; above 0 up to 1; default 0.5)
+#   room_hosts_per_address <- TANKITY_ROOM_HOSTS_PER_ADDRESS (started matches
+#                     one address can host at once, expired ones not
+#                     counted; default 4)
 #   addr_key       <- TANKITY_ADDR_KEY (the key for the hash a room stores in
 #                     place of an address; unset: a random key made once and
 #                     kept in the database)

@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  RoomClient, prettyRoomError, inviteUrl, standingsRows, shouldCatchUp, planCatchUp, isVolleyOpener,
+  RoomClient, isGoneError, prettyRoomError, inviteUrl, standingsRows, shouldCatchUp, planCatchUp, isVolleyOpener,
   MATCH_POLL_MS, LOBBY_POLL_MS, RETRY_429_MS, RETRY_429_TRIES,
 } from '../src/net.ts';
 import type { FetchInit, RoomEnv } from '../src/net.ts';
@@ -801,6 +801,22 @@ await test('invite-url-escapes-the-code', () => { assert.ok(inviteUrl('A&B', {})
   await test('gone-room-detaches', () => { assert.ok(net.code === '' && net.on === false && host.intervals.size === 0); });
   await test('gone-room-reported', () => { assert.ok(j(gone) === j([['FXT1', 'closed']]), j(gone)); });
 }
+{
+  // A room closed to make space says so to its own seats: the 404 carries why.
+  const gone: [string, string][] = [];
+  const host = makeHost(url => (url.includes('action=state') ? { status: 404, body: { ok: false, error: 'no such room', closed: 'space' } } : roomReply()));
+  const net = new RoomClient(host.env, { onReachable() {}, onSnapshot() {}, onReadyChange() {}, onError() {}, onGone: (c, why) => gone.push([c, why]) });
+  net.code = 'FXT1'; net.token = 'tok'; net.seat = 0;
+  net.beginMatch();
+  at([...host.intervals.values()], 0).fn();
+  await flush();
+  await test('closed-for-space-detaches-and-says-why', () => { assert.ok(net.code === '' && net.on === false && j(gone) === j([['FXT1', 'space']]), j(gone)); });
+}
+await test('gone-error-reason', () => {
+  assert.equal(isGoneError(new Error('no such room')), 'closed');
+  assert.equal(isGoneError(Object.assign(new Error('no such room'), { closed: 'space' })), 'space');
+  assert.equal(isGoneError(new Error('offline')), null);
+});
 {
   const gone: [string, string][] = [];
   // The seat was given up in another tab: the server answers the room, but to no seat.

@@ -145,3 +145,48 @@ test('a room swept under a running match ends the match before the lobby opens: 
   assert.match(r.$('lobby-status').textContent, /Room AB3D has closed/);
   assert.equal(r.$('lobby-veil').hidden, false);
 });
+
+test('a match closed to make space: back to the title, the line says why, and the seat stays listed as closed', async () => {
+  let gone = false;
+  const playing = lobbyRoom({ phase: 'play' });
+  const r = rig(url => {
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 50, max: 50 }, lobbies: { used: 3, max: 100 } });
+    if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
+    if (gone && url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room', closed: 'space' } };
+    if (url.includes('action=start')) return ok({ ok: true, room: playing });
+    return ok({ ok: true, room: lobbyRoom() });
+  });
+  await r.lobby.resumeRoom('AB3D');
+  click(r.$('lobby-start'));
+  await r.tick();
+  assert.equal(r.net.on, true);
+  gone = true;
+  await r.tick();
+  assert.equal(r.net.on, false);
+  assert.equal(r.titled.length, 1);
+  assert.match(r.$('lobby-status').textContent, /^Room AB3D was closed to make space\.$/);
+  assert.equal(r.seats.get('AB3D')?.closed, 'space', 'kept, marked closed');
+  assert.equal(r.intervals.size, 0, 'nothing polls the closed room');
+});
+
+test('resuming a room that was closed to make space marks the seat and says why', async () => {
+  const r = rig(url => {
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 3, max: 50 }, lobbies: { used: 12, max: 100 } });
+    if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
+    if (url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room', closed: 'space' } };
+    return ok({ ok: true });
+  });
+  assert.equal(await r.lobby.resumeRoom('AB3D'), false);
+  assert.equal(r.seats.get('AB3D')?.closed, 'space');
+  assert.match(r.$('lobby-status').textContent, /Room AB3D was closed to make space\./);
+});
+
+test('the occupancy line counts matches running and lobbies open', async () => {
+  const r = rig(url => {
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 3, max: 50 }, lobbies: { used: 12, max: 100 } });
+    if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
+    return ok({ ok: true, room: lobbyRoom() });
+  });
+  await r.lobby.resumeRoom('AB3D');
+  assert.match(r.$('lobby-count').textContent, /^3 \/ 50 matches running · 12 lobbies open$/);
+});

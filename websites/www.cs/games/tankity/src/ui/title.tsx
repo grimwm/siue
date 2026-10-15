@@ -56,7 +56,7 @@ export function Title(p: TitleProps) {
         <p class="title-note" id="title-initials-note" role="status">{p.problem}</p>
         {p.games && p.games.rows.length > 0 && <YourGames id="your-games" {...p.games} />}
         {p.hint && <p class="title-hint" id="title-hint" role="status">{p.hint}</p>}
-        <button type="button" id="title-settings" class="title-link" aria-haspopup="dialog" aria-expanded={p.settingsOpen}
+        <button type="button" id="title-settings" class="title-settings" aria-haspopup="dialog" aria-expanded={p.settingsOpen}
           onClick={blurThen(p.onSettings)}>Settings <Key at="global:back" bare /></button>
       </Dialog>
     </KeyHints.Provider>

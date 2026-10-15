@@ -156,13 +156,13 @@ export function Menu(p: MenuProps) {
               <span>Fullscreen <Key at="global:fullscreen" bare /></span>
             </button>
             <button type="button" id="btn-flashes" class="unit-choice tile-toggle" aria-pressed={p.flashes}
-              title="Toggle the screen flash and the brightest parts of big blasts" onClick={blurThen(p.onFlashes)}>
+              title="Screen flashes: bright full-screen flashes from big blasts" onClick={blurThen(p.onFlashes)}>
               <svg class="tile-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
                 <circle cx="12" cy="12" r="3.5" fill="currentColor" />
                 <path class="off-only" d="M4 3l16 18" />
               </svg>
-              <span>Screen flashes</span>
+              <span>Flashes</span>
             </button>
           </div>
         </div>

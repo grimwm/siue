@@ -1374,7 +1374,7 @@ other emitters carry the effect. Sheets that share a file (the shells atlas)
 share one image and its tinted copies.
 
 Screen flashes: the full-screen flash ramps in over 80 ms and is never drawn
-past 0.35, whatever an effect asks. Settings has a Screen flashes toggle
+past 0.35, whatever an effect asks. Settings has a Flashes toggle (titled Screen flashes)
 (`tankity-flashes` in this browser, on by default): off drops the flash and
 the large bright layers (`FX.isBright`: additive dots, blobs and sprites sized
 by the blast radius, three quarters of it or more, and any of them 36 px or

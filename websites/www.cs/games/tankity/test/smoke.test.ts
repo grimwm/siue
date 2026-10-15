@@ -419,7 +419,7 @@ function fxDelta(f: Fixture, u: string, body: Posted) {
   PFX.full++;
   return fxReply(f);
 }
-/** A room puzzle at 0 bits: any four nonces solve it, at once. */
+/** A room puzzle at 0 bits, which every four nonces solve at once. */
 const EASY_PUZZLE = { ok: true, challenge: 'v1.1800000000.c.0.smoke-rand.smoke-mac', bits: 0, count: 4, iter: 100, expiresIn: 120 };
 function fxServe(u: string, body: Posted) {
   if (u.includes('action=challenge')) return { ok: true, status: 200, json: async () => EASY_PUZZLE };

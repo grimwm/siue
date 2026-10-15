@@ -101,6 +101,7 @@ final class RoomsTest extends TestCase
 
     private static function post(string $action, array $body): mixed
     {
+        $body = tankity_test_admit(self::$base, $action, $body);
         $ctx = stream_context_create(['http' => [
             'method' => 'POST', 'timeout' => 5, 'ignore_errors' => true,
             'header' => "Content-Type: application/json\r\n",

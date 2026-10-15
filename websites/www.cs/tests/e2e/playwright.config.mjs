@@ -20,13 +20,16 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   // Chrome runs everything. E2E_WEBKIT=1 adds WebKit for the specs that judge
-  // drawing across engines (needs `npx playwright install webkit`; CI installs Chrome only).
+  // drawing across engines and for the room puzzle (needs `npx playwright
+  // install webkit`); E2E_FIREFOX=1 adds Firefox for the room puzzle (needs
+  // `npx playwright install firefox`). CI installs Chrome only.
   projects: [
     {
       name: 'chrome',
       // Never audible, never autoplaying: an orphaned browser must not play music.
       use: { channel: 'chrome', launchOptions: { args: ['--mute-audio', '--autoplay-policy=user-gesture-required'] } },
     },
-    ...(process.env.E2E_WEBKIT ? [{ name: 'webkit', use: { browserName: 'webkit' }, testMatch: ['tankity-sky-camera.spec.mjs'] }] : []),
+    ...(process.env.E2E_WEBKIT ? [{ name: 'webkit', use: { browserName: 'webkit' }, testMatch: ['tankity-sky-camera.spec.mjs', 'tankity-pow.spec.mjs'] }] : []),
+    ...(process.env.E2E_FIREFOX ? [{ name: 'firefox', use: { browserName: 'firefox' }, testMatch: ['tankity-pow.spec.mjs'] }] : []),
   ],
 });

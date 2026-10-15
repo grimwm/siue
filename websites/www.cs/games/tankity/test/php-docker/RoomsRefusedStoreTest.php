@@ -8,6 +8,9 @@ use PHPUnit\Framework\TestCase;
    endpoint with 503 JSON, never an empty 500 from an uncaught exception. */
 final class RoomsRefusedStoreTest extends TestCase
 {
+    /* Well-formed puzzles (their MACs cannot be checked until the store answers) with the protocol. */
+    private const PUZZLE = ['proto' => 2, 'pow' => ['c' => 'v1.1800000000.c.4.AAAAAAAAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAAAAAAAA', 'n' => [0, 1, 2, 3]]];
+    private const JOIN_PUZZLE = ['proto' => 2, 'pow' => ['c' => 'v1.1800000000.j.4.AAAAAAAAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAAAAAAAA', 'n' => [0, 1, 2, 3]]];
     private static string $tmp;
     private static string $base;
     private static string $log;
@@ -59,8 +62,10 @@ final class RoomsRefusedStoreTest extends TestCase
         foreach ([
             ['/rooms.php?action=ping', null],
             ['/rooms.php?action=state&code=ABCD', null],
-            ['/rooms.php?action=create', ['initials' => 'abc']],
-            ['/rooms.php?action=join', ['code' => 'ABCD', 'initials' => 'abc']],
+            // The puzzle's MAC needs the store's key: a refused store answers there.
+            ['/rooms.php?action=challenge&for=create', null],
+            ['/rooms.php?action=create', ['initials' => 'abc'] + self::PUZZLE],
+            ['/rooms.php?action=join', ['code' => 'ABCDEF', 'initials' => 'abc'] + self::JOIN_PUZZLE],
             ['/scores.php', null],
         ] as [$path, $body]) {
             [$st, $out] = self::call($path, $body);
@@ -75,7 +80,7 @@ final class RoomsRefusedStoreTest extends TestCase
 
     public function testARefusedStoreLogsOneLinePerRequest(): void
     {
-        foreach ([['/rooms.php?action=ping', null], ['/scores.php', null], ['/rooms.php?action=create', ['initials' => 'abc']]] as [$path, $body]) {
+        foreach ([['/rooms.php?action=ping', null], ['/scores.php', null], ['/rooms.php?action=create', ['initials' => 'abc'] + self::PUZZLE]] as [$path, $body]) {
             file_put_contents(self::$log, '');
             self::call($path, $body);
             $lines = array_filter(explode("\n", (string) file_get_contents(self::$log)));

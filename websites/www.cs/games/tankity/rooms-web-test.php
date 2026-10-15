@@ -60,7 +60,31 @@ $get = function (string $url) {
     $raw = @file_get_contents($url, false, $ctx);
     return $raw === false ? null : json_decode($raw, true);
 };
-$post = function (string $action, array $body) use ($base, $origin) {
+// Creating and joining pay the room puzzle (server/pow.php): asked for over
+// HTTP like the browser does, solved here at whatever bits the server set.
+$solve = function (string $action) use ($base): array {
+    $ctx = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true]]);
+    $ch = json_decode((string) @file_get_contents($base . '/rooms.php?action=challenge&for=' . $action, false, $ctx), true);
+    if (!is_array($ch) || !is_string($ch['challenge'] ?? null)) {
+        return ['c' => '', 'n' => []];
+    }
+    $found = [];
+    for ($n = 0; count($found) < (int) $ch['count']; $n++) {
+        if (room_pow_lead($ch['challenge'], $n) >= (int) $ch['bits']) {
+            $found[] = $n;
+        }
+    }
+    return ['c' => $ch['challenge'], 'n' => $found];
+};
+/* A create or join without `proto` or `pow` goes as the current bundle sends it. */
+$admit = function (string $action, array $body) use ($solve): array {
+    if (in_array($action, ['create', 'join'], true) && !array_key_exists('proto', $body) && !array_key_exists('pow', $body)) {
+        $body += ['proto' => 2, 'pow' => $solve($action)];
+    }
+    return $body;
+};
+$post = function (string $action, array $body) use ($base, $origin, $admit) {
+    $body = $admit($action, $body);
     $ctx = stream_context_create(['http' => [
         'method' => 'POST', 'timeout' => 8, 'ignore_errors' => true,
         'header' => "Content-Type: application/json\r\nOrigin: $origin\r\nX-CSRF-Token: " . ($body['csrf'] ?? '') . "\r\n",
@@ -69,7 +93,8 @@ $post = function (string $action, array $body) use ($base, $origin) {
     $raw = @file_get_contents($base . '/rooms.php?action=' . $action, false, $ctx);
     return $raw === false ? null : json_decode($raw, true);
 };
-$postStatus = function (string $action, array $body) use ($base, $origin): array {
+$postStatus = function (string $action, array $body) use ($base, $origin, $admit): array {
+    $body = $admit($action, $body);
     $ctx = stream_context_create(['http' => [
         'method' => 'POST', 'timeout' => 8, 'ignore_errors' => true,
         'header' => "Content-Type: application/json\r\nOrigin: $origin\r\nX-CSRF-Token: " . ($body['csrf'] ?? '') . "\r\n",
@@ -118,8 +143,14 @@ $baseUsed = (int) ($ping['lobbies']['used'] ?? 0);
 $baseSlots = (int) ($ping['rooms']['used'] ?? 0);
 $check('empty-shelf', ($ping['lobbies']['used'] ?? -1) === $baseUsed, 'used=' . ($ping['lobbies']['used'] ?? '?'));
 
+// A bundle from before the puzzle is told to reload, and nothing is made.
+[$oldStatus, $oldCreate] = $postStatus('create', ['initials' => 'old', 'proto' => null]);
+$check('create-old-bundle-reloads', $oldStatus === 426 && ($oldCreate['reload'] ?? false) === true, json_encode([$oldStatus, $oldCreate]));
+[$noPowStatus, $noPow] = $postStatus('create', ['initials' => 'old', 'proto' => 2]);
+$check('create-needs-the-puzzle', $noPowStatus === 422 && ($noPow['puzzle'] ?? '') === 'puzzle-short', json_encode([$noPowStatus, $noPow]));
 $room = $post('create', ['initials' => 'tst']);
 $check('create-ok', ($room['ok'] ?? false) === true, 'code=' . ($room['code'] ?? '?'));
+$check('code-six-characters', preg_match('/^[' . ROOM_CODE_ALPHABET . ']{6}$/', (string) ($room['code'] ?? '')) === 1, (string) ($room['code'] ?? '?'));
 $code = (string) ($room['code'] ?? '');
 $token = (string) ($room['token'] ?? '');
 $csrf = (string) ($room['csrf'] ?? '');
@@ -380,7 +411,7 @@ $check('match-cleaned', ($gone['error'] ?? '') === 'no such room', $gone['error'
 
 // server/*.php are libraries for rooms.php, never endpoints: asked for directly
 // they answer 403 (.htaccess, nginx) or 404 (their own guard) and send no code.
-foreach (['settings', 'db', 'store', 'sim', 'ai', 'rules', 'protocol'] as $lib) {
+foreach (['settings', 'db', 'store', 'sim', 'ai', 'rules', 'protocol', 'rate', 'pow'] as $lib) {
     [$hLib, $bLib] = $rawGet($base . '/server/' . $lib . '.php', '');
     $statusLib = (int) substr($hLib[0] ?? '', 9, 3);
     $check("server-$lib-not-served", in_array($statusLib, [403, 404], true) && stripos($bLib, '<?php') === false && stripos($bLib, 'function ') === false,

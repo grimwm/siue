@@ -118,7 +118,9 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `src/walls.ts`, `src/ui/walls.tsx` | The arena's walls: the picks and their names, a flight's step against them (`wallStep`), a roller's (`wallRoll`), Random's draw (`wallsFor`), which walls dam liquid, the flashes where shells meet them, and the solo setting (`tankity-walls`); and the picker the Menu and the lobby draw |
 | `src/audio.ts` | All the sound in TypeScript: WebAudio context, synthesized effects and built-in songs, game.json's sound files, the track player (silence-trimmed loops, cross-fades), mutes, keeps only the theme and the playing track decoded, and tells `main.ts` why a track started (the Next song toast). It never touches the page |
 | `src/track-toast.ts` | The Next song toast's text ("♫ Title · Author") and its timer. DOM-free: it is handed the element and the timers |
-| `src/net.ts` | The room client: transport (one fetcher, the 429 retry; create and join never retry a 429), the session (host, join, or resume a stored seat; `detach` drops it telling nobody, `leave` gives it up), polling, the act/buy/ready/leave senders, `mine` (its own fetch path), the turn, shop and room-close clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers and the clock are passed in |
+| `src/net.ts` | The room client: transport (one fetcher, the 429 retry; create and join never retry a 429), the session (host, join, or resume a stored seat; `detach` drops it telling nobody, `leave` gives it up), the room puzzle before a create or join (asked for, solved, asked for once more when refused as stale, rebound or spent; cancellable), polling, the act/buy/ready/leave senders, `mine` (its own fetch path), the turn, shop and room-close clocks, and the hidden-tab catch-up decision. It never touches the page: fetch, timers, the clock and WebCrypto are passed in |
+| `src/pow.ts` | The room puzzle's solver: `solvePow` keeps four WebCrypto PBKDF2 guesses in flight and returns the four smallest solving nonces (the same on every engine), cancellable; `leadingZeros`, `powLead`. DOM-free: `crypto.subtle` is passed in |
+| `src/pow-bench.ts`, `tools/pow-bench.html` | The puzzle bench: solves 20 puzzles at a difficulty and reports the mean, the 95th percentile and the longest stall of the page's thread (`tests/e2e/tankity-pow.spec.mjs` reads it). Built to `dist/pow-bench.js`, which is neither precached nor deployed |
 | `src/replay.ts` | The room volley replay: the queue of events waiting to play and the volley on screen. Eases the shooter's barrel, flies each shell along the path the server recorded (positions and velocities for the renderer), lands blasts and hits when the events say, hands a beam or plasma ring event and a tracer's landing to its host, plays a volley kept back by a catch-up, or fired by a drone with no human standing (`watch`), at triple speed (`FAST_SPEED`). Sound, particles, craters, armor and log lines happen through callbacks; it never touches the page |
 | `src/preview.ts` | The firing-range preview simulation: a dummy, the range and the aim from each gun's scenario (`game.yaml` `preview`: where it lands, on which ground, at what angle, the dummy how far off; plain guns aim at the dummy on the hills), the solver that lands it there with the war's own ballistics on an arc inside the frame, the shell loop (seeker, cluster and apex cluster, proximity, roller, and hop and scatter through the war's own `hopShell` and `scatterShells`), a beam aimed straight at the dummy (carving with `beamCarve`), a plasma ring with its dummy inside it, a tracer's path, the damage tally, what each volley showed of its gun's mechanic (`PreviewSeen`: hops, bomblets, roll, burrow, flow, bend, air burst, dip, arc, dirt cleared, and any shell leaving the frame) and the result timing, on its own small field. Weapons, effects and the result line are passed in; it never touches the page |
 | `src/speed.ts` | The game speed (the FF button): the speeds 1, 2 and 4 (kept equal to `server/settings.php`'s `ROOM_SPEEDS`), the tap order, the button's words, the solo setting in this browser (`tankity-speed`), and the host's pick in a room (shown at once, sent once it has stood `SPEED_SETTLE_MS`, held over polls until answered). Pure |
@@ -168,7 +170,8 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `server/settings.php` | What a room is (`ROOM_*` shape constants) and the host's knobs (`room_max_rooms`, `room_live_secs`) and the turn-time stops |
 | `server/store.php` | Rooms as rows: the room lock (`RoomLock`, one write transaction from `room_load` to `room_unlock`), create/close/discard, `room_save` (and the `phase`, `acted`, `turn_secs` columns it writes), the match slots (`room_slots_used`, `room_take_slot`, `room_reclaim_floor`, `room_reclaim_pick`), the lobby pool (`room_lobbies_used`, `room_lobby_take`, `room_lobby_evict_pick`), tombstones (`room_tombstone`, `room_closed_for`), the sweep, room codes |
 | `server/db.php` | Where Tankity keeps its files (`tankity_data_dir`), the database (`tankity_db`), the journal mode for its filesystem, the schema steps, `tankity_tx` |
-| `server/rate.php` | Each address's hourly count of rooms created and joined, in the `rate` table: `room_rate_take`, `rate_used`, `rate_take`, `rate_expire`, and `room_joins_per_hour()` (`room_joins_per_hour`, default 300) |
+| `server/rate.php` | Each address's hourly count of rooms created and joined, in the `rate` table: `room_rate_take`, `rate_used`, `rate_used_since`, `rate_take`, `rate_expire`, and `room_joins_per_hour()` (`room_joins_per_hour`, default 300) |
+| `server/pow.php` | The room puzzle (Room slots): `room_pow_issue` (a signed challenge), `room_pow_bits` (the difficulty under load), `room_pow_check` (format, MAC, age, work), `room_pow_lead`, `room_pow_spent` and `room_pow_spend` (the `pow_used` table), and `room_now` |
 | `server/guard.php` | Tankity's settings for the kit's `Kit\ScoreGuard` (`tankity_guard()`, `tankity_initials()`; Tankity uses its origin, address and initials checks), and `BLOCKED_INITIALS` (the same list as `src/initials.ts`) |
 | `server/score-guard.php` | The kit's score guard, a generated copy written by `tools/install-files.php` (`kit_php`); never edit it |
 | `server/board.php` | The all-time boards, one per difficulty, best 100 room runs each, rows in the database (`board_file`, `board_top`); a row can only come from a room match that two or more humans started |
@@ -189,7 +192,7 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `fx/sprites/` | Sprite sheets and `sprites.json`, rendered by `fx/blender/render_fx.py`: blasts and smoke (`blast`, `fireball`, `plume`, `smoke`, `flakburst`, `nuke`), ground (`dirt`, `debris`, `scorch`), light (`shock`, `energy`, `electric`, `flare`, `muzzle`), the shells in flight (`shells.png`, the Blast family's `shells_blast.png`, the tracers' `shells_beams.png` the Earth family's `shells_earth.png`: `p_clod`, `p_mud`, `p_drill`, `p_sandhog`, `p_riot`, `p_disrupter`, and the Fire family's `shells_fire.png`: `p_napalm`, `p_hotnapalm`; one `p_*` sheet per shell), `flame` (a looping flame tongue the burning pools stand in rows), `moon` and `parachute` |
 | `fx/blender/render_fx.py` | Headless Blender script that builds and renders the sprite sheets; its header documents the command and every option. Dev only |
 | `fx-editor.html`, `fx-editor.css`, `src/fx/editor.ts` | Dev-only live effects editor (see Weapon effects); `editor.ts` is bundled as the classic script `dist/fx-editor.js`, which sets `window.fxEditor`. Never deployed |
-| `.config.yaml` | Server settings, read-only, never sent to browsers; env vars win (`TANKITY_MAX_ROOMS`, `TANKITY_ROOM_LIVE_SECS`, `TANKITY_DATA_DIR`, `TANKITY_JOURNAL`, `TANKITY_ROOM_JOINS_PER_HOUR`, `TANKITY_ROOM_HOSTS_PER_ADDRESS`, `TANKITY_MAX_LOBBIES`, `TANKITY_LOBBIES_PER_ADDRESS`, `TANKITY_ALLOWED_HOSTS`; `CONFIG_FILE` points elsewhere) |
+| `.config.yaml` | Server settings, read-only, never sent to browsers; env vars win (`TANKITY_MAX_ROOMS`, `TANKITY_ROOM_LIVE_SECS`, `TANKITY_DATA_DIR`, `TANKITY_JOURNAL`, `TANKITY_ROOM_JOINS_PER_HOUR`, `TANKITY_ROOM_HOSTS_PER_ADDRESS`, `TANKITY_MAX_LOBBIES`, `TANKITY_LOBBIES_PER_ADDRESS`, `TANKITY_POW_BITS`, `TANKITY_POW_SURGE`, `TANKITY_ALLOWED_HOSTS`; `CONFIG_FILE` points elsewhere) |
 | `metadata.yaml`, `og.png`                                       | Games-page card and link preview (see `../README.md`)                                                                                                                                       |
 | `manifest.webmanifest`, `sw.js`, `icon-192.png`, `icon-512.png` | Install and offline support; the first two are generated by `tools/install-files.php`                                                                                                     |
 
@@ -437,10 +440,14 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   Creating and joining a room together spend one address's hourly allowance,
   `room_joins_per_hour` (300; 429 `too many rooms from here; try again
   later`), counted in the `rate` table, keyed by address
-  (IPv6 by its /64, IPv4 inside IPv6 by the IPv4 address). Every create and
-  join past the origin check is charged, except a create refused because its
-  address already has `lobbies_per_address` lobbies open or every lobby is
-  busy: those are read before charging. A spent allowance is
+  (IPv6 by its /64, IPv4 inside IPv6 by the IPv4 address). Create and join
+  check, in this order: the origin; `proto: 2` (426 with the reload line);
+  the room puzzle's format, MAC, age and work (403 or 422); a puzzle already
+  spent, from a plain read (409); for a create, its address's lobbies and a
+  busy pool (429, 409); then the allowance. Everything before the allowance
+  is uncharged. The allowance and the puzzle are spent together in one write
+  transaction, so a replay that races the plain read is refused (409) with
+  nothing charged. A spent allowance is
   refused from a plain read, so a flood past it never takes the write lock.
   The client never retries that 429 and retries a create or join's 503 once
   (other acts retry a 429 or 503 up to three times). The docker stack
@@ -824,6 +831,8 @@ The server settings that remain are in `.config.yaml` or as upper-case
 | `room_live_secs` | 600 | Seconds since the last touch before a lobby closes; the shortest idle limit of a started room; the reclaim floor's minimum |
 | `room_hosts_per_address` | 4 | Started matches one address hosts at once (429 at Start past it) |
 | `room_joins_per_hour` | 300 | Rooms one address creates or joins in an hour |
+| `pow_bits` | 11 | The room puzzle's difficulty at rest, in leading zero bits: a join needs this, a create one more, and load adds up to two (Room slots). 0 turns the puzzle off |
+| `pow_surge` | 60 | Creates from every address in ten minutes that make the puzzle one bit harder |
 | `allowed_hosts` | `www.cs.siue.edu,cs.siue.edu` | Hosts a request's Origin may name |
 | `addr_key` | made once, kept in the database | The key for the hash a room stores in place of an address |
 
@@ -884,11 +893,81 @@ people play together, and waiting costs little.
   beside "no such room"; anyone else learns nothing more. The code is never
   drawn for a new room while its tombstone lasts, and a tombstone never makes a
   code joinable. Housekeeping drops old tombstones.
+- **The room puzzle.** Creating or joining a room costs a small proof of
+  work, so a script cannot mint lobbies or try codes for free. The browser
+  asks for a challenge (`GET rooms.php?action=challenge&for=create|join`:
+  `{ok, challenge, bits, count, iter, expiresIn}`, not charged), solves it and
+  sends `pow: {c, n}` with the create or join. A solution is 4 distinct
+  nonces, each with PBKDF2-HMAC-SHA256(challenge, `tankity-pow|<nonce>`, 100
+  iterations, 32 bits) starting with `bits` zero bits: the same mean work as
+  one nonce at `bits + 2`, with a much shorter tail. PBKDF2 rather than one
+  SHA-256 per guess because a browser reaches SHA-256 only through WebCrypto,
+  where one call per guess would cost far more than the hashing; one
+  `deriveBits` runs 200 compressions natively, so a phone is not hundreds of
+  times slower than a native attacker. The server checks a solution with four
+  PBKDF2 runs (well under a millisecond).
+  - The challenge is `v1.<issued>.<purpose>.<bits>.<rand>.<mac>`, signed with
+    a key derived from `addr_key` over the first five parts and the asker's
+    address hash, and stored nowhere. It lives 120 s by the server's clock (5
+    s of skew allowed ahead). A changed purpose, difficulty or time, or a
+    puzzle redeemed from another address (a phone that switched networks),
+    gets 403 `puzzle-bad`; an old one 403 `puzzle-expired`; a wrong nonce 403
+    `puzzle-wrong`; a missing or short solution 422 `puzzle-short`; a puzzle
+    used before 409 `puzzle-spent` (spent puzzles are kept in `pow_used` until
+    they would have expired). The browser asks for a fresh puzzle once,
+    silently, after a 403 or a `puzzle-spent`.
+  - Difficulty (`room_pow_bits`): `pow_bits` for a join and one more for a
+    create; one more again when started matches or lobbies reach 75 % of
+    their caps or `pow_surge` creates came in the last ten minutes; two more
+    when either cap is full. Never more than two more. The bits ride in the
+    signed challenge, so a rise between asking and answering never refuses a
+    solver. `pow_bits: 0` turns the puzzle off (create and join then need
+    only `proto: 2`).
+  - What players see: "Setting up the room…" on Host and "Setting up your
+    seat…" on Join, in the lobby's status line (a polite live region, so
+    screen readers hear it), Host and Join off meanwhile, and a Cancel button
+    that stops the solve ("Stopped. Nothing was set up."; a seat taken while
+    cancelling is given up). The guesses run inside WebCrypto, off the page's
+    thread: the page stays responsive (the longest stall measured below is 7
+    ms), so no worker is needed. A page that is not a secure context has no
+    WebCrypto: rooms say "Rooms need a secure (https) page. Solo hills still
+    work."
+  - Measured with `tests/e2e/tankity-pow.spec.mjs` (20 puzzles each, the
+    game's own solver, a MacBook; Chrome's 4x CPU throttling stands in for a
+    mid phone). `pow_bits` is the largest value whose throttled join stays
+    within a second at the 95th percentile with room to spare (at 12 the
+    throttled join's p95 was 947 ms):
+
+    | Engine | Join (11 bits) mean / p95 | Create (12) mean / p95 | Join under full load (13) mean / p95 |
+    | --- | --- | --- | --- |
+    | Chrome | 74 / 111 ms | 130 / 251 ms | 256 / 442 ms |
+    | Chrome, 4x throttled | 254 / 425 ms | 508 / 927 ms | 895 / 1670 ms |
+    | WebKit | 151 / 288 ms | 260 / 435 ms | 589 / 1049 ms |
+    | Firefox | 107 / 184 ms | 230 / 436 ms | 371 / 871 ms |
+
+- **Room codes** have 6 characters from `ROOM_CODE_ALPHABET` (31 letters and
+  digits, no 0, O, 1 or I): 887,503,681 codes. Rooms made with 4-character
+  codes keep working until they end: the server takes 4 or 6. The lobby shows
+  a code in two halves (`K7Q 2MX`), and the code box takes it in any case,
+  with spaces or hyphens.
+- **Guessing codes.** A join's puzzle is checked before its code is looked
+  up, so a guess without the work gets the same 422 for a live code, a
+  made-up one and a malformed one, and a solved puzzle buys one lookup (it is
+  spent even when the code is not found). Started matches refuse joins, so
+  only the at most `max_lobbies` lobbies can be found. With one IPv6 /56 (256
+  `/64` allowances of 300 joins an hour, 76,800 guesses an hour) and 100
+  lobbies open, a hit comes every 115 hours or so, and each guess first costs
+  a join puzzle. A hit buys one seat in a stranger's lobby, where the host sees
+  the initials before Start. Codes are enough to join: there are no invites to
+  sign.
 - **The remaining exposure.** Bots that take a real turn at least hourly in
   every held room, from at least 13 addresses (four matches each, each with a
   second human at Start), still hold every slot. That costs as much as
-  playing, and every match that ends frees its slot first. When it shows up,
-  lower `room_hosts_per_address`.
+  playing (plus a create puzzle per lobby and a join puzzle per guest), and
+  every match that ends frees its slot first. When it shows up, lower
+  `room_hosts_per_address`. A native attacker solves a puzzle a few times
+  faster than a phone, not hundreds, so the puzzle slows a flood rather than
+  stopping one; the caps above are what bound it.
 
 ## Long games
 
@@ -1462,7 +1541,8 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/php/RoomSnapshotLeakTest.php`            | A room snapshot carries no seed, generator state, seat token or server path |
 | `test/render.test.ts`                         | `src/render.ts` paints a deep-frozen view on a stub canvas (so it cannot write to the game state), draws the firing range on its own canvas, skips quietly with no 2D context, rebuilds the sky only when the match key or the visible area changes, and draws an open parachute from its sheet (opening once, then swaying) or as a drawn canopy until the sheet loads, none over an armed or settled unit at rest, and units at their drawn height (a falling wreck whole) |
 | `test/input.test.ts`                          | `src/input.ts` with plain events: token lookup (code, key, Shift+, Ctrl+), the shipped bindings, command routing and fall-through, Q, the leave question, held keys and blur, the hold buttons, and the arm's rate on a fake clock |
-| `test/net.test.ts`                            | `src/net.ts` against a fake server and timers: the 429 retry (none for a create or join's 429, one for its 503), Ready's ordering under rapid toggles, polling, the leave beacon (Leave only), resume, detach and `mine`, the clocks and `closesIn`, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect), `proto: 2` on create, join and Start, Start resolving `room` or `local`, and a 426 giving the reload line |
+| `test/pow.test.ts`                            | `src/pow.ts` through node's WebCrypto: leading zeros, `protocol/pow-vectors.json` counted like the server, the server's own nonces found however many guesses are in flight, and a solve cancelled before and during |
+| `test/net.test.ts`                            | `src/net.ts` against a fake server and timers: the room puzzle (asked for by purpose, sent solved, asked for once more after a stale, rebound, wrong or spent refusal and never after a short one or a 426, a server that will not hand one out, no WebCrypto, cancelled while solving or after sending), the 429 retry (none for a create or join's 429, one for its 503), Ready's ordering under rapid toggles, polling, the leave beacon (Leave only), resume, detach and `mine`, the clocks and `closesIn`, the hidden-tab catch-up plan, delta snapshots (the rev it sends, hills kept when omitted, full on an unknown rev, a resync, a hidden-tab return or a reconnect), `proto: 2` on create, join and Start, Start resolving `room` or `local`, and a 426 giving the reload line |
 | `test/seats.test.ts`                          | `src/seats.ts`: round trip, newest first, the 12-seat cap, a malformed entry dropped alone, storage that refuses writes, a seat marked closed to make space |
 | `test/games.test.ts`                          | `src/games.ts` with fake timers: what it asks, gone rooms forgotten, rooms closed to make space kept, listed and never asked again, one report per turn key, never the room on screen or one another tab shows, the step-out hush |
 | `test/notify.test.ts`                         | `src/notify.ts` against a stubbed Notification: missing, promise and callback permission, the opt-in setting, the notification's tag and click |
@@ -1487,6 +1567,8 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `RoomLobbyPoolTest` (host PHP) | The lobby pool through `rooms.php`: lobbies hold no slot, four per address, a flood never closes a fresh attended lobby (uncharged 409), dead then idle then old, Play again takes a place and counts against its host's lobbies, tombstones answer only their seats (state, acts, `mine`), block the code and expire |
 | `RoomLocalStartTest` (host PHP) | Start with the host alone: `local` with the room's Difficulty, speed and Walls, the lobby closed with no tombstone and no slot or lobby place held, open seats no bar; without `proto: 2` a 426 with the reload line and the lobby kept; origin, CSRF, seat token and host-only before anything closes; two humans from one address take a slot; two humans without `proto` start as before |
 | `RoomReclaimTest` (host PHP) | Match slots and reclaim: the floor, the tier order on a fixed clock, an active long game outliving a stale short one, ties by code, thirteen addresses unable to hold every slot, a played hold as the residual, no Start evicting a room within its floor, Start's gates before any slot, the hosting cap at Start, Play again giving the slot back, and two racing Starts never both winning or reclaiming one room twice |
+| `RoomPowTest` (host PHP) | The room puzzle on a fixed clock: a challenge signed and bound to its purpose and address (an edited difficulty, purpose or time, or another address, is `puzzle-bad`), solutions checked (short, repeated, wrong), an old or future-dated challenge refused by the server's clock alone, a replay refused and housekept, the difficulty rising under load by at most two bits, 0 turning it off, and `protocol/pow-vectors.json` |
+| `RoomPowGateTest` (host PHP) | Create and join through `rooms.php`: an old bundle told to reload, a create needing a solved puzzle of its own purpose, a replay refused and uncharged (a join puzzle spent on a missed guess too), a puzzle past its life refused, a puzzle from another address refused, a guess without work answered the same for a live and a made-up code and the hourly allowance still counting solved guesses, 6-character codes with 4-character rooms still joinable and codes read back with spaces, and the challenge uncharged and rising with the lobby count |
 | `RoomAgainTest` (host PHP) | Play again keeps code and seats and resets lives, score and cash; a second press is harmless; the lowest human hosts when the host left |
 | `BoardTest`, `ScoresEndpointTest` (host PHP) | The boards (one per difficulty, room rows only, ties, the trim, a required source), and `scores.php` as a request (the board in the page's shape, no seeds, every POST answered 410 and nothing written, other methods 405) |
 | `RoomGuardTest` (host PHP) | Initials stored uppercase and the blocked set refused, origins and referers against the allow list, only turn-moving acts stamping `acted` (not the menu flag, a new look or an off-turn gun), and the hourly allowance on creating and joining: a setting, exact in every sliding hour, per address, in the `rate` table, swept by housekeeping, a spent one refused without the write lock, a 429 from `rooms.php` itself, and a create refused for a busy lobby pool not charged |
@@ -1497,8 +1579,9 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (run inside the PHP container)                 |
 | `tests/tankity-data-deny.sh` | `games/tankity/data/` is refused over HTTP (`make test` runs it) |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
+| `php protocol/pow-vectors.php --check`         | `protocol/pow-vectors.json` is current (`test.sh` runs it)                                  |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
-| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only), and the end of a match (`tankity-end`: a lost solo match is saved on this browser's board, shows under "This browser" in Scores and sends nothing to the score server; `tankity-end-again`: Play again in a room; `tankity-end-forfeit`: a leave, the winner filed online, and the solo card after it saved locally; `tankity-end-out`: the you're-out card and Menu → Standings), the tutorial and the themes (`tankity-tutorial`: on a phone and a desktop, each step's bubble shows on screen with focus, the marked control is on top at its centre and ringed, doing the step moves on through the shop and the battle to the end, Skip and Q end it; a fresh profile is Orange; Settings switches the theme's accent, Custom with the colour picker derives a readable palette, and a reload keeps it), a room closed to make space (`tankity-rooms-cap`: the line, Your games' closed row and Dismiss), and long games (`tankity-rooms-long`: the room link brings a closed tab back, Step out and Your games, the turn toast and Go, a lobby closed with Q listed, the turn time reaching everyone), and the game speed (`tankity-speed`: FF cycles 1×, 2×, 4× and the same seeded volley takes a half and a quarter of the wall time, kept across a reload; in a room the host's pick reaches the guest, who cannot change it), and the walls (`tankity-walls`: Settings keeps Rubber, the round line says so, and a full-power shot at the wall behind the tank turns round there and comes back onto the field; in a room the host sets Wraparound in the lobby, the guest sees the pick and the log line, the round plays it, and mid-round both Menus show it as a label). Each player context gives up its stored seats when a spec closes it (`tests/e2e/helpers.mjs`); `E2E_BASE_URL` points it at the live site |
+| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only), and the end of a match (`tankity-end`: a lost solo match is saved on this browser's board, shows under "This browser" in Scores and sends nothing to the score server; `tankity-end-again`: Play again in a room; `tankity-end-forfeit`: a leave, the winner filed online, and the solo card after it saved locally; `tankity-end-out`: the you're-out card and Menu → Standings), the tutorial and the themes (`tankity-tutorial`: on a phone and a desktop, each step's bubble shows on screen with focus, the marked control is on top at its centre and ringed, doing the step moves on through the shop and the battle to the end, Skip and Q end it; a fresh profile is Orange; Settings switches the theme's accent, Custom with the colour picker derives a readable palette, and a reload keeps it), a room closed to make space (`tankity-rooms-cap`: the line, Your games' closed row and Dismiss), the room puzzle (`tankity-pow`: "Setting up the room…" with Host and Join off, Cancel creating nothing, a 6-character code shown in halves and joined typed with a space, an old tab told to reload, and the solver's timings, which also run on WebKit and Firefox with `E2E_WEBKIT=1` and `E2E_FIREFOX=1`), and long games (`tankity-rooms-long`: the room link brings a closed tab back, Step out and Your games, the turn toast and Go, a lobby closed with Q listed, the turn time reaching everyone), and the game speed (`tankity-speed`: FF cycles 1×, 2×, 4× and the same seeded volley takes a half and a quarter of the wall time, kept across a reload; in a room the host's pick reaches the guest, who cannot change it), and the walls (`tankity-walls`: Settings keeps Rubber, the round line says so, and a full-power shot at the wall behind the tank turns round there and comes back onto the field; in a room the host sets Wraparound in the lobby, the guest sees the pick and the log line, the round plays it, and mid-round both Menus show it as a label). Each player context gives up its stored seats when a spec closes it (`tests/e2e/helpers.mjs`); `E2E_BASE_URL` points it at the live site |
 | `make e2e-changed` (site root) | Only the browser specs your changes need (`tests/e2e/select.mjs` maps touched files to specs; CI uses the same map) |
 
 `make test` from the site root runs every suite above except e2e. CI runs
@@ -1520,9 +1603,13 @@ settings mid-play: the snapshot's field and one event), `shop-after-win`, `shop-
 with one of two humans readied), `shop-walls` (the host's Walls pick in the shop: `walls`, the
 round just played's `wallsNow`, and one event), `create-reply`, `join-reply`, `start-local-reply` (the host alone starts: the
 match plays in the browser), `error-too-fast` (429), `error-not-your-turn` (409)
-and `error-reload` (426, a lone host's Start without `proto`). Each file
+`error-reload` (426, a lone host's Start without `proto`), `challenge-reply`
+(a room puzzle; the signed challenge string is a placeholder) and
+`error-puzzle` (422, a create without its puzzle). Each file
 is `{about, status, body}`.
-`sim-vectors.json` in the same folder is not one of them (see Sim vectors).
+`sim-vectors.json` in the same folder is not one of them (see Sim vectors),
+nor is `pow-vectors.json` (the room puzzle's derivation, written by
+`protocol/pow-vectors.php` and read by `test/pow.test.ts` and `RoomPowTest`).
 
 - `protocol/generate.php` writes them. Snapshots are built in process with
   `rooms.php`'s own functions on a fixed room code and seeds

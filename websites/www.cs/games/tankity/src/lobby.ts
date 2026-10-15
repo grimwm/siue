@@ -14,7 +14,8 @@ import { readInitials, saveInitials } from './initials.ts';
 import type { Pref } from '../../_kit/prefs.ts';
 import type { HudValues } from './hud.ts';
 import type { EndState } from './match.ts';
-import { goneLine, inviteUrl, isGoneError, prettyRoomError } from './net.ts';
+import { cleanCode, goneLine, inviteUrl, isGoneError, isRoomCode, prettyRoomError } from './net.ts';
+import { PowCancelled } from './pow.ts';
 import type { RoomClient } from './net.ts';
 import type { RoomEvent, RoomSnapshot } from './protocol.ts';
 import type { Difficulty } from './sim.ts';
@@ -57,6 +58,8 @@ export interface LobbyView {
   turnSecs: number;
   /** The room's Walls pick. */
   walls: WallsSetting;
+  /** Setting up a room or a seat (solving the room puzzle): Host and Join wait, Cancel stops it. */
+  working: boolean;
 }
 
 /** The slice of the game's state getting into a room touches (main.ts's G). */
@@ -125,8 +128,41 @@ export function createLobby(deps: LobbyDeps) {
   const LOBBY: LobbyView = {
     status: '', count: '', online: false, inRoom: false, mapId: '', mapsRev: 0, prefill: '',
     code: '', link: '', hills: 'Hills: Random hills', drones: '', seats: [], mySeat: 0, isHost: false, seatsHint: '', roomHint: '',
-    initialsRev: 0, initialsProblem: '', turnSecs: TURN_DEFAULT, walls: 'none',
+    initialsRev: 0, initialsProblem: '', turnSecs: TURN_DEFAULT, walls: 'none', working: false,
   };
+  /* The host or join under way, for Cancel: its signal, and the button that began it. */
+  let setup: { aborted: boolean; from: string } | null = null;
+  /* Runs a host or a join with the room puzzle: one at a time, the status line
+     saying so, Cancel able to stop it. */
+  async function settingUp(line: string, from: string, go: (signal: { aborted: boolean }) => Promise<void>): Promise<void> {
+    if (setup) return;
+    const signal = { aborted: false, from };
+    setup = signal;
+    LOBBY.working = true;
+    lobbySay(line);
+    try {
+      await go(signal);
+    } catch (err) {
+      if (!(err instanceof PowCancelled) && setup === signal) lobbySay(prettyRoomError(err));
+    } finally {
+      if (setup === signal) {
+        setup = null;
+        LOBBY.working = false;
+        renderLobby();
+      }
+    }
+  }
+  /* Cancel: the solve stops, nothing is sent (a seat taken in the meantime is
+     given up), and the player is back on the button they pressed. */
+  function cancelSetup(): void {
+    if (!setup) return;
+    setup.aborted = true;
+    const from = setup.from;
+    setup = null;
+    LOBBY.working = false;
+    lobbySay('Stopped. Nothing was set up.');
+    $(from)?.focus?.();
+  }
   function lobbySay(text: string): void {
     LOBBY.status = text;
     renderLobby();
@@ -172,21 +208,25 @@ export function createLobby(deps: LobbyDeps) {
       initialsProblem: LOBBY.initialsProblem,
       onInitials: word => { chooseInitials(word); renderLobby(); },
       onHost: letters => {
+        if (setup) return;
         const who = lobbyInitials(letters);
         if (who === null) return;
         playFullscreen?.();
         unlock(); sfx.play('click');
-        hostRoom(who, LOBBY.mapId);
+        void hostRoom(who, LOBBY.mapId);
       },
       onJoin: (rawCode, letters) => {
+        if (setup) return;
         const who = lobbyInitials(letters);
         if (who === null) return;
-        const code = rawCode.trim().toUpperCase();
-        if (!/^[A-Z0-9]{4}$/.test(code)) { lobbySay('Room codes are 4 letters or digits. Read it back and retry.'); return; }
+        const code = cleanCode(rawCode);
+        if (!isRoomCode(code)) { lobbySay('Room codes are 6 letters or digits. Read it back and retry.'); return; }
         playFullscreen?.();
         unlock(); sfx.play('click');
-        joinRoom(code, who);
+        void joinRoom(code, who);
       },
+      working: LOBBY.working,
+      onCancel: cancelSetup,
       code: LOBBY.code,
       link: LOBBY.link,
       hills: LOBBY.hills,
@@ -294,30 +334,30 @@ export function createLobby(deps: LobbyDeps) {
   function rememberSeat(initials: string): void {
     seats.remember({ code: net.code, seat: net.seat, token: net.token, csrf: net.csrf, initials });
   }
-  async function hostRoom(initials: string, mapId?: string | null): Promise<void> {
-    lobbySay('Raising the flag…');
-    MATCH.initials = initials;
-    try {
-      await net.host(initials, mapId || '', G.body, difficulty.get(), LOBBY.turnSecs);
+  /* Hosting and joining first solve the room puzzle (about a second), which
+     the status line says while it runs. */
+  function hostRoom(initials: string, mapId?: string | null): Promise<void> {
+    return settingUp('Setting up the room…', 'host-go', async signal => {
+      MATCH.initials = initials;
+      await net.host(initials, mapId || '', G.body, difficulty.get(), LOBBY.turnSecs, signal);
       rememberSeat(initials);
       lobbySay('');
       say(`Room ${net.code} hosted. Read the code to your friends.`, 'info');
       await netRefreshRoster();
       loadOccupancy();
       netLobbyWatch();
-    } catch (err) { lobbySay(prettyRoomError(err)); }
+    });
   }
-  async function joinRoom(code: string, initials: string): Promise<void> {
-    lobbySay('Knocking…');
-    MATCH.initials = initials;
-    try {
-      await net.join(code, initials, G.body);
+  function joinRoom(code: string, initials: string): Promise<void> {
+    return settingUp('Setting up your seat…', 'join-go', async signal => {
+      MATCH.initials = initials;
+      await net.join(code, initials, G.body, signal);
       rememberSeat(initials);
       lobbySay('');
       say(`Joined room ${net.code} as ${initials}.`, 'info');
       await netRefreshRoster();
       netLobbyWatch();
-    } catch (err) { lobbySay(prettyRoomError(err)); }
+    });
   }
   async function netRefreshRoster(): Promise<void> {
     let room: RoomSnapshot | null = null;
@@ -396,7 +436,7 @@ export function createLobby(deps: LobbyDeps) {
      friend arriving on the invite lands with the code already filled in. */
   function maybeApplyInviteCode(): void {
     if (typeof location === 'undefined' || !location.search) return;
-    const m = /[?&]code=([A-Za-z0-9]{4})/.exec(location.search);
+    const m = /[?&]code=([A-Za-z0-9]{6}|[A-Za-z0-9]{4})(?![A-Za-z0-9])/.exec(location.search);
     if (!m) return;
     const code = m[1]!.toUpperCase();
     if (seats.get(code)) { void resumeRoom(code); return; }

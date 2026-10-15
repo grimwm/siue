@@ -43,7 +43,7 @@ final class RoomsStoreFailureTest extends TestCase
     private static function create(): array
     {
         $ctx = stream_context_create(['http' => ['method' => 'POST', 'timeout' => 10, 'ignore_errors' => true,
-            'header' => "Content-Type: application/json\r\n", 'content' => json_encode(['initials' => 'abc'])]]);
+            'header' => "Content-Type: application/json\r\n", 'content' => json_encode(tankity_test_admit(self::$base, 'create', ['initials' => 'abc']))]]);
         $raw = @file_get_contents(self::$base . '/rooms.php?action=create', false, $ctx);
         preg_match('#^HTTP/\S+ (\d+)#', $http_response_header[0] ?? '', $m);
         return [(int) ($m[1] ?? 0), is_string($raw) ? json_decode($raw, true) : null];

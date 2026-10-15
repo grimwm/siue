@@ -12,6 +12,7 @@ import {
   RoomClient, isGoneError, prettyRoomError, inviteUrl, standingsRows, shouldCatchUp, planCatchUp, isVolleyOpener,
   MATCH_POLL_MS, LOBBY_POLL_MS, RETRY_429_MS, RETRY_429_TRIES, PROTO,
 } from '../src/net.ts';
+import { PowCancelled } from '../src/pow.ts';
 import type { FetchInit, RoomEnv } from '../src/net.ts';
 import type { StoredSeat } from '../src/seats.ts';
 import type { MineRow, RoomEvent, RoomSeat, RoomSnapshot } from '../src/protocol.ts';
@@ -49,19 +50,32 @@ interface Sent { url: string; init: FetchInit }
 interface FakeReply { status: number; body?: unknown; page?: boolean }
 type Respond = (url: string, init: FetchInit, i: number) => FakeReply | Error | Promise<FakeReply | Error>;
 interface Host {
+  /** The puzzles asked for (action=challenge), apart from `log`. */
+  challenges: string[];
   log: Sent[]; delays: number[]; intervals: Map<unknown, { fn: () => void; ms: number }>; nextId: number; clock: number;
   beacons: { url: string; body: string }[]; beaconTakes: boolean; inflight: number; maxInflight: number;
   env: RoomEnv;
 }
 
+/** A puzzle as the fake host hands it out: 0 bits, so any four nonces solve it. */
+const EASY_PUZZLE = { ok: true, challenge: 'v1.1800000000.c.0.fake-rand.fake-mac', bits: 0, count: 4, iter: 100, expiresIn: 120 };
+
 /** A fake host. `respond(url, init)` returns a status and body (or a promise of
- * them) for each request; the log keeps every request as it was sent. */
-function makeHost(respond: Respond): Host {
+ * them) for each request; the log keeps every request as it was sent. A
+ * puzzle request (action=challenge) is answered with EASY_PUZZLE and kept in
+ * `challenges` instead, unless `puzzles` answers it. */
+function makeHost(respond: Respond, puzzles?: (url: string) => FakeReply): Host {
   const host: Host = {
+    challenges: [],
     log: [], delays: [], intervals: new Map(), nextId: 1, clock: 0, beacons: [], beaconTakes: true,
     inflight: 0, maxInflight: 0,
     env: {
     async fetch(url: string, init: FetchInit) {
+      if (/action=challenge/.test(url)) {
+        host.challenges.push(url);
+        const r = puzzles ? puzzles(url) : ok(EASY_PUZZLE);
+        return { ok: r.status >= 200 && r.status < 300, status: r.status, json: async () => r.body };
+      }
       host.log.push({ url, init });
       host.inflight++;
       host.maxInflight = Math.max(host.maxInflight, host.inflight);
@@ -77,13 +91,14 @@ function makeHost(respond: Respond): Host {
     clearInterval: id => { host.intervals.delete(id); },
     now: () => host.clock,
     beacon: (url, body) => { host.beacons.push({ url, body }); return host.beaconTakes; },
+    subtle: () => globalThis.crypto.subtle,
   },
   };
   return host;
 }
 interface Seen { reachable: boolean[]; snapshots: { room: RoomSnapshot; fresh: RoomEvent[]; first: boolean }[]; ready: number; errors: unknown[] }
-function makeClient(respond: Respond) {
-  const host = makeHost(respond);
+function makeClient(respond: Respond, puzzles?: (url: string) => FakeReply) {
+  const host = makeHost(respond, puzzles);
   const seen: Seen = { reachable: [], snapshots: [], ready: 0, errors: [] };
   const net = new RoomClient(host.env, {
     onReachable: up => seen.reachable.push(up),
@@ -477,7 +492,7 @@ const bodyOf = (entry: Sent): Record<string, unknown> => JSON.parse(String(entry
   await test('delta-buy-sends-have', () => { assert.ok(bodyOf(at(host.log, 3)).have === fullRev, at(host.log, 3).init.body); });
   await net.post('ready', { ready: true });
   await test('delta-ready-sends-have', () => { assert.ok(bodyOf(at(host.log, 4)).have === fullRev, at(host.log, 4).init.body); });
-  await net.post('create', { proto: PROTO, initials: 'ABC', map: '', body: 'tank', difficulty: 'normal' }).catch(() => {});
+  await net.post('create', { proto: PROTO, pow: { c: 'v1.1.c.0.x.y', n: [0, 1, 2, 3] }, initials: 'ABC', map: '', body: 'tank', difficulty: 'normal' }).catch(() => {});
   await test('delta-create-sends-no-holdings', () => { assert.ok(bodyOf(at(host.log, 5)).have === undefined && bodyOf(at(host.log, 5)).since === undefined, at(host.log, 5).init.body); });
 }
 {
@@ -786,6 +801,85 @@ await test('invite-url-escapes-the-code', () => { assert.ok(inviteUrl('A&B', {})
   await test('speed-missing-reads-1x', () => { assert.equal(net.speed, 1); });
   net.apply(snap({ phase: 'play', events: [], seats: [], turnLeft: 500, shopLeft: null, speed: 3 }));
   await test('speed-unknown-reads-1x', () => { assert.equal(net.speed, 1); });
+}
+
+// ---- the room puzzle: asked for, solved, sent; a refused one is asked for again, once ----
+{
+  const { net, host } = makeClient(url => (/create/.test(url) ? ok(fixture('create-reply')) : ok(fixture('join-reply'))));
+  await net.host('ABC', '', 'tank', 'normal');
+  await net.join('FXT1', 'DEF', 'tank');
+  const create = bodyOf(at(host.log, 0));
+  const join = bodyOf(at(host.log, 1));
+  await test('puzzle-asked-for-by-purpose', () => {
+    assert.deepEqual(host.challenges, ['rooms.php?action=challenge&for=create', 'rooms.php?action=challenge&for=join']);
+  });
+  await test('puzzle-sent-solved', () => {
+    assert.deepEqual(create.pow, { c: EASY_PUZZLE.challenge, n: [0, 1, 2, 3] });
+    assert.deepEqual(join.pow, { c: EASY_PUZZLE.challenge, n: [0, 1, 2, 3] });
+    assert.ok(create.proto === 2 && join.proto === 2);
+  });
+}
+for (const puzzle of ['puzzle-expired', 'puzzle-bad', 'puzzle-wrong', 'puzzle-spent']) {
+  const status = puzzle === 'puzzle-spent' ? 409 : 403;
+  const refused = { status, body: { error: 'That puzzle ran out of time.', puzzle } };
+  let n = 0;
+  const again = makeClient(() => (++n === 1 ? refused : ok(fixture('create-reply'))));
+  await again.net.host('ABC', '', 'tank', 'normal');
+  await test(`${puzzle}-asks-again-once`, () => {
+    assert.ok(again.host.challenges.length === 2 && again.host.log.length === 2 && again.net.code === 'FXT1', j(again.host.challenges));
+  });
+  const twice = makeClient(() => refused);
+  let msg = '';
+  try { await twice.net.join('FXT1', 'DEF', 'tank'); } catch (err) { msg = errorOf(err).message; }
+  await test(`${puzzle}-twice-gives-up`, () => {
+    assert.ok(twice.host.challenges.length === 2 && twice.host.log.length === 2 && msg === 'That puzzle ran out of time.', `${twice.host.log.length}, "${msg}"`);
+  });
+}
+{
+  // Not finished (a bug, not a stale puzzle) and an old tab: never asked again.
+  for (const [what, reply, line] of [
+    ['short', { status: 422, body: { error: 'That puzzle is not finished.', puzzle: 'puzzle-short' } }, 'That puzzle is not finished.'],
+    ['reload', { status: 426, body: { error: 'Tankity was updated. Reload the page to keep playing.', reload: true } }, 'Tankity was updated. Reload the page to keep playing.'],
+  ] as const) {
+    const c = makeClient(() => reply);
+    let msg = '';
+    try { await c.net.host('ABC', '', 'tank', 'normal'); } catch (err) { msg = errorOf(err).message; }
+    await test(`puzzle-${what}-not-asked-again`, () => { assert.ok(c.host.challenges.length === 1 && c.host.log.length === 1 && msg === line, `${c.host.log.length}, "${msg}"`); });
+  }
+  // A puzzle the server will not hand out: its line, and no create.
+  const closed = makeClient(() => ok(fixture('create-reply')), () => ({ status: 503, body: { error: 'store unavailable' } }));
+  let msg = '';
+  try { await closed.net.host('ABC', '', 'tank', 'normal'); } catch (err) { msg = errorOf(err).message; }
+  await test('puzzle-unavailable', () => { assert.ok(closed.host.log.length === 0 && msg === 'store unavailable', msg); });
+  // A page that is not a secure context has no WebCrypto: rooms say so, solo still works.
+  const plain = makeClient(() => ok(fixture('create-reply')));
+  plain.host.env.subtle = () => null;
+  let m2 = '';
+  try { await plain.net.join('FXT1', 'DEF', 'tank'); } catch (err) { m2 = errorOf(err).message; }
+  await test('puzzle-needs-a-secure-page', () => {
+    assert.ok(plain.host.log.length === 0 && plain.host.challenges.length === 0 && m2 === 'Rooms need a secure (https) page. Solo hills still work.', m2);
+  });
+}
+{
+  // Cancelled while solving: nothing is sent.
+  const hard = { ...EASY_PUZZLE, bits: 24 };
+  const c = makeClient(() => ok(fixture('create-reply')), () => ok(hard));
+  const signal = { aborted: false };
+  const going = c.net.host('ABC', '', 'tank', 'normal', undefined, signal);
+  await flush();
+  signal.aborted = true;
+  await test('puzzle-cancelled-while-solving', async () => {
+    await assert.rejects(going, PowCancelled);
+    assert.ok(c.host.log.length === 0 && c.net.code === '', `${c.host.log.length} sent`);
+  });
+  // Cancelled while the create was on its way: the seat it got is given up.
+  const late = { aborted: false };
+  const d = makeClient(() => { late.aborted = true; return ok(fixture('create-reply')); });
+  await test('puzzle-cancelled-after-sending-leaves', async () => {
+    await assert.rejects(d.net.host('ABC', '', 'tank', 'normal', undefined, late), PowCancelled);
+    assert.ok(d.net.code === '' && d.host.beacons.length === 1 && /action=leave/.test(at(d.host.beacons, 0).url), j(d.host.beacons));
+    assert.equal(JSON.parse(at(d.host.beacons, 0).body).token, 'fixture-token-0');
+  });
 }
 
 // ---- the per-address hosting cap: its 429 is never retried and reads as the server says ----

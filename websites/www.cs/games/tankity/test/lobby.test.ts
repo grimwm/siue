@@ -5,7 +5,7 @@
 // lobby with a line saying so.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { asElement, click, document, installDocument } from '../../_kit/test/dom-stub.ts';
+import { asElement, click, document, installDocument, submit } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import type { StorageLike } from '../../_kit/ports.ts';
 import type { MatchState } from '../src/game-types.ts';
@@ -42,6 +42,7 @@ function rig(respond: (url: string, init?: { method?: string; body?: string }) =
     clearInterval: id => { intervals.delete(Number(id)); },
     now: () => 0,
     beacon: () => true,
+    subtle: () => globalThis.crypto.subtle,
   };
   const storage = new Map<string, string>();
   const store: StorageLike = { getItem: k => storage.get(k) ?? null, setItem: (k, v) => { storage.set(k, v); }, removeItem: k => { storage.delete(k); } };
@@ -277,4 +278,108 @@ test('the host picks the walls in the lobby; a guest sees the room\'s pick and c
   });
   await g.lobby.resumeRoom('AB3D');
   assert.equal(g.$('room-walls-label').textContent, 'Walls: Rubber (the host picks)');
+});
+
+/* Hosting and joining solve the room puzzle first: the status line says so
+   (it is a polite live region, so a screen reader hears it), Host and Join
+   are off until it is done, and Cancel stops it. */
+function puzzleRig(gate: { open?: () => void }) {
+  const sent: string[] = [];
+  const r = rig(url => {
+    sent.push(url.replace(/^rooms\.php\?action=([a-z]+).*$/, '$1'));
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
+    if (url.includes('action=challenge')) {
+      return new Promise<Answer>(res => { gate.open = () => res(ok({ ok: true, challenge: 'v1.1.c.0.x.y', bits: 0, count: 4, iter: 100, expiresIn: 120 })); });
+    }
+    if (url.includes('action=create')) return ok({ ok: true, code: 'K7Q2MX', seat: 0, token: 'tk', csrf: 'cs' });
+    if (url.includes('action=join')) return ok({ ok: true, code: 'K7Q2MX', seat: 1, token: 'tk', csrf: 'cs' });
+    return ok({ ok: true, room: lobbyRoom({ code: 'K7Q2MX' }) });
+  });
+  r.seats.forget('AB3D');
+  return { ...r, sent };
+}
+const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(res => setImmediate(res)); };
+/** Waits (up to 10 s) for what WebCrypto's thread pool finishes in its own time. */
+async function until(what: string, cond: () => boolean): Promise<void> {
+  for (const end = Date.now() + 10_000; !cond(); await new Promise(res => setTimeout(res, 5))) {
+    if (Date.now() > end) assert.fail(`timed out waiting for ${what}`);
+  }
+}
+
+test('hosting says Setting up the room…, keeps Host and Join off, and a second Host does nothing', async () => {
+  const gate: { open?: () => void } = {};
+  const r = puzzleRig(gate);
+  await r.lobby.openLobby();
+  submit(r.$('host-form'));
+  await settle();
+  assert.equal(r.$('lobby-status').textContent, 'Setting up the room…');
+  assert.equal(r.$('lobby-status').getAttribute('aria-live'), 'polite');
+  assert.equal(r.$('host-go').getAttribute('aria-disabled'), 'true');
+  assert.equal(r.$('join-go').getAttribute('aria-disabled'), 'true');
+  assert.equal(r.$('lobby-cancel').hidden, false);
+  submit(r.$('host-form'));
+  submit(r.$('join-form'));
+  await settle();
+  assert.deepEqual(r.sent.filter(a => a === 'challenge'), ['challenge'], 'one puzzle asked for');
+  gate.open?.();
+  await until('the room', () => r.net.code === 'K7Q2MX' && r.$('lobby-cancel').hidden === true);
+  assert.equal(r.seats.get('K7Q2MX')?.token, 'tk');
+  assert.equal(r.$('lobby-status').textContent, '');
+  assert.equal(r.$('lobby-cancel').hidden, true);
+  assert.equal(r.$('host-go').getAttribute('aria-disabled'), undefined);
+});
+
+test('Cancel stops setting up the room: nothing is created and Host works again', async () => {
+  const gate: { open?: () => void } = {};
+  const r = puzzleRig(gate);
+  await r.lobby.openLobby();
+  submit(r.$('host-form'));
+  await settle();
+  click(r.$('lobby-cancel'));
+  await settle();
+  assert.equal(r.$('lobby-status').textContent, 'Stopped. Nothing was set up.');
+  assert.equal(r.$('lobby-cancel').hidden, true);
+  assert.equal(r.$('host-go').getAttribute('aria-disabled'), undefined);
+  gate.open?.();
+  await settle();
+  assert.ok(!r.sent.includes('create'), r.sent.join());
+  assert.equal(r.net.code, '');
+  assert.equal(r.seats.list().length, 0);
+  // Host again: a new puzzle, and this time the room.
+  submit(r.$('host-form'));
+  await settle();
+  gate.open?.();
+  await until('the room', () => r.net.code === 'K7Q2MX' && r.$('lobby-cancel').hidden === true);
+});
+
+test('joining says Setting up your seat…, and takes the code as read back', async () => {
+  const gate: { open?: () => void } = {};
+  const r = puzzleRig(gate);
+  await r.lobby.openLobby();
+  (r.$('join-code') as unknown as { value: string }).value = ' k7q-2mx ';
+  submit(r.$('join-form'));
+  await settle();
+  assert.equal(r.$('lobby-status').textContent, 'Setting up your seat…');
+  gate.open?.();
+  await until('the seat', () => r.net.code === 'K7Q2MX' && r.$('lobby-cancel').hidden === true);
+});
+
+test('a code of the wrong length is refused before anything is sent', async () => {
+  const r = puzzleRig({});
+  await r.lobby.openLobby();
+  for (const code of ['K7Q2M', 'K7Q2MXY', '']) {
+    (r.$('join-code') as unknown as { value: string }).value = code;
+    submit(r.$('join-form'));
+    await settle();
+    assert.equal(r.$('lobby-status').textContent, 'Room codes are 6 letters or digits. Read it back and retry.', code);
+  }
+  assert.ok(!r.sent.includes('challenge') && !r.sent.includes('join'), r.sent.join());
+});
+
+test('cleanCode and isRoomCode', () => {
+  assert.equal(m.net.cleanCode(' k7q-2mx '), 'K7Q2MX');
+  assert.equal(m.net.cleanCode('k7q 2mx'), 'K7Q2MX');
+  assert.ok(m.net.isRoomCode('K7Q2MX') && m.net.isRoomCode('AB3D'));
+  assert.ok(!m.net.isRoomCode('K7Q2M') && !m.net.isRoomCode('K7Q2MXY') && !m.net.isRoomCode(''));
 });

@@ -10,7 +10,9 @@
  * A JSON import types every string as plain `string`, so the literal unions
  * (phase, event `t`, seat mode) cannot be checked here; test/protocol.test.ts
  * checks those values against protocol.ts. */
-import type { ErrorReply, LocalReply, MineReply, RoomReply, SeatReply } from './protocol.ts';
+import type { ChallengeReply, ErrorReply, LocalReply, MineReply, RoomReply, SeatReply } from './protocol.ts';
+import challengeReply from '../protocol/challenge-reply.json' with { type: 'json' };
+import errorPuzzle from '../protocol/error-puzzle.json' with { type: 'json' };
 import createReply from '../protocol/create-reply.json' with { type: 'json' };
 import joinReply from '../protocol/join-reply.json' with { type: 'json' };
 import errorNotYourTurn from '../protocol/error-not-your-turn.json' with { type: 'json' };
@@ -89,6 +91,8 @@ export const fixturesFit: {
   errorNotYourTurn: Fits<typeof errorNotYourTurn.body, ErrorReply>;
   errorTooFast: Fits<typeof errorTooFast.body, ErrorReply>;
   errorReload: Fits<typeof errorReload.body, ErrorReply>;
+  challengeReply: Fits<typeof challengeReply.body, ChallengeReply>;
+  errorPuzzle: Fits<typeof errorPuzzle.body, ErrorReply>;
   startLocalReply: Fits<typeof startLocalReply.body, LocalReply>;
   lobbyHost: Fits<typeof lobbyHost.body, RoomReply>;
   lobbyPublic: Fits<typeof lobbyPublic.body, RoomReply>;
@@ -112,6 +116,8 @@ export const fixturesFit: {
   errorNotYourTurn: true,
   errorTooFast: true,
   errorReload: true,
+  challengeReply: true,
+  errorPuzzle: true,
   startLocalReply: true,
   lobbyHost: true,
   lobbyPublic: true,

@@ -140,7 +140,7 @@ async function hostAlone(browser) {
   await host.page.click('#rooms-open');
   await host.page.click('#host-go');
   await host.page.waitForSelector('#lobby-room:not([hidden])');
-  await expect.poll(() => hud(host.page, 'lobby-code')).toMatch(/^[A-Z0-9]{4}$/);
+  await expect.poll(() => hud(host.page, 'lobby-code')).toMatch(/^[A-Z0-9]{6}$/);
   const code = (await hud(host.page, 'lobby-code')).trim();
   const seat = await host.page.evaluate(c => (JSON.parse(localStorage.getItem('tankity-seats') || '{}').seats || []).find(s => s.code === c), code);
   return { host, code, seat };

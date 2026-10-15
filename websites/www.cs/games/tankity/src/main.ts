@@ -493,6 +493,8 @@ function browserRoomEnv(): RoomEnv {
     clearInterval: id => clearInterval(id as number),
     now: () => performance.now(),
     beacon: (url, body) => typeof navigator !== 'undefined' && !!navigator.sendBeacon && navigator.sendBeacon(url, body),
+    // Browsers give WebCrypto to secure contexts only (https, or this machine).
+    subtle: () => globalThis.crypto?.subtle ?? null,
   };
 }
 const net = new RoomClient(browserRoomEnv(), {

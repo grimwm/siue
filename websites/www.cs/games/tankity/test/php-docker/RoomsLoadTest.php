@@ -38,8 +38,14 @@ final class RoomsLoadTest extends TestCase
     private const BASE = 'http://nginx/games/tankity/rooms.php';
 
     /** @return array{int, ?array} */
+    public static function setUpBeforeClass(): void
+    {
+        require_once dirname(__DIR__) . '/php/rooms-lib.php'; // the puzzle solver
+    }
+
     private function post(string $action, array $body): array
     {
+        $body = tankity_test_admit(dirname(self::BASE), $action, $body);
         $h = curl_init(self::BASE . '?action=' . $action);
         curl_setopt_array($h, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($body), CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER => ['Content-Type: application/json'], CURLOPT_TIMEOUT => 10]);

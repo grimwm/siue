@@ -8,6 +8,7 @@
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later */
 import { render } from 'preact';
+import type { ComponentChildren } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import { KeyHints, Key, OverlayHead, ScrollKeys, blurThen, useScrollKeep } from './chrome.tsx';
 import type { KeyHintFn } from './chrome.tsx';
@@ -39,6 +40,11 @@ export interface MenuProps {
   /** Toggle states (pressed means on). */
   sound: boolean;
   music: boolean;
+  /** The volume sliders' levels, 0 to 100 percent, and what a drag reports. */
+  soundLevel: number;
+  musicLevel: number;
+  onSoundLevel: (level: number) => void;
+  onMusicLevel: (level: number) => void;
   fullscreen: boolean;
   /** Screen flashes: the full-screen flash and the large bright blast layers. */
   flashes: boolean;
@@ -77,6 +83,30 @@ function UnitTile({ unit, picked, draw, onPick }: {
       <canvas width={48} height={34} ref={canvas} />
       <span>{unit.name}</span>
     </button>
+  );
+}
+
+/* One volume row: the word, a small toggle that mutes it (the slider's level
+   stays), the slider and its percent. The slider is a native range input, so
+   Tab reaches it and the arrow keys move it; Q, M and E still work from it. */
+function VolumeRow(p: {
+  channel: string; on: boolean; level: number; toggleId: string; rangeId: string; keyAt: string; title: string;
+  icon: ComponentChildren; onToggle: () => void; onLevel: (level: number) => void;
+}) {
+  const text = `${p.channel} ${p.level}%${p.on ? '' : ', muted'}`;
+  return (
+    <div class="unit-row vol-row" role="group" aria-label={`${p.channel} volume`}>
+      <span class="unit-label" aria-hidden="true">{p.channel}</span>
+      <button type="button" id={p.toggleId} class="unit-choice tile-toggle vol-toggle" aria-pressed={p.on} aria-label={p.channel}
+        title={p.title} onClick={blurThen(p.onToggle)}>
+        <svg class="tile-icon" viewBox="0 0 24 24" aria-hidden="true">{p.icon}</svg>
+        <Key at={p.keyAt} bare />
+      </button>
+      <input type="range" id={p.rangeId} class="vol-range" min={0} max={100} step={1} value={p.level}
+        aria-label={`${p.channel} volume`} aria-valuetext={text}
+        onInput={ev => p.onLevel(Number((ev.currentTarget as HTMLInputElement).value))} />
+      <output for={p.rangeId} class="vol-out">{p.level}%</output>
+    </div>
   );
 }
 
@@ -125,28 +155,24 @@ export function Menu(p: MenuProps) {
           </div>
         </div>
         <p class="hint" id="difficulty-hint">How well the drones aim. A change starts with your next match; in a room, the host's setting counts.</p>
+        <VolumeRow channel="Sound" on={p.sound} level={p.soundLevel} toggleId="btn-sound" rangeId="vol-sound" keyAt="global:sound"
+          title="Toggle sound effects" onToggle={p.onSound} onLevel={p.onSoundLevel}
+          icon={<>
+            <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" stroke="none" />
+            <path class="on-only" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" />
+            <path class="off-only" d="M16.5 9.5l5 5M21.5 9.5l-5 5" />
+          </>} />
+        <VolumeRow channel="Music" on={p.music} level={p.musicLevel} toggleId="btn-music" rangeId="vol-music" keyAt="global:music"
+          title="Toggle music" onToggle={p.onMusic} onLevel={p.onMusicLevel}
+          icon={<>
+            <path d="M9 18V6l10-2v12" />
+            <circle cx="6.5" cy="18" r="2.5" fill="currentColor" />
+            <circle cx="16.5" cy="16" r="2.5" fill="currentColor" />
+            <path class="off-only" d="M4 3l16 18" />
+          </>} />
         <div class="unit-row" role="group" aria-labelledby="options-label">
           <span class="unit-label" id="options-label">Options</span>
           <div class="unit-picker" id="toggle-picker">
-            <button type="button" id="btn-sound" class="unit-choice tile-toggle" aria-pressed={p.sound} title="Toggle sound effects"
-              onClick={blurThen(p.onSound)}>
-              <svg class="tile-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" stroke="none" />
-                <path class="on-only" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" />
-                <path class="off-only" d="M16.5 9.5l5 5M21.5 9.5l-5 5" />
-              </svg>
-              <span>Sound <Key at="global:sound" bare /></span>
-            </button>
-            <button type="button" id="btn-music" class="unit-choice tile-toggle" aria-pressed={p.music} title="Toggle music"
-              onClick={blurThen(p.onMusic)}>
-              <svg class="tile-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 18V6l10-2v12" />
-                <circle cx="6.5" cy="18" r="2.5" fill="currentColor" />
-                <circle cx="16.5" cy="16" r="2.5" fill="currentColor" />
-                <path class="off-only" d="M4 3l16 18" />
-              </svg>
-              <span>Music <Key at="global:music" bare /></span>
-            </button>
             <button type="button" id="fullscreen" class="unit-choice tile-toggle" aria-pressed={p.fullscreen} title="Toggle fullscreen"
               onClick={blurThen(p.onFullscreen)}>
               <svg class="tile-icon" viewBox="0 0 24 24" aria-hidden="true">

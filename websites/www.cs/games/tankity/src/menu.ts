@@ -13,6 +13,7 @@ import { DIFFICULTY_NAMES, isDifficulty } from './difficulty.ts';
 import type { DifficultySetting } from './difficulty.ts';
 import type { GameState, GameTank } from './game-types.ts';
 import type { RoomClient } from './net.ts';
+import type { Volume } from './volume.ts';
 import { drawUnitIcon } from './ui/icons.ts';
 import { renderMenu as drawMenu } from './ui/menu.tsx';
 import type { KeyHintFn } from './ui/chrome.tsx';
@@ -52,12 +53,14 @@ export interface MenuDeps {
   nextSong(): void;
   /** Screen flashes on or off in the effects engine. */
   setFlashes(on: boolean): void;
+  /** The Sound and Music sliders: their levels, and what a drag sets. */
+  volume: Pick<Volume, 'level' | 'setLevel'>;
 }
 
 export function createMenu(deps: MenuDeps) {
   const {
     G, $, net, sfx, difficulty, unlock, playFullscreen, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
-    freshMatchFromSeedBox, openStandings, turnTime, alerts, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong, setFlashes,
+    freshMatchFromSeedBox, openStandings, turnTime, alerts, toggleFullscreen, quit, toggleMusic, toggleOverlay, toggleSound, nextSong, setFlashes, volume,
   } = deps;
 
   /* Ground units: every human (you, and the people in a room) picks a body.
@@ -165,6 +168,10 @@ export function createMenu(deps: MenuDeps) {
       onPickDifficulty: chooseDifficulty,
       sound: !isSoundMuted(),
       music: !isMusicMuted(),
+      soundLevel: volume.level('sound'),
+      musicLevel: volume.level('music'),
+      onSoundLevel: level => { volume.setLevel('sound', level); renderMenu(); },
+      onMusicLevel: level => { volume.setLevel('music', level); renderMenu(); },
       fullscreen: !!document.fullscreenElement,
       flashes: flashesOn(),
       onFlashes: toggleFlashes,

@@ -26,11 +26,11 @@
    first paint, and Settings changes it (src/theme.ts). --accent-ink is the text
    on an accent fill, --accent-rgb the accent for translucent tints, --focus the
    focus ring. test/theme.test.ts holds every pair to WCAG AA. */
-:root, [data-theme="yellow"] { --accent: #ffc93c; --accent-hover: #ffd96e; --accent-ink: #1a1a1a; --accent-rgb: 255, 201, 60; --focus: #ffe08a; }
-[data-theme="lime"] { --accent: #a3e635; --accent-hover: #bef264; --accent-ink: #1a1a1a; --accent-rgb: 163, 230, 53; --focus: #d9f99d; }
-[data-theme="cyan"] { --accent: #22d3ee; --accent-hover: #67e8f9; --accent-ink: #0b1a1f; --accent-rgb: 34, 211, 238; --focus: #a5f3fc; }
-[data-theme="orange"] { --accent: #ff9f43; --accent-hover: #ffb873; --accent-ink: #1a1a1a; --accent-rgb: 255, 159, 67; --focus: #ffd0a1; }
-[data-theme="magenta"] { --accent: #f472d0; --accent-hover: #f9a8e4; --accent-ink: #1a1a1a; --accent-rgb: 244, 114, 208; --focus: #fbcfe8; }
+:root, [data-theme="yellow"] { --accent: #ffc93c; --accent-hover: #ffd96e; --accent-ink: #111111; --accent-rgb: 255, 201, 60; --focus: #ffe08a; }
+[data-theme="lime"] { --accent: #a3e635; --accent-hover: #bef264; --accent-ink: #111111; --accent-rgb: 163, 230, 53; --focus: #d9f99d; }
+[data-theme="cyan"] { --accent: #22d3ee; --accent-hover: #67e8f9; --accent-ink: #111111; --accent-rgb: 34, 211, 238; --focus: #a5f3fc; }
+[data-theme="orange"] { --accent: #ff9f43; --accent-hover: #ffb873; --accent-ink: #111111; --accent-rgb: 255, 159, 67; --focus: #ffd0a1; }
+[data-theme="magenta"] { --accent: #f472d0; --accent-hover: #f9a8e4; --accent-ink: #111111; --accent-rgb: 244, 114, 208; --focus: #fbcfe8; }
 
 * { box-sizing: border-box; }
 
@@ -195,13 +195,17 @@ button:disabled { opacity: 0.45; cursor: default; }
 /* Narrow screens: a tile's word and the Next song button stay inside their borders. */
 .unit-picker .m-track { grid-column: span 2; white-space: nowrap; }
 @media (max-width: 600px) {
-  .tile-toggle > span { font-size: 0.62rem; }
+  .tile-toggle > span, .theme-choice > span { font-size: 0.62rem; }
   .unit-picker .tile-toggle { padding-inline: 0.1rem; }
+  .unit-picker .theme-choice { padding-inline: 0; }
+  /* Five names need the card's whole width: the Theme label sits above them. */
+  .unit-row:has(> .theme-picker) { flex-wrap: wrap; row-gap: 0.2rem; }
+  .unit-row > .theme-picker { flex-basis: 100%; }
 }
 .unit-picker button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }
 /* Theme tiles: five across, each swatch in its own theme's accent (its
    data-theme scopes the palette to the swatch). */
-.unit-picker.theme-picker { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.unit-picker.theme-picker { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.2rem; }
 .theme-choice { align-content: center; min-height: 3.2rem; }
 .theme-swatch { display: block; width: 1.3rem; height: 1.3rem; border-radius: 50%; background: var(--accent); border: 2px solid rgba(255, 255, 255, 0.3); }
 .theme-choice[aria-pressed="true"] .theme-swatch { border-color: var(--ink); }

@@ -35,6 +35,7 @@ async function open(browser, id, width, height, touch) {
   const page = await context.newPage();
   await page.goto(`play/${id}/`);
   await expect(page.locator('#share-btn')).toBeVisible();
+  await expect(page.locator('#share-btn svg path').first(), 'the kit\'s Share icon: arrow up out of a tray').toHaveAttribute('d', 'M12 15V3M7 8l5-5 5 5');
   await offerInstall(page);
   await expect(page.locator('#install-btn')).toBeVisible();
   return { context, page };

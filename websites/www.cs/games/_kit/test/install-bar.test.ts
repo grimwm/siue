@@ -21,7 +21,7 @@ const group = (m: RegExpMatchArray | null): string => {
   assert.ok(m[1] !== undefined);
   return m[1];
 };
-const VIEW: InstallView = { off: false, install: false, highlight: false, steps: false, share: 'idle', shareIcon: 'dots' };
+const VIEW: InstallView = { off: false, install: false, highlight: false, steps: false, share: 'idle' };
 const calls: string[] = [];
 const roots: StubElement[] = [];
 afterEach(() => {
@@ -119,7 +119,6 @@ const svgOf = (el: StubElement): StubElement => {
   assert.ok(svg, 'no svg');
   return svg;
 };
-const pathsOf = (el: StubElement) => walk(svgOf(el)).map(n => n.localName).join(',');
 
 test('Install and Share each carry an icon (hidden from screen readers) beside their word, which a phone hides visually, not with display: none', () => {
   const root = draw({ install: true });
@@ -143,10 +142,7 @@ test('Install and Share each carry an icon (hidden from screen readers) beside t
   assert.match(phone, /\.kit-install-btn \{[^}]*width: 2\.5rem/);
 });
 
-test('Share draws the box on an Apple platform and the three dots elsewhere', () => {
-  const dots = pathsOf(byId(draw({ shareIcon: 'dots' }), 'share-btn'));
-  const box = pathsOf(byId(draw({ shareIcon: 'box' }), 'share-btn'));
-  assert.notEqual(dots, box);
-  assert.match(dots, /circle/);
-  assert.doesNotMatch(box, /circle/);
+test('Share draws the one kit icon, the same on every platform', () => {
+  const paths = walk(svgOf(byId(draw({}), 'share-btn'))).filter(n => n.localName === 'path').map(n => n.getAttribute('d'));
+  assert.deepEqual(paths, ['M12 15V3M7 8l5-5 5 5', 'M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3']);
 });

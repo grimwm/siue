@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { asElement, byId, click, elementOf, fire, installDocument, makeEl, maybeById, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
+import { manualClock } from '../../_kit/test/clock.ts';
 import type { TitleProps } from '../src/ui/title.tsx';
 
 installDocument();
@@ -15,11 +16,12 @@ const KEYS: Record<string, string> = { 'global:new': 'N', 'global:rooms': 'O', '
 
 function draw(over: Partial<TitleProps> = {}) {
   const root = makeEl('title-root');
-  const calls = { initials: [] as string[], play: 0, friends: 0, tutorial: 0, settings: 0 };
+  const calls = { initials: [] as string[], play: 0, friends: 0, tutorial: 0, settings: 0, share: 0, closeShare: 0 };
   const props: TitleProps = {
     keyHint: (c, a) => KEYS[`${c}:${a}`] ?? '', open: true, initials: 'BDJ', problem: '', hint: '', settingsOpen: false,
     onInitials: w => { calls.initials.push(w); }, onPlay: () => { calls.play++; }, onFriends: () => { calls.friends++; },
-    onTutorial: () => { calls.tutorial++; }, onSettings: () => { calls.settings++; }, ...over,
+    onTutorial: () => { calls.tutorial++; }, onSettings: () => { calls.settings++; }, shareState: 'idle', shareUrl: '', onShare: () => { calls.share++; },
+    onCloseShare: () => { calls.closeShare++; }, ...over,
   };
   render(root, props);
   return { root, calls, props };
@@ -128,6 +130,7 @@ test('the hint belongs to the open card: gone when a match starts, not shown on 
     $: id => (id === 'title-root' ? asElement(root) as HTMLElement : null), keyHint: () => '', initials: { get: () => 'BDJ', set() {}, subscribe: () => () => {} },
     play() {}, friends() {}, tutorial() {}, settings() {}, settingsOpen: () => false,
     games: () => ({ rows: [], alerts: 'off', age: 0, onOpen() {}, onAlerts() {} }),
+    shareEnv: { share: null, copy: null, timers: manualClock().timers }, shareUrl: 'https://site.test/play/tankity/',
   });
   t.showHint('nobody sees this');
   assert.equal(maybeById(root, 'title-hint'), undefined, 'a closed card shows nothing');
@@ -148,4 +151,44 @@ test('Tutorial is a secondary button of its own: the accent outline and a 🎓 t
   assert.ok(icon, 'an icon');
   assert.equal(icon.getAttribute('aria-hidden'), 'true');
   assert.equal(icon.textContent, '🎓');
+});
+
+test('Share sits beside Play in one row: a labelled icon button that reports, and shows the shared icon', () => {
+  const { root, calls } = draw();
+  const play = byId(root, 'title-play');
+  const share = byId(root, 'title-share');
+  assert.equal(play.parentElement, share.parentElement, 'one row');
+  assert.equal(share.getAttribute('aria-label'), 'Share');
+  assert.equal(share.getAttribute('title'), 'Share a link to this game');
+  assert.equal(share.textContent, '');
+  const paths = walk(share).filter(n => n.localName === 'path').map(n => n.getAttribute('d'));
+  assert.equal(paths[0], 'M12 15V3M7 8l5-5 5 5');
+  click(share);
+  assert.equal(calls.share, 1);
+});
+
+test('after Share: "Link copied" in a status line, or the address in a field that Q closes', () => {
+  assert.equal(byId(draw({ shareState: 'copied' }).root, 'title-share-status').textContent, 'Link copied');
+  assert.equal(byId(draw().root, 'title-share-status').textContent, '');
+  assert.equal(maybeById(draw().root, 'title-share-url'), undefined);
+  const { root, calls } = draw({ shareState: 'field', shareUrl: 'https://site.test/play/tankity/' });
+  const field = byId(root, 'title-share-url');
+  assert.equal(field.value, 'https://site.test/play/tankity/');
+  fire(field, 'keydown', { key: 'q', stopPropagation: () => {} });
+  assert.equal(calls.closeShare, 1);
+});
+
+test('the card\'s Share goes through the kit\'s share helper: the sheet gets the game\'s /play/tankity/ address', async () => {
+  const { title: card } = await importTsx<{ title: typeof import('../src/title.ts') }>(import.meta.dirname, { title: '../src/title.ts' });
+  const root = makeEl('title-root');
+  const shared: Array<{ title: string; url: string }> = [];
+  card.createTitle({
+    $: id => (id === 'title-root' ? asElement(root) as HTMLElement : null), keyHint: () => '', initials: { get: () => 'BDJ', set() {}, subscribe: () => () => {} },
+    play() {}, friends() {}, tutorial() {}, settings() {}, settingsOpen: () => false,
+    games: () => ({ rows: [], alerts: 'off', age: 0, onOpen() {}, onAlerts() {} }),
+    shareEnv: { share: async d => { shared.push(d); }, copy: null, timers: manualClock().timers }, shareUrl: 'https://site.test/play/tankity/',
+  }).openTitle();
+  click(byId(root, 'title-share'));
+  await Promise.resolve();
+  assert.deepEqual(shared, [{ title: 'Operation Tankity', url: 'https://site.test/play/tankity/' }]);
 });

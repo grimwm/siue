@@ -6,8 +6,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { DeferredPrompt, InstallEnv, InstallSetup, InstallView, Platform, ShareIcon } from '../install.ts';
-import { createInstall, asksInstall, withInstall, COPIED_MS, IOS_STEPS, PROMPT_STASH, detectPlatform, detectShareIcon, browserInstallEnv } from '../install.ts';
+import type { DeferredPrompt, InstallEnv, InstallSetup, InstallView, Platform } from '../install.ts';
+import { createInstall, asksInstall, withInstall, COPIED_MS, IOS_STEPS, PROMPT_STASH, detectPlatform, createShare, browserInstallEnv } from '../install.ts';
 import { runInNewContext } from 'node:vm';
 import { manualClock } from './clock.ts';
 
@@ -20,7 +20,6 @@ const GAME = { ...PLAY, installPage: null };
 
 interface SetupOptions {
   platform?: Platform;
-  shareIcon?: ShareIcon;
   installed?: boolean;
   framed?: boolean;
   share?: InstallEnv['share'];
@@ -28,7 +27,7 @@ interface SetupOptions {
   early?: DeferredPrompt | null;
 }
 
-function setup({ platform = 'chromium', shareIcon = 'dots', installed = false, framed = false, share = null, copy = null, early = null }: SetupOptions = {}, how: InstallSetup = PLAY) {
+function setup({ platform = 'chromium', installed = false, framed = false, share = null, copy = null, early = null }: SetupOptions = {}, how: InstallSetup = PLAY) {
   const clock = manualClock();
   const went: Array<[string, boolean]> = [];
   const views: InstallView[] = [];
@@ -39,7 +38,6 @@ function setup({ platform = 'chromium', shareIcon = 'dots', installed = false, f
     onInstalled: cb => { installedNow = cb; },
     installed: () => installed,
     platform: () => platform,
-    shareIcon: () => shareIcon,
     framed: () => framed,
     share,
     copy,
@@ -265,22 +263,23 @@ test('a prompt that fires before the bar loads is held back by the page\'s first
   }
 });
 
-test('the Share icon is Apple\'s box on iPhone, iPad (also as a touch Mac) and Mac, and the three dots everywhere else', () => {
-  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1';
-  const IPAD = 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1';
-  const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15';
-  const CHROME_MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/130.0 Safari/537.36';
-  assert.equal(detectShareIcon(IPHONE, 'iPhone', 5), 'box');
-  assert.equal(detectShareIcon(IPAD, 'iPad', 5), 'box');
-  assert.equal(detectShareIcon(MAC, 'MacIntel', 5), 'box', 'iPadOS in desktop mode says it is a Mac');
-  assert.equal(detectShareIcon(MAC, 'MacIntel', 0), 'box', 'a Mac');
-  assert.equal(detectShareIcon(CHROME_MAC, 'MacIntel', 0), 'box', 'Chrome on a Mac still uses the system share sheet');
-  assert.equal(detectShareIcon('Mozilla/5.0 (Linux; Android 16; SM-S938U) Chrome/130.0 Mobile Safari/537.36', 'Linux armv81', 5), 'dots');
-  assert.equal(detectShareIcon('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36', 'Win32', 0), 'dots');
-  assert.equal(detectShareIcon('Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/130.0', 'Linux x86_64', 0), 'dots');
-});
-
-test('the view carries the platform\'s Share icon', () => {
-  assert.equal(setup({ shareIcon: 'box' }).install.view().shareIcon, 'box');
-  assert.equal(setup({}).install.view().shareIcon, 'dots');
+test('createShare, on its own: Web Share with the title and address, then copy, then the field', async () => {
+  const clock = manualClock();
+  const shared: Array<{ title: string; url: string }> = [];
+  const copied: string[] = [];
+  let changes = 0;
+  const how = { title: 'Operation Tankity', shareUrl: 'https://site.test/play/tankity/' };
+  const viaSheet = createShare({ share: async d => { shared.push(d); }, copy: null, timers: clock.timers }, how, () => { changes++; });
+  await viaSheet.press();
+  assert.deepEqual([shared, viaSheet.state(), changes], [[{ title: 'Operation Tankity', url: 'https://site.test/play/tankity/' }], 'idle', 0]);
+  const viaCopy = createShare({ share: null, copy: async t => { copied.push(t); }, timers: clock.timers }, how, () => { changes++; });
+  await viaCopy.press();
+  assert.deepEqual([copied, viaCopy.state()], [['https://site.test/play/tankity/'], 'copied']);
+  clock.advance(COPIED_MS);
+  assert.equal(viaCopy.state(), 'idle');
+  const byHand = createShare({ share: null, copy: null, timers: clock.timers }, how, () => { changes++; });
+  await byHand.press();
+  assert.equal(byHand.state(), 'field');
+  byHand.close();
+  assert.equal(byHand.state(), 'idle');
 });

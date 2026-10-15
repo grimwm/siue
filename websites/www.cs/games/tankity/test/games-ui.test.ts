@@ -115,6 +115,7 @@ test('the title card shows Your games only when there are rooms', () => {
   const base: Omit<TitleProps, 'games'> = {
     keyHint: () => '', open: true, initials: 'BDJ', problem: '', hint: '', settingsOpen: false,
     onInitials() {}, onPlay() {}, onFriends() {}, onTutorial() {}, onSettings() {},
+    shareState: 'idle', shareUrl: '', onShare() {}, onCloseShare() {},
   };
   const games0: GamesView = { rows: [], alerts: 'off', age: 0, onOpen() {}, onAlerts() {} };
   const empty = makeEl('title-root');

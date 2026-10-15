@@ -34,6 +34,7 @@ import { BURIED_LINE, H, ROOM_W, TUNE, aimLimits, beamCarve, buried, carveCrater
 import type { Difficulty, ShopRow } from './sim.ts';
 import type { EndState } from './match.ts';
 import { turnLabel } from './turn-time.ts';
+import { parseSpeed, speedLabel } from './speed.ts';
 import { showTurnNotification } from './notify.ts';
 
 /** What a room match needs from the page and the rest of the game. */
@@ -71,6 +72,8 @@ export interface RoomDeps {
   renderMenu(): void;
   /** Turn alerts are on in this browser (src/notify.ts). */
   alertsOn(): boolean;
+  /** The FF button shows the room's game speed. */
+  renderSpeed(): void;
   renderShopReady(): void;
   shownAngle(t: GameTank): number;
   shownPower(t: GameTank): number;
@@ -87,7 +90,7 @@ export function createRoom(deps: RoomDeps) {
   const {
     G, $, tables, net, MATCH, HUD, END, replay, input, sfx, music, myTank, seatName, talk, say, closeOverlays, closePreview,
     backToLobby, decayFx, fallTanks, fxImpact, fxSpecial, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
-    renderShopReady, renderMenu, alertsOn, shownAngle, shownPower, startBanner, updateCamera, driftClouds, windText, saveLocal,
+    renderShopReady, renderMenu, alertsOn, renderSpeed, shownAngle, shownPower, startBanner, updateCamera, driftClouds, windText, saveLocal,
   } = deps;
   /* A match only one human played goes on this browser's board, never the server's, once per match. */
   const keeper = roomLocalSaver(saveLocal, () => new Date().toISOString());
@@ -520,6 +523,11 @@ export function createRoom(deps: RoomDeps) {
       renderMenu();
       return;
     }
+    if (e.t === 'speed') {
+      say(`${seatName(e.seat)} set the game speed to ${speedLabel(parseSpeed(e.speed))}.`, 'info');
+      renderSpeed();
+      return;
+    }
   }
   /* ---------- room replay ---------- */
   function netBlast(x: number, y: number, r: number, wkey: string): void {
@@ -712,18 +720,22 @@ export function createRoom(deps: RoomDeps) {
       t.showP = t.showP === undefined ? t.power : t.showP + (t.power - t.showP) * k;
     }
   }
-  function netFrame(dt: number): void {
+  /* One frame of a room: `dt` wall seconds, `gdt` the same at the room's
+     game speed. The replay, its effects, the falls and the chatter play on
+     gdt (a caught-up volley faster still); the player's own aim and drive,
+     the clocks, the camera and the clouds keep wall time. */
+  function netFrame(dt: number, gdt: number = dt): void {
     netSyncMenu();
     tickTurnClock();
     G.time += dt;
     netEaseAim(dt);
     updateCamera(dt);
-    decayFx(dt);
-    fallTanks(dt);
+    decayFx(gdt);
+    fallTanks(gdt);
     releaseFalls();
     driftClouds(dt);
-    netReplay(dt);
-    pumpDialogue(dt);
+    netReplay(gdt);
+    pumpDialogue(gdt);
     G.banterT -= dt;
     if (G.banterT <= 0) {
       G.banterT = 30 + Math.random() * 14;

@@ -260,13 +260,13 @@ function rig(extraCtx = {}) {
   // A new table replaces the keys; one missing a context is refused.
   const r = rig();
   const keys: Record<KeyContext, Record<string, string[]>> = JSON.parse(JSON.stringify(GAME.keys));
-  keys.global.music = ['x'];
+  keys.global.music = ['y'];
   await test('set-keys-accepts-a-full-table', () => { assert.ok(r.input.setKeys(keys) === true); });
   r.input.register({ music: r.log('music') });
   r.input.keydown(ev({ key: 'm', code: 'KeyM' }));
-  r.input.keydown(ev({ key: 'x', code: 'KeyX' }));
-  await test('rebinding-moves-the-key', () => { assert.ok(r.calls.join() === 'music' && r.input.hint('global', 'music') === 'X', r.calls.join()); });
-  await test('set-keys-refuses-a-partial-table', () => { assert.ok(r.input.setKeys({ aim: {} }) === false && r.input.hint('global', 'music') === 'X'); });
+  r.input.keydown(ev({ key: 'y', code: 'KeyY' }));
+  await test('rebinding-moves-the-key', () => { assert.ok(r.calls.join() === 'music' && r.input.hint('global', 'music') === 'Y', r.calls.join()); });
+  await test('set-keys-refuses-a-partial-table', () => { assert.ok(r.input.setKeys({ aim: {} }) === false && r.input.hint('global', 'music') === 'Y'); });
   await test('hint-nth-token', () => { assert.ok(r.input.hint('global', 'fire', 0) === 'Space' && r.input.hint('global', 'fire', 2) === 'Ctrl' && r.input.hint('global', 'nope') === ''); });
 }
 {

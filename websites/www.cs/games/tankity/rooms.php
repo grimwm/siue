@@ -568,6 +568,25 @@ if ($action === 'turntime' && $method === 'POST') {
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 
+/* The host sets the game speed in any phase; every client replays at it
+   from then on (room_set_speed). */
+if ($action === 'speed' && $method === 'POST') {
+    // Spaced like every other act (the button sends a settled pick).
+    [$room, $fh, $path, $seat] = room_gate($body, true);
+    $refused = room_set_speed($room, $seat, $body['speed'] ?? null);
+    if ($refused !== null) {
+        room_unlock($fh);
+        room_json_out($refused[0], ['error' => $refused[1]]);
+    }
+    if (!room_save($fh, $path, $room)) {
+        room_unlock($fh);
+        room_json_out(500, ['error' => 'store write failed']);
+    }
+    room_unlock($fh);
+    $out = room_reply_snapshot($room, $seat, $body);
+    room_json_out(200, ['ok' => true, 'room' => $out]);
+}
+
 if ($action === 'start' && $method === 'POST') {
     [$room, $fh, $path, $seat] = room_gate($body, true);
     if ($seat !== room_host($room)) {

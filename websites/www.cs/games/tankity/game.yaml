@@ -337,6 +337,7 @@ arsenal:
       aiRound: 1
       effect: shot
       speed: 1.0
+      drag: 1
       note: Free, straight, honest.
       gfx: {shell: "#ffe27a", trail: "#ffd75e", blast: ["#ffb13c", "#fff3c4"], painter: disc, shake: 0.3}
 
@@ -355,6 +356,8 @@ arsenal:
       pellets: 3
       spread: 0.1
       speed: 1.0
+      drag: 2.4
+      shortRange: true # pellets lose their speed fast in the air: a close-in spread gun
       note: Three pellets, forgiving aim.
       gfx: {shell: "#ffd166", trail: "#ffb13c", blast: ["#ffb13c", "#fff3c4"], painter: disc, shake: 0.3}
 
@@ -365,11 +368,12 @@ arsenal:
       radius: 42
       price: 200
       pack: 2
-      minRound: 1
+      minRound: 2
       ai: true
       aiRound: 3
       effect: shot
       speed: 1.0
+      drag: 0.8
       note: Big crater, slow shell.
       gfx: {shell: "#ff9f43", trail: "#ff7b39", blast: ["#ff7b39", "#ffe27a"], painter: disc, shake: 0.5}
 
@@ -387,6 +391,7 @@ arsenal:
       effect: emp
       drain: 60
       speed: 1.0
+      drag: 1
       note: Fries 60 fuel on everything it touches.
       gfx: {shell: "#72efdd", trail: "#72efdd", blast: ["#72efdd", "#ffffff"], painter: spark, shake: 0.3}
 
@@ -404,6 +409,7 @@ arsenal:
       effect: proximity
       prox: 34
       speed: 1.0
+      drag: 1.1
       preview: {aim: 40}
       note: Bursts next to anything it passes.
       gfx: {shell: "#ff5964", trail: "#ff5964", blast: ["#ff5964", "#ffe27a"], painter: spark, shake: 0.4}
@@ -421,6 +427,7 @@ arsenal:
       aiRound: 6
       effect: shot
       speed: 1.3
+      drag: 0.4
       note: Tiny blast, brutal direct hit.
       gfx: {shell: "#ffffff", trail: "#caf0f8", blast: ["#ffffff", "#9fd8ff"], painter: beam, shake: 0.3}
 
@@ -438,7 +445,9 @@ arsenal:
       effect: seeker
       steer: 70
       speed: 1.0
-      preview: {aim: -100}
+      drag: 0.9
+      missile: true
+      preview: {aim: -40}
       note: Bends toward the nearest tank.
       gfx: {shell: "#80ffdb", trail: "#80ffdb", blast: ["#80ffdb", "#ffffff"], painter: disc, shake: 0.3}
 
@@ -454,6 +463,7 @@ arsenal:
       aiRound: 6
       effect: shot
       speed: 0.95
+      drag: 0.45
       note: A huge, heavy shell that deletes hillsides.
       gfx: {shell: "#ff8c42", trail: "#e8483f", blast: ["#e8483f", "#ffd75e"], painter: disc, shake: 0.7}
 
@@ -475,6 +485,7 @@ arsenal:
       subRadius: 18
       aiRack: 1
       speed: 1.0
+      drag: 1.1
       preview: {aim: -20, ground: bowl, dummy: 200}
       note: Bursts and flings eight bomblets up in a wild fan; a near miss still pays.
       gfx: {shell: "#ff7eb6", trail: "#c77dff", blast: ["#ff7eb6", "#fff0fa"], painter: spark, shake: 0.4}
@@ -495,6 +506,7 @@ arsenal:
       subDmg: 34
       subRadius: 22
       speed: 1.0
+      drag: 1.1
       preview: {aim: -60}
       note: Bursts, then leaps on and bursts twice more, each leap shorter.
       gfx: {shell: "#b5e86b", trail: "#8fd14f", blast: ["#8fd14f", "#f2ffd8"], painter: spark, shake: 0.35}
@@ -516,6 +528,8 @@ arsenal:
       subDmg: 24
       subRadius: 22
       speed: 1.0
+      drag: 1.0
+      missile: true
       preview: {aim: 30}
       note: Splits into 4 bomblets mid-flight.
       gfx: {shell: "#e0aaff", trail: "#c77dff", blast: ["#c77dff", "#fff3c4"], painter: spark, shake: 0.4}
@@ -538,6 +552,8 @@ arsenal:
       subDmg: 17
       subRadius: 30
       speed: 1.0
+      drag: 0.9
+      missile: true
       preview: {aim: 40}
       note: Splits at the top of its arc into six heavy warheads.
       gfx: {shell: "#e8e8e8", trail: "#9a9aa8", blast: ["#ff4d4d", "#fff3c4"], painter: spark, shake: 0.7}
@@ -556,6 +572,7 @@ arsenal:
       friction: 0.8
       rollTime: 6
       speed: 1.0
+      drag: 1.1
       preview: {aim: -60, ground: slope}
       note: A cheap little roller that stops sooner.
       gfx: {shell: "#d8bf8a", trail: "#b8986a", blast: ["#e0b860", "#fff3c4"], painter: ball, shake: 0.35}
@@ -574,6 +591,7 @@ arsenal:
       friction: 0.6
       rollTime: 8
       speed: 1.0
+      drag: 1.1
       preview: {aim: -60, ground: slope}
       note: Rolls downhill after landing; bursts on a tank or in a dip.
       gfx: {shell: "#c9a66b", trail: "#b08850", blast: ["#d9a441", "#fff3c4"], painter: ball, shake: 0.5}
@@ -593,6 +611,7 @@ arsenal:
       friction: 0.45
       rollTime: 9
       speed: 0.9
+      drag: 0.6
       preview: {aim: -60, ground: slope}
       note: A heavy, slower ball that rolls far and bursts big.
       gfx: {shell: "#8a7a5a", trail: "#6a5a40", blast: ["#d98a41", "#fff3c4"], painter: ball, shake: 0.7}
@@ -610,6 +629,8 @@ arsenal:
       aiRack: 1
       effect: shot
       speed: 1.0
+      drag: 0.75
+      missile: true
       note: A small nuke at normal speed; flattens a hill, a step under NUKE.
       gfx: {shell: "#ff9a8a", trail: "#ff7b6b", blast: ["#ff7b6b", "#fff3c4"], painter: disc, shake: 0.7, linger: 0.7}
 
@@ -625,6 +646,8 @@ arsenal:
       aiRound: 99
       effect: shot
       speed: 1.0
+      drag: 0.55
+      missile: true
       note: Levels whole hillsides.
       gfx: {shell: "#ff6b6b", trail: "#ff6b6b", blast: ["#ff6b6b", "#fff3c4"], painter: disc, shake: 0.9, linger: 0.8}
 
@@ -673,7 +696,9 @@ arsenal:
       aiRound: 99
       effect: tracer
       speed: 1.0
-      preview: {angle: 70}
+      drag: 1.4
+      shortRange: true # a light marker the air slows: it ranges the near field
+      preview: {angle: 65, dummy: 180}
       note: Shows you its whole path and landing until your next shot.
       gfx: {shell: "#9ef0ff", trail: "#5ad8f0", blast: ["#5ad8f0", "#e8fbff"], painter: dash, shake: 0, mark: line}
 
@@ -689,7 +714,9 @@ arsenal:
       aiRound: 99
       effect: tracer
       speed: 1.0
-      preview: {angle: 70}
+      drag: 1.8
+      shortRange: true # a light, draggy smoke pot: it ranges the near field
+      preview: {angle: 65, dummy: 180}
       note: Leaves a smoke trail that everyone sees for the round, drifting with the wind.
       gfx: {shell: "#e8e4dc", trail: "#c8c2b8", blast: ["#c8c2b8", "#ffffff"], painter: dash, shake: 0, mark: smoke}
 
@@ -706,6 +733,8 @@ arsenal:
       aiRound: 4
       effect: dirt
       speed: 1.0
+      drag: 2.2
+      shortRange: true # a loose clod the air slows fast: dirt for the near field
       note: A small mound of dirt, enough to cover a hull sitting in a dip.
       gfx: {shell: "#a8774a", trail: "#7a5a3a", blast: ["#b8854a", "#e8d4a0"], painter: clod, shake: 0.2}
 
@@ -722,6 +751,8 @@ arsenal:
       aiRound: 5
       effect: dirt
       speed: 1.0
+      drag: 1.8
+      shortRange: true # a loose ball of dirt the air slows: dirt for the near field
       note: Buries a tank on flat ground. It cannot drive until it digs out.
       gfx: {shell: "#9a6a3a", trail: "#7a5a3a", blast: ["#b8854a", "#e8d4a0"], painter: clod, shake: 0.3}
 
@@ -739,6 +770,7 @@ arsenal:
       aiRack: 1
       effect: dirt
       speed: 1.0
+      drag: 0.9
       note: A hill where the target stood.
       gfx: {shell: "#8a5a2a", trail: "#6a4a2a", blast: ["#b8854a", "#e8d4a0"], painter: clod, shake: 0.45}
 
@@ -757,6 +789,7 @@ arsenal:
       volume: 4000
       poolMin: 34
       speed: 1.0
+      drag: 1.1
       preview: {aim: -25, ground: dip}
       note: Runs down into the valley it lands in and sets flat, burying whatever sits there; on flat ground a 34 px slab.
       gfx: {shell: "#7a5230", trail: "#5a3a1e", blast: ["#8a5a2a", "#d8b888"], painter: clod, shake: 0.2}
@@ -774,6 +807,7 @@ arsenal:
       aiRound: 6
       effect: dirt
       speed: 1.0
+      drag: 1.1
       note: A real blast that buries what it hurt under a mound.
       gfx: {shell: "#b8854a", trail: "#ff9f43", blast: ["#ff7b39", "#fff3c4"], painter: clod, shake: 0.5}
 
@@ -793,6 +827,7 @@ arsenal:
       digR: 8
       warheads: 0
       speed: 1.0
+      drag: 1
       preview: {aim: -18}
       note: Burrows on along its heading where it lands, cutting a short trench.
       gfx: {shell: "#c0c4cc", trail: "#8a8a92", blast: ["#b8854a", "#e8d4a0"], painter: drill, shake: 0.15}
@@ -813,6 +848,7 @@ arsenal:
       digR: 11
       warheads: 0
       speed: 1.0
+      drag: 0.9
       preview: {aim: -33}
       note: Undermines a tank so it drops and pays for the fall.
       gfx: {shell: "#d8b040", trail: "#a08a50", blast: ["#b8854a", "#e8d4a0"], painter: drill, shake: 0.2}
@@ -833,7 +869,8 @@ arsenal:
       digR: 15
       warheads: 0
       speed: 1.0
-      preview: {aim: -54}
+      drag: 0.7
+      preview: {aim: -40}
       note: A deep, wide trench.
       gfx: {shell: "#e07a2a", trail: "#a06a40", blast: ["#b8854a", "#e8d4a0"], painter: drill, shake: 0.3}
 
@@ -855,6 +892,7 @@ arsenal:
       subDmg: 26
       subRadius: 18
       speed: 1.0
+      drag: 1
       preview: {aim: -21}
       note: Burrows a short way; two warheads burst along the burrow.
       gfx: {shell: "#c8a080", trail: "#8a6a50", blast: ["#ff7b39", "#fff3c4"], painter: drill, shake: 0.35}
@@ -877,6 +915,7 @@ arsenal:
       subDmg: 34
       subRadius: 22
       speed: 1.0
+      drag: 0.9
       preview: {aim: -36}
       note: Burrows on; three warheads burst along the burrow, or all at once at a hull in the way.
       gfx: {shell: "#b06a3a", trail: "#8a5a3a", blast: ["#ff7b39", "#fff3c4"], painter: drill, shake: 0.45}
@@ -900,6 +939,7 @@ arsenal:
       subDmg: 22
       subRadius: 28
       speed: 1.0
+      drag: 0.7
       preview: {aim: -54}
       note: A long burrow with five warheads along it, or all five at once at a hull in the way.
       gfx: {shell: "#8a3a2a", trail: "#6a3a2a", blast: ["#ff5a3a", "#fff3c4"], painter: drill, shake: 0.6}
@@ -953,6 +993,7 @@ arsenal:
       aiRound: 5
       effect: shot
       speed: 1.0
+      drag: 1
       note: A harmless crater where it lands. Tanks on the rim drop and pay for the fall.
       gfx: {shell: "#e8e0c8", trail: "#b8b0a0", blast: ["#d8c090", "#ffffff"], painter: disc, shake: 0.35}
 
@@ -969,6 +1010,7 @@ arsenal:
       aiRound: 7
       effect: shot
       speed: 1.0
+      drag: 0.8
       note: A huge harmless crater.
       gfx: {shell: "#d8d0b8", trail: "#a8a090", blast: ["#d8c090", "#ffffff"], painter: disc, shake: 0.55}
 
@@ -988,6 +1030,7 @@ arsenal:
       slope: 1.0
       passes: 24
       speed: 1.0
+      drag: 1
       preview: {ground: ridge}
       note: Shakes the ground loose. Steep slopes within its reach slump, so tanks on ridges and cliff edges drop.
       gfx: {shell: "#9ad0c0", trail: "#5a9a8a", blast: ["#8ad0c0", "#f0fff8"], painter: spark, shake: 0.6}
@@ -1009,6 +1052,7 @@ arsenal:
       tick: 0.5
       flame: 18
       speed: 1.0
+      drag: 1.1
       preview: {aim: -25, ground: dip}
       note: Pools in the low ground where it lands and burns for 3 s. Up to 36 damage to a tank sitting in it.
       gfx: {shell: "#ff8a3c", trail: "#c8501e", blast: ["#ff9a3c", "#ffe27a"], painter: flame, shake: 0.3}
@@ -1031,6 +1075,7 @@ arsenal:
       tick: 0.5
       flame: 26
       speed: 1.0
+      drag: 1.1
       preview: {aim: -25, ground: dip}
       note: A bigger, taller pool that burns for 4 s, up to 80. Its flames reach drones hovering by the rim.
       gfx: {shell: "#ffd04a", trail: "#e8641e", blast: ["#ffc04a", "#fff4c0"], painter: flame, shake: 0.4}

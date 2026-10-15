@@ -5,20 +5,22 @@
  * shell on its ballistic way until it is off the picture. A ghost has no
  * collision, no blast and no effect on the game: it is never read back. */
 
+import { stepBallistic } from './sim.ts';
+import type { Air } from './sim.ts';
+
 export interface Flier { x: number; y: number; vx: number; vy: number; wkey: string }
 
 /** A shell this far from where the last frame saw it is another shell. */
 const SAME_SHELL = 60;
 /** A ghost is dropped past this many field widths either side, below this depth, or this old. */
 const REACH_W = 2, FLOOR_Y = 700, MAX_AGE = 12;
-/** Wind pushes a shell this hard per unit of wind (sim.ts stepBallistic). */
-const WIND_K = 2.2;
 
 interface Ghost extends Flier { age: number }
 
 export interface Ghosts {
   /** One frame: what the sim and the replay show now. Returns the ghosts to draw. */
-  frame(shells: readonly Flier[], fieldW: number, dt: number, wind: number, gravity: (wkey: string) => number): readonly Flier[];
+  /** `air`: the air each gun flies through (sim.ts airOf), so a ghost flies on as the war would have flown it. */
+  frame(shells: readonly Flier[], fieldW: number, dt: number, air: (wkey: string) => Air): readonly Flier[];
   clear(): void;
 }
 
@@ -27,12 +29,9 @@ export function createGhosts(): Ghosts {
   let ghosts: Ghost[] = [];
   const near = (a: Flier, b: Flier): boolean => a.wkey === b.wkey && Math.hypot(a.x - b.x, a.y - b.y) < SAME_SHELL;
   return {
-    frame(shells, fieldW, dt, wind, gravity) {
+    frame(shells, fieldW, dt, air) {
       for (const g of ghosts) {
-        g.vx += wind * WIND_K * dt;
-        g.vy += gravity(g.wkey) * dt;
-        g.x += g.vx * dt;
-        g.y += g.vy * dt;
+        if (dt > 0) stepBallistic(g, dt, air(g.wkey));
         g.age += dt;
       }
       ghosts = ghosts.filter(g => g.age < MAX_AGE && g.y < FLOOR_Y && g.x > -REACH_W * fieldW && g.x < (1 + REACH_W) * fieldW);

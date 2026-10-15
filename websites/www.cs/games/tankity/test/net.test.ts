@@ -685,7 +685,7 @@ await test('invite-url-escapes-the-code', () => { assert.ok(inviteUrl('A&B', {})
 {
   const seats = fixture('play-after-fire').room.seats;
   const rows = standingsRows(seats, 0);
-  await test('standings-name-the-human-by-initials', () => { assert.ok(at(rows, 0).name === 'ABC' && at(rows, 0).mine && at(rows, 0).score === 92, JSON.stringify(at(rows, 0))); });
+  await test('standings-name-the-human-by-initials', () => { assert.ok(at(rows, 0).name === 'ABC' && at(rows, 0).mine && at(rows, 0).score === 88, JSON.stringify(at(rows, 0))); });
   await test('standings-tag-drones-ai', () => { assert.ok(rows.some(r => r.name === 'REAPER (AI)' && !r.mine), JSON.stringify(rows)); });
   const flipped = standingsRows([...seats].reverse(), 0);
   await test('standings-best-first', () => { assert.ok(at(flipped, 0).name === 'ABC' && at(flipped, 0).mine, JSON.stringify(at(flipped, 0))); });

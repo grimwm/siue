@@ -53,9 +53,7 @@ function room_map_profile(string $id): array
     }
     return $out;
 }
-const ROOM_TURN_WIND = 2.2;
-const ROOM_GRAV = 95;
-const ROOM_W = 720; // a room's field; a solo run's is dealt (src/field.ts) and checked here
+// ROOM_GRAV and ROOM_W (a room's field) are server/flight.php's, with the air.
 const FIELD_W_MIN = 720;
 const FIELD_W_MAX = 1440;
 const FIELD_COL = 24;
@@ -190,6 +188,9 @@ function room_weapon_row(array $am): array
         'minRound' => (int) ($am['minRound'] ?? 1),
         'effect' => (string) ($am['effect'] ?? 'shot'),
         'speed' => (float) ($am['speed'] ?? 1.0),
+        'drag' => (float) ($am['drag'] ?? 1.0),
+        'missile' => !empty($am['missile']),
+        'missileSpeed' => array_map('floatval', is_array($am['missileSpeed'] ?? null) ? $am['missileSpeed'] : []),
         'pellets' => (int) ($am['pellets'] ?? 0),
         'spread' => (float) ($am['spread'] ?? 0.0),
         'fuse' => (float) ($am['fuse'] ?? 0.9),
@@ -237,6 +238,21 @@ function room_shot_speed(float $power, float $mult = 1.0, float $reach = 1.0): f
 {
     return (40.0 + $power * 2.4) * $mult * $reach;
 }
+/* src/sim.ts launchSpeed(): a missile's from its table (interpolated straight
+   between whole powers), any other gun's from room_shot_speed(). */
+function room_launch_speed(array $def, float $power, float $reach = 1.0): float
+{
+    $tab = !empty($def['missile']) ? ($def['missileSpeed'] ?? []) : [];
+    if (count($tab) < 101) {
+        return room_shot_speed($power, (float) ($def['speed'] ?? 1.0), $reach);
+    }
+    $p = max(0.0, min(100.0, $power));
+    $i = (int) floor($p);
+    if ($i >= 100) {
+        return (float) $tab[100] * $reach;
+    }
+    return ((float) $tab[$i] + ((float) $tab[$i + 1] - (float) $tab[$i]) * ($p - $i)) * $reach;
+}
 /* src/sim.ts fieldReach(): range and height grow by w / ROOM_W. */
 function room_field_reach(int $w): float
 {
@@ -253,7 +269,7 @@ function room_muzzle(array $tank): array
 /* The velocity a seeker gains this step toward the nearest live rival (a
 // point 12 px above its hull), or null when there is none to steer at.
 // src/sim.ts steerShell() is the same. [dvx, dvy]. */
-function room_seek_push(array $tanks, int $ownerIdx, float $sx, float $sy, float $steer, float $dt): ?array
+function room_seek_push(array $tanks, int $ownerIdx, float $sx, float $sy, float $steer, float $dt, float $vx = 0.0, float $vy = 0.0): ?array
 {
     $best = null;
     $bd = INF;
@@ -271,7 +287,16 @@ function room_seek_push(array $tanks, int $ownerIdx, float $sx, float $sy, float
         return null;
     }
     $push = $steer * $dt;
-    return [(($best['x'] - $sx) / $bd) * $push, ((($best['y'] - 12) - $sy) / $bd) * $push];
+    $px = (($best['x'] - $sx) / $bd) * $push;
+    $py = ((($best['y'] - 12) - $sy) / $bd) * $push;
+    // Across the seeker's flight only (src/sim.ts steerShell): homing turns it, never speeds it up.
+    $sp = room_dist($vx, $vy);
+    if ($sp > 0) {
+        $along = ($px * $vx + $py * $vy) / $sp;
+        $px -= $along * $vx / $sp;
+        $py -= $along * $vy / $sp;
+    }
+    return [$px, $py];
 }
 /* The bomblets a cluster blooms into: $n velocities fanned $fan radians
 // apart around the parent's heading, at 85% of its speed. src/sim.ts
@@ -385,8 +410,11 @@ function room_roll_out(array $terrain, float $x, float $vx, float $vy, array $w)
 function room_flight_key(array $def): string
 {
     $roll = ($def['effect'] ?? 'shot') === 'roller';
-    $nums = [(float) ($def['speed'] ?? 1.0), $roll ? (float) (($def['friction'] ?? 0.3) ?: 0.3) : 0.0,
-        $roll ? (float) (($def['rollTime'] ?? 5.0) ?: 5.0) : 0.0];
+    // A missile flies its speed table, and feels less of the wind (server/flight.php room_air).
+    $missile = !empty($def['missile']);
+    $nums = array_merge([(float) ($def['speed'] ?? 1.0)], $missile ? array_map('floatval', $def['missileSpeed'] ?? []) : [],
+        [(float) ($def['drag'] ?? 1.0), $roll ? (float) (($def['friction'] ?? 0.3) ?: 0.3) : 0.0,
+        $roll ? (float) (($def['rollTime'] ?? 5.0) ?: 5.0) : 0.0]);
     foreach ($nums as $v) {
         if (!is_finite($v)) {
             throw new InvalidArgumentException('a gun\'s flight field is not a finite number');
@@ -394,7 +422,7 @@ function room_flight_key(array $def): string
     }
     $nums = array_map(fn(float $v): float => $v == 0.0 ? 0.0 : $v, $nums); // -0 flies as 0, and JSON.stringify writes it 0
     // %.17g writes every double exactly whatever serialize_precision says, so two guns that differ never share a key.
-    return ($roll ? 'roll ' : 'fly ') . implode(' ', array_map(fn(float $v): string => sprintf('%.17g', $v), $nums));
+    return ($roll ? 'roll ' : 'fly ') . ($missile ? 'missile ' : '') . implode(' ', array_map(fn(float $v): string => sprintf('%.17g', $v), $nums));
 }
 /* Full trajectory; returns landing info. Mirrors src/sim.ts simShot. A
 // roller's landing is where its roll ends. $top is the highest ground (the
@@ -416,20 +444,13 @@ function room_sim_flight(array $terrain, float $wind, float $x, float $y, float 
 {
     room_sim_flights(1);
     $rad = deg2rad($angle);
-    $vx = det_cos($rad) * room_shot_speed($power, (float) ($def['speed'] ?? 1.0), room_field_reach($w)) * $dirS;
-    $vy = -det_sin($rad) * room_shot_speed($power, (float) ($def['speed'] ?? 1.0), room_field_reach($w));
-    $grav = (float) ROOM_GRAV;
+    $vx = det_cos($rad) * room_launch_speed($def, $power, room_field_reach($w)) * $dirS;
+    $vy = -det_sin($rad) * room_launch_speed($def, $power, room_field_reach($w));
     $dt = 1 / 60;
-    // The drones' aim search runs this hundreds of times a turn: the per-step
-    // products are formed once, in the same order, so every value is the same.
-    $windStep = $wind * ROOM_TURN_WIND * $dt;
-    $gravStep = $grav * $dt;
+    $air = room_air($w, $wind, $def);
     $roller = ($def['effect'] ?? 'shot') === 'roller';
     for ($i = 0, $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($w)); $i < $steps; $i++) {
-        $vx += $windStep;
-        $vy += $gravStep;
-        $x += $vx * $dt;
-        $y += $vy * $dt;
+        room_step_ballistic($x, $y, $vx, $vy, $dt, $air);
         if ($x < 0 || $x >= $w || $y >= 500) {
             return ['x' => $x, 'y' => $y, 'oob' => true, 'vx' => $vx, 'vy' => $vy];
         }
@@ -455,17 +476,14 @@ function room_split_point(array $terrain, float $wind, float $x, float $y, float
     room_sim_flights(1);
     $def = room_weapons()[$wkey];
     $rad = deg2rad($angle);
-    $vx = det_cos($rad) * room_shot_speed($power, (float) $def['speed'], room_field_reach($w)) * $dirS;
-    $vy = -det_sin($rad) * room_shot_speed($power, (float) $def['speed'], room_field_reach($w));
-    $grav = (float) ROOM_GRAV;
+    $vx = det_cos($rad) * room_launch_speed($def, $power, room_field_reach($w)) * $dirS;
+    $vy = -det_sin($rad) * room_launch_speed($def, $power, room_field_reach($w));
     $dt = 1 / 60;
+    $air = room_air($w, $wind, $def);
     $age = 0.0;
     for ($i = 0, $steps = (int) ceil(ROOM_FLIGHT_STEPS * room_field_reach($w)); $i < $steps; $i++) {
         $age += $dt;
-        $vx += $wind * ROOM_TURN_WIND * $dt;
-        $vy += $grav * $dt;
-        $x += $vx * $dt;
-        $y += $vy * $dt;
+        room_step_ballistic($x, $y, $vx, $vy, $dt, $air);
         if ($x < 0 || $x >= $w || $y >= 500) {
             return null;
         }
@@ -478,11 +496,24 @@ function room_split_point(array $terrain, float $wind, float $x, float $y, float
     }
     return null;
 }
-/* How long a munition leaving height $y0 at vertical speed $vy takes to come
-// down to $groundY, with no wind (src/sim.ts dropTime()). */
-function room_drop_time(float $y0, float $vy, float $groundY): float
+/* src/sim.ts fallTo(): a munition flying free from ($x, $y) at ($vx, $vy)
+// through $air, flown down to $groundY: [x, y, vx, vy, stopped, steps flown]
+// at the first step it falls to $groundY or below (or after a flight's longest
+// time). $hit sees each step's position; true stops the flight there. */
+function room_fall_to(float $x, float $y, float $vx, float $vy, float $groundY, array $air, ?callable $hit = null): array
 {
-    return (-$vy + sqrt(max(0.0, $vy * $vy + 2 * ROOM_GRAV * ($groundY - $y0)))) / ROOM_GRAV;
+    $n = 0;
+    for ($steps = (int) ceil(ROOM_FLIGHT_STEPS * sqrt($air['s'])); $n < $steps;) {
+        room_step_ballistic($x, $y, $vx, $vy, 1 / 60, $air);
+        $n++;
+        if ($hit !== null && $hit($x, $y)) {
+            return [$x, $y, $vx, $vy, true, $n];
+        }
+        if ($vy > 0 && $y >= $groundY) {
+            break;
+        }
+    }
+    return [$x, $y, $vx, $vy, false, $n];
 }
 /* The ground changed (a crater, a new round): clients holding an older
    terrainRev must be sent the hills again. Rooms stored before the counter
@@ -931,19 +962,15 @@ function room_arc_step(array &$room, array &$events, array $tank, array $w, stri
     $dt = 1 / 60;
     $effect = $w['effect'] ?? 'shot';
     if ($effect === 'seeker') {
-        $dv = room_seek_push($room['tanks'], $ownerIdx, $a['x'], $a['y'], (float) ($w['steer'] ?? 70.0), $dt);
+        $dv = room_seek_push($room['tanks'], $ownerIdx, $a['x'], $a['y'], (float) ($w['steer'] ?? 70.0), $dt, $a['vx'], $a['vy']);
         if ($dv !== null) {
             $a['vx'] += $dv[0];
             $a['vy'] += $dv[1];
         }
     }
-    $grav = (float) ROOM_GRAV;
-    $a['vx'] += $room['wind'] * ROOM_TURN_WIND * $dt;
-    $a['vy'] += $grav * $dt;
     $px = $a['x'];
     $py = $a['y'];
-    $a['x'] += $a['vx'] * $dt;
-    $a['y'] += $a['vy'] * $dt;
+    room_step_ballistic($a['x'], $a['y'], $a['vx'], $a['vy'], $dt, room_air(count($room['terrain']), (float) $room['wind'], $w));
     $a['age'] += $dt;
     $a['step']++;
     $step = $a['step'];

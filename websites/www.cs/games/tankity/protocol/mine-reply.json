@@ -14,7 +14,7 @@
                 "turn": 0,
                 "yourTurn": true,
                 "turnKey": "1:0:0",
-                "turnLeft": 120,
+                "turnLeft": 119.9,
                 "shopLeft": null,
                 "players": [
                     "ABC"

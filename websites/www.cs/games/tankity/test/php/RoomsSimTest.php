@@ -1169,7 +1169,7 @@ final class RoomsSimTest extends TestCase
         $target = self::tank(1, 'human', 300.0, 100);
         $target['dirS'] = -1;
         $room = self::onHills([$gun, $target]);
-        [$after, $events] = self::fireRoller($room, 45.0, 40.0);
+        [$after, $events] = self::fireRoller($room, 45.0, 44.0);
         $shot = self::shotOf($events);
         $hits = self::hitsOn($events, 1);
         self::assertTrue(count($hits) === 1 && $hits[0]['direct'] && $hits[0]['dmg'] > (int) $roller['dmg'], 'roller-rolls-down-and-hits' . ' :: ' . json_encode($hits));
@@ -1195,7 +1195,7 @@ final class RoomsSimTest extends TestCase
         $hills = self::hills();
         $gun = self::tank(0, 'human', 60.0, 100);
         $room = self::onHills([$gun, self::tank(1, 'ai', 640.0, 100)]);
-        [$after, $events] = self::fireRoller($room, 45.0, 40.0);
+        [$after, $events] = self::fireRoller($room, 45.0, 52.0);
         $shot = self::shotOf($events);
         self::assertTrue(abs($shot['x1'] - 300.0) < 12.0 && abs($shot['y1'] - $hills[300]) < 4.0, 'roller-rests-in-the-valley' . ' :: ' . json_encode([$shot['x1'], $shot['y1']]));
         self::assertTrue($after['terrain'][300] > $hills[300] + 20.0 && count(self::hitsOn($events, 1)) === 0, 'roller-valley-crater');
@@ -1258,7 +1258,7 @@ final class RoomsSimTest extends TestCase
     public function testDronesAimAtARollersRest(): void
     {
         $hills = self::hills();
-        $land = room_sim_shot($hills, 0.0, 74.0, 342.0, 45.0, 40.0, 'roller', 1, 720);
+        $land = room_sim_shot($hills, 0.0, 74.0, 342.0, 45.0, 52.0, 'roller', 1, 720);
         self::assertTrue(!$land['oob'] && abs($land['x'] - 300.0) < 12.0, 'roller-aim-predicts-the-rest' . ' :: ' . json_encode($land));
     }
 

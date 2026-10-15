@@ -212,8 +212,57 @@ foreach ([2.5, -2.5, 0.49999999999999994, -0.5, -0.4, -0.0, 0.0, 7.5, -7.5, 1e15
 }
 
 /* ---- constants and the integer core ---- */
-$add('constants', 'physics', [], ['grav' => ROOM_GRAV, 'windK' => ROOM_TURN_WIND,
-    'unitGap' => ROOM_UNIT_GAP, 'spawnGap' => ROOM_SPAWN_GAP]);
+$add('constants', 'physics', [], ['grav' => ROOM_GRAV, 'dragK' => ROOM_DRAG_K, 'airSpeed' => ROOM_AIR_SPEED, 'shearH' => ROOM_SHEAR_H,
+    'missileLow' => ROOM_MISSILE_LOW, 'missileFull' => ROOM_MISSILE_FULL, 'unitGap' => ROOM_UNIT_GAP, 'spawnGap' => ROOM_SPAWN_GAP]);
+
+/* ---- the air: drag, the wind's growth with height, exact ---- */
+foreach ([-5.0, 0.0, 0.5, 1.0, 1.0000001, 39.99, 40.0, 40.01, 123.456, 460.0, 1500.0] as $h) {
+    $exact('air', "shear-$h", ['kind' => 'shear', 'h' => $h], room_shear($h));
+}
+/* A flight of `steps` 1/60 s steps through the air of gun `drag` on a field `w` wide, from (x, y) at (vx, vy):
+   where it is and how fast it flies after each tenth of them. */
+$flight = function (string $name, array $c) use ($exact): void {
+    $air = room_air($c['w'] ?? SV_WIDTH, (float) $c['wind'], ['drag' => $c['drag']]);
+    [$x, $y, $vx, $vy] = [(float) $c['x'], (float) $c['y'], (float) $c['vx'], (float) $c['vy']];
+    $out = [];
+    for ($i = 1; $i <= $c['steps']; $i++) {
+        room_step_ballistic($x, $y, $vx, $vy, 1 / 60, $air);
+        if ($i % max(1, intdiv($c['steps'], 10)) === 0) {
+            $out[] = [$x, $y, $vx, $vy];
+        }
+    }
+    $exact('air', $name, ['kind' => 'flight'] + $c, $out);
+};
+foreach ([['shell', 1.0], ['slick', 0.4], ['draggy', 2.4], ['airless', 0.0]] as [$label, $drag]) {
+    foreach ([-10, -3, 0, 5, 12] as $wind) {
+        $flight("$label-wind$wind-lob", ['wind' => $wind, 'drag' => $drag, 'x' => 80, 'y' => 300, 'vx' => 150, 'vy' => -230, 'steps' => 300]);
+        $flight("$label-wind$wind-flat", ['wind' => $wind, 'drag' => $drag, 'x' => 640, 'y' => 310, 'vx' => -260, 'vy' => -60, 'steps' => 200]);
+    }
+}
+// The edge heights: grazing the field's floor and under it (the wind's floor of 1 px), one px up, over the top of the field.
+$flight('grazing-the-floor', ['wind' => 7, 'drag' => 1.0, 'x' => 100, 'y' => 459.5, 'vx' => 200, 'vy' => -5, 'steps' => 12]);
+$flight('under-the-floor', ['wind' => -7, 'drag' => 1.0, 'x' => 100, 'y' => 465, 'vx' => 200, 'vy' => 1, 'steps' => 12]);
+$flight('one-px-up', ['wind' => 4, 'drag' => 1.0, 'x' => 300, 'y' => 459, 'vx' => 0, 'vy' => 0, 'steps' => 5]);
+$flight('at-the-wind-height', ['wind' => -2, 'drag' => 1.0, 'x' => 300, 'y' => 420, 'vx' => 0, 'vy' => 0, 'steps' => 5]);
+$flight('over-the-top', ['wind' => 9, 'drag' => 0.55, 'x' => 300, 'y' => -300, 'vx' => 120, 'vy' => -100, 'steps' => 120]);
+$flight('wide-field', ['w' => 1440, 'wind' => -8, 'drag' => 1.0, 'x' => 200, 'y' => 300, 'vx' => 300, 'vy' => -320, 'steps' => 400]);
+$flight('mid-field', ['w' => 1080, 'wind' => 3, 'drag' => 0.75, 'x' => 900, 'y' => 300, 'vx' => -250, 'vy' => -250, 'steps' => 400]);
+
+/* ---- a missile's launch speeds: the table game.json carries, and the speed at any power, exact ---- */
+foreach ([0.4, 0.9, 1.0, 2.0] as $drag) {
+    $exact('missile-speed', "table-drag$drag", ['kind' => 'table', 'drag' => $drag], room_missile_table($drag));
+}
+foreach (room_weapons() as $wkey => $def) {
+    if (!$def['missile']) {
+        continue;
+    }
+    foreach ([-5.0, 0.0, 9.5, 10.0, 37.25, 50.0, 99.9, 100.0, 140.0] as $p) {
+        foreach ([720, 1440] as $w) {
+            $exact('missile-speed', "$wkey-p$p-w$w", ['kind' => 'speed', 'wkey' => $wkey, 'power' => $p, 'w' => $w],
+                room_launch_speed($def, $p, room_field_reach($w)));
+        }
+    }
+}
 
 foreach (['tankity-canyon-three', 'scorch-01', '', 'a'] as $seed) {
     $state = room_hash_seed($seed);
@@ -331,11 +380,14 @@ $sweep('human-target-box', [$drone(100), $human(300)], [250, 390, 350, 390], 0);
 $sweep('human-target-above-hull', [$drone(100), $human(300)], [250, 372, 350, 372], 0);
 
 /* ---- seeker steering and cluster fan ---- */
-$seek = function (string $name, array $tanks, int $owner, float $sx, float $sy, float $steer, float $dt, ?string $known = null) use ($add): void {
+$seek = function (string $name, array $tanks, int $owner, float $sx, float $sy, float $steer, float $dt, ?string $known = null, float $vx = 0.0, float $vy = 0.0) use ($add): void {
     $room = sv_room(['terrain' => ['flat' => 400], 'tanks' => $tanks]);
-    $add('seek-push', $name, ['tanks' => $tanks, 'owner' => $owner, 'sx' => $sx, 'sy' => $sy, 'steer' => $steer, 'dt' => $dt],
-        room_seek_push($room['tanks'], $owner, $sx, $sy, $steer, $dt), $known);
+    $add('seek-push', $name, ['tanks' => $tanks, 'owner' => $owner, 'sx' => $sx, 'sy' => $sy, 'steer' => $steer, 'dt' => $dt, 'vx' => $vx, 'vy' => $vy],
+        room_seek_push($room['tanks'], $owner, $sx, $sy, $steer, $dt, $vx, $vy), $known);
 };
+// In flight the push is across the seeker's heading only: it turns, never speeds up.
+$seek('across-a-flight-heading-at-the-rival', [$human(100), $drone(400)], 0, 150, 300, 70, 1 / 60, null, 200.0, 50.0);
+$seek('across-a-climb-away-from-the-rival', [$human(100), $drone(400)], 0, 150, 300, 70, 1 / 60, null, -120.0, -160.0);
 $seek('nearest-of-two', [$human(100), $drone(400), $drone(250)], 0, 150, 300, 70, 1 / 60);
 $seek('owner-never-targeted', [$human(150), $drone(500)], 0, 160, 380, 70, 1 / 60);
 $seek('dead-rival-ignored', [$human(100), $drone(200, 0), $drone(500)], 0, 150, 300, 70, 1 / 60);

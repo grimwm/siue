@@ -223,6 +223,13 @@ function rig(extraCtx = {}) {
   r.calls.length = 0;
   r.input.keydown(ev({ key: 'ArrowLeft', code: 'ArrowLeft', target: { tagName: 'INPUT', type: 'range' } }));
   await test('a-slider-keeps-its-arrows', () => { assert.ok(r.calls.length === 0 && !r.input.held.has('barrelLeft'), r.calls.join()); });
+  // The volume sliders also answer M and E (mute), which a text box never does.
+  r.input.register({ music: r.log('music'), sound: r.log('sound') });
+  r.calls.length = 0;
+  r.input.keydown(ev({ key: 'm', code: 'KeyM', target: { tagName: 'INPUT', type: 'range' } }));
+  r.input.keydown(ev({ key: 'e', code: 'KeyE', target: { tagName: 'INPUT', type: 'range' } }));
+  r.input.keydown(ev({ key: 'm', code: 'KeyM', target: { tagName: 'INPUT', type: 'text' } }));
+  await test('a-slider-mutes-on-m-and-e', () => { assert.ok(r.calls.join() === 'music,sound', r.calls.join()); });
 }
 {
   // The gun grid's fixed keys.

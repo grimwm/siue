@@ -338,13 +338,16 @@ export function createInput(opts: { touch: boolean; onKeyboard?: () => void }): 
   function keydown(e: KeyLike): void {
     // An editable box keeps every key, Q included: initials and codes may have
     // a Q. A read-only field (the invite link) or a slider (the turn time)
-    // types nothing, so Q still goes back from it and every other key, the
-    // slider's arrows included, stays the field's. Esc is bound to nothing,
+    // types nothing, so Q still goes back from it (and the volume sliders still
+    // mute on M and E) and every other key, the slider's arrows included, stays the field's. Esc is bound to nothing,
     // so it never reaches a command below.
     if (isTyping(e.target)) {
       const t = e.target;
       const readOnly = !!t && t.tagName === 'INPUT' && (!!t.readOnly || t.type === 'range');
-      if (!readOnly || lookup('global', e) !== 'back') return;
+      const g = lookup('global', e);
+      // A slider keeps the arrows but still answers Q, and M and E (mute) like the buttons beside it.
+      const slider = !!t && t.tagName === 'INPUT' && t.type === 'range';
+      if (!readOnly || (g !== 'back' && !(slider && (g === 'music' || g === 'sound')))) return;
     }
     // Only plain Q is back: Cmd+Q quits the browser, and Ctrl+Q and Alt+Q are
     // shortcuts too. They fall to the browser untouched.

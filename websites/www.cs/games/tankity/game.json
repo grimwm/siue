@@ -219,6 +219,42 @@
                 }
             },
             {
+                "key": "funky",
+                "name": "Funky Bomb",
+                "cat": "Splitters",
+                "dmg": 24,
+                "radius": 24,
+                "price": 180,
+                "pack": 2,
+                "minRound": 2,
+                "ai": true,
+                "aiRound": 7,
+                "aiRack": 1,
+                "effect": "scatter",
+                "split": 8,
+                "fan": 2.4,
+                "kick": 150,
+                "subDmg": 13,
+                "subRadius": 18,
+                "speed": 1.0,
+                "preview": {
+                    "aim": -20,
+                    "ground": "bowl",
+                    "dummy": 200
+                },
+                "note": "Bursts and flings eight bomblets up in a wild fan; a near miss still pays.",
+                "gfx": {
+                    "shell": "#ff7eb6",
+                    "trail": "#c77dff",
+                    "blast": [
+                        "#ff7eb6",
+                        "#fff0fa"
+                    ],
+                    "painter": "spark",
+                    "shake": 0.4
+                }
+            },
+            {
                 "key": "leapfrog",
                 "name": "Leapfrog",
                 "cat": "Splitters",
@@ -284,48 +320,12 @@
                 }
             },
             {
-                "key": "funky",
-                "name": "Funky Bomb",
-                "cat": "Splitters",
-                "dmg": 30,
-                "radius": 24,
-                "price": 300,
-                "pack": 1,
-                "minRound": 4,
-                "ai": true,
-                "aiRound": 7,
-                "aiRack": 1,
-                "effect": "scatter",
-                "split": 8,
-                "fan": 2.4,
-                "kick": 150,
-                "subDmg": 32,
-                "subRadius": 18,
-                "speed": 1.0,
-                "preview": {
-                    "aim": -20,
-                    "ground": "bowl",
-                    "dummy": 200
-                },
-                "note": "Bursts and flings eight bomblets up in a wild fan; a near miss still pays.",
-                "gfx": {
-                    "shell": "#ff7eb6",
-                    "trail": "#c77dff",
-                    "blast": [
-                        "#ff7eb6",
-                        "#fff0fa"
-                    ],
-                    "painter": "spark",
-                    "shake": 0.4
-                }
-            },
-            {
                 "key": "deathshead",
                 "name": "Death's Head",
                 "cat": "Splitters",
                 "dmg": 30,
                 "radius": 20,
-                "price": 450,
+                "price": 400,
                 "pack": 1,
                 "minRound": 5,
                 "ai": true,
@@ -335,7 +335,7 @@
                 "apex": true,
                 "split": 6,
                 "fan": 0.16,
-                "subDmg": 28,
+                "subDmg": 17,
                 "subRadius": 30,
                 "speed": 1.0,
                 "preview": {
@@ -921,14 +921,14 @@
                 "line": "sandhog",
                 "dmg": 0,
                 "radius": 1,
-                "price": 450,
+                "price": 200,
                 "pack": 1,
-                "minRound": 4,
+                "minRound": 3,
                 "ai": true,
                 "aiRound": 9,
                 "aiRack": 1,
                 "effect": "dig",
-                "subDmg": 44,
+                "subDmg": 22,
                 "subRadius": 28,
                 "digLen": 180,
                 "digR": 12,
@@ -937,7 +937,7 @@
                 "preview": {
                     "aim": -54
                 },
-                "note": "A long burrow with five big warheads along it.",
+                "note": "A long burrow with five warheads along it, or all five at once at a hull in the way.",
                 "gfx": {
                     "shell": "#8a3a2a",
                     "trail": "#6a3a2a",
@@ -2036,6 +2036,191 @@
                 ]
             }
         },
+        "funky": {
+            "body": {
+                "halo": 9,
+                "alpha": 0.45,
+                "pulse": 8,
+                "sprite": "p_funky",
+                "size": 14
+            },
+            "muzzle": {
+                "emitters": [
+                    {"count":1,"size":[8,8],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.85,0.5,0],"colors":["#ffffff","#ff7eb6"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[10,10],"life":[0.12,0.12],"alpha":[1,1,0]},
+                    {"shape":"ring","count":1,"size":[3,3],"sizeEnd":5,"ease":"out","life":[0.22,0.22],"width":2,"alpha":[1,0.6,0],"colors":["#ff7eb6","#7ee8ff"],"glow":true},
+                    {"shape":"spark","count":6,"life":[0.15,0.3],"speed":[60,160],"aim":"forward","spread":60,"size":[2,3],"sizeEnd":0.3,"colors":["#ffffff","#ff7eb6","#7ee8ff","#ffe27a"],"glow":true,"rotJitter":90},
+                    {"shape":"sprite","count":2,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[4.2,6],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#c8a0b8"}
+                ]
+            },
+            "trail": {
+                "emitters": [
+                    {"rate":40,"life":[0.2,0.36],"speed":[0,14],"size":[1.2,2],"sizeEnd":0.3,"colors":["#ffffff","#ff7eb6","#7ee8ff","#ffe27a"],"glow":true},
+                    {"shape":"spark","rate":10,"life":[0.2,0.32],"speed":[0,22],"size":[2.2,3.4],"sizeEnd":0.4,"colors":["#ffffff","#7ee8ff","#ff7eb6","#b5e86b"],"glow":true,"rotJitter":90,"spin":[-260,260]},
+                    {"shape":"sprite","rate":6,"sheet":"smoke","life":[0.5,0.8],"speed":[0,8],"angle":90,"spread":120,"gravity":-10,"drag":1.2,"size":[2.4,3],"sizeEnd":2,"alpha":[0,0.4,0],"rotJitter":180,"wind":1,"tint":"#c8a0b8"}
+                ]
+            },
+            "impact": {
+                "emitters": [
+                    {"shape":"sprite","count":2,"sheet":"scorch","unit":"r","size":[0.26,0.32],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
+                    {"count":1,"unit":"r","size":[0.64,0.64],"sizeEnd":0.6,"life":[0.18,0.18],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ff7eb6"],"glow":true},
+                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.75,0.75],"life":[0.55,0.55],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.15},
+                    {"shape":"sprite","count":1,"sheet":"flakburst","unit":"r","size":[0.9,0.9],"life":[0.6,0.6],"alpha":[1,1,0.8,0],"rotJitter":30,"scale":1.1},
+                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[1,1],"life":[0.4,0.4],"alpha":[0.8,0.6,0],"rotJitter":14,"tint":"#ff7eb6","glow":true},
+                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.65,0.65],"life":[0.75,0.75],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
+                    {"count":16,"life":[0.4,0.9],"speed":[80,210],"gravity":220,"drag":0.8,"size":[1.4,2.4],"colors":["#ffffff","#ff7eb6","#7ee8ff","#ffe27a","#b5e86b"],"glow":true},
+                    {"shape":"sprite","count":6,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[60,160],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.6,3],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
+                    {"shape":"sprite","count":1,"sheet":"plume","unit":"r","size":[0.4,0.5],"life":[1.4,2],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#8a7898","delay":0.25,"offset":0.25}
+                ]
+            },
+            "special": {
+                "scatter": {
+                    "emitters": [
+                        {
+                            "shape": "sprite",
+                            "count": 1,
+                            "sheet": "flare",
+                            "size": [
+                                16,
+                                16
+                            ],
+                            "life": [
+                                0.28,
+                                0.28
+                            ],
+                            "alpha": [
+                                1,
+                                1,
+                                0
+                            ],
+                            "tint": "#ff7eb6",
+                            "glow": true
+                        },
+                        {
+                            "shape": "ring",
+                            "count": 1,
+                            "size": [
+                                4,
+                                4
+                            ],
+                            "sizeEnd": 6,
+                            "ease": "out",
+                            "life": [
+                                0.3,
+                                0.3
+                            ],
+                            "width": 3,
+                            "alpha": [
+                                1,
+                                0.6,
+                                0
+                            ],
+                            "colors": [
+                                "#7ee8ff",
+                                "#ff7eb6"
+                            ],
+                            "glow": true
+                        },
+                        {
+                            "shape": "spark",
+                            "count": 12,
+                            "life": [
+                                0.3,
+                                0.6
+                            ],
+                            "speed": [
+                                80,
+                                200
+                            ],
+                            "aim": "forward",
+                            "spread": 140,
+                            "gravity": 120,
+                            "drag": 0.6,
+                            "size": [
+                                2.4,
+                                3.8
+                            ],
+                            "sizeEnd": 0.3,
+                            "colors": [
+                                "#ffffff",
+                                "#ff7eb6",
+                                "#7ee8ff",
+                                "#ffe27a",
+                                "#b5e86b"
+                            ],
+                            "glow": true,
+                            "rotJitter": 90,
+                            "spin": [
+                                -300,
+                                300
+                            ]
+                        },
+                        {
+                            "shape": "streak",
+                            "count": 12,
+                            "life": [
+                                0.2,
+                                0.4
+                            ],
+                            "speed": [
+                                120,
+                                260
+                            ],
+                            "gravity": 200,
+                            "drag": 1.2,
+                            "size": [
+                                1.2,
+                                1.8
+                            ],
+                            "length": 8,
+                            "alpha": [
+                                1,
+                                0.9,
+                                0
+                            ],
+                            "colors": [
+                                "#ffffff",
+                                "#ff7eb6",
+                                "#7ee8ff"
+                            ],
+                            "glow": true,
+                            "aim": "forward",
+                            "spread": 140
+                        },
+                        {
+                            "shape": "sprite",
+                            "count": 2,
+                            "sheet": "smoke",
+                            "life": [
+                                0.6,
+                                0.9
+                            ],
+                            "speed": [
+                                5,
+                                25
+                            ],
+                            "angle": 90,
+                            "spread": 120,
+                            "gravity": -15,
+                            "drag": 1.2,
+                            "size": [
+                                5,
+                                8
+                            ],
+                            "sizeEnd": 1.8,
+                            "alpha": [
+                                0,
+                                0.6,
+                                0
+                            ],
+                            "rotJitter": 180,
+                            "wind": 1,
+                            "tint": "#c8a0b8"
+                        }
+                    ]
+                }
+            }
+        },
         "leapfrog": {
             "body": {
                 "halo": 8,
@@ -2420,191 +2605,6 @@
                             "rotJitter": 180,
                             "wind": 1,
                             "tint": "#b8a0c8"
-                        }
-                    ]
-                }
-            }
-        },
-        "funky": {
-            "body": {
-                "halo": 9,
-                "alpha": 0.45,
-                "pulse": 8,
-                "sprite": "p_funky",
-                "size": 14
-            },
-            "muzzle": {
-                "emitters": [
-                    {"count":1,"size":[8,8],"sizeEnd":0.4,"life":[0.1,0.1],"alpha":[0.85,0.5,0],"colors":["#ffffff","#ff7eb6"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"muzzle","aim":"forward","spread":0,"align":true,"size":[10,10],"life":[0.12,0.12],"alpha":[1,1,0]},
-                    {"shape":"ring","count":1,"size":[3,3],"sizeEnd":5,"ease":"out","life":[0.22,0.22],"width":2,"alpha":[1,0.6,0],"colors":["#ff7eb6","#7ee8ff"],"glow":true},
-                    {"shape":"spark","count":6,"life":[0.15,0.3],"speed":[60,160],"aim":"forward","spread":60,"size":[2,3],"sizeEnd":0.3,"colors":["#ffffff","#ff7eb6","#7ee8ff","#ffe27a"],"glow":true,"rotJitter":90},
-                    {"shape":"sprite","count":2,"sheet":"plume","aim":"forward","spread":50,"life":[0.7,1.1],"speed":[20,60],"drag":2,"gravity":-20,"wind":1,"size":[4.2,6],"alpha":[0,0.6,0.3,0],"rotJitter":40,"tint":"#c8a0b8"}
-                ]
-            },
-            "trail": {
-                "emitters": [
-                    {"rate":40,"life":[0.2,0.36],"speed":[0,14],"size":[1.2,2],"sizeEnd":0.3,"colors":["#ffffff","#ff7eb6","#7ee8ff","#ffe27a"],"glow":true},
-                    {"shape":"spark","rate":10,"life":[0.2,0.32],"speed":[0,22],"size":[2.2,3.4],"sizeEnd":0.4,"colors":["#ffffff","#7ee8ff","#ff7eb6","#b5e86b"],"glow":true,"rotJitter":90,"spin":[-260,260]},
-                    {"shape":"sprite","rate":6,"sheet":"smoke","life":[0.5,0.8],"speed":[0,8],"angle":90,"spread":120,"gravity":-10,"drag":1.2,"size":[2.4,3],"sizeEnd":2,"alpha":[0,0.4,0],"rotJitter":180,"wind":1,"tint":"#c8a0b8"}
-                ]
-            },
-            "impact": {
-                "emitters": [
-                    {"shape":"sprite","count":2,"sheet":"scorch","unit":"r","size":[0.26,0.32],"life":[3,4.2],"offset":0.62,"edge":true,"angle":-90,"spread":130,"alpha":[0.95,0.85,0],"rotJitter":180,"ground":true},
-                    {"count":1,"unit":"r","size":[0.64,0.64],"sizeEnd":0.6,"life":[0.18,0.18],"alpha":[0.7,0.35,0],"colors":["#ffffff","#ff7eb6"],"glow":true},
-                    {"shape":"sprite","count":1,"sheet":"blast","unit":"r","size":[0.75,0.75],"life":[0.55,0.55],"alpha":[1,1,0.9,0],"rotJitter":20,"scale":1.15},
-                    {"shape":"sprite","count":1,"sheet":"flakburst","unit":"r","size":[0.9,0.9],"life":[0.6,0.6],"alpha":[1,1,0.8,0],"rotJitter":30,"scale":1.1},
-                    {"shape":"sprite","count":1,"sheet":"energy","unit":"r","size":[1,1],"life":[0.4,0.4],"alpha":[0.8,0.6,0],"rotJitter":14,"tint":"#ff7eb6","glow":true},
-                    {"shape":"sprite","count":1,"sheet":"dirt","unit":"r","size":[0.65,0.65],"life":[0.75,0.75],"alpha":[1,1,0.8,0],"anchor":"bottom","scale":1.1,"ground":true,"offset":0.55,"edge":true,"angle":-90,"spread":0},
-                    {"count":16,"life":[0.4,0.9],"speed":[80,210],"gravity":220,"drag":0.8,"size":[1.4,2.4],"colors":["#ffffff","#ff7eb6","#7ee8ff","#ffe27a","#b5e86b"],"glow":true},
-                    {"shape":"sprite","count":6,"sheet":"debris","anim":"random","fps":22,"life":[0.7,1.3],"speed":[60,160],"angle":90,"spread":140,"gravity":380,"drag":0.3,"size":[1.6,3],"alpha":[1,1,0],"rotJitter":180,"spin":[-360,360],"tint":"#a8774a"},
-                    {"shape":"sprite","count":1,"sheet":"plume","unit":"r","size":[0.4,0.5],"life":[1.4,2],"speed":[0.2,0.6],"angle":90,"spread":70,"gravity":-14,"drag":0.8,"wind":1,"alpha":[0,0.85,0.6,0],"rotJitter":25,"scale":1.25,"tint":"#8a7898","delay":0.25,"offset":0.25}
-                ]
-            },
-            "special": {
-                "scatter": {
-                    "emitters": [
-                        {
-                            "shape": "sprite",
-                            "count": 1,
-                            "sheet": "flare",
-                            "size": [
-                                16,
-                                16
-                            ],
-                            "life": [
-                                0.28,
-                                0.28
-                            ],
-                            "alpha": [
-                                1,
-                                1,
-                                0
-                            ],
-                            "tint": "#ff7eb6",
-                            "glow": true
-                        },
-                        {
-                            "shape": "ring",
-                            "count": 1,
-                            "size": [
-                                4,
-                                4
-                            ],
-                            "sizeEnd": 6,
-                            "ease": "out",
-                            "life": [
-                                0.3,
-                                0.3
-                            ],
-                            "width": 3,
-                            "alpha": [
-                                1,
-                                0.6,
-                                0
-                            ],
-                            "colors": [
-                                "#7ee8ff",
-                                "#ff7eb6"
-                            ],
-                            "glow": true
-                        },
-                        {
-                            "shape": "spark",
-                            "count": 12,
-                            "life": [
-                                0.3,
-                                0.6
-                            ],
-                            "speed": [
-                                80,
-                                200
-                            ],
-                            "aim": "forward",
-                            "spread": 140,
-                            "gravity": 120,
-                            "drag": 0.6,
-                            "size": [
-                                2.4,
-                                3.8
-                            ],
-                            "sizeEnd": 0.3,
-                            "colors": [
-                                "#ffffff",
-                                "#ff7eb6",
-                                "#7ee8ff",
-                                "#ffe27a",
-                                "#b5e86b"
-                            ],
-                            "glow": true,
-                            "rotJitter": 90,
-                            "spin": [
-                                -300,
-                                300
-                            ]
-                        },
-                        {
-                            "shape": "streak",
-                            "count": 12,
-                            "life": [
-                                0.2,
-                                0.4
-                            ],
-                            "speed": [
-                                120,
-                                260
-                            ],
-                            "gravity": 200,
-                            "drag": 1.2,
-                            "size": [
-                                1.2,
-                                1.8
-                            ],
-                            "length": 8,
-                            "alpha": [
-                                1,
-                                0.9,
-                                0
-                            ],
-                            "colors": [
-                                "#ffffff",
-                                "#ff7eb6",
-                                "#7ee8ff"
-                            ],
-                            "glow": true,
-                            "aim": "forward",
-                            "spread": 140
-                        },
-                        {
-                            "shape": "sprite",
-                            "count": 2,
-                            "sheet": "smoke",
-                            "life": [
-                                0.6,
-                                0.9
-                            ],
-                            "speed": [
-                                5,
-                                25
-                            ],
-                            "angle": 90,
-                            "spread": 120,
-                            "gravity": -15,
-                            "drag": 1.2,
-                            "size": [
-                                5,
-                                8
-                            ],
-                            "sizeEnd": 1.8,
-                            "alpha": [
-                                0,
-                                0.6,
-                                0
-                            ],
-                            "rotJitter": 180,
-                            "wind": 1,
-                            "tint": "#c8a0b8"
                         }
                     ]
                 }

@@ -1,7 +1,9 @@
 // The arsenal's balance, measured on the real sim (src/balance.ts): every gun
 // fired at the standard scenarios, its expected damage per shot at one target
 // and at three, and its damage per dollar. The invariants:
-//   - NUKE does the most expected damage of any gun, at one target and at three;
+//   - NUKE does the most expected damage of any gun, at one target and at three,
+//     and no gun outside its family lands a best single-target hit (one volley,
+//     perfectly aimed: a direct hit, a stop at a hull) above HIT_CAP of NUKE's;
 //   - along each weapon line (a cat, or a `line` within it) in shop order, every
 //     tier costs more per shot than the one before and, where the line does
 //     damage, does more expected damage;
@@ -18,7 +20,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildArsenal } from '../src/sim.ts';
-import { BAL_W, BAND_HI, BAND_LO, REACH_MIN, UNLOCK_GAP, fullReach, lineOf, measureArsenal, median } from '../src/balance.ts';
+import { BAL_W, BAND_HI, BAND_LO, HIT_CAP, REACH_MIN, UNLOCK_GAP, fullReach, lineOf, measureArsenal, median } from '../src/balance.ts';
 import { flies } from '../src/sim.ts';
 import type { GunWorth } from '../src/balance.ts';
 
@@ -46,6 +48,15 @@ test('NUKE does the most expected damage of any gun, at one target and at a clus
     if (g === nuke) continue;
     assert.ok(nuke.single > g.single, `${name(g)} ${f1(g.single)} vs NUKE ${f1(nuke.single)} at one target`);
     assert.ok(nuke.cluster > g.cluster, `${name(g)} ${f1(g.cluster)} vs NUKE ${f1(nuke.cluster)} at three targets`);
+  }
+});
+
+test(`no gun outside the Nukes lands a best single-target hit above ${HIT_CAP * 100}% of NUKE's`, () => {
+  assert.ok(nuke, 'the arsenal has a NUKE');
+  const family = gun(nuke.key).cat;
+  for (const g of worth) {
+    if (gun(g.key).cat === family) continue;
+    assert.ok(g.bestHit <= HIT_CAP * nuke.bestHit, `${name(g)}'s best hit ${f1(g.bestHit)} vs NUKE's ${f1(nuke.bestHit)}`);
   }
 });
 

@@ -80,12 +80,22 @@ export function volleyDamage(arsenal: Arsenal, wkey: string, ground: readonly nu
 
 /** A gun's expected damage in one scenario: the best aim's, averaged over the aim errors around it. */
 export function expectedDamage(arsenal: Arsenal, wkey: string, sc: BalanceScenario, n: 1 | 3, drone: boolean): number {
+  return aimDamage(arsenal, wkey, sc, n, drone).mean;
+}
+/** A gun's damage in one scenario: `mean` as expectedDamage, and `best` the most any one volley
+ *  the gunner tried there did (the best hit a perfect shot lands, a direct hit or a stop at a hull). */
+export function aimDamage(arsenal: Arsenal, wkey: string, sc: BalanceScenario, n: 1 | 3, drone: boolean): { mean: number; best: number } {
   const w = arsenal.weapons[wkey]!;
   const dist = w.effect === 'plasma' ? BAL_RING : sc.dist;
   const cols = targetCols(dist, n);
   const ground = balanceGround(sc.ground, BAL_GX + dist);
   const lim = aimLimits(w);
-  const shot = (a: number, p: number): number => volleyDamage(arsenal, wkey, ground, cols, drone, Math.max(lim.min, Math.min(lim.max, a)), Math.max(0, Math.min(100, p)));
+  let top = 0;
+  const shot = (a: number, p: number): number => {
+    const v = volleyDamage(arsenal, wkey, ground, cols, drone, Math.max(lim.min, Math.min(lim.max, a)), Math.max(0, Math.min(100, p)));
+    top = Math.max(top, v);
+    return v;
+  };
   let best = { v: -1, a: ANGLES[0]!, p: 100 };
   const consider = (a: number, p: number): void => {
     const v = shot(a, p);
@@ -109,7 +119,7 @@ export function expectedDamage(arsenal: Arsenal, wkey: string, sc: BalanceScenar
   const powers = flies(w) ? ERR_POWER : [0];
   let sum = 0;
   for (const dp of powers) for (const da of ERR_ANGLE) sum += shot(best.a + da, best.p + dp);
-  return sum / (powers.length * ERR_ANGLE.length);
+  return { mean: sum / (powers.length * ERR_ANGLE.length), best: top };
 }
 
 /** How the harness judges a gun. `damage`: by its damage per dollar. `dot`: damage over time
@@ -137,6 +147,8 @@ export interface GunWorth {
   perDollar: number | null;
   /** Single-target expected damage per scenario id (mean of drone and tank). */
   byScenario: Record<string, number>;
+  /** The best single-target hit in any scenario, at a drone or a tank: one volley, perfectly aimed. */
+  bestHit: number;
 }
 
 /** Every gun of the arsenal, measured, in rack order. */
@@ -146,9 +158,11 @@ export function measureArsenal(arsenal: Arsenal): GunWorth[] {
 export function measureGun(arsenal: Arsenal, key: string): GunWorth {
   const w = arsenal.weapons[key]!;
   const byScenario: Record<string, number> = {};
-  let single = 0, cluster = 0;
+  let single = 0, cluster = 0, bestHit = 0;
   for (const sc of SCENARIOS) {
-    const one = (expectedDamage(arsenal, key, sc, 1, true) + expectedDamage(arsenal, key, sc, 1, false)) / 2;
+    const atDrone = aimDamage(arsenal, key, sc, 1, true), atTank = aimDamage(arsenal, key, sc, 1, false);
+    bestHit = Math.max(bestHit, atDrone.best, atTank.best);
+    const one = (atDrone.mean + atTank.mean) / 2;
     byScenario[sc.id] = one;
     single += one;
     cluster += (expectedDamage(arsenal, key, sc, 3, true) + expectedDamage(arsenal, key, sc, 3, false)) / 2;
@@ -156,7 +170,7 @@ export function measureGun(arsenal: Arsenal, key: string): GunWorth {
   single /= SCENARIOS.length;
   cluster /= SCENARIOS.length;
   const perShot = w.pack > 0 ? w.price / w.pack : 0;
-  return { key, role: balanceRole(w), single, cluster, perShot, perDollar: perShot > 0 ? single / perShot : null, byScenario };
+  return { key, role: balanceRole(w), single, cluster, perShot, perDollar: perShot > 0 ? single / perShot : null, byScenario, bestHit };
 }
 
 /** The line a row belongs to: its cat, then its `line` within the cat when it names one. */
@@ -185,5 +199,7 @@ export function fullReach(w: Readonly<Weapon>): number {
   }
   return best;
 }
+/** No gun outside NUKE's own family lands a best single-target hit above this share of NUKE's. */
+export const HIT_CAP = 0.7;
 /** Two damage guns this far apart in expected damage must unlock in that order (minRound). */
 export const UNLOCK_GAP = 1.5;

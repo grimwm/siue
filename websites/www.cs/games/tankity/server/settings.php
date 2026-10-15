@@ -54,6 +54,21 @@ function room_long_cap(int $max): int
 {
     return max(1, (int) floor($max * room_long_share()));
 }
+const ROOM_MAX_LOBBIES = 100;
+const ROOM_LOBBIES_PER_ADDRESS = 4;
+/* A full lobby pool may close a lobby this old even when it is attended. */
+const ROOM_LOBBY_OLD_SECS = 1800;
+/* Lobbies waiting at once; they hold no match slot (max_rooms counts started
+   matches only). */
+function room_max_lobbies(): int
+{
+    return tankity_int_setting('TANKITY_MAX_LOBBIES', 'max_lobbies', ROOM_MAX_LOBBIES);
+}
+/* Lobbies one address hosts at once. */
+function room_lobbies_per_address(): int
+{
+    return tankity_int_setting('TANKITY_LOBBIES_PER_ADDRESS', 'lobbies_per_address', ROOM_LOBBIES_PER_ADDRESS);
+}
 function room_live_secs(): int
 {
     $raw = (string) tankity_setting('TANKITY_ROOM_LIVE_SECS', 'room_live_secs', '');

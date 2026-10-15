@@ -56,12 +56,18 @@ function tankity_housekeep(int $now, array $jobs): ?array
 }
 
 /* Every cleanup job this request can run, in order: where the room library is
-   loaded, the room sweep and old per-address counts. */
+   loaded, the room sweep, old tombstones, spent puzzles and old per-address counts. */
 function tankity_jobs(): array
 {
     $jobs = [];
     if (function_exists('room_sweep')) {
         $jobs['rooms'] = fn(int $now): int => room_sweep($now);
+    }
+    if (function_exists('room_tombstone_expire')) {
+        $jobs['closed'] = fn(int $now): int => room_tombstone_expire($now);
+    }
+    if (function_exists('room_pow_expire')) {
+        $jobs['pow'] = fn(int $now): int => room_pow_expire($now);
     }
     if (function_exists('rate_expire')) {
         $jobs['rate'] = fn(int $now): int => rate_expire($now);

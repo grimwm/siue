@@ -112,7 +112,7 @@ final class RoomIdleTest extends TestCase
         $room = $this->started('POLL', 'play', 1, 60, time() - 700);
         $this->save($room); // room_save touches the room now, as a poll does
         $this->assertTrue(room_idle(room_decode(tankity_db()->query("SELECT data FROM rooms WHERE code = 'POLL'")->fetchColumn())));
-        $this->assertSame(0, room_count());
+        $this->assertSame(0, room_slots_used());
     }
 
     public function testTheColumnFollowsTheRoom(): void
@@ -132,7 +132,7 @@ final class RoomIdleTest extends TestCase
     {
         $this->save($this->started('LIVE', 'play', 1, 600, time()));
         $this->save($this->started('DEAD', 'play', 1, 60, time() - 5000));
-        $this->assertSame(1, room_count());
+        $this->assertSame(1, room_slots_used());
         $lock = room_alloc(fn() => 'NEWR');
         room_save($lock, $lock->code, room_new('NEWR', 'ABC'));
         $this->assertTrue(room_register('NEWR', 2));

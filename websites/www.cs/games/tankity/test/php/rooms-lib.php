@@ -66,3 +66,31 @@ function room_test_age(string $code, int $seconds): void
         $u->execute();
     });
 }
+
+/* Sets a stored room's clocks (touched, acted, created) in its data and its
+   columns, with the expiry recomputed from the result: a room as if a poll,
+   an act or its creation had happened then. */
+function room_test_set(string $code, array $set): void
+{
+    tankity_tx(tankity_db(), function (PDO $db) use ($code, $set): void {
+        $q = $db->prepare('SELECT data FROM rooms WHERE code = ?');
+        $q->execute([$code]);
+        $room = room_decode($q->fetchColumn());
+        if ($room === null) {
+            return;
+        }
+        foreach (['touched', 'acted', 'created'] as $k) {
+            if (isset($set[$k])) {
+                $room[$k] = (int) $set[$k];
+            }
+        }
+        $u = $db->prepare('UPDATE rooms SET data = ?, touched = ?, acted = ?, created = ?, expires = ? WHERE code = ?');
+        $u->bindValue(1, serialize($room), PDO::PARAM_LOB);
+        $u->bindValue(2, (int) ($room['touched'] ?? time()), PDO::PARAM_INT);
+        $u->bindValue(3, room_acted($room), PDO::PARAM_INT);
+        $u->bindValue(4, (int) ($room['created'] ?? time()), PDO::PARAM_INT);
+        $u->bindValue(5, room_expires($room), PDO::PARAM_INT);
+        $u->bindValue(6, $code);
+        $u->execute();
+    });
+}

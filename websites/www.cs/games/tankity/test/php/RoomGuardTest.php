@@ -26,13 +26,11 @@ final class RoomGuardTest extends TestCase
         $_SERVER = ['HTTP_HOST' => 'localhost', 'REMOTE_ADDR' => '198.51.100.7'];
         $this->dir = tankity_test_dir();
         putenv('TANKITY_ROOM_JOINS_PER_HOUR');
-        putenv('TANKITY_ROOM_LONG_SHARE');
     }
 
     protected function tearDown(): void
     {
         putenv('TANKITY_ROOM_JOINS_PER_HOUR');
-        putenv('TANKITY_ROOM_LONG_SHARE');
         tankity_test_rm($this->dir);
     }
 
@@ -145,16 +143,15 @@ final class RoomGuardTest extends TestCase
             static fn(array $s): ?string => ($s['human'] ?? false) ? $s['initials'] : null, $room['seats']))));
     }
 
-    public function testACreateRefusedForAFullServerIsNotCharged(): void
+    public function testACreateRefusedForABusyLobbyPoolIsNotCharged(): void
     {
-        // A lab clicking Host while every room is taken keeps its allowance for the moment one frees.
-        $env = ['TANKITY_MAX_ROOMS' => '1'];
+        // A lab clicking Host while every lobby is busy keeps its allowance for the moment one frees.
+        $env = ['TANKITY_MAX_LOBBIES' => '1'];
         [$st, $host] = $this->call('create', ['initials' => 'hst'], [], $env);
         $this->assertSame(200, $st, json_encode($host));
         for ($i = 0; $i < 3; $i++) {
-            [$st, $out] = $this->call('create', ['initials' => 'two'], [], $env);
-            $this->assertSame(409, $st, json_encode($out));
-            $this->assertStringContainsString('every room is taken', $out['error']);
+            [$st, $out] = $this->call('create', ['initials' => 'two'], ['REMOTE_ADDR' => '203.0.113.10'], $env);
+            $this->assertSame([409, ['error' => 'Every lobby is busy. Try again in a minute.']], [$st, $out]);
         }
         $this->assertSame(1, $this->roomCharges(), 'only the create that made a room was charged');
         // Everything else is still charged: a join refused for a bad code costs one.
@@ -163,9 +160,9 @@ final class RoomGuardTest extends TestCase
     }
 
     /* The docker stacks lift both limits; these tests want the host's. */
-    private const FREE = ['TANKITY_ROOM_JOINS_PER_HOUR' => '1000', 'TANKITY_ROOM_HOSTS_PER_ADDRESS' => '4'];
+    private const FREE = ['TANKITY_ROOM_JOINS_PER_HOUR' => '1000', 'TANKITY_ROOM_HOSTS_PER_ADDRESS' => '4', 'TANKITY_LOBBIES_PER_ADDRESS' => '4'];
 
-    public function testAnAddressHostsFourRoomsAndNoMore(): void
+    public function testAnAddressOpensFourLobbiesAndNoMore(): void
     {
         for ($i = 0; $i < 4; $i++) {
             [$st, $out] = $this->call('create', ['initials' => 'hst'], [], self::FREE);
@@ -174,8 +171,7 @@ final class RoomGuardTest extends TestCase
                 'the host column carries the address, or the cap would never count the room');
         }
         [$st, $out] = $this->call('create', ['initials' => 'hst'], [], self::FREE);
-        $this->assertSame(429, $st);
-        $this->assertStringContainsString('too many rooms hosted', $out['error']);
+        $this->assertSame([429, ['error' => 'too many lobbies open from here; start or leave one first']], [$st, $out]);
         $this->assertSame(200, $this->call('create', ['initials' => 'two'], ['REMOTE_ADDR' => '203.0.113.10'], self::FREE)[0],
             'another address hosts its own');
     }
@@ -275,99 +271,6 @@ final class RoomGuardTest extends TestCase
             [], self::FREE);
         $this->assertSame(200, $st, json_encode($out));
         $this->assertEqualsWithDelta(time(), $this->actedColumn($code), 1, 'the player who is up loading a gun stamps it');
-    }
-
-    /* Ten rooms, so five long places; each create comes from its own address. */
-    private const TEN = ['TANKITY_MAX_ROOMS' => '10', 'TANKITY_ROOM_JOINS_PER_HOUR' => '1000',
-        'TANKITY_ROOM_HOSTS_PER_ADDRESS' => '4', 'TANKITY_ROOM_LONG_SHARE' => '0.5'];
-
-    /** @return array the answer of a create from address number $n */
-    private function createFrom(int $n, int $turn): array
-    {
-        return $this->call('create', ['initials' => 'hst', 'turn' => $turn], ['REMOTE_ADDR' => "203.0.113.$n"], self::TEN);
-    }
-
-    public function testLongGamesTakeAtMostHalfTheRooms(): void
-    {
-        for ($n = 1; $n <= 5; $n++) {
-            $this->assertSame(200, $this->createFrom($n, 28800)[0], "long room $n");
-        }
-        [$st, $out] = $this->createFrom(6, 86400);
-        $this->assertSame(409, $st, json_encode($out));
-        $this->assertSame('every long-game slot is taken; pick a shorter turn time or try later', $out['error']);
-        $this->assertSame(5, (int) tankity_db()->query('SELECT COUNT(*) FROM rooms')->fetchColumn(), 'the refused room was freed');
-        foreach ([60, 120, 600, 1800] as $i => $turn) {
-            $this->assertSame(200, $this->createFrom(7 + $i, $turn)[0], "a $turn s room still opens");
-        }
-    }
-
-    public function testTheHostCannotMoveARoomUpIntoAFullLongShare(): void
-    {
-        for ($n = 1; $n <= 5; $n++) {
-            $this->assertSame(200, $this->createFrom($n, 604800)[0]);
-        }
-        [$st, $host] = $this->createFrom(6, 600);
-        $this->assertSame(200, $st, json_encode($host));
-        $set = static fn(int $secs): array => ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf'], 'secs' => $secs];
-        $this->gap();
-        [$st, $out] = $this->call('turntime', $set(28800), ['REMOTE_ADDR' => '203.0.113.6'], self::TEN);
-        $this->assertSame(409, $st, json_encode($out));
-        $this->assertSame('every long-game slot is taken; pick a shorter turn time or try later', $out['error']);
-        $this->assertSame(600, $this->stored($host['code'])['turnSecs'], 'the refused change left the turn time alone');
-        $this->gap();
-        $this->assertSame(200, $this->call('turntime', $set(1800), ['REMOTE_ADDR' => '203.0.113.6'], self::TEN)[0], 'a shorter setting still works');
-        $this->assertSame(1800, $this->stored($host['code'])['turnSecs']);
-    }
-
-    public function testAFinishedLongRoomCannotBeRevivedIntoAFullLongShare(): void
-    {
-        for ($n = 1; $n <= 5; $n++) {
-            [$st, $out] = $this->createFrom($n, 28800);
-            $this->assertSame(200, $st);
-            $first ??= $out;
-        }
-        [$room, $lock] = room_load($first['code']);
-        $room['phase'] = 'over';
-        room_save($lock, $first['code'], $room);
-        room_unlock($lock);
-        $this->assertSame(200, $this->createFrom(6, 28800)[0], 'the finished room gave its place away');
-        $this->gap();
-        [$st, $out] = $this->call('again', ['code' => $first['code'], 'token' => $first['token'], 'csrf' => $first['csrf']], ['REMOTE_ADDR' => '203.0.113.1'], self::TEN);
-        $this->assertSame(409, $st, json_encode($out));
-        $this->assertSame('every long-game slot is taken; pick a shorter turn time or try later', $out['error']);
-        $this->assertSame('over', $this->stored($first['code'])['phase'], 'the refused revival left the room finished');
-    }
-
-    public function testALongRoomMayChangeBetweenLongStopsAndFreesItsPlace(): void
-    {
-        for ($n = 1; $n <= 5; $n++) {
-            [$st, $out] = $this->createFrom($n, 28800);
-            $this->assertSame(200, $st);
-            $first ??= $out;
-        }
-        $set = static fn(int $secs): array => ['code' => $first['code'], 'token' => $first['token'], 'csrf' => $first['csrf'], 'secs' => $secs];
-        $this->gap();
-        $this->assertSame(200, $this->call('turntime', $set(86400), ['REMOTE_ADDR' => '203.0.113.1'], self::TEN)[0], 'long to long needs no new place');
-        $this->gap();
-        $this->assertSame(200, $this->call('turntime', $set(120), ['REMOTE_ADDR' => '203.0.113.1'], self::TEN)[0]);
-        $this->assertSame(200, $this->createFrom(6, 604800)[0], 'the place it left is free');
-    }
-
-    public function testTheLongShareIsASetting(): void
-    {
-        $this->expectErrorLog();
-        $this->assertSame(0.5, room_long_share());
-        $this->assertSame(25, room_long_cap(50));
-        $this->assertSame(1, room_long_cap(1), 'never fewer than one place');
-        $this->assertSame(1, room_long_cap(3));
-        putenv('TANKITY_ROOM_LONG_SHARE=0.2');
-        $this->assertSame(10, room_long_cap(50));
-        putenv('TANKITY_ROOM_LONG_SHARE=1');
-        $this->assertSame(50, room_long_cap(50));
-        foreach (['0', '1.5', '-1', 'half'] as $bad) {
-            putenv("TANKITY_ROOM_LONG_SHARE=$bad");
-            $this->assertSame(0.5, room_long_share(), $bad);
-        }
     }
 
     public function testTheHostingPlaceFollowsTheHostWhenTheHostLeaves(): void

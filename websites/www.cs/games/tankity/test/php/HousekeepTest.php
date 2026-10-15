@@ -56,9 +56,9 @@ final class HousekeepTest extends TestCase
         }
     }
 
-    public function testTheJobsAreTheRoomsAndTheRateCounts(): void
+    public function testTheJobsAreTheRoomsTombstonesPuzzlesAndTheRateCounts(): void
     {
-        $this->assertSame(['rooms', 'rate'], array_keys(tankity_jobs()));
+        $this->assertSame(['rooms', 'closed', 'pow', 'rate'], array_keys(tankity_jobs()));
     }
 
     public function testOldRateCountsGo(): void

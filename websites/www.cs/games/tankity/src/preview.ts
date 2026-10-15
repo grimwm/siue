@@ -11,7 +11,7 @@
  * PreviewEnv, so it compiles in the DOM-free program and test/preview.test.ts
  * drives it on a clock the test moves by hand. */
 import {
-  GRAV, FLAT_GRAV, ROLL_LIFT, aimLimits, beamLine, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage, beamCarve, flies, unitHitBox, inHitBox,
+  GRAV, ROLL_LIFT, aimLimits, beamLine, clamp, shotSpeed, stepBallistic, carveCrater, blastDamage, beamCarve, flies, unitHitBox, inHitBox,
   groundAt, groundSlope, rollStart, rollStep, rollOut, hopShell, scatterShells, fallDamage, FALL_RULES,
 } from './sim.ts';
 import { BURY_EPS, DIG_STEP, addDirt, digHeading, fillPour, pourLevel, riotCarve, slumpGround } from './earth.ts';
@@ -114,8 +114,6 @@ export interface PreviewSeen {
   /** Hop warheads thrown on; bomblets thrown by a split or a scatter. */
   hops: number;
   split: number;
-  /** Units a piercing shell passed through. */
-  pierced: number;
   /** px a roller rolled along the ground. */
   rolled: number;
   /** px a digger burrowed. */
@@ -134,7 +132,7 @@ export interface PreviewSeen {
   cleared: number;
 }
 export function previewSeen(): PreviewSeen {
-  return { escaped: false, hops: 0, split: 0, pierced: 0, rolled: 0, dug: 0, flowed: 0, bend: 0, air: 0, dip: 0, rise: 0, cleared: 0 };
+  return { escaped: false, hops: 0, split: 0, rolled: 0, dug: 0, flowed: 0, bend: 0, air: 0, dip: 0, rise: 0, cleared: 0 };
 }
 
 /** A ridge under the dummy: px high, and px it falls away per column either side. */
@@ -219,12 +217,11 @@ export function previewShot(pv: PreviewState, env: PreviewEnv, angle: number, po
   const rad = angle * Math.PI / 180;
   const st = {
     x: pv.sx, y: (pv.terr[pv.sx] ?? 0) - 12,
-    vx: Math.cos(rad) * shotSpeed(power, w.flat, w.speed),
-    vy: -Math.sin(rad) * shotSpeed(power, w.flat, w.speed),
+    vx: Math.cos(rad) * shotSpeed(power, w.speed),
+    vy: -Math.sin(rad) * shotSpeed(power, w.speed),
   };
-  const grav = w.flat ? FLAT_GRAV : GRAV;
   for (let i = 0; i < 720; i++) {
-    stepBallistic(st, 1 / 60, pv.wind, grav);
+    stepBallistic(st, 1 / 60, pv.wind, GRAV);
     // An arc over the top of the frame flies out of sight: no landing the demo may use.
     if (st.y < 0) return NaN;
     if (st.x < 0 || st.x >= PV_W || st.y >= PV_H) return st.x;
@@ -252,21 +249,10 @@ export function solvePreview(pv: PreviewState, env: PreviewEnv): void {
     if (!Number.isFinite(err)) return;
     if (!best.have || err < best.err) { best.have = true; best.err = err; best.a = ca; best.p = cp; }
   };
-  if (w.flat) {
-    // Rail speed answers to power, so sweep both: short soft lobs thread
-    // hills that full-power bolts sail over.
-    for (let a = 5; a <= 85; a += 2) {
-      for (const p of [20, 35, 50, 65, 80]) consider(a, p);
-    }
-    for (let a = best.a - 3; a <= best.a + 3; a += 0.5) {
-      for (let p = best.p - 6; p <= best.p + 6; p += 1.5) consider(a, p);
-    }
-  } else {
-    for (let p = 20; p <= 100; p += 2) consider(60, p);
-    for (let a = 50; a <= 70; a += 2) consider(a, best.p);
-    for (let a = best.a - 3; a <= best.a + 3; a += 0.5) consider(a, best.p);
-    for (let p = best.p - 2; p <= best.p + 2; p += 0.25) consider(best.a, p);
-  }
+  for (let p = 20; p <= 100; p += 2) consider(60, p);
+  for (let a = 50; a <= 70; a += 2) consider(a, best.p);
+  for (let a = best.a - 3; a <= best.a + 3; a += 0.5) consider(a, best.p);
+  for (let p = best.p - 2; p <= best.p + 2; p += 0.25) consider(best.a, p);
   pv.angle = best.a;
   pv.power = best.p;
 }
@@ -289,7 +275,7 @@ function previewFire(pv: PreviewState, env: PreviewEnv): void {
   for (let i = 0; i < shots; i++) {
     const off = shots === 1 ? 0 : (i - (shots - 1) / 2) * (w.spread || 0);
     const a = rad + off;
-    const spd = shotSpeed(pv.power, w.flat, w.speed);
+    const spd = shotSpeed(pv.power, w.speed);
     pv.shells.push({ x: pv.sx, y: y0, vx: Math.cos(a) * spd, vy: -Math.sin(a) * spd, wkey: pv.wkey, age: 0, pierced: false, split: false });
   }
   env.muzzle(pv.fx, pv.wkey, pv.sx, y0, Math.atan2(-Math.sin(rad), Math.cos(rad)));
@@ -586,7 +572,7 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
     }
   } else if (pv.phase === 'fly') {
     const w = weaponOf(env, pv.wkey);
-    const grav = w.flat ? FLAT_GRAV : GRAV;
+    const grav = GRAV;
     const fy = pv.ty - 12;
     // Bomblets join pv.shells mid-loop and get their first step this frame.
     for (const s of pv.shells) {
@@ -637,13 +623,6 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
       if ((touch || near) && w.effect === 'proximity') pv.seen.air = Math.max(pv.seen.air, (pv.terr[clamp(Math.round(s.x), 0, PV_W - 1)] ?? 0) - s.y);
       if ((touch || near) && w.effect === 'seeker' && !pv.seen.bend) pv.seen.bend = Math.abs(s.x - previewShot(pv, env, pv.angle, pv.power)) || 0;
       if (touch || near) {
-        if (w.effect === 'pierce' && !s.pierced && touch) {
-          s.pierced = true;
-          pv.seen.pierced += 1;
-          env.special(pv.fx, pv.wkey, 'pierce', s.x, s.y, Math.atan2(s.vy, s.vx));
-          previewBoom(pv, env, s.x, s.y, shellBoom(s));
-          continue;
-        }
         if (EARTH_BURSTS.includes(w.effect)) { previewEarth(pv, env, s, w, touch); continue; }
         if (w.effect === 'napalm') { previewNapalm(pv, env, s, w); continue; }
         s.dead = true;

@@ -314,7 +314,7 @@ function room_fire_shot(array &$room, array &$events, int $seatIdx, string $wkey
     for ($i = 0; $i < $shots; $i++) {
         $off = $shots === 1 ? 0 : ($i - ($shots - 1) / 2) * ($w['spread'] ?? 0.0);
         $a = $rad + $off;
-        $spd = room_shot_speed($tank['power'], !empty($w['flat']), (float) ($w['speed'] ?? 1.0), room_field_reach(count($room['terrain'])));
+        $spd = room_shot_speed($tank['power'], (float) ($w['speed'] ?? 1.0), room_field_reach(count($room['terrain'])));
         [$mx, $my] = room_muzzle($tank);
         $vx = det_cos($a) * $spd * $dirS;
         $vy = -det_sin($a) * $spd;
@@ -617,6 +617,62 @@ function room_start_ammo(): array
         }
     }
     return $ammo;
+}
+/* Guns the arsenal has dropped (game.json arsenal.retired): key => what one
+   shell refunds, its old price per shell (price / pack, rounded down). */
+function room_retired(): array
+{
+    static $r = null;
+    if ($r !== null) {
+        return $r;
+    }
+    $r = [];
+    foreach (room_arsenal()['retired'] ?? [] as $row) {
+        if (is_array($row) && isset($row['key'])) {
+            $r[(string) $row['key']] = intdiv(max(0, (int) ($row['price'] ?? 0)), max(1, (int) ($row['pack'] ?? 1)));
+        }
+    }
+    return $r;
+}
+/* A room saved before a gun left the arsenal: each seat's shells of a
+   retired gun are refunded at its old price per shell in room cash, any
+   other key the arsenal lacks is dropped with no refund, a seat that had one
+   loaded loads the Shell, and every unit's rack drops them (a drone's too).
+   room_load runs it on every room, so the sim never meets a key it cannot
+   fire; it changes nothing once the room is clean. True when it changed. */
+function room_retire_guns(array &$room): bool
+{
+    $live = room_weapons();
+    $retired = room_retired();
+    $changed = false;
+    foreach (is_array($room['ammo'] ?? null) ? $room['ammo'] : [] as $seat => $stock) {
+        foreach (is_array($stock) ? $stock : [] as $k => $n) {
+            if (isset($live[$k])) {
+                continue;
+            }
+            $back = isset($retired[$k]) && is_numeric($n) && $n > 0 ? $retired[$k] * (int) $n : 0;
+            if ($back > 0) {
+                $room['cash'][$seat] = (int) ($room['cash'][$seat] ?? 0) + $back;
+            }
+            unset($room['ammo'][$seat][$k]);
+            $changed = true;
+        }
+    }
+    foreach (is_array($room['weapon'] ?? null) ? $room['weapon'] : [] as $seat => $w) {
+        if (!is_string($w) || !isset($live[$w])) {
+            $room['weapon'][$seat] = 'shell';
+            $changed = true;
+        }
+    }
+    foreach (is_array($room['tanks'] ?? null) ? $room['tanks'] : [] as $i => $t) {
+        foreach (is_array($t['ammo'] ?? null) ? $t['ammo'] : [] as $k => $_) {
+            if (!isset($live[$k])) {
+                unset($room['tanks'][$i]['ammo'][$k]);
+                $changed = true;
+            }
+        }
+    }
+    return $changed;
 }
 /* What a buy or a pick of a locked row says: its name and its round. */
 function room_unlock_msg(string $name, int $minRound): string

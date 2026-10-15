@@ -19,7 +19,7 @@ import { sceneryY } from './scenery.ts';
 import { ZOOM_FLOOR, cameraTarget, cloudWrap, easeCamera, skyMarks, stepHold } from './camera.ts';
 import type { Aloft, CamPose, Hold, Reach } from './camera.ts';
 import {
-  hashSeed, mulberry32, gauss, GRAV, FLAT_GRAV, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
+  hashSeed, mulberry32, gauss, GRAV, H, clamp, surfY as simSurfY, facing, isGroundUnit, muzzle,
 } from './sim.ts';
 import type { Weapon } from './sim.ts';
 
@@ -47,7 +47,7 @@ export function createView(deps: ViewDeps) {
      flies, the top of its arc too, pulled back down to ZOOM_FLOOR. */
   const units: GameTank[] = [];
   const calm = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
-  const gravity = (wkey: string): number => (tables.weapons[wkey]?.flat ? FLAT_GRAV : GRAV);
+  const gravity = (): number => GRAV;
   const hold: Hold = { top: null, empty: 0 }; // the volley's top row, held until it lands
   const target: CamPose = { z: 1, cx: 0, cy: 0 };
   // Last frame's shells: a room replay's (read once a frame, in battleView) and those flying on past the field's edge.
@@ -123,7 +123,7 @@ export function createView(deps: ViewDeps) {
     replayed = flying;
     if (G.time < ghostTime) ghosts.clear(); // a new match restarted the clock
     const flyOn = ghosts.frame([...G.shells, ...flying], G.w, Math.min(0.1, Math.max(0, G.time - ghostTime)), G.wind,
-      wkey => (tables.weapons[wkey]?.flat ? FLAT_GRAV : GRAV));
+      () => GRAV);
     ghostTime = G.time;
     flyingOn = flyOn;
     return {

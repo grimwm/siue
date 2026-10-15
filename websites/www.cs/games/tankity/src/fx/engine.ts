@@ -10,8 +10,8 @@
  *   muzzle   once, as the shell leaves the barrel
  *   trail    every frame while the shell flies (emitters use `rate`)
  *   impact   once, on detonation; `unit: "r"` sizes it by the blast radius
- *   special  named extras: split (cluster), steer (seeker), pierce (lance,
- *            or a beam, at each unit it passes through), arc (EMP, over each
+ *   special  named extras: split (cluster), steer (seeker), pierce (a
+ *            beam, at each unit it passes through), arc (EMP, over each
  *            tank it fries), hop (a hop gun's leap), scatter (a scatter gun's
  *            bomblets thrown up), beam (a beam's whole line: played along it),
  *            dig (a digger's burrow, at its head as it cuts; a riot charge's

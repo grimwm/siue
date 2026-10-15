@@ -108,7 +108,6 @@ arsenal:
       pellets: 3
       spread: 0.1
       speed: 1.0
-      flat: true
       note: Three pellets.
       gfx: {shell: "#FFD166", trail: "#fb3", blast: ["#ffb13c", "#fff3c4"], painter: spark, shake: 0.3}
   gear:
@@ -290,7 +289,7 @@ YAML;
             && $out['audio']['sfx']['boom'] === ['file' => 'audio/sfx/boom.mp3', 'volume' => 0.5]
             && !isset($out['audio']['sfx']['click']), 'good-shape');
         self::assertTrue(($out['arsenal']['ammo'][1]['gfx']['shell'] ?? '') === '#ffd166', 'colours-lowercased');
-        self::assertTrue(($out['arsenal']['ammo'][1]['flat'] ?? null) === true && !isset($out['arsenal']['ammo'][0]['flat']), 'optional-flat-kept');
+        self::assertTrue(!isset($out['arsenal']['ammo'][0]['shortRange']) && !isset($out['arsenal']['ammo'][0]['preview']), 'optional-fields-left-out');
     }
 
     /** roller, hop, scatter, beam, plasma and tracer weapons validate and their fields are required */
@@ -394,6 +393,17 @@ YAML;
             $e = (string) self::errOf(fn () => $this->render(self::mut("      note: Three pellets.\n", $add . "      note: Three pellets.\n")));
             self::assertStringContainsString($want, $e, $name);
         }
+        $short = $this->row1(self::mut("      note: Three pellets.\n", "      shortRange: true\n      note: Three pellets.\n"));
+        self::assertTrue(($short['shortRange'] ?? null) === true, 'shortrange-validates :: ' . json_encode($short));
+        $e = (string) self::errOf(fn () => $this->render(self::mut("      note: Three pellets.\n", "      flat: true\n      note: Three pellets.\n")));
+        self::assertStringContainsString('arsenal.ammo[1].flat: unknown key', $e, 'flat-is-gone');
+        // Retired guns: listed with their old price and pack, their keys reserved.
+        $retire = fn (string $rows) => self::mut("  fall: {", "  retired:\n$rows  fall: {");
+        $out = json_decode($this->render($retire("    - {key: rail, name: Rail, price: 140, pack: 2}\n")), true);
+        self::assertSame([['key' => 'rail', 'name' => 'Rail', 'price' => 140, 'pack' => 2]], $out['arsenal']['retired'], 'retired-validates');
+        self::assertSame([], json_decode($this->render(self::good()), true)['arsenal']['retired'], 'retired-defaults-empty');
+        self::assertStringContainsString('arsenal.retired[0].key: `buck` is retired', (string) self::errOf(fn () => $this->render($retire("    - {key: buck, name: Buck, price: 80, pack: 2}\n"))), 'retired-key-clash');
+        self::assertStringContainsString('arsenal.retired[0].pack', (string) self::errOf(fn () => $this->render($retire("    - {key: rail, name: Rail, price: 140, pack: 0}\n"))), 'retired-pack');
         // A third row back under Shells after buck moved to another cat: the Shells rows are apart.
         $third = "    - key: mortar\n      name: Mortar\n      cat: Shells\n      dmg: 56\n      radius: 42\n      price: 200\n      pack: 2\n      minRound: 1\n"
             . "      ai: true\n      aiRound: 3\n      effect: shot\n      speed: 1.0\n      note: Big.\n      gfx: {shell: \"#ff9f43\", trail: \"#ff7b39\", blast: [\"#ff7b39\", \"#ffe27a\"], painter: disc, shake: 0.5}\n";
@@ -646,7 +656,7 @@ YAML;
         self::assertTrue($shipped !== null && $shipped === (string) @file_get_contents("$repoDir/game.json"), 'shipped-json-in-sync' . ' :: ' . 'run: php tools/game-json.php (in games/tankity)');
         $sd = json_decode((string) $shipped, true);
         self::assertTrue(($out['arsenal']['fall'] ?? null) === ['freePx' => 10, 'perPx' => 0.5, 'chuteOver' => 5, 'aiRound' => 3], 'good-fall' . ' :: ' . json_encode($out['arsenal']['fall'] ?? null));
-        self::assertTrue(count($sd['arsenal']['ammo'] ?? []) === 41 && count($sd['arsenal']['gear'] ?? []) === 9
+        self::assertTrue(count($sd['arsenal']['ammo'] ?? []) >= 30 && count($sd['arsenal']['ammo']) === count($sd['effects'] ?? []) - 1 && count($sd['arsenal']['gear'] ?? []) === 9
             && count($sd['audio']['sfx'] ?? []) >= 1 && count($sd['audio']['music'] ?? []) >= 1, 'shipped-counts');
         $ammoKeys = array_column($sd['arsenal']['ammo'] ?? [], 'key');
         $rollerRow = $sd['arsenal']['ammo'][array_search('roller', $ammoKeys, true)] ?? [];

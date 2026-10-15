@@ -28,7 +28,6 @@ const MECHANIC: Record<string, [string, (v: Volley) => number]> = {
   scatter: ['flings its bomblets', v => v.seen.split],
   cluster: ['splits into bomblets', v => v.seen.split],
   seeker: ['bends onto the dummy', v => v.seen.bend],
-  pierce: ['punches through the dummy', v => v.seen.pierced],
   proximity: ['bursts in the air', v => v.seen.air],
   beam: ['dips below level', v => v.seen.dip],
   tracer: ['draws an arc', v => v.seen.rise],

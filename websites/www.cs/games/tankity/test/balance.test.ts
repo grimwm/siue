@@ -9,14 +9,17 @@
 //     damage guns' median (utility and damage-over-time guns are judged by
 //     their lines instead, see balanceRole);
 //   - unlocks follow power: along a line minRound never falls, and a damage gun
-//     UNLOCK_GAP times stronger than another never unlocks before it.
+//     UNLOCK_GAP times stronger than another never unlocks before it;
+//   - every gun that flies reaches REACH_MIN of a room's field at full power
+//     and its best angle, unless its row says shortRange.
 // tools/balance-report.ts prints the same numbers as a table.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildArsenal } from '../src/sim.ts';
-import { BAND_HI, BAND_LO, UNLOCK_GAP, lineOf, measureArsenal, median } from '../src/balance.ts';
+import { BAL_W, BAND_HI, BAND_LO, REACH_MIN, UNLOCK_GAP, fullReach, lineOf, measureArsenal, median } from '../src/balance.ts';
+import { flies } from '../src/sim.ts';
 import type { GunWorth } from '../src/balance.ts';
 
 const GAME = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
@@ -95,6 +98,15 @@ test('unlocks follow power: a gun far stronger than another never unlocks before
           `${name(a)} (${f1(a.single)}, round ${gun(a.key).minRound}) unlocks before ${name(b)} (${f1(b.single)}, round ${gun(b.key).minRound})`);
       }
     }
+  }
+});
+
+test(`every gun that flies reaches ${REACH_MIN * 100}% of a room's field at full power, unless it is short-range on purpose`, () => {
+  for (const k of arsenal.order) {
+    const w = gun(k);
+    if (!flies(w) || w.shortRange) continue;
+    const r = fullReach(w);
+    assert.ok(r >= REACH_MIN * BAL_W, `${w.name} reaches ${r.toFixed(0)} px of ${BAL_W} (speed ${w.speed})`);
   }
 });
 

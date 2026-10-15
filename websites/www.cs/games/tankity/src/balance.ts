@@ -11,7 +11,7 @@
  * million). test/balance.test.ts holds the arsenal to its invariants and
  * tools/balance-report.ts prints the table. Pure: no page, and the same
  * arsenal always gives the same numbers. Never bundled. */
-import { aimLimits, fireWeapon, flies, genTerrain, hashSeed, mulberry32, settleFalls, stepShells, surfY, volleyOn } from './sim.ts';
+import { GRAV, aimLimits, fireWeapon, flies, genTerrain, hashSeed, mulberry32, settleFalls, shotSpeed, stepBallistic, stepShells, surfY, volleyOn } from './sim.ts';
 import type { Arsenal, Tank, Weapon, World } from './sim.ts';
 import { beamAim } from './ai.ts';
 
@@ -169,6 +169,21 @@ export function median(xs: readonly number[]): number {
   const s = xs.slice().sort((a, b) => a - b);
   const m = s.length >> 1;
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+}
+/** The share of a room's field every gun that flies must reach at full power and its best angle
+ *  (unless its row says shortRange), so no gun is useful only at maximum power. */
+export const REACH_MIN = 0.85;
+/** How far gun w's full-power shot flies on a room's field with no wind, launch height to launch
+ *  height, at its best whole-degree angle (the sim's own speed, gravity and 1/60 s step), px. */
+export function fullReach(w: Readonly<Weapon>): number {
+  let best = 0;
+  for (let a = 5; a <= 85; a++) {
+    const v = shotSpeed(100, w.speed), r = a * Math.PI / 180;
+    const st = { x: 0, y: 0, vx: Math.cos(r) * v, vy: -Math.sin(r) * v };
+    for (let i = 0; i < 6000 && !(st.y >= 0 && st.vy > 0); i++) stepBallistic(st, 1 / 60, 0, GRAV);
+    best = Math.max(best, st.x);
+  }
+  return best;
 }
 /** Two damage guns this far apart in expected damage must unlock in that order (minRound). */
 export const UNLOCK_GAP = 1.5;

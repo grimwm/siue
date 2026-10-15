@@ -389,7 +389,7 @@ function tankity_yaml_scalar(string $t): mixed
 
 /* ---------------------------------------------------------------- schema */
 
-const TANKITY_AMMO_EFFECTS = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'pierce', 'emp', 'roller', 'hop', 'scatter', 'beam', 'plasma',
+const TANKITY_AMMO_EFFECTS = ['shot', 'pellets', 'cluster', 'proximity', 'seeker', 'emp', 'roller', 'hop', 'scatter', 'beam', 'plasma',
     'tracer', 'dirt', 'pour', 'dig', 'riot', 'slump', 'napalm'];
 /** The fields an ammo row carries for its effect: field => [type, [effect => [lo, hi]]]. A field is
  *  valid only on the effects listed for it, with that effect's range (bool fields have no range). */
@@ -735,12 +735,12 @@ function tankity_build_preview(TankityCheck $c, mixed $v, string $p): ?array
 
 function tankity_build_arsenal(TankityCheck $c, mixed $a): array
 {
-    $res = ['ammo' => [], 'gear' => [], 'fall' => null];
+    $res = ['ammo' => [], 'gear' => [], 'retired' => [], 'fall' => null];
     $a = $c->map($a, 'arsenal');
     if ($a === null) {
         return $res;
     }
-    $c->allow($a, ['ammo', 'gear', 'fall'], 'arsenal');
+    $c->allow($a, ['ammo', 'gear', 'retired', 'fall'], 'arsenal');
     $res['fall'] = tankity_build_fall($c, $a['fall'] ?? null);
     $seen = [];
     $ammo = $c->lst($a['ammo'] ?? null, 'arsenal.ammo') ?? [];
@@ -751,7 +751,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
             continue;
         }
         $c->allow($row, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'minRound', 'ai', 'aiRound', 'aiRack',
-            'effect', 'speed', 'flat'], array_keys(TANKITY_AMMO_EXTRA), ['preview', 'note', 'gfx']), $p);
+            'effect', 'speed', 'shortRange'], array_keys(TANKITY_AMMO_EXTRA), ['preview', 'note', 'gfx']), $p);
         $o = [];
         $o['key'] = $c->str($row, 'key', $p, 24, true, '/^[a-z][a-z0-9]*$/');
         if ($o['key'] !== null) {
@@ -784,8 +784,8 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         }
         $o['effect'] = $c->enum($row, 'effect', $p, TANKITY_AMMO_EFFECTS);
         $o['speed'] = $c->num($row, 'speed', $p, 0.1, 5.0);
-        if (($f = $c->bool($row, 'flat', $p, false)) !== null) {
-            $o['flat'] = $f;
+        if (array_key_exists('shortRange', $row) && $row['shortRange'] !== null) {
+            $o['shortRange'] = $c->bool($row, 'shortRange', $p);
         }
         $effect = $o['effect'];
         foreach (TANKITY_AMMO_EXTRA as $k => [$type, $byEffect]) {
@@ -845,7 +845,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         $o['note'] = $c->str($row, 'note', $p, 120);
         $o['gfx'] = tankity_build_gfx($c, $row['gfx'] ?? null, "$p.gfx", $effect);
         $res['ammo'][] = tankity_ordered($o, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'minRound', 'ai', 'aiRound', 'aiRack',
-            'effect'], array_keys(TANKITY_AMMO_EXTRA), ['flat', 'speed', 'preview', 'note', 'gfx']));
+            'effect'], array_keys(TANKITY_AMMO_EXTRA), ['speed', 'shortRange', 'preview', 'note', 'gfx']));
     }
     // The shop and the picker show each cat under one heading in file order: its rows sit together.
     $cats = array_column($res['ammo'], 'cat');
@@ -898,6 +898,26 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         }
         $o['note'] = $c->str($row, 'note', $p, 120);
         $res['gear'][] = tankity_ordered($o, ['key', 'name', 'cat', 'price', 'n', 'effect', 'minRound', 'dmg', 'radius', 'note']);
+    }
+    // Guns the game no longer has: their keys stay reserved, and a saved room still holding some refunds them.
+    foreach ($c->lst($a['retired'] ?? [], 'arsenal.retired') ?? [] as $i => $row) {
+        $p = "arsenal.retired[$i]";
+        $row = $c->map($row, $p);
+        if ($row === null) {
+            continue;
+        }
+        $c->allow($row, ['key', 'name', 'price', 'pack'], $p);
+        $o = ['key' => $c->str($row, 'key', $p, 24, true, '/^[a-z][a-z0-9]*$/')];
+        if ($o['key'] !== null) {
+            if (isset($seen[$o['key']])) {
+                $c->err("$p.key", "`{$o['key']}` is retired: no ammo, gear or other retired row may use it");
+            }
+            $seen[$o['key']] = true;
+        }
+        $o['name'] = $c->str($row, 'name', $p, 40);
+        $o['price'] = $c->int($row, 'price', $p, 0, 100000);
+        $o['pack'] = $c->int($row, 'pack', $p, 1, 99);
+        $res['retired'][] = $o;
     }
     return $res;
 }

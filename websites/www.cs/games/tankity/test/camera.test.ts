@@ -140,7 +140,7 @@ test('volleyTop: a shell past the edge holds only while it climbs within the flo
 });
 
 test('volleyTop reads each weapon\'s own gravity', () => {
-  const top = volleyTop(null, [[aloft({ y: 300, vy: -90, wkey: 'rail' })]], k => (k === 'rail' ? 90 : 95));
+  const top = volleyTop(null, [[aloft({ y: 300, vy: -90, wkey: 'slow' })]], k => (k === 'slow' ? 90 : 95));
   assert.ok(near(top, 300 - 90 * 90 / 180));
 });
 

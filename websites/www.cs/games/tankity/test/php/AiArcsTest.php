@@ -161,7 +161,7 @@ final class AiArcsTest extends TestCase
         $weapons = room_weapons();
         $rack = ['shell', 'buck', 'mortar'];
         $this->assertSame(['shell'], room_ai_arc_guns($weapons, $rack));
-        foreach ([['speed' => 1.2], ['flat' => true], ['effect' => 'roller', 'friction' => 0.6, 'rollTime' => 8.0]] as $change) {
+        foreach ([['speed' => 1.2], ['effect' => 'roller', 'friction' => 0.6, 'rollTime' => 8.0]] as $change) {
             $own = $weapons;
             $own['buck'] = $change + $own['buck'];
             $this->assertSame(['shell', 'buck'], room_ai_arc_guns($own, $rack), json_encode($change));

@@ -43,6 +43,7 @@ import {
   initAudio, sfx, music, unlock, noteGesture, isSoundMuted, setSoundMuted, isMusicMuted, setMusicMuted,
 } from './audio.ts';
 import type { AudioConfig } from './audio.ts';
+import { installAudioPage } from './audio-page.ts';
 import { RoomClient, prettyRoomError } from './net.ts';
 import { WAR_REST } from './flow.ts';
 import { createSpeedSender, nextSpeed, speedLabel, speedSetting, speedTitle } from './speed.ts';
@@ -968,6 +969,7 @@ function init(): void {
   // The room this tab shows, told to the other tabs now and on a beat (they forget a quiet tab).
   setInterval(reportScreen, ON_SCREEN_BEAT_MS);
   window.addEventListener('pagehide', () => onScreen.set(''));
+  installAudioPage({ doc: document, win: window, nav: navigator });
 
   document.querySelectorAll<HTMLElement>('[data-aim]').forEach(btn => {
     const act = AIM_COMMANDS[btn.getAttribute('data-aim') ?? ''];

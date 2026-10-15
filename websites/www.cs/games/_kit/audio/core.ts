@@ -47,6 +47,14 @@ export interface AudioCore {
   /** For a gesture: makes and resumes the context; the first time it runs, a silent blip primes it and onReady is called. */
   unlock(onReady?: () => void): void;
   suspend(): void;
+  /** Suspends the context and keeps it suspended: context() no longer resumes it until release(). */
+  hold(): void;
+  /** Ends a hold and resumes the context if one was made (never makes one). */
+  release(): void;
+  /** Resumes the context for one short sound while held; the caller suspends it again. */
+  wake(): AudioContext | null;
+  /** Closes the context for good; the next context() makes a fresh one. */
+  close(): void;
   tone(spec: ToneSpec, to?: BusName | AudioNode): void;
   noise(spec: NoiseSpec, to?: BusName | AudioNode): void;
 }
@@ -70,6 +78,7 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
   const make = opts.createContext ?? defaultContext;
   let ctx: AudioContext | null = null;
   let primed = false;
+  let held = false;
   let waiting: Array<() => void> = [];
   let loopNoise: AudioBuffer | null = null;
   const gains: Record<BusName, number> = { sfx: 1, music: 1 };
@@ -120,7 +129,7 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
       }
     }
     const c = ctx;
-    if (c.state === 'suspended') settle(() => c.resume()).catch(() => {});
+    if (c.state === 'suspended' && !held) settle(() => c.resume()).catch(() => {});
     return c;
   }
 
@@ -237,6 +246,30 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     suspend() {
       const c = ctx;
       if (c) settle(() => c.suspend()).catch(() => {});
+    },
+    hold() {
+      held = true;
+      const c = ctx;
+      if (c) settle(() => c.suspend()).catch(() => {});
+    },
+    release() {
+      held = false;
+      const c = ctx;
+      if (c && c.state === 'suspended') settle(() => c.resume()).catch(() => {});
+    },
+    wake() {
+      const c = context();
+      if (c && c.state === 'suspended') settle(() => c.resume()).catch(() => {});
+      return c;
+    },
+    close() {
+      const c = ctx;
+      ctx = null;
+      for (const name of BUSES) delete buses[name];
+      primed = false;
+      waiting = [];
+      loopNoise = null;
+      if (c && c.state !== 'closed') settle(() => c.close()).catch(() => {});
     },
     tone,
     noise,

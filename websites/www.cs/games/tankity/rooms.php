@@ -271,7 +271,7 @@ if ($action === 'map' && $method === 'POST') {
     room_json_out(200, ['ok' => true, 'room' => $out]);
 }
 if ($action === 'leave' && $method === 'POST') {
-    [$room, $fh, $path, $seat] = room_gate($body, true, false);
+    [$room, $fh, $path, $seat] = room_gate($body, true, false, false);
     $code = $room['code'];
     // The leaver's name rides on the event: by the next poll the seat is a drone's.
     $who = (string) ($room['seats'][$seat]['initials'] ?? '');
@@ -290,7 +290,7 @@ if ($action === 'leave' && $method === 'POST') {
 
 // A seat changes its unit's look any time: lobby, shop, mid-match.
 if ($action === 'body' && $method === 'POST') {
-    [$room, $fh, $path, $seat] = room_gate($body, true);
+    [$room, $fh, $path, $seat] = room_gate($body, true, true, false);
     $room['seats'][$seat]['body'] = room_body($body);
     if (!room_save($fh, $path, $room)) {
         room_unlock($fh);
@@ -452,8 +452,11 @@ if ($action === 'join' && $method === 'POST') {
 
 /* Authenticated room ops share these gates. */
 /* $throttle spaces a seat's acts 150 ms apart; leaving skips it, since a
-   leave right behind an aim tap must still land. */
-function room_gate(array $body, bool $needCsrf, bool $throttle = true): array
+   leave right behind an aim tap must still land. $stamp records the request
+   as a turn-moving act (room['acted']): what keeps a started room alive and
+   out of the reclaim. Requests that move nothing (a new look, leaving, the
+   menu flag, a gun loaded off one's turn) pass false. */
+function room_gate(array $body, bool $needCsrf, bool $throttle = true, bool $stamp = true): array
 {
     if (!room_origin_ok()) {
         room_json_out(403, ['error' => 'bad origin']);
@@ -492,7 +495,9 @@ function room_gate(array $body, bool $needCsrf, bool $throttle = true): array
             $room['seats'][$seat]['lastAct'] = $now;
         }
     }
-    $room['acted'] = time(); // a human acted; polls and timeouts never come through here
+    if ($stamp) {
+        $room['acted'] = time(); // polls and timeouts never come through here
+    }
     return [$room, $fh, $path, $seat];
 }
 
@@ -680,7 +685,8 @@ if ($action === 'state') {
 if ($action === 'act' && $method === 'POST') {
     // A menu flag only says "this player is in a menu": it follows the
     // player's own clicks, so the act throttle does not apply to it.
-    [$room, $fh, $path, $seat] = room_gate($body, true, ($body['kind'] ?? '') !== 'menu');
+    // The handler stamps the act itself once it knows whose turn it is.
+    [$room, $fh, $path, $seat] = room_gate($body, true, ($body['kind'] ?? '') !== 'menu', false);
     $kind = (string) ($body['kind'] ?? '');
     $events = [];
     if ($room['phase'] !== 'play') {
@@ -703,6 +709,13 @@ if ($action === 'act' && $method === 'POST') {
     } elseif ($myIdx === null || (!$anyTurn && ($room['tanks'][$room['turn']]['seat'] ?? -1) !== $seat)) {
         room_unlock($fh);
         room_json_out(409, ['error' => 'not your turn']);
+    }
+    // Aiming, driving and firing happen on one's own turn; a gun loaded then
+    // counts too. The menu flag and a gun loaded while someone else is up
+    // move nothing, so they keep the room alive for nobody.
+    $ownTurn = $myIdx !== null && ($room['tanks'][$room['turn']]['seat'] ?? -1) === $seat;
+    if ($kind !== 'menu' && $ownTurn) {
+        $room['acted'] = time();
     }
     if ($kind === 'menu') {
         // Recorded above; nothing else to do.

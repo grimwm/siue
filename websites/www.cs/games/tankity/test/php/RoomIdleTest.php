@@ -156,27 +156,17 @@ final class RoomIdleTest extends TestCase
         return $room;
     }
 
-    /* One address makes a one-human room, picks the week, and tries to hold a
-       slot of the cap for it. */
-    public function testALoneHumanOnTheWeekSettingExpiresAfterTheLiveWindow(): void
+    /* Two seats behind one address (friends on one campus network) earn a
+       turn each: a started room has its humans by construction, and a full
+       server reclaims an idle one sooner whatever this says. */
+    public function testIdleLimitIsHumansTimesTurnTime(): void
     {
-        $room = $this->seatsFrom($this->started('SOLO', 'play', 0, 604800, 1000), ['aaaa']);
-        $this->assertSame(1600, room_expires($room));
-    }
-
-    public function testTwoSeatsFromOneAddressExpireAfterTheLiveWindow(): void
-    {
-        $room = $this->seatsFrom($this->started('TWOS', 'play', 0, 604800, 1000), ['aaaa', 'aaaa']);
-        $this->assertSame(1600, room_expires($room));
-        $this->assertSame(1600, room_expires(array_merge($room, ['phase' => 'over'])));
-    }
-
-    public function testDistinctAddressesEarnTheirTurnsButNeverLessThanTheWindow(): void
-    {
-        $room = $this->seatsFrom($this->started('DIST', 'play', 0, 28800, 1000), ['aaaa', 'bbbb', 'aaaa']);
-        $this->assertSame(1000 + 2 * 28800, room_expires($room));
-        $room['turnSecs'] = 60;
-        $this->assertSame(1600, room_expires($room));
+        $two = $this->seatsFrom($this->started('TWOS', 'play', 0, 86400, 1000), ['aaaa', 'aaaa']);
+        $this->assertSame(172800, room_idle_limit($two));
+        $one = $this->seatsFrom($this->started('ONES', 'play', 0, 86400, 1000), ['aaaa']);
+        $this->assertSame(86400, room_idle_limit($one));
+        $lightning = $this->seatsFrom($this->started('LITE', 'play', 0, 60, 1000), ['aaaa']);
+        $this->assertSame(600, room_idle_limit($lightning));
     }
 
     public function testOneAddressCannotHostMoreThanItsShare(): void
@@ -194,9 +184,9 @@ final class RoomIdleTest extends TestCase
         $this->assertSame(4, room_hosted('aaaa', 'H1XX'));
         $this->assertSame(1, room_hosted('bbbb'));
         $this->assertSame(0, room_hosted(''));
-        // Expired rooms stop counting: the week-long hold is gone after the window.
-        room_test_age('H1XX', 700);
-        room_test_age('H2XX', 700);
+        // Expired rooms stop counting: a one-human week room expires a week after its last turn.
+        room_test_age('H1XX', 604801);
+        room_test_age('H2XX', 604801);
         $this->assertSame(3, room_hosted('aaaa'));
     }
 

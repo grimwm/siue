@@ -318,12 +318,14 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   `rooms.expires` at every save) is the one rule the cap count, the sweep (on
   create and ping) and the load check share. A lobby expires `room_live_secs`
   after its last touch (seated polls heartbeat it). A running room (play,
-  shop) expires `max(room_live_secs, distinct addresses x turn time)` after
-  the last human act (one live window with fewer than two addresses): any
-  request through `room_gate`, plus create and join; polls, `mine` and
-  timeouts never count. The end of a match counts as an act, and a finished
-  room (over) lasts one live window after it, so its places (the cap, its
-  host's, a long place) come back soon. There is no total-age cap.
+  shop) expires `max(room_live_secs, humans x turn time)` after the last
+  turn-moving act (`acted`): create, join, start, play again, the host's
+  lobby settings (hills, seats, turn time, speed), buying, Ready, and an aim,
+  drive, fire or gun loaded on one's own turn. The menu flag, a new look,
+  leaving, a gun loaded while someone else is up, polls, `mine` and timeouts
+  never count. The end of a match counts as an act, and a finished room (over)
+  lasts one live window after it, so its places come back soon. There is no
+  total-age cap.
 - A `state` poll of a running room is a read: it takes the write lock and
   saves only when `room_tick_due` says a clock ran out or a drone is up.
 - The hosting cap counts a room against its current host's address
@@ -704,9 +706,9 @@ A room plays over minutes, hours or a week.
   stays the player's.
 - **The shop** stays open 90 s in rooms of 2 min or less (60 s in Lightning) and
   one turn time in longer rooms; all voters Ready still closes it at once.
-- **Closing.** See the idle rule above: a lobby lasts `room_live_secs` after its
-  last touch; a started room lasts one turn time per distinct address with
-  nobody acting, at least `room_live_secs`. Replies carry `expiresAt` and
+- **Closing.** A lobby lasts `room_live_secs` after its last touch; a started
+  room lasts one turn time per human with nobody taking a turn, at least
+  `room_live_secs`; a full server may close it sooner (Room slots). Replies carry `expiresAt` and
   `closesIn` (seconds from the reply, so the client's own clock never matters);
   when the room would close before the running clock ends, the status bar, the
   shop line and Your games say "Room closes in 9:00 unless someone plays".

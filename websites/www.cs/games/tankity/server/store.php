@@ -129,22 +129,17 @@ function room_decode(mixed $raw): ?array
     return is_array($v) ? $v : null;
 }
 
-/* How long a started room (play, shop, over) lasts with no human acting:
-   every distinct address among its humans gets one turn's worth, never less
-   than the live window. One address, however many seats it holds, cannot buy
-   itself a long hold on the room cap, so a room with fewer than two distinct
-   addresses lasts the live window whatever its turn time. A seat with no
-   recorded address (an older room) counts as its own. */
+/* How long a started room (play, shop) lasts with no human taking a turn:
+   one turn time per human seated, never less than the live window. A full
+   server reclaims idle rooms sooner (room_reclaim_pick), so this bounds disk,
+   not slots. */
 function room_idle_limit(array $r): int
 {
-    $addrs = [];
-    foreach ($r['seats'] ?? [] as $i => $s) {
-        if ($s['human'] ?? false) {
-            $addrs[(string) ($s['addr'] ?? '') !== '' ? 'a' . $s['addr'] : 's' . $i] = true;
-        }
+    $humans = 0;
+    foreach ($r['seats'] ?? [] as $s) {
+        $humans += ($s['human'] ?? false) ? 1 : 0;
     }
-    $distinct = count($addrs);
-    return $distinct < 2 ? room_live_secs() : max(room_live_secs(), $distinct * room_turn_secs($r));
+    return max(room_live_secs(), max(1, $humans) * room_turn_secs($r));
 }
 
 /* When a room closes: a lobby a live window after its last touch (seated

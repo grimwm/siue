@@ -206,12 +206,75 @@ final class RoomGuardTest extends TestCase
         $this->assertSame(200, $this->call('join', ['code' => $host['code'], 'initials' => 'mat'], [], self::FREE)[0]);
         $room = $this->stored($host['code']);
         $this->assertSame($turn, $room['turnSecs']);
-        $this->assertSame(room_live_secs(), room_idle_limit($room), 'two seats at one address are one player\'s worth');
+        $this->assertSame(2 * $turn, room_idle_limit($room), 'two seats at one address earn a turn each');
         $this->assertNotSame('', (string) $room['seats'][1]['addr'], 'the join passed the address');
+    }
 
-        $this->assertSame(200, $this->call('join', ['code' => $host['code'], 'initials' => 'oth'], ['REMOTE_ADDR' => '203.0.113.10'], self::FREE)[0]);
-        $room = $this->stored($host['code']);
-        $this->assertSame(2 * $turn, room_idle_limit($room), 'a second address earns a turn each');
+    /** @return array{array, array, string} the host's and the guest's seats in a started two-human match, and its code */
+    private function startedPair(): array
+    {
+        [$st, $host] = $this->call('create', ['initials' => 'hst'], ['REMOTE_ADDR' => '203.0.113.1'], self::FREE);
+        $this->assertSame(200, $st, json_encode($host));
+        [$st, $guest] = $this->call('join', ['code' => $host['code'], 'initials' => 'gst'], ['REMOTE_ADDR' => '203.0.113.2'], self::FREE);
+        $this->assertSame(200, $st, json_encode($guest));
+        $this->gap();
+        [$st, $out] = $this->call('start', ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']],
+            ['REMOTE_ADDR' => '203.0.113.1'], self::FREE);
+        $this->assertSame(200, $st, json_encode($out));
+        return [$host, $guest, $host['code']];
+    }
+
+    /** @return array{array, array} the seat whose turn it is, then the other human */
+    private function byTurn(array $host, array $guest, string $code): array
+    {
+        $room = $this->stored($code);
+        $turnSeat = $room['tanks'][$room['turn']]['seat'] ?? -1;
+        $this->assertContains($turnSeat, [$host['seat'], $guest['seat']], 'a human is up after Start');
+        return $turnSeat === $host['seat'] ? [$host, $guest] : [$guest, $host];
+    }
+
+    private function actedColumn(string $code): int
+    {
+        return (int) tankity_db()->query('SELECT acted FROM rooms WHERE code = ' . tankity_db()->quote($code))->fetchColumn();
+    }
+
+    /* A6: requests that move nothing (the menu flag, a new look) cost nothing
+       and must not keep a held room "active". Only a turn-moving act does. */
+    public function testMenuAndBodyDoNotKeepARoomAlive(): void
+    {
+        [$host, $guest, $code] = $this->startedPair();
+        room_test_age($code, 500);
+        $acted = $this->actedColumn($code);
+        $this->assertSame($acted, room_acted($this->stored($code)));
+        [$up] = $this->byTurn($host, $guest, $code);
+        $seat = ['code' => $code, 'token' => $up['token'], 'csrf' => $up['csrf']];
+        $this->assertSame(200, $this->call('act', $seat + ['kind' => 'menu', 'open' => true], [], self::FREE)[0]);
+        $this->gap();
+        $this->assertSame(200, $this->call('body', $seat + ['body' => 'walker'], [], self::FREE)[0]);
+        $this->assertSame($acted, $this->actedColumn($code), 'menu and body leave acted');
+        $this->assertSame($acted, room_acted($this->stored($code)));
+        $this->gap();
+        [$st, $out] = $this->call('act', $seat + ['kind' => 'aim', 'angle' => 60, 'power' => 50], [], self::FREE);
+        $this->assertSame(200, $st, json_encode($out));
+        $this->assertEqualsWithDelta(time(), $this->actedColumn($code), 1, 'an aim on one\'s own turn stamps it');
+        $this->assertEqualsWithDelta(time(), room_acted($this->stored($code)), 1);
+    }
+
+    public function testAnOffTurnWeaponDoesNotStamp(): void
+    {
+        [$host, $guest, $code] = $this->startedPair();
+        room_test_age($code, 500);
+        $acted = $this->actedColumn($code);
+        [$up, $off] = $this->byTurn($host, $guest, $code);
+        [$st, $out] = $this->call('act', ['code' => $code, 'token' => $off['token'], 'csrf' => $off['csrf'], 'kind' => 'weapon', 'weapon' => 'shell'],
+            [], self::FREE);
+        $this->assertSame(200, $st, json_encode($out));
+        $this->assertSame($acted, $this->actedColumn($code), 'loading a gun off one\'s turn moves nothing');
+        $this->gap();
+        [$st, $out] = $this->call('act', ['code' => $code, 'token' => $up['token'], 'csrf' => $up['csrf'], 'kind' => 'weapon', 'weapon' => 'shell'],
+            [], self::FREE);
+        $this->assertSame(200, $st, json_encode($out));
+        $this->assertEqualsWithDelta(time(), $this->actedColumn($code), 1, 'the player who is up loading a gun stamps it');
     }
 
     /* Ten rooms, so five long places; each create comes from its own address. */

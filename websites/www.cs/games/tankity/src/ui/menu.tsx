@@ -37,6 +37,9 @@ export interface MenuProps {
   themes: readonly { key: string; name: string }[];
   theme: string;
   onPickTheme: (key: string) => void;
+  /** The player's own colour (#rrggbb): the Custom tile's swatch and the picker's value. */
+  customColour: string;
+  onPickCustom: (hex: string) => void;
   /** How well the drones aim: the choices, the saved one. */
   difficulties: { key: string; name: string }[];
   difficulty: string;
@@ -157,6 +160,18 @@ export function Menu(p: MenuProps) {
                 <span>{t.name}</span>
               </button>
             ))}
+            <div class="theme-custom">
+              <button type="button" class="unit-choice theme-choice" data-pick-theme="custom" aria-pressed={p.theme === 'custom'}
+                title="Custom theme" onClick={blurThen(() => p.onPickCustom(p.customColour))}>
+                <span class="theme-swatch" aria-hidden="true" style={{ background: p.customColour }} />
+                <span>Custom</span>
+              </button>
+              <label class="theme-custom-pick">
+                <span>Pick a colour</span>
+                <input type="color" id="theme-custom-input" value={p.customColour} aria-label="Custom theme colour"
+                  onInput={ev => p.onPickCustom((ev.currentTarget as HTMLInputElement).value)} />
+              </label>
+            </div>
           </div>
         </div>
         <div class="unit-row" role="group" aria-labelledby="difficulty-label">

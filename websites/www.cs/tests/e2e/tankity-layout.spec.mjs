@@ -308,7 +308,7 @@ for (const dev of DEVICES) {
     expect(pair.radius).toBeGreaterThanOrEqual(4);
     expect(pair.radius).toBeLessThan(pair.fireH * 0.4);
     const up = await page.locator('#deck [data-aim="up"]').evaluate(b => [getComputedStyle(b).backgroundColor, getComputedStyle(b).color]);
-    if (!landscapePhone(dev)) expect(up).toEqual(['rgb(255, 201, 60)', 'rgb(17, 17, 17)']);
+    if (!landscapePhone(dev)) expect(up).toEqual(['rgb(255, 159, 67)', 'rgb(17, 17, 17)']);
     if (phone(dev)) {
       await expect(page.locator('.topbar')).toBeHidden();
       expect(await page.evaluate(smallTargets)).toEqual([]);

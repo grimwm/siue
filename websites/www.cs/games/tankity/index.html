@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="yellow">
+<html lang="en" data-theme="orange">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,9 +14,9 @@
 <script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__installPrompt = e; });</script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
-<!-- The colour theme (src/theme.ts): data-theme above is the default; the saved choice replaces it before the first paint. -->
-<script>try { var t = localStorage.getItem('tankity-theme'); if (/^(yellow|lime|cyan|orange|magenta)$/.test(t)) document.documentElement.setAttribute('data-theme', t); } catch (e) { /* the default stays */ }</script>
-<link rel="stylesheet" href="game.css?v=ed0e30d400">
+<!-- The colour theme (src/theme.ts): data-theme above is the default (Orange); the saved choice, or the saved Custom palette, replaces it before the first paint. -->
+<script>try { var t = localStorage.getItem('tankity-theme'), c = localStorage.getItem('tankity-theme-custom-palette'); if (/^(yellow|lime|cyan|orange|magenta)$/.test(t)) document.documentElement.setAttribute('data-theme', t); else if (t === 'custom' && /^(--[a-z-]+:[#0-9a-f, ]+;)+$/.test(c)) { document.documentElement.style.cssText += c; document.documentElement.setAttribute('data-theme', t); } } catch (e) { /* the default stays */ }</script>
+<link rel="stylesheet" href="game.css?v=3acdcdbfa2">
 </head>
 <body>
 <header class="topbar">
@@ -109,7 +109,7 @@
 </main>
 
 <script src="dist/fx.js?v=e3e36f7f39" defer></script>
-<script type="module" src="dist/main.js?v=8444b32d04"></script>
+<script type="module" src="dist/main.js?v=31461c7ea5"></script>
 <script src="dist/install.js?v=770f9aabe1" defer></script>
 </body>
 </html>

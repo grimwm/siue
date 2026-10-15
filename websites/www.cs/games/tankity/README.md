@@ -55,20 +55,35 @@ Difficulty (`tankity-difficulty`), Sound, Music, Fullscreen and Flashes
 (`tankity-flashes`); then Scores, and in a room the turn time, Turn alerts,
 Standings and Leave room; and Quit.
 
-Theme picks the page's accent palette: Yellow, Lime, Cyan, Orange or Magenta.
-It colours the primary buttons and their hover, the focus ring, the card
-edges and highlights, the aim pad, Menu and the status bar's cash; the
-battlefield (hills, units, effects, FIRE's red) keeps its own colours. Each
-theme is a `[data-theme="..."]` block of custom properties at the top of
-`game.css` (`--accent`, `--accent-hover`, `--accent-ink` for text on the
-accent, `--accent-rgb` for tints, `--focus`), and `test/theme.test.ts`
-computes every pair against WCAG AA: button text 4.5:1 on the fill and on its
-hover, accent text 4.5:1 and the focus ring 3:1 on every dark surface. The
-default is the `data-theme` on `<html>` in `index.html`
-(`<html lang="en" data-theme="yellow">`; change that word to switch it). An
-inline script in the head swaps in the saved choice before the stylesheet
-loads, so the page never paints the default first; `src/theme.ts` saves a
-pick and sets the attribute at once.
+Theme picks the page's accent palette: Orange (the default for a player who has
+not chosen), Yellow, Lime, Cyan or Magenta, or Custom. It colours the primary
+buttons and their hover, the focus ring, the card edges and highlights, the aim
+pad, Menu and the status bar's cash; the battlefield (hills, units, effects,
+FIRE's red) keeps its own colours. Each preset is a `[data-theme="..."]` block
+of custom properties at the top of `game.css` (`--accent`, `--accent-hover`,
+`--accent-ink` for text on the accent, `--accent-rgb` for tints, `--focus`),
+and `test/theme.test.ts` computes every pair against WCAG AA: button text 4.5:1
+on the fill and on its hover, accent text 4.5:1 and the focus ring 3:1 on every
+dark surface.
+
+Custom sits under the five tiles with a swatch of its colour, a "Pick a
+colour" label and a native `<input type="color">` (the phone's own picker on a
+touch screen). It is focusable, and Q still closes the menu from it.
+`deriveCustomPalette` in `src/theme.ts` builds the same five tokens from that
+one colour in OKLCH: the fill keeps the hue and chroma at a lightness the dark
+panels can carry, hover and the focus ring are lighter steps, and the ink is
+dark or light, whichever reaches 4.5:1 on the fill and its hover (if neither
+does, the fill's lightness moves until one does). The colour is saved as
+`tankity-theme-custom` and the derived tokens as `tankity-theme-custom-palette`,
+which are set as inline properties on `<html>`; the unit tests hold the
+derivation to the same AA pairs for yellow, blue, black, white, grey and red.
+
+The default is the `data-theme` on `<html>` in `index.html`
+(`<html lang="en" data-theme="orange">`) and `DEFAULT_THEME` in `src/theme.ts`,
+which a test holds equal; a missing or unknown saved word reads as Orange. An
+inline script in the head swaps in the saved preset, or the saved Custom
+palette, before the stylesheet loads, so the page never paints the default
+first; `src/theme.ts` saves a pick and sets the attribute at once.
 
 Game speed: the FF button at the battlefield's top right, just under the status bar, reads 1×, 2× or 4×; each tap, or X, goes 1× → 2× → 4× → 1×. The war plays that many times as fast (shell flight, falls and parachutes, burns, the earth settling, effects, the drones' aiming and the settle, name cards and chatter) and ends exactly as it would at 1×: the solo war runs more of its fixed 1/60 s steps per frame, never a longer step. Your own aiming and driving, the camera, the music, the turn clocks and the shop clock keep wall time. Solo, the speed is yours, kept in this browser (`tankity-speed`); the demo always plays at 1×. In a room it is the room's: rooms start at 1×, the host turns it at any time (one log line tells everyone), and every client replays at it; a guest's button shows the room's speed and says the host sets it.
 
@@ -130,7 +145,7 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `src/view.ts` | The camera each frame (eased toward `src/camera.ts`'s target), and the `BattleView` snapshot the canvas paints each frame (whose turn marker shows, whether the aim arm is up, when the clock counts down). `createView(deps)` |
 | `src/tutorial.ts` | The coach (see Tutorial): which step is on, moving on when the player did it, Next and Skip, remembering a finished lesson, and the coach marks' props. `createTutorial(deps)` |
 | `src/coach.ts` | The tutorial's lesson as data (`COACH_STEPS`: target, text, keys, phase, completion test), how a lesson starts and moves on, and the bubble's geometry (`placeBubble`, `spotlight`). Pure |
-| `src/theme.ts` | The colour themes (see Settings): the five names, and the saved choice (`tankity-theme`, an unknown word reads as the page's default) set on `<html data-theme>` |
+| `src/theme.ts` | The colour themes (see Settings): the five names, Custom's derived palette, and the saved choice (`tankity-theme`, an unknown word reads as Orange) set on `<html data-theme>` |
 | `src/standings.ts` | This match's scoreboards: the room's match-end rule (`matchOutcome`, `winnerBonus`), room and solo rows (`roomBoard`, `soloBoard`), the filed line of an online score and the saved line of a local one (`localLine`), and `roomLocalSaver`, which saves a one-human room's score on this browser's board once per match |
 | `src/ui/standings.tsx` | The scoreboard table, at the top of the shop and on the end cards |
 | `src/scores.ts` | The scores overlay's data: the online board for a difficulty from `scores.php` (the latest load wins; the player's own rows marked), this browser's board for it, `saveLocal` for a finished run (the run just saved is marked), and a redraw when another tab saves. At load it moves the older `tankity-local` rows onto this browser's board. `createScores(deps)` |
@@ -1260,7 +1275,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/bomblets.test.ts`                       | Every cluster and scatter gun's bomblets burst as they land, fired either way on flat ground and hills: no frame holds a shell |
 | `test/weapon-keys.test.ts`                    | No logic in `src/` or `server/` compares a weapon to a key or lists keys, bare lists included (the Shell aside); how long a blast lingers (`gfx.linger`), that every gun flies a rendered body (`body.sprite`), a match's starting ammo (`start`) and the picker's shelf (`game.yaml` order, each cat together) come from `game.yaml` |
 | `test/coach.test.ts`                          | The tutorial's steps (`src/coach.ts`): their order and shape, short words, keys only in the keys line and all in the key table, no weapon named, each completion test before and after its move, where a lesson starts and how it moves on, and the bubble on screen and off its target's centre at phone, tablet and desktop sizes |
-| `test/theme.test.ts`                          | The themes: one `game.css` palette per name, every accent pair's computed WCAG contrast, no accent hard-coded outside the palettes, the head script that applies the saved theme before the stylesheet, and the saved choice's default, write and blocked storage |
+| `test/theme.test.ts`                          | The themes: one `game.css` palette per name, every accent pair's computed WCAG contrast, the derived Custom palette's pairs for yellow, blue, black, white, grey and red, the Orange default, no accent hard-coded outside the palettes, the head script that applies the saved theme before the stylesheet, and the saved choice's default, write and blocked storage |
 | `test/prefs-legacy.test.ts`                   | The saved settings (`tankity-body`, `tankity-text`, `tankity-tutorial`) read back through the kit's prefs exactly as the code before it wrote them, and the `tankity-local` and `tankity-scores-local` values |
 | `test/audio.test.ts`                          | `src/audio.ts` imports without a browser; the loop-point trim and the round-to-track mapping are right |
 | `test/audio-announce.test.ts` | Only Next song starts are announced as `'next'`: the theme, a round change (even one that takes over while Next song is loading) and a track standing in for a Next song that failed to load are `'auto'` |
@@ -1323,7 +1338,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `tests/tankity-data-deny.sh` | `games/tankity/data/` is refused over HTTP (`make test` runs it) |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
-| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only), and the end of a match (`tankity-end`: a lost solo match is saved on this browser's board, shows under "This browser" in Scores and sends nothing to the score server; `tankity-end-again`: Play again in a room; `tankity-end-forfeit`: a leave, the winner filed online, and the solo card after it saved locally; `tankity-end-out`: the you're-out card and Menu → Standings), the tutorial and the themes (`tankity-tutorial`: on a phone and a desktop, each step's bubble shows on screen with focus, the marked control is on top at its centre and ringed, doing the step moves on through the shop and the battle to the end, Skip and Q end it; Settings switches the theme's accent and a reload keeps it), and long games (`tankity-rooms-long`: the room link brings a closed tab back, Step out and Your games, the turn toast and Go, a lobby closed with Q listed, the turn time reaching everyone), and the game speed (`tankity-speed`: FF cycles 1×, 2×, 4× and the same seeded volley takes a half and a quarter of the wall time, kept across a reload; in a room the host's pick reaches the guest, who cannot change it). Each player context gives up its stored seats when a spec closes it (`tests/e2e/helpers.mjs`); `E2E_BASE_URL` points it at the live site |
+| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only), and the end of a match (`tankity-end`: a lost solo match is saved on this browser's board, shows under "This browser" in Scores and sends nothing to the score server; `tankity-end-again`: Play again in a room; `tankity-end-forfeit`: a leave, the winner filed online, and the solo card after it saved locally; `tankity-end-out`: the you're-out card and Menu → Standings), the tutorial and the themes (`tankity-tutorial`: on a phone and a desktop, each step's bubble shows on screen with focus, the marked control is on top at its centre and ringed, doing the step moves on through the shop and the battle to the end, Skip and Q end it; a fresh profile is Orange; Settings switches the theme's accent, Custom with the colour picker derives a readable palette, and a reload keeps it), and long games (`tankity-rooms-long`: the room link brings a closed tab back, Step out and Your games, the turn toast and Go, a lobby closed with Q listed, the turn time reaching everyone), and the game speed (`tankity-speed`: FF cycles 1×, 2×, 4× and the same seeded volley takes a half and a quarter of the wall time, kept across a reload; in a room the host's pick reaches the guest, who cannot change it). Each player context gives up its stored seats when a spec closes it (`tests/e2e/helpers.mjs`); `E2E_BASE_URL` points it at the live site |
 | `make e2e-changed` (site root) | Only the browser specs your changes need (`tests/e2e/select.mjs` maps touched files to specs; CI uses the same map) |
 
 `make test` from the site root runs every suite above except e2e. CI runs

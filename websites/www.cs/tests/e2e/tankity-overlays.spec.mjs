@@ -169,3 +169,129 @@ test('Menu → Quit ends the match and returns to the title card in a browser ta
   await expect(page.locator('#log-overlay')).not.toContainText('Swipe the app away');
   expect(errors).toEqual([]);
 });
+
+/* The Sound and Music sliders. Records the two buses (the gains wired to the
+   destination: sound first, then music) so a test reads what the speakers get. */
+function busProbe() {
+  window.__buses = [];
+  const connect = AudioNode.prototype.connect;
+  AudioNode.prototype.connect = function (to, ...a) {
+    if (this instanceof GainNode && to instanceof AudioDestinationNode && !window.__buses.includes(this)) window.__buses.push(this);
+    return connect.call(this, to, ...a);
+  };
+}
+async function volumePlayer(browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, serviceWorkers: 'block' });
+  await ctx.addInitScript(busProbe);
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto('games/tankity/');
+  await page.waitForTimeout(600);
+  return { ctx, page, errors };
+}
+const bus = (page, i) => page.evaluate(n => (window.__buses[n] ? window.__buses[n].gain.value : null), i);
+const SOUND = 0, MUSIC = 1, HEADROOM = 0.4;
+
+test('the music slider is remembered; mute zeroes the bus and unmute brings the level back', async ({ browser }) => {
+  const { ctx, page, errors } = await volumePlayer(browser);
+  await page.keyboard.press('q'); // the key press is the gesture that starts the audio
+  await expect(page.locator('#menu-overlay')).toBeVisible();
+  const slider = page.locator('#vol-music');
+  await expect(slider).toHaveValue('80');
+  await expect(slider).toHaveAttribute('aria-valuetext', 'Music 80%');
+  await slider.fill('30');
+  await expect(page.locator('output[for="vol-music"]')).toHaveText('30%');
+  await expect(slider).toHaveAttribute('aria-valuetext', 'Music 30%');
+  await expect.poll(() => bus(page, MUSIC)).toBeCloseTo(0.09 * HEADROOM, 5);
+
+  // The arrow keys move a focused slider; M mutes from it; Q still leaves the menu.
+  await slider.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(slider).toHaveValue('31');
+  await page.keyboard.press('ArrowLeft');
+  await expect(slider).toHaveValue('30');
+  await page.keyboard.press('m');
+  await expect(page.locator('#btn-music')).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(() => bus(page, MUSIC)).toBe(0);
+  await expect(slider).toHaveValue('30');
+  await page.locator('#btn-music').click();
+  await expect(page.locator('#btn-music')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => bus(page, MUSIC)).toBeCloseTo(0.09 * HEADROOM, 5);
+  await expect(slider).toHaveValue('30');
+  await slider.focus();
+  await page.keyboard.press('q');
+  await expect(page.locator('#menu-overlay')).toBeHidden();
+
+  // Sound is its own bus: the toggle mutes it and the slider's level returns.
+  await page.keyboard.press('q');
+  await page.locator('#vol-sound').fill('50');
+  await expect.poll(() => bus(page, SOUND)).toBeCloseTo(0.25, 5);
+  await page.locator('#btn-sound').click();
+  await expect.poll(() => bus(page, SOUND)).toBe(0);
+  await page.locator('#btn-sound').click();
+  await expect.poll(() => bus(page, SOUND)).toBeCloseTo(0.25, 5);
+
+  // Mute the music, reload: the level and the mute are both still there.
+  await page.locator('#btn-music').click();
+  await page.reload();
+  await page.waitForTimeout(600);
+  await page.keyboard.press('q');
+  await expect(page.locator('#vol-music')).toHaveValue('30');
+  await expect(page.locator('#vol-sound')).toHaveValue('50');
+  await expect(page.locator('#btn-music')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#btn-sound')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => bus(page, MUSIC)).toBe(0);
+  await page.locator('#btn-music').click();
+  await expect.poll(() => bus(page, MUSIC)).toBeCloseTo(0.09 * HEADROOM, 5);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+const VOLUME_SCREENS = [['phone 320', 320, 640, true], ['phone 393', 393, 852, true], ['tablet', 820, 1180, true], ['desktop', 1280, 800, false]];
+for (const [name, width, height, touch] of VOLUME_SCREENS) {
+  test(`the volume rows fit their controls on a ${name}, with thumb-sized targets on touch`, async ({ browser }) => {
+    test.setTimeout(40_000);
+    const { ctx, page } = await volumePlayer(browser);
+    await page.setViewportSize({ width, height });
+    await page.keyboard.press('q');
+    await expect(page.locator('#menu-overlay')).toBeVisible();
+    // Huge text on the narrowest phone overflows the menu's older rows too; the volume rows are held to it from 393 up.
+    for (const text of width >= 393 ? ['xl', 'm'] : ['m']) {
+      await page.evaluate(t => { document.documentElement.style.fontSize = t === 'xl' ? '130%' : '100%'; }, text);
+      await page.locator('#vol-music').scrollIntoViewIfNeeded();
+      await page.locator('#vol-music').fill('100'); // the widest percent
+      const probs = await page.evaluate(() => {
+        const out = [];
+        for (const row of document.querySelectorAll('#menu-overlay .vol-row')) {
+          const r = row.getBoundingClientRect();
+          const parts = [...row.children];
+          for (const el of parts) {
+            const b = el.getBoundingClientRect();
+            const what = el.id || el.className || el.tagName;
+            if (b.left < r.left - 0.5 || b.right > r.right + 0.5) out.push(`${what} leaves its row`);
+            if (el.scrollWidth > el.clientWidth + 0.5 && el.tagName !== 'INPUT') out.push(`${what} clips its words`);
+            if (b.top < r.top - 0.5 || b.bottom > r.bottom + 0.5) out.push(`${what} spills out of its row vertically`);
+          }
+          const tops = parts.map(el => Math.round(el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2));
+          if (Math.max(...tops) - Math.min(...tops) > 12) out.push(`${row.className} wraps onto two lines`);
+          const slider = row.querySelector('input').getBoundingClientRect();
+          if (slider.width < 70) out.push(`slider only ${Math.round(slider.width)}px wide`);
+        }
+        const o = document.getElementById('menu-overlay');
+        if (o.scrollWidth > o.clientWidth + 0.5) out.push('menu scrolls sideways');
+        return out;
+      });
+      expect(probs, `${name} at ${text}`).toEqual([]);
+      if (touch) {
+        for (const id of ['btn-sound', 'btn-music', 'vol-sound', 'vol-music']) {
+          const b = await page.locator('#' + id).boundingBox();
+          expect(b.height, `${id} height`).toBeGreaterThanOrEqual(43.5);
+          if (id.startsWith('btn')) expect(b.width, `${id} width`).toBeGreaterThanOrEqual(43.5);
+        }
+      }
+    }
+    await page.locator('#menu-overlay').screenshot({ path: `test-results/tankity-volume-${width}.png` });
+    await ctx.close();
+  });
+}

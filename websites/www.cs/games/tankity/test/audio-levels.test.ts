@@ -7,6 +7,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { MUSIC_HEADROOM, sfx, music, initAudio, noteGesture } from '../src/audio.ts';
+import { DEFAULT_LEVEL, gainFor } from '../src/volume.ts';
 import { fakeAudioContext } from '../../_kit/test/audio.ts';
 
 const ctx = fakeAudioContext();
@@ -18,7 +19,7 @@ test('music headroom is a real cut, under the effects bus', () => {
   assert.ok(MUSIC_HEADROOM > 0.2 && MUSIC_HEADROOM < 0.6, String(MUSIC_HEADROOM));
 });
 
-test('the buses: sound at full gain, music at the headroom (track player and synth alike)', async () => {
+test('the buses: at the default levels, sound and music through the curve, music under the headroom (track player and synth alike)', async () => {
   initAudio({ sfx: {}, music: [] }); // no tracks: the synth fallback plays
   noteGesture(false);
   sfx.play('boom');
@@ -28,8 +29,8 @@ test('the buses: sound at full gain, music at the headroom (track player and syn
   assert.equal(buses.length, 2);
   const [sound, mus] = buses;
   assert.ok(sound?.kind === 'gain' && mus?.kind === 'gain');
-  assert.equal(sound.gain.value, 1);
-  assert.equal(mus.gain.value, MUSIC_HEADROOM);
+  assert.equal(sound.gain.value, gainFor(DEFAULT_LEVEL.sound));
+  assert.equal(mus.gain.value, gainFor(DEFAULT_LEVEL.music) * MUSIC_HEADROOM);
   // Every synthesized music voice feeds the music bus, every effect the sound bus.
   const feeds = (bus: unknown) => ctx.nodes.filter(n => n.kind === 'gain' && n.to.includes(bus));
   assert.ok(feeds(mus).length > 0 && feeds(sound).length > 0);
@@ -54,17 +55,17 @@ function burstDb(a: Float32Array): number {
   return db(m);
 }
 
-test('at equal settings the music sits 6 to 10 dB under the loud effects', { skip: !ffmpeg && 'ffmpeg is not installed' }, () => {
+test('at the default levels the music sits 6 to 10 dB under the loud effects', { skip: !ffmpeg && 'ffmpeg is not installed' }, () => {
   const game = JSON.parse(readFileSync(dir + 'game.json', 'utf8')) as {
     audio: { sfx: Record<string, { file: string; volume: number }>; music: { file: string; volume: number }[] };
   };
   // The shell blast, the launch and the win fanfare: the loud ones.
   const effects = ['boom', 'launch', 'fanfare'].map(n => {
     const e = game.audio.sfx[n]!;
-    return burstDb(pcm(e.file, 5)) + db(e.volume); // sound bus gain is 1
+    return burstDb(pcm(e.file, 5)) + db(e.volume) + db(gainFor(DEFAULT_LEVEL.sound));
   });
   const effect = effects.reduce((a, b) => a + b, 0) / effects.length;
-  const tracks = game.audio.music.map(t => db(rms(pcm(t.file, 40), 0, 22050 * 40)) + db(t.volume * MUSIC_HEADROOM));
+  const tracks = game.audio.music.map(t => db(rms(pcm(t.file, 40), 0, 22050 * 40)) + db(t.volume * MUSIC_HEADROOM * gainFor(DEFAULT_LEVEL.music)));
   const mus = tracks.reduce((a, b) => a + b, 0) / tracks.length;
   const gap = effect - mus;
   console.log(`effects ${effect.toFixed(1)} dB (${effects.map(x => x.toFixed(1)).join(', ')}), music ${mus.toFixed(1)} dB, gap ${gap.toFixed(1)} dB`);

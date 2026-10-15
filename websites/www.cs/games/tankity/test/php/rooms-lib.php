@@ -94,3 +94,26 @@ function room_test_set(string $code, array $set): void
         $u->execute();
     });
 }
+
+/* A create or join body as the current bundle sends it, for the suites that
+   reach rooms.php over HTTP: the room protocol and the room puzzle, asked for
+   from $base (the URL of rooms.php's folder) and solved here at whatever bits
+   it came with. A body that already says `proto` or `pow` is sent as given. */
+function tankity_test_admit(string $base, string $action, array $body): array
+{
+    if (!in_array($action, ['create', 'join'], true) || array_key_exists('proto', $body) || array_key_exists('pow', $body)) {
+        return $body;
+    }
+    $ctx = stream_context_create(['http' => ['timeout' => 10, 'ignore_errors' => true]]);
+    $ch = json_decode((string) @file_get_contents($base . '/rooms.php?action=challenge&for=' . $action, false, $ctx), true);
+    if (!is_array($ch) || !is_string($ch['challenge'] ?? null)) {
+        return $body + ['proto' => ROOM_PROTO];
+    }
+    $found = [];
+    for ($n = 0; count($found) < (int) $ch['count']; $n++) {
+        if (room_pow_lead($ch['challenge'], $n) >= (int) $ch['bits']) {
+            $found[] = $n;
+        }
+    }
+    return $body + ['proto' => ROOM_PROTO, 'pow' => ['c' => $ch['challenge'], 'n' => $found]];
+}

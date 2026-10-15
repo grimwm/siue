@@ -61,6 +61,7 @@ final class RoomsStoreTest extends TestCase
     /** @return array{int, ?array} */
     private static function post(string $action, array $body): array
     {
+        $body = tankity_test_admit(self::$base, $action, $body);
         $ctx = stream_context_create(['http' => ['method' => 'POST', 'timeout' => 10, 'ignore_errors' => true,
             'header' => "Content-Type: application/json\r\n", 'content' => json_encode($body)]]);
         $raw = @file_get_contents(self::$base . '/rooms.php?action=' . $action, false, $ctx);
@@ -108,7 +109,7 @@ final class RoomsStoreTest extends TestCase
         $handles = [];
         foreach (['raz', 'ray'] as $who) {
             $h = curl_init(self::$base . '/rooms.php?action=create');
-            curl_setopt_array($h, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode(['initials' => $who]),
+            curl_setopt_array($h, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode(tankity_test_admit(self::$base, 'create', ['initials' => $who])),
                 CURLOPT_HTTPHEADER => ['Content-Type: application/json'], CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10]);
             curl_multi_add_handle($multi, $h);
             $handles[] = $h;

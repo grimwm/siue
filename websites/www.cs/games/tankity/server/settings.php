@@ -60,7 +60,7 @@ const ROOM_LOBBIES_PER_ADDRESS = 4;
 /* The room puzzle's difficulty (server/pow.php): leading zero bits a join's
    solutions need at rest; a create needs one more, and load adds up to two.
    0 turns the puzzle off. Measured in README "Room slots". */
-const ROOM_POW_BITS = 9;
+const ROOM_POW_BITS = 11;
 const ROOM_POW_BITS_MAX = 20;
 /* Creates from every address in ten minutes that count as a surge (one bit harder). */
 const ROOM_POW_SURGE = 60;

@@ -1,5 +1,6 @@
 // A modal panel inside its veil. The game says whether it is open; the dialog
-// moves focus in when it opens and back when it closes, and Q (the kit's back
+// moves focus in when it opens and back when it closes, keeps Tab inside the
+// panel while it is open (it is aria-modal), and Q (the kit's back
 // key, keys.ts) or a click on the veil itself calls onDismiss when the game
 // gives one. Escape does nothing here. A game whose own key router already
 // handles Q should not pass onDismiss for it.
@@ -22,10 +23,39 @@ export interface DialogProps {
   kickerId?: string;
   kickerClass?: string;
   describedBy?: string;
-  /** The element focused on opening; otherwise the panel's first usable button, else the panel. */
+  /** The element focused on opening; otherwise the panel's first usable button (enabled, and
+      neither it nor anything around it in the panel `hidden`), else the panel. */
   focusId?: string;
   onDismiss?: () => void;
   children?: ComponentChildren;
+}
+
+const TABBABLE = new Set(['button', 'input', 'select', 'textarea']);
+
+/** What Tab reaches inside `root`, in order: enabled controls (links with an
+ *  href, anything with a tabindex of 0 or more) outside any `hidden` subtree. */
+function tabbables(root: Element): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  const visit = (el: Element): void => {
+    for (const c of Array.from(el.children)) {
+      if (c.nodeType !== 1) continue;
+      const node = c as HTMLElement;
+      if (node.hidden) continue;
+      const tag = (node.localName || '').toLowerCase();
+      const index = node.getAttribute('tabindex');
+      const reach = index != null ? Number(index) >= 0
+        : TABBABLE.has(tag) || (tag === 'a' && node.getAttribute('href') != null);
+      if (reach && !(node as HTMLButtonElement).disabled) out.push(node);
+      visit(node);
+    }
+  };
+  visit(root);
+  return out;
+}
+
+function within(root: Element, el: Element | null): boolean {
+  for (let n: Node | null = el; n; n = n.parentNode) if (n === root) return true;
+  return false;
 }
 
 export function Dialog(p: DialogProps) {
@@ -48,7 +78,7 @@ export function Dialog(p: DialogProps) {
       const active = document.activeElement;
       returnTo.current = active && active !== document.body ? active : lastPressed();
       const named = p.focusId ? document.getElementById(p.focusId) : null;
-      const usable = Array.from(panel.current?.querySelectorAll('button') ?? []).find(b => !b.disabled && !b.hidden);
+      const usable = panel.current ? tabbables(panel.current).find(el => el.localName === 'button') : undefined;
       ((named ?? usable ?? panel.current) as HTMLElement | null)?.focus?.();
     } else if (!p.open && wasOpen.current) {
       giveFocusBack();
@@ -58,6 +88,32 @@ export function Dialog(p: DialogProps) {
 
   // A game that unmounts an open dialog still gets its focus back.
   useLayoutEffect(() => () => { if (wasOpen.current) giveFocusBack(); }, []);
+
+  // aria-modal: Tab and Shift+Tab wrap inside the panel, and focus that
+  // strayed behind the veil comes back in, so nothing under it is pressed.
+  useLayoutEffect(() => {
+    if (!p.open) return undefined;
+    const onTab = (ev: KeyboardEvent): void => {
+      const box = panel.current;
+      if (ev.key !== 'Tab' || ev.ctrlKey || ev.altKey || ev.metaKey || !box) return;
+      const items = tabbables(box);
+      const active = document.activeElement;
+      const inside = within(box, active);
+      if (!items.length) {
+        ev.preventDefault();
+        box.focus();
+        return;
+      }
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      const wrap = ev.shiftKey ? !inside || active === first || active === box : !inside || active === last;
+      if (!wrap) return;
+      ev.preventDefault();
+      (ev.shiftKey ? last : first).focus();
+    };
+    document.addEventListener('keydown', onTab, true);
+    return () => document.removeEventListener('keydown', onTab, true);
+  }, [p.open]);
 
   useLayoutEffect(() => {
     const dismiss = p.onDismiss;

@@ -149,6 +149,52 @@ test('a dialog with no usable button focuses its panel', () => {
   assert.equal(panel.getAttribute('tabIndex'), '-1');
 });
 
+test('the fallback skips a button inside something hidden', () => {
+  const root = mount();
+  render(dialog({ open: true }, [
+    h('div', { hidden: true }, h('button', { id: 'tucked' }, 'Tucked')),
+    h(Button, { id: 'ok', onClick() {} }, 'Ok'),
+  ]), root);
+  assert.equal(globalThis.__focused?.id, 'ok');
+});
+
+test('Tab stays in an open dialog: it wraps at either end and comes back in from outside', () => {
+  const root = mount();
+  render(dialog({ open: true }, [
+    h('button', { id: 'one' }, 'One'),
+    h('div', { hidden: true }, h('button', { id: 'tucked' }, 'Tucked')),
+    h('button', { id: 'off', disabled: true }, 'Off'),
+    h('button', { id: 'two' }, 'Two'),
+  ]), root);
+  const tab = (shiftKey = false) => fireDocument('keydown', { key: 'Tab', shiftKey });
+  assert.equal(document.activeElement?.id, 'one');
+  const back = tab(true);
+  assert.equal(back.prevented, true, 'Shift+Tab on the first wraps');
+  assert.equal(document.activeElement?.id, 'two');
+  const on = tab();
+  assert.equal(on.prevented, true, 'Tab on the last wraps');
+  assert.equal(document.activeElement?.id, 'one');
+  assert.equal(tab().prevented, false, 'between the ends the browser moves focus');
+  document.activeElement = makeEl('behind');
+  assert.equal(tab().prevented, true);
+  assert.equal(document.activeElement?.id, 'one', 'focus behind the veil comes back in');
+  document.activeElement = makeEl('behind');
+  tab(true);
+  assert.equal(document.activeElement?.id, 'two');
+  assert.equal(fireDocument('keydown', { key: 'Tab', ctrlKey: true }).prevented, false, 'Ctrl+Tab is the browser\'s');
+});
+
+test('Tab in a dialog with nothing to tab to keeps focus on its panel; a closed dialog leaves Tab alone', () => {
+  const root = mount();
+  render(dialog({ open: true }), root);
+  const panel = childEl(byId(root, 'veil'));
+  document.activeElement = makeEl('behind');
+  assert.equal(fireDocument('keydown', { key: 'Tab' }).prevented, true);
+  assert.equal(document.activeElement, panel);
+  render(dialog({ open: false }, h('button', { id: 'one' }, 'One')), root);
+  assert.equal(fireDocument('keydown', { key: 'Tab' }).prevented, false);
+});
+
 test('Q and a click on the veil dismiss; a click inside does not', () => {
   const root = mount();
   let dismissed = 0;

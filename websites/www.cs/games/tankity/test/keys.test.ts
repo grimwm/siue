@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { FALLBACK_KEYS, buildKeymap, lookupKey, keycap, createInput, gridCommand } from '../src/input.ts';
 import type { Command, CommandTable, KeyDefs, KeyLike } from '../src/input.ts';
+/** A pad button's tap timer, for tests that tap none. */
+const NO_TIMER = (): void => {};
 
 const GAME: { keys: KeyDefs } = JSON.parse(fs.readFileSync(new URL('../game.json', import.meta.url), 'utf8'));
 const map = buildKeymap(GAME.keys);
@@ -18,7 +20,7 @@ const ev = (o: EvInit): Ev => {
 const arrowLeft = (o: EvInit = {}) => ev({ code: 'ArrowLeft', key: 'ArrowLeft', ...o });
 const shift = (o: EvInit = {}) => ev({ code: 'ShiftLeft', key: 'Shift', ...o });
 function rig() {
-  const input = createInput({ touch: false });
+  const input = createInput({ touch: false, setTimeout: NO_TIMER });
   input.setKeys(GAME.keys);
   return input;
 }

@@ -190,6 +190,9 @@ export class Held {
 
 /** How fast a held key moves the arm, per second. */
 export const ARM_RATE = Object.freeze({ barrelDegrees: 42, power: 45 });
+/** How long a pad button activated without a pointer (Enter or Space on it,
+ *  a screen reader, a switch) holds its command: one short tap. */
+export const HOLD_TAP_MS = 150;
 export const ARM_LIMITS = Object.freeze({ angleMin: 10, angleMax: 170, powerMin: 10, powerMax: 100 });
 
 export interface ArmStep {
@@ -286,7 +289,7 @@ export interface KeyTarget {
 export interface HoldButton {
   addEventListener(type: 'pointerdown', fn: (ev: { preventDefault(): void }) => void): void;
   addEventListener(type: 'pointerup' | 'pointerleave', fn: () => void): void;
-  addEventListener(type: 'click', fn: (ev: { currentTarget: { blur?(): void } | null }) => void): void;
+  addEventListener(type: 'click', fn: (ev: { currentTarget: { blur?(): void } | null; detail?: number }) => void): void;
 }
 
 export interface Input {
@@ -305,11 +308,14 @@ export interface Input {
   keyup(e: KeyLike): void;
   /** Listen on a window: keys (not on touch screens) and the blur that drops held keys. */
   bind(win: KeyTarget): void;
-  /** Make a button hold a command for as long as the pointer is down on it. */
+  /** Make a button hold a command for as long as the pointer is down on it;
+   *  activated without a pointer, it holds the command for HOLD_TAP_MS. */
   bindHold(btn: HoldButton, cmd: HoldCommand): void;
 }
 
-export function createInput(opts: { touch: boolean; onKeyboard?: () => void }): Input {
+/** `setTimeout` times a pad button's tap (bindHold); the page passes the window's. */
+export function createInput(opts: { touch: boolean; onKeyboard?: () => void; setTimeout: (fn: () => void, ms: number) => void }): Input {
+  const later = opts.setTimeout;
   /** True until a physical key is pressed on a touch device. */
   let touch = opts.touch;
   let defs: KeyDefs = FALLBACK_KEYS;
@@ -484,7 +490,14 @@ export function createInput(opts: { touch: boolean; onKeyboard?: () => void }): 
       });
       btn.addEventListener('pointerup', () => held.release(cmd));
       btn.addEventListener('pointerleave', () => held.release(cmd));
-      btn.addEventListener('click', ev => { if (ev.currentTarget && ev.currentTarget.blur) ev.currentTarget.blur(); });
+      btn.addEventListener('click', ev => {
+        if (ev.currentTarget && ev.currentTarget.blur) ev.currentTarget.blur();
+        // A pointer already held it; a click with no pointer behind it is a tap.
+        if (ev.detail !== 0) return;
+        held.press(cmd);
+        if (ctx.onHold) ctx.onHold(cmd);
+        later(() => held.release(cmd), HOLD_TAP_MS);
+      });
     },
   };
 }

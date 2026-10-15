@@ -121,6 +121,7 @@ const TOUCH = touchOnly(typeof window.matchMedia === 'function' ? q => window.ma
 let touchNow = TOUCH;
 const input = createInput({
   touch: TOUCH,
+  setTimeout: (fn, ms) => { window.setTimeout(fn, ms); },
   onKeyboard() {
     touchNow = false;
     try { sessionStorage.setItem(KEYBOARD_SEEN, '1'); } catch { /* the keys still show for this page */ }

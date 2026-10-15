@@ -5,9 +5,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
-  FALLBACK_KEYS, buildKeymap, lookupKey, keycap, createInput, stepArm, Held, ARM_RATE, touchOnly, physicalKey, gridCommand,
+  FALLBACK_KEYS, buildKeymap, lookupKey, keycap, createInput, stepArm, Held, ARM_RATE, touchOnly, physicalKey, gridCommand, HOLD_TAP_MS,
 } from '../src/input.ts';
 import type { ArmStep, HoldButton, KeyContext, KeyDefs, KeyLike } from '../src/input.ts';
+/** A pad button's tap timer, for tests that tap none. */
+const NO_TIMER = (): void => {};
 
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 
@@ -54,7 +56,7 @@ const ev = (o: Omit<KeyLike, 'preventDefault'> = {}): Ev => {
   return e;
 };
 function rig(extraCtx = {}) {
-  const input = createInput({ touch: false });
+  const input = createInput({ touch: false, setTimeout: NO_TIMER });
   input.setKeys(GAME.keys);
   const calls: string[] = [];
   return { input, calls, log: (name: string) => () => { calls.push(name); } };
@@ -278,14 +280,14 @@ function rig(extraCtx = {}) {
 }
 {
   // Touch screens route no keys (the listener waits for a real one), and still drop held buttons on blur.
-  const input = createInput({ touch: true });
+  const input = createInput({ touch: true, setTimeout: NO_TIMER });
   const types: string[] = [];
   input.bind({ addEventListener: (type: string) => types.push(type) });
   await test('touch-routes-no-keys-until-a-real-one', () => { assert.ok(types.includes('keydown') && types.includes('blur'), types.join()); });
 }
 {
   // Hold buttons: down holds (and wakes audio), up and leave release.
-  const input = createInput({ touch: false });
+  const input = createInput({ touch: false, setTimeout: NO_TIMER });
   let holds = 0;
   input.register({}, { onHold: () => { holds++; } });
   /** The button's listeners, by event type. */
@@ -293,7 +295,7 @@ function rig(extraCtx = {}) {
     pointerdown?: (ev: { preventDefault(): void }) => void;
     pointerup?: () => void;
     pointerleave?: () => void;
-    click?: (ev: { currentTarget: { blur?(): void } | null }) => void;
+    click?: (ev: { currentTarget: { blur?(): void } | null; detail?: number }) => void;
   } = {};
   type Listener = NonNullable<(typeof on)[keyof typeof on]>;
   let blurred = 0;
@@ -309,8 +311,24 @@ function rig(extraCtx = {}) {
   pointerdown({ preventDefault() {} });
   pointerup();
   await test('hold-button-up-releases', () => { assert.ok(!input.held.has('driveLeft')); });
-  click({ currentTarget: { blur: () => { blurred++; } } });
+  click({ currentTarget: { blur: () => { blurred++; } }, detail: 1 });
   await test('hold-button-click-blurs', () => { assert.ok(blurred === 1); });
+  await test('hold-button-pointer-click-adds-nothing', () => { assert.ok(!input.held.has('driveLeft') && holds === 2); });
+}
+{
+  // Enter or Space on a focused pad button, or a screen reader's activation,
+  // is a click with no pointer (detail 0): it holds the command for one tap.
+  const timers: { fn: () => void; ms: number }[] = [];
+  const input = createInput({ touch: false, setTimeout: (fn, ms) => { timers.push({ fn, ms }); } });
+  const holds: string[] = [];
+  input.register({}, { onHold: cmd => { holds.push(cmd); } });
+  let click: ((ev: { currentTarget: { blur?(): void } | null; detail?: number }) => void) | undefined;
+  const button: HoldButton = { addEventListener: (type: string, fn: never) => { if (type === 'click') click = fn; } };
+  input.bindHold(button, 'barrelLeft');
+  click!({ currentTarget: { blur() {} }, detail: 0 });
+  await test('hold-button-keyboard-click-holds-a-tap', () => { assert.ok(input.held.has('barrelLeft') && holds.join() === 'barrelLeft' && timers.length === 1 && timers[0]!.ms === HOLD_TAP_MS); });
+  timers[0]!.fn();
+  await test('hold-button-keyboard-tap-lets-go', () => { assert.ok(!input.held.has('barrelLeft')); });
 }
 
 // ---- held keys and the arm, on a fake clock ----
@@ -394,7 +412,7 @@ await test('physical-key-not-composing', () => { assert.ok(physicalKey({ key: 'a
 function boundTouch() {
   const log: string[] = [];
   const on: Record<string, (e: KeyLike) => void> = {};
-  const input = createInput({ touch: true, onKeyboard: () => log.push('keyboard') });
+  const input = createInput({ touch: true, setTimeout: NO_TIMER, onKeyboard: () => log.push('keyboard') });
   input.register({ music: () => { log.push('music'); } });
   input.bind({ addEventListener: (type: string, fn: (e: KeyLike) => void) => { on[type] = fn; } });
   const press = (e: KeyLike) => { const fn = on['keydown']; assert.ok(fn); fn(e); };

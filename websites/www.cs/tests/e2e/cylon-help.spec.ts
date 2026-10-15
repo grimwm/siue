@@ -1,4 +1,5 @@
 // Cylon: opening How to Play mid-flight pauses the nuke; closing it resumes.
+// A hidden tab pauses it the same way.
 import { test, expect } from '@playwright/test';
 
 test('How to Play during the intro nuke pauses it, and closing it finishes the intro', async ({ page }) => {
@@ -21,6 +22,26 @@ test('How to Play during the intro nuke pauses it, and closing it finishes the i
   // The nuke lands and combat begins.
   await expect(nuke).not.toHaveClass(/is-flying/, { timeout: 10_000 });
   await expect.poll(() => page.evaluate(() => document.body.classList.contains('cylon-intro-hero')), { timeout: 10_000 }).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('a hidden tab pauses the run like How to Play, and showing it again carries on', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto('./?game=cylon');
+  const nuke = page.locator('#cylon-nuke-missile');
+  await expect(nuke).toHaveClass(/is-flying/, { timeout: 5000 });
+  const setHidden = (hidden: boolean) => page.evaluate(h => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (h ? 'hidden' : 'visible') });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, hidden);
+  await setHidden(true);
+  const y0 = await nuke.evaluate(el => (el as HTMLElement).style.top);
+  await page.waitForTimeout(800);
+  expect(await nuke.evaluate(el => (el as HTMLElement).style.top)).toBe(y0);
+  await expect(page.locator('#cylon-help')).toBeHidden();
+  await setHidden(false);
+  await expect(nuke).not.toHaveClass(/is-flying/, { timeout: 10_000 });
   expect(errors).toEqual([]);
 });
 

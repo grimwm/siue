@@ -220,6 +220,24 @@ test('a custom colour round-trips through storage and is shown at once', () => {
   assert.equal(root.props.get('--accent'), p.accent);
 });
 
+test('a saved Custom whose palette is missing or stale is shown and saved again at start, so the page and the menu agree', () => {
+  // The head script left Orange up: the palette write was refused, or the key was cleared.
+  const storage = memoryStorage({ 'tankity-theme': 'custom', 'tankity-theme-custom': '#3366ff' });
+  const root = fakeRoot('orange');
+  const theme = themeSetting(storage, root);
+  theme.apply();
+  const p = deriveCustomPalette('#3366ff');
+  assert.equal(root.attrs.get('data-theme'), 'custom');
+  assert.equal(root.props.get('--accent'), p.accent);
+  assert.match(storage.data.get(CUSTOM_PALETTE_PREF)!, new RegExp(`--accent:${p.accent};`), 'the next page paints it before the stylesheet');
+  // A preset is shown as saved, and nothing is written for it.
+  const preset = memoryStorage({ 'tankity-theme': 'lime' });
+  const presetRoot = fakeRoot('orange');
+  themeSetting(preset, presetRoot).apply();
+  assert.equal(presetRoot.attrs.get('data-theme'), 'lime');
+  assert.equal(preset.data.has(CUSTOM_PALETTE_PREF), false);
+});
+
 test('a malformed custom colour is ignored', () => {
   const storage = memoryStorage({ 'tankity-theme-custom': 'blue' });
   const root = fakeRoot('orange');

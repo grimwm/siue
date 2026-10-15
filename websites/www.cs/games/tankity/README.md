@@ -84,7 +84,10 @@ The default is the `data-theme` on `<html>` in `index.html`
 which a test holds equal; a missing or unknown saved word reads as Orange. An
 inline script in the head swaps in the saved preset, or the saved Custom
 palette, before the stylesheet loads, so the page never paints the default
-first; `src/theme.ts` saves a pick and sets the attribute at once.
+first; `src/theme.ts` saves a pick and sets the attribute at once. When the
+menu starts it shows the saved choice again (`apply()`), so a Custom whose
+saved palette was missing or malformed is painted anyway and its palette
+saved again, and the page always wears what the menu shows.
 
 Game speed: the FF button at the battlefield's top right, just under the status bar, reads 1×, 2× or 4×; each tap, or X, goes 1× → 2× → 4× → 1×. The war plays that many times as fast (shell flight, falls and parachutes, burns, the earth settling, effects, the drones' aiming and the settle, name cards and chatter) and ends exactly as it would at 1×: the solo war runs more of its fixed 1/60 s steps per frame, never a longer step. Your own aiming and driving, the camera, the music, the turn clocks and the shop clock keep wall time. Solo, the speed is yours, kept in this browser (`tankity-speed`); the demo always plays at 1×. In a room it is the room's: rooms start at 1×, the host turns it at any time (one log line tells everyone), and every client replays at it; a guest's button shows the room's speed and says the host sets it.
 
@@ -1468,7 +1471,9 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   handler per command) and an `InputContext` (`shopLive`, `modalOpen`/`modalBack`,
   `onHold`); `bind(window)` listens (no key listeners on a touch-only screen, but
   blur still drops the held keys); `bindHold(button, command)` makes an
-  on-screen pad button hold a command while the pointer is down; `held` is the
+  on-screen pad button hold a command while the pointer is down, and a click
+  with no pointer behind it (Enter or Space on the focused button, a screen
+  reader, a switch) hold it for one `HOLD_TAP_MS` (150 ms) tap; `held` is the
   set of held aim and drive commands; `lookup`, `hint` and `setKeys` serve the
   key table (Shift+ and Ctrl+ tokens win while that modifier is held, then
   `event.code`, then `event.key`). A handler returns `true` when it used the key

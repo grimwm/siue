@@ -127,8 +127,10 @@ export function createMenu(deps: MenuDeps) {
   }
   /* Theme: the accent colours of every panel and button (src/theme.ts), kept
      in this browser. index.html put the saved one on <html> before the first
-     paint; a pick here saves it and repaints at once. */
+     paint, and it is shown again here in case that could not; a pick here
+     saves it and repaints at once. */
   const theme = themeSetting(browserStorage(), typeof document === 'undefined' ? null : document.documentElement);
+  theme.apply(); // the page wears what the menu says, whatever the head script managed
   function chooseTheme(key: string): void {
     if (!isTheme(key)) return;
     theme.set(key);

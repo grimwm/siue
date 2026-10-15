@@ -83,3 +83,13 @@ test('opening How to Play focuses its button first, so closing can return focus 
   const focusAt = open.indexOf('helpBtn?.focus()');
   assert.ok(focusAt > 0 && focusAt < open.indexOf('helpOpen = true'));
 });
+
+test('the drones are buttons a screen reader can reach: no container of theirs is aria-hidden', () => {
+  const mount = read('mount.html');
+  for (const id of ['cylon-battlefield', 'cylon-ambush-under']) {
+    const tag = new RegExp(`<div[^>]*id="${id}"[^>]*>`).exec(mount);
+    assert.ok(tag, id);
+    assert.doesNotMatch(tag[0], /aria-hidden/, id);
+    assert.match(tag[0], /role="group" aria-label="[^"]+"/, id);
+  }
+});

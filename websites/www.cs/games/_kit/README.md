@@ -84,6 +84,17 @@ what each setting means stay in the game. Without Web Audio, or when making
 the context throws, every call is silent. Tests use `fakeAudioContext()` from
 `test/audio.ts`, which records every node and parameter call.
 
+## The page's life (`page-life.ts`)
+
+`followPage({ doc, win }, { hide, show, close })` follows the page: hidden
+(`visibilitychange`), frozen (`freeze`) or leaving (`pagehide`) calls `hide`;
+visible again (`visibilitychange`, `resume`, `pageshow`, only while the
+document is not hidden) calls `show`; a `pagehide` that will not come back
+from the back/forward cache also calls `close`. A page that starts hidden
+hides at once. Each game decides what going quiet means: Tankity suspends its
+sound and pauses its media; Cylon pauses the run as How to Play does and
+holds its sound.
+
 ## Components (`ui/`)
 
 Preact components every game draws its overlays with. A page keeps an empty
@@ -91,8 +102,11 @@ mount point; the game's module renders a component into it with a finished
 view of its state and callbacks, and redraws when the state changes.
 
 - `Dialog`: a modal panel in its veil. `open` shows it; on opening it focuses
-  `focusId` (or its first visible, enabled button, else the panel itself),
-  on closing it gives focus back; Q (the back key) and
+  `focusId` (or its first enabled button that neither is nor sits inside
+  anything `hidden` in the panel, else the panel itself), on closing it gives
+  focus back. While open it is `aria-modal`, and Tab and Shift+Tab wrap
+  inside the panel: focus never reaches the page behind the veil, and focus
+  found there is brought back in. Q (the back key) and
   a click on the veil (one that also began there) call `onDismiss`; a game
   whose own key router already handles Q should not pass `onDismiss`. Q
   typed into a box is a letter, and an open dialog stops Q there, so the game

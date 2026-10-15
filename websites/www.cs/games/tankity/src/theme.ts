@@ -169,6 +169,10 @@ export interface ThemeSetting {
   custom(): string;
   /** Saves a custom colour, makes Custom the theme and shows it at once. */
   setCustom(hex: string): void;
+  /** Shows the saved choice, at start: the head script painted it only if
+   *  its saved palette was there and well formed. Custom also saves its
+   *  palette again (derived from the saved colour), so the next page paints it. */
+  apply(): void;
 }
 
 /** The saved theme; a missing or unknown word reads as Orange. */
@@ -196,6 +200,11 @@ export function themeSetting(storage: StorageLike | null, root: ThemeRoot | null
       show(key);
     },
     custom,
+    apply() {
+      const key = this.get();
+      if (key === CUSTOM) this.set(CUSTOM);
+      else show(key);
+    },
     setCustom(hex) {
       const h = typeof hex === 'string' ? hex.toLowerCase() : '';
       if (!isHex(h)) return;

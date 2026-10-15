@@ -10,11 +10,13 @@ import { importTsx } from '../../_kit/test/tsx.ts';
 import { createInput } from '../src/input.ts';
 import type { KeyDefs } from '../src/input.ts';
 import type { KeyHintFn } from '../src/ui/chrome.tsx';
+/** A pad button's tap timer, for tests that tap none. */
+const NO_TIMER = (): void => {};
 
 installDocument();
 const { help } = await importTsx<{ help: typeof import('../src/ui/help.tsx') }>(import.meta.dirname, { help: '../src/ui/help.tsx' });
 const GAME: { keys: KeyDefs } = JSON.parse(fs.readFileSync(new URL('../game.json', import.meta.url), 'utf8'));
-const input = createInput({ touch: false });
+const input = createInput({ touch: false, setTimeout: NO_TIMER });
 input.setKeys(GAME.keys);
 const keyHint: KeyHintFn = (c, a, i) => input.hint(c, a, i);
 const hasClass = (el: StubElement, name: string) => String(el.className || '').split(' ').includes(name);

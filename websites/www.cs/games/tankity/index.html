@@ -14,7 +14,7 @@
 <script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__installPrompt = e; });</script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
 <!-- app-tags:end -->
-<link rel="stylesheet" href="game.css?v=ef2f7b5575">
+<link rel="stylesheet" href="game.css?v=142d6b5b02">
 </head>
 <body>
 <header class="topbar">
@@ -39,6 +39,8 @@
           <div class="dlg-text"><span id="dlg-name"></span><span id="dlg-line" aria-live="polite"></span></div>
         </div>
         <div id="track-toast" class="track-toast" role="status" aria-live="polite" hidden></div>
+        <button type="button" id="btn-speed" class="speed-btn" aria-label="Game speed 1×. Tap for 2×." title="Game speed 1×. Tap for 2×." hidden><span class="ic" aria-hidden="true">▶▶</span><span id="speed-val" class="v" aria-hidden="true">1×</span><kbd class="key" data-keyhint="global:speed" aria-hidden="true">X</kbd></button>
+        <span id="speed-live" class="sr-only" role="status" aria-live="polite"></span>
       </div>
       <div class="deck" id="deck" role="group" aria-label="Controls">
         <div class="grp grp-aim" role="group" aria-labelledby="deck-aim-h">
@@ -105,7 +107,7 @@
 </main>
 
 <script src="dist/fx.js?v=e3e36f7f39" defer></script>
-<script type="module" src="dist/main.js?v=2ebe71d4eb"></script>
+<script type="module" src="dist/main.js?v=1fdf3fa28e"></script>
 <script src="dist/install.js?v=6eb4810890" defer></script>
 </body>
 </html>

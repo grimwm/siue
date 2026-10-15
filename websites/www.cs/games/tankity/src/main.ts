@@ -45,7 +45,9 @@ import {
 import type { AudioConfig } from './audio.ts';
 import { installAudioPage } from './audio-page.ts';
 import { RoomClient, prettyRoomError } from './net.ts';
-import { SOLO_STEP, WAR_REST, runFixed, warSpeed } from './flow.ts';
+import { WAR_REST } from './flow.ts';
+import { createSpeedSender, nextSpeed, speedLabel, speedSetting, speedTitle } from './speed.ts';
+import type { Speed } from './speed.ts';
 import type { HoldCommand } from './input.ts';
 import { createPreview, stepPreview } from './preview.ts';
 import { createReplay } from './replay.ts';
@@ -318,14 +320,20 @@ function frame(ts: number): void {
   music.watchdog();
   const dt = Math.min(0.05, (ts - lastT) / 1000 || 0.016);
   lastT = ts;
+  // Game time: the frame's wall time at the game speed (the FF button). The
+  // war, its effects, the falls, the name cards and the chatter run on it;
+  // the player's own aiming and driving, the camera and the clouds keep wall time.
+  const speed = gameSpeed();
+  const gdt = dt * speed;
+  renderSpeed();
   // The firing range runs on its own, even over the pre-match shop.
   if (G.preview) stepPreview(G.preview, dt, previewEnv);
   // Name cards tick on sim time so a throttled background tab can never
   // strand the game between rounds; on return the card simply finishes.
-  tickBanner(dt);
+  tickBanner(gdt);
   // Room matches render the server snapshot; the server runs the war.
   if (net.on) {
-    netFrame(dt);
+    netFrame(dt, gdt);
     if (G.terrain) { render(); renderHUD(); }
     return;
   }
@@ -333,23 +341,23 @@ function frame(ts: number): void {
   if (G.phase === 'banner') {
     G.time += dt;
     driftClouds(dt);
-    pumpDialogue(dt);
+    pumpDialogue(gdt);
     updateCamera(dt);
     render();
     renderHUD();
     return;
   }
   if (!G.tanks.length) { render(); renderHUD(); return; }
-  if (G.over) { pumpDialogue(dt); render(); renderHUD(); return; }
+  if (G.over) { pumpDialogue(gdt); render(); renderHUD(); return; }
   G.time += dt;
-  decayFx(dt);
+  decayFx(gdt);
   // In the war, tanks fall inside its fixed steps (below), shells or no
   // shells; anywhere else they fall by the frame.
   const war = G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle';
-  if (!war) fallTanks(dt);
+  if (!war) fallTanks(gdt);
   tickTutorial();
   driftClouds(dt);
-  pumpDialogue(dt);
+  pumpDialogue(gdt);
   G.banterT -= dt;
   if (G.banterT <= 0) {
     G.banterT = 30 + Math.random() * 14;
@@ -389,20 +397,78 @@ function frame(ts: number): void {
     }
     if (!driving) driveRefused = false;
   } else if (war) {
-    // Fixed SOLO_STEP steps whatever the frame rate, each dropping the tanks
-    // and then moving the war on, so the war plays the same at any frame rate;
-    // with the player's tank wrecked the drones play on at triple speed.
-    warAcc = runFixed(warAcc, dt * warSpeed(me().hp > 0, G.demo), SOLO_STEP, h => {
-      fallTanks(h);
-      stepWar(h);
-      return !G.over && (G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle');
-    });
+    // The war in fixed steps (match.ts warFrame): a faster game runs more of
+    // the same steps, so it plays out exactly as it would at 1×.
+    warAcc = warFrame(warAcc, gdt, speed);
   } else {
     warAcc = WAR_REST;
   }
   updateCamera(dt);
   render();
   renderHUD();
+}
+
+/* ---------- the game speed: the FF button (src/speed.ts) ---------- */
+/* Solo, the player's speed, kept in this browser. In a room, the room's:
+   the host's pick shows at once and is sent once it has stood (the server
+   answers with the room, and one log line for everyone); a refusal leaves
+   the room's speed as it was. */
+const soloSpeed = speedSetting(browserStorage());
+const speedSender = createSpeedSender({
+  send: async s => { net.apply((await net.post('speed', { speed: s })).room); },
+  refused: err => { say(prettyRoomError(err), 'bad'); sfx.play('warn'); },
+  settled: () => renderSpeed(),
+  setTimeout: (fn, ms) => setTimeout(fn, ms),
+  clearTimeout: id => clearTimeout(id as number),
+});
+/** The speed the war plays at now. The demo always plays at 1×. */
+function gameSpeed(): Speed {
+  if (net.on) return speedSender.pending() ?? net.speed;
+  return G.demo ? 1 : soloSpeed.get();
+}
+/* The button shows over a match (solo or a room), never over the demo. Its
+   words, tooltip and the live line change only when something does. */
+let speedShown = '';
+let speedSaid: Speed | null = null;
+function renderSpeed(): void {
+  const b = $('btn-speed');
+  if (!b) return;
+  const s = gameSpeed();
+  const show = net.on || (!G.demo && G.tanks.length > 0);
+  const room = net.on ? { host: net.isHost } : null;
+  const key = `${show}|${s}|${room ? room.host : '-'}`;
+  if (key === speedShown) return;
+  speedShown = key;
+  b.hidden = !show;
+  const val = $('speed-val');
+  if (val) val.textContent = speedLabel(s);
+  const title = speedTitle(s, room);
+  b.setAttribute('aria-label', title);
+  b.title = title;
+  if (room && !room.host) b.setAttribute('aria-disabled', 'true');
+  else b.removeAttribute('aria-disabled');
+  const live = $('speed-live');
+  if (live && show && speedSaid !== null && speedSaid !== s) live.textContent = `Game speed ${speedLabel(s)}`;
+  speedSaid = show ? s : null;
+}
+/* A tap or the key: 1× → 2× → 4× → 1×. In a room only the host turns it. */
+function cycleSpeed(): void {
+  unlock();
+  if (net.on) {
+    if (!net.isHost) {
+      say('Only the host sets the game speed.', 'info');
+      sfx.play('thud');
+      return;
+    }
+    speedSender.pick(nextSpeed(gameSpeed()));
+  } else {
+    if (G.demo || !G.tanks.length) return;
+    const next = nextSpeed(soloSpeed.get());
+    soloSpeed.set(next);
+    say(`Game speed ${speedLabel(next)}.`, 'info');
+  }
+  sfx.play('click');
+  renderSpeed();
 }
 
 /* The room client (src/net.ts) owns the session, the
@@ -492,7 +558,7 @@ const seats = createSeatStore(browserStorage(), () => Date.now());
 const field = createFieldWidth(() => ({ w: window.innerWidth, h: window.innerHeight }));
 const {
   advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-  stepWar, decayFx, soloShopBoard, endVeilBack, checkOneUps,
+  warFrame, decayFx, soloShopBoard, endVeilBack, checkOneUps,
 } = createMatch({
   field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
@@ -527,7 +593,7 @@ const {
   backToLobby: () => netBackToLobby(),
   decayFx, fallTanks, fxImpact, fxSpecial, hideShop, pumpDialogue, refreshNavHints, render, renderEndVeil, renderHUD, renderShop,
   renderShopReady, shownAngle, shownPower, startBanner, updateCamera, driftClouds, windText, saveLocal, renderMenu: () => renderMenu(),
-  alertsOn: () => alertsState() === 'on',
+  alertsOn: () => alertsState() === 'on', renderSpeed: () => renderSpeed(),
 });
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving. */
 const {
@@ -853,6 +919,7 @@ function bindKeys(): void {
     tutorial: () => { tutorialOpen(); },
     battlePreview: () => { togglePreview(); },
     fullscreen: () => { toggleFullscreen(); },
+    speed: () => { cycleSpeed(); },
   }, {
     shopLive: p => G.phase === 'shop' && !G.over && !p.repeat,
     // The leave question holds every key but Q (which answers "stay").
@@ -916,6 +983,8 @@ function init(): void {
   if (cannon) cannon.addEventListener('click', ev => { blurTarget(ev); unlock(); music.start(); playerFire(); });
   const track = $('btn-track');
   if (track) track.addEventListener('click', ev => { blurTarget(ev); unlock(); music.next(); });
+  const ff = $('btn-speed');
+  if (ff) ff.addEventListener('click', ev => { blurTarget(ev); cycleSpeed(); });
   const weapon = $('btn-weapon');
   if (weapon) weapon.addEventListener('click', ev => { blurTarget(ev); if (gunsOpen()) closeGuns(); else openGuns(); });
   for (const [id, act] of [['btn-drive-l', 'driveLeft'], ['btn-drive-r', 'driveRight']] as const) {

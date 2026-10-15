@@ -26,6 +26,7 @@ import playAfterEarth from '../protocol/play-after-earth.json' with { type: 'jso
 import playAfterBurn from '../protocol/play-after-burn.json' with { type: 'json' };
 import playResync from '../protocol/play-resync.json' with { type: 'json' };
 import playTurntime from '../protocol/play-turntime.json' with { type: 'json' };
+import playSpeed from '../protocol/play-speed.json' with { type: 'json' };
 import mineReply from '../protocol/mine-reply.json' with { type: 'json' };
 import shopAfterWin from '../protocol/shop-after-win.json' with { type: 'json' };
 import shopReady from '../protocol/shop-ready.json' with { type: 'json' };
@@ -95,6 +96,7 @@ export const fixturesFit: {
   playAfterBurn: Fits<typeof playAfterBurn.body, RoomReply>;
   playResync: Fits<typeof playResync.body, RoomReply>;
   playTurntime: Fits<typeof playTurntime.body, RoomReply>;
+  playSpeed: Fits<typeof playSpeed.body, RoomReply>;
   mineReply: Fits<typeof mineReply.body, MineReply>;
   shopAfterWin: Fits<typeof shopAfterWin.body, RoomReply>;
   shopReady: Fits<typeof shopReady.body, RoomReply>;
@@ -114,6 +116,7 @@ export const fixturesFit: {
   playAfterBurn: true,
   playResync: true,
   playTurntime: true,
+  playSpeed: true,
   mineReply: true,
   shopAfterWin: true,
   shopReady: true,

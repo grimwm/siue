@@ -92,17 +92,70 @@ function room_json_out(int $code, array $payload): void
     echo json_encode($payload, JSON_UNESCAPED_SLASHES);
     exit;
 }
-/* Creating and joining a room spend one of the address's hourly allowance
-   (room_rate_take in server/rate.php); a 429 once it is spent. */
-function room_rate_gate(): void
+/* The front of create and join, in order and uncharged (README "Room
+   slots"): the protocol (an old bundle is told to reload), then the puzzle's
+   format, MAC, age and work (server/pow.php), then a plain read for a puzzle
+   already spent. Answers the challenge to spend, or null when the puzzle is
+   off. A join runs this before its code is read, so a guess without work
+   learns nothing. */
+function room_admit(array $body, string $purpose): ?string
 {
+    if (!room_proto_ok($body)) {
+        room_reload_out();
+    }
+    if (room_pow_bits_setting() === 0) {
+        return null;
+    }
     try {
-        $allowed = room_rate_take(tankity_guard()->clientKey(), time());
+        $refused = room_pow_check($body['pow'] ?? null, $purpose, room_now());
+        if ($refused !== null) {
+            room_json_out($refused[0], ['error' => $refused[2], 'puzzle' => $refused[1]]);
+        }
+        $challenge = (string) $body['pow']['c']; // the check passed, so it is a challenge string
+        $spent = room_pow_spent($challenge);
     } catch (Throwable $e) {
         room_store_fail($e);
     }
-    if (!$allowed) {
+    if ($spent) {
+        room_json_out(POW_SPENT[0], ['error' => POW_SPENT[2], 'puzzle' => POW_SPENT[1]]);
+    }
+    return $challenge;
+}
+
+/* Creating and joining a room spend one of the address's hourly allowance
+   (server/rate.php), a 429 once it is spent, and the puzzle admitted for it,
+   in one write transaction: a replay that raced past room_admit's read is
+   refused (409) with nothing charged, and an allowance refused leaves the
+   puzzle unspent. A create also counts toward the surge signal. */
+function room_rate_gate(?string $challenge, bool $create): void
+{
+    try {
+        $client = tankity_guard()->clientKey();
+        $now = time();
+        $perHour = room_joins_per_hour();
+        $db = tankity_db();
+        $out = rate_used($db, $client, 'room', $now) >= $perHour ? 'rate'
+            : tankity_tx($db, function (PDO $db) use ($client, $now, $perHour, $challenge, $create): string {
+                if (rate_used($db, $client, 'room', $now) >= $perHour) {
+                    return 'rate';
+                }
+                if ($challenge !== null && !room_pow_spend($db, $challenge)) {
+                    return 'spent';
+                }
+                rate_take($db, $client, 'room', $perHour, $now);
+                if ($create) {
+                    room_pow_count_create($db, $now);
+                }
+                return 'ok';
+            });
+    } catch (Throwable $e) {
+        room_store_fail($e);
+    }
+    if ($out === 'rate') {
         room_json_out(429, ['error' => 'too many rooms from here; try again later']);
+    }
+    if ($out === 'spent') {
+        room_json_out(POW_SPENT[0], ['error' => POW_SPENT[2], 'puzzle' => POW_SPENT[1]]);
     }
 }
 /* The arsenal lives in game.yaml, served as game.json (tools/game-json.php
@@ -152,7 +205,7 @@ function room_mine(mixed $seats): ?array
     $out = [];
     $seen = []; // a seat asked twice is looked up once
     foreach ($seats as $ask) {
-        $code = strtoupper(trim(is_array($ask) && is_string($ask['code'] ?? null) ? $ask['code'] : ''));
+        $code = room_code_clean(is_array($ask) && is_string($ask['code'] ?? null) ? $ask['code'] : '');
         $token = is_array($ask) && is_string($ask['token'] ?? null) ? $ask['token'] : '';
         $key = $code . '|' . $token;
         $seen[$key] ??= room_mine_one($code, $token);
@@ -164,7 +217,7 @@ function room_mine(mixed $seats): ?array
 function room_mine_one(string $code, string $token): array
 {
     $gone = ['code' => $code, 'gone' => true];
-    if (!preg_match('/^[A-Z0-9]{4}$/', $code) || $token === '') {
+    if (!preg_match(ROOM_CODE_RE, $code) || $token === '') {
         return $gone;
     }
     $room = room_peek($code);
@@ -222,6 +275,22 @@ if ($action === 'ping') {
         room_store_fail($e);
     }
     room_json_out(200, ['ok' => true, 'game' => 'operation-tankity', 'rooms' => $rooms, 'lobbies' => $lobbies]);
+}
+
+if ($action === 'challenge' && $method === 'GET') {
+    // A puzzle for a create or a join, signed and bound to this address. Not
+    // charged: issuing reads three counts and signs, and stores nothing.
+    $purpose = ['create' => 'c', 'join' => 'j'][(string) ($_GET['for'] ?? '')] ?? null;
+    if ($purpose === null) {
+        room_json_out(422, ['error' => 'ask for a create or a join puzzle']);
+    }
+    try {
+        $issued = room_pow_issue($purpose, room_now());
+    } catch (Throwable $e) {
+        room_store_fail($e);
+    }
+    header('Cache-Control: no-store');
+    room_json_out(200, ['ok' => true] + $issued);
 }
 
 if ($action === 'maps') {
@@ -315,11 +384,12 @@ if ($action === 'create' && $method === 'POST') {
     if (!room_origin_ok()) {
         room_json_out(403, ['error' => 'bad origin']);
     }
+    $challenge = room_admit($body, 'c');
     // Create opens a lobby: a place in the lobby pool, no match slot (Start
     // takes that). The address's lobby cap and a pool with nothing it may
     // close are answered from plain reads before anything is charged, so a
-    // lab clicking Host while every lobby is busy keeps its allowance; the
-    // exact checks are made again under the write lock below.
+    // lab clicking Host while every lobby is busy keeps its allowance and its
+    // puzzle; the exact checks are made again under the write lock below.
     try {
         $hostKey = room_client_hash();
         $hosting = room_lobbies_hosted($hostKey) >= room_lobbies_per_address();
@@ -333,7 +403,7 @@ if ($action === 'create' && $method === 'POST') {
     if ($busy) {
         room_json_out(409, ['error' => ROOM_LOBBIES_BUSY]);
     }
-    room_rate_gate();
+    room_rate_gate($challenge, true);
     $initials = room_valid_initials($body['initials'] ?? null);
     if ($initials === null) {
         room_json_out(422, ['error' => 'initials must be 3 letters, kept clean']);
@@ -398,11 +468,14 @@ if ($action === 'join' && $method === 'POST') {
     if (!room_origin_ok()) {
         room_json_out(403, ['error' => 'bad origin']);
     }
-    room_rate_gate();
-    $code = strtoupper(trim((string) ($body['code'] ?? '')));
+    // The work comes before the code is read: an unsolved guess at a live
+    // code and at a made-up one get the same answer.
+    $challenge = room_admit($body, 'j');
+    room_rate_gate($challenge, false);
+    $code = room_code_clean((string) ($body['code'] ?? ''));
     $initials = room_valid_initials($body['initials'] ?? null);
-    if (!preg_match('/^[A-Z0-9]{4}$/', $code) || $initials === null) {
-        room_json_out(422, ['error' => 'need a 4-character room code and clean 3-letter initials']);
+    if (!preg_match(ROOM_CODE_RE, $code) || $initials === null) {
+        room_json_out(422, ['error' => 'need a 6-character room code and clean 3-letter initials']);
     }
     $loaded = room_load($code);
     [$room, $fh, $path] = $loaded;
@@ -470,8 +543,8 @@ function room_gate(array $body, bool $needCsrf, bool $throttle = true, bool $sta
     if (!room_origin_ok()) {
         room_json_out(403, ['error' => 'bad origin']);
     }
-    $code = strtoupper(trim((string) ($body['code'] ?? '')));
-    if (!preg_match('/^[A-Z0-9]{4}$/', $code)) {
+    $code = room_code_clean((string) ($body['code'] ?? ''));
+    if (!preg_match(ROOM_CODE_RE, $code)) {
         room_json_out(422, ['error' => 'bad room code']);
     }
     $token = (string) ($body['token'] ?? '');
@@ -660,8 +733,8 @@ if ($action === 'start' && $method === 'POST') {
 }
 
 if ($action === 'state') {
-    $code = strtoupper(trim((string) (($body['code'] ?? $_GET['code'] ?? ''))));
-    if (!preg_match('/^[A-Z0-9]{4}$/', $code)) {
+    $code = room_code_clean((string) ($body['code'] ?? $_GET['code'] ?? ''));
+    if (!preg_match(ROOM_CODE_RE, $code)) {
         room_json_out(422, ['error' => 'bad room code']);
     }
     // A lobby or a finished match changes only by an act: a poll reads it

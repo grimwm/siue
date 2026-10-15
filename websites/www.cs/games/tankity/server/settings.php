@@ -12,8 +12,17 @@ if (!defined('TANKITY_ROOMS_INCLUDED')) {
 }
 
 const ROOM_GAME = 'operation-tankity';
-const ROOM_CODE_LEN = 4;
+const ROOM_CODE_LEN = 6;
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
+/* A room code as the server accepts it: six characters, or four for a room
+   made before codes grew (it keeps working until it ends). */
+const ROOM_CODE_RE = '/^(?:[A-Z0-9]{4}|[A-Z0-9]{6})$/';
+/* A code as a player may type or read it back: any case, with spaces or
+   hyphens (the lobby shows it as K7Q 2MX). */
+function room_code_clean(string $raw): string
+{
+    return strtoupper(str_replace([' ', '-', "\t"], '', trim($raw)));
+}
 const ROOM_SEATS = 4; // seat 0 hosts a new room (see room_host); every other seat starts as AI
 const ROOM_AI_NAMES = ['REAPER', 'WRAITH', 'SPOTTER', 'HUNTER'];
 const ROOM_MAX_ROOMS = 50; // built-in default; .config.yaml and env can change it

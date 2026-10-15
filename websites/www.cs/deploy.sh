@@ -271,4 +271,12 @@ sftp_batch "$work/chmod"
 } >"$work/stamp"
 chmod 644 "$work/stamp"
 scp -q -p "${mux[@]}" "$work/stamp" "$HOST:$STAMP"
-echo "www.cs: deployed ${hash:0:12}"
+
+# 5. Read the stamp back on the same connection: the host must now hold this
+# deploy's hash. A second deploy run to check would be a second login.
+scp -q "${mux[@]}" "$HOST:$STAMP" "$work/stamp-check"
+if [ "$(sed -n '1s/^sha256 //p' "$work/stamp-check")" != "$hash" ]; then
+  echo "deploy: $HOST:$STAMP does not hold ${hash:0:12} after the upload" >&2
+  exit 1
+fi
+echo "www.cs: deployed ${hash:0:12} (stamp verified)"

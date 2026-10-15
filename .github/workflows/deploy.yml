@@ -116,11 +116,9 @@ jobs:
           passfile="$RUNNER_TEMP/siue.pass"
           printf '%s\n' "$SIUE_PASSWORD" >"$passfile"
           trap 'rm -f "$passfile"' EXIT
+          # One login: deploy.sh reads the host's stamp back on the same
+          # connection and fails unless it holds this commit's content.
           make -C websites/www.cs deploy HOST="$host" SSHPASS_FILE="$passfile" PRUNE=1 FORCE="$FORCE"
-          # The host's stamp must now match this commit's content.
-          out=$(make -C websites/www.cs deploy HOST="$host" SSHPASS_FILE="$passfile" DRY_RUN=1)
-          echo "$out"
-          grep -q 'up to date' <<<"$out"
 
       - name: Check the live site
         if: steps.tip.outputs.skip != '1'

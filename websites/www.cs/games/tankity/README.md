@@ -147,6 +147,10 @@ php tools/install-files.php      # after the last edit to any served file
   needs no volume; add its row to CREDITS.md with the page's License(s) text,
   and `test/music-catalog.test.ts` fails until game.yaml, CREDITS.md,
   audio/music/ and the pins agree.
+  The music bus sits 8 dB down (`MUSIC_HEADROOM` in `src/audio.ts`, x0.4) because
+  -14 LUFS music otherwise drowns the effects: at equal settings the music lies
+  about 8 dB under the loud effects, which `test/audio-levels.test.ts` measures
+  (with ffmpeg) from the real files and bus gains.
 - A soundtrack track is looping action music for a tank battle, and each one
   meets every rule below; `build_music.sh --vet`, `--sha` and `--probe` check
   them:

@@ -27,6 +27,13 @@ export interface AudioConfig {
 
 /* ---------- audio context and voices: the kit's core ---------- */
 const core = createAudioCore();
+
+/** The music bus's gain. The soundtrack is normalised to -14 LUFS, streaming-loud
+ *  and far above the effects, so the bus sits 8 dB down (x0.4): at the same
+ *  setting the music lies about 8 dB under the loud effects. It covers the track
+ *  player and the synthesized songs alike; test/audio-levels.test.ts measures it. */
+export const MUSIC_HEADROOM = 0.4;
+core.setGain('music', MUSIC_HEADROOM);
 let musicMuted = false;
 let musicOn = false;
 let lastMusicTick = 0;
@@ -79,6 +86,11 @@ const SYNTH: Record<SfxName, () => void> = {
 type SfxState = 'idle' | 'loading' | 'ready' | 'failed';
 interface SfxFile { file: string; volume: number; state: SfxState; buf: AudioBuffer | null }
 let gestured = false;
+/* True while the page is hidden or gone: the context is held suspended, no
+   effect plays and no music timer runs (see pageHidden/pageVisible below). */
+let pageHidden = false;
+let pingTimer: ReturnType<typeof setTimeout> | 0 = 0;
+const PING_AWAKE_MS = 700;
 const SFX_FILES: Record<string, SfxFile> = {}; // event -> the file that voices it
 let MUSIC_LIST: Track[] = [];
 let trackIdx = 0;
@@ -153,11 +165,19 @@ function playSample(name: SfxName): boolean {
 /** Sound effects. */
 export const sfx = {
   /** The event's file when game.json has one that loaded, else its synthesized voice. */
-  play(name: SfxName): void { if (!playSample(name)) SYNTH[name](); },
-  /** The two-note ping for a turn that comes up in a hidden tab. */
-  turnPing(): void { blip(880, 0.12, 'sine', 0.08, null, 0); blip(1320, 0.18, 'sine', 0.07, null, 0.13); },
+  play(name: SfxName): void { if (pageHidden) return; if (!playSample(name)) SYNTH[name](); },
+  /** The two-note ping for a turn that comes up in a hidden tab: wakes the
+   *  suspended context for the ping alone, then suspends it again. */
+  turnPing(): void {
+    if (pageHidden && !core.isMuted('sfx')) {
+      core.wake();
+      clearTimeout(pingTimer);
+      pingTimer = setTimeout(() => { if (pageHidden) core.suspend(); }, PING_AWAKE_MS);
+    }
+    blip(880, 0.12, 'sine', 0.08, null, 0); blip(1320, 0.18, 'sine', 0.07, null, 0.13);
+  },
   /** Three beeps as the turn clock runs low. */
-  clockWarn(): void { for (let i = 0; i < 3; i++) blip(988, 0.09, 'square', 0.07, null, i * 0.16); },
+  clockWarn(): void { if (pageHidden) return; for (let i = 0; i < 3; i++) blip(988, 0.09, 'square', 0.07, null, i * 0.16); },
 };
 
 /* Punchy procedural war-grooves: four songs of 32 steps (two bars each),
@@ -248,7 +268,7 @@ interface TrackEntry { buf: AudioBuffer; start: number; end: number }
 /* One track's playback. While it is still loading it holds `heard`, the play
    the listener can hear, so switching, failing over or stopping can always
    fade that one out. */
-interface Play { idx: number; voices: { src: AudioBufferSourceNode; gain: GainNode }[]; timer: ReturnType<typeof setTimeout> | 0; heard: Play | null }
+interface Play { idx: number; voices: { src: AudioBufferSourceNode; gain: GainNode }[]; timer: ReturnType<typeof setTimeout> | 0; heard: Play | null; again: (() => void) | null; againAt: number }
 const TRACK_CACHE: Record<string, Promise<TrackEntry | null>> = {}; // file -> decoded track
 let trackPlay: Play | null = null;
 function trackMode(): boolean {
@@ -316,8 +336,18 @@ function playPass(play: Play, entry: TrackEntry, vol: number, when: number, fade
   play.voices.push({ src, gain });
   src.onended = () => { play.voices = play.voices.filter(v => v.src !== src); };
   const next = when + len - xf;
+  play.again = () => playPass(play, entry, vol, next, xf);
+  play.againAt = next;
+  armPass(play);
+}
+/* Arms the timer for a play's next pass; a held (suspended) clock arms nothing,
+   pageVisible re-arms it. */
+function armPass(play: Play): void {
   clearTimeout(play.timer);
-  play.timer = setTimeout(() => playPass(play, entry, vol, next, xf), Math.max(0, (next - ac.currentTime - 1) * 1000));
+  const ac = audioCtx();
+  if (!ac || !play.again || pageHidden) return;
+  const again = play.again;
+  play.timer = setTimeout(again, Math.max(0, (play.againAt - ac.currentTime - 1) * 1000));
 }
 function fadeOutPlay(play: Play | null, secs: number): void {
   const ac = audioCtx();
@@ -337,7 +367,7 @@ function playTrack(): void {
   if (!musicOn || musicMuted || !gestured || !trackMode()) return;
   const idx = trackIdx % MUSIC_LIST.length;
   if (trackPlay && trackPlay.idx === idx) return;
-  const play: Play = { idx, voices: [], timer: 0, heard: heardPlay() };
+  const play: Play = { idx, voices: [], timer: 0, heard: heardPlay(), again: null, againAt: 0 };
   trackPlay = play;
   const t = MUSIC_LIST[idx]!;
   loadTrack(t).then(entry => {
@@ -443,6 +473,42 @@ export const music = {
   /** Called once a track begins to play, with its game.json entry and why it began. */
   onTrackStart(callback: ((track: Track, cause: TrackCause) => void) | null): void { onTrackStart = callback; },
 };
+
+/* ---------- the page going away and coming back ---------- */
+/* A hidden tab must be silent: on Android the context keeps sounding after the
+   tab is closed or backgrounded unless the page suspends it. */
+
+/** The page is hidden (or freezing, or leaving): suspend the context, stop the
+ *  synth's scheduler and every track's next-pass timer. Music keeps its place:
+ *  a suspended clock holds each voice where it is. */
+export function pageHide(): void {
+  pageHidden = true;
+  stopSynth();
+  clearTimeout(trackPlay?.timer);
+  clearTimeout(trackPlay?.heard?.timer);
+  core.hold();
+}
+/** The page is visible again: the context resumes, and music resumes only if
+ *  it is on and not muted, from where each track was. */
+export function pageVisible(): void {
+  if (!pageHidden) return;
+  pageHidden = false;
+  clearTimeout(pingTimer);
+  core.release();
+  if (!musicOn || musicMuted) return;
+  if (trackPlay) {
+    armPass(trackPlay);
+    if (trackPlay.heard) armPass(trackPlay.heard);
+  } else if (trackMode()) playTrack();
+  else if (!musicTimer && audioCtx()) musicTimer = setInterval(musicStep, 60);
+}
+/** The page is gone for good (pagehide, not persisted): close the context. */
+export function pageClose(): void {
+  pageHide();
+  for (const p of [trackPlay, trackPlay?.heard]) if (p) { p.voices = []; p.again = null; }
+  trackPlay = null;
+  core.close();
+}
 
 /* ---------- gestures and mutes ---------- */
 

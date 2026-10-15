@@ -601,7 +601,7 @@ button.btn-leave[hidden] { display: none; }
 .title-tag { margin: 0 0 0.6rem; font-size: 0.75rem; color: #9aa3c7; }
 #frame .title-play {
   display: flex; align-items: center; justify-content: center; gap: 0.35rem;
-  width: 100%; padding: 0.65rem; margin-bottom: 0.45rem; font-size: 1rem; font-weight: 800; border-radius: 9px;
+  width: 100%; min-height: 44px; padding: 0.65rem; margin-bottom: 0.45rem; font-size: 1rem; font-weight: 800; border-radius: 9px;
 }
 .title-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
 #frame .title-row button, #frame .title-settings { flex: 1; padding: 0.45rem; background: #11163a; border-color: #3a3fb0; border-radius: 9px; }
@@ -643,7 +643,8 @@ input.initial { width: 2rem; height: 2rem; max-width: none; padding: 0; text-ali
 }
 /* Thumb-sized on touch screens. */
 @media (pointer: coarse) {
-  #frame .title-play, #frame .title-row button,   input.initial { width: 44px; height: 44px; }
+  #frame .title-play, #frame .title-row button, #frame .title-settings { min-height: 44px; }
+  input.initial { width: 44px; height: 44px; }
 }
 
 /* ---------- the frame: status bar, battlefield, control deck ----------

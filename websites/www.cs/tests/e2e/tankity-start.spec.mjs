@@ -122,6 +122,35 @@ for (const [width, height, touch] of [[375, 667, false], [390, 844, true], [844,
   });
 }
 
+/* Play is the card's primary button at every size: the full row, thumb tall, with its word and ▶ inside. */
+for (const [width, height, touch] of [[412, 915, true], [915, 412, true], [360, 740, true], [820, 1180, true], [1280, 720, false]]) {
+  test(`Play is the full-width primary button with its ▶ and word inside, at ${width}x${height}`, async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
+    const page = await ctx.newPage();
+    await page.goto('games/tankity/');
+    await expect(page.locator('#title-card')).toBeVisible();
+    const m = await page.evaluate(() => {
+      const btn = document.getElementById('title-play');
+      const b = btn.getBoundingClientRect();
+      const card = btn.parentElement;
+      const cs = getComputedStyle(card);
+      const content = card.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const row = document.querySelector('.title-row').getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(btn);
+      const t = range.getBoundingClientRect();
+      return { w: b.width, h: b.height, content, rowW: row.width, scroll: btn.scrollWidth, client: btn.clientWidth,
+        textL: t.left - b.left, textR: b.right - t.right, textT: t.top - b.top, textB: b.bottom - t.bottom };
+    });
+    expect(m.w, 'Play spans the row').toBeGreaterThanOrEqual(m.rowW - 1);
+    expect(m.w, 'Play spans the card content box').toBeGreaterThanOrEqual(m.content - 1);
+    expect(m.scroll, 'nothing overflows Play').toBeLessThanOrEqual(m.client);
+    for (const side of ['textL', 'textR', 'textT', 'textB']) expect(m[side], `the ▶ and word sit inside Play (${side})`).toBeGreaterThanOrEqual(-0.5);
+    expect(m.h, 'Play is thumb tall').toBeGreaterThanOrEqual(44);
+    await ctx.close();
+  });
+}
+
 test('R opens Scores over the title card and Q closes it', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);
   await page.keyboard.press('r');

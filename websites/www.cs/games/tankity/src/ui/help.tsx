@@ -39,6 +39,7 @@ export const HELP_KEYS: readonly (readonly [string, readonly (readonly [readonly
     [['global:nextTrack'], 'the next song'],
     [['global:sound'], 'sound effects on or off'],
     [['global:fullscreen'], 'fullscreen on or off'],
+    [['global:speed'], 'game speed: 1×, 2×, 4× (in a room, the host sets it)'],
   ]],
   ['Matches', [
     [['global:new'], 'a new match on the seed box\'s hills (in the shop: start the round)'],

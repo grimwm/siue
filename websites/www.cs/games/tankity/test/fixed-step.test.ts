@@ -90,3 +90,15 @@ test('a long stall runs at most MAX_STEPS in one frame', () => {
   runFixed(0, 10, SOLO_STEP, () => { n++; return true; });
   assert.equal(n, MAX_STEPS);
 });
+
+test('a faster game may run that many times the steps in one frame, and no more', () => {
+  let n = 0;
+  runFixed(0, 10, SOLO_STEP, () => { n++; return true; }, MAX_STEPS * 4);
+  assert.equal(n, MAX_STEPS * 4);
+  // 4× with the drones watched at 3×, on a 20 Hz frame (the cap main.ts allows): every step runs.
+  n = 0;
+  const left = runFixed(0, 0.05 * 4 * 3, SOLO_STEP, () => { n++; return true; }, MAX_STEPS * 4);
+  // 36 steps' worth; float noise can leave the last one a hair short, carried as the remainder.
+  assert.ok(n >= 35 && n <= 36, String(n));
+  assert.ok(Math.abs(n * SOLO_STEP + left - 0.6) < 1e-9);
+});

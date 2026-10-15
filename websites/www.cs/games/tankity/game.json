@@ -1383,6 +1383,9 @@
             "fullscreen": [
                 "f"
             ],
+            "speed": [
+                "x"
+            ],
             "fire": [
                 "Space",
                 " ",

@@ -1205,6 +1205,7 @@ keys:
     tutorial: [u]
     battlePreview: [v]
     fullscreen: [f]
+    speed: [x]
     fire: [Space, " ", ControlLeft, ControlRight, Control]
     back: [q]
   scroll:

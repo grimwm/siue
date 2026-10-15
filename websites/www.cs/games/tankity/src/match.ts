@@ -14,7 +14,7 @@ import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
 import type { DifficultySetting } from './difficulty.ts';
 import { FOE_DYING, FOE_FIRE, FOE_HIT, FOE_MISS, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, pick } from './chatter.ts';
 import type { FxSys } from './fx/types.ts';
-import { transition } from './flow.ts';
+import { MAX_STEPS, SOLO_STEP, runFixed, transition, warSpeed } from './flow.ts';
 import type { FlowEvent } from './flow.ts';
 import type { GameState, GameTank, Tables } from './game-types.ts';
 import type { FieldWidth } from './field.ts';
@@ -726,9 +726,23 @@ export function createMatch(deps: MatchDeps) {
     }
   }
 
+  /* One frame of the solo war: `gdt` seconds of game time (the frame's wall
+     time times the game speed, src/speed.ts) in fixed SOLO_STEP steps, each
+     dropping the tanks and then moving the war on, so the war plays the same
+     at any frame rate and any speed; with the player's tank wrecked the
+     drones play on at triple that. `speed` raises the steps one frame may
+     run to match. Answers the remainder to carry to the next frame. */
+  function warFrame(acc: number, gdt: number, speed: number): number {
+    return runFixed(acc, gdt * warSpeed(me().hp > 0, G.demo), SOLO_STEP, h => {
+      fallTanks(h);
+      stepWar(h);
+      return !G.over && (G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle');
+    }, MAX_STEPS * speed);
+  }
+
   return {
     advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
-    stepWar, decayFx, soloShopBoard, endVeilBack, checkOneUps,
+    stepWar, warFrame, decayFx, soloShopBoard, endVeilBack, checkOneUps,
     /** Solo landings still waiting to be seen (tests read it). */
     fallsPending: () => fallsDue.length,
   };

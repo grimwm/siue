@@ -78,7 +78,8 @@ export function warSpeed(playerAlive: boolean, demo: boolean): number {
   return demo || playerAlive ? 1 : WATCH_SPEED;
 }
 
-/** Steps one frame may run, so a tab coming back from a long stall never freezes. */
+/** Steps one frame may run at 1×, so a tab coming back from a long stall
+ * never freezes; a faster game speed (src/speed.ts) allows that many times more. */
 export const MAX_STEPS = 30;
 /** Every war step is this long. */
 export const SOLO_STEP = 1 / 60;
@@ -90,11 +91,13 @@ export const WAR_REST = SOLO_STEP / 2;
  * step size never varies, so the war plays the same at any frame rate: a
  * 30 Hz phone, a 144 Hz monitor and a throttled tab land every shell and every
  * falling tank in the same place. A step answering false (the phase left think/fly/settle) drops
- * the rest of the frame. */
-export function runFixed(acc: number, dt: number, h: number, step: (h: number) => boolean): number {
+ * the rest of the frame. The game speed only lengthens `dt`, so a faster game
+ * runs more of the same steps and ends the same; `max` caps the steps of one
+ * frame. */
+export function runFixed(acc: number, dt: number, h: number, step: (h: number) => boolean, max: number = MAX_STEPS): number {
   let left = acc + dt;
   for (let n = 0; left >= h; n++) {
-    if (n >= MAX_STEPS) return 0;
+    if (n >= max) return 0;
     left -= h;
     if (!step(h)) return 0;
   }

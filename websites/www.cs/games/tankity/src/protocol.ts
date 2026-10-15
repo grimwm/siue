@@ -162,6 +162,10 @@ export interface RoomSnapshot {
   turn: number | null;
   /** The room's turn time in seconds, one of the host's stops. */
   turnSecs: number;
+  /** The room's game speed (1, 2 or 4): every client replays the war this
+   * many times as fast. Only the host changes it. A client that does not know
+   * the field plays at 1×. */
+  speed: number;
   /** When the room closes for want of play, unix seconds; it can come before turnLeft runs out.
    * The game counts from closesIn (its own clock may be off); this stays for other readers. */
   expiresAt: number;
@@ -219,6 +223,8 @@ export interface LeftEvent extends EventBase { t: 'left'; seat: number; name: st
 export interface AgainEvent extends EventBase { t: 'again'; seat: number }
 /** The host changed the turn time (seconds); it applies from the next turn. */
 export interface TurnTimeEvent extends EventBase { t: 'turntime'; seat: number; secs: number }
+/** The host changed the game speed (1, 2 or 4); it applies at once. */
+export interface SpeedEvent extends EventBase { t: 'speed'; seat: number; speed: number }
 
 /** What opens a volley: a human fires, the drone fires, or a drone fires for
  * a human who ran the turn clock out. `x`, `a` and `pw` are where the barrel
@@ -288,7 +294,7 @@ export interface TacticEvent extends EventBase { t: 'tactic'; seat: number; s: s
 
 /** The events a snapshot carries, discriminated by `t`. */
 export type RoomEvent =
-  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent | TurnTimeEvent
+  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent | TurnTimeEvent | SpeedEvent
   | FireEvent | AiFireEvent | AutoEvent
   | ShotEvent | BeamEvent | RingEvent | BurnEvent | BurstEvent | DirtEvent | PourEvent | DigEvent | RiotEvent | SlumpEvent | HitEvent | FallEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
 
@@ -329,6 +335,8 @@ export interface PostBodies {
   seatmode: { seat: number; mode: 'ai' | 'open'; since?: number };
   /** Host only, any phase; `secs` is one of the host's stops. */
   turntime: { secs: number };
+  /** Host only, any phase; `speed` is 1, 2 or 4. */
+  speed: { speed: number };
   /** The seats this browser holds (at most 12), asked about together; the
    * reply is not a room, so no delta fields ride along. */
   mine: { seats: { code: string; token: string }[] };
@@ -348,6 +356,7 @@ export interface PostReplies {
   map: RoomReply;
   seatmode: RoomReply;
   turntime: RoomReply;
+  speed: RoomReply;
   mine: MineReply;
   leave: OkReply;
 }

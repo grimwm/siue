@@ -458,6 +458,22 @@ final class RoomsTest extends TestCase
         self::assertTrue(($tSet['ok'] ?? false) === true && ($tSet['room']['turnSecs'] ?? 0) === 600
             && count($tEvents) === 1 && $tEvents[0]['secs'] === 600 && $tEvents[0]['seat'] === 0, 'turntime-host-sets-mid-play' . ' :: ' . json_encode($tSet['room']['turnSecs'] ?? $tSet));
 
+        // The game speed: only the host sets it, only to 1, 2 or 4, mid-play; the
+        // snapshot carries it and one event says who changed it.
+        usleep(300000);
+        $sGuest = self::post('speed', $g3a + ['speed' => 2]);
+        self::assertTrue(isset($sGuest['error']) && strpos($sGuest['error'] ?? '', 'host') !== false, 'speed-host-only' . ' :: ' . json_encode($sGuest));
+        usleep(300000);
+        $sOdd = self::post('speed', $h2 + ['speed' => 3]);
+        self::assertTrue(isset($sOdd['error']) && strpos($sOdd['error'] ?? '', '4×') !== false, 'speed-only-a-speed' . ' :: ' . json_encode($sOdd));
+        usleep(300000);
+        $sSet = self::post('speed', $h2 + ['speed' => 4]);
+        $sEvents = array_values(array_filter($sSet['room']['events'] ?? [], fn($e) => ($e['t'] ?? '') === 'speed'));
+        self::assertTrue(($sSet['ok'] ?? false) === true && ($sSet['room']['speed'] ?? 0) === 4
+            && count($sEvents) === 1 && $sEvents[0]['speed'] === 4 && $sEvents[0]['seat'] === 0, 'speed-host-sets-mid-play' . ' :: ' . json_encode($sSet['room']['speed'] ?? $sSet));
+        $sSeen = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $g3a['token'] . '&since=0');
+        self::assertTrue(($sSeen['room']['speed'] ?? 0) === 4, 'speed-guest-sees-it' . ' :: ' . json_encode($sSeen['room']['speed'] ?? $sSeen));
+
         // The host walks out mid-match: the match goes on for the guest (the host's
         // tank turns drone), the room stays on the shelf, and only the last human
         // out takes it down.

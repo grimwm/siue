@@ -18,6 +18,22 @@ until mkdir "$lock" 2>/dev/null; do
   waited=$((waited + 1))
 done
 echo $$ >"$lock/pid"
-trap 'rm -rf "$lock"' EXIT
+# A per-run TMPDIR makes every browser profile path unique to this run (see
+# reap.sh); the trap kills the Playwright process group and reaps whatever
+# browser is left, on a normal exit and on INT, TERM and HUP.
+. ./reap.sh
+E2E_RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/siue-e2e-run.XXXXXX")
+E2E_PGID=
+finish() { e2e_cleanup; rm -rf "$lock"; }
+trap finish EXIT
+trap 'finish; exit 130' INT
+trap 'finish; exit 143' TERM
+trap 'finish; exit 129' HUP
 npm ci --silent
-npx playwright test "$@"
+set -m # the background job below becomes its own process group
+status=0
+TMPDIR=$E2E_RUN_DIR npx playwright test "$@" &
+E2E_PGID=$!
+wait "$E2E_PGID" || status=$?
+set +m
+exit "$status"

@@ -351,3 +351,31 @@ export async function loseMatch(page) {
   }
 }
 
+
+/* Injected into every WebKit page (it has no mute flag): audio keeps running,
+   so contexts still resume and suspend, but nothing reaches the speakers.
+   Everything an AudioContext sends to its destination goes through a
+   zero-gain node, and media elements play muted. */
+export function muteScript() {
+  const muteGain = new WeakMap();
+  const connect = AudioNode.prototype.connect;
+  AudioNode.prototype.connect = function (dest, ...rest) {
+    if (dest instanceof AudioDestinationNode) {
+      let g = muteGain.get(dest.context);
+      if (!g) {
+        g = dest.context.createGain();
+        g.gain.value = 0;
+        connect.call(g, dest);
+        muteGain.set(dest.context, g);
+      }
+      connect.call(this, g, ...rest);
+      return dest;
+    }
+    return connect.call(this, dest, ...rest);
+  };
+  const play = HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play = function (...a) {
+    this.muted = true;
+    return play.apply(this, a);
+  };
+}

@@ -32,24 +32,40 @@ export interface DialogProps {
 
 const TABBABLE = new Set(['button', 'input', 'select', 'textarea']);
 
+/** True for a subtree the browser never focuses into: display:none, or inert. */
+function unfocusable(node: HTMLElement): boolean {
+  if (node.hidden || node.inert || node.getAttribute('inert') != null) return true;
+  if (node.style && node.style.display === 'none') return true;
+  if (typeof getComputedStyle === 'function') {
+    try { if (getComputedStyle(node).display === 'none') return true; } catch { /* a detached node answers nothing */ }
+  }
+  return false;
+}
+
 /** What Tab reaches inside `root`, in order: enabled controls (links with an
- *  href, anything with a tabindex of 0 or more) outside any `hidden` subtree. */
+ *  href, anything with a tabindex of 0 or more) outside any subtree that is
+ *  hidden, display:none, inert or inside a disabled fieldset. */
 function tabbables(root: Element): HTMLElement[] {
   const out: HTMLElement[] = [];
-  const visit = (el: Element): void => {
+  const visit = (el: Element, off: boolean): void => {
+    let legendSeen = false;
     for (const c of Array.from(el.children)) {
       if (c.nodeType !== 1) continue;
       const node = c as HTMLElement;
-      if (node.hidden) continue;
       const tag = (node.localName || '').toLowerCase();
+      // A disabled fieldset disables everything in it but its first legend's controls.
+      const exempt = tag === 'legend' && !legendSeen;
+      if (tag === 'legend') legendSeen = true;
+      if (unfocusable(node)) continue;
       const index = node.getAttribute('tabindex');
       const reach = index != null ? Number(index) >= 0
         : TABBABLE.has(tag) || (tag === 'a' && node.getAttribute('href') != null);
-      if (reach && !(node as HTMLButtonElement).disabled) out.push(node);
-      visit(node);
+      const nodeOff = off && !exempt;
+      if (reach && !nodeOff && !(node as HTMLButtonElement).disabled) out.push(node);
+      visit(node, nodeOff || (tag === 'fieldset' && (node as HTMLFieldSetElement).disabled === true));
     }
   };
-  visit(root);
+  visit(root, false);
   return out;
 }
 
@@ -106,7 +122,10 @@ export function Dialog(p: DialogProps) {
       }
       const first = items[0]!;
       const last = items[items.length - 1]!;
-      const wrap = ev.shiftKey ? !inside || active === first || active === box : !inside || active === last;
+      // Focus on anything that is not itself a Tab stop (a tabindex=-1 element, the
+      // panel) counts as an end: native Tab from there could leave the panel.
+      const stop = items.includes(active as HTMLElement);
+      const wrap = ev.shiftKey ? !inside || !stop || active === first : !inside || !stop || active === last;
       if (!wrap) return;
       ev.preventDefault();
       (ev.shiftKey ? last : first).focus();

@@ -330,6 +330,35 @@ function rig(extraCtx = {}) {
   timers[0]!.fn();
   await test('hold-button-keyboard-tap-lets-go', () => { assert.ok(!input.held.has('barrelLeft')); });
 }
+{
+  // A second tap inside HOLD_TAP_MS is not cut short by the first one's timer.
+  const timers: (() => void)[] = [];
+  const input = createInput({ touch: false, setTimeout: fn => { timers.push(fn); } });
+  let click: ((ev: { currentTarget: null; detail?: number }) => void) | undefined;
+  const button: HoldButton = { addEventListener: (type: string, fn: never) => { if (type === 'click') click = fn; } };
+  input.bindHold(button, 'barrelLeft');
+  click!({ currentTarget: null, detail: 0 });
+  click!({ currentTarget: null, detail: 0 });
+  timers[0]!();
+  await test('hold-button-earlier-tap-timer-leaves-a-later-tap', () => { assert.ok(input.held.has('barrelLeft')); });
+  timers[1]!();
+  await test('hold-button-latest-tap-timer-lets-go', () => { assert.ok(!input.held.has('barrelLeft')); });
+}
+{
+  // Space on a focused pad button taps its command and never fires the global fire.
+  const timers: (() => void)[] = [];
+  const input = createInput({ touch: false, setTimeout: fn => { timers.push(fn); } });
+  const fired: string[] = [];
+  input.register({ fire: () => { fired.push('fire'); return true; } });
+  const button: HoldButton & { tagName: string } = { tagName: 'BUTTON', addEventListener() {} };
+  input.bindHold(button, 'barrelLeft');
+  const space = ev({ key: ' ', code: 'Space', target: button });
+  input.keydown(space);
+  await test('space-on-pad-button-holds-not-fires', () => { assert.ok(input.held.has('barrelLeft') && fired.length === 0 && space.prevented === 1, fired.join()); });
+  timers[0]!();
+  input.keydown(ev({ key: ' ', code: 'Space' }));
+  await test('space-elsewhere-still-fires', () => { assert.ok(fired.join() === 'fire'); });
+}
 
 // ---- held keys and the arm, on a fake clock ----
 {

@@ -374,3 +374,33 @@ test('a chip can name its key-table slot and stay out of the accessible name', (
   assert.equal(chip.getAttribute('data-keyhint'), 'global:new');
   assert.equal(chip.getAttribute('aria-hidden'), 'true');
 });
+
+test('Tab skips controls the browser cannot focus: display:none, inert, a disabled fieldset', () => {
+  const root = mount();
+  render(dialog({ open: true }, [
+    h('button', { id: 'one' }, 'One'),
+    h('div', { style: { display: 'none' } }, h('button', { id: 'gone' }, 'Gone')),
+    h('div', { inert: true }, h('button', { id: 'frozen' }, 'Frozen')),
+    h('fieldset', { disabled: true }, h('button', { id: 'locked' }, 'Locked')),
+    h('button', { id: 'two' }, 'Two'),
+  ]), root);
+  const tab = (shiftKey = false) => fireDocument('keydown', { key: 'Tab', shiftKey });
+  document.activeElement = byId(root, 'two');
+  assert.equal(tab().prevented, true, 'two is the last Tab stop');
+  assert.equal(document.activeElement?.id, 'one');
+});
+
+test('Tab from a tabindex=-1 element inside the panel stays in the panel', () => {
+  const root = mount();
+  render(dialog({ open: true }, [
+    h('button', { id: 'one' }, 'One'),
+    h('button', { id: 'two' }, 'Two'),
+    h('p', { id: 'note', tabindex: -1 }, 'Note'),
+  ]), root);
+  document.activeElement = byId(root, 'note');
+  assert.equal(fireDocument('keydown', { key: 'Tab' }).prevented, true);
+  assert.equal(document.activeElement?.id, 'one');
+  document.activeElement = byId(root, 'note');
+  fireDocument('keydown', { key: 'Tab', shiftKey: true });
+  assert.equal(document.activeElement?.id, 'two');
+});

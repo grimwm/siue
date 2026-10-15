@@ -85,8 +85,6 @@ reviews:
     - "!**/*.png"
     - "!**/*.ogg"
     - "!**/*.mp3"
-    - "!**/package-lock.json"
-    - "!**/composer.lock"
 
   auto_review:
     enabled: true

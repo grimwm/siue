@@ -259,7 +259,10 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     release() {
       held = false;
       const c = ctx;
-      if (c && c.state === 'suspended') settle(() => c.resume()).catch(() => {});
+      // Not gated on the state: a suspend() from hold() may still be in flight
+      // (the state reads 'running' until it lands), and the resume queued behind
+      // it is what keeps it from landing last. Resuming a running context is a no-op.
+      if (c) settle(() => c.resume()).catch(() => {});
     },
     wake() {
       const c = context();

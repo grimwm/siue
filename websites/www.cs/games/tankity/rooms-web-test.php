@@ -96,14 +96,13 @@ $ageRoom = function (string $c): void {
         // Abandoned long ago: its last touch and last act both far back, and
         // the stored expiry (what the count and the sweep read) with them.
         $room['touched'] = time() - 30 * 86400;
-        if (isset($room['actedAt'])) {
-            $room['actedAt'] = $room['touched'];
-        }
-        $u = $db->prepare('UPDATE rooms SET data = ?, touched = ?, expires = ? WHERE code = ?');
+        $room['acted'] = $room['touched'];
+        $u = $db->prepare('UPDATE rooms SET data = ?, touched = ?, expires = ?, acted = ? WHERE code = ?');
         $u->bindValue(1, serialize($room), PDO::PARAM_LOB);
         $u->bindValue(2, $room['touched'], PDO::PARAM_INT);
         $u->bindValue(3, room_expires($room), PDO::PARAM_INT);
-        $u->bindValue(4, $c);
+        $u->bindValue(4, $room['acted'], PDO::PARAM_INT);
+        $u->bindValue(5, $c);
         $u->execute();
     });
 };

@@ -51,15 +51,18 @@ function room_test_age(string $code, int $seconds): void
         }
         $room['touched'] = (int) ($room['touched'] ?? time()) - $seconds;
         $room['created'] = (int) ($room['created'] ?? time()) - $seconds;
-        if (isset($room['actedAt'])) {
-            $room['actedAt'] = (int) $room['actedAt'] - $seconds;
+        foreach (['acted', 'actedAt'] as $k) {
+            if (isset($room[$k])) {
+                $room[$k] = (int) $room[$k] - $seconds;
+            }
         }
-        $u = $db->prepare('UPDATE rooms SET data = ?, touched = touched - ?, created = created - ?, expires = expires - ? WHERE code = ?');
+        $u = $db->prepare('UPDATE rooms SET data = ?, touched = touched - ?, created = created - ?, expires = expires - ?, acted = acted - ?
+            WHERE code = ?');
         $u->bindValue(1, serialize($room), PDO::PARAM_LOB);
-        $u->bindValue(2, $seconds, PDO::PARAM_INT);
-        $u->bindValue(3, $seconds, PDO::PARAM_INT);
-        $u->bindValue(4, $seconds, PDO::PARAM_INT);
-        $u->bindValue(5, $code);
+        for ($i = 2; $i <= 5; $i++) {
+            $u->bindValue($i, $seconds, PDO::PARAM_INT);
+        }
+        $u->bindValue(6, $code);
         $u->execute();
     });
 }

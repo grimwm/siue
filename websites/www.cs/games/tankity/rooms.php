@@ -355,7 +355,7 @@ if ($action === 'create' && $method === 'POST') {
     // The host's setting for the whole room; nobody changes it after this.
     $room['difficulty'] = room_parse_difficulty($body['difficulty'] ?? null);
     $room['turnSecs'] = $turn;
-    $room['actedAt'] = time();
+    $room['acted'] = time();
     $token = room_rand_token();
     // A fresh seat is present, not idle: the turn clock must not mistake a
     // guest who just sat down for one who walked away.
@@ -441,7 +441,7 @@ if ($action === 'join' && $method === 'POST') {
     $room['seats'][$seat] = room_seat_human($initials, $token, $body, room_client_hash());
     room_seat_economy($room, $seat);
     room_emit($room, ['t' => 'join', 'seat' => $seat, 'name' => $initials]);
-    $room['actedAt'] = time();
+    $room['acted'] = time();
     if (!room_save($fh, $path, $room)) {
         room_unlock($fh);
         room_json_out(500, ['error' => 'store write failed']);
@@ -492,7 +492,7 @@ function room_gate(array $body, bool $needCsrf, bool $throttle = true): array
             $room['seats'][$seat]['lastAct'] = $now;
         }
     }
-    $room['actedAt'] = time(); // a human acted; polls and timeouts never come through here
+    $room['acted'] = time(); // a human acted; polls and timeouts never come through here
     return [$room, $fh, $path, $seat];
 }
 

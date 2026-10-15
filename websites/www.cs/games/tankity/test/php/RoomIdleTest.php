@@ -40,7 +40,7 @@ final class RoomIdleTest extends TestCase
             $room['turnSecs'] = $turnSecs;
         }
         if ($actedAt !== null) {
-            $room['actedAt'] = $actedAt;
+            $room['acted'] = $actedAt;
         }
         return $room;
     }

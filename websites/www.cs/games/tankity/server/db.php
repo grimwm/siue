@@ -208,7 +208,11 @@ function tankity_journal_mode(string $dir, ?string $mounts = null): string
    only the rows rooms filed, and drops the old callsign tables; step 6 stores
    each room's expiry (room_expires in server/store.php) so the cap count and
    the sweep stay plain SQL; step 7 stores the address that hosts a room, so a
-   hosting cap per address does too. */
+   hosting cap per address does too; step 8 stores each room's phase, last
+   turn-moving act and turn time, so the match slots, the lobby pool and the
+   reclaim stay plain SQL too, and adds the tombstones of rooms closed to make
+   space and the spent puzzles. A step's entry is SQL to run, or a
+   Closure(PDO) for work SQL cannot do. */
 function tankity_schema_steps(): array
 {
     return [
@@ -254,6 +258,33 @@ function tankity_schema_steps(): array
             "ALTER TABLE rooms ADD COLUMN host TEXT NOT NULL DEFAULT ''",
             'CREATE INDEX rooms_host ON rooms (host, expires)',
         ],
+        8 => [
+            // What the slot count, the lobby count and the reclaim read, written by every room_save (server/store.php).
+            "ALTER TABLE rooms ADD COLUMN phase TEXT NOT NULL DEFAULT 'lobby'",
+            'ALTER TABLE rooms ADD COLUMN acted INTEGER NOT NULL DEFAULT 0',
+            'ALTER TABLE rooms ADD COLUMN turn_secs INTEGER NOT NULL DEFAULT 120',
+            'CREATE INDEX rooms_phase ON rooms (phase, expires)',
+            // Rooms closed to make space: who may hear why (hashed seat tokens), for 14 days.
+            'CREATE TABLE closed (code TEXT PRIMARY KEY, reason TEXT NOT NULL, at INTEGER NOT NULL, seats TEXT NOT NULL)',
+            'CREATE INDEX closed_at ON closed (at)',
+            // Spent puzzles, until their challenge would have expired anyway.
+            'CREATE TABLE pow_used (id TEXT PRIMARY KEY, exp INTEGER NOT NULL)',
+            'CREATE INDEX pow_used_exp ON pow_used (exp)',
+            // The live rows' columns, from their rooms. Decoded here rather than
+            // through room_decode: scores.php loads this file without the room library.
+            static function (PDO $db): void {
+                $rows = $db->query('SELECT code, data, touched FROM rooms')->fetchAll(PDO::FETCH_NUM);
+                $u = $db->prepare('UPDATE rooms SET phase = ?, acted = ?, turn_secs = ? WHERE code = ?');
+                foreach ($rows as [$code, $raw, $touched]) {
+                    $v = is_string($raw) && $raw !== '' ? @unserialize($raw, ['allowed_classes' => false]) : null;
+                    if (!is_array($v)) {
+                        continue;
+                    }
+                    $u->execute([(string) ($v['phase'] ?? 'lobby'), (int) ($v['acted'] ?? $v['actedAt'] ?? $touched),
+                        is_int($v['turnSecs'] ?? null) ? $v['turnSecs'] : 120, $code]);
+                }
+            },
+        ],
     ];
 }
 
@@ -273,7 +304,7 @@ function tankity_schema(PDO $db): void
                 return;
             }
             foreach ($sql as $q) {
-                $db->exec($q);
+                $q instanceof Closure ? $q($db) : $db->exec($q);
             }
             $db->exec('PRAGMA user_version = ' . $version);
         });

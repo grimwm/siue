@@ -161,7 +161,14 @@ function room_expires(array $r): int
     // A finished match keeps its final standings up for the live window only,
     // so it soon gives back its place, its host's place and any long place.
     $limit = $phase === 'over' ? room_live_secs() : room_idle_limit($r);
-    return (int) ($r['actedAt'] ?? $touched) + $limit;
+    return room_acted($r) + $limit;
+}
+
+/* The last turn-moving act (rooms.php stamps it); a room saved before the
+   key was renamed reads actedAt, then its last touch. */
+function room_acted(array $r): int
+{
+    return (int) ($r['acted'] ?? $r['actedAt'] ?? $r['touched'] ?? $r['created'] ?? 0);
 }
 
 /* Seconds from now until the room closes for want of play, never negative.
@@ -195,11 +202,11 @@ function room_alloc(?callable $nextCode = null): RoomLock
 {
     $nextCode = $nextCode ?? fn() => room_new_code(fn($c) => false);
     $db = room_begin();
-    $ins = $db->prepare('INSERT OR IGNORE INTO rooms (code, data, created, touched, expires) VALUES (?, ?, ?, ?, ?)');
+    $ins = $db->prepare("INSERT OR IGNORE INTO rooms (code, data, created, touched, expires, phase, acted) VALUES (?, '', ?, ?, ?, 'lobby', ?)");
     for ($try = 0; $try < 50; $try++) {
         $code = $nextCode();
         $now = time();
-        $ins->execute([$code, '', $now, $now, $now + room_live_secs()]);
+        $ins->execute([$code, $now, $now, $now + room_live_secs(), $now]);
         if ($ins->rowCount() === 1) {
             return room_hold(new RoomLock($db, $code));
         }
@@ -318,12 +325,16 @@ function room_save($lock, string $code, array $room): bool
         return false;
     }
     try {
-        $q = $lock->db->prepare('UPDATE rooms SET data = ?, touched = ?, expires = ?, host = ? WHERE code = ?');
+        $q = $lock->db->prepare('UPDATE rooms SET data = ?, touched = ?, expires = ?, host = ?, phase = ?, acted = ?, turn_secs = ?
+            WHERE code = ?');
         $q->bindValue(1, $raw, PDO::PARAM_LOB);
         $q->bindValue(2, $room['touched'], PDO::PARAM_INT);
         $q->bindValue(3, room_expires($room), PDO::PARAM_INT);
         $q->bindValue(4, room_host_key($room));
-        $q->bindValue(5, $code);
+        $q->bindValue(5, (string) ($room['phase'] ?? 'lobby'));
+        $q->bindValue(6, room_acted($room), PDO::PARAM_INT);
+        $q->bindValue(7, room_turn_secs($room), PDO::PARAM_INT);
+        $q->bindValue(8, $code);
         $q->execute();
     } catch (PDOException $e) {
         room_store_fail($e);

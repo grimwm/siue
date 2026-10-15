@@ -1087,7 +1087,7 @@ function room_end_round(array &$room, array &$events): void
         }
         room_file_eliminated($room, $wrecked);
         $room['phase'] = 'over';
-        $room['actedAt'] = time(); // the final standings stay up for one idle limit
+        $room['acted'] = time(); // the final standings stay up for one idle limit
         $events[] = ['t' => 'matchover'];
         return;
     }

@@ -49,11 +49,13 @@ export interface FakeContext {
   buffers: number;
   resumes: number;
   suspends: number;
+  closes: number;
   /** Settles a resume() held by the `holdResume` option. */
   settleResume(): void;
   /** A test may swap in a context whose resume() or suspend() answers nothing, as a broken browser's does. */
   resume(): Promise<void> | void;
   suspend(): Promise<void> | void;
+  close(): Promise<void> | void;
   createGain(): FakeGain;
   createOscillator(): FakeOsc;
   createBiquadFilter(): FakeFilter;
@@ -84,6 +86,7 @@ export function fakeAudioContext(state = 'running', opts: { holdResume?: boolean
     buffers: 0,
     resumes: 0,
     suspends: 0,
+    closes: 0,
     settleResume() { ctx.state = 'running'; held.splice(0).forEach(r => r()); },
     resume() {
       ctx.resumes++;
@@ -92,6 +95,7 @@ export function fakeAudioContext(state = 'running', opts: { holdResume?: boolean
       return Promise.resolve();
     },
     suspend() { ctx.suspends++; ctx.state = 'suspended'; return Promise.resolve(); },
+    close() { ctx.closes++; ctx.state = 'closed'; return Promise.resolve(); },
     createGain: () => register({ ...base(), kind: 'gain', gain: param(1) }),
     createOscillator: () => register({ ...base(), kind: 'osc', type: 'sine', frequency: param(440) }),
     createBiquadFilter: () => register({ ...base(), kind: 'filter', type: 'lowpass', frequency: param(350), Q: param(1) }),

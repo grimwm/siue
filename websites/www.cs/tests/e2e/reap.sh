@@ -6,17 +6,22 @@
 # of every browser this run launched, and of none that another run, or the
 # developer's own Chrome, Comet or Safari, launched.
 
+# e2e_pids_in DIR: pids whose command line contains DIR, except this shell.
+e2e_pids_in() {
+  pgrep -f -- "$1" 2>/dev/null | grep -vx "$$" || true
+}
+
 # e2e_reap_dir DIR: kill every process whose command line contains DIR.
 e2e_reap_dir() {
   local dir=$1 pids
   case "$dir" in /?*) ;; *) echo "e2e_reap_dir: refusing '$dir'" >&2; return 1 ;; esac
-  pids=$(pgrep -f -- "$dir" 2>/dev/null || true)
+  pids=$(e2e_pids_in "$dir")
   [ -n "$pids" ] || return 0
   # shellcheck disable=SC2086
   kill -TERM $pids 2>/dev/null || true
   local i
   for i in 1 2 3 4 5 6 7 8 9 10; do
-    pids=$(pgrep -f -- "$dir" 2>/dev/null || true)
+    pids=$(e2e_pids_in "$dir")
     [ -n "$pids" ] || return 0
     sleep 0.2
   done

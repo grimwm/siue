@@ -131,3 +131,61 @@ test('R opens Scores over the title card and Q closes it', async ({ browser }) =
   await expect(page.locator('#report-overlay')).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+const TITLE_SCREENS = [
+  ['phone', 393, 852, true], ['tablet', 820, 1180, true], ['desktop', 1280, 720, false],
+];
+
+for (const [name, width, height, touch] of TITLE_SCREENS) {
+  test(`title card on a ${name}: Settings is styled like its siblings, Scores opens above Settings, Q goes back, labels fit`, async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto('games/tankity/');
+    await page.waitForSelector('#title-card:not([hidden])');
+    const look = sel => page.locator(sel).evaluate(el => {
+      const c = getComputedStyle(el);
+      return { bg: c.backgroundColor, border: c.borderTopColor, width: c.borderTopWidth, radius: c.borderTopLeftRadius, deco: c.textDecorationLine, font: c.fontFamily };
+    });
+    expect(await look('#title-settings')).toEqual(await look('#tutorial-open'));
+    // The topmost thing at an overlay's centre is inside it.
+    const topmostIn = id => page.evaluate(sel => {
+      const r = document.querySelector(sel).getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !!hit && !!hit.closest(sel);
+    }, '#' + id);
+    const press = async sel => { const l = page.locator(sel); await (touch ? l.tap() : l.click()); };
+    await press('#title-settings');
+    await expect(page.locator('#menu-overlay')).toBeVisible();
+    // Every Settings button's label fits inside it.
+    const clipped = await page.evaluate(() => [...document.querySelectorAll('#menu-overlay button')]
+      .filter(b => b.getBoundingClientRect().width > 0)
+      .filter(b => [b, ...b.querySelectorAll('span')].some(e => e.scrollWidth > e.clientWidth))
+      .map(b => b.id || b.textContent));
+    expect(clipped).toEqual([]);
+    await press('#scores-open');
+    await expect(page.locator('#report-overlay')).toBeVisible();
+    expect(await topmostIn('report-overlay')).toBe(true);
+    // Q on a keyboard, the close button on a touch screen (keys do nothing there).
+    if (touch) await press('#report-close'); else await page.keyboard.press('q');
+    await expect(page.locator('#report-overlay')).toBeHidden();
+    await expect(page.locator('#title-card')).toBeVisible();
+    await ctx.close();
+    expect(errors).toEqual([]);
+  });
+}
+
+test('Help opened from the Settings menu on the title card sits on top', async ({ browser }) => {
+  const { page, errors } = await newPlayer(browser);
+  await page.click('#title-settings');
+  await expect(page.locator('#menu-overlay')).toBeVisible();
+  await page.keyboard.press('h');
+  await expect(page.locator('#help-overlay')).toBeVisible();
+  const top = await page.evaluate(() => {
+    const r = document.querySelector('#help-overlay').getBoundingClientRect();
+    return !!document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('#help-overlay');
+  });
+  expect(top).toBe(true);
+  expect(errors).toEqual([]);
+});

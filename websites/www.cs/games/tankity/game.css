@@ -181,6 +181,12 @@ button:disabled { opacity: 0.45; cursor: default; }
 .map-choice canvas { width: 80px; height: 52px; }
 .map-choice { cursor: pointer; }
 .unit-choice span { font-size: 0.7rem; }
+/* Narrow screens: a tile's word and the Next song button stay inside their borders. */
+.unit-picker .m-track { grid-column: span 2; white-space: nowrap; }
+@media (max-width: 600px) {
+  .tile-toggle > span { font-size: 0.62rem; }
+  .unit-picker .tile-toggle { padding-inline: 0.1rem; }
+}
 .unit-picker button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: rgba(255, 201, 60, 0.1); }
 
 .hint { color: var(--dim); font-size: 0.9rem; }
@@ -577,14 +583,14 @@ button.btn-leave[hidden] { display: none; }
   width: 100%; padding: 0.65rem; margin-bottom: 0.45rem; font-size: 1rem; font-weight: 800; border-radius: 9px;
 }
 .title-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
-#frame .title-row button { flex: 1; padding: 0.45rem; background: #11163a; border-color: #3a3fb0; border-radius: 9px; }
+#frame .title-row button, #frame .title-settings { flex: 1; padding: 0.45rem; background: #11163a; border-color: #3a3fb0; border-radius: 9px; }
+#frame .title-settings { display: block; width: 100%; margin-top: 0.1rem; }
 .initials { display: flex; justify-content: center; align-items: center; gap: 0.3rem; border: 0; margin: 0 0 0.2rem; padding: 0; }
 .initials legend { float: left; margin-right: 0.4rem; font-size: 0.75rem; color: #9aa3c7; }
 input.initial { width: 2rem; height: 2rem; max-width: none; padding: 0; text-align: center; font-size: 1rem; font-weight: 800; text-transform: uppercase; }
 /* An installed app that could not close itself says how, on the card. */
 .title-hint { margin: 0 0 0.3rem; font-size: 0.8rem; font-weight: 600; color: #cdd3f0; }
 .title-note { min-height: 1em; margin: 0 0 0.3rem; font-size: 0.72rem; color: var(--bad); }
-#frame .title-link { background: none; border: 0; color: #9aa3c7; text-decoration: underline; font-weight: 600; padding: 0.25rem 0.5rem; }
 /* The demo's own "press Play" banner would sit over the card. */
 #title-root:has(.title-veil:not([hidden])) ~ .banner { display: none; }
 /* Phones, portrait or landscape: the card fills the whole battlefield instead
@@ -611,8 +617,7 @@ input.initial { width: 2rem; height: 2rem; max-width: none; padding: 0; text-ali
 }
 /* Thumb-sized on touch screens. */
 @media (pointer: coarse) {
-  #frame .title-play, #frame .title-row button, #frame .title-link { min-height: 44px; }
-  input.initial { width: 44px; height: 44px; }
+  #frame .title-play, #frame .title-row button,   input.initial { width: 44px; height: 44px; }
 }
 
 /* ---------- the frame: status bar, battlefield, control deck ----------

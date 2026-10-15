@@ -1046,6 +1046,12 @@ const OVERLAY_PAINT: Record<string, () => void> = {
 function toggleOverlay(id: string, btnId?: string): void {
   const ov = $(id);
   if (!ov) return;
+  // Help and Scores share the menu's layer and come after it in the page, so
+  // opening one over an open menu would draw it underneath: the menu closes first.
+  if (ov.hidden && (id === 'help-overlay' || id === 'report-overlay')) {
+    const mv = $('menu-overlay');
+    if (mv && !mv.hidden) toggleOverlay('menu-overlay', 'btn-menu');
+  }
   ov.hidden = !ov.hidden;
   if (OVERLAY_PAINT[id]) OVERLAY_PAINT[id]();
   const btn = btnId && $(btnId);

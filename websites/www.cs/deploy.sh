@@ -11,6 +11,11 @@
 # whose line changed are uploaded, and the stamp is written last so an
 # interrupted deploy retries.
 #
+# A deploy logs in exactly once. One ssh master connection authenticates with
+# the password; every scp and sftp rides its control socket and never
+# authenticates again. Nothing is retried: the server's fail2ban bans an IP
+# after repeated logins, so a failed connection stops the deploy.
+#
 #   FORCE=1   upload everything even when the hash matches
 #   DRY_RUN=1 show what would change, upload nothing
 #   PRUNE=1   also delete stale files: ones the last deploy sent (they are
@@ -79,14 +84,32 @@ if [ "${LIST:-0}" != 1 ] && [ -e games/zz-probe ]; then
 fi
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/www-cs-deploy.XXXXXX")
-trap 'rm -rf "$work"' EXIT
+ctl=
+sock=
+master=0
+cleanup() {
+  if [ "$master" = 1 ]; then
+    ssh -o "ControlPath=$sock" -O exit "$HOST" >/dev/null 2>&1 || true
+  fi
+  rm -rf "$work" ${ctl:+"$ctl"}
+}
+trap cleanup EXIT
+# The control socket lives in its own short directory: a unix socket path is
+# limited to about 104 bytes on macOS, and $TMPDIR there (/var/folders/...)
+# plus ssh's temporary suffix overflows it.
+ctl=$(mktemp -d /tmp/dpl.XXXX)
+sock=$ctl/m
 stage=$work/stage
 mkdir "$stage"
+
+# Options that make scp and sftp use the master's connection instead of
+# logging in again (ControlMaster=no: never open a connection of their own).
+mux=(-o "ControlPath=$sock" -o ControlMaster=no)
 
 # '-mkdir' on a directory that exists reports a Failure it then ignores;
 # drop that line so real errors stand out. sftp ends its messages with CRLF.
 sftp_batch() {
-  "${sshpass[@]}" sftp -q -oBatchMode=no -b "$1" "$HOST" 2> >(tr -d '\r' | grep -v '^remote mkdir .*: Failure$' >&2) >/dev/null
+  sftp -q -oBatchMode=no "${mux[@]}" -b "$1" "$HOST" 2> >(tr -d '\r' | grep -v '^remote mkdir .*: Failure$' >&2) >/dev/null
 }
 
 # 1. Stage.
@@ -142,16 +165,23 @@ if [ ! -r "$PASSFILE" ]; then
   echo "deploy: cannot read password file $PASSFILE (set SSHPASS_FILE)" >&2
   exit 1
 fi
-sshpass=(sshpass -f "$PASSFILE")
 
 hash=$(python3 -I "$repo/scripts/deploy-hash" "$stage" --extra "$PWD/deploy.sh")
 python3 -I "$repo/scripts/deploy-hash" "$stage" --manifest >"$work/manifest"
+
+# 2a. The one login. -f returns once authentication succeeded and the master
+# is in the background; ControlPersist=no ends it with -O exit (cleanup).
+if ! sshpass -f "$PASSFILE" ssh -o "ControlPath=$sock" -o ControlMaster=yes -o ControlPersist=no -fN "$HOST"; then
+  echo "deploy: could not connect to $HOST; not retrying — repeated logins trip the server's fail2ban" >&2
+  exit 1
+fi
+master=1
 
 # 2. Compare with the host's stamp. A missing stamp means a first deploy;
 # any other failure stops here rather than guessing.
 remote_hash=
 : >"$work/remote-manifest"
-if out=$("${sshpass[@]}" scp -q "$HOST:$STAMP" "$work/remote-stamp" 2>&1); then
+if out=$(scp -q "${mux[@]}" "$HOST:$STAMP" "$work/remote-stamp" 2>&1); then
   remote_hash=$(sed -n '1s/^sha256 //p' "$work/remote-stamp")
   grep -v -e '^sha256 ' -e '^#' "$work/remote-stamp" >"$work/remote-manifest" || true
 elif ! grep -qi 'no such file' <<<"$out"; then
@@ -219,14 +249,14 @@ fi
 # write it in place. A failed listing stops here, before the stamp, so a
 # network error can never replace live scores with an empty board.
 scores_dir=$(dirname "$SCORES")
-if ! listing=$(printf 'ls -1 %s\n' "$scores_dir" | "${sshpass[@]}" sftp -q -oBatchMode=no -b - "$HOST" 2>&1); then
+if ! listing=$(printf 'ls -1 %s\n' "$scores_dir" | sftp -q -oBatchMode=no "${mux[@]}" -b - "$HOST" 2>&1); then
   echo "deploy: cannot list $scores_dir on $HOST; scores left untouched, rerun the deploy" >&2
   exit 1
 fi
 if ! grep -q "/$(basename "$SCORES")\$" <<<"$listing"; then
   echo '{"week":[],"alltime":[]}' >"$work/scores"
   chmod 666 "$work/scores"
-  "${sshpass[@]}" scp -q -p "$work/scores" "$HOST:$SCORES"
+  scp -q -p "${mux[@]}" "$work/scores" "$HOST:$SCORES"
   echo "  created $SCORES"
 fi
 printf 'chmod 666 %s\n' "$SCORES" >"$work/chmod"
@@ -239,5 +269,5 @@ sftp_batch "$work/chmod"
   cat "$work/manifest"
 } >"$work/stamp"
 chmod 644 "$work/stamp"
-"${sshpass[@]}" scp -q -p "$work/stamp" "$HOST:$STAMP"
+scp -q -p "${mux[@]}" "$work/stamp" "$HOST:$STAMP"
 echo "www.cs: deployed ${hash:0:12}"

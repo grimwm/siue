@@ -10,7 +10,7 @@ Open course materials may be placed here from time-to-time as well.
 .
 ├── compose.yaml          # includes every site's compose.yaml (project name: siue)
 ├── Makefile              # make up | down | ps | urls | test | parity | deploy, for all sites
-├── scripts/              # deploy-hash (content hasher) and its test
+├── scripts/              # deploy-hash (content hasher), its test and the deploy login test
 ├── docs/superpowers/     # design specs and implementation plans
 ├── .github/              # workflows (ci.yml, deploy.yml) and the server's SSH host keys
 └── websites/
@@ -91,7 +91,7 @@ Pass the same `COMPOSE` to every target that talks to the containers (`up`, `dow
 
 ## Testing
 
-**Unit suites.** `make test` at the root runs `scripts/test_deploy_hash.py`, then `make test` in each site. The site's `make test` needs `make up` first and runs:
+**Unit suites.** `make test` at the root runs `scripts/test_deploy_hash.py` and `scripts/test_deploy_connection.py` (the real `deploy.sh` against fake `ssh`, `scp`, `sftp` and `sshpass`; it never touches a host), then `make test` in each site. The site's `make test` needs `make up` first and runs:
 
 - the selector and shard tests for the browser suite (`tests/e2e/select-test.mjs`, `shard-test.mjs`, `select.mjs --check`);
 - `npm ci` and the site's TypeScript build check (`tools/ts-build.mjs --check`);
@@ -137,6 +137,8 @@ Deploys www.cs when a `ci` run completes successfully for a push to `main` of th
 ### Deploy mechanics
 
 `make deploy` (or `make deploy SITE=www.cs`) deploys each site to its own server. A deploy stages exactly what the server receives (git's view of the working tree, uncommitted edits included, ignored files left out), hashes it with `scripts/deploy-hash`, and compares that with the `.deploy-hash` the site keeps on its server: equal means nothing to do, otherwise only changed files go up. The stamp is written last, so an interrupted deploy retries.
+
+A www.cs deploy logs in once. `deploy.sh` opens one SSH master connection with `sshpass` and the password file, and every `scp` and `sftp` after that rides its control socket (a short directory under `/tmp`, removed on exit) without authenticating again; `ssh -O exit` closes the master however the script ends. Nothing is retried: if the master cannot connect, the deploy prints one message and stops, because repeated logins trip the server's fail2ban.
 
 | Variable | Effect |
 | --- | --- |
